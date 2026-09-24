@@ -633,6 +633,25 @@
     window.addEventListener('resize', moveSegThumb);
   })();
 
+  // Program latihan: tetap slider biasa (digeser sendiri, bukan scroll-jack) — cuma
+  // "01/04" dan garis progres yang mengikuti posisi geser. Jalan tanpa GSAP juga.
+  (function bindProgram() {
+    var vp = document.getElementById('program-viewport');
+    var track = document.getElementById('program-track');
+    if (!vp || !track) return;
+    function update() {
+      var max = track.scrollWidth - vp.clientWidth;
+      var p = max > 0 ? clamp(vp.scrollLeft / max, 0, 1) : 0;
+      var n = track.children.length || 1;
+      var idx = clamp(Math.round(p * (n - 1)), 0, n - 1);
+      var el = $('#program-idx'); if (el) el.textContent = pad2(idx + 1);
+      var bar = $('#program-bar'); if (bar) bar.style.transform = 'scaleX(' + (0.25 + 0.75 * p).toFixed(3) + ')';
+    }
+    vp.addEventListener('scroll', function () { requestAnimationFrame(update); }, { passive: true });
+    window.addEventListener('resize', update);
+    update();
+  })();
+
   // ===========================================================================
   // Slot kosong minggu ini (jam dihitung dari jadwal asli, tanpa data klien)
   // Aturan sama dengan portal (App.html publicDayPanel): penuh kalau jumlah booking
@@ -1112,41 +1131,22 @@
       scrollTrigger: { trigger: hero, start: 'top top', end: 'bottom top', scrub: true }
     });
 
-    // Program: panel bergeser horizontal saat scroll vertikal.
-    var track = document.getElementById('program-track');
-    var dist = function () { return Math.max(0, track.scrollWidth - document.documentElement.clientWidth); };
-    G.to(track, {
-      x: function () { return -dist(); }, ease: 'none',
-      scrollTrigger: {
-        trigger: '#program', start: 'top top', end: function () { return '+=' + dist(); }, pin: true, scrub: 1, invalidateOnRefresh: true,
-        onUpdate: function (self) {
-          var idx = Math.min(3, Math.floor(self.progress * 4 * 0.999));
-          var el = document.getElementById('program-idx'); if (el) el.textContent = pad2(idx + 1);
-          var bar = document.getElementById('program-bar'); if (bar) bar.style.transform = 'scaleX(' + (0.25 + 0.75 * self.progress).toFixed(3) + ')';
-        }
-      }
-    });
-    $$('.prog').forEach(function (p) {
-      G.fromTo(p.querySelector('.prog-num'), { xPercent: -30 }, { xPercent: 10, ease: 'none', scrollTrigger: { trigger: '#program', start: 'top top', end: function () { return '+=' + dist(); }, scrub: true } });
-    });
-
-    // Proses: dipin, langkah aktif & angka besar berganti mengikuti scroll.
-    var stepEls = $$('#steps .step');
+    // Proses: setiap langkah cuma berubah warna sendiri saat garis scroll (60% tinggi
+    // layar) melewatinya — tidak dipin, halaman tetap scroll biasa.
     var bigNum = document.getElementById('method-num');
-    var current = 0;
-    var methodEl = document.getElementById('method');
-    ST.create({
-      trigger: methodEl, pin: true, scrub: true,
-      start: function () { return methodEl.offsetHeight > window.innerHeight ? 'bottom bottom' : 'center center'; },
-      end: '+=180%', invalidateOnRefresh: true,
-      onUpdate: function (self) {
-        var idx = Math.min(stepEls.length - 1, Math.floor(self.progress * stepEls.length * 0.999));
-        if (idx === current) return;
-        var dir = idx > current ? 1 : -1;
-        current = idx;
-        stepEls.forEach(function (s, i) { s.classList.toggle('is-active', i === idx); });
-        if (bigNum) G.fromTo(bigNum, { yPercent: 100 * dir, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.6, ease: 'expo.out', onStart: function () { bigNum.textContent = pad2(idx + 1); } });
-      }
+    function flipNum(i, dir) {
+      if (!bigNum) return;
+      G.fromTo(bigNum, { yPercent: 100 * dir, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.6, ease: 'expo.out', onStart: function () { bigNum.textContent = pad2(i + 1); } });
+    }
+    // Step 1 punya .is-active di HTML statis (tampilan default tanpa JS/scroll);
+    // begitu tiap langkah punya trigger sendiri, hapus dulu supaya tidak "nyangkut".
+    var stepEls = $$('#steps .step');
+    stepEls.forEach(function (s) { s.classList.remove('is-active'); });
+    stepEls.forEach(function (step, i) {
+      ST.create({
+        trigger: step, start: 'top 60%', end: 'bottom 60%', toggleClass: 'is-active',
+        onEnter: function () { flipNum(i, 1); }, onEnterBack: function () { flipNum(i, -1); }
+      });
     });
 
     // Kursor khusus, tombol magnetik, kartu miring.
@@ -1155,11 +1155,11 @@
   }
 
   function mobileMotion(G, ST) {
-    // HP: cukup fade-in lembut (tanpa masker baris, tanpa scrub).
+    // HP: cukup fade-in lembut (tanpa masker baris, tanpa scrub). Kartu program
+    // sudah kebagian reveal-nya lewat [data-stagger] di initMotion().
     $$('.split').forEach(function (el) {
       G.from(el, { y: 24, opacity: 0, duration: 0.9, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 90%', once: true } });
     });
-    G.from('.prog', { x: 60, opacity: 0, duration: 0.9, ease: 'power3.out', stagger: 0.08, scrollTrigger: { trigger: '#program', start: 'top 80%', once: true } });
     return function () {};
   }
 

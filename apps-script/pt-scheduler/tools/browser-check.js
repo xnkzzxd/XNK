@@ -624,20 +624,46 @@ async function contrastReport(page) {
       await page.waitForTimeout(900);
     }
     await shot(page, 'landing-desktop-hero');
+
+    // Program latihan: a plain slider (native drag/scroll), never scroll-jacked —
+    // holds regardless of whether the animation libraries loaded.
+    check(await page.evaluate(() => getComputedStyle(document.getElementById('program-track')).transform === 'none'), 'the program cards are never transformed by JS (native slider, not scroll-jacked)');
+    check(await page.evaluate(() => getComputedStyle(document.querySelector('.program-viewport')).overflowX === 'auto'), 'the program slider can be scrolled/dragged sideways');
+    await page.evaluate(() => { const vp = document.getElementById('program-viewport'); vp.scrollLeft = vp.scrollWidth; vp.dispatchEvent(new Event('scroll')); });
+    await page.waitForTimeout(200);
+    check((await page.textContent('#program-idx')) === '04', 'the "01/04" counter follows manual scrolling of the slider');
+    await page.evaluate(() => { const vp = document.getElementById('program-viewport'); vp.scrollLeft = 0; vp.dispatchEvent(new Event('scroll')); });
+
     if (ASSETS) {
       const ty = () => page.evaluate(() => getComputedStyle(document.getElementById('figure-desk')).getPropertyValue('--ty'));
       const initialTy = await ty();
       await scrollLanding(page, 900 * 0.8);
       check((await ty()) !== initialTy, 'the photo gets a subtle parallax while scrolling past the hero (no pin)');
       await shot(page, 'landing-desktop-scroll');
-      const prog = await sectionY(page, '#program');
-      await scrollLanding(page, prog + 900);
-      check(await page.evaluate(() => new DOMMatrix(getComputedStyle(document.getElementById('program-track')).transform).m41 < -200), 'programs slide horizontally while scrolling');
+      await scrollLanding(page, (await sectionY(page, '#program')) + 40);
       await shot(page, 'landing-desktop-program');
-      await scrollLanding(page, (await sectionY(page, '#method')) + 900);
+
+      // Proses: color change as the scroll line passes, never a pinned sequence.
+      // Sample the whole crossing range (from just before the section enters the
+      // viewport to just after it leaves), since a step's own trigger window can
+      // sit before the section's top edge reaches the top of the viewport.
+      const methodTop = await sectionY(page, '#method');
+      const methodHeight = await page.evaluate(() => document.getElementById('method').offsetHeight);
+      const rectTop = () => page.evaluate(() => document.getElementById('method').getBoundingClientRect().top);
+      const seen = new Set();
+      let maxActiveAtOnce = 0;
+      const scanFrom = methodTop - DESKTOP.height, scanTo = methodTop + methodHeight;
+      const rectAtStart = await rectTop();
+      for (let y = scanFrom; y <= scanTo; y += (scanTo - scanFrom) / 14) {
+        await scrollLanding(page, y, 220);
+        const idxs = await page.evaluate(() => [...document.querySelectorAll('#steps .step')].flatMap((s, i) => s.classList.contains('is-active') ? [i] : []));
+        idxs.forEach(i => seen.add(i));
+        maxActiveAtOnce = Math.max(maxActiveAtOnce, idxs.length);
+      }
+      check(maxActiveAtOnce <= 1, 'at most one process step is highlighted at a time');
+      check(seen.size === 4, 'every step gets highlighted once as the scan line passes it, no more (' + [...seen].sort().join(',') + ')');
+      check((await rectTop()) !== rectAtStart, 'the process section itself keeps scrolling on screen (not pinned in place)');
       await shot(page, 'landing-desktop-method');
-    } else {
-      check(await page.evaluate(() => { const v = document.querySelector('.program-viewport'); return getComputedStyle(v).overflowX === 'auto'; }), 'without animations the programs can still be scrolled sideways');
     }
     await scrollLanding(page, await sectionY(page, '#paket'));
     await shot(page, 'landing-desktop-paket');
