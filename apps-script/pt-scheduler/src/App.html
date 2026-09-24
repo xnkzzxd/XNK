@@ -986,7 +986,7 @@
     let body;
     if (!r) body = '<span class="skeleton" style="height:30px;width:60%;background:color-mix(in srgb,var(--on-ink) 14%,transparent)"></span><span class="kpi-note">Menghitung…</span>';
     else if (r.error) body = '<span class="kpi-value">–</span><span class="kpi-note">Belum bisa dimuat</span>';
-    else body = '<span class="kpi-value" id="kpi-revenue">' + h(rupiahShort(r.total || 0)) + '</span><span class="kpi-note">Estimasi dari ' + (r.count || 0) + ' pembelian/perpanjangan paket</span>';
+    else body = '<span class="kpi-value" id="kpi-revenue">' + h(rupiahShort(r.total || 0)) + '</span><span class="kpi-note">' + Math.round((r.share || 0.65) * 100) + '% dari harga paket · ' + (r.count || 0) + ' pembelian/perpanjangan</span>';
     el.innerHTML = '<div class="row-between"><span class="kpi-label">Pendapatan paket · ' + h(month) + '</span><span class="kpi-icon">' + icon('wallet') + '</span></div>' + body;
     paintIcons();
   }

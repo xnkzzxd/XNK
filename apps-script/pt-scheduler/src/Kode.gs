@@ -2682,12 +2682,16 @@ function _packageTrendStats_(month, year) {
   }
 }
 
+// Bagian PT dari harga paket: pendapatan = harga Price List × 65%.
+const REVENUE_SHARE = 0.65;
+
 /**
- * Estimasi pendapatan paket untuk dashboard admin: jumlah harga Price List dari
- * setiap transaksi paket (klien baru & perpanjangan) di log "Members" pada bulan
- * itu. Harga diambil dari Price List SAAT INI (termasuk paket nonaktif), jadi ini
- * estimasi — harga lama yang sudah diubah tidak tersimpan di log.
- * @returns {{total:number, count:number, byPackage:Array<{paketId:string, namaPaket:string, count:number, total:number}>}}
+ * Estimasi pendapatan paket untuk dashboard admin: 65% (REVENUE_SHARE) dari jumlah
+ * harga Price List setiap transaksi paket (klien baru & perpanjangan) di log
+ * "Members" pada bulan itu. Harga diambil dari Price List SAAT INI (termasuk paket
+ * nonaktif), jadi ini estimasi — harga lama yang sudah diubah tidak tersimpan di log.
+ * `grossTotal` = jumlah harga penuh (100%), `total` = bagian 65%.
+ * @returns {{total:number, grossTotal:number, share:number, count:number, byPackage:Array<{paketId:string, namaPaket:string, count:number, total:number, grossTotal:number}>}}
  */
 function getRevenueSummary(token, month, year) {
   requireAdmin_(token);
@@ -2709,7 +2713,7 @@ function _allPackagePrices_() {
 }
 
 function _revenueSummary_(month, year) {
-  const result = { total: 0, count: 0, byPackage: [] };
+  const result = { total: 0, grossTotal: 0, share: REVENUE_SHARE, count: 0, byPackage: [] };
   const log = _getMembersLogSheet_().getDataRange().getValues();
   if (log.length <= 1) return result;
   const prices = _allPackagePrices_();
@@ -2730,13 +2734,17 @@ function _revenueSummary_(month, year) {
     if (!paketId && !namaPaket) continue;
     const harga = prices.byId[paketId] !== undefined ? prices.byId[paketId] : (prices.byName[namaPaket.toLowerCase()] || 0);
     const key = paketId || namaPaket;
-    if (!map[key]) map[key] = { paketId: paketId, namaPaket: namaPaket || '(Tanpa Nama)', count: 0, total: 0 };
+    if (!map[key]) map[key] = { paketId: paketId, namaPaket: namaPaket || '(Tanpa Nama)', count: 0, total: 0, grossTotal: 0 };
     map[key].count++;
-    map[key].total += harga;
+    map[key].grossTotal += harga;
     result.count++;
-    result.total += harga;
+    result.grossTotal += harga;
   }
-  result.byPackage = Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.total - a.total; });
+  result.total = Math.round(result.grossTotal * REVENUE_SHARE);
+  result.byPackage = Object.keys(map).map(function(k) {
+    map[k].total = Math.round(map[k].grossTotal * REVENUE_SHARE);
+    return map[k];
+  }).sort(function(a, b) { return b.grossTotal - a.grossTotal; });
   return result;
 }
 

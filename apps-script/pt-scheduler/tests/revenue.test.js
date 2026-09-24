@@ -5,7 +5,7 @@ const { seededEnv } = require('./fixtures');
 
 const LOG_HEADERS = ['ID Transaksi', 'ID Member', 'Tanggal', 'Jenis', 'Paket ID', 'Nama Paket', 'Jumlah Sesi', 'Coach ID', 'Nama Coach', 'Catatan'];
 
-test('revenue sums Price List prices of package transactions in that month', () => {
+test('revenue is 65% of the Price List prices of package transactions in that month', () => {
   const env = seededEnv();
   env.ss.seed('Members', [
     LOG_HEADERS,
@@ -17,8 +17,12 @@ test('revenue sums Price List prices of package transactions in that month', () 
   ]);
   const res = env.call('getRevenueSummary', env.adminToken(), 9, 2026);
   assert.equal(res.count, 4);
-  assert.equal(res.total, 800000 + 1500000 + 100000 + 800000);
+  assert.equal(res.grossTotal, 800000 + 1500000 + 100000 + 800000);
+  assert.equal(res.share, 0.65);
+  assert.equal(res.total, 2080000);
   assert.equal(res.byPackage[0].namaPaket, 'Flex');
+  assert.equal(res.byPackage[0].grossTotal, 1500000);
+  assert.equal(res.byPackage[0].total, 975000);
 });
 
 test('revenue is admin-only', () => {

@@ -198,7 +198,9 @@ async function contrastReport(page) {
     check(await visible(page, '#tabbar'), 'floating bottom bar visible on phone');
     check(!(await visible(page, '#sidebar')), 'sidebar hidden on phone');
     check((await page.textContent('#view-dashboard')).includes('Perlu perhatian'), 'dashboard shows "Perlu perhatian"');
-    check((await page.evaluate(() => document.querySelector('#kpi-revenue-tile').textContent)).includes('Rp'), 'revenue KPI loaded');
+    const revenueText = await page.evaluate(() => document.querySelector('#kpi-revenue-tile').textContent);
+    check(revenueText.includes('Rp'), 'revenue KPI loaded');
+    check(revenueText.includes('65% dari harga paket'), 'revenue KPI says it is 65% of the package price');
     check(await page.evaluate(() => !document.getElementById('unread-badge').classList.contains('hide')), 'new-booking badge shown');
     await shot(page, 'admin-mobile-dashboard');
 
