@@ -1104,18 +1104,13 @@
     G.fromTo('.cta-giant', { scale: 0.7, opacity: 0.2 }, { scale: 1.08, opacity: 1, ease: 'none', scrollTrigger: { trigger: '.sec-cta', start: 'top bottom', end: 'bottom top', scrub: 1 } });
     G.from('.footer-giant', { yPercent: 40, ease: 'none', scrollTrigger: { trigger: '.footer', start: 'top bottom', end: 'bottom bottom', scrub: 1 } });
 
-    // Hero: dipin sebentar; garis scan turun dan badan berubah jadi peta otot (--m 0 → 1),
-    // JIZDAN berubah dari isi hitam jadi garis tepi.
+    // Hero: scroll biasa, tanpa dipin. Fotonya sedikit "parallax" (bergerak lebih
+    // lambat dari halaman) supaya scroll terasa hidup tanpa efek berat.
     var hero = document.getElementById('hero-desk');
-    G.timeline({
-      scrollTrigger: {
-        trigger: hero, pin: true, scrub: 1, anticipatePin: 1, end: '+=120%', invalidateOnRefresh: true,
-        start: function () { return hero.offsetHeight > window.innerHeight + 2 ? 'bottom bottom' : 'top top'; }
-      }
-    })
-      .to(hero, { '--m': 1, ease: 'none', duration: 1 }, 0)
-      .to('#figure-desk', { '--z': 1.06, ease: 'none', duration: 1 }, 0)
-      .to({}, { duration: 0.3 });
+    G.fromTo('#figure-desk', { '--ty': '0px', '--z': 1 }, {
+      '--ty': '-4%', '--z': 1.05, ease: 'none',
+      scrollTrigger: { trigger: hero, start: 'top top', end: 'bottom top', scrub: true }
+    });
 
     // Program: panel bergeser horizontal saat scroll vertikal.
     var track = document.getElementById('program-track');

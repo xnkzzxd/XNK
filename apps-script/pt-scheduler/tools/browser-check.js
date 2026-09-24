@@ -12,7 +12,7 @@
 //                   cropper.min.js/.css, inter-latin-wght-normal.woff2, and for the
 //                   Landing gsap.min.js, ScrollTrigger.min.js, SplitText.min.js,
 //                   lenis.min.js, anton-latin-400-normal.woff2, hero-cutout.webp,
-//                   hero-normal.webp, hero-anatomy.webp from that folder instead of tiny stubs / empty
+//                   hero-normal.webp from that folder instead of tiny stubs / empty
 //                   responses (for realistic screenshots and the animated Landing)
 //   SHOTS_DIR=dir   save screenshots of every main screen there
 //   VIDEO_DIR=dir   record the Landing scroll-through (desktop + phone) as .webm
@@ -56,7 +56,6 @@ const REAL = {
   'dist/lenis.min.js': ['lenis.min.js', 'application/javascript'],
   'xnkbooking.my.id/img/hero-cutout.webp': ['hero-cutout.webp', 'image/webp'],
   'xnkbooking.my.id/img/hero-normal.webp': ['hero-normal.webp', 'image/webp'],
-  'xnkbooking.my.id/img/hero-anatomy.webp': ['hero-anatomy.webp', 'image/webp'],
 };
 const CDN_ANIMATION = ['dist/gsap.min.js', 'dist/ScrollTrigger.min.js', 'dist/SplitText.min.js', 'dist/lenis.min.js'];
 const INTER_CSS = "@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(https://assets.test/inter.woff2) format('woff2');}" +
@@ -626,15 +625,11 @@ async function contrastReport(page) {
     }
     await shot(page, 'landing-desktop-hero');
     if (ASSETS) {
-      const m = () => page.evaluate(() => Number(getComputedStyle(document.getElementById('hero-desk')).getPropertyValue('--m')));
-      await scrollLanding(page, 900 * 0.5);
-      const mid = await m();
-      check(mid > 0.2 && mid < 0.8, 'scrolling scans the body into the muscle chart (' + mid.toFixed(2) + ')');
-      await shot(page, 'landing-desktop-scan');
-      await scrollLanding(page, 900 * 1.3);
-      check((await m()) > 0.97, 'muscle chart fully shown');
-      check(await page.evaluate(() => document.querySelector('.figure-anat').naturalWidth > 0), 'anatomy image loaded');
-      await shot(page, 'landing-desktop-anatomy');
+      const ty = () => page.evaluate(() => getComputedStyle(document.getElementById('figure-desk')).getPropertyValue('--ty'));
+      const initialTy = await ty();
+      await scrollLanding(page, 900 * 0.8);
+      check((await ty()) !== initialTy, 'the photo gets a subtle parallax while scrolling past the hero (no pin)');
+      await shot(page, 'landing-desktop-scroll');
       const prog = await sectionY(page, '#program');
       await scrollLanding(page, prog + 900);
       check(await page.evaluate(() => new DOMMatrix(getComputedStyle(document.getElementById('program-track')).transform).m41 < -200), 'programs slide horizontally while scrolling');
