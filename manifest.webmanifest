@@ -2,7 +2,7 @@
   "id": "/",
   "name": "XNK",
   "short_name": "XNK",
-  "description": "Pesan jadwal dengan mudah secara online.",
+  "description": "Aplikasi booking internal untuk tim PT XNK.",
   "lang": "id",
   "start_url": "/",
   "scope": "/",

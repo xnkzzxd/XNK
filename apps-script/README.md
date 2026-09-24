@@ -61,8 +61,8 @@ paste the new URL into the `<iframe src>` in `../index.html`.
 
 ## Keep secrets out of git
 
-If this repository is public, everything in this folder is public too.
-Never put passwords, API keys or tokens in the code. Store them in
+This repository is public, so everything in this folder is public too.
+Never put passwords, API keys, tokens or the site PIN in the code. Store them in
 **Project Settings → Script Properties** and read them with
 `PropertiesService.getScriptProperties().getProperty('NAME')`.
 
