@@ -3,9 +3,18 @@
 Kode sumber aplikasi Google Apps Script milik XNK, disimpan di GitHub supaya
 setiap perubahan tercatat dan **otomatis di-deploy**.
 
-| Folder | Aplikasi | Dipakai di |
+| Folder | Aplikasi |
+| --- | --- |
+| `apps-script/pt-scheduler/` | XNK Personal Trainer Scheduler (panel PT, landing, portal klien) |
+
+Ketiga situs ini membungkus **deployment yang sama** (`AKfycbyVOm1…BgJ`), jadi satu kali
+deploy memperbarui semuanya:
+
+| Situs | Repo | Halaman Apps Script |
 | --- | --- | --- |
-| `apps-script/pt-scheduler/` | XNK Personal Trainer Scheduler (panel PT + halaman klien) | https://xnk.my.id dan link `/exec?view=Landing` |
+| https://xnk.my.id | xnkzzxd/XNK | `/exec` → Index (panel PT, login PIN) |
+| https://xnkbooking.my.id | xnkzzxd/BookingPT | `/exec?view=Landing` (marketing + daftar) |
+| https://book.xnkbooking.my.id | xnkzzxd/BookingPT-Client | `/exec?view=public` (portal klien, login link member) |
 
 ## Cara kerja
 
@@ -51,7 +60,7 @@ Buka proyek *XNK Personal Trainer Scheduler* → ⚙️ **Project Settings** →
 | `ADMIN_PIN` | **Wajib.** PIN login panel PT, minimal 6 karakter. Tanpa ini tidak ada yang bisa masuk panel. Mengganti PIN = semua perangkat PT otomatis logout. |
 | `TELEGRAM_BOT_TOKEN` | Token bot Telegram (salin dari `kirimNotifTelegram` versi lama di editor, sebelum ditimpa) |
 | `TELEGRAM_CHAT_IDS` | Chat ID admin, dipisah koma, mis. `12345678,87654321` |
-| `MEMBER_LINK_BASE` | Opsional. Alamat portal klien untuk link member, mis. `https://book.xnkbooking.my.id/` (halaman itu harus meneruskan `?k=…` ke iframe Apps Script). Kosong = link langsung `…/exec?view=public&k=…`. |
+| `MEMBER_LINK_BASE` | Alamat portal klien untuk link member pribadi. Isi salah satu: `https://book.xnkbooking.my.id/` (hanya setelah BookingPT-Client meneruskan `?k=…` ke iframe), atau `https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec?view=public` (langsung, pasti jalan). Kalau kosong, aplikasi menebak alamat /exec sendiri — lebih baik diisi. |
 
 `SESSION_SECRET` dibuat otomatis oleh aplikasi. Menghapusnya = semua PT & klien logout.
 
