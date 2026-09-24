@@ -8,9 +8,10 @@ const OLD_HEADERS = MEMBERDATA_HEADERS.slice(0, 13); // sheet from before this c
 test('old MemberData sheet (13 columns) gets the "Kunci Link" header added', () => {
   const env = seededEnv();
   env.ss.seed('MemberData', [OLD_HEADERS, ['PT-X', 'Xena', '6287777777777', 'g', '1/1/2026', '', '', '', 10, 0, '', '', '1/1/2026']]);
-  const res = env.call('adminGetMemberLink', env.adminToken(), 'PT-X');
+  const login = env.call('memberLoginByPhone', '6287777777777');
   assert.equal(env.sheet('MemberData').rows[0][13], 'Kunci Link');
-  assert.match(res.link, /k=[a-f0-9]{32}$/);
+  assert.match(env.memberRow('PT-X')[13], /^[a-f0-9]{32}$/);
+  assert.equal(env.call('getMemberProfile', login.token).id, 'PT-X');
 });
 
 test('a column N the owner already uses is never overwritten', () => {
@@ -20,7 +21,10 @@ test('a column N the owner already uses is never overwritten', () => {
     ['PT-X', 'Xena', '6287777777777', 'g', '1/1/2026', '', '', '', 10, 0, '', '', '1/1/2026', 'alergi kacang'],
   ]);
   const admin = env.adminToken();
-  assert.throws(() => env.call('adminGetMemberLink', admin, 'PT-X'), /Kolom N di sheet MemberData sudah dipakai untuk "Catatan Owner"/);
+  // Phone login still works (the session just cannot be revoked per client).
+  const login = env.call('memberLoginByPhone', '6287777777777');
+  assert.equal(env.call('getMemberProfile', login.token).id, 'PT-X');
+  assert.equal(env.memberRow('PT-X')[13], 'alergi kacang');
   assert.throws(() => env.call('memberLoginByKey', 'a'.repeat(32)), /AUTH_REQUIRED/);
 
   // Adding / renewing clients still works and leaves column N alone.
@@ -30,5 +34,5 @@ test('a column N the owner already uses is never overwritten', () => {
   assert.equal(rows[0][13], 'Catatan Owner');
   assert.equal(rows[1][13], 'alergi kacang');
   assert.equal(rows.find(r => r[0] === res.id)[13], undefined);
-  assert.equal(res.memberLink, 'https://book.xnkbooking.my.id');
+  assert.ok(decodeURIComponent(res.waLink).includes('https://book.xnkbooking.my.id'));
 });

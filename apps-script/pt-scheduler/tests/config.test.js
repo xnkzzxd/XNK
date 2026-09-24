@@ -38,7 +38,7 @@ test('unknown keys and invalid values are not applied', () => {
   const env = createEnv();
   env.props.ADMIN_PIN = '246810';
   env.props.SESSION_SECRET = 'keep-me';
-  env.driveFiles.push(configFile({ ADMIN_PIN: '123', SESSION_SECRET: 'x', MEMBER_LINK_BASE: 'http://evil', TELEGRAM_CHAT_IDS: '5' }));
+  env.driveFiles.push(configFile({ ADMIN_PIN: '123', SESSION_SECRET: 'x', MEMBER_LINK_BASE: 'https://evil.example', TELEGRAM_CHAT_IDS: '5' }));
   env.call('doGet', { parameter: {} });
   assert.equal(env.props.ADMIN_PIN, '246810');
   assert.equal(env.props.SESSION_SECRET, 'keep-me');
@@ -48,10 +48,10 @@ test('unknown keys and invalid values are not applied', () => {
 
 test('null removes a property', () => {
   const env = createEnv();
-  env.props.MEMBER_LINK_BASE = 'https://old.example.com/';
-  env.driveFiles.push(configFile({ MEMBER_LINK_BASE: null }));
+  env.props.TELEGRAM_CHAT_IDS = '1,2';
+  env.driveFiles.push(configFile({ TELEGRAM_CHAT_IDS: null }));
   env.call('doGet', { parameter: {} });
-  assert.equal(env.props.MEMBER_LINK_BASE, undefined);
+  assert.equal(env.props.TELEGRAM_CHAT_IDS, undefined);
 });
 
 test('a config file that is not valid JSON is left alone', () => {

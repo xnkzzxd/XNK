@@ -1164,31 +1164,6 @@
       }
     };
 
-    // Kirim link member pribadi ke klien via WhatsApp (tombol di Profil Klien).
-    // reset=true: buat link baru; link lama & sesi login klien di HP lamanya tidak berlaku.
-    window.sendMemberLink = function(reset) {
-      const id = window.selectedMemberId;
-      if (!id) return;
-      const run = function() {
-        const waWin = window.openPendingWindow();
-        window.adminApi()
-          .withSuccessHandler(function(res) {
-            const text = 'Halo ' + res.name + ', ini link member pribadi kamu di XNK untuk booking jadwal & cek sisa sesi ' +
-              '(khusus untuk kamu, jangan dibagikan ya):\n' + res.link;
-            waWin.go(window.waUrl(res.phone, text));
-            window.showToast(reset ? 'Link baru dibuat. Link lama sudah tidak berlaku.' : 'Membuka WhatsApp...');
-          })
-          .withFailureHandler(function(err) { waWin.cancel(); window.showToast('Gagal: ' + err.message); })
-          .adminGetMemberLink(id, !!reset);
-      };
-      if (reset) {
-        window.showConfirmModal('Link lama klien ini akan <b>tidak berlaku</b> dan klien harus memakai link baru yang kamu kirim.', run,
-          { title: 'Buat Link Baru?', confirmText: 'Ya, Buat Baru', variant: 'danger' });
-      } else {
-        run();
-      }
-    };
-
     window.openEditProfileModal = function() {
       const mem = window.members.find(m => String(m.id) === String(window.selectedMemberId)); if(!mem) return;
       document.getElementById('edit-member-name').value = mem.name || ''; document.getElementById('edit-member-phone').value = mem.phone || ''; document.getElementById('edit-member-goal').value = mem.goal || '';
@@ -2260,10 +2235,15 @@
               window.navigate('public-login');
               return;
             }
-            // Klien baru: langsung masuk memakai link pribadinya.
-            const key = (String(res.memberLink || '').match(/[?&]k=([a-f0-9]{32})/i) || [])[1];
-            window.showToast('Registrasi berhasil! Simpan link member dari Coach untuk masuk lagi nanti.');
-            if (key) window.startPublicPortal(key); else window.navigate('public-login');
+            // Klien baru: langsung masuk. Berikutnya cukup masuk dengan nomor WhatsApp.
+            window.showToast('Registrasi berhasil! Berikutnya masuk dengan nomor WhatsApp kamu.');
+            if (res.token && res.member) {
+              _lsSet(MEMBER_TOKEN_KEY, res.token);
+              window.setPublicMember(res.member);
+              window.loadPublicData();
+            } else {
+              window.navigate('public-login');
+            }
           })
           .withFailureHandler(function(err) {
             waWin.cancel();
@@ -2276,8 +2256,35 @@
     // =============================================================================
     // --- PUBLIC MEMBER AREA ---
     // =============================================================================
-    // Klien masuk lewat link pribadi dari Coach (…?view=public&k=KUNCI). Token member
-    // disimpan di perangkat ini, jadi kunjungan berikutnya tidak perlu link lagi.
+    // Klien masuk dengan nomor WhatsApp yang terdaftar (dicek di server). Token member
+    // disimpan di perangkat ini (90 hari), jadi kunjungan berikutnya langsung masuk.
+    // Link lama (…?view=public&k=KUNCI) masih diterima lewat startPublicPortal(key).
+    window.handlePublicLogin = function(e) {
+      if (e) e.preventDefault();
+      const input = document.getElementById('login-phone');
+      const btn = document.getElementById('login-submit-btn');
+      const phone = sanitizePhone(input ? input.value : '');
+      if (!phone) return;
+      window.showMemberLinkMessage('');
+      if (!window.isGas) { window.showMemberLinkMessage('Mode demo: login tidak tersedia.'); return; }
+      const originalText = btn ? btn.innerHTML : '';
+      if (btn) { btn.disabled = true; btn.innerHTML = 'Memeriksa...'; }
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
+          _lsSet(MEMBER_TOKEN_KEY, res.token);
+          if (input) input.value = '';
+          window.setPublicMember(res.member);
+          window.loadPublicData();
+          window.showToast('Selamat datang, ' + (res.member.name || 'Klien') + '!');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
+          window.showMemberLinkMessage(window.authMessage(err));
+        })
+        .memberLoginByPhone(phone);
+    };
+
     window.startPublicPortal = function(key) {
       if (!window.isGas) { window.loadAllData(); return; }
       if (!key) { window.loadPublicData(); return; }
@@ -2322,12 +2329,6 @@
       if (loginBtn) loginBtn.classList.remove('hidden');
       window.showMemberLinkMessage(window.authMessage(err));
       if (window.currentView === 'public-dashboard') window.navigate('public-login');
-    };
-
-    // Tombol "Minta Link ke Coach" di halaman Akses Member.
-    window.requestMemberLink = function() {
-      const text = 'Halo Coach, saya member XNK dan butuh link member pribadi untuk booking & cek sisa sesi. Nama saya: ';
-      window.open(window.waUrl(window.coachContactNumber(), text), '_blank');
     };
 
     window.logoutPublic = function() {

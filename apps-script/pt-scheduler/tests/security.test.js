@@ -7,12 +7,12 @@ const { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays } = require('./fixtures');
 // browser through google.script.run. Each one must be classified here, so a
 // new server function added without a guard makes this test fail.
 const PUBLIC = [
-  'doGet', 'include', 'adminLogin', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
+  'doGet', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
   'getPriceList', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [
-  'checkAdminSession', 'changeAdminPin', 'adminGetMemberLink',
+  'checkAdminSession', 'changeAdminPin',
   'getMembers', 'getMemberTransactionLog', 'getSchedules',
   'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto',
   'addMember', 'updateMemberProfile', 'deleteMember',
@@ -118,37 +118,59 @@ test('trigger handlers cannot be spammed', () => {
   assert.equal(env.mails.length, 1);
 });
 
-test('member link login, profile, and reset revokes old link and sessions', () => {
+test('clients log in with their WhatsApp number in any common format', () => {
+  const env = seededEnv();
+  // PT-A is stored as 6281111111111, PT-B as 081222222222.
+  for (const phone of ['6281111111111', '081111111111', '81111111111', '+62 811-1111-1111']) {
+    assert.equal(env.call('memberLoginByPhone', phone).member.id, 'PT-A', phone);
+  }
+  assert.equal(env.call('memberLoginByPhone', '6281222222222').member.id, 'PT-B');
+
+  const login = env.call('memberLoginByPhone', '081111111111');
+  assert.equal(login.member.name, 'Ani Anggraini');
+  assert.equal(JSON.stringify(login).includes(KEY_A), false, 'login must not echo the session key');
+  assert.equal(env.call('getMemberProfile', login.token).usedSessions, 5);
+});
+
+test('phone login: unknown or invalid numbers are refused', () => {
+  const env = seededEnv();
+  assert.throws(() => env.call('memberLoginByPhone', '6289999999999'), /tidak ditemukan/);
+  assert.throws(() => env.call('memberLoginByPhone', '123'), /tidak valid/);
+  assert.throws(() => env.call('memberLoginByPhone', ''), /tidak valid/);
+});
+
+test('phone login locks for everyone after 30 unknown numbers, and alerts Telegram', () => {
+  const env = seededEnv();
+  for (let i = 0; i < 30; i++) {
+    assert.throws(() => env.call('memberLoginByPhone', '62899000000' + String(i).padStart(2, '0')), /tidak ditemukan/);
+  }
+  assert.throws(() => env.call('memberLoginByPhone', '6281111111111'), /Terlalu banyak percobaan/);
+  assert.ok(env.fetches.some(f => JSON.parse(f.options.payload).text.includes('LOGIN KLIEN DIKUNCI')));
+  env.now = Date.now() + 11 * 60 * 1000;
+  assert.equal(env.call('memberLoginByPhone', '6281111111111').member.id, 'PT-A');
+});
+
+test('phone login gives old clients a session key, and changing it ends their sessions', () => {
+  const env = seededEnv();
+  const login = env.call('memberLoginByPhone', '6283333333333'); // PT-C has no key yet
+  const key = env.memberRow('PT-C')[13];
+  assert.match(key, /^[a-f0-9]{32}$/);
+  assert.equal(env.call('getMemberProfile', login.token).id, 'PT-C');
+  // Same key on the next login.
+  env.call('memberLoginByPhone', '6283333333333');
+  assert.equal(env.memberRow('PT-C')[13], key);
+  // Owner clears / changes the key in the sheet: old sessions stop working.
+  env.memberRow('PT-C')[13] = 'd'.repeat(32);
+  assert.throws(() => env.call('getMemberProfile', login.token), AUTH);
+});
+
+test('old ?k= links still log in', () => {
   const env = seededEnv();
   assert.throws(() => env.call('memberLoginByKey', 'x'.repeat(32)), AUTH);
   assert.throws(() => env.call('memberLoginByKey', 'c'.repeat(32)), AUTH);
-
   const login = env.call('memberLoginByKey', KEY_A);
   assert.equal(login.member.id, 'PT-A');
-  assert.equal(login.member.name, 'Ani Anggraini');
-  assert.equal(JSON.stringify(login.member).includes(KEY_A), false, 'profile must not echo the link key');
-  assert.equal(env.call('getMemberProfile', login.token).usedSessions, 5);
-
-  const admin = env.adminToken();
-  const fresh = env.call('adminGetMemberLink', admin, 'PT-A', true);
-  const newKey = fresh.link.match(/k=([a-f0-9]{32})$/)[1];
-  assert.notEqual(newKey, KEY_A);
-  assert.throws(() => env.call('getMemberProfile', login.token), AUTH);
-  assert.throws(() => env.call('memberLoginByKey', KEY_A), AUTH);
-  assert.equal(env.call('memberLoginByKey', newKey).member.id, 'PT-A');
-});
-
-test('adminGetMemberLink creates a key for old clients and honours MEMBER_LINK_BASE', () => {
-  const env = seededEnv();
-  const admin = env.adminToken();
-  const res = env.call('adminGetMemberLink', admin, 'PT-C');
-  assert.match(res.link, /^https:\/\/script\.google\.com\/macros\/s\/AKfycbyVOm1[\w-]+\/exec\?view=public&k=[a-f0-9]{32}$/);
-  assert.equal(res.phone, '6283333333333');
-  // Same key on the next call (no reset).
-  assert.equal(env.call('adminGetMemberLink', admin, 'PT-C').link, res.link);
-
-  env.props.MEMBER_LINK_BASE = 'https://book.example.com/';
-  assert.match(env.call('adminGetMemberLink', admin, 'PT-C').link, /^https:\/\/book\.example\.com\/\?k=[a-f0-9]{32}$/);
+  assert.equal(env.call('getMemberProfile', login.token).id, 'PT-A');
 });
 
 test('getMembers (admin) never returns link keys', () => {

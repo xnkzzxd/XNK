@@ -1109,18 +1109,6 @@
   <script>
     // === Booking subdomain (clean URL, no query params) ===
     var BOOKING_URL = 'https://book.xnkbooking.my.id';
-    var LANDING_WA = '6288221254305';
-
-    // Buka URL di jendela teratas (halaman ini bisa tampil di dalam iframe).
-    function goTopUrl(url) {
-      try {
-        if (window.top && window.top !== window.self) {
-          window.top.location.href = url;
-          return;
-        }
-      } catch (e) { /* cross-origin fallback below */ }
-      window.location.href = url;
-    }
 
     function redirectToBooking() {
       try {
@@ -1194,23 +1182,81 @@
         '</button>' +
         '<div class="text-center">' +
           '<h2 class="mb-2" style="font-size:2rem;font-weight:900;line-height:1.15;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:10px">Member Lama</h2>' +
-          '<p class="text-sm" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:28px;line-height:1.5">Buka <b style="color:#111827">link member pribadi</b> yang dikirim Coach lewat WhatsApp untuk booking & cek sisa sesi. Belum punya atau lupa? Minta link ke Coach.</p>' +
-          '<button type="button" onclick="requestMemberLinkLanding()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#25D366;color:#FFFFFF;width:100%;transition:all 0.2s ease;margin-top:4px">' +
-            ' Minta Link ke Coach' +
+          '<p class="text-sm" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:28px;line-height:1.5">Masukkan nomor WhatsApp yang terdaftar untuk booking & cek sisa sesi.</p>' +
+          '<form onsubmit="doVerifyMember(event)">' +
+          '<div class="xnk-field text-left" style="margin-bottom:20px">' +
+            '<label for="verify-phone" class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:10px">Nomor WhatsApp <span style="color:#DC2626">*</span></label>' +
+            '<input type="tel" inputmode="numeric" id="verify-phone" class="xnk-input" placeholder="08123…" autocomplete="tel" style="width:100%;box-sizing:border-box;background:#F3F4F6;border:1.5px solid #F3F4F6;color:#111827;border-radius:16px;padding:16px 18px;font-size:0.95rem" />' +
+            '<p id="verify-error" class="xnk-error-text hide" role="alert" style="color:#DC2626;margin-top:10px;font-size:0.8rem;text-align:left"></p>' +
+          '</div>' +
+          '<button type="submit" id="verify-btn" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease;margin-top:4px">' +
+            'Masuk' +
           '</button>' +
-          '<p style="font-size:0.75rem;color:#9CA3AF;margin-top:14px">Link bersifat pribadi. Jangan dibagikan ke orang lain.</p>' +
+          '</form>' +
           '<p style="font-size:0.8rem;color:#6B7280;margin-top:20px">Belum terdaftar? <a href="javascript:void(0)" onclick="openRegistration()" style="font-weight:600;color:#111827;text-decoration:underline">Daftar sebagai member baru</a></p>' +
         '</div>' +
         '</div>';
 
       m.classList.remove('hide');
       document.body.style.overflow = 'hidden';
-
+      setTimeout(function() {
+        var inp = document.getElementById('verify-phone');
+        if (inp) inp.focus();
+      }, 300);
     }
 
-    function requestMemberLinkLanding() {
-      var text = 'Halo Coach, saya member XNK dan butuh link member pribadi untuk booking & cek sisa sesi. Nama saya: ';
-      window.open('https://wa.me/' + LANDING_WA + '?text=' + encodeURIComponent(text), '_blank');
+    // Cek nomor WA di server (daftar klien tidak pernah dikirim ke browser). Berhasil:
+    // token disimpan di perangkat ini, jadi book.xnkbooking.my.id langsung masuk.
+    function doVerifyMember(e) {
+      if (e) e.preventDefault();
+      var input = document.getElementById('verify-phone');
+      var errEl = document.getElementById('verify-error');
+      var btn = document.getElementById('verify-btn');
+      var raw = input ? String(input.value).trim() : '';
+      function showError(msg) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Masuk'; }
+        if (errEl) { errEl.textContent = msg; errEl.classList.remove('hide'); }
+      }
+      if (!raw) { showError('Masukkan nomor WhatsApp kamu.'); return; }
+      if (errEl) errEl.classList.add('hide');
+      if (typeof google === 'undefined' || !google.script) { showError('Mode demo: login tidak tersedia.'); return; }
+      if (btn) { btn.disabled = true; btn.textContent = 'Memeriksa...'; }
+      google.script.run
+        .withSuccessHandler(function(res) {
+          _lsSet(MEMBER_TOKEN_KEY, res.token);
+          showMemberCard(res.member);
+        })
+        .withFailureHandler(function(err) {
+          showError(err && err.message ? err.message : 'Gagal memeriksa nomor. Coba lagi.');
+        })
+        .memberLoginByPhone(raw);
+    }
+
+    function showMemberCard(member) {
+      var contentArea = document.querySelector('#member-check-modal .modal-content');
+      if (!contentArea || !member) return;
+      var total = parseInt(member.totalSessions, 10) || 0;
+      var remaining = Math.max(0, total - (parseInt(member.usedSessions, 10) || 0));
+      var box = 'class="rounded-2xl p-4" style="background:#F3F4F6;border:1.5px solid #F3F4F6"';
+      var label = 'style="font-size:0.625rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem"';
+      var num = 'font-size:1.75rem;font-weight:900;font-family:Inter,SF Pro Display,-apple-system,sans-serif';
+      contentArea.innerHTML =
+        '<div style="padding:40px 32px;position:relative">' +
+        '<button type="button" onclick="closeMemberCheck()" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors" style="color:#6B7280;background:transparent" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'transparent\'" aria-label="Tutup">' +
+          '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+        '</button>' +
+        '<div class="text-center">' +
+          '<h2 class="mb-1" style="font-size:2rem;font-weight:900;line-height:1.1;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + escapeHtml(member.name || 'Member') + '</h2>' +
+          '<p class="text-sm mb-4" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + escapeHtml(member.id || '') + '</p>' +
+          '<div class="grid grid-cols-2 gap-3 mb-4 text-left">' +
+            '<div ' + box + '><p ' + label + '>Sisa Sesi</p><p style="' + num + ';color:#000000">' + remaining + '</p></div>' +
+            '<div ' + box + '><p ' + label + '>Total Sesi</p><p style="' + num + ';color:#111827">' + total + '</p></div>' +
+          '</div>' +
+          '<button type="button" id="member-card-booking" onclick="redirectToBooking()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease">' +
+            'Lanjut Booking' +
+          '</button>' +
+        '</div>' +
+        '</div>';
     }
 
     // === Registration Flow (New Member) ===
@@ -1478,12 +1524,12 @@
         if (res.status === 'exists') {
           // Nomor sudah terdaftar: server TIDAK mengubah data/kuota. PT sudah dikabari.
           if (errEl) {
-            errEl.textContent = 'Nomor WhatsApp ini sudah terdaftar. Coach sudah kami kabari untuk memproses perpanjanganmu. Untuk booking, buka link member dari WhatsApp Coach.';
+            errEl.textContent = 'Nomor WhatsApp ini sudah terdaftar. Coach sudah kami kabari untuk memproses perpanjanganmu. Untuk booking, pilih Member Lama lalu masuk dengan nomor WhatsApp ini.';
             errEl.classList.remove('hide');
           }
           return;
         }
-        window._newMemberLink = res.memberLink || '';
+        if (res.token) _lsSet(MEMBER_TOKEN_KEY, res.token);
         var s2 = document.getElementById('reg-step-2');
         var s3 = document.getElementById('reg-step-3');
         if (s2) s2.classList.add('hide');
@@ -1509,15 +1555,15 @@
           });
       } else {
         var mockId = 'PT-' + String(Math.floor(Math.random() * 900 + 100));
-        setTimeout(function() { onSuccess({ status: 'success', id: mockId, memberLink: '' }); }, 600);
+        setTimeout(function() { onSuccess({ status: 'success', id: mockId }); }, 600);
       }
     }
 
-    // Setelah daftar: buka Member Area klien baru (link pribadinya), kalau tidak ada
-    // pakai halaman booking umum.
+    // Setelah daftar: ke halaman booking. Token klien baru sudah tersimpan, jadi
+    // book.xnkbooking.my.id langsung masuk (kalau browser mengizinkan); kalau tidak,
+    // klien cukup masuk dengan nomor WhatsApp.
     function openNewMemberArea() {
-      if (window._newMemberLink) goTopUrl(window._newMemberLink);
-      else redirectToBooking();
+      redirectToBooking();
     }
 
     // === FAQ Toggle ===

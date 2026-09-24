@@ -301,16 +301,6 @@
           </button>
         </div>
 
-        <!-- Baris 2b: Link member pribadi (login portal klien) -->
-        <div class="flex items-center gap-3 mb-5">
-          <button onclick="window.sendMemberLink(false)" type="button" class="flex-1 flex items-center justify-center gap-2 text-white bg-black hover:bg-gray-800 py-3 rounded-xl text-sm font-bold transition-colors">
-            <i data-lucide="link" class="w-4 h-4 pointer-events-none"></i> Kirim Link Member
-          </button>
-          <button onclick="window.sendMemberLink(true)" type="button" title="Buat link baru (link lama tidak berlaku)" class="flex items-center justify-center gap-2 text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-3 rounded-xl text-sm font-bold transition-colors">
-            <i data-lucide="refresh-cw" class="w-4 h-4 pointer-events-none"></i> Link Baru
-          </button>
-        </div>
-
         <!-- Baris 3: Aksi Edit & Hapus -->
         <div class="flex items-center gap-3 pt-4 border-t border-gray-100">
           <button onclick="window.openEditProfileModal()" type="button" class="flex-1 flex items-center justify-center gap-2 text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 py-3 rounded-xl text-sm font-bold transition-colors">
@@ -438,14 +428,22 @@
             <i data-lucide="user" class="w-8 h-8 text-white"></i>
           </div>
           <h2 class="text-2xl font-black mb-2">Akses Member</h2>
-          <p class="text-gray-500 text-sm mb-6">Buka <b class="text-gray-800">link member pribadi</b> yang dikirim Coach lewat WhatsApp untuk melihat jadwal dan sisa sesi. Setelah itu kamu otomatis masuk di perangkat ini.</p>
+          <p class="text-gray-500 text-sm mb-8">Masukkan nomor WhatsApp yang terdaftar untuk melihat jadwal dan sisa sesi.</p>
 
           <p id="member-link-message" class="hide text-xs font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-4" role="alert"></p>
 
-          <button type="button" onclick="window.requestMemberLink()" class="group w-full bg-[#25D366] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-[#1ebe5d] active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2">
-            <i data-lucide="message-circle" class="w-4 h-4 pointer-events-none"></i> Minta Link ke Coach
-          </button>
-          <p class="text-[11px] text-gray-400 mt-4">Link bersifat pribadi. Jangan dibagikan ke orang lain.</p>
+          <form onsubmit="window.handlePublicLogin(event)" class="space-y-4">
+            <div class="relative text-left">
+              <label for="login-phone" class="block text-xs font-bold text-gray-500 mb-1 ml-1">Nomor WhatsApp</label>
+              <div class="relative">
+                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-sm">+62</span>
+                <input type="tel" inputmode="numeric" id="login-phone" required placeholder="81234567890" class="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:bg-white text-sm font-medium transition-all" autocomplete="tel">
+              </div>
+            </div>
+            <button type="submit" id="login-submit-btn" class="group w-full bg-black text-white py-3.5 rounded-xl font-bold text-sm hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md mt-2 flex items-center justify-center gap-2">
+              Masuk <i data-lucide="arrow-right" class="w-4 h-4 group-hover:translate-x-1 transition-transform"></i>
+            </button>
+          </form>
     
           <div class="grid grid-cols-3 gap-2 mt-8 pt-6 border-t border-gray-100">
             <div class="flex flex-col items-center gap-1.5">

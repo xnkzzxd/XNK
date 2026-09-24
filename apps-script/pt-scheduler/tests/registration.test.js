@@ -10,16 +10,17 @@ test('new client: sessions come from the Price List, not the browser', () => {
     packageId: 'P1', sessions: 999, packageSessions: 999, price: 'Rp 1',
   });
   assert.equal(res.status, 'success');
-  assert.match(res.memberLink, /k=[a-f0-9]{32}$/);
+  assert.equal(res.memberLink, undefined);
   const row = env.memberRow(res.id);
   assert.equal(row[1], 'Dewi');
   assert.equal(row[6], 'P1');
   assert.equal(row[8], 8);  // Total Sesi from package P1
   assert.equal(row[9], 0);  // Sesi Terpakai
   assert.match(row[13], /^[a-f0-9]{32}$/);
-  // The returned link logs the new client in.
-  const key = res.memberLink.match(/k=([a-f0-9]{32})$/)[1];
-  assert.equal(env.call('memberLoginByKey', key).member.id, res.id);
+  // The new client is logged in right away, and can log in again by phone.
+  assert.equal(res.member.id, res.id);
+  assert.equal(env.call('getMemberProfile', res.token).id, res.id);
+  assert.equal(env.call('memberLoginByPhone', '081444444444').member.id, res.id);
 });
 
 test('flexible package (no session count) gets 1 session, as before', () => {
@@ -28,7 +29,7 @@ test('flexible package (no session count) gets 1 session, as before', () => {
   assert.equal(env.memberRow(res.id)[8], 1);
 });
 
-test('existing phone number: quota untouched, no link returned, PT notified', () => {
+test('existing phone number: quota untouched, no session returned, PT notified', () => {
   const env = seededEnv();
   const before = env.memberRow('PT-A').slice();
   // Same number in a different format than stored.
@@ -74,13 +75,15 @@ test('admin addMember still renews an existing client (resets quota, keeps key)'
   assert.equal(row[8], 8);
   assert.equal(row[9], 0);
   assert.equal(row[13], 'a'.repeat(32));
-  assert.match(res.memberLink, /k=a{32}$/);
-  assert.ok(decodeURIComponent(res.waLink).includes(res.memberLink));
+  // The WA welcome text points to the booking site, never to a script.google link.
+  const wa = decodeURIComponent(res.waLink);
+  assert.ok(wa.includes('https://book.xnkbooking.my.id'));
+  assert.ok(!wa.includes('script.google') && !wa.includes('k='));
 });
 
 test('admin addMember gives old clients without a key a new one', () => {
   const env = seededEnv();
   const res = env.call('addMember', env.adminToken(), { name: 'Citra', phone: '6283333333333', goal: 'x', packageId: 'P1' });
   assert.match(env.memberRow('PT-C')[13], /^[a-f0-9]{32}$/);
-  assert.ok(res.memberLink.endsWith(env.memberRow('PT-C')[13]));
+  assert.equal(res.memberLink, undefined);
 });

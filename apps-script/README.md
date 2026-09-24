@@ -14,7 +14,7 @@ deploy memperbarui semuanya:
 | --- | --- | --- |
 | https://xnk.my.id | xnkzzxd/XNK | `/exec` → Index (panel PT, login PIN) |
 | https://xnkbooking.my.id | xnkzzxd/BookingPT | `/exec?view=Landing` (marketing + daftar) |
-| https://book.xnkbooking.my.id | xnkzzxd/BookingPT-Client | `/exec?view=public` (portal klien, login link member) |
+| https://book.xnkbooking.my.id | xnkzzxd/BookingPT-Client | `/exec?view=public` (portal klien, login nomor WA) |
 
 ## Cara kerja
 
@@ -44,7 +44,7 @@ Rahasia (token bot, PIN, password) **tidak boleh** ditulis di kode. Simpan di
 Apps Script → ⚙️ Project Settings → **Script Properties**.
 
 **Repo ini publik.** Siapa pun bisa membaca kodenya, dan itu aman selama tidak ada
-rahasia di kode: semua akses data dicek di server (login PIN / link member).
+rahasia di kode: semua akses data dicek di server (login PIN admin / nomor WA klien).
 Secret GitHub (`CLASPRC_JSON`) tidak terlihat publik dan tidak dipakai untuk PR dari fork;
 deploy hanya jalan saat ada push ke `main`, yang hanya bisa dilakukan pemilik repo.
 
@@ -60,7 +60,6 @@ Buka proyek *XNK Personal Trainer Scheduler* → ⚙️ **Project Settings** →
 | `ADMIN_PIN` | **Wajib.** PIN login panel PT, minimal 6 karakter. Tanpa ini tidak ada yang bisa masuk panel. Mengganti PIN = semua perangkat PT otomatis logout. |
 | `TELEGRAM_BOT_TOKEN` | Token bot Telegram (salin dari `kirimNotifTelegram` versi lama di editor, sebelum ditimpa) |
 | `TELEGRAM_CHAT_IDS` | Chat ID admin, dipisah koma, mis. `12345678,87654321` |
-| `MEMBER_LINK_BASE` | Opsional. Alamat portal klien untuk link member pribadi. Kosong = langsung ke `…/exec?view=public` (pasti jalan). Isi `https://book.xnkbooking.my.id/` hanya setelah BookingPT-Client meneruskan `?k=…` ke iframe. |
 
 `SESSION_SECRET` dibuat otomatis oleh aplikasi. Menghapusnya = semua PT & klien logout.
 
@@ -68,7 +67,7 @@ Buka proyek *XNK Personal Trainer Scheduler* → ⚙️ **Project Settings** →
 pemilik (jangan dibagikan), isinya JSON, mis.
 `{"ADMIN_PIN":"135790","TELEGRAM_CHAT_IDS":"12345678,87654321"}`. Paling lambat 5 menit
 setelah halaman aplikasi dibuka, isinya dipindah ke Script Properties, file dibuang ke
-Sampah, dan Telegram menerima notif "Pengaturan aplikasi diperbarui". Hanya empat
+Sampah, dan Telegram menerima notif "Pengaturan aplikasi diperbarui". Hanya tiga
 property di tabel atas yang diterima; `null` menghapus property. File milik akun lain
 (yang dibagikan ke Anda) diabaikan.
 
@@ -124,8 +123,13 @@ fungsi di `.gs` yang namanya tidak berakhiran `_` bisa dipanggil siapa saja dari
 
 Tes `security.test.js` gagal kalau ada fungsi baru yang belum masuk salah satu daftar di atas.
 
-Klien masuk portal lewat **link pribadi** (`…?k=KUNCI`). PT mengirim link itu dari
-Profil Klien → **Kirim Link Member**; **Link Baru** membatalkan link lama.
+Klien masuk portal dengan **nomor WhatsApp** yang terdaftar (di book.xnkbooking.my.id atau
+tombol *Member Lama* di xnkbooking.my.id). Nomor dicek di server; daftar klien tidak pernah
+dikirim ke browser. HP klien mengingat login 90 hari. Siapa pun yang tahu nomor WA seorang
+klien bisa masuk sebagai klien itu — risiko ini disengaja supaya tanpa link/PIN klien.
+Untuk mencegah pemindaian massal: 30 nomor tak dikenal dalam 10 menit = login nomor WA
+dikunci 10 menit + notif Telegram. Mengosongkan kolom N ("Kunci Link") seorang klien di
+sheet MemberData mengeluarkan klien itu dari semua HP.
 
 ## Cek lokal
 

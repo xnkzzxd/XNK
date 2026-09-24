@@ -71,8 +71,10 @@ async function openPage(browser, env, pagePath, calls, storage) {
     }
   });
   await context.addInitScript(gasShim);
+  const navigations = [];
   await context.route('**/*', route => {
     const url = route.request().url();
+    if (route.request().isNavigationRequest()) navigations.push(url);
     if (url.startsWith(ORIGIN)) {
       const page = new URL(url).pathname.replace('/', '') || 'Index';
       return route.fulfill({ contentType: 'text/html', body: render(page) });
@@ -86,8 +88,15 @@ async function openPage(browser, env, pagePath, calls, storage) {
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(ORIGIN + pagePath);
   await page.waitForTimeout(700);
-  return { page, context, errors };
+  return { page, context, errors, navigations };
 }
+
+// Everything a client could see as a link: WhatsApp texts opened and top-level navigations.
+async function shownUrls(page, navigations) {
+  const opened = await page.evaluate(() => window.__opened.map(w => w.location.href));
+  return opened.concat(navigations).map(u => { try { return decodeURIComponent(u); } catch (e) { return u; } });
+}
+const noScriptGoogle = urls => !urls.some(u => u.includes('script.google'));
 
 const visible = (page, sel) => page.locator(sel).first().isVisible();
 
@@ -124,11 +133,9 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
     check((await page.textContent('#client-list')).includes('<img src=x'), 'client name is shown as plain text');
 
     await page.evaluate(() => window.openProfile('PT-C'));
-    await page.click('text=Kirim Link Member');
-    await page.waitForTimeout(400);
-    const opened = await page.evaluate(() => window.__opened.map(w => w.location.href));
-    const wa = opened.find(u => u.startsWith('https://wa.me/6283333333333'));
-    check(!!wa && /k%3D[a-f0-9]{32}/.test(wa), '"Kirim Link Member" opens WhatsApp with the client\'s personal link');
+    await page.waitForTimeout(300);
+    const profileText = await page.textContent('#view-profile');
+    check(!profileText.includes('Kirim Link') && !profileText.includes('Link Baru'), 'client profile has no member-link buttons');
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'admin-profile.png') });
 
     // Session survives a reload; a changed PIN logs every device out.
@@ -156,21 +163,30 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
     const leaked = await page.evaluate(() => JSON.stringify(window.schedules));
     check(!leaked.includes('Ani') && !leaked.includes('Rahasia') && !leaked.includes('62811'), 'public calendar data has no names, notes or phone numbers');
     await page.evaluate(() => window.navigate('public-login'));
-    check((await page.textContent('#view-public-login')).includes('link member pribadi'), 'login page explains the personal link');
+    check(await visible(page, '#login-phone'), 'login page asks for the WhatsApp number');
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'portal-login.png') });
     check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await context.close();
   }
   {
     const env = seededEnv();
-    const calls = [];
-    const { page, context, errors } = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, calls);
+    const { page, context, errors, navigations } = await openPage(browser, env, '/Index?view=public', []);
+    await page.evaluate(() => window.navigate('public-login'));
+    await page.fill('#login-phone', '89999999999');
+    await page.click('#login-submit-btn');
     await page.waitForTimeout(500);
-    check((await page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'personal link logs the client in');
+    check((await page.textContent('#member-link-message')).includes('tidak ditemukan'), 'unknown number → "Nomor WhatsApp tidak ditemukan"');
+    check(!(await page.evaluate(() => window.publicLoggedMember)), 'unknown number → not logged in');
+
+    await page.fill('#login-phone', '81111111111');
+    await page.click('#login-submit-btn');
+    await page.waitForTimeout(700);
+    check((await page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'registered WhatsApp number logs the client in');
     check((await page.evaluate(() => window.currentView)) === 'public-dashboard', 'opens "Dashboardku"');
     check((await page.textContent('#pub-dash-name')).includes('Ani'), 'shows the client\'s own name');
     const own = await page.evaluate(() => window.schedules.find(s => s.id === 'SCH-A1'));
     check(own && own.notes === 'Rahasia Ani', 'own bookings include their details');
+    check((await page.evaluate(() => window.members.length)) === 0, 'still no client list in the browser after login');
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'portal-dashboard.png') });
 
     // Book a session through the real form.
@@ -183,22 +199,30 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
     await page.waitForTimeout(500);
     const booked = env.sheet('Schedules').rows.find(r => r[6] === 'Leg day');
     check(!!booked && booked[1] === 'PT-A' && booked[7] === 'unread', 'booking is saved for the logged-in client');
+    check(noScriptGoogle(await shownUrls(page, navigations)), 'no script.google link shown to the client');
 
-    // Link reset by the PT → this device is logged out on next load.
-    env.call('adminGetMemberLink', env.adminToken(), 'PT-A', true);
+    // Next visit on the same phone: straight in. Changed session key: asked to log in again.
     const token = await page.evaluate(() => localStorage.getItem('xnk_member_token'));
     const again = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token });
-    check(!(await again.page.evaluate(() => window.publicLoggedMember)), 'after "Link Baru", the old session no longer works');
-    check((await again.page.textContent('#member-link-message')).includes('tidak berlaku'), 'client is told to ask for a new link');
+    await again.page.waitForTimeout(400);
+    check((await again.page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'next visit on this phone logs in automatically');
+    env.memberRow('PT-A')[13] = 'e'.repeat(32);
+    const revoked = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token });
+    await revoked.page.waitForTimeout(400);
+    check(!(await revoked.page.evaluate(() => window.publicLoggedMember)), 'changed session key → old session no longer works');
+    check((await revoked.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'client is told to log in with the WhatsApp number');
     check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
-    await context.close(); await again.context.close();
+    await context.close(); await again.context.close(); await revoked.context.close();
   }
   {
     const env = seededEnv();
-    const { page, context } = await openPage(browser, env, '/Index?view=public&k=' + 'f'.repeat(32), []);
-    check((await page.evaluate(() => window.currentView)) === 'public-login', 'unknown link → login page');
-    check((await page.textContent('#member-link-message')).includes('tidak dikenal'), 'unknown link → clear message');
-    await context.close();
+    const old = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, []);
+    await old.page.waitForTimeout(400);
+    check((await old.page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'an old ?k= link still logs in');
+    const bad = await openPage(browser, env, '/Index?view=public&k=' + 'f'.repeat(32), []);
+    check((await bad.page.evaluate(() => window.currentView)) === 'public-login', 'unknown link → login page');
+    check((await bad.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'unknown link → asked to log in with the number');
+    await old.context.close(); await bad.context.close();
   }
 
   // ── Landing ───────────────────────────────────────────────────────────────
@@ -206,12 +230,30 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
   {
     const env = seededEnv();
     const calls = [];
-    const { page, context, errors } = await openPage(browser, env, '/Landing', calls);
+    const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', calls);
     await page.evaluate(() => { openMemberCheck(); goToBooking('existing'); });
     await page.waitForTimeout(200);
-    check((await page.textContent('#member-check-modal')).includes('link member pribadi'), '"Member lama" explains the personal link');
+    check(await visible(page, '#verify-phone'), '"Member lama" asks for the WhatsApp number');
     check(!calls.includes('getMembers'), 'no client list requested');
-
+    await page.fill('#verify-phone', '0899 9999 9999');
+    await page.click('#verify-btn');
+    await page.waitForTimeout(500);
+    check((await page.textContent('#verify-error')).includes('tidak ditemukan'), 'unknown number → clear message');
+    await page.fill('#verify-phone', '081111111111');
+    await page.click('#verify-btn');
+    await page.waitForTimeout(500);
+    const card = await page.textContent('#member-check-modal');
+    check(card.includes('Ani Anggraini') && card.includes('Sisa Sesi') && card.includes('5'), 'registered number → member card with remaining sessions');
+    const saved = await page.evaluate(() => localStorage.getItem('xnk_member_token'));
+    check(!!saved && env.call('getMemberProfile', saved).id === 'PT-A', 'member session saved for the booking site');
+    await page.click('#member-card-booking');
+    await page.waitForTimeout(300);
+    check(navigations.some(u => u.startsWith('https://book.xnkbooking.my.id')), '"Lanjut Booking" goes to book.xnkbooking.my.id');
+    await context.close();
+  }
+  {
+    const env = seededEnv();
+    const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', []);
     await page.evaluate(() => openRegistration());
     await page.waitForTimeout(300);
     await page.fill('#reg-name', 'Fajar');
@@ -221,9 +263,14 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
     await page.evaluate(() => doRegisterStep2());
     await page.waitForTimeout(500);
     const row = env.sheet('MemberData').rows.find(r => r[1] === 'Fajar');
-    check(!!row && row[13] && /^[a-f0-9]{32}$/.test(row[13]), 'registration creates the client with a link key');
+    check(!!row && row[13] && /^[a-f0-9]{32}$/.test(row[13]), 'registration creates the client with a session key');
     check(await visible(page, '#reg-step-3'), 'shows "Registrasi Berhasil!"');
-    check((await page.evaluate(() => window._newMemberLink || '')).includes('k=' + (row && row[13])), '"Lanjut Booking" goes to the new client\'s own link');
+    const saved = await page.evaluate(() => localStorage.getItem('xnk_member_token'));
+    check(!!saved && env.call('getMemberProfile', saved).name === 'Fajar', 'new client is logged in on this device');
+    await page.click('#reg-open-member');
+    await page.waitForTimeout(300);
+    check(navigations.some(u => u.startsWith('https://book.xnkbooking.my.id')), '"Lanjut Booking" goes to book.xnkbooking.my.id');
+    check(noScriptGoogle(await shownUrls(page, navigations)), 'no script.google link shown to the client');
     check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await context.close();
   }

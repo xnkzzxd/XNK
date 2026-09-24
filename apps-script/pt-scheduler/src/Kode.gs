@@ -10,9 +10,9 @@
 //       ├─ doGet()
 //       └─ include()
 //
-//    📁 01_CONFIG_SECURITY         → Login admin (PIN), link pribadi member, token sesi
+//    📁 01_CONFIG_SECURITY         → Login admin (PIN), login klien (nomor WA), token sesi
 //       ├─ adminLogin() / checkAdminSession() / changeAdminPin()
-//       ├─ memberLoginByKey() / getMemberProfile() / adminGetMemberLink()
+//       ├─ memberLoginByPhone() / memberLoginByKey() / getMemberProfile()
 //       └─ requireAdmin_() / requireMember_() / requireOwner_()   ← penjaga akses
 //
 //    📁 02_UTILS                   → Helper umum lintas modul
@@ -123,9 +123,6 @@ function include(filename) {
 //   ADMIN_PIN          PIN login panel PT (wajib diisi, minimal 6 karakter).
 //                      Mengganti PIN = semua perangkat admin otomatis logout.
 //   SESSION_SECRET     Dibuat otomatis. Menghapusnya = semua sesi logout.
-//   MEMBER_LINK_BASE   Opsional. Alamat portal klien untuk link member, mis.
-//                      "https://book.xnkbooking.my.id/" (harus meneruskan ?k=
-//                      ke iframe). Kosong = DEFAULT_MEMBER_LINK_BASE.
 //   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS   Notifikasi Telegram (lihat kirimNotifTelegram_).
 //
 // Property di atas juga bisa diisi tanpa membuka editor, lewat file
@@ -133,8 +130,8 @@ function include(filename) {
 //
 // Token = base64url(payload JSON) + "." + HMAC-SHA256(payload, SESSION_SECRET).
 // Tidak ada data sesi yang disimpan di server; token berisi masa berlaku (exp)
-// dan "versi" (sidik PIN admin / sidik kunci link member) sehingga mengganti
-// PIN atau me-reset link langsung membatalkan token lama.
+// dan "versi" (sidik PIN admin / sidik kunci sesi member) sehingga mengganti
+// PIN atau kunci sesi langsung membatalkan token lama.
 
 const ADMIN_SESSION_DAYS = 30;
 const MEMBER_SESSION_DAYS = 90;
@@ -142,11 +139,7 @@ const LOGIN_MAX_FAILS = 10;          // gagal berturut-turut sebelum dikunci
 const LOGIN_LOCK_SECONDS = 600;      // lama kunci (dan jendela hitung gagal)
 const AUTH_ERROR_PREFIX = 'AUTH_REQUIRED';
 
-// Portal klien langsung di deployment /exec (yang dibungkus xnk.my.id & xnkbooking.my.id).
-// Dipakai kalau MEMBER_LINK_BASE kosong; ScriptApp.getService().getUrl() tidak
-// selalu mengembalikan alamat /exec yang benar.
-const DEFAULT_MEMBER_LINK_BASE =
-  'https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec?view=public';
+const MEMBER_LOGIN_MAX_FAILS = 30;   // nomor WA tak dikenal per 10 menit (dari semua pengunjung)
 
 // ── Pengaturan lewat file Drive ─────────────────────────────────────────────
 // Script Properties hanya bisa diisi dari editor atau dari kode yang sedang
@@ -158,12 +151,11 @@ const DEFAULT_MEMBER_LINK_BASE =
 // Nilai null = hapus property. Hanya file MILIK akun pemilik yang dibaca (file
 // yang dibagikan orang lain diabaikan), dan hanya kunci di CONFIG_KEYS.
 const CONFIG_FILE_NAME = 'xnk-pt-config.json';
-const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS', 'MEMBER_LINK_BASE'];
+const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS'];
 const CONFIG_CHECK_SECONDS = 300;
 
 function _configValueError_(key, value) {
   if (key === 'ADMIN_PIN' && value.length < 6) return 'minimal 6 karakter';
-  if (key === 'MEMBER_LINK_BASE' && !/^https:\/\//.test(value)) return 'harus diawali https://';
   return null;
 }
 
@@ -352,10 +344,12 @@ function changeAdminPin(token, oldPin, newPin) {
   };
 }
 
-// ── Link pribadi member ─────────────────────────────────────────────────────
-// Setiap klien punya "Kunci Link" acak (kolom N di MemberData). Link portalnya
-// berisi kunci itu (?k=...). Membuka link = login ke portal klien tanpa PIN.
-// Admin bisa me-reset kunci (link lama & sesi lama langsung tidak berlaku).
+// ── Login klien ─────────────────────────────────────────────────────────────
+// Klien masuk portal dengan nomor WhatsApp yang terdaftar (dicek di server; daftar
+// klien tidak pernah dikirim ke browser). Setiap klien punya kunci acak di kolom N
+// MemberData ("Kunci Link"): sidiknya jadi "versi" token, jadi mengganti/menghapus
+// kunci itu membatalkan semua sesi klien tersebut. Link lama ?k=KUNCI tetap bisa
+// dipakai untuk masuk (memberLoginByKey).
 
 const MEMBER_KEY_COL = 14; // Kolom N di MemberData (1-based)
 
@@ -367,9 +361,30 @@ function _memberKeyVersion_(key) {
   return _sha256Hex_('member-key:' + key).slice(0, 16);
 }
 
-function _memberLink_(key) {
-  const base = PropertiesService.getScriptProperties().getProperty('MEMBER_LINK_BASE') || DEFAULT_MEMBER_LINK_BASE;
-  return base + (base.indexOf('?') === -1 ? '?' : '&') + 'k=' + key;
+// Versi sesi klien. create=true membuat kunci kalau belum ada (kolom N siap).
+// Kolom N dipakai untuk hal lain = 'nokey' (sesi tetap jalan, tidak bisa dicabut).
+function _memberSessionVersion_(found, create) {
+  if (!_memberKeyColumnReady_(found.sheet)) return 'nokey';
+  let key = String(found.row[MEMBER_KEY_COL - 1] || '');
+  if (!/^[a-f0-9]{32}$/i.test(key)) {
+    if (!create) return null;
+    key = _newMemberKey_();
+    found.sheet.getRange(found.rowNum, MEMBER_KEY_COL).setValue(key);
+    found.row[MEMBER_KEY_COL - 1] = key;
+  }
+  return _memberKeyVersion_(key);
+}
+
+function _issueMemberSession_(found) {
+  return {
+    token: _issueToken_({
+      r: 'member',
+      m: String(found.row[0]).trim(),
+      v: _memberSessionVersion_(found, true),
+      exp: Date.now() + MEMBER_SESSION_DAYS * 86400000
+    }),
+    member: _memberPublicProfile_(found.row)
+  };
 }
 
 // Cari baris member (1-based) + datanya. Kembalikan null kalau tidak ada.
@@ -386,12 +401,12 @@ function _findMemberRow_(predicate) {
 function requireMember_(token) {
   const payload = _readToken_(token);
   if (!payload || payload.r !== 'member' || !payload.m) {
-    throw _authError_('Sesi member berakhir. Buka lagi link member dari WhatsApp Coach.');
+    throw _authError_('Sesi berakhir. Silakan masuk lagi dengan nomor WhatsApp.');
   }
   const found = _findMemberRow_(function(row) { return String(row[0]).trim() === String(payload.m); });
-  const key = found && _memberKeyColumnReady_(found.sheet) ? String(found.row[MEMBER_KEY_COL - 1] || '') : '';
-  if (!found || !key || payload.v !== _memberKeyVersion_(key)) {
-    throw _authError_('Link member sudah tidak berlaku. Minta link baru ke Coach.');
+  const version = found ? _memberSessionVersion_(found, false) : null;
+  if (!version || payload.v !== version) {
+    throw _authError_('Sesi berakhir. Silakan masuk lagi dengan nomor WhatsApp.');
   }
   return found;
 }
@@ -417,48 +432,52 @@ function _memberPublicProfile_(row) {
 }
 
 /**
- * Login portal klien dari link pribadi (?k=...).
+ * Login portal klien dengan nomor WhatsApp yang terdaftar.
+ * 30 nomor tak dikenal dalam 10 menit (dari siapa pun) = login nomor WA dikunci
+ * 10 menit + notif Telegram, supaya data klien tidak bisa dipindai massal.
+ * @returns {{token:string, member:Object}}
+ */
+function memberLoginByPhone(phone) {
+  const target = _normalizePhone_(phone);
+  if (!/^62\d{8,13}$/.test(target)) throw new Error('Nomor WhatsApp tidak valid.');
+  const cache = CacheService.getScriptCache();
+  const fails = parseInt(cache.get('member_login_fails') || '0', 10);
+  if (fails >= MEMBER_LOGIN_MAX_FAILS) {
+    throw new Error('Terlalu banyak percobaan. Coba lagi dalam 10 menit.');
+  }
+  const found = _findMemberRow_(function(row) { return _normalizePhone_(row[2]) === target; });
+  if (!found) {
+    cache.put('member_login_fails', String(fails + 1), LOGIN_LOCK_SECONDS);
+    if (fails + 1 === MEMBER_LOGIN_MAX_FAILS) {
+      try {
+        kirimNotifTelegram_('⚠️ <b>LOGIN KLIEN DIKUNCI</b>\n\n' + MEMBER_LOGIN_MAX_FAILS +
+          ' nomor WhatsApp tidak dikenal dalam 10 menit. Login klien dengan nomor WA dikunci 10 menit.');
+      } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
+    }
+    Utilities.sleep(500);
+    throw new Error('Nomor WhatsApp tidak ditemukan. Pastikan sudah didaftarkan oleh Coach.');
+  }
+  return _issueMemberSession_(found);
+}
+
+/**
+ * Login portal klien dari link lama (?k=...).
  * @returns {{token:string, member:Object}}
  */
 function memberLoginByKey(key) {
   key = String(key || '').trim();
-  if (!/^[a-f0-9]{32}$/i.test(key)) throw _authError_('Link member tidak valid.');
-  if (!_memberKeyColumnReady_(_getMemberDataSheet_())) throw _authError_('Link member belum aktif. Hubungi Coach.');
+  if (!/^[a-f0-9]{32}$/i.test(key)) throw _authError_('Link tidak valid. Silakan masuk dengan nomor WhatsApp.');
+  if (!_memberKeyColumnReady_(_getMemberDataSheet_())) throw _authError_('Link tidak valid. Silakan masuk dengan nomor WhatsApp.');
   const found = _findMemberRow_(function(row) {
     return _safeEqual_(String(row[MEMBER_KEY_COL - 1] || ''), key);
   });
-  if (!found) throw _authError_('Link member tidak dikenal. Minta link baru ke Coach.');
-  return {
-    token: _issueToken_({
-      r: 'member',
-      m: String(found.row[0]).trim(),
-      v: _memberKeyVersion_(key),
-      exp: Date.now() + MEMBER_SESSION_DAYS * 86400000
-    }),
-    member: _memberPublicProfile_(found.row)
-  };
+  if (!found) throw _authError_('Link tidak valid. Silakan masuk dengan nomor WhatsApp.');
+  return _issueMemberSession_(found);
 }
 
 /** Profil terbaru klien yang sedang login (dipakai saat portal dibuka ulang). */
 function getMemberProfile(memberToken) {
   return _memberPublicProfile_(requireMember_(memberToken).row);
-}
-
-/**
- * Admin: ambil (atau buat / reset) link pribadi seorang klien, untuk dikirim via WA.
- * @returns {{link:string, name:string, phone:string}}
- */
-function adminGetMemberLink(token, memberId, reset) {
-  requireAdmin_(token);
-  const found = _findMemberRow_(function(row) { return String(row[0]).trim() === String(memberId).trim(); });
-  if (!found) throw new Error('Klien tidak ditemukan');
-  _requireMemberKeyColumn_(found.sheet);
-  let key = String(found.row[MEMBER_KEY_COL - 1] || '');
-  if (!/^[a-f0-9]{32}$/i.test(key) || reset) {
-    key = _newMemberKey_();
-    found.sheet.getRange(found.rowNum, MEMBER_KEY_COL).setValue(key);
-  }
-  return { link: _memberLink_(key), name: sanitizeValue(found.row[1]), phone: String(sanitizeValue(found.row[2])).trim() };
 }
 
 // Batasi fungsi yang tidak butuh login tapi mahal/berisiko di-spam
@@ -740,7 +759,7 @@ function _getMemberDataSheet_() {
   const sheet = getOrCreateSheet_('MemberData', MEMBERDATA_HEADERS);
   sheet.getRange('E:E').setNumberFormat('@');
   sheet.getRange('M:M').setNumberFormat('@');
-  // Sheet lama belum punya kolom N "Kunci Link" (link pribadi member): tambahkan
+  // Sheet lama belum punya kolom N "Kunci Link" (kunci sesi klien): tambahkan
   // headernya — HANYA kalau sel N1 masih kosong, supaya kolom buatan sendiri tidak tertimpa.
   const keyHeader = sheet.getRange(1, MEMBER_KEY_COL);
   if (keyHeader.getValue() === '') {
@@ -753,13 +772,6 @@ function _getMemberDataSheet_() {
 // true kalau kolom N MemberData memang kolom "Kunci Link".
 function _memberKeyColumnReady_(sheet) {
   return sheet.getRange(1, MEMBER_KEY_COL).getValue() === 'Kunci Link';
-}
-
-function _requireMemberKeyColumn_(sheet) {
-  if (!_memberKeyColumnReady_(sheet)) {
-    throw new Error('Kolom N di sheet MemberData sudah dipakai untuk "' + sheet.getRange(1, MEMBER_KEY_COL).getValue() +
-      '". Pindahkan isi kolom itu ke kolom lain, kosongkan sel N1, lalu coba lagi (kolom N dipakai untuk Kunci Link member).');
-  }
 }
 
 /**
@@ -991,7 +1003,7 @@ function _getMembersAll_() {
   const sheet = _getMemberDataSheet_();
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
-  // Kunci link TIDAK ikut dikirim; admin mengambil link lewat adminGetMemberLink().
+  // Kunci sesi (kolom N) TIDAK ikut dikirim.
   const list = data.slice(1).filter(function(row) { return row[0]; }).map(_memberPublicProfile_);
 
   // Urutkan berdasarkan tanggal aktivitas terakhir (lama -> baru) supaya pengelompokan
@@ -1125,16 +1137,14 @@ function _addMemberInternal_(memberData, options) {
 
     // 3. Format Nomor WA
     const noWa = _normalizePhone_(memberData.phone);
-    // Tanpa kolom Kunci Link: pakai halaman booking umum (klien minta link ke Coach nanti).
-    const memberLink = memberKey ? _memberLink_(memberKey) : 'https://book.xnkbooking.my.id';
 
-    // 4. Buat Template Chat WA + link pribadi member (link = login portal klien)
+    // 4. Buat Template Chat WA + Link Booking (klien masuk pakai nomor WA ini)
     const templateWA = (isPerpanjang
         ? "Halo " + memberData.name + ", paket latihan kamu sudah diperpanjang! 🎉\n\n"
         : "Halo " + memberData.name + ", terima kasih sudah bergabung! 🎉\n\n") +
-      "Untuk mengatur jadwal latihan, silakan booking jadwal sesi kamu melalui link pribadi berikut " +
-      "(khusus untuk kamu, jangan dibagikan ya):\n" +
-      "👉 " + memberLink + "\n\n" +
+      "Untuk mengatur jadwal latihan, silakan booking jadwal sesi kamu melalui link berikut " +
+      "(masuk pakai nomor WhatsApp ini):\n" +
+      "👉 https://book.xnkbooking.my.id\n\n" +
       "Jika ada pertanyaan, silakan balas pesan ini ya. Terima kasih!";
 
     const waLink = "https://wa.me/" + noWa + "?text=" + encodeURIComponent(templateWA);
@@ -1147,7 +1157,7 @@ function _addMemberInternal_(memberData, options) {
                           (paketNama ? "🏷️ <b>Paket:</b> " + escapeHtmlTelegram(paketNama) + "\n" : "") +
                           (coachNama ? "🧑‍🏫 <b>Coach:</b> " + escapeHtmlTelegram(coachNama) + "\n" : "") +
                           "📦 <b>Total Sesi:</b> " + totalSessions + " Sesi\n\n" +
-                          "👉 <a href='" + _escHtml_(waLink) + "'>Chat Klien & Kirim Link Booking</a>";
+                          "👉 <a href='" + _escHtml_(waLink) + "'>Chat Klien & Minta Booking</a>";
 
     // 6. Kirim Notifikasi Telegram
     if (!options.silent) {
@@ -1158,7 +1168,7 @@ function _addMemberInternal_(memberData, options) {
       }
     }
 
-    return { status: 'success', id: id, renewed: isPerpanjang, packageId: paketId, packageName: paketNama, totalSessions: totalSessions, coachId: coachId, coachName: coachNama, memberLink: memberLink, waLink: waLink };
+    return { status: 'success', id: id, renewed: isPerpanjang, packageId: paketId, packageName: paketNama, totalSessions: totalSessions, coachId: coachId, coachName: coachNama, waLink: waLink };
   } catch (error) {
     throw new Error('Gagal menyimpan klien: ' + error.message);
   } finally {
@@ -1227,11 +1237,11 @@ function _formatRupiah_(n) {
  * Pendaftaran mandiri klien dari halaman publik (Landing & katalog portal klien).
  * - Jumlah sesi & harga SELALU diambil dari PriceList di server berdasarkan
  *   packageId; nilai sesi/harga dari browser diabaikan.
- * - No WA baru: klien langsung aktif (seperti sebelumnya) dan mendapat link pribadi.
+ * - No WA baru: klien langsung aktif (seperti sebelumnya) dan langsung masuk portal.
  * - No WA yang sudah terdaftar: data & kuota klien itu TIDAK diubah. PT dikabari
  *   lewat Telegram/email untuk memproses perpanjangan setelah pembayaran diterima.
  * @param {{name:string, phone:string, goal:string, packageId:string}} data
- * @returns {{status:'success', id:string, memberLink:string} | {status:'exists'}}
+ * @returns {{status:'success', id:string, token:string, member:Object} | {status:'exists'}}
  */
 function registerNewClient(data) {
   data = data || {};
@@ -1296,7 +1306,10 @@ function registerNewClient(data) {
   } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
 
   if (isExisting) return { status: 'exists' };
-  return { status: 'success', id: result.id, memberLink: result.memberLink };
+  const found = _findMemberRow_(function(row) { return String(row[0]).trim() === String(result.id); });
+  if (!found) return { status: 'success', id: result.id };
+  const session = _issueMemberSession_(found);
+  return { status: 'success', id: result.id, token: session.token, member: session.member };
 }
 
 /**
