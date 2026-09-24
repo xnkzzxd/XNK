@@ -19,7 +19,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
 
     <script>
-        // The PIN check uses crypto.subtle, which only works over HTTPS.
+        // Always HTTPS: the app sends the PT login PIN.
         if (location.protocol === 'http:' && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
             location.replace('https://' + location.host + location.pathname + location.search);
         }
@@ -42,11 +42,7 @@
             border: 0;
             background: #fff;
         }
-        iframe:not([src]) {
-            visibility: hidden;
-        }
-
-        /* Full-screen black panels: PIN gate, loading screen, no-JS note */
+        /* Full-screen black panels: loading screen, no-JS note */
         .screen {
             position: fixed;
             inset: 0;
@@ -87,49 +83,6 @@
             display: none;
         }
 
-        /* PIN gate */
-        .gate label {
-            font-size: 17px;
-            font-weight: 600;
-        }
-        .gate input {
-            width: 200px;
-            padding: 12px 16px;
-            box-sizing: border-box;
-            border: 1px solid rgba(255, 255, 255, .3);
-            border-radius: 10px;
-            background: rgba(255, 255, 255, .06);
-            color: #fff;
-            font-size: 24px;
-            letter-spacing: .4em;
-            text-align: center;
-            outline: none;
-        }
-        .gate input:focus {
-            border-color: #fff;
-        }
-        .gate button {
-            width: 200px;
-            padding: 12px 16px;
-            border: 0;
-            border-radius: 10px;
-            background: #fff;
-            color: var(--brand);
-            font: inherit;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .gate input:disabled,
-        .gate button:disabled {
-            opacity: .4;
-            cursor: not-allowed;
-        }
-        .gate .msg {
-            min-height: 1.4em;
-            color: #ff8a80;
-        }
-
         /* Loading screen */
         .spinner {
             width: 28px;
@@ -149,17 +102,9 @@
 </head>
 <body>
 
-    <iframe id="app" title="XNK – formulir pemesanan" data-src="https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec"></iframe>
+    <iframe id="app" title="XNK – panel PT" src="https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec"></iframe>
 
-    <form class="screen gate" id="gate" novalidate hidden>
-        <img src="/icon-192.png" alt="XNK">
-        <label for="pin">Masukkan PIN</label>
-        <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off">
-        <button type="submit" id="enter">Masuk</button>
-        <p class="msg" id="msg" role="alert"></p>
-    </form>
-
-    <div class="screen" id="loader" role="status" aria-live="polite" hidden>
+    <div class="screen" id="loader" role="status" aria-live="polite">
         <img src="/icon-192.png" alt="XNK">
         <div class="spinner" aria-hidden="true"></div>
         <p>Memuat…</p>
@@ -175,102 +120,19 @@
 
     <script>
         (function () {
-            // SHA-256 of SALT + PIN. README.md explains how to change the PIN.
-            var PIN_HASH = '7e6cc7140812b9a6f6eeea606a78f45ef8f09f30f2ccfe8bd2bd7058cebbb88d';
-            var SALT = 'xnk-pt:';
-            var STORAGE_KEY = 'xnk-pin';
-            var MAX_TRIES = 5;
-            var LOCK_SECONDS = 30;
-
+            // Login (PIN admin) happens inside the app, checked by the server.
+            // Forget the old page-level PIN (only a hash was stored).
+            try { localStorage.removeItem('xnk-pin'); } catch (e) {}
             var app = document.getElementById('app');
-            var gate = document.getElementById('gate');
-            var input = document.getElementById('pin');
-            var enter = document.getElementById('enter');
-            var msg = document.getElementById('msg');
             var loader = document.getElementById('loader');
             var fallback = document.getElementById('fallback');
-            var tries = 0;
-
-            // A phone that entered the current PIN before skips the gate.
-            // Changing PIN_HASH makes every phone ask again.
-            function remembered() {
-                try { return localStorage.getItem(STORAGE_KEY) === PIN_HASH; } catch (e) { return false; }
-            }
-            function remember() {
-                try { localStorage.setItem(STORAGE_KEY, PIN_HASH); } catch (e) {}
-            }
-
-            function sha256(text) {
-                return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (buf) {
-                    return Array.prototype.map.call(new Uint8Array(buf), function (b) {
-                        return ('0' + b.toString(16)).slice(-2);
-                    }).join('');
-                });
-            }
-
-            function start() {
-                gate.hidden = true;
-                loader.hidden = false;
-                fallback.href = app.dataset.src;
-                app.addEventListener('load', function () {
-                    // Ignore the empty frame's own load; a cross-origin page throws here.
-                    try { if (app.contentWindow.location.href === 'about:blank') return; } catch (e) {}
-                    loader.classList.add('done');
-                });
-                app.src = app.dataset.src;
-                setTimeout(function () {
-                    fallback.hidden = false;
-                }, 8000);
-            }
-
-            function lock() {
-                var left = LOCK_SECONDS;
-                input.disabled = enter.disabled = true;
-                (function tick() {
-                    if (left <= 0) {
-                        input.disabled = enter.disabled = false;
-                        tries = 0;
-                        msg.textContent = '';
-                        input.focus();
-                        return;
-                    }
-                    msg.textContent = 'Coba lagi dalam ' + left + ' detik';
-                    left--;
-                    setTimeout(tick, 1000);
-                })();
-            }
-
-            gate.addEventListener('submit', function (e) {
-                e.preventDefault();
-                var pin = input.value.trim();
-                if (!pin || input.disabled) return;
-                if (!window.crypto || !crypto.subtle) {
-                    msg.textContent = 'Buka lewat https://xnk.my.id';
-                    return;
-                }
-                sha256(SALT + pin).then(function (hash) {
-                    if (hash === PIN_HASH) {
-                        remember();
-                        start();
-                        return;
-                    }
-                    tries++;
-                    input.value = '';
-                    if (tries >= MAX_TRIES) {
-                        lock();
-                    } else {
-                        msg.textContent = 'PIN salah';
-                        input.focus();
-                    }
-                });
+            fallback.href = app.src;
+            app.addEventListener('load', function () {
+                loader.classList.add('done');
             });
-
-            if (remembered()) {
-                start();
-            } else {
-                gate.hidden = false;
-                input.focus();
-            }
+            setTimeout(function () {
+                fallback.hidden = false;
+            }, 8000);
         })();
     </script>
 

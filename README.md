@@ -2,7 +2,7 @@
 
 The internal booking tool for the XNK PTs at **https://xnk.my.id**. It is a GitHub
 Pages site that shows the booking app (a Google Apps Script web app) full-screen,
-behind a PIN screen, with a loading screen and "Add to Home Screen" support.
+with a loading screen and "Add to Home Screen" support. PTs log in inside the app.
 It is not meant to be shared publicly and is hidden from search engines.
 
 Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
@@ -11,7 +11,7 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | The page: PIN screen, loading screen, and the booking app in an iframe. |
+| `index.html` | The page: loading screen and the booking app in an iframe. |
 | `404.html` | Shown for unknown addresses; sends visitors back to the home page. |
 | `manifest.webmanifest` | Name, colors and icons used when the site is installed on a phone. |
 | `logo.png` | Original logo (white mark on transparent). Source for all icons. |
@@ -23,40 +23,21 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 | `_config.yml` | Keeps `apps-script/` and this README off the public website. |
 | `apps-script/` | Source of the Apps Script apps (PT Scheduler), auto-deployed by GitHub Actions — see [apps-script/README.md](apps-script/README.md). |
 
-## Access (PIN)
+## Access
 
-PTs enter a 6-digit PIN before the booking app loads. Each phone remembers the PIN,
-so it is typed once per device. After 5 wrong tries the screen locks for 30 seconds.
+PTs log in **inside the app** with the admin PIN. The Apps Script server checks it,
+so opening the `/exec` address directly does not get around it. Each phone stays
+logged in for 30 days; after 10 wrong PINs in 10 minutes, login locks for 10 minutes
+and Telegram gets an alert.
 
-**Changing the PIN** (for example when a PT leaves). The page only stores a
-SHA-256 hash of `xnk-pt:` + the PIN, in `PIN_HASH` near the bottom of `index.html`.
-
-1. Make the hash of the new PIN (replace `123456`):
-   - Mac/Linux terminal: `printf 'xnk-pt:123456' | shasum -a 256`
-   - Or in any browser's developer console:
-     ```js
-     crypto.subtle.digest('SHA-256', new TextEncoder().encode('xnk-pt:123456')).then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('')))
-     ```
-2. Paste the 64-character result into `PIN_HASH` in `index.html` and push to `main`.
-3. Every phone is asked for the new PIN on its next visit.
-
-**What the PIN does and doesn't protect.** It keeps casual visitors out of the
-booking form. It is not real security:
-
-- This repository is **public**, so anyone on GitHub can read the booking app's
-  `/exec` address in `index.html` and open it directly.
-- A 6-digit PIN hash can be cracked in seconds.
-
-For real protection, restrict access in Apps Script itself: check a PIN or
-password on the server side in the script, or limit who can open the web app in
-**Deploy → Manage deployments → Who has access**. Making this repository private
-would hide the address, but GitHub Pages on a private repository needs a paid
-GitHub plan.
+The PIN is the `ADMIN_PIN` Script Property of the Apps Script project. Changing it logs
+every phone out. How to change it (also without opening the editor) is in
+[apps-script/README.md](apps-script/README.md).
 
 ## Common changes
 
-**Booking app URL.** It is written once, in the `data-src` of the `<iframe>` in
-`index.html`; the page loads it after the PIN is accepted. Redeploying the
+**Booking app URL.** It is written once, in the `src` of the `<iframe>` in
+`index.html`. Redeploying the
 Apps Script with *Manage deployments → Edit → New version* keeps the same URL;
 creating a *new* deployment gives a new URL that must be pasted here.
 
@@ -74,5 +55,5 @@ creating a *new* deployment gives a new URL that must be pasted here.
 
 ## After publishing
 
-In **Settings → Pages**, make sure **Enforce HTTPS** is ticked. The PIN check
-only works over HTTPS; the page switches `http://` visits to `https://` itself.
+In **Settings → Pages**, make sure **Enforce HTTPS** is ticked. The page also
+switches `http://` visits to `https://` itself, since the app sends the login PIN.
