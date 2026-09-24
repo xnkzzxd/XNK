@@ -12,7 +12,7 @@
 //                   cropper.min.js/.css, inter-latin-wght-normal.woff2, and for the
 //                   Landing gsap.min.js, ScrollTrigger.min.js, SplitText.min.js,
 //                   lenis.min.js, anton-latin-400-normal.woff2, hero-cutout.webp,
-//                   hero-normal.webp from that folder instead of tiny stubs / empty
+//                   hero-normal.webp, hero-anatomy.webp from that folder instead of tiny stubs / empty
 //                   responses (for realistic screenshots and the animated Landing)
 //   SHOTS_DIR=dir   save screenshots of every main screen there
 //   VIDEO_DIR=dir   record the Landing scroll-through (desktop + phone) as .webm
@@ -56,6 +56,7 @@ const REAL = {
   'dist/lenis.min.js': ['lenis.min.js', 'application/javascript'],
   'xnkbooking.my.id/img/hero-cutout.webp': ['hero-cutout.webp', 'image/webp'],
   'xnkbooking.my.id/img/hero-normal.webp': ['hero-normal.webp', 'image/webp'],
+  'xnkbooking.my.id/img/hero-anatomy.webp': ['hero-anatomy.webp', 'image/webp'],
 };
 const CDN_ANIMATION = ['dist/gsap.min.js', 'dist/ScrollTrigger.min.js', 'dist/SplitText.min.js', 'dist/lenis.min.js'];
 const INTER_CSS = "@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(https://assets.test/inter.woff2) format('woff2');}" +
@@ -475,8 +476,9 @@ async function contrastReport(page) {
     const env = seededEnv();
     const calls = [];
     const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', calls, null, { touch: true, wait: LANDING_WAIT });
-    check(await visible(page, '#hero-story'), 'story hero on the phone');
-    check(!(await visible(page, '#hero-desk')), 'desktop hero (JIZDAN) hidden on the phone');
+    check(await visible(page, '#hero-m'), 'typographic hero on the phone');
+    check((await page.locator('#hero-m img').count()) === 0, 'no photo in the phone hero');
+    check(!(await visible(page, '#hero-desk')), 'desktop hero (photo + JIZDAN) hidden on the phone');
     check(await visible(page, '#m-bar'), 'sticky bottom bar with "Mulai Sekarang" + WhatsApp');
     check(await visible(page, '#burger') && !(await visible(page, '.nav-links')), 'burger menu instead of desktop links');
     check(!(await page.evaluate(() => document.body.classList.contains('has-cursor'))), 'no custom cursor on the phone');
@@ -486,21 +488,15 @@ async function contrastReport(page) {
     check((await page.locator('#slot-days .slot-day').count()) === 7, 'free-slot strip shows the next 7 days');
     check((await page.locator('#slot-hours .slot-h').count()) > 0, 'free hours listed');
     check(!calls.includes('getMembers') && !calls.includes('getSchedules'), 'no client list or admin schedule requested');
-    if (ASSETS) check(['on', 'fallback'].includes(await page.getAttribute('#figure-m', 'data-gl')), 'WebGL light on the close-up (' + (await page.getAttribute('#figure-m', 'data-gl')) + ')');
+    check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'nothing sticks out sideways on the phone');
+    check(!(await page.getAttribute('#figure-desk', 'data-gl')), 'no WebGL on the phone');
+    check(await page.evaluate(() => getComputedStyle(document.body, '::after').content === 'none'), 'no film-grain layer on the phone');
+    check(!(await page.evaluate(() => [...document.querySelectorAll('.sec')].some(el => getComputedStyle(el).position === 'sticky'))), 'sections scroll normally (no stacked sticky cards)');
     await shot(page, 'landing-mobile-hero');
 
-    // Story: scroll → muscle frames + progress bars.
-    const storyTop = await sectionY(page, '#hero-story');
-    const storyLen = await page.evaluate(() => document.getElementById('hero-story').offsetHeight - window.innerHeight);
-    await scrollLanding(page, storyTop + storyLen * 0.4, 900);
-    const frame = await page.evaluate(() => window.__landing.frame());
-    check(frame >= 2 && frame <= 3, 'scrolling the story moves to a muscle frame (' + frame + ')');
-    check(await page.evaluate(() => Number(getComputedStyle(document.querySelectorAll('.story-bars i')[0]).getPropertyValue('--p')) === 1), 'first story bar filled');
-    await shot(page, 'landing-mobile-story');
-
-    // Stacked cards + program swipe.
+    await scrollLanding(page, await sectionY(page, '#coach'), 900);
+    await shot(page, 'landing-mobile-coach');
     await scrollLanding(page, await sectionY(page, '#program'), 900);
-    check(await page.evaluate(() => getComputedStyle(document.getElementById('program')).position === 'sticky'), 'sections stack as sticky cards');
     await shot(page, 'landing-mobile-program');
     await scrollLanding(page, await sectionY(page, '#paket'), 900);
     await shot(page, 'landing-mobile-paket');
@@ -614,7 +610,8 @@ async function contrastReport(page) {
     const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
     check(await visible(page, '#hero-desk'), 'desktop hero visible');
     check((await page.textContent('.giant')).replace(/\s/g, '') === 'JIZDAN', 'giant "JIZDAN" behind the body');
-    check(!(await visible(page, '#hero-story')) && !(await visible(page, '#m-bar')), 'story hero and bottom bar hidden on desktop');
+    check(!(await page.locator('.callout, .hero-tag').count()), 'no muscle labels or tagline');
+    check(!(await visible(page, '#hero-m')) && !(await visible(page, '#m-bar')), 'phone hero and bottom bar hidden on desktop');
     check(await visible(page, '.nav-links'), 'desktop nav links visible');
     check(await page.evaluate(() => {
       const f = document.getElementById('figure-desk').getBoundingClientRect();
@@ -629,12 +626,15 @@ async function contrastReport(page) {
     }
     await shot(page, 'landing-desktop-hero');
     if (ASSETS) {
-      await scrollLanding(page, 900 * 0.75);
-      check(await page.evaluate(() => Number(getComputedStyle(document.querySelector('.giant-l')).opacity) < 0.5), 'JIZDAN splits apart on scroll');
-      await shot(page, 'landing-desktop-hero-zoom');
-      await scrollLanding(page, 900 * 1.45);
-      check(await page.evaluate(() => [...document.querySelectorAll('#figure-desk .callout')].filter(c => Number(getComputedStyle(c).opacity) > 0.5).length >= 3), 'muscle labels appear one by one');
-      await shot(page, 'landing-desktop-muscles');
+      const m = () => page.evaluate(() => Number(getComputedStyle(document.getElementById('hero-desk')).getPropertyValue('--m')));
+      await scrollLanding(page, 900 * 0.5);
+      const mid = await m();
+      check(mid > 0.2 && mid < 0.8, 'scrolling scans the body into the muscle chart (' + mid.toFixed(2) + ')');
+      await shot(page, 'landing-desktop-scan');
+      await scrollLanding(page, 900 * 1.3);
+      check((await m()) > 0.97, 'muscle chart fully shown');
+      check(await page.evaluate(() => document.querySelector('.figure-anat').naturalWidth > 0), 'anatomy image loaded');
+      await shot(page, 'landing-desktop-anatomy');
       const prog = await sectionY(page, '#program');
       await scrollLanding(page, prog + 900);
       check(await page.evaluate(() => new DOMMatrix(getComputedStyle(document.getElementById('program-track')).transform).m41 < -200), 'programs slide horizontally while scrolling');
@@ -662,6 +662,23 @@ async function contrastReport(page) {
     await page.evaluate(() => doRegisterStep1());
     await page.waitForTimeout(300);
     check((await page.locator('#reg-packages input:checked').inputValue()) === '0', 'the clicked package is preselected');
+    noErrors(errors);
+    await context.close();
+  }
+  // Hero text never overlaps the giant JIZDAN, also on short laptop screens.
+  for (const vp of [DESKTOP, { width: 1366, height: 657 }, { width: 1280, height: 720 }, { width: 1024, height: 640 }]) {
+    const env = seededEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: vp, wait: LANDING_WAIT });
+    const hit = await page.evaluate(() => {
+      const r = sel => document.querySelector(sel).getBoundingClientRect();
+      const cross = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      const g = r('.giant');
+      const labels = [...document.querySelectorAll('.hero-labels span')].map(e => e.getBoundingClientRect());
+      return ['.hero-labels', '.hero-copy', '.hero-side'].filter(sel => cross(r(sel), g))
+        .concat(cross(labels[0], labels[1]) ? ['labels'] : []);
+    });
+    check(!hit.length, vp.width + '×' + vp.height + ': hero text does not overlap JIZDAN' + (hit.length ? ' (' + hit.join(', ') + ')' : ''));
+    if (vp.height < 700) await shot(page, 'landing-desktop-hero-' + vp.width + 'x' + vp.height);
     noErrors(errors);
     await context.close();
   }

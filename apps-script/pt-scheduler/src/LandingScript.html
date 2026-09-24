@@ -793,9 +793,6 @@
       barAway = cta.getBoundingClientRect().top < window.innerHeight * 0.85;
       bar.classList.toggle('away', barAway || scrollLocks > 0);
     }
-    story.update();
-    stack.update();
-    steps.update();
   }
   var scrollQueued = false;
   window.addEventListener('scroll', function () {
@@ -804,134 +801,26 @@
     requestAnimationFrame(function () { scrollQueued = false; onScrollUi(); });
   }, { passive: true });
 
-  // ===========================================================================
-  // Mobile: story hero (bar progres + frame otot, dikendalikan scroll)
-  // ===========================================================================
-  var MUSCLES = [
-    { x: 0.52, y: 0.27 }, { x: 0.74, y: 0.34 }, { x: 0.23, y: 0.47 }, { x: 0.64, y: 0.50 }, { x: 0.44, y: 0.63 }
-  ];
-  var story = {
-    frame: -1,
-    update: function () {
-      var sec = document.getElementById('hero-story');
-      if (!sec || isDesk() || !sec.offsetHeight) return;
-      var total = sec.offsetHeight - window.innerHeight;
-      var p = total > 0 ? clamp(-sec.getBoundingClientRect().top / total, 0, 1) : 0;
-      var N = 6;
-      $$('.story-bars i').forEach(function (b, i) { b.style.setProperty('--p', clamp(p * N - i, 0, 1).toFixed(3)); });
-      var f = Math.min(N - 1, Math.floor(p * N * 0.999 + 0.0001));
-      if (f !== story.frame) story.setFrame(f);
-    },
-    setFrame: function (f) {
-      story.frame = f;
-      $$('.story-frame').forEach(function (el) {
-        var on = Number(el.getAttribute('data-frame')) === f;
-        el.classList.toggle('is-active', on);
-        el.setAttribute('aria-hidden', on ? 'false' : 'true');
-      });
-      $$('.m-dots i').forEach(function (d, i) { d.classList.toggle('on', i === f - 1); });
-      var fig = document.getElementById('figure-m');
-      if (!fig) return;
-      if (f === 0) {
-        fig.style.setProperty('--mz', 1);
-        fig.style.setProperty('--tx', '0px');
-        fig.style.setProperty('--ty', '0px');
-        if (glLight) glLight.follow(null);
-      } else {
-        // Otot yang dibahas digeser ke tengah-atas layar, di atas teksnya.
-        var m = MUSCLES[f - 1];
-        var mz = 1.15;
-        var w = fig.offsetWidth, h = fig.offsetHeight;
-        var xNow = fig.offsetLeft + 0.5 * w + (m.x - 0.5) * w * mz;
-        var yNow = fig.offsetTop + 0.4 * h + (m.y - 0.4) * h * mz;
-        var tx = clamp(window.innerWidth * 0.5 - xNow, -w * 0.3, w * 0.3);
-        var ty = clamp(window.innerHeight * 0.34 - yNow, -h * 0.6, 40);
-        fig.style.setProperty('--mz', mz);
-        fig.style.setProperty('--tx', tx.toFixed(1) + 'px');
-        fig.style.setProperty('--ty', ty.toFixed(1) + 'px');
-        if (glLight) glLight.follow({ x: m.x - 0.1, y: m.y - 0.12 });
-      }
-    },
-    go: function (dir) {
-      var sec = document.getElementById('hero-story');
-      if (!sec) return;
-      var N = 6, total = sec.offsetHeight - window.innerHeight;
-      var f = clamp(story.frame + dir, 0, N - 1);
-      var y = sec.getBoundingClientRect().top + window.pageYOffset + (f + 0.15) / N * total;
-      if (dir > 0 && story.frame === N - 1) y = sec.getBoundingClientRect().top + window.pageYOffset + sec.offsetHeight - window.innerHeight + 2;
-      window.scrollTo({ top: y, behavior: reduceMotion ? 'auto' : 'smooth' });
-    }
-  };
-  (function () {
-    var prev = $('.story-prev'), next = $('.story-next');
-    if (prev) prev.addEventListener('click', function () { story.go(-1); });
-    if (next) next.addEventListener('click', function () { story.go(1); });
-  })();
-
-  // ===========================================================================
-  // Mobile: section sebagai kartu yang menumpuk (sticky). Kartu yang lebih tinggi
-  // dari layar menempel saat bawahnya sampai di bawah layar, jadi isinya terbaca.
-  // ===========================================================================
-  var stack = {
-    cards: [],
-    measure: function () {
-      stack.cards = $$('.stack > .card-sec');
-      var mobile = !isDesk();
-      stack.cards.forEach(function (c) {
-        c.style.setProperty('--stick', mobile ? Math.min(0, window.innerHeight - c.offsetHeight) + 'px' : '0px');
-      });
-      stack.update();
-    },
-    update: function () {
-      if (isDesk() || reduceMotion) return;
-      for (var i = 0; i < stack.cards.length - 1; i++) {
-        // Seberapa jauh kartu berikutnya sudah menutupi kartu ini (0–1).
-        var c = stack.cards[i];
-        var r = c.getBoundingClientRect();
-        var visible = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
-        var overlap = Math.min(r.bottom, window.innerHeight) - stack.cards[i + 1].getBoundingClientRect().top;
-        var cover = visible > 0 ? clamp(overlap / visible, 0, 1) : 0;
-        c.style.transform = cover > 0 ? 'scale(' + (1 - cover * 0.05).toFixed(4) + ')' : '';
-        c.style.setProperty('--cover', cover.toFixed(3));
-      }
-    }
-  };
-
-  // Proses (mobile): garis vertikal terisi & langkah menyala saat di-scroll.
-  var steps = {
-    update: function () {
-      if (isDesk()) return;
-      var ol = document.getElementById('steps');
-      if (!ol) return;
-      var r = ol.getBoundingClientRect();
-      var p = clamp((window.innerHeight * 0.6 - r.top) / r.height, 0, 1);
-      ol.style.setProperty('--fill', p.toFixed(3));
-      $$('.step', ol).forEach(function (s, i, all) {
-        var sr = s.getBoundingClientRect();
-        var passed = sr.top < window.innerHeight * 0.6;
-        s.classList.toggle('done', passed);
-        s.classList.toggle('is-active', passed && (i === all.length - 1 || all[i + 1].getBoundingClientRect().top >= window.innerHeight * 0.6));
-      });
-    }
-  };
-
-  var layoutQueued = false, stRefreshTimer = null;
+  // Posisi ScrollTrigger dihitung ulang sekali setelah isi (paket, testimoni, jadwal) berhenti berubah.
+  var stRefreshTimer = null;
   function refreshLayout() {
-    if (!layoutQueued) {
-      layoutQueued = true;
-      requestAnimationFrame(function () { layoutQueued = false; stack.measure(); });
-    }
-    // Posisi ScrollTrigger dihitung ulang sekali setelah isi berhenti berubah.
     clearTimeout(stRefreshTimer);
     stRefreshTimer = setTimeout(function () {
       if (window.ScrollTrigger && root.classList.contains('js-motion')) window.ScrollTrigger.refresh();
     }, 300);
   }
-  window.addEventListener('resize', function () { refreshLayout(); story.frame = -1; onScrollUi(); });
+  // Toolbar browser HP yang muncul/hilang mengubah tinggi layar: abaikan, hanya lebar yang dihitung.
+  var lastWidth = window.innerWidth;
+  window.addEventListener('resize', function () {
+    if (window.innerWidth === lastWidth) return;
+    lastWidth = window.innerWidth;
+    refreshLayout();
+    onScrollUi();
+  });
 
   // ===========================================================================
   // WebGL: cahaya dinamis di otot. Normal map dibuat dari foto (tools/make-landing-images.py);
-  // cahaya mengikuti mouse (desktop) / jari & frame story (mobile). Gagal/lambat → foto biasa.
+  // cahaya mengikuti mouse (desktop saja). Gagal/lambat → foto biasa.
   // ===========================================================================
   var VS = 'attribute vec2 p;varying vec2 v;void main(){v=vec2(p.x*.5+.5,.5-p.y*.5);gl_Position=vec4(p,0.,1.);}';
   var FS = [
@@ -1099,9 +988,10 @@
 
   var glLight = null;
   var glFigure = null;
+  // Hanya desktop: di HP foto tidak ditampilkan di hero.
   function setupLight() {
-    if (reduceMotion) return;
-    var fig = document.getElementById(isDesk() ? 'figure-desk' : 'figure-m');
+    if (reduceMotion || !isDesk()) { if (glLight) glLight.destroy(); glLight = null; glFigure = null; return; }
+    var fig = document.getElementById('figure-desk');
     if (fig === glFigure && glLight) return;
     if (glLight) glLight.destroy();
     glFigure = fig;
@@ -1112,7 +1002,7 @@
     if (mq.addEventListener) mq.addEventListener('change', setupLight); else if (mq.addListener) mq.addListener(setupLight);
   })();
 
-  // Mouse (desktop) / jari (mobile) menggerakkan cahaya.
+  // Mouse menggerakkan cahaya.
   function pointToFigure(fig, x, y) {
     var r = fig.getBoundingClientRect();
     return { x: (x - r.left) / r.width, y: (y - r.top) / r.height };
@@ -1123,15 +1013,6 @@
     glLight.pointer(p.x, p.y);
   }, { passive: true });
   root.addEventListener('mouseleave', function () { if (glLight) glLight.release(); });
-  window.addEventListener('touchmove', function (e) {
-    if (!glLight || !glFigure || !e.touches[0] || story.frame > 0) return;
-    var p = pointToFigure(glFigure, e.touches[0].clientX, e.touches[0].clientY);
-    glLight.pointer(p.x, p.y);
-  }, { passive: true });
-  window.addEventListener('deviceorientation', function (e) {
-    if (!glLight || isDesk() || e.gamma == null || story.frame > 0) return;
-    glLight.pointer(0.5 + clamp(e.gamma / 35, -1, 1) * 0.45, 0.25 + clamp((e.beta - 45) / 40, -1, 1) * 0.25);
-  });
 
   // ===========================================================================
   // Motion (GSAP + ScrollTrigger + SplitText + Lenis). Tanpa library: statis.
@@ -1154,6 +1035,8 @@
     if (reduceMotion || !G || !ST) return false;
     G.registerPlugin(ST);
     if (window.SplitText) G.registerPlugin(window.SplitText);
+    // HP: toolbar browser yang muncul/hilang tidak memicu hitung ulang (sumber kedipan).
+    ST.config({ ignoreMobileResize: true });
     motion.on = true;
     root.classList.add('js-motion');
 
@@ -1165,6 +1048,26 @@
       G.ticker.lagSmoothing(0);
     }
 
+    $$('[data-reveal]').forEach(function (el) {
+      G.from(el, { y: 30, opacity: 0, duration: 1.1, ease: 'expo.out', delay: 0.15, scrollTrigger: { trigger: el, start: 'top 88%', once: true } });
+    });
+    $$('[data-stagger]').forEach(function (el) {
+      G.from(el.children, { y: 44, opacity: 0, duration: 1, ease: 'expo.out', stagger: 0.08, scrollTrigger: { trigger: el, start: 'top 85%', once: true } });
+    });
+    $$('[data-clip]').forEach(function (el) {
+      G.fromTo(el, { clipPath: 'inset(100% 0% 0% 0% round 28px)' }, { clipPath: 'inset(0% 0% 0% 0% round 28px)', duration: 1.4, ease: 'expo.inOut', scrollTrigger: { trigger: el, start: 'top 80%', once: true } });
+      var im = el.querySelector('img');
+      if (im) G.fromTo(im, { scale: 1.35 }, { scale: 1.08, duration: 1.8, ease: 'expo.out', scrollTrigger: { trigger: el, start: 'top 80%', once: true } });
+    });
+
+    var mm = G.matchMedia();
+    mm.add(DESK_Q, function () { return desktopMotion(G, ST); });
+    mm.add('(max-width: 1023.98px)', function () { return mobileMotion(G, ST); });
+    return true;
+  }
+
+  function desktopMotion(G, ST) {
+    var cleanups = [];
     // Judul: baris naik dari balik masker.
     $$('.split').forEach(function (el) {
       if (window.SplitText) {
@@ -1178,18 +1081,6 @@
         G.from(el, { y: 40, opacity: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: el, start: 'top 86%', once: true } });
       }
     });
-    $$('[data-reveal]').forEach(function (el) {
-      G.from(el, { y: 30, opacity: 0, duration: 1.1, ease: 'expo.out', delay: 0.15, scrollTrigger: { trigger: el, start: 'top 88%', once: true } });
-    });
-    $$('[data-stagger]').forEach(function (el) {
-      G.from(el.children, { y: 44, opacity: 0, duration: 1, ease: 'expo.out', stagger: 0.08, scrollTrigger: { trigger: el, start: 'top 85%', once: true } });
-    });
-    $$('[data-clip]').forEach(function (el) {
-      G.fromTo(el, { clipPath: 'inset(100% 0% 0% 0% round 28px)' }, { clipPath: 'inset(0% 0% 0% 0% round 28px)', duration: 1.4, ease: 'expo.inOut', scrollTrigger: { trigger: el, start: 'top 80%', once: true } });
-      var im = el.querySelector('img');
-      if (im) G.fromTo(im, { scale: 1.35 }, { scale: 1.08, duration: 1.8, ease: 'expo.out', scrollTrigger: { trigger: el, start: 'top 80%', once: true } });
-    });
-
     // Marquee: kecepatan & kemiringan mengikuti kecepatan scroll.
     var rows = $$('.marquee-row');
     var loops = rows.map(function (row, i) {
@@ -1213,45 +1104,18 @@
     G.fromTo('.cta-giant', { scale: 0.7, opacity: 0.2 }, { scale: 1.08, opacity: 1, ease: 'none', scrollTrigger: { trigger: '.sec-cta', start: 'top bottom', end: 'bottom top', scrub: 1 } });
     G.from('.footer-giant', { yPercent: 40, ease: 'none', scrollTrigger: { trigger: '.footer', start: 'top bottom', end: 'bottom bottom', scrub: 1 } });
 
-    var mm = G.matchMedia();
-    mm.add(DESK_Q, function () { return desktopMotion(G, ST); });
-    mm.add('(max-width: 1023.98px)', function () { return mobileMotion(G, ST); });
-    return true;
-  }
-
-  function desktopMotion(G, ST) {
-    var cleanups = [];
-    // Hero: dipin, JIZDAN membelah, kamera zoom ke punggung, label otot muncul satu per satu.
-    var callouts = $$('#figure-desk .callout');
-    var lightStops = [];
-    var tl = G.timeline({
+    // Hero: dipin sebentar; garis scan turun dan badan berubah jadi peta otot (--m 0 → 1),
+    // JIZDAN berubah dari isi hitam jadi garis tepi.
+    var hero = document.getElementById('hero-desk');
+    G.timeline({
       scrollTrigger: {
-        trigger: '#hero-desk', start: 'top top', end: '+=170%', pin: true, scrub: 1, anticipatePin: 1,
-        onUpdate: function (self) {
-          if (!glLight) return;
-          var p = self.progress;
-          var stop = null;
-          for (var i = 0; i < lightStops.length; i++) if (p >= lightStops[i].at) stop = lightStops[i];
-          glLight.follow(p > 0.4 && stop ? stop.pt : null);
-        }
+        trigger: hero, pin: true, scrub: 1, anticipatePin: 1, end: '+=120%', invalidateOnRefresh: true,
+        start: function () { return hero.offsetHeight > window.innerHeight + 2 ? 'bottom bottom' : 'top top'; }
       }
-    });
-    tl.to('.giant-l', { xPercent: -70, opacity: 0, ease: 'power2.in', duration: 0.34 }, 0)
-      .to('.giant-r', { xPercent: 70, opacity: 0, ease: 'power2.in', duration: 0.34 }, 0)
-      .to('.hero-copy, .hero-side', { y: -50, opacity: 0, duration: 0.2, ease: 'power1.in' }, 0)
-      .to('#figure-desk', { '--z': 1.6, duration: 0.42, ease: 'power2.inOut' }, 0.06);
-    callouts.forEach(function (c, i) {
-      var at = 0.46 + i * 0.085;
-      var side = c.getAttribute('data-side') === 'l' ? -1 : 1;
-      var m = MUSCLES[i];
-      lightStops.push({ at: at, pt: { x: m.x - 0.08 * side, y: m.y - 0.1 } });
-      tl.to(c, { opacity: 1, duration: 0.02 }, at)
-        .from(c.querySelector('.c-dot'), { scale: 0, duration: 0.05, ease: 'back.out(3)' }, at)
-        .from(c.querySelector('.c-line'), { scaleX: 0, duration: 0.06, ease: 'power2.out' }, at + 0.01)
-        .from(c.querySelector('.c-label'), { x: 24 * side, opacity: 0, duration: 0.06, ease: 'power2.out' }, at + 0.04);
-    });
-    tl.to('.hero-tag', { opacity: 1, duration: 0.06 }, 0.93)
-      .to({}, { duration: 0.05 });
+    })
+      .to(hero, { '--m': 1, ease: 'none', duration: 1 }, 0)
+      .to('#figure-desk', { '--z': 1.06, ease: 'none', duration: 1 }, 0)
+      .to({}, { duration: 0.3 });
 
     // Program: panel bergeser horizontal saat scroll vertikal.
     var track = document.getElementById('program-track');
@@ -1296,8 +1160,11 @@
   }
 
   function mobileMotion(G, ST) {
-    // Kartu program & paket masuk dari kanan saat terlihat.
-    G.from('.prog', { x: 80, opacity: 0, duration: 1, ease: 'expo.out', stagger: 0.08, scrollTrigger: { trigger: '#program', start: 'top 75%', once: true } });
+    // HP: cukup fade-in lembut (tanpa masker baris, tanpa scrub).
+    $$('.split').forEach(function (el) {
+      G.from(el, { y: 24, opacity: 0, duration: 0.9, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 90%', once: true } });
+    });
+    G.from('.prog', { x: 60, opacity: 0, duration: 0.9, ease: 'power3.out', stagger: 0.08, scrollTrigger: { trigger: '#program', start: 'top 80%', once: true } });
     return function () {};
   }
 
@@ -1305,6 +1172,7 @@
     var cur = $('.cursor');
     if (!cur) return null;
     document.body.classList.add('has-cursor');
+    cur.classList.add('is-hidden'); // tampil setelah mouse pertama kali bergerak
     var dot = $('.cursor-dot'), ring = $('.cursor-ring'), label = $('.cursor-label');
     var dx = G.quickTo(dot, 'x', { duration: 0.08 }), dy = G.quickTo(dot, 'y', { duration: 0.08 });
     var rx = G.quickTo(ring, 'x', { duration: 0.45, ease: 'power3' }), ry = G.quickTo(ring, 'y', { duration: 0.45, ease: 'power3' });
@@ -1383,7 +1251,7 @@
     var num = document.getElementById('intro-num'), bar = document.getElementById('intro-bar');
     var t0 = performance.now(), minDur = isDesk() ? 1500 : 900, maxWait = 3600;
     var ready = false, shown = 0;
-    var heroImg = $(isDesk() ? '#figure-desk .figure-img' : '#figure-m .figure-img');
+    var heroImg = isDesk() ? $('#figure-desk .figure-img') : null; // HP: hero tanpa foto
     var waits = [new Promise(function (res) {
       if (!heroImg || (heroImg.complete)) { res(); return; }
       heroImg.addEventListener('load', res, { once: true });
@@ -1412,15 +1280,14 @@
       var tl = G.timeline({ defaults: { ease: 'expo.out' } });
       tl.from('.giant .ch', { yPercent: 115, duration: 1.3, stagger: 0.06 }, 0)
         .from('#figure-desk', { '--z': 1.14, opacity: 0, filter: 'blur(16px)', duration: 1.8, clearProps: 'filter' }, 0.1)
+        .from('.hero-labels > *', { y: 20, opacity: 0, duration: 1, stagger: 0.08 }, 0.4)
         .from('.hero-copy > *', { y: 36, opacity: 0, duration: 1.1, stagger: 0.08 }, 0.5)
         .from('.hero-side > *', { y: 36, opacity: 0, duration: 1.1, stagger: 0.08 }, 0.6)
         .from('#nav > *', { y: -30, opacity: 0, duration: 1, stagger: 0.06, clearProps: 'transform,opacity' }, 0.6);
     } else {
       var tm = G.timeline({ defaults: { ease: 'expo.out' } });
-      tm.from('#figure-m', { opacity: 0, scale: 1.12, filter: 'blur(14px)', duration: 1.6, clearProps: 'filter,transform' }, 0)
-        .from('.story-bars span', { scaleX: 0, transformOrigin: 'left', duration: 0.8, stagger: 0.05 }, 0.2)
-        .from('.story-frame.is-active > *', { y: 40, opacity: 0, duration: 1, stagger: 0.08 }, 0.35)
-        .from('#nav > *', { y: -24, opacity: 0, duration: 0.9, stagger: 0.06, clearProps: 'transform,opacity' }, 0.4)
+      tm.from('.hm-inner > *', { y: 28, opacity: 0, duration: 1, stagger: 0.07, clearProps: 'transform,opacity' }, 0)
+        .from('#nav > *', { y: -24, opacity: 0, duration: 0.9, stagger: 0.06, clearProps: 'transform,opacity' }, 0.2)
         .from('#m-bar > *', { y: 30, opacity: 0, duration: 0.9, stagger: 0.08, clearProps: 'transform,opacity' }, 0.6);
     }
   }
@@ -1444,15 +1311,10 @@
   function start() {
     try { initMotion(); } catch (e) { motion.on = false; root.classList.remove('js-motion'); }
     setupLight();
-    stack.measure();
     onScrollUi();
-    if (window.ResizeObserver) {
-      var ro = new ResizeObserver(function () { refreshLayout(); });
-      $$('.stack > .card-sec').forEach(function (c) { ro.observe(c); });
-    }
     runIntro(heroEntrance);
     // Untuk tools/browser-check.js.
-    window.__landing = { lenis: function () { return lenis; }, frame: function () { return story.frame; } };
+    window.__landing = { lenis: function () { return lenis; } };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

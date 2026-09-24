@@ -66,71 +66,46 @@
 
     <!-- ============ HERO DESKTOP: JIZDAN di belakang badan ============ -->
     <section class="hero hero-desk" id="hero-desk" aria-labelledby="hero-title">
-      <div class="hero-stage">
+      <div class="hero-grid">
+        <div class="hero-labels" aria-hidden="true"><span>Personal Trainer · Sport Science</span><span>Banjarnegara &amp; Purwokerto</span></div>
         <div class="giant" aria-hidden="true">
           <span class="giant-half giant-l"><span class="ch">J</span><span class="ch">I</span><span class="ch">Z</span></span><span class="giant-half giant-r"><span class="ch">D</span><span class="ch">A</span><span class="ch">N</span></span>
         </div>
-
-        <div class="figure figure-desk" id="figure-desk">
-          <img class="figure-img" src="https://xnkbooking.my.id/img/hero-cutout.webp" alt="Coach Jizdan, tampak punggung" width="795" height="1041" crossorigin="anonymous" decoding="async" fetchpriority="high">
-          <canvas class="figure-gl" aria-hidden="true"></canvas>
-          <div class="callouts" aria-hidden="true">
-            <div class="callout" data-side="r" style="--x:52%;--y:27%"><i class="c-dot"></i><span class="c-line"></span><span class="c-label"><b>Trapezius</b><small>Postur &amp; stabilitas bahu</small></span></div>
-            <div class="callout" data-side="r" style="--x:74%;--y:34%"><i class="c-dot"></i><span class="c-line"></span><span class="c-label"><b>Deltoid</b><small>Bahu kuat, gerak overhead aman</small></span></div>
-            <div class="callout" data-side="l" style="--x:23%;--y:47%"><i class="c-dot"></i><span class="c-line"></span><span class="c-label"><b>Triceps</b><small>Tenaga dorong &amp; lockout</small></span></div>
-            <div class="callout" data-side="r" style="--x:64%;--y:50%"><i class="c-dot"></i><span class="c-line"></span><span class="c-label"><b>Latissimus dorsi</b><small>Tarikan &amp; lebar punggung</small></span></div>
-            <div class="callout" data-side="l" style="--x:44%;--y:63%"><i class="c-dot"></i><span class="c-line"></span><span class="c-label"><b>Erector spinae</b><small>Punggung bawah tahan beban</small></span></div>
+        <div class="hero-gap"></div>
+        <div class="hero-bottom">
+          <div class="hero-copy">
+            <h1 class="hero-title" id="hero-title">Move Better.<br>Get Stronger.<br><span class="outline">Perform Better.</span></h1>
+            <p class="hero-sub">Berbasis sport science: fat loss, muscle building &amp; performa olahraga, dilatih langsung oleh <b>Coach Jizdan</b>, guru pendidikan jasmani, pelatih pencak silat &amp; personal trainer.</p>
+            <div class="hero-actions">
+              <button type="button" class="btn btn-dark magnetic" onclick="openMemberCheck()">Mulai Sekarang<svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+              <button type="button" class="btn btn-line magnetic" data-go="coach">Kenali Coach</button>
+            </div>
+          </div>
+          <div class="hero-side">
+            <div class="hero-stat"><span class="hs-num" data-stat="sessions">–</span><span class="hs-lbl">Sesi latihan</span></div>
+            <div class="hero-stat"><span class="hs-num" data-stat="clients">–</span><span class="hs-lbl">Klien</span></div>
+            <div class="hero-stat" data-stat-wrap="rating"><span class="hs-num"><span data-stat="rating">–</span>★</span><span class="hs-lbl">Rating</span></div>
+            <p class="hero-hint"><span class="hint-line"></span>Scroll · lihat otot yang dilatih</p>
           </div>
         </div>
+      </div>
 
-        <div class="hero-copy">
-          <p class="eyebrow">Personal Trainer · Banjarnegara &amp; Purwokerto</p>
-          <h1 class="hero-title" id="hero-title">Move Better.<br>Get Stronger.<br><span class="outline">Perform Better.</span></h1>
-          <p class="hero-sub">Berbasis sport science: fat loss, muscle building &amp; performa olahraga, dilatih langsung oleh <b>Coach Jizdan</b>, guru pendidikan jasmani, pelatih pencak silat &amp; personal trainer.</p>
-          <div class="hero-actions">
-            <button type="button" class="btn btn-dark magnetic" onclick="openMemberCheck()">Mulai Sekarang<svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
-            <button type="button" class="btn btn-line magnetic" data-go="coach">Kenali Coach</button>
-          </div>
-        </div>
-
-        <div class="hero-side">
-          <div class="hero-stat"><span class="hs-num" data-stat="sessions">–</span><span class="hs-lbl">Sesi latihan</span></div>
-          <div class="hero-stat"><span class="hs-num" data-stat="clients">–</span><span class="hs-lbl">Klien</span></div>
-          <div class="hero-stat" data-stat-wrap="rating"><span class="hs-num"><span data-stat="rating">–</span>★</span><span class="hs-lbl">Rating</span></div>
-          <p class="hero-hint"><span class="hint-line"></span>Gerakkan mouse · scroll</p>
-        </div>
-
-        <p class="hero-tag" aria-hidden="true">Setiap otot dilatih dengan alasan.</p>
+      <div class="figure figure-desk" id="figure-desk">
+        <img class="figure-img" src="https://xnkbooking.my.id/img/hero-cutout.webp" alt="Coach Jizdan, tampak punggung" width="795" height="1041" crossorigin="anonymous" decoding="async" fetchpriority="high">
+        <canvas class="figure-gl" aria-hidden="true"></canvas>
+        <img class="figure-anat" src="https://xnkbooking.my.id/img/hero-anatomy.webp" alt="" aria-hidden="true" width="795" height="1041" loading="lazy" decoding="async">
+        <span class="scan" aria-hidden="true"></span>
       </div>
     </section>
 
-    <!-- ============ HERO MOBILE: story ============ -->
-    <section class="hero hero-story" id="hero-story" aria-labelledby="story-title">
-      <div class="story-sticky">
-        <div class="story-bars" aria-hidden="true"><span><i></i></span><span><i></i></span><span><i></i></span><span><i></i></span><span><i></i></span><span><i></i></span></div>
-        <div class="figure figure-m" id="figure-m">
-          <img class="figure-img" src="https://xnkbooking.my.id/img/hero-cutout.webp" alt="Coach Jizdan, tampak punggung dan bahu" width="795" height="1041" crossorigin="anonymous" decoding="async">
-          <canvas class="figure-gl" aria-hidden="true"></canvas>
-          <div class="m-dots" aria-hidden="true">
-            <i style="--x:52%;--y:27%"></i><i style="--x:74%;--y:34%"></i><i style="--x:23%;--y:47%"></i><i style="--x:64%;--y:50%"></i><i style="--x:44%;--y:63%"></i>
-          </div>
-        </div>
-        <div class="story-fade" aria-hidden="true"></div>
-        <div class="story-copy">
-          <div class="story-frame is-active" data-frame="0">
-            <p class="eyebrow">Coach Jizdan · Personal Trainer</p>
-            <h1 class="story-title" id="story-title">Move Better.<br>Get Stronger.<br><span class="outline">Perform Better.</span></h1>
-            <p class="story-sub">Personal training berbasis sport science.</p>
-          </div>
-          <div class="story-frame" data-frame="1" aria-hidden="true"><p class="eyebrow">Otot 01 / 05</p><p class="story-muscle">Trapezius</p><p class="story-sub">Postur tegak &amp; bahu stabil saat mengangkat beban.</p></div>
-          <div class="story-frame" data-frame="2" aria-hidden="true"><p class="eyebrow">Otot 02 / 05</p><p class="story-muscle">Deltoid</p><p class="story-sub">Bahu kuat, gerak overhead aman tanpa cedera.</p></div>
-          <div class="story-frame" data-frame="3" aria-hidden="true"><p class="eyebrow">Otot 03 / 05</p><p class="story-muscle">Triceps</p><p class="story-sub">Tenaga dorong untuk push-up, bench, sampai pukulan.</p></div>
-          <div class="story-frame" data-frame="4" aria-hidden="true"><p class="eyebrow">Otot 04 / 05</p><p class="story-muscle">Latissimus</p><p class="story-sub">Tarikan kuat &amp; punggung lebar yang proporsional.</p></div>
-          <div class="story-frame" data-frame="5" aria-hidden="true"><p class="eyebrow">Otot 05 / 05</p><p class="story-muscle">Erector spinae</p><p class="story-sub">Punggung bawah tahan beban, postur terjaga seharian.</p></div>
-          <p class="story-hint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Geser untuk lanjut</p>
-        </div>
-        <button type="button" class="story-tap story-prev" aria-label="Sebelumnya"></button>
-        <button type="button" class="story-tap story-next" aria-label="Berikutnya"></button>
+    <!-- ============ HERO MOBILE: tipografi saja ============ -->
+    <section class="hero hero-m" id="hero-m" aria-labelledby="hero-m-title">
+      <div class="wrap hm-inner">
+        <p class="hm-word" aria-hidden="true">JIZDAN</p>
+        <p class="eyebrow">Banjarnegara &amp; Purwokerto</p>
+        <h1 class="hm-title" id="hero-m-title">Move Better.<br>Get Stronger.<br><span class="outline">Perform Better.</span></h1>
+        <p class="hm-sub">Berbasis sport science: fat loss, muscle building &amp; performa olahraga, dilatih langsung oleh <b>Coach Jizdan</b>.</p>
+        <button type="button" class="hm-down" data-go="coach">Kenali Coach<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
       </div>
     </section>
 
