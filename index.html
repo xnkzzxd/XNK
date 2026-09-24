@@ -3,24 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PT Booking</title>
+    <title>XNK</title>
+    <meta name="description" content="Pesan jadwal dengan mudah secara online.">
+    <meta name="theme-color" content="#111111">
+
+    <!-- Link previews (WhatsApp, Facebook, X, Telegram) -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="XNK">
+    <meta property="og:title" content="XNK">
+    <meta property="og:description" content="Pesan jadwal dengan mudah secara online.">
+    <meta property="og:url" content="https://xnk.my.id/">
+    <meta property="og:image" content="https://xnk.my.id/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="id_ID">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <!-- Icons and home-screen install -->
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="XNK">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+    <script>document.documentElement.className = 'js';</script>
     <style>
-        body, html {
+        :root {
+            --brand: #111111;
+        }
+        html, body {
             margin: 0;
             padding: 0;
-            height: 100%;
             overflow: hidden;
+            background: var(--brand);
         }
         iframe {
+            display: block;
             width: 100%;
-            height: 100%;
-            border: none;
+            height: 100vh;
+            height: 100dvh; /* follows the mobile browser toolbar */
+            border: 0;
+            background: #fff;
+        }
+
+        /* Loading screen, only when JavaScript can remove it again */
+        .loader {
+            display: none;
+        }
+        .js .loader {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            background: var(--brand);
+            color: #fff;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            transition: opacity .4s ease, visibility .4s ease;
+        }
+        .loader.done {
+            opacity: 0;
+            visibility: hidden;
+        }
+        .loader img {
+            width: 96px;
+            height: 96px;
+        }
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid rgba(255, 255, 255, .2);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loader p {
+            margin: 0;
+            font-size: 15px;
+            color: rgba(255, 255, 255, .75);
+        }
+        .loader a {
+            color: #fff;
+            font-size: 15px;
+        }
+        .loader a[hidden] {
+            display: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .spinner { animation-duration: 2.4s; }
         }
     </style>
 </head>
 <body>
 
-    <iframe src="https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec"></iframe>
+    <iframe id="app" title="XNK – formulir pemesanan" src="https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec"></iframe>
+
+    <div class="loader" id="loader" role="status" aria-live="polite">
+        <img src="/icon-192.png" alt="XNK">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>Memuat…</p>
+        <a id="fallback" target="_blank" rel="noopener" hidden>Tidak muncul? Buka di tab baru</a>
+    </div>
+
+    <script>
+        (function () {
+            var app = document.getElementById('app');
+            var loader = document.getElementById('loader');
+            var fallback = document.getElementById('fallback');
+            fallback.href = app.src;
+            app.addEventListener('load', function () {
+                loader.classList.add('done');
+            });
+            setTimeout(function () {
+                fallback.hidden = false;
+            }, 8000);
+        })();
+    </script>
 
 </body>
 </html>
