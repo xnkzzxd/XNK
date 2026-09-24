@@ -10,13 +10,13 @@
 //       ├─ doGet()
 //       └─ include()
 //
-//    📁 01_CONFIG_SECURITY         → PIN admin
-//       ├─ _getAdminPin_()
-//       ├─ verifyAdminPin()
-//       └─ changeAdminPin()
+//    📁 01_CONFIG_SECURITY         → Login admin (PIN), link pribadi member, token sesi
+//       ├─ adminLogin() / checkAdminSession() / changeAdminPin()
+//       ├─ memberLoginByKey() / getMemberProfile() / adminGetMemberLink()
+//       └─ requireAdmin_() / requireMember_() / requireOwner_()   ← penjaga akses
 //
 //    📁 02_UTILS                   → Helper umum lintas modul
-//       ├─ getOrCreateSheet()
+//       ├─ getOrCreateSheet_()
 //       ├─ sanitizeValue()
 //       └─ testDriveAccess()
 //
@@ -66,12 +66,11 @@
 //    📁 08_AVAILABILITY            → Slot jadwal tersedia (publik)
 //       └─ getPublicAvailability()
 //
-//    ⚠️  CATATAN DEBUGGING:
-//    Fungsi kirimNotifTelegram() dipanggil di beberapa tempat (Members,
-//    Schedules, Notifications) tapi TIDAK didefinisikan di file ini.
-//    Pastikan fungsi tsb ada di file .gs lain dalam project yang sama,
-//    kalau tidak ada, notifikasi Telegram akan gagal secara silent
-//    (sudah dibungkus try/catch supaya tidak menghentikan proses utama).
+//    ⚠️  ATURAN KEAMANAN (baca section 01_CONFIG_SECURITY):
+//    Semua fungsi top-level TANPA akhiran "_" bisa dipanggil siapa saja dari
+//    browser. Fungsi admin wajib diawali requireAdmin_(token), fungsi portal
+//    klien requireMember_(token). Fungsi pembantu wajib berakhiran "_".
+//    Tes otomatis (pt-scheduler/tests) gagal kalau ada fungsi baru yang lupa dijaga.
 // #############################################################################
 
 
@@ -81,7 +80,9 @@
 
 function doGet(e) {
   var page = e && e.parameter && e.parameter.view ? e.parameter.view : 'Index';
-  var validPages = ['Index', 'Landing', 'Booking', 'Admin', 'PTBooking'];
+  // Hanya file HTML yang benar-benar ada. Nilai lain (termasuk ?view=public untuk
+  // portal klien) jatuh ke Index, yang membaca parameter view sendiri di browser.
+  var validPages = ['Index', 'Landing'];
   if (validPages.indexOf(page) === -1) page = 'Index';
 
   return HtmlService.createTemplateFromFile(page).evaluate()
@@ -102,31 +103,288 @@ function include(filename) {
 
 
 // #############################################################################
-// 📁 01_CONFIG_SECURITY — Admin Authentication (PIN)
+// 📁 01_CONFIG_SECURITY — Login Admin, Link Member, Token Sesi
 // #############################################################################
-// PIN disimpan di PropertiesService (bukan hardcoded).
-// Default PIN: 0000 — bisa diubah dari Admin panel nanti.
+//
+// Web app ini dibuka "Anyone" dan berjalan sebagai akun pemilik, jadi SETIAP
+// fungsi top-level di file .gs bisa dipanggil siapa saja lewat google.script.run.
+// Karena itu:
+//   - Fungsi admin wajib menerima `token` sebagai parameter pertama dan
+//     memanggil requireAdmin_(token) di baris pertama.
+//   - Fungsi portal klien menerima token member dan memanggil requireMember_().
+//   - Fungsi pembantu internal diberi akhiran "_" (private: TIDAK bisa
+//     dipanggil dari browser).
+//   - Fungsi perawatan (migrasi, setup trigger, test) memanggil requireOwner_(),
+//     jadi hanya bisa dijalankan pemilik dari editor Apps Script.
+//
+// Script Properties yang dipakai (Project Settings → Script Properties):
+//   ADMIN_PIN          PIN login panel PT (wajib diisi, minimal 6 karakter).
+//                      Mengganti PIN = semua perangkat admin otomatis logout.
+//   SESSION_SECRET     Dibuat otomatis. Menghapusnya = semua sesi logout.
+//   MEMBER_LINK_BASE   Opsional. Alamat portal klien untuk link member, mis.
+//                      "https://book.xnkbooking.my.id/" (harus meneruskan ?k=
+//                      ke iframe). Kosong = link /exec?view=public&k=… langsung.
+//
+// Token = base64url(payload JSON) + "." + HMAC-SHA256(payload, SESSION_SECRET).
+// Tidak ada data sesi yang disimpan di server; token berisi masa berlaku (exp)
+// dan "versi" (sidik PIN admin / sidik kunci link member) sehingga mengganti
+// PIN atau me-reset link langsung membatalkan token lama.
 
-function _getAdminPin_() {
-  var props = PropertiesService.getScriptProperties();
-  var pin = props.getProperty('ADMIN_PIN');
-  if (!pin) {
-    pin = '0000';
-    props.setProperty('ADMIN_PIN', pin);
+const ADMIN_SESSION_DAYS = 30;
+const MEMBER_SESSION_DAYS = 90;
+const LOGIN_MAX_FAILS = 10;          // gagal berturut-turut sebelum dikunci
+const LOGIN_LOCK_SECONDS = 600;      // lama kunci (dan jendela hitung gagal)
+const AUTH_ERROR_PREFIX = 'AUTH_REQUIRED';
+
+function _hex_(bytes) {
+  return bytes.map(function(b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+}
+
+function _sha256Hex_(text) {
+  return _hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(text), Utilities.Charset.UTF_8));
+}
+
+// Perbandingan string yang waktunya tidak bergantung pada posisi karakter beda.
+function _safeEqual_(a, b) {
+  a = String(a); b = String(b);
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function _sessionSecret_() {
+  const props = PropertiesService.getScriptProperties();
+  let secret = props.getProperty('SESSION_SECRET');
+  if (!secret) {
+    secret = Utilities.getUuid() + Utilities.getUuid();
+    props.setProperty('SESSION_SECRET', secret);
   }
-  return pin;
+  return secret;
 }
 
-function verifyAdminPin(inputPin) {
-  var stored = _getAdminPin_();
-  return String(inputPin) === String(stored);
+function _sign_(text) {
+  return _hex_(Utilities.computeHmacSha256Signature(text, _sessionSecret_()));
 }
 
-function changeAdminPin(oldPin, newPin) {
-  if (!verifyAdminPin(oldPin)) return { success: false, error: 'PIN lama salah' };
-  if (String(newPin).length < 4) return { success: false, error: 'PIN minimal 4 digit' };
-  PropertiesService.getScriptProperties().setProperty('ADMIN_PIN', String(newPin));
-  return { success: true };
+function _issueToken_(payload) {
+  const body = Utilities.base64EncodeWebSafe(JSON.stringify(payload), Utilities.Charset.UTF_8);
+  return body + '.' + _sign_(body);
+}
+
+// Kembalikan payload kalau token sah & belum kedaluwarsa, selain itu null.
+function _readToken_(token) {
+  if (!token || typeof token !== 'string' || token.length > 2000) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2 || !_safeEqual_(_sign_(parts[0]), parts[1])) return null;
+  let payload;
+  try {
+    payload = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString());
+  } catch (e) {
+    return null;
+  }
+  if (!payload || typeof payload.exp !== 'number' || payload.exp < Date.now()) return null;
+  return payload;
+}
+
+function _authError_(message) {
+  return new Error(AUTH_ERROR_PREFIX + ': ' + message);
+}
+
+function _adminPinVersion_() {
+  const pin = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN');
+  return pin ? _sha256Hex_('admin-pin:' + pin).slice(0, 16) : null;
+}
+
+/** Wajib dipanggil di baris pertama setiap fungsi admin. */
+function requireAdmin_(token) {
+  const payload = _readToken_(token);
+  const version = _adminPinVersion_();
+  if (!payload || payload.r !== 'admin' || !version || payload.v !== version) {
+    throw _authError_('Sesi admin berakhir. Silakan login lagi.');
+  }
+  return payload;
+}
+
+/** Untuk fungsi perawatan yang dijalankan manual dari editor Apps Script. */
+function requireOwner_() {
+  const active = Session.getActiveUser().getEmail();
+  const owner = Session.getEffectiveUser().getEmail();
+  if (!active || active !== owner) {
+    throw new Error('Fungsi ini hanya bisa dijalankan pemilik dari editor Apps Script.');
+  }
+}
+
+/**
+ * Login panel PT. Mengembalikan { token } yang disimpan browser (30 hari).
+ * 10x PIN salah dalam 10 menit = login dikunci 10 menit + notif Telegram.
+ */
+function adminLogin(pin) {
+  const stored = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN');
+  if (!stored) {
+    throw new Error('PIN admin belum diatur. Pemilik akun: isi ADMIN_PIN di Apps Script → Project Settings → Script Properties.');
+  }
+  const cache = CacheService.getScriptCache();
+  const fails = parseInt(cache.get('admin_login_fails') || '0', 10);
+  if (fails >= LOGIN_MAX_FAILS) {
+    throw new Error('Terlalu banyak percobaan PIN salah. Coba lagi dalam 10 menit.');
+  }
+  if (!_safeEqual_(String(pin == null ? '' : pin).trim(), stored)) {
+    cache.put('admin_login_fails', String(fails + 1), LOGIN_LOCK_SECONDS);
+    if (fails + 1 === LOGIN_MAX_FAILS) {
+      try {
+        kirimNotifTelegram_('⚠️ <b>LOGIN ADMIN DIKUNCI</b>\n\n' + LOGIN_MAX_FAILS +
+          ' kali PIN salah dalam 10 menit. Login panel PT dikunci 10 menit.');
+      } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
+    }
+    Utilities.sleep(700);
+    throw new Error('PIN salah.');
+  }
+  cache.remove('admin_login_fails');
+  return {
+    token: _issueToken_({ r: 'admin', v: _adminPinVersion_(), exp: Date.now() + ADMIN_SESSION_DAYS * 86400000 })
+  };
+}
+
+/** Dipanggil saat panel dibuka: cek token tersimpan masih berlaku. */
+function checkAdminSession(token) {
+  requireAdmin_(token);
+  return { ok: true };
+}
+
+/** Ganti PIN admin. Semua perangkat lain otomatis logout; perangkat ini dapat token baru. */
+function changeAdminPin(token, oldPin, newPin) {
+  requireAdmin_(token);
+  const props = PropertiesService.getScriptProperties();
+  if (!_safeEqual_(String(oldPin == null ? '' : oldPin).trim(), props.getProperty('ADMIN_PIN'))) {
+    throw new Error('PIN lama salah.');
+  }
+  newPin = String(newPin == null ? '' : newPin).trim();
+  if (newPin.length < 6) throw new Error('PIN baru minimal 6 karakter.');
+  props.setProperty('ADMIN_PIN', newPin);
+  return {
+    token: _issueToken_({ r: 'admin', v: _adminPinVersion_(), exp: Date.now() + ADMIN_SESSION_DAYS * 86400000 })
+  };
+}
+
+// ── Link pribadi member ─────────────────────────────────────────────────────
+// Setiap klien punya "Kunci Link" acak (kolom N di MemberData). Link portalnya
+// berisi kunci itu (?k=...). Membuka link = login ke portal klien tanpa PIN.
+// Admin bisa me-reset kunci (link lama & sesi lama langsung tidak berlaku).
+
+const MEMBER_KEY_COL = 14; // Kolom N di MemberData (1-based)
+
+function _newMemberKey_() {
+  return Utilities.getUuid().replace(/-/g, '');
+}
+
+function _memberKeyVersion_(key) {
+  return _sha256Hex_('member-key:' + key).slice(0, 16);
+}
+
+function _memberLink_(key) {
+  const base = PropertiesService.getScriptProperties().getProperty('MEMBER_LINK_BASE');
+  if (base) return base + (base.indexOf('?') === -1 ? '?' : '&') + 'k=' + key;
+  return ScriptApp.getService().getUrl() + '?view=public&k=' + key;
+}
+
+// Cari baris member (1-based) + datanya. Kembalikan null kalau tidak ada.
+function _findMemberRow_(predicate) {
+  const sheet = _getMemberDataSheet_();
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] && predicate(data[i])) return { sheet: sheet, rowNum: i + 1, row: data[i] };
+  }
+  return null;
+}
+
+/** Wajib dipanggil di baris pertama setiap fungsi portal klien. */
+function requireMember_(token) {
+  const payload = _readToken_(token);
+  if (!payload || payload.r !== 'member' || !payload.m) {
+    throw _authError_('Sesi member berakhir. Buka lagi link member dari WhatsApp Coach.');
+  }
+  const found = _findMemberRow_(function(row) { return String(row[0]).trim() === String(payload.m); });
+  const key = found && _memberKeyColumnReady_(found.sheet) ? String(found.row[MEMBER_KEY_COL - 1] || '') : '';
+  if (!found || !key || payload.v !== _memberKeyVersion_(key)) {
+    throw _authError_('Link member sudah tidak berlaku. Minta link baru ke Coach.');
+  }
+  return found;
+}
+
+// Data profil yang boleh dilihat klien itu sendiri (tanpa kunci link).
+function _memberPublicProfile_(row) {
+  const joinDate = sanitizeValue(row[4]);
+  return {
+    id: sanitizeValue(row[0]),
+    name: sanitizeValue(row[1]),
+    phone: String(sanitizeValue(row[2])).trim(),
+    goal: sanitizeValue(row[3]),
+    joinDate: joinDate,
+    lastActivityDate: sanitizeValue(row[12]) || joinDate,
+    photo: sanitizeValue(row[5]) || '',
+    packageId: sanitizeValue(row[6]) || '',
+    packageName: sanitizeValue(row[7]) || '',
+    totalSessions: parseInt(sanitizeValue(row[8])) || 10,
+    usedSessions: parseInt(sanitizeValue(row[9])) || 0,
+    preferredCoachId: sanitizeValue(row[10]) || '',
+    preferredCoachName: sanitizeValue(row[11]) || ''
+  };
+}
+
+/**
+ * Login portal klien dari link pribadi (?k=...).
+ * @returns {{token:string, member:Object}}
+ */
+function memberLoginByKey(key) {
+  key = String(key || '').trim();
+  if (!/^[a-f0-9]{32}$/i.test(key)) throw _authError_('Link member tidak valid.');
+  if (!_memberKeyColumnReady_(_getMemberDataSheet_())) throw _authError_('Link member belum aktif. Hubungi Coach.');
+  const found = _findMemberRow_(function(row) {
+    return _safeEqual_(String(row[MEMBER_KEY_COL - 1] || ''), key);
+  });
+  if (!found) throw _authError_('Link member tidak dikenal. Minta link baru ke Coach.');
+  return {
+    token: _issueToken_({
+      r: 'member',
+      m: String(found.row[0]).trim(),
+      v: _memberKeyVersion_(key),
+      exp: Date.now() + MEMBER_SESSION_DAYS * 86400000
+    }),
+    member: _memberPublicProfile_(found.row)
+  };
+}
+
+/** Profil terbaru klien yang sedang login (dipakai saat portal dibuka ulang). */
+function getMemberProfile(memberToken) {
+  return _memberPublicProfile_(requireMember_(memberToken).row);
+}
+
+/**
+ * Admin: ambil (atau buat / reset) link pribadi seorang klien, untuk dikirim via WA.
+ * @returns {{link:string, name:string, phone:string}}
+ */
+function adminGetMemberLink(token, memberId, reset) {
+  requireAdmin_(token);
+  const found = _findMemberRow_(function(row) { return String(row[0]).trim() === String(memberId).trim(); });
+  if (!found) throw new Error('Klien tidak ditemukan');
+  _requireMemberKeyColumn_(found.sheet);
+  let key = String(found.row[MEMBER_KEY_COL - 1] || '');
+  if (!/^[a-f0-9]{32}$/i.test(key) || reset) {
+    key = _newMemberKey_();
+    found.sheet.getRange(found.rowNum, MEMBER_KEY_COL).setValue(key);
+  }
+  return { link: _memberLink_(key), name: sanitizeValue(found.row[1]), phone: String(sanitizeValue(found.row[2])).trim() };
+}
+
+// Batasi fungsi yang tidak butuh login tapi mahal/berisiko di-spam
+// (mis. trigger email): maksimal 1x per `seconds` detik.
+function _throttle_(name, seconds) {
+  const cache = CacheService.getScriptCache();
+  const key = 'throttle_' + name;
+  if (cache.get(key)) return false;
+  cache.put(key, '1', seconds);
+  return true;
 }
 
 
@@ -138,7 +396,7 @@ function changeAdminPin(oldPin, newPin) {
  * Fungsi pembantu untuk membuat Sheet baru jika belum ada,
  * atau memastikan baris header sudah tertulis dengan benar.
  */
-function getOrCreateSheet(sheetName, headers) {
+function getOrCreateSheet_(sheetName, headers) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(sheetName);
 
@@ -174,6 +432,7 @@ function sanitizeValue(val) {
  * Folder test otomatis dihapus lagi setelah dijalankan.
  */
 function testDriveAccess() {
+  requireOwner_();
   var folder = DriveApp.createFolder('TEST_DRIVE_' + new Date().getTime());
   Logger.log('BERHASIL, folder id: ' + folder.getId());
   folder.setTrashed(true); // otomatis dihapus lagi setelah test
@@ -187,8 +446,22 @@ function escapeHtmlTelegram(text) {
     .replace(/>/g, '&gt;');
 }
 
+// Escape untuk teks & atribut HTML (email dan Telegram). Pakai ini untuk SEMUA
+// data yang diketik klien (nama, catatan, goal) sebelum dimasukkan ke HTML.
+function _escHtml_(text) {
+  return escapeHtmlTelegram(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Normalisasi nomor WA Indonesia ke "62xxxxxxxxxx" (digit saja).
+function _normalizePhone_(raw) {
+  let d = String(raw == null ? '' : raw).replace(/\D/g, '');
+  if (d.indexOf('0') === 0) d = '62' + d.slice(1);
+  else if (d.indexOf('8') === 0) d = '62' + d;
+  return d;
+}
+
 // Fungsi untuk menulis log ke Spreadsheet
-function logToSheet(pesan, status = "INFO") {
+function logToSheet_(pesan, status = "INFO") {
   try {
     // Gunakan getActiveSpreadsheet() jika script terikat ke file Sheets
     // Atau ganti dengan SpreadsheetApp.openById('ID_SPREADSHEET_ANDA') jika standalone
@@ -217,7 +490,7 @@ function logToSheet(pesan, status = "INFO") {
 
 function getCoaches() {
   const headers = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman"];
-  const sheet = getOrCreateSheet('Coaches', headers);
+  const sheet = getOrCreateSheet_('Coaches', headers);
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
   return data.slice(1).map(function(row) {
@@ -233,9 +506,10 @@ function getCoaches() {
   });
 }
 
-function addCoach(coachData) {
+function addCoach(token, coachData) {
+  requireAdmin_(token);
   const headers = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman"];
-  const sheet = getOrCreateSheet('Coaches', headers);
+  const sheet = getOrCreateSheet_('Coaches', headers);
   const id = 'COACH-' + new Date().getTime();
   sheet.appendRow([
     id, coachData.name, coachData.phone.toString(), coachData.specialty,
@@ -247,7 +521,8 @@ function addCoach(coachData) {
 /**
  * Update data profil coach (termasuk foto, bio, pengalaman).
  */
-function updateCoach(coachData) {
+function updateCoach(token, coachData) {
+  requireAdmin_(token);
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
   if (!sheet) throw new Error('Sheet Coaches tidak ditemukan');
   const data = sheet.getDataRange().getValues();
@@ -270,7 +545,8 @@ function updateCoach(coachData) {
  * dibiarkan (histori tetap ada), hanya penugasan baru yang tidak bisa pilih
  * coach ini lagi.
  */
-function deleteCoach(coachId) {
+function deleteCoach(token, coachId) {
+  requireAdmin_(token);
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
   if (!sheet) throw new Error('Sheet Coaches tidak ditemukan');
   const data = sheet.getDataRange().getValues();
@@ -309,16 +585,25 @@ function _getCoachPhotoFolder_() {
   return folder;
 }
 
+// Validasi upload gambar dari browser: hanya format gambar umum, maks ~5 MB.
+function _checkImageUpload_(base64Data, mimeType) {
+  if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].indexOf(String(mimeType)) === -1) {
+    throw new Error('Tipe file harus berupa gambar (JPG, PNG, WEBP, atau GIF)');
+  }
+  if (typeof base64Data !== 'string' || !base64Data || base64Data.length > 7000000) {
+    throw new Error('Ukuran foto maksimal 5 MB');
+  }
+}
+
 /**
  * Upload foto coach ke Google Drive (folder khusus, ID di-cache), kembalikan
  * link foto yang bisa langsung dipakai di tag <img>.
  * base64Data: string base64 TANPA prefix "data:image/...;base64,"
  */
-function uploadCoachPhoto(base64Data, fileName, mimeType) {
+function uploadCoachPhoto(token, base64Data, fileName, mimeType) {
+  requireAdmin_(token);
   try {
-    if (!mimeType || mimeType.indexOf('image/') !== 0) {
-      throw new Error('Tipe file harus berupa gambar (image/*)');
-    }
+    _checkImageUpload_(base64Data, mimeType);
 
     const folder = _getCoachPhotoFolder_();
 
@@ -357,7 +642,7 @@ function uploadCoachPhoto(base64Data, fileName, mimeType) {
 
 // ── 📂 MEMBERDATA (Sheet Master) ────────────────────────────────────────────
 
-const MEMBERDATA_HEADERS = ["ID", "Nama", "No WA", "Tujuan (Goal)", "Tanggal Gabung", "Foto URL", "Paket ID Aktif", "Nama Paket Aktif", "Total Sesi", "Sesi Terpakai", "Coach ID", "Nama Coach", "Tanggal Update Terakhir"];
+const MEMBERDATA_HEADERS = ["ID", "Nama", "No WA", "Tujuan (Goal)", "Tanggal Gabung", "Foto URL", "Paket ID Aktif", "Nama Paket Aktif", "Total Sesi", "Sesi Terpakai", "Coach ID", "Nama Coach", "Tanggal Update Terakhir", "Kunci Link"];
 const MEMBERS_LOG_HEADERS = ["Transaksi ID", "Member ID", "Tanggal", "Jenis Transaksi", "Paket ID", "Nama Paket", "Jumlah Sesi", "Coach ID", "Nama Coach", "Catatan"];
 
 /**
@@ -368,10 +653,29 @@ const MEMBERS_LOG_HEADERS = ["Transaksi ID", "Member ID", "Tanggal", "Jenis Tran
  * dan kacaukan parsing/sorting tanggal berbasis split "/").
  */
 function _getMemberDataSheet_() {
-  const sheet = getOrCreateSheet('MemberData', MEMBERDATA_HEADERS);
+  const sheet = getOrCreateSheet_('MemberData', MEMBERDATA_HEADERS);
   sheet.getRange('E:E').setNumberFormat('@');
   sheet.getRange('M:M').setNumberFormat('@');
+  // Sheet lama belum punya kolom N "Kunci Link" (link pribadi member): tambahkan
+  // headernya — HANYA kalau sel N1 masih kosong, supaya kolom buatan sendiri tidak tertimpa.
+  const keyHeader = sheet.getRange(1, MEMBER_KEY_COL);
+  if (keyHeader.getValue() === '') {
+    keyHeader.setValue('Kunci Link');
+    keyHeader.setFontWeight('bold');
+  }
   return sheet;
+}
+
+// true kalau kolom N MemberData memang kolom "Kunci Link".
+function _memberKeyColumnReady_(sheet) {
+  return sheet.getRange(1, MEMBER_KEY_COL).getValue() === 'Kunci Link';
+}
+
+function _requireMemberKeyColumn_(sheet) {
+  if (!_memberKeyColumnReady_(sheet)) {
+    throw new Error('Kolom N di sheet MemberData sudah dipakai untuk "' + sheet.getRange(1, MEMBER_KEY_COL).getValue() +
+      '". Pindahkan isi kolom itu ke kolom lain, kosongkan sel N1, lalu coba lagi (kolom N dipakai untuk Kunci Link member).');
+  }
 }
 
 /**
@@ -380,7 +684,7 @@ function _getMemberDataSheet_() {
  * mencegah Sheets auto-convert "D/M/YYYY" jadi tipe Date yang kacaukan parsing.
  */
 function _getMembersLogSheet_() {
-  const sheet = getOrCreateSheet('Members', MEMBERS_LOG_HEADERS);
+  const sheet = getOrCreateSheet_('Members', MEMBERS_LOG_HEADERS);
   sheet.getRange('C:C').setNumberFormat('@');
   return sheet;
 }
@@ -406,14 +710,15 @@ function _tulisLogTransaksiMember_(memberId, jenis, paketId, namaPaket, jumlahSe
  * Nama & foto diambil dari data klien saat ini (MemberData) via memberId, karena log
  * transaksi sendiri tidak menyimpan nama (menghindari data ganda yang bisa basi).
  */
-function getMemberTransactionLog() {
+function getMemberTransactionLog(token) {
+  requireAdmin_(token);
   const logSheet = _getMembersLogSheet_();
   const logData = logSheet.getDataRange().getValues();
   if (logData.length <= 1) return [];
 
   // Index nama & foto klien saat ini, keyed by ID
   const membersById = {};
-  getMembers().forEach(function(m) { membersById[String(m.id)] = m; });
+  _getMembersAll_().forEach(function(m) { membersById[String(m.id)] = m; });
 
   function parseTglFleksibel(val) {
     if (!val) return null;
@@ -491,6 +796,7 @@ function getMemberTransactionLog() {
  * CARA JALANKAN: buka Extensions > Apps Script > pilih fungsi ini di dropdown > Run.
  */
 function migrateSplitMembersData() {
+  requireOwner_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const oldSheet = ss.getSheetByName('Members');
   if (!oldSheet) {
@@ -530,7 +836,7 @@ function migrateSplitMembersData() {
       ? (joinDate.getDate() + '/' + (joinDate.getMonth() + 1) + '/' + joinDate.getFullYear())
       : String(joinDate);
 
-    rowsForMemberData.push([id, nama, noWa, goal, joinDate, fotoUrl, paketId, namaPaket, totalSesi, sesiTerpakai, coachId, namaCoach, dateStr]);
+    rowsForMemberData.push([id, nama, noWa, goal, joinDate, fotoUrl, paketId, namaPaket, totalSesi, sesiTerpakai, coachId, namaCoach, dateStr, _newMemberKey_()]);
 
     logEntries.push(['TRX-' + id, id, dateStr, 'Baru', paketId, namaPaket, totalSesi, coachId, namaCoach, 'Migrasi dari data lama']);
   }
@@ -560,32 +866,18 @@ function migrateSplitMembersData() {
 
 // Urutan kolom MemberData: ID(0) Nama(1) NoWA(2) Goal(3) JoinDate(4) FotoURL(5)
 //                           PaketID(6) NamaPaket(7) TotalSesi(8) SesiTerpakai(9) CoachID(10) NamaCoach(11)
-function getMemberSessions(memberId) {
-  try {
-    const sheet = _getMemberDataSheet_();
-    const data = sheet.getDataRange().getValues();
-    const targetId = String(memberId).trim();
-
-    for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]).trim() === targetId) {
-        const total = parseInt(data[i][8]) || 0;
-        const used = parseInt(data[i][9]) || 0;
-        const remaining = total - used;
-        const pct = total > 0 ? Math.round((used / total) * 100) : 0;
-        const namaPaket = data[i][7];
-        return {
-          total: total,
-          used: used,
-          remaining: remaining,
-          pct: pct,
-          packageName: namaPaket ? namaPaket : 'Paket Standar'
-        };
-      }
-    }
-    return null;
-  } catch (err) {
-    return null;
-  }
+function getMemberSessions(memberToken) {
+  const row = requireMember_(memberToken).row;
+  const total = parseInt(row[8]) || 0;
+  const used = parseInt(row[9]) || 0;
+  const namaPaket = row[7];
+  return {
+    total: total,
+    used: used,
+    remaining: total - used,
+    pct: total > 0 ? Math.round((used / total) * 100) : 0,
+    packageName: namaPaket ? namaPaket : 'Paket Standar'
+  };
 }
 
 // Helper: parse tanggal yang bisa datang dalam 2 bentuk —
@@ -605,30 +897,18 @@ function _parseTanggalDMY_(str) {
   return isNaN(fallback) ? null : fallback;
 }
 
-function getMembers() {
+/** Admin: daftar semua klien (termasuk No WA). */
+function getMembers(token) {
+  requireAdmin_(token);
+  return _getMembersAll_();
+}
+
+function _getMembersAll_() {
   const sheet = _getMemberDataSheet_();
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
-  const list = data.slice(1).filter(function(row) { return row[0]; }).map(function(row) {
-    const joinDate = sanitizeValue(row[4]);
-    // Fallback ke Tanggal Gabung untuk baris lama yang belum punya "Tanggal Update Terakhir"
-    const lastActivityDate = sanitizeValue(row[12]) || joinDate;
-    return {
-      id: sanitizeValue(row[0]),
-      name: sanitizeValue(row[1]),
-      phone: String(sanitizeValue(row[2])).trim(),
-      goal: sanitizeValue(row[3]),
-      joinDate: joinDate,
-      lastActivityDate: lastActivityDate,
-      photo: sanitizeValue(row[5]) || '',
-      packageId: sanitizeValue(row[6]) || '',
-      packageName: sanitizeValue(row[7]) || '',
-      totalSessions: parseInt(sanitizeValue(row[8])) || 10,
-      usedSessions: parseInt(sanitizeValue(row[9])) || 0,
-      preferredCoachId: sanitizeValue(row[10]) || '',
-      preferredCoachName: sanitizeValue(row[11]) || ''
-    };
-  });
+  // Kunci link TIDAK ikut dikirim; admin mengambil link lewat adminGetMemberLink().
+  const list = data.slice(1).filter(function(row) { return row[0]; }).map(_memberPublicProfile_);
 
   // Urutkan berdasarkan tanggal aktivitas terakhir (lama -> baru) supaya pengelompokan
   // bulan di tab Klien rapi: klien yang baru perpanjang otomatis pindah ke bawah/bulan terbaru.
@@ -649,22 +929,41 @@ function getMembers() {
  * dianggap PERPANJANG (paket & kuota di-reset sesuai paket baru, riwayat lama
  * tetap tersimpan sebagai log transaksi "Perpanjang" di sheet Members).
  */
-function addMember(memberData) {
+/** Admin: tambah klien baru, atau perpanjang kalau No WA sudah terdaftar. */
+function addMember(token, memberData) {
+  requireAdmin_(token);
+  return _addMemberInternal_(memberData);
+}
+
+function _findMemberRowIndexByPhone_(data, phone) {
+  const target = _normalizePhone_(phone);
+  if (!target) return -1;
+  for (let i = 1; i < data.length; i++) {
+    if (_normalizePhone_(data[i][2]) === target) return i;
+  }
+  return -1;
+}
+
+/**
+ * @param {Object} memberData
+ * @param {{newOnly?:boolean, silent?:boolean}} [options]
+ *   newOnly: kalau No WA sudah terdaftar, JANGAN ubah apa pun → {status:'exists'}
+ *            (dipakai pendaftaran publik supaya tidak bisa me-reset kuota orang lain).
+ *   silent:  jangan kirim notif Telegram (pemanggil mengirim notifnya sendiri).
+ */
+function _addMemberInternal_(memberData, options) {
+  options = options || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
   try {
     const sheet = _getMemberDataSheet_();
     const data = sheet.getDataRange().getValues();
-    const noWaBaru = String(memberData.phone || '').replace(/\D/g, '');
 
     // 0. Cek apakah No WA ini sudah pernah terdaftar sebagai klien (deteksi klien lama)
-    let existingRowIndex = -1; // index di array `data` (0-based, termasuk header)
-    for (let i = 1; i < data.length; i++) {
-      const waLama = String(data[i][2] || '').replace(/\D/g, '');
-      if (waLama && waLama === noWaBaru) {
-        existingRowIndex = i;
-        break;
-      }
-    }
+    const existingRowIndex = _findMemberRowIndexByPhone_(data, memberData.phone); // index di `data` (0-based, termasuk header)
     const isPerpanjang = existingRowIndex !== -1;
+    if (isPerpanjang && options.newOnly) return { status: 'exists' };
+    const keyColumnReady = _memberKeyColumnReady_(sheet);
 
     const d = new Date();
     const dateStr = d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
@@ -696,13 +995,20 @@ function addMember(memberData) {
       }
     }
 
-    let id;
+    let id, memberKey;
     const usedSessions = memberData.usedSessions || 0;
 
     if (isPerpanjang) {
       // ── PERPANJANG: update baris MemberData yang sudah ada, kuota di-RESET sesuai paket baru ──
       id = data[existingRowIndex][0];
       const rowNum = existingRowIndex + 1;
+      if (keyColumnReady) {
+        memberKey = String(data[existingRowIndex][MEMBER_KEY_COL - 1] || '');
+        if (!/^[a-f0-9]{32}$/i.test(memberKey)) {
+          memberKey = _newMemberKey_();
+          sheet.getRange(rowNum, MEMBER_KEY_COL).setValue(memberKey);
+        }
+      }
       sheet.getRange(rowNum, 4).setValue(memberData.goal);            // Tujuan (boleh update)
       sheet.getRange(rowNum, 7).setValue(paketId || data[existingRowIndex][6]);
       sheet.getRange(rowNum, 8).setValue(paketNama || data[existingRowIndex][7]);
@@ -720,29 +1026,34 @@ function addMember(memberData) {
     } else {
       // ── KLIEN BARU: baris baru di MemberData + log "Baru" di Members ──
       id = 'PT-' + new Date().getTime();
-      sheet.appendRow([
+      const newRow = [
         id, memberData.name, memberData.phone.toString(), memberData.goal, dateStr,
         "", paketId, paketNama, totalSessions, usedSessions, coachId, coachNama, dateStr
-      ]);
+      ];
+      if (keyColumnReady) {
+        memberKey = _newMemberKey_();
+        newRow.push(memberKey);
+      }
+      sheet.appendRow(newRow);
 
       _tulisLogTransaksiMember_(id, 'Baru', paketId, paketNama, totalSessions, coachId, coachNama, 'Klien baru');
     }
 
     // 3. Format Nomor WA
-    let noWa = memberData.phone.toString().replace(/^0/, '62').replace(/\D/g, '');
+    const noWa = _normalizePhone_(memberData.phone);
+    // Tanpa kolom Kunci Link: pakai halaman booking umum (klien minta link ke Coach nanti).
+    const memberLink = memberKey ? _memberLink_(memberKey) : 'https://book.xnkbooking.my.id';
 
-    // 4. Buat Template Chat WA + Link Booking
-    let templateWA = isPerpanjang
-      ? "Halo " + memberData.name + ", paket latihan kamu sudah diperpanjang! 🎉\n\n" +
-        "Untuk mengatur jadwal latihan, silakan booking jadwal sesi kamu melalui link berikut:\n" +
-        "👉 https://book.xnkbooking.my.id\n\n" +
-        "Jika ada pertanyaan, silakan balas pesan ini ya. Terima kasih!"
-      : "Halo " + memberData.name + ", terima kasih sudah bergabung! 🎉\n\n" +
-        "Untuk mengatur jadwal latihan, silakan booking jadwal sesi kamu melalui link berikut:\n" +
-        "👉 https://book.xnkbooking.my.id\n\n" +
-        "Jika ada pertanyaan, silakan balas pesan ini ya. Terima kasih!";
+    // 4. Buat Template Chat WA + link pribadi member (link = login portal klien)
+    const templateWA = (isPerpanjang
+        ? "Halo " + memberData.name + ", paket latihan kamu sudah diperpanjang! 🎉\n\n"
+        : "Halo " + memberData.name + ", terima kasih sudah bergabung! 🎉\n\n") +
+      "Untuk mengatur jadwal latihan, silakan booking jadwal sesi kamu melalui link pribadi berikut " +
+      "(khusus untuk kamu, jangan dibagikan ya):\n" +
+      "👉 " + memberLink + "\n\n" +
+      "Jika ada pertanyaan, silakan balas pesan ini ya. Terima kasih!";
 
-    let waLink = "https://wa.me/" + noWa + "?text=" + encodeURIComponent(templateWA);
+    const waLink = "https://wa.me/" + noWa + "?text=" + encodeURIComponent(templateWA);
 
     // 5. Susun Pesan Notifikasi Telegram
     const pesanTelegram = (isPerpanjang ? "🔁 <b>KLIEN PERPANJANG PAKET!</b> 🔁\n\n" : "🚨 <b>MEMBER BARU DITAMBAHKAN!</b> 🚨\n\n") +
@@ -752,18 +1063,22 @@ function addMember(memberData) {
                           (paketNama ? "🏷️ <b>Paket:</b> " + escapeHtmlTelegram(paketNama) + "\n" : "") +
                           (coachNama ? "🧑‍🏫 <b>Coach:</b> " + escapeHtmlTelegram(coachNama) + "\n" : "") +
                           "📦 <b>Total Sesi:</b> " + totalSessions + " Sesi\n\n" +
-                          "👉 <a href='" + waLink + "'>Chat Klien & Minta Booking</a>";
+                          "👉 <a href='" + _escHtml_(waLink) + "'>Chat Klien & Kirim Link Booking</a>";
 
     // 6. Kirim Notifikasi Telegram
-    try {
-      kirimNotifTelegram(pesanTelegram);
-    } catch(e) {
-      Logger.log("Notif Telegram gagal: " + e);
+    if (!options.silent) {
+      try {
+        kirimNotifTelegram_(pesanTelegram);
+      } catch(e) {
+        Logger.log("Notif Telegram gagal: " + e);
+      }
     }
 
-    return { status: 'success', id: id, renewed: isPerpanjang, packageId: paketId, packageName: paketNama, totalSessions: totalSessions, coachId: coachId, coachName: coachNama };
+    return { status: 'success', id: id, renewed: isPerpanjang, packageId: paketId, packageName: paketNama, totalSessions: totalSessions, coachId: coachId, coachName: coachNama, memberLink: memberLink, waLink: waLink };
   } catch (error) {
     throw new Error('Gagal menyimpan klien: ' + error.message);
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -772,7 +1087,8 @@ function addMember(memberData) {
  * Update ini murni edit profil (bukan transaksi), jadi hanya menulis ke MemberData,
  * TIDAK menambah log transaksi baru di Members.
  */
-function updateMemberProfile(memberData) {
+function updateMemberProfile(token, memberData) {
+  requireAdmin_(token);
   const sheet = _getMemberDataSheet_();
   const data = sheet.getDataRange().getValues();
   const targetId = String(memberData.id).trim();
@@ -806,7 +1122,7 @@ function updateMemberProfile(memberData) {
       }
 
       try {
-        kirimNotifTelegram("✏️ <b>PROFIL KLIEN DIUBAH</b>\n\n" +
+        kirimNotifTelegram_("✏️ <b>PROFIL KLIEN DIUBAH</b>\n\n" +
           "👤 <b>Nama:</b> " + escapeHtmlTelegram(memberData.name) + "\n" +
           "🎯 <b>Tujuan:</b> " + escapeHtmlTelegram(memberData.goal) + "\n" +
           "📦 <b>Sesi:</b> " + memberData.usedSessions + "/" + memberData.totalSessions);
@@ -818,51 +1134,85 @@ function updateMemberProfile(memberData) {
   throw new Error('Klien tidak ditemukan');
 }
 
+// Format "Rp 1.500.000" tanpa bergantung pada dukungan locale Intl di server.
+function _formatRupiah_(n) {
+  return 'Rp ' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 /**
- * Fungsi mendaftarkan Klien Baru secara mandiri dari Katalog (Pricelist Funnel).
+ * Pendaftaran mandiri klien dari halaman publik (Landing & katalog portal klien).
+ * - Jumlah sesi & harga SELALU diambil dari PriceList di server berdasarkan
+ *   packageId; nilai sesi/harga dari browser diabaikan.
+ * - No WA baru: klien langsung aktif (seperti sebelumnya) dan mendapat link pribadi.
+ * - No WA yang sudah terdaftar: data & kuota klien itu TIDAK diubah. PT dikabari
+ *   lewat Telegram/email untuk memproses perpanjangan setelah pembayaran diterima.
+ * @param {{name:string, phone:string, goal:string, packageId:string}} data
+ * @returns {{status:'success', id:string, memberLink:string} | {status:'exists'}}
  */
 function registerNewClient(data) {
-  const goalWithPackage = data.goal + " | [" + data.packageName + " - " + data.sessions + " Sesi]";
-  const newId = addMember({ name: data.name, phone: data.phone, goal: goalWithPackage, totalSessions: data.sessions, usedSessions: 0 }).id;
+  data = data || {};
+  const name = String(data.name || '').trim().slice(0, 100);
+  const phone = _normalizePhone_(data.phone);
+  const goal = String(data.goal || '').trim().slice(0, 200);
+  if (!name) throw new Error('Nama wajib diisi.');
+  if (!/^62\d{8,13}$/.test(phone)) throw new Error('Nomor WhatsApp tidak valid.');
 
-  const emailTujuan = Session.getActiveUser().getEmail();
-  const subject = "💰 Pendaftaran PT Baru: " + data.name;
-  const waLink = "https://wa.me/" + data.phone + "?text=" + encodeURIComponent("Halo " + data.name + ", terima kasih sudah mendaftar di XNK Workspace untuk paket " + data.packageName + ". Silakan kirim bukti transfer ke sini ya.");
+  const pkg = getPriceList().find(function(p) { return String(p.id) === String(data.packageId); });
+  if (!pkg) throw new Error('Paket tidak ditemukan. Muat ulang halaman lalu pilih paket lagi.');
+  const sessions = parseInt(pkg.jumlahSesi, 10) || 1;
+  const priceStr = _formatRupiah_(pkg.harga);
+
+  const result = _addMemberInternal_({
+    name: name,
+    phone: phone,
+    goal: goal + ' | [' + pkg.namaPaket + ' - ' + sessions + ' Sesi]',
+    packageId: pkg.id,
+    totalSessions: sessions,
+    usedSessions: 0
+  }, { newOnly: true, silent: true });
+
+  const isExisting = result.status === 'exists';
+  const waLink = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
+    'Halo ' + name + ', terima kasih sudah mendaftar di XNK untuk paket ' + pkg.namaPaket +
+    '. Silakan kirim bukti transfer ke sini ya.');
+  const title = isExisting ? 'Klien Lama Minta Perpanjang 🔁' : 'Klien Baru Mendaftar! 💸';
+  const note = isExisting
+    ? 'Nomor ini sudah terdaftar. Kuota klien BELUM diubah. Setelah pembayaran diterima, perpanjang lewat form Tambah Klien di panel PT.'
+    : 'Klien sudah aktif dengan kuota paket ini. Konfirmasi pembayaran via WA.';
 
   const body = `
     <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9fafb; color: #111827;">
       <div style="background-color: white; padding: 30px; border-radius: 12px; max-width: 500px; margin: 0 auto; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-        <h2 style="margin-top:0; color: #000000;">Klien Baru Mendaftar! 💸</h2>
+        <h2 style="margin-top:0; color: #000000;">${title}</h2>
+        <p>${note}</p>
         <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #000000;">
-          <p style="margin:0 0 8px 0;"><b>Nama:</b> ${data.name}</p>
-          <p style="margin:0 0 8px 0;"><b>No WA:</b> +${data.phone}</p>
-          <p style="margin:0 0 8px 0;"><b>Goal:</b> ${data.goal}</p>
-          <p style="margin:0 0 8px 0;"><b>Kategori:</b> ${data.clientType.toUpperCase()}</p>
-          <p style="margin:0 0 8px 0;"><b>Paket Dipilih:</b> ${data.packageName} (${data.sessions} Sesi)</p>
-          <p style="margin:0; color: #16a34a; font-weight:bold; font-size:18px;">Total Tagihan: ${data.price}</p>
+          <p style="margin:0 0 8px 0;"><b>Nama:</b> ${_escHtml_(name)}</p>
+          <p style="margin:0 0 8px 0;"><b>No WA:</b> +${phone}</p>
+          <p style="margin:0 0 8px 0;"><b>Goal:</b> ${_escHtml_(goal || '-')}</p>
+          <p style="margin:0 0 8px 0;"><b>Paket Dipilih:</b> ${_escHtml_(pkg.namaPaket)} (${sessions} Sesi)</p>
+          <p style="margin:0; color: #16a34a; font-weight:bold; font-size:18px;">Total Tagihan: ${priceStr}</p>
         </div>
-        <a href="${waLink}" style="display: block; width: 100%; text-align: center; background-color: #000000; color: white; padding: 12px 0; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 20px;">Tanya Bukti Transfer via WA</a>
+        <a href="${_escHtml_(waLink)}" style="display: block; width: 100%; text-align: center; background-color: #000000; color: white; padding: 12px 0; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 20px;">Tanya Bukti Transfer via WA</a>
       </div>
     </div>
   `;
 
-  try { MailApp.sendEmail({ to: emailTujuan, subject: subject, htmlBody: body }); } catch(e) {}
-
-  const pesanTelegram = "🚨 <b>MEMBER BARU MENDAFTAR!</b> 🚨\n\n" +
-                        "👤 <b>Nama:</b> " + escapeHtmlTelegram(data.name) + "\n" +
-                        "📞 <b>No WA:</b> +" + data.phone + "\n" +
-                        "🏷️ <b>Kategori:</b> " + data.clientType.toUpperCase() + "\n" +
-                        "📦 <b>Paket:</b> " + data.packageName + " (" + data.sessions + " Sesi)\n" +
-                        "💰 <b>Tagihan:</b> " + data.price + "\n\n" +
-                        "👉 <a href='" + waLink + "'>Chat Klien Sekarang</a>";
+  try {
+    MailApp.sendEmail({ to: Session.getEffectiveUser().getEmail(), subject: (isExisting ? '🔁 Permintaan Perpanjang: ' : '💰 Pendaftaran PT Baru: ') + name, htmlBody: body });
+  } catch (e) { Logger.log('Email pendaftaran gagal: ' + e); }
 
   try {
-    kirimNotifTelegram(pesanTelegram);
-  } catch(e) {
-    Logger.log("Notif Telegram gagal: " + e);
-  }
+    kirimNotifTelegram_((isExisting ? '🔁 <b>KLIEN LAMA MINTA PERPANJANG</b> 🔁\n\n' : '🚨 <b>MEMBER BARU MENDAFTAR!</b> 🚨\n\n') +
+      '👤 <b>Nama:</b> ' + _escHtml_(name) + '\n' +
+      '📞 <b>No WA:</b> +' + phone + '\n' +
+      '📦 <b>Paket:</b> ' + _escHtml_(pkg.namaPaket) + ' (' + sessions + ' Sesi)\n' +
+      '💰 <b>Tagihan:</b> ' + priceStr + '\n\n' +
+      (isExisting ? '⚠️ Kuota belum diubah — proses perpanjangan manual setelah bayar.\n' : '') +
+      "👉 <a href='" + _escHtml_(waLink) + "'>Chat Klien Sekarang</a>");
+  } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
 
-  return { status: 'success', id: newId };
+  if (isExisting) return { status: 'exists' };
+  return { status: 'success', id: result.id, memberLink: result.memberLink };
 }
 
 /**
@@ -870,7 +1220,8 @@ function registerNewClient(data) {
  * Riwayat transaksinya di sheet Members (log "Baru"/"Perpanjang") SENGAJA DIBIARKAN
  * sebagai arsip — tidak ikut dihapus, sesuai keputusan yang sudah dikonfirmasi.
  */
-function deleteMember(memberId) {
+function deleteMember(token, memberId) {
+  requireAdmin_(token);
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const memSheet = _getMemberDataSheet_();
@@ -901,7 +1252,7 @@ function deleteMember(memberId) {
     }
 
     try {
-      kirimNotifTelegram("🗑️ <b>KLIEN DIHAPUS</b>\n\n👤 <b>Nama:</b> " + escapeHtmlTelegram(deletedName) + "\n\nSemua jadwal terkait juga sudah dihapus. Riwayat transaksi tetap tersimpan sebagai arsip.");
+      kirimNotifTelegram_("🗑️ <b>KLIEN DIHAPUS</b>\n\n👤 <b>Nama:</b> " + escapeHtmlTelegram(deletedName) + "\n\nSemua jadwal terkait juga sudah dihapus. Riwayat transaksi tetap tersimpan sebagai arsip.");
     } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
 
     return { status: 'success' };
@@ -913,7 +1264,7 @@ function deleteMember(memberId) {
 // ── 📂 PHOTO_UPLOAD ──────────────────────────────────────────────────────────
 // Catatan: migrateMembersAddPhotoColumn(), migrateMembersAddPaketColumns(), dan
 // migrateMembersAddCoachColumns() sudah TIDAK DIPAKAI LAGI sejak split ke MemberData,
-// karena sheet MemberData dibuat langsung dengan header lengkap (getOrCreateSheet).
+// karena sheet MemberData dibuat langsung dengan header lengkap (getOrCreateSheet_).
 // Fungsi-fungsi itu dihapus supaya tidak ada yang salah pakai ke sheet Members (log transaksi).
 
 function _getMemberPhotoFolder_() {
@@ -927,11 +1278,14 @@ function _getMemberPhotoFolder_() {
   return folder;
 }
 
-function uploadMemberPhoto(base64Data, fileName, mimeType) {
+/**
+ * Portal klien: upload foto profil klien yang sedang login, langsung disimpan
+ * ke profilnya (kolom F). Klien hanya bisa mengubah fotonya sendiri.
+ */
+function uploadMemberPhoto(memberToken, base64Data, fileName, mimeType) {
+  const member = requireMember_(memberToken);
   try {
-    if (!mimeType || mimeType.indexOf('image/') !== 0) {
-      throw new Error('Tipe file harus berupa gambar (image/*)');
-    }
+    _checkImageUpload_(base64Data, mimeType);
     const folder = _getMemberPhotoFolder_();
     const decodedBytes = Utilities.base64Decode(base64Data);
     const blob = Utilities.newBlob(decodedBytes, mimeType, fileName);
@@ -943,31 +1297,30 @@ function uploadMemberPhoto(base64Data, fileName, mimeType) {
     
     // Menggunakan Direct CDN URL Drive yang paling stabil
     const photoUrl = 'https://lh3.googleusercontent.com/d/' + fileId;
-    
+    _saveMemberPhoto_(member, photoUrl);
+
     return { status: 'success', url: photoUrl, fileId: fileId };
   } catch (err) {
     throw new Error('Gagal upload foto: ' + err.message);
   }
 }
 
-// Simpan URL foto ke baris member yang sesuai di MemberData (Kolom 6 / Kolom F: Foto URL)
-function updateMemberPhoto(memberId, photoUrl) {
-  const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
-  const targetId = String(memberId).trim();
+function _saveMemberPhoto_(member, photoUrl) {
+  member.sheet.getRange(member.rowNum, 6).setValue(photoUrl);
+  try {
+    kirimNotifTelegram_("🖼️ <b>FOTO KLIEN DIPERBARUI</b>\n\n👤 <b>Nama:</b> " + escapeHtmlTelegram(member.row[1]));
+  } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
+}
 
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === targetId) {
-      sheet.getRange(i + 1, 6).setValue(photoUrl);
-
-      try {
-        kirimNotifTelegram("🖼️ <b>FOTO KLIEN DIPERBARUI</b>\n\n👤 <b>Nama:</b> " + escapeHtmlTelegram(data[i][1]));
-      } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
-
-      return { status: 'success' };
-    }
+// Portal klien: simpan URL foto (hasil uploadMemberPhoto) ke profil klien yang login.
+// Hanya menerima URL foto Drive milik sistem ini, bukan URL sembarang.
+function updateMemberPhoto(memberToken, photoUrl) {
+  const member = requireMember_(memberToken);
+  if (!/^https:\/\/lh3\.googleusercontent\.com\/d\/[A-Za-z0-9_-]+$/.test(String(photoUrl))) {
+    throw new Error('URL foto tidak valid.');
   }
-  throw new Error('Klien tidak ditemukan dengan ID: ' + memberId);
+  _saveMemberPhoto_(member, photoUrl);
+  return { status: 'success' };
 }
 
 /**
@@ -980,6 +1333,7 @@ function updateMemberPhoto(memberId, photoUrl) {
  * log transaksi yang MEMANG sengaja punya banyak baris per klien).
  */
 function pertahankanWABaruMemberData() {
+  requireOwner_();
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("MemberData");
   if (!sheet) return;
   var range = sheet.getDataRange();
@@ -1007,9 +1361,35 @@ function pertahankanWABaruMemberData() {
 
 // ── 📂 CRUD ──────────────────────────────────────────────────────────────────
 
-function getSchedules() {
+/** Admin: semua jadwal lengkap (nama & No WA klien, catatan). */
+function getSchedules(token) {
+  requireAdmin_(token);
+  return _getSchedulesAll_();
+}
+
+/**
+ * Publik (portal klien & kalender): jadwal TANPA nama, No WA, atau catatan klien lain.
+ * Kalau memberToken sah, jadwal milik klien itu sendiri ikut dikirim lengkap
+ * (untuk riwayat & reschedule di "Dashboardku").
+ */
+function getPublicSchedules(memberToken) {
+  let memberId = null;
+  if (memberToken) {
+    try { memberId = String(requireMember_(memberToken).row[0]).trim(); } catch (e) { memberId = null; }
+  }
+  return _getSchedulesAll_().map(function(s) {
+    if (memberId && String(s.memberId) === memberId) {
+      const own = Object.assign({}, s);
+      delete own.phone;
+      return own;
+    }
+    return { start: s.start, end: s.end, status: s.status, coachId: s.coachId, coachName: s.coachName };
+  });
+}
+
+function _getSchedulesAll_() {
   const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID"];
-  const sheet = getOrCreateSheet('Schedules', headers);
+  const sheet = getOrCreateSheet_('Schedules', headers);
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
   return data.slice(1).map(function(row) {
@@ -1037,10 +1417,15 @@ function getSchedules() {
  *        dipanggil berkali-kali dari addRecurringSchedule, supaya tidak spam 1 notif per sesi;
  *        addRecurringSchedule mengirim 1 notif ringkasan sendiri setelah semua sesi dibuat)
  */
-function addSchedule(scheduleData, statusParam, silentNotif) {
+function addSchedule(token, scheduleData) {
+  requireAdmin_(token);
+  return _addScheduleInternal_(scheduleData, 'read', false);
+}
+
+function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
   try {
     const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID"];
-    const sheet = getOrCreateSheet('Schedules', headers);
+    const sheet = getOrCreateSheet_('Schedules', headers);
     const id = 'SCH-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const status = statusParam || 'read';
 
@@ -1052,7 +1437,7 @@ function addSchedule(scheduleData, statusParam, silentNotif) {
     let coachName = scheduleData.coachName || "";
     if (!coachId && scheduleData.memberId) {
       try {
-        const member = getMembers().find(function(m) { return String(m.id) === String(scheduleData.memberId); });
+        const member = _getMembersAll_().find(function(m) { return String(m.id) === String(scheduleData.memberId); });
         if (member && member.preferredCoachId) {
           coachId = member.preferredCoachId;
           coachName = member.preferredCoachName || coachName;
@@ -1073,9 +1458,9 @@ function addSchedule(scheduleData, statusParam, silentNotif) {
     // punya notif ringkasannya sendiri di addRecurringSchedule.
     if (statusParam !== 'unread' && !silentNotif) {
       try {
-        kirimNotifTelegram("📅 <b>JADWAL BARU DIBUAT</b>\n\n" +
+        kirimNotifTelegram_("📅 <b>JADWAL BARU DIBUAT</b>\n\n" +
           "👤 <b>Klien:</b> " + escapeHtmlTelegram(scheduleData.memberName) + "\n" +
-          "⏰ <b>Mulai:</b> " + scheduleData.start + "\n" +
+          "⏰ <b>Mulai:</b> " + escapeHtmlTelegram(scheduleData.start) + "\n" +
           (coachName ? "🧑‍🏫 <b>Coach:</b> " + escapeHtmlTelegram(coachName) + "\n" : "") +
           "📝 <b>Catatan:</b> " + escapeHtmlTelegram(scheduleData.notes || '-'));
       } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
@@ -1106,8 +1491,35 @@ function addSchedule(scheduleData, statusParam, silentNotif) {
  *   { weekdays: number[] (0=Minggu..6=Sabtu), occurrences: number (total sesi yang dibuat) }
  * @returns {{status:string, groupId:string, count:number, ids:string[], dates:string[]}}
  */
-function addRecurringSchedule(baseScheduleData, recurrenceRule) {
+function addRecurringSchedule(token, baseScheduleData, recurrenceRule) {
+  requireAdmin_(token);
+  return _addRecurringInternal_(baseScheduleData, recurrenceRule, 'read');
+}
+
+/**
+ * Portal klien: booking berulang untuk klien yang sedang login. Identitas klien
+ * diambil dari token (bukan dari browser). Jadwal masuk berstatus 'unread'
+ * (muncul sebagai booking baru di panel PT).
+ */
+function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule) {
+  const member = requireMember_(memberToken);
+  const base = baseScheduleData || {};
+  return _addRecurringInternal_({
+    memberId: String(member.row[0]).trim(),
+    memberName: member.row[1],
+    phone: String(member.row[2]),
+    notes: String(base.notes || '').slice(0, 500),
+    startDate: String(base.startDate || ''),
+    time: String(base.time || ''),
+    duration: base.duration
+  }, recurrenceRule, 'unread');
+}
+
+function _addRecurringInternal_(baseScheduleData, recurrenceRule, status) {
   try {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(baseScheduleData.startDate)) || !/^\d{2}:\d{2}$/.test(String(baseScheduleData.time))) {
+      throw new Error('Tanggal atau jam tidak valid.');
+    }
     const weekdays = (recurrenceRule && recurrenceRule.weekdays) || [];
     const occurrences = (recurrenceRule && recurrenceRule.occurrences) || 0;
 
@@ -1134,7 +1546,7 @@ function addRecurringSchedule(baseScheduleData, recurrenceRule) {
         const sessionStart = new Date(cursor);
         const sessionEnd = new Date(sessionStart.getTime() + durationMin * 60000);
 
-        const result = addSchedule({
+        const result = _addScheduleInternal_({
           memberId: baseScheduleData.memberId,
           memberName: baseScheduleData.memberName,
           phone: baseScheduleData.phone,
@@ -1144,7 +1556,7 @@ function addRecurringSchedule(baseScheduleData, recurrenceRule) {
           coachId: baseScheduleData.coachId,
           coachName: baseScheduleData.coachName,
           recurringGroupId: groupId
-        }, 'read', true); // silent=true, notif ringkasan dikirim sekali di bawah
+        }, status, true); // silent=true, notif ringkasan dikirim sekali di bawah
 
         ids.push(result.id);
         dates.push(sessionStart.toLocaleDateString('id-ID', {weekday:'short', day:'numeric', month:'short'}) + ' ' + baseScheduleData.time);
@@ -1155,7 +1567,7 @@ function addRecurringSchedule(baseScheduleData, recurrenceRule) {
     if (ids.length === 0) throw new Error('Tidak ada tanggal yang cocok dengan pola berulang ini.');
 
     try {
-      kirimNotifTelegram("🔁 <b>JADWAL BERULANG DIBUAT</b>\n\n" +
+      kirimNotifTelegram_((status === 'unread' ? "🔁 <b>KLIEN BOOKING BERULANG</b>\n\n" : "🔁 <b>JADWAL BERULANG DIBUAT</b>\n\n") +
         "👤 <b>Klien:</b> " + escapeHtmlTelegram(baseScheduleData.memberName) + "\n" +
         "📦 <b>Total Sesi:</b> " + ids.length + "\n" +
         "📅 <b>Tanggal:</b>\n" + dates.map(function(d) { return "• " + d; }).join("\n"));
@@ -1176,7 +1588,8 @@ function addRecurringSchedule(baseScheduleData, recurrenceRule) {
  * @param {string} groupId
  * @returns {{status:string, deletedCount:number}}
  */
-function deleteRecurringGroup(groupId) {
+function deleteRecurringGroup(token, groupId) {
+  requireAdmin_(token);
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const schSheet = ss.getSheetByName('Schedules');
@@ -1221,7 +1634,7 @@ function deleteRecurringGroup(groupId) {
     }
 
     try {
-      kirimNotifTelegram("🗑️ <b>SERI JADWAL BERULANG DIHAPUS</b>\n\n" +
+      kirimNotifTelegram_("🗑️ <b>SERI JADWAL BERULANG DIHAPUS</b>\n\n" +
         "👤 <b>Klien:</b> " + escapeHtmlTelegram(memberName) + "\n" +
         "📦 <b>Jumlah Sesi Dihapus:</b> " + rowsToDelete.length);
     } catch (e) { Logger.log("Notif Telegram gagal: " + e); }
@@ -1236,7 +1649,8 @@ function deleteRecurringGroup(groupId) {
  * Fungsi untuk mengedit (update) detail tanggal, jam, atau durasi sesi di kalender.
  * Mendukung penuh sinkronisasi Drag & Drop serta Resize dari Kalender Frontend.
  */
-function updateScheduleData(scheduleData) {
+function updateScheduleData(token, scheduleData) {
+  requireAdmin_(token);
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
     if (!sheet) throw new Error('Sheet Schedules tidak ditemukan');
@@ -1250,7 +1664,7 @@ function updateScheduleData(scheduleData) {
         sheet.getRange(i + 1, 7).setValue(scheduleData.notes || currentNotes);
 
         try {
-          kirimNotifTelegram("🔄 <b>JADWAL DIUBAH</b>\n\n" +
+          kirimNotifTelegram_("🔄 <b>JADWAL DIUBAH</b>\n\n" +
             "👤 <b>Klien:</b> " + escapeHtmlTelegram(data[i][2]) + "\n" +
             "⏰ <b>Waktu Baru:</b> " + scheduleData.start + " - " + scheduleData.end);
         } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
@@ -1287,8 +1701,10 @@ const RESCHEDULE_CUTOFF_HOURS = 2;
  * @param {string} newEnd - ISO string waktu selesai baru
  * @returns {{status:string, oldStart:string, newStart:string}}
  */
-function clientRescheduleSchedule(scheduleId, memberId, newStart, newEnd) {
+function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
   try {
+    _validateSlot_(newStart, newEnd);
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
     if (!sheet) throw new Error('Sheet Schedules tidak ditemukan');
     const data = sheet.getDataRange().getValues();
@@ -1324,7 +1740,7 @@ function clientRescheduleSchedule(scheduleId, memberId, newStart, newEnd) {
       try {
         const oldFormatted = new Date(oldStartStr).toLocaleString('id-ID', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'});
         const newFormatted = new Date(newStart).toLocaleString('id-ID', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'});
-        kirimNotifTelegram("🔄 <b>KLIEN RESCHEDULE MANDIRI</b>\n\n" +
+        kirimNotifTelegram_("🔄 <b>KLIEN RESCHEDULE MANDIRI</b>\n\n" +
           "👤 <b>Klien:</b> " + escapeHtmlTelegram(memberName) + "\n" +
           "⏰ <b>Dari:</b> " + oldFormatted + "\n" +
           "⏰ <b>Ke:</b> " + newFormatted);
@@ -1342,7 +1758,8 @@ function clientRescheduleSchedule(scheduleId, memberId, newStart, newEnd) {
 /**
  * Menugaskan pelatih (Assign Coach) ke dalam sesi latihan tertentu.
  */
-function updateScheduleCoach(scheduleId, coachId, coachName) {
+function updateScheduleCoach(token, scheduleId, coachId, coachName) {
+  requireAdmin_(token);
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
   if (!sheet) throw new Error('Sheet Jadwal tidak ditemukan');
   const data = sheet.getDataRange().getValues();
@@ -1352,7 +1769,7 @@ function updateScheduleCoach(scheduleId, coachId, coachName) {
       sheet.getRange(i + 1, 10).setValue(coachName);
 
       try {
-        kirimNotifTelegram("🏋️ <b>COACH DITUGASKAN</b>\n\n" +
+        kirimNotifTelegram_("🏋️ <b>COACH DITUGASKAN</b>\n\n" +
           "👤 <b>Klien:</b> " + escapeHtmlTelegram(data[i][2]) + "\n" +
           "🧑‍🏫 <b>Coach:</b> " + escapeHtmlTelegram(coachName));
       } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
@@ -1363,55 +1780,86 @@ function updateScheduleCoach(scheduleId, coachId, coachName) {
   throw new Error('Jadwal tidak ditemukan');
 }
 
-function clientBookSchedule(scheduleData) {
-  const addResult = addSchedule(scheduleData, 'unread');
+// Validasi slot dari browser: tanggal sah, selesai > mulai, maks 4 jam.
+function _validateSlot_(start, end) {
+  const s = new Date(start), e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) throw new Error('Waktu jadwal tidak valid.');
+  if (e - s > 4 * 60 * 60000) throw new Error('Durasi sesi maksimal 4 jam.');
+}
+
+/**
+ * Portal klien: booking 1 sesi untuk klien yang sedang login. Nama, No WA, dan
+ * Member ID diambil dari token + sheet (bukan dari browser), jadi klien tidak
+ * bisa booking atas nama orang lain.
+ * @param {string} memberToken
+ * @param {{start:string, end:string, duration:number, notes:string}} scheduleData
+ */
+function clientBookSchedule(memberToken, scheduleData) {
+  const member = requireMember_(memberToken);
+  scheduleData = scheduleData || {};
+  _validateSlot_(scheduleData.start, scheduleData.end);
+
+  const memberName = String(member.row[1]);
+  const phone = _normalizePhone_(member.row[2]);
+  const notes = String(scheduleData.notes || '').slice(0, 500);
+  const duration = Math.round((new Date(scheduleData.end) - new Date(scheduleData.start)) / 60000);
+
+  const addResult = _addScheduleInternal_({
+    memberId: String(member.row[0]).trim(),
+    memberName: memberName,
+    phone: phone,
+    start: scheduleData.start,
+    end: scheduleData.end,
+    notes: notes
+  }, 'unread');
   const newId = addResult.id;
   const assignedCoachName = addResult.coachName || '';
-  const emailTujuan = Session.getActiveUser().getEmail(); // <-- Ganti "emailkamu@gmail.com" jika error
   const startTime = new Date(scheduleData.start);
   const formattedTime = startTime.toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long'}) + ' jam ' + startTime.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB';
-  const subject = "📅 Booking Baru: " + scheduleData.memberName;
-  const waLink = "https://wa.me/" + scheduleData.phone + "?text=" + encodeURIComponent("Halo " + scheduleData.memberName + ", booking jadwal latihan kamu untuk " + formattedTime + " sudah Coach terima ya! Sampai jumpa!");
+  const subject = "📅 Booking Baru: " + memberName;
+  const waLink = "https://wa.me/" + phone + "?text=" + encodeURIComponent("Halo " + memberName + ", booking jadwal latihan kamu untuk " + formattedTime + " sudah Coach terima ya! Sampai jumpa!");
 
   const body = `
     <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9fafb; color: #111827;">
       <div style="background-color: white; padding: 30px; border-radius: 12px; max-width: 500px; margin: 0 auto; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
         <h2 style="margin-top:0; color: #000000;">Ada Booking Sesi Baru! 🎉</h2>
-        <p>Klien Anda <b>${scheduleData.memberName}</b> baru saja mem-booking jadwal latihan secara mandiri. ${assignedCoachName ? 'Sesi ini otomatis ter-assign ke Coach ' + assignedCoachName + '.' : 'Segera buka aplikasi untuk Assign Coach!'}</p>
+        <p>Klien Anda <b>${_escHtml_(memberName)}</b> baru saja mem-booking jadwal latihan secara mandiri. ${assignedCoachName ? 'Sesi ini otomatis ter-assign ke Coach ' + _escHtml_(assignedCoachName) + '.' : 'Segera buka aplikasi untuk Assign Coach!'}</p>
         <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #000000;">
           <p style="margin:0 0 8px 0;"><b>Jadwal:</b> ${formattedTime}</p>
-          <p style="margin:0 0 8px 0;"><b>Durasi:</b> ${scheduleData.duration} Menit</p>
-          <p style="margin:0;"><b>Fokus/Catatan:</b> ${scheduleData.notes || '-'}</p>
+          <p style="margin:0 0 8px 0;"><b>Durasi:</b> ${duration} Menit</p>
+          <p style="margin:0;"><b>Fokus/Catatan:</b> ${_escHtml_(notes || '-')}</p>
         </div>
-        <a href="${waLink}" style="display: block; width: 100%; text-align: center; background-color: #000000; color: white; padding: 12px 0; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 20px;">Kirim WA Konfirmasi ke Klien</a>
+        <a href="${_escHtml_(waLink)}" style="display: block; width: 100%; text-align: center; background-color: #000000; color: white; padding: 12px 0; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 20px;">Kirim WA Konfirmasi ke Klien</a>
       </div>
     </div>
   `;
 
-  // 1. Kirim Email Bawaan
-  try { MailApp.sendEmail({ to: emailTujuan, subject: subject, htmlBody: body }); } catch(e) {}
+  // 1. Email ke pemilik akun (getEffectiveUser — getActiveUser kosong untuk pengunjung anonim)
+  try { MailApp.sendEmail({ to: Session.getEffectiveUser().getEmail(), subject: subject, htmlBody: body }); } catch(e) { Logger.log('Email booking gagal: ' + e); }
 
-  // 2. KIRIM NOTIFIKASI KE TELEGRAM (NEW 🚀)
+  // 2. Notifikasi Telegram
   const pesanTelegram = "📅 <b>BOOKING SESI BARU!</b> 🎉\n\n" +
-                        "👤 <b>Klien:</b> " + scheduleData.memberName + "\n" +
+                        "👤 <b>Klien:</b> " + _escHtml_(memberName) + "\n" +
                         "⏰ <b>Jadwal:</b> " + formattedTime + "\n" +
-                        "⏳ <b>Durasi:</b> " + scheduleData.duration + " Menit\n" +
-                        (assignedCoachName ? "🧑‍🏫 <b>Coach:</b> " + assignedCoachName + " (auto-assign)\n" : "") +
-                        "📝 <b>Catatan:</b> " + (scheduleData.notes || '-') + "\n\n" +
-                        "👉 <a href='" + waLink + "'>Chat Konfirmasi Klien</a>";
+                        "⏳ <b>Durasi:</b> " + duration + " Menit\n" +
+                        (assignedCoachName ? "🧑‍🏫 <b>Coach:</b> " + _escHtml_(assignedCoachName) + " (auto-assign)\n" : "") +
+                        "📝 <b>Catatan:</b> " + _escHtml_(notes || '-') + "\n\n" +
+                        "👉 <a href='" + _escHtml_(waLink) + "'>Chat Konfirmasi Klien</a>";
 
   try {
-    kirimNotifTelegram(pesanTelegram);
+    kirimNotifTelegram_(pesanTelegram);
   } catch(e) {
     Logger.log("Notif Telegram gagal: " + e);
   }
 
-  return { status: 'success', id: newId };
+  return { status: 'success', id: newId, coachId: addResult.coachId || '', coachName: assignedCoachName };
 }
 
 // ── 📂 STATUS ────────────────────────────────────────────────────────────────
 
-function markSchedulesAsRead(ids) {
+function markSchedulesAsRead(token, ids) {
+  requireAdmin_(token);
+  if (!Array.isArray(ids)) ids = [];
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
   if (!sheet) return;
   const data = sheet.getDataRange().getValues();
@@ -1426,7 +1874,7 @@ function markSchedulesAsRead(ids) {
 /**
  * Pastikan sheet Schedules punya kolom ke-11 "Completed At" (dipakai untuk
  * data akurat di getCoachMonthlyStats). Sheet lama yang dibuat sebelum kolom ini
- * ada tidak akan auto-migrasi header-nya lewat getOrCreateSheet, jadi dicek manual
+ * ada tidak akan auto-migrasi header-nya lewat getOrCreateSheet_, jadi dicek manual
  * di sini — aman dipanggil berkali-kali, hanya menulis kalau memang belum ada.
  */
 function _ensureCompletedAtColumn_(sheet) {
@@ -1442,7 +1890,8 @@ function _ensureCompletedAtColumn_(sheet) {
  * Mengubah status jadwal di kalender menjadi hijau ('completed') dan menambah
  * Sesi Terpakai Klien (+1).
  */
-function completeSession(scheduleId, memberId) {
+function completeSession(token, scheduleId, memberId) {
+  requireAdmin_(token);
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   const schSheet = ss.getSheetByName('Schedules');
@@ -1478,7 +1927,7 @@ function completeSession(scheduleId, memberId) {
   if(!memberFound) throw new Error('Klien tidak ditemukan');
 
   try {
-    kirimNotifTelegram("✅ <b>SESI SELESAI</b>\n\n" +
+    kirimNotifTelegram_("✅ <b>SESI SELESAI</b>\n\n" +
       "👤 <b>Klien:</b> " + escapeHtmlTelegram(memberName) + "\n" +
       "📦 <b>Sesi Terpakai:</b> " + usedAfter + "/" + totalSesi);
   } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
@@ -1503,7 +1952,8 @@ function completeSession(scheduleId, memberId) {
  * Jika jadwal berstatus 'completed', otomatis mengembalikan (-1) Sesi Terpakai
  * klien agar kuota member tidak salah hitung setelah jadwal dihapus.
  */
-function deleteSchedule(scheduleId) {
+function deleteSchedule(token, scheduleId) {
+  requireAdmin_(token);
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const schSheet = ss.getSheetByName('Schedules');
@@ -1543,7 +1993,7 @@ function deleteSchedule(scheduleId) {
     }
 
     try {
-      kirimNotifTelegram("🗑️ <b>JADWAL DIHAPUS</b>\n\n👤 <b>Klien:</b> " + escapeHtmlTelegram(memberName));
+      kirimNotifTelegram_("🗑️ <b>JADWAL DIHAPUS</b>\n\n👤 <b>Klien:</b> " + escapeHtmlTelegram(memberName));
     } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
 
     return { status: 'success' };
@@ -1558,6 +2008,7 @@ function deleteSchedule(scheduleId) {
 // #############################################################################
 
 function setupDailyTrigger() {
+  requireOwner_();
   const triggers = ScriptApp.getProjectTriggers();
   for (let i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'sendDailyReminderEmail') ScriptApp.deleteTrigger(triggers[i]);
@@ -1573,15 +2024,18 @@ function setupDailyTrigger() {
  * Berjalan di Google Apps Script backend.
  */
 function sendDailyReminderEmail() {
-  logToSheet("Memulai fungsi sendDailyReminderEmail", "INFO");
+  // Fungsi trigger ini bisa dipanggil dari browser juga; batasi supaya tidak bisa
+  // dipakai untuk spam email/Telegram (trigger aslinya jalan 2x sehari).
+  if (!_throttle_('daily_reminder', 3000)) return;
+  logToSheet_("Memulai fungsi sendDailyReminderEmail", "INFO");
 
   try {
     // 1. Ambil timezone dan jadwal
     const timeZone = Session.getScriptTimeZone();
     const emailTujuan = Session.getEffectiveUser().getEmail();
-    const schedules = getSchedules();
+    const schedules = _getSchedulesAll_();
 
-    logToSheet(`Berhasil mengambil total ${schedules.length} jadwal dari getSchedules()`, "INFO");
+    logToSheet_(`Berhasil mengambil total ${schedules.length} jadwal dari _getSchedulesAll_()`, "INFO");
 
     // 2. Tentukan batas waktu untuk besok (00:00:00 - 23:59:59)
     const now = new Date();
@@ -1594,7 +2048,7 @@ function sendDailyReminderEmail() {
       return schDate >= tomorrowStart && schDate <= tomorrowEnd;
     });
 
-    logToSheet(`Ditemukan ${schedulesBesok.length} jadwal untuk besok`, "INFO");
+    logToSheet_(`Ditemukan ${schedulesBesok.length} jadwal untuk besok`, "INFO");
 
     // 4. PERSIAPAN WADAH PESAN
     let emailBody = "";
@@ -1602,7 +2056,7 @@ function sendDailyReminderEmail() {
 
     // JIKA TIDAK ADA JADWAL: Siapkan pesan bahwa jadwal kosong
     if (schedulesBesok.length === 0) {
-      logToSheet("Jadwal kosong, menyiapkan notifikasi tidak ada jadwal", "INFO");
+      logToSheet_("Jadwal kosong, menyiapkan notifikasi tidak ada jadwal", "INFO");
       
       emailBody = `<h3>🔔 Pengingat Jadwal Latihan Besok</h3>
                    <p>Halo, tidak ada jadwal latihan klien untuk besok. Selamat istirahat! 🏖️</p>`;
@@ -1611,7 +2065,7 @@ function sendDailyReminderEmail() {
     } 
     // JIKA ADA JADWAL: Masukkan list jadwal ke dalam pesan
     else {
-      logToSheet("Menyiapkan draft email dan Telegram beserta list jadwal", "INFO");
+      logToSheet_("Menyiapkan draft email dan Telegram beserta list jadwal", "INFO");
       
       emailBody = `<h3>🔔 Pengingat Jadwal Latihan Besok</h3><ul style="line-height: 1.6;">`;
       pesanTelegram = `🔔 <b>PENGINGAT JADWAL LATIHAN BESOK</b> 🔔\n\n`;
@@ -1619,7 +2073,8 @@ function sendDailyReminderEmail() {
       schedulesBesok.forEach(sch => {
         const schDate = new Date(sch.start);
         const notes = sch.notes ? ` (${sch.notes})` : '';
-        const coachName = sch.coachName || 'Belum Ditugaskan';
+        const coachName = _escHtml_(sch.coachName || 'Belum Ditugaskan');
+        const title = _escHtml_(sch.title);
 
         const jam = Utilities.formatDate(schDate, timeZone, "HH:mm");
         const noWa = sch.phone ? sch.phone.toString().replace(/^0/, '62').replace(/\D/g, '') : '';
@@ -1629,42 +2084,42 @@ function sendDailyReminderEmail() {
 
         emailBody += `
           <li style="margin-bottom: 15px;">
-            <b>${jam} WIB</b> - ${sch.title} <br>
+            <b>${jam} WIB</b> - ${title} <br>
             Coach Ditugaskan: <i>${coachName}</i> <br>
-            <a href="${linkWA}" style="color: #25D366; font-weight: bold; text-decoration: none;">
+            <a href="${_escHtml_(linkWA)}" style="color: #25D366; font-weight: bold; text-decoration: none;">
               [📱 Kirim WA Konfirmasi ke Klien]
             </a>
           </li>`;
 
-        pesanTelegram += `⏰ <b>${jam} WIB</b> - ${sch.title}\n🏋️ <b>Coach:</b> ${coachName}\n👉 <a href="${linkWA}">Kirim WA Konfirmasi</a>\n\n`;
+        pesanTelegram += `⏰ <b>${jam} WIB</b> - ${title}\n🏋️ <b>Coach:</b> ${coachName}\n👉 <a href="${_escHtml_(linkWA)}">Kirim WA Konfirmasi</a>\n\n`;
       });
 
       emailBody += `</ul>`;
     }
 
     // 5. EKSEKUSI PENGIRIMAN EMAIL
-    logToSheet(`Mencoba mengirim email ke ${emailTujuan}`, "INFO");
+    logToSheet_(`Mencoba mengirim email ke ${emailTujuan}`, "INFO");
     MailApp.sendEmail({
       to: emailTujuan,
       subject: "🔔 Pengingat Jadwal PT Besok",
       htmlBody: emailBody
     });
-    logToSheet("Email berhasil terkirim", "SUCCESS");
+    logToSheet_("Email berhasil terkirim", "SUCCESS");
 
     // 6. EKSEKUSI PENGIRIMAN TELEGRAM
     try {
-      logToSheet("Mencoba mengirim notif Telegram", "INFO");
-      kirimNotifTelegram(pesanTelegram);
-      logToSheet("Telegram berhasil terkirim", "SUCCESS");
+      logToSheet_("Mencoba mengirim notif Telegram", "INFO");
+      kirimNotifTelegram_(pesanTelegram);
+      logToSheet_("Telegram berhasil terkirim", "SUCCESS");
     } catch(e) {
-      logToSheet(`Telegram gagal terkirim: ${e.message}`, "ERROR");
+      logToSheet_(`Telegram gagal terkirim: ${e.message}`, "ERROR");
     }
 
   } catch(errorUtama) {
-    logToSheet(`Error pada sistem utama: ${errorUtama.message}`, "FATAL ERROR");
+    logToSheet_(`Error pada sistem utama: ${errorUtama.message}`, "FATAL ERROR");
   }
   
-  logToSheet("Fungsi sendDailyReminderEmail selesai", "INFO");
+  logToSheet_("Fungsi sendDailyReminderEmail selesai", "INFO");
 }
 
 /**
@@ -1676,6 +2131,7 @@ function sendDailyReminderEmail() {
  * CARA AKTIFKAN: buka Extensions > Apps Script > pilih fungsi ini di dropdown > Run (sekali saja).
  */
 function setupWeeklyReportTrigger() {
+  requireOwner_();
   const triggers = ScriptApp.getProjectTriggers();
   for (let i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'sendWeeklyReportEmail') ScriptApp.deleteTrigger(triggers[i]);
@@ -1700,7 +2156,8 @@ function setupWeeklyReportTrigger() {
  * (sesi selesai & member baru) dihitung terpisah dari rentang 7 hari terakhir yang sebenarnya.
  */
 function sendWeeklyReportEmail() {
-  logToSheet("Memulai fungsi sendWeeklyReportEmail", "INFO");
+  if (!_throttle_('weekly_report', 21600)) return; // lihat catatan di sendDailyReminderEmail
+  logToSheet_("Memulai fungsi sendWeeklyReportEmail", "INFO");
 
   try {
     const timeZone = Session.getScriptTimeZone();
@@ -1711,7 +2168,7 @@ function sendWeeklyReportEmail() {
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     // 1. Sesi selesai minggu ini (dari Completed At, konsisten dengan getCoachMonthlyStats)
-    const schedules = getSchedules();
+    const schedules = _getSchedulesAll_();
     const completedThisWeek = schedules.filter(function(s) {
       if (String(s.status).toLowerCase() !== 'completed' || !s.completedAt) return false;
       const d = new Date(s.completedAt);
@@ -1719,7 +2176,7 @@ function sendWeeklyReportEmail() {
     });
 
     // 2. Member baru minggu ini (dari Tanggal Gabung di MemberData)
-    const members = getMembers();
+    const members = _getMembersAll_();
     const newMembersThisWeek = members.filter(function(m) {
       if (!m.joinDate) return false;
       const d = new Date(m.joinDate);
@@ -1727,8 +2184,8 @@ function sendWeeklyReportEmail() {
     });
 
     // 3. Konteks bulan berjalan: coach paling aktif & paket terlaris (reuse fungsi existing)
-    const coachStats = getCoachMonthlyStats(now.getMonth() + 1, now.getFullYear());
-    const packageStats = getPackageTrendStats(now.getMonth() + 1, now.getFullYear());
+    const coachStats = _coachMonthlyStats_(now.getMonth() + 1, now.getFullYear());
+    const packageStats = _packageTrendStats_(now.getMonth() + 1, now.getFullYear());
     const topCoach = coachStats.length > 0 ? coachStats[0] : null;
     const topPackage = packageStats.length > 0 ? packageStats[0] : null;
 
@@ -1740,42 +2197,42 @@ function sendWeeklyReportEmail() {
       <ul style="line-height: 1.8;">
         <li>✅ <b>Sesi Selesai Minggu Ini:</b> ${completedThisWeek.length}</li>
         <li>🆕 <b>Member Baru Minggu Ini:</b> ${newMembersThisWeek.length}</li>
-        <li>🏆 <b>Coach Paling Aktif Bulan Ini:</b> ${topCoach ? topCoach.coachName + ' (' + topCoach.totalSessions + ' sesi)' : '-'}</li>
-        <li>📦 <b>Paket Terlaris Bulan Ini:</b> ${topPackage ? topPackage.namaPaket + ' (' + topPackage.count + 'x dipilih)' : '-'}</li>
+        <li>🏆 <b>Coach Paling Aktif Bulan Ini:</b> ${topCoach ? _escHtml_(topCoach.coachName) + ' (' + topCoach.totalSessions + ' sesi)' : '-'}</li>
+        <li>📦 <b>Paket Terlaris Bulan Ini:</b> ${topPackage ? _escHtml_(topPackage.namaPaket) + ' (' + topPackage.count + 'x dipilih)' : '-'}</li>
       </ul>
       <p style="color:#999; font-size:12px;">Laporan otomatis, dikirim tiap Senin pagi. Buka Dashboard Admin untuk detail lengkap.</p>`;
 
     let pesanTelegram = `📊 <b>LAPORAN MINGGUAN</b> (${periodeLabel})\n\n` +
       `✅ Sesi Selesai: ${completedThisWeek.length}\n` +
       `🆕 Member Baru: ${newMembersThisWeek.length}\n` +
-      `🏆 Coach Teraktif: ${topCoach ? topCoach.coachName + ' (' + topCoach.totalSessions + ' sesi)' : '-'}\n` +
-      `📦 Paket Terlaris: ${topPackage ? topPackage.namaPaket + ' (' + topPackage.count + 'x)' : '-'}`;
+      `🏆 Coach Teraktif: ${topCoach ? _escHtml_(topCoach.coachName) + ' (' + topCoach.totalSessions + ' sesi)' : '-'}\n` +
+      `📦 Paket Terlaris: ${topPackage ? _escHtml_(topPackage.namaPaket) + ' (' + topPackage.count + 'x)' : '-'}`;
 
     // 5. Kirim email
-    logToSheet(`Mencoba mengirim laporan mingguan ke ${emailTujuan}`, "INFO");
+    logToSheet_(`Mencoba mengirim laporan mingguan ke ${emailTujuan}`, "INFO");
     MailApp.sendEmail({ to: emailTujuan, subject: "📊 Laporan Mingguan XNK Gym OS - " + periodeLabel, htmlBody: emailBody });
-    logToSheet("Laporan mingguan email berhasil terkirim", "SUCCESS");
+    logToSheet_("Laporan mingguan email berhasil terkirim", "SUCCESS");
 
     // 6. Kirim juga ke Telegram (dual-channel, konsisten sama pola reminder harian)
     try {
-      kirimNotifTelegram(pesanTelegram);
-      logToSheet("Laporan mingguan Telegram berhasil terkirim", "SUCCESS");
+      kirimNotifTelegram_(pesanTelegram);
+      logToSheet_("Laporan mingguan Telegram berhasil terkirim", "SUCCESS");
     } catch(e) {
-      logToSheet(`Laporan mingguan Telegram gagal terkirim: ${e.message}`, "ERROR");
+      logToSheet_(`Laporan mingguan Telegram gagal terkirim: ${e.message}`, "ERROR");
     }
 
   } catch(errorUtama) {
-    logToSheet(`Error pada sendWeeklyReportEmail: ${errorUtama.message}`, "FATAL ERROR");
+    logToSheet_(`Error pada sendWeeklyReportEmail: ${errorUtama.message}`, "FATAL ERROR");
   }
 
-  logToSheet("Fungsi sendWeeklyReportEmail selesai", "INFO");
+  logToSheet_("Fungsi sendWeeklyReportEmail selesai", "INFO");
 }
 
 /**
  * Fungsi untuk mengirim pesan ke Telegram Admin
  * @param {string} pesan - Teks yang ingin dikirim
  */
-function kirimNotifTelegram(pesan) {
+function kirimNotifTelegram_(pesan) {
   // Token bot & chat ID admin disimpan di Script Properties (Project Settings),
   // BUKAN di kode: TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_IDS (dipisah koma).
   const props = PropertiesService.getScriptProperties();
@@ -1818,8 +2275,9 @@ function kirimNotifTelegram(pesan) {
 // FUNGSI UNTUK UJI COBA (JALANKAN FUNGSI INI)
 // ==========================================
 function testNotif() {
+  requireOwner_();
   const teks = "🚨 <b>Ada Booking Baru!</b>\n\nNama: Budi\nJadwal: Senin, 10:00\nStatus: Menunggu Persetujuan.\n\nSilakan cek di Dashboard!";
-  kirimNotifTelegram(teks);
+  kirimNotifTelegram_(teks);
 }
 
 // #############################################################################
@@ -1828,7 +2286,7 @@ function testNotif() {
 
 function getPriceList() {
   const headers = ["ID", "Nama Paket", "Kategori", "Harga", "Jumlah Sesi", "Durasi", "Deskripsi", "Benefit", "Status Aktif"];
-  const sheet = getOrCreateSheet('PriceList', headers);
+  const sheet = getOrCreateSheet_('PriceList', headers);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) return [];
@@ -1938,7 +2396,8 @@ function _avgRatingRow_(row) {
  * @returns {{days: Array, totalBookings: number}}
  *   days[i] = { key, label, hours: [{hour, count}], outsideHours: number }
  */
-function getPeakHourData() {
+function getPeakHourData(token) {
+  requireAdmin_(token);
   try {
     const DAY_CONFIG = [
       { key: 'mon', label: 'Senin',  jsDay: 1, startHour: 6, endHour: 21 },
@@ -1959,7 +2418,7 @@ function getPeakHourData() {
       }
     });
 
-    const schedules = getSchedules(); // reuse fungsi existing, semua status ikut dihitung
+    const schedules = _getSchedulesAll_(); // semua status ikut dihitung
     let totalBookings = 0;
 
     schedules.forEach(function(sch) {
@@ -2018,9 +2477,14 @@ function getPeakHourData() {
  * @returns {Array<{coachId:string, coachName:string, totalSessions:number, uniqueClients:number}>}
  *          diurutkan dari totalSessions terbanyak
  */
-function getCoachMonthlyStats(month, year) {
+function getCoachMonthlyStats(token, month, year) {
+  requireAdmin_(token);
+  return _coachMonthlyStats_(month, year);
+}
+
+function _coachMonthlyStats_(month, year) {
   try {
-    const schedules = getSchedules(); // reuse fungsi existing, sudah termasuk field completedAt
+    const schedules = _getSchedulesAll_(); // sudah termasuk field completedAt
 
     const statsMap = {}; // coachId -> { coachName, totalSessions, clientSet }
 
@@ -2075,7 +2539,12 @@ function getCoachMonthlyStats(month, year) {
  * @returns {Array<{paketId:string, namaPaket:string, count:number, totalSesi:number}>}
  *          diurutkan dari count terbanyak
  */
-function getPackageTrendStats(month, year) {
+function getPackageTrendStats(token, month, year) {
+  requireAdmin_(token);
+  return _packageTrendStats_(month, year);
+}
+
+function _packageTrendStats_(month, year) {
   try {
     const sheet = _getMembersLogSheet_();
     const data = sheet.getDataRange().getValues();

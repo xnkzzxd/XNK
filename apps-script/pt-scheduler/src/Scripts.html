@@ -48,6 +48,65 @@
       }, 3000);
     };
 
+    // =============================================================================
+    // --- AUTH: token admin (panel PT) & token member (portal klien) ---
+    // =============================================================================
+    // Server menolak semua fungsi admin tanpa token admin, dan fungsi portal klien
+    // tanpa token member. adminApi()/memberApi() dipakai persis seperti
+    // google.script.run, tapi otomatis menyisipkan token sebagai argumen pertama
+    // dan membuka layar login lagi kalau sesinya sudah berakhir.
+    const ADMIN_TOKEN_KEY = 'xnk_admin_token';
+    const MEMBER_TOKEN_KEY = 'xnk_member_token';
+    function _lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+    function _lsSet(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} }
+
+    window.isAuthError = function(err) {
+      return !!err && String(err.message || err).indexOf('AUTH_REQUIRED') !== -1;
+    };
+    window.authMessage = function(err) {
+      return String((err && err.message) || err || '').replace(/^.*AUTH_REQUIRED:\s*/, '');
+    };
+
+    function _tokenRunner(getToken, onAuthLost) {
+      let onOk = null, onFail = null;
+      const proxy = new Proxy({}, {
+        get: function(_, prop) {
+          if (prop === 'withSuccessHandler') return function(fn) { onOk = fn; return proxy; };
+          if (prop === 'withFailureHandler') return function(fn) { onFail = fn; return proxy; };
+          return function() {
+            const args = [getToken()].concat(Array.prototype.slice.call(arguments));
+            let runner = google.script.run.withFailureHandler(function(err) {
+              if (window.isAuthError(err)) onAuthLost(err);
+              if (onFail) onFail(err);
+            });
+            if (onOk) runner = runner.withSuccessHandler(onOk);
+            return runner[prop].apply(runner, args);
+          };
+        }
+      });
+      return proxy;
+    }
+    window.adminApi = function() {
+      return _tokenRunner(function() { return _lsGet(ADMIN_TOKEN_KEY); }, function(err) { window.onAdminAuthLost(err); });
+    };
+    window.memberApi = function() {
+      return _tokenRunner(function() { return _lsGet(MEMBER_TOKEN_KEY); }, function(err) { window.onMemberAuthLost(err); });
+    };
+
+    // Buka tab WhatsApp SEKARANG (masih dalam klik user, supaya tidak diblokir
+    // popup blocker), lalu isi alamatnya setelah data dari server datang.
+    window.openPendingWindow = function() {
+      let w = null;
+      try { w = window.open('', '_blank'); } catch (e) {}
+      return {
+        go: function(url) { if (w && !w.closed) w.location.href = url; else window.open(url, '_blank'); },
+        cancel: function() { try { if (w && !w.closed) w.close(); } catch (e) {} }
+      };
+    };
+    window.waUrl = function(phone, text) {
+      return 'https://wa.me/' + sanitizePhone(phone || '') + '?text=' + encodeURIComponent(text || '');
+    };
+
     window._iconTimer = null;
     window.scheduleIconUpdate = function() {
       if (window._iconTimer) clearTimeout(window._iconTimer);
@@ -192,41 +251,119 @@
     // --- INIT APP ---
     // =============================================================================
     window.onload = function() {
+      // Scripts.html juga di-include di Landing.html, yang punya logikanya sendiri.
+      if (!document.getElementById('main-scroll-area')) return;
       lucide.createIcons();
-      
-      if (window.isGas) {
-        google.script.url.getLocation(function(location) {
-          if (location.parameter.view === 'public') {
-             window.isPublicView = true;
-             window.navigate('public-catalog');
-          } else {
-             window.navigate('dashboard');
-          }
-          window.loadAllData();
-        });
-      } else {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('view') === 'public') {
-           window.isPublicView = true;
-           window.navigate('public-catalog');
+
+      const start = function(params) {
+        if (params.view === 'public') {
+          window.isPublicView = true;
+          window.navigate('public-catalog');
+          window.startPublicPortal(params.k);
         } else {
-           window.navigate('dashboard');
+          window.navigate('dashboard');
+          window.startAdminPanel();
         }
-        window.loadAllData();
+      };
+
+      if (window.isGas) {
+        google.script.url.getLocation(function(location) { start(location.parameter || {}); });
+      } else {
+        const params = {};
+        new URLSearchParams(window.location.search).forEach(function(v, k) { params[k] = v; });
+        start(params);
       }
     };
 
-    window.loadAllData = function() {
+    window.hideGlobalLoader = function() {
       const loader = document.getElementById('global-loader');
+      if (!loader) return;
+      loader.classList.add('opacity-0');
+      setTimeout(() => loader.classList.add('hide'), 300);
+    };
+    window.showGlobalLoader = function() {
+      const loader = document.getElementById('global-loader');
+      if (!loader) return;
+      loader.classList.remove('hide', 'opacity-0');
+    };
+
+    // =============================================================================
+    // --- PANEL PT: LOGIN ADMIN ---
+    // =============================================================================
+    window.startAdminPanel = function() {
+      if (!window.isGas) { window.loadAllData(); return; }
+      if (!_lsGet(ADMIN_TOKEN_KEY)) { window.showAdminLogin(); return; }
+      window.adminApi()
+        .withSuccessHandler(function() { window.loadAllData(); })
+        .withFailureHandler(function(err) {
+          if (!window.isAuthError(err)) window.showAdminLogin('Gagal terhubung: ' + err.message);
+        })
+        .checkAdminSession();
+    };
+
+    window.showAdminLogin = function(message) {
+      window.hideGlobalLoader();
+      const box = document.getElementById('admin-login');
+      if (!box) return;
+      box.classList.remove('hide');
+      const errEl = document.getElementById('admin-login-error');
+      if (errEl) errEl.textContent = message || '';
+      const pin = document.getElementById('admin-pin');
+      if (pin) { pin.value = ''; setTimeout(() => pin.focus(), 50); }
+    };
+
+    window.onAdminAuthLost = function(err) {
+      if (window.isPublicView) return; // portal klien tidak pernah pakai sesi admin
+      _lsSet(ADMIN_TOKEN_KEY, null);
+      window.members = []; window.memberArchive = []; window.schedules = [];
+      window.showAdminLogin(window.authMessage(err));
+    };
+
+    window.handleAdminLogin = function(e) {
+      e.preventDefault();
+      const pinEl = document.getElementById('admin-pin');
+      const errEl = document.getElementById('admin-login-error');
+      const btn = document.getElementById('admin-login-btn');
+      const pin = pinEl ? pinEl.value.trim() : '';
+      if (!pin) return;
+      btn.disabled = true; btn.textContent = 'Memeriksa...';
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; btn.textContent = 'Masuk';
+          _lsSet(ADMIN_TOKEN_KEY, res.token);
+          pinEl.value = '';
+          document.getElementById('admin-login').classList.add('hide');
+          window.showGlobalLoader();
+          window.loadAllData();
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false; btn.textContent = 'Masuk';
+          errEl.textContent = err.message;
+          pinEl.value = ''; pinEl.focus();
+        })
+        .adminLogin(pin);
+    };
+
+    window.openAdminProfileMenu = function() {
+      window.showConfirmModal('Keluar dari panel PT di perangkat ini? Kamu perlu memasukkan PIN lagi untuk masuk.', function() {
+        _lsSet(ADMIN_TOKEN_KEY, null);
+        window.members = []; window.memberArchive = []; window.schedules = [];
+        window.updateMemberUI(); window.navigate('dashboard');
+        window.showAdminLogin('Kamu sudah keluar.');
+      }, { title: 'Keluar?', confirmText: 'Ya, Keluar' });
+    };
+
+    // Panel PT (admin): semua data, hanya dengan token admin yang sah.
+    window.loadAllData = function() {
       if (window.isGas) {
         let loaded = 0; const totalReqs = 5;
-        const checkDone = () => { loaded++; if(loaded >= totalReqs) { loader.classList.add('opacity-0'); setTimeout(()=>loader.classList.add('hide'), 300); window.updateUI(); } };
-        
-        google.script.run.withSuccessHandler(res => { window.members = res || []; checkDone(); }).getMembers();
-        google.script.run.withSuccessHandler(res => { window.memberArchive = res || []; checkDone(); }).getMemberTransactionLog();
-        google.script.run.withSuccessHandler(res => { window.schedules = res || []; checkDone(); }).getSchedules();
-        google.script.run.withSuccessHandler(res => { window.coaches = res || []; checkDone(); }).getCoaches();
-        google.script.run.withSuccessHandler(res => { window.priceListData = res || []; checkDone(); }).getPriceList();
+        const checkDone = () => { loaded++; if(loaded >= totalReqs) { window.hideGlobalLoader(); window.updateUI(); } };
+
+        window.adminApi().withSuccessHandler(res => { window.members = res || []; checkDone(); }).withFailureHandler(checkDone).getMembers();
+        window.adminApi().withSuccessHandler(res => { window.memberArchive = res || []; checkDone(); }).withFailureHandler(checkDone).getMemberTransactionLog();
+        window.adminApi().withSuccessHandler(res => { window.schedules = res || []; checkDone(); }).withFailureHandler(checkDone).getSchedules();
+        google.script.run.withSuccessHandler(res => { window.coaches = res || []; checkDone(); }).withFailureHandler(checkDone).getCoaches();
+        google.script.run.withSuccessHandler(res => { window.priceListData = res || []; checkDone(); }).withFailureHandler(checkDone).getPriceList();
       } else {
         window.members = [{id: 'PT-1', name: 'John Doe', phone: '628123', goal: 'Turun BB', totalSessions: 10, usedSessions: 2}];
         window.memberArchive = [];
@@ -240,7 +377,24 @@
           {id: 'P2', namaPaket: 'Student Pro', kategori: 'student', harga: 500000, jumlahSesi: 8, durasi: '1 Bulan', deskripsi: 'Latihan intensif & tracking.', benefit: ['1 on 1', 'Diet Tracking', 'Fleksibel']},
           {id: 'P3', namaPaket: 'Flex Premium', kategori: 'premium', harga: 1500000, jumlahSesi: '', durasi: 'Unlmited', deskripsi: 'Bebas kapan saja.', benefit: ['All Access', 'Diet Tracking', 'Fleksibel']}
         ];
-        setTimeout(() => { loader.classList.add('opacity-0'); setTimeout(()=>loader.classList.add('hide'), 300); window.updateUI(); }, 500);
+        setTimeout(() => { window.hideGlobalLoader(); window.updateUI(); }, 500);
+      }
+    };
+
+    // Portal klien (?view=public): hanya data publik + data milik klien yang login.
+    // Daftar klien lain TIDAK pernah dikirim ke browser.
+    window.loadPublicData = function() {
+      if (!window.isGas) { window.loadAllData(); return; }
+      const token = _lsGet(MEMBER_TOKEN_KEY);
+      let loaded = 0; const totalReqs = token ? 4 : 3;
+      const checkDone = () => { loaded++; if (loaded >= totalReqs) { window.hideGlobalLoader(); window.updateUI(); } };
+      window.members = []; window.memberArchive = [];
+
+      google.script.run.withSuccessHandler(res => { window.schedules = res || []; checkDone(); }).withFailureHandler(checkDone).getPublicSchedules(token);
+      google.script.run.withSuccessHandler(res => { window.coaches = res || []; checkDone(); }).withFailureHandler(checkDone).getCoaches();
+      google.script.run.withSuccessHandler(res => { window.priceListData = res || []; checkDone(); }).withFailureHandler(checkDone).getPriceList();
+      if (token) {
+        window.memberApi().withSuccessHandler(m => { window.setPublicMember(m); checkDone(); }).withFailureHandler(checkDone).getMemberProfile();
       }
     };
 
@@ -249,7 +403,10 @@
       window.updateMemberUI();
       window.updateCoachUI();
       window.renderPriceCategories();
-      if (window.isPublicView && !window.publicLoggedMember) window.tryAutoLoginPublic();
+      if (window.isPublicView && window.publicLoggedMember && window._openMemberDashboard) {
+        window._openMemberDashboard = false;
+        window.navigate('public-dashboard');
+      }
       if(window.currentView === 'dashboard') window.renderDashboard();
       if(window.currentView === 'public-dashboard' && window.publicLoggedMember) window.renderPublicDashboard();
       if(window.currentView === 'public-catalog') window.renderPriceList();
@@ -335,7 +492,7 @@
                             <i data-lucide="calendar-clock" class="w-5 h-5"></i>
                         </div>
                         <div>
-                            <p class="text-sm font-bold text-gray-900">Booking Baru: ${s.title}</p>
+                            <p class="text-sm font-bold text-gray-900">Booking Baru: ${escapeHtml(s.title)}</p>
                             <p class="text-xs text-gray-500 mt-1">${timeStr}</p>
                         </div>
                     </div>
@@ -363,7 +520,7 @@
 
     window.markNotificationsRead = function() {
         const unreadIds = window.schedules.filter(s => s.status === 'unread').map(s => s.id);
-        if(window.isGas) google.script.run.markSchedulesAsRead(unreadIds);
+        if(window.isGas) window.adminApi().markSchedulesAsRead(unreadIds);
         
         window.schedules.forEach(s => { if(s.status === 'unread') s.status = 'read'; });
         window.checkUnreadBookings(); 
@@ -395,7 +552,7 @@
     // 2. Perbarui fungsi markNotificationsRead Anda menjadi seperti ini:
     window.markNotificationsRead = function() {
       const unreadIds = window.schedules.filter(s => s.status === 'unread').map(s => s.id);
-      if(window.isGas) google.script.run.markSchedulesAsRead(unreadIds);
+      if(window.isGas) window.adminApi().markSchedulesAsRead(unreadIds);
       
       window.schedules.forEach(s => { if(s.status === 'unread') s.status = 'read'; });
       window.checkUnreadBookings(); 
@@ -619,6 +776,7 @@
     // filter bulan berubah. Pakai dropdown filter yang sama dengan Performa Coach Bulanan.
     // =============================================================================
     window.renderPackageTrendStats = function() {
+      if (window.isPublicView) return; // statistik admin, tidak dimuat di portal klien
       const listEl = document.getElementById('package-trend-list');
       const filterEl = document.getElementById('coach-monthly-filter');
       if (!listEl || !filterEl || !filterEl.value) return;
@@ -627,7 +785,7 @@
       const [month, year] = filterEl.value.split('-').map(Number);
       listEl.innerHTML = '<div class="flex justify-center py-4"><div class="loading-spinner" style="width:24px;height:24px;border-width:3px;"></div></div>';
 
-      google.script.run
+      window.adminApi()
         .withSuccessHandler(function(results) {
           if (!results || results.length === 0) {
             listEl.innerHTML = '<div class="text-center py-6"><i data-lucide="package-x" class="w-8 h-8 mx-auto text-gray-300 mb-2"></i><p class="text-sm text-gray-500">Belum ada transaksi paket tercatat di bulan ini.</p></div>';
@@ -694,9 +852,9 @@
       const el = document.getElementById('coach-leaderboard');
       el.innerHTML = sorted.map(([name, count]) =>
         '<div class="flex items-center gap-3 mb-3 last:mb-0">' +
-          '<div class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-xs font-bold flex-shrink-0">' + name[0] + '</div>' +
+          '<div class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-xs font-bold flex-shrink-0">' + escapeHtml(name[0]) + '</div>' +
           '<div class="flex-1 min-w-0">' +
-            '<div class="flex justify-between text-xs mb-1"><span class="font-bold">' + name + '</span><span class="text-gray-400 font-semibold">' + count + ' sesi</span></div>' +
+            '<div class="flex justify-between text-xs mb-1"><span class="font-bold">' + escapeHtml(name) + '</span><span class="text-gray-400 font-semibold">' + count + ' sesi</span></div>' +
             '<div class="h-1.5 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full bg-black w-0 transition-all duration-1000" data-w="' + Math.round(count/max*100) + '"></div></div>' +
           '</div>' +
         '</div>'
@@ -743,8 +901,8 @@
                 '<p class="text-sm font-black text-black">' + timeStr + '</p>' +
               '</div>' +
               '<div class="flex-1">' +
-                '<h4 class="font-bold text-sm">' + s.title + '</h4>' +
-                '<p class="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><i data-lucide="contact-2" class="w-3 h-3"></i> ' + (s.coachName || 'Belum di-assign') + '</p>' +
+                '<h4 class="font-bold text-sm">' + escapeHtml(s.title) + '</h4>' +
+                '<p class="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><i data-lucide="contact-2" class="w-3 h-3"></i> ' + escapeHtml(s.coachName || 'Belum di-assign') + '</p>' +
               '</div>' +
               '<span class="countdown-label text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full whitespace-nowrap">' + window.timeUntil(d) + '</span>' +
             '</div>';
@@ -841,8 +999,8 @@
         '<div class="flex items-center gap-3 mb-4">' +
           avatarHtml +
           '<div class="flex-1 min-w-0">' +
-            '<h4 class="font-bold text-sm md:text-base truncate">' + m.name + '</h4>' +
-            '<p class="text-xs text-gray-400 font-mono truncate">+' + m.phone + '</p>' +
+            '<h4 class="font-bold text-sm md:text-base truncate">' + escapeHtml(m.name) + '</h4>' +
+            '<p class="text-xs text-gray-400 font-mono truncate">+' + escapeHtml(m.phone) + '</p>' +
           '</div>' +
         '</div>' +
         '<div>' +
@@ -876,16 +1034,16 @@
         '<div class="flex items-center gap-3 mb-3">' +
           avatarHtml +
           '<div class="flex-1 min-w-0">' +
-            '<h4 class="font-bold text-sm md:text-base truncate text-gray-600">' + a.name + '</h4>' +
-            '<p class="text-xs text-gray-400 font-mono truncate">+' + a.phone + '</p>' +
+            '<h4 class="font-bold text-sm md:text-base truncate text-gray-600">' + escapeHtml(a.name) + '</h4>' +
+            '<p class="text-xs text-gray-400 font-mono truncate">+' + escapeHtml(a.phone) + '</p>' +
           '</div>' +
           '<span class="text-[10px] font-bold ' + badgeClass + ' px-2 py-1 rounded-full flex items-center gap-1 shrink-0">' +
             '<i data-lucide="' + badgeIcon + '" class="w-3 h-3"></i> ' + badgeLabel +
           '</span>' +
         '</div>' +
         '<div class="text-xs text-gray-500 space-y-0.5">' +
-          '<p>' + (a.packageName || 'Paket Standar') + ' &middot; ' + (a.totalSessions || 0) + ' Sesi</p>' +
-          '<p class="text-gray-400">' + a.date + '</p>' +
+          '<p>' + escapeHtml(a.packageName || 'Paket Standar') + ' &middot; ' + (a.totalSessions || 0) + ' Sesi</p>' +
+          '<p class="text-gray-400">' + escapeHtml(a.date) + '</p>' +
         '</div>' +
       '</div>';
     };
@@ -950,7 +1108,7 @@
         let displayGoal = mem.goal || '-';
         if(typeof displayGoal === 'string' && displayGoal.includes('|')) { 
            const parts = displayGoal.split('|'); 
-           if(elGoal) elGoal.innerHTML = parts[0].trim() + '<br><span class="text-[10px] bg-gray-200 text-gray-700 px-2 py-1 rounded inline-block mt-1.5 font-bold">' + (parts[1] ? parts[1].trim() : '') + '</span>'; 
+           if(elGoal) elGoal.innerHTML = escapeHtml(parts[0].trim()) + '<br><span class="text-[10px] bg-gray-200 text-gray-700 px-2 py-1 rounded inline-block mt-1.5 font-bold">' + escapeHtml(parts[1] ? parts[1].trim() : '') + '</span>'; 
         } else { 
            if(elGoal) elGoal.innerText = displayGoal; 
         }
@@ -991,7 +1149,7 @@
                 const badgeText = String(s.status).toUpperCase() === 'COMPLETED' ? 'Selesai' : (isUpcoming ? 'Akan Datang' : 'Terlewat'); const coachName = s.coachName && s.coachName !== "Belum Ditugaskan" ? s.coachName : "-";
 
                 histContainer.innerHTML += '<div class="border border-gray-100 rounded-xl p-3 flex justify-between items-center bg-gray-50">' +
-                   '<div><p class="text-xs font-bold text-gray-900">' + dateStr + ' • ' + timeStr + '</p><p class="text-[10px] text-gray-500 mt-0.5"><i data-lucide="contact-2" class="w-3 h-3 inline"></i> Coach: ' + coachName + '</p></div>' +
+                   '<div><p class="text-xs font-bold text-gray-900">' + dateStr + ' • ' + timeStr + '</p><p class="text-[10px] text-gray-500 mt-0.5"><i data-lucide="contact-2" class="w-3 h-3 inline"></i> Coach: ' + escapeHtml(coachName) + '</p></div>' +
                    '<div class="text-right"><span class="' + badgeCol + ' text-[9px] font-bold px-2 py-0.5 rounded uppercase">' + badgeText + '</span></div>' +
                 '</div>';
               });
@@ -1003,6 +1161,31 @@
       } catch (error) { 
         console.error(error);
         window.showToast('Gagal memuat profil: ' + error.message); 
+      }
+    };
+
+    // Kirim link member pribadi ke klien via WhatsApp (tombol di Profil Klien).
+    // reset=true: buat link baru; link lama & sesi login klien di HP lamanya tidak berlaku.
+    window.sendMemberLink = function(reset) {
+      const id = window.selectedMemberId;
+      if (!id) return;
+      const run = function() {
+        const waWin = window.openPendingWindow();
+        window.adminApi()
+          .withSuccessHandler(function(res) {
+            const text = 'Halo ' + res.name + ', ini link member pribadi kamu di XNK untuk booking jadwal & cek sisa sesi ' +
+              '(khusus untuk kamu, jangan dibagikan ya):\n' + res.link;
+            waWin.go(window.waUrl(res.phone, text));
+            window.showToast(reset ? 'Link baru dibuat. Link lama sudah tidak berlaku.' : 'Membuka WhatsApp...');
+          })
+          .withFailureHandler(function(err) { waWin.cancel(); window.showToast('Gagal: ' + err.message); })
+          .adminGetMemberLink(id, !!reset);
+      };
+      if (reset) {
+        window.showConfirmModal('Link lama klien ini akan <b>tidak berlaku</b> dan klien harus memakai link baru yang kamu kirim.', run,
+          { title: 'Buat Link Baru?', confirmText: 'Ya, Buat Baru', variant: 'danger' });
+      } else {
+        run();
       }
     };
 
@@ -1033,7 +1216,7 @@
       data.preferredCoachId = data.coachId; data.preferredCoachName = selCoach ? selCoach.name : '';
 
       if (window.isGas) {
-        google.script.run
+        window.adminApi()
           .withSuccessHandler(function() {
             const memIndex = window.members.findIndex(m => String(m.id) === String(window.selectedMemberId));
             if(memIndex !== -1) { 
@@ -1067,7 +1250,7 @@
       btn.innerHTML = 'Menghapus...'; btn.disabled = true;
 
       if (window.isGas) {
-        google.script.run
+        window.adminApi()
           .withSuccessHandler(function() {
             window.members = window.members.filter(m => String(m.id) !== String(id));
             window.schedules = window.schedules.filter(s => String(s.memberId) !== String(id));
@@ -1102,7 +1285,7 @@
          if(filterEl) {
              if (filterEl.options.length <= 1) {
                  window.coaches.forEach(c => {
-                     filterEl.innerHTML += '<option value="' + c.id + '">Coach ' + c.name + '</option>';
+                     filterEl.innerHTML += '<option value="' + escapeHtml(c.id) + '">Coach ' + escapeHtml(c.name) + '</option>';
                  });
              }
              selectedCoach = filterEl.value;
@@ -1349,7 +1532,7 @@
 
       if (window.isRescheduleMode) {
          if (window.isGas) {
-           google.script.run
+           window.memberApi()
              .withSuccessHandler(function() {
                const schIndex = window.schedules.findIndex(s => String(s.id) === String(window.rescheduleScheduleId));
                if (schIndex !== -1) {
@@ -1360,12 +1543,12 @@
                btn.innerHTML = originalText; btn.disabled = false; window.showToast('Jadwal berhasil direschedule!');
              })
              .withFailureHandler(function(err) { btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal: ' + err.message); })
-             .clientRescheduleSchedule(window.rescheduleScheduleId, window.publicLoggedMember.id, data.start, data.end);
+             .clientRescheduleSchedule(window.rescheduleScheduleId, data.start, data.end);
          }
       } else if (window.isEditScheduleMode) {
          data.id = window.selectedScheduleDetailId;
          if (window.isGas) {
-           google.script.run
+           window.adminApi()
              .withSuccessHandler(function() {
                const schIndex = window.schedules.findIndex(s => String(s.id) === String(window.selectedScheduleDetailId));
                if(schIndex !== -1) {
@@ -1405,11 +1588,13 @@
            const recurrenceRule = { weekdays: weekdays, occurrences: occurrences };
 
            if (window.isGas) {
-             google.script.run
+             const isClient = window.isPublicView;
+             (isClient ? window.memberApi() : window.adminApi())
                .withSuccessHandler(function(res) {
                  // Refresh penuh data schedules dari server, paling aman & sederhana
                  // daripada menyusun ulang N objek jadwal baru secara manual di client.
-                 google.script.run.withSuccessHandler(function(allSchedules) {
+                 const refresh = isClient ? window.memberApi() : window.adminApi();
+                 refresh.withSuccessHandler(function(allSchedules) {
                    window.schedules = allSchedules || [];
                    window.initCalendar(); window.checkUnreadBookings();
                    if (window.isPublicView) window.renderPublicDashboard();
@@ -1417,12 +1602,12 @@
                    window.updateDashboardStats();
                    window.closeModal(); btn.innerHTML = originalText; btn.disabled = false;
                    window.showToast(res.count + ' sesi berulang berhasil dibuat!');
-                 }).getSchedules();
+                 })[isClient ? 'getPublicSchedules' : 'getSchedules']();
                })
                .withFailureHandler(function(err) {
                  btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal: ' + err.message);
                })
-               .addRecurringSchedule(baseData, recurrenceRule);
+               [isClient ? 'clientBookRecurring' : 'addRecurringSchedule'](baseData, recurrenceRule);
            }
            return;
          }
@@ -1431,9 +1616,10 @@
            const isClientBooking = window.isPublicView;
            
            if (isClientBooking) {
-             google.script.run
+             window.memberApi()
                .withSuccessHandler(function(res) {
                  data.id = res.id; data.title = data.memberName; data.status = 'unread';
+                 data.coachId = res.coachId || ''; data.coachName = res.coachName || '';
                  window.schedules.push(data); 
                  window.initCalendar(); window.checkUnreadBookings();
                  window.renderPublicDashboard(); 
@@ -1445,7 +1631,7 @@
                })
                .clientBookSchedule(data);
            } else {
-             google.script.run
+             window.adminApi()
                .withSuccessHandler(function(res) {
                  data.id = res.id; data.title = data.memberName; data.status = 'read';
                  window.schedules.push(data); 
@@ -1478,7 +1664,7 @@
       
       window.showToast("Menyimpan pembaruan slot kalender...");
       if(window.isGas) {
-        google.script.run
+        window.adminApi()
           .withSuccessHandler(function() {
             const schIndex = window.schedules.findIndex(s => String(s.id) === String(data.id));
             if(schIndex !== -1) {
@@ -1531,7 +1717,7 @@
       
       const selectEl = document.getElementById('detail-assign-coach'); selectEl.innerHTML = '<option value="">Belum Ditugaskan</option>';
       const currentCoachId = extProps.coachId || '';
-      window.coaches.forEach(c => { let selected = currentCoachId === c.id ? 'selected' : ''; selectEl.innerHTML += '<option value="' + c.id + '" ' + selected + '>Coach ' + c.name + '</option>'; });
+      window.coaches.forEach(c => { let selected = currentCoachId === c.id ? 'selected' : ''; selectEl.innerHTML += '<option value="' + escapeHtml(c.id) + '" ' + selected + '>Coach ' + escapeHtml(c.name) + '</option>'; });
 
       const compContainer = document.getElementById('detail-complete-container');
       const statusStr = String(sch.status).toUpperCase();
@@ -1564,7 +1750,7 @@
       const coachName = coachObj ? (coachObj.name || 'Belum Ditugaskan') : 'Belum Ditugaskan';
 
       if(window.isGas) {
-         google.script.run
+         window.adminApi()
          .withSuccessHandler(function() {
             const schIndex = window.schedules.findIndex(s => String(s.id) === String(window.selectedScheduleDetailId));
             if(schIndex !== -1) { window.schedules[schIndex].coachId = coachId; window.schedules[schIndex].coachName = coachName; }
@@ -1589,11 +1775,11 @@
           if (btn) { btn.innerHTML = 'Menghapus...'; btn.disabled = true; }
 
           if (window.isGas) {
-            google.script.run
+            window.adminApi()
               .withSuccessHandler(function(res) {
                 window.schedules = window.schedules.filter(s => String(s.recurringGroupId) !== String(groupId));
                 // Refresh member quota juga, karena kuota bisa dikembalikan di server kalau ada sesi completed yang terhapus
-                google.script.run.withSuccessHandler(function(freshMembers) {
+                window.adminApi().withSuccessHandler(function(freshMembers) {
                   window.members = freshMembers || window.members;
                   window.initCalendar(); window.updateMemberUI(); window.updateDashboardStats();
                   window.closeModal(); window.showToast(res.deletedCount + ' sesi berulang berhasil dihapus.');
@@ -1630,12 +1816,12 @@
       if(mem.usedSessions >= mem.totalSessions) { window.showToast('Gagal: Kuota sesi klien ini sudah habis!'); return; }
 
       window.showConfirmModal(
-        'Ini akan memotong 1 kuota sesi dari klien <b>' + sch.title + '</b>.',
+        'Ini akan memotong 1 kuota sesi dari klien <b>' + escapeHtml(sch.title) + '</b>.',
         function() {
           const btn = document.getElementById('btn-complete-session'); const originalText = btn.innerHTML; btn.innerHTML = 'Memproses...'; btn.disabled = true;
 
           if (window.isGas) {
-            google.script.run
+            window.adminApi()
               .withSuccessHandler(function(result) {
                 sch.status = 'completed'; mem.usedSessions = (mem.usedSessions || 0) + 1;
                 window.updateMemberUI(); window.initCalendar(); window.closeModal(); window.showToast('Sesi selesai! Kuota dipotong.');
@@ -1648,7 +1834,7 @@
 
                 setTimeout(function() {
                   window.showConfirmModal(
-                    'Kirim info sisa sesi ke <b>' + sch.title + '</b> via WhatsApp?<br><span class="text-gray-400 text-xs">"' + reminderMsg + '"</span>',
+                    'Kirim info sisa sesi ke <b>' + escapeHtml(sch.title) + '</b> via WhatsApp?<br><span class="text-gray-400 text-xs">"' + escapeHtml(reminderMsg) + '"</span>',
                     function() { window.sendToParentWA(sch.phone, reminderMsg); },
                     { title: 'Kirim Reminder Sesi?', confirmText: 'Kirim Reminder WA', cancelText: 'Nanti Saja', variant: 'default' }
                   );
@@ -1694,7 +1880,7 @@
       const memberId = sch.memberId;
 
       if (window.isGas) {
-        google.script.run
+        window.adminApi()
           .withSuccessHandler(function(res) {
             window.schedules = window.schedules.filter(s => String(s.id) !== String(scheduleId));
 
@@ -1832,7 +2018,7 @@
       function finishSave() {
         if (!window.isGas) return;
         const handler = editId ? 'updateCoach' : 'addCoach';
-        google.script.run
+        window.adminApi()
           .withSuccessHandler(function(res) {
             if (editId) {
               const idx = window.coaches.findIndex(c => String(c.id) === String(editId));
@@ -1854,7 +2040,7 @@
       }
 
       if (window.pendingCoachBase64) {
-        google.script.run
+        window.adminApi()
           .withSuccessHandler(function(res) {
             data.photo = res.url;
             window.pendingCoachBase64 = null;
@@ -2000,16 +2186,16 @@
         if(theme === 'purple') { bgIcon = 'bg-purple-700'; textAccent = 'text-purple-700'; borderAccent = 'border-purple-200'; }
 
         let sesiDisplay = pkg.jumlahSesi ? pkg.jumlahSesi + ' Sesi' : 'Flexible Session';
-        let subTitleDisplay = pkg.durasi ? sesiDisplay + ' • ' + pkg.durasi : sesiDisplay;
+        let subTitleDisplay = pkg.durasi ? sesiDisplay + ' • ' + escapeHtml(pkg.durasi) : sesiDisplay;
 
-        let priceButtonsHtml = '<div class="flex items-center justify-between bg-gray-50 p-3 rounded-xl mb-2"><div><span class="font-black text-sm block">' + subTitleDisplay + '</span><span class="text-gray-500 font-bold text-xs">' + formatRp(pkg.harga) + '</span></div><button onclick="window.openRegistrationModal(\'' + pkg.id + '\')" class="bg-black text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors">Pilih</button></div>';
+        let priceButtonsHtml = '<div class="flex items-center justify-between bg-gray-50 p-3 rounded-xl mb-2"><div><span class="font-black text-sm block">' + subTitleDisplay + '</span><span class="text-gray-500 font-bold text-xs">' + formatRp(pkg.harga) + '</span></div><button onclick="window.openRegistrationModal(\'' + escapeHtml(pkg.id) + '\')" class="bg-black text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors">Pilih</button></div>';
         
         let featuresHtml = '';
         if(pkg.benefit && Array.isArray(pkg.benefit)) {
-          featuresHtml = pkg.benefit.map(function(f) { return '<li class="flex items-start gap-2 text-xs text-gray-600 mb-2"><i data-lucide="check-circle-2" class="w-4 h-4 ' + textAccent + ' shrink-0"></i> <span>' + f + '</span></li>'; }).join('');
+          featuresHtml = pkg.benefit.map(function(f) { return '<li class="flex items-start gap-2 text-xs text-gray-600 mb-2"><i data-lucide="check-circle-2" class="w-4 h-4 ' + textAccent + ' shrink-0"></i> <span>' + escapeHtml(f) + '</span></li>'; }).join('');
         }
 
-        container.innerHTML += '<div class="bg-white rounded-3xl p-6 border ' + borderAccent + ' shadow-sm flex flex-col h-full hover:shadow-xl transition-shadow relative overflow-hidden"><div class="absolute top-0 right-0 p-4 opacity-5"><i data-lucide="dumbbell" class="w-32 h-32"></i></div><div class="flex items-center gap-3 mb-4 relative z-10"><div class="w-12 h-12 ' + bgIcon + ' text-white rounded-xl flex items-center justify-center shadow-md"><i data-lucide="dumbbell" class="w-6 h-6"></i></div><h3 class="text-lg font-black leading-tight max-w-[150px] uppercase ' + textAccent + '">' + pkg.namaPaket + '</h3></div><p class="text-xs text-gray-500 mb-6 min-h-[40px] italic leading-relaxed relative z-10">' + pkg.deskripsi + '</p><div class="mb-6 relative z-10"><h4 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Termasuk:</h4><ul class="mb-4">' + featuresHtml + '</ul></div><div class="mt-auto relative z-10 border-t border-gray-100 pt-4">' + priceButtonsHtml + '</div></div>';
+        container.innerHTML += '<div class="bg-white rounded-3xl p-6 border ' + borderAccent + ' shadow-sm flex flex-col h-full hover:shadow-xl transition-shadow relative overflow-hidden"><div class="absolute top-0 right-0 p-4 opacity-5"><i data-lucide="dumbbell" class="w-32 h-32"></i></div><div class="flex items-center gap-3 mb-4 relative z-10"><div class="w-12 h-12 ' + bgIcon + ' text-white rounded-xl flex items-center justify-center shadow-md"><i data-lucide="dumbbell" class="w-6 h-6"></i></div><h3 class="text-lg font-black leading-tight max-w-[150px] uppercase ' + textAccent + '">' + escapeHtml(pkg.namaPaket) + '</h3></div><p class="text-xs text-gray-500 mb-6 min-h-[40px] italic leading-relaxed relative z-10">' + escapeHtml(pkg.deskripsi) + '</p><div class="mb-6 relative z-10"><h4 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Termasuk:</h4><ul class="mb-4">' + featuresHtml + '</ul></div><div class="mt-auto relative z-10 border-t border-gray-100 pt-4">' + priceButtonsHtml + '</div></div>';
       });
       try { window.lucide.createIcons(); } catch(e) {}
     };
@@ -2025,6 +2211,7 @@
       document.getElementById('reg-package-name').innerText = pkg.namaPaket + ' (' + sesiDisplay + ')'; 
       document.getElementById('reg-package-price').innerText = formatRp(pkg.harga);
       
+      document.getElementById('reg-data-package-id').value = pkg.id;
       document.getElementById('reg-data-package').value = pkg.namaPaket; 
       document.getElementById('reg-data-sessions').value = pkg.jumlahSesi ? parseInt(pkg.jumlahSesi) : 1; 
       document.getElementById('reg-data-price').value = formatRp(pkg.harga); 
@@ -2035,25 +2222,51 @@
       const mod = document.getElementById('modal-public-register'); mod.classList.remove('hide'); setTimeout(() => mod.classList.remove('scale-95'), 10);
     };
 
+    // Nomor WA tujuan untuk klien yang menghubungi gym: COACH_WA_NUMBER kalau
+    // diisi, kalau tidak coach pertama di daftar Coach.
+    window.coachContactNumber = function() {
+      const fixed = sanitizePhone(COACH_WA_NUMBER || '');
+      if (fixed.length >= 10) return fixed;
+      const first = (window.coaches || []).find(c => c && c.phone);
+      return first ? sanitizePhone(first.phone) : '';
+    };
+
     window.submitRegistration = function(e) {
       e.preventDefault();
-      if(COACH_WA_NUMBER === "628xxxxxxxx" || !COACH_WA_NUMBER) { alert("SISTEM ERROR: Nomor WhatsApp Coach belum disetting di kode HTML."); return; }
       const btn = e.target.querySelector('button[type="submit"]'); const originalText = btn.innerHTML; btn.innerHTML = 'Memproses...'; btn.disabled = true;
 
+      // Hanya data diri + ID paket yang dikirim. Jumlah sesi & harga dihitung server dari PriceList.
       const data = {
         name: document.getElementById('reg-name').value, phone: sanitizePhone(document.getElementById('reg-phone').value), goal: document.getElementById('reg-goal').value,
-        packageName: document.getElementById('reg-data-package').value, sessions: parseInt(document.getElementById('reg-data-sessions').value, 10),
-        price: document.getElementById('reg-data-price').value, clientType: document.getElementById('reg-data-type').value
+        packageId: document.getElementById('reg-data-package-id').value
       };
+      const packageName = document.getElementById('reg-data-package').value;
+      const sessions = document.getElementById('reg-data-sessions').value;
+      const price = document.getElementById('reg-data-price').value;
+      const clientType = document.getElementById('reg-data-type').value;
 
       if (window.isGas) {
+        const waWin = window.openPendingWindow();
         google.script.run
-          .withSuccessHandler(function() {
+          .withSuccessHandler(function(res) {
             window.closeModal(); btn.innerHTML = originalText; btn.disabled = false;
-            const textWA = 'Halo Coach, saya ' + data.name + ' ingin mendaftar PT.\n\n*Detail Pendaftaran:*\nKategori: ' + data.clientType.toUpperCase() + '\nPaket: ' + data.packageName + ' (' + data.sessions + ' Sesi)\nGoal: ' + data.goal + '\n\n*Total Tagihan: ' + data.price + '*\n\nMohon info nomor rekening pembayarannya ya Coach. Terima kasih!';
-            window.showToast('Registrasi berhasil! Mengarahkan ke WhatsApp...'); setTimeout(() => { window.sendToParentWA(COACH_WA_NUMBER, textWA); window.navigate('public-login'); }, 1500);
+            const textWA = 'Halo Coach, saya ' + data.name + (res.status === 'exists' ? ' (sudah pernah terdaftar) ingin perpanjang paket PT.' : ' ingin mendaftar PT.') +
+              '\n\n*Detail Pendaftaran:*\nKategori: ' + String(clientType).toUpperCase() + '\nPaket: ' + packageName + ' (' + sessions + ' Sesi)\nGoal: ' + data.goal +
+              '\n\n*Total Tagihan: ' + price + '*\n\nMohon info nomor rekening pembayarannya ya Coach. Terima kasih!';
+            waWin.go(window.waUrl(window.coachContactNumber(), textWA));
+
+            if (res.status === 'exists') {
+              window.showToast('Nomor ini sudah terdaftar. Coach akan memproses perpanjanganmu.');
+              window.navigate('public-login');
+              return;
+            }
+            // Klien baru: langsung masuk memakai link pribadinya.
+            const key = (String(res.memberLink || '').match(/[?&]k=([a-f0-9]{32})/i) || [])[1];
+            window.showToast('Registrasi berhasil! Simpan link member dari Coach untuk masuk lagi nanti.');
+            if (key) window.startPublicPortal(key); else window.navigate('public-login');
           })
           .withFailureHandler(function(err) {
+            waWin.cancel();
             btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal Pendaftaran: ' + err.message);
           })
           .registerNewClient(data);
@@ -2063,70 +2276,74 @@
     // =============================================================================
     // --- PUBLIC MEMBER AREA ---
     // =============================================================================
-    window.handlePublicLogin = function(e) {
-      e.preventDefault();
-      const phoneInput = sanitizePhone(document.getElementById('login-phone').value);
-      const member = window.members.find(m => sanitizePhone(m.phone) === phoneInput);
-      
-      if (member) {
-        window.publicLoggedMember = member;
-
-        const rememberEl = document.getElementById('login-remember-me');
-        const rememberMe = rememberEl ? rememberEl.checked : true;
-        try {
-          if (rememberMe) {
-            localStorage.setItem('xnk_remembered_phone', phoneInput);
-          } else {
-            localStorage.removeItem('xnk_remembered_phone');
-          }
-        } catch (e) { /* localStorage tidak tersedia, abaikan */ }
-        
-        const dashboardBtn = document.getElementById('nav-dashboard-btn');
-        const loginBtn = document.getElementById('nav-login-btn');
-        if (dashboardBtn) dashboardBtn.classList.remove('hidden');
-        if (loginBtn) loginBtn.classList.add('hidden');
-        
-        window.navigate('public-dashboard');
-        window.showToast('Selamat datang, ' + (member.name || 'Klien') + '!');
-      } else {
-        window.showToast("Nomor WhatsApp tidak ditemukan. Pastikan sudah didaftarkan oleh Coach.");
-      }
+    // Klien masuk lewat link pribadi dari Coach (…?view=public&k=KUNCI). Token member
+    // disimpan di perangkat ini, jadi kunjungan berikutnya tidak perlu link lagi.
+    window.startPublicPortal = function(key) {
+      if (!window.isGas) { window.loadAllData(); return; }
+      if (!key) { window.loadPublicData(); return; }
+      google.script.run
+        .withSuccessHandler(function(res) {
+          _lsSet(MEMBER_TOKEN_KEY, res.token);
+          window.setPublicMember(res.member);
+          window.loadPublicData();
+        })
+        .withFailureHandler(function(err) {
+          _lsSet(MEMBER_TOKEN_KEY, null);
+          window.showMemberLinkMessage(window.authMessage(err));
+          window.loadPublicData();
+          window.navigate('public-login');
+        })
+        .memberLoginByKey(key);
     };
 
-    // Coba login otomatis pakai nomor yang tersimpan di perangkat ini (dipanggil setelah data member selesai dimuat)
-    window.tryAutoLoginPublic = function() {
-      if (!window.isPublicView || window.publicLoggedMember) return;
-      let savedPhone = null;
-      try {
-        savedPhone = localStorage.getItem('xnk_remembered_phone');
-      } catch (e) { return; }
-      if (!savedPhone) return;
-
-      const member = window.members.find(m => sanitizePhone(m.phone) === savedPhone);
-      if (member) {
-        window.publicLoggedMember = member;
-
-        const dashboardBtn = document.getElementById('nav-dashboard-btn');
-        const loginBtn = document.getElementById('nav-login-btn');
-        if (dashboardBtn) dashboardBtn.classList.remove('hidden');
-        if (loginBtn) loginBtn.classList.add('hidden');
-
-        window.navigate('public-dashboard');
-      }
+    window.setPublicMember = function(member) {
+      const wasLoggedIn = !!window.publicLoggedMember;
+      window.publicLoggedMember = member;
+      const dashboardBtn = document.getElementById('nav-dashboard-btn');
+      const loginBtn = document.getElementById('nav-login-btn');
+      if (dashboardBtn) dashboardBtn.classList.remove('hidden');
+      if (loginBtn) loginBtn.classList.add('hidden');
+      if (!wasLoggedIn) window._openMemberDashboard = true;
     };
 
-    window.logoutPublic = function() {
+    window.showMemberLinkMessage = function(message) {
+      const el = document.getElementById('member-link-message');
+      if (!el) return;
+      el.textContent = message || '';
+      el.classList.toggle('hide', !message);
+    };
+
+    window.onMemberAuthLost = function(err) {
+      _lsSet(MEMBER_TOKEN_KEY, null);
       window.publicLoggedMember = null;
-      document.getElementById('login-phone').value = '';
-      try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) { /* abaikan */ }
-      
       const dashboardBtn = document.getElementById('nav-dashboard-btn');
       const loginBtn = document.getElementById('nav-login-btn');
       if (dashboardBtn) dashboardBtn.classList.add('hidden');
       if (loginBtn) loginBtn.classList.remove('hidden');
-      
+      window.showMemberLinkMessage(window.authMessage(err));
+      if (window.currentView === 'public-dashboard') window.navigate('public-login');
+    };
+
+    // Tombol "Minta Link ke Coach" di halaman Akses Member.
+    window.requestMemberLink = function() {
+      const text = 'Halo Coach, saya member XNK dan butuh link member pribadi untuk booking & cek sisa sesi. Nama saya: ';
+      window.open(window.waUrl(window.coachContactNumber(), text), '_blank');
+    };
+
+    window.logoutPublic = function() {
+      window.publicLoggedMember = null;
+      _lsSet(MEMBER_TOKEN_KEY, null);
+      try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) { /* abaikan */ }
+
+      const dashboardBtn = document.getElementById('nav-dashboard-btn');
+      const loginBtn = document.getElementById('nav-login-btn');
+      if (dashboardBtn) dashboardBtn.classList.add('hidden');
+      if (loginBtn) loginBtn.classList.remove('hidden');
+
+      window.showMemberLinkMessage('');
       window.navigate('public-login');
       window.showToast("Berhasil keluar.");
+      window.loadPublicData(); // muat ulang jadwal tanpa data pribadi
     };
 
     window.renderPublicDashboard = function() {
@@ -2225,7 +2442,7 @@
                 ${d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})} WIB
               </p>
               <p class="text-[10px] text-gray-400 mt-1">
-                <i data-lucide="contact-2" class="w-3 h-3 inline"></i> ${s.coachName || 'Menunggu Coach'}
+                <i data-lucide="contact-2" class="w-3 h-3 inline"></i> ${escapeHtml(s.coachName || 'Menunggu Coach')}
               </p>
             </div>
             <div>
@@ -2237,7 +2454,7 @@
           </div>
           ${isUpcoming ? `
           <div class="mt-3 pt-3 border-t border-gray-100">
-            <button type="button" onclick="window.openRescheduleModal('${s.id}')" class="w-full flex items-center justify-center gap-2 text-xs font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 py-2 rounded-xl transition-colors">
+            <button type="button" onclick="window.openRescheduleModal('${escapeHtml(s.id)}')" class="w-full flex items-center justify-center gap-2 text-xs font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 py-2 rounded-xl transition-colors">
               <i data-lucide="calendar-clock" class="w-3.5 h-3.5"></i> Reschedule
             </button>
           </div>` : ''}
@@ -2535,8 +2752,8 @@
           const kategoriLabel = p.kategori ? (' • ' + p.kategori) : '';
           return '<button type="button" onclick="window.selectPackageOption(\'' + prefix + '\', \'' + String(p.id).replace(/'/g, "\\'") + '\')" class="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between gap-3">' +
               '<span class="min-w-0">' +
-                '<span class="block text-sm font-bold truncate">' + p.namaPaket + '</span>' +
-                '<span class="block text-[11px] text-gray-400">' + sesiLabel + kategoriLabel + '</span>' +
+                '<span class="block text-sm font-bold truncate">' + escapeHtml(p.namaPaket) + '</span>' +
+                '<span class="block text-[11px] text-gray-400">' + escapeHtml(sesiLabel + kategoriLabel) + '</span>' +
               '</span>' +
               (hargaLabel ? '<span class="text-xs font-bold text-gray-600 shrink-0">' + hargaLabel + '</span>' : '') +
             '</button>';
@@ -2602,7 +2819,7 @@
       if (!selectEl) return;
       selectEl.innerHTML = '<option value="">-- Belum Ditentukan --</option>' +
         (window.coaches || []).map(function(c) {
-          return '<option value="' + c.id + '">' + c.name + '</option>';
+          return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
         }).join('');
       selectEl.value = selectedCoachId || '';
     };
@@ -2628,7 +2845,7 @@
       };
 
       if (window.isGas) {
-        google.script.run
+        window.adminApi()
           .withSuccessHandler(function(res) {
             const d = new Date(); const todayStr = d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
             data.id = res.id;
@@ -2880,12 +3097,12 @@
 
         if (window.google && google.script && window.publicLoggedMember) {
           // 1. Upload ke Google Drive dulu
-          google.script.run
+          window.memberApi()
             .withSuccessHandler(function(res){
               window.publicLoggedMember.photo = res.url;
               
               // 2. Pastikan file terupload, BARU simpan link ke database
-              google.script.run
+              window.memberApi()
                 .withSuccessHandler(function() {
                   // Jika sukses 100%, kembalikan tombol & TUTUP modal
                   btn.innerHTML = originalText; 
@@ -2907,7 +3124,7 @@
                   btn.disabled = false; 
                   window.showToast('Gagal menyimpan foto ke profil: ' + err.message);
                 })
-                .updateMemberPhoto(window.publicLoggedMember.id, res.url); // Panggil fungsi update db
+                .updateMemberPhoto(res.url); // server memastikan ini foto milik klien yang login
             })
             .withFailureHandler(function(err){
               btn.innerHTML = originalText; 

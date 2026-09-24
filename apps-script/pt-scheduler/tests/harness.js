@@ -299,12 +299,14 @@ function createEnv(opts = {}) {
   }
 
   env.context = context;
-  // Call a server function the way google.script.run would. Arguments are
-  // JSON-cloned, since google.script.run only passes plain data.
+  // Call a server function the way google.script.run would. Arguments and
+  // results are JSON-cloned, since google.script.run only passes plain data.
   env.call = (name, ...args) => {
     const fn = context[name];
     if (typeof fn !== 'function') throw new Error('No server function ' + name);
-    return fn(...JSON.parse(JSON.stringify(args)));
+    const out = fn(...JSON.parse(JSON.stringify(args)));
+    // google.script.run also serialises return values.
+    return out === undefined ? undefined : JSON.parse(JSON.stringify(out));
   };
   env.sheet = name => env.ss.getSheetByName(name);
   env.EXEC_URL = EXEC_URL;

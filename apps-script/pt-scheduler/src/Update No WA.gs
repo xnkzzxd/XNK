@@ -1,4 +1,5 @@
 function pertahankanWABaru() {
+  requireOwner_(); // hanya pemilik, dari editor Apps Script
   // PENTING: sejak migrasi split-sheet, data klien (termasuk No WA) ada di
   // sheet "MemberData", BUKAN "Members" lagi. Sheet "Members" sekarang cuma
   // log transaksi (append-only, kolom C-nya "Tanggal", bukan "No WA").

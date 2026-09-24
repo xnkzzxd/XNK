@@ -1109,6 +1109,18 @@
   <script>
     // === Booking subdomain (clean URL, no query params) ===
     var BOOKING_URL = 'https://book.xnkbooking.my.id';
+    var LANDING_WA = '6288221254305';
+
+    // Buka URL di jendela teratas (halaman ini bisa tampil di dalam iframe).
+    function goTopUrl(url) {
+      try {
+        if (window.top && window.top !== window.self) {
+          window.top.location.href = url;
+          return;
+        }
+      } catch (e) { /* cross-origin fallback below */ }
+      window.location.href = url;
+    }
 
     function redirectToBooking() {
       try {
@@ -1181,17 +1193,12 @@
           '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
         '</button>' +
         '<div class="text-center">' +
-          '<h2 class="mb-2" style="font-size:2rem;font-weight:900;line-height:1.15;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:10px">Verifikasi Member</h2>' +
-          '<p class="text-sm" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:28px;line-height:1.5">Masukkan nomor WhatsApp atau Member ID kamu.</p>' +
-          '<div class="xnk-field text-left" style="margin-bottom:20px">' +
-            '<label class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:10px">Nomor WhatsApp / Member ID <span style="color:#DC2626">*</span></label>' +
-            '<input type="text" id="verify-identifier" class="xnk-input" placeholder="08123… atau PT-001" autocomplete="off" style="width:100%;box-sizing:border-box;background:#F3F4F6;border:1.5px solid #F3F4F6;color:#111827;border-radius:16px;padding:16px 18px;font-size:0.95rem" />' +
-            '<p id="verify-error" class="xnk-error-text hide" style="color:#DC2626;margin-top:10px;font-size:0.8rem;text-align:left">Member tidak ditemukan.</p>' +
-          '</div>' +
-          '<button type="button" id="verify-btn" onclick="doVerifyMember()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease;margin-top:4px">' +
-            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>' +
-            ' Cari Data Saya' +
+          '<h2 class="mb-2" style="font-size:2rem;font-weight:900;line-height:1.15;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:10px">Member Lama</h2>' +
+          '<p class="text-sm" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:28px;line-height:1.5">Buka <b style="color:#111827">link member pribadi</b> yang dikirim Coach lewat WhatsApp untuk booking & cek sisa sesi. Belum punya atau lupa? Minta link ke Coach.</p>' +
+          '<button type="button" onclick="requestMemberLinkLanding()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#25D366;color:#FFFFFF;width:100%;transition:all 0.2s ease;margin-top:4px">' +
+            ' Minta Link ke Coach' +
           '</button>' +
+          '<p style="font-size:0.75rem;color:#9CA3AF;margin-top:14px">Link bersifat pribadi. Jangan dibagikan ke orang lain.</p>' +
           '<p style="font-size:0.8rem;color:#6B7280;margin-top:20px">Belum terdaftar? <a href="javascript:void(0)" onclick="openRegistration()" style="font-weight:600;color:#111827;text-decoration:underline">Daftar sebagai member baru</a></p>' +
         '</div>' +
         '</div>';
@@ -1199,116 +1206,11 @@
       m.classList.remove('hide');
       document.body.style.overflow = 'hidden';
 
-      setTimeout(function() {
-        var inp = document.getElementById('verify-identifier');
-        if (inp) inp.focus();
-      }, 300);
     }
 
-    function doVerifyMember() {
-      var input = document.getElementById('verify-identifier');
-      var errEl = document.getElementById('verify-error');
-      var btn = document.getElementById('verify-btn');
-      if (!input) return;
-
-      var raw = String(input.value).trim();
-      if (!raw) {
-        if (errEl) errEl.classList.remove('hide');
-        return;
-      }
-
-      if (errEl) errEl.classList.add('hide');
-      if (typeof setBtnLoading === 'function') setBtnLoading(btn, true);
-
-      var normalizedPhone = typeof normalizePhoneID === 'function' ? normalizePhoneID(raw) : '';
-
-      function searchMembers(members) {
-        var found = null;
-        (members || []).forEach(function(m) {
-          if (found) return;
-          if (m.id === raw) { found = m; return; }
-          if (normalizedPhone && typeof normalizePhoneID === 'function') {
-            var mp = normalizePhoneID(m.phone);
-            if (mp === normalizedPhone) { found = m; return; }
-          }
-          var digitsOnly = raw.replace(/\D/g, '');
-          if (digitsOnly && m.phone && m.phone.indexOf(digitsOnly) !== -1) { found = m; return; }
-        });
-        return found;
-      }
-
-      function showMemberCard(member, sessionData) {
-        if (typeof setBtnLoading === 'function') setBtnLoading(btn, false);
-        var contentArea = document.querySelector('#member-check-modal .modal-content');
-        if (!contentArea) return;
-
-        var remaining = sessionData ? sessionData.remaining : (member.totalSessions || 0);
-        var total = sessionData ? (sessionData.total || 0) : (member.totalSessions || 0);
-
-        contentArea.innerHTML =
-          '<div style="padding:40px 32px;position:relative">' +
-          '<button type="button" onclick="closeMemberCheck()" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors" style="color:#6B7280;background:transparent" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'transparent\'" aria-label="Tutup">' +
-            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
-          '</button>' +
-          '<div class="text-center">' +
-            '<div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3" style="background:linear-gradient(135deg,#000000,#374151)">' +
-              '<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="#FFFFFF" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' +
-            '</div>' +
-            '<h2 class="mb-1" style="font-size:2rem;font-weight:900;line-height:1.1;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + (member.name || 'Member') + '</h2>' +
-            '<p class="text-sm mb-4" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + (member.id || '') + '</p>' +
-            '<div class="grid grid-cols-2 gap-3 mb-4 text-left">' +
-              '<div class="rounded-2xl p-4" style="background:#F3F4F6;border:1.5px solid #F3F4F6"><p style="font-size:0.625rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem">Sisa Sesi</p><p style="font-size:1.75rem;font-weight:900;color:#000000;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + remaining + '</p></div>' +
-              '<div class="rounded-2xl p-4" style="background:#F3F4F6;border:1.5px solid #F3F4F6"><p style="font-size:0.625rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem">Total Sesi</p><p style="font-size:1.75rem;font-weight:900;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + total + '</p></div>' +
-            '</div>' +
-            '<button type="button" onclick="redirectToBooking()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease">' +
-              'Lanjut Booking <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>' +
-            '</button>' +
-          '</div>' +
-          '</div>';
-      }
-
-      function handleMemberFound(member) {
-        if (typeof google !== 'undefined' && google.script) {
-          google.script.run
-            .withSuccessHandler(function(sd) { showMemberCard(member, sd); })
-            .withFailureHandler(function() { showMemberCard(member, null); })
-            .getMemberSessions(member.id);
-        } else {
-          var sd = null;
-          if (typeof mockMembers !== 'undefined') {
-            for (var i = 0; i < mockMembers.length; i++) {
-              if (mockMembers[i].id === member.id) {
-                sd = { total: mockMembers[i].totalSessions || 0, used: mockMembers[i].usedSessions || 0, remaining: (mockMembers[i].totalSessions || 0) - (mockMembers[i].usedSessions || 0) };
-                break;
-              }
-            }
-          }
-          showMemberCard(member, sd);
-        }
-      }
-
-      function handleNotFound() {
-        if (typeof setBtnLoading === 'function') setBtnLoading(btn, false);
-        if (errEl) {
-          errEl.textContent = 'Member tidak ditemukan. Coba lagi atau daftar baru.';
-          errEl.classList.remove('hide');
-        }
-      }
-
-      if (typeof google !== 'undefined' && google.script) {
-        google.script.run
-          .withSuccessHandler(function(members) {
-            var found = searchMembers(members);
-            if (found) handleMemberFound(found);
-            else handleNotFound();
-          })
-          .withFailureHandler(handleNotFound)
-          .getMembers();
-      } else {
-        var found = searchMembers(typeof mockMembers !== 'undefined' ? mockMembers : []);
-        if (found) handleMemberFound(found);
-        else handleNotFound();
-      }
+    function requestMemberLinkLanding() {
+      var text = 'Halo Coach, saya member XNK dan butuh link member pribadi untuk booking & cek sisa sesi. Nama saya: ';
+      window.open('https://wa.me/' + LANDING_WA + '?text=' + encodeURIComponent(text), '_blank');
     }
 
     // === Registration Flow (New Member) ===
@@ -1363,7 +1265,7 @@
           '<h2 class="mb-2" style="font-size:2rem;font-weight:900;line-height:1.1;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif">Registrasi Berhasil!</h2>' +
           '<p class="text-sm mb-1" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif">Kamu sudah terdaftar sebagai member XNK.</p>' +
           '<p id="reg-new-id" class="text-xs mb-5" style="color:#6B7280"></p>' +
-          '<button type="button" onclick="redirectToBooking()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease">' +
+          '<button type="button" id="reg-open-member" onclick="openNewMemberArea()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease">' +
             'Lanjut Booking Sesi <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>' +
           '</button>' +
         '</div>' +
@@ -1402,16 +1304,16 @@
           var priceStr = typeof formatRp === 'function' ? formatRp(pkg.harga) : ('Rp ' + (pkg.harga || 0).toLocaleString('id-ID'));
           var benefitsHtml = '';
           if (pkg.benefit && Array.isArray(pkg.benefit)) {
-            benefitsHtml = pkg.benefit.map(function(f) { return '<span class="xnk-reg-benefit">' + f + '</span>'; }).join('');
+            benefitsHtml = pkg.benefit.map(function(f) { return '<span class="xnk-reg-benefit">' + escapeHtml(f) + '</span>'; }).join('');
           }
           html +=
             '<label class="cursor-pointer block" onclick="selectRegPkgPill(this)">' +
               '<input type="radio" name="reg-pkg" value="' + i + '" class="sr-only" ' + (isSelected ? 'checked' : '') + ' />' +
               '<div class="xnk-reg-pkg-card' + (isSelected ? ' xnk-reg-pkg-featured' : '') + '" data-pkg-index="' + i + '" style="background:' + (isSelected ? 'rgba(0,0,0,0.04)' : '#F3F4F6') + ';border:1.5px solid ' + (isSelected ? '#111827' : '#F3F4F6') + ';border-radius:20px;padding:20px;transition:all 0.2s ease">' +
                 (isFeatured ? '<span style="display:inline-block;font-size:0.625rem;font-weight:700;color:#FFFFFF;background:#000000;padding:4px 10px;border-radius:9999px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em">Rekomendasi</span>' : '') +
-                '<div class="flex items-center justify-between"><h3 style="font-weight:800;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin:0">' + pkg.namaPaket + '</h3><span style="font-weight:900;color:#000000;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + priceStr + '</span></div>' +
-                '<p style="font-size:0.75rem;color:#6B7280;margin-top:4px;margin-bottom:8px">' + sesi + (pkg.durasi ? ' · ' + pkg.durasi : '') + '</p>' +
-                '<p style="font-size:0.75rem;color:#6B7280;line-height:1.5">' + (benefitsHtml || pkg.deskripsi || '') + '</p>' +
+                '<div class="flex items-center justify-between"><h3 style="font-weight:800;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin:0">' + escapeHtml(pkg.namaPaket) + '</h3><span style="font-weight:900;color:#000000;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + priceStr + '</span></div>' +
+                '<p style="font-size:0.75rem;color:#6B7280;margin-top:4px;margin-bottom:8px">' + sesi + (pkg.durasi ? ' · ' + escapeHtml(pkg.durasi) : '') + '</p>' +
+                '<p style="font-size:0.75rem;color:#6B7280;line-height:1.5">' + (benefitsHtml || escapeHtml(pkg.deskripsi || '')) + '</p>' +
               '</div>' +
             '</label>';
         });
@@ -1570,14 +1472,24 @@
 
       if (typeof setBtnLoading === 'function') setBtnLoading(btn, true);
 
-      function onSuccess(memberId) {
+      function onSuccess(res) {
         if (typeof setBtnLoading === 'function') setBtnLoading(btn, false);
+        res = res || {};
+        if (res.status === 'exists') {
+          // Nomor sudah terdaftar: server TIDAK mengubah data/kuota. PT sudah dikabari.
+          if (errEl) {
+            errEl.textContent = 'Nomor WhatsApp ini sudah terdaftar. Coach sudah kami kabari untuk memproses perpanjanganmu. Untuk booking, buka link member dari WhatsApp Coach.';
+            errEl.classList.remove('hide');
+          }
+          return;
+        }
+        window._newMemberLink = res.memberLink || '';
         var s2 = document.getElementById('reg-step-2');
         var s3 = document.getElementById('reg-step-3');
         if (s2) s2.classList.add('hide');
         if (s3) s3.classList.remove('hide');
         var idEl = document.getElementById('reg-new-id');
-        if (idEl && memberId) idEl.textContent = 'Member ID: ' + memberId;
+        if (idEl && res.id) idEl.textContent = 'Member ID: ' + res.id;
       }
 
       function onFailure(err) {
@@ -1592,19 +1504,20 @@
           .registerNewClient({
             name: data.name,
             phone: data.phone,
-            gender: data.gender,
-            dob: data.dob,
             goal: data.goal,
-            experience: data.experience,
-            packageId: pkg.id,
-            packageName: pkg.namaPaket,
-            packagePrice: pkg.harga,
-            packageSessions: pkg.jumlahSesi
+            packageId: pkg.id
           });
       } else {
         var mockId = 'PT-' + String(Math.floor(Math.random() * 900 + 100));
-        setTimeout(function() { onSuccess(mockId); }, 600);
+        setTimeout(function() { onSuccess({ status: 'success', id: mockId, memberLink: '' }); }, 600);
       }
+    }
+
+    // Setelah daftar: buka Member Area klien baru (link pribadinya), kalau tidak ada
+    // pakai halaman booking umum.
+    function openNewMemberArea() {
+      if (window._newMemberLink) goTopUrl(window._newMemberLink);
+      else redirectToBooking();
     }
 
     // === FAQ Toggle ===

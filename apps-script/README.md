@@ -48,8 +48,12 @@ Buka proyek *XNK Personal Trainer Scheduler* → ⚙️ **Project Settings** →
 
 | Property | Isi |
 | --- | --- |
+| `ADMIN_PIN` | **Wajib.** PIN login panel PT, minimal 6 karakter. Tanpa ini tidak ada yang bisa masuk panel. Mengganti PIN = semua perangkat PT otomatis logout. |
 | `TELEGRAM_BOT_TOKEN` | Token bot Telegram (salin dari `kirimNotifTelegram` versi lama di editor, sebelum ditimpa) |
 | `TELEGRAM_CHAT_IDS` | Chat ID admin, dipisah koma, mis. `12345678,87654321` |
+| `MEMBER_LINK_BASE` | Opsional. Alamat portal klien untuk link member, mis. `https://book.xnkbooking.my.id/` (halaman itu harus meneruskan `?k=…` ke iframe Apps Script). Kosong = link langsung `…/exec?view=public&k=…`. |
+
+`SESSION_SECRET` dibuat otomatis oleh aplikasi. Menghapusnya = semua PT & klien logout.
 
 ### 2. Izinkan Apps Script API
 
@@ -92,9 +96,27 @@ manual: tab **Actions** → *PT Scheduler* → **Run workflow**.
   *Version*: pilih versi sebelumnya → **Deploy**. Link tetap sama.
 - **Lewat repo:** revert PR-nya di GitHub → merge → robot men-deploy versi lama lagi.
 
+## Keamanan (wajib dibaca sebelum menambah fungsi server)
+
+Web app ini terbuka untuk siapa saja dan berjalan sebagai akun pemilik, jadi **setiap
+fungsi di `.gs` yang namanya tidak berakhiran `_` bisa dipanggil siapa saja dari browser**.
+
+- Fungsi admin (panel PT): parameter pertama `token`, baris pertama `requireAdmin_(token);`.
+- Fungsi portal klien: parameter pertama token member, baris pertama `requireMember_(token)`.
+- Fungsi pembantu: beri akhiran `_` (private).
+- Fungsi perawatan yang dijalankan manual dari editor: `requireOwner_();`.
+
+Tes `security.test.js` gagal kalau ada fungsi baru yang belum masuk salah satu daftar di atas.
+
+Klien masuk portal lewat **link pribadi** (`…?k=KUNCI`). PT mengirim link itu dari
+Profil Klien → **Kirim Link Member**; **Link Baru** membatalkan link lama.
+
 ## Cek lokal
 
 ```sh
 node apps-script/pt-scheduler/tools/check-syntax.js
 node --test apps-script/pt-scheduler/tests/*.test.js
+
+# Opsional: uji halaman asli di Chromium (butuh Playwright terpasang global)
+NODE_PATH=$(npm root -g) node apps-script/pt-scheduler/tools/browser-check.js
 ```
