@@ -3,7 +3,7 @@
     // Helper bersama. Dipakai Index.html (panel PT & portal klien, lewat App.html)
     // DAN Landing.html. Semua deklarasi di sini global (top-level) — jangan dibungkus
     // IIFE, dan jangan pakai nama yang sama dengan deklarasi top-level di Landing
-    // (CATEGORIES, allPackagesData, currentCategory, BOOKING_URL, …) atau App.html.
+    // (lihat LandingScript.html) atau App.html.
     // =============================================================================
     function formatRp(angka) {
       return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
@@ -33,4 +33,11 @@
     const MEMBER_TOKEN_KEY = 'xnk_member_token';
     function _lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     function _lsSet(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} }
+
+    // Jam latihan per hari (0 = Minggu): [jam mulai, jam selesai). Dipakai portal klien
+    // (pilih jam) dan Landing (slot kosong minggu ini).
+    const DAY_HOURS = { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] };
+    // Jam yang dipilih di Landing: {date:'YYYY-MM-DD', time:'HH:MM'}. Portal membuka form
+    // booking dengan jam itu setelah klien masuk.
+    const PENDING_SLOT_KEY = 'xnk_pending_slot';
 </script>

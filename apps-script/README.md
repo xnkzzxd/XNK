@@ -32,7 +32,9 @@ PR di GitHub ──► cek otomatis (sintaks + tes) ──► merge ke main
   - `Kode.gs` — server (data, login, keamanan).
   - `Index.html` + `Theme.html` + `App.html` — panel PT & portal klien (desain hitam-putih,
     terang/gelap otomatis, tata letak HP & desktop berbeda).
-  - `Landing.html` + `Styles.html` + `Components.html` — halaman xnkbooking.my.id.
+  - `Landing.html` + `LandingStyle.html` + `LandingScript.html` — halaman xnkbooking.my.id
+    (terang galeri, hero foto coach dengan cahaya WebGL, animasi GSAP; HP & desktop berbeda).
+    Foto hero ada di repo BookingPT (`img/`), dibuat dengan `tools/make-landing-images.py`.
   - `Scripts.html` — helper kecil yang dipakai bersama Index & Landing.
 - `apps-script/pt-scheduler/.clasp.json` = ID proyek Apps Script (bukan rahasia).
 - `apps-script/pt-scheduler/tests/` = tes otomatis (tidak ikut di-push ke Apps Script).

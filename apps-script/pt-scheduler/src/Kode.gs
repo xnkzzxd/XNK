@@ -96,7 +96,7 @@ function doGet(e) {
 /**
  * Include helper untuk modular HTML components.
  * Memungkinkan file GAS HTML dipisah menjadi partials.
- * Digunakan dalam template: <?!= include('Styles.html') ?>
+ * Digunakan dalam template: <?!= include('Theme.html') ?>
  * Standard Google Apps Script pattern.
  */
 function include(filename) {

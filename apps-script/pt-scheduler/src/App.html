@@ -42,7 +42,6 @@
     dataReady: false
   };
 
-  const DAY_HOURS = { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] };
   const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   const DOW_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   const COACH_WA_NUMBER = '';
@@ -770,8 +769,28 @@
       } else {
         window.updateUI();
       }
+      openPendingSlot();
     });
   };
+
+  // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form
+  // booking dengan tanggal & jam itu. Dipakai sekali lalu dihapus.
+  function openPendingSlot() {
+    if (!window.isPublicView || !window.publicLoggedMember) return;
+    const raw = _lsGet(PENDING_SLOT_KEY);
+    if (!raw) return;
+    _lsSet(PENDING_SLOT_KEY, null);
+    let slot = null;
+    try { slot = JSON.parse(raw); } catch (e) { return; }
+    if (!slot || !/^\d{4}-\d{2}-\d{2}$/.test(slot.date) || !/^\d{2}:\d{2}$/.test(slot.time)) return;
+    const p = slot.date.split('-').map(Number);
+    const when = new Date(p[0], p[1] - 1, p[2], Number(slot.time.slice(0, 2)), Number(slot.time.slice(3)));
+    if (!(when > new Date())) return;
+    ui.selectedDate = new Date(p[0], p[1] - 1, p[2]);
+    ui.calMonth = new Date(p[0], p[1] - 1, 1);
+    window.navigate('calendar');
+    window.bookSlot(slot.date, slot.time);
+  }
 
   function loadRevenue() {
     const now = new Date();

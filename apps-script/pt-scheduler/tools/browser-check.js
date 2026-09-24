@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// End-to-end check of the real Index.html / Landing.html in headless Chromium.
+// End-to-end check of the real Index.html (panel PT, portal klien) and Landing.html
+// (xnkbooking.my.id: phone & desktop layouts, animations, WebGL, flows) in headless Chromium.
 // google.script.run is bridged to the real server code (src/*.gs) running in
 // the Node test harness, so this runs fully offline. Not part of CI (needs
 // Playwright + Chromium):
@@ -8,9 +9,13 @@
 //
 // Optional:
 //   ASSETS_DIR=dir  use real lucide.min.js, fullcalendar.global.min.js,
-//                   cropper.min.js/.css and inter-latin-wght-normal.woff2 from
-//                   that folder instead of tiny stubs (for realistic screenshots)
+//                   cropper.min.js/.css, inter-latin-wght-normal.woff2, and for the
+//                   Landing gsap.min.js, ScrollTrigger.min.js, SplitText.min.js,
+//                   lenis.min.js, anton-latin-400-normal.woff2, hero-cutout.webp,
+//                   hero-normal.webp from that folder instead of tiny stubs / empty
+//                   responses (for realistic screenshots and the animated Landing)
 //   SHOTS_DIR=dir   save screenshots of every main screen there
+//   VIDEO_DIR=dir   record the Landing scroll-through (desktop + phone) as .webm
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -44,8 +49,17 @@ const REAL = {
   'cropper.min.js': ['cropper.min.js', 'application/javascript'],
   'cropper.min.css': ['cropper.min.css', 'text/css'],
   'assets.test/inter.woff2': ['inter-latin-wght-normal.woff2', 'font/woff2'],
+  'assets.test/anton.woff2': ['anton-latin-400-normal.woff2', 'font/woff2'],
+  'dist/gsap.min.js': ['gsap.min.js', 'application/javascript'],
+  'dist/ScrollTrigger.min.js': ['ScrollTrigger.min.js', 'application/javascript'],
+  'dist/SplitText.min.js': ['SplitText.min.js', 'application/javascript'],
+  'dist/lenis.min.js': ['lenis.min.js', 'application/javascript'],
+  'xnkbooking.my.id/img/hero-cutout.webp': ['hero-cutout.webp', 'image/webp'],
+  'xnkbooking.my.id/img/hero-normal.webp': ['hero-normal.webp', 'image/webp'],
 };
-const INTER_CSS = "@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(https://assets.test/inter.woff2) format('woff2');}";
+const CDN_ANIMATION = ['dist/gsap.min.js', 'dist/ScrollTrigger.min.js', 'dist/SplitText.min.js', 'dist/lenis.min.js'];
+const INTER_CSS = "@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(https://assets.test/inter.woff2) format('woff2');}" +
+  "@font-face{font-family:'Anton';font-style:normal;font-weight:400;font-display:swap;src:url(https://assets.test/anton.woff2) format('woff2');}";
 
 // Runs in the page before any app script: google.script.* bridge + window.open capture.
 function gasShim() {
@@ -78,7 +92,11 @@ function gasShim() {
 
 async function openPage(browser, env, pagePath, calls, storage, opts) {
   opts = opts || {};
-  const context = await browser.newContext({ viewport: opts.viewport || MOBILE, colorScheme: opts.colorScheme || 'light', reducedMotion: opts.reducedMotion || 'no-preference' });
+  const context = await browser.newContext({
+    viewport: opts.viewport || MOBILE, colorScheme: opts.colorScheme || 'light', reducedMotion: opts.reducedMotion || 'no-preference',
+    hasTouch: !!opts.touch, isMobile: !!opts.touch,
+    recordVideo: opts.video ? { dir: opts.video, size: opts.viewport || MOBILE } : undefined,
+  });
   if (storage) await context.addInitScript(s => { for (const k in s) localStorage.setItem(k, s[k]); }, storage);
   await context.exposeFunction('__gasCall', (name, argsJson) => {
     calls.push(name);
@@ -97,11 +115,12 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
       const page = new URL(url).pathname.replace('/', '') || 'Index';
       return route.fulfill({ contentType: 'text/html', body: render(page) });
     }
+    if (opts.blockCdn && CDN_ANIMATION.some(k => url.includes(k))) return route.fulfill({ status: 404, body: '' });
     if (ASSETS) {
       if (url.includes('fonts.googleapis.com/css')) return route.fulfill({ contentType: 'text/css', body: INTER_CSS });
       const real = Object.keys(REAL).find(k => url.includes(k));
       if (real && fs.existsSync(path.join(ASSETS, REAL[real][0]))) {
-        return route.fulfill({ contentType: REAL[real][1], body: fs.readFileSync(path.join(ASSETS, REAL[real][0])) });
+        return route.fulfill({ contentType: REAL[real][1], headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ASSETS, REAL[real][0])) });
       }
     }
     const stub = Object.keys(STUBS).find(k => url.includes(k));
@@ -440,16 +459,73 @@ async function contrastReport(page) {
     await old.context.close(); await bad.context.close();
   }
 
-  // ── Landing (tidak di-redesign; harus tetap jalan) ───────────────────────
-  console.log('Landing');
+  // ── Landing xnkbooking.my.id ─────────────────────────────────────────────
+  const scrollLanding = async (page, y, wait) => {
+    await page.evaluate(top => {
+      const l = window.__landing && window.__landing.lenis();
+      if (l) l.scrollTo(top, { immediate: true, force: true }); else window.scrollTo(0, top);
+    }, y);
+    await page.waitForTimeout(wait || 1400); // scrub:1 menghaluskan ±1 detik
+  };
+  const sectionY = (page, sel) => page.evaluate(s => document.querySelector(s).getBoundingClientRect().top + window.pageYOffset, sel);
+  const LANDING_WAIT = ASSETS ? 3200 : 1200; // intro 00–100
+
+  console.log('Landing · HP');
   {
     const env = seededEnv();
     const calls = [];
-    const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', calls);
-    await page.evaluate(() => { openMemberCheck(); goToBooking('existing'); });
-    await page.waitForTimeout(200);
+    const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', calls, null, { touch: true, wait: LANDING_WAIT });
+    check(await visible(page, '#hero-story'), 'story hero on the phone');
+    check(!(await visible(page, '#hero-desk')), 'desktop hero (JIZDAN) hidden on the phone');
+    check(await visible(page, '#m-bar'), 'sticky bottom bar with "Mulai Sekarang" + WhatsApp');
+    check(await visible(page, '#burger') && !(await visible(page, '.nav-links')), 'burger menu instead of desktop links');
+    check(!(await page.evaluate(() => document.body.classList.contains('has-cursor'))), 'no custom cursor on the phone');
+    check((await page.locator('#pricing-track .price').count()) === 1, 'packages from the Price List (active only, per category)');
+    check((await page.locator('.toggle-btn').count()) === 2, 'category switch only lists categories that have packages');
+    check((await page.locator('#testimonial-grid .testi, #testimonial-grid .empty-note').count()) > 0, 'testimonials section rendered');
+    check((await page.locator('#slot-days .slot-day').count()) === 7, 'free-slot strip shows the next 7 days');
+    check((await page.locator('#slot-hours .slot-h').count()) > 0, 'free hours listed');
+    check(!calls.includes('getMembers') && !calls.includes('getSchedules'), 'no client list or admin schedule requested');
+    if (ASSETS) check(['on', 'fallback'].includes(await page.getAttribute('#figure-m', 'data-gl')), 'WebGL light on the close-up (' + (await page.getAttribute('#figure-m', 'data-gl')) + ')');
+    await shot(page, 'landing-mobile-hero');
+
+    // Story: scroll → muscle frames + progress bars.
+    const storyTop = await sectionY(page, '#hero-story');
+    const storyLen = await page.evaluate(() => document.getElementById('hero-story').offsetHeight - window.innerHeight);
+    await scrollLanding(page, storyTop + storyLen * 0.4, 900);
+    const frame = await page.evaluate(() => window.__landing.frame());
+    check(frame >= 2 && frame <= 3, 'scrolling the story moves to a muscle frame (' + frame + ')');
+    check(await page.evaluate(() => Number(getComputedStyle(document.querySelectorAll('.story-bars i')[0]).getPropertyValue('--p')) === 1), 'first story bar filled');
+    await shot(page, 'landing-mobile-story');
+
+    // Stacked cards + program swipe.
+    await scrollLanding(page, await sectionY(page, '#program'), 900);
+    check(await page.evaluate(() => getComputedStyle(document.getElementById('program')).position === 'sticky'), 'sections stack as sticky cards');
+    await shot(page, 'landing-mobile-program');
+    await scrollLanding(page, await sectionY(page, '#paket'), 900);
+    await shot(page, 'landing-mobile-paket');
+
+    // Menu.
+    await page.click('#burger');
+    await page.waitForTimeout(900);
+    check(await page.evaluate(() => document.body.classList.contains('menu-open')), 'burger opens the full-screen menu');
+    await shot(page, 'landing-mobile-menu');
+    await page.click('#m-menu [data-go="jadwal"]');
+    await page.waitForTimeout(1200);
+    check(!(await page.evaluate(() => document.body.classList.contains('menu-open'))), 'menu link closes the menu');
+
+    // Slot → saved for the portal → "Sudah member?".
+    await page.locator('#slot-hours .slot-h').first().click();
+    await page.waitForTimeout(700);
+    const pending = await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_pending_slot') || 'null'));
+    check(!!pending && /^\d{4}-\d{2}-\d{2}$/.test(pending.date) && /^\d{2}:00$/.test(pending.time), 'picking an hour saves it for the booking page');
+    check((await page.textContent('#member-check-modal')).includes('Jam dipilih'), 'modal shows the chosen hour');
+    await shot(page, 'landing-mobile-slot-modal');
+
+    // Member lama.
+    await page.evaluate(() => goToBooking('existing'));
+    await page.waitForTimeout(300);
     check(await visible(page, '#verify-phone'), '"Member lama" asks for the WhatsApp number');
-    check(!calls.includes('getMembers'), 'no client list requested');
     await page.fill('#verify-phone', '0899 9999 9999');
     await page.click('#verify-btn');
     await page.waitForTimeout(500);
@@ -461,20 +537,43 @@ async function contrastReport(page) {
     check(card.includes('Ani Anggraini') && card.includes('Sisa Sesi') && card.includes('5'), 'registered number → member card with remaining sessions');
     const saved = await page.evaluate(() => localStorage.getItem('xnk_member_token'));
     check(!!saved && env.call('getMemberProfile', saved).id === 'PT-A', 'member session saved for the booking site');
+    await shot(page, 'landing-mobile-member');
+
+    // Closing and reopening starts at the "Sudah member?" chooser again.
+    await page.evaluate(() => closeMemberCheck());
+    await page.waitForTimeout(600);
+    check(!(await visible(page, '#member-check-modal')), 'modal closes');
+    await page.evaluate(() => openMemberCheck());
+    await page.waitForTimeout(300);
+    check((await page.textContent('#member-check-modal')).includes('Sudah member?'), 'reopening shows the chooser again');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(600);
+    check(!(await visible(page, '#member-check-modal')), 'Esc closes the modal');
+
+    await page.evaluate(() => { openMemberCheck(); showMemberCard({ name: 'Ani Anggraini', id: 'PT-A', totalSessions: 10, usedSessions: 5 }); });
     await page.click('#member-card-booking');
     await page.waitForTimeout(300);
     check(navigations.some(u => u.startsWith('https://book.xnkbooking.my.id')), '"Lanjut Booking" goes to book.xnkbooking.my.id');
     noErrors(errors);
     await context.close();
+
+    // The portal opens the booking form at the hour picked on the Landing.
+    const portal = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: saved, xnk_pending_slot: JSON.stringify(pending) }, { wait: 1800 });
+    check(await visible(portal.page, '#modal-edit-schedule'), 'booking page opens the booking form for the picked hour');
+    check((await portal.page.inputValue('#edit-sch-date')) === pending.date && (await portal.page.inputValue('#edit-sch-time')) === pending.time, 'booking form has the picked date and hour');
+    check((await portal.page.evaluate(() => localStorage.getItem('xnk_pending_slot'))) === null, 'picked hour is used once');
+    noErrors(portal.errors);
+    await portal.context.close();
   }
   {
     const env = seededEnv();
-    const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', []);
+    const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', [], null, { touch: true });
     await page.evaluate(() => openRegistration());
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(400);
     await page.fill('#reg-name', 'Fajar');
     await page.fill('#reg-wa', '81577777777');
     await page.selectOption('#reg-goal', 'Weight Loss');
+    await shot(page, 'landing-mobile-register');
     await page.evaluate(() => doRegisterStep1());
     await page.evaluate(() => doRegisterStep2());
     await page.waitForTimeout(500);
@@ -487,8 +586,124 @@ async function contrastReport(page) {
     await page.waitForTimeout(300);
     check(navigations.some(u => u.startsWith('https://book.xnkbooking.my.id')), '"Lanjut Booking" goes to book.xnkbooking.my.id');
     check(noScriptGoogle(await shownUrls(page, navigations)), 'no script.google link shown to the client');
+
+    // Program card → registration with that goal preselected.
+    await page.evaluate(() => { closeMemberCheck(); });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => document.querySelector('[data-goal="Muscle Building"]').click());
+    await page.evaluate(() => goToBooking('new'));
+    await page.waitForTimeout(300);
+    check((await page.inputValue('#reg-goal')) === 'Muscle Building', 'program card preselects the training goal');
     noErrors(errors);
     await context.close();
+  }
+  {
+    // HTML in the Price List is shown as text, never run.
+    const env = seededEnv();
+    env.sheet('PriceList').rows.push(['P9', '<img src=x onerror="window.__xss=1">', 'regular', 1, 1, '<b>x</b>', '<img src=x onerror="window.__xss=2">', 'a', true]);
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { touch: true });
+    check(!(await page.evaluate(() => window.__xss)), 'package names/descriptions are escaped');
+    check((await page.locator('#pricing-track img').count()) === 0, 'no HTML injected into package cards');
+    noErrors(errors);
+    await context.close();
+  }
+
+  console.log('Landing · desktop');
+  {
+    const env = seededEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
+    check(await visible(page, '#hero-desk'), 'desktop hero visible');
+    check((await page.textContent('.giant')).replace(/\s/g, '') === 'JIZDAN', 'giant "JIZDAN" behind the body');
+    check(!(await visible(page, '#hero-story')) && !(await visible(page, '#m-bar')), 'story hero and bottom bar hidden on desktop');
+    check(await visible(page, '.nav-links'), 'desktop nav links visible');
+    check(await page.evaluate(() => {
+      const f = document.getElementById('figure-desk').getBoundingClientRect();
+      return Math.abs(f.left + f.width / 2 - window.innerWidth / 2) < 4;
+    }), 'photo centred');
+    if (ASSETS) {
+      check(await page.evaluate(() => document.documentElement.classList.contains('js-motion')), 'scroll animations active');
+      check(await page.evaluate(() => document.body.classList.contains('has-cursor')), 'custom cursor on desktop');
+      check(['on', 'fallback'].includes(await page.getAttribute('#figure-desk', 'data-gl')), 'WebGL muscle light (' + (await page.getAttribute('#figure-desk', 'data-gl')) + ')');
+      await page.mouse.move(900, 300);
+      await page.waitForTimeout(900);
+    }
+    await shot(page, 'landing-desktop-hero');
+    if (ASSETS) {
+      await scrollLanding(page, 900 * 0.75);
+      check(await page.evaluate(() => Number(getComputedStyle(document.querySelector('.giant-l')).opacity) < 0.5), 'JIZDAN splits apart on scroll');
+      await shot(page, 'landing-desktop-hero-zoom');
+      await scrollLanding(page, 900 * 1.45);
+      check(await page.evaluate(() => [...document.querySelectorAll('#figure-desk .callout')].filter(c => Number(getComputedStyle(c).opacity) > 0.5).length >= 3), 'muscle labels appear one by one');
+      await shot(page, 'landing-desktop-muscles');
+      const prog = await sectionY(page, '#program');
+      await scrollLanding(page, prog + 900);
+      check(await page.evaluate(() => new DOMMatrix(getComputedStyle(document.getElementById('program-track')).transform).m41 < -200), 'programs slide horizontally while scrolling');
+      await shot(page, 'landing-desktop-program');
+      await scrollLanding(page, (await sectionY(page, '#method')) + 900);
+      await shot(page, 'landing-desktop-method');
+    } else {
+      check(await page.evaluate(() => { const v = document.querySelector('.program-viewport'); return getComputedStyle(v).overflowX === 'auto'; }), 'without animations the programs can still be scrolled sideways');
+    }
+    await scrollLanding(page, await sectionY(page, '#paket'));
+    await shot(page, 'landing-desktop-paket');
+    await scrollLanding(page, await sectionY(page, '#jadwal'));
+    await shot(page, 'landing-desktop-jadwal');
+    await scrollLanding(page, await sectionY(page, '#cta'));
+    await shot(page, 'landing-desktop-cta');
+    await page.evaluate(() => document.querySelector('#pricing-track .price').click());
+    await page.waitForTimeout(900);
+    check((await page.textContent('#member-check-modal')).includes('Sudah member?'), 'package card opens "Sudah member?"');
+    await shot(page, 'landing-desktop-modal');
+    await page.evaluate(() => goToBooking('new'));
+    await page.waitForTimeout(400);
+    await page.fill('#reg-name', 'Gita');
+    await page.fill('#reg-wa', '81566666666');
+    await page.selectOption('#reg-goal', 'Weight Loss');
+    await page.evaluate(() => doRegisterStep1());
+    await page.waitForTimeout(300);
+    check((await page.locator('#reg-packages input:checked').inputValue()) === '0', 'the clicked package is preselected');
+    noErrors(errors);
+    await context.close();
+  }
+  {
+    // Reduced motion: no intro, no scroll animations, static photo.
+    const env = seededEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, reducedMotion: 'reduce' });
+    check(!(await page.locator('#intro').count()), 'reduced motion: no intro');
+    check(!(await page.evaluate(() => document.documentElement.classList.contains('js-motion'))), 'reduced motion: no scroll animations');
+    check(!(await page.getAttribute('#figure-desk', 'data-gl')), 'reduced motion: static photo');
+    noErrors(errors);
+    await context.close();
+  }
+  if (ASSETS) {
+    // Animation libraries unreachable: page still works (static).
+    const env = seededEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, blockCdn: true, wait: 5200 });
+    check(!(await visible(page, '#intro')), 'without GSAP the intro still goes away');
+    check((await page.locator('#pricing-track .price').count()) > 0, 'without GSAP the content still loads');
+    await page.evaluate(() => { openMemberCheck(); goToBooking('existing'); });
+    await page.waitForTimeout(300);
+    check(await visible(page, '#verify-phone'), 'without GSAP the member flow still works');
+    noErrors(errors);
+    await context.close();
+  }
+  if (process.env.VIDEO_DIR) {
+    // Scroll-through recordings for review.
+    for (const [name, opts] of [['landing-desktop', { viewport: DESKTOP }], ['landing-mobile', { touch: true }]]) {
+      const env = seededEnv();
+      const dir = path.join(process.env.VIDEO_DIR, name);
+      const { page, context } = await openPage(browser, env, '/Landing', [], null, Object.assign({ video: dir, wait: 3600 }, opts));
+      const h = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+      if (opts.viewport) { for (let x = 300; x <= 1100; x += 40) { await page.mouse.move(x, 250 + (x % 200)); await page.waitForTimeout(25); } }
+      for (let y = 0; y <= h; y += opts.viewport ? 60 : 45) {
+        await page.evaluate(top => { const l = window.__landing.lenis(); if (l) l.scrollTo(top, { immediate: true, force: true }); else window.scrollTo(0, top); }, y);
+        await page.waitForTimeout(40);
+      }
+      await page.waitForTimeout(1200);
+      await context.close();
+      const file = fs.readdirSync(dir).find(f => f.endsWith('.webm'));
+      if (file) fs.renameSync(path.join(dir, file), path.join(process.env.VIDEO_DIR, name + '.webm'));
+    }
   }
 
   await browser.close();
