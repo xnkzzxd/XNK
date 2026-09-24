@@ -41,13 +41,15 @@ jobs:
       cancel-in-progress: false
     env:
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
-      PT_DEPLOYMENT_ID: ${{ vars.PT_DEPLOYMENT_ID }}
+      # The deployment behind xnk.my.id (public: it is in the /exec URL). A repo
+      # variable with the same name overrides it.
+      PT_DEPLOYMENT_ID: ${{ vars.PT_DEPLOYMENT_ID || 'AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ' }}
     steps:
       - name: Check deploy settings
         id: cfg
         run: |
           if [ -z "$CLASPRC_JSON" ] || [ -z "$PT_DEPLOYMENT_ID" ]; then
-            echo "::notice title=Deploy dilewati::Secret CLASPRC_JSON atau variable PT_DEPLOYMENT_ID belum diatur. Lihat apps-script/README.md bagian 'Setup sekali'."
+            echo "::notice title=Deploy dilewati::Secret CLASPRC_JSON belum diatur. Lihat apps-script/README.md bagian 'Setup sekali'."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"

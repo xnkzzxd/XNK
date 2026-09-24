@@ -163,6 +163,8 @@ function createEnv(opts = {}) {
     fetches: [],
     logs: [],
     files: [],
+    driveFiles: [],        // searchable Drive files: { name, owner, content, trashed }
+    driveError: null,      // set to make DriveApp.searchFiles throw
     activeUserEmail: opts.activeUserEmail || '',       // anonymous web app visitor
     effectiveUserEmail: opts.effectiveUserEmail || 'owner@example.com',
     now: null,             // override Date.now() for cache expiry tests
@@ -269,6 +271,19 @@ function createEnv(opts = {}) {
       createFolder: name => folder('FOLDER_' + name, name),
       getFolderById: id => folder(id, id),
       getFileById: id => env.files.find(f => f.getId() === id),
+      // Supports the one query shape the app uses: title = "…" and trashed = false
+      searchFiles: query => {
+        if (env.driveError) throw new Error(env.driveError);
+        const m = /^title = "([^"]+)" and trashed = false$/.exec(query);
+        if (!m) throw new Error('Unsupported Drive query: ' + query);
+        const found = env.driveFiles.filter(f => f.name === m[1] && !f.trashed).map(f => ({
+          getOwner: () => (f.owner ? { getEmail: () => f.owner } : null),
+          getBlob: () => ({ getDataAsString: () => f.content }),
+          setTrashed(t) { f.trashed = t; return this; },
+        }));
+        let i = 0;
+        return { hasNext: () => i < found.length, next: () => found[i++] };
+      },
     },
     ScriptApp: {
       WeekDay: { MONDAY: 'MONDAY' },

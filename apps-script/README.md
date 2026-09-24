@@ -60,9 +60,17 @@ Buka proyek *XNK Personal Trainer Scheduler* → ⚙️ **Project Settings** →
 | `ADMIN_PIN` | **Wajib.** PIN login panel PT, minimal 6 karakter. Tanpa ini tidak ada yang bisa masuk panel. Mengganti PIN = semua perangkat PT otomatis logout. |
 | `TELEGRAM_BOT_TOKEN` | Token bot Telegram (salin dari `kirimNotifTelegram` versi lama di editor, sebelum ditimpa) |
 | `TELEGRAM_CHAT_IDS` | Chat ID admin, dipisah koma, mis. `12345678,87654321` |
-| `MEMBER_LINK_BASE` | Alamat portal klien untuk link member pribadi. Isi salah satu: `https://book.xnkbooking.my.id/` (hanya setelah BookingPT-Client meneruskan `?k=…` ke iframe), atau `https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec?view=public` (langsung, pasti jalan). Kalau kosong, aplikasi menebak alamat /exec sendiri — lebih baik diisi. |
+| `MEMBER_LINK_BASE` | Opsional. Alamat portal klien untuk link member pribadi. Kosong = langsung ke `…/exec?view=public` (pasti jalan). Isi `https://book.xnkbooking.my.id/` hanya setelah BookingPT-Client meneruskan `?k=…` ke iframe. |
 
 `SESSION_SECRET` dibuat otomatis oleh aplikasi. Menghapusnya = semua PT & klien logout.
+
+**Tanpa membuka editor:** buat file bernama `xnk-pt-config.json` di Google Drive akun
+pemilik (jangan dibagikan), isinya JSON, mis.
+`{"ADMIN_PIN":"135790","TELEGRAM_CHAT_IDS":"12345678,87654321"}`. Paling lambat 5 menit
+setelah halaman aplikasi dibuka, isinya dipindah ke Script Properties, file dibuang ke
+Sampah, dan Telegram menerima notif "Pengaturan aplikasi diperbarui". Hanya empat
+property di tabel atas yang diterima; `null` menghapus property. File milik akun lain
+(yang dibagikan ke Anda) diabaikan.
 
 ### 2. Izinkan Apps Script API
 
@@ -87,10 +95,9 @@ Repo ini → **Settings** → **Secrets and variables** → **Actions**:
 - Tab **Secrets** → *New repository secret*
   - Name: `CLASPRC_JSON`
   - Secret: **seluruh isi** file `.clasprc.json`
-- Tab **Variables** → *New repository variable*
-  - Name: `PT_DEPLOYMENT_ID`
-  - Value: ID deployment web app, yaitu bagian `AKfy…` dari link `/exec` yang dipakai
-    xnk.my.id (cek di Apps Script → **Deploy → Manage deployments**).
+- Opsional, tab **Variables**: `PT_DEPLOYMENT_ID` hanya perlu diisi kalau web app
+  pindah ke deployment lain. Tanpa variable ini, robot deploy memakai deployment
+  xnk.my.id saat ini (`AKfycbyVOm1…BgJ`).
 
 Selesai. Merge berikutnya ke `main` akan otomatis ter-deploy. Untuk deploy ulang
 manual: tab **Actions** → *PT Scheduler* → **Run workflow**.

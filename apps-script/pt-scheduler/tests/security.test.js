@@ -142,7 +142,7 @@ test('adminGetMemberLink creates a key for old clients and honours MEMBER_LINK_B
   const env = seededEnv();
   const admin = env.adminToken();
   const res = env.call('adminGetMemberLink', admin, 'PT-C');
-  assert.match(res.link, new RegExp('^' + env.EXEC_URL.replace(/[.?]/g, '\\$&') + '\\?view=public&k=[a-f0-9]{32}$'));
+  assert.match(res.link, /^https:\/\/script\.google\.com\/macros\/s\/AKfycbyVOm1[\w-]+\/exec\?view=public&k=[a-f0-9]{32}$/);
   assert.equal(res.phone, '6283333333333');
   // Same key on the next call (no reset).
   assert.equal(env.call('adminGetMemberLink', admin, 'PT-C').link, res.link);

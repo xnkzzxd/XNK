@@ -85,6 +85,8 @@ function doGet(e) {
   var validPages = ['Index', 'Landing'];
   if (validPages.indexOf(page) === -1) page = 'Index';
 
+  try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
+
   return HtmlService.createTemplateFromFile(page).evaluate()
     .setTitle('Zendo')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -123,7 +125,11 @@ function include(filename) {
 //   SESSION_SECRET     Dibuat otomatis. Menghapusnya = semua sesi logout.
 //   MEMBER_LINK_BASE   Opsional. Alamat portal klien untuk link member, mis.
 //                      "https://book.xnkbooking.my.id/" (harus meneruskan ?k=
-//                      ke iframe). Kosong = link /exec?view=public&k=… langsung.
+//                      ke iframe). Kosong = DEFAULT_MEMBER_LINK_BASE.
+//   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS   Notifikasi Telegram (lihat kirimNotifTelegram_).
+//
+// Property di atas juga bisa diisi tanpa membuka editor, lewat file
+// CONFIG_FILE_NAME di Google Drive pemilik (lihat _applyPendingConfig_).
 //
 // Token = base64url(payload JSON) + "." + HMAC-SHA256(payload, SESSION_SECRET).
 // Tidak ada data sesi yang disimpan di server; token berisi masa berlaku (exp)
@@ -135,6 +141,81 @@ const MEMBER_SESSION_DAYS = 90;
 const LOGIN_MAX_FAILS = 10;          // gagal berturut-turut sebelum dikunci
 const LOGIN_LOCK_SECONDS = 600;      // lama kunci (dan jendela hitung gagal)
 const AUTH_ERROR_PREFIX = 'AUTH_REQUIRED';
+
+// Portal klien langsung di deployment /exec (yang dibungkus xnk.my.id & xnkbooking.my.id).
+// Dipakai kalau MEMBER_LINK_BASE kosong; ScriptApp.getService().getUrl() tidak
+// selalu mengembalikan alamat /exec yang benar.
+const DEFAULT_MEMBER_LINK_BASE =
+  'https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec?view=public';
+
+// ── Pengaturan lewat file Drive ─────────────────────────────────────────────
+// Script Properties hanya bisa diisi dari editor atau dari kode yang sedang
+// berjalan. Supaya bisa diatur tanpa editor, buat file JSON bernama
+// CONFIG_FILE_NAME di Google Drive akun pemilik, mis.
+//   {"ADMIN_PIN":"123456","TELEGRAM_BOT_TOKEN":"…","TELEGRAM_CHAT_IDS":"1,2"}
+// Saat halaman dibuka berikutnya (paling lambat CONFIG_CHECK_SECONDS kemudian)
+// isinya dipindah ke Script Properties, lalu file dibuang ke Sampah.
+// Nilai null = hapus property. Hanya file MILIK akun pemilik yang dibaca (file
+// yang dibagikan orang lain diabaikan), dan hanya kunci di CONFIG_KEYS.
+const CONFIG_FILE_NAME = 'xnk-pt-config.json';
+const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS', 'MEMBER_LINK_BASE'];
+const CONFIG_CHECK_SECONDS = 300;
+
+function _configValueError_(key, value) {
+  if (key === 'ADMIN_PIN' && value.length < 6) return 'minimal 6 karakter';
+  if (key === 'MEMBER_LINK_BASE' && !/^https:\/\//.test(value)) return 'harus diawali https://';
+  return null;
+}
+
+/** Pindahkan isi file pengaturan di Drive ke Script Properties. Mengembalikan nama kunci yang diubah. */
+function _applyPendingConfig_(force) {
+  const cache = CacheService.getScriptCache();
+  if (!force && cache.get('config_checked')) return [];
+  cache.put('config_checked', '1', CONFIG_CHECK_SECONDS);
+
+  const owner = Session.getEffectiveUser().getEmail();
+  if (!owner) return [];
+  const props = PropertiesService.getScriptProperties();
+  const changed = [];
+  const files = DriveApp.searchFiles('title = "' + CONFIG_FILE_NAME + '" and trashed = false');
+  while (files.hasNext()) {
+    const file = files.next();
+    const fileOwner = file.getOwner();
+    if (!fileOwner || fileOwner.getEmail() !== owner) continue;
+    let data;
+    try {
+      data = JSON.parse(file.getBlob().getDataAsString());
+    } catch (e) {
+      Logger.log(CONFIG_FILE_NAME + ' bukan JSON yang valid, dilewati.');
+      continue;
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+    CONFIG_KEYS.forEach(function(key) {
+      if (!Object.prototype.hasOwnProperty.call(data, key)) return;
+      if (data[key] === null) {
+        props.deleteProperty(key);
+        changed.push(key);
+        return;
+      }
+      const value = String(data[key]).trim();
+      const error = _configValueError_(key, value);
+      if (error) {
+        Logger.log(CONFIG_FILE_NAME + ': ' + key + ' dilewati (' + error + ').');
+        return;
+      }
+      props.setProperty(key, value);
+      changed.push(key);
+    });
+    file.setTrashed(true);
+  }
+  if (changed.length) {
+    Logger.log('Pengaturan diperbarui dari ' + CONFIG_FILE_NAME + ': ' + changed.join(', '));
+    try {
+      kirimNotifTelegram_('⚙️ <b>Pengaturan aplikasi diperbarui</b>\n\n' + _escHtml_(changed.join(', ')));
+    } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
+  }
+  return changed;
+}
 
 function _hex_(bytes) {
   return bytes.map(function(b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
@@ -220,9 +301,13 @@ function requireOwner_() {
  * 10x PIN salah dalam 10 menit = login dikunci 10 menit + notif Telegram.
  */
 function adminLogin(pin) {
-  const stored = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN');
+  let stored = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN');
   if (!stored) {
-    throw new Error('PIN admin belum diatur. Pemilik akun: isi ADMIN_PIN di Apps Script → Project Settings → Script Properties.');
+    _applyPendingConfig_(true);
+    stored = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN');
+  }
+  if (!stored) {
+    throw new Error('PIN admin belum diatur. Pemilik akun: isi ADMIN_PIN di Script Properties atau lewat file ' + CONFIG_FILE_NAME + ' di Google Drive.');
   }
   const cache = CacheService.getScriptCache();
   const fails = parseInt(cache.get('admin_login_fails') || '0', 10);
@@ -283,9 +368,8 @@ function _memberKeyVersion_(key) {
 }
 
 function _memberLink_(key) {
-  const base = PropertiesService.getScriptProperties().getProperty('MEMBER_LINK_BASE');
-  if (base) return base + (base.indexOf('?') === -1 ? '?' : '&') + 'k=' + key;
-  return ScriptApp.getService().getUrl() + '?view=public&k=' + key;
+  const base = PropertiesService.getScriptProperties().getProperty('MEMBER_LINK_BASE') || DEFAULT_MEMBER_LINK_BASE;
+  return base + (base.indexOf('?') === -1 ? '?' : '&') + 'k=' + key;
 }
 
 // Cari baris member (1-based) + datanya. Kembalikan null kalau tidak ada.
