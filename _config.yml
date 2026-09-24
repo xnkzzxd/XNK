@@ -1,0 +1,5 @@
+# GitHub Pages (Jekyll) settings.
+# Keep the Apps Script source and repo docs in git, but off the public website.
+exclude:
+  - apps-script
+  - README.md
