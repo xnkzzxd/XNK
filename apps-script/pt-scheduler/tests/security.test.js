@@ -18,7 +18,7 @@ const ADMIN = [
   'addMember', 'updateMemberProfile', 'deleteMember',
   'addSchedule', 'addRecurringSchedule', 'deleteRecurringGroup', 'updateScheduleData', 'updateScheduleCoach',
   'markSchedulesAsRead', 'completeSession', 'deleteSchedule',
-  'getPeakHourData', 'getCoachMonthlyStats', 'getPackageTrendStats',
+  'getPeakHourData', 'getCoachMonthlyStats', 'getPackageTrendStats', 'getRevenueSummary',
 ];
 const MEMBER = [
   'getMemberProfile', 'getMemberSessions', 'clientBookSchedule', 'clientBookRecurring',

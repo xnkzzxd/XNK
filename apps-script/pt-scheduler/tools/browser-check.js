@@ -1,19 +1,28 @@
 #!/usr/bin/env node
 // End-to-end check of the real Index.html / Landing.html in headless Chromium.
 // google.script.run is bridged to the real server code (src/*.gs) running in
-// the Node test harness, and CDN scripts are replaced by tiny stubs, so this
-// runs fully offline. Not part of CI (needs Playwright + Chromium):
+// the Node test harness, so this runs fully offline. Not part of CI (needs
+// Playwright + Chromium):
 //
 //   NODE_PATH=$(npm root -g) node apps-script/pt-scheduler/tools/browser-check.js
+//
+// Optional:
+//   ASSETS_DIR=dir  use real lucide.min.js, fullcalendar.global.min.js,
+//                   cropper.min.js/.css and inter-latin-wght-normal.woff2 from
+//                   that folder instead of tiny stubs (for realistic screenshots)
+//   SHOTS_DIR=dir   save screenshots of every main screen there
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
-const { seededEnv, KEY_A, ADMIN_PIN } = require('../tests/fixtures');
+const { seededEnv, KEY_A, ADMIN_PIN, inDays } = require('../tests/fixtures');
 
 const SRC = path.join(__dirname, '..', 'src');
 const ORIGIN = 'https://gas.test';
 const SHOTS = process.env.SHOTS_DIR || '';
+const ASSETS = process.env.ASSETS_DIR || '';
+const MOBILE = { width: 390, height: 844 };
+const DESKTOP = { width: 1440, height: 900 };
 let failures = 0;
 const check = (ok, msg) => { console.log((ok ? '  ✓ ' : '  ✗ ') + msg); if (!ok) failures++; };
 
@@ -26,9 +35,17 @@ const STUBS = {
   'cdn.tailwindcss.com': 'window.tailwind = window.tailwind || {};',
   'unpkg.com/lucide': 'window.lucide = { createIcons: function() {} };',
   'fullcalendar': `window.FullCalendar = { Calendar: function(el, opts) {
-      window.__calendarOpts = opts; this.render = function() {}; this.destroy = function() {}; } };`,
-  'cropper.min.js': 'window.Cropper = function() { return { destroy: function() {} }; };',
+      window.__calendarOpts = opts; this.render = function() { el.setAttribute('data-fc', 'stub'); }; this.destroy = function() {}; } };`,
+  'cropper.min.js': 'window.Cropper = function() { return { destroy: function() {}, getCroppedCanvas: function() { return document.createElement("canvas"); } }; };',
 };
+const REAL = {
+  'unpkg.com/lucide': ['lucide.min.js', 'application/javascript'],
+  'fullcalendar': ['fullcalendar.global.min.js', 'application/javascript'],
+  'cropper.min.js': ['cropper.min.js', 'application/javascript'],
+  'cropper.min.css': ['cropper.min.css', 'text/css'],
+  'assets.test/inter.woff2': ['inter-latin-wght-normal.woff2', 'font/woff2'],
+};
+const INTER_CSS = "@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(https://assets.test/inter.woff2) format('woff2');}";
 
 // Runs in the page before any app script: google.script.* bridge + window.open capture.
 function gasShim() {
@@ -59,8 +76,9 @@ function gasShim() {
   };
 }
 
-async function openPage(browser, env, pagePath, calls, storage) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+async function openPage(browser, env, pagePath, calls, storage, opts) {
+  opts = opts || {};
+  const context = await browser.newContext({ viewport: opts.viewport || MOBILE, colorScheme: opts.colorScheme || 'light', reducedMotion: opts.reducedMotion || 'no-preference' });
   if (storage) await context.addInitScript(s => { for (const k in s) localStorage.setItem(k, s[k]); }, storage);
   await context.exposeFunction('__gasCall', (name, argsJson) => {
     calls.push(name);
@@ -79,64 +97,156 @@ async function openPage(browser, env, pagePath, calls, storage) {
       const page = new URL(url).pathname.replace('/', '') || 'Index';
       return route.fulfill({ contentType: 'text/html', body: render(page) });
     }
+    if (ASSETS) {
+      if (url.includes('fonts.googleapis.com/css')) return route.fulfill({ contentType: 'text/css', body: INTER_CSS });
+      const real = Object.keys(REAL).find(k => url.includes(k));
+      if (real && fs.existsSync(path.join(ASSETS, REAL[real][0]))) {
+        return route.fulfill({ contentType: REAL[real][1], body: fs.readFileSync(path.join(ASSETS, REAL[real][0])) });
+      }
+    }
     const stub = Object.keys(STUBS).find(k => url.includes(k));
     if (stub) return route.fulfill({ contentType: 'application/javascript', body: STUBS[stub] });
-    return route.fulfill({ status: 204, body: '' }); // fonts, css, images, analytics
+    return route.fulfill({ status: 204, body: '' }); // fonts, images, analytics
   });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(ORIGIN + pagePath);
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(opts.wait || 900);
   return { page, context, errors, navigations };
 }
 
-// Everything a client could see as a link: WhatsApp texts opened and top-level navigations.
+const visible = (page, sel) => page.locator(sel).first().isVisible();
+async function shot(page, name) {
+  if (!SHOTS) return;
+  await page.waitForTimeout(700); // let entrance animations finish
+  await page.screenshot({ path: path.join(SHOTS, name + '.png') });
+}
 async function shownUrls(page, navigations) {
   const opened = await page.evaluate(() => window.__opened.map(w => w.location.href));
   return opened.concat(navigations).map(u => { try { return decodeURIComponent(u); } catch (e) { return u; } });
 }
 const noScriptGoogle = urls => !urls.some(u => u.includes('script.google'));
+const noErrors = errors => check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 
-const visible = (page, sel) => page.locator(sel).first().isVisible();
+// Extra seed so every dashboard block has something to show.
+function richEnv() {
+  const env = seededEnv();
+  const at = (days, h, m) => { const d = new Date(Date.now() + days * 86400000); d.setHours(h, m || 0, 0, 0); return d.toISOString(); };
+  const plusH = (iso, h) => new Date(new Date(iso).getTime() + h * 3600000).toISOString();
+  const rows = env.sheet('Schedules').rows;
+  const add = (id, member, name, phone, start, notes, status, coach, coachName, completedAt) =>
+    rows.push([id, member, name, phone, start, plusH(start, 1), notes, status, coach, coachName, completedAt || '', '']);
+  add('SCH-T1', 'PT-B', 'Budi', '081222222222', at(0, 7), 'Upper body', 'completed', 'C-1', 'Rizky', at(0, 8));
+  add('SCH-T2', 'PT-A', 'Ani Anggraini', '6281111111111', at(0, 17), 'Cardio', 'read', 'C-1', 'Rizky');
+  add('SCH-T3', 'PT-C', 'Citra', '6283333333333', at(0, 19), '', 'unread', '', '');
+  for (let i = 1; i <= 10; i++) add('SCH-H' + i, 'PT-A', 'Ani Anggraini', '6281111111111', at(-i * 3, 7 + (i % 3) * 5), '', 'completed', 'C-1', 'Rizky', at(-i * 3, 9));
+  env.ss.seed('Members', [
+    ['ID Transaksi', 'ID Member', 'Tanggal', 'Jenis', 'Paket ID', 'Nama Paket', 'Jumlah Sesi', 'Coach ID', 'Nama Coach', 'Catatan'],
+    ['T1', 'PT-A', (() => { const d = new Date(); return '1/' + (d.getMonth() + 1) + '/' + d.getFullYear(); })(), 'Baru', 'P1', 'Regular 8', 8, '', '', ''],
+    ['T2', 'PT-B', (() => { const d = new Date(); return '2/' + (d.getMonth() + 1) + '/' + d.getFullYear(); })(), 'Perpanjang', 'P2', 'Flex', 1, '', '', ''],
+  ]);
+  return env;
+}
+
+// WCAG contrast of the theme tokens, read from the rendered page.
+async function contrastReport(page) {
+  return page.evaluate(() => {
+    const css = getComputedStyle(document.documentElement);
+    const hex = v => v.trim();
+    const lum = h => {
+      const m = h.replace('#', '');
+      const c = [0, 2, 4].map(i => parseInt(m.substr(i, 2), 16) / 255).map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4));
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const ratio = (a, b) => { const x = lum(hex(css.getPropertyValue(a))), y = lum(hex(css.getPropertyValue(b))); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    return {
+      fgOnBg: ratio('--fg', '--bg'),
+      mutedOnSurface: ratio('--fg-muted', '--surface'),
+      mutedOnBg: ratio('--fg-muted', '--bg'),
+      mutedOnSurface2: ratio('--fg-muted', '--surface-2'),
+      onInk: ratio('--on-ink', '--ink'),
+      onInkMuted: ratio('--on-ink-muted', '--ink'),
+    };
+  });
+}
 
 (async () => {
   const browser = await chromium.launch();
 
-  // ── Panel PT (admin) ──────────────────────────────────────────────────────
-  console.log('Panel PT (admin)');
+  // ── Panel PT, HP ──────────────────────────────────────────────────────────
+  console.log('Panel PT · HP');
   {
-    const env = seededEnv();
+    const env = richEnv();
     env.memberRow('PT-B')[1] = '<img src=x onerror="window.__xss=1">Budi';
     const calls = [];
     const { page, context, errors } = await openPage(browser, env, '/Index', calls);
 
-    check(await visible(page, '#admin-login'), 'no token → PIN login screen is shown');
+    check(await visible(page, '#admin-login'), 'no token → PIN login screen');
     check(!calls.includes('getMembers') && !calls.includes('getSchedules'), 'no client data requested before login');
-
+    await shot(page, 'admin-mobile-login');
     await page.fill('#admin-pin', '000000');
     await page.click('#admin-login-btn');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
     check((await page.textContent('#admin-login-error')).includes('PIN salah'), 'wrong PIN → "PIN salah."');
-
     await page.fill('#admin-pin', ADMIN_PIN);
     await page.click('#admin-login-btn');
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(1200);
     check(!(await visible(page, '#admin-login')), 'right PIN → login screen closes');
     check((await page.evaluate(() => window.members.length)) === 3, 'clients loaded after login');
     check(!!(await page.evaluate(() => localStorage.getItem('xnk_admin_token'))), 'admin token stored on this device');
-    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'admin-dashboard.png') });
+    check(await visible(page, '#tabbar'), 'floating bottom bar visible on phone');
+    check(!(await visible(page, '#sidebar')), 'sidebar hidden on phone');
+    check((await page.textContent('#view-dashboard')).includes('Perlu perhatian'), 'dashboard shows "Perlu perhatian"');
+    check((await page.evaluate(() => document.querySelector('#kpi-revenue-tile').textContent)).includes('Rp'), 'revenue KPI loaded');
+    check(await page.evaluate(() => !document.getElementById('unread-badge').classList.contains('hide')), 'new-booking badge shown');
+    await shot(page, 'admin-mobile-dashboard');
+
+    await page.click('#client-booking-fab');
+    await page.waitForTimeout(400);
+    check(await visible(page, '#sheet-quick'), '"+" opens the quick-add sheet');
+    await shot(page, 'admin-mobile-quick');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
 
     await page.evaluate(() => window.navigate('clients'));
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
     check((await page.evaluate(() => window.__xss)) === undefined, 'client name with <img onerror> is not executed');
     check((await page.textContent('#client-list')).includes('<img src=x'), 'client name is shown as plain text');
+    await shot(page, 'admin-mobile-clients');
+    await page.fill('#search-client', 'citra');
+    await page.waitForTimeout(200);
+    check((await page.locator('#client-list .client-card').count()) === 1, 'search narrows the client list');
+    await page.fill('#search-client', '');
+    await page.evaluate(() => window.filterClients());
 
     await page.evaluate(() => window.openProfile('PT-C'));
-    await page.waitForTimeout(300);
-    const profileText = await page.textContent('#view-profile');
-    check(!profileText.includes('Kirim Link') && !profileText.includes('Link Baru'), 'client profile has no member-link buttons');
-    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'admin-profile.png') });
+    await page.waitForTimeout(700);
+    const box = await page.locator('#detail-panel').boundingBox();
+    check(!!box && box.width >= MOBILE.width - 1, 'client detail opens full-screen on phone');
+    const detail = await page.textContent('#detail-panel');
+    check(detail.includes('Citra') && !detail.includes('Kirim Link') && !detail.includes('Link Baru'), 'client detail shows the client, no member-link buttons');
+    await shot(page, 'admin-mobile-client-detail');
+    await page.evaluate(() => window.closeDetail());
+
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(500);
+    check(await visible(page, '#month-cal'), 'schedule shows the month calendar');
+    check(!(await visible(page, '#sched-seg')), 'week view switch is desktop-only');
+    await shot(page, 'admin-mobile-calendar');
+
+    // Book from the "+" sheet: pick the client, save.
+    await page.evaluate(() => window.openBookingSheet({}));
+    await page.waitForTimeout(400);
+    check(await visible(page, '#sch-member'), 'admin booking asks which client');
+    await page.selectOption('#sch-member', 'PT-B');
+    await page.fill('#edit-sch-date', inDays(4).slice(0, 10));
+    await page.fill('#edit-sch-time', '09:00');
+    await page.fill('#edit-sch-notes', 'Admin booking');
+    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.waitForTimeout(600);
+    const adminBooked = env.sheet('Schedules').rows.find(r => r[6] === 'Admin booking');
+    check(!!adminBooked && adminBooked[1] === 'PT-B', 'admin booking saved for the chosen client');
 
     // Session survives a reload; a changed PIN logs every device out.
     const token = await page.evaluate(() => localStorage.getItem('xnk_admin_token'));
@@ -146,78 +256,181 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
     const revoked = await openPage(browser, env, '/Index', [], { xnk_admin_token: token });
     check(await visible(revoked.page, '#admin-login'), 'ADMIN_PIN changed → saved token rejected, login shown');
     check((await revoked.page.textContent('#admin-login-error')).includes('Sesi admin berakhir'), 'explains why the PIN is needed again');
-    check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+    noErrors(errors.concat(reload.errors, revoked.errors));
     await context.close(); await reload.context.close(); await revoked.context.close();
   }
 
-  // ── Portal klien (?view=public) ───────────────────────────────────────────
-  console.log('Portal klien (?view=public)');
+  // ── Panel PT, desktop (terang & gelap) ────────────────────────────────────
+  for (const scheme of ['light', 'dark']) {
+    console.log('Panel PT · desktop · ' + scheme);
+    const env = richEnv();
+    const calls = [];
+    const token = env.adminToken();
+    const { page, context, errors } = await openPage(browser, env, '/Index', calls, { xnk_admin_token: token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1400 });
+    check(await visible(page, '#sidebar'), 'sidebar visible on desktop');
+    check(!(await visible(page, '#tabbar')), 'bottom bar hidden on desktop');
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    const dark = /rgb\((\d+), (\d+), (\d+)\)/.exec(bg);
+    const luma = dark ? (Number(dark[1]) + Number(dark[2]) + Number(dark[3])) / 3 : 255;
+    check(scheme === 'dark' ? luma < 40 : luma > 200, scheme + ' theme follows the device (' + bg + ')');
+    const c = await contrastReport(page);
+    check(c.fgOnBg >= 7 && c.onInk >= 7, 'text contrast ≥ 7:1 (' + c.fgOnBg.toFixed(1) + ', ink ' + c.onInk.toFixed(1) + ')');
+    check(c.mutedOnSurface >= 4.5 && c.mutedOnBg >= 4.5 && c.mutedOnSurface2 >= 4.5, 'muted text contrast ≥ 4.5:1 (' + [c.mutedOnSurface, c.mutedOnBg, c.mutedOnSurface2].map(x => x.toFixed(1)).join(', ') + ')');
+    check(c.onInkMuted >= 4.5, 'muted text on black cards ≥ 4.5:1 (' + c.onInkMuted.toFixed(1) + ')');
+    await shot(page, 'admin-desktop-' + scheme + '-dashboard');
+
+    await page.evaluate(() => window.navigate('clients'));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(800);
+    const panel = await page.locator('#detail-panel').boundingBox();
+    check(!!panel && panel.x > 900 && panel.width > 380 && panel.width < 460, 'client detail opens as a right-hand column');
+    check(await visible(page, '#client-list'), 'client list stays visible next to the detail');
+    check((await page.locator('#client-list .selected').count()) === 1, 'selected client is highlighted in the list');
+    await shot(page, 'admin-desktop-' + scheme + '-clients');
+
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sched-seg'), 'desktop has the Bulan | Minggu switch');
+    await shot(page, 'admin-desktop-' + scheme + '-calendar');
+    await page.evaluate(() => window.setSchedMode('week'));
+    await page.waitForTimeout(700);
+    check(await page.evaluate(() => !!window.calendarInstance), 'week tab builds the drag-and-drop calendar');
+    await shot(page, 'admin-desktop-' + scheme + '-week');
+    await page.evaluate(() => { window.setSchedMode('month'); window.openScheduleDetail('SCH-T3'); });
+    await page.waitForTimeout(700);
+    check((await page.textContent('#detail-panel')).includes('Tandai selesai'), 'session detail has the complete action');
+    check(env.sheet('Schedules').rows.find(r => r[0] === 'SCH-T3')[7] !== 'unread', 'opening a new booking marks it read');
+    await shot(page, 'admin-desktop-' + scheme + '-session');
+
+    await page.evaluate(() => window.navigate('coaches'));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openCoachProfile('C-1'));
+    await page.waitForTimeout(600);
+    check((await page.textContent('#detail-panel')).includes('Rizky'), 'coach detail opens');
+    await shot(page, 'admin-desktop-' + scheme + '-coach');
+    noErrors(errors);
+    await context.close();
+  }
+
+  // ── Tema manual ───────────────────────────────────────────────────────────
+  console.log('Tema manual');
   {
     const env = seededEnv();
+    const token = env.adminToken();
+    const { page, context } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { viewport: DESKTOP, colorScheme: 'dark' });
+    await page.evaluate(() => window.setTheme('light'));
+    check((await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) === 'light', 'switch to light while the device is dark');
+    check((await page.evaluate(() => localStorage.getItem('xnk_theme'))) === 'light', 'theme choice saved on the device');
+    await context.close();
+    const again = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_theme: 'light' }, { viewport: DESKTOP, colorScheme: 'dark', wait: 100 });
+    check((await again.page.evaluate(() => document.documentElement.getAttribute('data-theme'))) === 'light', 'saved theme applied before the page draws');
+    await again.context.close();
+  }
+
+  // ── Portal klien ──────────────────────────────────────────────────────────
+  console.log('Portal klien · HP');
+  {
+    const env = richEnv();
     const calls = [];
-    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', calls);
-    const adminCalls = ['getMembers', 'getSchedules', 'getMemberTransactionLog', 'getPackageTrendStats', 'checkAdminSession'];
+    const { page, context, errors, navigations } = await openPage(browser, env, '/Index?view=public', calls);
+    const adminCalls = ['getMembers', 'getSchedules', 'getMemberTransactionLog', 'getPackageTrendStats', 'getRevenueSummary', 'checkAdminSession'];
     check(!calls.some(c => adminCalls.includes(c)), 'no admin functions called: ' + calls.join(','));
     check(!(await visible(page, '#admin-login')), 'admin PIN screen never appears in the client portal');
     check((await page.evaluate(() => window.members.length)) === 0, 'no client list in the browser');
     const leaked = await page.evaluate(() => JSON.stringify(window.schedules));
     check(!leaked.includes('Ani') && !leaked.includes('Rahasia') && !leaked.includes('62811'), 'public calendar data has no names, notes or phone numbers');
-    await page.evaluate(() => window.navigate('public-login'));
     check(await visible(page, '#login-phone'), 'login page asks for the WhatsApp number');
-    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'portal-login.png') });
-    check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
-    await context.close();
-  }
-  {
-    const env = seededEnv();
-    const { page, context, errors, navigations } = await openPage(browser, env, '/Index?view=public', []);
-    await page.evaluate(() => window.navigate('public-login'));
+    await shot(page, 'portal-mobile-login');
+
     await page.fill('#login-phone', '89999999999');
     await page.click('#login-submit-btn');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600);
     check((await page.textContent('#member-link-message')).includes('tidak ditemukan'), 'unknown number → "Nomor WhatsApp tidak ditemukan"');
-    check(!(await page.evaluate(() => window.publicLoggedMember)), 'unknown number → not logged in');
-
     await page.fill('#login-phone', '81111111111');
     await page.click('#login-submit-btn');
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(1000);
     check((await page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'registered WhatsApp number logs the client in');
-    check((await page.evaluate(() => window.currentView)) === 'public-dashboard', 'opens "Dashboardku"');
+    check((await page.evaluate(() => window.currentView)) === 'public-dashboard', 'opens "Beranda"');
     check((await page.textContent('#pub-dash-name')).includes('Ani'), 'shows the client\'s own name');
+    check((await page.evaluate(() => window.members.length)) === 0, 'still no client list in the browser after login');
     const own = await page.evaluate(() => window.schedules.find(s => s.id === 'SCH-A1'));
     check(own && own.notes === 'Rahasia Ani', 'own bookings include their details');
-    check((await page.evaluate(() => window.members.length)) === 0, 'still no client list in the browser after login');
-    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'portal-dashboard.png') });
+    check(((await page.textContent('#pub-next-countdown')) || '').trim().length > 0, 'next-session countdown is filled');
+    check((await page.textContent('#pub-consistency-score')).includes('%'), 'consistency insight shown');
+    await shot(page, 'portal-mobile-home');
 
-    // Book a session through the real form.
-    await page.evaluate(() => window.handleFabClick());
-    const d = new Date(Date.now() + 5 * 86400000);
-    await page.fill('#edit-sch-date', d.toISOString().slice(0, 10));
-    await page.fill('#edit-sch-time', '10:00');
-    await page.fill('#edit-sch-notes', 'Leg day');
-    await page.evaluate(() => document.querySelector('#form-edit-schedule button[type="submit"]').click());
+    // Book through a free time slot on the Jadwal tab.
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(400);
+    const day = inDays(5).slice(0, 10);
+    await page.evaluate(d => window.selectDate(d), day);
+    await page.waitForTimeout(400);
+    check((await page.locator('#day-panel .slot:not([disabled])').count()) > 0, 'free time slots listed for the chosen day');
+    await shot(page, 'portal-mobile-calendar');
+    await page.locator('#day-panel .slot:not([disabled])').first().click();
     await page.waitForTimeout(500);
+    check(await visible(page, '#modal-edit-schedule'), 'tapping a slot opens the booking sheet');
+    check((await page.inputValue('#edit-sch-date')) === day, 'booking sheet has the chosen date');
+    await page.fill('#edit-sch-notes', 'Leg day');
+    await shot(page, 'portal-mobile-booking');
+    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.waitForTimeout(700);
     const booked = env.sheet('Schedules').rows.find(r => r[6] === 'Leg day');
     check(!!booked && booked[1] === 'PT-A' && booked[7] === 'unread', 'booking is saved for the logged-in client');
+
+    // FAB booking still works.
+    await page.evaluate(() => window.handleFabClick());
+    await page.waitForTimeout(400);
+    await page.fill('#edit-sch-date', inDays(6).slice(0, 10));
+    await page.fill('#edit-sch-time', '10:00');
+    await page.fill('#edit-sch-notes', 'Fab booking');
+    await page.evaluate(() => document.querySelector('#form-edit-schedule button[type="submit"]').click());
+    await page.waitForTimeout(700);
+    check(!!env.sheet('Schedules').rows.find(r => r[6] === 'Fab booking' && r[1] === 'PT-A'), '"+" booking is saved too');
+
+    await page.evaluate(() => window.navigate('public-coaches'));
+    await page.waitForTimeout(400);
+    await page.locator('#public-coach-list button').first().click();
+    check((await page.evaluate(() => window.__opened.map(w => w.location.href))).some(u => u.startsWith('https://wa.me/6281112223334')), '"Tanya program" opens WhatsApp to the coach');
+    await shot(page, 'portal-mobile-coaches');
+    await page.evaluate(() => window.navigate('public-catalog'));
+    await page.waitForTimeout(400);
+    check((await page.locator('#pricelist-container .btn').count()) > 0, 'package catalog lists packages');
+    await shot(page, 'portal-mobile-catalog');
     check(noScriptGoogle(await shownUrls(page, navigations)), 'no script.google link shown to the client');
 
     // Next visit on the same phone: straight in. Changed session key: asked to log in again.
     const token = await page.evaluate(() => localStorage.getItem('xnk_member_token'));
     const again = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token });
-    await again.page.waitForTimeout(400);
     check((await again.page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'next visit on this phone logs in automatically');
     env.memberRow('PT-A')[13] = 'e'.repeat(32);
     const revoked = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token });
-    await revoked.page.waitForTimeout(400);
     check(!(await revoked.page.evaluate(() => window.publicLoggedMember)), 'changed session key → old session no longer works');
     check((await revoked.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'client is told to log in with the WhatsApp number');
-    check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+    noErrors(errors.concat(again.errors, revoked.errors));
     await context.close(); await again.context.close(); await revoked.context.close();
+  }
+  console.log('Portal klien · desktop');
+  for (const scheme of ['light', 'dark']) {
+    const env = richEnv();
+    const token = env.memberToken(KEY_A);
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1300 });
+    const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.portal-grid')).gridTemplateColumns.split(' ').length);
+    check(cols === 2, scheme + ': Beranda uses two columns on desktop');
+    await shot(page, 'portal-desktop-' + scheme + '-home');
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(500);
+    await shot(page, 'portal-desktop-' + scheme + '-calendar');
+    await page.evaluate(() => window.logoutPublic());
+    await page.waitForTimeout(700);
+    await shot(page, 'portal-desktop-' + scheme + '-login');
+    noErrors(errors);
+    await context.close();
   }
   {
     const env = seededEnv();
     const old = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, []);
-    await old.page.waitForTimeout(400);
     check((await old.page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'an old ?k= link still logs in');
     const bad = await openPage(browser, env, '/Index?view=public&k=' + 'f'.repeat(32), []);
     check((await bad.page.evaluate(() => window.currentView)) === 'public-login', 'unknown link → login page');
@@ -225,7 +438,7 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
     await old.context.close(); await bad.context.close();
   }
 
-  // ── Landing ───────────────────────────────────────────────────────────────
+  // ── Landing (tidak di-redesign; harus tetap jalan) ───────────────────────
   console.log('Landing');
   {
     const env = seededEnv();
@@ -249,6 +462,7 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
     await page.click('#member-card-booking');
     await page.waitForTimeout(300);
     check(navigations.some(u => u.startsWith('https://book.xnkbooking.my.id')), '"Lanjut Booking" goes to book.xnkbooking.my.id');
+    noErrors(errors);
     await context.close();
   }
   {
@@ -271,7 +485,7 @@ const visible = (page, sel) => page.locator(sel).first().isVisible();
     await page.waitForTimeout(300);
     check(navigations.some(u => u.startsWith('https://book.xnkbooking.my.id')), '"Lanjut Booking" goes to book.xnkbooking.my.id');
     check(noScriptGoogle(await shownUrls(page, navigations)), 'no script.google link shown to the client');
-    check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+    noErrors(errors);
     await context.close();
   }
 

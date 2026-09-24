@@ -28,8 +28,12 @@ PR di GitHub ──► cek otomatis (sintaks + tes) ──► merge ke main
                   Apps Script: versi baru di deployment yang SAMA (link /exec tidak berubah)
 ```
 
-- `apps-script/pt-scheduler/src/` = isi proyek Apps Script, 1:1 dengan file di editor
-  (`Kode.gs`, `Index.html`, `Landing.html`, `Scripts.html`, …).
+- `apps-script/pt-scheduler/src/` = isi proyek Apps Script, 1:1 dengan file di editor:
+  - `Kode.gs` — server (data, login, keamanan).
+  - `Index.html` + `Theme.html` + `App.html` — panel PT & portal klien (desain hitam-putih,
+    terang/gelap otomatis, tata letak HP & desktop berbeda).
+  - `Landing.html` + `Styles.html` + `Components.html` — halaman xnkbooking.my.id.
+  - `Scripts.html` — helper kecil yang dipakai bersama Index & Landing.
 - `apps-script/pt-scheduler/.clasp.json` = ID proyek Apps Script (bukan rahasia).
 - `apps-script/pt-scheduler/tests/` = tes otomatis (tidak ikut di-push ke Apps Script).
 - `.github/workflows/pt-scheduler.yml` = alur cek + deploy.

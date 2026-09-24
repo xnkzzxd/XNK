@@ -88,7 +88,7 @@ function doGet(e) {
   try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
 
   return HtmlService.createTemplateFromFile(page).evaluate()
-    .setTitle('Zendo')
+    .setTitle('XNK Personal Training')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -2680,6 +2680,64 @@ function _packageTrendStats_(month, year) {
     Logger.log('getPackageTrendStats error: ' + err);
     return [];
   }
+}
+
+/**
+ * Estimasi pendapatan paket untuk dashboard admin: jumlah harga Price List dari
+ * setiap transaksi paket (klien baru & perpanjangan) di log "Members" pada bulan
+ * itu. Harga diambil dari Price List SAAT INI (termasuk paket nonaktif), jadi ini
+ * estimasi — harga lama yang sudah diubah tidak tersimpan di log.
+ * @returns {{total:number, count:number, byPackage:Array<{paketId:string, namaPaket:string, count:number, total:number}>}}
+ */
+function getRevenueSummary(token, month, year) {
+  requireAdmin_(token);
+  return _revenueSummary_(month, year);
+}
+
+function _allPackagePrices_() {
+  const prices = { byId: {}, byName: {} };
+  const sheet = getOrCreateSheet_('PriceList', ["ID", "Nama Paket", "Kategori", "Harga", "Jumlah Sesi", "Durasi", "Deskripsi", "Benefit", "Status Aktif"]);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    const harga = parseFloat(data[i][3]) || 0;
+    const id = String(sanitizeValue(data[i][0]) || '').trim();
+    const name = String(sanitizeValue(data[i][1]) || '').trim().toLowerCase();
+    if (id) prices.byId[id] = harga;
+    if (name) prices.byName[name] = harga;
+  }
+  return prices;
+}
+
+function _revenueSummary_(month, year) {
+  const result = { total: 0, count: 0, byPackage: [] };
+  const log = _getMembersLogSheet_().getDataRange().getValues();
+  if (log.length <= 1) return result;
+  const prices = _allPackagePrices_();
+  const map = {};
+  for (let i = 1; i < log.length; i++) {
+    const row = log[i];
+    const tgl = row[2];
+    let m, y;
+    if (tgl instanceof Date) { m = tgl.getMonth() + 1; y = tgl.getFullYear(); }
+    else {
+      const parts = String(tgl || '').trim().split('/');
+      if (parts.length !== 3) continue;
+      m = parseInt(parts[1], 10); y = parseInt(parts[2], 10);
+    }
+    if (m !== Number(month) || y !== Number(year)) continue;
+    const paketId = String(row[4] || '').trim();
+    const namaPaket = String(row[5] || '').trim();
+    if (!paketId && !namaPaket) continue;
+    const harga = prices.byId[paketId] !== undefined ? prices.byId[paketId] : (prices.byName[namaPaket.toLowerCase()] || 0);
+    const key = paketId || namaPaket;
+    if (!map[key]) map[key] = { paketId: paketId, namaPaket: namaPaket || '(Tanpa Nama)', count: 0, total: 0 };
+    map[key].count++;
+    map[key].total += harga;
+    result.count++;
+    result.total += harga;
+  }
+  result.byPackage = Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.total - a.total; });
+  return result;
 }
 
 /**
