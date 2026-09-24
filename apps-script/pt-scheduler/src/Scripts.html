@@ -1,0 +1,2938 @@
+<script>
+    // =============================================================================
+    // --- GLOBAL VARIABLES & STATE ---
+    // =============================================================================
+    window.isGas = typeof google !== 'undefined' && google.script;
+    window.members = [];
+    window.memberArchive = [];
+    window.schedules = [];
+    window.coaches = [];
+    window.priceListData = []; 
+    
+    window.currentView = 'dashboard';
+    window.selectedMemberId = null;
+    window.selectedScheduleDetailId = null;
+    window.isEditScheduleMode = false;
+    
+    window.isPublicView = false;
+    window.publicLoggedMember = null;
+    window.currentClientType = 'regular'; 
+    
+    const COACH_WA_NUMBER = " "; 
+
+    // =============================================================================
+    // --- HELPER FUNCTIONS ---
+    // =============================================================================
+    function formatRp(angka) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka); }
+    function sanitizePhone(phone) { let p = phone.toString().replace(/\D/g, ''); if(p.startsWith('0')) p = '62' + p.substring(1); else if(p.startsWith('8')) p = '62' + p; return p; }
+    
+    window.sendToParentWA = function(phone, text) { 
+      const cleanPhone = sanitizePhone(phone); 
+      window.open('https://wa.me/' + cleanPhone + '?text=' + encodeURIComponent(text), '_blank'); 
+    };
+    
+    window.showToast = function(msg) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-msg');
+      if (!toast || !toastMsg) return;
+
+      toastMsg.innerText = msg;
+      clearTimeout(window._toastTimer);
+
+      toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+      toast.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+
+      window._toastTimer = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+        toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+      }, 3000);
+    };
+
+    window._iconTimer = null;
+    window.scheduleIconUpdate = function() {
+      if (window._iconTimer) clearTimeout(window._iconTimer);
+      window._iconTimer = setTimeout(function() {
+        try { lucide.createIcons(); } catch(e) {}
+        window._iconTimer = null;
+      }, 50);
+    };
+
+    (function() {
+      if (typeof MutationObserver === 'undefined') return;
+      var observer = new MutationObserver(function() {
+        window.scheduleIconUpdate();
+      });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: false, characterData: false });
+    })();
+
+    window.confirmCallback = null;
+
+    window.showConfirmModal = function(message, onConfirm, options = {}) {
+      const { title = 'Konfirmasi', confirmText = 'Ya, Lanjutkan', cancelText = 'Batal', variant = 'default' } = options;
+
+      document.getElementById('confirm-modal-title').textContent = title;
+      document.getElementById('confirm-modal-message').innerHTML = message;
+
+      const btnYes = document.getElementById('btn-confirm-modal-yes');
+      const btnNo  = document.getElementById('btn-confirm-modal-no');
+      btnYes.textContent = confirmText;
+      btnNo.textContent = cancelText;
+
+      const iconWrap = document.getElementById('confirm-modal-icon-wrap');
+      const icon = document.getElementById('confirm-modal-icon');
+
+      if (variant === 'danger') {
+        btnYes.className = 'flex-1 min-h-[48px] bg-red-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-red-700 active:bg-red-800 transition-colors';
+        iconWrap.className = 'w-11 h-11 rounded-full flex items-center justify-center shrink-0 bg-red-50';
+        icon.setAttribute('data-lucide', 'alert-triangle');
+        icon.className = 'w-6 h-6 text-red-600 pointer-events-none';
+      } else {
+        btnYes.className = 'flex-1 min-h-[48px] bg-black text-white py-3 rounded-xl font-bold text-sm hover:bg-gray-800 active:bg-gray-900 transition-colors';
+        iconWrap.className = 'w-11 h-11 rounded-full flex items-center justify-center shrink-0 bg-gray-100';
+        icon.setAttribute('data-lucide', 'help-circle');
+        icon.className = 'w-6 h-6 text-gray-600 pointer-events-none';
+      }
+
+      window.confirmCallback = onConfirm;
+      const modal = document.getElementById('modal-confirm');
+      const box = modal.querySelector(':scope > div');
+      modal.classList.remove('hide');
+      if (window.lucide) window.lucide.createIcons();
+      requestAnimationFrame(() => box.classList.remove('scale-95'));
+    };
+
+    window.closeConfirmModal = function() {
+      const modal = document.getElementById('modal-confirm');
+      const box = modal.querySelector(':scope > div');
+      box.classList.add('scale-95');
+      setTimeout(() => modal.classList.add('hide'), 200);
+      window.confirmCallback = null;
+    };
+
+    window.handleConfirmModalYes = function() {
+      const cb = window.confirmCallback;
+      window.closeConfirmModal();
+      if (typeof cb === 'function') cb();
+    };
+
+    // =============================================================================
+    // --- NAVIGATION & VIEWS ---
+    // =============================================================================
+    window.navigate = function(viewId) {
+      ['dashboard', 'calendar', 'clients', 'profile', 'coaches', 'coach-profile', 'public-catalog', 'public-login', 'public-dashboard', 'public-coaches']
+      .forEach(v => {
+        const el = document.getElementById('view-' + v);
+        if(el) { el.classList.add('hide'); el.classList.remove('opacity-100'); }
+      });
+      
+      const isPub = viewId.startsWith('public-') || viewId === 'calendar' && window.isPublicView;
+      if (viewId !== 'calendar') {
+          window.isPublicView = isPub;
+      }
+      
+      document.getElementById('admin-header-actions').classList.toggle('hide', window.isPublicView);
+      document.getElementById('public-header-actions').classList.toggle('hide', !window.isPublicView && !window.publicLoggedMember);
+      document.getElementById('admin-bottom-nav').classList.toggle('hide', window.isPublicView);
+      
+      const pubMenu = document.getElementById('public-menu-bar');
+      if (pubMenu) pubMenu.classList.toggle('hide', !window.isPublicView);
+
+      const titles = {
+        'dashboard': 'Dashboard', 'calendar': window.isPublicView ? 'Jadwal Tersedia' : 'Kalender', 'clients': 'Klien', 
+        'profile': 'Profil Klien', 'coaches': 'Tim Coach', 'coach-profile': 'Profil Coach',
+        'public-catalog': 'Pilih Paket', 'public-login': 'Member Area', 'public-dashboard': 'Dashboardku',
+        'public-coaches': 'Tim Coach'
+      };
+      document.getElementById('page-title').innerText = titles[viewId] || 'XNK';
+
+      const targetEl = document.getElementById('view-' + viewId);
+      if(targetEl) {
+        targetEl.classList.remove('hide');
+        setTimeout(() => targetEl.classList.add('opacity-100'), 10);
+      }
+      
+      window.currentView = viewId;
+
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        const isActive = btn.dataset.view === viewId;
+        btn.classList.toggle('text-black', isActive);
+        btn.classList.toggle('font-bold', isActive);
+        btn.classList.toggle('text-gray-400', !isActive);
+        btn.classList.toggle('md:bg-gray-100', isActive);
+      });
+
+      if (window.isPublicView) {
+        document.querySelectorAll('.pub-nav-btn').forEach(btn => {
+          btn.classList.remove('text-black'); btn.classList.add('text-gray-500');
+          let btnText = btn.innerText.toLowerCase();
+          let viewMatch = viewId.replace('public-', '');
+          if(viewMatch === 'catalog') viewMatch = 'paket';
+          if(viewMatch === 'login' || viewMatch === 'dashboard') viewMatch = 'member';
+          if(viewId === 'calendar') viewMatch = 'jadwal';
+          if(viewMatch === 'coaches') viewMatch = 'coach';
+          
+          if(btnText.includes(viewMatch)) {
+            btn.classList.add('text-black'); btn.classList.remove('text-gray-500');
+          }
+        });
+      }
+      
+      window.scheduleIconUpdate();
+
+      if (viewId === 'calendar') setTimeout(() => window.initCalendar(), 100);
+      if (viewId === 'dashboard') window.renderDashboard();
+      if (viewId === 'public-catalog') window.renderPriceList();
+      if (viewId === 'public-coaches') window.renderPublicCoaches();
+      if (viewId === 'public-dashboard') window.renderPublicDashboard();
+      
+      document.getElementById('main-scroll-area').scrollTo(0,0);
+    };
+
+    // =============================================================================
+    // --- INIT APP ---
+    // =============================================================================
+    window.onload = function() {
+      lucide.createIcons();
+      
+      if (window.isGas) {
+        google.script.url.getLocation(function(location) {
+          if (location.parameter.view === 'public') {
+             window.isPublicView = true;
+             window.navigate('public-catalog');
+          } else {
+             window.navigate('dashboard');
+          }
+          window.loadAllData();
+        });
+      } else {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('view') === 'public') {
+           window.isPublicView = true;
+           window.navigate('public-catalog');
+        } else {
+           window.navigate('dashboard');
+        }
+        window.loadAllData();
+      }
+    };
+
+    window.loadAllData = function() {
+      const loader = document.getElementById('global-loader');
+      if (window.isGas) {
+        let loaded = 0; const totalReqs = 5;
+        const checkDone = () => { loaded++; if(loaded >= totalReqs) { loader.classList.add('opacity-0'); setTimeout(()=>loader.classList.add('hide'), 300); window.updateUI(); } };
+        
+        google.script.run.withSuccessHandler(res => { window.members = res || []; checkDone(); }).getMembers();
+        google.script.run.withSuccessHandler(res => { window.memberArchive = res || []; checkDone(); }).getMemberTransactionLog();
+        google.script.run.withSuccessHandler(res => { window.schedules = res || []; checkDone(); }).getSchedules();
+        google.script.run.withSuccessHandler(res => { window.coaches = res || []; checkDone(); }).getCoaches();
+        google.script.run.withSuccessHandler(res => { window.priceListData = res || []; checkDone(); }).getPriceList();
+      } else {
+        window.members = [{id: 'PT-1', name: 'John Doe', phone: '628123', goal: 'Turun BB', totalSessions: 10, usedSessions: 2}];
+        window.memberArchive = [];
+        window.schedules = [
+            {id: 'SCH-1', memberId: 'PT-1', title: 'John Doe', phone: '628123', start: new Date().toISOString(), end: new Date(new Date().getTime()+3600000).toISOString(), notes: 'Leg day', status: 'UNREAD', coachId: 'C-1', coachName: 'Budi'},
+            {id: 'SCH-2', memberId: 'PT-2', title: 'Jane Doe', phone: '628124', start: new Date(new Date().getTime()+7200000).toISOString(), end: new Date(new Date().getTime()+10800000).toISOString(), notes: '', status: 'AVAILABLE', coachId: 'C-1', coachName: 'Budi'}
+        ];
+        window.coaches = [{id: 'C-1', name: 'Budi', phone: '628999', specialty: 'Strength'}];
+        window.priceListData = [
+          {id: 'P1', namaPaket: 'Regular Basic', kategori: 'regular', harga: 250000, jumlahSesi: 4, durasi: '1 Bulan', deskripsi: 'Latihan mandiri satu lawan satu.', benefit: ['1 on 1', 'Program', 'Fleksibel']},
+          {id: 'P2', namaPaket: 'Student Pro', kategori: 'student', harga: 500000, jumlahSesi: 8, durasi: '1 Bulan', deskripsi: 'Latihan intensif & tracking.', benefit: ['1 on 1', 'Diet Tracking', 'Fleksibel']},
+          {id: 'P3', namaPaket: 'Flex Premium', kategori: 'premium', harga: 1500000, jumlahSesi: '', durasi: 'Unlmited', deskripsi: 'Bebas kapan saja.', benefit: ['All Access', 'Diet Tracking', 'Fleksibel']}
+        ];
+        setTimeout(() => { loader.classList.add('opacity-0'); setTimeout(()=>loader.classList.add('hide'), 300); window.updateUI(); }, 500);
+      }
+    };
+
+    window.updateUI = function() {
+      window.updateDashboardStats();
+      window.updateMemberUI();
+      window.updateCoachUI();
+      window.renderPriceCategories();
+      if (window.isPublicView && !window.publicLoggedMember) window.tryAutoLoginPublic();
+      if(window.currentView === 'dashboard') window.renderDashboard();
+      if(window.currentView === 'public-dashboard' && window.publicLoggedMember) window.renderPublicDashboard();
+      if(window.currentView === 'public-catalog') window.renderPriceList();
+      if(window.currentView === 'public-coaches') window.renderPublicCoaches();
+      window.checkUnreadBookings();
+    };
+
+    let closeTimeout;
+
+    window.closeModal = function() {
+      const overlay = document.getElementById('modal-overlay');
+      if (!overlay) return;
+
+      window.isRescheduleMode = false;
+      window.rescheduleScheduleId = null;
+
+      if (window.closeTimeout) clearTimeout(window.closeTimeout);
+
+      overlay.classList.add('pointer-events-none');
+      overlay.classList.remove('opacity-100');
+      overlay.classList.add('opacity-0');
+
+      const modals = document.querySelectorAll('#modal-overlay > div');
+      modals.forEach(el => {
+          el.classList.remove('scale-100');
+          el.classList.add('scale-95');
+      });
+
+      window.closeTimeout = setTimeout(() => {
+          overlay.classList.add('hide');
+          overlay.classList.remove('flex');
+          overlay.classList.remove('pointer-events-none');
+          modals.forEach(el => el.classList.add('hide'));
+      }, 300);
+    };
+
+    // =============================================================================
+    // --- FEATURE: ADMIN NOTIFICATIONS ---
+    // =============================================================================
+    window.checkUnreadBookings = function() {
+      if(window.isPublicView) return;
+      const unreadCount = window.schedules.filter(s => s.status === 'unread').length;
+      const badge = document.getElementById('unread-badge');
+      const notifBtn = document.getElementById('notification-btn');
+      if (!badge || !notifBtn) return;
+      
+      const newBtn = notifBtn.cloneNode(true);
+      notifBtn.parentNode.replaceChild(newBtn, notifBtn);
+      
+      if (unreadCount > 0) {
+        badge.classList.remove('hide');
+      } else {
+        badge.classList.add('hide');
+      }
+
+      newBtn.addEventListener('click', function() {
+         window.openNotificationModal();
+      });
+    };
+
+    window.openNotificationModal = function() {
+        const unreadSchedules = window.schedules.filter(s => s.status === 'unread');
+        const listEl = document.getElementById('notification-list');
+        const actionEl = document.getElementById('notification-action');
+        
+        if (!listEl) return;
+        
+        if (unreadSchedules.length === 0) {
+            listEl.innerHTML = `
+              <div class="text-center py-8 text-gray-500">
+                <i data-lucide="bell-off" class="w-12 h-12 mx-auto mb-3 text-gray-300"></i>
+                <p class="text-sm font-medium">Tidak ada notifikasi baru saat ini.</p>
+              </div>`;
+            if(actionEl) actionEl.classList.add('hide');
+        } else {
+            let html = '<div class="space-y-3">';
+            unreadSchedules.forEach(s => {
+                const d = new Date(s.start);
+                const timeStr = d.toLocaleDateString('id-ID', {weekday:'short', day:'numeric', month:'short'}) + ' • ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+                html += `
+                    <div class="p-4 rounded-2xl border border-amber-100 bg-amber-50/50 flex items-start gap-3">
+                        <div class="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center shrink-0">
+                            <i data-lucide="calendar-clock" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-gray-900">Booking Baru: ${s.title}</p>
+                            <p class="text-xs text-gray-500 mt-1">${timeStr}</p>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            listEl.innerHTML = html;
+            if(actionEl) actionEl.classList.remove('hide');
+        }
+        
+        try { window.lucide.createIcons(); } catch(e) {}
+        
+        const overlay = document.getElementById('modal-overlay');
+        document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+        overlay.classList.remove('hide'); 
+        overlay.classList.add('flex'); 
+        setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+        
+        const mod = document.getElementById('modal-notifications');
+        if (mod) {
+            mod.classList.remove('hide'); 
+            setTimeout(() => mod.classList.remove('scale-95'), 10);
+        }
+    };
+
+    window.markNotificationsRead = function() {
+        const unreadIds = window.schedules.filter(s => s.status === 'unread').map(s => s.id);
+        if(window.isGas) google.script.run.markSchedulesAsRead(unreadIds);
+        
+        window.schedules.forEach(s => { if(s.status === 'unread') s.status = 'read'; });
+        window.checkUnreadBookings(); 
+        
+        window.closeModal();
+        window.navigate('calendar');
+        window.showToast('Membuka kalender...');
+    };
+
+    // 1. Tambahkan fungsi khusus penutup ini
+    window.closeNotificationModal = function() {
+      const mod = document.getElementById('modal-notifications');
+      if (mod) {
+        mod.classList.add('hide', 'scale-95');
+      }
+      
+      const overlay = document.getElementById('modal-overlay');
+      if (overlay) {
+        overlay.classList.add('hide', 'opacity-0');
+        overlay.classList.remove('flex');
+      }
+      
+      // Panggil closeModal bawaan untuk berjaga-jaga mereset state lain
+      if (typeof window.closeModal === 'function') {
+        window.closeModal();
+      }
+    };
+
+    // 2. Perbarui fungsi markNotificationsRead Anda menjadi seperti ini:
+    window.markNotificationsRead = function() {
+      const unreadIds = window.schedules.filter(s => s.status === 'unread').map(s => s.id);
+      if(window.isGas) google.script.run.markSchedulesAsRead(unreadIds);
+      
+      window.schedules.forEach(s => { if(s.status === 'unread') s.status = 'read'; });
+      window.checkUnreadBookings(); 
+      
+      // Gunakan fungsi penutup yang baru saja dibuat
+      window.closeNotificationModal(); 
+      
+      window.navigate('calendar');
+      window.showToast('Membuka kalender...');
+    };
+
+    // =============================================================================
+    // --- STATS & CHARTS ---
+    // =============================================================================
+    window.animateCountUp = function(el, target, suffix) {
+      suffix = suffix || '';
+      const start = performance.now();
+      const dur = 900;
+      function frame(t) {
+        const p = Math.min(1, (t - start) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.innerHTML = Math.round(target * eased) + (suffix ? '<span class="text-sm text-gray-400">' + suffix + '</span>' : '');
+        if (p < 1) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    };
+
+    window.updateDashboardStats = function() {
+      const today = new Date().toDateString();
+      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 6); weekAgo.setHours(0,0,0,0);
+      const now = new Date();
+
+      const todaySessions = window.schedules.filter(s => new Date(s.start).toDateString() === today);
+      const weekSessions = window.schedules.filter(s => { const d = new Date(s.start); return d >= weekAgo && d <= now; });
+      const completed = window.schedules.filter(s => String(s.status).toLowerCase() === 'completed');
+      const rate = window.schedules.length ? Math.round((completed.length / window.schedules.length) * 100) : 0;
+
+      window.animateCountUp(document.getElementById('stat-total-clients'), window.members.length);
+      window.animateCountUp(document.getElementById('stat-today-sessions'), todaySessions.length);
+      window.animateCountUp(document.getElementById('stat-week-sessions'), weekSessions.length);
+      window.animateCountUp(document.getElementById('stat-completion-rate'), rate, '%');
+
+      window.renderWeeklyChart();
+      window.renderCompletionRing(rate);
+      window.renderCoachLeaderboard();
+      window.renderPeakHourHeatmap();
+      window.populateCoachMonthlyFilter();
+      window.renderCoachMonthlyStats();
+      window.renderPackageTrendStats();
+    };
+
+    // =============================================================================
+    // --- PEAK HOUR HEATMAP ---
+    // Dihitung client-side dari window.schedules (data sudah ter-load di memori,
+    // sama seperti stat lain di dashboard), semua status booking ikut dihitung.
+    // Jam operasional: Senin-Sabtu 06:00-21:00, Minggu 06:00-12:00.
+    // =============================================================================
+    window.PEAK_HOUR_DAY_CONFIG = [
+      { key: 'mon', label: 'Sen', jsDay: 1, startHour: 6, endHour: 21 },
+      { key: 'tue', label: 'Sel', jsDay: 2, startHour: 6, endHour: 21 },
+      { key: 'wed', label: 'Rab', jsDay: 3, startHour: 6, endHour: 21 },
+      { key: 'thu', label: 'Kam', jsDay: 4, startHour: 6, endHour: 21 },
+      { key: 'fri', label: 'Jum', jsDay: 5, startHour: 6, endHour: 21 },
+      { key: 'sat', label: 'Sab', jsDay: 6, startHour: 6, endHour: 21 },
+      { key: 'sun', label: 'Min', jsDay: 0, startHour: 6, endHour: 12 }
+    ];
+
+    window.computePeakHourData = function() {
+      const dayMap = {};
+      window.PEAK_HOUR_DAY_CONFIG.forEach(cfg => {
+        const counts = {};
+        for (let h = cfg.startHour; h < cfg.endHour; h++) counts[h] = 0;
+        dayMap[cfg.jsDay] = { config: cfg, counts };
+      });
+
+      (window.schedules || []).forEach(s => {
+        if (!s.start) return;
+        const d = new Date(s.start);
+        if (isNaN(d.getTime())) return;
+        const bucket = dayMap[d.getDay()];
+        if (!bucket) return;
+        const hour = d.getHours();
+        if (hour >= bucket.config.startHour && hour < bucket.config.endHour) {
+          bucket.counts[hour] = (bucket.counts[hour] || 0) + 1;
+        }
+      });
+
+      return window.PEAK_HOUR_DAY_CONFIG.map(cfg => {
+        const bucket = dayMap[cfg.jsDay];
+        const hours = [];
+        for (let h = cfg.startHour; h < cfg.endHour; h++) hours.push({ hour: h, count: bucket.counts[h] || 0 });
+        return { key: cfg.key, label: cfg.label, hours };
+      });
+    };
+
+    window.renderPeakHourHeatmap = function() {
+      const el = document.getElementById('peak-hour-heatmap');
+      if (!el) return;
+
+      const days = window.computePeakHourData();
+      let maxCount = 1;
+      days.forEach(d => d.hours.forEach(h => { if (h.count > maxCount) maxCount = h.count; }));
+
+      const fullHours = [];
+      for (let h = 6; h < 21; h++) fullHours.push(h);
+      const nCols = fullHours.length;
+
+      function cellColor(count) {
+        if (count === 0) return '#f0efec';
+        const t = Math.min(1, count / maxCount);
+        const from = [199, 197, 191], to = [10, 10, 10];
+        const rgb = from.map((c, i) => Math.round(c + (to[i] - c) * t));
+        return 'rgb(' + rgb.join(',') + ')';
+      }
+
+      const gridCols = 'minmax(28px,auto) repeat(' + nCols + ', 1fr)';
+
+      let html = '<div class="xnk-heat-grid" style="display:grid;grid-template-columns:' + gridCols + ';gap:2px;width:100%;">';
+
+      // Header jam (kolom pertama kosong utk sejajar dgn label hari)
+      html += '<div></div>';
+      fullHours.forEach(h => {
+        html += '<div class="text-center font-bold text-gray-400" style="font-size:9px;">' + h + '</div>';
+      });
+
+      // Baris per hari
+      days.forEach(day => {
+        html += '<div class="font-bold text-gray-500 flex items-center" style="font-size:10px;">' + day.label + '</div>';
+        fullHours.forEach(h => {
+          const match = day.hours.find(x => x.hour === h);
+          if (!match) {
+            html += '<div style="aspect-ratio:1/1;background:transparent;border-radius:3px;"></div>';
+          } else {
+            const title = day.label + ' ' + String(h).padStart(2,'0') + ':00 — ' + match.count + ' booking';
+            html += '<div class="cursor-default transition-transform hover:scale-110" style="aspect-ratio:1/1;border-radius:3px;background:' + cellColor(match.count) + '" title="' + title + '"></div>';
+          }
+        });
+      });
+
+      html += '</div>';
+      el.innerHTML = html;
+    };
+
+    // =============================================================================
+    // --- DASHBOARD BULANAN PER COACH ---
+    // Dihitung client-side dari window.schedules, berdasarkan field `completedAt`
+    // (waktu sesi ditandai selesai), bukan tanggal booking — supaya laporan bulan X
+    // mencerminkan sesi yang benar-benar selesai di bulan itu.
+    // Sesi lama (sebelum fitur ini ada) tidak punya completedAt, jadi tidak akan
+    // muncul di laporan bulan manapun sampai ada sesi baru yang diselesaikan.
+    // =============================================================================
+    window.populateCoachMonthlyFilter = function() {
+      const el = document.getElementById('coach-monthly-filter');
+      if (!el || el.dataset.populated === '1') return; // isi cuma sekali, biar pilihan user gak ke-reset tiap refresh
+
+      const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+      const now = new Date();
+      let html = '';
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const m = d.getMonth() + 1, y = d.getFullYear();
+        html += '<option value="' + m + '-' + y + '"' + (i === 0 ? ' selected' : '') + '>' + monthNames[d.getMonth()] + ' ' + y + '</option>';
+      }
+      el.innerHTML = html;
+      el.dataset.populated = '1';
+    };
+
+    window.renderCoachMonthlyStats = function() {
+      const listEl = document.getElementById('coach-monthly-stats-list');
+      const filterEl = document.getElementById('coach-monthly-filter');
+      if (!listEl || !filterEl || !filterEl.value) return;
+
+      const [month, year] = filterEl.value.split('-').map(Number);
+
+      const statsMap = {};
+      (window.schedules || []).forEach(s => {
+        if (String(s.status).toLowerCase() !== 'completed') return;
+        if (!s.completedAt) return;
+        const d = new Date(s.completedAt);
+        if (isNaN(d.getTime())) return;
+        if ((d.getMonth() + 1) !== month || d.getFullYear() !== year) return;
+
+        const coachId = s.coachId || '_unassigned';
+        const coachName = s.coachName || 'Belum Ditugaskan';
+        if (!statsMap[coachId]) statsMap[coachId] = { coachName, totalSessions: 0, clientSet: {} };
+        statsMap[coachId].totalSessions++;
+        if (s.memberId) statsMap[coachId].clientSet[s.memberId] = true;
+      });
+
+      const results = Object.values(statsMap)
+        .map(e => ({ coachName: e.coachName, totalSessions: e.totalSessions, uniqueClients: Object.keys(e.clientSet).length }))
+        .sort((a, b) => b.totalSessions - a.totalSessions);
+
+      if (results.length === 0) {
+        listEl.innerHTML = '<div class="text-center py-6"><i data-lucide="calendar-x" class="w-8 h-8 mx-auto text-gray-300 mb-2"></i><p class="text-sm text-gray-500">Belum ada sesi selesai tercatat di bulan ini.</p></div>';
+        try { window.lucide.createIcons(); } catch(e) {}
+        return;
+      }
+
+      const maxSessions = Math.max(...results.map(r => r.totalSessions), 1);
+      listEl.innerHTML = results.map(r =>
+        '<div class="flex items-center gap-3">' +
+          '<div class="w-9 h-9 rounded-full bg-black text-white flex items-center justify-center text-xs font-bold shrink-0">' + (r.coachName[0] || '?') + '</div>' +
+          '<div class="flex-1 min-w-0">' +
+            '<div class="flex justify-between items-baseline text-xs mb-1">' +
+              '<span class="font-bold truncate">' + r.coachName + '</span>' +
+              '<span class="text-gray-400 font-semibold shrink-0 ml-2">' + r.totalSessions + ' sesi &middot; ' + r.uniqueClients + ' klien</span>' +
+            '</div>' +
+            '<div class="h-1.5 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full bg-black transition-all duration-700" style="width:' + Math.round(r.totalSessions/maxSessions*100) + '%"></div></div>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    // =============================================================================
+    // --- TREND PAKET TERLARIS ---
+    // Beda dengan heatmap/performa coach yang dihitung dari window.schedules (sudah
+    // di-load di client), data transaksi paket TIDAK di-preload ke client (jarang
+    // dipakai & bisa cukup besar historinya), jadi fetch langsung ke server tiap kali
+    // filter bulan berubah. Pakai dropdown filter yang sama dengan Performa Coach Bulanan.
+    // =============================================================================
+    window.renderPackageTrendStats = function() {
+      const listEl = document.getElementById('package-trend-list');
+      const filterEl = document.getElementById('coach-monthly-filter');
+      if (!listEl || !filterEl || !filterEl.value) return;
+      if (!window.isGas) { listEl.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Tidak tersedia di mode preview.</p>'; return; }
+
+      const [month, year] = filterEl.value.split('-').map(Number);
+      listEl.innerHTML = '<div class="flex justify-center py-4"><div class="loading-spinner" style="width:24px;height:24px;border-width:3px;"></div></div>';
+
+      google.script.run
+        .withSuccessHandler(function(results) {
+          if (!results || results.length === 0) {
+            listEl.innerHTML = '<div class="text-center py-6"><i data-lucide="package-x" class="w-8 h-8 mx-auto text-gray-300 mb-2"></i><p class="text-sm text-gray-500">Belum ada transaksi paket tercatat di bulan ini.</p></div>';
+            try { window.lucide.createIcons(); } catch(e) {}
+            return;
+          }
+
+          const maxCount = Math.max(...results.map(r => r.count), 1);
+          listEl.innerHTML = results.map(r =>
+            '<div>' +
+              '<div class="flex justify-between items-baseline text-xs mb-1">' +
+                '<span class="font-bold truncate">' + r.namaPaket + '</span>' +
+                '<span class="text-gray-400 font-semibold shrink-0 ml-2">' + r.count + 'x dipilih</span>' +
+              '</div>' +
+              '<div class="h-1.5 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full bg-black transition-all duration-700" style="width:' + Math.round(r.count/maxCount*100) + '%"></div></div>' +
+            '</div>'
+          ).join('');
+          try { window.lucide.createIcons(); } catch(e) {}
+        })
+        .withFailureHandler(function(err) {
+          listEl.innerHTML = '<p class="text-xs text-red-500 text-center py-4">Gagal memuat data: ' + err.message + '</p>';
+        })
+        .getPackageTrendStats(month, year);
+    };
+
+    window.renderWeeklyChart = function() {
+      const el = document.getElementById('weekly-chart');
+      const days = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+      const buckets = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0);
+        const dEnd = new Date(d); dEnd.setHours(23,59,59,999);
+        const count = window.schedules.filter(s => { const t = new Date(s.start); return t >= d && t <= dEnd; }).length;
+        buckets.push({ label: days[d.getDay()], count, isToday: i === 0 });
+      }
+      const max = Math.max(...buckets.map(b => b.count), 1);
+      el.innerHTML = buckets.map(b =>
+        '<div class="flex-1 flex flex-col items-center justify-end gap-1.5 h-full">' +
+          '<div class="w-full max-w-[26px] rounded-t-lg rounded-b-sm h-0 transition-all duration-1000 ' +
+            (b.isToday ? 'bg-gradient-to-b from-green-600 to-green-800' : 'bg-gradient-to-b from-gray-800 to-black') + '"' +
+            ' data-h="' + Math.round(b.count/max*100) + '"></div>' +
+          '<span class="text-[10px] font-bold text-gray-400 uppercase">' + b.label + '</span>' +
+        '</div>'
+      ).join('');
+      requestAnimationFrame(() => {
+        el.querySelectorAll('[data-h]').forEach((bar, i) => {
+          setTimeout(() => { bar.style.height = bar.dataset.h + '%'; }, i * 70);
+        });
+      });
+    };
+
+    window.renderCompletionRing = function(rate) {
+      const circumference = 364.4;
+      const ring = document.getElementById('completion-ring');
+      requestAnimationFrame(() => { ring.style.strokeDashoffset = circumference - (rate/100)*circumference; });
+      window.animateCountUp(document.getElementById('ring-value'), rate, '%');
+    };
+
+    window.renderCoachLeaderboard = function() {
+      const counts = {};
+      window.schedules.forEach(s => { const n = s.coachName || 'Belum Ditugaskan'; counts[n] = (counts[n]||0) + 1; });
+      const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,5);
+      const max = sorted.length ? sorted[0][1] : 1;
+      const el = document.getElementById('coach-leaderboard');
+      el.innerHTML = sorted.map(([name, count]) =>
+        '<div class="flex items-center gap-3 mb-3 last:mb-0">' +
+          '<div class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-xs font-bold flex-shrink-0">' + name[0] + '</div>' +
+          '<div class="flex-1 min-w-0">' +
+            '<div class="flex justify-between text-xs mb-1"><span class="font-bold">' + name + '</span><span class="text-gray-400 font-semibold">' + count + ' sesi</span></div>' +
+            '<div class="h-1.5 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full bg-black w-0 transition-all duration-1000" data-w="' + Math.round(count/max*100) + '"></div></div>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+      requestAnimationFrame(() => {
+        el.querySelectorAll('[data-w]').forEach((fill, i) => {
+          setTimeout(() => { fill.style.width = fill.dataset.w + '%'; }, i * 100);
+        });
+      });
+    };
+
+    window.timeUntil = function(date) {
+      const diff = date - new Date();
+      if (diff <= 0) return 'Berlangsung';
+      const mins = Math.round(diff / 60000);
+      if (mins < 60) return 'dalam ' + mins + ' mnt';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return 'dalam ' + hrs + ' jam';
+      return 'dalam ' + Math.floor(hrs / 24) + ' hari';
+    };
+
+    window.renderDashboard = function() {
+      const listEl = document.getElementById('upcoming-schedules-list'); listEl.innerHTML = '';
+      const now = new Date();
+      const upcoming = window.schedules
+        .filter(s => new Date(s.start) >= now && String(s.status).toUpperCase() !== 'COMPLETED' && String(s.status).toUpperCase() !== 'AVAILABLE')
+        .sort((a,b) => new Date(a.start) - new Date(b.start))
+        .slice(0, 5);
+
+      if (upcoming.length === 0) {
+        listEl.innerHTML = '<div class="text-center p-6 bg-white rounded-2xl border border-gray-100"><i data-lucide="calendar-check" class="w-8 h-8 mx-auto text-gray-300 mb-2"></i><p class="text-sm text-gray-500">Tidak ada jadwal mendatang.</p></div>';
+      } else {
+        upcoming.forEach((s, i) => {
+          const d = new Date(s.start);
+          const timeStr = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+          const dateStr = d.toLocaleDateString('id-ID', {weekday:'short', day:'numeric', month:'short'});
+          const statusDot = s.status === 'unread' ? '<span class="w-2 h-2 bg-red-500 rounded-full absolute -top-1 -right-1"></span>' : '';
+
+          listEl.innerHTML += '<div onclick="window.navigate(\'calendar\')" data-time="' + d.getTime() + '" style="animation-delay:' + (i*0.08) + 's" ' +
+              'class="sched-item bg-white p-4 rounded-2xl border border-gray-100 flex items-center gap-4 cursor-pointer hover:border-black transition-colors shadow-sm relative">' +
+              statusDot +
+              '<div class="bg-gray-50 rounded-xl p-2 text-center min-w-[60px] border border-gray-100">' +
+                '<p class="text-[10px] font-bold text-gray-400 uppercase">' + dateStr.split(',')[0] + '</p>' +
+                '<p class="text-sm font-black text-black">' + timeStr + '</p>' +
+              '</div>' +
+              '<div class="flex-1">' +
+                '<h4 class="font-bold text-sm">' + s.title + '</h4>' +
+                '<p class="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><i data-lucide="contact-2" class="w-3 h-3"></i> ' + (s.coachName || 'Belum di-assign') + '</p>' +
+              '</div>' +
+              '<span class="countdown-label text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full whitespace-nowrap">' + window.timeUntil(d) + '</span>' +
+            '</div>';
+        });
+      }
+      lucide.createIcons();
+    };
+
+    setInterval(function() {
+      const clockEl = document.getElementById('live-clock');
+      if (clockEl) clockEl.textContent = new Date().toLocaleTimeString('id-ID');
+      document.querySelectorAll('.sched-item').forEach(function(node) {
+        const label = node.querySelector('.countdown-label');
+        if (label) label.textContent = window.timeUntil(new Date(parseInt(node.dataset.time)));
+      });
+    }, 1000);
+
+    // =============================================================================
+    // --- FEATURE: CLIENTS MANAGEMENT (ADMIN) ---
+    // =============================================================================
+
+    // Parse tanggal format "D/M/YYYY" (format yang disimpan backend) dengan aman.
+    // new Date("28/8/2026") tidak reliable di semua browser (bukan format standar),
+    // jadi selalu urai manual dulu, baru fallback ke Date() native untuk format lain (ISO, dsb).
+    window.parseFlexibleDate = function(str) {
+      if (!str) return new Date();
+      if (str instanceof Date) return str;
+      const parts = String(str).split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d)) return d;
+      }
+      const fallback = new Date(str);
+      return isNaN(fallback) ? new Date() : fallback;
+    };
+
+    window.updateMemberUI = function() {
+      const listEl = document.getElementById('client-list');
+      if(!listEl) return;
+
+      // Gabungkan card LIVE (klien saat ini, dari window.members) dengan card ARSIP
+      // (riwayat transaksi lama sebelum transaksi terakhir, dari window.memberArchive)
+      // jadi satu daftar, lalu diurutkan & dikelompokkan per bulan bareng-bareng.
+      const combined = [];
+
+      window.members.forEach(m => {
+        const activityDateRaw = m.lastActivityDate || m.joinDate || m.createdAt || new Date().toISOString();
+        combined.push({ type: 'live', data: m, sortDate: window.parseFlexibleDate(activityDateRaw) });
+      });
+
+      (window.memberArchive || []).forEach(a => {
+        combined.push({ type: 'archive', data: a, sortDate: window.parseFlexibleDate(a.date) });
+      });
+
+      combined.sort((a, b) => a.sortDate - b.sortDate);
+
+      let html = '';
+      let currentMonthYear = '';
+
+      combined.forEach(entry => {
+        const memberMonthYear = entry.sortDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
+        if (memberMonthYear !== currentMonthYear) {
+          html += '<div class="col-span-full flex items-center gap-3 mt-4 mb-2 month-divider">' +
+                    '<div class="h-px bg-gray-200 flex-1"></div>' +
+                    '<span class="text-xs font-bold text-gray-400 uppercase tracking-widest">' + memberMonthYear + '</span>' +
+                    '<div class="h-px bg-gray-200 flex-1"></div>' +
+                  '</div>';
+          currentMonthYear = memberMonthYear;
+        }
+
+        html += entry.type === 'archive' ? window.renderArchiveCard(entry.data) : window.renderLiveClientCard(entry.data);
+      });
+
+      listEl.innerHTML = html;
+      lucide.createIcons();
+    };
+
+    // Card klien AKTIF (status kuota real-time), diklik untuk buka profil klien.
+    window.renderLiveClientCard = function(m) {
+      const pct = Math.min(100, Math.round(((m.usedSessions || 0) / m.totalSessions) * 100));
+      let colorClass = 'bg-black'; if(pct >= 90) colorClass = 'bg-red-500'; else if(pct >= 75) colorClass = 'bg-yellow-500';
+
+      const avatarHtml = m.photo
+        ? '<img src="' + escapeHtml(m.photo) + '" class="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover shrink-0" onerror="this.outerHTML=\'<div class=&quot;w-10 h-10 md:w-12 md:h-12 bg-gray-50 rounded-full flex items-center justify-center shrink-0&quot;><i data-lucide=&quot;user&quot; class=&quot;w-5 h-5 md:w-6 md:h-6&quot;></i></div>\'; try{window.lucide.createIcons();}catch(e){}">'
+        : '<div class="w-10 h-10 md:w-12 md:h-12 bg-gray-50 rounded-full flex items-center justify-center group-hover:bg-black group-hover:text-white transition-colors shrink-0">' +
+            '<i data-lucide="user" class="w-5 h-5 md:w-6 md:h-6"></i>' +
+          '</div>';
+
+      return '<div onclick="window.openProfile(\'' + String(m.id) + '\')" class="client-card bg-white border border-gray-100 rounded-2xl p-4 md:p-5 hover:shadow-lg hover:border-black cursor-pointer transition-all flex flex-col justify-between group h-full">' +
+        '<div class="flex items-center gap-3 mb-4">' +
+          avatarHtml +
+          '<div class="flex-1 min-w-0">' +
+            '<h4 class="font-bold text-sm md:text-base truncate">' + m.name + '</h4>' +
+            '<p class="text-xs text-gray-400 font-mono truncate">+' + m.phone + '</p>' +
+          '</div>' +
+        '</div>' +
+        '<div>' +
+          '<div class="flex justify-between text-[10px] md:text-xs font-bold text-gray-500 mb-1">' +
+            '<span>Sisa Sesi: ' + (m.totalSessions - (m.usedSessions || 0)) + '</span>' +
+            '<span>' + (m.usedSessions || 0) + '/' + m.totalSessions + '</span>' +
+          '</div>' +
+          '<div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">' +
+            '<div class="' + colorClass + ' h-1.5 rounded-full transition-all duration-500" style="width: ' + pct + '%"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    };
+
+    // Card ARSIP: snapshot riwayat transaksi lama (bukan status kuota sekarang).
+    // Tetap bisa diklik untuk buka profil klien yang sama (data terkininya),
+    // tapi ditampilkan pudar + badge jenis transaksi supaya jelas ini riwayat, bukan status aktif.
+    window.renderArchiveCard = function(a) {
+      const isBaru = a.jenis === 'Baru';
+      const badgeClass = isBaru ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500';
+      const badgeIcon = isBaru ? 'user-plus' : 'history';
+      const badgeLabel = isBaru ? 'Baru' : (a.jenis || 'Riwayat');
+
+      const avatarHtml = a.photo
+        ? '<img src="' + escapeHtml(a.photo) + '" class="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover shrink-0 opacity-70" onerror="this.outerHTML=\'<div class=&quot;w-10 h-10 md:w-12 md:h-12 bg-gray-50 rounded-full flex items-center justify-center shrink-0&quot;><i data-lucide=&quot;user&quot; class=&quot;w-5 h-5 md:w-6 md:h-6&quot;></i></div>\'; try{window.lucide.createIcons();}catch(e){}">'
+        : '<div class="w-10 h-10 md:w-12 md:h-12 bg-gray-50 rounded-full flex items-center justify-center shrink-0">' +
+            '<i data-lucide="user" class="w-5 h-5 md:w-6 md:h-6"></i>' +
+          '</div>';
+
+      return '<div onclick="window.openProfile(\'' + String(a.id) + '\')" class="client-card client-card-archive bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-4 md:p-5 hover:shadow-md hover:border-gray-400 cursor-pointer transition-all flex flex-col justify-between group h-full opacity-80">' +
+        '<div class="flex items-center gap-3 mb-3">' +
+          avatarHtml +
+          '<div class="flex-1 min-w-0">' +
+            '<h4 class="font-bold text-sm md:text-base truncate text-gray-600">' + a.name + '</h4>' +
+            '<p class="text-xs text-gray-400 font-mono truncate">+' + a.phone + '</p>' +
+          '</div>' +
+          '<span class="text-[10px] font-bold ' + badgeClass + ' px-2 py-1 rounded-full flex items-center gap-1 shrink-0">' +
+            '<i data-lucide="' + badgeIcon + '" class="w-3 h-3"></i> ' + badgeLabel +
+          '</span>' +
+        '</div>' +
+        '<div class="text-xs text-gray-500 space-y-0.5">' +
+          '<p>' + (a.packageName || 'Paket Standar') + ' &middot; ' + (a.totalSessions || 0) + ' Sesi</p>' +
+          '<p class="text-gray-400">' + a.date + '</p>' +
+        '</div>' +
+      '</div>';
+    };
+
+    window.filterClients = function() {
+      const val = document.getElementById('search-client').value.toLowerCase();
+      const items = document.getElementById('client-list').children;
+      
+      Array.from(items).forEach(el => {
+        if (el.classList.contains('month-divider')) {
+          el.style.display = val !== '' ? 'none' : '';
+          return; 
+        }
+
+        if (el.classList.contains('client-card')) {
+          const h4 = el.querySelector('h4');
+          if (h4) {
+            const name = h4.innerText.toLowerCase();
+            el.style.display = name.includes(val) ? '' : 'none';
+          }
+        }
+      });
+    };
+
+    window.openProfile = function(id) {
+      try {
+        if(window.isPublicView) return;
+        const mem = window.members.find(m => String(m.id) === String(id)); 
+        if(!mem) { window.showToast('Error: Data klien tidak ditemukan.'); return; }
+        window.selectedMemberId = id; 
+        
+        const elName = document.getElementById('profile-name');
+        const elPhone = document.getElementById('profile-phone');
+        const elGoal = document.getElementById('profile-goal');
+        const elDate = document.getElementById('profile-date');
+        const elRemaining = document.getElementById('profile-remaining');
+        const elTotal = document.getElementById('profile-total');
+        const elProgress = document.getElementById('profile-progress');
+        const elBadge = document.getElementById('profile-status-badge');
+        const elWaBtn = document.getElementById('profile-wa-btn');
+        const elPhoto = document.getElementById('profile-photo');
+        const elPhotoFallback = document.getElementById('profile-photo-fallback');
+
+        if (elPhoto && elPhotoFallback) {
+          if (mem.photo && mem.photo.trim() !== '') {
+            elPhoto.src = mem.photo;
+            elPhoto.classList.remove('hide');
+            elPhotoFallback.classList.add('hide');
+            elPhoto.onerror = function() {
+              elPhoto.classList.add('hide');
+              elPhotoFallback.classList.remove('hide');
+            };
+          } else {
+            elPhoto.classList.add('hide');
+            elPhotoFallback.classList.remove('hide');
+          }
+        }
+
+        if(elName) elName.innerText = mem.name || 'Klien'; 
+        if(elPhone) elPhone.innerText = mem.phone || '-';
+        
+        let displayGoal = mem.goal || '-';
+        if(typeof displayGoal === 'string' && displayGoal.includes('|')) { 
+           const parts = displayGoal.split('|'); 
+           if(elGoal) elGoal.innerHTML = parts[0].trim() + '<br><span class="text-[10px] bg-gray-200 text-gray-700 px-2 py-1 rounded inline-block mt-1.5 font-bold">' + (parts[1] ? parts[1].trim() : '') + '</span>'; 
+        } else { 
+           if(elGoal) elGoal.innerText = displayGoal; 
+        }
+        
+        if(elDate) elDate.innerText = mem.joinDate || '-';
+
+        const elPackage = document.getElementById('profile-package');
+        if(elPackage) elPackage.innerText = mem.packageName || 'Custom / Tanpa Paket';
+
+        const elCoach = document.getElementById('profile-coach');
+        if(elCoach) elCoach.innerText = mem.preferredCoachName || 'Belum Ditentukan';
+        
+        const total = mem.totalSessions || 10; 
+        const used = mem.usedSessions || 0; 
+        const isExpired = used >= total;
+        const remaining = Math.max(0, total - used);
+        
+        if(elRemaining) elRemaining.innerText = remaining; 
+        if(elTotal) elTotal.innerText = total; 
+        if(elProgress) elProgress.style.width = (used / total * 100) + "%";
+        
+        if(elBadge) {
+          elBadge.innerText = isExpired ? 'HABIS' : 'AKTIF'; 
+          elBadge.className = 'text-white text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap shrink-0 mt-1 ' + (isExpired ? 'bg-red-500' : 'bg-green-500');
+        }
+        
+        if(elWaBtn) elWaBtn.onclick = function() { window.sendToParentWA(mem.phone, ''); };
+        
+        const histContainer = document.getElementById('profile-history'); 
+        if (histContainer) {
+            histContainer.innerHTML = '';
+            const memSchedules = window.schedules.filter(s => String(s.memberId) === String(id) && String(s.status).toUpperCase() !== 'AVAILABLE').sort((a,b) => new Date(b.start) - new Date(a.start)); 
+            
+            if(memSchedules.length > 0) {
+              memSchedules.forEach(s => {
+                const d = new Date(s.start); const dateStr = d.toLocaleDateString('id-ID', {weekday:'short', day:'numeric', month:'short'}); const timeStr = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+                const isUpcoming = d >= new Date(); const badgeCol = String(s.status).toUpperCase() === 'COMPLETED' ? 'bg-green-100 text-green-800' : (isUpcoming ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500');
+                const badgeText = String(s.status).toUpperCase() === 'COMPLETED' ? 'Selesai' : (isUpcoming ? 'Akan Datang' : 'Terlewat'); const coachName = s.coachName && s.coachName !== "Belum Ditugaskan" ? s.coachName : "-";
+
+                histContainer.innerHTML += '<div class="border border-gray-100 rounded-xl p-3 flex justify-between items-center bg-gray-50">' +
+                   '<div><p class="text-xs font-bold text-gray-900">' + dateStr + ' • ' + timeStr + '</p><p class="text-[10px] text-gray-500 mt-0.5"><i data-lucide="contact-2" class="w-3 h-3 inline"></i> Coach: ' + coachName + '</p></div>' +
+                   '<div class="text-right"><span class="' + badgeCol + ' text-[9px] font-bold px-2 py-0.5 rounded uppercase">' + badgeText + '</span></div>' +
+                '</div>';
+              });
+            } else { histContainer.innerHTML = '<p class="text-xs text-gray-400 italic">Belum ada riwayat jadwal.</p>'; }
+        }
+
+        try { window.lucide.createIcons(); } catch(e) {}
+        window.navigate('profile');
+      } catch (error) { 
+        console.error(error);
+        window.showToast('Gagal memuat profil: ' + error.message); 
+      }
+    };
+
+    window.openEditProfileModal = function() {
+      const mem = window.members.find(m => String(m.id) === String(window.selectedMemberId)); if(!mem) return;
+      document.getElementById('edit-member-name').value = mem.name || ''; document.getElementById('edit-member-phone').value = mem.phone || ''; document.getElementById('edit-member-goal').value = mem.goal || '';
+      document.getElementById('edit-member-total').value = mem.totalSessions || 10; document.getElementById('edit-member-used').value = mem.usedSessions || 0;
+      window.populateMemberPackageOptions('edit-member', mem.packageId || '');
+      window.populateMemberCoachOptions('edit-member-coach', mem.preferredCoachId || '');
+
+      const overlay = document.getElementById('modal-overlay'); document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex'); setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+      const modEdit = document.getElementById('modal-edit-profile'); modEdit.classList.remove('hide'); setTimeout(() => modEdit.classList.remove('scale-95'), 10);
+    };
+
+    window.submitEditProfile = function(e) {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]'); const originalText = btn.innerHTML; btn.innerHTML = 'Menyimpan...'; btn.disabled = true;
+      const data = {
+        id: window.selectedMemberId, name: document.getElementById('edit-member-name').value, phone: document.getElementById('edit-member-phone').value,
+        goal: document.getElementById('edit-member-goal').value, totalSessions: parseInt(document.getElementById('edit-member-total').value, 10), usedSessions: parseInt(document.getElementById('edit-member-used').value, 10),
+        packageId: document.getElementById('edit-member-package').value || '',
+        coachId: document.getElementById('edit-member-coach').value || ''
+      };
+      const selPkg = (window.priceListData || []).find(p => String(p.id) === String(data.packageId));
+      data.packageName = selPkg ? selPkg.namaPaket : '';
+      const selCoach = (window.coaches || []).find(c => String(c.id) === String(data.coachId));
+      data.preferredCoachId = data.coachId; data.preferredCoachName = selCoach ? selCoach.name : '';
+
+      if (window.isGas) {
+        google.script.run
+          .withSuccessHandler(function() {
+            const memIndex = window.members.findIndex(m => String(m.id) === String(window.selectedMemberId));
+            if(memIndex !== -1) { 
+               window.members[memIndex] = Object.assign(window.members[memIndex], data); 
+               window.updateMemberUI(); window.openProfile(window.selectedMemberId); 
+            }
+            window.closeModal(); btn.innerHTML = originalText; btn.disabled = false; window.showToast('Profil klien berhasil diperbarui!');
+          })
+          .withFailureHandler(function(err){ btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal: ' + err.message); })
+          .updateMemberProfile(data);
+      }
+    };
+
+    window.openDeleteConfirmModal = function() {
+      const overlay = document.getElementById('modal-overlay');
+      document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex');
+      setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+
+      const modDelete = document.getElementById('modal-delete-confirm');
+      modDelete.classList.remove('hide');
+      setTimeout(() => modDelete.classList.remove('scale-95'), 10);
+    };
+
+    window.confirmDeleteMember = function() {
+      const id = window.selectedMemberId;
+      if (!id) return;
+
+      const btn = document.getElementById('delete-confirm-btn');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = 'Menghapus...'; btn.disabled = true;
+
+      if (window.isGas) {
+        google.script.run
+          .withSuccessHandler(function() {
+            window.members = window.members.filter(m => String(m.id) !== String(id));
+            window.schedules = window.schedules.filter(s => String(s.memberId) !== String(id));
+
+            window.updateMemberUI();
+            window.closeModal();
+            btn.innerHTML = originalText; btn.disabled = false;
+            window.showToast('Klien berhasil dihapus.');
+            window.navigate('clients'); 
+          })
+          .withFailureHandler(function(err) {
+            btn.innerHTML = originalText; btn.disabled = false;
+            window.showToast('Gagal: ' + err.message);
+          })
+          .deleteMember(id);
+      }
+    };
+
+    // =============================================================================
+    // --- FEATURE: SCHEDULING (CALENDAR & BOOKING) ---
+    // =============================================================================
+    window.initCalendar = function() {
+      const calendarEl = document.getElementById('calendar');
+      if(!calendarEl) return;
+      
+      const filterEl = document.getElementById('calendar-coach-filter');
+      const filterWrapper = document.getElementById('calendar-public-filter');
+      let selectedCoach = 'ALL';
+      
+      if (window.isPublicView) {
+         if(filterWrapper) filterWrapper.classList.remove('hide');
+         if(filterEl) {
+             if (filterEl.options.length <= 1) {
+                 window.coaches.forEach(c => {
+                     filterEl.innerHTML += '<option value="' + c.id + '">Coach ' + c.name + '</option>';
+                 });
+             }
+             selectedCoach = filterEl.value;
+         }
+      } else {
+         if(filterWrapper) filterWrapper.classList.add('hide');
+      }
+
+      let filteredSchedules = window.schedules;
+      if (selectedCoach !== 'ALL') {
+          filteredSchedules = filteredSchedules.filter(s => String(s.coachId) === String(selectedCoach));
+      }
+
+      const displayEvents = filteredSchedules.map(function(s) {
+        const statusStr = String(s.status).toUpperCase();
+        const isUnread = statusStr === 'UNREAD'; 
+        const isCompleted = statusStr === 'COMPLETED';
+        const isHold = statusStr === 'HOLD';
+        const isConfirmed = statusStr === 'CONFIRMED';
+        const isAvailable = statusStr === 'AVAILABLE';
+        
+        let color = '#94a3b8';
+        if (isUnread && !window.isPublicView) color = '#f59e0b';
+        else if (isCompleted && !window.isPublicView) color = '#16a34a';
+        else if (isHold) color = '#eab308';
+        else if (isConfirmed) color = '#ef4444';
+        else if (isAvailable) color = '#22c55e';
+        
+        let titleStr = '';
+        if (window.isPublicView) {
+            if (isAvailable) titleStr = 'Tersedia';
+            else if (isHold) titleStr = 'Hold';
+            else titleStr = 'Terisi';
+        } else {
+            titleStr = s.title + (isUnread ? ' (Baru)' : '') + (s.coachName && s.coachName!=='Belum Ditugaskan' ? ' [' + s.coachName + ']' : '');
+        }
+
+        return Object.assign({}, s, { title: titleStr, backgroundColor: color, borderColor: color, extendedProps: { status: statusStr, notes: s.notes, phone: s.phone, coachId: s.coachId } });
+      });
+
+      calendarEl.innerHTML = '';
+      const initialViewType = window.innerWidth < 768 ? 'timeGridDay' : 'timeGridWeek';
+      
+      if(window.calendarInstance) { window.calendarInstance.destroy(); }
+
+      window.calendarInstance = new FullCalendar.Calendar(calendarEl, {
+        initialView: initialViewType,
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+        slotMinTime: '06:00:00', slotMaxTime: '23:00:00', allDaySlot: false, 
+        
+        selectable: !window.isPublicView || (window.isPublicView && window.publicLoggedMember), 
+        editable: !window.isPublicView,
+        events: displayEvents,
+        
+        select: function(info) { window.handleSlotSelection(info); },
+        eventDrop: function(info) { window.updateDraggedEvent(info.event, info.revert); },
+        eventResize: function(info) { window.updateDraggedEvent(info.event, info.revert); },
+        eventClick: function(info) {
+          if(window.isPublicView) { 
+             const statusStr = String(info.event.extendedProps.status || '').toUpperCase();
+             if (statusStr === 'AVAILABLE') {
+                 if(!window.publicLoggedMember) {
+                    window.showToast("Silakan login untuk mem-booking slot ini.");
+                    window.navigate('public-login');
+                 } else {
+                    window.handleSlotSelection({start: info.event.start});
+                 }
+             } else {
+                 window.showToast('Maaf, Sesi pada jam ini sudah tidak tersedia.'); 
+             }
+             return; 
+          }
+          window.openScheduleDetailModal(info.event);
+        }
+      });
+      window.calendarInstance.render();
+      
+      const fab = document.getElementById('client-booking-fab');
+      if (window.isPublicView && window.publicLoggedMember) {
+        if(fab) { fab.classList.remove('hidden'); fab.classList.add('flex'); }
+      } else {
+        if(fab) { fab.classList.add('hidden'); fab.classList.remove('flex'); }
+      }
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    window.handleFabClick = function() {
+      if(window.isPublicView && !window.publicLoggedMember) {
+         window.showToast("Silakan login untuk mem-booking jadwal."); window.navigate('public-login'); return;
+      }
+      
+      const overlay = document.getElementById('modal-overlay');
+      document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex'); 
+      setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+      
+      const formModal = document.getElementById('modal-edit-schedule');
+      formModal.classList.remove('hide');
+      setTimeout(() => formModal.classList.remove('scale-95'), 10);
+      
+      window.isEditScheduleMode = false;
+      window.isRescheduleMode = false;
+      window.rescheduleScheduleId = null;
+      document.getElementById('modal-sch-title').innerText = window.isPublicView ? "Booking Jadwal" : "Tambah Jadwal";
+
+      // Recurring booking hanya relevan untuk booking BARU, bukan edit/reschedule
+      const recurWrap = document.getElementById('recurring-toggle-wrap');
+      if (recurWrap) recurWrap.classList.remove('hide');
+      window.resetRecurringUI();
+      
+      let clientName = "";
+      if (window.isPublicView && window.publicLoggedMember) { clientName = window.publicLoggedMember.name; } 
+      else if (!window.isPublicView && window.selectedMemberId && window.currentView === 'profile') {
+         const m = window.members.find(x => String(x.id) === String(window.selectedMemberId));
+         if(m) clientName = m.name;
+      } else { clientName = "Pilih dari Profil Klien Dulu"; }
+      document.getElementById('edit-sch-client-name').innerText = clientName;
+
+      document.getElementById('form-edit-schedule').reset();
+      
+      const d = new Date();
+      try {
+        document.getElementById('edit-sch-date').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        document.getElementById('edit-sch-time').value = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+      } catch(e) {}
+    };
+
+    window.openAddScheduleModal = function() {
+       window.handleFabClick();
+    };
+
+    window.openRescheduleModal = function(scheduleId) {
+      if (!window.publicLoggedMember) { window.showToast("Silakan login terlebih dahulu."); return; }
+      const sch = window.schedules.find(s => String(s.id) === String(scheduleId));
+      if (!sch) { window.showToast("Jadwal tidak ditemukan."); return; }
+      if (String(sch.memberId) !== String(window.publicLoggedMember.id)) { window.showToast("Jadwal ini bukan milik Anda."); return; }
+      if (String(sch.status).toLowerCase() === 'completed') { window.showToast("Sesi yang sudah selesai tidak bisa direschedule."); return; }
+
+      // Peringatan dini di sisi klien kalau sudah lewat batas waktu, sebelum submit ke server
+      const hoursLeft = (new Date(sch.start) - new Date()) / (1000 * 60 * 60);
+      if (hoursLeft < 2) {
+        window.showToast("Reschedule mandiri sudah lewat batas waktu (min. 2 jam sebelum jadwal). Hubungi Coach via WhatsApp ya.");
+        return;
+      }
+
+      window.isEditScheduleMode = false;
+      window.isRescheduleMode = true;
+      window.rescheduleScheduleId = scheduleId;
+
+      const recurWrap = document.getElementById('recurring-toggle-wrap');
+      if (recurWrap) recurWrap.classList.add('hide');
+      window.resetRecurringUI();
+
+      const overlay = document.getElementById('modal-overlay');
+      document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex');
+      setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+
+      const formModal = document.getElementById('modal-edit-schedule');
+      formModal.classList.remove('hide');
+      setTimeout(() => formModal.classList.remove('scale-95'), 10);
+
+      document.getElementById('modal-sch-title').innerText = "Reschedule Jadwal";
+      document.getElementById('edit-sch-client-name').innerText = window.publicLoggedMember.name;
+
+      const d = new Date(sch.start);
+      document.getElementById('edit-sch-date').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      document.getElementById('edit-sch-time').value = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+
+      const diffMins = Math.round((new Date(sch.end) - d) / 60000);
+      const durSelect = document.getElementById('edit-sch-duration');
+      if (durSelect) {
+        if ([...durSelect.options].some(o => o.value == String(diffMins))) { durSelect.value = diffMins; } else { durSelect.value = "60"; }
+      }
+      document.getElementById('edit-sch-notes').value = sch.notes || "";
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    window.openEditScheduleDetailModal = function() {
+      const sch = window.schedules.find(s => String(s.id) === String(window.selectedScheduleDetailId)); if(!sch) return;
+      window.isEditScheduleMode = true;
+      window.isRescheduleMode = false;
+      window.rescheduleScheduleId = null;
+      document.getElementById('modal-sch-title').innerText = "Ubah Jadwal";
+      document.getElementById('edit-sch-client-name').innerText = sch.title;
+
+      const recurWrap = document.getElementById('recurring-toggle-wrap');
+      if (recurWrap) recurWrap.classList.add('hide');
+      window.resetRecurringUI();
+      
+      const d = new Date(sch.start);
+      document.getElementById('edit-sch-date').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      document.getElementById('edit-sch-time').value = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+      
+      const diffMins = Math.round((new Date(sch.end) - d) / 60000);
+      const durSelect = document.getElementById('edit-sch-duration');
+      if([...durSelect.options].some(o => o.value == String(diffMins))) { durSelect.value = diffMins; } else { durSelect.value = "60"; }
+      document.getElementById('edit-sch-notes').value = sch.notes || "";
+
+      document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      const modEdit = document.getElementById('modal-edit-schedule');
+      modEdit.classList.remove('hide'); setTimeout(() => modEdit.classList.remove('scale-95'), 10);
+    };
+
+    // =============================================================================
+    // --- RECURRING BOOKING (toggle UI di modal-edit-schedule) ---
+    // =============================================================================
+    window.resetRecurringUI = function() {
+      const checkbox = document.getElementById('edit-sch-recurring-toggle');
+      const options = document.getElementById('recurring-options');
+      const occInput = document.getElementById('edit-sch-recurring-occurrences');
+      if (checkbox) checkbox.checked = false;
+      if (options) options.classList.add('hide');
+      if (occInput) occInput.value = '4';
+      document.querySelectorAll('.recurring-day-btn.active').forEach(btn => btn.classList.remove('active'));
+    };
+
+    window.toggleRecurringOptions = function() {
+      const checkbox = document.getElementById('edit-sch-recurring-toggle');
+      const options = document.getElementById('recurring-options');
+      if (!checkbox || !options) return;
+      options.classList.toggle('hide', !checkbox.checked);
+    };
+
+    window.toggleRecurringWeekday = function(btn) {
+      btn.classList.toggle('active');
+    };
+
+    window.getSelectedRecurringWeekdays = function() {
+      return [...document.querySelectorAll('.recurring-day-btn.active')].map(btn => Number(btn.dataset.day));
+    };
+
+    window.submitScheduleForm = function(e) {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]'); const originalText = btn.innerHTML; btn.innerHTML = 'Memproses...'; btn.disabled = true;
+
+      const dateVal = document.getElementById('edit-sch-date').value; const timeVal = document.getElementById('edit-sch-time').value;
+      const durationMins = parseInt(document.getElementById('edit-sch-duration').value, 10); const notes = document.getElementById('edit-sch-notes').value;
+      const startDateTime = new Date(dateVal + 'T' + timeVal + ':00'); const endDateTime = new Date(startDateTime.getTime() + durationMins * 60000); 
+
+      let data = {
+         start: startDateTime.toISOString(), end: endDateTime.toISOString(), notes: notes, duration: durationMins
+      };
+
+      if (window.isRescheduleMode) {
+         if (window.isGas) {
+           google.script.run
+             .withSuccessHandler(function() {
+               const schIndex = window.schedules.findIndex(s => String(s.id) === String(window.rescheduleScheduleId));
+               if (schIndex !== -1) {
+                 window.schedules[schIndex].start = data.start; window.schedules[schIndex].end = data.end; window.schedules[schIndex].notes = data.notes;
+               }
+               window.isRescheduleMode = false; window.rescheduleScheduleId = null;
+               window.renderPublicDashboard(); window.initCalendar(); window.closeModal();
+               btn.innerHTML = originalText; btn.disabled = false; window.showToast('Jadwal berhasil direschedule!');
+             })
+             .withFailureHandler(function(err) { btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal: ' + err.message); })
+             .clientRescheduleSchedule(window.rescheduleScheduleId, window.publicLoggedMember.id, data.start, data.end);
+         }
+      } else if (window.isEditScheduleMode) {
+         data.id = window.selectedScheduleDetailId;
+         if (window.isGas) {
+           google.script.run
+             .withSuccessHandler(function() {
+               const schIndex = window.schedules.findIndex(s => String(s.id) === String(window.selectedScheduleDetailId));
+               if(schIndex !== -1) {
+                 window.schedules[schIndex].start = data.start; window.schedules[schIndex].end = data.end; window.schedules[schIndex].notes = data.notes;
+               }
+               window.initCalendar(); window.closeModal(); btn.innerHTML = originalText; btn.disabled = false; window.showToast('Jadwal berhasil diperbarui!');
+             })
+             .withFailureHandler(function(err){ btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal: ' + err.message); })
+             .updateScheduleData(data);
+         }
+      } else {
+         let memberData = null;
+         if(window.isPublicView && window.publicLoggedMember) { memberData = window.publicLoggedMember; }
+         else if(!window.isPublicView && window.selectedMemberId) { memberData = window.members.find(x => String(x.id) === String(window.selectedMemberId)); }
+         
+         if(!memberData) { window.showToast("Error: Data Klien tidak ditemukan."); btn.innerHTML = originalText; btn.disabled = false; return; }
+         
+         data.memberId = memberData.id; data.memberName = memberData.name; data.phone = memberData.phone;
+
+         // --- Cabang: Recurring Booking ---
+         const recurCheckbox = document.getElementById('edit-sch-recurring-toggle');
+         if (recurCheckbox && recurCheckbox.checked) {
+           const weekdays = window.getSelectedRecurringWeekdays();
+           const occurrences = parseInt(document.getElementById('edit-sch-recurring-occurrences').value, 10);
+
+           if (weekdays.length === 0) {
+             window.showToast('Pilih minimal 1 hari untuk jadwal berulang.'); btn.innerHTML = originalText; btn.disabled = false; return;
+           }
+           if (!occurrences || occurrences < 2) {
+             window.showToast('Jumlah sesi minimal 2 untuk booking berulang.'); btn.innerHTML = originalText; btn.disabled = false; return;
+           }
+
+           const baseData = {
+             memberId: memberData.id, memberName: memberData.name, phone: memberData.phone, notes: notes,
+             startDate: dateVal, time: timeVal, duration: durationMins
+           };
+           const recurrenceRule = { weekdays: weekdays, occurrences: occurrences };
+
+           if (window.isGas) {
+             google.script.run
+               .withSuccessHandler(function(res) {
+                 // Refresh penuh data schedules dari server, paling aman & sederhana
+                 // daripada menyusun ulang N objek jadwal baru secara manual di client.
+                 google.script.run.withSuccessHandler(function(allSchedules) {
+                   window.schedules = allSchedules || [];
+                   window.initCalendar(); window.checkUnreadBookings();
+                   if (window.isPublicView) window.renderPublicDashboard();
+                   else if (window.currentView === 'profile') window.openProfile(memberData.id);
+                   window.updateDashboardStats();
+                   window.closeModal(); btn.innerHTML = originalText; btn.disabled = false;
+                   window.showToast(res.count + ' sesi berulang berhasil dibuat!');
+                 }).getSchedules();
+               })
+               .withFailureHandler(function(err) {
+                 btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal: ' + err.message);
+               })
+               .addRecurringSchedule(baseData, recurrenceRule);
+           }
+           return;
+         }
+
+         if (window.isGas) {
+           const isClientBooking = window.isPublicView;
+           
+           if (isClientBooking) {
+             google.script.run
+               .withSuccessHandler(function(res) {
+                 data.id = res.id; data.title = data.memberName; data.status = 'unread';
+                 window.schedules.push(data); 
+                 window.initCalendar(); window.checkUnreadBookings();
+                 window.renderPublicDashboard(); 
+                 window.closeModal(); btn.innerHTML = originalText; btn.disabled = false;
+                 window.showToast('Booking berhasil dikirim ke Coach!');
+               })
+               .withFailureHandler(function(err) {
+                 btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal Booking: ' + err.message);
+               })
+               .clientBookSchedule(data);
+           } else {
+             google.script.run
+               .withSuccessHandler(function(res) {
+                 data.id = res.id; data.title = data.memberName; data.status = 'read';
+                 window.schedules.push(data); 
+                 window.initCalendar(); window.checkUnreadBookings();
+                 window.openProfile(memberData.id); 
+                 window.closeModal(); btn.innerHTML = originalText; btn.disabled = false;
+                 window.showToast('Jadwal berhasil ditambahkan!');
+               })
+               .withFailureHandler(function(err) {
+                 btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal Booking: ' + err.message);
+               })
+               .addSchedule(data);
+           }
+         }
+      }
+    };
+
+    window.updateDraggedEvent = function(event, revertFunc) {
+      if(window.isPublicView) {
+        window.showToast("Klien tidak dapat mengubah jadwal secara langsung.");
+        revertFunc(); return;
+      }
+      
+      const data = {
+        id: event.id,
+        start: event.start.toISOString(),
+        end: event.end ? event.end.toISOString() : new Date(event.start.getTime() + 60*60000).toISOString(),
+        notes: (event.extendedProps && event.extendedProps.notes) || ""
+      };
+      
+      window.showToast("Menyimpan pembaruan slot kalender...");
+      if(window.isGas) {
+        google.script.run
+          .withSuccessHandler(function() {
+            const schIndex = window.schedules.findIndex(s => String(s.id) === String(data.id));
+            if(schIndex !== -1) {
+              window.schedules[schIndex].start = data.start;
+              window.schedules[schIndex].end = data.end;
+            }
+            window.showToast('Slot Jadwal berhasil diperbarui!');
+          })
+          .withFailureHandler(function(err){ 
+            window.showToast('Gagal mengubah jadwal: ' + err.message);
+            revertFunc(); 
+          })
+          .updateScheduleData(data);
+      }
+    };
+
+    window.handleSlotSelection = function(info) {
+       if(window.isPublicView && !window.publicLoggedMember) { window.showToast("Silakan login untuk mem-booking."); return; }
+       if(!window.isPublicView && (!window.selectedMemberId || window.currentView !== 'profile')) {
+          window.showToast("Untuk menambah jadwal, buka Profil Klien terlebih dahulu lalu klik Kalender."); return;
+       }
+
+       window.handleFabClick();
+       setTimeout(() => {
+          const d = new Date(info.start);
+          try {
+            document.getElementById('edit-sch-date').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            document.getElementById('edit-sch-time').value = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+          } catch(e) {}
+       }, 50);
+    };
+
+    window.openScheduleDetailModal = function(event) {
+      window.selectedScheduleDetailId = event.id;
+      const sch = window.schedules.find(s => String(s.id) === String(event.id));
+
+      // Reset tombol hapus ke kondisi normal (jaga-jaga jika sebelumnya sempat stuck di spinner)
+      const btnDelete = document.getElementById('btn-delete-schedule');
+      if (btnDelete) {
+        btnDelete.disabled = false;
+        btnDelete.innerHTML = '<i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i> Hapus';
+      }
+      const d = new Date(event.start); const timeStr = d.toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'short'}) + ' • ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB';
+      
+      document.getElementById('detail-member-name').innerText = event.title;
+      const extProps = event.extendedProps || {};
+      document.getElementById('detail-member-phone').innerText = '+' + (extProps.phone || '');
+      document.getElementById('detail-time').innerText = timeStr;
+      document.getElementById('detail-notes').innerText = extProps.notes ? '"' + extProps.notes + '"' : 'Tidak ada catatan';
+      
+      const selectEl = document.getElementById('detail-assign-coach'); selectEl.innerHTML = '<option value="">Belum Ditugaskan</option>';
+      const currentCoachId = extProps.coachId || '';
+      window.coaches.forEach(c => { let selected = currentCoachId === c.id ? 'selected' : ''; selectEl.innerHTML += '<option value="' + c.id + '" ' + selected + '>Coach ' + c.name + '</option>'; });
+
+      const compContainer = document.getElementById('detail-complete-container');
+      const statusStr = String(sch.status).toUpperCase();
+      if (statusStr === 'COMPLETED') {
+         compContainer.innerHTML = '<div class="w-full bg-green-50 text-green-700 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border border-green-200 cursor-default"><i data-lucide="check-circle-2" class="w-4 h-4"></i> Sesi Telah Diselesaikan</div>';
+      } else if (statusStr === 'AVAILABLE') {
+         compContainer.innerHTML = '<p class="text-xs text-center text-gray-500 italic mt-2 border-t border-gray-100 pt-3">Ini adalah slot Kosong/Available.</p>';
+      } else {
+         compContainer.innerHTML = '<button onclick="window.markSessionCompleted()" id="btn-complete-session" class="w-full bg-black text-white py-3.5 rounded-xl font-bold text-xs hover:bg-gray-900 transition-colors shadow-lg flex items-center justify-center gap-2"><i data-lucide="check-circle" class="w-4 h-4"></i> Tandai Selesai & Potong 1 Sesi</button>';
+      }
+
+      // Tampilkan opsi "Hapus Seluruh Seri" kalau jadwal ini bagian dari recurring booking
+      window.selectedScheduleDetailRecurringGroupId = (sch && sch.recurringGroupId) ? sch.recurringGroupId : '';
+      const recurDetailContainer = document.getElementById('detail-recurring-container');
+      if (recurDetailContainer) {
+        recurDetailContainer.classList.toggle('hide', !window.selectedScheduleDetailRecurringGroupId);
+      }
+
+      const overlay = document.getElementById('modal-overlay'); document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex'); setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+      const mod = document.getElementById('modal-schedule-detail'); mod.classList.remove('hide'); setTimeout(() => mod.classList.remove('scale-95'), 10);
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    window.saveCoachAssignment = function() {
+      const btn = document.getElementById('btn-save-coach'); const originalText = btn.innerHTML; btn.innerHTML = '...'; btn.disabled = true;
+      const selectEl = document.getElementById('detail-assign-coach'); if(!selectEl) return;
+      const coachId = selectEl.value;
+      const coachObj = coachId ? window.coaches.find(c => String(c.id) === String(coachId)) : null;
+      const coachName = coachObj ? (coachObj.name || 'Belum Ditugaskan') : 'Belum Ditugaskan';
+
+      if(window.isGas) {
+         google.script.run
+         .withSuccessHandler(function() {
+            const schIndex = window.schedules.findIndex(s => String(s.id) === String(window.selectedScheduleDetailId));
+            if(schIndex !== -1) { window.schedules[schIndex].coachId = coachId; window.schedules[schIndex].coachName = coachName; }
+            window.initCalendar(); btn.innerHTML = originalText; btn.disabled = false; window.closeModal(); window.showToast('Penugasan Coach Berhasil!');
+         })
+         .withFailureHandler(function(err){
+            btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal: ' + err.message);
+         })
+         .updateScheduleCoach(window.selectedScheduleDetailId, coachId, coachName);
+      }
+    };
+
+    window.deleteRecurringGroupFromDetail = function() {
+      const groupId = window.selectedScheduleDetailRecurringGroupId;
+      if (!groupId) return;
+
+      window.showConfirmModal(
+        'Ini akan menghapus <b>SEMUA sesi</b> dalam seri jadwal berulang ini (termasuk yang sudah lewat/selesai). Kuota sesi klien yang sudah terpakai dari sesi completed akan dikembalikan.',
+        function() {
+          const btn = document.getElementById('btn-delete-recurring-group');
+          const originalText = btn ? btn.innerHTML : '';
+          if (btn) { btn.innerHTML = 'Menghapus...'; btn.disabled = true; }
+
+          if (window.isGas) {
+            google.script.run
+              .withSuccessHandler(function(res) {
+                window.schedules = window.schedules.filter(s => String(s.recurringGroupId) !== String(groupId));
+                // Refresh member quota juga, karena kuota bisa dikembalikan di server kalau ada sesi completed yang terhapus
+                google.script.run.withSuccessHandler(function(freshMembers) {
+                  window.members = freshMembers || window.members;
+                  window.initCalendar(); window.updateMemberUI(); window.updateDashboardStats();
+                  window.closeModal(); window.showToast(res.deletedCount + ' sesi berulang berhasil dihapus.');
+                  if (window.currentView === 'profile' && window.selectedMemberId) window.openProfile(window.selectedMemberId);
+                }).getMembers();
+              })
+              .withFailureHandler(function(err) {
+                if (btn) { btn.innerHTML = originalText; btn.disabled = false; }
+                window.showToast('Gagal: ' + err.message);
+              })
+              .deleteRecurringGroup(groupId);
+          }
+        },
+        { title: 'Hapus Seluruh Seri Berulang?', confirmText: 'Ya, Hapus Semua', cancelText: 'Batal', variant: 'danger' }
+      );
+    };
+
+    window.contactDetailMember = function() {
+      const sch = window.schedules.find(s => String(s.id) === String(window.selectedScheduleDetailId)); if(!sch) return;
+      const d = new Date(sch.start); const timeStr = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB';
+      window.sendToParentWA(sch.phone, 'Halo ' + sch.title + ', ini Coach. Mengingatkan jadwal latihan kita tanggal ' + d.toLocaleDateString('id-ID') + ' jam ' + timeStr + '. Tolong konfirmasi ya!');
+    };
+
+    window.contactDetailCoach = function() {
+      const sch = window.schedules.find(s => String(s.id) === String(window.selectedScheduleDetailId)); if(!sch || !sch.coachId) { window.showToast('Pilih Coach terlebih dahulu!'); return; }
+      const coach = window.coaches.find(c => String(c.id) === String(sch.coachId)); if(!coach) return;
+      const d = new Date(sch.start); const timeStr = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB';
+      window.sendToParentWA(coach.phone, 'Halo Coach ' + coach.name + ', Anda ditugaskan untuk sesi bersama klien ' + sch.title + ' pada tanggal ' + d.toLocaleDateString('id-ID') + ' jam ' + timeStr + '.');
+    };
+
+    window.markSessionCompleted = function() {
+      const sch = window.schedules.find(s => String(s.id) === String(window.selectedScheduleDetailId)); if(!sch) return;
+      const mem = window.members.find(m => String(m.id) === String(sch.memberId)); if(!mem) return;
+      if(mem.usedSessions >= mem.totalSessions) { window.showToast('Gagal: Kuota sesi klien ini sudah habis!'); return; }
+
+      window.showConfirmModal(
+        'Ini akan memotong 1 kuota sesi dari klien <b>' + sch.title + '</b>.',
+        function() {
+          const btn = document.getElementById('btn-complete-session'); const originalText = btn.innerHTML; btn.innerHTML = 'Memproses...'; btn.disabled = true;
+
+          if (window.isGas) {
+            google.script.run
+              .withSuccessHandler(function(result) {
+                sch.status = 'completed'; mem.usedSessions = (mem.usedSessions || 0) + 1;
+                window.updateMemberUI(); window.initCalendar(); window.closeModal(); window.showToast('Sesi selesai! Kuota dipotong.');
+                if(window.currentView === 'profile' && window.selectedMemberId === sch.memberId) window.openProfile(sch.memberId);
+
+                // Tawarkan kirim reminder WA sisa sesi (manual, 1 klik, tanpa CTA jualan)
+                const reminderMsg = (result && result.reminderMessage)
+                  ? result.reminderMessage
+                  : 'Halo ' + sch.title + ', sesi kamu tersisa ' + Math.max(0, (mem.totalSessions||0) - (mem.usedSessions||0)) + ' dari ' + (mem.totalSessions||0) + ' ya.';
+
+                setTimeout(function() {
+                  window.showConfirmModal(
+                    'Kirim info sisa sesi ke <b>' + sch.title + '</b> via WhatsApp?<br><span class="text-gray-400 text-xs">"' + reminderMsg + '"</span>',
+                    function() { window.sendToParentWA(sch.phone, reminderMsg); },
+                    { title: 'Kirim Reminder Sesi?', confirmText: 'Kirim Reminder WA', cancelText: 'Nanti Saja', variant: 'default' }
+                  );
+                }, 400);
+              })
+              .withFailureHandler(function(err){ btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal: ' + err.message); })
+              .completeSession(sch.id, sch.memberId);
+          }
+        },
+        { title: 'Tandai Sesi Selesai?', confirmText: 'Ya, Selesai', variant: 'default' }
+      );
+    };
+
+    window.deleteScheduleFromDetail = function() {
+      const scheduleId = window.selectedScheduleDetailId;
+      const sch = window.schedules.find(s => String(s.id) === String(scheduleId));
+      if (!sch) { window.showToast('Data jadwal tidak ditemukan.'); return; }
+
+      document.getElementById('delete-schedule-title').innerText = sch.title || 'jadwal ini';
+
+      const overlay = document.getElementById('modal-overlay');
+      document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex');
+      setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+
+      const modDelete = document.getElementById('modal-delete-schedule-confirm');
+      modDelete.classList.remove('hide');
+      setTimeout(() => modDelete.classList.remove('scale-95'), 10);
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    window.confirmDeleteSchedule = function() {
+      const scheduleId = window.selectedScheduleDetailId;
+      const sch = window.schedules.find(s => String(s.id) === String(scheduleId));
+      if (!sch) { window.showToast('Data jadwal tidak ditemukan.'); window.closeModal(); return; }
+
+      const btn = document.getElementById('delete-schedule-confirm-btn');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin pointer-events-none"></i> Menghapus...';
+
+      const wasCompleted = String(sch.status).toUpperCase() === 'COMPLETED';
+      const memberId = sch.memberId;
+
+      if (window.isGas) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            window.schedules = window.schedules.filter(s => String(s.id) !== String(scheduleId));
+
+            if (wasCompleted) {
+              const mem = window.members.find(m => String(m.id) === String(memberId));
+              if (mem) {
+                mem.usedSessions = Math.max(0, (mem.usedSessions || 0) - 1);
+              }
+            }
+
+            window.initCalendar();
+            window.updateMemberUI();
+            window.closeModal();
+            btn.disabled = false; btn.innerHTML = originalHtml;
+            window.showToast('Jadwal berhasil dihapus.');
+
+            if (window.currentView === 'profile' && window.selectedMemberId === memberId) {
+              window.openProfile(memberId);
+            }
+          })
+          .withFailureHandler(function(err) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            try { window.lucide.createIcons(); } catch(e) {}
+            window.showToast('Gagal: ' + err.message);
+          })
+          .deleteSchedule(scheduleId);
+      }
+    };
+
+    // =============================================================================
+    // --- FEATURE: COACHES MANAGEMENT ---
+    // =============================================================================
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    window.updateCoachUI = function() {
+      const listEl = document.getElementById('coach-list'); const selectSchEl = document.getElementById('sch-coach');
+      if(listEl) listEl.innerHTML = ''; if(selectSchEl) selectSchEl.innerHTML = '<option value="">Belum Ditugaskan</option>';
+      window.coaches.forEach(function(c) {
+        if(listEl) {
+          const avatarHtml = c.photo
+            ? '<img src="' + escapeHtml(c.photo) + '" class="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" onerror="this.outerHTML=\'<div class=&quot;w-10 h-10 md:w-12 md:h-12 bg-gray-100 rounded-full flex items-center justify-center&quot;><i data-lucide=&quot;contact-2&quot; class=&quot;w-5 h-5 md:w-6 md:h-6&quot;></i></div>\'; try{window.lucide.createIcons();}catch(e){}">'
+            : '<div class="w-10 h-10 md:w-12 md:h-12 bg-gray-100 rounded-full flex items-center justify-center group-hover:bg-black group-hover:text-white transition-colors"><i data-lucide="contact-2" class="w-5 h-5 md:w-6 md:h-6"></i></div>';
+
+          listEl.innerHTML += '<div onclick="window.openCoachProfile(\'' + c.id + '\')" class="bg-white border border-gray-200 rounded-2xl p-4 md:p-6 hover:shadow-lg hover:border-black cursor-pointer transition-all group relative overflow-hidden"><div class="flex items-center gap-3 md:gap-4 mb-3">' + avatarHtml + '<div><h4 class="font-bold text-base md:text-lg">' + escapeHtml(c.name || 'Coach') + '</h4><p class="text-xs md:text-sm text-gray-400 font-mono">+' + escapeHtml(c.phone || '-') + '</p></div></div><div class="bg-gray-50 p-2.5 md:p-3 rounded-xl text-xs border border-gray-100 text-center font-bold uppercase tracking-wider text-gray-500">' + escapeHtml(c.specialty || '-') + '</div></div>';
+        }
+        if(selectSchEl) selectSchEl.innerHTML += '<option value="' + c.id + '">Coach ' + escapeHtml(c.name || '-') + '</option>';
+      });
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    window.openCoachProfile = function(id) {
+      const c = window.coaches.find(m => String(m.id) === String(id)); if(!c) return;
+      const cName = document.getElementById('cprofile-name');
+      const cSpec = document.getElementById('cprofile-specialty');
+      const cExp = document.getElementById('cprofile-experience');
+      const cBio = document.getElementById('cprofile-bio');
+      const cPhoto = document.getElementById('cprofile-photo');
+      const cPhotoFallback = document.getElementById('cprofile-photo-fallback');
+      const cWaBtn = document.getElementById('cprofile-wa-btn');
+
+      if(cName) cName.innerText = c.name || 'Coach';
+      if(cSpec) cSpec.innerText = c.specialty || '-';
+      if(cExp) cExp.innerText = c.experience ? c.experience + ' Pengalaman' : '';
+      if(cBio) cBio.innerText = c.bio || 'Belum ada bio untuk coach ini.';
+
+      if(cPhoto && cPhotoFallback) {
+        if (c.photo) {
+          cPhoto.src = c.photo; cPhoto.classList.remove('hide'); cPhotoFallback.classList.add('hide');
+        } else {
+          cPhoto.classList.add('hide'); cPhotoFallback.classList.remove('hide');
+        }
+      }
+      if(cWaBtn) cWaBtn.onclick = function() { window.sendToParentWA(c.phone, ''); };
+
+      window.currentCoachId = c.id;
+      window.navigate('coach-profile');
+    };
+
+    window.renderPublicCoaches = function() {
+      const listEl = document.getElementById('public-coach-list');
+      if(!listEl) return;
+      listEl.innerHTML = '';
+
+      if(window.coaches.length === 0) {
+        listEl.innerHTML = '<p class="text-center text-gray-500 col-span-1 md:col-span-3 py-8">Belum ada data coach.</p>';
+        return;
+      }
+
+      window.coaches.forEach(function(c) {
+        const avatarHtml = c.photo
+          ? '<img src="' + escapeHtml(c.photo) + '" class="w-24 h-24 rounded-full object-cover mb-4 shrink-0" onerror="this.outerHTML=\'<div class=&quot;w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4 shrink-0&quot;><i data-lucide=&quot;contact-2&quot; class=&quot;w-10 h-10 text-gray-400&quot;></i></div>\'; try{window.lucide.createIcons();}catch(e){}">'
+          : '<div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4 shrink-0"><i data-lucide="contact-2" class="w-10 h-10 text-gray-400"></i></div>';
+
+        const bioHtml = c.bio ? '<p class="text-xs text-gray-500 mb-4 line-clamp-3">' + escapeHtml(c.bio) + '</p>' : '';
+        const expHtml = c.experience ? '<p class="text-[11px] text-gray-400 font-bold uppercase tracking-wider mb-1">' + escapeHtml(c.experience) + '</p>' : '';
+
+        listEl.innerHTML += '<div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center hover:shadow-lg transition-all">' +
+          avatarHtml +
+          '<h3 class="text-xl font-black mb-1">' + escapeHtml(c.name || 'Coach') + '</h3>' +
+          '<p class="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full font-bold mb-2 uppercase tracking-wider">' + escapeHtml(c.specialty || 'General Training') + '</p>' +
+          expHtml + bioHtml +
+          '<button onclick="window.contactPublicCoach(\'' + c.id + '\')" class="w-full bg-[#25D366] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#1ebe5d] transition-colors shadow-md flex items-center justify-center gap-2 mt-auto">' +
+            '<i data-lucide="message-circle" class="w-4 h-4"></i> Tanya Program' +
+          '</button>' +
+        '</div>';
+      });
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    window.submitAddCoach = function(e) {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      const originalText = btn.innerHTML; btn.innerHTML = 'Menyimpan...'; btn.disabled = true;
+
+      const editId = document.getElementById('coach-edit-id').value;
+      const data = {
+        name: document.getElementById('coach-name').value,
+        phone: sanitizePhone(document.getElementById('coach-phone').value),
+        specialty: document.getElementById('coach-specialty').value,
+        bio: document.getElementById('coach-bio').value,
+        experience: document.getElementById('coach-experience').value,
+        photo: editId ? (window.coaches.find(c => String(c.id) === String(editId)) || {}).photo || '' : ''
+      };
+      if (editId) data.id = editId;
+
+      function finishSave() {
+        if (!window.isGas) return;
+        const handler = editId ? 'updateCoach' : 'addCoach';
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (editId) {
+              const idx = window.coaches.findIndex(c => String(c.id) === String(editId));
+              if (idx > -1) window.coaches[idx] = data;
+            } else {
+              data.id = res.id;
+              window.coaches.push(data);
+            }
+            window.updateCoachUI();
+            window.closeModal();
+            btn.innerHTML = originalText; btn.disabled = false;
+            window.showToast(editId ? 'Coach berhasil diupdate!' : 'Coach berhasil ditambahkan!');
+          })
+          .withFailureHandler(function(err) {
+            btn.innerHTML = originalText; btn.disabled = false;
+            window.showToast('Gagal Simpan: ' + err.message);
+          })
+          [handler](data);
+      }
+
+      if (window.pendingCoachBase64) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            data.photo = res.url;
+            window.pendingCoachBase64 = null;
+            finishSave();
+          })
+          .withFailureHandler(function(err) {
+            btn.innerHTML = originalText; btn.disabled = false;
+            window.showToast('Gagal Upload Foto: ' + err.message);
+          })
+          .uploadCoachPhoto(window.pendingCoachBase64, 'coach_' + new Date().getTime() + '.jpg', 'image/jpeg');
+      } else {
+        finishSave();
+      }
+    };
+
+    window.openEditCoachModal = function(id) {
+      const c = window.coaches.find(m => String(m.id) === String(id)); if(!c) return;
+      window.openAddCoachModal();
+      document.getElementById('coach-modal-title').innerText = 'Edit Coach';
+      document.getElementById('coach-edit-id').value = c.id;
+      document.getElementById('coach-name').value = c.name || '';
+      document.getElementById('coach-phone').value = c.phone || '';
+      document.getElementById('coach-specialty').value = c.specialty || '';
+      document.getElementById('coach-experience').value = c.experience || '';
+      document.getElementById('coach-bio').value = c.bio || '';
+      const preview = document.getElementById('coach-photo-preview');
+      const fallback = document.getElementById('coach-photo-preview-fallback');
+      if (c.photo) { preview.src = c.photo; preview.classList.remove('hide'); fallback.classList.add('hide'); }
+      else { preview.classList.add('hide'); fallback.classList.remove('hide'); }
+    };
+
+    window.openAddCoachModal = function() {
+      document.getElementById('coach-modal-title').innerText = 'Tambah Coach Baru';
+      document.getElementById('coach-edit-id').value = '';
+      document.getElementById('coach-name').value = '';
+      document.getElementById('coach-phone').value = '';
+      document.getElementById('coach-specialty').value = '';
+      document.getElementById('coach-experience').value = '';
+      document.getElementById('coach-bio').value = '';
+      
+      window.pendingCoachBase64 = null;
+
+      const fileInput = document.getElementById('coach-photo-file');
+      if (fileInput) fileInput.value = '';
+      const preview = document.getElementById('coach-photo-preview');
+      const fallback = document.getElementById('coach-photo-preview-fallback');
+      if (preview) preview.classList.add('hide');
+      if (fallback) fallback.classList.remove('hide');
+
+      const overlay = document.getElementById('modal-overlay'); document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex'); setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+      const modAdd = document.getElementById('modal-add-coach'); modAdd.classList.remove('hide'); setTimeout(() => modAdd.classList.remove('scale-95'), 10);
+    };
+
+    window.previewCoachPhoto = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) { window.showToast("Harap pilih file gambar (JPG/PNG)."); return; }
+      
+      window.cropContext = 'coach';
+      window.openCropModal(file);
+      e.target.value = '';
+    };
+
+
+    // =============================================================================
+    // --- FEATURE: PRICE LIST & PACKAGES (DYNAMIC CATEGORIES) ---
+    // =============================================================================
+    window.renderPriceCategories = function() {
+      const container = document.getElementById('category-button-container');
+      if (!container) return;
+
+      const uniqueCategories = [...new Set(window.priceListData.map(p => p.kategori))].filter(Boolean);
+      
+      if (uniqueCategories.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      if (!uniqueCategories.includes(window.currentClientType)) {
+        window.currentClientType = uniqueCategories[0];
+      }
+
+      const pct = 100 / uniqueCategories.length;
+      
+      let html = `<div id="price-indicator" class="absolute h-[calc(100%-12px)] bg-black rounded-xl transition-transform duration-300 ease-out shadow-md z-0" style="width: calc(${pct}% - 3px); left: 6px; top: 6px; transform: translateX(0%);"></div>`;
+
+      uniqueCategories.forEach((cat, index) => {
+        const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+        const isActive = cat === window.currentClientType;
+        const textClass = isActive ? 'text-white' : 'text-gray-500 hover:text-gray-800';
+        
+        html += `<button onclick="window.setPriceCategory('${cat}', ${index})" data-category="${cat}" class="cat-btn relative z-10 flex-1 py-2.5 text-xs md:text-sm font-bold ${textClass} transition-colors duration-300">${label}</button>`;
+      });
+
+      container.innerHTML = html;
+      
+      const activeIndex = uniqueCategories.indexOf(window.currentClientType);
+      window.setPriceCategory(window.currentClientType, activeIndex !== -1 ? activeIndex : 0);
+    };
+
+    window.setPriceCategory = function(category, index) {
+      window.currentClientType = category;
+      
+      const indicator = document.getElementById('price-indicator');
+      if (indicator) {
+         indicator.style.transform = 'translateX(' + (index * 100) + '%)';
+      }
+      
+      const btns = document.querySelectorAll('.cat-btn');
+      btns.forEach(function(btn) {
+          if (btn.dataset.category === category) {
+              btn.classList.add('text-white');
+              btn.classList.remove('text-gray-500', 'hover:text-gray-800');
+          } else {
+              btn.classList.remove('text-white');
+              btn.classList.add('text-gray-500', 'hover:text-gray-800');
+          }
+      });
+      
+      window.renderPriceList();
+    };
+
+    window.renderPriceList = function() {
+      const container = document.getElementById('pricelist-container'); 
+      if(!container) return;
+      
+      container.innerHTML = '';
+      const type = window.currentClientType; 
+      
+      const filteredPackages = window.priceListData.filter(function(p) { return p.kategori === type; });
+
+      if(filteredPackages.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-500 col-span-1 md:col-span-3 py-8">Belum ada paket tersedia untuk kategori ini.</p>';
+        return;
+      }
+
+      filteredPackages.forEach(function(pkg, index) {
+        const themes = ['slate', 'indigo', 'purple'];
+        const theme = themes[index % 3];
+        let bgIcon = 'bg-slate-800'; let textAccent = 'text-slate-800'; let borderAccent = 'border-slate-200';
+        if(theme === 'indigo') { bgIcon = 'bg-indigo-600'; textAccent = 'text-indigo-600'; borderAccent = 'border-indigo-200'; }
+        if(theme === 'purple') { bgIcon = 'bg-purple-700'; textAccent = 'text-purple-700'; borderAccent = 'border-purple-200'; }
+
+        let sesiDisplay = pkg.jumlahSesi ? pkg.jumlahSesi + ' Sesi' : 'Flexible Session';
+        let subTitleDisplay = pkg.durasi ? sesiDisplay + ' • ' + pkg.durasi : sesiDisplay;
+
+        let priceButtonsHtml = '<div class="flex items-center justify-between bg-gray-50 p-3 rounded-xl mb-2"><div><span class="font-black text-sm block">' + subTitleDisplay + '</span><span class="text-gray-500 font-bold text-xs">' + formatRp(pkg.harga) + '</span></div><button onclick="window.openRegistrationModal(\'' + pkg.id + '\')" class="bg-black text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors">Pilih</button></div>';
+        
+        let featuresHtml = '';
+        if(pkg.benefit && Array.isArray(pkg.benefit)) {
+          featuresHtml = pkg.benefit.map(function(f) { return '<li class="flex items-start gap-2 text-xs text-gray-600 mb-2"><i data-lucide="check-circle-2" class="w-4 h-4 ' + textAccent + ' shrink-0"></i> <span>' + f + '</span></li>'; }).join('');
+        }
+
+        container.innerHTML += '<div class="bg-white rounded-3xl p-6 border ' + borderAccent + ' shadow-sm flex flex-col h-full hover:shadow-xl transition-shadow relative overflow-hidden"><div class="absolute top-0 right-0 p-4 opacity-5"><i data-lucide="dumbbell" class="w-32 h-32"></i></div><div class="flex items-center gap-3 mb-4 relative z-10"><div class="w-12 h-12 ' + bgIcon + ' text-white rounded-xl flex items-center justify-center shadow-md"><i data-lucide="dumbbell" class="w-6 h-6"></i></div><h3 class="text-lg font-black leading-tight max-w-[150px] uppercase ' + textAccent + '">' + pkg.namaPaket + '</h3></div><p class="text-xs text-gray-500 mb-6 min-h-[40px] italic leading-relaxed relative z-10">' + pkg.deskripsi + '</p><div class="mb-6 relative z-10"><h4 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Termasuk:</h4><ul class="mb-4">' + featuresHtml + '</ul></div><div class="mt-auto relative z-10 border-t border-gray-100 pt-4">' + priceButtonsHtml + '</div></div>';
+      });
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    window.openRegistrationModal = function(id) {
+      const pkg = window.priceListData.find(function(p) { return p.id === id; });
+      if(!pkg) return;
+      
+      const typeLabel = window.currentClientType.charAt(0).toUpperCase() + window.currentClientType.slice(1);
+      let sesiDisplay = pkg.jumlahSesi ? pkg.jumlahSesi + ' Sesi' : 'Flexible Session';
+
+      document.getElementById('reg-status-label').innerText = 'Kategori: ' + typeLabel; 
+      document.getElementById('reg-package-name').innerText = pkg.namaPaket + ' (' + sesiDisplay + ')'; 
+      document.getElementById('reg-package-price').innerText = formatRp(pkg.harga);
+      
+      document.getElementById('reg-data-package').value = pkg.namaPaket; 
+      document.getElementById('reg-data-sessions').value = pkg.jumlahSesi ? parseInt(pkg.jumlahSesi) : 1; 
+      document.getElementById('reg-data-price').value = formatRp(pkg.harga); 
+      document.getElementById('reg-data-type').value = typeLabel;
+
+      const overlay = document.getElementById('modal-overlay'); document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex'); setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+      const mod = document.getElementById('modal-public-register'); mod.classList.remove('hide'); setTimeout(() => mod.classList.remove('scale-95'), 10);
+    };
+
+    window.submitRegistration = function(e) {
+      e.preventDefault();
+      if(COACH_WA_NUMBER === "628xxxxxxxx" || !COACH_WA_NUMBER) { alert("SISTEM ERROR: Nomor WhatsApp Coach belum disetting di kode HTML."); return; }
+      const btn = e.target.querySelector('button[type="submit"]'); const originalText = btn.innerHTML; btn.innerHTML = 'Memproses...'; btn.disabled = true;
+
+      const data = {
+        name: document.getElementById('reg-name').value, phone: sanitizePhone(document.getElementById('reg-phone').value), goal: document.getElementById('reg-goal').value,
+        packageName: document.getElementById('reg-data-package').value, sessions: parseInt(document.getElementById('reg-data-sessions').value, 10),
+        price: document.getElementById('reg-data-price').value, clientType: document.getElementById('reg-data-type').value
+      };
+
+      if (window.isGas) {
+        google.script.run
+          .withSuccessHandler(function() {
+            window.closeModal(); btn.innerHTML = originalText; btn.disabled = false;
+            const textWA = 'Halo Coach, saya ' + data.name + ' ingin mendaftar PT.\n\n*Detail Pendaftaran:*\nKategori: ' + data.clientType.toUpperCase() + '\nPaket: ' + data.packageName + ' (' + data.sessions + ' Sesi)\nGoal: ' + data.goal + '\n\n*Total Tagihan: ' + data.price + '*\n\nMohon info nomor rekening pembayarannya ya Coach. Terima kasih!';
+            window.showToast('Registrasi berhasil! Mengarahkan ke WhatsApp...'); setTimeout(() => { window.sendToParentWA(COACH_WA_NUMBER, textWA); window.navigate('public-login'); }, 1500);
+          })
+          .withFailureHandler(function(err) {
+            btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal Pendaftaran: ' + err.message);
+          })
+          .registerNewClient(data);
+      }
+    };
+
+    // =============================================================================
+    // --- PUBLIC MEMBER AREA ---
+    // =============================================================================
+    window.handlePublicLogin = function(e) {
+      e.preventDefault();
+      const phoneInput = sanitizePhone(document.getElementById('login-phone').value);
+      const member = window.members.find(m => sanitizePhone(m.phone) === phoneInput);
+      
+      if (member) {
+        window.publicLoggedMember = member;
+
+        const rememberEl = document.getElementById('login-remember-me');
+        const rememberMe = rememberEl ? rememberEl.checked : true;
+        try {
+          if (rememberMe) {
+            localStorage.setItem('xnk_remembered_phone', phoneInput);
+          } else {
+            localStorage.removeItem('xnk_remembered_phone');
+          }
+        } catch (e) { /* localStorage tidak tersedia, abaikan */ }
+        
+        const dashboardBtn = document.getElementById('nav-dashboard-btn');
+        const loginBtn = document.getElementById('nav-login-btn');
+        if (dashboardBtn) dashboardBtn.classList.remove('hidden');
+        if (loginBtn) loginBtn.classList.add('hidden');
+        
+        window.navigate('public-dashboard');
+        window.showToast('Selamat datang, ' + (member.name || 'Klien') + '!');
+      } else {
+        window.showToast("Nomor WhatsApp tidak ditemukan. Pastikan sudah didaftarkan oleh Coach.");
+      }
+    };
+
+    // Coba login otomatis pakai nomor yang tersimpan di perangkat ini (dipanggil setelah data member selesai dimuat)
+    window.tryAutoLoginPublic = function() {
+      if (!window.isPublicView || window.publicLoggedMember) return;
+      let savedPhone = null;
+      try {
+        savedPhone = localStorage.getItem('xnk_remembered_phone');
+      } catch (e) { return; }
+      if (!savedPhone) return;
+
+      const member = window.members.find(m => sanitizePhone(m.phone) === savedPhone);
+      if (member) {
+        window.publicLoggedMember = member;
+
+        const dashboardBtn = document.getElementById('nav-dashboard-btn');
+        const loginBtn = document.getElementById('nav-login-btn');
+        if (dashboardBtn) dashboardBtn.classList.remove('hidden');
+        if (loginBtn) loginBtn.classList.add('hidden');
+
+        window.navigate('public-dashboard');
+      }
+    };
+
+    window.logoutPublic = function() {
+      window.publicLoggedMember = null;
+      document.getElementById('login-phone').value = '';
+      try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) { /* abaikan */ }
+      
+      const dashboardBtn = document.getElementById('nav-dashboard-btn');
+      const loginBtn = document.getElementById('nav-login-btn');
+      if (dashboardBtn) dashboardBtn.classList.add('hidden');
+      if (loginBtn) loginBtn.classList.remove('hidden');
+      
+      window.navigate('public-login');
+      window.showToast("Berhasil keluar.");
+    };
+
+    window.renderPublicDashboard = function() {
+  if (!window.publicLoggedMember) return;
+  const m = window.publicLoggedMember;
+  
+  if (window.members && Array.isArray(window.members)) {
+    const updatedMember = window.members.find(x => String(x.id) === String(m.id));
+    if (updatedMember) {
+      window.publicLoggedMember = updatedMember;
+    }
+  }
+  
+  const currMember = window.publicLoggedMember;
+
+  const firstName = currMember && currMember.name ? currMember.name.split(' ')[0] : 'Member';
+  const nameEl = document.getElementById('pub-dash-name');
+  if (nameEl) nameEl.innerText = firstName;
+  
+  // =========================================================
+  // KODE TAMBAHAN: MENGATUR RENDER FOTO PROFIL SAAT LOAD
+  // =========================================================
+  const imgEl = document.getElementById('pub-avatar-img');
+  const placeholderEl = document.getElementById('pub-avatar-placeholder-icon');
+  const avatarBtn = document.getElementById('pub-avatar-btn');
+
+  if (currMember.photo && currMember.photo.trim() !== '') {
+    // Jika member punya foto
+    imgEl.src = currMember.photo;
+    imgEl.classList.remove('hidden');
+    placeholderEl.classList.add('hidden');
+    avatarBtn.classList.remove('border-dashed', 'border-gray-300');
+    avatarBtn.classList.add('border-solid', 'border-black');
+  } else {
+    // Jika tidak ada foto (kembali ke default icon)
+    imgEl.src = '';
+    imgEl.classList.add('hidden');
+    placeholderEl.classList.remove('hidden');
+    avatarBtn.classList.add('border-dashed', 'border-gray-300');
+    avatarBtn.classList.remove('border-solid', 'border-black');
+  }
+  // =========================================================
+  
+  const totalSessions = currMember && currMember.totalSessions ? Number(currMember.totalSessions) : 0;
+  const usedSessions = currMember && currMember.usedSessions ? Number(currMember.usedSessions) : 0;
+  const remainingSessions = totalSessions - usedSessions;
+
+  const remainingEl = document.getElementById('pub-dash-remaining');
+  const totalEl = document.getElementById('pub-dash-total');
+  
+  if (remainingEl) remainingEl.innerText = remainingSessions;
+  if (totalEl) totalEl.innerText = totalSessions;
+
+  // --- Warning Kuota Hampir Habis ---
+  const quotaWarningEl = document.getElementById('pub-quota-warning');
+  if (quotaWarningEl) {
+    if (totalSessions > 0 && remainingSessions <= 1) {
+      quotaWarningEl.classList.remove('hide');
+      const warnTextEl = document.getElementById('pub-quota-warning-text');
+      if (warnTextEl) {
+        warnTextEl.innerText = remainingSessions <= 0
+          ? 'Kuota sesimu sudah habis. Yuk hubungi Coach untuk perpanjang paket!'
+          : 'Sesimu tinggal 1 lagi! Yuk hubungi Coach untuk perpanjang paket.';
+      }
+    } else {
+      quotaWarningEl.classList.add('hide');
+    }
+  }
+
+  const histEl = document.getElementById('pub-dash-history'); 
+  if (!histEl) return; 
+  
+  histEl.innerHTML = '';
+  const safeSchedules = Array.isArray(window.schedules) ? window.schedules : [];
+  
+  const memSchedules = safeSchedules
+    .filter(s => currMember && String(s.memberId) === String(currMember.id))
+    .sort((a, b) => new Date(b.start) - new Date(a.start));
+  
+  if (memSchedules.length === 0) {
+    histEl.innerHTML = '<div class="text-center p-6 bg-gray-50 rounded-2xl border border-gray-100"><p class="text-sm text-gray-500">Belum ada jadwal latihan.</p></div>';
+  } else {
+    memSchedules.forEach(s => {
+      const d = new Date(s.start);
+      const isDone = s.status === 'completed';
+      const isUpcoming = !isDone && d >= new Date();
+      
+      histEl.innerHTML += `
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-black ${isDone ? 'text-green-600' : 'text-black'}">
+                ${d.toLocaleDateString('id-ID', {weekday:'short', day:'numeric', month:'short'})}
+              </p>
+              <p class="text-xs font-bold text-gray-500">
+                ${d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})} WIB
+              </p>
+              <p class="text-[10px] text-gray-400 mt-1">
+                <i data-lucide="contact-2" class="w-3 h-3 inline"></i> ${s.coachName || 'Menunggu Coach'}
+              </p>
+            </div>
+            <div>
+              ${isDone 
+                ? '<span class="bg-green-100 text-green-700 text-xs font-bold px-3 py-1.5 rounded-lg border border-green-200">Selesai</span>' 
+                : '<span class="bg-yellow-100 text-yellow-700 text-xs font-bold px-3 py-1.5 rounded-lg border border-yellow-200">Mendatang</span>'
+              }
+            </div>
+          </div>
+          ${isUpcoming ? `
+          <div class="mt-3 pt-3 border-t border-gray-100">
+            <button type="button" onclick="window.openRescheduleModal('${s.id}')" class="w-full flex items-center justify-center gap-2 text-xs font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 py-2 rounded-xl transition-colors">
+              <i data-lucide="calendar-clock" class="w-3.5 h-3.5"></i> Reschedule
+            </button>
+          </div>` : ''}
+        </div>
+      `;
+    });
+  }
+  
+  window.renderConsistencyAnalysis(currMember, memSchedules);
+  window.renderFavoriteTime(memSchedules);
+  window.renderAchievementBadges(memSchedules);
+  window.renderActivityHeatmap(memSchedules);
+
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    lucide.createIcons();
+  }
+};
+
+    // =============================================================================
+    // --- FEATURE: CONSISTENCY / ATTENDANCE ANALYSIS (Member Dashboard) ---
+    // =============================================================================
+    window.renderConsistencyAnalysis = function(currMember, memSchedules) {
+      const scoreEl = document.getElementById('pub-consistency-score');
+      const labelEl = document.getElementById('pub-consistency-label');
+      const streakEl = document.getElementById('pub-consistency-streak');
+      const avgEl = document.getElementById('pub-consistency-avg');
+      const chartEl = document.getElementById('pub-consistency-chart');
+      const emptyEl = document.getElementById('pub-consistency-empty');
+      const contentEl = document.getElementById('pub-consistency-content');
+      if (!scoreEl || !chartEl) return;
+
+      const completedSchedules = (memSchedules || [])
+        .filter(s => String(s.status).toLowerCase() === 'completed')
+        .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+      if (completedSchedules.length === 0) {
+        if (emptyEl) emptyEl.classList.remove('hide');
+        if (contentEl) contentEl.classList.add('hide');
+        return;
+      }
+      if (emptyEl) emptyEl.classList.add('hide');
+      if (contentEl) contentEl.classList.remove('hide');
+
+      // --- Helper: dapatkan awal minggu (Senin) dari sebuah tanggal ---
+      function startOfWeek(d) {
+        const date = new Date(d);
+        const day = date.getDay(); // 0=Minggu, 1=Senin, ...
+        const diff = (day === 0 ? -6 : 1) - day; // geser ke Senin
+        date.setDate(date.getDate() + diff);
+        date.setHours(0, 0, 0, 0);
+        return date;
+      }
+
+      // --- Helper: parse joinDate format "D/M/YYYY" (disimpan backend) dengan aman ---
+      function parseJoinDate(str) {
+        if (!str) return null;
+        const parts = String(str).split('/');
+        if (parts.length !== 3) {
+          const fallback = new Date(str);
+          return isNaN(fallback) ? null : fallback;
+        }
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        return isNaN(d) ? null : d;
+      }
+
+      const now = new Date();
+      const currentWeekStart = startOfWeek(now);
+
+      // --- Tentukan titik awal periode analisis: maksimal 12 minggu terakhir, ---
+      // --- dipersempit (bukan diperlebar) kalau member baru gabung / sesi pertama lebih baru ---
+      const twelveWeeksAgo = new Date(currentWeekStart);
+      twelveWeeksAgo.setDate(twelveWeeksAgo.getDate() - 7 * 11); // 12 minggu termasuk minggu ini
+
+      const joinDateObj = currMember ? parseJoinDate(currMember.joinDate) : null;
+      const firstSessionDate = new Date(completedSchedules[0].start);
+
+      let periodStart = twelveWeeksAgo;
+      if (firstSessionDate > periodStart) periodStart = startOfWeek(firstSessionDate);
+      if (joinDateObj && joinDateObj > periodStart) periodStart = startOfWeek(joinDateObj);
+
+      const periodStartWeek = startOfWeek(periodStart);
+      const totalWeeks = Math.max(1, Math.round((currentWeekStart - periodStartWeek) / (7 * 24 * 60 * 60 * 1000)) + 1);
+
+      // --- Hitung jumlah sesi completed per minggu (key: ISO string awal minggu) ---
+      const weekCounts = {};
+      completedSchedules.forEach(s => {
+        const wk = startOfWeek(new Date(s.start)).getTime();
+        weekCounts[wk] = (weekCounts[wk] || 0) + 1;
+      });
+
+      // --- Bangun array minggu dari periodStartWeek s.d. currentWeekStart ---
+      const weeks = [];
+      let cursor = new Date(periodStartWeek);
+      while (cursor <= currentWeekStart) {
+        weeks.push({ start: new Date(cursor), count: weekCounts[cursor.getTime()] || 0 });
+        cursor.setDate(cursor.getDate() + 7);
+      }
+
+      const activeWeeks = weeks.filter(w => w.count > 0).length;
+      const consistencyScore = Math.round((activeWeeks / weeks.length) * 100);
+
+      // --- Streak mingguan berturut-turut (mundur dari minggu ini) ---
+      let streak = 0;
+      for (let i = weeks.length - 1; i >= 0; i--) {
+        if (weeks[i].count > 0) {
+          streak++;
+        } else {
+          // Kalau minggu ini (paling akhir) masih 0 dan belum berakhir, jangan putus streak, cek minggu sebelumnya
+          if (i === weeks.length - 1) continue;
+          break;
+        }
+      }
+
+      const totalCompleted = completedSchedules.length;
+      const avgPerActiveWeek = activeWeeks > 0 ? (totalCompleted / activeWeeks).toFixed(1) : '0.0';
+
+      // --- Label kualitatif ---
+      let label = 'Perlu Ditingkatkan 💪';
+      let colorClass = 'text-red-600 bg-red-50 border-red-200';
+      if (consistencyScore >= 80) {
+        label = 'Sangat Konsisten 🔥';
+        colorClass = 'text-green-600 bg-green-50 border-green-200';
+      } else if (consistencyScore >= 50) {
+        label = 'Cukup Stabil 👍';
+        colorClass = 'text-amber-600 bg-amber-50 border-amber-200';
+      }
+
+      if (scoreEl) scoreEl.innerText = consistencyScore + '%';
+      if (labelEl) {
+        labelEl.innerText = label;
+        labelEl.className = 'text-[11px] font-bold px-2.5 py-1 rounded-full border inline-block ' + colorClass;
+      }
+      if (streakEl) streakEl.innerText = streak + ' minggu beruntun';
+      if (avgEl) avgEl.innerText = avgPerActiveWeek + ' sesi/minggu';
+
+      // --- Mini bar chart: ambil maksimal 8 minggu terakhir ---
+      const chartWeeks = weeks.slice(-8);
+      const maxCount = Math.max(1, ...chartWeeks.map(w => w.count));
+      chartEl.innerHTML = chartWeeks.map(w => {
+        const heightPct = Math.max(8, Math.round((w.count / maxCount) * 100));
+        const barColor = w.count > 0 ? 'bg-black' : 'bg-gray-200';
+        const lbl = w.start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        return '<div class="flex flex-col items-center gap-1 flex-1">' +
+                 '<div class="w-full flex items-end justify-center" style="height:48px;">' +
+                   '<div class="w-full max-w-[14px] rounded-t-md ' + barColor + '" style="height:' + heightPct + '%;" title="' + w.count + ' sesi"></div>' +
+                 '</div>' +
+                 '<span class="text-[8px] text-gray-400 font-medium">' + lbl + '</span>' +
+               '</div>';
+      }).join('');
+    };
+
+    // =============================================================================
+    // --- FEATURE: WAKTU/HARI FAVORIT LATIHAN (Member Dashboard) ---
+    // =============================================================================
+    window.renderFavoriteTime = function(memSchedules) {
+      const wrapEl = document.getElementById('pub-favtime-content');
+      const emptyEl = document.getElementById('pub-favtime-empty');
+      const textEl = document.getElementById('pub-favtime-text');
+      if (!wrapEl || !textEl) return;
+
+      const completed = (memSchedules || []).filter(s => String(s.status).toLowerCase() === 'completed');
+
+      if (completed.length < 3) {
+        wrapEl.classList.add('hide');
+        if (emptyEl) emptyEl.classList.remove('hide');
+        return;
+      }
+      wrapEl.classList.remove('hide');
+      if (emptyEl) emptyEl.classList.add('hide');
+
+      const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jumat", 'Sabtu'];
+      const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+      const slotCounts = { 'Pagi': 0, 'Siang': 0, 'Sore': 0, 'Malam': 0 };
+
+      completed.forEach(s => {
+        const d = new Date(s.start);
+        dayCounts[d.getDay()]++;
+        const hour = d.getHours();
+        let slot;
+        if (hour >= 5 && hour < 11) slot = 'Pagi';
+        else if (hour >= 11 && hour < 15) slot = 'Siang';
+        else if (hour >= 15 && hour < 18) slot = 'Sore';
+        else slot = 'Malam';
+        slotCounts[slot]++;
+      });
+
+      let favDayIdx = 0;
+      for (let i = 1; i < 7; i++) if (dayCounts[i] > dayCounts[favDayIdx]) favDayIdx = i;
+      const favDay = dayNames[favDayIdx];
+
+      let favSlot = 'Pagi';
+      Object.keys(slotCounts).forEach(k => { if (slotCounts[k] > slotCounts[favSlot]) favSlot = k; });
+
+      const slotEmoji = { 'Pagi': '🌅', 'Siang': '☀️', 'Sore': '🌇', 'Malam': '🌙' };
+
+      textEl.innerHTML = 'Kamu paling sering latihan di <b>' + favDay + '</b>, sesi <b>' + favSlot + '</b> ' + (slotEmoji[favSlot] || '');
+    };
+
+    // =============================================================================
+    // --- FEATURE: BADGE PENCAPAIAN (Member Dashboard) ---
+    // =============================================================================
+    window.renderAchievementBadges = function(memSchedules) {
+      const containerEl = document.getElementById('pub-badges-container');
+      if (!containerEl) return;
+
+      const totalCompleted = (memSchedules || []).filter(s => String(s.status).toLowerCase() === 'completed').length;
+
+      const badges = [
+        { threshold: 4, icon: '🎯', label: '4 Sesi' },
+        { threshold: 8, icon: '💪', label: '8 Sesi' },
+        { threshold: 12, icon: '🏆', label: '12 Sesi' }
+      ];
+
+      containerEl.innerHTML = badges.map(b => {
+        const unlocked = totalCompleted >= b.threshold;
+        const boxClass = unlocked
+          ? 'bg-amber-50 border-amber-200 opacity-100'
+          : 'bg-gray-50 border-gray-200 opacity-40 grayscale';
+        return '<div class="flex flex-col items-center gap-1.5 p-3 rounded-2xl border ' + boxClass + ' flex-1">' +
+                 '<span class="text-2xl leading-none">' + b.icon + '</span>' +
+                 '<span class="text-[10px] font-bold text-gray-600 text-center leading-tight">' + b.label + '</span>' +
+               '</div>';
+      }).join('');
+    };
+
+    // =============================================================================
+    // --- FEATURE: HEATMAP AKTIVITAS (Member Dashboard) ---
+    // =============================================================================
+    window.renderActivityHeatmap = function(memSchedules) {
+      const gridEl = document.getElementById('pub-heatmap-grid');
+      if (!gridEl) return;
+
+      const completed = (memSchedules || []).filter(s => String(s.status).toLowerCase() === 'completed');
+      const completedDates = {};
+      completed.forEach(s => {
+        const d = new Date(s.start);
+        const key = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+        completedDates[key] = true;
+      });
+
+      const totalDays = 84; // 12 minggu
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Mulai dari totalDays-1 hari yang lalu, agar hari ini berada di kolom paling kanan
+      const startDate = new Date(today);
+      startDate.setDate(startDate.getDate() - (totalDays - 1));
+      // Geser mundur ke hari Senin supaya grid rapi per minggu (7 baris)
+      const startDay = startDate.getDay();
+      const backToMonday = startDay === 0 ? 6 : startDay - 1;
+      startDate.setDate(startDate.getDate() - backToMonday);
+
+      let cells = '';
+      let cursor = new Date(startDate);
+      while (cursor <= today) {
+        const key = cursor.getFullYear() + '-' + cursor.getMonth() + '-' + cursor.getDate();
+        const isDone = !!completedDates[key];
+        const isFuture = cursor > today;
+        const colorClass = isFuture ? 'bg-transparent' : (isDone ? 'bg-black' : 'bg-gray-100');
+        const dateLbl = cursor.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+        cells += '<div class="w-2 h-2 rounded-sm ' + colorClass + '" title="' + dateLbl + (isDone ? ' — Latihan' : '') + '"></div>';
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      gridEl.innerHTML = cells;
+    };
+
+    // ============================================================
+    // SEARCHABLE PACKAGE DROPDOWN (dipakai di modal Tambah & Edit Klien)
+    // prefix: 'member' untuk Tambah Klien, 'edit-member' untuk Edit Profil
+    // ============================================================
+    function renderPackageDropdownList(prefix) {
+      const listEl = document.getElementById(prefix + '-package-list');
+      if (!listEl) return;
+      const searchInput = document.getElementById(prefix + '-package-search');
+      const search = (searchInput && searchInput.value || '').toLowerCase().trim();
+      const packages = window.priceListData || [];
+      const filtered = search
+        ? packages.filter(function(p) {
+            return (p.namaPaket || '').toLowerCase().includes(search) || (p.kategori || '').toLowerCase().includes(search);
+          })
+        : packages;
+
+      let html = '<button type="button" onclick="window.selectPackageOption(\'' + prefix + '\', \'\')" class="w-full text-left px-4 py-3 text-sm text-gray-500 hover:bg-gray-50 transition-colors">-- Tanpa Paket / Custom --</button>';
+
+      if (filtered.length === 0) {
+        html += '<div class="px-4 py-6 text-center text-xs text-gray-400">Paket tidak ditemukan</div>';
+      } else {
+        html += filtered.map(function(p) {
+          const sesiLabel = p.jumlahSesi ? (p.jumlahSesi + ' Sesi') : 'Unlimited';
+          const hargaLabel = p.harga ? ('Rp' + Number(p.harga).toLocaleString('id-ID')) : '';
+          const kategoriLabel = p.kategori ? (' • ' + p.kategori) : '';
+          return '<button type="button" onclick="window.selectPackageOption(\'' + prefix + '\', \'' + String(p.id).replace(/'/g, "\\'") + '\')" class="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between gap-3">' +
+              '<span class="min-w-0">' +
+                '<span class="block text-sm font-bold truncate">' + p.namaPaket + '</span>' +
+                '<span class="block text-[11px] text-gray-400">' + sesiLabel + kategoriLabel + '</span>' +
+              '</span>' +
+              (hargaLabel ? '<span class="text-xs font-bold text-gray-600 shrink-0">' + hargaLabel + '</span>' : '') +
+            '</button>';
+        }).join('');
+      }
+      listEl.innerHTML = html;
+    }
+
+    // Mengisi & mereset dropdown paket, dipanggil saat modal dibuka (selectedPackageId opsional untuk mode edit)
+    window.populateMemberPackageOptions = function(prefix, selectedPackageId) {
+      const hiddenInput = document.getElementById(prefix + '-package');
+      const labelEl = document.getElementById(prefix + '-package-label');
+      if (!hiddenInput || !labelEl) return;
+      hiddenInput.value = selectedPackageId || '';
+      const pkg = (window.priceListData || []).find(function(p) { return String(p.id) === String(selectedPackageId); });
+      labelEl.textContent = pkg ? pkg.namaPaket : '-- Tanpa Paket / Custom --';
+      labelEl.className = pkg ? 'truncate text-sm' : 'truncate text-gray-400';
+      renderPackageDropdownList(prefix);
+    };
+
+    window.filterPackageOptions = function(prefix) { renderPackageDropdownList(prefix); };
+
+    window.togglePackageDropdown = function(prefix) {
+      const panel = document.getElementById(prefix + '-package-panel');
+      if (!panel) return;
+      const willOpen = panel.classList.contains('hide');
+      document.querySelectorAll('[id$="-package-panel"]').forEach(function(p) { p.classList.add('hide'); });
+      if (willOpen) {
+        panel.classList.remove('hide');
+        renderPackageDropdownList(prefix);
+        const searchInput = document.getElementById(prefix + '-package-search');
+        if (searchInput) { searchInput.value = ''; setTimeout(function() { searchInput.focus(); }, 50); }
+      }
+    };
+
+    window.selectPackageOption = function(prefix, packageId) {
+      window.populateMemberPackageOptions(prefix, packageId);
+      const panel = document.getElementById(prefix + '-package-panel');
+      if (panel) panel.classList.add('hide');
+      // Auto-isi Total Sesi Beli sesuai paket, khusus modal Tambah Klien Baru
+      if (prefix === 'member' && packageId) {
+        const pkg = (window.priceListData || []).find(function(p) { return String(p.id) === String(packageId); });
+        if (pkg && pkg.jumlahSesi) {
+          const totalInput = document.getElementById('member-total-sessions');
+          if (totalInput) totalInput.value = pkg.jumlahSesi;
+        }
+      }
+    };
+
+    // Tutup dropdown paket kalau klik di luar area-nya
+    document.addEventListener('click', function(e) {
+      document.querySelectorAll('[id$="-package-wrap"]').forEach(function(wrap) {
+        if (!wrap.contains(e.target)) {
+          const panel = wrap.querySelector('[id$="-package-panel"]');
+          if (panel) panel.classList.add('hide');
+        }
+      });
+    });
+
+    // Mengisi dropdown Coach (Default Booking) di modal Tambah/Edit Klien dari window.coaches
+    window.populateMemberCoachOptions = function(selectId, selectedCoachId) {
+      const selectEl = document.getElementById(selectId);
+      if (!selectEl) return;
+      selectEl.innerHTML = '<option value="">-- Belum Ditentukan --</option>' +
+        (window.coaches || []).map(function(c) {
+          return '<option value="' + c.id + '">' + c.name + '</option>';
+        }).join('');
+      selectEl.value = selectedCoachId || '';
+    };
+
+    window.openAddMemberModal = function() {
+      window.populateMemberPackageOptions('member', '');
+      window.populateMemberCoachOptions('member-coach', '');
+      const overlay = document.getElementById('modal-overlay'); document.querySelectorAll('#modal-overlay > div').forEach(el => el.classList.add('hide'));
+      overlay.classList.remove('hide'); overlay.classList.add('flex'); setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+      const modAdd = document.getElementById('modal-add-member'); modAdd.classList.remove('hide'); setTimeout(() => modAdd.classList.remove('scale-95'), 10);
+      try { window.lucide.createIcons(); } catch(e) {}
+    };
+
+    window.submitAddMember = function(e) {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]'); const originalText = btn.innerHTML; btn.innerHTML = 'Menyimpan...'; btn.disabled = true;
+      const data = {
+        name: document.getElementById('member-name').value, phone: sanitizePhone(document.getElementById('member-phone').value),
+        goal: document.getElementById('member-goal').value, totalSessions: parseInt(document.getElementById('member-total-sessions').value, 10),
+        usedSessions: parseInt(document.getElementById('member-used-sessions').value, 10),
+        packageId: document.getElementById('member-package').value || '',
+        coachId: document.getElementById('member-coach').value || ''
+      };
+
+      if (window.isGas) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            const d = new Date(); const todayStr = d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
+            data.id = res.id;
+            data.packageName = res.packageName || ''; data.preferredCoachId = res.coachId || ''; data.preferredCoachName = res.coachName || '';
+            if (res.totalSessions) data.totalSessions = res.totalSessions;
+            data.lastActivityDate = todayStr; // dipakai untuk pengelompokan bulan di tab Klien
+
+            if (res.renewed) {
+              // PERPANJANG: klien sudah ada, update entri yang sudah ada (jangan push baris baru)
+              // supaya tidak dobel di layar dan langsung pindah ke grup bulan hari ini.
+              const idx = window.members.findIndex(m => String(m.id) === String(res.id));
+              if (idx !== -1) {
+                const oldEntry = window.members[idx];
+                // Data lama (sebelum ditimpa paket baru) jadi card ARSIP di bulan lamanya,
+                // supaya jejak paket sebelumnya tetap kelihatan, bukan hilang begitu saja.
+                const alreadyHasArchive = (window.memberArchive || []).some(a => String(a.id) === String(res.id));
+                window.memberArchive = window.memberArchive || [];
+                window.memberArchive.push({
+                  id: oldEntry.id,
+                  name: oldEntry.name,
+                  phone: oldEntry.phone,
+                  photo: oldEntry.photo || '',
+                  date: oldEntry.lastActivityDate || oldEntry.joinDate || todayStr,
+                  jenis: alreadyHasArchive ? 'Perpanjang' : 'Baru',
+                  packageName: oldEntry.packageName || 'Paket Standar',
+                  totalSessions: oldEntry.totalSessions || 0
+                });
+
+                window.members[idx] = Object.assign({}, oldEntry, data);
+              } else {
+                data.joinDate = todayStr;
+                window.members.push(data);
+              }
+            } else {
+              // KLIEN BARU
+              data.joinDate = todayStr;
+              window.members.push(data);
+            }
+
+            // Jaga urutan tetap kronologis berdasarkan aktivitas terakhir, sama seperti di backend.
+            window.members.sort((a, b) => window.parseFlexibleDate(a.lastActivityDate || a.joinDate) - window.parseFlexibleDate(b.lastActivityDate || b.joinDate));
+
+            window.updateMemberUI(); window.closeModal(); btn.innerHTML = originalText; btn.disabled = false;
+            window.showToast(res.renewed ? 'Paket klien berhasil diperpanjang!' : 'Klien berhasil ditambahkan!');
+          })
+          .withFailureHandler(function(err) { btn.innerHTML = originalText; btn.disabled = false; window.showToast('Gagal Simpan: ' + err.message); })
+          .addMember(data);
+      }
+    };
+    
+    // =============================================================================
+    // --- FIX INFINITE COUNT LOOP (OBSERVER CONTROL) ---
+    // =============================================================================
+    let dashObserver = null;
+
+    function startDashObserver() {
+      const target = document.getElementById('pub-dash-remaining');
+      if (!target || dashObserver) return;
+      
+      dashObserver = new MutationObserver(function() {
+        window.refreshDashboardVisuals();
+      });
+      
+      dashObserver.observe(target, { childList: true, characterData: true, subtree: true });
+    }
+
+    function stopDashObserver() {
+      if (dashObserver) {
+        dashObserver.disconnect();
+        dashObserver = null;
+      }
+    }
+
+    window.refreshDashboardVisuals = function(){
+      const remainEl = document.getElementById('pub-dash-remaining');
+      const totalEl = document.getElementById('pub-dash-total');
+      const ring = document.getElementById('pub-quota-ring');
+      if (!remainEl || !totalEl) return;
+
+      const remaining = parseInt(remainEl.textContent) || 0;
+      const total = parseInt(totalEl.textContent) || 0;
+      const pct = total > 0 ? remaining / total : 0;
+      const circumference = 113; 
+
+      if (ring) {
+        requestAnimationFrame(function(){
+          ring.style.strokeDashoffset = circumference - (pct * circumference);
+        });
+      }
+
+      // Hentikan observer sejenak agar perubahan angka saat animasi tidak memicu observer lagi
+      stopDashObserver();
+      
+      xnkAnimateCount(remainEl, remaining, function(){ 
+        // Hidupkan observer kembali setelah animasi selesai
+        startDashObserver(); 
+      });
+    };
+
+    function xnkAnimateCount(el, target, onDone){
+      const duration = 700;
+      const start = performance.now();
+      
+      function tick(now){
+        const progress = Math.min((now - start) / duration, 1);
+        el.textContent = Math.round(progress * target);
+        
+        if (progress < 1) {
+          requestAnimationFrame(tick);
+        } else {
+          el.textContent = target; // Pastikan nilai akhir tepat
+          if (onDone) onDone();
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // Inisialisasi awal
+    startDashObserver();
+
+    // Countdown Timer
+    function xnkTickCountdown(){
+      const card = document.getElementById('pub-next-session-card');
+      const out = document.getElementById('pub-next-countdown');
+      if (!card || !out) return;
+      const startStr = card.dataset.start;
+      if (!startStr) { out.textContent = ''; return; }
+
+      const diff = new Date(startStr).getTime() - Date.now();
+      if (diff <= 0) { out.textContent = 'Sesi sedang berlangsung'; return; }
+
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+
+      out.textContent = d > 0
+        ? d + 'h ' + h + 'j lagi'
+        : String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }
+    setInterval(xnkTickCountdown, 1000);
+    xnkTickCountdown();
+
+    // =============================================================================
+    // --- FEATURE: UNIVERSAL AVATAR CROP & UPLOAD (MEMBER & COACH) ---
+    // =============================================================================
+    let cropperInstance = null;
+    window.cropContext = null; 
+    window.pendingCoachBase64 = null; 
+
+    // Listener untuk Member Avatar
+    (function(){
+      const input = document.getElementById('pub-avatar-input');
+      if (!input) return;
+
+      input.addEventListener('change', function(e){
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { window.showToast("Harap pilih file gambar (JPG/PNG)."); return; }
+
+        window.cropContext = 'member';
+        window.openCropModal(file);
+        e.target.value = ''; 
+      });
+    })();
+
+    window.openCropModal = function(file) {
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const dataUrl = ev.target.result;
+        const cropImg = document.getElementById('cropper-image');
+        
+        cropImg.src = dataUrl;
+        cropImg.classList.remove('hidden');
+
+        // 1. Sembunyikan SEMUA modal di overlay
+        const overlay = document.getElementById('modal-overlay');
+        document.querySelectorAll('#modal-overlay > div').forEach(el => {
+          el.classList.add('hide');
+          el.classList.add('scale-95');
+        });
+
+        // 2. Aktifkan overlay utama & TAMBAHKAN items-center justify-center agar CENTER!
+        overlay.classList.remove('hide'); 
+        overlay.classList.remove('pointer-events-none');
+        overlay.classList.add('flex', 'items-center', 'justify-center', 'opacity-100'); 
+        overlay.classList.remove('opacity-0');
+        
+        // 3. Tampilkan modal crop
+        const modCrop = document.getElementById('modal-crop-avatar'); 
+        modCrop.classList.remove('hide'); 
+        setTimeout(() => modCrop.classList.remove('scale-95'), 10);
+
+        if (cropperInstance) { cropperInstance.destroy(); }
+        setTimeout(() => {
+          cropperInstance = new Cropper(cropImg, {
+            aspectRatio: 1,
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.9,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+          });
+        }, 200);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.cancelCrop = function() {
+      document.getElementById('modal-crop-avatar').classList.add('hide');
+      
+      if (window.cropContext === 'coach') {
+        document.getElementById('modal-add-coach').classList.remove('hide');
+      } else {
+        window.closeModal();
+      }
+    };
+
+    window.saveCroppedAvatar = function() {
+      if (!cropperInstance) return;
+
+      const btn = document.getElementById('btn-save-crop');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin pointer-events-none"></i> Memproses...';
+      btn.disabled = true;
+
+      const canvas = cropperInstance.getCroppedCanvas({
+        width: 400, height: 400, imageSmoothingEnabled: true, imageSmoothingQuality: 'high',
+      });
+      const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const base64Data = croppedDataUrl.split(',')[1];
+      
+      if (window.cropContext === 'member') {
+        const img = document.getElementById('pub-avatar-img');
+        const placeholder = document.getElementById('pub-avatar-placeholder-icon');
+        const avatarBtn = document.getElementById('pub-avatar-btn');
+        
+        // Update foto sementara di layar menggunakan base64
+        img.src = croppedDataUrl; 
+        img.classList.remove('hidden'); 
+        placeholder.classList.add('hidden');
+        avatarBtn.classList.remove('border-dashed','border-gray-300'); 
+        avatarBtn.classList.add('border-solid','border-black');
+
+        if (window.google && google.script && window.publicLoggedMember) {
+          // 1. Upload ke Google Drive dulu
+          google.script.run
+            .withSuccessHandler(function(res){
+              window.publicLoggedMember.photo = res.url;
+              
+              // 2. Pastikan file terupload, BARU simpan link ke database
+              google.script.run
+                .withSuccessHandler(function() {
+                  // Jika sukses 100%, kembalikan tombol & TUTUP modal
+                  btn.innerHTML = originalText; 
+                  btn.disabled = false;
+                  
+                  // Menutup spesifik modal crop & overlay
+                  document.getElementById('modal-crop-avatar').classList.add('hide');
+                  const overlay = document.getElementById('modal-overlay');
+                  if(overlay) {
+                    overlay.classList.remove('flex', 'items-center', 'justify-center', 'opacity-100');
+                    overlay.classList.add('hide', 'opacity-0');
+                  }
+                  if (typeof window.closeModal === 'function') window.closeModal();
+
+                  window.showToast('Foto profil berhasil diperbarui');
+                })
+                .withFailureHandler(function(err) {
+                  btn.innerHTML = originalText; 
+                  btn.disabled = false; 
+                  window.showToast('Gagal menyimpan foto ke profil: ' + err.message);
+                })
+                .updateMemberPhoto(window.publicLoggedMember.id, res.url); // Panggil fungsi update db
+            })
+            .withFailureHandler(function(err){
+              btn.innerHTML = originalText; 
+              btn.disabled = false; 
+              window.showToast('Gagal upload foto ke server: ' + err.message);
+            })
+            .uploadMemberPhoto(base64Data, 'avatar_' + window.publicLoggedMember.id + '.jpg', 'image/jpeg');
+        } else {
+          btn.innerHTML = originalText; btn.disabled = false;
+        }
+
+      } else if (window.cropContext === 'coach') {
+        window.pendingCoachBase64 = base64Data;
+        
+        const preview = document.getElementById('coach-photo-preview');
+        const fallback = document.getElementById('coach-photo-preview-fallback');
+        
+        preview.src = croppedDataUrl;
+        preview.classList.remove('hide');
+        fallback.classList.add('hide');
+
+        btn.innerHTML = originalText; btn.disabled = false;
+        
+        document.getElementById('modal-crop-avatar').classList.add('hide');
+        document.getElementById('modal-add-coach').classList.remove('hide');
+      }
+    };
+</script>

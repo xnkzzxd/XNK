@@ -1,0 +1,1963 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XNK - Premium Personal Training</title>
+
+  <!-- ===== CDN RESOURCES ===== -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <?!= include('Styles.html') ?>
+
+  <style>
+    /* ===== LANDING PAGE LIGHT THEME (ala Index/Admin) — Aksen Hitam Solid ===== */
+    
+    /* Page base override — putih bersih, sesuai admin panel */
+    body {
+      background: #FFFFFF;
+    }
+    
+    /* ===== HERO SECTION ===== */
+    .hero-wrapper {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 30% 50%, rgba(0,0,0,0.025) 0%, transparent 60%),
+                  radial-gradient(ellipse at 70% 30%, rgba(0,0,0,0.015) 0%, transparent 50%);
+    }
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+    .hero-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: center;
+      position: relative;
+      z-index: 2;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 100px 24px 120px;
+    }
+    .hero-image-card {
+      position: relative;
+      aspect-ratio: 4/5;
+      border-radius: 28px;
+      overflow: hidden;
+      background: #F9FAFB;
+      border: 1px solid #F3F4F6;
+    }
+    .hero-image-card img,
+    .hero-image-card .hero-img-placeholder {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .hero-img-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 100%);
+      color: #9CA3AF;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #F9FAFB;
+      border: 1px solid #E5E7EB;
+      border-radius: 9999px;
+      padding: 6px 16px;
+      margin-bottom: 24px;
+    }
+    .hero-badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #000000;
+      animation: heroPulse 2s infinite;
+    }
+    @keyframes heroPulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,0,0,0.15); }
+      50% { opacity: 0.8; box-shadow: 0 0 0 8px rgba(0,0,0,0); }
+    }
+    .hero-headline {
+      font-family: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+      font-size: 3.5rem;
+      font-weight: 900;
+      line-height: 1.08;
+      color: #111827;
+      letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+    .hero-highlight {
+      background: linear-gradient(135deg, #000000 0%, #4B5563 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: 1.125rem;
+      color: #6B7280;
+      max-width: 440px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+    
+    /* Stats bar */
+    .hero-stats {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid #F3F4F6;
+      z-index: 3;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.03);
+    }
+    
+    /* ===== SECTIONS ===== */
+    .section-padding {
+      padding: 96px 0;
+    }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #6B7280;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+      display: inline-block;
+    }
+    .section-title {
+      font-family: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+      font-size: 2.5rem;
+      font-weight: 900;
+      line-height: 1.1;
+      color: #111827;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .section-desc {
+      font-size: 0.95rem;
+      color: #6B7280;
+      max-width: 480px;
+      line-height: 1.6;
+    }
+    
+    /* ===== CARDS / BENTO ===== */
+    .dark-card {
+      background: #FFFFFF;
+      border: 1px solid #F3F4F6;
+      border-radius: 28px;
+      padding: 32px;
+      transition: all 0.25s ease;
+    }
+    .dark-card:hover {
+      border-color: #E5E7EB;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.06);
+    }
+    .dark-card-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    
+    /* ===== BENEFIT CARDS ===== */
+    .benefit-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    
+    /* ===== METHOD STEPS ===== */
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      position: relative;
+    }
+    .method-line {
+      display: none;
+      position: absolute;
+      top: 28px;
+      left: 12.5%;
+      right: 12.5%;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(0,0,0,0.15), rgba(0,0,0,0.04), rgba(0,0,0,0.02));
+    }
+    .method-step-num {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+      font-size: 1.25rem;
+      font-weight: 900;
+      margin: 0 auto 16px;
+      position: relative;
+      z-index: 2;
+    }
+    
+    /* ===== TESTIMONIAL CARDS ===== */
+    .testimonial-card {
+      background: #FFFFFF;
+      border: 1px solid #F3F4F6;
+      border-radius: 20px;
+      padding: 24px;
+      transition: box-shadow 0.3s ease, border-color 0.3s ease;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .testimonial-card:hover {
+      border-color: #E5E7EB;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+    }
+    
+    /* ===== PRICING CARDS ===== */
+    .pricing-card {
+      background: #FFFFFF;
+      border: 1.5px solid #F3F4F6;
+      border-radius: 24px;
+      padding: 28px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+    }
+    .pricing-card:hover {
+      border-color: #E5E7EB;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+      transform: translateY(-4px);
+    }
+    .pricing-card.featured {
+      border-color: #111827;
+      border-width: 2px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    .pricing-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #000000;
+      color: #FFFFFF;
+      font-size: 0.625rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 14px;
+      border-radius: 9999px;
+    }
+    
+    /* ===== CATEGORY TOGGLES ===== */
+    .toggle-container {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      background: #F3F4F6;
+      padding: 6px;
+      border-radius: 99px;
+      width: fit-content;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .toggle-btn {
+      background: transparent;
+      color: #6B7280;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 99px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .toggle-btn:hover { color: #111827; }
+    .toggle-btn.active {
+      background: #000000;
+      color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    /* ===== SLIDER CONTAINER ===== */
+    .slider-wrapper {
+      position: relative;
+      width: 100%;
+      display: flex;
+      align-items: center;
+    }
+    
+    .slider-track {
+      display: flex;
+      gap: 20px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE/Edge */
+      padding: 20px 4px; /* Memberikan ruang untuk shadow dan efek hover */
+      width: 100%;
+    }
+    .slider-track::-webkit-scrollbar { display: none; /* Chrome/Safari */ }
+
+    .slider-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: #FFFFFF;
+      color: #111827;
+      border: 1px solid #E5E7EB;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      transition: all 0.3s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .slider-btn:hover {
+      background: #000000;
+      color: #FFFFFF;
+      border-color: #000000;
+    }
+    .slider-btn.prev { left: -22px; }
+    .slider-btn.next { right: -22px; }
+    
+    /* Disable button if at edge */
+    .slider-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      background: #FFFFFF;
+      border-color: #E5E7EB;
+    }
+
+    /* ===== PRICING CARDS ===== */
+    .pricing-card {
+      background: #FFFFFF;
+      border: 1.5px solid #F3F4F6;
+      border-radius: 24px;
+      padding: 28px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+      flex: 0 0 calc(33.333% - 14px); /* Tampilkan 3 per baris di Desktop */
+      min-width: 300px; /* Lebar minimum untuk mobile */
+      scroll-snap-align: center;
+    }
+    @media (max-width: 1024px) { .pricing-card { flex: 0 0 calc(50% - 10px); } }
+    @media (max-width: 640px) { .pricing-card { flex: 0 0 85%; } .slider-btn { display: none; } /* Hide buttons on small mobile, rely on swipe */ }
+
+    .pricing-card:hover {
+      border-color: #E5E7EB;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+      transform: translateY(-4px);
+    }
+    .pricing-card.featured {
+      border-color: #111827;
+      border-width: 2px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    .pricing-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #000000;
+      color: #FFFFFF;
+      font-size: 0.625rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 14px;
+      border-radius: 99px;
+      white-space: nowrap;
+    }
+    
+    /* Loading Animation */
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+
+    /* ===== FAQ ACCORDION ===== */
+    .faq-item {
+      background: #FFFFFF;
+      border: 1px solid #F3F4F6;
+      border-radius: 20px;
+      overflow: hidden;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+    .faq-item:hover {
+      border-color: #E5E7EB;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+    }
+    .faq-q {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      text-align: left;
+      padding: 20px 24px;
+      font-family: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #111827;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease;
+    }
+    .faq-answer.open {
+      max-height: 300px;
+    }
+    .faq-answer-inner {
+      padding: 0 24px 20px;
+      font-size: 0.875rem;
+      color: #6B7280;
+      line-height: 1.6;
+    }
+    .faq-icon {
+      flex-shrink: 0;
+      transition: transform 0.3s ease;
+      color: #9CA3AF;
+    }
+    .faq-item.open .faq-icon {
+      transform: rotate(180deg);
+    }
+    
+    /* ===== CTA BUTTONS ===== */
+    .cta-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 18px 32px;
+      border-radius: 9999px;
+      border: none;
+      cursor: pointer;
+      background: #000000;
+      color: #FFFFFF;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    .cta-primary:hover {
+      background: #1F2937;
+      transform: scale(1.02);
+    }
+    .cta-primary:active {
+      transform: scale(0.98);
+    }
+    .cta-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 18px 32px;
+      border-radius: 9999px;
+      border: 1.5px solid #E5E7EB;
+      background: transparent;
+      color: #111827;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    .cta-secondary:hover {
+      border-color: #D1D5DB;
+      background: #F9FAFB;
+    }
+    .cta-whatsapp {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 18px 32px;
+      border-radius: 9999px;
+      border: 1.5px solid rgba(37,211,102,0.4);
+      background: transparent;
+      color: #111827;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    .cta-whatsapp:hover {
+      border-color: #25D366;
+      background: rgba(37,211,102,0.08);
+    }
+    
+    /* ===== RESULTS MARQUEE ===== */
+    .results-marquee {
+      overflow: hidden;
+      white-space: nowrap;
+      position: relative;
+      background: #F9FAFB;
+      border: 1px solid #F3F4F6;
+      border-radius: 20px;
+      padding: 20px 0;
+    }
+    .results-marquee-inner {
+      display: inline-block;
+      animation: marquee 30s linear infinite;
+    }
+    @keyframes marquee {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    
+    /* ===== NAVIGATION ===== */
+    .landing-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid #F3F4F6;
+    }
+    
+    /* ===== FLOATING CTA ===== */
+    .floating-cta {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 40;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #000000;
+      color: #FFFFFF;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .floating-cta:hover {
+      transform: scale(1.08);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    }
+    .floating-cta:active {
+      transform: scale(0.94);
+    }
+    
+    /* ===== SCROLL FADE IN ===== */
+    .fade-in-up {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .fade-in-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    /* ===== COACH SECTION ===== */
+    .coach-grid {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 40px;
+      align-items: center;
+    }
+    .coach-photo {
+      width: 100%;
+      aspect-ratio: 4/5;
+      border-radius: 28px;
+      overflow: hidden;
+      background: #F3F4F6;
+      border: 1px solid #F3F4F6;
+    }
+
+    
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .hero-split {
+        grid-template-columns: 1fr;
+        gap: 32px;
+        padding: 80px 20px 100px;
+      }
+      .hero-image-card {
+        max-width: 320px;
+        margin: 0 auto;
+        order: -1;
+      }
+      .hero-headline {
+        font-size: 2.5rem;
+      }
+      .benefit-grid {
+        grid-template-columns: 1fr;
+      }
+      .method-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 32px 16px;
+      }
+      .coach-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+      .coach-photo {
+        max-width: 240px;
+        margin: 0 auto;
+      }
+      .section-padding {
+        padding: 64px 0;
+      }
+      .section-title {
+        font-size: 1.85rem;
+      }
+      .dark-card {
+        padding: 24px;
+        border-radius: 22px;
+      }
+    }
+    @media (max-width: 480px) {
+      .hero-headline {
+        font-size: 2rem;
+      }
+      .method-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 24px 12px;
+      }
+      .method-step-num {
+        width: 44px;
+        height: 44px;
+        font-size: 1rem;
+      }
+      .cta-primary, .cta-secondary, .cta-whatsapp {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+    @media (min-width: 769px) {
+      .method-line {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== LOADING OVERLAY ===== -->
+  <div id="landing-loader" class="fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-500" style="background:#FFFFFF">
+    <div class="text-center">
+      <div class="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style="background:#000000">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#FFFFFF" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5 5 5M7 17l5-5 5 5"/></svg>
+      </div>
+      <p style="font-size:0.8rem;color:#9CA3AF;font-weight:500">Memuat...</p>
+    </div>
+  </div>
+
+  <!-- ===== NAVIGATION ===== -->
+  <nav class="landing-nav">
+    <div class="max-w-6xl mx-auto px-4 h-14 md:h-16 flex items-center justify-center md:justify-start">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:#000000">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#FFFFFF" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5 5 5M7 17l5-5 5 5"/></svg>
+        </div>
+        <span style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-weight:900;font-size:1.2rem;color:#111827;letter-spacing:-0.02em">XNK</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ===== HERO SECTION ===== -->
+  <section class="hero-wrapper">
+    <div class="hero-bg"></div>
+    <div class="hero-grid"></div>
+    
+    <div class="hero-split">
+      <div>
+        <div class="hero-badge">
+          <span class="hero-badge-dot"></span>
+          <span style="color:#6B7280;font-size:0.75rem;font-weight:600">Personal Trainer Banjarnegara & Purwokerto</span>
+        </div>
+        <h1 class="hero-headline">
+          Move Better.<br>
+          Get Stronger.
+          <span class="hero-highlight">Perform Better.</span>
+        </h1>
+        <p class="hero-sub">
+          Berbasis Sport Science<br>
+          Fat loss, Muscle building, & Performa Olahraga.<br>
+          <br>
+          with Coach Jizdan<br>
+          Guru Pendidikan Jasmani, Pelatih Pencak Silat<br>
+          Personal Trainer.
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:12px">
+          <button type="button" onclick="openMemberCheck()" class="cta-primary">
+            Mulai Sekarang
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+          </button>
+          <a href="#benefits" class="cta-secondary">
+            Pelajari Lebih Lanjut
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+          </a>
+        </div>
+      </div>
+      <div class="hero-image-card">
+        <img
+          src="https://lh3.googleusercontent.com/d/1Vf0-T6Y-1clCvNSQypuW8_8R9OrKVgT0"
+          alt="Coach Jizdan"
+          class="hero-image"
+        >
+      </div>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="hero-stats">
+      <div class="max-w-6xl mx-auto px-4 py-5 flex flex-wrap justify-between items-center gap-4">
+        <div style="text-align:center;flex:1;min-width:90px">
+          <p style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:1.75rem;font-weight:900;color:#111827" id="stat-sessions">–</p>
+          <p style="font-size:0.7rem;color:#9CA3AF;font-weight:600">Sesi Latihan</p>
+        </div>
+        <div style="width:1px;height:32px;background:#F3F4F6"></div>
+        <div style="text-align:center;flex:1;min-width:90px">
+          <p style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:1.75rem;font-weight:900;color:#111827" id="stat-clients">–</p>
+          <p style="font-size:0.7rem;color:#9CA3AF;font-weight:600">Klien Aktif</p>
+        </div>
+        <div style="width:1px;height:32px;background:#F3F4F6" id="stat-satisfaction-divider"></div>
+        <div style="text-align:center;flex:1;min-width:90px" id="stat-satisfaction-wrap">
+          <p style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:1.75rem;font-weight:900;color:#111827" id="stat-satisfaction">–</p>
+          <p style="font-size:0.7rem;color:#9CA3AF;font-weight:600">Kepuasan</p>
+        </div>
+        <div style="width:1px;height:32px;background:#F3F4F6" id="stat-rating-divider"></div>
+        <div style="text-align:center;flex:1;min-width:90px" id="stat-rating-wrap">
+          <p style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:1.75rem;font-weight:900;color:#111827" id="stat-rating">–</p>
+          <p style="font-size:0.7rem;color:#9CA3AF;font-weight:600">Rating ★</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== COACH INTRO SECTION ===== -->
+  <section class="section-padding" style="background:#F9FAFB">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="coach-grid fade-in-up">
+        <div class="coach-photo" style="display:flex;align-items:center;justify-content:center">
+           <img
+            src="https://lh3.googleusercontent.com/d/1wJm5BrOkFDAdmyjVm1rJ0Vq0nps3E31g"
+            alt="Coach Jizdan"
+            class="coach-image"
+          >
+        </div>
+        <div>
+          <span class="section-label">Coach Jizdan</span>
+          <h2 style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:2rem;font-weight:900;line-height:1.15;color:#111827;margin-bottom:12px">Guru Pendidikan Jasmani<br>
+          Pelatih Pencak Silat Bersertifikat<br>
+          & Personal Trainer.</h2>
+          <p style="color:#6B7280;font-size:0.9rem;line-height:1.6;margin-bottom:20px">
+            Dengan latar belakang pendidikan olahraga dan pengalaman melatih atlet, pelajar, mahasiswa, hingga masyarakat umum, setiap program disusun berdasarkan prinsip ilmiah, bukan tren fitness sesaat.
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:5px 12px;border-radius:9999px;color:#6B7280;background:#FFFFFF;border:1px solid #E5E7EB">Fat Loss</span>
+            <span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:5px 12px;border-radius:9999px;color:#6B7280;background:#FFFFFF;border:1px solid #E5E7EB">Muscle Building</span>
+            <span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:5px 12px;border-radius:9999px;color:#6B7280;background:#FFFFFF;border:1px solid #E5E7EB">Strength & Conditioning</span>
+            <span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:5px 12px;border-radius:9999px;color:#6B7280;background:#FFFFFF;border:1px solid #E5E7EB">Sports Performance</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== BENEFITS SECTION ===== -->
+  <section id="benefits" class="section-padding" style="background:#FFFFFF">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="text-center mb-16 fade-in-up">
+        <span class="section-label">Kenapa Berlatih Bersama Saya?</span>
+        <h2 class="section-title">Pendidikan Olahraga</h2>
+        <p class="section-desc" style="margin:0 auto">Bukan hanya menghitung repetisi. Setiap program disusun berdasarkan prinsip anatomi, fisiologi latihan, dan sport science.</p>
+      </div>
+      
+      <div class="benefit-grid">
+        <div class="dark-card fade-in-up">
+          <div class="dark-card-icon" style="background:#F3F4F6">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#111827" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          </div>
+          <h3 style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:1.15rem;font-weight:800;color:#111827;margin-bottom:10px">Pengalaman Melatih Beragam Klien</h3>
+          <p style="font-size:0.85rem;color:#6B7280;line-height:1.55">Mulai dari pemula, mahasiswa, pekerja kantoran, hingga atlet olahraga prestasi.</p>
+        </div>
+        
+        <div class="dark-card fade-in-up">
+          <div class="dark-card-icon" style="background:#F3F4F6">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#111827" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+          </div>
+          <h3 style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:1.15rem;font-weight:800;color:#111827;margin-bottom:10px">Pendekatan Edukatif</h3>
+          <p style="font-size:0.85rem;color:#6B7280;line-height:1.55">Tujuan saya bukan membuatmu bergantung pada coach, tetapi memahami tubuhmu sendiri.</p>
+        </div>
+        
+        <div class="dark-card fade-in-up">
+          <div class="dark-card-icon" style="background:#F3F4F6">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#111827" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          </div>
+          <h3 style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:1.15rem;font-weight:800;color:#111827;margin-bottom:10px">Progress yang Terukur</h3>
+          <p style="font-size:0.85rem;color:#6B7280;line-height:1.55">Berat badan, lingkar tubuh, kekuatan, mobilitas, dan performa dicatat secara berkala.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== HOW IT WORKS / METHOD ===== -->
+  <section id="method" class="section-padding" style="background:#F9FAFB">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="text-center mb-16 fade-in-up">
+        <span class="section-label">Proses Coaching</span>
+        <h2 class="section-title">Dari Evaluasi Menuju Hasil Nyata</h2>
+        <p class="section-desc" style="margin:0 auto">Setiap klien memiliki kondisi, tujuan, dan kemampuan yang berbeda. Karena itu, program latihan disusun secara personal dan berbasis data.</p>
+      </div>
+
+      <div class="method-grid">
+        <div class="method-line"></div>
+
+        <div class="text-center fade-in-up" style="position:relative">
+          <div class="method-step-num" style="background:#000000;color:#FFFFFF;box-shadow:0 0 24px rgba(0,0,0,0.12)">1</div>
+          <h3 style="font-weight:800;color:#111827;margin-bottom:6px;font-size:0.95rem">Consultation</h3>
+          <p style="font-size:0.8rem;color:#6B7280;line-height:1.5">Diskusi mengenai target yang ingin dicapai, riwayat latihan, kondisi kesehatan, jadwal harian, serta hambatan yang sering dihadapi.</p>
+        </div>
+        <div class="text-center fade-in-up" style="position:relative">
+          <div class="method-step-num" style="background:#FFFFFF;color:#6B7280;border:1.5px solid #E5E7EB">2</div>
+          <h3 style="font-weight:800;color:#111827;margin-bottom:6px;font-size:0.95rem">Assessment</h3>
+          <p style="font-size:0.8rem;color:#6B7280;line-height:1.5">Evaluasi komposisi tubuh, postur, mobilitas, kekuatan, daya tahan, dan kualitas gerak untuk menentukan titik awal latihan.</p>
+        </div>
+        <div class="text-center fade-in-up" style="position:relative">
+          <div class="method-step-num" style="background:#FFFFFF;color:#6B7280;border:1.5px solid #E5E7EB">3</div>
+          <h3 style="font-weight:800;color:#111827;margin-bottom:6px;font-size:0.95rem">Training</h3>
+          <p style="font-size:0.8rem;color:#6B7280;line-height:1.5">Program dirancang berdasarkan hasil assessment dan dijalankan melalui sesi personal training dengan pendampingan langsung dari coach 1-on-1.</p>
+        </div>
+        <div class="text-center fade-in-up" style="position:relative">
+          <div class="method-step-num" style="background:#FFFFFF;color:#6B7280;border:1.5px solid #E5E7EB">4</div>
+          <h3 style="font-weight:800;color:#111827;margin-bottom:6px;font-size:0.95rem">Monitoring & Evaluation</h3>
+          <p style="font-size:0.8rem;color:#6B7280;line-height:1.5">Progres dipantau secara berkala melalui evaluasi performa dan perkembangan latihan. Program akan disesuaikan untuk memastikan hasil tetap optimal dan berkelanjutan.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== RESULTS / TESTIMONIALS ===== -->
+  <section class="section-padding" style="background:#FFFFFF">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="text-center mb-12 fade-in-up">
+        <span class="section-label">Testimoni Nyata</span>
+        <h2 class="section-title">Hasil Klien Kami</h2>
+      </div>
+
+      <!-- Testimonials (dimuat otomatis dari data evaluasi klien real via getPublicTestimonials()) -->
+      <div id="testimonial-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:48px" class="testimonial-grid">
+        <div class="text-center w-full p-10 text-gray-400" style="grid-column:1/-1">Memuat testimoni...</div>
+      </div>
+
+      <!-- Results Marquee -->
+      <div class="results-marquee fade-in-up">
+        <div class="results-marquee-inner">
+          <span style="display:inline-flex;align-items:center;gap:32px;color:#6B7280;font-size:0.85rem;font-weight:600;margin:0 32px">
+            <span>🏋️ Personal Training</span>
+            <span>🥋 Coaching Pencak Silat</span>
+            <span>🎓 Guru Pendidikan Jasmani</span>
+            <span>📊 Sport Science Based Training</span>
+            <span>📈 Progress Monitoring</span>
+            <span>💪 Strength & Conditioning</span>
+            <span>🏋️ Personal Training</span>
+            <span>🥋 Coaching Pencak Silat</span>
+            <span>🎓 Guru Pendidikan Jasmani</span>
+            <span>📊 Sport Science Based Training</span>
+            <span>📈 Progress Monitoring</span>
+            <span>💪 Strength & Conditioning</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PRICING / PACKAGES ===== -->
+  <section id="packages" class="section-padding">
+    <div class="max-w-6xl mx-auto px-4">
+      
+      <div class="text-center mb-8">
+        <span class="section-label">Pilih Paket</span>
+        <h2 class="section-title">Investasi untuk Dirimu</h2>
+        <p class="section-desc mx-auto">Pilih paket yang sesuai dengan kebutuhanmu. Semua paket sudah termasuk sesi 1-on-1 dengan coach profesional.</p>
+      </div>
+
+      <!-- Category Toggles -->
+      <div id="category-toggles" class="toggle-container" style="display: none;">
+        <!-- Toggles akan di-generate via JS -->
+      </div>
+
+      <!-- Slider Area -->
+      <div class="slider-wrapper">
+        <button id="btn-prev" class="slider-btn prev" onclick="slideLeft()" aria-label="Previous">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+        </button>
+
+        <div id="pricing-track" class="slider-track" onscroll="updateSliderButtons()">
+          <!-- Loading skeletons -->
+          <div class="pricing-card" style="cursor:default">
+            <div style="height:12px;background:#F3F4F6;border-radius:6px;width:40%;margin-bottom:16px;animation:pulse 1.5s infinite"></div>
+            <div style="height:28px;background:#F3F4F6;border-radius:8px;width:60%;margin-bottom:20px;animation:pulse 1.5s infinite"></div>
+            <div style="height:10px;background:#F3F4F6;border-radius:5px;width:100%;margin-bottom:8px;animation:pulse 1.5s infinite"></div>
+            <div style="height:10px;background:#F3F4F6;border-radius:5px;width:80%;margin-bottom:8px;animation:pulse 1.5s infinite"></div>
+            <div style="height:10px;background:#F3F4F6;border-radius:5px;width:60%;margin-bottom:20px;animation:pulse 1.5s infinite"></div>
+            <div style="height:44px;background:#F3F4F6;border-radius:22px;width:100%;animation:pulse 1.5s infinite"></div>
+          </div>
+          <div class="pricing-card" style="cursor:default">
+            <div style="height:12px;background:#F3F4F6;border-radius:6px;width:40%;margin-bottom:16px;animation:pulse 1.5s infinite"></div>
+            <div style="height:28px;background:#F3F4F6;border-radius:8px;width:60%;margin-bottom:20px;animation:pulse 1.5s infinite"></div>
+            <div style="height:10px;background:#F3F4F6;border-radius:5px;width:100%;margin-bottom:8px;animation:pulse 1.5s infinite"></div>
+            <div style="height:44px;background:#F3F4F6;border-radius:22px;width:100%;animation:pulse 1.5s infinite"></div>
+          </div>
+        </div>
+
+        <button id="btn-next" class="slider-btn next" onclick="slideRight()" aria-label="Next">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+        </button>
+      </div>
+
+      <div class="text-center mt-12">
+        <p style="font-size:0.85rem;color:#9CA3AF;margin-bottom:16px">Ada pertanyaan tentang paket? Konsultasi gratis dulu!</p>
+        <a href="https://wa.me/6288221254305" target="_blank" class="cta-whatsapp">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          Konsultasi Gratis
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FAQ SECTION ===== -->
+  <section id="faq" class="section-padding" style="background:#F9FAFB">
+    <div class="max-w-3xl mx-auto px-4">
+      <div class="text-center mb-12 fade-in-up">
+        <span class="section-label">Pertanyaan Umum</span>
+        <h2 class="section-title">FAQ</h2>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="faq-item fade-in-up">
+          <button onclick="toggleFaq(this)" class="faq-q">
+            Apakah saya perlu punya pengalaman fitness?
+            <svg class="faq-icon w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer"><div class="faq-answer-inner">Tidak sama sekali! Program kami dirancang untuk semua level, dari pemula total hingga atlet. Coach akan menyesuaikan intensitas dan kompleksitas latihan sesuai kemampuanmu.</div></div>
+        </div>
+        <div class="faq-item fade-in-up">
+          <button onclick="toggleFaq(this)" class="faq-q">
+            Bagaimana sistem pembayarannya?
+            <svg class="faq-icon w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer"><div class="faq-answer-inner">Pembayaran dilakukan di awal per paket (bukan per sesi). Kami menerima transfer bank (BRI),e-wallet (DANA) & Cash. Setelah pembayaran dikonfirmasi, sesi kamu aktif dan bisa langsung booking jadwal.</div></div>
+        </div>
+        <div class="faq-item fade-in-up">
+          <button onclick="toggleFaq(this)" class="faq-q">
+            Apakah ada session expire?
+            <svg class="faq-icon w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer"><div class="faq-answer-inner">Ya, setiap paket memiliki masa berlaku 1 bulan, Tapi tenang, kami selalu ingatkan via WhatsApp sebelum masa berlaku habis!</div></div>
+        </div>
+        <div class="faq-item fade-in-up">
+          <button onclick="toggleFaq(this)" class="faq-q">
+            Bisa ganti jadwal di hari yang sama?
+            <svg class="faq-icon w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer"><div class="faq-answer-inner">Bisa! Kami mengerti ada keadaan darurat. Cukup hubungi Coach via WhatsApp minimal 2 jam sebelum sesi untuk reschedule tanpa penalti.</div></div>
+        </div>
+        <div class="faq-item fade-in-up">
+          <button onclick="toggleFaq(this)" class="faq-q">
+            Apakah ada sesi trial?
+            <svg class="faq-icon w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer"><div class="faq-answer-inner">Ada! Kami menyediakan 1 sesi trial gratis untuk kamu yang ingin merasakan pengalaman latihan dengan coach kami sebelum memutuskan. Silakan klik "Book Session" untuk jadwalkan trial.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FINAL CTA ===== -->
+  <section class="section-padding" style="background:linear-gradient(135deg,#000000 0%,#1F2937 100%);position:relative;overflow:hidden">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(255,255,255,0.04) 0%,transparent 70%)"></div>
+    <div class="max-w-4xl mx-auto px-4 text-center" style="position:relative;z-index:2">
+      <h2 style="font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:3rem;font-weight:900;color:#FFFFFF;line-height:1.1;margin-bottom:16px">
+        Siap Memulai Perjalananmu?
+      </h2>
+      <p style="font-size:1.05rem;color:#9CA3AF;margin-bottom:32px;max-width:500px;margin-left:auto;margin-right:auto">
+        1 sesi trial gratis. Tidak ada komitmen. Hanya kamu dan coach, wujudkan perubahan.
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
+        <button type="button" onclick="openMemberCheck()" class="cta-primary" style="background:#FFFFFF;color:#000000">
+          Booking Trial Gratis
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+        </button>
+        <a href="https://wa.me/6288221254305" target="_blank" class="cta-whatsapp" style="color:#FFFFFF">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          Tanya via WhatsApp
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer style="background:#F9FAFB;color:#6B7280;padding:60px 0;border-top:1px solid #F3F4F6">
+    <div class="max-w-6xl mx-auto px-4">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:32px;margin-bottom:40px">
+        <div style="grid-column:span 2">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:#000000">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#FFFFFF" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5 5 5M7 17l5-5 5 5"/></svg>
+            </div>
+            <span style="font-weight:900;font-size:1.1rem;color:#111827">XNK</span>
+          </div>
+          <p style="font-size:0.8rem;line-height:1.6;max-width:280px">Premium Personal Training Studio. Transform your body & mind with professional coaches.</p>
+        </div>
+        <div>
+          <h4 style="font-weight:800;color:#111827;font-size:0.8rem;margin-bottom:14px;text-transform:uppercase;letter-spacing:0.05em">Program</h4>
+          <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px">
+            <li><a href="javascript:void(0)" onclick="openMemberCheck()" style="font-size:0.8rem;color:#6B7280;transition:color 0.2s">Weight Loss</a></li>
+            <li><a href="javascript:void(0)" onclick="openMemberCheck()" style="font-size:0.8rem;color:#6B7280;transition:color 0.2s">Muscle Building</a></li>
+            <li><a href="javascript:void(0)" onclick="openMemberCheck()" style="font-size:0.8rem;color:#6B7280;transition:color 0.2s">Posture Fix</a></li>
+            <li><a href="javascript:void(0)" onclick="openMemberCheck()" style="font-size:0.8rem;color:#6B7280;transition:color 0.2s">Flexible Program</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="font-weight:800;color:#111827;font-size:0.8rem;margin-bottom:14px;text-transform:uppercase;letter-spacing:0.05em">Company</h4>
+          <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px">
+            <li><a href="#method" style="font-size:0.8rem;color:#6B7280;transition:color 0.2s">Tentang</a></li>
+            <li><a href="#faq" style="font-size:0.8rem;color:#6B7280;transition:color 0.2s">FAQ</a></li>
+          </ul>
+        </div>
+      </div>
+      <div style="border-top:1px solid #E5E7EB;padding-top:24px;text-align:center;font-size:0.7rem;color:#9CA3AF">
+        &copy; 2026 XNK Workspace. All rights reserved.
+      </div>
+    </div>
+  </footer>
+
+  <!-- ===== FLOATING CTA (Mobile) ===== -->
+  <button type="button" onclick="openMemberCheck()" class="floating-cta md:hidden" aria-label="Book Session">
+    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+  </button>
+
+
+  <!-- ===== MEMBER CHECK MODAL ===== -->
+  <div id="member-check-modal" class="hide fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.4);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)" onclick="if(event.target===this)closeMemberCheck()">
+    <div class="relative w-full max-w-md p-0 modal-content modal-sheet xnk-scale-in overflow-y-auto" style="background:#FFFFFF;border-radius:28px;max-height:90vh;box-shadow:0 25px 60px rgba(0,0,0,0.2)">
+      <div id="reg-progress" class="hide" style="height:4px;background:#F3F4F6;border-radius:28px 28px 0 0;overflow:hidden"><div id="reg-progress-fill" style="height:100%;width:33%;background:#000000;transition:width 0.35s ease"></div></div>
+      <div style="padding:40px 32px" class="member-modal-pad">
+      <button type="button" onclick="closeMemberCheck()" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors" style="color:#6B7280;background:transparent" onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='transparent'" aria-label="Tutup">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+      <div class="text-center">
+        <h2 style="font-size:2rem;font-weight:900;line-height:1.15;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:10px">Sudah Member?</h2>
+        <p class="text-sm" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:28px;line-height:1.5">Pilih salah satu untuk melanjutkan booking sesi PT kamu.</p>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <button type="button" onclick="goToBooking('existing')" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Saya Member Lama
+          </button>
+          <button type="button" onclick="goToBooking('new')" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:1.5px solid #E5E7EB;cursor:pointer;background:transparent;color:#111827;width:100%;transition:all 0.2s ease">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+            Saya Member Baru
+          </button>
+        </div>
+        <p style="font-size:0.8rem;color:#6B7280;margin-top:20px">Belum yakin? <a href="https://wa.me/6288221254305" target="_blank" style="font-weight:600;color:#111827;text-decoration:underline">Konsultasi gratis via WhatsApp</a></p>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== JAVASCRIPT ===== -->
+  <?!= include('Scripts.html') ?>
+  <?!= include('Components.html') ?>
+
+  <script>
+    // === Booking subdomain (clean URL, no query params) ===
+    var BOOKING_URL = 'https://book.xnkbooking.my.id';
+
+    function redirectToBooking() {
+      try {
+        if (window.top && window.top !== window.self) {
+          window.top.location.href = BOOKING_URL;
+          return;
+        }
+      } catch (e) { /* cross-origin fallback below */ }
+      window.location.href = BOOKING_URL;
+    }
+
+    // === Member Check Modal ===
+    // pkgId opsional: dikirim saat klik kartu paket tertentu di section Pricing,
+    // supaya paket itu otomatis ke-pilih saat sampai di step "Pilih Paket" pada form registrasi.
+    function openMemberCheck(pkgId) {
+      var m = document.getElementById('member-check-modal');
+      if (!m) return;
+      window._preselectedPkgId = pkgId || null;
+      m.classList.remove('hide');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeMemberCheck() {
+      var m = document.getElementById('member-check-modal');
+      if (!m) return;
+      m.classList.add('hide');
+      document.body.style.overflow = '';
+    }
+
+    // === GAS-safe navigation ===
+    function goToPage(page, params) {
+      var base = (window.location && window.location.href) ? window.location.href.split('?')[0] : '';
+      var qs = 'view=' + encodeURIComponent(page);
+
+      if (params) {
+        Object.keys(params).forEach(function(k) {
+          if (params[k] != null && params[k] !== '') {
+            qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+          }
+        });
+      }
+      var url = base + '?' + qs;
+      try {
+        if (window.top && window.top !== window.self) {
+          window.top.location.href = url;
+          return;
+        }
+      } catch (e) { /* cross-origin fallback below */ }
+      window.location.href = url;
+    }
+
+    // Member-check modal handlers.
+    function goToBooking(memberType) {
+      closeMemberCheck();
+      if (memberType === 'new') {
+        openRegistration();
+      } else {
+        openVerification();
+      }
+    }
+
+    // === Verification Flow (Existing Member) ===
+    function openVerification() {
+      var m = document.getElementById('member-check-modal');
+      var contentArea = m ? m.querySelector('.modal-content') : null;
+      if (!m || !contentArea) return;
+
+      contentArea.innerHTML =
+        '<div style="padding:40px 32px;position:relative">' +
+        '<button type="button" onclick="closeMemberCheck()" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors" style="color:#6B7280;background:transparent" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'transparent\'" aria-label="Tutup">' +
+          '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+        '</button>' +
+        '<div class="text-center">' +
+          '<h2 class="mb-2" style="font-size:2rem;font-weight:900;line-height:1.15;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:10px">Verifikasi Member</h2>' +
+          '<p class="text-sm" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:28px;line-height:1.5">Masukkan nomor WhatsApp atau Member ID kamu.</p>' +
+          '<div class="xnk-field text-left" style="margin-bottom:20px">' +
+            '<label class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:10px">Nomor WhatsApp / Member ID <span style="color:#DC2626">*</span></label>' +
+            '<input type="text" id="verify-identifier" class="xnk-input" placeholder="08123… atau PT-001" autocomplete="off" style="width:100%;box-sizing:border-box;background:#F3F4F6;border:1.5px solid #F3F4F6;color:#111827;border-radius:16px;padding:16px 18px;font-size:0.95rem" />' +
+            '<p id="verify-error" class="xnk-error-text hide" style="color:#DC2626;margin-top:10px;font-size:0.8rem;text-align:left">Member tidak ditemukan.</p>' +
+          '</div>' +
+          '<button type="button" id="verify-btn" onclick="doVerifyMember()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease;margin-top:4px">' +
+            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>' +
+            ' Cari Data Saya' +
+          '</button>' +
+          '<p style="font-size:0.8rem;color:#6B7280;margin-top:20px">Belum terdaftar? <a href="javascript:void(0)" onclick="openRegistration()" style="font-weight:600;color:#111827;text-decoration:underline">Daftar sebagai member baru</a></p>' +
+        '</div>' +
+        '</div>';
+
+      m.classList.remove('hide');
+      document.body.style.overflow = 'hidden';
+
+      setTimeout(function() {
+        var inp = document.getElementById('verify-identifier');
+        if (inp) inp.focus();
+      }, 300);
+    }
+
+    function doVerifyMember() {
+      var input = document.getElementById('verify-identifier');
+      var errEl = document.getElementById('verify-error');
+      var btn = document.getElementById('verify-btn');
+      if (!input) return;
+
+      var raw = String(input.value).trim();
+      if (!raw) {
+        if (errEl) errEl.classList.remove('hide');
+        return;
+      }
+
+      if (errEl) errEl.classList.add('hide');
+      if (typeof setBtnLoading === 'function') setBtnLoading(btn, true);
+
+      var normalizedPhone = typeof normalizePhoneID === 'function' ? normalizePhoneID(raw) : '';
+
+      function searchMembers(members) {
+        var found = null;
+        (members || []).forEach(function(m) {
+          if (found) return;
+          if (m.id === raw) { found = m; return; }
+          if (normalizedPhone && typeof normalizePhoneID === 'function') {
+            var mp = normalizePhoneID(m.phone);
+            if (mp === normalizedPhone) { found = m; return; }
+          }
+          var digitsOnly = raw.replace(/\D/g, '');
+          if (digitsOnly && m.phone && m.phone.indexOf(digitsOnly) !== -1) { found = m; return; }
+        });
+        return found;
+      }
+
+      function showMemberCard(member, sessionData) {
+        if (typeof setBtnLoading === 'function') setBtnLoading(btn, false);
+        var contentArea = document.querySelector('#member-check-modal .modal-content');
+        if (!contentArea) return;
+
+        var remaining = sessionData ? sessionData.remaining : (member.totalSessions || 0);
+        var total = sessionData ? (sessionData.total || 0) : (member.totalSessions || 0);
+
+        contentArea.innerHTML =
+          '<div style="padding:40px 32px;position:relative">' +
+          '<button type="button" onclick="closeMemberCheck()" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors" style="color:#6B7280;background:transparent" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'transparent\'" aria-label="Tutup">' +
+            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+          '</button>' +
+          '<div class="text-center">' +
+            '<div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3" style="background:linear-gradient(135deg,#000000,#374151)">' +
+              '<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="#FFFFFF" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' +
+            '</div>' +
+            '<h2 class="mb-1" style="font-size:2rem;font-weight:900;line-height:1.1;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + (member.name || 'Member') + '</h2>' +
+            '<p class="text-sm mb-4" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + (member.id || '') + '</p>' +
+            '<div class="grid grid-cols-2 gap-3 mb-4 text-left">' +
+              '<div class="rounded-2xl p-4" style="background:#F3F4F6;border:1.5px solid #F3F4F6"><p style="font-size:0.625rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem">Sisa Sesi</p><p style="font-size:1.75rem;font-weight:900;color:#000000;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + remaining + '</p></div>' +
+              '<div class="rounded-2xl p-4" style="background:#F3F4F6;border:1.5px solid #F3F4F6"><p style="font-size:0.625rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem">Total Sesi</p><p style="font-size:1.75rem;font-weight:900;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + total + '</p></div>' +
+            '</div>' +
+            '<button type="button" onclick="redirectToBooking()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease">' +
+              'Lanjut Booking <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>' +
+            '</button>' +
+          '</div>' +
+          '</div>';
+      }
+
+      function handleMemberFound(member) {
+        if (typeof google !== 'undefined' && google.script) {
+          google.script.run
+            .withSuccessHandler(function(sd) { showMemberCard(member, sd); })
+            .withFailureHandler(function() { showMemberCard(member, null); })
+            .getMemberSessions(member.id);
+        } else {
+          var sd = null;
+          if (typeof mockMembers !== 'undefined') {
+            for (var i = 0; i < mockMembers.length; i++) {
+              if (mockMembers[i].id === member.id) {
+                sd = { total: mockMembers[i].totalSessions || 0, used: mockMembers[i].usedSessions || 0, remaining: (mockMembers[i].totalSessions || 0) - (mockMembers[i].usedSessions || 0) };
+                break;
+              }
+            }
+          }
+          showMemberCard(member, sd);
+        }
+      }
+
+      function handleNotFound() {
+        if (typeof setBtnLoading === 'function') setBtnLoading(btn, false);
+        if (errEl) {
+          errEl.textContent = 'Member tidak ditemukan. Coba lagi atau daftar baru.';
+          errEl.classList.remove('hide');
+        }
+      }
+
+      if (typeof google !== 'undefined' && google.script) {
+        google.script.run
+          .withSuccessHandler(function(members) {
+            var found = searchMembers(members);
+            if (found) handleMemberFound(found);
+            else handleNotFound();
+          })
+          .withFailureHandler(handleNotFound)
+          .getMembers();
+      } else {
+        var found = searchMembers(typeof mockMembers !== 'undefined' ? mockMembers : []);
+        if (found) handleMemberFound(found);
+        else handleNotFound();
+      }
+    }
+
+    // === Registration Flow (New Member) ===
+    function openRegistration() {
+      var m = document.getElementById('member-check-modal');
+      var contentArea = m ? m.querySelector('.modal-content') : null;
+      if (!m || !contentArea) return;
+
+      contentArea.innerHTML =
+        '<div style="padding:40px 32px;position:relative">' +
+        '<button type="button" onclick="closeMemberCheck()" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors" style="color:#6B7280;background:transparent" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'transparent\'" aria-label="Tutup">' +
+          '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+        '</button>' +
+        '<div id="reg-step-1" class="text-left">' +
+          '<h2 class="text-center" style="font-size:1.85rem;font-weight:900;line-height:1.15;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:8px">Registrasi Member Baru</h2>' +
+          '<p class="text-sm text-center" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:24px;line-height:1.5">Isi data diri kamu untuk mendaftar.</p>' +
+          '<div class="grid" style="gap:18px">' +
+            '<div class="xnk-field"><label class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:8px">Nama Lengkap <span style="color:#DC2626">*</span></label><input type="text" id="reg-name" placeholder="Nama lengkap kamu" style="width:100%;box-sizing:border-box;background:#F3F4F6;border:1.5px solid #F3F4F6;color:#111827;border-radius:16px;padding:16px 18px;font-size:16px;font-family:Inter,SF Pro Display,-apple-system,sans-serif" /></div>' +
+            '<div class="xnk-field"><label class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:8px">Nomor WhatsApp <span style="color:#DC2626">*</span></label><div class="xnk-phone" style="background:#F3F4F6;border:1.5px solid #F3F4F6;border-radius:16px;display:flex;align-items:center"><span class="xnk-phone-prefix" style="background:#FFFFFF;color:#6B7280;border-right:1.5px solid #FFFFFF;padding:16px 14px;border-radius:16px 0 0 16px">+62</span><input type="tel" id="reg-wa" placeholder="81234567890" inputmode="numeric" style="flex:1;border:none;outline:none;padding:16px 14px;font-size:16px;font-family:Inter,SF Pro Display,-apple-system,sans-serif;background:transparent;color:#111827" /></div></div>' +
+            '<div class="xnk-field"><label class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:8px">Jenis Kelamin</label><div class="flex gap-3" id="reg-gender-group">' +
+              '<label class="flex-1 cursor-pointer" onclick="selectRegPill(this)"><input type="radio" name="reg-gender" value="Pria" class="sr-only" checked /><div class="xnk-reg-pill xnk-reg-pill-selected" data-value="Pria" style="padding:14px;text-align:center;border-radius:14px;font-weight:600;font-size:0.9rem">Pria</div></label>' +
+              '<label class="flex-1 cursor-pointer" onclick="selectRegPill(this)"><input type="radio" name="reg-gender" value="Wanita" class="sr-only" /><div class="xnk-reg-pill" data-value="Wanita" style="padding:14px;text-align:center;border-radius:14px;font-weight:600;font-size:0.9rem;background:#F3F4F6;color:#6B7280;border:1.5px solid #F3F4F6">Wanita</div></label>' +
+            '</div></div>' +
+            '<div class="xnk-field"><label class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:8px">Tanggal Lahir</label><input type="date" id="reg-dob" style="width:100%;box-sizing:border-box;background:#F3F4F6;border:1.5px solid #F3F4F6;color:#111827;border-radius:16px;padding:16px 18px;font-size:16px;font-family:Inter,SF Pro Display,-apple-system,sans-serif;color-scheme:light" /></div>' +
+            '<div class="xnk-field"><label class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:8px">Goals / Tujuan Latihan <span style="color:#DC2626">*</span></label><select id="reg-goal" style="width:100%;box-sizing:border-box;background:#F3F4F6;border:1.5px solid #F3F4F6;color:#111827;border-radius:16px;padding:16px 18px;font-size:16px;font-family:Inter,SF Pro Display,-apple-system,sans-serif"><option value="">Pilih tujuan...</option><option>Weight Loss</option><option>Muscle Building</option><option>General Fitness</option><option>Body Transformation</option><option>Strength Training</option><option>Flexibility & Mobility</option></select></div>' +
+            '<div class="xnk-field"><label class="xnk-label" style="display:block;font-size:0.8rem;font-weight:700;color:#111827;margin-bottom:8px">Pengalaman Training</label><div class="flex gap-3" id="reg-exp-group">' +
+              '<label class="flex-1 cursor-pointer" onclick="selectRegPill(this)"><input type="radio" name="reg-experience" value="Pemula" class="sr-only" checked /><div class="xnk-reg-pill xnk-reg-pill-selected" data-value="Pemula" style="padding:14px;text-align:center;border-radius:14px;font-weight:600;font-size:0.9rem">Pemula</div></label>' +
+              '<label class="flex-1 cursor-pointer" onclick="selectRegPill(this)"><input type="radio" name="reg-experience" value="Menengah" class="sr-only" /><div class="xnk-reg-pill" data-value="Menengah" style="padding:14px;text-align:center;border-radius:14px;font-weight:600;font-size:0.9rem;background:#F3F4F6;color:#6B7280;border:1.5px solid #F3F4F6">Menengah</div></label>' +
+              '<label class="flex-1 cursor-pointer" onclick="selectRegPill(this)"><input type="radio" name="reg-experience" value="Lanjutan" class="sr-only" /><div class="xnk-reg-pill" data-value="Lanjutan" style="padding:14px;text-align:center;border-radius:14px;font-weight:600;font-size:0.9rem;background:#F3F4F6;color:#6B7280;border:1.5px solid #F3F4F6">Lanjutan</div></label>' +
+            '</div></div>' +
+          '</div>' +
+          '<p id="reg-step1-error" class="xnk-error-text hide text-center" style="color:#DC2626;margin-top:14px;font-size:0.8rem"></p>' +
+          '<button type="button" id="reg-step1-btn" onclick="doRegisterStep1()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease;margin-top:24px">' +
+            'Lanjut Pilih Paket <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>' +
+          '</button>' +
+        '</div>' +
+        '<div id="reg-step-2" class="hide text-left">' +
+          '<button type="button" onclick="goBackRegStep1()" class="text-sm font-semibold inline-flex items-center gap-1 transition-colors" style="color:#6B7280;background:transparent;border:none;cursor:pointer;padding:0;margin-bottom:14px">' +
+            '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Kembali' +
+          '</button>' +
+          '<h2 class="text-center" style="font-size:1.85rem;font-weight:900;line-height:1.15;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin-bottom:20px">Pilih Paket Kamu</h2>' +
+          '<div id="reg-packages" class="grid" style="gap:12px;margin-bottom:16px"></div>' +
+          '<p id="reg-step2-error" class="xnk-error-text hide text-center" style="color:#DC2626;margin-bottom:12px;font-size:0.8rem"></p>' +
+          '<button type="button" id="reg-step2-btn" onclick="doRegisterStep2()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease">' +
+            'Konfirmasi & Daftar' +
+          '</button>' +
+        '</div>' +
+        '<div id="reg-step-3" class="hide text-center">' +
+          '<div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style="background:linear-gradient(135deg,#000000,#374151)">' +
+            '<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="#FFFFFF" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' +
+          '</div>' +
+          '<h2 class="mb-2" style="font-size:2rem;font-weight:900;line-height:1.1;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif">Registrasi Berhasil!</h2>' +
+          '<p class="text-sm mb-1" style="color:#6B7280;font-family:Inter,SF Pro Display,-apple-system,sans-serif">Kamu sudah terdaftar sebagai member XNK.</p>' +
+          '<p id="reg-new-id" class="text-xs mb-5" style="color:#6B7280"></p>' +
+          '<button type="button" onclick="redirectToBooking()" class="xnk-btn-block xnk-tap" style="display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;font-family:Inter,SF Pro Display,-apple-system,sans-serif;font-weight:700;font-size:1rem;padding:18px 1.5rem;border-radius:9999px;border:none;cursor:pointer;background:#000000;color:#FFFFFF;width:100%;transition:all 0.2s ease">' +
+            'Lanjut Booking Sesi <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>' +
+          '</button>' +
+        '</div>' +
+        '</div>';
+
+      m.classList.remove('hide');
+      document.body.style.overflow = 'hidden';
+
+      // Load price list for Step 2
+      window._regFormData = {};
+      window._regSelectedPkg = null;
+      window._regPackages = [];
+
+      function renderStep2Pkgs(packages) {
+        window._regPackages = packages || [];
+        var pkgContainer = document.getElementById('reg-packages');
+        if (!pkgContainer) return;
+        var html = '';
+        var featuredIdx = Math.max(0, Math.floor((packages.length - 1) / 2));
+
+        // Kalau user klik kartu paket tertentu di section Pricing, paket itu yang di-highlight/dipilih,
+        // bukan paket "tengah" default.
+        var preselectIdx = -1;
+        if (window._preselectedPkgId) {
+          for (var pi = 0; pi < packages.length; pi++) {
+            if (String(packages[pi].id) === String(window._preselectedPkgId)) { preselectIdx = pi; break; }
+          }
+        }
+        var selectedIdx = preselectIdx !== -1 ? preselectIdx : featuredIdx;
+        window._regSelectedPkg = selectedIdx;
+
+        packages.forEach(function(pkg, i) {
+          var isFeatured = i === featuredIdx;
+          var isSelected = i === selectedIdx;
+          var sesi = pkg.jumlahSesi ? pkg.jumlahSesi + ' Sesi' : 'Unlimited';
+          var priceStr = typeof formatRp === 'function' ? formatRp(pkg.harga) : ('Rp ' + (pkg.harga || 0).toLocaleString('id-ID'));
+          var benefitsHtml = '';
+          if (pkg.benefit && Array.isArray(pkg.benefit)) {
+            benefitsHtml = pkg.benefit.map(function(f) { return '<span class="xnk-reg-benefit">' + f + '</span>'; }).join('');
+          }
+          html +=
+            '<label class="cursor-pointer block" onclick="selectRegPkgPill(this)">' +
+              '<input type="radio" name="reg-pkg" value="' + i + '" class="sr-only" ' + (isSelected ? 'checked' : '') + ' />' +
+              '<div class="xnk-reg-pkg-card' + (isSelected ? ' xnk-reg-pkg-featured' : '') + '" data-pkg-index="' + i + '" style="background:' + (isSelected ? 'rgba(0,0,0,0.04)' : '#F3F4F6') + ';border:1.5px solid ' + (isSelected ? '#111827' : '#F3F4F6') + ';border-radius:20px;padding:20px;transition:all 0.2s ease">' +
+                (isFeatured ? '<span style="display:inline-block;font-size:0.625rem;font-weight:700;color:#FFFFFF;background:#000000;padding:4px 10px;border-radius:9999px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em">Rekomendasi</span>' : '') +
+                '<div class="flex items-center justify-between"><h3 style="font-weight:800;color:#111827;font-family:Inter,SF Pro Display,-apple-system,sans-serif;margin:0">' + pkg.namaPaket + '</h3><span style="font-weight:900;color:#000000;font-family:Inter,SF Pro Display,-apple-system,sans-serif">' + priceStr + '</span></div>' +
+                '<p style="font-size:0.75rem;color:#6B7280;margin-top:4px;margin-bottom:8px">' + sesi + (pkg.durasi ? ' · ' + pkg.durasi : '') + '</p>' +
+                '<p style="font-size:0.75rem;color:#6B7280;line-height:1.5">' + (benefitsHtml || pkg.deskripsi || '') + '</p>' +
+              '</div>' +
+            '</label>';
+        });
+        pkgContainer.innerHTML = html;
+
+        // Kalau paket yang dipilih dari klik card bukan yang pertama, scroll dikit biar kelihatan.
+        if (preselectIdx > 0) {
+          setTimeout(function() {
+            var el = pkgContainer.querySelector('[data-pkg-index="' + preselectIdx + '"]');
+            if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }, 100);
+        }
+      }
+
+      if (typeof google !== 'undefined' && google.script) {
+        google.script.run
+          .withSuccessHandler(renderStep2Pkgs)
+          .withFailureHandler(function() {
+            renderStep2Pkgs([]);
+          })
+          .getPriceList();
+      } else {
+        setTimeout(function() {
+          var fp = typeof mockPriceList !== 'undefined' ? mockPriceList : [];
+          if (fp.length === 0 && typeof mockMembers !== 'undefined') {
+            fp = [
+              { namaPaket: 'Starter', harga: 250000, jumlahSesi: 4, durasi: '1 Bulan', deskripsi: 'Cocok untuk memulai perjalanan fitness.', benefit: ['1-on-1 Training', 'Program Personal', 'Progress Tracking'] },
+              { namaPaket: 'Pro', harga: 800000, jumlahSesi: 8, durasi: '2 Bulan', deskripsi: 'Program intensif dengan pendampingan penuh.', benefit: ['1-on-1 Training', 'Program Personal', 'Progress Tracking', 'Diet Consultation', 'Priority Booking'] },
+              { namaPaket: 'Premium', harga: 1500000, jumlahSesi: null, durasi: '1 Bulan', deskripsi: 'Akses unlimited untuk komitmen penuh.', benefit: ['Unlimited Sessions', '1-on-1 Training', 'Program Personal', 'Diet Consultation', 'Priority Booking', 'Coach Chat 24/7'] }
+            ];
+          }
+          renderStep2Pkgs(fp);
+        }, 400);
+      }
+
+      setTimeout(function() {
+        var inp = document.getElementById('reg-name');
+        if (inp) inp.focus();
+      }, 300);
+    }
+
+    function doRegisterStep1() {
+      var nameEl = document.getElementById('reg-name');
+      var waEl = document.getElementById('reg-wa');
+      var goalEl = document.getElementById('reg-goal');
+      var errEl = document.getElementById('reg-step1-error');
+      var btn = document.getElementById('reg-step1-btn');
+
+      var name = (nameEl ? nameEl.value : '').trim();
+      var wa = (waEl ? waEl.value : '').trim();
+      var goal = goalEl ? goalEl.value : '';
+
+      // Validate
+      var errors = [];
+      if (!name) errors.push('Nama lengkap wajib diisi.');
+      if (!wa) errors.push('Nomor WhatsApp wajib diisi.');
+      else if (typeof isValidPhoneID === 'function' && !isValidPhoneID(wa)) errors.push('Nomor WhatsApp tidak valid. Gunakan format Indonesia (08xx/62xx).');
+      if (!goal) errors.push('Goals / Tujuan latihan wajib dipilih.');
+
+      if (errors.length > 0) {
+        if (errEl) { errEl.textContent = errors.join(' '); errEl.classList.remove('hide'); }
+        return;
+      }
+      if (errEl) errEl.classList.add('hide');
+
+      // Normalize phone
+      var phone = typeof normalizePhoneID === 'function' ? normalizePhoneID(wa) : wa;
+
+      // Get gender & dob & experience
+      var genderEl = document.querySelector('input[name="reg-gender"]:checked');
+      var dobEl = document.getElementById('reg-dob');
+      var expEl = document.querySelector('input[name="reg-experience"]:checked');
+
+      window._regFormData = {
+        name: name,
+        phone: phone,
+        gender: genderEl ? genderEl.value : '',
+        dob: dobEl ? dobEl.value : '',
+        goal: goal,
+        experience: expEl ? expEl.value : ''
+      };
+
+      // Show step 2
+      var s1 = document.getElementById('reg-step-1');
+      var s2 = document.getElementById('reg-step-2');
+      if (s1) s1.classList.add('hide');
+      if (s2) s2.classList.remove('hide');
+    }
+
+    function goBackRegStep1() {
+      var s1 = document.getElementById('reg-step-1');
+      var s2 = document.getElementById('reg-step-2');
+      if (s1) s1.classList.remove('hide');
+      if (s2) s2.classList.add('hide');
+    }
+
+    // === Reg Pill Selection (Gender & Experience radio groups) ===
+    function selectRegPill(labelEl) {
+      var group = labelEl.parentElement;
+      if (!group) return;
+      var pills = group.querySelectorAll('.xnk-reg-pill');
+      pills.forEach(function(p) {
+        p.classList.remove('xnk-reg-pill-selected');
+        p.style.background = '#F3F4F6';
+        p.style.color = '#6B7280';
+        p.style.border = '1.5px solid #F3F4F6';
+      });
+      var targetPill = labelEl.querySelector('.xnk-reg-pill');
+      if (targetPill) {
+        targetPill.classList.add('xnk-reg-pill-selected');
+        targetPill.style.background = '#000000';
+        targetPill.style.color = '#FFFFFF';
+        targetPill.style.border = '1.5px solid #000000';
+      }
+      var radio = labelEl.querySelector('input[type="radio"]');
+      if (radio) radio.checked = true;
+    }
+
+    // === Reg Package Pill Selection ===
+    function selectRegPkgPill(labelEl) {
+      var container = document.getElementById('reg-packages');
+      if (!container) return;
+      var cards = container.querySelectorAll('.xnk-reg-pkg-card');
+      cards.forEach(function(c) {
+        c.classList.remove('xnk-reg-pkg-featured');
+        c.style.background = '#F3F4F6';
+        c.style.border = '1.5px solid #F3F4F6';
+      });
+      var targetCard = labelEl.querySelector('.xnk-reg-pkg-card');
+      if (targetCard) {
+        targetCard.classList.add('xnk-reg-pkg-featured');
+        targetCard.style.background = 'rgba(255,51,68,0.06)';
+        targetCard.style.border = '1.5px solid #111827';
+      }
+      var radio = labelEl.querySelector('input[type="radio"]');
+      if (radio) radio.checked = true;
+      window._regSelectedPkg = parseInt(radio ? radio.value : '0', 10);
+    }
+
+    function doRegisterStep2() {
+      var errEl = document.getElementById('reg-step2-error');
+      var btn = document.getElementById('reg-step2-btn');
+      var data = window._regFormData;
+      var selectedIdx = window._regSelectedPkg;
+      var pkg = window._regPackages && window._regPackages[selectedIdx];
+
+      if (!data) {
+        if (errEl) { errEl.textContent = 'Data form tidak lengkap. Silakan ulangi.'; errEl.classList.remove('hide'); }
+        return;
+      }
+      if (!pkg) {
+        if (errEl) { errEl.textContent = 'Silakan pilih paket terlebih dahulu.'; errEl.classList.remove('hide'); }
+        return;
+      }
+      if (errEl) errEl.classList.add('hide');
+
+      if (typeof setBtnLoading === 'function') setBtnLoading(btn, true);
+
+      function onSuccess(memberId) {
+        if (typeof setBtnLoading === 'function') setBtnLoading(btn, false);
+        var s2 = document.getElementById('reg-step-2');
+        var s3 = document.getElementById('reg-step-3');
+        if (s2) s2.classList.add('hide');
+        if (s3) s3.classList.remove('hide');
+        var idEl = document.getElementById('reg-new-id');
+        if (idEl && memberId) idEl.textContent = 'Member ID: ' + memberId;
+      }
+
+      function onFailure(err) {
+        if (typeof setBtnLoading === 'function') setBtnLoading(btn, false);
+        if (errEl) { errEl.textContent = err && err.message ? err.message : 'Gagal menyimpan data. Coba lagi.'; errEl.classList.remove('hide'); }
+      }
+
+      if (typeof google !== 'undefined' && google.script) {
+        google.script.run
+          .withSuccessHandler(onSuccess)
+          .withFailureHandler(onFailure)
+          .registerNewClient({
+            name: data.name,
+            phone: data.phone,
+            gender: data.gender,
+            dob: data.dob,
+            goal: data.goal,
+            experience: data.experience,
+            packageId: pkg.id,
+            packageName: pkg.namaPaket,
+            packagePrice: pkg.harga,
+            packageSessions: pkg.jumlahSesi
+          });
+      } else {
+        var mockId = 'PT-' + String(Math.floor(Math.random() * 900 + 100));
+        setTimeout(function() { onSuccess(mockId); }, 600);
+      }
+    }
+
+    // === FAQ Toggle ===
+    function toggleFaq(btn) {
+      var item = btn.parentElement;
+      var answer = item.querySelector('.faq-answer');
+      var icon = item.querySelector('.faq-icon');
+      if (!answer) return;
+      var isOpen = answer.classList.contains('open');
+      // Close all others
+      var allItems = document.querySelectorAll('.faq-item');
+      allItems.forEach(function(el) {
+        var a = el.querySelector('.faq-answer');
+        if (a) a.classList.remove('open');
+        el.classList.remove('open');
+      });
+      if (!isOpen) {
+        answer.classList.add('open');
+        item.classList.add('open');
+      }
+    }
+
+    // <!-- ===== Pricing Logic ===== -->
+    // 1. Kategori yang diinginkan
+    const CATEGORIES = [
+      { id: 'student', label: 'Student' },
+      { id: 'college', label: 'College' },
+      { id: 'regular', label: 'Regular' },
+      { id: 'premium', label: 'Premium' }
+    ];
+
+    let allPackagesData = [];
+    let currentCategory = 'regular'; // Kategori default saat pertama kali render
+
+    // Format Rupiah
+    function formatRp(angka) {
+      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
+    }
+
+    // (openMemberCheck sudah didefinisikan di atas — menerima pkgId opsional dari kartu paket)
+
+    // 2. Render UI Utama (Toggle & Cards)
+    function initializePricingUI(packages) {
+      allPackagesData = packages || [];
+      
+      const toggleContainer = document.getElementById('category-toggles');
+      
+      // Jika data kosong
+      if (allPackagesData.length === 0) {
+        document.getElementById('pricing-track').innerHTML = '<div class="text-center w-full p-10 text-gray-400">Paket belum tersedia. Hubungi kami via WhatsApp untuk info.</div>';
+        return;
+      }
+
+      // Render Toggle Buttons
+      let toggleHTML = '';
+      CATEGORIES.forEach(cat => {
+        toggleHTML += `<button id="toggle-${cat.id}" class="toggle-btn" onclick="changeCategory('${cat.id}')">${cat.label}</button>`;
+      });
+      toggleContainer.innerHTML = toggleHTML;
+      toggleContainer.style.display = 'flex'; // Tampilkan toggle setelah data ready
+
+      // Set kategori default
+      changeCategory(currentCategory);
+    }
+
+    // 3. Fungsi ganti kategori tab
+    function changeCategory(catId) {
+      currentCategory = catId;
+
+      // Update Styling Toggles
+      CATEGORIES.forEach(cat => {
+        const btn = document.getElementById(`toggle-${cat.id}`);
+        if(btn) {
+          if (cat.id === catId) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        }
+      });
+
+      // Filter Data berdasarkan Kategori (mencocokkan nilai yg sudah di toLowerCase() & trim())
+      const filteredData = allPackagesData.filter(pkg => pkg.kategori === catId);
+      renderSliderCards(filteredData);
+    }
+
+    // 4. Render Kartu ke dalam Slider
+    function renderSliderCards(packages) {
+      const track = document.getElementById('pricing-track');
+      
+      if (packages.length === 0) {
+        track.innerHTML = '<div class="text-center w-full p-10 text-gray-400">Belum ada paket untuk kategori ini.</div>';
+        updateSliderButtons();
+        return;
+      }
+
+      let html = '';
+      // Asumsi paket tengah adalah yang "Featured/Rekomendasi"
+      let featuredIdx = Math.max(0, Math.floor((packages.length - 1) / 2));
+      
+      packages.forEach((pkg, i) => {
+        let isFeatured = (i === featuredIdx);
+        let sesi = pkg.jumlahSesi ? pkg.jumlahSesi + ' Sesi' : 'Unlimited';
+        let priceStr = formatRp(pkg.harga);
+        
+        // Mem-parsing array benefit (Opsional jika ingin dilist, di sini saya pakai deskripsi)
+        html += `
+          <div class="pricing-card ${isFeatured ? 'featured' : ''}" onclick="openMemberCheck('${String(pkg.id).replace(/'/g, "\\'")}')">
+            ${isFeatured ? '<span class="pricing-badge">Rekomendasi</span>' : ''}
+            <h3 style="font-weight:800;font-size:1.1rem;color:#111827;margin-bottom:4px">${pkg.namaPaket}</h3>
+            <p style="font-size:0.75rem;color:#6B7280;margin-bottom:16px">${sesi} ${pkg.durasi ? ' · ' + pkg.durasi : ''}</p>
+            <p style="font-size:2rem;font-weight:900;color:#000000;margin-bottom:16px">${priceStr}</p>
+            <p style="font-size:0.8rem;color:#6B7280;line-height:1.6;margin-bottom:20px">${pkg.deskripsi || ''}</p>
+            <button type="button" class="cta-primary" style="width:100%;justify-content:center;font-size:0.85rem;padding:14px 24px">Pilih Paket</button>
+          </div>
+        `;
+      });
+
+      track.innerHTML = html;
+      
+      // Reset scroll posisi ke paling awal tiap ganti kategori
+      track.scrollLeft = 0;
+      setTimeout(updateSliderButtons, 100); // Check ketersediaan tombol slide
+    }
+
+    // 5. Fungsi Navigasi Slider (Geser Kiri/Kanan)
+    function slideLeft() {
+      const track = document.getElementById('pricing-track');
+      const cardWidth = track.querySelector('.pricing-card')?.offsetWidth || 300;
+      track.scrollBy({ left: -(cardWidth + 20), behavior: 'smooth' }); // 20 adalah nilai gap
+    }
+
+    function slideRight() {
+      const track = document.getElementById('pricing-track');
+      const cardWidth = track.querySelector('.pricing-card')?.offsetWidth || 300;
+      track.scrollBy({ left: (cardWidth + 20), behavior: 'smooth' });
+    }
+
+    // Disable/Enable tombol navigasi slider jika mentok
+    function updateSliderButtons() {
+      const track = document.getElementById('pricing-track');
+      const btnPrev = document.getElementById('btn-prev');
+      const btnNext = document.getElementById('btn-next');
+
+      if (!track || !btnPrev || !btnNext) return;
+
+      // Mentok kiri
+      if (track.scrollLeft <= 5) {
+        btnPrev.disabled = true;
+      } else {
+        btnPrev.disabled = false;
+      }
+
+      // Mentok kanan
+      if (track.scrollLeft + track.clientWidth >= track.scrollWidth - 5) {
+        btnNext.disabled = true;
+      } else {
+        btnNext.disabled = false;
+      }
+    }
+
+    // 6. Integrasi dengan Google Apps Script
+    function loadPricing() {
+      if (typeof google !== 'undefined' && google.script) {
+        // Lingkungan Google Apps Script
+        google.script.run
+          .withSuccessHandler(initializePricingUI)
+          .withFailureHandler(function(err){ 
+             console.error(err); 
+             initializePricingUI([]); 
+          })
+          .getPriceList();
+      } else {
+        // MOCK DATA: Simulasi load data jika dibuka di browser biasa / Preview
+        setTimeout(() => {
+          const mockData = [
+            // Student
+            { namaPaket: 'Starter Student', kategori: 'student', harga: 150000, jumlahSesi: 4, durasi: '1 Bulan', deskripsi: 'Khusus pelajar untuk mulai pola hidup sehat.', aktif: true },
+            { namaPaket: 'Pro Student', kategori: 'student', harga: 400000, jumlahSesi: 8, durasi: '2 Bulan', deskripsi: 'Pilihan pas pelajar untuk hasil maksimal.', aktif: true },
+            // College
+            { namaPaket: 'College Starter', kategori: 'college', harga: 200000, jumlahSesi: 4, durasi: '1 Bulan', deskripsi: 'Cocok untuk mahasiswa sibuk.', aktif: true },
+            { namaPaket: 'College Elite', kategori: 'college', harga: 600000, jumlahSesi: null, durasi: '1 Bulan', deskripsi: 'Akses tanpa batas buat anak kuliahan.', aktif: true },
+            // Regular
+            { namaPaket: 'Basic', kategori: 'regular', harga: 250000, jumlahSesi: 4, durasi: '1 Bulan', deskripsi: 'Cocok untuk memulai perjalanan fitness.', aktif: true },
+            { namaPaket: 'Pro', kategori: 'regular', harga: 800000, jumlahSesi: 8, durasi: '2 Bulan', deskripsi: 'Program intensif dengan pendampingan penuh.', aktif: true },
+            { namaPaket: 'Advanced', kategori: 'regular', harga: 1200000, jumlahSesi: 12, durasi: '3 Bulan', deskripsi: 'Perubahan signifikan dalam 3 bulan.', aktif: true },
+            // Premium
+            { namaPaket: 'Premium VIP', kategori: 'premium', harga: 1500000, jumlahSesi: null, durasi: '1 Bulan', deskripsi: 'Akses unlimited untuk komitmen penuh.', aktif: true },
+            { namaPaket: 'Exclusive', kategori: 'premium', harga: 3000000, jumlahSesi: null, durasi: '3 Bulan', deskripsi: 'Fasilitas eksklusif dan prioritas utama.', aktif: true }
+          ];
+          initializePricingUI(mockData);
+        }, 800); // Simulasi delay internet
+      }
+    }
+
+    // === Hero Stats (data real dari backend) ===
+    function renderHeroStats(stats) {
+      stats = stats || {};
+      var elSessions = document.getElementById('stat-sessions');
+      var elClients = document.getElementById('stat-clients');
+      var elSat = document.getElementById('stat-satisfaction');
+      var elRating = document.getElementById('stat-rating');
+      var satWrap = document.getElementById('stat-satisfaction-wrap');
+      var satDivider = document.getElementById('stat-satisfaction-divider');
+      var ratingWrap = document.getElementById('stat-rating-wrap');
+      var ratingDivider = document.getElementById('stat-rating-divider');
+
+      if (elSessions) elSessions.textContent = (stats.completedSessions || 0) + '+';
+      if (elClients) elClients.textContent = stats.totalClients || 0;
+
+      // Kepuasan & Rating disembunyikan otomatis kalau belum ada data evaluasi sama sekali,
+      // supaya tidak menampilkan angka 0%/0.0 yang menyesatkan.
+      if (stats.satisfactionPct != null) {
+        if (elSat) elSat.textContent = stats.satisfactionPct + '%';
+      } else {
+        if (satWrap) satWrap.style.display = 'none';
+        if (satDivider) satDivider.style.display = 'none';
+      }
+
+      if (stats.avgRating != null) {
+        if (elRating) elRating.textContent = stats.avgRating;
+      } else {
+        if (ratingWrap) ratingWrap.style.display = 'none';
+        if (ratingDivider) ratingDivider.style.display = 'none';
+      }
+    }
+
+    function loadLandingStats() {
+      if (typeof google !== 'undefined' && google.script) {
+        google.script.run
+          .withSuccessHandler(renderHeroStats)
+          .withFailureHandler(function(err) {
+            console.error(err);
+            renderHeroStats({ totalClients: 0, completedSessions: 0, satisfactionPct: null, avgRating: null });
+          })
+          .getLandingStats();
+      } else {
+        // MOCK DATA untuk preview di luar Apps Script
+        setTimeout(function() {
+          renderHeroStats({ totalClients: 12, completedSessions: 240, satisfactionPct: 96, avgRating: 4.8 });
+        }, 500);
+      }
+    }
+
+    // === Testimonials (data real dari sheet evaluasi klien, via getPublicTestimonials()) ===
+    function escapeHtmlTestimoni(str) {
+      var div = document.createElement('div');
+      div.textContent = str == null ? '' : String(str);
+      return div.innerHTML;
+    }
+
+    function renderStarsSvg(count) {
+      var full = '<svg class="w-4 h-4" fill="#f59e0b" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+      var empty = '<svg class="w-4 h-4" fill="#E5E7EB" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+      var html = '';
+      for (var i = 0; i < 5; i++) html += i < count ? full : empty;
+      return html;
+    }
+
+    function initialFromName(name) {
+      var parts = String(name || '').trim().split(/\s+/);
+      if (parts.length === 0) return '?';
+      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+
+    function renderTestimonials(list) {
+      var el = document.getElementById('testimonial-grid');
+      if (!el) return;
+
+      if (!list || list.length === 0) {
+        el.innerHTML = '<div class="text-center w-full p-10 text-gray-400" style="grid-column:1/-1">Belum ada testimoni yang bisa ditampilkan.</div>';
+        return;
+      }
+
+      // Tampilkan maksimal 3 (terbaru duluan) supaya layout grid 3-kolom tetap rapi
+      var shown = list.slice(0, 3);
+      var html = '';
+      shown.forEach(function(t) {
+        html +=
+          '<div class="testimonial-card fade-in-up visible">' +
+            '<div style="display:flex;align-items:center;gap:4px;margin-bottom:14px">' + renderStarsSvg(t.rating) + '</div>' +
+            '<p style="font-size:0.85rem;color:#6B7280;margin-bottom:16px;line-height:1.55">"' + escapeHtmlTestimoni(t.text) + '"</p>' +
+            '<div style="display:flex;align-items:center;gap:12px">' +
+              '<div style="width:40px;height:40px;border-radius:50%;background:#F3F4F6;display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:800;color:#111827">' + initialFromName(t.name) + '</div>' +
+              '<div><p style="font-size:0.85rem;font-weight:700;color:#111827">' + escapeHtmlTestimoni(t.name) + '</p>' +
+              (t.sessionsCompleted ? '<p style="font-size:0.7rem;color:#9CA3AF">' + escapeHtmlTestimoni(String(t.sessionsCompleted)) + ' Sesi Selesai</p>' : '') +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      });
+      el.innerHTML = html;
+    }
+
+    function loadTestimonials() {
+      if (typeof google !== 'undefined' && google.script) {
+        google.script.run
+          .withSuccessHandler(renderTestimonials)
+          .withFailureHandler(function(err) {
+            console.error(err);
+            renderTestimonials([]);
+          })
+          .getPublicTestimonials();
+      } else {
+        // MOCK DATA untuk preview di luar Apps Script
+        setTimeout(function() {
+          renderTestimonials([
+            { name: 'Amalia A.', rating: 5, text: 'Informatif, edukatif banyak ilmu yang didapat mengenai kesehatan.', sessionsCompleted: 9 },
+            { name: 'Susi Pambayun', rating: 5, text: 'Coach tidak hanya ramah, tapi superduper sabar ngajarin form yang benar.', sessionsCompleted: 12 },
+            { name: 'Diyah Woro', rating: 5, text: 'Pace-nya pas, banyak dijelaskan tentang gerakan dan manfaatnya.', sessionsCompleted: 5 }
+          ]);
+        }, 500);
+      }
+    }
+
+    // Jalankan saat halaman di-load
+    document.addEventListener("DOMContentLoaded", () => {
+      // Pastikan button di update saat window resize
+      window.addEventListener('resize', updateSliderButtons);
+    });
+
+    // === Scroll Animation Observer ===
+    function initScrollReveal() {
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+          }
+        });
+      }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+      document.querySelectorAll('.fade-in-up').forEach(function(el) {
+        observer.observe(el);
+      });
+    }
+
+    // === Init on Load ===
+    window.addEventListener('DOMContentLoaded', function() {
+      // Hide loader
+      setTimeout(function() {
+        var loader = document.getElementById('landing-loader');
+        if (loader) {
+          loader.style.opacity = '0';
+          setTimeout(function() { if (loader) loader.remove(); }, 500);
+        }
+      }, 400);
+
+      loadPricing();
+      loadLandingStats();
+      loadTestimonials();
+      initScrollReveal();
+    });
+  </script>
+
+</body>
+</html>

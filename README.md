@@ -21,7 +21,7 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 | `apple-touch-icon.png` | iPhone/iPad home-screen icon (180 px). |
 | `robots.txt` | Tells search engines not to crawl the site. |
 | `_config.yml` | Keeps `apps-script/` and this README off the public website. |
-| `apps-script/` | Where the Apps Script source code goes — see [apps-script/README.md](apps-script/README.md). |
+| `apps-script/` | Source of the Apps Script apps (PT Scheduler), auto-deployed by GitHub Actions — see [apps-script/README.md](apps-script/README.md). |
 
 ## Access (PIN)
 

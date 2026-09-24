@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zendo</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93SRTYH3SG"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-93SRTYH3SG');
+  </script>
+  
+  <?!= include('Styles.html') ?>
+</head>
+<body class="antialiased overflow-hidden h-screen flex flex-col">
+
+  <!-- ========================================= -->
+  <!-- TOP NAVIGATION BAR                        -->
+  <!-- ========================================= -->
+  <header class="bg-white border-b border-gray-100 z-50 sticky top-0 flex items-center justify-between px-4 md:px-8 h-16 md:h-20 w-full shrink-0">
+    <div class="flex items-center gap-3 md:w-64 shrink-0">
+      <div class="w-8 h-8 md:w-10 md:h-10 bg-black rounded-lg flex items-center justify-center shrink-0">
+        <i data-lucide="dumbbell" class="w-5 h-5 md:w-6 md:h-6 text-white pointer-events-none"></i>
+      </div>
+      <h1 class="font-black text-lg md:text-xl tracking-tight uppercase" id="page-title">Zendo</h1>
+    </div>
+
+    <div class="flex-1 flex justify-center">
+      <!-- Public Menu Bar -->
+      <div id="public-menu-bar" class="fixed bottom-0 left-0 w-full bg-white border-t border-gray-100 md:border-none md:bg-transparent md:relative md:w-auto flex justify-around md:justify-center md:gap-4 pb-safe md:pb-0 z-40 hide shadow-[0_-4px_10px_rgba(0,0,0,0.03)] md:shadow-none transition-opacity duration-300">
+        <button type="button" onclick="window.navigate('public-catalog')" class="pub-nav-btn flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-gray-500 hover:text-black transition-colors group flex-1 md:flex-none md:px-4 md:py-2 md:rounded-xl md:hover:bg-gray-50">
+          <i data-lucide="tags" class="w-5 h-5 md:hidden transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm font-bold whitespace-nowrap pointer-events-none">Price List</span>
+        </button>
+
+        <button type="button" onclick="window.navigate('calendar')" class="pub-nav-btn flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-gray-500 hover:text-black transition-colors group flex-1 md:flex-none md:px-4 md:py-2 md:rounded-xl md:hover:bg-gray-50">
+          <i data-lucide="calendar" class="w-5 h-5 md:hidden transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm font-bold whitespace-nowrap pointer-events-none">Jadwal</span>
+        </button>
+
+        <button type="button" onclick="window.navigate('public-coaches')" class="pub-nav-btn flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-gray-500 hover:text-black transition-colors group flex-1 md:flex-none md:px-4 md:py-2 md:rounded-xl md:hover:bg-gray-50">
+          <i data-lucide="users" class="w-5 h-5 md:hidden transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm font-bold whitespace-nowrap pointer-events-none">Coach</span>
+        </button>
+
+        <button type="button" id="nav-login-btn" onclick="window.navigate('public-login')" class="pub-nav-btn flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-gray-500 hover:text-black transition-colors group flex-1 md:flex-none md:px-4 md:py-2 md:rounded-xl md:hover:bg-gray-50">
+          <i data-lucide="user-circle" class="w-5 h-5 md:hidden transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm font-bold whitespace-nowrap pointer-events-none">Member Area</span>
+        </button>
+
+        <button type="button" id="nav-dashboard-btn" onclick="window.navigate('public-dashboard')" class="pub-nav-btn hidden flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-black transition-colors group flex-1 md:flex-none md:px-4 md:py-2 md:bg-black md:text-white md:rounded-xl md:shadow-md">
+          <i data-lucide="layout-dashboard" class="w-5 h-5 md:hidden transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm font-black whitespace-nowrap pointer-events-none">Home</span>
+        </button>
+      </div>
+
+      <!-- Bottom Navigation (Mobile & Desktop) for Admin -->
+      <div id="admin-bottom-nav" class="fixed bottom-0 left-0 w-full bg-white border-t border-gray-100 md:border-none md:bg-transparent md:relative md:w-auto flex justify-around md:justify-center md:gap-4 pb-safe md:pb-0 z-40 hide shadow-[0_-4px_10px_rgba(0,0,0,0.03)] md:shadow-none">
+        <button type="button" data-view="dashboard" onclick="window.navigate('dashboard')" class="nav-btn flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-gray-400 font-medium group flex-1 md:flex-none md:px-4 md:py-2 md:rounded-xl transition-colors">
+          <i data-lucide="layout-dashboard" class="w-5 h-5 transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm pointer-events-none">Zendo</span>
+        </button>
+
+        <button type="button" data-view="calendar" onclick="window.navigate('calendar')" class="nav-btn flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-gray-400 font-medium group flex-1 md:flex-none md:px-4 md:py-2 md:rounded-xl transition-colors">
+          <i data-lucide="calendar" class="w-5 h-5 transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm pointer-events-none">Jadwal</span>
+        </button>
+
+        <button type="button" data-view="clients" onclick="window.navigate('clients')" class="nav-btn flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-gray-400 font-medium group flex-1 md:flex-none md:px-4 md:py-2 md:rounded-xl transition-colors">
+          <i data-lucide="users" class="w-5 h-5 transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm pointer-events-none">Klien</span>
+        </button>
+
+        <button type="button" data-view="coaches" onclick="window.navigate('coaches')" class="nav-btn flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 p-2 min-h-[56px] md:min-h-0 text-gray-400 font-medium group flex-1 md:flex-none md:px-4 md:py-2 md:rounded-xl transition-colors">
+          <i data-lucide="contact-2" class="w-5 h-5 transition-transform group-hover:scale-110 pointer-events-none"></i>
+          <span class="text-[10px] md:text-sm pointer-events-none">Coach</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-1 md:w-64 shrink-0">
+      <div class="flex items-center gap-1" id="admin-header-actions">
+        <button type="button" onclick="window.checkUnreadBookings()" id="notification-btn" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-100 rounded-lg transition-colors relative">
+          <i data-lucide="bell" class="w-5 h-5 md:w-6 md:h-6 pointer-events-none"></i>
+          <span id="unread-badge" class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full hide pointer-events-none"></span>
+        </button>
+
+        <button type="button" onclick="window.openAdminProfileMenu && window.openAdminProfileMenu()" class="min-w-[44px] min-h-[44px] rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center hover:border-black transition-colors">
+          <i data-lucide="user" class="w-4 h-4 md:w-5 md:h-5 text-gray-500 pointer-events-none"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 hide" id="public-header-actions">
+        <button type="button" onclick="window.navigate('public-login')" class="text-xs font-bold text-gray-800 hover:text-black bg-gray-100 hover:bg-gray-200 px-6 min-h-[44px] rounded-lg transition-colors flex items-center justify-center">
+          Masuk Member
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================= -->
+  <!-- MAIN CONTENT AREA                         -->
+  <!-- ========================================= -->
+  <main class="flex-1 overflow-y-auto overflow-x-hidden relative" id="main-scroll-area">
+    
+    <!-- View: Dashboard Admin -->
+    <div id="view-dashboard" class="p-4 md:p-6 pb-24 md:pb-6 max-w-5xl mx-auto w-full transition-opacity duration-300">
+      <div class="bg-gradient-to-br from-black to-gray-800 rounded-3xl p-6 text-white mb-6 shadow-xl relative overflow-hidden">
+        <div class="absolute top-0 right-0 p-4 opacity-10"><i data-lucide="activity" class="w-32 h-32"></i></div>
+        <div class="flex items-start justify-between relative z-10">
+          <div>
+            <h2 class="text-2xl md:text-3xl font-black mb-1">Ringkasan Personal Trainer</h2>
+            <p class="text-gray-400 text-sm">Pantau aktivitas hari ini</p>
+          </div>
+          <div class="text-right">
+            <div class="flex items-center gap-1.5 bg-white/10 border border-white/10 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide">
+              <span class="relative flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
+              </span>
+              Live
+            </div>
+            <p id="live-clock" class="text-gray-300 text-[11px] mt-1 tabular-nums"></p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10 mt-5">
+          <div class="stat-card bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+            <p class="text-gray-300 text-xs font-medium mb-1">Total Klien</p>
+            <p class="text-2xl font-black" id="stat-total-clients">0</p>
+          </div>
+          <div class="stat-card bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+            <p class="text-gray-300 text-xs font-medium mb-1">Sesi Hari Ini</p>
+            <p class="text-2xl font-black" id="stat-today-sessions">0</p>
+          </div>
+          <div class="stat-card bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+            <p class="text-gray-300 text-xs font-medium mb-1">Sesi Minggu Ini</p>
+            <p class="text-2xl font-black" id="stat-week-sessions">0</p>
+          </div>
+          <div class="stat-card bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+            <p class="text-gray-300 text-xs font-medium mb-1">Tingkat Selesai</p>
+            <p class="text-2xl font-black" id="stat-completion-rate">0<span class="text-sm text-gray-400">%</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grafik 7 hari -->
+      <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="w-5 h-5 text-gray-400"></i> Sesi 7 Hari Terakhir</h3>
+      <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm">
+        <div id="weekly-chart" class="flex items-end gap-2 h-28"></div>
+      </div>
+
+      <!-- Ring + Leaderboard coach -->
+      <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="trophy" class="w-5 h-5 text-gray-400"></i> Performa Minggu Ini</h3>
+      <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4">
+        <div class="flex flex-col items-center justify-center gap-1">
+          <svg width="120" height="120" viewBox="0 0 140 140">
+            <circle cx="70" cy="70" r="58" fill="none" stroke="#f0efec" stroke-width="12"/>
+            <circle id="completion-ring" cx="70" cy="70" r="58" fill="none" stroke="#0a0a0a" stroke-width="12" stroke-linecap="round" stroke-dasharray="364.4" stroke-dashoffset="364.4" transform="rotate(-90 70 70)" style="transition: stroke-dashoffset 1.1s cubic-bezier(.16,1,.3,1);"/>
+          </svg>
+          <p class="text-xl font-black" id="ring-value">0%</p>
+          <p class="text-[11px] text-gray-400 font-semibold">Sesi Selesai</p>
+        </div>
+        <div id="coach-leaderboard"></div>
+      </div>
+
+      <!-- Peak Hour Heatmap -->
+      <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="flame" class="w-5 h-5 text-gray-400"></i> Jam Ramai Booking</h3>
+      <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm">
+        <div id="peak-hour-heatmap" class="w-full">
+          <!-- Rendered by JS: window.renderPeakHourHeatmap() -->
+        </div>
+        <div class="flex items-center justify-end gap-2 mt-3 text-[10px] text-gray-400 font-semibold">
+          <span>Sepi</span>
+          <div class="flex gap-0.5">
+            <div class="w-3 h-3 rounded-sm" style="background:#f0efec"></div>
+            <div class="w-3 h-3 rounded-sm" style="background:#c7c5bf"></div>
+            <div class="w-3 h-3 rounded-sm" style="background:#8a8880"></div>
+            <div class="w-3 h-3 rounded-sm" style="background:#4a4944"></div>
+            <div class="w-3 h-3 rounded-sm" style="background:#0a0a0a"></div>
+          </div>
+          <span>Ramai</span>
+        </div>
+      </div>
+
+      <!-- Dashboard Bulanan per Coach -->
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-lg flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-gray-400"></i> Performa Coach Bulanan</h3>
+        <select id="coach-monthly-filter" onchange="window.renderCoachMonthlyStats(); window.renderPackageTrendStats();" class="bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-black shadow-sm">
+          <!-- Rendered by JS: 12 bulan terakhir -->
+        </select>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm">
+        <div id="coach-monthly-stats-list" class="space-y-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Trend Paket Terlaris (pakai filter bulan yang sama dengan Performa Coach Bulanan) -->
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-lg flex items-center gap-2"><i data-lucide="package" class="w-5 h-5 text-gray-400"></i> Trend Paket Terlaris</h3>
+        <span class="text-[10px] text-gray-400 font-semibold">Ikut filter bulan di atas</span>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm">
+        <div id="package-trend-list" class="space-y-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="clock" class="w-5 h-5 text-gray-400"></i> Jadwal Latihan Mendatang</h3>
+      <div id="upcoming-schedules-list" class="space-y-3"></div>
+    </div>
+
+    <!-- View: Calendar Admin/Public -->
+    <div id="view-calendar" class="p-4 md:p-6 pb-24 md:pb-6 h-full flex flex-col hide transition-opacity duration-300 max-w-5xl mx-auto w-full">
+      <!-- Filter Coach untuk Public View -->
+      <div id="calendar-public-filter" class="hide mb-4 flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+        <h3 class="font-bold text-gray-700 text-sm md:text-base">Filter Ketersediaan:</h3>
+        <select id="calendar-coach-filter" onchange="window.initCalendar()" class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-black">
+          <option value="ALL">Semua Coach</option>
+        </select>
+      </div>
+
+      <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex-1 flex flex-col min-h-[1000px]">
+        <div id="calendar" class="flex-1"></div>
+      </div>
+
+      <!-- Spacer supaya konten paling bawah kalender tidak ketutup bottom nav -->
+      <div class="h-28 md:hidden shrink-0" aria-hidden="true"></div>
+    </div>
+
+    <!-- View: Client List (Admin) -->
+    <div id="view-clients" class="p-4 md:p-6 pb-24 md:pb-6 max-w-5xl mx-auto w-full hide transition-opacity duration-300">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-black">Database Klien</h2>
+        <button onclick="window.openAddMemberModal()" class="bg-black text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-800 transition-colors shadow-md">
+          <i data-lucide="plus" class="w-4 h-4"></i> Klien Baru
+        </button>
+      </div>
+      
+      <div class="relative mb-6">
+        <i data-lucide="search" class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+        <input type="text" id="search-client" placeholder="Cari nama klien..." onkeyup="window.filterClients()" class="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent text-sm transition-all shadow-sm">
+      </div>
+
+      <div id="client-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- View: Client Profile Detail (Admin) -->
+    <div id="view-profile" class="p-4 md:p-6 pb-24 md:pb-6 max-w-3xl mx-auto w-full hide transition-opacity duration-300">
+      <button onclick="window.navigate('clients')" class="mb-6 flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-black transition-colors">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i> Kembali ke Daftar
+      </button>
+
+      <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mb-6">
+        <!-- Baris 1: Avatar + Nama + Badge Status -->
+        <div class="flex items-start gap-4 mb-5">
+          <div class="relative w-16 h-16 md:w-20 md:h-20 shrink-0">
+            <img id="profile-photo" src="" class="hide w-16 h-16 md:w-20 md:h-20 rounded-full object-cover" alt="Foto Klien">
+            <div id="profile-photo-fallback" class="w-16 h-16 md:w-20 md:h-20 bg-gray-100 rounded-full flex items-center justify-center">
+              <i data-lucide="user" class="w-8 h-8 md:w-10 md:h-10 text-gray-400"></i>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+              <div class="min-w-0">
+                <h2 class="text-xl md:text-2xl font-black mb-1 truncate" id="profile-name">Nama Klien</h2>
+                <p class="text-gray-500 text-sm flex items-center gap-1">
+                  <i data-lucide="phone" class="w-3 h-3 shrink-0"></i> <span id="profile-phone"></span>
+                </p>
+              </div>
+              <span id="profile-status-badge" class="text-white text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider bg-gray-300 whitespace-nowrap shrink-0 mt-1">...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Baris 2: Goal + Chat WA -->
+        <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-100 flex justify-between items-end gap-3 mb-5">
+          <div class="min-w-0">
+            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Tujuan / Goal</p>
+            <p class="text-sm font-medium" id="profile-goal">Goal klien</p>
+            <p class="text-[10px] text-gray-400 mt-2">Bergabung: <span id="profile-date">-</span></p>
+            <p class="text-[10px] text-gray-400 mt-1 flex items-center gap-1" id="profile-package-wrap"><i data-lucide="tag" class="w-3 h-3 shrink-0"></i> Paket: <span id="profile-package" class="font-bold text-gray-600">-</span></p>
+            <p class="text-[10px] text-gray-400 mt-1 flex items-center gap-1" id="profile-coach-wrap"><i data-lucide="contact-2" class="w-3 h-3 shrink-0"></i> Coach: <span id="profile-coach" class="font-bold text-gray-600">-</span></p>
+          </div>
+          <button id="profile-wa-btn" class="bg-[#25D366] text-white px-3 py-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-[#1ebe5d] transition-colors shadow-sm shrink-0">
+            <i data-lucide="message-circle" class="w-4 h-4 pointer-events-none"></i> Chat WA
+          </button>
+        </div>
+
+        <!-- Baris 3: Aksi Edit & Hapus -->
+        <div class="flex items-center gap-3 pt-4 border-t border-gray-100">
+          <button onclick="window.openEditProfileModal()" type="button" class="flex-1 flex items-center justify-center gap-2 text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 py-3 rounded-xl text-sm font-bold transition-colors">
+            <i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i> Edit
+          </button>
+          <button onclick="window.openDeleteConfirmModal()" type="button" class="flex-1 flex items-center justify-center gap-2 text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 py-3 rounded-xl text-sm font-bold transition-colors">
+            <i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i> Hapus
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+          <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Sisa Sesi</p>
+          <div class="flex items-baseline gap-1">
+            <span class="text-3xl font-black" id="profile-remaining">0</span>
+            <span class="text-sm text-gray-400 font-medium">/ <span id="profile-total">0</span></span>
+          </div>
+          <div class="w-full bg-gray-100 rounded-full h-1.5 mt-3 overflow-hidden">
+            <div id="profile-progress" class="bg-black h-1.5 rounded-full" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col justify-between">
+          <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Aksi Cepat</p>
+          <button onclick="window.openAddScheduleModal()" class="w-full bg-black text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors">
+            <i data-lucide="calendar-plus" class="w-4 h-4"></i> Tambah Jadwal
+          </button>
+        </div>
+      </div>
+
+      <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5 text-gray-400"></i> Riwayat Sesi</h3>
+      <div id="profile-history" class="space-y-3">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- View: Coaches List -->
+    <div id="view-coaches" class="p-4 md:p-6 pb-24 md:pb-6 max-w-5xl mx-auto w-full hide transition-opacity duration-300">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-black">Tim Coach</h2>
+        <button onclick="window.openAddCoachModal()" class="bg-black text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-800 transition-colors shadow-md">
+          <i data-lucide="plus" class="w-4 h-4"></i> Tambah Coach
+        </button>
+      </div>
+      <div id="coach-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+         <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- View: Coach Profile -->
+    <div id="view-coach-profile" class="p-4 md:p-6 pb-24 md:pb-6 max-w-3xl mx-auto w-full hide transition-opacity duration-300">
+      <button onclick="window.navigate('coaches')" class="coach-back group mb-6 flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-black hover:bg-gray-100 px-3 py-2 -ml-3 rounded-xl transition-all duration-200">
+        <i data-lucide="arrow-left" class="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-1"></i> Kembali
+      </button>
+    
+      <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="coach-cover relative h-28 md:h-32">
+          <div class="coach-glow"></div>
+        </div>
+    
+        <div class="px-6 pb-8 flex flex-col items-center text-center -mt-16">
+          <div class="coach-avatar-wrap relative">
+            <div class="w-28 h-28 rounded-full mb-4 overflow-hidden bg-gray-100 flex items-center justify-center shrink-0 ring-4 ring-white shadow-xl relative z-10 group">
+              <img id="cprofile-photo" src="" alt="" class="w-full h-full object-cover hide transition-transform duration-500 group-hover:scale-110" onerror="this.classList.add('hide'); document.getElementById('cprofile-photo-fallback').classList.remove('hide');">
+              <i id="cprofile-photo-fallback" data-lucide="contact-2" class="w-12 h-12 text-gray-400"></i>
+            </div>
+          </div>
+    
+          <h2 class="coach-name text-2xl md:text-3xl font-black mb-3 tracking-tight" id="cprofile-name">Coach Name</h2>
+    
+          <div class="coach-badges flex flex-wrap items-center justify-center gap-2 mb-4">
+            <p id="cprofile-specialty">Specialty</p>
+            <p id="cprofile-experience"></p>
+          </div>
+    
+          <div class="coach-divider mb-6"></div>
+    
+          <div class="coach-bio-card w-full bg-gray-50 rounded-2xl p-5 md:p-6 mb-6 text-left">
+            <p class="text-sm text-gray-600 leading-relaxed" id="cprofile-bio"></p>
+          </div>
+    
+          <button id="cprofile-wa-btn" class="coach-cta w-full bg-[#25D366] text-white px-6 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-200 transition-all duration-200 hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-95">
+            <span class="coach-cta-shine"></span>
+            <i data-lucide="message-circle" class="w-5 h-5"></i> Chat via WhatsApp
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- View: Public Catalog (Pricelist Funnel) -->
+    <div id="view-public-catalog" class="p-4 md:p-6 pb-24 md:pb-6 max-w-5xl mx-auto w-full hide transition-opacity duration-300">
+      <div class="text-center mb-10 mt-4">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-black rounded-2xl mb-4 shadow-lg">
+          <i data-lucide="dumbbell" class="w-8 h-8 text-white"></i>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-black mb-3 tracking-tight">Mulai Perjalanan Fitnesmu</h2>
+        <p class="text-gray-500 text-sm md:text-base max-w-md mx-auto">Pilih paket Personal Training yang sesuai dengan tujuan dan kebutuhanmu.</p>
+      </div>
+
+      <!-- Toggle Kategori Dinamis (Otomatis dari Sheet) -->
+      <div class="flex justify-center mb-8">
+        <div id="category-button-container" class="bg-gray-100 p-1.5 rounded-2xl shadow-inner border border-gray-200 flex relative w-full max-w-2xl overflow-hidden">
+          <!-- Indikator dan tombol akan di-generate otomatis oleh JavaScript di sini -->
+        </div>
+      </div>
+
+      <div id="pricelist-container" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- View: Public Login (Member Access) -->
+    <div id="view-public-login" class="relative p-4 md:p-6 pb-24 md:pb-6 max-w-md mx-auto w-full transition-opacity duration-300 flex flex-col justify-center min-h-[70vh] overflow-hidden">
+      <div class="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div class="absolute top-6 -left-10 w-40 h-40 bg-gray-200/50 rounded-full blur-2xl xnk-float-slow"></div>
+        <div class="absolute bottom-0 -right-10 w-48 h-48 bg-amber-100/60 rounded-full blur-2xl xnk-float-slower"></div>
+      </div>
+    
+      <div class="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 text-center relative overflow-hidden xnk-card-in">
+        <div class="absolute -top-10 -right-10 w-32 h-32 bg-gray-50 rounded-full"></div>
+        <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-gray-50 rounded-full"></div>
+    
+        <div class="relative z-10">
+          <div class="w-16 h-16 bg-black rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-gray-300 xnk-pulse-ring">
+            <i data-lucide="user" class="w-8 h-8 text-white"></i>
+          </div>
+          <h2 class="text-2xl font-black mb-2">Akses Member</h2>
+          <p class="text-gray-500 text-sm mb-8">Masukkan nomor WhatsApp yang terdaftar untuk melihat jadwal dan sisa sesi.</p>
+    
+          <form onsubmit="window.handlePublicLogin(event)" class="space-y-4">
+            <div class="relative text-left">
+              <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Nomor WhatsApp</label>
+              <div class="relative">
+                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-sm">+62</span>
+                <input type="number" id="login-phone" required placeholder="81234567890" class="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:bg-white text-sm font-medium transition-all" autocomplete="tel">
+              </div>
+            </div>
+            <label class="flex items-center gap-2 text-left cursor-pointer select-none ml-1">
+              <input type="checkbox" id="login-remember-me" checked class="w-4 h-4 rounded border-gray-300 text-black focus:ring-black focus:ring-offset-0">
+              <span class="text-xs font-medium text-gray-500">Ingat saya di perangkat ini</span>
+            </label>
+            <button type="submit" class="group w-full bg-black text-white py-3.5 rounded-xl font-bold text-sm hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md mt-2 flex items-center justify-center gap-2">
+              Masuk <i data-lucide="arrow-right" class="w-4 h-4 group-hover:translate-x-1 transition-transform"></i>
+            </button>
+          </form>
+    
+          <div class="grid grid-cols-3 gap-2 mt-8 pt-6 border-t border-gray-100">
+            <div class="flex flex-col items-center gap-1.5">
+              <div class="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center"><i data-lucide="calendar-check" class="w-4 h-4 text-gray-600"></i></div>
+              <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wide leading-tight">Jadwal<br>Fleksibel</span>
+            </div>
+            <div class="flex flex-col items-center gap-1.5">
+              <div class="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center"><i data-lucide="badge-check" class="w-4 h-4 text-gray-600"></i></div>
+              <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wide leading-tight">Coaching<br>Tersetruktur</span>
+            </div>
+            <div class="flex flex-col items-center gap-1.5">
+              <div class="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center"><i data-lucide="trending-up" class="w-4 h-4 text-gray-600"></i></div>
+              <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wide leading-tight">Progress<br>Terukur</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- View: Public Dashboard (Member Area) -->
+    <div id="view-public-dashboard" class="hide p-4 md:p-6 pb-24 md:pb-6 max-w-3xl mx-auto w-full transition-opacity duration-300">
+      <!-- Warning Kuota Hampir Habis -->
+      <div id="pub-quota-warning" class="hide bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 flex items-center gap-3">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0"></i>
+        <p class="text-xs font-bold text-amber-700 flex-1" id="pub-quota-warning-text">Sesimu tinggal sedikit!</p>
+        <button onclick="window.sendToParentWA(COACH_WA_NUMBER, 'Halo Coach, saya mau perpanjang paket latihan saya.')" class="text-[10px] font-bold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg shrink-0 transition-colors">Hubungi Coach</button>
+      </div>
+
+      <div class="flex justify-between items-center mb-6 gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="relative shrink-0">
+            <input type="file" id="pub-avatar-input" accept="image/*" class="hidden">
+            <button type="button" onclick="document.getElementById('pub-avatar-input').click()" id="pub-avatar-btn" class="w-12 h-12 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-black transition-colors">
+              <img id="pub-avatar-img" src="" class="w-full h-full object-cover hidden" alt="">
+              <i data-lucide="user" class="w-5 h-5 text-gray-400" id="pub-avatar-placeholder-icon"></i>
+            </button>
+            <span class="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center border-2 border-white pointer-events-none">
+              <i data-lucide="camera" class="w-2.5 h-2.5 text-white"></i>
+            </span>
+          </div>
+          <h2 class="text-xl font-black truncate">Halo, <span id="pub-dash-name">Member</span>! 👋</h2>
+        </div>
+        <button onclick="window.logoutPublic()" class="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100 active:scale-95 transition-all shrink-0">Keluar</button>
+      </div>
+    
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <!-- Sisa Kuota -->
+        <div class="bg-gradient-to-br from-black to-gray-800 rounded-3xl p-5 shadow-lg text-white relative overflow-hidden xnk-card-in">
+          <p class="text-[10px] text-gray-300 font-bold uppercase tracking-wider mb-2">Sisa Kuota Sesi</p>
+          <div class="flex items-center justify-between">
+            <div class="flex items-baseline gap-1">
+              <span class="text-4xl font-black" id="pub-dash-remaining">0</span>
+              <span class="text-sm text-gray-400 font-medium">/ <span id="pub-dash-total">0</span></span>
+            </div>
+            <svg width="44" height="44" viewBox="0 0 44 44" class="shrink-0 -rotate-90">
+              <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="5"/>
+              <circle id="pub-quota-ring" cx="22" cy="22" r="18" fill="none" stroke="#F5A524" stroke-width="5" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="113" style="transition: stroke-dashoffset 1.1s cubic-bezier(.4,0,.2,1);"/>
+            </svg>
+          </div>
+        </div>
+    
+        <!-- Sesi Berikutnya -->
+        <div class="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col justify-between xnk-card-in" style="animation-delay:.08s" id="pub-next-session-card">
+          <div>
+            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Sesi Berikutnya</p>
+            <p class="text-sm font-bold text-gray-800 leading-tight" id="pub-next-session-label">Belum ada jadwal</p>
+            <p class="text-[11px] text-amber-600 font-bold mt-0.5 tabular-nums" id="pub-next-countdown"></p>
+          </div>
+          <button onclick="window.navigate('calendar')" class="w-full bg-black text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-95 transition-all mt-3">
+            <i data-lucide="calendar" class="w-4 h-4"></i> Buka Kalender
+          </button>
+        </div>
+      </div>
+    
+      <!-- Analisis Konsistensi -->
+      <div class="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6 xnk-card-in" style="animation-delay:.14s">
+        <div class="flex items-center gap-2 mb-4">
+          <i data-lucide="trending-up" class="w-5 h-5 text-gray-400"></i>
+          <h3 class="font-bold text-base">Konsistensi Latihanmu</h3>
+        </div>
+
+        <div id="pub-consistency-empty" class="hide text-center py-4">
+          <p class="text-sm text-gray-500">Belum ada sesi selesai. Yuk mulai latihan pertamamu! 💪</p>
+        </div>
+
+        <div id="pub-consistency-content">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-4xl font-black" id="pub-consistency-score">0%</span>
+              </div>
+              <span id="pub-consistency-label" class="text-[11px] font-bold px-2.5 py-1 rounded-full border inline-block mt-1 text-gray-600 bg-gray-50 border-gray-200">-</span>
+            </div>
+            <div class="text-right">
+              <p class="text-xs font-bold text-gray-700" id="pub-consistency-streak">0 minggu beruntun</p>
+              <p class="text-xs text-gray-400" id="pub-consistency-avg">0.0 sesi/minggu</p>
+            </div>
+          </div>
+
+          <div id="pub-consistency-chart" class="flex items-end gap-1.5 border-t border-gray-100 pt-3"></div>
+        </div>
+      </div>
+
+      <!-- Waktu Favorit Latihan -->
+      <div class="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6 xnk-card-in" style="animation-delay:.16s">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="clock" class="w-5 h-5 text-gray-400"></i>
+          <h3 class="font-bold text-base">Waktu Favorit Latihan</h3>
+        </div>
+        <div id="pub-favtime-empty" class="hide">
+          <p class="text-sm text-gray-500">Kumpulkan lebih banyak sesi dulu untuk insight ini 📊</p>
+        </div>
+        <div id="pub-favtime-content" class="hide">
+          <p class="text-sm text-gray-700" id="pub-favtime-text"></p>
+        </div>
+      </div>
+
+      <!-- Badge Pencapaian -->
+      <div class="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6 xnk-card-in" style="animation-delay:.18s">
+        <div class="flex items-center gap-2 mb-4">
+          <i data-lucide="award" class="w-5 h-5 text-gray-400"></i>
+          <h3 class="font-bold text-base">Badge Pencapaian</h3>
+        </div>
+        <div id="pub-badges-container" class="flex gap-2"></div>
+      </div>
+
+      <!-- Heatmap Aktivitas -->
+      <div class="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6 xnk-card-in" style="animation-delay:.20s">
+        <div class="flex items-center gap-2 mb-4">
+          <i data-lucide="calendar-days" class="w-5 h-5 text-gray-400"></i>
+          <h3 class="font-bold text-base">Aktivitas 12 Minggu Terakhir</h3>
+        </div>
+        <div class="overflow-x-auto pb-1">
+          <div id="pub-heatmap-grid" class="grid grid-flow-col grid-rows-7 gap-[3px] w-max"></div>
+        </div>
+        <div class="flex items-center gap-2 mt-3 text-[10px] text-gray-400">
+          <span>Kosong</span>
+          <div class="w-2 h-2 rounded-sm bg-gray-100"></div>
+          <div class="w-2 h-2 rounded-sm bg-black"></div>
+          <span>Latihan</span>
+        </div>
+      </div>
+
+      <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5 text-gray-400"></i> Riwayat & Jadwal Saya</h3>
+      <div id="pub-dash-history" class="space-y-3">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- View: Public Coaches -->
+    <div id="view-public-coaches" class="p-4 md:p-6 pb-24 md:pb-6 max-w-5xl mx-auto w-full hide transition-opacity duration-300">
+      <div class="text-center mb-10 mt-4">
+        <h2 class="text-3xl md:text-4xl font-black mb-3 tracking-tight">Tim Coach</h2>
+        <p class="text-gray-500 text-sm md:text-base max-w-md mx-auto">Pilih dan hubungi pelatih profesional yang sesuai dengan goal fitness Anda.</p>
+      </div>
+      <div id="public-coach-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================= -->
+  <!-- FLOATING ACTION BUTTON & TOAST            -->
+  <!-- ========================================= -->
+  <button id="client-booking-fab" onclick="window.handleFabClick()" class="fixed bottom-24 md:bottom-8 right-4 md:right-8 z-50 bg-black text-white rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.4)] border-2 border-white/20 hover:bg-gray-800 hover:scale-105 transition-all duration-300 hidden items-center justify-center px-4 py-3 md:px-6 md:py-4 group">
+    <i data-lucide="calendar-plus" class="w-5 h-5 md:w-6 md:h-6 group-hover:-rotate-12 transition-transform duration-300"></i>
+    <span class="ml-2 font-black text-sm md:text-base tracking-wide whitespace-nowrap">Jadwalkan</span>
+  </button>
+
+  <div id="toast" class="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-black text-white px-6 py-3 rounded-2xl shadow-2xl text-sm font-bold flex items-center gap-3 transition-all duration-300 translate-y-20 opacity-0 pointer-events-none">
+    <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
+    <span id="toast-msg"></span>
+  </div>
+
+  <div id="global-loader" class="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
+    <div class="loading-spinner mb-4"></div>
+    <p class="text-sm font-bold text-gray-500 animate-pulse">Memuat Data...</p>
+  </div>
+
+  <!-- ========================================= -->
+  <!-- MODALS OVERLAY & COMPONENTS               -->
+  <!-- ========================================= -->
+  <div id="modal-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hide opacity-0 transition-opacity duration-300 flex items-center justify-center p-4">
+    
+    <!-- Modal: Add New Member (Admin) -->
+    <div id="modal-add-member" class="bg-white rounded-3xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300 hide flex flex-col max-h-[90vh]">
+      <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+        <h3 class="font-black text-lg">Tambah Klien Baru</h3>
+        <button onclick="window.closeModal()" type="button" class="text-gray-400 hover:text-black p-1">
+          <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto">
+        <form onsubmit="window.submitAddMember(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Nama Lengkap</label>
+            <input type="text" id="member-name" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">No WhatsApp (Tanpa 0 / +62)</label>
+            <div class="flex">
+              <span class="inline-flex items-center px-4 bg-gray-100 border border-r-0 border-gray-200 rounded-l-xl text-sm font-bold text-gray-500">+62</span>
+              <input type="number" id="member-phone" required class="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-r-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Tujuan Latihan (Goal)</label>
+            <input type="text" id="member-goal" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm" placeholder="Contoh: Turun BB, Muscle Building">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Paket Diambil</label>
+            <div class="relative" id="member-package-wrap">
+              <button type="button" onclick="window.togglePackageDropdown('member')" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm flex items-center justify-between gap-2">
+                <span id="member-package-label" class="truncate text-gray-400">-- Tanpa Paket / Custom --</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400 shrink-0 pointer-events-none"></i>
+              </button>
+              <input type="hidden" id="member-package" value="">
+              <div id="member-package-panel" class="hide absolute z-30 mt-1.5 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div class="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                  <input type="text" id="member-package-search" oninput="window.filterPackageOptions('member')" placeholder="Cari nama paket..." class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black">
+                </div>
+                <div id="member-package-list" class="max-h-56 overflow-y-auto divide-y divide-gray-50"></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Coach (Default Booking)</label>
+            <select id="member-coach" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+              <option value="">-- Belum Ditentukan --</option>
+            </select>
+            <p class="text-[10px] text-gray-400 mt-1 ml-1">Coach ini otomatis dipakai setiap klien booking, tanpa perlu di-assign manual lagi. Tetap bisa diganti per-jadwal kapan saja.</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Total Sesi Beli</label>
+              <input type="number" id="member-total-sessions" required value="10" min="1" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm text-center font-bold">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Sesi Terpakai Awal</label>
+              <input type="number" id="member-used-sessions" required value="0" min="0" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm text-center font-bold">
+            </div>
+          </div>
+          <button type="submit" class="w-full bg-black text-white py-3.5 rounded-xl font-bold text-sm mt-4 hover:bg-gray-800 transition-colors shadow-md">Simpan Data Klien</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Edit Profile Member (Admin) -->
+    <div id="modal-edit-profile" class="bg-white rounded-3xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300 hide flex flex-col max-h-[90vh]">
+      <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+        <h3 class="font-black text-lg">Edit Profil Klien</h3>
+        <button onclick="window.closeModal()" type="button" class="text-gray-400 hover:text-black p-1">
+          <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto">
+         <form onsubmit="window.submitEditProfile(event)" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Nama Lengkap</label>
+              <input type="text" id="edit-member-name" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">No WhatsApp (Tanpa 0 / +62)</label>
+              <div class="flex">
+                <span class="inline-flex items-center px-4 bg-gray-100 border border-r-0 border-gray-200 rounded-l-xl text-sm font-bold text-gray-500">+62</span>
+                <input type="number" id="edit-member-phone" required class="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-r-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Tujuan Latihan (Goal)</label>
+              <input type="text" id="edit-member-goal" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Paket Diambil</label>
+              <div class="relative" id="edit-member-package-wrap">
+                <button type="button" onclick="window.togglePackageDropdown('edit-member')" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm flex items-center justify-between gap-2">
+                  <span id="edit-member-package-label" class="truncate text-gray-400">-- Tanpa Paket / Custom --</span>
+                  <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400 shrink-0 pointer-events-none"></i>
+                </button>
+                <input type="hidden" id="edit-member-package" value="">
+                <div id="edit-member-package-panel" class="hide absolute z-30 mt-1.5 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                  <div class="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                    <input type="text" id="edit-member-package-search" oninput="window.filterPackageOptions('edit-member')" placeholder="Cari nama paket..." class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black">
+                  </div>
+                  <div id="edit-member-package-list" class="max-h-56 overflow-y-auto divide-y divide-gray-50"></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Coach (Default Booking)</label>
+              <select id="edit-member-coach" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+                <option value="">-- Belum Ditentukan --</option>
+              </select>
+              <p class="text-[10px] text-gray-400 mt-1 ml-1">Coach ini otomatis dipakai setiap klien booking, tanpa perlu di-assign manual lagi. Tetap bisa diganti per-jadwal kapan saja.</p>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Total Sesi Beli</label>
+                <input type="number" id="edit-member-total" required min="1" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm text-center font-bold">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Sesi Terpakai</label>
+                <input type="number" id="edit-member-used" required min="0" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm text-center font-bold">
+              </div>
+            </div>
+            <div class="bg-yellow-50 p-3 rounded-xl border border-yellow-100 mt-2">
+               <p class="text-xs text-yellow-800 flex items-start gap-2"><i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i> <span>Mengubah sesi di sini tidak menghapus riwayat jadwal yang sudah ada.</span></p>
+            </div>
+            <button type="submit" class="w-full bg-black text-white py-3.5 rounded-xl font-bold text-sm mt-4 hover:bg-gray-800 transition-colors shadow-md">Simpan Perubahan</button>
+         </form>
+      </div>
+    </div>
+
+    <!-- Modal: Konfirmasi Hapus Klien -->
+    <div id="modal-delete-confirm" class="bg-white rounded-3xl w-full max-w-sm overflow-hidden transform scale-95 transition-transform duration-300 hide">
+      <div class="p-6 text-center">
+        <div class="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i data-lucide="alert-triangle" class="w-7 h-7 pointer-events-none"></i>
+        </div>
+        <h3 class="font-black text-lg mb-2">Hapus Klien Ini?</h3>
+        <p class="text-sm text-gray-500 mb-6">
+          Tindakan ini akan menghapus data klien beserta <b>seluruh riwayat jadwalnya</b> secara permanen dan tidak bisa dibatalkan.
+        </p>
+        <div class="flex gap-3">
+          <button onclick="window.closeModal()" type="button" class="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors">
+            Batal
+          </button>
+          <button id="delete-confirm-btn" onclick="window.confirmDeleteMember()" type="button" class="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-red-700 transition-colors">
+            Ya, Hapus
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Konfirmasi Hapus Jadwal -->
+    <div id="modal-delete-schedule-confirm" class="bg-white rounded-3xl w-full max-w-sm overflow-hidden transform scale-95 transition-transform duration-300 hide">
+      <div class="p-6 text-center">
+        <div class="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i data-lucide="alert-triangle" class="w-7 h-7 pointer-events-none"></i>
+        </div>
+        <h3 class="font-black text-lg mb-2">Hapus Jadwal Ini?</h3>
+        <p class="text-sm text-gray-500 mb-6">
+          Jadwal <b id="delete-schedule-title">-</b> akan dihapus secara permanen dan tidak bisa dibatalkan.
+        </p>
+        <div class="flex gap-3">
+          <button onclick="window.closeModal()" type="button" class="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors">
+            Batal
+          </button>
+          <button id="delete-schedule-confirm-btn" onclick="window.confirmDeleteSchedule()" type="button" class="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-red-700 transition-colors flex items-center justify-center gap-1.5">
+            <i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i> Ya, Hapus
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Form Add/Edit Schedule (Booking & Manual Add) -->
+    <div id="modal-edit-schedule" class="bg-white rounded-3xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300 hide flex flex-col max-h-[90vh]">
+      <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+        <h3 class="font-black text-lg" id="modal-sch-title">Atur Jadwal</h3>
+        <button onclick="window.closeModal()" type="button" class="text-gray-400 hover:text-black p-1">
+          <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto">
+         <div class="mb-4 bg-gray-50 p-4 rounded-xl border border-gray-200 flex items-center gap-3">
+            <div class="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white"><i data-lucide="user" class="w-5 h-5"></i></div>
+            <div>
+               <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Klien</p>
+               <p class="font-bold text-sm" id="edit-sch-client-name">Nama Klien</p>
+            </div>
+         </div>
+         <form id="form-edit-schedule" onsubmit="window.submitScheduleForm(event)" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal</label>
+                <input type="date" id="edit-sch-date" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam</label>
+                <input type="time" id="edit-sch-time" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+              </div>
+            </div>
+            <div>
+               <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Durasi</label>
+               <select id="edit-sch-duration" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm font-medium">
+                  <option value="60">60 Menit (1 Jam)</option>
+                  <option value="90">90 Menit (1.5 Jam)</option>
+                  <option value="120">120 Menit (2 Jam)</option>
+               </select>
+            </div>
+
+            <!-- Recurring Booking (hanya muncul saat menambah jadwal baru, bukan edit/reschedule) -->
+            <div id="recurring-toggle-wrap" class="border-t border-gray-100 pt-4">
+              <label class="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" id="edit-sch-recurring-toggle" onchange="window.toggleRecurringOptions()" class="w-4 h-4 rounded border-gray-300 text-black focus:ring-black">
+                <span class="text-xs font-bold text-gray-700">Ulangi jadwal ini (booking berulang)</span>
+              </label>
+              <div id="recurring-options" class="hide mt-3 space-y-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                <div>
+                  <label class="block text-xs font-bold text-gray-500 mb-2 ml-1">Ulangi tiap hari</label>
+                  <div class="flex gap-1.5 flex-wrap" id="recurring-weekday-picker">
+                    <button type="button" data-day="1" onclick="window.toggleRecurringWeekday(this)" class="recurring-day-btn px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-gray-500 transition-colors">Sen</button>
+                    <button type="button" data-day="2" onclick="window.toggleRecurringWeekday(this)" class="recurring-day-btn px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-gray-500 transition-colors">Sel</button>
+                    <button type="button" data-day="3" onclick="window.toggleRecurringWeekday(this)" class="recurring-day-btn px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-gray-500 transition-colors">Rab</button>
+                    <button type="button" data-day="4" onclick="window.toggleRecurringWeekday(this)" class="recurring-day-btn px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-gray-500 transition-colors">Kam</button>
+                    <button type="button" data-day="5" onclick="window.toggleRecurringWeekday(this)" class="recurring-day-btn px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-gray-500 transition-colors">Jum</button>
+                    <button type="button" data-day="6" onclick="window.toggleRecurringWeekday(this)" class="recurring-day-btn px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-gray-500 transition-colors">Sab</button>
+                    <button type="button" data-day="0" onclick="window.toggleRecurringWeekday(this)" class="recurring-day-btn px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-gray-500 transition-colors">Min</button>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Jumlah Sesi</label>
+                  <input type="number" id="edit-sch-recurring-occurrences" min="2" max="52" value="4" class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+                </div>
+                <p class="text-[10px] text-gray-400 leading-relaxed">Sesi pertama dibuat sesuai tanggal &amp; jam di atas. Sesi berikutnya otomatis dibuat di hari-hari yang dipilih, dengan jam &amp; durasi yang sama.</p>
+              </div>
+            </div>
+
+            <div>
+               <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Catatan / Fokus Latihan</label>
+               <textarea id="edit-sch-notes" rows="2" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm" placeholder="Opsional..."></textarea>
+            </div>
+            <button type="submit" class="w-full bg-black text-white py-3.5 rounded-xl font-bold text-sm mt-4 hover:bg-gray-800 transition-colors shadow-md">Simpan Jadwal</button>
+         </form>
+      </div>
+    </div>
+
+    <!-- Modal: Schedule Detail (Admin Only) -->
+    <div id="modal-schedule-detail" class="bg-white rounded-3xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300 hide flex flex-col max-h-[90vh]">
+      <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+        <h3 class="font-black text-lg">Detail Sesi</h3>
+        <button onclick="window.closeModal()" type="button" class="text-gray-400 hover:text-black hover:bg-gray-200 p-2.5 rounded-full transition-colors -mr-1">
+          <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1 min-h-0">
+        <div class="flex items-center gap-4 mb-6">
+          <div class="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
+            <i data-lucide="user" class="w-7 h-7 text-gray-500"></i>
+          </div>
+          <div class="min-w-0">
+            <h4 class="font-black text-lg leading-tight truncate" id="detail-member-name">Nama Member</h4>
+            <p class="text-sm text-gray-500 font-medium" id="detail-member-phone">+628...</p>
+          </div>
+          <button onclick="window.contactDetailMember()" type="button" class="ml-auto bg-green-50 text-green-600 w-12 h-12 rounded-full hover:bg-green-100 transition-colors flex items-center justify-center shrink-0">
+            <i data-lucide="message-circle" class="w-5 h-5 pointer-events-none"></i>
+          </button>
+        </div>
+
+        <div class="space-y-4 mb-6">
+          <div class="flex items-start gap-3">
+            <i data-lucide="clock" class="w-5 h-5 text-gray-400 mt-0.5 shrink-0"></i>
+            <div>
+              <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Waktu Latihan</p>
+              <p class="text-sm font-bold" id="detail-time">Senin, 08:00 WIB</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <i data-lucide="align-left" class="w-5 h-5 text-gray-400 mt-0.5 shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Catatan Khusus</p>
+              <p class="text-sm italic text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100" id="detail-notes">-</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-t border-gray-100 pt-5 mb-6">
+          <label class="block text-xs font-bold text-gray-500 mb-2 ml-1">Tugaskan Coach (Assign)</label>
+          <div class="flex gap-2">
+            <select id="detail-assign-coach" class="flex-1 min-w-0 px-4 py-3 min-h-[48px] bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm font-medium">
+              <option value="">Belum Ditugaskan</option>
+            </select>
+            <button onclick="window.saveCoachAssignment()" id="btn-save-coach" type="button" class="bg-black text-white w-12 min-h-[48px] rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors flex items-center justify-center shrink-0">
+              <i data-lucide="save" class="w-4 h-4 pointer-events-none"></i>
+            </button>
+          </div>
+          <button onclick="window.contactDetailCoach()" type="button" class="w-full mt-2 min-h-[44px] text-xs font-bold text-gray-500 bg-gray-50 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors flex items-center justify-center gap-2">
+            <i data-lucide="send" class="w-3.5 h-3.5 pointer-events-none"></i> Info Coach via WA
+          </button>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2" id="detail-action-buttons">
+          <button onclick="window.openEditScheduleDetailModal()" type="button" class="col-span-2 min-h-[48px] bg-gray-100 text-black py-3.5 rounded-xl font-bold text-xs hover:bg-gray-200 active:bg-gray-300 transition-colors border border-gray-200">
+            Ubah Jadwal
+          </button>
+          <button onclick="window.deleteScheduleFromDetail()" id="btn-delete-schedule" type="button" class="col-span-1 min-h-[48px] bg-red-50 text-red-600 py-3.5 rounded-xl font-bold text-xs hover:bg-red-100 active:bg-red-200 transition-colors border border-red-100 flex items-center justify-center gap-1.5">
+            <i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i> Hapus
+          </button>
+        </div>
+
+        <!-- Muncul hanya kalau jadwal ini bagian dari seri Recurring Booking -->
+        <div class="hide mt-3" id="detail-recurring-container">
+          <div class="flex items-center gap-2 text-[11px] text-gray-400 font-semibold mb-2">
+            <i data-lucide="repeat" class="w-3.5 h-3.5"></i> Bagian dari jadwal berulang
+          </div>
+          <button onclick="window.deleteRecurringGroupFromDetail()" id="btn-delete-recurring-group" type="button" class="w-full min-h-[44px] bg-red-50 text-red-600 py-2.5 rounded-xl font-bold text-xs hover:bg-red-100 active:bg-red-200 transition-colors border border-red-100 flex items-center justify-center gap-1.5">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5 pointer-events-none"></i> Hapus Seluruh Seri Berulang
+          </button>
+        </div>
+
+        <div class="mt-3" id="detail-complete-container">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Public Register (Dari Katalog) -->
+    <div id="modal-public-register" class="bg-white rounded-3xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300 hide flex flex-col max-h-[90vh]">
+       <div class="bg-black text-white p-6 relative">
+          <button onclick="window.closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white p-1">
+            <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
+          </button>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1" id="reg-status-label">Kategori</p>
+          <h3 class="font-black text-xl mb-1" id="reg-package-name">Nama Paket</h3>
+          <p class="font-black text-2xl text-green-400" id="reg-package-price">Rp 0</p>
+       </div>
+       <div class="p-6 overflow-y-auto">
+          <form onsubmit="window.submitRegistration(event)" class="space-y-4">
+             <input type="hidden" id="reg-data-package">
+             <input type="hidden" id="reg-data-sessions">
+             <input type="hidden" id="reg-data-price">
+             <input type="hidden" id="reg-data-type">
+
+             <div>
+               <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Nama Lengkap</label>
+               <input type="text" id="reg-name" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+             </div>
+             <div>
+               <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">No WhatsApp</label>
+               <div class="flex">
+                 <span class="inline-flex items-center px-4 bg-gray-100 border border-r-0 border-gray-200 rounded-l-xl text-sm font-bold text-gray-500">+62</span>
+                 <input type="number" id="reg-phone" required placeholder="81234567890" class="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-r-xl focus:outline-none focus:ring-2 focus:ring-black text-sm">
+               </div>
+             </div>
+             <div>
+               <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">Tujuan / Goal Fitness</label>
+               <input type="text" id="reg-goal" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm" placeholder="Misal: Turun berat badan">
+             </div>
+             <button type="submit" class="w-full bg-black text-white py-4 rounded-xl font-bold text-sm mt-4 hover:bg-gray-800 transition-colors shadow-lg flex items-center justify-center gap-2">
+               Lanjut ke WhatsApp <i data-lucide="arrow-right" class="w-4 h-4"></i>
+             </button>
+             <p class="text-[10px] text-center text-gray-400 mt-2">Anda akan diarahkan ke WhatsApp Coach untuk konfirmasi dan pembayaran.</p>
+          </form>
+       </div>
+    </div>
+
+    <!-- Modal: Tambah/Edit Coach -->
+    <div id="modal-add-coach" class="hide bg-white rounded-3xl p-6 md:p-8 w-full max-w-md mx-4 shadow-2xl scale-95 transition-transform duration-300">
+      <h3 class="text-xl font-black mb-6" id="coach-modal-title">Tambah Coach Baru</h3>
+      <form onsubmit="window.submitAddCoach(event)" class="space-y-4">
+        <input type="hidden" id="coach-edit-id" value="">
+
+        <div class="flex flex-col items-center mb-2">
+          <div class="w-20 h-20 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center mb-2">
+            <img id="coach-photo-preview" src="" class="w-full h-full object-cover hide">
+            <i id="coach-photo-preview-fallback" data-lucide="camera" class="w-6 h-6 text-gray-400"></i>
+          </div>
+          <label class="text-xs font-bold text-black cursor-pointer underline">
+            Upload Foto
+            <input type="file" id="coach-photo-file" accept="image/*" class="hidden" onchange="window.previewCoachPhoto(event)">
+          </label>
+        </div>
+
+        <div>
+          <label class="text-xs font-bold text-gray-500 mb-1 block">Nama Coach</label>
+          <input id="coach-name" type="text" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black">
+        </div>
+        <div>
+          <label class="text-xs font-bold text-gray-500 mb-1 block">No WhatsApp</label>
+          <input id="coach-phone" type="text" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black">
+        </div>
+        <div>
+          <label class="text-xs font-bold text-gray-500 mb-1 block">Spesialisasi</label>
+          <input id="coach-specialty" type="text" placeholder="cth: Fat Loss, Strength Training" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black">
+        </div>
+        <div>
+          <label class="text-xs font-bold text-gray-500 mb-1 block">Pengalaman</label>
+          <input id="coach-experience" type="text" placeholder="cth: 5+ Tahun" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black">
+        </div>
+        <div>
+          <label class="text-xs font-bold text-gray-500 mb-1 block">Bio Singkat</label>
+          <textarea id="coach-bio" rows="3" placeholder="Ceritakan pengalaman & keahlian coach..." class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-black resize-none"></textarea>
+        </div>
+
+        <button type="submit" class="w-full bg-black text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors mt-2">
+          Simpan Coach
+        </button>
+      </form>
+    </div>
+
+    <!-- Hidden coach select for updateCoachUI -->
+    <select id="sch-coach" class="hide" aria-hidden="true"></select>
+  </div>
+
+  <!-- Modal: Universal Confirm -->
+  <div id="modal-confirm" class="hide fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden transform scale-95 transition-transform duration-300">
+      <div class="p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div id="confirm-modal-icon-wrap" class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 bg-gray-100">
+            <i data-lucide="help-circle" id="confirm-modal-icon" class="w-6 h-6 text-gray-600 pointer-events-none"></i>
+          </div>
+          <h3 id="confirm-modal-title" class="font-black text-lg">Konfirmasi</h3>
+        </div>
+        <p id="confirm-modal-message" class="text-sm text-gray-600 leading-relaxed mb-6"></p>
+        <div class="flex gap-2">
+          <button onclick="window.closeConfirmModal()" id="btn-confirm-modal-no" type="button" class="flex-1 min-h-[48px] bg-gray-100 text-black py-3 rounded-xl font-bold text-sm hover:bg-gray-200 active:bg-gray-300 transition-colors">
+            Batal
+          </button>
+          <button onclick="window.handleConfirmModalYes()" id="btn-confirm-modal-yes" type="button" class="flex-1 min-h-[48px] bg-black text-white py-3 rounded-xl font-bold text-sm hover:bg-gray-800 active:bg-gray-900 transition-colors">
+            Ya, Lanjutkan
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Notifikasi (Admin) -->
+  <div id="modal-notifications" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-3xl w-[90%] max-w-md overflow-hidden transform scale-95 transition-all duration-300 hide flex flex-col max-h-[90vh] shadow-2xl z-[60]">
+    <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+      <h3 class="font-black text-lg">Notifikasi Baru</h3>
+      <button onclick="window.closeNotificationModal()" type="button" class="text-gray-400 hover:text-black p-1">
+        <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
+      </button>
+    </div>
+    
+    <!-- Tempat list notifikasi dirender -->
+    <div class="p-6 overflow-y-auto flex-1 min-h-0" id="notification-list">
+    </div>
+    
+    <!-- Tombol Aksi (Disembunyikan jika tidak ada notifikasi) -->
+    <div class="p-5 border-t border-gray-100 bg-white" id="notification-action">
+      <button onclick="window.markNotificationsRead()" class="w-full bg-black text-white py-3.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors shadow-md">
+        Tandai Dibaca & Buka Kalender
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal: Crop Avatar -->
+  <div id="modal-crop-avatar" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black rounded-3xl w-[90%] max-w-md overflow-hidden transform scale-95 transition-all duration-300 hide flex flex-col max-h-[90vh] shadow-2xl border border-gray-800 z-[60]">
+    
+    <div class="p-5 border-b border-gray-800 flex justify-between items-center bg-gray-900 shrink-0 text-white">
+      <h3 class="font-black text-lg">Sesuaikan Foto</h3>
+      <button onclick="window.cancelCrop()" type="button" class="text-gray-400 hover:text-white transition-colors p-1">
+        <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
+      </button>
+    </div>
+    
+    <!-- Area Cropper -->
+    <div class="p-6 bg-black flex-1 min-h-[300px] flex items-center justify-center relative">
+      <div class="w-full h-[300px] relative">
+        <img id="cropper-image" src="" alt="Picture" class="max-w-full block hidden">
+      </div>
+    </div>
+    
+    <!-- Tombol Aksi -->
+    <div class="p-5 bg-gray-900 border-t border-gray-800 flex gap-3 shrink-0">
+      <button onclick="window.cancelCrop()" type="button" class="flex-1 min-h-[48px] bg-gray-800 text-white py-3 rounded-xl font-bold text-sm hover:bg-gray-700 transition-colors">
+      Batal
+      </button>
+      <button id="btn-save-crop" onclick="window.saveCroppedAvatar()" type="button" class="flex-1 min-h-[48px] bg-white text-black py-3 rounded-xl font-black text-sm hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
+        <i data-lucide="check" class="w-4 h-4 pointer-events-none"></i> Simpan
+      </button>
+    </div>
+  </div>
+
+  <!-- INCLUSION FILE SCRIPTS (Javascript External) -->
+  <?!= include('Scripts.html') ?>
+  
+</body>
+</html>
