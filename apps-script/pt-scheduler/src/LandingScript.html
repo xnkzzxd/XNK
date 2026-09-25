@@ -52,7 +52,8 @@
       { name: 'Diyah W.', rating: 5, text: 'Pace-nya pas, banyak dijelaskan tentang gerakan dan manfaatnya.', sessionsCompleted: 5 }
     ],
     getPublicSchedules: [],
-    getCoaches: [{ id: 'C-1', name: 'Jizdan' }]
+    getCoaches: [{ id: 'C-1', name: 'Jizdan' }],
+    getPublicAvailability: []
   };
   function call(name) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -638,45 +639,95 @@
   (function bindProgram() {
     var vp = document.getElementById('program-viewport');
     var track = document.getElementById('program-track');
+    var prev = document.getElementById('program-prev');
+    var next = document.getElementById('program-next');
     if (!vp || !track) return;
+    var idx = 0;
+    function step() {
+      var card = track.firstElementChild;
+      if (!card) return vp.clientWidth;
+      var style = window.getComputedStyle(track);
+      var gap = parseFloat(style.columnGap || style.gap || '0') || 0;
+      return card.offsetWidth + gap;
+    }
     function update() {
       var max = track.scrollWidth - vp.clientWidth;
       var p = max > 0 ? clamp(vp.scrollLeft / max, 0, 1) : 0;
       var n = track.children.length || 1;
-      var idx = clamp(Math.round(p * (n - 1)), 0, n - 1);
+      idx = clamp(Math.round(p * (n - 1)), 0, n - 1);
       var el = $('#program-idx'); if (el) el.textContent = pad2(idx + 1);
       var bar = $('#program-bar'); if (bar) bar.style.transform = 'scaleX(' + (0.25 + 0.75 * p).toFixed(3) + ')';
+      if (prev) prev.disabled = idx <= 0;
+      if (next) next.disabled = idx >= n - 1;
     }
     vp.addEventListener('scroll', function () { requestAnimationFrame(update); }, { passive: true });
     window.addEventListener('resize', update);
+    if (prev) prev.addEventListener('click', function () { vp.scrollBy({ left: -step(), behavior: 'smooth' }); });
+    if (next) next.addEventListener('click', function () { vp.scrollBy({ left: step(), behavior: 'smooth' }); });
     update();
   })();
 
   // ===========================================================================
   // Slot kosong minggu ini (jam dihitung dari jadwal asli, tanpa data klien)
-  // Aturan sama dengan portal (App.html publicDayPanel): penuh kalau jumlah booking
-  // yang bentrok >= jumlah coach; jam yang sudah lewat tidak ditampilkan.
+  // Kapasitas dihitung per coach (coachId), bukan sekadar jumlah booking: booking
+  // tanpa coach (belum ditugaskan admin) tetap makan satu slot generik. Jendela
+  // jam per hari memakai aturan asli (getPublicAvailability/CoachAvailability)
+  // kalau sudah diisi admin; kalau belum, jatuh ke DAY_HOURS seperti biasa.
   // ===========================================================================
   var slots = { days: [], selected: 0 };
+  var SLOT_BANDS = [
+    { label: 'Pagi', test: function (h) { return h < 11; } },
+    { label: 'Siang', test: function (h) { return h >= 11 && h < 15; } },
+    { label: 'Sore', test: function (h) { return h >= 15 && h < 18; } },
+    { label: 'Malam', test: function (h) { return h >= 18; } }
+  ];
 
-  function computeOpenSlots(schedules, coachCount) {
+  function computeOpenSlots(schedules, coaches, availability) {
     var now = new Date();
-    var booked = (schedules || []).filter(function (s) {
-      return String(s.status || '').toLowerCase() !== 'available';
-    }).map(function (s) {
-      return { a: new Date(s.start).getTime(), b: new Date(s.end || s.start).getTime() };
+    var totalCoaches = (coaches || []).length;
+    var busy = {}; // coachId ('' = belum ditugaskan) -> [{a,b}, ...]
+    (schedules || []).forEach(function (s) {
+      if (String(s.status || '').toLowerCase() === 'available') return;
+      var key = String(s.coachId || '');
+      (busy[key] || (busy[key] = [])).push({ a: new Date(s.start).getTime(), b: new Date(s.end || s.start).getTime() });
     });
+    var envelope = {}; // dayOfWeek -> [minHour, maxHour+1] dari aturan asli coach
+    (availability || []).forEach(function (row) {
+      var dow = new Date(row.date + 'T00:00:00').getDay();
+      (row.availableSlots || []).forEach(function (t) {
+        var h = parseInt(t.split(':')[0], 10);
+        if (isNaN(h)) return;
+        if (!envelope[dow]) envelope[dow] = [h, h + 1];
+        else { envelope[dow][0] = Math.min(envelope[dow][0], h); envelope[dow][1] = Math.max(envelope[dow][1], h + 1); }
+      });
+    });
+
     var days = [];
     for (var d = 0; d < 7; d++) {
       var day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() + d);
-      var range = DAY_HOURS[day.getDay()] || [0, 0];
+      var range = envelope[day.getDay()] || DAY_HOURS[day.getDay()] || [0, 0];
       var hours = [];
       for (var h = range[0]; h < range[1]; h++) {
         var s0 = new Date(day); s0.setHours(h, 0, 0, 0);
-        if (s0 <= now) continue;
+        var past = s0 <= now;
         var a = s0.getTime(), b = a + 3600000;
-        var n = booked.filter(function (x) { return x.a < b && x.b > a; }).length;
-        if (n < coachCount) hours.push(h);
+        var open;
+        if (past) {
+          open = false;
+        } else if (totalCoaches > 0) {
+          var busyCoaches = 0;
+          Object.keys(busy).forEach(function (key) {
+            if (key === '') return;
+            if (busy[key].some(function (x) { return x.a < b && x.b > a; })) busyCoaches++;
+          });
+          var unassigned = (busy[''] || []).filter(function (x) { return x.a < b && x.b > a; }).length;
+          open = (busyCoaches + unassigned) < totalCoaches;
+        } else {
+          var n = 0;
+          Object.keys(busy).forEach(function (key) { busy[key].forEach(function (x) { if (x.a < b && x.b > a) n++; }); });
+          open = n < 1;
+        }
+        hours.push({ h: h, open: open, past: past });
       }
       days.push({ date: day, hours: hours });
     }
@@ -688,7 +739,7 @@
     var box = document.getElementById('slot-days');
     if (!box) return;
     box.innerHTML = slots.days.map(function (d, i) {
-      var n = d.hours.length;
+      var n = d.hours.filter(function (x) { return x.open; }).length;
       return '<button type="button" role="tab" class="slot-day' + (i === slots.selected ? ' active' : '') + (n ? '' : ' full') + '" data-day="' + i + '" aria-selected="' + (i === slots.selected) + '">' +
         '<span class="d-dow">' + (i === 0 ? 'Hari ini' : DOW[d.date.getDay()]) + '</span><span class="d-num">' + d.date.getDate() + '</span><span class="d-free">' + (n ? n + ' jam' : 'Penuh') + '</span></button>';
     }).join('');
@@ -699,13 +750,23 @@
     var d = slots.days[slots.selected];
     if (!box || !d) return;
     var picked = pendingSlot();
-    if (!d.hours.length) {
+    var html = !d.hours.length ? '' : SLOT_BANDS.map(function (band) {
+      var items = d.hours.filter(function (x) { return band.test(x.h); });
+      if (!items.length) return '';
+      var lo = items[0].h, hi = items[items.length - 1].h + 1;
+      var chips = items.map(function (x) {
+        var isPicked = x.open && picked && picked.date === ymd(d.date) && picked.time === pad2(x.h) + ':00';
+        var state = x.open ? (isPicked ? ' picked' : '') : (x.past ? ' past' : ' taken');
+        var dis = x.open ? '' : ' disabled aria-disabled="true"';
+        var what = x.open ? 'Pilih' : (x.past ? 'Sudah lewat' : 'Sudah dibooking');
+        return '<button type="button" class="slot-h' + state + '" data-h="' + x.h + '"' + dis + ' aria-label="' + what + ' ' + DOW_LONG[d.date.getDay()] + ' jam ' + pad2(x.h) + '.00">' + pad2(x.h) + '.00</button>';
+      }).join('');
+      return '<div class="slot-band"><p class="slot-band-label">' + band.label + ' <span>' + pad2(lo) + '.00–' + pad2(hi) + '.00</span></p><div class="slot-band-row">' + chips + '</div></div>';
+    }).join('');
+    if (!html) {
       box.innerHTML = '<p class="slot-empty">Hari ini sudah penuh. Pilih hari lain atau <a href="https://wa.me/6288221254305" target="_blank" rel="noopener">chat coach</a> untuk jadwal khusus.</p>';
     } else {
-      box.innerHTML = d.hours.map(function (h) {
-        var isPicked = picked && picked.date === ymd(d.date) && picked.time === pad2(h) + ':00';
-        return '<button type="button" class="slot-h' + (isPicked ? ' picked' : '') + '" data-h="' + h + '" aria-label="Pilih ' + DOW_LONG[d.date.getDay()] + ' jam ' + pad2(h) + '.00">' + pad2(h) + '.00</button>';
-      }).join('');
+      box.innerHTML = html;
       motion.revealNew(box.children, true);
     }
     refreshLayout();
@@ -729,16 +790,21 @@
     });
     if (hours) hours.addEventListener('click', function (e) {
       var b = e.target.closest('.slot-h');
-      if (b) pickSlot(slots.selected, Number(b.getAttribute('data-h')));
+      if (b && !b.disabled) pickSlot(slots.selected, Number(b.getAttribute('data-h')));
     });
   })();
 
   function loadSlots() {
-    Promise.all([call('getPublicSchedules'), call('getCoaches')]).then(function (r) {
-      var coachCount = Math.max(1, (r[1] || []).length);
-      slots.days = computeOpenSlots(r[0], coachCount);
+    Promise.all([
+      call('getPublicSchedules'),
+      call('getCoaches'),
+      call('getPublicAvailability').catch(function () { return []; })
+    ]).then(function (r) {
+      slots.days = computeOpenSlots(r[0], r[1] || [], r[2] || []);
       var firstOpen = 0;
-      for (var i = 0; i < slots.days.length; i++) { if (slots.days[i].hours.length) { firstOpen = i; break; } }
+      for (var i = 0; i < slots.days.length; i++) {
+        if (slots.days[i].hours.some(function (x) { return x.open; })) { firstOpen = i; break; }
+      }
       slots.selected = firstOpen;
       renderSlotDays();
     }).catch(function () {

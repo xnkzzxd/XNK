@@ -485,7 +485,8 @@ async function contrastReport(page) {
     check((await page.locator('.toggle-btn').count()) === 2, 'category switch only lists categories that have packages');
     check((await page.locator('#testimonial-grid .testi, #testimonial-grid .empty-note').count()) > 0, 'testimonials section rendered');
     check((await page.locator('#slot-days .slot-day').count()) === 7, 'free-slot strip shows the next 7 days');
-    check((await page.locator('#slot-hours .slot-h').count()) > 0, 'free hours listed');
+    check((await page.locator('#slot-hours .slot-band').count()) > 0, 'hours grouped into time-of-day bands (Pagi/Siang/Sore/Malam)');
+    check((await page.locator('#slot-hours .slot-h:not(.taken):not(.past)').count()) > 0, 'free hours listed');
     check(!calls.includes('getMembers') && !calls.includes('getSchedules'), 'no client list or admin schedule requested');
     check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'nothing sticks out sideways on the phone');
     check(!(await page.getAttribute('#figure-desk', 'data-gl')), 'no WebGL on the phone');
@@ -510,7 +511,7 @@ async function contrastReport(page) {
     check(!(await page.evaluate(() => document.body.classList.contains('menu-open'))), 'menu link closes the menu');
 
     // Slot → saved for the portal → "Sudah member?".
-    await page.locator('#slot-hours .slot-h').first().click();
+    await page.locator('#slot-hours .slot-h:not(.taken):not(.past)').first().click();
     await page.waitForTimeout(700);
     const pending = await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_pending_slot') || 'null'));
     check(!!pending && /^\d{4}-\d{2}-\d{2}$/.test(pending.date) && /^\d{2}:00$/.test(pending.time), 'picking an hour saves it for the booking page');
@@ -633,6 +634,22 @@ async function contrastReport(page) {
     await page.waitForTimeout(200);
     check((await page.textContent('#program-idx')) === '04', 'the "01/04" counter follows manual scrolling of the slider');
     await page.evaluate(() => { const vp = document.getElementById('program-viewport'); vp.scrollLeft = 0; vp.dispatchEvent(new Event('scroll')); });
+    await page.waitForTimeout(200);
+
+    // Program latihan: prev/next buttons next to the "01/04" counter.
+    check(await page.evaluate(() => document.getElementById('program-prev').disabled), 'previous-program button disabled at the first card');
+    check(!(await page.evaluate(() => document.getElementById('program-next').disabled)), 'next-program button enabled when more cards remain');
+    await page.click('#program-next');
+    await page.waitForTimeout(600);
+    check((await page.textContent('#program-idx')) !== '01', 'clicking the next-program button advances the slider');
+    await page.click('#program-prev');
+    await page.waitForTimeout(600);
+    check((await page.textContent('#program-idx')) === '01', 'clicking the previous-program button goes back');
+    await page.evaluate(() => { const vp = document.getElementById('program-viewport'); vp.scrollLeft = vp.scrollWidth; vp.dispatchEvent(new Event('scroll')); });
+    await page.waitForTimeout(200);
+    check(await page.evaluate(() => document.getElementById('program-next').disabled), 'next-program button disabled at the last card');
+    await page.evaluate(() => { const vp = document.getElementById('program-viewport'); vp.scrollLeft = 0; vp.dispatchEvent(new Event('scroll')); });
+    await page.waitForTimeout(200);
 
     if (ASSETS) {
       const ty = () => page.evaluate(() => getComputedStyle(document.getElementById('figure-desk')).getPropertyValue('--ty'));
@@ -683,6 +700,74 @@ async function contrastReport(page) {
     await page.evaluate(() => doRegisterStep1());
     await page.waitForTimeout(300);
     check((await page.locator('#reg-packages input:checked').inputValue()) === '0', 'the clicked package is preselected');
+    noErrors(errors);
+    await context.close();
+  }
+
+  console.log('Landing · slot kosong (kapasitas per coach, bukan sekadar hitung kepala)');
+  {
+    const env = seededEnv();
+    env.ss.seed('Coaches', [
+      ['ID', 'Nama Coach', 'No WA', 'Spesialisasi', 'Foto URL', 'Bio', 'Pengalaman'],
+      ['C-1', 'Rizky', '6281112223334', 'Strength', '', 'Bio', '3 Tahun'],
+      ['C-2', 'Dina', '6281112223335', 'Cardio', '', 'Bio', '2 Tahun'],
+    ]);
+    const at = (days, h) => { const d = new Date(Date.now() + days * 86400000); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+    const plusH = (iso, h) => new Date(new Date(iso).getTime() + h * 3600000).toISOString();
+    const rows = env.sheet('Schedules').rows;
+    // Hari ke-4: cuma C-1 sibuk jam 10 — C-2 masih bisa, jadi jam itu HARUS tetap kosong
+    // (dulu, kalau ada coach terdaftar lain yang jadi hantu/tidak dipakai, ini akan salah dianggap penuh).
+    rows.push(['SCH-M1', 'PT-A', 'Ani Anggraini', '6281111111111', at(4, 10), plusH(at(4, 10), 1), '', 'read', 'C-1', 'Rizky', '', '']);
+    // Hari ke-5: C-1 sibuk + 1 booking yang belum ditugaskan admin (coachId kosong) jam 10 —
+    // dua "kursi" dari dua coach terpakai, jadi jam itu HARUS penuh (booking tanpa coach dulu tidak menghalangi apa-apa).
+    rows.push(['SCH-M2', 'PT-B', 'Budi', '081222222222', at(5, 10), plusH(at(5, 10), 1), '', 'read', 'C-1', 'Rizky', '', '']);
+    rows.push(['SCH-M3', 'PT-C', 'Citra', '6283333333333', at(5, 10), plusH(at(5, 10), 1), '', 'unread', '', '']);
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
+
+    await page.click('#slot-days [data-day="4"]');
+    await page.waitForTimeout(300);
+    check(!(await page.locator('#slot-hours .slot-h[data-h="10"]').first().evaluate(el => el.disabled)),
+      'hari ke-4: jam 10 tetap kosong karena coach lain (C-2) masih bisa — bukan sekadar hitung kepala booking');
+
+    await page.click('#slot-days [data-day="5"]');
+    await page.waitForTimeout(300);
+    check(await page.locator('#slot-hours .slot-h[data-h="10"]').first().evaluate(el => el.disabled && el.classList.contains('taken')),
+      'hari ke-5: jam 10 penuh — booking tanpa coach tetap makan satu kursi kapasitas');
+    await shot(page, 'landing-desktop-slot-multicoach');
+    noErrors(errors);
+    await context.close();
+  }
+
+  console.log('Landing · slot kosong (jam kerja asli coach, CoachAvailability)');
+  {
+    const env = seededEnv();
+    const dow = new Date(Date.now() + 86400000).getDay();
+    const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+    env.ss.seed('CoachAvailability', [
+      ['Coach ID', 'Hari', 'Jam Mulai', 'Jam Selesai'],
+      ['C-1', dayNames[dow], '08:00', '10:00'],
+    ]);
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
+    await page.click('#slot-days [data-day="1"]');
+    await page.waitForTimeout(300);
+    const hours = await page.locator('#slot-hours .slot-h').evaluateAll(els => els.map(e => e.getAttribute('data-h')).sort());
+    check(hours.length === 2 && hours.includes('8') && hours.includes('9'),
+      'jam kerja asli coach (08–10, diisi admin di CoachAvailability) mempersempit jendela hari itu, bukan jam buka default (' + hours.join(',') + ')');
+    await shot(page, 'landing-desktop-slot-envelope');
+    noErrors(errors);
+    await context.close();
+  }
+  {
+    // Sheet CoachAvailability masih kosong (kondisi nyata saat ini, belum ada UI admin untuk isi) →
+    // tidak boleh ada regresi: jendela jam tetap DAY_HOURS seperti sebelumnya.
+    const env = seededEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
+    await page.click('#slot-days [data-day="1"]');
+    await page.waitForTimeout(300);
+    const hours = await page.locator('#slot-hours .slot-h').evaluateAll(els => els.map(e => Number(e.getAttribute('data-h'))));
+    const dow = new Date(Date.now() + 86400000).getDay();
+    const expected = ({ 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] })[dow];
+    check(hours.length === expected[1] - expected[0], 'no CoachAvailability rules → falls back to the default opening hours, no regression (' + hours.length + ' jam)');
     noErrors(errors);
     await context.close();
   }
