@@ -330,6 +330,34 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#detail-panel')).includes('Rizky'), 'coach detail opens');
     await shot(page, 'admin-desktop-' + scheme + '-coach');
+
+    // Closing a sheet stacked on top of the detail panel must not leave a full-viewport
+    // ghost overlay eating the very next click (was: #sheet-layer kept pointer-events:auto
+    // for ~280ms after .open was removed, silently swallowing clicks meant for whatever
+    // was underneath, incl. the detail panel's own close button).
+    await page.evaluate(() => window.navigate('clients'));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openSheet('modal-edit-schedule'));
+    await page.waitForTimeout(400);
+    const detailCloseBox = await page.locator('.detail-head .icon-btn[aria-label="Tutup detail"]').boundingBox();
+    await page.click('#modal-edit-schedule .icon-btn');
+    check((await page.evaluate(() => getComputedStyle(document.getElementById('sheet-layer')).pointerEvents)) === 'none',
+      'closing a sheet drops pointer-events on #sheet-layer immediately (no ghost overlay)');
+    await page.mouse.click(detailCloseBox.x + detailCloseBox.width / 2, detailCloseBox.y + detailCloseBox.height / 2);
+    check(!(await page.evaluate(() => document.getElementById('detail-panel').classList.contains('open'))),
+      'a click right under a just-closed sheet reaches the detail panel\'s own close button (not swallowed by a ghost overlay)');
+    await page.waitForTimeout(500);
+
+    // Same ghost-overlay check for the confirm modal ("Yakin?").
+    await page.evaluate(() => window.showConfirmModal('Yakin?'));
+    await page.waitForTimeout(300);
+    await page.click('#btn-confirm-modal-no');
+    check((await page.evaluate(() => getComputedStyle(document.getElementById('modal-confirm')).pointerEvents)) === 'none',
+      'closing the confirm modal drops pointer-events immediately (no ghost overlay)');
+    await page.waitForTimeout(500);
+
     noErrors(errors);
     await context.close();
   }

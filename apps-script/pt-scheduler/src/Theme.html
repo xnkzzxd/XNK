@@ -858,7 +858,8 @@ kbd { font-family: var(--font); font-size: 11px; font-weight: 700; color: var(--
 .collapse.closed .collapse-body { grid-template-rows: 0fr; opacity: 0; }
 
 /* ── Lapisan: sheet / modal, konfirmasi, toast ─────────────────────────── */
-.layer { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; }
+.layer { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
+.layer.open { pointer-events: auto; }
 .layer.hide { display: none; }
 .layer .backdrop { position: absolute; inset: 0; background: var(--overlay); opacity: 0; transition: opacity var(--t-base) var(--ease); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
 .layer.open .backdrop { opacity: 1; }

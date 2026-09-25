@@ -311,7 +311,7 @@
       layer.classList.add('hide');
       layer.querySelectorAll(':scope > .sheet').forEach(function (s) { s.classList.add('hide'); s.style.transform = ''; });
       if (ui.lastFocus && ui.lastFocus.focus) try { ui.lastFocus.focus({ preventScroll: true }); } catch (e) {}
-    }, 280);
+    }, 440);
   };
 
   // Tarik sheet ke bawah untuk menutup (HP).
@@ -367,7 +367,7 @@
     const layer = $('modal-confirm');
     layer.classList.remove('open');
     clearTimeout(ui.confirmTimer);
-    ui.confirmTimer = setTimeout(function () { layer.classList.add('hide'); layer.querySelector('.sheet').style.transform = ''; }, 250);
+    ui.confirmTimer = setTimeout(function () { layer.classList.add('hide'); layer.querySelector('.sheet').style.transform = ''; }, 440);
   };
   window.handleConfirmModalYes = function () {
     const cb = window.confirmCallback;
