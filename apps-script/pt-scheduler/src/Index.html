@@ -158,6 +158,50 @@
             <p class="hint">Mengganti PIN membuat semua perangkat lain keluar dari panel.</p>
             <button type="submit" class="btn btn-outline btn-block"><i data-lucide="key-round"></i> Ganti PIN</button>
           </form>
+
+          <form class="stack" id="form-app-settings" onsubmit="window.submitAppSettings(event)">
+            <div class="group-label"><span>Notifikasi</span></div>
+            <div class="card-flat stack" style="gap:12px">
+              <div class="row-between">
+                <div><p class="li-title">Notifikasi Telegram</p><p class="li-sub">Kirim update booking &amp; laporan ke Telegram</p></div>
+                <label class="toggle"><input type="checkbox" id="settings-telegram-enabled" aria-label="Notifikasi Telegram"><span></span></label>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="field"><label class="label" for="settings-telegram-token">Token Bot Telegram</label><input class="input" type="password" id="settings-telegram-token" autocomplete="off" placeholder="123456:ABC-DEF..."></div>
+              <div class="field">
+                <label class="label" for="settings-telegram-chatids">Chat ID Telegram</label>
+                <input class="input" type="text" id="settings-telegram-chatids" autocomplete="off" placeholder="111111, 222222">
+                <p class="hint">Pisahkan dengan koma kalau lebih dari satu.</p>
+              </div>
+              <button type="button" class="btn btn-outline btn-block" id="btn-telegram-test" onclick="window.sendTelegramTest()"><i data-lucide="send"></i> Kirim pesan tes</button>
+              <div class="field"><label class="label" for="settings-notif-email">Email Notifikasi</label><input class="input" type="email" id="settings-notif-email" placeholder="Kosongkan = email pemilik akun"></div>
+            </div>
+
+            <div class="group-label"><span>Jam Operasional</span></div>
+            <div class="form-grid">
+              <div class="field"><span class="label">Minggu</span><div class="two"><input class="input" type="number" min="0" max="24" id="settings-hours-0-start" aria-label="Minggu jam buka" placeholder="Buka"><input class="input" type="number" min="0" max="24" id="settings-hours-0-end" aria-label="Minggu jam tutup" placeholder="Tutup"></div></div>
+              <div class="field"><span class="label">Senin</span><div class="two"><input class="input" type="number" min="0" max="24" id="settings-hours-1-start" aria-label="Senin jam buka" placeholder="Buka"><input class="input" type="number" min="0" max="24" id="settings-hours-1-end" aria-label="Senin jam tutup" placeholder="Tutup"></div></div>
+              <div class="field"><span class="label">Selasa</span><div class="two"><input class="input" type="number" min="0" max="24" id="settings-hours-2-start" aria-label="Selasa jam buka" placeholder="Buka"><input class="input" type="number" min="0" max="24" id="settings-hours-2-end" aria-label="Selasa jam tutup" placeholder="Tutup"></div></div>
+              <div class="field"><span class="label">Rabu</span><div class="two"><input class="input" type="number" min="0" max="24" id="settings-hours-3-start" aria-label="Rabu jam buka" placeholder="Buka"><input class="input" type="number" min="0" max="24" id="settings-hours-3-end" aria-label="Rabu jam tutup" placeholder="Tutup"></div></div>
+              <div class="field"><span class="label">Kamis</span><div class="two"><input class="input" type="number" min="0" max="24" id="settings-hours-4-start" aria-label="Kamis jam buka" placeholder="Buka"><input class="input" type="number" min="0" max="24" id="settings-hours-4-end" aria-label="Kamis jam tutup" placeholder="Tutup"></div></div>
+              <div class="field"><span class="label">Jumat</span><div class="two"><input class="input" type="number" min="0" max="24" id="settings-hours-5-start" aria-label="Jumat jam buka" placeholder="Buka"><input class="input" type="number" min="0" max="24" id="settings-hours-5-end" aria-label="Jumat jam tutup" placeholder="Tutup"></div></div>
+              <div class="field"><span class="label">Sabtu</span><div class="two"><input class="input" type="number" min="0" max="24" id="settings-hours-6-start" aria-label="Sabtu jam buka" placeholder="Buka"><input class="input" type="number" min="0" max="24" id="settings-hours-6-end" aria-label="Sabtu jam tutup" placeholder="Tutup"></div></div>
+            </div>
+
+            <div class="group-label"><span>Keamanan &amp; Sesi</span></div>
+            <div class="form-grid">
+              <div class="two">
+                <div class="field"><label class="label" for="settings-login-max-fails">Batas gagal login admin</label><input class="input" type="number" min="1" id="settings-login-max-fails"></div>
+                <div class="field"><label class="label" for="settings-login-lock-seconds">Lama kunci (detik)</label><input class="input" type="number" min="10" id="settings-login-lock-seconds"></div>
+              </div>
+              <div class="two">
+                <div class="field"><label class="label" for="settings-member-login-max-fails">Batas nomor WA tak dikenal</label><input class="input" type="number" min="1" id="settings-member-login-max-fails"></div>
+                <div class="field"><label class="label" for="settings-admin-session-days">Lama sesi admin (hari)</label><input class="input" type="number" min="1" id="settings-admin-session-days"></div>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-dark btn-block"><i data-lucide="save"></i> Simpan Pengaturan</button>
+          </form>
         </div>
         <button type="button" class="btn btn-danger btn-block" id="settings-logout" onclick="window.logoutCurrent()"><i data-lucide="log-out"></i> Keluar</button>
       </div>

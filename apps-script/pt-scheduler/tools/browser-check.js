@@ -358,6 +358,33 @@ async function contrastReport(page) {
       'closing the confirm modal drops pointer-events immediately (no ghost overlay)');
     await page.waitForTimeout(500);
 
+    // ── Pengaturan: notifikasi, jam operasional, keamanan/sesi ────────────────
+    await page.evaluate(() => window.openSettings());
+    await page.waitForTimeout(500);
+    check((await page.inputValue('#settings-telegram-token')) === '1:x', 'Settings pre-fills the saved Telegram bot token');
+    check((await page.inputValue('#settings-telegram-chatids')) === '111', 'Settings pre-fills the saved Telegram chat IDs');
+    check(await page.isChecked('#settings-telegram-enabled'), 'Telegram toggle defaults to on');
+    check((await page.inputValue('#settings-hours-1-start')) === '6' && (await page.inputValue('#settings-hours-1-end')) === '21',
+      'Settings pre-fills today\'s business hours (Senin 06–21)');
+    check((await page.inputValue('#settings-login-max-fails')) === '10', 'Settings pre-fills the login lockout threshold');
+
+    await page.click('#settings-telegram-enabled');
+    await page.fill('#settings-notif-email', 'gym-owner@example.com');
+    await page.fill('#settings-hours-0-start', '8');
+    await page.fill('#settings-hours-0-end', '11');
+    await page.fill('#settings-login-max-fails', '4');
+    await page.click('#form-app-settings button[type=submit]');
+    await page.waitForTimeout(500);
+    check(env.props.TELEGRAM_ENABLED === 'false', 'turning the toggle off is saved');
+    check(env.props.NOTIF_EMAIL === 'gym-owner@example.com', 'notification email is saved');
+    check(JSON.parse(env.props.BUSINESS_HOURS_JSON)['0'][0] === 8 && JSON.parse(env.props.BUSINESS_HOURS_JSON)['0'][1] === 11, 'business hours override is saved');
+    check(env.props.LOGIN_MAX_FAILS === '4', 'login lockout threshold is saved');
+    check((await page.textContent('#toast-msg')).includes('disimpan'), 'a confirmation toast is shown after saving');
+
+    await page.fill('#settings-telegram-chatids', '999');
+    await page.click('#btn-telegram-test');
+    await page.waitForTimeout(400);
+    check((await page.textContent('#toast-msg')).includes('Chat ID'), 'the "kirim pesan tes" button reports how many chat IDs received the test');
     noErrors(errors);
     await context.close();
   }
@@ -796,6 +823,22 @@ async function contrastReport(page) {
     const dow = new Date(Date.now() + 86400000).getDay();
     const expected = ({ 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] })[dow];
     check(hours.length === expected[1] - expected[0], 'no CoachAvailability rules → falls back to the default opening hours, no regression (' + hours.length + ' jam)');
+    noErrors(errors);
+    await context.close();
+  }
+  console.log('Landing · jam operasional dari Pengaturan admin (BUSINESS_HOURS_JSON)');
+  {
+    const env = seededEnv();
+    const dow = new Date(Date.now() + 86400000).getDay();
+    const hoursMap = { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] };
+    hoursMap[dow] = [9, 12];
+    env.props.BUSINESS_HOURS_JSON = JSON.stringify(hoursMap);
+    const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
+    await page.click('#slot-days [data-day="1"]');
+    await page.waitForTimeout(300);
+    const hours = await page.locator('#slot-hours .slot-h').evaluateAll(els => els.map(e => Number(e.getAttribute('data-h'))).sort((a, b) => a - b));
+    check(hours.length === 3 && hours[0] === 9 && hours[hours.length - 1] === 11,
+      'jam operasional yang diatur admin lewat Pengaturan (09–12) dipakai Landing, bukan jam buka default (' + hours.join(',') + ')');
     noErrors(errors);
     await context.close();
   }

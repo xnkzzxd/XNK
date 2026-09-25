@@ -53,7 +53,8 @@
     ],
     getPublicSchedules: [],
     getCoaches: [{ id: 'C-1', name: 'Jizdan' }],
-    getPublicAvailability: []
+    getPublicAvailability: [],
+    getBusinessHours: { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] }
   };
   function call(name) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -798,8 +799,10 @@
     Promise.all([
       call('getPublicSchedules'),
       call('getCoaches'),
-      call('getPublicAvailability').catch(function () { return []; })
+      call('getPublicAvailability').catch(function () { return []; }),
+      call('getBusinessHours').catch(function () { return null; })
     ]).then(function (r) {
+      if (r[3]) Object.assign(DAY_HOURS, r[3]);
       slots.days = computeOpenSlots(r[0], r[1] || [], r[2] || []);
       var firstOpen = 0;
       for (var i = 0; i < slots.days.length; i++) {

@@ -8,7 +8,7 @@ const { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays } = require('./fixtures');
 // new server function added without a guard makes this test fail.
 const PUBLIC = [
   'doGet', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
-  'getPriceList', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability',
+  'getPriceList', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [
@@ -19,6 +19,7 @@ const ADMIN = [
   'addSchedule', 'addRecurringSchedule', 'deleteRecurringGroup', 'updateScheduleData', 'updateScheduleCoach',
   'markSchedulesAsRead', 'completeSession', 'deleteSchedule',
   'getPeakHourData', 'getCoachMonthlyStats', 'getPackageTrendStats', 'getRevenueSummary',
+  'getAppSettings', 'updateAppSettings', 'sendTelegramTest',
 ];
 const MEMBER = [
   'getMemberProfile', 'getMemberSessions', 'clientBookSchedule', 'clientBookRecurring',

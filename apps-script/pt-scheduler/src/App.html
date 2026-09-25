@@ -532,6 +532,62 @@
     if (lo) lo.classList.toggle('hide', ui.mode === 'public' && !window.publicLoggedMember);
     openSheet('sheet-settings');
     moveSegThumb($('theme-seg'));
+    if (ui.mode === 'admin') loadAppSettingsForm();
+  };
+
+  function populateAppSettingsForm(s) {
+    $('settings-telegram-enabled').checked = !!s.telegramEnabled;
+    $('settings-telegram-token').value = s.telegramBotToken || '';
+    $('settings-telegram-chatids').value = s.telegramChatIds || '';
+    $('settings-notif-email').value = s.notifEmail || '';
+    for (let d = 0; d < 7; d++) {
+      const range = (s.businessHours && s.businessHours[d]) || [0, 0];
+      $('settings-hours-' + d + '-start').value = range[0];
+      $('settings-hours-' + d + '-end').value = range[1];
+    }
+    $('settings-login-max-fails').value = s.loginMaxFails;
+    $('settings-login-lock-seconds').value = s.loginLockSeconds;
+    $('settings-member-login-max-fails').value = s.memberLoginMaxFails;
+    $('settings-admin-session-days').value = s.adminSessionDays;
+  }
+
+  function loadAppSettingsForm() {
+    adminCall('getAppSettings').then(populateAppSettingsForm)
+      .catch(function (err) { window.showToast('Gagal memuat Pengaturan: ' + window.authMessage(err)); });
+  }
+
+  window.submitAppSettings = function (e) {
+    e.preventDefault();
+    const businessHours = {};
+    for (let d = 0; d < 7; d++) {
+      businessHours[d] = [Number($('settings-hours-' + d + '-start').value), Number($('settings-hours-' + d + '-end').value)];
+    }
+    const payload = {
+      telegramEnabled: $('settings-telegram-enabled').checked,
+      telegramBotToken: $('settings-telegram-token').value,
+      telegramChatIds: $('settings-telegram-chatids').value,
+      notifEmail: $('settings-notif-email').value,
+      businessHours: businessHours,
+      loginMaxFails: $('settings-login-max-fails').value,
+      loginLockSeconds: $('settings-login-lock-seconds').value,
+      memberLoginMaxFails: $('settings-member-login-max-fails').value,
+      adminSessionDays: $('settings-admin-session-days').value
+    };
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('updateAppSettings', payload).then(function (s) {
+      done();
+      populateAppSettingsForm(s);
+      window.showToast('Pengaturan disimpan.');
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+
+  window.sendTelegramTest = function () {
+    const btn = $('btn-telegram-test');
+    const done = busy(btn, 'Mengirim…');
+    adminCall('sendTelegramTest', $('settings-telegram-token').value, $('settings-telegram-chatids').value).then(function (res) {
+      done();
+      window.showToast(res.sent + ' dari ' + res.total + ' Chat ID berhasil menerima pesan tes.');
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
   };
 
   // ── Navigasi ────────────────────────────────────────────────────────────────
@@ -729,7 +785,8 @@
       safe(adminCall('getMemberTransactionLog')),
       safe(adminCall('getSchedules')),
       safe(publicCall('getCoaches')),
-      safe(publicCall('getPriceList'))
+      safe(publicCall('getPriceList')),
+      safe(publicCall('getBusinessHours'))
     ]).then(function (r) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
       window.members = r[0] || [];
@@ -737,6 +794,7 @@
       window.schedules = normalizeSchedules(r[2]);
       window.coaches = r[3] || [];
       window.priceListData = r[4] || [];
+      if (r[5]) Object.assign(DAY_HOURS, r[5]);
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
@@ -750,7 +808,8 @@
     const jobs = [
       safe(publicCall('getPublicSchedules', token)),
       safe(publicCall('getCoaches')),
-      safe(publicCall('getPriceList'))
+      safe(publicCall('getPriceList')),
+      safe(publicCall('getBusinessHours'))
     ];
     if (token) jobs.push(safe(memberCall('getMemberProfile')));
     window.members = []; window.memberArchive = [];
@@ -758,7 +817,8 @@
       window.schedules = normalizeSchedules(r[0]);
       window.coaches = r[1] || [];
       window.priceListData = r[2] || [];
-      if (token && r[3]) window.setPublicMember(r[3]);
+      if (r[3]) Object.assign(DAY_HOURS, r[3]);
+      if (token && r[4]) window.setPublicMember(r[4]);
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (window._openMemberDashboard && window.publicLoggedMember) {

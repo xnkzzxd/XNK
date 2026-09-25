@@ -264,6 +264,18 @@ function _authError_(message) {
   return new Error(AUTH_ERROR_PREFIX + ': ' + message);
 }
 
+/** Angka dari Script Properties (diatur lewat Pengaturan), jatuh ke nilai default kalau belum diisi/tidak valid. */
+function _numProp_(key, fallback) {
+  const v = PropertiesService.getScriptProperties().getProperty(key);
+  const n = v === null || v === '' ? NaN : Number(v);
+  return isNaN(n) ? fallback : n;
+}
+
+/** Alamat email tujuan notifikasi: NOTIF_EMAIL kalau diisi lewat Pengaturan, kalau tidak email pemilik akun (seperti sebelumnya). */
+function _notifEmailRecipient_() {
+  return PropertiesService.getScriptProperties().getProperty('NOTIF_EMAIL') || Session.getEffectiveUser().getEmail();
+}
+
 function _adminPinVersion_() {
   const pin = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN');
   return pin ? _sha256Hex_('admin-pin:' + pin).slice(0, 16) : null;
@@ -302,15 +314,17 @@ function adminLogin(pin) {
     throw new Error('PIN admin belum diatur. Pemilik akun: isi ADMIN_PIN di Script Properties atau lewat file ' + CONFIG_FILE_NAME + ' di Google Drive.');
   }
   const cache = CacheService.getScriptCache();
+  const loginMaxFails = _numProp_('LOGIN_MAX_FAILS', LOGIN_MAX_FAILS);
+  const loginLockSeconds = _numProp_('LOGIN_LOCK_SECONDS', LOGIN_LOCK_SECONDS);
   const fails = parseInt(cache.get('admin_login_fails') || '0', 10);
-  if (fails >= LOGIN_MAX_FAILS) {
+  if (fails >= loginMaxFails) {
     throw new Error('Terlalu banyak percobaan PIN salah. Coba lagi dalam 10 menit.');
   }
   if (!_safeEqual_(String(pin == null ? '' : pin).trim(), stored)) {
-    cache.put('admin_login_fails', String(fails + 1), LOGIN_LOCK_SECONDS);
-    if (fails + 1 === LOGIN_MAX_FAILS) {
+    cache.put('admin_login_fails', String(fails + 1), loginLockSeconds);
+    if (fails + 1 === loginMaxFails) {
       try {
-        kirimNotifTelegram_('⚠️ <b>LOGIN ADMIN DIKUNCI</b>\n\n' + LOGIN_MAX_FAILS +
+        kirimNotifTelegram_('⚠️ <b>LOGIN ADMIN DIKUNCI</b>\n\n' + loginMaxFails +
           ' kali PIN salah dalam 10 menit. Login panel PT dikunci 10 menit.');
       } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
     }
@@ -319,7 +333,7 @@ function adminLogin(pin) {
   }
   cache.remove('admin_login_fails');
   return {
-    token: _issueToken_({ r: 'admin', v: _adminPinVersion_(), exp: Date.now() + ADMIN_SESSION_DAYS * 86400000 })
+    token: _issueToken_({ r: 'admin', v: _adminPinVersion_(), exp: Date.now() + _numProp_('ADMIN_SESSION_DAYS', ADMIN_SESSION_DAYS) * 86400000 })
   };
 }
 
@@ -340,8 +354,128 @@ function changeAdminPin(token, oldPin, newPin) {
   if (newPin.length < 6) throw new Error('PIN baru minimal 6 karakter.');
   props.setProperty('ADMIN_PIN', newPin);
   return {
-    token: _issueToken_({ r: 'admin', v: _adminPinVersion_(), exp: Date.now() + ADMIN_SESSION_DAYS * 86400000 })
+    token: _issueToken_({ r: 'admin', v: _adminPinVersion_(), exp: Date.now() + _numProp_('ADMIN_SESSION_DAYS', ADMIN_SESSION_DAYS) * 86400000 })
   };
+}
+
+// ── Pengaturan sistem (notifikasi, jam operasional, keamanan/sesi) ──────────
+// Semua nilai punya default = perilaku sebelum fitur ini ada, jadi selama admin
+// belum pernah buka Pengaturan, tidak ada yang berubah.
+const DEFAULT_BUSINESS_HOURS = { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] };
+const SETTINGS_NUMERIC_BOUNDS = {
+  loginMaxFails: { key: 'LOGIN_MAX_FAILS', fallback: LOGIN_MAX_FAILS, min: 1, max: 1000 },
+  loginLockSeconds: { key: 'LOGIN_LOCK_SECONDS', fallback: LOGIN_LOCK_SECONDS, min: 10, max: 86400 },
+  memberLoginMaxFails: { key: 'MEMBER_LOGIN_MAX_FAILS', fallback: MEMBER_LOGIN_MAX_FAILS, min: 1, max: 1000 },
+  adminSessionDays: { key: 'ADMIN_SESSION_DAYS', fallback: ADMIN_SESSION_DAYS, min: 1, max: 365 }
+};
+
+function _businessHours_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('BUSINESS_HOURS_JSON');
+  if (!raw) return DEFAULT_BUSINESS_HOURS;
+  try {
+    const parsed = JSON.parse(raw);
+    return _validBusinessHours_(parsed) ? parsed : DEFAULT_BUSINESS_HOURS;
+  } catch (e) {
+    return DEFAULT_BUSINESS_HOURS;
+  }
+}
+
+function _validBusinessHours_(hours) {
+  if (!hours || typeof hours !== 'object') return false;
+  for (let d = 0; d < 7; d++) {
+    const range = hours[d];
+    if (!Array.isArray(range) || range.length !== 2) return false;
+    const [start, end] = range;
+    if (!Number.isInteger(start) || !Number.isInteger(end)) return false;
+    if (start < 0 || end > 24 || start >= end) return false;
+  }
+  return true;
+}
+
+/** Jam operasional per hari (0=Minggu..6=Sabtu), dipakai Landing & portal untuk slot kosong. */
+function getBusinessHours() {
+  return _businessHours_();
+}
+
+/** Info Pengaturan buat form admin: notifikasi, jam operasional, keamanan/sesi. */
+function getAppSettings(token) {
+  requireAdmin_(token);
+  const props = PropertiesService.getScriptProperties();
+  const settings = {
+    telegramEnabled: props.getProperty('TELEGRAM_ENABLED') !== 'false',
+    telegramBotToken: props.getProperty('TELEGRAM_BOT_TOKEN') || '',
+    telegramChatIds: props.getProperty('TELEGRAM_CHAT_IDS') || '',
+    notifEmail: props.getProperty('NOTIF_EMAIL') || '',
+    businessHours: _businessHours_()
+  };
+  Object.keys(SETTINGS_NUMERIC_BOUNDS).forEach(function (name) {
+    const b = SETTINGS_NUMERIC_BOUNDS[name];
+    settings[name] = _numProp_(b.key, b.fallback);
+  });
+  return settings;
+}
+
+/** Simpan Pengaturan. String kosong/null pada satu kolom = hapus properti itu (balik ke default). */
+function updateAppSettings(token, payload) {
+  requireAdmin_(token);
+  payload = payload || {};
+  const props = PropertiesService.getScriptProperties();
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'businessHours') && payload.businessHours != null) {
+    if (!_validBusinessHours_(payload.businessHours)) {
+      throw new Error('Jam operasional tidak valid: tiap hari perlu jam buka < jam tutup, antara 0 dan 24.');
+    }
+  }
+  Object.keys(SETTINGS_NUMERIC_BOUNDS).forEach(function (name) {
+    if (!Object.prototype.hasOwnProperty.call(payload, name) || payload[name] === '' || payload[name] == null) return;
+    const b = SETTINGS_NUMERIC_BOUNDS[name];
+    const n = Number(payload[name]);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < b.min || n > b.max) {
+      throw new Error('Nilai ' + name + ' harus bilangan bulat antara ' + b.min + ' dan ' + b.max + '.');
+    }
+  });
+
+  const setOrDelete = function (key, value) {
+    if (value === '' || value == null) props.deleteProperty(key);
+    else props.setProperty(key, String(value));
+  };
+  if (Object.prototype.hasOwnProperty.call(payload, 'telegramEnabled')) {
+    props.setProperty('TELEGRAM_ENABLED', payload.telegramEnabled ? 'true' : 'false');
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'telegramBotToken')) setOrDelete('TELEGRAM_BOT_TOKEN', String(payload.telegramBotToken || '').trim());
+  if (Object.prototype.hasOwnProperty.call(payload, 'telegramChatIds')) setOrDelete('TELEGRAM_CHAT_IDS', String(payload.telegramChatIds || '').trim());
+  if (Object.prototype.hasOwnProperty.call(payload, 'notifEmail')) setOrDelete('NOTIF_EMAIL', String(payload.notifEmail || '').trim());
+  if (Object.prototype.hasOwnProperty.call(payload, 'businessHours')) {
+    setOrDelete('BUSINESS_HOURS_JSON', payload.businessHours == null ? '' : JSON.stringify(payload.businessHours));
+  }
+  Object.keys(SETTINGS_NUMERIC_BOUNDS).forEach(function (name) {
+    if (!Object.prototype.hasOwnProperty.call(payload, name)) return;
+    setOrDelete(SETTINGS_NUMERIC_BOUNDS[name].key, payload[name] === '' || payload[name] == null ? '' : Math.trunc(Number(payload[name])));
+  });
+
+  return getAppSettings(token);
+}
+
+/** Tes token/Chat ID Telegram TANPA menyimpannya dulu (dari form Pengaturan). */
+function sendTelegramTest(token, botToken, chatIds) {
+  requireAdmin_(token);
+  botToken = String(botToken || '').trim();
+  const ids = String(chatIds || '').split(',').map(function (id) { return id.trim(); }).filter(String);
+  if (!botToken || ids.length === 0) throw new Error('Isi token bot dan minimal satu Chat ID dulu.');
+  const url = 'https://api.telegram.org/bot' + botToken + '/sendMessage';
+  const results = ids.map(function (id) {
+    try {
+      const res = UrlFetchApp.fetch(url, {
+        method: 'post', contentType: 'application/json',
+        payload: JSON.stringify({ chat_id: id, text: '✅ Tes notifikasi dari xnk.my.id — kalau pesan ini sampai, token & Chat ID sudah benar.' }),
+        muteHttpExceptions: true
+      });
+      return { id: id, ok: res.getResponseCode() === 200 };
+    } catch (e) {
+      return { id: id, ok: false };
+    }
+  });
+  return { results: results, sent: results.filter(function (r) { return r.ok; }).length, total: results.length };
 }
 
 // ── Login klien ─────────────────────────────────────────────────────────────
@@ -441,16 +575,18 @@ function memberLoginByPhone(phone) {
   const target = _normalizePhone_(phone);
   if (!/^62\d{8,13}$/.test(target)) throw new Error('Nomor WhatsApp tidak valid.');
   const cache = CacheService.getScriptCache();
+  const memberLoginMaxFails = _numProp_('MEMBER_LOGIN_MAX_FAILS', MEMBER_LOGIN_MAX_FAILS);
+  const loginLockSeconds = _numProp_('LOGIN_LOCK_SECONDS', LOGIN_LOCK_SECONDS);
   const fails = parseInt(cache.get('member_login_fails') || '0', 10);
-  if (fails >= MEMBER_LOGIN_MAX_FAILS) {
+  if (fails >= memberLoginMaxFails) {
     throw new Error('Terlalu banyak percobaan. Coba lagi dalam 10 menit.');
   }
   const found = _findMemberRow_(function(row) { return _normalizePhone_(row[2]) === target; });
   if (!found) {
-    cache.put('member_login_fails', String(fails + 1), LOGIN_LOCK_SECONDS);
-    if (fails + 1 === MEMBER_LOGIN_MAX_FAILS) {
+    cache.put('member_login_fails', String(fails + 1), loginLockSeconds);
+    if (fails + 1 === memberLoginMaxFails) {
       try {
-        kirimNotifTelegram_('⚠️ <b>LOGIN KLIEN DIKUNCI</b>\n\n' + MEMBER_LOGIN_MAX_FAILS +
+        kirimNotifTelegram_('⚠️ <b>LOGIN KLIEN DIKUNCI</b>\n\n' + memberLoginMaxFails +
           ' nomor WhatsApp tidak dikenal dalam 10 menit. Login klien dengan nomor WA dikunci 10 menit.');
       } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
     }
@@ -1292,7 +1428,7 @@ function registerNewClient(data) {
   `;
 
   try {
-    MailApp.sendEmail({ to: Session.getEffectiveUser().getEmail(), subject: (isExisting ? '🔁 Permintaan Perpanjang: ' : '💰 Pendaftaran PT Baru: ') + name, htmlBody: body });
+    MailApp.sendEmail({ to: _notifEmailRecipient_(), subject: (isExisting ? '🔁 Permintaan Perpanjang: ' : '💰 Pendaftaran PT Baru: ') + name, htmlBody: body });
   } catch (e) { Logger.log('Email pendaftaran gagal: ' + e); }
 
   try {
@@ -1932,7 +2068,7 @@ function clientBookSchedule(memberToken, scheduleData) {
   `;
 
   // 1. Email ke pemilik akun (getEffectiveUser — getActiveUser kosong untuk pengunjung anonim)
-  try { MailApp.sendEmail({ to: Session.getEffectiveUser().getEmail(), subject: subject, htmlBody: body }); } catch(e) { Logger.log('Email booking gagal: ' + e); }
+  try { MailApp.sendEmail({ to: _notifEmailRecipient_(), subject: subject, htmlBody: body }); } catch(e) { Logger.log('Email booking gagal: ' + e); }
 
   // 2. Notifikasi Telegram
   const pesanTelegram = "📅 <b>BOOKING SESI BARU!</b> 🎉\n\n" +
@@ -2129,7 +2265,7 @@ function sendDailyReminderEmail() {
   try {
     // 1. Ambil timezone dan jadwal
     const timeZone = Session.getScriptTimeZone();
-    const emailTujuan = Session.getEffectiveUser().getEmail();
+    const emailTujuan = _notifEmailRecipient_();
     const schedules = _getSchedulesAll_();
 
     logToSheet_(`Berhasil mengambil total ${schedules.length} jadwal dari _getSchedulesAll_()`, "INFO");
@@ -2258,7 +2394,7 @@ function sendWeeklyReportEmail() {
 
   try {
     const timeZone = Session.getScriptTimeZone();
-    const emailTujuan = Session.getEffectiveUser().getEmail();
+    const emailTujuan = _notifEmailRecipient_();
     const now = new Date();
 
     // Rentang 7 hari terakhir (H-7 sampai sekarang)
@@ -2333,6 +2469,10 @@ function kirimNotifTelegram_(pesan) {
   // Token bot & chat ID admin disimpan di Script Properties (Project Settings),
   // BUKAN di kode: TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_IDS (dipisah koma).
   const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TELEGRAM_ENABLED') === 'false') {
+    Logger.log("Notif Telegram dilewati: dimatikan lewat Pengaturan.");
+    return;
+  }
   const tokenBot = props.getProperty('TELEGRAM_BOT_TOKEN');
   const chatIdAdmin = String(props.getProperty('TELEGRAM_CHAT_IDS') || '')
     .split(',').map(function(id) { return id.trim(); }).filter(String);
