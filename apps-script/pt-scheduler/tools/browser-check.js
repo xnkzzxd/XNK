@@ -455,15 +455,6 @@ async function contrastReport(page) {
     await page.click('#settings-save-btn');
     await page.waitForTimeout(600);
     check(env.props.RMD_TPL_PR === undefined, 'saving the default text stores no override');
-    await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
-    await page.waitForTimeout(700);
-    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 3, 'client page: all three reminder switches start on');
-    await page.click('#profile-remind-prefs input[data-remind="pr"]');
-    await page.waitForTimeout(600);
-    check(env.memberRow('PT-A')[15] === 'pr', 'client page: switching PR off is saved for that client (MemberData column P)');
-    await page.click('#profile-remind-prefs input[data-remind="pr"]');
-    await page.waitForTimeout(500);
-    check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
 
     // ── Paket & Harga (desktop) ───────────────────────────────────────────────
     await page.click('.settings-nav-item[data-section="paket"]');
@@ -510,6 +501,17 @@ async function contrastReport(page) {
     check(await page.isDisabled('#pkg-menu-delete') && (await page.textContent('#pkg-menu-delete-note')).includes('Dipakai 2 klien'), 'a package in use cannot be deleted, and the reason is shown');
     await page.click('#sheet-pkg-menu .icon-btn');
     await page.waitForTimeout(500);
+
+    // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
+    await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
+    await page.waitForTimeout(700);
+    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 3, 'client page: all three reminder switches start on');
+    await page.click('#profile-remind-prefs input[data-remind="pr"]');
+    await page.waitForTimeout(600);
+    check(env.memberRow('PT-A')[15] === 'pr', 'client page: switching PR off is saved for that client (MemberData column P)');
+    await page.click('#profile-remind-prefs input[data-remind="pr"]');
+    await page.waitForTimeout(500);
+    check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
     noErrors(errors);
     await context.close();
   }
