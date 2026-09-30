@@ -178,6 +178,39 @@
               <div class="field"><label class="label" for="settings-notif-email">Email Notifikasi</label><input class="input" type="email" id="settings-notif-email" placeholder="Kosongkan = email pemilik akun"></div>
             </div>
 
+            <div class="group-label"><span>Pengingat</span></div>
+            <div class="card-flat stack" style="gap:12px">
+              <div class="row-between">
+                <div><p class="li-title">Pengingat otomatis</p><p class="li-sub">Digest ke Telegram Coach: booking, PR, dan tidur</p></div>
+                <label class="toggle"><input type="checkbox" id="settings-rmd-enabled" aria-label="Pengingat otomatis"><span></span></label>
+              </div>
+              <p class="hint">Butuh Telegram aktif &amp; trigger per jam terpasang (<code>setupReminderTrigger</code>). Mati = perilaku lama.</p>
+            </div>
+            <div class="card-flat stack" style="gap:12px">
+              <div class="row-between">
+                <div><p class="li-title">Booking Minggu</p><p class="li-sub">Ajakan booking + 3 slot kosong terdekat (tiap Minggu)</p></div>
+                <label class="toggle"><input type="checkbox" id="settings-rmd-booking-minggu-enabled" aria-label="Pengingat Booking Minggu"><span></span></label>
+              </div>
+              <div class="field"><label class="label" for="settings-rmd-booking-minggu-hour">Jam kirim (WIB, 0–23)</label><input class="input" type="number" min="0" max="23" id="settings-rmd-booking-minggu-hour" placeholder="Bawaan"></div>
+              <button type="button" class="btn btn-outline btn-block" onclick="window.sendReminderTest('booking-minggu', this)"><i data-lucide="send"></i> Kirim tes Booking Minggu</button>
+            </div>
+            <div class="card-flat stack" style="gap:12px">
+              <div class="row-between">
+                <div><p class="li-title">PR (Task)</p><p class="li-sub">Klien dengan PR telat, jatuh tempo hari ini/besok (tiap hari)</p></div>
+                <label class="toggle"><input type="checkbox" id="settings-rmd-pr-enabled" aria-label="Pengingat PR"><span></span></label>
+              </div>
+              <div class="field"><label class="label" for="settings-rmd-pr-hour">Jam kirim (WIB, 0–23)</label><input class="input" type="number" min="0" max="23" id="settings-rmd-pr-hour" placeholder="Bawaan"></div>
+              <button type="button" class="btn btn-outline btn-block" onclick="window.sendReminderTest('pr', this)"><i data-lucide="send"></i> Kirim tes PR</button>
+            </div>
+            <div class="card-flat stack" style="gap:12px">
+              <div class="field">
+                <label class="label" for="settings-rmd-sleep">Kalimat tidur (reminder malam)</label>
+                <textarea class="textarea" id="settings-rmd-sleep" rows="2" maxlength="300" placeholder="Kosongkan = tidak ditambahkan"></textarea>
+                <p class="hint">Ditambahkan ke email &amp; Telegram jadwal besok pada run malam saja. Simpan dulu sebelum kirim tes.</p>
+              </div>
+              <button type="button" class="btn btn-outline btn-block" onclick="window.sendReminderTest('tidur', this)"><i data-lucide="send"></i> Kirim tes kalimat tidur</button>
+            </div>
+
             <div class="group-label"><span>Jam Operasional</span></div>
             <div class="form-grid">
               <div class="field"><span class="label">Minggu</span><div class="two"><input class="input" type="number" min="0" max="24" id="settings-hours-0-start" aria-label="Minggu jam buka" placeholder="Buka"><input class="input" type="number" min="0" max="24" id="settings-hours-0-end" aria-label="Minggu jam tutup" placeholder="Tutup"></div></div>
@@ -274,6 +307,39 @@
           <div class="field"><label class="label" for="edit-member-used">Sesi terpakai</label><input class="input num" type="number" id="edit-member-used" required min="0"></div>
         </div>
         <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan perubahan</button>
+      </form>
+    </div>
+
+    <!-- PR (Task): tambah / ubah -->
+    <div class="sheet hide" id="modal-task" role="dialog" aria-modal="true" aria-labelledby="task-sheet-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div class="grow"><h2 class="sheet-title" id="task-sheet-title">Tambah PR</h2><p class="li-sub" id="task-sheet-client"></p></div>
+        <button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button>
+      </div>
+      <form class="sheet-body form-grid" id="form-task" onsubmit="window.submitTaskForm(event)" novalidate>
+        <div class="field" id="task-tpl-field"><span class="label">Template <span class="li-sub">(opsional)</span></span><div id="task-tpl-list" style="display:flex;flex-wrap:wrap;gap:8px" aria-label="Template PR"></div></div>
+        <div class="field"><label class="label" for="task-title">Judul</label><input class="input" type="text" id="task-title" maxlength="80" placeholder="Contoh: Catat makan 3 hari" autocomplete="off"></div>
+        <div class="field"><label class="label" for="task-desc">Deskripsi <span class="li-sub">(opsional)</span></label><textarea class="textarea" id="task-desc" maxlength="500" placeholder="Petunjuk untuk klien"></textarea></div>
+        <div class="field"><span class="label">Kategori</span><div id="task-cat-chips" style="display:flex;flex-wrap:wrap;gap:8px" role="radiogroup" aria-label="Kategori"></div></div>
+        <div class="field"><label class="label" for="task-due">Tenggat <span class="li-sub">(opsional)</span></label><input class="input" type="date" id="task-due"></div>
+        <div class="field"><span class="label">Ulangi</span><div id="task-repeat-chips" style="display:flex;flex-wrap:wrap;gap:8px" role="radiogroup" aria-label="Pengulangan"></div>
+          <p class="li-sub" id="task-repeat-hint">PR berulang wajib punya tenggat awal.</p></div>
+        <button type="button" class="btn btn-secondary btn-block" id="task-save-tpl" onclick="window.saveTaskAsTemplate()">Simpan sebagai template</button>
+        <button type="submit" class="btn btn-primary btn-lg btn-block" id="task-submit">Simpan PR</button>
+      </form>
+    </div>
+
+    <!-- PR-ku: selesaikan dengan catatan -->
+    <div class="sheet hide" id="modal-task-done" role="dialog" aria-modal="true" aria-labelledby="task-done-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div class="grow"><h2 class="sheet-title" id="task-done-title">Selesaikan PR</h2><p class="li-sub" id="task-done-name"></p></div>
+        <button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button>
+      </div>
+      <form class="sheet-body form-grid" id="form-task-done" onsubmit="window.submitTaskDone(event)">
+        <div class="field"><label class="label" for="task-done-note">Catatan untuk coach <span class="li-sub">(opsional)</span></label><textarea class="textarea" id="task-done-note" maxlength="300" placeholder="Bagaimana rasanya? Ada kendala?"></textarea></div>
+        <button type="submit" class="btn btn-primary btn-lg btn-block" id="task-done-submit">Tandai selesai</button>
       </form>
     </div>
 

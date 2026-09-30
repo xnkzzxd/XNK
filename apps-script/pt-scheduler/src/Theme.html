@@ -1063,4 +1063,17 @@ button.avatar { border: 0; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }
+/* ── PR (Task) di profil klien (panel PT) ─────────────────────────────────── */
+.task-item { align-items: flex-start; }
+.task-item.done .li-title { text-decoration: line-through; color: var(--fg-muted); }
+.task-item.late { border-color: var(--fg); }
+.task-check { flex-shrink: 0; width: 28px; height: 28px; margin-top: 2px; border-radius: 8px; border: 1.5px solid var(--border-strong); background: var(--surface); color: var(--on-ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
+.task-check:active { transform: scale(0.9); }
+.task-check.on { background: var(--ink); border-color: var(--ink); }
+.task-check svg { width: 16px; height: 16px; }
+.task-check[disabled] { opacity: 0.5; cursor: default; }
+.task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.task-note { margin-top: 6px; padding: 8px 10px; border-radius: var(--r-md); background: var(--surface-2); font-size: var(--fs-xs); color: var(--fg-2); overflow-wrap: anywhere; }
+.task-acts { display: flex; gap: 2px; flex-shrink: 0; margin: -4px -6px -4px 0; }
+.task-acts .icon-btn { width: 36px; height: 36px; border-radius: 10px; }
 </style>
