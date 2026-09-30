@@ -644,7 +644,8 @@ async function contrastReport(page) {
     check((await page.evaluate(() => window.currentView)) === 'settings', 'phone: choosing Batal stays on Pengaturan');
 
     // Pesan ke klien & saklar per klien di HP
-    await page.click('#tabbar .tab[data-view="dashboard"]').catch(() => {});
+    await page.evaluate(() => window.navigate('dashboard', { force: true }));
+    await page.waitForTimeout(300);
     await page.evaluate(() => window.navigate('settings', { force: true }));
     await page.waitForTimeout(500);
     await page.click('.settings-nav-item[data-section="pengingat"]');
