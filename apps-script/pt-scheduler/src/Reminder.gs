@@ -396,7 +396,11 @@ var REMINDER_JOBS = [
   // T-72: bawaan MATI (defaultEnabled:false) sampai tip disetujui Coach (T-75) — aktifkan lewat
   // properti RMD_MAKAN_PAGI_ENABLED / RMD_MAKAN_SORE_ENABLED = 'true' (UI menyusul).
   { jenis: 'makan-pagi',     day: null, hour: 6,  handler: 'sendMakanPagiDigest_', defaultEnabled: false },
-  { jenis: 'makan-sore',     day: null, hour: 16, handler: 'sendMakanSoreDigest_', defaultEnabled: false }
+  { jenis: 'makan-sore',     day: null, hour: 16, handler: 'sendMakanSoreDigest_', defaultEnabled: false },
+  // Fase D4: bawaan MATI sampai pemilik menyalakannya di Pengaturan → Pengingat Klien.
+  { jenis: 'rekap-bulanan',     day: null, hour: 9,  dayOfMonth: 1, handler: 'sendRekapBulananDigest_', defaultEnabled: false },
+  { jenis: 'selamat-milestone', day: null, hour: 18, handler: 'sendMilestoneDigest_', defaultEnabled: false },
+  { jenis: 'waktunya-ukur',     day: 1,    hour: 8,  evenWeek: true, handler: 'sendUkurDigest_', defaultEnabled: false }
 ];
 
 /** Nilai bawaan saklar satu jenis bila properti _ENABLED belum pernah diisi. */
@@ -435,6 +439,8 @@ function _dueJobs_(parts, jobs, hourOverride, tolerance) {
   (jobs || []).forEach(function(job) {
     var hour = hourOverride && hourOverride[job.jenis] != null ? hourOverride[job.jenis] : job.hour;
     if (job.day != null && job.day !== parts.day) return;
+    if (job.dayOfMonth != null && parseInt(String(parts.date).slice(8, 10), 10) !== job.dayOfMonth) return;
+    if (job.evenWeek && _weekParity_(parts.date) !== 0) return;
     var late = parts.hour - hour;
     if (late < 0 || late > tolerance) return;
     out.push({ job: job, slot: parts.date + 'T' + ('0' + hour).slice(-2) });
@@ -579,14 +585,20 @@ var RMD_TPL_DEFAULT = {
   'booking-minggu': 'Halo {nama}, minggu ini masih ada slot latihan kosong:\n{slot}\nMau booking yang mana? 💪',
   'pr': 'Halo {nama}, pengingat PR kamu:\n{pr}\nSemangat, kamu pasti bisa! 💪',
   'makan-pagi': 'Halo {nama}, pengingat makan pagi:\n{tip}\nSemangat! 💪',
-  'makan-sore': 'Halo {nama}, pengingat makan sore:\n{tip}\nSemangat! 💪'
+  'makan-sore': 'Halo {nama}, pengingat makan sore:\n{tip}\nSemangat! 💪',
+  'rekap-bulanan': 'Halo {nama}, rekap latihan bulan {bulan}:\n💪 {sesi} sesi latihan{berat}{pinggang}{streak}\n\nLihat progresmu di {link}\nTerus semangat!',
+  'selamat-milestone': 'Selamat {nama}! 🎉 Kamu baru meraih badge {badge}.\nBangga banget sama progresmu, terus semangat! 💪',
+  'waktunya-ukur': 'Halo {nama}, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.{terakhir}\nCatat di {link} (Beranda → Progres).'
 };
 var RMD_PLACEHOLDERS = {
   'sesi-besok': ['nama', 'jam', 'coach', 'tidur'],
   'booking-minggu': ['nama', 'slot'],
   'pr': ['nama', 'pr'],
   'makan-pagi': ['nama', 'tip'],
-  'makan-sore': ['nama', 'tip']
+  'makan-sore': ['nama', 'tip'],
+  'rekap-bulanan': ['nama', 'bulan', 'sesi', 'berat', 'pinggang', 'streak', 'link'],
+  'selamat-milestone': ['nama', 'badge'],
+  'waktunya-ukur': ['nama', 'terakhir', 'link']
 };
 var MEMBER_REMIND_OFF_COL = 16;                            // Kolom P (1-based)
 var MEMBER_REMIND_OFF_HEADER = 'Pengingat Nonaktif';
@@ -684,6 +696,9 @@ function _rmdSampleVars_(jenis) {
   var v = { nama: 'Budi' };
   if (jenis === 'sesi-besok') { v.jam = '07:00'; v.coach = 'dengan Coach Dika'; v.tidur = '\n\n😴 ' + (sleep || 'Tidur cukup malam ini ya.'); }
   else if (jenis === 'booking-minggu') v.slot = '• Rabu 1/10 07:00\n• Rabu 1/10 08:00\n• Kamis 2/10 17:00';
+  else if (jenis === 'rekap-bulanan') { v.bulan = 'September'; v.sesi = '8'; v.berat = '\n⚖️ Berat −2,1 kg'; v.pinggang = '\n📏 Pinggang −3 cm'; v.streak = '\n🔥 Streak 5 minggu'; v.link = RMD_PORTAL_URL; }
+  else if (jenis === 'selamat-milestone') v.badge = '25 sesi';
+  else if (jenis === 'waktunya-ukur') { v.terakhir = ' Terakhir kamu catat tanggal 12 Sep.'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'pr') v.pr = '• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan 3 hari (tenggat 2/10)';
   else v.tip = 'Sarapan telur dan oatmeal, minum air putih dulu.';
   return v;
@@ -787,6 +802,200 @@ function sendSesiBesokDigest_(ctx) {
     });
   });
   return _rmdSendDigest_('Sesi besok', _rmdDateLabel_(tomorrow), items, noPhone);
+}
+
+// ##############################################################################
+// BAGIAN: D4 Rekap bulanan, Selamat milestone, Waktunya ukur
+// ##############################################################################
+// Sama seperti jenis lain: satu pesan Telegram ke Coach, satu tombol WhatsApp per klien dengan
+// pesan yang sudah ditulis untuk klien. Data dari Progress (Kode.gs), jadwal selesai, badge.
+
+var RMD_PORTAL_URL = 'https://book.xnkbooking.my.id';
+var RMD_MONTHS_FULL = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+var MEMBER_BADGE_GIVEN_COL = 18;            // Kolom R "Badge Diselamati" (1-based)
+var MEMBER_BADGE_GIVEN_HEADER = 'Badge Diselamati';
+var UKUR_EVERY_DAYS = 14;
+var MILESTONE_RECENT_DAYS = 14;             // hanya klien yang masih aktif berlatih yang diselamati
+
+/** Murni: 0 atau 1, berganti tiap minggu (Senin–Minggu), dihitung sejak Senin 5 Jan 2026. Minggu genap (0) = jadwal "tiap dua minggu". */
+function _weekParity_(iso) {
+  var a = _weekStart_(iso).split('-'), b = [2026, 1, 5];
+  var weeks = Math.round((Date.UTC(+a[0], +a[1] - 1, +a[2]) - Date.UTC(b[0], b[1] - 1, b[2])) / (7 * 86400000));
+  return ((weeks % 2) + 2) % 2;
+}
+
+/** Murni: bulan sebelum tanggal ini → { from, to, label } */
+function _prevMonthRange_(todayIso) {
+  var p = String(todayIso).split('-').map(Number), y = p[0], m = p[1] - 1;
+  if (m === 0) { m = 12; y--; }
+  var pad = function(n) { return ('0' + n).slice(-2); };
+  var last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { from: y + '-' + pad(m) + '-01', to: y + '-' + pad(m) + '-' + pad(last), label: RMD_MONTHS_FULL[m - 1] };
+}
+
+function _daysBetween_(fromIso, toIso) {
+  var a = String(fromIso).split('-'), b = String(toIso).split('-');
+  return Math.round((Date.UTC(+b[0], +b[1] - 1, +b[2]) - Date.UTC(+a[0], +a[1] - 1, +a[2])) / 86400000);
+}
+
+/** Murni: 72.4 → "72,4"; -2.1 → "−2,1"; tanda plus untuk naik. */
+function _rmdSigned_(v) {
+  var n = Math.round(Math.abs(v) * 10) / 10, t = String(n).replace('.', ',');
+  if (n === 0) return '0';
+  return v < 0 ? '−' + t : (v > 0 ? '+' + t : t);
+}
+
+/**
+ * Murni: perubahan satu ukuran selama satu bulan. Pembanding = catatan terakhir SEBELUM bulan itu, atau catatan
+ * pertama di bulan itu kalau belum ada. null kalau kurang dari dua titik data.
+ */
+function _monthChange_(entries, key, from, to) {
+  var pts = (entries || []).filter(function(e) { return e[key] !== '' && e[key] != null; });
+  var inMonth = pts.filter(function(e) { return e.tanggal >= from && e.tanggal <= to; });
+  if (!inMonth.length) return null;
+  var before = pts.filter(function(e) { return e.tanggal < from; });
+  var base = before.length ? before[before.length - 1] : inMonth[0];
+  var last = inMonth[inMonth.length - 1];
+  if (base === last) return null;
+  return Math.round((last[key] - base[key]) * 10) / 10;
+}
+
+/** Satu kali baca sheet Progress → { memberId: [entri urut tanggal] }. */
+function _progressByMember_() {
+  var out = {};
+  _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    if (!r[0]) return;
+    var id = String(r[1]).trim();
+    (out[id] = out[id] || []).push({ tanggal: String(r[2]), berat: r[3] === '' ? '' : Number(r[3]), pinggang: r[4] === '' ? '' : Number(r[4]) });
+  });
+  Object.keys(out).forEach(function(k) { out[k].sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); }); });
+  return out;
+}
+
+/** Handler 'rekap-bulanan': tiap tanggal 1, klien yang latihan atau mencatat progres bulan lalu. */
+function sendRekapBulananDigest_(ctx) {
+  var now = (ctx && ctx.now) || new Date();
+  var today = _wibParts_(now).date, range = _prevMonthRange_(today);
+  var schedules = _getSchedulesAll_(), members = _rmdMemberIndex_(), byMember = _progressByMember_();
+  var sessions = {};
+  schedules.forEach(function(sc) {
+    if (String(sc.status || '').toLowerCase() !== 'completed') return;
+    var d = new Date(sc.start);
+    if (isNaN(d.getTime())) return;
+    var day = Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd');
+    if (day < range.from || day > range.to) return;
+    var id = String(sc.memberId).trim();
+    sessions[id] = (sessions[id] || 0) + 1;
+  });
+  var tpl = _rmdTemplate_('rekap-bulanan'), items = [], noPhone = [];
+  Object.keys(members).map(function(k) { return members[k]; }).sort(function(a, b) { return a.name.localeCompare(b.name); }).forEach(function(m) {
+    var entries = byMember[m.id] || [];
+    var n = sessions[m.id] || 0;
+    var hasEntry = entries.some(function(e) { return e.tanggal >= range.from && e.tanggal <= range.to; });
+    if (!n && !hasEntry) return;
+    if (_rmdIsOff_(m, 'rekap-bulanan')) return;
+    if (!m.phone) { noPhone.push(m.name); return; }
+    var db = _monthChange_(entries, 'berat', range.from, range.to), dp = _monthChange_(entries, 'pinggang', range.from, range.to);
+    var streak = _streak_(_completedWeeks_(schedules, m.id).weeks, today);
+    items.push({
+      name: m.name, phone: m.phone, fact: n + ' sesi',
+      text: _rmdFill_(tpl, {
+        nama: m.name, bulan: range.label, sesi: n,
+        berat: db === null ? '' : '\n⚖️ Berat ' + (db === 0 ? 'tetap' : _rmdSigned_(db) + ' kg'),
+        pinggang: dp === null ? '' : '\n📏 Pinggang ' + (dp === 0 ? 'tetap' : _rmdSigned_(dp) + ' cm'),
+        streak: streak >= 2 ? '\n🔥 Streak ' + streak + ' minggu' : '',
+        link: RMD_PORTAL_URL
+      })
+    });
+  });
+  return _rmdSendDigest_('Rekap bulanan', range.label, items, noPhone);
+}
+
+/** Tulis "sudah diselamati" di kolom R. Tanpa lock sendiri: dipanggil dari runReminderTick yang sudah memegang lock skrip. */
+function _rmdMarkBadgesGiven_(map) {
+  var ids = Object.keys(map);
+  if (!ids.length) return;
+  var sheet = _getMemberDataSheet_();
+  var head = sheet.getRange(1, MEMBER_BADGE_GIVEN_COL);
+  if (head.getValue() === '') { head.setValue(MEMBER_BADGE_GIVEN_HEADER); head.setFontWeight('bold'); }
+  else if (head.getValue() !== MEMBER_BADGE_GIVEN_HEADER) throw new Error('Kolom R di MemberData sudah dipakai untuk hal lain. Kosongkan/ganti dulu.');
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var id = String(data[i][0]).trim();
+    if (!map[id]) continue;
+    var cur = _rmdOffFrom_(data[i][MEMBER_BADGE_GIVEN_COL - 1]);
+    map[id].forEach(function(b) { if (cur.indexOf(b) === -1) cur.push(b); });
+    sheet.getRange(i + 1, MEMBER_BADGE_GIVEN_COL).setValue(cur.join(','));
+  }
+}
+
+/** Murni: dari daftar badge baru, yang tertinggi per jenis (sesi / streak). */
+function _highestFreshBadges_(fresh) {
+  var best = {};
+  fresh.forEach(function(b) { if (!best[b.kind] || b.need > best[b.kind].need) best[b.kind] = b; });
+  return Object.keys(best).map(function(k) { return best[k]; });
+}
+
+/**
+ * Handler 'selamat-milestone': klien yang meraih badge dan belum diselamati (kolom R).
+ * Hanya badge tertinggi per jenis yang disebut; yang lebih rendah ikut ditandai. Klien yang sudah lama
+ * tidak berlatih ditandai diam-diam (bukan diselamati). Penandaan baru ditulis SETELAH Telegram terkirim.
+ */
+function sendMilestoneDigest_(ctx) {
+  var now = (ctx && ctx.now) || new Date();
+  var isTest = !!(ctx && ctx.slot === 'tes');
+  var today = _wibParts_(now).date, since = _addDaysIso_(today, -MILESTONE_RECENT_DAYS);
+  var schedules = _getSchedulesAll_();
+  var data = _getMemberDataSheet_().getDataRange().getValues().slice(1);
+  var tpl = _rmdTemplate_('selamat-milestone'), items = [], noPhone = [], toMark = {};
+  data.forEach(function(row) {
+    if (!row || !row[0]) return;
+    var id = String(row[0]).trim(), given = _rmdOffFrom_(row[MEMBER_BADGE_GIVEN_COL - 1]);
+    var cw = _completedWeeks_(schedules, id);
+    var fresh = _badges_(cw.completed, _bestStreak_(cw.weeks)).filter(function(b) { return b.earned && given.indexOf(b.id) === -1; });
+    if (!fresh.length) return;
+    toMark[id] = fresh.map(function(b) { return b.id; });
+    var lastDay = '';
+    schedules.forEach(function(sc) {
+      if (String(sc.memberId).trim() !== id || String(sc.status || '').toLowerCase() !== 'completed') return;
+      var d = new Date(sc.start);
+      if (isNaN(d.getTime())) return;
+      var day = Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd');
+      if (day > lastDay) lastDay = day;
+    });
+    if (!lastDay || lastDay < since) return;                      // lama tidak berlatih: tandai diam-diam
+    var member = { id: id, name: String(row[1] || '').trim(), phone: _rmdNormalizePhone_(row[2]), off: _rmdOffFrom_(row[15]) };
+    if (_rmdIsOff_(member, 'selamat-milestone')) return;
+    if (!member.phone) { noPhone.push(member.name); return; }
+    var top = _highestFreshBadges_(fresh);
+    items.push({
+      name: member.name, phone: member.phone, fact: top[0].label.replace(' berturut-turut', ''),
+      text: _rmdFill_(tpl, { nama: member.name, badge: top.map(function(b) { return b.label; }).join(' dan ') })
+    });
+  });
+  var ok = _rmdSendDigest_('Selamat milestone', _rmdDateLabel_(today), items, noPhone);
+  if (ok && !isTest) _rmdMarkBadgesGiven_(toMark);
+  return ok;
+}
+
+/** Handler 'waktunya-ukur': klien aktif yang catatan terakhirnya 14+ hari lalu (atau belum pernah). */
+function sendUkurDigest_(ctx) {
+  var now = (ctx && ctx.now) || new Date();
+  var today = _wibParts_(now).date;
+  var pools = _loadClientPools_(), byMember = _progressByMember_();
+  var tpl = _rmdTemplate_('waktunya-ukur'), items = [];
+  pools.active.filter(function(c) { return !_rmdIsOff_(c, 'waktunya-ukur'); }).forEach(function(c) {
+    var list = byMember[c.id] || [];
+    var last = list.length ? list[list.length - 1].tanggal : '';
+    var days = last ? _daysBetween_(last, today) : null;
+    if (last && days < UKUR_EVERY_DAYS) return;
+    var dm = last ? last.split('-') : null;
+    items.push({
+      name: c.name, phone: c.phone, fact: last ? days + ' hari' : 'baru',
+      text: _rmdFill_(tpl, { nama: c.name, link: RMD_PORTAL_URL, terakhir: last ? ' Terakhir kamu catat tanggal ' + parseInt(dm[2], 10) + ' ' + RMD_MONTHS[parseInt(dm[1], 10) - 1] + '.' : '' })
+    });
+  });
+  return _rmdSendDigest_('Waktunya ukur', _rmdDateLabel_(today), items, pools.skippedNames);
 }
 
 // ##############################################################################
@@ -1013,7 +1222,7 @@ function _sleepLine_(hour) {
 //   - Throttle 15 detik per jenis (mencegah spam dari tombol).
 // Hasil: {jenis, terkirim:boolean, pesan:string}. `terkirim` false + pesan = alasan.
 
-var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore'];
+var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore', 'rekap-bulanan', 'selamat-milestone', 'waktunya-ukur'];
 var RMD_TEST_MIN_GAP_MS = 15000;
 
 /** Murni: nama jenis valid → jenis itu sendiri; selain itu lempar error. */
@@ -1050,7 +1259,7 @@ function sendReminderTest(token, jenis) {
     return { jenis: j, terkirim: true, pesan: 'Pratinjau kalimat tidur terkirim ke Telegram.' };
   }
 
-  var handler = { 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
+  var handler = { 'rekap-bulanan': sendRekapBulananDigest_, 'selamat-milestone': sendMilestoneDigest_, 'waktunya-ukur': sendUkurDigest_, 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
                   'makan-pagi': sendMakanPagiDigest_, 'makan-sore': sendMakanSoreDigest_ }[j];
   var ok;
   try {

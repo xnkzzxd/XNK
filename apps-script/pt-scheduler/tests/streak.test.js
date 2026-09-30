@@ -45,6 +45,7 @@ test('badges come from lifetime sessions and the best streak, so they never disa
   assert.deepEqual(earned(25, 4), ['sesi-10', 'sesi-25', 'streak-4']);
   assert.deepEqual(earned(100, 12), ['sesi-10', 'sesi-25', 'sesi-50', 'sesi-100', 'streak-4', 'streak-8', 'streak-12']);
   assert.equal(env.call('_badges_', 0, 0).length, 7);
+  assert.deepEqual(env.call('_badges_', 0, 0).map(b => b.need), [10, 25, 50, 100, 4, 8, 12]);
   assert.equal(env.call('_badges_', 10, 0)[0].label, '10 sesi');
 });
 

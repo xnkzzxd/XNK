@@ -3081,7 +3081,7 @@ function _bestStreak_(weeks) {
 function _badges_(completed, bestStreak) {
   return BADGE_DEFS.map(function(b) {
     const have = b.kind === 'sesi' ? completed : bestStreak;
-    return { id: b.id, kind: b.kind, label: b.label, earned: have >= b.need };
+    return { id: b.id, kind: b.kind, need: b.need, label: b.label, earned: have >= b.need };
   });
 }
 
