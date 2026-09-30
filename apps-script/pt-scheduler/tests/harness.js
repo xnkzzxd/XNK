@@ -188,6 +188,7 @@ function createEnv(opts = {}) {
         getUrl: () => 'https://drive.google.com/file/d/' + fileId + '/view',
         setSharing(access, perm) { this.sharing = [access, perm]; return this; },
         setTrashed(t) { this.trashed = t; return this; },
+        getBlob: () => blob,
       };
       env.files.push(file);
       return file;

@@ -2879,6 +2879,279 @@ function reorderPackages(token, category, ids) {
 
 
 // #############################################################################
+// 📁 08_PROGRESS — Progres klien (berat, pinggang, foto) — Fase D1
+// #############################################################################
+// Sheet "Progress": satu baris per klien per tanggal (simpan kedua di hari yang sama = ubah).
+// Sheet "ProgressPhotos": metadata foto; berkasnya di folder Drive PRIVAT "XNK Progress"
+// (TIDAK PERNAH dibagikan lewat link). Foto hanya keluar lewat fungsi yang memeriksa token
+// klien (fotonya sendiri) atau token admin.
+
+const PROGRESS_HEADERS = ["ID", "Member ID", "Tanggal", "Berat (kg)", "Pinggang (cm)", "Dicatat Oleh", "Diubah Pada"];
+const PROGRESS_PHOTO_HEADERS = ["ID", "Member ID", "Tanggal", "Sisi", "File ID", "Dicatat Oleh"];
+const PROGRESS_LIMITS = { beratMin: 20, beratMax: 300, pinggangMin: 30, pinggangMax: 250, photosPerMember: 60, backDaysClient: 7, entriesShown: 120 };
+const PROGRESS_SIDES = ['depan', 'samping'];
+
+function _progressSheet_() {
+  const sheet = getOrCreateSheet_('Progress', PROGRESS_HEADERS);
+  sheet.getRange('C:C').setNumberFormat('@');
+  return sheet;
+}
+function _progressPhotosSheet_() {
+  const sheet = getOrCreateSheet_('ProgressPhotos', PROGRESS_PHOTO_HEADERS);
+  sheet.getRange('C:C').setNumberFormat('@');
+  return sheet;
+}
+
+function _todayWib_(now) { return Utilities.formatDate(now || new Date(), 'Asia/Jakarta', 'yyyy-MM-dd'); }
+function _addDaysIso_(iso, days) {
+  const p = String(iso).split('-');
+  const d = new Date(Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10) + days));
+  return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+}
+
+/** Murni: nilai ukur → angka 1 desimal, '' kalau kosong; lempar error Indonesia kalau di luar batas. */
+function _parseMeasure_(v, min, max, label) {
+  if (v === '' || v == null) return '';
+  const n = Number(String(v).replace(',', '.'));
+  if (typeof v === 'boolean' || !isFinite(n) || n < min || n > max) throw new Error(label + ' harus angka antara ' + min + ' dan ' + max + '.');
+  return Math.round(n * 10) / 10;
+}
+
+/** Murni: tanggal 'YYYY-MM-DD' valid dan tidak di masa depan; batasan mundur (hari) opsional. */
+function _validProgressDate_(iso, today, maxBackDays) {
+  const t = String(iso == null || iso === '' ? today : iso).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t) || _addDaysIso_(t, 0) !== t) throw new Error('Tanggal tidak valid.');
+  if (t > today) throw new Error('Tanggal tidak boleh di masa depan.');
+  if (maxBackDays != null && t < _addDaysIso_(today, -maxBackDays)) throw new Error('Klien hanya bisa mencatat sampai ' + maxBackDays + ' hari ke belakang.');
+  return t;
+}
+
+function _readProgress_(memberId) {
+  const id = String(memberId).trim();
+  const out = [];
+  _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[1]).trim() !== id || !r[0]) return;
+    out.push({
+      id: String(r[0]), tanggal: String(r[2]),
+      berat: r[3] === '' ? '' : Number(r[3]), pinggang: r[4] === '' ? '' : Number(r[4]),
+      oleh: String(r[5] || 'klien')
+    });
+  });
+  out.sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); });
+  return out;
+}
+
+function _readProgressPhotos_(memberId) {
+  const id = String(memberId).trim();
+  const out = [];
+  _progressPhotosSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[1]).trim() !== id || !r[0]) return;
+    out.push({ id: String(r[0]), tanggal: String(r[2]), sisi: String(r[3]), oleh: String(r[5] || 'klien') });
+  });
+  out.sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });   // terbaru dulu
+  return out;
+}
+
+/** Murni: perubahan sejak catatan pertama untuk satu ukuran ('berat' | 'pinggang'). null kalau belum ada data. */
+function _measureChange_(entries, key) {
+  const pts = entries.filter(function(e) { return e[key] !== ''; });
+  if (!pts.length) return null;
+  const first = pts[0], last = pts[pts.length - 1];
+  return { first: { tanggal: first.tanggal, nilai: first[key] }, last: { tanggal: last.tanggal, nilai: last[key] },
+           change: Math.round((last[key] - first[key]) * 10) / 10, count: pts.length };
+}
+
+function _progressPayload_(memberId) {
+  const all = _readProgress_(memberId);
+  return {
+    entries: all.slice(-PROGRESS_LIMITS.entriesShown),
+    photos: _readProgressPhotos_(memberId),
+    summary: { berat: _measureChange_(all, 'berat'), pinggang: _measureChange_(all, 'pinggang') }
+  };
+}
+
+/** Simpan/ubah catatan (satu baris per klien per tanggal). Nilai kosong tidak menimpa nilai lama. */
+function _saveMeasurement_(memberId, tanggal, berat, pinggang, oleh) {
+  if (berat === '' && pinggang === '') throw new Error('Isi berat atau lingkar pinggang.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _progressSheet_();
+    const data = sheet.getDataRange().getValues();
+    const now = new Date().toISOString();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][1]).trim() === String(memberId).trim() && String(data[i][2]) === tanggal) {
+        if (berat !== '') sheet.getRange(i + 1, 4).setValue(berat);
+        if (pinggang !== '') sheet.getRange(i + 1, 5).setValue(pinggang);
+        sheet.getRange(i + 1, 6).setValue(oleh);
+        sheet.getRange(i + 1, 7).setValue(now);
+        return { id: String(data[i][0]), tanggal: tanggal, updated: true };
+      }
+    }
+    const id = 'PRG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    sheet.appendRow([id, String(memberId).trim(), tanggal, berat, pinggang, oleh, now]);
+    return { id: id, tanggal: tanggal, updated: false };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _deleteMeasurement_(id, memberIdOrNull) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _progressSheet_();
+    const data = sheet.getDataRange().getValues();
+    const rid = String(id == null ? '' : id).trim();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) !== rid) continue;
+      if (memberIdOrNull !== null && String(data[i][1]).trim() !== String(memberIdOrNull).trim()) break;   // bukan milik klien ini
+      sheet.deleteRow(i + 1);
+      return { status: 'success', id: rid };
+    }
+    throw new Error('Catatan tidak ditemukan.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── Klien (token member; ID klien selalu dari token, bukan dari argumen) ────
+
+function getMyProgress(memberToken) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  return _progressPayload_(memberId);
+}
+
+function saveMyMeasurement(memberToken, data) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  data = data || {};
+  const today = _todayWib_();
+  const tanggal = _validProgressDate_(data.tanggal, today, PROGRESS_LIMITS.backDaysClient);
+  const berat = _parseMeasure_(data.berat, PROGRESS_LIMITS.beratMin, PROGRESS_LIMITS.beratMax, 'Berat');
+  const pinggang = _parseMeasure_(data.pinggang, PROGRESS_LIMITS.pinggangMin, PROGRESS_LIMITS.pinggangMax, 'Lingkar pinggang');
+  _saveMeasurement_(memberId, tanggal, berat, pinggang, 'klien');
+  return _progressPayload_(memberId);
+}
+
+function deleteMyMeasurement(memberToken, id) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  _deleteMeasurement_(id, memberId);
+  return _progressPayload_(memberId);
+}
+
+/** Folder Drive privat untuk foto progres. TIDAK ada setSharing di mana pun untuk folder/berkas ini. */
+function _progressFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const savedId = props.getProperty('PROGRESS_PHOTO_FOLDER_ID');
+  if (savedId) {
+    try { return DriveApp.getFolderById(savedId); } catch (e) { /* folder hilang: buat baru di bawah */ }
+  }
+  const folder = DriveApp.createFolder('XNK Progress');
+  props.setProperty('PROGRESS_PHOTO_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+function uploadMyProgressPhoto(memberToken, base64Data, mimeType, sisi) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  const side = String(sisi == null ? '' : sisi).trim().toLowerCase();
+  if (PROGRESS_SIDES.indexOf(side) === -1) throw new Error('Pilih foto depan atau samping.');
+  if (['image/jpeg', 'image/png', 'image/webp'].indexOf(String(mimeType)) === -1) throw new Error('Foto harus berupa JPG, PNG, atau WEBP.');
+  if (typeof base64Data !== 'string' || !base64Data || base64Data.length > 7000000) throw new Error('Ukuran foto maksimal 5 MB.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    if (_readProgressPhotos_(memberId).length >= PROGRESS_LIMITS.photosPerMember) {
+      throw new Error('Maksimal ' + PROGRESS_LIMITS.photosPerMember + ' foto. Hapus foto lama dulu.');
+    }
+    const tanggal = _todayWib_();
+    const ext = mimeType === 'image/png' ? 'png' : (mimeType === 'image/webp' ? 'webp' : 'jpg');
+    const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, 'PRG_' + memberId + '_' + tanggal + '_' + side + '.' + ext);
+    const file = _progressFolder_().createFile(blob);     // sengaja tanpa setSharing: berkas tetap privat
+    const id = 'PHT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    _progressPhotosSheet_().appendRow([id, memberId, tanggal, side, file.getId(), 'klien']);
+  } finally {
+    lock.releaseLock();
+  }
+  return _progressPayload_(memberId);
+}
+
+function _photoDataUrl_(fileId) {
+  const blob = DriveApp.getFileById(fileId).getBlob();
+  return 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
+}
+
+function _findPhotoRow_(photoId) {
+  const rid = String(photoId == null ? '' : photoId).trim();
+  const data = _progressPhotosSheet_().getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === rid) return { rowNum: i + 1, memberId: String(data[i][1]).trim(), fileId: String(data[i][4]) };
+  }
+  return null;
+}
+
+function getMyProgressPhoto(memberToken, photoId) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  const p = _findPhotoRow_(photoId);
+  if (!p || p.memberId !== memberId) throw new Error('Foto tidak ditemukan.');
+  return { id: String(photoId), dataUrl: _photoDataUrl_(p.fileId) };
+}
+
+function deleteMyProgressPhoto(memberToken, photoId) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const p = _findPhotoRow_(photoId);
+    if (!p || p.memberId !== memberId) throw new Error('Foto tidak ditemukan.');
+    try { DriveApp.getFileById(p.fileId).setTrashed(true); } catch (e) { Logger.log('Foto progres sudah tidak ada di Drive: ' + e); }
+    _progressPhotosSheet_().deleteRow(p.rowNum);
+  } finally {
+    lock.releaseLock();
+  }
+  return _progressPayload_(memberId);
+}
+
+// ── Admin / coach ───────────────────────────────────────────────────────────
+
+function getMemberProgress(token, memberId) {
+  requireAdmin_(token);
+  return _progressPayload_(memberId);
+}
+
+function saveMemberMeasurement(token, memberId, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const id = String(memberId == null ? '' : memberId).trim();
+  if (!_findMemberRow_(function(row) { return String(row[0]).trim() === id; })) throw new Error('Klien tidak ditemukan.');
+  const tanggal = _validProgressDate_(data.tanggal, _todayWib_(), null);
+  const berat = _parseMeasure_(data.berat, PROGRESS_LIMITS.beratMin, PROGRESS_LIMITS.beratMax, 'Berat');
+  const pinggang = _parseMeasure_(data.pinggang, PROGRESS_LIMITS.pinggangMin, PROGRESS_LIMITS.pinggangMax, 'Lingkar pinggang');
+  _saveMeasurement_(id, tanggal, berat, pinggang, 'coach');
+  return _progressPayload_(id);
+}
+
+function deleteMemberMeasurement(token, id) {
+  requireAdmin_(token);
+  const sheetRow = (function() {
+    const rid = String(id == null ? '' : id).trim();
+    const data = _progressSheet_().getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) if (String(data[i][0]) === rid) return String(data[i][1]).trim();
+    return null;
+  })();
+  if (sheetRow === null) throw new Error('Catatan tidak ditemukan.');
+  _deleteMeasurement_(id, null);
+  return _progressPayload_(sheetRow);
+}
+
+function getMemberProgressPhoto(token, photoId) {
+  requireAdmin_(token);
+  const p = _findPhotoRow_(photoId);
+  if (!p) throw new Error('Foto tidak ditemukan.');
+  return { id: String(photoId), dataUrl: _photoDataUrl_(p.fileId) };
+}
+
+
+// #############################################################################
 // 📁 07B_LANDING_STATS — Statistik & Testimoni Real untuk Landing Page
 // #############################################################################
 //
