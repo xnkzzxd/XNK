@@ -1474,7 +1474,8 @@
       safe(publicCall('getCoaches')),
       safe(publicCall('getPriceList')),
       safe(publicCall('getBusinessHours')),
-      safe(adminCall('getTaskSummary'))
+      safe(adminCall('getTaskSummary')),
+      safe(adminCall('getRenewalRequests'))
     ]).then(function (r) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
       window.members = r[0] || [];
@@ -1484,6 +1485,7 @@
       window.priceListData = r[4] || [];
       if (r[5]) Object.assign(DAY_HOURS, r[5]);
       window.taskSummary = r[6] || {};
+      window.renewals = r[7] || [];
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
@@ -1672,6 +1674,7 @@
       '<button type="button" class="btn btn-primary only-desktop" onclick="window.quickAction(\'booking\')">' + icon('calendar-plus') + 'Booking</button></div></div>';
 
     html += '<div class="dash-grid stagger">';
+    html += renewalsCardHtml();
 
     // Sesi berikutnya (kartu hitam)
     html += '<div class="span-5">' + nextSessionCard(next) + '</div>';
@@ -3343,7 +3346,7 @@
   };
 
   window.onMemberAuthLost = function (err) {
-    window.myTasks = undefined; window.myMeal = undefined; pg.data = null;
+    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; pg.data = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
     window.publicLoggedMember = null;
     renderTopbarActions();
@@ -3352,7 +3355,7 @@
   };
 
   window.logoutPublic = function () {
-    window.myTasks = undefined; window.myMeal = undefined; pg.data = null;
+    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; pg.data = null;
     window.publicLoggedMember = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
     try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) {}
@@ -3477,6 +3480,105 @@
         '<p class="li-sub">' + h(pgChangeText(sum, m[2])) + '</p>' + pgChartSvg(d.entries, m[0], m[2]) + '</div>';
     }).join('');
   }
+
+  // ── Perpanjang paket dari portal (Fase D3) ──────────────────────────────────
+  // window.myRenewal: undefined = belum dimuat, null = belum pernah minta, objek = permintaan terbaru
+  function renewCoachPhone() {
+    const me = window.publicLoggedMember || {};
+    const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId));
+    return coach ? coach.phone : window.coachContactNumber();
+  }
+  function renewText(pkgName, harga) {
+    const me = window.publicLoggedMember || {};
+    return 'Halo Coach, saya ' + (me.name || '') + '. Saya mau perpanjang paket ' + pkgName + (harga ? ' (' + formatRp(harga) + ')' : '') + '.';
+  }
+  function renewNoticeHtml(rem, total) {
+    const r = window.myRenewal;
+    const box = 'margin-top:16px;background:transparent;border-color:var(--on-ink)';
+    if (r && r.status === 'menunggu') {
+      return '<div class="notice" id="pub-renew-pending" style="' + box + '">' + icon('clock') + '<div class="grow"><p class="li-title">Menunggu konfirmasi</p>' +
+        '<p class="muted" style="font-size:var(--fs-xs)">Perpanjang ' + h(r.packageName || 'paket') + ' sudah diminta. Coach mengaktifkannya setelah pembayaran diterima.</p></div>' +
+        '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.renewResend()">Kirim ulang WA</button></div>';
+    }
+    if (r && r.status === 'disetujui' && r.decidedAt && Date.now() - new Date(r.decidedAt).getTime() < 3 * 86400000) {
+      return '<div class="notice" id="pub-renew-done" style="' + box + '">' + icon('check-circle-2') + '<div class="grow"><p class="li-title">Paketmu sudah diperpanjang</p>' +
+        '<p class="muted" style="font-size:var(--fs-xs)">Selamat latihan lagi! 💪</p></div></div>';
+    }
+    if (total > 0 && rem <= 2) {
+      return '<div class="notice" id="pub-quota-warning" style="' + box + '">' + icon('triangle-alert') + '<div class="grow"><p class="li-title" id="pub-quota-warning-text">' +
+        (rem === 0 ? 'Kuota sesimu sudah habis.' : 'Sisa ' + rem + ' sesi lagi.') + '</p><p class="muted" style="font-size:var(--fs-xs)">Perpanjang paket supaya jadwalmu tidak terputus.</p></div>' +
+        '<button type="button" class="btn btn-on-ink btn-sm" id="pub-renew-btn" onclick="window.openRenewSheet()">Perpanjang</button></div>';
+    }
+    return '';
+  }
+  function renderRenewSlot() {
+    const slot = $('pub-renew-slot'), me = window.publicLoggedMember;
+    if (!slot || !me) return;
+    const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0;
+    setHTML(slot, renewNoticeHtml(Math.max(0, total - used), total));
+  }
+  window.loadMyRenewal = function () {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    return memberCall('getMyRenewal').then(function (r) { window.myRenewal = r || null; renderRenewSlot(); })
+      .catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
+  };
+  window.openRenewSheet = function () {
+    const list = (window.priceListData || []).filter(p => p && p.aktif !== false);
+    $('renew-list').innerHTML = list.length ? list.map(function (p) {
+      return '<button type="button" class="list-item interactive" style="min-height:64px" onclick="window.renewPick(\'' + h(p.id) + '\')"><span class="grow" style="min-width:0;text-align:left"><span class="li-title truncate" style="display:block">' + h(p.namaPaket) + '</span>' +
+        '<span class="li-sub">' + h((p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '')) + '</span></span>' +
+        '<span class="li-trail num" style="font-weight:800">' + h(formatRp(p.harga)) + '</span></button>';
+    }).join('') : '<p class="li-sub">Belum ada paket yang bisa dipilih.</p>';
+    openSheet('sheet-renew');
+  };
+  window.renewPick = function (id) {
+    const p = (window.priceListData || []).find(x => String(x.id) === String(id));
+    if (!p) return;
+    window.showConfirmModal('Perpanjang <b>' + h(p.namaPaket) + '</b> (' + h(formatRp(p.harga)) + ')? Setelah ini WhatsApp ke coach terbuka untuk konfirmasi pembayaran.', function () {
+      memberCall('requestRenewal', id).then(function (res) {
+        window.myRenewal = res.request;
+        window.closeModal();
+        renderRenewSlot();
+        window.showWaPrompt(window.waUrl(renewCoachPhone(), res.text), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
+      }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Perpanjang paket?', confirmText: 'Ya, perpanjang' });
+  };
+  window.renewResend = function () {
+    const r = window.myRenewal;
+    if (!r) return;
+    window.showWaPrompt(window.waUrl(renewCoachPhone(), renewText(r.packageName || 'paket', r.harga)), 'Kirim pesan perpanjang ke coach lewat WhatsApp.');
+  };
+
+  // ── Minta perpanjang di panel (Fase D3) ─────────────────────────────────────
+  function renewalsCardHtml() {
+    const list = (window.renewals || []).filter(r => r.status === 'menunggu');
+    if (!list.length) return '';
+    return '<div class="span-12 card" id="renewals-card"><div class="section-head"><h3 class="section-title">Minta perpanjang</h3><span class="pill num">' + list.length + '</span></div><div class="list">' +
+      list.map(function (r) {
+        return '<div class="list-item" style="flex-wrap:wrap;gap:10px" data-renewal="' + h(r.id) + '"><div class="grow" style="min-width:0"><p class="li-title truncate">' + h(r.name) + '</p>' +
+          '<p class="li-sub">' + h(r.packageName) + ' · ' + h(formatRp(r.harga)) + ' · ' + h(fmtShort(new Date(r.createdAt))) + '</p></div>' +
+          '<div class="row" style="gap:8px"><button type="button" class="btn btn-outline" onclick="window.renewalDecide(\'' + h(r.id) + '\', false)">Tolak</button>' +
+          '<button type="button" class="btn btn-primary" onclick="window.renewalDecide(\'' + h(r.id) + '\', true)">' + icon('check') + 'Setujui</button></div></div>';
+      }).join('') + '</div><p class="hint" style="margin-top:8px">Setujui setelah pembayaran diterima: sesi klien direset sesuai paket dan transaksi dicatat.</p></div>';
+  }
+  window.loadRenewals = function () {
+    return adminCall('getRenewalRequests').then(function (r) { window.renewals = r || []; window.renderDashboard(); })
+      .catch(function (err) { if (!window.isAuthError(err)) console.warn(err); });
+  };
+  window.renewalDecide = function (id, approve) {
+    const r = (window.renewals || []).find(x => x.id === id);
+    if (!r) return;
+    const msg = approve
+      ? 'Setujui perpanjangan <b>' + h(r.name) + '</b> (' + h(r.packageName) + ')? Sesi klien direset ke paket baru dan transaksi dicatat. Pastikan pembayaran sudah diterima.'
+      : 'Tolak permintaan perpanjang <b>' + h(r.name) + '</b>? Data klien tidak berubah.';
+    window.showConfirmModal(msg, function () {
+      adminCall('decideRenewal', id, approve).then(function () {
+        window.showToast(approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.');
+        return approve ? window.loadAllData() : null;
+      }).then(function () { return window.loadRenewals(); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); window.loadRenewals(); });
+    }, approve ? { title: 'Setujui perpanjangan?', confirmText: 'Setujui' } : { title: 'Tolak permintaan?', confirmText: 'Tolak', variant: 'danger' });
+  };
 
   // ── Streak & badge (Fase D2) ────────────────────────────────────────────────
   const pgShortBadge = b => String(b.label).replace(' berturut-turut', '');
@@ -3769,8 +3871,7 @@
       '<div class="ring-center"><span class="num" style="font-size:var(--fs-4xl);font-weight:800;line-height:1" id="pub-dash-remaining">' + rem + '</span><span class="eyebrow">dari <span id="pub-dash-total">' + total + '</span></span></div></div>' +
       '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p>' +
       '<p class="muted">' + used + ' sesi sudah dipakai</p></div></div>' +
-      (total > 0 && rem <= 1 ? '<div class="notice" id="pub-quota-warning" style="margin-top:16px;background:transparent;border-color:var(--on-ink)">' + icon('triangle-alert') + '<div class="grow"><p class="li-title" id="pub-quota-warning-text">' + (rem === 0 ? 'Kuota sesimu sudah habis.' : 'Sesimu tinggal 1 lagi.') + '</p><p class="muted" style="font-size:var(--fs-xs)">Hubungi coach untuk perpanjang paket.</p></div>' +
-        '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.chatCoach(\'renew\')">Perpanjang</button></div>' : '') +
+      '<div id="pub-renew-slot">' + renewNoticeHtml(rem, total) + '</div>' +
       '</div>';
 
     left += '<div class="card" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
@@ -3807,6 +3908,7 @@
     if (!window.myTasks) window.loadMyTasks(false);
     window.loadMyMeal(false);
     window.loadMyProgress(false);
+    window.loadMyRenewal();
   };
 
   // Tanggal di beranda: pindah ke tab Jadwal pada tanggal itu.
@@ -3920,7 +4022,8 @@
     if (!cats.length) { setHTML(el, '<div class="page-head"><div><h2 class="page-title">Paket latihan</h2></div></div>' + emptyState('package', 'Belum ada paket', 'Paket latihan akan tampil di sini.')); return; }
     if (cats.indexOf(window.currentClientType) === -1) window.currentClientType = cats[0];
     const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-    let html = '<div class="page-head"><div><h2 class="page-title">Paket latihan</h2><p class="page-sub">Pilih paket, lalu konfirmasi pembayaran dengan coach lewat WhatsApp.</p></div>' +
+    let html = '<div class="page-head"><div><h2 class="page-title">Paket latihan</h2><p class="page-sub">Pilih paket, lalu konfirmasi pembayaran dengan coach lewat WhatsApp.</p>' +
+      (window.publicLoggedMember ? '<button type="button" class="btn btn-primary" id="catalog-renew-btn" style="margin-top:12px" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang paketku</button>' : '') + '</div>' +
       (cats.length > 1 ? '<div class="seg ink" id="category-button-container">' + '<span class="seg-thumb"></span>' + cats.map(function (c, i) {
         return '<button type="button" class="cat-btn' + (c === window.currentClientType ? ' active' : '') + '" data-category="' + h(c) + '" onclick="window.setPriceCategory(this.getAttribute(\'data-category\'),' + i + ')">' + h(cap(c)) + '</button>';
       }).join('') + '</div>' : '') + '</div>';

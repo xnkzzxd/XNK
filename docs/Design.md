@@ -423,7 +423,7 @@ New sheets (created by `getOrCreateSheet_`, all columns Plain Text except number
 | `getRenewalRequests(token, {status})` | admin | Pending first. |
 | `decideRenewal(token, id, approve)` | admin | Approve = same path as Perpanjang (`_addMemberInternal_` renewal branch, price snapshot); once only, under the script lock. |
 
-All go into `tests/security.test.js` (MEMBER / ADMIN lists). The owner's WhatsApp number for renewal comes from Script Property `OWNER_WA` (new Settings field under Notifikasi Admin; if empty, the button explains that renewal requests go to the panel only).
+All go into `tests/security.test.js` (MEMBER / ADMIN lists). The WhatsApp for renewal goes to the client's preferred coach, or to the app's existing contact number (`coachContactNumber()`), the same as the existing "Chat coach" button. There is no separate `OWNER_WA` setting.
 
 ### 10.4 Portal (client) screens, phone first
 

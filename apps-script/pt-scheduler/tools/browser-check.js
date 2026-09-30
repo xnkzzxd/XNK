@@ -691,6 +691,56 @@ async function contrastReport(page) {
     await context.close();
   }
 
+  // ── Perpanjang paket (Fase D3): klien minta di HP, admin menyetujui di desktop ───
+  console.log('Perpanjang paket · portal HP + panel desktop');
+  {
+    const env = richEnv();
+    env.memberRow('PT-A')[9] = 9;                     // 1 session left
+    const memberToken = env.memberToken(KEY_A);
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: memberToken }, { wait: 1500 });
+    check(await visible(page, '#pub-quota-warning') && (await page.textContent('#pub-quota-warning-text')).includes('Sisa 1 sesi'), 'renewal: with 1 session left the home screen offers to renew');
+    await shot(page, 'renew-mobile-notice');
+    await page.click('#pub-renew-btn');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#sheet-renew') && (await page.locator('#renew-list .list-item').count()) === 2, 'renewal: the renew sheet lists the active packages');
+    const rowH = await page.evaluate(() => Array.from(document.querySelectorAll('#renew-list .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
+    check(rowH.every(x => x >= 56), 'renewal: package rows are big enough to tap (' + rowH.join(', ') + ' px)');
+    check((await page.textContent('#renew-list')).includes('Rp'), 'renewal: each package shows its price');
+    check((await overflowX(page)) <= 0, 'renewal: the sheet has no sideways scroll');
+    await shot(page, 'renew-mobile-sheet');
+    await page.click('#renew-list .list-item');
+    await page.waitForTimeout(400);
+    check(await visible(page, '#modal-confirm'), 'renewal: choosing a package asks to confirm first');
+    await page.click('#btn-confirm-modal-yes');
+    await page.waitForTimeout(900);
+    const req = env.sheet('RenewalRequests') && env.sheet('RenewalRequests').rows[1];
+    check(!!req && req[1] === 'PT-A' && req[3] === 'menunggu', 'renewal: the request is recorded for this client');
+    check(await visible(page, '#wa-prompt') && ((await page.getAttribute('#wa-prompt a', 'href')) || '').startsWith('https://wa.me/') && decodeURIComponent(await page.getAttribute('#wa-prompt a', 'href')).includes('perpanjang paket'), 'renewal: a WhatsApp button with the typed order appears');
+    check((await page.textContent('#pub-renew-slot')).includes('Menunggu konfirmasi'), 'renewal: the home screen now says "Menunggu konfirmasi"');
+    check(env.fetches.some(f => JSON.parse(f.options.payload).text.includes('MINTA PERPANJANG')), 'renewal: the owner gets a Telegram notice');
+    await shot(page, 'renew-mobile-pending');
+    await page.reload();
+    await page.waitForTimeout(1600);
+    check((await page.textContent('#pub-renew-slot')).includes('Menunggu konfirmasi'), 'renewal: the pending status survives a reload');
+    noErrors(errors);
+    await context.close();
+
+    const adminToken = env.adminToken();
+    const adm = await openPage(browser, env, '/Index', [], { xnk_admin_token: adminToken }, { viewport: DESKTOP, wait: 1500 });
+    check(await visible(adm.page, '#renewals-card') && (await adm.page.textContent('#renewals-card')).includes('Ani Anggraini'), 'renewal: the dashboard shows "Minta perpanjang" with the client');
+    await adm.page.click('#renewals-card .btn-primary');
+    await adm.page.waitForTimeout(400);
+    check(await visible(adm.page, '#modal-confirm'), 'renewal: approving asks for confirmation first');
+    await adm.page.click('#btn-confirm-modal-yes');
+    await adm.page.waitForTimeout(1200);
+    check(env.memberRow('PT-A')[9] === 0 && env.memberRow('PT-A')[8] === 8, 'renewal: approving resets the client\'s sessions to the new package');
+    check(env.sheet('RenewalRequests').rows[1][3] === 'disetujui', 'renewal: the request is marked as approved');
+    check(!(await visible(adm.page, '#renewals-card')), 'renewal: the card disappears once nothing is pending');
+    check(env.sheet('Members').rows.some(r => r[1] === 'PT-A' && r[3] === 'Perpanjang' && r[10] === 800000), 'renewal: the transaction is logged with the package price');
+    noErrors(adm.errors);
+    await adm.context.close();
+  }
+
   // ── Tema manual ───────────────────────────────────────────────────────────
   console.log('Tema manual');
   {

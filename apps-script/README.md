@@ -92,6 +92,12 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
   10/25/50/100 sesi selesai dan streak 4/8/12 minggu (dihitung otomatis, tidak pernah hilang). Saat klien
   pertama kali membuka beranda setelah meraih badge baru, muncul perayaan sekali saja dengan tombol
   Bagikan (WhatsApp). Halaman klien di panel menampilkan streak dan badge klien itu.
+- **Perpanjang paket** (portal klien): saat sisa sesi ≤ 2 muncul tombol **Perpanjang** (juga ada di halaman Paket).
+  Klien memilih paket → permintaan tercatat (sheet `RenewalRequests`), Telegram Anda menerima notif, dan
+  WhatsApp ke coach terbuka dengan pesan siap kirim. Di panel, kartu **Minta perpanjang** di Dashboard
+  menampilkan permintaan; setelah pembayaran diterima tekan **Setujui**: sesi klien direset sesuai paket dan
+  transaksi dicatat dengan harga saat itu (sama seperti Perpanjang di form Tambah Klien). **Tolak** tidak
+  mengubah data klien. Satu permintaan hanya bisa diputuskan sekali.
 - **Notifikasi Admin**: Telegram (saklar, token, chat ID, tombol tes) dan email notifikasi
   (`NOTIF_EMAIL`, kosong = email pemilik akun). Token yang tersimpan hanya tampil sebagai
   `••••1234`; dikosongkan berarti token lama tetap dipakai.

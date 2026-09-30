@@ -85,12 +85,14 @@ Built. The old four "lencana" tiles (4/8/12/24 sessions) in the portal insights 
 
 ### D3 — Easy renewal
 
+Built. Deviation: no new `OWNER_WA` setting. The WhatsApp goes to the client's preferred coach, or to the app's existing contact number (`coachContactNumber()`), exactly like the existing "Chat coach" button. The renewal notice now shows at 2 sessions left or fewer (was 1) and replaces the old chat-only button.
+
 | | ID | Task | Files | Depends | Size | Done when |
 | --- | --- | --- | --- | --- | --- | --- |
-| [ ] | T-170 | `RenewalRequests` sheet, `requestRenewal` (throttle, one open request, Telegram notice), `OWNER_WA` setting. | Kode.gs, App.html, tests, tests/security.test.js | — | M | Tests: second request cancels the first; notice sent. |
-| [ ] | T-171 | `getRenewalRequests`, `decideRenewal` (approve once, reuses the Perpanjang path with price snapshot, reject). | Kode.gs, tests | T-170 | M | Approving twice is refused; quota and log match today's Perpanjang. |
-| [ ] | T-172 | Portal "Sisa N sesi · Perpanjang" card and package sheet; opens WhatsApp to the owner; status "Menunggu konfirmasi". | App.html, Index.html | T-170 | M | Flow works on a phone end to end. |
-| [ ] | T-173 | Panel "Minta perpanjang (N)" card with Setujui / Tolak. | App.html | T-171 | S | One tap approves; client sees "Aktif". |
+| [x] | T-170 | `RenewalRequests` sheet, `requestRenewal` (throttle, one open request, Telegram notice), `OWNER_WA` setting. | Kode.gs, App.html, tests, tests/security.test.js | — | M | Tests: second request cancels the first; notice sent. |
+| [x] | T-171 | `getRenewalRequests`, `decideRenewal` (approve once, reuses the Perpanjang path with price snapshot, reject). | Kode.gs, tests | T-170 | M | Approving twice is refused; quota and log match today's Perpanjang. |
+| [x] | T-172 | Portal "Sisa N sesi · Perpanjang" card and package sheet; opens WhatsApp to the owner; status "Menunggu konfirmasi". | App.html, Index.html | T-170 | M | Flow works on a phone end to end. |
+| [x] | T-173 | Panel "Minta perpanjang (N)" card with Setujui / Tolak. | App.html | T-171 | S | One tap approves; client sees "Aktif". |
 
 ### D4 — WhatsApp messages
 
