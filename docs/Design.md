@@ -30,7 +30,7 @@ Settings moves out of the bottom sheet `#sheet-settings` into a real admin view 
 
 ### 1.2 Layout
 
-Desktop (≥ 960 px): section list on the left, open section on the right, max width 640 px.
+Breakpoint: the app switches at **768 px** (`.only-mobile` / `.only-desktop` in Theme.html); use the same one. Desktop (≥ 768 px): section list on the left, open section on the right, max width 640 px.
 
 ```
 ┌ Sidebar ┐┌ Pengaturan ─────────────────────────────────────────────┐
@@ -47,7 +47,7 @@ Desktop (≥ 960 px): section list on the left, open section on the right, max w
 └─────────┘└─────────────────────────────────────────────────────────┘
 ```
 
-Phone: the list is a page of its own. Tapping a row opens the section full-width with a back arrow in the page head. The save bar is sticky above the tab bar.
+Phone (< 768 px): the list is a page of its own. Tapping a row opens the section full-width with a back arrow in the page head. The save bar is sticky above the tab bar. Full phone rules are in §8.
 
 ```
 ┌ Pengaturan ──────────┐     ┌ ← Jam Operasional ───┐
@@ -278,9 +278,100 @@ Node tests in `apps-script/pt-scheduler/tests/` using the existing harness (`env
 - Reminders: manual mode sends zero client fetches and one owner digest; gateway mode sends one fetch per eligible client; opt-out and no-number are skipped and logged; a run cut off halfway resumes without duplicates; the cap stops sends; quiet hours defer; 429 is retried and 400 is not.
 - Security lists updated.
 
-Plus `tools/browser-check.js` for the Settings view at phone and desktop widths, in both themes.
+Plus `tools/browser-check.js` at phone and desktop widths in both themes (phone checks listed in §8.5).
 
-## 7. Rollout
+## 8. Mobile view
+
+The phone is the main device for both the owner and clients. Everything below is **< 768 px**, the app's existing breakpoint. Test widths: 360, 390 and 430 px.
+
+### 8.1 Shared phone rules
+
+- **Frame:** page padding `--page-pad` (16 px), no sideways scroll, and content never hides behind the tab bar (`--tabbar-h`) or the home indicator (`env(safe-area-inset-bottom)`).
+- **Touch:** targets at least 44 × 44 px, and 8 px between neighboring targets. Toggles keep the existing `.toggle` size.
+- **Keyboards:** `inputmode="numeric"` for prices, sessions, hours and limits; `type="tel"` for WhatsApp numbers; `type="email"` for email. Enter moves to the next field; the last one submits.
+- **Keyboard open:** the focused field scrolls into view above the keyboard (`scrollIntoView({block:'center'})` on focus). The save bar stays attached to the bottom of the visible area.
+- **Back:** each level pushes a history entry (`#settings`, `#settings/paket`, `#settings/paket/edit`), so the phone's back gesture steps back one level and closes an open sheet before leaving the section.
+- **Sheets:** use the existing bottom sheet (`.sheet`, `.sheet-handle`); a tall form uses a full-height sheet with a sticky footer holding the main button.
+- **Text:** body stays at `--fs-md` (14 px) or larger; inputs are 16 px so iOS doesn't zoom on focus.
+- **Motion:** slide-in for sections and sheets uses `--t-base`, and is turned off under `prefers-reduced-motion`.
+
+### 8.2 Settings on a phone
+
+```
+┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
+│ Pengaturan               │   │ ← Pengingat Klien        │   │ ← Pengingat Klien        │
+│──────────────────────────│   │──────────────────────────│   │ Sesi besok          [on] │
+│ ◐ Tampilan            ›  │   │ Pengingat otomatis  [on] │   │ Jam kirim   [ 19 ]       │
+│ ▤ Paket & Harga       ›  │   │ Kanal: Manual        ›   │   │ Pesan                    │
+│   12 paket aktif         │   │ ● Trigger terpasang      │   │ ┌──────────────────────┐ │
+│ 🔔 Pengingat Klien    ›  │ ► │   tick terakhir 10:15    │ ► │ │Hai {nama}, besok ... │ │
+│   Manual · ● terpasang   │   │──────────────────────────│   │ └──────────────────────┘ │
+│ ✈ Notifikasi Admin    ›  │   │ Sesi besok  19:00   [on] │   │ Pratinjau (lebar HP)     │
+│ 🕘 Jam Operasional     ›  │   │ Booking     Min 17  [on] │   │ [ Kirim tes ]            │
+│ 🔒 Keamanan            ›  │   │ PR          08:00   [on] │   │                          │
+│ ⎋ Akun                ›  │   │ Makan pagi  06:00  [off] │   │▓ Belum disimpan [Batal][Simpan]▓
+│                          │   │ Riwayat pengingat     ›  │   │──────────────────────────│
+│──────────────────────────│   │──────────────────────────│   │ ▢  ▢   (+)   ▢  ▢  tabbar│
+│ ▢  ▢   (+)   ▢  ▢  tabbar│   │ ▢  ▢   (+)   ▢  ▢  tabbar│   └──────────────────────────┘
+└──────────────────────────┘   └──────────────────────────┘
+   list                           section (compact rows)         type opened (details)
+```
+
+- **List:** full-width rows with an icon, a title, a status sub-line and a chevron. There is no save bar on the list.
+- **Section:** the page head shows ← and the section title, and the tab bar stays visible. Long sections (Pengingat Klien) show one compact row per type; tapping a row expands it in place, one open at a time.
+- **Save bar:** fixed at `bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom))` with full width, 56 px tall, "Belum disimpan" on the left, and Batal/Simpan on the right. The section gets matching bottom padding so the bar never covers the last field.
+- **Jam Operasional:** one row per day: the day name, then two number inputs (open, close) side by side, 72 px each, then the Tutup toggle (later, S-9). No grid wider than the screen.
+- **Keamanan:** the PIN form stays one field per row. The numeric limits are stacked (not `.two`) below 400 px.
+- **Tests:** "Kirim tes" buttons are full width, and show their result as a toast above the save bar.
+
+### 8.3 Paket & Harga on a phone
+
+```
+┌──────────────────────────┐   ┌──────────────────────────┐
+│ ← Paket & Harga    [+ ]  │   │ ─────  Paket baru      ✕ │
+│ [Semua][Student][Regu›   │   │ Nama paket               │
+│ Tampilkan nonaktif  [ ]  │   │ [ Pro 8 Sesi           ] │
+│──────────────────────────│   │ Kategori                 │
+│ Pro 8 Sesi          [on] │   │ [ Regular            ▾ ] │
+│ Rp 800.000               │   │ Harga (Rp)               │
+│ 8 sesi · 1 Bulan · 5 klien ⋯│ │ [ 800.000              ] │
+│──────────────────────────│   │ Jumlah sesi  [ 8 ] □Fleks│
+│ Advanced 12        [on]  │   │ Durasi   [ 1 Bulan     ] │
+│ Rp 1.200.000             │   │ Benefit                  │
+│ 12 sesi · 1 Bulan · 2 kl ⋯│  │ (1-on-1 ×)(Program ×) [+]│
+│──────────────────────────│   │ Deskripsi                │
+│ Starter          (nonaktif)│ │ [                      ] │
+│ ...                      │   │──────────────────────────│
+│ ▢  ▢   (+)   ▢  ▢  tabbar│   │ [      Simpan paket    ] │
+└──────────────────────────┘   └──────────────────────────┘
+   list                           editor (full-height sheet)
+```
+
+- **Category chips:** one horizontal row that scrolls sideways inside itself (the only allowed sideways scroll), with snap to each chip.
+- **Package row:** two lines plus a meta line, with the active toggle top-right and the ⋯ menu bottom-right. Tapping the row opens the editor.
+- **⋯ menu:** opens a small action sheet (Ubah, Duplikat, Urutkan, Hapus). Hapus is disabled with its reason on one line when the package is in use.
+- **Reorder mode:** "Urutkan" switches the list to show ↑/↓ buttons (44 px) on every row and a "Selesai" button in the head. There is no drag on phones.
+- **Editor:** a full-height bottom sheet with the handle and ✕, fields one per row, and a sticky footer holding **Simpan paket**. Price uses the numeric keypad and shows thousands separators as you type. Benefit chips wrap onto new lines.
+- **Delete confirm:** the existing confirm modal.
+
+### 8.4 Reminders on a phone
+
+- **Owner, Settings:** as in §8.2. The template editor is a textarea, 4 rows tall, growing with the text. Under it is a preview bubble styled like a WhatsApp message, capped at 320 px wide so the owner sees the real line breaks.
+- **Owner, reminder history:** a list with one row per send: client name, type, time, and a result chip (Terkirim / Gagal / Dilewati). A "Hanya gagal" toggle sits at the top. Rows load 50 at a time, with a "Muat lagi" button.
+- **Owner, Telegram summary:** at most 6 short lines, then buttons (max 8 per message, one per row). This already matches `kirimTelegramTombol_`.
+- **Client, portal home:** the "Pengingat WhatsApp" card sits below the existing "Makan hari ini" card, collapsed to one line ("Pengingat WhatsApp · 4 aktif ›"). Tapping it opens a bottom sheet with one toggle row per type the client is eligible for, each with a one-line explanation. Changes save instantly, with a toast.
+- **Client, WhatsApp message:** the key fact goes in the first line ("Besok 07:00 sesi dengan Coach Dika"). The message has a short greeting, at most ~500 characters and no long links. The opt-out line comes last.
+
+### 8.5 Mobile checks
+
+`tools/browser-check.js` gains a phone pass (390 × 844, touch enabled) for every new screen, in both themes. For each one it checks:
+
+- No element is wider than the viewport.
+- Every button, toggle and chip is at least 44 × 44 px.
+- The save bar doesn't overlap the last input.
+- Back from a section returns to the list.
+
+## 9. Rollout
 
 1. Phase A ships with no new behavior. The existing values show in the new view.
 2. Phase B: the first admin write migrates the PriceList schema. Before deploying, copy the spreadsheet (File → Make a copy) as a backup.

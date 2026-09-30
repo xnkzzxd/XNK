@@ -49,7 +49,7 @@ Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks
 
 1. Open [Task.md](Task.md) and take the lowest-numbered unchecked task in the current phase whose dependencies are done. Mark it `[~]`.
 2. Read the matching section in [Design.md](Design.md). If the design is wrong or unclear, fix the design text in the same change and say so; don't silently build something else.
-3. Implement it, following §4.
+3. Implement it, following §4. For UI, build the phone layout first, then widen to desktop.
 4. Add or update tests in `apps-script/pt-scheduler/tests/`.
 5. Run the checks (§5) until they're clean.
 6. Update docs that the change makes stale: `apps-script/README.md` (Indonesian, for the owner), root `README.md` (English), and §7 of this file.
@@ -72,7 +72,7 @@ Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks
 - Escape every dynamic string with `h()` before putting it in HTML.
 - Use tokens and components from `Theme.html` (`.card-flat`, `.field`, `.toggle`, `.btn*`, `.group-label`, …). Don't use hard-coded colors; everything must work in light and dark.
 - UI text is Indonesian, short and friendly ("Simpan", "Batal", "Bawaan 17:00").
-- Layout must work at phone width (~390 px) and desktop; check both.
+- **Phone first.** The owner and clients mostly use phones. Every UI change must work at 360–430 px as well as desktop, split at the app's 768 px breakpoint (`.only-mobile` / `.only-desktop`). Follow Design.md §8: 44 px touch targets, no sideways scroll, inputs at 16 px, the right keyboard (`inputmode="numeric"`, `type="tel"`, `type="email"`), sticky bars above the tab bar and `env(safe-area-inset-bottom)`, the phone back gesture stepping back one level, and bottom sheets for editors.
 - Use Lucide icons through `icon('name')`.
 
 ## 5. Checks before every push
@@ -80,7 +80,7 @@ Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks
 ```sh
 node apps-script/pt-scheduler/tools/check-syntax.js
 node --test apps-script/pt-scheduler/tests/*.test.js
-# UI changes (needs Playwright):
+# UI changes (needs Playwright); includes the phone pass at 390 × 844:
 NODE_PATH=$(npm root -g) node apps-script/pt-scheduler/tools/browser-check.js
 ```
 

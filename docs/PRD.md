@@ -97,6 +97,22 @@ Priority: **P0** = must ship for the phase to count, **P1** = should, **P2** = n
 | R-10 | P1 | Send pacing and daily cap per channel (delay between messages, max messages per day) to protect the WhatsApp number from being flagged. | Run stops at the cap and the summary says how many are waiting. |
 | R-11 | P2 | New type **Sisa sesi**: tell a client when they have 1–2 sessions left. | — |
 
+### 5.4 Mobile view (applies to all three priorities)
+
+The owner runs the gym from a phone and clients open the portal on a phone, so the phone layout is the main one, not an afterthought.
+
+| ID | Pri | Requirement | Acceptance |
+| --- | --- | --- | --- |
+| M-1 | P0 | Every new screen works at 360–430 px wide with no sideways scrolling, in light and dark. | Browser check at 360 and 390 px passes for each new screen. |
+| M-2 | P0 | Settings on a phone: a section list, then one section full-screen with a back arrow. The phone's back gesture returns to the list, not out of the app. | Back from a section lands on the list. |
+| M-3 | P0 | The save bar sits above the bottom tab bar and the phone's home indicator, and never covers the last field. | Last field of each section can be reached and edited with the keyboard open. |
+| M-4 | P0 | Tap targets are at least 44 × 44 px (toggles, chips, list rows, ⋯ menus). | Measured in the browser check. |
+| M-5 | P0 | Right keyboards: numbers (`inputmode="numeric"`) for price, sessions, hours and limits; phone keypad for WhatsApp numbers; email keyboard for email. | Checked per field. |
+| M-6 | P0 | Package editor on a phone is a full-height bottom sheet with its Simpan button always visible. Reorder uses ↑/↓ buttons, not drag. | Owner can add and reorder a package one-handed. |
+| M-7 | P0 | Client portal "Pengingat WhatsApp" card fits the home screen without crowding the existing cards. | Checked at 360 px. |
+| M-8 | P1 | Reminder messages read well on a phone's WhatsApp: short lines, the key fact (time, slot, PR title) in the first line, under ~500 characters. | Template preview in Settings is shown at phone width. |
+| M-9 | P1 | The owner's Telegram summary fits one phone screen, with at most 8 buttons per message. | — |
+
 ## 6. Decisions needed from the owner
 
 | ID | Question | Options | Recommendation |
@@ -127,8 +143,8 @@ Priority: **P0** = must ship for the phase to count, **P1** = should, **P2** = n
 
 | Phase | Scope | Ships when |
 | --- | --- | --- |
-| A | Settings UI (S-1…S-8) | Priority 1. No new behavior, only a new home for existing settings, plus S-5/S-7/S-8. |
-| B | Pricelist CRUD (P-1…P-8) | Priority 2. Needs the Settings view from phase A for its section. |
-| C1 | Client reminder foundation: channel adapter with Manual mode, per-client log, opt-outs, summary, quiet hours (R-3…R-7) | Can ship before D-1 is decided; behavior stays manual. |
-| C2 | Real channel (R-1, R-2, R-8…R-10) | After D-1 is decided and the sender number exists. |
+| A | Settings UI (S-1…S-8, M-1…M-5) | Priority 1. No new behavior, only a new home for existing settings, plus S-5/S-7/S-8. |
+| B | Pricelist CRUD (P-1…P-8, M-6) | Priority 2. Needs the Settings view from phase A for its section. |
+| C1 | Client reminder foundation: channel adapter with Manual mode, per-client log, opt-outs, summary, quiet hours (R-3…R-7, M-7) | Can ship before D-1 is decided; behavior stays manual. |
+| C2 | Real channel (R-1, R-2, R-8…R-10, M-8, M-9) | After D-1 is decided and the sender number exists. |
 | Later | S-9, S-10, P-9, R-11 | When phases A–C are stable. |
