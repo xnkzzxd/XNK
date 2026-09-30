@@ -361,6 +361,43 @@
       </form>
     </div>
 
+    <!-- Paket & Harga: menu aksi paket -->
+    <div class="sheet sm hide" id="sheet-pkg-menu" role="dialog" aria-modal="true" aria-labelledby="pkg-menu-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title truncate" id="pkg-menu-title">Paket</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack">
+        <button type="button" class="list-item interactive" style="min-height:56px" onclick="window.pkgMenuAction('edit')"><i data-lucide="pencil"></i><span class="li-title">Ubah</span></button>
+        <button type="button" class="list-item interactive" style="min-height:56px" onclick="window.pkgMenuAction('dup')"><i data-lucide="repeat"></i><span class="li-title">Duplikat</span></button>
+        <button type="button" class="list-item interactive" id="pkg-menu-delete" style="min-height:56px" onclick="window.pkgMenuAction('delete')"><i data-lucide="trash-2"></i><span class="li-title">Hapus</span></button>
+        <p class="hint" id="pkg-menu-delete-note"></p>
+      </div>
+    </div>
+
+    <!-- Paket & Harga: tambah / ubah paket -->
+    <div class="sheet tall hide" id="sheet-package" role="dialog" aria-modal="true" aria-labelledby="pkg-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pkg-title">Paket baru</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-package" onsubmit="window.pkgSave(event)" novalidate>
+        <div class="field" id="pkg-f-name"><label class="label" for="pkg-name">Nama paket</label><input class="input" type="text" id="pkg-name" maxlength="60" autocomplete="off" placeholder="Contoh: Regular 8 Sesi"><p class="hint err-msg" role="alert"></p></div>
+        <div class="field"><label class="label" for="pkg-cat">Kategori</label><select class="select" id="pkg-cat"></select></div>
+        <div class="field" id="pkg-f-price"><label class="label" for="pkg-price">Harga</label>
+          <div class="input-affix"><span class="affix">Rp</span><input class="input num" type="text" inputmode="numeric" id="pkg-price" autocomplete="off" placeholder="800.000" oninput="window.pkgFormatPrice(this)"></div>
+          <p class="hint err-msg" role="alert"></p></div>
+        <div class="field" id="pkg-f-sessions"><label class="label" for="pkg-sessions">Jumlah sesi</label>
+          <div class="two"><input class="input num" type="number" inputmode="numeric" id="pkg-sessions" min="1" max="200" placeholder="8">
+          <label class="pkg-flex"><input type="checkbox" id="pkg-flex" onchange="window.pkgFlexChange()"><span>Fleksibel</span></label></div>
+          <p class="hint err-msg" role="alert"></p></div>
+        <div class="field"><label class="label" for="pkg-duration">Durasi</label><input class="input" type="text" id="pkg-duration" maxlength="40" autocomplete="off" placeholder="Contoh: 1 Bulan"></div>
+        <div class="field"><label class="label" for="pkg-benefit-input">Benefit</label>
+          <div class="pkg-benefit-add"><input class="input" type="text" id="pkg-benefit-input" maxlength="60" autocomplete="off" enterkeyhint="done" placeholder="Ketik lalu Enter"><button type="button" class="btn btn-outline" onclick="window.pkgAddBenefit()">Tambah</button></div>
+          <div class="pkg-benefits" id="pkg-benefits"></div><p class="hint err-msg" id="pkg-err-benefit" role="alert" style="display:block"></p></div>
+        <div class="field"><label class="label" for="pkg-desc">Deskripsi</label><textarea class="textarea" id="pkg-desc" rows="3" maxlength="300" placeholder="Satu-dua kalimat tentang paket ini"></textarea></div>
+        <div class="row-between"><div><p class="li-title">Tampil di halaman booking</p><p class="li-sub">Nonaktif = tersembunyi, klien lama tidak terpengaruh</p></div>
+          <label class="toggle"><input type="checkbox" id="pkg-active" aria-label="Tampil di halaman booking"><span></span></label></div>
+      </form>
+      <div class="sheet-foot"><button type="submit" form="form-package" class="btn btn-primary btn-lg btn-block" id="pkg-save-btn">Simpan paket</button></div>
+    </div>
+
     <!-- Potong foto -->
     <div class="sheet hide" id="modal-crop-avatar" role="dialog" aria-modal="true" aria-labelledby="crop-title">
       <div class="sheet-handle"></div>

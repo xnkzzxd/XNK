@@ -125,7 +125,7 @@ All colors come from the existing tokens (`--bg`, `--surface`, `--border`, `--fg
 
 - `_priceListSchema_(headerRow)` maps columns by **header name**, not position.
 - `_ensurePriceListSchema_()` runs on every admin write, under the script lock. If "Jumlah Sesi" is missing it inserts it at E. If "Urutan" is missing it appends it. It is idempotent.
-- `getPriceList()` and `_allPackagePrices_()` switch to header mapping. Public output shape doesn't change, apart from also being sorted by Urutan.
+- `getPriceList()` and `_allPackagePrices_()` switch to header mapping. Public output shape doesn't change, apart from also being sorted (categories in order of first appearance in the sheet, then Urutan). The first admin write also numbers the existing packages (Urutan 1..n per category, in their current order) so a newly added package goes last, not first.
 
 `PACKAGE_CATEGORIES` (server constant, sent with the admin list):
 
@@ -156,8 +156,8 @@ All admin functions call `requireAdmin_(token)` first and write under `LockServi
 ### 2.3 UI (section "Paket & Harga")
 
 - Toolbar: category chips (Semua · Student · College · Regular · Premium · Core), a "Tampilkan nonaktif" toggle, and **+ Paket**.
-- A list row shows the name, a price formatted `Rp 1.200.000`, "12 sesi · 1 Bulan", a usage chip "8 klien", an active toggle and a ⋯ menu (Ubah, Duplikat, Hapus). On desktop, rows can be dragged to reorder; on phone, ↑/↓ buttons appear in edit mode.
-- The editor is a bottom sheet on phone and the right detail pane on desktop, with the fields from §2.1. The price input formats thousands as you type and stores digits only. Benefits are a chip input (Enter adds a chip, × removes one). Sessions has a "Fleksibel" checkbox that clears the number.
+- A list row shows the name, a price formatted `Rp 1.200.000`, "12 sesi · 1 Bulan", a usage chip "8 klien", an active toggle and a ⋯ menu (Ubah, Duplikat, Hapus). Reordering uses ↑/↓ buttons on every screen size ("Urutkan" mode, one category at a time); drag-and-drop is not built.
+- The editor is a bottom sheet (full height on phone, a centered dialog on desktop), with the fields from §2.1. The price input formats thousands as you type and stores digits only. Benefits are a chip input (Enter adds a chip, × removes one). Sessions has a "Fleksibel" checkbox that clears the number.
 - Delete is shown disabled with the reason when the package is in use.
 - After any change, refresh `window.priceListData` so member forms and the portal catalog see it without a reload.
 

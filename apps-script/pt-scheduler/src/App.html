@@ -567,6 +567,7 @@
 
   const SET_SECTIONS = [
     ['tampilan', 'sun-moon', 'Tampilan'],
+    ['paket', 'package', 'Paket & Harga'],
     ['pengingat', 'bell', 'Pengingat Klien'],
     ['notifikasi', 'send', 'Notifikasi Admin'],
     ['jam', 'calendar-clock', 'Jam Operasional'],
@@ -653,6 +654,7 @@
       return '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
         '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>';
     },
+    paket: function () { return '<div class="stack" id="pkg-root">' + pkgHtml() + '</div>'; },
     pengingat: function () {
       const r = setState.data.reminder || { enabled: false, tplSleep: '', jobs: {} };
       let html = '<div class="card-flat stack">' + setToggleCard('rmdEnabled', 'Pengingat otomatis', 'Digest ke Telegram Coach: booking, PR, makan, dan tidur', r.enabled) +
@@ -701,6 +703,7 @@
     if (!d) return '';
     switch (id) {
       case 'tampilan': return ({ system: 'Otomatis', light: 'Terang', dark: 'Gelap' })[currentTheme()] || '';
+      case 'paket': return pkgState.data ? pkgState.data.packages.filter(function (p) { return p.aktif; }).length + ' paket aktif' : '';
       case 'pengingat': return (d.reminder && d.reminder.enabled ? 'Aktif' : 'Mati') + (setState.status ? (setState.status.triggerInstalled ? ' · trigger terpasang' : ' · trigger belum terpasang') : '');
       case 'notifikasi': return d.telegramEnabled ? (d.telegramBotTokenMask ? 'Telegram aktif' : 'Telegram: token belum diisi') : 'Telegram mati';
       case 'jam': return 'Buka ' + Object.keys(d.businessHours || {}).length + ' hari';
@@ -714,6 +717,246 @@
         '<span class="sn-ic">' + icon(s[1]) + '</span><span class="sn-txt"><b>' + s[2] + '</b><small>' + h(setSectionStatus(s[0])) + '</small></span>' + icon('chevron-right', 'class="sn-chev"') + '</button>';
     }).join('');
   }
+
+  // ── Paket & Harga (Pengaturan → bagian "paket") ─────────────────────────────
+  // Berbeda dengan bagian lain, tiap aksi di sini langsung tersimpan (tidak ada bar simpan).
+  const pkgState = { data: null, cat: '__all', showInactive: false, reorder: false, editing: null, benefits: [], menuId: null };
+
+  function pkgList() {
+    if (!pkgState.data) return [];
+    return pkgState.data.packages.filter(function (p) {
+      if (pkgState.cat !== '__all' && p.kategori !== pkgState.cat) return false;
+      return pkgState.showInactive || pkgState.reorder || p.aktif;
+    });
+  }
+  function pkgFind(id) {
+    return pkgState.data ? pkgState.data.packages.filter(function (p) { return p.id === id; })[0] : null;
+  }
+  function pkgCatLabel(id) {
+    const c = pkgState.data && pkgState.data.categories.filter(function (x) { return x.id === id; })[0];
+    return c ? c.label : id;
+  }
+  function pkgUsageText(p) {
+    const u = p.usage || { activeMembers: 0, logEntries: 0 };
+    return u.activeMembers + ' klien';
+  }
+
+  function pkgHtml() {
+    const d = pkgState.data;
+    if (!d) return '<span class="li-sub">Memuat paket…</span>';
+    const chips = [['__all', 'Semua']].concat(d.categories.map(function (c) { return [c.id, c.label]; })).map(function (c) {
+      const n = d.packages.filter(function (p) { return (c[0] === '__all' || p.kategori === c[0]) && p.aktif; }).length;
+      return '<button type="button" class="chip' + (pkgState.cat === c[0] ? ' active' : '') + '" data-cat="' + h(c[0]) + '" onclick="window.pkgSetCat(\'' + h(c[0]) + '\')">' + h(c[1]) + ' <span class="chip-count">' + n + '</span></button>';
+    }).join('');
+    const canReorder = pkgState.cat !== '__all';
+    let html = '<div class="chips" id="pkg-chips" role="tablist" aria-label="Kategori paket">' + chips + '</div>' +
+      '<div class="row-between"><div><p class="li-title">Tampilkan nonaktif</p><p class="li-sub">Paket yang disembunyikan dari halaman booking</p></div>' +
+      '<label class="toggle"><input type="checkbox" id="pkg-show-inactive" onchange="window.pkgToggleInactive(this)"' + (pkgState.showInactive ? ' checked' : '') + ' aria-label="Tampilkan nonaktif"><span></span></label></div>' +
+      '<div class="pkg-toolbar"><button type="button" class="btn btn-dark" id="pkg-add" onclick="window.pkgEdit(null)">' + icon('plus') + ' Paket</button>' +
+      '<button type="button" class="btn btn-outline" id="pkg-reorder-btn" onclick="window.pkgToggleReorder()"' + (canReorder ? '' : ' disabled') + '>' + (pkgState.reorder ? icon('check') + ' Selesai' : icon('repeat') + ' Urutkan') + '</button></div>' +
+      (canReorder ? '' : '<p class="hint">Pilih satu kategori untuk mengubah urutan.</p>');
+    const list = pkgList();
+    if (!list.length) {
+      html += '<div class="empty"><span class="empty-icon">' + icon('package') + '</span><b>Belum ada paket</b><span>' + (d.packages.length ? 'Tidak ada paket aktif di kategori ini. Nyalakan "Tampilkan nonaktif" untuk melihat semuanya.' : 'Tambahkan paket pertama dengan tombol + Paket.') + '</span></div>';
+      return html;
+    }
+    html += '<div class="list" id="pkg-list">' + list.map(function (p, i) {
+      const meta = (p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '') + ' · ' + pkgUsageText(p);
+      const right = pkgState.reorder
+        ? '<button type="button" class="icon-btn plain" aria-label="Naikkan ' + h(p.namaPaket) + '"' + (i === 0 ? ' disabled' : '') + ' onclick="window.pkgMove(\'' + h(p.id) + '\', -1)">' + icon('chevron-up') + '</button>' +
+          '<button type="button" class="icon-btn plain" aria-label="Turunkan ' + h(p.namaPaket) + '"' + (i === list.length - 1 ? ' disabled' : '') + ' onclick="window.pkgMove(\'' + h(p.id) + '\', 1)">' + icon('chevron-down') + '</button>'
+        : '<label class="toggle"><input type="checkbox" data-pkg="' + h(p.id) + '" onchange="window.pkgToggle(\'' + h(p.id) + '\', this)"' + (p.aktif ? ' checked' : '') + ' aria-label="Aktif: ' + h(p.namaPaket) + '"><span></span></label>' +
+          '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(p.namaPaket) + '" onclick="window.pkgMenu(\'' + h(p.id) + '\')">' + icon('ellipsis') + '</button>';
+      return '<div class="list-item pkg-row' + (p.aktif ? '' : ' pkg-inactive') + '" data-pkg-row="' + h(p.id) + '">' +
+        '<button type="button" class="pkg-main" onclick="window.pkgEdit(\'' + h(p.id) + '\')"' + (pkgState.reorder ? ' disabled' : '') + '>' +
+        '<span class="li-title truncate" style="display:block">' + h(p.namaPaket) + (p.aktif ? '' : ' <span class="pill dashed">Nonaktif</span>') + '</span>' +
+        '<span class="li-sub num" style="display:block;font-weight:700">' + h(formatRp(p.harga)) + '</span>' +
+        '<span class="li-sub" style="display:block">' + h(pkgCatLabel(p.kategori) + ' · ' + meta) + '</span></button>' +
+        '<span class="li-trail">' + right + '</span></div>';
+    }).join('') + '</div>';
+    return html;
+  }
+  function pkgRefreshView() {
+    const el = $('pkg-root');
+    if (el) { el.innerHTML = pkgHtml(); paintIcons(); }
+    refreshSettingsNav();
+  }
+  function pkgLoad() {
+    return adminCall('getPriceListAdmin').then(function (d) { pkgState.data = d; pkgRefreshView(); })
+      .catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); });
+  }
+  // Setelah perubahan: form klien, katalog portal, dan pilihan paket ikut yang terbaru tanpa muat ulang.
+  function pkgRefreshPublic() {
+    return publicCall('getPriceList').then(function (r) { window.priceListData = r || []; }).catch(function () {});
+  }
+  function pkgAfterChange() {
+    return Promise.all([pkgLoad(), pkgRefreshPublic()]);
+  }
+
+  window.pkgSetCat = function (cat) { pkgState.cat = cat; if (cat === '__all') pkgState.reorder = false; pkgRefreshView(); };
+  window.pkgToggleInactive = function (el) { pkgState.showInactive = !!el.checked; pkgRefreshView(); };
+  window.pkgToggleReorder = function () { pkgState.reorder = !pkgState.reorder; pkgRefreshView(); };
+
+  window.pkgToggle = function (id, el) {
+    const want = !!el.checked;
+    el.disabled = true;
+    adminCall('setPackageActive', id, want).then(function () {
+      window.showToast(want ? 'Paket ditampilkan.' : 'Paket disembunyikan.');
+      return pkgAfterChange();
+    }).catch(function (err) {
+      el.checked = !want; el.disabled = false;
+      window.showToast('Gagal: ' + window.authMessage(err));
+    });
+  };
+
+  window.pkgMove = function (id, dir) {
+    const list = pkgList();
+    const i = list.findIndex(function (p) { return p.id === id; });
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    const all = pkgState.data.packages;
+    const a = all.indexOf(list[i]), b = all.indexOf(list[j]);
+    const tmp = all[a]; all[a] = all[b]; all[b] = tmp;
+    pkgRefreshView();
+    const ids = pkgList().map(function (p) { return p.id; });
+    adminCall('reorderPackages', pkgState.cat, ids).then(pkgRefreshPublic).catch(function (err) {
+      window.showToast('Gagal mengurutkan: ' + window.authMessage(err));
+      pkgLoad();
+    });
+  };
+
+  window.pkgMenu = function (id) {
+    const p = pkgFind(id);
+    if (!p) return;
+    pkgState.menuId = id;
+    const u = p.usage || { activeMembers: 0, logEntries: 0 };
+    const used = u.activeMembers > 0 || u.logEntries > 0;
+    $('pkg-menu-title').textContent = p.namaPaket;
+    const del = $('pkg-menu-delete');
+    del.disabled = used;
+    $('pkg-menu-delete-note').textContent = used ? 'Dipakai ' + u.activeMembers + ' klien / ' + u.logEntries + ' transaksi. Nonaktifkan saja.' : '';
+    openSheet('sheet-pkg-menu');
+  };
+  window.pkgMenuAction = function (action) {
+    const id = pkgState.menuId;
+    window.closeModal();
+    if (!id) return;
+    setTimeout(function () {
+      if (action === 'edit') window.pkgEdit(id);
+      else if (action === 'dup') window.pkgEdit(null, id);
+      else if (action === 'delete') window.pkgDelete(id);
+    }, 480);
+  };
+  window.pkgDelete = function (id) {
+    const p = pkgFind(id);
+    if (!p) return;
+    window.showConfirmModal('Paket <b>' + h(p.namaPaket) + '</b> dihapus permanen. Ini tidak bisa dibatalkan.', function () {
+      adminCall('deletePackage', id).then(function () { window.showToast('Paket dihapus.'); return pkgAfterChange(); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus paket?', confirmText: 'Hapus', variant: 'danger' });
+  };
+
+  // Editor paket (lembar bawah; penuh tinggi di HP)
+  function pkgFmtPrice(digits) {
+    const s = String(digits || '').replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+  window.pkgFormatPrice = function (el) { el.value = pkgFmtPrice(el.value); };
+  window.pkgFlexChange = function () {
+    const flex = $('pkg-flex').checked, s = $('pkg-sessions');
+    if (flex) s.value = '';
+    s.disabled = flex;
+  };
+  function pkgRenderBenefits() {
+    $('pkg-benefits').innerHTML = pkgState.benefits.map(function (b, i) {
+      return '<span class="chip">' + h(b) + '<button type="button" class="chip-x" aria-label="Hapus ' + h(b) + '" onclick="window.pkgRemoveBenefit(' + i + ')">' + icon('x') + '</button></span>';
+    }).join('');
+    paintIcons();
+  }
+  window.pkgAddBenefit = function () {
+    const inp = $('pkg-benefit-input');
+    const v = inp.value.trim();
+    if (!v) return;
+    if (v.indexOf(',') !== -1) { $('pkg-err-benefit').textContent = 'Benefit tidak boleh berisi koma.'; return; }
+    if (v.length > 60) { $('pkg-err-benefit').textContent = 'Setiap benefit maksimal 60 karakter.'; return; }
+    if (pkgState.benefits.length >= 10) { $('pkg-err-benefit').textContent = 'Benefit maksimal 10 butir.'; return; }
+    $('pkg-err-benefit').textContent = '';
+    pkgState.benefits.push(v);
+    inp.value = '';
+    pkgRenderBenefits();
+  };
+  window.pkgRemoveBenefit = function (i) { pkgState.benefits.splice(i, 1); pkgRenderBenefits(); };
+
+  window.pkgEdit = function (id, dupOf) {
+    const src = pkgFind(id || dupOf);
+    const editing = id ? src : null;
+    pkgState.editing = editing ? editing.id : null;
+    $('pkg-title').textContent = editing ? 'Ubah paket' : (dupOf ? 'Duplikat paket' : 'Paket baru');
+    $('pkg-cat').innerHTML = pkgState.data.categories.map(function (c) { return '<option value="' + h(c.id) + '">' + h(c.label) + '</option>'; }).join('');
+    if (src && !pkgState.data.categories.some(function (c) { return c.id === src.kategori; })) {
+      $('pkg-cat').innerHTML += '<option value="' + h(src.kategori) + '">' + h(src.kategori) + '</option>';
+    }
+    $('pkg-name').value = src ? src.namaPaket + (dupOf ? ' (salinan)' : '') : '';
+    $('pkg-cat').value = src ? src.kategori : (pkgState.cat !== '__all' ? pkgState.cat : 'regular');
+    $('pkg-price').value = src ? pkgFmtPrice(src.harga) : '';
+    $('pkg-flex').checked = !!src && src.jumlahSesi === '';
+    $('pkg-sessions').value = src && src.jumlahSesi !== '' ? src.jumlahSesi : '';
+    window.pkgFlexChange();
+    $('pkg-duration').value = src ? src.durasi : '';
+    $('pkg-desc').value = src ? src.deskripsi : '';
+    $('pkg-active').checked = editing ? !!editing.aktif : false;
+    pkgState.benefits = src ? src.benefit.slice() : [];
+    $('pkg-benefit-input').value = '';
+    document.querySelectorAll('#form-package .err-msg').forEach(function (e) { e.textContent = ''; });
+    document.querySelectorAll('#form-package .field').forEach(function (f) { f.classList.remove('has-error'); });
+    pkgRenderBenefits();
+    openSheet('sheet-package');
+  };
+
+  function pkgFieldError(fieldId, msg) {
+    const f = $(fieldId);
+    if (!f) return;
+    f.classList.toggle('has-error', !!msg);
+    const m = f.querySelector('.err-msg'); if (m) m.textContent = msg || '';
+  }
+  window.pkgSave = function (e) {
+    e.preventDefault();
+    const pending = $('pkg-benefit-input').value.trim();
+    if (pending) window.pkgAddBenefit();
+    const name = $('pkg-name').value.trim();
+    const priceDigits = $('pkg-price').value.replace(/\D/g, '');
+    const flex = $('pkg-flex').checked;
+    const sess = $('pkg-sessions').value.trim();
+    let bad = false;
+    const fail = function (field, msg) { pkgFieldError(field, msg); bad = true; };
+    pkgFieldError('pkg-f-name', ''); pkgFieldError('pkg-f-price', ''); pkgFieldError('pkg-f-sessions', '');
+    if (!name) fail('pkg-f-name', 'Nama paket wajib diisi.');
+    if (!priceDigits) fail('pkg-f-price', 'Isi harga dalam Rupiah.');
+    else if (Number(priceDigits) > 100000000) fail('pkg-f-price', 'Harga maksimal Rp 100.000.000.');
+    if (!flex && (!/^\d+$/.test(sess) || Number(sess) < 1 || Number(sess) > 200)) fail('pkg-f-sessions', 'Isi jumlah sesi 1–200, atau centang Fleksibel.');
+    if (bad) return;
+    const payload = {
+      id: pkgState.editing || undefined,
+      namaPaket: name,
+      kategori: $('pkg-cat').value,
+      harga: Number(priceDigits),
+      jumlahSesi: flex ? '' : Number(sess),
+      durasi: $('pkg-duration').value,
+      deskripsi: $('pkg-desc').value,
+      benefit: pkgState.benefits.slice(),
+      aktif: $('pkg-active').checked
+    };
+    const done = busy($('pkg-save-btn'), 'Menyimpan…');
+    adminCall('savePackage', payload).then(function () {
+      done();
+      window.closeModal();
+      window.showToast('Paket disimpan.');
+      return pkgAfterChange();
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target && e.target.id === 'pkg-benefit-input') { e.preventDefault(); window.pkgAddBenefit(); }
+  });
 
   window.renderSettings = function () {
     const el = $('view-settings');
@@ -737,6 +980,7 @@
       refreshSettingsNav();
       if (setState.open) renderSettingsSection(setState.open);
       loadRmdStatus();
+      if (!pkgState.data) pkgLoad();
     }).catch(function (err) {
       setState.built = false;
       window.showToast('Gagal memuat Pengaturan: ' + window.authMessage(err));
@@ -784,6 +1028,7 @@
     setDirty(false);
     paintIcons();
     if (id === 'tampilan') renderThemeSeg();
+    if (id === 'paket') pkgLoad();
     if (id === 'pengingat') { setState.log = null; window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); }
     refreshSettingsNav();
     const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 });

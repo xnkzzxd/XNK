@@ -1111,6 +1111,25 @@ button.avatar { border: 0; cursor: pointer; }
 }
 @media (min-width: 1200px) { .save-bar { left: calc(var(--sidebar-w) + 28px); } }
 
+/* ── Paket & Harga ───────────────────────────────────────────────────────── */
+.pkg-toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pkg-row { align-items: center; gap: 8px; padding-right: 8px; }
+.pkg-main { flex: 1; min-width: 0; min-height: 44px; text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.pkg-main[disabled] { cursor: default; }
+.pkg-inactive .pkg-main { opacity: 0.65; }
+.pkg-row .li-trail { gap: 4px; }
+.settings-pane .chip { height: 44px; }
+.chips { scroll-snap-type: x proximity; }
+.chips .chip { scroll-snap-align: start; }
+.pkg-benefit-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.pkg-benefits { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pkg-benefits .chip { height: 44px; padding-right: 0; }
+.chip-x { width: 44px; height: 44px; display: inline-grid; place-items: center; color: var(--fg-muted); }
+.pkg-flex { display: flex; align-items: center; gap: 10px; min-height: 48px; font-weight: 700; font-size: var(--fs-sm); }
+.pkg-flex input { width: 24px; height: 24px; accent-color: var(--ink); }
+.pkg-flex input:disabled + span { opacity: 0.5; }
+@media (max-width: 767px) { .sheet.tall { height: calc(100dvh - 24px); } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }

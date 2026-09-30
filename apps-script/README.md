@@ -77,6 +77,13 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
 - **Notifikasi Admin**: Telegram (saklar, token, chat ID, tombol tes) dan email notifikasi
   (`NOTIF_EMAIL`, kosong = email pemilik akun). Token yang tersimpan hanya tampil sebagai
   `••••1234`; dikosongkan berarti token lama tetap dipakai.
+- **Paket & Harga**: tambah, ubah, gandakan, urutkan, tampil/sembunyikan, dan hapus paket tanpa membuka
+  spreadsheet. Paket hanya bisa dihapus kalau tidak ada klien atau transaksi yang memakainya;
+  kalau tidak, **nonaktifkan** saja (klien lama tidak terpengaruh). Kategori tetap: student, college,
+  regular, premium, core. Harga tiap transaksi disimpan di sheet `Members` kolom K ("Harga"), jadi
+  mengubah harga paket **tidak** mengubah laporan pendapatan bulan-bulan lalu. Saat pertama kali
+  dipakai, sheet `PriceList` dilengkapi kolom "Jumlah Sesi" (kalau belum ada) dan "Urutan".
+  **Salin spreadsheet dulu** (File → Buat salinan) sebelum menyimpan perubahan pertama.
 - **Jam Operasional** per hari (`BUSINESS_HOURS_JSON`).
 - **Keamanan**: ganti PIN, `LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`, `MEMBER_LOGIN_MAX_FAILS`,
   `ADMIN_SESSION_DAYS`. Kolom angka yang dikosongkan kembali ke nilai bawaan ("Bawaan …").
