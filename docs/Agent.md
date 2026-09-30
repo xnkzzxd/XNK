@@ -103,8 +103,8 @@ clasp pull
 
 - Phase A is built: Pengaturan is its own admin page with 7 sections (Tampilan, Paket & Harga, Pengingat Klien, Notifikasi Admin, Jam Operasional, Keamanan, Akun), per-section saves, dirty tracking, masked Telegram token, reminder trigger install/status/history. The client portal keeps the small settings sheet. 
 - Phase B is built: Pengaturan → Paket & Harga manages packages (add/edit/duplicate/reorder/activate/delete-when-unused). PriceList columns are read by header name; the first admin write adds "Jumlah Sesi" and "Urutan". Transactions store the price in `Members` column K; revenue uses it (older rows fall back to the current price).
-- Reminders go to the owner's Telegram with one `wa.me` button per client; the owner taps it and presses Send in WhatsApp. This is the chosen design: **never add a WhatsApp API or gateway** or send to clients automatically. Phase C makes every message client-ready.
+- Phase C is built: reminders go to the owner's Telegram as one message per type with one `wa.me` button per client; the button carries a message written to the client (editable templates with placeholders, server preview). Types: sesi-besok (new, 19:00), booking-minggu, pr, makan-pagi/sore. Per-client off switches live in MemberData column P. This is the chosen design: **never add a WhatsApp API or gateway** or send to clients automatically.
 - Tasks/PR for clients with recurring tasks and templates are live; the client portal shows them and a "Makan hari ini" card.
 - `runReminderTick` is a public trigger handler, gated by `RMD_ENABLED`, a lock and a throttle.
 - Sessions: admin 30 days, member 90 days (defaults). Revenue estimate = 65 % of package price.
-- Tests: 86 passing (`node --test`), plus the browser check with a phone pass for Pengaturan.
+- Tests: 109 passing (`node --test`), plus the browser check with a phone pass for Pengaturan.

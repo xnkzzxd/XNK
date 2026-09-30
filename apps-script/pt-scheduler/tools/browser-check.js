@@ -435,6 +435,36 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check(env.props.RMD_MAKAN_PAGI_ENABLED === 'true' && env.props.RMD_MAKAN_PAGI_HOUR === '7', 'meal reminders can be switched on and timed from the panel');
 
+    // ── Pesan ke klien: template + pratinjau, dan saklar per klien ────────────
+    await page.click('.settings-nav-item[data-section="pengingat"]');
+    await page.waitForTimeout(700);
+    check(await page.locator('[data-k="job-sesi-besok-enabled"]').count() === 1, 'Pengingat has a "Sesi besok" card');
+    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 5, 'every reminder type has an editable client message');
+    check((await page.textContent('#pv-pr')).startsWith('Halo Budi, pengingat PR kamu'), 'the preview shows the default client message with sample data');
+    await page.fill('#set-job-pr-tpl', 'Hai {nama}, PR: {pr}');
+    await page.waitForTimeout(800);
+    check((await page.textContent('#pv-pr')).startsWith('Hai Budi, PR: •'), 'the preview updates while typing');
+    await page.fill('#set-job-pr-tpl', 'Hai {foo}');
+    check((await page.locator('[data-fk="job-pr-tpl"].has-error').count()) === 1 && await page.isDisabled('#settings-save-btn'), 'an unknown placeholder shows an error and blocks saving');
+    await page.fill('#set-job-pr-tpl', 'Hai {nama}, PR: {pr}');
+    await page.click('#settings-save-btn');
+    await page.waitForTimeout(700);
+    check(env.props.RMD_TPL_PR === 'Hai {nama}, PR: {pr}', 'the message template is saved');
+    await page.click('#set-job-pr-tpl ~ .link-btn');
+    check((await page.inputValue('#set-job-pr-tpl')).startsWith('Halo {nama}'), '"Kembalikan pesan bawaan" restores the default text');
+    await page.click('#settings-save-btn');
+    await page.waitForTimeout(600);
+    check(env.props.RMD_TPL_PR === undefined, 'saving the default text stores no override');
+    await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
+    await page.waitForTimeout(700);
+    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 3, 'client page: all three reminder switches start on');
+    await page.click('#profile-remind-prefs input[data-remind="pr"]');
+    await page.waitForTimeout(600);
+    check(env.memberRow('PT-A')[15] === 'pr', 'client page: switching PR off is saved for that client (MemberData column P)');
+    await page.click('#profile-remind-prefs input[data-remind="pr"]');
+    await page.waitForTimeout(500);
+    check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
+
     // ── Paket & Harga (desktop) ───────────────────────────────────────────────
     await page.click('.settings-nav-item[data-section="paket"]');
     await page.waitForTimeout(600);
@@ -610,6 +640,25 @@ async function contrastReport(page) {
     await page.click('#btn-confirm-modal-no');
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.currentView)) === 'settings', 'phone: choosing Batal stays on Pengaturan');
+
+    // Pesan ke klien & saklar per klien di HP
+    await page.click('#tabbar .tab[data-view="dashboard"]').catch(() => {});
+    await page.evaluate(() => window.navigate('settings', { force: true }));
+    await page.waitForTimeout(500);
+    await page.click('.settings-nav-item[data-section="pengingat"]');
+    await page.waitForTimeout(700);
+    const bub = await page.locator('#pv-pr').boundingBox();
+    check(!!bub && bub.width <= 322 && (await overflow()) <= 0, 'phone: the message preview is a WhatsApp-style bubble (' + Math.round(bub && bub.width) + ' px wide) without sideways scroll');
+    check(((await page.textContent('#pv-pr')) || '').startsWith('Halo Budi'), 'phone: the preview text is loaded');
+    await page.evaluate(() => window.navigate('clients', { force: true }));
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(800);
+    const remind = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
+    check(remind.length === 3 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
+    const hit = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs input[data-remind]')).map(e => e.getBoundingClientRect()).every(r => r.height >= 43.5 && r.width >= 43.5));
+    check(hit, 'phone: the switch touch area is at least 44 × 44 px');
+    check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');
+    await shot(page, 'client-reminders-mobile-' + scheme);
     noErrors(errors);
     await context.close();
   }

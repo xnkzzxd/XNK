@@ -74,6 +74,14 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
 - **Pengingat Klien**: saklar utama, tiap jenis (Booking Minggu, PR, Makan pagi/sore) dengan jam
   dan tombol tes, kalimat tidur, tombol **Pasang** trigger (tanpa membuka editor), dan riwayat
   pengingat (nama klien, bukan nomor).
+- **Pesan ke klien**: tiap jenis pengingat punya isi pesan yang bisa diubah (placeholder seperti
+  `{nama}`, `{jam}`, `{coach}`, `{slot}`, `{pr}`, `{tip}`, `{tidur}`) dengan pratinjau. **Cara pakai**: bot
+  Telegram mengirim satu pesan per jenis dengan satu tombol per klien; tekan nama klien → WhatsApp
+  terbuka ke klien itu dengan pesan siap kirim → tekan Kirim. Klien tanpa nomor WA yang valid
+  tercantum di baris "📵 Tanpa nomor". Jenis yang ada: **Sesi besok** (19:00), **Booking Minggu**,
+  **PR**, **Makan pagi/sore**. Di halaman klien, tiap jenis bisa dimatikan per klien (kolom P
+  "Pengingat Nonaktif" di MemberData). Selama **Sesi besok** aktif, tombol WA dan kalimat tidur
+  pindah dari email harian ke pesan ini; kalau dimatikan, email harian seperti biasa.
 - **Notifikasi Admin**: Telegram (saklar, token, chat ID, tombol tes) dan email notifikasi
   (`NOTIF_EMAIL`, kosong = email pemilik akun). Token yang tersimpan hanya tampil sebagai
   `••••1234`; dikosongkan berarti token lama tetap dipakai.

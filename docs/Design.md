@@ -191,31 +191,31 @@ This is today's engine (`kirimTelegramTombol_`, `_waLink_`, `ReminderLog`, `_due
 | `makan-pagi` / `makan-sore` | 06:00 / 16:00 | Core-package clients with meal reminder on | `Budi` | today's `_makanWaText_` with `{tip}` |
 | `sisa-sesi` (later) | Daily 10:00 | Clients with 1–2 sessions left | `Budi · sisa 1` | `Hai {nama}, sesi kamu tinggal {sisa}. Mau lanjut paket?` |
 
-- `sesi-besok` replaces the "Kirim WA Konfirmasi" links in `sendDailyReminderEmail`. The 05:00/20:00 owner email stays as a schedule report, without WhatsApp links.
-- `RMD_TPL_SLEEP` stops being a line in the owner's email and becomes `{tidur}` inside `sesi-besok`.
+- `sesi-besok` replaces the "Kirim WA Konfirmasi" links in `sendDailyReminderEmail`, but only while it is active (reminders on and this type on). While it is off, the 05:00/20:00 owner email and Telegram message keep their links, exactly as before. Either way the email stays a schedule report for the owner.
+- `RMD_TPL_SLEEP` moves from the owner's email into `{tidur}` inside `sesi-besok` while that reminder is active; otherwise it stays in the email as before.
 - Rewrite each existing text so it speaks to the client (greeting with `{nama}`, key fact in the first line, ≤ 500 characters).
 
 ### 3.3 Telegram message layout (for the owner)
 
 ```
-🔔 Sesi besok · Rabu 1 Okt · 12 klien
+🔔 Sesi besok · Kamis 1 Okt · 12 klien
 Tekan nama → WhatsApp terbuka dengan pesan siap kirim.
+📵 Tanpa nomor: Andi, Rina          ← only when someone has no valid number
 [ Budi · 07:00 ]
 [ Sari · 08:00 ]
-… (max 8 per message, then "↪️ Lanjutan (2/2)")
-📵 Tanpa nomor: Andi, Rina
+… (max 8 per message, then "↪️ Lanjutan (2/3)")
 ```
 
-The header is for the owner; client-facing words only live inside the button links. Button labels ≤ 30 characters (`TELEGRAM_BUTTON_TEXT_MAX` today is 60, lower it). A run with zero recipients sends nothing and logs `ok`.
+The header is for the owner; client-facing words only live inside the button links. Button labels ≤ 30 characters (`TELEGRAM_BUTTON_TEXT_MAX` is now 30; a long name is shortened with … and the fact is kept). The "Tanpa nomor" line sits under the header because Telegram cannot put text after the buttons. A run with zero recipients sends nothing and logs `ok`.
 
 ### 3.4 Templates
 
-`RMD_TPL_<JENIS>` holds the client message with placeholders. Empty = built-in default above. On save: unknown `{…}` rejected, max 600 characters. Settings shows a live preview with a sample client, styled as a WhatsApp bubble.
+`RMD_TPL_<JENIS>` holds the client message with placeholders. Empty = built-in default above (saving the default text stores nothing, so future wording fixes reach you). On save: unknown or other-type `{…}` rejected, stray braces rejected, max 600 characters. The rendered client text is capped at 900 characters. Settings shows a preview with sample data, styled as a WhatsApp bubble; it comes from the server (`previewReminderText`), so it is exactly what the button will carry.
 
 ### 3.5 Per-client opt-out
 
 - `MemberData` gets column **P "Pengingat Nonaktif"**: comma list of jenis switched off, e.g. `pr,booking-minggu`. Empty = all on. Column O (meal flag) keeps working; `makan-*` counts as off if either says so.
-- Panel: toggles on the client detail, via `setMemberReminderPrefs(token, memberId, prefs)` (admin).
+- Panel: toggles on the client detail (sesi besok, booking mingguan, PR; meal keeps its own switch), via `setMemberReminderPrefs(token, memberId, { off: [...] })` (admin). Other entries already in column P (for example `makan-pagi`) are preserved.
 - Later (R-10): the same toggles in the portal via `getMyReminderPrefs` / `setMyReminderPrefs` (member).
 
 ### 3.6 Test sends

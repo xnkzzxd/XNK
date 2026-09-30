@@ -1130,6 +1130,11 @@ button.avatar { border: 0; cursor: pointer; }
 .pkg-flex input:disabled + span { opacity: 0.5; }
 @media (max-width: 767px) { .sheet.tall { height: calc(100dvh - 24px); } }
 
+/* ── Pratinjau pesan WhatsApp ────────────────────────────────────────────── */
+.wa-preview { background: var(--surface-3); border-radius: var(--r-md); padding: 14px; display: flex; }
+.wa-bubble { max-width: 320px; width: 100%; background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: 4px 16px 16px 16px; padding: 10px 12px; font-size: var(--fs-md); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: var(--shadow-1); }
+.wa-bubble.wa-error { border: 2px solid var(--fg); font-weight: 700; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }

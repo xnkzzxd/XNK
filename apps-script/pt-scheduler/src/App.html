@@ -583,8 +583,9 @@
   };
   // Jenis pengingat: sama dengan REMINDER_JOBS di Reminder.gs
   const SET_RMD_JOBS = [
-    { id: 'booking-minggu', title: 'Booking Minggu', sub: 'Ajakan booking + 3 slot kosong terdekat (tiap Minggu)' },
-    { id: 'pr', title: 'PR (Task)', sub: 'Klien dengan PR telat, jatuh tempo hari ini/besok (tiap hari)' },
+    { id: 'sesi-besok', title: 'Sesi besok', sub: 'Tombol WhatsApp ke tiap klien yang punya sesi besok (tiap hari)' },
+    { id: 'booking-minggu', title: 'Booking Minggu', sub: 'Ajakan booking + 3 slot kosong terdekat ke tiap klien (tiap Minggu)' },
+    { id: 'pr', title: 'PR (Task)', sub: 'Tombol WhatsApp ke klien dengan PR telat, jatuh tempo hari ini/besok (tiap hari)' },
     { id: 'makan-pagi', title: 'Makan pagi', sub: 'Tip makan pagi untuk klien paket core. Butuh tip aktif di sheet MealTips.' },
     { id: 'makan-sore', title: 'Makan sore', sub: 'Tip makan sore untuk klien paket core. Butuh tip aktif di sheet MealTips.' }
   ];
@@ -665,7 +666,8 @@
         html += '<div class="card-flat stack">' + setToggleCard('job-' + j.id + '-enabled', j.title, j.sub, job.enabled !== false) +
           setField('Jam kirim (WIB, 0–23)', '<div class="input-affix"><input class="input" type="number" inputmode="numeric" min="0" max="23" id="set-job-' + j.id + '-hour" data-k="job-' + j.id + '-hour" value="' + h(job.hour === job.defaultHour ? '' : job.hour) + '" placeholder="Bawaan ' + h(job.defaultHour) + ':00">' +
             '<button type="button" class="link-btn reset-link" onclick="window.settingsReset(\'job-' + j.id + '-hour\')">Bawaan</button></div>', 'job-' + j.id + '-hour', '') +
-          '<button type="button" class="btn btn-outline btn-block" onclick="window.sendReminderTest(\'' + j.id + '\', this)">' + icon('send') + ' Kirim tes ' + h(j.title) + '</button></div>';
+          '<button type="button" class="btn btn-outline btn-block" onclick="window.sendReminderTest(\'' + j.id + '\', this)">' + icon('send') + ' Kirim tes ' + h(j.title) + '</button>' +
+          rmdTemplateHtml(j, job) + '</div>';
       });
       html += '<div class="card-flat stack">' +
         setField('Kalimat tidur (reminder malam)', '<textarea class="textarea" id="set-tplSleep" data-k="tplSleep" rows="2" maxlength="300" placeholder="Kosongkan = tidak ditambahkan">' + h(r.tplSleep) + '</textarea>', 'tplSleep', 'Ditambahkan ke email & Telegram jadwal besok pada run malam saja. Simpan dulu sebelum kirim tes.') +
@@ -677,6 +679,45 @@
       return html;
     }
   };
+
+  // Template pesan ke klien + pratinjau (dari server, jadi sama persis dengan isi tombol WhatsApp)
+  function rmdTemplateHtml(j, job) {
+    const ph = (job.placeholders || []).map(function (k) { return '{' + k + '}'; }).join(' ');
+    return '<div class="group-label"><span>Pesan ke klien</span></div>' +
+      setField('Isi pesan', '<textarea class="textarea" id="set-job-' + j.id + '-tpl" data-k="job-' + j.id + '-tpl" data-default="' + h(job.tplDefault || '') + '" rows="5" maxlength="600" autocapitalize="sentences">' + h(job.tpl || job.tplDefault || '') + '</textarea>' +
+        '<button type="button" class="link-btn" style="align-self:flex-start" onclick="window.settingsResetTpl(\'' + j.id + '\')">Kembalikan pesan bawaan</button>',
+        'job-' + j.id + '-tpl', 'Bisa dipakai: ' + ph) +
+      '<p class="li-sub">Pratinjau (contoh data)</p><div class="wa-preview"><div class="wa-bubble" id="pv-' + j.id + '" aria-live="polite">…</div></div>';
+  }
+  window.settingsResetTpl = function (jobId) {
+    const el = $('set-job-' + jobId + '-tpl');
+    if (!el) return;
+    el.value = el.getAttribute('data-default') || '';
+    onSettingsEdit();
+  };
+  const rmdPreviewTimers = {}, rmdPreviewSeq = {};
+  function rmdPreview(jobId) {
+    const el = $('set-job-' + jobId + '-tpl'), out = $('pv-' + jobId);
+    if (!el || !out) return;
+    const seq = (rmdPreviewSeq[jobId] = (rmdPreviewSeq[jobId] || 0) + 1);   // abaikan jawaban lama kalau pengguna sudah mengetik lagi
+    adminCall('previewReminderText', jobId, el.value).then(function (r) {
+      if (seq !== rmdPreviewSeq[jobId]) return;
+      out.textContent = r.text;
+      out.classList.remove('wa-error');
+    }).catch(function (err) {
+      if (seq !== rmdPreviewSeq[jobId]) return;
+      out.textContent = window.authMessage(err);
+      out.classList.add('wa-error');
+    });
+  }
+  function rmdPreviewAll() { SET_RMD_JOBS.forEach(function (j) { rmdPreview(j.id); }); }
+  function rmdSchedulePreview(target) {
+    const k = target && target.getAttribute && target.getAttribute('data-k');
+    const m = k && /^job-(.+)-tpl$/.exec(k);
+    if (!m) return;
+    clearTimeout(rmdPreviewTimers[m[1]]);
+    rmdPreviewTimers[m[1]] = setTimeout(function () { rmdPreview(m[1]); }, 350);
+  }
 
   function rmdStatusHtml() {
     const s = setState.status;
@@ -1029,7 +1070,7 @@
     paintIcons();
     if (id === 'tampilan') renderThemeSeg();
     if (id === 'paket') pkgLoad();
-    if (id === 'pengingat') { setState.log = null; window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); }
+    if (id === 'pengingat') { setState.log = null; window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); rmdPreviewAll(); }
     refreshSettingsNav();
     const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 });
   }
@@ -1131,10 +1172,23 @@
       const s = Number(vals['h' + i + 's']), e = Number(vals['h' + i + 'e']);
       if (vals['h' + i + 's'] === '' || vals['h' + i + 'e'] === '' || !Number.isInteger(s) || !Number.isInteger(e) || s < 0 || e > 24 || s >= e) errs['hours' + i] = 'Jam buka harus lebih kecil dari jam tutup (0–24).';
     }
+    SET_RMD_JOBS.forEach(function (j) {
+      const k = 'job-' + j.id + '-tpl';
+      if (!(k in vals)) return;
+      const job = (setState.data.reminder && setState.data.reminder.jobs && setState.data.reminder.jobs[j.id]) || {};
+      const allowed = job.placeholders || [];
+      const t = vals[k].trim();
+      if (t.length > 600) { errs[k] = 'Pesan maksimal 600 karakter.'; return; }
+      let bad = null;
+      const rest = t.replace(/\{([a-z]*)\}/g, function (m, name) { if (allowed.indexOf(name) < 0 && bad === null) bad = m; return ''; });
+      if (bad) errs[k] = 'Placeholder ' + bad + ' tidak dikenal. Yang boleh: ' + allowed.map(function (n) { return '{' + n + '}'; }).join(' ') + '.';
+      else if (/[{}]/.test(rest)) errs[k] = 'Tanda { } hanya untuk placeholder, misalnya {nama}.';
+    });
     if ('email' in vals && vals.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals.email.trim())) errs.email = 'Alamat email tidak valid.';
     return errs;
   }
-  function onSettingsEdit() {
+  function onSettingsEdit(ev) {
+    if (ev && ev.target) rmdSchedulePreview(ev.target);
     const vals = readSettingsForm();
     const changed = changedSettingsKeys(vals);
     const errs = validateSettings(vals);
@@ -1167,6 +1221,7 @@
         const job = {};
         if (has('job-' + j.id + '-enabled')) job.enabled = vals['job-' + j.id + '-enabled'];
         if (has('job-' + j.id + '-hour')) job.hour = vals['job-' + j.id + '-hour'];
+        if (has('job-' + j.id + '-tpl')) job.tpl = vals['job-' + j.id + '-tpl'];
         if (Object.keys(job).length) { r.jobs = r.jobs || {}; r.jobs[j.id] = job; }
       });
       if (Object.keys(r).length) p.reminder = r;
@@ -2586,6 +2641,7 @@
       '<div><p class="k">Coach</p><p class="v">' + h(m.preferredCoachName || 'Belum ditentukan') + '</p></div>' +
       '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
     body += mealToggleHtml(m);
+    body += reminderPrefsHtml(m);
     body += '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>';
     body += '<div><div class="section-head"><h4 class="section-title">Jadwal mendatang</h4><span class="li-sub">' + upcoming.length + '</span></div>' +
       (upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
@@ -2616,6 +2672,34 @@
       '<label class="toggle"><input type="checkbox" id="profile-meal-toggle" aria-label="Reminder makan klien"' + (on ? ' checked' : '') +
       ' onchange="window.toggleMealReminder(\'' + mid + '\',this)"><span></span></label></div>';
   }
+  // Pengingat WhatsApp per klien (T-123): mati per jenis; makan punya saklarnya sendiri di atas
+  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo']];
+  function reminderPrefsHtml(m) {
+    const off = m.reminderOff || [];
+    return '<div><div class="section-head"><h4 class="section-title">Pengingat WhatsApp</h4></div><div class="list" id="profile-remind-prefs">' +
+      REMIND_TYPES.map(function (t) {
+        return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title">' + h(t[1]) + '</p><p class="li-sub">' + h(t[2]) + '</p></div>' +
+          '<label class="toggle"><input type="checkbox" data-remind="' + t[0] + '" aria-label="' + h(t[1]) + '"' + (off.indexOf(t[0]) === -1 ? ' checked' : '') + ' onchange="window.toggleReminderPref(\'' + h(m.id) + '\', this)"><span></span></label></div>';
+      }).join('') + '</div><p class="hint" style="margin-top:6px">Dimatikan = klien ini tidak muncul di pesan Telegram jenis itu.</p></div>';
+  }
+  window.toggleReminderPref = function (memberId, input) {
+    const m = window.members.find(function (x) { return String(x.id) === String(memberId); });
+    if (!m) return;
+    const known = REMIND_TYPES.map(function (t) { return t[0]; });
+    const off = (m.reminderOff || []).filter(function (k) { return known.indexOf(k) === -1; });   // jenis lain (mis. makan) tetap
+    document.querySelectorAll('#profile-remind-prefs input[data-remind]').forEach(function (el) { if (!el.checked) off.push(el.getAttribute('data-remind')); });
+    const boxes = document.querySelectorAll('#profile-remind-prefs input[data-remind]');
+    boxes.forEach(function (el) { el.disabled = true; });
+    adminCall('setMemberReminderPrefs', memberId, { off: off }).then(function (res) {
+      m.reminderOff = (res && res.reminderOff) || off;
+      boxes.forEach(function (el) { el.disabled = false; });
+      window.showToast('Pengingat klien disimpan.');
+    }).catch(function (err) {
+      input.checked = !input.checked;
+      boxes.forEach(function (el) { el.disabled = false; });
+      window.showToast('Gagal: ' + window.authMessage(err));
+    });
+  };
   window.toggleMealReminder = function (memberId, input) {
     const m = window.members.find(x => String(x.id) === String(memberId));
     const want = !!input.checked;

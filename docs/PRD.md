@@ -94,7 +94,7 @@ Priority: **P0** = must ship for the phase to count, **P1** = should, **P2** = n
 | R-4 | P0 | Clients without a valid WhatsApp number are listed as text at the end ("Tanpa nomor: Sari, Andi") instead of silently dropped. | Owner knows who can't be reached. |
 | R-5 | P0 | The owner can turn a reminder type off per client (client detail in the panel). Those clients get no button. | Opted-out client never appears in that type's message. |
 | R-6 | P0 | Each run sends to Telegram once per slot (no duplicates after retries); a failed Telegram send is retried on the next tick. | Re-running a tick doesn't repeat the message. |
-| R-7 | P0 | Owner schedule email (05:00 / 20:00) stays an owner report; its per-session WhatsApp links are replaced by the Sesi besok reminder. | No duplicated client links across email and Telegram. |
+| R-7 | P0 | Owner schedule email (05:00 / 20:00) stays an owner report; its per-session WhatsApp links (and the sleep line) move to the Sesi besok reminder while that reminder is on. While it is off, nothing changes. | No duplicated client links across email and Telegram; default behavior unchanged. |
 | R-8 | P1 | Editable message templates per type with placeholders (`{nama}`, `{jam}`, `{coach}`, `{slot}`, `{pr}`, `{tip}`, `{tidur}`) and a live preview. | Owner changes wording without code; unknown placeholders are rejected. |
 | R-9 | P1 | "Kirim tes" per type sends the real Telegram message to the owner now, marked 🧪 TES. | Already exists for some types; extended to all. |
 | R-10 | P1 | Clients can also switch reminder types off themselves in the portal. | Same effect as R-5. |

@@ -44,14 +44,16 @@ Built on branch `claude/wonderful-wozniak-it2gzt`. Deviations from the first pla
 
 ## Phase C — Client-ready reminders over Telegram (priority 3)
 
+Built on branch `claude/wonderful-wozniak-it2gzt`. Note: the default client texts already addressed the client, so T-120 mostly moved them into templates.
+
 | | ID | Task | Files | Depends | Size | Done when |
 | --- | --- | --- | --- | --- | --- | --- |
-| [ ] | T-120 | Rewrite every client text (`_bookingWaText_`, `_prWaText_`, `_makanWaText_`) to address the client: greeting with name, key fact first, ≤ 500 chars. | Reminder.gs, tests/reminder.test.js (new) | — | S | Tests check each text starts with the client's name and contains the key fact. |
-| [ ] | T-121 | Owner-facing Telegram layout: short header with type, date and count; button label `Nama · fakta` ≤ 30 chars; "📵 Tanpa nomor: …" line; zero recipients = no message. | Reminder.gs, tests | T-120 | S | Test with 20 clients: 3 messages, correct labels, wa.me URLs with client number and text. |
-| [ ] | T-122 | New type `sesi-besok` (daily 19:00): one button per client with a session tomorrow; `{tidur}` from `RMD_TPL_SLEEP`. Remove the "Kirim WA Konfirmasi" links and the sleep line from `sendDailyReminderEmail`. | Reminder.gs, Kode.gs, tests | T-121 | M | Tomorrow's sessions produce one button per client; owner email has no WhatsApp links. |
-| [ ] | T-123 | Per-client opt-out: MemberData column P, merged with column O for meals; `setMemberReminderPrefs` (admin); toggles on client detail in the panel. | Kode.gs, Reminder.gs, App.html, Index.html, tests, tests/security.test.js | — | M | Opted-out client gets no button (test); toggles are 44 px rows on a phone. |
-| [ ] | T-124 | Templates `RMD_TPL_<JENIS>` with placeholder validation; template editor and WhatsApp-style preview in the Pengingat Klien section. | Reminder.gs, App.html, Index.html, tests | T-106, T-120 | M | Unknown placeholder rejected; preview at phone width matches the button's text. |
-| [ ] | T-125 | "Kirim tes" for every type including `sesi-besok` and the meal types. | Reminder.gs, App.html | T-122 | S | Each card's test button delivers a 🧪 TES message. |
+| [x] | T-120 | Rewrite every client text (`_bookingWaText_`, `_prWaText_`, `_makanWaText_`) to address the client: greeting with name, key fact first, ≤ 500 chars. | Reminder.gs, tests/reminder.test.js (new) | — | S | Tests check each text starts with the client's name and contains the key fact. |
+| [x] | T-121 | Owner-facing Telegram layout: short header with type, date and count; button label `Nama · fakta` ≤ 30 chars; "📵 Tanpa nomor: …" line; zero recipients = no message. | Reminder.gs, tests | T-120 | S | Test with 20 clients: 3 messages, correct labels, wa.me URLs with client number and text. |
+| [x] | T-122 | New type `sesi-besok` (daily 19:00): one button per client with a session tomorrow; `{tidur}` from `RMD_TPL_SLEEP`. Remove the "Kirim WA Konfirmasi" links and the sleep line from `sendDailyReminderEmail`. | Reminder.gs, Kode.gs, tests | T-121 | M | Tomorrow's sessions produce one button per client; owner email has no WhatsApp links. |
+| [x] | T-123 | Per-client opt-out: MemberData column P, merged with column O for meals; `setMemberReminderPrefs` (admin); toggles on client detail in the panel. | Kode.gs, Reminder.gs, App.html, Index.html, tests, tests/security.test.js | — | M | Opted-out client gets no button (test); toggles are 44 px rows on a phone. |
+| [x] | T-124 | Templates `RMD_TPL_<JENIS>` with placeholder validation; template editor and WhatsApp-style preview in the Pengingat Klien section. | Reminder.gs, App.html, Index.html, tests | T-106, T-120 | M | Unknown placeholder rejected; preview at phone width matches the button's text. |
+| [x] | T-125 | "Kirim tes" for every type including `sesi-besok` and the meal types. | Reminder.gs, App.html | T-122 | S | Each card's test button delivers a 🧪 TES message. |
 | [ ] | T-126 | Docs for phase C and `apps-script/README.md` (how to use the buttons). | docs | T-120…T-125 | S | — |
 
 ## Later
