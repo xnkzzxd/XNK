@@ -56,6 +56,49 @@ Built on branch `claude/wonderful-wozniak-it2gzt`. Note: the default client text
 | [x] | T-125 | "Kirim tes" for every type including `sesi-besok` and the meal types. | Reminder.gs, App.html | T-122 | S | Each card's test button delivers a 🧪 TES message. |
 | [ ] | T-126 | Docs for phase C and `apps-script/README.md` (how to use the buttons). | docs | T-120…T-125 | S | — |
 
+## Phase D — Client progress & motivation (see PRD §10, Design §10)
+
+Open decisions D-8 (renewal WhatsApp nudge), D-9 (photo storage) and D-10 (order) are assumed as written in PRD §10.4 until the owner says otherwise.
+
+### D1 — Progress tracker
+
+| | ID | Task | Files | Depends | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [ ] | T-150 | `Progress` sheet, `saveMyMeasurement` / `deleteMyMeasurement` / `getMyProgress` (entries only), limits and one-row-per-day upsert. | Kode.gs, tests/progress.test.js (new), tests/security.test.js | — | M | Tests cover limits, upsert, and that a client can't touch another client's rows. |
+| [ ] | T-151 | Admin side: `getMemberProgress`, `saveMemberMeasurement`, `deleteMemberMeasurement` (marked `coach`). | Kode.gs, tests | T-150 | S | Coach and client entries show together with who entered them. |
+| [ ] | T-152 | Private photo folder, `uploadMyProgressPhoto`, `getMyProgressPhoto`, `deleteMyProgressPhoto`, `getMemberProgressPhoto`; limits 5 MB / 60 photos. | Kode.gs, tests | T-150 | M | Test proves no link sharing and no cross-client access. |
+| [ ] | T-153 | Portal "Progres" card: SVG line chart, change since first entry, "Catat hari ini" sheet, photo sheet with in-browser resize. | Index.html, App.html, Theme.html | T-150, T-152 | L | Works at 360 px in both themes; decimal keypad; no sideways scroll. |
+| [ ] | T-154 | Panel client page "Progres" section with the same chart, entry list, + Catat, photo grid. | Index.html, App.html | T-151, T-153 | M | Owner can add and fix entries on a phone. |
+
+### D2 — Streaks & milestones
+
+| | ID | Task | Files | Depends | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [ ] | T-160 | Pure `_completedWeeks_`, `_streak_`, `_badges_`; add streak/badges/newBadges to `getMyProgress` and `getMemberProgress`. | Kode.gs, tests | T-150 | M | Tests: holiday gap, current-week rule, best streak keeps badges. |
+| [ ] | T-161 | MemberData column Q, `markBadgesSeen`. | Kode.gs, tests, tests/security.test.js | T-160 | S | Seen badges aren't celebrated again. |
+| [ ] | T-162 | Portal streak line, badge row, celebration card (CSS confetti, reduced motion) with Bagikan. | App.html, Index.html, Theme.html | T-160, T-161 | M | Celebration shows once; reduced motion shows no animation. |
+| [ ] | T-163 | Streak and badges on the panel client page. | App.html | T-160 | S | — |
+
+### D3 — Easy renewal
+
+| | ID | Task | Files | Depends | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [ ] | T-170 | `RenewalRequests` sheet, `requestRenewal` (throttle, one open request, Telegram notice), `OWNER_WA` setting. | Kode.gs, App.html, tests, tests/security.test.js | — | M | Tests: second request cancels the first; notice sent. |
+| [ ] | T-171 | `getRenewalRequests`, `decideRenewal` (approve once, reuses the Perpanjang path with price snapshot, reject). | Kode.gs, tests | T-170 | M | Approving twice is refused; quota and log match today's Perpanjang. |
+| [ ] | T-172 | Portal "Sisa N sesi · Perpanjang" card and package sheet; opens WhatsApp to the owner; status "Menunggu konfirmasi". | App.html, Index.html | T-170 | M | Flow works on a phone end to end. |
+| [ ] | T-173 | Panel "Minta perpanjang (N)" card with Setujui / Tolak. | App.html | T-171 | S | One tap approves; client sees "Aktif". |
+
+### D4 — WhatsApp messages
+
+| | ID | Task | Files | Depends | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [ ] | T-180 | `_dueJobs_` gains `dayOfMonth` and `evenWeek`; three new `REMINDER_JOBS` (off by default) with templates and placeholders. | Reminder.gs, tests | T-150, T-160 | M | Tests for the new schedule rules; Settings shows the three cards. |
+| [ ] | T-181 | `rekap-bulanan` handler (last month's sessions, weight/waist change, streak, portal link). | Reminder.gs, tests | T-180 | M | Skips clients with nothing last month. |
+| [ ] | T-182 | `selamat-milestone` handler; MemberData column R written only after a successful send. | Reminder.gs, tests | T-180, T-160 | M | A badge is congratulated exactly once. |
+| [ ] | T-183 | `waktunya-ukur` handler (last measurement ≥ 14 days or none). | Reminder.gs, tests | T-180 | S | — |
+| [ ] | T-184 | Per-client switches for the three types on the client page; test buttons. | App.html, Reminder.gs | T-181…T-183 | S | — |
+| [ ] | T-185 | Browser check: portal cards, celebration, renewal and panel Progres at phone and desktop; docs (README, Agent §7). | tools/browser-check.js, docs | all above | M | All browser checks pass. |
+
 ## Later
 
 | | ID | Task | PRD |

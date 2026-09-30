@@ -43,6 +43,7 @@ Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks
 5. **Default = today's behavior.** A new feature is off (or `manual`) until the owner turns it on in Settings.
 6. **Don't reintroduce `Test.gs` or in-editor `test*` functions.** They were removed on purpose; tests live in `tests/` (Node).
 7. **Don't send client phone numbers to the browser** except in admin responses that already carry them.
+7b. **Progress photos are private.** Never give them link sharing (unlike coach photos). Serve them only as data URLs through a function that checks the member or admin token, and a member function must read the member ID from the token, never from its arguments.
 8. **Don't commit to `main` directly.** Work on a branch and open a pull request, which runs the checks.
 
 ## 3. How to work a task
@@ -104,6 +105,7 @@ clasp pull
 - Phase A is built: Pengaturan is its own admin page with 7 sections (Tampilan, Paket & Harga, Pengingat Klien, Notifikasi Admin, Jam Operasional, Keamanan, Akun), per-section saves, dirty tracking, masked Telegram token, reminder trigger install/status/history. The client portal keeps the small settings sheet. 
 - Phase B is built: Pengaturan → Paket & Harga manages packages (add/edit/duplicate/reorder/activate/delete-when-unused). PriceList columns are read by header name; the first admin write adds "Jumlah Sesi" and "Urutan". Transactions store the price in `Members` column K; revenue uses it (older rows fall back to the current price).
 - Phase C is built: reminders go to the owner's Telegram as one message per type with one `wa.me` button per client; the button carries a message written to the client (editable templates with placeholders, server preview). Types: sesi-besok (new, 19:00), booking-minggu, pr, makan-pagi/sore. Per-client off switches live in MemberData column P. This is the chosen design: **never add a WhatsApp API or gateway** or send to clients automatically.
+- Phase D is **planned, not built** (PRD §10, Design §10, Task.md T-150…T-185): client progress tracker (weight, waist, private photos), weekly streak and badges, one-tap renewal, and three new WhatsApp message types (monthly recap, milestone congrats, measure reminder). Build order D1 → D4. Decisions D-8…D-10 are assumed until the owner confirms.
 - Tasks/PR for clients with recurring tasks and templates are live; the client portal shows them and a "Makan hari ini" card.
 - `runReminderTick` is a public trigger handler, gated by `RMD_ENABLED`, a lock and a throttle.
 - Sessions: admin 30 days, member 90 days (defaults). Revenue estimate = 65 % of package price.

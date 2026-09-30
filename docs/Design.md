@@ -348,3 +348,135 @@ The phone is the main device for both the owner and clients. Everything below is
 1. Phase A ships with no new behavior. The existing values show in the new view.
 2. Phase B: the first admin write migrates the PriceList schema. Before deploying, copy the spreadsheet (File → Make a copy) as a backup.
 3. Phase C: deploy, use "Kirim tes" for each type, read the messages on the phone, adjust templates, then turn the types on.
+
+---
+
+## 10. Phase D — Client progress & motivation
+
+Builds [PRD §10](PRD.md#10-phase-d--client-progress--motivation). Same rules as before: guards on every public function, append-only sheets, off by default, phone first.
+
+### 10.1 Data
+
+New sheets (created by `getOrCreateSheet_`, all columns Plain Text except numbers):
+
+**`Progress`** (one row per client per day)
+
+| Col | Header | Notes |
+| --- | --- | --- |
+| A | ID | `PRG-<ms>-<rand>` |
+| B | Member ID | |
+| C | Tanggal | `YYYY-MM-DD` (WIB); one row per member per date, a second save updates it |
+| D | Berat (kg) | number with one decimal, or empty |
+| E | Pinggang (cm) | number with one decimal, or empty |
+| F | Dicatat Oleh | `klien` or `coach` |
+| G | Diubah Pada | ISO time |
+
+**`ProgressPhotos`**
+
+| Col | Header | Notes |
+| --- | --- | --- |
+| A | ID | `PHT-<ms>-<rand>` |
+| B | Member ID | |
+| C | Tanggal | `YYYY-MM-DD` |
+| D | Sisi | `depan` / `samping` |
+| E | File ID | Drive file ID in the private folder |
+| F | Dicatat Oleh | `klien` / `coach` |
+
+**`RenewalRequests`**
+
+| Col | Header | Notes |
+| --- | --- | --- |
+| A | ID | `REN-<ms>-<rand>` |
+| B | Member ID | |
+| C | Paket ID | must be an active package |
+| D | Status | `menunggu` / `disetujui` / `ditolak` / `dibatalkan` |
+| E | Dibuat Pada | ISO time |
+| F | Diputuskan Pada | ISO time |
+| G | Harga | package price at request time |
+
+**`MemberData` column Q "Badge Terlihat"**: comma list of badge IDs the client has already seen celebrated. Column R **"Badge Diselamati"**: badge IDs already sent in a "Selamat milestone" button. Badges themselves are **computed**, not stored.
+
+**Photos folder**: `XNK Progress` in the owner's Drive, ID kept in Script Property `PROGRESS_PHOTO_FOLDER_ID` (created on first upload, like `COACH_PHOTO_FOLDER_ID`). Files are **never** given link sharing. That is unlike coach photos, which use `ANYONE_WITH_LINK`, so don't reuse that helper as is.
+
+### 10.2 Streak and badges (pure functions, easy to test)
+
+- `_completedWeeks_(schedules, memberId)`: a set of ISO week keys (`2026-W40`, Monday-start, WIB) with at least one schedule `status === 'completed'` for that member.
+- `_streak_(weeks, now)`: count back from the last **finished** week. If the current week already has a session, add it. So a streak never drops on Monday morning just because this week hasn't had a session yet.
+- `_badges_(completedCount, bestStreak)`: `sesi-10/25/50/100` from the lifetime completed count, and `streak-4/8/12` from the **best** streak ever. Earned badges never disappear.
+- `getMyProgress(memberToken)` returns `{ entries, photos:[{id,tanggal,sisi}], streak, bestStreak, completed, badges:[{id,label,earned}], newBadges:[ids not in col Q] }`.
+
+### 10.3 Server API
+
+| Function | Guard | Does |
+| --- | --- | --- |
+| `getMyProgress(memberToken)` | member | See 10.2. |
+| `saveMyMeasurement(memberToken, {tanggal?, berat, pinggang})` | member | Upsert today's row (a client cannot pick a future date or one more than 7 days back). |
+| `deleteMyMeasurement(memberToken, id)` | member | Only own rows. |
+| `uploadMyProgressPhoto(memberToken, base64, mime, sisi)` | member | Reuse `_checkImageUpload_`; 5 MB; 60 photos per member; private file. |
+| `getMyProgressPhoto(memberToken, id)` | member | Returns `data:` URL (base64) of own photo only. |
+| `deleteMyProgressPhoto(memberToken, id)` | member | Trashes the Drive file and removes the row. |
+| `markBadgesSeen(memberToken, ids)` | member | Adds to column Q. |
+| `requestRenewal(memberToken, packageId)` | member | One open request per member (a new one cancels the old); Telegram notice to the owner; returns the owner's WhatsApp link text. |
+| `getMemberProgress(token, memberId)` | admin | Same shape as `getMyProgress` plus who entered each value. |
+| `saveMemberMeasurement(token, memberId, data)` / `deleteMemberMeasurement(token, id)` | admin | Coach entries. |
+| `getMemberProgressPhoto(token, id)` | admin | Any client's photo, as a data URL. |
+| `getRenewalRequests(token, {status})` | admin | Pending first. |
+| `decideRenewal(token, id, approve)` | admin | Approve = same path as Perpanjang (`_addMemberInternal_` renewal branch, price snapshot); once only, under the script lock. |
+
+All go into `tests/security.test.js` (MEMBER / ADMIN lists). The owner's WhatsApp number for renewal comes from Script Property `OWNER_WA` (new Settings field under Notifikasi Admin; if empty, the button explains that renewal requests go to the panel only).
+
+### 10.4 Portal (client) screens, phone first
+
+The portal home (`public-dashboard`) gets three new cards in this order, below the existing session card:
+
+```
+┌ Beranda ───────────────────────┐
+│ Sisa 2 sesi        [Perpanjang]│  ← only when ≤ 2 left (D-R1)
+│────────────────────────────────│
+│ 🔥 5 minggu berturut-turut      │
+│ ○10 ●25 ○50 ○100  ●4 ○8 ○12    │  ← badges, locked faded
+│────────────────────────────────│
+│ Progres                        │
+│ Berat 72,4 kg  (−2,1 sejak 1/9)│
+│ ╭──╮_   line chart (SVG)       │
+│ [Catat hari ini]  [Foto]       │
+└────────────────────────────────┘
+```
+
+- **Catat hari ini** opens a bottom sheet with two big number fields (`inputmode="decimal"`, 16 px), Simpan.
+- **Foto** opens a sheet with Depan / Samping, the camera or gallery picker, and a grid of past photos (tap to view full screen, delete from there). Images are resized in the browser to max 1600 px JPEG before upload.
+- **Chart:** inline SVG, no library. One line per measure, dots per entry, muted grid, `--fg` stroke. Tap a dot to see the value. At most the last 26 entries.
+- **Celebration:** on load, if `newBadges` isn't empty, show a centered card "Badge baru: 25 sesi! 🎉" with a light confetti burst (CSS only, off under reduced motion), a **Bagikan** button (WhatsApp share text) and **Tutup**. Then call `markBadgesSeen`.
+- **Renewal sheet:** active packages from `getPriceList` as big rows (name, price, sessions). Choosing one calls `requestRenewal` then opens `wa.me/<OWNER_WA>?text=…`. Afterwards the card shows "Menunggu konfirmasi".
+
+### 10.5 Panel (owner) screens
+
+- **Client page**, new section "Progres": the same chart, a list of entries with a *klien* / *coach* chip, **+ Catat** (sheet), a photo grid, and the streak and badges line.
+- **Dashboard**: a "Minta perpanjang (N)" card when requests are pending; tapping it lists them with **Setujui** / **Tolak**.
+- **Telegram notice** on each new request: "🔁 Budi minta perpanjang Regular 8 (Rp 800.000)".
+
+### 10.6 New reminder types (same engine as Phase C)
+
+| jenis | When (default) | Who | Button | Placeholders |
+| --- | --- | --- | --- | --- |
+| `rekap-bulanan` | Day 1 of month, 09:00 | Active clients with a session or measurement last month | `Budi · 8 sesi` | `{nama} {sesi} {berat} {pinggang} {streak} {link}` |
+| `selamat-milestone` | Daily 18:00 | Clients with a badge not yet in column R | `Budi · 25 sesi` | `{nama} {badge}` |
+| `waktunya-ukur` | Every other Monday (even ISO week), 08:00 | Active clients whose last measurement is ≥ 14 days old or missing | `Budi` | `{nama} {terakhir} {link}` |
+
+- `REMINDER_JOBS` gains the three types with `defaultEnabled: false`. `_dueJobs_` gets a `dayOfMonth` option and an `evenWeek` option.
+- `{berat}` renders as "berat −2,1 kg" or empty when there's no data; the template tidying from Phase C removes leftover spaces.
+- `{link}` is the portal URL (`https://book.xnkbooking.my.id`).
+- `selamat-milestone` writes column R after the Telegram message succeeds, so a failed send is retried.
+- Settings (Pengingat Klien) shows the three cards automatically from `SET_RMD_JOBS`. The client page's per-client switches gain the three types.
+
+### 10.7 Security
+
+- Photos: no link sharing; data URLs only through the member/admin functions; the member function checks the photo's Member ID equals the token's member.
+- Every member function reads the member ID from the token, never from the arguments.
+- `requestRenewal` is throttled (one per member per minute) and capped at one open request.
+
+### 10.8 Testing
+
+- Pure: `_completedWeeks_`, `_streak_` (holiday gap, current-week rule, Monday morning), `_badges_`.
+- Server: measurement upsert and limits; client can't touch another client's rows or photos; photo file is never shared; renewal approve-once and price snapshot; reminder types (skip rules, badge column R only after success, even-week rule).
+- Browser (phone first): portal cards at 360/390 px in both themes, measurement sheet keyboard, chart without sideways scroll, celebration card and reduced motion, renewal flow opening WhatsApp, panel Progres section and renewal approval.
