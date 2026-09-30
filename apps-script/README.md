@@ -98,6 +98,12 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
   menampilkan permintaan; setelah pembayaran diterima tekan **Setujui**: sesi klien direset sesuai paket dan
   transaksi dicatat dengan harga saat itu (sama seperti Perpanjang di form Tambah Klien). **Tolak** tidak
   mengubah data klien. Satu permintaan hanya bisa diputuskan sekali.
+- **Pesan baru ke klien** (Pengaturan → Pengingat Klien, semuanya **mati** sampai Anda menyalakannya): **Rekap bulanan**
+  (tanggal 1, 09:00: sesi bulan lalu, perubahan berat/pinggang, streak), **Selamat milestone** (tiap hari 18:00:
+  klien yang baru meraih badge; tiap badge hanya diselamati sekali) dan **Waktunya ukur** (tiap dua minggu,
+  Senin 08:00: klien yang belum mencatat berat/pinggang 14 hari). Cara kerjanya sama: satu pesan Telegram dengan
+  satu tombol per klien; tekan nama → WhatsApp terbuka dengan pesan siap kirim. Isi pesan bisa diubah dan tiap
+  jenis bisa dimatikan per klien di halaman klien.
 - **Notifikasi Admin**: Telegram (saklar, token, chat ID, tombol tes) dan email notifikasi
   (`NOTIF_EMAIL`, kosong = email pemilik akun). Token yang tersimpan hanya tampil sebagai
   `••••1234`; dikosongkan berarti token lama tetap dipakai.

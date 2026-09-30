@@ -461,12 +461,12 @@ The portal home (`public-dashboard`) gets three new cards in this order, below t
 | --- | --- | --- | --- | --- |
 | `rekap-bulanan` | Day 1 of month, 09:00 | Active clients with a session or measurement last month | `Budi · 8 sesi` | `{nama} {sesi} {berat} {pinggang} {streak} {link}` |
 | `selamat-milestone` | Daily 18:00 | Clients with a badge not yet in column R | `Budi · 25 sesi` | `{nama} {badge}` |
-| `waktunya-ukur` | Every other Monday (even ISO week), 08:00 | Active clients whose last measurement is ≥ 14 days old or missing | `Budi` | `{nama} {terakhir} {link}` |
+| `waktunya-ukur` | Every other Monday (weeks counted from Monday 5 Jan 2026), 08:00 | Active clients whose last measurement is ≥ 14 days old or missing | `Budi` | `{nama} {terakhir} {link}` |
 
 - `REMINDER_JOBS` gains the three types with `defaultEnabled: false`. `_dueJobs_` gets a `dayOfMonth` option and an `evenWeek` option.
 - `{berat}` renders as "berat −2,1 kg" or empty when there's no data; the template tidying from Phase C removes leftover spaces.
 - `{link}` is the portal URL (`https://book.xnkbooking.my.id`).
-- `selamat-milestone` writes column R after the Telegram message succeeds, so a failed send is retried.
+- `selamat-milestone` writes column R after the Telegram message succeeds (never for a test send), so a failed send is retried. Only the highest new badge per kind is named; lower ones are marked too. Clients with no completed session in the last 14 days, and opted-out clients, are marked silently rather than congratulated late.
 - Settings (Pengingat Klien) shows the three cards automatically from `SET_RMD_JOBS`. The client page's per-client switches gain the three types.
 
 ### 10.7 Security

@@ -587,7 +587,10 @@
     { id: 'booking-minggu', title: 'Booking Minggu', sub: 'Ajakan booking + 3 slot kosong terdekat ke tiap klien (tiap Minggu)' },
     { id: 'pr', title: 'PR (Task)', sub: 'Tombol WhatsApp ke klien dengan PR telat, jatuh tempo hari ini/besok (tiap hari)' },
     { id: 'makan-pagi', title: 'Makan pagi', sub: 'Tip makan pagi untuk klien paket core. Butuh tip aktif di sheet MealTips.' },
-    { id: 'makan-sore', title: 'Makan sore', sub: 'Tip makan sore untuk klien paket core. Butuh tip aktif di sheet MealTips.' }
+    { id: 'makan-sore', title: 'Makan sore', sub: 'Tip makan sore untuk klien paket core. Butuh tip aktif di sheet MealTips.' },
+    { id: 'rekap-bulanan', title: 'Rekap bulanan', sub: 'Tanggal 1 tiap bulan: sesi, perubahan berat/pinggang, dan streak bulan lalu' },
+    { id: 'selamat-milestone', title: 'Selamat milestone', sub: 'Tiap hari: klien yang baru meraih badge (10/25/50/100 sesi, streak 4/8/12 minggu)' },
+    { id: 'waktunya-ukur', title: 'Waktunya ukur', sub: 'Tiap dua minggu (Senin): klien yang belum mencatat berat/pinggang 14 hari' }
   ];
   const setState = { data: null, open: null, snap: {}, dirty: false, built: false, pushed: false, forcePop: false, status: null, log: null, onlyFailed: false, saving: false };
   const isPhone = function () { return !(window.matchMedia && window.matchMedia('(min-width: 768px)').matches); };
@@ -2678,7 +2681,7 @@
       ' onchange="window.toggleMealReminder(\'' + mid + '\',this)"><span></span></label></div>';
   }
   // Pengingat WhatsApp per klien (T-123): mati per jenis; makan punya saklarnya sendiri di atas
-  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo']];
+  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang']];
   function reminderPrefsHtml(m) {
     const off = m.reminderOff || [];
     return '<div><div class="section-head"><h4 class="section-title">Pengingat WhatsApp</h4></div><div class="list" id="profile-remind-prefs">' +
