@@ -3581,7 +3581,7 @@
     const list = pgPhotos();
     $('pg-photo-list').innerHTML = list.length ? list.map(function (p) {
       return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title">' + (p.sisi === 'samping' ? 'Samping' : 'Depan') + ' · ' + h(pgLabel(p.tanggal)) + '</p><p class="li-sub">oleh ' + (p.oleh === 'coach' ? 'coach' : 'klien') + '</p></div>' +
-        '<button type="button" class="btn btn-outline btn-sm" onclick="window.pgViewPhoto(\'' + h(p.id) + '\')">Lihat</button></div>';
+        '<button type="button" class="btn btn-outline" onclick="window.pgViewPhoto(\'' + h(p.id) + '\')">Lihat</button></div>';
     }).join('') : '<p class="li-sub">Belum ada foto. Foto hanya bisa dilihat kamu dan coach, dan tidak dibagikan lewat link.</p>';
     ['depan', 'samping'].forEach(function (s) { const b = $('pg-side-' + s); if (b) b.classList.toggle('active', pg.side === s); });
     paintIcons();

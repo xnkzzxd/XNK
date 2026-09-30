@@ -760,7 +760,7 @@ async function contrastReport(page) {
     check((await page.locator('#pub-progress-wrap svg.pg-chart').count()) === 2, 'portal: a line chart for weight and one for waist');
     const chartBox = await page.locator('#pub-progress-wrap svg.pg-chart').first().boundingBox();
     check(!!chartBox && chartBox.width <= MOBILE.width && chartBox.height > 60, 'portal: the chart fits the phone width (' + Math.round(chartBox && chartBox.width) + ' px)');
-    await page.locator('#pub-progress-wrap svg.pg-chart .pg-dot').last().click();
+    await page.locator('#pub-progress-wrap .pg-block').first().locator('.pg-dot').last().click();
     check((await page.textContent('#toast-msg')).includes('72,4'), 'portal: tapping a dot shows its value');
     // Foto
     await page.click('#pub-progress-wrap .btn-outline');
