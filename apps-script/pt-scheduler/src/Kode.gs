@@ -586,7 +586,8 @@ function _memberPublicProfile_(row) {
     usedSessions: parseInt(sanitizeValue(row[9])) || 0,
     preferredCoachId: sanitizeValue(row[10]) || '',
     preferredCoachName: sanitizeValue(row[11]) || '',
-    mealReminder: _mealOnFrom_(row[14])   // T-73: kolom O; kosong = aktif
+    mealReminder: _mealOnFrom_(row[14]),   // T-73: kolom O; kosong = aktif
+    reminderOff: _rmdOffFrom_(row[15])     // T-123: kolom P; jenis pengingat yang dimatikan
   };
 }
 
@@ -2334,6 +2335,7 @@ function sendDailyReminderEmail() {
       emailBody = `<h3>🔔 Pengingat Jadwal Latihan Besok</h3><ul style="line-height: 1.6;">`;
       pesanTelegram = `🔔 <b>PENGINGAT JADWAL LATIHAN BESOK</b> 🔔\n\n`;
 
+      const waInReminder = !_rmdJobActive_('sesi-besok');   // T-122: kalau pengingat 'sesi-besok' aktif, tombol WA klien ada di Telegram-nya
       schedulesBesok.forEach(sch => {
         const schDate = new Date(sch.start);
         const notes = sch.notes ? ` (${sch.notes})` : '';
@@ -2350,19 +2352,19 @@ function sendDailyReminderEmail() {
           <li style="margin-bottom: 15px;">
             <b>${jam} WIB</b> - ${title} <br>
             Coach Ditugaskan: <i>${coachName}</i> <br>
-            <a href="${_escHtml_(linkWA)}" style="color: #25D366; font-weight: bold; text-decoration: none;">
+            ${waInReminder ? `<a href="${_escHtml_(linkWA)}" style="color: #25D366; font-weight: bold; text-decoration: none;">
               [📱 Kirim WA Konfirmasi ke Klien]
-            </a>
+            </a>` : ''}
           </li>`;
 
-        pesanTelegram += `⏰ <b>${jam} WIB</b> - ${title}\n🏋️ <b>Coach:</b> ${coachName}\n👉 <a href="${_escHtml_(linkWA)}">Kirim WA Konfirmasi</a>\n\n`;
+        pesanTelegram += `⏰ <b>${jam} WIB</b> - ${title}\n🏋️ <b>Coach:</b> ${coachName}\n` + (waInReminder ? `👉 <a href="${_escHtml_(linkWA)}">Kirim WA Konfirmasi</a>\n` : '') + `\n`;
       });
 
       emailBody += `</ul>`;
     }
 
     // 4b. T-47: kalimat tidur (RMD_TPL_SLEEP), hanya di run malam. Kosong = tidak ada perubahan.
-    const sleepLine = _sleepLine_(now.getHours());
+    const sleepLine = _rmdJobActive_('sesi-besok') ? '' : _sleepLine_(now.getHours());   // T-122: kalau 'sesi-besok' aktif, kalimat tidur ikut pesan klien
     if (sleepLine) {
       emailBody += `<p>😴 ${_escHtml_(sleepLine)}</p>`;
       pesanTelegram += `\n\n😴 ${_escHtml_(sleepLine)}`;

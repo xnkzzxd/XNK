@@ -140,19 +140,22 @@ function makeBlob(data, contentType, name) {
   };
 }
 
-function formatDate(date, _tz, fmt) {
+function formatDate(date, tz, fmt) {
   const d = new Date(date);
+  let zone;
+  try { new Intl.DateTimeFormat('en', { timeZone: tz }); zone = tz; } catch (e) { zone = undefined; }
+  const parts = {};
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: 'h23', weekday: 'short',
+  }).formatToParts(d).forEach(p => { parts[p.type] = p.value; });
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const pad = n => String(n).padStart(2, '0');
-  return fmt
-    .replace('yyyy', d.getFullYear())
-    .replace('MMM', months[d.getMonth()])
-    .replace('MM', pad(d.getMonth() + 1))
-    .replace('dd', pad(d.getDate()))
-    .replace(/\bd\b/, d.getDate())
-    .replace('HH', pad(d.getHours()))
-    .replace('mm', pad(d.getMinutes()))
-    .replace('ss', pad(d.getSeconds()));
+  const isoDay = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }[parts.weekday];
+  const map = {
+    yyyy: parts.year, MMM: months[parseInt(parts.month, 10) - 1], MM: parts.month, dd: parts.day,
+    d: String(parseInt(parts.day, 10)), HH: parts.hour, H: String(parseInt(parts.hour, 10)), mm: parts.minute, ss: parts.second, u: String(isoDay),
+  };
+  return fmt.replace(/yyyy|MMM|MM|dd|HH|mm|ss|H|d|u/g, t => map[t]);
 }
 
 function createEnv(opts = {}) {
@@ -322,6 +325,12 @@ function createEnv(opts = {}) {
   env.context = context;
   // Call a server function the way google.script.run would. Arguments and
   // results are JSON-cloned, since google.script.run only passes plain data.
+  // Like call() but hands the arguments over untouched (Dates, functions): for server-internal handlers, not google.script.run entry points.
+  env.callRaw = (name, ...args) => {
+    const fn = context[name];
+    if (typeof fn !== 'function') throw new Error('No such server function: ' + name);
+    return fn(...args);
+  };
   env.call = (name, ...args) => {
     const fn = context[name];
     if (typeof fn !== 'function') throw new Error('No server function ' + name);

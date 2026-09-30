@@ -17,7 +17,7 @@
 
 var TELEGRAM_CHUNK_GAP_MS = 1100;      // T-78: jeda antar pesan lanjutan
 var TELEGRAM_BUTTONS_PER_MESSAGE = 8;   // >8 tombol dipecah jadi beberapa pesan
-var TELEGRAM_BUTTON_TEXT_MAX = 60;
+var TELEGRAM_BUTTON_TEXT_MAX = 30;      // T-121: label tombol muat satu baris di HP
 
 /**
  * Bagi array jadi potongan berukuran `size` (fungsi murni, mudah dites).
@@ -217,7 +217,7 @@ function _buildClientPools_(members, schedules, now) {
     upcoming[id] = (upcoming[id] || 0) + 1;
   });
 
-  var active = [], bookable = [], skipped = 0;
+  var active = [], bookable = [], skipped = 0, skippedNames = [];
   (members || []).forEach(function(row) {
     if (!row || !row[0]) return;
     var total = parseInt(row[8], 10); if (isNaN(total)) total = 10;   // sama dengan profil klien
@@ -225,18 +225,19 @@ function _buildClientPools_(members, schedules, now) {
     var remaining = total - used;
     if (remaining <= 0) return;
     var phone = _rmdNormalizePhone_(row[2]);
-    if (!phone) { skipped++; return; }
+    if (!phone) { skipped++; skippedNames.push(String(row[1] || '').trim()); return; }
     var id = String(row[0]).trim();
     var c = {
       id: id, name: String(row[1] || '').trim(), phone: phone, mealOn: _mealOnFrom_(row[14]),
       remaining: remaining, upcoming: upcoming[id] || 0,
       slots: remaining - (upcoming[id] || 0),
-      packageId: String(row[6] || ''), coachId: String(row[10] || '')
+      packageId: String(row[6] || ''), coachId: String(row[10] || ''),
+      off: _rmdOffFrom_(row[15])                       // T-123: jenis pengingat yang dimatikan untuk klien ini (kolom P)
     };
     active.push(c);
     if (c.slots > 0) bookable.push(c);
   });
-  return { active: active, bookable: bookable, skipped: skipped };
+  return { active: active, bookable: bookable, skipped: skipped, skippedNames: skippedNames };
 }
 
 function _loadClientPools_() {
@@ -294,7 +295,10 @@ function _rmdRead_() {
     jobs[j.jenis] = {
       enabled: _rmdEnabledFrom_(props.getProperty('RMD_' + k + '_ENABLED'), j.jenis),
       hour: (!isNaN(h) && h >= 0 && h <= 23) ? h : j.hour,
-      defaultHour: j.hour
+      defaultHour: j.hour,
+      tpl: String(props.getProperty('RMD_TPL_' + k) || ''),          // T-124: kosong = pakai bawaan
+      tplDefault: RMD_TPL_DEFAULT[j.jenis] || '',
+      placeholders: RMD_PLACEHOLDERS[j.jenis] || []
     };
   });
   return {
@@ -331,6 +335,10 @@ function _rmdValidate_(r) {
       if (!known[jenis]) throw new Error('Jenis pengingat tidak dikenal: ' + jenis + '.');
       var job = r.jobs[jenis] || {}, k = _rmdJobKey_(jenis);
       if (has(job, 'enabled')) out['RMD_' + k + '_ENABLED'] = job.enabled ? 'true' : 'false';
+      if (has(job, 'tpl')) {
+        var tv = String(job.tpl == null ? '' : job.tpl).trim();
+        out['RMD_TPL_' + k] = (tv === '' || tv === RMD_TPL_DEFAULT[jenis]) ? '' : _rmdValidateTpl_(jenis, tv);
+      }
       if (has(job, 'hour')) {
         if (job.hour === '' || job.hour == null) out['RMD_' + k + '_HOUR'] = '';
         else {
@@ -382,6 +390,7 @@ var REMINDER_TICK_MIN_GAP_MS = 5 * 60000;  // throttle: tick tidak diproses < 5 
 
 // day: 0=Minggu..6=Sabtu, null = setiap hari. hour: jam WIB default.
 var REMINDER_JOBS = [
+  { jenis: 'sesi-besok',     day: null, hour: 19, handler: 'sendSesiBesokDigest_' },    // T-122
   { jenis: 'booking-minggu', day: 0,    hour: 17, handler: 'sendBookingMingguDigest_' }, // T-45
   { jenis: 'pr',             day: null, hour: 8,  handler: 'sendPrDigest_' },           // T-46
   // T-72: bawaan MATI (defaultEnabled:false) sampai tip disetujui Coach (T-75) — aktifkan lewat
@@ -557,6 +566,230 @@ function getReminderLog(token, opts) {
 
 
 // ##############################################################################
+// BAGIAN: T-120…T-125 Pesan siap kirim ke klien (lewat tombol WhatsApp di Telegram)
+// ##############################################################################
+// Telegram Coach menerima SATU pesan ringkas per jenis; tiap klien = satu tombol yang
+// membuka WhatsApp ke klien itu dengan teks yang SUDAH ditulis untuk klien. Tidak ada
+// pengiriman otomatis ke klien: Coach menekan tombol lalu Kirim di WhatsApp.
+
+var RMD_MSG_MAX = 600;            // panjang template pesan
+var RMD_CLIENT_TEXT_MAX = 900;    // batas keras teks yang masuk link wa.me
+var RMD_TPL_DEFAULT = {
+  'sesi-besok': 'Hai {nama}, pengingat sesi besok jam {jam} {coach}.{tidur}\n\nSampai ketemu! 💪',
+  'booking-minggu': 'Halo {nama}, minggu ini masih ada slot latihan kosong:\n{slot}\nMau booking yang mana? 💪',
+  'pr': 'Halo {nama}, pengingat PR kamu:\n{pr}\nSemangat, kamu pasti bisa! 💪',
+  'makan-pagi': 'Halo {nama}, pengingat makan pagi:\n{tip}\nSemangat! 💪',
+  'makan-sore': 'Halo {nama}, pengingat makan sore:\n{tip}\nSemangat! 💪'
+};
+var RMD_PLACEHOLDERS = {
+  'sesi-besok': ['nama', 'jam', 'coach', 'tidur'],
+  'booking-minggu': ['nama', 'slot'],
+  'pr': ['nama', 'pr'],
+  'makan-pagi': ['nama', 'tip'],
+  'makan-sore': ['nama', 'tip']
+};
+var MEMBER_REMIND_OFF_COL = 16;                            // Kolom P (1-based)
+var MEMBER_REMIND_OFF_HEADER = 'Pengingat Nonaktif';
+var RMD_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+/** Template aktif untuk satu jenis: properti RMD_TPL_<JENIS> bila diisi, kalau tidak bawaan. */
+function _rmdTemplate_(jenis) {
+  var custom = String(PropertiesService.getScriptProperties().getProperty('RMD_TPL_' + _rmdJobKey_(jenis)) || '').trim();
+  return custom || RMD_TPL_DEFAULT[jenis] || '';
+}
+
+/** Murni: isi placeholder {nama}… lalu rapikan spasi. Placeholder tak dikenal dibiarkan apa adanya. */
+function _rmdFill_(tpl, vars) {
+  var out = String(tpl == null ? '' : tpl).replace(/\{([a-z]+)\}/g, function(m, k) {
+    return Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m;
+  });
+  out = out.replace(/[ \t]+([.,!?;:])/g, '$1').replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (out.length > RMD_CLIENT_TEXT_MAX) out = out.slice(0, RMD_CLIENT_TEXT_MAX - 1) + '…';
+  return out;
+}
+
+/** Murni: validasi template. Lempar error Indonesia; kembalikan teks yang sudah dipangkas. */
+function _rmdValidateTpl_(jenis, text) {
+  var allowed = RMD_PLACEHOLDERS[jenis];
+  if (!allowed) throw new Error('Jenis pengingat ini tidak punya template pesan.');
+  var t = String(text == null ? '' : text).trim();
+  if (t.length > RMD_MSG_MAX) throw new Error('Pesan maksimal ' + RMD_MSG_MAX + ' karakter.');
+  var bad = null;
+  var rest = t.replace(/\{([a-z]*)\}/g, function(m, k) {
+    if (allowed.indexOf(k) < 0 && bad === null) bad = m;
+    return '';
+  });
+  if (bad) throw new Error('Placeholder ' + bad + ' tidak dikenal. Yang boleh: ' + allowed.map(function(k) { return '{' + k + '}'; }).join(', ') + '.');
+  if (/[{}]/.test(rest)) throw new Error('Tanda { } hanya untuk placeholder, misalnya {nama}.');
+  return t;
+}
+
+/** Murni: kolom P → daftar jenis yang dimatikan. */
+function _rmdOffFrom_(cell) {
+  return String(cell == null ? '' : cell).split(',').map(function(x) { return x.trim().toLowerCase(); }).filter(String);
+}
+function _rmdIsOff_(client, jenis) { return ((client && client.off) || []).indexOf(jenis) !== -1; }
+
+/** Murni: label tombol "Nama · fakta" maksimal TELEGRAM_BUTTON_TEXT_MAX karakter; fakta dipertahankan, nama dipotong. */
+function _rmdButtonLabel_(name, fact) {
+  var max = TELEGRAM_BUTTON_TEXT_MAX;
+  var n = String(name == null ? '' : name).trim(), f = String(fact == null ? '' : fact).trim();
+  if (!f) return n.length > max ? n.slice(0, max - 1) + '…' : n;
+  var suffix = ' · ' + f;
+  if ((n + suffix).length <= max) return n + suffix;
+  var room = max - suffix.length;
+  if (room >= 3) return n.slice(0, room - 1) + '…' + suffix;
+  return (n + suffix).slice(0, max - 1) + '…';
+}
+
+/** 'YYYY-MM-DD' → 'Rabu 1 Okt'. */
+function _rmdDateLabel_(dateStr) {
+  var p = String(dateStr).split('-');
+  var d = new Date(Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
+  return BOOKING_DAY_NAMES[d.getUTCDay()] + ' ' + parseInt(p[2], 10) + ' ' + RMD_MONTHS[parseInt(p[1], 10) - 1];
+}
+
+/**
+ * Murni: pesan Telegram untuk Coach + tombol. items = [{name, phone (62…), fact, text}].
+ * Header pendek untuk Coach; teks untuk klien hanya ada di dalam link tombol.
+ */
+function _rmdDigestMessage_(title, dateLabel, items, noPhoneNames) {
+  var text = '🔔 <b>' + _escHtml_(title) + '</b> · ' + _escHtml_(dateLabel) + ' · ' + items.length + ' klien\n' +
+    'Tekan nama → WhatsApp terbuka dengan pesan siap kirim.';
+  if (noPhoneNames && noPhoneNames.length) {
+    text += '\n📵 Tanpa nomor: ' + noPhoneNames.slice(0, 8).map(_escHtml_).join(', ') +
+      (noPhoneNames.length > 8 ? ' dan ' + (noPhoneNames.length - 8) + ' lainnya' : '');
+  }
+  var buttons = items.map(function(it) { return { text: _rmdButtonLabel_(it.name, it.fact), url: _waLink_(it.phone, it.text) }; });
+  return { text: text, buttons: buttons };
+}
+
+/** Kirim digest. Tanpa penerima = tidak ada pesan, dianggap selesai. @returns {boolean} true = selesai. */
+function _rmdSendDigest_(title, dateLabel, items, noPhoneNames) {
+  if (!items.length) { Logger.log(title + ': tidak ada penerima, tidak ada yang dikirim.'); return true; }
+  var m = _rmdDigestMessage_(title, dateLabel, items, noPhoneNames);
+  var r = kirimTelegramTombol_(m.text, m.buttons);
+  Logger.log(title + ': ' + JSON.stringify(r));
+  return !r.skipped && r.sent > 0 && r.failed === 0;
+}
+
+/** Job aktif sekarang? (saklar utama + saklar jenis). */
+function _rmdJobActive_(jenis) {
+  return PropertiesService.getScriptProperties().getProperty('RMD_ENABLED') === 'true' && _rmdJobEnabled_(jenis);
+}
+
+/** Contoh isi placeholder untuk pratinjau di Pengaturan (memakai kalimat tidur asli bila sudah diisi). */
+function _rmdSampleVars_(jenis) {
+  var sleep = String(PropertiesService.getScriptProperties().getProperty('RMD_TPL_SLEEP') || '').trim();
+  var v = { nama: 'Budi' };
+  if (jenis === 'sesi-besok') { v.jam = '07:00'; v.coach = 'dengan Coach Dika'; v.tidur = '\n\n😴 ' + (sleep || 'Tidur cukup malam ini ya.'); }
+  else if (jenis === 'booking-minggu') v.slot = '• Rabu 1/10 07:00\n• Rabu 1/10 08:00\n• Kamis 2/10 17:00';
+  else if (jenis === 'pr') v.pr = '• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan 3 hari (tenggat 2/10)';
+  else v.tip = 'Sarapan telur dan oatmeal, minum air putih dulu.';
+  return v;
+}
+
+/** Admin: pratinjau teks klien dari template (kosong = bawaan) dengan contoh data. */
+function previewReminderText(token, jenis, tpl) {
+  requireAdmin_(token);
+  var j = String(jenis == null ? '' : jenis).trim();
+  if (!RMD_PLACEHOLDERS[j]) throw new Error('Jenis pengingat ini tidak punya template pesan.');
+  var t = String(tpl == null ? '' : tpl).trim() === '' ? RMD_TPL_DEFAULT[j] : _rmdValidateTpl_(j, tpl);
+  return { text: _rmdFill_(t, _rmdSampleVars_(j)) };
+}
+
+/** Tulis header P1 bila masih kosong (tidak menimpa kolom buatan sendiri). */
+function _ensureRemindOffCol_(sheet) {
+  var h = sheet.getRange(1, MEMBER_REMIND_OFF_COL);
+  if (h.getValue() === '') { h.setValue(MEMBER_REMIND_OFF_HEADER); h.setFontWeight('bold'); }
+  return h.getValue() === MEMBER_REMIND_OFF_HEADER;
+}
+
+/** Admin: jenis pengingat yang dimatikan untuk satu klien. prefs = { off: ['pr', 'booking-minggu'] }. */
+function setMemberReminderPrefs(token, memberId, prefs) {
+  requireAdmin_(token);
+  var id = String(memberId == null ? '' : memberId).trim();
+  if (!id) throw new Error('Klien tidak ditemukan');
+  var known = REMINDER_JOBS.map(function(j) { return j.jenis; });
+  var off = (prefs && Array.isArray(prefs.off)) ? prefs.off : null;
+  if (!off) throw new Error('Pengaturan pengingat klien tidak valid.');
+  var clean = [];
+  off.forEach(function(x) {
+    var k = String(x == null ? '' : x).trim().toLowerCase();
+    if (known.indexOf(k) < 0) throw new Error('Jenis pengingat tidak dikenal: ' + k + '.');
+    if (clean.indexOf(k) < 0) clean.push(k);
+  });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    var sheet = _getMemberDataSheet_();
+    if (!_ensureRemindOffCol_(sheet)) throw new Error('Kolom P di MemberData sudah dipakai untuk hal lain. Kosongkan/ganti dulu.');
+    var ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+    for (var i = 1; i < ids.length; i++) {
+      if (String(ids[i][0]).trim() === id) {
+        sheet.getRange(i + 1, MEMBER_REMIND_OFF_COL).setValue(clean.join(','));
+        return { id: id, reminderOff: clean };
+      }
+    }
+    throw new Error('Klien tidak ditemukan');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Indeks klien untuk pengingat sesi: { id: {id, name, phone (62… atau null), off} }. */
+function _rmdMemberIndex_() {
+  var idx = {};
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+    if (!row || !row[0]) return;
+    var id = String(row[0]).trim();
+    idx[id] = { id: id, name: String(row[1] || '').trim(), phone: _rmdNormalizePhone_(row[2]), off: _rmdOffFrom_(row[15]) };
+  });
+  return idx;
+}
+
+/**
+ * Handler 'sesi-besok' (T-122): satu tombol per klien yang punya sesi besok.
+ * Jam & coach dari jadwal; kalimat tidur (RMD_TPL_SLEEP) ikut di dalam pesan klien.
+ */
+function sendSesiBesokDigest_(ctx) {
+  var now = (ctx && ctx.now) || new Date();
+  var tomorrow = _wibParts_(new Date(now.getTime() + 86400000)).date;
+  var groups = {}, order = [];
+  _getSchedulesAll_().forEach(function(s) {
+    var st = String(s.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'completed') return;
+    var d = new Date(s.start);
+    if (isNaN(d.getTime()) || _wibParts_(d).date !== tomorrow) return;
+    var key = String(s.memberId).trim() || ('tel:' + s.phone);
+    if (!groups[key]) { groups[key] = { key: key, title: s.title, phone: s.phone, coach: s.coachName || '', times: [], t0: d.getTime() }; order.push(key); }
+    groups[key].times.push({ t: d.getTime(), label: Utilities.formatDate(d, REMINDER_TZ, 'HH:mm') });
+    if (!groups[key].coach && s.coachName) groups[key].coach = s.coachName;
+  });
+  if (!order.length) { Logger.log('Sesi besok: tidak ada sesi besok.'); return true; }
+
+  var members = _rmdMemberIndex_();
+  var sleep = String(PropertiesService.getScriptProperties().getProperty('RMD_TPL_SLEEP') || '').trim();
+  var tpl = _rmdTemplate_('sesi-besok');
+  var groupsSorted = order.map(function(k) { return groups[k]; }).sort(function(a, b) { return a.t0 - b.t0; });
+  var items = [], noPhone = [];
+  groupsSorted.forEach(function(g) {
+    var m = members[g.key];
+    var name = (m && m.name) || String(g.title || '').trim() || 'Klien';
+    if (m && _rmdIsOff_(m, 'sesi-besok')) return;
+    var phone = m ? m.phone : _rmdNormalizePhone_(g.phone);
+    if (!phone) { noPhone.push(name); return; }
+    g.times.sort(function(a, b) { return a.t - b.t; });
+    var jam = g.times.map(function(x) { return x.label; }).join(' dan ');
+    items.push({
+      name: name, phone: phone, fact: g.times[0].label,
+      text: _rmdFill_(tpl, { nama: name, jam: jam, coach: g.coach ? 'dengan Coach ' + g.coach : '', tidur: sleep ? '\n\n😴 ' + sleep : '' })
+    });
+  });
+  return _rmdSendDigest_('Sesi besok', _rmdDateLabel_(tomorrow), items, noPhone);
+}
+
+// ##############################################################################
 // BAGIAN: T-45 Digest Booking Minggu
 // ##############################################################################
 
@@ -616,14 +849,6 @@ function _nearestFreeSlots_(schedules, now, n, dayHours, lookaheadDays) {
   return out;
 }
 
-/** Teks WhatsApp ke klien (dikirim Coach). */
-function _bookingWaText_(name, slots) {
-  var lines = ['Halo ' + name + ', minggu ini masih ada slot latihan kosong:'];
-  slots.forEach(function(s) { lines.push('• ' + s.label); });
-  lines.push('Mau booking yang mana? 💪');
-  return lines.join('\n');
-}
-
 /**
  * Handler REMINDER_JOBS 'booking-minggu'. ctx = {slot, now}.
  * @returns {boolean} true = selesai (terkirim, atau memang tidak ada yang perlu dikirim);
@@ -632,25 +857,18 @@ function _bookingWaText_(name, slots) {
 function sendBookingMingguDigest_(ctx) {
   var now = (ctx && ctx.now) || new Date();
   var pools = _loadClientPools_();
-  var clients = pools.bookable;
+  var clients = pools.bookable.filter(function(c) { return !_rmdIsOff_(c, 'booking-minggu'); });
   if (!clients.length) { Logger.log('Booking Minggu: tidak ada klien yang bisa booking.'); return true; }
 
-  var slots = _nearestFreeSlots_(_getSchedulesAll_(), now, BOOKING_MAX_SLOTS, _businessHours_(), BOOKING_LOOKAHEAD_DAYS);   // T-45: jam buka dari Pengaturan
+  var slots = _nearestFreeSlots_(_getSchedulesAll_(), now, BOOKING_MAX_SLOTS, _businessHours_(), BOOKING_LOOKAHEAD_DAYS);
   if (!slots.length) { Logger.log('Booking Minggu: tidak ada slot kosong.'); return true; }
 
-  var text = '📅 <b>Booking Minggu Ini</b>\n' +
-    clients.length + ' klien masih punya jatah sesi. Slot kosong terdekat:\n' +
-    slots.map(function(s) { return '• ' + _escHtml_(s.label); }).join('\n') +
-    '\n\nTekan nama klien untuk kirim ajakan lewat WhatsApp.';
-  if (pools.skipped) text += '\n⚠️ ' + pools.skipped + ' klien dilewati (nomor WA tidak valid).';
-
-  var buttons = clients.map(function(c) {
-    return { text: '💬 ' + c.name + ' (sisa ' + c.slots + ')', url: _waLink_(c.phone, _bookingWaText_(c.name, slots)) };
+  var slotText = slots.map(function(s) { return '• ' + s.label; }).join('\n');
+  var tpl = _rmdTemplate_('booking-minggu');
+  var items = clients.map(function(c) {
+    return { name: c.name, phone: c.phone, fact: 'sisa ' + c.slots, text: _rmdFill_(tpl, { nama: c.name, slot: slotText }) };
   });
-
-  var r = kirimTelegramTombol_(text, buttons);
-  Logger.log('Booking Minggu: ' + JSON.stringify(r));
-  return !r.skipped && r.sent > 0 && r.failed === 0;
+  return _rmdSendDigest_('Booking minggu', _rmdDateLabel_(_wibParts_(now).date), items, pools.skippedNames);
 }
 
 /** Tes murni (tanpa sheet/Telegram). Lempar error bila gagal. */
@@ -710,26 +928,20 @@ function _buildPrDigest_(taskRows, activeClients, today) {
 
 function _prDueLabel_(d) { return d.getDate() + '/' + (d.getMonth() + 1); }
 
-/** Ringkasan singkat per klien: "2 telat, 1 hari ini, 1 besok". */
-function _prSummaryText_(e) {
-  var p = [];
-  if (e.late.length) p.push(e.late.length + ' telat');
-  if (e.today.length) p.push(e.today.length + ' hari ini');
-  if (e.tomorrow.length) p.push(e.tomorrow.length + ' besok');
-  return p.join(', ');
-}
-
-/** Teks WhatsApp ke klien. */
-function _prWaText_(e) {
-  var lines = ['Halo ' + e.client.name + ', pengingat PR kamu:'];
+/** Isi placeholder {pr}: daftar judul PR klien (maks PR_DIGEST_MAX_TITLES). */
+function _prItemsText_(e) {
   var all = e.late.concat(e.today, e.tomorrow), shown = all.slice(0, PR_DIGEST_MAX_TITLES);
-  shown.forEach(function(t) {
+  var lines = shown.map(function(t) {
     var tag = e.late.indexOf(t) >= 0 ? 'telat, ' : '';
-    lines.push('• ' + t.title + ' (' + tag + 'tenggat ' + _prDueLabel_(t.due) + ')');
+    return '• ' + t.title + ' (' + tag + 'tenggat ' + _prDueLabel_(t.due) + ')';
   });
   if (all.length > shown.length) lines.push('…dan ' + (all.length - shown.length) + ' PR lain.');
-  lines.push('Semangat, kamu pasti bisa! 💪');
   return lines.join('\n');
+}
+
+/** Fakta singkat untuk label tombol: "2 telat" atau "3 PR". */
+function _prFact_(e) {
+  return e.late.length ? e.late.length + ' telat' : (e.today.length + e.tomorrow.length) + ' PR';
 }
 
 /**
@@ -741,23 +953,16 @@ function sendPrDigest_(ctx) {
   var now = (ctx && ctx.now) || new Date();
   var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   var pools = _loadClientPools_();
+  var active = pools.active.filter(function(c) { return !_rmdIsOff_(c, 'pr'); });
   var rows = _tasksSheet_().getDataRange().getValues().slice(1);
-  var list = _buildPrDigest_(rows, pools.active, today);
+  var list = _buildPrDigest_(rows, active, today);
   if (!list.length) { Logger.log('PR digest: tidak ada PR yang perlu diingatkan.'); return true; }
 
-  var shown = list.slice(0, PR_DIGEST_MAX_LINES);
-  var text = '📝 <b>Pengingat PR</b>\n' + list.length + ' klien punya PR yang perlu ditindaklanjuti:\n\n' +
-    shown.map(function(e) { return '• ' + _escHtml_(e.client.name) + ' — ' + _prSummaryText_(e); }).join('\n');
-  if (list.length > shown.length) text += '\n…dan ' + (list.length - shown.length) + ' klien lain.';
-  text += '\n\nTekan nama klien untuk kirim pengingat lewat WhatsApp.';
-  if (pools.skipped) text += '\n⚠️ ' + pools.skipped + ' klien dilewati (nomor WA tidak valid).';
-
-  var buttons = list.map(function(e) {
-    return { text: '💬 ' + e.client.name + ' (' + _prSummaryText_(e) + ')', url: _waLink_(e.client.phone, _prWaText_(e)) };
+  var tpl = _rmdTemplate_('pr');
+  var items = list.map(function(e) {
+    return { name: e.client.name, phone: e.client.phone, fact: _prFact_(e), text: _rmdFill_(tpl, { nama: e.client.name, pr: _prItemsText_(e) }) };
   });
-  var r = kirimTelegramTombol_(text, buttons);
-  Logger.log('PR digest: ' + JSON.stringify(r));
-  return !r.skipped && r.sent > 0 && r.failed === 0;
+  return _rmdSendDigest_('PR', _rmdDateLabel_(_wibParts_(now).date), items, pools.skippedNames);
 }
 
 /** Tes murni (tanpa sheet/Telegram). Lempar error bila gagal. */
@@ -808,7 +1013,7 @@ function _sleepLine_(hour) {
 //   - Throttle 15 detik per jenis (mencegah spam dari tombol).
 // Hasil: {jenis, terkirim:boolean, pesan:string}. `terkirim` false + pesan = alasan.
 
-var RMD_TEST_JENIS = ['booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore'];
+var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore'];
 var RMD_TEST_MIN_GAP_MS = 15000;
 
 /** Murni: nama jenis valid → jenis itu sendiri; selain itu lempar error. */
@@ -845,7 +1050,7 @@ function sendReminderTest(token, jenis) {
     return { jenis: j, terkirim: true, pesan: 'Pratinjau kalimat tidur terkirim ke Telegram.' };
   }
 
-  var handler = { 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
+  var handler = { 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
                   'makan-pagi': sendMakanPagiDigest_, 'makan-sore': sendMakanSoreDigest_ }[j];
   var ok;
   try {
@@ -986,7 +1191,7 @@ function _selectCoreClients_() {
   var pools = _loadClientPools_();
   var r = _filterCoreClients_(pools.active, getPriceList());
   if (!r.corePackages) Logger.log('Paket core: tidak ada paket berkategori "core" di PriceList (lihat T-01).');
-  return { clients: r.clients, skipped: pools.skipped, corePackages: r.corePackages };
+  return { clients: r.clients, skipped: pools.skipped, skippedNames: pools.skippedNames, corePackages: r.corePackages };
 }
 
 /** Tes T-71 (murni, tanpa sheet). Jalankan dari editor. */
@@ -1012,43 +1217,23 @@ function _selectCoreClients_() {
 
 var MAKAN_LABEL = { pagi: '🍳 Makan Pagi', sore: '🥗 Makan Sore' };
 
-/** Teks WhatsApp ke klien (dikirim Coach). Murni. */
-function _makanWaText_(name, waktu, tip) {
-  var lines = ['Halo ' + name + ', pengingat ' + (waktu === 'pagi' ? 'makan pagi' : 'makan sore') + ':', tip, 'Semangat! 💪'];
-  return lines.join('\n');
-}
-
-/**
- * Murni: susun pesan Telegram + tombol. clients = hasil _selectCoreClients_().clients.
- * @returns {{text:string, buttons:Array}|null} null bila tak ada klien atau tip kosong.
- */
-function _buildMakanDigest_(clients, waktu, tip, skipped) {
-  var t = String(tip == null ? '' : tip).trim();
-  if (!clients || !clients.length || !t || !MAKAN_LABEL[waktu]) return null;
-  var text = '<b>' + MAKAN_LABEL[waktu] + '</b>\n' + clients.length + ' klien paket core. Tip hari ini:\n' +
-    _escHtml_(t) + '\n\nTekan nama klien untuk kirim lewat WhatsApp.';
-  if (skipped) text += '\n⚠️ ' + skipped + ' klien dilewati (nomor WA tidak valid).';
-  var buttons = clients.map(function(c) {
-    return { text: '💬 ' + c.name, url: _waLink_(c.phone, _makanWaText_(c.name, waktu, t)) };
-  });
-  return { text: text, buttons: buttons };
-}
-
 /**
  * Handler bersama. @returns {boolean} true = selesai (terkirim / memang tak ada yang dikirim);
  * false = Telegram dilewati/gagal → dicoba lagi di tick berikut.
  */
 function _sendMakanDigest_(waktu, ctx) {
   var now = (ctx && ctx.now) || new Date();
+  var jenis = 'makan-' + waktu;
   var sel = _selectCoreClients_();
-  sel.clients = sel.clients.filter(function(c) { return c.mealOn !== false; });   // T-73: opt-out per klien
-  if (!sel.clients.length) { Logger.log('Makan ' + waktu + ': tidak ada klien core dengan reminder makan aktif.'); return true; }
-  var tip = _pickTip_(waktu, _wibParts_(now).date);
-  var d = _buildMakanDigest_(sel.clients, waktu, tip, sel.skipped);
-  if (!d) { Logger.log('Makan ' + waktu + ': tidak ada tip aktif di MealTips, tidak ada yang dikirim.'); return true; }
-  var r = kirimTelegramTombol_(d.text, d.buttons);
-  Logger.log('Makan ' + waktu + ': ' + JSON.stringify(r));
-  return !r.skipped && r.sent > 0 && r.failed === 0;
+  var clients = sel.clients.filter(function(c) { return c.mealOn !== false && !_rmdIsOff_(c, jenis); });   // T-73 (kolom O) + T-123 (kolom P)
+  if (!clients.length) { Logger.log('Makan ' + waktu + ': tidak ada klien core dengan reminder makan aktif.'); return true; }
+  var tip = String(_pickTip_(waktu, _wibParts_(now).date) || '').trim();
+  if (!tip) { Logger.log('Makan ' + waktu + ': tidak ada tip aktif di MealTips, tidak ada yang dikirim.'); return true; }
+  var tpl = _rmdTemplate_(jenis);
+  var items = clients.map(function(c) {
+    return { name: c.name, phone: c.phone, fact: '', text: _rmdFill_(tpl, { nama: c.name, tip: tip }) };
+  });
+  return _rmdSendDigest_(waktu === 'pagi' ? 'Makan pagi' : 'Makan sore', _rmdDateLabel_(_wibParts_(now).date), items, sel.skippedNames);
 }
 
 function sendMakanPagiDigest_(ctx) { return _sendMakanDigest_('pagi', ctx); }

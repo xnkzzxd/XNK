@@ -23,6 +23,7 @@ const ADMIN = [
   'addTask', 'updateTask', 'deleteTask', 'deleteTaskGroup', 'getTasksForMember', 'getTaskSummary',
   'getTaskTemplates', 'saveTaskTemplate', 'deleteTaskTemplate', 'setMemberMealReminder', 'sendReminderTest',
   'getReminderStatus', 'installReminderTrigger', 'getReminderLog',
+  'previewReminderText', 'setMemberReminderPrefs',
   'getPriceListAdmin', 'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages',
 ];
 const MEMBER = [
