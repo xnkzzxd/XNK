@@ -1018,18 +1018,40 @@
     const body = $('settings-body');
     body.addEventListener('input', onSettingsEdit);
     body.addEventListener('change', onSettingsEdit);
-    adminCall('getAppSettings').then(function (s) {
+    const pre = setState.pre || settingsPrefetch();
+    setState.pre = null;
+    pre.settings.then(function (s) {
       setState.data = s;
       if (!isPhone() && !setState.open) setState.open = SET_SECTIONS[0][0];
       refreshSettingsNav();
       if (setState.open) renderSettingsSection(setState.open);
-      loadRmdStatus();
-      if (!pkgState.data) pkgLoad();
+      pre.status.then(applyRmdStatus).catch(function () {});
+      if (!pkgState.data) pre.pkg.then(function (d) { if (d) { pkgState.data = d; pkgRefreshView(); } });
     }).catch(function (err) {
       setState.built = false;
       window.showToast('Gagal memuat Pengaturan: ' + window.authMessage(err));
     });
   };
+
+  // Tiga panggilan berjalan bersamaan, dan dimulai diam-diam setelah data panel siap,
+  // supaya Pengaturan sudah terisi saat dibuka.
+  function settingsPrefetch() {
+    const p = {
+      settings: adminCall('getAppSettings'),
+      status: adminCall('getReminderStatus'),
+      pkg: adminCall('getPriceListAdmin').catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); return null; })
+    };
+    p.settings.catch(function () {});   // kesalahan ditangani saat halaman dibuka
+    p.status.catch(function () {});
+    setState.pre = p;
+    return p;
+  }
+  window.settingsPrefetch = function () { if (!setState.built && !setState.pre) settingsPrefetch(); };
+  function applyRmdStatus(s) {
+    setState.status = s;
+    const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();
+    refreshSettingsNav();
+  }
 
   function refreshSettingsNav() {
     const nav = $('settings-nav');
@@ -1491,6 +1513,7 @@
       window.renewals = r[7] || [];
       ui.dataReady = true;
       window.hideGlobalLoader();
+      if (!window.isPublicView) window.settingsPrefetch();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
       loadRevenue();
     });
