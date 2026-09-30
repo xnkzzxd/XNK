@@ -67,6 +67,12 @@ Buka proyek *XNK Personal Trainer Scheduler* → ⚙️ **Project Settings** →
 | `TELEGRAM_BOT_TOKEN` | Token bot Telegram (salin dari `kirimNotifTelegram` versi lama di editor, sebelum ditimpa) |
 | `TELEGRAM_CHAT_IDS` | Chat ID admin, dipisah koma, mis. `12345678,87654321` |
 
+Pengaturan lain **tidak perlu** diisi manual: panel PT → **Pengaturan** bisa mengubah
+Telegram (token, chat ID, tombol tes), email notifikasi (`NOTIF_EMAIL`, kosong = email
+pemilik akun), jam operasional per hari (`BUSINESS_HOURS_JSON`), dan keamanan/sesi
+(`LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`, `MEMBER_LOGIN_MAX_FAILS`, `ADMIN_SESSION_DAYS`).
+Semuanya disimpan sebagai Script Properties; kosong = nilai bawaan di `Kode.gs`.
+
 `SESSION_SECRET` dibuat otomatis oleh aplikasi. Menghapusnya = semua PT & klien logout.
 
 **Tanpa membuka editor:** buat file bernama `xnk-pt-config.json` di Google Drive akun
