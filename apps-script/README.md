@@ -68,11 +68,21 @@ Buka proyek *XNK Personal Trainer Scheduler* → ⚙️ **Project Settings** →
 | `TELEGRAM_BOT_TOKEN` | Token bot Telegram (salin dari `kirimNotifTelegram` versi lama di editor, sebelum ditimpa) |
 | `TELEGRAM_CHAT_IDS` | Chat ID admin, dipisah koma, mis. `12345678,87654321` |
 
-Pengaturan lain **tidak perlu** diisi manual: panel PT → **Pengaturan** bisa mengubah
-Telegram (token, chat ID, tombol tes), email notifikasi (`NOTIF_EMAIL`, kosong = email
-pemilik akun), jam operasional per hari (`BUSINESS_HOURS_JSON`), dan keamanan/sesi
-(`LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`, `MEMBER_LOGIN_MAX_FAILS`, `ADMIN_SESSION_DAYS`).
-Semuanya disimpan sebagai Script Properties; kosong = nilai bawaan di `Kode.gs`.
+Pengaturan lain **tidak perlu** diisi manual: panel PT → **Pengaturan** (halaman sendiri, dibagi
+per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
+
+- **Pengingat Klien**: saklar utama, tiap jenis (Booking Minggu, PR, Makan pagi/sore) dengan jam
+  dan tombol tes, kalimat tidur, tombol **Pasang** trigger (tanpa membuka editor), dan riwayat
+  pengingat (nama klien, bukan nomor).
+- **Notifikasi Admin**: Telegram (saklar, token, chat ID, tombol tes) dan email notifikasi
+  (`NOTIF_EMAIL`, kosong = email pemilik akun). Token yang tersimpan hanya tampil sebagai
+  `••••1234`; dikosongkan berarti token lama tetap dipakai.
+- **Jam Operasional** per hari (`BUSINESS_HOURS_JSON`).
+- **Keamanan**: ganti PIN, `LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`, `MEMBER_LOGIN_MAX_FAILS`,
+  `ADMIN_SESSION_DAYS`. Kolom angka yang dikosongkan kembali ke nilai bawaan ("Bawaan …").
+
+Semuanya disimpan sebagai Script Properties; kosong = nilai bawaan di `Kode.gs`. Di HP, bagian
+dibuka satu per satu dan gerakan kembali di HP menutup bagian itu.
 
 `SESSION_SECRET` dibuat otomatis oleh aplikasi. Menghapusnya = semua PT & klien logout.
 

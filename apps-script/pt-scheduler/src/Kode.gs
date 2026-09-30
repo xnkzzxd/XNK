@@ -407,20 +407,30 @@ function getBusinessHours() {
   return _businessHours_();
 }
 
+/** '••••1234' untuk rahasia yang tersimpan, '' kalau belum diisi. Tidak pernah membocorkan lebih dari 4 karakter terakhir. */
+function _maskSecret_(value) {
+  const v = String(value || '');
+  if (!v) return '';
+  return '••••' + (v.length > 8 ? v.slice(-4) : '');
+}
+
 /** Info Pengaturan buat form admin: notifikasi, jam operasional, keamanan/sesi. */
 function getAppSettings(token) {
   requireAdmin_(token);
   const props = PropertiesService.getScriptProperties();
   const settings = {
     telegramEnabled: props.getProperty('TELEGRAM_ENABLED') !== 'false',
-    telegramBotToken: props.getProperty('TELEGRAM_BOT_TOKEN') || '',
+    telegramBotToken: '',   // T-105: token tidak pernah dikirim ke browser; lihat telegramBotTokenMask
+    telegramBotTokenMask: _maskSecret_(props.getProperty('TELEGRAM_BOT_TOKEN')),
     telegramChatIds: props.getProperty('TELEGRAM_CHAT_IDS') || '',
     notifEmail: props.getProperty('NOTIF_EMAIL') || '',
     businessHours: _businessHours_()
   };
+  settings.defaults = { businessHours: DEFAULT_BUSINESS_HOURS };
   Object.keys(SETTINGS_NUMERIC_BOUNDS).forEach(function (name) {
     const b = SETTINGS_NUMERIC_BOUNDS[name];
     settings[name] = _numProp_(b.key, b.fallback);
+    settings.defaults[name] = b.fallback;
   });
   settings.reminder = _rmdRead_();   // T-40: lihat ReminderSettings.gs
   return settings;
@@ -473,7 +483,7 @@ function updateAppSettings(token, payload) {
 /** Tes token/Chat ID Telegram TANPA menyimpannya dulu (dari form Pengaturan). */
 function sendTelegramTest(token, botToken, chatIds) {
   requireAdmin_(token);
-  botToken = String(botToken || '').trim();
+  botToken = String(botToken || '').trim() || String(PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || '');   // kosong = pakai token tersimpan
   const ids = String(chatIds || '').split(',').map(function (id) { return id.trim(); }).filter(String);
   if (!botToken || ids.length === 0) throw new Error('Isi token bot dan minimal satu Chat ID dulu.');
   const url = 'https://api.telegram.org/bot' + botToken + '/sendMessage';

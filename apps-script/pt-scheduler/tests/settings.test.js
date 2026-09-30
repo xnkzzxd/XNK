@@ -15,7 +15,8 @@ test('getAppSettings returns today\'s defaults until the admin changes something
   const s = env.call('getAppSettings', token);
   delete s.reminder; // reminder settings are covered by their own defaults
   assert.deepEqual(s, {
-    telegramEnabled: true, telegramBotToken: '', telegramChatIds: '', notifEmail: '',
+    telegramEnabled: true, telegramBotToken: '', telegramBotTokenMask: '', telegramChatIds: '', notifEmail: '',
+    defaults: { businessHours: DEFAULT_HOURS, loginMaxFails: 10, loginLockSeconds: 600, memberLoginMaxFails: 30, adminSessionDays: 30 },
     businessHours: DEFAULT_HOURS,
     loginMaxFails: 10, loginLockSeconds: 600, memberLoginMaxFails: 30, adminSessionDays: 30,
   });
@@ -31,11 +32,13 @@ test('updateAppSettings saves every field, and getAppSettings reflects it back',
     loginMaxFails: 3, loginLockSeconds: 120, memberLoginMaxFails: 5, adminSessionDays: 7,
   });
   const expected = {
-    telegramEnabled: false, telegramBotToken: '123:abc', telegramChatIds: '1, 2',
+    telegramEnabled: false, telegramBotToken: '', telegramBotTokenMask: '••••', telegramChatIds: '1, 2',
+    defaults: { businessHours: DEFAULT_HOURS, loginMaxFails: 10, loginLockSeconds: 600, memberLoginMaxFails: 30, adminSessionDays: 30 },
     notifEmail: 'owner@gym.test', businessHours: hours,
     loginMaxFails: 3, loginLockSeconds: 120, memberLoginMaxFails: 5, adminSessionDays: 7,
   };
   delete res.reminder;
+  assert.equal(env.props.TELEGRAM_BOT_TOKEN, '123:abc');
   assert.deepEqual(res, expected);
   const got = env.call('getAppSettings', token);
   delete got.reminder;
@@ -48,7 +51,8 @@ test('updateAppSettings: an empty string deletes the property, reverting to defa
   env.call('updateAppSettings', token, { telegramBotToken: 'x', notifEmail: 'a@b.com', loginMaxFails: 4 });
   env.call('updateAppSettings', token, { telegramBotToken: '', notifEmail: '', loginMaxFails: '' });
   const s = env.call('getAppSettings', token);
-  assert.equal(s.telegramBotToken, '');
+  assert.equal(env.props.TELEGRAM_BOT_TOKEN, undefined);
+  assert.equal(s.telegramBotTokenMask, '');
   assert.equal(s.notifEmail, '');
   assert.equal(s.loginMaxFails, 10);
 });
@@ -121,6 +125,7 @@ test('sendTelegramTest sends one message per given chat id, using the given (not
 test('sendTelegramTest requires a token and at least one chat id', () => {
   const env = seededEnv();
   const token = env.adminToken();
+  delete env.props.TELEGRAM_BOT_TOKEN;
   assert.throws(() => env.call('sendTelegramTest', token, '', '111'), /token/);
   assert.throws(() => env.call('sendTelegramTest', token, 'abc', ''), /Chat ID/);
 });
@@ -152,4 +157,37 @@ test('ADMIN_SESSION_DAYS from Pengaturan changes the issued token lifetime', () 
   const payload = env.context._readToken_(shortToken);
   const expected = before + 1 * 86400000;
   assert.ok(Math.abs(payload.exp - expected) < 5000, `exp ${payload.exp} not close to ${expected}`);
+});
+
+test('getAppSettings never returns the Telegram token, only a short mask', () => {
+  const env = seededEnv();
+  const token = env.adminToken();
+  env.props.TELEGRAM_BOT_TOKEN = '123456789:AAHsecretsecretsecret9f3a';
+  const s = env.call('getAppSettings', token);
+  assert.equal(s.telegramBotToken, '');
+  assert.equal(s.telegramBotTokenMask, '••••9f3a');
+  assert.ok(!JSON.stringify(s).includes('AAHsecret'));
+});
+
+test('a partial save leaves every other setting alone (including the stored token)', () => {
+  const env = seededEnv();
+  const token = env.adminToken();
+  env.props.TELEGRAM_BOT_TOKEN = 'keep:me';
+  env.props.NOTIF_EMAIL = 'keep@x.com';
+  env.props.RMD_ENABLED = 'true';
+  const hours = Object.assign({}, DEFAULT_HOURS, { 2: [7, 20] });
+  env.call('updateAppSettings', token, { businessHours: hours });
+  assert.equal(env.props.TELEGRAM_BOT_TOKEN, 'keep:me');
+  assert.equal(env.props.NOTIF_EMAIL, 'keep@x.com');
+  assert.equal(env.props.RMD_ENABLED, 'true');
+  assert.deepEqual(env.call('getBusinessHours'), hours);
+});
+
+test('sendTelegramTest falls back to the stored token when the field is left empty', () => {
+  const env = seededEnv();
+  const token = env.adminToken();
+  env.props.TELEGRAM_BOT_TOKEN = 'saved:token';
+  const res = env.call('sendTelegramTest', token, '', '10');
+  assert.equal(res.sent, 1);
+  assert.ok(env.fetches[0].url.includes('saved:token'));
 });

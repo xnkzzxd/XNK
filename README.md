@@ -31,7 +31,7 @@ PTs log in **inside the app** with the admin PIN. The Apps Script server checks 
 so opening the `/exec` address directly does not get around it. Each phone stays
 logged in for 30 days; after 10 wrong PINs in 10 minutes, login locks for 10 minutes
 and Telegram gets an alert. These are defaults: the panel's **Pengaturan** page can change
-them, plus Telegram, notification email and business hours.
+them, plus Telegram, reminders, notification email and business hours.
 
 The PIN is the `ADMIN_PIN` Script Property of the Apps Script project. Changing it logs
 every phone out. How to change it (also without opening the editor) is in

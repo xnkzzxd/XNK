@@ -22,6 +22,7 @@ const ADMIN = [
   'getAppSettings', 'updateAppSettings', 'sendTelegramTest',
   'addTask', 'updateTask', 'deleteTask', 'deleteTaskGroup', 'getTasksForMember', 'getTaskSummary',
   'getTaskTemplates', 'saveTaskTemplate', 'deleteTaskTemplate', 'setMemberMealReminder', 'sendReminderTest',
+  'getReminderStatus', 'installReminderTrigger', 'getReminderLog',
 ];
 const MEMBER = [
   'getMemberProfile', 'getMemberSessions', 'clientBookSchedule', 'clientBookRecurring',

@@ -26,7 +26,7 @@ Settings moves out of the bottom sheet `#sheet-settings` into a real admin view 
 - Add `'settings'` to `VIEWS` in `App.html`, rendered by `renderSettings()`.
 - The sidebar "Pengaturan" button and the top-bar gear call `window.navigate('settings')` instead of `openSettings()`.
 - Client portal keeps the small sheet, with theme and logout only. `#sheet-settings` stays for clients and loses its admin block.
-- The URL hash carries the open section (`#settings/paket`) so a refresh or the back button returns to it.
+- On a phone, opening a section pushes a browser history entry (state only, no URL hash, because Apps Script pages run in a sandboxed iframe), so the back gesture returns to the list. The open section is kept in memory while the app is open; a page refresh returns to the list.
 
 ### 1.2 Layout
 
@@ -47,7 +47,7 @@ Breakpoint: the app switches at **768 px** (`.only-mobile` / `.only-desktop` in 
 └─────────┘└─────────────────────────────────────────────────────────┘
 ```
 
-Phone (< 768 px): the list is a page of its own. Tapping a row opens the section full-width with a back arrow in the page head. The save bar is sticky above the tab bar. Full phone rules are in §8.
+Phone (< 768 px): the list is a page of its own. Tapping a row opens the section full-width with a back arrow in the page head. The save bar is a fixed element outside the page (a page animation would otherwise trap fixed children), sitting above the tab bar. Full phone rules are in §8.
 
 ```
 ┌ Pengaturan ──────────┐     ┌ ← Jam Operasional ───┐
@@ -99,7 +99,7 @@ All colors come from the existing tokens (`--bg`, `--surface`, `--border`, `--fg
 ### 1.6 Trigger status and history (S-7, S-8)
 
 - `getReminderStatus(token)` (admin) returns `{ triggerInstalled, tickEveryMinutes, lastTickAt, telegramReady }`. It reads `ScriptApp.getProjectTriggers()` and `RMD_LAST_tick`.
-- `installReminderTrigger(token)` (admin) does the same as `setupReminderTrigger`: it removes duplicate triggers and creates one every 15 minutes. This works from the web app because the deployment runs as the owner. `setupReminderTrigger` stays for the editor.
+- `installReminderTrigger(token)` (admin) does the same as `setupReminderTrigger`: it removes duplicate triggers and creates one hourly trigger (the reminder hours are whole hours, so hourly is enough). This works from the web app because the deployment runs as the owner. `setupReminderTrigger` stays for the editor.
 - `getReminderLog(token, {onlyFailed, limit})` (admin) returns the newest rows of `ReminderLog` (max 200). The target is shown as the client name (joined server-side). Phone numbers are not included.
 
 ## 2. Pricelist CRUD (priority 2)
@@ -168,7 +168,7 @@ No WhatsApp API. The owner's Telegram gets one message per reminder run; each cl
 ### 3.1 Flow
 
 ```
-time trigger (every 15 min) ─► runReminderTick ─► RMD_ENABLED? due jobs (_dueJobs_)?
+time trigger (hourly) ─► runReminderTick ─► RMD_ENABLED? due jobs (_dueJobs_)?
     ▼
 handler(ctx): recipients = eligible clients − per-client opt-outs
     ▼
@@ -261,7 +261,7 @@ The phone is the main device for both the owner and clients. Everything below is
 - **Touch:** targets at least 44 × 44 px, and 8 px between neighboring targets. Toggles keep the existing `.toggle` size.
 - **Keyboards:** `inputmode="numeric"` for prices, sessions, hours and limits; `type="tel"` for phone numbers; `type="email"` for email. Enter moves to the next field; the last one submits.
 - **Keyboard open:** the focused field scrolls into view above the keyboard (`scrollIntoView({block:'center'})` on focus). The save bar stays attached to the bottom of the visible area.
-- **Back:** each level pushes a history entry (`#settings`, `#settings/paket`, `#settings/paket/edit`), so the phone's back gesture steps back one level and closes an open sheet before leaving the section.
+- **Back:** each level pushes a history entry (state only, no hash: list → section → editor), so the phone's back gesture steps back one level and closes an open sheet before leaving the section.
 - **Sheets:** use the existing bottom sheet (`.sheet`, `.sheet-handle`); a tall form uses a full-height sheet with a sticky footer holding the main button.
 - **Text:** body stays at `--fs-md` (14 px) or larger; inputs are 16 px so iOS doesn't zoom on focus.
 - **Motion:** slide-in for sections and sheets uses `--t-base`, and is turned off under `prefers-reduced-motion`.

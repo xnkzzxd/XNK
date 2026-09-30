@@ -358,33 +358,173 @@ async function contrastReport(page) {
       'closing the confirm modal drops pointer-events immediately (no ghost overlay)');
     await page.waitForTimeout(500);
 
-    // ── Pengaturan: notifikasi, jam operasional, keamanan/sesi ────────────────
-    await page.evaluate(() => window.openSettings());
-    await page.waitForTimeout(500);
-    check((await page.inputValue('#settings-telegram-token')) === '1:x', 'Settings pre-fills the saved Telegram bot token');
-    check((await page.inputValue('#settings-telegram-chatids')) === '111', 'Settings pre-fills the saved Telegram chat IDs');
-    check(await page.isChecked('#settings-telegram-enabled'), 'Telegram toggle defaults to on');
-    check((await page.inputValue('#settings-hours-1-start')) === '6' && (await page.inputValue('#settings-hours-1-end')) === '21',
-      'Settings pre-fills today\'s business hours (Senin 06–21)');
-    check((await page.inputValue('#settings-login-max-fails')) === '10', 'Settings pre-fills the login lockout threshold');
-
-    await page.click('#settings-telegram-enabled');
-    await page.fill('#settings-notif-email', 'gym-owner@example.com');
-    await page.fill('#settings-hours-0-start', '8');
-    await page.fill('#settings-hours-0-end', '11');
-    await page.fill('#settings-login-max-fails', '4');
-    await page.click('#form-app-settings button[type=submit]');
+    // ── Pengaturan (halaman penuh): daftar + bagian berdampingan di desktop ───
+    await page.click('#side-foot .nav-item[data-view="settings"]');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#view-settings'), 'sidebar "Pengaturan" opens the full settings page');
+    check(await visible(page, '#settings-nav') && await visible(page, '#settings-pane'), 'desktop shows the section list and the open section side by side');
+    check((await page.locator('#settings-nav .settings-nav-item').count()) === 6, 'settings list has 6 sections');
+    check(!(await visible(page, '#settings-savebar')), 'no save bar until something changes');
+    await page.click('.settings-nav-item[data-section="notifikasi"]');
+    check((await page.inputValue('#set-tgToken')) === '', 'the saved Telegram token is never put in the form');
+    check(((await page.getAttribute('#set-tgToken', 'placeholder')) || '').startsWith('••••'), 'the stored token shows only as a mask');
+    check((await page.inputValue('#set-tgChat')) === '111', 'Settings pre-fills the saved Telegram chat IDs');
+    check(await page.isChecked('[data-k="tgEnabled"]'), 'Telegram toggle defaults to on');
+    await page.click('[data-k="tgEnabled"]');
+    check(await visible(page, '#settings-savebar'), 'changing a field shows the save bar');
+    await page.fill('#set-email', 'not-an-email');
+    check(await page.locator('[data-fk="email"].has-error').count() === 1 && await page.isDisabled('#settings-save-btn'), 'invalid email shows an error and blocks saving');
+    await page.fill('#set-email', 'gym-owner@example.com');
+    check(await page.locator('[data-fk="email"].has-error').count() === 0, 'fixing the email clears the error');
+    await page.click('#settings-save-btn');
     await page.waitForTimeout(500);
     check(env.props.TELEGRAM_ENABLED === 'false', 'turning the toggle off is saved');
     check(env.props.NOTIF_EMAIL === 'gym-owner@example.com', 'notification email is saved');
-    check(JSON.parse(env.props.BUSINESS_HOURS_JSON)['0'][0] === 8 && JSON.parse(env.props.BUSINESS_HOURS_JSON)['0'][1] === 11, 'business hours override is saved');
-    check(env.props.LOGIN_MAX_FAILS === '4', 'login lockout threshold is saved');
+    check(env.props.TELEGRAM_BOT_TOKEN === '1:x', 'saving Notifikasi leaves the stored token alone');
     check((await page.textContent('#toast-msg')).includes('disimpan'), 'a confirmation toast is shown after saving');
+    check(!(await visible(page, '#settings-savebar')), 'save bar hides after saving');
 
-    await page.fill('#settings-telegram-chatids', '999');
+    await page.fill('#set-tgChat', '999');
     await page.click('#btn-telegram-test');
     await page.waitForTimeout(400);
     check((await page.textContent('#toast-msg')).includes('Chat ID'), 'the "kirim pesan tes" button reports how many chat IDs received the test');
+    check(env.fetches.some(f => f.url.includes('bot1:x')), 'the test uses the stored token when the token field is empty');
+
+    // Jam operasional
+    await page.click('.settings-nav-item[data-section="jam"]');   // dirty (chat ID) → confirm
+    await page.waitForTimeout(400);
+    check(await visible(page, '#modal-confirm'), 'leaving a section with unsaved changes asks first');
+    await page.click('#btn-confirm-modal-no');
+    await page.waitForTimeout(500);
+    check((await page.inputValue('#set-tgChat')) === '999', 'Batal on the question keeps the unsaved edit');
+    await page.click('#settings-savebar .btn-secondary');
+    check((await page.inputValue('#set-tgChat')) === '111', 'Batal on the save bar restores the saved value');
+    await page.click('.settings-nav-item[data-section="jam"]');
+    check((await page.inputValue('[data-k="h1s"]')) === '6' && (await page.inputValue('[data-k="h1e"]')) === '21', 'Settings pre-fills today\'s business hours (Senin 06–21)');
+    await page.fill('[data-k="h0s"]', '12'); await page.fill('[data-k="h0e"]', '11');
+    check(await page.locator('[data-fk="hours0"].has-error').count() === 1 && await page.isDisabled('#settings-save-btn'), 'open ≥ close shows an error and blocks saving');
+    await page.fill('[data-k="h0s"]', '8');
+    await page.click('#settings-save-btn');
+    await page.waitForTimeout(500);
+    check(JSON.parse(env.props.BUSINESS_HOURS_JSON)['0'][0] === 8 && JSON.parse(env.props.BUSINESS_HOURS_JSON)['0'][1] === 11, 'business hours override is saved');
+    check(env.props.NOTIF_EMAIL === 'gym-owner@example.com', 'saving Jam Operasional leaves other settings alone');
+
+    // Keamanan
+    await page.click('.settings-nav-item[data-section="keamanan"]');
+    check((await page.getAttribute('#set-loginMaxFails', 'placeholder')) === 'Bawaan 10' && (await page.inputValue('#set-loginMaxFails')) === '', 'a default number shows as the "Bawaan" placeholder');
+    await page.fill('#set-loginMaxFails', '4');
+    await page.click('#settings-save-btn');
+    await page.waitForTimeout(500);
+    check(env.props.LOGIN_MAX_FAILS === '4', 'login lockout threshold is saved');
+    await page.fill('#set-loginMaxFails', '');
+    await page.click('#settings-save-btn');
+    await page.waitForTimeout(500);
+    check(env.props.LOGIN_MAX_FAILS === undefined, 'clearing a number returns to the default');
+
+    // Pengingat
+    await page.click('.settings-nav-item[data-section="pengingat"]');
+    await page.waitForTimeout(500);
+    check((await page.locator('#settings-body .card-flat .toggle').count()) >= 5, 'Pengingat has a master switch and a card per reminder type (incl. makan pagi/sore)');
+    check((await page.textContent('#rmd-status')).includes('belum terpasang'), 'reminder status says the trigger is not installed');
+    await page.click('#rmd-status .btn');
+    await page.waitForTimeout(500);
+    check(env.triggers.length === 1 && (await page.textContent('#rmd-status')).includes('Trigger terpasang'), '"Pasang" installs the reminder trigger from the panel');
+    await page.click('[data-k="job-makan-pagi-enabled"]');
+    await page.fill('[data-k="job-makan-pagi-hour"]', '7');
+    await page.click('#settings-save-btn');
+    await page.waitForTimeout(500);
+    check(env.props.RMD_MAKAN_PAGI_ENABLED === 'true' && env.props.RMD_MAKAN_PAGI_HOUR === '7', 'meal reminders can be switched on and timed from the panel');
+    noErrors(errors);
+    await context.close();
+  }
+
+  // ── Pengaturan · HP (touch, terang & gelap) ───────────────────────────────
+  for (const scheme of ['light', 'dark']) {
+    console.log('Pengaturan · HP · ' + scheme);
+    const env = richEnv();
+    const token = env.adminToken();
+    const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { touch: true, colorScheme: scheme, wait: 1400 });
+    const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    // Tombol/kolom yang bisa disentuh di bagian yang terbuka harus ≥ 44 px
+    const smallTargets = () => page.evaluate(() => {
+      const bad = [];
+      document.querySelectorAll('#settings-pane button, #settings-pane input:not([type=hidden]), #settings-pane textarea, #settings-nav button').forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') return;
+        if (r.height < 43.5 || r.width < 43.5) bad.push((el.getAttribute('data-k') || el.className || el.tagName) + ' ' + Math.round(r.width) + '×' + Math.round(r.height));
+      });
+      return bad;
+    });
+
+    await page.click('#topbar-actions .icon-btn[aria-label="Pengaturan"]');
+    await page.waitForTimeout(700);
+    check(await visible(page, '#view-settings') && await visible(page, '#settings-nav'), 'phone: the gear opens Pengaturan with the section list');
+    check(!(await visible(page, '#settings-pane')), 'phone: only the list is shown until a section is chosen');
+    check(await visible(page, '#tabbar'), 'phone: the bottom bar stays visible');
+    check((await overflow()) <= 0, 'phone: settings list has no sideways scroll');
+    check((await smallTargets()).length === 0, 'phone: list rows are at least 44 px tall (' + (await smallTargets()).join(', ') + ')');
+    await shot(page, 'settings-mobile-list-' + scheme);
+
+    for (const id of ['tampilan', 'pengingat', 'notifikasi', 'jam', 'keamanan', 'akun']) {
+      await page.click('.settings-nav-item[data-section="' + id + '"]');
+      await page.waitForTimeout(500);
+      check(await visible(page, '#settings-pane') && !(await visible(page, '#settings-nav')), 'phone: "' + id + '" opens full-width with the list hidden');
+      check((await overflow()) <= 0, 'phone: "' + id + '" has no sideways scroll');
+      const bad = await smallTargets();
+      check(bad.length === 0, 'phone: "' + id + '" touch targets ≥ 44 px' + (bad.length ? ' — ' + bad.join(', ') : ''));
+      const fs = await page.evaluate(() => Array.from(document.querySelectorAll('#settings-body input.input, #settings-body textarea')).filter(e => e.getBoundingClientRect().width).map(e => parseFloat(getComputedStyle(e).fontSize)));
+      check(fs.every(x => x >= 16), 'phone: "' + id + '" inputs are 16 px (no iOS zoom)');
+      if (id === 'jam') await shot(page, 'settings-mobile-jam-' + scheme);
+      if (id === 'pengingat') await shot(page, 'settings-mobile-pengingat-' + scheme);
+      await page.goBack();
+      await page.waitForTimeout(400);
+      check(await visible(page, '#settings-nav') && !(await visible(page, '#settings-pane')), 'phone: back gesture from "' + id + '" returns to the list');
+    }
+
+    // Keyboards
+    await page.click('.settings-nav-item[data-section="jam"]');
+    check((await page.getAttribute('[data-k="h0s"]', 'inputmode')) === 'numeric', 'phone: hour fields open the numeric keypad');
+    await page.goBack(); await page.waitForTimeout(300);
+    await page.click('.settings-nav-item[data-section="notifikasi"]');
+    check((await page.getAttribute('#set-email', 'type')) === 'email', 'phone: email field opens the email keyboard');
+    await page.goBack(); await page.waitForTimeout(300);
+
+    // Bar simpan di atas bar bawah, tidak menutup kolom terakhir
+    await page.click('.settings-nav-item[data-section="keamanan"]');
+    await page.waitForTimeout(300);
+    await page.fill('#set-adminSessionDays', '14');
+    check(await visible(page, '#settings-savebar'), 'phone: editing shows the save bar');
+    await page.evaluate(() => { const m = document.getElementById('main-scroll-area'); m.scrollTo({ top: m.scrollHeight }); });
+    await page.waitForTimeout(300);
+    const geo = await page.evaluate(() => {
+      const r = id => document.getElementById(id).getBoundingClientRect();
+      const inputs = Array.from(document.querySelectorAll('#settings-body .input')).filter(e => e.getBoundingClientRect().width);
+      const last = inputs[inputs.length - 1].getBoundingClientRect();
+      return { barTop: r('settings-savebar').top, barBottom: r('settings-savebar').bottom, tabTop: r('tabbar').top, lastBottom: last.bottom };
+    });
+    check(geo.barBottom <= geo.tabTop, 'phone: the save bar sits above the bottom bar (' + Math.round(geo.barBottom) + ' ≤ ' + Math.round(geo.tabTop) + ')');
+    check(geo.lastBottom <= geo.barTop, 'phone: the save bar does not cover the last field (' + Math.round(geo.lastBottom) + ' ≤ ' + Math.round(geo.barTop) + ')');
+    await shot(page, 'settings-mobile-savebar-' + scheme);
+
+    // Gerakan kembali dengan perubahan belum disimpan → tanya dulu
+    await page.goBack();
+    await page.waitForTimeout(500);
+    check(await visible(page, '#modal-confirm'), 'phone: back gesture with unsaved changes asks before leaving');
+    check(await visible(page, '#settings-pane'), 'phone: the section stays open while the question is shown');
+    await page.click('#btn-confirm-modal-yes');
+    await page.waitForTimeout(700);
+    check(await visible(page, '#settings-nav') && !(await visible(page, '#settings-pane')), 'phone: confirming discards the edit and returns to the list');
+    check(env.props.ADMIN_SESSION_DAYS === undefined, 'phone: the discarded edit was never saved');
+
+    // Pindah tab saat ada perubahan belum disimpan
+    await page.click('.settings-nav-item[data-section="keamanan"]');
+    await page.fill('#set-adminSessionDays', '9');
+    await page.click('#tabbar .tab[data-view="dashboard"]');
+    await page.waitForTimeout(400);
+    check(await visible(page, '#modal-confirm'), 'phone: switching tab with unsaved changes asks first');
+    await page.click('#btn-confirm-modal-no');
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.currentView)) === 'settings', 'phone: choosing Batal stays on Pengaturan');
     noErrors(errors);
     await context.close();
   }

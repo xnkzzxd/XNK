@@ -161,6 +161,7 @@ function createEnv(opts = {}) {
     cache: {},             // key -> { value, expires }
     mails: [],
     fetches: [],
+    triggers: [],
     logs: [],
     files: [],
     driveFiles: [],        // searchable Drive files: { name, owner, content, trashed }
@@ -189,8 +190,11 @@ function createEnv(opts = {}) {
     setTrashed() { return this; },
   });
 
-  const triggerBuilder = () => {
-    const b = { timeBased: () => b, everyDays: () => b, atHour: () => b, onWeekDay: () => b, create: () => ({}) };
+  const triggerBuilder = handler => {
+    const b = {
+      timeBased: () => b, everyDays: () => b, atHour: () => b, onWeekDay: () => b, everyHours: () => b, inTimezone: () => b,
+      create: () => { const t = { getHandlerFunction: () => handler }; env.triggers.push(t); return t; },
+    };
     return b;
   };
 
@@ -288,9 +292,9 @@ function createEnv(opts = {}) {
     ScriptApp: {
       WeekDay: { MONDAY: 'MONDAY' },
       getService: () => ({ getUrl: () => EXEC_URL }),
-      getProjectTriggers: () => [],
-      newTrigger: () => triggerBuilder(),
-      deleteTrigger: () => {},
+      getProjectTriggers: () => env.triggers.slice(),
+      newTrigger: handler => triggerBuilder(handler),
+      deleteTrigger: t => { env.triggers = env.triggers.filter(x => x !== t); },
     },
     HtmlService: {
       XFrameOptionsMode: { ALLOWALL: 'ALLOWALL' },

@@ -481,15 +481,76 @@ function runReminderTick() {
   return res;
 }
 
-/** Pemilik, dari editor: hapus trigger runReminderTick lama lalu pasang satu trigger per jam. */
-function setupReminderTrigger() {
-  requireOwner_();
+/** Hapus trigger runReminderTick lama lalu pasang satu trigger per jam. Kembalikan jumlah duplikat yang dihapus. */
+function _installReminderTrigger_() {
   var removed = 0;
   ScriptApp.getProjectTriggers().forEach(function(t) {
     if (t.getHandlerFunction() === 'runReminderTick') { ScriptApp.deleteTrigger(t); removed++; }
   });
   ScriptApp.newTrigger('runReminderTick').timeBased().everyHours(1).inTimezone(REMINDER_TZ).create();
+  return removed;
+}
+
+/** Pemilik, dari editor: pasang trigger pengingat. */
+function setupReminderTrigger() {
+  requireOwner_();
+  var removed = _installReminderTrigger_();
   Logger.log('Trigger runReminderTick dipasang (' + removed + ' duplikat dihapus). Aktifkan dengan properti RMD_ENABLED=true.');
+}
+
+/** Status pengingat untuk Pengaturan: trigger terpasang? kapan tick terakhir? Telegram siap? */
+function getReminderStatus(token) {
+  requireAdmin_(token);
+  var props = PropertiesService.getScriptProperties();
+  var installed = ScriptApp.getProjectTriggers().filter(function(t) { return t.getHandlerFunction() === 'runReminderTick'; }).length;
+  var last = parseInt(props.getProperty('RMD_LAST_tick'), 10);
+  return {
+    triggerInstalled: installed > 0,
+    tickEveryMinutes: 60,
+    lastTickAt: isNaN(last) ? '' : new Date(last).toISOString(),
+    telegramReady: _telegramReady_(),
+    enabled: props.getProperty('RMD_ENABLED') === 'true'
+  };
+}
+
+/** Pasang trigger pengingat dari panel (aplikasi berjalan sebagai pemilik). */
+function installReminderTrigger(token) {
+  requireAdmin_(token);
+  _installReminderTrigger_();
+  return getReminderStatus(token);
+}
+
+/**
+ * Riwayat pengingat terbaru (paling baru dulu). Nomor telepon tidak ikut; target klien
+ * ditampilkan sebagai nama. opts: { onlyFailed: boolean, limit: 1..200 (bawaan 50) }.
+ */
+function getReminderLog(token, opts) {
+  requireAdmin_(token);
+  opts = opts || {};
+  var limit = parseInt(opts.limit, 10);
+  if (isNaN(limit) || limit < 1) limit = 50;
+  if (limit > 200) limit = 200;
+  var sheet = _reminderLogSheet_();
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  var rows = sheet.getRange(2, 1, last - 1, 6).getValues();
+  var names = null;
+  var out = [];
+  for (var i = rows.length - 1; i >= 0 && out.length < limit; i--) {
+    var r = rows[i];
+    if (opts.onlyFailed && String(r[5]) !== 'gagal') continue;
+    var target = String(r[3] || '*');
+    var label = 'Semua';
+    if (target !== '*') {
+      if (!names) {
+        names = {};
+        _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(m) { if (m[0]) names[String(m[0]).trim()] = String(m[1] || '').trim(); });
+      }
+      label = names[target] || 'Klien dihapus';
+    }
+    out.push({ jenis: String(r[1]), slot: String(r[2]), target: label, waktu: String(r[4]), hasil: String(r[5]) });
+  }
+  return out;
 }
 
 /** Tes murni tanpa efek samping (T-60 akan memperluas). Lempar error bila gagal. */
