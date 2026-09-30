@@ -11,6 +11,7 @@
   // ── State ───────────────────────────────────────────────────────────────────
   window.isGas = typeof google !== 'undefined' && !!google.script;
   window.members = [];
+  window.taskSummary = {}; // {memberId:{open,overdue}} dari getTaskSummary (panel PT)
   window.memberArchive = [];
   window.schedules = [];
   window.coaches = [];
@@ -167,15 +168,40 @@
   window.sendToParentWA = function (phone, text) {
     window.open(window.waUrl(phone, text), '_blank');
   };
-  // Buka tab kosong SEKARANG (masih dalam klik pengguna, jadi tidak diblokir),
-  // lalu arahkan ke WhatsApp setelah server menjawab.
-  window.openPendingWindow = function () {
-    let w = null;
-    try { w = window.open('', '_blank'); } catch (e) { w = null; }
-    return {
-      go: function (url) { if (w && !w.closed) w.location.href = url; else window.open(url, '_blank'); },
-      cancel: function () { try { if (w && !w.closed) w.close(); } catch (e) {} }
-    };
+  // Tampilkan tombol "Buka WhatsApp" setelah aksi berhasil. Pengguna membukanya
+  // dengan ketukan sendiri (link biasa), jadi tidak ada tab kosong yang dibuka
+  // lebih dulu dan tidak diblokir popup blocker.
+  window.showWaPrompt = function (url, message) {
+    if (!/^https:\/\/wa\.me\//.test(String(url || ''))) return;
+    const old = document.getElementById('wa-prompt');
+    if (old) old.remove();
+    const box = document.createElement('div');
+    box.id = 'wa-prompt';
+    box.setAttribute('role', 'status');
+    box.style.cssText = 'position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:9999;' +
+      'max-width:calc(100vw - 32px);display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;' +
+      'padding:12px 14px;border-radius:16px;background:#111;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.28);' +
+      'font-size:14px;line-height:1.35;';
+    const txt = document.createElement('span');
+    txt.textContent = message || 'Lanjutkan lewat WhatsApp.';
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = 'Buka WhatsApp';
+    a.style.cssText = 'background:#25D366;color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:10px;white-space:nowrap;';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Tutup');
+    close.textContent = '\u00d7';
+    close.style.cssText = 'background:transparent;border:0;color:#fff;font-size:22px;line-height:1;cursor:pointer;padding:0 4px;';
+    const dismiss = function () { clearTimeout(window._waPromptTimer); box.remove(); };
+    close.addEventListener('click', dismiss);
+    a.addEventListener('click', function () { setTimeout(dismiss, 300); });
+    box.appendChild(txt); box.appendChild(a); box.appendChild(close);
+    document.body.appendChild(box);
+    clearTimeout(window._waPromptTimer);
+    window._waPromptTimer = setTimeout(dismiss, 30000);
   };
   window.coachContactNumber = function () {
     const fixed = sanitizePhone(COACH_WA_NUMBER || '');
@@ -549,7 +575,38 @@
     $('settings-login-lock-seconds').value = s.loginLockSeconds;
     $('settings-member-login-max-fails').value = s.memberLoginMaxFails;
     $('settings-admin-session-days').value = s.adminSessionDays;
+    populateReminderForm(s.reminder);
   }
+
+  // T-50: bagian "Pengingat". Jam kosong = pakai jam bawaan (server menghapus properti).
+  const RMD_JOB_IDS = ['booking-minggu', 'pr'];
+  function populateReminderForm(r) {
+    if (!r) return;
+    $('settings-rmd-enabled').checked = !!r.enabled;
+    $('settings-rmd-sleep').value = r.tplSleep || '';
+    RMD_JOB_IDS.forEach(function (j) {
+      const job = (r.jobs && r.jobs[j]) || { enabled: true, hour: '', defaultHour: '' };
+      $('settings-rmd-' + j + '-enabled').checked = job.enabled !== false;
+      $('settings-rmd-' + j + '-hour').value = job.hour === job.defaultHour ? '' : job.hour;
+      $('settings-rmd-' + j + '-hour').placeholder = 'Bawaan ' + job.defaultHour + ':00';
+    });
+  }
+
+  function collectReminderPayload() {
+    const jobs = {};
+    RMD_JOB_IDS.forEach(function (j) {
+      jobs[j] = { enabled: $('settings-rmd-' + j + '-enabled').checked, hour: $('settings-rmd-' + j + '-hour').value };
+    });
+    return { enabled: $('settings-rmd-enabled').checked, tplSleep: $('settings-rmd-sleep').value, jobs: jobs };
+  }
+
+  window.sendReminderTest = function (jenis, btn) {
+    const done = busy(btn, 'Mengirim…');
+    adminCall('sendReminderTest', jenis).then(function (res) {
+      done();
+      window.showToast(res.pesan);
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
 
   function loadAppSettingsForm() {
     adminCall('getAppSettings').then(populateAppSettingsForm)
@@ -571,7 +628,8 @@
       loginMaxFails: $('settings-login-max-fails').value,
       loginLockSeconds: $('settings-login-lock-seconds').value,
       memberLoginMaxFails: $('settings-member-login-max-fails').value,
-      adminSessionDays: $('settings-admin-session-days').value
+      adminSessionDays: $('settings-admin-session-days').value,
+      reminder: collectReminderPayload()
     };
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
     adminCall('updateAppSettings', payload).then(function (s) {
@@ -717,7 +775,7 @@
   window.onAdminAuthLost = function (err) {
     if (window.isPublicView) return;
     _lsSet(ADMIN_TOKEN_KEY, null);
-    window.members = []; window.schedules = []; window.memberArchive = [];
+    window.members = []; window.schedules = []; window.memberArchive = []; window.taskSummary = {};
     window.showAdminLogin(window.authMessage(err));
   };
 
@@ -766,7 +824,7 @@
     window.showConfirmModal('Kamu akan keluar dari panel di perangkat ini.', function () {
       window.closeModal();
       _lsSet(ADMIN_TOKEN_KEY, null);
-      window.members = []; window.schedules = []; window.memberArchive = [];
+      window.members = []; window.schedules = []; window.memberArchive = []; window.taskSummary = {};
       window.closeDetail();
       window.showAdminLogin();
     }, { title: 'Keluar dari panel?', confirmText: 'Keluar', icon: 'log-out' });
@@ -786,7 +844,8 @@
       safe(adminCall('getSchedules')),
       safe(publicCall('getCoaches')),
       safe(publicCall('getPriceList')),
-      safe(publicCall('getBusinessHours'))
+      safe(publicCall('getBusinessHours')),
+      safe(adminCall('getTaskSummary'))
     ]).then(function (r) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
       window.members = r[0] || [];
@@ -795,11 +854,20 @@
       window.coaches = r[3] || [];
       window.priceListData = r[4] || [];
       if (r[5]) Object.assign(DAY_HOURS, r[5]);
+      window.taskSummary = r[6] || {};
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
       loadRevenue();
     });
+  };
+
+  // Muat ulang ringkasan PR (pill di daftar klien). Dipanggil setelah PR berubah.
+  window.refreshTaskSummary = function () {
+    return adminCall('getTaskSummary').then(function (res) {
+      window.taskSummary = res || {};
+      if (window.updateMemberUI) window.updateMemberUI();
+    }).catch(function (err) { if (!window.isAuthError(err)) console.warn(err); });
   };
 
   window.loadPublicData = function () {
@@ -1894,9 +1962,16 @@
     const total = Number(m.totalSessions) || 0, used = Number(m.usedSessions) || 0, rem = remainingOf(m);
     const st = clientState(m);
     const pill = st === 'empty' ? '<span class="pill solid">Habis</span>' : st === 'low' ? '<span class="pill dashed">Sisa ' + rem + '</span>' : '';
+    const ts = (window.taskSummary || {})[String(m.id)] || {};
+    const tOpen = Number(ts.open) || 0, tLate = Number(ts.overdue) || 0;
+    const taskPills = (tOpen || tLate)
+      ? '<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">' +
+          (tOpen ? '<span class="pill soft num">PR ' + tOpen + '</span>' : '') +
+          (tLate ? '<span class="pill solid num">Telat ' + tLate + '</span>' : '') + '</div>'
+      : '';
     return '<div class="list-item interactive client-card" role="button" tabindex="0" data-key="client:' + h(m.id) + '" onclick="window.openProfile(\'' + h(m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
       avatar(m.photo, m.name) +
-      '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4><p class="li-sub truncate">+' + h(m.phone) + (m.packageName ? ' · ' + h(m.packageName) : '') + '</p>' +
+      '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4><p class="li-sub truncate">+' + h(m.phone) + (m.packageName ? ' · ' + h(m.packageName) : '') + '</p>' + taskPills +
       '<div class="meter' + (st === 'low' ? ' hatch' : '') + '" style="margin-top:8px;max-width:220px"><i style="width:' + (total ? Math.min(100, Math.round(used / total * 100)) : 0) + '%"></i></div></div>' +
       '<div class="li-trail"><div style="text-align:right"><p class="num" style="font-weight:800;font-size:var(--fs-lg)">' + rem + '<span class="li-sub">/' + total + '</span></p><p class="li-sub">sisa sesi</p></div>' + pill + '</div></div>';
   }
@@ -1936,6 +2011,8 @@
       '<div><p class="k">Bergabung</p><p class="v">' + h(m.joinDate || '-') + '</p></div>' +
       '<div><p class="k">Coach</p><p class="v">' + h(m.preferredCoachName || 'Belum ditentukan') + '</p></div>' +
       '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
+    body += mealToggleHtml(m);
+    body += '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>';
     body += '<div><div class="section-head"><h4 class="section-title">Jadwal mendatang</h4><span class="li-sub">' + upcoming.length + '</span></div>' +
       (upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
     body += '<div><div class="section-head"><h4 class="section-title">Riwayat</h4><span class="li-sub">' + past.length + ' sesi</span></div>' +
@@ -1945,10 +2022,254 @@
     body += '</div>';
     const actions = '<button type="button" class="icon-btn plain" onclick="window.openEditProfileModal()" aria-label="Ubah data klien">' + icon('pencil') + '</button>';
     openDetail('client:' + m.id, 'Profil klien', actions, body);
+    window.loadMemberTasks(m.id, false);
     requestAnimationFrame(function () {
       const ring = document.querySelector('#detail-body .ring-fill');
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
     });
+  };
+
+  // ── Reminder makan di profil klien (T-73) — hanya klien paket core ──────────
+  function isCoreMember(m) {
+    const pkg = (window.priceListData || []).find(p => String(p.id) === String(m.packageId));
+    return !!pkg && String(pkg.kategori || '').toLowerCase().trim() === 'core';
+  }
+  function mealToggleHtml(m) {
+    if (!isCoreMember(m)) return '';
+    const on = m.mealReminder !== false, mid = h(m.id);
+    return '<div class="list-item" id="profile-meal-wrap"><div class="grow" style="min-width:0"><p class="li-title">Reminder makan</p>' +
+      '<p class="li-sub">Ikut digest makan pagi &amp; sore ke Coach (paket core)</p></div>' +
+      '<label class="toggle"><input type="checkbox" id="profile-meal-toggle" aria-label="Reminder makan klien"' + (on ? ' checked' : '') +
+      ' onchange="window.toggleMealReminder(\'' + mid + '\',this)"><span></span></label></div>';
+  }
+  window.toggleMealReminder = function (memberId, input) {
+    const m = window.members.find(x => String(x.id) === String(memberId));
+    const want = !!input.checked;
+    input.disabled = true;
+    adminCall('setMemberMealReminder', memberId, want).then(function (res) {
+      if (m) m.mealReminder = !!(res && res.mealReminder);
+      input.disabled = false;
+      window.showToast(want ? 'Reminder makan dinyalakan.' : 'Reminder makan dimatikan.');
+    }).catch(function (err) {
+      input.checked = !want; input.disabled = false;
+      window.showToast('Gagal: ' + window.authMessage(err));
+    });
+  };
+
+  // ── PR (Task) di profil klien (T-21) ────────────────────────────────────────
+  // Cache per klien: {list, state:'loading'|'ok'|'error', error}. Hanya wadah
+  // #profile-tasks-wrap yang digambar ulang, bukan seluruh profil.
+  window.memberTasks = window.memberTasks || {};
+  const TASK_CAT_LABEL = { nutrisi: 'Nutrisi', tidur: 'Tidur', mobilitas: 'Mobilitas', aktivitas: 'Aktivitas', lain: 'Lain-lain' };
+  const TASK_REPEAT_LABEL = { daily: 'Harian', weekly: 'Mingguan' };
+
+  function taskItemHtml(t, memberId) {
+    const done = t.status === 'done', skipped = t.status === 'skipped', open = t.status === 'todo';
+    const tid = h(t.id), mid = h(memberId);
+    let meta = '<span class="pill soft">' + h(TASK_CAT_LABEL[t.category] || t.category) + '</span>';
+    if (t.dueDate) meta += '<span class="pill ' + (t.overdue ? 'solid' : 'soft') + ' num">' + (t.overdue ? 'Telat · ' : 'Tenggat ') + h(t.dueDate) + '</span>';
+    if (t.repeat && t.repeat !== 'none') meta += '<span class="pill soft">' + icon('repeat') + h(TASK_REPEAT_LABEL[t.repeat] || t.repeat) + '</span>';
+    if (skipped) meta += '<span class="pill dashed">Dilewati</span>';
+    return '<div class="list-item task-item' + (open ? '' : ' done') + (t.overdue ? ' late' : '') + '" data-task="' + tid + '">' +
+      '<button type="button" class="task-check' + (done ? ' on' : '') + '" onclick="window.toggleTaskDone(\'' + tid + '\',\'' + mid + '\',this)" aria-label="' + (done ? 'Tandai belum selesai: ' : 'Tandai selesai: ') + h(t.title) + '"' + (skipped ? ' disabled' : '') + '>' + (done ? icon('check') : '') + '</button>' +
+      '<div class="grow" style="min-width:0"><p class="li-title" style="overflow-wrap:anywhere">' + h(t.title) + '</p>' +
+      (t.description ? '<p class="li-sub" style="margin-top:2px;overflow-wrap:anywhere">' + h(t.description) + '</p>' : '') +
+      '<div class="task-meta">' + meta + '</div>' +
+      (t.clientNote ? '<p class="task-note"><b>Catatan klien:</b> ' + h(t.clientNote) + '</p>' : '') + '</div>' +
+      '<div class="task-acts">' +
+      '<button type="button" class="icon-btn plain" onclick="window.editTask(\'' + mid + '\',\'' + tid + '\')" aria-label="Ubah PR">' + icon('pencil') + '</button>' +
+      '<button type="button" class="icon-btn plain" onclick="window.deleteTaskItem(\'' + tid + '\',\'' + mid + '\')" aria-label="Hapus PR">' + icon('trash-2') + '</button></div></div>';
+  }
+
+  function taskSectionHtml(memberId) {
+    const c = window.memberTasks[String(memberId)];
+    const addBtn = '<button type="button" class="btn btn-secondary btn-sm" onclick="window.addTaskFor(\'' + h(memberId) + '\')">' + icon('plus') + 'Tambah</button>';
+    let inner;
+    if (!c || c.state === 'loading') inner = '<p class="li-sub">Memuat PR…</p>';
+    else if (c.state === 'error') inner = '<p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMemberTasks(\'' + h(memberId) + '\',true)">Coba lagi</button>';
+    else if (!c.list.length) inner = emptyState('inbox', 'Belum ada PR', 'Beri klien tugas di luar gym, misalnya nutrisi atau tidur.');
+    else {
+      const openL = c.list.filter(t => t.status === 'todo');
+      const closedL = c.list.filter(t => t.status !== 'todo');
+      inner = '<div class="list">' + openL.map(t => taskItemHtml(t, memberId)).join('') + '</div>';
+      if (!openL.length) inner = '<p class="li-sub" style="margin-bottom:8px">Semua PR sudah selesai.</p>' + inner;
+      if (closedL.length) inner += '<div class="group-label"><span>Selesai / dilewati (' + closedL.length + ')</span></div><div class="list">' + closedL.slice(0, 5).map(t => taskItemHtml(t, memberId)).join('') + '</div>' +
+        (closedL.length > 5 ? '<p class="li-sub" style="margin-top:8px">+' + (closedL.length - 5) + ' PR lama lainnya</p>' : '');
+    }
+    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : 0;
+    return '<div class="section-head"><h4 class="section-title">PR (Task)</h4>' + (nOpen ? '<span class="li-sub">' + nOpen + ' terbuka</span>' : '') + addBtn + '</div>' + inner;
+  }
+
+  function renderTaskSection(memberId) {
+    if (String(window.selectedMemberId) !== String(memberId)) return;
+    const wrap = $('profile-tasks-wrap');
+    if (wrap) setHTML(wrap, taskSectionHtml(memberId));
+  }
+
+  window.loadMemberTasks = function (memberId, force) {
+    const key = String(memberId), c = window.memberTasks[key];
+    if (c && c.state === 'ok' && !force) { renderTaskSection(key); return Promise.resolve(); }
+    if (!c || c.state !== 'ok') window.memberTasks[key] = { list: [], state: 'loading' };
+    renderTaskSection(key);
+    return adminCall('getTasksForMember', key).then(function (list) {
+      window.memberTasks[key] = { list: list || [], state: 'ok' };
+      renderTaskSection(key);
+    }).catch(function (err) {
+      window.memberTasks[key] = { list: [], state: 'error', error: String((err && err.message) || err) };
+      renderTaskSection(key);
+    });
+  };
+
+  // Setelah PR berubah: muat ulang daftar klien ini + pill di daftar klien.
+  function afterTaskChange(memberId) {
+    const p = window.loadMemberTasks(memberId, true);
+    if (window.refreshTaskSummary) window.refreshTaskSummary().then(function () { if (window.currentView === 'clients') renderClientList(); }).catch(function () {});
+    return p;
+  }
+
+  window.toggleTaskDone = function (taskId, memberId, btn) {
+    const c = window.memberTasks[String(memberId)];
+    const t = c && c.list.find(x => String(x.id) === String(taskId));
+    if (!t) return;
+    if (btn) btn.disabled = true;
+    adminCall('updateTask', { id: taskId, status: t.status === 'done' ? 'todo' : 'done' })
+      .then(function () { return afterTaskChange(memberId); })
+      .catch(function (err) { if (btn) btn.disabled = false; window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+
+  window.deleteTaskItem = function (taskId, memberId) {
+    const c = window.memberTasks[String(memberId)];
+    const t = c && c.list.find(x => String(x.id) === String(taskId));
+    if (!t) return;
+    const rec = t.repeat && t.repeat !== 'none' && t.groupId;
+    const msg = '<b>' + h(t.title) + '</b> akan dihapus permanen.' + (rec ? ' Ini PR berulang: hanya PR ini yang dihapus, ulangannya berhenti.' : '');
+    window.showConfirmModal(msg, function () {
+      adminCall('deleteTask', taskId)
+        .then(function () { window.showToast('PR dihapus.'); return afterTaskChange(memberId); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus PR?', confirmText: 'Hapus PR', variant: 'danger' });
+  };
+
+  // Tombol Tambah/Ubah membuka form di bawah (openTaskSheet).
+  window.addTaskFor = function (memberId) {
+    window.openTaskSheet(memberId, null);
+  };
+  window.editTask = function (memberId, taskId) {
+    const c = window.memberTasks[String(memberId)];
+    const t = c && c.list.find(x => String(x.id) === String(taskId));
+    if (!t) return;
+    window.openTaskSheet(memberId, t);
+  };
+
+  // ── Form PR (T-22): bottom-sheet tambah/ubah ────────────────────────────────
+  const TASK_CATS = [['nutrisi', 'Nutrisi'], ['tidur', 'Tidur'], ['mobilitas', 'Mobilitas'], ['aktivitas', 'Aktivitas'], ['lain', 'Lain-lain']];
+  const TASK_REPS = [['none', 'Tidak'], ['daily', 'Harian'], ['weekly', 'Mingguan']];
+  window.taskForm = { memberId: null, id: null, category: 'lain', repeat: 'none' };
+
+  function taskChips(elId, list, current, fn) {
+    setHTML(elId, list.map(function (c) {
+      return '<button type="button" role="radio" aria-checked="' + (c[0] === current) + '" class="chip' + (c[0] === current ? ' active' : '') + '" onclick="' + fn + '(\'' + c[0] + '\')">' + h(c[1]) + '</button>';
+    }).join(''));
+  }
+  window.setTaskCategory = function (v) { window.taskForm.category = v; taskChips('task-cat-chips', TASK_CATS, v, 'window.setTaskCategory'); };
+  window.setTaskRepeat = function (v) { window.taskForm.repeat = v; taskChips('task-repeat-chips', TASK_REPS, v, 'window.setTaskRepeat'); };
+
+  // "D/M/YYYY" <-> "YYYY-MM-DD" (input date)
+  function dmyToIso(s) {
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s || '').trim());
+    return m ? m[3] + '-' + pad(+m[2]) + '-' + pad(+m[1]) : '';
+  }
+  function isoToDmy(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+    return m ? (+m[3]) + '/' + (+m[2]) + '/' + m[1] : '';
+  }
+
+  // t = null -> PR baru; t = objek PR -> ubah.
+  window.openTaskSheet = function (memberId, t) {
+    const m = window.members.find(x => String(x.id) === String(memberId));
+    if (!m) { window.showToast('Data klien tidak ditemukan.'); return; }
+    window.taskForm = { memberId: String(memberId), id: t ? String(t.id) : null, category: 'lain', repeat: 'none' };
+    $('task-sheet-title').textContent = t ? 'Ubah PR' : 'Tambah PR';
+    $('task-sheet-client').textContent = m.name || '';
+    $('task-title').value = t ? t.title : '';
+    $('task-desc').value = t ? t.description : '';
+    $('task-due').value = t ? dmyToIso(t.dueDate) : '';
+    // PR baru tidak boleh bertenggat lewat; saat mengubah, tenggat lama boleh dipertahankan.
+    if (t) $('task-due').removeAttribute('min'); else $('task-due').min = ymd(new Date());
+    window.setTaskCategory(t ? t.category : 'lain');
+    window.setTaskRepeat(t ? (t.repeat || 'none') : 'none');
+    $('task-submit').textContent = t ? 'Simpan perubahan' : 'Simpan PR';
+    // Template hanya untuk PR baru; tombol simpan-template tetap ada saat mengubah.
+    $('task-tpl-field').classList.toggle('hide', !!t);
+    if (!t) { renderTaskTemplates(); loadTaskTemplates(); }
+    openSheet('modal-task');
+  };
+
+  // ── Template PR (T-76) ──────────────────────────────────────────────────────
+  window.taskTemplates = [];
+  function renderTaskTemplates() {
+    const list = window.taskTemplates;
+    if (!list.length) {
+      setHTML('task-tpl-list', '<span class="li-sub">Belum ada template. Isi form, lalu ketuk "Simpan sebagai template".</span>');
+      return;
+    }
+    setHTML('task-tpl-list', list.map(function (t) {
+      const id = h(t.id);
+      return '<span style="display:inline-flex;align-items:center;gap:2px">' +
+        '<button type="button" class="chip" onclick="window.applyTaskTemplate(\'' + id + '\')">' + h(t.title) + '</button>' +
+        '<button type="button" class="icon-btn plain" onclick="window.deleteTaskTemplateItem(\'' + id + '\')" aria-label="Hapus template ' + h(t.title) + '">' + icon('x') + '</button></span>';
+    }).join(''));
+  }
+  function loadTaskTemplates() {
+    return adminCall('getTaskTemplates').then(function (list) {
+      window.taskTemplates = Array.isArray(list) ? list : [];
+      renderTaskTemplates();
+    }).catch(function () { /* form tetap bisa dipakai tanpa template */ });
+  }
+  window.applyTaskTemplate = function (id) {
+    const t = window.taskTemplates.find(x => String(x.id) === String(id));
+    if (!t) return;
+    $('task-title').value = t.title;
+    $('task-desc').value = t.description || '';
+    window.setTaskCategory(t.category);
+    window.setTaskRepeat(t.repeat || 'none');
+    window.showToast('Template dipakai. Atur tenggat lalu simpan.');
+  };
+  window.saveTaskAsTemplate = function () {
+    const f = window.taskForm;
+    const title = $('task-title').value.trim();
+    if (!title) { window.showToast('Isi judul dulu untuk dijadikan template.'); $('task-title').focus(); return; }
+    const done = busy($('task-save-tpl'), 'Menyimpan…');
+    adminCall('saveTaskTemplate', { title: title, description: $('task-desc').value.trim(), category: f.category, repeat: f.repeat })
+      .then(function (r) { done(); window.showToast(r && r.updated ? 'Template diperbarui.' : 'Template disimpan.'); return loadTaskTemplates(); })
+      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  window.deleteTaskTemplateItem = function (id) {
+    const t = window.taskTemplates.find(x => String(x.id) === String(id));
+    if (!t) return;
+    window.showConfirmModal('Template <b>' + h(t.title) + '</b> akan dihapus. PR yang sudah dibuat darinya tidak terpengaruh.', function () {
+      adminCall('deleteTaskTemplate', id)
+        .then(function () { window.showToast('Template dihapus.'); return loadTaskTemplates(); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus template?', confirmText: 'Hapus', variant: 'danger' });
+  };
+
+  window.submitTaskForm = function (e) {
+    e.preventDefault();
+    const f = window.taskForm;
+    const title = $('task-title').value.trim();
+    const dueIso = $('task-due').value;
+    if (!title) { window.showToast('Judul wajib diisi.'); $('task-title').focus(); return; }
+    if (f.repeat !== 'none' && !dueIso) { window.showToast('PR berulang wajib punya tenggat awal.'); $('task-due').focus(); return; }
+    const data = { title: title, description: $('task-desc').value.trim(), category: f.category, dueDate: isoToDmy(dueIso), repeat: f.repeat };
+    const done = busy($('task-submit'), 'Menyimpan…');
+    const req = f.id ? adminCall('updateTask', Object.assign({ id: f.id }, data)) : adminCall('addTask', Object.assign({ memberId: f.memberId }, data));
+    req.then(function () {
+      done();
+      window.closeModal();
+      window.showToast(f.id ? 'PR diperbarui.' : 'PR ditambahkan.');
+      return afterTaskChange(f.memberId);
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
   };
 
   window.openEditProfileModal = function () {
@@ -2082,7 +2403,6 @@
       packageId: $('member-package').value || '',
       coachId: $('member-coach').value || ''
     };
-    const waWin = window.openPendingWindow();
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
     adminCall('addMember', data).then(function (res) {
       done();
@@ -2106,9 +2426,9 @@
       window.closeModal();
       window.updateUI();
       window.showToast(res.renewed ? 'Paket klien diperpanjang.' : 'Klien ditambahkan.');
-      if (res.waLink) waWin.go(res.waLink); else waWin.cancel();
+      if (res.waLink) window.showWaPrompt(res.waLink, res.renewed ? 'Kabari klien soal perpanjangan paketnya.' : 'Kirim info booking ke klien baru.');
       if (window.currentView === 'clients') window.openProfile(res.id);
-    }).catch(function (err) { done(); waWin.cancel(); window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
   };
 
   // ── COACH ──────────────────────────────────────────────────────────────────
@@ -2363,6 +2683,7 @@
   };
 
   window.onMemberAuthLost = function (err) {
+    window.myTasks = undefined; window.myMeal = undefined;
     _lsSet(MEMBER_TOKEN_KEY, null);
     window.publicLoggedMember = null;
     renderTopbarActions();
@@ -2371,6 +2692,7 @@
   };
 
   window.logoutPublic = function () {
+    window.myTasks = undefined; window.myMeal = undefined;
     window.publicLoggedMember = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
     try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) {}
@@ -2392,6 +2714,122 @@
         : upcoming ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah</button>'
         : '<span class="pill dashed soft">Terlewat</span>') + '</div></div>';
   }
+
+  // ── Makan hari ini di Dashboardku portal (T-74) — hanya klien paket core ────
+  // window.myMeal: {state:'loading'|'ok'|'error', data, day, error}. undefined = belum dimuat.
+  function todayKey() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function mealRowHtml(ic, label, tip) {
+    return '<div class="list-item"><div class="grow" style="min-width:0"><p class="li-sub">' + icon(ic, 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(label) + '</p>' +
+      (tip ? '<p class="li-title" style="overflow-wrap:anywhere;white-space:pre-line">' + h(tip) + '</p>' : '<p class="li-sub">Belum ada tip.</p>') + '</div></div>';
+  }
+  function myMealCardHtml() {
+    const c = window.myMeal;
+    if (!c || c.state === 'loading') return '';                               // tidak mengganggu layout sebelum tahu klien core
+    if (c.state === 'error') return '<div class="card"><div class="section-head"><h3 class="section-title">Makan hari ini</h3></div><p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyMeal(true)">Coba lagi</button></div>';
+    const d = c.data;
+    if (!d || !d.core) return '';
+    const inner = (d.pagi || d.sore)
+      ? '<div class="list">' + mealRowHtml('sunrise', 'Pagi', d.pagi) + mealRowHtml('sunset', 'Sore', d.sore) + '</div>'
+      : emptyState('utensils', 'Belum ada tip makan', 'Tip makan dari coach untuk hari ini muncul di sini.');
+    return '<div class="card"><div class="section-head"><h3 class="section-title">Makan hari ini</h3></div>' + inner + '</div>';
+  }
+  function renderMyMealCard() {
+    const wrap = $('pub-meal-slot');
+    if (wrap) setHTML(wrap, myMealCardHtml());
+  }
+  window.loadMyMeal = function (force) {
+    const token = _lsGet(MEMBER_TOKEN_KEY);
+    if (!token || !window.publicLoggedMember) return Promise.resolve();
+    const c = window.myMeal;
+    if (c && c.state === 'ok' && c.day === todayKey() && !force) { renderMyMealCard(); return Promise.resolve(); }
+    if (!c || c.state !== 'ok') window.myMeal = { state: 'loading' };
+    renderMyMealCard();
+    return memberCall('getMyMealToday').then(function (data) {
+      window.myMeal = { state: 'ok', data: data || { core: false }, day: todayKey() };
+      renderMyMealCard();
+    }).catch(function (err) {
+      if (window.isAuthError && window.isAuthError(err)) return;
+      window.myMeal = { state: 'error', error: String((err && err.message) || err) };
+      renderMyMealCard();
+    });
+  };
+
+  // ── PR-ku di Dashboardku portal (T-23) ──────────────────────────────────────
+  // window.myTasks: {list, state:'loading'|'ok'|'error', error}. undefined = belum dimuat.
+  function myTaskItemHtml(t) {
+    const done = t.status === 'done', skipped = t.status === 'skipped', open = t.status === 'todo';
+    let meta = '<span class="pill soft">' + h(TASK_CAT_LABEL[t.category] || t.category) + '</span>';
+    if (t.dueDate) meta += '<span class="pill ' + (t.overdue ? 'solid' : 'soft') + ' num">' + (t.overdue ? 'Telat · ' : 'Tenggat ') + h(t.dueDate) + '</span>';
+    if (t.repeat && t.repeat !== 'none') meta += '<span class="pill soft">' + icon('repeat') + h(TASK_REPEAT_LABEL[t.repeat] || t.repeat) + '</span>';
+    if (skipped) meta += '<span class="pill dashed">Dilewati</span>';
+    const tid = h(t.id);
+    return '<div class="list-item task-item' + (open ? '' : ' done') + (t.overdue ? ' late' : '') + '">' +
+      (open ? '<button type="button" class="task-check" onclick="window.openTaskDone(\'' + tid + '\')" aria-label="Selesaikan: ' + h(t.title) + '"></button>'
+            : '<span class="task-check' + (done ? ' on' : '') + '" aria-hidden="true">' + (done ? icon('check') : '') + '</span>') +
+      '<div class="grow" style="min-width:0"><p class="li-title" style="overflow-wrap:anywhere">' + h(t.title) + '</p>' +
+      (t.description ? '<p class="li-sub" style="margin-top:2px;overflow-wrap:anywhere">' + h(t.description) + '</p>' : '') +
+      '<div class="task-meta">' + meta + '</div>' +
+      (t.clientNote ? '<p class="task-note"><b>Catatanku:</b> ' + h(t.clientNote) + '</p>' : '') + '</div></div>';
+  }
+
+  function myTasksCardInner() {
+    const c = window.myTasks;
+    let inner;
+    if (!c || c.state === 'loading') inner = '<p class="li-sub">Memuat PR…</p>';
+    else if (c.state === 'error') inner = '<p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyTasks(true)">Coba lagi</button>';
+    else if (!c.list.length) inner = emptyState('clipboard-check', 'Belum ada PR', 'PR dari coach untuk di luar gym muncul di sini.');
+    else {
+      const openL = c.list.filter(t => t.status === 'todo'), closedL = c.list.filter(t => t.status !== 'todo');
+      inner = (openL.length ? '<div class="list">' + openL.map(myTaskItemHtml).join('') + '</div>' : '<p class="li-sub">Semua PR sudah selesai. Kerja bagus!</p>') +
+        (closedL.length ? '<div class="group-label"><span>Sudah selesai</span></div><div class="list">' + closedL.slice(0, 3).map(myTaskItemHtml).join('') + '</div>' : '');
+    }
+    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : 0;
+    return '<div class="section-head"><h3 class="section-title">PR-ku</h3>' + (nOpen ? '<span class="pill num">' + nOpen + ' terbuka</span>' : '') + '</div>' + inner;
+  }
+
+  function renderMyTasksCard() {
+    const wrap = $('pub-tasks-wrap');
+    if (wrap) setHTML(wrap, myTasksCardInner());
+  }
+
+  window.loadMyTasks = function (force) {
+    const token = _lsGet(MEMBER_TOKEN_KEY);
+    if (!token || !window.publicLoggedMember) return Promise.resolve();
+    if (window.myTasks && window.myTasks.state === 'ok' && !force) { renderMyTasksCard(); return Promise.resolve(); }
+    if (!window.myTasks || window.myTasks.state !== 'ok') window.myTasks = { list: [], state: 'loading' };
+    renderMyTasksCard();
+    return memberCall('getMyTasks').then(function (list) {
+      window.myTasks = { list: list || [], state: 'ok' };
+      renderMyTasksCard();
+    }).catch(function (err) {
+      if (window.isAuthError && window.isAuthError(err)) return;
+      window.myTasks = { list: [], state: 'error', error: String((err && err.message) || err) };
+      renderMyTasksCard();
+    });
+  };
+
+  window.openTaskDone = function (taskId) {
+    const t = window.myTasks && window.myTasks.list.find(x => String(x.id) === String(taskId));
+    if (!t || t.status !== 'todo') return;
+    window.taskDoneId = String(t.id);
+    $('task-done-name').textContent = t.title;
+    $('task-done-note').value = '';
+    openSheet('modal-task-done');
+  };
+
+  window.submitTaskDone = function (e) {
+    e.preventDefault();
+    const id = window.taskDoneId;
+    if (!id) return;
+    const done = busy($('task-done-submit'), 'Menyimpan…');
+    memberCall('completeMyTask', id, $('task-done-note').value.trim()).then(function () {
+      done();
+      window.taskDoneId = null;
+      window.closeModal();
+      window.showToast('PR selesai. Kerja bagus!');
+      return window.loadMyTasks(true);
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
 
   window.renderPublicDashboard = function () {
     const el = $('view-public-dashboard');
@@ -2432,6 +2870,9 @@
         : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
       '</div>';
 
+    left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
+    left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
+
     left += insightsCard(me, mine);
 
     let right = '<div class="month-cal" id="month-cal"></div>';
@@ -2448,6 +2889,8 @@
       countUp($('pub-dash-remaining'), rem);
     });
     renderConsistencyBars();
+    if (!window.myTasks) window.loadMyTasks(false);
+    window.loadMyMeal(false);
   };
 
   // Tanggal di beranda: pindah ke tab Jadwal pada tanggal itu.
@@ -2620,7 +3063,6 @@
     e.preventDefault();
     const data = { name: $('reg-name').value, phone: sanitizePhone($('reg-phone').value), goal: $('reg-goal').value, packageId: $('reg-data-package-id').value };
     const pkgName = $('reg-data-package').value, sessions = $('reg-data-sessions').value, price = $('reg-data-price').value, type = $('reg-data-type').value;
-    const waWin = window.openPendingWindow();
     const done = busy(e.target.querySelector('button[type=submit]'), 'Memproses…');
     publicCall('registerNewClient', data).then(function (res) {
       done();
@@ -2628,7 +3070,7 @@
       const text = 'Halo Coach, saya ' + data.name + (res.status === 'exists' ? ' (sudah terdaftar) ingin perpanjang paket PT.' : ' ingin mendaftar PT.') +
         '\n\n*Detail pendaftaran:*\nKategori: ' + String(type).toUpperCase() + '\nPaket: ' + pkgName + ' (' + sessions + ' sesi)\nGoal: ' + data.goal +
         '\n\n*Total tagihan: ' + price + '*\n\nMohon info nomor rekening pembayarannya ya Coach. Terima kasih!';
-      waWin.go(window.waUrl(window.coachContactNumber(), text));
+      window.showWaPrompt(window.waUrl(window.coachContactNumber(), text), 'Kirim detail pendaftaran ke Coach lewat WhatsApp.');
       if (res.status === 'exists') {
         window.showToast('Nomor ini sudah terdaftar. Coach akan memproses perpanjanganmu.', 'info');
         if (!window.publicLoggedMember) window.navigate('public-login');
@@ -2637,7 +3079,7 @@
       window.showToast('Pendaftaran berhasil! Berikutnya masuk dengan nomor WhatsApp-mu.', 'party-popper');
       if (res.token && res.member) { _lsSet(MEMBER_TOKEN_KEY, res.token); window.setPublicMember(res.member); window.loadPublicData(); }
       else window.navigate('public-login');
-    }).catch(function (err) { done(); waWin.cancel(); window.showToast('Gagal mendaftar: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast('Gagal mendaftar: ' + err.message); });
   };
 
   window.renderPublicCoaches = function () {

@@ -66,6 +66,16 @@
 //    📁 08_AVAILABILITY            → Slot jadwal tersedia (publik)
 //       └─ getPublicAvailability()
 //
+//    📁 09_TASKS                   → PR (Task) klien di luar gym
+//       ├─ _tasksSheet_()
+//       ├─ addTask() / updateTask() / deleteTask()   (admin)
+//       ├─ getTasksForMember() / getTaskSummary()    (admin)
+//       ├─ getMyTasks() / completeMyTask()           (klien)
+//       ├─ deleteTaskGroup()                         (admin, hapus seluruh PR berulang)
+//       └─ PR berulang: _nextRecurrence_ / _spawnNextTaskInstance_ / _rolloverRecurringTasks_
+//       └─ helper validasi: _taskText_ / _taskDueDate_ / _taskEnum_
+//       └─ Template PR (T-76): getTaskTemplates() / saveTaskTemplate() / deleteTaskTemplate()   (admin)
+//
 //    ⚠️  ATURAN KEAMANAN (baca section 01_CONFIG_SECURITY):
 //    Semua fungsi top-level TANPA akhiran "_" bisa dipanggil siapa saja dari
 //    browser. Fungsi admin wajib diawali requireAdmin_(token), fungsi portal
@@ -412,6 +422,7 @@ function getAppSettings(token) {
     const b = SETTINGS_NUMERIC_BOUNDS[name];
     settings[name] = _numProp_(b.key, b.fallback);
   });
+  settings.reminder = _rmdRead_();   // T-40: lihat ReminderSettings.gs
   return settings;
 }
 
@@ -435,6 +446,8 @@ function updateAppSettings(token, payload) {
     }
   });
 
+  const rmdMap = _rmdValidate_(payload.reminder);   // T-40: validasi dulu, tulis belakangan
+
   const setOrDelete = function (key, value) {
     if (value === '' || value == null) props.deleteProperty(key);
     else props.setProperty(key, String(value));
@@ -452,6 +465,7 @@ function updateAppSettings(token, payload) {
     if (!Object.prototype.hasOwnProperty.call(payload, name)) return;
     setOrDelete(SETTINGS_NUMERIC_BOUNDS[name].key, payload[name] === '' || payload[name] == null ? '' : Math.trunc(Number(payload[name])));
   });
+  _rmdWrite_(rmdMap);   // T-40
 
   return getAppSettings(token);
 }
@@ -561,7 +575,8 @@ function _memberPublicProfile_(row) {
     totalSessions: parseInt(sanitizeValue(row[8])) || 10,
     usedSessions: parseInt(sanitizeValue(row[9])) || 0,
     preferredCoachId: sanitizeValue(row[10]) || '',
-    preferredCoachName: sanitizeValue(row[11]) || ''
+    preferredCoachName: sanitizeValue(row[11]) || '',
+    mealReminder: _mealOnFrom_(row[14])   // T-73: kolom O; kosong = aktif
   };
 }
 
@@ -2246,7 +2261,7 @@ function setupDailyTrigger() {
   for (let i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'sendDailyReminderEmail') ScriptApp.deleteTrigger(triggers[i]);
   }
-  // Reminder jam 12:00
+  // Reminder jam 05:00 (pagi)
   ScriptApp.newTrigger('sendDailyReminderEmail').timeBased().everyDays(1).atHour(5).create();
   // Reminder jam 20:00
   ScriptApp.newTrigger('sendDailyReminderEmail').timeBased().everyDays(1).atHour(20).create();
@@ -2260,6 +2275,7 @@ function sendDailyReminderEmail() {
   // Fungsi trigger ini bisa dipanggil dari browser juga; batasi supaya tidak bisa
   // dipakai untuk spam email/Telegram (trigger aslinya jalan 2x sehari).
   if (!_throttle_('daily_reminder', 3000)) return;
+  try { _rolloverRecurringTasks_(); } catch (e) { Logger.log('Rollover PR berulang gagal: ' + e); }
   logToSheet_("Memulai fungsi sendDailyReminderEmail", "INFO");
 
   try {
@@ -2328,6 +2344,13 @@ function sendDailyReminderEmail() {
       });
 
       emailBody += `</ul>`;
+    }
+
+    // 4b. T-47: kalimat tidur (RMD_TPL_SLEEP), hanya di run malam. Kosong = tidak ada perubahan.
+    const sleepLine = _sleepLine_(now.getHours());
+    if (sleepLine) {
+      emailBody += `<p>😴 ${_escHtml_(sleepLine)}</p>`;
+      pesanTelegram += `\n\n😴 ${_escHtml_(sleepLine)}`;
     }
 
     // 5. EKSEKUSI PENGIRIMAN EMAIL
@@ -3092,4 +3115,511 @@ function getPublicAvailability() {
   }
 
   return results;
+}
+
+
+// #############################################################################
+// 📁 09_TASKS — PR (Task) Klien di Luar Gym
+// #############################################################################
+//
+// STRUKTUR DATA: sheet "Tasks", 1 baris per PR (atau per instance PR berulang).
+//   Kolom A-M: Task ID, Member ID, Judul, Deskripsi, Kategori, Tenggat, Status,
+//              Pengulangan, Dibuat Oleh, Dibuat Pada, Selesai Pada,
+//              Catatan Klien, Grup Ulang ID
+//   Nilai yang diizinkan:
+//     Kategori   : nutrisi | tidur | mobilitas | aktivitas | lain
+//     Status     : todo | done | skipped
+//     Pengulangan: none | daily | weekly
+//   Tenggat disimpan sebagai teks "D/M/YYYY" (Plain Text), sama seperti
+//   tanggal di MemberData, supaya Sheets tidak mengubahnya jadi tipe Date.
+// Urutan kolom di atas JANGAN digeser: fungsi CRUD Task membaca per indeks.
+
+const TASKS_HEADERS = ["Task ID", "Member ID", "Judul", "Deskripsi", "Kategori", "Tenggat", "Status", "Pengulangan", "Dibuat Oleh", "Dibuat Pada", "Selesai Pada", "Catatan Klien", "Grup Ulang ID"];
+const TASK_CATEGORIES = ['nutrisi', 'tidur', 'mobilitas', 'aktivitas', 'lain'];
+const TASK_STATUSES = ['todo', 'done', 'skipped'];
+const TASK_REPEATS = ['none', 'daily', 'weekly'];
+
+/**
+ * Ambil (atau buat) sheet "Tasks". Kolom teks-tanggal dipaksa Plain Text:
+ * F (Tenggat, format D/M/YYYY), J (Dibuat Pada) dan K (Selesai Pada), yang
+ * ditulis sebagai string ISO. Fungsi internal (akhiran "_"), tidak bisa
+ * dipanggil dari browser.
+ */
+function _tasksSheet_() {
+  const sheet = getOrCreateSheet_('Tasks', TASKS_HEADERS);
+  sheet.getRange('F:F').setNumberFormat('@');
+  sheet.getRange('J:K').setNumberFormat('@');
+  return sheet;
+}
+
+
+// ── 📂 CRUD (admin) ──────────────────────────────────────────────────────────
+
+const TASK_TITLE_MAX = 80;
+const TASK_DESC_MAX = 500;
+
+/** Teks wajib/opsional dengan batas panjang (dicek di server, bukan hanya di form). */
+function _taskText_(value, max, label, required) {
+  const text = String(value == null ? '' : value).trim();
+  if (required && !text) throw new Error(label + ' wajib diisi.');
+  if (text.length > max) throw new Error(label + ' maksimal ' + max + ' karakter.');
+  return text;
+}
+
+/**
+ * Validasi tenggat "D/M/YYYY" (tanggal harus benar-benar ada). Kosong = tanpa tenggat.
+ * Kembalikan string "D/M/YYYY" tanpa angka nol di depan (format yang sama dengan
+ * tanggal di MemberData). allowPast=false menolak tanggal sebelum hari ini.
+ */
+function _taskDueDate_(value, allowPast) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) return '';
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw);
+  if (!m) throw new Error('Format tenggat harus D/M/YYYY, contoh 5/10/2026.');
+  const d = parseInt(m[1], 10), mo = parseInt(m[2], 10), y = parseInt(m[3], 10);
+  const date = new Date(y, mo - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) {
+    throw new Error('Tanggal tenggat tidak valid.');
+  }
+  if (!allowPast) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (date < today) throw new Error('Tenggat tidak boleh di masa lalu.');
+  }
+  return d + '/' + mo + '/' + y;
+}
+
+/** Nilai harus salah satu dari daftar yang diizinkan. */
+function _taskEnum_(value, allowed, label) {
+  const v = String(value == null ? '' : value).trim().toLowerCase();
+  if (allowed.indexOf(v) === -1) throw new Error(label + ' tidak valid. Pilihan: ' + allowed.join(', ') + '.');
+  return v;
+}
+
+/** Jalankan fungsi tulis dengan kunci skrip, supaya baris tidak bergeser oleh penulisan bersamaan. */
+function _withTaskLock_(fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Cari baris Task (1-based di sheet) berdasarkan ID. null kalau tidak ada. */
+function _findTaskRow_(sheet, taskId) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(taskId)) return { rowNum: i + 1, row: data[i] };
+  }
+  return null;
+}
+
+/**
+ * Admin: tambah PR untuk satu klien.
+ * data: { memberId, title, description?, category, dueDate? ("D/M/YYYY"), repeat? }
+ * PR berulang (repeat daily/weekly) wajib punya dueDate dan mendapat Grup Ulang ID;
+ * instance berikutnya dibuat otomatis, lihat _spawnNextTaskInstance_.
+ * @returns {{status:string, id:string}}
+ */
+function addTask(token, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const memberId = String(data.memberId == null ? '' : data.memberId).trim();
+  if (!memberId) throw new Error('Klien wajib dipilih.');
+  if (!_findMemberRow_(function(row) { return String(row[0]).trim() === memberId; })) {
+    throw new Error('Klien tidak ditemukan.');
+  }
+  const title = _taskText_(data.title, TASK_TITLE_MAX, 'Judul', true);
+  const description = _taskText_(data.description, TASK_DESC_MAX, 'Deskripsi', false);
+  const category = _taskEnum_(data.category, TASK_CATEGORIES, 'Kategori');
+  const dueDate = _taskDueDate_(data.dueDate, false);
+  const repeat = data.repeat == null || data.repeat === '' ? 'none' : _taskEnum_(data.repeat, TASK_REPEATS, 'Pengulangan');
+  if (repeat !== 'none' && !dueDate) throw new Error('PR berulang wajib punya tenggat awal.');
+
+  return _withTaskLock_(function() {
+    const sheet = _tasksSheet_();
+    const id = 'TSK-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    const groupId = repeat === 'none' ? '' : _newTaskGroupId_();
+    sheet.appendRow([id, memberId, title, description, category, dueDate, 'todo', repeat, 'coach', new Date().toISOString(), '', '', groupId]);
+    return { status: 'success', id: id };
+  });
+}
+
+/**
+ * Admin: ubah PR. Hanya field yang ada di data yang diubah; Member ID tidak bisa dipindah.
+ * data: { id, title?, description?, category?, dueDate?, status?, repeat? }
+ * dueDate '' menghapus tenggat. status 'done' mengisi Selesai Pada; status lain mengosongkannya.
+ * Tenggat lama (sudah lewat) boleh dipertahankan saat mengubah PR.
+ */
+function updateTask(token, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const has = function(key) { return Object.prototype.hasOwnProperty.call(data, key); };
+  const taskId = String(data.id == null ? '' : data.id).trim();
+  if (!taskId) throw new Error('ID PR wajib diisi.');
+
+  // Validasi dulu semua input sebelum menyentuh sheet.
+  const changes = {};
+  if (has('title')) changes.title = _taskText_(data.title, TASK_TITLE_MAX, 'Judul', true);
+  if (has('description')) changes.description = _taskText_(data.description, TASK_DESC_MAX, 'Deskripsi', false);
+  if (has('category')) changes.category = _taskEnum_(data.category, TASK_CATEGORIES, 'Kategori');
+  if (has('dueDate')) changes.dueDate = _taskDueDate_(data.dueDate, true);
+  if (has('status')) changes.status = _taskEnum_(data.status, TASK_STATUSES, 'Status');
+  if (has('repeat')) changes.repeat = _taskEnum_(data.repeat, TASK_REPEATS, 'Pengulangan');
+
+  return _withTaskLock_(function() {
+    const sheet = _tasksSheet_();
+    const found = _findTaskRow_(sheet, taskId);
+    if (!found) throw new Error('PR tidak ditemukan.');
+    const row = found.row.slice(0, TASKS_HEADERS.length);
+    while (row.length < TASKS_HEADERS.length) row.push('');
+
+    if (has('title')) row[2] = changes.title;
+    if (has('description')) row[3] = changes.description;
+    if (has('category')) row[4] = changes.category;
+    if (has('dueDate')) row[5] = changes.dueDate;
+    if (has('repeat')) row[7] = changes.repeat;
+    let statusChanged = false;
+    if (has('status') && changes.status !== String(row[6])) {
+      row[6] = changes.status;
+      row[10] = changes.status === 'done' ? new Date().toISOString() : '';
+      statusChanged = true;
+    }
+    const rowRepeat = String(row[7] || 'none');
+    if (rowRepeat !== 'none') {
+      if (!String(row[5]).trim()) throw new Error('PR berulang wajib punya tenggat.');
+      if (!row[12]) row[12] = _newTaskGroupId_();
+    }
+    sheet.getRange(found.rowNum, 1, 1, TASKS_HEADERS.length).setValues([row]);
+    if (statusChanged && (row[6] === 'done' || row[6] === 'skipped')) _spawnNextTaskInstance_(sheet, row);
+    return { status: 'success' };
+  });
+}
+
+/** Admin: hapus satu PR. Kalau ini instance terbuka dari PR berulang, ulangannya berhenti; hapus seluruh grup lewat deleteTaskGroup. */
+function deleteTask(token, taskId) {
+  requireAdmin_(token);
+  taskId = String(taskId == null ? '' : taskId).trim();
+  if (!taskId) throw new Error('ID PR wajib diisi.');
+  return _withTaskLock_(function() {
+    const sheet = _tasksSheet_();
+    const found = _findTaskRow_(sheet, taskId);
+    if (!found) throw new Error('PR tidak ditemukan.');
+    sheet.deleteRow(found.rowNum);
+    return { status: 'success' };
+  });
+}
+
+
+// ── 📂 BACA (admin) ──────────────────────────────────────────────────────────
+
+/** Baris sheet Tasks -> objek PR untuk frontend. Tenggat tetap teks "D/M/YYYY". */
+function _taskRowToObj_(row) {
+  const dueDate = String(row[5] == null ? '' : row[5]).trim();
+  const due = _parseTanggalDMY_(dueDate);
+  const status = String(row[6] || 'todo');
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return {
+    id: String(row[0]),
+    memberId: String(row[1]),
+    title: String(row[2] || ''),
+    description: String(row[3] || ''),
+    category: String(row[4] || 'lain'),
+    dueDate: dueDate,
+    status: status,
+    repeat: String(row[7] || 'none'),
+    createdBy: String(row[8] || ''),
+    createdAt: String(row[9] || ''),
+    completedAt: String(row[10] || ''),
+    clientNote: String(row[11] || ''),
+    groupId: String(row[12] || ''),
+    overdue: status === 'todo' && !!due && due < today
+  };
+}
+
+/**
+ * Admin: semua PR satu klien (termasuk yang sudah selesai/dilewati).
+ * Urutan: todo dulu (tenggat terdekat di atas, tanpa tenggat di bawah), lalu
+ * done/skipped dengan yang terbaru selesai di atas.
+ * @returns {Array<Object>} lihat _taskRowToObj_
+ */
+function getTasksForMember(token, memberId) {
+  requireAdmin_(token);
+  memberId = String(memberId == null ? '' : memberId).trim();
+  if (!memberId) throw new Error('Klien wajib dipilih.');
+
+  const data = _tasksSheet_().getDataRange().getValues();
+  const list = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] && String(data[i][1]).trim() === memberId) list.push(_taskRowToObj_(data[i]));
+  }
+
+  const FAR = 8.64e15; // tanpa tenggat -> paling bawah
+  list.sort(function(a, b) {
+    const aTodo = a.status === 'todo', bTodo = b.status === 'todo';
+    if (aTodo !== bTodo) return aTodo ? -1 : 1;
+    if (aTodo) {
+      const da = _parseTanggalDMY_(a.dueDate), db = _parseTanggalDMY_(b.dueDate);
+      return (da ? da.getTime() : FAR) - (db ? db.getTime() : FAR);
+    }
+    return String(b.completedAt).localeCompare(String(a.completedAt));
+  });
+  return list;
+}
+
+/**
+ * Admin: ringkasan PR semua klien dalam SATU panggilan (untuk pill di daftar klien).
+ * open = PR berstatus todo; overdue = todo yang tenggatnya sebelum hari ini.
+ * Klien tanpa PR terbuka tidak ikut dikembalikan (frontend anggap 0).
+ * @returns {Object<string,{open:number, overdue:number}>}
+ */
+function getTaskSummary(token) {
+  requireAdmin_(token);
+  const data = _tasksSheet_().getDataRange().getValues();
+  const summary = {};
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    const t = _taskRowToObj_(data[i]);
+    if (t.status !== 'todo' || !t.memberId) continue;
+    if (!summary[t.memberId]) summary[t.memberId] = { open: 0, overdue: 0 };
+    summary[t.memberId].open++;
+    if (t.overdue) summary[t.memberId].overdue++;
+  }
+  return summary;
+}
+
+
+// ── 📂 PORTAL KLIEN ──────────────────────────────────────────────────────────
+// Identitas klien SELALU diambil dari token (requireMember_), bukan dari parameter,
+// jadi klien tidak bisa membaca atau menyelesaikan PR klien lain.
+
+const TASK_CLIENT_NOTE_MAX = 300;
+const TASK_CLIENT_DONE_LIMIT = 20; // PR selesai/dilewati yang ikut dikirim ke portal
+
+/**
+ * Klien: daftar PR milik sendiri. PR todo dulu (tenggat terdekat di atas),
+ * lalu maksimal 20 PR selesai/dilewati terbaru. Field khusus admin tidak ikut.
+ * @returns {Array<{id,title,description,category,dueDate,status,repeat,completedAt,clientNote,overdue}>}
+ */
+function getMyTasks(memberToken) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  const data = _tasksSheet_().getDataRange().getValues();
+  const todo = [], finished = [];
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][0] || String(data[i][1]).trim() !== memberId) continue;
+    const t = _taskRowToObj_(data[i]);
+    (t.status === 'todo' ? todo : finished).push({
+      id: t.id, title: t.title, description: t.description, category: t.category,
+      dueDate: t.dueDate, status: t.status, repeat: t.repeat,
+      completedAt: t.completedAt, clientNote: t.clientNote, overdue: t.overdue
+    });
+  }
+  const FAR = 8.64e15;
+  todo.sort(function(a, b) {
+    const da = _parseTanggalDMY_(a.dueDate), db = _parseTanggalDMY_(b.dueDate);
+    return (da ? da.getTime() : FAR) - (db ? db.getTime() : FAR);
+  });
+  finished.sort(function(a, b) { return String(b.completedAt).localeCompare(String(a.completedAt)); });
+  return todo.concat(finished.slice(0, TASK_CLIENT_DONE_LIMIT));
+}
+
+/**
+ * Klien: tandai PR milik sendiri selesai, dengan catatan opsional (maks 300 karakter).
+ * PR klien lain dijawab "PR tidak ditemukan." (sama dengan ID yang tidak ada).
+ * @returns {{status:string}}
+ */
+function completeMyTask(memberToken, taskId, note) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  const id = String(taskId == null ? '' : taskId).trim();
+  if (!id) throw new Error('ID PR wajib diisi.');
+  const clientNote = _taskText_(note, TASK_CLIENT_NOTE_MAX, 'Catatan', false);
+
+  return _withTaskLock_(function() {
+    const sheet = _tasksSheet_();
+    const found = _findTaskRow_(sheet, id);
+    if (!found || String(found.row[1]).trim() !== memberId) throw new Error('PR tidak ditemukan.');
+    if (String(found.row[6]) !== 'todo') throw new Error('PR ini sudah selesai atau dilewati.');
+    sheet.getRange(found.rowNum, 7).setValue('done');
+    sheet.getRange(found.rowNum, 11, 1, 2).setValues([[new Date().toISOString(), clientNote]]);
+    _spawnNextTaskInstance_(sheet, found.row);
+    return { status: 'success' };
+  });
+}
+
+
+// ── 📂 PR BERULANG ───────────────────────────────────────────────────────────
+// Satu PR berulang = satu "grup" (kolom M, Grup Ulang ID). Tiap instance adalah
+// baris sendiri, jadi riwayat (done/skipped) tetap utuh. Selalu paling banyak
+// SATU instance todo per grup. Instance berikutnya dibuat saat:
+//   - instance sebelumnya diselesaikan (klien lewat completeMyTask, atau admin
+//     lewat updateTask status done/skipped), atau
+//   - tenggatnya lewat: _rolloverRecurringTasks_ menandainya 'skipped' lalu
+//     membuat instance baru (dipanggil dari trigger harian sendDailyReminderEmail).
+
+function _newTaskGroupId_() {
+  return 'GRP-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+}
+
+/**
+ * Tenggat instance berikutnya ("D/M/YYYY"): tenggat lama + 1 hari (daily) atau
+ * + 7 hari (weekly), dimajukan lagi selama masih sebelum hari ini supaya
+ * instance baru tidak langsung telat. Kosong kalau repeat 'none' atau tenggat tidak valid.
+ */
+function _nextRecurrence_(dueDate, repeat, fromDate) {
+  const step = repeat === 'daily' ? 1 : (repeat === 'weekly' ? 7 : 0);
+  const base = _parseTanggalDMY_(dueDate);
+  if (!step || !base) return '';
+  const now = fromDate || new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let next = new Date(base.getFullYear(), base.getMonth(), base.getDate() + step);
+  while (next < today) next = new Date(next.getFullYear(), next.getMonth(), next.getDate() + step);
+  return next.getDate() + '/' + (next.getMonth() + 1) + '/' + next.getFullYear();
+}
+
+/**
+ * Buat instance todo berikutnya dari baris PR berulang yang baru selesai/dilewati.
+ * Tidak melakukan apa-apa kalau PR tidak berulang/tanpa grup, atau grup itu sudah
+ * punya instance todo (aman dipanggil dua kali). Harus dipanggil DI DALAM _withTaskLock_.
+ * @returns {string|null} ID instance baru, atau null
+ */
+function _spawnNextTaskInstance_(sheet, row) {
+  const repeat = String(row[7] || 'none');
+  const groupId = String(row[12] || '').trim();
+  if (repeat === 'none' || !groupId) return null;
+  const next = _nextRecurrence_(String(row[5] == null ? '' : row[5]).trim(), repeat);
+  if (!next) return null;
+
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][12]).trim() === groupId && String(data[i][6]) === 'todo') return null;
+  }
+  const id = 'TSK-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+  sheet.appendRow([id, row[1], row[2], row[3], row[4], next, 'todo', repeat, row[8], new Date().toISOString(), '', '', groupId]);
+  return id;
+}
+
+/**
+ * Instance PR berulang yang tenggatnya sudah lewat dan belum dikerjakan ditandai
+ * 'skipped', lalu instance berikutnya dibuat. Internal (dipanggil trigger harian).
+ * @returns {number} jumlah instance yang digulirkan
+ */
+function _rolloverRecurringTasks_() {
+  return _withTaskLock_(function() {
+    const sheet = _tasksSheet_();
+    const data = sheet.getDataRange().getValues();
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let count = 0;
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!row[0] || String(row[6]) !== 'todo' || String(row[7] || 'none') === 'none' || !String(row[12]).trim()) continue;
+      const due = _parseTanggalDMY_(String(row[5] == null ? '' : row[5]).trim());
+      if (!due || due >= today) continue;
+      sheet.getRange(i + 1, 7).setValue('skipped');
+      const skippedRow = row.slice();
+      skippedRow[6] = 'skipped';
+      _spawnNextTaskInstance_(sheet, skippedRow);
+      count++;
+    }
+    return count;
+  });
+}
+
+/** Admin: hapus SEMUA instance (riwayat + yang terbuka) dari satu grup PR berulang. */
+function deleteTaskGroup(token, groupId) {
+  requireAdmin_(token);
+  const gid = String(groupId == null ? '' : groupId).trim();
+  if (!gid) throw new Error('ID grup PR wajib diisi.');
+  return _withTaskLock_(function() {
+    const sheet = _tasksSheet_();
+    const data = sheet.getDataRange().getValues();
+    let deleted = 0;
+    for (let i = data.length - 1; i >= 1; i--) { // dari bawah supaya nomor baris tidak bergeser
+      if (String(data[i][12]).trim() === gid) { sheet.deleteRow(i + 1); deleted++; }
+    }
+    if (!deleted) throw new Error('Grup PR tidak ditemukan.');
+    return { status: 'success', deleted: deleted };
+  });
+}
+
+// ── 📂 Template PR (T-76, admin) ─────────────────────────────────────────────
+// Sheet "TaskTemplates": A-F = Template ID, Judul, Deskripsi, Kategori,
+// Pengulangan, Dibuat Pada. Template TIDAK berisi klien maupun tenggat: dipakai
+// dengan mengisi form PR (frontend), lalu disimpan lewat addTask seperti biasa,
+// jadi semua validasi addTask tetap berlaku. Semua fungsi khusus admin.
+
+const TASK_TEMPLATES_HEADERS = ["Template ID", "Judul", "Deskripsi", "Kategori", "Pengulangan", "Dibuat Pada"];
+const TASK_TEMPLATE_LIMIT = 50;
+
+function _taskTemplatesSheet_() {
+  const sheet = getOrCreateSheet_('TaskTemplates', TASK_TEMPLATES_HEADERS);
+  sheet.getRange('A:F').setNumberFormat('@');
+  return sheet;
+}
+
+/** Admin: daftar template PR (terbaru di atas). */
+function getTaskTemplates(token) {
+  requireAdmin_(token);
+  const data = _taskTemplatesSheet_().getDataRange().getValues();
+  const list = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (!String(r[0]).trim()) continue;
+    list.push({
+      id: String(r[0]), title: String(r[1]), description: String(r[2] == null ? '' : r[2]),
+      category: String(r[3]), repeat: String(r[4] || 'none')
+    });
+  }
+  return list.reverse();
+}
+
+/**
+ * Admin: simpan template. data: { title, description?, category, repeat? }.
+ * Judul yang sama (tanpa membedakan huruf besar/kecil) menimpa template lama,
+ * jadi tombol "simpan sebagai template" tidak menumpuk duplikat.
+ * @returns {{status:string, id:string, updated:boolean}}
+ */
+function saveTaskTemplate(token, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const title = _taskText_(data.title, TASK_TITLE_MAX, 'Judul', true);
+  const description = _taskText_(data.description, TASK_DESC_MAX, 'Deskripsi', false);
+  const category = _taskEnum_(data.category, TASK_CATEGORIES, 'Kategori');
+  const repeat = data.repeat == null || data.repeat === '' ? 'none' : _taskEnum_(data.repeat, TASK_REPEATS, 'Pengulangan');
+
+  return _withTaskLock_(function() {
+    const sheet = _taskTemplatesSheet_();
+    const rows = sheet.getDataRange().getValues();
+    const key = title.toLowerCase();
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][1]).trim().toLowerCase() === key) {
+        sheet.getRange(i + 1, 2, 1, 4).setValues([[title, description, category, repeat]]);
+        return { status: 'success', id: String(rows[i][0]), updated: true };
+      }
+    }
+    if (rows.length - 1 >= TASK_TEMPLATE_LIMIT) {
+      throw new Error('Template sudah mencapai batas ' + TASK_TEMPLATE_LIMIT + '. Hapus yang tidak terpakai dulu.');
+    }
+    const id = 'TPL-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    sheet.appendRow([id, title, description, category, repeat, new Date().toISOString()]);
+    return { status: 'success', id: id, updated: false };
+  });
+}
+
+/** Admin: hapus satu template. Tidak memengaruhi PR yang sudah dibuat darinya. */
+function deleteTaskTemplate(token, templateId) {
+  requireAdmin_(token);
+  const tid = String(templateId == null ? '' : templateId).trim();
+  if (!tid) throw new Error('ID template wajib diisi.');
+  return _withTaskLock_(function() {
+    const sheet = _taskTemplatesSheet_();
+    const rows = sheet.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === tid) { sheet.deleteRow(i + 1); return { status: 'success' }; }
+    }
+    throw new Error('Template tidak ditemukan.');
+  });
 }
