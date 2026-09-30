@@ -398,6 +398,45 @@
       <div class="sheet-foot"><button type="submit" form="form-package" class="btn btn-primary btn-lg btn-block" id="pkg-save-btn">Simpan paket</button></div>
     </div>
 
+    <!-- Progres: catat berat / pinggang -->
+    <div class="sheet sm hide" id="sheet-progress" role="dialog" aria-modal="true" aria-labelledby="pg-entry-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pg-entry-title">Catat hari ini</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-progress" onsubmit="window.pgSaveEntry(event)" novalidate>
+        <div class="field hide" id="pg-date-field"><label class="label" for="pg-tanggal">Tanggal</label><input class="input" type="date" id="pg-tanggal"></div>
+        <div class="field"><label class="label" for="pg-berat">Berat (kg)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-berat" autocomplete="off" placeholder="72,4"></div>
+        <div class="field"><label class="label" for="pg-pinggang">Lingkar pinggang (cm)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-pinggang" autocomplete="off" placeholder="80"></div>
+        <p class="hint">Boleh isi salah satu. Catatan di hari yang sama diperbarui.</p>
+        <p class="hint err-msg" id="pg-err" role="alert" style="display:block"></p>
+      </form>
+      <div class="sheet-foot"><button type="submit" form="form-progress" class="btn btn-primary btn-lg btn-block" id="pg-save-btn">Simpan</button></div>
+    </div>
+
+    <!-- Progres: foto -->
+    <div class="sheet tall hide" id="sheet-progress-photos" role="dialog" aria-modal="true" aria-labelledby="pg-photos-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pg-photos-title">Foto progres</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack">
+        <div class="stack" id="pg-photo-upload">
+          <div class="chips" role="radiogroup" aria-label="Sisi foto"><button type="button" class="chip active" id="pg-side-depan" onclick="window.pgSetSide('depan')">Depan</button><button type="button" class="chip" id="pg-side-samping" onclick="window.pgSetSide('samping')">Samping</button></div>
+          <button type="button" class="btn btn-primary btn-lg btn-block" id="pg-photo-btn" onclick="window.pgPickPhoto()"><i data-lucide="camera"></i> Ambil / pilih foto</button>
+          <input type="file" id="pg-photo-input" accept="image/*" class="sr-only" aria-label="Pilih foto progres" onchange="window.pgUploadPhoto(this)">
+        </div>
+        <div class="list" id="pg-photo-list"></div>
+      </div>
+    </div>
+
+    <!-- Progres: lihat satu foto -->
+    <div class="sheet tall hide" id="sheet-photo-view" role="dialog" aria-modal="true" aria-labelledby="pg-view-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pg-view-title">Foto</h2><button type="button" class="icon-btn plain" onclick="window.pgClosePhotoView()" aria-label="Kembali ke daftar foto"><i data-lucide="chevron-left"></i></button></div>
+      <div class="sheet-body stack">
+        <p class="li-sub" id="pg-view-loading">Memuat foto…</p>
+        <img id="pg-view-img" class="pg-photo" alt="Foto progres">
+      </div>
+      <div class="sheet-foot"><button type="button" class="btn btn-danger btn-block" id="pg-view-del" onclick="window.pgDeletePhoto()"><i data-lucide="trash-2"></i> Hapus foto</button></div>
+    </div>
+
     <!-- Potong foto -->
     <div class="sheet hide" id="modal-crop-avatar" role="dialog" aria-modal="true" aria-labelledby="crop-title">
       <div class="sheet-handle"></div>

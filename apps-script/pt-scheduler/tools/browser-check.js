@@ -135,6 +135,7 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
   return { page, context, errors, navigations };
 }
 
+const overflowX = page => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 const visible = (page, sel) => page.locator(sel).first().isVisible();
 async function shot(page, name) {
   if (!SHOTS) return;
@@ -512,6 +513,23 @@ async function contrastReport(page) {
     await page.click('#profile-remind-prefs input[data-remind="pr"]');
     await page.waitForTimeout(500);
     check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
+
+    // ── Progres di halaman klien (panel) ───────────────────────────────────────
+    check(await visible(page, '#profile-progress-wrap') && (await page.textContent('#profile-progress-wrap')).includes('Belum ada catatan'), 'client page: a Progres section is shown');
+    await page.click('#profile-progress-wrap .btn-outline');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#pg-date-field'), 'client page: the coach can choose the date');
+    await page.fill('#pg-berat', '73');
+    await page.click('#pg-save-btn');
+    await page.waitForTimeout(800);
+    const crow = env.sheet('Progress').rows.find(r => r[1] === 'PT-A' && r[5] === 'coach');
+    check(!!crow && crow[3] === 73, 'client page: a coach entry is saved and marked "coach"');
+    check((await page.textContent('#profile-progress-wrap')).includes('coach') && (await page.textContent('#profile-progress-wrap')).includes('73'), 'client page: the entry and its author are listed');
+    await page.click('#profile-progress-wrap .list-item .icon-btn');
+    await page.waitForTimeout(300);
+    await page.click('#btn-confirm-modal-yes');
+    await page.waitForTimeout(700);
+    check(!env.sheet('Progress').rows.some(r => r[1] === 'PT-A' && r[5] === 'coach'), 'client page: a coach can delete an entry');
     noErrors(errors);
     await context.close();
   }
@@ -712,6 +730,63 @@ async function contrastReport(page) {
     check(((await page.textContent('#pub-next-countdown')) || '').trim().length > 0, 'next-session countdown is filled');
     check((await page.textContent('#pub-consistency-score')).includes('%'), 'consistency insight shown');
     await shot(page, 'portal-mobile-home');
+
+    // ── Progres klien (Fase D1) ────────────────────────────────────────────────
+    check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
+    await page.click('#pub-progress-wrap .btn-primary');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#sheet-progress'), 'portal: "Catat hari ini" opens the entry sheet');
+    check((await page.getAttribute('#pg-berat', 'inputmode')) === 'decimal' && (await page.getAttribute('#pg-pinggang', 'inputmode')) === 'decimal', 'portal: weight and waist open the decimal keypad');
+    check(!(await visible(page, '#pg-date-field')), 'portal: a client cannot pick the date (always today)');
+    await page.click('#pg-save-btn');
+    check((await page.textContent('#pg-err')).includes('Isi berat'), 'portal: saving an empty form explains what to fill');
+    await page.fill('#pg-berat', '10');
+    await page.click('#pg-save-btn');
+    check((await page.textContent('#pg-err')).includes('antara 20 dan 300'), 'portal: an impossible weight is refused with a clear message');
+    const bigFont = await page.evaluate(() => ['pg-berat', 'pg-pinggang'].every(id => parseFloat(getComputedStyle(document.getElementById(id)).fontSize) >= 16));
+    check(bigFont, 'portal: entry fields are 16 px or larger (no iOS zoom)');
+    const pastDay = env.call('_addDaysIso_', env.call('_todayWib_'), -6);
+    env.call('saveMemberMeasurement', env.adminToken(), 'PT-A', { tanggal: pastDay, berat: 74.5, pinggang: 84 });
+    await page.fill('#pg-berat', '72,4');
+    await page.fill('#pg-pinggang', '80');
+    await page.click('#pg-save-btn');
+    await page.waitForTimeout(700);
+    const prow = env.sheet('Progress').rows.find(r => r[2] === env.call('_todayWib_') && r[1] === 'PT-A');
+    check(!!prow && prow[3] === 72.4 && prow[4] === 80 && prow[5] === 'klien', 'portal: the entry is saved for the logged-in client (72,4 kg, comma accepted)');
+    await page.evaluate(() => window.loadMyProgress(true));
+    await page.waitForTimeout(500);
+    const ptxt = await page.textContent('#pub-progress-wrap');
+    check(ptxt.includes('72,4') && ptxt.includes('−2,1 kg sejak'), 'portal: shows the latest value and the change since the first entry');
+    check((await page.locator('#pub-progress-wrap svg.pg-chart').count()) === 2, 'portal: a line chart for weight and one for waist');
+    const chartBox = await page.locator('#pub-progress-wrap svg.pg-chart').first().boundingBox();
+    check(!!chartBox && chartBox.width <= MOBILE.width && chartBox.height > 60, 'portal: the chart fits the phone width (' + Math.round(chartBox && chartBox.width) + ' px)');
+    await page.locator('#pub-progress-wrap svg.pg-chart .pg-dot').last().click();
+    check((await page.textContent('#toast-msg')).includes('72,4'), 'portal: tapping a dot shows its value');
+    // Foto
+    await page.click('#pub-progress-wrap .btn-outline');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#sheet-progress-photos') && (await page.textContent('#pg-photo-list')).includes('Belum ada foto'), 'portal: the photo sheet opens with an empty list and a privacy note');
+    const PNG1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    await page.click('#pg-side-samping');
+    await page.setInputFiles('#pg-photo-input', { name: 'foto.png', mimeType: 'image/png', buffer: PNG1 });
+    await page.waitForTimeout(1200);
+    check(env.files.length === 1 && env.files[0].sharing === null, 'portal: the photo is uploaded to Drive and is not shared by link');
+    check(env.sheet('ProgressPhotos').rows[1][3] === 'samping' && env.sheet('ProgressPhotos').rows[1][1] === 'PT-A', 'portal: the photo is recorded for this client on the chosen side');
+    check((await page.textContent('#pg-photo-list')).includes('Samping'), 'portal: the new photo appears in the list');
+    const photoBad = await page.evaluate(() => Array.from(document.querySelectorAll('#sheet-progress-photos button, #sheet-progress-photos .chip')).map(e => e.getBoundingClientRect()).filter(r => r.width && (r.height < 43.5 || r.width < 43.5)).length);
+    check(photoBad === 0, 'portal: photo sheet buttons are at least 44 px');
+    await page.click('#pg-photo-list .btn');
+    await page.waitForTimeout(800);
+    check(((await page.getAttribute('#pg-view-img', 'src')) || '').startsWith('data:image/'), 'portal: viewing a photo loads it as a private data URL');
+    await page.click('#pg-view-del');
+    await page.waitForTimeout(300);
+    await page.click('#btn-confirm-modal-yes');
+    await page.waitForTimeout(800);
+    check(env.files[0].trashed === true && env.sheet('ProgressPhotos').rows.length === 1, 'portal: deleting a photo trashes the Drive file');
+    check((await overflowX(page)) <= 0, 'portal: Progres screens have no sideways scroll');
+    await shot(page, 'portal-mobile-progress');
+    await page.click('#sheet-progress-photos .icon-btn').catch(() => {});
+    await page.waitForTimeout(500);
 
     // Book through a free time slot on the Jadwal tab.
     await page.evaluate(() => window.navigate('calendar'));

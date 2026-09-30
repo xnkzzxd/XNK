@@ -1134,6 +1134,19 @@ button.avatar { border: 0; cursor: pointer; }
 .wa-bubble { max-width: 320px; width: 100%; background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: 4px 16px 16px 16px; padding: 10px 12px; font-size: var(--fs-md); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: var(--shadow-1); }
 .wa-bubble.wa-error { border: 2px solid var(--fg); font-weight: 700; }
 
+/* ── Progres klien ───────────────────────────────────────────────────────── */
+.pg-block { display: flex; flex-direction: column; gap: 4px; }
+.pg-now { font-size: var(--fs-2xl); font-weight: 800; letter-spacing: -0.02em; }
+.pg-now small { font-size: var(--fs-sm); font-weight: 700; color: var(--fg-muted); }
+.pg-chart { width: 100%; height: auto; display: block; margin-top: 4px; overflow: visible; }
+.pg-line { stroke: var(--fg); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.pg-axis { stroke: var(--border-strong); stroke-width: 1; }
+.pg-lbl { fill: var(--fg-muted); font-size: 10px; font-weight: 600; }
+.pg-dot { fill: var(--surface); stroke: var(--fg); stroke-width: 2.5; cursor: pointer; }
+.pg-dot:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.pg-big { font-size: 22px; font-weight: 800; min-height: 56px; }
+.pg-photo { width: 100%; max-height: 60vh; object-fit: contain; border-radius: var(--r-md); background: var(--surface-3); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }

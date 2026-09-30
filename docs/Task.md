@@ -62,13 +62,15 @@ All decisions are made (PRD §10.4): no WhatsApp nudge when sessions run low, ph
 
 ### D1 — Progress tracker
 
+Built. Deviations from the first plan: the photo list shows rows with a **Lihat** button (a photo is fetched only when opened, so 60 photos never load at once); the panel lets the coach **view** photos but not upload them.
+
 | | ID | Task | Files | Depends | Size | Done when |
 | --- | --- | --- | --- | --- | --- | --- |
-| [ ] | T-150 | `Progress` sheet, `saveMyMeasurement` / `deleteMyMeasurement` / `getMyProgress` (entries only), limits and one-row-per-day upsert. | Kode.gs, tests/progress.test.js (new), tests/security.test.js | — | M | Tests cover limits, upsert, and that a client can't touch another client's rows. |
-| [ ] | T-151 | Admin side: `getMemberProgress`, `saveMemberMeasurement`, `deleteMemberMeasurement` (marked `coach`). | Kode.gs, tests | T-150 | S | Coach and client entries show together with who entered them. |
-| [ ] | T-152 | Private photo folder, `uploadMyProgressPhoto`, `getMyProgressPhoto`, `deleteMyProgressPhoto`, `getMemberProgressPhoto`; limits 5 MB / 60 photos. | Kode.gs, tests | T-150 | M | Test proves no link sharing and no cross-client access. |
-| [ ] | T-153 | Portal "Progres" card: SVG line chart, change since first entry, "Catat hari ini" sheet, photo sheet with in-browser resize. | Index.html, App.html, Theme.html | T-150, T-152 | L | Works at 360 px in both themes; decimal keypad; no sideways scroll. |
-| [ ] | T-154 | Panel client page "Progres" section with the same chart, entry list, + Catat, photo grid. | Index.html, App.html | T-151, T-153 | M | Owner can add and fix entries on a phone. |
+| [x] | T-150 | `Progress` sheet, `saveMyMeasurement` / `deleteMyMeasurement` / `getMyProgress` (entries only), limits and one-row-per-day upsert. | Kode.gs, tests/progress.test.js (new), tests/security.test.js | — | M | Tests cover limits, upsert, and that a client can't touch another client's rows. |
+| [x] | T-151 | Admin side: `getMemberProgress`, `saveMemberMeasurement`, `deleteMemberMeasurement` (marked `coach`). | Kode.gs, tests | T-150 | S | Coach and client entries show together with who entered them. |
+| [x] | T-152 | Private photo folder, `uploadMyProgressPhoto`, `getMyProgressPhoto`, `deleteMyProgressPhoto`, `getMemberProgressPhoto`; limits 5 MB / 60 photos. | Kode.gs, tests | T-150 | M | Test proves no link sharing and no cross-client access. |
+| [x] | T-153 | Portal "Progres" card: SVG line chart, change since first entry, "Catat hari ini" sheet, photo sheet with in-browser resize. | Index.html, App.html, Theme.html | T-150, T-152 | L | Works at 360 px in both themes; decimal keypad; no sideways scroll. |
+| [x] | T-154 | Panel client page "Progres" section with the same chart, entry list, + Catat, photo grid. | Index.html, App.html | T-151, T-153 | M | Owner can add and fix entries on a phone. |
 
 ### D2 — Streaks & milestones
 

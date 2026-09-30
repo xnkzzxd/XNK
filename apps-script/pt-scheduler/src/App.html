@@ -2642,6 +2642,7 @@
       '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
     body += mealToggleHtml(m);
     body += reminderPrefsHtml(m);
+    body += '<div id="profile-progress-wrap" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>';
     body += '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>';
     body += '<div><div class="section-head"><h4 class="section-title">Jadwal mendatang</h4><span class="li-sub">' + upcoming.length + '</span></div>' +
       (upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
@@ -2653,6 +2654,7 @@
     const actions = '<button type="button" class="icon-btn plain" onclick="window.openEditProfileModal()" aria-label="Ubah data klien">' + icon('pencil') + '</button>';
     openDetail('client:' + m.id, 'Profil klien', actions, body);
     window.loadMemberTasks(m.id, false);
+    window.pgLoadAdmin(m.id);
     requestAnimationFrame(function () {
       const ring = document.querySelector('#detail-body .ring-fill');
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
@@ -3341,7 +3343,7 @@
   };
 
   window.onMemberAuthLost = function (err) {
-    window.myTasks = undefined; window.myMeal = undefined;
+    window.myTasks = undefined; window.myMeal = undefined; pg.data = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
     window.publicLoggedMember = null;
     renderTopbarActions();
@@ -3350,7 +3352,7 @@
   };
 
   window.logoutPublic = function () {
-    window.myTasks = undefined; window.myMeal = undefined;
+    window.myTasks = undefined; window.myMeal = undefined; pg.data = null;
     window.publicLoggedMember = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
     try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) {}
@@ -3429,6 +3431,217 @@
       '<div class="task-meta">' + meta + '</div>' +
       (t.clientNote ? '<p class="task-note"><b>Catatanku:</b> ' + h(t.clientNote) + '</p>' : '') + '</div></div>';
   }
+
+  // ── Progres klien: berat, pinggang, foto (Fase D1) ──────────────────────────
+  // Dipakai di portal klien (memberCall) dan di halaman klien panel (adminCall).
+  const pg = { data: null, admin: {}, mode: 'member', memberId: null, side: 'depan', viewId: null };
+  const PG_MEASURES = [['berat', 'Berat', 'kg'], ['pinggang', 'Pinggang', 'cm']];
+  const pgNum = v => Number(v).toLocaleString('id-ID', { maximumFractionDigits: 1 });
+  const pgDate = iso => { const p = String(iso).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+  const pgLabel = iso => pgDate(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+  const pgToday = () => { const d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+
+  function pgChangeText(sum, unit) {
+    if (!sum || sum.count < 2) return 'Catatan pertama. Catat lagi nanti untuk melihat perubahan.';
+    const c = sum.change;
+    return (c === 0 ? 'Tidak berubah' : (c < 0 ? '−' : '+') + pgNum(Math.abs(c)) + ' ' + unit) + ' sejak ' + pgLabel(sum.first.tanggal);
+  }
+
+  // Grafik garis SVG tanpa pustaka. Titik bisa disentuh untuk melihat nilainya.
+  function pgChartSvg(entries, key, unit) {
+    const pts = entries.filter(e => e[key] !== '').slice(-26);
+    if (!pts.length) return '';
+    const W = 300, H = 128, padX = 14, top = 16, bottom = 24;
+    const ts = pts.map(p => pgDate(p.tanggal).getTime());
+    const vs = pts.map(p => p[key]);
+    const t0 = Math.min.apply(null, ts), t1 = Math.max.apply(null, ts);
+    let v0 = Math.min.apply(null, vs), v1 = Math.max.apply(null, vs);
+    const pad = Math.max((v1 - v0) * 0.2, 0.5);
+    v0 -= pad; v1 += pad;
+    const x = t => (t1 === t0 ? W / 2 : padX + (t - t0) / (t1 - t0) * (W - 2 * padX));
+    const y = v => top + (1 - (v - v0) / (v1 - v0)) * (H - top - bottom);
+    const line = pts.map((p, i) => (i ? 'L' : 'M') + x(ts[i]).toFixed(1) + ' ' + y(vs[i]).toFixed(1)).join(' ');
+    const dots = pts.map((p, i) => '<circle cx="' + x(ts[i]).toFixed(1) + '" cy="' + y(vs[i]).toFixed(1) + '" r="' + (i === pts.length - 1 ? 5 : 3.5) + '" class="pg-dot" tabindex="0" role="button" aria-label="' + h(pgNum(vs[i]) + ' ' + unit + ', ' + pgLabel(p.tanggal)) + '" onclick="window.showToast(\'' + h(pgNum(vs[i]) + ' ' + unit + ' · ' + pgLabel(p.tanggal)) + '\',\'trending-up\')"/>').join('');
+    return '<svg class="pg-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Grafik ' + h(key) + '">' +
+      '<line x1="' + padX + '" y1="' + (H - bottom) + '" x2="' + (W - padX) + '" y2="' + (H - bottom) + '" class="pg-axis"/>' +
+      (pts.length > 1 ? '<path d="' + line + '" class="pg-line" fill="none"/>' : '') + dots +
+      '<text x="' + padX + '" y="' + (H - 6) + '" class="pg-lbl">' + h(pgLabel(pts[0].tanggal)) + '</text>' +
+      (pts.length > 1 ? '<text x="' + (W - padX) + '" y="' + (H - 6) + '" text-anchor="end" class="pg-lbl">' + h(pgLabel(pts[pts.length - 1].tanggal)) + '</text>' : '') + '</svg>';
+  }
+
+  function pgBlocksHtml(d) {
+    return PG_MEASURES.map(function (m) {
+      const sum = d.summary && d.summary[m[0]];
+      if (!sum) return '';
+      return '<div class="pg-block"><div class="row-between"><span class="label">' + m[1] + '</span><span class="pg-now num">' + h(pgNum(sum.last.nilai)) + ' <small>' + m[2] + '</small></span></div>' +
+        '<p class="li-sub">' + h(pgChangeText(sum, m[2])) + '</p>' + pgChartSvg(d.entries, m[0], m[2]) + '</div>';
+    }).join('');
+  }
+
+  function pgCardInner() {
+    const d = pg.data;
+    let inner;
+    if (!d) inner = '<p class="li-sub">Memuat progres…</p>';
+    else if (d.error) inner = '<p class="li-sub">Gagal memuat progres: ' + h(d.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgress(true)">Coba lagi</button>';
+    else if (!d.entries.length) inner = emptyState('trending-up', 'Belum ada catatan', 'Catat berat atau lingkar pinggangmu, lalu lihat perubahannya di sini.');
+    else inner = '<div class="stack" style="gap:18px">' + pgBlocksHtml(d) + '</div>';
+    const nPhoto = d && d.photos ? d.photos.length : 0;
+    return '<div class="section-head"><h3 class="section-title">Progres</h3></div>' + inner +
+      '<div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-primary" onclick="window.pgOpenEntry(\'member\')">' + icon('plus') + 'Catat hari ini</button>' +
+      '<button type="button" class="btn btn-outline" onclick="window.pgOpenPhotos(\'member\')">' + icon('camera') + 'Foto' + (nPhoto ? ' (' + nPhoto + ')' : '') + '</button></div>';
+  }
+  function pgRenderCard() {
+    const wrap = $('pub-progress-wrap');
+    if (wrap) { setHTML(wrap, pgCardInner()); }
+  }
+  window.loadMyProgress = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    if (pg.data && !pg.data.error && !force) { pgRenderCard(); return Promise.resolve(); }
+    if (!pg.data || force) { pg.data = null; pgRenderCard(); }
+    return memberCall('getMyProgress').then(function (d) { pg.data = d; pgRenderCard(); })
+      .catch(function (err) {
+        if (window.isAuthError && window.isAuthError(err)) return;
+        pg.data = { error: String((err && err.message) || err), entries: [], photos: [] };
+        pgRenderCard();
+      });
+  };
+
+  // Panel: bagian "Progres" di halaman klien
+  function pgAdminInner(memberId) {
+    const d = pg.admin[memberId];
+    let inner;
+    if (!d) inner = '<p class="li-sub">Memuat progres…</p>';
+    else if (d.error) inner = '<p class="li-sub">Gagal memuat progres: ' + h(d.error) + '</p>';
+    else {
+      inner = (d.entries.length ? '<div class="stack" style="gap:18px">' + pgBlocksHtml(d) + '</div>' : '<p class="li-sub">Belum ada catatan.</p>');
+      if (d.entries.length) {
+        inner += '<div class="group-label"><span>Catatan</span></div><div class="list">' + d.entries.slice().reverse().slice(0, 10).map(function (e) {
+          const parts = [];
+          if (e.berat !== '') parts.push(pgNum(e.berat) + ' kg');
+          if (e.pinggang !== '') parts.push(pgNum(e.pinggang) + ' cm');
+          return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title num">' + h(parts.join(' · ')) + '</p><p class="li-sub">' + h(pgLabel(e.tanggal)) + ' · <span class="pill">' + (e.oleh === 'coach' ? 'coach' : 'klien') + '</span></p></div>' +
+            '<button type="button" class="icon-btn plain" aria-label="Hapus catatan ' + h(pgLabel(e.tanggal)) + '" onclick="window.pgDeleteAdminEntry(\'' + h(memberId) + '\',\'' + h(e.id) + '\')">' + icon('trash-2') + '</button></div>';
+        }).join('') + '</div>';
+      }
+    }
+    const nPhoto = d && d.photos ? d.photos.length : 0;
+    return '<div class="section-head"><h4 class="section-title">Progres</h4></div>' + inner +
+      '<div class="btn-row" style="margin-top:12px"><button type="button" class="btn btn-outline" onclick="window.pgOpenEntry(\'admin\',\'' + h(memberId) + '\')">' + icon('plus') + 'Catat</button>' +
+      '<button type="button" class="btn btn-outline" onclick="window.pgOpenPhotos(\'admin\',\'' + h(memberId) + '\')">' + icon('camera') + 'Foto' + (nPhoto ? ' (' + nPhoto + ')' : '') + '</button></div>';
+  }
+  function pgAdminRender(memberId) {
+    const wrap = $('profile-progress-wrap');
+    if (wrap && wrap.getAttribute('data-member') === String(memberId)) setHTML(wrap, pgAdminInner(memberId));
+  }
+  window.pgLoadAdmin = function (memberId) {
+    return adminCall('getMemberProgress', memberId).then(function (d) { pg.admin[memberId] = d; pgAdminRender(memberId); })
+      .catch(function (err) { pg.admin[memberId] = { error: window.authMessage(err), entries: [], photos: [] }; pgAdminRender(memberId); });
+  };
+  window.pgDeleteAdminEntry = function (memberId, id) {
+    window.showConfirmModal('Catatan ini dihapus permanen.', function () {
+      adminCall('deleteMemberMeasurement', id).then(function (d) { pg.admin[memberId] = d; pgAdminRender(memberId); window.showToast('Catatan dihapus.'); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
+  };
+  function pgStore(d) {
+    if (pg.mode === 'admin') { pg.admin[pg.memberId] = d; pgAdminRender(pg.memberId); }
+    else { pg.data = d; pgRenderCard(); }
+  }
+
+  // Lembar "Catat"
+  window.pgOpenEntry = function (mode, memberId) {
+    pg.mode = mode; pg.memberId = memberId || null;
+    $('pg-berat').value = ''; $('pg-pinggang').value = '';
+    $('pg-tanggal').value = pgToday(); $('pg-tanggal').max = pgToday();
+    $('pg-date-field').classList.toggle('hide', mode !== 'admin');
+    $('pg-err').textContent = '';
+    $('pg-entry-title').textContent = mode === 'admin' ? 'Catat progres klien' : 'Catat hari ini';
+    openSheet('sheet-progress');
+  };
+  window.pgSaveEntry = function (e) {
+    e.preventDefault();
+    const berat = $('pg-berat').value.trim().replace(',', '.'), pinggang = $('pg-pinggang').value.trim().replace(',', '.');
+    const fail = function (m) { $('pg-err').textContent = m; };
+    if (!berat && !pinggang) return fail('Isi berat atau lingkar pinggang.');
+    if (berat && (isNaN(Number(berat)) || Number(berat) < 20 || Number(berat) > 300)) return fail('Berat harus antara 20 dan 300 kg.');
+    if (pinggang && (isNaN(Number(pinggang)) || Number(pinggang) < 30 || Number(pinggang) > 250)) return fail('Lingkar pinggang harus antara 30 dan 250 cm.');
+    fail('');
+    const data = { berat: berat, pinggang: pinggang };
+    const done = busy($('pg-save-btn'), 'Menyimpan…');
+    const call = pg.mode === 'admin'
+      ? adminCall('saveMemberMeasurement', pg.memberId, Object.assign({ tanggal: $('pg-tanggal').value }, data))
+      : memberCall('saveMyMeasurement', data);
+    call.then(function (d) { done(); pgStore(d); window.closeModal(); window.showToast('Tersimpan.'); })
+      .catch(function (err) { done(); fail(window.authMessage(err)); });
+  };
+
+  // Lembar foto
+  function pgPhotos() { return (pg.mode === 'admin' ? (pg.admin[pg.memberId] || {}) : (pg.data || {})).photos || []; }
+  function pgRenderPhotoList() {
+    const list = pgPhotos();
+    $('pg-photo-list').innerHTML = list.length ? list.map(function (p) {
+      return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title">' + (p.sisi === 'samping' ? 'Samping' : 'Depan') + ' · ' + h(pgLabel(p.tanggal)) + '</p><p class="li-sub">oleh ' + (p.oleh === 'coach' ? 'coach' : 'klien') + '</p></div>' +
+        '<button type="button" class="btn btn-outline btn-sm" onclick="window.pgViewPhoto(\'' + h(p.id) + '\')">Lihat</button></div>';
+    }).join('') : '<p class="li-sub">Belum ada foto. Foto hanya bisa dilihat kamu dan coach, dan tidak dibagikan lewat link.</p>';
+    ['depan', 'samping'].forEach(function (s) { const b = $('pg-side-' + s); if (b) b.classList.toggle('active', pg.side === s); });
+    paintIcons();
+  }
+  window.pgOpenPhotos = function (mode, memberId) {
+    pg.mode = mode; pg.memberId = memberId || null;
+    $('pg-photo-upload').classList.toggle('hide', mode === 'admin');
+    pgRenderPhotoList();
+    openSheet('sheet-progress-photos');
+  };
+  window.pgSetSide = function (side) { pg.side = side; pgRenderPhotoList(); };
+  window.pgPickPhoto = function () { const i = $('pg-photo-input'); if (i) { i.value = ''; i.click(); } };
+
+  // Perkecil di browser: maksimal 1600 px, JPEG (hemat kuota Drive dan waktu unggah)
+  function pgResize(file, maxDim) {
+    return new Promise(function (resolve, reject) {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.82).split(',')[1]);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Foto tidak bisa dibaca. Coba foto lain.')); };
+      img.src = url;
+    });
+  }
+  window.pgUploadPhoto = function (input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const btn = $('pg-photo-btn'), done = busy(btn, 'Mengunggah…');
+    pgResize(file, 1600).then(function (b64) {
+      if (b64.length > 6900000) throw new Error('Foto terlalu besar. Coba foto lain.');
+      return memberCall('uploadMyProgressPhoto', b64, 'image/jpeg', pg.side);
+    }).then(function (d) { done(); pg.data = d; pgRenderCard(); pgRenderPhotoList(); window.showToast('Foto tersimpan.'); })
+      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  window.pgViewPhoto = function (id) {
+    pg.viewId = id;
+    const p = pgPhotos().filter(function (x) { return x.id === id; })[0];
+    $('pg-view-title').textContent = p ? (p.sisi === 'samping' ? 'Samping' : 'Depan') + ' · ' + pgLabel(p.tanggal) : 'Foto';
+    $('pg-view-img').removeAttribute('src');
+    $('pg-view-del').classList.toggle('hide', pg.mode === 'admin');
+    $('pg-view-loading').classList.remove('hide');
+    openSheet('sheet-photo-view');
+    (pg.mode === 'admin' ? adminCall('getMemberProgressPhoto', id) : memberCall('getMyProgressPhoto', id)).then(function (r) {
+      if (pg.viewId !== id) return;
+      $('pg-view-img').src = r.dataUrl; $('pg-view-loading').classList.add('hide');
+    }).catch(function (err) { $('pg-view-loading').textContent = 'Gagal memuat foto: ' + window.authMessage(err); });
+  };
+  window.pgClosePhotoView = function () { window.pgOpenPhotos(pg.mode, pg.memberId); };
+  window.pgDeletePhoto = function () {
+    const id = pg.viewId;
+    window.showConfirmModal('Foto ini dihapus permanen dari Drive.', function () {
+      memberCall('deleteMyProgressPhoto', id).then(function (d) { pg.data = d; pgRenderCard(); window.pgOpenPhotos('member'); window.showToast('Foto dihapus.'); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus foto?', confirmText: 'Hapus', variant: 'danger' });
+  };
 
   function myTasksCardInner() {
     const c = window.myTasks;
@@ -3530,6 +3743,7 @@
 
     left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
+    left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
 
     left += insightsCard(me, mine);
 
@@ -3549,6 +3763,7 @@
     renderConsistencyBars();
     if (!window.myTasks) window.loadMyTasks(false);
     window.loadMyMeal(false);
+    window.loadMyProgress(false);
   };
 
   // Tanggal di beranda: pindah ke tab Jadwal pada tanggal itu.

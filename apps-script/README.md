@@ -82,6 +82,11 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
   **PR**, **Makan pagi/sore**. Di halaman klien, tiap jenis bisa dimatikan per klien (kolom P
   "Pengingat Nonaktif" di MemberData). Selama **Sesi besok** aktif, tombol WA dan kalimat tidur
   pindah dari email harian ke pesan ini; kalau dimatikan, email harian seperti biasa.
+- **Progres klien** (di portal klien dan halaman klien di panel): klien mencatat berat dan lingkar pinggang
+  (satu catatan per hari; catatan di hari yang sama diperbarui) dan melihat grafik perubahannya. Klien juga
+  bisa mengunggah foto progres (depan/samping); foto disimpan di folder Drive **privat** "XNK Progress"
+  (tidak pernah dibagikan lewat link) dan hanya bisa dilihat klien itu dan Anda. Coach bisa menambah atau
+  menghapus catatan dari halaman klien. Data ada di sheet `Progress` dan `ProgressPhotos`.
 - **Notifikasi Admin**: Telegram (saklar, token, chat ID, tombol tes) dan email notifikasi
   (`NOTIF_EMAIL`, kosong = email pemilik akun). Token yang tersimpan hanya tampil sebagai
   `••••1234`; dikosongkan berarti token lama tetap dipakai.
