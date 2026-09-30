@@ -989,10 +989,6 @@ kbd { font-family: var(--font); font-size: 11px; font-weight: 700; color: var(--
 .benefits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .benefits li { display: flex; gap: 10px; align-items: flex-start; font-size: var(--fs-sm); color: var(--fg-2); }
 .benefits li svg.lucide { width: 16px; height: 16px; margin-top: 1px; }
-.badge-tile { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border-radius: var(--r-md); border: 1.5px solid var(--fg); font-weight: 800; font-size: var(--fs-xs); text-align: center; }
-.badge-tile .bt-icon { width: 36px; height: 36px; border-radius: 12px; background: var(--ink); color: var(--on-ink); display: flex; align-items: center; justify-content: center; }
-.badge-tile.locked { border-style: dashed; border-color: var(--border-strong); color: var(--fg-muted); }
-.badge-tile.locked .bt-icon { background: var(--surface-3); color: var(--fg-muted); }
 .notice { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: var(--r-md); border: 1.5px solid var(--fg); background: var(--surface); }
 .notice svg.lucide { margin-top: 1px; }
 
@@ -1147,6 +1143,35 @@ button.avatar { border: 0; cursor: pointer; }
 .pg-big { font-size: 22px; font-weight: 800; min-height: 56px; }
 #sheet-progress-photos .chip { height: 44px; }
 .pg-photo { width: 100%; max-height: 60vh; object-fit: contain; border-radius: var(--r-md); background: var(--surface-3); }
+
+/* ── Streak, badge, perayaan ─────────────────────────────────────────────── */
+.pg-streak { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.pg-flame { width: 52px; height: 52px; border-radius: 18px; background: var(--surface-3); color: var(--fg-muted); display: grid; place-items: center; flex-shrink: 0; }
+.pg-flame.on { background: var(--ink); color: var(--on-ink); }
+.pg-flame svg.lucide { width: 26px; height: 26px; }
+.pg-badges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.pg-badge { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface); text-align: center; min-height: 76px; }
+.pg-badge-ic { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: var(--ink); color: var(--on-ink); }
+.pg-badge-ic svg.lucide { width: 18px; height: 18px; }
+.pg-badge-txt { font-size: var(--fs-xs); font-weight: 700; line-height: 1.2; }
+.pg-badge.locked { opacity: 0.38; border-style: dashed; }
+.pg-badge.locked .pg-badge-ic { background: var(--surface-3); color: var(--fg-muted); }
+.pg-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pg-trophy { width: 72px; height: 72px; border-radius: 24px; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; animation: popIn var(--t-slow) var(--spring) both; }
+.pg-trophy svg.lucide { width: 36px; height: 36px; }
+.pg-badge-list { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.pg-badge-list li { padding: 8px 16px; border-radius: var(--r-full); background: var(--surface-3); font-weight: 800; }
+#sheet-badge { overflow: hidden; }
+.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.confetti i { position: absolute; top: -12px; left: calc(var(--n) * 6.2%); width: 8px; height: 14px; border-radius: 2px; background: var(--fg); opacity: 0; animation: confettiFall 1.9s var(--ease-out) both; animation-delay: calc(var(--n) * 55ms); }
+.confetti i:nth-child(3n) { background: var(--fg-muted); width: 10px; height: 10px; border-radius: 50%; }
+.confetti i:nth-child(3n+1) { background: var(--border-strong); }
+.confetti i:nth-child(1) { --n: 0; } .confetti i:nth-child(2) { --n: 1; } .confetti i:nth-child(3) { --n: 2; } .confetti i:nth-child(4) { --n: 3; }
+.confetti i:nth-child(5) { --n: 4; } .confetti i:nth-child(6) { --n: 5; } .confetti i:nth-child(7) { --n: 6; } .confetti i:nth-child(8) { --n: 7; }
+.confetti i:nth-child(9) { --n: 8; } .confetti i:nth-child(10) { --n: 9; } .confetti i:nth-child(11) { --n: 10; } .confetti i:nth-child(12) { --n: 11; }
+.confetti i:nth-child(13) { --n: 12; } .confetti i:nth-child(14) { --n: 13; } .confetti i:nth-child(15) { --n: 14; } .confetti i:nth-child(16) { --n: 15; }
+@keyframes confettiFall { 0% { opacity: 1; transform: translateY(0) rotate(0); } 100% { opacity: 0; transform: translateY(340px) rotate(420deg); } }
+@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .pg-trophy { animation: none; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }

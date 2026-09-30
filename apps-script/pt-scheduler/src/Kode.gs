@@ -2963,10 +2963,12 @@ function _measureChange_(entries, key) {
 
 function _progressPayload_(memberId) {
   const all = _readProgress_(memberId);
+  const info = _streakInfo_(memberId);
   return {
     entries: all.slice(-PROGRESS_LIMITS.entriesShown),
     photos: _readProgressPhotos_(memberId),
-    summary: { berat: _measureChange_(all, 'berat'), pinggang: _measureChange_(all, 'pinggang') }
+    summary: { berat: _measureChange_(all, 'berat'), pinggang: _measureChange_(all, 'pinggang') },
+    streak: info.streak, bestStreak: info.bestStreak, completed: info.completed, badges: info.badges
   };
 }
 
@@ -3015,11 +3017,127 @@ function _deleteMeasurement_(id, memberIdOrNull) {
   }
 }
 
+// ── Streak & badge (D2) ─────────────────────────────────────────────────────
+// Streak = minggu berurutan (Senin–Minggu, WIB) dengan minimal 1 sesi selesai. Minggu berjalan tidak
+// memutus streak sebelum minggunya berakhir. Badge dihitung, bukan disimpan; badge yang sudah diraih
+// tidak pernah hilang karena dihitung dari total sesi dan streak TERBAIK.
+
+const MEMBER_BADGE_SEEN_COL = 17;   // Kolom Q "Badge Terlihat"
+const MEMBER_BADGE_SEEN_HEADER = 'Badge Terlihat';
+const BADGE_DEFS = [
+  { id: 'sesi-10', kind: 'sesi', need: 10, label: '10 sesi' },
+  { id: 'sesi-25', kind: 'sesi', need: 25, label: '25 sesi' },
+  { id: 'sesi-50', kind: 'sesi', need: 50, label: '50 sesi' },
+  { id: 'sesi-100', kind: 'sesi', need: 100, label: '100 sesi' },
+  { id: 'streak-4', kind: 'streak', need: 4, label: '4 minggu berturut-turut' },
+  { id: 'streak-8', kind: 'streak', need: 8, label: '8 minggu berturut-turut' },
+  { id: 'streak-12', kind: 'streak', need: 12, label: '12 minggu berturut-turut' }
+];
+
+/** Murni: tanggal 'YYYY-MM-DD' → tanggal Senin di minggu itu. */
+function _weekStart_(iso) {
+  const p = String(iso).split('-');
+  const dow = new Date(Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10))).getUTCDay();   // 0 = Minggu
+  return _addDaysIso_(iso, -((dow + 6) % 7));
+}
+
+/** Murni: dari jadwal → { weeks: {senin: true}, completed: jumlah sesi selesai } untuk satu klien. */
+function _completedWeeks_(schedules, memberId) {
+  const id = String(memberId).trim();
+  const weeks = {};
+  let completed = 0;
+  (schedules || []).forEach(function(sc) {
+    if (String(sc.memberId).trim() !== id || String(sc.status || '').toLowerCase() !== 'completed') return;
+    const d = new Date(sc.start);
+    if (isNaN(d.getTime())) return;
+    weeks[_weekStart_(Utilities.formatDate(d, 'Asia/Jakarta', 'yyyy-MM-dd'))] = true;
+    completed++;
+  });
+  return { weeks: weeks, completed: completed };
+}
+
+/** Murni: streak saat ini (minggu berurutan sampai hari ini). */
+function _streak_(weeks, todayIso) {
+  const thisWeek = _weekStart_(todayIso);
+  let n = 0, w = _addDaysIso_(thisWeek, -7);
+  while (weeks[w]) { n++; w = _addDaysIso_(w, -7); }
+  if (weeks[thisWeek]) n++;
+  return n;
+}
+
+/** Murni: streak terpanjang sepanjang riwayat. */
+function _bestStreak_(weeks) {
+  const keys = Object.keys(weeks).sort();
+  let best = 0, run = 0, prev = null;
+  keys.forEach(function(k) {
+    run = (prev !== null && _addDaysIso_(prev, 7) === k) ? run + 1 : 1;
+    if (run > best) best = run;
+    prev = k;
+  });
+  return best;
+}
+
+/** Murni: daftar badge dengan status earned. */
+function _badges_(completed, bestStreak) {
+  return BADGE_DEFS.map(function(b) {
+    const have = b.kind === 'sesi' ? completed : bestStreak;
+    return { id: b.id, kind: b.kind, label: b.label, earned: have >= b.need };
+  });
+}
+
+function _streakInfo_(memberId) {
+  const cw = _completedWeeks_(_getSchedulesAll_(), memberId);
+  const best = _bestStreak_(cw.weeks);
+  return { streak: _streak_(cw.weeks, _todayWib_()), bestStreak: best, completed: cw.completed, badges: _badges_(cw.completed, best) };
+}
+
 // ── Klien (token member; ID klien selalu dari token, bukan dari argumen) ────
 
+/** Payload klien + badge yang sudah diraih tapi belum pernah dirayakan (kolom Q). */
+function _myPayload_(row) {
+  const memberId = String(row[0]).trim();
+  const p = _progressPayload_(memberId);
+  const seen = _rmdOffFrom_(row[MEMBER_BADGE_SEEN_COL - 1]);
+  p.newBadges = p.badges.filter(function(b) { return b.earned && seen.indexOf(b.id) === -1; }).map(function(b) { return b.id; });
+  return p;
+}
+
+function _myPayloadFor_(memberId) {
+  const found = _findMemberRow_(function(r) { return String(r[0]).trim() === String(memberId).trim(); });
+  return found ? _myPayload_(found.row) : _progressPayload_(memberId);
+}
+
 function getMyProgress(memberToken) {
-  const memberId = String(requireMember_(memberToken).row[0]).trim();
-  return _progressPayload_(memberId);
+  return _myPayload_(requireMember_(memberToken).row);
+}
+
+/** Tandai badge sudah dirayakan supaya tidak muncul lagi. Hanya badge yang benar-benar sudah diraih. */
+function markBadgesSeen(memberToken, ids) {
+  const row = requireMember_(memberToken).row;
+  const memberId = String(row[0]).trim();
+  const earned = _streakInfo_(memberId).badges.filter(function(b) { return b.earned; }).map(function(b) { return b.id; });
+  const want = (Array.isArray(ids) ? ids : []).map(function(x) { return String(x).trim(); }).filter(function(x) { return earned.indexOf(x) !== -1; });
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _getMemberDataSheet_();
+    const head = sheet.getRange(1, MEMBER_BADGE_SEEN_COL);
+    if (head.getValue() === '') { head.setValue(MEMBER_BADGE_SEEN_HEADER); head.setFontWeight('bold'); }
+    else if (head.getValue() !== MEMBER_BADGE_SEEN_HEADER) throw new Error('Kolom Q di MemberData sudah dipakai untuk hal lain. Kosongkan/ganti dulu.');
+    const ids2 = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+    for (let i = 1; i < ids2.length; i++) {
+      if (String(ids2[i][0]).trim() !== memberId) continue;
+      const cell = sheet.getRange(i + 1, MEMBER_BADGE_SEEN_COL);
+      const cur = _rmdOffFrom_(cell.getValue());
+      want.forEach(function(b) { if (cur.indexOf(b) === -1) cur.push(b); });
+      cell.setValue(cur.join(','));
+      row[MEMBER_BADGE_SEEN_COL - 1] = cur.join(',');
+      break;
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  return _myPayload_(row);
 }
 
 function saveMyMeasurement(memberToken, data) {
@@ -3030,13 +3148,13 @@ function saveMyMeasurement(memberToken, data) {
   const berat = _parseMeasure_(data.berat, PROGRESS_LIMITS.beratMin, PROGRESS_LIMITS.beratMax, 'Berat');
   const pinggang = _parseMeasure_(data.pinggang, PROGRESS_LIMITS.pinggangMin, PROGRESS_LIMITS.pinggangMax, 'Lingkar pinggang');
   _saveMeasurement_(memberId, tanggal, berat, pinggang, 'klien');
-  return _progressPayload_(memberId);
+  return _myPayloadFor_(memberId);
 }
 
 function deleteMyMeasurement(memberToken, id) {
   const memberId = String(requireMember_(memberToken).row[0]).trim();
   _deleteMeasurement_(id, memberId);
-  return _progressPayload_(memberId);
+  return _myPayloadFor_(memberId);
 }
 
 /** Folder Drive privat untuk foto progres. TIDAK ada setSharing di mana pun untuk folder/berkas ini. */
@@ -3072,7 +3190,7 @@ function uploadMyProgressPhoto(memberToken, base64Data, mimeType, sisi) {
   } finally {
     lock.releaseLock();
   }
-  return _progressPayload_(memberId);
+  return _myPayloadFor_(memberId);
 }
 
 function _photoDataUrl_(fileId) {
@@ -3108,7 +3226,7 @@ function deleteMyProgressPhoto(memberToken, photoId) {
   } finally {
     lock.releaseLock();
   }
-  return _progressPayload_(memberId);
+  return _myPayloadFor_(memberId);
 }
 
 // ── Admin / coach ───────────────────────────────────────────────────────────

@@ -74,12 +74,14 @@ Built. Deviations from the first plan: the photo list shows rows with a **Lihat*
 
 ### D2 — Streaks & milestones
 
+Built. The old four "lencana" tiles (4/8/12/24 sessions) in the portal insights card were removed, so clients see one badge set only. The celebration is marked as seen on the server the moment it is shown.
+
 | | ID | Task | Files | Depends | Size | Done when |
 | --- | --- | --- | --- | --- | --- | --- |
-| [ ] | T-160 | Pure `_completedWeeks_`, `_streak_`, `_badges_`; add streak/badges/newBadges to `getMyProgress` and `getMemberProgress`. | Kode.gs, tests | T-150 | M | Tests: holiday gap, current-week rule, best streak keeps badges. |
-| [ ] | T-161 | MemberData column Q, `markBadgesSeen`. | Kode.gs, tests, tests/security.test.js | T-160 | S | Seen badges aren't celebrated again. |
-| [ ] | T-162 | Portal streak line, badge row, celebration card (CSS confetti, reduced motion) with Bagikan. | App.html, Index.html, Theme.html | T-160, T-161 | M | Celebration shows once; reduced motion shows no animation. |
-| [ ] | T-163 | Streak and badges on the panel client page. | App.html | T-160 | S | — |
+| [x] | T-160 | Pure `_completedWeeks_`, `_streak_`, `_badges_`; add streak/badges/newBadges to `getMyProgress` and `getMemberProgress`. | Kode.gs, tests | T-150 | M | Tests: holiday gap, current-week rule, best streak keeps badges. |
+| [x] | T-161 | MemberData column Q, `markBadgesSeen`. | Kode.gs, tests, tests/security.test.js | T-160 | S | Seen badges aren't celebrated again. |
+| [x] | T-162 | Portal streak line, badge row, celebration card (CSS confetti, reduced motion) with Bagikan. | App.html, Index.html, Theme.html | T-160, T-161 | M | Celebration shows once; reduced motion shows no animation. |
+| [x] | T-163 | Streak and badges on the panel client page. | App.html | T-160 | S | — |
 
 ### D3 — Easy renewal
 

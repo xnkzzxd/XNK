@@ -87,6 +87,11 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
   bisa mengunggah foto progres (depan/samping); foto disimpan di folder Drive **privat** "XNK Progress"
   (tidak pernah dibagikan lewat link) dan hanya bisa dilihat klien itu dan Anda. Coach bisa menambah atau
   menghapus catatan dari halaman klien. Data ada di sheet `Progress` dan `ProgressPhotos`.
+- **Streak & badge** (portal klien, kartu "Pencapaian"): streak = minggu berturut-turut (Senin–Minggu) dengan
+  minimal satu sesi selesai; minggu yang sedang berjalan tidak memutus streak sebelum berakhir. Badge:
+  10/25/50/100 sesi selesai dan streak 4/8/12 minggu (dihitung otomatis, tidak pernah hilang). Saat klien
+  pertama kali membuka beranda setelah meraih badge baru, muncul perayaan sekali saja dengan tombol
+  Bagikan (WhatsApp). Halaman klien di panel menampilkan streak dan badge klien itu.
 - **Notifikasi Admin**: Telegram (saklar, token, chat ID, tombol tes) dan email notifikasi
   (`NOTIF_EMAIL`, kosong = email pemilik akun). Token yang tersimpan hanya tampil sebagai
   `••••1234`; dikosongkan berarti token lama tetap dipakai.

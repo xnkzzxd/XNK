@@ -132,6 +132,12 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(ORIGIN + pagePath);
   await page.waitForTimeout(opts.wait || 900);
+  if (pagePath.includes('view=public') && !opts.keepCelebration) {
+    // A client with new badges gets a celebration sheet on the home screen; other flows don't care about it.
+    await page.waitForTimeout(500);
+    await page.evaluate(() => { const b = document.getElementById('sheet-badge'); if (b && !b.classList.contains('hide') && window.closeModal) window.closeModal(); }).catch(() => {});
+    await page.waitForTimeout(500);
+  }
   return { page, context, errors, navigations };
 }
 
@@ -516,6 +522,7 @@ async function contrastReport(page) {
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
     check(await visible(page, '#profile-progress-wrap') && (await page.textContent('#profile-progress-wrap')).includes('Belum ada catatan'), 'client page: a Progres section is shown');
+    check((await page.textContent('#profile-progress-wrap')).includes('sesi selesai') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
     await page.click('#profile-progress-wrap .btn-outline');
     await page.waitForTimeout(600);
     check(await visible(page, '#pg-date-field'), 'client page: the coach can choose the date');
@@ -720,7 +727,7 @@ async function contrastReport(page) {
     check((await page.textContent('#member-link-message')).includes('tidak ditemukan'), 'unknown number → "Nomor WhatsApp tidak ditemukan"');
     await page.fill('#login-phone', '81111111111');
     await page.click('#login-submit-btn');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1400);
     check((await page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'registered WhatsApp number logs the client in');
     check((await page.evaluate(() => window.currentView)) === 'public-dashboard', 'opens "Beranda"');
     check((await page.textContent('#pub-dash-name')).includes('Ani'), 'shows the client\'s own name');
@@ -730,6 +737,33 @@ async function contrastReport(page) {
     check(((await page.textContent('#pub-next-countdown')) || '').trim().length > 0, 'next-session countdown is filled');
     check((await page.textContent('#pub-consistency-score')).includes('%'), 'consistency insight shown');
     await shot(page, 'portal-mobile-home');
+
+    // ── Streak, badge dan perayaan (Fase D2) ───────────────────────────────────
+    check(await visible(page, '#sheet-badge'), 'portal: a newly earned badge is celebrated when the client opens the home screen');
+    check((await page.textContent('#pg-badge-list')).includes('10 sesi'), 'portal: the celebration names the badge (10 sesi)');
+    check((await page.locator('#sheet-badge .confetti i').count()) === 16, 'portal: the celebration has confetti');
+    check((env.memberRow('PT-A')[16] || '').includes('sesi-10'), 'portal: the badge is marked as seen right away, so it is celebrated only once');
+    const shareBad = await page.evaluate(() => Array.from(document.querySelectorAll('#sheet-badge .btn')).map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5).length);
+    check(shareBad === 0, 'portal: celebration buttons are at least 44 px');
+    await page.click('#pg-badge-share');
+    await page.waitForTimeout(300);
+    const shared = await page.evaluate(() => window.__opened.map(w => w.location.href).pop() || '');
+    check(shared.startsWith('https://wa.me/?text=') && decodeURIComponent(shared).includes('10 sesi'), 'portal: "Bagikan" opens WhatsApp with a proud message (contact chosen by the client)');
+    await shot(page, 'portal-mobile-celebration');
+    await page.click('#sheet-badge .btn-secondary');
+    await page.waitForTimeout(700);
+    check(!(await visible(page, '#sheet-badge')), 'portal: the celebration closes');
+    await page.evaluate(() => window.loadMyProgress(true));
+    await page.waitForTimeout(800);
+    check(!(await visible(page, '#sheet-badge')), 'portal: the same badge is not celebrated again');
+    check(await visible(page, '#pub-badges-wrap') && (await page.locator('#pub-badges-wrap .pg-badge').count()) === 7, 'portal: the Pencapaian card shows all 7 badges');
+    check((await page.locator('#pub-badges-wrap .pg-badge.earned').count()) >= 1 && (await page.locator('#pub-badges-wrap .pg-badge.locked').count()) >= 1, 'portal: earned badges are solid and locked ones are faded');
+    const streakTxt = await page.textContent('#pub-badges-wrap');
+    check(streakTxt.includes('berturut-turut') || streakTxt.includes('Mulai streak'), 'portal: the streak line is shown');
+    const lockedOpacity = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#pub-badges-wrap .pg-badge.locked')).opacity));
+    check(lockedOpacity < 0.6, 'portal: locked badges are visibly faded');
+    check((await overflowX(page)) <= 0, 'portal: the Pencapaian card has no sideways scroll');
+    check(!(await page.textContent('#pub-insights-card, body').then(t => t.includes('Selesaikan 24 sesi')).catch(() => false)), 'portal: the old separate badge tiles are gone');
 
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');

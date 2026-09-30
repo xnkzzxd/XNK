@@ -3478,6 +3478,44 @@
     }).join('');
   }
 
+  // ── Streak & badge (Fase D2) ────────────────────────────────────────────────
+  const pgShortBadge = b => String(b.label).replace(' berturut-turut', '');
+  function pgBadgesInner() {
+    const d = pg.data;
+    if (!d || d.error) return '';
+    const streakLine = d.streak > 0
+      ? '<p class="li-title num">' + d.streak + ' minggu berturut-turut</p><p class="li-sub">Terbaik ' + d.bestStreak + ' minggu · ' + d.completed + ' sesi selesai</p>'
+      : '<p class="li-title">Mulai streak-mu</p><p class="li-sub">Selesaikan satu sesi minggu ini. ' + d.completed + ' sesi selesai sejauh ini.</p>';
+    const badges = (d.badges || []).map(function (b) {
+      return '<div class="pg-badge ' + (b.earned ? 'earned' : 'locked') + '" role="img" aria-label="' + h(b.label + (b.earned ? ', sudah diraih' : ', belum diraih')) + '">' +
+        '<span class="pg-badge-ic">' + icon(b.kind === 'streak' ? 'flame' : 'award') + '</span><span class="pg-badge-txt">' + h(pgShortBadge(b)) + '</span></div>';
+    }).join('');
+    return '<div class="section-head"><h3 class="section-title">Pencapaian</h3></div>' +
+      '<div class="pg-streak"><span class="pg-flame' + (d.streak > 0 ? ' on' : '') + '">' + icon('flame') + '</span><div>' + streakLine + '</div></div>' +
+      '<div class="pg-badges">' + badges + '</div>';
+  }
+  function pgRenderBadges() {
+    const wrap = $('pub-badges-wrap');
+    if (!wrap) return;
+    const html = pgBadgesInner();
+    wrap.classList.toggle('hide', !html);
+    if (html) setHTML(wrap, html);
+  }
+
+  // Perayaan badge baru: sekali per badge (ditandai di server begitu ditampilkan)
+  function pgCelebrate(d) {
+    const ids = (d && d.newBadges) || [];
+    if (!ids.length || window.currentView !== 'public-dashboard') return;
+    const layer = $('sheet-layer');
+    if (layer && !layer.classList.contains('hide')) return;   // ada lembar lain terbuka: nanti saja
+    const labels = (d.badges || []).filter(function (b) { return ids.indexOf(b.id) !== -1; }).map(pgShortBadge);
+    $('pg-badge-list').innerHTML = labels.map(function (l) { return '<li>' + h(l) + '</li>'; }).join('');
+    $('pg-badge-share').setAttribute('data-text', 'Aku baru meraih badge ' + labels.join(' dan ') + ' di XNK Personal Training! 💪');
+    openSheet('sheet-badge');
+    memberCall('markBadgesSeen', ids).then(function (r) { if (r) pg.data = r; }).catch(function () {});
+  }
+  window.pgShareBadge = function () { window.sendToParentWA('', $('pg-badge-share').getAttribute('data-text') || ''); };
+
   function pgCardInner() {
     const d = pg.data;
     let inner;
@@ -3493,12 +3531,13 @@
   function pgRenderCard() {
     const wrap = $('pub-progress-wrap');
     if (wrap) { setHTML(wrap, pgCardInner()); }
+    pgRenderBadges();
   }
   window.loadMyProgress = function (force) {
     if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
     if (pg.data && !pg.data.error && !force) { pgRenderCard(); return Promise.resolve(); }
     if (!pg.data || force) { pg.data = null; pgRenderCard(); }
-    return memberCall('getMyProgress').then(function (d) { pg.data = d; pgRenderCard(); })
+    return memberCall('getMyProgress').then(function (d) { pg.data = d; pgRenderCard(); pgCelebrate(d); })
       .catch(function (err) {
         if (window.isAuthError && window.isAuthError(err)) return;
         pg.data = { error: String((err && err.message) || err), entries: [], photos: [] };
@@ -3513,7 +3552,10 @@
     if (!d) inner = '<p class="li-sub">Memuat progres…</p>';
     else if (d.error) inner = '<p class="li-sub">Gagal memuat progres: ' + h(d.error) + '</p>';
     else {
-      inner = (d.entries.length ? '<div class="stack" style="gap:18px">' + pgBlocksHtml(d) + '</div>' : '<p class="li-sub">Belum ada catatan.</p>');
+      const earned = (d.badges || []).filter(function (b) { return b.earned; });
+      inner = '<p class="li-sub" style="margin-bottom:10px">' + icon('flame', 'style="width:14px;height:14px;vertical-align:-2px"') + ' <b class="num">' + (d.streak || 0) + '</b> minggu berturut-turut · terbaik ' + (d.bestStreak || 0) + ' · ' + (d.completed || 0) + ' sesi selesai</p>' +
+        '<div class="pg-pills">' + (earned.length ? earned.map(function (b) { return '<span class="pill">' + h(pgShortBadge(b)) + '</span>'; }).join('') : '<span class="li-sub">Belum ada badge.</span>') + '</div>' +
+        (d.entries.length ? '<div class="stack" style="gap:18px;margin-top:14px">' + pgBlocksHtml(d) + '</div>' : '<p class="li-sub" style="margin-top:12px">Belum ada catatan.</p>');
       if (d.entries.length) {
         inner += '<div class="group-label"><span>Catatan</span></div><div class="list">' + d.entries.slice().reverse().slice(0, 10).map(function (e) {
           const parts = [];
@@ -3741,6 +3783,7 @@
         : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
       '</div>';
 
+    left += '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div>';
     left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
     left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
@@ -3837,12 +3880,7 @@
       html += '<div class="notice" style="margin-top:14px;border-style:dashed" id="pub-favtime-content">' + icon(slotIcon) + '<p id="pub-favtime-text">Kamu paling sering latihan di <b>' + dayNames[fd] + '</b>, sesi <b>' + fs.toLowerCase() + '</b>.</p></div>';
     }
 
-    // Lencana
-    const badges = [[4, 'target', '4 sesi'], [8, 'flame', '8 sesi'], [12, 'trophy', '12 sesi'], [24, 'medal', '24 sesi']];
-    html += '<p class="eyebrow" style="margin:18px 0 8px">Pencapaian</p><div class="row" style="gap:8px" id="pub-badges-container">' + badges.map(function (b) {
-      const ok = completed.length >= b[0];
-      return '<div class="badge-tile' + (ok ? '' : ' locked') + '" data-tip="' + (ok ? 'Terbuka' : 'Selesaikan ' + b[0] + ' sesi') + '"><span class="bt-icon">' + icon(ok ? b[1] : 'lock') + '</span>' + b[2] + '</div>';
-    }).join('') + '</div>';
+    // (Lencana dan streak ada di kartu "Pencapaian" tersendiri, lihat pgBadgesInner)
 
     // Heatmap 12 minggu
     const doneDays = {};

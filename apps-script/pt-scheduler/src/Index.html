@@ -437,6 +437,22 @@
       <div class="sheet-foot"><button type="button" class="btn btn-danger btn-block" id="pg-view-del" onclick="window.pgDeletePhoto()"><i data-lucide="trash-2"></i> Hapus foto</button></div>
     </div>
 
+    <!-- Perayaan badge baru -->
+    <div class="sheet sm hide" id="sheet-badge" role="dialog" aria-modal="true" aria-labelledby="pg-badge-title">
+      <div class="confetti" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="sheet-handle"></div>
+      <div class="sheet-body stack" style="text-align:center;align-items:center;padding-top:8px">
+        <span class="pg-trophy" aria-hidden="true"><i data-lucide="trophy"></i></span>
+        <h2 class="sheet-title" id="pg-badge-title">Badge baru! 🎉</h2>
+        <ul class="pg-badge-list" id="pg-badge-list"></ul>
+        <p class="li-sub">Keren, terus semangat latihannya!</p>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn btn-secondary" onclick="window.closeModal()">Tutup</button>
+        <button type="button" class="btn btn-primary" id="pg-badge-share" onclick="window.pgShareBadge()"><i data-lucide="share-2"></i> Bagikan</button>
+      </div>
+    </div>
+
     <!-- Potong foto -->
     <div class="sheet hide" id="modal-crop-avatar" role="dialog" aria-modal="true" aria-labelledby="crop-title">
       <div class="sheet-handle"></div>

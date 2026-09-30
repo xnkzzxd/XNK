@@ -400,7 +400,7 @@ New sheets (created by `getOrCreateSheet_`, all columns Plain Text except number
 
 ### 10.2 Streak and badges (pure functions, easy to test)
 
-- `_completedWeeks_(schedules, memberId)`: a set of ISO week keys (`2026-W40`, Monday-start, WIB) with at least one schedule `status === 'completed'` for that member.
+- `_completedWeeks_(schedules, memberId)`: a set of week keys (the **Monday's date**, e.g. `2026-09-28`, Monday-start, WIB) with at least one schedule `status === 'completed'` for that member. A session late on Sunday UTC counts in the Jakarta week it falls in.
 - `_streak_(weeks, now)`: count back from the last **finished** week. If the current week already has a session, add it. So a streak never drops on Monday morning just because this week hasn't had a session yet.
 - `_badges_(completedCount, bestStreak)`: `sesi-10/25/50/100` from the lifetime completed count, and `streak-4/8/12` from the **best** streak ever. Earned badges never disappear.
 - `getMyProgress(memberToken)` returns `{ entries, photos:[{id,tanggal,sisi}], streak, bestStreak, completed, badges:[{id,label,earned}], newBadges:[ids not in col Q] }`.
