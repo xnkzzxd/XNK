@@ -105,7 +105,7 @@ Built. Notes: "every other Monday" counts weeks from Monday 5 Jan 2026 (so it ke
 | [x] | T-182 | `selamat-milestone` handler; MemberData column R written only after a successful send. | Reminder.gs, tests | T-180, T-160 | M | A badge is congratulated exactly once. |
 | [x] | T-183 | `waktunya-ukur` handler (last measurement ≥ 14 days or none). | Reminder.gs, tests | T-180 | S | — |
 | [x] | T-184 | Per-client switches for the three types on the client page; test buttons. | App.html, Reminder.gs | T-181…T-183 | S | — |
-| [ ] | T-185 | Browser check: portal cards, celebration, renewal and panel Progres at phone and desktop; docs (README, Agent §7). | tools/browser-check.js, docs | all above | M | All browser checks pass. |
+| [x] | T-185 | Browser check: portal cards, celebration, renewal and panel Progres at phone and desktop; docs (README, Agent §7). | tools/browser-check.js, docs | all above | M | All browser checks pass. |
 
 ## Later
 
