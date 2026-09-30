@@ -3270,6 +3270,158 @@ function getMemberProgressPhoto(token, photoId) {
 
 
 // #############################################################################
+// 📁 09_RENEWAL — Permintaan perpanjang paket dari portal klien (Fase D3)
+// #############################################################################
+// Klien memilih paket di portal → permintaan tercatat (status "menunggu") + notif Telegram + WhatsApp ke
+// coach. Setelah pembayaran diterima, admin menyetujui dengan satu ketukan: persis jalur "Perpanjang" di
+// form Tambah Klien (kuota di-reset sesuai paket, transaksi dicatat dengan harga saat itu).
+
+const RENEWAL_HEADERS = ["ID", "Member ID", "Paket ID", "Status", "Dibuat Pada", "Diputuskan Pada", "Harga"];
+const RENEWAL_THROTTLE_SECONDS = 20;
+
+function _renewalSheet_() {
+  return getOrCreateSheet_('RenewalRequests', RENEWAL_HEADERS);
+}
+
+function _renewalFromRow_(r) {
+  return { id: String(r[0]), memberId: String(r[1]).trim(), packageId: String(r[2]), status: String(r[3]), createdAt: String(r[4]), decidedAt: String(r[5] || ''), harga: Number(r[6]) || 0 };
+}
+
+/** Klien: minta perpanjang. Satu permintaan terbuka per klien (yang baru membatalkan yang lama). */
+function requestRenewal(memberToken, packageId) {
+  const row = requireMember_(memberToken).row;
+  const memberId = String(row[0]).trim();
+  const pid = String(packageId == null ? '' : packageId).trim();
+  const pkg = getPriceList().find(function(p) { return String(p.id) === pid; });
+  if (!pkg) throw new Error('Paket tidak ditemukan atau sudah tidak aktif. Muat ulang halaman lalu pilih lagi.');
+  if (!_throttle_('renewal_' + memberId, RENEWAL_THROTTLE_SECONDS)) throw new Error('Permintaan baru saja dikirim. Tunggu sebentar.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  let id;
+  try {
+    const sheet = _renewalSheet_();
+    const data = sheet.getDataRange().getValues();
+    const now = new Date().toISOString();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][1]).trim() === memberId && String(data[i][3]) === 'menunggu') {
+        sheet.getRange(i + 1, 4).setValue('dibatalkan');
+        sheet.getRange(i + 1, 6).setValue(now);
+      }
+    }
+    id = 'REN-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    sheet.appendRow([id, memberId, pkg.id, 'menunggu', now, '', pkg.harga]);
+  } finally {
+    lock.releaseLock();
+  }
+  const name = String(row[1] || '').trim();
+  try {
+    kirimNotifTelegram_('🔁 <b>MINTA PERPANJANG PAKET</b>\n\n👤 <b>Klien:</b> ' + escapeHtmlTelegram(name) + '\n📦 <b>Paket:</b> ' + escapeHtmlTelegram(pkg.namaPaket) +
+      ' (' + _formatRupiah_(pkg.harga) + ')\n\nSetelah pembayaran diterima, setujui di panel: Dashboard → Minta perpanjang.');
+  } catch (e) { Logger.log('Notif perpanjang gagal: ' + e); }
+  return {
+    request: { id: id, status: 'menunggu', packageId: pkg.id, packageName: pkg.namaPaket, harga: pkg.harga },
+    text: 'Halo Coach, saya ' + name + '. Saya mau perpanjang paket ' + pkg.namaPaket + ' (' + _formatRupiah_(pkg.harga) + ').'
+  };
+}
+
+/** Klien: permintaan perpanjang terbaru (untuk status di beranda). null kalau belum pernah. */
+function getMyRenewal(memberToken) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  let last = null;
+  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    if (!r[0] || String(r[1]).trim() !== memberId || String(r[3]) === 'dibatalkan') return;
+    last = _renewalFromRow_(r);
+  });
+  if (!last) return null;
+  const pkg = getPriceList().find(function(p) { return String(p.id) === last.packageId; });
+  last.packageName = pkg ? pkg.namaPaket : '';
+  return last;
+}
+
+/** Admin: daftar permintaan, yang menunggu dulu. opts: { status, limit (bawaan 50, maks 200) }. */
+function getRenewalRequests(token, opts) {
+  requireAdmin_(token);
+  opts = opts || {};
+  const want = opts.status ? String(opts.status) : '';
+  let limit = parseInt(opts.limit, 10);
+  if (isNaN(limit) || limit < 1) limit = 50;
+  if (limit > 200) limit = 200;
+  const members = {};
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
+  const pkgNames = {};
+  const ctx = _priceListSheetAndColumns_();
+  _readPackages_(ctx.sheet, ctx.idx).forEach(function(p) { pkgNames[p.id] = p.namaPaket; });
+  const list = [];
+  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    if (!r[0]) return;
+    const q = _renewalFromRow_(r);
+    if (want ? q.status !== want : q.status === 'dibatalkan') return;
+    const m = members[q.memberId] || { name: 'Klien dihapus', phone: '' };
+    q.name = m.name; q.phone = m.phone; q.packageName = pkgNames[q.packageId] || '(paket dihapus)';
+    q._n = list.length;
+    list.push(q);
+  });
+  list.sort(function(a, b) {
+    if ((a.status === 'menunggu') !== (b.status === 'menunggu')) return a.status === 'menunggu' ? -1 : 1;
+    if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+    return b._n - a._n;   // sama persis: baris yang lebih baru dulu
+  });
+  return list.slice(0, limit).map(function(q) { delete q._n; return q; });
+}
+
+/**
+ * Admin: setujui atau tolak. Setuju = jalur Perpanjang di form Tambah Klien (kuota di-reset sesuai paket,
+ * transaksi + harga dicatat). Hanya bisa diputuskan sekali; kalau perpanjangan gagal, status kembali "menunggu".
+ */
+function decideRenewal(token, id, approve) {
+  requireAdmin_(token);
+  const rid = String(id == null ? '' : id).trim();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  let req, rowNum;
+  try {
+    const sheet = _renewalSheet_();
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) !== rid) continue;
+      req = _renewalFromRow_(data[i]); rowNum = i + 1;
+      break;
+    }
+    if (!req) throw new Error('Permintaan tidak ditemukan.');
+    if (req.status !== 'menunggu') throw new Error('Permintaan ini sudah diputuskan (' + req.status + ').');
+    sheet.getRange(rowNum, 4).setValue(approve ? 'disetujui' : 'ditolak');
+    sheet.getRange(rowNum, 6).setValue(new Date().toISOString());
+  } finally {
+    lock.releaseLock();
+  }
+  if (!approve) return { status: 'ditolak', id: rid };
+  // Di luar lock: _addMemberInternal_ memakai lock yang sama.
+  try {
+    const found = _findMemberRow_(function(r) { return String(r[0]).trim() === req.memberId; });
+    if (!found) throw new Error('Klien sudah dihapus.');
+    if (!getPriceList().some(function(p) { return String(p.id) === req.packageId; })) {
+      throw new Error('Paket sudah tidak aktif. Aktifkan paketnya dulu, atau tolak permintaan ini.');
+    }
+    const row = found.row;
+    const res = _addMemberInternal_({
+      name: String(row[1] || ''), phone: String(row[2] || ''), goal: String(row[3] || ''),
+      packageId: req.packageId, usedSessions: 0, coachId: String(row[10] || '')
+    }, { silent: true });
+    return { status: 'disetujui', id: rid, packageName: res.packageName, totalSessions: res.totalSessions };
+  } catch (e) {
+    const l2 = LockService.getScriptLock();
+    if (l2.tryLock(10000)) {
+      try {
+        const sheet = _renewalSheet_();
+        sheet.getRange(rowNum, 4).setValue('menunggu');
+        sheet.getRange(rowNum, 6).setValue('');
+      } finally { l2.releaseLock(); }
+    }
+    throw new Error(e.message.replace(/^Gagal menyimpan klien: /, ''));
+  }
+}
+
+// #############################################################################
 // 📁 07B_LANDING_STATS — Statistik & Testimoni Real untuk Landing Page
 // #############################################################################
 //
