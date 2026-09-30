@@ -122,7 +122,7 @@ The owner runs the gym from a phone and clients open the portal on a phone, so t
 | --- | --- | --- |
 | D-1 | How do reminders reach clients? | **Decided:** Telegram bot to the owner with one button per client; each opens WhatsApp with the message typed. No WhatsApp API or gateway. |
 | D-2 | Default for existing clients? | Every type on, owner switches off per client (R-5). |
-| D-3 | Should package categories stay fixed (student, college, regular, premium, core)? | Recommended: fixed list for now. The landing page only knows the four display categories, and `core` drives the meal reminders. |
+| D-3 | Should package categories stay fixed (student, college, regular, premium, core)? | **Decided:** fixed. The landing page only knows the four display categories, and `core` drives the meal reminders. Adding a category is a code change. |
 
 ## 7. Success measures
 
