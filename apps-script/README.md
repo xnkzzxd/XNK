@@ -29,7 +29,8 @@ PR di GitHub ──► cek otomatis (sintaks + tes) ──► merge ke main
 ```
 
 - `apps-script/pt-scheduler/src/` = isi proyek Apps Script, 1:1 dengan file di editor:
-  - `Kode.gs` — server (data, login, keamanan).
+  - `Kode.gs` — server (data, login, keamanan, PR klien).
+  - `Reminder.gs` — pengingat Telegram terjadwal (`runReminderTick`).
   - `Index.html` + `Theme.html` + `App.html` — panel PT & portal klien (desain hitam-putih,
     terang/gelap otomatis, tata letak HP & desktop berbeda).
   - `Landing.html` + `LandingStyle.html` + `LandingScript.html` — halaman xnkbooking.my.id

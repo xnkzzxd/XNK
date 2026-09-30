@@ -20,16 +20,19 @@ const ADMIN = [
   'markSchedulesAsRead', 'completeSession', 'deleteSchedule',
   'getPeakHourData', 'getCoachMonthlyStats', 'getPackageTrendStats', 'getRevenueSummary',
   'getAppSettings', 'updateAppSettings', 'sendTelegramTest',
+  'addTask', 'updateTask', 'deleteTask', 'deleteTaskGroup', 'getTasksForMember', 'getTaskSummary',
+  'getTaskTemplates', 'saveTaskTemplate', 'deleteTaskTemplate', 'setMemberMealReminder', 'sendReminderTest',
 ];
 const MEMBER = [
   'getMemberProfile', 'getMemberSessions', 'clientBookSchedule', 'clientBookRecurring',
   'clientRescheduleSchedule', 'uploadMemberPhoto', 'updateMemberPhoto',
+  'getMyTasks', 'completeMyTask', 'getMyMealToday',
 ];
 const OWNER = [
   'testDriveAccess', 'migrateSplitMembersData', 'pertahankanWABaruMemberData', 'pertahankanWABaru',
-  'setupDailyTrigger', 'setupWeeklyReportTrigger', 'testNotif',
+  'setupDailyTrigger', 'setupWeeklyReportTrigger', 'testNotif', 'setupReminderTrigger',
 ];
-const TRIGGER = ['sendDailyReminderEmail', 'sendWeeklyReportEmail'];
+const TRIGGER = ['sendDailyReminderEmail', 'sendWeeklyReportEmail', 'runReminderTick'];
 
 const AUTH = /AUTH_REQUIRED/;
 

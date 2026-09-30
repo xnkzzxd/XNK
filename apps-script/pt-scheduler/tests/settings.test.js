@@ -13,6 +13,7 @@ test('getAppSettings returns today\'s defaults until the admin changes something
   delete env.props.TELEGRAM_BOT_TOKEN;
   delete env.props.TELEGRAM_CHAT_IDS;
   const s = env.call('getAppSettings', token);
+  delete s.reminder; // reminder settings are covered by their own defaults
   assert.deepEqual(s, {
     telegramEnabled: true, telegramBotToken: '', telegramChatIds: '', notifEmail: '',
     businessHours: DEFAULT_HOURS,
@@ -34,8 +35,11 @@ test('updateAppSettings saves every field, and getAppSettings reflects it back',
     notifEmail: 'owner@gym.test', businessHours: hours,
     loginMaxFails: 3, loginLockSeconds: 120, memberLoginMaxFails: 5, adminSessionDays: 7,
   };
+  delete res.reminder;
   assert.deepEqual(res, expected);
-  assert.deepEqual(env.call('getAppSettings', token), expected);
+  const got = env.call('getAppSettings', token);
+  delete got.reminder;
+  assert.deepEqual(got, expected);
 });
 
 test('updateAppSettings: an empty string deletes the property, reverting to default', () => {

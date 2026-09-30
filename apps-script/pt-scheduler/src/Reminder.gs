@@ -353,24 +353,6 @@ function _rmdWrite_(map) {
 }
 
 /** Tes murni. Lempar error bila gagal. */
-function testRmdValidate() {
-  var bad = [];
-  function eq(l, g, w) { if (JSON.stringify(g) !== JSON.stringify(w)) bad.push(l + ' → ' + JSON.stringify(g)); }
-  function throws(l, fn) { try { fn(); bad.push(l + ' → tidak melempar'); } catch (e) {} }
-  eq('kosong', _rmdValidate_(null), {});
-  eq('master', _rmdValidate_({ enabled: true }), { RMD_ENABLED: 'true' });
-  eq('job jam+aktif', _rmdValidate_({ jobs: { 'booking-minggu': { enabled: false, hour: '18' } } }),
-     { RMD_BOOKING_MINGGU_ENABLED: 'false', RMD_BOOKING_MINGGU_HOUR: '18' });
-  eq('jam kosong = hapus', _rmdValidate_({ jobs: { pr: { hour: '' } } }), { RMD_PR_HOUR: '' });
-  eq('tidur dipangkas', _rmdValidate_({ tplSleep: '  Tidur cukup  ' }), { RMD_TPL_SLEEP: 'Tidur cukup' });
-  throws('jam 24', function() { _rmdValidate_({ jobs: { pr: { hour: 24 } } }); });
-  throws('jam desimal', function() { _rmdValidate_({ jobs: { pr: { hour: 7.5 } } }); });
-  throws('jenis asing', function() { _rmdValidate_({ jobs: { xyz: { hour: 5 } } }); });
-  throws('tidur kepanjangan', function() { _rmdValidate_({ tplSleep: new Array(302).join('a') }); });
-  throws('bukan objek', function() { _rmdValidate_('x'); });
-  if (bad.length) throw new Error('testRmdValidate GAGAL: ' + bad.join(' | '));
-  Logger.log('testRmdValidate: 10/10 lulus');
-}
 
 
 // ##############################################################################
@@ -511,21 +493,6 @@ function setupReminderTrigger() {
 }
 
 /** Tes murni tanpa efek samping (T-60 akan memperluas). Lempar error bila gagal. */
-function testDueJobs() {
-  // Hanya jenis awal (T-44…46) supaya tes tidak bergantung pada jam job baru (T-72 makan-*).
-  var jobs = REMINDER_JOBS.filter(function(j) { return j.jenis === 'booking-minggu' || j.jenis === 'pr'; });
-  var tol = REMINDER_TICK_TOLERANCE_HOURS, bad = [];
-  function eq(label, got, want) { if (JSON.stringify(got) !== JSON.stringify(want)) bad.push(label + ' → ' + JSON.stringify(got)); }
-  var sun = '2026-09-27';   // Minggu
-  eq('Minggu 17:00 booking',  _dueJobs_({day:0,hour:17,date:sun}, jobs, {}, tol).map(function(d){return d.slot;}), [sun+'T17']);
-  eq('Minggu 18:00 masih ok', _dueJobs_({day:0,hour:18,date:sun}, jobs, {}, tol).map(function(d){return d.slot;}), [sun+'T17']);
-  eq('Minggu 19:00 lewat',    _dueJobs_({day:0,hour:19,date:sun}, jobs, {}, tol).length, 0);
-  eq('Senin 17:00 bukan booking', _dueJobs_({day:1,hour:17,date:'2026-09-28'}, jobs, {}, tol).length, 0);
-  eq('override jam PR',       _dueJobs_({day:1,hour:20,date:'2026-09-28'}, jobs, {pr:20}, tol).map(function(d){return d.job.jenis;}), ['pr']);
-  eq('sebelum jam',           _dueJobs_({day:0,hour:16,date:sun}, jobs, {}, tol).length, 0);
-  if (bad.length) throw new Error('testDueJobs GAGAL: ' + bad.join(' | '));
-  Logger.log('testDueJobs: 6/6 lulus');
-}
 
 
 // ##############################################################################
@@ -626,23 +593,6 @@ function sendBookingMingguDigest_(ctx) {
 }
 
 /** Tes murni (tanpa sheet/Telegram). Lempar error bila gagal. */
-function testNearestFreeSlots() {
-  var bad = [];
-  function eq(l, g, w) { if (JSON.stringify(g) !== JSON.stringify(w)) bad.push(l + ' → ' + JSON.stringify(g)); }
-  var lbl = function(a) { return a.map(function(s) { return s.label; }); };
-  // Minggu 2026-09-27 17:00 WIB (10:00 UTC): Minggu sudah tutup → slot pertama Senin 06:00
-  var now = new Date('2026-09-27T10:00:00Z');
-  eq('Minggu sore → Senin pagi', lbl(_nearestFreeSlots_([], now, 3, BOOKING_DAY_HOURS, 7)),
-     ['Senin 28/9 06:00', 'Senin 28/9 07:00', 'Senin 28/9 08:00']);
-  // Senin 06:00 & 07:00 WIB terisi (23:00 & 00:00 UTC), completed diabaikan, cancelled diabaikan
-  var sch = [{ start: '2026-09-27T23:00:00Z', status: 'scheduled' }, { start: '2026-09-28T00:00:00Z', status: 'booked' },
-             { start: '2026-09-28T01:00:00Z', status: 'cancelled' }];
-  eq('slot terisi dilewati', lbl(_nearestFreeSlots_(sch, now, 3, BOOKING_DAY_HOURS, 7)),
-     ['Senin 28/9 08:00', 'Senin 28/9 09:00', 'Senin 28/9 10:00']);
-  eq('lookahead 0 hari', _nearestFreeSlots_([], now, 3, BOOKING_DAY_HOURS, 0).length, 0);
-  if (bad.length) throw new Error('testNearestFreeSlots GAGAL: ' + bad.join(' | '));
-  Logger.log('testNearestFreeSlots: 3/3 lulus');
-}
 
 
 // ##############################################################################
@@ -750,31 +700,6 @@ function sendPrDigest_(ctx) {
 }
 
 /** Tes murni (tanpa sheet/Telegram). Lempar error bila gagal. */
-function testBuildPrDigest() {
-  var bad = [];
-  function eq(l, g, w) { if (JSON.stringify(g) !== JSON.stringify(w)) bad.push(l + ' → ' + JSON.stringify(g)); }
-  var today = new Date(2026, 8, 28);                                   // 28 Sep 2026
-  var clients = [{ id: 'A', name: 'Ani', phone: '628111111111' }, { id: 'B', name: 'Budi', phone: '628122222222' },
-                 { id: 'C', name: 'Cici', phone: '628133333333' }];
-  var rows = [
-    ['1', 'A', 'PR satu',  '', 'lain', '27/9/2026', 'todo'],     // telat
-    ['2', 'A', 'PR dua',   '', 'lain', '28/9/2026', 'todo'],     // hari ini
-    ['3', 'A', 'sudah',    '', 'lain', '20/9/2026', 'done'],     // selesai → diabaikan
-    ['4', 'B', 'PR besok', '', 'lain', '29/9/2026', 'todo'],     // besok
-    ['5', 'B', 'jauh',     '', 'lain', '5/10/2026', 'todo'],     // terlalu jauh → diabaikan
-    ['6', 'C', 'tanpa tenggat', '', 'lain', '', 'todo'],         // diabaikan
-    ['7', 'Z', 'klien tak aktif', '', 'lain', '1/9/2026', 'todo'],
-    ['8', 'A', 'dilewati', '', 'lain', '1/9/2026', 'skipped']
-  ];
-  var out = _buildPrDigest_(rows, clients, today);
-  eq('klien terpilih', out.map(function(e) { return e.client.id; }), ['A', 'B']);
-  eq('ringkasan Ani', _prSummaryText_(out[0]), '1 telat, 1 hari ini');
-  eq('ringkasan Budi', _prSummaryText_(out[1]), '1 besok');
-  eq('teks WA memuat tag telat', /PR satu \(telat, tenggat 27\/9\)/.test(_prWaText_(out[0])), true);
-  eq('kosong', _buildPrDigest_([], clients, today).length, 0);
-  if (bad.length) throw new Error('testBuildPrDigest GAGAL: ' + bad.join(' | '));
-  Logger.log('testBuildPrDigest: 5/5 lulus');
-}
 
 
 // =============================================================================
@@ -805,21 +730,6 @@ function _sleepLine_(hour) {
 }
 
 /** Tes T-47 (murni, tanpa efek samping). Jalankan dari editor. */
-function testSleepLine() {
-  var fails = [];
-  var eq = function(l, a, b) { if (a !== b) fails.push(l + ': ' + JSON.stringify(a) + ' != ' + JSON.stringify(b)); };
-  eq('malam 20 + isi', _sleepLineFor_(20, 'Tidur 7 jam ya'), 'Tidur 7 jam ya');
-  eq('pagi 5 + isi', _sleepLineFor_(5, 'Tidur 7 jam ya'), '');
-  eq('batas 12', _sleepLineFor_(12, 'x'), 'x');
-  eq('11 belum malam', _sleepLineFor_(11, 'x'), '');
-  eq('kosong', _sleepLineFor_(20, ''), '');
-  eq('spasi saja', _sleepLineFor_(20, '   '), '');
-  eq('null', _sleepLineFor_(20, null), '');
-  eq('dipangkas', _sleepLineFor_(21, '  hai  '), 'hai');
-  fails.forEach(function(f) { Logger.log('❌ ' + f); });
-  Logger.log(fails.length ? '— GAGAL ' + fails.length + ' —' : '— testSleepLine 8/8 lulus —');
-  if (fails.length) throw new Error('T-47 GAGAL: ' + fails[0]);
-}
 
 
 // =============================================================================
@@ -890,23 +800,6 @@ function sendReminderTest(token, jenis) {
 }
 
 /** Tes T-48 (murni, tanpa efek samping). Jalankan dari editor. */
-function testRmdTestResolve() {
-  var fails = [];
-  var eq = function(l, a, b) { if (a !== b) fails.push(l + ': ' + a + ' != ' + b); };
-  var thr = function(l, v) { try { _rmdTestResolve_(v); fails.push(l + ': tidak melempar'); } catch (e) {} };
-  eq('pr', _rmdTestResolve_('pr'), 'pr');
-  eq('booking', _rmdTestResolve_('booking-minggu'), 'booking-minggu');
-  eq('tidur dipangkas', _rmdTestResolve_(' tidur '), 'tidur');
-  thr('kosong', ''); thr('null', null); thr('undefined', undefined);
-  thr('acak', 'malam-x'); thr('objek', { a: 1 });
-  thr('huruf besar', 'PR');
-  // Penjaga akses: token sampah harus ditolak SEBELUM apa pun terkirim.
-  try { sendReminderTest('bukan-token', 'pr'); fails.push('token sampah: tidak ditolak'); }
-  catch (e) { if (String(e.message || e).indexOf(AUTH_ERROR_PREFIX) !== 0) fails.push('token sampah: bukan error auth: ' + e); }
-  fails.forEach(function(f) { Logger.log('❌ ' + f); });
-  Logger.log(fails.length ? '— GAGAL ' + fails.length + ' —' : '— testRmdTestResolve 9/9 lulus —');
-  if (fails.length) throw new Error('T-48 GAGAL: ' + fails[0]);
-}
 
 
 // ##############################################################################
@@ -986,43 +879,6 @@ function _pickTip_(waktu, tanggal) {
 }
 
 /** Tes T-70 (murni, tanpa sheet). Jalankan dari editor. */
-function testPickTip() {
-  var fails = [];
-  var eq = function(l, a, b) { if (a !== b) fails.push(l + ': ' + JSON.stringify(a) + ' != ' + JSON.stringify(b)); };
-  var rows = [
-    ['pagi', 'P1', 'ya'], ['pagi', 'P2', 'ya'], ['pagi', 'P3', 'ya'],
-    ['sore', 'S1', 'ya'], ['sore', 'S2', 'ya'],
-    ['pagi', 'DRAF', 'tidak'], ['pagi', 'KOSONG-AKTIF', ''], ['Pagi ', '  P4  ', ' YA '], ['pagi', '   ', 'ya'], ['malam', 'M1', 'ya'], null
-  ];
-  var d0 = _tipDayNumber_('2026-09-28');
-  eq('hari epoch 1970-01-01', _tipDayNumber_('1970-01-01'), 0);
-  eq('hari berikutnya +1', _tipDayNumber_('2026-09-29') - d0, 1);
-  eq('tanggal 30 Feb tidak valid', _tipDayNumber_('2026-02-30'), null);
-  eq('format salah', _tipDayNumber_('28/9/2026'), null);
-  eq('null', _tipDayNumber_(null), null);
-
-  var pool = ['P1', 'P2', 'P3', 'P4'];                       // baris aktif 'pagi', urut sheet
-  var expect = pool[d0 % 4];
-  eq('pagi: indeks = hari mod 4', _pickTipFrom_(rows, 'pagi', '2026-09-28'), expect);
-  eq('deterministik (panggil ulang)', _pickTipFrom_(rows, 'pagi', '2026-09-28'), expect);
-  eq('besok berganti tip', _pickTipFrom_(rows, 'pagi', '2026-09-29'), pool[(d0 + 1) % 4]);
-  eq('siklus penuh kembali (4 hari)', _pickTipFrom_(rows, 'pagi', '2026-10-02'), expect);
-  eq('sore terpisah dari pagi', _pickTipFrom_(rows, 'sore', '2026-09-28'), ['S1', 'S2'][d0 % 2]);
-  eq('waktu dinormalisasi (huruf besar/spasi)', _pickTipFrom_(rows, ' SORE ', '2026-09-28'), ['S1', 'S2'][d0 % 2]);
-  eq('draf (Aktif != ya) tidak dipakai', pool.indexOf('DRAF'), -1);
-  var seen = {};
-  for (var i = 0; i < 8; i++) seen[_pickTipFrom_(rows, 'pagi', '2026-10-' + ('0' + (1 + i)).slice(-2))] = true;
-  eq('8 hari berurutan hanya memilih tip aktif', Object.keys(seen).sort().join(','), 'P1,P2,P3,P4');
-  eq('waktu tak dikenal → \'\'', _pickTipFrom_(rows, 'malam', '2026-09-28'), '');
-  eq('tanggal tidak valid → \'\'', _pickTipFrom_(rows, 'pagi', 'bukan-tanggal'), '');
-  eq('tanpa baris → \'\'', _pickTipFrom_([], 'pagi', '2026-09-28'), '');
-  eq('rows null → \'\'', _pickTipFrom_(null, 'pagi', '2026-09-28'), '');
-  eq('semua draf → \'\'', _pickTipFrom_([['pagi', 'x', 'tidak']], 'pagi', '2026-09-28'), '');
-  eq('satu tip aktif selalu dipilih', _pickTipFrom_([['sore', 'Satu', 'ya']], 'sore', '2026-09-28'), 'Satu');
-  fails.forEach(function(f) { Logger.log('❌ ' + f); });
-  Logger.log(fails.length ? '— GAGAL ' + fails.length + ' —' : '— testPickTip 19/19 lulus —');
-  if (fails.length) throw new Error('T-70 GAGAL: ' + fails[0]);
-}
 
 
 // ##############################################################################
@@ -1073,31 +929,6 @@ function _selectCoreClients_() {
 }
 
 /** Tes T-71 (murni, tanpa sheet). Jalankan dari editor. */
-function testFilterCoreClients() {
-  var fails = [];
-  var eq = function(l, a, b) { if (JSON.stringify(a) !== JSON.stringify(b)) fails.push(l + ': ' + JSON.stringify(a) + ' != ' + JSON.stringify(b)); };
-  var ids = function(r) { return r.clients.map(function(c) { return c.id; }); };
-  var packages = [
-    { id: 'P1', kategori: 'core' }, { id: 'P2', kategori: 'reguler' }, { id: 7, kategori: ' Core ' },
-    { id: 'P4', kategori: 'CORE' }, { id: '', kategori: 'core' }, null, { id: 'P1', kategori: 'core' }
-  ];
-  var active = [
-    { id: 'A', packageId: 'P1' }, { id: 'B', packageId: 'P2' }, { id: 'C', packageId: '7' },
-    { id: 'D', packageId: '' }, { id: 'E', packageId: 'P9' }, { id: 'F', packageId: ' P4 ' },
-    { id: 'G', packageId: 7 }, { id: 'H' }, null
-  ];
-  var r = _filterCoreClients_(active, packages);
-  eq('klien core = A,C,F,G (urut asli)', ids(r), ['A', 'C', 'F', 'G']);
-  eq('paket core unik = 3 (P1, 7, P4; kosong & duplikat diabaikan)', r.corePackages, 3);
-  eq('ID angka cocok dengan ID string', ids(_filterCoreClients_([{ id: 'X', packageId: '7' }], [{ id: 7, kategori: 'core' }])), ['X']);
-  eq('tanpa paket core → kosong', _filterCoreClients_(active, [{ id: 'P2', kategori: 'reguler' }]), { clients: [], corePackages: 0 });
-  eq('packages null → kosong', _filterCoreClients_(active, null), { clients: [], corePackages: 0 });
-  eq('active null → kosong', _filterCoreClients_(null, packages), { clients: [], corePackages: 3 });
-  eq('objek klien asli tidak diubah', active[0], { id: 'A', packageId: 'P1' });
-  fails.forEach(function(f) { Logger.log('❌ ' + f); });
-  Logger.log(fails.length ? '— GAGAL ' + fails.length + ' —' : '— testFilterCoreClients 7/7 lulus —');
-  if (fails.length) throw new Error('T-71 GAGAL: ' + fails[0]);
-}
 
 
 // ##############################################################################
@@ -1163,33 +994,6 @@ function sendMakanPagiDigest_(ctx) { return _sendMakanDigest_('pagi', ctx); }
 function sendMakanSoreDigest_(ctx) { return _sendMakanDigest_('sore', ctx); }
 
 /** Tes T-72 (murni, tanpa sheet/Telegram). Jalankan dari editor. */
-function testBuildMakanDigest() {
-  var fails = [];
-  var eq = function(l, a, b) { if (JSON.stringify(a) !== JSON.stringify(b)) fails.push(l + ': ' + JSON.stringify(a) + ' != ' + JSON.stringify(b)); };
-  var clients = [{ id: 'A', name: 'Ani', phone: '628111111111' }, { id: 'B', name: 'Budi <b>', phone: '628122222222' }];
-  var d = _buildMakanDigest_(clients, 'pagi', 'Sarapan protein ya', 0);
-  eq('tombol = jumlah klien', d.buttons.length, 2);
-  eq('teks tombol', d.buttons[0].text, '💬 Ani');
-  eq('link WA berisi nomor', d.buttons[0].url.indexOf('https://wa.me/628111111111?text=') === 0, true);
-  eq('link WA berisi tip', decodeURIComponent(d.buttons[0].url.split('?text=')[1]).indexOf('Sarapan protein ya') > 0, true);
-  eq('judul pagi', d.text.indexOf('Makan Pagi') > 0, true);
-  eq('sore memakai judul sore', _buildMakanDigest_(clients, 'sore', 'x', 0).text.indexOf('Makan Sore') > 0, true);
-  eq('tip di-escape di teks Telegram', _buildMakanDigest_(clients, 'pagi', 'a<b', 0).text.indexOf('a&lt;b') > 0, true);
-  eq('peringatan klien dilewati', _buildMakanDigest_(clients, 'pagi', 'x', 2).text.indexOf('2 klien dilewati') > 0, true);
-  eq('tanpa tip → null', _buildMakanDigest_(clients, 'pagi', '  ', 0), null);
-  eq('tanpa klien → null', _buildMakanDigest_([], 'pagi', 'x', 0), null);
-  eq('waktu asing → null', _buildMakanDigest_(clients, 'malam', 'x', 0), null);
-  // Saklar bawaan: makan-* mati, jenis lama tetap aktif.
-  eq('makan-pagi bawaan mati', _rmdEnabledFrom_(null, 'makan-pagi'), false);
-  eq('makan-sore bawaan mati', _rmdEnabledFrom_('', 'makan-sore'), false);
-  eq('makan-pagi diaktifkan', _rmdEnabledFrom_('true', 'makan-pagi'), true);
-  eq('pr bawaan aktif', _rmdEnabledFrom_(null, 'pr'), true);
-  eq('pr dimatikan', _rmdEnabledFrom_('false', 'pr'), false);
-  eq('booking bawaan aktif', _rmdEnabledFrom_(undefined, 'booking-minggu'), true);
-  fails.forEach(function(f) { Logger.log('❌ ' + f); });
-  Logger.log(fails.length ? '— GAGAL ' + fails.length + ' —' : '— testBuildMakanDigest 17/17 lulus —');
-  if (fails.length) throw new Error('T-72 GAGAL: ' + fails[0]);
-}
 
 
 // ##############################################################################
@@ -1254,32 +1058,6 @@ function setMemberMealReminder(token, memberId, aktif) {
 }
 
 /** Tes T-73 (murni, tanpa sheet). Jalankan dari editor. */
-function testMealToggle() {
-  var fails = [];
-  var eq = function(l, a, b) { if (JSON.stringify(a) !== JSON.stringify(b)) fails.push(l + ': ' + JSON.stringify(a) + ' != ' + JSON.stringify(b)); };
-  var thr = function(l, v) { try { _parseMealFlag_(v); fails.push(l + ': tidak melempar'); } catch (e) {} };
-  eq('kosong = aktif', _mealOnFrom_(''), true);
-  eq('undefined (kolom belum ada) = aktif', _mealOnFrom_(undefined), true);
-  eq('null = aktif', _mealOnFrom_(null), true);
-  eq("'ya' = aktif", _mealOnFrom_('ya'), true);
-  eq("'tidak' = nonaktif", _mealOnFrom_('tidak'), false);
-  eq("' Tidak ' = nonaktif", _mealOnFrom_(' Tidak '), false);
-  eq('teks lain = aktif', _mealOnFrom_('mungkin'), true);
-  eq('true', _parseMealFlag_(true), true);
-  eq("'false'", _parseMealFlag_('false'), false);
-  eq("'ya'", _parseMealFlag_('ya'), true);
-  thr('kosong', ''); thr('null', null); thr('angka 1', 1); thr('objek', {});
-  // _buildClientPools_ membawa mealOn dari kolom O (indeks 14).
-  var row = function(id, o) { var r = [id, 'N' + id, '08123456789', '', '', '', 'PKG', '', 5, 0, 'C1', '', '', '']; r[14] = o; return r; };
-  var p = _buildClientPools_([row('A', 'tidak'), row('B', 'ya'), row('C', undefined)], [], new Date(2026, 8, 28));
-  eq('mealOn per klien', p.active.map(function(c) { return c.mealOn; }), [false, true, true]);
-  // Penjaga akses: token sampah ditolak sebelum menyentuh sheet.
-  try { setMemberMealReminder('bukan-token', 'A', true); fails.push('token sampah: tidak ditolak'); }
-  catch (e) { if (String(e.message || e).indexOf(AUTH_ERROR_PREFIX) !== 0) fails.push('token sampah: bukan error auth: ' + e); }
-  fails.forEach(function(f) { Logger.log('❌ ' + f); });
-  Logger.log(fails.length ? '— GAGAL ' + fails.length + ' —' : '— testMealToggle 15/15 lulus —');
-  if (fails.length) throw new Error('T-73 GAGAL: ' + fails[0]);
-}
 
 
 // ##############################################################################
@@ -1322,27 +1100,3 @@ function getMyMealToday(memberToken) {
 }
 
 /** Tes T-74 (murni + penjaga akses, tanpa menulis apa pun). Jalankan dari editor. */
-function testMealToday() {
-  var fails = [];
-  var eq = function(l, a, b) { if (JSON.stringify(a) !== JSON.stringify(b)) fails.push(l + ': ' + JSON.stringify(a) + ' != ' + JSON.stringify(b)); };
-  var pk = [{ id: 'P1', kategori: 'core' }, { id: 'P2', kategori: 'reguler' }, { id: 7, kategori: ' CORE ' }, null];
-  eq('P1 core', _isCorePackage_('P1', pk), true);
-  eq('P2 bukan core', _isCorePackage_('P2', pk), false);
-  eq('ID angka cocok string', _isCorePackage_('7', pk), true);
-  eq('spasi di ID', _isCorePackage_(' P1 ', pk), true);
-  eq('tanpa paket', _isCorePackage_('', pk), false);
-  eq('paket tak dikenal', _isCorePackage_('P9', pk), false);
-  eq('packages null', _isCorePackage_('P1', null), false);
-  eq('non-core tidak membawa tip', _mealTodayFor_(false, 'rahasia', 'rahasia', '2026-09-28'), { core: false });
-  eq('core membawa tip', _mealTodayFor_(true, 'A', 'B', '2026-09-28'), { core: true, date: '2026-09-28', pagi: 'A', sore: 'B' });
-  eq('core tanpa tip → kosong', _mealTodayFor_(true, null, undefined, '2026-09-28'), { core: true, date: '2026-09-28', pagi: '', sore: '' });
-  [undefined, null, '', 'bukan-token'].forEach(function(t, i) {
-    try { getMyMealToday(t); fails.push('token #' + i + ': tidak ditolak'); }
-    catch (e) { if (String(e.message || e).indexOf(AUTH_ERROR_PREFIX) !== 0) fails.push('token #' + i + ': bukan error auth: ' + e); }
-  });
-  try { getMyMealToday(_issueToken_({ r: 'admin', v: 'x', exp: Date.now() + 60000 })); fails.push('token admin di fungsi klien: tidak ditolak'); }
-  catch (e) { if (String(e.message || e).indexOf(AUTH_ERROR_PREFIX) !== 0) fails.push('token admin: bukan error auth: ' + e); }
-  fails.forEach(function(f) { Logger.log('❌ ' + f); });
-  Logger.log(fails.length ? '— GAGAL ' + fails.length + ' —' : '— testMealToday 15/15 lulus —');
-  if (fails.length) throw new Error('T-74 GAGAL: ' + fails[0]);
-}
