@@ -3,3 +3,5 @@
 exclude:
   - apps-script
   - README.md
+  - CLAUDE.md
+  - docs

@@ -20,7 +20,9 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 | `icon-maskable-512.png` | Android app icon; the logo is smaller so Android can crop it to any shape. |
 | `apple-touch-icon.png` | iPhone/iPad home-screen icon (180 px). |
 | `robots.txt` | Tells search engines not to crawl the site. |
-| `_config.yml` | Keeps `apps-script/` and this README off the public website. |
+| `_config.yml` | Keeps `apps-script/`, `docs/`, `CLAUDE.md` and this README off the public website. |
+| `docs/` | Upgrade plan: `PRD.md`, `Design.md`, `Task.md`, and `Agent.md` (rules for AI agents and developers). Not published. |
+| `CLAUDE.md` | Loads `docs/Agent.md` for Claude Code. Not published. |
 | `apps-script/` | Source of the Apps Script apps (PT Scheduler), auto-deployed by GitHub Actions — see [apps-script/README.md](apps-script/README.md). |
 
 ## Access
