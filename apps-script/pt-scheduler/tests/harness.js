@@ -95,6 +95,8 @@ class Sheet {
     return this;
   }
   deleteRow(row) { this.rows.splice(row - 1, 1); }
+  insertColumnAfter(col) { this.rows.forEach(r => { while (r.length < col) r.push(''); r.splice(col, 0, ''); }); }
+  insertColumnBefore(col) { this.rows.forEach(r => { while (r.length < col) r.push(''); r.splice(col - 1, 0, ''); }); }
   insertRowBefore(row) { this.rows.splice(row - 1, 0, []); }
   setFrozenRows() {}
 }

@@ -940,9 +940,12 @@ function _memberKeyColumnReady_(sheet) {
  * Kolom C (Tanggal) dipaksa Plain Text, sama alasannya seperti di MemberData:
  * mencegah Sheets auto-convert "D/M/YYYY" jadi tipe Date yang kacaukan parsing.
  */
+const MEMBERS_LOG_PRICE_COL = 11;   // K "Harga": harga paket saat transaksi (untuk laporan pendapatan)
 function _getMembersLogSheet_() {
   const sheet = getOrCreateSheet_('Members', MEMBERS_LOG_HEADERS);
   sheet.getRange('C:C').setNumberFormat('@');
+  const priceHeader = sheet.getRange(1, MEMBERS_LOG_PRICE_COL);
+  if (priceHeader.getValue() === '') { priceHeader.setValue('Harga'); priceHeader.setFontWeight('bold'); }
   return sheet;
 }
 
@@ -950,12 +953,13 @@ function _getMembersLogSheet_() {
  * Tambah 1 baris log transaksi ke sheet "Members" (append-only, tidak pernah overwrite).
  * jenis: "Baru" | "Perpanjang" | "Ganti Paket"
  */
-function _tulisLogTransaksiMember_(memberId, jenis, paketId, namaPaket, jumlahSesi, coachId, namaCoach, catatan) {
+function _tulisLogTransaksiMember_(memberId, jenis, paketId, namaPaket, jumlahSesi, coachId, namaCoach, catatan, harga) {
   const sheet = _getMembersLogSheet_();
   const trxId = 'TRX-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
   const now = new Date();
   const dateStr = now.getDate() + '/' + (now.getMonth() + 1) + '/' + now.getFullYear();
-  sheet.appendRow([trxId, memberId, dateStr, jenis, paketId || '', namaPaket || '', jumlahSesi || 0, coachId || '', namaCoach || '', catatan || '']);
+  const price = (typeof harga === 'number' && isFinite(harga)) ? harga : '';   // harga saat transaksi; '' = tidak diketahui
+  sheet.appendRow([trxId, memberId, dateStr, jenis, paketId || '', namaPaket || '', jumlahSesi || 0, coachId || '', namaCoach || '', catatan || '', price]);
   return trxId;
 }
 
@@ -1226,7 +1230,7 @@ function _addMemberInternal_(memberData, options) {
     const dateStr = d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
 
     // 1. Cari data paket yang dipilih admin dari PriceList (jika ada)
-    let paketId = '', paketNama = '';
+    let paketId = '', paketNama = '', paketHarga = '';
     let totalSessions = memberData.totalSessions || 10;
     if (memberData.packageId) {
       const allPackages = getPriceList();
@@ -1234,6 +1238,7 @@ function _addMemberInternal_(memberData, options) {
       if (selectedPkg) {
         paketId = selectedPkg.id;
         paketNama = selectedPkg.namaPaket;
+        paketHarga = selectedPkg.harga;
         // Kalau admin tidak override Total Sesi secara manual, pakai jumlah sesi dari paket
         if (!memberData.totalSessions && selectedPkg.jumlahSesi) {
           totalSessions = selectedPkg.jumlahSesi;
@@ -1279,7 +1284,7 @@ function _addMemberInternal_(memberData, options) {
       // tetap) supaya di tab Klien card ini pindah muncul di bulan & tanggal perpanjangan.
       sheet.getRange(rowNum, 13).setValue(dateStr);
 
-      _tulisLogTransaksiMember_(id, 'Perpanjang', paketId, paketNama, totalSessions, coachId, coachNama, 'Perpanjang via form Tambah Klien');
+      _tulisLogTransaksiMember_(id, 'Perpanjang', paketId, paketNama, totalSessions, coachId, coachNama, 'Perpanjang via form Tambah Klien', paketHarga);
     } else {
       // ── KLIEN BARU: baris baru di MemberData + log "Baru" di Members ──
       id = 'PT-' + new Date().getTime();
@@ -1293,7 +1298,7 @@ function _addMemberInternal_(memberData, options) {
       }
       sheet.appendRow(newRow);
 
-      _tulisLogTransaksiMember_(id, 'Baru', paketId, paketNama, totalSessions, coachId, coachNama, 'Klien baru');
+      _tulisLogTransaksiMember_(id, 'Baru', paketId, paketNama, totalSessions, coachId, coachNama, 'Klien baru', paketHarga);
     }
 
     // 3. Format Nomor WA
@@ -2554,46 +2559,320 @@ function testNotif() {
 // 📁 07_PRICELIST — Manajemen Pricelist (Katalog Paket)
 // #############################################################################
 
-function getPriceList() {
-  const headers = ["ID", "Nama Paket", "Kategori", "Harga", "Jumlah Sesi", "Durasi", "Deskripsi", "Benefit", "Status Aktif"];
-  const sheet = getOrCreateSheet_('PriceList', headers);
+// Kategori paket TETAP (landing hanya punya tab student/college/regular/premium; `core` memicu pengingat makan).
+const PACKAGE_CATEGORIES = [
+  { id: 'student', label: 'Student', onLanding: true },
+  { id: 'college', label: 'College', onLanding: true },
+  { id: 'regular', label: 'Regular', onLanding: true },
+  { id: 'premium', label: 'Premium', onLanding: true },
+  { id: 'core', label: 'Core', onLanding: false }
+];
+const PRICELIST_HEADERS = ["ID", "Nama Paket", "Kategori", "Harga", "Jumlah Sesi", "Durasi", "Deskripsi", "Benefit", "Status Aktif", "Urutan"];
+const PRICELIST_KEYS = ['id', 'nama', 'kategori', 'harga', 'sesi', 'durasi', 'deskripsi', 'benefit', 'aktif', 'urutan'];
+const PACKAGE_MAX = { nama: 60, durasi: 40, deskripsi: 300, benefitItem: 60, benefitCount: 10, harga: 100000000, sesi: 200 };
+
+/**
+ * Peta kolom PriceList berdasarkan NAMA header (bukan posisi), supaya menambah kolom tidak menggeser bacaan.
+ * Kembalian: { kunci: indeks kolom 0-based }. Kalau nama header tidak dikenali, pakai posisi lama
+ * (9 kolom, atau 8 kolom tanpa "Jumlah Sesi").
+ */
+function _priceListColumns_(headerRow) {
+  const norm = function(v) { return String(v == null ? '' : v).trim().toLowerCase(); };
+  const names = PRICELIST_HEADERS.map(norm);
+  const idx = {};
+  (headerRow || []).forEach(function(h, i) {
+    const k = names.indexOf(norm(h));
+    if (k !== -1 && idx[PRICELIST_KEYS[k]] === undefined) idx[PRICELIST_KEYS[k]] = i;
+  });
+  if (['id', 'nama', 'kategori', 'harga', 'aktif'].every(function(k) { return idx[k] !== undefined; })) return idx;
+  const filled = (headerRow || []).filter(function(h) { return String(h == null ? '' : h).trim() !== ''; }).length;
+  return filled >= 9
+    ? { id: 0, nama: 1, kategori: 2, harga: 3, sesi: 4, durasi: 5, deskripsi: 6, benefit: 7, aktif: 8 }
+    : { id: 0, nama: 1, kategori: 2, harga: 3, durasi: 4, deskripsi: 5, benefit: 6, aktif: 7 };
+}
+
+function _priceListSheetAndColumns_() {
+  const sheet = getOrCreateSheet_('PriceList', PRICELIST_HEADERS);
+  const header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  return { sheet: sheet, idx: _priceListColumns_(header), header: header };
+}
+
+/** Sama dengan di atas, tapi melengkapi kolom "Jumlah Sesi" dan "Urutan" bila belum ada. Idempoten; panggil di dalam lock. */
+function _ensurePriceListSchema_() {
+  const ctx = _priceListSheetAndColumns_();
+  const named = _priceListNamedColumns_(ctx.header);
+  if (!named) throw new Error('Header sheet PriceList tidak dikenali. Pastikan baris pertama berisi: ' + PRICELIST_HEADERS.join(', ') + '.');
+  const sheet = ctx.sheet;
+  if (named.sesi === undefined) {
+    sheet.insertColumnAfter(named.harga + 1);
+    sheet.getRange(1, named.harga + 2).setValue('Jumlah Sesi');
+    sheet.getRange(1, named.harga + 2).setFontWeight('bold');
+  }
+  let header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  let cols = _priceListNamedColumns_(header);
+  if (cols.urutan === undefined) {
+    const col = sheet.getLastColumn() + 1;
+    sheet.getRange(1, col).setValue('Urutan');
+    sheet.getRange(1, col).setFontWeight('bold');
+    header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+    cols = _priceListNamedColumns_(header);
+    // Kolom baru: beri nomor urut sesuai urutan tampil sekarang, supaya paket baru masuk paling akhir (bukan paling depan).
+    const perCat = {};
+    _readPackages_(sheet, cols).forEach(function(p) {
+      perCat[p.kategori] = (perCat[p.kategori] || 0) + 1;
+      sheet.getRange(p._row, cols.urutan + 1).setValue(perCat[p.kategori]);
+    });
+  }
+  return { sheet: sheet, idx: cols };
+}
+
+/** Peta kolom hanya dari nama header; null kalau kolom inti tidak ada (tidak menebak posisi). */
+function _priceListNamedColumns_(header) {
+  const norm = function(v) { return String(v == null ? '' : v).trim().toLowerCase(); };
+  const names = PRICELIST_HEADERS.map(norm);
+  const idx = {};
+  header.forEach(function(h, i) {
+    const k = names.indexOf(norm(h));
+    if (k !== -1 && idx[PRICELIST_KEYS[k]] === undefined) idx[PRICELIST_KEYS[k]] = i;
+  });
+  return ['id', 'nama', 'kategori', 'harga', 'aktif'].every(function(k) { return idx[k] !== undefined; }) ? idx : null;
+}
+
+function _plCell_(row, idx, key) { return idx[key] === undefined ? '' : row[idx[key]]; }
+
+/** Semua paket (aktif & nonaktif) dalam urutan tampil: kategori menurut kemunculan pertama, lalu Urutan, lalu baris sheet. */
+function _readPackages_(sheet, idx) {
   const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) return [];
-
-  let packages = [];
-  // Mulai dari baris kedua (index 1) untuk melewati header
+  const list = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-
-    // BACKWARD COMPATIBILITY: Cegah error jika admin belum menambah kolom Jumlah Sesi
-    let id, namaPaket, kategori, harga, jumlahSesi, durasi, deskripsi, benefitStr, statusAktif;
-    if (row.length >= 9) {
-      id = row[0]; namaPaket = row[1]; kategori = row[2]; harga = row[3];
-      jumlahSesi = row[4]; durasi = row[5]; deskripsi = row[6]; benefitStr = row[7]; statusAktif = row[8];
-    } else {
-      id = row[0]; namaPaket = row[1]; kategori = row[2]; harga = row[3];
-      jumlahSesi = ''; durasi = row[4]; deskripsi = row[5]; benefitStr = row[6]; statusAktif = row[7];
-    }
-
-    // Hanya ambil paket yang Status Aktif-nya dicentang / diisi TRUE
-    if (statusAktif === true || String(statusAktif).toUpperCase() === 'TRUE') {
-      packages.push({
-        id: sanitizeValue(id),
-        namaPaket: sanitizeValue(namaPaket),
-        kategori: sanitizeValue(kategori).toLowerCase().trim(),
-        harga: parseFloat(harga) || 0,
-        jumlahSesi: sanitizeValue(jumlahSesi) !== '' ? parseInt(sanitizeValue(jumlahSesi)) : '',
-        durasi: sanitizeValue(durasi),
-        deskripsi: sanitizeValue(deskripsi),
-        // Memecah teks benefit yang dipisah dengan koma menjadi array
-        benefit: sanitizeValue(benefitStr).split(',').map(function(b) { return b.trim(); }),
-        aktif: true
-      });
-    }
+    const id = String(sanitizeValue(_plCell_(row, idx, 'id')) || '').trim();
+    if (!id) continue;
+    const ur = _plCell_(row, idx, 'urutan');
+    const sesi = sanitizeValue(_plCell_(row, idx, 'sesi'));
+    const aktifRaw = _plCell_(row, idx, 'aktif');
+    list.push({
+      _row: i + 1,
+      id: id,
+      namaPaket: sanitizeValue(_plCell_(row, idx, 'nama')),
+      kategori: sanitizeValue(_plCell_(row, idx, 'kategori')).toLowerCase().trim(),
+      harga: parseFloat(_plCell_(row, idx, 'harga')) || 0,
+      jumlahSesi: sesi !== '' ? parseInt(sesi, 10) : '',
+      durasi: sanitizeValue(_plCell_(row, idx, 'durasi')),
+      deskripsi: sanitizeValue(_plCell_(row, idx, 'deskripsi')),
+      benefit: sanitizeValue(_plCell_(row, idx, 'benefit')).split(',').map(function(b) { return b.trim(); }).filter(String),
+      aktif: aktifRaw === true || String(aktifRaw).toUpperCase() === 'TRUE',
+      urutan: ur === '' || isNaN(Number(ur)) ? '' : Number(ur)
+    });
   }
+  const catRank = {};
+  list.forEach(function(p) { if (catRank[p.kategori] === undefined) catRank[p.kategori] = Object.keys(catRank).length; });
+  list.forEach(function(p, n) { p._n = n; });
+  list.sort(function(a, b) {
+    if (catRank[a.kategori] !== catRank[b.kategori]) return catRank[a.kategori] - catRank[b.kategori];
+    const ua = a.urutan === '' ? Infinity : a.urutan, ub = b.urutan === '' ? Infinity : b.urutan;
+    if (ua !== ub) return ua < ub ? -1 : 1;
+    return a._n - b._n;
+  });
+  return list;
+}
 
-  return packages;
+function getPriceList() {
+  const ctx = _priceListSheetAndColumns_();
+  return _readPackages_(ctx.sheet, ctx.idx).filter(function(p) { return p.aktif; }).map(function(p) {
+    return {
+      id: p.id, namaPaket: p.namaPaket, kategori: p.kategori, harga: p.harga, jumlahSesi: p.jumlahSesi,
+      durasi: p.durasi, deskripsi: p.deskripsi, benefit: p.benefit.length ? p.benefit : [''], aktif: true
+    };
+  });
+}
+
+// ── Pricelist: kelola dari panel (admin) ─────────────────────────────────────
+
+function _packageUsage_() {
+  const members = {}, log = {};
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    const id = String(r[6] || '').trim();
+    if (id) members[id] = (members[id] || 0) + 1;
+  });
+  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    const id = String(r[4] || '').trim();
+    if (id) log[id] = (log[id] || 0) + 1;
+  });
+  return { members: members, log: log };
+}
+
+function _adminPackage_(p, usage) {
+  return {
+    id: p.id, namaPaket: p.namaPaket, kategori: p.kategori, harga: p.harga, jumlahSesi: p.jumlahSesi,
+    durasi: p.durasi, deskripsi: p.deskripsi, benefit: p.benefit, aktif: p.aktif, urutan: p.urutan,
+    usage: { activeMembers: usage.members[p.id] || 0, logEntries: usage.log[p.id] || 0 }
+  };
+}
+
+/** Semua paket untuk halaman Pengaturan → Paket & Harga (nonaktif ikut, diurutkan setelah yang aktif di tiap kategori). */
+function getPriceListAdmin(token) {
+  requireAdmin_(token);
+  const ctx = _priceListSheetAndColumns_();
+  const usage = _packageUsage_();
+  const list = _readPackages_(ctx.sheet, ctx.idx);
+  const rank = {};
+  list.forEach(function(p) { if (rank[p.kategori] === undefined) rank[p.kategori] = Object.keys(rank).length; });
+  list.forEach(function(p, n) { p._m = n; });
+  list.sort(function(a, b) {
+    if (rank[a.kategori] !== rank[b.kategori]) return rank[a.kategori] - rank[b.kategori];
+    if (a.aktif !== b.aktif) return a.aktif ? -1 : 1;
+    return a._m - b._m;
+  });
+  return { categories: PACKAGE_CATEGORIES, packages: list.map(function(p) { return _adminPackage_(p, usage); }) };
+}
+
+function _wholeNumber_(v, min, max, msg) {
+  const n = Number(v);
+  if (v === '' || v == null || typeof v === 'boolean' || !Number.isFinite(n) || !Number.isInteger(n) || n < min || n > max) throw new Error(msg);
+  return n;
+}
+
+function _validatePackage_(data, existing) {
+  const nama = String(data.namaPaket == null ? '' : data.namaPaket).trim();
+  if (!nama || nama.length > PACKAGE_MAX.nama) throw new Error('Nama paket wajib diisi (maksimal ' + PACKAGE_MAX.nama + ' karakter).');
+  const kategori = String(data.kategori == null ? '' : data.kategori).trim().toLowerCase();
+  const known = PACKAGE_CATEGORIES.some(function(c) { return c.id === kategori; });
+  if (!known && !(existing && existing.kategori === kategori)) throw new Error('Kategori tidak dikenal. Pilih salah satu: ' + PACKAGE_CATEGORIES.map(function(c) { return c.id; }).join(', ') + '.');
+  const harga = _wholeNumber_(data.harga, 0, PACKAGE_MAX.harga, 'Harga harus bilangan bulat Rupiah antara 0 dan 100.000.000.');
+  const sesiRaw = data.jumlahSesi;
+  const sesi = (sesiRaw === '' || sesiRaw == null) ? '' : _wholeNumber_(sesiRaw, 1, PACKAGE_MAX.sesi, 'Jumlah sesi harus bilangan bulat 1–' + PACKAGE_MAX.sesi + ', atau kosongkan untuk fleksibel.');
+  const durasi = String(data.durasi == null ? '' : data.durasi).trim();
+  if (durasi.length > PACKAGE_MAX.durasi) throw new Error('Durasi maksimal ' + PACKAGE_MAX.durasi + ' karakter.');
+  const deskripsi = String(data.deskripsi == null ? '' : data.deskripsi).trim();
+  if (deskripsi.length > PACKAGE_MAX.deskripsi) throw new Error('Deskripsi maksimal ' + PACKAGE_MAX.deskripsi + ' karakter.');
+  const rawBenefit = Array.isArray(data.benefit) ? data.benefit : [];
+  const benefit = rawBenefit.map(function(b) { return String(b == null ? '' : b).trim(); }).filter(String);
+  if (benefit.length > PACKAGE_MAX.benefitCount) throw new Error('Benefit maksimal ' + PACKAGE_MAX.benefitCount + ' butir.');
+  benefit.forEach(function(b) {
+    if (b.length > PACKAGE_MAX.benefitItem) throw new Error('Setiap benefit maksimal ' + PACKAGE_MAX.benefitItem + ' karakter.');
+    if (b.indexOf(',') !== -1) throw new Error('Benefit tidak boleh berisi koma.');
+  });
+  return { namaPaket: nama, kategori: kategori, harga: harga, jumlahSesi: sesi, durasi: durasi, deskripsi: deskripsi, benefit: benefit };
+}
+
+function _newPackageId_(taken) {
+  const day = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyyMMdd');
+  for (let n = 0; n < 50; n++) {
+    const id = 'PKG-' + day + '-' + (Math.random().toString(36) + '0000').slice(2, 6).toUpperCase();
+    if (!taken[id]) return id;
+  }
+  throw new Error('Gagal membuat ID paket. Coba lagi.');
+}
+
+function _withPriceListLock_(fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try { return fn(_ensurePriceListSchema_()); } finally { lock.releaseLock(); }
+}
+
+function _writePackageRow_(sheet, idx, rowNum, v) {
+  const set = function(key, val) { if (idx[key] !== undefined) sheet.getRange(rowNum, idx[key] + 1).setValue(val); };
+  set('nama', v.namaPaket); set('kategori', v.kategori); set('harga', v.harga); set('sesi', v.jumlahSesi);
+  set('durasi', v.durasi); set('deskripsi', v.deskripsi); set('benefit', v.benefit.join(', '));
+  if (v.aktif !== undefined) set('aktif', v.aktif);
+  if (v.urutan !== undefined) set('urutan', v.urutan);
+}
+
+/** Tambah (tanpa data.id) atau ubah (dengan data.id) satu paket. Paket baru nonaktif kecuali data.aktif === true. */
+function savePackage(token, data) {
+  requireAdmin_(token);
+  data = data || {};
+  return _withPriceListLock_(function(ctx) {
+    const list = _readPackages_(ctx.sheet, ctx.idx);
+    const id = String(data.id == null ? '' : data.id).trim();
+    const existing = id ? list.filter(function(p) { return p.id === id; })[0] : null;
+    if (id && !existing) throw new Error('Paket tidak ditemukan. Muat ulang halaman.');
+    const v = _validatePackage_(data, existing);
+    let savedId = id;
+    if (existing) {
+      if (Object.prototype.hasOwnProperty.call(data, 'aktif')) v.aktif = !!data.aktif;
+      if (v.kategori !== existing.kategori) v.urutan = _nextPackageOrder_(list, v.kategori);
+      _writePackageRow_(ctx.sheet, ctx.idx, existing._row, v);
+    } else {
+      const taken = {};
+      list.forEach(function(p) { taken[p.id] = true; });
+      savedId = _newPackageId_(taken);
+      const width = Math.max(ctx.sheet.getLastColumn(), Math.max.apply(null, Object.keys(ctx.idx).map(function(k) { return ctx.idx[k]; })) + 1);
+      const row = [];
+      for (let c = 0; c < width; c++) row.push('');
+      row[ctx.idx.id] = savedId;
+      ctx.sheet.appendRow(row);
+      v.aktif = data.aktif === true;
+      v.urutan = _nextPackageOrder_(list, v.kategori);
+      _writePackageRow_(ctx.sheet, ctx.idx, ctx.sheet.getLastRow(), v);
+    }
+    const saved = _readPackages_(ctx.sheet, ctx.idx).filter(function(p) { return p.id === savedId; })[0];
+    return _adminPackage_(saved, _packageUsage_());
+  });
+}
+
+function _nextPackageOrder_(list, kategori) {
+  let max = 0, count = 0;
+  list.forEach(function(p) {
+    if (p.kategori !== kategori) return;
+    count++;
+    if (p.urutan !== '' && p.urutan > max) max = p.urutan;
+  });
+  return Math.max(max, count) + 1;
+}
+
+function _findPackage_(ctx, id) {
+  const pid = String(id == null ? '' : id).trim();
+  const p = _readPackages_(ctx.sheet, ctx.idx).filter(function(x) { return x.id === pid; })[0];
+  if (!p) throw new Error('Paket tidak ditemukan. Muat ulang halaman.');
+  return p;
+}
+
+function setPackageActive(token, id, aktif) {
+  requireAdmin_(token);
+  return _withPriceListLock_(function(ctx) {
+    const p = _findPackage_(ctx, id);
+    ctx.sheet.getRange(p._row, ctx.idx.aktif + 1).setValue(!!aktif);
+    p.aktif = !!aktif;
+    return _adminPackage_(p, _packageUsage_());
+  });
+}
+
+/** Hapus permanen hanya kalau tidak ada klien aktif & tidak ada transaksi yang memakai paket ini. */
+function deletePackage(token, id) {
+  requireAdmin_(token);
+  return _withPriceListLock_(function(ctx) {
+    const p = _findPackage_(ctx, id);
+    const u = _adminPackage_(p, _packageUsage_()).usage;
+    if (u.activeMembers > 0 || u.logEntries > 0) {
+      throw new Error('Paket dipakai ' + u.activeMembers + ' klien / ' + u.logEntries + ' transaksi. Nonaktifkan saja.');
+    }
+    ctx.sheet.deleteRow(p._row);
+    return { status: 'success', id: p.id };
+  });
+}
+
+/** Simpan urutan tampil satu kategori: `ids` dulu (sesuai urutan yang dikirim), sisanya menyusul. */
+function reorderPackages(token, category, ids) {
+  requireAdmin_(token);
+  const cat = String(category == null ? '' : category).trim().toLowerCase();
+  if (!Array.isArray(ids)) throw new Error('Daftar urutan tidak valid.');
+  return _withPriceListLock_(function(ctx) {
+    const inCat = _readPackages_(ctx.sheet, ctx.idx).filter(function(p) { return p.kategori === cat; });
+    const byId = {};
+    inCat.forEach(function(p) { byId[p.id] = p; });
+    const seen = {};
+    const order = [];
+    ids.forEach(function(raw) {
+      const id = String(raw == null ? '' : raw).trim();
+      if (!byId[id]) throw new Error('Paket ' + id + ' tidak ada di kategori ' + cat + '.');
+      if (!seen[id]) { seen[id] = true; order.push(byId[id]); }
+    });
+    inCat.forEach(function(p) { if (!seen[p.id]) order.push(p); });
+    order.forEach(function(p, n) { ctx.sheet.getRange(p._row, ctx.idx.urutan + 1).setValue(n + 1); });
+    return { status: 'success', order: order.map(function(p) { return p.id; }) };
+  });
 }
 
 
@@ -2873,15 +3152,12 @@ function getRevenueSummary(token, month, year) {
 
 function _allPackagePrices_() {
   const prices = { byId: {}, byName: {} };
-  const sheet = getOrCreateSheet_('PriceList', ["ID", "Nama Paket", "Kategori", "Harga", "Jumlah Sesi", "Durasi", "Deskripsi", "Benefit", "Status Aktif"]);
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    const harga = parseFloat(data[i][3]) || 0;
-    const id = String(sanitizeValue(data[i][0]) || '').trim();
-    const name = String(sanitizeValue(data[i][1]) || '').trim().toLowerCase();
-    if (id) prices.byId[id] = harga;
-    if (name) prices.byName[name] = harga;
-  }
+  const ctx = _priceListSheetAndColumns_();
+  _readPackages_(ctx.sheet, ctx.idx).forEach(function(p) {
+    if (p.id) prices.byId[p.id] = p.harga;
+    const name = String(p.namaPaket || '').trim().toLowerCase();
+    if (name) prices.byName[name] = p.harga;
+  });
   return prices;
 }
 
@@ -2905,7 +3181,9 @@ function _revenueSummary_(month, year) {
     const paketId = String(row[4] || '').trim();
     const namaPaket = String(row[5] || '').trim();
     if (!paketId && !namaPaket) continue;
-    const harga = prices.byId[paketId] !== undefined ? prices.byId[paketId] : (prices.byName[namaPaket.toLowerCase()] || 0);
+    const snap = parseFloat(row[MEMBERS_LOG_PRICE_COL - 1]);   // harga saat transaksi; kosong (data lama) = harga sekarang
+    const harga = (row[MEMBERS_LOG_PRICE_COL - 1] !== '' && isFinite(snap)) ? snap
+      : (prices.byId[paketId] !== undefined ? prices.byId[paketId] : (prices.byName[namaPaket.toLowerCase()] || 0));
     const key = paketId || namaPaket;
     if (!map[key]) map[key] = { paketId: paketId, namaPaket: namaPaket || '(Tanpa Nama)', count: 0, total: 0, grossTotal: 0 };
     map[key].count++;
