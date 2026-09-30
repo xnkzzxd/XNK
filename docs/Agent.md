@@ -103,7 +103,7 @@ clasp pull
 
 - Settings CRUD exists but lives in one bottom sheet (phase A of Task.md replaces it).
 - PriceList is read-only in the app; revenue prices past transactions at today's price (phase B fixes both).
-- Reminder engine (`Reminder.gs`) sends everything to the owner's Telegram with `wa.me` buttons; nothing goes to clients directly (phase C).
+- Reminders go to the owner's Telegram with one `wa.me` button per client; the owner taps it and presses Send in WhatsApp. This is the chosen design: **never add a WhatsApp API or gateway** or send to clients automatically. Phase C makes every message client-ready.
 - Tasks/PR for clients with recurring tasks and templates are live; the client portal shows them and a "Makan hari ini" card.
 - `runReminderTick` is a public trigger handler, gated by `RMD_ENABLED`, a lock and a throttle.
 - Sessions: admin 30 days, member 90 days (defaults). Revenue estimate = 65 % of package price.

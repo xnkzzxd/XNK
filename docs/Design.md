@@ -9,7 +9,7 @@ xnk.my.id ─┐                                   ┌─ Google Sheets (MemberD
 xnkbooking ─┼─ iframe ─► Apps Script web app ──┤   Schedules, Tasks, ReminderLog, MealTips, …)
 book.xnk… ─┘   (one deployment, runs as owner)  ├─ Script Properties (settings + secrets)
                                                 ├─ Time triggers (daily email, weekly report, runReminderTick)
-                                                └─ UrlFetchApp → Telegram (today), WhatsApp channel (new)
+                                                └─ UrlFetchApp → Telegram bot → owner taps wa.me button → WhatsApp
 ```
 
 - `Kode.gs` is the server; `Reminder.gs` holds the reminder engine.
@@ -69,7 +69,7 @@ Each list row shows a one-line status: the number of active packages, the remind
 | --- | --- | --- |
 | Tampilan | Theme segment (existing `#theme-seg`) | Local only, instant, no save bar |
 | Paket & Harga | Package list and editor (§2) | Pricelist functions, one call per action |
-| Pengingat Klien | Master switch, channel and credentials, quiet hours, pacing, one card per type (on/off, hour, template, test), trigger status, history | `updateAppSettings({reminder: …})`, `installReminderTrigger`, `getReminderLog` |
+| Pengingat Klien | Master switch, one card per type (on/off, hour, template with preview, test), trigger status, history | `updateAppSettings({reminder: …})`, `installReminderTrigger`, `getReminderLog` |
 | Notifikasi Admin | Telegram on/off, token, chat IDs, test, notification email | `updateAppSettings({telegram…, notifEmail})` |
 | Jam Operasional | 7 rows: open, close, Tutup (S-9, later) | `updateAppSettings({businessHours})` |
 | Keamanan | PIN change (existing form); lockout and session numbers | `changeAdminPin`, `updateAppSettings({loginMaxFails, …})` |
@@ -98,7 +98,7 @@ All colors come from the existing tokens (`--bg`, `--surface`, `--border`, `--fg
 
 ### 1.6 Trigger status and history (S-7, S-8)
 
-- `getReminderStatus(token)` (admin) returns `{ triggerInstalled, tickEveryMinutes, lastTickAt, channel, channelReady, sentToday, cap }`. It reads `ScriptApp.getProjectTriggers()` and `RMD_LAST_tick`.
+- `getReminderStatus(token)` (admin) returns `{ triggerInstalled, tickEveryMinutes, lastTickAt, telegramReady }`. It reads `ScriptApp.getProjectTriggers()` and `RMD_LAST_tick`.
 - `installReminderTrigger(token)` (admin) does the same as `setupReminderTrigger`: it removes duplicate triggers and creates one every 15 minutes. This works from the web app because the deployment runs as the owner. `setupReminderTrigger` stays for the editor.
 - `getReminderLog(token, {onlyFailed, limit})` (admin) returns the newest rows of `ReminderLog` (max 200). The target is shown as the client name (joined server-side). Phone numbers are not included.
 
@@ -161,121 +161,92 @@ All admin functions call `requireAdmin_(token)` first and write under `LockServi
 - Delete is shown disabled with the reason when the package is in use.
 - After any change, refresh `window.priceListData` so member forms and the portal catalog see it without a reload.
 
-## 3. Client reminders (priority 3)
+## 3. Client reminders via Telegram buttons (priority 3)
+
+No WhatsApp API. The owner's Telegram gets one message per reminder run; each client is a button that opens WhatsApp with a message **written to the client**. The owner presses Send.
 
 ### 3.1 Flow
 
 ```
-time trigger (every 15 min) ─► runReminderTick
-    │  RMD_ENABLED? quiet hours? daily cap left?
+time trigger (every 15 min) ─► runReminderTick ─► RMD_ENABLED? due jobs (_dueJobs_)?
     ▼
-_dueJobs_ (per type: day, hour, tolerance)
+handler(ctx): recipients = eligible clients − per-client opt-outs
     ▼
-handler(ctx) builds the recipient list
+for each client: text = fill(template, vars)  →  button { "Budi · 07:00", wa.me/62…?text=… }
     ▼
-for each client: opted in? already sent (ReminderLog jenis|slot|memberId = ok)? cap?
-    │   yes ► sendToClient_(client, text) via channel adapter ► log ok/gagal
+kirimTelegramTombol_(header, buttons)   (8 buttons per message, split into "lanjutan")
     ▼
-job complete when every eligible client has an ok/skip row ► log jenis|slot|* = ok
-    ▼
-owner summary to Telegram (sent / failed / no number / waiting) + wa.me buttons for failures
+ReminderLog  jenis|slot|*  = ok / gagal  (gagal → retried next tick within tolerance)
 ```
 
-### 3.2 Channel adapter
+This is today's engine (`kirimTelegramTombol_`, `_waLink_`, `ReminderLog`, `_dueJobs_`). The changes are in *what* the messages say and which types exist.
 
-One entry point, `_sendToClient_(client, jenis, text, vars)`, returns `{ ok, error, retry }`. The provider is chosen by `RMD_CHANNEL`:
+### 3.2 Reminder types
 
-| Channel | Behavior | Properties |
-| --- | --- | --- |
-| `manual` (default) | Sends nothing to clients. The job produces today's owner digest with `wa.me` buttons (current code path). | — |
-| `wa-gateway` | HTTP POST to the gateway with target number and text. Provider details live only in `_gatewaySend_`. | `WA_GATEWAY_TOKEN` (secret) |
-| `wa-cloud` | Meta Cloud API template message. `vars` fill the template parameters; the free-text template is ignored. | `WA_CLOUD_TOKEN` (secret), `WA_CLOUD_PHONE_ID`, `WA_CLOUD_TPL_<JENIS>` |
+| jenis | When (default) | Who gets a button | Button label | Client message (default template) |
+| --- | --- | --- | --- | --- |
+| `sesi-besok` (new) | Daily 19:00 | Clients with a session tomorrow (not cancelled) | `Budi · 07:00` | `Hai {nama}, pengingat sesi besok jam {jam} dengan Coach {coach}. {tidur} Sampai ketemu!` |
+| `booking-minggu` | Sunday 17:00 | Bookable clients (A4) | `Budi · 3 slot` | today's `_bookingWaText_` with `{slot}` |
+| `pr` | Daily 08:00 | Active clients with PR overdue, due today or tomorrow | `Budi · 2 PR` | today's `_prWaText_` with `{pr}` |
+| `makan-pagi` / `makan-sore` | 06:00 / 16:00 | Core-package clients with meal reminder on | `Budi` | today's `_makanWaText_` with `{tip}` |
+| `sisa-sesi` (later) | Daily 10:00 | Clients with 1–2 sessions left | `Budi · sisa 1` | `Hai {nama}, sesi kamu tinggal {sisa}. Mau lanjut paket?` |
 
-Rules:
+- `sesi-besok` replaces the "Kirim WA Konfirmasi" links in `sendDailyReminderEmail`. The 05:00/20:00 owner email stays as a schedule report, without WhatsApp links.
+- `RMD_TPL_SLEEP` stops being a line in the owner's email and becomes `{tidur}` inside `sesi-besok`.
+- Rewrite each existing text so it speaks to the client (greeting with `{nama}`, key fact in the first line, ≤ 500 characters).
 
-- Tokens are Script Properties only. Settings shows them masked, and they're never written to logs or ReminderLog.
-- HTTP 429 or 5xx means `retry: true`. Other 4xx means `retry: false` (bad number or template), logged as `gagal` with a short reason.
-- A pause of `RMD_SEND_GAP_MS` (default 3000) comes between messages. `RMD_DAILY_CAP` (default 150) counts `ok` rows for today across all types.
-- Each run stops starting new sends after about 4.5 minutes and leaves the rest for the next tick, safely under the 6-minute Apps Script limit.
-
-### 3.3 Reminder types
-
-| jenis | When (default) | Who | Message vars |
-| --- | --- | --- | --- |
-| `sesi-besok` (new; replaces the per-session links in `sendDailyReminderEmail`) | Daily 19:00 | Clients with a session tomorrow (not cancelled) | `{nama} {jam} {coach} {tidur}` |
-| `booking-minggu` | Sunday 17:00 | Bookable clients (A4) | `{nama} {slot}` (3 nearest free slots) |
-| `pr` | Daily 08:00 | Active clients with PR overdue, due today or due tomorrow | `{nama} {pr}` (max 4 titles) |
-| `makan-pagi` / `makan-sore` | 06:00 / 16:00 | Core-package clients with meal reminder on | `{nama} {tip}` |
-| `sisa-sesi` (later) | Daily 10:00 | Clients with 1–2 sessions left, once per level | `{nama} {sisa}` |
-
-`tidur` stops being a separate line in the owner email. `RMD_TPL_SLEEP` becomes the `{tidur}` var in `sesi-besok`. The owner's own 05:00/20:00 schedule email stays, without the per-session WhatsApp links once the channel isn't manual.
-
-**Templates:** `RMD_TPL_<JENIS>` holds free text with placeholders. Built-in defaults come from today's `_bookingWaText_`, `_prWaText_` and `_makanWaText_`. On save, unknown `{…}` placeholders are rejected, and the maximum is 600 characters. Settings shows a live preview filled with a sample client.
-
-**Quiet hours:** `RMD_QUIET_FROM` = 21 and `RMD_QUIET_TO` = 6 (WIB). A job whose hour is set inside quiet hours is rejected on save. Retries that would fall into quiet hours wait for the next allowed tick while still within tolerance (`RMD_TOLERANCE_HOURS`, default 3); after that they are logged `lewat`.
-
-### 3.4 Idempotency (per client)
-
-`ReminderLog` already has a `Target` column; today it is always `*`. Changes:
-
-- Each client send is logged with target = member ID and result `ok` | `gagal` | `skip-optout` | `skip-nomor` | `lewat`.
-- `_alreadySent_(jenis, slot, memberId)` is checked before each send, so a rerun only covers the rest.
-- The job-level `*` row is written `ok` only when no eligible client is left without an `ok` or `skip-*` row. Until then, each tick in the tolerance window continues the job.
-- Reading ReminderLog once per run into a `Set` of keys avoids one sheet read per client.
-
-### 3.5 Client preferences (R-6)
-
-- `MemberData` gets column **P "Pengingat Nonaktif"**: a comma list of jenis the client turned off, e.g. `pr,booking-minggu`. Empty means everything is on. Column O (meal flag) keeps working, and `makan-*` counts as off if either O says `tidak` or P lists it.
-- Portal: a "Pengingat WhatsApp" card on the client home with one toggle per type the client is eligible for. It uses `getMyReminderPrefs(memberToken)` and `setMyReminderPrefs(memberToken, prefs)`, both of which call `requireMember_` first.
-- Panel: the same toggles on the client detail, via `setMemberReminderPrefs(token, memberId, prefs)` (admin).
-- The first automatic message to a client ends with one line saying how to turn reminders off in the portal. A `RMD_INTRO_<memberId>` flag isn't needed: the absence of any earlier `ok` row for that member in ReminderLog is the signal.
-
-### 3.6 Owner summary
-
-After each job completes (or reaches the cap), send one Telegram message through `kirimTelegramTombol_`:
+### 3.3 Telegram message layout (for the owner)
 
 ```
-🔔 Sesi besok · Rabu 1 Okt
-✅ 12 terkirim   ⚠️ 1 gagal   📵 2 tanpa nomor valid   ⏸ 0 menunggu
-[WA Budi (gagal)]  [WA Sari (nomor?)]
+🔔 Sesi besok · Rabu 1 Okt · 12 klien
+Tekan nama → WhatsApp terbuka dengan pesan siap kirim.
+[ Budi · 07:00 ]
+[ Sari · 08:00 ]
+… (max 8 per message, then "↪️ Lanjutan (2/2)")
+📵 Tanpa nomor: Andi, Rina
 ```
 
-Buttons appear only for clients the channel couldn't reach. In `manual` mode the summary *is* today's digest.
+The header is for the owner; client-facing words only live inside the button links. Button labels ≤ 30 characters (`TELEGRAM_BUTTON_TEXT_MAX` today is 60, lower it). A run with zero recipients sends nothing and logs `ok`.
 
-### 3.7 Tests for the owner
+### 3.4 Templates
 
-`sendReminderTest(token, jenis, phone)` gains an optional `phone`. With a phone and a non-manual channel, it sends the sample to that number only; it is never logged against a client. The existing 15-second throttle is kept.
+`RMD_TPL_<JENIS>` holds the client message with placeholders. Empty = built-in default above. On save: unknown `{…}` rejected, max 600 characters. Settings shows a live preview with a sample client, styled as a WhatsApp bubble.
+
+### 3.5 Per-client opt-out
+
+- `MemberData` gets column **P "Pengingat Nonaktif"**: comma list of jenis switched off, e.g. `pr,booking-minggu`. Empty = all on. Column O (meal flag) keeps working; `makan-*` counts as off if either says so.
+- Panel: toggles on the client detail, via `setMemberReminderPrefs(token, memberId, prefs)` (admin).
+- Later (R-10): the same toggles in the portal via `getMyReminderPrefs` / `setMyReminderPrefs` (member).
+
+### 3.6 Test sends
+
+`sendReminderTest(token, jenis)` already runs a handler now and prefixes "🧪 TES". Extend `RMD_TEST_JENIS` with `sesi-besok` and make every type testable from its card.
 
 ## 4. Settings keys added
 
 | Key | Default | Section |
 | --- | --- | --- |
-| `RMD_CHANNEL` | `manual` | Pengingat Klien |
-| `WA_GATEWAY_TOKEN` | — (secret) | Pengingat Klien |
-| `WA_CLOUD_TOKEN`, `WA_CLOUD_PHONE_ID`, `WA_CLOUD_TPL_<JENIS>` | — | Pengingat Klien |
 | `RMD_TPL_<JENIS>` | built-in text | Pengingat Klien |
-| `RMD_QUIET_FROM`, `RMD_QUIET_TO` | 21, 6 | Pengingat Klien |
-| `RMD_SEND_GAP_MS`, `RMD_DAILY_CAP`, `RMD_TOLERANCE_HOURS` | 3000, 150, 3 | Pengingat Klien |
 | `RMD_SESI_BESOK_ENABLED`, `RMD_SESI_BESOK_HOUR` | on, 19 | Pengingat Klien |
 
-`getAppSettings` returns them under `reminder` (secrets masked); `_rmdValidate_` validates them. `CONFIG_KEYS` (the Drive config file import) gains `WA_GATEWAY_TOKEN` and `WA_CLOUD_TOKEN`, so tokens can also be set without the UI.
+`getAppSettings` returns them under `reminder`; `_rmdValidate_` validates them.
 
 ## 5. Security
 
 - New admin functions take `token` first and call `requireAdmin_(token);` on the first line: `getReminderStatus`, `installReminderTrigger`, `getReminderLog`, `getPriceListAdmin`, `savePackage`, `setPackageActive`, `deletePackage`, `reorderPackages`, `setMemberReminderPrefs`.
-- New member functions call `requireMember_(memberToken)` first and only touch that member's row: `getMyReminderPrefs`, `setMyReminderPrefs`.
+- Later (R-10), member functions `getMyReminderPrefs` / `setMyReminderPrefs` call `requireMember_(memberToken)` first and only touch that member's row.
 - Everything else gets a trailing `_`.
 - Add each name to the right list in `tests/security.test.js` (ADMIN / MEMBER). The existing loops then prove they reject missing, bogus and cross-role tokens.
-- No phone numbers go to the browser except in admin responses that already contain them (client detail). The reminder log shows names.
-- `runReminderTick` stays a public trigger handler: gated by `RMD_ENABLED`, lock and throttle; with the channel on, also by the daily cap.
+- Client phone numbers only appear inside Telegram button links (owner's chat) and admin responses that already carry them. The reminder log in Settings shows names.
+- `runReminderTick` stays a public trigger handler, gated by `RMD_ENABLED`, a lock and a throttle.
 
 ## 6. Testing
 
 Node tests in `apps-script/pt-scheduler/tests/` using the existing harness (`env.fetches` records UrlFetchApp calls; `env.props` is Script Properties):
 
-- Settings: a partial save touches only its keys; masked secrets round-trip without being overwritten; reminder keys validate (quiet hours, template placeholders).
+- Settings: a partial save touches only its keys; masked secrets round-trip without being overwritten; templates reject unknown placeholders.
 - Pricelist: create/update/validate; delete blocked when used; legacy 8-column sheet is migrated once and read correctly; `getPriceList` sort order; price snapshot written; revenue uses the snapshot.
-- Reminders: manual mode sends zero client fetches and one owner digest; gateway mode sends one fetch per eligible client; opt-out and no-number are skipped and logged; a run cut off halfway resumes without duplicates; the cap stops sends; quiet hours defer; 429 is retried and 400 is not.
+- Reminders: each type sends one Telegram message (split at 8 buttons) whose button URLs are `wa.me` links with the client's number and client-addressed text; opted-out clients get no button; no-number clients are listed; re-running a tick doesn't resend; `sesi-besok` picks tomorrow's sessions only.
 - Security lists updated.
 
 Plus `tools/browser-check.js` at phone and desktop widths in both themes (phone checks listed in §8.5).
@@ -288,7 +259,7 @@ The phone is the main device for both the owner and clients. Everything below is
 
 - **Frame:** page padding `--page-pad` (16 px), no sideways scroll, and content never hides behind the tab bar (`--tabbar-h`) or the home indicator (`env(safe-area-inset-bottom)`).
 - **Touch:** targets at least 44 × 44 px, and 8 px between neighboring targets. Toggles keep the existing `.toggle` size.
-- **Keyboards:** `inputmode="numeric"` for prices, sessions, hours and limits; `type="tel"` for WhatsApp numbers; `type="email"` for email. Enter moves to the next field; the last one submits.
+- **Keyboards:** `inputmode="numeric"` for prices, sessions, hours and limits; `type="tel"` for phone numbers; `type="email"` for email. Enter moves to the next field; the last one submits.
 - **Keyboard open:** the focused field scrolls into view above the keyboard (`scrollIntoView({block:'center'})` on focus). The save bar stays attached to the bottom of the visible area.
 - **Back:** each level pushes a history entry (`#settings`, `#settings/paket`, `#settings/paket/edit`), so the phone's back gesture steps back one level and closes an open sheet before leaving the section.
 - **Sheets:** use the existing bottom sheet (`.sheet`, `.sheet-handle`); a tall form uses a full-height sheet with a sticky footer holding the main button.
@@ -302,10 +273,10 @@ The phone is the main device for both the owner and clients. Everything below is
 │ Pengaturan               │   │ ← Pengingat Klien        │   │ ← Pengingat Klien        │
 │──────────────────────────│   │──────────────────────────│   │ Sesi besok          [on] │
 │ ◐ Tampilan            ›  │   │ Pengingat otomatis  [on] │   │ Jam kirim   [ 19 ]       │
-│ ▤ Paket & Harga       ›  │   │ Kanal: Manual        ›   │   │ Pesan                    │
+│ ▤ Paket & Harga       ›  │   │ Telegram: aktif      ›   │   │ Pesan                    │
 │   12 paket aktif         │   │ ● Trigger terpasang      │   │ ┌──────────────────────┐ │
 │ 🔔 Pengingat Klien    ›  │ ► │   tick terakhir 10:15    │ ► │ │Hai {nama}, besok ... │ │
-│   Manual · ● terpasang   │   │──────────────────────────│   │ └──────────────────────┘ │
+│   Telegram · ● terpasang   │   │──────────────────────────│   │ └──────────────────────┘ │
 │ ✈ Notifikasi Admin    ›  │   │ Sesi besok  19:00   [on] │   │ Pratinjau (lebar HP)     │
 │ 🕘 Jam Operasional     ›  │   │ Booking     Min 17  [on] │   │ [ Kirim tes ]            │
 │ 🔒 Keamanan            ›  │   │ PR          08:00   [on] │   │                          │
@@ -356,11 +327,12 @@ The phone is the main device for both the owner and clients. Everything below is
 
 ### 8.4 Reminders on a phone
 
-- **Owner, Settings:** as in §8.2. The template editor is a textarea, 4 rows tall, growing with the text. Under it is a preview bubble styled like a WhatsApp message, capped at 320 px wide so the owner sees the real line breaks.
-- **Owner, reminder history:** a list with one row per send: client name, type, time, and a result chip (Terkirim / Gagal / Dilewati). A "Hanya gagal" toggle sits at the top. Rows load 50 at a time, with a "Muat lagi" button.
-- **Owner, Telegram summary:** at most 6 short lines, then buttons (max 8 per message, one per row). This already matches `kirimTelegramTombol_`.
-- **Client, portal home:** the "Pengingat WhatsApp" card sits below the existing "Makan hari ini" card, collapsed to one line ("Pengingat WhatsApp · 4 aktif ›"). Tapping it opens a bottom sheet with one toggle row per type the client is eligible for, each with a one-line explanation. Changes save instantly, with a toast.
-- **Client, WhatsApp message:** the key fact goes in the first line ("Besok 07:00 sesi dengan Coach Dika"). The message has a short greeting, at most ~500 characters and no long links. The opt-out line comes last.
+- **Owner, Telegram (the main screen for this feature):** one button per row, labels ≤ 30 chars so they don't wrap, a two-line header, the "Tanpa nomor" line last. Tapping a button leaves Telegram for WhatsApp; after Send, the phone's back returns to Telegram at the same spot for the next client.
+- **Owner, Settings:** as in §8.2. Template editor is a textarea, 4 rows, growing with the text; under it a WhatsApp-style preview bubble capped at 320 px so the owner sees real line breaks.
+- **Owner, reminder history:** rows of type, slot time, result chip (Terkirim ke Telegram / Gagal), "Hanya gagal" toggle, 50 at a time.
+- **Owner, client detail:** a "Pengingat" group with one toggle per type (44 px rows).
+- **Client, WhatsApp:** the key fact in the first line ("Besok 07:00 sesi dengan Coach Dika"), short greeting, ≤ 500 characters, no long links.
+- **Client, portal (later, R-10):** a one-line "Pengingat · 4 aktif ›" card below "Makan hari ini", opening a bottom sheet of toggles.
 
 ### 8.5 Mobile checks
 
@@ -375,5 +347,4 @@ The phone is the main device for both the owner and clients. Everything below is
 
 1. Phase A ships with no new behavior. The existing values show in the new view.
 2. Phase B: the first admin write migrates the PriceList schema. Before deploying, copy the spreadsheet (File → Make a copy) as a backup.
-3. Phase C1: deploy with `RMD_CHANNEL=manual` so the owner sees the new summary format while nothing goes to clients.
-4. Phase C2: set up the sender number, enter the token, send tests to your own number, then switch the channel. Start with one type (`sesi-besok`) for a week before turning on the rest.
+3. Phase C: deploy, use "Kirim tes" for each type, read the messages on the phone, adjust templates, then turn the types on.

@@ -38,29 +38,17 @@ Work items for [PRD.md](PRD.md), built as described in [Design.md](Design.md). R
 | [ ] | T-116a | Extend the phone pass (T-108a) to Paket & Harga: list, action sheet, editor sheet, reorder mode. | tools/browser-check.js | T-108a, T-115 | S | Passes at 360 and 390 px. |
 | [ ] | T-117 | Docs and backup note (copy the spreadsheet before the first deploy of phase B). | docs, apps-script/README.md | T-110…T-116 | S | — |
 
-## Phase C1 — Client reminder foundation (priority 3, no messages to clients yet)
+## Phase C — Client-ready reminders over Telegram (priority 3)
 
 | | ID | Task | Files | Depends | Size | Done when |
 | --- | --- | --- | --- | --- | --- | --- |
-| [ ] | T-120 | Per-client logging: results `ok / gagal / skip-optout / skip-nomor / lewat`; load ReminderLog keys once per run into a Set; job `*` row only when every eligible client is resolved. | Reminder.gs, tests/reminder.test.js (new) | — | M | A run cut halfway resumes without duplicates (test). |
-| [ ] | T-121 | Channel adapter `_sendToClient_` with `manual` only; handlers refactored to "build recipients → send each → summary". Manual output equals today's digest. | Reminder.gs, tests | T-120 | L | Manual mode: zero client fetches, one owner digest per job (test). |
-| [ ] | T-122 | New type `sesi-besok` (daily 19:00): clients with a session tomorrow; `{tidur}` from `RMD_TPL_SLEEP`. In manual mode, owner gets the digest with wa.me buttons. | Reminder.gs, Kode.gs, tests | T-121 | M | Tomorrow's sessions produce one entry per client. |
-| [ ] | T-123 | Client preferences: MemberData column P "Pengingat Nonaktif"; merge with column O for meals; `getMyReminderPrefs` / `setMyReminderPrefs` (member), `setMemberReminderPrefs` (admin). | Kode.gs, Reminder.gs, tests, tests/security.test.js | — | M | Opted-out client is logged `skip-optout` and never messaged (test). |
-| [ ] | T-124 | Portal card "Pengingat WhatsApp" (toggles for eligible types) and the same toggles on client detail in the panel. | Index.html, App.html | T-123 | M | Client can turn PR reminders off from the portal on a phone: one-line card under "Makan hari ini", bottom sheet with toggles, instant save with toast. |
-| [ ] | T-125 | Quiet hours, tolerance, pacing, daily cap and time budget (stop new sends after ~4.5 min). Settings keys and validation. | Reminder.gs, Kode.gs, tests | T-120 | M | Cap and quiet-hours tests pass. |
-| [ ] | T-126 | Owner summary message (sent / gagal / tanpa nomor / menunggu) with buttons only for unreachable clients. | Reminder.gs, tests | T-121 | S | One Telegram message per job run. |
-| [ ] | T-127 | Templates `RMD_TPL_<JENIS>` with placeholder validation and preview in the Pengingat Klien section; defaults equal today's texts. | Reminder.gs, App.html, tests | T-106, T-121 | M | Unknown placeholder is rejected; preview is a WhatsApp-style bubble at phone width and matches what gets sent. |
-
-## Phase C2 — Real WhatsApp channel (needs decision D-1 in PRD)
-
-| | ID | Task | Files | Depends | Size | Done when |
-| --- | --- | --- | --- | --- | --- | --- |
-| [ ] | T-130 | **Decide D-1, D-2, D-3** with the owner; set up the sender number and account. | — | — | — | Written into PRD §6. |
-| [ ] | T-131 | `wa-gateway` provider in `_gatewaySend_`: request format for the chosen service, retry on 429/5xx, no retry on 4xx, token from `WA_GATEWAY_TOKEN`. | Reminder.gs, tests | T-121, T-130 | M | Mocked fetch tests for success, 429, 400. |
-| [ ] | T-132 | Channel settings UI: channel select, masked token, "Kirim tes ke nomor saya" (`sendReminderTest(token, jenis, phone)`), channel-ready status. | Index.html, App.html, Reminder.gs | T-131, T-106 | M | Test reaches the owner's number only. |
-| [ ] | T-133 | First-message opt-out line; `CONFIG_KEYS` accepts the WhatsApp tokens. | Reminder.gs, Kode.gs, tests | T-131 | S | First message to a client carries the line; later ones don't (test). |
-| [ ] | T-134 | Rollout: one week `sesi-besok` only, then the other types. Remove the per-session wa.me links from the owner's schedule email when the channel isn't manual. | Kode.gs | T-131…T-133 | S | Owner confirms clients receive messages. |
-| [ ] | T-135 | (Only if D-1 = Cloud API) `wa-cloud` provider with template mapping `WA_CLOUD_TPL_<JENIS>`. | Reminder.gs, tests | T-130 | M | Mocked fetch test with template parameters. |
+| [ ] | T-120 | Rewrite every client text (`_bookingWaText_`, `_prWaText_`, `_makanWaText_`) to address the client: greeting with name, key fact first, ≤ 500 chars. | Reminder.gs, tests/reminder.test.js (new) | — | S | Tests check each text starts with the client's name and contains the key fact. |
+| [ ] | T-121 | Owner-facing Telegram layout: short header with type, date and count; button label `Nama · fakta` ≤ 30 chars; "📵 Tanpa nomor: …" line; zero recipients = no message. | Reminder.gs, tests | T-120 | S | Test with 20 clients: 3 messages, correct labels, wa.me URLs with client number and text. |
+| [ ] | T-122 | New type `sesi-besok` (daily 19:00): one button per client with a session tomorrow; `{tidur}` from `RMD_TPL_SLEEP`. Remove the "Kirim WA Konfirmasi" links and the sleep line from `sendDailyReminderEmail`. | Reminder.gs, Kode.gs, tests | T-121 | M | Tomorrow's sessions produce one button per client; owner email has no WhatsApp links. |
+| [ ] | T-123 | Per-client opt-out: MemberData column P, merged with column O for meals; `setMemberReminderPrefs` (admin); toggles on client detail in the panel. | Kode.gs, Reminder.gs, App.html, Index.html, tests, tests/security.test.js | — | M | Opted-out client gets no button (test); toggles are 44 px rows on a phone. |
+| [ ] | T-124 | Templates `RMD_TPL_<JENIS>` with placeholder validation; template editor and WhatsApp-style preview in the Pengingat Klien section. | Reminder.gs, App.html, Index.html, tests | T-106, T-120 | M | Unknown placeholder rejected; preview at phone width matches the button's text. |
+| [ ] | T-125 | "Kirim tes" for every type including `sesi-besok` and the meal types. | Reminder.gs, App.html | T-122 | S | Each card's test button delivers a 🧪 TES message. |
+| [ ] | T-126 | Docs for phase C and `apps-script/README.md` (how to use the buttons). | docs | T-120…T-125 | S | — |
 
 ## Later
 
@@ -70,3 +58,4 @@ Work items for [PRD.md](PRD.md), built as described in [Design.md](Design.md). R
 | [ ] | T-141 | Meal tips editor for the `MealTips` sheet (add, edit, approve, delete). | S-10 |
 | [ ] | T-142 | Landing-card live preview in the package editor. | P-9 |
 | [ ] | T-143 | `sisa-sesi` reminder (1–2 sessions left). | R-11 |
+| [ ] | T-144 | Portal card where clients switch reminder types off themselves (`getMyReminderPrefs` / `setMyReminderPrefs`). | R-10, M-7 |

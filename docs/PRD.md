@@ -24,17 +24,18 @@
 
 1. **Settings are hard to use.** One scroll with 30+ fields mixes rare and frequent settings. Saving one field re-saves all of them, and there's no feedback on what changed. Some features can't be configured from the app at all.
 2. **Prices can't be managed in the app.** The owner has to open the spreadsheet, which is error-prone on a phone and unsafe for revenue history.
-3. **Reminders need the owner's hands.** Every client message is sent manually from the owner's phone. With N clients that's N taps per reminder run, several times a day, so reminders get skipped. Clients should get them directly.
+3. **Reminders are written for the owner, not the client.** The Telegram messages read as reports to the owner. Some types give no ready message for the client at all: the session-tomorrow list is an owner email, and the sleep tip is a line in that email. The owner has to rewrite or skip them. Every reminder should hand the owner a message addressed to the client, ready to send.
 
 ## 3. Goals and non-goals
 
 **Goals**
 - G1. Every setting the app uses can be viewed and changed from the panel, in small sections that save independently.
 - G2. The owner can create, edit, reorder, deactivate and (when unused) delete packages from the panel, on a phone, without opening Sheets.
-- G3. Client reminders reach the client's WhatsApp automatically. The owner gets one summary instead of N buttons.
+- G3. Every reminder type arrives in the owner's Telegram as a list of client buttons. Each button opens WhatsApp to that client with a finished message written to the client. The owner only taps the button, then Send.
 - G4. Nothing changes for anyone until the owner turns a feature on. Existing sheets, links and sessions keep working.
 
 **Non-goals (this round)**
+- Sending WhatsApp messages automatically (no WhatsApp API or gateway). The owner always presses Send in WhatsApp.
 - Two-way chat, or reading client replies.
 - Online payment for packages.
 - Multiple admin accounts or per-coach logins.
@@ -45,7 +46,7 @@
 | User | Where | Needs |
 | --- | --- | --- |
 | Owner / admin (PIN) | xnk.my.id, mostly on a phone | Configure the app, manage packages, trust that reminders go out without doing it by hand. |
-| Client (WhatsApp login) | book.xnkbooking.my.id portal | Get timely reminders, be able to turn off the ones they don't want. |
+| Client (WhatsApp login) | book.xnkbooking.my.id portal; receives the owner's WhatsApp messages | Clear, personal reminders; not getting the types that don't apply to them. |
 | Visitor | xnkbooking.my.id landing | See correct, current packages and prices. |
 
 ## 5. Requirements
@@ -81,21 +82,23 @@ Priority: **P0** = must ship for the phase to count, **P1** = should, **P2** = n
 | P-8 | P1 | Duplicate a package as a starting point. | Copy opens in the editor as inactive with "(salinan)". |
 | P-9 | P2 | Live preview of the package card as it will look on the landing page. | — |
 
-### 5.3 Client reminders (priority 3)
+### 5.3 Client reminders via Telegram buttons (priority 3)
+
+**How it works (kept from today):** the reminder timer sends a Telegram message to the owner. It lists the clients who should get this reminder, with one button per client. The button opens `wa.me/<client number>?text=<message>`, so WhatsApp opens on the owner's phone with the client's chat and the message already typed. The owner presses Send. Nothing is sent to clients automatically.
 
 | ID | Pri | Requirement | Acceptance |
 | --- | --- | --- | --- |
-| R-1 | P0 | Reminders are sent **to each client's WhatsApp number** through a configurable channel. The channel is chosen in Settings; see decision D-1. | With the channel on, a due reminder reaches the client with no owner action. |
-| R-2 | P0 | Reminder types for clients: **Sesi besok** (H-1, with time and coach, plus the sleep line), **Booking minggu** (3 nearest free slots), **PR** (due or overdue homework), **Makan pagi / sore** (core-package clients). | Each type can be switched on/off and has an hour in Settings. |
-| R-3 | P0 | Per-client delivery log. A client gets each reminder at most once per slot. A failed send is retried on the next tick. Clients already served are never sent twice. | Killing a run halfway and re-running sends only to the clients who were missed. |
-| R-4 | P0 | Owner summary instead of buttons: one Telegram message per run, e.g. "Sesi besok: 12 terkirim · 1 gagal · 2 tanpa nomor valid". Failed/no-number clients still get a `wa.me` button so the owner can send by hand. | The owner's Telegram gets one message per run, not N buttons. |
-| R-5 | P0 | **Manual mode** stays available and is the default: the channel "Manual (lewat Coach)" keeps today's behavior exactly. | Upgrading without configuring a channel changes nothing. |
-| R-6 | P0 | Clients can turn off each reminder type in the portal. The owner can also switch it off per client. | A client who turned off PR reminders never gets one. The switch shows in the client's profile in the panel. |
-| R-7 | P0 | Quiet hours: no automatic client messages between 21:00 and 06:00 WIB (configurable). | A reminder due in quiet hours waits for the next allowed hour or is skipped, as configured. |
-| R-8 | P1 | Editable message templates per type, with placeholders such as `{nama}`, `{jam}`, `{coach}`, `{slot}`, `{pr}`, `{tip}` and a live preview. | Owner changes wording without code. Unknown placeholders are rejected on save. |
-| R-9 | P1 | "Kirim tes ke nomor saya": sends a sample of each type to a number the owner types in, not to clients. | Test never reaches a real client. |
-| R-10 | P1 | Send pacing and daily cap per channel (delay between messages, max messages per day) to protect the WhatsApp number from being flagged. | Run stops at the cap and the summary says how many are waiting. |
-| R-11 | P2 | New type **Sisa sesi**: tell a client when they have 1–2 sessions left. | — |
+| R-1 | P0 | Every reminder type produces client buttons whose WhatsApp text is **addressed to the client** ("Hai Budi, besok jam 07:00 sesi dengan Coach Dika…"), never an owner report. | Tapping any button opens WhatsApp with a message the owner can send unchanged. |
+| R-2 | P0 | Reminder types, each on/off with its own hour: **Sesi besok** (new, H-1 with time and coach; the sleep tip goes inside this message), **Booking minggu** (3 nearest free slots), **PR** (due or overdue homework), **Makan pagi / sore** (core-package clients). | Each type shows up in Settings and in Telegram at its hour. |
+| R-3 | P0 | The Telegram message header is short and for the owner ("🔔 Sesi besok · Rabu 1 Okt · 12 klien"); the client-facing text lives only in the buttons. Button label = client name plus one fact ("Budi · 07:00"). | Owner sees at a glance who to message. |
+| R-4 | P0 | Clients without a valid WhatsApp number are listed as text at the end ("Tanpa nomor: Sari, Andi") instead of silently dropped. | Owner knows who can't be reached. |
+| R-5 | P0 | The owner can turn a reminder type off per client (client detail in the panel). Those clients get no button. | Opted-out client never appears in that type's message. |
+| R-6 | P0 | Each run sends to Telegram once per slot (no duplicates after retries); a failed Telegram send is retried on the next tick. | Re-running a tick doesn't repeat the message. |
+| R-7 | P0 | Owner schedule email (05:00 / 20:00) stays an owner report; its per-session WhatsApp links are replaced by the Sesi besok reminder. | No duplicated client links across email and Telegram. |
+| R-8 | P1 | Editable message templates per type with placeholders (`{nama}`, `{jam}`, `{coach}`, `{slot}`, `{pr}`, `{tip}`, `{tidur}`) and a live preview. | Owner changes wording without code; unknown placeholders are rejected. |
+| R-9 | P1 | "Kirim tes" per type sends the real Telegram message to the owner now, marked 🧪 TES. | Already exists for some types; extended to all. |
+| R-10 | P1 | Clients can also switch reminder types off themselves in the portal. | Same effect as R-5. |
+| R-11 | P2 | New type **Sisa sesi**: button for clients with 1–2 sessions left. | — |
 
 ### 5.4 Mobile view (applies to all three priorities)
 
@@ -109,33 +112,31 @@ The owner runs the gym from a phone and clients open the portal on a phone, so t
 | M-4 | P0 | Tap targets are at least 44 × 44 px (toggles, chips, list rows, ⋯ menus). | Measured in the browser check. |
 | M-5 | P0 | Right keyboards: numbers (`inputmode="numeric"`) for price, sessions, hours and limits; phone keypad for WhatsApp numbers; email keyboard for email. | Checked per field. |
 | M-6 | P0 | Package editor on a phone is a full-height bottom sheet with its Simpan button always visible. Reorder uses ↑/↓ buttons, not drag. | Owner can add and reorder a package one-handed. |
-| M-7 | P0 | Client portal "Pengingat WhatsApp" card fits the home screen without crowding the existing cards. | Checked at 360 px. |
-| M-8 | P1 | Reminder messages read well on a phone's WhatsApp: short lines, the key fact (time, slot, PR title) in the first line, under ~500 characters. | Template preview in Settings is shown at phone width. |
-| M-9 | P1 | The owner's Telegram summary fits one phone screen, with at most 8 buttons per message. | — |
+| M-7 | P1 | Client portal "Pengingat" card (R-10) fits the home screen without crowding the existing cards. | Checked at 360 px. |
+| M-8 | P0 | Client messages read well on a phone's WhatsApp: short lines, the key fact (time, slot, PR title) in the first line, under ~500 characters. | Template preview in Settings is shown at phone width. |
+| M-9 | P0 | The owner's Telegram message is easy to work through on a phone: one button per row, label short enough to fit (≤ 30 chars), at most 8 buttons per message (more are split into "lanjutan" messages). | Checked with 20 clients. |
 
-## 6. Decisions needed from the owner
+## 6. Decisions
 
-| ID | Question | Options | Recommendation |
-| --- | --- | --- | --- |
-| **D-1** | How do messages reach the client's WhatsApp? | **a) WhatsApp gateway** (Indonesian services such as Fonnte or Wablas: link a WhatsApp number by QR, send through a simple HTTP API, monthly fee). Unofficial, so the number can be banned if clients report spam. **b) WhatsApp Cloud API** (Meta, official): needs a Meta Business account, a dedicated number, and pre-approved message templates; Meta charges per message. **c) Stay manual** (today). | Build the channel as a switchable adapter (see Design.md). Start with **a)** on a separate business number, with pacing and a daily cap. Move to **b)** if volume grows or the number gets flagged. |
-| D-2 | Are reminders on or off by default for existing clients? | On (clients opt out in the portal), or off (clients opt in). | **On** for Sesi besok (it's about an appointment they booked). **On** for the others as well, with a one-time first message that says how to turn them off. |
-| D-3 | Who is the sender? | The gym's business number, or the owner's personal number. | A separate business number, so a ban never hits the owner's personal WhatsApp. |
-| D-4 | Should package categories stay fixed (student, college, regular, premium, core)? | Fixed list, or owner-defined categories. | Fixed list for now. The landing page only knows these four display categories, and `core` drives the meal reminders. |
+| ID | Question | Decision |
+| --- | --- | --- |
+| D-1 | How do reminders reach clients? | **Decided:** Telegram bot to the owner with one button per client; each opens WhatsApp with the message typed. No WhatsApp API or gateway. |
+| D-2 | Default for existing clients? | Every type on, owner switches off per client (R-5). |
+| D-3 | Should package categories stay fixed (student, college, regular, premium, core)? | Recommended: fixed list for now. The landing page only knows the four display categories, and `core` drives the meal reminders. |
 
 ## 7. Success measures
 
 - Owner opens the Apps Script editor or the spreadsheet for settings or prices: **0 times a month**.
-- Share of due reminders delivered without owner action: **≥ 90 %** once the channel is on.
-- Owner time spent sending reminders: from about N taps per run to **reading one summary**.
+- Every reminder button opens a message the owner sends **without editing** it.
+- No reminder type needs the owner to write a message from scratch.
 - No change in past months' revenue numbers after a price edit (P-5).
 
 ## 8. Risks
 
 | Risk | Mitigation |
 | --- | --- |
-| WhatsApp number banned for bulk messages (D-1a). | Separate number, pacing, daily cap, opt-out in portal, only transactional content, no links in the first message. Manual mode stays one switch away. |
-| Apps Script limits (about 6 min per run, daily URL-fetch and trigger-time quotas). | Per-client log lets a run stop early and continue next tick. Tick every 15 min. Cap per run. |
-| Secrets (gateway token) leak through the public repo. | Stored only in Script Properties, shown masked in Settings, never logged. |
+| Telegram rate limits with many buttons (about 1 message per second per chat). | Existing 1.1 s gap between split messages; max 8 buttons per message. |
+| Secrets (Telegram bot token) leak through the public repo. | Stored only in Script Properties, shown masked in Settings, never logged. |
 | Editing prices corrupts revenue. | Price snapshot on each transaction (P-5), and delete blocked for used packages. |
 | Sheet structure changes break old data. | Columns only appended, never reordered. Legacy formats still read. Migrations are idempotent. |
 
@@ -145,6 +146,5 @@ The owner runs the gym from a phone and clients open the portal on a phone, so t
 | --- | --- | --- |
 | A | Settings UI (S-1…S-8, M-1…M-5) | Priority 1. No new behavior, only a new home for existing settings, plus S-5/S-7/S-8. |
 | B | Pricelist CRUD (P-1…P-8, M-6) | Priority 2. Needs the Settings view from phase A for its section. |
-| C1 | Client reminder foundation: channel adapter with Manual mode, per-client log, opt-outs, summary, quiet hours (R-3…R-7, M-7) | Can ship before D-1 is decided; behavior stays manual. |
-| C2 | Real channel (R-1, R-2, R-8…R-10, M-8, M-9) | After D-1 is decided and the sender number exists. |
-| Later | S-9, S-10, P-9, R-11 | When phases A–C are stable. |
+| C | Client-ready reminders over Telegram (R-1…R-9, M-8, M-9) | Priority 3. No new services needed. |
+| Later | S-9, S-10, P-9, R-10, R-11, M-7 | When phases A–C are stable. |
