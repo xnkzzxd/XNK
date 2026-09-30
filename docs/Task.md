@@ -58,7 +58,7 @@ Built on branch `claude/wonderful-wozniak-it2gzt`. Note: the default client text
 
 ## Phase D — Client progress & motivation (see PRD §10, Design §10)
 
-Open decisions D-8 (renewal WhatsApp nudge), D-9 (photo storage) and D-10 (order) are assumed as written in PRD §10.4 until the owner says otherwise.
+All decisions are made (PRD §10.4): no WhatsApp nudge when sessions run low, photos in a private Drive folder, build order D1 → D4.
 
 ### D1 — Progress tracker
 

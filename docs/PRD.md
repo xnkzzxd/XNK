@@ -219,9 +219,9 @@ Non-goals: automatic WhatsApp sending (still never), online payment, diet or wor
 | D-5 | Streak rule | **Decided:** 1 completed session per week. |
 | D-6 | Who enters progress | **Decided:** both client and coach. |
 | D-7 | Renewal flow | **Decided:** both a recorded request and WhatsApp to the owner. |
-| D-8 | Renewal WhatsApp nudge at 2 sessions left (a Telegram button type) | **Open.** Not chosen in the interview; the plan assumes **no** (portal button only). Easy to add later as another type. |
-| D-9 | Photo storage | **Open, assumed yes:** private Drive folder "XNK Progress" in the owner's Drive, files never shared by link. |
-| D-10 | Build order | **Open, assumed:** progress → streaks & badges → renewal → WhatsApp messages. |
+| D-8 | Renewal WhatsApp nudge at 2 sessions left | **Decided: no.** Renewal is the portal button only; no WhatsApp message when sessions run low. |
+| D-9 | Photo storage | **Decided:** private Drive folder "XNK Progress" in the owner's Drive, files never shared by link. |
+| D-10 | Build order | **Decided:** progress → streaks & badges → renewal → WhatsApp messages. |
 
 ### 10.5 Success measures
 
