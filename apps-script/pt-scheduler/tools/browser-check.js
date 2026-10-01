@@ -294,6 +294,7 @@ async function contrastReport(page) {
     const env = richEnv();
     const calls = [];
     const { page, context, errors } = await openPage(browser, env, '/Index', calls, undefined, { touch: true });
+    await page.waitForFunction(() => document.getElementById('global-loader').classList.contains('gone'));
     await page.evaluate(() => {
       window.__splashShown = false;
       const el = document.getElementById('global-loader');
@@ -318,15 +319,25 @@ async function contrastReport(page) {
 
     // Tarik ke bawah
     const before = calls.filter(c => c === 'getMembers').length;
-    await page.evaluate(() => {
+    const touch = (type, y) => page.evaluate(([type, y]) => {
       const sc = document.getElementById('main-scroll-area');
-      const fire = (type, y) => {
-        const t = new Touch({ identifier: 1, target: sc, clientX: 100, clientY: y });
-        sc.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true }));
-      };
-      fire('touchstart', 200); fire('touchmove', 260); fire('touchmove', 420); fire('touchend', 420);
-    });
+      const t = new Touch({ identifier: 1, target: sc, clientX: 100, clientY: y });
+      sc.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true }));
+    }, [type, y]);
+    await touch('touchstart', 200); await touch('touchmove', 230); await touch('touchmove', 280);
+    const mid = await page.evaluate(() => ({ t: document.getElementById('main-scroll-area').style.transform, o: +getComputedStyle(document.querySelector('.ptr')).opacity }));
+    check(/translate3d/.test(mid.t) && mid.o > 0, 'pull down: the page follows the finger and the indicator fades in');
+    await shot(page, 'admin-mobile-pulling');
+    await touch('touchmove', 420);
+    check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('armed')), 'pull down: the indicator flips when the pull is long enough');
+    await touch('touchend', 420);
+    await page.waitForTimeout(250);
+    check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('spinning')), 'pull down: spins while loading');
+    await shot(page, 'admin-mobile-refreshing');
+    await page.waitForTimeout(1300);
+    check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('ok')), 'pull down: ends with a check mark');
     await page.waitForTimeout(900);
+    check(await page.evaluate(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr'), 'pull down: the page settles back and the indicator resets');
     check(calls.filter(c => c === 'getMembers').length === before + 1, 'pull down: data is reloaded in place');
     check((await page.evaluate(() => window.currentView)) === 'dashboard', 'pull down: stays on the same page');
 

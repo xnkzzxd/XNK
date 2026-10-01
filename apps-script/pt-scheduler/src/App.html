@@ -1381,13 +1381,28 @@
   }
 
   // ── Loader & start ──────────────────────────────────────────────────────────
+  // Layar awal tampil minimal sebentar supaya peralihannya terasa disengaja
+  // (bukan kedip): bar penuh dulu, lalu layar memudar sementara isi naik.
+  const SPLASH_MIN = 700, splashAt = performance.now();
+  let splashLeaving = false;
   window.hideGlobalLoader = function () {
     const el = $('global-loader');
-    if (el) el.classList.add('gone');
+    if (!el || splashLeaving || el.classList.contains('gone')) return;
+    splashLeaving = true;
+    const wait = Math.max(0, SPLASH_MIN - (performance.now() - splashAt));
+    setTimeout(function () {
+      el.classList.add('done');
+      setTimeout(function () {
+        const app = $('app');
+        if (app) { app.classList.remove('reveal'); void app.offsetWidth; app.classList.add('reveal'); }
+        el.classList.add('gone');
+        splashLeaving = false;
+      }, 280);
+    }, wait);
   };
   window.showGlobalLoader = function () {
     const el = $('global-loader');
-    if (el) el.classList.remove('gone');
+    if (el) el.classList.remove('gone', 'done');
   };
 
   window.onload = function () {
@@ -1457,13 +1472,9 @@
   // ── Tarik ke bawah untuk muat ulang ─────────────────────────────────────────
   window.refreshAll = function () {
     if (ui.pulling) return Promise.resolve();
-    if (setState.dirty) { window.showToast('Simpan atau batalkan perubahan dulu.', 'info'); return Promise.resolve(); }
     ui.pulling = true;
     const job = window.isPublicView ? window.loadPublicData() : window.loadAllData();
-    return Promise.resolve(job).catch(function () {}).then(function () {
-      ui.pulling = false;
-      window.showToast('Diperbarui', 'check');
-    });
+    return Promise.resolve(job).catch(function () {}).then(function () { ui.pulling = false; });
   };
   function initPullRefresh() {
     const sc = $('main-scroll-area');
@@ -1471,33 +1482,70 @@
     sc._ptr = true;
     const el = document.createElement('div');
     el.className = 'ptr'; el.setAttribute('aria-hidden', 'true');
-    el.innerHTML = icon('refresh-cw');
+    el.innerHTML = '<div class="ptr-dot"><svg class="ptr-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="14"></circle></svg>' +
+      '<span class="ptr-ico ptr-arrow">' + icon('arrow-down') + '</span><span class="ptr-ico ptr-check">' + icon('check') + '</span></div>';
     document.body.appendChild(el); paintIcons();
-    const MAX = 110, TRIGGER = 70;
-    let y0 = null, dy = 0;
-    const blocked = function () { return !isPhone() || ui.pulling || bkLevels() > (bkIsHome(window.currentView) ? 0 : 1); };
+    const TRIGGER = 64, HOLD = 60, MAX = 150, MIN_SPIN = 700;
+    let y0 = null, x0 = 0, dy = 0, top = 0, armed = false, locked = false, busy = false;
+    const vibrate = function () { try { if (navigator.vibrate) navigator.vibrate(10); } catch (e) {} };
+    // Indikator berada di celah yang terbuka di atas isi halaman.
+    const place = function (y, p) {
+      const size = 0.6 + 0.4 * Math.min(1, y / 40);
+      el.style.opacity = Math.max(0, Math.min(1, (y - 6) / 26));
+      el.style.transform = 'translate3d(0,' + (top + y / 2 - 18) + 'px,0) scale(' + size + ')';
+      el.style.setProperty('--off', String(88 * (1 - p)));
+    };
+    const move = function (y, animate) {
+      sc.style.transition = animate ? 'transform 440ms var(--ease-out)' : 'none';
+      sc.style.transform = y ? 'translate3d(0,' + y + 'px,0)' : '';
+    };
+    const moveEl = function (y, p, animate) {
+      el.style.transition = animate ? 'transform 440ms var(--ease-out), opacity 300ms var(--ease)' : 'none';
+      place(y, p);
+    };
+    const blocked = function () { return !isPhone() || busy || ui.pulling || setState.dirty || bkLevels() > (bkIsHome(window.currentView) ? 0 : 1); };
+    const reset = function () {
+      move(0, true); moveEl(0, 0, true);
+      setTimeout(function () {
+        if (busy || y0 !== null) return;
+        sc.style.transition = ''; sc.style.willChange = '';
+        el.className = 'ptr'; el.style.opacity = ''; el.style.transform = ''; el.style.transition = '';
+      }, 460);
+    };
     sc.addEventListener('touchstart', function (e) {
-      y0 = (sc.scrollTop <= 0 && e.touches.length === 1 && !blocked()) ? e.touches[0].clientY : null; dy = 0;
+      y0 = null;
+      if (sc.scrollTop > 0 || e.touches.length !== 1 || blocked()) return;
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; armed = false; locked = false;
+      top = sc.getBoundingClientRect().top;
     }, { passive: true });
     sc.addEventListener('touchmove', function (e) {
       if (y0 === null) return;
-      const d = e.touches[0].clientY - y0;
-      if (d <= 0 || sc.scrollTop > 0) { if (dy) { dy = 0; el.style.opacity = 0; } return; }
-      dy = Math.min(MAX, d * 0.5);
-      el.classList.add('pulling');
-      el.style.opacity = Math.min(1, dy / TRIGGER);
-      el.style.transform = 'translateY(' + (dy - 56) + 'px) rotate(' + (dy * 3) + 'deg)';
+      const d = e.touches[0].clientY - y0, dx = e.touches[0].clientX - x0;
+      if (!locked) {
+        if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(d)) { y0 = null; return; }   // gerak menyamping: bukan tarikan
+        if (d < 4) return;
+        locked = true; sc.style.willChange = 'transform';
+      }
+      if (sc.scrollTop > 0) return;
+      dy = d <= 0 ? 0 : MAX * (1 - Math.exp(-d / (MAX * 1.1)));
+      move(dy, false); moveEl(dy, Math.min(1, dy / TRIGGER), false);
+      const now = dy >= TRIGGER;
+      if (now !== armed) { armed = now; el.classList.toggle('armed', armed); if (armed) vibrate(); }
     }, { passive: true });
     const end = function () {
       if (y0 === null) return;
-      const go = dy >= TRIGGER;
-      y0 = null; dy = 0;
-      el.classList.remove('pulling');
-      if (!go) { el.style.opacity = ''; el.style.transform = ''; return; }
-      el.style.opacity = 1; el.style.transform = 'translateY(0)';
-      el.classList.add('spinning');
+      const go = locked && armed;
+      y0 = null; locked = false;
+      if (!go) { armed = false; el.classList.remove('armed'); reset(); return; }
+      busy = true; el.classList.remove('armed'); el.classList.add('spinning');
+      move(HOLD, true); moveEl(HOLD, 1, true);
+      const t0 = performance.now();
       window.refreshAll().then(function () {
-        el.classList.remove('spinning'); el.style.opacity = ''; el.style.transform = '';
+        const wait = Math.max(0, MIN_SPIN - (performance.now() - t0));
+        setTimeout(function () {
+          el.classList.remove('spinning'); el.classList.add('ok');
+          setTimeout(function () { busy = false; reset(); }, 520);
+        }, wait);
       });
     };
     sc.addEventListener('touchend', end, { passive: true });
