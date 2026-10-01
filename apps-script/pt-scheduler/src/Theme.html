@@ -457,6 +457,8 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 }
 .icon-btn:hover { border-color: var(--border-strong); }
 .icon-btn:active { transform: scale(0.92); }
+.card-ink .icon-btn { color: var(--on-ink); background: color-mix(in srgb, var(--on-ink) 12%, transparent); border-color: color-mix(in srgb, var(--on-ink) 28%, transparent); }
+.card-ink .icon-btn:hover { background: color-mix(in srgb, var(--on-ink) 20%, transparent); border-color: color-mix(in srgb, var(--on-ink) 45%, transparent); }
 .icon-btn.plain { width: 48px; height: 48px; border-radius: 16px; background: transparent; border-color: transparent; }
 .icon-btn.plain:hover { background: var(--surface-2); }
 .icon-btn .badge-dot {
@@ -561,6 +563,12 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 @media (min-width: 768px) { .client-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .client-kpis .kpi { min-height: 88px; padding: 12px; text-align: left; cursor: pointer; }
 .client-kpis .kpi.active { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+
+.coach-card { display: flex; flex-direction: column; gap: 14px; text-align: left; }
+.coach-card-top { position: relative; display: flex; justify-content: center; padding: 6px 0 2px; }
+.coach-card-top .avatar { width: 104px; height: 104px; box-shadow: 0 0 0 4px var(--surface-2); }
+.coach-card-badge { position: absolute; top: 0; right: 0; }
+.my-coach-card .section-head svg.lucide:last-child { color: var(--fg-muted); }
 
 /* ── Grid dashboard ──────────────────────────────────────────────────────── */
 .grid { display: grid; gap: var(--gap); }

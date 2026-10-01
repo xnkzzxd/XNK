@@ -177,3 +177,16 @@ test('the coach profile page: public fields only, status, at most 3 testimonials
   assert.ok(!JSON.stringify(mine).includes('rahasia'));
   assert.throws(() => env.call('getMyCoach', t), /AUTH_REQUIRED/);
 });
+
+test('getMyCoach(coachId) returns that active coach and its own status; an unknown or inactive id falls back to the self coach', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), mt = env.memberToken(require('./fixtures').KEY_A);
+  const { id } = env.call('saveCoach', t, PROFILE);
+  assert.equal(env.call('getMyCoach', mt, id).coach.id, id);
+  assert.equal(env.call('getMyCoach', mt, id).solo, false);
+  assert.equal(env.call('getMyCoach', mt, 'NOPE').coach.id, 'C-1');
+  env.call('setCoachActive', t, id, false);
+  assert.equal(env.call('getMyCoach', mt, id).coach.id, 'C-1');
+  env.call('addCoachTimeOff', t, { coachId: 'C-1', from: new Date().toISOString().slice(0, 10), to: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10) });
+  assert.equal(env.call('getCoachStatus', 'C-1').state, 'cuti');
+});
