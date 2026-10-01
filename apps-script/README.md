@@ -177,7 +177,9 @@ Tab **Coach** di panel adalah berandamu sebagai coach.
 - **Tetapkan ke saya**: memberi coach "Ini saya" ke semua jadwal yang belum punya coach.
 - **Lihat seperti klien**: pratinjau halaman coach yang dilihat klien di portal. Halaman itu tampil premium: kartu hero gelap dengan status hari ini, angka klien/sesi/rating, slot kosong terdekat, sertifikasi, prestasi, dan testimoni.
 
-**Perawatan klien** (halaman klien): catatan privat (tanda perhatian, catatan, tanggal lahir), form kesehatan (diisi klien di portal, kamu tandai **Sudah ditinjau**), assessment, dan tes kebugaran. Semua ini hanya kamu yang bisa baca; Telegram hanya memberi tahu bahwa form diisi, tanpa jawabannya. Di **Pengaturan → Pengingat Klien** ada jenis baru (semua mati bawaan): **Tes ulang** (tiap Senin, 28 hari sejak tes terakhir), **Ulang tahun**, dan **Ringkasan bulanan** untukmu. **Keamanan** punya batas "ganti jadwal klien" (jam sebelum sesi, bawaan 2).
+**Halaman klien** sekarang punya kartu hero gelap (sisa sesi, Chat WA, Booking) dan empat tab: Ringkasan, Progres, Perawatan, Riwayat. Tab **Klien** punya empat kotak ringkas (Aktif, Hampir habis, Habis, PR telat) yang juga menjadi filter. Di portal, klien melihat Beranda bergaya dashboard dan tombol **Profil saya** (foto, angka ringkas, kontak, tema, keluar).
+
+**Perawatan klien** (tab Perawatan di halaman klien): catatan privat (tanda perhatian, catatan, tanggal lahir), form kesehatan (diisi klien di portal, kamu tandai **Sudah ditinjau**), assessment, dan tes kebugaran. Semua ini hanya kamu yang bisa baca; Telegram hanya memberi tahu bahwa form diisi, tanpa jawabannya. Di **Pengaturan → Pengingat Klien** ada jenis baru (semua mati bawaan): **Tes ulang** (tiap Senin, 28 hari sejak tes terakhir), **Ulang tahun**, dan **Ringkasan bulanan** untukmu. **Keamanan** punya batas "ganti jadwal klien" (jam sebelum sesi, bawaan 2).
 
 Sebelum deploy pertama fase ini, salin spreadsheet (File → Buat salinan). Sheet baru dibuat otomatis: `CoachTimeOff`, `Assessments`, `FitnessTests`, `HealthScreening`; sheet `Coaches` dan `MemberData` hanya ditambah kolom di kanan.
 
