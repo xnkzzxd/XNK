@@ -599,7 +599,9 @@
     { id: 'makan-sore', title: 'Makan sore', sub: 'Tip makan sore untuk klien paket core. Butuh tip aktif di sheet MealTips.' },
     { id: 'rekap-bulanan', title: 'Rekap bulanan', sub: 'Tanggal 1 tiap bulan: sesi, perubahan berat/pinggang, dan streak bulan lalu' },
     { id: 'selamat-milestone', title: 'Selamat milestone', sub: 'Tiap hari: klien yang baru meraih badge (10/25/50/100 sesi, streak 4/8/12 minggu)' },
-    { id: 'waktunya-ukur', title: 'Waktunya ukur', sub: 'Tiap dua minggu (Senin): klien yang belum mencatat berat/pinggang 14 hari' }
+    { id: 'waktunya-ukur', title: 'Waktunya ukur', sub: 'Tiap dua minggu (Senin): klien yang belum mencatat berat/pinggang 14 hari' },
+    { id: 'ulang-tahun', title: 'Ulang tahun', sub: 'Tiap hari: tombol WhatsApp ucapan untuk klien yang berulang tahun' },
+    { id: 'ringkasan-owner', title: 'Ringkasan bulanan (untukmu)', sub: 'Tanggal 1: satu pesan Telegram berisi sesi, klien baru, pendapatan, dan hasil target bulan lalu' }
   ];
   const setState = { data: null, open: null, snap: {}, dirty: false, built: false, pushed: false, forcePop: false, status: null, log: null, onlyFailed: false, saving: false };
   const isPhone = function () { return !(window.matchMedia && window.matchMedia('(min-width: 768px)').matches); };
@@ -2874,7 +2876,7 @@
       ' onchange="window.toggleMealReminder(\'' + mid + '\',this)"><span></span></label></div>';
   }
   // Pengingat WhatsApp per klien (T-123): mati per jenis; makan punya saklarnya sendiri di atas
-  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang']];
+  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang'], ['ulang-tahun', 'Ulang tahun', 'Ucapan di hari ulang tahun']];
   function reminderPrefsHtml(m) {
     const off = m.reminderOff || [];
     return '<div><div class="section-head"><h4 class="section-title">Pengingat WhatsApp</h4></div><div class="list" id="profile-remind-prefs">' +
@@ -3310,6 +3312,7 @@
     const solo = window.isSoloCoach();
     let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + (solo ? 'Profil dan jadwalmu' : window.coaches.length + ' coach aktif di tim') + '</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + (solo ? 'Tambah coach' : 'Coach baru') + '</button></div>';
+    html += '<div id="hub-wrap"></div>';
     const unassigned = window.schedules.filter(function (s) { return !s.coachId && !isDone(s) && !isAvailable(s); }).length;
     if (unassigned && window.coaches.length) {
       html += '<div class="card-flat row-between" style="margin-bottom:16px;gap:12px"><div><p class="li-title">' + unassigned + ' jadwal belum punya coach</p><p class="li-sub">Tetapkan semuanya ke coach "Ini saya".</p></div>' +
@@ -3333,6 +3336,7 @@
       }).join('') + '</div>';
     }
     setHTML(el, html);
+    loadHub();
   }
 
 
@@ -3424,6 +3428,54 @@
   window.deleteTimeOff = function (id) {
     adminCall('deleteCoachTimeOff', id).then(function () { window.showToast('Cuti dihapus.'); window.openHoursPage(); })
       .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
+
+  // ── Beranda Coach (E3): hari ini, target, statistik ─────────────────────────
+  window._hub = null;
+  const rupiah = n => 'Rp ' + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  function hubHtml(hub) {
+    let html = '<div class="stack" style="gap:16px;margin-bottom:16px">';
+    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Hari ini</p><span class="li-sub">' + hub.today.length + ' sesi</span></div>';
+    if (!hub.today.length) html += '<p class="li-sub" style="min-height:44px;display:flex;align-items:center">Tidak ada sesi hari ini.</p>';
+    html += hub.today.map(function (t) {
+      const d = new Date(t.start), done = t.status === 'completed';
+      return '<div class="row" style="gap:8px;min-height:56px;' + (done ? 'opacity:.55' : '') + '">' +
+        '<button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openScheduleDetail(\'' + h(t.id) + '\')"><span class="num" style="font-weight:800;min-width:52px">' + fmtTime(d) + '</span><span class="grow truncate">' + h(t.memberName) + '</span></button>' +
+        (done ? '<span class="pill soft">Selesai</span>' : '<button type="button" class="btn btn-secondary" style="min-width:44px;min-height:44px" aria-label="Tandai selesai ' + h(t.memberName) + '" onclick="window.hubComplete(\'' + h(t.id) + '\')">' + icon('check') + '</button>') + '</div>';
+    }).join('') + '</div>';
+    html += '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Target bulan ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTargetsSheet()">' + (hub.targets.length ? 'Ubah' : 'Atur target') + '</button></div>';
+    if (!hub.targets.length) html += '<p class="li-sub">Belum ada target. Atur target sesi, klien, atau pendapatan.</p>';
+    html += hub.targets.map(function (t) {
+      const pct = Math.min(100, Math.round(t.actual / t.goal * 100));
+      const val = t.key === 'pendapatan' ? rupiah(t.actual) + ' / ' + rupiah(t.goal) : t.actual + ' / ' + t.goal;
+      return '<div class="stack" style="gap:4px"><div class="row-between"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700">' + h(val) + '</span></div>' +
+        '<div style="height:8px;border-radius:99px;background:var(--border);overflow:hidden"><div style="height:100%;width:' + pct + '%;background:var(--ink)"></div></div>' +
+        (t.key === 'klienAktif' ? '' : '<span class="li-sub">' + (t.onPace ? 'Di jalur' : 'Kurang dari jalur (' + (t.key === 'pendapatan' ? rupiah(t.pace) : t.pace) + ' sejauh ini)') + '</span>') + '</div>';
+    }).join('') + '</div>';
+    const st = hub.stats;
+    html += '<div class="kv"><div><p class="k">Minggu ini</p><p class="v num">' + st.weekSessions + ' sesi · ' + st.weekHours + ' jam</p></div><div><p class="k">Bulan ini</p><p class="v num">' + st.monthSessions + ' sesi · ' + st.monthHours + ' jam</p></div>' +
+      '<div><p class="k">Klien aktif</p><p class="v num">' + st.activeClients + '</p></div><div><p class="k">Streak</p><p class="v num">' + (st.streak ? '🔥 ' + st.streak + ' minggu' : '-') + '</p></div></div></div>';
+    return html;
+  }
+  function loadHub() {
+    const draw = function () { const w = $('hub-wrap'); if (w && window._hub) w.innerHTML = hubHtml(window._hub); };
+    draw();
+    adminCall('getCoachHub').then(function (hub) { window._hub = hub; draw(); }).catch(function () {});
+  }
+  window.hubComplete = function (id) { window.selectedScheduleDetailId = id; window.markSessionCompleted(); };
+  window.openTargetsSheet = function () {
+    const raw = (window._hub && window._hub.rawTargets) || {};
+    ['sesi', 'klienAktif', 'pendapatan', 'klienBaru'].forEach(function (k) { $('tg-' + k).value = raw[k] === '' || raw[k] == null ? '' : raw[k]; });
+    openSheet('modal-coach-targets');
+  };
+  window.submitTargets = function (e) {
+    e.preventDefault();
+    const data = {};
+    ['sesi', 'klienAktif', 'pendapatan', 'klienBaru'].forEach(function (k) { data[k] = $('tg-' + k).value.trim(); });
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveCoachTargets', data).then(function () { done(); window.closeModal(); window.showToast('Target disimpan.'); loadHub(); })
+      .catch(function (err) { done(); window.showToast(err.message); });
   };
 
   window.assignUnassignedConfirm = function () {

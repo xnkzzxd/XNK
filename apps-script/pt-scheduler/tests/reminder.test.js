@@ -363,3 +363,56 @@ test('turning sesi-besok off brings the links back even with reminders on', () =
   env.call('sendDailyReminderEmail');
   assert.ok(env.mails[0].htmlBody.includes('wa.me'));
 });
+
+// ── Phase E3: ulang-tahun and ringkasan-owner ────────────────────────────────
+
+function telegramOn(env) {
+  env.props.TELEGRAM_BOT_TOKEN = '123:abc';
+  env.props.TELEGRAM_CHAT_IDS = '1';
+}
+
+test('ulang-tahun: only clients whose birthday is today get a button, addressed to the client; opt-out respected', () => {
+  const env = seededEnv();
+  telegramOn(env);
+  const md = env.sheet('MemberData').rows;
+  while (md[1].length < 21) md[1].push('');
+  md[1][20] = '1990-09-30';   // Ani: today in WIB (2026-09-30)
+  assert.equal(env.callRaw('sendUlangTahunDigest_', ctx(env)), true);
+  const bs = buttons(env);
+  assert.equal(bs.length, 1);
+  assert.equal(bs[0].text, 'Ani Anggraini · ulang tahun');
+  assert.match(waText(bs[0]), /^Selamat ulang tahun Ani Anggraini!/);
+  const other = seededEnv();
+  telegramOn(other);
+  const m2 = other.sheet('MemberData').rows;
+  while (m2[1].length < 21) m2[1].push('');
+  m2[1][20] = '1990-05-01';
+  assert.equal(other.callRaw('sendUlangTahunDigest_', ctx(other)), true);
+  assert.equal(buttons(other).length, 0);
+});
+
+test('the new types are off by default and listed with templates', () => {
+  const env = seededEnv();
+  const r = env.call('getAppSettings', env.adminToken()).reminder;
+  assert.equal(r.jobs['ulang-tahun'].enabled, false);
+  assert.equal(r.jobs['ringkasan-owner'].enabled, false);
+  assert.match(env.call('previewReminderText', env.adminToken(), 'ulang-tahun', '').text, /^Selamat ulang tahun Budi/);
+  assert.match(env.call('previewReminderText', env.adminToken(), 'ringkasan-owner', '').text, /^📊 Ringkasan September/);
+});
+
+test('ringkasan-owner: sends one owner message about last month, skips when nothing happened, retries when Telegram is off', () => {
+  const env = seededEnv();
+  assert.equal(env.callRaw('sendRingkasanOwner_', { now: runInContext("new Date('2026-10-01T02:30:00Z')", env.context) }), true);   // nothing last month → quiet
+  assert.equal(env.fetches.length, 0);
+  env.sheet('Schedules').rows.push(['S-SUM', 'PT-A', 'Ani', '1', '2026-09-10T01:00:00Z', '2026-09-10T02:00:00Z', '', 'completed', 'C-1', 'Rizky', '2026-09-10T02:00:00Z', '']);
+  env.props.TELEGRAM_ENABLED = 'false';
+  assert.equal(env.callRaw('sendRingkasanOwner_', { now: runInContext("new Date('2026-10-01T02:30:00Z')", env.context) }), false);   // Telegram off → retried next tick
+  env.props.TELEGRAM_ENABLED = 'true';
+  telegramOn(env);
+  assert.equal(env.callRaw('sendRingkasanOwner_', { now: runInContext("new Date('2026-10-01T02:30:00Z')", env.context) }), true);
+  const msgs = messages(env);
+  assert.equal(msgs.length, 1);
+  assert.match(msgs[0].text, /Ringkasan September 2026/);
+  assert.match(msgs[0].text, /Sesi selesai: 1 \(1 jam\)/);
+  assert.ok(!msgs[0].reply_markup);
+});

@@ -4921,3 +4921,144 @@ function deleteCoachTimeOff(token, id) {
     lock.releaseLock();
   }
 }
+
+
+// #############################################################################
+// 📁 11_COACH_HUB — Beranda Coach: hari ini, statistik, target (Phase E3)
+// #############################################################################
+
+const COACH_TARGETS = {
+  sesi: { key: 'COACH_TARGET_SESI', label: 'Sesi', min: 1, max: 500 },
+  klienAktif: { key: 'COACH_TARGET_KLIEN_AKTIF', label: 'Klien aktif', min: 1, max: 200 },
+  pendapatan: { key: 'COACH_TARGET_PENDAPATAN', label: 'Pendapatan (estimasi)', min: 0, max: 1000000000 },
+  klienBaru: { key: 'COACH_TARGET_KLIEN_BARU', label: 'Klien baru', min: 1, max: 100 }
+};
+
+/** Simpan target bulanan. Nilai kosong menghapus target (tidak ditampilkan). */
+function saveCoachTargets(token, targets) {
+  requireAdmin_(token);
+  targets = targets || {};
+  const clean = {};
+  Object.keys(COACH_TARGETS).forEach(function(k) {
+    if (!Object.prototype.hasOwnProperty.call(targets, k)) return;
+    const v = targets[k];
+    if (v === '' || v == null) { clean[k] = ''; return; }
+    const n = Number(v), b = COACH_TARGETS[k];
+    if (!Number.isInteger(n) || n < b.min || n > b.max) throw new Error('Target ' + b.label + ' harus bilangan bulat antara ' + b.min + ' dan ' + b.max + '.');
+    clean[k] = n;
+  });
+  const props = PropertiesService.getScriptProperties();
+  Object.keys(clean).forEach(function(k) {
+    if (clean[k] === '') props.deleteProperty(COACH_TARGETS[k].key); else props.setProperty(COACH_TARGETS[k].key, String(clean[k]));
+  });
+  return { status: 'success' };
+}
+
+/** Murni: pesan "di jalur" untuk target bulanan. */
+function _targetPace_(goal, actual, day, daysInMonth) {
+  const pace = Math.ceil(goal * day / daysInMonth);
+  return { pace: pace, onPace: actual >= pace };
+}
+
+/** Murni-ish: ringkasan Beranda Coach untuk tanggal `now`. */
+function _coachHub_(now) {
+  const self = _selfCoach_();
+  const wib = _wibParts_(now);
+  const mine = function(s) { return !s.coachId || (self && s.coachId === self.id); };
+  const all = _getSchedulesAll_().filter(mine);
+  const done = all.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; });
+  const dateOf = function(s) {
+    const d = new Date(s.completedAt || s.start);
+    return isNaN(d.getTime()) ? null : Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd');
+  };
+  const hoursOf = function(s) {
+    const a = new Date(s.start), b = new Date(s.end || s.start);
+    return isNaN(a.getTime()) || isNaN(b.getTime()) ? 0 : Math.max(0, (b - a) / 3600000);
+  };
+  const monthKey = wib.date.slice(0, 7), weekStart = _weekStart_(wib.date), weekEnd = _addDaysIso_(weekStart, 6);
+  const stats = { weekSessions: 0, weekHours: 0, monthSessions: 0, monthHours: 0, activeClients: 0, streak: 0 };
+  const weeks = {};
+  done.forEach(function(s) {
+    const d = dateOf(s);
+    if (!d) return;
+    weeks[_weekStart_(d)] = true;
+    if (d >= weekStart && d <= weekEnd) { stats.weekSessions++; stats.weekHours += hoursOf(s); }
+    if (d.slice(0, 7) === monthKey) { stats.monthSessions++; stats.monthHours += hoursOf(s); }
+  });
+  stats.weekHours = Math.round(stats.weekHours * 10) / 10;
+  stats.monthHours = Math.round(stats.monthHours * 10) / 10;
+  stats.streak = _streak_(weeks, wib.date);
+  const members = _getMembersAll_();
+  stats.activeClients = members.filter(function(m) { return Number(m.totalSessions) > Number(m.usedSessions); }).length;
+
+  const today = all.filter(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'available') return false;
+    const d = new Date(s.start);
+    return !isNaN(d.getTime()) && Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd') === wib.date;
+  }).sort(function(a, b) { return new Date(a.start) - new Date(b.start); }).map(function(s) {
+    return { id: s.id, memberId: s.memberId, memberName: s.title, start: s.start, end: s.end, status: String(s.status || '').toLowerCase() };
+  });
+
+  const props = PropertiesService.getScriptProperties();
+  const p = wib.date.split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
+  const targets = [];
+  Object.keys(COACH_TARGETS).forEach(function(k) {
+    const goal = _numProp_(COACH_TARGETS[k].key, NaN);
+    if (isNaN(goal) || goal <= 0) return;
+    let actual = 0;
+    if (k === 'sesi') actual = stats.monthSessions;
+    else if (k === 'klienAktif') actual = stats.activeClients;
+    else if (k === 'pendapatan') actual = _revenueSummary_(p[1], p[0]).total;
+    else if (k === 'klienBaru') {
+      _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+        if (String(r[3]) !== 'Baru') return;
+        const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
+        if (t.length === 3 && parseInt(t[1], 10) === p[1] && parseInt(t[2], 10) === p[0]) actual++;
+      });
+    }
+    const pace = k === 'klienAktif' ? { pace: goal, onPace: actual >= goal } : _targetPace_(goal, actual, p[2], daysInMonth);
+    targets.push({ key: k, label: COACH_TARGETS[k].label, goal: goal, actual: actual, pace: pace.pace, onPace: pace.onPace });
+  });
+  return {
+    selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
+    today: today, stats: stats, targets: targets,
+    rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
+  };
+}
+
+/** Ringkasan satu bulan (y, m=1-12): sesi & jam selesai, klien baru, pendapatan, dan hasil tiap target. */
+function _monthSummary_(y, m) {
+  const self = _selfCoach_();
+  const key = y + '-' + ('0' + m).slice(-2);
+  let sessions = 0, hours = 0, newClients = 0;
+  _getSchedulesAll_().forEach(function(s) {
+    if (String(s.status || '').toLowerCase() !== 'completed') return;
+    if (s.coachId && self && s.coachId !== self.id) return;
+    const d = new Date(s.completedAt || s.start);
+    if (isNaN(d.getTime()) || Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM') !== key) return;
+    sessions++;
+    const a = new Date(s.start), b = new Date(s.end || s.start);
+    if (!isNaN(a.getTime()) && !isNaN(b.getTime())) hours += Math.max(0, (b - a) / 3600000);
+  });
+  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[3]) !== 'Baru') return;
+    const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
+    if (t.length === 3 && parseInt(t[1], 10) === m && parseInt(t[2], 10) === y) newClients++;
+  });
+  const revenue = _revenueSummary_(m, y).total;
+  hours = Math.round(hours * 10) / 10;
+  const actual = { sesi: sessions, pendapatan: revenue, klienBaru: newClients };
+  const targets = [];
+  ['sesi', 'pendapatan', 'klienBaru'].forEach(function(k) {
+    const goal = _numProp_(COACH_TARGETS[k].key, NaN);
+    if (!isNaN(goal) && goal > 0) targets.push({ key: k, label: COACH_TARGETS[k].label, goal: goal, actual: actual[k] });
+  });
+  return { sessions: sessions, hours: hours, newClients: newClients, revenue: revenue, targets: targets };
+}
+
+function getCoachHub(token) {
+  requireAdmin_(token);
+  return _coachHub_(new Date());
+}

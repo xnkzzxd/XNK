@@ -396,6 +396,19 @@
       </form>
     </div>
 
+    <div class="sheet hide" id="modal-coach-targets" role="dialog" aria-modal="true" aria-labelledby="coach-targets-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="coach-targets-title">Target bulanan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" onsubmit="window.submitTargets(event)">
+        <p class="hint">Kosongkan target yang tidak ingin kamu pakai.</p>
+        <div class="field"><label class="label" for="tg-sesi">Sesi per bulan</label><input class="input num" id="tg-sesi" type="number" inputmode="numeric" min="1" max="500" placeholder="Tidak diatur"></div>
+        <div class="field"><label class="label" for="tg-klienAktif">Klien aktif</label><input class="input num" id="tg-klienAktif" type="number" inputmode="numeric" min="1" max="200" placeholder="Tidak diatur"></div>
+        <div class="field"><label class="label" for="tg-pendapatan">Pendapatan (estimasi, Rp)</label><input class="input num" id="tg-pendapatan" type="number" inputmode="numeric" min="0" placeholder="Tidak diatur"></div>
+        <div class="field"><label class="label" for="tg-klienBaru">Klien baru per bulan</label><input class="input num" id="tg-klienBaru" type="number" inputmode="numeric" min="1" max="100" placeholder="Tidak diatur"></div>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan target</button>
+      </form>
+    </div>
+
     <!-- Paket & Harga: menu aksi paket -->
     <div class="sheet sm hide" id="sheet-pkg-menu" role="dialog" aria-modal="true" aria-labelledby="pkg-menu-title">
       <div class="sheet-handle"></div>

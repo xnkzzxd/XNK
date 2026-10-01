@@ -400,7 +400,10 @@ var REMINDER_JOBS = [
   // Fase D4: bawaan MATI sampai pemilik menyalakannya di Pengaturan → Pengingat Klien.
   { jenis: 'rekap-bulanan',     day: null, hour: 9,  dayOfMonth: 1, handler: 'sendRekapBulananDigest_', defaultEnabled: false },
   { jenis: 'selamat-milestone', day: null, hour: 18, handler: 'sendMilestoneDigest_', defaultEnabled: false },
-  { jenis: 'waktunya-ukur',     day: 1,    hour: 8,  evenWeek: true, handler: 'sendUkurDigest_', defaultEnabled: false }
+  { jenis: 'waktunya-ukur',     day: 1,    hour: 8,  evenWeek: true, handler: 'sendUkurDigest_', defaultEnabled: false },
+  // Fase E3: bawaan MATI. Ulang tahun klien (tombol WhatsApp) dan ringkasan bulanan untuk pemilik (satu pesan Telegram).
+  { jenis: 'ulang-tahun',       day: null, hour: 8,  handler: 'sendUlangTahunDigest_', defaultEnabled: false },
+  { jenis: 'ringkasan-owner',   day: null, hour: 9,  dayOfMonth: 1, handler: 'sendRingkasanOwner_', defaultEnabled: false }
 ];
 
 /** Nilai bawaan saklar satu jenis bila properti _ENABLED belum pernah diisi. */
@@ -588,7 +591,9 @@ var RMD_TPL_DEFAULT = {
   'makan-sore': 'Halo {nama}, pengingat makan sore:\n{tip}\nSemangat! 💪',
   'rekap-bulanan': 'Halo {nama}, rekap latihan bulan {bulan}:\n💪 {sesi} sesi latihan{berat}{pinggang}{streak}\n\nLihat progresmu di {link}\nTerus semangat!',
   'selamat-milestone': 'Selamat {nama}! 🎉 Kamu baru meraih badge {badge}.\nBangga banget sama progresmu, terus semangat! 💪',
-  'waktunya-ukur': 'Halo {nama}, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.{terakhir}\nCatat di {link} (Beranda → Progres).'
+  'waktunya-ukur': 'Halo {nama}, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.{terakhir}\nCatat di {link} (Beranda → Progres).',
+  'ulang-tahun': 'Selamat ulang tahun {nama}! 🎂 Semoga sehat selalu dan makin semangat latihannya. 💪',
+  'ringkasan-owner': '📊 Ringkasan {bulan}\nSesi selesai: {sesi} ({jam} jam)\nKlien baru: {klienbaru}\nPendapatan (estimasi): {pendapatan}{target}'
 };
 var RMD_PLACEHOLDERS = {
   'sesi-besok': ['nama', 'jam', 'coach', 'tidur'],
@@ -598,7 +603,9 @@ var RMD_PLACEHOLDERS = {
   'makan-sore': ['nama', 'tip'],
   'rekap-bulanan': ['nama', 'bulan', 'sesi', 'berat', 'pinggang', 'streak', 'link'],
   'selamat-milestone': ['nama', 'badge'],
-  'waktunya-ukur': ['nama', 'terakhir', 'link']
+  'waktunya-ukur': ['nama', 'terakhir', 'link'],
+  'ulang-tahun': ['nama'],
+  'ringkasan-owner': ['bulan', 'sesi', 'jam', 'klienbaru', 'pendapatan', 'target']
 };
 var MEMBER_REMIND_OFF_COL = 16;                            // Kolom P (1-based)
 var MEMBER_REMIND_OFF_HEADER = 'Pengingat Nonaktif';
@@ -698,6 +705,8 @@ function _rmdSampleVars_(jenis) {
   else if (jenis === 'booking-minggu') v.slot = '• Rabu 1/10 07:00\n• Rabu 1/10 08:00\n• Kamis 2/10 17:00';
   else if (jenis === 'rekap-bulanan') { v.bulan = 'September'; v.sesi = '8'; v.berat = '\n⚖️ Berat −2,1 kg'; v.pinggang = '\n📏 Pinggang −3 cm'; v.streak = '\n🔥 Streak 5 minggu'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'selamat-milestone') v.badge = '25 sesi';
+  else if (jenis === 'ulang-tahun') { /* hanya {nama} */ }
+  else if (jenis === 'ringkasan-owner') { v.bulan = 'September'; v.sesi = '58'; v.jam = '58'; v.klienbaru = '3'; v.pendapatan = 'Rp 6.500.000'; v.target = '\nTarget sesi: 58 dari 80'; }
   else if (jenis === 'waktunya-ukur') { v.terakhir = ' Terakhir kamu catat tanggal 12 Sep.'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'pr') v.pr = '• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan 3 hari (tenggat 2/10)';
   else v.tip = 'Sarapan telur dan oatmeal, minum air putih dulu.';
@@ -998,6 +1007,44 @@ function sendUkurDigest_(ctx) {
   return _rmdSendDigest_('Waktunya ukur', _rmdDateLabel_(today), items, pools.skippedNames);
 }
 
+/** Murni: apakah 'YYYY-MM-DD' (tanggal lahir) jatuh pada hari-bulan yang sama dengan `today`? */
+function _isBirthdayToday_(birth, today) {
+  var b = String(birth || '').trim(), t = String(today || '');
+  return /^\d{4}-\d{2}-\d{2}$/.test(b) && b.slice(5) === t.slice(5);
+}
+
+/** Handler 'ulang-tahun': klien aktif yang ulang tahunnya hari ini (kolom U MemberData "Tanggal Lahir"). */
+function sendUlangTahunDigest_(ctx) {
+  var now = (ctx && ctx.now) || new Date();
+  var today = _wibParts_(now).date;
+  var pools = _loadClientPools_();
+  var rows = _getMemberDataSheet_().getDataRange().getValues().slice(1), births = {};
+  rows.forEach(function(r) { if (r[0]) births[String(r[0]).trim()] = r[20]; });
+  var tpl = _rmdTemplate_('ulang-tahun'), items = [];
+  pools.active.filter(function(c) { return !_rmdIsOff_(c, 'ulang-tahun') && _isBirthdayToday_(births[c.id], today); }).forEach(function(c) {
+    items.push({ name: c.name, phone: c.phone, fact: 'ulang tahun', text: _rmdFill_(tpl, { nama: c.name }) });
+  });
+  return _rmdSendDigest_('Ulang tahun', _rmdDateLabel_(today), items, pools.skippedNames);
+}
+
+/** Handler 'ringkasan-owner': satu pesan Telegram ke pemilik tentang bulan LALU. Tanpa tombol klien. */
+function sendRingkasanOwner_(ctx) {
+  var now = (ctx && ctx.now) || new Date();
+  var today = _wibParts_(now).date, p = today.split('-').map(Number);
+  var y = p[1] === 1 ? p[0] - 1 : p[0], m = p[1] === 1 ? 12 : p[1] - 1;
+  var sum = _monthSummary_(y, m);
+  if (!sum.sessions && !sum.newClients && !sum.revenue) { Logger.log('Ringkasan owner: tidak ada data bulan lalu.'); return true; }
+  if (!_telegramReady_()) return false;
+  var rp = function(n) { return 'Rp ' + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+  var lines = sum.targets.map(function(t) { return '\n' + t.label + ': ' + (t.key === 'pendapatan' ? rp(t.actual) + ' dari ' + rp(t.goal) : t.actual + ' dari ' + t.goal) + (t.actual >= t.goal ? ' ✅' : ''); });
+  var text = _rmdFill_(_rmdTemplate_('ringkasan-owner'), {
+    bulan: RMD_MONTH_NAMES_ID[m - 1] + ' ' + y, sesi: sum.sessions, jam: sum.hours, klienbaru: sum.newClients, pendapatan: rp(sum.revenue), target: lines.join('')
+  });
+  kirimNotifTelegram_(_escHtml_(text));
+  return true;
+}
+var RMD_MONTH_NAMES_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
 // ##############################################################################
 // BAGIAN: T-45 Digest Booking Minggu
 // ##############################################################################
@@ -1224,7 +1271,7 @@ function _sleepLine_(hour) {
 //   - Throttle 15 detik per jenis (mencegah spam dari tombol).
 // Hasil: {jenis, terkirim:boolean, pesan:string}. `terkirim` false + pesan = alasan.
 
-var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore', 'rekap-bulanan', 'selamat-milestone', 'waktunya-ukur'];
+var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore', 'rekap-bulanan', 'selamat-milestone', 'waktunya-ukur', 'ulang-tahun', 'ringkasan-owner'];
 var RMD_TEST_MIN_GAP_MS = 15000;
 
 /** Murni: nama jenis valid → jenis itu sendiri; selain itu lempar error. */
@@ -1261,7 +1308,7 @@ function sendReminderTest(token, jenis) {
     return { jenis: j, terkirim: true, pesan: 'Pratinjau kalimat tidur terkirim ke Telegram.' };
   }
 
-  var handler = { 'rekap-bulanan': sendRekapBulananDigest_, 'selamat-milestone': sendMilestoneDigest_, 'waktunya-ukur': sendUkurDigest_, 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
+  var handler = { 'rekap-bulanan': sendRekapBulananDigest_, 'selamat-milestone': sendMilestoneDigest_, 'waktunya-ukur': sendUkurDigest_, 'ulang-tahun': sendUlangTahunDigest_, 'ringkasan-owner': sendRingkasanOwner_, 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
                   'makan-pagi': sendMakanPagiDigest_, 'makan-sore': sendMakanSoreDigest_ }[j];
   var ok;
   try {
