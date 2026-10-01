@@ -639,6 +639,10 @@ async function contrastReport(page) {
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
     check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 4, 'client page: dark hero and four tabs (Ringkasan, Progres, Perawatan, Riwayat)');
+    const tabBox = await page.evaluate(() => { const t = document.querySelector('#detail-body .cp-tabs'), d = document.querySelector('#detail-body'); if (!t || !d) return null; const r = t.getBoundingClientRect(), dr = d.getBoundingClientRect(); return { l: Math.round(r.left - dr.left), r: Math.round(dr.right - r.right), over: t.scrollWidth - t.clientWidth, chips: Array.from(t.children).map(c => Math.round(c.scrollWidth - c.clientWidth)) }; });
+    check(!!tabBox && tabBox.l >= 0 && tabBox.r >= 0 && tabBox.over <= 1 && tabBox.chips.every(x => x <= 1), 'client page: the tab pills stay inside the panel (no bleed) ' + JSON.stringify(tabBox));
+    await page.evaluate(() => { const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; });
+    await shot(page, 'admin-client-tabs');
     await page.evaluate(() => window.cpTab('progres'));
     await page.waitForTimeout(300);
     check(await visible(page, '#profile-progress-wrap') && (await page.textContent('#profile-progress-wrap')).includes('Belum ada catatan'), 'client page: a Progres section is shown');
