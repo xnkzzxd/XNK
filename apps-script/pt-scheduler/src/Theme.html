@@ -553,6 +553,23 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .chips.cp-tabs .chip { min-height: 56px; width: 100%; min-width: 0; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: var(--fs-2xs); line-height: 1.1; white-space: nowrap; border-radius: 14px; }
 .chips.cp-tabs .chip svg { width: 16px; height: 16px; }
 .cp-pane.hide { display: none; }
+.client-ring { width: 118px; height: 118px; }
+.client-ring-row { gap: 18px; margin-top: 18px; }
+.client-hero-actions { margin-top: 18px; }
+.chips.cp-tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 6px 0; }
+.detail-body { padding-bottom: calc(var(--tabbar-h) + 40px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 767px) {
+  .client-hero { padding: 16px; }
+  .client-ring { width: 88px; height: 88px; }
+  .client-ring .num { font-size: var(--fs-xl) !important; }
+  .client-ring .eyebrow { font-size: 9px; }
+  .client-ring-row { gap: 14px; margin-top: 12px; }
+  .client-hero-actions { margin-top: 12px; }
+  .client-hero .profile-name { font-size: var(--fs-xl); }
+  .client-kpis { gap: 8px; }
+  .client-kpis .kpi { min-height: 0; padding: 10px 12px; }
+  .client-kpis .kpi .kpi-icon { display: none; }
+}
 .portal-hero .avatar { box-shadow: 0 0 0 3px color-mix(in srgb, var(--on-ink) 16%, transparent); }
 .portal-kpis { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .portal-kpis .kpi { min-height: 92px; padding: 12px 10px; align-items: center; text-align: center; }
