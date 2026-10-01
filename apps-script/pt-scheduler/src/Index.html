@@ -409,6 +409,71 @@
       </form>
     </div>
 
+    <!-- Perawatan klien (E4) -->
+    <div class="sheet hide" id="modal-care-notes" role="dialog" aria-modal="true" aria-labelledby="care-notes-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="care-notes-title">Catatan privat</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" onsubmit="window.submitCareNotes(event)">
+        <p class="hint">Hanya kamu yang bisa melihat ini. Tidak tampil di portal klien.</p>
+        <div class="field"><label class="label" for="care-flag">Perhatian singkat</label><input class="input" id="care-flag" type="text" maxlength="80" placeholder="Cedera lutut kiri"></div>
+        <div class="field"><label class="label" for="care-notes">Catatan</label><textarea class="textarea" id="care-notes" rows="4" maxlength="2000"></textarea></div>
+        <div class="field"><label class="label" for="care-birth">Tanggal lahir</label><input class="input" id="care-birth" type="date"></div>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan</button>
+      </form>
+    </div>
+
+    <div class="sheet hide" id="modal-care-assess" role="dialog" aria-modal="true" aria-labelledby="care-assess-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="care-assess-title">Assessment</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" onsubmit="window.submitAssessment(event)">
+        <div class="field"><label class="label" for="as-goal">Tujuan utama</label><input class="input" id="as-goal" type="text" maxlength="200"></div>
+        <div class="field"><label class="label" for="as-history">Riwayat latihan</label><textarea class="textarea" id="as-history" rows="2" maxlength="500"></textarea></div>
+        <div class="field"><label class="label" for="as-pref">Preferensi jadwal</label><input class="input" id="as-pref" type="text" maxlength="200" placeholder="Pagi, Senin &amp; Kamis"></div>
+        <div class="field"><label class="label" for="as-motivation">Motivasi</label><input class="input" id="as-motivation" type="text" maxlength="300"></div>
+        <div class="field"><label class="label" for="as-coach-notes">Catatan coach (tidak tampil ke klien)</label><textarea class="textarea" id="as-coach-notes" rows="2" maxlength="1000"></textarea></div>
+        <div class="group-label"><span>Ukuran awal (opsional)</span></div>
+        <div class="two">
+          <div class="field"><label class="label" for="as-weight">Berat (kg)</label><input class="input num" id="as-weight" type="text" inputmode="decimal"></div>
+          <div class="field"><label class="label" for="as-waist">Pinggang (cm)</label><input class="input num" id="as-waist" type="text" inputmode="decimal"></div>
+          <div class="field"><label class="label" for="as-fat">Lemak tubuh (%)</label><input class="input num" id="as-fat" type="text" inputmode="decimal"></div>
+          <div class="field"><label class="label" for="as-chest">Dada (cm)</label><input class="input num" id="as-chest" type="text" inputmode="decimal"></div>
+          <div class="field"><label class="label" for="as-arm">Lengan (cm)</label><input class="input num" id="as-arm" type="text" inputmode="decimal"></div>
+          <div class="field"><label class="label" for="as-hip">Pinggul (cm)</label><input class="input num" id="as-hip" type="text" inputmode="decimal"></div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan assessment</button>
+      </form>
+    </div>
+
+    <div class="sheet hide" id="modal-care-tests" role="dialog" aria-modal="true" aria-labelledby="care-tests-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="care-tests-title">Tes kebugaran</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" onsubmit="window.submitCareTests(event)">
+        <div class="field"><label class="label" for="ft-date">Tanggal</label><input class="input" id="ft-date" type="date" required></div>
+        <div id="ft-fields" class="form-grid"></div>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan hasil tes</button>
+      </form>
+    </div>
+
+    <div class="sheet hide" id="modal-care-health" role="dialog" aria-modal="true" aria-labelledby="care-health-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="care-health-title">Form kesehatan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px" id="care-health-body"></div>
+    </div>
+
+    <div class="sheet hide" id="modal-portal-health" role="dialog" aria-modal="true" aria-labelledby="ph-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="ph-title">Form kesehatan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" onsubmit="window.submitPortalHealth(event)">
+        <p class="hint">Supaya latihanmu aman. Hanya coach yang bisa membaca jawabanmu.</p>
+        <div id="ph-questions" class="stack" style="gap:14px"></div>
+        <div class="field"><label class="label" for="ph-injuries">Cedera atau operasi (jika ada)</label><input class="input" id="ph-injuries" type="text" maxlength="300"></div>
+        <div class="field"><label class="label" for="ph-med">Obat yang rutin diminum</label><input class="input" id="ph-med" type="text" maxlength="300"></div>
+        <div class="field"><label class="label" for="ph-other">Kondisi lain yang perlu coach tahu</label><input class="input" id="ph-other" type="text" maxlength="300"></div>
+        <label class="row" style="gap:10px;min-height:44px;align-items:flex-start"><input type="checkbox" id="ph-consent"> <span>Jawaban ini benar dan boleh dibaca coach.</span></label>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Kirim</button>
+      </form>
+    </div>
+
     <!-- Paket & Harga: menu aksi paket -->
     <div class="sheet sm hide" id="sheet-pkg-menu" role="dialog" aria-modal="true" aria-labelledby="pkg-menu-title">
       <div class="sheet-handle"></div>

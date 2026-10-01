@@ -1624,7 +1624,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { _lsSet(ADMIN_CACHE_KEY, null); }
+  function clearAdminCache() { _lsSet(ADMIN_CACHE_KEY, null); if (window.clearCareCache) window.clearCareCache(); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -2397,6 +2397,7 @@
     const member = window.members.find(m => String(m.id) === String(s.memberId));
     const coachOpts = '<option value="">Belum ada coach</option>' + window.coaches.map(c => '<option value="' + h(c.id) + '"' + (String(s.coachId) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
     let body = '<div class="stack" style="gap:16px">';
+    body += '<div id="detail-briefing"></div>';
     body += '<div class="card-ink"><div class="row-between"><p class="eyebrow">' + h(info.label) + '</p>' + info.pill + '</div>' +
       '<p style="font-size:var(--fs-4xl);font-weight:800;letter-spacing:-0.03em;margin-top:10px" class="num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' +
       '<p class="muted" style="margin-top:4px">' + h(fmtDate(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</p>' +
@@ -2422,6 +2423,7 @@
     if (s.recurringGroupId) body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-recurring-group" onclick="window.deleteRecurringGroupFromDetail()">' + icon('repeat') + 'Hapus seluruh seri berulang</button>';
     body += '</div></div>';
     openDetail('session:' + s.id, isAvailable(s) ? 'Slot tersedia' : 'Detail sesi', '', body);
+    if (!isAvailable(s) && s.memberId) window.loadSessionBriefing(s.id);
     if (status(s) === 'unread') window.markNotificationsReadSilently([s.id]);
   };
   window.openScheduleDetailModal = function (event) { window.openScheduleDetail(event && event.id); };
@@ -2845,6 +2847,7 @@
     body += mealToggleHtml(m);
     body += reminderPrefsHtml(m);
     body += '<div id="profile-progress-wrap" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>';
+    body += '<div id="profile-care-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div>';
     body += '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>';
     body += '<div><div class="section-head"><h4 class="section-title">Jadwal mendatang</h4><span class="li-sub">' + upcoming.length + '</span></div>' +
       (upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
@@ -2857,6 +2860,7 @@
     openDetail('client:' + m.id, 'Profil klien', actions, body);
     window.loadMemberTasks(m.id, false);
     window.pgLoadAdmin(m.id);
+    window.loadClientCare(m.id);
     requestAnimationFrame(function () {
       const ring = document.querySelector('#detail-body .ring-fill');
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
@@ -3445,6 +3449,7 @@
         '<button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openScheduleDetail(\'' + h(t.id) + '\')"><span class="num" style="font-weight:800;min-width:52px">' + fmtTime(d) + '</span><span class="grow truncate">' + h(t.memberName) + '</span></button>' +
         (done ? '<span class="pill soft">Selesai</span>' : '<button type="button" class="btn btn-secondary" style="min-width:44px;min-height:44px" aria-label="Tandai selesai ' + h(t.memberName) + '" onclick="window.hubComplete(\'' + h(t.id) + '\')">' + icon('check') + '</button>') + '</div>';
     }).join('') + '</div>';
+    html += careListHtml(hub.care);
     html += '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Target bulan ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTargetsSheet()">' + (hub.targets.length ? 'Ubah' : 'Atur target') + '</button></div>';
     if (!hub.targets.length) html += '<p class="li-sub">Belum ada target. Atur target sesi, klien, atau pendapatan.</p>';
     html += hub.targets.map(function (t) {
@@ -3476,6 +3481,183 @@
     ['sesi', 'klienAktif', 'pendapatan', 'klienBaru'].forEach(function (k) { data[k] = $('tg-' + k).value.trim(); });
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
     adminCall('saveCoachTargets', data).then(function () { done(); window.closeModal(); window.showToast('Target disimpan.'); loadHub(); })
+      .catch(function (err) { done(); window.showToast(err.message); });
+  };
+
+
+  // ── Perawatan klien (E4): catatan privat, kesehatan, assessment, tes ─────────
+  // Data sensitif: dimuat saat halaman klien dibuka dan TIDAK disimpan di cache panel.
+  const care = {};
+  function careRow(label, value) { return '<div class="row-between" style="min-height:36px;gap:12px"><span class="li-sub">' + h(label) + '</span><span style="text-align:right">' + value + '</span></div>'; }
+  function careTestChange(t) {
+    if (t.change === null) return '';
+    const sign = t.change > 0 ? '+' : '';
+    return ' <span class="pill soft">' + sign + String(t.change).replace('.', ',') + ' ' + h(t.unit.split(' ')[0]) + (t.improved ? ' ↑' : '') + '</span>';
+  }
+  function careInner(memberId) {
+    const d = care[memberId];
+    if (!d) return '<p class="li-sub">Memuat catatan klien…</p>';
+    if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Catatan privat</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareNotes(\'' + h(memberId) + '\')">Ubah</button></div>' +
+      (d.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(d.flag) + '</p>' : '') +
+      (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') + '</div>';
+    html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Kesehatan</p>';
+    if (!d.health) {
+      html += '<p class="li-sub">Belum mengisi form.</p><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">Kirim pengingat</button>';
+    } else {
+      const yes = d.health.answers.filter(a => a === 'ya').length, extra = d.health.injuries || d.health.medication || d.health.other;
+      html += '<p>' + (yes || extra ? '<b>Ada hal yang perlu dibaca</b>' : 'Tidak ada catatan') + ' <span class="li-sub">· ' + h(d.health.tanggal) + '</span></p>' +
+        '<p class="li-sub">' + (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau') + '</p>' +
+        '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareHealth(\'' + h(memberId) + '\')">Lihat jawaban</button>';
+    }
+    html += '</div>';
+    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Assessment</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openAssessment(\'' + h(memberId) + '\')">' + (d.assessment ? 'Ubah' : 'Isi') + '</button></div>';
+    if (d.assessment) {
+      const a = d.assessment;
+      html += (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
+      const ex = [['Lemak', a.bodyFat, '%'], ['Dada', a.chest, ' cm'], ['Lengan', a.arm, ' cm'], ['Pinggul', a.hip, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
+      if (ex.length) html += careRow('Ukuran', h(ex.join(' · ')));
+    } else html += '<p class="li-sub">Belum diisi.</p>';
+    html += '</div>';
+    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Tes kebugaran</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareTests(\'' + h(memberId) + '\')">' + icon('plus') + 'Tes</button></div>' +
+      (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t))).join('') : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div>';
+    return html;
+  }
+  window.loadClientCare = function (memberId) {
+    return adminCall('getClientCare', memberId).then(function (d) { care[memberId] = d; }).catch(function (err) { care[memberId] = { error: err.message }; })
+      .then(function () { const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId); paintIcons(); });
+  };
+  window.clearCareCache = function () { Object.keys(care).forEach(k => delete care[k]); };
+  function careDone(memberId, msg) { window.closeModal(); window.showToast(msg); return window.loadClientCare(memberId); }
+  let careMember = '';
+  window.openCareNotes = function (id) {
+    careMember = id; const d = care[id] || {};
+    $('care-flag').value = d.flag || ''; $('care-notes').value = d.notes || ''; $('care-birth').value = d.birthDate || '';
+    openSheet('modal-care-notes');
+  };
+  window.submitCareNotes = function (e) {
+    e.preventDefault();
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveClientNotes', careMember, { flag: $('care-flag').value, notes: $('care-notes').value, birthDate: $('care-birth').value })
+      .then(function () { done(); return careDone(careMember, 'Catatan disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+  window.openAssessment = function (id) {
+    careMember = id; const a = (care[id] || {}).assessment || {};
+    $('as-goal').value = a.goal || ''; $('as-history').value = a.history || ''; $('as-pref').value = a.schedulePref || ''; $('as-motivation').value = a.motivation || ''; $('as-coach-notes').value = a.coachNotes || '';
+    ['as-weight', 'as-waist'].forEach(k => { $(k).value = ''; });
+    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat; $('as-chest').value = a.chest === '' || a.chest == null ? '' : a.chest;
+    $('as-arm').value = a.arm === '' || a.arm == null ? '' : a.arm; $('as-hip').value = a.hip === '' || a.hip == null ? '' : a.hip;
+    openSheet('modal-care-assess');
+  };
+  window.submitAssessment = function (e) {
+    e.preventDefault();
+    const v = k => $(k).value.trim().replace(',', '.');
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveAssessment', careMember, { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), chest: v('as-chest'), arm: v('as-arm'), hip: v('as-hip') })
+      .then(function () { done(); if (window.pgLoadAdmin) window.pgLoadAdmin(careMember); return careDone(careMember, 'Assessment disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+  window.openCareTests = function (id) {
+    careMember = id; const list = (care[id] || {}).testList || [];
+    $('ft-date').value = ymd(new Date());
+    $('ft-fields').innerHTML = list.map(t => '<div class="field"><label class="label" for="ft-' + h(t.id) + '">' + h(t.label) + ' (' + h(t.unit) + ')</label><input class="input num" id="ft-' + h(t.id) + '" data-test="' + h(t.id) + '" type="text" inputmode="decimal"></div>').join('');
+    openSheet('modal-care-tests');
+  };
+  window.submitCareTests = function (e) {
+    e.preventDefault();
+    const values = {};
+    document.querySelectorAll('#ft-fields [data-test]').forEach(function (el) { values[el.getAttribute('data-test')] = el.value.trim().replace(',', '.'); });
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveFitnessTests', careMember, { tanggal: $('ft-date').value, values: values })
+      .then(function () { done(); return careDone(careMember, 'Hasil tes disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+  window.openCareHealth = function (id) {
+    careMember = id; const d = care[id]; if (!d || !d.health) return;
+    const hl = d.health;
+    const rows = d.questions.map((q, i) => '<div class="card-flat" style="padding:10px 12px"><p class="li-sub">' + h(q) + '</p><p style="font-weight:700">' + h(hl.answers[i] === 'ya' ? 'Ya' : 'Tidak') + '</p></div>').join('');
+    const txt = (l, v) => v ? '<div class="card-flat" style="padding:10px 12px"><p class="eyebrow">' + h(l) + '</p><p>' + h(v) + '</p></div>' : '';
+    $('care-health-body').innerHTML = rows + txt('Cedera / operasi', hl.injuries) + txt('Obat rutin', hl.medication) + txt('Kondisi lain', hl.other) +
+      '<div class="field"><label class="label" for="care-review-note">Catatan untuk dirimu</label><input class="input" id="care-review-note" type="text" maxlength="300" value="' + h(hl.reviewNote || '') + '"></div>' +
+      '<button type="button" class="btn btn-primary btn-lg btn-block" id="btn-review" onclick="window.markReviewed()">' + (hl.reviewedAt ? 'Perbarui catatan' : 'Sudah ditinjau') + '</button>';
+    openSheet('modal-care-health');
+  };
+  window.markReviewed = function () {
+    const done = busy($('btn-review'), 'Menyimpan…');
+    adminCall('markHealthReviewed', careMember, $('care-review-note').value).then(function () { done(); return careDone(careMember, 'Ditandai sudah ditinjau.'); })
+      .catch(function (err) { done(); window.showToast(err.message); });
+  };
+
+  // Briefing di atas detail sesi
+  window.loadSessionBriefing = function (scheduleId) {
+    adminCall('getSessionBriefing', scheduleId).then(function (b) {
+      const el = $('detail-briefing');
+      if (!el || !(b.flag || b.notes || b.goal || b.lastTest || b.healthPending)) return;
+      el.innerHTML = '<div class="card-flat stack" style="gap:4px"><p class="eyebrow">Briefing</p>' +
+        (b.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(b.flag) + '</p>' : '') +
+        (b.notes ? '<p>' + h(b.notes.split('\n').slice(0, 3).join('\n')) + '</p>' : '') +
+        (b.goal ? '<p class="li-sub">Tujuan: ' + h(b.goal) + '</p>' : '') +
+        (b.lastTest ? '<p class="li-sub">Tes terakhir: ' + h(b.lastTest.label) + ' ' + h(b.lastTest.nilai) + ' ' + h(b.lastTest.unit.split(' ')[0]) + '</p>' : '') +
+        (b.healthPending ? '<p class="li-sub">Form kesehatan belum ditinjau.</p>' : '') + '</div>';
+      paintIcons();
+    }).catch(function () {});
+  };
+
+  // Daftar "Perlu perhatian" di Beranda Coach
+  const CARE_CHIPS = { 'flag-today': 'Perhatian hari ini', 'health-review': 'Form belum ditinjau', 'retest': 'Tes ulang', 'no-assessment': 'Belum ada assessment', 'no-health': 'Belum isi form', 'gap': '14 hari tanpa sesi' };
+  function careListHtml(list) {
+    if (!list || !list.length) return '<div class="card-flat"><p class="eyebrow">Perlu perhatian</p><p class="li-sub" style="min-height:44px;display:flex;align-items:center">Semua klien beres.</p></div>';
+    return '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + '</span></div>' + list.slice(0, 8).map(function (c) {
+      return '<div class="row" style="gap:6px;min-height:56px"><button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="grow" style="min-width:0"><span class="li-title truncate" style="display:block">' + h(c.name) + '</span>' +
+        '<span class="row" style="gap:4px;flex-wrap:wrap">' + c.reasons.slice(0, 2).map(r => '<span class="pill soft">' + h(CARE_CHIPS[r] || r) + '</span>').join('') + '</span></span>' + icon('chevron-right') + '</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
+    }).join('') + (list.length > 8 ? '<p class="li-sub">+' + (list.length - 8) + ' lainnya</p>' : '') + '</div>';
+  }
+  window.snoozeCareUI = function (id) {
+    adminCall('snoozeCare', id, 7).then(function () { window.showToast('Disembunyikan 7 hari.'); loadHub(); }).catch(function (err) { window.showToast(err.message); });
+  };
+
+  // Portal: form kesehatan + tes kebugaran
+  const myCare = { form: null, assess: null };
+  function myCareInner() {
+    let html = '';
+    if (myCare.form && !myCare.form.done) {
+      html += '<div class="card"><div class="section-head"><h3 class="section-title">Form kesehatan</h3></div><p class="li-sub">Isi sekali saja supaya coach tahu kondisimu sebelum latihan.</p>' +
+        '<button type="button" class="btn btn-primary btn-block" style="margin-top:12px" onclick="window.openPortalHealth()">Isi sekarang</button></div>';
+    }
+    const tests = myCare.assess && myCare.assess.tests || [];
+    if (tests.length) {
+      html += '<div class="card"><div class="section-head"><h3 class="section-title">Tes kebugaran</h3></div><div class="stack" style="gap:6px">' + tests.map(function (t) {
+        const unit = t.unit.split(' ')[0];
+        const delta = t.change === null ? '' : (t.improved ? ' · ' + (t.better === 'lower' ? 'turun ' : 'naik ') + Math.abs(t.change).toString().replace('.', ',') + ' ' + unit + ' 🎉' : '');
+        return '<div class="row-between" style="min-height:40px;gap:8px"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700;text-align:right">' + h(t.first.nilai) + (t.latest.nilai !== t.first.nilai || t.change !== null ? ' → ' + h(t.latest.nilai) : '') + ' ' + h(unit) + '<span class="li-sub">' + h(delta) + '</span></span></div>';
+      }).join('') + '</div></div>';
+    }
+    return html;
+  }
+  window.loadMyCare = function () {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return;
+    Promise.all([memberCall('getMyHealthForm').catch(() => null), memberCall('getMyAssessment').catch(() => null)]).then(function (r) {
+      myCare.form = r[0]; myCare.assess = r[1];
+      const w = $('pub-care-wrap'); if (w) { w.innerHTML = myCareInner(); paintIcons(); }
+    });
+  };
+  window.openPortalHealth = function () {
+    const qs = (myCare.form && myCare.form.questions) || [];
+    $('ph-questions').innerHTML = qs.map((q, i) => '<div class="stack" style="gap:6px"><p>' + (i + 1) + '. ' + h(q) + '</p><div class="seg" role="radiogroup" aria-label="Pertanyaan ' + (i + 1) + '"><span class="seg-thumb"></span>' +
+      '<button type="button" data-q="' + i + '" data-v="ya" style="min-height:44px" onclick="window.phPick(this)">Ya</button><button type="button" data-q="' + i + '" data-v="tidak" style="min-height:44px" onclick="window.phPick(this)">Tidak</button></div></div>').join('');
+    $('ph-injuries').value = $('ph-med').value = $('ph-other').value = ''; $('ph-consent').checked = false;
+    openSheet('modal-portal-health');
+  };
+  window.phPick = function (btn) {
+    Array.prototype.forEach.call(btn.parentNode.querySelectorAll('button'), b => b.classList.toggle('active', b === btn));
+  };
+  window.submitPortalHealth = function (e) {
+    e.preventDefault();
+    const n = (myCare.form.questions || []).length, q = [];
+    for (let i = 0; i < n; i++) { const b = document.querySelector('#ph-questions button.active[data-q="' + i + '"]'); q.push(b ? b.getAttribute('data-v') : ''); }
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Mengirim…');
+    memberCall('submitMyHealthForm', { q: q, injuries: $('ph-injuries').value, medication: $('ph-med').value, other: $('ph-other').value, consent: $('ph-consent').checked ? 'ya' : '' })
+      .then(function () { done(); window.closeModal(); window.showToast('Terima kasih, coach akan membacanya.'); window.loadMyCare(); })
       .catch(function (err) { done(); window.showToast(err.message); });
   };
 
@@ -4276,6 +4458,7 @@
     left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
     left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
+    left += '<div id="pub-care-wrap" class="stack" style="gap:16px">' + myCareInner() + '</div>';
 
     left += insightsCard(me, mine);
 
@@ -4296,6 +4479,7 @@
     if (!window.myTasks) window.loadMyTasks(false);
     window.loadMyMeal(false);
     window.loadMyProgress(false);
+    window.loadMyCare();
     window.loadMyRenewal();
   };
 

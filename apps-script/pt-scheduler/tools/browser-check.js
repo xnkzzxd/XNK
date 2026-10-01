@@ -625,6 +625,18 @@ async function contrastReport(page) {
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
     check(await visible(page, '#profile-progress-wrap') && (await page.textContent('#profile-progress-wrap')).includes('Belum ada catatan'), 'client page: a Progres section is shown');
+    await page.waitForTimeout(500);
+    check((await page.textContent('#profile-care-wrap')).includes('Catatan privat') && (await page.textContent('#profile-care-wrap')).includes('Tes kebugaran'), 'client page: private notes, health, assessment and fitness sections');
+    await page.evaluate(() => window.openCareTests('PT-A'));
+    await page.waitForTimeout(500);
+    check(await visible(page, '#ft-pushup') && (await page.getAttribute('#ft-pushup', 'inputmode')) === 'decimal', 'fitness test sheet opens with a decimal keypad');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openAssessment('PT-A'));
+    await page.waitForTimeout(500);
+    check(await visible(page, '#as-goal'), 'assessment sheet opens');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
     check((await page.textContent('#profile-progress-wrap')).includes('sesi selesai') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
     await page.click('#profile-progress-wrap .btn-outline');
     await page.waitForTimeout(600);
@@ -920,6 +932,8 @@ async function contrastReport(page) {
 
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
+    await page.waitForTimeout(500);
+    check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
     await page.click('#pub-progress-wrap .btn-primary');
     await page.waitForTimeout(600);
     check(await visible(page, '#sheet-progress'), 'portal: "Catat hari ini" opens the entry sheet');

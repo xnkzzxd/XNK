@@ -51,20 +51,20 @@ Requirements: CH-1…CH-7, CC-10 (birthday), CM-2. Built. Deviations: targets ar
 
 ## E4 — Client care
 
-Requirements: CC-1…CC-9, CC-11, CM-3…CM-6.
+Requirements: CC-1…CC-9, CC-11, CM-3…CM-6. Built. Deviations: the optional body extras (body fat, chest, arm, hip) live on the `Assessments` row, not in `Progress` H–K (weight and waist still go to Progress as *coach* entries); there is no delete button for a fitness result in the panel yet (`deleteFitnessTest` exists); the birth date (`ulang-tahun`) is edited in the private-notes sheet.
 
 | | ID | Task | Files | Depends | Size | Done when |
 | --- | --- | --- | --- | --- | --- | --- |
 | [x] | T-230 | **Private notes.** MemberData S "Perhatian", T "Catatan Privat" (V "Perhatian Ditunda"), `getClientCare` (first cut), `saveClientNotes`, `snoozeCare`. Key-list tests proving S–V stay out of `_memberPublicProfile_`, `getMembers`, `getMyProgress`, `getPublicSchedules`. | Kode.gs, tests/care.test.js (new), tests/security.test.js | T-201 | M | Notes round-trip; limits enforced; no leak path (tests). |
 | [x] | T-231 | **Health screening.** `HealthScreening` sheet, `HEALTH_QUESTIONS`, `getMyHealthForm`, `submitMyHealthForm` (throttled, Telegram without answers), `markHealthReviewed`. | Kode.gs, tests, tests/security.test.js | T-230 | M | A new submission clears the review; Telegram text contains no answer (test); a member can't read another member's form. |
 | [x] | T-232 | **Assessment, extras and fitness tests.** `Assessments`, Progress H–K, `FitnessTests`, `FITNESS_TESTS`, `saveAssessment` (optional weight/waist via the Progress path), `saveFitnessTests`, `deleteFitnessTest`, `getMyAssessment`. | Kode.gs, tests, tests/security.test.js | T-230 | M | Upsert per member, date and test; bounds enforced; `getMyAssessment` key list has no coach notes; heart rate improves downward. |
-| [ ] | T-233 | **Session briefing.** `getSessionBriefing` and the Briefing card at the top of `openScheduleDetail`. | Kode.gs, App.html, tests | T-230, T-232 | S | A flagged client's session shows the flag first; the card never blocks the rest of the sheet. |
-| [ ] | T-234 | **Client page sections** (panel): Catatan privat, Kesehatan (answers sheet, Sudah ditinjau, Kirim pengingat), Assessment & tes (assessment sheet, tests table, + Tes sheet). Loaded on demand, never cached. | Index.html, App.html, Theme.html | T-230…T-232 | L | Owner can fill a first assessment and a retest one-handed on a phone; decimal keypad for values; sheets are full height with sticky Simpan; nothing lands in `xnk_admin_cache`. |
-| [ ] | T-235 | **Portal health form** card and full-height sheet (Ya/Tidak segments, consent, sticky Kirim). | Index.html, App.html | T-231 | M | Keyboard never covers the focused field; the card disappears after submit. |
-| [ ] | T-236 | **Portal "Tes kebugaran" card** (first → latest, positive wording). | Index.html, App.html | T-232 | S | Heart rate "turun N bpm" reads as improvement; hidden until a test exists. |
+| [x] | T-233 | **Session briefing.** `getSessionBriefing` and the Briefing card at the top of `openScheduleDetail`. | Kode.gs, App.html, tests | T-230, T-232 | S | A flagged client's session shows the flag first; the card never blocks the rest of the sheet. |
+| [x] | T-234 | **Client page sections** (panel): Catatan privat, Kesehatan (answers sheet, Sudah ditinjau, Kirim pengingat), Assessment & tes (assessment sheet, tests table, + Tes sheet). Loaded on demand, never cached. | Index.html, App.html, Theme.html | T-230…T-232 | L | Owner can fill a first assessment and a retest one-handed on a phone; decimal keypad for values; sheets are full height with sticky Simpan; nothing lands in `xnk_admin_cache`. |
+| [x] | T-235 | **Portal health form** card and full-height sheet (Ya/Tidak segments, consent, sticky Kirim). | Index.html, App.html | T-231 | M | Keyboard never covers the focused field; the card disappears after submit. |
+| [x] | T-236 | **Portal "Tes kebugaran" card** (first → latest, positive wording). | Index.html, App.html | T-232 | S | Heart rate "turun N bpm" reads as improvement; hidden until a test exists. |
 | [x] | T-237 | **`tes-ulang` reminder** (Mondays 08:00, last test ≥ 28 days, off by default, template, preview, test button, per-client switch). | Reminder.gs, App.html, Index.html, tests/reminder.test.js | T-232 | M | Opted-out clients get no button; never-tested clients are skipped (they're in the care list). |
-| [ ] | T-238 | **Care list in the hub** (`care` in `getCoachHub`, reasons of Design §3.2, snooze). | Kode.gs, App.html, tests | T-220, T-230…T-232 | M | A client with two reasons appears once with both chips; a snoozed row returns after 7 days. |
-| [ ] | T-239 | **Browser checks for E4** (client page sections, sheets, briefing, portal health form with keyboard open, fitness card, care list). | tools/browser-check.js | T-233…T-238 | M | Passes at 360 and 390 px, both themes. |
+| [x] | T-238 | **Care list in the hub** (`care` in `getCoachHub`, reasons of Design §3.2, snooze). | Kode.gs, App.html, tests | T-220, T-230…T-232 | M | A client with two reasons appears once with both chips; a snoozed row returns after 7 days. |
+| [x] | T-239 | **Browser checks for E4** (client page sections, sheets, briefing, portal health form with keyboard open, fitness card, care list). | tools/browser-check.js | T-233…T-238 | M | Passes at 360 and 390 px, both themes. |
 
 ## E5 — Portal coach page
 
