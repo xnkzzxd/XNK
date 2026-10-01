@@ -376,7 +376,8 @@ const SETTINGS_NUMERIC_BOUNDS = {
   loginMaxFails: { key: 'LOGIN_MAX_FAILS', fallback: LOGIN_MAX_FAILS, min: 1, max: 1000 },
   loginLockSeconds: { key: 'LOGIN_LOCK_SECONDS', fallback: LOGIN_LOCK_SECONDS, min: 10, max: 86400 },
   memberLoginMaxFails: { key: 'MEMBER_LOGIN_MAX_FAILS', fallback: MEMBER_LOGIN_MAX_FAILS, min: 1, max: 1000 },
-  adminSessionDays: { key: 'ADMIN_SESSION_DAYS', fallback: ADMIN_SESSION_DAYS, min: 1, max: 365 }
+  adminSessionDays: { key: 'ADMIN_SESSION_DAYS', fallback: ADMIN_SESSION_DAYS, min: 1, max: 365 },
+  rescheduleCutoffHours: { key: 'RESCHEDULE_CUTOFF_HOURS', fallback: 2, min: 0, max: 72 }
 };
 
 function _businessHours_() {
@@ -1961,7 +1962,10 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
     let coachId = scheduleData.coachId || "";
     let coachName = scheduleData.coachName || "";
     if (!coachId) {
-      const actives = _activeCoaches_();
+      const allActive = _activeCoaches_();
+      const rulesNow = _coachRules_(), offNow = _coachTimeOff_(false);
+      // Coach yang sedang cuti / di luar jam kerjanya tidak dipilih otomatis.
+      const actives = allActive.filter(function(c) { return _anyCoachAvailable_([c], rulesNow, offNow, scheduleData.start, scheduleData.end || scheduleData.start); });
       if (scheduleData.memberId) {
         try {
           const member = _getMembersAll_().find(function(m) { return String(m.id) === String(scheduleData.memberId); });
@@ -1972,7 +1976,7 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
         }
       }
       // Mode solo (satu coach aktif): semua sesi otomatis milik coach itu.
-      if (!coachId && actives.length === 1) { coachId = actives[0].id; coachName = actives[0].name; }
+      if (!coachId && allActive.length === 1 && actives.length === 1) { coachId = actives[0].id; coachName = actives[0].name; }
     }
 
     sheet.appendRow([
@@ -1994,7 +1998,9 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
       } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
     }
 
-    return { status: 'success', id: id, coachId: coachId, coachName: coachName };
+    let warnings = [];
+    try { warnings = _slotWarnings_(scheduleData.start, scheduleData.end || scheduleData.start); } catch (e) { warnings = []; }
+    return { status: 'success', id: id, coachId: coachId, coachName: coachName, warnings: warnings };
   } catch(error) {
     throw new Error('Gagal menyimpan jadwal: ' + error.message);
   }
@@ -2208,7 +2214,8 @@ function updateScheduleData(token, scheduleData) {
 
 // Batas waktu minimal sebelum jadwal mulai, supaya klien masih boleh reschedule mandiri.
 // Di bawah batas ini, klien harus hubungi admin langsung (via WA) untuk reschedule.
-const RESCHEDULE_CUTOFF_HOURS = 2;
+const RESCHEDULE_CUTOFF_HOURS = 2;   // bawaan; bisa diubah lewat Pengaturan (RESCHEDULE_CUTOFF_HOURS di Script Properties)
+function _rescheduleCutoff_() { return _numProp_('RESCHEDULE_CUTOFF_HOURS', RESCHEDULE_CUTOFF_HOURS); }
 
 /**
  * Reschedule mandiri oleh klien (member portal), TANPA lewat admin.
@@ -2255,8 +2262,8 @@ function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd) {
       const oldStart = new Date(data[i][4]);
       const now = new Date();
       const hoursUntilOldStart = (oldStart - now) / (1000 * 60 * 60);
-      if (hoursUntilOldStart < RESCHEDULE_CUTOFF_HOURS) {
-        throw new Error('Reschedule mandiri sudah lewat batas waktu (minimal ' + RESCHEDULE_CUTOFF_HOURS + ' jam sebelum jadwal). Silakan hubungi Coach langsung via WhatsApp.');
+      if (hoursUntilOldStart < _rescheduleCutoff_()) {
+        throw new Error('Reschedule mandiri sudah lewat batas waktu (minimal ' + _rescheduleCutoff_() + ' jam sebelum jadwal). Silakan hubungi Coach langsung via WhatsApp.');
       }
 
       const memberName = data[i][2];
@@ -2330,6 +2337,7 @@ function clientBookSchedule(memberToken, scheduleData) {
   const member = requireMember_(memberToken);
   scheduleData = scheduleData || {};
   _validateSlot_(scheduleData.start, scheduleData.end);
+  _assertSlotBookable_(scheduleData.start, scheduleData.end);
 
   const memberName = String(member.row[1]);
   const phone = _normalizePhone_(member.row[2]);
@@ -4100,115 +4108,7 @@ function getPublicTestimonials() {
 // #############################################################################
 
 function getPublicAvailability() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  // 1. Ambil Data Semua Coach
-  const coaches = _activeCoaches_().map(function(c) { return { id: c.id, name: c.name }; });
-
-  // 2. Ambil Aturan Ketersediaan Jam Kerja Coach (Sheet Baru)
-  const availHeaders = ["Coach ID", "Hari", "Jam Mulai", "Jam Selesai"];
-  let availSheet = ss.getSheetByName('CoachAvailability');
-  if (!availSheet) {
-    availSheet = ss.insertSheet('CoachAvailability');
-    availSheet.appendRow(availHeaders);
-  }
-  const availData = availSheet.getDataRange().getValues();
-  let rules = [];
-  for (let i = 1; i < availData.length; i++) {
-    let sH = 0, sM = 0, eH = 0, eM = 0;
-
-    // Parsing Jam Mulai dengan aman (Handle String maupun Object Date)
-    if (Object.prototype.toString.call(availData[i][2]) === '[object Date]') {
-      sH = availData[i][2].getHours(); sM = availData[i][2].getMinutes();
-    } else {
-      let s = String(availData[i][2]).split(':');
-      sH = parseInt(s[0]) || 0; sM = parseInt(s[1]) || 0;
-    }
-
-    // Parsing Jam Selesai dengan aman
-    if (Object.prototype.toString.call(availData[i][3]) === '[object Date]') {
-      eH = availData[i][3].getHours(); eM = availData[i][3].getMinutes();
-    } else {
-      let e = String(availData[i][3]).split(':');
-      eH = parseInt(e[0]) || 0; eM = parseInt(e[1]) || 0;
-    }
-
-    rules.push({
-      coachId: availData[i][0],
-      hari: String(availData[i][1]).toLowerCase().trim(),
-      startHour: sH, startMin: sM,
-      endHour: eH, endMin: eM
-    });
-  }
-
-  // 3. Ambil Daftar Jadwal yang sudah dibooking
-  const schSheet = ss.getSheetByName('Schedules');
-  let bookings = [];
-  if (schSheet) {
-    const sData = schSheet.getDataRange().getValues();
-    for (let i = 1; i < sData.length; i++) {
-      let status = String(sData[i][7]).toUpperCase();
-      // Status dianggap Tidak Tersedia (Overlap): HOLD, CONFIRMED, UNREAD, READ, COMPLETED
-      if (['UNREAD', 'READ', 'COMPLETED', 'CONFIRMED', 'HOLD'].includes(status)) {
-        bookings.push({
-          start: new Date(sData[i][4]),
-          end: new Date(sData[i][5]),
-          coachId: sData[i][8]
-        });
-      }
-    }
-  }
-
-  // 4. Kalkulasi Slot Tersedia (untuk 14 hari ke depan)
-  const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
-  let results = [];
-  const today = new Date();
-  today.setHours(0,0,0,0);
-
-  for (let d = 0; d < 14; d++) {
-    let currentDate = new Date(today.getTime() + d * 24 * 60 * 60 * 1000);
-    let dayName = dayNames[currentDate.getDay()];
-    let dateString = currentDate.getFullYear() + '-' + String(currentDate.getMonth()+1).padStart(2,'0') + '-' + String(currentDate.getDate()).padStart(2,'0');
-
-    coaches.forEach(coach => {
-      let rule = rules.find(r => r.coachId === coach.id && r.hari === dayName);
-      if (rule) {
-        let slots = [];
-        let currentSlot = new Date(currentDate);
-        currentSlot.setHours(rule.startHour, rule.startMin, 0, 0);
-
-        let endTime = new Date(currentDate);
-        endTime.setHours(rule.endHour, rule.endMin, 0, 0);
-
-        while (currentSlot < endTime) {
-          let nextSlot = new Date(currentSlot.getTime() + 60 * 60 * 1000); // Durasi per sesi: 1 Jam
-
-          let isBooked = bookings.some(b => {
-             return b.coachId === coach.id &&
-                    ((currentSlot >= b.start && currentSlot < b.end) ||
-                     (nextSlot > b.start && nextSlot <= b.end) ||
-                     (currentSlot <= b.start && nextSlot >= b.end));
-          });
-
-          if (!isBooked && currentSlot > new Date()) {
-             slots.push(String(currentSlot.getHours()).padStart(2,'0') + ':' + String(currentSlot.getMinutes()).padStart(2,'0'));
-          }
-          currentSlot = nextSlot;
-        }
-
-        if (slots.length > 0) {
-          results.push({
-            coachId: coach.id,
-            coachName: coach.name,
-            date: dateString,
-            availableSlots: slots
-          });
-        }
-      }
-    });
-  }
-
-  return results;
+  return _availabilityAdapter_();
 }
 
 
@@ -4716,4 +4616,307 @@ function deleteTaskTemplate(token, templateId) {
     }
     throw new Error('Template tidak ditemukan.');
   });
+}
+
+// #############################################################################
+// 📁 10_COACH_HOURS — Jam kerja coach, cuti, dan satu mesin slot (Phase E2)
+// #############################################################################
+//
+// Satu fungsi murni, _freeSlots_, menjawab "jam mana yang masih kosong". Dipakai getOpenSlots
+// (Landing & portal), pengingat booking-minggu, dan pengecekan booking di server.
+// Tanpa jam kerja & cuti tersimpan, hasilnya sama dengan perilaku lama: jam operasional studio,
+// kapasitas = jumlah coach aktif (atau 1 kalau belum ada coach).
+
+const COACH_AVAIL_HEADERS = ["Coach ID", "Hari", "Jam Mulai", "Jam Selesai"];
+const COACH_TIMEOFF_HEADERS = ["ID", "Coach ID", "Mulai", "Selesai", "Jam Mulai", "Jam Selesai", "Catatan", "Dibuat Pada"];
+const COACH_DAY_NAMES = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+
+function _hourCell_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v.getTime()) ? 0 : v.getHours();
+  return parseInt(String(v).split(':')[0], 10) || 0;
+}
+
+/** Aturan jam kerja dari sheet CoachAvailability (hanya baca; tidak membuat sheet). */
+function _coachRules_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachAvailability');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const out = [];
+  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[0]).trim() === '') return;
+    out.push({ coachId: String(r[0]).trim(), hari: String(r[1]).toLowerCase().trim(), startHour: _hourCell_(r[2]), endHour: _hourCell_(r[3]) });
+  });
+  return out;
+}
+
+/** Cuti dari sheet CoachTimeOff (hanya baca). adminView=true menyertakan catatan. */
+function _coachTimeOff_(adminView) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const out = [];
+  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[0]).trim() === '') return;
+    const row = {
+      id: String(r[0]), coachId: String(r[1]).trim(), from: String(r[2]).trim(), to: String(r[3]).trim(),
+      hourFrom: String(r[4]) === '' ? null : _hourCell_(r[4]), hourTo: String(r[5]) === '' ? null : _hourCell_(r[5])
+    };
+    if (adminView) row.note = String(r[6] || '');
+    out.push(row);
+  });
+  return out;
+}
+
+/** Murni: apakah coach ini bisa melayani jam itu (jam kerja + cuti)? date 'YYYY-MM-DD' WIB, dow 0=Minggu. */
+function _coachAvailableAt_(coachId, rules, timeOff, date, hour, dow) {
+  const mine = (rules || []).filter(function(r) { return r.coachId === coachId; });
+  if (mine.length) {
+    const day = COACH_DAY_NAMES[dow];
+    if (!mine.some(function(r) { return r.hari === day && hour >= r.startHour && hour < r.endHour; })) return false;
+  }
+  return !(timeOff || []).some(function(o) {
+    return o.coachId === coachId && o.from <= date && date <= o.to && (o.hourFrom === null || (hour >= o.hourFrom && hour < o.hourTo));
+  });
+}
+
+/**
+ * Murni. in: { businessHours, coaches:[{id}], rules, timeOff, bookings:[{start,end,coachId}], from:'YYYY-MM-DD', days, now:Date }
+ * out: [{ date, dow, closed, hours:[{hour, free}] }] — hanya jam di dalam jam operasional studio.
+ */
+function _freeSlots_(o) {
+  const coaches = (o.coaches && o.coaches.length) ? o.coaches : [{ id: '' }];
+  const known = {};
+  coaches.forEach(function(c) { if (c.id) known[c.id] = true; });
+  const out = [];
+  for (let i = 0; i < o.days; i++) {
+    const date = _addDaysIso_(o.from, i);
+    const p = date.split('-');
+    const dow = new Date(Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10))).getUTCDay();
+    const range = o.businessHours[dow];
+    const hours = [];
+    if (range) {
+      for (let h = range[0]; h < range[1]; h++) {
+        const a = Date.parse(date + 'T' + ('0' + h).slice(-2) + ':00:00+07:00'), b = a + 3600000;
+        let free = 0;
+        if (a > o.now.getTime()) {
+          const avail = coaches.filter(function(c) { return !c.id || _coachAvailableAt_(c.id, o.rules, o.timeOff, date, h, dow); });
+          const availIds = {};
+          avail.forEach(function(c) { availIds[c.id] = true; });
+          let used = 0;
+          (o.bookings || []).forEach(function(bk) {
+            if (!(new Date(bk.start).getTime() < b && new Date(bk.end || bk.start).getTime() > a)) return;
+            // Booking milik coach yang sedang tidak tersedia tidak memakai kursi; tanpa coach (atau coach tak dikenal) memakai kursi bersama.
+            if (!bk.coachId || !known[bk.coachId] || availIds[bk.coachId]) used++;
+          });
+          free = Math.max(0, avail.length - used);
+        }
+        hours.push({ hour: h, free: free });
+      }
+    }
+    out.push({ date: date, dow: dow, closed: hours.length === 0, hours: hours });
+  }
+  return out;
+}
+
+function _slotBookings_() {
+  return _getSchedulesAll_().filter(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    return st !== 'available' && st !== 'cancelled';
+  }).map(function(s) { return { start: s.start, end: s.end, coachId: String(s.coachId || '') }; });
+}
+
+/** Publik: jam kosong tiap hari (7 hari default, maks 21). Tidak membuka siapa yang booking atau alasan cuti. */
+function getOpenSlots(opts) {
+  opts = opts || {};
+  const now = new Date();
+  let from = String(opts.from || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) from = _wibParts_(now).date;
+  const days = Math.max(1, Math.min(21, parseInt(opts.days, 10) || 7));
+  return _freeSlots_({
+    businessHours: _businessHours_(), coaches: _activeCoaches_().map(function(c) { return { id: c.id }; }),
+    rules: _coachRules_(), timeOff: _coachTimeOff_(false), bookings: _slotBookings_(), from: from, days: days, now: now
+  });
+}
+
+/** Publik: status singkat coach "Ini saya": sesi | tersedia (+next) | cuti (+until) | libur | tutup. Tanpa catatan cuti. */
+function getCoachStatus() {
+  const self = _selfCoach_();
+  if (!self) return { state: 'tutup' };
+  const now = new Date();
+  const wib = _wibParts_(now);
+  const rules = _coachRules_(), timeOff = _coachTimeOff_(false);
+  const off = timeOff.find(function(o) { return o.coachId === self.id && o.from <= wib.date && wib.date <= o.to && o.hourFrom === null; });
+  if (off) return { state: 'cuti', until: off.to };
+  const nowMs = now.getTime();
+  const busy = _slotBookings_().some(function(bk) { return bk.coachId === self.id && new Date(bk.start).getTime() <= nowMs && new Date(bk.end || bk.start).getTime() > nowMs; });
+  if (busy) return { state: 'sesi' };
+  const mine = rules.filter(function(r) { return r.coachId === self.id; });
+  if (mine.length && !mine.some(function(r) { return r.hari === COACH_DAY_NAMES[wib.day]; })) return { state: 'libur' };
+  const day = _freeSlots_({ businessHours: _businessHours_(), coaches: [{ id: self.id }], rules: rules, timeOff: timeOff, bookings: _slotBookings_(), from: wib.date, days: 1, now: now })[0];
+  const next = day.hours.find(function(x) { return x.free > 0; });
+  return next ? { state: 'tersedia', next: ('0' + next.hour).slice(-2) + ':00' } : { state: 'tutup' };
+}
+
+/** Publik (adapter lama): bentuk keluaran getPublicAvailability dari mesin slot, 14 hari, per coach. */
+function _availabilityAdapter_() {
+  const now = new Date();
+  const coaches = _activeCoaches_();
+  const rules = _coachRules_(), timeOff = _coachTimeOff_(false), bookings = _slotBookings_();
+  const results = [];
+  coaches.forEach(function(c) {
+    if (!rules.some(function(r) { return r.coachId === c.id; })) return;   // tanpa aturan: perilaku lama = tidak ada baris
+    _freeSlots_({ businessHours: _businessHours_(), coaches: [{ id: c.id }], rules: rules, timeOff: timeOff, bookings: bookings, from: _wibParts_(now).date, days: 14, now: now }).forEach(function(day) {
+      const slots = day.hours.filter(function(x) { return x.free > 0; }).map(function(x) { return ('0' + x.hour).slice(-2) + ':00'; });
+      if (slots.length) results.push({ coachId: c.id, coachName: c.name, date: day.date, availableSlots: slots });
+    });
+  });
+  return results;
+}
+
+/** Murni: ada coach yang tersedia untuk SEMUA jam di [start,end)? Tanpa aturan & cuti selalu true. */
+function _anyCoachAvailable_(coaches, rules, timeOff, start, end) {
+  if (!(rules || []).length && !(timeOff || []).length) return true;
+  const s = new Date(start), e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return true;
+  const list = (coaches && coaches.length) ? coaches : [];
+  if (!list.length) return true;
+  return list.some(function(c) {
+    for (let t = Math.floor(s.getTime() / 3600000) * 3600000; t < e.getTime(); t += 3600000) {
+      const w = _wibParts_(new Date(t));
+      if (!_coachAvailableAt_(c.id, rules, timeOff, w.date, w.hour, w.day)) return false;
+    }
+    return true;
+  });
+}
+
+function _slotWarnings_(start, end) {
+  const rules = _coachRules_(), timeOff = _coachTimeOff_(false);
+  if (_anyCoachAvailable_(_activeCoaches_(), rules, timeOff, start, end)) return [];
+  return [timeOff.length ? 'Di luar jam kerja atau bertepatan dengan cuti.' : 'Di luar jam kerja.'];
+}
+
+function _assertSlotBookable_(start, end) {
+  if (_anyCoachAvailable_(_activeCoaches_(), _coachRules_(), _coachTimeOff_(false), start, end)) return;
+  throw new Error('Jam ini tidak tersedia.');
+}
+
+// ── 📂 Admin: jam kerja & cuti ──────────────────────────────────────────────
+
+function _validDate_(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s))) return false;
+  const p = String(s).split('-').map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  return d.getUTCFullYear() === p[0] && d.getUTCMonth() === p[1] - 1 && d.getUTCDate() === p[2];
+}
+
+/** Jam kerja mingguan + cuti satu coach (default: coach "Ini saya"). Termasuk catatan cuti. */
+function getCoachAvailability(token, coachId) {
+  requireAdmin_(token);
+  const id = String(coachId || (_selfCoach_() || {}).id || '');
+  const week = {};
+  COACH_DAY_NAMES.forEach(function(d) { week[d] = []; });
+  _coachRules_().filter(function(r) { return r.coachId === id; }).forEach(function(r) {
+    if (week[r.hari]) week[r.hari].push([r.startHour, r.endHour]);
+  });
+  const today = _wibParts_(new Date()).date, cutoff = _addDaysIso_(today, -30);
+  return {
+    coachId: id, week: week, hasRules: _coachRules_().some(function(r) { return r.coachId === id; }),
+    timeOff: _coachTimeOff_(true).filter(function(o) { return o.coachId === id && o.to >= cutoff; }),
+    businessHours: _businessHours_()
+  };
+}
+
+/** week = { senin: [[6,10],[16,20]], ... }. Menggantikan semua aturan coach itu. week kosong = ikut jam operasional. */
+function saveCoachAvailability(token, coachId, week) {
+  requireAdmin_(token);
+  coachId = String(coachId || '');
+  if (!_activeCoaches_().some(function(c) { return c.id === coachId; })) throw new Error('Pilih coach yang aktif.');
+  week = week || {};
+  const bh = _businessHours_();
+  const rows = [];
+  COACH_DAY_NAMES.forEach(function(day, dow) {
+    const ranges = (week[day] || []).map(function(r) { return [Number(r[0]), Number(r[1])]; }).sort(function(a, b) { return a[0] - b[0]; });
+    if (ranges.length > 3) throw new Error('Maksimal 3 rentang jam per hari.');
+    ranges.forEach(function(r, i) {
+      if (!Number.isInteger(r[0]) || !Number.isInteger(r[1]) || r[0] >= r[1]) throw new Error('Jam mulai harus lebih kecil dari jam selesai (' + day + ').');
+      if (!bh[dow] || r[0] < bh[dow][0] || r[1] > bh[dow][1]) throw new Error('Jam kerja ' + day + ' harus di dalam jam operasional studio.');
+      if (i > 0 && r[0] < ranges[i - 1][1]) throw new Error('Rentang jam ' + day + ' tidak boleh saling tumpang tindih.');
+      rows.push([coachId, day, ('0' + r[0]).slice(-2) + ':00', ('0' + r[1]).slice(-2) + ':00']);
+    });
+  });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getOrCreateSheet_('CoachAvailability', COACH_AVAIL_HEADERS);
+    sheet.getRange('C:D').setNumberFormat('@');
+    const data = sheet.getDataRange().getValues();
+    for (let i = data.length - 1; i >= 1; i--) if (String(data[i][0]).trim() === coachId) sheet.deleteRow(i + 1);
+    rows.forEach(function(r) { sheet.appendRow(r); });
+    return { status: 'success', count: rows.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _timeOffClashes_(coachId, o) {
+  const out = [];
+  _getSchedulesAll_().forEach(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    if (st === 'completed' || st === 'cancelled' || st === 'available') return;
+    if (s.coachId && s.coachId !== coachId) return;
+    const d = new Date(s.start);
+    if (isNaN(d.getTime())) return;
+    const w = _wibParts_(d);
+    if (w.date < o.from || w.date > o.to) return;
+    if (o.hourFrom !== null && !(w.hour >= o.hourFrom && w.hour < o.hourTo)) return;
+    out.push({ scheduleId: s.id, memberId: s.memberId, memberName: s.title, start: s.start, end: s.end });
+  });
+  return out;
+}
+
+/** data = { coachId?, from, to, hourFrom?, hourTo?, note? }. Mengembalikan jadwal yang bentrok; tidak ada yang dibatalkan. */
+function addCoachTimeOff(token, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const coachId = String(data.coachId || (_selfCoach_() || {}).id || '');
+  if (!_activeCoaches_().some(function(c) { return c.id === coachId; })) throw new Error('Pilih coach yang aktif.');
+  const from = String(data.from || ''), to = String(data.to || data.from || '');
+  if (!_validDate_(from) || !_validDate_(to)) throw new Error('Tanggal cuti tidak valid.');
+  if (to < from) throw new Error('Tanggal selesai tidak boleh sebelum tanggal mulai.');
+  const days = (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000 + 1;
+  if (days > 120) throw new Error('Cuti maksimal 120 hari.');
+  const hasH = !(data.hourFrom === '' || data.hourFrom == null) || !(data.hourTo === '' || data.hourTo == null);
+  let hourFrom = null, hourTo = null;
+  if (hasH) {
+    hourFrom = Number(data.hourFrom); hourTo = Number(data.hourTo);
+    if (!Number.isInteger(hourFrom) || !Number.isInteger(hourTo) || hourFrom < 0 || hourTo > 24 || hourFrom >= hourTo) throw new Error('Jam cuti tidak valid: jam mulai harus lebih kecil dari jam selesai.');
+  }
+  const note = String(data.note || '').trim();
+  if (note.length > 100) throw new Error('Catatan maksimal 100 karakter.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getOrCreateSheet_('CoachTimeOff', COACH_TIMEOFF_HEADERS);
+    sheet.getRange('C:F').setNumberFormat('@');
+    const id = 'OFF-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    sheet.appendRow([id, coachId, from, to, hourFrom === null ? '' : ('0' + hourFrom).slice(-2) + ':00', hourTo === null ? '' : ('0' + hourTo).slice(-2) + ':00', note, new Date().toISOString()]);
+    return { status: 'success', id: id, clashes: _timeOffClashes_(coachId, { from: from, to: to, hourFrom: hourFrom, hourTo: hourTo }) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteCoachTimeOff(token, id) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
+    if (!sheet) throw new Error('Cuti tidak ditemukan.');
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(id)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
+    }
+    throw new Error('Cuti tidak ditemukan.');
+  } finally {
+    lock.releaseLock();
+  }
 }

@@ -1029,7 +1029,7 @@ var BOOKING_LOOKAHEAD_DAYS = 7;
  * Fungsi murni (mudah dites). schedules = hasil _getSchedulesAll_(), now = Date.
  * @returns {Array<{date:string,hour:number,day:number,label:string}>} maks n slot kosong, urut waktu.
  */
-function _nearestFreeSlots_(schedules, now, n, dayHours, lookaheadDays) {
+function _nearestFreeSlots_(schedules, now, n, dayHours, lookaheadDays, avail) {
   var busy = {};
   (schedules || []).forEach(function(s) {
     var st = String(s.status || '').toLowerCase();
@@ -1049,6 +1049,7 @@ function _nearestFreeSlots_(schedules, now, n, dayHours, lookaheadDays) {
     var h = dayHours[p.day];
     if (!h || p.hour < h[0] || p.hour >= h[1]) continue;
     if (busy[p.date + 'T' + p.hour]) continue;
+    if (avail && !_anyCoachAvailable_(avail.coaches, avail.rules, avail.timeOff, new Date(t), new Date(t + hourMs))) continue;   // E2: jam kerja & cuti coach
     var dm = p.date.split('-');
     out.push({
       date: p.date, hour: p.hour, day: p.day,
@@ -1069,7 +1070,8 @@ function sendBookingMingguDigest_(ctx) {
   var clients = pools.bookable.filter(function(c) { return !_rmdIsOff_(c, 'booking-minggu'); });
   if (!clients.length) { Logger.log('Booking Minggu: tidak ada klien yang bisa booking.'); return true; }
 
-  var slots = _nearestFreeSlots_(_getSchedulesAll_(), now, BOOKING_MAX_SLOTS, _businessHours_(), BOOKING_LOOKAHEAD_DAYS);
+  var slots = _nearestFreeSlots_(_getSchedulesAll_(), now, BOOKING_MAX_SLOTS, _businessHours_(), BOOKING_LOOKAHEAD_DAYS,
+    { coaches: _activeCoaches_(), rules: _coachRules_(), timeOff: _coachTimeOff_(false) });
   if (!slots.length) { Logger.log('Booking Minggu: tidak ada slot kosong.'); return true; }
 
   var slotText = slots.map(function(s) { return '• ' + s.label; }).join('\n');

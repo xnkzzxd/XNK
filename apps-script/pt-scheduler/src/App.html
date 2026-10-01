@@ -587,7 +587,8 @@
     loginMaxFails: { label: 'Batas gagal login admin', min: 1, max: 1000 },
     loginLockSeconds: { label: 'Lama kunci (detik)', min: 10, max: 86400 },
     memberLoginMaxFails: { label: 'Batas nomor WA tak dikenal', min: 1, max: 1000 },
-    adminSessionDays: { label: 'Lama sesi admin (hari)', min: 1, max: 365 }
+    adminSessionDays: { label: 'Lama sesi admin (hari)', min: 1, max: 365 },
+    rescheduleCutoffHours: { label: 'Batas ganti jadwal klien (jam sebelum sesi)', min: 0, max: 72 }
   };
   // Jenis pengingat: sama dengan REMINDER_JOBS di Reminder.gs
   const SET_RMD_JOBS = [
@@ -660,7 +661,7 @@
         '</div><p class="hint">Mengganti PIN membuat semua perangkat lain keluar dari panel.</p>' +
         '<button type="submit" class="btn btn-outline btn-block">' + icon('lock') + ' Ganti PIN</button></form>' +
         '<div class="group-label"><span>Batas &amp; sesi</span></div><div class="form-grid">' +
-        setNumField('loginMaxFails') + setNumField('loginLockSeconds') + setNumField('memberLoginMaxFails') + setNumField('adminSessionDays') + '</div>';
+        setNumField('loginMaxFails') + setNumField('loginLockSeconds') + setNumField('memberLoginMaxFails') + setNumField('adminSessionDays') + setNumField('rescheduleCutoffHours') + '</div>';
     },
     akun: function () {
       return '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
