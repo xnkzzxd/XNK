@@ -45,17 +45,26 @@
       { id: 'P2', namaPaket: 'Pro', kategori: 'regular', harga: 800000, jumlahSesi: 8, durasi: '1 Bulan', deskripsi: 'Program intensif dengan pendampingan penuh.', benefit: ['1-on-1 Training', 'Program Personal', 'Progress Tracking'] },
       { id: 'P3', namaPaket: 'Advanced', kategori: 'regular', harga: 1200000, jumlahSesi: 12, durasi: '1 Bulan', deskripsi: 'Perubahan signifikan, hasil terukur.', benefit: ['1-on-1 Training', 'Diet Consultation'] }
     ],
+    getPriceListPublic: null, // diisi di bawah dari getPriceList
     getLandingStats: { totalClients: 42, completedSessions: 640, satisfactionPct: 98, avgRating: 4.9 },
     getPublicTestimonials: [
       { name: 'Amalia A.', rating: 5, text: 'Informatif, edukatif, banyak ilmu yang didapat mengenai kesehatan.', sessionsCompleted: 9 },
       { name: 'Susi P.', rating: 5, text: 'Coach ramah dan super sabar ngajarin form yang benar.', sessionsCompleted: 12 },
       { name: 'Diyah W.', rating: 5, text: 'Pace-nya pas, banyak dijelaskan tentang gerakan dan manfaatnya.', sessionsCompleted: 5 }
     ],
-    getPublicSchedules: [],
-    getCoaches: [{ id: 'C-1', name: 'Jizdan' }],
-    getPublicAvailability: [],
-    getBusinessHours: { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] }
+    getCoaches: [{ id: 'C-1', name: 'Jizdan' }]
   };
+  MOCK.getOpenSlots = (function () {   // pratinjau lokal: jam operasional contoh, semua kosong
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(); d.setDate(d.getDate() + i);
+      var hours = [];
+      for (var h = 6; h < 21; h++) hours.push({ hour: h, free: 1, off: false, past: i === 0 && h <= d.getHours() });
+      out.push({ date: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2), dow: d.getDay(), closed: false, hours: hours });
+    }
+    return out;
+  })();
+  MOCK.getPriceListPublic = { categories: [{ id: 'regular', label: 'Regular' }], packages: MOCK.getPriceList };
   function call(name) {
     var args = Array.prototype.slice.call(arguments, 1);
     return new Promise(function (resolve, reject) {
@@ -519,7 +528,7 @@
   // ===========================================================================
   // Paket harga (kategori → kartu)
   // ===========================================================================
-  var CATEGORIES = [
+  var CATEGORIES = [   // cadangan; urutan & label resmi datang dari server (getPriceListPublic)
     { id: 'student', label: 'Student' },
     { id: 'college', label: 'College' },
     { id: 'regular', label: 'Regular' },
@@ -527,8 +536,11 @@
   ];
   var pricing = { all: [], current: 'regular' };
 
-  function initializePricingUI(packages) {
-    pricing.all = packages || [];
+  // Server baru: { categories, packages }. Server lama: array paket polos.
+  function initializePricingUI(data) {
+    var packages = Array.isArray(data) ? data : ((data && data.packages) || []);
+    if (data && !Array.isArray(data) && Array.isArray(data.categories) && data.categories.length) CATEGORIES = data.categories;
+    pricing.all = packages;
     var track = document.getElementById('pricing-track');
     var seg = document.getElementById('category-toggles');
     if (!pricing.all.length) {
@@ -586,6 +598,7 @@
         '<h3 class="price-name">' + esc(pkg.namaPaket) + '</h3>' +
         '<p class="price-meta">' + esc(sesi) + (pkg.durasi ? ' · ' + esc(pkg.durasi) : '') + '</p>' +
         '<p class="price-amt"><small style="font-size:.45em;vertical-align:.9em;margin-right:4px">Rp</small>' + esc(num.toLocaleString('id-ID')) + '</p>' +
+        (pkg.jumlahSesi && num ? '<p class="price-per">≈ Rp ' + esc(Math.round(num / pkg.jumlahSesi).toLocaleString('id-ID')) + ' / sesi</p>' : '') +
         (pkg.deskripsi ? '<p class="price-desc">' + esc(pkg.deskripsi) + '</p>' : '') +
         (list.length ? '<ul class="price-list">' + list.map(function (b) { return '<li>' + ICON.check + '<span>' + esc(b) + '</span></li>'; }).join('') + '</ul>' : '<div style="height:24px"></div>') +
         '<span class="btn ' + (featured ? 'btn-light' : 'btn-dark') + '">Pilih Paket' + ICON.arrow + '</span>' +
@@ -669,11 +682,7 @@
   })();
 
   // ===========================================================================
-  // Slot kosong minggu ini (jam dihitung dari jadwal asli, tanpa data klien)
-  // Kapasitas dihitung per coach (coachId), bukan sekadar jumlah booking: booking
-  // tanpa coach (belum ditugaskan admin) tetap makan satu slot generik. Jendela
-  // jam per hari memakai aturan asli (getPublicAvailability/CoachAvailability)
-  // kalau sudah diisi admin; kalau belum, jatuh ke DAY_HOURS seperti biasa.
+  // Slot kosong minggu ini: seluruhnya dihitung di server (getOpenSlots), tanpa data klien.
   // ===========================================================================
   var slots = { days: [], selected: 0 };
   var SLOT_BANDS = [
@@ -683,57 +692,6 @@
     { label: 'Malam', test: function (h) { return h >= 18; } }
   ];
 
-  function computeOpenSlots(schedules, coaches, availability) {
-    var now = new Date();
-    var totalCoaches = (coaches || []).length;
-    var busy = {}; // coachId ('' = belum ditugaskan) -> [{a,b}, ...]
-    (schedules || []).forEach(function (s) {
-      if (String(s.status || '').toLowerCase() === 'available') return;
-      var key = String(s.coachId || '');
-      (busy[key] || (busy[key] = [])).push({ a: new Date(s.start).getTime(), b: new Date(s.end || s.start).getTime() });
-    });
-    var envelope = {}; // dayOfWeek -> [minHour, maxHour+1] dari aturan asli coach
-    (availability || []).forEach(function (row) {
-      var dow = new Date(row.date + 'T00:00:00').getDay();
-      (row.availableSlots || []).forEach(function (t) {
-        var h = parseInt(t.split(':')[0], 10);
-        if (isNaN(h)) return;
-        if (!envelope[dow]) envelope[dow] = [h, h + 1];
-        else { envelope[dow][0] = Math.min(envelope[dow][0], h); envelope[dow][1] = Math.max(envelope[dow][1], h + 1); }
-      });
-    });
-
-    var days = [];
-    for (var d = 0; d < 7; d++) {
-      var day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() + d);
-      var range = envelope[day.getDay()] || DAY_HOURS[day.getDay()] || [0, 0];
-      var hours = [];
-      for (var h = range[0]; h < range[1]; h++) {
-        var s0 = new Date(day); s0.setHours(h, 0, 0, 0);
-        var past = s0 <= now;
-        var a = s0.getTime(), b = a + 3600000;
-        var open;
-        if (past) {
-          open = false;
-        } else if (totalCoaches > 0) {
-          var busyCoaches = 0;
-          Object.keys(busy).forEach(function (key) {
-            if (key === '') return;
-            if (busy[key].some(function (x) { return x.a < b && x.b > a; })) busyCoaches++;
-          });
-          var unassigned = (busy[''] || []).filter(function (x) { return x.a < b && x.b > a; }).length;
-          open = (busyCoaches + unassigned) < totalCoaches;
-        } else {
-          var n = 0;
-          Object.keys(busy).forEach(function (key) { busy[key].forEach(function (x) { if (x.a < b && x.b > a) n++; }); });
-          open = n < 1;
-        }
-        hours.push({ h: h, open: open, past: past });
-      }
-      days.push({ date: day, hours: hours });
-    }
-    return days;
-  }
   function ymd(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 
   function renderSlotDays() {
@@ -795,8 +753,8 @@
     });
   })();
 
-  // E2: satu mesin slot di server (getOpenSlots: jam operasional, jam kerja & cuti coach, kapasitas).
-  // Kalau gagal (mis. versi server lama), jatuh ke perhitungan lama di bawah.
+  // Satu mesin slot di server (getOpenSlots): jam operasional, jam kerja & cuti coach, kapasitas,
+  // dan penanda "sudah lewat" dalam WIB. Browser tidak menghitung apa pun sendiri.
   function slotsFromEngine(rows) {
     var now = new Date();
     return rows.map(function (r) {
@@ -806,49 +764,54 @@
         date: day,
         hours: r.hours.filter(function (x) { return !x.off; }).map(function (x) {
           var s0 = new Date(day); s0.setHours(x.hour, 0, 0, 0);
-          return { h: x.hour, open: x.free > 0, past: s0 <= now };
+          return { h: x.hour, open: x.free > 0, past: x.past !== undefined ? !!x.past : s0 <= now };   // server lama: tanpa penanda
         })
       };
     });
   }
-  function showSlotDays(days) {
+  function showSlotDays(days, keepSelection) {
+    var picked = keepSelection && slots.days[slots.selected] ? ymd(slots.days[slots.selected].date) : '';
     slots.days = days;
     var firstOpen = 0;
     for (var i = 0; i < slots.days.length; i++) {
       if (slots.days[i].hours.some(function (x) { return x.open; })) { firstOpen = i; break; }
     }
     slots.selected = firstOpen;
+    if (picked) {
+      for (var j = 0; j < slots.days.length; j++) if (ymd(slots.days[j].date) === picked) { slots.selected = j; break; }
+    }
     renderSlotDays();
   }
-  function loadSlots() {
-    call('getBusinessHours').catch(function () { return null; }).then(function (bh) { if (bh) Object.assign(DAY_HOURS, bh); })
-      .then(function () { return call('getOpenSlots', { days: 7 }); })
+  function setSlotsLive(ok) {
+    var live = document.getElementById('slots-live');
+    var txt = document.getElementById('slots-live-text');
+    if (!live || !txt) return;
+    live.classList.toggle('off', !ok);
+    var d = new Date();
+    txt.textContent = ok ? 'Live · ' + pad2(d.getHours()) + '.' + pad2(d.getMinutes()) : 'Tidak terhubung';
+  }
+  var slotsBusy = false;
+  function loadSlots(isRefresh) {
+    if (slotsBusy) return;
+    slotsBusy = true;
+    call('getOpenSlots', { days: 7 })
       .then(function (rows) {
-        if (!Array.isArray(rows) || !rows.length) throw new Error('no engine');
-        showSlotDays(slotsFromEngine(rows));
+        if (!Array.isArray(rows) || !rows.length) throw new Error('no slots');
+        showSlotDays(slotsFromEngine(rows), isRefresh);
+        setSlotsLive(true);
       })
-      .catch(loadSlotsLegacy);
+      .catch(function () {
+        setSlotsLive(false);
+        if (isRefresh && slots.days.length) return;   // tampilan lama tetap dipakai sampai berhasil lagi
+        var box = document.getElementById('slot-hours');
+        if (box) box.innerHTML = '<p class="slot-empty">Jadwal belum bisa dimuat. <a href="https://wa.me/6288221254305" target="_blank" rel="noopener">Chat coach</a> untuk cek jam kosong.</p>';
+      })
+      .then(function () { slotsBusy = false; });
   }
-  function loadSlotsLegacy() {
-    Promise.all([
-      call('getPublicSchedules'),
-      call('getCoaches'),
-      call('getPublicAvailability').catch(function () { return []; }),
-      call('getBusinessHours').catch(function () { return null; })
-    ]).then(function (r) {
-      if (r[3]) Object.assign(DAY_HOURS, r[3]);
-      slots.days = computeOpenSlots(r[0], r[1] || [], r[2] || []);
-      var firstOpen = 0;
-      for (var i = 0; i < slots.days.length; i++) {
-        if (slots.days[i].hours.some(function (x) { return x.open; })) { firstOpen = i; break; }
-      }
-      slots.selected = firstOpen;
-      renderSlotDays();
-    }).catch(function () {
-      var box = document.getElementById('slot-hours');
-      if (box) box.innerHTML = '<p class="slot-empty">Jadwal belum bisa dimuat. <a href="https://wa.me/6288221254305" target="_blank" rel="noopener">Chat coach</a> untuk cek jam kosong.</p>';
-    });
-  }
+  // Jadwal berubah terus (booking klien, cuti coach): muat ulang tiap 2 menit saat tab terlihat,
+  // dan langsung saat tab dibuka lagi. Server tetap memeriksa ulang saat booking.
+  setInterval(function () { if (!document.hidden) loadSlots(true); }, 120000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) loadSlots(true); });
 
   // ===========================================================================
   // Navigasi, menu mobile, bar bawah
@@ -1396,7 +1359,8 @@
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
   // Data dimuat segera (tidak menunggu library animasi).
-  call('getPriceList').then(initializePricingUI).catch(function () { initializePricingUI([]); });
+  call('getPriceListPublic').catch(function () { return call('getPriceList'); })   // server lama: tanpa getPriceListPublic
+    .then(initializePricingUI).catch(function () { initializePricingUI([]); });
   call('getLandingStats').then(renderHeroStats).catch(function () { renderHeroStats({ totalClients: 0, completedSessions: 0, satisfactionPct: null, avgRating: null }); });
   call('getPublicTestimonials').then(renderTestimonials).catch(function () { renderTestimonials([]); });
   loadSlots();

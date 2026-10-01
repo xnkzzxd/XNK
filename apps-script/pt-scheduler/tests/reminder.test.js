@@ -166,7 +166,7 @@ test('booking-minggu: buttons say "Nama · sisa N", texts are addressed to the c
   const bs = buttons(env);
   assert.deepEqual(bs.map(b => b.text), ['Ani Anggraini · sisa 5', 'Budi · sisa 8']);
   const text = waText(bs[0]);
-  assert.match(text, /^Halo Ani Anggraini, minggu ini masih ada slot latihan kosong:\n• Rabu 30\/9 19:00\n• Rabu 30\/9 20:00\n• Kamis 1\/10 06:00\nMau booking yang mana\? 💪$/);
+  assert.match(text, /^Halo Ani Anggraini, minggu ini masih ada slot latihan kosong:\n• Rabu 30\/9 20:00\n• Kamis 1\/10 06:00\n• Kamis 1\/10 07:00\nMau booking yang mana\? 💪$/);
 });
 
 // ── PR ───────────────────────────────────────────────────────────────────────

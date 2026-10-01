@@ -20,10 +20,10 @@ Search by name; line numbers drift.
 | `Reminder.gs` | `REMINDER_JOBS`, `_dueJobs_`, `_buildClientPools_`, `sendSesiBesokDigest_` ("dengan Coach {name}"), `_nearestFreeSlots_` |
 | `App.html` | `renderCoaches`, `coachStats`, `openCoachProfile`, `openAddCoachModal`, `submitAddCoach`, crop flow, `populateMemberCoachOptions`, `saveCoachAssignment`, `coachFilterOptions`, `renderLeaderboard`, `renderMonthlyStats`, `renderPublicCoaches`, `coachContactNumber`, `publicDayPanel`, `openScheduleDetail`, `openProfile` |
 | `Index.html` | `#view-coaches`, `#view-public-coaches`, `#modal-add-coach`, `#member-coach`, `#edit-member-coach` |
-| `LandingScript.html` | `computeOpenSlots`, `loadSlots` (calls `getCoaches`, `getPublicAvailability`, `getBusinessHours`) |
+| `LandingScript.html` | `loadSlots` (calls `getOpenSlots` only; refreshes every 2 min) |
 | Sheets | `Coaches`, `CoachAvailability`, `Schedules` (I/J coach), `MemberData` (K/L coach, P opt-outs, Q/R badges), `Members` log, `Progress`, `Evaluasi` rows behind testimonials |
 
-**The three free-slot calculations that Phase E replaces with one engine:** `computeOpenSlots` (landing), `publicDayPanel` (portal), `_nearestFreeSlots_` (reminders).
+**The three free-slot calculations that Phase E replaces with one engine:** the landing's browser-side one (removed in Phase F), `publicDayPanel` (portal), `_nearestFreeSlots_` (reminders, now a thin wrapper over `_freeSlots_`).
 
 ## 3. Rules for this phase
 

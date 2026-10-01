@@ -1,14 +1,14 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays } = require('./fixtures');
+const { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays, wibSlot } = require('./fixtures');
 
 // Every top-level function without a trailing "_" can be called from any
 // browser through google.script.run. Each one must be classified here, so a
 // new server function added without a guard makes this test fail.
 const PUBLIC = [
   'doGet', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
-  'getPriceList', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus',
+  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [
@@ -214,7 +214,7 @@ test('clientBookSchedule books as the token owner, ignoring forged identity', ()
   const env = seededEnv();
   const res = env.call('clientBookSchedule', env.memberToken(KEY_A), {
     memberId: 'PT-B', memberName: 'Budi', phone: '081222222222',
-    start: inDays(5), end: inDays(5.04), duration: 60, notes: '<script>x</script>',
+    start: wibSlot(5).start, end: wibSlot(5).end, duration: 60, notes: '<script>x</script>',
   });
   const row = env.sheet('Schedules').rows.find(r => r[0] === res.id);
   assert.equal(row[1], 'PT-A');
@@ -236,9 +236,10 @@ test('clientBookSchedule validates the slot', () => {
 test("clients can only reschedule their own sessions", () => {
   const env = seededEnv();
   const ani = env.memberToken(KEY_A);
-  assert.throws(() => env.call('clientRescheduleSchedule', ani, 'SCH-B1', inDays(6), inDays(6.04)), /bukan milik Anda/);
-  const newStart = inDays(6);
-  env.call('clientRescheduleSchedule', ani, 'SCH-A1', newStart, inDays(6.04));
+  const slot = wibSlot(6);
+  assert.throws(() => env.call('clientRescheduleSchedule', ani, 'SCH-B1', slot.start, slot.end), /bukan milik Anda/);
+  const newStart = slot.start;
+  env.call('clientRescheduleSchedule', ani, 'SCH-A1', newStart, slot.end);
   assert.equal(env.sheet('Schedules').rows.find(r => r[0] === 'SCH-A1')[4], newStart);
 });
 
@@ -282,4 +283,15 @@ test('doGet serves only real pages; unknown views fall back to Index', () => {
     assert.equal(env.call('doGet', { parameter: { view } }).content, index, view);
   }
   assert.notEqual(env.call('doGet', { parameter: { view: 'Landing' } }).content, index);
+});
+
+test('doGet?view=prices serves public package JSON only', () => {
+  const env = seededEnv();
+  const out = env.call('doGet', { parameter: { view: 'prices' } });
+  assert.equal(out.mime, 'JSON');
+  const data = JSON.parse(out.content);
+  assert.deepEqual(data.categories.map(c => c.id), ['student', 'college', 'regular', 'premium']);   // `core` is not for landing
+  assert.ok(data.packages.length > 0);
+  assert.ok(data.packages.every(p => p.aktif && !('phone' in p)));
+  assert.ok(!data.packages.some(p => p.namaPaket === 'Lama'));   // inactive hidden
 });

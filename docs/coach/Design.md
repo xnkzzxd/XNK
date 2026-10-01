@@ -376,7 +376,7 @@ Two cards are added below the existing ones (after "Progres"):
 
 ## 5. Landing page
 
-**Only slots change.** `loadSlots` in `LandingScript.html` calls `getOpenSlots` and falls back to `computeOpenSlots` on error. The coach section, copy, photo and `wa.me` numbers stay hand-written (D-13). `getCoaches` still feeds nothing there except the fallback's capacity count.
+**Only slots change.** `loadSlots` in `LandingScript.html` calls `getOpenSlots` only (the browser-side fallback was removed in Phase F; on error the section shows a WhatsApp link). The coach section, copy, photo and `wa.me` numbers stay hand-written (D-13). `getCoaches` still feeds nothing there except the fallback's capacity count.
 
 ## 6. Reminder types
 
