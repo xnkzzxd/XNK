@@ -624,6 +624,9 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
 
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
+    await page.evaluate(() => window.navigate('clients', { force: true }));
+    await page.waitForTimeout(400);
+    check((await page.locator('#view-clients .client-kpis .kpi').count()) === 4, 'Klien list: four summary tiles that also filter');
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
     check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 8, 'client page: all eight reminder switches start on');
@@ -635,8 +638,13 @@ async function contrastReport(page) {
     check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
+    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 4, 'client page: dark hero and four tabs (Ringkasan, Progres, Perawatan, Riwayat)');
+    await page.evaluate(() => window.cpTab('progres'));
+    await page.waitForTimeout(300);
     check(await visible(page, '#profile-progress-wrap') && (await page.textContent('#profile-progress-wrap')).includes('Belum ada catatan'), 'client page: a Progres section is shown');
     await page.waitForTimeout(500);
+    await page.evaluate(() => window.cpTab('perawatan'));
+    await page.waitForTimeout(300);
     check((await page.textContent('#profile-care-wrap')).includes('Catatan privat') && (await page.textContent('#profile-care-wrap')).includes('Tes kebugaran'), 'client page: private notes, health, assessment and fitness sections');
     await page.evaluate(() => window.openCareTests('PT-A'));
     await page.waitForTimeout(500);
@@ -648,6 +656,8 @@ async function contrastReport(page) {
     check(await visible(page, '#as-goal'), 'assessment sheet opens');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
+    await page.evaluate(() => window.cpTab('progres'));
+    await page.waitForTimeout(300);
     check((await page.textContent('#profile-progress-wrap')).includes('sesi selesai') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
     await page.click('#profile-progress-wrap .btn-outline');
     await page.waitForTimeout(600);
@@ -807,6 +817,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(800);
+    await page.evaluate(() => window.cpTab('ringkasan'));
     const remind = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
     check(remind.length === 8 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
     const hit = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs input[data-remind]')).map(e => e.getBoundingClientRect()).every(r => r.height >= 43.5 && r.width >= 43.5));
@@ -945,6 +956,20 @@ async function contrastReport(page) {
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.waitForTimeout(500);
     check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
+    check(await visible(page, '#view-public-dashboard .portal-hero') && (await page.locator('#view-public-dashboard .portal-kpis .kpi').count()) === 3 && (await page.locator('#view-public-dashboard .portal-actions .btn').count()) === 3, 'portal home: dark hero, three KPI tiles and three quick actions');
+    check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'portal home: no sideways page scroll');
+    await shot(page, 'portal-mobile-home-premium');
+    await page.evaluate(() => window.openMyProfile());
+    await page.waitForTimeout(600);
+    check((await page.textContent('#sheet-my-profile')).includes('Keluar') && (await page.textContent('#sheet-my-profile')).includes('Sisa sesi'), 'portal: "Profil saya" sheet shows identity, numbers and logout');
+    await shot(page, 'portal-mobile-my-profile');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(500);
+    check((await page.locator('#view-calendar .portal-kpis .kpi').count()) >= 2, 'portal Jadwal: KPI tiles above the calendar');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
     await page.click('#pub-progress-wrap .btn-primary');
     await page.waitForTimeout(600);
     check(await visible(page, '#sheet-progress'), 'portal: "Catat hari ini" opens the entry sheet');

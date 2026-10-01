@@ -1951,6 +1951,7 @@
       }).join('') + '</div>' : emptyState('inbox', 'Semua sudah dibaca', 'Booking dari portal klien muncul di sini.')) + '</div>';
 
     html += '<div class="card"><div class="section-head"><h3 class="section-title">Perlu perhatian</h3>' +
+      '<button type="button" class="link-btn" onclick="window.navigate(\'coaches\')">Perawatan ' + icon('arrow-right', 'style="width:14px;height:14px"') + '</button>' +
       (attention.length > 4 ? '<button type="button" class="link-btn" onclick="window.setClientFilter(\'low\');window.navigate(\'clients\')">Lihat semua</button>' : '') + '</div>' +
       (attention.length ? '<div class="list stagger">' + attention.slice(0, 4).map(function (a) {
         return '<div class="list-item interactive" role="button" tabindex="0" data-key="client:' + h(a.m.id) + '" onclick="window.openProfile(\'' + h(a.m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' + avatar(a.m.photo, a.m.name, 'sm') +
@@ -2217,6 +2218,7 @@
       (!pub ? '<div class="seg only-desktop" id="sched-seg"><span class="seg-thumb"></span><button type="button" class="' + (ui.schedMode === 'month' ? 'active' : '') + '" onclick="window.setSchedMode(\'month\')">Bulan</button><button type="button" class="' + (ui.schedMode === 'week' ? 'active' : '') + '" onclick="window.setSchedMode(\'week\')">Minggu</button></div>' : '') +
       '<button type="button" class="btn btn-primary only-desktop" onclick="' + (pub ? 'window.handleFabClick()' : 'window.quickAction(\'booking\')') + '">' + icon('calendar-plus') + 'Booking</button>' +
       '</div></div>';
+    if (pub) html += portalScheduleKpis();
 
     if (ui.schedMode === 'week') {
       html += '<div class="week-wrap"><div id="calendar"></div></div>';
@@ -2787,9 +2789,13 @@
     const el = $('view-clients');
     const counts = { all: window.members.length, active: 0, low: 0, empty: 0, archive: (window.memberArchive || []).length };
     window.members.forEach(m => { counts[clientState(m)]++; });
+    const lateTasks = Object.keys(window.taskSummary || {}).reduce((n, k) => n + (Number(window.taskSummary[k].overdue) || 0), 0);
     const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['archive', 'Riwayat paket']];
     const html = '<div class="page-head"><div><h2 class="page-title">Klien</h2><p class="page-sub">' + counts.all + ' klien · ' + (counts.active + counts.low) + ' punya sisa sesi</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button></div>' +
+      '<div class="client-kpis">' + [['users', 'Aktif', counts.active, 'active'], ['alert-triangle', 'Hampir habis', counts.low, 'low'], ['battery-warning', 'Habis', counts.empty, 'empty'], ['list-todo', 'PR telat', lateTasks, 'all']].map(function (k) {
+        return '<button type="button" class="kpi' + (ui.clientFilter === k[3] && k[3] !== 'all' ? ' active' : '') + '" onclick="window.setClientFilter(\'' + k[3] + '\')"><span class="kpi-icon">' + icon(k[0]) + '</span><span class="kpi-value num">' + k[2] + '</span><span class="kpi-label">' + k[1] + '</span></button>';
+      }).join('') + '</div>' +
       '<div class="stack" style="gap:12px;margin-bottom:8px">' +
         '<div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari nama atau nomor…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
         '<div class="chips" role="tablist" aria-label="Filter klien">' + chips.map(c => '<button type="button" role="tab" class="chip' + (ui.clientFilter === c[0] ? ' active' : '') + '" aria-selected="' + (ui.clientFilter === c[0]) + '" onclick="window.setClientFilter(\'' + c[0] + '\')">' + c[1] + ' <span class="chip-count num">' + counts[c[0]] + '</span></button>').join('') + '</div>' +
@@ -2878,31 +2884,43 @@
     const past = sessions.filter(s => !(new Date(s.start) >= new Date() && !isDone(s)));
     const C = 2 * Math.PI * 52, pct = total ? rem / total : 0;
 
+    const doneCount = sessions.filter(isDone).length;
+    const stPill = st === 'empty' ? '<span class="pill solid">Kuota habis</span>' : st === 'low' ? '<span class="pill">Hampir habis</span>' : '<span class="pill">Aktif</span>';
     let body = '<div class="stack" style="gap:16px">';
-    body += '<div class="profile-hero">' + avatar(m.photo, m.name, 'lg') + '<div class="grow"><h3 class="profile-name">' + h(m.name) + '</h3><p class="li-sub" id="profile-phone">+' + h(m.phone) + '</p>' +
-      '<div class="row" style="margin-top:8px;gap:6px">' + (st === 'empty' ? '<span class="pill solid">Kuota habis</span>' : st === 'low' ? '<span class="pill dashed">Hampir habis</span>' : '<span class="pill">Aktif</span>') + '</div></div></div>';
-    body += '<div class="card-ink"><div class="row" style="gap:18px"><div class="ring-wrap" style="width:118px;height:118px"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
+    // Hero (kartu ink seperti dashboard): identitas, sisa sesi, tiga angka, aksi cepat
+    body += '<div class="card-ink client-hero"><div class="row" style="gap:14px">' + avatar(m.photo, m.name, 'lg') +
+      '<div class="grow" style="min-width:0"><h3 class="profile-name truncate">' + h(m.name) + '</h3><p class="muted" id="profile-phone">+' + h(m.phone) + '</p>' +
+      '<div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap">' + stPill + (m.packageName ? '<span class="pill">' + h(m.packageName) + '</span>' : '') + '</div></div></div>' +
+      '<div class="row" style="gap:18px;margin-top:18px"><div class="ring-wrap" style="width:118px;height:118px"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
       '<circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
       '<div class="ring-center"><span class="num" style="font-size:var(--fs-3xl);font-weight:800" id="profile-remaining">' + rem + '</span><span class="eyebrow">dari <span id="profile-total">' + total + '</span></span></div></div>' +
-      '<div class="grow stack" style="gap:8px"><p class="eyebrow">Sisa sesi</p><p style="font-weight:700">' + used + ' terpakai</p><p class="muted">' + h(m.packageName || 'Tanpa paket') + '</p></div></div></div>';
-    body += '<div class="btn-row">' +
-      '<button type="button" class="btn btn-primary" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div>';
+      '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p><p class="muted">' + used + ' terpakai · ' + doneCount + ' selesai</p></div></div>' +
+      '<div class="btn-row" style="margin-top:18px"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
+      '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div></div>';
+    // Tab bagian halaman
+    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['perawatan', 'Perawatan', 'heart-pulse'], ['riwayat', 'Riwayat', 'history']];
+    body += '<div class="chips cp-tabs" role="tablist" aria-label="Bagian profil klien">' + tabs.map((t, i) => '<button type="button" role="tab" class="chip' + (i === 0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (i === 0) + '" onclick="window.cpTab(\'' + t[0] + '\')">' + icon(t[2]) + t[1] + '</button>').join('') + '</div>';
+    // Ringkasan
+    body += '<div class="cp-pane stack" data-cppane="ringkasan" style="gap:16px">';
     body += '<div class="kv">' +
       '<div><p class="k">Bergabung</p><p class="v">' + h(m.joinDate || '-') + '</p></div>' +
       '<div><p class="k">Coach</p><p class="v">' + h(m.preferredCoachName || 'Belum ditentukan') + '</p></div>' +
       '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
-    body += mealToggleHtml(m);
-    body += reminderPrefsHtml(m);
-    body += '<div id="profile-progress-wrap" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>';
-    body += '<div id="profile-care-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div>';
     body += '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>';
     body += '<div><div class="section-head"><h4 class="section-title">Jadwal mendatang</h4><span class="li-sub">' + upcoming.length + '</span></div>' +
       (upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
-    body += '<div><div class="section-head"><h4 class="section-title">Riwayat</h4><span class="li-sub">' + past.length + ' sesi</span></div>' +
-      (past.length ? '<div class="timeline" id="profile-history">' + past.slice(0, 12).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub" id="profile-history">Belum ada riwayat latihan.</p>') + '</div>';
-    body += '<div class="btn-row" style="margin-top:4px"><button type="button" class="btn btn-ghost" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
-      '<button type="button" class="btn btn-ghost" onclick="window.openDeleteConfirmModal()">' + icon('trash-2') + 'Hapus klien</button></div>';
+    body += mealToggleHtml(m);
+    body += reminderPrefsHtml(m);
+    body += '</div>';
+    // Progres
+    body += '<div class="cp-pane hide" data-cppane="progres"><div id="profile-progress-wrap" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div></div>';
+    // Perawatan
+    body += '<div class="cp-pane hide" data-cppane="perawatan"><div id="profile-care-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
+    // Riwayat
+    body += '<div class="cp-pane stack hide" data-cppane="riwayat" style="gap:16px"><div><div class="section-head"><h4 class="section-title">Riwayat</h4><span class="li-sub">' + past.length + ' sesi</span></div>' +
+      (past.length ? '<div class="timeline" id="profile-history">' + past.slice(0, 12).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub" id="profile-history">Belum ada riwayat latihan.</p>') + '</div>' +
+      '<div class="btn-row" style="margin-top:4px"><button type="button" class="btn btn-ghost" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
+      '<button type="button" class="btn btn-ghost" onclick="window.openDeleteConfirmModal()">' + icon('trash-2') + 'Hapus klien</button></div></div>';
     body += '</div>';
     const actions = '<button type="button" class="icon-btn plain" onclick="window.openEditProfileModal()" aria-label="Ubah data klien">' + icon('pencil') + '</button>';
     openDetail('client:' + m.id, 'Profil klien', actions, body);
@@ -2913,6 +2931,12 @@
       const ring = document.querySelector('#detail-body .ring-fill');
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
     });
+  };
+
+  // Tab di halaman klien (panel): satu bagian tampil sekali, supaya halaman tidak panjang di HP.
+  window.cpTab = function (name) {
+    document.querySelectorAll('#detail-body [data-cptab]').forEach(function (b) { const on = b.getAttribute('data-cptab') === name; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('#detail-body [data-cppane]').forEach(function (p) { p.classList.toggle('hide', p.getAttribute('data-cppane') !== name); });
   };
 
   // ── Reminder makan di profil klien (T-73) — hanya klien paket core ──────────
@@ -4476,15 +4500,20 @@
     const next = upcoming[0];
     const C = 2 * Math.PI * 52, pct = total ? rem / total : 0;
 
+    const completedMine = mine.filter(isDone);
+    const weeksP = weeklyBuckets(completedMine.slice().sort(byStart), me.joinDate);
+    let streakP = 0;
+    for (let i = weeksP.length - 1; i >= 0; i--) { if (weeksP[i].count > 0) streakP++; else if (i === weeksP.length - 1) continue; else break; }
+
     let left = '';
-    left += '<div class="card"><div class="row" style="gap:16px">' +
+    left += '<div class="card-ink portal-hero"><div class="row" style="gap:14px">' +
       '<button type="button" class="avatar lg interactive" id="pub-avatar-btn" onclick="document.getElementById(\'pub-avatar-input\').click()" aria-label="Ganti foto profil" style="position:relative">' +
         (me.photo ? '<img src="' + h(me.photo) + '" alt="" id="pub-avatar-img">' : h(initials(me.name))) +
-        '<span style="position:absolute;right:-2px;bottom:-2px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--surface)">' + icon('camera', 'style="width:13px;height:13px"') + '</span></button>' +
-      '<div class="grow"><p class="eyebrow">' + greeting() + '</p><h2 class="profile-name">Halo, <span id="pub-dash-name">' + h(me.name) + '</span>!</h2>' +
-      '<p class="li-sub">' + h(me.packageName || 'Member XNK') + (me.joinDate ? ' · sejak ' + h(me.joinDate) : '') + '</p></div></div></div>';
-
-    left += '<div class="card-ink"><div class="row" style="gap:20px">' +
+        '<span style="position:absolute;right:-2px;bottom:-2px;width:26px;height:26px;border-radius:50%;background:var(--on-ink);color:var(--ink);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--ink)">' + icon('camera', 'style="width:13px;height:13px"') + '</span></button>' +
+      '<div class="grow" style="min-width:0"><p class="eyebrow">' + greeting() + '</p><h2 class="profile-name">Halo, <span id="pub-dash-name">' + h(me.name) + '</span>!</h2>' +
+      '<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap"><span class="pill">' + h(me.packageName || 'Member XNK') + '</span>' + (me.joinDate ? '<span class="pill">sejak ' + h(me.joinDate) + '</span>' : '') + '</div></div>' +
+      '<button type="button" class="icon-btn" style="color:var(--on-ink)" onclick="window.openMyProfile()" aria-label="Profil saya">' + icon('user-round') + '</button></div>' +
+      '<div class="row" style="gap:20px;margin-top:20px">' +
       '<div class="ring-wrap"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
       '<circle class="ring-fill" id="pub-quota-ring" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
       '<div class="ring-center"><span class="num" style="font-size:var(--fs-4xl);font-weight:800;line-height:1" id="pub-dash-remaining">' + rem + '</span><span class="eyebrow">dari <span id="pub-dash-total">' + total + '</span></span></div></div>' +
@@ -4492,6 +4521,14 @@
       '<p class="muted">' + used + ' sesi sudah dipakai</p></div></div>' +
       '<div id="pub-renew-slot">' + renewNoticeHtml(rem, total) + '</div>' +
       '</div>';
+
+    left += '<div class="portal-kpis">' + [['check-circle-2', completedMine.length, 'Sesi selesai'], ['flame', streakP, 'Minggu beruntun'], ['calendar-clock', upcoming.length, 'Mendatang']].map(function (k) {
+      return '<div class="kpi"><span class="kpi-icon">' + icon(k[0]) + '</span><span class="kpi-value num">' + k[1] + '</span><span class="kpi-label">' + k[2] + '</span></div>';
+    }).join('') + '</div>';
+
+    left += '<div class="portal-actions"><button type="button" class="btn btn-primary" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button>' +
+      '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
+      '<button type="button" class="btn btn-outline" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket</button></div>';
 
     left += '<div class="card" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
       '<div class="section-head"><h3 class="section-title">Sesi berikutnya</h3>' + (next ? statusInfo(next).pill : '') + '</div>' +
@@ -4544,6 +4581,44 @@
     }
     _selectDate(key);
   };
+
+
+  // Profil saya (portal klien): identitas, angka ringkas, kontak, tampilan, keluar.
+  window.openMyProfile = function () {
+    const me = window.publicLoggedMember;
+    if (!me) return;
+    const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0, rem = Math.max(0, total - used);
+    const mine = window.schedules.filter(x => String(x.memberId) === String(me.id));
+    const done = mine.filter(isDone).length;
+    const goal = String(me.goal || '').split('|')[0].trim();
+    const row = (ic, k, v) => v ? '<div class="coach-row"><span class="ico">' + icon(ic, 'style="width:16px;height:16px"') + '</span><span style="padding-top:2px"><span class="li-sub" style="display:block">' + h(k) + '</span>' + h(v) + '</span></div>' : '';
+    const coach = window.isSoloCoach() ? '' : me.preferredCoachName;
+    $('my-profile-body').innerHTML =
+      '<div class="card-ink portal-hero" style="text-align:center;padding:24px 18px">' + avatar(me.photo, me.name, 'xl', 'margin:0 auto 12px') +
+      '<h3 class="profile-name">' + h(me.name) + '</h3><div class="row" style="gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px"><span class="pill">' + h(me.packageName || 'Member XNK') + '</span>' + (me.joinDate ? '<span class="pill">sejak ' + h(me.joinDate) + '</span>' : '') + '</div>' +
+      '<button type="button" class="btn btn-ghost-ink btn-block" style="margin-top:16px" onclick="document.getElementById(\'pub-avatar-input\').click()">' + icon('camera') + 'Ganti foto</button></div>' +
+      '<div class="portal-kpis">' + [['gauge', rem, 'Sisa sesi'], ['check-circle-2', done, 'Selesai'], ['package', total, 'Total paket']].map(k => '<div class="kpi"><span class="kpi-icon">' + icon(k[0]) + '</span><span class="kpi-value num">' + k[1] + '</span><span class="kpi-label">' + k[2] + '</span></div>').join('') + '</div>' +
+      '<div class="card-flat">' + row('phone', 'WhatsApp', me.phone ? '+' + me.phone : '') + row('target', 'Tujuan', goal) + row('user-round', 'Coach', coach) + '</div>' +
+      '<div class="btn-row"><button type="button" class="btn btn-secondary" onclick="window.closeModal();window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
+      '<button type="button" class="btn btn-outline" onclick="window.closeModal();setTimeout(window.openSettings,300)">' + icon('sun-moon') + 'Tampilan</button></div>' +
+      '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button>';
+    openSheet('sheet-my-profile');
+    paintIcons();
+  };
+
+  // Portal Jadwal: angka ringkas di atas kalender
+  function portalScheduleKpis() {
+    const me = window.publicLoggedMember;
+    if (!me) return '';
+    const mine = window.schedules.filter(x => String(x.memberId) === String(me.id));
+    const now = new Date();
+    const upcoming = mine.filter(x => !isDone(x) && new Date(x.end || x.start) > now).length;
+    const monthDone = mine.filter(x => isDone(x) && new Date(x.completedAt || x.start).getMonth() === now.getMonth() && new Date(x.completedAt || x.start).getFullYear() === now.getFullYear()).length;
+    const todayFree = window.openSlotsByDate && window.openSlotsByDate[ymd(now)] ? Object.keys(window.openSlotsByDate[ymd(now)]).filter(hh => window.openSlotsByDate[ymd(now)][hh] > 0 && Number(hh) > now.getHours()).length : null;
+    const tiles = [['calendar-clock', upcoming, 'Mendatang'], ['check-circle-2', monthDone, 'Selesai bulan ini']];
+    if (todayFree !== null) tiles.push(['clock', todayFree, 'Jam kosong hari ini']);
+    return '<div class="portal-kpis" style="margin-bottom:16px">' + tiles.map(k => '<div class="kpi"><span class="kpi-icon">' + icon(k[0]) + '</span><span class="kpi-value num">' + k[1] + '</span><span class="kpi-label">' + k[2] + '</span></div>').join('') + '</div>';
+  }
 
   window.chatCoach = function (kind) {
     const me = window.publicLoggedMember || {};

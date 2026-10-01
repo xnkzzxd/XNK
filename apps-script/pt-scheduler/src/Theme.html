@@ -543,6 +543,25 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .quote-card .stars { letter-spacing: 2px; font-size: var(--fs-sm); }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 
+/* ── Halaman klien (panel) & beranda klien (portal): gaya dashboard ─────────── */
+.client-hero .profile-name { font-size: var(--fs-2xl); letter-spacing: -0.03em; }
+.client-hero .btn-inverse, .portal-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
+.client-hero .btn-ghost-ink, .portal-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
+.cp-tabs { margin: 0 calc(var(--page-pad) * -1); padding: 0 var(--page-pad) 2px; }
+.cp-tabs .chip { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.cp-tabs .chip svg { width: 15px; height: 15px; }
+.cp-pane.hide { display: none; }
+.portal-hero .avatar { box-shadow: 0 0 0 3px color-mix(in srgb, var(--on-ink) 16%, transparent); }
+.portal-kpis { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.portal-kpis .kpi { min-height: 92px; padding: 12px 10px; align-items: center; text-align: center; }
+.portal-kpis .kpi .kpi-value { font-size: var(--fs-2xl); }
+.portal-actions { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.portal-actions .btn { min-height: 52px; flex-direction: column; gap: 4px; font-size: var(--fs-xs); padding: 6px; }
+.client-kpis { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 14px; }
+@media (min-width: 768px) { .client-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.client-kpis .kpi { min-height: 88px; padding: 12px; text-align: left; cursor: pointer; }
+.client-kpis .kpi.active { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+
 /* ── Grid dashboard ──────────────────────────────────────────────────────── */
 .grid { display: grid; gap: var(--gap); }
 .grid-2 { display: grid; gap: var(--gap); grid-template-columns: repeat(2, minmax(0, 1fr)); }
