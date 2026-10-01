@@ -77,6 +77,8 @@ Requirements: CP-6…CP-10.
 | [x] | T-242 | **Browser checks for E5.** | tools/browser-check.js | T-241 | S | Passes. |
 | [x] | T-243 | **Docs**: `apps-script/README.md` (Indonesian: Coach hub, jam kerja, form kesehatan, tes ulang, targets), root `README.md`, [../Agent.md](../Agent.md) §7 and this folder's Agent §6, tick the boxes. | docs | all above | S | Docs match the shipped UI. |
 
+| [x] | T-244 | **Premium client coach page**: dark hero card with live status pill, KPI tiles (clients, sessions, rating from `getLandingStats`), nearest free slots from the slot engine, icon sections, testimonial cards with stars. Same renderer for the owner preview. | App.html, Theme.html, Kode.gs, tests/coach.test.js, tools/browser-check.js | T-241 | M | Portal Coach tab at 390 px has no sideways scroll, 44 px buttons, Chat WA still opens WhatsApp. (The sticky Booking bar was not built; the hero buttons are the call to action.) |
+
 ## Later
 
 Not in this phase (PRD §10). Pick one up only after E1–E5 are stable and its design is written.

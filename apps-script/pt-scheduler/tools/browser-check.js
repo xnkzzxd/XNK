@@ -1034,7 +1034,11 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     const coachPage = await page.textContent('#view-public-coaches');
     check(coachPage.includes('Rizky') && coachPage.includes('Booking'), 'portal Coach tab is one profile page in solo mode');
-    await page.locator('#coach-profile-page .btn-primary').first().click();
+    check(await visible(page, '#coach-profile-page .card-ink.coach-hero'), 'portal coach page: ink hero');
+    check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'portal coach page: no sideways page scroll');
+    check((await page.locator('#coach-profile-page .btn-row .btn').evaluateAll(els => els.every(e => e.getBoundingClientRect().height >= 44))), 'portal coach page: buttons are 44 px or taller');
+    await shot(page, 'portal-mobile-coach-premium');
+    await page.locator('#coach-profile-page .btn-inverse').first().click();
     check((await page.evaluate(() => window.__opened.map(w => w.location.href))).some(u => u.startsWith('https://wa.me/6281112223334')), '"Chat WA" on the coach page opens WhatsApp to the coach');
     await shot(page, 'portal-mobile-coaches');
     await page.evaluate(() => window.navigate('public-catalog'));

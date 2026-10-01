@@ -169,8 +169,9 @@ test('the coach profile page: public fields only, status, at most 3 testimonials
   const mine = env.call('getMyCoach', mt);
   const prev = env.call('previewCoachProfile', t);
   assert.equal(JSON.stringify(mine), JSON.stringify(prev));
-  assert.deepEqual(Object.keys(mine).sort(), ['coach', 'rescheduleCutoffHours', 'solo', 'status', 'testimonials']);
+  assert.deepEqual(Object.keys(mine).sort(), ['coach', 'rescheduleCutoffHours', 'solo', 'stats', 'status', 'testimonials']);
   assert.deepEqual(Object.keys(mine.coach).sort(), ['achievements', 'bio', 'certifications', 'experience', 'headline', 'id', 'instagram', 'location', 'name', 'phone', 'photo', 'specialty']);
+  assert.deepEqual(Object.keys(mine.stats).sort(), ['clients', 'rating', 'sessions']);
   assert.equal(mine.rescheduleCutoffHours, 2);
   assert.ok(mine.testimonials.length <= 3);
   assert.ok(!JSON.stringify(mine).includes('rahasia'));

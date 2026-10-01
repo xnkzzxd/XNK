@@ -5412,6 +5412,7 @@ function _coachProfilePage_() {
     solo: _activeCoaches_().length === 1,
     status: getCoachStatus(),
     testimonials: getPublicTestimonials().slice(0, 3),
+    stats: (function() { const st = getLandingStats(); return { clients: st.totalClients || 0, sessions: st.completedSessions || 0, rating: st.avgRating }; })(),
     rescheduleCutoffHours: _rescheduleCutoff_()
   };
 }
