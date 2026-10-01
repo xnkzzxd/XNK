@@ -543,7 +543,7 @@ async function contrastReport(page) {
     await page.click('.settings-nav-item[data-section="pengingat"]');
     await page.waitForTimeout(700);
     check(await page.locator('[data-k="job-sesi-besok-enabled"]').count() === 1, 'Pengingat has a "Sesi besok" card');
-    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 10, 'every reminder type has an editable client message');
+    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 11, 'every reminder type has an editable client message');
     check((await page.textContent('#pv-pr')).startsWith('Halo Budi, pengingat PR kamu'), 'the preview shows the default client message with sample data');
     check((await page.locator('[data-k="job-rekap-bulanan-enabled"]:not(:checked), [data-k="job-selamat-milestone-enabled"]:not(:checked), [data-k="job-waktunya-ukur-enabled"]:not(:checked)').count()) === 3, 'the three new message types (rekap, milestone, ukur) start switched off');
     check((await page.textContent('#pv-rekap-bulanan')).includes('rekap latihan bulan September') && (await page.textContent('#pv-selamat-milestone')).includes('badge 25 sesi') && (await page.textContent('#pv-waktunya-ukur')).includes('waktunya catat progres'), 'the new types show a preview of their client message');
@@ -615,7 +615,7 @@ async function contrastReport(page) {
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
-    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 7, 'client page: all seven reminder switches start on');
+    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 8, 'client page: all eight reminder switches start on');
     await page.click('#profile-remind-prefs input[data-remind="pr"]');
     await page.waitForTimeout(600);
     check(env.memberRow('PT-A')[15] === 'pr', 'client page: switching PR off is saved for that client (MemberData column P)');
@@ -785,7 +785,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(800);
     const remind = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
-    check(remind.length === 7 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
+    check(remind.length === 8 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
     const hit = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs input[data-remind]')).map(e => e.getBoundingClientRect()).every(r => r.height >= 43.5 && r.width >= 43.5));
     check(hit, 'phone: the switch touch area is at least 44 × 44 px');
     check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');

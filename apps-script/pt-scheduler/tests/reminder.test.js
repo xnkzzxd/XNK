@@ -416,3 +416,19 @@ test('ringkasan-owner: sends one owner message about last month, skips when noth
   assert.match(msgs[0].text, /Sesi selesai: 1 \(1 jam\)/);
   assert.ok(!msgs[0].reply_markup);
 });
+
+test('tes-ulang: only clients whose last fitness test is 28+ days old get a button; never-tested and opted-out clients do not', () => {
+  const env = seededEnv();
+  telegramOn(env);
+  env.ss.seed('FitnessTests', [['ID', 'Member ID', 'Tanggal', 'Tes', 'Nilai', 'Dicatat Oleh', 'Diubah Pada'], ['F1', 'PT-A', '2026-08-20', 'pushup', 20, 'coach', '']]);
+  assert.equal(env.callRaw('sendTesUlangDigest_', ctx(env)), true);
+  const bs = buttons(env);
+  assert.equal(bs.length, 1);
+  assert.equal(bs[0].text, 'Ani Anggraini · tes ulang');
+  assert.match(waText(bs[0]), /^Hai Ani Anggraini, sudah sebulan sejak tes kebugaranmu \(20 Agu\)/);
+  const fresh = seededEnv();
+  telegramOn(fresh);
+  fresh.ss.seed('FitnessTests', [['ID', 'Member ID', 'Tanggal', 'Tes', 'Nilai', 'Dicatat Oleh', 'Diubah Pada'], ['F1', 'PT-A', '2026-09-20', 'pushup', 20, 'coach', '']]);
+  assert.equal(fresh.callRaw('sendTesUlangDigest_', ctx(fresh)), true);
+  assert.equal(buttons(fresh).length, 0);
+});

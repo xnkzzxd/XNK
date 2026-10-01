@@ -5023,7 +5023,7 @@ function _coachHub_(now) {
   });
   return {
     selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
-    today: today, stats: stats, targets: targets,
+    today: today, stats: stats, targets: targets, care: _careList_(now),
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }
@@ -5061,4 +5061,340 @@ function _monthSummary_(y, m) {
 function getCoachHub(token) {
   requireAdmin_(token);
   return _coachHub_(new Date());
+}
+
+
+// #############################################################################
+// 📁 12_CLIENT_CARE — Catatan privat, form kesehatan, assessment, tes kebugaran (Phase E4)
+// #############################################################################
+//
+// DATA SENSITIF. Hanya admin (atau klien itu sendiri untuk bagiannya) yang boleh membacanya.
+// Tidak boleh masuk: _memberPublicProfile_, getMembers, getPublicSchedules, getMyProgress,
+// cache panel, Telegram, email, atau log (lihat docs/coach/Agent.md aturan 5 dan 6).
+
+const MEMBER_FLAG_COL = 19, MEMBER_NOTES_COL = 20, MEMBER_BIRTH_COL = 21, MEMBER_SNOOZE_COL = 22;   // S, T, U, V
+const MEMBER_CARE_HEADERS = { 19: 'Perhatian', 20: 'Catatan Privat', 21: 'Tanggal Lahir', 22: 'Perhatian Ditunda' };
+const ASSESSMENT_HEADERS = ["ID", "Member ID", "Tanggal", "Tujuan Utama", "Riwayat Latihan", "Preferensi Jadwal", "Motivasi", "Catatan Coach", "Diubah Pada", "Lemak Tubuh (%)", "Dada (cm)", "Lengan (cm)", "Pinggul (cm)"];
+const FITNESS_HEADERS = ["ID", "Member ID", "Tanggal", "Tes", "Nilai", "Dicatat Oleh", "Diubah Pada"];
+const HEALTH_HEADERS = ["ID", "Member ID", "Tanggal", "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Cedera/Operasi", "Obat Rutin", "Kondisi Lain", "Persetujuan", "Ditinjau Pada", "Catatan Coach", "Dibuat Pada"];
+const FITNESS_TESTS = [
+  { id: 'pushup', label: 'Push-up', unit: 'kali / 1 menit', better: 'higher', min: 0, max: 300 },
+  { id: 'plank', label: 'Plank', unit: 'detik', better: 'higher', min: 0, max: 3600 },
+  { id: 'squat', label: 'Squat', unit: 'kali / 1 menit', better: 'higher', min: 0, max: 300 },
+  { id: 'sit-reach', label: 'Sit and reach', unit: 'cm', better: 'higher', min: -40, max: 80 },
+  { id: 'nadi-istirahat', label: 'Detak jantung istirahat', unit: 'bpm', better: 'lower', min: 30, max: 220 }
+];
+const HEALTH_QUESTIONS = [
+  'Pernah dikatakan dokter bahwa jantungmu bermasalah, dan sebaiknya berolahraga hanya dengan pengawasan?',
+  'Apakah dadamu terasa sakit saat berolahraga atau beraktivitas?',
+  'Dalam sebulan terakhir, apakah kamu pernah nyeri dada saat tidak sedang berolahraga?',
+  'Apakah kamu pernah hilang keseimbangan karena pusing, atau pernah pingsan?',
+  'Apakah ada masalah tulang atau sendi yang bisa memburuk karena olahraga?',
+  'Apakah kamu sedang minum obat untuk tekanan darah atau masalah jantung?',
+  'Apakah ada alasan lain kamu sebaiknya tidak berolahraga berat (hamil, baru operasi, dll)?'
+];
+
+function _careStr_(v, max, label) {
+  const t = String(v == null ? '' : v).trim();
+  if (t.length > max) throw new Error(label + ' maksimal ' + max + ' karakter.');
+  return t;
+}
+
+function _memberRowOrThrow_(memberId) {
+  const id = String(memberId == null ? '' : memberId).trim();
+  const found = _findMemberRow_(function(row) { return String(row[0]).trim() === id; });
+  if (!found) throw new Error('Klien tidak ditemukan.');
+  return found;
+}
+
+function _ensureCareColumns_(sheet) {
+  Object.keys(MEMBER_CARE_HEADERS).forEach(function(col) {
+    const cell = sheet.getRange(1, Number(col));
+    if (cell.getValue() === '') { cell.setValue(MEMBER_CARE_HEADERS[col]); cell.setFontWeight('bold'); }
+  });
+}
+
+function _careSheet_(name, headers) { return getOrCreateSheet_(name, headers); }
+
+/** Baris terbaru (terakhir ditulis) milik klien dari sheet; null kalau belum ada. */
+function _latestRowFor_(sheetName, memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return null;
+  const rows = sheet.getDataRange().getValues();
+  for (let i = rows.length - 1; i >= 1; i--) if (String(rows[i][1]).trim() === memberId) return { row: rows[i], rowNum: i + 1, sheet: sheet };
+  return null;
+}
+
+function _fitnessByMember_(memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FitnessTests');
+  const out = {};
+  FITNESS_TESTS.forEach(function(t) { out[t.id] = []; });
+  if (!sheet) return out;
+  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[1]).trim() !== memberId || !out[String(r[3])]) return;
+    out[String(r[3])].push({ id: String(r[0]), tanggal: String(r[2]), nilai: Number(r[4]) });
+  });
+  Object.keys(out).forEach(function(k) { out[k].sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); }); });
+  return out;
+}
+
+function _fitnessSummary_(byTest) {
+  return FITNESS_TESTS.map(function(t) {
+    const list = byTest[t.id] || [];
+    const first = list.length ? list[0] : null, latest = list.length ? list[list.length - 1] : null;
+    const change = (first && latest && list.length > 1) ? Math.round((latest.nilai - first.nilai) * 10) / 10 : null;
+    const improved = change === null ? null : (t.better === 'lower' ? change < 0 : change > 0);
+    return { id: t.id, label: t.label, unit: t.unit, better: t.better, first: first, latest: latest, change: change, improved: improved, count: list.length };
+  }).filter(function(x) { return x.count > 0; });
+}
+
+/** Admin: semua data perawatan satu klien (catatan privat, kesehatan, assessment, tes). */
+function getClientCare(token, memberId) {
+  requireAdmin_(token);
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const asm = _latestRowFor_('Assessments', id), hs = _latestRowFor_('HealthScreening', id);
+  const byTest = _fitnessByMember_(id);
+  const a = asm ? asm.row : null, hr = hs ? hs.row : null;
+  return {
+    flag: String(m.row[MEMBER_FLAG_COL - 1] || ''), notes: String(m.row[MEMBER_NOTES_COL - 1] || ''),
+    birthDate: String(m.row[MEMBER_BIRTH_COL - 1] || ''), snoozedUntil: String(m.row[MEMBER_SNOOZE_COL - 1] || ''),
+    assessment: a ? { tanggal: String(a[2]), goal: a[3], history: a[4], schedulePref: a[5], motivation: a[6], coachNotes: a[7], bodyFat: a[9], chest: a[10], arm: a[11], hip: a[12] } : null,
+    health: hr ? {
+      tanggal: String(hr[2]), answers: [3, 4, 5, 6, 7, 8, 9].map(function(i) { return String(hr[i]); }),
+      injuries: hr[10], medication: hr[11], other: hr[12], reviewedAt: String(hr[14] || ''), reviewNote: String(hr[15] || '')
+    } : null,
+    tests: _fitnessSummary_(byTest), testHistory: byTest, testList: FITNESS_TESTS, questions: HEALTH_QUESTIONS
+  };
+}
+
+/** Admin: flag singkat + catatan privat + tanggal lahir. */
+function saveClientNotes(token, memberId, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const flag = _careStr_(data.flag, 80, 'Perhatian'), notes = _careStr_(data.notes, 2000, 'Catatan');
+  let birth = String(data.birthDate == null ? '' : data.birthDate).trim();
+  if (birth && (!_validDate_(birth) || birth > _todayWib_())) throw new Error('Tanggal lahir tidak valid.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const m = _memberRowOrThrow_(memberId);
+    _ensureCareColumns_(m.sheet);
+    m.sheet.getRange(m.rowNum, MEMBER_FLAG_COL).setValue(flag);
+    m.sheet.getRange(m.rowNum, MEMBER_NOTES_COL).setValue(notes);
+    m.sheet.getRange(m.rowNum, MEMBER_BIRTH_COL).setNumberFormat('@').setValue(birth);
+    return { status: 'success' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Admin: sembunyikan klien dari daftar "Perlu perhatian" selama `days` hari (1-30). */
+function snoozeCare(token, memberId, days) {
+  requireAdmin_(token);
+  const n = Math.max(1, Math.min(30, parseInt(days, 10) || 7));
+  const m = _memberRowOrThrow_(memberId);
+  _ensureCareColumns_(m.sheet);
+  m.sheet.getRange(m.rowNum, MEMBER_SNOOZE_COL).setNumberFormat('@').setValue(_addDaysIso_(_todayWib_(), n));
+  return { status: 'success' };
+}
+
+/** Admin: assessment pertama / perubahan. Berat & pinggang (opsional) masuk ke Progres sebagai catatan coach. */
+function saveAssessment(token, memberId, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const row = [
+    'ASM-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, _todayWib_(),
+    _careStr_(data.goal, 200, 'Tujuan utama'), _careStr_(data.history, 500, 'Riwayat latihan'), _careStr_(data.schedulePref, 200, 'Preferensi jadwal'),
+    _careStr_(data.motivation, 300, 'Motivasi'), _careStr_(data.coachNotes, 1000, 'Catatan coach'), new Date().toISOString()
+  ];
+  [['bodyFat', 'Lemak tubuh', 3, 60], ['chest', 'Lingkar dada', 40, 200], ['arm', 'Lingkar lengan', 15, 80], ['hip', 'Lingkar pinggul', 40, 200]].forEach(function(f) {
+    row.push(_parseMeasure_(data[f[0]], f[2], f[3], f[1]));
+  });
+  const berat = _parseMeasure_(data.weight, PROGRESS_LIMITS.beratMin, PROGRESS_LIMITS.beratMax, 'Berat');
+  const pinggang = _parseMeasure_(data.waist, PROGRESS_LIMITS.pinggangMin, PROGRESS_LIMITS.pinggangMax, 'Lingkar pinggang');
+  if (!row[3] && !row[4] && !row[5] && !row[6] && !row[7] && berat === '' && pinggang === '' && !row.slice(9).some(function(v) { return v !== ''; })) throw new Error('Isi minimal satu bagian assessment.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = _careSheet_('Assessments', ASSESSMENT_HEADERS);
+    sheet.getRange('C:C').setNumberFormat('@');
+    sheet.appendRow(row);
+  } finally {
+    lock.releaseLock();
+  }
+  if (berat !== '' || pinggang !== '') _saveMeasurement_(id, _todayWib_(), berat, pinggang, 'coach');
+  return { status: 'success' };
+}
+
+/** Admin: nilai tes kebugaran. values = { pushup: 24, plank: 60 }; kosong diabaikan. Upsert per klien, tanggal, dan tes. */
+function saveFitnessTests(token, memberId, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const tanggal = _validProgressDate_(data.tanggal, _todayWib_(), null);
+  const values = {};
+  FITNESS_TESTS.forEach(function(t) {
+    const raw = data.values ? data.values[t.id] : '';
+    if (raw === '' || raw == null) return;
+    values[t.id] = _parseMeasure_(String(raw).replace(',', '.'), t.min, t.max, t.label);
+  });
+  if (!Object.keys(values).length) throw new Error('Isi minimal satu hasil tes.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = _careSheet_('FitnessTests', FITNESS_HEADERS);
+    sheet.getRange('C:C').setNumberFormat('@');
+    const rows = sheet.getDataRange().getValues();
+    const now = new Date().toISOString();
+    Object.keys(values).forEach(function(tid) {
+      let found = 0;
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][1]).trim() === id && String(rows[i][2]) === tanggal && String(rows[i][3]) === tid) { found = i + 1; break; }
+      }
+      if (found) { sheet.getRange(found, 5).setValue(values[tid]); sheet.getRange(found, 7).setValue(now); }
+      else sheet.appendRow(['FIT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, tanggal, tid, values[tid], 'coach', now]);
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  return { status: 'success', tests: _fitnessSummary_(_fitnessByMember_(id)) };
+}
+
+function deleteFitnessTest(token, testId) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FitnessTests');
+    if (!sheet) throw new Error('Hasil tes tidak ditemukan.');
+    const rows = sheet.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][0]) === String(testId)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
+    throw new Error('Hasil tes tidak ditemukan.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Admin: tandai form kesehatan terbaru sudah dibaca. */
+function markHealthReviewed(token, memberId, note) {
+  requireAdmin_(token);
+  const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
+  const hs = _latestRowFor_('HealthScreening', id);
+  if (!hs) throw new Error('Klien ini belum mengisi form kesehatan.');
+  hs.sheet.getRange(hs.rowNum, 15).setValue(new Date().toISOString());
+  hs.sheet.getRange(hs.rowNum, 16).setValue(_careStr_(note, 300, 'Catatan'));
+  return { status: 'success' };
+}
+
+/** Admin: ringkasan untuk kartu "Briefing" di atas detail sesi. Tidak pernah di-cache di browser. */
+function getSessionBriefing(token, scheduleId) {
+  requireAdmin_(token);
+  const s = _getSchedulesAll_().find(function(x) { return String(x.id) === String(scheduleId); });
+  if (!s || !s.memberId) return { flag: '', notes: '', goal: '', lastTest: null, healthPending: false };
+  const m = _findMemberRow_(function(row) { return String(row[0]).trim() === String(s.memberId).trim(); });
+  if (!m) return { flag: '', notes: '', goal: '', lastTest: null, healthPending: false };
+  const id = String(m.row[0]).trim();
+  const asm = _latestRowFor_('Assessments', id), hs = _latestRowFor_('HealthScreening', id);
+  const tests = _fitnessSummary_(_fitnessByMember_(id));
+  let last = null;
+  tests.forEach(function(t) { if (!last || t.latest.tanggal > last.tanggal) last = { label: t.label, unit: t.unit, nilai: t.latest.nilai, tanggal: t.latest.tanggal }; });
+  return {
+    flag: String(m.row[MEMBER_FLAG_COL - 1] || ''), notes: String(m.row[MEMBER_NOTES_COL - 1] || ''),
+    goal: asm ? String(asm.row[3] || '') : '', lastTest: last, healthPending: !!hs && !hs.row[14]
+  };
+}
+
+// ── Klien (portal) ──────────────────────────────────────────────────────────
+
+/** Klien: pertanyaan form kesehatan dan apakah sudah diisi. TIDAK mengembalikan jawaban. */
+function getMyHealthForm(memberToken) {
+  const id = String(requireMember_(memberToken).row[0]).trim();
+  const hs = _latestRowFor_('HealthScreening', id);
+  return { questions: HEALTH_QUESTIONS, done: !!hs, date: hs ? String(hs.row[2]) : '' };
+}
+
+/** Klien: kirim form kesehatan. answers = { q: ['ya'|'tidak' x7], injuries, medication, other, consent }. */
+function submitMyHealthForm(memberToken, answers) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  answers = answers || {};
+  const q = Array.isArray(answers.q) ? answers.q.map(function(v) { return String(v).toLowerCase(); }) : [];
+  if (q.length !== HEALTH_QUESTIONS.length || q.some(function(v) { return v !== 'ya' && v !== 'tidak'; })) throw new Error('Jawab semua pertanyaan dengan Ya atau Tidak.');
+  if (String(answers.consent) !== 'ya') throw new Error('Centang persetujuan sebelum mengirim.');
+  const inj = _careStr_(answers.injuries, 300, 'Cedera/operasi'), med = _careStr_(answers.medication, 300, 'Obat rutin'), oth = _careStr_(answers.other, 300, 'Kondisi lain');
+  if (!_throttle_('health_' + id, 60)) throw new Error('Form baru saja dikirim. Tunggu sebentar.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _careSheet_('HealthScreening', HEALTH_HEADERS);
+    sheet.getRange('C:C').setNumberFormat('@');
+    const now = new Date().toISOString();
+    sheet.appendRow(['KES-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, _todayWib_()].concat(q, [inj, med, oth, 'ya', '', '', now]));
+  } finally {
+    lock.releaseLock();
+  }
+  // Hanya nama klien; jawaban tidak pernah dikirim ke Telegram.
+  try { kirimNotifTelegram_('🩺 <b>' + _escHtml_(String(row[1] || '').trim()) + '</b> mengisi form kesehatan. Perlu ditinjau di panel.'); } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
+  return { status: 'success' };
+}
+
+/** Klien: tujuan & preferensi dari assessment, dan hasil tes (pertama → terbaru). Tanpa catatan coach. */
+function getMyAssessment(memberToken) {
+  const id = String(requireMember_(memberToken).row[0]).trim();
+  const asm = _latestRowFor_('Assessments', id);
+  return {
+    goal: asm ? String(asm.row[3] || '') : '', schedulePref: asm ? String(asm.row[5] || '') : '',
+    tests: _fitnessSummary_(_fitnessByMember_(id)).map(function(t) {
+      return { id: t.id, label: t.label, unit: t.unit, better: t.better, first: t.first, latest: t.latest, change: t.change, improved: t.improved };
+    })
+  };
+}
+
+// ── Daftar "Perlu perhatian" (dipakai Beranda Coach) ─────────────────────────
+
+/** Murni-ish: alasan yang perlu diperhatikan per klien aktif. */
+function _careList_(now) {
+  const today = _wibParts_(now).date;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const md = ss.getSheetByName('MemberData');
+  if (!md) return [];
+  const asmIds = {}, healthRows = {}, lastTest = {};
+  const asm = ss.getSheetByName('Assessments');
+  if (asm) asm.getDataRange().getValues().slice(1).forEach(function(r) { asmIds[String(r[1]).trim()] = true; });
+  const hs = ss.getSheetByName('HealthScreening');
+  if (hs) hs.getDataRange().getValues().slice(1).forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
+  const ft = ss.getSheetByName('FitnessTests');
+  if (ft) ft.getDataRange().getValues().slice(1).forEach(function(r) { const k = String(r[1]).trim(); if (!lastTest[k] || String(r[2]) > lastTest[k]) lastTest[k] = String(r[2]); });
+  const lastSession = {}, todaySession = {};
+  _getSchedulesAll_().forEach(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'available') return;
+    const d = new Date(s.start);
+    if (isNaN(d.getTime())) return;
+    const day = Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd'), k = String(s.memberId).trim();
+    if (day === today) todaySession[k] = true;
+    if (st === 'completed' && (!lastSession[k] || day > lastSession[k])) lastSession[k] = day;
+  });
+  const out = [];
+  md.getDataRange().getValues().slice(1).forEach(function(r) {
+    const id = String(r[0] || '').trim();
+    if (!id) return;
+    const rem = (parseInt(r[8], 10) || 0) - (parseInt(r[9], 10) || 0);
+    if (rem <= 0) return;   // hanya klien yang masih punya sisa sesi
+    if (String(r[MEMBER_SNOOZE_COL - 1] || '') >= today) return;
+    const reasons = [];
+    const joined = _parseTanggalDMY_(r[4]);
+    const joinedDays = joined ? Math.floor((now.getTime() - joined.getTime()) / 86400000) : 999;
+    if (r[MEMBER_FLAG_COL - 1] && todaySession[id]) reasons.push('flag-today');
+    if (healthRows[id] && !healthRows[id][14]) reasons.push('health-review');
+    if (lastTest[id] && _daysBetween_(lastTest[id], today) >= 28) reasons.push('retest');
+    if (!asmIds[id] && joinedDays >= 3) reasons.push('no-assessment');
+    if (!healthRows[id] && joinedDays >= 3) reasons.push('no-health');
+    if (lastSession[id] ? _daysBetween_(lastSession[id], today) >= 14 : joinedDays >= 14) reasons.push('gap');
+    if (reasons.length) out.push({ memberId: id, name: String(r[1] || '').trim(), reasons: reasons, flag: String(r[MEMBER_FLAG_COL - 1] || '') });
+  });
+  const order = ['flag-today', 'health-review', 'retest', 'no-assessment', 'no-health', 'gap'];
+  out.sort(function(a, b) { return order.indexOf(a.reasons[0]) - order.indexOf(b.reasons[0]); });
+  return out;
 }

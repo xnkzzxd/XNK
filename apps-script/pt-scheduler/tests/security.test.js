@@ -15,7 +15,7 @@ const ADMIN = [
   'checkAdminSession', 'changeAdminPin',
   'getMembers', 'getMemberTransactionLog', 'getSchedules',
   'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto',
-  'saveCoach', 'getCoachHub', 'saveCoachTargets', 'getCoachAvailability', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',
+  'saveCoach', 'getClientCare', 'saveClientNotes', 'snoozeCare', 'saveAssessment', 'saveFitnessTests', 'deleteFitnessTest', 'markHealthReviewed', 'getSessionBriefing', 'getCoachHub', 'saveCoachTargets', 'getCoachAvailability', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',
   'addMember', 'updateMemberProfile', 'deleteMember',
   'addSchedule', 'addRecurringSchedule', 'deleteRecurringGroup', 'updateScheduleData', 'updateScheduleCoach',
   'markSchedulesAsRead', 'completeSession', 'deleteSchedule',
@@ -33,7 +33,7 @@ const MEMBER = [
   'getMemberProfile', 'getMemberSessions', 'clientBookSchedule', 'clientBookRecurring',
   'clientRescheduleSchedule', 'uploadMemberPhoto', 'updateMemberPhoto',
   'getMyTasks', 'completeMyTask', 'getMyMealToday',
-  'getMyProgress', 'markBadgesSeen', 'requestRenewal', 'getMyRenewal', 'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'getMyProgressPhoto', 'deleteMyProgressPhoto',
+  'getMyHealthForm', 'submitMyHealthForm', 'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'requestRenewal', 'getMyRenewal', 'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'getMyProgressPhoto', 'deleteMyProgressPhoto',
 ];
 const OWNER = [
   'testDriveAccess', 'migrateSplitMembersData', 'pertahankanWABaruMemberData', 'pertahankanWABaru',
