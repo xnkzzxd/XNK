@@ -108,7 +108,16 @@ Built. Notes: "every other Monday" counts weeks from Monday 5 Jan 2026 (so it ke
 | [x] | T-184 | Per-client switches for the three types on the client page; test buttons. | App.html, Reminder.gs | T-181…T-183 | S | — |
 | [x] | T-185 | Browser check: portal cards, celebration, renewal and panel Progres at phone and desktop; docs (README, Agent §7). | tools/browser-check.js, docs | all above | M | All browser checks pass. |
 
-## Phase F — Classes in the price list
+## Phase F: Landing upgrade, SEO and GEO
+
+| | ID | Task | Files | Dep | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [x] | T-300 | Landing slots: server `past` flag (WIB), remove the browser fallback, refresh every 2 min and on tab focus, live indicator. | Kode.gs, LandingScript.html | — | M | Chips match WIB for any visitor time zone; tests + browser check pass. |
+| [x] | T-301 | `_nearestFreeSlots_` (booking-minggu) runs on `_freeSlots_`. | Reminder.gs, tests | T-300 | S | Digest slots equal the landing's. |
+| [x] | T-302 | `getPriceListPublic` (landing categories + active packages), landing tabs from it, price per session, `doGet?view=prices` JSON. | Kode.gs, LandingScript.html | — | M | `core` stays off the landing; old server still works. |
+| [ ] | T-310 | BookingPT: `/harga` and `/kelas` static pages, `data/paket.json` mirror + sync Action, JSON-LD, sitemap, robots, llms.txt. | BookingPT repo | T-302 | L | Separate PR in BookingPT. |
+
+## Phase G — Classes in the price list
 
 Owner request: classes in the price list; clients can join a class, or make a private group (join code). Sheets stay as they are: only columns are appended. Decisions: a class is a PriceList package with a fixed schedule; a class has its own session count (`Jumlah Sesi`); a private group is made by sharing a code; a friend joins only after taking the same class package (the normal Beli / Perpanjang flow), then enters the code. Deviation from the first plan: group members live in `ClassGroups` column G (no new MemberData column).
 

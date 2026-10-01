@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { seededEnv, KEY_A, KEY_B, inDays, MEMBERDATA_HEADERS } = require('./fixtures');
+const { seededEnv, KEY_A, KEY_B, wibSlot } = require('./fixtures');
 
 const CLASS_PKG = { namaPaket: 'Group HIIT', kategori: 'regular', harga: 300000, jumlahSesi: 8, durasi: '1 Bulan', deskripsi: '', benefit: [], aktif: true, tipe: 'kelas', kapasitas: 3, jadwal: 'Sen & Rab 18:00', privat: true };
 
@@ -80,7 +80,7 @@ test('a group cannot be created from a regular package or a non-private class', 
 test('class sessions at the same time share one coach seat, up to capacity', () => {
   const { env } = classEnv(2);
   const a = env.memberToken(KEY_A), b = env.memberToken(KEY_B);
-  const start = inDays(5), end = inDays(5.04);
+  const { start, end } = wibSlot(5);
   env.call('clientBookSchedule', a, { start, end });
   env.call('clientBookSchedule', b, { start, end });
   const rows = env.sheet('Schedules').rows.filter(r => r[12] && r[0] !== 'ID');
@@ -91,7 +91,7 @@ test('class sessions at the same time share one coach seat, up to capacity', () 
 test('a full class session is refused and members cannot book twice', () => {
   const { env } = classEnv(2);
   const a = env.memberToken(KEY_A), b = env.memberToken(KEY_B);
-  const start = inDays(5), end = inDays(5.04);
+  const { start, end } = wibSlot(5);
   env.call('clientBookSchedule', a, { start, end });
   assert.throws(() => env.call('clientBookSchedule', a, { start, end }), /sudah terdaftar/);
   env.call('clientBookSchedule', b, { start, end });
@@ -105,17 +105,17 @@ test('class members cannot book recurring or reschedule class sessions alone', (
   const { env } = classEnv(2);
   const a = env.memberToken(KEY_A);
   assert.throws(() => env.call('clientBookRecurring', a, { startDate: '2030-01-01', time: '10:00', duration: 60 }, { weekdays: [1], occurrences: 2 }), /satu per satu/);
-  const res = env.call('clientBookSchedule', a, { start: inDays(6), end: inDays(6.04) });
-  assert.throws(() => env.call('clientRescheduleSchedule', a, res.id, inDays(7), inDays(7.04)), /Sesi kelas tidak bisa dipindah/);
+  const res = env.call('clientBookSchedule', a, wibSlot(6));
+  assert.throws(() => env.call('clientRescheduleSchedule', a, res.id, wibSlot(7).start, wibSlot(7).end), /Sesi kelas tidak bisa dipindah/);
 });
 
 test('group sessions use the group as Kelas ID, separate from the open class', () => {
   const { env, pkg } = classEnv(3);
   const a = env.memberToken(KEY_A), b = env.memberToken(KEY_B);
   const g = env.call('createClassGroup', a);
-  const start = inDays(5), end = inDays(5.04);
+  const { start, end } = wibSlot(5);
   env.call('clientBookSchedule', a, { start, end });
-  env.call('clientBookSchedule', b, { start: inDays(6), end: inDays(6.04) });   // B is not in the group: open class id
+  env.call('clientBookSchedule', b, wibSlot(6));   // B is not in the group: open class id
   const ids = env.sheet('Schedules').rows.filter(r => r[12] && r[0] !== 'ID').map(r => r[12]);
   assert.equal(ids.length, 2);
   assert.notEqual(ids[0], ids[1]);
@@ -126,6 +126,6 @@ test('group sessions use the group as Kelas ID, separate from the open class', (
 
 test('regular package members book exactly as before', () => {
   const env = seededEnv();
-  const res = env.call('clientBookSchedule', env.memberToken(KEY_A), { start: inDays(5), end: inDays(5.04) });
+  const res = env.call('clientBookSchedule', env.memberToken(KEY_A), wibSlot(5));
   assert.equal(env.sheet('Schedules').rows.find(r => r[0] === res.id)[12] || '', '');
 });

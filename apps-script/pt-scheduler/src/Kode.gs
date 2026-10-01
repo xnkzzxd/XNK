@@ -89,6 +89,10 @@
 // #############################################################################
 
 function doGet(e) {
+  // Cermin harga untuk situs statis (GitHub Action BookingPT): JSON publik, tanpa data klien.
+  if (e && e.parameter && e.parameter.view === 'prices') {
+    return ContentService.createTextOutput(JSON.stringify(getPriceListPublic())).setMimeType(ContentService.MimeType.JSON);
+  }
   var page = e && e.parameter && e.parameter.view ? e.parameter.view : 'Index';
   // Hanya file HTML yang benar-benar ada. Nilai lain (termasuk ?view=public untuk
   // portal klien) jatuh ke Index, yang membaca parameter view sendiri di browser.
@@ -3088,6 +3092,17 @@ function getPriceList() {
   });
 }
 
+/** Publik: paket aktif + kategori yang tampil di landing (urut tetap), untuk landing dan halaman /harga. */
+function getPriceListPublic() {
+  const cats = PACKAGE_CATEGORIES.filter(function(c) { return c.onLanding; }).map(function(c) { return { id: c.id, label: c.label }; });
+  const ids = {};
+  cats.forEach(function(c) { ids[c.id] = true; });
+  return {
+    categories: cats,
+    packages: getPriceList().filter(function(p) { return ids[p.kategori]; })
+  };
+}
+
 // ── Pricelist: kelola dari panel (admin) ─────────────────────────────────────
 
 function _packageUsage_() {
@@ -4829,7 +4844,8 @@ function _freeSlots_(o) {
       for (let h = range[0]; h < range[1]; h++) {
         const a = Date.parse(date + 'T' + ('0' + h).slice(-2) + ':00:00+07:00'), b = a + 3600000;
         let free = 0, off = false;
-        if (a > o.now.getTime()) {
+        const past = a <= o.now.getTime();
+        if (!past) {
           const avail = coaches.filter(function(c) { return !c.id || _coachAvailableAt_(c.id, o.rules, o.timeOff, date, h, dow); });
           const availIds = {};
           avail.forEach(function(c) { availIds[c.id] = true; });
@@ -4845,7 +4861,7 @@ function _freeSlots_(o) {
           free = Math.max(0, avail.length - used);
           off = avail.length === 0;   // tidak ada coach yang bertugas jam ini (di luar jam kerja / cuti)
         }
-        hours.push({ hour: h, free: free, off: off });
+        hours.push({ hour: h, free: free, off: off, past: past });
       }
     }
     out.push({ date: date, dow: dow, closed: hours.length === 0, hours: hours });

@@ -314,6 +314,10 @@ function createEnv(opts = {}) {
         return htmlOutput(fs.readFileSync(file, 'utf8'));
       },
     },
+    ContentService: {
+      MimeType: { JSON: 'JSON' },
+      createTextOutput: text => ({ content: text, mime: null, setMimeType(m) { this.mime = m; return this; } }),
+    },
     Logger: { log: (...a) => env.logs.push(a.join(' ')) },
   };
 

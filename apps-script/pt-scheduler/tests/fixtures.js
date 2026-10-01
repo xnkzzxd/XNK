@@ -12,6 +12,11 @@ const KEY_A = 'a'.repeat(32);
 const KEY_B = 'b'.repeat(32);
 const ADMIN_PIN = '246810';
 
+// 10:00-11:00 WIB, `d` days from today: always inside opening hours, whatever time the tests run.
+const wibSlot = d => {
+  const day = new Date(Date.now() + d * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  return { start: new Date(day + 'T10:00:00+07:00').toISOString(), end: new Date(day + 'T11:00:00+07:00').toISOString() };
+};
 const inDays = d => new Date(Date.now() + d * 86400000).toISOString();
 
 function seededEnv(opts) {
@@ -47,4 +52,4 @@ function seededEnv(opts) {
   return env;
 }
 
-module.exports = { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays, MEMBERDATA_HEADERS, SCHEDULE_HEADERS };
+module.exports = { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays, wibSlot, MEMBERDATA_HEADERS, SCHEDULE_HEADERS };

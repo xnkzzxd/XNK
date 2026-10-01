@@ -1098,32 +1098,31 @@ var BOOKING_LOOKAHEAD_DAYS = 7;
  * @returns {Array<{date:string,hour:number,day:number,label:string}>} maks n slot kosong, urut waktu.
  */
 function _nearestFreeSlots_(schedules, now, n, dayHours, lookaheadDays, avail) {
-  var busy = {};
-  (schedules || []).forEach(function(s) {
+  // Satu mesin slot (_freeSlots_), sama dengan Landing & portal: kapasitas per coach, jam kerja, cuti.
+  var bookings = (schedules || []).filter(function(s) {
     var st = String(s.status || '').toLowerCase();
-    if (st === 'cancelled' || st === 'completed') return;
-    var d = new Date(s.start);
-    if (isNaN(d.getTime())) return;
-    var p = _wibParts_(d);
-    busy[p.date + 'T' + p.hour] = true;
+    return st !== 'available' && st !== 'cancelled';
+  }).map(function(s) { return { start: s.start, end: s.end, coachId: String(s.coachId || '') }; });
+  var days = _freeSlots_({
+    businessHours: dayHours,
+    coaches: ((avail && avail.coaches) || []).map(function(c) { return { id: c.id }; }),
+    rules: (avail && avail.rules) || [], timeOff: (avail && avail.timeOff) || [],
+    bookings: bookings, from: _wibParts_(now).date, days: lookaheadDays + 1, now: now
   });
-
-  var hourMs = 3600000;
-  var t = Math.ceil(now.getTime() / hourMs) * hourMs;    // jam penuh berikutnya
-  var end = now.getTime() + lookaheadDays * 24 * hourMs;
+  var end = now.getTime() + lookaheadDays * 24 * 3600000;
   var out = [];
-  for (; t <= end && out.length < n; t += hourMs) {
-    var p = _wibParts_(new Date(t));
-    var h = dayHours[p.day];
-    if (!h || p.hour < h[0] || p.hour >= h[1]) continue;
-    if (busy[p.date + 'T' + p.hour]) continue;
-    if (avail && !_anyCoachAvailable_(avail.coaches, avail.rules, avail.timeOff, new Date(t), new Date(t + hourMs))) continue;   // E2: jam kerja & cuti coach
-    var dm = p.date.split('-');
-    out.push({
-      date: p.date, hour: p.hour, day: p.day,
-      label: BOOKING_DAY_NAMES[p.day] + ' ' + parseInt(dm[2], 10) + '/' + parseInt(dm[1], 10) + ' ' + ('0' + p.hour).slice(-2) + ':00'
+  days.forEach(function(day) {
+    day.hours.forEach(function(x) {
+      if (out.length >= n || x.free <= 0) return;
+      var at = Date.parse(day.date + 'T' + ('0' + x.hour).slice(-2) + ':00:00+07:00');
+      if (at > end) return;
+      var dm = day.date.split('-');
+      out.push({
+        date: day.date, hour: x.hour, day: day.dow,
+        label: BOOKING_DAY_NAMES[day.dow] + ' ' + parseInt(dm[2], 10) + '/' + parseInt(dm[1], 10) + ' ' + ('0' + x.hour).slice(-2) + ':00'
+      });
     });
-  }
+  });
   return out;
 }
 
