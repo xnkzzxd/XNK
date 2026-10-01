@@ -110,4 +110,5 @@ clasp pull
 - Tasks/PR for clients with recurring tasks and templates are live; the client portal shows them and a "Makan hari ini" card.
 - `runReminderTick` is a public trigger handler, gated by `RMD_ENABLED`, a lock and a throttle.
 - Sessions: admin 30 days, member 90 days (defaults). Revenue estimate = 65 % of package price.
+- Phone UX (2026-10): login shows one loader (the button, no splash); the panel opens from a localStorage copy (`xnk_admin_cache`, admin only, cleared on logout/auth loss) with no separate `checkAdminSession` call; secondary data (transaction log, tasks, renewals, revenue) loads after the first screen; pull-to-refresh (`refreshAll`) on `#main-scroll-area`; Android back stack (`syncBack`) closes sheet → detail → page → dashboard. New sheets/details/views get this for free through `openSheet`/`openDetail`/`navigate`; don't add your own `pushState` except for the settings sub-page.
 - Tests: 159 passing (`node --test`), plus the browser check with a phone pass for Pengaturan.

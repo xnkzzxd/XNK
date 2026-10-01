@@ -1046,6 +1046,15 @@ button.avatar { border: 0; cursor: pointer; }
 @keyframes slideInL { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
 @keyframes tabbarIn { from { opacity: 0; transform: translate(-50%, 30px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Tarik ke bawah untuk muat ulang (HP) */
+.main { overscroll-behavior-y: contain; }
+.ptr { position: fixed; left: 50%; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px)); z-index: 40; width: 40px; height: 40px; margin-left: -20px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-full); background: var(--surface); color: var(--fg); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.12); opacity: 0; pointer-events: none; transform: translateY(-56px); }
+.ptr.pulling { transition: none; }
+.ptr:not(.pulling) { transition: transform var(--t-base) var(--ease-out), opacity var(--t-base); }
+.ptr.spinning svg { animation: spin 0.8s linear infinite; }
+.ptr svg { width: 20px; height: 20px; }
+@media (prefers-reduced-motion: reduce) { .ptr.spinning svg { animation-duration: 2.4s; } }
 @keyframes shimmer { to { transform: translateX(100%); } }
 @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fg) 40%, transparent); } 50% { box-shadow: 0 0 0 6px transparent; } }
 @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.94); opacity: 0.85; } }
