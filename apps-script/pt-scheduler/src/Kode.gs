@@ -101,7 +101,10 @@ function doGet(e) {
 
   try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
 
+  // Ikon tab untuk halaman yang dibuka langsung (landing: situs publik; panel: xnk.my.id).
+  const faviconUrl = page === 'Landing' ? 'https://xnkbooking.my.id/favicon.ico' : 'https://xnk.my.id/favicon.ico';
   return HtmlService.createTemplateFromFile(page).evaluate()
+    .setFaviconUrl(faviconUrl)
     .setTitle('XNK Personal Training')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);

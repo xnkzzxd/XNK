@@ -295,3 +295,12 @@ test('doGet?view=prices serves public package JSON only', () => {
   assert.ok(data.packages.every(p => p.aktif && !('phone' in p)));
   assert.ok(!data.packages.some(p => p.namaPaket === 'Lama'));   // inactive hidden
 });
+
+test('doGet sets the tab icon per site, and the landing draws the real X mark (no chevron)', () => {
+  const env = seededEnv();
+  assert.equal(env.call('doGet', { parameter: { view: 'Landing' } }).faviconUrl, 'https://xnkbooking.my.id/favicon.ico');
+  assert.equal(env.call('doGet', { parameter: {} }).faviconUrl, 'https://xnk.my.id/favicon.ico');
+  const landing = env.call('doGet', { parameter: { view: 'Landing' } }).content;
+  assert.ok(!landing.includes('M7 11l5-5 5 5'), 'chevron path is gone');
+  assert.equal((landing.match(/fill-rule="evenodd" d="M/g) || []).length, 3, 'nav, intro and footer use the X mark');
+});

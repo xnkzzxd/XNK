@@ -209,6 +209,7 @@ function createEnv(opts = {}) {
       content,
       getContent: () => content,
       setTitle: () => out,
+      setFaviconUrl: url => { out.faviconUrl = url; return out; },
       addMetaTag: () => out,
       setXFrameOptionsMode: () => out,
     };
