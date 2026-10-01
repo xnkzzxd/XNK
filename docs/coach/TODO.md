@@ -78,6 +78,7 @@ Requirements: CP-6…CP-10.
 | [x] | T-243 | **Docs**: `apps-script/README.md` (Indonesian: Coach hub, jam kerja, form kesehatan, tes ulang, targets), root `README.md`, [../Agent.md](../Agent.md) §7 and this folder's Agent §6, tick the boxes. | docs | all above | S | Docs match the shipped UI. |
 
 | [x] | T-244 | **Premium client coach page**: dark hero card with live status pill, KPI tiles (clients, sessions, rating from `getLandingStats`), nearest free slots from the slot engine, icon sections, testimonial cards with stars. Same renderer for the owner preview. | App.html, Theme.html, Kode.gs, tests/coach.test.js, tools/browser-check.js | T-241 | M | Portal Coach tab at 390 px has no sideways scroll, 44 px buttons, Chat WA still opens WhatsApp. (The sticky Booking bar was not built; the hero buttons are the call to action.) |
+| [x] | T-245 | **Booking rules enforced on the server for clients**: one rule (`_slotProblem_`) refuses a past time, a time outside Jam Operasional, an hour no coach works or on a day off, and an hour that is already booked (also partly overlapping). Applies to `clientBookSchedule` (check + write under one lock), every date of `clientBookRecurring` (all or none) and the new time in `clientRescheduleSchedule`. The owner's own bookings only get warnings. | Kode.gs, tests/availability.test.js | T-212 | M | Tests prove each refusal and each allowed case. |
 
 ## Later
 
