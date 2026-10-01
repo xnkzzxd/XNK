@@ -224,3 +224,23 @@ test('the owner can still book outside hours or on a booked hour, with a warning
   const free = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: FUT(4, 13), end: FUT(4, 14), notes: '' });
   assert.equal(free.warnings.length, 0);
 });
+
+test('each hour carries a server-side past flag (WIB), so the browser clock never decides', () => {
+  const env = seededEnv();
+  // 2030-01-07 10:30 WIB = 03:30Z: hours up to 10:00 started already, 11:00 onward are ahead.
+  const [d] = run(env, { now: new Date('2030-01-07T03:30:00Z') });
+  const past = Array.from(d.hours).filter(h => h.past).map(h => h.hour);
+  assert.deepEqual(JSON.parse(JSON.stringify(past)), [6, 7, 8, 9, 10]);
+  assert.ok(Array.from(d.hours).filter(h => h.past).every(h => h.free === 0));
+  assert.ok(Array.from(d.hours).filter(h => !h.past).every(h => h.free === 1));
+});
+
+test('booking-minggu digest slots come from the same engine as the landing', () => {
+  const env = seededEnv();
+  const now = new Date('2030-01-07T03:30:00Z');   // Monday 10:30 WIB
+  const bookings = [{ start: at(MON, 11), end: at(MON, 12), coachId: 'C-1', status: 'read' }, { start: at(MON, 12), end: at(MON, 13), coachId: 'C-1', status: 'cancelled' }];
+  const nearest = JSON.parse(JSON.stringify(env.callRaw('_nearestFreeSlots_', bookings, now, 3, BH, 7, { coaches: [{ id: 'C-1' }], rules: [], timeOff: [] })));
+  const engine = Array.from(run(env, { now, bookings: bookings.filter(b => b.status !== 'cancelled'), days: 1 })[0].hours).filter(h => h.free > 0).slice(0, 3).map(h => h.hour);
+  assert.deepEqual(nearest.map(s => s.hour), engine);
+  assert.deepEqual(engine, [12, 13, 14]);   // 11:00 is booked, cancelled 12:00 stays free
+});
