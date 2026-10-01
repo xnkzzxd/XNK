@@ -2410,7 +2410,7 @@
     const sel = $('detail-assign-coach');
     const coachId = sel ? sel.value : '';
     const coach = window.coaches.find(c => String(c.id) === String(coachId));
-    const coachName = coach ? coach.name : 'Belum Ditugaskan';
+    const coachName = coach ? coach.name : '';
     const done = busy($('btn-save-coach'), '…');
     adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId, coachName).then(function () {
       const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));

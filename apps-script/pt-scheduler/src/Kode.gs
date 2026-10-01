@@ -1651,6 +1651,12 @@ function getPublicSchedules(memberToken) {
   });
 }
 
+/** T-200: coach kosong = ID kosong + nama kosong. Baris lama yang menyimpan teks placeholder dibaca sebagai kosong. */
+function _coachNameOrEmpty_(v) {
+  const n = sanitizeValue(v);
+  return String(n).trim() === 'Belum Ditugaskan' ? '' : n;
+}
+
 function _getSchedulesAll_() {
   const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID"];
   const sheet = getOrCreateSheet_('Schedules', headers);
@@ -1667,7 +1673,7 @@ function _getSchedulesAll_() {
       notes: sanitizeValue(row[6]),
       status: sanitizeValue(row[7]) || 'read',
       coachId: sanitizeValue(row[8]),
-      coachName: sanitizeValue(row[9]),
+      coachName: _coachNameOrEmpty_(row[9]),   // T-200: teks lama "Belum Ditugaskan" dibaca sebagai kosong
       completedAt: sanitizeValue(row[10]) || '',
       recurringGroupId: sanitizeValue(row[11]) || ''
     };
@@ -1714,7 +1720,7 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
     sheet.appendRow([
       id, scheduleData.memberId, scheduleData.memberName, scheduleData.phone.toString(),
       scheduleData.start, scheduleData.end, scheduleData.notes, status,
-      coachId, coachName || "Belum Ditugaskan", "", scheduleData.recurringGroupId || ""
+      coachId, coachName || "", "", scheduleData.recurringGroupId || ""
     ]);
 
     // Hanya notif di sini kalau BUKAN booking mandiri klien (statusParam 'unread') DAN bukan silent,

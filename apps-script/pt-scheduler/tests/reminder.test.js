@@ -92,6 +92,14 @@ test('sesi-besok: one button per client with a session tomorrow, addressed to th
   assert.equal(waText(bs[1]), 'Hai Budi, pengingat sesi besok jam 07:00 dan 17:00.\n\nSampai ketemu! 💪');   // no coach → no stray " ."
 });
 
+test('sesi-besok: the old "Belum Ditugaskan" placeholder reads as no coach (T-200)', () => {
+  const env = withSchedules([
+    sched('S1', 'PT-B', 'Budi', '081222222222', '2026-10-01T00:00:00Z', 'read', 'Belum Ditugaskan'),
+  ]);
+  assert.equal(env.callRaw('sendSesiBesokDigest_', ctx(env)), true);
+  assert.equal(waText(buttons(env)[0]), 'Hai Budi, pengingat sesi besok jam 07:00.\n\nSampai ketemu! 💪');
+});
+
 test('sesi-besok: the sleep sentence goes inside the client message', () => {
   const env = withSchedules([sched('S1', 'PT-A', 'Ani Anggraini', '6281111111111', '2026-09-30T23:00:00Z', 'read', 'Rizky')]);
   env.props.RMD_TPL_SLEEP = 'Tidur sebelum jam 10 ya.';
