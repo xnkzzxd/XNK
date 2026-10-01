@@ -1999,7 +1999,7 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
     }
 
     let warnings = [];
-    try { warnings = _slotWarnings_(scheduleData.start, scheduleData.end || scheduleData.start); } catch (e) { warnings = []; }
+    try { warnings = _slotWarnings_(scheduleData.start, scheduleData.end || scheduleData.start, id); } catch (e) { warnings = []; }
     return { status: 'success', id: id, coachId: coachId, coachName: coachName, warnings: warnings };
   } catch(error) {
     throw new Error('Gagal menyimpan jadwal: ' + error.message);
@@ -2038,15 +2038,21 @@ function addRecurringSchedule(token, baseScheduleData, recurrenceRule) {
 function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule) {
   const member = requireMember_(memberToken);
   const base = baseScheduleData || {};
-  return _addRecurringInternal_({
-    memberId: String(member.row[0]).trim(),
-    memberName: member.row[1],
-    phone: String(member.row[2]),
-    notes: String(base.notes || '').slice(0, 500),
-    startDate: String(base.startDate || ''),
-    time: String(base.time || ''),
-    duration: base.duration
-  }, recurrenceRule, 'unread');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    return _addRecurringInternal_({
+      memberId: String(member.row[0]).trim(),
+      memberName: member.row[1],
+      phone: String(member.row[2]),
+      notes: String(base.notes || '').slice(0, 500),
+      startDate: String(base.startDate || ''),
+      time: String(base.time || ''),
+      duration: base.duration
+    }, recurrenceRule, 'unread');
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function _addRecurringInternal_(baseScheduleData, recurrenceRule, status) {
@@ -2068,6 +2074,21 @@ function _addRecurringInternal_(baseScheduleData, recurrenceRule, status) {
 
     const weekdaySet = {};
     weekdays.forEach(function(w) { weekdaySet[Number(w)] = true; });
+
+    // Booking mandiri klien: semua tanggal harus boleh dibooking; kalau satu saja gagal, tidak ada yang dibuat.
+    if (status === 'unread') {
+      let probe = new Date(startY, startM - 1, startD, hh, mm, 0), made = 0, guard = 0;
+      while (made < occurrences && guard < 400) {
+        guard++;
+        if (weekdaySet[probe.getDay()]) {
+          made++;
+          const end = new Date(probe.getTime() + durationMin * 60000);
+          const p = _slotProblem_(probe.toISOString(), end.toISOString(), '', false);
+          if (p) throw new Error(p.message.replace(/\.$/, '') + ' (' + probe.toLocaleDateString('id-ID', {weekday:'short', day:'numeric', month:'short'}) + ' ' + baseScheduleData.time + '). Tidak ada sesi yang dibuat.');
+        }
+        probe = new Date(probe.getTime() + 24 * 60 * 60000);
+      }
+    }
 
     const ids = [];
     const dates = [];
@@ -2238,6 +2259,16 @@ function _rescheduleCutoff_() { return _numProp_('RESCHEDULE_CUTOFF_HOURS', RESC
  */
 function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd) {
   const memberId = String(requireMember_(memberToken).row[0]).trim();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    return _clientReschedule_(memberId, scheduleId, newStart, newEnd);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _clientReschedule_(memberId, scheduleId, newStart, newEnd) {
   try {
     _validateSlot_(newStart, newEnd);
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
@@ -2265,6 +2296,9 @@ function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd) {
       if (hoursUntilOldStart < _rescheduleCutoff_()) {
         throw new Error('Reschedule mandiri sudah lewat batas waktu (minimal ' + _rescheduleCutoff_() + ' jam sebelum jadwal). Silakan hubungi Coach langsung via WhatsApp.');
       }
+
+      // 4. Waktu BARU harus boleh dibooking (jam operasional, coach, belum terisi); jadwal ini sendiri tidak dihitung.
+      _assertClientSlotOpen_(newStart, newEnd, scheduleId);
 
       const memberName = data[i][2];
       const oldStartStr = data[i][4];
@@ -2337,21 +2371,29 @@ function clientBookSchedule(memberToken, scheduleData) {
   const member = requireMember_(memberToken);
   scheduleData = scheduleData || {};
   _validateSlot_(scheduleData.start, scheduleData.end);
-  _assertSlotBookable_(scheduleData.start, scheduleData.end);
 
   const memberName = String(member.row[1]);
   const phone = _normalizePhone_(member.row[2]);
   const notes = String(scheduleData.notes || '').slice(0, 500);
   const duration = Math.round((new Date(scheduleData.end) - new Date(scheduleData.start)) / 60000);
 
-  const addResult = _addScheduleInternal_({
-    memberId: String(member.row[0]).trim(),
-    memberName: memberName,
-    phone: phone,
-    start: scheduleData.start,
-    end: scheduleData.end,
-    notes: notes
-  }, 'unread');
+  // Cek + tulis dalam satu lock supaya dua klien tidak bisa mengambil jam yang sama bersamaan.
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  let addResult;
+  try {
+    _assertClientSlotOpen_(scheduleData.start, scheduleData.end, '');
+    addResult = _addScheduleInternal_({
+      memberId: String(member.row[0]).trim(),
+      memberName: memberName,
+      phone: phone,
+      start: scheduleData.start,
+      end: scheduleData.end,
+      notes: notes
+    }, 'unread');
+  } finally {
+    lock.releaseLock();
+  }
   const newId = addResult.id;
   const assignedCoachName = addResult.coachName || '';
   const startTime = new Date(scheduleData.start);
@@ -4788,15 +4830,48 @@ function _anyCoachAvailable_(coaches, rules, timeOff, start, end) {
   });
 }
 
-function _slotWarnings_(start, end) {
-  const rules = _coachRules_(), timeOff = _coachTimeOff_(false);
-  if (_anyCoachAvailable_(_activeCoaches_(), rules, timeOff, start, end)) return [];
-  return [timeOff.length ? 'Di luar jam kerja atau bertepatan dengan cuti.' : 'Di luar jam kerja.'];
+/**
+ * Satu-satunya aturan "boleh dibooking?" untuk SATU jadwal: kembalikan null kalau boleh, atau {code, message}.
+ * code: 'past' | 'closed' | 'unavailable' | 'taken'. Memakai mesin slot yang sama dengan Landing & portal.
+ * excludeId = jadwal yang sedang dipindah / baru dibuat (tidak dihitung sebagai bentrok).
+ */
+function _slotProblem_(start, end, excludeId, allowPast) {
+  const s = new Date(start), e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return { code: 'closed', message: 'Waktu jadwal tidak valid.' };
+  if (!allowPast && s.getTime() <= Date.now()) return { code: 'past', message: 'Jam ini sudah lewat.' };
+  const bh = _businessHours_();
+  const coaches = _activeCoaches_().map(function(c) { return { id: c.id }; });
+  const rules = _coachRules_(), off = _coachTimeOff_(false);
+  const bookings = _getSchedulesAll_().filter(function(x) {
+    const st = String(x.status || '').toLowerCase();
+    return st !== 'available' && st !== 'cancelled' && String(x.id) !== String(excludeId || '');
+  }).map(function(x) { return { start: x.start, end: x.end, coachId: String(x.coachId || '') }; });
+  const cache = {};
+  for (let t = Math.floor(s.getTime() / 3600000) * 3600000; t < e.getTime(); t += 3600000) {
+    const w = _wibParts_(new Date(t));
+    const range = bh[w.day];
+    if (!range || w.hour < range[0] || w.hour >= range[1]) return { code: 'closed', message: 'Jam ini di luar jam operasional.' };
+    const day = cache[w.date] || (cache[w.date] = _freeSlots_({ businessHours: bh, coaches: coaches, rules: rules, timeOff: off, bookings: bookings, from: w.date, days: 1, now: new Date(0) })[0]);
+    const hr = Array.from(day.hours).find(function(x) { return x.hour === w.hour; });
+    if (!hr || hr.off) return { code: 'unavailable', message: 'Jam ini tidak tersedia.' };
+    if (hr.free <= 0) return { code: 'taken', message: 'Jam ini sudah dibooking. Pilih jam lain.' };
+  }
+  return null;
 }
 
-function _assertSlotBookable_(start, end) {
-  if (_anyCoachAvailable_(_activeCoaches_(), _coachRules_(), _coachTimeOff_(false), start, end)) return;
-  throw new Error('Jam ini tidak tersedia.');
+/** Peringatan (tidak memblokir) untuk booking buatan pemilik. */
+function _slotWarnings_(start, end, excludeId) {
+  const p = _slotProblem_(start, end, excludeId, true);
+  if (!p) return [];
+  if (p.code === 'closed') return ['Di luar jam operasional.'];
+  if (p.code === 'taken') return ['Jam ini sudah ada booking.'];
+  return [_coachTimeOff_(false).length ? 'Di luar jam kerja atau bertepatan dengan cuti.' : 'Di luar jam kerja.'];
+}
+
+/** Klien: lempar error Indonesia kalau jam tidak boleh dibooking (lewat, tutup, coach tidak ada, atau sudah terisi). */
+function _assertClientSlotOpen_(start, end, excludeId) {
+  const p = _slotProblem_(start, end, excludeId, false);
+  if (p) throw new Error(p.message);
 }
 
 // ── 📂 Admin: jam kerja & cuti ──────────────────────────────────────────────

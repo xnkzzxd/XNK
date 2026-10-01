@@ -128,3 +128,99 @@ test('getPublicAvailability keeps its shape and no longer creates the sheet on r
   assert.ok(rows.length > 0);
   assert.deepEqual(Object.keys(rows[0]).sort(), ['availableSlots', 'coachId', 'coachName', 'date']);
 });
+
+// ── Client booking rules: hours, past, booked hour, reschedule, recurring ────
+
+const FUT = (daysAhead, hour, min) => {
+  const day = new Date(Date.now() + daysAhead * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  return new Date(day + 'T' + ('0' + hour).slice(-2) + ':' + ('0' + (min || 0)).slice(-2) + ':00+07:00').toISOString();
+};
+const book = (env, start, end) => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_A), { start, end: end || new Date(new Date(start).getTime() + 3600000).toISOString() });
+const noSchedules = env => { env.sheet('Schedules').rows.length = 1; };
+
+test('clients cannot book outside the opening hours or in the past', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  assert.throws(() => book(env, FUT(3, 3)), /di luar jam operasional/);     // 03:00 WIB
+  assert.throws(() => book(env, FUT(3, 22)), /di luar jam operasional/);    // after closing
+  assert.throws(() => book(env, FUT(3, 20, 30), FUT(3, 21, 30)), /di luar jam operasional/);   // runs past closing
+  assert.throws(() => book(env, new Date(Date.now() - 3600000).toISOString()), /sudah lewat/);
+  assert.equal(book(env, FUT(3, 10)).status, 'success');                    // inside hours is fine
+});
+
+test('the opening hours set in Pengaturan are enforced for clients', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const hours = { 0: [6, 12], 1: [9, 12], 2: [9, 12], 3: [9, 12], 4: [9, 12], 5: [9, 12], 6: [9, 12] };
+  env.call('updateAppSettings', env.adminToken(), { businessHours: hours });
+  assert.throws(() => book(env, FUT(3, 14)), /di luar jam operasional/);
+  assert.equal(book(env, FUT(3, 10)).status, 'success');
+});
+
+test('clients cannot take an hour that is already booked, even partly, but a free neighbour hour is fine', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
+  assert.throws(() => book(env, FUT(4, 10)), /sudah dibooking/);
+  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 11, 30)), /sudah dibooking/);   // overlaps the booked hour
+  assert.throws(() => book(env, FUT(4, 9, 30), FUT(4, 10, 30)), /sudah dibooking/);
+  assert.equal(book(env, FUT(4, 11)).status, 'success');
+  assert.equal(book(env, FUT(4, 9)).status, 'success');
+});
+
+test('the second of two identical bookings is refused (the check and the write are one step)', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  book(env, FUT(5, 15));
+  assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(5, 15), end: FUT(5, 16) }), /sudah dibooking/);
+  assert.equal(env.sheet('Schedules').rows.filter(r => r[4] === FUT(5, 15)).length, 1);
+});
+
+test('with two coaches an hour stays open until both are taken', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
+  assert.equal(book(env, FUT(4, 10)).status, 'success');
+  assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(4, 10), end: FUT(4, 11) }), /sudah dibooking/);
+});
+
+test('clients cannot reschedule onto a booked hour or outside hours, but can onto a free hour or their own hour', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const mine = book(env, FUT(6, 10));
+  env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(6, 14), FUT(6, 15), '', 'read', 'C-1', 'Rizky', '', '']);
+  const mt = env.memberToken(require('./fixtures').KEY_A);
+  assert.throws(() => env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 14), FUT(6, 15)), /sudah dibooking/);
+  assert.throws(() => env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 3), FUT(6, 4)), /di luar jam operasional/);
+  assert.equal(env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 10, 30), FUT(6, 11, 30)).status, 'success');   // overlaps only itself
+  assert.equal(env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 16), FUT(6, 17)).status, 'success');
+});
+
+test('a recurring series books all dates or none', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const start = new Date(FUT(3, 10));
+  const z = n => String(n).padStart(2, '0');
+  const local = new Date(start);
+  const startDate = local.getFullYear() + '-' + z(local.getMonth() + 1) + '-' + z(local.getDate());
+  const time = z(local.getHours()) + ':' + z(local.getMinutes());
+  env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(5, 10), FUT(5, 11), '', 'read', 'C-1', 'Rizky', '', '']);   // blocks day 5
+  const mt = env.memberToken(require('./fixtures').KEY_A);
+  const before = env.sheet('Schedules').rows.length;
+  assert.throws(() => env.call('clientBookRecurring', mt, { startDate, time, duration: 60 }, { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 4 }), /sudah dibooking.*Tidak ada sesi yang dibuat/);
+  assert.equal(env.sheet('Schedules').rows.length, before);
+});
+
+test('the owner can still book outside hours or on a booked hour, with a warning', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
+  const t = env.adminToken();
+  const closed = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: FUT(4, 3), end: FUT(4, 4), notes: '' });
+  assert.match(closed.warnings[0], /jam operasional/);
+  const taken = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: FUT(4, 10), end: FUT(4, 11), notes: '' });
+  assert.match(taken.warnings[0], /sudah ada booking/);
+  const free = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: FUT(4, 13), end: FUT(4, 14), notes: '' });
+  assert.equal(free.warnings.length, 0);
+});

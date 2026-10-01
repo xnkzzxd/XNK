@@ -244,10 +244,12 @@ test("clients can only reschedule their own sessions", () => {
 
 test('clientBookRecurring books for the token owner as unread', () => {
   const env = seededEnv();
-  const d = new Date(Date.now() + 86400000);
-  const startDate = d.toISOString().slice(0, 10);
+  // 10:00 WIB, expressed in the machine's own time zone (the server builds dates in script time).
+  const wibDay = new Date(Date.now() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const t = new Date(wibDay + 'T10:00:00+07:00'), z = n => String(n).padStart(2, '0');
+  const startDate = t.getFullYear() + '-' + z(t.getMonth() + 1) + '-' + z(t.getDate());
   const res = env.call('clientBookRecurring', env.memberToken(KEY_B),
-    { memberId: 'PT-A', startDate, time: '09:00', duration: 60, notes: 'x' },
+    { memberId: 'PT-A', startDate, time: z(t.getHours()) + ':' + z(t.getMinutes()), duration: 60, notes: 'x' },
     { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 3 });
   assert.equal(res.count, 3);
   const rows = env.sheet('Schedules').rows.filter(r => r[11] === res.groupId);
