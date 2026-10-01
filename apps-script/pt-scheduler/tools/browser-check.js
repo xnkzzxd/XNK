@@ -410,6 +410,22 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(400);
     check(!(await visible(page, '#calendar-coach-filter')), 'solo mode hides the calendar coach filter');
+    await page.evaluate(() => window.navigate('coaches'));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openHoursPage());
+    await page.waitForTimeout(700);
+    check((await page.textContent('#detail-panel')).includes('Ikut jam studio'), 'hours page says the coach follows studio hours when nothing is saved');
+    await page.evaluate(() => window.openHoursEditor());
+    await page.waitForTimeout(500);
+    check(await visible(page, '#coach-hours-rows'), 'hours editor opens');
+    await page.evaluate(() => { window.hoursCopyStudio(); window.saveHours(); });
+    await page.waitForTimeout(900);
+    check((await page.textContent('#detail-panel')).includes('Jam kerja'), 'hours saved and the page reloads');
+    await page.evaluate(() => window.openTimeOffSheet());
+    await page.waitForTimeout(500);
+    check(await visible(page, '#off-from'), 'time-off sheet opens');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
 
     // Closing a sheet stacked on top of the detail panel must not leave a full-viewport
     // ghost overlay eating the very next click (was: #sheet-layer kept pointer-events:auto
@@ -1282,7 +1298,9 @@ async function contrastReport(page) {
       ['C-1', 'Rizky', '6281112223334', 'Strength', '', 'Bio', '3 Tahun'],
       ['C-2', 'Dina', '6281112223335', 'Cardio', '', 'Bio', '2 Tahun'],
     ]);
-    const at = (days, h) => { const d = new Date(Date.now() + days * 86400000); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+    // Jam dihitung di WIB, seperti mesin slot server (mesin ini tidak harus berzona waktu WIB).
+    const wibDate = days => new Date(Date.now() + days * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const at = (days, h) => new Date(wibDate(days) + 'T' + ('0' + h).slice(-2) + ':00:00+07:00').toISOString();
     const plusH = (iso, h) => new Date(new Date(iso).getTime() + h * 3600000).toISOString();
     const rows = env.sheet('Schedules').rows;
     // Hari ke-4: cuma C-1 sibuk jam 10 — C-2 masih bisa, jadi jam itu HARUS tetap kosong
@@ -1311,7 +1329,7 @@ async function contrastReport(page) {
   console.log('Landing · slot kosong (jam kerja asli coach, CoachAvailability)');
   {
     const env = seededEnv();
-    const dow = new Date(Date.now() + 86400000).getDay();
+    const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();
     const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
     env.ss.seed('CoachAvailability', [
       ['Coach ID', 'Hari', 'Jam Mulai', 'Jam Selesai'],
@@ -1335,7 +1353,7 @@ async function contrastReport(page) {
     await page.click('#slot-days [data-day="1"]');
     await page.waitForTimeout(300);
     const hours = await page.locator('#slot-hours .slot-h').evaluateAll(els => els.map(e => Number(e.getAttribute('data-h'))));
-    const dow = new Date(Date.now() + 86400000).getDay();
+    const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();
     const expected = ({ 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] })[dow];
     check(hours.length === expected[1] - expected[0], 'no CoachAvailability rules → falls back to the default opening hours, no regression (' + hours.length + ' jam)');
     noErrors(errors);

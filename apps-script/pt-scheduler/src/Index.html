@@ -366,6 +366,36 @@
       </form>
     </div>
 
+    <div class="sheet hide" id="modal-coach-hours" role="dialog" aria-modal="true" aria-labelledby="coach-hours-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="coach-hours-title">Jam kerja</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px">
+        <p class="hint">Hari tanpa jam dianggap libur. Kosongkan semua hari untuk mengikuti jam operasional studio.</p>
+        <button type="button" class="btn btn-outline btn-block" onclick="window.hoursCopyStudio()">Salin jam operasional</button>
+        <div id="coach-hours-rows" class="stack" style="gap:10px"></div>
+        <button type="button" class="btn btn-primary btn-lg btn-block" id="btn-save-hours" onclick="window.saveHours()">Simpan jam kerja</button>
+      </div>
+    </div>
+
+    <div class="sheet hide" id="modal-coach-timeoff" role="dialog" aria-modal="true" aria-labelledby="coach-timeoff-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="coach-timeoff-title">Tambah cuti</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-timeoff" onsubmit="window.submitTimeOff(event)">
+        <div class="two">
+          <div class="field"><label class="label" for="off-from">Mulai</label><input class="input" id="off-from" type="date" required></div>
+          <div class="field"><label class="label" for="off-to">Selesai</label><input class="input" id="off-to" type="date" required></div>
+        </div>
+        <label class="row" style="gap:10px;min-height:44px"><input type="checkbox" id="off-allday" checked onchange="window.toggleOffHours()"> Seharian</label>
+        <div class="two hide" id="off-hours">
+          <div class="field"><label class="label" for="off-hfrom">Dari jam</label><input class="input num" id="off-hfrom" type="number" inputmode="numeric" min="0" max="23" placeholder="10"></div>
+          <div class="field"><label class="label" for="off-hto">Sampai jam</label><input class="input num" id="off-hto" type="number" inputmode="numeric" min="1" max="24" placeholder="12"></div>
+        </div>
+        <div class="field"><label class="label" for="off-note">Catatan (hanya kamu yang lihat)</label><input class="input" id="off-note" type="text" maxlength="100" placeholder="Dokter, acara keluarga…"></div>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan cuti</button>
+        <div id="off-clashes" class="stack" style="gap:8px"></div>
+      </form>
+    </div>
+
     <!-- Paket & Harga: menu aksi paket -->
     <div class="sheet sm hide" id="sheet-pkg-menu" role="dialog" aria-modal="true" aria-labelledby="pkg-menu-title">
       <div class="sheet-handle"></div>

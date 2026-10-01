@@ -795,7 +795,41 @@
     });
   })();
 
+  // E2: satu mesin slot di server (getOpenSlots: jam operasional, jam kerja & cuti coach, kapasitas).
+  // Kalau gagal (mis. versi server lama), jatuh ke perhitungan lama di bawah.
+  function slotsFromEngine(rows) {
+    var now = new Date();
+    return rows.map(function (r) {
+      var p = r.date.split('-');
+      var day = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+      return {
+        date: day,
+        hours: r.hours.filter(function (x) { return !x.off; }).map(function (x) {
+          var s0 = new Date(day); s0.setHours(x.hour, 0, 0, 0);
+          return { h: x.hour, open: x.free > 0, past: s0 <= now };
+        })
+      };
+    });
+  }
+  function showSlotDays(days) {
+    slots.days = days;
+    var firstOpen = 0;
+    for (var i = 0; i < slots.days.length; i++) {
+      if (slots.days[i].hours.some(function (x) { return x.open; })) { firstOpen = i; break; }
+    }
+    slots.selected = firstOpen;
+    renderSlotDays();
+  }
   function loadSlots() {
+    call('getBusinessHours').catch(function () { return null; }).then(function (bh) { if (bh) Object.assign(DAY_HOURS, bh); })
+      .then(function () { return call('getOpenSlots', { days: 7 }); })
+      .then(function (rows) {
+        if (!Array.isArray(rows) || !rows.length) throw new Error('no engine');
+        showSlotDays(slotsFromEngine(rows));
+      })
+      .catch(loadSlotsLegacy);
+  }
+  function loadSlotsLegacy() {
     Promise.all([
       call('getPublicSchedules'),
       call('getCoaches'),

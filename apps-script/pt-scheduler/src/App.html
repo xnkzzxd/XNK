@@ -1633,6 +1633,17 @@
     window.coachSelfId = res.selfId || '';
     window.coaches = window.coachesAll.filter(function (c) { return c.aktif; });
   }
+  // E2: jam kosong dari mesin slot server (jam operasional, jam kerja & cuti coach, kapasitas).
+  // Kalau gagal, panel jam memakai hitungan lama di publicDayPanel.
+  window.openSlotsByDate = null;
+  window.loadOpenSlots = function () {
+    return publicCall('getOpenSlots', { days: 21 }).then(function (rows) {
+      const map = {};
+      (rows || []).forEach(function (d) { const f = {}; d.hours.forEach(function (x) { f[x.hour] = x.free; }); map[d.date] = f; });
+      window.openSlotsByDate = map;
+      if (window.isPublicView && window.currentView === 'calendar') renderView('calendar', { animate: false });
+    }).catch(function () { window.openSlotsByDate = null; });
+  };
   window.loadAllData = function () {
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     return Promise.all([
@@ -1700,6 +1711,7 @@
       window.priceListData = r[2] || [];
       if (r[3]) Object.assign(DAY_HOURS, r[3]);
       if (token && r[4]) window.setPublicMember(r[4]);
+      window.loadOpenSlots();
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (window._openMemberDashboard && window.publicLoggedMember) {
@@ -2292,7 +2304,8 @@
       const s1 = new Date(s0.getTime() + 3600000);
       const overlapping = list.filter(s => isBooked(s) && new Date(s.start) < s1 && new Date(s.end || s.start) > s0);
       const isMine = me && overlapping.some(s => String(s.memberId) === String(me.id));
-      const taken = !isMine && overlapping.length >= coachCount;
+      const eng = window.openSlotsByDate && window.openSlotsByDate[ymd(day)];
+      const taken = !isMine && (eng && eng[hh] !== undefined ? eng[hh] <= 0 : overlapping.length >= coachCount);
       const past = s0 <= now;
       const label = pad(hh) + '.00';
       if (isMine) slots += '<button type="button" class="slot mine" disabled>' + icon('check', 'style="width:14px;height:14px"') + label + '</button>';
@@ -3302,6 +3315,9 @@
       html += '<div class="card-flat row-between" style="margin-bottom:16px;gap:12px"><div><p class="li-title">' + unassigned + ' jadwal belum punya coach</p><p class="li-sub">Tetapkan semuanya ke coach "Ini saya".</p></div>' +
         '<button type="button" class="btn btn-secondary" onclick="window.assignUnassignedConfirm()">Tetapkan ke saya</button></div>';
     }
+    if (window.coaches.length) {
+      html += '<button type="button" class="card-flat list-item interactive" style="width:100%;margin-bottom:16px;text-align:left" onclick="window.openHoursPage()">' + icon('calendar-clock') + '<span class="grow"><span class="li-title" style="display:block">Jam kerja &amp; cuti</span><span class="li-sub">Atur jam tersedia dan hari libur</span></span>' + icon('chevron-right') + '</button>';
+    }
     if (!list.length) {
       html += emptyState('dumbbell', 'Belum ada coach', 'Tambahkan coach untuk mulai membagi sesi.');
     } else {
@@ -3318,6 +3334,97 @@
     }
     setHTML(el, html);
   }
+
+
+  // ── Jam kerja & cuti (E2) ───────────────────────────────────────────────────
+  const HOURS_DAYS = [['senin', 'Senin', 1], ['selasa', 'Selasa', 2], ['rabu', 'Rabu', 3], ['kamis', 'Kamis', 4], ['jumat', 'Jumat', 5], ['sabtu', 'Sabtu', 6], ['minggu', 'Minggu', 0]];
+  let hoursState = null, hoursStudio = null, hoursCoachId = '';
+  const p2 = n => ('0' + n).slice(-2);
+
+  function hoursSummary(ranges) { return ranges.length ? ranges.map(r => p2(r[0]) + '–' + p2(r[1])).join(', ') : 'Libur'; }
+
+  window.openHoursPage = function () {
+    adminCall('getCoachAvailability').then(function (a) {
+      hoursState = a.week; hoursStudio = a.businessHours; hoursCoachId = a.coachId;
+      window._hoursAvail = a;
+      const rows = HOURS_DAYS.map(d => '<div class="row-between" style="min-height:44px"><span>' + d[1] + '</span><span class="li-sub num">' + (a.hasRules ? h(hoursSummary(a.week[d[0]])) : 'Ikut jam studio') + '</span></div>').join('');
+      const off = a.timeOff.length ? a.timeOff.map(function (o) {
+        const when = o.from === o.to ? o.from : o.from + ' → ' + o.to;
+        return '<div class="row-between" style="min-height:48px;gap:8px"><div class="grow"><p class="li-title">' + h(when) + '</p><p class="li-sub">' + (o.hourFrom === null ? 'Seharian' : p2(o.hourFrom) + '–' + p2(o.hourTo)) + (o.note ? ' · ' + h(o.note) : '') + '</p></div>' +
+          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\')">' + icon('trash-2') + '</button></div>';
+      }).join('') : '<p class="li-sub">Belum ada cuti.</p>';
+      const body = '<div class="stack" style="gap:16px"><div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Jam kerja</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openHoursEditor()">Ubah</button></div>' + rows + '</div>' +
+        '<div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Cuti</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTimeOffSheet()">' + icon('plus') + 'Tambah</button></div>' + off + '</div></div>';
+      openDetail('hours', 'Jam kerja & cuti', '', body);
+    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
+  function renderHoursRows() {
+    $('coach-hours-rows').innerHTML = HOURS_DAYS.map(function (d) {
+      const ranges = hoursState[d[0]];
+      const inputs = ranges.map(function (r, i) {
+        return '<div class="row" style="gap:6px;align-items:center"><input class="input num" style="width:64px;text-align:center" type="number" inputmode="numeric" min="0" max="24" value="' + r[0] + '" aria-label="' + d[1] + ' mulai" onchange="window.hoursEdit(\'' + d[0] + '\',' + i + ',0,this.value)">' +
+          '<span>–</span><input class="input num" style="width:64px;text-align:center" type="number" inputmode="numeric" min="0" max="24" value="' + r[1] + '" aria-label="' + d[1] + ' selesai" onchange="window.hoursEdit(\'' + d[0] + '\',' + i + ',1,this.value)">' +
+          '<button type="button" class="icon-btn plain" aria-label="Hapus rentang" onclick="window.hoursRemove(\'' + d[0] + '\',' + i + ')">' + icon('x') + '</button></div>';
+      }).join('');
+      return '<div class="card-flat" style="padding:10px 12px"><div class="row-between" style="min-height:44px"><strong>' + d[1] + '</strong>' +
+        (ranges.length < 3 ? '<button type="button" class="btn btn-secondary btn-sm" onclick="window.hoursAdd(\'' + d[0] + '\')">' + icon('plus') + 'Jam</button>' : '') + '</div>' +
+        (inputs ? '<div class="stack" style="gap:6px">' + inputs + '</div>' : '<p class="li-sub">Libur</p>') + '</div>';
+    }).join('');
+  }
+  window.openHoursEditor = function () {
+    hoursState = JSON.parse(JSON.stringify(window._hoursAvail.week));
+    renderHoursRows();
+    openSheet('modal-coach-hours');
+  };
+  window.hoursAdd = function (day) {
+    const d = HOURS_DAYS.find(x => x[0] === day), st = hoursStudio[d[2]] || [6, 21];
+    hoursState[day].push([st[0], st[1]]);
+    renderHoursRows();
+  };
+  window.hoursRemove = function (day, i) { hoursState[day].splice(i, 1); renderHoursRows(); };
+  window.hoursEdit = function (day, i, k, v) { hoursState[day][i][k] = parseInt(v, 10); };
+  window.hoursCopyStudio = function () {
+    HOURS_DAYS.forEach(function (d) { const st = hoursStudio[d[2]]; hoursState[d[0]] = st ? [[st[0], st[1]]] : []; });
+    renderHoursRows();
+  };
+  window.saveHours = function () {
+    const done = busy($('btn-save-hours'), 'Menyimpan…');
+    adminCall('saveCoachAvailability', hoursCoachId, hoursState).then(function () {
+      done(); window.closeModal(); window.showToast('Jam kerja disimpan.'); window.openHoursPage();
+    }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+
+  window.toggleOffHours = function () { $('off-hours').classList.toggle('hide', $('off-allday').checked); };
+  window.openTimeOffSheet = function () {
+    $('form-timeoff').reset();
+    $('off-clashes').innerHTML = '';
+    $('off-hours').classList.add('hide');
+    $('off-from').value = $('off-to').value = ymd(new Date());
+    openSheet('modal-coach-timeoff');
+  };
+  window.submitTimeOff = function (e) {
+    e.preventDefault();
+    const all = $('off-allday').checked;
+    const data = { coachId: hoursCoachId, from: $('off-from').value, to: $('off-to').value, note: $('off-note').value, hourFrom: all ? '' : $('off-hfrom').value, hourTo: all ? '' : $('off-hto').value };
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('addCoachTimeOff', data).then(function (r) {
+      done();
+      window.showToast('Cuti disimpan.');
+      if (!r.clashes.length) { window.closeModal(); window.openHoursPage(); return; }
+      $('off-clashes').innerHTML = '<p class="li-title">' + r.clashes.length + ' sesi bertepatan dengan cuti ini</p>' + r.clashes.map(function (c, i) {
+        const d = new Date(c.start);
+        const text = 'Hai ' + c.memberName + ', mohon maaf sesi ' + fmtShort(d) + ' jam ' + fmtTime(d) + ' perlu dipindah karena coach berhalangan. Boleh kita atur ulang?';
+        return '<div class="card-flat row-between" style="gap:8px"><div class="grow"><p class="li-title">' + h(c.memberName) + '</p><p class="li-sub">' + h(fmtShort(d)) + ' · ' + h(fmtTime(d)) + '</p></div>' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-wa="' + h(c.phone) + '" data-text="' + h(text) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">WA klien</button>' +
+          '<button type="button" class="btn btn-outline btn-sm" onclick="window.closeModal();window.navigate(\'calendar\');window.openScheduleDetail(\'' + h(c.scheduleId) + '\')">Buka jadwal</button></div>';
+      }).join('');
+    }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+  window.deleteTimeOff = function (id) {
+    adminCall('deleteCoachTimeOff', id).then(function () { window.showToast('Cuti dihapus.'); window.openHoursPage(); })
+      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
 
   window.assignUnassignedConfirm = function () {
     adminCall('assignUnassignedToSelf', { dryRun: true }).then(function (r) {

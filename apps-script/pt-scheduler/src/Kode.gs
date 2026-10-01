@@ -4695,7 +4695,7 @@ function _freeSlots_(o) {
     if (range) {
       for (let h = range[0]; h < range[1]; h++) {
         const a = Date.parse(date + 'T' + ('0' + h).slice(-2) + ':00:00+07:00'), b = a + 3600000;
-        let free = 0;
+        let free = 0, off = false;
         if (a > o.now.getTime()) {
           const avail = coaches.filter(function(c) { return !c.id || _coachAvailableAt_(c.id, o.rules, o.timeOff, date, h, dow); });
           const availIds = {};
@@ -4707,8 +4707,9 @@ function _freeSlots_(o) {
             if (!bk.coachId || !known[bk.coachId] || availIds[bk.coachId]) used++;
           });
           free = Math.max(0, avail.length - used);
+          off = avail.length === 0;   // tidak ada coach yang bertugas jam ini (di luar jam kerja / cuti)
         }
-        hours.push({ hour: h, free: free });
+        hours.push({ hour: h, free: free, off: off });
       }
     }
     out.push({ date: date, dow: dow, closed: hours.length === 0, hours: hours });
@@ -4867,7 +4868,7 @@ function _timeOffClashes_(coachId, o) {
     const w = _wibParts_(d);
     if (w.date < o.from || w.date > o.to) return;
     if (o.hourFrom !== null && !(w.hour >= o.hourFrom && w.hour < o.hourTo)) return;
-    out.push({ scheduleId: s.id, memberId: s.memberId, memberName: s.title, start: s.start, end: s.end });
+    out.push({ scheduleId: s.id, memberId: s.memberId, memberName: s.title, phone: s.phone, start: s.start, end: s.end });
   });
   return out;
 }
