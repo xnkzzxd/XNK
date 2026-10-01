@@ -175,7 +175,7 @@ Tab **Coach** di panel adalah berandamu sebagai coach.
 - **Jam kerja & cuti**: atur jam kerjamu per hari (boleh beberapa rentang) dan tanggal cuti. Tanpa jam kerja tersimpan, jam yang tampil mengikuti **Pengaturan → Jam Operasional**. Landing, portal, pengingat Booking Minggu, dan booking klien semua memakai satu perhitungan yang sama. Klien tidak bisa booking di jam cuti; kamu tetap bisa, dengan peringatan.
 - **Mode solo**: kalau hanya ada satu coach aktif, pilihan coach, filter coach, dan peringkat coach disembunyikan, dan semua sesi otomatis atas namamu. Coach lama: buka kartunya → **Nonaktifkan** (riwayat tetap aman). Coach yang masih dipakai jadwal atau klien tidak bisa dihapus.
 - **Tetapkan ke saya**: memberi coach "Ini saya" ke semua jadwal yang belum punya coach.
-- **Lihat seperti klien**: pratinjau halaman coach yang dilihat klien di portal.
+- **Lihat seperti klien**: pratinjau halaman coach yang dilihat klien di portal. Halaman itu tampil premium: kartu hero gelap dengan status hari ini, angka klien/sesi/rating, slot kosong terdekat, sertifikasi, prestasi, dan testimoni.
 
 **Perawatan klien** (halaman klien): catatan privat (tanda perhatian, catatan, tanggal lahir), form kesehatan (diisi klien di portal, kamu tandai **Sudah ditinjau**), assessment, dan tes kebugaran. Semua ini hanya kamu yang bisa baca; Telegram hanya memberi tahu bahwa form diisi, tanpa jawabannya. Di **Pengaturan → Pengingat Klien** ada jenis baru (semua mati bawaan): **Tes ulang** (tiap Senin, 28 hari sejak tes terakhir), **Ulang tahun**, dan **Ringkasan bulanan** untukmu. **Keamanan** punya batas "ganti jadwal klien" (jam sebelum sesi, bawaan 2).
 

@@ -518,6 +518,31 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .card.interactive:active { transform: scale(0.99); }
 .card.selected { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg), var(--shadow-2); }
 
+/* ── Halaman coach untuk klien (premium) ─────────────────────────────────── */
+.coach-hero { text-align: center; padding: 28px 20px 22px; }
+.coach-hero .avatar { margin: 0 auto 14px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--on-ink) 14%, transparent); }
+.coach-hero .profile-name { font-size: var(--fs-3xl); letter-spacing: -0.03em; }
+.coach-hero .pill-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+.coach-hero .btn-row { margin-top: 20px; }
+.coach-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
+.coach-hero .btn-inverse:hover:not(:disabled) { opacity: .92; }
+.coach-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; animation: livePulse 2s var(--ease) infinite; }
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.coach-kpis { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.coach-kpis .kpi { min-height: 96px; padding: 14px 12px; align-items: center; text-align: center; }
+.coach-kpis .kpi .kpi-value { font-size: var(--fs-2xl); }
+.coach-slots { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.coach-slots .slot { min-height: 44px; padding: 0 10px; width: 100%; font-size: var(--fs-sm); }
+.coach-row { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 8px 0; }
+.coach-row + .coach-row { border-top: 1px solid var(--border); }
+.coach-row .ico { width: 34px; height: 34px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.quote-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; margin: 0 calc(var(--page-pad) * -1); padding-left: var(--page-pad); padding-right: var(--page-pad); scrollbar-width: none; }
+.quote-row::-webkit-scrollbar { display: none; }
+.quote-card { flex: 0 0 min(86%, 320px); scroll-snap-align: start; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.quote-card .stars { letter-spacing: 2px; font-size: var(--fs-sm); }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
 /* ── Grid dashboard ──────────────────────────────────────────────────────── */
 .grid { display: grid; gap: var(--gap); }
 .grid-2 { display: grid; gap: var(--gap); grid-template-columns: repeat(2, minmax(0, 1fr)); }
