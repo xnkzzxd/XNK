@@ -4780,8 +4780,8 @@ function getOpenSlots(opts) {
 }
 
 /** Publik: status singkat coach "Ini saya": sesi | tersedia (+next) | cuti (+until) | libur | tutup. Tanpa catatan cuti. */
-function getCoachStatus() {
-  const self = _selfCoach_();
+function getCoachStatus(coachId) {
+  const self = coachId ? (_activeCoaches_().find(function(c) { return c.id === String(coachId); }) || null) : _selfCoach_();
   if (!self) return { state: 'tutup' };
   const now = new Date();
   const wib = _wibParts_(now);
@@ -5480,12 +5480,13 @@ function _careList_(now) {
 // #############################################################################
 
 /** Murni-ish: isi halaman profil coach "Ini saya" (hanya field publik + status + 3 testimoni + batas reschedule). */
-function _coachProfilePage_() {
-  const self = _selfCoach_();
+function _coachProfilePage_(coachId) {
+  const picked = coachId ? _activeCoaches_().find(function(c) { return c.id === String(coachId); }) : null;
+  const self = picked || _selfCoach_();
   return {
     coach: self ? _publicCoach_(self) : null,
     solo: _activeCoaches_().length === 1,
-    status: getCoachStatus(),
+    status: getCoachStatus(self ? self.id : ''),
     testimonials: getPublicTestimonials().slice(0, 3),
     stats: (function() { const st = getLandingStats(); return { clients: st.totalClients || 0, sessions: st.completedSessions || 0, rating: st.avgRating }; })(),
     rescheduleCutoffHours: _rescheduleCutoff_()
@@ -5493,9 +5494,9 @@ function _coachProfilePage_() {
 }
 
 /** Klien: halaman profil coach. */
-function getMyCoach(memberToken) {
+function getMyCoach(memberToken, coachId) {
   requireMember_(memberToken);
-  return _coachProfilePage_();
+  return _coachProfilePage_(coachId);
 }
 
 /** Admin: persis isi yang dilihat klien ("Lihat seperti klien"). */

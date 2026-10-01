@@ -4512,7 +4512,7 @@
         '<span style="position:absolute;right:-2px;bottom:-2px;width:26px;height:26px;border-radius:50%;background:var(--on-ink);color:var(--ink);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--ink)">' + icon('camera', 'style="width:13px;height:13px"') + '</span></button>' +
       '<div class="grow" style="min-width:0"><p class="eyebrow">' + greeting() + '</p><h2 class="profile-name">Halo, <span id="pub-dash-name">' + h(me.name) + '</span>!</h2>' +
       '<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap"><span class="pill">' + h(me.packageName || 'Member XNK') + '</span>' + (me.joinDate ? '<span class="pill">sejak ' + h(me.joinDate) + '</span>' : '') + '</div></div>' +
-      '<button type="button" class="icon-btn" style="color:var(--on-ink)" onclick="window.openMyProfile()" aria-label="Profil saya">' + icon('user-round') + '</button></div>' +
+      '<button type="button" class="icon-btn" onclick="window.openMyProfile()" aria-label="Profil saya">' + icon('user-round') + '</button></div>' +
       '<div class="row" style="gap:20px;margin-top:20px">' +
       '<div class="ring-wrap"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
       '<circle class="ring-fill" id="pub-quota-ring" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
@@ -4529,6 +4529,7 @@
     left += '<div class="portal-actions"><button type="button" class="btn btn-primary" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button>' +
       '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
       '<button type="button" class="btn btn-outline" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket</button></div>';
+    left += myCoachCardHtml(me);
 
     left += '<div class="card" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
       '<div class="section-head"><h3 class="section-title">Sesi berikutnya</h3>' + (next ? statusInfo(next).pill : '') + '</div>' +
@@ -4567,6 +4568,7 @@
     window.loadMyProgress(false);
     window.loadMyCare();
     window.loadMyRenewal();
+    loadMyCoachStatus();
   };
 
   // Tanggal di beranda: pindah ke tab Jadwal pada tanggal itu.
@@ -4816,7 +4818,7 @@
       (c.location ? '<span class="pill">' + icon('map-pin') + h(c.location) + '</span>' : '') + '</div>';
     if (!opts.preview) {
       html += '<div class="btn-row"><button type="button" class="btn btn-lg btn-inverse" data-coach="' + h(c.id) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Chat WA</button>' +
-        '<button type="button" class="btn btn-lg btn-ghost-ink" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button></div>';
+        '<button type="button" class="btn btn-lg btn-ghost-ink" onclick="' + (opts.inSheet ? 'window.closeModal();setTimeout(window.handleFabClick,300)' : 'window.handleFabClick()') + '">' + icon('calendar-plus') + 'Booking</button></div>';
     }
     html += '</div>';
     // KPI
@@ -4871,16 +4873,53 @@
       }
       return;
     }
-    let html = '<div class="page-head"><div><h2 class="page-title">Tim coach</h2><p class="page-sub">Latihan bersama coach berpengalaman.</p></div></div>';
+    let html = '<div class="page-head"><div><h2 class="page-title">Tim coach</h2><p class="page-sub">Pilih coach untuk melihat profil, jadwal tersedia, dan testimoni.</p></div></div>';
     html += window.coaches.length ? '<div class="cards-grid three stagger" id="public-coach-list">' + window.coaches.map(function (c) {
-      return '<div class="card" style="display:flex;flex-direction:column;gap:14px">' +
-        '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h3 class="section-title">' + h(c.name) + '</h3><p class="li-sub">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
-        (c.experience ? '<span class="pill soft" style="margin-top:8px">' + h(c.experience) + '</span>' : '') + '</div></div>' +
-        (c.bio ? '<p class="li-sub" style="font-size:var(--fs-sm)">' + h(c.bio) + '</p>' : '') +
-        '<button type="button" class="btn btn-primary btn-block" style="margin-top:auto" data-coach="' + h(String(c.id)) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Tanya program</button></div>';
+      const mine = window.publicLoggedMember && String(window.publicLoggedMember.preferredCoachId) === String(c.id);
+      const specs = String(c.specialty || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 3);
+      return '<div class="card coach-card interactive" role="button" tabindex="0" data-coach="' + h(String(c.id)) + '" onclick="window.openCoachSheet(this.getAttribute(\'data-coach\'))" onkeydown="if(event.key===\'Enter\')this.click()">' +
+        '<div class="coach-card-top">' + avatar(c.photo, c.name, 'xl') + (mine ? '<span class="pill solid coach-card-badge">Coach kamu</span>' : '') + '</div>' +
+        '<div class="stack" style="gap:6px;flex:1"><h3 class="section-title">' + h(c.name) + '</h3>' +
+        '<p class="li-sub">' + h(c.headline || (c.specialty ? '' : 'Personal trainer')) + '</p>' +
+        (specs.length ? '<div class="row" style="gap:6px;flex-wrap:wrap">' + specs.map(x => '<span class="pill soft">' + h(x) + '</span>').join('') + '</div>' : '') +
+        (c.experience ? '<p class="li-sub">' + icon('medal', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(c.experience) + '</p>' : '') + '</div>' +
+        '<div class="btn-row"><span class="btn btn-primary" style="pointer-events:none">' + icon('user-round') + 'Lihat profil</span>' +
+        '<button type="button" class="btn btn-outline" data-coach="' + h(String(c.id)) + '" onclick="event.stopPropagation();window.contactPublicCoach(this.getAttribute(\'data-coach\'))" aria-label="Chat ' + h(c.name) + '">' + icon('message-circle') + 'Chat</button></div></div>';
     }).join('') + '</div>' : emptyState('dumbbell', 'Belum ada data coach', '');
     setHTML(el, html);
   };
+
+  // Profil lengkap satu coach dalam lembar (dari tab Coach atau kartu "Coach kamu" di beranda).
+  window.openCoachSheet = function (coachId) {
+    const c = window.coaches.find(x => String(x.id) === String(coachId));
+    $('coach-sheet-title').textContent = c ? c.name : 'Profil coach';
+    $('coach-sheet-body').innerHTML = '<p class="li-sub">Memuat profil…</p>';
+    openSheet('sheet-coach-profile');
+    const draw = function (p) { $('coach-sheet-body').innerHTML = window.renderCoachProfile(p, { inSheet: true }); paintIcons(); };
+    if (_lsGet(MEMBER_TOKEN_KEY) && window.publicLoggedMember) {
+      memberCall('getMyCoach', coachId).then(draw).catch(function () { draw({ coach: c, status: null, testimonials: [] }); });
+    } else {
+      Promise.all([publicCall('getCoachStatus', coachId).catch(() => null), publicCall('getPublicTestimonials').catch(() => [])]).then(function (r) {
+        draw({ coach: c, status: r[0], testimonials: (r[1] || []).slice(0, 3) });
+      });
+    }
+  };
+
+  // Kartu "Coach kamu" di beranda klien
+  function myCoachCardHtml(me) {
+    const c = window.coaches.find(x => String(x.id) === String(me.preferredCoachId)) || (window.isSoloCoach() ? window.coaches[0] : null);
+    if (!c) return '';
+    return '<div class="card interactive my-coach-card" role="button" tabindex="0" data-coach="' + h(String(c.id)) + '" onclick="window.openCoachSheet(this.getAttribute(\'data-coach\'))" onkeydown="if(event.key===\'Enter\')this.click()">' +
+      '<div class="section-head"><h3 class="section-title">' + icon('user-round', 'style="width:16px;height:16px;vertical-align:-3px;margin-right:6px"') + 'Coach kamu</h3>' + icon('chevron-right') + '</div>' +
+      '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow" style="min-width:0"><h4 class="section-title truncate">' + h(c.name) + '</h4>' +
+      '<p class="li-sub truncate">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
+      '<div style="margin-top:8px" id="pub-coach-status" data-coach="' + h(String(c.id)) + '"></div></div></div></div>';
+  }
+  function loadMyCoachStatus() {
+    const el = $('pub-coach-status');
+    if (!el) return;
+    publicCall('getCoachStatus', el.getAttribute('data-coach')).then(function (st) { const e2 = $('pub-coach-status'); if (e2) e2.innerHTML = coachStatusChip(st); }).catch(function () {});
+  }
 
   window.contactPublicCoach = function (id) {
     const c = window.coaches.find(x => String(x.id) === String(id));

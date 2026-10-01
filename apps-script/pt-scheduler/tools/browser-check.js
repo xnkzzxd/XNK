@@ -956,6 +956,12 @@ async function contrastReport(page) {
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.waitForTimeout(500);
     check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
+    check((await page.textContent('#view-public-dashboard .my-coach-card')).includes('Coach kamu'), 'portal home: a "Coach kamu" card shows the coach');
+    await page.locator('#view-public-dashboard .my-coach-card').click();
+    await page.waitForTimeout(700);
+    check((await page.textContent('#coach-sheet-body')).includes('Rizky') && await visible(page, '#coach-sheet-body .coach-hero'), 'tapping "Coach kamu" opens the full coach profile in a sheet');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
     check(await visible(page, '#view-public-dashboard .portal-hero') && (await page.locator('#view-public-dashboard .portal-kpis .kpi').count()) === 3 && (await page.locator('#view-public-dashboard .portal-actions .btn').count()) === 3, 'portal home: dark hero, three KPI tiles and three quick actions');
     check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'portal home: no sideways page scroll');
     await shot(page, 'portal-mobile-home-premium');
