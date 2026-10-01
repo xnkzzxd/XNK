@@ -828,6 +828,14 @@ async function contrastReport(page) {
     check(hit, 'phone: the switch touch area is at least 44 × 44 px');
     check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');
     await shot(page, 'client-reminders-mobile-' + scheme);
+    for (const tab of ['ringkasan', 'progres', 'perawatan', 'riwayat']) {
+      await page.evaluate(t => { window.cpTab(t); const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; }, tab);
+      await page.waitForTimeout(250);
+      await shot(page, 'phone-client-' + tab + '-' + scheme);
+    }
+    await page.evaluate(() => { window.cpTab('ringkasan'); window.closeDetail(); window.navigate('clients', { force: true }); });
+    await page.waitForTimeout(500);
+    await shot(page, 'phone-klien-' + scheme);
     noErrors(errors);
     await context.close();
   }

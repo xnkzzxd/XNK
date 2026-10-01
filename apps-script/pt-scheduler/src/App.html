@@ -2891,11 +2891,11 @@
     body += '<div class="card-ink client-hero"><div class="row" style="gap:14px">' + avatar(m.photo, m.name, 'lg') +
       '<div class="grow" style="min-width:0"><h3 class="profile-name truncate">' + h(m.name) + '</h3><p class="muted" id="profile-phone">+' + h(m.phone) + '</p>' +
       '<div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap">' + stPill + (m.packageName ? '<span class="pill">' + h(m.packageName) + '</span>' : '') + '</div></div></div>' +
-      '<div class="row" style="gap:18px;margin-top:18px"><div class="ring-wrap" style="width:118px;height:118px"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
+      '<div class="row client-ring-row"><div class="ring-wrap client-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
       '<circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
       '<div class="ring-center"><span class="num" style="font-size:var(--fs-3xl);font-weight:800" id="profile-remaining">' + rem + '</span><span class="eyebrow">dari <span id="profile-total">' + total + '</span></span></div></div>' +
       '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p><p class="muted">' + used + ' terpakai · ' + doneCount + ' selesai</p></div></div>' +
-      '<div class="btn-row" style="margin-top:18px"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
+      '<div class="btn-row client-hero-actions"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
       '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div></div>';
     // Tab bagian halaman
     const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['perawatan', 'Perawatan', 'heart-pulse'], ['riwayat', 'Riwayat', 'history']];
