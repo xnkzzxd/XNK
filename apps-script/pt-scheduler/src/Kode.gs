@@ -753,75 +753,330 @@ function logToSheet_(pesan, status = "INFO") {
 
 // ── 📂 CRUD ──────────────────────────────────────────────────────────────────
 
-function getCoaches() {
-  const headers = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman"];
-  const sheet = getOrCreateSheet_('Coaches', headers);
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-  return data.slice(1).map(function(row) {
-    return {
-      id: sanitizeValue(row[0]),
-      name: sanitizeValue(row[1]),
-      phone: sanitizeValue(row[2]),
-      specialty: sanitizeValue(row[3]),
-      photo: sanitizeValue(row[4]),
-      bio: sanitizeValue(row[5]),
-      experience: sanitizeValue(row[6])
-    };
+const COACH_HEADERS = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman", "Status Aktif", "Headline", "Sertifikasi", "Prestasi", "Lokasi", "Instagram", "Foto File ID"];
+const COACH_KEYS = ['id', 'name', 'phone', 'specialty', 'photo', 'bio', 'experience', 'aktif', 'headline', 'certifications', 'achievements', 'location', 'instagram', 'photoFileId'];
+const COACH_PUBLIC_KEYS = ['id', 'name', 'phone', 'specialty', 'photo', 'bio', 'experience', 'headline', 'certifications', 'achievements', 'location', 'instagram'];
+const COACH_LIST_KEYS = ['certifications', 'achievements'];
+const COACH_UNASSIGNED_TEXT = 'Belum Ditugaskan';   // teks lama; tidak pernah ditulis lagi (T-200)
+
+/** Peta kolom Coaches dari nama header; null kalau kolom inti tidak ada (tidak menebak posisi). */
+function _coachSchema_(header) {
+  const norm = function(v) { return String(v == null ? '' : v).trim().toLowerCase(); };
+  const names = COACH_HEADERS.map(norm);
+  const idx = {};
+  header.forEach(function(h, i) {
+    const k = names.indexOf(norm(h));
+    if (k !== -1 && idx[COACH_KEYS[k]] === undefined) idx[COACH_KEYS[k]] = i;
   });
+  return ['id', 'name', 'phone'].every(function(k) { return idx[k] !== undefined; }) ? idx : null;
 }
+
+/** Membuat sheet bila perlu dan menambah header yang belum ada (hanya di akhir). Idempoten; panggil di dalam lock. */
+function _ensureCoachSchema_() {
+  const sheet = getOrCreateSheet_('Coaches', COACH_HEADERS);
+  let header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  let idx = _coachSchema_(header);
+  if (!idx) throw new Error('Header sheet Coaches tidak dikenali. Pastikan baris pertama berisi: ' + COACH_HEADERS.join(', ') + '.');
+  COACH_HEADERS.forEach(function(name, k) {
+    if (idx[COACH_KEYS[k]] !== undefined) return;
+    const col = sheet.getLastColumn() + 1;
+    sheet.getRange(1, col).setValue(name);
+    sheet.getRange(1, col).setFontWeight('bold');
+    header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+    idx = _coachSchema_(header);
+  });
+  return { sheet: sheet, idx: idx };
+}
+
+function _coachList_(v) {
+  return String(v == null ? '' : v).split(',').map(function(x) { return x.trim(); }).filter(Boolean);
+}
+
+/** Semua coach (aktif & nonaktif), dibaca per nama header. Tidak pernah membuat sheet. Baris lama tanpa "Status Aktif" = aktif. */
+function _coachesAll_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const data = sheet.getDataRange().getValues();
+  const idx = _coachSchema_(data[0]);
+  if (!idx) return [];
+  const cell = function(row, key) { return idx[key] === undefined ? '' : sanitizeValue(row[idx[key]]); };
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (cell(row, 'id') === '') continue;
+    out.push({
+      id: String(cell(row, 'id')), name: String(cell(row, 'name')), phone: String(cell(row, 'phone')),
+      specialty: String(cell(row, 'specialty')), photo: String(cell(row, 'photo')), bio: String(cell(row, 'bio')),
+      experience: String(cell(row, 'experience')),
+      aktif: String(cell(row, 'aktif')).trim().toUpperCase() !== 'FALSE',
+      headline: String(cell(row, 'headline')), certifications: _coachList_(cell(row, 'certifications')),
+      achievements: _coachList_(cell(row, 'achievements')), location: String(cell(row, 'location')),
+      instagram: String(cell(row, 'instagram')), photoFileId: String(cell(row, 'photoFileId')), _row: i + 1
+    });
+  }
+  return out;
+}
+
+function _activeCoaches_() { return _coachesAll_().filter(function(c) { return c.aktif; }); }
+
+/** Coach "Ini saya": COACH_SELF_ID kalau masih aktif, kalau tidak coach aktif pertama; null kalau tidak ada. */
+function _selfCoach_() {
+  const active = _activeCoaches_();
+  const saved = PropertiesService.getScriptProperties().getProperty('COACH_SELF_ID');
+  return active.find(function(c) { return c.id === saved; }) || active[0] || null;
+}
+
+function _publicCoach_(c) {
+  const out = {};
+  COACH_PUBLIC_KEYS.forEach(function(k) { out[k] = c[k]; });
+  return out;
+}
+
+/** Publik: hanya coach aktif dan hanya field whitelist (CP-5). */
+function getCoaches() {
+  return _activeCoaches_().map(_publicCoach_);
+}
+
+/** Murni: validasi + bersihkan data profil coach. Melempar kalimat Indonesia yang diakhiri titik. */
+function _validateCoach_(d) {
+  d = d || {};
+  const str = function(v) { return String(v == null ? '' : v).trim(); };
+  const maxLen = function(v, n, label) { if (v.length > n) throw new Error(label + ' maksimal ' + n + ' karakter.'); return v; };
+  const name = str(d.name);
+  if (!name || name.length > 60) throw new Error('Nama coach wajib diisi, maksimal 60 karakter.');
+  const phone = _normalizePhone_(d.phone);
+  if (phone.length < 10 || phone.length > 15) throw new Error('Nomor WhatsApp coach harus 10-15 angka.');
+  const specialty = maxLen(str(d.specialty), 200, 'Spesialisasi');
+  if (_coachList_(specialty).length > 8 || _coachList_(specialty).some(function(x) { return x.length > 40; })) {
+    throw new Error('Spesialisasi maksimal 8 item, masing-masing 40 karakter.');
+  }
+  const out = {
+    name: name, phone: phone, specialty: specialty,
+    experience: maxLen(str(d.experience), 40, 'Pengalaman'), bio: maxLen(str(d.bio), 600, 'Bio'),
+    headline: maxLen(str(d.headline), 80, 'Headline'), location: maxLen(str(d.location), 60, 'Lokasi')
+  };
+  COACH_LIST_KEYS.forEach(function(k) {
+    const label = k === 'certifications' ? 'Sertifikasi' : 'Prestasi';
+    const items = Array.isArray(d[k]) ? d[k].map(str).filter(Boolean) : _coachList_(d[k]);
+    if (items.length > 10) throw new Error(label + ' maksimal 10 item.');
+    items.forEach(function(x) {
+      if (x.length > 60) throw new Error('Setiap item ' + label + ' maksimal 60 karakter.');
+      if (x.indexOf(',') !== -1) throw new Error('Item ' + label + ' tidak boleh berisi koma.');
+    });
+    out[k] = items;
+  });
+  const ig = str(d.instagram).replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/[\/?].*$/, '');
+  if (ig && !/^[A-Za-z0-9._]{1,30}$/.test(ig)) throw new Error('Instagram harus berupa username (huruf, angka, titik, garis bawah; maks 30).');
+  out.instagram = ig;
+  return out;
+}
+
+function _coachPhotoFileId_(url, given) {
+  if (given) return String(given);
+  const m = /[?&]id=([^&]+)/.exec(String(url || ''));
+  return m ? m[1] : '';
+}
+
+// ── 📂 CRUD ──────────────────────────────────────────────────────────────────
 
 function addCoach(token, coachData) {
   requireAdmin_(token);
-  const headers = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman"];
-  const sheet = getOrCreateSheet_('Coaches', headers);
-  const id = 'COACH-' + new Date().getTime();
-  sheet.appendRow([
-    id, coachData.name, coachData.phone.toString(), coachData.specialty,
-    coachData.photo || '', coachData.bio || '', coachData.experience || ''
-  ]);
-  return { status: 'success', id: id };
+  const data = Object.assign({}, coachData || {});
+  delete data.id;
+  return saveCoach(token, data);
 }
 
-/**
- * Update data profil coach (termasuk foto, bio, pengalaman).
- */
+/** Update data profil coach (termasuk foto, bio, pengalaman). */
 function updateCoach(token, coachData) {
   requireAdmin_(token);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
-  if (!sheet) throw new Error('Sheet Coaches tidak ditemukan');
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === coachData.id) {
-      sheet.getRange(i + 1, 2).setValue(coachData.name);
-      sheet.getRange(i + 1, 3).setValue(coachData.phone.toString());
-      sheet.getRange(i + 1, 4).setValue(coachData.specialty);
-      sheet.getRange(i + 1, 5).setValue(coachData.photo || '');
-      sheet.getRange(i + 1, 6).setValue(coachData.bio || '');
-      sheet.getRange(i + 1, 7).setValue(coachData.experience || '');
-      return { status: 'success' };
-    }
-  }
-  throw new Error('Coach tidak ditemukan');
+  if (!coachData || !coachData.id) throw new Error('Coach tidak ditemukan.');
+  return saveCoach(token, coachData);
 }
 
 /**
- * Hapus data coach. Jadwal (Schedules) yang sudah pernah pakai coach ini
- * dibiarkan (histori tetap ada), hanya penugasan baru yang tidak bisa pilih
- * coach ini lagi.
+ * Tambah (tanpa data.id) atau ubah coach. Validasi dulu, tulis di dalam lock. Kalau nama berubah,
+ * nama di klien (MemberData) dan jadwal yang belum selesai ikut diperbarui; jadwal selesai & log transaksi
+ * tetap memakai nama saat itu. Foto lama dipindah ke tempat sampah bila diganti.
  */
-function deleteCoach(token, coachId) {
+function saveCoach(token, data) {
   requireAdmin_(token);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
-  if (!sheet) throw new Error('Sheet Coaches tidak ditemukan');
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === coachId) {
-      sheet.deleteRow(i + 1);
-      return { status: 'success' };
+  const clean = _validateCoach_(data);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ctx = _ensureCoachSchema_();
+    const sheet = ctx.sheet, idx = ctx.idx;
+    const photoGiven = Object.prototype.hasOwnProperty.call(data, 'photo');
+    const photo = photoGiven ? String(data.photo || '') : null;
+    const fileId = photoGiven ? _coachPhotoFileId_(photo, data.fotoFileId) : null;
+    const values = {
+      name: clean.name, phone: clean.phone, specialty: clean.specialty, bio: clean.bio, experience: clean.experience,
+      headline: clean.headline, location: clean.location, instagram: clean.instagram,
+      certifications: clean.certifications.join(', '), achievements: clean.achievements.join(', ')
+    };
+    if (photoGiven) { values.photo = photo; values.photoFileId = fileId; }
+
+    if (!data.id) {
+      const id = 'COACH-' + new Date().getTime();
+      const row = [];
+      for (let i = 0; i < sheet.getLastColumn(); i++) row.push('');
+      row[idx.id] = id;
+      row[idx.aktif] = true;
+      Object.keys(values).forEach(function(k) { row[idx[k]] = values[k]; });
+      sheet.appendRow(row);
+      return { status: 'success', id: id };
+    }
+
+    const existing = _coachesAll_().find(function(c) { return c.id === String(data.id); });
+    if (!existing) throw new Error('Coach tidak ditemukan.');
+    Object.keys(values).forEach(function(k) { sheet.getRange(existing._row, idx[k] + 1).setValue(values[k]); });
+    if (existing.name !== clean.name) _renameCoachEverywhere_(existing.id, clean.name);
+    if (photoGiven && existing.photoFileId && existing.photoFileId !== fileId) {
+      try { DriveApp.getFileById(existing.photoFileId).setTrashed(true); } catch (e) { Logger.log('Foto coach lama tidak bisa dihapus: ' + e); }
+    }
+    return { status: 'success', id: existing.id };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Nama baru ke klien (MemberData K/L) dan jadwal yang belum selesai (Schedules I/J). Panggil di dalam lock. */
+function _renameCoachEverywhere_(coachId, newName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const md = ss.getSheetByName('MemberData');
+  if (md) {
+    const rows = md.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][10]) === coachId) md.getRange(i + 1, 12).setValue(newName);
+  }
+  const sc = ss.getSheetByName('Schedules');
+  if (sc) {
+    const rows = sc.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][8]) === coachId && String(rows[i][7]).toLowerCase() !== 'completed') sc.getRange(i + 1, 10).setValue(newName);
     }
   }
-  throw new Error('Coach tidak ditemukan');
+}
+
+/** Berapa jadwal, klien, dan baris log yang masih menunjuk ke tiap coach: { coachId: {sessions, clients, logEntries} }. */
+function _coachUsage_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const usage = {};
+  const bump = function(id, key) {
+    id = String(id || '').trim();
+    if (!id) return;
+    (usage[id] || (usage[id] = { sessions: 0, clients: 0, logEntries: 0 }))[key]++;
+  };
+  const sc = ss.getSheetByName('Schedules');
+  if (sc) sc.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[8], 'sessions'); });
+  const md = ss.getSheetByName('MemberData');
+  if (md) md.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[10], 'clients'); });
+  const lg = ss.getSheetByName('Members');
+  if (lg) lg.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[7], 'logEntries'); });
+  return usage;
+}
+
+/** Semua coach untuk panel: field lengkap, pemakaian, penanda "Ini saya", dan apakah mode solo. */
+function getCoachesAdmin(token) {
+  requireAdmin_(token);
+  const usage = _coachUsage_();
+  const self = _selfCoach_();
+  const all = _coachesAll_();
+  return {
+    coaches: all.map(function(c) {
+      const out = Object.assign({}, c);
+      delete out._row;
+      out.usage = usage[c.id] || { sessions: 0, clients: 0, logEntries: 0 };
+      out.isSelf = !!self && self.id === c.id;
+      return out;
+    }),
+    selfId: self ? self.id : '',
+    solo: all.filter(function(c) { return c.aktif; }).length === 1
+  };
+}
+
+function setCoachActive(token, id, aktif) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const all = _coachesAll_();
+    const coach = all.find(function(c) { return c.id === String(id); });
+    if (!coach) throw new Error('Coach tidak ditemukan.');
+    if (!aktif && coach.aktif && all.filter(function(c) { return c.aktif; }).length <= 1) throw new Error('Harus ada satu coach aktif.');
+    const ctx = _ensureCoachSchema_();
+    const fresh = _coachesAll_().find(function(c) { return c.id === coach.id; });
+    ctx.sheet.getRange(fresh._row, ctx.idx.aktif + 1).setValue(!!aktif);
+    const props = PropertiesService.getScriptProperties();
+    if (!aktif && props.getProperty('COACH_SELF_ID') === coach.id) props.deleteProperty('COACH_SELF_ID');
+    return { status: 'success' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Hapus coach hanya kalau tidak dipakai di jadwal, klien, atau log. Kalau dipakai: Nonaktifkan saja. */
+function deleteCoach(token, coachId) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const coach = _coachesAll_().find(function(c) { return c.id === String(coachId); });
+    if (!coach) throw new Error('Coach tidak ditemukan.');
+    const u = _coachUsage_()[coach.id] || { sessions: 0, clients: 0, logEntries: 0 };
+    if (u.sessions || u.clients || u.logEntries) {
+      throw new Error('Coach dipakai ' + u.sessions + ' jadwal / ' + u.clients + ' klien. Nonaktifkan saja.');
+    }
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches').deleteRow(coach._row);
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty('COACH_SELF_ID') === coach.id) props.deleteProperty('COACH_SELF_ID');
+    return { status: 'success' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function setSelfCoach(token, id) {
+  requireAdmin_(token);
+  const coach = _activeCoaches_().find(function(c) { return c.id === String(id); });
+  if (!coach) throw new Error('Pilih coach yang aktif.');
+  PropertiesService.getScriptProperties().setProperty('COACH_SELF_ID', coach.id);
+  return { status: 'success' };
+}
+
+/** Beri coach "Ini saya" ke semua jadwal (belum selesai) dan klien yang belum punya coach. opts.dryRun = hanya hitung. */
+function assignUnassignedToSelf(token, opts) {
+  requireAdmin_(token);
+  const dryRun = !!(opts && opts.dryRun);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const self = _selfCoach_();
+    if (!self) throw new Error('Belum ada coach aktif.');
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const blank = function(v) { const t = String(v == null ? '' : v).trim(); return t === '' || t === COACH_UNASSIGNED_TEXT; };
+    let sessions = 0, clients = 0;
+    const sc = ss.getSheetByName('Schedules');
+    if (sc) {
+      const rows = sc.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (!blank(rows[i][8]) || String(rows[i][7]).toLowerCase() === 'completed' || String(rows[i][0]) === '') continue;
+        sessions++;
+        if (!dryRun) { sc.getRange(i + 1, 9).setValue(self.id); sc.getRange(i + 1, 10).setValue(self.name); }
+      }
+    }
+    const md = ss.getSheetByName('MemberData');
+    if (md) {
+      const rows = md.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === '' || !blank(rows[i][10])) continue;
+        clients++;
+        if (!dryRun) { md.getRange(i + 1, 11).setValue(self.id); md.getRange(i + 1, 12).setValue(self.name); }
+      }
+    }
+    return { status: 'success', dryRun: dryRun, sessions: sessions, clients: clients, coachName: self.name };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ── 📂 PHOTO_UPLOAD ──────────────────────────────────────────────────────────
@@ -1250,7 +1505,7 @@ function _addMemberInternal_(memberData, options) {
     // 2. Cari data coach yang dipilih admin sebagai coach default klien ini (jika ada)
     let coachId = '', coachNama = '';
     if (memberData.coachId) {
-      const allCoaches = getCoaches();
+      const allCoaches = _coachesAll_();
       const selectedCoach = allCoaches.find(function(c) { return String(c.id) === String(memberData.coachId); });
       if (selectedCoach) {
         coachId = selectedCoach.id;
@@ -1371,7 +1626,7 @@ function updateMemberProfile(token, memberData) {
 
       if (typeof memberData.coachId !== 'undefined') {
         if (memberData.coachId) {
-          const allCoaches = getCoaches();
+          const allCoaches = _coachesAll_();
           const selectedCoach = allCoaches.find(function(c) { return String(c.id) === String(memberData.coachId); });
           sheet.getRange(i + 1, 11).setValue(memberData.coachId);
           sheet.getRange(i + 1, 12).setValue(selectedCoach ? selectedCoach.name : '');
@@ -1705,16 +1960,19 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
     // dan selalu bisa menimpa coach hasil auto-assign ini kapan saja.
     let coachId = scheduleData.coachId || "";
     let coachName = scheduleData.coachName || "";
-    if (!coachId && scheduleData.memberId) {
-      try {
-        const member = _getMembersAll_().find(function(m) { return String(m.id) === String(scheduleData.memberId); });
-        if (member && member.preferredCoachId) {
-          coachId = member.preferredCoachId;
-          coachName = member.preferredCoachName || coachName;
+    if (!coachId) {
+      const actives = _activeCoaches_();
+      if (scheduleData.memberId) {
+        try {
+          const member = _getMembersAll_().find(function(m) { return String(m.id) === String(scheduleData.memberId); });
+          const preferred = member && member.preferredCoachId ? actives.find(function(c) { return c.id === String(member.preferredCoachId); }) : null;
+          if (preferred) { coachId = preferred.id; coachName = preferred.name; }
+        } catch (e) {
+          Logger.log("Gagal auto-assign coach dari preferensi klien: " + e);
         }
-      } catch (e) {
-        Logger.log("Gagal auto-assign coach dari preferensi klien: " + e);
       }
+      // Mode solo (satu coach aktif): semua sesi otomatis milik coach itu.
+      if (!coachId && actives.length === 1) { coachId = actives[0].id; coachName = actives[0].name; }
     }
 
     sheet.appendRow([
@@ -2028,8 +2286,12 @@ function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd) {
 /**
  * Menugaskan pelatih (Assign Coach) ke dalam sesi latihan tertentu.
  */
-function updateScheduleCoach(token, scheduleId, coachId, coachName) {
+function updateScheduleCoach(token, scheduleId, coachId) {
   requireAdmin_(token);
+  coachId = String(coachId || '');
+  const picked = coachId ? _coachesAll_().find(function(c) { return c.id === coachId; }) : null;
+  if (coachId && !picked) throw new Error('Coach tidak ditemukan.');
+  const coachName = picked ? picked.name : '';
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
   if (!sheet) throw new Error('Sheet Jadwal tidak ditemukan');
   const data = sheet.getDataRange().getValues();
@@ -2041,7 +2303,7 @@ function updateScheduleCoach(token, scheduleId, coachId, coachName) {
       try {
         kirimNotifTelegram_("🏋️ <b>COACH DITUGASKAN</b>\n\n" +
           "👤 <b>Klien:</b> " + escapeHtmlTelegram(data[i][2]) + "\n" +
-          "🧑‍🏫 <b>Coach:</b> " + escapeHtmlTelegram(coachName));
+          "🧑‍🏫 <b>Coach:</b> " + escapeHtmlTelegram(coachName || 'Tanpa coach'));
       } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
 
       return { status: 'success' };
@@ -3841,14 +4103,7 @@ function getPublicAvailability() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   // 1. Ambil Data Semua Coach
-  const coachSheet = ss.getSheetByName('Coaches');
-  let coaches = [];
-  if (coachSheet) {
-    const cData = coachSheet.getDataRange().getValues();
-    for (let i = 1; i < cData.length; i++) {
-      coaches.push({ id: cData[i][0], name: cData[i][1] });
-    }
-  }
+  const coaches = _activeCoaches_().map(function(c) { return { id: c.id, name: c.name }; });
 
   // 2. Ambil Aturan Ketersediaan Jam Kerja Coach (Sheet Baru)
   const availHeaders = ["Coach ID", "Hari", "Jam Mulai", "Jam Selesai"];

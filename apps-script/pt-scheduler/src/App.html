@@ -2412,7 +2412,7 @@
     const coach = window.coaches.find(c => String(c.id) === String(coachId));
     const coachName = coach ? coach.name : '';
     const done = busy($('btn-save-coach'), '…');
-    adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId, coachName).then(function () {
+    adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId).then(function () {
       const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
       if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
       done();

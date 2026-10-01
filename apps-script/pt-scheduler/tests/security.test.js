@@ -15,6 +15,7 @@ const ADMIN = [
   'checkAdminSession', 'changeAdminPin',
   'getMembers', 'getMemberTransactionLog', 'getSchedules',
   'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto',
+  'saveCoach', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',
   'addMember', 'updateMemberProfile', 'deleteMember',
   'addSchedule', 'addRecurringSchedule', 'deleteRecurringGroup', 'updateScheduleData', 'updateScheduleCoach',
   'markSchedulesAsRead', 'completeSession', 'deleteSchedule',
