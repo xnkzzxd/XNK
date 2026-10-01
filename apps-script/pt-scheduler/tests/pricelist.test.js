@@ -41,13 +41,13 @@ test('the first admin write migrates a legacy sheet once: inserts Jumlah Sesi, a
   ]);
   const token = env.adminToken();
   env.call('savePackage', token, NEW_PKG);
-  assert.deepEqual(plRows(env)[0], ['ID', 'Nama Paket', 'Kategori', 'Harga', 'Jumlah Sesi', 'Durasi', 'Deskripsi', 'Benefit', 'Status Aktif', 'Urutan']);
+  assert.deepEqual(plRows(env)[0], ['ID', 'Nama Paket', 'Kategori', 'Harga', 'Jumlah Sesi', 'Durasi', 'Deskripsi', 'Benefit', 'Status Aktif', 'Urutan', 'Tipe', 'Kapasitas', 'Jadwal Kelas', 'Kelas Privat']);
   const l1 = plRows(env)[1];
   assert.deepEqual(l1.slice(0, 8), ['L1', 'Lama 1', 'regular', 500000, '', '1 Bulan', 'desc', 'x, y']);
   const before = JSON.stringify(plRows(env));
   env.call('setPackageActive', token, 'L1', true);       // second write: header must not change again
   assert.equal(JSON.stringify(plRows(env)[0]), JSON.stringify(JSON.parse(before)[0]));
-  assert.equal(plRows(env)[0].length, 10);
+  assert.equal(plRows(env)[0].length, 14);
 });
 
 test('an unrecognised header row is not guessed at for writes', () => {

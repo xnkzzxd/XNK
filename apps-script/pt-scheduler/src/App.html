@@ -817,7 +817,7 @@
       return html;
     }
     html += '<div class="list" id="pkg-list">' + list.map(function (p, i) {
-      const meta = (p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '') + ' · ' + pkgUsageText(p);
+      const meta = (p.tipe === 'kelas' ? 'Kelas ' + p.kapasitas + ' kursi · ' : '') + (p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '') + ' · ' + pkgUsageText(p);
       const right = pkgState.reorder
         ? '<button type="button" class="icon-btn plain" aria-label="Naikkan ' + h(p.namaPaket) + '"' + (i === 0 ? ' disabled' : '') + ' onclick="window.pkgMove(\'' + h(p.id) + '\', -1)">' + icon('chevron-up') + '</button>' +
           '<button type="button" class="icon-btn plain" aria-label="Turunkan ' + h(p.namaPaket) + '"' + (i === list.length - 1 ? ' disabled' : '') + ' onclick="window.pkgMove(\'' + h(p.id) + '\', 1)">' + icon('chevron-down') + '</button>'
@@ -923,6 +923,9 @@
     if (flex) s.value = '';
     s.disabled = flex;
   };
+  window.pkgClassChange = function () {
+    $('pkg-class-fields').classList.toggle('hide', !$('pkg-class').checked);
+  };
   function pkgRenderBenefits() {
     $('pkg-benefits').innerHTML = pkgState.benefits.map(function (b, i) {
       return '<span class="chip">' + h(b) + '<button type="button" class="chip-x" aria-label="Hapus ' + h(b) + '" onclick="window.pkgRemoveBenefit(' + i + ')">' + icon('x') + '</button></span>';
@@ -961,6 +964,11 @@
     $('pkg-duration').value = src ? src.durasi : '';
     $('pkg-desc').value = src ? src.deskripsi : '';
     $('pkg-active').checked = editing ? !!editing.aktif : false;
+    $('pkg-class').checked = !!src && src.tipe === 'kelas';
+    $('pkg-cap').value = src && src.kapasitas ? src.kapasitas : '';
+    $('pkg-schedule').value = src && src.jadwal ? src.jadwal : '';
+    $('pkg-private').checked = !!src && !!src.privat;
+    window.pkgClassChange();
     pkgState.benefits = src ? src.benefit.slice() : [];
     $('pkg-benefit-input').value = '';
     document.querySelectorAll('#form-package .err-msg').forEach(function (e) { e.textContent = ''; });
@@ -985,7 +993,9 @@
     const sess = $('pkg-sessions').value.trim();
     let bad = false;
     const fail = function (field, msg) { pkgFieldError(field, msg); bad = true; };
-    pkgFieldError('pkg-f-name', ''); pkgFieldError('pkg-f-price', ''); pkgFieldError('pkg-f-sessions', '');
+    pkgFieldError('pkg-f-name', ''); pkgFieldError('pkg-f-price', ''); pkgFieldError('pkg-f-sessions', ''); pkgFieldError('pkg-f-cap', '');
+    const isClass = $('pkg-class').checked, cap = $('pkg-cap').value.trim();
+    if (isClass && (!/^\d+$/.test(cap) || Number(cap) < 2 || Number(cap) > 50)) fail('pkg-f-cap', 'Isi kapasitas 2–50 kursi.');
     if (!name) fail('pkg-f-name', 'Nama paket wajib diisi.');
     if (!priceDigits) fail('pkg-f-price', 'Isi harga dalam Rupiah.');
     else if (Number(priceDigits) > 100000000) fail('pkg-f-price', 'Harga maksimal Rp 100.000.000.');
@@ -1000,7 +1010,11 @@
       durasi: $('pkg-duration').value,
       deskripsi: $('pkg-desc').value,
       benefit: pkgState.benefits.slice(),
-      aktif: $('pkg-active').checked
+      aktif: $('pkg-active').checked,
+      tipe: isClass ? 'kelas' : 'paket',
+      kapasitas: isClass ? Number(cap) : '',
+      jadwal: isClass ? $('pkg-schedule').value : '',
+      privat: isClass && $('pkg-private').checked
     };
     const done = busy($('pkg-save-btn'), 'Menyimpan…');
     adminCall('savePackage', payload).then(function () {
@@ -3989,7 +4003,7 @@
   };
 
   window.onMemberAuthLost = function (err) {
-    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; pg.data = null;
+    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; pg.data = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
     window.publicLoggedMember = null;
     renderTopbarActions();
@@ -3998,7 +4012,7 @@
   };
 
   window.logoutPublic = function () {
-    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; pg.data = null;
+    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; pg.data = null;
     window.publicLoggedMember = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
     try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) {}
@@ -4168,8 +4182,9 @@
   window.openRenewSheet = function () {
     const list = (window.priceListData || []).filter(p => p && p.aktif !== false);
     $('renew-list').innerHTML = list.length ? list.map(function (p) {
-      return '<button type="button" class="list-item interactive" style="min-height:64px" onclick="window.renewPick(\'' + h(p.id) + '\')"><span class="grow" style="min-width:0;text-align:left"><span class="li-title truncate" style="display:block">' + h(p.namaPaket) + '</span>' +
-        '<span class="li-sub">' + h((p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '')) + '</span></span>' +
+      const full = classFull(p) && String(p.id) !== String((window.publicLoggedMember || {}).packageId);
+      return '<button type="button" class="list-item interactive" style="min-height:64px"' + (full ? ' disabled' : '') + ' onclick="window.renewPick(\'' + h(p.id) + '\')"><span class="grow" style="min-width:0;text-align:left"><span class="li-title truncate" style="display:block">' + h(p.namaPaket) + '</span>' +
+        '<span class="li-sub">' + h((p.tipe === 'kelas' ? 'Kelas · ' + classSeatsText(p) + ' · ' : '') + (p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '')) + '</span></span>' +
         '<span class="li-trail num" style="font-weight:800">' + h(formatRp(p.harga)) + '</span></button>';
     }).join('') : '<p class="li-sub">Belum ada paket yang bisa dipilih.</p>';
     openSheet('sheet-renew');
@@ -4530,6 +4545,7 @@
       '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
       '<button type="button" class="btn btn-outline" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket</button></div>';
     left += myCoachCardHtml(me);
+    left += '<div id="pub-class-wrap">' + classCardHtml() + '</div>';
 
     left += '<div class="card" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
       '<div class="section-head"><h3 class="section-title">Sesi berikutnya</h3>' + (next ? statusInfo(next).pill : '') + '</div>' +
@@ -4568,6 +4584,7 @@
     window.loadMyProgress(false);
     window.loadMyCare();
     window.loadMyRenewal();
+    window.loadMyClassGroup();
     loadMyCoachStatus();
   };
 
@@ -4713,6 +4730,77 @@
     });
   }
 
+  // ── PORTAL: kelas & grup privat ───────────────────────────────────────────
+  function classFull(p) { return p && p.tipe === 'kelas' && p.kapasitas && Number(p.terisi) >= Number(p.kapasitas); }
+  function classSeatsText(p) {
+    const left = Math.max(0, Number(p.kapasitas) - Number(p.terisi || 0));
+    return left ? left + ' dari ' + p.kapasitas + ' kursi tersisa' : 'Penuh';
+  }
+  function classBadgeHtml(p) {
+    return '<div class="row" style="gap:6px;flex-wrap:wrap"><span class="pill solid">Kelas</span><span class="pill">' + h(classSeatsText(p)) + '</span>' +
+      (p.privat ? '<span class="pill">Bisa grup privat</span>' : '') + '</div>' +
+      (p.jadwal ? '<p class="li-sub">' + icon('calendar-clock', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(p.jadwal) + '</p>' : '');
+  }
+  // window.myGroup: undefined = belum dimuat, null = tidak punya grup, objek = grup saya
+  function myClassPackage() {
+    const me = window.publicLoggedMember;
+    const p = me && (window.priceListData || []).find(x => String(x.id) === String(me.packageId));
+    return p && p.tipe === 'kelas' ? p : null;
+  }
+  function classCardHtml() {
+    const p = myClassPackage();
+    if (!p) return '';
+    const g = window.myGroup;
+    let body = '<p class="li-sub">' + h(p.namaPaket) + (p.jadwal ? ' · ' + h(p.jadwal) : '') + '</p>';
+    if (g) {
+      body += '<div class="notice" style="margin-top:12px">' + icon('users') + '<div class="grow"><p class="li-title">Grup privat · <span class="num" id="class-group-code" style="letter-spacing:.15em">' + h(g.code) + '</span></p>' +
+        '<p class="li-sub">' + h(g.members.join(', ')) + ' (' + g.members.length + '/' + h(String(g.capacity)) + ')</p></div></div>' +
+        '<div class="btn-row" style="margin-top:12px"><button type="button" class="btn btn-primary" onclick="window.classShareGroup()">' + icon('share-2') + 'Bagikan kode</button>' +
+        '<button type="button" class="btn btn-outline" onclick="window.classLeaveGroup()">' + (g.isOwner ? 'Tutup grup' : 'Keluar') + '</button></div>' +
+        '<p class="li-sub" style="margin-top:8px">Sesi grup tidak bercampur dengan peserta kelas umum. Booking jam seperti biasa.</p>';
+    } else if (p.privat) {
+      body += '<p class="li-sub" style="margin-top:8px">Mau kelas privat? Buat grup, bagikan kode ke temanmu (maks. ' + h(String(p.kapasitas)) + ' orang).</p>' +
+        '<div class="btn-row" style="margin-top:12px"><button type="button" class="btn btn-primary" id="class-create-btn" onclick="window.classCreateGroup()">' + icon('users') + 'Buat grup</button>' +
+        '<button type="button" class="btn btn-outline" onclick="window.classOpenJoin()">Gabung dengan kode</button></div>';
+    }
+    return '<div class="card" id="pub-class-card"><div class="section-head"><h3 class="section-title">Kelas</h3><span class="pill">' + h(classSeatsText(p)) + '</span></div>' + body + '</div>';
+  }
+  function renderClassSlot() {
+    const slot = $('pub-class-wrap');
+    if (slot) { setHTML(slot, classCardHtml()); paintIcons(); }
+  }
+  window.loadMyClassGroup = function () {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember || !myClassPackage()) return Promise.resolve();
+    return memberCall('getMyClassGroup').then(function (g) { window.myGroup = g || null; renderClassSlot(); })
+      .catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
+  };
+  window.classCreateGroup = function () {
+    const done = busy($('class-create-btn'), 'Membuat…');
+    memberCall('createClassGroup').then(function (g) { done(); window.myGroup = g; renderClassSlot(); window.showToast('Grup dibuat. Bagikan kodenya ke temanmu.'); })
+      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  window.classOpenJoin = function () { $('class-join-code').value = ''; openSheet('sheet-class-join'); };
+  window.classJoinSubmit = function (e) {
+    e.preventDefault();
+    const done = busy($('class-join-btn'), 'Menggabung…');
+    memberCall('joinClassGroup', $('class-join-code').value.trim().toUpperCase()).then(function (g) {
+      done(); window.myGroup = g; window.closeModal(); renderClassSlot(); window.showToast('Kamu sudah masuk grup.');
+    }).catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+  };
+  window.classLeaveGroup = function () {
+    const g = window.myGroup;
+    if (!g) return;
+    window.showConfirmModal(g.isOwner ? 'Tutup grup ini? Anggota lain tidak bisa lagi memakai kodenya. Sesi yang sudah dibooking tetap berlaku.' : 'Keluar dari grup ini? Sesi yang sudah dibooking tetap berlaku.', function () {
+      memberCall('leaveClassGroup').then(function () { window.myGroup = null; renderClassSlot(); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: g.isOwner ? 'Tutup grup?' : 'Keluar grup?', confirmText: g.isOwner ? 'Ya, tutup' : 'Ya, keluar' });
+  };
+  window.classShareGroup = function () {
+    const g = window.myGroup;
+    if (!g) return;
+    const text = 'Gabung grup kelas privatku di XNK (' + g.packageName + ')! Ambil paketnya di https://book.xnkbooking.my.id lalu masukkan kode grup ' + g.code + ' di beranda (kartu Kelas).';
+    window.sendToParentWA('', text);
+  };
+
   // ── PORTAL: paket & coach ─────────────────────────────────────────────────
   function renderCatalog() {
     const el = $('view-public-catalog');
@@ -4746,10 +4834,11 @@
       return '<div class="' + (featured ? 'card-ink' : 'card') + ' pkg-card">' +
         '<div class="row-between"><span class="avatar ' + (featured ? '' : 'ink') + '" style="border-radius:14px">' + icon('dumbbell') + '</span>' + (featured ? '<span class="pill solid">Terpopuler</span>' : '') + '</div>' +
         '<div><h3 class="section-title" style="font-size:var(--fs-xl)">' + h(p.namaPaket) + '</h3><p class="' + (featured ? 'muted' : 'li-sub') + '" style="margin-top:4px">' + h((p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Sesi fleksibel') + (p.durasi ? ' · ' + p.durasi : '')) + '</p></div>' +
+        (p.tipe === 'kelas' ? classBadgeHtml(p) : '') +
         '<p class="pkg-price num">' + h(formatRp(p.harga)) + '</p>' +
         (p.deskripsi ? '<p class="' + (featured ? 'muted' : 'li-sub') + '">' + h(p.deskripsi) + '</p>' : '') +
         (Array.isArray(p.benefit) && p.benefit.length ? '<ul class="benefits"' + (featured ? ' style="color:var(--on-ink)"' : '') + '>' + p.benefit.map(b => '<li>' + icon('check') + '<span' + (featured ? ' style="color:var(--on-ink)"' : '') + '>' + h(b) + '</span></li>').join('') + '</ul>' : '') +
-        '<button type="button" class="btn ' + (featured ? 'btn-on-ink' : 'btn-primary') + ' btn-block" style="margin-top:auto" data-pkg="' + h(String(p.id)) + '" onclick="window.openRegistrationModal(this.getAttribute(\'data-pkg\'))">Pilih paket</button></div>';
+        '<button type="button" class="btn ' + (featured ? 'btn-on-ink' : 'btn-primary') + ' btn-block" style="margin-top:auto" data-pkg="' + h(String(p.id)) + '"' + (classFull(p) ? ' disabled' : '') + ' onclick="window.openRegistrationModal(this.getAttribute(\'data-pkg\'))">' + (classFull(p) ? 'Kelas penuh' : (p.tipe === 'kelas' ? 'Ikut kelas' : 'Pilih paket')) + '</button></div>';
     }).join('') : emptyState('package', 'Belum ada paket', 'Belum ada paket di kategori ini.'));
     staggerIndex(el);
   };

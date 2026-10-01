@@ -518,6 +518,14 @@
           <div class="two"><input class="input num" type="number" inputmode="numeric" id="pkg-sessions" min="1" max="200" placeholder="8">
           <label class="pkg-flex"><input type="checkbox" id="pkg-flex" onchange="window.pkgFlexChange()"><span>Fleksibel</span></label></div>
           <p class="hint err-msg" role="alert"></p></div>
+        <div class="row-between"><div><p class="li-title">Ini kelas</p><p class="li-sub">Klien bergabung ke kelas dengan kursi terbatas</p></div>
+          <label class="toggle"><input type="checkbox" id="pkg-class" onchange="window.pkgClassChange()" aria-label="Ini kelas"><span></span></label></div>
+        <div id="pkg-class-fields" class="form-grid hide">
+          <div class="field" id="pkg-f-cap"><label class="label" for="pkg-cap">Kapasitas (kursi)</label><input class="input num" type="number" inputmode="numeric" id="pkg-cap" min="2" max="50" placeholder="10"><p class="hint err-msg" role="alert"></p></div>
+          <div class="field"><label class="label" for="pkg-schedule">Jadwal kelas</label><input class="input" type="text" id="pkg-schedule" maxlength="80" autocomplete="off" placeholder="Contoh: Sen &amp; Rab 18:00"></div>
+          <div class="row-between"><div><p class="li-title">Boleh buat grup privat</p><p class="li-sub">Klien membuat grup, teman gabung dengan kode (maks. sebesar kapasitas)</p></div>
+            <label class="toggle"><input type="checkbox" id="pkg-private" aria-label="Boleh buat grup privat"><span></span></label></div>
+        </div>
         <div class="field"><label class="label" for="pkg-duration">Durasi</label><input class="input" type="text" id="pkg-duration" maxlength="40" autocomplete="off" placeholder="Contoh: 1 Bulan"></div>
         <div class="field"><label class="label" for="pkg-benefit-input">Benefit</label>
           <div class="pkg-benefit-add"><input class="input" type="text" id="pkg-benefit-input" maxlength="60" autocomplete="off" enterkeyhint="done" placeholder="Ketik lalu Enter"><button type="button" class="btn btn-outline" onclick="window.pkgAddBenefit()">Tambah</button></div>
@@ -589,6 +597,16 @@
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="renew-title">Perpanjang paket</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <div class="sheet-body stack"><p class="li-sub">Pilih paket. Setelah itu WhatsApp ke coach terbuka untuk konfirmasi pembayaran.</p><div class="list" id="renew-list"></div></div>
+    </div>
+
+    <!-- Gabung grup kelas privat dengan kode (portal klien) -->
+    <div class="sheet sm hide" id="sheet-class-join" role="dialog" aria-modal="true" aria-labelledby="class-join-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="class-join-title">Gabung grup</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-class-join" onsubmit="window.classJoinSubmit(event)" novalidate>
+        <div class="field"><label class="label" for="class-join-code">Kode grup</label><input class="input num" type="text" id="class-join-code" maxlength="6" autocapitalize="characters" autocomplete="off" placeholder="ABC234" style="text-transform:uppercase;letter-spacing:.2em"><p class="hint">Kode 6 karakter dari temanmu. Kamu harus sudah memegang paket kelas yang sama.</p></div>
+      </form>
+      <div class="sheet-foot"><button type="submit" form="form-class-join" class="btn btn-primary btn-lg btn-block" id="class-join-btn">Gabung</button></div>
     </div>
 
     <!-- Potong foto -->
