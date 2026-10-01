@@ -1,0 +1,39 @@
+name: Desktop app (Windows)
+
+# Packages https://xnk.my.id as a Windows installer (.msi) with Pake.
+# Run it from Actions -> "Desktop app (Windows)" -> Run workflow,
+# then download the "xnk-pt-manager-msi" artifact from the run page.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/desktop-app.yml
+
+jobs:
+  msi:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Pake
+        run: npm install -g pake-cli
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          pake https://xnk.my.id --name "XNK - PT Manager" --targets msi --json > pake.json
+          $code = $LASTEXITCODE
+          Get-Content pake.json
+          if ($code -ne 0) { exit $code }
+          $result = Get-Content pake.json -Raw | ConvertFrom-Json
+          if (-not $result.ok) { exit 1 }
+          New-Item -ItemType Directory -Force out | Out-Null
+          foreach ($o in $result.outputs) { Copy-Item $o.path out/ }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xnk-pt-manager-msi
+          path: out/*.msi
+          if-no-files-found: error
