@@ -117,6 +117,18 @@ Built. Notes: "every other Monday" counts weeks from Monday 5 Jan 2026 (so it ke
 | [x] | T-302 | `getPriceListPublic` (landing categories + active packages), landing tabs from it, price per session, `doGet?view=prices` JSON. | Kode.gs, LandingScript.html | — | M | `core` stays off the landing; old server still works. |
 | [ ] | T-310 | BookingPT: `/harga` and `/kelas` static pages, `data/paket.json` mirror + sync Action, JSON-LD, sitemap, robots, llms.txt. | BookingPT repo | T-302 | L | Separate PR in BookingPT. |
 
+## Phase G — Classes in the price list
+
+Owner request: classes in the price list; clients can join a class, or make a private group (join code). Sheets stay as they are: only columns are appended. Decisions: a class is a PriceList package with a fixed schedule; a class has its own session count (`Jumlah Sesi`); a private group is made by sharing a code; a friend joins only after taking the same class package (the normal Beli / Perpanjang flow), then enters the code. Deviation from the first plan: group members live in `ClassGroups` column G (no new MemberData column).
+
+| | ID | Task | Files | Depends | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [x] | T-250 | PriceList columns `Tipe`, `Kapasitas`, `Jadwal Kelas`, `Kelas Privat` (appended, idempotent); public `getPriceList` returns them plus seats taken; full class refused in `_addMemberInternal_`. | Kode.gs, tests | — | M | Old rows stay plain packages; migration runs once. |
+| [x] | T-251 | Package editor: "Ini kelas" switch with capacity, schedule, private-group switch. | Index.html, App.html | T-250 | S | Saves and reloads on a phone. |
+| [x] | T-252 | `ClassGroups` sheet, `createClassGroup`, `joinClassGroup`, `leaveClassGroup`, `getMyClassGroup`, admin `getClassGroups`; first names only. | Kode.gs, tests/security.test.js | T-250 | M | Full group, wrong package and bad code refused. |
+| [x] | T-253 | Schedules column M `Kelas ID`; same class (or group) at the same start shares one coach seat up to capacity; class members book single sessions only. | Kode.gs, tests | T-250 | M | Booking flow for regular packages unchanged. |
+| [x] | T-254 | Portal: class badge and seats on cards, "Ikut kelas", Kelas card with group create / join / share / leave. | App.html, Index.html | T-252 | M | Works at 390 px. |
+
 ## Later
 
 | | ID | Task | PRD |

@@ -114,6 +114,14 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
   mengubah harga paket **tidak** mengubah laporan pendapatan bulan-bulan lalu. Saat pertama kali
   dipakai, sheet `PriceList` dilengkapi kolom "Jumlah Sesi" (kalau belum ada) dan "Urutan".
   **Salin spreadsheet dulu** (File → Buat salinan) sebelum menyimpan perubahan pertama.
+- **Kelas** (di Paket & Harga): nyalakan **Ini kelas** pada sebuah paket, isi **Kapasitas** (jumlah kursi),
+  **Jadwal kelas** (teks, mis. "Sen & Rab 18:00") dan, kalau mau, **Boleh buat grup privat**. Kelas punya
+  jumlah sesi sendiri (kolom "Jumlah Sesi"). Klien ikut kelas lewat alur paket biasa; kelas yang penuh
+  tidak bisa dipilih lagi. Di portal, klien kelas privat bisa **Buat grup** (dapat kode 6 karakter) dan
+  membagikannya; teman yang sudah mengambil paket kelas yang sama memasukkan kode itu. Sesi kelas yang sama
+  pada jam yang sama memakai satu kursi coach (sheet `Schedules` kolom M "Kelas ID"; sheet `ClassGroups`
+  baru). Booking untuk klien kelas dilakukan satu per satu (tidak berulang, tidak bisa dipindah sendiri).
+  Kolom baru PriceList: "Tipe", "Kapasitas", "Jadwal Kelas", "Kelas Privat" (ditambah otomatis).
 - **Jam Operasional** per hari (`BUSINESS_HOURS_JSON`).
 - **Keamanan**: ganti PIN, `LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`, `MEMBER_LOGIN_MAX_FAILS`,
   `ADMIN_SESSION_DAYS`. Kolom angka yang dikosongkan kembali ke nilai bawaan ("Bawaan …").

@@ -1496,6 +1496,12 @@ function _addMemberInternal_(memberData, options) {
     if (memberData.packageId) {
       const allPackages = getPriceList();
       const selectedPkg = allPackages.find(function(p) { return String(p.id) === String(memberData.packageId); });
+      if (selectedPkg && selectedPkg.tipe === 'kelas' && selectedPkg.kapasitas) {
+        // Kelas penuh: tolak, kecuali klien ini sudah memegang kursi di kelas yang sama (perpanjang).
+        const holdsSeat = isPerpanjang && String(data[existingRowIndex][6] || '').trim() === String(selectedPkg.id) &&
+          (parseInt(data[existingRowIndex][9], 10) || 0) < (parseInt(data[existingRowIndex][8], 10) || 0);
+        if (!holdsSeat && selectedPkg.terisi >= selectedPkg.kapasitas) throw new Error('Kelas sudah penuh.');
+      }
       if (selectedPkg) {
         paketId = selectedPkg.id;
         paketNama = selectedPkg.namaPaket;
@@ -1917,8 +1923,14 @@ function _coachNameOrEmpty_(v) {
   return String(n).trim() === 'Belum Ditugaskan' ? '' : n;
 }
 
+/** Sheet Schedules lama belum punya kolom M "Kelas ID": beri header-nya (hanya kalau M1 masih kosong). */
+function _ensureScheduleClassHeader_(sheet) {
+  const c = sheet.getRange(1, 13);
+  if (c.getValue() === '') { c.setValue('Kelas ID'); c.setFontWeight('bold'); }
+}
+
 function _getSchedulesAll_() {
-  const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID"];
+  const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID", "Kelas ID"];
   const sheet = getOrCreateSheet_('Schedules', headers);
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
@@ -1935,7 +1947,8 @@ function _getSchedulesAll_() {
       coachId: sanitizeValue(row[8]),
       coachName: _coachNameOrEmpty_(row[9]),   // T-200: teks lama "Belum Ditugaskan" dibaca sebagai kosong
       completedAt: sanitizeValue(row[10]) || '',
-      recurringGroupId: sanitizeValue(row[11]) || ''
+      recurringGroupId: sanitizeValue(row[11]) || '',
+      classId: sanitizeValue(row[12]) || ''
     };
   });
 }
@@ -1954,7 +1967,7 @@ function addSchedule(token, scheduleData) {
 
 function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
   try {
-    const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID"];
+    const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID", "Kelas ID"];
     const sheet = getOrCreateSheet_('Schedules', headers);
     const id = 'SCH-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const status = statusParam || 'read';
@@ -1986,8 +1999,9 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
     sheet.appendRow([
       id, scheduleData.memberId, scheduleData.memberName, scheduleData.phone.toString(),
       scheduleData.start, scheduleData.end, scheduleData.notes, status,
-      coachId, coachName || "", "", scheduleData.recurringGroupId || ""
+      coachId, coachName || "", "", scheduleData.recurringGroupId || "", scheduleData.classId || ""
     ]);
+    _ensureScheduleClassHeader_(sheet);
 
     // Hanya notif di sini kalau BUKAN booking mandiri klien (statusParam 'unread') DAN bukan silent,
     // karena booking mandiri sudah dinotif detail di clientBookSchedule, dan batch recurring
@@ -2041,6 +2055,7 @@ function addRecurringSchedule(token, baseScheduleData, recurrenceRule) {
  */
 function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule) {
   const member = requireMember_(memberToken);
+  if (_memberClassContext_(member.row)) throw new Error('Sesi kelas dipilih satu per satu, tidak bisa berulang. Pilih jam kelasnya.');
   const base = baseScheduleData || {};
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
@@ -2287,6 +2302,8 @@ function _clientReschedule_(memberId, scheduleId, newStart, newEnd) {
         throw new Error('Jadwal ini bukan milik Anda.');
       }
 
+      if (String(data[i][12] || '').trim()) throw new Error('Sesi kelas tidak bisa dipindah sendiri. Hubungi Coach atau batalkan lalu pilih sesi kelas lain.');
+
       // 2. Tidak boleh reschedule sesi yang sudah selesai
       const status = String(data[i][7]).toLowerCase();
       if (status === 'completed') {
@@ -2386,14 +2403,29 @@ function clientBookSchedule(memberToken, scheduleData) {
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   let addResult;
   try {
-    _assertClientSlotOpen_(scheduleData.start, scheduleData.end, '');
+    // Klien di paket kelas: sesinya memakai Kelas ID (kelas, atau grup privat). Jam yang sudah dipakai kelas yang sama
+    // tetap bisa diikuti selama Kapasitas belum penuh; jam baru memakai aturan slot biasa.
+    const cls = _memberClassContext_(member.row);
+    let classKey = '';
+    if (cls) {
+      classKey = String(cls.classId) + '|' + new Date(scheduleData.start).getTime();
+      const same = _getSchedulesAll_().filter(function(x) {
+        const st = String(x.status || '').toLowerCase();
+        return st !== 'available' && st !== 'cancelled' && _classKey_(x) === classKey;
+      });
+      if (same.some(function(x) { return String(x.memberId).trim() === String(member.row[0]).trim(); })) throw new Error('Kamu sudah terdaftar di sesi kelas ini.');
+      if (same.length && same.length >= cls.kapasitas) throw new Error('Sesi kelas ini sudah penuh. Pilih jam lain.');
+      if (same.length && new Date(same[0].end).getTime() !== new Date(scheduleData.end).getTime()) throw new Error('Durasi harus sama dengan sesi kelas yang sudah ada.');
+    }
+    _assertClientSlotOpen_(scheduleData.start, scheduleData.end, '', classKey);
     addResult = _addScheduleInternal_({
       memberId: String(member.row[0]).trim(),
       memberName: memberName,
       phone: phone,
       start: scheduleData.start,
       end: scheduleData.end,
-      notes: notes
+      notes: notes,
+      classId: cls ? cls.classId : ''
     }, 'unread');
   } finally {
     lock.releaseLock();
@@ -2891,9 +2923,11 @@ const PACKAGE_CATEGORIES = [
   { id: 'premium', label: 'Premium', onLanding: true },
   { id: 'core', label: 'Core', onLanding: false }
 ];
-const PRICELIST_HEADERS = ["ID", "Nama Paket", "Kategori", "Harga", "Jumlah Sesi", "Durasi", "Deskripsi", "Benefit", "Status Aktif", "Urutan"];
-const PRICELIST_KEYS = ['id', 'nama', 'kategori', 'harga', 'sesi', 'durasi', 'deskripsi', 'benefit', 'aktif', 'urutan'];
-const PACKAGE_MAX = { nama: 60, durasi: 40, deskripsi: 300, benefitItem: 60, benefitCount: 10, harga: 100000000, sesi: 200 };
+const PRICELIST_HEADERS = ["ID", "Nama Paket", "Kategori", "Harga", "Jumlah Sesi", "Durasi", "Deskripsi", "Benefit", "Status Aktif", "Urutan", "Tipe", "Kapasitas", "Jadwal Kelas", "Kelas Privat"];
+const PRICELIST_KEYS = ['id', 'nama', 'kategori', 'harga', 'sesi', 'durasi', 'deskripsi', 'benefit', 'aktif', 'urutan', 'tipe', 'kapasitas', 'jadwal', 'privat'];
+const PACKAGE_MAX = { nama: 60, durasi: 40, deskripsi: 300, benefitItem: 60, benefitCount: 10, harga: 100000000, sesi: 200, kapasitas: 50, jadwal: 80 };
+// Kolom opsional kelas (diurutkan setelah "Urutan"); ditambahkan idempoten di _ensurePriceListSchema_.
+const PRICELIST_CLASS_COLS = [['tipe', 'Tipe'], ['kapasitas', 'Kapasitas'], ['jadwal', 'Jadwal Kelas'], ['privat', 'Kelas Privat']];
 
 /**
  * Peta kolom PriceList berdasarkan NAMA header (bukan posisi), supaya menambah kolom tidak menggeser bacaan.
@@ -2947,6 +2981,20 @@ function _ensurePriceListSchema_() {
       sheet.getRange(p._row, cols.urutan + 1).setValue(perCat[p.kategori]);
     });
   }
+  // Kolom kelas (Tipe, Kapasitas, Jadwal Kelas, Kelas Privat): hanya ditambah di ujung kanan, baris lama dibiarkan kosong (= paket biasa).
+  let added = false;
+  PRICELIST_CLASS_COLS.forEach(function(c) {
+    if (cols[c[0]] !== undefined) return;
+    const col = sheet.getLastColumn() + 1;
+    sheet.getRange(1, col).setValue(c[1]);
+    sheet.getRange(1, col).setFontWeight('bold');
+    cols[c[0]] = col - 1;
+    added = true;
+  });
+  if (added) {
+    header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+    cols = _priceListNamedColumns_(header);
+  }
   return { sheet: sheet, idx: cols };
 }
 
@@ -2986,7 +3034,11 @@ function _readPackages_(sheet, idx) {
       deskripsi: sanitizeValue(_plCell_(row, idx, 'deskripsi')),
       benefit: sanitizeValue(_plCell_(row, idx, 'benefit')).split(',').map(function(b) { return b.trim(); }).filter(String),
       aktif: aktifRaw === true || String(aktifRaw).toUpperCase() === 'TRUE',
-      urutan: ur === '' || isNaN(Number(ur)) ? '' : Number(ur)
+      urutan: ur === '' || isNaN(Number(ur)) ? '' : Number(ur),
+      tipe: String(sanitizeValue(_plCell_(row, idx, 'tipe'))).toLowerCase().trim() === 'kelas' ? 'kelas' : 'paket',
+      kapasitas: _kapasitasFrom_(_plCell_(row, idx, 'kapasitas')),
+      jadwal: String(sanitizeValue(_plCell_(row, idx, 'jadwal'))).trim(),
+      privat: _truthyCell_(_plCell_(row, idx, 'privat'))
     });
   }
   const catRank = {};
@@ -3001,13 +3053,42 @@ function _readPackages_(sheet, idx) {
   return list;
 }
 
+function _kapasitasFrom_(v) {
+  const n = parseInt(sanitizeValue(v), 10);
+  return n > 0 ? n : '';
+}
+
+function _truthyCell_(v) { return v === true || String(v).trim().toUpperCase() === 'TRUE'; }
+
+/** Kursi terisi per paket: klien yang masih punya sisa sesi di paket itu (klien yang kuotanya habis melepas kursi). */
+function _packageSeats_() {
+  const seats = {};
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    const id = String(r[6] || '').trim();
+    if (!id || String(r[0]).trim() === '') return;
+    if ((parseInt(r[9], 10) || 0) >= (parseInt(r[8], 10) || 0)) return;
+    seats[id] = (seats[id] || 0) + 1;
+  });
+  return seats;
+}
+
 function getPriceList() {
   const ctx = _priceListSheetAndColumns_();
-  return _readPackages_(ctx.sheet, ctx.idx).filter(function(p) { return p.aktif; }).map(function(p) {
-    return {
+  const list = _readPackages_(ctx.sheet, ctx.idx).filter(function(p) { return p.aktif; });
+  const seats = list.some(function(p) { return p.tipe === 'kelas'; }) ? _packageSeats_() : {};
+  return list.map(function(p) {
+    const out = {
       id: p.id, namaPaket: p.namaPaket, kategori: p.kategori, harga: p.harga, jumlahSesi: p.jumlahSesi,
       durasi: p.durasi, deskripsi: p.deskripsi, benefit: p.benefit.length ? p.benefit : [''], aktif: true
     };
+    if (p.tipe === 'kelas') {
+      out.tipe = 'kelas';
+      out.kapasitas = p.kapasitas;
+      out.jadwal = p.jadwal;
+      out.privat = p.privat;
+      out.terisi = seats[p.id] || 0;
+    }
+    return out;
   });
 }
 
@@ -3041,6 +3122,7 @@ function _adminPackage_(p, usage) {
   return {
     id: p.id, namaPaket: p.namaPaket, kategori: p.kategori, harga: p.harga, jumlahSesi: p.jumlahSesi,
     durasi: p.durasi, deskripsi: p.deskripsi, benefit: p.benefit, aktif: p.aktif, urutan: p.urutan,
+    tipe: p.tipe, kapasitas: p.kapasitas, jadwal: p.jadwal, privat: p.privat,
     usage: { activeMembers: usage.members[p.id] || 0, logEntries: usage.log[p.id] || 0 }
   };
 }
@@ -3088,7 +3170,15 @@ function _validatePackage_(data, existing) {
     if (b.length > PACKAGE_MAX.benefitItem) throw new Error('Setiap benefit maksimal ' + PACKAGE_MAX.benefitItem + ' karakter.');
     if (b.indexOf(',') !== -1) throw new Error('Benefit tidak boleh berisi koma.');
   });
-  return { namaPaket: nama, kategori: kategori, harga: harga, jumlahSesi: sesi, durasi: durasi, deskripsi: deskripsi, benefit: benefit };
+  const tipe = String(data.tipe == null ? '' : data.tipe).trim().toLowerCase() === 'kelas' ? 'kelas' : 'paket';
+  let kapasitas = '', jadwal = '', privat = false;
+  if (tipe === 'kelas') {
+    kapasitas = _wholeNumber_(data.kapasitas, 2, PACKAGE_MAX.kapasitas, 'Kapasitas kelas harus bilangan bulat 2–' + PACKAGE_MAX.kapasitas + '.');
+    jadwal = String(data.jadwal == null ? '' : data.jadwal).trim();
+    if (jadwal.length > PACKAGE_MAX.jadwal) throw new Error('Jadwal kelas maksimal ' + PACKAGE_MAX.jadwal + ' karakter.');
+    privat = data.privat === true;
+  }
+  return { namaPaket: nama, kategori: kategori, harga: harga, jumlahSesi: sesi, durasi: durasi, deskripsi: deskripsi, benefit: benefit, tipe: tipe, kapasitas: kapasitas, jadwal: jadwal, privat: privat };
 }
 
 function _newPackageId_(taken) {
@@ -3110,6 +3200,7 @@ function _writePackageRow_(sheet, idx, rowNum, v) {
   const set = function(key, val) { if (idx[key] !== undefined) sheet.getRange(rowNum, idx[key] + 1).setValue(val); };
   set('nama', v.namaPaket); set('kategori', v.kategori); set('harga', v.harga); set('sesi', v.jumlahSesi);
   set('durasi', v.durasi); set('deskripsi', v.deskripsi); set('benefit', v.benefit.join(', '));
+  set('tipe', v.tipe === 'kelas' ? 'kelas' : ''); set('kapasitas', v.kapasitas); set('jadwal', v.jadwal); set('privat', v.privat ? true : '');
   if (v.aktif !== undefined) set('aktif', v.aktif);
   if (v.urutan !== undefined) set('urutan', v.urutan);
 }
@@ -4759,8 +4850,11 @@ function _freeSlots_(o) {
           const availIds = {};
           avail.forEach(function(c) { availIds[c.id] = true; });
           let used = 0;
+          const seenClass = {};
           (o.bookings || []).forEach(function(bk) {
             if (!(new Date(bk.start).getTime() < b && new Date(bk.end || bk.start).getTime() > a)) return;
+            // Sesi kelas yang sama (kelas + jam mulai sama) berbagi SATU kursi coach; peserta dibatasi Kapasitas.
+            if (bk.classKey) { if (seenClass[bk.classKey]) return; seenClass[bk.classKey] = true; }
             // Booking milik coach yang sedang tidak tersedia tidak memakai kursi; tanpa coach (atau coach tak dikenal) memakai kursi bersama.
             if (!bk.coachId || !known[bk.coachId] || availIds[bk.coachId]) used++;
           });
@@ -4779,7 +4873,12 @@ function _slotBookings_() {
   return _getSchedulesAll_().filter(function(s) {
     const st = String(s.status || '').toLowerCase();
     return st !== 'available' && st !== 'cancelled';
-  }).map(function(s) { return { start: s.start, end: s.end, coachId: String(s.coachId || '') }; });
+  }).map(function(s) { return { start: s.start, end: s.end, coachId: String(s.coachId || ''), classKey: _classKey_(s) }; });
+}
+
+/** Kunci satu sesi kelas: kelas/grup + jam mulai. Kosong untuk sesi biasa. */
+function _classKey_(s) {
+  return s && s.classId ? String(s.classId) + '|' + new Date(s.start).getTime() : '';
 }
 
 /** Publik: jam kosong tiap hari (7 hari default, maks 21). Tidak membuka siapa yang booking atau alasan cuti. */
@@ -4851,7 +4950,7 @@ function _anyCoachAvailable_(coaches, rules, timeOff, start, end) {
  * code: 'past' | 'closed' | 'unavailable' | 'taken'. Memakai mesin slot yang sama dengan Landing & portal.
  * excludeId = jadwal yang sedang dipindah / baru dibuat (tidak dihitung sebagai bentrok).
  */
-function _slotProblem_(start, end, excludeId, allowPast) {
+function _slotProblem_(start, end, excludeId, allowPast, joinClassKey) {
   const s = new Date(start), e = new Date(end);
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return { code: 'closed', message: 'Waktu jadwal tidak valid.' };
   if (!allowPast && s.getTime() <= Date.now()) return { code: 'past', message: 'Jam ini sudah lewat.' };
@@ -4860,8 +4959,8 @@ function _slotProblem_(start, end, excludeId, allowPast) {
   const rules = _coachRules_(), off = _coachTimeOff_(false);
   const bookings = _getSchedulesAll_().filter(function(x) {
     const st = String(x.status || '').toLowerCase();
-    return st !== 'available' && st !== 'cancelled' && String(x.id) !== String(excludeId || '');
-  }).map(function(x) { return { start: x.start, end: x.end, coachId: String(x.coachId || '') }; });
+    return st !== 'available' && st !== 'cancelled' && String(x.id) !== String(excludeId || '') && !(joinClassKey && _classKey_(x) === joinClassKey);
+  }).map(function(x) { return { start: x.start, end: x.end, coachId: String(x.coachId || ''), classKey: _classKey_(x) }; });
   const cache = {};
   for (let t = Math.floor(s.getTime() / 3600000) * 3600000; t < e.getTime(); t += 3600000) {
     const w = _wibParts_(new Date(t));
@@ -4885,8 +4984,8 @@ function _slotWarnings_(start, end, excludeId) {
 }
 
 /** Klien: lempar error Indonesia kalau jam tidak boleh dibooking (lewat, tutup, coach tidak ada, atau sudah terisi). */
-function _assertClientSlotOpen_(start, end, excludeId) {
-  const p = _slotProblem_(start, end, excludeId, false);
+function _assertClientSlotOpen_(start, end, excludeId, joinClassKey) {
+  const p = _slotProblem_(start, end, excludeId, false, joinClassKey);
   if (p) throw new Error(p.message);
 }
 
@@ -5519,4 +5618,174 @@ function getMyCoach(memberToken, coachId) {
 function previewCoachProfile(token) {
   requireAdmin_(token);
   return _coachProfilePage_();
+}
+
+
+// #############################################################################
+// 📁 13_CLASSES — Kelas (paket bertipe "kelas") dan grup privat
+// #############################################################################
+//
+// Kelas = baris PriceList dengan Tipe "kelas" (Kapasitas, Jadwal Kelas, Kelas Privat). Klien ikut kelas lewat alur paket biasa.
+// Grup privat: klien membuat grup dari paket kelas "privat", membagikan kode, teman yang sudah memegang paket yang sama bergabung.
+// Sesi satu kelas/grup pada jam yang sama berbagi satu kursi coach (Schedules kolom M "Kelas ID").
+
+const CLASS_GROUP_HEADERS = ["ID", "Kode", "Paket ID", "Pembuat Member ID", "Status", "Dibuat Pada", "Anggota"];
+const CLASS_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function _classGroupSheet_() { return getOrCreateSheet_('ClassGroups', CLASS_GROUP_HEADERS); }
+
+function _classGroupFromRow_(r) {
+  return {
+    id: String(r[0]), code: String(r[1]), packageId: String(r[2]), creatorId: String(r[3]).trim(), status: String(r[4]),
+    createdAt: String(r[5]), members: String(r[6] || '').split(',').map(function(x) { return x.trim(); }).filter(String)
+  };
+}
+
+function _newClassCode_(taken) {
+  for (let n = 0; n < 50; n++) {
+    let c = '';
+    for (let i = 0; i < 6; i++) c += CLASS_CODE_CHARS.charAt(Math.floor(Math.random() * CLASS_CODE_CHARS.length));
+    if (!taken[c]) return c;
+  }
+  throw new Error('Gagal membuat kode grup. Coba lagi.');
+}
+
+/** Paket kelas (aktif) dari PriceList menurut ID; null kalau bukan kelas. */
+function _classPackage_(packageId) {
+  const pid = String(packageId == null ? '' : packageId).trim();
+  const pkg = getPriceList().find(function(p) { return String(p.id) === pid; });
+  return pkg && pkg.tipe === 'kelas' ? pkg : null;
+}
+
+/** Grup terbuka milik / berisi klien ini ({sheetRow, ...group}) atau null. */
+function _openGroupOf_(memberId) {
+  const data = _classGroupSheet_().getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    const g = _classGroupFromRow_(data[i]);
+    if (g.status === 'buka' && g.members.indexOf(String(memberId).trim()) !== -1) { g._row = i + 1; return g; }
+  }
+  return null;
+}
+
+/**
+ * Konteks kelas klien: null kalau paketnya bukan kelas. Kalau klien ada di grup privat untuk paket yang sama,
+ * Kelas ID = ID grup (sesinya tidak bercampur dengan kelas umum); selain itu Kelas ID = ID paket.
+ */
+function _memberClassContext_(row) {
+  const pkg = _classPackage_(row[6]);
+  if (!pkg) return null;
+  const g = _openGroupOf_(row[0]);
+  const group = g && g.packageId === pkg.id ? g : null;
+  return { classId: group ? group.id : pkg.id, kapasitas: pkg.kapasitas || 1, package: pkg, group: group };
+}
+
+function _publicGroup_(g, memberId) {
+  const names = {};
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
+  const pkg = _classPackage_(g.packageId);
+  return {
+    id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '',
+    isOwner: g.creatorId === String(memberId).trim(),
+    members: g.members.map(function(m) { return names[m] || 'Anggota'; })   // nama depan saja, tanpa nomor WA
+  };
+}
+
+/** Klien: buat grup privat dari paket kelas yang sedang dipegang. Mengembalikan kode untuk dibagikan. */
+function createClassGroup(memberToken) {
+  const row = requireMember_(memberToken).row;
+  const memberId = String(row[0]).trim();
+  const pkg = _classPackage_(row[6]);
+  if (!pkg) throw new Error('Pilih paket kelas dulu sebelum membuat grup.');
+  if (!pkg.privat) throw new Error('Kelas ini tidak menyediakan grup privat.');
+  if ((parseInt(row[9], 10) || 0) >= (parseInt(row[8], 10) || 0)) throw new Error('Sesi kelasmu sudah habis. Perpanjang dulu.');
+  if (!_throttle_('classgroup_' + memberId, 10)) throw new Error('Permintaan baru saja dikirim. Tunggu sebentar.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  let g;
+  try {
+    if (_openGroupOf_(memberId)) throw new Error('Kamu sudah punya grup. Keluar dari grup itu dulu.');
+    const sheet = _classGroupSheet_();
+    const data = sheet.getDataRange().getValues();
+    const taken = {};
+    data.slice(1).forEach(function(r) { taken[String(r[1])] = true; });
+    g = { id: 'GRP-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), code: _newClassCode_(taken), packageId: pkg.id, creatorId: memberId, status: 'buka', createdAt: new Date().toISOString(), members: [memberId] };
+    sheet.appendRow([g.id, g.code, g.packageId, g.creatorId, g.status, g.createdAt, g.members.join(',')]);
+  } finally {
+    lock.releaseLock();
+  }
+  return _publicGroup_(g, memberId);
+}
+
+/** Klien: gabung grup pakai kode. Wajib sudah memegang paket kelas yang sama (sisa sesi) dan grup belum penuh. */
+function joinClassGroup(memberToken, code) {
+  const row = requireMember_(memberToken).row;
+  const memberId = String(row[0]).trim();
+  const kode = String(code == null ? '' : code).trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(kode)) throw new Error('Kode grup tidak valid.');
+  if (!_throttle_('classjoin_' + memberId, 3)) throw new Error('Terlalu cepat. Tunggu sebentar.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  let g;
+  try {
+    const sheet = _classGroupSheet_();
+    const data = sheet.getDataRange().getValues();
+    let rowNum = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][1]) === kode && String(data[i][4]) === 'buka') { g = _classGroupFromRow_(data[i]); rowNum = i + 1; break; }
+    }
+    if (!g) throw new Error('Kode grup tidak ditemukan.');
+    if (g.members.indexOf(memberId) !== -1) return _publicGroup_(g, memberId);
+    if (_openGroupOf_(memberId)) throw new Error('Kamu sudah ada di grup lain. Keluar dulu.');
+    const pkg = _classPackage_(g.packageId);
+    if (!pkg || !pkg.privat) throw new Error('Grup ini sudah tidak tersedia.');
+    if (String(row[6]).trim() !== pkg.id || (parseInt(row[9], 10) || 0) >= (parseInt(row[8], 10) || 0)) {
+      throw new Error('Ambil paket "' + pkg.namaPaket + '" dulu (Beli / Perpanjang), lalu masukkan kode lagi.');
+    }
+    if (g.members.length >= (pkg.kapasitas || 1)) throw new Error('Grup sudah penuh.');
+    g.members.push(memberId);
+    sheet.getRange(rowNum, 7).setValue(g.members.join(','));
+  } finally {
+    lock.releaseLock();
+  }
+  return _publicGroup_(g, memberId);
+}
+
+/** Klien: keluar dari grup. Pembuat yang keluar menutup grup; sesi yang sudah dibooking tetap berlaku. */
+function leaveClassGroup(memberToken) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const g = _openGroupOf_(memberId);
+    if (!g) return { status: 'success' };
+    const sheet = _classGroupSheet_();
+    if (g.creatorId === memberId) {
+      sheet.getRange(g._row, 5).setValue('tutup');
+    } else {
+      sheet.getRange(g._row, 7).setValue(g.members.filter(function(m) { return m !== memberId; }).join(','));
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  return { status: 'success' };
+}
+
+/** Klien: grup saya (atau null). Hanya nama depan anggota. */
+function getMyClassGroup(memberToken) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  const g = _openGroupOf_(memberId);
+  return g ? _publicGroup_(g, memberId) : null;
+}
+
+/** Admin: semua grup privat terbuka beserta anggotanya. */
+function getClassGroups(token) {
+  requireAdmin_(token);
+  const names = {};
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
+  return _classGroupSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[4]) === 'buka'; }).map(function(r) {
+    const g = _classGroupFromRow_(r);
+    const pkg = _classPackage_(g.packageId);
+    return { id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '', createdAt: g.createdAt, members: g.members.map(function(m) { return { id: m, name: names[m] || '' }; }) };
+  });
 }
