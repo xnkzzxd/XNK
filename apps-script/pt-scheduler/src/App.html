@@ -15,6 +15,8 @@
   window.memberArchive = [];
   window.schedules = [];
   window.coaches = [];
+  // Mode solo: tepat satu coach aktif. window.coaches hanya berisi coach aktif, jadi cukup dihitung.
+  window.isSoloCoach = function () { return (window.coaches || []).length === 1; };
   window.priceListData = [];
   window.currentView = null;
   window.isPublicView = false;
@@ -585,7 +587,8 @@
     loginMaxFails: { label: 'Batas gagal login admin', min: 1, max: 1000 },
     loginLockSeconds: { label: 'Lama kunci (detik)', min: 10, max: 86400 },
     memberLoginMaxFails: { label: 'Batas nomor WA tak dikenal', min: 1, max: 1000 },
-    adminSessionDays: { label: 'Lama sesi admin (hari)', min: 1, max: 365 }
+    adminSessionDays: { label: 'Lama sesi admin (hari)', min: 1, max: 365 },
+    rescheduleCutoffHours: { label: 'Batas ganti jadwal klien (jam sebelum sesi)', min: 0, max: 72 }
   };
   // Jenis pengingat: sama dengan REMINDER_JOBS di Reminder.gs
   const SET_RMD_JOBS = [
@@ -596,7 +599,10 @@
     { id: 'makan-sore', title: 'Makan sore', sub: 'Tip makan sore untuk klien paket core. Butuh tip aktif di sheet MealTips.' },
     { id: 'rekap-bulanan', title: 'Rekap bulanan', sub: 'Tanggal 1 tiap bulan: sesi, perubahan berat/pinggang, dan streak bulan lalu' },
     { id: 'selamat-milestone', title: 'Selamat milestone', sub: 'Tiap hari: klien yang baru meraih badge (10/25/50/100 sesi, streak 4/8/12 minggu)' },
-    { id: 'waktunya-ukur', title: 'Waktunya ukur', sub: 'Tiap dua minggu (Senin): klien yang belum mencatat berat/pinggang 14 hari' }
+    { id: 'waktunya-ukur', title: 'Waktunya ukur', sub: 'Tiap dua minggu (Senin): klien yang belum mencatat berat/pinggang 14 hari' },
+    { id: 'tes-ulang', title: 'Tes ulang', sub: 'Tiap Senin: klien yang tes kebugaran terakhirnya 28 hari lalu atau lebih' },
+    { id: 'ulang-tahun', title: 'Ulang tahun', sub: 'Tiap hari: tombol WhatsApp ucapan untuk klien yang berulang tahun' },
+    { id: 'ringkasan-owner', title: 'Ringkasan bulanan (untukmu)', sub: 'Tanggal 1: satu pesan Telegram berisi sesi, klien baru, pendapatan, dan hasil target bulan lalu' }
   ];
   const setState = { data: null, open: null, snap: {}, dirty: false, built: false, pushed: false, forcePop: false, status: null, log: null, onlyFailed: false, saving: false };
   const isPhone = function () { return !(window.matchMedia && window.matchMedia('(min-width: 768px)').matches); };
@@ -658,7 +664,7 @@
         '</div><p class="hint">Mengganti PIN membuat semua perangkat lain keluar dari panel.</p>' +
         '<button type="submit" class="btn btn-outline btn-block">' + icon('lock') + ' Ganti PIN</button></form>' +
         '<div class="group-label"><span>Batas &amp; sesi</span></div><div class="form-grid">' +
-        setNumField('loginMaxFails') + setNumField('loginLockSeconds') + setNumField('memberLoginMaxFails') + setNumField('adminSessionDays') + '</div>';
+        setNumField('loginMaxFails') + setNumField('loginLockSeconds') + setNumField('memberLoginMaxFails') + setNumField('adminSessionDays') + setNumField('rescheduleCutoffHours') + '</div>';
     },
     akun: function () {
       return '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
@@ -1666,16 +1672,35 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { _lsSet(ADMIN_CACHE_KEY, null); }
+  function clearAdminCache() { _lsSet(ADMIN_CACHE_KEY, null); if (window.clearCareCache) window.clearCareCache(); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
+  // Daftar semua coach (aktif & nonaktif) untuk layar Tim coach; window.coaches hanya yang aktif.
+  window.coachesAll = [];
+  window.coachSelfId = '';
+  function applyCoachesAdmin(res) {
+    window.coachesAll = res.coaches || [];
+    window.coachSelfId = res.selfId || '';
+    window.coaches = window.coachesAll.filter(function (c) { return c.aktif; });
+  }
+  // E2: jam kosong dari mesin slot server (jam operasional, jam kerja & cuti coach, kapasitas).
+  // Kalau gagal, panel jam memakai hitungan lama di publicDayPanel.
+  window.openSlotsByDate = null;
+  window.loadOpenSlots = function () {
+    return publicCall('getOpenSlots', { days: 21 }).then(function (rows) {
+      const map = {};
+      (rows || []).forEach(function (d) { const f = {}; d.hours.forEach(function (x) { f[x.hour] = x.free; }); map[d.date] = f; });
+      window.openSlotsByDate = map;
+      if (window.isPublicView && window.currentView === 'calendar') renderView('calendar', { animate: false });
+    }).catch(function () { window.openSlotsByDate = null; });
+  };
   window.loadAllData = function () {
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     return Promise.all([
       safe(adminCall('getMembers')),
       safe(adminCall('getSchedules')),
-      safe(publicCall('getCoaches')),
+      safe(adminCall('getCoachesAdmin')),
       safe(publicCall('getPriceList')),
       safe(publicCall('getBusinessHours'))
     ]).then(function (r) {
@@ -1683,7 +1708,7 @@
       // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
       if (r[0]) window.members = r[0];
       if (r[1]) window.schedules = normalizeSchedules(r[1]);
-      if (r[2]) window.coaches = r[2];
+      if (r[2]) applyCoachesAdmin(r[2]);
       if (r[3]) window.priceListData = r[3];
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
       ui.dataReady = true;
@@ -1737,6 +1762,7 @@
       window.priceListData = r[2] || [];
       if (r[3]) Object.assign(DAY_HOURS, r[3]);
       if (token && r[4]) window.setPublicMember(r[4]);
+      window.loadOpenSlots();
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (window._openMemberDashboard && window.publicLoggedMember) {
@@ -1849,8 +1875,8 @@
       '<div class="tl-rail"><span class="tl-node"></span></div>' +
       '<div class="tl-card interactive" role="button" tabindex="0" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
         '<div class="row-between"><span class="li-title truncate">' + h(isAvailable(s) ? 'Slot tersedia' : opts.inProfile ? (s.notes || 'Sesi latihan') : s.title) + '</span>' + info.pill + '</div>' +
-        '<span class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Belum ada coach') +
-          (opts.showDate ? ' · ' + h(fmtShort(d)) : '') + (live ? ' · Berlangsung' : '') + '</span>' +
+        '<span class="li-sub">' + (window.isSoloCoach() ? '' : icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Belum ada coach')) +
+          (opts.showDate ? (window.isSoloCoach() ? '' : ' · ') + h(fmtShort(d)) : '') + (live ? ' · Berlangsung' : '') + '</span>' +
         actions +
       '</div></div>';
   }
@@ -1940,10 +1966,10 @@
       '<div class="collapse-body"><div><div class="grid" style="margin-top:16px">' +
         '<div class="dash-grid">' +
           '<div class="span-7 card-flat"><div class="section-head"><h4 class="li-title">Booking 7 hari terakhir</h4></div><div class="bars" id="weekly-chart"></div></div>' +
-          '<div class="span-5 card-flat"><div class="section-head"><h4 class="li-title">Coach tersibuk</h4><span class="li-sub">semua waktu</span></div><div class="stack" id="coach-leaderboard"></div></div>' +
+          (window.isSoloCoach() ? '' : '<div class="span-5 card-flat"><div class="section-head"><h4 class="li-title">Coach tersibuk</h4><span class="li-sub">semua waktu</span></div><div class="stack" id="coach-leaderboard"></div></div>') +
           '<div class="span-12 card-flat"><div class="section-head"><h4 class="li-title">Jam ramai</h4><div class="heat-legend">Sepi<span class="heat-cell"></span><span class="heat-cell l1"></span><span class="heat-cell l2"></span><span class="heat-cell l3"></span><span class="heat-cell l4"></span>Ramai</div></div><div id="peak-hour-heatmap" style="overflow-x:auto"></div></div>' +
           '<div class="span-12 row-between" style="flex-wrap:wrap"><h4 class="li-title">Laporan bulanan</h4><select class="select" id="coach-monthly-filter" style="width:auto;min-height:40px" onchange="window.renderMonthlyStats()"></select></div>' +
-          '<div class="span-6 card-flat"><div class="section-head"><h4 class="li-title">Performa coach</h4><span class="li-sub">sesi selesai</span></div><div class="stack" id="coach-monthly-stats-list"></div></div>' +
+          (window.isSoloCoach() ? '' : '<div class="span-6 card-flat"><div class="section-head"><h4 class="li-title">Performa coach</h4><span class="li-sub">sesi selesai</span></div><div class="stack" id="coach-monthly-stats-list"></div></div>') +
           '<div class="span-6 card-flat"><div class="section-head"><h4 class="li-title">Paket terlaris</h4><span class="li-sub">transaksi</span></div><div class="stack" id="package-trend-list"></div></div>' +
         '</div>' +
       '</div></div></div></div>';
@@ -2085,6 +2111,7 @@
   }
 
   function renderLeaderboard() {
+    if (!$('coach-leaderboard')) return;
     const counts = {};
     window.schedules.filter(isBooked).forEach(function (s) { const n = s.coachName || 'Belum ada coach'; counts[n] = (counts[n] || 0) + 1; });
     const rows = Object.keys(counts).map(k => ({ label: k, value: counts[k], note: counts[k] + ' sesi', tip: counts[k] + ' sesi' }))
@@ -2156,7 +2183,7 @@
       const c = Object.keys(map[k].clients).length;
       return { label: map[k].name, value: map[k].n, note: map[k].n + ' sesi · ' + c + ' klien', tip: map[k].n + ' sesi selesai, ' + c + ' klien' };
     }).sort((a, b) => b.value - a.value);
-    hbarList($('coach-monthly-stats-list'), rows, emptyState('calendar-x', 'Belum ada sesi selesai', 'Sesi yang ditandai selesai di bulan ini muncul di sini.'));
+    if ($('coach-monthly-stats-list')) hbarList($('coach-monthly-stats-list'), rows, emptyState('calendar-x', 'Belum ada sesi selesai', 'Sesi yang ditandai selesai di bulan ini muncul di sini.'));
 
     const listEl = $('package-trend-list');
     if (!listEl) return;
@@ -2186,7 +2213,7 @@
     let html = '<div class="page-head"><div><h2 class="page-title">Jadwal</h2><p class="page-sub">' +
       (pub ? 'Pilih tanggal untuk melihat jam yang masih kosong.' : 'Kelola semua sesi latihan klien.') + '</p></div>' +
       '<div class="row" style="flex-wrap:wrap">' +
-      '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="window.setCoachFilter(this.value)" aria-label="Filter coach">' + coachFilterOptions() + '</select>' +
+      (window.isSoloCoach() ? '' : '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="window.setCoachFilter(this.value)" aria-label="Filter coach">' + coachFilterOptions() + '</select>') +
       (!pub ? '<div class="seg only-desktop" id="sched-seg"><span class="seg-thumb"></span><button type="button" class="' + (ui.schedMode === 'month' ? 'active' : '') + '" onclick="window.setSchedMode(\'month\')">Bulan</button><button type="button" class="' + (ui.schedMode === 'week' ? 'active' : '') + '" onclick="window.setSchedMode(\'week\')">Minggu</button></div>' : '') +
       '<button type="button" class="btn btn-primary only-desktop" onclick="' + (pub ? 'window.handleFabClick()' : 'window.quickAction(\'booking\')') + '">' + icon('calendar-plus') + 'Booking</button>' +
       '</div></div>';
@@ -2328,7 +2355,8 @@
       const s1 = new Date(s0.getTime() + 3600000);
       const overlapping = list.filter(s => isBooked(s) && new Date(s.start) < s1 && new Date(s.end || s.start) > s0);
       const isMine = me && overlapping.some(s => String(s.memberId) === String(me.id));
-      const taken = !isMine && overlapping.length >= coachCount;
+      const eng = window.openSlotsByDate && window.openSlotsByDate[ymd(day)];
+      const taken = !isMine && (eng && eng[hh] !== undefined ? eng[hh] <= 0 : overlapping.length >= coachCount);
       const past = s0 <= now;
       const label = pad(hh) + '.00';
       if (isMine) slots += '<button type="button" class="slot mine" disabled>' + icon('check', 'style="width:14px;height:14px"') + label + '</button>';
@@ -2417,6 +2445,7 @@
     const member = window.members.find(m => String(m.id) === String(s.memberId));
     const coachOpts = '<option value="">Belum ada coach</option>' + window.coaches.map(c => '<option value="' + h(c.id) + '"' + (String(s.coachId) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
     let body = '<div class="stack" style="gap:16px">';
+    body += '<div id="detail-briefing"></div>';
     body += '<div class="card-ink"><div class="row-between"><p class="eyebrow">' + h(info.label) + '</p>' + info.pill + '</div>' +
       '<p style="font-size:var(--fs-4xl);font-weight:800;letter-spacing:-0.03em;margin-top:10px" class="num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' +
       '<p class="muted" style="margin-top:4px">' + h(fmtDate(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</p>' +
@@ -2427,7 +2456,7 @@
         avatar(member && member.photo, s.title) + '<span class="grow"><span class="li-title" style="display:block">' + h(s.title) + '</span><span class="li-sub">+' + h(s.phone || '') +
         (member ? ' · sisa ' + remainingOf(member) + ' sesi' : '') + '</span></span>' + (member ? icon('chevron-right') : '') + '</button>';
     }
-    body += '<div class="field"><label class="label" for="detail-assign-coach">Coach</label><div class="row"><select class="select grow" id="detail-assign-coach">' + coachOpts + '</select>' +
+    if (!window.isSoloCoach()) body += '<div class="field"><label class="label" for="detail-assign-coach">Coach</label><div class="row"><select class="select grow" id="detail-assign-coach">' + coachOpts + '</select>' +
       '<button type="button" class="btn btn-secondary" id="btn-save-coach" onclick="window.saveCoachAssignment()">Simpan</button></div></div>';
     body += '<div class="card-flat"><p class="eyebrow">Catatan</p><p style="margin-top:6px">' + (s.notes ? h(s.notes) : '<span class="muted">Tidak ada catatan</span>') + '</p></div>';
 
@@ -2436,12 +2465,13 @@
     body += '<div class="btn-row">' +
       (!isDone(s) ? '<button type="button" class="btn btn-outline" onclick="window.openEditScheduleDetailModal()">' + icon('calendar-clock') + 'Ubah jadwal</button>' : '') +
       (s.phone ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailMember()">' + icon('message-circle') + 'Chat klien</button>' : '') +
-      (s.coachId ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailCoach()">' + icon('dumbbell') + 'Chat coach</button>' : '') +
+      (s.coachId && !window.isSoloCoach() ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailCoach()">' + icon('dumbbell') + 'Chat coach</button>' : '') +
       '</div>';
     body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-schedule" onclick="window.deleteScheduleFromDetail()">' + icon('trash-2') + 'Hapus sesi ini</button>';
     if (s.recurringGroupId) body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-recurring-group" onclick="window.deleteRecurringGroupFromDetail()">' + icon('repeat') + 'Hapus seluruh seri berulang</button>';
     body += '</div></div>';
     openDetail('session:' + s.id, isAvailable(s) ? 'Slot tersedia' : 'Detail sesi', '', body);
+    if (!isAvailable(s) && s.memberId) window.loadSessionBriefing(s.id);
     if (status(s) === 'unread') window.markNotificationsReadSilently([s.id]);
   };
   window.openScheduleDetailModal = function (event) { window.openScheduleDetail(event && event.id); };
@@ -2458,9 +2488,9 @@
     const sel = $('detail-assign-coach');
     const coachId = sel ? sel.value : '';
     const coach = window.coaches.find(c => String(c.id) === String(coachId));
-    const coachName = coach ? coach.name : 'Belum Ditugaskan';
+    const coachName = coach ? coach.name : '';
     const done = busy($('btn-save-coach'), '…');
-    adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId, coachName).then(function () {
+    adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId).then(function () {
       const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
       if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
       done();
@@ -2865,6 +2895,7 @@
     body += mealToggleHtml(m);
     body += reminderPrefsHtml(m);
     body += '<div id="profile-progress-wrap" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>';
+    body += '<div id="profile-care-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div>';
     body += '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>';
     body += '<div><div class="section-head"><h4 class="section-title">Jadwal mendatang</h4><span class="li-sub">' + upcoming.length + '</span></div>' +
       (upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
@@ -2877,6 +2908,7 @@
     openDetail('client:' + m.id, 'Profil klien', actions, body);
     window.loadMemberTasks(m.id, false);
     window.pgLoadAdmin(m.id);
+    window.loadClientCare(m.id);
     requestAnimationFrame(function () {
       const ring = document.querySelector('#detail-body .ring-fill');
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
@@ -2897,7 +2929,7 @@
       ' onchange="window.toggleMealReminder(\'' + mid + '\',this)"><span></span></label></div>';
   }
   // Pengingat WhatsApp per klien (T-123): mati per jenis; makan punya saklarnya sendiri di atas
-  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang']];
+  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang'], ['tes-ulang', 'Tes ulang', 'Ajakan tes kebugaran tiap 4 minggu'], ['ulang-tahun', 'Ulang tahun', 'Ucapan di hari ulang tahun']];
   function reminderPrefsHtml(m) {
     const off = m.reminderOff || [];
     return '<div><div class="section-head"><h4 class="section-title">Pengingat WhatsApp</h4></div><div class="list" id="profile-remind-prefs">' +
@@ -3263,6 +3295,8 @@
   window.populateMemberCoachOptions = function (selectId, id) {
     const el = $(selectId);
     if (!el) return;
+    const fld = el.closest ? el.closest('.field') : null;
+    if (fld) fld.style.display = window.isSoloCoach() ? 'none' : '';
     el.innerHTML = '<option value="">Belum ditentukan</option>' + window.coaches.map(c => '<option value="' + h(c.id) + '">' + h(c.name) + '</option>').join('');
     el.value = id || '';
   };
@@ -3323,53 +3357,414 @@
     return { month: month, clients: Object.keys(clients).length, upcoming: mine.filter(s => new Date(s.start) > now && !isDone(s)).length };
   }
 
+  function coachList() { return window.coachesAll.length ? window.coachesAll : window.coaches; }
+
   function renderCoaches() {
     const el = $('view-coaches');
-    let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + window.coaches.length + ' coach di tim</p></div>' +
-      '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + 'Coach baru</button></div>';
-    if (!window.coaches.length) {
+    const list = coachList();
+    const solo = window.isSoloCoach();
+    let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + (solo ? 'Profil dan jadwalmu' : window.coaches.length + ' coach aktif di tim') + '</p></div>' +
+      '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + (solo ? 'Tambah coach' : 'Coach baru') + '</button></div>';
+    html += '<div id="hub-wrap"></div>';
+    const unassigned = window.schedules.filter(function (s) { return !s.coachId && !isDone(s) && !isAvailable(s); }).length;
+    if (unassigned && window.coaches.length) {
+      html += '<div class="card-flat row-between" style="margin-bottom:16px;gap:12px"><div><p class="li-title">' + unassigned + ' jadwal belum punya coach</p><p class="li-sub">Tetapkan semuanya ke coach "Ini saya".</p></div>' +
+        '<button type="button" class="btn btn-secondary" onclick="window.assignUnassignedConfirm()">Tetapkan ke saya</button></div>';
+    }
+    if (window.coaches.length) {
+      html += '<button type="button" class="card-flat list-item interactive" style="width:100%;margin-bottom:16px;text-align:left" onclick="window.openHoursPage()">' + icon('calendar-clock') + '<span class="grow"><span class="li-title" style="display:block">Jam kerja &amp; cuti</span><span class="li-sub">Atur jam tersedia dan hari libur</span></span>' + icon('chevron-right') + '</button>';
+    }
+    if (!list.length) {
       html += emptyState('dumbbell', 'Belum ada coach', 'Tambahkan coach untuk mulai membagi sesi.');
     } else {
-      html += '<div class="cards-grid three stagger" id="coach-list">' + window.coaches.map(function (c) {
+      html += '<div class="cards-grid three stagger" id="coach-list">' + list.map(function (c) {
         const st = coachStats(c);
-        return '<div class="card interactive" role="button" tabindex="0" data-key="coach:' + h(c.id) + '" onclick="window.openCoachProfile(\'' + h(c.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
-          '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h4 class="section-title truncate">' + h(c.name) + '</h4><p class="li-sub truncate">' + h(c.specialty || 'Personal trainer') + '</p>' +
-          (c.experience ? '<span class="pill soft" style="margin-top:8px">' + h(c.experience) + '</span>' : '') + '</div></div>' +
+        const inactive = c.aktif === false;
+        return '<div class="card interactive" role="button" tabindex="0" style="' + (inactive ? 'opacity:.6' : '') + '" data-key="coach:' + h(c.id) + '" onclick="window.openCoachProfile(\'' + h(c.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
+          '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h4 class="section-title truncate">' + h(c.name) + '</h4><p class="li-sub truncate">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
+          '<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px">' + (c.experience ? '<span class="pill soft">' + h(c.experience) + '</span>' : '') +
+          (c.id === window.coachSelfId && !inactive ? '<span class="pill">Ini saya</span>' : '') + (inactive ? '<span class="pill soft">Nonaktif</span>' : '') + '</div></div></div>' +
           '<div class="grid-2" style="margin-top:16px;gap:8px"><div class="card-flat" style="padding:10px 12px"><p class="eyebrow">Bulan ini</p><p class="num" style="font-weight:800;font-size:var(--fs-xl)">' + st.month + ' <span class="li-sub">sesi</span></p></div>' +
           '<div class="card-flat" style="padding:10px 12px"><p class="eyebrow">Klien</p><p class="num" style="font-weight:800;font-size:var(--fs-xl)">' + st.clients + '</p></div></div></div>';
       }).join('') + '</div>';
     }
     setHTML(el, html);
+    loadHub();
   }
+
+
+  // ── Jam kerja & cuti (E2) ───────────────────────────────────────────────────
+  const HOURS_DAYS = [['senin', 'Senin', 1], ['selasa', 'Selasa', 2], ['rabu', 'Rabu', 3], ['kamis', 'Kamis', 4], ['jumat', 'Jumat', 5], ['sabtu', 'Sabtu', 6], ['minggu', 'Minggu', 0]];
+  let hoursState = null, hoursStudio = null, hoursCoachId = '';
+  const p2 = n => ('0' + n).slice(-2);
+
+  function hoursSummary(ranges) { return ranges.length ? ranges.map(r => p2(r[0]) + '–' + p2(r[1])).join(', ') : 'Libur'; }
+
+  window.openHoursPage = function () {
+    adminCall('getCoachAvailability').then(function (a) {
+      hoursState = a.week; hoursStudio = a.businessHours; hoursCoachId = a.coachId;
+      window._hoursAvail = a;
+      const rows = HOURS_DAYS.map(d => '<div class="row-between" style="min-height:44px"><span>' + d[1] + '</span><span class="li-sub num">' + (a.hasRules ? h(hoursSummary(a.week[d[0]])) : 'Ikut jam studio') + '</span></div>').join('');
+      const off = a.timeOff.length ? a.timeOff.map(function (o) {
+        const when = o.from === o.to ? o.from : o.from + ' → ' + o.to;
+        return '<div class="row-between" style="min-height:48px;gap:8px"><div class="grow"><p class="li-title">' + h(when) + '</p><p class="li-sub">' + (o.hourFrom === null ? 'Seharian' : p2(o.hourFrom) + '–' + p2(o.hourTo)) + (o.note ? ' · ' + h(o.note) : '') + '</p></div>' +
+          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\')">' + icon('trash-2') + '</button></div>';
+      }).join('') : '<p class="li-sub">Belum ada cuti.</p>';
+      const body = '<div class="stack" style="gap:16px"><div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Jam kerja</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openHoursEditor()">Ubah</button></div>' + rows + '</div>' +
+        '<div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Cuti</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTimeOffSheet()">' + icon('plus') + 'Tambah</button></div>' + off + '</div></div>';
+      openDetail('hours', 'Jam kerja & cuti', '', body);
+    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
+  function renderHoursRows() {
+    $('coach-hours-rows').innerHTML = HOURS_DAYS.map(function (d) {
+      const ranges = hoursState[d[0]];
+      const inputs = ranges.map(function (r, i) {
+        return '<div class="row" style="gap:6px;align-items:center"><input class="input num" style="width:64px;text-align:center" type="number" inputmode="numeric" min="0" max="24" value="' + r[0] + '" aria-label="' + d[1] + ' mulai" onchange="window.hoursEdit(\'' + d[0] + '\',' + i + ',0,this.value)">' +
+          '<span>–</span><input class="input num" style="width:64px;text-align:center" type="number" inputmode="numeric" min="0" max="24" value="' + r[1] + '" aria-label="' + d[1] + ' selesai" onchange="window.hoursEdit(\'' + d[0] + '\',' + i + ',1,this.value)">' +
+          '<button type="button" class="icon-btn plain" aria-label="Hapus rentang" onclick="window.hoursRemove(\'' + d[0] + '\',' + i + ')">' + icon('x') + '</button></div>';
+      }).join('');
+      return '<div class="card-flat" style="padding:10px 12px"><div class="row-between" style="min-height:44px"><strong>' + d[1] + '</strong>' +
+        (ranges.length < 3 ? '<button type="button" class="btn btn-secondary btn-sm" onclick="window.hoursAdd(\'' + d[0] + '\')">' + icon('plus') + 'Jam</button>' : '') + '</div>' +
+        (inputs ? '<div class="stack" style="gap:6px">' + inputs + '</div>' : '<p class="li-sub">Libur</p>') + '</div>';
+    }).join('');
+  }
+  window.openHoursEditor = function () {
+    hoursState = JSON.parse(JSON.stringify(window._hoursAvail.week));
+    renderHoursRows();
+    openSheet('modal-coach-hours');
+  };
+  window.hoursAdd = function (day) {
+    const d = HOURS_DAYS.find(x => x[0] === day), st = hoursStudio[d[2]] || [6, 21];
+    hoursState[day].push([st[0], st[1]]);
+    renderHoursRows();
+  };
+  window.hoursRemove = function (day, i) { hoursState[day].splice(i, 1); renderHoursRows(); };
+  window.hoursEdit = function (day, i, k, v) { hoursState[day][i][k] = parseInt(v, 10); };
+  window.hoursCopyStudio = function () {
+    HOURS_DAYS.forEach(function (d) { const st = hoursStudio[d[2]]; hoursState[d[0]] = st ? [[st[0], st[1]]] : []; });
+    renderHoursRows();
+  };
+  window.saveHours = function () {
+    const done = busy($('btn-save-hours'), 'Menyimpan…');
+    adminCall('saveCoachAvailability', hoursCoachId, hoursState).then(function () {
+      done(); window.closeModal(); window.showToast('Jam kerja disimpan.'); window.openHoursPage();
+    }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+
+  window.toggleOffHours = function () { $('off-hours').classList.toggle('hide', $('off-allday').checked); };
+  window.openTimeOffSheet = function () {
+    $('form-timeoff').reset();
+    $('off-clashes').innerHTML = '';
+    $('off-hours').classList.add('hide');
+    $('off-from').value = $('off-to').value = ymd(new Date());
+    openSheet('modal-coach-timeoff');
+  };
+  window.submitTimeOff = function (e) {
+    e.preventDefault();
+    const all = $('off-allday').checked;
+    const data = { coachId: hoursCoachId, from: $('off-from').value, to: $('off-to').value, note: $('off-note').value, hourFrom: all ? '' : $('off-hfrom').value, hourTo: all ? '' : $('off-hto').value };
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('addCoachTimeOff', data).then(function (r) {
+      done();
+      window.showToast('Cuti disimpan.');
+      if (!r.clashes.length) { window.closeModal(); window.openHoursPage(); return; }
+      $('off-clashes').innerHTML = '<p class="li-title">' + r.clashes.length + ' sesi bertepatan dengan cuti ini</p>' + r.clashes.map(function (c, i) {
+        const d = new Date(c.start);
+        const text = 'Hai ' + c.memberName + ', mohon maaf sesi ' + fmtShort(d) + ' jam ' + fmtTime(d) + ' perlu dipindah karena coach berhalangan. Boleh kita atur ulang?';
+        return '<div class="card-flat row-between" style="gap:8px"><div class="grow"><p class="li-title">' + h(c.memberName) + '</p><p class="li-sub">' + h(fmtShort(d)) + ' · ' + h(fmtTime(d)) + '</p></div>' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-wa="' + h(c.phone) + '" data-text="' + h(text) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">WA klien</button>' +
+          '<button type="button" class="btn btn-outline btn-sm" onclick="window.closeModal();window.navigate(\'calendar\');window.openScheduleDetail(\'' + h(c.scheduleId) + '\')">Buka jadwal</button></div>';
+      }).join('');
+    }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+  window.deleteTimeOff = function (id) {
+    adminCall('deleteCoachTimeOff', id).then(function () { window.showToast('Cuti dihapus.'); window.openHoursPage(); })
+      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
+
+  // ── Beranda Coach (E3): hari ini, target, statistik ─────────────────────────
+  window._hub = null;
+  const rupiah = n => 'Rp ' + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  function hubHtml(hub) {
+    let html = '<div class="stack" style="gap:16px;margin-bottom:16px">';
+    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Hari ini</p><span class="li-sub">' + hub.today.length + ' sesi</span></div>';
+    if (!hub.today.length) html += '<p class="li-sub" style="min-height:44px;display:flex;align-items:center">Tidak ada sesi hari ini.</p>';
+    html += hub.today.map(function (t) {
+      const d = new Date(t.start), done = t.status === 'completed';
+      return '<div class="row" style="gap:8px;min-height:56px;' + (done ? 'opacity:.55' : '') + '">' +
+        '<button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openScheduleDetail(\'' + h(t.id) + '\')"><span class="num" style="font-weight:800;min-width:52px">' + fmtTime(d) + '</span><span class="grow truncate">' + h(t.memberName) + '</span></button>' +
+        (done ? '<span class="pill soft">Selesai</span>' : '<button type="button" class="btn btn-secondary" style="min-width:44px;min-height:44px" aria-label="Tandai selesai ' + h(t.memberName) + '" onclick="window.hubComplete(\'' + h(t.id) + '\')">' + icon('check') + '</button>') + '</div>';
+    }).join('') + '</div>';
+    html += careListHtml(hub.care);
+    html += '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Target bulan ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTargetsSheet()">' + (hub.targets.length ? 'Ubah' : 'Atur target') + '</button></div>';
+    if (!hub.targets.length) html += '<p class="li-sub">Belum ada target. Atur target sesi, klien, atau pendapatan.</p>';
+    html += hub.targets.map(function (t) {
+      const pct = Math.min(100, Math.round(t.actual / t.goal * 100));
+      const val = t.key === 'pendapatan' ? rupiah(t.actual) + ' / ' + rupiah(t.goal) : t.actual + ' / ' + t.goal;
+      return '<div class="stack" style="gap:4px"><div class="row-between"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700">' + h(val) + '</span></div>' +
+        '<div style="height:8px;border-radius:99px;background:var(--border);overflow:hidden"><div style="height:100%;width:' + pct + '%;background:var(--ink)"></div></div>' +
+        (t.key === 'klienAktif' ? '' : '<span class="li-sub">' + (t.onPace ? 'Di jalur' : 'Kurang dari jalur (' + (t.key === 'pendapatan' ? rupiah(t.pace) : t.pace) + ' sejauh ini)') + '</span>') + '</div>';
+    }).join('') + '</div>';
+    const st = hub.stats;
+    html += '<div class="kv"><div><p class="k">Minggu ini</p><p class="v num">' + st.weekSessions + ' sesi · ' + st.weekHours + ' jam</p></div><div><p class="k">Bulan ini</p><p class="v num">' + st.monthSessions + ' sesi · ' + st.monthHours + ' jam</p></div>' +
+      '<div><p class="k">Klien aktif</p><p class="v num">' + st.activeClients + '</p></div><div><p class="k">Streak</p><p class="v num">' + (st.streak ? '🔥 ' + st.streak + ' minggu' : '-') + '</p></div></div></div>';
+    return html;
+  }
+  function loadHub() {
+    const draw = function () { const w = $('hub-wrap'); if (w && window._hub) w.innerHTML = hubHtml(window._hub); };
+    draw();
+    adminCall('getCoachHub').then(function (hub) { window._hub = hub; draw(); }).catch(function () {});
+  }
+  window.hubComplete = function (id) { window.selectedScheduleDetailId = id; window.markSessionCompleted(); };
+  window.openTargetsSheet = function () {
+    const raw = (window._hub && window._hub.rawTargets) || {};
+    ['sesi', 'klienAktif', 'pendapatan', 'klienBaru'].forEach(function (k) { $('tg-' + k).value = raw[k] === '' || raw[k] == null ? '' : raw[k]; });
+    openSheet('modal-coach-targets');
+  };
+  window.submitTargets = function (e) {
+    e.preventDefault();
+    const data = {};
+    ['sesi', 'klienAktif', 'pendapatan', 'klienBaru'].forEach(function (k) { data[k] = $('tg-' + k).value.trim(); });
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveCoachTargets', data).then(function () { done(); window.closeModal(); window.showToast('Target disimpan.'); loadHub(); })
+      .catch(function (err) { done(); window.showToast(err.message); });
+  };
+
+
+  // ── Perawatan klien (E4): catatan privat, kesehatan, assessment, tes ─────────
+  // Data sensitif: dimuat saat halaman klien dibuka dan TIDAK disimpan di cache panel.
+  const care = {};
+  function careRow(label, value) { return '<div class="row-between" style="min-height:36px;gap:12px"><span class="li-sub">' + h(label) + '</span><span style="text-align:right">' + value + '</span></div>'; }
+  function careTestChange(t) {
+    if (t.change === null) return '';
+    const sign = t.change > 0 ? '+' : '';
+    return ' <span class="pill soft">' + sign + String(t.change).replace('.', ',') + ' ' + h(t.unit.split(' ')[0]) + (t.improved ? ' ↑' : '') + '</span>';
+  }
+  function careInner(memberId) {
+    const d = care[memberId];
+    if (!d) return '<p class="li-sub">Memuat catatan klien…</p>';
+    if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Catatan privat</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareNotes(\'' + h(memberId) + '\')">Ubah</button></div>' +
+      (d.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(d.flag) + '</p>' : '') +
+      (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') + '</div>';
+    html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Kesehatan</p>';
+    if (!d.health) {
+      html += '<p class="li-sub">Belum mengisi form.</p><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">Kirim pengingat</button>';
+    } else {
+      const yes = d.health.answers.filter(a => a === 'ya').length, extra = d.health.injuries || d.health.medication || d.health.other;
+      html += '<p>' + (yes || extra ? '<b>Ada hal yang perlu dibaca</b>' : 'Tidak ada catatan') + ' <span class="li-sub">· ' + h(d.health.tanggal) + '</span></p>' +
+        '<p class="li-sub">' + (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau') + '</p>' +
+        '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareHealth(\'' + h(memberId) + '\')">Lihat jawaban</button>';
+    }
+    html += '</div>';
+    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Assessment</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openAssessment(\'' + h(memberId) + '\')">' + (d.assessment ? 'Ubah' : 'Isi') + '</button></div>';
+    if (d.assessment) {
+      const a = d.assessment;
+      html += (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
+      const ex = [['Lemak', a.bodyFat, '%'], ['Dada', a.chest, ' cm'], ['Lengan', a.arm, ' cm'], ['Pinggul', a.hip, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
+      if (ex.length) html += careRow('Ukuran', h(ex.join(' · ')));
+    } else html += '<p class="li-sub">Belum diisi.</p>';
+    html += '</div>';
+    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Tes kebugaran</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareTests(\'' + h(memberId) + '\')">' + icon('plus') + 'Tes</button></div>' +
+      (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t))).join('') : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div>';
+    return html;
+  }
+  window.loadClientCare = function (memberId) {
+    return adminCall('getClientCare', memberId).then(function (d) { care[memberId] = d; }).catch(function (err) { care[memberId] = { error: err.message }; })
+      .then(function () { const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId); paintIcons(); });
+  };
+  window.clearCareCache = function () { Object.keys(care).forEach(k => delete care[k]); };
+  function careDone(memberId, msg) { window.closeModal(); window.showToast(msg); return window.loadClientCare(memberId); }
+  let careMember = '';
+  window.openCareNotes = function (id) {
+    careMember = id; const d = care[id] || {};
+    $('care-flag').value = d.flag || ''; $('care-notes').value = d.notes || ''; $('care-birth').value = d.birthDate || '';
+    openSheet('modal-care-notes');
+  };
+  window.submitCareNotes = function (e) {
+    e.preventDefault();
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveClientNotes', careMember, { flag: $('care-flag').value, notes: $('care-notes').value, birthDate: $('care-birth').value })
+      .then(function () { done(); return careDone(careMember, 'Catatan disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+  window.openAssessment = function (id) {
+    careMember = id; const a = (care[id] || {}).assessment || {};
+    $('as-goal').value = a.goal || ''; $('as-history').value = a.history || ''; $('as-pref').value = a.schedulePref || ''; $('as-motivation').value = a.motivation || ''; $('as-coach-notes').value = a.coachNotes || '';
+    ['as-weight', 'as-waist'].forEach(k => { $(k).value = ''; });
+    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat; $('as-chest').value = a.chest === '' || a.chest == null ? '' : a.chest;
+    $('as-arm').value = a.arm === '' || a.arm == null ? '' : a.arm; $('as-hip').value = a.hip === '' || a.hip == null ? '' : a.hip;
+    openSheet('modal-care-assess');
+  };
+  window.submitAssessment = function (e) {
+    e.preventDefault();
+    const v = k => $(k).value.trim().replace(',', '.');
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveAssessment', careMember, { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), chest: v('as-chest'), arm: v('as-arm'), hip: v('as-hip') })
+      .then(function () { done(); if (window.pgLoadAdmin) window.pgLoadAdmin(careMember); return careDone(careMember, 'Assessment disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+  window.openCareTests = function (id) {
+    careMember = id; const list = (care[id] || {}).testList || [];
+    $('ft-date').value = ymd(new Date());
+    $('ft-fields').innerHTML = list.map(t => '<div class="field"><label class="label" for="ft-' + h(t.id) + '">' + h(t.label) + ' (' + h(t.unit) + ')</label><input class="input num" id="ft-' + h(t.id) + '" data-test="' + h(t.id) + '" type="text" inputmode="decimal"></div>').join('');
+    openSheet('modal-care-tests');
+  };
+  window.submitCareTests = function (e) {
+    e.preventDefault();
+    const values = {};
+    document.querySelectorAll('#ft-fields [data-test]').forEach(function (el) { values[el.getAttribute('data-test')] = el.value.trim().replace(',', '.'); });
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveFitnessTests', careMember, { tanggal: $('ft-date').value, values: values })
+      .then(function () { done(); return careDone(careMember, 'Hasil tes disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+  };
+  window.openCareHealth = function (id) {
+    careMember = id; const d = care[id]; if (!d || !d.health) return;
+    const hl = d.health;
+    const rows = d.questions.map((q, i) => '<div class="card-flat" style="padding:10px 12px"><p class="li-sub">' + h(q) + '</p><p style="font-weight:700">' + h(hl.answers[i] === 'ya' ? 'Ya' : 'Tidak') + '</p></div>').join('');
+    const txt = (l, v) => v ? '<div class="card-flat" style="padding:10px 12px"><p class="eyebrow">' + h(l) + '</p><p>' + h(v) + '</p></div>' : '';
+    $('care-health-body').innerHTML = rows + txt('Cedera / operasi', hl.injuries) + txt('Obat rutin', hl.medication) + txt('Kondisi lain', hl.other) +
+      '<div class="field"><label class="label" for="care-review-note">Catatan untuk dirimu</label><input class="input" id="care-review-note" type="text" maxlength="300" value="' + h(hl.reviewNote || '') + '"></div>' +
+      '<button type="button" class="btn btn-primary btn-lg btn-block" id="btn-review" onclick="window.markReviewed()">' + (hl.reviewedAt ? 'Perbarui catatan' : 'Sudah ditinjau') + '</button>';
+    openSheet('modal-care-health');
+  };
+  window.markReviewed = function () {
+    const done = busy($('btn-review'), 'Menyimpan…');
+    adminCall('markHealthReviewed', careMember, $('care-review-note').value).then(function () { done(); return careDone(careMember, 'Ditandai sudah ditinjau.'); })
+      .catch(function (err) { done(); window.showToast(err.message); });
+  };
+
+  // Briefing di atas detail sesi
+  window.loadSessionBriefing = function (scheduleId) {
+    adminCall('getSessionBriefing', scheduleId).then(function (b) {
+      const el = $('detail-briefing');
+      if (!el || !(b.flag || b.notes || b.goal || b.lastTest || b.healthPending)) return;
+      el.innerHTML = '<div class="card-flat stack" style="gap:4px"><p class="eyebrow">Briefing</p>' +
+        (b.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(b.flag) + '</p>' : '') +
+        (b.notes ? '<p>' + h(b.notes.split('\n').slice(0, 3).join('\n')) + '</p>' : '') +
+        (b.goal ? '<p class="li-sub">Tujuan: ' + h(b.goal) + '</p>' : '') +
+        (b.lastTest ? '<p class="li-sub">Tes terakhir: ' + h(b.lastTest.label) + ' ' + h(b.lastTest.nilai) + ' ' + h(b.lastTest.unit.split(' ')[0]) + '</p>' : '') +
+        (b.healthPending ? '<p class="li-sub">Form kesehatan belum ditinjau.</p>' : '') + '</div>';
+      paintIcons();
+    }).catch(function () {});
+  };
+
+  // Daftar "Perlu perhatian" di Beranda Coach
+  const CARE_CHIPS = { 'flag-today': 'Perhatian hari ini', 'health-review': 'Form belum ditinjau', 'retest': 'Tes ulang', 'no-assessment': 'Belum ada assessment', 'no-health': 'Belum isi form', 'gap': '14 hari tanpa sesi' };
+  function careListHtml(list) {
+    if (!list || !list.length) return '<div class="card-flat"><p class="eyebrow">Perlu perhatian</p><p class="li-sub" style="min-height:44px;display:flex;align-items:center">Semua klien beres.</p></div>';
+    return '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + '</span></div>' + list.slice(0, 8).map(function (c) {
+      return '<div class="row" style="gap:6px;min-height:56px"><button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="grow" style="min-width:0"><span class="li-title truncate" style="display:block">' + h(c.name) + '</span>' +
+        '<span class="row" style="gap:4px;flex-wrap:wrap">' + c.reasons.slice(0, 2).map(r => '<span class="pill soft">' + h(CARE_CHIPS[r] || r) + '</span>').join('') + '</span></span>' + icon('chevron-right') + '</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
+    }).join('') + (list.length > 8 ? '<p class="li-sub">+' + (list.length - 8) + ' lainnya</p>' : '') + '</div>';
+  }
+  window.snoozeCareUI = function (id) {
+    adminCall('snoozeCare', id, 7).then(function () { window.showToast('Disembunyikan 7 hari.'); loadHub(); }).catch(function (err) { window.showToast(err.message); });
+  };
+
+  // Portal: form kesehatan + tes kebugaran
+  const myCare = { form: null, assess: null };
+  function myCareInner() {
+    let html = '';
+    if (myCare.form && !myCare.form.done) {
+      html += '<div class="card"><div class="section-head"><h3 class="section-title">Form kesehatan</h3></div><p class="li-sub">Isi sekali saja supaya coach tahu kondisimu sebelum latihan.</p>' +
+        '<button type="button" class="btn btn-primary btn-block" style="margin-top:12px" onclick="window.openPortalHealth()">Isi sekarang</button></div>';
+    }
+    const tests = myCare.assess && myCare.assess.tests || [];
+    if (tests.length) {
+      html += '<div class="card"><div class="section-head"><h3 class="section-title">Tes kebugaran</h3></div><div class="stack" style="gap:6px">' + tests.map(function (t) {
+        const unit = t.unit.split(' ')[0];
+        const delta = t.change === null ? '' : (t.improved ? ' · ' + (t.better === 'lower' ? 'turun ' : 'naik ') + Math.abs(t.change).toString().replace('.', ',') + ' ' + unit + ' 🎉' : '');
+        return '<div class="row-between" style="min-height:40px;gap:8px"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700;text-align:right">' + h(t.first.nilai) + (t.latest.nilai !== t.first.nilai || t.change !== null ? ' → ' + h(t.latest.nilai) : '') + ' ' + h(unit) + '<span class="li-sub">' + h(delta) + '</span></span></div>';
+      }).join('') + '</div></div>';
+    }
+    return html;
+  }
+  window.loadMyCare = function () {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return;
+    Promise.all([memberCall('getMyHealthForm').catch(() => null), memberCall('getMyAssessment').catch(() => null)]).then(function (r) {
+      myCare.form = r[0]; myCare.assess = r[1];
+      const w = $('pub-care-wrap'); if (w) { w.innerHTML = myCareInner(); paintIcons(); }
+    });
+  };
+  window.openPortalHealth = function () {
+    const qs = (myCare.form && myCare.form.questions) || [];
+    $('ph-questions').innerHTML = qs.map((q, i) => '<div class="stack" style="gap:6px"><p>' + (i + 1) + '. ' + h(q) + '</p><div class="seg" role="radiogroup" aria-label="Pertanyaan ' + (i + 1) + '"><span class="seg-thumb"></span>' +
+      '<button type="button" data-q="' + i + '" data-v="ya" style="min-height:44px" onclick="window.phPick(this)">Ya</button><button type="button" data-q="' + i + '" data-v="tidak" style="min-height:44px" onclick="window.phPick(this)">Tidak</button></div></div>').join('');
+    $('ph-injuries').value = $('ph-med').value = $('ph-other').value = ''; $('ph-consent').checked = false;
+    openSheet('modal-portal-health');
+  };
+  window.phPick = function (btn) {
+    Array.prototype.forEach.call(btn.parentNode.querySelectorAll('button'), b => b.classList.toggle('active', b === btn));
+  };
+  window.submitPortalHealth = function (e) {
+    e.preventDefault();
+    const n = (myCare.form.questions || []).length, q = [];
+    for (let i = 0; i < n; i++) { const b = document.querySelector('#ph-questions button.active[data-q="' + i + '"]'); q.push(b ? b.getAttribute('data-v') : ''); }
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Mengirim…');
+    memberCall('submitMyHealthForm', { q: q, injuries: $('ph-injuries').value, medication: $('ph-med').value, other: $('ph-other').value, consent: $('ph-consent').checked ? 'ya' : '' })
+      .then(function () { done(); window.closeModal(); window.showToast('Terima kasih, coach akan membacanya.'); window.loadMyCare(); })
+      .catch(function (err) { done(); window.showToast(err.message); });
+  };
+
+  window.assignUnassignedConfirm = function () {
+    adminCall('assignUnassignedToSelf', { dryRun: true }).then(function (r) {
+      if (!r.sessions && !r.clients) { window.showToast('Semua jadwal sudah punya coach.'); return; }
+      window.showConfirmModal('<b>' + r.sessions + '</b> jadwal dan <b>' + r.clients + '</b> klien tanpa coach akan ditetapkan ke <b>' + h(r.coachName) + '</b>. Sesi yang sudah selesai tidak berubah.', function () {
+        adminCall('assignUnassignedToSelf', {}).then(function () { window.showToast('Selesai ditetapkan.'); return window.loadAllData(); })
+          .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      }, { title: 'Tetapkan ke saya?', confirmText: 'Tetapkan' });
+    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
+  function reloadCoaches() {
+    return adminCall('getCoachesAdmin').then(function (res) { applyCoachesAdmin(res); saveAdminCache(); window.updateUI(); });
+  }
+  window.setCoachActiveUI = function (id, aktif) {
+    adminCall('setCoachActive', id, aktif).then(function () { window.closeDetail(); return reloadCoaches(); })
+      .then(function () { window.showToast(aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.'); })
+      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+  window.setSelfCoachUI = function (id) {
+    adminCall('setSelfCoach', id).then(function () { return reloadCoaches(); })
+      .then(function () { window.showToast('Ditandai sebagai "Ini saya".'); window.openCoachProfile(id); })
+      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
   window.updateCoachUI = function () { if (window.currentView === 'coaches') renderView('coaches', { animate: false }); };
 
   window.openCoachProfile = function (id) {
-    const c = window.coaches.find(x => String(x.id) === String(id));
+    const c = coachList().find(x => String(x.id) === String(id));
     if (!c) return;
     window.currentCoachId = c.id;
     const st = coachStats(c);
     let body = '<div class="stack" style="gap:16px">' +
       '<div class="card-ink" style="text-align:center;padding:28px 20px">' + avatar(c.photo, c.name, 'xl', 'margin:0 auto 14px') +
-      '<h3 class="profile-name">' + h(c.name) + '</h3><p class="muted" style="margin-top:4px">' + h(c.specialty || 'Personal trainer') + '</p>' +
+      '<h3 class="profile-name">' + h(c.name) + '</h3><p class="muted" style="margin-top:4px">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
       (c.experience ? '<span class="pill" style="margin-top:12px">' + h(c.experience) + ' pengalaman</span>' : '') + '</div>' +
       '<div class="kv"><div><p class="k">Sesi bulan ini</p><p class="v num">' + st.month + '</p></div><div><p class="k">Jadwal mendatang</p><p class="v num">' + st.upcoming + '</p></div>' +
       '<div><p class="k">Klien dilatih</p><p class="v num">' + st.clients + '</p></div><div><p class="k">WhatsApp</p><p class="v">+' + h(c.phone || '-') + '</p></div></div>' +
       '<div class="card-flat"><p class="eyebrow">Bio</p><p style="margin-top:6px">' + (c.bio ? h(c.bio) : '<span class="muted">Belum ada bio.</span>') + '</p></div>' +
+      ((c.certifications && c.certifications.length) ? '<div class="card-flat"><p class="eyebrow">Sertifikasi</p><p style="margin-top:6px">' + c.certifications.map(h).join(' · ') + '</p></div>' : '') +
+      ((c.achievements && c.achievements.length) ? '<div class="card-flat"><p class="eyebrow">Prestasi</p><p style="margin-top:6px">' + c.achievements.map(h).join(' · ') + '</p></div>' : '') +
+      ((c.location || c.instagram) ? '<div class="card-flat"><p class="eyebrow">Lokasi & sosial</p><p style="margin-top:6px">' + h(c.location || '') + (c.location && c.instagram ? ' · ' : '') + (c.instagram ? '@' + h(c.instagram) : '') + '</p></div>' : '') +
       '<div class="btn-row"><button type="button" class="btn btn-primary" data-wa="' + h(c.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
       '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
+      (c.id === window.coachSelfId ? '<button type="button" class="btn btn-secondary btn-block" onclick="window.openCoachPreview()">' + icon('eye') + 'Lihat seperti klien</button>' : '') +
+      (c.aktif !== false && c.id !== window.coachSelfId ? '<button type="button" class="btn btn-outline btn-block" onclick="window.setSelfCoachUI(\'' + h(c.id) + '\')">' + icon('user-check') + 'Jadikan "Ini saya"</button>' : '') +
+      '<button type="button" class="btn btn-outline btn-block" onclick="window.setCoachActiveUI(\'' + h(c.id) + '\',' + (c.aktif === false ? 'true' : 'false') + ')">' + icon('power') + (c.aktif === false ? 'Aktifkan coach' : 'Nonaktifkan coach') + '</button>' +
       '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>';
     openDetail('coach:' + c.id, 'Profil coach', '<button type="button" class="icon-btn plain" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')" aria-label="Ubah coach">' + icon('pencil') + '</button>', body);
   };
 
   window.deleteCoachConfirm = function (id) {
-    const c = window.coaches.find(x => String(x.id) === String(id));
+    const c = coachList().find(x => String(x.id) === String(id));
     if (!c) return;
-    window.showConfirmModal('<b>' + h(c.name) + '</b> dihapus dari tim. Jadwal lama tetap tersimpan.', function () {
+    window.showConfirmModal('<b>' + h(c.name) + '</b> dihapus dari tim. Coach yang masih dipakai jadwal atau klien tidak bisa dihapus; nonaktifkan saja.', function () {
       adminCall('deleteCoach', id).then(function () {
-        window.coaches = window.coaches.filter(x => String(x.id) !== String(id));
         window.closeDetail();
-        window.updateUI();
-        window.showToast('Coach dihapus.');
+        return reloadCoaches().then(function () { window.showToast('Coach dihapus.'); });
       }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
     }, { title: 'Hapus coach?', confirmText: 'Hapus', variant: 'danger' });
   };
@@ -3381,13 +3776,13 @@
   }
   window.openAddCoachModal = function () {
     $('coach-modal-title').textContent = 'Coach baru';
-    ['coach-edit-id', 'coach-name', 'coach-phone', 'coach-specialty', 'coach-experience', 'coach-bio'].forEach(id => { $(id).value = ''; });
+    ['coach-edit-id', 'coach-name', 'coach-phone', 'coach-specialty', 'coach-experience', 'coach-bio', 'coach-headline', 'coach-certs', 'coach-achievements', 'coach-location', 'coach-instagram'].forEach(id => { $(id).value = ''; });
     window.pendingCoachBase64 = null;
     setCoachPreview('');
     openSheet('modal-add-coach');
   };
   window.openEditCoachModal = function (id) {
-    const c = window.coaches.find(x => String(x.id) === String(id));
+    const c = coachList().find(x => String(x.id) === String(id));
     if (!c) return;
     window.openAddCoachModal();
     $('coach-modal-title').textContent = 'Ubah coach';
@@ -3397,6 +3792,11 @@
     $('coach-specialty').value = c.specialty || '';
     $('coach-experience').value = c.experience || '';
     $('coach-bio').value = c.bio || '';
+    $('coach-headline').value = c.headline || '';
+    $('coach-certs').value = (c.certifications || []).join(', ');
+    $('coach-achievements').value = (c.achievements || []).join(', ');
+    $('coach-location').value = c.location || '';
+    $('coach-instagram').value = c.instagram || '';
     setCoachPreview(c.photo);
   };
   window.previewCoachPhoto = function (e) {
@@ -3410,22 +3810,22 @@
   window.submitAddCoach = function (e) {
     e.preventDefault();
     const editId = $('coach-edit-id').value;
-    const old = editId ? window.coaches.find(c => String(c.id) === String(editId)) : null;
+    const old = editId ? coachList().find(c => String(c.id) === String(editId)) : null;
     const data = {
       name: $('coach-name').value, phone: sanitizePhone($('coach-phone').value), specialty: $('coach-specialty').value,
-      bio: $('coach-bio').value, experience: $('coach-experience').value, photo: old ? old.photo || '' : ''
+      bio: $('coach-bio').value, experience: $('coach-experience').value, headline: $('coach-headline').value,
+      certifications: $('coach-certs').value, achievements: $('coach-achievements').value,
+      location: $('coach-location').value, instagram: $('coach-instagram').value,
+      photo: old ? old.photo || '' : '', fotoFileId: old ? old.photoFileId || '' : ''
     };
     if (editId) data.id = editId;
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
     const upload = window.pendingCoachBase64
-      ? adminCall('uploadCoachPhoto', window.pendingCoachBase64, 'coach_' + Date.now() + '.jpg', 'image/jpeg').then(function (r) { data.photo = r.url; window.pendingCoachBase64 = null; })
+      ? adminCall('uploadCoachPhoto', window.pendingCoachBase64, 'coach_' + Date.now() + '.jpg', 'image/jpeg').then(function (r) { data.photo = r.url; data.fotoFileId = r.fileId || ''; window.pendingCoachBase64 = null; })
       : Promise.resolve();
-    upload.then(function () { return adminCall(editId ? 'updateCoach' : 'addCoach', data); }).then(function (res) {
+    upload.then(function () { return adminCall('saveCoach', data); }).then(function () { return reloadCoaches(); }).then(function () {
       done();
-      if (editId) { const i = window.coaches.findIndex(c => String(c.id) === String(editId)); if (i > -1) window.coaches[i] = Object.assign({}, window.coaches[i], data); }
-      else { data.id = res.id; window.coaches.push(data); }
       window.closeModal();
-      window.updateUI();
       window.showToast(editId ? 'Coach diperbarui.' : 'Coach ditambahkan.');
     }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
   };
@@ -3591,7 +3991,7 @@
     const done = isDone(s), upcoming = !done && d >= new Date();
     return '<div class="list-item">' +
       '<div style="width:52px;text-align:center;flex-shrink:0"><p class="eyebrow">' + DOW_SHORT[d.getDay()] + '</p><p class="num" style="font-size:var(--fs-2xl);font-weight:800;line-height:1.1">' + d.getDate() + '</p></div>' +
-      '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p><p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p></div>' +
+      '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' + (window.isSoloCoach() ? '' : '<p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p>') + '</div>' +
       '<div class="li-trail">' + (done ? '<span class="pill soft">' + icon('check') + 'Selesai</span>'
         : upcoming ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah</button>'
         : '<span class="pill dashed soft">Terlewat</span>') + '</div></div>';
@@ -4097,7 +4497,7 @@
       '<div class="section-head"><h3 class="section-title">Sesi berikutnya</h3>' + (next ? statusInfo(next).pill : '') + '</div>' +
       (next ? '<p id="pub-next-session-label" style="font-weight:700">' + h(fmtDate(new Date(next.start))) + ' · ' + fmtTime(new Date(next.start)) + '</p>' +
         '<p class="num" style="font-size:var(--fs-3xl);font-weight:800;letter-spacing:-0.03em;margin:8px 0" id="pub-next-countdown" data-countdown-long="' + new Date(next.start).getTime() + '">' + h(countdownText(new Date(next.start))) + '</p>' +
-        '<p class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(next.coachName || 'Menunggu coach') + '</p>' +
+        (window.isSoloCoach() ? '' : '<p class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(next.coachName || 'Menunggu coach') + '</p>') +
         '<div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-outline" onclick="window.openRescheduleModal(\'' + h(next.id) + '\')">' + icon('calendar-clock') + 'Reschedule</button>' +
         '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button></div>'
         : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
@@ -4107,6 +4507,7 @@
     left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
     left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
+    left += '<div id="pub-care-wrap" class="stack" style="gap:16px">' + myCareInner() + '</div>';
 
     left += insightsCard(me, mine);
 
@@ -4127,6 +4528,7 @@
     if (!window.myTasks) window.loadMyTasks(false);
     window.loadMyMeal(false);
     window.loadMyProgress(false);
+    window.loadMyCare();
     window.loadMyRenewal();
   };
 
@@ -4315,13 +4717,61 @@
     }).catch(function (err) { done(); window.showToast('Gagal mendaftar: ' + err.message); });
   };
 
+  // Halaman profil coach: dipakai portal klien dan pratinjau panel ("Lihat seperti klien").
+  function coachStatusChip(st) {
+    if (!st) return '';
+    const label = st.state === 'sesi' ? 'Sedang sesi' : st.state === 'tersedia' ? 'Tersedia ' + (st.next || '') : st.state === 'cuti' ? 'Cuti sampai ' + fmtShort(new Date(st.until + 'T00:00:00')) : st.state === 'libur' ? 'Libur hari ini' : 'Tutup';
+    return '<span class="pill soft">' + h(label) + '</span>';
+  }
+  window.renderCoachProfile = function (p, opts) {
+    opts = opts || {};
+    const c = p && p.coach;
+    if (!c) return emptyState('dumbbell', 'Belum ada data coach', '');
+    const chips = String(c.specialty || '').split(',').map(x => x.trim()).filter(Boolean).map(x => '<span class="pill soft">' + h(x) + '</span>').join('');
+    const list = (title, items) => items && items.length ? '<div class="card-flat"><p class="eyebrow">' + h(title) + '</p><ul style="margin:6px 0 0;padding-left:18px">' + items.map(i => '<li>' + h(i) + '</li>').join('') + '</ul></div>' : '';
+    let html = '<div class="stack" style="gap:16px"><div style="text-align:center">' + avatar(c.photo, c.name, 'xl', 'margin:0 auto 12px') +
+      '<h3 class="profile-name">' + h(c.name) + '</h3>' + (c.headline ? '<p class="muted" style="margin-top:4px">' + h(c.headline) + '</p>' : '') +
+      '<div style="margin-top:10px">' + coachStatusChip(p.status) + '</div></div>';
+    if (!opts.preview) {
+      html += '<div class="btn-row"><button type="button" class="btn btn-primary" data-coach="' + h(c.id) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Chat WA</button>' +
+        '<button type="button" class="btn btn-outline" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button></div>';
+    }
+    html += (c.bio ? '<div class="card-flat"><p class="eyebrow">Tentang</p><p style="margin-top:6px">' + h(c.bio) + '</p></div>' : '') +
+      (chips ? '<div class="card-flat"><p class="eyebrow">Spesialisasi</p><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px">' + chips + '</div></div>' : '') +
+      (c.experience ? '<div class="card-flat"><p class="eyebrow">Pengalaman</p><p style="margin-top:6px">' + h(c.experience) + '</p></div>' : '') +
+      list('Sertifikasi', c.certifications) + list('Prestasi', c.achievements) +
+      ((c.location || c.instagram) ? '<div class="card-flat"><p class="eyebrow">Lokasi</p><p style="margin-top:6px">' + h(c.location || '') + '</p>' +
+        (c.instagram ? '<a class="btn btn-outline btn-sm" style="margin-top:8px" href="https://instagram.com/' + h(c.instagram) + '" target="_blank" rel="noopener">@' + h(c.instagram) + '</a>' : '') + '</div>' : '') +
+      ((p.testimonials && p.testimonials.length) ? '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Kata klien</p>' + p.testimonials.map(t => '<p>“' + h(t.text) + '” <span class="li-sub">— ' + h(t.name) + '</span></p>').join('') + '</div>' : '') +
+      (p.rescheduleCutoffHours != null && !opts.preview && window.publicLoggedMember ? '<p class="li-sub" style="text-align:center">Ganti jadwal minimal ' + h(p.rescheduleCutoffHours) + ' jam sebelum sesi.</p>' : '') + '</div>';
+    return html;
+  };
+  window.openCoachPreview = function () {
+    adminCall('previewCoachProfile').then(function (p) {
+      $('coach-preview-body').innerHTML = window.renderCoachProfile(p, { preview: true });
+      openSheet('modal-coach-preview');
+    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
   window.renderPublicCoaches = function () {
     const el = $('view-public-coaches');
     if (!el) return;
+    if (window.isSoloCoach()) {
+      setHTML(el, '<div class="page-head"><div><h2 class="page-title">Coach</h2></div></div><div id="coach-profile-page">' + '<p class="li-sub">Memuat profil…</p>' + '</div>');
+      const draw = function (p) { const box = $('coach-profile-page'); if (box) { box.innerHTML = window.renderCoachProfile(p); paintIcons(); } };
+      if (_lsGet(MEMBER_TOKEN_KEY) && window.publicLoggedMember) {
+        memberCall('getMyCoach').then(draw).catch(function () { draw({ coach: window.coaches[0], status: null, testimonials: [] }); });
+      } else {
+        Promise.all([publicCall('getCoachStatus').catch(() => null), publicCall('getPublicTestimonials').catch(() => [])]).then(function (r) {
+          draw({ coach: window.coaches[0], status: r[0], testimonials: (r[1] || []).slice(0, 3) });
+        });
+      }
+      return;
+    }
     let html = '<div class="page-head"><div><h2 class="page-title">Tim coach</h2><p class="page-sub">Latihan bersama coach berpengalaman.</p></div></div>';
     html += window.coaches.length ? '<div class="cards-grid three stagger" id="public-coach-list">' + window.coaches.map(function (c) {
       return '<div class="card" style="display:flex;flex-direction:column;gap:14px">' +
-        '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h3 class="section-title">' + h(c.name) + '</h3><p class="li-sub">' + h(c.specialty || 'Personal trainer') + '</p>' +
+        '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h3 class="section-title">' + h(c.name) + '</h3><p class="li-sub">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
         (c.experience ? '<span class="pill soft" style="margin-top:8px">' + h(c.experience) + '</span>' : '') + '</div></div>' +
         (c.bio ? '<p class="li-sub" style="font-size:var(--fs-sm)">' + h(c.bio) + '</p>' : '') +
         '<button type="button" class="btn btn-primary btn-block" style="margin-top:auto" data-coach="' + h(String(c.id)) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Tanya program</button></div>';

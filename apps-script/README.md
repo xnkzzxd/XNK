@@ -165,6 +165,22 @@ manual: tab **Actions** → *PT Scheduler* → **Run workflow**.
 > Jangan dibagikan. Bisa dicabut kapan saja di https://myaccount.google.com/permissions
 > (cari "clasp"), lalu ulangi langkah 3–4.
 
+## Tab Coach (Beranda Coach)
+
+Tab **Coach** di panel adalah berandamu sebagai coach.
+
+- **Hari ini**: sesi hari ini berurutan. Ketuk ✓ untuk menandai selesai (sama seperti di detail sesi).
+- **Perlu perhatian**: klien yang perlu disapa (form kesehatan belum ditinjau, tes ulang, belum ada assessment, 14 hari tanpa sesi, dll). Ketuk **Nanti** untuk menyembunyikannya 7 hari.
+- **Target bulan ini**: sesi, klien aktif, pendapatan (estimasi), klien baru. Semua opsional; target yang kosong tidak tampil.
+- **Jam kerja & cuti**: atur jam kerjamu per hari (boleh beberapa rentang) dan tanggal cuti. Tanpa jam kerja tersimpan, jam yang tampil mengikuti **Pengaturan → Jam Operasional**. Landing, portal, pengingat Booking Minggu, dan booking klien semua memakai satu perhitungan yang sama. Klien tidak bisa booking di jam cuti; kamu tetap bisa, dengan peringatan.
+- **Mode solo**: kalau hanya ada satu coach aktif, pilihan coach, filter coach, dan peringkat coach disembunyikan, dan semua sesi otomatis atas namamu. Coach lama: buka kartunya → **Nonaktifkan** (riwayat tetap aman). Coach yang masih dipakai jadwal atau klien tidak bisa dihapus.
+- **Tetapkan ke saya**: memberi coach "Ini saya" ke semua jadwal yang belum punya coach.
+- **Lihat seperti klien**: pratinjau halaman coach yang dilihat klien di portal.
+
+**Perawatan klien** (halaman klien): catatan privat (tanda perhatian, catatan, tanggal lahir), form kesehatan (diisi klien di portal, kamu tandai **Sudah ditinjau**), assessment, dan tes kebugaran. Semua ini hanya kamu yang bisa baca; Telegram hanya memberi tahu bahwa form diisi, tanpa jawabannya. Di **Pengaturan → Pengingat Klien** ada jenis baru (semua mati bawaan): **Tes ulang** (tiap Senin, 28 hari sejak tes terakhir), **Ulang tahun**, dan **Ringkasan bulanan** untukmu. **Keamanan** punya batas "ganti jadwal klien" (jam sebelum sesi, bawaan 2).
+
+Sebelum deploy pertama fase ini, salin spreadsheet (File → Buat salinan). Sheet baru dibuat otomatis: `CoachTimeOff`, `Assessments`, `FitnessTests`, `HealthScreening`; sheet `Coaches` dan `MemberData` hanya ditambah kolom di kanan.
+
 ## Di HP: pasang dari Chrome, tarik untuk muat ulang, tombol back
 
 - **Pasang dari Chrome** (lebih baik daripada bungkus Kodular): buka xnk.my.id di Chrome → menu ⋮ → *Instal aplikasi* / *Tambahkan ke layar utama*. Ikonnya sama, selalu versi terbaru, dan tombol back bekerja normal.

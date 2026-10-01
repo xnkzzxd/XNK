@@ -2,6 +2,7 @@
 
 Work items for [PRD.md](PRD.md), built as described in [Design.md](Design.md). Rules for whoever picks a task are in [Agent.md](Agent.md).
 
+- Phase E (coach hub, profile, client care) has its own list: [coach/TODO.md](coach/TODO.md), IDs T-200+.
 - IDs start at **T-100**, because code comments already use T-40 … T-78 from the earlier reminder work.
 - Size: **S** ≈ under 2 h, **M** ≈ half a day, **L** ≈ a day or more.
 - Status: `[ ]` todo · `[~]` in progress · `[x]` done. Update the box in the same commit that finishes the task.
@@ -111,7 +112,7 @@ Built. Notes: "every other Monday" counts weeks from Monday 5 Jan 2026 (so it ke
 
 | | ID | Task | PRD |
 | --- | --- | --- | --- |
-| [ ] | T-140 | Closed days in business hours ("Tutup"), respected by landing, portal and booking. | S-9 |
+| [ ] | T-140 | Closed days in business hours ("Tutup"), respected by landing, portal and booking. (Coach days off in Phase E cover the coach's own closed days.) | S-9 |
 | [ ] | T-141 | Meal tips editor for the `MealTips` sheet (add, edit, approve, delete). | S-10 |
 | [ ] | T-142 | Landing-card live preview in the package editor. | P-9 |
 | [ ] | T-143 | `sisa-sesi` reminder (1–2 sessions left). | R-11 |

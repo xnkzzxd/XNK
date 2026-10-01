@@ -376,7 +376,8 @@ const SETTINGS_NUMERIC_BOUNDS = {
   loginMaxFails: { key: 'LOGIN_MAX_FAILS', fallback: LOGIN_MAX_FAILS, min: 1, max: 1000 },
   loginLockSeconds: { key: 'LOGIN_LOCK_SECONDS', fallback: LOGIN_LOCK_SECONDS, min: 10, max: 86400 },
   memberLoginMaxFails: { key: 'MEMBER_LOGIN_MAX_FAILS', fallback: MEMBER_LOGIN_MAX_FAILS, min: 1, max: 1000 },
-  adminSessionDays: { key: 'ADMIN_SESSION_DAYS', fallback: ADMIN_SESSION_DAYS, min: 1, max: 365 }
+  adminSessionDays: { key: 'ADMIN_SESSION_DAYS', fallback: ADMIN_SESSION_DAYS, min: 1, max: 365 },
+  rescheduleCutoffHours: { key: 'RESCHEDULE_CUTOFF_HOURS', fallback: 2, min: 0, max: 72 }
 };
 
 function _businessHours_() {
@@ -753,75 +754,330 @@ function logToSheet_(pesan, status = "INFO") {
 
 // ── 📂 CRUD ──────────────────────────────────────────────────────────────────
 
-function getCoaches() {
-  const headers = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman"];
-  const sheet = getOrCreateSheet_('Coaches', headers);
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-  return data.slice(1).map(function(row) {
-    return {
-      id: sanitizeValue(row[0]),
-      name: sanitizeValue(row[1]),
-      phone: sanitizeValue(row[2]),
-      specialty: sanitizeValue(row[3]),
-      photo: sanitizeValue(row[4]),
-      bio: sanitizeValue(row[5]),
-      experience: sanitizeValue(row[6])
-    };
+const COACH_HEADERS = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman", "Status Aktif", "Headline", "Sertifikasi", "Prestasi", "Lokasi", "Instagram", "Foto File ID"];
+const COACH_KEYS = ['id', 'name', 'phone', 'specialty', 'photo', 'bio', 'experience', 'aktif', 'headline', 'certifications', 'achievements', 'location', 'instagram', 'photoFileId'];
+const COACH_PUBLIC_KEYS = ['id', 'name', 'phone', 'specialty', 'photo', 'bio', 'experience', 'headline', 'certifications', 'achievements', 'location', 'instagram'];
+const COACH_LIST_KEYS = ['certifications', 'achievements'];
+const COACH_UNASSIGNED_TEXT = 'Belum Ditugaskan';   // teks lama; tidak pernah ditulis lagi (T-200)
+
+/** Peta kolom Coaches dari nama header; null kalau kolom inti tidak ada (tidak menebak posisi). */
+function _coachSchema_(header) {
+  const norm = function(v) { return String(v == null ? '' : v).trim().toLowerCase(); };
+  const names = COACH_HEADERS.map(norm);
+  const idx = {};
+  header.forEach(function(h, i) {
+    const k = names.indexOf(norm(h));
+    if (k !== -1 && idx[COACH_KEYS[k]] === undefined) idx[COACH_KEYS[k]] = i;
   });
+  return ['id', 'name', 'phone'].every(function(k) { return idx[k] !== undefined; }) ? idx : null;
 }
+
+/** Membuat sheet bila perlu dan menambah header yang belum ada (hanya di akhir). Idempoten; panggil di dalam lock. */
+function _ensureCoachSchema_() {
+  const sheet = getOrCreateSheet_('Coaches', COACH_HEADERS);
+  let header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  let idx = _coachSchema_(header);
+  if (!idx) throw new Error('Header sheet Coaches tidak dikenali. Pastikan baris pertama berisi: ' + COACH_HEADERS.join(', ') + '.');
+  COACH_HEADERS.forEach(function(name, k) {
+    if (idx[COACH_KEYS[k]] !== undefined) return;
+    const col = sheet.getLastColumn() + 1;
+    sheet.getRange(1, col).setValue(name);
+    sheet.getRange(1, col).setFontWeight('bold');
+    header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+    idx = _coachSchema_(header);
+  });
+  return { sheet: sheet, idx: idx };
+}
+
+function _coachList_(v) {
+  return String(v == null ? '' : v).split(',').map(function(x) { return x.trim(); }).filter(Boolean);
+}
+
+/** Semua coach (aktif & nonaktif), dibaca per nama header. Tidak pernah membuat sheet. Baris lama tanpa "Status Aktif" = aktif. */
+function _coachesAll_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const data = sheet.getDataRange().getValues();
+  const idx = _coachSchema_(data[0]);
+  if (!idx) return [];
+  const cell = function(row, key) { return idx[key] === undefined ? '' : sanitizeValue(row[idx[key]]); };
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (cell(row, 'id') === '') continue;
+    out.push({
+      id: String(cell(row, 'id')), name: String(cell(row, 'name')), phone: String(cell(row, 'phone')),
+      specialty: String(cell(row, 'specialty')), photo: String(cell(row, 'photo')), bio: String(cell(row, 'bio')),
+      experience: String(cell(row, 'experience')),
+      aktif: String(cell(row, 'aktif')).trim().toUpperCase() !== 'FALSE',
+      headline: String(cell(row, 'headline')), certifications: _coachList_(cell(row, 'certifications')),
+      achievements: _coachList_(cell(row, 'achievements')), location: String(cell(row, 'location')),
+      instagram: String(cell(row, 'instagram')), photoFileId: String(cell(row, 'photoFileId')), _row: i + 1
+    });
+  }
+  return out;
+}
+
+function _activeCoaches_() { return _coachesAll_().filter(function(c) { return c.aktif; }); }
+
+/** Coach "Ini saya": COACH_SELF_ID kalau masih aktif, kalau tidak coach aktif pertama; null kalau tidak ada. */
+function _selfCoach_() {
+  const active = _activeCoaches_();
+  const saved = PropertiesService.getScriptProperties().getProperty('COACH_SELF_ID');
+  return active.find(function(c) { return c.id === saved; }) || active[0] || null;
+}
+
+function _publicCoach_(c) {
+  const out = {};
+  COACH_PUBLIC_KEYS.forEach(function(k) { out[k] = c[k]; });
+  return out;
+}
+
+/** Publik: hanya coach aktif dan hanya field whitelist (CP-5). */
+function getCoaches() {
+  return _activeCoaches_().map(_publicCoach_);
+}
+
+/** Murni: validasi + bersihkan data profil coach. Melempar kalimat Indonesia yang diakhiri titik. */
+function _validateCoach_(d) {
+  d = d || {};
+  const str = function(v) { return String(v == null ? '' : v).trim(); };
+  const maxLen = function(v, n, label) { if (v.length > n) throw new Error(label + ' maksimal ' + n + ' karakter.'); return v; };
+  const name = str(d.name);
+  if (!name || name.length > 60) throw new Error('Nama coach wajib diisi, maksimal 60 karakter.');
+  const phone = _normalizePhone_(d.phone);
+  if (phone.length < 10 || phone.length > 15) throw new Error('Nomor WhatsApp coach harus 10-15 angka.');
+  const specialty = maxLen(str(d.specialty), 200, 'Spesialisasi');
+  if (_coachList_(specialty).length > 8 || _coachList_(specialty).some(function(x) { return x.length > 40; })) {
+    throw new Error('Spesialisasi maksimal 8 item, masing-masing 40 karakter.');
+  }
+  const out = {
+    name: name, phone: phone, specialty: specialty,
+    experience: maxLen(str(d.experience), 40, 'Pengalaman'), bio: maxLen(str(d.bio), 600, 'Bio'),
+    headline: maxLen(str(d.headline), 80, 'Headline'), location: maxLen(str(d.location), 60, 'Lokasi')
+  };
+  COACH_LIST_KEYS.forEach(function(k) {
+    const label = k === 'certifications' ? 'Sertifikasi' : 'Prestasi';
+    const items = Array.isArray(d[k]) ? d[k].map(str).filter(Boolean) : _coachList_(d[k]);
+    if (items.length > 10) throw new Error(label + ' maksimal 10 item.');
+    items.forEach(function(x) {
+      if (x.length > 60) throw new Error('Setiap item ' + label + ' maksimal 60 karakter.');
+      if (x.indexOf(',') !== -1) throw new Error('Item ' + label + ' tidak boleh berisi koma.');
+    });
+    out[k] = items;
+  });
+  const ig = str(d.instagram).replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/[\/?].*$/, '');
+  if (ig && !/^[A-Za-z0-9._]{1,30}$/.test(ig)) throw new Error('Instagram harus berupa username (huruf, angka, titik, garis bawah; maks 30).');
+  out.instagram = ig;
+  return out;
+}
+
+function _coachPhotoFileId_(url, given) {
+  if (given) return String(given);
+  const m = /[?&]id=([^&]+)/.exec(String(url || ''));
+  return m ? m[1] : '';
+}
+
+// ── 📂 CRUD ──────────────────────────────────────────────────────────────────
 
 function addCoach(token, coachData) {
   requireAdmin_(token);
-  const headers = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman"];
-  const sheet = getOrCreateSheet_('Coaches', headers);
-  const id = 'COACH-' + new Date().getTime();
-  sheet.appendRow([
-    id, coachData.name, coachData.phone.toString(), coachData.specialty,
-    coachData.photo || '', coachData.bio || '', coachData.experience || ''
-  ]);
-  return { status: 'success', id: id };
+  const data = Object.assign({}, coachData || {});
+  delete data.id;
+  return saveCoach(token, data);
 }
 
-/**
- * Update data profil coach (termasuk foto, bio, pengalaman).
- */
+/** Update data profil coach (termasuk foto, bio, pengalaman). */
 function updateCoach(token, coachData) {
   requireAdmin_(token);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
-  if (!sheet) throw new Error('Sheet Coaches tidak ditemukan');
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === coachData.id) {
-      sheet.getRange(i + 1, 2).setValue(coachData.name);
-      sheet.getRange(i + 1, 3).setValue(coachData.phone.toString());
-      sheet.getRange(i + 1, 4).setValue(coachData.specialty);
-      sheet.getRange(i + 1, 5).setValue(coachData.photo || '');
-      sheet.getRange(i + 1, 6).setValue(coachData.bio || '');
-      sheet.getRange(i + 1, 7).setValue(coachData.experience || '');
-      return { status: 'success' };
-    }
-  }
-  throw new Error('Coach tidak ditemukan');
+  if (!coachData || !coachData.id) throw new Error('Coach tidak ditemukan.');
+  return saveCoach(token, coachData);
 }
 
 /**
- * Hapus data coach. Jadwal (Schedules) yang sudah pernah pakai coach ini
- * dibiarkan (histori tetap ada), hanya penugasan baru yang tidak bisa pilih
- * coach ini lagi.
+ * Tambah (tanpa data.id) atau ubah coach. Validasi dulu, tulis di dalam lock. Kalau nama berubah,
+ * nama di klien (MemberData) dan jadwal yang belum selesai ikut diperbarui; jadwal selesai & log transaksi
+ * tetap memakai nama saat itu. Foto lama dipindah ke tempat sampah bila diganti.
  */
-function deleteCoach(token, coachId) {
+function saveCoach(token, data) {
   requireAdmin_(token);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
-  if (!sheet) throw new Error('Sheet Coaches tidak ditemukan');
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === coachId) {
-      sheet.deleteRow(i + 1);
-      return { status: 'success' };
+  const clean = _validateCoach_(data);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ctx = _ensureCoachSchema_();
+    const sheet = ctx.sheet, idx = ctx.idx;
+    const photoGiven = Object.prototype.hasOwnProperty.call(data, 'photo');
+    const photo = photoGiven ? String(data.photo || '') : null;
+    const fileId = photoGiven ? _coachPhotoFileId_(photo, data.fotoFileId) : null;
+    const values = {
+      name: clean.name, phone: clean.phone, specialty: clean.specialty, bio: clean.bio, experience: clean.experience,
+      headline: clean.headline, location: clean.location, instagram: clean.instagram,
+      certifications: clean.certifications.join(', '), achievements: clean.achievements.join(', ')
+    };
+    if (photoGiven) { values.photo = photo; values.photoFileId = fileId; }
+
+    if (!data.id) {
+      const id = 'COACH-' + new Date().getTime();
+      const row = [];
+      for (let i = 0; i < sheet.getLastColumn(); i++) row.push('');
+      row[idx.id] = id;
+      row[idx.aktif] = true;
+      Object.keys(values).forEach(function(k) { row[idx[k]] = values[k]; });
+      sheet.appendRow(row);
+      return { status: 'success', id: id };
+    }
+
+    const existing = _coachesAll_().find(function(c) { return c.id === String(data.id); });
+    if (!existing) throw new Error('Coach tidak ditemukan.');
+    Object.keys(values).forEach(function(k) { sheet.getRange(existing._row, idx[k] + 1).setValue(values[k]); });
+    if (existing.name !== clean.name) _renameCoachEverywhere_(existing.id, clean.name);
+    if (photoGiven && existing.photoFileId && existing.photoFileId !== fileId) {
+      try { DriveApp.getFileById(existing.photoFileId).setTrashed(true); } catch (e) { Logger.log('Foto coach lama tidak bisa dihapus: ' + e); }
+    }
+    return { status: 'success', id: existing.id };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Nama baru ke klien (MemberData K/L) dan jadwal yang belum selesai (Schedules I/J). Panggil di dalam lock. */
+function _renameCoachEverywhere_(coachId, newName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const md = ss.getSheetByName('MemberData');
+  if (md) {
+    const rows = md.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][10]) === coachId) md.getRange(i + 1, 12).setValue(newName);
+  }
+  const sc = ss.getSheetByName('Schedules');
+  if (sc) {
+    const rows = sc.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][8]) === coachId && String(rows[i][7]).toLowerCase() !== 'completed') sc.getRange(i + 1, 10).setValue(newName);
     }
   }
-  throw new Error('Coach tidak ditemukan');
+}
+
+/** Berapa jadwal, klien, dan baris log yang masih menunjuk ke tiap coach: { coachId: {sessions, clients, logEntries} }. */
+function _coachUsage_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const usage = {};
+  const bump = function(id, key) {
+    id = String(id || '').trim();
+    if (!id) return;
+    (usage[id] || (usage[id] = { sessions: 0, clients: 0, logEntries: 0 }))[key]++;
+  };
+  const sc = ss.getSheetByName('Schedules');
+  if (sc) sc.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[8], 'sessions'); });
+  const md = ss.getSheetByName('MemberData');
+  if (md) md.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[10], 'clients'); });
+  const lg = ss.getSheetByName('Members');
+  if (lg) lg.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[7], 'logEntries'); });
+  return usage;
+}
+
+/** Semua coach untuk panel: field lengkap, pemakaian, penanda "Ini saya", dan apakah mode solo. */
+function getCoachesAdmin(token) {
+  requireAdmin_(token);
+  const usage = _coachUsage_();
+  const self = _selfCoach_();
+  const all = _coachesAll_();
+  return {
+    coaches: all.map(function(c) {
+      const out = Object.assign({}, c);
+      delete out._row;
+      out.usage = usage[c.id] || { sessions: 0, clients: 0, logEntries: 0 };
+      out.isSelf = !!self && self.id === c.id;
+      return out;
+    }),
+    selfId: self ? self.id : '',
+    solo: all.filter(function(c) { return c.aktif; }).length === 1
+  };
+}
+
+function setCoachActive(token, id, aktif) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const all = _coachesAll_();
+    const coach = all.find(function(c) { return c.id === String(id); });
+    if (!coach) throw new Error('Coach tidak ditemukan.');
+    if (!aktif && coach.aktif && all.filter(function(c) { return c.aktif; }).length <= 1) throw new Error('Harus ada satu coach aktif.');
+    const ctx = _ensureCoachSchema_();
+    const fresh = _coachesAll_().find(function(c) { return c.id === coach.id; });
+    ctx.sheet.getRange(fresh._row, ctx.idx.aktif + 1).setValue(!!aktif);
+    const props = PropertiesService.getScriptProperties();
+    if (!aktif && props.getProperty('COACH_SELF_ID') === coach.id) props.deleteProperty('COACH_SELF_ID');
+    return { status: 'success' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Hapus coach hanya kalau tidak dipakai di jadwal, klien, atau log. Kalau dipakai: Nonaktifkan saja. */
+function deleteCoach(token, coachId) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const coach = _coachesAll_().find(function(c) { return c.id === String(coachId); });
+    if (!coach) throw new Error('Coach tidak ditemukan.');
+    const u = _coachUsage_()[coach.id] || { sessions: 0, clients: 0, logEntries: 0 };
+    if (u.sessions || u.clients || u.logEntries) {
+      throw new Error('Coach dipakai ' + u.sessions + ' jadwal / ' + u.clients + ' klien. Nonaktifkan saja.');
+    }
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches').deleteRow(coach._row);
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty('COACH_SELF_ID') === coach.id) props.deleteProperty('COACH_SELF_ID');
+    return { status: 'success' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function setSelfCoach(token, id) {
+  requireAdmin_(token);
+  const coach = _activeCoaches_().find(function(c) { return c.id === String(id); });
+  if (!coach) throw new Error('Pilih coach yang aktif.');
+  PropertiesService.getScriptProperties().setProperty('COACH_SELF_ID', coach.id);
+  return { status: 'success' };
+}
+
+/** Beri coach "Ini saya" ke semua jadwal (belum selesai) dan klien yang belum punya coach. opts.dryRun = hanya hitung. */
+function assignUnassignedToSelf(token, opts) {
+  requireAdmin_(token);
+  const dryRun = !!(opts && opts.dryRun);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const self = _selfCoach_();
+    if (!self) throw new Error('Belum ada coach aktif.');
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const blank = function(v) { const t = String(v == null ? '' : v).trim(); return t === '' || t === COACH_UNASSIGNED_TEXT; };
+    let sessions = 0, clients = 0;
+    const sc = ss.getSheetByName('Schedules');
+    if (sc) {
+      const rows = sc.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (!blank(rows[i][8]) || String(rows[i][7]).toLowerCase() === 'completed' || String(rows[i][0]) === '') continue;
+        sessions++;
+        if (!dryRun) { sc.getRange(i + 1, 9).setValue(self.id); sc.getRange(i + 1, 10).setValue(self.name); }
+      }
+    }
+    const md = ss.getSheetByName('MemberData');
+    if (md) {
+      const rows = md.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === '' || !blank(rows[i][10])) continue;
+        clients++;
+        if (!dryRun) { md.getRange(i + 1, 11).setValue(self.id); md.getRange(i + 1, 12).setValue(self.name); }
+      }
+    }
+    return { status: 'success', dryRun: dryRun, sessions: sessions, clients: clients, coachName: self.name };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ── 📂 PHOTO_UPLOAD ──────────────────────────────────────────────────────────
@@ -1250,7 +1506,7 @@ function _addMemberInternal_(memberData, options) {
     // 2. Cari data coach yang dipilih admin sebagai coach default klien ini (jika ada)
     let coachId = '', coachNama = '';
     if (memberData.coachId) {
-      const allCoaches = getCoaches();
+      const allCoaches = _coachesAll_();
       const selectedCoach = allCoaches.find(function(c) { return String(c.id) === String(memberData.coachId); });
       if (selectedCoach) {
         coachId = selectedCoach.id;
@@ -1371,7 +1627,7 @@ function updateMemberProfile(token, memberData) {
 
       if (typeof memberData.coachId !== 'undefined') {
         if (memberData.coachId) {
-          const allCoaches = getCoaches();
+          const allCoaches = _coachesAll_();
           const selectedCoach = allCoaches.find(function(c) { return String(c.id) === String(memberData.coachId); });
           sheet.getRange(i + 1, 11).setValue(memberData.coachId);
           sheet.getRange(i + 1, 12).setValue(selectedCoach ? selectedCoach.name : '');
@@ -1651,6 +1907,12 @@ function getPublicSchedules(memberToken) {
   });
 }
 
+/** T-200: coach kosong = ID kosong + nama kosong. Baris lama yang menyimpan teks placeholder dibaca sebagai kosong. */
+function _coachNameOrEmpty_(v) {
+  const n = sanitizeValue(v);
+  return String(n).trim() === 'Belum Ditugaskan' ? '' : n;
+}
+
 function _getSchedulesAll_() {
   const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID"];
   const sheet = getOrCreateSheet_('Schedules', headers);
@@ -1667,7 +1929,7 @@ function _getSchedulesAll_() {
       notes: sanitizeValue(row[6]),
       status: sanitizeValue(row[7]) || 'read',
       coachId: sanitizeValue(row[8]),
-      coachName: sanitizeValue(row[9]),
+      coachName: _coachNameOrEmpty_(row[9]),   // T-200: teks lama "Belum Ditugaskan" dibaca sebagai kosong
       completedAt: sanitizeValue(row[10]) || '',
       recurringGroupId: sanitizeValue(row[11]) || ''
     };
@@ -1699,22 +1961,28 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
     // dan selalu bisa menimpa coach hasil auto-assign ini kapan saja.
     let coachId = scheduleData.coachId || "";
     let coachName = scheduleData.coachName || "";
-    if (!coachId && scheduleData.memberId) {
-      try {
-        const member = _getMembersAll_().find(function(m) { return String(m.id) === String(scheduleData.memberId); });
-        if (member && member.preferredCoachId) {
-          coachId = member.preferredCoachId;
-          coachName = member.preferredCoachName || coachName;
+    if (!coachId) {
+      const allActive = _activeCoaches_();
+      const rulesNow = _coachRules_(), offNow = _coachTimeOff_(false);
+      // Coach yang sedang cuti / di luar jam kerjanya tidak dipilih otomatis.
+      const actives = allActive.filter(function(c) { return _anyCoachAvailable_([c], rulesNow, offNow, scheduleData.start, scheduleData.end || scheduleData.start); });
+      if (scheduleData.memberId) {
+        try {
+          const member = _getMembersAll_().find(function(m) { return String(m.id) === String(scheduleData.memberId); });
+          const preferred = member && member.preferredCoachId ? actives.find(function(c) { return c.id === String(member.preferredCoachId); }) : null;
+          if (preferred) { coachId = preferred.id; coachName = preferred.name; }
+        } catch (e) {
+          Logger.log("Gagal auto-assign coach dari preferensi klien: " + e);
         }
-      } catch (e) {
-        Logger.log("Gagal auto-assign coach dari preferensi klien: " + e);
       }
+      // Mode solo (satu coach aktif): semua sesi otomatis milik coach itu.
+      if (!coachId && allActive.length === 1 && actives.length === 1) { coachId = actives[0].id; coachName = actives[0].name; }
     }
 
     sheet.appendRow([
       id, scheduleData.memberId, scheduleData.memberName, scheduleData.phone.toString(),
       scheduleData.start, scheduleData.end, scheduleData.notes, status,
-      coachId, coachName || "Belum Ditugaskan", "", scheduleData.recurringGroupId || ""
+      coachId, coachName || "", "", scheduleData.recurringGroupId || ""
     ]);
 
     // Hanya notif di sini kalau BUKAN booking mandiri klien (statusParam 'unread') DAN bukan silent,
@@ -1730,7 +1998,9 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
       } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
     }
 
-    return { status: 'success', id: id, coachId: coachId, coachName: coachName };
+    let warnings = [];
+    try { warnings = _slotWarnings_(scheduleData.start, scheduleData.end || scheduleData.start); } catch (e) { warnings = []; }
+    return { status: 'success', id: id, coachId: coachId, coachName: coachName, warnings: warnings };
   } catch(error) {
     throw new Error('Gagal menyimpan jadwal: ' + error.message);
   }
@@ -1944,7 +2214,8 @@ function updateScheduleData(token, scheduleData) {
 
 // Batas waktu minimal sebelum jadwal mulai, supaya klien masih boleh reschedule mandiri.
 // Di bawah batas ini, klien harus hubungi admin langsung (via WA) untuk reschedule.
-const RESCHEDULE_CUTOFF_HOURS = 2;
+const RESCHEDULE_CUTOFF_HOURS = 2;   // bawaan; bisa diubah lewat Pengaturan (RESCHEDULE_CUTOFF_HOURS di Script Properties)
+function _rescheduleCutoff_() { return _numProp_('RESCHEDULE_CUTOFF_HOURS', RESCHEDULE_CUTOFF_HOURS); }
 
 /**
  * Reschedule mandiri oleh klien (member portal), TANPA lewat admin.
@@ -1991,8 +2262,8 @@ function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd) {
       const oldStart = new Date(data[i][4]);
       const now = new Date();
       const hoursUntilOldStart = (oldStart - now) / (1000 * 60 * 60);
-      if (hoursUntilOldStart < RESCHEDULE_CUTOFF_HOURS) {
-        throw new Error('Reschedule mandiri sudah lewat batas waktu (minimal ' + RESCHEDULE_CUTOFF_HOURS + ' jam sebelum jadwal). Silakan hubungi Coach langsung via WhatsApp.');
+      if (hoursUntilOldStart < _rescheduleCutoff_()) {
+        throw new Error('Reschedule mandiri sudah lewat batas waktu (minimal ' + _rescheduleCutoff_() + ' jam sebelum jadwal). Silakan hubungi Coach langsung via WhatsApp.');
       }
 
       const memberName = data[i][2];
@@ -2022,8 +2293,12 @@ function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd) {
 /**
  * Menugaskan pelatih (Assign Coach) ke dalam sesi latihan tertentu.
  */
-function updateScheduleCoach(token, scheduleId, coachId, coachName) {
+function updateScheduleCoach(token, scheduleId, coachId) {
   requireAdmin_(token);
+  coachId = String(coachId || '');
+  const picked = coachId ? _coachesAll_().find(function(c) { return c.id === coachId; }) : null;
+  if (coachId && !picked) throw new Error('Coach tidak ditemukan.');
+  const coachName = picked ? picked.name : '';
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
   if (!sheet) throw new Error('Sheet Jadwal tidak ditemukan');
   const data = sheet.getDataRange().getValues();
@@ -2035,7 +2310,7 @@ function updateScheduleCoach(token, scheduleId, coachId, coachName) {
       try {
         kirimNotifTelegram_("🏋️ <b>COACH DITUGASKAN</b>\n\n" +
           "👤 <b>Klien:</b> " + escapeHtmlTelegram(data[i][2]) + "\n" +
-          "🧑‍🏫 <b>Coach:</b> " + escapeHtmlTelegram(coachName));
+          "🧑‍🏫 <b>Coach:</b> " + escapeHtmlTelegram(coachName || 'Tanpa coach'));
       } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
 
       return { status: 'success' };
@@ -2062,6 +2337,7 @@ function clientBookSchedule(memberToken, scheduleData) {
   const member = requireMember_(memberToken);
   scheduleData = scheduleData || {};
   _validateSlot_(scheduleData.start, scheduleData.end);
+  _assertSlotBookable_(scheduleData.start, scheduleData.end);
 
   const memberName = String(member.row[1]);
   const phone = _normalizePhone_(member.row[2]);
@@ -3832,122 +4108,7 @@ function getPublicTestimonials() {
 // #############################################################################
 
 function getPublicAvailability() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  // 1. Ambil Data Semua Coach
-  const coachSheet = ss.getSheetByName('Coaches');
-  let coaches = [];
-  if (coachSheet) {
-    const cData = coachSheet.getDataRange().getValues();
-    for (let i = 1; i < cData.length; i++) {
-      coaches.push({ id: cData[i][0], name: cData[i][1] });
-    }
-  }
-
-  // 2. Ambil Aturan Ketersediaan Jam Kerja Coach (Sheet Baru)
-  const availHeaders = ["Coach ID", "Hari", "Jam Mulai", "Jam Selesai"];
-  let availSheet = ss.getSheetByName('CoachAvailability');
-  if (!availSheet) {
-    availSheet = ss.insertSheet('CoachAvailability');
-    availSheet.appendRow(availHeaders);
-  }
-  const availData = availSheet.getDataRange().getValues();
-  let rules = [];
-  for (let i = 1; i < availData.length; i++) {
-    let sH = 0, sM = 0, eH = 0, eM = 0;
-
-    // Parsing Jam Mulai dengan aman (Handle String maupun Object Date)
-    if (Object.prototype.toString.call(availData[i][2]) === '[object Date]') {
-      sH = availData[i][2].getHours(); sM = availData[i][2].getMinutes();
-    } else {
-      let s = String(availData[i][2]).split(':');
-      sH = parseInt(s[0]) || 0; sM = parseInt(s[1]) || 0;
-    }
-
-    // Parsing Jam Selesai dengan aman
-    if (Object.prototype.toString.call(availData[i][3]) === '[object Date]') {
-      eH = availData[i][3].getHours(); eM = availData[i][3].getMinutes();
-    } else {
-      let e = String(availData[i][3]).split(':');
-      eH = parseInt(e[0]) || 0; eM = parseInt(e[1]) || 0;
-    }
-
-    rules.push({
-      coachId: availData[i][0],
-      hari: String(availData[i][1]).toLowerCase().trim(),
-      startHour: sH, startMin: sM,
-      endHour: eH, endMin: eM
-    });
-  }
-
-  // 3. Ambil Daftar Jadwal yang sudah dibooking
-  const schSheet = ss.getSheetByName('Schedules');
-  let bookings = [];
-  if (schSheet) {
-    const sData = schSheet.getDataRange().getValues();
-    for (let i = 1; i < sData.length; i++) {
-      let status = String(sData[i][7]).toUpperCase();
-      // Status dianggap Tidak Tersedia (Overlap): HOLD, CONFIRMED, UNREAD, READ, COMPLETED
-      if (['UNREAD', 'READ', 'COMPLETED', 'CONFIRMED', 'HOLD'].includes(status)) {
-        bookings.push({
-          start: new Date(sData[i][4]),
-          end: new Date(sData[i][5]),
-          coachId: sData[i][8]
-        });
-      }
-    }
-  }
-
-  // 4. Kalkulasi Slot Tersedia (untuk 14 hari ke depan)
-  const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
-  let results = [];
-  const today = new Date();
-  today.setHours(0,0,0,0);
-
-  for (let d = 0; d < 14; d++) {
-    let currentDate = new Date(today.getTime() + d * 24 * 60 * 60 * 1000);
-    let dayName = dayNames[currentDate.getDay()];
-    let dateString = currentDate.getFullYear() + '-' + String(currentDate.getMonth()+1).padStart(2,'0') + '-' + String(currentDate.getDate()).padStart(2,'0');
-
-    coaches.forEach(coach => {
-      let rule = rules.find(r => r.coachId === coach.id && r.hari === dayName);
-      if (rule) {
-        let slots = [];
-        let currentSlot = new Date(currentDate);
-        currentSlot.setHours(rule.startHour, rule.startMin, 0, 0);
-
-        let endTime = new Date(currentDate);
-        endTime.setHours(rule.endHour, rule.endMin, 0, 0);
-
-        while (currentSlot < endTime) {
-          let nextSlot = new Date(currentSlot.getTime() + 60 * 60 * 1000); // Durasi per sesi: 1 Jam
-
-          let isBooked = bookings.some(b => {
-             return b.coachId === coach.id &&
-                    ((currentSlot >= b.start && currentSlot < b.end) ||
-                     (nextSlot > b.start && nextSlot <= b.end) ||
-                     (currentSlot <= b.start && nextSlot >= b.end));
-          });
-
-          if (!isBooked && currentSlot > new Date()) {
-             slots.push(String(currentSlot.getHours()).padStart(2,'0') + ':' + String(currentSlot.getMinutes()).padStart(2,'0'));
-          }
-          currentSlot = nextSlot;
-        }
-
-        if (slots.length > 0) {
-          results.push({
-            coachId: coach.id,
-            coachName: coach.name,
-            date: dateString,
-            availableSlots: slots
-          });
-        }
-      }
-    });
-  }
-
-  return results;
+  return _availabilityAdapter_();
 }
 
 
@@ -4455,4 +4616,814 @@ function deleteTaskTemplate(token, templateId) {
     }
     throw new Error('Template tidak ditemukan.');
   });
+}
+
+// #############################################################################
+// 📁 10_COACH_HOURS — Jam kerja coach, cuti, dan satu mesin slot (Phase E2)
+// #############################################################################
+//
+// Satu fungsi murni, _freeSlots_, menjawab "jam mana yang masih kosong". Dipakai getOpenSlots
+// (Landing & portal), pengingat booking-minggu, dan pengecekan booking di server.
+// Tanpa jam kerja & cuti tersimpan, hasilnya sama dengan perilaku lama: jam operasional studio,
+// kapasitas = jumlah coach aktif (atau 1 kalau belum ada coach).
+
+const COACH_AVAIL_HEADERS = ["Coach ID", "Hari", "Jam Mulai", "Jam Selesai"];
+const COACH_TIMEOFF_HEADERS = ["ID", "Coach ID", "Mulai", "Selesai", "Jam Mulai", "Jam Selesai", "Catatan", "Dibuat Pada"];
+const COACH_DAY_NAMES = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+
+function _hourCell_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v.getTime()) ? 0 : v.getHours();
+  return parseInt(String(v).split(':')[0], 10) || 0;
+}
+
+/** Aturan jam kerja dari sheet CoachAvailability (hanya baca; tidak membuat sheet). */
+function _coachRules_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachAvailability');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const out = [];
+  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[0]).trim() === '') return;
+    out.push({ coachId: String(r[0]).trim(), hari: String(r[1]).toLowerCase().trim(), startHour: _hourCell_(r[2]), endHour: _hourCell_(r[3]) });
+  });
+  return out;
+}
+
+/** Cuti dari sheet CoachTimeOff (hanya baca). adminView=true menyertakan catatan. */
+function _coachTimeOff_(adminView) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const out = [];
+  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[0]).trim() === '') return;
+    const row = {
+      id: String(r[0]), coachId: String(r[1]).trim(), from: String(r[2]).trim(), to: String(r[3]).trim(),
+      hourFrom: String(r[4]) === '' ? null : _hourCell_(r[4]), hourTo: String(r[5]) === '' ? null : _hourCell_(r[5])
+    };
+    if (adminView) row.note = String(r[6] || '');
+    out.push(row);
+  });
+  return out;
+}
+
+/** Murni: apakah coach ini bisa melayani jam itu (jam kerja + cuti)? date 'YYYY-MM-DD' WIB, dow 0=Minggu. */
+function _coachAvailableAt_(coachId, rules, timeOff, date, hour, dow) {
+  const mine = (rules || []).filter(function(r) { return r.coachId === coachId; });
+  if (mine.length) {
+    const day = COACH_DAY_NAMES[dow];
+    if (!mine.some(function(r) { return r.hari === day && hour >= r.startHour && hour < r.endHour; })) return false;
+  }
+  return !(timeOff || []).some(function(o) {
+    return o.coachId === coachId && o.from <= date && date <= o.to && (o.hourFrom === null || (hour >= o.hourFrom && hour < o.hourTo));
+  });
+}
+
+/**
+ * Murni. in: { businessHours, coaches:[{id}], rules, timeOff, bookings:[{start,end,coachId}], from:'YYYY-MM-DD', days, now:Date }
+ * out: [{ date, dow, closed, hours:[{hour, free}] }] — hanya jam di dalam jam operasional studio.
+ */
+function _freeSlots_(o) {
+  const coaches = (o.coaches && o.coaches.length) ? o.coaches : [{ id: '' }];
+  const known = {};
+  coaches.forEach(function(c) { if (c.id) known[c.id] = true; });
+  const out = [];
+  for (let i = 0; i < o.days; i++) {
+    const date = _addDaysIso_(o.from, i);
+    const p = date.split('-');
+    const dow = new Date(Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10))).getUTCDay();
+    const range = o.businessHours[dow];
+    const hours = [];
+    if (range) {
+      for (let h = range[0]; h < range[1]; h++) {
+        const a = Date.parse(date + 'T' + ('0' + h).slice(-2) + ':00:00+07:00'), b = a + 3600000;
+        let free = 0, off = false;
+        if (a > o.now.getTime()) {
+          const avail = coaches.filter(function(c) { return !c.id || _coachAvailableAt_(c.id, o.rules, o.timeOff, date, h, dow); });
+          const availIds = {};
+          avail.forEach(function(c) { availIds[c.id] = true; });
+          let used = 0;
+          (o.bookings || []).forEach(function(bk) {
+            if (!(new Date(bk.start).getTime() < b && new Date(bk.end || bk.start).getTime() > a)) return;
+            // Booking milik coach yang sedang tidak tersedia tidak memakai kursi; tanpa coach (atau coach tak dikenal) memakai kursi bersama.
+            if (!bk.coachId || !known[bk.coachId] || availIds[bk.coachId]) used++;
+          });
+          free = Math.max(0, avail.length - used);
+          off = avail.length === 0;   // tidak ada coach yang bertugas jam ini (di luar jam kerja / cuti)
+        }
+        hours.push({ hour: h, free: free, off: off });
+      }
+    }
+    out.push({ date: date, dow: dow, closed: hours.length === 0, hours: hours });
+  }
+  return out;
+}
+
+function _slotBookings_() {
+  return _getSchedulesAll_().filter(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    return st !== 'available' && st !== 'cancelled';
+  }).map(function(s) { return { start: s.start, end: s.end, coachId: String(s.coachId || '') }; });
+}
+
+/** Publik: jam kosong tiap hari (7 hari default, maks 21). Tidak membuka siapa yang booking atau alasan cuti. */
+function getOpenSlots(opts) {
+  opts = opts || {};
+  const now = new Date();
+  let from = String(opts.from || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) from = _wibParts_(now).date;
+  const days = Math.max(1, Math.min(21, parseInt(opts.days, 10) || 7));
+  return _freeSlots_({
+    businessHours: _businessHours_(), coaches: _activeCoaches_().map(function(c) { return { id: c.id }; }),
+    rules: _coachRules_(), timeOff: _coachTimeOff_(false), bookings: _slotBookings_(), from: from, days: days, now: now
+  });
+}
+
+/** Publik: status singkat coach "Ini saya": sesi | tersedia (+next) | cuti (+until) | libur | tutup. Tanpa catatan cuti. */
+function getCoachStatus() {
+  const self = _selfCoach_();
+  if (!self) return { state: 'tutup' };
+  const now = new Date();
+  const wib = _wibParts_(now);
+  const rules = _coachRules_(), timeOff = _coachTimeOff_(false);
+  const off = timeOff.find(function(o) { return o.coachId === self.id && o.from <= wib.date && wib.date <= o.to && o.hourFrom === null; });
+  if (off) return { state: 'cuti', until: off.to };
+  const nowMs = now.getTime();
+  const busy = _slotBookings_().some(function(bk) { return bk.coachId === self.id && new Date(bk.start).getTime() <= nowMs && new Date(bk.end || bk.start).getTime() > nowMs; });
+  if (busy) return { state: 'sesi' };
+  const mine = rules.filter(function(r) { return r.coachId === self.id; });
+  if (mine.length && !mine.some(function(r) { return r.hari === COACH_DAY_NAMES[wib.day]; })) return { state: 'libur' };
+  const day = _freeSlots_({ businessHours: _businessHours_(), coaches: [{ id: self.id }], rules: rules, timeOff: timeOff, bookings: _slotBookings_(), from: wib.date, days: 1, now: now })[0];
+  const next = day.hours.find(function(x) { return x.free > 0; });
+  return next ? { state: 'tersedia', next: ('0' + next.hour).slice(-2) + ':00' } : { state: 'tutup' };
+}
+
+/** Publik (adapter lama): bentuk keluaran getPublicAvailability dari mesin slot, 14 hari, per coach. */
+function _availabilityAdapter_() {
+  const now = new Date();
+  const coaches = _activeCoaches_();
+  const rules = _coachRules_(), timeOff = _coachTimeOff_(false), bookings = _slotBookings_();
+  const results = [];
+  coaches.forEach(function(c) {
+    if (!rules.some(function(r) { return r.coachId === c.id; })) return;   // tanpa aturan: perilaku lama = tidak ada baris
+    _freeSlots_({ businessHours: _businessHours_(), coaches: [{ id: c.id }], rules: rules, timeOff: timeOff, bookings: bookings, from: _wibParts_(now).date, days: 14, now: now }).forEach(function(day) {
+      const slots = day.hours.filter(function(x) { return x.free > 0; }).map(function(x) { return ('0' + x.hour).slice(-2) + ':00'; });
+      if (slots.length) results.push({ coachId: c.id, coachName: c.name, date: day.date, availableSlots: slots });
+    });
+  });
+  return results;
+}
+
+/** Murni: ada coach yang tersedia untuk SEMUA jam di [start,end)? Tanpa aturan & cuti selalu true. */
+function _anyCoachAvailable_(coaches, rules, timeOff, start, end) {
+  if (!(rules || []).length && !(timeOff || []).length) return true;
+  const s = new Date(start), e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return true;
+  const list = (coaches && coaches.length) ? coaches : [];
+  if (!list.length) return true;
+  return list.some(function(c) {
+    for (let t = Math.floor(s.getTime() / 3600000) * 3600000; t < e.getTime(); t += 3600000) {
+      const w = _wibParts_(new Date(t));
+      if (!_coachAvailableAt_(c.id, rules, timeOff, w.date, w.hour, w.day)) return false;
+    }
+    return true;
+  });
+}
+
+function _slotWarnings_(start, end) {
+  const rules = _coachRules_(), timeOff = _coachTimeOff_(false);
+  if (_anyCoachAvailable_(_activeCoaches_(), rules, timeOff, start, end)) return [];
+  return [timeOff.length ? 'Di luar jam kerja atau bertepatan dengan cuti.' : 'Di luar jam kerja.'];
+}
+
+function _assertSlotBookable_(start, end) {
+  if (_anyCoachAvailable_(_activeCoaches_(), _coachRules_(), _coachTimeOff_(false), start, end)) return;
+  throw new Error('Jam ini tidak tersedia.');
+}
+
+// ── 📂 Admin: jam kerja & cuti ──────────────────────────────────────────────
+
+function _validDate_(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s))) return false;
+  const p = String(s).split('-').map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  return d.getUTCFullYear() === p[0] && d.getUTCMonth() === p[1] - 1 && d.getUTCDate() === p[2];
+}
+
+/** Jam kerja mingguan + cuti satu coach (default: coach "Ini saya"). Termasuk catatan cuti. */
+function getCoachAvailability(token, coachId) {
+  requireAdmin_(token);
+  const id = String(coachId || (_selfCoach_() || {}).id || '');
+  const week = {};
+  COACH_DAY_NAMES.forEach(function(d) { week[d] = []; });
+  _coachRules_().filter(function(r) { return r.coachId === id; }).forEach(function(r) {
+    if (week[r.hari]) week[r.hari].push([r.startHour, r.endHour]);
+  });
+  const today = _wibParts_(new Date()).date, cutoff = _addDaysIso_(today, -30);
+  return {
+    coachId: id, week: week, hasRules: _coachRules_().some(function(r) { return r.coachId === id; }),
+    timeOff: _coachTimeOff_(true).filter(function(o) { return o.coachId === id && o.to >= cutoff; }),
+    businessHours: _businessHours_()
+  };
+}
+
+/** week = { senin: [[6,10],[16,20]], ... }. Menggantikan semua aturan coach itu. week kosong = ikut jam operasional. */
+function saveCoachAvailability(token, coachId, week) {
+  requireAdmin_(token);
+  coachId = String(coachId || '');
+  if (!_activeCoaches_().some(function(c) { return c.id === coachId; })) throw new Error('Pilih coach yang aktif.');
+  week = week || {};
+  const bh = _businessHours_();
+  const rows = [];
+  COACH_DAY_NAMES.forEach(function(day, dow) {
+    const ranges = (week[day] || []).map(function(r) { return [Number(r[0]), Number(r[1])]; }).sort(function(a, b) { return a[0] - b[0]; });
+    if (ranges.length > 3) throw new Error('Maksimal 3 rentang jam per hari.');
+    ranges.forEach(function(r, i) {
+      if (!Number.isInteger(r[0]) || !Number.isInteger(r[1]) || r[0] >= r[1]) throw new Error('Jam mulai harus lebih kecil dari jam selesai (' + day + ').');
+      if (!bh[dow] || r[0] < bh[dow][0] || r[1] > bh[dow][1]) throw new Error('Jam kerja ' + day + ' harus di dalam jam operasional studio.');
+      if (i > 0 && r[0] < ranges[i - 1][1]) throw new Error('Rentang jam ' + day + ' tidak boleh saling tumpang tindih.');
+      rows.push([coachId, day, ('0' + r[0]).slice(-2) + ':00', ('0' + r[1]).slice(-2) + ':00']);
+    });
+  });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getOrCreateSheet_('CoachAvailability', COACH_AVAIL_HEADERS);
+    sheet.getRange('C:D').setNumberFormat('@');
+    const data = sheet.getDataRange().getValues();
+    for (let i = data.length - 1; i >= 1; i--) if (String(data[i][0]).trim() === coachId) sheet.deleteRow(i + 1);
+    rows.forEach(function(r) { sheet.appendRow(r); });
+    return { status: 'success', count: rows.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _timeOffClashes_(coachId, o) {
+  const out = [];
+  _getSchedulesAll_().forEach(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    if (st === 'completed' || st === 'cancelled' || st === 'available') return;
+    if (s.coachId && s.coachId !== coachId) return;
+    const d = new Date(s.start);
+    if (isNaN(d.getTime())) return;
+    const w = _wibParts_(d);
+    if (w.date < o.from || w.date > o.to) return;
+    if (o.hourFrom !== null && !(w.hour >= o.hourFrom && w.hour < o.hourTo)) return;
+    out.push({ scheduleId: s.id, memberId: s.memberId, memberName: s.title, phone: s.phone, start: s.start, end: s.end });
+  });
+  return out;
+}
+
+/** data = { coachId?, from, to, hourFrom?, hourTo?, note? }. Mengembalikan jadwal yang bentrok; tidak ada yang dibatalkan. */
+function addCoachTimeOff(token, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const coachId = String(data.coachId || (_selfCoach_() || {}).id || '');
+  if (!_activeCoaches_().some(function(c) { return c.id === coachId; })) throw new Error('Pilih coach yang aktif.');
+  const from = String(data.from || ''), to = String(data.to || data.from || '');
+  if (!_validDate_(from) || !_validDate_(to)) throw new Error('Tanggal cuti tidak valid.');
+  if (to < from) throw new Error('Tanggal selesai tidak boleh sebelum tanggal mulai.');
+  const days = (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000 + 1;
+  if (days > 120) throw new Error('Cuti maksimal 120 hari.');
+  const hasH = !(data.hourFrom === '' || data.hourFrom == null) || !(data.hourTo === '' || data.hourTo == null);
+  let hourFrom = null, hourTo = null;
+  if (hasH) {
+    hourFrom = Number(data.hourFrom); hourTo = Number(data.hourTo);
+    if (!Number.isInteger(hourFrom) || !Number.isInteger(hourTo) || hourFrom < 0 || hourTo > 24 || hourFrom >= hourTo) throw new Error('Jam cuti tidak valid: jam mulai harus lebih kecil dari jam selesai.');
+  }
+  const note = String(data.note || '').trim();
+  if (note.length > 100) throw new Error('Catatan maksimal 100 karakter.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getOrCreateSheet_('CoachTimeOff', COACH_TIMEOFF_HEADERS);
+    sheet.getRange('C:F').setNumberFormat('@');
+    const id = 'OFF-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    sheet.appendRow([id, coachId, from, to, hourFrom === null ? '' : ('0' + hourFrom).slice(-2) + ':00', hourTo === null ? '' : ('0' + hourTo).slice(-2) + ':00', note, new Date().toISOString()]);
+    return { status: 'success', id: id, clashes: _timeOffClashes_(coachId, { from: from, to: to, hourFrom: hourFrom, hourTo: hourTo }) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteCoachTimeOff(token, id) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
+    if (!sheet) throw new Error('Cuti tidak ditemukan.');
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(id)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
+    }
+    throw new Error('Cuti tidak ditemukan.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// #############################################################################
+// 📁 11_COACH_HUB — Beranda Coach: hari ini, statistik, target (Phase E3)
+// #############################################################################
+
+const COACH_TARGETS = {
+  sesi: { key: 'COACH_TARGET_SESI', label: 'Sesi', min: 1, max: 500 },
+  klienAktif: { key: 'COACH_TARGET_KLIEN_AKTIF', label: 'Klien aktif', min: 1, max: 200 },
+  pendapatan: { key: 'COACH_TARGET_PENDAPATAN', label: 'Pendapatan (estimasi)', min: 0, max: 1000000000 },
+  klienBaru: { key: 'COACH_TARGET_KLIEN_BARU', label: 'Klien baru', min: 1, max: 100 }
+};
+
+/** Simpan target bulanan. Nilai kosong menghapus target (tidak ditampilkan). */
+function saveCoachTargets(token, targets) {
+  requireAdmin_(token);
+  targets = targets || {};
+  const clean = {};
+  Object.keys(COACH_TARGETS).forEach(function(k) {
+    if (!Object.prototype.hasOwnProperty.call(targets, k)) return;
+    const v = targets[k];
+    if (v === '' || v == null) { clean[k] = ''; return; }
+    const n = Number(v), b = COACH_TARGETS[k];
+    if (!Number.isInteger(n) || n < b.min || n > b.max) throw new Error('Target ' + b.label + ' harus bilangan bulat antara ' + b.min + ' dan ' + b.max + '.');
+    clean[k] = n;
+  });
+  const props = PropertiesService.getScriptProperties();
+  Object.keys(clean).forEach(function(k) {
+    if (clean[k] === '') props.deleteProperty(COACH_TARGETS[k].key); else props.setProperty(COACH_TARGETS[k].key, String(clean[k]));
+  });
+  return { status: 'success' };
+}
+
+/** Murni: pesan "di jalur" untuk target bulanan. */
+function _targetPace_(goal, actual, day, daysInMonth) {
+  const pace = Math.ceil(goal * day / daysInMonth);
+  return { pace: pace, onPace: actual >= pace };
+}
+
+/** Murni-ish: ringkasan Beranda Coach untuk tanggal `now`. */
+function _coachHub_(now) {
+  const self = _selfCoach_();
+  const wib = _wibParts_(now);
+  const mine = function(s) { return !s.coachId || (self && s.coachId === self.id); };
+  const all = _getSchedulesAll_().filter(mine);
+  const done = all.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; });
+  const dateOf = function(s) {
+    const d = new Date(s.completedAt || s.start);
+    return isNaN(d.getTime()) ? null : Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd');
+  };
+  const hoursOf = function(s) {
+    const a = new Date(s.start), b = new Date(s.end || s.start);
+    return isNaN(a.getTime()) || isNaN(b.getTime()) ? 0 : Math.max(0, (b - a) / 3600000);
+  };
+  const monthKey = wib.date.slice(0, 7), weekStart = _weekStart_(wib.date), weekEnd = _addDaysIso_(weekStart, 6);
+  const stats = { weekSessions: 0, weekHours: 0, monthSessions: 0, monthHours: 0, activeClients: 0, streak: 0 };
+  const weeks = {};
+  done.forEach(function(s) {
+    const d = dateOf(s);
+    if (!d) return;
+    weeks[_weekStart_(d)] = true;
+    if (d >= weekStart && d <= weekEnd) { stats.weekSessions++; stats.weekHours += hoursOf(s); }
+    if (d.slice(0, 7) === monthKey) { stats.monthSessions++; stats.monthHours += hoursOf(s); }
+  });
+  stats.weekHours = Math.round(stats.weekHours * 10) / 10;
+  stats.monthHours = Math.round(stats.monthHours * 10) / 10;
+  stats.streak = _streak_(weeks, wib.date);
+  const members = _getMembersAll_();
+  stats.activeClients = members.filter(function(m) { return Number(m.totalSessions) > Number(m.usedSessions); }).length;
+
+  const today = all.filter(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'available') return false;
+    const d = new Date(s.start);
+    return !isNaN(d.getTime()) && Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd') === wib.date;
+  }).sort(function(a, b) { return new Date(a.start) - new Date(b.start); }).map(function(s) {
+    return { id: s.id, memberId: s.memberId, memberName: s.title, start: s.start, end: s.end, status: String(s.status || '').toLowerCase() };
+  });
+
+  const props = PropertiesService.getScriptProperties();
+  const p = wib.date.split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
+  const targets = [];
+  Object.keys(COACH_TARGETS).forEach(function(k) {
+    const goal = _numProp_(COACH_TARGETS[k].key, NaN);
+    if (isNaN(goal) || goal <= 0) return;
+    let actual = 0;
+    if (k === 'sesi') actual = stats.monthSessions;
+    else if (k === 'klienAktif') actual = stats.activeClients;
+    else if (k === 'pendapatan') actual = _revenueSummary_(p[1], p[0]).total;
+    else if (k === 'klienBaru') {
+      _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+        if (String(r[3]) !== 'Baru') return;
+        const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
+        if (t.length === 3 && parseInt(t[1], 10) === p[1] && parseInt(t[2], 10) === p[0]) actual++;
+      });
+    }
+    const pace = k === 'klienAktif' ? { pace: goal, onPace: actual >= goal } : _targetPace_(goal, actual, p[2], daysInMonth);
+    targets.push({ key: k, label: COACH_TARGETS[k].label, goal: goal, actual: actual, pace: pace.pace, onPace: pace.onPace });
+  });
+  return {
+    selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
+    today: today, stats: stats, targets: targets, care: _careList_(now),
+    rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
+  };
+}
+
+/** Ringkasan satu bulan (y, m=1-12): sesi & jam selesai, klien baru, pendapatan, dan hasil tiap target. */
+function _monthSummary_(y, m) {
+  const self = _selfCoach_();
+  const key = y + '-' + ('0' + m).slice(-2);
+  let sessions = 0, hours = 0, newClients = 0;
+  _getSchedulesAll_().forEach(function(s) {
+    if (String(s.status || '').toLowerCase() !== 'completed') return;
+    if (s.coachId && self && s.coachId !== self.id) return;
+    const d = new Date(s.completedAt || s.start);
+    if (isNaN(d.getTime()) || Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM') !== key) return;
+    sessions++;
+    const a = new Date(s.start), b = new Date(s.end || s.start);
+    if (!isNaN(a.getTime()) && !isNaN(b.getTime())) hours += Math.max(0, (b - a) / 3600000);
+  });
+  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[3]) !== 'Baru') return;
+    const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
+    if (t.length === 3 && parseInt(t[1], 10) === m && parseInt(t[2], 10) === y) newClients++;
+  });
+  const revenue = _revenueSummary_(m, y).total;
+  hours = Math.round(hours * 10) / 10;
+  const actual = { sesi: sessions, pendapatan: revenue, klienBaru: newClients };
+  const targets = [];
+  ['sesi', 'pendapatan', 'klienBaru'].forEach(function(k) {
+    const goal = _numProp_(COACH_TARGETS[k].key, NaN);
+    if (!isNaN(goal) && goal > 0) targets.push({ key: k, label: COACH_TARGETS[k].label, goal: goal, actual: actual[k] });
+  });
+  return { sessions: sessions, hours: hours, newClients: newClients, revenue: revenue, targets: targets };
+}
+
+function getCoachHub(token) {
+  requireAdmin_(token);
+  return _coachHub_(new Date());
+}
+
+
+// #############################################################################
+// 📁 12_CLIENT_CARE — Catatan privat, form kesehatan, assessment, tes kebugaran (Phase E4)
+// #############################################################################
+//
+// DATA SENSITIF. Hanya admin (atau klien itu sendiri untuk bagiannya) yang boleh membacanya.
+// Tidak boleh masuk: _memberPublicProfile_, getMembers, getPublicSchedules, getMyProgress,
+// cache panel, Telegram, email, atau log (lihat docs/coach/Agent.md aturan 5 dan 6).
+
+const MEMBER_FLAG_COL = 19, MEMBER_NOTES_COL = 20, MEMBER_BIRTH_COL = 21, MEMBER_SNOOZE_COL = 22;   // S, T, U, V
+const MEMBER_CARE_HEADERS = { 19: 'Perhatian', 20: 'Catatan Privat', 21: 'Tanggal Lahir', 22: 'Perhatian Ditunda' };
+const ASSESSMENT_HEADERS = ["ID", "Member ID", "Tanggal", "Tujuan Utama", "Riwayat Latihan", "Preferensi Jadwal", "Motivasi", "Catatan Coach", "Diubah Pada", "Lemak Tubuh (%)", "Dada (cm)", "Lengan (cm)", "Pinggul (cm)"];
+const FITNESS_HEADERS = ["ID", "Member ID", "Tanggal", "Tes", "Nilai", "Dicatat Oleh", "Diubah Pada"];
+const HEALTH_HEADERS = ["ID", "Member ID", "Tanggal", "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Cedera/Operasi", "Obat Rutin", "Kondisi Lain", "Persetujuan", "Ditinjau Pada", "Catatan Coach", "Dibuat Pada"];
+const FITNESS_TESTS = [
+  { id: 'pushup', label: 'Push-up', unit: 'kali / 1 menit', better: 'higher', min: 0, max: 300 },
+  { id: 'plank', label: 'Plank', unit: 'detik', better: 'higher', min: 0, max: 3600 },
+  { id: 'squat', label: 'Squat', unit: 'kali / 1 menit', better: 'higher', min: 0, max: 300 },
+  { id: 'sit-reach', label: 'Sit and reach', unit: 'cm', better: 'higher', min: -40, max: 80 },
+  { id: 'nadi-istirahat', label: 'Detak jantung istirahat', unit: 'bpm', better: 'lower', min: 30, max: 220 }
+];
+const HEALTH_QUESTIONS = [
+  'Pernah dikatakan dokter bahwa jantungmu bermasalah, dan sebaiknya berolahraga hanya dengan pengawasan?',
+  'Apakah dadamu terasa sakit saat berolahraga atau beraktivitas?',
+  'Dalam sebulan terakhir, apakah kamu pernah nyeri dada saat tidak sedang berolahraga?',
+  'Apakah kamu pernah hilang keseimbangan karena pusing, atau pernah pingsan?',
+  'Apakah ada masalah tulang atau sendi yang bisa memburuk karena olahraga?',
+  'Apakah kamu sedang minum obat untuk tekanan darah atau masalah jantung?',
+  'Apakah ada alasan lain kamu sebaiknya tidak berolahraga berat (hamil, baru operasi, dll)?'
+];
+
+function _careStr_(v, max, label) {
+  const t = String(v == null ? '' : v).trim();
+  if (t.length > max) throw new Error(label + ' maksimal ' + max + ' karakter.');
+  return t;
+}
+
+function _memberRowOrThrow_(memberId) {
+  const id = String(memberId == null ? '' : memberId).trim();
+  const found = _findMemberRow_(function(row) { return String(row[0]).trim() === id; });
+  if (!found) throw new Error('Klien tidak ditemukan.');
+  return found;
+}
+
+function _ensureCareColumns_(sheet) {
+  Object.keys(MEMBER_CARE_HEADERS).forEach(function(col) {
+    const cell = sheet.getRange(1, Number(col));
+    if (cell.getValue() === '') { cell.setValue(MEMBER_CARE_HEADERS[col]); cell.setFontWeight('bold'); }
+  });
+}
+
+function _careSheet_(name, headers) { return getOrCreateSheet_(name, headers); }
+
+/** Baris terbaru (terakhir ditulis) milik klien dari sheet; null kalau belum ada. */
+function _latestRowFor_(sheetName, memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return null;
+  const rows = sheet.getDataRange().getValues();
+  for (let i = rows.length - 1; i >= 1; i--) if (String(rows[i][1]).trim() === memberId) return { row: rows[i], rowNum: i + 1, sheet: sheet };
+  return null;
+}
+
+function _fitnessByMember_(memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FitnessTests');
+  const out = {};
+  FITNESS_TESTS.forEach(function(t) { out[t.id] = []; });
+  if (!sheet) return out;
+  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+    if (String(r[1]).trim() !== memberId || !out[String(r[3])]) return;
+    out[String(r[3])].push({ id: String(r[0]), tanggal: String(r[2]), nilai: Number(r[4]) });
+  });
+  Object.keys(out).forEach(function(k) { out[k].sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); }); });
+  return out;
+}
+
+function _fitnessSummary_(byTest) {
+  return FITNESS_TESTS.map(function(t) {
+    const list = byTest[t.id] || [];
+    const first = list.length ? list[0] : null, latest = list.length ? list[list.length - 1] : null;
+    const change = (first && latest && list.length > 1) ? Math.round((latest.nilai - first.nilai) * 10) / 10 : null;
+    const improved = change === null ? null : (t.better === 'lower' ? change < 0 : change > 0);
+    return { id: t.id, label: t.label, unit: t.unit, better: t.better, first: first, latest: latest, change: change, improved: improved, count: list.length };
+  }).filter(function(x) { return x.count > 0; });
+}
+
+/** Admin: semua data perawatan satu klien (catatan privat, kesehatan, assessment, tes). */
+function getClientCare(token, memberId) {
+  requireAdmin_(token);
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const asm = _latestRowFor_('Assessments', id), hs = _latestRowFor_('HealthScreening', id);
+  const byTest = _fitnessByMember_(id);
+  const a = asm ? asm.row : null, hr = hs ? hs.row : null;
+  return {
+    flag: String(m.row[MEMBER_FLAG_COL - 1] || ''), notes: String(m.row[MEMBER_NOTES_COL - 1] || ''),
+    birthDate: String(m.row[MEMBER_BIRTH_COL - 1] || ''), snoozedUntil: String(m.row[MEMBER_SNOOZE_COL - 1] || ''),
+    assessment: a ? { tanggal: String(a[2]), goal: a[3], history: a[4], schedulePref: a[5], motivation: a[6], coachNotes: a[7], bodyFat: a[9], chest: a[10], arm: a[11], hip: a[12] } : null,
+    health: hr ? {
+      tanggal: String(hr[2]), answers: [3, 4, 5, 6, 7, 8, 9].map(function(i) { return String(hr[i]); }),
+      injuries: hr[10], medication: hr[11], other: hr[12], reviewedAt: String(hr[14] || ''), reviewNote: String(hr[15] || '')
+    } : null,
+    tests: _fitnessSummary_(byTest), testHistory: byTest, testList: FITNESS_TESTS, questions: HEALTH_QUESTIONS
+  };
+}
+
+/** Admin: flag singkat + catatan privat + tanggal lahir. */
+function saveClientNotes(token, memberId, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const flag = _careStr_(data.flag, 80, 'Perhatian'), notes = _careStr_(data.notes, 2000, 'Catatan');
+  let birth = String(data.birthDate == null ? '' : data.birthDate).trim();
+  if (birth && (!_validDate_(birth) || birth > _todayWib_())) throw new Error('Tanggal lahir tidak valid.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const m = _memberRowOrThrow_(memberId);
+    _ensureCareColumns_(m.sheet);
+    m.sheet.getRange(m.rowNum, MEMBER_FLAG_COL).setValue(flag);
+    m.sheet.getRange(m.rowNum, MEMBER_NOTES_COL).setValue(notes);
+    m.sheet.getRange(m.rowNum, MEMBER_BIRTH_COL).setNumberFormat('@').setValue(birth);
+    return { status: 'success' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Admin: sembunyikan klien dari daftar "Perlu perhatian" selama `days` hari (1-30). */
+function snoozeCare(token, memberId, days) {
+  requireAdmin_(token);
+  const n = Math.max(1, Math.min(30, parseInt(days, 10) || 7));
+  const m = _memberRowOrThrow_(memberId);
+  _ensureCareColumns_(m.sheet);
+  m.sheet.getRange(m.rowNum, MEMBER_SNOOZE_COL).setNumberFormat('@').setValue(_addDaysIso_(_todayWib_(), n));
+  return { status: 'success' };
+}
+
+/** Admin: assessment pertama / perubahan. Berat & pinggang (opsional) masuk ke Progres sebagai catatan coach. */
+function saveAssessment(token, memberId, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const row = [
+    'ASM-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, _todayWib_(),
+    _careStr_(data.goal, 200, 'Tujuan utama'), _careStr_(data.history, 500, 'Riwayat latihan'), _careStr_(data.schedulePref, 200, 'Preferensi jadwal'),
+    _careStr_(data.motivation, 300, 'Motivasi'), _careStr_(data.coachNotes, 1000, 'Catatan coach'), new Date().toISOString()
+  ];
+  [['bodyFat', 'Lemak tubuh', 3, 60], ['chest', 'Lingkar dada', 40, 200], ['arm', 'Lingkar lengan', 15, 80], ['hip', 'Lingkar pinggul', 40, 200]].forEach(function(f) {
+    row.push(_parseMeasure_(data[f[0]], f[2], f[3], f[1]));
+  });
+  const berat = _parseMeasure_(data.weight, PROGRESS_LIMITS.beratMin, PROGRESS_LIMITS.beratMax, 'Berat');
+  const pinggang = _parseMeasure_(data.waist, PROGRESS_LIMITS.pinggangMin, PROGRESS_LIMITS.pinggangMax, 'Lingkar pinggang');
+  if (!row[3] && !row[4] && !row[5] && !row[6] && !row[7] && berat === '' && pinggang === '' && !row.slice(9).some(function(v) { return v !== ''; })) throw new Error('Isi minimal satu bagian assessment.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = _careSheet_('Assessments', ASSESSMENT_HEADERS);
+    sheet.getRange('C:C').setNumberFormat('@');
+    sheet.appendRow(row);
+  } finally {
+    lock.releaseLock();
+  }
+  if (berat !== '' || pinggang !== '') _saveMeasurement_(id, _todayWib_(), berat, pinggang, 'coach');
+  return { status: 'success' };
+}
+
+/** Admin: nilai tes kebugaran. values = { pushup: 24, plank: 60 }; kosong diabaikan. Upsert per klien, tanggal, dan tes. */
+function saveFitnessTests(token, memberId, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const tanggal = _validProgressDate_(data.tanggal, _todayWib_(), null);
+  const values = {};
+  FITNESS_TESTS.forEach(function(t) {
+    const raw = data.values ? data.values[t.id] : '';
+    if (raw === '' || raw == null) return;
+    values[t.id] = _parseMeasure_(String(raw).replace(',', '.'), t.min, t.max, t.label);
+  });
+  if (!Object.keys(values).length) throw new Error('Isi minimal satu hasil tes.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = _careSheet_('FitnessTests', FITNESS_HEADERS);
+    sheet.getRange('C:C').setNumberFormat('@');
+    const rows = sheet.getDataRange().getValues();
+    const now = new Date().toISOString();
+    Object.keys(values).forEach(function(tid) {
+      let found = 0;
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][1]).trim() === id && String(rows[i][2]) === tanggal && String(rows[i][3]) === tid) { found = i + 1; break; }
+      }
+      if (found) { sheet.getRange(found, 5).setValue(values[tid]); sheet.getRange(found, 7).setValue(now); }
+      else sheet.appendRow(['FIT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, tanggal, tid, values[tid], 'coach', now]);
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  return { status: 'success', tests: _fitnessSummary_(_fitnessByMember_(id)) };
+}
+
+function deleteFitnessTest(token, testId) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FitnessTests');
+    if (!sheet) throw new Error('Hasil tes tidak ditemukan.');
+    const rows = sheet.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][0]) === String(testId)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
+    throw new Error('Hasil tes tidak ditemukan.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Admin: tandai form kesehatan terbaru sudah dibaca. */
+function markHealthReviewed(token, memberId, note) {
+  requireAdmin_(token);
+  const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
+  const hs = _latestRowFor_('HealthScreening', id);
+  if (!hs) throw new Error('Klien ini belum mengisi form kesehatan.');
+  hs.sheet.getRange(hs.rowNum, 15).setValue(new Date().toISOString());
+  hs.sheet.getRange(hs.rowNum, 16).setValue(_careStr_(note, 300, 'Catatan'));
+  return { status: 'success' };
+}
+
+/** Admin: ringkasan untuk kartu "Briefing" di atas detail sesi. Tidak pernah di-cache di browser. */
+function getSessionBriefing(token, scheduleId) {
+  requireAdmin_(token);
+  const s = _getSchedulesAll_().find(function(x) { return String(x.id) === String(scheduleId); });
+  if (!s || !s.memberId) return { flag: '', notes: '', goal: '', lastTest: null, healthPending: false };
+  const m = _findMemberRow_(function(row) { return String(row[0]).trim() === String(s.memberId).trim(); });
+  if (!m) return { flag: '', notes: '', goal: '', lastTest: null, healthPending: false };
+  const id = String(m.row[0]).trim();
+  const asm = _latestRowFor_('Assessments', id), hs = _latestRowFor_('HealthScreening', id);
+  const tests = _fitnessSummary_(_fitnessByMember_(id));
+  let last = null;
+  tests.forEach(function(t) { if (!last || t.latest.tanggal > last.tanggal) last = { label: t.label, unit: t.unit, nilai: t.latest.nilai, tanggal: t.latest.tanggal }; });
+  return {
+    flag: String(m.row[MEMBER_FLAG_COL - 1] || ''), notes: String(m.row[MEMBER_NOTES_COL - 1] || ''),
+    goal: asm ? String(asm.row[3] || '') : '', lastTest: last, healthPending: !!hs && !hs.row[14]
+  };
+}
+
+// ── Klien (portal) ──────────────────────────────────────────────────────────
+
+/** Klien: pertanyaan form kesehatan dan apakah sudah diisi. TIDAK mengembalikan jawaban. */
+function getMyHealthForm(memberToken) {
+  const id = String(requireMember_(memberToken).row[0]).trim();
+  const hs = _latestRowFor_('HealthScreening', id);
+  return { questions: HEALTH_QUESTIONS, done: !!hs, date: hs ? String(hs.row[2]) : '' };
+}
+
+/** Klien: kirim form kesehatan. answers = { q: ['ya'|'tidak' x7], injuries, medication, other, consent }. */
+function submitMyHealthForm(memberToken, answers) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  answers = answers || {};
+  const q = Array.isArray(answers.q) ? answers.q.map(function(v) { return String(v).toLowerCase(); }) : [];
+  if (q.length !== HEALTH_QUESTIONS.length || q.some(function(v) { return v !== 'ya' && v !== 'tidak'; })) throw new Error('Jawab semua pertanyaan dengan Ya atau Tidak.');
+  if (String(answers.consent) !== 'ya') throw new Error('Centang persetujuan sebelum mengirim.');
+  const inj = _careStr_(answers.injuries, 300, 'Cedera/operasi'), med = _careStr_(answers.medication, 300, 'Obat rutin'), oth = _careStr_(answers.other, 300, 'Kondisi lain');
+  if (!_throttle_('health_' + id, 60)) throw new Error('Form baru saja dikirim. Tunggu sebentar.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _careSheet_('HealthScreening', HEALTH_HEADERS);
+    sheet.getRange('C:C').setNumberFormat('@');
+    const now = new Date().toISOString();
+    sheet.appendRow(['KES-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, _todayWib_()].concat(q, [inj, med, oth, 'ya', '', '', now]));
+  } finally {
+    lock.releaseLock();
+  }
+  // Hanya nama klien; jawaban tidak pernah dikirim ke Telegram.
+  try { kirimNotifTelegram_('🩺 <b>' + _escHtml_(String(row[1] || '').trim()) + '</b> mengisi form kesehatan. Perlu ditinjau di panel.'); } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
+  return { status: 'success' };
+}
+
+/** Klien: tujuan & preferensi dari assessment, dan hasil tes (pertama → terbaru). Tanpa catatan coach. */
+function getMyAssessment(memberToken) {
+  const id = String(requireMember_(memberToken).row[0]).trim();
+  const asm = _latestRowFor_('Assessments', id);
+  return {
+    goal: asm ? String(asm.row[3] || '') : '', schedulePref: asm ? String(asm.row[5] || '') : '',
+    tests: _fitnessSummary_(_fitnessByMember_(id)).map(function(t) {
+      return { id: t.id, label: t.label, unit: t.unit, better: t.better, first: t.first, latest: t.latest, change: t.change, improved: t.improved };
+    })
+  };
+}
+
+// ── Daftar "Perlu perhatian" (dipakai Beranda Coach) ─────────────────────────
+
+/** Murni-ish: alasan yang perlu diperhatikan per klien aktif. */
+function _careList_(now) {
+  const today = _wibParts_(now).date;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const md = ss.getSheetByName('MemberData');
+  if (!md) return [];
+  const asmIds = {}, healthRows = {}, lastTest = {};
+  const asm = ss.getSheetByName('Assessments');
+  if (asm) asm.getDataRange().getValues().slice(1).forEach(function(r) { asmIds[String(r[1]).trim()] = true; });
+  const hs = ss.getSheetByName('HealthScreening');
+  if (hs) hs.getDataRange().getValues().slice(1).forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
+  const ft = ss.getSheetByName('FitnessTests');
+  if (ft) ft.getDataRange().getValues().slice(1).forEach(function(r) { const k = String(r[1]).trim(); if (!lastTest[k] || String(r[2]) > lastTest[k]) lastTest[k] = String(r[2]); });
+  const lastSession = {}, todaySession = {};
+  _getSchedulesAll_().forEach(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'available') return;
+    const d = new Date(s.start);
+    if (isNaN(d.getTime())) return;
+    const day = Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd'), k = String(s.memberId).trim();
+    if (day === today) todaySession[k] = true;
+    if (st === 'completed' && (!lastSession[k] || day > lastSession[k])) lastSession[k] = day;
+  });
+  const out = [];
+  md.getDataRange().getValues().slice(1).forEach(function(r) {
+    const id = String(r[0] || '').trim();
+    if (!id) return;
+    const rem = (parseInt(r[8], 10) || 0) - (parseInt(r[9], 10) || 0);
+    if (rem <= 0) return;   // hanya klien yang masih punya sisa sesi
+    if (String(r[MEMBER_SNOOZE_COL - 1] || '') >= today) return;
+    const reasons = [];
+    const joined = _parseTanggalDMY_(r[4]);
+    const joinedDays = joined ? Math.floor((now.getTime() - joined.getTime()) / 86400000) : 999;
+    if (r[MEMBER_FLAG_COL - 1] && todaySession[id]) reasons.push('flag-today');
+    if (healthRows[id] && !healthRows[id][14]) reasons.push('health-review');
+    if (lastTest[id] && _daysBetween_(lastTest[id], today) >= 28) reasons.push('retest');
+    if (!asmIds[id] && joinedDays >= 3) reasons.push('no-assessment');
+    if (!healthRows[id] && joinedDays >= 3) reasons.push('no-health');
+    if (lastSession[id] ? _daysBetween_(lastSession[id], today) >= 14 : joinedDays >= 14) reasons.push('gap');
+    if (reasons.length) out.push({ memberId: id, name: String(r[1] || '').trim(), reasons: reasons, flag: String(r[MEMBER_FLAG_COL - 1] || '') });
+  });
+  const order = ['flag-today', 'health-review', 'retest', 'no-assessment', 'no-health', 'gap'];
+  out.sort(function(a, b) { return order.indexOf(a.reasons[0]) - order.indexOf(b.reasons[0]); });
+  return out;
+}
+
+
+// #############################################################################
+// 📁 13_COACH_PROFILE_PAGE — Halaman profil coach untuk portal & pratinjau panel (Phase E5)
+// #############################################################################
+
+/** Murni-ish: isi halaman profil coach "Ini saya" (hanya field publik + status + 3 testimoni + batas reschedule). */
+function _coachProfilePage_() {
+  const self = _selfCoach_();
+  return {
+    coach: self ? _publicCoach_(self) : null,
+    solo: _activeCoaches_().length === 1,
+    status: getCoachStatus(),
+    testimonials: getPublicTestimonials().slice(0, 3),
+    rescheduleCutoffHours: _rescheduleCutoff_()
+  };
+}
+
+/** Klien: halaman profil coach. */
+function getMyCoach(memberToken) {
+  requireMember_(memberToken);
+  return _coachProfilePage_();
+}
+
+/** Admin: persis isi yang dilihat klien ("Lihat seperti klien"). */
+function previewCoachProfile(token) {
+  requireAdmin_(token);
+  return _coachProfilePage_();
 }

@@ -411,6 +411,40 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#detail-panel')).includes('Rizky'), 'coach detail opens');
     await shot(page, 'admin-desktop-' + scheme + '-coach');
+    check(await page.evaluate(() => window.isSoloCoach()), 'one active coach = solo mode');
+    check((await page.textContent('#detail-panel')).includes('Nonaktifkan coach'), 'coach detail offers Nonaktifkan');
+    await page.evaluate(() => { window.closeDetail(); window.openEditCoachModal('C-1'); });
+    await page.waitForTimeout(500);
+    check(await visible(page, '#coach-headline') && await visible(page, '#coach-instagram'), 'coach editor has the new profile fields');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(400);
+    check(!(await visible(page, '#calendar-coach-filter')), 'solo mode hides the calendar coach filter');
+    await page.evaluate(() => window.navigate('coaches'));
+    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
+    check((await page.textContent('#view-coaches')).includes('Hari ini'), 'coach hub shows Hari ini');
+    check((await page.textContent('#view-coaches')).includes('Atur target'), 'coach hub offers to set targets');
+    await page.evaluate(() => window.openTargetsSheet());
+    await page.waitForTimeout(400);
+    check(await visible(page, '#tg-sesi'), 'targets sheet opens');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openHoursPage());
+    await page.waitForTimeout(700);
+    check((await page.textContent('#detail-panel')).includes('Ikut jam studio'), 'hours page says the coach follows studio hours when nothing is saved');
+    await page.evaluate(() => window.openHoursEditor());
+    await page.waitForTimeout(500);
+    check(await visible(page, '#coach-hours-rows'), 'hours editor opens');
+    await page.evaluate(() => { window.hoursCopyStudio(); window.saveHours(); });
+    await page.waitForTimeout(900);
+    check((await page.textContent('#detail-panel')).includes('Jam kerja'), 'hours saved and the page reloads');
+    await page.evaluate(() => window.openTimeOffSheet());
+    await page.waitForTimeout(500);
+    check(await visible(page, '#off-from'), 'time-off sheet opens');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
 
     // Closing a sheet stacked on top of the detail panel must not leave a full-viewport
     // ghost overlay eating the very next click (was: #sheet-layer kept pointer-events:auto
@@ -520,7 +554,7 @@ async function contrastReport(page) {
     await page.click('.settings-nav-item[data-section="pengingat"]');
     await page.waitForTimeout(700);
     check(await page.locator('[data-k="job-sesi-besok-enabled"]').count() === 1, 'Pengingat has a "Sesi besok" card');
-    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 8, 'every reminder type has an editable client message');
+    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 11, 'every reminder type has an editable client message');
     check((await page.textContent('#pv-pr')).startsWith('Halo Budi, pengingat PR kamu'), 'the preview shows the default client message with sample data');
     check((await page.locator('[data-k="job-rekap-bulanan-enabled"]:not(:checked), [data-k="job-selamat-milestone-enabled"]:not(:checked), [data-k="job-waktunya-ukur-enabled"]:not(:checked)').count()) === 3, 'the three new message types (rekap, milestone, ukur) start switched off');
     check((await page.textContent('#pv-rekap-bulanan')).includes('rekap latihan bulan September') && (await page.textContent('#pv-selamat-milestone')).includes('badge 25 sesi') && (await page.textContent('#pv-waktunya-ukur')).includes('waktunya catat progres'), 'the new types show a preview of their client message');
@@ -592,7 +626,7 @@ async function contrastReport(page) {
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
-    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 6, 'client page: all six reminder switches start on');
+    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 8, 'client page: all eight reminder switches start on');
     await page.click('#profile-remind-prefs input[data-remind="pr"]');
     await page.waitForTimeout(600);
     check(env.memberRow('PT-A')[15] === 'pr', 'client page: switching PR off is saved for that client (MemberData column P)');
@@ -602,6 +636,18 @@ async function contrastReport(page) {
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
     check(await visible(page, '#profile-progress-wrap') && (await page.textContent('#profile-progress-wrap')).includes('Belum ada catatan'), 'client page: a Progres section is shown');
+    await page.waitForTimeout(500);
+    check((await page.textContent('#profile-care-wrap')).includes('Catatan privat') && (await page.textContent('#profile-care-wrap')).includes('Tes kebugaran'), 'client page: private notes, health, assessment and fitness sections');
+    await page.evaluate(() => window.openCareTests('PT-A'));
+    await page.waitForTimeout(500);
+    check(await visible(page, '#ft-pushup') && (await page.getAttribute('#ft-pushup', 'inputmode')) === 'decimal', 'fitness test sheet opens with a decimal keypad');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openAssessment('PT-A'));
+    await page.waitForTimeout(500);
+    check(await visible(page, '#as-goal'), 'assessment sheet opens');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
     check((await page.textContent('#profile-progress-wrap')).includes('sesi selesai') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
     await page.click('#profile-progress-wrap .btn-outline');
     await page.waitForTimeout(600);
@@ -762,7 +808,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(800);
     const remind = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
-    check(remind.length === 6 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
+    check(remind.length === 8 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
     const hit = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs input[data-remind]')).map(e => e.getBoundingClientRect()).every(r => r.height >= 43.5 && r.width >= 43.5));
     check(hit, 'phone: the switch touch area is at least 44 × 44 px');
     check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');
@@ -897,6 +943,8 @@ async function contrastReport(page) {
 
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
+    await page.waitForTimeout(500);
+    check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
     await page.click('#pub-progress-wrap .btn-primary');
     await page.waitForTimeout(600);
     check(await visible(page, '#sheet-progress'), 'portal: "Catat hari ini" opens the entry sheet');
@@ -983,8 +1031,11 @@ async function contrastReport(page) {
 
     await page.evaluate(() => window.navigate('public-coaches'));
     await page.waitForTimeout(400);
-    await page.locator('#public-coach-list button').first().click();
-    check((await page.evaluate(() => window.__opened.map(w => w.location.href))).some(u => u.startsWith('https://wa.me/6281112223334')), '"Tanya program" opens WhatsApp to the coach');
+    await page.waitForTimeout(500);
+    const coachPage = await page.textContent('#view-public-coaches');
+    check(coachPage.includes('Rizky') && coachPage.includes('Booking'), 'portal Coach tab is one profile page in solo mode');
+    await page.locator('#coach-profile-page .btn-primary').first().click();
+    check((await page.evaluate(() => window.__opened.map(w => w.location.href))).some(u => u.startsWith('https://wa.me/6281112223334')), '"Chat WA" on the coach page opens WhatsApp to the coach');
     await shot(page, 'portal-mobile-coaches');
     await page.evaluate(() => window.navigate('public-catalog'));
     await page.waitForTimeout(400);
@@ -1283,7 +1334,9 @@ async function contrastReport(page) {
       ['C-1', 'Rizky', '6281112223334', 'Strength', '', 'Bio', '3 Tahun'],
       ['C-2', 'Dina', '6281112223335', 'Cardio', '', 'Bio', '2 Tahun'],
     ]);
-    const at = (days, h) => { const d = new Date(Date.now() + days * 86400000); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+    // Jam dihitung di WIB, seperti mesin slot server (mesin ini tidak harus berzona waktu WIB).
+    const wibDate = days => new Date(Date.now() + days * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const at = (days, h) => new Date(wibDate(days) + 'T' + ('0' + h).slice(-2) + ':00:00+07:00').toISOString();
     const plusH = (iso, h) => new Date(new Date(iso).getTime() + h * 3600000).toISOString();
     const rows = env.sheet('Schedules').rows;
     // Hari ke-4: cuma C-1 sibuk jam 10 — C-2 masih bisa, jadi jam itu HARUS tetap kosong
@@ -1312,7 +1365,7 @@ async function contrastReport(page) {
   console.log('Landing · slot kosong (jam kerja asli coach, CoachAvailability)');
   {
     const env = seededEnv();
-    const dow = new Date(Date.now() + 86400000).getDay();
+    const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();
     const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
     env.ss.seed('CoachAvailability', [
       ['Coach ID', 'Hari', 'Jam Mulai', 'Jam Selesai'],
@@ -1336,7 +1389,7 @@ async function contrastReport(page) {
     await page.click('#slot-days [data-day="1"]');
     await page.waitForTimeout(300);
     const hours = await page.locator('#slot-hours .slot-h').evaluateAll(els => els.map(e => Number(e.getAttribute('data-h'))));
-    const dow = new Date(Date.now() + 86400000).getDay();
+    const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();
     const expected = ({ 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] })[dow];
     check(hours.length === expected[1] - expected[0], 'no CoachAvailability rules → falls back to the default opening hours, no regression (' + hours.length + ' jam)');
     noErrors(errors);

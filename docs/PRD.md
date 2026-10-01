@@ -38,7 +38,7 @@
 - Sending WhatsApp messages automatically (no WhatsApp API or gateway). The owner always presses Send in WhatsApp.
 - Two-way chat, or reading client replies.
 - Online payment for packages.
-- Multiple admin accounts or per-coach logins.
+- Multiple admin accounts or per-coach logins. (Still true; see also [coach/PRD.md](coach/PRD.md) for Phase E, the solo-coach hub.)
 - Replacing Google Sheets as the database.
 
 ## 4. Users
