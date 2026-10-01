@@ -539,7 +539,7 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .coach-row { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 8px 0; }
 .coach-row + .coach-row { border-top: 1px solid var(--border); }
 .coach-row .ico { width: 34px; height: 34px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.quote-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; margin: 0 calc(var(--page-pad) * -1); padding-left: var(--page-pad); padding-right: var(--page-pad); scrollbar-width: none; }
+.quote-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; margin: 0; padding-left: 0; padding-right: 0; scrollbar-width: none; }
 .quote-row::-webkit-scrollbar { display: none; }
 .quote-card { flex: 0 0 min(86%, 320px); scroll-snap-align: start; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .quote-card .stars { letter-spacing: 2px; font-size: var(--fs-sm); }
@@ -549,9 +549,9 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .client-hero .profile-name { font-size: var(--fs-2xl); letter-spacing: -0.03em; }
 .client-hero .btn-inverse, .portal-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
 .client-hero .btn-ghost-ink, .portal-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
-.cp-tabs { margin: 0 calc(var(--page-pad) * -1); padding: 0 var(--page-pad) 2px; }
-.cp-tabs .chip { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.cp-tabs .chip svg { width: 15px; height: 15px; }
+.chips.cp-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; overflow: visible; padding: 0; margin: 0; }
+.chips.cp-tabs .chip { min-height: 56px; width: 100%; min-width: 0; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: var(--fs-2xs); line-height: 1.1; white-space: nowrap; border-radius: 14px; }
+.chips.cp-tabs .chip svg { width: 16px; height: 16px; }
 .cp-pane.hide { display: none; }
 .portal-hero .avatar { box-shadow: 0 0 0 3px color-mix(in srgb, var(--on-ink) 16%, transparent); }
 .portal-kpis { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
