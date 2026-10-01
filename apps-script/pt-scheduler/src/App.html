@@ -325,6 +325,8 @@
       const f = sheet.querySelector('input:not([type=hidden]):not(.sr-only), select, textarea, button.btn-primary');
       if (f && window.innerWidth >= 768) try { f.focus({ preventScroll: true }); } catch (e) {}
     }, 260);
+    ui.sheetOn = true;
+    syncBack();
   }
   window.openSheet = openSheet;
 
@@ -332,6 +334,7 @@
     const layer = $('sheet-layer');
     if (!layer || layer.classList.contains('hide')) return;
     layer.classList.remove('open');
+    ui.sheetOn = false;
     window.isRescheduleMode = false;
     window.rescheduleScheduleId = null;
     document.querySelectorAll('.pkg-panel').forEach(function (p) { p.classList.add('hide'); });
@@ -341,6 +344,7 @@
       layer.querySelectorAll(':scope > .sheet').forEach(function (s) { s.classList.add('hide'); s.style.transform = ''; });
       if (ui.lastFocus && ui.lastFocus.focus) try { ui.lastFocus.focus({ preventScroll: true }); } catch (e) {}
     }, 440);
+    syncBack();
   };
 
   // Tarik sheet ke bawah untuk menutup (HP).
@@ -424,6 +428,7 @@
       $('detail-body').scrollTop = 0;
     }
     highlightSelection();
+    syncBack();
   }
   window.closeDetail = function () {
     const panel = $('detail-panel');
@@ -436,6 +441,7 @@
     window.selectedScheduleDetailId = null;
     highlightSelection();
     if (ui.detailFocus && ui.detailFocus.focus) try { ui.detailFocus.focus({ preventScroll: true }); } catch (e) {}
+    syncBack();
   };
   function refreshDetail() {
     if (!ui.detail) return;
@@ -1128,6 +1134,7 @@
   window.addEventListener('popstate', function (e) {
     if (window.currentView !== 'settings') { setState.pushed = false; return; }
     const id = e.state && e.state.xnkSet;
+    setState.subPop = !!setState.pushed && bkLevels() <= 1;   // entri yang terlepas milik sub-halaman, bukan lapisan umum
     if (!id && setState.open && setState.dirty && !setState.forcePop) {
       try { history.pushState({ xnkSet: setState.open }, ''); } catch (err) {}
       settingsConfirmDiscard(function () { setState.dirty = false; setState.forcePop = true; try { history.back(); } catch (err) { settingsShowList(); } });
@@ -1333,6 +1340,7 @@
     if (changed) { const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 }); $('topbar').classList.remove('scrolled'); }
     updateBadges();
     syncSettingsBar();
+    syncBack();
   };
 
   function renderView(viewId, opts) {
@@ -1385,6 +1393,7 @@
   window.onload = function () {
     if (!$('main-scroll-area')) return;
     paintIcons();
+    initPullRefresh();
     const start = function (params) {
       params = params || {};
       if (params.view === 'public') {
@@ -1407,14 +1416,108 @@
     }
   };
 
+  // ── Tombol back Android ─────────────────────────────────────────────────────
+  // Tiap lapisan yang terbuka (halaman selain beranda, panel detail, sheet)
+  // memegang satu entri riwayat. Back menutup lapisan paling atas; di beranda
+  // tanpa lapisan, back keluar dari aplikasi seperti biasa.
+  const bk = { n: 0, silent: false };
+  function bkIsHome(v) { return v === 'dashboard' || v === 'public-dashboard' || v === 'public-login' || !v; }
+  function bkLevels() {
+    const panel = $('detail-panel');
+    return (bkIsHome(window.currentView) ? 0 : 1)
+      + (panel && panel.classList.contains('open') ? 1 : 0)
+      + (ui.sheetOn ? 1 : 0);
+  }
+  function syncBack() {
+    if (!isPhone() || !window.history || !history.pushState) return;
+    const want = bkLevels();
+    try {
+      while (bk.n < want) { history.pushState({ xnkBk: bk.n + 1 }, ''); bk.n++; }
+      if (bk.n > want) {
+        const k = bk.n - want;
+        bk.n = want; bk.silent = true;
+        setTimeout(function () { bk.silent = false; }, 600);
+        history.go(-k);
+      }
+    } catch (e) {}
+  }
+  window.syncBack = syncBack;
+  window.addEventListener('popstate', function () {
+    if (bk.silent) { bk.silent = false; return; }
+    if (setState.subPop) { setState.subPop = false; return; }
+    if (!isPhone() || bk.n === 0) return;
+    bk.n--;
+    const panel = $('detail-panel');
+    if (ui.sheetOn) window.closeModal();
+    else if (panel && panel.classList.contains('open')) window.closeDetail();
+    else if (!bkIsHome(window.currentView)) window.navigate(window.isPublicView ? 'public-dashboard' : 'dashboard');
+    syncBack();
+  });
+
+  // ── Tarik ke bawah untuk muat ulang ─────────────────────────────────────────
+  window.refreshAll = function () {
+    if (ui.pulling) return Promise.resolve();
+    if (setState.dirty) { window.showToast('Simpan atau batalkan perubahan dulu.', 'info'); return Promise.resolve(); }
+    ui.pulling = true;
+    const job = window.isPublicView ? window.loadPublicData() : window.loadAllData();
+    return Promise.resolve(job).catch(function () {}).then(function () {
+      ui.pulling = false;
+      window.showToast('Diperbarui', 'check');
+    });
+  };
+  function initPullRefresh() {
+    const sc = $('main-scroll-area');
+    if (!sc || sc._ptr) return;
+    sc._ptr = true;
+    const el = document.createElement('div');
+    el.className = 'ptr'; el.setAttribute('aria-hidden', 'true');
+    el.innerHTML = icon('refresh-cw');
+    document.body.appendChild(el); paintIcons();
+    const MAX = 110, TRIGGER = 70;
+    let y0 = null, dy = 0;
+    const blocked = function () { return !isPhone() || ui.pulling || bkLevels() > (bkIsHome(window.currentView) ? 0 : 1); };
+    sc.addEventListener('touchstart', function (e) {
+      y0 = (sc.scrollTop <= 0 && e.touches.length === 1 && !blocked()) ? e.touches[0].clientY : null; dy = 0;
+    }, { passive: true });
+    sc.addEventListener('touchmove', function (e) {
+      if (y0 === null) return;
+      const d = e.touches[0].clientY - y0;
+      if (d <= 0 || sc.scrollTop > 0) { if (dy) { dy = 0; el.style.opacity = 0; } return; }
+      dy = Math.min(MAX, d * 0.5);
+      el.classList.add('pulling');
+      el.style.opacity = Math.min(1, dy / TRIGGER);
+      el.style.transform = 'translateY(' + (dy - 56) + 'px) rotate(' + (dy * 3) + 'deg)';
+    }, { passive: true });
+    const end = function () {
+      if (y0 === null) return;
+      const go = dy >= TRIGGER;
+      y0 = null; dy = 0;
+      el.classList.remove('pulling');
+      if (!go) { el.style.opacity = ''; el.style.transform = ''; return; }
+      el.style.opacity = 1; el.style.transform = 'translateY(0)';
+      el.classList.add('spinning');
+      window.refreshAll().then(function () {
+        el.classList.remove('spinning'); el.style.opacity = ''; el.style.transform = '';
+      });
+    };
+    sc.addEventListener('touchend', end, { passive: true });
+    sc.addEventListener('touchcancel', end, { passive: true });
+  }
+
   // ── Auth admin ─────────────────────────────────────────────────────────────
   window.startAdminPanel = function () {
     if (!window.isGas) { window.hideGlobalLoader(); window.navigate('dashboard'); window.showToast('Mode pratinjau: data tidak dimuat.', 'info'); return; }
     if (!_lsGet(ADMIN_TOKEN_KEY)) { window.showAdminLogin(); return; }
-    window.adminApi()
-      .withSuccessHandler(function () { window.loadAllData(); })
-      .withFailureHandler(function (err) { if (!window.isAuthError(err)) window.showAdminLogin('Gagal terhubung: ' + err.message); })
-      .checkAdminSession();
+    // Tanpa cek sesi terpisah: kalau token sudah tidak berlaku, panggilan data
+    // gagal dengan AUTH_REQUIRED dan layar login muncul (onAdminAuthLost).
+    if (loadAdminCache()) {
+      ui.dataReady = true;
+      window.hideGlobalLoader();
+      window.navigate('dashboard');
+    }
+    window.loadAllData().catch(function (err) {
+      if (!window.isAuthError(err)) window.showAdminLogin('Gagal terhubung: ' + err.message);
+    });
   };
 
   window.showAdminLogin = function (message) {
@@ -1428,7 +1531,7 @@
 
   window.onAdminAuthLost = function (err) {
     if (window.isPublicView) return;
-    _lsSet(ADMIN_TOKEN_KEY, null);
+    _lsSet(ADMIN_TOKEN_KEY, null); clearAdminCache();
     window.members = []; window.schedules = []; window.memberArchive = []; window.taskSummary = {};
     window.showAdminLogin(window.authMessage(err));
   };
@@ -1441,13 +1544,14 @@
     const done = busy($('admin-login-btn'), 'Memeriksa…');
     google.script.run
       .withSuccessHandler(function (res) {
-        done();
+        // Tombol tetap "Memeriksa…" sampai data siap: satu loading saja.
         _lsSet(ADMIN_TOKEN_KEY, res.token);
-        $('admin-pin').value = '';
-        err.classList.add('hide');
-        $('admin-login').classList.add('hide');
-        window.showGlobalLoader();
-        window.loadAllData();
+        window.loadAllData().then(function () {
+          done();
+          $('admin-pin').value = '';
+          err.classList.add('hide');
+          if (_lsGet(ADMIN_TOKEN_KEY)) $('admin-login').classList.add('hide');
+        });
       })
       .withFailureHandler(function (e2) {
         done();
@@ -1477,7 +1581,7 @@
     if (ui.mode === 'public') { window.closeModal(); window.logoutPublic(); return; }
     window.showConfirmModal('Kamu akan keluar dari panel di perangkat ini.', function () {
       window.closeModal();
-      _lsSet(ADMIN_TOKEN_KEY, null);
+      _lsSet(ADMIN_TOKEN_KEY, null); clearAdminCache();
       window.members = []; window.schedules = []; window.memberArchive = []; window.taskSummary = {};
       window.closeDetail();
       window.showAdminLogin();
@@ -1490,34 +1594,75 @@
     return (list || []).map(function (s) { s.status = String(s.status || '').toLowerCase(); return s; });
   }
 
+  // Salinan terakhir data panel (hanya di perangkat admin) supaya panel langsung
+  // terisi saat dibuka; data segar menyusul di belakang layar.
+  const ADMIN_CACHE_KEY = 'xnk_admin_cache';
+  function saveAdminCache() {
+    try {
+      _lsSet(ADMIN_CACHE_KEY, JSON.stringify({
+        members: window.members, schedules: window.schedules, coaches: window.coaches,
+        priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || []
+      }));
+    } catch (e) {}
+  }
+  function loadAdminCache() {
+    try {
+      const c = JSON.parse(_lsGet(ADMIN_CACHE_KEY) || 'null');
+      if (!c || !Array.isArray(c.members) || !Array.isArray(c.schedules)) return false;
+      window.members = c.members;
+      window.schedules = normalizeSchedules(c.schedules);
+      window.coaches = c.coaches || [];
+      window.priceListData = c.priceList || [];
+      window.taskSummary = c.taskSummary || {};
+      window.renewals = c.renewals || [];
+      return true;
+    } catch (e) { return false; }
+  }
+  function clearAdminCache() { _lsSet(ADMIN_CACHE_KEY, null); }
+
+  // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
+  // dan omzet menyusul setelah layar tampil.
   window.loadAllData = function () {
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
-    Promise.all([
+    return Promise.all([
       safe(adminCall('getMembers')),
-      safe(adminCall('getMemberTransactionLog')),
       safe(adminCall('getSchedules')),
       safe(publicCall('getCoaches')),
       safe(publicCall('getPriceList')),
-      safe(publicCall('getBusinessHours')),
+      safe(publicCall('getBusinessHours'))
+    ]).then(function (r) {
+      if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
+      // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
+      if (r[0]) window.members = r[0];
+      if (r[1]) window.schedules = normalizeSchedules(r[1]);
+      if (r[2]) window.coaches = r[2];
+      if (r[3]) window.priceListData = r[3];
+      if (r[4]) Object.assign(DAY_HOURS, r[4]);
+      ui.dataReady = true;
+      window.hideGlobalLoader();
+      if (r[0] && r[1]) saveAdminCache();
+      if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
+      loadAdminExtras();
+    });
+  };
+
+  function loadAdminExtras() {
+    const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
+    Promise.all([
+      safe(adminCall('getMemberTransactionLog')),
       safe(adminCall('getTaskSummary')),
       safe(adminCall('getRenewalRequests'))
     ]).then(function (r) {
-      if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
-      window.members = r[0] || [];
-      window.memberArchive = r[1] || [];
-      window.schedules = normalizeSchedules(r[2]);
-      window.coaches = r[3] || [];
-      window.priceListData = r[4] || [];
-      if (r[5]) Object.assign(DAY_HOURS, r[5]);
-      window.taskSummary = r[6] || {};
-      window.renewals = r[7] || [];
-      ui.dataReady = true;
-      window.hideGlobalLoader();
-      if (!window.isPublicView) window.settingsPrefetch();
-      if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
-      loadRevenue();
+      if (!_lsGet(ADMIN_TOKEN_KEY)) return;
+      if (r[0]) window.memberArchive = r[0];
+      if (r[1]) window.taskSummary = r[1];
+      if (r[2]) window.renewals = r[2];
+      window.updateUI();
+      saveAdminCache();
     });
-  };
+    if (!window.isPublicView) window.settingsPrefetch();
+    loadRevenue();
+  }
 
   // Muat ulang ringkasan PR (pill di daftar klien). Dipanggil setelah PR berubah.
   window.refreshTaskSummary = function () {

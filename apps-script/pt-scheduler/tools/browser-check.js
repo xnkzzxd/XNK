@@ -288,6 +288,69 @@ async function contrastReport(page) {
     await context.close(); await reload.context.close(); await revoked.context.close();
   }
 
+  // ── Panel PT, HP: satu loading, tarik untuk muat ulang, tombol back ───────
+  console.log('Panel PT · HP (login, tarik, back)');
+  {
+    const env = richEnv();
+    const calls = [];
+    const { page, context, errors } = await openPage(browser, env, '/Index', calls, undefined, { touch: true });
+    await page.evaluate(() => {
+      window.__splashShown = false;
+      const el = document.getElementById('global-loader');
+      new MutationObserver(() => { if (!el.classList.contains('gone')) window.__splashShown = true; }).observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+    await page.fill('#admin-pin', ADMIN_PIN);
+    await page.click('#admin-login-btn');
+    await page.waitForTimeout(1500);
+    check(!(await page.evaluate(() => window.__splashShown)), 'login: only the button loads, the full-screen splash never shows');
+    check(!(await visible(page, '#admin-login')) && (await page.evaluate(() => window.members.length)) === 3, 'login: dashboard is ready when the login box closes');
+    check(calls.includes('getMemberTransactionLog') && calls.includes('getTaskSummary'), 'login: the secondary data loads after the first screen');
+
+    // Buka lagi dengan token: panel langsung terisi dari salinan, tanpa cek sesi terpisah
+    const token = await page.evaluate(() => localStorage.getItem('xnk_admin_token'));
+    const cache = await page.evaluate(() => localStorage.getItem('xnk_admin_cache'));
+    check(!!cache && JSON.parse(cache).members.length === 3, 'open: a copy of the last data is kept on this device');
+    const calls2 = [];
+    const again = await openPage(browser, env, '/Index', calls2, { xnk_admin_token: token, xnk_admin_cache: cache }, { touch: true, wait: 700 });
+    check(!calls2.includes('checkAdminSession'), 'open: no separate session check before loading data');
+    check((await again.page.evaluate(() => window.members.length)) === 3 && !(await visible(again.page, '#admin-login')), 'open: the dashboard shows right away');
+    await again.context.close();
+
+    // Tarik ke bawah
+    const before = calls.filter(c => c === 'getMembers').length;
+    await page.evaluate(() => {
+      const sc = document.getElementById('main-scroll-area');
+      const fire = (type, y) => {
+        const t = new Touch({ identifier: 1, target: sc, clientX: 100, clientY: y });
+        sc.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true }));
+      };
+      fire('touchstart', 200); fire('touchmove', 260); fire('touchmove', 420); fire('touchend', 420);
+    });
+    await page.waitForTimeout(900);
+    check(calls.filter(c => c === 'getMembers').length === before + 1, 'pull down: data is reloaded in place');
+    check((await page.evaluate(() => window.currentView)) === 'dashboard', 'pull down: stays on the same page');
+
+    // Tombol back
+    await page.evaluate(() => window.navigate('clients'));
+    await page.waitForTimeout(150);
+    await page.evaluate(() => window.openNotificationModal());
+    await page.waitForTimeout(450);
+    await page.goBack();
+    await page.waitForTimeout(700);
+    check(!(await page.evaluate(() => document.getElementById('sheet-layer').classList.contains('open'))), 'back: closes the open sheet first');
+    check((await page.evaluate(() => window.currentView)) === 'clients', 'back: the page stays on Klien after closing the sheet');
+    await page.goBack();
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => window.currentView)) === 'dashboard', 'back: from another page returns to the dashboard');
+    const hist = await page.evaluate(() => history.length);
+    await page.evaluate(() => window.navigate('clients'));
+    await page.evaluate(() => window.navigate('dashboard'));
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => history.length)) <= hist + 1, 'back: tab switches do not pile up history entries');
+    check(errors.length === 0, 'no page errors: ' + errors.join(' | '));
+    await context.close();
+  }
+
   // ── Panel PT, desktop (terang & gelap) ────────────────────────────────────
   for (const scheme of ['light', 'dark']) {
     console.log('Panel PT · desktop · ' + scheme);

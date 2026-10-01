@@ -165,6 +165,13 @@ manual: tab **Actions** → *PT Scheduler* → **Run workflow**.
 > Jangan dibagikan. Bisa dicabut kapan saja di https://myaccount.google.com/permissions
 > (cari "clasp"), lalu ulangi langkah 3–4.
 
+## Di HP: pasang dari Chrome, tarik untuk muat ulang, tombol back
+
+- **Pasang dari Chrome** (lebih baik daripada bungkus Kodular): buka xnk.my.id di Chrome → menu ⋮ → *Instal aplikasi* / *Tambahkan ke layar utama*. Ikonnya sama, selalu versi terbaru, dan tombol back bekerja normal.
+- **Tarik ke bawah** dari paling atas halaman untuk memuat ulang data (tanpa memuat ulang seluruh halaman).
+- **Tombol back Android** menutup lapisan paling atas dulu (sheet, panel detail), lalu kembali ke Beranda. Di Beranda, back keluar dari aplikasi.
+- Panel menyimpan salinan data terakhir di perangkat admin supaya langsung terisi saat dibuka; data baru menyusul di belakang layar. Salinan dihapus saat keluar atau sesi habis.
+
 ## Rollback (kalau versi baru bermasalah)
 
 - **Cepat (tanpa kode):** Apps Script → **Deploy → Manage deployments** → ✏️ Edit →
