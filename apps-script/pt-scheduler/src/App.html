@@ -3703,6 +3703,7 @@
       ((c.location || c.instagram) ? '<div class="card-flat"><p class="eyebrow">Lokasi & sosial</p><p style="margin-top:6px">' + h(c.location || '') + (c.location && c.instagram ? ' · ' : '') + (c.instagram ? '@' + h(c.instagram) : '') + '</p></div>' : '') +
       '<div class="btn-row"><button type="button" class="btn btn-primary" data-wa="' + h(c.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
       '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
+      (c.id === window.coachSelfId ? '<button type="button" class="btn btn-secondary btn-block" onclick="window.openCoachPreview()">' + icon('eye') + 'Lihat seperti klien</button>' : '') +
       (c.aktif !== false && c.id !== window.coachSelfId ? '<button type="button" class="btn btn-outline btn-block" onclick="window.setSelfCoachUI(\'' + h(c.id) + '\')">' + icon('user-check') + 'Jadikan "Ini saya"</button>' : '') +
       '<button type="button" class="btn btn-outline btn-block" onclick="window.setCoachActiveUI(\'' + h(c.id) + '\',' + (c.aktif === false ? 'true' : 'false') + ')">' + icon('power') + (c.aktif === false ? 'Aktifkan coach' : 'Nonaktifkan coach') + '</button>' +
       '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>';
@@ -4668,13 +4669,61 @@
     }).catch(function (err) { done(); window.showToast('Gagal mendaftar: ' + err.message); });
   };
 
+  // Halaman profil coach: dipakai portal klien dan pratinjau panel ("Lihat seperti klien").
+  function coachStatusChip(st) {
+    if (!st) return '';
+    const label = st.state === 'sesi' ? 'Sedang sesi' : st.state === 'tersedia' ? 'Tersedia ' + (st.next || '') : st.state === 'cuti' ? 'Cuti sampai ' + fmtShort(new Date(st.until + 'T00:00:00')) : st.state === 'libur' ? 'Libur hari ini' : 'Tutup';
+    return '<span class="pill soft">' + h(label) + '</span>';
+  }
+  window.renderCoachProfile = function (p, opts) {
+    opts = opts || {};
+    const c = p && p.coach;
+    if (!c) return emptyState('dumbbell', 'Belum ada data coach', '');
+    const chips = String(c.specialty || '').split(',').map(x => x.trim()).filter(Boolean).map(x => '<span class="pill soft">' + h(x) + '</span>').join('');
+    const list = (title, items) => items && items.length ? '<div class="card-flat"><p class="eyebrow">' + h(title) + '</p><ul style="margin:6px 0 0;padding-left:18px">' + items.map(i => '<li>' + h(i) + '</li>').join('') + '</ul></div>' : '';
+    let html = '<div class="stack" style="gap:16px"><div style="text-align:center">' + avatar(c.photo, c.name, 'xl', 'margin:0 auto 12px') +
+      '<h3 class="profile-name">' + h(c.name) + '</h3>' + (c.headline ? '<p class="muted" style="margin-top:4px">' + h(c.headline) + '</p>' : '') +
+      '<div style="margin-top:10px">' + coachStatusChip(p.status) + '</div></div>';
+    if (!opts.preview) {
+      html += '<div class="btn-row"><button type="button" class="btn btn-primary" data-coach="' + h(c.id) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Chat WA</button>' +
+        '<button type="button" class="btn btn-outline" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button></div>';
+    }
+    html += (c.bio ? '<div class="card-flat"><p class="eyebrow">Tentang</p><p style="margin-top:6px">' + h(c.bio) + '</p></div>' : '') +
+      (chips ? '<div class="card-flat"><p class="eyebrow">Spesialisasi</p><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px">' + chips + '</div></div>' : '') +
+      (c.experience ? '<div class="card-flat"><p class="eyebrow">Pengalaman</p><p style="margin-top:6px">' + h(c.experience) + '</p></div>' : '') +
+      list('Sertifikasi', c.certifications) + list('Prestasi', c.achievements) +
+      ((c.location || c.instagram) ? '<div class="card-flat"><p class="eyebrow">Lokasi</p><p style="margin-top:6px">' + h(c.location || '') + '</p>' +
+        (c.instagram ? '<a class="btn btn-outline btn-sm" style="margin-top:8px" href="https://instagram.com/' + h(c.instagram) + '" target="_blank" rel="noopener">@' + h(c.instagram) + '</a>' : '') + '</div>' : '') +
+      ((p.testimonials && p.testimonials.length) ? '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Kata klien</p>' + p.testimonials.map(t => '<p>“' + h(t.text) + '” <span class="li-sub">— ' + h(t.name) + '</span></p>').join('') + '</div>' : '') +
+      (p.rescheduleCutoffHours != null && !opts.preview && window.publicLoggedMember ? '<p class="li-sub" style="text-align:center">Ganti jadwal minimal ' + h(p.rescheduleCutoffHours) + ' jam sebelum sesi.</p>' : '') + '</div>';
+    return html;
+  };
+  window.openCoachPreview = function () {
+    adminCall('previewCoachProfile').then(function (p) {
+      $('coach-preview-body').innerHTML = window.renderCoachProfile(p, { preview: true });
+      openSheet('modal-coach-preview');
+    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
   window.renderPublicCoaches = function () {
     const el = $('view-public-coaches');
     if (!el) return;
+    if (window.isSoloCoach()) {
+      setHTML(el, '<div class="page-head"><div><h2 class="page-title">Coach</h2></div></div><div id="coach-profile-page">' + '<p class="li-sub">Memuat profil…</p>' + '</div>');
+      const draw = function (p) { const box = $('coach-profile-page'); if (box) { box.innerHTML = window.renderCoachProfile(p); paintIcons(); } };
+      if (_lsGet(MEMBER_TOKEN_KEY) && window.publicLoggedMember) {
+        memberCall('getMyCoach').then(draw).catch(function () { draw({ coach: window.coaches[0], status: null, testimonials: [] }); });
+      } else {
+        Promise.all([publicCall('getCoachStatus').catch(() => null), publicCall('getPublicTestimonials').catch(() => [])]).then(function (r) {
+          draw({ coach: window.coaches[0], status: r[0], testimonials: (r[1] || []).slice(0, 3) });
+        });
+      }
+      return;
+    }
     let html = '<div class="page-head"><div><h2 class="page-title">Tim coach</h2><p class="page-sub">Latihan bersama coach berpengalaman.</p></div></div>';
     html += window.coaches.length ? '<div class="cards-grid three stagger" id="public-coach-list">' + window.coaches.map(function (c) {
       return '<div class="card" style="display:flex;flex-direction:column;gap:14px">' +
-        '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h3 class="section-title">' + h(c.name) + '</h3><p class="li-sub">' + h(c.specialty || 'Personal trainer') + '</p>' +
+        '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h3 class="section-title">' + h(c.name) + '</h3><p class="li-sub">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
         (c.experience ? '<span class="pill soft" style="margin-top:8px">' + h(c.experience) + '</span>' : '') + '</div></div>' +
         (c.bio ? '<p class="li-sub" style="font-size:var(--fs-sm)">' + h(c.bio) + '</p>' : '') +
         '<button type="button" class="btn btn-primary btn-block" style="margin-top:auto" data-coach="' + h(String(c.id)) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Tanya program</button></div>';

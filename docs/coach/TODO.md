@@ -72,10 +72,10 @@ Requirements: CP-6…CP-10.
 
 | | ID | Task | Files | Depends | Size | Done when |
 | --- | --- | --- | --- | --- | --- | --- |
-| [ ] | T-240 | **`getMyCoach`** (profile, status, three testimonials, reschedule notice) and the shared `renderCoachProfile`. `previewCoachProfile` for the panel. | Kode.gs, App.html, tests, tests/security.test.js | T-203, T-210 | M | Testimonials respect consent and anonymisation (test); the preview and the portal use the same renderer. |
-| [ ] | T-241 | **Portal Coach tab**: full profile page in solo mode, list + profile sheet in team mode; Chat and Booking buttons; **Lihat seperti klien** in the hub opens the same page. | App.html, Index.html, Theme.html | T-240, T-221 | M | At 360 px in both themes the page has no sideways scroll and Booking opens the booking sheet. |
-| [ ] | T-242 | **Browser checks for E5.** | tools/browser-check.js | T-241 | S | Passes. |
-| [ ] | T-243 | **Docs**: `apps-script/README.md` (Indonesian: Coach hub, jam kerja, form kesehatan, tes ulang, targets), root `README.md`, [../Agent.md](../Agent.md) §7 and this folder's Agent §6, tick the boxes. | docs | all above | S | Docs match the shipped UI. |
+| [x] | T-240 | **`getMyCoach`** (profile, status, three testimonials, reschedule notice) and the shared `renderCoachProfile`. `previewCoachProfile` for the panel. | Kode.gs, App.html, tests, tests/security.test.js | T-203, T-210 | M | Testimonials respect consent and anonymisation (test); the preview and the portal use the same renderer. |
+| [x] | T-241 | **Portal Coach tab**: full profile page in solo mode, list + profile sheet in team mode; Chat and Booking buttons; **Lihat seperti klien** in the hub opens the same page. | App.html, Index.html, Theme.html | T-240, T-221 | M | At 360 px in both themes the page has no sideways scroll and Booking opens the booking sheet. |
+| [x] | T-242 | **Browser checks for E5.** | tools/browser-check.js | T-241 | S | Passes. |
+| [x] | T-243 | **Docs**: `apps-script/README.md` (Indonesian: Coach hub, jam kerja, form kesehatan, tes ulang, targets), root `README.md`, [../Agent.md](../Agent.md) §7 and this folder's Agent §6, tick the boxes. | docs | all above | S | Docs match the shipped UI. |
 
 ## Later
 

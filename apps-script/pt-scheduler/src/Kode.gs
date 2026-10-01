@@ -5398,3 +5398,32 @@ function _careList_(now) {
   out.sort(function(a, b) { return order.indexOf(a.reasons[0]) - order.indexOf(b.reasons[0]); });
   return out;
 }
+
+
+// #############################################################################
+// 📁 13_COACH_PROFILE_PAGE — Halaman profil coach untuk portal & pratinjau panel (Phase E5)
+// #############################################################################
+
+/** Murni-ish: isi halaman profil coach "Ini saya" (hanya field publik + status + 3 testimoni + batas reschedule). */
+function _coachProfilePage_() {
+  const self = _selfCoach_();
+  return {
+    coach: self ? _publicCoach_(self) : null,
+    solo: _activeCoaches_().length === 1,
+    status: getCoachStatus(),
+    testimonials: getPublicTestimonials().slice(0, 3),
+    rescheduleCutoffHours: _rescheduleCutoff_()
+  };
+}
+
+/** Klien: halaman profil coach. */
+function getMyCoach(memberToken) {
+  requireMember_(memberToken);
+  return _coachProfilePage_();
+}
+
+/** Admin: persis isi yang dilihat klien ("Lihat seperti klien"). */
+function previewCoachProfile(token) {
+  requireAdmin_(token);
+  return _coachProfilePage_();
+}

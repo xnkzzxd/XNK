@@ -161,3 +161,18 @@ test('updateScheduleCoach derives the name from the ID and clears with an empty 
   assert.equal(env.sheet('Schedules').rows.find(r => r[0] === 'S1')[9], '');
   assert.throws(() => env.call('updateScheduleCoach', t, 'S1', 'NOPE'), /Coach tidak ditemukan\./);
 });
+
+test('the coach profile page: public fields only, status, at most 3 testimonials, reschedule notice; same for the member and the owner preview', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), mt = env.memberToken(require('./fixtures').KEY_A);
+  env.call('addCoachTimeOff', t, { from: '2020-01-01', to: '2020-01-02', note: 'rahasia' });
+  const mine = env.call('getMyCoach', mt);
+  const prev = env.call('previewCoachProfile', t);
+  assert.equal(JSON.stringify(mine), JSON.stringify(prev));
+  assert.deepEqual(Object.keys(mine).sort(), ['coach', 'rescheduleCutoffHours', 'solo', 'status', 'testimonials']);
+  assert.deepEqual(Object.keys(mine.coach).sort(), ['achievements', 'bio', 'certifications', 'experience', 'headline', 'id', 'instagram', 'location', 'name', 'phone', 'photo', 'specialty']);
+  assert.equal(mine.rescheduleCutoffHours, 2);
+  assert.ok(mine.testimonials.length <= 3);
+  assert.ok(!JSON.stringify(mine).includes('rahasia'));
+  assert.throws(() => env.call('getMyCoach', t), /AUTH_REQUIRED/);
+});

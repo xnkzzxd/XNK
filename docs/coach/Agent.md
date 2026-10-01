@@ -78,7 +78,6 @@ Extra for this phase:
 
 ## 6. Current state (2026-10-01)
 
-- **Phase E is planned, nothing is built.** Phases A–D are live (see [../Agent.md](../Agent.md) §7).
-- Decisions in [PRD.md](PRD.md) §6: no coach logins, solo mode with a coach addable later, landing copy stays hand-written, health and notes admin-only, retest every 28 days, four optional targets, the portal's Coach tab becomes one profile page.
-- Known bug to fix first (T-200): "Belum Ditugaskan" is stored as a coach name.
-- Build order: E1 solo mode and coach data → E2 hours, days off, slot engine → E3 coach hub → E4 client care → E5 portal coach page.
+- **Phase E is built** (T-200…T-243). See [TODO.md](TODO.md) for the deviations from the design (targets saved through `saveCoachTargets`; care extras on the `Assessments` row; certifications and achievements typed as comma lists; calendar shading of days off and a fitness-result delete button are not built).
+- Decisions in [PRD.md](PRD.md) §6 hold: no coach logins, solo mode with a coach addable later, landing copy stays hand-written, health and notes admin-only, retest every 28 days, four optional targets, the portal's Coach tab is one profile page in solo mode.
+- Later items (PRD §10, TODO "Later") are not started.
