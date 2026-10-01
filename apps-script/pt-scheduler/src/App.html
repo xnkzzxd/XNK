@@ -15,6 +15,8 @@
   window.memberArchive = [];
   window.schedules = [];
   window.coaches = [];
+  // Mode solo: tepat satu coach aktif. window.coaches hanya berisi coach aktif, jadi cukup dihitung.
+  window.isSoloCoach = function () { return (window.coaches || []).length === 1; };
   window.priceListData = [];
   window.currentView = null;
   window.isPublicView = false;
@@ -1622,12 +1624,20 @@
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
+  // Daftar semua coach (aktif & nonaktif) untuk layar Tim coach; window.coaches hanya yang aktif.
+  window.coachesAll = [];
+  window.coachSelfId = '';
+  function applyCoachesAdmin(res) {
+    window.coachesAll = res.coaches || [];
+    window.coachSelfId = res.selfId || '';
+    window.coaches = window.coachesAll.filter(function (c) { return c.aktif; });
+  }
   window.loadAllData = function () {
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     return Promise.all([
       safe(adminCall('getMembers')),
       safe(adminCall('getSchedules')),
-      safe(publicCall('getCoaches')),
+      safe(adminCall('getCoachesAdmin')),
       safe(publicCall('getPriceList')),
       safe(publicCall('getBusinessHours'))
     ]).then(function (r) {
@@ -1635,7 +1645,7 @@
       // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
       if (r[0]) window.members = r[0];
       if (r[1]) window.schedules = normalizeSchedules(r[1]);
-      if (r[2]) window.coaches = r[2];
+      if (r[2]) applyCoachesAdmin(r[2]);
       if (r[3]) window.priceListData = r[3];
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
       ui.dataReady = true;
@@ -1801,8 +1811,8 @@
       '<div class="tl-rail"><span class="tl-node"></span></div>' +
       '<div class="tl-card interactive" role="button" tabindex="0" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
         '<div class="row-between"><span class="li-title truncate">' + h(isAvailable(s) ? 'Slot tersedia' : opts.inProfile ? (s.notes || 'Sesi latihan') : s.title) + '</span>' + info.pill + '</div>' +
-        '<span class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Belum ada coach') +
-          (opts.showDate ? ' · ' + h(fmtShort(d)) : '') + (live ? ' · Berlangsung' : '') + '</span>' +
+        '<span class="li-sub">' + (window.isSoloCoach() ? '' : icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Belum ada coach')) +
+          (opts.showDate ? (window.isSoloCoach() ? '' : ' · ') + h(fmtShort(d)) : '') + (live ? ' · Berlangsung' : '') + '</span>' +
         actions +
       '</div></div>';
   }
@@ -1892,10 +1902,10 @@
       '<div class="collapse-body"><div><div class="grid" style="margin-top:16px">' +
         '<div class="dash-grid">' +
           '<div class="span-7 card-flat"><div class="section-head"><h4 class="li-title">Booking 7 hari terakhir</h4></div><div class="bars" id="weekly-chart"></div></div>' +
-          '<div class="span-5 card-flat"><div class="section-head"><h4 class="li-title">Coach tersibuk</h4><span class="li-sub">semua waktu</span></div><div class="stack" id="coach-leaderboard"></div></div>' +
+          (window.isSoloCoach() ? '' : '<div class="span-5 card-flat"><div class="section-head"><h4 class="li-title">Coach tersibuk</h4><span class="li-sub">semua waktu</span></div><div class="stack" id="coach-leaderboard"></div></div>') +
           '<div class="span-12 card-flat"><div class="section-head"><h4 class="li-title">Jam ramai</h4><div class="heat-legend">Sepi<span class="heat-cell"></span><span class="heat-cell l1"></span><span class="heat-cell l2"></span><span class="heat-cell l3"></span><span class="heat-cell l4"></span>Ramai</div></div><div id="peak-hour-heatmap" style="overflow-x:auto"></div></div>' +
           '<div class="span-12 row-between" style="flex-wrap:wrap"><h4 class="li-title">Laporan bulanan</h4><select class="select" id="coach-monthly-filter" style="width:auto;min-height:40px" onchange="window.renderMonthlyStats()"></select></div>' +
-          '<div class="span-6 card-flat"><div class="section-head"><h4 class="li-title">Performa coach</h4><span class="li-sub">sesi selesai</span></div><div class="stack" id="coach-monthly-stats-list"></div></div>' +
+          (window.isSoloCoach() ? '' : '<div class="span-6 card-flat"><div class="section-head"><h4 class="li-title">Performa coach</h4><span class="li-sub">sesi selesai</span></div><div class="stack" id="coach-monthly-stats-list"></div></div>') +
           '<div class="span-6 card-flat"><div class="section-head"><h4 class="li-title">Paket terlaris</h4><span class="li-sub">transaksi</span></div><div class="stack" id="package-trend-list"></div></div>' +
         '</div>' +
       '</div></div></div></div>';
@@ -2037,6 +2047,7 @@
   }
 
   function renderLeaderboard() {
+    if (!$('coach-leaderboard')) return;
     const counts = {};
     window.schedules.filter(isBooked).forEach(function (s) { const n = s.coachName || 'Belum ada coach'; counts[n] = (counts[n] || 0) + 1; });
     const rows = Object.keys(counts).map(k => ({ label: k, value: counts[k], note: counts[k] + ' sesi', tip: counts[k] + ' sesi' }))
@@ -2108,7 +2119,7 @@
       const c = Object.keys(map[k].clients).length;
       return { label: map[k].name, value: map[k].n, note: map[k].n + ' sesi · ' + c + ' klien', tip: map[k].n + ' sesi selesai, ' + c + ' klien' };
     }).sort((a, b) => b.value - a.value);
-    hbarList($('coach-monthly-stats-list'), rows, emptyState('calendar-x', 'Belum ada sesi selesai', 'Sesi yang ditandai selesai di bulan ini muncul di sini.'));
+    if ($('coach-monthly-stats-list')) hbarList($('coach-monthly-stats-list'), rows, emptyState('calendar-x', 'Belum ada sesi selesai', 'Sesi yang ditandai selesai di bulan ini muncul di sini.'));
 
     const listEl = $('package-trend-list');
     if (!listEl) return;
@@ -2138,7 +2149,7 @@
     let html = '<div class="page-head"><div><h2 class="page-title">Jadwal</h2><p class="page-sub">' +
       (pub ? 'Pilih tanggal untuk melihat jam yang masih kosong.' : 'Kelola semua sesi latihan klien.') + '</p></div>' +
       '<div class="row" style="flex-wrap:wrap">' +
-      '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="window.setCoachFilter(this.value)" aria-label="Filter coach">' + coachFilterOptions() + '</select>' +
+      (window.isSoloCoach() ? '' : '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="window.setCoachFilter(this.value)" aria-label="Filter coach">' + coachFilterOptions() + '</select>') +
       (!pub ? '<div class="seg only-desktop" id="sched-seg"><span class="seg-thumb"></span><button type="button" class="' + (ui.schedMode === 'month' ? 'active' : '') + '" onclick="window.setSchedMode(\'month\')">Bulan</button><button type="button" class="' + (ui.schedMode === 'week' ? 'active' : '') + '" onclick="window.setSchedMode(\'week\')">Minggu</button></div>' : '') +
       '<button type="button" class="btn btn-primary only-desktop" onclick="' + (pub ? 'window.handleFabClick()' : 'window.quickAction(\'booking\')') + '">' + icon('calendar-plus') + 'Booking</button>' +
       '</div></div>';
@@ -2379,7 +2390,7 @@
         avatar(member && member.photo, s.title) + '<span class="grow"><span class="li-title" style="display:block">' + h(s.title) + '</span><span class="li-sub">+' + h(s.phone || '') +
         (member ? ' · sisa ' + remainingOf(member) + ' sesi' : '') + '</span></span>' + (member ? icon('chevron-right') : '') + '</button>';
     }
-    body += '<div class="field"><label class="label" for="detail-assign-coach">Coach</label><div class="row"><select class="select grow" id="detail-assign-coach">' + coachOpts + '</select>' +
+    if (!window.isSoloCoach()) body += '<div class="field"><label class="label" for="detail-assign-coach">Coach</label><div class="row"><select class="select grow" id="detail-assign-coach">' + coachOpts + '</select>' +
       '<button type="button" class="btn btn-secondary" id="btn-save-coach" onclick="window.saveCoachAssignment()">Simpan</button></div></div>';
     body += '<div class="card-flat"><p class="eyebrow">Catatan</p><p style="margin-top:6px">' + (s.notes ? h(s.notes) : '<span class="muted">Tidak ada catatan</span>') + '</p></div>';
 
@@ -2388,7 +2399,7 @@
     body += '<div class="btn-row">' +
       (!isDone(s) ? '<button type="button" class="btn btn-outline" onclick="window.openEditScheduleDetailModal()">' + icon('calendar-clock') + 'Ubah jadwal</button>' : '') +
       (s.phone ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailMember()">' + icon('message-circle') + 'Chat klien</button>' : '') +
-      (s.coachId ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailCoach()">' + icon('dumbbell') + 'Chat coach</button>' : '') +
+      (s.coachId && !window.isSoloCoach() ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailCoach()">' + icon('dumbbell') + 'Chat coach</button>' : '') +
       '</div>';
     body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-schedule" onclick="window.deleteScheduleFromDetail()">' + icon('trash-2') + 'Hapus sesi ini</button>';
     if (s.recurringGroupId) body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-recurring-group" onclick="window.deleteRecurringGroupFromDetail()">' + icon('repeat') + 'Hapus seluruh seri berulang</button>';
@@ -3215,6 +3226,8 @@
   window.populateMemberCoachOptions = function (selectId, id) {
     const el = $(selectId);
     if (!el) return;
+    const fld = el.closest ? el.closest('.field') : null;
+    if (fld) fld.style.display = window.isSoloCoach() ? 'none' : '';
     el.innerHTML = '<option value="">Belum ditentukan</option>' + window.coaches.map(c => '<option value="' + h(c.id) + '">' + h(c.name) + '</option>').join('');
     el.value = id || '';
   };
@@ -3275,53 +3288,91 @@
     return { month: month, clients: Object.keys(clients).length, upcoming: mine.filter(s => new Date(s.start) > now && !isDone(s)).length };
   }
 
+  function coachList() { return window.coachesAll.length ? window.coachesAll : window.coaches; }
+
   function renderCoaches() {
     const el = $('view-coaches');
-    let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + window.coaches.length + ' coach di tim</p></div>' +
-      '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + 'Coach baru</button></div>';
-    if (!window.coaches.length) {
+    const list = coachList();
+    const solo = window.isSoloCoach();
+    let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + (solo ? 'Profil dan jadwalmu' : window.coaches.length + ' coach aktif di tim') + '</p></div>' +
+      '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + (solo ? 'Tambah coach' : 'Coach baru') + '</button></div>';
+    const unassigned = window.schedules.filter(function (s) { return !s.coachId && !isDone(s) && !isAvailable(s); }).length;
+    if (unassigned && window.coaches.length) {
+      html += '<div class="card-flat row-between" style="margin-bottom:16px;gap:12px"><div><p class="li-title">' + unassigned + ' jadwal belum punya coach</p><p class="li-sub">Tetapkan semuanya ke coach "Ini saya".</p></div>' +
+        '<button type="button" class="btn btn-secondary" onclick="window.assignUnassignedConfirm()">Tetapkan ke saya</button></div>';
+    }
+    if (!list.length) {
       html += emptyState('dumbbell', 'Belum ada coach', 'Tambahkan coach untuk mulai membagi sesi.');
     } else {
-      html += '<div class="cards-grid three stagger" id="coach-list">' + window.coaches.map(function (c) {
+      html += '<div class="cards-grid three stagger" id="coach-list">' + list.map(function (c) {
         const st = coachStats(c);
-        return '<div class="card interactive" role="button" tabindex="0" data-key="coach:' + h(c.id) + '" onclick="window.openCoachProfile(\'' + h(c.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
-          '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h4 class="section-title truncate">' + h(c.name) + '</h4><p class="li-sub truncate">' + h(c.specialty || 'Personal trainer') + '</p>' +
-          (c.experience ? '<span class="pill soft" style="margin-top:8px">' + h(c.experience) + '</span>' : '') + '</div></div>' +
+        const inactive = c.aktif === false;
+        return '<div class="card interactive" role="button" tabindex="0" style="' + (inactive ? 'opacity:.6' : '') + '" data-key="coach:' + h(c.id) + '" onclick="window.openCoachProfile(\'' + h(c.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
+          '<div class="row" style="gap:14px">' + avatar(c.photo, c.name, 'lg') + '<div class="grow"><h4 class="section-title truncate">' + h(c.name) + '</h4><p class="li-sub truncate">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
+          '<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px">' + (c.experience ? '<span class="pill soft">' + h(c.experience) + '</span>' : '') +
+          (c.id === window.coachSelfId && !inactive ? '<span class="pill">Ini saya</span>' : '') + (inactive ? '<span class="pill soft">Nonaktif</span>' : '') + '</div></div></div>' +
           '<div class="grid-2" style="margin-top:16px;gap:8px"><div class="card-flat" style="padding:10px 12px"><p class="eyebrow">Bulan ini</p><p class="num" style="font-weight:800;font-size:var(--fs-xl)">' + st.month + ' <span class="li-sub">sesi</span></p></div>' +
           '<div class="card-flat" style="padding:10px 12px"><p class="eyebrow">Klien</p><p class="num" style="font-weight:800;font-size:var(--fs-xl)">' + st.clients + '</p></div></div></div>';
       }).join('') + '</div>';
     }
     setHTML(el, html);
   }
+
+  window.assignUnassignedConfirm = function () {
+    adminCall('assignUnassignedToSelf', { dryRun: true }).then(function (r) {
+      if (!r.sessions && !r.clients) { window.showToast('Semua jadwal sudah punya coach.'); return; }
+      window.showConfirmModal('<b>' + r.sessions + '</b> jadwal dan <b>' + r.clients + '</b> klien tanpa coach akan ditetapkan ke <b>' + h(r.coachName) + '</b>. Sesi yang sudah selesai tidak berubah.', function () {
+        adminCall('assignUnassignedToSelf', {}).then(function () { window.showToast('Selesai ditetapkan.'); return window.loadAllData(); })
+          .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      }, { title: 'Tetapkan ke saya?', confirmText: 'Tetapkan' });
+    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
+  function reloadCoaches() {
+    return adminCall('getCoachesAdmin').then(function (res) { applyCoachesAdmin(res); saveAdminCache(); window.updateUI(); });
+  }
+  window.setCoachActiveUI = function (id, aktif) {
+    adminCall('setCoachActive', id, aktif).then(function () { window.closeDetail(); return reloadCoaches(); })
+      .then(function () { window.showToast(aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.'); })
+      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+  window.setSelfCoachUI = function (id) {
+    adminCall('setSelfCoach', id).then(function () { return reloadCoaches(); })
+      .then(function () { window.showToast('Ditandai sebagai "Ini saya".'); window.openCoachProfile(id); })
+      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
   window.updateCoachUI = function () { if (window.currentView === 'coaches') renderView('coaches', { animate: false }); };
 
   window.openCoachProfile = function (id) {
-    const c = window.coaches.find(x => String(x.id) === String(id));
+    const c = coachList().find(x => String(x.id) === String(id));
     if (!c) return;
     window.currentCoachId = c.id;
     const st = coachStats(c);
     let body = '<div class="stack" style="gap:16px">' +
       '<div class="card-ink" style="text-align:center;padding:28px 20px">' + avatar(c.photo, c.name, 'xl', 'margin:0 auto 14px') +
-      '<h3 class="profile-name">' + h(c.name) + '</h3><p class="muted" style="margin-top:4px">' + h(c.specialty || 'Personal trainer') + '</p>' +
+      '<h3 class="profile-name">' + h(c.name) + '</h3><p class="muted" style="margin-top:4px">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
       (c.experience ? '<span class="pill" style="margin-top:12px">' + h(c.experience) + ' pengalaman</span>' : '') + '</div>' +
       '<div class="kv"><div><p class="k">Sesi bulan ini</p><p class="v num">' + st.month + '</p></div><div><p class="k">Jadwal mendatang</p><p class="v num">' + st.upcoming + '</p></div>' +
       '<div><p class="k">Klien dilatih</p><p class="v num">' + st.clients + '</p></div><div><p class="k">WhatsApp</p><p class="v">+' + h(c.phone || '-') + '</p></div></div>' +
       '<div class="card-flat"><p class="eyebrow">Bio</p><p style="margin-top:6px">' + (c.bio ? h(c.bio) : '<span class="muted">Belum ada bio.</span>') + '</p></div>' +
+      ((c.certifications && c.certifications.length) ? '<div class="card-flat"><p class="eyebrow">Sertifikasi</p><p style="margin-top:6px">' + c.certifications.map(h).join(' · ') + '</p></div>' : '') +
+      ((c.achievements && c.achievements.length) ? '<div class="card-flat"><p class="eyebrow">Prestasi</p><p style="margin-top:6px">' + c.achievements.map(h).join(' · ') + '</p></div>' : '') +
+      ((c.location || c.instagram) ? '<div class="card-flat"><p class="eyebrow">Lokasi & sosial</p><p style="margin-top:6px">' + h(c.location || '') + (c.location && c.instagram ? ' · ' : '') + (c.instagram ? '@' + h(c.instagram) : '') + '</p></div>' : '') +
       '<div class="btn-row"><button type="button" class="btn btn-primary" data-wa="' + h(c.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
       '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
+      (c.aktif !== false && c.id !== window.coachSelfId ? '<button type="button" class="btn btn-outline btn-block" onclick="window.setSelfCoachUI(\'' + h(c.id) + '\')">' + icon('user-check') + 'Jadikan "Ini saya"</button>' : '') +
+      '<button type="button" class="btn btn-outline btn-block" onclick="window.setCoachActiveUI(\'' + h(c.id) + '\',' + (c.aktif === false ? 'true' : 'false') + ')">' + icon('power') + (c.aktif === false ? 'Aktifkan coach' : 'Nonaktifkan coach') + '</button>' +
       '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>';
     openDetail('coach:' + c.id, 'Profil coach', '<button type="button" class="icon-btn plain" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')" aria-label="Ubah coach">' + icon('pencil') + '</button>', body);
   };
 
   window.deleteCoachConfirm = function (id) {
-    const c = window.coaches.find(x => String(x.id) === String(id));
+    const c = coachList().find(x => String(x.id) === String(id));
     if (!c) return;
-    window.showConfirmModal('<b>' + h(c.name) + '</b> dihapus dari tim. Jadwal lama tetap tersimpan.', function () {
+    window.showConfirmModal('<b>' + h(c.name) + '</b> dihapus dari tim. Coach yang masih dipakai jadwal atau klien tidak bisa dihapus; nonaktifkan saja.', function () {
       adminCall('deleteCoach', id).then(function () {
-        window.coaches = window.coaches.filter(x => String(x.id) !== String(id));
         window.closeDetail();
-        window.updateUI();
-        window.showToast('Coach dihapus.');
+        return reloadCoaches().then(function () { window.showToast('Coach dihapus.'); });
       }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
     }, { title: 'Hapus coach?', confirmText: 'Hapus', variant: 'danger' });
   };
@@ -3333,13 +3384,13 @@
   }
   window.openAddCoachModal = function () {
     $('coach-modal-title').textContent = 'Coach baru';
-    ['coach-edit-id', 'coach-name', 'coach-phone', 'coach-specialty', 'coach-experience', 'coach-bio'].forEach(id => { $(id).value = ''; });
+    ['coach-edit-id', 'coach-name', 'coach-phone', 'coach-specialty', 'coach-experience', 'coach-bio', 'coach-headline', 'coach-certs', 'coach-achievements', 'coach-location', 'coach-instagram'].forEach(id => { $(id).value = ''; });
     window.pendingCoachBase64 = null;
     setCoachPreview('');
     openSheet('modal-add-coach');
   };
   window.openEditCoachModal = function (id) {
-    const c = window.coaches.find(x => String(x.id) === String(id));
+    const c = coachList().find(x => String(x.id) === String(id));
     if (!c) return;
     window.openAddCoachModal();
     $('coach-modal-title').textContent = 'Ubah coach';
@@ -3349,6 +3400,11 @@
     $('coach-specialty').value = c.specialty || '';
     $('coach-experience').value = c.experience || '';
     $('coach-bio').value = c.bio || '';
+    $('coach-headline').value = c.headline || '';
+    $('coach-certs').value = (c.certifications || []).join(', ');
+    $('coach-achievements').value = (c.achievements || []).join(', ');
+    $('coach-location').value = c.location || '';
+    $('coach-instagram').value = c.instagram || '';
     setCoachPreview(c.photo);
   };
   window.previewCoachPhoto = function (e) {
@@ -3362,22 +3418,22 @@
   window.submitAddCoach = function (e) {
     e.preventDefault();
     const editId = $('coach-edit-id').value;
-    const old = editId ? window.coaches.find(c => String(c.id) === String(editId)) : null;
+    const old = editId ? coachList().find(c => String(c.id) === String(editId)) : null;
     const data = {
       name: $('coach-name').value, phone: sanitizePhone($('coach-phone').value), specialty: $('coach-specialty').value,
-      bio: $('coach-bio').value, experience: $('coach-experience').value, photo: old ? old.photo || '' : ''
+      bio: $('coach-bio').value, experience: $('coach-experience').value, headline: $('coach-headline').value,
+      certifications: $('coach-certs').value, achievements: $('coach-achievements').value,
+      location: $('coach-location').value, instagram: $('coach-instagram').value,
+      photo: old ? old.photo || '' : '', fotoFileId: old ? old.photoFileId || '' : ''
     };
     if (editId) data.id = editId;
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
     const upload = window.pendingCoachBase64
-      ? adminCall('uploadCoachPhoto', window.pendingCoachBase64, 'coach_' + Date.now() + '.jpg', 'image/jpeg').then(function (r) { data.photo = r.url; window.pendingCoachBase64 = null; })
+      ? adminCall('uploadCoachPhoto', window.pendingCoachBase64, 'coach_' + Date.now() + '.jpg', 'image/jpeg').then(function (r) { data.photo = r.url; data.fotoFileId = r.fileId || ''; window.pendingCoachBase64 = null; })
       : Promise.resolve();
-    upload.then(function () { return adminCall(editId ? 'updateCoach' : 'addCoach', data); }).then(function (res) {
+    upload.then(function () { return adminCall('saveCoach', data); }).then(function () { return reloadCoaches(); }).then(function () {
       done();
-      if (editId) { const i = window.coaches.findIndex(c => String(c.id) === String(editId)); if (i > -1) window.coaches[i] = Object.assign({}, window.coaches[i], data); }
-      else { data.id = res.id; window.coaches.push(data); }
       window.closeModal();
-      window.updateUI();
       window.showToast(editId ? 'Coach diperbarui.' : 'Coach ditambahkan.');
     }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
   };
@@ -3543,7 +3599,7 @@
     const done = isDone(s), upcoming = !done && d >= new Date();
     return '<div class="list-item">' +
       '<div style="width:52px;text-align:center;flex-shrink:0"><p class="eyebrow">' + DOW_SHORT[d.getDay()] + '</p><p class="num" style="font-size:var(--fs-2xl);font-weight:800;line-height:1.1">' + d.getDate() + '</p></div>' +
-      '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p><p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p></div>' +
+      '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' + (window.isSoloCoach() ? '' : '<p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p>') + '</div>' +
       '<div class="li-trail">' + (done ? '<span class="pill soft">' + icon('check') + 'Selesai</span>'
         : upcoming ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah</button>'
         : '<span class="pill dashed soft">Terlewat</span>') + '</div></div>';
@@ -4049,7 +4105,7 @@
       '<div class="section-head"><h3 class="section-title">Sesi berikutnya</h3>' + (next ? statusInfo(next).pill : '') + '</div>' +
       (next ? '<p id="pub-next-session-label" style="font-weight:700">' + h(fmtDate(new Date(next.start))) + ' · ' + fmtTime(new Date(next.start)) + '</p>' +
         '<p class="num" style="font-size:var(--fs-3xl);font-weight:800;letter-spacing:-0.03em;margin:8px 0" id="pub-next-countdown" data-countdown-long="' + new Date(next.start).getTime() + '">' + h(countdownText(new Date(next.start))) + '</p>' +
-        '<p class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(next.coachName || 'Menunggu coach') + '</p>' +
+        (window.isSoloCoach() ? '' : '<p class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(next.coachName || 'Menunggu coach') + '</p>') +
         '<div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-outline" onclick="window.openRescheduleModal(\'' + h(next.id) + '\')">' + icon('calendar-clock') + 'Reschedule</button>' +
         '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button></div>'
         : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +

@@ -400,6 +400,16 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#detail-panel')).includes('Rizky'), 'coach detail opens');
     await shot(page, 'admin-desktop-' + scheme + '-coach');
+    check(await page.evaluate(() => window.isSoloCoach()), 'one active coach = solo mode');
+    check((await page.textContent('#detail-panel')).includes('Nonaktifkan coach'), 'coach detail offers Nonaktifkan');
+    await page.evaluate(() => { window.closeDetail(); window.openEditCoachModal('C-1'); });
+    await page.waitForTimeout(500);
+    check(await visible(page, '#coach-headline') && await visible(page, '#coach-instagram'), 'coach editor has the new profile fields');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(400);
+    check(!(await visible(page, '#calendar-coach-filter')), 'solo mode hides the calendar coach filter');
 
     // Closing a sheet stacked on top of the detail panel must not leave a full-viewport
     // ghost overlay eating the very next click (was: #sheet-layer kept pointer-events:auto

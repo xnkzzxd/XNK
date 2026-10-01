@@ -354,9 +354,14 @@
         </div>
         <div class="field"><label class="label" for="coach-name">Nama</label><input class="input" id="coach-name" type="text" required></div>
         <div class="field"><label class="label" for="coach-phone">Nomor WhatsApp</label><input class="input" id="coach-phone" type="tel" inputmode="numeric" required placeholder="6281234567890"></div>
-        <div class="field"><label class="label" for="coach-specialty">Spesialisasi</label><input class="input" id="coach-specialty" type="text" placeholder="Fat loss, strength training" required></div>
+        <div class="field"><label class="label" for="coach-specialty">Spesialisasi</label><input class="input" id="coach-specialty" type="text" maxlength="200" placeholder="Fat loss, strength training"></div>
+        <div class="field"><label class="label" for="coach-headline">Headline</label><input class="input" id="coach-headline" type="text" maxlength="80" placeholder="Satu baris tentang kamu"></div>
         <div class="field"><label class="label" for="coach-experience">Pengalaman</label><input class="input" id="coach-experience" type="text" placeholder="5+ tahun"></div>
-        <div class="field"><label class="label" for="coach-bio">Bio</label><textarea class="textarea" id="coach-bio" rows="3" placeholder="Pengalaman & keahlian coach"></textarea></div>
+        <div class="field"><label class="label" for="coach-bio">Bio</label><textarea class="textarea" id="coach-bio" rows="3" maxlength="600" placeholder="Pengalaman & keahlian coach"></textarea></div>
+        <div class="field"><label class="label" for="coach-certs">Sertifikasi</label><input class="input" id="coach-certs" type="text" placeholder="Pisahkan dengan koma"></div>
+        <div class="field"><label class="label" for="coach-achievements">Prestasi</label><input class="input" id="coach-achievements" type="text" placeholder="Pisahkan dengan koma"></div>
+        <div class="field"><label class="label" for="coach-location">Lokasi</label><input class="input" id="coach-location" type="text" maxlength="60" placeholder="Purwokerto"></div>
+        <div class="field"><label class="label" for="coach-instagram">Instagram</label><input class="input" id="coach-instagram" type="text" maxlength="40" autocapitalize="none" placeholder="username"></div>
         <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan coach</button>
       </form>
     </div>
