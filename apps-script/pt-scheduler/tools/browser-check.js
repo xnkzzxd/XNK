@@ -1445,7 +1445,7 @@ async function contrastReport(page) {
   console.log('Landing · jam operasional dari Pengaturan admin (BUSINESS_HOURS_JSON)');
   {
     const env = seededEnv();
-    const dow = new Date(Date.now() + 86400000).getDay();
+    const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();   // WIB, like the server
     const hoursMap = { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] };
     hoursMap[dow] = [9, 12];
     env.props.BUSINESS_HOURS_JSON = JSON.stringify(hoursMap);
