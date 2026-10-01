@@ -48,7 +48,7 @@ Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks
 
 ## 3. How to work a task
 
-1. Open [Task.md](Task.md) and take the lowest-numbered unchecked task in the current phase whose dependencies are done. Mark it `[~]`.
+1. Open [Task.md](Task.md) and take the lowest-numbered unchecked task in the current phase whose dependencies are done. Mark it `[~]`. **Phase E (coach) tasks are in [coach/TODO.md](coach/TODO.md); read [coach/Agent.md](coach/Agent.md) before starting one.**
 2. Read the matching section in [Design.md](Design.md). If the design is wrong or unclear, fix the design text in the same change and say so; don't silently build something else.
 3. Implement it, following §4. For UI, build the phone layout first, then widen to desktop.
 4. Add or update tests in `apps-script/pt-scheduler/tests/`.
@@ -111,4 +111,5 @@ clasp pull
 - `runReminderTick` is a public trigger handler, gated by `RMD_ENABLED`, a lock and a throttle.
 - Sessions: admin 30 days, member 90 days (defaults). Revenue estimate = 65 % of package price.
 - Phone UX (2026-10): login shows one loader (the button, no splash); the panel opens from a localStorage copy (`xnk_admin_cache`, admin only, cleared on logout/auth loss) with no separate `checkAdminSession` call; secondary data (transaction log, tasks, renewals, revenue) loads after the first screen; pull-to-refresh (`refreshAll`) on `#main-scroll-area`; Android back stack (`syncBack`) closes sheet → detail → page → dashboard. New sheets/details/views get this for free through `openSheet`/`openDetail`/`navigate`; don't add your own `pushState` except for the settings sub-page.
+- Phase E (solo coach hub, coach profile, client care) is **planned, not built**: see [coach/PRD.md](coach/PRD.md), [coach/Design.md](coach/Design.md), [coach/TODO.md](coach/TODO.md). The app now has one coach, the owner; the first task (T-200) fixes "Belum Ditugaskan" being stored as a coach name.
 - Tests: 159 passing (`node --test`), plus the browser check with a phone pass for Pengaturan.
