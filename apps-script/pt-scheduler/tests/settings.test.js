@@ -13,7 +13,7 @@ test('getAppSettings returns today\'s defaults until the admin changes something
   delete env.props.TELEGRAM_BOT_TOKEN;
   delete env.props.TELEGRAM_CHAT_IDS;
   const s = env.call('getAppSettings', token);
-  delete s.reminder; // reminder settings are covered by their own defaults
+  delete s.reminder; delete s.finance; // reminder settings are covered by their own defaults
   assert.deepEqual(s, {
     telegramEnabled: true, telegramBotToken: '', telegramBotTokenMask: '', telegramChatIds: '', notifEmail: '',
     defaults: { businessHours: DEFAULT_HOURS, loginMaxFails: 10, loginLockSeconds: 600, memberLoginMaxFails: 30, adminSessionDays: 30, rescheduleCutoffHours: 2 },
@@ -37,11 +37,11 @@ test('updateAppSettings saves every field, and getAppSettings reflects it back',
     notifEmail: 'owner@gym.test', businessHours: hours,
     loginMaxFails: 3, loginLockSeconds: 120, memberLoginMaxFails: 5, adminSessionDays: 7, rescheduleCutoffHours: 2,
   };
-  delete res.reminder;
+  delete res.reminder; delete res.finance;
   assert.equal(env.props.TELEGRAM_BOT_TOKEN, '123:abc');
   assert.deepEqual(res, expected);
   const got = env.call('getAppSettings', token);
-  delete got.reminder;
+  delete got.reminder; delete got.finance;
   assert.deepEqual(got, expected);
 });
 

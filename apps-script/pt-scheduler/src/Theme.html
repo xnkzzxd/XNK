@@ -1284,4 +1284,9 @@ button.avatar { border: 0; cursor: pointer; }
 .task-note { margin-top: 6px; padding: 8px 10px; border-radius: var(--r-md); background: var(--surface-2); font-size: var(--fs-xs); color: var(--fg-2); overflow-wrap: anywhere; }
 .task-acts { display: flex; gap: 2px; flex-shrink: 0; margin: -4px -6px -4px 0; }
 .task-acts .icon-btn { width: 36px; height: 36px; border-radius: 10px; }
+/* Keuangan (Fase H): sasaran sentuh 44 px di HP */
+@media (max-width: 767px) {
+  #view-finance .chip, #view-finance .btn-sm, .sheet[id^="sheet-fin"] .chip, #settings-body .chip { min-height: 44px; height: auto; }
+  #settings-body .chip-x { min-width: 44px; min-height: 44px; }
+}
 </style>

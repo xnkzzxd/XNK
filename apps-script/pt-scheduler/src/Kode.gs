@@ -441,6 +441,7 @@ function getAppSettings(token) {
     settings.defaults[name] = b.fallback;
   });
   settings.reminder = _rmdRead_();   // T-40: lihat ReminderSettings.gs
+  settings.finance = _finSettingsRead_();   // Fase H: lihat Keuangan.gs
   return settings;
 }
 
@@ -465,6 +466,7 @@ function updateAppSettings(token, payload) {
   });
 
   const rmdMap = _rmdValidate_(payload.reminder);   // T-40: validasi dulu, tulis belakangan
+  const finMap = _finValidate_(payload.finance);    // Fase H
 
   const setOrDelete = function (key, value) {
     if (value === '' || value == null) props.deleteProperty(key);
@@ -484,6 +486,7 @@ function updateAppSettings(token, payload) {
     setOrDelete(SETTINGS_NUMERIC_BOUNDS[name].key, payload[name] === '' || payload[name] == null ? '' : Math.trunc(Number(payload[name])));
   });
   _rmdWrite_(rmdMap);   // T-40
+  _finWrite_(finMap);   // Fase H
 
   return getAppSettings(token);
 }
@@ -761,8 +764,8 @@ function logToSheet_(pesan, status = "INFO") {
 
 // ── 📂 CRUD ──────────────────────────────────────────────────────────────────
 
-const COACH_HEADERS = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman", "Status Aktif", "Headline", "Sertifikasi", "Prestasi", "Lokasi", "Instagram", "Foto File ID"];
-const COACH_KEYS = ['id', 'name', 'phone', 'specialty', 'photo', 'bio', 'experience', 'aktif', 'headline', 'certifications', 'achievements', 'location', 'instagram', 'photoFileId'];
+const COACH_HEADERS = ["ID", "Nama Coach", "No WA", "Spesialisasi", "Foto URL", "Bio", "Pengalaman", "Status Aktif", "Headline", "Sertifikasi", "Prestasi", "Lokasi", "Instagram", "Foto File ID", "Bagi Hasil Tipe", "Bagi Hasil Nilai"];
+const COACH_KEYS = ['id', 'name', 'phone', 'specialty', 'photo', 'bio', 'experience', 'aktif', 'headline', 'certifications', 'achievements', 'location', 'instagram', 'photoFileId', 'shareType', 'shareValue'];
 const COACH_PUBLIC_KEYS = ['id', 'name', 'phone', 'specialty', 'photo', 'bio', 'experience', 'headline', 'certifications', 'achievements', 'location', 'instagram'];
 const COACH_LIST_KEYS = ['certifications', 'achievements'];
 const COACH_UNASSIGNED_TEXT = 'Belum Ditugaskan';   // teks lama; tidak pernah ditulis lagi (T-200)
@@ -819,7 +822,8 @@ function _coachesAll_() {
       aktif: String(cell(row, 'aktif')).trim().toUpperCase() !== 'FALSE',
       headline: String(cell(row, 'headline')), certifications: _coachList_(cell(row, 'certifications')),
       achievements: _coachList_(cell(row, 'achievements')), location: String(cell(row, 'location')),
-      instagram: String(cell(row, 'instagram')), photoFileId: String(cell(row, 'photoFileId')), _row: i + 1
+      instagram: String(cell(row, 'instagram')), photoFileId: String(cell(row, 'photoFileId')),
+      shareType: String(cell(row, 'shareType')), shareValue: cell(row, 'shareValue'), _row: i + 1
     });
   }
   return out;
@@ -1224,6 +1228,7 @@ function _tulisLogTransaksiMember_(memberId, jenis, paketId, namaPaket, jumlahSe
   const dateStr = now.getDate() + '/' + (now.getMonth() + 1) + '/' + now.getFullYear();
   const price = (typeof harga === 'number' && isFinite(harga)) ? harga : '';   // harga saat transaksi; '' = tidak diketahui
   sheet.appendRow([trxId, memberId, dateStr, jenis, paketId || '', namaPaket || '', jumlahSesi || 0, coachId || '', namaCoach || '', catatan || '', price]);
+  _finBillFromTransaction_({ trxId: trxId, memberId: memberId, paketId: paketId, namaPaket: namaPaket, coachId: coachId, dateStr: dateStr, price: price });   // Fase H: tagihan (hanya bila aktif)
   return trxId;
 }
 

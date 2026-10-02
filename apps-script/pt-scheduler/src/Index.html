@@ -71,6 +71,7 @@
           <section class="view hide" id="view-calendar" aria-label="Jadwal"></section>
           <section class="view hide" id="view-clients" aria-label="Klien"></section>
           <section class="view hide" id="view-coaches" aria-label="Coach"></section>
+          <section class="view hide" id="view-finance" aria-label="Keuangan"></section>
           <section class="view hide" id="view-settings" aria-label="Pengaturan"></section>
           <!-- PORTAL KLIEN -->
           <section class="view hide" id="view-public-login" aria-label="Masuk member"></section>
@@ -145,6 +146,8 @@
           <button type="button" class="action-tile" onclick="window.quickAction('booking')"><span class="at-icon"><i data-lucide="calendar-plus"></i></span>Booking</button>
           <button type="button" class="action-tile" onclick="window.quickAction('client')"><span class="at-icon"><i data-lucide="user-plus"></i></span>Klien</button>
           <button type="button" class="action-tile" onclick="window.quickAction('coach')"><span class="at-icon"><i data-lucide="dumbbell"></i></span>Coach</button>
+          <button type="button" class="action-tile fin-tile" onclick="window.finQuick('payment')"><span class="at-icon"><i data-lucide="banknote"></i></span>Pembayaran</button>
+          <button type="button" class="action-tile fin-tile" onclick="window.finQuick('expense')"><span class="at-icon"><i data-lucide="receipt"></i></span>Pengeluaran</button>
         </div>
       </div>
     </div>
@@ -172,6 +175,54 @@
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="coach-sheet-title">Profil coach</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <div class="sheet-body" id="coach-sheet-body"></div>
+    </div>
+
+    <!-- Keuangan (Fase H) -->
+    <div class="sheet tall hide" id="sheet-fin-payment" role="dialog" aria-modal="true" aria-labelledby="sheet-fin-payment-t">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sheet-fin-payment-t"><span id="fin-pay-title">Keuangan</span></h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-fin-pay" onsubmit="window.finPaySave(event)" novalidate>
+        <div class="field" id="fin-pay-bill-wrap"><label class="label" for="fin-pay-bill">Tagihan</label><select class="select" id="fin-pay-bill"></select></div>
+        <div class="field"><label class="label" for="fin-pay-amount">Jumlah</label><div class="input-affix"><span class="affix">Rp</span><input class="input num" type="text" inputmode="numeric" id="fin-pay-amount" autocomplete="off" placeholder="100.000" oninput="window.finFmt(this)"></div></div>
+        <div class="field"><span class="label">Metode</span><div class="chips" id="fin-pay-method" style="flex-wrap:wrap"></div></div>
+        <div class="field" id="fin-pay-cat-wrap"><span class="label">Kategori</span><div class="chips" id="fin-pay-cat" style="flex-wrap:wrap"></div></div>
+        <div class="field"><label class="label" for="fin-pay-date">Tanggal</label><input class="input" type="date" id="fin-pay-date"></div>
+        <div class="field"><label class="label" for="fin-pay-note">Catatan</label><input class="input" type="text" id="fin-pay-note" maxlength="300" autocomplete="off"></div>
+        <div class="field"><span class="label">Bukti</span><label class="btn btn-outline btn-block" style="cursor:pointer"><span id="fin-pay-proof-lbl">Tambah foto bukti</span><input type="file" accept="image/*" id="fin-pay-proof" data-lbl="fin-pay-proof-lbl" onchange="window.finProofChange(this)" style="display:none"></label><button type="button" class="link-btn hide" id="fin-pay-view">Lihat bukti tersimpan</button><div id="fin-pay-proof-box"></div></div>
+        <p class="hint err-msg" id="fin-pay-err" role="alert" style="display:block"></p>
+        <button type="button" class="btn btn-danger btn-block hide" id="fin-pay-archive" onclick="window.finPayArchive()">Arsipkan pembayaran</button>
+      </form>
+      <div class="sheet-foot"><button type="submit" form="form-fin-pay" class="btn btn-primary btn-lg btn-block" id="fin-pay-save">Simpan</button></div>
+    </div>
+
+    <div class="sheet tall hide" id="sheet-fin-expense" role="dialog" aria-modal="true" aria-labelledby="sheet-fin-expense-t">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sheet-fin-expense-t"><span id="fin-exp-title">Keuangan</span></h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-fin-exp" onsubmit="window.finExpSave(event)" novalidate>
+        <div class="field"><label class="label" for="fin-exp-amount">Jumlah</label><div class="input-affix"><span class="affix">Rp</span><input class="input num" type="text" inputmode="numeric" id="fin-exp-amount" autocomplete="off" placeholder="100.000" oninput="window.finFmt(this)"></div></div>
+        <div class="field"><span class="label">Kategori</span><div class="chips" id="fin-exp-cat" style="flex-wrap:wrap"></div></div>
+        <div class="field"><span class="label">Metode</span><div class="chips" id="fin-exp-method" style="flex-wrap:wrap"></div></div>
+        <div class="field"><label class="label" for="fin-exp-date">Tanggal</label><input class="input" type="date" id="fin-exp-date"></div>
+        <div class="field"><label class="label" for="fin-exp-note">Catatan</label><input class="input" type="text" id="fin-exp-note" maxlength="300" autocomplete="off"></div>
+        <div class="field"><span class="label">Bukti</span><label class="btn btn-outline btn-block" style="cursor:pointer"><span id="fin-exp-proof-lbl">Tambah foto nota</span><input type="file" accept="image/*" id="fin-exp-proof" data-lbl="fin-exp-proof-lbl" onchange="window.finProofChange(this)" style="display:none"></label><button type="button" class="link-btn hide" id="fin-exp-view">Lihat bukti tersimpan</button><div id="fin-exp-proof-box"></div></div>
+        <p class="hint err-msg" id="fin-exp-err" role="alert" style="display:block"></p>
+        <button type="button" class="btn btn-danger btn-block hide" id="fin-exp-archive" onclick="window.finExpArchive()">Arsipkan pengeluaran</button>
+      </form>
+      <div class="sheet-foot"><button type="submit" form="form-fin-exp" class="btn btn-primary btn-lg btn-block" id="fin-exp-save">Simpan</button></div>
+    </div>
+
+    <div class="sheet tall hide" id="sheet-fin-bill" role="dialog" aria-modal="true" aria-labelledby="sheet-fin-bill-t">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sheet-fin-bill-t"><span id="fin-bill-title">Keuangan</span></h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-fin-bill" onsubmit="window.finBillSave(event)" novalidate>
+        <div class="field"><label class="label" for="fin-bill-total">Total tagihan</label><div class="input-affix"><span class="affix">Rp</span><input class="input num" type="text" inputmode="numeric" id="fin-bill-total" oninput="window.finFmt(this)"></div></div>
+        <div class="field"><label class="label" for="fin-bill-reason">Alasan (wajib kalau total diubah)</label><input class="input" type="text" id="fin-bill-reason" maxlength="200" autocomplete="off"></div>
+        <div class="field"><label class="label" for="fin-bill-discount">Diskon</label><div class="input-affix"><span class="affix">Rp</span><input class="input num" type="text" inputmode="numeric" id="fin-bill-discount" oninput="window.finFmt(this)"></div></div>
+        <div class="field"><label class="label" for="fin-bill-note">Catatan</label><input class="input" type="text" id="fin-bill-note" maxlength="300" autocomplete="off"></div>
+        <p class="hint err-msg" id="fin-bill-err" role="alert" style="display:block"></p>
+        <button type="button" class="btn btn-danger btn-block" onclick="window.finBillArchive()">Arsipkan tagihan</button>
+      </form>
+      <div class="sheet-foot"><button type="submit" form="form-fin-bill" class="btn btn-primary btn-lg btn-block" id="fin-bill-save">Simpan</button></div>
     </div>
 
     <!-- Notifikasi booking baru -->

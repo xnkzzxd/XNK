@@ -233,3 +233,18 @@ node --test apps-script/pt-scheduler/tests/*.test.js
 # Opsional: uji halaman asli di Chromium (butuh Playwright terpasang global)
 NODE_PATH=$(npm root -g) node apps-script/pt-scheduler/tools/browser-check.js
 ```
+
+### Keuangan (tagihan, pembayaran, pengeluaran)
+
+Pengaturan → **Keuangan** (mati sampai Anda menyalakannya):
+
+- Saat pertama dinyalakan, semua transaksi lama dicatat **Lunas**. Sesudahnya tiap paket baru atau perpanjangan
+  otomatis jadi tagihan (status **Belum bayar → DP → Lunas** dihitung dari pembayaran yang dicatat).
+- Menu **Keuangan** (sidebar di laptop; kartu pendapatan di Dashboard dan tombol **+** di HP): catat pembayaran
+  (bisa dicicil) dan pengeluaran, lihat Masuk, Keluar, Laba, Tunggakan, grafik 6 bulan, daftar tunggakan, ekspor CSV.
+- Yang dihapus hanya **diarsipkan** dan bisa dipulihkan (filter **Arsip**).
+- Foto bukti transfer/nota disimpan di folder Drive privat **XNK Keuangan**.
+- Bagi hasil coach diatur per coach (persen atau rupiah per sesi); kosong = 65%.
+- **Klien bisa lihat tagihan** (mati): kartu Tagihan read-only di portal klien.
+- Pengingat **Tagihan** (Pengingat Klien, mati): tombol WA ke klien yang belum lunas lebih dari 3 hari.
+- Sheet baru: `Tagihan`, `Pembayaran`, `Pengeluaran`, `KategoriKeuangan`; `Coaches` mendapat 2 kolom bagi hasil.
