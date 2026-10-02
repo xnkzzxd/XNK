@@ -4644,39 +4644,42 @@
   // Layar digelapkan dan hanya tombol yang perlu diklik yang terang, per halaman,
   // untuk klien yang mendaftar sendiri (server mengirim `guide` di profil; klien
   // lama, perpanjang, dan klien dari admin tidak). Tiap halaman sekali; selesai
-  // atau "Lewati" dicatat lewat markGuideSeen. Target dicari ulang tiap kali
+  // atau ditutup dicatat lewat markGuideSeen. Target dicari ulang tiap kali
   // diposisikan, jadi render ulang (data baru masuk) tidak merusak sorotan.
+  // HP: kartu menempel di bawah (atau atas) dan target digulir ke ruang kosong.
+  // Desktop: kartu melayang di samping target dengan panah.
+  // Langkah: sel/selDesktop = target, text/textDesktop; {klik}/{Klik} = ketuk di HP.
   const GUIDE_STEPS = {
     beranda: [
       { sel: '.portal-hero .ring-wrap', title: 'Sisa sesimu', text: 'Lingkaran ini menunjukkan berapa sesi latihan yang masih bisa kamu pakai.' },
       { sel: '#pub-next-session-card', title: 'Sesi berikutnya', text: 'Jadwal latihan terdekatmu muncul di sini, lengkap dengan hitung mundur dan tombol reschedule.' },
-      { sel: '.portal-actions .btn-secondary', title: 'Chat coach', text: 'Ada pertanyaan? Klik di sini untuk chat coach lewat WhatsApp.' },
-      { sel: '#tabbar, #side-nav', title: 'Menu', text: 'Pindah ke Jadwal, Paket, atau Coach dari sini.' },
-      { sel: '.portal-actions .btn-primary', title: 'Booking latihan', text: 'Sekarang coba klik Booking untuk memilih tanggal dan jam latihan pertamamu.', tap: true }
+      { sel: '.portal-actions .btn-secondary', title: 'Chat coach', text: 'Ada pertanyaan? {Klik} di sini untuk chat coach lewat WhatsApp.' },
+      { sel: '#tabbar', selDesktop: '#side-nav', title: 'Menu', text: 'Pindah ke Jadwal, Paket, atau Coach dari menu di bawah. Tombol + di tengah juga untuk booking.', textDesktop: 'Pindah ke Jadwal, Paket, atau Coach dari menu di kiri.' },
+      { sel: '.portal-actions .btn-primary', title: 'Booking latihan', text: 'Sekarang coba {klik} Booking untuk memilih tanggal dan jam latihan pertamamu.', tap: true }
     ],
     booking: [
       { sel: '#form-edit-schedule .two', title: 'Pilih tanggal & jam', text: 'Isi tanggal dan jam latihan yang kamu mau.' },
       { sel: '#edit-sch-duration', up: '.field', title: 'Durasi', text: 'Biarkan 60 menit kalau belum diatur coach.' },
       { sel: '#recurring-toggle-wrap', title: 'Jadwal berulang', text: 'Opsional: nyalakan untuk booking beberapa minggu sekaligus di hari yang sama.' },
-      { sel: '#sch-submit-btn', title: 'Kirim booking', text: 'Klik di sini kalau sudah pas. Coach akan mendapat jadwalmu.', tap: true }
+      { sel: '#sch-submit-btn', title: 'Kirim booking', text: '{Klik} di sini kalau sudah pas. Coach akan mendapat jadwalmu.', tap: true }
     ],
     jadwal: [
-      { sel: '#month-cal', title: 'Kalender', text: 'Tanggal yang bertanda berisi sesimu. Klik tanggal untuk melihat jadwal hari itu.' },
-      { sel: '#day-panel', title: 'Jadwal hari ini', text: 'Daftar sesi di tanggal yang dipilih muncul di sini.' },
-      { sel: '#client-booking-fab, #view-calendar .page-head .btn-primary', title: 'Booking dari sini', text: 'Tombol ini juga membuka form booking.' }
+      { sel: '#month-cal', title: 'Kalender', text: 'Tanggal yang bertanda berisi sesimu. {Klik} tanggal untuk melihat jadwal hari itu.' },
+      { sel: '#day-panel', title: 'Jadwal per hari', text: 'Daftar sesi di tanggal yang dipilih muncul di sini.' },
+      { sel: '#client-booking-fab', selDesktop: '#view-calendar .page-head .btn-primary', title: 'Booking dari sini', text: 'Tombol + ini juga membuka form booking.', textDesktop: 'Tombol ini juga membuka form booking.' }
     ],
     paket: [
       { sel: '#category-button-container', title: 'Kategori', text: 'Pilih kategori paket yang sesuai.' },
-      { sel: '#pricelist-container .pkg-card', title: 'Pilih paket', text: 'Lihat isi dan harga paket, lalu klik "Pilih paket" untuk lanjut ke WhatsApp coach.' },
+      { sel: '#pricelist-container .pkg-card', title: 'Pilih paket', text: 'Lihat isi dan harga paket, lalu {klik} "Pilih paket" untuk lanjut ke WhatsApp coach.' },
       { sel: '#catalog-renew-btn', title: 'Perpanjang', text: 'Sesi hampir habis? Minta perpanjang paketmu dari sini.' }
     ],
     coach: [
       { sel: '#public-coach-list .coach-card, #coach-profile-page .coach-hero, #coach-profile-page', title: 'Coach kamu', text: 'Kenali coach-mu: pengalaman, keahlian, dan testimoni klien.' },
-      { sel: '#public-coach-list .coach-card .btn-outline, #coach-profile-page .btn-primary', title: 'Hubungi coach', text: 'Klik untuk chat coach lewat WhatsApp.' }
+      { sel: '#public-coach-list .coach-card .btn-outline, #coach-profile-page .btn-primary', title: 'Hubungi coach', text: '{Klik} untuk chat coach lewat WhatsApp.' }
     ]
   };
   const GUIDE_VIEW_PAGE = { 'public-dashboard': 'beranda', 'calendar': 'jadwal', 'public-catalog': 'paket', 'public-coaches': 'coach' };
-  const guide = { on: false, page: null, steps: [], i: 0, replay: false, timer: null, raf: 0, tick: 0 };
+  const guide = { on: false, page: null, steps: [], i: 0, replay: false, timer: null, raf: 0, tick: 0, dock: 'bottom' };
 
   function guideVisible(el) {
     if (!el || !el.getClientRects().length) return false;
@@ -4684,13 +4687,18 @@
     return r.width > 0 && r.height > 0;
   }
   function guideTarget(step) {
-    const list = document.querySelectorAll(step.sel);
+    const list = document.querySelectorAll((!isPhone() && step.selDesktop) || step.sel);
     for (let i = 0; i < list.length; i++) {
       const el = step.up ? (list[i].closest(step.up) || list[i]) : list[i];
       if (guideVisible(el)) return el;
     }
     return null;
   }
+  function guideText(step) {
+    const t = (!isPhone() && step.textDesktop) || step.text;
+    return t.replace(/\{klik\}/g, isPhone() ? 'ketuk' : 'klik').replace(/\{Klik\}/g, isPhone() ? 'Ketuk' : 'Klik');
+  }
+  function guideShown() { return guide.steps.map(function (s, i) { return guideTarget(s) ? i : -1; }).filter(function (i) { return i !== -1; }); }
   function guidePage() {
     const me = window.publicLoggedMember;
     if (!window.isPublicView || !me) return null;
@@ -4730,33 +4738,102 @@
     guideGo(1);
   }
 
-  // Maju (dir 1) ke langkah berikutnya yang targetnya terlihat; habis = selesai.
+  // Maju (1) atau mundur (-1) ke langkah yang targetnya terlihat; habis = selesai.
   function guideGo(dir) {
     let i = guide.i + dir;
     while (i >= 0 && i < guide.steps.length && !guideTarget(guide.steps[i])) i += dir;
-    if (i < 0 || i >= guide.steps.length) { guideEnd(false); return; }
+    if (i >= guide.steps.length) { guideEnd(false); return; }
+    if (i < 0) return;
     guide.i = i;
-    const el = guideTarget(guide.steps[i]);
-    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
     guideRenderTip();
+    guideScrollTo(guideTarget(guide.steps[i]));
     guidePlace();
-    setTimeout(guidePlace, 380);
+    setTimeout(guidePlace, 420);
+  }
+
+  // Bidang tempat kartu boleh menempel (HP): di bawah topbar, di atas tab bar.
+  function guideBounds() {
+    const vh = window.innerHeight;
+    if (ui.sheetOn) return { top: 12, bottom: vh - 12 };
+    const tb = $('topbar'), bar = $('tabbar');
+    const top = tb && guideVisible(tb) ? tb.getBoundingClientRect().bottom + 8 : 12;
+    const bottom = bar && guideVisible(bar) ? bar.getBoundingClientRect().top - 12 : vh - 12;
+    return { top: top, bottom: bottom };
+  }
+  function guideScroller(el) {
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+    }
+    return null;
+  }
+  function guideFixed(el) {
+    for (let p = el; p && p !== document.body; p = p.parentElement) if (getComputedStyle(p).position === 'fixed') return true;
+    return false;
+  }
+
+  // Gulir target ke ruang yang tidak ditutup kartu, dan pilih sisi kartu (HP).
+  function guideScrollTo(el) {
+    if (!el) return;
+    const tip = $('guide-tip'), th = tip.offsetHeight, b = guideBounds(), pad = 12;
+    const r = el.getBoundingClientRect(), sc = guideFixed(el) && !ui.sheetOn ? null : guideScroller(el);
+    const room = function (side) { return side === 'bottom' ? [b.top + pad, b.bottom - th - pad] : [b.top + th + pad, b.bottom - pad]; };
+    // Geser yang dibutuhkan supaya target muat di ruang [lo, hi] (target tinggi: rata atas).
+    const need = function (lo, hi) {
+      if (r.top >= lo && r.bottom <= hi) return 0;
+      return r.height > hi - lo ? r.top - lo : (r.top < lo ? r.top - lo : r.bottom - hi);
+    };
+    const can = function (d) { return !d || (sc && sc.scrollTop + d >= -1 && sc.scrollTop + d <= sc.scrollHeight - sc.clientHeight + 1); };
+    let side = 'bottom';
+    if (isPhone()) {
+      const lo = room('bottom'), dB = need(lo[0], lo[1]);
+      if (!can(dB)) { const up = room('top'), dT = need(up[0], up[1]); if (can(dT) || Math.abs(dT) < Math.abs(dB)) side = 'top'; }
+    }
+    guide.dock = side;
+    tip.setAttribute('data-dock', isPhone() ? side : '');
+    if (!sc) return;
+    let d;
+    if (isPhone()) { const rm = room(side); d = need(rm[0], rm[1]); }
+    else d = r.top >= b.top + pad && r.bottom <= window.innerHeight - pad ? 0 : r.top - Math.max(b.top + pad, (window.innerHeight - Math.min(r.height, window.innerHeight * 0.6)) / 2);
+    const max = sc.scrollHeight - sc.clientHeight;
+    const to = Math.max(0, Math.min(max, sc.scrollTop + d));
+    if (Math.abs(to - sc.scrollTop) > 1) sc.scrollTo({ top: to, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }
 
   function guideRenderTip() {
     const step = guide.steps[guide.i];
-    const total = guide.steps.filter(guideTarget).length || guide.steps.length;
-    const nr = guide.steps.slice(0, guide.i + 1).filter(guideTarget).length;
-    const last = !guide.steps.slice(guide.i + 1).some(guideTarget);
+    const shown = guideShown(), nr = shown.indexOf(guide.i) + 1, total = shown.length;
+    const last = nr === total, first = nr === 1;
     const tip = $('guide-tip');
     tip.style.animation = 'none'; void tip.offsetWidth; tip.style.animation = '';
-    tip.innerHTML = '<p class="eyebrow">Panduan · ' + nr + ' / ' + total + '</p>' +
-      '<h3 id="guide-title">' + h(step.title) + '</h3><p>' + h(step.text) + '</p>' +
-      '<div class="guide-actions"><button type="button" class="btn btn-ghost" onclick="window.guideSkip()">' + (last ? 'Nanti saja' : 'Lewati') + '</button>' +
-      '<button type="button" class="btn btn-primary" id="guide-next" onclick="window.guideNext()">' + (last ? 'Mengerti' : 'Lanjut ' + icon('arrow-right')) + '</button></div>' +
-      (guide.replay ? '' : '<button type="button" class="link-btn guide-off" onclick="window.guideOff()">Jangan tampilkan panduan lagi</button>');
+    const dots = shown.map(function (i) { return '<i class="' + (i === guide.i ? 'on' : (i < guide.i ? 'done' : '')) + '"></i>'; }).join('');
+    const left = first
+      ? (guide.replay ? '<span></span>' : '<button type="button" class="link-btn guide-off" onclick="window.guideOff()">Jangan tampilkan lagi</button>')
+      : '<button type="button" class="btn btn-ghost guide-prev" onclick="window.guidePrev()">' + icon('arrow-left') + 'Kembali</button>';
+    tip.innerHTML = '<div class="guide-head"><span class="guide-dots" role="img" aria-label="Langkah ' + nr + ' dari ' + total + '">' + dots + '</span>' +
+      '<span class="guide-count">' + nr + '/' + total + '</span>' +
+      '<button type="button" class="icon-btn plain guide-x" onclick="window.guideSkip()" aria-label="Tutup panduan">' + icon('x') + '</button></div>' +
+      '<h3 id="guide-title">' + h(step.title) + '</h3><p class="guide-text">' + h(guideText(step)) + '</p>' +
+      (step.tap ? '<p class="guide-hint">' + icon('pointer', 'style="width:14px;height:14px"') + (isPhone() ? 'Atau ketuk' : 'Atau klik') + ' tombol yang disorot.</p>' : '') +
+      '<div class="guide-actions">' + left +
+      '<button type="button" class="btn btn-primary" id="guide-next" onclick="window.guideNext()">' + (last ? 'Mengerti' : 'Lanjut' + icon('arrow-right')) + '</button></div>';
     paintIcons();
     try { $('guide-next').focus({ preventScroll: true }); } catch (e) {}
+  }
+
+  function guideHole(x, y, w, hh, rad) {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    rad = Math.max(0, Math.min(rad, w / 2, hh / 2));
+    let d = 'M0 0H' + vw + 'V' + vh + 'H0Z';
+    if (w > 0 && hh > 0) {
+      d += 'M' + (x + rad) + ' ' + y + 'H' + (x + w - rad) + 'A' + rad + ' ' + rad + ' 0 0 1 ' + (x + w) + ' ' + (y + rad) +
+        'V' + (y + hh - rad) + 'A' + rad + ' ' + rad + ' 0 0 1 ' + (x + w - rad) + ' ' + (y + hh) +
+        'H' + (x + rad) + 'A' + rad + ' ' + rad + ' 0 0 1 ' + x + ' ' + (y + hh - rad) +
+        'V' + (y + rad) + 'A' + rad + ' ' + rad + ' 0 0 1 ' + (x + rad) + ' ' + y + 'Z';
+    }
+    const svg = $('guide-scrim');
+    svg.setAttribute('viewBox', '0 0 ' + vw + ' ' + vh);
+    $('guide-hole').setAttribute('d', d);
   }
 
   function guidePlace() {
@@ -4764,25 +4841,52 @@
     const step = guide.steps[guide.i];
     const el = step && guideTarget(step);
     const spot = $('guide-spot'), tip = $('guide-tip');
-    const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 14;
-    if (!el) { spot.classList.add('none'); tip.style.left = Math.max(16, (vw - tip.offsetWidth) / 2) + 'px'; tip.style.top = Math.max(16, (vh - tip.offsetHeight) / 2) + 'px'; return; }
+    const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 16, m = 16;
+    const th = tip.offsetHeight, tw = tip.offsetWidth;
+    if (!el) {
+      spot.classList.add('none'); guideHole(0, 0, 0, 0, 0);
+      tip.removeAttribute('data-side');
+      tip.style.left = Math.max(m, (vw - tw) / 2) + 'px'; tip.style.top = Math.max(m, (vh - th) / 2) + 'px';
+      return;
+    }
     spot.classList.remove('none');
     const r = el.getBoundingClientRect();
-    const top = Math.max(4, r.top - pad), left = Math.max(4, r.left - pad);
-    const bottom = Math.min(vh - 4, r.bottom + pad), right = Math.min(vw - 4, r.right + pad);
-    Object.assign(spot.style, { top: top + 'px', left: left + 'px', width: Math.max(0, right - left) + 'px', height: Math.max(0, bottom - top) + 'px' });
-    spot.style.borderRadius = getComputedStyle(el).borderRadius === '0px' ? 'var(--r-md)' : 'calc(' + getComputedStyle(el).borderRadius + ' + ' + pad + 'px)';
-    const th = tip.offsetHeight, tw = tip.offsetWidth;
-    let y;
-    if (vh - bottom >= th + gap + 8) y = bottom + gap;
-    else if (top >= th + gap + 8) y = top - gap - th;
-    else y = vh - th - 16;   // target besar: kartu di bawah layar
-    tip.style.top = Math.max(8, y) + 'px';
-    tip.style.left = Math.min(vw - tw - 16, Math.max(16, (r.left + r.right) / 2 - tw / 2)) + 'px';
+    const top = Math.max(2, r.top - pad), left = Math.max(2, r.left - pad);
+    const bottom = Math.min(vh - 2, r.bottom + pad), right = Math.min(vw - 2, r.right + pad);
+    const w = Math.max(0, right - left), hh = Math.max(0, bottom - top);
+    const br = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+    const rad = Math.min(br + pad, 28) || 14;
+    Object.assign(spot.style, { top: top + 'px', left: left + 'px', width: w + 'px', height: hh + 'px', borderRadius: rad + 'px' });
+    guideHole(left, top, w, hh, rad);
+
+    if (isPhone()) {
+      // Menempel selebar layar; tanpa panah.
+      const b = guideBounds();
+      tip.removeAttribute('data-side');
+      tip.style.left = m + 'px';
+      tip.style.top = (guide.dock === 'top' ? b.top : Math.max(b.top, b.bottom - th)) + 'px';
+      return;
+    }
+    // Desktop: bawah → atas → kanan → kiri; jepit ke layar.
+    const cx = (left + right) / 2, cy = (top + bottom) / 2;
+    const clampX = function (x) { return Math.min(vw - tw - m, Math.max(m, x)); };
+    const clampY = function (y) { return Math.min(vh - th - m, Math.max(m, y)); };
+    const opts = [
+      { side: 'bottom', ok: vh - bottom >= th + gap + m, x: clampX(cx - tw / 2), y: bottom + gap },
+      { side: 'top', ok: top >= th + gap + m, x: clampX(cx - tw / 2), y: top - gap - th },
+      { side: 'right', ok: vw - right >= tw + gap + m, x: right + gap, y: clampY(cy - th / 2) },
+      { side: 'left', ok: left >= tw + gap + m, x: left - gap - tw, y: clampY(cy - th / 2) }
+    ];
+    const pick = opts.filter(function (o) { return o.ok; })[0] || { side: '', x: vw - tw - m, y: vh - th - m };
+    tip.style.left = pick.x + 'px'; tip.style.top = pick.y + 'px';
+    if (pick.side) tip.setAttribute('data-side', pick.side); else tip.removeAttribute('data-side');
+    const ax = Math.min(tw - 24, Math.max(24, cx - pick.x)), ay = Math.min(th - 24, Math.max(24, cy - pick.y));
+    tip.style.setProperty('--arrow-x', ax + 'px');
+    tip.style.setProperty('--arrow-y', ay + 'px');
   }
   function guideReflow() { if (!guide.on) return; cancelAnimationFrame(guide.raf); guide.raf = requestAnimationFrame(guidePlace); }
   window.addEventListener('resize', guideReflow);
-  window.addEventListener('orientationchange', function () { setTimeout(guideReflow, 250); });
+  window.addEventListener('orientationchange', function () { setTimeout(function () { if (guide.on) { guideScrollTo(guideTarget(guide.steps[guide.i])); guideReflow(); } }, 250); });
   document.addEventListener('scroll', guideReflow, true);
 
   function guideEnd(skipAll) {
@@ -4801,6 +4905,7 @@
     }).catch(function () {});
   }
   window.guideNext = function () { guideGo(1); };
+  window.guidePrev = function () { guideGo(-1); };
   window.guideSkip = function () { guideEnd(false); };
   window.guideOff = function () { guideEnd(true); window.showToast('Panduan dimatikan. Buka lagi dari Profil.', 'info'); };
   window.guideClose = function () { guideEnd(false); };
@@ -4816,8 +4921,19 @@
     guideEnd(false);
     setTimeout(function () { el.click(); }, 60);
   });
+  // Esc = tutup, → = lanjut, ← = kembali; Tab berputar di dalam kartu.
   document.addEventListener('keydown', function (e) {
-    if (guide.on && e.key === 'Escape') { e.stopPropagation(); guideEnd(false); }
+    if (!guide.on) return;
+    if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); guideEnd(false); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); guideGo(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); guideGo(-1); }
+    else if (e.key === 'Tab') {
+      const f = Array.prototype.slice.call($('guide-tip').querySelectorAll('button'));
+      if (!f.length) return;
+      const i = f.indexOf(document.activeElement);
+      e.preventDefault();
+      f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    }
   }, true);
 
   // Dari Profil: putar ulang panduan halaman ini (tidak dicatat ke server).

@@ -141,6 +141,16 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
   return { page, context, errors, navigations };
 }
 
+// Average brightness (0–255) of a small screenshot area, read back through a canvas.
+async function brightness(page, x, y) {
+  const png = await page.screenshot({ clip: { x: Math.round(x), y: Math.round(y), width: 6, height: 6 } });
+  return page.evaluate(b64 => new Promise(res => {
+    const img = new Image();
+    img.onload = () => { const c = document.createElement('canvas'); c.width = 6; c.height = 6; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, 6, 6).data; let t = 0; for (let i = 0; i < d.length; i += 4) t += (d[i] + d[i + 1] + d[i + 2]) / 3; res(t / 36); };
+    img.src = 'data:image/png;base64,' + b64;
+  }), png.toString('base64'));
+}
 const overflowX = page => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 const visible = (page, sel) => page.locator(sel).first().isVisible();
 async function shot(page, name) {
@@ -992,23 +1002,38 @@ async function contrastReport(page) {
       const spot = document.getElementById('guide-spot').getBoundingClientRect();
       const tip = document.getElementById('guide-tip').getBoundingClientRect();
       const ring = document.querySelector('.portal-hero .ring-wrap').getBoundingClientRect();
-      const btns = Array.from(document.querySelectorAll('#guide-tip .btn')).map(b => Math.round(b.getBoundingClientRect().height));
+      const btns = Array.from(document.querySelectorAll('#guide-tip .btn, #guide-tip .guide-x, #guide-tip .guide-off')).map(b => Math.round(b.getBoundingClientRect().height));
       return { spotOk: spot.left <= ring.left && spot.right >= ring.right && spot.top <= ring.top && spot.bottom >= ring.bottom,
         tipIn: tip.left >= 0 && tip.right <= innerWidth && tip.top >= 0 && tip.bottom <= innerHeight,
         overlap: !(tip.bottom <= spot.top || tip.top >= spot.bottom), btns: btns,
-        dark: getComputedStyle(document.getElementById('guide-spot')).boxShadow.includes('0.8') };
+        dark: getComputedStyle(document.querySelector('#guide-hole')).fill.includes('0.85') };
     });
     check(geo.spotOk, 'guide: the bright box surrounds the highlighted element');
     check(geo.tipIn && !geo.overlap, 'guide: the text card fits the phone screen and does not cover the highlighted element');
     check(geo.btns.every(x => x >= 44), 'guide: guide buttons are at least 44 px (' + geo.btns.join(', ') + ')');
     check(geo.dark, 'guide: the rest of the screen is dark');
+    check((await brightness(page, 20, 470)) < 64, 'guide: the screen outside the highlight is really dark (light theme)');
+    check((await page.locator('#guide-tip .guide-dots i').count()) === 5 && (await page.textContent('#guide-tip .guide-count')) === '1/5', 'guide: progress dots show step 1 of 5');
     check((await overflowX(page)) <= 0, 'guide: no sideways scroll');
     await shot(page, 'guide-mobile-home');
     // Tapping the dark area does nothing.
     await page.mouse.click(10, 10);
     await page.waitForTimeout(200);
     check((await tipTitle(page)) === 'Sisa sesimu', 'guide: tapping the dark area does nothing');
-    for (let i = 0; i < 6 && (await tipTitle(page)) !== 'Booking latihan'; i++) { await page.click('#guide-next'); await page.waitForTimeout(450); }
+    await page.click('#guide-next');
+    await page.waitForTimeout(600);
+    check((await tipTitle(page)) === 'Sesi berikutnya' && await visible(page, '#guide-tip .guide-prev'), 'guide: step 2 has a "Kembali" button');
+    await page.click('#guide-tip .guide-prev');
+    await page.waitForTimeout(600);
+    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: "Kembali" goes back one step');
+    let clash = [];
+    for (let i = 0; i < 6 && (await tipTitle(page)) !== 'Booking latihan'; i++) {
+      await page.click('#guide-next'); await page.waitForTimeout(700);
+      const bad = await page.evaluate(() => { const a = document.getElementById('guide-spot').getBoundingClientRect(), b = document.getElementById('guide-tip').getBoundingClientRect();
+        return (b.top < a.bottom - 2 && b.bottom > a.top + 2) || b.bottom > innerHeight || b.top < 0 ? document.getElementById('guide-title').textContent : ''; });
+      if (bad) clash.push(bad);
+    }
+    check(!clash.length, 'guide: on the phone the card never covers the highlighted part' + (clash.length ? ' (' + clash.join(', ') + ')' : ''));
     check((await tipTitle(page)) === 'Booking latihan', 'guide: "Lanjut" steps through to the Booking button');
     await shot(page, 'guide-mobile-booking-button');
     const b = await page.evaluate(() => { const r = document.querySelector('.portal-actions .btn-primary').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
@@ -1018,9 +1043,9 @@ async function contrastReport(page) {
     check(await visible(page, '#modal-edit-schedule'), 'guide: tapping the highlighted Booking button opens the booking form');
     check(await visible(page, '#guide-layer') && (await tipTitle(page)) === 'Pilih tanggal & jam', 'guide: the booking form gets its own guide');
     await shot(page, 'guide-mobile-booking-form');
-    await page.click('#guide-tip .btn-ghost');
+    await page.click('#guide-tip .guide-x');
     await page.waitForTimeout(400);
-    check(!(await visible(page, '#guide-layer')) && guideCol().split('|').includes('booking'), 'guide: "Lewati" closes the guide and saves it');
+    check(!(await visible(page, '#guide-layer')) && guideCol().split('|').includes('booking'), 'guide: the × button closes the guide and saves it');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(600);
     await page.evaluate(() => window.navigate('public-catalog'));
@@ -1048,7 +1073,8 @@ async function contrastReport(page) {
     await page.click('#sheet-my-profile button:has-text("Lihat panduan")');
     await page.waitForTimeout(1400);
     check(await visible(page, '#guide-layer') && (await tipTitle(page)) === 'Sisa sesimu', 'guide: "Lihat panduan" in the profile replays the guide');
-    await page.click('#guide-tip .btn-ghost');
+    check(!(await page.locator('#guide-tip .guide-off').count()), 'guide: a replay has no "Jangan tampilkan lagi" link');
+    await page.click('#guide-tip .guide-x');
     await page.waitForTimeout(300);
     check(guideCol() === 'selesai', 'guide: a replay does not change what is saved');
     noErrors(errors);
@@ -1059,9 +1085,40 @@ async function contrastReport(page) {
     const dark = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500, colorScheme: 'dark' });
     await dark.page.waitForTimeout(800);
     check(await visible(dark.page, '#guide-layer'), 'guide: shows in the dark theme too');
+    check((await brightness(dark.page, 20, 470)) < 64, 'guide: the screen outside the highlight is really dark (dark theme)');
     await shot(dark.page, 'guide-mobile-home-dark');
     noErrors(dark.errors);
     await dark.context.close();
+
+    // Desktop: floating card with an arrow, beside the sidebar for the menu step.
+    const reg3 = env.call('registerNewClient', { name: 'Dina Desktop', phone: '6289900000003', goal: 'x', packageId: 'P1' });
+    for (const scheme of ['light', 'dark']) {
+      const dk = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg3.token }, { viewport: DESKTOP, wait: 1500, colorScheme: scheme });
+      await dk.page.waitForTimeout(900);
+      check(await visible(dk.page, '#guide-layer'), 'guide desktop (' + scheme + '): the home guide shows');
+      check((await brightness(dk.page, 700, 880)) < 64, 'guide desktop (' + scheme + '): the screen outside the highlight is dark');
+      await shot(dk.page, 'guide-desktop-home-' + scheme);
+      const seen = [];
+      for (let i = 0; i < 6 && (await tipTitle(dk.page)) !== 'Booking latihan'; i++) {
+        await dk.page.keyboard.press('ArrowRight'); await dk.page.waitForTimeout(700);
+        seen.push(await dk.page.evaluate(() => { const a = document.getElementById('guide-spot').getBoundingClientRect(), b = document.getElementById('guide-tip').getBoundingClientRect();
+          return { t: document.getElementById('guide-title').textContent, side: document.getElementById('guide-tip').getAttribute('data-side') || '',
+            clash: b.left < a.right - 2 && b.right > a.left + 2 && b.top < a.bottom - 2 && b.bottom > a.top + 2,
+            inside: b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight }; }));
+        if (seen[seen.length - 1].t === 'Menu') await shot(dk.page, 'guide-desktop-menu-' + scheme);
+      }
+      const menu = seen.find(x => x.t === 'Menu');
+      check(!!menu && !!menu.side && !menu.clash && (await dk.page.evaluate(() => !!document.querySelector('#side-nav'))), 'guide desktop (' + scheme + '): the menu step highlights the side menu, with an arrowed card beside it (' + (menu && menu.side) + ')');
+      check(seen.every(x => !x.clash && x.inside), 'guide desktop (' + scheme + '): the card stays on screen and never covers the highlight');
+      check((await dk.page.textContent('#guide-tip')).includes('Atau klik'), 'guide desktop (' + scheme + '): desktop wording says "klik"');
+      await dk.page.keyboard.press('ArrowLeft'); await dk.page.waitForTimeout(500);
+      check((await tipTitle(dk.page)) !== 'Booking latihan', 'guide desktop (' + scheme + '): the left arrow key goes back');
+      await dk.page.keyboard.press('Escape'); await dk.page.waitForTimeout(400);
+      check(!(await visible(dk.page, '#guide-layer')), 'guide desktop (' + scheme + '): Esc closes the guide');
+      noErrors(dk.errors);
+      await dk.context.close();
+      env.memberRow(reg3.id)[22] = 'baru';   // show it again for the other theme
+    }
 
     // An existing client logging in by WhatsApp never sees the guide.
     const old = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: env.memberToken(KEY_A) }, { wait: 1500 });

@@ -195,7 +195,8 @@ Sebelum deploy pertama fase ini, salin spreadsheet (File → Buat salinan). Shee
 
 Klien yang **mendaftar sendiri** (dari landing atau katalog portal) mendapat panduan langkah demi langkah di portal: layar digelapkan dan hanya tombol yang perlu diklik yang terang, dengan teks singkat dan tombol **Lanjut** / **Lewati**. Panduan muncul sekali per halaman (Beranda, form Booking, Jadwal, Paket, Coach). Klien lama yang masuk dengan nomor WA, klien yang perpanjang, dan klien yang kamu tambahkan sendiri **tidak** melihat panduan.
 
-- Klien bisa menekan **Jangan tampilkan panduan lagi**, dan memutar ulang kapan saja dari **Profil saya → Lihat panduan halaman ini**.
+- Di HP kartu panduan menempel di bawah (atau atas) layar dan halaman digulir supaya tombol yang disorot tidak tertutup; di desktop kartu muncul di samping tombol dengan panah. Ada titik progres, **Kembali**, **Lanjut**, dan **×** untuk menutup (di desktop juga tombol panah ← → dan Esc).
+- Klien bisa menekan **Jangan tampilkan lagi** (di langkah pertama), dan memutar ulang kapan saja dari **Profil saya → Lihat panduan halaman ini**.
 - Tercatat di kolom W `Panduan` sheet `MemberData` (`baru|beranda|…`, lalu `selesai`), jadi tetap jalan kalau klien ganti HP. Kolom dibuat otomatis saat pendaftaran pertama.
 - Nyala sejak awal. Matikan di **Pengaturan → Tampilan → Panduan klien baru** (langsung tersimpan; Script Property `CLIENT_GUIDE_ENABLED` = `false`).
 

@@ -25,7 +25,7 @@
   --on-ink-muted: #a7a7a4;
   --overlay: rgba(12, 12, 12, 0.42);
   /* Panduan klien baru: layar gelap di tema terang dan gelap */
-  --guide-scrim: rgba(0, 0, 0, 0.8);
+  --guide-scrim: rgba(0, 0, 0, 0.85);
   --guide-ring: rgba(255, 255, 255, 0.92);
   --focus: #0b0b0b;
   --heat-0: #ececea;
@@ -1294,23 +1294,50 @@ button.avatar { border: 0; cursor: pointer; }
 }
 /* ── Panduan klien baru: layar gelap, satu tombol disorot ─────────────────── */
 .guide-layer { position: fixed; inset: 0; z-index: 100; }
+.guide-scrim { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.guide-scrim path { fill: var(--guide-scrim); }
 .guide-block { position: absolute; inset: 0; cursor: default; touch-action: none; }
 .guide-spot {
   position: fixed; pointer-events: none; border-radius: var(--r-md);
-  box-shadow: 0 0 0 3px var(--guide-ring), 0 0 0 200vmax var(--guide-scrim);
+  box-shadow: 0 0 0 2px var(--guide-ring);
   transition: top var(--t-base) var(--ease-out), left var(--t-base) var(--ease-out), width var(--t-base) var(--ease-out), height var(--t-base) var(--ease-out);
+  animation: guidePulse 1.8s var(--ease) infinite;
 }
-.guide-spot.none { box-shadow: 0 0 0 200vmax var(--guide-scrim); width: 0; height: 0; }
+.guide-spot.none { display: none; }
+@keyframes guidePulse {
+  0% { box-shadow: 0 0 0 2px var(--guide-ring), 0 0 0 0 var(--guide-ring); }
+  70%, 100% { box-shadow: 0 0 0 2px var(--guide-ring), 0 0 0 12px transparent; }
+}
 .guide-tip {
-  position: fixed; width: min(340px, calc(100vw - 32px)); padding: 16px; border-radius: var(--r-lg);
-  background: var(--surface); color: var(--fg); box-shadow: var(--shadow-3);
+  position: fixed; width: 340px; padding: 14px 16px 16px; border-radius: var(--r-lg);
+  background: var(--surface); color: var(--fg); border: 1px solid var(--border); box-shadow: var(--shadow-3);
   display: flex; flex-direction: column; gap: 6px; animation: fadeUp var(--t-base) var(--ease-out) both;
+  transition: top var(--t-base) var(--ease-out), left var(--t-base) var(--ease-out);
 }
-.guide-tip .eyebrow { margin: 0; }
-.guide-tip h3 { font-size: var(--fs-lg); font-weight: 800; margin: 0; }
-.guide-tip p { margin: 0; color: var(--fg-2); font-size: var(--fs-md); line-height: 1.45; }
-.guide-tip .guide-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
-.guide-tip .guide-actions .btn { min-height: 44px; }
-.guide-tip .guide-off { align-self: flex-start; min-height: 44px; padding: 0; }
-@media (prefers-reduced-motion: reduce) { .guide-spot { transition: none; } .guide-tip { animation: none; } }
+.guide-head { display: flex; align-items: center; gap: 10px; margin: -6px -10px 2px 0; }
+.guide-dots { display: flex; gap: 5px; flex: 1; }
+.guide-dots i { width: 7px; height: 7px; border-radius: var(--r-full); background: var(--border-strong); transition: width var(--t-base) var(--ease-out), background var(--t-base) var(--ease); }
+.guide-dots i.done { background: var(--fg-muted); }
+.guide-dots i.on { width: 22px; background: var(--fg); }
+.guide-count { font-size: var(--fs-xs); font-weight: 700; color: var(--fg-muted); }
+.guide-x { width: 44px; height: 44px; }
+.guide-tip h3 { font-size: var(--fs-xl); font-weight: 800; letter-spacing: -0.01em; margin: 0; }
+.guide-tip .guide-text { margin: 0; color: var(--fg-2); font-size: var(--fs-md); line-height: 1.5; }
+.guide-tip .guide-hint { margin: 2px 0 0; display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); font-weight: 600; color: var(--fg-muted); }
+.guide-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.guide-actions .btn { min-height: 44px; }
+.guide-actions .guide-prev { padding-left: 8px; }
+.guide-actions .guide-off { padding: 0; margin: 0; }
+/* Panah ke target (desktop) */
+.guide-tip[data-side]::before { content: ''; position: absolute; width: 14px; height: 14px; background: var(--surface); border: 1px solid var(--border); transform: rotate(45deg); }
+.guide-tip[data-side="bottom"]::before { top: -8px; left: calc(var(--arrow-x, 50%) - 7px); border-right: 0; border-bottom: 0; }
+.guide-tip[data-side="top"]::before { bottom: -8px; left: calc(var(--arrow-x, 50%) - 7px); border-left: 0; border-top: 0; }
+.guide-tip[data-side="right"]::before { left: -8px; top: calc(var(--arrow-y, 50%) - 7px); border-right: 0; border-top: 0; }
+.guide-tip[data-side="left"]::before { right: -8px; top: calc(var(--arrow-y, 50%) - 7px); border-left: 0; border-bottom: 0; }
+/* HP: kartu menempel selebar layar, di atas tab bar (atau di bawah topbar) */
+@media (max-width: 767px) {
+  .guide-tip { width: calc(100vw - 32px); max-width: 480px; transition: top var(--t-base) var(--ease-out); }
+  .guide-tip[data-dock="bottom"] { animation-name: fadeUp; }
+}
+@media (prefers-reduced-motion: reduce) { .guide-spot { transition: none; animation: none; } .guide-tip { animation: none; transition: none; } }
 </style>
