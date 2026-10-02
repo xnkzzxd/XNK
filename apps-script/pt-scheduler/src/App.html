@@ -634,7 +634,10 @@
   const SET_RENDER = {
     tampilan: function () {
       return '<div class="card-flat stack"><span class="label">Tema tampilan</span><div class="seg" id="theme-seg-2" role="radiogroup" aria-label="Tema"></div>' +
-        '<p class="hint">Tersimpan di perangkat ini saja.</p></div>';
+        '<p class="hint">Tersimpan di perangkat ini saja.</p></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Panduan klien baru</p><p class="li-sub">Layar gelap yang menunjukkan tombol yang perlu diklik di portal, untuk klien yang baru daftar.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-client-guide" onchange="window.setClientGuide(this)" aria-label="Panduan klien baru"' + (setState.data.clientGuideEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Klien lama dan yang perpanjang tidak melihat panduan.</p></div>';
     },
     notifikasi: function () {
       const d = setState.data;
@@ -1368,6 +1371,7 @@
     updateBadges();
     syncSettingsBar();
     syncBack();
+    if (window.isPublicView && window.guideCheck) window.guideCheck();
   };
 
   function renderView(viewId, opts) {
@@ -1469,7 +1473,8 @@
     const panel = $('detail-panel');
     return (bkIsHome(window.currentView) ? 0 : 1)
       + (panel && panel.classList.contains('open') ? 1 : 0)
-      + (ui.sheetOn ? 1 : 0);
+      + (ui.sheetOn ? 1 : 0)
+      + (ui.guideOn ? 1 : 0);
   }
   function syncBack() {
     if (!isPhone() || !window.history || !history.pushState) return;
@@ -1491,7 +1496,8 @@
     if (!isPhone() || bk.n === 0) return;
     bk.n--;
     const panel = $('detail-panel');
-    if (ui.sheetOn) window.closeModal();
+    if (ui.guideOn) window.guideClose();
+    else if (ui.sheetOn) window.closeModal();
     else if (panel && panel.classList.contains('open')) window.closeDetail();
     else if (!bkIsHome(window.currentView)) window.navigate(window.isPublicView ? 'public-dashboard' : 'dashboard');
     syncBack();
@@ -2652,6 +2658,7 @@
     $('sch-submit-btn').textContent = window.isPublicView ? 'Kirim booking' : 'Simpan booking';
     prefillDateTime(opts.date, opts.time);
     openSheet('modal-edit-schedule');
+    if (window.isPublicView && window.guideCheck) window.guideCheck();
   };
 
   window.handleFabClick = function () {
@@ -4633,6 +4640,196 @@
     _selectDate(key);
   };
 
+  // ── Panduan klien baru ─────────────────────────────────────────────────────
+  // Layar digelapkan dan hanya tombol yang perlu diklik yang terang, per halaman,
+  // untuk klien yang mendaftar sendiri (server mengirim `guide` di profil; klien
+  // lama, perpanjang, dan klien dari admin tidak). Tiap halaman sekali; selesai
+  // atau "Lewati" dicatat lewat markGuideSeen. Target dicari ulang tiap kali
+  // diposisikan, jadi render ulang (data baru masuk) tidak merusak sorotan.
+  const GUIDE_STEPS = {
+    beranda: [
+      { sel: '.portal-hero .ring-wrap', title: 'Sisa sesimu', text: 'Lingkaran ini menunjukkan berapa sesi latihan yang masih bisa kamu pakai.' },
+      { sel: '#pub-next-session-card', title: 'Sesi berikutnya', text: 'Jadwal latihan terdekatmu muncul di sini, lengkap dengan hitung mundur dan tombol reschedule.' },
+      { sel: '.portal-actions .btn-secondary', title: 'Chat coach', text: 'Ada pertanyaan? Klik di sini untuk chat coach lewat WhatsApp.' },
+      { sel: '#tabbar, #side-nav', title: 'Menu', text: 'Pindah ke Jadwal, Paket, atau Coach dari sini.' },
+      { sel: '.portal-actions .btn-primary', title: 'Booking latihan', text: 'Sekarang coba klik Booking untuk memilih tanggal dan jam latihan pertamamu.', tap: true }
+    ],
+    booking: [
+      { sel: '#form-edit-schedule .two', title: 'Pilih tanggal & jam', text: 'Isi tanggal dan jam latihan yang kamu mau.' },
+      { sel: '#edit-sch-duration', up: '.field', title: 'Durasi', text: 'Biarkan 60 menit kalau belum diatur coach.' },
+      { sel: '#recurring-toggle-wrap', title: 'Jadwal berulang', text: 'Opsional: nyalakan untuk booking beberapa minggu sekaligus di hari yang sama.' },
+      { sel: '#sch-submit-btn', title: 'Kirim booking', text: 'Klik di sini kalau sudah pas. Coach akan mendapat jadwalmu.', tap: true }
+    ],
+    jadwal: [
+      { sel: '#month-cal', title: 'Kalender', text: 'Tanggal yang bertanda berisi sesimu. Klik tanggal untuk melihat jadwal hari itu.' },
+      { sel: '#day-panel', title: 'Jadwal hari ini', text: 'Daftar sesi di tanggal yang dipilih muncul di sini.' },
+      { sel: '#client-booking-fab, #view-calendar .page-head .btn-primary', title: 'Booking dari sini', text: 'Tombol ini juga membuka form booking.' }
+    ],
+    paket: [
+      { sel: '#category-button-container', title: 'Kategori', text: 'Pilih kategori paket yang sesuai.' },
+      { sel: '#pricelist-container .pkg-card', title: 'Pilih paket', text: 'Lihat isi dan harga paket, lalu klik "Pilih paket" untuk lanjut ke WhatsApp coach.' },
+      { sel: '#catalog-renew-btn', title: 'Perpanjang', text: 'Sesi hampir habis? Minta perpanjang paketmu dari sini.' }
+    ],
+    coach: [
+      { sel: '#public-coach-list .coach-card, #coach-profile-page .coach-hero, #coach-profile-page', title: 'Coach kamu', text: 'Kenali coach-mu: pengalaman, keahlian, dan testimoni klien.' },
+      { sel: '#public-coach-list .coach-card .btn-outline, #coach-profile-page .btn-primary', title: 'Hubungi coach', text: 'Klik untuk chat coach lewat WhatsApp.' }
+    ]
+  };
+  const GUIDE_VIEW_PAGE = { 'public-dashboard': 'beranda', 'calendar': 'jadwal', 'public-catalog': 'paket', 'public-coaches': 'coach' };
+  const guide = { on: false, page: null, steps: [], i: 0, replay: false, timer: null, raf: 0, tick: 0 };
+
+  function guideVisible(el) {
+    if (!el || !el.getClientRects().length) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+  function guideTarget(step) {
+    const list = document.querySelectorAll(step.sel);
+    for (let i = 0; i < list.length; i++) {
+      const el = step.up ? (list[i].closest(step.up) || list[i]) : list[i];
+      if (guideVisible(el)) return el;
+    }
+    return null;
+  }
+  function guidePage() {
+    const me = window.publicLoggedMember;
+    if (!window.isPublicView || !me) return null;
+    if (ui.sheetOn) {
+      const sh = $('modal-edit-schedule');
+      return sh && !sh.classList.contains('hide') && !window.isRescheduleMode && !window.isEditScheduleMode ? 'booking' : null;
+    }
+    return GUIDE_VIEW_PAGE[window.currentView] || null;
+  }
+
+  // Dipanggil setelah pindah halaman dan saat form booking dibuka.
+  window.guideCheck = function () {
+    clearTimeout(guide.timer);
+    guide.timer = setTimeout(function () {
+      const me = window.publicLoggedMember;
+      if (guide.on || !me || !me.guide) return;
+      const splash = $('global-loader');
+      if (splash && !splash.classList.contains('gone')) { window.guideCheck(); return; }
+      const page = guidePage();
+      if (page && (me.guide.done || []).indexOf(page) === -1) guideStart(page, false, 0);
+    }, 700);
+  };
+
+  function guideStart(page, replay, tries) {
+    const steps = (GUIDE_STEPS[page] || []).slice();
+    // Konten yang dimuat belakangan (mis. profil coach): tunggu sebentar.
+    if (!steps.some(guideTarget)) {
+      if (tries < 8) guide.timer = setTimeout(function () { if (guidePage() === page && !guide.on) guideStart(page, replay, tries + 1); }, 400);
+      return;
+    }
+    Object.assign(guide, { on: true, page: page, steps: steps, i: -1, replay: !!replay });
+    ui.guideOn = true;
+    $('guide-layer').classList.remove('hide');
+    clearInterval(guide.tick);
+    guide.tick = setInterval(guidePlace, 500);   // isi halaman bisa dirender ulang saat data masuk
+    syncBack();
+    guideGo(1);
+  }
+
+  // Maju (dir 1) ke langkah berikutnya yang targetnya terlihat; habis = selesai.
+  function guideGo(dir) {
+    let i = guide.i + dir;
+    while (i >= 0 && i < guide.steps.length && !guideTarget(guide.steps[i])) i += dir;
+    if (i < 0 || i >= guide.steps.length) { guideEnd(false); return; }
+    guide.i = i;
+    const el = guideTarget(guide.steps[i]);
+    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+    guideRenderTip();
+    guidePlace();
+    setTimeout(guidePlace, 380);
+  }
+
+  function guideRenderTip() {
+    const step = guide.steps[guide.i];
+    const total = guide.steps.filter(guideTarget).length || guide.steps.length;
+    const nr = guide.steps.slice(0, guide.i + 1).filter(guideTarget).length;
+    const last = !guide.steps.slice(guide.i + 1).some(guideTarget);
+    const tip = $('guide-tip');
+    tip.style.animation = 'none'; void tip.offsetWidth; tip.style.animation = '';
+    tip.innerHTML = '<p class="eyebrow">Panduan · ' + nr + ' / ' + total + '</p>' +
+      '<h3 id="guide-title">' + h(step.title) + '</h3><p>' + h(step.text) + '</p>' +
+      '<div class="guide-actions"><button type="button" class="btn btn-ghost" onclick="window.guideSkip()">' + (last ? 'Nanti saja' : 'Lewati') + '</button>' +
+      '<button type="button" class="btn btn-primary" id="guide-next" onclick="window.guideNext()">' + (last ? 'Mengerti' : 'Lanjut ' + icon('arrow-right')) + '</button></div>' +
+      (guide.replay ? '' : '<button type="button" class="link-btn guide-off" onclick="window.guideOff()">Jangan tampilkan panduan lagi</button>');
+    paintIcons();
+    try { $('guide-next').focus({ preventScroll: true }); } catch (e) {}
+  }
+
+  function guidePlace() {
+    if (!guide.on) return;
+    const step = guide.steps[guide.i];
+    const el = step && guideTarget(step);
+    const spot = $('guide-spot'), tip = $('guide-tip');
+    const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 14;
+    if (!el) { spot.classList.add('none'); tip.style.left = Math.max(16, (vw - tip.offsetWidth) / 2) + 'px'; tip.style.top = Math.max(16, (vh - tip.offsetHeight) / 2) + 'px'; return; }
+    spot.classList.remove('none');
+    const r = el.getBoundingClientRect();
+    const top = Math.max(4, r.top - pad), left = Math.max(4, r.left - pad);
+    const bottom = Math.min(vh - 4, r.bottom + pad), right = Math.min(vw - 4, r.right + pad);
+    Object.assign(spot.style, { top: top + 'px', left: left + 'px', width: Math.max(0, right - left) + 'px', height: Math.max(0, bottom - top) + 'px' });
+    spot.style.borderRadius = getComputedStyle(el).borderRadius === '0px' ? 'var(--r-md)' : 'calc(' + getComputedStyle(el).borderRadius + ' + ' + pad + 'px)';
+    const th = tip.offsetHeight, tw = tip.offsetWidth;
+    let y;
+    if (vh - bottom >= th + gap + 8) y = bottom + gap;
+    else if (top >= th + gap + 8) y = top - gap - th;
+    else y = vh - th - 16;   // target besar: kartu di bawah layar
+    tip.style.top = Math.max(8, y) + 'px';
+    tip.style.left = Math.min(vw - tw - 16, Math.max(16, (r.left + r.right) / 2 - tw / 2)) + 'px';
+  }
+  function guideReflow() { if (!guide.on) return; cancelAnimationFrame(guide.raf); guide.raf = requestAnimationFrame(guidePlace); }
+  window.addEventListener('resize', guideReflow);
+  window.addEventListener('orientationchange', function () { setTimeout(guideReflow, 250); });
+  document.addEventListener('scroll', guideReflow, true);
+
+  function guideEnd(skipAll) {
+    if (!guide.on) return;
+    const page = guide.page, replay = guide.replay;
+    guide.on = false; ui.guideOn = false;
+    clearInterval(guide.tick);
+    $('guide-layer').classList.add('hide');
+    syncBack();
+    const me = window.publicLoggedMember;
+    if (replay || !me || !me.guide) return;
+    if (skipAll) me.guide = null;
+    else if (me.guide.done.indexOf(page) === -1) me.guide.done.push(page);
+    memberCall('markGuideSeen', skipAll ? 'semua' : page).then(function (g) {
+      if (window.publicLoggedMember === me) me.guide = g;
+    }).catch(function () {});
+  }
+  window.guideNext = function () { guideGo(1); };
+  window.guideSkip = function () { guideEnd(false); };
+  window.guideOff = function () { guideEnd(true); window.showToast('Panduan dimatikan. Buka lagi dari Profil.', 'info'); };
+  window.guideClose = function () { guideEnd(false); };
+
+  // Klik di area gelap: hanya kotak yang disorot yang bisa diklik.
+  $('guide-block').addEventListener('click', function (e) {
+    const step = guide.steps[guide.i];
+    const el = step && guideTarget(step);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+    if (!step.tap) { guideGo(1); return; }
+    guideEnd(false);
+    setTimeout(function () { el.click(); }, 60);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (guide.on && e.key === 'Escape') { e.stopPropagation(); guideEnd(false); }
+  }, true);
+
+  // Dari Profil: putar ulang panduan halaman ini (tidak dicatat ke server).
+  window.guideReplay = function () {
+    window.closeModal();
+    setTimeout(function () {
+      const page = guidePage();
+      if (page) guideStart(page, true, 0);
+      else window.showToast('Panduan belum ada untuk halaman ini.', 'info');
+    }, 480);
+  };
+
 
   // Profil saya (portal klien): identitas, angka ringkas, kontak, tampilan, keluar.
   window.openMyProfile = function () {
@@ -4652,6 +4849,7 @@
       '<div class="card-flat">' + row('phone', 'WhatsApp', me.phone ? '+' + me.phone : '') + row('target', 'Tujuan', goal) + row('user-round', 'Coach', coach) + '</div>' +
       '<div class="btn-row"><button type="button" class="btn btn-secondary" onclick="window.closeModal();window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
       '<button type="button" class="btn btn-outline" onclick="window.closeModal();setTimeout(window.openSettings,300)">' + icon('sun-moon') + 'Tampilan</button></div>' +
+      '<button type="button" class="btn btn-outline btn-block" onclick="window.guideReplay()">' + icon('lightbulb') + 'Lihat panduan halaman ini</button>' +
       '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button>';
     openSheet('sheet-my-profile');
     paintIcons();
@@ -5443,6 +5641,15 @@
         '<button type="button" class="btn btn-outline btn-sm" onclick="window.finShareSave(\'' + h(c.id) + '\',this)">Simpan</button></div>';
     }).join('') || '<span class="li-sub">Belum ada coach.</span>';
   }
+  window.setClientGuide = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { clientGuideEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.clientGuideEnabled = s.clientGuideEnabled;
+      window.showToast(s.clientGuideEnabled ? 'Panduan klien baru aktif.' : 'Panduan klien baru dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
+
   function finSaveSettings(patch, then) {
     return adminCall('updateAppSettings', { finance: patch }).then(function (s) {
       if (setState.data) setState.data.finance = s.finance;

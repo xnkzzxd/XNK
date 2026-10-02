@@ -191,6 +191,14 @@ Tab **Coach** di panel adalah berandamu sebagai coach.
 
 Sebelum deploy pertama fase ini, salin spreadsheet (File → Buat salinan). Sheet baru dibuat otomatis: `CoachTimeOff`, `Assessments`, `FitnessTests`, `HealthScreening`; sheet `Coaches` dan `MemberData` hanya ditambah kolom di kanan.
 
+## Panduan klien baru (portal)
+
+Klien yang **mendaftar sendiri** (dari landing atau katalog portal) mendapat panduan langkah demi langkah di portal: layar digelapkan dan hanya tombol yang perlu diklik yang terang, dengan teks singkat dan tombol **Lanjut** / **Lewati**. Panduan muncul sekali per halaman (Beranda, form Booking, Jadwal, Paket, Coach). Klien lama yang masuk dengan nomor WA, klien yang perpanjang, dan klien yang kamu tambahkan sendiri **tidak** melihat panduan.
+
+- Klien bisa menekan **Jangan tampilkan panduan lagi**, dan memutar ulang kapan saja dari **Profil saya → Lihat panduan halaman ini**.
+- Tercatat di kolom W `Panduan` sheet `MemberData` (`baru|beranda|…`, lalu `selesai`), jadi tetap jalan kalau klien ganti HP. Kolom dibuat otomatis saat pendaftaran pertama.
+- Nyala sejak awal. Matikan di **Pengaturan → Tampilan → Panduan klien baru** (langsung tersimpan; Script Property `CLIENT_GUIDE_ENABLED` = `false`).
+
 ## Di HP: pasang dari Chrome, tarik untuk muat ulang, tombol back
 
 - **Pasang dari Chrome** (lebih baik daripada bungkus Kodular): buka xnk.my.id di Chrome → menu ⋮ → *Instal aplikasi* / *Tambahkan ke layar utama*. Ikonnya sama, selalu versi terbaru, dan tombol back bekerja normal.

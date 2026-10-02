@@ -15,7 +15,7 @@ test('getAppSettings returns today\'s defaults until the admin changes something
   const s = env.call('getAppSettings', token);
   delete s.reminder; delete s.finance; // reminder settings are covered by their own defaults
   assert.deepEqual(s, {
-    telegramEnabled: true, telegramBotToken: '', telegramBotTokenMask: '', telegramChatIds: '', notifEmail: '',
+    telegramEnabled: true, telegramBotToken: '', telegramBotTokenMask: '', telegramChatIds: '', notifEmail: '', clientGuideEnabled: true,
     defaults: { businessHours: DEFAULT_HOURS, loginMaxFails: 10, loginLockSeconds: 600, memberLoginMaxFails: 30, adminSessionDays: 30, rescheduleCutoffHours: 2 },
     businessHours: DEFAULT_HOURS,
     loginMaxFails: 10, loginLockSeconds: 600, memberLoginMaxFails: 30, adminSessionDays: 30, rescheduleCutoffHours: 2,
@@ -28,13 +28,13 @@ test('updateAppSettings saves every field, and getAppSettings reflects it back',
   const hours = Object.assign({}, DEFAULT_HOURS, { 0: [8, 10] });
   const res = env.call('updateAppSettings', token, {
     telegramEnabled: false, telegramBotToken: '123:abc', telegramChatIds: '1, 2',
-    notifEmail: 'owner@gym.test', businessHours: hours,
+    notifEmail: 'owner@gym.test', businessHours: hours, clientGuideEnabled: false,
     loginMaxFails: 3, loginLockSeconds: 120, memberLoginMaxFails: 5, adminSessionDays: 7,
   });
   const expected = {
     telegramEnabled: false, telegramBotToken: '', telegramBotTokenMask: '••••', telegramChatIds: '1, 2',
     defaults: { businessHours: DEFAULT_HOURS, loginMaxFails: 10, loginLockSeconds: 600, memberLoginMaxFails: 30, adminSessionDays: 30, rescheduleCutoffHours: 2 },
-    notifEmail: 'owner@gym.test', businessHours: hours,
+    notifEmail: 'owner@gym.test', businessHours: hours, clientGuideEnabled: false,
     loginMaxFails: 3, loginLockSeconds: 120, memberLoginMaxFails: 5, adminSessionDays: 7, rescheduleCutoffHours: 2,
   };
   delete res.reminder; delete res.finance;

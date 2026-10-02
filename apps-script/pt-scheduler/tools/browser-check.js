@@ -977,6 +977,118 @@ async function contrastReport(page) {
     await adm.context.close();
   }
 
+  // ── Panduan klien baru (portal): layar gelap, satu tombol disorot ─────────
+  console.log('Panduan klien baru · portal HP');
+  {
+    const env = richEnv();
+    const reg = env.call('registerNewClient', { name: 'Nadia Baru', phone: '6289900000001', goal: 'Weight Loss', packageId: 'P1' });
+    const guideCol = () => String(env.memberRow(reg.id)[22] || '');
+    const tipTitle = page => page.textContent('#guide-title').catch(() => '');
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg.token }, { wait: 1500 });
+    await page.waitForTimeout(800);
+    check(await visible(page, '#guide-layer'), 'guide: a new client sees the guide on the home screen');
+    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: the first step points at the remaining sessions');
+    const geo = await page.evaluate(() => {
+      const spot = document.getElementById('guide-spot').getBoundingClientRect();
+      const tip = document.getElementById('guide-tip').getBoundingClientRect();
+      const ring = document.querySelector('.portal-hero .ring-wrap').getBoundingClientRect();
+      const btns = Array.from(document.querySelectorAll('#guide-tip .btn')).map(b => Math.round(b.getBoundingClientRect().height));
+      return { spotOk: spot.left <= ring.left && spot.right >= ring.right && spot.top <= ring.top && spot.bottom >= ring.bottom,
+        tipIn: tip.left >= 0 && tip.right <= innerWidth && tip.top >= 0 && tip.bottom <= innerHeight,
+        overlap: !(tip.bottom <= spot.top || tip.top >= spot.bottom), btns: btns,
+        dark: getComputedStyle(document.getElementById('guide-spot')).boxShadow.includes('0.8') };
+    });
+    check(geo.spotOk, 'guide: the bright box surrounds the highlighted element');
+    check(geo.tipIn && !geo.overlap, 'guide: the text card fits the phone screen and does not cover the highlighted element');
+    check(geo.btns.every(x => x >= 44), 'guide: guide buttons are at least 44 px (' + geo.btns.join(', ') + ')');
+    check(geo.dark, 'guide: the rest of the screen is dark');
+    check((await overflowX(page)) <= 0, 'guide: no sideways scroll');
+    await shot(page, 'guide-mobile-home');
+    // Tapping the dark area does nothing.
+    await page.mouse.click(10, 10);
+    await page.waitForTimeout(200);
+    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: tapping the dark area does nothing');
+    for (let i = 0; i < 6 && (await tipTitle(page)) !== 'Booking latihan'; i++) { await page.click('#guide-next'); await page.waitForTimeout(450); }
+    check((await tipTitle(page)) === 'Booking latihan', 'guide: "Lanjut" steps through to the Booking button');
+    await shot(page, 'guide-mobile-booking-button');
+    const b = await page.evaluate(() => { const r = document.querySelector('.portal-actions .btn-primary').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await page.mouse.click(b.x, b.y);
+    await page.waitForTimeout(1600);
+    check(guideCol().split('|').includes('beranda'), 'guide: finishing the home guide is saved for this client');
+    check(await visible(page, '#modal-edit-schedule'), 'guide: tapping the highlighted Booking button opens the booking form');
+    check(await visible(page, '#guide-layer') && (await tipTitle(page)) === 'Pilih tanggal & jam', 'guide: the booking form gets its own guide');
+    await shot(page, 'guide-mobile-booking-form');
+    await page.click('#guide-tip .btn-ghost');
+    await page.waitForTimeout(400);
+    check(!(await visible(page, '#guide-layer')) && guideCol().split('|').includes('booking'), 'guide: "Lewati" closes the guide and saves it');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(600);
+    await page.evaluate(() => window.navigate('public-catalog'));
+    await page.waitForTimeout(1400);
+    check(await visible(page, '#guide-layer'), 'guide: the Paket page shows its guide the first time');
+    await page.goBack();
+    await page.waitForTimeout(500);
+    check(!(await visible(page, '#guide-layer')) && guideCol().split('|').includes('paket'), 'guide: the phone back gesture closes the guide');
+    await page.evaluate(() => window.navigate('public-coaches'));
+    await page.waitForTimeout(1600);
+    check(await visible(page, '#guide-layer'), 'guide: the Coach page shows its guide');
+    await page.click('#guide-tip .guide-off');
+    await page.waitForTimeout(500);
+    check(guideCol() === 'selesai', 'guide: "Jangan tampilkan panduan lagi" turns it off for good');
+    await page.reload();
+    await page.waitForTimeout(2200);
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(1200);
+    check(!(await visible(page, '#guide-layer')), 'guide: after that, no page shows the guide');
+    // Replay from the profile sheet, without saving anything.
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(800);
+    await page.evaluate(() => window.openMyProfile());
+    await page.waitForTimeout(500);
+    await page.click('#sheet-my-profile button:has-text("Lihat panduan")');
+    await page.waitForTimeout(1400);
+    check(await visible(page, '#guide-layer') && (await tipTitle(page)) === 'Sisa sesimu', 'guide: "Lihat panduan" in the profile replays the guide');
+    await page.click('#guide-tip .btn-ghost');
+    await page.waitForTimeout(300);
+    check(guideCol() === 'selesai', 'guide: a replay does not change what is saved');
+    noErrors(errors);
+    await context.close();
+
+    // Dark theme: the guide still reads well.
+    const reg2 = env.call('registerNewClient', { name: 'Raka Baru', phone: '6289900000002', goal: 'x', packageId: 'P1' });
+    const dark = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500, colorScheme: 'dark' });
+    await dark.page.waitForTimeout(800);
+    check(await visible(dark.page, '#guide-layer'), 'guide: shows in the dark theme too');
+    await shot(dark.page, 'guide-mobile-home-dark');
+    noErrors(dark.errors);
+    await dark.context.close();
+
+    // An existing client logging in by WhatsApp never sees the guide.
+    const old = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: env.memberToken(KEY_A) }, { wait: 1500 });
+    await old.page.waitForTimeout(900);
+    check(!(await visible(old.page, '#guide-layer')), 'guide: an existing client does not see the guide');
+    noErrors(old.errors);
+    await old.context.close();
+
+    // Owner switch in Pengaturan → Tampilan.
+    const adm = await openPage(browser, env, '/Index', [], { xnk_admin_token: env.adminToken() }, { viewport: DESKTOP, wait: 1500 });
+    await adm.page.evaluate(() => window.navigate('settings'));
+    await adm.page.waitForTimeout(1200);
+    await adm.page.evaluate(() => window.settingsOpen('tampilan'));
+    await adm.page.waitForTimeout(600);
+    check(await adm.page.isChecked('#set-client-guide'), 'guide: Pengaturan → Tampilan shows "Panduan klien baru" switched on');
+    await adm.page.click('#set-client-guide');
+    await adm.page.waitForTimeout(800);
+    check(env.props.CLIENT_GUIDE_ENABLED === 'false', 'guide: switching it off is saved');
+    noErrors(adm.errors);
+    await adm.context.close();
+    const off = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500 });
+    await off.page.waitForTimeout(900);
+    check(!(await visible(off.page, '#guide-layer')), 'guide: with the switch off, new clients see no guide');
+    noErrors(off.errors);
+    await off.context.close();
+  }
+
   // ── Tema manual ───────────────────────────────────────────────────────────
   console.log('Tema manual');
   {

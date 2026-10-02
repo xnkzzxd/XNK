@@ -37,6 +37,11 @@ The PIN is the `ADMIN_PIN` Script Property of the Apps Script project. Changing 
 every phone out. How to change it (also without opening the editor) is in
 [apps-script/README.md](apps-script/README.md).
 
+**New-client guide.** Clients who sign up themselves get a step-by-step guide in the
+client portal (dark screen, one highlighted button per step, once per page). Existing
+clients, renewals and clients added by the PT don't. It is on by default; switch it off
+in **Pengaturan → Tampilan → Panduan klien baru**.
+
 ## Common changes
 
 **Booking app URL.** It is written once, in the `src` of the `<iframe>` in
