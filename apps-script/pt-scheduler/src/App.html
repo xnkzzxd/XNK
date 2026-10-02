@@ -514,13 +514,14 @@
     ]
   };
   const TITLES = {
-    'dashboard': 'Dashboard', 'calendar': 'Jadwal', 'clients': 'Klien', 'coaches': 'Coach', 'settings': 'Pengaturan',
+    'dashboard': 'Dashboard', 'calendar': 'Jadwal', 'clients': 'Klien', 'coaches': 'Coach', 'finance': 'Keuangan', 'settings': 'Pengaturan',
     'public-login': 'Masuk member', 'public-dashboard': 'Beranda', 'public-catalog': 'Paket', 'public-coaches': 'Coach'
   };
 
   function buildChrome() {
     const items = NAV[ui.mode];
-    setHTML('side-nav', items.map(function (n) {
+    const sideItems = items.concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
+    setHTML('side-nav', sideItems.map(function (n) {
       return '<button type="button" class="nav-item" data-view="' + n[0] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
         icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' +
         (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="nav-badge hide" id="nav-unread-badge"></span>' : '') + '</button>';
@@ -543,6 +544,7 @@
     setHTML('tabbar', tab(t[0]) + tab(t[1]) + fab + tab(t[2]) + tab(t[3]));
     renderTopbarActions();
     renderThemeSeg();
+    finTiles();
     const sa = $('settings-admin');
     if (sa) sa.classList.toggle('hide', ui.mode !== 'admin');
   }
@@ -579,6 +581,7 @@
     ['pengingat', 'bell', 'Pengingat Klien'],
     ['notifikasi', 'send', 'Notifikasi Admin'],
     ['jam', 'calendar-clock', 'Jam Operasional'],
+    ['keuangan', 'wallet', 'Keuangan'],
     ['keamanan', 'lock', 'Keamanan'],
     ['akun', 'user-plus', 'Akun']
   ];
@@ -666,6 +669,7 @@
         '<div class="group-label"><span>Batas &amp; sesi</span></div><div class="form-grid">' +
         setNumField('loginMaxFails') + setNumField('loginLockSeconds') + setNumField('memberLoginMaxFails') + setNumField('adminSessionDays') + setNumField('rescheduleCutoffHours') + '</div>';
     },
+    keuangan: function () { return finSettingsHtml(); },
     akun: function () {
       return '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
         '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>';
@@ -764,6 +768,7 @@
       case 'notifikasi': return d.telegramEnabled ? (d.telegramBotTokenMask ? 'Telegram aktif' : 'Telegram: token belum diisi') : 'Telegram mati';
       case 'jam': return 'Buka ' + Object.keys(d.businessHours || {}).length + ' hari';
       case 'keamanan': return 'Sesi ' + d.adminSessionDays + ' hari';
+      case 'keuangan': return d.finance && d.finance.enabled ? 'Aktif' : 'Mati';
       default: return '';
     }
   }
@@ -1121,6 +1126,7 @@
     paintIcons();
     if (id === 'tampilan') renderThemeSeg();
     if (id === 'paket') pkgLoad();
+    if (id === 'keuangan') finSettingsLoad();
     if (id === 'pengingat') { setState.log = null; window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); rmdPreviewAll(); }
     refreshSettingsNav();
     const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 });
@@ -1326,7 +1332,7 @@
   };
 
   // ── Navigasi ────────────────────────────────────────────────────────────────
-  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'settings', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches'];
+  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches'];
 
   window.navigate = function (viewId, opts) {
     opts = opts || {};
@@ -1373,6 +1379,7 @@
         case 'calendar': renderSchedule(); break;
         case 'clients': renderClients(); break;
         case 'coaches': renderCoaches(); break;
+        case 'finance': renderFinance(); break;
         case 'settings': window.renderSettings(); break;
         case 'public-login': renderPublicLogin(); break;
         case 'public-dashboard': window.renderPublicDashboard(); break;
@@ -1813,9 +1820,14 @@
   function loadRevenue() {
     const now = new Date();
     ui.revenue = null;
-    adminCall('getRevenueSummary', now.getMonth() + 1, now.getFullYear())
-      .then(function (res) { ui.revenue = res || { total: 0, count: 0 }; renderRevenueKpi(); })
-      .catch(function () { ui.revenue = { error: true }; renderRevenueKpi(); });
+    const sp = setState.pre && setState.pre.settings ? setState.pre.settings : adminCall('getAppSettings');
+    sp.catch(function () { return null; }).then(function (s) {
+      if (s && s.finance) finApplySettings(s.finance);
+      if (s && s.finance && s.finance.enabled) {
+        return adminCall('getFinanceOverview', now.getMonth() + 1, now.getFullYear()).then(function (o) { ui.revenue = { fin: true, o: o }; renderRevenueKpi(); });
+      }
+      return adminCall('getRevenueSummary', now.getMonth() + 1, now.getFullYear()).then(function (res) { ui.revenue = res || { total: 0, count: 0 }; renderRevenueKpi(); });
+    }).catch(function () { ui.revenue = { error: true }; renderRevenueKpi(); });
   }
 
   // ── Badge booking baru ─────────────────────────────────────────────────────
@@ -2025,8 +2037,11 @@
     let body;
     if (!r) body = '<span class="skeleton" style="height:30px;width:60%;background:color-mix(in srgb,var(--on-ink) 14%,transparent)"></span><span class="kpi-note">Menghitung…</span>';
     else if (r.error) body = '<span class="kpi-value">–</span><span class="kpi-note">Belum bisa dimuat</span>';
+    else if (r.fin) body = '<span class="kpi-value" id="kpi-revenue">' + h(rupiahShort(r.o.masuk || 0)) + '</span><span class="kpi-note">Laba ' + h(rupiahShort(r.o.laba || 0)) + ' · tunggakan ' + h(rupiahShort(r.o.tunggakan || 0)) + '</span>';
     else body = '<span class="kpi-value" id="kpi-revenue">' + h(rupiahShort(r.total || 0)) + '</span><span class="kpi-note">' + Math.round((r.share || 0.65) * 100) + '% dari harga paket · ' + (r.count || 0) + ' pembelian/perpanjangan</span>';
-    el.innerHTML = '<div class="row-between"><span class="kpi-label">Pendapatan paket · ' + h(month) + '</span><span class="kpi-icon">' + icon('wallet') + '</span></div>' + body;
+    el.innerHTML = '<div class="row-between"><span class="kpi-label">' + (r && r.fin ? 'Keuangan bulan ini' : 'Pendapatan paket') + ' · ' + h(month) + '</span><span class="kpi-icon">' + icon('wallet') + '</span></div>' + body;
+    el.onclick = r && r.fin ? window.finGo : null;
+    el.style.cursor = r && r.fin ? 'pointer' : '';
     paintIcons();
   }
 
@@ -5024,6 +5039,436 @@
     document.querySelectorAll('[data-countdown]').forEach(function (n) { n.textContent = timeUntil(new Date(Number(n.getAttribute('data-countdown')))); });
     document.querySelectorAll('[data-countdown-long]').forEach(function (n) { n.textContent = countdownText(new Date(Number(n.getAttribute('data-countdown-long')))); });
   }, 1000);
+
+  // ── Keuangan (Fase H): tagihan, pembayaran, pengeluaran, laporan ─────────────
+  const FIN_STATUS_PILL = { 'Lunas': 'pill solid', 'DP': 'pill', 'Belum bayar': 'pill dashed' };
+  const fin = { month: new Date().getMonth() + 1, year: new Date().getFullYear(), tab: 'bills', filter: 'open', ov: null, bills: null, exps: null, arrears: null, cats: null, methods: ['Tunai', 'Transfer bank', 'QRIS / e-wallet'], portal: false, billId: null, payPick: '', payId: null, expId: null, proof: null };
+  const finRp = function (n) { return (n < 0 ? '−' : '') + 'Rp ' + String(Math.abs(Math.round(n || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+  const finNum = function (s) { return parseInt(String(s || '').replace(/\D/g, ''), 10) || 0; };
+  function finOn() { try { return localStorage.getItem('xnk_fin_on') === '1'; } catch (e) { return false; } }
+  function finApplySettings(f) {
+    if (!f) return;
+    let was = finOn();
+    try { localStorage.setItem('xnk_fin_on', f.enabled ? '1' : '0'); } catch (e) {}
+    fin.methods = f.methods && f.methods.length ? f.methods : fin.methods;
+    fin.portal = !!f.portalVisible;
+    if (was !== !!f.enabled && ui.mode === 'admin') buildChrome();
+    finTiles();
+  }
+  function finTiles() { document.querySelectorAll('.fin-tile').forEach(function (t) { t.classList.toggle('hide', !(ui.mode === 'admin' && finOn())); }); }
+  function finErr(err) { window.showToast('Gagal: ' + window.authMessage(err)); }
+  function finMonthLabel() { return MONTHS[fin.month - 1] + ' ' + fin.year; }
+  function finToday() { return ymd(new Date()); }
+
+  window.finGo = function () { if (finOn()) window.navigate('finance'); };
+  window.finMonth = function (d) {
+    let m = fin.month + d, y = fin.year;
+    if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
+    fin.month = m; fin.year = y;
+    finLoad();
+  };
+  window.finTab = function (t) { fin.tab = t; fin.filter = t === 'bills' ? 'open' : 'all'; renderFinance(true); finLoadTab(); };
+  window.finFilter = function (f) { fin.filter = f; finLoadTab(); finRenderList(); };
+
+  function renderFinance(keepData) {
+    const el = $('view-finance');
+    if (!el) return;
+    if (!finOn()) { el.innerHTML = emptyState('wallet', 'Keuangan belum aktif', 'Nyalakan di Pengaturan → Keuangan.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.navigate(\'settings\')">Buka Pengaturan</button>'); paintIcons(); return; }
+    const tabs = [['bills', 'Tagihan'], ['exps', 'Pengeluaran'], ['report', 'Laporan']].map(function (t) {
+      return '<button type="button" class="chip' + (fin.tab === t[0] ? ' active' : '') + '" onclick="window.finTab(\'' + t[0] + '\')">' + t[1] + '</button>';
+    }).join('');
+    el.innerHTML = '<div class="page-head"><div><h1 class="page-title">Keuangan</h1><p class="page-sub">Tagihan, pembayaran, dan pengeluaran</p></div>' +
+      '<div class="btn-row"><button type="button" class="btn btn-secondary btn-sm" onclick="window.finOpenExpense(null)">' + icon('receipt') + 'Pengeluaran</button>' +
+      '<button type="button" class="btn btn-primary btn-sm" onclick="window.finOpenPayment(null)">' + icon('banknote') + 'Pembayaran</button></div></div>' +
+      '<div class="stack" style="gap:var(--gap)"><div class="row-between"><button type="button" class="icon-btn" onclick="window.finMonth(-1)" aria-label="Bulan sebelumnya">' + icon('chevron-left') + '</button>' +
+      '<b id="fin-month">' + h(finMonthLabel()) + '</b><button type="button" class="icon-btn" onclick="window.finMonth(1)" aria-label="Bulan berikutnya">' + icon('chevron-right') + '</button></div>' +
+      '<div id="fin-head"></div><div class="chips" role="tablist" aria-label="Bagian keuangan">' + tabs + '</div><div id="fin-filters"></div><div id="fin-list" class="stack"></div></div>';
+    paintIcons();
+    finRenderHead();
+    finRenderList();
+    if (!keepData) finLoad();
+  }
+  function finLoad() {
+    fin.ov = null; fin.bills = null; fin.exps = null; fin.arrears = null;
+    const mEl = $('fin-month'); if (mEl) mEl.textContent = finMonthLabel();
+    finRenderHead(); finRenderList();
+    adminCall('getFinanceOverview', fin.month, fin.year).then(function (ov) { fin.ov = ov; finRenderHead(); finRenderList(); }).catch(finErr);
+    finLoadTab();
+  }
+  function finLoadTab() {
+    const m = fin.month, y = fin.year;
+    if (fin.tab === 'bills') {
+      const f = fin.filter, q = {};
+      if (f === 'arsip') q.archived = true;
+      else if (f === 'open') q.status = 'open';
+      else { q.month = m; q.year = y; if (f !== 'all') q.status = f; }
+      fin.bills = null; finRenderList();
+      adminCall('getBills', q).then(function (r) { fin.bills = r; finRenderList(); }).catch(finErr);
+    } else if (fin.tab === 'exps') {
+      fin.exps = null; finRenderList();
+      adminCall('getExpenses', { month: m, year: y, archived: fin.filter === 'arsip' }).then(function (r) { fin.exps = r; finRenderList(); }).catch(finErr);
+    } else {
+      fin.exps = null; fin.arrears = null; finRenderList();
+      adminCall('getExpenses', { month: m, year: y }).then(function (r) { fin.exps = r; finRenderList(); }).catch(finErr);
+      adminCall('getBills', { status: 'open' }).then(function (r) { fin.arrears = r; finRenderList(); }).catch(finErr);
+    }
+  }
+  function finRenderHead() {
+    const el = $('fin-head');
+    if (!el) return;
+    const o = fin.ov;
+    const k = function (label, val, note, ic, on) {
+      return '<div class="kpi"' + (on ? ' role="button" tabindex="0" onclick="' + on + '"' : '') + '><div class="row-between"><span class="kpi-label">' + label + '</span><span class="kpi-icon">' + icon(ic) + '</span></div>' +
+        '<span class="kpi-value num">' + (o ? h(finRp(val)) : '<span class="skeleton" style="height:26px;width:70%"></span>') + '</span><span class="kpi-note">' + h(note) + '</span></div>';
+    };
+    let bars = '';
+    if (o) {
+      const max = Math.max(1, Math.max.apply(null, o.series.map(function (s) { return Math.max(s.masuk, s.keluar); })));
+      bars = '<div class="card-flat"><div class="section-head"><h4 class="li-title">6 bulan terakhir</h4><span class="li-sub">masuk vs keluar</span></div><div class="bars" id="fin-bars">' +
+        o.series.map(function (s) {
+          return '<div class="bar-col"><div class="bar-track" style="gap:3px;align-items:flex-end"><div class="bar" data-h="' + Math.max(s.masuk ? 6 : 2, Math.round(s.masuk / max * 100)) + '" data-tip="' + h(finRp(s.masuk)) + '"></div>' +
+            '<div class="bar soft" data-h="' + Math.max(s.keluar ? 6 : 2, Math.round(s.keluar / max * 100)) + '" data-tip="' + h(finRp(s.keluar)) + '"></div></div><span class="bar-lbl">' + MONTHS[s.month - 1].slice(0, 3) + '</span></div>';
+        }).join('') + '</div></div>';
+    }
+    el.innerHTML = '<div class="kpi-grid">' + k('Masuk', o && o.masuk, 'Pembayaran diterima', 'arrow-down-left') + k('Keluar', o && o.keluar, 'Pengeluaran', 'arrow-up-right') +
+      k('Laba', o && o.laba, 'Masuk − keluar', 'trending-up') + k('Tunggakan', o && o.tunggakan, o ? o.openBills + ' tagihan belum lunas' : '', 'clock', 'window.finFilter(\'open\');window.finTab(\'bills\')') + '</div>' + bars;
+    paintIcons();
+    el.querySelectorAll('.bar').forEach(function (b, i) { setTimeout(function () { b.style.height = b.getAttribute('data-h') + '%'; }, 40 + i * 30); });
+  }
+  function finChip(label, val) { return '<button type="button" class="chip' + (fin.filter === val ? ' active' : '') + '" onclick="window.finFilter(\'' + val + '\')">' + label + '</button>'; }
+  function finRenderList() {
+    const el = $('fin-list'), fl = $('fin-filters');
+    if (!el || !fl) return;
+    const skel = '<div class="skeleton" style="height:64px"></div><div class="skeleton" style="height:64px"></div>';
+    if (fin.tab === 'bills') {
+      fl.innerHTML = '<div class="chips">' + finChip('Belum lunas', 'open') + finChip('Semua bulan ini', 'all') + finChip('DP', 'DP') + finChip('Lunas', 'Lunas') + finChip('Arsip', 'arsip') + '</div>';
+      if (!fin.bills) { el.innerHTML = skel; return; }
+      el.innerHTML = fin.bills.length ? '<div class="list">' + fin.bills.map(finBillRow).join('') + '</div>' : emptyState('receipt', fin.filter === 'open' ? 'Tidak ada tunggakan' : 'Belum ada tagihan', 'Tagihan dibuat otomatis saat ada paket baru atau perpanjangan.');
+    } else if (fin.tab === 'exps') {
+      fl.innerHTML = '<div class="chips">' + finChip('Bulan ini', 'all') + finChip('Arsip', 'arsip') + '</div>';
+      if (!fin.exps) { el.innerHTML = skel; return; }
+      el.innerHTML = fin.exps.length ? '<div class="list">' + fin.exps.map(finExpRow).join('') + '</div>' : emptyState('receipt', 'Belum ada pengeluaran', 'Catat sewa tempat, alat, iklan, dan lainnya.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.finOpenExpense(null)">' + icon('plus') + 'Pengeluaran</button>');
+    } else {
+      fl.innerHTML = '';
+      el.innerHTML = finReportHtml();
+    }
+    paintIcons();
+  }
+  function finBillRow(b) {
+    return '<div class="list-item" data-key="bill:' + h(b.id) + '" role="button" tabindex="0" onclick="window.finOpenBill(\'' + h(b.id) + '\')" style="min-height:56px">' +
+      '<div style="min-width:0"><p class="li-title truncate">' + h(b.name || '(Tanpa nama)') + '</p><p class="li-sub truncate">' + h(b.packageName) + ' · ' + h(b.date) + (b.remaining ? ' · sisa ' + h(finRp(b.remaining)) : '') + '</p></div>' +
+      '<span class="li-trail">' + (b.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();window.finRestore(\'bill\',\'' + h(b.id) + '\')">Pulihkan</button>' : '<span class="' + FIN_STATUS_PILL[b.status] + '">' + h(b.status) + '</span>' + icon('chevron-right')) + '</span></div>';
+  }
+  function finExpRow(e) {
+    return '<div class="list-item" role="button" tabindex="0" onclick="window.finOpenExpense(\'' + h(e.id) + '\')" style="min-height:56px">' +
+      '<div style="min-width:0"><p class="li-title truncate">' + h(e.category) + (e.note ? ' · ' + h(e.note) : '') + '</p><p class="li-sub">' + h(e.date) + ' · ' + h(e.method) + (e.hasProof ? ' · 📎' : '') + '</p></div>' +
+      '<span class="li-trail">' + (e.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();window.finRestore(\'expense\',\'' + h(e.id) + '\')">Pulihkan</button>' : '<b class="num">' + h(finRp(e.amount)) + '</b>') + '</span></div>';
+  }
+  function finReportHtml() {
+    const o = fin.ov;
+    let html = '<div class="card-flat stack"><h4 class="li-title">Bagi hasil coach · ' + h(finMonthLabel()) + '</h4>';
+    if (!o) html += '<div class="skeleton" style="height:40px"></div>';
+    else if (!o.coachShare.length) html += '<p class="li-sub">Belum ada tagihan lunas atau sesi selesai bulan ini.</p>';
+    else html += '<div class="kv">' + o.coachShare.map(function (c) {
+      return '<div><p class="k">' + h(c.name || '(Tanpa coach)') + ' · ' + (c.tipe === 'persen' ? c.nilai + '%' : finRp(c.nilai) + '/sesi' + (c.sesi ? ' × ' + c.sesi : '')) + '</p><p class="v num">' + h(finRp(c.amount)) + '</p></div>';
+    }).join('') + '</div>';
+    html += '</div>';
+    const cats = {};
+    (fin.exps || []).forEach(function (e) { cats[e.category] = (cats[e.category] || 0) + e.amount; });
+    const keys = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; });
+    const total = keys.reduce(function (s, k) { return s + cats[k]; }, 0) || 1;
+    html += '<div class="card-flat stack"><h4 class="li-title">Pengeluaran per kategori</h4>' + (fin.exps ? (keys.length ? keys.map(function (k) {
+      return '<div class="hbar"><span class="li-sub">' + h(k) + '</span><b class="num">' + h(finRp(cats[k])) + '</b><div class="hbar-track"><div style="height:100%;width:' + Math.round(cats[k] / total * 100) + '%;background:var(--fg)"></div></div></div>';
+    }).join('') : '<p class="li-sub">Belum ada pengeluaran bulan ini.</p>') : '<div class="skeleton" style="height:40px"></div>') + '</div>';
+    html += '<div class="card-flat stack"><h4 class="li-title">Daftar tunggakan</h4>' + (fin.arrears ? (fin.arrears.length ? '<div class="list">' + fin.arrears.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).map(function (b) {
+      return '<div class="list-item" role="button" tabindex="0" onclick="window.finOpenBill(\'' + h(b.id) + '\')"><div style="min-width:0"><p class="li-title truncate">' + h(b.name) + '</p><p class="li-sub">' + h(b.packageName) + ' · ' + b.ageDays + ' hari</p></div><span class="li-trail"><b class="num">' + h(finRp(b.remaining)) + '</b></span></div>';
+    }).join('') + '</div>' : '<p class="li-sub">Semua tagihan lunas.</p>') : '<div class="skeleton" style="height:40px"></div>') + '</div>';
+    const first = fin.year + '-' + ('0' + fin.month).slice(-2) + '-01', last = fin.year + '-' + ('0' + fin.month).slice(-2) + '-' + ('0' + new Date(fin.year, fin.month, 0).getDate()).slice(-2);
+    html += '<div class="card-flat stack"><h4 class="li-title">Ekspor CSV</h4><div class="two"><input class="input" type="date" id="fin-exp-from" value="' + first + '" aria-label="Dari"><input class="input" type="date" id="fin-exp-to" value="' + last + '" aria-label="Sampai"></div>' +
+      '<div class="btn-row"><button type="button" class="btn btn-outline btn-sm" onclick="window.finExport(\'pembayaran\',this)">Pembayaran</button><button type="button" class="btn btn-outline btn-sm" onclick="window.finExport(\'pengeluaran\',this)">Pengeluaran</button><button type="button" class="btn btn-outline btn-sm" onclick="window.finExport(\'tagihan\',this)">Tagihan</button></div></div>';
+    return html;
+  }
+  window.finExport = function (kind, btn) {
+    const done = busy(btn, 'Mengekspor…');
+    adminCall('exportFinanceCsv', kind, $('fin-exp-from').value, $('fin-exp-to').value).then(function (r) {
+      done();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([r.csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = r.filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.showToast(r.count + ' baris diekspor.');
+    }).catch(function (err) { done(); finErr(err); });
+  };
+  window.finRestore = function (kind, id) {
+    adminCall('restoreFinanceItem', kind, id).then(function () { window.showToast('Dipulihkan.'); finLoad(); }).catch(finErr);
+  };
+
+  // Detail tagihan
+  window.finOpenBill = function (id) {
+    adminCall('getBillDetail', id).then(function (r) {
+      const b = r.bill;
+      fin.billId = id;
+      const pays = r.payments.map(function (p) {
+        return '<div class="tl-item"><div class="tl-card"><div class="row-between"><b>' + h(finRp(p.amount)) + '</b><span class="li-sub">' + h(p.date) + '</span></div>' +
+          '<p class="li-sub">' + h(p.method) + (p.note ? ' · ' + h(p.note) : '') + (p.hasProof ? ' · 📎' : '') + (p.archived ? ' · diarsipkan' : '') + '</p>' +
+          '<div class="btn-row">' + (p.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.finRestore(\'payment\',\'' + h(p.id) + '\')">Pulihkan</button>' : '<button type="button" class="btn btn-outline btn-sm" onclick="window.finOpenPayment(\'' + h(p.id) + '\')">Ubah</button>') + '</div></div></div>';
+      }).join('');
+      const wa = b.phone ? '<button type="button" class="btn btn-secondary" onclick="window.finBill_wa(\'' + h(id) + '\')">' + icon('message-circle') + 'WA tagih</button>' : '';
+      fin.detail = r;
+      openDetail('bill:' + id, b.name || 'Tagihan',
+        '<button type="button" class="icon-btn" onclick="window.finBillMenu(\'' + h(id) + '\')" aria-label="Menu tagihan">' + icon('more-horizontal') + '</button>',
+        '<div class="stack"><p class="li-sub">' + h(b.packageName) + ' · ' + h(b.date) + '</p>' +
+        '<div class="kv"><div><p class="k">Total</p><p class="v num">' + h(finRp(b.total)) + '</p></div><div><p class="k">Diskon</p><p class="v num">' + h(finRp(b.discount)) + '</p></div>' +
+        '<div><p class="k">Dibayar</p><p class="v num">' + h(finRp(b.paid)) + '</p></div><div><p class="k">Sisa</p><p class="v num">' + h(finRp(b.remaining)) + ' <span class="' + FIN_STATUS_PILL[b.status] + '">' + h(b.status) + '</span></p></div></div>' +
+        (b.note ? '<p class="li-sub">' + h(b.note) + '</p>' : '') +
+        '<div class="group-label"><span>Pembayaran</span></div>' + (pays ? '<div class="timeline">' + pays + '</div>' : '<p class="li-sub">Belum ada pembayaran.</p>') +
+        '<div class="btn-row" style="position:sticky;bottom:0;background:var(--bg);padding:8px 0">' + wa +
+        (b.remaining ? '<button type="button" class="btn btn-outline" onclick="window.finOpenPayment(null,\'' + h(id) + '\',' + b.remaining + ')">Lunasi</button>' : '') +
+        '<button type="button" class="btn btn-primary" onclick="window.finOpenPayment(null,\'' + h(id) + '\')">' + icon('plus') + 'Bayar</button></div></div>');
+    }).catch(finErr);
+  };
+  window.finBill_wa = function (id) {
+    const b = fin.detail && fin.detail.bill;
+    if (!b || !b.phone) return;
+    const first = String(b.name || '').split(' ')[0] || '';
+    const text = 'Hai ' + first + ', sisa pembayaran paket ' + b.packageName + ' Rp' + String(b.remaining).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '. Terima kasih 🙏';
+    window.open('https://wa.me/' + String(b.phone).replace(/\D/g, '') + '?text=' + encodeURIComponent(text), '_blank');
+  };
+  window.finBillMenu = function (id) {
+    const b = fin.detail && fin.detail.bill;
+    if (!b) return;
+    $('fin-bill-title').textContent = b.name || 'Tagihan';
+    $('fin-bill-discount').value = b.discount ? String(b.discount).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+    $('fin-bill-total').value = String(b.total).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    $('fin-bill-reason').value = '';
+    $('fin-bill-note').value = b.note || '';
+    $('fin-bill-err').textContent = '';
+    openSheet('sheet-fin-bill');
+  };
+  window.finBillSave = function (e) {
+    e.preventDefault();
+    const b = fin.detail.bill, btn = $('fin-bill-save'), done = busy(btn, 'Menyimpan…');
+    adminCall('saveBillAdjust', b.id, { diskon: finNum($('fin-bill-discount').value), total: finNum($('fin-bill-total').value), alasan: $('fin-bill-reason').value, catatan: $('fin-bill-note').value }).then(function () {
+      done(); window.closeModal(); window.showToast('Tagihan disimpan.'); window.finOpenBill(b.id); finLoad();
+    }).catch(function (err) { done(); $('fin-bill-err').textContent = window.authMessage(err); });
+  };
+  window.finBillArchive = function () {
+    const id = fin.detail.bill.id;
+    adminCall('archiveFinanceItem', 'bill', id).then(function () { window.closeModal(); window.closeDetail(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+  };
+
+  // Sheet pembayaran / pengeluaran
+  window.finFmt = function (el) { const n = finNum(el.value); el.value = n ? String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''; };
+  function finChips(id, list, sel) {
+    return list.map(function (v) { return '<button type="button" class="chip' + (v === sel ? ' active' : '') + '" data-v="' + h(v) + '" onclick="window.finPick(\'' + id + '\',this)">' + h(v) + '</button>'; }).join('');
+  }
+  window.finPick = function (id, btn) {
+    $(id).querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('active', c === btn); });
+  };
+  function finPicked(id) { const c = $(id).querySelector('.chip.active'); return c ? c.getAttribute('data-v') : ''; }
+  function finCats(type) {
+    return (fin.cats || []).filter(function (c) { return c.type === type && c.active; }).map(function (c) { return c.name; });
+  }
+  function finEnsureCats() {
+    return fin.cats ? Promise.resolve(fin.cats) : adminCall('getFinanceCategories').then(function (c) { fin.cats = c; return c; });
+  }
+  function finShrink(file) {
+    return new Promise(function (resolve, reject) {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        const s = Math.min(1, 1280 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.8).split(',')[1]);
+      };
+      img.onerror = function () { reject(new Error('Foto tidak bisa dibaca.')); };
+      img.src = url;
+    });
+  }
+  window.finProofChange = function (input) {
+    const f = input.files && input.files[0];
+    fin.proof = null;
+    if (!f) { $(input.getAttribute('data-lbl')).textContent = 'Tambah foto bukti'; return; }
+    finShrink(f).then(function (b64) { fin.proof = b64; $(input.getAttribute('data-lbl')).textContent = 'Foto siap diunggah'; }).catch(finErr);
+  };
+  function finUploadProof(kind, id) {
+    if (!fin.proof) return Promise.resolve();
+    const b64 = fin.proof; fin.proof = null;
+    return adminCall('uploadFinanceProof', kind, id, b64, 'image/jpeg');
+  }
+  window.finViewProof = function (kind, id, boxId) {
+    adminCall('getFinanceProof', kind, id).then(function (r) { $(boxId).innerHTML = '<img src="' + r.dataUrl + '" alt="Bukti" style="max-width:100%;border-radius:12px">'; }).catch(finErr);
+  };
+
+  window.finOpenPayment = function (payId, billId, remaining) {
+    Promise.all([finEnsureCats(), (!billId && !payId) ? adminCall('getBills', { status: 'open' }) : Promise.resolve([])]).then(function (res) {
+      fin.payId = payId || null; fin.payPick = billId || '';
+      const edit = payId && fin.detail ? fin.detail.payments.filter(function (p) { return p.id === payId; })[0] : null;
+      const bills = res[1].filter(function (b) { return !b.archived && b.remaining > 0; });
+      const billSel = '<option value="">— Tanpa tagihan (pemasukan lain) —</option>' + bills.map(function (b) { return '<option value="' + h(b.id) + '">' + h(b.name + ' · ' + b.packageName + ' · sisa ' + finRp(b.remaining)) + '</option>'; }).join('') +
+        (billId && !bills.some(function (b) { return b.id === billId; }) ? '<option value="' + h(billId) + '">Tagihan ini</option>' : '');
+      $('fin-pay-title').textContent = edit ? 'Ubah pembayaran' : 'Pembayaran';
+      $('fin-pay-bill').innerHTML = billSel;
+      $('fin-pay-bill').value = billId || (edit ? edit.billId : '');
+      $('fin-pay-bill-wrap').classList.toggle('hide', !!billId || !!edit);
+      $('fin-pay-amount').value = remaining ? String(remaining).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : (edit ? String(edit.amount).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '');
+      $('fin-pay-date').value = edit ? edit.date : finToday();
+      $('fin-pay-note').value = edit ? edit.note : '';
+      $('fin-pay-method').innerHTML = finChips('fin-pay-method', fin.methods, edit ? edit.method : fin.methods[0]);
+      $('fin-pay-cat').innerHTML = finChips('fin-pay-cat', finCats('masuk'), edit ? edit.category : finCats('masuk')[0]);
+      $('fin-pay-cat-wrap').classList.toggle('hide', !!(billId || (edit && edit.billId)));
+      $('fin-pay-proof').value = ''; $('fin-pay-proof-lbl').textContent = edit && edit.hasProof ? 'Ganti foto bukti' : 'Tambah foto bukti'; fin.proof = null;
+      $('fin-pay-view').classList.toggle('hide', !(edit && edit.hasProof));
+      $('fin-pay-view').onclick = function () { window.finViewProof('payment', payId, 'fin-pay-proof-box'); };
+      $('fin-pay-proof-box').innerHTML = '';
+      $('fin-pay-archive').classList.toggle('hide', !edit);
+      $('fin-pay-err').textContent = '';
+      const sel = $('fin-pay-bill');
+      sel.onchange = function () { const b = bills.filter(function (x) { return x.id === sel.value; })[0]; $('fin-pay-cat-wrap').classList.toggle('hide', !!sel.value); if (b) { $('fin-pay-amount').value = String(b.remaining).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); } };
+      openSheet('sheet-fin-payment');
+    }).catch(finErr);
+  };
+  window.finPaySave = function (e) {
+    e.preventDefault();
+    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
+    const billId = fin.payPick || $('fin-pay-bill').value;
+    const p = { id: fin.payId || undefined, billId: billId || undefined, amount: finNum($('fin-pay-amount').value), date: $('fin-pay-date').value, method: finPicked('fin-pay-method'), note: $('fin-pay-note').value, category: finPicked('fin-pay-cat') };
+    adminCall('savePayment', p).then(function (r) { return finUploadProof('payment', r.id); }).then(function () {
+      done(); window.closeModal(); window.showToast('Pembayaran tersimpan.'); finLoad(); if (fin.billId && ui.detail === 'bill:' + fin.billId) window.finOpenBill(fin.billId);
+    }).catch(function (err) { done(); $('fin-pay-err').textContent = window.authMessage(err); });
+  };
+  window.finPayArchive = function () {
+    adminCall('archiveFinanceItem', 'payment', fin.payId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat tagihannya.'); finLoad(); if (fin.billId) window.finOpenBill(fin.billId); }).catch(finErr);
+  };
+
+  window.finOpenExpense = function (id) {
+    finEnsureCats().then(function () {
+      fin.expId = id || null;
+      const edit = id ? (fin.exps || []).filter(function (x) { return x.id === id; })[0] : null;
+      $('fin-exp-title').textContent = edit ? 'Ubah pengeluaran' : 'Pengeluaran';
+      $('fin-exp-amount').value = edit ? String(edit.amount).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+      $('fin-exp-date').value = edit ? edit.date : finToday();
+      $('fin-exp-note').value = edit ? edit.note : '';
+      $('fin-exp-cat').innerHTML = finChips('fin-exp-cat', finCats('keluar'), edit ? edit.category : finCats('keluar')[0]);
+      $('fin-exp-method').innerHTML = finChips('fin-exp-method', fin.methods, edit ? edit.method : fin.methods[0]);
+      $('fin-exp-proof').value = ''; $('fin-exp-proof-lbl').textContent = edit && edit.hasProof ? 'Ganti foto nota' : 'Tambah foto nota'; fin.proof = null;
+      $('fin-exp-view').classList.toggle('hide', !(edit && edit.hasProof));
+      $('fin-exp-view').onclick = function () { window.finViewProof('expense', id, 'fin-exp-proof-box'); };
+      $('fin-exp-proof-box').innerHTML = '';
+      $('fin-exp-archive').classList.toggle('hide', !edit);
+      $('fin-exp-err').textContent = '';
+      openSheet('sheet-fin-expense');
+    }).catch(finErr);
+  };
+  window.finExpSave = function (e) {
+    e.preventDefault();
+    const btn = $('fin-exp-save'), done = busy(btn, 'Menyimpan…');
+    adminCall('saveExpense', { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value })
+      .then(function (r) { return finUploadProof('expense', r.id); }).then(function () { done(); window.closeModal(); window.showToast('Pengeluaran tersimpan.'); finLoad(); })
+      .catch(function (err) { done(); $('fin-exp-err').textContent = window.authMessage(err); });
+  };
+  window.finExpArchive = function () {
+    adminCall('archiveFinanceItem', 'expense', fin.expId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+  };
+  window.finQuick = function (kind) {
+    window.closeModal();
+    setTimeout(function () {
+      if (!finOn()) { window.showToast('Nyalakan Keuangan di Pengaturan dulu.'); return; }
+      if (window.currentView !== 'finance') window.navigate('finance');
+      if (kind === 'payment') window.finOpenPayment(null);
+      else window.finOpenExpense(null);
+    }, 120);
+  };
+
+  // Pengaturan → Keuangan (tombol langsung, tanpa bar simpan)
+  function finSettingsHtml() {
+    const f = (setState.data && setState.data.finance) || { enabled: false, portalVisible: false, methods: fin.methods };
+    const tg = function (id, title, sub, on, fn) {
+      return '<div class="row-between"><div><p class="li-title">' + title + '</p><p class="li-sub">' + sub + '</p></div><label class="toggle"><input type="checkbox" id="' + id + '" onchange="' + fn + '(this)"' + (on ? ' checked' : '') + ' aria-label="' + title + '"><span></span></label></div>';
+    };
+    let html = '<div class="card-flat stack">' + tg('fin-set-on', 'Fitur keuangan', 'Tagihan otomatis dari paket, pembayaran, pengeluaran, laporan. Pertama dinyalakan: transaksi lama dicatat Lunas.', f.enabled, 'window.finSetOn') +
+      tg('fin-set-portal', 'Klien bisa lihat tagihan', 'Kartu Tagihan di portal klien (hanya miliknya sendiri)', f.portalVisible, 'window.finSetPortal') + '</div>';
+    if (f.enabled) {
+      html += '<div class="card-flat stack"><h4 class="li-title">Metode bayar</h4><div class="chips" style="flex-wrap:wrap">' + f.methods.map(function (m, i) {
+        return '<span class="chip">' + h(m) + '<button type="button" class="chip-x" onclick="window.finMethodDel(' + i + ')" aria-label="Hapus ' + h(m) + '">' + icon('x') + '</button></span>';
+      }).join('') + '</div><div class="pkg-benefit-add"><input class="input" type="text" id="fin-set-method" maxlength="30" placeholder="Metode baru, mis. DANA" enterkeyhint="done"><button type="button" class="btn btn-outline" onclick="window.finMethodAdd()">Tambah</button></div></div>' +
+        '<div class="card-flat stack"><h4 class="li-title">Kategori</h4><div id="fin-set-cats"><span class="li-sub">Memuat…</span></div></div>' +
+        '<div class="card-flat stack"><h4 class="li-title">Bagi hasil coach</h4><div id="fin-set-share"><span class="li-sub">Memuat…</span></div></div>' +
+        '<button type="button" class="btn btn-outline btn-block" onclick="window.finSync(this)">' + icon('refresh-cw') + ' Sinkronkan transaksi</button>';
+    }
+    return html;
+  }
+  function finSettingsLoad() {
+    if (!finOn()) return;
+    adminCall('getFinanceCategories').then(function (c) { fin.cats = c; finCatsRender(); }).catch(finErr);
+    adminCall('getCoachesAdmin').then(function (r) { fin.coaches = r.coaches; finShareRender(); }).catch(finErr);
+  }
+  function finCatsRender() {
+    const el = $('fin-set-cats');
+    if (!el) return;
+    const grp = function (type, title) {
+      return '<p class="group-label"><span>' + title + '</span></p>' + (fin.cats || []).filter(function (c) { return c.type === type; }).map(function (c) {
+        return '<div class="row-between" style="min-height:44px"><span>' + h(c.name) + '</span><span class="row" style="gap:8px"><label class="toggle"><input type="checkbox" onchange="window.finCatActive(\'' + h(c.id) + '\',this.checked)"' + (c.active ? ' checked' : '') + ' aria-label="Aktif ' + h(c.name) + '"><span></span></label>' +
+          '<button type="button" class="icon-btn" onclick="window.finCatDel(\'' + h(c.id) + '\')" aria-label="Hapus ' + h(c.name) + '">' + icon('trash-2') + '</button></span></div>';
+      }).join('') + '<div class="pkg-benefit-add"><input class="input" type="text" id="fin-cat-' + type + '" maxlength="40" placeholder="Kategori baru"><button type="button" class="btn btn-outline" onclick="window.finCatAdd(\'' + type + '\')">Tambah</button></div>';
+    };
+    el.innerHTML = grp('masuk', 'Pemasukan') + grp('keluar', 'Pengeluaran');
+    paintIcons();
+  }
+  function finShareRender() {
+    const el = $('fin-set-share');
+    if (!el) return;
+    el.innerHTML = (fin.coaches || []).map(function (c) {
+      const tipe = c.shareType === 'sesi' ? 'sesi' : 'persen', val = c.shareValue === '' || c.shareValue == null ? (tipe === 'persen' ? 65 : 0) : c.shareValue;
+      return '<div class="field"><label class="label">' + h(c.name) + '</label><div class="two"><select class="select" id="fin-sh-t-' + h(c.id) + '"><option value="persen"' + (tipe === 'persen' ? ' selected' : '') + '>Persen dari harga paket</option><option value="sesi"' + (tipe === 'sesi' ? ' selected' : '') + '>Rupiah per sesi selesai</option></select>' +
+        '<input class="input num" type="text" inputmode="numeric" id="fin-sh-v-' + h(c.id) + '" value="' + h(val) + '" aria-label="Nilai"></div>' +
+        '<button type="button" class="btn btn-outline btn-sm" onclick="window.finShareSave(\'' + h(c.id) + '\',this)">Simpan</button></div>';
+    }).join('') || '<span class="li-sub">Belum ada coach.</span>';
+  }
+  function finSaveSettings(patch, then) {
+    return adminCall('updateAppSettings', { finance: patch }).then(function (s) {
+      if (setState.data) setState.data.finance = s.finance;
+      finApplySettings(s.finance);
+      if (then) then(s);
+    }).catch(finErr);
+  }
+  function finRerenderSettings() { if (setState.open === 'keuangan') { $('settings-body').innerHTML = finSettingsHtml(); paintIcons(); finSettingsLoad(); } refreshSettingsNav(); }
+  window.finSetOn = function (el) {
+    el.disabled = true;
+    finSaveSettings({ enabled: el.checked }, function () { window.showToast(el.checked ? 'Keuangan aktif.' : 'Keuangan dimatikan.'); loadRevenue(); finRerenderSettings(); }).then(function () { el.disabled = false; });
+  };
+  window.finSetPortal = function (el) { finSaveSettings({ portalVisible: el.checked }, function () { window.showToast(el.checked ? 'Klien bisa melihat tagihan.' : 'Tagihan disembunyikan dari klien.'); }); };
+  window.finMethodAdd = function () {
+    const v = $('fin-set-method').value.trim();
+    if (!v) return;
+    finSaveSettings({ methods: fin.methods.concat([v]) }, finRerenderSettings);
+  };
+  window.finMethodDel = function (i) {
+    if (fin.methods.length <= 1) { window.showToast('Minimal satu metode bayar.'); return; }
+    finSaveSettings({ methods: fin.methods.filter(function (m, k) { return k !== i; }) }, finRerenderSettings);
+  };
+  window.finCatAdd = function (type) {
+    const v = $('fin-cat-' + type).value.trim();
+    if (!v) return;
+    adminCall('saveFinanceCategory', { type: type, name: v }).then(function () { fin.cats = null; return adminCall('getFinanceCategories'); }).then(function (c) { fin.cats = c; finCatsRender(); }).catch(finErr);
+  };
+  window.finCatActive = function (id, on) {
+    const c = (fin.cats || []).filter(function (x) { return x.id === id; })[0];
+    if (!c) return;
+    adminCall('saveFinanceCategory', { id: id, name: c.name, active: on }).then(function () { c.active = on; }).catch(finErr);
+  };
+  window.finCatDel = function (id) {
+    adminCall('deleteFinanceCategory', id).then(function () { fin.cats = (fin.cats || []).filter(function (c) { return c.id !== id; }); finCatsRender(); }).catch(finErr);
+  };
+  window.finShareSave = function (id, btn) {
+    const done = busy(btn, 'Menyimpan…');
+    adminCall('saveCoachShare', id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)).then(function () { done(); window.showToast('Bagi hasil tersimpan.'); }).catch(function (err) { done(); finErr(err); });
+  };
+  window.finSync = function (btn) {
+    const done = busy(btn, 'Menyinkronkan…');
+    adminCall('syncFinanceTransactions').then(function (r) { done(); window.showToast(r.created + ' transaksi baru dicatat.'); }).catch(function (err) { done(); finErr(err); });
+  };
 
   // Judul kecil di topbar muncul setelah judul besar halaman tergulir.
   (function topbarOnScroll() {

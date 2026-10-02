@@ -681,6 +681,93 @@ async function contrastReport(page) {
     await context.close();
   }
 
+  // ── Keuangan · HP (touch, terang & gelap) + desktop ───────────────────────
+  for (const scheme of ['light', 'dark']) {
+    console.log('Keuangan · HP · ' + scheme);
+    const env = richEnv();
+    const token = env.adminToken();
+    const wib = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    env.call('updateAppSettings', token, { finance: { enabled: true } });
+    env.call('addMember', token, { name: 'Budi Keuangan', phone: '081399990001', goal: 'Fit', packageId: 'P1' });
+    env.call('saveExpense', token, { amount: 250000, date: wib, category: 'Sewa tempat', method: 'Tunai', note: 'Sewa gym' });
+    const { page, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_fin_on: '1' }, { touch: true, colorScheme: scheme, wait: 1400 });
+    const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    const small = sel => page.evaluate(s => {
+      const bad = [];
+      document.querySelectorAll(s).forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') return;
+        if (r.height < 43.5) bad.push((el.className || el.tagName) + ' ' + Math.round(r.width) + '×' + Math.round(r.height));
+      });
+      return bad;
+    }, sel);
+    check((await page.evaluate(() => !!document.querySelector('.fin-tile:not(.hide)'))), 'phone: the + sheet offers Pembayaran and Pengeluaran when Keuangan is on');
+    await page.evaluate(() => window.navigate('finance'));
+    await page.waitForTimeout(900);
+    check(await visible(page, '#view-finance'), 'phone: the Keuangan page opens');
+    check(((await page.textContent('#fin-head')) || '').includes('Tunggakan'), 'phone: the four summary tiles are shown');
+    check(((await page.textContent('#fin-list')) || '').includes('Budi Keuangan'), 'phone: the open bill is listed under Belum lunas');
+    check((await overflow()) <= 0, 'phone: Keuangan has no sideways scroll');
+    check((await small('#view-finance button.chip, #view-finance .list-item, #view-finance .btn')).length === 0, 'phone: Keuangan touch targets are at least 44 px (' + (await small('#view-finance button.chip, #view-finance .list-item, #view-finance .btn')).join(', ') + ')');
+    await shot(page, 'finance-mobile-' + scheme);
+    // detail tagihan + bayar
+    await page.click('#fin-list .list-item');
+    await page.waitForTimeout(700);
+    check(((await page.textContent('#detail-body')) || '').includes('Belum bayar'), 'phone: the bill detail shows its status');
+    await page.click('#detail-body .btn-primary');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#sheet-fin-payment'), 'phone: Bayar opens the payment sheet');
+    check((await page.getAttribute('#fin-pay-amount', 'inputmode')) === 'numeric', 'phone: the amount field uses the numeric keyboard');
+    check((await small('#sheet-fin-payment .chip, #sheet-fin-payment .btn, #sheet-fin-payment input:not([type=file]), #sheet-fin-payment select')).length === 0, 'phone: payment sheet targets are at least 44 px (' + (await small('#sheet-fin-payment .chip, #sheet-fin-payment .btn, #sheet-fin-payment input:not([type=file]), #sheet-fin-payment select')).join(', ') + ')');
+    await page.fill('#fin-pay-amount', '300000');
+    check((await page.inputValue('#fin-pay-amount')) === '300.000', 'phone: the amount shows thousand separators while typing');
+    await shot(page, 'finance-payment-mobile-' + scheme);
+    await page.click('#fin-pay-save');
+    await page.waitForTimeout(900);
+    check(!(await visible(page, '#sheet-fin-payment')), 'phone: a saved payment closes the sheet');
+    check(((await page.textContent('#detail-body')) || '').includes('DP'), 'phone: the bill becomes DP after a part payment');
+    // pengeluaran + laporan
+    await page.evaluate(() => { window.closeDetail(); window.finTab('exps'); });
+    await page.waitForTimeout(700);
+    check(((await page.textContent('#fin-list')) || '').includes('Sewa tempat'), 'phone: the expense list shows the recorded expense');
+    await page.evaluate(() => window.finTab('report'));
+    await page.waitForTimeout(700);
+    check(((await page.textContent('#fin-list')) || '').includes('Ekspor CSV'), 'phone: the report tab offers CSV export');
+    check((await overflow()) <= 0, 'phone: the report tab has no sideways scroll');
+    await shot(page, 'finance-report-mobile-' + scheme);
+    // Pengaturan → Keuangan
+    await page.evaluate(() => window.navigate('settings', { force: true }));
+    await page.waitForTimeout(500);
+    await page.click('.settings-nav-item[data-section="keuangan"]');
+    await page.waitForTimeout(900);
+    check(((await page.textContent('#settings-body')) || '').includes('Metode bayar'), 'phone: Pengaturan → Keuangan shows methods, categories and coach share');
+    check((await overflow()) <= 0, 'phone: Pengaturan → Keuangan has no sideways scroll');
+    check(errors.length === 0, 'Keuangan: no page errors (' + errors.join(' | ') + ')');
+    await page.context().close();
+  }
+  console.log('Keuangan · desktop');
+  {
+    const env = richEnv();
+    const token = env.adminToken();
+    env.call('updateAppSettings', token, { finance: { enabled: true } });
+    const { page, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_fin_on: '1' }, { viewport: DESKTOP, wait: 1400 });
+    check(await visible(page, '#side-nav .nav-item[data-view="finance"]'), 'desktop: the sidebar has Keuangan');
+    await page.click('#side-nav .nav-item[data-view="finance"]');
+    await page.waitForTimeout(800);
+    check(await visible(page, '#view-finance'), 'desktop: Keuangan opens');
+    await shot(page, 'finance-desktop');
+    check(errors.length === 0, 'desktop Keuangan: no page errors (' + errors.join(' | ') + ')');
+    await page.context().close();
+  }
+  console.log('Keuangan mati: menu tersembunyi');
+  {
+    const env = richEnv();
+    const { page } = await openPage(browser, env, '/Index', [], { xnk_admin_token: env.adminToken() }, { viewport: DESKTOP, wait: 1200 });
+    check(!(await visible(page, '#side-nav .nav-item[data-view="finance"]')), 'off by default: no Keuangan in the sidebar');
+    check(!(await page.evaluate(() => !!document.querySelector('.fin-tile:not(.hide)'))), 'off by default: no finance tiles in the + sheet');
+    await page.context().close();
+  }
+
   // ── Pengaturan · HP (touch, terang & gelap) ───────────────────────────────
   for (const scheme of ['light', 'dark']) {
     console.log('Pengaturan · HP · ' + scheme);
