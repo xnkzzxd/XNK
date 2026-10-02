@@ -26,10 +26,10 @@ test('the first admin write appends the new headers once, keeps old values, and 
   const token = env.adminToken();
   env.call('saveCoach', token, Object.assign({ id: 'C-1' }, PROFILE, { name: 'Rizky' }));
   const header = coachRows(env)[0];
-  assert.equal(header.length, 14);
+  assert.equal(header.length, 16);
   assert.deepEqual(header.slice(0, 7), ['ID', 'Nama Coach', 'No WA', 'Spesialisasi', 'Foto URL', 'Bio', 'Pengalaman']);
   env.call('saveCoach', token, Object.assign({ id: 'C-1' }, PROFILE, { name: 'Rizky' }));
-  assert.equal(coachRows(env)[0].length, 14);
+  assert.equal(coachRows(env)[0].length, 16);
 });
 
 test('saveCoach creates a coach with normalised phone, instagram handle and joined lists', () => {
