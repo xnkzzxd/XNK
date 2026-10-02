@@ -155,3 +155,26 @@ test('methods setting is validated and empty reverts to the default', () => {
   assert.deepEqual(plain(env.call('updateAppSettings', t, { finance: { methods: ['Tunai', 'DANA'] } }).finance.methods), ['Tunai', 'DANA']);
   assert.deepEqual(plain(env.call('updateAppSettings', t, { finance: { methods: [] } }).finance.methods), ['Tunai', 'Transfer bank', 'QRIS / e-wallet']);
 });
+
+test('tagihan reminder: quiet while finance is off; one button for a bill open more than 3 days; none for a fresh or paid one', () => {
+  const env = seededEnv();
+  const t = env.adminToken();
+  env.props.TELEGRAM_BOT_TOKEN = 'x:y'; env.props.TELEGRAM_CHAT_IDS = '1'; env.props.TELEGRAM_ENABLED = 'true';
+  assert.equal(env.callRaw('sendTagihanDigest_', {}), true);
+  assert.equal(env.fetches.length, 0);
+  on(env);
+  addClient(env, t);
+  env.fetches.length = 0;   // adding a client notifies the owner; only the digest matters here
+  assert.equal(env.callRaw('sendTagihanDigest_', {}), true);   // fresh bill: nothing yet
+  assert.equal(env.fetches.length, 0);
+  env.sheet('Tagihan').rows[1][7] = '2026-01-01';               // Tanggal, long overdue
+  assert.equal(env.callRaw('sendTagihanDigest_', {}), true);
+  const body = JSON.parse(env.fetches[env.fetches.length - 1].options.payload);
+  assert.match(JSON.stringify(body), /wa\.me\/6281300000001/);
+  assert.match(JSON.stringify(body), /Rp800\.000/);
+});
+
+test('previewReminderText tagihan fills the placeholders', () => {
+  const env = seededEnv();
+  assert.match(env.call('previewReminderText', env.adminToken(), 'tagihan', '').text, /Rp300\.000/);
+});

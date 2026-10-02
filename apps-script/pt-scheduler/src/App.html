@@ -605,6 +605,7 @@
     { id: 'waktunya-ukur', title: 'Waktunya ukur', sub: 'Tiap dua minggu (Senin): klien yang belum mencatat berat/pinggang 14 hari' },
     { id: 'tes-ulang', title: 'Tes ulang', sub: 'Tiap Senin: klien yang tes kebugaran terakhirnya 28 hari lalu atau lebih' },
     { id: 'ulang-tahun', title: 'Ulang tahun', sub: 'Tiap hari: tombol WhatsApp ucapan untuk klien yang berulang tahun' },
+    { id: 'tagihan', title: 'Tagihan', sub: 'Tiap hari: klien yang belum lunas lebih dari 3 hari, dengan tombol WhatsApp. Butuh Keuangan aktif.' },
     { id: 'ringkasan-owner', title: 'Ringkasan bulanan (untukmu)', sub: 'Tanggal 1: satu pesan Telegram berisi sesi, klien baru, pendapatan, dan hasil target bulan lalu' }
   ];
   const setState = { data: null, open: null, snap: {}, dirty: false, built: false, pushed: false, forcePop: false, status: null, log: null, onlyFailed: false, saving: false };
@@ -4194,6 +4195,20 @@
     return memberCall('getMyRenewal').then(function (r) { window.myRenewal = r || null; renderRenewSlot(); })
       .catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
   };
+  // Kartu Tagihan (Fase H): server mengembalikan [] kecuali owner mengizinkan; tanpa tombol, hanya baca.
+  window.loadMyBills = function () {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    return memberCall('getMyBills').then(function (list) {
+      const slot = $('pub-bill-slot');
+      if (!slot) return;
+      const bills = (list || []).filter(function (b) { return b.status !== 'Lunas'; }).slice(0, 3);
+      const rp = function (n) { return 'Rp ' + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+      setHTML(slot, bills.length ? '<div class="card-flat stack" id="pub-bill-card"><h4 class="li-title">Tagihan</h4>' + bills.map(function (b) {
+        return '<div class="row-between"><div style="min-width:0"><p class="li-title truncate">' + h(b.paket) + '</p><p class="li-sub">' + (b.lastPaid ? 'Terakhir bayar ' + h(b.lastPaid) : 'Belum ada pembayaran') + '</p></div>' +
+          '<div style="text-align:right"><b class="num">' + h(rp(b.remaining)) + '</b><p><span class="pill' + (b.status === 'DP' ? '' : ' dashed') + '">' + h(b.status) + '</span></p></div></div>';
+      }).join('') + '<p class="hint">Pembayaran dilakukan langsung ke coach.</p></div>' : '');
+    }).catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
+  };
   window.openRenewSheet = function () {
     const list = (window.priceListData || []).filter(p => p && p.aktif !== false);
     $('renew-list').innerHTML = list.length ? list.map(function (p) {
@@ -4550,6 +4565,7 @@
       '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p>' +
       '<p class="muted">' + used + ' sesi sudah dipakai</p></div></div>' +
       '<div id="pub-renew-slot">' + renewNoticeHtml(rem, total) + '</div>' +
+      '<div id="pub-bill-slot"></div>' +
       '</div>';
 
     left += '<div class="portal-kpis">' + [['check-circle-2', completedMine.length, 'Sesi selesai'], ['flame', streakP, 'Minggu beruntun'], ['calendar-clock', upcoming.length, 'Mendatang']].map(function (k) {
@@ -4599,6 +4615,7 @@
     window.loadMyProgress(false);
     window.loadMyCare();
     window.loadMyRenewal();
+    window.loadMyBills();
     window.loadMyClassGroup();
     loadMyCoachStatus();
   };

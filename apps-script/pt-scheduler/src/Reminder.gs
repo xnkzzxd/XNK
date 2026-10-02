@@ -404,7 +404,9 @@ var REMINDER_JOBS = [
   // Fase E3: bawaan MATI. Ulang tahun klien (tombol WhatsApp) dan ringkasan bulanan untuk pemilik (satu pesan Telegram).
   { jenis: 'tes-ulang',         day: 1,    hour: 8,  handler: 'sendTesUlangDigest_', defaultEnabled: false },   // Fase E4
   { jenis: 'ulang-tahun',       day: null, hour: 8,  handler: 'sendUlangTahunDigest_', defaultEnabled: false },
-  { jenis: 'ringkasan-owner',   day: null, hour: 9,  dayOfMonth: 1, handler: 'sendRingkasanOwner_', defaultEnabled: false }
+  { jenis: 'ringkasan-owner',   day: null, hour: 9,  dayOfMonth: 1, handler: 'sendRingkasanOwner_', defaultEnabled: false },
+  // Fase H: tagihan yang belum lunas lebih dari 3 hari; hanya jalan bila Keuangan aktif.
+  { jenis: 'tagihan',           day: null, hour: 9,  handler: 'sendTagihanDigest_', defaultEnabled: false }
 ];
 
 /** Nilai bawaan saklar satu jenis bila properti _ENABLED belum pernah diisi. */
@@ -595,6 +597,7 @@ var RMD_TPL_DEFAULT = {
   'waktunya-ukur': 'Halo {nama}, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.{terakhir}\nCatat di {link} (Beranda → Progres).',
   'tes-ulang': 'Hai {nama}, sudah sebulan sejak tes kebugaranmu ({terakhir}). Yuk tes ulang di sesi berikutnya, biar kelihatan kemajuanmu. 💪 {link}',
   'ulang-tahun': 'Selamat ulang tahun {nama}! 🎂 Semoga sehat selalu dan makin semangat latihannya. 💪',
+  'tagihan': 'Hai {nama}, sisa pembayaran paket {paket} Rp{sisa}. Terima kasih 🙏',
   'ringkasan-owner': '📊 Ringkasan {bulan}\nSesi selesai: {sesi} ({jam} jam)\nKlien baru: {klienbaru}\nPendapatan (estimasi): {pendapatan}{target}'
 };
 var RMD_PLACEHOLDERS = {
@@ -608,6 +611,7 @@ var RMD_PLACEHOLDERS = {
   'waktunya-ukur': ['nama', 'terakhir', 'link'],
   'tes-ulang': ['nama', 'terakhir', 'link'],
   'ulang-tahun': ['nama'],
+  'tagihan': ['nama', 'paket', 'sisa'],
   'ringkasan-owner': ['bulan', 'sesi', 'jam', 'klienbaru', 'pendapatan', 'target']
 };
 var MEMBER_REMIND_OFF_COL = 16;                            // Kolom P (1-based)
@@ -710,6 +714,7 @@ function _rmdSampleVars_(jenis) {
   else if (jenis === 'selamat-milestone') v.badge = '25 sesi';
   else if (jenis === 'tes-ulang') { v.terakhir = '12 Sep'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'ulang-tahun') { /* hanya {nama} */ }
+  else if (jenis === 'tagihan') { v.nama = 'Budi'; v.paket = 'Regular 8'; v.sisa = '300.000'; }
   else if (jenis === 'ringkasan-owner') { v.bulan = 'September'; v.sesi = '58'; v.jam = '58'; v.klienbaru = '3'; v.pendapatan = 'Rp 6.500.000'; v.target = '\nTarget sesi: 58 dari 80'; }
   else if (jenis === 'waktunya-ukur') { v.terakhir = ' Terakhir kamu catat tanggal 12 Sep.'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'pr') v.pr = '• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan 3 hari (tenggat 2/10)';
@@ -1048,6 +1053,22 @@ function sendUlangTahunDigest_(ctx) {
   return _rmdSendDigest_('Ulang tahun', _rmdDateLabel_(today), items, pools.skippedNames);
 }
 
+/** Handler 'tagihan' (Fase H): tombol WhatsApp ke klien dengan tagihan belum lunas > 3 hari. Hanya bila Keuangan aktif. */
+function sendTagihanDigest_(ctx) {
+  var now = (ctx && ctx.now) || new Date();
+  if (!_finOn_()) return true;
+  var today = _wibParts_(now).date;
+  var tpl = _rmdTemplate_('tagihan'), items = [];
+  var payments = _finRead_('Pembayaran'), members = _finMembersById_();
+  _finRead_('Tagihan').forEach(function(b) {
+    if (b['Diarsipkan Pada']) return;
+    var v = _finBillView_(b, payments, members);
+    if (v.remaining <= 0 || v.ageDays <= 3 || !v.phone) return;
+    items.push({ name: String(v.name).split(' ')[0], phone: v.phone, fact: 'sisa Rp' + v.remaining, text: _rmdFill_(tpl, { nama: String(v.name).split(' ')[0], paket: v.packageName, sisa: String(v.remaining).replace(/\B(?=(\d{3})+(?!\d))/g, '.') }) });
+  });
+  return _rmdSendDigest_('Tagihan', _rmdDateLabel_(today), items, []);
+}
+
 /** Handler 'ringkasan-owner': satu pesan Telegram ke pemilik tentang bulan LALU. Tanpa tombol klien. */
 function sendRingkasanOwner_(ctx) {
   var now = (ctx && ctx.now) || new Date();
@@ -1291,7 +1312,7 @@ function _sleepLine_(hour) {
 //   - Throttle 15 detik per jenis (mencegah spam dari tombol).
 // Hasil: {jenis, terkirim:boolean, pesan:string}. `terkirim` false + pesan = alasan.
 
-var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore', 'rekap-bulanan', 'selamat-milestone', 'waktunya-ukur', 'tes-ulang', 'ulang-tahun', 'ringkasan-owner'];
+var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore', 'rekap-bulanan', 'selamat-milestone', 'waktunya-ukur', 'tes-ulang', 'ulang-tahun', 'ringkasan-owner', 'tagihan'];
 var RMD_TEST_MIN_GAP_MS = 15000;
 
 /** Murni: nama jenis valid → jenis itu sendiri; selain itu lempar error. */
@@ -1328,7 +1349,7 @@ function sendReminderTest(token, jenis) {
     return { jenis: j, terkirim: true, pesan: 'Pratinjau kalimat tidur terkirim ke Telegram.' };
   }
 
-  var handler = { 'rekap-bulanan': sendRekapBulananDigest_, 'selamat-milestone': sendMilestoneDigest_, 'waktunya-ukur': sendUkurDigest_, 'tes-ulang': sendTesUlangDigest_, 'ulang-tahun': sendUlangTahunDigest_, 'ringkasan-owner': sendRingkasanOwner_, 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
+  var handler = { 'rekap-bulanan': sendRekapBulananDigest_, 'selamat-milestone': sendMilestoneDigest_, 'waktunya-ukur': sendUkurDigest_, 'tes-ulang': sendTesUlangDigest_, 'ulang-tahun': sendUlangTahunDigest_, 'ringkasan-owner': sendRingkasanOwner_, 'tagihan': sendTagihanDigest_, 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
                   'makan-pagi': sendMakanPagiDigest_, 'makan-sore': sendMakanSoreDigest_ }[j];
   var ok;
   try {
