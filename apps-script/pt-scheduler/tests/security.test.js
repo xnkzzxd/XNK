@@ -246,9 +246,13 @@ test("clients can only reschedule their own sessions", () => {
 
 test('clientBookRecurring books for the token owner as unread', () => {
   const env = seededEnv();
-  // 10:00 WIB, expressed in the machine's own time zone (the server builds dates in script time).
+  // The fixture sessions sit at "now + 2 days" and "now + 3 days", so book at an hour at least 2 h away from the
+  // current WIB hour (07:00, or 11:00 when it is about 07:00 now); otherwise the test fails around that hour.
+  // Both are inside opening hours on every weekday, Sunday (06–12) included.
+  const nowH = Number(new Date().toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false }));
+  const hh = Math.abs(nowH - 7) >= 2 ? '07' : '11';
   const wibDay = new Date(Date.now() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
-  const t = new Date(wibDay + 'T10:00:00+07:00'), z = n => String(n).padStart(2, '0');
+  const t = new Date(wibDay + 'T' + hh + ':00:00+07:00'), z = n => String(n).padStart(2, '0');
   const startDate = t.getFullYear() + '-' + z(t.getMonth() + 1) + '-' + z(t.getDate());
   const res = env.call('clientBookRecurring', env.memberToken(KEY_B),
     { memberId: 'PT-A', startDate, time: z(t.getHours()) + ':' + z(t.getMinutes()), duration: 60, notes: 'x' },
