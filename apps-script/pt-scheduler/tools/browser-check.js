@@ -478,7 +478,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check(await visible(page, '#view-settings'), 'sidebar "Pengaturan" opens the full settings page');
     check(await visible(page, '#settings-nav') && await visible(page, '#settings-pane'), 'desktop shows the section list and the open section side by side');
-    check((await page.locator('#settings-nav .settings-nav-item').count()) === 7, 'settings list has 7 sections');
+    check((await page.locator('#settings-nav .settings-nav-item').count()) === 8, 'settings list has 8 sections');
     check(!(await visible(page, '#settings-savebar')), 'no save bar until something changes');
     await page.click('.settings-nav-item[data-section="notifikasi"]');
     check((await page.inputValue('#set-tgToken')) === '', 'the saved Telegram token is never put in the form');
@@ -554,7 +554,7 @@ async function contrastReport(page) {
     await page.click('.settings-nav-item[data-section="pengingat"]');
     await page.waitForTimeout(700);
     check(await page.locator('[data-k="job-sesi-besok-enabled"]').count() === 1, 'Pengingat has a "Sesi besok" card');
-    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 11, 'every reminder type has an editable client message');
+    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 12, 'every reminder type has an editable client message');
     check((await page.textContent('#pv-pr')).startsWith('Halo Budi, pengingat PR kamu'), 'the preview shows the default client message with sample data');
     check((await page.locator('[data-k="job-rekap-bulanan-enabled"]:not(:checked), [data-k="job-selamat-milestone-enabled"]:not(:checked), [data-k="job-waktunya-ukur-enabled"]:not(:checked)').count()) === 3, 'the three new message types (rekap, milestone, ukur) start switched off');
     check((await page.textContent('#pv-rekap-bulanan')).includes('rekap latihan bulan September') && (await page.textContent('#pv-selamat-milestone')).includes('badge 25 sesi') && (await page.textContent('#pv-waktunya-ukur')).includes('waktunya catat progres'), 'the new types show a preview of their client message');
