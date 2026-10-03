@@ -532,7 +532,8 @@
     { id: 'student', label: 'Student' },
     { id: 'college', label: 'College' },
     { id: 'regular', label: 'Regular' },
-    { id: 'premium', label: 'Premium' }
+    { id: 'premium', label: 'Premium' },
+    { id: 'core', label: 'Core' }
   ];
   var pricing = { all: [], current: 'regular' };
 
@@ -597,6 +598,7 @@
         (featured ? '<span class="price-badge">Rekomendasi</span>' : '') +
         '<h3 class="price-name">' + esc(pkg.namaPaket) + '</h3>' +
         '<p class="price-meta">' + esc(sesi) + (pkg.durasi ? ' · ' + esc(pkg.durasi) : '') + '</p>' +
+        (pkg.tipe === 'kelas' && (pkg.jadwal || pkg.kapasitas) ? '<p class="price-meta">Kelas' + (pkg.jadwal ? ' · ' + esc(pkg.jadwal) : '') + (pkg.kapasitas ? ' · maks. ' + esc(pkg.kapasitas) + ' peserta' : '') + '</p>' : '') +
         '<p class="price-amt"><small style="font-size:.45em;vertical-align:.9em;margin-right:4px">Rp</small>' + esc(num.toLocaleString('id-ID')) + '</p>' +
         (pkg.jumlahSesi && num ? '<p class="price-per">≈ Rp ' + esc(Math.round(num / pkg.jumlahSesi).toLocaleString('id-ID')) + ' / sesi</p>' : '') +
         (pkg.deskripsi ? '<p class="price-desc">' + esc(pkg.deskripsi) + '</p>' : '') +

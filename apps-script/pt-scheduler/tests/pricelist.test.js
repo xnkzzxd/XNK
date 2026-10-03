@@ -253,3 +253,8 @@ test('revenue prices are still found by name for old rows without a package ID',
   ]);
   assert.equal(env.call('getRevenueSummary', env.adminToken(), 9, 2026).grossTotal, 800000);
 });
+
+test('getPriceListPublic includes the core category for the landing', () => {
+  const env = seededEnv();
+  assert.deepEqual(env.call('getPriceListPublic').categories.map(c => c.id), ['student', 'college', 'regular', 'premium', 'core']);
+});

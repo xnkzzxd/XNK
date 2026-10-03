@@ -295,7 +295,7 @@ test('doGet?view=prices serves public package JSON only', () => {
   const out = env.call('doGet', { parameter: { view: 'prices' } });
   assert.equal(out.mime, 'JSON');
   const data = JSON.parse(out.content);
-  assert.deepEqual(data.categories.map(c => c.id), ['student', 'college', 'regular', 'premium']);   // `core` is not for landing
+  assert.deepEqual(data.categories.map(c => c.id), ['student', 'college', 'regular', 'premium', 'core']);
   assert.ok(data.packages.length > 0);
   assert.ok(data.packages.every(p => p.aktif && !('phone' in p)));
   assert.ok(!data.packages.some(p => p.namaPaket === 'Lama'));   // inactive hidden
