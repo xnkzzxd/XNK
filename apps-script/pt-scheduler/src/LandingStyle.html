@@ -691,4 +691,22 @@ select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://ww
   .marquee-inner { animation: none !important; }
   .intro { display: none; }
 }
+
+/* Halaman info (Proses & FAQ): menggantikan dua section panjang di landing */
+.coach-points { display: grid; gap: 10px; margin: 22px 0 14px; padding: 0; list-style: none; color: var(--ink-2); }
+.coach-points b { color: var(--ink); }
+.link-more { background: none; border: 0; padding: 8px 0; margin-bottom: 14px; font: inherit; font-weight: 700; color: var(--ink); cursor: pointer; text-decoration: underline; text-underline-offset: 4px; min-height: 44px; }
+.info-page { position: fixed; inset: 0; z-index: 140; overflow-y: auto; background: var(--bg); -webkit-overflow-scrolling: touch; }
+.info-page[hidden] { display: none; }
+.info-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; padding-bottom: 14px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.info-back { background: none; border: 0; font: inherit; font-weight: 700; cursor: pointer; min-height: 44px; padding: 0 4px; color: var(--ink); }
+.info-body { max-width: 860px; padding-top: 32px; padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+.info-body section[hidden] { display: none; }
+.info-body .steps { margin-top: 28px; }
+.info-body .step p { color: var(--muted); }
+.info-body .faq-list { margin-top: 24px; }
+.info-cta { margin-top: 40px; }
+.info-tab { border: 0; background: none; cursor: pointer; height: 44px; padding: 0 20px; border-radius: 999px; font: inherit; font-weight: 700; font-size: 14px; color: var(--ink-2); }
+.info-tab.active { background: var(--ink); color: #fff; }
+body.info-open { overflow: hidden; }
 </style>

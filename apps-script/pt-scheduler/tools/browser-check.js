@@ -1586,27 +1586,16 @@ async function contrastReport(page) {
       await scrollLanding(page, (await sectionY(page, '#program')) + 40);
       await shot(page, 'landing-desktop-program');
 
-      // Proses: color change as the scroll line passes, never a pinned sequence.
-      // Sample the whole crossing range (from just before the section enters the
-      // viewport to just after it leaves), since a step's own trigger window can
-      // sit before the section's top edge reaches the top of the viewport.
-      const methodTop = await sectionY(page, '#method');
-      const methodHeight = await page.evaluate(() => document.getElementById('method').offsetHeight);
-      const rectTop = () => page.evaluate(() => document.getElementById('method').getBoundingClientRect().top);
-      const seen = new Set();
-      let maxActiveAtOnce = 0;
-      const scanFrom = methodTop - DESKTOP.height, scanTo = methodTop + methodHeight;
-      const rectAtStart = await rectTop();
-      for (let y = scanFrom; y <= scanTo; y += (scanTo - scanFrom) / 14) {
-        await scrollLanding(page, y, 220);
-        const idxs = await page.evaluate(() => [...document.querySelectorAll('#steps .step')].flatMap((s, i) => s.classList.contains('is-active') ? [i] : []));
-        idxs.forEach(i => seen.add(i));
-        maxActiveAtOnce = Math.max(maxActiveAtOnce, idxs.length);
-      }
-      check(maxActiveAtOnce <= 1, 'at most one process step is highlighted at a time');
-      check(seen.size === 4, 'every step gets highlighted once as the scan line passes it, no more (' + [...seen].sort().join(',') + ')');
-      check((await rectTop()) !== rectAtStart, 'the process section itself keeps scrolling on screen (not pinned in place)');
-      await shot(page, 'landing-desktop-method');
+      // Proses & FAQ live on the info page (overlay), not as sections of the landing.
+      check(!(await page.evaluate(() => !!document.getElementById('method') || !!document.getElementById('faq') || !!document.querySelector('.marquee'))), 'landing no longer has the process, FAQ and ticker sections');
+      await page.evaluate(() => document.querySelector('[data-info="proses"]').click());
+      await page.waitForTimeout(200);
+      check(await page.evaluate(() => !document.getElementById('info-page').hidden && document.querySelectorAll('#steps .step').length === 4), 'info page opens on the process tab with 4 steps');
+      await page.evaluate(() => document.querySelector('[data-info-tab="faq"]').click());
+      check(await page.evaluate(() => !document.querySelector('[data-info-pane="faq"]').hidden && document.querySelector('[data-info-pane="proses"]').hidden), 'info page FAQ tab shows the FAQ');
+      await shot(page, 'landing-desktop-info');
+      await page.evaluate(() => document.querySelector('[data-info-close]').click());
+      check(await page.evaluate(() => document.getElementById('info-page').hidden), 'info page closes');
     }
     await scrollLanding(page, await sectionY(page, '#paket'));
     await shot(page, 'landing-desktop-paket');
