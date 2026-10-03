@@ -8,11 +8,11 @@ const { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays, wibSlot } = require('./fixtu
 // new server function added without a guard makes this test fail.
 const PUBLIC = [
   'doGet', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
-  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus',
+  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [
-  'checkAdminSession', 'changeAdminPin',
+  'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras',
   'getMembers', 'getMemberTransactionLog', 'getSchedules',
   'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto',
   'saveCoach', 'previewCoachProfile', 'getClientCare', 'saveClientNotes', 'snoozeCare', 'saveAssessment', 'saveFitnessTests', 'deleteFitnessTest', 'markHealthReviewed', 'getSessionBriefing', 'getCoachHub', 'saveCoachTargets', 'getCoachAvailability', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',

@@ -627,7 +627,9 @@ function getFinanceProof(token, kind, id) {
 // ── Ekspor CSV ──────────────────────────────────────────────────────────────
 
 function _finCsvCell_(v) {
-  const s = String(v == null ? '' : v);
+  let s = String(v == null ? '' : v);
+  // Cegah formula injection: teks yang diawali = + - @ (atau tab/CR) dibaca Excel/Sheets sebagai rumus.
+  if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 

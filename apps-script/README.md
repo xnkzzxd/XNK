@@ -129,6 +129,19 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
 Semuanya disimpan sebagai Script Properties; kosong = nilai bawaan di `Kode.gs`. Di HP, bagian
 dibuka satu per satu dan gerakan kembali di HP menutup bagian itu.
 
+**Batas yang hanya diatur di server** (tidak ada kolomnya di Pengaturan; isi lewat Script Properties
+kalau perlu diubah, kosong = bawaan):
+
+- `BOOKING_MAX_DAYS_AHEAD` (bawaan 60): klien hanya bisa booking/pindah jadwal sampai sekian hari ke depan.
+  Portal menampilkan jam kosong sampai batas ini.
+- `REGISTER_MAX_PER_10MIN` (bawaan 5): pendaftaran mandiri maksimal sekian per 10 menit (dari semua
+  pengunjung); satu nomor WA hanya bisa mendaftar sekali per menit. Mencegah spam akun & email.
+
+Klien tidak bisa booking kalau sisa sesinya habis (Total Sesi − Sesi Terpakai − sesi mendatang yang
+sudah dibooking). Paket tanpa jumlah sesi tidak dibatasi. Admin tetap bisa membuat jadwal, dengan
+peringatan. "Selesai" yang ditekan dua kali tidak memotong sesi dua kali, dan sesi selalu dipotong dari
+klien pemilik jadwal itu.
+
 `SESSION_SECRET` dibuat otomatis oleh aplikasi. Menghapusnya = semua PT & klien logout.
 
 **Tanpa membuka editor:** buat file bernama `xnk-pt-config.json` di Google Drive akun
