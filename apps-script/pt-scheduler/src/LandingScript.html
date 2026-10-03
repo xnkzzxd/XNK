@@ -830,11 +830,44 @@
   }
 
   document.addEventListener('click', function (e) {
+    var info = e.target.closest('[data-info]');
+    if (info) { e.preventDefault(); toggleMenu(false); openInfo(info.getAttribute('data-info')); return; }
     var go = e.target.closest('[data-go]');
     if (go) { e.preventDefault(); scrollToId(go.getAttribute('data-go')); return; }
     var g = e.target.closest('[data-goal]');
     if (g) { e.preventDefault(); openMemberCheck(null, g.getAttribute('data-goal')); }
   });
+
+  // Halaman info (Proses & FAQ): overlay satu layar, bukan section di landing.
+  function openInfo(tab) {
+    var page = document.getElementById('info-page');
+    if (!page) return;
+    page.hidden = false;
+    document.body.classList.add('info-open');
+    infoTab(tab);
+    page.scrollTop = 0;
+  }
+  function closeInfo() {
+    var page = document.getElementById('info-page');
+    if (!page || page.hidden) return;
+    page.hidden = true;
+    document.body.classList.remove('info-open');
+  }
+  function infoTab(tab) {
+    $$('[data-info-tab]').forEach(function (b) {
+      var on = b.getAttribute('data-info-tab') === tab;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    $$('[data-info-pane]').forEach(function (p) { p.hidden = p.getAttribute('data-info-pane') !== tab; });
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-info-close]')) { closeInfo(); return; }
+    var t = e.target.closest('[data-info-tab]');
+    if (t) infoTab(t.getAttribute('data-info-tab'));
+    if (e.target.closest('#info-page .btn')) closeInfo();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeInfo(); });
 
   function toggleMenu(open) {
     var body = document.body;
@@ -1170,6 +1203,7 @@
     });
     // Marquee: kecepatan & kemiringan mengikuti kecepatan scroll.
     var rows = $$('.marquee-row');
+    if (rows.length) {
     var loops = rows.map(function (row, i) {
       var inners = row.querySelectorAll('.marquee-inner');
       return i % 2 === 0
@@ -1186,6 +1220,7 @@
       },
       onLeave: function () { skewTo(0); }, onLeaveBack: function () { skewTo(0); }
     });
+    }
 
     // Ajakan akhir: "SIAP?" membesar, footer XNK naik.
     G.fromTo('.cta-giant', { scale: 0.7, opacity: 0.2 }, { scale: 1.08, opacity: 1, ease: 'none', scrollTrigger: { trigger: '.sec-cta', start: 'top bottom', end: 'bottom top', scrub: 1 } });
@@ -1197,24 +1232,6 @@
     G.fromTo('#figure-desk', { '--ty': '0px', '--z': 1 }, {
       '--ty': '-4%', '--z': 1.05, ease: 'none',
       scrollTrigger: { trigger: hero, start: 'top top', end: 'bottom top', scrub: true }
-    });
-
-    // Proses: setiap langkah cuma berubah warna sendiri saat garis scroll (60% tinggi
-    // layar) melewatinya — tidak dipin, halaman tetap scroll biasa.
-    var bigNum = document.getElementById('method-num');
-    function flipNum(i, dir) {
-      if (!bigNum) return;
-      G.fromTo(bigNum, { yPercent: 100 * dir, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.6, ease: 'expo.out', onStart: function () { bigNum.textContent = pad2(i + 1); } });
-    }
-    // Step 1 punya .is-active di HTML statis (tampilan default tanpa JS/scroll);
-    // begitu tiap langkah punya trigger sendiri, hapus dulu supaya tidak "nyangkut".
-    var stepEls = $$('#steps .step');
-    stepEls.forEach(function (s) { s.classList.remove('is-active'); });
-    stepEls.forEach(function (step, i) {
-      ST.create({
-        trigger: step, start: 'top 60%', end: 'bottom 60%', toggleClass: 'is-active',
-        onEnter: function () { flipNum(i, 1); }, onEnterBack: function () { flipNum(i, -1); }
-      });
     });
 
     // Kursor khusus, tombol magnetik, kartu miring.
