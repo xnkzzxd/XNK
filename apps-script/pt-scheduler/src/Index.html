@@ -106,6 +106,14 @@
 
   <nav class="tabbar" id="tabbar" aria-label="Navigasi"></nav>
 
+  <!-- Panduan klien baru (portal): layar gelap, satu tombol disorot -->
+  <div class="guide-layer hide" id="guide-layer" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+    <svg class="guide-scrim" id="guide-scrim" aria-hidden="true" preserveAspectRatio="none"><path id="guide-hole" fill-rule="evenodd" d=""></path></svg>
+    <div class="guide-block" id="guide-block"></div>
+    <div class="guide-spot" id="guide-spot"></div>
+    <div class="guide-tip" id="guide-tip"></div>
+  </div>
+
   <!-- Login PIN admin -->
   <div class="auth hide" id="admin-login" role="dialog" aria-modal="true" aria-labelledby="admin-login-title">
     <form class="auth-form" onsubmit="window.handleAdminLogin(event)" novalidate>

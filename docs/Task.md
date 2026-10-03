@@ -129,6 +129,14 @@ Owner request: classes in the price list; clients can join a class, or make a pr
 | [x] | T-253 | Schedules column M `Kelas ID`; same class (or group) at the same start shares one coach seat up to capacity; class members book single sessions only. | Kode.gs, tests | T-250 | M | Booking flow for regular packages unchanged. |
 | [x] | T-254 | Portal: class badge and seats on cards, "Ikut kelas", Kelas card with group create / join / share / leave. | App.html, Index.html | T-252 | M | Works at 390 px. |
 
+## New-client guide (portal)
+
+Owner request: a step-by-step guide for new clients in the portal: dark screen, only the button to press is lit. Clients who log in by WhatsApp (existing) or renew get none. Decisions: portal only (landing unchanged); on by default with a switch in Pengaturan → Tampilan (exception to "default = off", chosen by the owner).
+
+| | ID | Task | Files | Depends | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [x] | T-500 | MemberData column W `Panduan` set by `registerNewClient` (new numbers only); profile `guide`; `markGuideSeen`; `CLIENT_GUIDE_ENABLED` setting; portal spotlight guide for Beranda, Booking, Jadwal, Paket, Coach; replay from Profil saya; back gesture closes it. | Kode.gs, App.html, Index.html, Theme.html, tests/guide.test.js, tools/browser-check.js | — | M | Works at 390 px in light and dark; existing clients never see it. |
+
 ## Later
 
 | | ID | Task | PRD |

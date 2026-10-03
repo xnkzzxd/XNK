@@ -432,6 +432,7 @@ function getAppSettings(token) {
     telegramBotTokenMask: _maskSecret_(props.getProperty('TELEGRAM_BOT_TOKEN')),
     telegramChatIds: props.getProperty('TELEGRAM_CHAT_IDS') || '',
     notifEmail: props.getProperty('NOTIF_EMAIL') || '',
+    clientGuideEnabled: _guideEnabled_(),
     businessHours: _businessHours_()
   };
   settings.defaults = { businessHours: DEFAULT_BUSINESS_HOURS };
@@ -478,6 +479,7 @@ function updateAppSettings(token, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'telegramBotToken')) setOrDelete('TELEGRAM_BOT_TOKEN', String(payload.telegramBotToken || '').trim());
   if (Object.prototype.hasOwnProperty.call(payload, 'telegramChatIds')) setOrDelete('TELEGRAM_CHAT_IDS', String(payload.telegramChatIds || '').trim());
   if (Object.prototype.hasOwnProperty.call(payload, 'notifEmail')) setOrDelete('NOTIF_EMAIL', String(payload.notifEmail || '').trim());
+  if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'businessHours')) {
     setOrDelete('BUSINESS_HOURS_JSON', payload.businessHours == null ? '' : JSON.stringify(payload.businessHours));
   }
@@ -598,7 +600,8 @@ function _memberPublicProfile_(row) {
     preferredCoachId: sanitizeValue(row[10]) || '',
     preferredCoachName: sanitizeValue(row[11]) || '',
     mealReminder: _mealOnFrom_(row[14]),   // T-73: kolom O; kosong = aktif
-    reminderOff: _rmdOffFrom_(row[15])     // T-123: kolom P; jenis pengingat yang dimatikan
+    reminderOff: _rmdOffFrom_(row[15]),    // T-123: kolom P; jenis pengingat yang dimatikan
+    guide: _guideFrom_(row[MEMBER_GUIDE_COL - 1])   // kolom W; null = tanpa panduan
   };
 }
 
@@ -651,6 +654,53 @@ function memberLoginByKey(key) {
 /** Profil terbaru klien yang sedang login (dipakai saat portal dibuka ulang). */
 function getMemberProfile(memberToken) {
   return _memberPublicProfile_(requireMember_(memberToken).row);
+}
+
+// ── Panduan klien baru ──────────────────────────────────────────────────────
+// Portal menggelapkan layar dan menyorot tombol yang perlu diklik, per halaman,
+// hanya untuk klien yang mendaftar sendiri. Kolom W MemberData "Panduan":
+// kosong = tanpa panduan (klien lama, perpanjang, ditambah admin);
+// 'baru|beranda|booking' = klien baru + halaman yang sudah selesai;
+// 'selesai' = semua selesai atau dimatikan klien. Bisa dimatikan di Pengaturan
+// (CLIENT_GUIDE_ENABLED = 'false'); bawaannya nyala.
+const MEMBER_GUIDE_COL = 23;   // Kolom W
+const GUIDE_PAGES = ['beranda', 'booking', 'jadwal', 'paket', 'coach'];
+
+function _guideEnabled_() {
+  return PropertiesService.getScriptProperties().getProperty('CLIENT_GUIDE_ENABLED') !== 'false';
+}
+
+function _guideFrom_(cell) {
+  const parts = String(cell == null ? '' : cell).trim().split('|');
+  if (parts[0] !== 'baru' || !_guideEnabled_()) return null;
+  const done = GUIDE_PAGES.filter(function(p) { return parts.indexOf(p) !== -1; });
+  return done.length === GUIDE_PAGES.length ? null : { done: done };
+}
+
+function _ensureGuideColumn_(sheet) {
+  const cell = sheet.getRange(1, MEMBER_GUIDE_COL);
+  if (cell.getValue() === '') { cell.setValue('Panduan'); cell.setFontWeight('bold'); }
+}
+
+/** Klien menandai panduan satu halaman selesai/dilewati; 'semua' = matikan panduan. */
+function markGuideSeen(memberToken, page) {
+  const found = requireMember_(memberToken);
+  page = String(page == null ? '' : page);
+  if (page !== 'semua' && GUIDE_PAGES.indexOf(page) === -1) throw new Error('Halaman panduan tidak dikenal.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const cell = found.sheet.getRange(found.rowNum, MEMBER_GUIDE_COL);
+    const parts = String(cell.getValue() || '').trim().split('|');
+    if (parts[0] !== 'baru') return null;
+    if (page !== 'semua' && parts.indexOf(page) === -1) parts.push(page);
+    const done = GUIDE_PAGES.filter(function(p) { return parts.indexOf(p) !== -1; });
+    const value = page === 'semua' || done.length === GUIDE_PAGES.length ? 'selesai' : ['baru'].concat(done).join('|');
+    cell.setValue(value);
+    return _guideFrom_(value);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // Batasi fungsi yang tidak butuh login tapi mahal/berisiko di-spam
@@ -1749,6 +1799,15 @@ function registerNewClient(data) {
   if (isExisting) return { status: 'exists' };
   const found = _findMemberRow_(function(row) { return String(row[0]).trim() === String(result.id); });
   if (!found) return { status: 'success', id: result.id };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    _ensureGuideColumn_(found.sheet);
+    found.sheet.getRange(found.rowNum, MEMBER_GUIDE_COL).setValue('baru');
+    found.row[MEMBER_GUIDE_COL - 1] = 'baru';
+  } finally {
+    lock.releaseLock();
+  }
   const session = _issueMemberSession_(found);
   return { status: 'success', id: result.id, token: session.token, member: session.member };
 }
