@@ -1712,27 +1712,21 @@
     window.coachSelfId = res.selfId || '';
     window.coaches = window.coachesAll.filter(function (c) { return c.aktif; });
   }
-  // E2: jam kosong dari mesin slot server (jam operasional, jam kerja & cuti coach, kapasitas).
-  // Kalau gagal, panel jam memakai hitungan lama di publicDayPanel.
+  // E2: jam kosong dari mesin slot server (jam operasional, jam kerja & cuti coach, kapasitas),
+  // dikirim lewat getPortalBootstrap. Kalau gagal, panel jam memakai hitungan lama di publicDayPanel.
   window.openSlotsByDate = null;
-  window.loadOpenSlots = function () {
-    return publicCall('getOpenSlots', { days: 21 }).then(function (rows) {
-      const map = {};
-      (rows || []).forEach(function (d) { const f = {}; d.hours.forEach(function (x) { f[x.hour] = x.free; }); map[d.date] = f; });
-      window.openSlotsByDate = map;
-      if (window.isPublicView && window.currentView === 'calendar') renderView('calendar', { animate: false });
-    }).catch(function () { window.openSlotsByDate = null; });
-  };
+  window.bookingHorizonDays = 21;
+  function applyOpenSlots(rows) {
+    const map = {};
+    (rows || []).forEach(function (d) { const f = {}; d.hours.forEach(function (x) { f[x.hour] = x.free; }); map[d.date] = f; });
+    window.openSlotsByDate = map;
+  }
   window.loadAllData = function () {
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
-    return Promise.all([
-      safe(adminCall('getMembers')),
-      safe(adminCall('getSchedules')),
-      safe(adminCall('getCoachesAdmin')),
-      safe(publicCall('getPriceList')),
-      safe(publicCall('getBusinessHours'))
-    ]).then(function (r) {
+    // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
+    return safe(adminCall('getAdminBootstrap')).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
+      const r = b ? [b.members, b.schedules, b.coaches, b.priceList, b.businessHours] : [];
       // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
       if (r[0]) window.members = r[0];
       if (r[1]) window.schedules = normalizeSchedules(r[1]);
@@ -1749,12 +1743,9 @@
 
   function loadAdminExtras() {
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
-    Promise.all([
-      safe(adminCall('getMemberTransactionLog')),
-      safe(adminCall('getTaskSummary')),
-      safe(adminCall('getRenewalRequests'))
-    ]).then(function (r) {
+    safe(adminCall('getAdminExtras')).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return;
+      const r = b ? [b.transactionLog, b.taskSummary, b.renewals] : [];
       if (r[0]) window.memberArchive = r[0];
       if (r[1]) window.taskSummary = r[1];
       if (r[2]) window.renewals = r[2];
@@ -1775,22 +1766,16 @@
 
   window.loadPublicData = function () {
     const token = _lsGet(MEMBER_TOKEN_KEY);
-    const safe = p => p.catch(function () { return null; });
-    const jobs = [
-      safe(publicCall('getPublicSchedules', token)),
-      safe(publicCall('getCoaches')),
-      safe(publicCall('getPriceList')),
-      safe(publicCall('getBusinessHours'))
-    ];
-    if (token) jobs.push(safe(memberCall('getMemberProfile')));
     window.members = []; window.memberArchive = [];
-    return Promise.all(jobs).then(function (r) {
-      window.schedules = normalizeSchedules(r[0]);
-      window.coaches = r[1] || [];
-      window.priceListData = r[2] || [];
-      if (r[3]) Object.assign(DAY_HOURS, r[3]);
-      if (token && r[4]) window.setPublicMember(r[4]);
-      window.loadOpenSlots();
+    // Satu panggilan server: profil, jadwalku, jam kosong, coach, paket, jam operasional.
+    return publicCall('getPortalBootstrap', token).catch(function () { return null; }).then(function (b) {
+      b = b || {};
+      applyPortalBootstrap(b);
+      window.coaches = b.coaches || [];
+      window.priceListData = b.priceList || [];
+      if (b.businessHours) Object.assign(DAY_HOURS, b.businessHours);
+      if (token && b.authLost) window.onMemberAuthLost(new Error(b.authLost));
+      else if (token && b.profile) window.setPublicMember(b.profile);
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (window._openMemberDashboard && window.publicLoggedMember) {
@@ -1803,6 +1788,16 @@
       }
       openPendingSlot();
     });
+  };
+
+  // Jadwalku + jam kosong dari getPortalBootstrap (jadwal klien lain tidak pernah dikirim ke browser).
+  function applyPortalBootstrap(b) {
+    window.schedules = normalizeSchedules(b.schedules);
+    if (b.horizonDays) window.bookingHorizonDays = b.horizonDays;
+    if (b.openSlots) applyOpenSlots(b.openSlots);
+  }
+  window.refreshPortalSchedules = function () {
+    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { applyPortalBootstrap(b || {}); });
   };
 
   // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form
@@ -2394,7 +2389,8 @@
       const overlapping = list.filter(s => isBooked(s) && new Date(s.start) < s1 && new Date(s.end || s.start) > s0);
       const isMine = me && overlapping.some(s => String(s.memberId) === String(me.id));
       const eng = window.openSlotsByDate && window.openSlotsByDate[ymd(day)];
-      const taken = !isMine && (eng && eng[hh] !== undefined ? eng[hh] <= 0 : overlapping.length >= coachCount);
+      // Jam kosong dari server; hari di luar batas booking (tidak ada di openSlotsByDate) = penuh.
+      const taken = !isMine && (eng && eng[hh] !== undefined ? eng[hh] <= 0 : (window.openSlotsByDate ? true : overlapping.length >= coachCount));
       const past = s0 <= now;
       const label = pad(hh) + '.00';
       if (isMine) slots += '<button type="button" class="slot mine" disabled>' + icon('check', 'style="width:14px;height:14px"') + label + '</button>';
@@ -2785,9 +2781,8 @@
       const done = busy(btn, 'Membuat jadwal…');
       (isClient ? memberCall('clientBookRecurring', base, { weekdays: weekdays, occurrences: occ }) : adminCall('addRecurringSchedule', base, { weekdays: weekdays, occurrences: occ }))
         .then(function (res) {
-          return (isClient ? publicCall('getPublicSchedules', _lsGet(MEMBER_TOKEN_KEY)) : adminCall('getSchedules')).then(function (all) {
+          return (isClient ? window.refreshPortalSchedules() : adminCall('getSchedules').then(function (all) { window.schedules = normalizeSchedules(all); })).then(function () {
             done();
-            window.schedules = normalizeSchedules(all);
             window.closeModal();
             window.updateUI();
             window.showToast((res && res.count) + ' sesi berulang dibuat.');

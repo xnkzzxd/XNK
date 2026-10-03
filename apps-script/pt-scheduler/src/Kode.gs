@@ -157,6 +157,7 @@ const LOGIN_LOCK_SECONDS = 600;      // lama kunci (dan jendela hitung gagal)
 const AUTH_ERROR_PREFIX = 'AUTH_REQUIRED';
 
 const MEMBER_LOGIN_MAX_FAILS = 30;   // nomor WA tak dikenal per 10 menit (dari semua pengunjung)
+const REGISTER_MAX_PER_10MIN = 5;    // pendaftaran mandiri per 10 menit (dari semua pengunjung); Script Property menimpanya
 
 // ── Pengaturan lewat file Drive ─────────────────────────────────────────────
 // Script Properties hanya bisa diisi dari editor atau dari kode yang sedang
@@ -711,6 +712,54 @@ function _throttle_(name, seconds) {
   if (cache.get(key)) return false;
   cache.put(key, '1', seconds);
   return true;
+}
+
+
+// Jalankan fn di bawah script lock (baca-lalu-tulis sheet). Panggilan bersarang dalam
+// satu eksekusi tidak mengambil lock lagi.
+let _lockDepth_ = 0;
+function _locked_(fn) {
+  if (_lockDepth_ > 0) return fn();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  _lockDepth_++;
+  try { return fn(); } finally { _lockDepth_--; lock.releaseLock(); }
+}
+
+// ── Kuota & batas booking klien ─────────────────────────────────────────────
+const BOOKING_MAX_DAYS_AHEAD = 60;   // bawaan; Script Property BOOKING_MAX_DAYS_AHEAD menimpanya
+
+/**
+ * Sisa sesi yang masih boleh dibooking klien: Total Sesi − Sesi Terpakai − sesi mendatang
+ * yang sudah dibooking (belum selesai/batal). null = paket tanpa jumlah sesi (tidak dibatasi).
+ * Bisa negatif.
+ */
+function _memberQuotaLeft_(memberRow, schedules) {
+  const total = parseInt(memberRow[8], 10);
+  if (!(total > 0)) return null;
+  const used = parseInt(memberRow[9], 10) || 0;
+  const id = String(memberRow[0]).trim();
+  const now = Date.now();
+  const upcoming = (schedules || _getSchedulesAll_()).filter(function(s) {
+    const st = String(s.status || '').toLowerCase();
+    return String(s.memberId).trim() === id && st !== 'completed' && st !== 'cancelled' && st !== 'available' &&
+      new Date(s.start).getTime() > now;
+  }).length;
+  return total - used - upcoming;   // bisa negatif kalau admin membooking melebihi kuota
+}
+
+function _assertQuota_(memberRow, count) {
+  const left = _memberQuotaLeft_(memberRow);
+  if (left === null) return;
+  if (left <= 0) throw new Error('Sisa sesi paketmu habis. Perpanjang paket dulu.');
+  if (count > left) throw new Error('Sisa sesi paketmu tinggal ' + left + '. Kurangi jumlah sesi berulangnya.');
+}
+
+function _assertBookingHorizon_(start) {
+  const days = _numProp_('BOOKING_MAX_DAYS_AHEAD', BOOKING_MAX_DAYS_AHEAD);
+  if (new Date(start).getTime() > Date.now() + days * 86400000) {
+    throw new Error('Booking paling jauh ' + days + ' hari ke depan.');
+  }
 }
 
 
@@ -1674,6 +1723,10 @@ function _addMemberInternal_(memberData, options) {
  */
 function updateMemberProfile(token, memberData) {
   requireAdmin_(token);
+  return _locked_(function() { return _updateMemberProfile_(memberData || {}); });
+}
+
+function _updateMemberProfile_(memberData) {
   const sheet = _getMemberDataSheet_();
   const data = sheet.getDataRange().getValues();
   const targetId = String(memberData.id).trim();
@@ -1746,6 +1799,15 @@ function registerNewClient(data) {
   if (!pkg) throw new Error('Paket tidak ditemukan. Muat ulang halaman lalu pilih paket lagi.');
   const sessions = parseInt(pkg.jumlahSesi, 10) || 1;
   const priceStr = _formatRupiah_(pkg.harga);
+
+  // Anti-spam: satu nomor sekali per menit, dan maksimal REGISTER_MAX_PER_10MIN pendaftaran per 10 menit.
+  if (!_throttle_('reg_' + phone, 60)) throw new Error('Pendaftaran baru saja dikirim. Tunggu sebentar.');
+  const regCache = CacheService.getScriptCache();
+  const regCount = parseInt(regCache.get('register_count') || '0', 10);
+  if (regCount >= _numProp_('REGISTER_MAX_PER_10MIN', REGISTER_MAX_PER_10MIN)) {
+    throw new Error('Sedang banyak pendaftaran. Coba lagi dalam 10 menit, atau hubungi Coach lewat WhatsApp.');
+  }
+  regCache.put('register_count', String(regCount + 1), 600);
 
   const result = _addMemberInternal_({
     name: name,
@@ -1984,6 +2046,69 @@ function getPublicSchedules(memberToken) {
   });
 }
 
+/**
+ * Portal klien: SATU panggilan saat portal dibuka (backend-first, supaya cepat).
+ * Token boleh kosong (layar masuk). Hanya jadwal milik klien itu sendiri yang dikirim;
+ * jam penuh/kosong datang dari mesin slot server (openSlots), bukan dari booking klien lain.
+ * Token yang tidak sah tidak melempar error: authLost berisi pesannya, supaya browser logout.
+ */
+function getPortalBootstrap(memberToken) {
+  let found = null, authLost = '';
+  if (memberToken) {
+    try { found = requireMember_(memberToken); } catch (e) { authLost = String(e.message || e); }
+  }
+  const memberId = found ? String(found.row[0]).trim() : null;
+  const all = _getSchedulesAll_();
+  const mine = memberId ? all.filter(function(x) { return String(x.memberId).trim() === memberId; }).map(function(x) {
+    const own = Object.assign({}, x);
+    delete own.phone;
+    return own;
+  }) : [];
+  const now = new Date();
+  const horizon = _portalHorizonDays_();
+  const bh = _businessHours_();
+  return {
+    profile: found ? _memberPublicProfile_(found.row) : null,
+    authLost: authLost.indexOf(AUTH_ERROR_PREFIX) !== -1 ? authLost : '',
+    schedules: mine,
+    openSlots: _freeSlots_({
+      businessHours: bh, coaches: _activeCoaches_().map(function(c) { return { id: c.id }; }),
+      rules: _coachRules_(), timeOff: _coachTimeOff_(false), bookings: _slotBookings_(all), from: _wibParts_(now).date, days: horizon, now: now
+    }),
+    horizonDays: horizon,
+    coaches: getCoaches(),
+    priceList: getPriceList(),
+    businessHours: bh
+  };
+}
+
+/** Berapa hari jam kosong yang dikirim ke portal: sama dengan batas booking (maks 62). */
+function _portalHorizonDays_() {
+  return Math.max(1, Math.min(62, Math.floor(_numProp_('BOOKING_MAX_DAYS_AHEAD', BOOKING_MAX_DAYS_AHEAD))));
+}
+
+/** Panel admin: data utama dalam SATU panggilan (klien, jadwal, coach, paket, jam operasional). */
+function getAdminBootstrap(token) {
+  requireAdmin_(token);
+  return {
+    members: getMembers(token),
+    schedules: _getSchedulesAll_(),
+    coaches: getCoachesAdmin(token),
+    priceList: getPriceList(),
+    businessHours: _businessHours_()
+  };
+}
+
+/** Panel admin: data susulan dalam SATU panggilan (riwayat transaksi, ringkasan PR, perpanjangan). */
+function getAdminExtras(token) {
+  requireAdmin_(token);
+  return {
+    transactionLog: getMemberTransactionLog(token),
+    taskSummary: getTaskSummary(token),
+    renewals: getRenewalRequests(token)
+  };
+}
+
 /** T-200: coach kosong = ID kosong + nama kosong. Baris lama yang menyimpan teks placeholder dibaca sebagai kosong. */
 function _coachNameOrEmpty_(v) {
   const n = sanitizeValue(v);
@@ -2029,7 +2154,15 @@ function _getSchedulesAll_() {
  */
 function addSchedule(token, scheduleData) {
   requireAdmin_(token);
-  return _addScheduleInternal_(scheduleData, 'read', false);
+  return _locked_(function() {
+    const res = _addScheduleInternal_(scheduleData, 'read', false);
+    try {
+      const found = scheduleData && scheduleData.memberId ? _findMemberRow_(function(row) { return String(row[0]).trim() === String(scheduleData.memberId).trim(); }) : null;
+      const left = found ? _memberQuotaLeft_(found.row) : null;
+      if (left !== null && left < 0 && new Date(scheduleData.start).getTime() > Date.now()) res.warnings = (res.warnings || []).concat(['Sesi klien ini sudah habis terpakai/terbooking.']);
+    } catch (e) { Logger.log('Cek kuota gagal: ' + e); }
+    return res;
+  });
 }
 
 function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
@@ -2127,6 +2260,7 @@ function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
+    _assertQuota_(member.row, Math.min(52, parseInt(recurrenceRule && recurrenceRule.occurrences, 10) || 0));
     return _addRecurringInternal_({
       memberId: String(member.row[0]).trim(),
       memberName: member.row[1],
@@ -2168,6 +2302,7 @@ function _addRecurringInternal_(baseScheduleData, recurrenceRule, status) {
         guard++;
         if (weekdaySet[probe.getDay()]) {
           made++;
+          _assertBookingHorizon_(probe);
           const end = new Date(probe.getTime() + durationMin * 60000);
           const p = _slotProblem_(probe.toISOString(), end.toISOString(), '', false);
           if (p) throw new Error(p.message.replace(/\.$/, '') + ' (' + probe.toLocaleDateString('id-ID', {weekday:'short', day:'numeric', month:'short'}) + ' ' + baseScheduleData.time + '). Tidak ada sesi yang dibuat.');
@@ -2484,6 +2619,7 @@ function clientBookSchedule(memberToken, scheduleData) {
       if (same.length && same.length >= cls.kapasitas) throw new Error('Sesi kelas ini sudah penuh. Pilih jam lain.');
       if (same.length && new Date(same[0].end).getTime() !== new Date(scheduleData.end).getTime()) throw new Error('Durasi harus sama dengan sesi kelas yang sudah ada.');
     }
+    _assertQuota_(member.row, 1);
     _assertClientSlotOpen_(scheduleData.start, scheduleData.end, '', classKey);
     addResult = _addScheduleInternal_({
       memberId: String(member.row[0]).trim(),
@@ -2577,45 +2713,49 @@ function _ensureCompletedAtColumn_(sheet) {
  */
 function completeSession(token, scheduleId, memberId) {
   requireAdmin_(token);
+  // memberId dari browser diabaikan: klien yang dipotong selalu pemilik jadwal ini (kolom B).
+  return _locked_(function() { return _completeSession_(scheduleId); });
+}
+
+function _completeSession_(scheduleId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   const schSheet = ss.getSheetByName('Schedules');
   if(!schSheet) throw new Error('Sheet Schedules tidak ditemukan');
   _ensureCompletedAtColumn_(schSheet);
   const schData = schSheet.getDataRange().getValues();
-  let scheduleFound = false;
-  let memberName = '';
-  const completedAt = new Date();
+  let schRow = -1;
   for (let i = 1; i < schData.length; i++) {
-    if (schData[i][0] === scheduleId) {
-      schSheet.getRange(i + 1, 8).setValue('completed');
-      schSheet.getRange(i + 1, 11).setValue(completedAt); // Completed At — dipakai getCoachMonthlyStats
-      memberName = schData[i][2];
-      scheduleFound = true; break;
-    }
+    if (schData[i][0] === scheduleId) { schRow = i; break; }
   }
-  if(!scheduleFound) throw new Error('Jadwal tidak ditemukan');
+  if (schRow === -1) throw new Error('Jadwal tidak ditemukan');
+  const memberName = schData[schRow][2];
+  const memberId = String(schData[schRow][1]).trim();
+  const alreadyDone = String(schData[schRow][7]).toLowerCase() === 'completed';
 
   const memSheet = _getMemberDataSheet_();
   const memData = memSheet.getDataRange().getValues();
-  let memberFound = false;
-  let usedAfter = 0, totalSesi = 0;
+  let memRow = -1;
   for (let i = 1; i < memData.length; i++) {
-    if (memData[i][0] === memberId) {
-      let currentUsed = parseInt(memData[i][9]) || 0;
-      usedAfter = currentUsed + 1;
-      totalSesi = parseInt(memData[i][8]) || 0;
-      memSheet.getRange(i + 1, 10).setValue(usedAfter);
-      memberFound = true; break;
-    }
+    if (String(memData[i][0]).trim() === memberId) { memRow = i; break; }
   }
-  if(!memberFound) throw new Error('Klien tidak ditemukan');
+  if (memRow === -1) throw new Error('Klien tidak ditemukan');
 
-  try {
-    kirimNotifTelegram_("✅ <b>SESI SELESAI</b>\n\n" +
-      "👤 <b>Klien:</b> " + escapeHtmlTelegram(memberName) + "\n" +
-      "📦 <b>Sesi Terpakai:</b> " + usedAfter + "/" + totalSesi);
-  } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
+  let usedAfter = parseInt(memData[memRow][9]) || 0;
+  const totalSesi = parseInt(memData[memRow][8]) || 0;
+  // Sudah selesai (mis. tombol ditekan dua kali): jangan potong sesi lagi.
+  if (!alreadyDone) {
+    schSheet.getRange(schRow + 1, 8).setValue('completed');
+    schSheet.getRange(schRow + 1, 11).setValue(new Date()); // Completed At — dipakai getCoachMonthlyStats
+    usedAfter += 1;
+    memSheet.getRange(memRow + 1, 10).setValue(usedAfter);
+
+    try {
+      kirimNotifTelegram_("✅ <b>SESI SELESAI</b>\n\n" +
+        "👤 <b>Klien:</b> " + escapeHtmlTelegram(memberName) + "\n" +
+        "📦 <b>Sesi Terpakai:</b> " + usedAfter + "/" + totalSesi);
+    } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
+  }
 
   // Data untuk reminder WA sisa sesi (dikirim manual oleh admin via tombol di frontend,
   // bukan auto-send, karena WA tidak punya API kirim otomatis tanpa WhatsApp Business API).
@@ -2624,6 +2764,8 @@ function completeSession(token, scheduleId, memberId) {
 
   return {
     status: 'success',
+    memberId: memberId,
+    alreadyCompleted: alreadyDone,
     memberName: memberName,
     usedSessions: usedAfter,
     totalSessions: totalSesi,
@@ -2639,6 +2781,10 @@ function completeSession(token, scheduleId, memberId) {
  */
 function deleteSchedule(token, scheduleId) {
   requireAdmin_(token);
+  return _locked_(function() { return _deleteSchedule_(scheduleId); });
+}
+
+function _deleteSchedule_(scheduleId) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const schSheet = ss.getSheetByName('Schedules');
@@ -4936,8 +5082,8 @@ function _freeSlots_(o) {
   return out;
 }
 
-function _slotBookings_() {
-  return _getSchedulesAll_().filter(function(s) {
+function _slotBookings_(all) {
+  return (all || _getSchedulesAll_()).filter(function(s) {
     const st = String(s.status || '').toLowerCase();
     return st !== 'available' && st !== 'cancelled';
   }).map(function(s) { return { start: s.start, end: s.end, coachId: String(s.coachId || ''), classKey: _classKey_(s) }; });
@@ -4948,13 +5094,13 @@ function _classKey_(s) {
   return s && s.classId ? String(s.classId) + '|' + new Date(s.start).getTime() : '';
 }
 
-/** Publik: jam kosong tiap hari (7 hari default, maks 21). Tidak membuka siapa yang booking atau alasan cuti. */
+/** Publik: jam kosong tiap hari (7 hari default, maks 62). Tidak membuka siapa yang booking atau alasan cuti. */
 function getOpenSlots(opts) {
   opts = opts || {};
   const now = new Date();
   let from = String(opts.from || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) from = _wibParts_(now).date;
-  const days = Math.max(1, Math.min(21, parseInt(opts.days, 10) || 7));
+  const days = Math.max(1, Math.min(62, parseInt(opts.days, 10) || 7));
   return _freeSlots_({
     businessHours: _businessHours_(), coaches: _activeCoaches_().map(function(c) { return { id: c.id }; }),
     rules: _coachRules_(), timeOff: _coachTimeOff_(false), bookings: _slotBookings_(), from: from, days: days, now: now
@@ -5054,6 +5200,7 @@ function _slotWarnings_(start, end, excludeId) {
 function _assertClientSlotOpen_(start, end, excludeId, joinClassKey) {
   const p = _slotProblem_(start, end, excludeId, false, joinClassKey);
   if (p) throw new Error(p.message);
+  _assertBookingHorizon_(start);
 }
 
 // ── 📂 Admin: jam kerja & cuti ──────────────────────────────────────────────

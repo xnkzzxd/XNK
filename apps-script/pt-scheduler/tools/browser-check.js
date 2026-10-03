@@ -219,7 +219,7 @@ async function contrastReport(page) {
     const { page, context, errors } = await openPage(browser, env, '/Index', calls);
 
     check(await visible(page, '#admin-login'), 'no token → PIN login screen');
-    check(!calls.includes('getMembers') && !calls.includes('getSchedules'), 'no client data requested before login');
+    check(!calls.includes('getAdminBootstrap') && !calls.includes('getMembers') && !calls.includes('getSchedules'), 'no client data requested before login');
     await shot(page, 'admin-mobile-login');
     await page.fill('#admin-pin', '000000');
     await page.click('#admin-login-btn');
@@ -315,7 +315,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(1500);
     check(!(await page.evaluate(() => window.__splashShown)), 'login: only the button loads, the full-screen splash never shows');
     check(!(await visible(page, '#admin-login')) && (await page.evaluate(() => window.members.length)) === 3, 'login: dashboard is ready when the login box closes');
-    check(calls.includes('getMemberTransactionLog') && calls.includes('getTaskSummary'), 'login: the secondary data loads after the first screen');
+    check(calls.filter(c => c === 'getAdminBootstrap').length === 1 && calls.includes('getAdminExtras'), 'login: one call for the first screen, one for the secondary data');
 
     // Buka lagi dengan token: panel langsung terisi dari salinan, tanpa cek sesi terpisah
     const token = await page.evaluate(() => localStorage.getItem('xnk_admin_token'));
@@ -328,7 +328,7 @@ async function contrastReport(page) {
     await again.context.close();
 
     // Tarik ke bawah
-    const before = calls.filter(c => c === 'getMembers').length;
+    const before = calls.filter(c => c === 'getAdminBootstrap').length;
     const touch = (type, y) => page.evaluate(([type, y]) => {
       const sc = document.getElementById('main-scroll-area');
       const t = new Touch({ identifier: 1, target: sc, clientX: 100, clientY: y });
@@ -348,7 +348,7 @@ async function contrastReport(page) {
     check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('ok')), 'pull down: ends with a check mark');
     await page.waitForTimeout(900);
     check(await page.evaluate(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr'), 'pull down: the page settles back and the indicator resets');
-    check(calls.filter(c => c === 'getMembers').length === before + 1, 'pull down: data is reloaded in place');
+    check(calls.filter(c => c === 'getAdminBootstrap').length === before + 1, 'pull down: data is reloaded in place');
     check((await page.evaluate(() => window.currentView)) === 'dashboard', 'pull down: stays on the same page');
 
     // Tombol back
@@ -1167,12 +1167,13 @@ async function contrastReport(page) {
     const env = richEnv();
     const calls = [];
     const { page, context, errors, navigations } = await openPage(browser, env, '/Index?view=public', calls);
-    const adminCalls = ['getMembers', 'getSchedules', 'getMemberTransactionLog', 'getPackageTrendStats', 'getRevenueSummary', 'checkAdminSession'];
+    const adminCalls = ['getAdminBootstrap', 'getAdminExtras', 'getMembers', 'getSchedules', 'getMemberTransactionLog', 'getPackageTrendStats', 'getRevenueSummary', 'checkAdminSession'];
     check(!calls.some(c => adminCalls.includes(c)), 'no admin functions called: ' + calls.join(','));
     check(!(await visible(page, '#admin-login')), 'admin PIN screen never appears in the client portal');
     check((await page.evaluate(() => window.members.length)) === 0, 'no client list in the browser');
     const leaked = await page.evaluate(() => JSON.stringify(window.schedules));
     check(!leaked.includes('Ani') && !leaked.includes('Rahasia') && !leaked.includes('62811'), 'public calendar data has no names, notes or phone numbers');
+    check(calls.filter(c => c === 'getPortalBootstrap').length === 1 && !calls.includes('getPublicSchedules'), 'portal opens with one server call: ' + calls.join(','));
     check(await visible(page, '#login-phone'), 'login page asks for the WhatsApp number');
     await shot(page, 'portal-mobile-login');
 
