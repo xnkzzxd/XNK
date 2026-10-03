@@ -3128,13 +3128,13 @@ function testNotif() {
 // 📁 07_PRICELIST — Manajemen Pricelist (Katalog Paket)
 // #############################################################################
 
-// Kategori paket TETAP (landing hanya punya tab student/college/regular/premium; `core` memicu pengingat makan).
+// Kategori paket TETAP (semuanya tampil sebagai tab di landing; `core` juga memicu pengingat makan).
 const PACKAGE_CATEGORIES = [
   { id: 'student', label: 'Student', onLanding: true },
   { id: 'college', label: 'College', onLanding: true },
   { id: 'regular', label: 'Regular', onLanding: true },
   { id: 'premium', label: 'Premium', onLanding: true },
-  { id: 'core', label: 'Core', onLanding: false }
+  { id: 'core', label: 'Core', onLanding: true }
 ];
 const PRICELIST_HEADERS = ["ID", "Nama Paket", "Kategori", "Harga", "Jumlah Sesi", "Durasi", "Deskripsi", "Benefit", "Status Aktif", "Urutan", "Tipe", "Kapasitas", "Jadwal Kelas", "Kelas Privat"];
 const PRICELIST_KEYS = ['id', 'nama', 'kategori', 'harga', 'sesi', 'durasi', 'deskripsi', 'benefit', 'aktif', 'urutan', 'tipe', 'kapasitas', 'jadwal', 'privat'];
