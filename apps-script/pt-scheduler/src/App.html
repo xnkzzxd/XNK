@@ -265,6 +265,29 @@
     return function () { btn.disabled = false; btn.innerHTML = html; paintIcons(); };
   }
 
+  // Klien: panel "memeriksa ketersediaan" (skeleton) di atas form selama server mengecek booking.
+  function showChecking(form, text) {
+    let el = form.querySelector('.checking-panel');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'checking-panel notice';
+      el.setAttribute('role', 'status');
+      el.style.cssText = 'flex-direction:column;align-items:stretch;gap:10px';
+      form.insertBefore(el, form.firstChild);
+    }
+    el.innerHTML = '<p class="li-title row" style="gap:8px"><span class="spin" aria-hidden="true"></span><span class="chk-text">' + h(text) + '</span></p>' +
+      '<div class="skeleton" style="height:14px;width:80%"></div><div class="skeleton" style="height:14px;width:55%"></div>';
+    form.setAttribute('aria-busy', 'true');
+    form.querySelectorAll('input,select,textarea').forEach(function (i) { i.dataset.wasDisabled = i.disabled ? '1' : ''; i.disabled = true; });
+  }
+  function setChecking(form, text) { const t = form.querySelector('.chk-text'); if (t) t.textContent = text; }
+  function hideChecking(form) {
+    const el = form.querySelector('.checking-panel');
+    if (el) el.remove();
+    form.removeAttribute('aria-busy');
+    form.querySelectorAll('input,select,textarea').forEach(function (i) { if (!i.dataset.wasDisabled) i.disabled = false; });
+  }
+
   // ── Toast ───────────────────────────────────────────────────────────────────
   window.showToast = function (msg, iconName) {
     const el = $('toast'), txt = $('toast-msg');
@@ -2810,8 +2833,27 @@
       return;
     }
 
-    const done = busy(btn, isClient ? 'Mengirim…' : 'Menyimpan…');
-    (isClient ? memberCall('clientBookSchedule', data) : adminCall('addSchedule', data)).then(function (res) {
+    const form = e.target;
+    const finish = busy(btn, isClient ? 'Memeriksa…' : 'Menyimpan…');
+    if (isClient) showChecking(form, 'Memeriksa ketersediaan jam…');
+    const done = function () { finish(); if (isClient) hideChecking(form); };
+    const fresh = function () { return window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {}); };
+    // Klien: cek jam kosong terbaru dulu (bukan data lama di layar), lalu server cek lagi saat menyimpan.
+    const preflight = !isClient ? Promise.resolve() : publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14 }).then(function (rows) {
+      applyOpenSlots(rows);
+      const row = (rows || []).find(function (d) { return d.date === ymd(start); });
+      const first = new Date(start); first.setMinutes(0, 0, 0);
+      for (let t = first.getTime(); t < end.getTime(); t += 3600000) {
+        const d = new Date(t);
+        const r = (rows || []).find(function (x) { return x.date === ymd(d); });
+        const hr = r && r.hours.find(function (x) { return x.hour === d.getHours(); });
+        if (hr && hr.free <= 0 && !hr.past) throw new Error('Jam ' + pad(d.getHours()) + '.00 baru saja diambil orang lain. Pilih jam lain.');
+      }
+    }, function () {});   // gagal cek awal: biarkan server yang memutuskan
+    preflight.then(function () {
+      if (isClient) setChecking(form, 'Jam tersedia, menyimpan booking…');
+      return isClient ? memberCall('clientBookSchedule', data) : adminCall('addSchedule', data);
+    }).then(function (res) {
       done();
       data.id = res.id;
       data.title = member.name;
@@ -2824,11 +2866,11 @@
       window.closeModal();
       window.updateUI();
       window.showToast(isClient ? 'Booking terkirim ke coach!' : 'Booking tersimpan.');
-      if (isClient) window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {});
+      if (isClient) fresh();
     }).catch(function (err) {
       done(); window.showToast('Gagal booking: ' + window.authMessage(err));
       // Jam sudah diambil orang lain: muat ulang kisi supaya jam itu tidak bisa diklik lagi.
-      if (isClient) window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {});
+      if (isClient) fresh();
     });
   };
 
