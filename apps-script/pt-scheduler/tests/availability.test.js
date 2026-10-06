@@ -221,7 +221,7 @@ test('the owner can still book outside hours or on a booked hour, with a warning
   assert.match(closed.warnings[0], /jam operasional/);
   const taken = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: FUT(4, 10), end: FUT(4, 11), notes: '' });
   assert.match(taken.warnings[0], /sudah ada booking/);
-  const free = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: FUT(4, 13), end: FUT(4, 14), notes: '' });
+  const free = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: FUT(4, 8), end: FUT(4, 9), notes: '' });
   assert.equal(free.warnings.length, 0);
 });
 
