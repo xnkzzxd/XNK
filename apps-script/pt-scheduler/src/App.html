@@ -56,6 +56,9 @@
   const pad = n => String(n).padStart(2, '0');
   const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   const hm = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
+  // Portal klien: semua jam dibaca & ditulis dalam WIB (UTC+7), apa pun zona waktu HP.
+  const wibAt = (date, time) => new Date(date + 'T' + time + ':00+07:00');
+  const wibParts = d => { const w = new Date(d.getTime() + 7 * 3600000); return { date: w.getUTCFullYear() + '-' + pad(w.getUTCMonth() + 1) + '-' + pad(w.getUTCDate()), hour: w.getUTCHours(), min: w.getUTCMinutes() }; };
   const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
   const fmtTime = d => pad(d.getHours()) + '.' + pad(d.getMinutes());
   const fmtDate = (d, o) => d.toLocaleDateString('id-ID', o || { weekday: 'long', day: 'numeric', month: 'long' });
@@ -1375,6 +1378,7 @@
     VIEWS.forEach(function (v) { const el = $('view-' + v); if (el) el.classList.add('hide'); });
     const target = $('view-' + viewId);
     window.currentView = viewId;
+    if (viewId === 'calendar' && window.isPublicView && window.refreshOpenSlots) window.refreshOpenSlots();
     if (changed && !opts.keepDetail) window.closeDetail();
     document.title = (TITLES[viewId] ? TITLES[viewId] + ' · ' : '') + 'XNK Personal Training';
     $('page-title').textContent = TITLES[viewId] || 'XNK';
@@ -2407,9 +2411,14 @@
     let slots = '';
     let free = 0;
     for (let hh = range[0]; hh < range[1]; hh++) {
-      const s0 = new Date(day); s0.setHours(hh, 0, 0, 0);
+      const s0 = wibAt(ymd(day), pad(hh) + ':00');
       const s1 = new Date(s0.getTime() + 3600000);
-      const overlapping = list.filter(s => isBooked(s) && new Date(s.start) < s1 && new Date(s.end || s.start) > s0);
+      const overlapping = list.filter(s => {
+        if (!isBooked(s)) return false;
+        // Sama dengan server: sesi dihitung dari jam bulat awalnya selama durasinya.
+        const bs = Math.floor(new Date(s.start).getTime() / 3600000) * 3600000, be = bs + (new Date(s.end || s.start) - new Date(s.start));
+        return bs < s1.getTime() && be > s0.getTime();
+      });
       const isMine = me && overlapping.some(s => String(s.memberId) === String(me.id));
       const eng = window.openSlotsByDate && window.openSlotsByDate[ymd(day)];
       // Jam kosong dari server; hari di luar batas booking (tidak ada di openSlotsByDate) = penuh.
@@ -2645,24 +2654,20 @@
     $('edit-sch-time').value = time || hm(next);
   }
 
-  // Portal: saat tab dibuka lagi, muat ulang jam kosong supaya jam yang baru diambil orang lain tidak bisa diklik.
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && window.isPublicView && window.publicLoggedMember && window.refreshPortalSchedules) {
-      window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {});
-    }
-  });
-
-  // Jam kosong selalu segar: cek server tiap 15 detik selama tab terlihat (hanya jam kosong, bukan seluruh data).
-  let slotPollBusy = false;
-  setInterval(function () {
-    if (document.visibilityState !== 'visible' || !window.isPublicView || !window.publicLoggedMember || slotPollBusy) return;
-    slotPollBusy = true;
-    publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14 }).then(function (rows) {
+  // Jam kosong dimuat HANYA saat klien membuka tab Jadwal/booking (bukan polling), dengan jeda 10 detik di browser
+  // dan cache 10 detik di server. Saat tab tidak dibuka, tidak ada panggilan ke server.
+  let slotsFetchedAt = 0, slotsFetching = false;
+  window.refreshOpenSlots = function (force) {
+    if (!window.isPublicView || !window.publicLoggedMember || slotsFetching) return Promise.resolve();
+    if (!force && Date.now() - slotsFetchedAt < 10000) return Promise.resolve();
+    slotsFetching = true;
+    return publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14, fresh: !!force }).then(function (rows) {
+      slotsFetchedAt = Date.now();
       const before = JSON.stringify(window.openSlotsByDate);
       applyOpenSlots(rows);
       if (JSON.stringify(window.openSlotsByDate) !== before) window.updateUI();
-    }).catch(function () {}).then(function () { slotPollBusy = false; });
-  }, 15000);
+    }).catch(function () {}).then(function () { slotsFetching = false; });
+  };
 
   // Booking baru. Admin: pilih klien (atau klien dari konteks). Klien: dirinya sendiri.
   window.openBookingSheet = function (opts) {
@@ -2722,8 +2727,9 @@
 
   function fillScheduleForm(s, title) {
     const d = new Date(s.start), mins = Math.round((new Date(s.end) - d) / 60000);
-    $('edit-sch-date').value = ymd(d);
-    $('edit-sch-time').value = hm(d);
+    const wp = wibParts(d);
+    $('edit-sch-date').value = window.isPublicView ? wp.date : ymd(d);
+    $('edit-sch-time').value = window.isPublicView ? pad(wp.hour) + ':' + pad(wp.min) : hm(d);
     const dur = $('edit-sch-duration');
     dur.value = Array.prototype.some.call(dur.options, o => o.value === String(mins)) ? String(mins) : '60';
     $('edit-sch-notes').value = s.notes || '';
@@ -2772,13 +2778,16 @@
     if (!dateVal || !timeVal) { window.showToast('Isi tanggal dan jam dulu.'); return; }
     const dur = parseInt($('edit-sch-duration').value, 10);
     const notes = $('edit-sch-notes').value;
-    const start = new Date(dateVal + 'T' + timeVal + ':00');
+    const start = window.isPublicView ? wibAt(dateVal, timeVal) : new Date(dateVal + 'T' + timeVal + ':00');
     const end = new Date(start.getTime() + dur * 60000);
     const data = { start: start.toISOString(), end: end.toISOString(), notes: notes, duration: dur };
 
     if (window.isRescheduleMode) {
       const id = window.rescheduleScheduleId;
-      const done = busy(btn, 'Menyimpan…');
+      const form = e.target;
+      const finish = busy(btn, 'Memeriksa…');
+      showChecking(form, 'Memeriksa ketersediaan jam baru…');
+      const done = function () { finish(); hideChecking(form); };
       memberCall('clientRescheduleSchedule', id, data.start, data.end).then(function () {
         done();
         const s = window.schedules.find(x => String(x.id) === String(id));
@@ -2839,15 +2848,15 @@
     const done = function () { finish(); if (isClient) hideChecking(form); };
     const fresh = function () { return window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {}); };
     // Klien: cek jam kosong terbaru dulu (bukan data lama di layar), lalu server cek lagi saat menyimpan.
-    const preflight = !isClient ? Promise.resolve() : publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14 }).then(function (rows) {
+    const preflight = !isClient ? Promise.resolve() : publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14, fresh: true }).then(function (rows) {
       applyOpenSlots(rows);
-      const row = (rows || []).find(function (d) { return d.date === ymd(start); });
-      const first = new Date(start); first.setMinutes(0, 0, 0);
-      for (let t = first.getTime(); t < end.getTime(); t += 3600000) {
-        const d = new Date(t);
-        const r = (rows || []).find(function (x) { return x.date === ymd(d); });
-        const hr = r && r.hours.find(function (x) { return x.hour === d.getHours(); });
-        if (hr && hr.free <= 0 && !hr.past) throw new Error('Jam ' + pad(d.getHours()) + '.00 baru saja diambil orang lain. Pilih jam lain.');
+      const first = Math.floor(start.getTime() / 3600000) * 3600000;
+      const endMs = first + (end.getTime() - start.getTime());
+      for (let t = first; t < endMs; t += 3600000) {
+        const wp = wibParts(new Date(t));
+        const r = (rows || []).find(function (x) { return x.date === wp.date; });
+        const hr = r && r.hours.find(function (x) { return x.hour === wp.hour; });
+        if (hr && hr.free <= 0 && !hr.past) throw new Error('Jam ' + pad(wp.hour) + '.00 baru saja diambil orang lain. Pilih jam lain.');
       }
     }, function () {});   // gagal cek awal: biarkan server yang memutuskan
     preflight.then(function () {
