@@ -127,6 +127,7 @@
       m.classList.add('hide');
       m.classList.remove('closing');
       modalState.closeTimer = null;
+      if (window.loadSlotsNow) window.loadSlotsNow();
       lockScroll(false);
       if (modalState.lastFocus && modalState.lastFocus.focus) { try { modalState.lastFocus.focus({ preventScroll: true }); } catch (e) {} }
     }, 380);
@@ -535,7 +536,7 @@
     { id: 'premium', label: 'Premium' },
     { id: 'core', label: 'Core' }
   ];
-  var pricing = { all: [], current: 'regular' };
+  var pricing = { all: [], current: 'core' };   // Core dulu; kalau kosong, jatuh ke kategori pertama
 
   // Server baru: { categories, packages }. Server lama: array paket polos.
   function initializePricingUI(data) {
@@ -735,9 +736,20 @@
   function pickSlot(dayIdx, h) {
     var d = slots.days[dayIdx];
     if (!d) return;
-    _lsSet(PENDING_SLOT_KEY, JSON.stringify({ date: ymd(d.date), time: pad2(h) + ':00' }));
-    renderSlotHours();
-    openMemberCheck();
+    var date = ymd(d.date);
+    // Cek ulang ke server dulu: jam yang baru saja dibooking orang lain (atau kamu) tidak boleh terpilih.
+    loadSlots(true).then(function () {
+      var nd = slots.days.filter(function (x) { return ymd(x.date) === date; })[0];
+      var hr = nd && nd.hours.filter(function (x) { return x.h === h; })[0];
+      if (!hr || !hr.open) {
+        renderSlotHours();
+        alert('Jam itu sudah dibooking. Silakan pilih jam lain.');
+        return;
+      }
+      _lsSet(PENDING_SLOT_KEY, JSON.stringify({ date: date, time: pad2(h) + ':00' }));
+      renderSlotHours();
+      openMemberCheck();
+    });
   }
   (function bindSlots() {
     var days = document.getElementById('slot-days');
@@ -794,9 +806,9 @@
   }
   var slotsBusy = false;
   function loadSlots(isRefresh) {
-    if (slotsBusy) return;
+    if (slotsBusy) return Promise.resolve();
     slotsBusy = true;
-    call('getOpenSlots', { days: 7 })
+    return call('getOpenSlots', { days: 7 })
       .then(function (rows) {
         if (!Array.isArray(rows) || !rows.length) throw new Error('no slots');
         showSlotDays(slotsFromEngine(rows), isRefresh);
@@ -812,6 +824,7 @@
   }
   // Jadwal berubah terus (booking klien, cuti coach): muat ulang tiap 2 menit saat tab terlihat,
   // dan langsung saat tab dibuka lagi. Server tetap memeriksa ulang saat booking.
+  window.loadSlotsNow = function () { loadSlots(true); };
   setInterval(function () { if (!document.hidden) loadSlots(true); }, 120000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) loadSlots(true); });
 
@@ -842,17 +855,24 @@
   function openInfo(tab) {
     var page = document.getElementById('info-page');
     if (!page) return;
+    var wasOpen = !page.hidden;
     page.hidden = false;
     document.body.classList.add('info-open');
+    if (lenis) lenis.stop();
+    if (!wasOpen) { try { history.pushState({ xnkInfo: 1 }, ''); } catch (e) {} }
     infoTab(tab);
     page.scrollTop = 0;
   }
-  function closeInfo() {
+  function closeInfo(fromPop) {
     var page = document.getElementById('info-page');
     if (!page || page.hidden) return;
     page.hidden = true;
     document.body.classList.remove('info-open');
+    if (lenis) lenis.start();
+    if (fromPop !== true && history.state && history.state.xnkInfo) { try { history.back(); } catch (e) {} }
   }
+  // Tombol back HP menutup halaman info, bukan situsnya.
+  window.addEventListener('popstate', function () { closeInfo(true); });
   function infoTab(tab) {
     $$('[data-info-tab]').forEach(function (b) {
       var on = b.getAttribute('data-info-tab') === tab;
