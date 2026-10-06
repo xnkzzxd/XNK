@@ -2620,7 +2620,6 @@
     const next = new Date(now); next.setMinutes(0, 0, 0); next.setHours(next.getHours() + 1);
     $('edit-sch-date').value = date || ymd(ui.selectedDate >= today0() ? ui.selectedDate : now);
     $('edit-sch-time').value = time || hm(next);
-    $('edit-sch-time').step = window.isPublicView ? 3600 : 900;
   }
 
   // Portal: saat tab dibuka lagi, muat ulang jam kosong supaya jam yang baru diambil orang lain tidak bisa diklik.
@@ -2739,8 +2738,6 @@
     const dur = parseInt($('edit-sch-duration').value, 10);
     const notes = $('edit-sch-notes').value;
     const start = new Date(dateVal + 'T' + timeVal + ':00');
-    // Klien hanya bisa jam bulat (sama dengan kisi jam kosong); menit dibulatkan ke bawah.
-    if (window.isPublicView) start.setMinutes(0, 0, 0);
     const end = new Date(start.getTime() + dur * 60000);
     const data = { start: start.toISOString(), end: end.toISOString(), notes: notes, duration: dur };
 
