@@ -450,6 +450,7 @@ function getAppSettings(token) {
 /** Simpan Pengaturan. String kosong/null pada satu kolom = hapus properti itu (balik ke default). */
 function updateAppSettings(token, payload) {
   requireAdmin_(token);
+  _bustSlots_();   // buang cache jam kosong
   payload = payload || {};
   const props = PropertiesService.getScriptProperties();
 
@@ -1011,6 +1012,7 @@ function updateCoach(token, coachData) {
  */
 function saveCoach(token, data) {
   requireAdmin_(token);
+  _bustSlots_();   // buang cache jam kosong
   const clean = _validateCoach_(data);
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -2202,6 +2204,7 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif) {
       coachId, coachName || "", "", scheduleData.recurringGroupId || "", scheduleData.classId || ""
     ]);
     _ensureScheduleClassHeader_(sheet);
+    _bustSlots_();
 
     // Hanya notif di sini kalau BUKAN booking mandiri klien (statusParam 'unread') DAN bukan silent,
     // karena booking mandiri sudah dinotif detail di clientBookSchedule, dan batch recurring
@@ -2428,6 +2431,7 @@ function deleteRecurringGroup(token, groupId) {
  */
 function updateScheduleData(token, scheduleData) {
   requireAdmin_(token);
+  _bustSlots_();   // buang cache jam kosong
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
     if (!sheet) throw new Error('Sheet Schedules tidak ditemukan');
@@ -2524,6 +2528,7 @@ function _clientReschedule_(memberId, scheduleId, newStart, newEnd) {
       }
 
       // 4. Waktu BARU harus boleh dibooking (jam operasional, coach, belum terisi); jadwal ini sendiri tidak dihitung.
+      _assertNoOwnOverlap_(memberId, newStart, newEnd, scheduleId);
       _assertClientSlotOpen_(newStart, newEnd, scheduleId);
 
       const memberName = data[i][2];
@@ -2531,6 +2536,7 @@ function _clientReschedule_(memberId, scheduleId, newStart, newEnd) {
 
       sheet.getRange(i + 1, 5).setValue(newStart); // Waktu Mulai
       sheet.getRange(i + 1, 6).setValue(newEnd);   // Waktu Selesai
+      _bustSlots_();
 
       try {
         const oldFormatted = new Date(oldStartStr).toLocaleString('id-ID', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'});
@@ -2588,6 +2594,18 @@ function _snapSlot_(start, end) {
   return { start: new Date(a).toISOString(), end: new Date(a + (e.getTime() - s.getTime())).toISOString() };
 }
 
+/** Klien tidak boleh punya dua sesi yang bertumpuk (mis. dua coach). excludeId = jadwal yang sedang dipindah. */
+function _assertNoOwnOverlap_(memberId, start, end, excludeId) {
+  const s = new Date(start).getTime(), e = new Date(end).getTime();
+  const clash = _getSchedulesAll_().some(function(x) {
+    const st = String(x.status || '').toLowerCase();
+    if (st === 'available' || st === 'cancelled' || String(x.memberId).trim() !== String(memberId).trim() || String(x.id) === String(excludeId || '')) return false;
+    const bs = Math.floor(new Date(x.start).getTime() / 3600000) * 3600000, be = bs + (new Date(x.end || x.start).getTime() - new Date(x.start).getTime());
+    return bs < e && be > s;
+  });
+  if (clash) throw new Error('Kamu sudah punya sesi di jam itu.');
+}
+
 function _validateSlot_(start, end) {
   const s = new Date(start), e = new Date(end);
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) throw new Error('Waktu jadwal tidak valid.');
@@ -2633,6 +2651,7 @@ function clientBookSchedule(memberToken, scheduleData) {
       if (same.length && new Date(same[0].end).getTime() !== new Date(scheduleData.end).getTime()) throw new Error('Durasi harus sama dengan sesi kelas yang sudah ada.');
     }
     _assertQuota_(member.row, 1);
+    _assertNoOwnOverlap_(member.row[0], scheduleData.start, scheduleData.end, '');
     _assertClientSlotOpen_(scheduleData.start, scheduleData.end, '', classKey);
     addResult = _addScheduleInternal_({
       memberId: String(member.row[0]).trim(),
@@ -2794,6 +2813,7 @@ function _completeSession_(scheduleId) {
  */
 function deleteSchedule(token, scheduleId) {
   requireAdmin_(token);
+  _bustSlots_();   // buang cache jam kosong
   return _locked_(function() { return _deleteSchedule_(scheduleId); });
 }
 
@@ -5113,6 +5133,26 @@ function _classKey_(s) {
 function getOpenSlots(opts) {
   opts = opts || {};
   const now = new Date();
+  // Cache 10 detik di server (hemat kuota). fresh:true = dipakai pengecekan sebelum booking, selalu data terbaru.
+  const cacheKey = 'openslots:' + _slotsVersion_() + ':' + String(opts.from || '') + ':' + (parseInt(opts.days, 10) || 7);
+  if (!opts.fresh) {
+    try { const hit = CacheService.getScriptCache().get(cacheKey); if (hit) return JSON.parse(hit); } catch (e) {}
+  }
+  const out = _getOpenSlotsCompute_(opts, now);
+  try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(out), 10); } catch (e) {}
+  return out;
+}
+
+function _slotsVersion_() {
+  try { return CacheService.getScriptCache().get('openslots:ver') || '0'; } catch (e) { return '0'; }
+}
+
+/** Setiap perubahan jadwal / jam kerja membuang cache jam kosong dengan menaikkan versinya. */
+function _bustSlots_() {
+  try { CacheService.getScriptCache().put('openslots:ver', String(Date.now()), 21600); } catch (e) {}
+}
+
+function _getOpenSlotsCompute_(opts, now) {
   let from = String(opts.from || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) from = _wibParts_(now).date;
   const days = Math.max(1, Math.min(62, parseInt(opts.days, 10) || 7));
@@ -5247,6 +5287,7 @@ function getCoachAvailability(token, coachId) {
 /** week = { senin: [[6,10],[16,20]], ... }. Menggantikan semua aturan coach itu. week kosong = ikut jam operasional. */
 function saveCoachAvailability(token, coachId, week) {
   requireAdmin_(token);
+  _bustSlots_();   // buang cache jam kosong
   coachId = String(coachId || '');
   if (!_activeCoaches_().some(function(c) { return c.id === coachId; })) throw new Error('Pilih coach yang aktif.');
   week = week || {};
@@ -5295,6 +5336,7 @@ function _timeOffClashes_(coachId, o) {
 /** data = { coachId?, from, to, hourFrom?, hourTo?, note? }. Mengembalikan jadwal yang bentrok; tidak ada yang dibatalkan. */
 function addCoachTimeOff(token, data) {
   requireAdmin_(token);
+  _bustSlots_();   // buang cache jam kosong
   data = data || {};
   const coachId = String(data.coachId || (_selfCoach_() || {}).id || '');
   if (!_activeCoaches_().some(function(c) { return c.id === coachId; })) throw new Error('Pilih coach yang aktif.');
@@ -5326,6 +5368,7 @@ function addCoachTimeOff(token, data) {
 
 function deleteCoachTimeOff(token, id) {
   requireAdmin_(token);
+  _bustSlots_();   // buang cache jam kosong
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {

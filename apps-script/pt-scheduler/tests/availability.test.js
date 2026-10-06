@@ -180,7 +180,7 @@ test('with two coaches an hour stays open until both are taken', () => {
   const env = seededEnv();
   noSchedules(env);
   env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
-  env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
+  env.sheet('Schedules').rows.push(['S-B', 'PT-X', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
   assert.equal(book(env, FUT(4, 10)).status, 'success');
   assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(4, 10), end: FUT(4, 11) }), /sudah dibooking/);
 });
@@ -253,4 +253,22 @@ test('an off-the-hour client booking is stored from the whole hour for the chose
   assert.ok(row);
   assert.equal(row[5], FUT(4, 8));
   assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(4, 7, 45), end: FUT(4, 8, 45) }), /sudah dibooking/);
+});
+
+test('a client cannot hold two overlapping sessions even with two coaches', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  book(env, FUT(4, 10));
+  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 11, 30)), /sudah punya sesi/);
+});
+
+test('getOpenSlots is cached for a moment but fresh:true and writes bypass the cache', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const hourOf = rows => rows.find(d => d.date === new Date(FUT(4, 10)).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })).hours.find(h => h.hour === 10).free;
+  assert.equal(hourOf(env.call('getOpenSlots', { days: 7 })), 1);
+  book(env, FUT(4, 10));
+  assert.equal(hourOf(env.call('getOpenSlots', { days: 7 })), 0);
+  assert.equal(hourOf(env.call('getOpenSlots', { days: 7, fresh: true })), 0);
 });
