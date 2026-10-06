@@ -143,7 +143,7 @@ test('clients cannot book outside the opening hours or in the past', () => {
   noSchedules(env);
   assert.throws(() => book(env, FUT(3, 3)), /di luar jam operasional/);     // 03:00 WIB
   assert.throws(() => book(env, FUT(3, 22)), /di luar jam operasional/);    // after closing
-  assert.throws(() => book(env, FUT(3, 20, 30), FUT(3, 21, 30)), /di luar jam operasional/);   // runs past closing
+  assert.throws(() => book(env, FUT(3, 20), FUT(3, 21, 30)), /di luar jam operasional/);   // runs past closing
   assert.throws(() => book(env, new Date(Date.now() - 3600000).toISOString()), /sudah lewat/);
   assert.equal(book(env, FUT(3, 10)).status, 'success');                    // inside hours is fine
 });
@@ -162,8 +162,8 @@ test('clients cannot take an hour that is already booked, even partly, but a fre
   noSchedules(env);
   env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
   assert.throws(() => book(env, FUT(4, 10)), /sudah dibooking/);
-  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 11, 30)), /sudah dibooking/);   // overlaps the booked hour
-  assert.throws(() => book(env, FUT(4, 9, 30), FUT(4, 10, 30)), /sudah dibooking/);
+  assert.throws(() => book(env, FUT(4, 9), FUT(4, 10, 30)), /sudah dibooking/);   // 90 min runs into the booked hour
+  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 11, 30)), /sudah dibooking/);   // 10:30 snaps to 10:00
   assert.equal(book(env, FUT(4, 11)).status, 'success');
   assert.equal(book(env, FUT(4, 9)).status, 'success');
 });
@@ -193,7 +193,7 @@ test('clients cannot reschedule onto a booked hour or outside hours, but can ont
   const mt = env.memberToken(require('./fixtures').KEY_A);
   assert.throws(() => env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 14), FUT(6, 15)), /sudah dibooking/);
   assert.throws(() => env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 3), FUT(6, 4)), /di luar jam operasional/);
-  assert.equal(env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 10, 30), FUT(6, 11, 30)).status, 'success');   // overlaps only itself
+  assert.equal(env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 10), FUT(6, 11, 30)).status, 'success');   // overlaps only itself
   assert.equal(env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 16), FUT(6, 17)).status, 'success');
 });
 
@@ -243,4 +243,14 @@ test('booking-minggu digest slots come from the same engine as the landing', () 
   const engine = Array.from(run(env, { now, bookings: bookings.filter(b => b.status !== 'cancelled'), days: 1 })[0].hours).filter(h => h.free > 0).slice(0, 3).map(h => h.hour);
   assert.deepEqual(nearest.map(s => s.hour), engine);
   assert.deepEqual(engine, [12, 13, 14]);   // 11:00 is booked, cancelled 12:00 stays free
+});
+
+test('an off-the-hour client booking is stored from the whole hour for the chosen duration', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  assert.equal(book(env, FUT(4, 7, 15), FUT(4, 8, 15)).status, 'success');
+  const row = env.sheet('Schedules').rows.find(r => r[4] === FUT(4, 7));
+  assert.ok(row);
+  assert.equal(row[5], FUT(4, 8));
+  assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(4, 7, 45), end: FUT(4, 8, 45) }), /sudah dibooking/);
 });

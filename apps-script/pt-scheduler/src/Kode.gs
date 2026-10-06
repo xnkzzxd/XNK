@@ -2289,7 +2289,8 @@ function _addRecurringInternal_(baseScheduleData, recurrenceRule, status) {
 
     const groupId = 'RGRP-' + new Date().getTime();
     const [startY, startM, startD] = baseScheduleData.startDate.split('-').map(Number);
-    const [hh, mm] = baseScheduleData.time.split(':').map(Number);
+    const [hh, mm0] = baseScheduleData.time.split(':').map(Number);
+    const mm = status === 'unread' ? 0 : mm0;   // klien: sesi mulai di jam bulat
     const durationMin = parseInt(baseScheduleData.duration, 10) || 60;
 
     const weekdaySet = {};
@@ -2491,6 +2492,8 @@ function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd) {
 
 function _clientReschedule_(memberId, scheduleId, newStart, newEnd) {
   try {
+    const snapped = _snapSlot_(newStart, newEnd);
+    newStart = snapped.start; newEnd = snapped.end;
     _validateSlot_(newStart, newEnd);
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
     if (!sheet) throw new Error('Sheet Schedules tidak ditemukan');
@@ -2577,6 +2580,14 @@ function updateScheduleCoach(token, scheduleId, coachId) {
 }
 
 // Validasi slot dari browser: tanggal sah, selesai > mulai, maks 4 jam.
+/** Klien boleh memilih jam berapa saja (07.15); sesi dicatat mulai dari jam bulat (07.00) selama durasi yang dipilih. */
+function _snapSlot_(start, end) {
+  const s = new Date(start), e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return { start: start, end: end };
+  const a = Math.floor(s.getTime() / 3600000) * 3600000;
+  return { start: new Date(a).toISOString(), end: new Date(a + (e.getTime() - s.getTime())).toISOString() };
+}
+
 function _validateSlot_(start, end) {
   const s = new Date(start), e = new Date(end);
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) throw new Error('Waktu jadwal tidak valid.');
@@ -2593,6 +2604,8 @@ function _validateSlot_(start, end) {
 function clientBookSchedule(memberToken, scheduleData) {
   const member = requireMember_(memberToken);
   scheduleData = scheduleData || {};
+  const snapped = _snapSlot_(scheduleData.start, scheduleData.end);
+  scheduleData = { start: snapped.start, end: snapped.end, notes: scheduleData.notes };
   _validateSlot_(scheduleData.start, scheduleData.end);
 
   const memberName = String(member.row[1]);
@@ -5065,7 +5078,9 @@ function _freeSlots_(o) {
           let used = 0;
           const seenClass = {};
           (o.bookings || []).forEach(function(bk) {
-            if (!(new Date(bk.start).getTime() < b && new Date(bk.end || bk.start).getTime() > a)) return;
+            const bs = Math.floor(new Date(bk.start).getTime() / 3600000) * 3600000;
+            const be = bs + (new Date(bk.end || bk.start).getTime() - new Date(bk.start).getTime());
+            if (!(bs < b && be > a)) return;
             // Sesi kelas yang sama (kelas + jam mulai sama) berbagi SATU kursi coach; peserta dibatasi Kapasitas.
             if (bk.classKey) { if (seenClass[bk.classKey]) return; seenClass[bk.classKey] = true; }
             // Booking milik coach yang sedang tidak tersedia tidak memakai kursi; tanpa coach (atau coach tak dikenal) memakai kursi bersama.
