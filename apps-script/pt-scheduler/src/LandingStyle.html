@@ -709,4 +709,14 @@ select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://ww
 .info-tab { border: 0; background: none; cursor: pointer; height: 44px; padding: 0 20px; border-radius: 999px; font: inherit; font-weight: 700; font-size: 14px; color: var(--ink-2); }
 .info-tab.active { background: var(--ink); color: #fff; }
 body.info-open { overflow: hidden; }
+.slot-check { display: flex; gap: 14px; align-items: flex-start; margin: 0 0 16px; padding: 16px 18px; border-radius: var(--r-md); background: var(--paper); border: 1px solid var(--line); }
+.slot-check[hidden], .slot-msg[hidden] { display: none; }
+.slot-spin { flex: none; width: 22px; height: 22px; margin-top: 2px; border-radius: 50%; border: 2.5px solid var(--line-2); border-top-color: var(--ink); animation: slotSpin .8s linear infinite; }
+@keyframes slotSpin { to { transform: rotate(360deg); } }
+.slot-check-body { flex: 1; display: grid; gap: 8px; }
+.slot-check-text { font-weight: 700; }
+.slot-bar { display: block; height: 12px; border-radius: 6px; }
+.slot-bar.short { width: 60%; }
+.slot-msg { margin: 0 0 16px; padding: 12px 16px; border-radius: var(--r-sm); background: var(--ink); color: #fff; font-weight: 600; }
+.slot-hours.locked { pointer-events: none; opacity: .55; }
 </style>
