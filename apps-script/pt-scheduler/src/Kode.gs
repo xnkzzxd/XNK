@@ -5167,6 +5167,8 @@ function _slotProblem_(start, end, excludeId, allowPast, joinClassKey) {
   const s = new Date(start), e = new Date(end);
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return { code: 'closed', message: 'Waktu jadwal tidak valid.' };
   if (!allowPast && s.getTime() <= Date.now()) return { code: 'past', message: 'Jam ini sudah lewat.' };
+  // Booking klien selalu mulai di jam bulat (07.00, bukan 07.15), supaya cocok dengan kisi jam kosong.
+  if (!allowPast && s.getTime() % 3600000 !== 0) return { code: 'closed', message: 'Pilih jam bulat, misalnya 07.00.' };
   const bh = _businessHours_();
   const coaches = _activeCoaches_().map(function(c) { return { id: c.id }; });
   const rules = _coachRules_(), off = _coachTimeOff_(false);

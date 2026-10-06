@@ -143,7 +143,7 @@ test('clients cannot book outside the opening hours or in the past', () => {
   noSchedules(env);
   assert.throws(() => book(env, FUT(3, 3)), /di luar jam operasional/);     // 03:00 WIB
   assert.throws(() => book(env, FUT(3, 22)), /di luar jam operasional/);    // after closing
-  assert.throws(() => book(env, FUT(3, 20, 30), FUT(3, 21, 30)), /di luar jam operasional/);   // runs past closing
+  assert.throws(() => book(env, FUT(3, 20), FUT(3, 21, 30)), /di luar jam operasional/);   // runs past closing
   assert.throws(() => book(env, new Date(Date.now() - 3600000).toISOString()), /sudah lewat/);
   assert.equal(book(env, FUT(3, 10)).status, 'success');                    // inside hours is fine
 });
@@ -162,8 +162,8 @@ test('clients cannot take an hour that is already booked, even partly, but a fre
   noSchedules(env);
   env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
   assert.throws(() => book(env, FUT(4, 10)), /sudah dibooking/);
-  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 11, 30)), /sudah dibooking/);   // overlaps the booked hour
-  assert.throws(() => book(env, FUT(4, 9, 30), FUT(4, 10, 30)), /sudah dibooking/);
+  assert.throws(() => book(env, FUT(4, 9), FUT(4, 10, 30)), /sudah dibooking/);   // 90 min runs into the booked hour
+  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 11, 30)), /jam bulat/);     // off-the-hour starts are refused
   assert.equal(book(env, FUT(4, 11)).status, 'success');
   assert.equal(book(env, FUT(4, 9)).status, 'success');
 });
@@ -193,7 +193,8 @@ test('clients cannot reschedule onto a booked hour or outside hours, but can ont
   const mt = env.memberToken(require('./fixtures').KEY_A);
   assert.throws(() => env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 14), FUT(6, 15)), /sudah dibooking/);
   assert.throws(() => env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 3), FUT(6, 4)), /di luar jam operasional/);
-  assert.equal(env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 10, 30), FUT(6, 11, 30)).status, 'success');   // overlaps only itself
+  assert.throws(() => env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 16, 15), FUT(6, 17, 15)), /jam bulat/);
+  assert.equal(env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 10), FUT(6, 11, 30)).status, 'success');   // overlaps only itself
   assert.equal(env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 16), FUT(6, 17)).status, 'success');
 });
 

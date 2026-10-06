@@ -2620,7 +2620,15 @@
     const next = new Date(now); next.setMinutes(0, 0, 0); next.setHours(next.getHours() + 1);
     $('edit-sch-date').value = date || ymd(ui.selectedDate >= today0() ? ui.selectedDate : now);
     $('edit-sch-time').value = time || hm(next);
+    $('edit-sch-time').step = window.isPublicView ? 3600 : 900;
   }
+
+  // Portal: saat tab dibuka lagi, muat ulang jam kosong supaya jam yang baru diambil orang lain tidak bisa diklik.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && window.isPublicView && window.publicLoggedMember && window.refreshPortalSchedules) {
+      window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {});
+    }
+  });
 
   // Booking baru. Admin: pilih klien (atau klien dari konteks). Klien: dirinya sendiri.
   window.openBookingSheet = function (opts) {
@@ -2731,6 +2739,8 @@
     const dur = parseInt($('edit-sch-duration').value, 10);
     const notes = $('edit-sch-notes').value;
     const start = new Date(dateVal + 'T' + timeVal + ':00');
+    // Klien hanya bisa jam bulat (sama dengan kisi jam kosong); menit dibulatkan ke bawah.
+    if (window.isPublicView) start.setMinutes(0, 0, 0);
     const end = new Date(start.getTime() + dur * 60000);
     const data = { start: start.toISOString(), end: end.toISOString(), notes: notes, duration: dur };
 
@@ -2805,7 +2815,12 @@
       window.closeModal();
       window.updateUI();
       window.showToast(isClient ? 'Booking terkirim ke coach!' : 'Booking tersimpan.');
-    }).catch(function (err) { done(); window.showToast('Gagal booking: ' + window.authMessage(err)); });
+      if (isClient) window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {});
+    }).catch(function (err) {
+      done(); window.showToast('Gagal booking: ' + window.authMessage(err));
+      // Jam sudah diambil orang lain: muat ulang kisi supaya jam itu tidak bisa diklik lagi.
+      if (isClient) window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {});
+    });
   };
 
   // ── KLIEN (admin) ──────────────────────────────────────────────────────────
