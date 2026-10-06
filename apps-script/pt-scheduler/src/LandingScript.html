@@ -795,7 +795,7 @@
       var day = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
       return {
         date: day,
-        hours: r.hours.filter(function (x) { return !x.off; }).map(function (x) {
+        hours: r.hours.filter(function (x) { return !x.off || x.leave; }).map(function (x) {   // cuti coach: tampil penuh, bukan hilang
           var s0 = new Date(day); s0.setHours(x.hour, 0, 0, 0);
           return { h: x.hour, open: x.free > 0, past: x.past !== undefined ? !!x.past : s0 <= now };   // server lama: tanpa penanda
         })

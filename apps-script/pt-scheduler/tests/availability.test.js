@@ -32,6 +32,19 @@ test('all-day and hourly days off block only what they cover', () => {
   assert.ok(hoursOf(run(env, { timeOff: hourly })[0]).includes(11));
 });
 
+test('a coach\'s leave marks working hours as leave (shown full on the landing); hours outside working time stay hidden', () => {
+  const env = seededEnv();
+  const hourly = [{ coachId: 'C-1', from: MON, to: MON, hourFrom: 10, hourTo: 11 }];
+  const rules = [{ coachId: 'C-1', hari: 'senin', startHour: 8, endHour: 14 }];
+  const hrs = Array.from(run(env, { timeOff: hourly, rules: rules })[0].hours);
+  const h = n => hrs.find(x => x.hour === n);
+  assert.equal(h(10).leave, true);
+  assert.equal(h(10).free, 0);
+  assert.equal(h(11).leave, undefined);   // free
+  assert.equal(h(16).off, true);          // outside working hours: off, not leave
+  assert.equal(h(16).leave, undefined);
+});
+
 test('a booking uses its coach; an unassigned booking uses shared capacity; two coaches keep an hour open', () => {
   const env = seededEnv();
   const bk = [{ start: at(MON, 9), end: at(MON, 10), coachId: '' }];

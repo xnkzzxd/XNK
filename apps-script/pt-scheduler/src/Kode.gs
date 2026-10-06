@@ -5109,7 +5109,10 @@ function _freeSlots_(o) {
           free = Math.max(0, avail.length - used);
           off = avail.length === 0;   // tidak ada coach yang bertugas jam ini (di luar jam kerja / cuti)
         }
-        hours.push({ hour: h, free: free, off: off, past: past });
+        const slot = { hour: h, free: free, off: off, past: past };
+        // Jam kerja coach yang tertutup cuti: tampil sebagai PENUH (bukan disembunyikan), tidak bisa dipilih.
+        if (off && !past && coaches.some(function(c) { return c.id && _coachAvailableAt_(c.id, o.rules, [], date, h, dow); })) slot.leave = true;
+        hours.push(slot);
       }
     }
     out.push({ date: date, dow: dow, closed: hours.length === 0, hours: hours });
