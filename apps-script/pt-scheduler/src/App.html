@@ -2629,6 +2629,18 @@
     }
   });
 
+  // Jam kosong selalu segar: cek server tiap 15 detik selama tab terlihat (hanya jam kosong, bukan seluruh data).
+  let slotPollBusy = false;
+  setInterval(function () {
+    if (document.visibilityState !== 'visible' || !window.isPublicView || !window.publicLoggedMember || slotPollBusy) return;
+    slotPollBusy = true;
+    publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14 }).then(function (rows) {
+      const before = JSON.stringify(window.openSlotsByDate);
+      applyOpenSlots(rows);
+      if (JSON.stringify(window.openSlotsByDate) !== before) window.updateUI();
+    }).catch(function () {}).then(function () { slotPollBusy = false; });
+  }, 15000);
+
   // Booking baru. Admin: pilih klien (atau klien dari konteks). Klien: dirinya sendiri.
   window.openBookingSheet = function (opts) {
     opts = opts || {};
