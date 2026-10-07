@@ -754,11 +754,11 @@
     if (panel) { panel.hidden = !on; var t = panel.querySelector('.slot-check-text'); if (t && text) t.textContent = text; }
     if (box) { box.classList.toggle('locked', on); box.setAttribute('aria-busy', on ? 'true' : 'false'); }
   }
-  function slotMsg(text, altHours) {
+  function slotMsg(text, altHours, date) {
     var m = document.getElementById('slot-msg');
     if (!m) return;
     var alts = (altHours || []).map(function (h) {
-      return '<button type="button" class="slot-alt" data-h="' + h + '" aria-label="Pilih jam ' + pad2(h) + '.00">' + pad2(h) + '.00</button>';
+      return '<button type="button" class="slot-alt" data-date="' + esc(date || '') + '" data-h="' + h + '" aria-label="Pilih jam ' + pad2(h) + '.00">' + pad2(h) + '.00</button>';
     }).join('');
     m.innerHTML = text ? '<span>' + esc(text) + '</span>' + (alts ? '<span class="slot-alts">' + alts + '</span>' : '') : '';
     m.hidden = !text;
@@ -781,7 +781,7 @@
       if (!hr || !hourOpen(hr)) {
         renderSlotHours();
         var alts = nearestOpenHours(nd, h);
-        slotMsg(alts.length ? 'Jam ' + pad2(h) + '.00 sudah terisi. Yang masih kosong:' : 'Jam ' + pad2(h) + '.00 sudah terisi. Pilih hari lain.', alts);
+        slotMsg(alts.length ? 'Jam ' + pad2(h) + '.00 sudah terisi. Yang masih kosong:' : 'Jam ' + pad2(h) + '.00 sudah terisi. Pilih hari lain.', alts, date);
         return;
       }
       _lsSet(PENDING_SLOT_KEY, JSON.stringify({ date: date, time: pad2(h) + ':00', at: Date.now() }));
@@ -805,18 +805,27 @@
     if (days) days.addEventListener('click', function (e) {
       var b = e.target.closest('.slot-day');
       if (!b) return;
+      if (slotChecking) return;
       slots.selected = Number(b.getAttribute('data-day'));
       $$('.slot-day', days).forEach(function (x) { var on = x === b; x.classList.toggle('active', on); x.setAttribute('aria-selected', on); });
+      slotMsg('');   // pesan & saran jam milik hari lain
       renderSlotHours();
     });
     if (hours) hours.addEventListener('click', function (e) {
+      if (e.target.closest('.slot-retry')) { hours.innerHTML = '<p class="slot-empty">Memuat jadwal…</p>'; loadSlots(); return; }
       var b = e.target.closest('.slot-h');
       if (b && !b.disabled && !slotChecking) pickSlot(slots.selected, Number(b.getAttribute('data-h')));
     });
     var msg = document.getElementById('slot-msg');
     if (msg) msg.addEventListener('click', function (e) {
       var b = e.target.closest('.slot-alt');
-      if (b && !slotChecking) pickSlot(slots.selected, Number(b.getAttribute('data-h')));
+      if (!b || slotChecking) return;
+      // Saran jam berlaku untuk hari tempat ia dihitung, bukan tab yang sedang terbuka.
+      var dt = b.getAttribute('data-date'), idx = -1;
+      for (var i = 0; i < slots.days.length; i++) if (ymd(slots.days[i].date) === dt) { idx = i; break; }
+      if (idx < 0) { slotMsg(''); return; }
+      if (idx !== slots.selected) { slots.selected = idx; renderSlotDays(); }
+      pickSlot(idx, Number(b.getAttribute('data-h')));
     });
   })();
 
@@ -858,7 +867,7 @@
     txt.textContent = ok ? 'Diperbarui ' + pad2(d.getHours()) + '.' + pad2(d.getMinutes()) : 'Tidak terhubung';
   }
   var slotsBusy = false, slotsPromise = Promise.resolve(true), slotsSig = '', slotsAt = 0;
-  var SLOTS_MAX_AGE = 120000;   // data jam kosong dipakai ulang 2 menit (hemat kuota server)
+  var SLOTS_MAX_AGE = 120000, slotsAutoRetried = false;   // data jam kosong dipakai ulang 2 menit (hemat kuota server)
   function slotsFresh() { return slotsAt && Date.now() - slotsAt < SLOTS_MAX_AGE && slots.days.length; }
   function loadSlots(isRefresh) {
     if (slotsBusy) return slotsPromise;
@@ -884,7 +893,9 @@
         setSlotsLive(false);
         if (isRefresh && slots.days.length) return false;   // tampilan lama tetap dipakai sampai berhasil lagi
         var box = document.getElementById('slot-hours');
-        if (box) box.innerHTML = '<p class="slot-empty">Jadwal belum bisa dimuat. <a href="https://wa.me/6288221254305" target="_blank" rel="noopener">Chat coach</a> untuk cek jam kosong.</p>';
+        if (box) box.innerHTML = '<p class="slot-empty">Jadwal belum bisa dimuat. <button type="button" class="slot-retry">Coba lagi</button> atau <a href="https://wa.me/6288221254305" target="_blank" rel="noopener">chat coach</a> untuk cek jam kosong.</p>';
+        // Gagal saat halaman dibuka: satu kali coba ulang otomatis (bukan polling; hanya setelah gagal).
+        if (!slotsAutoRetried) { slotsAutoRetried = true; setTimeout(function () { if (!slots.days.length && !slotsBusy) loadSlots(); }, 15000); }
       })
       .then(function (ok) { slotsBusy = false; return ok !== false; });
     return slotsPromise;

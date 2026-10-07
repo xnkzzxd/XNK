@@ -1849,9 +1849,9 @@
     let slot = null;
     try { slot = JSON.parse(raw); } catch (e) { return; }
     if (!slot || !/^\d{4}-\d{2}-\d{2}$/.test(slot.date) || !/^\d{2}:\d{2}$/.test(slot.time)) return;
+    if (slot.at && Date.now() - Number(slot.at) > 30 * 60000) return;   // pilihan lama dari Landing (> 30 menit)
     const p = slot.date.split('-').map(Number);
-    const when = new Date(p[0], p[1] - 1, p[2], Number(slot.time.slice(0, 2)), Number(slot.time.slice(3)));
-    if (!(when > new Date())) return;
+    if (!(wibAt(slot.date, slot.time) > new Date())) return;
     ui.selectedDate = new Date(p[0], p[1] - 1, p[2]);
     ui.calMonth = new Date(p[0], p[1] - 1, 1);
     window.navigate('calendar');
@@ -2916,7 +2916,10 @@
       (alts.length ? '<div class="coach-slots">' + alts.map(function (a, i) {
         return '<button type="button" class="slot" data-i="' + i + '" aria-pressed="false">' + h(slotChipLabel(a.date, Number(a.hour))) + '</button>';
       }).join('') + '</div>' : '') +
-      '<div class="btn-row"><button type="button" class="btn btn-outline" data-act="all">' + icon('calendar-days') + 'Lihat semua jam</button>' +
+      // Saat pindah jadwal, tetap di sheet ini ("Ganti jam"): membuka kisi jam akan membatalkan mode pindah dan membuat booking baru.
+      '<div class="btn-row">' + (resched
+        ? '<button type="button" class="btn btn-outline" data-act="time">' + icon('clock') + 'Ganti jam</button>'
+        : '<button type="button" class="btn btn-outline" data-act="all">' + icon('calendar-days') + 'Lihat semua jam</button>') +
         (alts.length ? '' : '<button type="button" class="btn btn-secondary" data-act="chat">' + icon('message-circle') + 'Chat coach</button>') + '</div>';
     form.insertBefore(el, form.firstChild);
     el.querySelectorAll('.slot[data-i]').forEach(function (b) {
@@ -2941,7 +2944,14 @@
         try { sb.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
       });
     });
-    el.querySelector('[data-act="all"]').addEventListener('click', function () {
+    const timeBtn = el.querySelector('[data-act="time"]');
+    if (timeBtn) timeBtn.addEventListener('click', function () {
+      clearSchNotice(form);
+      const t = $('edit-sch-time');
+      try { t.focus(); t.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    });
+    const allBtn = el.querySelector('[data-act="all"]');
+    if (allBtn) allBtn.addEventListener('click', function () {
       const d = rp ? rp.date : $('edit-sch-date').value;
       window.closeModal();
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
@@ -2982,7 +2992,8 @@
         '<button type="button" class="btn btn-outline" data-act="time">' + icon('clock') + 'Ganti jam</button></div>';
     form.insertBefore(el, form.firstChild);
     const skip = el.querySelector('[data-act="skip"]');
-    if (skip) skip.addEventListener('click', function () { clientBookSeries(form, $('sch-submit-btn'), base, rule, true); });
+    // Catatan bisa diubah setelah bentrok muncul: kirim isi yang sekarang.
+    if (skip) skip.addEventListener('click', function () { clientBookSeries(form, $('sch-submit-btn'), Object.assign({}, base, { notes: $('edit-sch-notes').value }), rule, true); });
     el.querySelector('[data-act="time"]').addEventListener('click', function () {
       clearSchNotice(form);
       const t = $('edit-sch-time');
@@ -3134,6 +3145,7 @@
     });
   }
   function seriesDoneText(res) {
+    if (res.duplicate) return 'Jadwal ini sudah ada di Jadwalku.';   // coba lagi setelah jawaban hilang: tidak ada yang dibuat dua kali
     const made = res.count != null ? Number(res.count) : (res.items || []).length;
     return res.skipped ? made + ' sesi dibuat, ' + res.skipped + ' tanggal dilewati.' : made + ' sesi berulang dibuat.';
   }

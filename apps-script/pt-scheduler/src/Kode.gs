@@ -2278,7 +2278,6 @@ function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule, opts
   try {
     const ver = _slotsVersion_();   // versi dulu, baru sheet (lihat _bustSlots_)
     const all = _getSchedulesAll_();
-    if (!skipTaken) _assertQuota_(member.row, Math.min(52, parseInt(recurrenceRule && recurrenceRule.occurrences, 10) || 0), all);
     return _addRecurringInternal_({
       memberId: String(member.row[0]).trim(),
       memberName: member.row[1],
@@ -2346,6 +2345,26 @@ function _addRecurringInternal_(baseScheduleData, recurrenceRule, status, opts) 
       ver = opts.all ? opts.ver : _slotsVersion_();
       rows = opts.all || _getSchedulesAll_();
       const collect = !!(opts.soft || opts.skipTaken);
+      // Coba lagi setelah jawaban hilang: tanggal yang sudah jadi sesi klien ini (mulai & selesai sama) tidak dibuat lagi.
+      const exact = plan.map(function(item) {
+        const s = new Date(item.start).getTime(), e = new Date(item.end).getTime();
+        return rows.find(function(x) {
+          const st = String(x.status || '').toLowerCase();
+          return st !== 'available' && st !== 'cancelled' && String(x.memberId).trim() === String(baseScheduleData.memberId).trim() &&
+            new Date(x.start).getTime() === s && new Date(x.end).getTime() === e;
+        }) || null;
+      });
+      const already = exact.filter(Boolean);
+      const duplicateOut = function() {
+        return {
+          status: 'success', duplicate: true, groupId: String(already[0].recurringGroupId || ''), count: already.length, skipped: plan.length - already.length,
+          ids: already.map(function(x) { return x.id; }), dates: [], items: already.map(_ownScheduleOut_),
+          openSlots: _openSlotsCached_({ days: _portalHorizonDays_() }, new Date(), rows, false, ver)
+        };
+      };
+      if (plan.length && already.length === plan.length) return duplicateOut();
+      // Kuota dicek sesudah aturan duplikat (sama dengan booking satu sesi); "Lewati" mengecek jumlah tanggal yang kosong saja.
+      if (!opts.skipTaken && opts.memberRow) _assertQuota_(opts.memberRow, plan.length, rows);
       const clashes = [];
       plan.forEach(function(item) {
         _assertBookingHorizon_(item.start);
@@ -2357,6 +2376,8 @@ function _addRecurringInternal_(baseScheduleData, recurrenceRule, status, opts) 
         item.code = p.code;
         clashes.push(item);
       });
+      // "Lewati tanggal penuh" diulang: tidak ada tanggal baru, sebagian sudah jadi sesinya → sama dengan yang sudah dibuat.
+      if (opts.skipTaken && already.length && clashes.length === plan.length) return duplicateOut();
       if (clashes.length && !opts.skipTaken) {
         return {
           status: 'conflict', code: 'series',
@@ -5235,6 +5256,16 @@ function _freeSlots_(o) {
   const coaches = (o.coaches && o.coaches.length) ? o.coaches : [{ id: '' }];
   const known = {};
   coaches.forEach(function(c) { if (c.id) known[c.id] = true; });
+  // Hanya booking yang menyentuh rentang ini (riwayat lama dilewati), jam dibaca sekali per booking.
+  // Booking dihitung dari jam penuh awalnya selama durasinya (07.15–08.15 → 07.00–08.00).
+  const rangeA = Date.parse(o.from + 'T00:00:00+07:00'), rangeB = rangeA + o.days * 86400000;
+  const books = [];
+  (o.bookings || []).forEach(function(bk) {
+    const s = new Date(bk.start).getTime();
+    const bs = Math.floor(s / 3600000) * 3600000;
+    const be = bs + (new Date(bk.end || bk.start).getTime() - s);
+    if (bs < rangeB && be > rangeA) books.push({ bs: bs, be: be, coachId: bk.coachId, classKey: bk.classKey });
+  });
   const out = [];
   for (let i = 0; i < o.days; i++) {
     const date = _addDaysIso_(o.from, i);
@@ -5253,10 +5284,8 @@ function _freeSlots_(o) {
           avail.forEach(function(c) { availIds[c.id] = true; });
           let used = 0;
           const seenClass = {};
-          (o.bookings || []).forEach(function(bk) {
-            const bs = Math.floor(new Date(bk.start).getTime() / 3600000) * 3600000;
-            const be = bs + (new Date(bk.end || bk.start).getTime() - new Date(bk.start).getTime());
-            if (!(bs < b && be > a)) return;
+          books.forEach(function(bk) {
+            if (!(bk.bs < b && bk.be > a)) return;
             // Sesi kelas yang sama (kelas + jam mulai sama) berbagi SATU kursi coach; peserta dibatasi Kapasitas.
             if (bk.classKey) { if (seenClass[bk.classKey]) return; seenClass[bk.classKey] = true; }
             // Booking milik coach yang sedang tidak tersedia tidak memakai kursi; tanpa coach (atau coach tak dikenal) memakai kursi bersama.

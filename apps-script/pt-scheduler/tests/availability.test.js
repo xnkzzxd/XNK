@@ -621,3 +621,41 @@ test('a fractional series count books the same whole number the quota was checke
   assert.equal(ok.status, 'success');
   assert.equal(ok.count, 4);
 });
+
+test('repeating a recurring booking after a lost answer returns the sessions it already made, even with no quota left', () => {
+  const env = slotEnv();
+  const mt = env.memberToken(KEY_A);
+  env.memberRow('PT-A')[9] = 7;   // 10 total, 7 used: 3 left
+  const rule = { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 3 };
+  const first = env.call('clientBookRecurring', mt, series(3, 10), rule, { soft: true });
+  assert.equal(first.count, 3);
+  const rows = env.sheet('Schedules').rows.length, fetches = env.fetches.length;
+  const again = env.call('clientBookRecurring', mt, series(3, 10), rule, { soft: true });
+  assert.equal(again.status, 'success');
+  assert.equal(again.duplicate, true);
+  assert.equal(again.count, 3);
+  assert.deepEqual(again.items.map(i => i.id).sort(), first.items.map(i => i.id).sort());
+  assert.ok(again.items.every(i => !('phone' in i)));
+  assert.equal(env.sheet('Schedules').rows.length, rows, 'nothing written');
+  assert.equal(env.fetches.length, fetches, 'no second Telegram');
+  // Same for "Lewati tanggal penuh" sent twice: the second call adds nothing.
+  env.memberRow('PT-A')[9] = 0;
+  budiAt(env, FUT(7, 10), null, 'S-BUDI-7');
+  const skip1 = env.call('clientBookRecurring', mt, series(6, 10), { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 2 }, { soft: true, skipTaken: true });
+  assert.equal(skip1.count, 1);
+  const skip2 = env.call('clientBookRecurring', mt, series(6, 10), { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 2 }, { soft: true, skipTaken: true });
+  assert.equal(skip2.duplicate, true);
+  assert.equal(skip2.count, 1);
+});
+
+test('the slot engine skips past history but gives the same hours', () => {
+  const env = slotEnv();
+  const rows = env.sheet('Schedules').rows;
+  const base = env.call('getOpenSlots', { days: 14 });
+  for (let i = 0; i < 400; i++) {   // old sessions, months ago
+    const s = new Date(Date.now() - (30 + i) * 86400000);
+    rows.push(['S-OLD-' + i, 'PT-B', 'Budi', '1', s.toISOString(), new Date(s.getTime() + 3600000).toISOString(), '', 'completed', 'C-1', 'Rizky', '', '']);
+  }
+  for (const k of Object.keys(env.cache)) if (k.indexOf('openslots') === 0) delete env.cache[k];
+  assert.deepEqual(JSON.parse(JSON.stringify(env.call('getOpenSlots', { days: 14 }))), JSON.parse(JSON.stringify(base)));
+});

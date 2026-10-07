@@ -1460,6 +1460,39 @@ async function contrastReport(page) {
     noErrors(errors);
     await context.close();
   }
+  {
+    // Pindah jadwal ke jam yang terisi: tetap di sheet (tanpa "Lihat semua jam"), saran jam memindahkan sesi yang sama.
+    const env = seededEnv();
+    const token = env.memberToken(KEY_A);
+    const own = wibSlot(5), taken = wibSlot(6);
+    const mine = env.call('clientBookSchedule', token, { start: own.start, end: own.end, notes: '' }, { soft: true });
+    env.sheet('Schedules').rows.push(['SCH-X2', 'PT-B', 'Budi', '081222222222', taken.start, taken.end, '', 'unread', 'C-1', 'Rizky', '', '']);
+    for (const k of Object.keys(env.cache)) if (k.indexOf('openslots') === 0) delete env.cache[k];
+    const calls = [];
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', calls, { xnk_member_token: token }, { timezoneId: 'Asia/Jakarta', wait: 1300 });
+    await page.evaluate(id => window.openRescheduleModal(id), mine.id);
+    await page.waitForTimeout(500);
+    const takenDay = new Date(taken.start).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    await page.fill('#edit-sch-date', takenDay);
+    await page.fill('#edit-sch-time', '10:00');
+    const rowsBefore = env.sheet('Schedules').rows.length;
+    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.waitForTimeout(900);
+    check(await visible(page, '.conflict-panel'), 'reschedule: a taken hour shows the conflict notice in the sheet');
+    check(((await page.textContent('.conflict-panel')) || '').includes('tetap aman'), 'reschedule: the notice says the old session is safe');
+    check((await page.locator('.conflict-panel [data-act="all"]').count()) === 0 && (await page.locator('.conflict-panel [data-act="time"]').count()) === 1,
+      'reschedule: "Ganti jam" instead of "Lihat semua jam" (the grid would book an extra session)');
+    await page.locator('.conflict-panel .slot[data-i]').first().click();
+    check(((await page.textContent('#sch-submit-btn')) || '').startsWith('Pindah ke '), 'reschedule: a suggestion makes the button "Pindah ke …"');
+    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.waitForTimeout(900);
+    const row = env.sheet('Schedules').rows.find(r => r[0] === mine.id);
+    check(env.sheet('Schedules').rows.length === rowsBefore && !!row && new Date(row[4]).toISOString() !== new Date(own.start).toISOString(),
+      'reschedule: the same session moved, no extra session');
+    check((await page.locator('.conflict-panel [data-act="time"]').count()) === 0 && (await page.textContent('#toast-msg')).includes('Jadwal dipindah'), 'reschedule: "Jadwal dipindah …"');
+    noErrors(errors);
+    await context.close();
+  }
 
   {
     const env = seededEnv();
@@ -1587,6 +1620,26 @@ async function contrastReport(page) {
     await context.close();
   }
   {
+    // The first load fails: "Coba lagi" in the box loads the hours (no polling otherwise).
+    const env = seededEnv();
+    const orig = env.call.bind(env);
+    let failOnce = true;
+    env.call = (name, ...args) => {
+      if (name === 'getOpenSlots' && failOnce) { failOnce = false; throw new Error('Server error'); }
+      return orig(name, ...args);
+    };
+    const calls = [];
+    const { page, context, errors } = await openPage(browser, env, '/Landing', calls, null, { touch: true, wait: LANDING_WAIT });
+    check(await visible(page, '#slot-hours .slot-retry'), 'Landing: a failed first load shows "Coba lagi"');
+    const box = await page.locator('#slot-hours .slot-retry').boundingBox();
+    check(!!box && box.height >= 44, 'Landing: "Coba lagi" is a 44 px tap target');
+    await page.click('#slot-hours .slot-retry');
+    await page.waitForTimeout(600);
+    check((await page.locator('#slot-hours .slot-h').count()) > 0, 'Landing: "Coba lagi" loads the free hours');
+    noErrors(errors);
+    await context.close();
+  }
+  {
     // Pick within 2 minutes: checked on screen, no call. After 2 minutes: one reload; a taken hour offers nearby free hours.
     const env = seededEnv();
     const calls = [];
@@ -1617,9 +1670,19 @@ async function contrastReport(page) {
     check(msg.includes('Jam ' + String(h).padStart(2, '0') + '.00 sudah terisi') && (await page.locator('#slot-msg .slot-alt').count()) >= 1, 'Landing: a taken hour shows "sudah terisi" with nearby free hours: ' + msg.trim());
     const altBox = await page.locator('#slot-msg .slot-alt').first().boundingBox();
     check(!!altBox && altBox.height >= 44, 'Landing: alternative hours are 44 px tap targets');
+    await page.click('#slot-days [data-day="2"]');
+    await page.waitForTimeout(200);
+    check(await page.locator('#slot-msg').evaluate(el => el.hidden), 'Landing: switching day clears the "sudah terisi" message');
+    await page.click('#slot-days [data-day="1"]');
+    await page.waitForTimeout(200);
+    await page.locator('#slot-hours .slot-h[data-h="' + h + '"]').first().click();   // data is fresh again: checked on screen
+    await page.waitForTimeout(300);
+    const altH = Number(await page.locator('#slot-msg .slot-alt').first().getAttribute('data-h'));
     await page.locator('#slot-msg .slot-alt').first().click();
     await page.waitForTimeout(300);
     check(await visible(page, '#member-check-modal'), 'Landing: tapping an alternative hour opens the member check');
+    const pick = JSON.parse((await page.evaluate(() => localStorage.getItem('xnk_pending_slot'))) || '{}');
+    check(pick.date === day && pick.time === String(altH).padStart(2, '0') + ':00' && pick.at > 0, 'Landing: the picked alternative keeps its own day and hour (' + JSON.stringify(pick) + ')');
     noErrors(errors);
     await context.close();
   }
