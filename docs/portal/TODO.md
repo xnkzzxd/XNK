@@ -14,9 +14,9 @@ Status: `[ ]` todo · `[~]` berjalan · `[x]` selesai. ID mulai T-700.
 
 | | ID | Task | Selesai bila |
 | --- | --- | --- | --- |
-| [ ] | T-710 | Sheet `ProgramItems`/`ProgramLog`, parser `_parseProgramText_`, fungsi admin (program klien, template) | Tes lolos |
-| [ ] | T-711 | `getMyProgram`, `logMyProgramDay`, tab Program (hari, gerakan, centang, video) | Tes dan browser check |
-| [ ] | T-712 | Tab Program di halaman klien (panel): editor teks, pratinjau, template | Browser check |
+| [x] | T-710 | Sheet `ProgramItems`/`ProgramLog`, parser `_parseProgramText_`, fungsi admin (program klien, template) | Tes lolos |
+| [x] | T-711 | `getMyProgram`, `logMyProgramDay`, tab Program (hari, gerakan, centang, video) | Tes dan browser check |
+| [x] | T-712 | Tab Program di halaman klien (panel): editor teks, pratinjau, template | Browser check |
 
 ## J3 — Info & Tips
 

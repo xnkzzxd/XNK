@@ -668,7 +668,7 @@ async function contrastReport(page) {
     check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
-    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 4, 'client page: dark hero and four tabs (Ringkasan, Progres, Perawatan, Riwayat)');
+    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 5, 'client page: dark hero and five tabs (Ringkasan, Progres, Program, Perawatan, Riwayat)');
     const tabBox = await page.evaluate(() => { const t = document.querySelector('#detail-body .cp-tabs'), d = document.querySelector('#detail-body'); if (!t || !d) return null; const r = t.getBoundingClientRect(), dr = d.getBoundingClientRect(); return { l: Math.round(r.left - dr.left), r: Math.round(dr.right - r.right), over: t.scrollWidth - t.clientWidth, chips: Array.from(t.children).map(c => Math.round(c.scrollWidth - c.clientWidth)) }; });
     check(!!tabBox && tabBox.l >= 0 && tabBox.r >= 0 && tabBox.over <= 1 && tabBox.chips.every(x => x <= 1), 'client page: the tab pills stay inside the panel (no bleed) ' + JSON.stringify(tabBox));
     await page.evaluate(() => { const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; });
@@ -720,6 +720,28 @@ async function contrastReport(page) {
     check(!(await page.locator('#as-chest').count()) && (await page.locator('#as-lenganKanan').count()) === 1, 'assessment: the old chest and arm fields are replaced by right/left arm, abdomen, thighs and chest');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
+    // Program latihan (Fase J2): tab Program di halaman klien, editor teks, template.
+    await page.evaluate(() => window.cpTab('program'));
+    await page.waitForTimeout(300);
+    check((await page.textContent('#profile-program-wrap')).includes('Belum ada') && (await page.textContent('#profile-program-wrap')).includes('Buat program'), 'client page: the Program tab starts empty with a "Buat program" button');
+    await page.click('#profile-program-wrap .btn-primary');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#prg-text') && (await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('prg-text')).fontSize))) >= 16, 'program editor: opens with a 16 px text box');
+    await page.fill('#prg-text', 'Squat');
+    await page.click('#prg-save');
+    await page.waitForTimeout(600);
+    check((await page.textContent('#prg-err')).includes('Baris 1: tulis set dan rep'), 'program editor: a bad line is named with its number');
+    await page.fill('#prg-text', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
+    await page.click('#modal-program details > summary');
+    await page.fill('#prg-tpl-name', 'Pemula 2 hari');
+    await page.click('#prg-tpl-save');
+    await page.waitForTimeout(700);
+    check(env.sheet('ProgramItems').rows.some(r => !r[1] && r[2] === 'Pemula 2 hari'), 'program editor: "Simpan template" stores a reusable template');
+    const prgBad = await page.locator('#modal-program .sheet-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(prgBad === 0 && (await overflowX(page)) <= 0, 'program editor: footer buttons are at least 44 px and nothing scrolls sideways');
+    await page.click('#prg-save');
+    await page.waitForTimeout(800);
+    check((await page.textContent('#profile-program-wrap')).includes('2 hari · 3 gerakan') && env.sheet('ProgramItems').rows.filter(r => r[1] === 'PT-A').length === 3, 'program: saved for the client and summarised on the client page');
     await page.evaluate(() => window.cpTab('progres'));
     await page.waitForTimeout(300);
     check((await page.textContent('#profile-progress-wrap')).includes('sesi selesai') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
@@ -1285,6 +1307,25 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-progress"]', 'aria-current')) === 'page' && !(await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')), 'nav: the Progres tab is lit alone');
     await page.click('#tabbar .tab[data-view="public-dashboard"]');
+    await page.waitForTimeout(500);
+    // Program latihan di portal: kartu per hari, centang tersimpan.
+    env.call('saveMemberProgram', env.adminToken(), 'PT-A', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
+    await page.evaluate(() => { window.myProgram = null; });
+    await page.evaluate(() => window.navigate('public-program'));
+    await page.waitForTimeout(900);
+    check((await page.locator('#pub-program-wrap .card').count()) === 2 && (await page.textContent('#pub-program-wrap')).includes('Bench press') && (await page.textContent('#pub-program-wrap')).includes('3 × 10'), 'program: the client sees both days with sets × reps');
+    const vid = await page.getAttribute('#pub-program-wrap a[href^="https://youtu.be/abc"]', 'rel');
+    check(!!vid && vid.includes('noopener'), 'program: the video link opens outside with rel=noopener');
+    const progBtn = await page.locator('#pub-program-wrap .prog-hit').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width < 43.5 || r.height < 43.5).length);
+    check(progBtn === 0 && (await overflowX(page)) <= 0, 'program: check buttons are at least 44 px and nothing scrolls sideways');
+    await page.locator('#pub-program-wrap .card').first().locator('.prog-hit').nth(0).click();
+    await page.locator('#pub-program-wrap .card').first().locator('.prog-hit').nth(1).click();
+    await page.waitForTimeout(1300);
+    const logRow = env.sheet('ProgramLog') && env.sheet('ProgramLog').rows.find(r => r[1] === 'PT-A');
+    check(!!logRow && logRow[3] === 'Hari A' && logRow[4] === '1,2', 'program: two taps are saved as one row for the day');
+    check((await page.textContent('#pub-program-wrap .card')).includes('Selesai'), 'program: the finished day shows "Selesai"');
+    check((await page.locator('#pub-tasks-wrap').count()) === 1 && (await page.locator('#pub-meal-slot').count()) === 1, 'program: PR and meal cards live in the same tab');
+    await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(500);
     await page.evaluate(() => window.navigate('public-progress'));
     await page.waitForTimeout(500);

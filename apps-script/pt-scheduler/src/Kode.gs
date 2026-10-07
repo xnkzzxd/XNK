@@ -6216,6 +6216,257 @@ function markHealthReviewed(token, memberId, note) {
   return { status: 'success' };
 }
 
+// ── Program latihan (Fase J2) ────────────────────────────────────────────────
+// Coach menulis program dengan teks: "# Hari A" lalu satu gerakan per baris "Squat | 3x10 | catatan | https://…".
+// Sheet ProgramItems menyimpan program klien (Member ID terisi) dan template (Member ID kosong, Template terisi).
+// ProgramLog mencatat gerakan yang dicentang klien per hari.
+
+const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada"];
+const PROGRAM_LOG_HEADERS = ["ID", "Member ID", "Tanggal", "Hari", "Selesai", "Dibuat Pada"];
+const PROGRAM_LIMITS = { days: 7, items: 12, name: 60, hari: 40, gerakan: 80, rep: 16, note: 200, url: 300, templates: 30 };
+
+function _programSheet_() { return getOrCreateSheet_('ProgramItems', PROGRAM_HEADERS); }
+function _programLogSheet_() { const s = getOrCreateSheet_('ProgramLog', PROGRAM_LOG_HEADERS); s.getRange('C:C').setNumberFormat('@'); return s; }
+
+/**
+ * Murni: teks program → { days: [{ hari, items: [{ gerakan, set, rep, catatan, video }] }] }.
+ * "# Nama hari" membuka hari baru (tanpa judul = satu hari "Latihan"). Baris gerakan: Gerakan | 3x10 | catatan | https://link
+ * (catatan dan link boleh ditukar atau dihilangkan; link harus https). Lempar error Indonesia dengan nomor baris.
+ */
+function _parseProgramText_(text) {
+  const L = PROGRAM_LIMITS;
+  const days = [];
+  let cur = null;
+  String(text == null ? '' : text).split(/\r?\n/).forEach(function(raw, idx) {
+    const line = raw.trim(), n = idx + 1;
+    if (!line) return;
+    if (line.charAt(0) === '#') {
+      const hari = line.replace(/^#+\s*/, '').trim();
+      if (!hari) throw new Error('Baris ' + n + ': beri nama hari setelah #.');
+      if (hari.length > L.hari) throw new Error('Baris ' + n + ': nama hari maksimal ' + L.hari + ' karakter.');
+      if (days.length >= L.days) throw new Error('Maksimal ' + L.days + ' hari per program.');
+      if (days.some(function(d) { return d.hari.toLowerCase() === hari.toLowerCase(); })) throw new Error('Baris ' + n + ': nama hari "' + hari + '" sudah dipakai.');
+      cur = { hari: hari, items: [] };
+      days.push(cur);
+      return;
+    }
+    if (!cur) { cur = { hari: 'Latihan', items: [] }; days.push(cur); }
+    if (cur.items.length >= L.items) throw new Error('Baris ' + n + ': maksimal ' + L.items + ' gerakan per hari.');
+    const parts = line.split('|').map(function(x) { return x.trim(); });
+    const gerakan = parts[0];
+    if (!gerakan) throw new Error('Baris ' + n + ': nama gerakan kosong.');
+    if (gerakan.length > L.gerakan) throw new Error('Baris ' + n + ': nama gerakan maksimal ' + L.gerakan + ' karakter.');
+    const m = /^(\d{1,2})\s*[x×*]\s*(.{1,16})$/i.exec(parts[1] || '');
+    if (!m) throw new Error('Baris ' + n + ': tulis set dan rep seperti 3x10 (atau 3x30 dtk).');
+    const item = { gerakan: gerakan, set: parseInt(m[1], 10), rep: m[2].trim(), catatan: '', video: '' };
+    if (item.set < 1 || item.set > 20) throw new Error('Baris ' + n + ': jumlah set harus 1 sampai 20.');
+    parts.slice(2).forEach(function(f) {
+      if (!f) return;
+      if (/^https?:\/\//i.test(f)) {
+        if (!/^https:\/\/[^\s]+$/i.test(f)) throw new Error('Baris ' + n + ': link video harus diawali https:// tanpa spasi.');
+        if (f.length > L.url) throw new Error('Baris ' + n + ': link video terlalu panjang.');
+        if (item.video) throw new Error('Baris ' + n + ': hanya satu link video per gerakan.');
+        item.video = f;
+      } else {
+        if (item.catatan) throw new Error('Baris ' + n + ': catatan lebih dari satu. Gabungkan jadi satu kalimat.');
+        if (f.length > L.note) throw new Error('Baris ' + n + ': catatan maksimal ' + L.note + ' karakter.');
+        item.catatan = f;
+      }
+    });
+    cur.items.push(item);
+  });
+  return { days: days.filter(function(d) { return d.items.length; }) };
+}
+
+/** Murni: kebalikan _parseProgramText_ (untuk mengisi kotak edit). */
+function _programToText_(days) {
+  return (days || []).map(function(d) {
+    return '# ' + d.hari + '\n' + d.items.map(function(it) {
+      return [it.gerakan, it.set + 'x' + it.rep, it.catatan, it.video].filter(function(x, i) { return i < 2 || x; }).join(' | ');
+    }).join('\n');
+  }).join('\n\n');
+}
+
+/** Baris sheet → { days:[{hari, items:[{n, gerakan, set, rep, catatan, video}]}] } untuk satu klien (memberId) atau satu template (name). */
+function _programDays_(memberId, templateName) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramItems');
+  if (!sheet || sheet.getLastRow() < 2) return { days: [], updatedAt: '' };
+  const days = [], by = {};
+  let updatedAt = '';
+  const rows = sheet.getDataRange().getValues().slice(1).filter(function(r) {
+    if (!r[0]) return false;
+    return memberId != null ? String(r[1]).trim() === String(memberId).trim() : (!String(r[1]).trim() && String(r[2]) === String(templateName));
+  }).sort(function(a, b) { return Number(a[4]) - Number(b[4]); });
+  rows.forEach(function(r) {
+    const hari = String(r[3]);
+    if (!by[hari]) { by[hari] = { hari: hari, items: [] }; days.push(by[hari]); }
+    by[hari].items.push({ n: Number(r[4]), gerakan: String(r[5]), set: Number(r[6]) || 0, rep: String(r[7]), catatan: String(r[8] || ''), video: String(r[9] || '') });
+    if (String(r[10]) > updatedAt) updatedAt = String(r[10]);
+  });
+  return { days: days, updatedAt: updatedAt };
+}
+
+/** Tulis ulang seluruh program satu klien / template (di dalam lock). days kosong = hapus. */
+function _programWrite_(memberId, templateName, days) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _programSheet_();
+    const rows = sheet.getDataRange().getValues();
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const r = rows[i];
+      const mine = memberId != null ? String(r[1]).trim() === String(memberId).trim() : (!String(r[1]).trim() && String(r[2]) === String(templateName));
+      if (mine) sheet.deleteRow(i + 1);
+    }
+    const now = new Date().toISOString();
+    let n = 0;
+    (days || []).forEach(function(d) {
+      d.items.forEach(function(it) {
+        n++;
+        sheet.appendRow(['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now]);
+      });
+    });
+    return n;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Admin: program satu klien, juga sebagai teks untuk editor, dan catatan latihan terakhir klien. */
+function getMemberProgram(token, memberId) {
+  requireAdmin_(token);
+  const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
+  const p = _programDays_(id);
+  const logs = _programLogsFor_(id);
+  const last = logs.length ? logs[logs.length - 1] : null;
+  return { days: p.days, text: _programToText_(p.days), updatedAt: p.updatedAt, last: last ? { tanggal: last.tanggal, hari: last.hari, selesai: last.selesai.length } : null };
+}
+
+/** Admin: simpan program klien dari teks (kosong = hapus program). */
+function saveMemberProgram(token, memberId, text) {
+  requireAdmin_(token);
+  const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
+  const parsed = _parseProgramText_(text);
+  _programWrite_(id, null, parsed.days);
+  return getMemberProgram(token, id);
+}
+
+function _templateName_(name) {
+  const t = String(name == null ? '' : name).trim();
+  if (!t) throw new Error('Nama template wajib diisi.');
+  if (t.length > PROGRAM_LIMITS.name) throw new Error('Nama template maksimal ' + PROGRAM_LIMITS.name + ' karakter.');
+  return t;
+}
+
+/** Admin: daftar template program (nama, jumlah hari dan gerakan, teks). */
+function getProgramTemplates(token) {
+  requireAdmin_(token);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramItems');
+  const names = [];
+  if (sheet && sheet.getLastRow() > 1) {
+    sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+      if (r[0] && !String(r[1]).trim() && String(r[2]).trim() && names.indexOf(String(r[2])) === -1) names.push(String(r[2]));
+    });
+  }
+  return names.map(function(name) {
+    const p = _programDays_(null, name);
+    return { name: name, days: p.days.length, items: p.days.reduce(function(s, d) { return s + d.items.length; }, 0), text: _programToText_(p.days) };
+  });
+}
+
+/** Admin: simpan template (nama yang sama menimpa). Teks kosong ditolak. */
+function saveProgramTemplate(token, name, text) {
+  requireAdmin_(token);
+  const nm = _templateName_(name);
+  const parsed = _parseProgramText_(text);
+  if (!parsed.days.length) throw new Error('Template tidak boleh kosong.');
+  const existing = getProgramTemplates(token).map(function(t) { return t.name.toLowerCase(); });
+  if (existing.indexOf(nm.toLowerCase()) === -1 && existing.length >= PROGRAM_LIMITS.templates) throw new Error('Template sudah mencapai batas ' + PROGRAM_LIMITS.templates + '. Hapus yang tidak terpakai dulu.');
+  const exact = getProgramTemplates(token).find(function(t) { return t.name.toLowerCase() === nm.toLowerCase(); });
+  _programWrite_(null, exact ? exact.name : nm, parsed.days);
+  return { status: 'success', name: exact ? exact.name : nm };
+}
+
+function deleteProgramTemplate(token, name) {
+  requireAdmin_(token);
+  const nm = _templateName_(name);
+  if (!_programDays_(null, nm).days.length) throw new Error('Template tidak ditemukan.');
+  _programWrite_(null, nm, []);
+  return { status: 'success' };
+}
+
+/** Admin: salin template jadi program klien (menggantikan program yang ada). */
+function applyProgramTemplate(token, memberId, name) {
+  requireAdmin_(token);
+  const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
+  const nm = _templateName_(name);
+  const p = _programDays_(null, nm);
+  if (!p.days.length) throw new Error('Template tidak ditemukan.');
+  _programWrite_(id, null, p.days.map(function(d) { return { hari: d.hari, items: d.items.map(function(it) { return { gerakan: it.gerakan, set: it.set, rep: it.rep, catatan: it.catatan, video: it.video }; }) }; }));
+  return getMemberProgram(token, id);
+}
+
+/** Log centang satu klien, lama → baru: [{tanggal, hari, selesai:[urutan]}]. */
+function _programLogsFor_(memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramLog');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const id = String(memberId).trim();
+  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; })
+    .map(function(r) { return { tanggal: String(r[2]), hari: String(r[3]), selesai: String(r[4] || '').split(',').filter(String).map(Number) }; })
+    .sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); });
+}
+
+/** Klien: program miliknya dan gerakan yang sudah dicentang hari ini { hari: [urutan] }. */
+function getMyProgram(memberToken) {
+  const id = String(requireMember_(memberToken).row[0]).trim();
+  const p = _programDays_(id);
+  const today = _todayWib_();
+  const done = {};
+  _programLogsFor_(id).forEach(function(l) { if (l.tanggal === today) done[l.hari] = l.selesai; });
+  return { days: p.days, today: today, done: done, updatedAt: p.updatedAt };
+}
+
+/** Klien: simpan centang satu hari program (hari ini, WIB). selesai = daftar urutan gerakan. Klien dari token. */
+function logMyProgramDay(memberToken, hari, selesai) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  const day = _programDays_(id).days.find(function(d) { return d.hari === String(hari == null ? '' : hari); });
+  if (!day) throw new Error('Hari latihan tidak ditemukan.');
+  const valid = {};
+  day.items.forEach(function(it) { valid[it.n] = true; });
+  const picked = [];
+  (Array.isArray(selesai) ? selesai : []).forEach(function(v) {
+    const n = Number(v);
+    if (!valid[n]) throw new Error('Gerakan tidak ditemukan.');
+    if (picked.indexOf(n) === -1) picked.push(n);
+  });
+  picked.sort(function(a, b) { return a - b; });
+  const today = _todayWib_();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  let wasComplete = false;
+  try {
+    const sheet = _programLogSheet_();
+    const rows = sheet.getDataRange().getValues();
+    let found = 0;
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][1]).trim() === id && String(rows[i][2]) === today && String(rows[i][3]) === day.hari) { found = i + 1; break; }
+    if (found) {
+      wasComplete = String(rows[found - 1][4] || '').split(',').filter(String).length >= day.items.length;
+      if (picked.length) sheet.getRange(found, 5).setValue(picked.join(','));
+      else sheet.deleteRow(found);
+    } else if (picked.length) {
+      sheet.appendRow(['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, today, day.hari, picked.join(','), new Date().toISOString()]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  const complete = picked.length >= day.items.length;
+  if (complete && !wasComplete) {
+    try { kirimNotifTelegram_('💪 <b>' + escapeHtmlTelegram(String(row[1] || '').trim().split(/\s+/)[0]) + '</b> menyelesaikan program: ' + escapeHtmlTelegram(day.hari)); } catch (e) { Logger.log('Notif program gagal: ' + e); }
+  }
+  return { status: 'success', hari: day.hari, selesai: picked, complete: complete };
+}
+
 // ── Penilaian cepat dan evaluasi paket (Fase I3) ─────────────────────────────
 // Klien menilai sesi yang baru selesai (1-5 bintang + satu kalimat) dan mengisi evaluasi saat sisa sesi paket 0.
 // Komentar hanya terlihat di panel admin; Telegram hanya memuat nama depan dan angka.

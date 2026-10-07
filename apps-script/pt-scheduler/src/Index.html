@@ -535,6 +535,21 @@
       </div>
     </div>
 
+    <!-- Program latihan klien (Fase J2), panel -->
+    <div class="sheet hide" id="modal-program" role="dialog" aria-modal="true" aria-labelledby="prg-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="prg-title">Program latihan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-program" onsubmit="window.programSave(event)">
+        <p class="li-sub" id="prg-who"></p>
+        <div class="field"><label class="label" for="prg-tpl">Muat dari template</label><select class="select" id="prg-tpl" onchange="window.programLoadTemplate()"><option value="">Pilih template…</option></select></div>
+        <div class="field"><label class="label" for="prg-text">Program</label><textarea class="textarea prog-text" id="prg-text" rows="12" spellcheck="false" placeholder="# Hari A&#10;Bench press | 3x10 | turun pelan | https://youtu.be/…&#10;Push-up | 3x12"></textarea>
+          <p class="hint">Satu gerakan per baris: <b>Gerakan | 3x10 | catatan | link video (https)</b>. Catatan dan link boleh dikosongkan. Awali hari baru dengan <b>#</b>.</p></div>
+        <details class="pg-more"><summary>Simpan sebagai template</summary><div class="stack" style="gap:8px"><input class="input" id="prg-tpl-name" type="text" maxlength="60" placeholder="Nama template, mis. Pemula 3 hari"><button type="button" class="btn btn-outline btn-block" id="prg-tpl-save" onclick="window.programSaveTemplate()">Simpan template</button><button type="button" class="btn btn-ghost btn-block hide" id="prg-tpl-del" onclick="window.programDeleteTemplate()">Hapus template yang dipilih</button></div></details>
+        <p class="hint err-msg" id="prg-err" role="alert" style="display:block"></p>
+      </form>
+      <div class="sheet-foot"><div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" id="prg-clear" onclick="window.programClear()">Hapus program</button><button type="submit" form="form-program" class="btn btn-primary btn-lg" id="prg-save">Simpan program</button></div></div>
+    </div>
+
     <!-- Evaluasi paket (Fase I3), portal klien -->
     <div class="sheet hide" id="modal-pkg-eval" role="dialog" aria-modal="true" aria-labelledby="pe-title">
       <div class="sheet-handle"></div>

@@ -3462,7 +3462,7 @@
       '<div class="btn-row client-hero-actions"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
       '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div></div>';
     // Tab bagian halaman
-    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['perawatan', 'Perawatan', 'heart-pulse'], ['riwayat', 'Riwayat', 'history']];
+    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['program', 'Program', 'clipboard-list'], ['perawatan', 'Perawatan', 'heart-pulse'], ['riwayat', 'Riwayat', 'history']];
     body += '<div class="chips cp-tabs" role="tablist" aria-label="Bagian profil klien">' + tabs.map((t, i) => '<button type="button" role="tab" class="chip' + (i === 0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (i === 0) + '" onclick="window.cpTab(\'' + t[0] + '\')">' + icon(t[2]) + t[1] + '</button>').join('') + '</div>';
     // Ringkasan
     body += '<div class="cp-pane stack" data-cppane="ringkasan" style="gap:16px">';
@@ -3478,6 +3478,8 @@
     body += '</div>';
     // Progres
     body += '<div class="cp-pane hide" data-cppane="progres"><div id="profile-progress-wrap" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div></div>';
+    // Program latihan (Fase J2)
+    body += '<div class="cp-pane hide" data-cppane="program"><div id="profile-program-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + programAdminInner(m.id) + '</div></div>';
     // Perawatan
     body += '<div class="cp-pane hide" data-cppane="perawatan"><div id="profile-care-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     // Riwayat
@@ -3491,6 +3493,7 @@
     window.loadMemberTasks(m.id, false);
     window.pgLoadAdmin(m.id);
     window.loadClientCare(m.id);
+    window.loadAdminProgram(m.id);
     requestAnimationFrame(function () {
       const ring = document.querySelector('#detail-body .ring-fill');
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
@@ -4124,6 +4127,91 @@
       .catch(function (err) { done(); window.showToast(err.message); });
   };
 
+
+  // ── Program latihan di halaman klien (panel, Fase J2) ──────────────────────────
+  const progAdmin = {};   // memberId → { days, text, last } | { error }
+  let progTemplates = [];
+  let progMember = '';
+  function programAdminInner(memberId) {
+    const d = progAdmin[memberId];
+    if (!d) return '<p class="li-sub">Memuat program…</p>';
+    if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    const n = d.days.reduce((s, x) => s + x.items.length, 0);
+    let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Program latihan</p><span class="li-sub">' + (n ? d.days.length + ' hari · ' + n + ' gerakan' : 'Belum ada') + '</span></div>';
+    if (n) {
+      html += d.days.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p>' + day.items.map(it => '<p class="li-sub">' + h(it.gerakan) + ' · ' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'style="width:12px;height:12px;vertical-align:-2px"') : '') + '</p>').join('') + '</div>').join('');
+      if (d.last) html += '<p class="li-sub" style="margin-top:6px">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
+    } else html += '<p class="li-sub">Tulis program supaya klien melihatnya di tab Program.</p>';
+    html += '<div class="btn-row" style="margin-top:6px"><button type="button" class="btn btn-primary" onclick="window.openProgramEditor(\'' + h(memberId) + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button></div></div>';
+    return html;
+  }
+  function renderProgramAdmin(memberId) {
+    const w = $('profile-program-wrap');
+    if (w && w.getAttribute('data-member') === String(memberId)) { setHTML(w, programAdminInner(memberId)); }
+  }
+  window.loadAdminProgram = function (memberId) {
+    return adminCall('getMemberProgram', memberId).then(function (d) { progAdmin[memberId] = d; renderProgramAdmin(memberId); })
+      .catch(function (err) { progAdmin[memberId] = { error: window.authMessage ? window.authMessage(err) : err.message }; renderProgramAdmin(memberId); });
+  };
+  window.openProgramEditor = function (memberId) {
+    progMember = memberId;
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    $('prg-who').textContent = m.name || '';
+    $('prg-text').value = (progAdmin[memberId] && progAdmin[memberId].text) || '';
+    $('prg-err').textContent = ''; $('prg-tpl-name').value = '';
+    $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>'; $('prg-tpl-del').classList.add('hide');
+    $('prg-clear').classList.toggle('hide', !(progAdmin[memberId] && progAdmin[memberId].days && progAdmin[memberId].days.length));
+    openSheet('modal-program');
+    adminCall('getProgramTemplates').then(function (list) {
+      progTemplates = list || [];
+      $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+    }).catch(function () {});
+  };
+  window.programLoadTemplate = function () {
+    const name = $('prg-tpl').value, t = progTemplates.find(x => x.name === name);
+    $('prg-tpl-del').classList.toggle('hide', !t);
+    if (!t) return;
+    const apply = function () { $('prg-text').value = t.text; $('prg-tpl-name').value = t.name; };
+    const cur = $('prg-text').value.trim();
+    if (cur && cur !== t.text.trim()) {
+      window.showConfirmModal('Isi program yang sedang ditulis diganti dengan template <b>' + h(t.name) + '</b>.', apply, { title: 'Pakai template?', confirmText: 'Ganti' });
+      return;
+    }
+    apply();
+  };
+  function programDone(d, msg) { progAdmin[progMember] = d; renderProgramAdmin(progMember); window.closeModal(); window.showToast(msg); }
+  window.programSave = function (e) {
+    if (e) e.preventDefault();
+    $('prg-err').textContent = '';
+    const done = busy($('prg-save'), 'Menyimpan…');
+    adminCall('saveMemberProgram', progMember, $('prg-text').value).then(function (d) { done(); programDone(d, d.days.length ? 'Program disimpan.' : 'Program dihapus.'); })
+      .catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+  };
+  window.programClear = function () {
+    window.showConfirmModal('Program latihan klien ini dihapus. Centang klien tetap tersimpan.', function () {
+      adminCall('saveMemberProgram', progMember, '').then(function (d) { programDone(d, 'Program dihapus.'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus program?', confirmText: 'Hapus', variant: 'danger' });
+  };
+  window.programSaveTemplate = function () {
+    $('prg-err').textContent = '';
+    const done = busy($('prg-tpl-save'), 'Menyimpan…');
+    adminCall('saveProgramTemplate', $('prg-tpl-name').value, $('prg-text').value).then(function (r) {
+      done(); window.showToast('Template "' + r.name + '" disimpan.');
+      return adminCall('getProgramTemplates').then(function (list) {
+        progTemplates = list || [];
+        $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '"' + (t.name === r.name ? ' selected' : '') + '>' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+        $('prg-tpl-del').classList.remove('hide');
+      });
+    }).catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+  };
+  window.programDeleteTemplate = function () {
+    const name = $('prg-tpl').value; if (!name) return;
+    adminCall('deleteProgramTemplate', name).then(function () {
+      progTemplates = progTemplates.filter(t => t.name !== name);
+      $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+      $('prg-tpl-del').classList.add('hide'); window.showToast('Template dihapus.');
+    }).catch(function (err) { $('prg-err').textContent = window.authMessage(err); });
+  };
 
   // ── Perawatan klien (E4): catatan privat, kesehatan, assessment, tes ─────────
   // Data sensitif: dimuat saat halaman klien dibuka dan TIDAK disimpan di cache panel.
@@ -5417,13 +5505,67 @@
     window.loadMyCare();
   }
 
+  // Program latihan dari coach: window.myProgram = { state, data:{days,done,today}, error }; centang disimpan per hari.
+  const progSave = { timers: {} };
+  const safeHttps = u => /^https:\/\/[^\s"'<>]+$/.test(String(u || ''));
+  function programDoneSet(hari) { const d = window.myProgram && window.myProgram.data; return (d && d.done && d.done[hari]) || []; }
+  function programInner() {
+    const c = window.myProgram;
+    if (!c || c.state === 'loading') return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div><p class="li-sub">Memuat program…</p>';
+    if (c.state === 'error') return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div><p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgram(true)">Coba lagi</button>';
+    const days = c.data.days || [];
+    if (!days.length) return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div>' + emptyState('clipboard-list', 'Belum ada program', 'Coach belum menyiapkan program untukmu. Tanya coach lewat Chat.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>');
+    return days.map(function (d) {
+      const done = programDoneSet(d.hari), n = d.items.length, all = done.length >= n;
+      return '<div class="card" data-hari="' + h(d.hari) + '"><div class="section-head"><h3 class="section-title">' + h(d.hari) + '</h3><span class="pill num' + (all ? ' solid' : '') + '">' + (all ? 'Selesai 🎉' : done.length + ' / ' + n) + '</span></div><div class="stack" style="gap:0">' +
+        d.items.map(function (it) {
+          const on = done.indexOf(it.n) !== -1;
+          return '<div class="prog-item' + (on ? ' on' : '') + '"><button type="button" class="prog-hit" role="checkbox" aria-checked="' + on + '" aria-label="' + h(it.gerakan) + '" onclick="window.progToggle(\'' + h(d.hari).replace(/'/g, "\\'") + '\',' + it.n + ')"><span class="prog-check">' + icon('check') + '</span></button>' +
+            '<div class="grow" style="min-width:0"><p class="li-title prog-name">' + h(it.gerakan) + '</p><div class="prog-meta"><span class="pill soft num">' + it.set + ' × ' + h(it.rep) + '</span>' +
+            (safeHttps(it.video) ? '<a class="btn btn-ghost btn-sm" style="min-height:44px" href="' + h(it.video) + '" target="_blank" rel="noopener noreferrer">' + icon('circle-play') + 'Video</a>' : '') + '</div>' +
+            (it.catatan ? '<p class="li-sub" style="white-space:normal">' + h(it.catatan) + '</p>' : '') + '</div></div>';
+        }).join('') + '</div></div>';
+    }).join('');
+  }
+  function renderProgramCard() { const w = $('pub-program-wrap'); if (w) { setHTML(w, programInner()); } }
+  window.loadMyProgram = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    const c = window.myProgram;
+    if (c && c.state === 'ok' && c.data.today === pgToday() && !force) { renderProgramCard(); return Promise.resolve(); }
+    if (!c || c.state !== 'ok') window.myProgram = { state: 'loading' };
+    renderProgramCard();
+    return memberCall('getMyProgram').then(function (data) { window.myProgram = { state: 'ok', data: data || { days: [], done: {} } }; renderProgramCard(); })
+      .catch(function (err) {
+        if (window.isAuthError && window.isAuthError(err)) return;
+        window.myProgram = { state: 'error', error: String((err && err.message) || err) }; renderProgramCard();
+      });
+  };
+  // Ketuk = centang/lepas; simpan sesudah jeda singkat (satu panggilan per hari, berisi semua centang).
+  window.progToggle = function (hari, n) {
+    const c = window.myProgram; if (!c || c.state !== 'ok') return;
+    const set = (c.data.done[hari] || []).slice(), at = set.indexOf(n);
+    if (at === -1) set.push(n); else set.splice(at, 1);
+    set.sort((x, y) => x - y);
+    if (set.length) c.data.done[hari] = set; else delete c.data.done[hari];
+    const day = c.data.days.find(d => d.hari === hari);
+    renderProgramCard();
+    clearTimeout(progSave.timers[hari]);
+    progSave.timers[hari] = setTimeout(function () {
+      memberCall('logMyProgramDay', hari, set).then(function (r) {
+        if (r && r.complete && day && set.length >= day.items.length) window.showToast('Latihan ' + hari + ' selesai. Kerja bagus! 🎉');
+      }).catch(function (err) { window.showToast('Gagal menyimpan centang: ' + (window.authMessage ? window.authMessage(err) : err.message)); });
+    }, 600);
+  };
+
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
     if (!el || !me) return;
     let left = pageIntro('Program', 'Latihan, PR, dan makan harianmu dari coach.');
-    left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
-    left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
-    setHTML(el, portalGrid(left, ''));
+    left += '<div class="stack" style="gap:var(--gap)" id="pub-program-wrap">' + programInner() + '</div>';
+    let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
+    right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
+    setHTML(el, portalGrid(left, right));
+    window.loadMyProgram(false);
     if (!window.myTasks) window.loadMyTasks(false); else renderMyTasksCard();
     window.loadMyMeal(false);
   }

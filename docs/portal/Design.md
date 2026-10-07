@@ -12,7 +12,10 @@ Rujukan kode: `apps-script/pt-scheduler/src/`.
 
 ## 2. Program (J2)
 
-Lihat bagian J2 di [TODO.md](TODO.md); dirancang saat dibangun.
+- Sheet `ProgramItems` (`ID, Member ID, Template, Hari, Urutan, Gerakan, Set, Rep, Catatan, Video URL, Diubah Pada`): Member ID terisi = program klien, Member ID kosong + Template terisi = template. `ProgramLog` (`ID, Member ID, Tanggal, Hari, Selesai, Dibuat Pada`) menyimpan urutan gerakan yang dicentang per klien, hari, dan tanggal WIB.
+- Editor berbasis teks: `# Nama hari`, lalu satu gerakan per baris `Gerakan | 3x10 | catatan | https://link`. `_parseProgramText_` (murni) memvalidasi dan melempar error Indonesia dengan nomor baris (maks 7 hari × 12 gerakan; hanya link https; selain itu teks biasa). `_programToText_` untuk mengisi kotak edit; program ditulis ulang seluruhnya di dalam lock (`_programWrite_`).
+- Admin: `getMemberProgram`, `saveMemberProgram` (teks kosong = hapus), `getProgramTemplates`, `saveProgramTemplate` (nama tak peka huruf, maks 30), `deleteProgramTemplate`, `applyProgramTemplate`. Klien: `getMyProgram` (program + centang hari ini), `logMyProgramDay(memberToken, hari, selesai[])` (klien dari token; hari dan gerakan harus milik programnya; daftar kosong menghapus; Telegram hanya nama depan + nama hari saat hari selesai pertama kali).
+- Portal: kartu per hari dengan kotak centang 44 px, set × rep, tombol video (`rel=noopener`), simpan setelah jeda 600 ms. Panel: tab Program di halaman klien, editor dengan "Muat dari template" dan "Simpan sebagai template".
 
 ## 3. Info & Tips (J3)
 
