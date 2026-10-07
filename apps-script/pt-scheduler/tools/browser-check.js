@@ -1641,6 +1641,10 @@ async function contrastReport(page) {
     rows.push(['SCH-M3', 'PT-C', 'Citra', '6283333333333', at(5, 10), plusH(at(5, 10), 1), '', 'unread', '', '']);
     const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
 
+    // Dua coach aktif: pilih coach dulu, jam baru muncul.
+    check((await page.textContent('#slot-hours')).includes('Pilih coach dulu'), 'dua coach aktif: jam tidak ditampilkan sebelum coach dipilih');
+    await page.click('#slot-coaches .slot-coach[data-coach="C-2"]');
+    await page.waitForSelector('#slot-days [data-day="4"]');
     await page.click('#slot-days [data-day="4"]');
     await page.waitForTimeout(300);
     check(!(await page.locator('#slot-hours .slot-h[data-h="10"]').first().evaluate(el => el.disabled)),
