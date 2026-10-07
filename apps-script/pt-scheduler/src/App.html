@@ -2272,6 +2272,8 @@
 
   // ── JADWAL (kalender bulan + daftar, minggu di desktop) ───────────────────
   function coachFilterOptions() {
+    // Klien: dropdown ini adalah pilihan coach untuk booking (wajib), bukan filter.
+    if (window.isPublicView) return '<option value="">Pilih coach…</option>' + window.coaches.map(c => '<option value="' + h(String(c.id)) + '"' + (String(ui.bookCoach) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
     return '<option value="ALL">Semua coach</option>' + window.coaches.map(c => '<option value="' + h(c.id) + '"' + (String(ui.coachFilter) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
   }
   function filteredSchedules() {
@@ -2286,7 +2288,7 @@
     let html = '<div class="page-head"><div><h2 class="page-title">Jadwal</h2><p class="page-sub">' +
       (pub ? 'Pilih tanggal untuk melihat jam yang masih kosong.' : 'Kelola semua sesi latihan klien.') + '</p></div>' +
       '<div class="row" style="flex-wrap:wrap">' +
-      (window.isSoloCoach() ? '' : '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="window.setCoachFilter(this.value)" aria-label="Filter coach">' + coachFilterOptions() + '</select>') +
+      (window.isSoloCoach() ? '' : '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="' + (window.isPublicView ? 'window.pickBookCoach(this.value)' : 'window.setCoachFilter(this.value)') + '" aria-label="' + (window.isPublicView ? 'Pilih coach' : 'Filter coach') + '">' + coachFilterOptions() + '</select>') +
       (!pub ? '<div class="seg only-desktop" id="sched-seg"><span class="seg-thumb"></span><button type="button" class="' + (ui.schedMode === 'month' ? 'active' : '') + '" onclick="window.setSchedMode(\'month\')">Bulan</button><button type="button" class="' + (ui.schedMode === 'week' ? 'active' : '') + '" onclick="window.setSchedMode(\'week\')">Minggu</button></div>' : '') +
       '<button type="button" class="btn btn-primary only-desktop" onclick="' + (pub ? 'window.handleFabClick()' : 'window.quickAction(\'booking\')') + '">' + icon('calendar-plus') + 'Booking</button>' +
       '</div></div>';
@@ -2422,12 +2424,8 @@
     const range = DAY_HOURS[day.getDay()];
     const multi = !window.isSoloCoach() && window.coaches.length > 1;
     if (multi && me) {
-      // Dua coach aktif atau lebih: pilih coach dulu, baru jam. Jam kosong dihitung per coach di server.
-      html += '<p class="eyebrow" style="margin:6px 0 8px">Pilih coach</p><div class="row" id="book-coach-chips" style="gap:8px;flex-wrap:wrap;margin-bottom:16px">' + window.coaches.map(function (c) {
-        const on = String(ui.bookCoach) === String(c.id);
-        return '<button type="button" class="btn btn-sm ' + (on ? 'btn-primary' : 'btn-outline') + '" data-coach="' + h(String(c.id)) + '" aria-pressed="' + on + '" onclick="window.pickBookCoach(this.getAttribute(\'data-coach\'))">' + h(c.name) + '</button>';
-      }).join('') + '</div>';
-      if (!ui.bookCoach) return html + '<div class="notice">' + icon('user-round') + '<div class="grow"><p class="li-title">Pilih coach dulu</p><p class="li-sub">Setelah itu jam kosong coach tersebut akan muncul.</p></div></div>';
+      // Dua coach aktif atau lebih: pilih coach (dropdown di atas) dulu, baru jam. Jam kosong dihitung per coach di server.
+      if (!ui.bookCoach) return html + '<div class="notice">' + icon('user-round') + '<div class="grow"><p class="li-title">Pilih coach dulu</p><p class="li-sub">Pilih coach di dropdown atas, lalu jam kosongnya akan muncul.</p></div></div>';
     }
     const coachCount = ui.coachFilter === 'ALL' ? Math.max(1, window.coaches.length) : 1;
     const byCoach = multi && me ? window.openSlotsByCoachMap[ui.bookCoach] : null;
@@ -2473,9 +2471,9 @@
     return need;
   }
   window.pickBookCoach = function (id) {
-    ui.bookCoach = String(id);
-    window.updateUI();
-    if (window.refreshOpenSlots) window.refreshOpenSlots(true);
+    ui.bookCoach = String(id || '');
+    renderView('calendar', { animate: false });
+    if (ui.bookCoach && window.refreshOpenSlots) window.refreshOpenSlots(true);
   };
   window.bookSlot = function (date, time) {
     if (!window.publicLoggedMember) { window.showToast('Masuk dulu untuk booking.', 'lock'); window.navigate('public-login'); return; }
