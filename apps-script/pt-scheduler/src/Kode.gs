@@ -668,7 +668,7 @@ function getMemberProfile(memberToken) {
 // 'selesai' = semua selesai atau dimatikan klien. Bisa dimatikan di Pengaturan
 // (CLIENT_GUIDE_ENABLED = 'false'); bawaannya nyala.
 const MEMBER_GUIDE_COL = 23;   // Kolom W
-const GUIDE_PAGES = ['beranda', 'booking', 'jadwal', 'paket', 'coach'];
+const GUIDE_PAGES = ['beranda', 'booking', 'jadwal', 'paket', 'coach', 'progres', 'program', 'info'];   // J4 menambah tiga halaman terakhir
 
 function _guideEnabled_() {
   return PropertiesService.getScriptProperties().getProperty('CLIENT_GUIDE_ENABLED') !== 'false';
@@ -2090,6 +2090,7 @@ function getPortalBootstrap(memberToken) {
     feedbackEnabled: feedbackOn,
     pendingRating: found && feedbackOn ? _pendingRating_(memberId, all) : null,
     packageEval: { eligible: !!(found && feedbackOn && _packageEvalEligible_(found.row, all)) },
+    info: { latestAt: found ? _contentLatestAt_() : '' },
     openSlots: _openSlotsCached_({ days: horizon }, now, all, false, ver),
     openSlotsByCoach: _openSlotsByCoach_(all, ver, horizon, now, false),
     horizonDays: horizon,
@@ -4023,10 +4024,30 @@ function _streakInfo_(memberId) {
 
 // ── Klien (token member; ID klien selalu dari token, bukan dari argumen) ────
 
+const MONTHLY_CHALLENGE_DEFAULT = 8;   // sesi selesai per bulan; Script Property MONTHLY_CHALLENGE_SESSIONS menimpanya (1-31)
+
+/** Murni: jumlah sesi selesai klien pada bulan WIB `month` ('YYYY-MM'). Waktu selesai dipakai bila ada, kalau tidak jam mulai. */
+function _challengeDone_(schedules, memberId, month) {
+  const id = String(memberId).trim();
+  return (schedules || []).filter(function(s) {
+    if (String(s.memberId).trim() !== id || String(s.status || '').toLowerCase() !== 'completed') return false;
+    const t = new Date(s.completedAt || s.start);
+    return !isNaN(t.getTime()) && Utilities.formatDate(t, REMINDER_TZ, 'yyyy-MM') === month;
+  }).length;
+}
+
+/** Tantangan bulan ini: { target, done, month }. Dihitung di server dari sesi selesai; tidak ada data baru. */
+function _monthlyChallenge_(memberId) {
+  const month = _todayWib_().slice(0, 7);
+  const target = Math.max(1, Math.min(31, Math.floor(_numProp_('MONTHLY_CHALLENGE_SESSIONS', MONTHLY_CHALLENGE_DEFAULT))));
+  return { target: target, done: _challengeDone_(_getSchedulesAll_(), memberId, month), month: month };
+}
+
 /** Payload klien + badge yang sudah diraih tapi belum pernah dirayakan (kolom Q). */
 function _myPayload_(row) {
   const memberId = String(row[0]).trim();
   const p = _progressPayload_(memberId);
+  p.challenge = _monthlyChallenge_(memberId);
   const seen = _rmdOffFrom_(row[MEMBER_BADGE_SEEN_COL - 1]);
   p.newBadges = p.badges.filter(function(b) { return b.earned && seen.indexOf(b.id) === -1; }).map(function(b) { return b.id; });
   return p;
@@ -6194,6 +6215,384 @@ function markHealthReviewed(token, memberId, note) {
   hs.sheet.getRange(hs.rowNum, 15).setValue(new Date().toISOString());
   hs.sheet.getRange(hs.rowNum, 16).setValue(_careStr_(note, 300, 'Catatan'));
   return { status: 'success' };
+}
+
+// ── Konten untuk klien: pengumuman, tips, video (Fase J3) ─────────────────────
+// Pemilik menulis di halaman Konten (panel). Klien hanya menerima yang aktif dan sedang tayang; tanpa data pribadi.
+
+const CONTENT_HEADERS = ["ID", "Tipe", "Judul", "Isi", "URL", "Kategori", "Sematkan", "Tampil Mulai", "Tampil Sampai", "Aktif", "Dibuat Pada"];
+const CONTENT_TYPES = ['pengumuman', 'tips', 'video'];
+const CONTENT_LIMITS = { judul: 80, isi: 2000, url: 300, kategori: 30, items: 200 };
+
+function _contentSheet_() {
+  const s = getOrCreateSheet_('Content', CONTENT_HEADERS);
+  s.getRange('H:I').setNumberFormat('@');
+  return s;
+}
+
+function _contentFromRow_(r) {
+  return { id: String(r[0]), tipe: String(r[1]), judul: String(r[2]), isi: String(r[3] || ''), url: String(r[4] || ''), kategori: String(r[5] || ''),
+    sematkan: String(r[6]) === 'ya', mulai: _isoDateCell_(r[7]), sampai: _isoDateCell_(r[8]), aktif: String(r[9]) !== 'tidak', dibuat: String(r[10] || '') };
+}
+
+/** Murni: konten tampil bagi klien pada tanggal WIB `today`? (aktif, dalam rentang tanggal). */
+function _contentVisible_(c, today) {
+  if (!c.aktif) return false;
+  if (c.mulai && c.mulai > today) return false;
+  if (c.sampai && c.sampai < today) return false;
+  return true;
+}
+
+/** Murni: status untuk admin: 'tayang' | 'terjadwal' | 'berakhir' | 'mati'. */
+function _contentStatus_(c, today) {
+  if (!c.aktif) return 'mati';
+  if (c.mulai && c.mulai > today) return 'terjadwal';
+  if (c.sampai && c.sampai < today) return 'berakhir';
+  return 'tayang';
+}
+
+function _contentAll_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Content');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(_contentFromRow_);
+}
+
+/** Klien (bootstrap): waktu pembuatan konten tayang terbaru, untuk titik "baru". Kosong bila tak ada. */
+function _contentLatestAt_() {
+  const today = _todayWib_();
+  return _contentAll_().filter(function(c) { return _contentVisible_(c, today); }).reduce(function(m, c) { return c.dibuat > m ? c.dibuat : m; }, '');
+}
+
+/** Murni: urutan klien: disematkan dulu, lalu terbaru. */
+function _contentSort_(list) {
+  return list.slice().sort(function(a, b) { return (b.sematkan ? 1 : 0) - (a.sematkan ? 1 : 0) || (a.dibuat < b.dibuat ? 1 : a.dibuat > b.dibuat ? -1 : 0); });
+}
+
+/** Admin: semua konten (terbaru dulu) dengan statusnya. */
+function getContentAdmin(token) {
+  requireAdmin_(token);
+  const today = _todayWib_();
+  return _contentAll_().sort(function(a, b) { return a.dibuat < b.dibuat ? 1 : -1; }).map(function(c) { return Object.assign({ status: _contentStatus_(c, today) }, c); });
+}
+
+/** Admin: buat atau ubah konten. data = { id?, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif }. */
+function saveContent(token, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const L = CONTENT_LIMITS;
+  const tipe = String(data.tipe == null ? '' : data.tipe).trim();
+  if (CONTENT_TYPES.indexOf(tipe) === -1) throw new Error('Pilih jenis konten: pengumuman, tips, atau video.');
+  const judul = _careStr_(data.judul, L.judul, 'Judul');
+  if (!judul) throw new Error('Judul wajib diisi.');
+  const isi = _careStr_(data.isi, L.isi, 'Isi');
+  const kategori = _careStr_(data.kategori, L.kategori, 'Kategori');
+  const url = _careStr_(data.url, L.url, 'Link');
+  if (url && !/^https:\/\/[^\s"'<>]+$/.test(url)) throw new Error('Link harus diawali https:// tanpa spasi.');
+  if (tipe === 'video' && !url) throw new Error('Video butuh link (https).');
+  if (tipe !== 'video' && !isi) throw new Error('Isi wajib diisi.');
+  const mulai = String(data.mulai == null ? '' : data.mulai).trim(), sampai = String(data.sampai == null ? '' : data.sampai).trim();
+  if (mulai && !_validDate_(mulai)) throw new Error('Tanggal mulai tidak valid.');
+  if (sampai && !_validDate_(sampai)) throw new Error('Tanggal selesai tidak valid.');
+  if (mulai && sampai && sampai < mulai) throw new Error('Tanggal selesai harus sesudah tanggal mulai.');
+  const sematkan = data.sematkan ? 'ya' : '', aktif = data.aktif === false ? 'tidak' : 'ya';
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _contentSheet_();
+    const rows = sheet.getDataRange().getValues();
+    const id = String(data.id == null ? '' : data.id).trim();
+    if (id) {
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === id) {
+          sheet.getRange(i + 1, 2, 1, 9).setValues([[tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif]]);
+          return { status: 'success', id: id, updated: true };
+        }
+      }
+      throw new Error('Konten tidak ditemukan.');
+    }
+    if (rows.length - 1 >= L.items) throw new Error('Konten sudah mencapai batas ' + L.items + '. Hapus yang tidak terpakai dulu.');
+    const nid = 'CNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    sheet.appendRow([nid, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif, new Date().toISOString()]);
+    return { status: 'success', id: nid, updated: false };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteContent(token, id) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Content');
+    if (sheet) {
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) if (String(rows[i][0]) === String(id)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
+    }
+    throw new Error('Konten tidak ditemukan.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Klien: konten yang sedang tayang (disematkan dulu, lalu terbaru). Tanpa data pribadi, bukan milik satu klien. */
+function getMyContent(memberToken) {
+  requireMember_(memberToken);
+  const today = _todayWib_();
+  return _contentSort_(_contentAll_().filter(function(c) { return _contentVisible_(c, today); })).map(function(c) {
+    return { id: c.id, tipe: c.tipe, judul: c.judul, isi: c.isi, url: c.url, kategori: c.kategori, sematkan: c.sematkan, dibuat: c.dibuat };
+  });
+}
+
+// ── Program latihan (Fase J2) ────────────────────────────────────────────────
+// Coach menulis program dengan teks: "# Hari A" lalu satu gerakan per baris "Squat | 3x10 | catatan | https://…".
+// Sheet ProgramItems menyimpan program klien (Member ID terisi) dan template (Member ID kosong, Template terisi).
+// ProgramLog mencatat gerakan yang dicentang klien per hari.
+
+const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada"];
+const PROGRAM_LOG_HEADERS = ["ID", "Member ID", "Tanggal", "Hari", "Selesai", "Dibuat Pada"];
+const PROGRAM_LIMITS = { days: 7, items: 12, name: 60, hari: 40, gerakan: 80, rep: 16, note: 200, url: 300, templates: 30 };
+
+function _programSheet_() { return getOrCreateSheet_('ProgramItems', PROGRAM_HEADERS); }
+function _programLogSheet_() { const s = getOrCreateSheet_('ProgramLog', PROGRAM_LOG_HEADERS); s.getRange('C:C').setNumberFormat('@'); return s; }
+
+/**
+ * Murni: teks program → { days: [{ hari, items: [{ gerakan, set, rep, catatan, video }] }] }.
+ * "# Nama hari" membuka hari baru (tanpa judul = satu hari "Latihan"). Baris gerakan: Gerakan | 3x10 | catatan | https://link
+ * (catatan dan link boleh ditukar atau dihilangkan; link harus https). Lempar error Indonesia dengan nomor baris.
+ */
+function _parseProgramText_(text) {
+  const L = PROGRAM_LIMITS;
+  const days = [];
+  let cur = null;
+  String(text == null ? '' : text).split(/\r?\n/).forEach(function(raw, idx) {
+    const line = raw.trim(), n = idx + 1;
+    if (!line) return;
+    if (line.charAt(0) === '#') {
+      const hari = line.replace(/^#+\s*/, '').trim();
+      if (!hari) throw new Error('Baris ' + n + ': beri nama hari setelah #.');
+      if (hari.length > L.hari) throw new Error('Baris ' + n + ': nama hari maksimal ' + L.hari + ' karakter.');
+      if (days.length >= L.days) throw new Error('Maksimal ' + L.days + ' hari per program.');
+      if (days.some(function(d) { return d.hari.toLowerCase() === hari.toLowerCase(); })) throw new Error('Baris ' + n + ': nama hari "' + hari + '" sudah dipakai.');
+      cur = { hari: hari, items: [] };
+      days.push(cur);
+      return;
+    }
+    if (!cur) { cur = { hari: 'Latihan', items: [] }; days.push(cur); }
+    if (cur.items.length >= L.items) throw new Error('Baris ' + n + ': maksimal ' + L.items + ' gerakan per hari.');
+    const parts = line.split('|').map(function(x) { return x.trim(); });
+    const gerakan = parts[0];
+    if (!gerakan) throw new Error('Baris ' + n + ': nama gerakan kosong.');
+    if (gerakan.length > L.gerakan) throw new Error('Baris ' + n + ': nama gerakan maksimal ' + L.gerakan + ' karakter.');
+    const m = /^(\d{1,2})\s*[x×*]\s*(.{1,16})$/i.exec(parts[1] || '');
+    if (!m) throw new Error('Baris ' + n + ': tulis set dan rep seperti 3x10 (atau 3x30 dtk).');
+    const item = { gerakan: gerakan, set: parseInt(m[1], 10), rep: m[2].trim(), catatan: '', video: '' };
+    if (item.set < 1 || item.set > 20) throw new Error('Baris ' + n + ': jumlah set harus 1 sampai 20.');
+    parts.slice(2).forEach(function(f) {
+      if (!f) return;
+      if (/^https?:\/\//i.test(f)) {
+        if (!/^https:\/\/[^\s]+$/i.test(f)) throw new Error('Baris ' + n + ': link video harus diawali https:// tanpa spasi.');
+        if (f.length > L.url) throw new Error('Baris ' + n + ': link video terlalu panjang.');
+        if (item.video) throw new Error('Baris ' + n + ': hanya satu link video per gerakan.');
+        item.video = f;
+      } else {
+        if (item.catatan) throw new Error('Baris ' + n + ': catatan lebih dari satu. Gabungkan jadi satu kalimat.');
+        if (f.length > L.note) throw new Error('Baris ' + n + ': catatan maksimal ' + L.note + ' karakter.');
+        item.catatan = f;
+      }
+    });
+    cur.items.push(item);
+  });
+  return { days: days.filter(function(d) { return d.items.length; }) };
+}
+
+/** Murni: kebalikan _parseProgramText_ (untuk mengisi kotak edit). */
+function _programToText_(days) {
+  return (days || []).map(function(d) {
+    return '# ' + d.hari + '\n' + d.items.map(function(it) {
+      return [it.gerakan, it.set + 'x' + it.rep, it.catatan, it.video].filter(function(x, i) { return i < 2 || x; }).join(' | ');
+    }).join('\n');
+  }).join('\n\n');
+}
+
+/** Baris sheet → { days:[{hari, items:[{n, gerakan, set, rep, catatan, video}]}] } untuk satu klien (memberId) atau satu template (name). */
+function _programDays_(memberId, templateName) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramItems');
+  if (!sheet || sheet.getLastRow() < 2) return { days: [], updatedAt: '' };
+  const days = [], by = {};
+  let updatedAt = '';
+  const rows = sheet.getDataRange().getValues().slice(1).filter(function(r) {
+    if (!r[0]) return false;
+    return memberId != null ? String(r[1]).trim() === String(memberId).trim() : (!String(r[1]).trim() && String(r[2]) === String(templateName));
+  }).sort(function(a, b) { return Number(a[4]) - Number(b[4]); });
+  rows.forEach(function(r) {
+    const hari = String(r[3]);
+    if (!by[hari]) { by[hari] = { hari: hari, items: [] }; days.push(by[hari]); }
+    by[hari].items.push({ n: Number(r[4]), gerakan: String(r[5]), set: Number(r[6]) || 0, rep: String(r[7]), catatan: String(r[8] || ''), video: String(r[9] || '') });
+    if (String(r[10]) > updatedAt) updatedAt = String(r[10]);
+  });
+  return { days: days, updatedAt: updatedAt };
+}
+
+/** Tulis ulang seluruh program satu klien / template (di dalam lock). days kosong = hapus. */
+function _programWrite_(memberId, templateName, days) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _programSheet_();
+    const rows = sheet.getDataRange().getValues();
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const r = rows[i];
+      const mine = memberId != null ? String(r[1]).trim() === String(memberId).trim() : (!String(r[1]).trim() && String(r[2]) === String(templateName));
+      if (mine) sheet.deleteRow(i + 1);
+    }
+    const now = new Date().toISOString();
+    let n = 0;
+    (days || []).forEach(function(d) {
+      d.items.forEach(function(it) {
+        n++;
+        sheet.appendRow(['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now]);
+      });
+    });
+    return n;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Admin: program satu klien, juga sebagai teks untuk editor, dan catatan latihan terakhir klien. */
+function getMemberProgram(token, memberId) {
+  requireAdmin_(token);
+  const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
+  const p = _programDays_(id);
+  const logs = _programLogsFor_(id);
+  const last = logs.length ? logs[logs.length - 1] : null;
+  return { days: p.days, text: _programToText_(p.days), updatedAt: p.updatedAt, last: last ? { tanggal: last.tanggal, hari: last.hari, selesai: last.selesai.length } : null };
+}
+
+/** Admin: simpan program klien dari teks (kosong = hapus program). */
+function saveMemberProgram(token, memberId, text) {
+  requireAdmin_(token);
+  const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
+  const parsed = _parseProgramText_(text);
+  _programWrite_(id, null, parsed.days);
+  return getMemberProgram(token, id);
+}
+
+function _templateName_(name) {
+  const t = String(name == null ? '' : name).trim();
+  if (!t) throw new Error('Nama template wajib diisi.');
+  if (t.length > PROGRAM_LIMITS.name) throw new Error('Nama template maksimal ' + PROGRAM_LIMITS.name + ' karakter.');
+  return t;
+}
+
+/** Admin: daftar template program (nama, jumlah hari dan gerakan, teks). */
+function getProgramTemplates(token) {
+  requireAdmin_(token);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramItems');
+  const names = [];
+  if (sheet && sheet.getLastRow() > 1) {
+    sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+      if (r[0] && !String(r[1]).trim() && String(r[2]).trim() && names.indexOf(String(r[2])) === -1) names.push(String(r[2]));
+    });
+  }
+  return names.map(function(name) {
+    const p = _programDays_(null, name);
+    return { name: name, days: p.days.length, items: p.days.reduce(function(s, d) { return s + d.items.length; }, 0), text: _programToText_(p.days) };
+  });
+}
+
+/** Admin: simpan template (nama yang sama menimpa). Teks kosong ditolak. */
+function saveProgramTemplate(token, name, text) {
+  requireAdmin_(token);
+  const nm = _templateName_(name);
+  const parsed = _parseProgramText_(text);
+  if (!parsed.days.length) throw new Error('Template tidak boleh kosong.');
+  const existing = getProgramTemplates(token).map(function(t) { return t.name.toLowerCase(); });
+  if (existing.indexOf(nm.toLowerCase()) === -1 && existing.length >= PROGRAM_LIMITS.templates) throw new Error('Template sudah mencapai batas ' + PROGRAM_LIMITS.templates + '. Hapus yang tidak terpakai dulu.');
+  const exact = getProgramTemplates(token).find(function(t) { return t.name.toLowerCase() === nm.toLowerCase(); });
+  _programWrite_(null, exact ? exact.name : nm, parsed.days);
+  return { status: 'success', name: exact ? exact.name : nm };
+}
+
+function deleteProgramTemplate(token, name) {
+  requireAdmin_(token);
+  const nm = _templateName_(name);
+  if (!_programDays_(null, nm).days.length) throw new Error('Template tidak ditemukan.');
+  _programWrite_(null, nm, []);
+  return { status: 'success' };
+}
+
+/** Admin: salin template jadi program klien (menggantikan program yang ada). */
+function applyProgramTemplate(token, memberId, name) {
+  requireAdmin_(token);
+  const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
+  const nm = _templateName_(name);
+  const p = _programDays_(null, nm);
+  if (!p.days.length) throw new Error('Template tidak ditemukan.');
+  _programWrite_(id, null, p.days.map(function(d) { return { hari: d.hari, items: d.items.map(function(it) { return { gerakan: it.gerakan, set: it.set, rep: it.rep, catatan: it.catatan, video: it.video }; }) }; }));
+  return getMemberProgram(token, id);
+}
+
+/** Log centang satu klien, lama → baru: [{tanggal, hari, selesai:[urutan]}]. */
+function _programLogsFor_(memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramLog');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const id = String(memberId).trim();
+  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; })
+    .map(function(r) { return { tanggal: String(r[2]), hari: String(r[3]), selesai: String(r[4] || '').split(',').filter(String).map(Number) }; })
+    .sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); });
+}
+
+/** Klien: program miliknya dan gerakan yang sudah dicentang hari ini { hari: [urutan] }. */
+function getMyProgram(memberToken) {
+  const id = String(requireMember_(memberToken).row[0]).trim();
+  const p = _programDays_(id);
+  const today = _todayWib_();
+  const done = {};
+  _programLogsFor_(id).forEach(function(l) { if (l.tanggal === today) done[l.hari] = l.selesai; });
+  return { days: p.days, today: today, done: done, updatedAt: p.updatedAt };
+}
+
+/** Klien: simpan centang satu hari program (hari ini, WIB). selesai = daftar urutan gerakan. Klien dari token. */
+function logMyProgramDay(memberToken, hari, selesai) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  const day = _programDays_(id).days.find(function(d) { return d.hari === String(hari == null ? '' : hari); });
+  if (!day) throw new Error('Hari latihan tidak ditemukan.');
+  const valid = {};
+  day.items.forEach(function(it) { valid[it.n] = true; });
+  const picked = [];
+  (Array.isArray(selesai) ? selesai : []).forEach(function(v) {
+    const n = Number(v);
+    if (!valid[n]) throw new Error('Gerakan tidak ditemukan.');
+    if (picked.indexOf(n) === -1) picked.push(n);
+  });
+  picked.sort(function(a, b) { return a - b; });
+  const today = _todayWib_();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  let wasComplete = false;
+  try {
+    const sheet = _programLogSheet_();
+    const rows = sheet.getDataRange().getValues();
+    let found = 0;
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][1]).trim() === id && String(rows[i][2]) === today && String(rows[i][3]) === day.hari) { found = i + 1; break; }
+    if (found) {
+      wasComplete = String(rows[found - 1][4] || '').split(',').filter(String).length >= day.items.length;
+      if (picked.length) sheet.getRange(found, 5).setValue(picked.join(','));
+      else sheet.deleteRow(found);
+    } else if (picked.length) {
+      sheet.appendRow(['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, today, day.hari, picked.join(','), new Date().toISOString()]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  const complete = picked.length >= day.items.length;
+  if (complete && !wasComplete) {
+    try { kirimNotifTelegram_('💪 <b>' + escapeHtmlTelegram(String(row[1] || '').trim().split(/\s+/)[0]) + '</b> menyelesaikan program: ' + escapeHtmlTelegram(day.hari)); } catch (e) { Logger.log('Notif program gagal: ' + e); }
+  }
+  return { status: 'success', hari: day.hari, selesai: picked, complete: complete };
 }
 
 // ── Penilaian cepat dan evaluasi paket (Fase I3) ─────────────────────────────

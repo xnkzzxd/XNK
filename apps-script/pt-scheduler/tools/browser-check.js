@@ -456,6 +456,35 @@ async function contrastReport(page) {
     check(sentWa.length === 1 && sentWa[0].text.includes('terima kasih untuk sesi hari ini') && sentWa[0].text.includes('Squat 3x10') && sentWa[0].text.includes('Teknik squat'), 'session note: "Simpan & kirim WA" hands the ready message to WhatsApp');
     const snRow = env.sheet('SessionNotes').rows.find(r => r[1] === 'SCH-A1');
     check(!!snRow && snRow[2] === 'PT-A' && snRow[6] === 7, 'session note: saved for the right client with RPE 7');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    // Konten untuk klien (Fase J3): halaman Konten di panel.
+    check(await visible(page, '#side-nav .nav-item[data-view="content"]') || (await page.locator('#side-nav .nav-item[data-view="content"]').count()) === 1, 'content: the panel sidebar has Konten');
+    await page.evaluate(() => window.navigate('content'));
+    await page.waitForTimeout(800);
+    check((await page.textContent('#view-content')).includes('Belum ada konten'), 'content: the page starts with a friendly empty state');
+    await page.evaluate(() => window.openContentEditor(''));
+    await page.waitForTimeout(500);
+    check(await visible(page, '#cn-judul') && (await page.locator('#cn-tipe .chip').count()) === 3, 'content: the editor offers three types');
+    await page.click('#cn-save');
+    await page.waitForTimeout(500);
+    check((await page.textContent('#cn-err')).includes('Judul wajib'), 'content: saving without a title is refused in Indonesian');
+    await page.click('#cn-tipe .chip[data-v="video"]');
+    await page.fill('#cn-judul', 'Teknik squat');
+    await page.fill('#cn-url', 'http://tidak-aman.id/v');
+    await page.click('#cn-save');
+    await page.waitForTimeout(500);
+    check((await page.textContent('#cn-err')).includes('Link harus diawali https'), 'content: a non-https link is refused');
+    await page.fill('#cn-url', 'https://youtu.be/squat');
+    await page.fill('#cn-kategori', 'Latihan');
+    await page.check('#cn-sematkan');
+    const cnBad = await page.locator('#modal-content .sheet-foot .btn, #cn-tipe .chip').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(cnBad === 0 && (await overflowX(page)) <= 0, 'content: editor buttons are at least 44 px and nothing scrolls sideways');
+    await page.click('#cn-save');
+    await page.waitForTimeout(900);
+    check((await page.textContent('#view-content')).includes('Teknik squat') && (await page.textContent('#view-content')).includes('Tayang') && env.sheet('Content').rows.length === 2, 'content: the saved item is listed as "Tayang"');
+    await page.evaluate(() => window.navigate('dashboard'));
+    await page.waitForTimeout(400);
     await page.evaluate(() => window.openTargetsSheet());
     await page.waitForTimeout(400);
     check(await visible(page, '#tg-sesi'), 'targets sheet opens');
@@ -668,7 +697,7 @@ async function contrastReport(page) {
     check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
-    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 4, 'client page: dark hero and four tabs (Ringkasan, Progres, Perawatan, Riwayat)');
+    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 5, 'client page: dark hero and five tabs (Ringkasan, Progres, Program, Perawatan, Riwayat)');
     const tabBox = await page.evaluate(() => { const t = document.querySelector('#detail-body .cp-tabs'), d = document.querySelector('#detail-body'); if (!t || !d) return null; const r = t.getBoundingClientRect(), dr = d.getBoundingClientRect(); return { l: Math.round(r.left - dr.left), r: Math.round(dr.right - r.right), over: t.scrollWidth - t.clientWidth, chips: Array.from(t.children).map(c => Math.round(c.scrollWidth - c.clientWidth)) }; });
     check(!!tabBox && tabBox.l >= 0 && tabBox.r >= 0 && tabBox.over <= 1 && tabBox.chips.every(x => x <= 1), 'client page: the tab pills stay inside the panel (no bleed) ' + JSON.stringify(tabBox));
     await page.evaluate(() => { const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; });
@@ -720,6 +749,28 @@ async function contrastReport(page) {
     check(!(await page.locator('#as-chest').count()) && (await page.locator('#as-lenganKanan').count()) === 1, 'assessment: the old chest and arm fields are replaced by right/left arm, abdomen, thighs and chest');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
+    // Program latihan (Fase J2): tab Program di halaman klien, editor teks, template.
+    await page.evaluate(() => window.cpTab('program'));
+    await page.waitForTimeout(300);
+    check((await page.textContent('#profile-program-wrap')).includes('Belum ada') && (await page.textContent('#profile-program-wrap')).includes('Buat program'), 'client page: the Program tab starts empty with a "Buat program" button');
+    await page.click('#profile-program-wrap .btn-primary');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#prg-text') && (await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('prg-text')).fontSize))) >= 16, 'program editor: opens with a 16 px text box');
+    await page.fill('#prg-text', 'Squat');
+    await page.click('#prg-save');
+    await page.waitForTimeout(600);
+    check((await page.textContent('#prg-err')).includes('Baris 1: tulis set dan rep'), 'program editor: a bad line is named with its number');
+    await page.fill('#prg-text', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
+    await page.click('#modal-program details > summary');
+    await page.fill('#prg-tpl-name', 'Pemula 2 hari');
+    await page.click('#prg-tpl-save');
+    await page.waitForTimeout(700);
+    check(env.sheet('ProgramItems').rows.some(r => !r[1] && r[2] === 'Pemula 2 hari'), 'program editor: "Simpan template" stores a reusable template');
+    const prgBad = await page.locator('#modal-program .sheet-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(prgBad === 0 && (await overflowX(page)) <= 0, 'program editor: footer buttons are at least 44 px and nothing scrolls sideways');
+    await page.click('#prg-save');
+    await page.waitForTimeout(800);
+    check((await page.textContent('#profile-program-wrap')).includes('2 hari · 3 gerakan') && env.sheet('ProgramItems').rows.filter(r => r[1] === 'PT-A').length === 3, 'program: saved for the client and summarised on the client page');
     await page.evaluate(() => window.cpTab('progres'));
     await page.waitForTimeout(300);
     check((await page.textContent('#profile-progress-wrap')).includes('sesi selesai') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
@@ -1107,6 +1158,22 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('public-coaches'));
     await page.waitForTimeout(1600);
     check(await visible(page, '#guide-layer'), 'guide: the Coach page shows its guide');
+    await page.click('#guide-tip .guide-x');
+    await page.waitForTimeout(500);
+    // Tab baru (Fase J4): tiap tab punya panduannya sendiri, sekali saja.
+    for (const [view, page_, title] of [['public-progress', 'progres', 'Pencapaian'], ['public-program', 'program', 'Program latihan'], ['public-info', 'info', 'Info & Tips']]) {
+      await page.evaluate(v => window.navigate(v), view);
+      await page.waitForTimeout(1700);
+      check(await visible(page, '#guide-layer') && (await tipTitle(page)) === title, 'guide: the ' + page_ + ' tab shows its own guide first (' + title + ')');
+      await page.click('#guide-tip .guide-x');
+      await page.waitForTimeout(500);
+      check(guideCol().split('|').includes(page_), 'guide: closing it saves "' + page_ + '"');
+    }
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(1500);
+    check(!(await visible(page, '#guide-layer')), 'guide: a tab guide is not shown twice');
+    await page.evaluate(() => window.navigate('calendar'));   // the one page not seen yet
+    await page.waitForTimeout(1600);
     await page.click('#guide-tip .guide-off');
     await page.waitForTimeout(500);
     check(guideCol() === 'selesai', 'guide: "Jangan tampilkan panduan lagi" turns it off for good');
@@ -1241,8 +1308,13 @@ async function contrastReport(page) {
     const own = await page.evaluate(() => window.schedules.find(s => s.id === 'SCH-A1'));
     check(own && own.notes === 'Rahasia Ani', 'own bookings include their details');
     check(((await page.textContent('#pub-next-countdown')) || '').trim().length > 0, 'next-session countdown is filled');
-    check((await page.textContent('#pub-consistency-score')).includes('%'), 'consistency insight shown');
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(500);
+    check((await page.textContent('#pub-consistency-score')).includes('%'), 'consistency insight shown on the Progres tab');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
     await shot(page, 'portal-mobile-home');
+
 
     // ── Streak, badge dan perayaan (Fase D2) ───────────────────────────────────
     check(await visible(page, '#sheet-badge'), 'portal: a newly earned badge is celebrated when the client opens the home screen');
@@ -1259,6 +1331,70 @@ async function contrastReport(page) {
     await page.click('#sheet-badge .btn-secondary');
     await page.waitForTimeout(700);
     check(!(await visible(page, '#sheet-badge')), 'portal: the celebration closes');
+    // Info & Tips (Fase J3): konten dari pemilik, titik "baru".
+    env.call('saveContent', env.adminToken(), { tipe: 'pengumuman', judul: 'Studio libur 17 Agustus', isi: 'Kami libur di hari kemerdekaan.', sematkan: true });
+    env.call('saveContent', env.adminToken(), { tipe: 'tips', judul: 'Minum cukup', isi: 'Minum 2 liter air tiap hari.', kategori: 'Nutrisi' });
+    env.call('saveContent', env.adminToken(), { tipe: 'video', judul: 'Teknik squat', url: 'https://youtu.be/squat', kategori: 'Latihan' });
+    env.call('saveContent', env.adminToken(), { tipe: 'tips', judul: 'Rahasia nanti', isi: 'x', mulai: '2099-01-01' });
+    await page.evaluate(() => { try { localStorage.removeItem('xnk_info_seen'); } catch (e) {} });
+    await page.evaluate(() => window.refreshPortalSchedules().then(() => window.updateUI()));
+    await page.waitForTimeout(700);
+    check(await visible(page, '#tab-more-new'), 'info: the Lainnya tab shows a dot when there is new content');
+    check((await page.textContent('#pub-teasers')).includes('Ada info baru dari coach'), 'info: the Beranda teaser says there is new info');
+    // ── Tab klien (Fase J1): bar bawah Beranda · Jadwal · + · Progres · Lainnya ───────────────
+    check((await page.locator('#tabbar .tab').allTextContents()).map(t => t.trim()).join(',') === 'Beranda,Jadwal,Progres,Lainnya' && (await page.locator('#tabbar .tab-fab').count()) === 1, 'nav: the phone bar has Beranda, Jadwal, +, Progres, Lainnya');
+    check((await page.locator('#side-nav .nav-item').allTextContents()).map(t => t.trim()).join(',') === 'Beranda,Jadwal,Progres,Program,Info & Tips,Paket,Coach', 'nav: the sidebar lists every tab');
+    check(!(await page.locator('#view-public-dashboard #pub-progress-wrap, #view-public-dashboard #pub-tasks-wrap, #view-public-dashboard #pub-meal-slot').count()) && (await page.locator('#pub-teasers .teaser-row').count()) === 3, 'nav: Beranda is lighter, the moved cards leave teasers behind');
+    await page.click('#tabbar .tab[data-view="public-more"]');
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.currentView)) === 'public-more' && (await page.locator('#view-public-more .more-row').count()) === 6, 'nav: Lainnya opens a list of six rows');
+    const moreBad = await page.locator('#view-public-more .more-row').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5 || r.right > window.innerWidth).length);
+    check(moreBad === 0 && (await overflowX(page)) <= 0, 'nav: Lainnya rows are at least 44 px and fit the phone');
+    check((await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: the Lainnya tab is lit on its own page');
+    await page.click('#view-public-more .more-row:nth-child(1)');
+    await page.waitForTimeout(600);
+    check((await page.evaluate(() => window.currentView)) === 'public-program' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: Program opens and Lainnya stays lit');
+    check(await visible(page, '#pub-tasks-wrap') && (await page.textContent('#view-public-program')).includes('PR'), 'nav: the Program tab holds the PR card');
+    await page.evaluate(() => window.navigate('public-info'));
+    await page.waitForTimeout(900);
+    check(await visible(page, '#view-public-info') && (await page.textContent('#view-public-info')).includes('Info & Tips'), 'nav: the Info & Tips tab opens');
+    check((await page.locator('#pub-info-wrap .content-card').count()) === 3 && !(await page.textContent('#pub-info-wrap')).includes('Rahasia nanti'), 'info: three items show; scheduled content stays hidden');
+    check((await page.locator('#pub-info-wrap .content-card').first().getAttribute('data-tipe')) === 'pengumuman', 'info: the pinned announcement comes first');
+    const vrel = await page.getAttribute('#pub-info-wrap a[href="https://youtu.be/squat"]', 'rel');
+    check(!!vrel && vrel.includes('noopener') && (await page.textContent('#pub-info-wrap')).includes('Tonton video'), 'info: the video opens outside with rel=noopener');
+    await page.click('#pub-info-wrap .chip[data-k="Nutrisi"]');
+    check((await page.locator('#pub-info-wrap .content-card').count()) === 1, 'info: a category chip filters the list');
+    check((await overflowX(page)) <= 0, 'info: no sideways scroll');
+    check(!(await visible(page, '#tab-more-new')), 'info: the dot is gone after reading');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
+    check(!(await page.textContent('#pub-teasers')).includes('Ada info baru'), 'info: the Beranda teaser no longer shouts');
+    await page.click('#tabbar .tab[data-view="public-progress"]');
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-progress"]', 'aria-current')) === 'page' && !(await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')), 'nav: the Progres tab is lit alone');
+    await page.click('#tabbar .tab[data-view="public-dashboard"]');
+    await page.waitForTimeout(500);
+    // Program latihan di portal: kartu per hari, centang tersimpan.
+    env.call('saveMemberProgram', env.adminToken(), 'PT-A', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
+    await page.evaluate(() => { window.myProgram = null; });
+    await page.evaluate(() => window.navigate('public-program'));
+    await page.waitForTimeout(900);
+    check((await page.locator('#pub-program-wrap .card').count()) === 2 && (await page.textContent('#pub-program-wrap')).includes('Bench press') && (await page.textContent('#pub-program-wrap')).includes('3 × 10'), 'program: the client sees both days with sets × reps');
+    const vid = await page.getAttribute('#pub-program-wrap a[href^="https://youtu.be/abc"]', 'rel');
+    check(!!vid && vid.includes('noopener'), 'program: the video link opens outside with rel=noopener');
+    const progBtn = await page.locator('#pub-program-wrap .prog-hit').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width < 43.5 || r.height < 43.5).length);
+    check(progBtn === 0 && (await overflowX(page)) <= 0, 'program: check buttons are at least 44 px and nothing scrolls sideways');
+    await page.locator('#pub-program-wrap .card').first().locator('.prog-hit').nth(0).click();
+    await page.locator('#pub-program-wrap .card').first().locator('.prog-hit').nth(1).click();
+    await page.waitForTimeout(1300);
+    const logRow = env.sheet('ProgramLog') && env.sheet('ProgramLog').rows.find(r => r[1] === 'PT-A');
+    check(!!logRow && logRow[3] === 'Hari A' && logRow[4] === '1,2', 'program: two taps are saved as one row for the day');
+    check((await page.textContent('#pub-program-wrap .card')).includes('Selesai'), 'program: the finished day shows "Selesai"');
+    check((await page.locator('#pub-tasks-wrap').count()) === 1 && (await page.locator('#pub-meal-slot').count()) === 1, 'program: PR and meal cards live in the same tab');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(500);
     await page.evaluate(() => window.loadMyProgress(true));
     await page.waitForTimeout(800);
     check(!(await visible(page, '#sheet-badge')), 'portal: the same badge is not celebrated again');
@@ -1270,9 +1406,12 @@ async function contrastReport(page) {
     check(lockedOpacity < 0.6, 'portal: locked badges are visibly faded');
     check((await overflowX(page)) <= 0, 'portal: the Pencapaian card has no sideways scroll');
     check(!(await page.textContent('#pub-insights-card, body').then(t => t.includes('Selesaikan 24 sesi')).catch(() => false)), 'portal: the old separate badge tiles are gone');
+    check((await page.textContent('#pub-badges-wrap')).includes('Tantangan bulan ini') && await visible(page, '#pub-badges-wrap .challenge-bar'), 'portal: the monthly challenge card shows on the Progres tab');
 
     // ── Penilaian cepat dan evaluasi paket (Fase I3) ────────────────────────────
     // Data uji: SCH-H1 selesai 3 hari lalu (paling baru), jadi portal menanyakan penilaiannya.
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
     const fbRefresh = async () => { await page.evaluate(() => window.refreshPortalSchedules().then(() => window.updateUI())); await page.waitForTimeout(700); };
     await fbRefresh();
     check(await visible(page, '#pub-feedback-card') && (await page.textContent('#pub-feedback-card')).includes('Bagaimana sesi tadi?'), 'feedback: a recently finished session asks "Bagaimana sesi tadi?"');
@@ -1338,8 +1477,11 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
 
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(600);
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
-    await page.waitForTimeout(500);
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(600);
     check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
     check((await page.textContent('#view-public-dashboard .my-coach-card')).includes('Coach kamu'), 'portal home: a "Coach kamu" card shows the coach');
     await page.locator('#view-public-dashboard .my-coach-card').click();
@@ -1359,7 +1501,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
     check((await page.locator('#view-calendar .portal-kpis .kpi').count()) >= 2, 'portal Jadwal: KPI tiles above the calendar');
-    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.evaluate(() => window.navigate('public-progress'));
     await page.waitForTimeout(400);
     await page.click('#pub-progress-wrap .btn-primary');
     await page.waitForTimeout(600);

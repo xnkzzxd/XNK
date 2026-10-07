@@ -533,21 +533,34 @@
       ['clients', 'users', 'Klien'],
       ['coaches', 'dumbbell', 'Coach']
     ],
+    // Sidebar desktop: semua tab. Bar bawah HP (publicTabs): Beranda, Jadwal, [+], Progres, Lainnya.
     public: [
       ['public-dashboard', 'house', 'Beranda'],
       ['calendar', 'calendar-days', 'Jadwal'],
+      ['public-progress', 'trending-up', 'Progres'],
+      ['public-program', 'clipboard-list', 'Program'],
+      ['public-info', 'megaphone', 'Info & Tips'],
       ['public-catalog', 'package', 'Paket'],
       ['public-coaches', 'dumbbell', 'Coach']
     ]
   };
+  const PUBLIC_TABS = [
+    ['public-dashboard', 'house', 'Beranda'],
+    ['calendar', 'calendar-days', 'Jadwal'],
+    ['public-progress', 'trending-up', 'Progres'],
+    ['public-more', 'layout-grid', 'Lainnya']
+  ];
+  // Tab "Lainnya" menyala untuk halaman isinya.
+  const MORE_GROUP = ['public-more', 'public-program', 'public-info', 'public-catalog', 'public-coaches'];
   const TITLES = {
-    'dashboard': 'Dashboard', 'calendar': 'Jadwal', 'clients': 'Klien', 'coaches': 'Coach', 'finance': 'Keuangan', 'settings': 'Pengaturan',
-    'public-login': 'Masuk member', 'public-dashboard': 'Beranda', 'public-catalog': 'Paket', 'public-coaches': 'Coach'
+    'dashboard': 'Dashboard', 'calendar': 'Jadwal', 'clients': 'Klien', 'coaches': 'Coach', 'finance': 'Keuangan', 'settings': 'Pengaturan', 'content': 'Konten',
+    'public-login': 'Masuk member', 'public-dashboard': 'Beranda', 'public-catalog': 'Paket', 'public-coaches': 'Coach',
+    'public-progress': 'Progres', 'public-program': 'Program', 'public-info': 'Info & Tips', 'public-more': 'Lainnya'
   };
 
   function buildChrome() {
     const items = NAV[ui.mode];
-    const sideItems = items.concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
+    const sideItems = items.concat(ui.mode === 'admin' ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
     setHTML('side-nav', sideItems.map(function (n) {
       return '<button type="button" class="nav-item" data-view="' + n[0] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
         icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' +
@@ -560,10 +573,11 @@
         '<button type="button" class="nav-item" id="side-auth-btn" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>';
     setHTML('side-foot', foot);
 
-    const t = items;
+    const t = ui.mode === 'public' ? PUBLIC_TABS : items;
     const tab = function (n) {
-      return '<button type="button" class="tab" data-view="' + n[0] + '" onclick="window.navigate(\'' + n[0] + '\')" aria-label="' + n[2] + '">' +
-        icon(n[1]) + '<span>' + n[2] + '</span>' + (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="tab-dot hide" id="tab-unread-dot"></span>' : '') + '</button>';
+      return '<button type="button" class="tab" data-view="' + n[0] + '"' + (n[0] === 'public-more' ? ' data-group="' + MORE_GROUP.join(' ') + '"' : '') + ' onclick="window.navigate(\'' + n[0] + '\')" aria-label="' + n[2] + '">' +
+        icon(n[1]) + '<span>' + n[2] + '</span>' + (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="tab-dot hide" id="tab-unread-dot"></span>' : '') +
+        (n[0] === 'public-more' ? '<span class="tab-dot-new hide" id="tab-more-new"></span>' : '') + '</button>';
     };
     const fab = ui.mode === 'admin'
       ? '<button type="button" class="tab-fab" id="client-booking-fab" onclick="window.openSheet(\'sheet-quick\')" aria-label="Tambah cepat">' + icon('plus') + '</button>'
@@ -572,6 +586,7 @@
     renderTopbarActions();
     renderThemeSeg();
     finTiles();
+    if (ui.mode === 'public' && window.renderInfoDotsLate) window.renderInfoDotsLate();
     const sa = $('settings-admin');
     if (sa) sa.classList.toggle('hide', ui.mode !== 'admin');
   }
@@ -1366,7 +1381,7 @@
   };
 
   // ── Navigasi ────────────────────────────────────────────────────────────────
-  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches'];
+  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'content', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches', 'public-progress', 'public-program', 'public-info', 'public-more'];
 
   window.navigate = function (viewId, opts) {
     opts = opts || {};
@@ -1375,7 +1390,7 @@
     if (viewId === 'coach-profile') viewId = 'coaches';
     const isPub = viewId.indexOf('public-') === 0 || (viewId === 'calendar' && window.isPublicView);
     if (viewId !== 'calendar') window.isPublicView = isPub;
-    if (viewId === 'public-dashboard' && !window.publicLoggedMember) viewId = 'public-login';
+    if (['public-dashboard', 'public-progress', 'public-program', 'public-info', 'public-more'].indexOf(viewId) !== -1 && !window.publicLoggedMember) viewId = 'public-login';
 
     const changed = window.currentView !== viewId;
     if (viewId === 'settings' && changed) { setState.built = false; setState.pushed = false; if (isPhone()) setState.open = null; }   // muat ulang pengaturan tiap masuk halaman; HP mulai dari daftar
@@ -1388,7 +1403,8 @@
     $('page-title').textContent = TITLES[viewId] || 'XNK';
 
     document.querySelectorAll('.nav-item[data-view], .tab[data-view]').forEach(function (b) {
-      const active = b.getAttribute('data-view') === viewId || (viewId === 'public-login' && b.getAttribute('data-view') === 'public-dashboard');
+      const group = (b.getAttribute('data-group') || '').split(' ');
+      const active = b.getAttribute('data-view') === viewId || group.indexOf(viewId) !== -1 || (viewId === 'public-login' && b.getAttribute('data-view') === 'public-dashboard');
       b.classList.toggle('active', active);
       if (active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
@@ -1416,11 +1432,16 @@
         case 'clients': renderClients(); break;
         case 'coaches': renderCoaches(); break;
         case 'finance': renderFinance(); break;
+        case 'content': renderContentAdmin(); if (!cnt.list || (opts && opts.animate)) window.loadContentAdmin(); break;
         case 'settings': window.renderSettings(); break;
         case 'public-login': renderPublicLogin(); break;
         case 'public-dashboard': window.renderPublicDashboard(); break;
         case 'public-catalog': renderCatalog(); break;
         case 'public-coaches': window.renderPublicCoaches(); break;
+        case 'public-progress': renderPublicProgress(); break;
+        case 'public-program': renderPublicProgram(); break;
+        case 'public-info': renderPublicInfo(); break;
+        case 'public-more': renderPublicMore(); break;
       }
     } catch (e) {
       console.error(e);
@@ -1862,6 +1883,8 @@
     if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
     if (b.openSlots) applyOpenSlots(b.openSlots);
     applyOpenSlotsByCoach(b.openSlotsByCoach);
+    window.infoLatest = (b.info && b.info.latestAt) || '';
+    renderInfoDots();
     window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
   }
   window.refreshPortalSchedules = function () {
@@ -2822,6 +2845,7 @@
       if (kind === 'booking') window.openBookingSheet({});
       else if (kind === 'client') window.openAddMemberModal();
       else if (kind === 'coach') window.openAddCoachModal();
+      else if (kind === 'content') window.navigate('content');
     }, 120);
   };
 
@@ -3443,7 +3467,7 @@
       '<div class="btn-row client-hero-actions"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
       '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div></div>';
     // Tab bagian halaman
-    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['perawatan', 'Perawatan', 'heart-pulse'], ['riwayat', 'Riwayat', 'history']];
+    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['program', 'Program', 'clipboard-list'], ['perawatan', 'Perawatan', 'heart-pulse'], ['riwayat', 'Riwayat', 'history']];
     body += '<div class="chips cp-tabs" role="tablist" aria-label="Bagian profil klien">' + tabs.map((t, i) => '<button type="button" role="tab" class="chip' + (i === 0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (i === 0) + '" onclick="window.cpTab(\'' + t[0] + '\')">' + icon(t[2]) + t[1] + '</button>').join('') + '</div>';
     // Ringkasan
     body += '<div class="cp-pane stack" data-cppane="ringkasan" style="gap:16px">';
@@ -3459,6 +3483,8 @@
     body += '</div>';
     // Progres
     body += '<div class="cp-pane hide" data-cppane="progres"><div id="profile-progress-wrap" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div></div>';
+    // Program latihan (Fase J2)
+    body += '<div class="cp-pane hide" data-cppane="program"><div id="profile-program-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + programAdminInner(m.id) + '</div></div>';
     // Perawatan
     body += '<div class="cp-pane hide" data-cppane="perawatan"><div id="profile-care-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     // Riwayat
@@ -3472,6 +3498,7 @@
     window.loadMemberTasks(m.id, false);
     window.pgLoadAdmin(m.id);
     window.loadClientCare(m.id);
+    window.loadAdminProgram(m.id);
     requestAnimationFrame(function () {
       const ring = document.querySelector('#detail-body .ring-fill');
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
@@ -4106,6 +4133,146 @@
   };
 
 
+  // ── Konten untuk klien: halaman admin (Fase J3) ────────────────────────────
+  const cnt = { list: null, error: '', editId: '', tipe: 'tips' };
+  const CN_LABEL = { pengumuman: 'Pengumuman', tips: 'Tips', video: 'Video' };
+  const CN_STATUS = { tayang: ['Tayang', 'solid'], terjadwal: ['Terjadwal', 'soft'], berakhir: ['Berakhir', 'dashed'], mati: ['Mati', 'dashed'] };
+  function renderContentAdmin() {
+    const el = $('view-content'); if (!el) return;
+    let body;
+    if (cnt.error) body = '<p class="li-sub">Gagal memuat: ' + h(cnt.error) + '</p>';
+    else if (!cnt.list) body = '<p class="li-sub">Memuat konten…</p>';
+    else if (!cnt.list.length) body = emptyState('megaphone', 'Belum ada konten', 'Tulis pengumuman, tips, atau tempel link video. Klien membacanya di tab Info & Tips.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.openContentEditor(\'\')">' + icon('plus') + 'Tambah konten</button>');
+    else body = '<div class="list">' + cnt.list.map(function (c) {
+      const st = CN_STATUS[c.status] || CN_STATUS.mati;
+      return '<button type="button" class="list-item interactive" style="min-height:64px;text-align:left" onclick="window.openContentEditor(\'' + h(c.id) + '\')"><span class="grow" style="min-width:0"><span class="li-title truncate" style="display:block">' + (c.sematkan ? icon('pin', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' : '') + h(c.judul) + '</span>' +
+        '<span class="li-sub truncate" style="display:block">' + h(CN_LABEL[c.tipe] || c.tipe) + (c.kategori ? ' · ' + h(c.kategori) : '') + (c.mulai || c.sampai ? ' · ' + h((c.mulai || '…') + ' – ' + (c.sampai || '…')) : '') + '</span></span><span class="pill ' + st[1] + '">' + st[0] + '</span></button>';
+    }).join('') + '</div>';
+    setHTML(el, '<div class="page-head"><div><h1 class="page-title">Konten</h1><p class="page-sub">Pengumuman, tips, dan video untuk klien</p></div>' +
+      '<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" onclick="window.openContentEditor(\'\')">' + icon('plus') + 'Tambah</button></div></div><div class="stack" style="gap:var(--gap);max-width:720px">' + body + '</div>');
+  }
+  window.loadContentAdmin = function () {
+    return adminCall('getContentAdmin').then(function (l) { cnt.list = l; cnt.error = ''; if (window.currentView === 'content') renderContentAdmin(); })
+      .catch(function (err) { cnt.error = window.authMessage(err); if (window.currentView === 'content') renderContentAdmin(); });
+  };
+  window.contentTipe = function (t) {
+    cnt.tipe = t;
+    document.querySelectorAll('#cn-tipe .chip').forEach(b => { const on = b.getAttribute('data-v') === t; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); });
+    $('cn-url').closest('.field').querySelector('.label').textContent = t === 'video' ? 'Link video (https)' : 'Link (https, opsional)';
+  };
+  window.openContentEditor = function (id) {
+    cnt.editId = id || '';
+    const c = id ? (cnt.list || []).find(x => x.id === id) : null;
+    $('cn-title').textContent = c ? 'Ubah konten' : 'Konten baru';
+    window.contentTipe(c ? c.tipe : 'tips');
+    $('cn-judul').value = c ? c.judul : ''; $('cn-isi').value = c ? c.isi : ''; $('cn-url').value = c ? c.url : ''; $('cn-kategori').value = c ? c.kategori : '';
+    $('cn-mulai').value = c ? c.mulai : ''; $('cn-sampai').value = c ? c.sampai : '';
+    $('cn-sematkan').checked = !!(c && c.sematkan); $('cn-aktif').checked = c ? c.aktif : true;
+    $('cn-err').textContent = ''; $('cn-del').classList.toggle('hide', !c);
+    openSheet('modal-content');
+  };
+  window.contentSave = function (e) {
+    if (e) e.preventDefault();
+    $('cn-err').textContent = '';
+    const done = busy($('cn-save'), 'Menyimpan…');
+    adminCall('saveContent', { id: cnt.editId, tipe: cnt.tipe, judul: $('cn-judul').value, isi: $('cn-isi').value, url: $('cn-url').value.trim(), kategori: $('cn-kategori').value,
+      mulai: $('cn-mulai').value, sampai: $('cn-sampai').value, sematkan: $('cn-sematkan').checked, aktif: $('cn-aktif').checked })
+      .then(function () { done(); window.closeModal(); window.showToast('Konten disimpan.'); return window.loadContentAdmin(); })
+      .catch(function (err) { done(); $('cn-err').textContent = window.authMessage(err); });
+  };
+  window.contentDelete = function () {
+    const id = cnt.editId; if (!id) return;
+    window.showConfirmModal('Konten ini dihapus permanen dan hilang dari portal klien.', function () {
+      adminCall('deleteContent', id).then(function () { window.closeModal(); window.showToast('Konten dihapus.'); return window.loadContentAdmin(); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus konten?', confirmText: 'Hapus', variant: 'danger' });
+  };
+
+  // ── Program latihan di halaman klien (panel, Fase J2) ──────────────────────────
+  const progAdmin = {};   // memberId → { days, text, last } | { error }
+  let progTemplates = [];
+  let progMember = '';
+  function programAdminInner(memberId) {
+    const d = progAdmin[memberId];
+    if (!d) return '<p class="li-sub">Memuat program…</p>';
+    if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    const n = d.days.reduce((s, x) => s + x.items.length, 0);
+    let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Program latihan</p><span class="li-sub">' + (n ? d.days.length + ' hari · ' + n + ' gerakan' : 'Belum ada') + '</span></div>';
+    if (n) {
+      html += d.days.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p>' + day.items.map(it => '<p class="li-sub">' + h(it.gerakan) + ' · ' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'style="width:12px;height:12px;vertical-align:-2px"') : '') + '</p>').join('') + '</div>').join('');
+      if (d.last) html += '<p class="li-sub" style="margin-top:6px">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
+    } else html += '<p class="li-sub">Tulis program supaya klien melihatnya di tab Program.</p>';
+    html += '<div class="btn-row" style="margin-top:6px"><button type="button" class="btn btn-primary" onclick="window.openProgramEditor(\'' + h(memberId) + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button></div></div>';
+    return html;
+  }
+  function renderProgramAdmin(memberId) {
+    const w = $('profile-program-wrap');
+    if (w && w.getAttribute('data-member') === String(memberId)) { setHTML(w, programAdminInner(memberId)); }
+  }
+  window.loadAdminProgram = function (memberId) {
+    return adminCall('getMemberProgram', memberId).then(function (d) { progAdmin[memberId] = d; renderProgramAdmin(memberId); })
+      .catch(function (err) { progAdmin[memberId] = { error: window.authMessage ? window.authMessage(err) : err.message }; renderProgramAdmin(memberId); });
+  };
+  window.openProgramEditor = function (memberId) {
+    progMember = memberId;
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    $('prg-who').textContent = m.name || '';
+    $('prg-text').value = (progAdmin[memberId] && progAdmin[memberId].text) || '';
+    $('prg-err').textContent = ''; $('prg-tpl-name').value = '';
+    $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>'; $('prg-tpl-del').classList.add('hide');
+    $('prg-clear').classList.toggle('hide', !(progAdmin[memberId] && progAdmin[memberId].days && progAdmin[memberId].days.length));
+    openSheet('modal-program');
+    adminCall('getProgramTemplates').then(function (list) {
+      progTemplates = list || [];
+      $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+    }).catch(function () {});
+  };
+  window.programLoadTemplate = function () {
+    const name = $('prg-tpl').value, t = progTemplates.find(x => x.name === name);
+    $('prg-tpl-del').classList.toggle('hide', !t);
+    if (!t) return;
+    const apply = function () { $('prg-text').value = t.text; $('prg-tpl-name').value = t.name; };
+    const cur = $('prg-text').value.trim();
+    if (cur && cur !== t.text.trim()) {
+      window.showConfirmModal('Isi program yang sedang ditulis diganti dengan template <b>' + h(t.name) + '</b>.', apply, { title: 'Pakai template?', confirmText: 'Ganti' });
+      return;
+    }
+    apply();
+  };
+  function programDone(d, msg) { progAdmin[progMember] = d; renderProgramAdmin(progMember); window.closeModal(); window.showToast(msg); }
+  window.programSave = function (e) {
+    if (e) e.preventDefault();
+    $('prg-err').textContent = '';
+    const done = busy($('prg-save'), 'Menyimpan…');
+    adminCall('saveMemberProgram', progMember, $('prg-text').value).then(function (d) { done(); programDone(d, d.days.length ? 'Program disimpan.' : 'Program dihapus.'); })
+      .catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+  };
+  window.programClear = function () {
+    window.showConfirmModal('Program latihan klien ini dihapus. Centang klien tetap tersimpan.', function () {
+      adminCall('saveMemberProgram', progMember, '').then(function (d) { programDone(d, 'Program dihapus.'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus program?', confirmText: 'Hapus', variant: 'danger' });
+  };
+  window.programSaveTemplate = function () {
+    $('prg-err').textContent = '';
+    const done = busy($('prg-tpl-save'), 'Menyimpan…');
+    adminCall('saveProgramTemplate', $('prg-tpl-name').value, $('prg-text').value).then(function (r) {
+      done(); window.showToast('Template "' + r.name + '" disimpan.');
+      return adminCall('getProgramTemplates').then(function (list) {
+        progTemplates = list || [];
+        $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '"' + (t.name === r.name ? ' selected' : '') + '>' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+        $('prg-tpl-del').classList.remove('hide');
+      });
+    }).catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+  };
+  window.programDeleteTemplate = function () {
+    const name = $('prg-tpl').value; if (!name) return;
+    adminCall('deleteProgramTemplate', name).then(function () {
+      progTemplates = progTemplates.filter(t => t.name !== name);
+      $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+      $('prg-tpl-del').classList.add('hide'); window.showToast('Template dihapus.');
+    }).catch(function (err) { $('prg-err').textContent = window.authMessage(err); });
+  };
+
   // ── Perawatan klien (E4): catatan privat, kesehatan, assessment, tes ─────────
   // Data sensitif: dimuat saat halaman klien dibuka dan TIDAK disimpan di cache panel.
   const care = {};
@@ -4377,12 +4544,16 @@
 
   // Portal: form kesehatan + tes kebugaran
   const myCare = { form: null, assess: null };
-  function myCareInner() {
+  function myCareInner() {   // Beranda: hanya kartu form kesehatan
     let html = '';
     if (myCare.form && !myCare.form.done) {
       html += '<div class="card"><div class="section-head"><h3 class="section-title">Form kesehatan</h3></div><p class="li-sub">Isi sekali saja supaya coach tahu kondisimu sebelum latihan.</p>' +
         '<button type="button" class="btn btn-primary btn-block" style="margin-top:12px" onclick="window.openPortalHealth()">Isi sekarang</button></div>';
     }
+    return html;
+  }
+  function myTestsInner() {   // Progres: kartu hasil tes dan tren
+    let html = '';
     const tests = myCare.assess && myCare.assess.tests || [];
     if (tests.length) {
       html += '<div class="card"><div class="section-head"><h3 class="section-title">Hasil tes</h3></div><div class="stack" style="gap:6px">' + tests.map(function (t) {
@@ -4398,6 +4569,7 @@
     Promise.all([memberCall('getMyHealthForm').catch(() => null), memberCall('getMyAssessment').catch(() => null)]).then(function (r) {
       myCare.form = r[0]; myCare.assess = r[1];
       const w = $('pub-care-wrap'); if (w) { w.innerHTML = myCareInner(); paintIcons(); }
+      const wt = $('pub-tests-wrap'); if (wt) { wt.innerHTML = myTestsInner(); paintIcons(); }
     });
   };
   window.openPortalHealth = function () {
@@ -5087,7 +5259,11 @@
       return '<div class="pg-badge ' + (b.earned ? 'earned' : 'locked') + '" role="img" aria-label="' + h(b.label + (b.earned ? ', sudah diraih' : ', belum diraih')) + '">' +
         '<span class="pg-badge-ic">' + icon(b.kind === 'streak' ? 'flame' : 'award') + '</span><span class="pg-badge-txt">' + h(pgShortBadge(b)) + '</span></div>';
     }).join('');
-    return '<div class="section-head"><h3 class="section-title">Pencapaian</h3></div>' +
+    const ch = d.challenge;
+    const chHtml = ch ? '<div class="stack" style="gap:6px;margin:4px 0 14px"><div class="row-between"><span class="li-title">Tantangan bulan ini</span><span class="num" style="font-weight:800">' + Math.min(ch.done, ch.target) + ' / ' + ch.target + ' sesi</span></div>' +
+      '<div class="challenge-bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + ch.target + '" aria-valuenow="' + Math.min(ch.done, ch.target) + '"><div style="width:' + Math.min(100, Math.round(ch.done / ch.target * 100)) + '%"></div></div>' +
+      '<p class="li-sub">' + (ch.done >= ch.target ? 'Tantangan selesai, keren! 🎉' : 'Sisa ' + (ch.target - ch.done) + ' sesi lagi bulan ini.') + '</p></div>' : '';
+    return '<div class="section-head"><h3 class="section-title">Pencapaian</h3></div>' + chHtml +
       '<div class="pg-streak"><span class="pg-flame' + (d.streak > 0 ? ' on' : '') + '">' + icon('flame') + '</span><div>' + streakLine + '</div></div>' +
       '<div class="pg-badges">' + badges + '</div>';
   }
@@ -5129,6 +5305,7 @@
     const wrap = $('pub-progress-wrap');
     if (wrap) { setHTML(wrap, pgCardInner()); }
     pgRenderBadges();
+    renderTeasers();
   }
   window.loadMyProgress = function (force) {
     if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
@@ -5306,6 +5483,7 @@
   function renderMyTasksCard() {
     const wrap = $('pub-tasks-wrap');
     if (wrap) setHTML(wrap, myTasksCardInner());
+    renderTeasers();
   }
 
   window.loadMyTasks = function (force) {
@@ -5346,6 +5524,186 @@
       return window.loadMyTasks(true);
     }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
   };
+
+  // ── Tab klien: Progres, Program, Info & Tips, Lainnya (Fase J) ───────────────
+  function portalGrid(left, right) {
+    return '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + (right || '') + '</div></div>';
+  }
+  function pageIntro(title, sub) { return '<div class="page-intro"><h2 class="section-title" style="font-size:var(--fs-2xl)">' + h(title) + '</h2><p class="li-sub">' + h(sub) + '</p></div>'; }
+  function teaserRow(view, ic, title, sub, dot) {
+    return '<button type="button" class="teaser-row" onclick="window.navigate(\'' + view + '\')"><span class="more-ic" style="width:40px;height:40px;border-radius:12px;background:var(--surface-3);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">' + icon(ic) + '</span>' +
+      '<span class="grow" style="min-width:0"><b style="display:block">' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + (dot ? '<span class="new-dot" aria-label="Baru"></span>' : '') + icon('chevron-right') + '</button>';
+  }
+  function teasersInner() {
+    const c = window.myTasks;
+    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : null;
+    const chal = pg.data && !pg.data.error ? pg.data.challenge : null;
+    const chSub = chal ? 'Tantangan bulan ini: ' + Math.min(chal.done, chal.target) + ' dari ' + chal.target + ' sesi' : 'Ukuran badan, hasil tes, dan badge';
+    const prSub = nOpen === null ? 'PR dari coach dan makan hari ini' : (nOpen ? nOpen + ' PR belum selesai' : 'Semua PR beres, kerja bagus!');
+    return '<div class="section-head"><h3 class="section-title">Jelajahi</h3></div><div class="stack" style="gap:2px">' +
+      teaserRow('public-program', 'clipboard-list', 'Program & PR', prSub) +
+      teaserRow('public-progress', 'trending-up', 'Progres', chSub) +
+      teaserRow('public-info', 'megaphone', 'Info & Tips', infoHasNew() ? 'Ada info baru dari coach' : 'Pengumuman dan tips dari coach', infoHasNew()) + '</div>';
+  }
+  function renderTeasers() { const el = $('pub-teasers'); if (el) setHTML(el, teasersInner()); }
+
+  function renderPublicProgress() {
+    const el = $('view-public-progress'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
+    const upcoming = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date());
+    const history = mine.filter(s => upcoming.indexOf(s) === -1).sort((x, y) => new Date(y.start) - new Date(x.start));
+    let left = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.');
+    left += '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div>';
+    left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
+    left += '<div id="pub-tests-wrap" class="stack" style="gap:16px">' + myTestsInner() + '</div>';
+    let right = insightsCard(me, mine);
+    right += '<div class="card"><div class="section-head"><h3 class="section-title">Riwayat latihan</h3><span class="li-sub">' + history.length + ' sesi</span></div>' +
+      '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>';
+    setHTML(el, portalGrid(left, right));
+    renderConsistencyBars();
+    window.loadMyProgress(false);
+    window.loadMyCare();
+  }
+
+  // Program latihan dari coach: window.myProgram = { state, data:{days,done,today}, error }; centang disimpan per hari.
+  const progSave = { timers: {} };
+  const safeHttps = u => /^https:\/\/[^\s"'<>]+$/.test(String(u || ''));
+  function programDoneSet(hari) { const d = window.myProgram && window.myProgram.data; return (d && d.done && d.done[hari]) || []; }
+  function programInner() {
+    const c = window.myProgram;
+    if (!c || c.state === 'loading') return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div><p class="li-sub">Memuat program…</p>';
+    if (c.state === 'error') return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div><p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgram(true)">Coba lagi</button>';
+    const days = c.data.days || [];
+    if (!days.length) return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div>' + emptyState('clipboard-list', 'Belum ada program', 'Coach belum menyiapkan program untukmu. Tanya coach lewat Chat.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>');
+    return days.map(function (d) {
+      const done = programDoneSet(d.hari), n = d.items.length, all = done.length >= n;
+      return '<div class="card" data-hari="' + h(d.hari) + '"><div class="section-head"><h3 class="section-title">' + h(d.hari) + '</h3><span class="pill num' + (all ? ' solid' : '') + '">' + (all ? 'Selesai 🎉' : done.length + ' / ' + n) + '</span></div><div class="stack" style="gap:0">' +
+        d.items.map(function (it) {
+          const on = done.indexOf(it.n) !== -1;
+          return '<div class="prog-item' + (on ? ' on' : '') + '"><button type="button" class="prog-hit" role="checkbox" aria-checked="' + on + '" aria-label="' + h(it.gerakan) + '" onclick="window.progToggle(\'' + h(d.hari).replace(/'/g, "\\'") + '\',' + it.n + ')"><span class="prog-check">' + icon('check') + '</span></button>' +
+            '<div class="grow" style="min-width:0"><p class="li-title prog-name">' + h(it.gerakan) + '</p><div class="prog-meta"><span class="pill soft num">' + it.set + ' × ' + h(it.rep) + '</span>' +
+            (safeHttps(it.video) ? '<a class="btn btn-ghost btn-sm" style="min-height:44px" href="' + h(it.video) + '" target="_blank" rel="noopener noreferrer">' + icon('circle-play') + 'Video</a>' : '') + '</div>' +
+            (it.catatan ? '<p class="li-sub" style="white-space:normal">' + h(it.catatan) + '</p>' : '') + '</div></div>';
+        }).join('') + '</div></div>';
+    }).join('');
+  }
+  function renderProgramCard() { const w = $('pub-program-wrap'); if (w) { setHTML(w, programInner()); } }
+  window.loadMyProgram = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    const c = window.myProgram;
+    if (c && c.state === 'ok' && c.data.today === pgToday() && !force) { renderProgramCard(); return Promise.resolve(); }
+    if (!c || c.state !== 'ok') window.myProgram = { state: 'loading' };
+    renderProgramCard();
+    return memberCall('getMyProgram').then(function (data) { window.myProgram = { state: 'ok', data: data || { days: [], done: {} } }; renderProgramCard(); })
+      .catch(function (err) {
+        if (window.isAuthError && window.isAuthError(err)) return;
+        window.myProgram = { state: 'error', error: String((err && err.message) || err) }; renderProgramCard();
+      });
+  };
+  // Ketuk = centang/lepas; simpan sesudah jeda singkat (satu panggilan per hari, berisi semua centang).
+  window.progToggle = function (hari, n) {
+    const c = window.myProgram; if (!c || c.state !== 'ok') return;
+    const set = (c.data.done[hari] || []).slice(), at = set.indexOf(n);
+    if (at === -1) set.push(n); else set.splice(at, 1);
+    set.sort((x, y) => x - y);
+    if (set.length) c.data.done[hari] = set; else delete c.data.done[hari];
+    const day = c.data.days.find(d => d.hari === hari);
+    renderProgramCard();
+    clearTimeout(progSave.timers[hari]);
+    progSave.timers[hari] = setTimeout(function () {
+      memberCall('logMyProgramDay', hari, set).then(function (r) {
+        if (r && r.complete && day && set.length >= day.items.length) window.showToast('Latihan ' + hari + ' selesai. Kerja bagus! 🎉');
+      }).catch(function (err) { window.showToast('Gagal menyimpan centang: ' + (window.authMessage ? window.authMessage(err) : err.message)); });
+    }, 600);
+  };
+
+  function renderPublicProgram() {
+    const el = $('view-public-program'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    let left = pageIntro('Program', 'Latihan, PR, dan makan harianmu dari coach.');
+    left += '<div class="stack" style="gap:var(--gap)" id="pub-program-wrap">' + programInner() + '</div>';
+    let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
+    right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
+    setHTML(el, portalGrid(left, right));
+    window.loadMyProgram(false);
+    if (!window.myTasks) window.loadMyTasks(false); else renderMyTasksCard();
+    window.loadMyMeal(false);
+  }
+
+  // Info & Tips: window.myContent = { state, list }. Titik "baru" bila ada konten lebih baru dari yang terakhir dilihat (per perangkat).
+  const INFO_SEEN_KEY = 'xnk_info_seen';
+  let infoFilter = '';
+  function infoHasNew() { const l = window.infoLatest || ''; return !!l && l > (_lsGet(INFO_SEEN_KEY) || ''); }
+  window.renderInfoDotsLate = function () { renderInfoDots(); };
+  function renderInfoDots() {
+    const on = infoHasNew();
+    ['tab-more-new'].forEach(id => { const d = $(id); if (d) d.classList.toggle('hide', !on); });
+    document.querySelectorAll('#side-nav .nav-item[data-view="public-info"]').forEach(b => {
+      let d = b.querySelector('.new-dot');
+      if (on && !d) b.insertAdjacentHTML('beforeend', '<span class="new-dot" style="margin-left:auto" aria-label="Baru"></span>');
+      else if (!on && d) d.remove();
+    });
+    const m = $('more-info-dot'); if (m) m.classList.toggle('hide', !on);
+    renderTeasers();
+  }
+  function markInfoSeen() { if (window.infoLatest) { try { _lsSet(INFO_SEEN_KEY, window.infoLatest); } catch (e) {} } renderInfoDots(); }
+  function contentCardHtml(c) {
+    const pinned = c.sematkan ? '<span class="pill soft">' + icon('pin') + 'Disematkan</span>' : '';
+    const cat = c.kategori ? '<span class="pill soft">' + h(c.kategori) + '</span>' : '';
+    const link = /^https:\/\/[^\s"'<>]+$/.test(c.url || '') ? '<a class="btn ' + (c.tipe === 'video' ? 'btn-primary' : 'btn-outline') + ' btn-sm" style="min-height:44px;align-self:flex-start" href="' + h(c.url) + '" target="_blank" rel="noopener noreferrer">' + icon(c.tipe === 'video' ? 'circle-play' : 'external-link') + (c.tipe === 'video' ? 'Tonton video' : 'Buka link') + '</a>' : '';
+    return '<div class="' + (c.tipe === 'pengumuman' ? 'card-ink' : 'card') + ' content-card" data-tipe="' + h(c.tipe) + '"><div class="prog-meta"><span class="pill ' + (c.tipe === 'pengumuman' ? '' : 'soft') + '">' + icon(c.tipe === 'video' ? 'circle-play' : c.tipe === 'tips' ? 'lightbulb' : 'megaphone') + h(CN_LABEL[c.tipe] || c.tipe) + '</span>' + cat + pinned + '</div>' +
+      '<h3 class="section-title" style="margin:8px 0 4px">' + h(c.judul) + '</h3>' + (c.isi ? '<p style="white-space:pre-line;overflow-wrap:anywhere">' + h(c.isi) + '</p>' : '') + (link ? '<div style="margin-top:10px">' + link + '</div>' : '') + '</div>';
+  }
+  function infoInner() {
+    const c = window.myContent;
+    if (!c || c.state === 'loading') return '<p class="li-sub">Memuat…</p>';
+    if (c.state === 'error') return '<p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyContent(true)">Coba lagi</button>';
+    if (!c.list.length) return emptyState('megaphone', 'Belum ada info', 'Pengumuman, tips, dan video dari coach muncul di sini.');
+    const cats = c.list.map(x => x.kategori).filter((v, i, arr) => v && arr.indexOf(v) === i);
+    const chips = cats.length ? '<div class="chips" role="group" aria-label="Kategori"><button type="button" class="chip chip-lg' + (infoFilter ? '' : ' active') + '" onclick="window.infoSetFilter(\'\')">Semua</button>' +
+      cats.map(k => '<button type="button" class="chip chip-lg' + (infoFilter === k ? ' active' : '') + '" onclick="window.infoSetFilter(this.getAttribute(\'data-k\'))" data-k="' + h(k) + '">' + h(k) + '</button>').join('') + '</div>' : '';
+    const shown = c.list.filter(x => !infoFilter || x.kategori === infoFilter);
+    return chips + '<div class="stack" style="gap:var(--gap)">' + shown.map(contentCardHtml).join('') + '</div>';
+  }
+  window.infoSetFilter = function (k) { infoFilter = k || ''; const w = $('pub-info-wrap'); if (w) { setHTML(w, infoInner()); } };
+  window.loadMyContent = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    const c = window.myContent;
+    if (c && c.state === 'ok' && !force && Date.now() - c.at < 120000) { markInfoSeen(); return Promise.resolve(); }
+    if (!c || c.state !== 'ok') window.myContent = { state: 'loading', list: [] };
+    const w = $('pub-info-wrap'); if (w) setHTML(w, infoInner());
+    return memberCall('getMyContent').then(function (list) {
+      window.myContent = { state: 'ok', list: list || [], at: Date.now() };
+      const w2 = $('pub-info-wrap'); if (w2) setHTML(w2, infoInner());
+      paintIcons(); markInfoSeen();
+    }).catch(function (err) {
+      if (window.isAuthError && window.isAuthError(err)) return;
+      window.myContent = { state: 'error', error: String((err && err.message) || err), list: [] };
+      const w3 = $('pub-info-wrap'); if (w3) setHTML(w3, infoInner());
+    });
+  };
+  function renderPublicInfo() {
+    const el = $('view-public-info'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:720px">' + pageIntro('Info & Tips', 'Pengumuman, tips, dan video dari coach.') + '<div class="stack" style="gap:var(--gap)" id="pub-info-wrap">' + infoInner() + '</div></div>');
+    window.loadMyContent(false);
+  }
+
+  function renderPublicMore() {
+    const el = $('view-public-more'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const row = (onclick, ic, title, sub) => '<button type="button" class="more-row" onclick="' + onclick + '"><span class="more-ic">' + icon(ic) + '</span><span class="more-txt"><b>' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + icon('chevron-right') + '</button>';
+    const go = v => 'window.navigate(\'' + v + '\')';
+    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:640px">' + pageIntro('Lainnya', 'Semua yang kamu butuhkan di satu tempat.') +
+      '<div class="more-list">' +
+      row(go('public-program'), 'clipboard-list', 'Program', 'Latihan, PR, dan makan hari ini') +
+      row(go('public-info'), 'megaphone', 'Info & Tips', 'Pengumuman dan tips dari coach').replace('</button>', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span></button>') +
+      row(go('public-catalog'), 'package', 'Paket', 'Lihat dan perpanjang paketmu') +
+      row(go('public-coaches'), 'dumbbell', 'Coach', 'Profil dan kontak coach') +
+      row('window.openSettings()', 'sun-moon', 'Tampilan', 'Terang, gelap, atau ikut sistem') +
+      row('window.logoutCurrent()', 'log-out', 'Keluar', 'Keluar dari akun ini') + '</div></div>');
+  }
 
   window.renderPublicDashboard = function () {
     const el = $('view-public-dashboard');
@@ -5403,19 +5761,12 @@
         : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
       '</div>';
 
-    left += '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div>';
-    left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
-    left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
-    left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
     left += '<div id="pub-care-wrap" class="stack" style="gap:16px">' + myCareInner() + '</div>';
-
-    left += insightsCard(me, mine);
+    left += '<div class="card" id="pub-teasers">' + teasersInner() + '</div>';
 
     let right = '<div class="month-cal" id="month-cal"></div>';
     right += '<div class="card"><div class="section-head"><h3 class="section-title">Jadwalku</h3><button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button></div>' +
       (upcoming.length ? '<div class="list stagger">' + upcoming.map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
-    right += '<div class="card"><div class="section-head"><h3 class="section-title">Riwayat latihan</h3><span class="li-sub">' + history.length + ' sesi</span></div>' +
-      '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>';
 
     setHTML(el, '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + right + '</div></div>');
     renderMonthCal();
@@ -5424,10 +5775,8 @@
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 150);
       countUp($('pub-dash-remaining'), rem);
     });
-    renderConsistencyBars();
     if (!window.myTasks) window.loadMyTasks(false);
-    window.loadMyMeal(false);
-    window.loadMyProgress(false);
+    window.loadMyProgress(false);   // perayaan badge baru muncul di Beranda; kartunya sendiri ada di tab Progres
     window.loadMyCare();
     window.loadMyRenewal();
     window.loadMyBills();
@@ -5462,7 +5811,7 @@
       { sel: '.portal-hero .ring-wrap', title: 'Sisa sesimu', text: 'Lingkaran ini menunjukkan berapa sesi latihan yang masih bisa kamu pakai.' },
       { sel: '#pub-next-session-card', title: 'Sesi berikutnya', text: 'Jadwal latihan terdekatmu muncul di sini, lengkap dengan hitung mundur dan tombol reschedule.' },
       { sel: '.portal-actions .btn-secondary', title: 'Chat coach', text: 'Ada pertanyaan? {Klik} di sini untuk chat coach lewat WhatsApp.' },
-      { sel: '#tabbar', selDesktop: '#side-nav', title: 'Menu', text: 'Pindah ke Jadwal, Paket, atau Coach dari menu di bawah. Tombol + di tengah juga untuk booking.', textDesktop: 'Pindah ke Jadwal, Paket, atau Coach dari menu di kiri.' },
+      { sel: '#tabbar', selDesktop: '#side-nav', title: 'Menu', text: 'Pindah ke Jadwal, Progres, atau Lainnya (Program, Info, Paket, Coach) dari menu di bawah. Tombol + di tengah juga untuk booking.', textDesktop: 'Pindah ke Jadwal, Progres, Program, Info, Paket, atau Coach dari menu di kiri.' },
       { sel: '.portal-actions .btn-primary', title: 'Booking latihan', text: 'Sekarang coba {klik} Booking untuk memilih tanggal dan jam latihan pertamamu.', tap: true }
     ],
     booking: [
@@ -5484,9 +5833,20 @@
     coach: [
       { sel: '#public-coach-list .coach-card, #coach-profile-page .coach-hero, #coach-profile-page', title: 'Coach kamu', text: 'Kenali coach-mu: pengalaman, keahlian, dan testimoni klien.' },
       { sel: '#public-coach-list .coach-card .btn-outline, #coach-profile-page .btn-primary', title: 'Hubungi coach', text: '{Klik} untuk chat coach lewat WhatsApp.' }
+    ],
+    progres: [
+      { sel: '#pub-badges-wrap', title: 'Pencapaian', text: 'Streak, badge, dan tantangan bulananmu ada di sini. Semakin rutin latihan, semakin banyak badge.' },
+      { sel: '#pub-progress-wrap .btn-primary', title: 'Catat progres', text: '{Klik} untuk mencatat berat dan lingkar badan. Grafik perubahanmu muncul di atasnya.' }
+    ],
+    program: [
+      { sel: '#pub-program-wrap', title: 'Program latihan', text: 'Program dari coach muncul di sini. {Klik} kotak di samping gerakan untuk mencentangnya setelah selesai.' },
+      { sel: '#pub-tasks-wrap', title: 'PR dari coach', text: 'PR untuk dikerjakan di luar gym ada di sini. Tandai selesai kalau sudah.' }
+    ],
+    info: [
+      { sel: '#pub-info-wrap', title: 'Info & Tips', text: 'Pengumuman, tips, dan video dari coach muncul di sini. Titik kecil di menu berarti ada yang baru.' }
     ]
   };
-  const GUIDE_VIEW_PAGE = { 'public-dashboard': 'beranda', 'calendar': 'jadwal', 'public-catalog': 'paket', 'public-coaches': 'coach' };
+  const GUIDE_VIEW_PAGE = { 'public-dashboard': 'beranda', 'calendar': 'jadwal', 'public-catalog': 'paket', 'public-coaches': 'coach', 'public-progress': 'progres', 'public-program': 'program', 'public-info': 'info' };
   const guide = { on: false, page: null, steps: [], i: 0, replay: false, timer: null, raf: 0, tick: 0, dock: 'bottom' };
 
   function guideVisible(el) {

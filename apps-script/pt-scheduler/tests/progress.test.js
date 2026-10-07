@@ -204,3 +204,25 @@ test('the assessment saves the eight measures to Progress as coach entries, keep
   assert.equal(a.hip, 95);
   assert.throws(() => env.call('saveAssessment', t, 'PT-A', { perut: 5 }), /perut/i);
 });
+
+test('monthly challenge: sessions completed this WIB month, target from a property (default 8, 1-31)', () => {
+  const { env, ani } = setup();
+  const month = today(env).slice(0, 7);
+  const rows = env.sheet('Schedules').rows;
+  const mk = (id, member, status, doneAt) => rows.push([id, member, 'x', '628', doneAt, doneAt, '', status, 'C-1', 'Rizky', doneAt, '']);
+  mk('CH-1', 'PT-A', 'completed', month + '-01T03:00:00.000Z');
+  mk('CH-2', 'PT-A', 'completed', month + '-02T03:00:00.000Z');
+  mk('CH-3', 'PT-A', 'read', month + '-03T03:00:00.000Z');          // not completed
+  mk('CH-4', 'PT-B', 'completed', month + '-02T03:00:00.000Z');     // another client
+  mk('CH-5', 'PT-A', 'completed', '2020-01-02T03:00:00.000Z');      // another month
+  const ch = JSON.parse(JSON.stringify(env.call('getMyProgress', ani).challenge));
+  assert.deepEqual(ch, { target: 8, done: 2, month });
+  env.props.MONTHLY_CHALLENGE_SESSIONS = '12';
+  assert.equal(env.call('getMyProgress', ani).challenge.target, 12);
+  env.props.MONTHLY_CHALLENGE_SESSIONS = '99';
+  assert.equal(env.call('getMyProgress', ani).challenge.target, 31, 'clamped to a month');
+  env.props.MONTHLY_CHALLENGE_SESSIONS = 'abc';
+  assert.equal(env.call('getMyProgress', ani).challenge.target, 8, 'a bad value falls back to the default');
+  assert.ok(!('challenge' in env.call('getMemberProgress', env.adminToken(), 'PT-A')), 'the owner view is unchanged');
+  assert.equal(env.call('_challengeDone_', [{ memberId: 'PT-A', status: 'completed', start: '2026-09-30T20:00:00.000Z' }], 'PT-A', '2026-10'), 1, 'WIB month, not UTC');
+});
