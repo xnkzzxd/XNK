@@ -38,8 +38,9 @@ test('markGuideSeen records pages, is idempotent and finishes after the last pag
   assert.deepEqual(env.call('markGuideSeen', res.token, 'beranda'), { done: ['beranda'] });
   assert.deepEqual(env.call('markGuideSeen', res.token, 'paket'), { done: ['beranda', 'paket'] });
   assert.equal(env.memberRow(res.id)[GUIDE_COL], 'baru|beranda|paket');
-  ['booking', 'jadwal'].forEach(p => env.call('markGuideSeen', res.token, p));
-  assert.equal(env.call('markGuideSeen', res.token, 'coach'), null);
+  ['booking', 'jadwal', 'coach', 'progres', 'program'].forEach(p => env.call('markGuideSeen', res.token, p));
+  assert.notEqual(env.memberRow(res.id)[GUIDE_COL], 'selesai', 'the eight pages are not finished until the last one is seen');
+  assert.equal(env.call('markGuideSeen', res.token, 'info'), null);
   assert.equal(env.memberRow(res.id)[GUIDE_COL], 'selesai');
   assert.equal(env.call('getMemberProfile', res.token).guide, null);
 });

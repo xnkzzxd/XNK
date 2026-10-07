@@ -30,4 +30,4 @@ Status: `[ ]` todo · `[~]` berjalan · `[x]` selesai. ID mulai T-700.
 
 | | ID | Task | Selesai bila |
 | --- | --- | --- | --- |
-| [ ] | T-730 | Langkah panduan klien untuk tab baru, teaser lengkap, dokumen | Browser check |
+| [x] | T-730 | Langkah panduan klien untuk tab baru, teaser lengkap, dokumen | Browser check |

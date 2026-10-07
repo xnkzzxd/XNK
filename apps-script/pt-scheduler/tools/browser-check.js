@@ -1158,6 +1158,22 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('public-coaches'));
     await page.waitForTimeout(1600);
     check(await visible(page, '#guide-layer'), 'guide: the Coach page shows its guide');
+    await page.click('#guide-tip .guide-x');
+    await page.waitForTimeout(500);
+    // Tab baru (Fase J4): tiap tab punya panduannya sendiri, sekali saja.
+    for (const [view, page_, title] of [['public-progress', 'progres', 'Pencapaian'], ['public-program', 'program', 'Program latihan'], ['public-info', 'info', 'Info & Tips']]) {
+      await page.evaluate(v => window.navigate(v), view);
+      await page.waitForTimeout(1700);
+      check(await visible(page, '#guide-layer') && (await tipTitle(page)) === title, 'guide: the ' + page_ + ' tab shows its own guide first (' + title + ')');
+      await page.click('#guide-tip .guide-x');
+      await page.waitForTimeout(500);
+      check(guideCol().split('|').includes(page_), 'guide: closing it saves "' + page_ + '"');
+    }
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(1500);
+    check(!(await visible(page, '#guide-layer')), 'guide: a tab guide is not shown twice');
+    await page.evaluate(() => window.navigate('calendar'));   // the one page not seen yet
+    await page.waitForTimeout(1600);
     await page.click('#guide-tip .guide-off');
     await page.waitForTimeout(500);
     check(guideCol() === 'selesai', 'guide: "Jangan tampilkan panduan lagi" turns it off for good');

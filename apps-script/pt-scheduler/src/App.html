@@ -5811,7 +5811,7 @@
       { sel: '.portal-hero .ring-wrap', title: 'Sisa sesimu', text: 'Lingkaran ini menunjukkan berapa sesi latihan yang masih bisa kamu pakai.' },
       { sel: '#pub-next-session-card', title: 'Sesi berikutnya', text: 'Jadwal latihan terdekatmu muncul di sini, lengkap dengan hitung mundur dan tombol reschedule.' },
       { sel: '.portal-actions .btn-secondary', title: 'Chat coach', text: 'Ada pertanyaan? {Klik} di sini untuk chat coach lewat WhatsApp.' },
-      { sel: '#tabbar', selDesktop: '#side-nav', title: 'Menu', text: 'Pindah ke Jadwal, Paket, atau Coach dari menu di bawah. Tombol + di tengah juga untuk booking.', textDesktop: 'Pindah ke Jadwal, Paket, atau Coach dari menu di kiri.' },
+      { sel: '#tabbar', selDesktop: '#side-nav', title: 'Menu', text: 'Pindah ke Jadwal, Progres, atau Lainnya (Program, Info, Paket, Coach) dari menu di bawah. Tombol + di tengah juga untuk booking.', textDesktop: 'Pindah ke Jadwal, Progres, Program, Info, Paket, atau Coach dari menu di kiri.' },
       { sel: '.portal-actions .btn-primary', title: 'Booking latihan', text: 'Sekarang coba {klik} Booking untuk memilih tanggal dan jam latihan pertamamu.', tap: true }
     ],
     booking: [
@@ -5833,9 +5833,20 @@
     coach: [
       { sel: '#public-coach-list .coach-card, #coach-profile-page .coach-hero, #coach-profile-page', title: 'Coach kamu', text: 'Kenali coach-mu: pengalaman, keahlian, dan testimoni klien.' },
       { sel: '#public-coach-list .coach-card .btn-outline, #coach-profile-page .btn-primary', title: 'Hubungi coach', text: '{Klik} untuk chat coach lewat WhatsApp.' }
+    ],
+    progres: [
+      { sel: '#pub-badges-wrap', title: 'Pencapaian', text: 'Streak, badge, dan tantangan bulananmu ada di sini. Semakin rutin latihan, semakin banyak badge.' },
+      { sel: '#pub-progress-wrap .btn-primary', title: 'Catat progres', text: '{Klik} untuk mencatat berat dan lingkar badan. Grafik perubahanmu muncul di atasnya.' }
+    ],
+    program: [
+      { sel: '#pub-program-wrap', title: 'Program latihan', text: 'Program dari coach muncul di sini. {Klik} kotak di samping gerakan untuk mencentangnya setelah selesai.' },
+      { sel: '#pub-tasks-wrap', title: 'PR dari coach', text: 'PR untuk dikerjakan di luar gym ada di sini. Tandai selesai kalau sudah.' }
+    ],
+    info: [
+      { sel: '#pub-info-wrap', title: 'Info & Tips', text: 'Pengumuman, tips, dan video dari coach muncul di sini. Titik kecil di menu berarti ada yang baru.' }
     ]
   };
-  const GUIDE_VIEW_PAGE = { 'public-dashboard': 'beranda', 'calendar': 'jadwal', 'public-catalog': 'paket', 'public-coaches': 'coach' };   // J4 menambah halaman panduan Progres/Program/Info
+  const GUIDE_VIEW_PAGE = { 'public-dashboard': 'beranda', 'calendar': 'jadwal', 'public-catalog': 'paket', 'public-coaches': 'coach', 'public-progress': 'progres', 'public-program': 'program', 'public-info': 'info' };
   const guide = { on: false, page: null, steps: [], i: 0, replay: false, timer: null, raf: 0, tick: 0, dock: 'bottom' };
 
   function guideVisible(el) {

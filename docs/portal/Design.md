@@ -22,3 +22,7 @@ Rujukan kode: `apps-script/pt-scheduler/src/`.
 - Sheet `Content` (`ID, Tipe, Judul, Isi, URL, Kategori, Sematkan, Tampil Mulai, Tampil Sampai, Aktif, Dibuat Pada`). Tipe: `pengumuman`, `tips`, `video`; video wajib punya link https; pengumuman dan tips wajib punya isi; maks 200 item.
 - Admin: `getContentAdmin` (status `tayang`/`terjadwal`/`berakhir`/`mati`), `saveContent` (buat atau ubah, validasi Indonesia), `deleteContent`. Halaman **Konten** di panel: sidebar desktop dan tombol **+** di HP, daftar dengan status, lembar editor penuh tinggi.
 - Klien: `getMyContent(memberToken)` hanya yang aktif dan sedang tayang (`_contentVisible_`), disematkan dulu lalu terbaru (`_contentSort_`); tanpa data klien. `getPortalBootstrap.info.latestAt` = waktu pembuatan terbaru yang tayang. Titik "baru" (tab Lainnya, sidebar, baris Lainnya, teaser Beranda) membandingkannya dengan `localStorage` `xnk_info_seen`; membuka tab Info menandai sudah dilihat. Chip kategori menyaring daftar di browser.
+
+## 4. Panduan klien baru (J4)
+
+`GUIDE_PAGES` (server) bertambah `progres`, `program`, dan `info`; `GUIDE_STEPS` dan `GUIDE_VIEW_PAGE` (App.html) memberi tiap tab langkahnya sendiri (langkah yang targetnya tidak ada dilewati). Klien yang panduannya sudah `selesai` tidak melihat apa pun; klien baru melihat tiga halaman tambahan sekali saja. Langkah "Menu" di Beranda menyebut Progres dan Lainnya.

@@ -668,7 +668,7 @@ function getMemberProfile(memberToken) {
 // 'selesai' = semua selesai atau dimatikan klien. Bisa dimatikan di Pengaturan
 // (CLIENT_GUIDE_ENABLED = 'false'); bawaannya nyala.
 const MEMBER_GUIDE_COL = 23;   // Kolom W
-const GUIDE_PAGES = ['beranda', 'booking', 'jadwal', 'paket', 'coach'];
+const GUIDE_PAGES = ['beranda', 'booking', 'jadwal', 'paket', 'coach', 'progres', 'program', 'info'];   // J4 menambah tiga halaman terakhir
 
 function _guideEnabled_() {
   return PropertiesService.getScriptProperties().getProperty('CLIENT_GUIDE_ENABLED') !== 'false';

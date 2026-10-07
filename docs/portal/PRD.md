@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Disetujui 2026-10-07, dibangun bertahap J1 → J4 |
+| Status | Dibangun penuh (J1 → J4), 2026-10-07 |
 | Terkait | [Design.md](Design.md) · [TODO.md](TODO.md) · [../Agent.md](../Agent.md) · [../loop/PRD.md](../loop/PRD.md) |
 
 ## 1. Latar belakang
