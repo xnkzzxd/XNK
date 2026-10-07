@@ -437,6 +437,25 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.textContent('#view-coaches')).includes('Hari ini'), 'coach hub shows Hari ini');
     check((await page.textContent('#view-coaches')).includes('Atur target'), 'coach hub offers to set targets');
+    // Catatan sesi (Fase I2): sheet bawah, RPE angka, simpan & kirim WA membuka WhatsApp dengan pesan pasca-sesi.
+    await page.evaluate(() => { window.__wa = []; window.sendToParentWA = (ph, text) => window.__wa.push({ ph, text }); window.openSessionNote('SCH-A1', true); });
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sn-dilatih') && (await page.textContent('#sn-title')).includes('Sesi selesai'), 'session note: the sheet opens after "Selesai"');
+    check((await page.getAttribute('#sn-rpe', 'inputmode')) === 'numeric', 'session note: RPE uses the numeric keypad');
+    const snBtn = await page.locator('#modal-session-note .sheet-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5).length);
+    check(snBtn === 0 && (await overflowX(page)) <= 0, 'session note: buttons are at least 44 px and nothing scrolls sideways');
+    await page.fill('#sn-rpe', '12');
+    await page.click('#sn-wa-btn');
+    check((await page.textContent('#sn-err')).includes('RPE harus bilangan bulat 1 sampai 10'), 'session note: a bad RPE is refused before saving');
+    await page.fill('#sn-dilatih', 'Squat 3x10');
+    await page.fill('#sn-fokus', 'Teknik squat');
+    await page.fill('#sn-rpe', '7');
+    await page.click('#sn-wa-btn');
+    await page.waitForTimeout(900);
+    const sentWa = await page.evaluate(() => window.__wa);
+    check(sentWa.length === 1 && sentWa[0].text.includes('terima kasih untuk sesi hari ini') && sentWa[0].text.includes('Squat 3x10') && sentWa[0].text.includes('Teknik squat'), 'session note: "Simpan & kirim WA" hands the ready message to WhatsApp');
+    const snRow = env.sheet('SessionNotes').rows.find(r => r[1] === 'SCH-A1');
+    check(!!snRow && snRow[2] === 'PT-A' && snRow[6] === 7, 'session note: saved for the right client with RPE 7');
     await page.evaluate(() => window.openTargetsSheet());
     await page.waitForTimeout(400);
     check(await visible(page, '#tg-sesi'), 'targets sheet opens');
@@ -664,11 +683,41 @@ async function contrastReport(page) {
     await page.evaluate(() => window.openCareTests('PT-A'));
     await page.waitForTimeout(500);
     check(await visible(page, '#ft-pushup') && (await page.getAttribute('#ft-pushup', 'inputmode')) === 'decimal', 'fitness test sheet opens with a decimal keypad');
+    // Timer 1 menit di tes kebugaran: hitung mundur, jeda, ulang, selesai (jam sistem digeser), plank = stopwatch.
+    check(!(await visible(page, '#ft-timer')) && (await page.locator('#ft-fields .tm-start').count()) === 3, 'fitness tests: push-up, squat and plank each get a timer button');
+    await page.click('#ft-pushup >> xpath=following-sibling::button');
+    check(await visible(page, '#ft-timer') && (await page.textContent('#ft-timer-time')) === '1:00' && (await page.textContent('#ft-timer-label')).includes('Push-up'), 'timer: opens for push-up at 1:00');
+    await page.click('#ft-timer-toggle');
+    await page.waitForTimeout(1300);
+    const running = await page.textContent('#ft-timer-time');
+    check(/^0:5[7-9]$/.test(running), 'timer: counts down from 1:00 (' + running + ')');
+    await page.click('#ft-timer-toggle');
+    const paused = await page.textContent('#ft-timer-time');
+    await page.waitForTimeout(800);
+    check((await page.textContent('#ft-timer-time')) === paused && (await page.textContent('#ft-timer-toggle')) === 'Lanjut', 'timer: pause holds the time and offers "Lanjut"');
+    await page.click('#ft-timer-toggle');
+    await page.evaluate(() => { const real = Date.now; Date.now = () => real() + 61000; });
+    await page.waitForTimeout(500);
+    check((await page.textContent('#ft-timer-time')) === '0:00' && (await page.locator('#ft-timer.done').count()) === 1, 'timer: finishes at 0:00');
+    check(await page.evaluate(() => document.activeElement && document.activeElement.id) === 'ft-pushup', 'timer: focus moves to the push-up field when time is up');
+    const tmBtn = await page.locator('#ft-timer .btn, #ft-fields .tm-start').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(tmBtn === 0, 'timer: every timer button is at least 44 px');
+    await page.click('#ft-timer .btn-outline');
+    check((await page.textContent('#ft-timer-time')) === '1:00', 'timer: "Ulang" returns to 1:00');
+    await page.click('#ft-plank >> xpath=following-sibling::button');
+    await page.click('#ft-timer-toggle');
+    await page.evaluate(() => { const real = Date.now; Date.now = () => real() + 42000; });
+    await page.waitForTimeout(400);
+    await page.click('#ft-timer-toggle');
+    check(parseInt(await page.inputValue('#ft-plank'), 10) >= 42, 'timer: the plank stopwatch writes its seconds into the field');
+    check((await overflowX(page)) <= 0, 'fitness tests sheet: no sideways scroll on the phone');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
     await page.evaluate(() => window.openAssessment('PT-A'));
     await page.waitForTimeout(500);
     check(await visible(page, '#as-goal'), 'assessment sheet opens');
+    check((await page.locator('#modal-care-assess input[inputmode=decimal]').count()) === 10, 'assessment: weight, waist, six body measures, body fat and hip');
+    check(!(await page.locator('#as-chest').count()) && (await page.locator('#as-lenganKanan').count()) === 1, 'assessment: the old chest and arm fields are replaced by right/left arm, abdomen, thighs and chest');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
     await page.evaluate(() => window.cpTab('progres'));
@@ -1222,6 +1271,72 @@ async function contrastReport(page) {
     check((await overflowX(page)) <= 0, 'portal: the Pencapaian card has no sideways scroll');
     check(!(await page.textContent('#pub-insights-card, body').then(t => t.includes('Selesaikan 24 sesi')).catch(() => false)), 'portal: the old separate badge tiles are gone');
 
+    // ── Penilaian cepat dan evaluasi paket (Fase I3) ────────────────────────────
+    // Data uji: SCH-H1 selesai 3 hari lalu (paling baru), jadi portal menanyakan penilaiannya.
+    const fbRefresh = async () => { await page.evaluate(() => window.refreshPortalSchedules().then(() => window.updateUI())); await page.waitForTimeout(700); };
+    await fbRefresh();
+    check(await visible(page, '#pub-feedback-card') && (await page.textContent('#pub-feedback-card')).includes('Bagaimana sesi tadi?'), 'feedback: a recently finished session asks "Bagaimana sesi tadi?"');
+    const starBox = await page.locator('#pub-feedback-card .star').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width < 43.5 || r.height < 43.5).length);
+    check(starBox === 0 && (await page.locator('#pub-feedback-card .star').count()) === 5, 'feedback: five stars, each at least 44 px');
+    check((await overflowX(page)) <= 0, 'feedback: the card has no sideways scroll');
+    await page.click('#pub-feedback-card .star[data-v="5"]');
+    await page.waitForTimeout(700);
+    const rrow = env.sheet('SessionRatings').rows.find(r => r[1] === 'SCH-H1');
+    check(!!rrow && rrow[2] === 'PT-A' && rrow[4] === 5, 'feedback: one tap on the fifth star saves a 5-star rating');
+    check(await visible(page, '#fb-comment') && (await page.textContent('#pub-feedback-card')).includes('Terima kasih'), 'feedback: after the tap the card thanks and offers an optional sentence');
+    await page.fill('#fb-comment', 'Latihannya seru');
+    await page.waitForTimeout(3300);   // the server keeps a 3 s gap between two saves of the same client
+    await page.click('#fb-send');
+    await page.waitForTimeout(900);
+    check(env.sheet('SessionRatings').rows.find(r => r[1] === 'SCH-H1')[5] === 'Latihannya seru' && !(await visible(page, '#pub-feedback-card')), 'feedback: the sentence is saved and the card goes away');
+    // Paket habis: kartu evaluasi paket membuka lembar dengan ringkasan, bintang per aspek, dan Perpanjang.
+    const usedBefore = env.memberRow('PT-A')[9];
+    env.memberRow('PT-A')[9] = env.memberRow('PT-A')[8];
+    await fbRefresh();
+    check(await visible(page, '#pub-feedback-card') && (await page.textContent('#pub-feedback-card')).includes('Evaluasi paket'), 'evaluation: a finished package shows the "Evaluasi paket" card');
+    await page.click('#pub-feedback-card .btn-primary');
+    await page.waitForTimeout(900);
+    check(await visible(page, '#modal-pkg-eval') && (await page.locator('#pe-body .stars').count()) === 5, 'evaluation: the sheet shows five rated aspects');
+    await page.click('#pe-send');
+    check((await page.textContent('#pe-err')).includes('Beri bintang untuk motivasi'), 'evaluation: sending without stars names what is missing');
+    for (const key of ['motivasi', 'keselamatan', 'kepuasan', 'komunikasi', 'profesionalisme']) await page.click('#pe-st-' + key + ' .star[data-v="4"]');
+    await page.fill('#pe-comment', 'Terima kasih coach');
+    check((await overflowX(page)) <= 0, 'evaluation: the sheet has no sideways scroll on the phone');
+    const peBtn = await page.locator('#pe-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5).length);
+    check(peBtn === 0, 'evaluation: footer buttons are at least 44 px');
+    await page.click('#pe-send');
+    await page.waitForTimeout(900);
+    const erow = env.sheet('PackageEvaluations').rows[1];
+    check(!!erow && erow[1] === 'PT-A' && erow[4] === 4 && erow[9] === 'Terima kasih coach', 'evaluation: the answers are saved for the right client');
+    check(!(await page.textContent('#pub-feedback-slot')).includes('Evaluasi paket'), 'evaluation: the package card is gone once the package is evaluated');
+    // Saklar: dimatikan, kartu hilang untuk sisa pengecekan.
+    env.memberRow('PT-A')[9] = usedBefore;
+    env.props.FEEDBACK_ENABLED = 'false';
+    await fbRefresh();
+    check(!(await visible(page, '#pub-feedback-card')), 'feedback: the owner switch hides the cards');
+
+    // ── Tambah ke kalender (Fase I4) ───────────────────────────────────────────
+    const calId = await page.evaluate(() => (window.schedules.filter(s => new Date(s.start) > new Date())[0] || {}).id);
+    check(!!calId && (await page.locator('#pub-next-cal').count()) === 1, 'calendar: the next-session card has a Kalender button');
+    await page.evaluate(id => window.openAddToCalendar([id]), calId);
+    await page.waitForTimeout(500);
+    check(await visible(page, '#modal-add-cal') && await visible(page, '#cal-google') && await visible(page, '#cal-ics'), 'calendar: the sheet offers Google Kalender and .ics');
+    const gUrl = await page.getAttribute('#cal-google', 'href');
+    check(/^https:\/\/calendar\.google\.com\/calendar\/render\?action=TEMPLATE&text=Sesi%20latihan%20XNK&dates=\d{8}T\d{6}Z\/\d{8}T\d{6}Z/.test(gUrl), 'calendar: the Google link carries the title and UTC start/end');
+    const calBtn = await page.locator('#modal-add-cal .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(calBtn === 0 && (await overflowX(page)) <= 0, 'calendar: buttons are at least 44 px and nothing scrolls sideways');
+    const dl = page.waitForEvent('download');
+    await page.click('#cal-ics');
+    const download = await dl;
+    const icsText = fs.readFileSync(await download.path(), 'utf8');
+    check(download.suggestedFilename() === 'sesi-xnk.ics' && icsText.startsWith('BEGIN:VCALENDAR\r\n') && icsText.includes('\r\nEND:VCALENDAR\r\n'), 'calendar: the .ics file downloads with CRLF lines');
+    check(icsText.includes('UID:' + calId + '@xnk.my.id') && /DTSTART:\d{8}T\d{6}Z/.test(icsText) && icsText.includes('SUMMARY:Sesi latihan XNK') && icsText.includes('TRIGGER:-PT1H'), 'calendar: the event has a stable UID, UTC times, a title and a 1-hour alarm');
+    const multi = await page.evaluate(() => window.buildIcs([{ id: 'A', start: '2030-01-07T00:00:00.000Z', end: '2030-01-07T01:00:00.000Z', coachName: 'Rizky, "Coach"; Satu' }, { id: 'B', start: '2030-01-08T00:00:00.000Z' }], new Date('2030-01-01T00:00:00Z')));
+    check((multi.match(/BEGIN:VEVENT/g) || []).length === 2 && multi.includes('DTSTART:20300107T000000Z') && multi.includes('DTEND:20300108T010000Z'), 'calendar: several sessions make one file, a missing end defaults to one hour');
+    check(multi.split('\r\n').every(l => l.length <= 75), 'calendar: long lines are folded to 75 characters');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.waitForTimeout(500);
@@ -1252,10 +1367,18 @@ async function contrastReport(page) {
     check((await page.getAttribute('#pg-berat', 'inputmode')) === 'decimal' && (await page.getAttribute('#pg-pinggang', 'inputmode')) === 'decimal', 'portal: weight and waist open the decimal keypad');
     check(!(await visible(page, '#pg-date-field')), 'portal: a client cannot pick the date (always today)');
     await page.click('#pg-save-btn');
-    check((await page.textContent('#pg-err')).includes('Isi berat'), 'portal: saving an empty form explains what to fill');
+    check((await page.textContent('#pg-err')).includes('Isi minimal satu ukuran'), 'portal: saving an empty form explains what to fill');
     await page.fill('#pg-berat', '10');
     await page.click('#pg-save-btn');
     check((await page.textContent('#pg-err')).includes('antara 20 dan 300'), 'portal: an impossible weight is refused with a clear message');
+    await page.fill('#pg-berat', '');
+    check(!(await visible(page, '#pg-lenganKiri')), 'portal: the extra body measures start folded away');
+    await page.click('#pg-more > summary');
+    await page.fill('#pg-lenganKiri', '5');
+    await page.click('#pg-save-btn');
+    check((await page.textContent('#pg-err')).includes('Lengan kiri harus antara 10 dan 80') && (await page.evaluate(() => document.getElementById('pg-more').open)), 'portal: a bad arm value is refused and the extra measures open');
+    await page.fill('#pg-lenganKiri', '');
+    await page.fill('#pg-berat', '');
     const bigFont = await page.evaluate(() => ['pg-berat', 'pg-pinggang'].every(id => parseFloat(getComputedStyle(document.getElementById(id)).fontSize) >= 16));
     check(bigFont, 'portal: entry fields are 16 px or larger (no iOS zoom)');
     const pastDay = env.call('_addDaysIso_', env.call('_todayWib_'), -6);
@@ -1320,6 +1443,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(700);
     const booked = env.sheet('Schedules').rows.find(r => r[6] === 'Leg day');
     check(!!booked && booked[1] === 'PT-A' && booked[7] === 'unread', 'booking is saved for the logged-in client');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     const bookCalls = calls.slice(callsBeforeBook);
     check(bookCalls.length === 1 && bookCalls[0] === 'clientBookSchedule', 'booking is one server call (no pre-check, no reload afterwards): ' + bookCalls.join(','));
     check(await page.evaluate(id => window.schedules.some(s => s.id === id && s.memberId === 'PT-A'), booked && booked[0]), 'the new booking is on screen straight from the answer');
@@ -1334,6 +1458,7 @@ async function contrastReport(page) {
     await page.evaluate(() => document.querySelector('#form-edit-schedule button[type="submit"]').click());
     await page.waitForTimeout(700);
     check(!!env.sheet('Schedules').rows.find(r => r[6] === 'Fab booking' && r[1] === 'PT-A'), '"+" booking is saved too');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
 
     await page.evaluate(() => window.navigate('public-coaches'));
     await page.waitForTimeout(400);
@@ -1433,6 +1558,7 @@ async function contrastReport(page) {
     const pickIso = new Date(pick.date + 'T' + pick.time + ':00+07:00').getTime();
     const saved = env.sheet('Schedules').rows.find(r => r[1] === 'PT-A' && new Date(r[4]).getTime() === pickIso);
     check(!!saved && saved[7] === 'unread', 'conflict: the suggested hour is booked (' + pick.date + ' ' + pick.time + ')');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     check(calls.slice(callsBefore2).join(',') === 'clientBookSchedule', 'conflict: booking the suggestion is one more call: ' + calls.slice(callsBefore2).join(','));
     check(!(await page.evaluate(() => document.getElementById('sheet-layer').classList.contains('open'))), 'conflict: the sheet closes after booking');
     check((await page.textContent('#toast-msg')).includes('Booking terkirim'), 'conflict: "Booking terkirim ke coach!"');
@@ -1457,6 +1583,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(900);
     check(env.sheet('Schedules').rows.length === rowsBefore + 1, 'recurring: "Lewati" books only the free date');
     check((await page.textContent('#toast-msg')).includes('1 sesi dibuat, 1 tanggal dilewati'), 'recurring: "1 sesi dibuat, 1 tanggal dilewati."');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     noErrors(errors);
     await context.close();
   }
@@ -1490,6 +1617,7 @@ async function contrastReport(page) {
     check(env.sheet('Schedules').rows.length === rowsBefore && !!row && new Date(row[4]).toISOString() !== new Date(own.start).toISOString(),
       'reschedule: the same session moved, no extra session');
     check((await page.locator('.conflict-panel [data-act="time"]').count()) === 0 && (await page.textContent('#toast-msg')).includes('Jadwal dipindah'), 'reschedule: "Jadwal dipindah …"');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     noErrors(errors);
     await context.close();
   }

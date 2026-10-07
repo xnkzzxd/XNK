@@ -511,13 +511,49 @@
         <div class="two">
           <div class="field"><label class="label" for="as-weight">Berat (kg)</label><input class="input num" id="as-weight" type="text" inputmode="decimal"></div>
           <div class="field"><label class="label" for="as-waist">Pinggang (cm)</label><input class="input num" id="as-waist" type="text" inputmode="decimal"></div>
+          <div class="field"><label class="label" for="as-lenganKanan">Lengan kanan (cm)</label><input class="input num" id="as-lenganKanan" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-lenganKiri">Lengan kiri (cm)</label><input class="input num" id="as-lenganKiri" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-perut">Perut (cm)</label><input class="input num" id="as-perut" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-pahaKanan">Paha kanan (cm)</label><input class="input num" id="as-pahaKanan" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-pahaKiri">Paha kiri (cm)</label><input class="input num" id="as-pahaKiri" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-dada">Dada (cm)</label><input class="input num" id="as-dada" type="text" inputmode="decimal"></div>
           <div class="field"><label class="label" for="as-fat">Lemak tubuh (%)</label><input class="input num" id="as-fat" type="text" inputmode="decimal"></div>
-          <div class="field"><label class="label" for="as-chest">Dada (cm)</label><input class="input num" id="as-chest" type="text" inputmode="decimal"></div>
-          <div class="field"><label class="label" for="as-arm">Lengan (cm)</label><input class="input num" id="as-arm" type="text" inputmode="decimal"></div>
           <div class="field"><label class="label" for="as-hip">Pinggul (cm)</label><input class="input num" id="as-hip" type="text" inputmode="decimal"></div>
         </div>
         <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan assessment</button>
       </form>
+    </div>
+
+    <!-- Tambah ke kalender (Fase I4), portal klien -->
+    <div class="sheet sm hide" id="modal-add-cal" role="dialog" aria-modal="true" aria-labelledby="cal-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="cal-title">Tambah ke kalender</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:10px">
+        <p class="li-sub" id="cal-sum"></p>
+        <a class="btn btn-primary btn-lg btn-block" id="cal-google" href="#" target="_blank" rel="noopener"><i data-lucide="calendar-plus"></i> Google Kalender</a>
+        <button type="button" class="btn btn-outline btn-lg btn-block" id="cal-ics" onclick="window.downloadIcs()"><i data-lucide="download"></i> Apple / Outlook (.ics)</button>
+        <button type="button" class="btn btn-ghost btn-block" onclick="window.closeModal()">Nanti saja</button>
+      </div>
+    </div>
+
+    <!-- Evaluasi paket (Fase I3), portal klien -->
+    <div class="sheet hide" id="modal-pkg-eval" role="dialog" aria-modal="true" aria-labelledby="pe-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pe-title">Evaluasi paket</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:14px" id="pe-body"></div>
+      <div class="sheet-foot hide" id="pe-foot"><p class="hint err-msg" id="pe-err" role="alert" style="display:block"></p><div class="btn-row"><button type="button" class="btn btn-outline btn-lg" onclick="window.peRenew()">Perpanjang paket</button><button type="button" class="btn btn-primary btn-lg" id="pe-send" onclick="window.peSubmit()">Kirim evaluasi</button></div></div>
+    </div>
+
+    <!-- Catatan sesi (Fase I2): dibuka setelah "Selesai" dan dari detail sesi -->
+    <div class="sheet hide" id="modal-session-note" role="dialog" aria-modal="true" aria-labelledby="sn-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sn-title">Catatan sesi</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-session-note" onsubmit="window.sessionNoteSave(event, false)">
+        <p class="li-sub" id="sn-who"></p>
+        <button type="button" class="btn btn-secondary btn-block hide" id="sn-pkg"><i data-lucide="party-popper"></i> Paket selesai · ajak klien mengisi evaluasi (WA)</button>
+        <div class="field"><label class="label" for="sn-dilatih">Yang dilatih</label><textarea class="textarea" id="sn-dilatih" rows="2" maxlength="500" placeholder="Squat 3x10, plank 45 dtk"></textarea></div>
+        <div class="field"><label class="label" for="sn-fokus">Fokus berikutnya</label><input class="input" id="sn-fokus" type="text" maxlength="300" placeholder="Perdalam teknik squat"></div>
+        <div class="field"><label class="label" for="sn-rpe">RPE (1–10, seberapa berat)</label><input class="input num" id="sn-rpe" type="text" inputmode="numeric" maxlength="2" placeholder="7"></div>
+        <div class="field"><label class="label" for="sn-pribadi">Catatan pribadi (tidak tampil ke klien)</label><textarea class="textarea" id="sn-pribadi" rows="2" maxlength="1000"></textarea></div>
+        <p class="hint">Klien hanya melihat "Yang dilatih" dan "Fokus berikutnya".</p>
+        <p class="hint err-msg" id="sn-err" role="alert" style="display:block"></p>
+      </form>
+      <div class="sheet-foot"><div class="btn-row"><button type="submit" form="form-session-note" class="btn btn-outline btn-lg" id="sn-save-btn">Simpan</button><button type="button" class="btn btn-primary btn-lg" id="sn-wa-btn" onclick="window.sessionNoteSave(null, true)"><i data-lucide="message-circle"></i> Simpan &amp; kirim WA</button></div></div>
     </div>
 
     <div class="sheet hide" id="modal-care-tests" role="dialog" aria-modal="true" aria-labelledby="care-tests-title">
@@ -525,6 +561,11 @@
       <div class="sheet-head"><h2 class="sheet-title" id="care-tests-title">Tes kebugaran</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <form class="sheet-body form-grid" onsubmit="window.submitCareTests(event)">
         <div class="field"><label class="label" for="ft-date">Tanggal</label><input class="input" id="ft-date" type="date" required></div>
+        <div class="tm-card hide" id="ft-timer" role="timer">
+          <p class="eyebrow" id="ft-timer-label"></p>
+          <p class="tm-time num" id="ft-timer-time" aria-live="off">1:00</p>
+          <div class="btn-row"><button type="button" class="btn btn-primary btn-lg" id="ft-timer-toggle" onclick="window.ftToggle()">Mulai</button><button type="button" class="btn btn-outline btn-lg" onclick="window.ftReset()">Ulang</button><button type="button" class="btn btn-ghost btn-lg" onclick="window.ftClose()">Tutup</button></div>
+        </div>
         <div id="ft-fields" class="form-grid"></div>
         <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan hasil tes</button>
       </form>
@@ -609,6 +650,7 @@
         <div class="field hide" id="pg-date-field"><label class="label" for="pg-tanggal">Tanggal</label><input class="input" type="date" id="pg-tanggal"></div>
         <div class="field"><label class="label" for="pg-berat">Berat (kg)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-berat" autocomplete="off" placeholder="72,4"></div>
         <div class="field"><label class="label" for="pg-pinggang">Lingkar pinggang (cm)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-pinggang" autocomplete="off" placeholder="80"></div>
+        <details class="pg-more" id="pg-more"><summary>Lingkar badan lainnya</summary><div class="two"><div class="field"><label class="label" for="pg-lenganKanan">Lengan kanan (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-lenganKanan" autocomplete="off" placeholder="32"></div><div class="field"><label class="label" for="pg-lenganKiri">Lengan kiri (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-lenganKiri" autocomplete="off" placeholder="32"></div><div class="field"><label class="label" for="pg-perut">Perut (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-perut" autocomplete="off" placeholder="85"></div><div class="field"><label class="label" for="pg-pahaKanan">Paha kanan (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-pahaKanan" autocomplete="off" placeholder="55"></div><div class="field"><label class="label" for="pg-pahaKiri">Paha kiri (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-pahaKiri" autocomplete="off" placeholder="55"></div><div class="field"><label class="label" for="pg-dada">Dada (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-dada" autocomplete="off" placeholder="95"></div></div></details>
         <p class="hint">Boleh isi salah satu. Catatan di hari yang sama diperbarui.</p>
         <p class="hint err-msg" id="pg-err" role="alert" style="display:block"></p>
       </form>

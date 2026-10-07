@@ -598,7 +598,11 @@ var RMD_TPL_DEFAULT = {
   'tes-ulang': 'Hai {nama}, sudah sebulan sejak tes kebugaranmu ({terakhir}). Yuk tes ulang di sesi berikutnya, biar kelihatan kemajuanmu. 💪 {link}',
   'ulang-tahun': 'Selamat ulang tahun {nama}! 🎂 Semoga sehat selalu dan makin semangat latihannya. 💪',
   'tagihan': 'Hai {nama}, sisa pembayaran paket {paket} Rp{sisa}. Terima kasih 🙏',
-  'ringkasan-owner': '📊 Ringkasan {bulan}\nSesi selesai: {sesi} ({jam} jam)\nKlien baru: {klienbaru}\nPendapatan (estimasi): {pendapatan}{target}'
+  'ringkasan-owner': '📊 Ringkasan {bulan}\nSesi selesai: {sesi} ({jam} jam)\nKlien baru: {klienbaru}\nPendapatan (estimasi): {pendapatan}{target}',
+  // Pesan manual (bukan job terjadwal): dibuat saat pemilik menekan tombol. Template bisa diganti lewat Script Property RMD_TPL_<JENIS>.
+  'hasil-tes': 'Halo {nama}, ini hasil tes kebugaranmu:\n{hasil}\n\nKemajuanmu keren, terus semangat! 💪 {link}',
+  'pasca-sesi': 'Halo {nama}, terima kasih untuk sesi hari ini! 💪{dilatih}{fokus}\n\nSisa sesimu {sisa}. Sampai ketemu lagi!',
+  'evaluasi-paket': 'Halo {nama}, selamat, semua sesi paketmu sudah selesai! 🎉 Boleh minta penilaianmu? Buka {link} (Beranda → Evaluasi paket). Terima kasih!'
 };
 var RMD_PLACEHOLDERS = {
   'sesi-besok': ['nama', 'jam', 'coach', 'tidur'],
@@ -612,7 +616,10 @@ var RMD_PLACEHOLDERS = {
   'tes-ulang': ['nama', 'terakhir', 'link'],
   'ulang-tahun': ['nama'],
   'tagihan': ['nama', 'paket', 'sisa'],
-  'ringkasan-owner': ['bulan', 'sesi', 'jam', 'klienbaru', 'pendapatan', 'target']
+  'ringkasan-owner': ['bulan', 'sesi', 'jam', 'klienbaru', 'pendapatan', 'target'],
+  'hasil-tes': ['nama', 'hasil', 'link'],
+  'pasca-sesi': ['nama', 'dilatih', 'fokus', 'sisa'],
+  'evaluasi-paket': ['nama', 'link']
 };
 var MEMBER_REMIND_OFF_COL = 16;                            // Kolom P (1-based)
 var MEMBER_REMIND_OFF_HEADER = 'Pengingat Nonaktif';
@@ -717,6 +724,9 @@ function _rmdSampleVars_(jenis) {
   else if (jenis === 'tagihan') { v.nama = 'Budi'; v.paket = 'Regular 8'; v.sisa = '300.000'; }
   else if (jenis === 'ringkasan-owner') { v.bulan = 'September'; v.sesi = '58'; v.jam = '58'; v.klienbaru = '3'; v.pendapatan = 'Rp 6.500.000'; v.target = '\nTarget sesi: 58 dari 80'; }
   else if (jenis === 'waktunya-ukur') { v.terakhir = ' Terakhir kamu catat tanggal 12 Sep.'; v.link = RMD_PORTAL_URL; }
+  else if (jenis === 'hasil-tes') { v.hasil = '• Push-up: 20 → 28 kali / 1 menit (naik 8)\n• Plank: 45 → 70 detik (naik 25)'; v.link = RMD_PORTAL_URL; }
+  else if (jenis === 'pasca-sesi') { v.dilatih = '\n🏋️ Hari ini: squat, lunges, plank'; v.fokus = '\n🎯 Berikutnya: perdalam teknik squat'; v.sisa = '5 dari 8'; }
+  else if (jenis === 'evaluasi-paket') v.link = RMD_PORTAL_URL;
   else if (jenis === 'pr') v.pr = '• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan 3 hari (tenggat 2/10)';
   else v.tip = 'Sarapan telur dan oatmeal, minum air putih dulu.';
   return v;

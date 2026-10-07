@@ -15,7 +15,7 @@ const ADMIN = [
   'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras',
   'getMembers', 'getMemberTransactionLog', 'getSchedules',
   'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto',
-  'saveCoach', 'previewCoachProfile', 'getClientCare', 'saveClientNotes', 'snoozeCare', 'saveAssessment', 'saveFitnessTests', 'deleteFitnessTest', 'markHealthReviewed', 'getSessionBriefing', 'getCoachHub', 'saveCoachTargets', 'getCoachAvailability', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',
+  'saveCoach', 'previewCoachProfile', 'getClientCare', 'saveClientNotes', 'snoozeCare', 'saveAssessment', 'saveFitnessTests', 'deleteFitnessTest', 'getTestResultMessage', 'markHealthReviewed', 'getSessionBriefing', 'saveSessionNote', 'getSessionNote', 'getCoachHub', 'saveCoachTargets', 'getCoachAvailability', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',
   'addMember', 'updateMemberProfile', 'deleteMember',
   'addSchedule', 'addRecurringSchedule', 'deleteRecurringGroup', 'updateScheduleData', 'updateScheduleCoach',
   'markSchedulesAsRead', 'completeSession', 'deleteSchedule',
@@ -34,7 +34,7 @@ const MEMBER = [
   'getMemberProfile', 'getMemberSessions', 'clientBookSchedule', 'clientBookRecurring',
   'clientRescheduleSchedule', 'uploadMemberPhoto', 'updateMemberPhoto',
   'getMyTasks', 'completeMyTask', 'getMyMealToday',
-  'getMyCoach', 'getMyHealthForm', 'submitMyHealthForm', 'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'requestRenewal', 'getMyRenewal', 'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'getMyProgressPhoto', 'deleteMyProgressPhoto', 'createClassGroup', 'joinClassGroup', 'leaveClassGroup', 'getMyClassGroup', 'getMyBills', 'markGuideSeen',
+  'getMyCoach', 'rateSession', 'getMyPackageEval', 'submitMyPackageEval', 'getMyHealthForm', 'submitMyHealthForm', 'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'requestRenewal', 'getMyRenewal', 'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'getMyProgressPhoto', 'deleteMyProgressPhoto', 'createClassGroup', 'joinClassGroup', 'leaveClassGroup', 'getMyClassGroup', 'getMyBills', 'markGuideSeen',
 ];
 const OWNER = [
   'testDriveAccess', 'migrateSplitMembersData', 'pertahankanWABaruMemberData', 'pertahankanWABaru',
