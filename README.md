@@ -42,6 +42,13 @@ client portal (dark screen, one highlighted button per step, once per page). Exi
 clients, renewals and clients added by the PT don't. It is on by default; switch it off
 in **Pengaturan → Tampilan → Panduan klien baru**.
 
+**Booking slots.** The landing page and the client portal load the free hours when they
+are opened and reuse them for 2 minutes; nothing polls in the background, which keeps the
+Apps Script quota low. Every client booking is checked by the server under a lock in the
+same call that saves it. If the hour was just taken, the client is not shown an error: the
+booking sheet stays open with up to three nearby free times for the same duration. A time
+like 07:15 is booked as the whole hour from 07:00.
+
 ## Common changes
 
 **Booking app URL.** It is written once, in the `src` of the `<iframe>` in
