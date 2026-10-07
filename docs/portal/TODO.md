@@ -22,9 +22,9 @@ Status: `[ ]` todo · `[~]` berjalan · `[x]` selesai. ID mulai T-700.
 
 | | ID | Task | Selesai bila |
 | --- | --- | --- | --- |
-| [ ] | T-720 | Sheet `Content`, `getContentAdmin`/`saveContent`/`deleteContent`, `getMyContent`, `info.latestAt` di bootstrap | Tes lolos |
-| [ ] | T-721 | Halaman Konten di panel | Browser check |
-| [ ] | T-722 | Tab Info & Tips, titik "baru" | Browser check |
+| [x] | T-720 | Sheet `Content`, `getContentAdmin`/`saveContent`/`deleteContent`, `getMyContent`, `info.latestAt` di bootstrap | Tes lolos |
+| [x] | T-721 | Halaman Konten di panel | Browser check |
+| [x] | T-722 | Tab Info & Tips, titik "baru" | Browser check |
 
 ## J4 — Poles
 

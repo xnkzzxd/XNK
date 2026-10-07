@@ -2090,6 +2090,7 @@ function getPortalBootstrap(memberToken) {
     feedbackEnabled: feedbackOn,
     pendingRating: found && feedbackOn ? _pendingRating_(memberId, all) : null,
     packageEval: { eligible: !!(found && feedbackOn && _packageEvalEligible_(found.row, all)) },
+    info: { latestAt: found ? _contentLatestAt_() : '' },
     openSlots: _openSlotsCached_({ days: horizon }, now, all, false, ver),
     openSlotsByCoach: _openSlotsByCoach_(all, ver, horizon, now, false),
     horizonDays: horizon,
@@ -6214,6 +6215,133 @@ function markHealthReviewed(token, memberId, note) {
   hs.sheet.getRange(hs.rowNum, 15).setValue(new Date().toISOString());
   hs.sheet.getRange(hs.rowNum, 16).setValue(_careStr_(note, 300, 'Catatan'));
   return { status: 'success' };
+}
+
+// ── Konten untuk klien: pengumuman, tips, video (Fase J3) ─────────────────────
+// Pemilik menulis di halaman Konten (panel). Klien hanya menerima yang aktif dan sedang tayang; tanpa data pribadi.
+
+const CONTENT_HEADERS = ["ID", "Tipe", "Judul", "Isi", "URL", "Kategori", "Sematkan", "Tampil Mulai", "Tampil Sampai", "Aktif", "Dibuat Pada"];
+const CONTENT_TYPES = ['pengumuman', 'tips', 'video'];
+const CONTENT_LIMITS = { judul: 80, isi: 2000, url: 300, kategori: 30, items: 200 };
+
+function _contentSheet_() {
+  const s = getOrCreateSheet_('Content', CONTENT_HEADERS);
+  s.getRange('H:I').setNumberFormat('@');
+  return s;
+}
+
+function _contentFromRow_(r) {
+  return { id: String(r[0]), tipe: String(r[1]), judul: String(r[2]), isi: String(r[3] || ''), url: String(r[4] || ''), kategori: String(r[5] || ''),
+    sematkan: String(r[6]) === 'ya', mulai: _isoDateCell_(r[7]), sampai: _isoDateCell_(r[8]), aktif: String(r[9]) !== 'tidak', dibuat: String(r[10] || '') };
+}
+
+/** Murni: konten tampil bagi klien pada tanggal WIB `today`? (aktif, dalam rentang tanggal). */
+function _contentVisible_(c, today) {
+  if (!c.aktif) return false;
+  if (c.mulai && c.mulai > today) return false;
+  if (c.sampai && c.sampai < today) return false;
+  return true;
+}
+
+/** Murni: status untuk admin: 'tayang' | 'terjadwal' | 'berakhir' | 'mati'. */
+function _contentStatus_(c, today) {
+  if (!c.aktif) return 'mati';
+  if (c.mulai && c.mulai > today) return 'terjadwal';
+  if (c.sampai && c.sampai < today) return 'berakhir';
+  return 'tayang';
+}
+
+function _contentAll_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Content');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(_contentFromRow_);
+}
+
+/** Klien (bootstrap): waktu pembuatan konten tayang terbaru, untuk titik "baru". Kosong bila tak ada. */
+function _contentLatestAt_() {
+  const today = _todayWib_();
+  return _contentAll_().filter(function(c) { return _contentVisible_(c, today); }).reduce(function(m, c) { return c.dibuat > m ? c.dibuat : m; }, '');
+}
+
+/** Murni: urutan klien: disematkan dulu, lalu terbaru. */
+function _contentSort_(list) {
+  return list.slice().sort(function(a, b) { return (b.sematkan ? 1 : 0) - (a.sematkan ? 1 : 0) || (a.dibuat < b.dibuat ? 1 : a.dibuat > b.dibuat ? -1 : 0); });
+}
+
+/** Admin: semua konten (terbaru dulu) dengan statusnya. */
+function getContentAdmin(token) {
+  requireAdmin_(token);
+  const today = _todayWib_();
+  return _contentAll_().sort(function(a, b) { return a.dibuat < b.dibuat ? 1 : -1; }).map(function(c) { return Object.assign({ status: _contentStatus_(c, today) }, c); });
+}
+
+/** Admin: buat atau ubah konten. data = { id?, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif }. */
+function saveContent(token, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const L = CONTENT_LIMITS;
+  const tipe = String(data.tipe == null ? '' : data.tipe).trim();
+  if (CONTENT_TYPES.indexOf(tipe) === -1) throw new Error('Pilih jenis konten: pengumuman, tips, atau video.');
+  const judul = _careStr_(data.judul, L.judul, 'Judul');
+  if (!judul) throw new Error('Judul wajib diisi.');
+  const isi = _careStr_(data.isi, L.isi, 'Isi');
+  const kategori = _careStr_(data.kategori, L.kategori, 'Kategori');
+  const url = _careStr_(data.url, L.url, 'Link');
+  if (url && !/^https:\/\/[^\s"'<>]+$/.test(url)) throw new Error('Link harus diawali https:// tanpa spasi.');
+  if (tipe === 'video' && !url) throw new Error('Video butuh link (https).');
+  if (tipe !== 'video' && !isi) throw new Error('Isi wajib diisi.');
+  const mulai = String(data.mulai == null ? '' : data.mulai).trim(), sampai = String(data.sampai == null ? '' : data.sampai).trim();
+  if (mulai && !_validDate_(mulai)) throw new Error('Tanggal mulai tidak valid.');
+  if (sampai && !_validDate_(sampai)) throw new Error('Tanggal selesai tidak valid.');
+  if (mulai && sampai && sampai < mulai) throw new Error('Tanggal selesai harus sesudah tanggal mulai.');
+  const sematkan = data.sematkan ? 'ya' : '', aktif = data.aktif === false ? 'tidak' : 'ya';
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _contentSheet_();
+    const rows = sheet.getDataRange().getValues();
+    const id = String(data.id == null ? '' : data.id).trim();
+    if (id) {
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === id) {
+          sheet.getRange(i + 1, 2, 1, 9).setValues([[tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif]]);
+          return { status: 'success', id: id, updated: true };
+        }
+      }
+      throw new Error('Konten tidak ditemukan.');
+    }
+    if (rows.length - 1 >= L.items) throw new Error('Konten sudah mencapai batas ' + L.items + '. Hapus yang tidak terpakai dulu.');
+    const nid = 'CNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    sheet.appendRow([nid, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif, new Date().toISOString()]);
+    return { status: 'success', id: nid, updated: false };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteContent(token, id) {
+  requireAdmin_(token);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Content');
+    if (sheet) {
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) if (String(rows[i][0]) === String(id)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
+    }
+    throw new Error('Konten tidak ditemukan.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Klien: konten yang sedang tayang (disematkan dulu, lalu terbaru). Tanpa data pribadi, bukan milik satu klien. */
+function getMyContent(memberToken) {
+  requireMember_(memberToken);
+  const today = _todayWib_();
+  return _contentSort_(_contentAll_().filter(function(c) { return _contentVisible_(c, today); })).map(function(c) {
+    return { id: c.id, tipe: c.tipe, judul: c.judul, isi: c.isi, url: c.url, kategori: c.kategori, sematkan: c.sematkan, dibuat: c.dibuat };
+  });
 }
 
 // ── Program latihan (Fase J2) ────────────────────────────────────────────────

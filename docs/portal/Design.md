@@ -19,4 +19,6 @@ Rujukan kode: `apps-script/pt-scheduler/src/`.
 
 ## 3. Info & Tips (J3)
 
-Lihat bagian J3 di [TODO.md](TODO.md); dirancang saat dibangun.
+- Sheet `Content` (`ID, Tipe, Judul, Isi, URL, Kategori, Sematkan, Tampil Mulai, Tampil Sampai, Aktif, Dibuat Pada`). Tipe: `pengumuman`, `tips`, `video`; video wajib punya link https; pengumuman dan tips wajib punya isi; maks 200 item.
+- Admin: `getContentAdmin` (status `tayang`/`terjadwal`/`berakhir`/`mati`), `saveContent` (buat atau ubah, validasi Indonesia), `deleteContent`. Halaman **Konten** di panel: sidebar desktop dan tombol **+** di HP, daftar dengan status, lembar editor penuh tinggi.
+- Klien: `getMyContent(memberToken)` hanya yang aktif dan sedang tayang (`_contentVisible_`), disematkan dulu lalu terbaru (`_contentSort_`); tanpa data klien. `getPortalBootstrap.info.latestAt` = waktu pembuatan terbaru yang tayang. Titik "baru" (tab Lainnya, sidebar, baris Lainnya, teaser Beranda) membandingkannya dengan `localStorage` `xnk_info_seen`; membuka tab Info menandai sudah dilihat. Chip kategori menyaring daftar di browser.

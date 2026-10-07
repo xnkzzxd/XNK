@@ -72,6 +72,7 @@
           <section class="view hide" id="view-clients" aria-label="Klien"></section>
           <section class="view hide" id="view-coaches" aria-label="Coach"></section>
           <section class="view hide" id="view-finance" aria-label="Keuangan"></section>
+          <section class="view hide" id="view-content" aria-label="Konten"></section>
           <section class="view hide" id="view-settings" aria-label="Pengaturan"></section>
           <!-- PORTAL KLIEN -->
           <section class="view hide" id="view-public-login" aria-label="Masuk member"></section>
@@ -158,6 +159,7 @@
           <button type="button" class="action-tile" onclick="window.quickAction('booking')"><span class="at-icon"><i data-lucide="calendar-plus"></i></span>Booking</button>
           <button type="button" class="action-tile" onclick="window.quickAction('client')"><span class="at-icon"><i data-lucide="user-plus"></i></span>Klien</button>
           <button type="button" class="action-tile" onclick="window.quickAction('coach')"><span class="at-icon"><i data-lucide="dumbbell"></i></span>Coach</button>
+          <button type="button" class="action-tile" onclick="window.quickAction('content')"><span class="at-icon"><i data-lucide="megaphone"></i></span>Konten</button>
           <button type="button" class="action-tile fin-tile" onclick="window.finQuick('payment')"><span class="at-icon"><i data-lucide="banknote"></i></span>Pembayaran</button>
           <button type="button" class="action-tile fin-tile" onclick="window.finQuick('expense')"><span class="at-icon"><i data-lucide="receipt"></i></span>Pengeluaran</button>
         </div>
@@ -533,6 +535,24 @@
         <button type="button" class="btn btn-outline btn-lg btn-block" id="cal-ics" onclick="window.downloadIcs()"><i data-lucide="download"></i> Apple / Outlook (.ics)</button>
         <button type="button" class="btn btn-ghost btn-block" onclick="window.closeModal()">Nanti saja</button>
       </div>
+    </div>
+
+    <!-- Konten untuk klien (Fase J3), panel -->
+    <div class="sheet hide" id="modal-content" role="dialog" aria-modal="true" aria-labelledby="cn-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="cn-title">Konten</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-content" onsubmit="window.contentSave(event)">
+        <div class="field"><span class="label">Jenis</span><div class="chips chips-lg" role="radiogroup" aria-label="Jenis konten" id="cn-tipe"><button type="button" class="chip chip-lg" data-v="pengumuman" onclick="window.contentTipe('pengumuman')">Pengumuman</button><button type="button" class="chip chip-lg" data-v="tips" onclick="window.contentTipe('tips')">Tips</button><button type="button" class="chip chip-lg" data-v="video" onclick="window.contentTipe('video')">Video</button></div></div>
+        <div class="field"><label class="label" for="cn-judul">Judul</label><input class="input" id="cn-judul" type="text" maxlength="80"></div>
+        <div class="field"><label class="label" for="cn-isi">Isi</label><textarea class="textarea" id="cn-isi" rows="5" maxlength="2000"></textarea></div>
+        <div class="field" id="cn-url-field"><label class="label" for="cn-url">Link (https)</label><input class="input" id="cn-url" type="url" inputmode="url" maxlength="300" placeholder="https://youtu.be/…"></div>
+        <div class="field"><label class="label" for="cn-kategori">Kategori (opsional)</label><input class="input" id="cn-kategori" type="text" maxlength="30" placeholder="Nutrisi, Latihan, Pemulihan"></div>
+        <div class="two"><div class="field"><label class="label" for="cn-mulai">Tampil mulai</label><input class="input" id="cn-mulai" type="date"></div><div class="field"><label class="label" for="cn-sampai">Sampai</label><input class="input" id="cn-sampai" type="date"></div></div>
+        <label class="row" style="gap:10px;min-height:44px"><input type="checkbox" id="cn-sematkan"> <span>Sematkan di atas</span></label>
+        <label class="row" style="gap:10px;min-height:44px"><input type="checkbox" id="cn-aktif" checked> <span>Tampil ke klien</span></label>
+        <p class="hint err-msg" id="cn-err" role="alert" style="display:block"></p>
+      </form>
+      <div class="sheet-foot"><div class="btn-row"><button type="button" class="btn btn-ghost btn-lg hide" id="cn-del" onclick="window.contentDelete()">Hapus</button><button type="submit" form="form-content" class="btn btn-primary btn-lg" id="cn-save">Simpan</button></div></div>
     </div>
 
     <!-- Program latihan klien (Fase J2), panel -->
