@@ -16,9 +16,9 @@ Status: `[ ]` todo · `[~]` berjalan · `[x]` selesai. ID mulai T-600.
 
 | | ID | Task | Selesai bila |
 | --- | --- | --- | --- |
-| [ ] | T-610 | Sheet `SessionNotes`, `saveSessionNote`, `getSessionNote`, `lastNote` di briefing | Tes lolos |
-| [ ] | T-611 | Sheet "Catatan sesi" setelah Selesai dan template `pasca-sesi` | Browser check |
-| [ ] | T-612 | "Fokus berikutnya" dan "Dilatih" di portal | Tes whitelist lolos |
+| [x] | T-610 | Sheet `SessionNotes`, `saveSessionNote`, `getSessionNote`, `lastNote` di briefing | Tes lolos |
+| [x] | T-611 | Sheet "Catatan sesi" setelah Selesai dan template `pasca-sesi` | Browser check |
+| [x] | T-612 | "Fokus berikutnya" dan "Dilatih" di portal | Tes whitelist lolos |
 
 ## I3 — Penilaian cepat dan evaluasi paket
 

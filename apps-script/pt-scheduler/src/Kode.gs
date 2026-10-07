@@ -2072,7 +2072,12 @@ function getPortalBootstrap(memberToken) {
   const ver = _slotsVersion_();
   // Tanpa klien yang masuk, sheet Schedules hanya dibaca kalau cache jam kosong kosong (hemat kuota).
   const all = memberId ? _getSchedulesAll_() : undefined;
-  const mine = memberId ? all.filter(function(x) { return String(x.memberId).trim() === memberId; }).map(_ownScheduleOut_) : [];
+  const shared = memberId ? _sharedNotesFor_(memberId) : {};
+  const mine = memberId ? all.filter(function(x) { return String(x.memberId).trim() === memberId; }).map(function(x) {
+    const o = _ownScheduleOut_(x);
+    if (shared[String(x.id)]) { o.dilatih = shared[String(x.id)].dilatih; o.fokus = shared[String(x.id)].fokus; }
+    return o;
+  }) : [];
   const now = new Date();
   const horizon = _portalHorizonDays_();
   return {
@@ -5862,7 +5867,9 @@ function _coachHub_(now) {
     const d = new Date(s.start);
     return !isNaN(d.getTime()) && Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd') === wib.date;
   }).sort(function(a, b) { return new Date(a.start) - new Date(b.start); }).map(function(s) {
-    return { id: s.id, memberId: s.memberId, memberName: s.title, start: s.start, end: s.end, status: String(s.status || '').toLowerCase() };
+    // "Fokus" = fokus berikutnya dari catatan sesi sebelumnya klien ini (bukan sesi hari ini).
+    const prev = s.memberId ? _notesForMember_(s.memberId).filter(function(n) { return n.scheduleId !== String(s.id) && n.fokus; })[0] : null;
+    return { id: s.id, memberId: s.memberId, memberName: s.title, start: s.start, end: s.end, status: String(s.status || '').toLowerCase(), fokus: prev ? prev.fokus : '' };
   });
 
   const props = PropertiesService.getScriptProperties();
@@ -6176,21 +6183,118 @@ function markHealthReviewed(token, memberId, note) {
   return { status: 'success' };
 }
 
+// ── Catatan sesi (Fase I2) ───────────────────────────────────────────────────
+// Satu baris per sesi. "Dilatih" dan "Fokus berikutnya" boleh dilihat klien sendiri; RPE dan catatan pribadi hanya admin
+// dan tidak pernah masuk Telegram, portal, atau cache panel.
+
+const SESSION_NOTE_HEADERS = ["ID", "Schedule ID", "Member ID", "Tanggal", "Dilatih", "Fokus Berikutnya", "RPE", "Catatan Pribadi", "Diubah Pada"];
+
+function _sessionNotesSheet_() {
+  const sheet = getOrCreateSheet_('SessionNotes', SESSION_NOTE_HEADERS);
+  sheet.getRange('D:D').setNumberFormat('@');
+  return sheet;
+}
+
+/** Murni: baris sheet → objek catatan. */
+function _noteFromRow_(r) {
+  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: String(r[3]), dilatih: String(r[4] || ''), fokus: String(r[5] || ''),
+    rpe: r[6] === '' || r[6] == null ? '' : Number(r[6]), pribadi: String(r[7] || '') };
+}
+
+/** Semua catatan satu klien, terbaru dulu. Sheet belum ada = []. */
+function _notesForMember_(memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SessionNotes');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const id = String(memberId).trim();
+  const out = [];
+  sheet.getDataRange().getValues().slice(1).forEach(function(r) { if (r[0] && String(r[2]).trim() === id) out.push(_noteFromRow_(r)); });
+  out.sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });
+  return out;
+}
+
+/** Klien: hanya "dilatih" dan "fokus berikutnya" per sesi miliknya, { scheduleId: {dilatih, fokus} }. Tanpa RPE dan catatan pribadi. */
+function _sharedNotesFor_(memberId) {
+  const out = {};
+  _notesForMember_(memberId).forEach(function(n) { if (n.dilatih || n.fokus) out[n.scheduleId] = { dilatih: n.dilatih, fokus: n.fokus }; });
+  return out;
+}
+
+/** Murni: kalimat "sisa sesi" untuk pesan klien. */
+function _sisaText_(memberRow) {
+  const total = parseInt(memberRow[8], 10) || 0, used = parseInt(memberRow[9], 10) || 0;
+  return total > 0 ? Math.max(0, total - used) + ' dari ' + total : 'tidak dibatasi';
+}
+
+/** Admin: catatan satu sesi (kosong bila belum ada). */
+function getSessionNote(token, scheduleId) {
+  requireAdmin_(token);
+  const s = _getSchedulesAll_().find(function(x) { return String(x.id) === String(scheduleId); });
+  if (!s) throw new Error('Jadwal tidak ditemukan.');
+  const n = _notesForMember_(s.memberId).find(function(x) { return x.scheduleId === String(s.id); });
+  return { scheduleId: String(s.id), dilatih: n ? n.dilatih : '', fokus: n ? n.fokus : '', rpe: n ? n.rpe : '', pribadi: n ? n.pribadi : '' };
+}
+
+/**
+ * Admin: simpan (upsert) catatan satu sesi. Klien diambil dari baris jadwal, bukan dari argumen.
+ * Mengembalikan juga pesan pasca-sesi siap kirim (template "pasca-sesi"); tidak ada yang dikirim otomatis.
+ */
+function saveSessionNote(token, scheduleId, data) {
+  requireAdmin_(token);
+  data = data || {};
+  const sched = _getSchedulesAll_().find(function(x) { return String(x.id) === String(scheduleId); });
+  if (!sched || !sched.memberId) throw new Error('Jadwal tidak ditemukan.');
+  const dilatih = _careStr_(data.dilatih, 500, 'Yang dilatih'), fokus = _careStr_(data.fokus, 300, 'Fokus berikutnya'), pribadi = _careStr_(data.pribadi, 1000, 'Catatan pribadi');
+  let rpe = '';
+  if (data.rpe !== '' && data.rpe != null) {
+    rpe = Number(data.rpe);
+    if (!isFinite(rpe) || rpe < 1 || rpe > 10 || Math.floor(rpe) !== rpe) throw new Error('RPE harus bilangan bulat 1 sampai 10.');
+  }
+  const m = _findMemberRow_(function(row) { return String(row[0]).trim() === String(sched.memberId).trim(); });
+  if (!m) throw new Error('Klien tidak ditemukan.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _sessionNotesSheet_();
+    const rows = sheet.getDataRange().getValues();
+    const now = new Date().toISOString();
+    const tanggal = Utilities.formatDate(new Date(sched.start), REMINDER_TZ, 'yyyy-MM-dd');
+    let found = 0;
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][1]) === String(sched.id)) { found = i + 1; break; }
+    if (!dilatih && !fokus && rpe === '' && !pribadi) {
+      if (found) sheet.deleteRow(found);   // semua kosong = hapus catatan
+    } else if (found) {
+      sheet.getRange(found, 5, 1, 5).setValues([[dilatih, fokus, rpe, pribadi, now]]);
+    } else {
+      sheet.appendRow(['SNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), String(sched.memberId).trim(), tanggal, dilatih, fokus, rpe, pribadi, now]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  const text = _rmdFill_(_rmdTemplate_('pasca-sesi'), {
+    nama: String(m.row[1] || '').trim().split(/\s+/)[0],
+    dilatih: dilatih ? '\n🏋️ Hari ini: ' + dilatih.split('\n')[0] : '', fokus: fokus ? '\n🎯 Berikutnya: ' + fokus.split('\n')[0] : '', sisa: _sisaText_(m.row)
+  });
+  return { status: 'success', text: text, waLink: _waLink_(m.row[2], text) };
+}
+
 /** Admin: ringkasan untuk kartu "Briefing" di atas detail sesi. Tidak pernah di-cache di browser. */
 function getSessionBriefing(token, scheduleId) {
   requireAdmin_(token);
   const s = _getSchedulesAll_().find(function(x) { return String(x.id) === String(scheduleId); });
-  if (!s || !s.memberId) return { flag: '', notes: '', goal: '', lastTest: null, healthPending: false };
+  if (!s || !s.memberId) return { flag: '', notes: '', goal: '', lastTest: null, healthPending: false, lastNote: null };
   const m = _findMemberRow_(function(row) { return String(row[0]).trim() === String(s.memberId).trim(); });
-  if (!m) return { flag: '', notes: '', goal: '', lastTest: null, healthPending: false };
+  if (!m) return { flag: '', notes: '', goal: '', lastTest: null, healthPending: false, lastNote: null };
   const id = String(m.row[0]).trim();
   const asm = _latestRowFor_('Assessments', id), hs = _latestRowFor_('HealthScreening', id);
   const tests = _fitnessSummary_(_fitnessByMember_(id));
   let last = null;
   tests.forEach(function(t) { if (!last || t.latest.tanggal > last.tanggal) last = { label: t.label, unit: t.unit, nilai: t.latest.nilai, tanggal: t.latest.tanggal }; });
+  // Fokus berikutnya dari sesi sebelum ini (catatan terbaru yang bukan sesi ini).
+  const prev = _notesForMember_(id).filter(function(n) { return n.scheduleId !== String(s.id) && (n.dilatih || n.fokus); })[0];
   return {
     flag: String(m.row[MEMBER_FLAG_COL - 1] || ''), notes: String(m.row[MEMBER_NOTES_COL - 1] || ''),
-    goal: asm ? String(asm.row[3] || '') : '', lastTest: last, healthPending: !!hs && !hs.row[14]
+    goal: asm ? String(asm.row[3] || '') : '', lastTest: last, healthPending: !!hs && !hs.row[14],
+    lastNote: prev ? { tanggal: prev.tanggal, dilatih: prev.dilatih, fokus: prev.fokus, rpe: prev.rpe } : null
   };
 }
 

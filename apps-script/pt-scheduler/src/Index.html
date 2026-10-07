@@ -519,6 +519,22 @@
       </form>
     </div>
 
+    <!-- Catatan sesi (Fase I2): dibuka setelah "Selesai" dan dari detail sesi -->
+    <div class="sheet hide" id="modal-session-note" role="dialog" aria-modal="true" aria-labelledby="sn-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sn-title">Catatan sesi</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-session-note" onsubmit="window.sessionNoteSave(event, false)">
+        <p class="li-sub" id="sn-who"></p>
+        <div class="field"><label class="label" for="sn-dilatih">Yang dilatih</label><textarea class="textarea" id="sn-dilatih" rows="2" maxlength="500" placeholder="Squat 3x10, plank 45 dtk"></textarea></div>
+        <div class="field"><label class="label" for="sn-fokus">Fokus berikutnya</label><input class="input" id="sn-fokus" type="text" maxlength="300" placeholder="Perdalam teknik squat"></div>
+        <div class="field"><label class="label" for="sn-rpe">RPE (1–10, seberapa berat)</label><input class="input num" id="sn-rpe" type="text" inputmode="numeric" maxlength="2" placeholder="7"></div>
+        <div class="field"><label class="label" for="sn-pribadi">Catatan pribadi (tidak tampil ke klien)</label><textarea class="textarea" id="sn-pribadi" rows="2" maxlength="1000"></textarea></div>
+        <p class="hint">Klien hanya melihat "Yang dilatih" dan "Fokus berikutnya".</p>
+        <p class="hint err-msg" id="sn-err" role="alert" style="display:block"></p>
+      </form>
+      <div class="sheet-foot"><div class="btn-row"><button type="submit" form="form-session-note" class="btn btn-outline btn-lg" id="sn-save-btn">Simpan</button><button type="button" class="btn btn-primary btn-lg" id="sn-wa-btn" onclick="window.sessionNoteSave(null, true)"><i data-lucide="message-circle"></i> Simpan &amp; kirim WA</button></div></div>
+    </div>
+
     <div class="sheet hide" id="modal-care-tests" role="dialog" aria-modal="true" aria-labelledby="care-tests-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="care-tests-title">Tes kebugaran</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>

@@ -2599,6 +2599,7 @@
     body += '<div class="card-flat"><p class="eyebrow">Catatan</p><p style="margin-top:6px">' + (s.notes ? h(s.notes) : '<span class="muted">Tidak ada catatan</span>') + '</p></div>';
 
     body += '<div class="stack" style="gap:8px" id="detail-complete-container">';
+    if (isDone(s)) body += '<button type="button" class="btn btn-secondary btn-lg btn-block" onclick="window.openSessionNote(\'' + h(s.id) + '\')">' + icon('notebook-pen') + 'Catatan sesi &amp; kirim WA</button>';
     if (!isDone(s) && !isAvailable(s)) body += '<button type="button" class="btn btn-primary btn-lg btn-block" id="btn-complete-session" onclick="window.markSessionCompleted()">' + icon('check-circle-2') + 'Tandai selesai & potong 1 sesi</button>';
     body += '<div class="btn-row">' +
       (!isDone(s) ? '<button type="button" class="btn btn-outline" onclick="window.openEditScheduleDetailModal()">' + icon('calendar-clock') + 'Ubah jadwal</button>' : '') +
@@ -2662,13 +2663,8 @@
         if (m) m.usedSessions = (Number(m.usedSessions) || 0) + 1;
         window.updateUI();
         window.showToast('Sesi selesai. Kuota dipotong.');
-        const msg = (result && result.reminderMessage) ||
-          ('Halo ' + s.title + ', sesi kamu tersisa ' + (m ? remainingOf(m) : '-') + ' dari ' + (m ? m.totalSessions : '-') + ' ya.');
-        setTimeout(function () {
-          window.showConfirmModal('Kirim info sisa sesi ke <b>' + h(s.title) + '</b> lewat WhatsApp?<br><span class="li-sub">"' + h(msg) + '"</span>',
-            function () { window.sendToParentWA(s.phone, msg); },
-            { title: 'Kirim pengingat?', confirmText: 'Kirim WhatsApp', cancelText: 'Nanti saja', icon: 'message-circle' });
-        }, 350);
+        // Catatan sesi + pesan pasca-sesi (memuat sisa sesi) menggantikan konfirmasi "kirim info sisa sesi".
+        setTimeout(function () { window.openSessionNote(s.id, true); }, 350);
       }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
     }, { title: 'Tandai sesi selesai?', confirmText: 'Ya, selesai', icon: 'check-circle-2' });
   };
@@ -4060,7 +4056,7 @@
     html += hub.today.map(function (t) {
       const d = new Date(t.start), done = t.status === 'completed';
       return '<div class="row" style="gap:8px;min-height:56px;' + (done ? 'opacity:.55' : '') + '">' +
-        '<button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openScheduleDetail(\'' + h(t.id) + '\')"><span class="num" style="font-weight:800;min-width:52px">' + fmtTime(d) + '</span><span class="grow truncate">' + h(t.memberName) + '</span></button>' +
+        '<button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openScheduleDetail(\'' + h(t.id) + '\')"><span class="num" style="font-weight:800;min-width:52px">' + fmtTime(d) + '</span><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(t.memberName) + '</span>' + (t.fokus && !done ? '<span class="li-sub truncate" style="display:block">' + icon('target', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(t.fokus) + '</span>' : '') + '</span></button>' +
         (done ? '<span class="pill soft">Selesai</span>' : '<button type="button" class="btn btn-secondary" style="min-width:44px;min-height:44px" aria-label="Tandai selesai ' + h(t.memberName) + '" onclick="window.hubComplete(\'' + h(t.id) + '\')">' + icon('check') + '</button>') + '</div>';
     }).join('') + '</div>';
     html += careListHtml(hub.care);
@@ -4296,15 +4292,48 @@
   window.loadSessionBriefing = function (scheduleId) {
     adminCall('getSessionBriefing', scheduleId).then(function (b) {
       const el = $('detail-briefing');
-      if (!el || !(b.flag || b.notes || b.goal || b.lastTest || b.healthPending)) return;
+      if (!el || !(b.flag || b.notes || b.goal || b.lastTest || b.healthPending || b.lastNote)) return;
       el.innerHTML = '<div class="card-flat stack" style="gap:4px"><p class="eyebrow">Briefing</p>' +
         (b.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(b.flag) + '</p>' : '') +
         (b.notes ? '<p>' + h(b.notes.split('\n').slice(0, 3).join('\n')) + '</p>' : '') +
         (b.goal ? '<p class="li-sub">Tujuan: ' + h(b.goal) + '</p>' : '') +
+        (b.lastNote && (b.lastNote.fokus || b.lastNote.dilatih) ? '<p>' + icon('target', 'style="width:14px;height:14px;vertical-align:-2px"') + ' <b>Fokus kali ini:</b> ' + h(b.lastNote.fokus || b.lastNote.dilatih) + '</p><p class="li-sub">Dari sesi ' + h(pgLabel(b.lastNote.tanggal)) + (b.lastNote.rpe !== '' ? ' · RPE ' + h(b.lastNote.rpe) : '') + '</p>' : '') +
         (b.lastTest ? '<p class="li-sub">Tes terakhir: ' + h(b.lastTest.label) + ' ' + h(b.lastTest.nilai) + ' ' + h(b.lastTest.unit.split(' ')[0]) + '</p>' : '') +
         (b.healthPending ? '<p class="li-sub">Form kesehatan belum ditinjau.</p>' : '') + '</div>';
       paintIcons();
     }).catch(function () {});
+  };
+
+  // ── Catatan sesi (Fase I2) ──────────────────────────────────────────────────
+  // Dibuka otomatis setelah "Selesai" (afterDone = true) dan dari detail sesi yang sudah selesai.
+  let noteSched = null;
+  window.openSessionNote = function (scheduleId, afterDone) {
+    const s = window.schedules.find(x => String(x.id) === String(scheduleId));
+    if (!s) return;
+    noteSched = s;
+    ['sn-dilatih', 'sn-fokus', 'sn-rpe', 'sn-pribadi'].forEach(k => { $(k).value = ''; });
+    $('sn-err').textContent = '';
+    $('sn-who').textContent = s.title + ' · ' + fmtShort(new Date(s.start)) + ' ' + fmtTime(new Date(s.start));
+    $('sn-title').textContent = afterDone ? 'Sesi selesai: catat sesi' : 'Catatan sesi';
+    openSheet('modal-session-note');
+    adminCall('getSessionNote', s.id).then(function (n) {
+      if (noteSched !== s) return;
+      if (!$('sn-dilatih').value && !$('sn-fokus').value) { $('sn-dilatih').value = n.dilatih || ''; $('sn-fokus').value = n.fokus || ''; $('sn-rpe').value = n.rpe === '' ? '' : n.rpe; $('sn-pribadi').value = n.pribadi || ''; }
+    }).catch(function () {});
+  };
+  window.sessionNoteSave = function (e, withWa) {
+    if (e) e.preventDefault();
+    if (!noteSched) return;
+    const s = noteSched;
+    const rpe = $('sn-rpe').value.trim();
+    if (rpe && !/^(10|[1-9])$/.test(rpe)) { $('sn-err').textContent = 'RPE harus bilangan bulat 1 sampai 10.'; return; }
+    $('sn-err').textContent = '';
+    const done = busy($(withWa ? 'sn-wa-btn' : 'sn-save-btn'), 'Menyimpan…');
+    adminCall('saveSessionNote', s.id, { dilatih: $('sn-dilatih').value, fokus: $('sn-fokus').value, rpe: rpe, pribadi: $('sn-pribadi').value }).then(function (r) {
+      done(); window.closeModal();
+      window.showToast('Catatan sesi disimpan.');
+      if (withWa) setTimeout(function () { window.sendToParentWA(s.phone, r.text); }, 200);
+    }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
   };
 
   // Daftar "Perlu perhatian" di Beranda Coach
@@ -4648,7 +4677,9 @@
     const done = isDone(s), upcoming = !done && d >= new Date();
     return '<div class="list-item">' +
       '<div style="width:52px;text-align:center;flex-shrink:0"><p class="eyebrow">' + DOW_SHORT[d.getDay()] + '</p><p class="num" style="font-size:var(--fs-2xl);font-weight:800;line-height:1.1">' + d.getDate() + '</p></div>' +
-      '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' + (window.isSoloCoach() ? '' : '<p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p>') + '</div>' +
+      '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' + (window.isSoloCoach() ? '' : '<p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p>') +
+      (done && s.dilatih ? '<p class="li-sub" style="white-space:normal">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.dilatih) + '</p>' : '') +
+      (done && s.fokus ? '<p class="li-sub" style="white-space:normal">' + icon('target', 'style="width:12px;height:12px;vertical-align:-2px"') + ' Berikutnya: ' + h(s.fokus) + '</p>' : '') + '</div>' +
       '<div class="li-trail">' + (done ? '<span class="pill soft">' + icon('check') + 'Selesai</span>'
         : upcoming ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah</button>'
         : '<span class="pill dashed soft">Terlewat</span>') + '</div></div>';

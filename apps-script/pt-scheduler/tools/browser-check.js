@@ -437,6 +437,25 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.textContent('#view-coaches')).includes('Hari ini'), 'coach hub shows Hari ini');
     check((await page.textContent('#view-coaches')).includes('Atur target'), 'coach hub offers to set targets');
+    // Catatan sesi (Fase I2): sheet bawah, RPE angka, simpan & kirim WA membuka WhatsApp dengan pesan pasca-sesi.
+    await page.evaluate(() => { window.__wa = []; window.sendToParentWA = (ph, text) => window.__wa.push({ ph, text }); window.openSessionNote('SCH-A1', true); });
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sn-dilatih') && (await page.textContent('#sn-title')).includes('Sesi selesai'), 'session note: the sheet opens after "Selesai"');
+    check((await page.getAttribute('#sn-rpe', 'inputmode')) === 'numeric', 'session note: RPE uses the numeric keypad');
+    const snBtn = await page.locator('#modal-session-note .sheet-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5).length);
+    check(snBtn === 0 && (await overflowX(page)) <= 0, 'session note: buttons are at least 44 px and nothing scrolls sideways');
+    await page.fill('#sn-rpe', '12');
+    await page.click('#sn-wa-btn');
+    check((await page.textContent('#sn-err')).includes('RPE harus bilangan bulat 1 sampai 10'), 'session note: a bad RPE is refused before saving');
+    await page.fill('#sn-dilatih', 'Squat 3x10');
+    await page.fill('#sn-fokus', 'Teknik squat');
+    await page.fill('#sn-rpe', '7');
+    await page.click('#sn-wa-btn');
+    await page.waitForTimeout(900);
+    const sentWa = await page.evaluate(() => window.__wa);
+    check(sentWa.length === 1 && sentWa[0].text.includes('terima kasih untuk sesi hari ini') && sentWa[0].text.includes('Squat 3x10') && sentWa[0].text.includes('Teknik squat'), 'session note: "Simpan & kirim WA" hands the ready message to WhatsApp');
+    const snRow = env.sheet('SessionNotes').rows.find(r => r[1] === 'SCH-A1');
+    check(!!snRow && snRow[2] === 'PT-A' && snRow[6] === 7, 'session note: saved for the right client with RPE 7');
     await page.evaluate(() => window.openTargetsSheet());
     await page.waitForTimeout(400);
     check(await visible(page, '#tg-sesi'), 'targets sheet opens');

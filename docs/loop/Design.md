@@ -17,7 +17,10 @@ Rujukan kode: `apps-script/pt-scheduler/src/`.
 
 ## 3. Catatan sesi dan pesan pasca-sesi (I2)
 
-Dirancang di bagian I2; lihat [TODO.md](TODO.md).
+- Sheet `SessionNotes`: `ID, Schedule ID, Member ID, Tanggal, Dilatih, Fokus Berikutnya, RPE, Catatan Pribadi, Diubah Pada`. Satu baris per sesi; menyimpan semua kolom kosong menghapus baris.
+- `saveSessionNote(token, scheduleId, data)` mengambil klien dari baris jadwal. Membalas `{text, waLink}` dari template `pasca-sesi` (`{nama}`, `{dilatih}`, `{fokus}`, `{sisa}`); tidak ada yang dikirim.
+- Klien: `getPortalBootstrap.schedules[]` mendapat `dilatih` dan `fokus` untuk sesi miliknya (`_sharedNotesFor_`). RPE dan catatan pribadi tidak keluar dari fungsi admin.
+- Panel: setelah **Selesai** lembar catatan terbuka otomatis (`openSessionNote(id, true)`); briefing dan baris Hari ini menampilkan fokus dari sesi sebelumnya.
 
 ## 4. Penilaian dan evaluasi (I3)
 
