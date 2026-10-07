@@ -204,11 +204,9 @@ test('clients cannot reschedule onto a booked hour or outside hours, but can ont
 test('a recurring series books all dates or none', () => {
   const env = seededEnv();
   noSchedules(env);
-  const start = new Date(FUT(3, 10));
-  const z = n => String(n).padStart(2, '0');
-  const local = new Date(start);
-  const startDate = local.getFullYear() + '-' + z(local.getMonth() + 1) + '-' + z(local.getDate());
-  const time = z(local.getHours()) + ':' + z(local.getMinutes());
+  // The series date and time are WIB, as the portal sends them (the server builds the dates in WIB).
+  const w = new Date(new Date(FUT(3, 10)).getTime() + 7 * 3600000).toISOString();
+  const startDate = w.slice(0, 10), time = w.slice(11, 16);
   env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(5, 10), FUT(5, 11), '', 'read', 'C-1', 'Rizky', '', '']);   // blocks day 5
   const mt = env.memberToken(require('./fixtures').KEY_A);
   const before = env.sheet('Schedules').rows.length;
@@ -542,10 +540,10 @@ test('soft reschedule onto the client\'s own other session is "mine"', () => {
   assert.throws(() => env.call('clientRescheduleSchedule', mt, a.id, FUT(6, 12), FUT(6, 13)), /sudah punya sesi/);
 });
 
-// Recurring series start: the server builds dates in its own local time, like the portal sends them.
+// Recurring series start in WIB, like the portal sends it (the server builds the dates in WIB, whatever its own zone).
 const series = (dayOffset, hour) => {
-  const local = new Date(FUT(dayOffset, hour)), z = n => String(n).padStart(2, '0');
-  return { startDate: local.getFullYear() + '-' + z(local.getMonth() + 1) + '-' + z(local.getDate()), time: z(local.getHours()) + ':' + z(local.getMinutes()), duration: 60 };
+  const w = new Date(new Date(FUT(dayOffset, hour)).getTime() + 7 * 3600000).toISOString();
+  return { startDate: w.slice(0, 10), time: w.slice(11, 16), duration: 60 };
 };
 const DAILY_4 = { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 4 };
 

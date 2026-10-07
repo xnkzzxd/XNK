@@ -2320,11 +2320,13 @@ function _addRecurringInternal_(baseScheduleData, recurrenceRule, status, opts) 
 
     // Semua tanggal seri, berurutan.
     let plan = [];
-    let cursor = new Date(startY, startM - 1, startD, hh, mm, 0);
+    // Selalu WIB (sama dengan portal & mesin slot), tidak bergantung zona waktu server.
+    const two = function(n) { return ('0' + n).slice(-2); };
+    let cursor = new Date(Date.parse(startY + '-' + two(startM) + '-' + two(startD) + 'T' + two(hh) + ':' + two(mm) + ':00+07:00'));
     let safetyCounter = 0; // jaga-jaga supaya tidak infinite loop kalau weekdays kosong/aneh
     while (plan.length < occurrences && safetyCounter < 400) {
       safetyCounter++;
-      if (weekdaySet[cursor.getDay()]) {
+      if (weekdaySet[_wibParts_(cursor).day]) {
         const sessionStart = new Date(cursor);
         const sessionEnd = new Date(sessionStart.getTime() + durationMin * 60000);
         plan.push({
