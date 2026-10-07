@@ -1742,24 +1742,47 @@
   }
   // E2: jam kosong dari mesin slot server (jam operasional, jam kerja & cuti coach, kapasitas),
   // dikirim lewat getPortalBootstrap. Kalau gagal, panel jam memakai hitungan lama di publicDayPanel.
+  // Jam yang sudah lewat atau coach libur dicatat 0 (tidak bisa dipilih). openSlotsAt = kapan data ini diterima;
+  // tanggal yang tidak ada di peta (lewat batas booking) tampil "Belum dibuka".
   window.openSlotsByDate = null;
+  window.openSlotsAt = 0;
   window.bookingHorizonDays = 21;
+  window.rescheduleCutoffHours = null;
   function applyOpenSlots(rows) {
+    if (!Array.isArray(rows)) return;
     const map = {};
-    (rows || []).forEach(function (d) { const f = {}; d.hours.forEach(function (x) { f[x.hour] = x.free; }); map[d.date] = f; });
+    rows.forEach(function (d) {
+      if (!d || !d.date) return;
+      const f = {};
+      (d.hours || []).forEach(function (x) { f[x.hour] = (x.off || x.past) ? 0 : (Number(x.free) || 0); });
+      map[d.date] = f;
+    });
     window.openSlotsByDate = map;
+    window.openSlotsAt = Date.now();
   }
-  // Dua coach aktif atau lebih: jam kosong per coach (klien pilih coach dulu, baru jam).
+  // Dua coach aktif atau lebih: jam kosong per coach (klien pilih coach dulu, baru jam). Aturan sama dengan
+  // applyOpenSlots (lewat / libur = 0); openSlotsAtByCoach = kapan data coach itu diterima (aturan 2 menit).
   window.openSlotsByCoachMap = {};
+  window.openSlotsAtByCoach = {};
   function applyOpenSlotsForCoach(coachId, rows) {
+    if (!Array.isArray(rows)) return;
     const m = {};
-    (rows || []).forEach(function (d) { const f = {}; d.hours.forEach(function (x) { f[x.hour] = x.free; }); m[d.date] = f; });
+    rows.forEach(function (d) {
+      if (!d || !d.date) return;
+      const f = {};
+      (d.hours || []).forEach(function (x) { f[x.hour] = (x.off || x.past) ? 0 : (Number(x.free) || 0); });
+      m[d.date] = f;
+    });
     window.openSlotsByCoachMap[coachId] = m;
+    window.openSlotsAtByCoach[coachId] = Date.now();
   }
   function applyOpenSlotsByCoach(by) {
-    window.openSlotsByCoachMap = {};
-    Object.keys(by || {}).forEach(function (id) { applyOpenSlotsForCoach(id, by[id]); });
+    if (!by) return;
+    Object.keys(by).forEach(function (id) { applyOpenSlotsForCoach(id, by[id]); });
   }
+  // Klien dengan 2 coach aktif atau lebih: coach yang dipilih untuk booking ('' = solo / belum dipilih).
+  const slotCoach = () => (window.isPublicView && !window.isSoloCoach() && window.coaches.length > 1) ? String(ui.bookCoach || '') : '';
+  const slotsAtNow = () => { const c = slotCoach(); return c ? (window.openSlotsAtByCoach[c] || 0) : window.openSlotsAt; };
   window.loadAllData = function () {
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
@@ -1833,6 +1856,7 @@
   function applyPortalBootstrap(b) {
     window.schedules = normalizeSchedules(b.schedules);
     if (b.horizonDays) window.bookingHorizonDays = b.horizonDays;
+    if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
     if (b.openSlots) applyOpenSlots(b.openSlots);
     applyOpenSlotsByCoach(b.openSlotsByCoach);
   }
@@ -1850,9 +1874,9 @@
     let slot = null;
     try { slot = JSON.parse(raw); } catch (e) { return; }
     if (!slot || !/^\d{4}-\d{2}-\d{2}$/.test(slot.date) || !/^\d{2}:\d{2}$/.test(slot.time)) return;
+    if (slot.at && Date.now() - Number(slot.at) > 30 * 60000) return;   // pilihan lama dari Landing (> 30 menit)
     const p = slot.date.split('-').map(Number);
-    const when = new Date(p[0], p[1] - 1, p[2], Number(slot.time.slice(0, 2)), Number(slot.time.slice(3)));
-    if (!(when > new Date())) return;
+    if (!(wibAt(slot.date, slot.time) > new Date())) return;
     if (slot.coachId && window.coaches.some(c => String(c.id) === String(slot.coachId))) ui.bookCoach = String(slot.coachId);
     ui.selectedDate = new Date(p[0], p[1] - 1, p[2]);
     ui.calMonth = new Date(p[0], p[1] - 1, 1);
@@ -2421,6 +2445,14 @@
     if (mine.length) {
       html += '<p class="eyebrow" style="margin:6px 0 8px">Jadwalku</p><div class="list stagger" style="margin-bottom:18px">' + mine.map(memberSessionRow).join('') + '</div>';
     }
+    scheduleHourRedraw();
+    const slotMap = window.openSlotsByDate;
+    const slotDates = slotMap ? Object.keys(slotMap).sort() : [];
+    // Lewat batas booking: belum ada jam yang dibuka, jadi tidak ada kisi jam.
+    if (slotDates.length && ymd(day) > slotDates[slotDates.length - 1]) {
+      return html + '<div class="notice" role="status" style="margin-top:6px">' + icon('calendar-off') + '<div class="grow"><p class="li-title">Belum dibuka</p>' +
+        '<p class="li-sub">Booking paling jauh ' + h(window.bookingHorizonDays) + ' hari ke depan.</p></div></div>';
+    }
     const range = DAY_HOURS[day.getDay()];
     const multi = !window.isSoloCoach() && window.coaches.length > 1;
     if (multi && me) {
@@ -2453,7 +2485,9 @@
       else if (taken) slots += '<button type="button" class="slot taken" disabled aria-label="' + label + ' penuh">' + label + '</button>';
       else { free++; slots += '<button type="button" class="slot" onclick="window.bookSlot(\'' + ymd(day) + '\',\'' + pad(hh) + ':00\')" aria-label="Booking jam ' + label + '">' + label + '</button>'; }
     }
-    html += '<div class="row-between" style="margin:6px 0 10px"><p class="eyebrow">Pilih jam</p><span class="li-sub">' + free + ' jam kosong</span></div>' +
+    const at = slotsAtNow();
+    const fresh = at ? ' · diperbarui ' + fmtTime(new Date(at)) : '';
+    html += '<div class="row-between" style="margin:6px 0 10px;gap:10px"><p class="eyebrow">Pilih jam</p><span class="li-sub num" id="slots-meta">' + free + ' jam kosong' + fresh + '</span></div>' +
       '<div class="slot-grid stagger">' + slots + '</div>' +
       '<div class="row" style="gap:16px;margin-top:14px;flex-wrap:wrap" aria-hidden="true">' +
         '<span class="li-sub row" style="gap:6px"><span class="slot" style="width:22px;height:16px;border-radius:6px"></span>Kosong</span>' +
@@ -2474,13 +2508,15 @@
   window.pickBookCoach = function (id) {
     ui.bookCoach = String(id || '');
     renderView('calendar', { animate: false });
-    if (ui.bookCoach && window.refreshOpenSlots) window.refreshOpenSlots(true);
+    // Jam kosong coach ini sudah ikut bootstrap; server hanya ditanya kalau datanya lebih dari 2 menit.
+    if (ui.bookCoach && window.refreshOpenSlots) window.refreshOpenSlots();
   };
   window.bookSlot = function (date, time) {
     if (!window.publicLoggedMember) { window.showToast('Masuk dulu untuk booking.', 'lock'); window.navigate('public-login'); return; }
     window.handleFabClick();
     $('edit-sch-date').value = date;
     $('edit-sch-time').value = time;
+    updateTimeHint();
   };
 
   // FullCalendar (tab Minggu, admin desktop)
@@ -2679,8 +2715,8 @@
     document.querySelectorAll('.recurring-day-btn.active').forEach(b => b.classList.remove('active'));
   }
   window.resetRecurringUI = function () { resetRecurring(true); };
-  window.toggleRecurringOptions = function () { $('recurring-options').classList.toggle('hide', !$('edit-sch-recurring-toggle').checked); };
-  window.toggleRecurringWeekday = function (btn) { btn.classList.toggle('active'); btn.setAttribute('aria-pressed', btn.classList.contains('active')); };
+  window.toggleRecurringOptions = function () { $('recurring-options').classList.toggle('hide', !$('edit-sch-recurring-toggle').checked); window.onSchFieldChange(); };
+  window.toggleRecurringWeekday = function (btn) { btn.classList.toggle('active'); btn.setAttribute('aria-pressed', btn.classList.contains('active')); window.onSchFieldChange(); };
   window.getSelectedRecurringWeekdays = function () { return Array.prototype.map.call(document.querySelectorAll('.recurring-day-btn.active'), b => Number(b.dataset.day)); };
 
   function prefillDateTime(date, time) {
@@ -2690,21 +2726,38 @@
     $('edit-sch-time').value = time || hm(next);
   }
 
-  // Jam kosong dimuat HANYA saat klien membuka tab Jadwal/booking (bukan polling), dengan jeda 10 detik di browser
-  // dan cache 10 detik di server. Saat tab tidak dibuka, tidak ada panggilan ke server.
-  let slotsFetchedAt = 0, slotsFetching = false;
+  // Jam kosong dimuat ulang HANYA saat klien membuka tab Jadwal (atau kembali ke tab browser di Jadwal) dan datanya
+  // sudah lebih dari 2 menit (server juga menyimpan 2 menit). Bootstrap dan setiap jawaban booking sudah membawa
+  // openSlots terbaru, jadi tidak ada polling. Pemeriksaan sebenarnya terjadi saat booking dikirim.
+  const SLOTS_TTL_MS = 120000;
+  let slotsFetching = false;
   window.refreshOpenSlots = function (force) {
     if (!window.isPublicView || !window.publicLoggedMember || slotsFetching) return Promise.resolve();
-    if (!force && Date.now() - slotsFetchedAt < 10000) return Promise.resolve();
+    const coach = slotCoach();   // dua coach atau lebih: jam kosong coach yang dipilih
+    const at = slotsAtNow();
+    if (!force && at && Date.now() - at < SLOTS_TTL_MS) return Promise.resolve();
     slotsFetching = true;
-    const coach = !window.isSoloCoach() ? ui.bookCoach : '';
-    return publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14, fresh: !!force, coachId: coach }).then(function (rows) {
-      slotsFetchedAt = Date.now();
-      const before = coach ? JSON.stringify(window.openSlotsByCoachMap[coach]) : JSON.stringify(window.openSlotsByDate);
+    const snap = () => JSON.stringify(coach ? window.openSlotsByCoachMap[coach] : window.openSlotsByDate);
+    return publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14, coachId: coach }).then(function (rows) {
+      const before = snap();
       if (coach) applyOpenSlotsForCoach(coach, rows); else applyOpenSlots(rows);
-      if ((coach ? JSON.stringify(window.openSlotsByCoachMap[coach]) : JSON.stringify(window.openSlotsByDate)) !== before) window.updateUI();
+      if (snap() !== before) window.updateUI();
+      else if (window.currentView === 'calendar') renderDayPanel();   // hanya "diperbarui HH.MM" yang berubah
     }).catch(function () {}).then(function () { slotsFetching = false; });
   };
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && window.currentView === 'calendar' && window.isPublicView) window.refreshOpenSlots();
+  });
+  // Tepat di pergantian jam, kisi jam digambar ulang supaya jam yang baru lewat jadi abu-abu. Tanpa panggilan server.
+  let hourRedrawTimer = null;
+  function scheduleHourRedraw() {
+    clearTimeout(hourRedrawTimer);
+    const wait = 3600000 - (Date.now() % 3600000) + 1000;
+    hourRedrawTimer = setTimeout(function () {
+      hourRedrawTimer = null;
+      if (window.currentView === 'calendar' && window.isPublicView) window.updateUI();
+    }, wait);
+  }
 
   // Booking baru. Admin: pilih klien (atau klien dari konteks). Klien: dirinya sendiri.
   window.openBookingSheet = function (opts) {
@@ -2713,6 +2766,7 @@
     window.isRescheduleMode = false;
     window.rescheduleScheduleId = null;
     $('form-edit-schedule').reset();
+    resetSchSheet();
     resetRecurring(true);
     const memberField = $('sch-member-field');
     let who = '';
@@ -2745,6 +2799,7 @@
       $('sch-coach').value = window.coaches.some(c => String(c.id) === String(ui.bookCoach)) ? String(ui.bookCoach) : '';
     }
     prefillDateTime(opts.date, opts.time);
+    updateTimeHint();
     openSheet('modal-edit-schedule');
     if (window.isPublicView && window.guideCheck) window.guideCheck();
   };
@@ -2780,8 +2835,10 @@
     $('edit-sch-notes').value = s.notes || '';
     $('modal-sch-title').textContent = title;
     $('sch-member-field').classList.add('hide');
+    resetSchSheet();
     $('sch-coach-field').classList.add('hide');
     resetRecurring(false);
+    updateTimeHint();
   }
 
   window.openRescheduleModal = function (id) {
@@ -2791,8 +2848,9 @@
     if (!s) { window.showToast('Jadwal tidak ditemukan.'); return; }
     if (String(s.memberId) !== String(me.id)) { window.showToast('Jadwal ini bukan milikmu.'); return; }
     if (isDone(s)) { window.showToast('Sesi yang sudah selesai tidak bisa diubah.'); return; }
-    if ((new Date(s.start) - new Date()) / 3600000 < 2) {
-      window.showToast('Reschedule paling lambat 2 jam sebelum sesi. Hubungi coach lewat WhatsApp ya.', 'clock');
+    const cutoff = window.rescheduleCutoffHours != null ? Number(window.rescheduleCutoffHours) : 2;
+    if ((new Date(s.start) - new Date()) / 3600000 < cutoff) {
+      window.showToast('Reschedule paling lambat ' + cutoff + ' jam sebelum sesi. Hubungi coach lewat WhatsApp ya.', 'clock');
       return;
     }
     window.isEditScheduleMode = false;
@@ -2817,9 +2875,366 @@
     openSheet('modal-edit-schedule');
   };
 
+  // ── Portal: kirim booking dengan satu panggilan, bentrok jadi saran jam di dalam sheet ──
+  // Klien tetap boleh mengetik jam bebas (07.15); server mencatatnya dari jam penuh (_snapSlot_).
+  function updateTimeHint() {
+    const el = $('edit-sch-time-hint');
+    if (!el) return;
+    const m = /^(\d{2}):(\d{2})/.exec($('edit-sch-time').value || '');
+    el.textContent = window.isPublicView && m && m[2] !== '00' ? 'Dicatat mulai ' + m[1] + '.00 (dihitung dari jam penuh).' : '';
+  }
+  // "Rab 8 Okt" dari tanggal WIB (YYYY-MM-DD), tanpa koma supaya enak dideretkan.
+  function shortDay(date) {
+    const p = String(date || '').split('-').map(Number);
+    if (p.length !== 3 || !p[0]) return '';
+    return DOW_SHORT[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()] + ' ' + p[2] + ' ' + MONTHS[p[1] - 1].slice(0, 3);
+  }
+  const slotChipLabel = (date, hour) => shortDay(date) + ' · ' + pad(hour) + '.00';
+  function whenLabel(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const p = wibParts(d);
+    return shortDay(p.date) + ' · ' + pad(p.hour) + '.' + pad(p.min);
+  }
+  function hourLabel(iso) { const d = new Date(iso); return isNaN(d) ? '' : pad(wibParts(d).hour) + '.00'; }
+  function schDefaultLabel() { return window.isRescheduleMode ? 'Simpan jadwal baru' : 'Kirim booking'; }
+  function clearSchNotice(form) { const el = form && form.querySelector('.conflict-panel'); if (el) el.remove(); }
+
+  // Sheet booking dibuka (ulang): buang panel periksa/bentrok lama. schSeq menandai jawaban yang datang telat.
+  function resetSchSheet() {
+    ui.schSeq = (ui.schSeq || 0) + 1;
+    ui.schPick = null;
+    if (!window.isPublicView) return;
+    const form = $('form-edit-schedule');
+    if (form) { if (form.getAttribute('aria-busy')) hideChecking(form); clearSchNotice(form); }
+    const btn = $('sch-submit-btn');
+    if (btn) btn.disabled = false;
+  }
+  function schSheetLive(seq) {
+    const sh = $('modal-edit-schedule');
+    return !!ui.sheetOn && seq === ui.schSeq && !!sh && !sh.classList.contains('hide');
+  }
+
+  // Tanggal, jam, durasi atau pola berulang diubah sendiri: saran jam yang dipilih tidak berlaku lagi.
+  window.onSchFieldChange = function () {
+    updateTimeHint();
+    if (!window.isPublicView) return;
+    const form = $('form-edit-schedule');
+    if (!form) return;
+    const series = form.querySelector('.conflict-panel[data-kind="series"]');
+    if (series) series.remove();
+    if (ui.schPick && ($('edit-sch-date').value !== ui.schPick.date || $('edit-sch-time').value !== ui.schPick.time)) {
+      ui.schPick = null;
+      form.querySelectorAll('.conflict-panel .slot.active').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
+      const sb = $('sch-submit-btn');
+      if (sb && !sb.disabled) sb.textContent = schDefaultLabel();
+    }
+  };
+
+  function conflictTitle(res, label) {
+    const alts = Array.isArray(res.alternatives) ? res.alternatives : [];
+    const mins = alts[0] && alts[0].start && alts[0].end ? Math.round((new Date(alts[0].end) - new Date(alts[0].start)) / 60000) : 0;
+    switch (res.code) {
+      case 'taken': return 'Jam ' + label + ' baru saja terisi';
+      case 'past': return 'Jam ' + label + ' sudah lewat';
+      case 'closed': return 'Jam ' + label + ' di luar jam buka';
+      case 'unavailable': return 'Coach tidak bertugas jam ' + label;
+      case 'mine': return 'Kamu sudah punya sesi di jam itu';
+      case 'full': return 'Kelas jam ' + label + ' sudah penuh';
+      case 'duration': return mins ? 'Kelas jam ' + label + ' berdurasi ' + mins + ' menit' : 'Durasi harus sama dengan kelas jam ' + label;
+      default: return 'Jam ' + label + ' tidak bisa dibooking';
+    }
+  }
+
+  // Bentrok (soft): notice netral + maks 3 saran jam. Ketuk saran = pilih (tombol kirim berubah), belum booking.
+  function showConflict(form, res) {
+    res = res || {};
+    if (res.openSlots) applyOpenSlots(res.openSlots);
+    if (form.getAttribute('aria-busy')) hideChecking(form);
+    clearSchNotice(form);
+    ui.schPick = null;
+    const resched = !!window.isRescheduleMode;
+    const req = res.requested || {};
+    let reqStart = new Date(req.start || '');
+    if (isNaN(reqStart)) reqStart = wibAt($('edit-sch-date').value, $('edit-sch-time').value);
+    const rp = isNaN(reqStart) ? null : wibParts(reqStart);
+    const label = rp ? pad(rp.hour) + '.00' : 'itu';
+    const reqMins = req.start && req.end ? Math.round((new Date(req.end) - new Date(req.start)) / 60000) : (parseInt($('edit-sch-duration').value, 10) || 60);
+    const alts = (Array.isArray(res.alternatives) ? res.alternatives : [])
+      .filter(a => a && /^\d{4}-\d{2}-\d{2}$/.test(String(a.date)) && isFinite(Number(a.hour))).slice(0, 3);
+    const classMins = res.code === 'duration' && alts[0] && alts[0].start && alts[0].end ? Math.round((new Date(alts[0].end) - new Date(alts[0].start)) / 60000) : 0;
+    const sub = !alts.length ? 'Belum ada jam kosong yang cocok.' : res.code === 'duration' ? 'Ikut kelasnya dengan durasi yang sama?' : 'Pilih jam lain, durasi ' + reqMins + ' menit tetap sama.';
+    let old = '';
+    if (resched) {
+      const s = window.schedules.find(x => String(x.id) === String(window.rescheduleScheduleId));
+      if (s) old = 'Jadwal lama (' + whenLabel(s.start) + ') tetap aman.';
+    }
+    const el = document.createElement('div');
+    el.className = 'conflict-panel notice';
+    el.setAttribute('role', 'status');
+    el.dataset.kind = 'slot';
+    el.innerHTML = '<div class="row" style="gap:10px;align-items:flex-start">' + icon('calendar-x') +
+        '<div class="grow" style="min-width:0"><p class="li-title">' + h(conflictTitle(res, label)) + '</p><p class="li-sub">' + h(sub) + '</p>' + (old ? '<p class="li-sub">' + h(old) + '</p>' : '') + '</div></div>' +
+      (alts.length ? '<div class="coach-slots">' + alts.map(function (a, i) {
+        return '<button type="button" class="slot" data-i="' + i + '" aria-pressed="false">' + h(slotChipLabel(a.date, Number(a.hour))) + '</button>';
+      }).join('') + '</div>' : '') +
+      // Saat pindah jadwal, tetap di sheet ini ("Ganti jam"): membuka kisi jam akan membatalkan mode pindah dan membuat booking baru.
+      '<div class="btn-row">' + (resched
+        ? '<button type="button" class="btn btn-outline" data-act="time">' + icon('clock') + 'Ganti jam</button>'
+        : '<button type="button" class="btn btn-outline" data-act="all">' + icon('calendar-days') + 'Lihat semua jam</button>') +
+        (alts.length ? '' : '<button type="button" class="btn btn-secondary" data-act="chat">' + icon('message-circle') + 'Chat coach</button>') + '</div>';
+    form.insertBefore(el, form.firstChild);
+    el.querySelectorAll('.slot[data-i]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const a = alts[Number(b.dataset.i)];
+        if (!a) return;
+        el.querySelectorAll('.slot[data-i]').forEach(function (x) { x.classList.toggle('active', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+        const t = pad(Number(a.hour)) + ':00';
+        $('edit-sch-date').value = a.date;
+        $('edit-sch-time').value = t;
+        if (res.code === 'duration' && classMins > 0) {
+          const dur = $('edit-sch-duration');
+          if (!Array.prototype.some.call(dur.options, o => o.value === String(classMins))) {
+            const o = document.createElement('option'); o.value = String(classMins); o.textContent = classMins + ' menit'; dur.appendChild(o);
+          }
+          dur.value = String(classMins);
+        }
+        ui.schPick = { date: a.date, time: t };
+        updateTimeHint();
+        const sb = $('sch-submit-btn');
+        sb.textContent = (resched ? 'Pindah ke ' : 'Booking ') + slotChipLabel(a.date, Number(a.hour));
+        try { sb.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+      });
+    });
+    const timeBtn = el.querySelector('[data-act="time"]');
+    if (timeBtn) timeBtn.addEventListener('click', function () {
+      clearSchNotice(form);
+      const t = $('edit-sch-time');
+      try { t.focus(); t.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    });
+    const allBtn = el.querySelector('[data-act="all"]');
+    if (allBtn) allBtn.addEventListener('click', function () {
+      const d = rp ? rp.date : $('edit-sch-date').value;
+      window.closeModal();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        const p = d.split('-').map(Number);
+        ui.selectedDate = new Date(p[0], p[1] - 1, p[2]);
+        ui.calMonth = new Date(p[0], p[1] - 1, 1);
+      }
+      window.navigate('calendar');
+    });
+    const chat = el.querySelector('[data-act="chat"]');
+    if (chat) chat.addEventListener('click', function () { window.chatCoach(); });
+    const sb = $('sch-submit-btn');
+    if (sb) sb.textContent = schDefaultLabel();
+    paintIcons();
+    try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+  }
+
+  // Jadwal berulang (soft): semua tanggal yang bentrok, lalu "Lewati tanggal penuh" atau "Ganti jam".
+  function seriesConflictText(res) {
+    const list = Array.isArray(res.conflicts) ? res.conflicts : [];
+    return list.length + ' dari ' + (Number(res.total) || list.length) + ' tanggal sudah terisi';
+  }
+  function showSeriesConflict(form, res, base, rule) {
+    if (res.openSlots) applyOpenSlots(res.openSlots);
+    if (form.getAttribute('aria-busy')) hideChecking(form);
+    clearSchNotice(form);
+    const list = Array.isArray(res.conflicts) ? res.conflicts : [];
+    const dates = list.slice(0, 2).map(c => { const d = new Date(c && c.start); return isNaN(d) ? '' : shortDay(wibParts(d).date); }).filter(Boolean);
+    const title = seriesConflictText(res) + (dates.length ? ': ' + dates.join(', ') + (list.length > 2 ? ', +' + (list.length - 2) : '') : '');
+    const bookable = Math.max(0, parseInt(res.bookable, 10) || 0);
+    const el = document.createElement('div');
+    el.className = 'conflict-panel notice';
+    el.setAttribute('role', 'status');
+    el.dataset.kind = 'series';
+    el.innerHTML = '<div class="row" style="gap:10px;align-items:flex-start">' + icon('calendar-x') +
+        '<div class="grow" style="min-width:0"><p class="li-title">' + h(title) + '</p><p class="li-sub">Belum ada yang dibuat.</p></div></div>' +
+      '<div class="btn-row">' + (bookable ? '<button type="button" class="btn btn-secondary" data-act="skip">' + icon('skip-forward') + 'Lewati tanggal penuh (' + bookable + ' sesi)</button>' : '') +
+        '<button type="button" class="btn btn-outline" data-act="time">' + icon('clock') + 'Ganti jam</button></div>';
+    form.insertBefore(el, form.firstChild);
+    const skip = el.querySelector('[data-act="skip"]');
+    // Catatan bisa diubah setelah bentrok muncul: kirim isi yang sekarang.
+    if (skip) skip.addEventListener('click', function () { clientBookSeries(form, $('sch-submit-btn'), Object.assign({}, base, { notes: $('edit-sch-notes').value }), rule, true); });
+    el.querySelector('[data-act="time"]').addEventListener('click', function () {
+      clearSchNotice(form);
+      const t = $('edit-sch-time');
+      try { t.focus(); t.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    });
+    paintIcons();
+    try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+  }
+
+  // Error yang tetap dilempar server (kuota, batas hari, sibuk, koneksi) tampil di dalam sheet, bukan toast.
+  const isNetworkError = msg => !msg || /network|failed to fetch|HTTP \d|timed? ?out|connection|koneksi|server error|sorry|exceeded/i.test(msg);
+  function showFormNotice(form, err) {
+    if (form.getAttribute('aria-busy')) hideChecking(form);
+    clearSchNotice(form);
+    const msg = window.authMessage(err).replace(/^(Error|Exception|ScriptError):\s*/i, '').trim();
+    const act = (a, ic, text, cls) => '<button type="button" class="btn ' + (cls || 'btn-outline') + '" data-act="' + a + '">' + icon(ic) + h(text) + '</button>';
+    let title = '', sub = '', acts = '';
+    if (/Sisa sesi paketmu/i.test(msg)) {
+      const empty = /habis/i.test(msg);
+      title = empty ? 'Sesi paketmu habis.' : msg;
+      sub = empty ? 'Perpanjang paket dulu supaya bisa booking lagi.' : '';
+      acts = act('renew', 'repeat', 'Minta perpanjang', 'btn-secondary');
+    } else if (/Booking paling jauh/i.test(msg)) {
+      title = msg;
+    } else if (/sibuk/i.test(msg)) {
+      title = 'Server lagi ramai. Coba lagi sebentar.';
+      acts = act('retry', 'rotate-cw', 'Coba lagi');
+    } else if (window.isRescheduleMode && /tidak ditemukan/i.test(msg)) {
+      title = 'Jadwal ini sudah diubah coach.';
+      sub = 'Jadwalmu dimuat ulang.';
+      window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {});
+    } else if (/Reschedule mandiri/i.test(msg)) {
+      title = msg;
+      acts = act('chat', 'message-circle', 'Chat coach', 'btn-secondary');
+    } else if (isNetworkError(msg)) {
+      title = 'Belum tersambung. Cek internet lalu coba lagi.';
+      acts = act('retry', 'rotate-cw', 'Coba lagi');
+    } else {
+      title = msg;   // kalimat dari server, mis. "Kamu sudah terdaftar di sesi kelas ini."
+    }
+    const el = document.createElement('div');
+    el.className = 'conflict-panel notice';
+    el.setAttribute('role', 'alert');
+    el.dataset.kind = 'error';
+    el.innerHTML = '<div class="row" style="gap:10px;align-items:flex-start">' + icon('alert-circle') +
+      '<div class="grow" style="min-width:0"><p class="li-title">' + h(title) + '</p>' + (sub ? '<p class="li-sub">' + h(sub) + '</p>' : '') + '</div></div>' +
+      (acts ? '<div class="btn-row">' + acts + '</div>' : '');
+    form.insertBefore(el, form.firstChild);
+    el.querySelectorAll('[data-act]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const a = b.dataset.act;
+        if (a === 'renew') { window.closeModal(); setTimeout(window.openRenewSheet, 300); }
+        else if (a === 'chat') window.chatCoach();
+        else if (a === 'retry') { clearSchNotice(form); if (form.requestSubmit) form.requestSubmit(); else $('sch-submit-btn').click(); }
+      });
+    });
+    paintIcons();
+    try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+  }
+
+  // Satu panggilan server dengan panel "Memeriksa…". Jawaban yang datang setelah sheet ditutup atau dibuka ulang
+  // hanya jadi toast (onLate). Login yang hilang ditangani onMemberAuthLost (tokenRunner).
+  function schRequest(form, btn, busyLabel, checkText, run, onLive, onLate) {
+    ui.bookReq = (ui.bookReq || 0) + 1;
+    const my = ui.bookReq, seq = ui.schSeq;
+    clearSchNotice(form);
+    const finish = busy(btn, busyLabel);
+    showChecking(form, checkText);
+    const live = function () { return my === ui.bookReq && schSheetLive(seq); };
+    run().then(function (res) {
+      res = res || {};
+      if (res.openSlots) applyOpenSlots(res.openSlots);
+      if (res.openSlotsByCoach) applyOpenSlotsByCoach(res.openSlotsByCoach);
+      if (live()) { finish(); onLive(res); } else onLate(res);
+    }, function (err) {
+      const isLive = live();
+      if (window.isAuthError(err)) { if (isLive) { finish(); hideChecking(form); window.closeModal(); } return; }
+      if (isLive) { finish(); showFormNotice(form, err); }
+      else window.showToast('Gagal: ' + window.authMessage(err));
+    });
+  }
+
+  // Sesi milik klien dari jawaban server (jam yang sudah dibulatkan server, bukan jam ketikan).
+  function addOwnBooking(res, data, member) {
+    const row = Object.assign({ memberId: member.id, title: member.name, notes: data.notes, status: 'unread', coachId: res.coachId || '', coachName: res.coachName || '' },
+      res.schedule || { id: res.id, start: data.start, end: data.end });
+    if (!row.id) return null;
+    row.memberId = member.id;
+    const have = window.schedules.find(x => String(x.id) === String(row.id));
+    if (have) return have;
+    window.schedules.push(normalizeSchedules([row])[0]);
+    return row;
+  }
+
+  function clientBookSingle(form, btn, data, member) {
+    const label = hourLabel(data.start);
+    const doneText = res => res.duplicate ? 'Jam ini sudah jadi jadwalmu.' : 'Booking terkirim ke coach!';
+    schRequest(form, btn, 'Memeriksa…', 'Memeriksa jam ' + label + '…',
+      function () { return memberCall('clientBookSchedule', data, { soft: true }); },
+      function (res) {
+        if (res.status === 'conflict') { showConflict(form, res); window.updateUI(); return; }
+        hideChecking(form);
+        const s = addOwnBooking(res, data, member);
+        if (s) {
+          const d = new Date(s.start);
+          ui.selectedDate = new Date(d); ui.selectedDate.setHours(0, 0, 0, 0);
+          ui.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+        }
+        window.closeModal();
+        if (data.coachId) ui.bookCoach = '';   // booking berikutnya: pilih coach lagi
+        window.updateUI();
+        window.showToast(doneText(res));
+      },
+      function (res) {
+        if (res.status === 'conflict') window.showToast(conflictTitle(res, label) + '. Pilih jam lain di Jadwal.', 'calendar-x');
+        else { addOwnBooking(res, data, member); window.showToast(doneText(res)); }
+        window.updateUI();
+      });
+  }
+
+  function clientReschedule(form, btn, id, data, notes) {
+    const label = hourLabel(data.start);
+    const apply = function (res) {
+      const ns = res.newStart || data.start, ne = res.newEnd || data.end;
+      const s = window.schedules.find(x => String(x.id) === String(id));
+      if (s) { s.start = ns; s.end = ne; s.notes = notes; }
+      return 'Jadwal dipindah ke ' + whenLabel(ns) + '.';
+    };
+    schRequest(form, btn, 'Memeriksa…', 'Memeriksa jam ' + label + '…',
+      function () { return memberCall('clientRescheduleSchedule', id, data.start, data.end, { soft: true }); },
+      function (res) {
+        if (res.status === 'conflict') { showConflict(form, res); window.updateUI(); return; }
+        hideChecking(form);
+        const msg = apply(res);
+        window.closeModal();
+        window.updateUI();
+        window.showToast(msg);
+      },
+      function (res) {
+        window.showToast(res.status === 'conflict' ? conflictTitle(res, label) + '. Pilih jam lain di Jadwal.' : apply(res), res.status === 'conflict' ? 'calendar-x' : null);
+        window.updateUI();
+      });
+  }
+
+  function addSeriesItems(res, base) {
+    const me = window.publicLoggedMember || {};
+    if (!Array.isArray(res.items)) { window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {}); return; }
+    res.items.forEach(function (it) {
+      if (!it || !it.id || window.schedules.some(x => String(x.id) === String(it.id))) return;
+      window.schedules.push(normalizeSchedules([Object.assign({ memberId: me.id, title: me.name, notes: base.notes, status: 'unread', recurringGroupId: res.groupId || '' }, it)])[0]);
+    });
+  }
+  function seriesDoneText(res) {
+    if (res.duplicate) return 'Jadwal ini sudah ada di Jadwalku.';   // coba lagi setelah jawaban hilang: tidak ada yang dibuat dua kali
+    const made = res.count != null ? Number(res.count) : (res.items || []).length;
+    return res.skipped ? made + ' sesi dibuat, ' + res.skipped + ' tanggal dilewati.' : made + ' sesi berulang dibuat.';
+  }
+  function clientBookSeries(form, btn, base, rule, skipTaken) {
+    schRequest(form, btn, skipTaken ? 'Membuat jadwal…' : 'Memeriksa…', skipTaken ? 'Membuat jadwal…' : 'Memeriksa ' + rule.occurrences + ' tanggal…',
+      function () { return memberCall('clientBookRecurring', base, rule, skipTaken ? { soft: true, skipTaken: true } : { soft: true }); },
+      function (res) {
+        if (res.status === 'conflict') { showSeriesConflict(form, res, base, rule); window.updateUI(); return; }
+        hideChecking(form);
+        addSeriesItems(res, base);
+        window.closeModal();
+        window.updateUI();
+        window.showToast(seriesDoneText(res));
+      },
+      function (res) {
+        if (res.status === 'conflict') window.showToast(seriesConflictText(res) + '. Pilih jam lain di Jadwal.', 'calendar-x');
+        else { addSeriesItems(res, base); window.showToast(seriesDoneText(res)); }
+        window.updateUI();
+      });
+  }
+
   window.submitScheduleForm = function (e) {
     e.preventDefault();
-    const btn = e.target.querySelector('button[type="submit"]');
+    const form = e.target;
+    const btn = form.querySelector('button[type="submit"]');
     const dateVal = $('edit-sch-date').value, timeVal = $('edit-sch-time').value;
     if (!dateVal || !timeVal) { window.showToast('Isi tanggal dan jam dulu.'); return; }
     const dur = parseInt($('edit-sch-duration').value, 10);
@@ -2829,19 +3244,7 @@
     const data = { start: start.toISOString(), end: end.toISOString(), notes: notes, duration: dur };
 
     if (window.isRescheduleMode) {
-      const id = window.rescheduleScheduleId;
-      const form = e.target;
-      const finish = busy(btn, 'Memeriksa…');
-      showChecking(form, 'Memeriksa ketersediaan jam baru…');
-      const done = function () { finish(); hideChecking(form); };
-      memberCall('clientRescheduleSchedule', id, data.start, data.end).then(function () {
-        done();
-        const s = window.schedules.find(x => String(x.id) === String(id));
-        if (s) { s.start = data.start; s.end = data.end; s.notes = notes; }
-        window.closeModal();
-        window.updateUI();
-        window.showToast('Jadwal dipindah ke ' + fmtShort(start) + ' ' + fmtTime(start) + '.');
-      }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+      clientReschedule(form, btn, window.rescheduleScheduleId, data, notes);
       return;
     }
 
@@ -2880,10 +3283,11 @@
       if (!weekdays.length) { window.showToast('Pilih minimal 1 hari untuk jadwal berulang.'); return; }
       if (!occ || occ < 2) { window.showToast('Jadwal berulang minimal 2 sesi.'); return; }
       const base = { memberId: member.id, memberName: member.name, phone: member.phone, notes: notes, startDate: dateVal, time: timeVal, duration: dur };
+      if (isClient) { clientBookSeries(form, btn, base, { weekdays: weekdays, occurrences: occ }, false); return; }
       const done = busy(btn, 'Membuat jadwal…');
-      (isClient ? memberCall('clientBookRecurring', base, { weekdays: weekdays, occurrences: occ }) : adminCall('addRecurringSchedule', base, { weekdays: weekdays, occurrences: occ }))
+      adminCall('addRecurringSchedule', base, { weekdays: weekdays, occurrences: occ })
         .then(function (res) {
-          return (isClient ? window.refreshPortalSchedules() : adminCall('getSchedules').then(function (all) { window.schedules = normalizeSchedules(all); })).then(function () {
+          return adminCall('getSchedules').then(function (all) { window.schedules = normalizeSchedules(all); }).then(function () {
             done();
             window.closeModal();
             window.updateUI();
@@ -2893,31 +3297,14 @@
       return;
     }
 
-    const form = e.target;
-    const finish = busy(btn, isClient ? 'Memeriksa…' : 'Menyimpan…');
-    if (isClient) showChecking(form, 'Memeriksa ketersediaan jam…');
-    const done = function () { finish(); if (isClient) hideChecking(form); };
-    const fresh = function () { return window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {}); };
-    // Klien: cek jam kosong terbaru dulu (bukan data lama di layar), lalu server cek lagi saat menyimpan.
-    const preflight = !isClient ? Promise.resolve() : publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14, fresh: true, coachId: data.coachId || '' }).then(function (rows) {
-      if (data.coachId) applyOpenSlotsForCoach(data.coachId, rows); else applyOpenSlots(rows);
-      const first = Math.floor(start.getTime() / 3600000) * 3600000;
-      const endMs = first + (end.getTime() - start.getTime());
-      for (let t = first; t < endMs; t += 3600000) {
-        const wp = wibParts(new Date(t));
-        const r = (rows || []).find(function (x) { return x.date === wp.date; });
-        const hr = r && r.hours.find(function (x) { return x.hour === wp.hour; });
-        if (hr && hr.free <= 0 && !hr.past) throw new Error('Jam ' + pad(wp.hour) + '.00 baru saja diambil orang lain. Pilih jam lain.');
-      }
-    }, function () {});   // gagal cek awal: biarkan server yang memutuskan
-    preflight.then(function () {
-      if (isClient) setChecking(form, 'Jam tersedia, menyimpan booking…');
-      return isClient ? memberCall('clientBookSchedule', data) : adminCall('addSchedule', data);
-    }).then(function (res) {
+    if (isClient) { clientBookSingle(form, btn, data, member); return; }
+
+    const done = busy(btn, 'Menyimpan…');
+    adminCall('addSchedule', data).then(function (res) {
       done();
       data.id = res.id;
       data.title = member.name;
-      data.status = isClient ? 'unread' : 'read';
+      data.status = 'read';
       data.coachId = res.coachId || '';
       data.coachName = res.coachName || '';
       window.schedules.push(data);
@@ -2925,13 +3312,9 @@
       ui.calMonth = new Date(start.getFullYear(), start.getMonth(), 1);
       window.closeModal();
       window.updateUI();
-      if (isClient) ui.bookCoach = '';   // booking berikutnya: pilih coach lagi
-      window.showToast(isClient ? 'Booking terkirim ke coach!' : 'Booking tersimpan.');
-      if (isClient) fresh();
+      window.showToast('Booking tersimpan.');
     }).catch(function (err) {
       done(); window.showToast('Gagal booking: ' + window.authMessage(err));
-      // Jam sudah diambil orang lain: muat ulang kisi supaya jam itu tidak bisa diklik lagi.
-      if (isClient) fresh();
     });
   };
 

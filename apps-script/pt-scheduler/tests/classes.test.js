@@ -92,8 +92,12 @@ test('a full class session is refused and members cannot book twice', () => {
   const { env } = classEnv(2);
   const a = env.memberToken(KEY_A), b = env.memberToken(KEY_B);
   const { start, end } = wibSlot(5);
-  env.call('clientBookSchedule', a, { start, end });
-  assert.throws(() => env.call('clientBookSchedule', a, { start, end }), /sudah terdaftar/);
+  const first = env.call('clientBookSchedule', a, { start, end });
+  const again = env.call('clientBookSchedule', a, { start, end });   // the same request again (retry, double tap)
+  assert.equal(again.duplicate, true);
+  assert.equal(again.id, first.id);
+  const longer = new Date(new Date(end).getTime() + 30 * 60000).toISOString();
+  assert.throws(() => env.call('clientBookSchedule', a, { start, end: longer }), /sudah terdaftar/);
   env.call('clientBookSchedule', b, { start, end });
   // a third member (PT-C has no link key: give one)
   const cRow = env.sheet('MemberData').rows.find(r => r[0] === 'PT-C');
@@ -128,4 +132,43 @@ test('regular package members book exactly as before', () => {
   const env = seededEnv();
   const res = env.call('clientBookSchedule', env.memberToken(KEY_A), wibSlot(5));
   assert.equal(env.sheet('Schedules').rows.find(r => r[0] === res.id)[12] || '', '');
+});
+
+test('soft booking: a full class session is "full" with free-hour alternatives; without soft it still throws', () => {
+  const { env } = classEnv(2);
+  const a = env.memberToken(KEY_A), b = env.memberToken(KEY_B);
+  const { start, end } = wibSlot(5);
+  env.call('clientBookSchedule', a, { start, end });
+  env.call('clientBookSchedule', b, { start, end });
+  env.sheet('MemberData').rows.find(r => r[0] === 'PT-C')[13] = 'c'.repeat(32);
+  const c = env.memberToken('c'.repeat(32));
+  const rows = env.sheet('Schedules').rows.length;
+  const res = env.call('clientBookSchedule', c, { start, end }, { soft: true });
+  assert.equal(res.status, 'conflict');
+  assert.equal(res.code, 'full');
+  assert.ok(res.alternatives.length >= 1 && res.alternatives.length <= 3);
+  for (const x of res.alternatives) {
+    assert.notEqual(x.start, start);
+    const day = res.openSlots.find(d => d.date === x.date);
+    assert.ok(day.hours.find(h => h.hour === x.hour).free > 0, 'a free hour');
+  }
+  assert.ok(!JSON.stringify(res).includes('Budi') && !JSON.stringify(res).includes('PT-A'), 'no other member');
+  assert.equal(env.sheet('Schedules').rows.length, rows);
+  assert.throws(() => env.call('clientBookSchedule', c, { start, end }), /Sesi kelas ini sudah penuh\. Pilih jam lain\./);
+});
+
+test('soft booking: another length than the class session is "duration", offering exactly that session', () => {
+  const { env } = classEnv(3);
+  const a = env.memberToken(KEY_A), b = env.memberToken(KEY_B);
+  const { start, end } = wibSlot(5);
+  env.call('clientBookSchedule', a, { start, end });
+  const longer = new Date(new Date(end).getTime() + 30 * 60000).toISOString();
+  const res = env.call('clientBookSchedule', b, { start, end: longer }, { soft: true });
+  assert.equal(res.status, 'conflict');
+  assert.equal(res.code, 'duration');
+  assert.deepEqual(res.alternatives, [{ start, end, date: new Date(start).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }), hour: 10, group: 'day' }]);
+  assert.throws(() => env.call('clientBookSchedule', b, { start, end: longer }), /Durasi harus sama dengan sesi kelas yang sudah ada\./);
+  const ok = env.call('clientBookSchedule', b, { start: res.alternatives[0].start, end: res.alternatives[0].end }, { soft: true });
+  assert.equal(ok.status, 'success');
+  assert.equal(ok.schedule.classId, env.sheet('Schedules').rows.find(r => r[0] === ok.id)[12]);
 });

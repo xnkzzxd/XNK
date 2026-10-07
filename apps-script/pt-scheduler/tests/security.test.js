@@ -252,10 +252,9 @@ test('clientBookRecurring books for the token owner as unread', () => {
   const nowH = Number(new Date().toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false }));
   const hh = Math.abs(nowH - 7) >= 2 ? '07' : '11';
   const wibDay = new Date(Date.now() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
-  const t = new Date(wibDay + 'T' + hh + ':00:00+07:00'), z = n => String(n).padStart(2, '0');
-  const startDate = t.getFullYear() + '-' + z(t.getMonth() + 1) + '-' + z(t.getDate());
+  const startDate = wibDay;   // the series date and time are WIB, as the portal sends them
   const res = env.call('clientBookRecurring', env.memberToken(KEY_B),
-    { memberId: 'PT-A', startDate, time: z(t.getHours()) + ':' + z(t.getMinutes()), duration: 60, notes: 'x' },
+    { memberId: 'PT-A', startDate, time: hh + ':00', duration: 60, notes: 'x' },
     { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 3 });
   assert.equal(res.count, 3);
   const rows = env.sheet('Schedules').rows.filter(r => r[11] === res.groupId);
