@@ -1271,6 +1271,50 @@ async function contrastReport(page) {
     check((await overflowX(page)) <= 0, 'portal: the Pencapaian card has no sideways scroll');
     check(!(await page.textContent('#pub-insights-card, body').then(t => t.includes('Selesaikan 24 sesi')).catch(() => false)), 'portal: the old separate badge tiles are gone');
 
+    // ── Penilaian cepat dan evaluasi paket (Fase I3) ────────────────────────────
+    // Data uji: SCH-H1 selesai 3 hari lalu (paling baru), jadi portal menanyakan penilaiannya.
+    const fbRefresh = async () => { await page.evaluate(() => window.refreshPortalSchedules().then(() => window.updateUI())); await page.waitForTimeout(700); };
+    await fbRefresh();
+    check(await visible(page, '#pub-feedback-card') && (await page.textContent('#pub-feedback-card')).includes('Bagaimana sesi tadi?'), 'feedback: a recently finished session asks "Bagaimana sesi tadi?"');
+    const starBox = await page.locator('#pub-feedback-card .star').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width < 43.5 || r.height < 43.5).length);
+    check(starBox === 0 && (await page.locator('#pub-feedback-card .star').count()) === 5, 'feedback: five stars, each at least 44 px');
+    check((await overflowX(page)) <= 0, 'feedback: the card has no sideways scroll');
+    await page.click('#pub-feedback-card .star[data-v="5"]');
+    await page.waitForTimeout(700);
+    const rrow = env.sheet('SessionRatings').rows.find(r => r[1] === 'SCH-H1');
+    check(!!rrow && rrow[2] === 'PT-A' && rrow[4] === 5, 'feedback: one tap on the fifth star saves a 5-star rating');
+    check(await visible(page, '#fb-comment') && (await page.textContent('#pub-feedback-card')).includes('Terima kasih'), 'feedback: after the tap the card thanks and offers an optional sentence');
+    await page.fill('#fb-comment', 'Latihannya seru');
+    await page.waitForTimeout(3300);   // the server keeps a 3 s gap between two saves of the same client
+    await page.click('#fb-send');
+    await page.waitForTimeout(900);
+    check(env.sheet('SessionRatings').rows.find(r => r[1] === 'SCH-H1')[5] === 'Latihannya seru' && !(await visible(page, '#pub-feedback-card')), 'feedback: the sentence is saved and the card goes away');
+    // Paket habis: kartu evaluasi paket membuka lembar dengan ringkasan, bintang per aspek, dan Perpanjang.
+    const usedBefore = env.memberRow('PT-A')[9];
+    env.memberRow('PT-A')[9] = env.memberRow('PT-A')[8];
+    await fbRefresh();
+    check(await visible(page, '#pub-feedback-card') && (await page.textContent('#pub-feedback-card')).includes('Evaluasi paket'), 'evaluation: a finished package shows the "Evaluasi paket" card');
+    await page.click('#pub-feedback-card .btn-primary');
+    await page.waitForTimeout(900);
+    check(await visible(page, '#modal-pkg-eval') && (await page.locator('#pe-body .stars').count()) === 5, 'evaluation: the sheet shows five rated aspects');
+    await page.click('#pe-send');
+    check((await page.textContent('#pe-err')).includes('Beri bintang untuk motivasi'), 'evaluation: sending without stars names what is missing');
+    for (const key of ['motivasi', 'keselamatan', 'kepuasan', 'komunikasi', 'profesionalisme']) await page.click('#pe-st-' + key + ' .star[data-v="4"]');
+    await page.fill('#pe-comment', 'Terima kasih coach');
+    check((await overflowX(page)) <= 0, 'evaluation: the sheet has no sideways scroll on the phone');
+    const peBtn = await page.locator('#pe-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5).length);
+    check(peBtn === 0, 'evaluation: footer buttons are at least 44 px');
+    await page.click('#pe-send');
+    await page.waitForTimeout(900);
+    const erow = env.sheet('PackageEvaluations').rows[1];
+    check(!!erow && erow[1] === 'PT-A' && erow[4] === 4 && erow[9] === 'Terima kasih coach', 'evaluation: the answers are saved for the right client');
+    check(!(await page.textContent('#pub-feedback-slot')).includes('Evaluasi paket'), 'evaluation: the package card is gone once the package is evaluated');
+    // Saklar: dimatikan, kartu hilang untuk sisa pengecekan.
+    env.memberRow('PT-A')[9] = usedBefore;
+    env.props.FEEDBACK_ENABLED = 'false';
+    await fbRefresh();
+    check(!(await visible(page, '#pub-feedback-card')), 'feedback: the owner switch hides the cards');
+
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.waitForTimeout(500);

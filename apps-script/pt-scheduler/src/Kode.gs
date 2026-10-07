@@ -434,6 +434,7 @@ function getAppSettings(token) {
     telegramChatIds: props.getProperty('TELEGRAM_CHAT_IDS') || '',
     notifEmail: props.getProperty('NOTIF_EMAIL') || '',
     clientGuideEnabled: _guideEnabled_(),
+    feedbackEnabled: _feedbackEnabled_(),
     businessHours: _businessHours_()
   };
   settings.defaults = { businessHours: DEFAULT_BUSINESS_HOURS };
@@ -481,6 +482,7 @@ function updateAppSettings(token, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'telegramChatIds')) setOrDelete('TELEGRAM_CHAT_IDS', String(payload.telegramChatIds || '').trim());
   if (Object.prototype.hasOwnProperty.call(payload, 'notifEmail')) setOrDelete('NOTIF_EMAIL', String(payload.notifEmail || '').trim());
   if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
+  if (Object.prototype.hasOwnProperty.call(payload, 'feedbackEnabled')) setOrDelete('FEEDBACK_ENABLED', payload.feedbackEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'businessHours')) {
     setOrDelete('BUSINESS_HOURS_JSON', payload.businessHours == null ? '' : JSON.stringify(payload.businessHours));
   }
@@ -2080,10 +2082,14 @@ function getPortalBootstrap(memberToken) {
   }) : [];
   const now = new Date();
   const horizon = _portalHorizonDays_();
+  const feedbackOn = _feedbackEnabled_();
   return {
     profile: found ? _memberPublicProfile_(found.row) : null,
     authLost: authLost.indexOf(AUTH_ERROR_PREFIX) !== -1 ? authLost : '',
     schedules: mine,
+    feedbackEnabled: feedbackOn,
+    pendingRating: found && feedbackOn ? _pendingRating_(memberId, all) : null,
+    packageEval: { eligible: !!(found && feedbackOn && _packageEvalEligible_(found.row, all)) },
     openSlots: _openSlotsCached_({ days: horizon }, now, all, false, ver),
     openSlotsByCoach: _openSlotsByCoach_(all, ver, horizon, now, false),
     horizonDays: horizon,
@@ -3000,7 +3006,8 @@ function _completeSession_(scheduleId) {
     try {
       kirimNotifTelegram_("✅ <b>SESI SELESAI</b>\n\n" +
         "👤 <b>Klien:</b> " + escapeHtmlTelegram(memberName) + "\n" +
-        "📦 <b>Sesi Terpakai:</b> " + usedAfter + "/" + totalSesi);
+        "📦 <b>Sesi Terpakai:</b> " + usedAfter + "/" + totalSesi +
+        (totalSesi > 0 && usedAfter >= totalSesi ? "\n\n🏁 <b>Paket selesai.</b> Klien bisa mengisi evaluasi paket di portal." : ""));
     } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
   }
 
@@ -3009,8 +3016,13 @@ function _completeSession_(scheduleId) {
   const remaining = Math.max(0, totalSesi - usedAfter);
   const reminderMessage = "Halo " + memberName + ", sesi kamu tersisa " + remaining + " dari " + totalSesi + " ya.";
 
+  const packageDone = !alreadyDone && totalSesi > 0 && usedAfter >= totalSesi;
+  const evalText = packageDone ? _rmdFill_(_rmdTemplate_('evaluasi-paket'), { nama: String(memberName || '').trim().split(/\s+/)[0], link: RMD_PORTAL_URL }) : '';
   return {
     status: 'success',
+    packageDone: packageDone,
+    evalText: evalText,
+    evalWaLink: packageDone ? _waLink_(memData[memRow][2], evalText) : null,
     memberId: memberId,
     alreadyCompleted: alreadyDone,
     memberName: memberName,
@@ -5895,7 +5907,7 @@ function _coachHub_(now) {
   });
   return {
     selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
-    today: today, stats: stats, targets: targets, care: _careList_(now),
+    today: today, stats: stats, targets: targets, care: _careList_(now), feedback: _feedbackSummary_(now.getTime()),
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }
@@ -6035,7 +6047,8 @@ function getClientCare(token, memberId) {
       tanggal: String(hr[2]), answers: [3, 4, 5, 6, 7, 8, 9].map(function(i) { return String(hr[i]); }),
       injuries: hr[10], medication: hr[11], other: hr[12], reviewedAt: String(hr[14] || ''), reviewNote: String(hr[15] || '')
     } : null,
-    tests: _fitnessSummary_(byTest), testHistory: byTest, testList: FITNESS_TESTS, questions: HEALTH_QUESTIONS
+    tests: _fitnessSummary_(byTest), testHistory: byTest, testList: FITNESS_TESTS, questions: HEALTH_QUESTIONS,
+    feedback: _feedbackFor_(id)
   };
 }
 
@@ -6181,6 +6194,182 @@ function markHealthReviewed(token, memberId, note) {
   hs.sheet.getRange(hs.rowNum, 15).setValue(new Date().toISOString());
   hs.sheet.getRange(hs.rowNum, 16).setValue(_careStr_(note, 300, 'Catatan'));
   return { status: 'success' };
+}
+
+// ── Penilaian cepat dan evaluasi paket (Fase I3) ─────────────────────────────
+// Klien menilai sesi yang baru selesai (1-5 bintang + satu kalimat) dan mengisi evaluasi saat sisa sesi paket 0.
+// Komentar hanya terlihat di panel admin; Telegram hanya memuat nama depan dan angka.
+
+const RATING_HEADERS = ["ID", "Schedule ID", "Member ID", "Tanggal", "Bintang", "Komentar", "Izin Testimoni", "Dibuat Pada"];
+const EVAL_ASPECTS = [['motivasi', 'Motivasi'], ['keselamatan', 'Keselamatan'], ['kepuasan', 'Kepuasan'], ['komunikasi', 'Komunikasi'], ['profesionalisme', 'Profesionalisme']];
+const EVAL_HEADERS = ["ID", "Member ID", "Paket", "Tanggal", "Motivasi", "Keselamatan", "Kepuasan", "Komunikasi", "Profesionalisme", "Komentar", "Izin Testimoni", "Dibuat Pada"];
+const RATING_WINDOW_DAYS = 7;       // sesi selesai yang masih ditawari penilaian
+const FEEDBACK_THROTTLE_SECONDS = 3;
+
+/** Saklar Pengaturan → Tampilan. Bawaan HIDUP (pengecualian sadar aturan 5, seperti panduan klien). */
+function _feedbackEnabled_() {
+  return PropertiesService.getScriptProperties().getProperty('FEEDBACK_ENABLED') !== 'false';
+}
+
+function _ratingSheet_() { const s = getOrCreateSheet_('SessionRatings', RATING_HEADERS); s.getRange('D:D').setNumberFormat('@'); return s; }
+function _evalSheet_() { const s = getOrCreateSheet_('PackageEvaluations', EVAL_HEADERS); s.getRange('D:D').setNumberFormat('@'); return s; }
+
+/** Murni: baris penilaian → objek. */
+function _ratingFromRow_(r) {
+  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: String(r[3]), bintang: Number(r[4]) || 0, komentar: String(r[5] || ''), izin: String(r[6] || '') === 'ya', dibuat: String(r[7] || '') };
+}
+function _evalFromRow_(r) {
+  const o = { id: String(r[0]), memberId: String(r[1]).trim(), paket: String(r[2] || ''), tanggal: String(r[3]), komentar: String(r[9] || ''), izin: String(r[10] || '') === 'ya', dibuat: String(r[11] || '') };
+  EVAL_ASPECTS.forEach(function(a, i) { o[a[0]] = Number(r[4 + i]) || 0; });
+  return o;
+}
+
+function _readSheetRows_(name, fn, memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const out = [];
+  const id = memberId == null ? null : String(memberId).trim();
+  sheet.getDataRange().getValues().slice(1).forEach(function(r) { if (r[0] && (id === null || String(r[2 - (name === 'PackageEvaluations' ? 1 : 0)]).trim() === id)) out.push(fn(r)); });
+  return out;
+}
+function _ratingsFor_(memberId) { return _readSheetRows_('SessionRatings', _ratingFromRow_, memberId); }
+function _evalsFor_(memberId) { return _readSheetRows_('PackageEvaluations', _evalFromRow_, memberId); }
+
+/** Murni: sesi selesai terbaru (<= 7 hari) yang belum dinilai, atau null. all = isi Schedules. */
+function _pendingRatingFrom_(memberId, schedules, rated, nowMs) {
+  const id = String(memberId).trim();
+  let best = null;
+  (schedules || []).forEach(function(s) {
+    if (String(s.memberId).trim() !== id || String(s.status || '').toLowerCase() !== 'completed' || rated[String(s.id)]) return;
+    const doneAt = new Date(s.completedAt || s.end || s.start).getTime();
+    if (isNaN(doneAt) || nowMs - doneAt > RATING_WINDOW_DAYS * 86400000 || doneAt > nowMs + 3600000) return;
+    if (!best || doneAt > best.doneAt) best = { scheduleId: String(s.id), start: s.start, end: s.end, doneAt: doneAt };
+  });
+  return best ? { scheduleId: best.scheduleId, start: best.start, end: best.end } : null;
+}
+function _pendingRating_(memberId, all) {
+  const rated = {};
+  _ratingsFor_(memberId).forEach(function(r) { rated[r.scheduleId] = true; });
+  return _pendingRatingFrom_(memberId, all || _getSchedulesAll_(), rated, Date.now());
+}
+
+/** Klien: nilai satu sesi miliknya yang sudah selesai. Satu penilaian per sesi (yang baru menimpa). */
+function rateSession(memberToken, scheduleId, stars, comment, consent) {
+  const row = requireMember_(memberToken).row;
+  if (!_feedbackEnabled_()) throw new Error('Penilaian sedang dimatikan.');
+  const memberId = String(row[0]).trim();
+  const n = Number(stars);
+  if (!isFinite(n) || Math.floor(n) !== n || n < 1 || n > 5) throw new Error('Pilih 1 sampai 5 bintang.');
+  const text = _careStr_(comment, 300, 'Komentar');
+  const sched = _getSchedulesAll_().find(function(x) { return String(x.id) === String(scheduleId == null ? '' : scheduleId); });
+  // Jadwal milik klien lain dijawab sama dengan ID yang tidak ada.
+  if (!sched || String(sched.memberId).trim() !== memberId) throw new Error('Sesi tidak ditemukan.');
+  if (String(sched.status || '').toLowerCase() !== 'completed') throw new Error('Sesi ini belum selesai.');
+  if (!_throttle_('rate_' + memberId, FEEDBACK_THROTTLE_SECONDS)) throw new Error('Penilaian baru saja dikirim. Tunggu sebentar.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    const sheet = _ratingSheet_();
+    const rows = sheet.getDataRange().getValues();
+    const now = new Date().toISOString();
+    const vals = [n, text, consent ? 'ya' : ''];
+    let found = 0;
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][1]) === String(sched.id)) { found = i + 1; break; }
+    if (found) { sheet.getRange(found, 5, 1, 3).setValues([vals]); sheet.getRange(found, 8).setValue(now); }
+    else sheet.appendRow(['RTG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), memberId, Utilities.formatDate(new Date(sched.start), REMINDER_TZ, 'yyyy-MM-dd'), n, text, consent ? 'ya' : '', now]);
+  } finally {
+    lock.releaseLock();
+  }
+  // Hanya nama depan dan bintang; komentar tidak pernah ke Telegram.
+  if (n <= 3) {
+    try { kirimNotifTelegram_('⚠️ <b>PENILAIAN SESI RENDAH</b>\n\n👤 ' + escapeHtmlTelegram(String(row[1] || '').trim().split(/\s+/)[0]) + ' memberi ' + n + ' dari 5 bintang. Lihat di halaman klien.'); } catch (e) { Logger.log('Notif penilaian gagal: ' + e); }
+  }
+  return { status: 'success' };
+}
+
+/** Murni: apakah sisa sesi sudah 0 dan evaluasi belum diisi sejak sesi terakhir selesai? */
+function _packageEvalEligibleFrom_(memberRow, schedules, evals) {
+  const total = parseInt(memberRow[8], 10) || 0, used = parseInt(memberRow[9], 10) || 0;
+  if (total <= 0 || used < total) return false;
+  const id = String(memberRow[0]).trim();
+  let lastDone = 0;
+  (schedules || []).forEach(function(s) {
+    if (String(s.memberId).trim() !== id || String(s.status || '').toLowerCase() !== 'completed') return;
+    const t = new Date(s.completedAt || s.end || s.start).getTime();
+    if (!isNaN(t) && t > lastDone) lastDone = t;
+  });
+  const lastEval = (evals || []).reduce(function(m, e) { const t = new Date(e.dibuat).getTime(); return isNaN(t) ? m : Math.max(m, t); }, 0);
+  return !lastEval || lastEval < lastDone;
+}
+function _packageEvalEligible_(memberRow, all) {
+  const total = parseInt(memberRow[8], 10) || 0, used = parseInt(memberRow[9], 10) || 0;
+  if (total <= 0 || used < total) return false;   // cukup murah untuk bootstrap: sheet hanya dibaca bila paket habis
+  return _packageEvalEligibleFrom_(memberRow, all || _getSchedulesAll_(), _evalsFor_(String(memberRow[0]).trim()));
+}
+
+/** Klien: ringkasan evaluasi paket (hanya bila sisa sesi 0 dan belum dievaluasi). */
+function getMyPackageEval(memberToken) {
+  const row = requireMember_(memberToken).row;
+  if (!_feedbackEnabled_() || !_packageEvalEligible_(row)) return { eligible: false };
+  const id = String(row[0]).trim();
+  const p = _progressPayload_(id), info = _streakInfo_(id);
+  const measures = PROGRESS_MEASURES.map(function(m) {
+    const s = p.summary[m.key];
+    return s && s.count > 1 ? { key: m.key, label: m.short, unit: m.unit, first: s.first.nilai, last: s.last.nilai, change: s.change } : null;
+  }).filter(Boolean);
+  const tests = _fitnessSummary_(_fitnessByMember_(id)).filter(function(t) { return t.count > 1; }).map(function(t) {
+    return { label: t.label, unit: t.unit.split(' ')[0], first: t.first.nilai, latest: t.latest.nilai, change: t.change, improved: t.improved, better: t.better };
+  });
+  return {
+    eligible: true, packageName: String(row[7] || ''), total: parseInt(row[8], 10) || 0,
+    sessions: info.completed, streak: info.streak, bestStreak: info.bestStreak, measures: measures, tests: tests,
+    aspects: EVAL_ASPECTS.map(function(a) { return { key: a[0], label: a[1] }; })
+  };
+}
+
+/** Klien: kirim evaluasi paket. data = { motivasi, keselamatan, kepuasan, komunikasi, profesionalisme (1-5), komentar, consent }. */
+function submitMyPackageEval(memberToken, data) {
+  const row = requireMember_(memberToken).row;
+  if (!_feedbackEnabled_()) throw new Error('Evaluasi sedang dimatikan.');
+  data = data || {};
+  const vals = EVAL_ASPECTS.map(function(a) {
+    const n = Number(data[a[0]]);
+    if (!isFinite(n) || Math.floor(n) !== n || n < 1 || n > 5) throw new Error('Beri 1 sampai 5 bintang untuk ' + a[1].toLowerCase() + '.');
+    return n;
+  });
+  const komentar = _careStr_(data.komentar, 500, 'Komentar');
+  const memberId = String(row[0]).trim();
+  if (!_packageEvalEligible_(row)) throw new Error('Evaluasi paket belum tersedia atau sudah diisi.');   // dicek lagi di dalam lock
+  if (!_throttle_('eval_' + memberId, FEEDBACK_THROTTLE_SECONDS)) throw new Error('Evaluasi baru saja dikirim. Tunggu sebentar.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  try {
+    if (!_packageEvalEligible_(row)) throw new Error('Evaluasi paket belum tersedia atau sudah diisi.');
+    const now = new Date().toISOString();
+    _evalSheet_().appendRow(['EVL-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, String(row[7] || ''), _todayWib_()].concat(vals, [komentar, data.consent ? 'ya' : '', now]));
+  } finally {
+    lock.releaseLock();
+  }
+  const avg = Math.round(vals.reduce(function(s, v) { return s + v; }, 0) / vals.length * 10) / 10;
+  try { kirimNotifTelegram_('⭐ <b>EVALUASI PAKET</b>\n\n👤 ' + escapeHtmlTelegram(String(row[1] || '').trim().split(/\s+/)[0]) + ' · rata-rata ' + String(avg).replace('.', ',') + ' dari 5. Lihat di halaman klien.'); } catch (e) { Logger.log('Notif evaluasi gagal: ' + e); }
+  return { status: 'success' };
+}
+
+/** Admin: penilaian dan evaluasi satu klien (komentar ikut), terbaru dulu. */
+function _feedbackFor_(memberId) {
+  const rs = _ratingsFor_(memberId).sort(function(a, b) { return a.dibuat < b.dibuat ? 1 : -1; });
+  const es = _evalsFor_(memberId).sort(function(a, b) { return a.dibuat < b.dibuat ? 1 : -1; });
+  return { ratings: rs.slice(0, 20), evals: es.slice(0, 5) };
+}
+
+/** Admin: ringkasan 30 hari untuk Beranda Coach: rata-rata, jumlah, dan 5 terbaru (dengan nama klien). */
+function _feedbackSummary_(nowMs) {
+  const names = {};
+  _getMembersAll_().forEach(function(m) { names[String(m.id).trim()] = m.name; });
+  const all = _readSheetRows_('SessionRatings', _ratingFromRow_, null).filter(function(r) { const t = new Date(r.dibuat).getTime(); return !isNaN(t) && nowMs - t <= 30 * 86400000; })
+    .sort(function(a, b) { return a.dibuat < b.dibuat ? 1 : -1; });
+  const avg = all.length ? Math.round(all.reduce(function(s, r) { return s + r.bintang; }, 0) / all.length * 10) / 10 : null;
+  return { count: all.length, avg: avg, recent: all.slice(0, 5).map(function(r) { return { name: names[r.memberId] || r.memberId, tanggal: r.tanggal, bintang: r.bintang, komentar: r.komentar }; }) };
 }
 
 // ── Catatan sesi (Fase I2) ───────────────────────────────────────────────────

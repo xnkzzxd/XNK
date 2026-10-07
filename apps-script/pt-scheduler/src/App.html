@@ -664,7 +664,10 @@
         '<p class="hint">Tersimpan di perangkat ini saja.</p></div>' +
         '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Panduan klien baru</p><p class="li-sub">Layar gelap yang menunjukkan tombol yang perlu diklik di portal, untuk klien yang baru daftar.</p></div>' +
         '<label class="toggle"><input type="checkbox" id="set-client-guide" onchange="window.setClientGuide(this)" aria-label="Panduan klien baru"' + (setState.data.clientGuideEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
-        '<p class="hint">Langsung tersimpan. Klien lama dan yang perpanjang tidak melihat panduan.</p></div>';
+        '<p class="hint">Langsung tersimpan. Klien lama dan yang perpanjang tidak melihat panduan.</p></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Penilaian sesi &amp; evaluasi paket</p><p class="li-sub">Klien menilai sesi yang baru selesai (bintang) dan mengisi evaluasi saat sisa sesi 0.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-feedback" onchange="window.setFeedback(this)" aria-label="Penilaian sesi dan evaluasi paket"' + (setState.data.feedbackEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Komentar hanya terlihat olehmu di halaman klien.</p></div>';
     },
     notifikasi: function () {
       const d = setState.data;
@@ -1859,6 +1862,7 @@
     if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
     if (b.openSlots) applyOpenSlots(b.openSlots);
     applyOpenSlotsByCoach(b.openSlotsByCoach);
+    window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
   }
   window.refreshPortalSchedules = function () {
     return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { applyPortalBootstrap(b || {}); });
@@ -2664,7 +2668,7 @@
         window.updateUI();
         window.showToast('Sesi selesai. Kuota dipotong.');
         // Catatan sesi + pesan pasca-sesi (memuat sisa sesi) menggantikan konfirmasi "kirim info sisa sesi".
-        setTimeout(function () { window.openSessionNote(s.id, true); }, 350);
+        setTimeout(function () { window.openSessionNote(s.id, true, result); }, 350);
       }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
     }, { title: 'Tandai sesi selesai?', confirmText: 'Ya, selesai', icon: 'check-circle-2' });
   };
@@ -4060,6 +4064,10 @@
         (done ? '<span class="pill soft">Selesai</span>' : '<button type="button" class="btn btn-secondary" style="min-width:44px;min-height:44px" aria-label="Tandai selesai ' + h(t.memberName) + '" onclick="window.hubComplete(\'' + h(t.id) + '\')">' + icon('check') + '</button>') + '</div>';
     }).join('') + '</div>';
     html += careListHtml(hub.care);
+    if (hub.feedback && hub.feedback.count) {
+      html += '<div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Penilaian sesi (30 hari)</p><span class="num" style="font-weight:800">' + h(String(hub.feedback.avg).replace('.', ',')) + ' / 5 · ' + hub.feedback.count + '</span></div>' +
+        hub.feedback.recent.map(r => '<div class="row-between" style="min-height:44px;gap:8px"><span style="min-width:0"><span class="truncate" style="display:block">' + h(r.name) + '</span>' + (r.komentar ? '<span class="li-sub truncate" style="display:block">' + h(r.komentar) + '</span>' : '') + '</span><span class="num" aria-label="' + r.bintang + ' bintang">' + starsText(r.bintang) + '</span></div>').join('') + '</div>';
+    }
     html += '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Target bulan ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTargetsSheet()">' + (hub.targets.length ? 'Ubah' : 'Atur target') + '</button></div>';
     if (!hub.targets.length) html += '<p class="li-sub">Belum ada target. Atur target sesi, klien, atau pendapatan.</p>';
     html += hub.targets.map(function (t) {
@@ -4117,6 +4125,15 @@
       window.sendToParentWA(m.phone || '', r.text);
     }).catch(function (err) { window.showToast(err.message); });
   };
+  const starsText = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+  function feedbackAdminHtml(f) {
+    if (!f || (!f.ratings.length && !f.evals.length)) return '';
+    return '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Penilaian klien</p>' +
+      f.evals.map(e => { const avg = Math.round((e.motivasi + e.keselamatan + e.kepuasan + e.komunikasi + e.profesionalisme) / 5 * 10) / 10;
+        return '<div class="stack" style="gap:2px"><p class="li-title">Evaluasi paket · ' + h(String(avg).replace('.', ',')) + ' / 5 <span class="li-sub">' + h(e.tanggal) + (e.izin ? ' · boleh testimoni' : '') + '</span></p>' +
+          '<p class="li-sub">Motivasi ' + e.motivasi + ' · Keselamatan ' + e.keselamatan + ' · Kepuasan ' + e.kepuasan + ' · Komunikasi ' + e.komunikasi + ' · Profesional ' + e.profesionalisme + '</p>' + (e.komentar ? '<p>' + h(e.komentar) + '</p>' : '') + '</div>'; }).join('') +
+      f.ratings.slice(0, 6).map(r => '<div class="row-between" style="gap:8px;align-items:flex-start"><span style="min-width:0"><span class="li-sub">' + h(r.tanggal) + '</span>' + (r.komentar ? '<span style="display:block">' + h(r.komentar) + '</span>' : '') + '</span><span class="num" aria-label="' + r.bintang + ' bintang">' + starsText(r.bintang) + '</span></div>').join('') + '</div>';
+  }
   function careInner(memberId) {
     const d = care[memberId];
     if (!d) return '<p class="li-sub">Memuat catatan klien…</p>';
@@ -4125,6 +4142,7 @@
     let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Catatan privat</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareNotes(\'' + h(memberId) + '\')">Ubah</button></div>' +
       (d.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(d.flag) + '</p>' : '') +
       (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') + '</div>';
+    html += feedbackAdminHtml(d.feedback);
     html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Kesehatan</p>';
     if (!d.health) {
       html += '<p class="li-sub">Belum mengisi form.</p><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">Kirim pengingat</button>';
@@ -4307,7 +4325,7 @@
   // ── Catatan sesi (Fase I2) ──────────────────────────────────────────────────
   // Dibuka otomatis setelah "Selesai" (afterDone = true) dan dari detail sesi yang sudah selesai.
   let noteSched = null;
-  window.openSessionNote = function (scheduleId, afterDone) {
+  window.openSessionNote = function (scheduleId, afterDone, result) {
     const s = window.schedules.find(x => String(x.id) === String(scheduleId));
     if (!s) return;
     noteSched = s;
@@ -4315,6 +4333,10 @@
     $('sn-err').textContent = '';
     $('sn-who').textContent = s.title + ' · ' + fmtShort(new Date(s.start)) + ' ' + fmtTime(new Date(s.start));
     $('sn-title').textContent = afterDone ? 'Sesi selesai: catat sesi' : 'Catatan sesi';
+    // Paket habis: tawarkan ajakan evaluasi lewat WhatsApp (tombol, tidak dikirim otomatis).
+    const pk = $('sn-pkg');
+    pk.classList.toggle('hide', !(result && result.packageDone));
+    pk.onclick = result && result.packageDone ? function () { window.sendToParentWA(s.phone, result.evalText); } : null;
     openSheet('modal-session-note');
     adminCall('getSessionNote', s.id).then(function (n) {
       if (noteSched !== s) return;
@@ -4793,6 +4815,88 @@
     return main + (more.length ? '<details class="pg-more"><summary>Lingkar badan lainnya (' + more.length + ')</summary><div class="stack" style="gap:18px">' + more.join('') + '</div></details>' : '');
   }
 
+  // ── Penilaian cepat + evaluasi paket di portal (Fase I3) ─────────────────────
+  // window.myFeedback = { enabled, pending: {scheduleId,start,end}|null, pkgEval: bool, stars, scheduleId }
+  function starsHtml(name, value, onclick) {
+    let s = '<div class="stars" role="radiogroup" aria-label="' + h(name) + '">';
+    for (let i = 1; i <= 5; i++) s += '<button type="button" class="star' + (i <= value ? ' on' : '') + '" role="radio" aria-checked="' + (i === value) + '" aria-label="' + i + ' bintang" data-v="' + i + '" onclick="' + onclick + '(' + i + ',this)">' + icon('star') + '</button>';
+    return s + '</div>';
+  }
+  function feedbackCardHtml() {
+    const f = window.myFeedback;
+    if (!f || !f.enabled) return '';
+    if (f.pkgEval) {
+      return '<div class="card" id="pub-feedback-card"><div class="section-head"><h3 class="section-title">Evaluasi paket</h3></div><p class="li-sub">Semua sesi paketmu sudah selesai 🎉 Lihat kemajuanmu dan beri penilaian ke coach.</p>' +
+        '<button type="button" class="btn btn-primary btn-block" style="margin-top:12px" onclick="window.openPackageEval()">' + icon('clipboard-check') + 'Lihat &amp; beri evaluasi</button></div>';
+    }
+    if (!f.pending) return '';
+    const sub = fmtShort(new Date(f.pending.start)) + ' · ' + fmtTime(new Date(f.pending.start));
+    if (f.scheduleId === f.pending.scheduleId && f.stars) {
+      return '<div class="card" id="pub-feedback-card"><div class="section-head"><h3 class="section-title">Terima kasih!</h3></div>' + starsHtml('Penilaian sesi', f.stars, 'window.fbStar') +
+        '<div class="field" style="margin-top:10px"><label class="label" for="fb-comment">Mau tambah satu kalimat? (opsional)</label><input class="input" id="fb-comment" type="text" maxlength="300" placeholder="Misalnya: latihannya seru"></div>' +
+        (f.stars >= 4 ? '<label class="row" style="gap:10px;min-height:44px"><input type="checkbox" id="fb-consent"> <span class="li-sub">Boleh dipakai sebagai testimoni</span></label>' : '') +
+        '<div class="btn-row"><button type="button" class="btn btn-primary" id="fb-send" onclick="window.fbSendComment()">Kirim</button><button type="button" class="btn btn-ghost" onclick="window.fbDone()">Selesai</button></div></div>';
+    }
+    return '<div class="card" id="pub-feedback-card"><div class="section-head"><h3 class="section-title">Bagaimana sesi tadi?</h3></div><p class="li-sub">' + h(sub) + '</p>' + starsHtml('Penilaian sesi', 0, 'window.fbStar') + '</div>';
+  }
+  function fbRender() { const el = $('pub-feedback-slot'); if (el) { setHTML(el, feedbackCardHtml()); paintIcons(); } }
+  window.fbStar = function (n) {
+    const f = window.myFeedback; if (!f || !f.pending) return;
+    f.stars = n; f.scheduleId = f.pending.scheduleId; fbRender();
+    memberCall('rateSession', f.pending.scheduleId, n, '', false).catch(function (err) { window.showToast(window.authMessage ? window.authMessage(err) : err.message); });
+  };
+  window.fbSendComment = function () {
+    const f = window.myFeedback; if (!f || !f.pending) return;
+    const c = $('fb-comment').value.trim(), consent = !!($('fb-consent') && $('fb-consent').checked);
+    if (!c && !consent) { window.fbDone(); return; }
+    const done = busy($('fb-send'), 'Mengirim…');
+    // Tunggu sedikit: simpan bintang dan komentar tidak boleh berebut (jeda 3 detik di server).
+    setTimeout(function () {
+      memberCall('rateSession', f.pending.scheduleId, f.stars, c, consent).then(function () { done(); window.showToast('Terima kasih!'); window.fbDone(); })
+        .catch(function (err) { done(); window.showToast(err.message); });
+    }, 0);
+  };
+  window.fbDone = function () { const f = window.myFeedback; if (f) { f.pending = null; f.stars = 0; } fbRender(); };
+
+  const pe = { data: null, vals: {} };
+  window.openPackageEval = function () {
+    pe.data = null; pe.vals = {};
+    $('pe-body').innerHTML = '<p class="li-sub">Memuat…</p>';
+    $('pe-err').textContent = '';
+    openSheet('modal-pkg-eval');
+    memberCall('getMyPackageEval').then(function (d) {
+      if (!d.eligible) { $('pe-body').innerHTML = '<p class="li-sub">Evaluasi paket belum tersedia atau sudah kamu isi. Terima kasih!</p>'; return; }
+      pe.data = d;
+      const ch = (v, u) => (v > 0 ? '+' : v < 0 ? '−' : '') + String(Math.abs(v)).replace('.', ',') + ' ' + u;
+      let html = '<div class="card-ink"><p class="eyebrow">' + h(d.packageName || 'Paketmu') + '</p><p class="num" style="font-size:var(--fs-4xl);font-weight:800">' + d.sessions + ' sesi</p><p class="muted">selesai' + (d.bestStreak ? ' · streak terbaik ' + d.bestStreak + ' minggu' : '') + '</p></div>';
+      if (d.measures.length || d.tests.length) {
+        html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Kemajuanmu</p>' + d.measures.map(m => '<div class="row-between"><span>' + h(m.label) + '</span><span class="num" style="font-weight:700">' + h(pgNum(m.first)) + ' → ' + h(pgNum(m.last)) + ' ' + h(m.unit) + ' <span class="li-sub">(' + h(ch(m.change, m.unit)) + ')</span></span></div>').join('') +
+          d.tests.map(t => '<div class="row-between"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700">' + h(pgNum(t.first)) + ' → ' + h(pgNum(t.latest)) + ' ' + h(t.unit) + (t.improved ? ' 🎉' : '') + '</span></div>').join('') + '</div>';
+      }
+      html += '<p class="eyebrow" style="margin-top:6px">Bagaimana pengalamanmu?</p>' + d.aspects.map(a => '<div class="row-between" style="gap:8px;flex-wrap:wrap"><span>' + h(a.label) + '</span><span id="pe-st-' + h(a.key) + '">' + starsHtml(a.label, 0, 'window.peStar.bind(null,\'' + h(a.key) + '\')') + '</span></div>').join('') +
+        '<div class="field"><label class="label" for="pe-comment">Cerita singkat (opsional)</label><textarea class="textarea" id="pe-comment" rows="3" maxlength="500"></textarea></div>' +
+        '<label class="row" style="gap:10px;min-height:44px;align-items:flex-start"><input type="checkbox" id="pe-consent"> <span>Boleh dipakai sebagai testimoni</span></label>';
+      $('pe-body').innerHTML = html;
+      $('pe-foot').classList.remove('hide');
+      paintIcons();
+    }).catch(function (err) { $('pe-body').innerHTML = '<p class="li-sub">Gagal memuat: ' + h(err.message) + '</p>'; });
+  };
+  window.peStar = function (key, n) {
+    pe.vals[key] = n;
+    $('pe-st-' + key).innerHTML = starsHtml(key, n, 'window.peStar.bind(null,\'' + key + '\')'); paintIcons();
+  };
+  window.peSubmit = function () {
+    if (!pe.data) return;
+    const missing = pe.data.aspects.find(a => !pe.vals[a.key]);
+    if (missing) { $('pe-err').textContent = 'Beri bintang untuk ' + missing.label.toLowerCase() + '.'; return; }
+    $('pe-err').textContent = '';
+    const done = busy($('pe-send'), 'Mengirim…');
+    memberCall('submitMyPackageEval', Object.assign({}, pe.vals, { komentar: $('pe-comment').value, consent: $('pe-consent').checked }))
+      .then(function () { done(); window.closeModal(); window.showToast('Terima kasih atas evaluasinya!'); if (window.myFeedback) window.myFeedback.pkgEval = false; fbRender(); })
+      .catch(function (err) { done(); $('pe-err').textContent = err.message; });
+  };
+  window.peRenew = function () { window.closeModal(); setTimeout(function () { if (window.openRenewSheet) window.openRenewSheet(); }, 300); };
+
   // ── Perpanjang paket dari portal (Fase D3) ──────────────────────────────────
   // window.myRenewal: undefined = belum dimuat, null = belum pernah minta, objek = permintaan terbaru
   function renewCoachPhone() {
@@ -5227,6 +5331,7 @@
       '<button type="button" class="btn btn-outline" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket</button></div>';
     left += myCoachCardHtml(me);
     left += '<div id="pub-class-wrap">' + classCardHtml() + '</div>';
+    left += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
 
     left += '<div class="card" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
       '<div class="section-head"><h3 class="section-title">Sesi berikutnya</h3>' + (next ? statusInfo(next).pill : '') + '</div>' +
@@ -6407,6 +6512,14 @@
         '<button type="button" class="btn btn-outline btn-sm" onclick="window.finShareSave(\'' + h(c.id) + '\',this)">Simpan</button></div>';
     }).join('') || '<span class="li-sub">Belum ada coach.</span>';
   }
+  window.setFeedback = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { feedbackEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.feedbackEnabled = s.feedbackEnabled;
+      window.showToast(s.feedbackEnabled ? 'Penilaian klien aktif.' : 'Penilaian klien dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
   window.setClientGuide = function (el) {
     el.disabled = true;
     adminCall('updateAppSettings', { clientGuideEnabled: el.checked }).then(function (s) {

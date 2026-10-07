@@ -24,9 +24,9 @@ Status: `[ ]` todo · `[~]` berjalan · `[x]` selesai. ID mulai T-600.
 
 | | ID | Task | Selesai bila |
 | --- | --- | --- | --- |
-| [ ] | T-620 | `SessionRatings`, `rateSession`, `pendingRating` di bootstrap | Tes lolos |
-| [ ] | T-621 | `PackageEvaluations`, `getMyPackageEval`, `submitMyPackageEval` | Tes lolos |
-| [ ] | T-622 | Telegram paket selesai, rating rendah, kartu penilaian di hub, saklar `FEEDBACK_ENABLED` | Tes lolos |
+| [x] | T-620 | `SessionRatings`, `rateSession`, `pendingRating` di bootstrap | Tes lolos |
+| [x] | T-621 | `PackageEvaluations`, `getMyPackageEval`, `submitMyPackageEval` | Tes lolos |
+| [x] | T-622 | Telegram paket selesai, rating rendah, kartu penilaian di hub, saklar `FEEDBACK_ENABLED` | Tes lolos |
 
 ## I4 — Tambah ke kalender
 

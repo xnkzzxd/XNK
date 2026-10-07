@@ -24,7 +24,11 @@ Rujukan kode: `apps-script/pt-scheduler/src/`.
 
 ## 4. Penilaian dan evaluasi (I3)
 
-Dirancang di bagian I3; lihat [TODO.md](TODO.md).
+- `SessionRatings` (`ID, Schedule ID, Member ID, Tanggal, Bintang, Komentar, Izin Testimoni, Dibuat Pada`): satu baris per sesi selesai milik klien; `rateSession(memberToken, scheduleId, stars, comment, consent)` mengganti penilaian lama. Klien lain yang menebak ID sesi mendapat "Sesi tidak ditemukan.".
+- `PackageEvaluations` (`ID, Member ID, Paket, Tanggal, Motivasi, Keselamatan, Kepuasan, Komunikasi, Profesionalisme, Komentar, Izin Testimoni, Dibuat Pada`). Berhak mengisi bila total > 0, terpakai ≥ total, dan evaluasi terakhir lebih lama dari sesi selesai terakhir (`_packageEvalEligibleFrom_`), jadi paket baru setelah perpanjangan diminta lagi.
+- Bootstrap portal: `feedbackEnabled`, `pendingRating` (sesi selesai ≤ 7 hari belum dinilai), `packageEval.eligible`. Ringkasan evaluasi baru dimuat saat lembar dibuka (`getMyPackageEval`).
+- Pemilik: `completeSession` mengembalikan `packageDone`, `evalText`, `evalWaLink`; komentar hanya di `getClientCare.feedback` dan `getCoachHub().feedback`. Telegram hanya memuat nama depan dan angka.
+- Saklar `FEEDBACK_ENABLED` (Pengaturan → Tampilan), bawaan hidup.
 
 ## 5. Kalender (I4)
 

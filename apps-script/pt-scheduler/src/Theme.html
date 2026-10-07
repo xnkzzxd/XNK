@@ -1269,6 +1269,11 @@ button.avatar { border: 0; cursor: pointer; }
 .tm-time { font-size: 56px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .tm-card .btn-row { justify-content: center; }
 .tm-start { min-height: 44px; }
+.stars { display: flex; gap: 2px; }
+.star { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; color: var(--fg-muted); border-radius: 50%; cursor: pointer; }
+.star svg { width: 28px; height: 28px; }
+.star.on { color: var(--fg); }
+.star.on svg { fill: currentColor; }
 .pg-trophy { width: 72px; height: 72px; border-radius: 24px; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; animation: popIn var(--t-slow) var(--spring) both; }
 .pg-trophy svg.lucide { width: 36px; height: 36px; }
 .pg-badge-list { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }

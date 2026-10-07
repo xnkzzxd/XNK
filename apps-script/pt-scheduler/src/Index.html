@@ -519,12 +519,21 @@
       </form>
     </div>
 
+    <!-- Evaluasi paket (Fase I3), portal klien -->
+    <div class="sheet hide" id="modal-pkg-eval" role="dialog" aria-modal="true" aria-labelledby="pe-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pe-title">Evaluasi paket</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:14px" id="pe-body"></div>
+      <div class="sheet-foot hide" id="pe-foot"><p class="hint err-msg" id="pe-err" role="alert" style="display:block"></p><div class="btn-row"><button type="button" class="btn btn-outline btn-lg" onclick="window.peRenew()">Perpanjang paket</button><button type="button" class="btn btn-primary btn-lg" id="pe-send" onclick="window.peSubmit()">Kirim evaluasi</button></div></div>
+    </div>
+
     <!-- Catatan sesi (Fase I2): dibuka setelah "Selesai" dan dari detail sesi -->
     <div class="sheet hide" id="modal-session-note" role="dialog" aria-modal="true" aria-labelledby="sn-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="sn-title">Catatan sesi</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <form class="sheet-body form-grid" id="form-session-note" onsubmit="window.sessionNoteSave(event, false)">
         <p class="li-sub" id="sn-who"></p>
+        <button type="button" class="btn btn-secondary btn-block hide" id="sn-pkg"><i data-lucide="party-popper"></i> Paket selesai · ajak klien mengisi evaluasi (WA)</button>
         <div class="field"><label class="label" for="sn-dilatih">Yang dilatih</label><textarea class="textarea" id="sn-dilatih" rows="2" maxlength="500" placeholder="Squat 3x10, plank 45 dtk"></textarea></div>
         <div class="field"><label class="label" for="sn-fokus">Fokus berikutnya</label><input class="input" id="sn-fokus" type="text" maxlength="300" placeholder="Perdalam teknik squat"></div>
         <div class="field"><label class="label" for="sn-rpe">RPE (1–10, seberapa berat)</label><input class="input num" id="sn-rpe" type="text" inputmode="numeric" maxlength="2" placeholder="7"></div>
