@@ -449,7 +449,7 @@ function getAppSettings(token) {
 }
 
 /** Simpan Pengaturan. String kosong/null pada satu kolom = hapus properti itu (balik ke default). */
-function updateAppSettings(token, payload) {
+function updateAppSettingsImpl_(token, payload) {
   requireAdmin_(token);
   payload = payload || {};
   const props = PropertiesService.getScriptProperties();
@@ -949,7 +949,7 @@ function _publicCoach_(c) {
 
 /** Publik: hanya coach aktif dan hanya field whitelist (CP-5). */
 function getCoaches() {
-  return _activeCoaches_().map(_publicCoach_);
+  return _sharedCached_('coaches', function() { return _activeCoaches_().map(_publicCoach_); });
 }
 
 /** Murni: validasi + bersihkan data profil coach. Melempar kalimat Indonesia yang diakhiri titik. */
@@ -1013,7 +1013,7 @@ function updateCoach(token, coachData) {
  * nama di klien (MemberData) dan jadwal yang belum selesai ikut diperbarui; jadwal selesai & log transaksi
  * tetap memakai nama saat itu. Foto lama dipindah ke tempat sampah bila diganti.
  */
-function saveCoach(token, data) {
+function saveCoachImpl_(token, data) {
   requireAdmin_(token);
   const clean = _validateCoach_(data);
   const lock = LockService.getScriptLock();
@@ -1111,7 +1111,7 @@ function getCoachesAdmin(token) {
   };
 }
 
-function setCoachActive(token, id, aktif) {
+function setCoachActiveImpl_(token, id, aktif) {
   requireAdmin_(token);
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -3636,7 +3636,7 @@ function getPriceList() {
 }
 
 /** Publik: paket aktif + kategori yang tampil di landing (urut tetap), untuk landing dan halaman /harga. */
-function getPriceListPublic() {
+function getPriceListPublicImpl_() {
   const cats = PACKAGE_CATEGORIES.filter(function(c) { return c.onLanding; }).map(function(c) { return { id: c.id, label: c.label }; });
   const ids = {};
   cats.forEach(function(c) { ids[c.id] = true; });
@@ -3749,7 +3749,7 @@ function _writePackageRow_(sheet, idx, rowNum, v) {
 }
 
 /** Tambah (tanpa data.id) atau ubah (dengan data.id) satu paket. Paket baru nonaktif kecuali data.aktif === true. */
-function savePackage(token, data) {
+function savePackageImpl_(token, data) {
   requireAdmin_(token);
   data = data || {};
   return _withPriceListLock_(function(ctx) {
@@ -3798,7 +3798,7 @@ function _findPackage_(ctx, id) {
   return p;
 }
 
-function setPackageActive(token, id, aktif) {
+function setPackageActiveImpl_(token, id, aktif) {
   requireAdmin_(token);
   return _withPriceListLock_(function(ctx) {
     const p = _findPackage_(ctx, id);
@@ -3823,7 +3823,7 @@ function deletePackage(token, id) {
 }
 
 /** Simpan urutan tampil satu kategori: `ids` dulu (sesuai urutan yang dikirim), sisanya menyusul. */
-function reorderPackages(token, category, ids) {
+function reorderPackagesImpl_(token, category, ids) {
   requireAdmin_(token);
   const cat = String(category == null ? '' : category).trim().toLowerCase();
   if (!Array.isArray(ids)) throw new Error('Daftar urutan tidak valid.');
@@ -4811,7 +4811,7 @@ function getLandingStats() {
  * Hanya mengembalikan response yang consent-nya "Ya" (boleh dipakai promosi).
  * Nama disamarkan otomatis kalau consent-nya minta anonim.
  */
-function getPublicTestimonials() {
+function getPublicTestimonialsImpl_() {
   try {
     const rows = _readEvaluasiRows_();
     const results = [];
@@ -5791,7 +5791,7 @@ function getCoachAvailability(token, coachId) {
 }
 
 /** week = { senin: [[6,10],[16,20]], ... }. Menggantikan semua aturan coach itu. week kosong = ikut jam operasional. */
-function saveCoachAvailability(token, coachId, week) {
+function saveCoachAvailabilityImpl_(token, coachId, week) {
   requireAdmin_(token);
   coachId = String(coachId || '');
   if (!_activeCoaches_().some(function(c) { return c.id === coachId; })) throw new Error('Pilih coach yang aktif.');
@@ -6361,7 +6361,7 @@ function getContentAdmin(token) {
 }
 
 /** Admin: buat atau ubah konten. data = { id?, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif }. */
-function saveContent(token, data) {
+function saveContentImpl_(token, data) {
   requireAdmin_(token);
   data = data || {};
   const L = CONTENT_LIMITS;
@@ -6404,7 +6404,7 @@ function saveContent(token, data) {
   }
 }
 
-function deleteContent(token, id) {
+function deleteContentImpl_(token, id) {
   requireAdmin_(token);
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
@@ -6423,6 +6423,9 @@ function deleteContent(token, id) {
 /** Klien: konten yang sedang tayang (disematkan dulu, lalu terbaru). Tanpa data pribadi, bukan milik satu klien. */
 function getMyContent(memberToken) { requireMember_(memberToken); return _contentForClient_(); }
 function _contentForClient_() {
+  return _sharedCached_('content', _contentForClientImpl_);
+}
+function _contentForClientImpl_() {
   const today = _todayWib_();
   return _contentSort_(_contentAll_().filter(function(c) { return _contentVisible_(c, today); })).map(function(c) {
     return { id: c.id, tipe: c.tipe, judul: c.judul, isi: c.isi, url: c.url, kategori: c.kategori, sematkan: c.sematkan, dibuat: c.dibuat };
@@ -7272,3 +7275,83 @@ function getClassGroups(token) {
     return { id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '', createdAt: g.createdAt, members: g.members.map(function(m) { return { id: m, name: names[m] || '' }; }) };
   });
 }
+
+// ── Cache bersama (Fase K3) ──────────────────────────────────────────────────
+// Data yang sama untuk semua klien (testimoni, paket publik, coach publik, konten tayang) disimpan sebentar di
+// CacheService. Penulisnya memanggil _bustShared_() SESUDAH menulis (lewat pembungkus di bawah); salah-basi paling lama TTL.
+function _sharedVersion_() {
+  try { return CacheService.getScriptCache().get('shared:ver') || '0'; } catch (e) { return '0'; }
+}
+function _bustShared_() {
+  try { SpreadsheetApp.flush(); } catch (e) {}
+  try { CacheService.getScriptCache().put('shared:ver', String(Date.now()) + '.' + Math.floor(Math.random() * 1000000), 21600); } catch (e) {}
+}
+function _sharedCached_(name, fn) {
+  const ttl = Math.max(30, Math.min(600, Math.floor(_numProp_('SHARED_CACHE_SECONDS', 180))));
+  const ver = _sharedVersion_();   // dibaca SEBELUM sheet
+  const key = 'shared:' + name + ':' + ver;
+  try {
+    const hit = CacheService.getScriptCache().get(key);
+    if (hit) return JSON.parse(hit);
+  } catch (e) {}
+  const val = fn();
+  try {
+    const s = JSON.stringify(val);
+    if (s && s.length < 90000) CacheService.getScriptCache().put(key, s, ttl);
+  } catch (e) {}
+  return val;
+}
+
+function saveCoach(token, data) {
+  requireAdmin_(token);
+  try { return saveCoachImpl_(token, data); } finally { _bustShared_(); }
+}
+
+function setCoachActive(token, id, aktif) {
+  requireAdmin_(token);
+  try { return setCoachActiveImpl_(token, id, aktif); } finally { _bustShared_(); }
+}
+
+function saveCoachAvailability(token, coachId, week) {
+  requireAdmin_(token);
+  try { return saveCoachAvailabilityImpl_(token, coachId, week); } finally { _bustShared_(); }
+}
+
+function savePackage(token, data) {
+  requireAdmin_(token);
+  try { return savePackageImpl_(token, data); } finally { _bustShared_(); }
+}
+
+function setPackageActive(token, id, aktif) {
+  requireAdmin_(token);
+  try { return setPackageActiveImpl_(token, id, aktif); } finally { _bustShared_(); }
+}
+
+function reorderPackages(token, category, ids) {
+  requireAdmin_(token);
+  try { return reorderPackagesImpl_(token, category, ids); } finally { _bustShared_(); }
+}
+
+function saveContent(token, data) {
+  requireAdmin_(token);
+  try { return saveContentImpl_(token, data); } finally { _bustShared_(); }
+}
+
+function deleteContent(token, id) {
+  requireAdmin_(token);
+  try { return deleteContentImpl_(token, id); } finally { _bustShared_(); }
+}
+
+function updateAppSettings(token, payload) {
+  requireAdmin_(token);
+  try { return updateAppSettingsImpl_(token, payload); } finally { _bustShared_(); }
+}
+
+function getPriceListPublic() {
+  return _sharedCached_('prices', getPriceListPublicImpl_);
+}
+
+function getPublicTestimonials() {
+  return _sharedCached_('testimonials', getPublicTestimonialsImpl_);
+}
+
