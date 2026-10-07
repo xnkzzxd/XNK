@@ -1269,6 +1269,18 @@ button.avatar { border: 0; cursor: pointer; }
 .tm-time { font-size: 56px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .tm-card .btn-row { justify-content: center; }
 .tm-start { min-height: 44px; }
+/* Tab Lainnya (portal klien): baris menu besar + titik "baru" */
+.more-list { display: flex; flex-direction: column; gap: 8px; }
+.more-row { display: flex; align-items: center; gap: 14px; min-height: 60px; width: 100%; padding: 10px 14px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--fg); cursor: pointer; }
+.more-row:active { background: var(--surface-2); }
+.more-row .more-ic { width: 40px; height: 40px; border-radius: 12px; background: var(--surface-3); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.more-row .more-txt { flex: 1; min-width: 0; }
+.more-row .more-txt b { display: block; font-weight: 700; }
+.new-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--fg); display: inline-block; flex-shrink: 0; }
+.tab .tab-dot-new { position: absolute; top: 6px; left: calc(50% + 8px); width: 9px; height: 9px; border-radius: 50%; background: var(--on-ink); border: 2px solid var(--ink); }
+.teaser-row { display: flex; align-items: center; gap: 12px; min-height: 52px; width: 100%; padding: 8px 4px; background: transparent; border: 0; text-align: left; color: var(--fg); cursor: pointer; }
+.challenge-bar { height: 10px; border-radius: 99px; background: var(--border); overflow: hidden; }
+.challenge-bar > div { height: 100%; background: var(--ink); border-radius: 99px; transition: width .4s; }
 .stars { display: flex; gap: 2px; }
 .star { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; color: var(--fg-muted); border-radius: 50%; cursor: pointer; }
 .star svg { width: 28px; height: 28px; }

@@ -1241,8 +1241,13 @@ async function contrastReport(page) {
     const own = await page.evaluate(() => window.schedules.find(s => s.id === 'SCH-A1'));
     check(own && own.notes === 'Rahasia Ani', 'own bookings include their details');
     check(((await page.textContent('#pub-next-countdown')) || '').trim().length > 0, 'next-session countdown is filled');
-    check((await page.textContent('#pub-consistency-score')).includes('%'), 'consistency insight shown');
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(500);
+    check((await page.textContent('#pub-consistency-score')).includes('%'), 'consistency insight shown on the Progres tab');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
     await shot(page, 'portal-mobile-home');
+
 
     // ── Streak, badge dan perayaan (Fase D2) ───────────────────────────────────
     check(await visible(page, '#sheet-badge'), 'portal: a newly earned badge is celebrated when the client opens the home screen');
@@ -1259,6 +1264,30 @@ async function contrastReport(page) {
     await page.click('#sheet-badge .btn-secondary');
     await page.waitForTimeout(700);
     check(!(await visible(page, '#sheet-badge')), 'portal: the celebration closes');
+    // ── Tab klien (Fase J1): bar bawah Beranda · Jadwal · + · Progres · Lainnya ───────────────
+    check((await page.locator('#tabbar .tab').allTextContents()).map(t => t.trim()).join(',') === 'Beranda,Jadwal,Progres,Lainnya' && (await page.locator('#tabbar .tab-fab').count()) === 1, 'nav: the phone bar has Beranda, Jadwal, +, Progres, Lainnya');
+    check((await page.locator('#side-nav .nav-item').allTextContents()).map(t => t.trim()).join(',') === 'Beranda,Jadwal,Progres,Program,Info & Tips,Paket,Coach', 'nav: the sidebar lists every tab');
+    check(!(await page.locator('#view-public-dashboard #pub-progress-wrap, #view-public-dashboard #pub-tasks-wrap, #view-public-dashboard #pub-meal-slot').count()) && (await page.locator('#pub-teasers .teaser-row').count()) === 2, 'nav: Beranda is lighter, the moved cards leave teasers behind');
+    await page.click('#tabbar .tab[data-view="public-more"]');
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.currentView)) === 'public-more' && (await page.locator('#view-public-more .more-row').count()) === 6, 'nav: Lainnya opens a list of six rows');
+    const moreBad = await page.locator('#view-public-more .more-row').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5 || r.right > window.innerWidth).length);
+    check(moreBad === 0 && (await overflowX(page)) <= 0, 'nav: Lainnya rows are at least 44 px and fit the phone');
+    check((await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: the Lainnya tab is lit on its own page');
+    await page.click('#view-public-more .more-row:nth-child(1)');
+    await page.waitForTimeout(600);
+    check((await page.evaluate(() => window.currentView)) === 'public-program' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: Program opens and Lainnya stays lit');
+    check(await visible(page, '#pub-tasks-wrap') && (await page.textContent('#view-public-program')).includes('PR'), 'nav: the Program tab holds the PR card');
+    await page.evaluate(() => window.navigate('public-info'));
+    await page.waitForTimeout(500);
+    check(await visible(page, '#view-public-info') && (await page.textContent('#view-public-info')).includes('Info & Tips'), 'nav: the Info & Tips tab opens');
+    await page.click('#tabbar .tab[data-view="public-progress"]');
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-progress"]', 'aria-current')) === 'page' && !(await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')), 'nav: the Progres tab is lit alone');
+    await page.click('#tabbar .tab[data-view="public-dashboard"]');
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(500);
     await page.evaluate(() => window.loadMyProgress(true));
     await page.waitForTimeout(800);
     check(!(await visible(page, '#sheet-badge')), 'portal: the same badge is not celebrated again');
@@ -1270,9 +1299,12 @@ async function contrastReport(page) {
     check(lockedOpacity < 0.6, 'portal: locked badges are visibly faded');
     check((await overflowX(page)) <= 0, 'portal: the Pencapaian card has no sideways scroll');
     check(!(await page.textContent('#pub-insights-card, body').then(t => t.includes('Selesaikan 24 sesi')).catch(() => false)), 'portal: the old separate badge tiles are gone');
+    check((await page.textContent('#pub-badges-wrap')).includes('Tantangan bulan ini') && await visible(page, '#pub-badges-wrap .challenge-bar'), 'portal: the monthly challenge card shows on the Progres tab');
 
     // ── Penilaian cepat dan evaluasi paket (Fase I3) ────────────────────────────
     // Data uji: SCH-H1 selesai 3 hari lalu (paling baru), jadi portal menanyakan penilaiannya.
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
     const fbRefresh = async () => { await page.evaluate(() => window.refreshPortalSchedules().then(() => window.updateUI())); await page.waitForTimeout(700); };
     await fbRefresh();
     check(await visible(page, '#pub-feedback-card') && (await page.textContent('#pub-feedback-card')).includes('Bagaimana sesi tadi?'), 'feedback: a recently finished session asks "Bagaimana sesi tadi?"');
@@ -1338,8 +1370,11 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
 
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(600);
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
-    await page.waitForTimeout(500);
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(600);
     check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
     check((await page.textContent('#view-public-dashboard .my-coach-card')).includes('Coach kamu'), 'portal home: a "Coach kamu" card shows the coach');
     await page.locator('#view-public-dashboard .my-coach-card').click();
@@ -1359,7 +1394,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
     check((await page.locator('#view-calendar .portal-kpis .kpi').count()) >= 2, 'portal Jadwal: KPI tiles above the calendar');
-    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.evaluate(() => window.navigate('public-progress'));
     await page.waitForTimeout(400);
     await page.click('#pub-progress-wrap .btn-primary');
     await page.waitForTimeout(600);

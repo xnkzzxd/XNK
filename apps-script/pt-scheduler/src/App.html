@@ -533,16 +533,29 @@
       ['clients', 'users', 'Klien'],
       ['coaches', 'dumbbell', 'Coach']
     ],
+    // Sidebar desktop: semua tab. Bar bawah HP (publicTabs): Beranda, Jadwal, [+], Progres, Lainnya.
     public: [
       ['public-dashboard', 'house', 'Beranda'],
       ['calendar', 'calendar-days', 'Jadwal'],
+      ['public-progress', 'trending-up', 'Progres'],
+      ['public-program', 'clipboard-list', 'Program'],
+      ['public-info', 'megaphone', 'Info & Tips'],
       ['public-catalog', 'package', 'Paket'],
       ['public-coaches', 'dumbbell', 'Coach']
     ]
   };
+  const PUBLIC_TABS = [
+    ['public-dashboard', 'house', 'Beranda'],
+    ['calendar', 'calendar-days', 'Jadwal'],
+    ['public-progress', 'trending-up', 'Progres'],
+    ['public-more', 'layout-grid', 'Lainnya']
+  ];
+  // Tab "Lainnya" menyala untuk halaman isinya.
+  const MORE_GROUP = ['public-more', 'public-program', 'public-info', 'public-catalog', 'public-coaches'];
   const TITLES = {
     'dashboard': 'Dashboard', 'calendar': 'Jadwal', 'clients': 'Klien', 'coaches': 'Coach', 'finance': 'Keuangan', 'settings': 'Pengaturan',
-    'public-login': 'Masuk member', 'public-dashboard': 'Beranda', 'public-catalog': 'Paket', 'public-coaches': 'Coach'
+    'public-login': 'Masuk member', 'public-dashboard': 'Beranda', 'public-catalog': 'Paket', 'public-coaches': 'Coach',
+    'public-progress': 'Progres', 'public-program': 'Program', 'public-info': 'Info & Tips', 'public-more': 'Lainnya'
   };
 
   function buildChrome() {
@@ -560,10 +573,11 @@
         '<button type="button" class="nav-item" id="side-auth-btn" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>';
     setHTML('side-foot', foot);
 
-    const t = items;
+    const t = ui.mode === 'public' ? PUBLIC_TABS : items;
     const tab = function (n) {
-      return '<button type="button" class="tab" data-view="' + n[0] + '" onclick="window.navigate(\'' + n[0] + '\')" aria-label="' + n[2] + '">' +
-        icon(n[1]) + '<span>' + n[2] + '</span>' + (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="tab-dot hide" id="tab-unread-dot"></span>' : '') + '</button>';
+      return '<button type="button" class="tab" data-view="' + n[0] + '"' + (n[0] === 'public-more' ? ' data-group="' + MORE_GROUP.join(' ') + '"' : '') + ' onclick="window.navigate(\'' + n[0] + '\')" aria-label="' + n[2] + '">' +
+        icon(n[1]) + '<span>' + n[2] + '</span>' + (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="tab-dot hide" id="tab-unread-dot"></span>' : '') +
+        (n[0] === 'public-more' ? '<span class="tab-dot-new hide" id="tab-more-new"></span>' : '') + '</button>';
     };
     const fab = ui.mode === 'admin'
       ? '<button type="button" class="tab-fab" id="client-booking-fab" onclick="window.openSheet(\'sheet-quick\')" aria-label="Tambah cepat">' + icon('plus') + '</button>'
@@ -1366,7 +1380,7 @@
   };
 
   // ── Navigasi ────────────────────────────────────────────────────────────────
-  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches'];
+  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches', 'public-progress', 'public-program', 'public-info', 'public-more'];
 
   window.navigate = function (viewId, opts) {
     opts = opts || {};
@@ -1375,7 +1389,7 @@
     if (viewId === 'coach-profile') viewId = 'coaches';
     const isPub = viewId.indexOf('public-') === 0 || (viewId === 'calendar' && window.isPublicView);
     if (viewId !== 'calendar') window.isPublicView = isPub;
-    if (viewId === 'public-dashboard' && !window.publicLoggedMember) viewId = 'public-login';
+    if (['public-dashboard', 'public-progress', 'public-program', 'public-info', 'public-more'].indexOf(viewId) !== -1 && !window.publicLoggedMember) viewId = 'public-login';
 
     const changed = window.currentView !== viewId;
     if (viewId === 'settings' && changed) { setState.built = false; setState.pushed = false; if (isPhone()) setState.open = null; }   // muat ulang pengaturan tiap masuk halaman; HP mulai dari daftar
@@ -1388,7 +1402,8 @@
     $('page-title').textContent = TITLES[viewId] || 'XNK';
 
     document.querySelectorAll('.nav-item[data-view], .tab[data-view]').forEach(function (b) {
-      const active = b.getAttribute('data-view') === viewId || (viewId === 'public-login' && b.getAttribute('data-view') === 'public-dashboard');
+      const group = (b.getAttribute('data-group') || '').split(' ');
+      const active = b.getAttribute('data-view') === viewId || group.indexOf(viewId) !== -1 || (viewId === 'public-login' && b.getAttribute('data-view') === 'public-dashboard');
       b.classList.toggle('active', active);
       if (active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
@@ -1421,6 +1436,10 @@
         case 'public-dashboard': window.renderPublicDashboard(); break;
         case 'public-catalog': renderCatalog(); break;
         case 'public-coaches': window.renderPublicCoaches(); break;
+        case 'public-progress': renderPublicProgress(); break;
+        case 'public-program': renderPublicProgram(); break;
+        case 'public-info': renderPublicInfo(); break;
+        case 'public-more': renderPublicMore(); break;
       }
     } catch (e) {
       console.error(e);
@@ -4377,12 +4396,16 @@
 
   // Portal: form kesehatan + tes kebugaran
   const myCare = { form: null, assess: null };
-  function myCareInner() {
+  function myCareInner() {   // Beranda: hanya kartu form kesehatan
     let html = '';
     if (myCare.form && !myCare.form.done) {
       html += '<div class="card"><div class="section-head"><h3 class="section-title">Form kesehatan</h3></div><p class="li-sub">Isi sekali saja supaya coach tahu kondisimu sebelum latihan.</p>' +
         '<button type="button" class="btn btn-primary btn-block" style="margin-top:12px" onclick="window.openPortalHealth()">Isi sekarang</button></div>';
     }
+    return html;
+  }
+  function myTestsInner() {   // Progres: kartu hasil tes dan tren
+    let html = '';
     const tests = myCare.assess && myCare.assess.tests || [];
     if (tests.length) {
       html += '<div class="card"><div class="section-head"><h3 class="section-title">Hasil tes</h3></div><div class="stack" style="gap:6px">' + tests.map(function (t) {
@@ -4398,6 +4421,7 @@
     Promise.all([memberCall('getMyHealthForm').catch(() => null), memberCall('getMyAssessment').catch(() => null)]).then(function (r) {
       myCare.form = r[0]; myCare.assess = r[1];
       const w = $('pub-care-wrap'); if (w) { w.innerHTML = myCareInner(); paintIcons(); }
+      const wt = $('pub-tests-wrap'); if (wt) { wt.innerHTML = myTestsInner(); paintIcons(); }
     });
   };
   window.openPortalHealth = function () {
@@ -5087,7 +5111,11 @@
       return '<div class="pg-badge ' + (b.earned ? 'earned' : 'locked') + '" role="img" aria-label="' + h(b.label + (b.earned ? ', sudah diraih' : ', belum diraih')) + '">' +
         '<span class="pg-badge-ic">' + icon(b.kind === 'streak' ? 'flame' : 'award') + '</span><span class="pg-badge-txt">' + h(pgShortBadge(b)) + '</span></div>';
     }).join('');
-    return '<div class="section-head"><h3 class="section-title">Pencapaian</h3></div>' +
+    const ch = d.challenge;
+    const chHtml = ch ? '<div class="stack" style="gap:6px;margin:4px 0 14px"><div class="row-between"><span class="li-title">Tantangan bulan ini</span><span class="num" style="font-weight:800">' + Math.min(ch.done, ch.target) + ' / ' + ch.target + ' sesi</span></div>' +
+      '<div class="challenge-bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + ch.target + '" aria-valuenow="' + Math.min(ch.done, ch.target) + '"><div style="width:' + Math.min(100, Math.round(ch.done / ch.target * 100)) + '%"></div></div>' +
+      '<p class="li-sub">' + (ch.done >= ch.target ? 'Tantangan selesai, keren! 🎉' : 'Sisa ' + (ch.target - ch.done) + ' sesi lagi bulan ini.') + '</p></div>' : '';
+    return '<div class="section-head"><h3 class="section-title">Pencapaian</h3></div>' + chHtml +
       '<div class="pg-streak"><span class="pg-flame' + (d.streak > 0 ? ' on' : '') + '">' + icon('flame') + '</span><div>' + streakLine + '</div></div>' +
       '<div class="pg-badges">' + badges + '</div>';
   }
@@ -5129,6 +5157,7 @@
     const wrap = $('pub-progress-wrap');
     if (wrap) { setHTML(wrap, pgCardInner()); }
     pgRenderBadges();
+    renderTeasers();
   }
   window.loadMyProgress = function (force) {
     if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
@@ -5306,6 +5335,7 @@
   function renderMyTasksCard() {
     const wrap = $('pub-tasks-wrap');
     if (wrap) setHTML(wrap, myTasksCardInner());
+    renderTeasers();
   }
 
   window.loadMyTasks = function (force) {
@@ -5346,6 +5376,78 @@
       return window.loadMyTasks(true);
     }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
   };
+
+  // ── Tab klien: Progres, Program, Info & Tips, Lainnya (Fase J) ───────────────
+  function portalGrid(left, right) {
+    return '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + (right || '') + '</div></div>';
+  }
+  function pageIntro(title, sub) { return '<div class="page-intro"><h2 class="section-title" style="font-size:var(--fs-2xl)">' + h(title) + '</h2><p class="li-sub">' + h(sub) + '</p></div>'; }
+  function teaserRow(view, ic, title, sub, dot) {
+    return '<button type="button" class="teaser-row" onclick="window.navigate(\'' + view + '\')"><span class="more-ic" style="width:40px;height:40px;border-radius:12px;background:var(--surface-3);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">' + icon(ic) + '</span>' +
+      '<span class="grow" style="min-width:0"><b style="display:block">' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + (dot ? '<span class="new-dot" aria-label="Baru"></span>' : '') + icon('chevron-right') + '</button>';
+  }
+  function teasersInner() {
+    const c = window.myTasks;
+    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : null;
+    const chal = pg.data && !pg.data.error ? pg.data.challenge : null;
+    const chSub = chal ? 'Tantangan bulan ini: ' + Math.min(chal.done, chal.target) + ' dari ' + chal.target + ' sesi' : 'Ukuran badan, hasil tes, dan badge';
+    const prSub = nOpen === null ? 'PR dari coach dan makan hari ini' : (nOpen ? nOpen + ' PR belum selesai' : 'Semua PR beres, kerja bagus!');
+    return '<div class="section-head"><h3 class="section-title">Jelajahi</h3></div><div class="stack" style="gap:2px">' +
+      teaserRow('public-program', 'clipboard-list', 'Program & PR', prSub) +
+      teaserRow('public-progress', 'trending-up', 'Progres', chSub) + '</div>';
+  }
+  function renderTeasers() { const el = $('pub-teasers'); if (el) setHTML(el, teasersInner()); }
+
+  function renderPublicProgress() {
+    const el = $('view-public-progress'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
+    const upcoming = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date());
+    const history = mine.filter(s => upcoming.indexOf(s) === -1).sort((x, y) => new Date(y.start) - new Date(x.start));
+    let left = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.');
+    left += '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div>';
+    left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
+    left += '<div id="pub-tests-wrap" class="stack" style="gap:16px">' + myTestsInner() + '</div>';
+    let right = insightsCard(me, mine);
+    right += '<div class="card"><div class="section-head"><h3 class="section-title">Riwayat latihan</h3><span class="li-sub">' + history.length + ' sesi</span></div>' +
+      '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>';
+    setHTML(el, portalGrid(left, right));
+    renderConsistencyBars();
+    window.loadMyProgress(false);
+    window.loadMyCare();
+  }
+
+  function renderPublicProgram() {
+    const el = $('view-public-program'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    let left = pageIntro('Program', 'Latihan, PR, dan makan harianmu dari coach.');
+    left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
+    left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
+    setHTML(el, portalGrid(left, ''));
+    if (!window.myTasks) window.loadMyTasks(false); else renderMyTasksCard();
+    window.loadMyMeal(false);
+  }
+
+  function renderPublicInfo() {
+    const el = $('view-public-info'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    setHTML(el, portalGrid(pageIntro('Info & Tips', 'Pengumuman dan tips dari coach.') + emptyState('megaphone', 'Belum ada info', 'Pengumuman, tips, dan video dari coach muncul di sini.'), ''));
+  }
+
+  function renderPublicMore() {
+    const el = $('view-public-more'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const row = (onclick, ic, title, sub) => '<button type="button" class="more-row" onclick="' + onclick + '"><span class="more-ic">' + icon(ic) + '</span><span class="more-txt"><b>' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + icon('chevron-right') + '</button>';
+    const go = v => 'window.navigate(\'' + v + '\')';
+    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:640px">' + pageIntro('Lainnya', 'Semua yang kamu butuhkan di satu tempat.') +
+      '<div class="more-list">' +
+      row(go('public-program'), 'clipboard-list', 'Program', 'Latihan, PR, dan makan hari ini') +
+      row(go('public-info'), 'megaphone', 'Info & Tips', 'Pengumuman dan tips dari coach') +
+      row(go('public-catalog'), 'package', 'Paket', 'Lihat dan perpanjang paketmu') +
+      row(go('public-coaches'), 'dumbbell', 'Coach', 'Profil dan kontak coach') +
+      row('window.openSettings()', 'sun-moon', 'Tampilan', 'Terang, gelap, atau ikut sistem') +
+      row('window.logoutCurrent()', 'log-out', 'Keluar', 'Keluar dari akun ini') + '</div></div>');
+  }
 
   window.renderPublicDashboard = function () {
     const el = $('view-public-dashboard');
@@ -5403,19 +5505,12 @@
         : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
       '</div>';
 
-    left += '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div>';
-    left += '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
-    left += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
-    left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
     left += '<div id="pub-care-wrap" class="stack" style="gap:16px">' + myCareInner() + '</div>';
-
-    left += insightsCard(me, mine);
+    left += '<div class="card" id="pub-teasers">' + teasersInner() + '</div>';
 
     let right = '<div class="month-cal" id="month-cal"></div>';
     right += '<div class="card"><div class="section-head"><h3 class="section-title">Jadwalku</h3><button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button></div>' +
       (upcoming.length ? '<div class="list stagger">' + upcoming.map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
-    right += '<div class="card"><div class="section-head"><h3 class="section-title">Riwayat latihan</h3><span class="li-sub">' + history.length + ' sesi</span></div>' +
-      '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>';
 
     setHTML(el, '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + right + '</div></div>');
     renderMonthCal();
@@ -5424,10 +5519,8 @@
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 150);
       countUp($('pub-dash-remaining'), rem);
     });
-    renderConsistencyBars();
     if (!window.myTasks) window.loadMyTasks(false);
-    window.loadMyMeal(false);
-    window.loadMyProgress(false);
+    window.loadMyProgress(false);   // perayaan badge baru muncul di Beranda; kartunya sendiri ada di tab Progres
     window.loadMyCare();
     window.loadMyRenewal();
     window.loadMyBills();
@@ -5486,7 +5579,7 @@
       { sel: '#public-coach-list .coach-card .btn-outline, #coach-profile-page .btn-primary', title: 'Hubungi coach', text: '{Klik} untuk chat coach lewat WhatsApp.' }
     ]
   };
-  const GUIDE_VIEW_PAGE = { 'public-dashboard': 'beranda', 'calendar': 'jadwal', 'public-catalog': 'paket', 'public-coaches': 'coach' };
+  const GUIDE_VIEW_PAGE = { 'public-dashboard': 'beranda', 'calendar': 'jadwal', 'public-catalog': 'paket', 'public-coaches': 'coach' };   // J4 menambah halaman panduan Progres/Program/Info
   const guide = { on: false, page: null, steps: [], i: 0, replay: false, timer: null, raf: 0, tick: 0, dock: 'bottom' };
 
   function guideVisible(el) {

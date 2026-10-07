@@ -4023,10 +4023,30 @@ function _streakInfo_(memberId) {
 
 // ── Klien (token member; ID klien selalu dari token, bukan dari argumen) ────
 
+const MONTHLY_CHALLENGE_DEFAULT = 8;   // sesi selesai per bulan; Script Property MONTHLY_CHALLENGE_SESSIONS menimpanya (1-31)
+
+/** Murni: jumlah sesi selesai klien pada bulan WIB `month` ('YYYY-MM'). Waktu selesai dipakai bila ada, kalau tidak jam mulai. */
+function _challengeDone_(schedules, memberId, month) {
+  const id = String(memberId).trim();
+  return (schedules || []).filter(function(s) {
+    if (String(s.memberId).trim() !== id || String(s.status || '').toLowerCase() !== 'completed') return false;
+    const t = new Date(s.completedAt || s.start);
+    return !isNaN(t.getTime()) && Utilities.formatDate(t, REMINDER_TZ, 'yyyy-MM') === month;
+  }).length;
+}
+
+/** Tantangan bulan ini: { target, done, month }. Dihitung di server dari sesi selesai; tidak ada data baru. */
+function _monthlyChallenge_(memberId) {
+  const month = _todayWib_().slice(0, 7);
+  const target = Math.max(1, Math.min(31, Math.floor(_numProp_('MONTHLY_CHALLENGE_SESSIONS', MONTHLY_CHALLENGE_DEFAULT))));
+  return { target: target, done: _challengeDone_(_getSchedulesAll_(), memberId, month), month: month };
+}
+
 /** Payload klien + badge yang sudah diraih tapi belum pernah dirayakan (kolom Q). */
 function _myPayload_(row) {
   const memberId = String(row[0]).trim();
   const p = _progressPayload_(memberId);
+  p.challenge = _monthlyChallenge_(memberId);
   const seen = _rmdOffFrom_(row[MEMBER_BADGE_SEEN_COL - 1]);
   p.newBadges = p.badges.filter(function(b) { return b.earned && seen.indexOf(b.id) === -1; }).map(function(b) { return b.id; });
   return p;
