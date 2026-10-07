@@ -533,7 +533,7 @@ test('_slotAlternatives_: skips own sessions (from the whole hour), avoided star
   const env = seededEnv();
   const days = mkDays(1, (d, h) => (h === 9 ? { past: true } : h === 11 ? { off: true } : null));
   const o = { own: [{ start: new Date(Date.parse(at(MON, 12)) + 30 * 60000).toISOString(), end: new Date(Date.parse(at(MON, 13)) + 30 * 60000).toISOString() }], avoid: [at(MON, 8)] };
-  assert.deepEqual(alts(env, days, at(MON, 10), at(MON, 11), o), [[MON, 13, 'day'], [MON, 7, 'day'], [MON, 14, 'near']]);
+  assert.deepEqual(alts(env, days, at(MON, 10), at(MON, 11), o), [[MON, 7, 'day'], [MON, 14, 'day'], [MON, 6, 'near']]);
 });
 
 test('_slotAlternatives_: at most n (default 3), none when nothing fits', () => {
@@ -751,4 +751,17 @@ test('two coaches: a soft conflict suggests the picked coach\'s free hours and c
   assert.equal(ok.status, 'success');
   assert.equal(ok.coachId, dinaId);
   assert.equal(freeAt(ok.openSlotsByCoach[dinaId], FUT(4, 10)), 0);
+});
+
+test('an owner-made off-the-hour session also blocks the next hour it really touches', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const t = env.adminToken();
+  env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: FUT(4, 9, 30), end: FUT(4, 10, 30), notes: '' });
+  const day = env.call('getOpenSlots', { days: 6 }).find(d => d.date === wibDate(4));
+  const free = h => Array.from(day.hours).find(x => x.hour === h).free;
+  assert.equal(free(9), 0);
+  assert.equal(free(10), 0);   // 09:30–10:30 really overlaps 10:00
+  assert.equal(free(11), 1);
+  assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(4, 10), end: FUT(4, 11) }), /sudah dibooking/);
 });

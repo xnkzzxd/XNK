@@ -2470,7 +2470,7 @@
       const overlapping = list.filter(s => {
         if (!isBooked(s)) return false;
         // Sama dengan server: sesi dihitung dari jam bulat awalnya selama durasinya.
-        const bs = Math.floor(new Date(s.start).getTime() / 3600000) * 3600000, be = bs + (new Date(s.end || s.start) - new Date(s.start));
+        const bs = Math.floor(new Date(s.start).getTime() / 3600000) * 3600000, be = Math.max(bs + (new Date(s.end || s.start) - new Date(s.start)), new Date(s.end || s.start).getTime());
         return bs < s1.getTime() && be > s0.getTime();
       });
       const isMine = me && overlapping.some(s => String(s.memberId) === String(me.id));
