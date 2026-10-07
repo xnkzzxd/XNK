@@ -667,8 +667,8 @@ function exportFinanceCsv(token, kind, from, to) {
 
 // ── Portal klien (hanya bila diizinkan owner) ───────────────────────────────
 
-function getMyBills(memberToken) {
-  const memberId = String(requireMember_(memberToken).row[0]).trim();
+function _billsFor_(row) {
+  const memberId = String(row[0]).trim();
   if (!_finOn_() || PropertiesService.getScriptProperties().getProperty('FIN_PORTAL_VISIBLE') !== 'true') return [];
   const payments = _finRead_('Pembayaran');
   return _finRead_('Tagihan').filter(function(b) { return String(b['Member ID']).trim() === memberId && !b['Diarsipkan Pada']; })
@@ -677,3 +677,4 @@ function getMyBills(memberToken) {
       return { paket: b['Nama Paket'] || '', tanggal: b.Tanggal, total: t.net, paid: t.paid, remaining: t.remaining, status: t.status, lastPaid: t.lastPaid };
     }).sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : -1; });
 }
+function getMyBills(memberToken) { return _billsFor_(requireMember_(memberToken).row); }

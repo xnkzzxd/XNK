@@ -1469,11 +1469,12 @@
   // (bukan kedip): bar penuh dulu, lalu layar memudar sementara isi naik.
   const SPLASH_MIN = 700, splashAt = performance.now();
   let splashLeaving = false;
-  window.hideGlobalLoader = function () {
+  window.hideGlobalLoader = function (fast) {
     const el = $('global-loader');
     if (!el || splashLeaving || el.classList.contains('gone')) return;
     splashLeaving = true;
-    const wait = Math.max(0, SPLASH_MIN - (performance.now() - splashAt));
+    // fast = layar sudah bisa diisi dari salinan di perangkat: tidak perlu menahan layar awal.
+    const wait = fast ? 0 : Math.max(0, SPLASH_MIN - (performance.now() - splashAt));
     setTimeout(function () {
       el.classList.add('done');
       setTimeout(function () {
@@ -1853,8 +1854,20 @@
   window.loadPublicData = function () {
     const token = _lsGet(MEMBER_TOKEN_KEY);
     window.members = []; window.memberArchive = [];
-    // Satu panggilan server: profil, jadwalku, jam kosong, coach, paket, jam operasional.
-    return publicCall('getPortalBootstrap', token).catch(function () { return null; }).then(function (b) {
+    // Salinan terakhir di perangkat (hanya saat aplikasi baru dibuka): layar langsung terisi, data segar menyusul.
+    const cached = !!token && !ui.dataReady && loadPortalCache(token);
+    let sigBefore = '';
+    if (cached) {
+      sigBefore = portalSig();
+      ui.dataReady = true;
+      window._openMemberDashboard = false;
+      window.hideGlobalLoader(true);
+      window.navigate(window.currentView && window.currentView !== 'public-login' ? window.currentView : 'public-dashboard');
+    }
+    // Panggilan 1: profil, jadwalku, jam kosong, coach, paket (cepat). Panggilan 2 (lazy, sesudah layar tampil): semua data sisanya.
+    const boot = publicCall('getPortalBootstrap', token).catch(function () { return null; });
+    if (token) setTimeout(function () { window.refreshPortalMore(true); }, 0);
+    return boot.then(function (b) {
       b = b || {};
       applyPortalBootstrap(b);
       window.coaches = b.coaches || [];
@@ -1864,7 +1877,11 @@
       else if (token && b.profile) window.setPublicMember(b.profile);
       ui.dataReady = true;
       window.hideGlobalLoader();
-      if (window._openMemberDashboard && window.publicLoggedMember) {
+      if (cached) {
+        // Sudah tampil dari salinan: gambar ulang hanya bila ada yang berubah (tanpa loncat).
+        window._openMemberDashboard = false;
+        if (portalSig() !== sigBefore) window.updateUI();
+      } else if (window._openMemberDashboard && window.publicLoggedMember) {
         window._openMemberDashboard = false;
         window.navigate('public-dashboard');
       } else if (!window.currentView) {
@@ -1872,9 +1889,111 @@
       } else {
         window.updateUI();
       }
+      savePortalCache();
       openPendingSlot();
     });
   };
+
+  // ── Salinan portal di perangkat + satu panggilan "more" (Fase K) ───────────────────────────────
+  // Hanya data klien itu sendiri. Dibersihkan saat keluar atau sesi habis. Kunci memuat sidik token, jadi akun lain tidak
+  // pernah melihat salinan ini. Jam kosong tidak disimpan (selalu dari server).
+  const PORTAL_CACHE_KEY = 'xnk_portal_cache';
+  const tokenSig = t => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
+  let portalMoreRaw = null, portalMoreInflight = null, portalMoreAt = 0;
+  function portalSig() { return JSON.stringify([window.publicLoggedMember, window.schedules, window.coaches, window.priceListData]); }
+  function savePortalCache() {
+    const token = _lsGet(MEMBER_TOKEN_KEY);
+    if (!token || !window.publicLoggedMember) return;
+    try {
+      _lsSet(PORTAL_CACHE_KEY, JSON.stringify({
+        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules, coaches: window.coaches,
+        priceList: window.priceListData, hours: DAY_HOURS, horizon: window.bookingHorizonDays, cutoff: window.rescheduleCutoffHours,
+        infoLatest: window.infoLatest || '', feedback: window.myFeedback ? { enabled: window.myFeedback.enabled, pending: window.myFeedback.pending, pkgEval: window.myFeedback.pkgEval } : null,
+        more: portalMoreRaw
+      }));
+    } catch (e) {}
+  }
+  window.clearPortalCache = function () {
+    _lsSet(PORTAL_CACHE_KEY, null);
+    portalMoreRaw = null; portalMoreInflight = null; portalMoreAt = 0;
+    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; window.myBills = undefined;
+    window.myProgram = undefined; window.myContent = undefined; window.myCoachStatus = undefined; pg.data = null; myCare.form = null; myCare.assess = null;
+  };
+  function loadPortalCache(token) {
+    try {
+      const c = JSON.parse(_lsGet(PORTAL_CACHE_KEY) || 'null');
+      if (!c || c.v !== 1 || c.th !== tokenSig(token) || !c.profile || !Array.isArray(c.schedules)) { if (c) _lsSet(PORTAL_CACHE_KEY, null); return false; }
+      window.publicLoggedMember = c.profile;
+      window.schedules = normalizeSchedules(c.schedules);
+      window.coaches = c.coaches || [];
+      window.priceListData = c.priceList || [];
+      if (c.hours) Object.assign(DAY_HOURS, c.hours);
+      if (c.horizon) window.bookingHorizonDays = c.horizon;
+      if (c.cutoff != null) window.rescheduleCutoffHours = c.cutoff;
+      window.infoLatest = c.infoLatest || '';
+      window.myFeedback = Object.assign({ enabled: true, pending: null, pkgEval: false }, c.feedback || {}, { stars: 0, scheduleId: '' });
+      if (c.more) applyPortalMore(c.more, true);
+      renderTopbarActions();
+      return true;
+    } catch (e) { return false; }
+  }
+  const moreBad = v => !!v && typeof v === 'object' && !Array.isArray(v) && typeof v.error === 'string' && Object.keys(v).length === 1;
+  const moreErr = v => String(v.error);
+  // Terapkan jawaban getPortalMore ke state portal, lalu gambar ulang hanya bagian yang sedang tampil.
+  function applyPortalMore(m, fromCache) {
+    if (!m || typeof m !== 'object') return;
+    portalMoreRaw = m;
+    if (Array.isArray(m.tasks)) window.myTasks = { list: m.tasks, state: 'ok' };
+    else if (m.tasks && moreBad(m.tasks) && !(window.myTasks && window.myTasks.state === 'ok')) window.myTasks = { list: [], state: 'error', error: moreErr(m.tasks) };
+    if (m.progress && !moreBad(m.progress)) pg.data = m.progress;
+    else if (m.progress && !pg.data) pg.data = { error: moreErr(m.progress), entries: [], photos: [] };
+    if (m.healthForm !== undefined) myCare.form = moreBad(m.healthForm) ? myCare.form : m.healthForm;
+    if (m.assessment !== undefined) myCare.assess = moreBad(m.assessment) ? myCare.assess : m.assessment;
+    if (m.renewal !== undefined && !moreBad(m.renewal)) window.myRenewal = m.renewal || null;
+    if (Array.isArray(m.bills)) window.myBills = m.bills;
+    if (m.classGroup !== undefined && !moreBad(m.classGroup)) window.myGroup = m.classGroup || null;
+    if (m.meal !== undefined && !moreBad(m.meal)) window.myMeal = { state: 'ok', data: m.meal || { core: false }, day: todayKey() };
+    else if (m.meal && !window.myMeal) window.myMeal = { state: 'error', error: moreErr(m.meal) };
+    if (m.program && !moreBad(m.program)) window.myProgram = { state: 'ok', data: m.program };
+    else if (m.program && !window.myProgram) window.myProgram = { state: 'error', error: moreErr(m.program) };
+    if (Array.isArray(m.content)) window.myContent = { state: 'ok', list: m.content, at: Date.now() };
+    else if (m.content && !window.myContent) window.myContent = { state: 'error', error: moreErr(m.content), list: [] };
+    if (m.coachStatus && !moreBad(m.coachStatus)) window.myCoachStatus = m.coachStatus;
+    renderPortalParts();
+    if (!fromCache && pg.data && !pg.data.error) pgCelebrate(pg.data);
+  }
+  // Gambar ulang kartu yang sedang ada di layar (elemen yang tidak tampil dilewati).
+  function renderPortalParts() {
+    renderMyTasksCard(); pgRenderCard(); renderRenewSlot(); renderBillSlot(); renderClassSlot(); renderMyMealCard(); renderProgramCard(); renderCoachStatusChip();
+    const care = $('pub-care-wrap'); if (care) { care.innerHTML = myCareInner(); }
+    const tests = $('pub-tests-wrap'); if (tests) { tests.innerHTML = myTestsInner(); }
+    const info = $('pub-info-wrap'); if (info) { setHTML(info, infoInner()); if (window.currentView === 'public-info') markInfoSeen(); }
+    paintIcons();
+  }
+  // Satu panggilan untuk semua data sisa. Panggilan yang bersamaan digabung; sebelum 20 detik tidak diulang kecuali dipaksa.
+  window.refreshPortalMore = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY)) return Promise.resolve();
+    if (portalMoreInflight) return portalMoreInflight;
+    if (!force && portalMoreAt && Date.now() - portalMoreAt < 20000) return Promise.resolve();
+    portalMoreInflight = memberCall('getPortalMore').then(function (m) { portalMoreAt = Date.now(); applyPortalMore(m, false); savePortalCache(); })
+      .catch(function (err) {
+        if (window.isAuthError && window.isAuthError(err)) return;
+        // Tidak ada data sama sekali: kartu menampilkan "Coba lagi" (bukan skeleton selamanya).
+        [['myTasks', { list: [], state: 'error' }], ['myProgram', { state: 'error' }], ['myContent', { list: [], state: 'error' }]].forEach(function (p) { if (!window[p[0]]) window[p[0]] = Object.assign({ error: String((err && err.message) || err) }, p[1]); });
+        renderPortalParts();
+      })
+      .then(function () { portalMoreInflight = null; });
+    return portalMoreInflight;
+  };
+  // Kembali ke aplikasi setelah lama: segarkan diam-diam (bukan saat pindah tab).
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    if (!window.isPublicView || !window.publicLoggedMember || !hiddenAt || Date.now() - hiddenAt < 120000) return;
+    hiddenAt = 0;
+    window.refreshPortalSchedules().then(function () { window.updateUI(); savePortalCache(); }).catch(function () {});
+    window.refreshPortalMore(true);
+  });
 
   // Jadwalku + jam kosong dari getPortalBootstrap (jadwal klien lain tidak pernah dikirim ke browser).
   function applyPortalBootstrap(b) {
@@ -1888,7 +2007,7 @@
     window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
   }
   window.refreshPortalSchedules = function () {
-    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { applyPortalBootstrap(b || {}); });
+    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { applyPortalBootstrap(b || {}); savePortalCache(); });
   };
 
   // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form
@@ -2473,6 +2592,7 @@
       html += '<p class="eyebrow" style="margin:6px 0 8px">Jadwalku</p><div class="list stagger" style="margin-bottom:18px">' + mine.map(memberSessionRow).join('') + '</div>';
     }
     scheduleHourRedraw();
+    if (me && !window.openSlotsByDate) return html + '<div class="notice" role="status">' + icon('clock') + '<div class="grow"><p class="li-title">Memuat jam kosong…</p></div></div>' + skel(2, true);
     const slotMap = window.openSlotsByDate;
     const slotDates = slotMap ? Object.keys(slotMap).sort() : [];
     // Lewat batas booking: belum ada jam yang dibuka, jadi tidak ada kisi jam.
@@ -3595,7 +3715,7 @@
     const c = window.memberTasks[String(memberId)];
     const addBtn = '<button type="button" class="btn btn-secondary btn-sm" onclick="window.addTaskFor(\'' + h(memberId) + '\')">' + icon('plus') + 'Tambah</button>';
     let inner;
-    if (!c || c.state === 'loading') inner = '<p class="li-sub">Memuat PR…</p>';
+    if (!c || c.state === 'loading') inner = skel(3);
     else if (c.state === 'error') inner = '<p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMemberTasks(\'' + h(memberId) + '\',true)">Coba lagi</button>';
     else if (!c.list.length) inner = emptyState('inbox', 'Belum ada PR', 'Beri klien tugas di luar gym, misalnya nutrisi atau tidur.');
     else {
@@ -4848,7 +4968,7 @@
   };
 
   window.onMemberAuthLost = function (err) {
-    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; pg.data = null;
+    window.clearPortalCache();
     _lsSet(MEMBER_TOKEN_KEY, null);
     window.publicLoggedMember = null;
     renderTopbarActions();
@@ -4857,7 +4977,7 @@
   };
 
   window.logoutPublic = function () {
-    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; pg.data = null;
+    window.clearPortalCache();
     window.publicLoggedMember = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
     try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) {}
@@ -5170,18 +5290,20 @@
       .catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
   };
   // Kartu Tagihan (Fase H): server mengembalikan [] kecuali owner mengizinkan; tanpa tombol, hanya baca.
+  function renderBillSlot() {
+    const slot = $('pub-bill-slot');
+    if (!slot) return;
+    const bills = (Array.isArray(window.myBills) ? window.myBills : []).filter(function (b) { return b.status !== 'Lunas'; }).slice(0, 3);
+    const rp = function (n) { return 'Rp ' + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+    setHTML(slot, bills.length ? '<div class="card-flat stack" id="pub-bill-card"><h4 class="li-title">Tagihan</h4>' + bills.map(function (b) {
+      return '<div class="row-between"><div style="min-width:0"><p class="li-title truncate">' + h(b.paket) + '</p><p class="li-sub">' + (b.lastPaid ? 'Terakhir bayar ' + h(b.lastPaid) : 'Belum ada pembayaran') + '</p></div>' +
+        '<div style="text-align:right"><b class="num">' + h(rp(b.remaining)) + '</b><p><span class="pill' + (b.status === 'DP' ? '' : ' dashed') + '">' + h(b.status) + '</span></p></div></div>';
+    }).join('') + '<p class="hint">Pembayaran dilakukan langsung ke coach.</p></div>' : '');
+  }
   window.loadMyBills = function () {
     if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
-    return memberCall('getMyBills').then(function (list) {
-      const slot = $('pub-bill-slot');
-      if (!slot) return;
-      const bills = (list || []).filter(function (b) { return b.status !== 'Lunas'; }).slice(0, 3);
-      const rp = function (n) { return 'Rp ' + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
-      setHTML(slot, bills.length ? '<div class="card-flat stack" id="pub-bill-card"><h4 class="li-title">Tagihan</h4>' + bills.map(function (b) {
-        return '<div class="row-between"><div style="min-width:0"><p class="li-title truncate">' + h(b.paket) + '</p><p class="li-sub">' + (b.lastPaid ? 'Terakhir bayar ' + h(b.lastPaid) : 'Belum ada pembayaran') + '</p></div>' +
-          '<div style="text-align:right"><b class="num">' + h(rp(b.remaining)) + '</b><p><span class="pill' + (b.status === 'DP' ? '' : ' dashed') + '">' + h(b.status) + '</span></p></div></div>';
-      }).join('') + '<p class="hint">Pembayaran dilakukan langsung ke coach.</p></div>' : '');
-    }).catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
+    return memberCall('getMyBills').then(function (list) { window.myBills = list || []; renderBillSlot(); })
+      .catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
   };
   window.openRenewSheet = function () {
     fillCoachSelect('renew-coach-field', 'renew-coach');
@@ -5292,7 +5414,7 @@
   function pgCardInner() {
     const d = pg.data;
     let inner;
-    if (!d) inner = '<p class="li-sub">Memuat progres…</p>';
+    if (!d) inner = skel(3, true);
     else if (d.error) inner = '<p class="li-sub">Gagal memuat progres: ' + h(d.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgress(true)">Coba lagi</button>';
     else if (!d.entries.length) inner = emptyState('trending-up', 'Belum ada catatan', 'Catat berat atau lingkar pinggangmu, lalu lihat perubahannya di sini.');
     else inner = '<div class="stack" style="gap:18px">' + pgBlocksHtml(d) + '</div>';
@@ -5468,7 +5590,7 @@
   function myTasksCardInner() {
     const c = window.myTasks;
     let inner;
-    if (!c || c.state === 'loading') inner = '<p class="li-sub">Memuat PR…</p>';
+    if (!c || c.state === 'loading') inner = skel(3);
     else if (c.state === 'error') inner = '<p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyTasks(true)">Coba lagi</button>';
     else if (!c.list.length) inner = emptyState('clipboard-check', 'Belum ada PR', 'PR dari coach untuk di luar gym muncul di sini.');
     else {
@@ -5529,6 +5651,12 @@
   function portalGrid(left, right) {
     return '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + (right || '') + '</div></div>';
   }
+  // Kerangka abu (skeleton) selagi data belum datang: n baris teks + blok opsional.
+  function skel(n, block) {
+    let s = '<div class="skel-wrap" aria-hidden="true">';
+    for (let i = 0; i < n; i++) s += '<div class="skel skel-line" style="width:' + (i === 0 ? 45 : i % 2 ? 90 : 70) + '%"></div>';
+    return s + (block ? '<div class="skel skel-block"></div>' : '') + '</div>';
+  }
   function pageIntro(title, sub) { return '<div class="page-intro"><h2 class="section-title" style="font-size:var(--fs-2xl)">' + h(title) + '</h2><p class="li-sub">' + h(sub) + '</p></div>'; }
   function teaserRow(view, ic, title, sub, dot) {
     return '<button type="button" class="teaser-row" onclick="window.navigate(\'' + view + '\')"><span class="more-ic" style="width:40px;height:40px;border-radius:12px;background:var(--surface-3);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">' + icon(ic) + '</span>' +
@@ -5562,8 +5690,6 @@
       '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>';
     setHTML(el, portalGrid(left, right));
     renderConsistencyBars();
-    window.loadMyProgress(false);
-    window.loadMyCare();
   }
 
   // Program latihan dari coach: window.myProgram = { state, data:{days,done,today}, error }; centang disimpan per hari.
@@ -5572,7 +5698,7 @@
   function programDoneSet(hari) { const d = window.myProgram && window.myProgram.data; return (d && d.done && d.done[hari]) || []; }
   function programInner() {
     const c = window.myProgram;
-    if (!c || c.state === 'loading') return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div><p class="li-sub">Memuat program…</p>';
+    if (!c || c.state === 'loading') return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div>' + skel(3, true);
     if (c.state === 'error') return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div><p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgram(true)">Coba lagi</button>';
     const days = c.data.days || [];
     if (!days.length) return '<div class="section-head"><h3 class="section-title">Program latihan</h3></div>' + emptyState('clipboard-list', 'Belum ada program', 'Coach belum menyiapkan program untukmu. Tanya coach lewat Chat.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>');
@@ -5626,9 +5752,6 @@
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
     setHTML(el, portalGrid(left, right));
-    window.loadMyProgram(false);
-    if (!window.myTasks) window.loadMyTasks(false); else renderMyTasksCard();
-    window.loadMyMeal(false);
   }
 
   // Info & Tips: window.myContent = { state, list }. Titik "baru" bila ada konten lebih baru dari yang terakhir dilihat (per perangkat).
@@ -5657,7 +5780,7 @@
   }
   function infoInner() {
     const c = window.myContent;
-    if (!c || c.state === 'loading') return '<p class="li-sub">Memuat…</p>';
+    if (!c || c.state === 'loading') return skel(3, true);
     if (c.state === 'error') return '<p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyContent(true)">Coba lagi</button>';
     if (!c.list.length) return emptyState('megaphone', 'Belum ada info', 'Pengumuman, tips, dan video dari coach muncul di sini.');
     const cats = c.list.map(x => x.kategori).filter((v, i, arr) => v && arr.indexOf(v) === i);
@@ -5687,7 +5810,10 @@
     const el = $('view-public-info'), me = window.publicLoggedMember;
     if (!el || !me) return;
     setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:720px">' + pageIntro('Info & Tips', 'Pengumuman, tips, dan video dari coach.') + '<div class="stack" style="gap:var(--gap)" id="pub-info-wrap">' + infoInner() + '</div></div>');
-    window.loadMyContent(false);
+    const c = window.myContent, latest = window.infoLatest || '';
+    // Konten baru terdeteksi dari bootstrap (info.latestAt) tapi belum ada di daftar: muat daftar saja (satu panggilan kecil).
+    if (!c || (c.state === 'ok' && latest && !c.list.some(x => x.dibuat >= latest))) window.loadMyContent(true);
+    else if (c.state === 'ok') markInfoSeen();
   }
 
   function renderPublicMore() {
@@ -5775,13 +5901,8 @@
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 150);
       countUp($('pub-dash-remaining'), rem);
     });
-    if (!window.myTasks) window.loadMyTasks(false);
-    window.loadMyProgress(false);   // perayaan badge baru muncul di Beranda; kartunya sendiri ada di tab Progres
-    window.loadMyCare();
-    window.loadMyRenewal();
-    window.loadMyBills();
-    window.loadMyClassGroup();
-    loadMyCoachStatus();
+    // Semua data sisa datang dari satu panggilan (refreshPortalMore); render hanya membaca state.
+    renderBillSlot(); renderCoachStatusChip();
   };
 
   // Tanggal di beranda: pindah ke tab Jadwal pada tanggal itu.
@@ -6525,10 +6646,12 @@
       '<p class="li-sub truncate">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
       '<div style="margin-top:8px" id="pub-coach-status" data-coach="' + h(String(c.id)) + '"></div></div></div></div>';
   }
-  function loadMyCoachStatus() {
-    const el = $('pub-coach-status');
-    if (!el) return;
-    publicCall('getCoachStatus', el.getAttribute('data-coach')).then(function (st) { const e2 = $('pub-coach-status'); if (e2) e2.innerHTML = coachStatusChip(st); }).catch(function () {});
+  function renderCoachStatusChip() {
+    const el = $('pub-coach-status'), s = window.myCoachStatus;
+    if (!el || !s || !s.status) return;
+    const id = el.getAttribute('data-coach');
+    if (s.coachId && String(s.coachId) !== String(id)) return;   // status milik coach lain
+    el.innerHTML = coachStatusChip(s.status);
   }
 
   window.contactPublicCoach = function (id) {

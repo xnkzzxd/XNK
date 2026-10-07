@@ -1646,8 +1646,8 @@ function _mealTodayFor_(isCore, tipPagi, tipSore, tanggal) {
 }
 
 /** @returns {{core:boolean, date?:string, pagi?:string, sore?:string}} */
-function getMyMealToday(memberToken) {
-  var row = requireMember_(memberToken).row;
+function getMyMealToday(memberToken) { return _mealForMember_(requireMember_(memberToken).row); }
+function _mealForMember_(row) {
   var core = _isCorePackage_(row[6], getPriceList());
   if (!core) return _mealTodayFor_(false);
   var date = _wibParts_(new Date()).date;

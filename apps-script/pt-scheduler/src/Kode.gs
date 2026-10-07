@@ -2102,6 +2102,35 @@ function getPortalBootstrap(memberToken) {
 }
 
 /**
+ * Portal klien (Fase K): SEMUA data sisa untuk Beranda dan tab (progres, PR, form kesehatan, asesmen, perpanjangan, tagihan,
+ * grup kelas, makan hari ini, program, konten, status coach) dalam SATU panggilan: satu autentikasi dan Schedules dibaca sekali.
+ * Setiap bagian bentuknya sama persis dengan fungsi lamanya (getMyProgress, getMyTasks, …). Bagian yang gagal menjadi
+ * { error } dan tidak merusak bagian lain. Hanya data klien itu sendiri.
+ */
+function getPortalMore(memberToken) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  const part = function(fn) { try { return fn(); } catch (e) { return { error: String((e && e.message) || e) }; } };
+  return _withSchedulesMemo_(function() {
+    const coachId = String(row[10] || '').trim();
+    return {
+      at: new Date().toISOString(),
+      progress: part(function() { return _myPayload_(row); }),
+      tasks: part(function() { return _myTasksFor_(row); }),
+      healthForm: part(function() { return _healthFormFor_(row); }),
+      assessment: part(function() { return _assessmentFor_(row); }),
+      renewal: part(function() { return _renewalFor_(row); }),
+      bills: part(function() { return _billsFor_(row); }),
+      classGroup: part(function() { return _classGroupFor_(row); }),
+      meal: part(function() { return _mealForMember_(row); }),
+      program: part(function() { return _programFor_(row); }),
+      content: part(function() { return _contentForClient_(); }),
+      coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; })
+    };
+  });
+}
+
+/**
  * Dua coach aktif atau lebih: jam kosong per coach (klien memilih coach lebih dulu), lewat cache yang sama.
  * Solo: {} (tidak dipakai). refresh = hitung ulang & simpan (write-through sesudah booking).
  */
@@ -2171,7 +2200,16 @@ function _ensureScheduleClassHeader_(sheet) {
   if (c.getValue() === '') { c.setValue('Kelas ID'); c.setFontWeight('bold'); }
 }
 
+// Memo per eksekusi untuk bundle baca-saja (getPortalMore, dst.): Schedules dibaca sekali. Hanya diisi oleh _withSchedulesMemo_.
+let _schedMemo_ = null;
+function _withSchedulesMemo_(fn) {
+  const prev = _schedMemo_;
+  _schedMemo_ = _getSchedulesAll_();
+  try { return fn(); } finally { _schedMemo_ = prev; }
+}
+
 function _getSchedulesAll_() {
+  if (_schedMemo_) return _schedMemo_;
   const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID", "Kelas ID"];
   const sheet = getOrCreateSheet_('Schedules', headers);
   const data = sheet.getDataRange().getValues();
@@ -4279,8 +4317,8 @@ function requestRenewal(memberToken, packageId, coachId) {
 }
 
 /** Klien: permintaan perpanjang terbaru (untuk status di beranda). null kalau belum pernah. */
-function getMyRenewal(memberToken) {
-  const memberId = String(requireMember_(memberToken).row[0]).trim();
+function _renewalFor_(row) {
+  const memberId = String(row[0]).trim();
   let last = null;
   _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     if (!r[0] || String(r[1]).trim() !== memberId || String(r[3]) === 'dibatalkan') return;
@@ -4291,6 +4329,7 @@ function getMyRenewal(memberToken) {
   last.packageName = pkg ? pkg.namaPaket : '';
   return last;
 }
+function getMyRenewal(memberToken) { return _renewalFor_(requireMember_(memberToken).row); }
 
 /** Admin: daftar permintaan, yang menunggu dulu. opts: { status, limit (bawaan 50, maks 200) }. */
 function getRenewalRequests(token, opts) {
@@ -5076,8 +5115,8 @@ const TASK_CLIENT_DONE_LIMIT = 20; // PR selesai/dilewati yang ikut dikirim ke p
  * lalu maksimal 20 PR selesai/dilewati terbaru. Field khusus admin tidak ikut.
  * @returns {Array<{id,title,description,category,dueDate,status,repeat,completedAt,clientNote,overdue}>}
  */
-function getMyTasks(memberToken) {
-  const memberId = String(requireMember_(memberToken).row[0]).trim();
+function _myTasksFor_(row) {
+  const memberId = String(row[0]).trim();
   const data = _tasksSheet_().getDataRange().getValues();
   const todo = [], finished = [];
   for (let i = 1; i < data.length; i++) {
@@ -5097,6 +5136,7 @@ function getMyTasks(memberToken) {
   finished.sort(function(a, b) { return String(b.completedAt).localeCompare(String(a.completedAt)); });
   return todo.concat(finished.slice(0, TASK_CLIENT_DONE_LIMIT));
 }
+function getMyTasks(memberToken) { return _myTasksFor_(requireMember_(memberToken).row); }
 
 /**
  * Klien: tandai PR milik sendiri selesai, dengan catatan opsional (maks 300 karakter).
@@ -6336,8 +6376,8 @@ function deleteContent(token, id) {
 }
 
 /** Klien: konten yang sedang tayang (disematkan dulu, lalu terbaru). Tanpa data pribadi, bukan milik satu klien. */
-function getMyContent(memberToken) {
-  requireMember_(memberToken);
+function getMyContent(memberToken) { requireMember_(memberToken); return _contentForClient_(); }
+function _contentForClient_() {
   const today = _todayWib_();
   return _contentSort_(_contentAll_().filter(function(c) { return _contentVisible_(c, today); })).map(function(c) {
     return { id: c.id, tipe: c.tipe, judul: c.judul, isi: c.isi, url: c.url, kategori: c.kategori, sematkan: c.sematkan, dibuat: c.dibuat };
@@ -6545,14 +6585,15 @@ function _programLogsFor_(memberId) {
 }
 
 /** Klien: program miliknya dan gerakan yang sudah dicentang hari ini { hari: [urutan] }. */
-function getMyProgram(memberToken) {
-  const id = String(requireMember_(memberToken).row[0]).trim();
+function _programFor_(row) {
+  const id = String(row[0]).trim();
   const p = _programDays_(id);
   const today = _todayWib_();
   const done = {};
   _programLogsFor_(id).forEach(function(l) { if (l.tanggal === today) done[l.hari] = l.selesai; });
   return { days: p.days, today: today, done: done, updatedAt: p.updatedAt };
 }
+function getMyProgram(memberToken) { return _programFor_(requireMember_(memberToken).row); }
 
 /** Klien: simpan centang satu hari program (hari ini, WIB). selesai = daftar urutan gerakan. Klien dari token. */
 function logMyProgramDay(memberToken, hari, selesai) {
@@ -6889,11 +6930,12 @@ function getSessionBriefing(token, scheduleId) {
 // ── Klien (portal) ──────────────────────────────────────────────────────────
 
 /** Klien: pertanyaan form kesehatan dan apakah sudah diisi. TIDAK mengembalikan jawaban. */
-function getMyHealthForm(memberToken) {
-  const id = String(requireMember_(memberToken).row[0]).trim();
+function _healthFormFor_(row) {
+  const id = String(row[0]).trim();
   const hs = _latestRowFor_('HealthScreening', id);
   return { questions: HEALTH_QUESTIONS, done: !!hs, date: hs ? String(hs.row[2]) : '' };
 }
+function getMyHealthForm(memberToken) { return _healthFormFor_(requireMember_(memberToken).row); }
 
 /** Klien: kirim form kesehatan. answers = { q: ['ya'|'tidak' x7], injuries, medication, other, consent }. */
 function submitMyHealthForm(memberToken, answers) {
@@ -6921,8 +6963,8 @@ function submitMyHealthForm(memberToken, answers) {
 }
 
 /** Klien: tujuan & preferensi dari assessment, dan hasil tes (pertama → terbaru). Tanpa catatan coach. */
-function getMyAssessment(memberToken) {
-  const id = String(requireMember_(memberToken).row[0]).trim();
+function _assessmentFor_(row) {
+  const id = String(row[0]).trim();
   const asm = _latestRowFor_('Assessments', id);
   const byTest = _fitnessByMember_(id);
   return {
@@ -6934,6 +6976,7 @@ function getMyAssessment(memberToken) {
     })
   };
 }
+function getMyAssessment(memberToken) { return _assessmentFor_(requireMember_(memberToken).row); }
 
 // ── Daftar "Perlu perhatian" (dipakai Beranda Coach) ─────────────────────────
 
@@ -7166,11 +7209,12 @@ function leaveClassGroup(memberToken) {
 }
 
 /** Klien: grup saya (atau null). Hanya nama depan anggota. */
-function getMyClassGroup(memberToken) {
-  const memberId = String(requireMember_(memberToken).row[0]).trim();
+function _classGroupFor_(row) {
+  const memberId = String(row[0]).trim();
   const g = _openGroupOf_(memberId);
   return g ? _publicGroup_(g, memberId) : null;
 }
+function getMyClassGroup(memberToken) { return _classGroupFor_(requireMember_(memberToken).row); }
 
 /** Admin: semua grup privat terbuka beserta anggotanya. */
 function getClassGroups(token) {

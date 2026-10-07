@@ -20,10 +20,14 @@ function colToIndex(letters) {
 }
 
 class Range {
+  // Test instrumentation: how many times sheet data was read (each getValues = one read).
+  static resetReads() { Range.reads = { total: 0, bySheet: {} }; }
   constructor(sheet, row, col, numRows, numCols) {
     Object.assign(this, { sheet, row, col, numRows, numCols });
   }
   getValues() {
+    Range.reads.total++;
+    Range.reads.bySheet[this.sheet.name] = (Range.reads.bySheet[this.sheet.name] || 0) + 1;
     const out = [];
     for (let r = 0; r < this.numRows; r++) {
       const src = this.sheet.rows[this.row - 1 + r] || [];
@@ -53,6 +57,8 @@ class Range {
   setFontWeight() { return this; }
   setBackground() { return this; }
 }
+
+Range.resetReads();
 
 class Sheet {
   constructor(name, rows) {
@@ -160,6 +166,8 @@ function formatDate(date, tz, fmt) {
 
 function createEnv(opts = {}) {
   const env = {
+    reads: () => JSON.parse(JSON.stringify(Range.reads)),
+    resetReads: () => Range.resetReads(),
     ss: new Spreadsheet('ACTIVE'),
     external: {},          // spreadsheets opened by id
     props: {},             // Script Properties
