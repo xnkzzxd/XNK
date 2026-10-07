@@ -2290,7 +2290,7 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif, deferBust
  */
 function addRecurringSchedule(token, baseScheduleData, recurrenceRule) {
   requireAdmin_(token);
-  return _addRecurringInternal_(baseScheduleData, recurrenceRule, 'read');
+  return _locked_(function() { return _addRecurringInternal_(baseScheduleData, recurrenceRule, 'read'); });   // satu lock dengan booking klien
 }
 
 /**
@@ -2732,7 +2732,7 @@ function _ownOverlap_(memberId, start, end, excludeId, all) {
   return (all || _getSchedulesAll_()).find(function(x) {
     const st = String(x.status || '').toLowerCase();
     if (st === 'available' || st === 'cancelled' || String(x.memberId).trim() !== String(memberId).trim() || String(x.id) === String(excludeId || '')) return false;
-    const bs = Math.floor(new Date(x.start).getTime() / 3600000) * 3600000, be = bs + (new Date(x.end || x.start).getTime() - new Date(x.start).getTime());
+    const bs = Math.floor(new Date(x.start).getTime() / 3600000) * 3600000, be = Math.max(bs + (new Date(x.end || x.start).getTime() - new Date(x.start).getTime()), new Date(x.end || x.start).getTime());
     return bs < e && be > s;
   }) || null;
 }
@@ -5314,7 +5314,8 @@ function _freeSlots_(o) {
   (o.bookings || []).forEach(function(bk) {
     const s = new Date(bk.start).getTime();
     const bs = Math.floor(s / 3600000) * 3600000;
-    const be = bs + (new Date(bk.end || bk.start).getTime() - s);
+    // Akhir sesungguhnya ikut dihitung: jadwal admin 10.30–11.30 juga menutup jam 11 (sesi klien selalu jam bulat, tak berubah).
+    const be = Math.max(bs + (new Date(bk.end || bk.start).getTime() - s), new Date(bk.end || bk.start).getTime());
     if (bs < rangeB && be > rangeA) books.push({ bs: bs, be: be, coachId: bk.coachId, classKey: bk.classKey });
   });
   const out = [];
@@ -5550,8 +5551,8 @@ function _slotAlternatives_(days, req, o) {
   (o.own || []).forEach(function(b) {
     const s = new Date(b.start).getTime(), e = new Date(b.end || b.start).getTime();
     if (isNaN(s) || isNaN(e)) return;
-    const bs = Math.floor(s / 3600000) * 3600000;   // sama dengan server: dihitung dari jam bulat
-    own.push({ s: bs, e: bs + (e - s) });
+    const bs = Math.floor(s / 3600000) * 3600000;   // sama dengan server: dari jam bulat, sampai akhir sesungguhnya
+    own.push({ s: bs, e: Math.max(bs + (e - s), e) });
   });
   const avoid = {};
   (o.avoid || []).forEach(function(a) { const t = new Date(a).getTime(); if (!isNaN(t)) avoid[t] = true; });
