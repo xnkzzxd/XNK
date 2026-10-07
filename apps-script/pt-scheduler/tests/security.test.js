@@ -12,7 +12,7 @@ const PUBLIC = [
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [
-  'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras',
+  'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras', 'getAdminMore', 'getClientBundle',
   'getMembers', 'getMemberTransactionLog', 'getSchedules',
   'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto',
   'saveCoach', 'previewCoachProfile', 'getClientCare', 'saveClientNotes', 'snoozeCare', 'saveAssessment', 'saveFitnessTests', 'deleteFitnessTest', 'getTestResultMessage', 'markHealthReviewed', 'getSessionBriefing', 'getContentAdmin', 'saveContent', 'deleteContent', 'getMemberProgram', 'saveMemberProgram', 'getProgramTemplates', 'saveProgramTemplate', 'deleteProgramTemplate', 'applyProgramTemplate', 'saveSessionNote', 'getSessionNote', 'getCoachHub', 'saveCoachTargets', 'getCoachAvailability', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',

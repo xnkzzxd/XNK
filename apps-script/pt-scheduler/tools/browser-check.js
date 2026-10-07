@@ -317,7 +317,14 @@ async function contrastReport(page) {
     await page.waitForTimeout(1500);
     check(!(await page.evaluate(() => window.__splashShown)), 'login: only the button loads, the full-screen splash never shows');
     check(!(await visible(page, '#admin-login')) && (await page.evaluate(() => window.members.length)) === 3, 'login: dashboard is ready when the login box closes');
-    check(calls.filter(c => c === 'getAdminBootstrap').length === 1 && calls.includes('getAdminExtras'), 'login: one call for the first screen, one for the secondary data');
+    check(calls.filter(c => c === 'getAdminBootstrap').length === 1 && calls.includes('getAdminMore'), 'login: one call for the first screen, one for the secondary data');
+    check(calls.filter(c => /^get/.test(c)).length === 2 || calls.filter(c => /^get/.test(c)).join() === 'getAdminBootstrap,getAdminMore', 'fast: the panel opens with exactly two server calls (' + calls.join(',') + ')');
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(700);
+    const prof = calls.filter(c => /^get/.test(c)).slice(2);
+    await page.evaluate(() => window.closeDetail());
+    await page.waitForTimeout(300);
+    check(prof.length === 1 && prof[0] === 'getClientBundle', 'fast: opening a client page makes one call (' + prof.join(',') + ')');
 
     // Buka lagi dengan token: panel langsung terisi dari salinan, tanpa cek sesi terpisah
     const token = await page.evaluate(() => localStorage.getItem('xnk_admin_token'));
@@ -1285,7 +1292,7 @@ async function contrastReport(page) {
     const env = richEnv();
     const calls = [];
     const { page, context, errors, navigations } = await openPage(browser, env, '/Index?view=public', calls);
-    const adminCalls = ['getAdminBootstrap', 'getAdminExtras', 'getMembers', 'getSchedules', 'getMemberTransactionLog', 'getPackageTrendStats', 'getRevenueSummary', 'checkAdminSession'];
+    const adminCalls = ['getAdminBootstrap', 'getAdminExtras', 'getAdminMore', 'getMembers', 'getSchedules', 'getMemberTransactionLog', 'getPackageTrendStats', 'getRevenueSummary', 'checkAdminSession'];
     check(!calls.some(c => adminCalls.includes(c)), 'no admin functions called: ' + calls.join(','));
     check(!(await visible(page, '#admin-login')), 'admin PIN screen never appears in the client portal');
     check((await page.evaluate(() => window.members.length)) === 0, 'no client list in the browser');

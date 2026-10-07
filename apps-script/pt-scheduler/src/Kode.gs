@@ -2188,6 +2188,34 @@ function getAdminExtras(token) {
   };
 }
 
+/**
+ * Panel admin (Fase K2): SEMUA data susulan dalam satu panggilan, menggantikan getAdminExtras + prefetch pengaturan
+ * + omzet/keuangan + tren paket + coach hub. Tiap bagian berbentuk sama dengan fungsi lamanya; bagian yang gagal
+ * mengembalikan {error}. Detail Pengaturan (status pengingat, paket admin) dimuat saat halamannya dibuka.
+ */
+function getAdminMore(token, month, year) {
+  requireAdmin_(token);
+  const ymd = _wibParts_(new Date()).date.split('-').map(Number);
+  const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
+  const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
+  const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
+  return _withSchedulesMemo_(function () {
+    const finance = part(_finSettingsRead_);
+    const finOn = !!(finance && finance.enabled);
+    return {
+      at: Date.now(),
+      month: m, year: y,
+      transactionLog: part(function () { return getMemberTransactionLog(token); }),
+      taskSummary: part(function () { return getTaskSummary(token); }),
+      renewals: part(function () { return getRenewalRequests(token); }),
+      finance: finance,
+      revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
+      packageTrend: part(function () { return _packageTrendStats_(m, y); }),
+      hub: part(function () { return _coachHub_(new Date()); })
+    };
+  });
+}
+
 /** T-200: coach kosong = ID kosong + nama kosong. Baris lama yang menyimpan teks placeholder dibaca sebagai kosong. */
 function _coachNameOrEmpty_(v) {
   const n = sanitizeValue(v);
@@ -6094,6 +6122,23 @@ function _fitnessSummary_(byTest) {
 }
 
 /** Admin: semua data perawatan satu klien (catatan privat, kesehatan, assessment, tes). */
+/**
+ * Halaman klien di panel (Fase K2): PR, progres, perawatan, dan program dalam SATU panggilan.
+ * Tiap bagian sama persis dengan fungsi lamanya; bagian yang gagal diberi {error}. Hanya admin.
+ */
+function getClientBundle(token, memberId) {
+  requireAdmin_(token);
+  const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
+  return _withSchedulesMemo_(function () {
+    return {
+      tasks: part(function () { return getTasksForMember(token, memberId); }),
+      progress: part(function () { return getMemberProgress(token, memberId); }),
+      care: part(function () { return getClientCare(token, memberId); }),
+      program: part(function () { return getMemberProgram(token, memberId); })
+    };
+  });
+}
+
 function getClientCare(token, memberId) {
   requireAdmin_(token);
   const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();

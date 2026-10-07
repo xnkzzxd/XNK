@@ -1823,24 +1823,31 @@
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (r[0] && r[1]) saveAdminCache();
-      if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
       loadAdminExtras();
+      if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
     });
   };
 
+  // Fase K2: satu panggilan untuk semua data susulan (riwayat, PR, perpanjangan, keuangan/omzet, tren paket, hub).
+  // Pengaturan dimuat saat halamannya dibuka.
   function loadAdminExtras() {
-    const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
-    safe(adminCall('getAdminExtras')).then(function (b) {
-      if (!_lsGet(ADMIN_TOKEN_KEY)) return;
-      const r = b ? [b.transactionLog, b.taskSummary, b.renewals] : [];
-      if (r[0]) window.memberArchive = r[0];
-      if (r[1]) window.taskSummary = r[1];
-      if (r[2]) window.renewals = r[2];
+    const now = new Date();
+    const mo = now.getMonth() + 1, yr = now.getFullYear();
+    ui.revenue = null; window._trendCache = {};
+    window._morePending = adminCall('getAdminMore', mo, yr).then(function (b) {
+      if (!_lsGet(ADMIN_TOKEN_KEY) || !b) return;
+      const ok = v => v && !v.error;
+      if (ok(b.transactionLog)) window.memberArchive = b.transactionLog;
+      if (ok(b.taskSummary)) window.taskSummary = b.taskSummary;
+      if (ok(b.renewals)) window.renewals = b.renewals;
+      if (ok(b.finance)) finApplySettings(b.finance);
+      if (ok(b.packageTrend)) { window._trendCache = window._trendCache || {}; window._trendCache[mo + '-' + yr] = b.packageTrend; }
+      if (ok(b.hub)) { window._hub = b.hub; window._hubAt = Date.now(); }
+      ui.revenue = ok(b.revenue) ? b.revenue : { error: true };
+      renderRevenueKpi();
       window.updateUI();
       saveAdminCache();
-    });
-    if (!window.isPublicView) window.settingsPrefetch();
-    loadRevenue();
+    }).catch(function (err) { if (!window.isAuthError(err)) console.warn(err); ui.revenue = { error: true }; renderRevenueKpi(); });
   }
 
   // Muat ulang ringkasan PR (pill di daftar klien). Dipanggil setelah PR berubah.
@@ -2033,14 +2040,9 @@
   function loadRevenue() {
     const now = new Date();
     ui.revenue = null;
-    const sp = setState.pre && setState.pre.settings ? setState.pre.settings : adminCall('getAppSettings');
-    sp.catch(function () { return null; }).then(function (s) {
-      if (s && s.finance) finApplySettings(s.finance);
-      if (s && s.finance && s.finance.enabled) {
-        return adminCall('getFinanceOverview', now.getMonth() + 1, now.getFullYear()).then(function (o) { ui.revenue = { fin: true, o: o }; renderRevenueKpi(); });
-      }
-      return adminCall('getRevenueSummary', now.getMonth() + 1, now.getFullYear()).then(function (res) { ui.revenue = res || { total: 0, count: 0 }; renderRevenueKpi(); });
-    }).catch(function () { ui.revenue = { error: true }; renderRevenueKpi(); });
+    const call = finOn() ? adminCall('getFinanceOverview', now.getMonth() + 1, now.getFullYear()).then(function (o) { return { fin: true, o: o }; })
+      : adminCall('getRevenueSummary', now.getMonth() + 1, now.getFullYear()).then(function (res) { return res || { total: 0, count: 0 }; });
+    call.then(function (r) { ui.revenue = r; renderRevenueKpi(); }).catch(function () { ui.revenue = { error: true }; renderRevenueKpi(); });
   }
 
   // ── Badge booking baru ─────────────────────────────────────────────────────
@@ -2431,7 +2433,9 @@
     const listEl = $('package-trend-list');
     if (!listEl) return;
     setHTML(listEl, '<span class="skeleton" style="height:18px"></span><span class="skeleton" style="height:18px;width:70%"></span><span class="skeleton" style="height:18px;width:50%"></span>');
-    adminCall('getPackageTrendStats', month, year).then(function (res) {
+    const tkey = month + '-' + year;
+    const trendP = (window._trendCache && window._trendCache[tkey]) ? Promise.resolve(window._trendCache[tkey]) : (window._morePending || Promise.resolve()).then(function () { return window._trendCache && window._trendCache[tkey] ? window._trendCache[tkey] : adminCall('getPackageTrendStats', month, year).then(function (r) { (window._trendCache = window._trendCache || {})[tkey] = r; return r; }); });
+    trendP.then(function (res) {
       hbarList(listEl, (res || []).map(r => ({ label: r.namaPaket || '(tanpa nama)', value: r.count, note: r.count + '×', tip: r.count + ' transaksi' })),
         emptyState('package', 'Belum ada transaksi', 'Pembelian & perpanjangan paket di bulan ini muncul di sini.'));
     }).catch(function (err) { setHTML(listEl, emptyState('triangle-alert', 'Gagal memuat', err.message)); });
@@ -3615,10 +3619,7 @@
     body += '</div>';
     const actions = '<button type="button" class="icon-btn plain" onclick="window.openEditProfileModal()" aria-label="Ubah data klien">' + icon('pencil') + '</button>';
     openDetail('client:' + m.id, 'Profil klien', actions, body);
-    window.loadMemberTasks(m.id, false);
-    window.pgLoadAdmin(m.id);
-    window.loadClientCare(m.id);
-    window.loadAdminProgram(m.id);
+    window.loadClientBundle(m.id);
     requestAnimationFrame(function () {
       const ring = document.querySelector('#detail-body .ring-fill');
       if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
@@ -3736,6 +3737,29 @@
     if (wrap) setHTML(wrap, taskSectionHtml(memberId));
   }
 
+  // Fase K2: satu panggilan mengisi PR, progres, perawatan, dan program halaman klien; bagian yang gagal diberi pesan di kartunya.
+  window.loadClientBundle = function (memberId) {
+    const key = String(memberId);
+    const cT = window.memberTasks[key];
+    if (!cT || cT.state !== 'ok') { window.memberTasks[key] = { list: [], state: 'loading' }; renderTaskSection(key); }
+    return adminCall('getClientBundle', key).then(function (b) {
+      b = b || {};
+      const bad = v => !v || v.error;
+      const msg = v => (v && v.error) || 'Tidak ada jawaban.';
+      window.memberTasks[key] = bad(b.tasks) ? { list: [], state: 'error', error: msg(b.tasks) } : { list: b.tasks, state: 'ok' };
+      renderTaskSection(key);
+      window.pgSetAdmin(key, bad(b.progress) ? { error: msg(b.progress), entries: [], photos: [] } : b.progress);
+      window.careSet(key, bad(b.care) ? { error: msg(b.care) } : b.care);
+      window.programSetAdmin(key, bad(b.program) ? { error: msg(b.program) } : b.program);
+    }).catch(function (err) {
+      const m = window.authMessage(err);
+      window.memberTasks[key] = { list: [], state: 'error', error: m };
+      renderTaskSection(key);
+      window.pgSetAdmin(key, { error: m, entries: [], photos: [] });
+      window.careSet(key, { error: m });
+      window.programSetAdmin(key, { error: m });
+    });
+  };
   window.loadMemberTasks = function (memberId, force) {
     const key = String(memberId), c = window.memberTasks[key];
     if (c && c.state === 'ok' && !force) { renderTaskSection(key); return Promise.resolve(); }
@@ -4235,7 +4259,8 @@
   function loadHub() {
     const draw = function () { const w = $('hub-wrap'); if (w && window._hub) w.innerHTML = hubHtml(window._hub); };
     draw();
-    adminCall('getCoachHub').then(function (hub) { window._hub = hub; draw(); }).catch(function () {});
+    if (window._hub && Date.now() - (window._hubAt || 0) < 60000) return;
+    adminCall('getCoachHub').then(function (hub) { window._hub = hub; window._hubAt = Date.now(); draw(); }).catch(function () {});
   }
   window.hubComplete = function (id) { window.selectedScheduleDetailId = id; window.markSessionCompleted(); };
   window.openTargetsSheet = function () {
@@ -4329,6 +4354,7 @@
     const w = $('profile-program-wrap');
     if (w && w.getAttribute('data-member') === String(memberId)) { setHTML(w, programAdminInner(memberId)); }
   }
+  window.programSetAdmin = function (memberId, d) { progAdmin[memberId] = d; renderProgramAdmin(memberId); };
   window.loadAdminProgram = function (memberId) {
     return adminCall('getMemberProgram', memberId).then(function (d) { progAdmin[memberId] = d; renderProgramAdmin(memberId); })
       .catch(function (err) { progAdmin[memberId] = { error: window.authMessage ? window.authMessage(err) : err.message }; renderProgramAdmin(memberId); });
@@ -4456,6 +4482,11 @@
         '<button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="window.sendTestResult(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim hasil via WA</button>' : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div>';
     return html;
   }
+  window.careSet = function (memberId, d) {
+    care[memberId] = d;
+    const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId);
+    paintIcons();
+  };
   window.loadClientCare = function (memberId) {
     return adminCall('getClientCare', memberId).then(function (d) { care[memberId] = d; }).catch(function (err) { care[memberId] = { error: err.message }; })
       .then(function () { const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId); paintIcons(); });
@@ -5470,6 +5501,7 @@
     const wrap = $('profile-progress-wrap');
     if (wrap && wrap.getAttribute('data-member') === String(memberId)) setHTML(wrap, pgAdminInner(memberId));
   }
+  window.pgSetAdmin = function (memberId, d) { pg.admin[memberId] = d; pgAdminRender(memberId); };
   window.pgLoadAdmin = function (memberId) {
     return adminCall('getMemberProgress', memberId).then(function (d) { pg.admin[memberId] = d; pgAdminRender(memberId); })
       .catch(function (err) { pg.admin[memberId] = { error: window.authMessage(err), entries: [], photos: [] }; pgAdminRender(memberId); });
