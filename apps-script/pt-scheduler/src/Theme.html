@@ -888,6 +888,11 @@ kbd { font-family: var(--font); font-size: 11px; font-weight: 700; color: var(--
 .slot.taken { border-style: solid; border-color: var(--border); background: var(--surface-3); color: var(--fg-muted); cursor: not-allowed; text-decoration: line-through; }
 .slot.mine { background: var(--ink); color: var(--on-ink); border: 1.5px solid var(--ink); cursor: default; }
 .slot.past { opacity: 0.4; cursor: not-allowed; }
+.slot.active { border-style: solid; border-color: var(--ink); background: var(--ink); color: var(--on-ink); }
+/* Bentrok booking di sheet (portal): notice + saran jam + tombol, semua ≥ 44 px dan boleh turun baris */
+.conflict-panel { flex-direction: column; align-items: stretch; gap: 12px; }
+.conflict-panel .slot { height: auto; min-height: 44px; padding: 6px 8px; line-height: 1.2; text-align: center; }
+.conflict-panel .btn { white-space: normal; line-height: 1.25; text-align: center; padding-top: 10px; padding-bottom: 10px; }
 
 /* ── Grafik (monokrom) ──────────────────────────────────────────────────── */
 .bars { display: flex; align-items: flex-end; gap: 10px; height: 140px; padding-top: 18px; }

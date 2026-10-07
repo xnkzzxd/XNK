@@ -174,6 +174,7 @@ function createEnv(opts = {}) {
     activeUserEmail: opts.activeUserEmail || '',       // anonymous web app visitor
     effectiveUserEmail: opts.effectiveUserEmail || 'owner@example.com',
     now: null,             // override Date.now() for cache expiry tests
+    flushes: [],           // one entry per SpreadsheetApp.flush(): the 'openslots:ver' value at that moment
   };
   const clock = () => (env.now === null ? Date.now() : env.now);
 
@@ -224,7 +225,8 @@ function createEnv(opts = {}) {
         if (!env.external[id]) env.external[id] = new Spreadsheet(id);
         return env.external[id];
       },
-      flush: () => {},
+      // Records the slot-cache version seen at each flush, so tests can check "flush, then bump".
+      flush: () => { env.flushes.push(env.cache['openslots:ver'] ? env.cache['openslots:ver'].value : null); },
     },
     PropertiesService: {
       getScriptProperties: () => ({

@@ -9,6 +9,9 @@ const MON = '2030-01-07';   // a Monday
 const run = (env, o) => env.callRaw('_freeSlots_', Object.assign({ businessHours: BH, coaches: [{ id: 'C-1' }], rules: [], timeOff: [], bookings: [], from: MON, days: 1, now: NOW }, o));
 const hoursOf = day => Array.from(day.hours).filter(h => h.free > 0).map(h => h.hour);
 const at = (date, hour) => new Date(date + 'T' + ('0' + hour).slice(-2) + ':00:00+07:00').toISOString();
+const wibDate = d => new Date(Date.now() + d * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+// A Monday 7–13 days ahead (WIB): inside the slot window and the booking horizon, whatever day the tests run.
+const NEXT_MON = (() => { for (let d = 7; d < 14; d++) if (new Date(wibDate(d) + 'T00:00:00Z').getUTCDay() === 1) return wibDate(d); })();
 
 test('no rules and no days off: every studio hour is free (today\'s behavior)', () => {
   const [d] = run(seededEnv(), {});
@@ -53,13 +56,14 @@ test('past hours are never free and a closed day has no hours', () => {
 test('getOpenSlots matches the old behavior with no hours saved and shrinks after saveCoachAvailability', () => {
   const env = seededEnv();
   const t = env.adminToken();
-  const before = env.call('getOpenSlots', { from: MON, days: 1 })[0];
+  const before = env.call('getOpenSlots', { from: NEXT_MON, days: 1 })[0];
+  assert.equal(before.date, NEXT_MON);
   assert.equal(before.hours.length, 15);
   env.call('saveCoachAvailability', t, 'C-1', { senin: [[8, 10]] });
-  const after = env.call('getOpenSlots', { from: MON, days: 1 })[0];
+  const after = env.call('getOpenSlots', { from: NEXT_MON, days: 1 })[0];
   assert.deepEqual(JSON.parse(JSON.stringify(Array.from(after.hours).filter(h => h.free).map(h => h.hour))), [8, 9]);
   env.call('saveCoachAvailability', t, 'C-1', {});   // empty week = follow studio hours again
-  assert.equal(env.call('getOpenSlots', { from: MON, days: 1 })[0].hours.filter(h => h.free).length, 15);
+  assert.equal(env.call('getOpenSlots', { from: NEXT_MON, days: 1 })[0].hours.filter(h => h.free).length, 15);
 });
 
 test('saveCoachAvailability validates ranges', () => {
@@ -90,10 +94,10 @@ test('days off: validation, clashes are listed (not cancelled), and delete works
 test('a client cannot book inside a day off; the owner can, with a warning', () => {
   const env = seededEnv();
   const t = env.adminToken();
-  env.call('addCoachTimeOff', t, { from: MON, to: MON });
+  env.call('addCoachTimeOff', t, { from: NEXT_MON, to: NEXT_MON });
   const mt = env.memberToken(require('./fixtures').KEY_A);
-  assert.throws(() => env.call('clientBookSchedule', mt, { start: at(MON, 9), end: at(MON, 10) }), /Jam ini tidak tersedia\./);
-  const r = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: at(MON, 9), end: at(MON, 10), notes: '' });
+  assert.throws(() => env.call('clientBookSchedule', mt, { start: at(NEXT_MON, 9), end: at(NEXT_MON, 10) }), /Jam ini tidak tersedia\./);
+  const r = env.call('addSchedule', t, { memberId: 'PT-A', memberName: 'Ani', phone: '6281', start: at(NEXT_MON, 9), end: at(NEXT_MON, 10), notes: '' });
   assert.ok(r.warnings.length === 1 && /cuti/.test(r.warnings[0]));
   assert.equal(r.coachId, '');   // the only coach is on leave: never auto-assigned
 });
@@ -260,15 +264,353 @@ test('a client cannot hold two overlapping sessions even with two coaches', () =
   noSchedules(env);
   env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
   book(env, FUT(4, 10));
-  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 11, 30)), /sudah punya sesi/);
+  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 12)), /sudah punya sesi/);   // 10:30–12:00 → 10:00–11:30
+  assert.equal(book(env, FUT(4, 10, 30), FUT(4, 11, 30)).duplicate, true);   // snaps to exactly the same session
 });
 
-test('getOpenSlots is cached for a moment but fresh:true and writes bypass the cache', () => {
+// ── Slot cache (2 min, keyed by WIB hour), soft booking conflicts and alternatives ──
+
+const { KEY_A, KEY_B, wibSlot } = require('./fixtures');
+const verOf = env => (env.cache['openslots:ver'] || {}).value;
+const slotKeys = env => Object.keys(env.cache).filter(k => k.startsWith('openslots:') && k !== 'openslots:ver');
+const dayOf = iso => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+const hourOfIso = iso => Number(new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hourCycle: 'h23' }));
+const freeAt = (rows, iso) => rows.find(d => d.date === dayOf(iso)).hours.find(h => h.hour === hourOfIso(iso)).free;
+const plusMin = (iso, m) => new Date(new Date(iso).getTime() + m * 60000).toISOString();
+const softBook = (env, key, start, end) => env.call('clientBookSchedule', env.memberToken(key), { start, end: end || plusMin(start, 60) }, { soft: true });
+const budiAt = (env, start, end, id) => env.sheet('Schedules').rows.push([id || 'S-BUDI', 'PT-B', 'Budi', '081222222222', start, end || plusMin(start, 60), 'Catatan Budi', 'read', 'C-1', 'Rizky', '', '']);
+// Every day open 06–21, so the tests below do not depend on the weekday they run on.
+const allWeek = env => { env.props.BUSINESS_HOURS_JSON = JSON.stringify({ 0: [6, 21], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] }); };
+const slotEnv = () => { const env = seededEnv(); allWeek(env); noSchedules(env); return env; };
+const noOtherClient = (text, label) => {
+  for (const s of ['PT-B', 'Budi', '081222222222', 'S-BUDI', 'Catatan Budi']) assert.ok(!text.includes(s), label + ' leaks ' + s);
+};
+
+test('getOpenSlots is cached for 2 minutes; app writes bust it; fresh is ignored', () => {
+  const env = slotEnv();
+  env.now = Date.now();
+  assert.equal(freeAt(env.call('getOpenSlots', { days: 7 }), FUT(4, 10)), 1);
+  budiAt(env, FUT(4, 10));   // typed straight into the Sheet: no version bump
+  assert.equal(freeAt(env.call('getOpenSlots', { days: 7 }), FUT(4, 10)), 1, 'served from the cache');
+  assert.equal(freeAt(env.call('getOpenSlots', { days: 7, fresh: true }), FUT(4, 10)), 1, 'fresh is ignored');
+  env.now += 121000;
+  assert.equal(freeAt(env.call('getOpenSlots', { days: 7 }), FUT(4, 10)), 0, 'recomputed after 2 minutes');
+  book(env, FUT(4, 12));   // an app write bumps the version at once
+  assert.equal(freeAt(env.call('getOpenSlots', { days: 7 }), FUT(4, 12)), 0);
+});
+
+test('SLOTS_CACHE_SECONDS sets the server cache time, clamped to 10–300 s', () => {
+  const env = slotEnv();
+  env.now = Date.now();
+  const ttl = () => { const k = slotKeys(env)[0]; const s = (env.cache[k].expires - env.now) / 1000; Object.keys(env.cache).forEach(x => { if (x !== 'openslots:ver') delete env.cache[x]; }); return s; };
+  env.call('getOpenSlots', {});
+  assert.equal(ttl(), 120);
+  env.props.SLOTS_CACHE_SECONDS = '5';
+  env.call('getOpenSlots', {});
+  assert.equal(ttl(), 10);
+  env.props.SLOTS_CACHE_SECONDS = '9999';
+  env.call('getOpenSlots', {});
+  assert.equal(ttl(), 300);
+});
+
+test('the server cache key holds the WIB hour, so an hour turns past at hh:00 without a bust', () => {
   const env = seededEnv();
-  noSchedules(env);
-  const hourOf = rows => rows.find(d => d.date === new Date(FUT(4, 10)).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })).hours.find(h => h.hour === 10).free;
-  assert.equal(hourOf(env.call('getOpenSlots', { days: 7 })), 1);
+  const h10 = days => Array.from(days[0].hours).find(h => h.hour === 10);
+  const before = env.callRaw('_openSlotsCached_', { days: 1 }, new Date('2030-01-07T09:59:00+07:00'));
+  const after = env.callRaw('_openSlotsCached_', { days: 1 }, new Date('2030-01-07T10:00:30+07:00'));
+  assert.equal(h10(before).past, false);
+  assert.equal(h10(before).free, 1);
+  assert.equal(h10(after).past, true);
+  assert.equal(h10(after).free, 0);
+  const keys = slotKeys(env);
+  assert.equal(keys.length, 2);
+  assert.ok(keys.some(k => k.endsWith(':2030-01-07T9:2030-01-07:1')), keys.join());
+  assert.ok(keys.some(k => k.endsWith(':2030-01-07T10:2030-01-07:1')), keys.join());
+});
+
+test('from and days are normalised before the cache key is built', () => {
+  const env = seededEnv();
+  const today = wibDate(0);
+  env.call('getOpenSlots', { from: 'x', days: 999 });
+  env.call('getOpenSlots', { from: wibDate(100), days: 999 });
+  env.call('getOpenSlots', { from: wibDate(-3), days: 62 });
+  env.call('getOpenSlots', { from: '2026-02-31', days: '62' });
+  const keys = slotKeys(env);
+  assert.equal(keys.length, 1, keys.join());
+  assert.ok(keys[0].endsWith(':' + today + ':62'), keys[0]);
+  const rows = env.call('getOpenSlots', { from: 'x', days: 999 });
+  assert.equal(rows.length, 62);
+  assert.equal(rows[0].date, today);
+});
+
+test('every app write that changes free hours bumps the slot version', () => {
+  const env = seededEnv();
+  const t = env.adminToken();
+  const bumps = (label, fn) => { const before = verOf(env); fn(); assert.notEqual(verOf(env), before, label); };
+  bumps('updateScheduleCoach', () => env.call('updateScheduleCoach', t, 'SCH-A1', ''));
+  env.sheet('Schedules').rows.push(['S-G1', 'PT-C', 'Citra', '1', FUT(9, 10), FUT(9, 11), '', 'read', 'C-1', 'Rizky', '', 'RGRP-T']);
+  bumps('deleteRecurringGroup', () => env.call('deleteRecurringGroup', t, 'RGRP-T'));
+  const dry = verOf(env);
+  env.call('assignUnassignedToSelf', t, { dryRun: true });
+  assert.equal(verOf(env), dry, 'a dry run writes nothing and keeps the version');
+  bumps('assignUnassignedToSelf', () => env.call('assignUnassignedToSelf', t, {}));
+  const dina = env.call('saveCoach', t, { name: 'Dina', phone: '081234567891' });
+  bumps('setCoachActive', () => env.call('setCoachActive', t, dina.id, false));
+  bumps('deleteCoach', () => env.call('deleteCoach', t, dina.id));
+  bumps('updateScheduleData', () => env.call('updateScheduleData', t, { id: 'SCH-A1', start: FUT(9, 12), end: FUT(9, 13) }));
+  bumps('deleteSchedule', () => env.call('deleteSchedule', t, 'SCH-B1'));
+  bumps('deleteMember', () => env.call('deleteMember', t, 'PT-C'));
+  bumps('updateAppSettings', () => env.call('updateAppSettings', t, { rescheduleCutoffHours: 3 }));
+});
+
+test('a client booking flushes the sheet before the slot version changes', () => {
+  const env = slotEnv();
+  env.cache['openslots:ver'] = { value: 'V0', expires: Date.now() + 3600000 };
   book(env, FUT(4, 10));
-  assert.equal(hourOf(env.call('getOpenSlots', { days: 7 })), 0);
-  assert.equal(hourOf(env.call('getOpenSlots', { days: 7, fresh: true })), 0);
+  assert.deepEqual(env.flushes, ['V0'], 'one flush, while the old version was still current');
+  assert.notEqual(verOf(env), 'V0');
+});
+
+test('soft booking: a taken hour is a conflict with up to 3 alternatives; nothing is written or sent', () => {
+  const env = slotEnv();
+  budiAt(env, FUT(4, 10));
+  const rows = env.sheet('Schedules').rows.length, fetches = env.fetches.length, mails = env.mails.length;
+  const res = softBook(env, KEY_A, FUT(4, 10));
+  assert.equal(res.status, 'conflict');
+  assert.equal(res.code, 'taken');
+  assert.match(res.message, /sudah dibooking/);
+  assert.deepEqual(res.requested, { start: FUT(4, 10), end: FUT(4, 11) });
+  assert.equal(res.openSlots.length, 60);
+  assert.equal(freeAt(res.openSlots, FUT(4, 10)), 0);
+  assert.equal(env.sheet('Schedules').rows.length, rows, 'no row');
+  assert.equal(env.fetches.length, fetches, 'no Telegram');
+  assert.equal(env.mails.length, mails, 'no email');
+  // Same day nearest (the later hour wins the tie), then the same hour tomorrow.
+  assert.deepEqual(res.alternatives.map(a => [a.start, a.group]), [[FUT(4, 11), 'day'], [FUT(4, 9), 'day'], [FUT(5, 10), 'hour']]);
+  assert.deepEqual(Object.keys(res.alternatives[0]).sort(), ['date', 'end', 'group', 'hour', 'start']);
+  noOtherClient(JSON.stringify(res), 'conflict');
+  assert.throws(() => book(env, FUT(4, 10)), /sudah dibooking/);   // without soft: today's error
+  for (const a of res.alternatives) assert.equal(softBook(env, KEY_A, a.start, a.end).status, 'success');
+});
+
+test('soft booking success: snapped times, the own row, and openSlots written through to the cache', () => {
+  const env = slotEnv();
+  const res = softBook(env, KEY_A, FUT(4, 7, 15), FUT(4, 8, 15));
+  assert.equal(res.status, 'success');
+  assert.equal(res.duplicate, undefined);
+  assert.equal(res.schedule.id, res.id);
+  assert.equal(res.schedule.start, FUT(4, 7));
+  assert.equal(res.schedule.end, FUT(4, 8));
+  assert.equal(res.schedule.status, 'unread');
+  assert.equal(res.schedule.memberId, 'PT-A');
+  assert.ok(!('phone' in res.schedule));
+  assert.equal(freeAt(res.openSlots, FUT(4, 7)), 0);
+  budiAt(env, FUT(4, 12));   // straight into the Sheet: only a cache hit can miss it
+  assert.deepEqual(env.call('getOpenSlots', { days: 60 }), res.openSlots);
+});
+
+test('the same booking sent twice is one row and one notification (safe retry)', () => {
+  const env = slotEnv();
+  const first = softBook(env, KEY_A, FUT(4, 10));
+  const fetches = env.fetches.length, mails = env.mails.length;
+  const again = softBook(env, KEY_A, FUT(4, 10, 20), FUT(4, 11, 20));   // snaps to the same session
+  assert.equal(again.status, 'success');
+  assert.equal(again.duplicate, true);
+  assert.equal(again.id, first.id);
+  assert.equal(again.schedule.start, FUT(4, 10));
+  assert.ok(Array.isArray(again.openSlots));
+  assert.equal(book(env, FUT(4, 10)).duplicate, true, 'also without soft');
+  assert.equal(env.sheet('Schedules').rows.filter(r => r[4] === FUT(4, 10)).length, 1);
+  assert.equal(env.fetches.length, fetches);
+  assert.equal(env.mails.length, mails);
+});
+
+test('soft booking: own overlap is "mine" and the alternatives skip the client\'s own hours; a passed hour is "past"', () => {
+  const env = slotEnv();
+  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });   // 10:00 stays open for others
+  book(env, FUT(4, 10));
+  const res = softBook(env, KEY_A, FUT(4, 10), FUT(4, 11, 30));   // 90 min over the client's own 10:00
+  assert.equal(res.status, 'conflict');
+  assert.equal(res.code, 'mine');
+  assert.equal(res.alternatives.length, 3);
+  const own = [new Date(FUT(4, 10)).getTime(), new Date(FUT(4, 11)).getTime()];
+  for (const a of res.alternatives) {
+    assert.ok(!(new Date(a.start).getTime() < own[1] && new Date(a.end).getTime() > own[0]), a.start);
+    assert.equal(new Date(a.end) - new Date(a.start), 90 * 60000);
+  }
+  assert.throws(() => book(env, FUT(4, 10), FUT(4, 11, 30)), /sudah punya sesi/);
+
+  const lastHour = new Date(Math.floor(Date.now() / 3600000) * 3600000 - 3600000).toISOString();
+  const past = softBook(env, KEY_A, lastHour);
+  assert.equal(past.status, 'conflict');
+  assert.equal(past.code, 'past');
+  assert.ok(past.alternatives.length >= 1 && past.alternatives.every(a => new Date(a.start).getTime() > Date.now()));
+});
+
+test('soft booking still throws for quota, horizon and invalid times', () => {
+  const env = slotEnv();
+  env.memberRow('PT-A')[9] = 10;
+  assert.throws(() => softBook(env, KEY_A, FUT(4, 10)), /Sisa sesi paketmu habis/);
+  env.memberRow('PT-A')[9] = 0;
+  assert.throws(() => softBook(env, KEY_A, wibSlot(70).start, wibSlot(70).end), /paling jauh 60 hari/);
+  assert.throws(() => env.call('clientBookSchedule', env.memberToken(KEY_A), { start: 'x', end: 'y' }, { soft: true }), /tidak valid/);
+  assert.throws(() => softBook(env, KEY_A, FUT(4, 10), FUT(4, 15)), /maksimal 4 jam/);
+});
+
+// _slotAlternatives_ is pure: hand-made engine output, Monday 2030-01-07 onward.
+const addDays = (iso, d) => new Date(Date.parse(iso + 'T00:00:00Z') + d * 86400000).toISOString().slice(0, 10);
+const H = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+const mkDays = (n, edit) => Array.from({ length: n }, (_, i) => {
+  const date = addDays(MON, i);
+  return { date, hours: H.map(h => Object.assign({ hour: h, free: 1, off: false, past: false }, (edit && edit(date, h)) || {})) };
+});
+const alts = (env, days, start, end, o) => JSON.parse(JSON.stringify(env.callRaw('_slotAlternatives_', days, { start, end }, o || {}))).map(a => [a.date, a.hour, a.group]);
+const TUE = addDays(MON, 1), WED = addDays(MON, 2);
+
+test('_slotAlternatives_: same day nearest (later hour wins a tie, at most 2), then the same hour on later days', () => {
+  const env = seededEnv();
+  const days = mkDays(3, (d, h) => (d === MON && h === 10 ? { free: 0 } : null));
+  assert.deepEqual(alts(env, days, at(MON, 10), at(MON, 11)), [[MON, 11, 'day'], [MON, 9, 'day'], [TUE, 10, 'hour']]);
+  const out = env.callRaw('_slotAlternatives_', days, { start: at(MON, 10), end: at(MON, 11) }, {});
+  assert.equal(out[0].start, at(MON, 11));
+  assert.equal(out[0].end, at(MON, 12));
+});
+
+test('_slotAlternatives_: then the nearest anywhere', () => {
+  const env = seededEnv();
+  const days = mkDays(3, (d, h) => (d === MON || (d === TUE && h === 10) ? { free: 0 } : null));
+  assert.deepEqual(alts(env, days, at(MON, 10), at(MON, 11)), [[WED, 10, 'hour'], [TUE, 6, 'near'], [TUE, 7, 'near']]);
+});
+
+test('_slotAlternatives_: a 120-minute request needs two free hours in a row', () => {
+  const env = seededEnv();
+  const days = mkDays(1, (d, h) => ([8, 12, 13].includes(h) ? null : { free: 0 }));
+  const out = env.callRaw('_slotAlternatives_', days, { start: at(MON, 10), end: at(MON, 12) }, {});
+  assert.deepEqual(JSON.parse(JSON.stringify(out)), [{ start: at(MON, 12), end: at(MON, 14), date: MON, hour: 12, group: 'day' }]);
+});
+
+test('_slotAlternatives_: skips own sessions (from the whole hour), avoided starts, past and off hours, and the request itself', () => {
+  const env = seededEnv();
+  const days = mkDays(1, (d, h) => (h === 9 ? { past: true } : h === 11 ? { off: true } : null));
+  const o = { own: [{ start: new Date(Date.parse(at(MON, 12)) + 30 * 60000).toISOString(), end: new Date(Date.parse(at(MON, 13)) + 30 * 60000).toISOString() }], avoid: [at(MON, 8)] };
+  assert.deepEqual(alts(env, days, at(MON, 10), at(MON, 11), o), [[MON, 13, 'day'], [MON, 7, 'day'], [MON, 14, 'near']]);
+});
+
+test('_slotAlternatives_: at most n (default 3), none when nothing fits', () => {
+  const env = seededEnv();
+  const days = mkDays(7);
+  assert.equal(alts(env, days, at(MON, 10), at(MON, 11)).length, 3);
+  assert.equal(alts(env, days, at(MON, 10), at(MON, 11), { n: 1 }).length, 1);
+  assert.deepEqual(alts(env, mkDays(2, () => ({ free: 0 })), at(MON, 10), at(MON, 11)), []);
+});
+
+test('soft reschedule: a clash keeps the old row and never offers the old start; success returns newEnd and openSlots', () => {
+  const env = slotEnv();
+  const mt = env.memberToken(KEY_A);
+  const mine = book(env, FUT(6, 13));
+  budiAt(env, FUT(6, 14));
+  const res = env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 14), FUT(6, 15), { soft: true });
+  assert.equal(res.status, 'conflict');
+  assert.equal(res.code, 'taken');
+  assert.equal(res.oldStart, FUT(6, 13));
+  // 13:00 is the nearest free hour (the moved session's own seat) but it is the old start: 15:00, 16:00, then tomorrow 14:00.
+  assert.deepEqual(res.alternatives.map(a => a.start), [FUT(6, 15), FUT(6, 16), FUT(7, 14)]);
+  assert.equal(env.sheet('Schedules').rows.find(r => r[0] === mine.id)[4], FUT(6, 13), 'the old session is untouched');
+  noOtherClient(JSON.stringify(res), 'reschedule conflict');
+  assert.throws(() => env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 14), FUT(6, 15)), /sudah dibooking/);
+
+  const ok = env.call('clientRescheduleSchedule', mt, mine.id, FUT(6, 16, 10), FUT(6, 17, 40), { soft: true });
+  assert.equal(ok.status, 'success');
+  assert.equal(ok.oldStart, FUT(6, 13));
+  assert.equal(ok.newStart, FUT(6, 16));
+  assert.equal(ok.newEnd, FUT(6, 17, 30));
+  assert.equal(freeAt(ok.openSlots, FUT(6, 16)), 0);
+  assert.equal(freeAt(ok.openSlots, FUT(6, 17)), 0);
+  assert.equal(freeAt(ok.openSlots, FUT(6, 13)), 1);
+  assert.deepEqual(env.call('getOpenSlots', { days: 60 }), ok.openSlots, 'written through to the cache');
+});
+
+test('soft reschedule onto the client\'s own other session is "mine"', () => {
+  const env = slotEnv();
+  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const mt = env.memberToken(KEY_A);
+  const a = book(env, FUT(6, 10));
+  book(env, FUT(6, 12));
+  const res = env.call('clientRescheduleSchedule', mt, a.id, FUT(6, 12), FUT(6, 13), { soft: true });
+  assert.equal(res.code, 'mine');
+  assert.ok(res.alternatives.every(x => x.start !== FUT(6, 12) && x.start !== FUT(6, 10)));
+  assert.throws(() => env.call('clientRescheduleSchedule', mt, a.id, FUT(6, 12), FUT(6, 13)), /sudah punya sesi/);
+});
+
+// Recurring series start: the server builds dates in its own local time, like the portal sends them.
+const series = (dayOffset, hour) => {
+  const local = new Date(FUT(dayOffset, hour)), z = n => String(n).padStart(2, '0');
+  return { startDate: local.getFullYear() + '-' + z(local.getMonth() + 1) + '-' + z(local.getDate()), time: z(local.getHours()) + ':' + z(local.getMinutes()), duration: 60 };
+};
+const DAILY_4 = { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 4 };
+
+test('soft recurring: every clash is listed and nothing is written; skipTaken books only the clear dates, within quota', () => {
+  const env = slotEnv();
+  const mt = env.memberToken(KEY_A);
+  budiAt(env, FUT(4, 10), null, 'S-BUDI-4');
+  budiAt(env, FUT(5, 10), null, 'S-BUDI-5');
+  const rows = env.sheet('Schedules').rows.length, fetches = env.fetches.length;
+  const res = env.call('clientBookRecurring', mt, series(3, 10), DAILY_4, { soft: true });
+  assert.equal(res.status, 'conflict');
+  assert.equal(res.code, 'series');
+  assert.deepEqual(res.conflicts, [{ start: FUT(4, 10), code: 'taken' }, { start: FUT(5, 10), code: 'taken' }]);
+  assert.equal(res.bookable, 2);
+  assert.equal(res.total, 4);
+  assert.equal(res.openSlots.length, 60);
+  noOtherClient(JSON.stringify(res), 'series conflict');
+  assert.equal(env.sheet('Schedules').rows.length, rows, 'nothing written');
+  assert.equal(env.fetches.length, fetches, 'no Telegram');
+  assert.throws(() => env.call('clientBookRecurring', mt, series(3, 10), DAILY_4), /sudah dibooking.*Tidak ada sesi yang dibuat/);
+
+  env.memberRow('PT-A')[9] = 8;   // 10 total, 8 used: 2 left — too few for 4, enough for the 2 clear dates
+  assert.throws(() => env.call('clientBookRecurring', mt, series(3, 10), DAILY_4, { soft: true }), /tinggal 2/);
+  env.memberRow('PT-A')[9] = 9;   // 1 left: the quota is checked on the clear dates
+  assert.throws(() => env.call('clientBookRecurring', mt, series(3, 10), DAILY_4, { soft: true, skipTaken: true }), /tinggal 1/);
+  env.memberRow('PT-A')[9] = 8;
+  const ok = env.call('clientBookRecurring', mt, series(3, 10), DAILY_4, { soft: true, skipTaken: true });
+  assert.equal(ok.status, 'success');
+  assert.equal(ok.count, 2);
+  assert.equal(ok.skipped, 2);
+  assert.deepEqual(ok.items.map(i => i.start), [FUT(3, 10), FUT(6, 10)]);
+  assert.ok(ok.items.every(i => i.memberId === 'PT-A' && i.status === 'unread' && !('phone' in i)));
+  assert.equal(freeAt(ok.openSlots, FUT(3, 10)), 0);
+  assert.equal(freeAt(ok.openSlots, FUT(6, 10)), 0);
+  assert.equal(env.sheet('Schedules').rows.filter(r => r[11] === ok.groupId).length, 2);
+  assert.equal(env.fetches.length, fetches + 1, 'one summary');
+  assert.throws(() => env.call('clientBookRecurring', mt, series(4, 10), { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 2 }, { soft: true, skipTaken: true }), /Semua tanggal sudah terisi/);
+});
+
+test('recurring now checks the client\'s own sessions on every date, with or without soft', () => {
+  const env = slotEnv();
+  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });   // 10:00 stays open for others
+  book(env, FUT(4, 10));
+  const mt = env.memberToken(KEY_A);
+  const rows = env.sheet('Schedules').rows.length;
+  assert.throws(() => env.call('clientBookRecurring', mt, series(3, 10), DAILY_4), /sudah punya sesi.*Tidak ada sesi yang dibuat/);
+  const res = env.call('clientBookRecurring', mt, series(3, 10), DAILY_4, { soft: true });
+  assert.deepEqual(res.conflicts, [{ start: FUT(4, 10), code: 'mine' }]);
+  assert.equal(env.sheet('Schedules').rows.length, rows);
+  const ok = env.call('clientBookRecurring', mt, series(3, 10), { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 3 }, { soft: true, skipTaken: true });
+  assert.equal(ok.count, 2);
+  assert.equal(ok.skipped, 1);
+});
+
+test('portal bootstrap: openSlots from the shared cache, the reschedule notice, and no other client in it', () => {
+  const env = seededEnv();
+  const mt = env.memberToken(KEY_A);
+  const a = env.call('getPortalBootstrap', mt);
+  assert.equal(a.rescheduleCutoffHours, 2);
+  budiAt(env, FUT(4, 10));   // straight into the Sheet: the cached grid stays until a write or 2 minutes
+  env.props.RESCHEDULE_CUTOFF_HOURS = '6';
+  const b = env.call('getPortalBootstrap', mt);
+  assert.deepEqual(b.openSlots, a.openSlots);
+  assert.equal(b.rescheduleCutoffHours, 6);
+  assert.deepEqual(env.call('getOpenSlots', { days: b.horizonDays }), a.openSlots, 'the Jadwal tab shares the key');
+  noOtherClient(JSON.stringify(Object.assign({}, b, { profile: null })), 'bootstrap');
+  assert.equal(env.call('getPortalBootstrap', null).rescheduleCutoffHours, 6);
 });

@@ -20,7 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
-const { seededEnv, KEY_A, ADMIN_PIN, inDays } = require('../tests/fixtures');
+const { seededEnv, KEY_A, ADMIN_PIN, inDays, wibSlot } = require('../tests/fixtures');
 
 const SRC = path.join(__dirname, '..', 'src');
 const ORIGIN = 'https://gas.test';
@@ -94,7 +94,7 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
   opts = opts || {};
   const context = await browser.newContext({
     viewport: opts.viewport || MOBILE, colorScheme: opts.colorScheme || 'light', reducedMotion: opts.reducedMotion || 'no-preference',
-    hasTouch: !!opts.touch, isMobile: !!opts.touch,
+    hasTouch: !!opts.touch, isMobile: !!opts.touch, timezoneId: opts.timezoneId,
     recordVideo: opts.video ? { dir: opts.video, size: opts.viewport || MOBILE } : undefined,
   });
   if (storage) await context.addInitScript(s => { for (const k in s) localStorage.setItem(k, s[k]); }, storage);
@@ -130,6 +130,7 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
+  if (opts.clock) await page.clock.install();
   await page.goto(ORIGIN + pagePath);
   await page.waitForTimeout(opts.wait || 900);
   if (pagePath.includes('view=public') && !opts.keepCelebration) {
@@ -1314,10 +1315,15 @@ async function contrastReport(page) {
     check((await page.inputValue('#edit-sch-date')) === day, 'booking sheet has the chosen date');
     await page.fill('#edit-sch-notes', 'Leg day');
     await shot(page, 'portal-mobile-booking');
+    const callsBeforeBook = calls.length;
     await page.click('#form-edit-schedule button[type="submit"]');
     await page.waitForTimeout(700);
     const booked = env.sheet('Schedules').rows.find(r => r[6] === 'Leg day');
     check(!!booked && booked[1] === 'PT-A' && booked[7] === 'unread', 'booking is saved for the logged-in client');
+    const bookCalls = calls.slice(callsBeforeBook);
+    check(bookCalls.length === 1 && bookCalls[0] === 'clientBookSchedule', 'booking is one server call (no pre-check, no reload afterwards): ' + bookCalls.join(','));
+    check(await page.evaluate(id => window.schedules.some(s => s.id === id && s.memberId === 'PT-A'), booked && booked[0]), 'the new booking is on screen straight from the answer');
+    check((await page.textContent('#toast-msg')).includes('Booking terkirim'), 'booking: "Booking terkirim ke coach!"');
 
     // FAB booking still works.
     await page.evaluate(() => window.handleFabClick());
@@ -1375,6 +1381,86 @@ async function contrastReport(page) {
     noErrors(errors);
     await context.close();
   }
+  // ── Portal: jam yang baru saja terisi → saran jam di dalam sheet (HP) ─────
+  console.log('Portal klien · booking bentrok · HP');
+  {
+    const env = seededEnv();
+    const calls = [];
+    const token = env.memberToken(KEY_A);
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', calls, { xnk_member_token: token }, { timezoneId: 'Asia/Jakarta', wait: 1300 });
+    const slot = wibSlot(4);                       // 10.00–11.00 WIB, 4 hari lagi
+    const day = new Date(slot.start).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    await page.evaluate(() => window.navigate('calendar'));
+    await page.waitForTimeout(400);
+    await page.evaluate(d => window.selectDate(d), day);
+    await page.waitForTimeout(400);
+    const hour10 = page.locator('#day-panel .slot-grid .slot', { hasText: '10.00' }).first();
+    check(await hour10.isEnabled(), 'conflict: 10.00 shows as free in the grid');
+    check(/\d+ jam kosong · diperbarui \d{2}\.\d{2}/.test((await page.textContent('#slots-meta')) || ''), 'Jadwal: header says how many hours are free and when the list was updated');
+    // Someone else books 10.00 after this screen loaded (the grid still shows it free).
+    env.sheet('Schedules').rows.push(['SCH-X1', 'PT-B', 'Budi', '081222222222', slot.start, slot.end, '', 'unread', 'C-1', 'Rizky', '', '']);
+    await hour10.click();
+    await page.waitForTimeout(500);
+    check(await visible(page, '#modal-edit-schedule'), 'conflict: tapping the hour opens the booking sheet');
+    await page.fill('#edit-sch-time', '10:15');
+    check(((await page.textContent('#edit-sch-time-hint')) || '').includes('Dicatat mulai 10.00 (dihitung dari jam penuh).'), 'time field: 10:15 shows "Dicatat mulai 10.00 (dihitung dari jam penuh)."');
+    const callsBefore = calls.length;
+    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.waitForTimeout(900);
+    check(calls.slice(callsBefore).join(',') === 'clientBookSchedule', 'conflict: one server call, no pre-check: ' + calls.slice(callsBefore).join(','));
+    check(await visible(page, '#modal-edit-schedule .conflict-panel'), 'conflict: the sheet stays open with a notice');
+    check(((await page.textContent('.conflict-panel .li-title')) || '').includes('Jam 10.00 baru saja terisi'), 'conflict: "Jam 10.00 baru saja terisi" (10:15 is counted from 10.00)');
+    check(!env.sheet('Schedules').rows.some(r => r[1] === 'PT-A' && new Date(r[4]).getTime() === new Date(slot.start).getTime()), 'conflict: nothing was saved for the taken hour');
+    const chips = page.locator('.conflict-panel .slot');
+    check((await chips.count()) >= 1 && (await chips.count()) <= 3, 'conflict: 1 to 3 other hours are offered (' + (await chips.count()) + ')');
+    check(await visible(page, '.conflict-panel [data-act="all"]'), 'conflict: "Lihat semua jam" is offered');
+    const small = await page.evaluate(() => Array.from(document.querySelectorAll('.conflict-panel button')).map(b => b.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(small === 0, 'conflict: chips and buttons are at least 44 px');
+    check((await overflowX(page)) <= 0, 'conflict: no sideways scroll');
+    check(await page.evaluate(() => !document.getElementById('modal-edit-schedule').querySelector('input:disabled, select:disabled, textarea:disabled')), 'conflict: the form is usable again');
+    check(await page.evaluate(d => window.openSlotsByDate[d] && window.openSlotsByDate[d][10] === 0, day), 'conflict: the answer updates the hour grid (10.00 now full)');
+    await shot(page, 'portal-mobile-booking-conflict');
+    await chips.first().click();
+    await page.waitForTimeout(200);
+    const btnText = ((await page.textContent('#sch-submit-btn')) || '').trim();
+    check(/^Booking .+ · \d{2}\.00$/.test(btnText), 'conflict: tapping a suggestion only selects it; the button reads "' + btnText + '"');
+    check(await page.evaluate(() => document.querySelector('.conflict-panel .slot.active') !== null), 'conflict: the chosen suggestion is highlighted');
+    const pick = { date: await page.inputValue('#edit-sch-date'), time: await page.inputValue('#edit-sch-time') };
+    check(!env.sheet('Schedules').rows.some(r => r[1] === 'PT-A' && r[0] !== 'SCH-A1'), 'conflict: selecting a suggestion does not book yet');
+    const callsBefore2 = calls.length;
+    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.waitForTimeout(900);
+    const pickIso = new Date(pick.date + 'T' + pick.time + ':00+07:00').getTime();
+    const saved = env.sheet('Schedules').rows.find(r => r[1] === 'PT-A' && new Date(r[4]).getTime() === pickIso);
+    check(!!saved && saved[7] === 'unread', 'conflict: the suggested hour is booked (' + pick.date + ' ' + pick.time + ')');
+    check(calls.slice(callsBefore2).join(',') === 'clientBookSchedule', 'conflict: booking the suggestion is one more call: ' + calls.slice(callsBefore2).join(','));
+    check(!(await page.evaluate(() => document.getElementById('sheet-layer').classList.contains('open'))), 'conflict: the sheet closes after booking');
+    check((await page.textContent('#toast-msg')).includes('Booking terkirim'), 'conflict: "Booking terkirim ke coach!"');
+
+    // Jadwal berulang: tanggal yang sudah terisi → "Lewati tanggal penuh".
+    await page.evaluate(d => window.openBookingSheet({ date: d, time: '10:00' }), day);
+    await page.waitForTimeout(500);
+    check(!(await visible(page, '#modal-edit-schedule .conflict-panel')), 'a new booking sheet starts without the old notice');
+    await page.evaluate(() => { const t = document.getElementById('edit-sch-recurring-toggle'); t.checked = true; window.toggleRecurringOptions(); });
+    const dow = new Date(day + 'T12:00:00+07:00').getUTCDay();
+    await page.click('.recurring-day-btn[data-day="' + dow + '"]');
+    await page.fill('#edit-sch-recurring-occurrences', '2');
+    const rowsBefore = env.sheet('Schedules').rows.length;
+    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.waitForTimeout(900);
+    check(await visible(page, '.conflict-panel[data-kind="series"]') && ((await page.textContent('.conflict-panel .li-title')) || '').includes('1 dari 2 tanggal sudah terisi'), 'recurring: "1 dari 2 tanggal sudah terisi" and nothing is written');
+    check(env.sheet('Schedules').rows.length === rowsBefore, 'recurring: no session is created on a clash');
+    const skip = page.locator('.conflict-panel [data-act="skip"]');
+    check(((await skip.textContent().catch(() => '')) || '').includes('Lewati tanggal penuh (1 sesi)'), 'recurring: "Lewati tanggal penuh (1 sesi)" is offered');
+    check((await overflowX(page)) <= 0, 'recurring: no sideways scroll');
+    await skip.click().catch(() => {});
+    await page.waitForTimeout(900);
+    check(env.sheet('Schedules').rows.length === rowsBefore + 1, 'recurring: "Lewati" books only the free date');
+    check((await page.textContent('#toast-msg')).includes('1 sesi dibuat, 1 tanggal dilewati'), 'recurring: "1 sesi dibuat, 1 tanggal dilewati."');
+    noErrors(errors);
+    await context.close();
+  }
+
   {
     const env = seededEnv();
     const old = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, []);
@@ -1486,6 +1572,19 @@ async function contrastReport(page) {
     check((await portal.page.evaluate(() => localStorage.getItem('xnk_pending_slot'))) === null, 'picked hour is used once');
     noErrors(portal.errors);
     await portal.context.close();
+  }
+  {
+    // No polling: the free hours load once; time passing alone sends no new request.
+    const env = seededEnv();
+    const calls = [];
+    const { page, context, errors } = await openPage(browser, env, '/Landing', calls, null, { touch: true, clock: true, wait: LANDING_WAIT });
+    const first = calls.filter(c => c === 'getOpenSlots').length;
+    await page.clock.runFor(20000);
+    await page.waitForTimeout(400);
+    const later = calls.filter(c => c === 'getOpenSlots').length;
+    check(first === 1 && later === first, 'Landing: free hours load once, no getOpenSlots after 20 s (' + first + ' → ' + later + ')');
+    noErrors(errors);
+    await context.close();
   }
   {
     const env = seededEnv();

@@ -352,11 +352,11 @@
           <select class="select" id="sch-member"></select>
         </div>
         <div class="two">
-          <div class="field"><label class="label" for="edit-sch-date">Tanggal</label><input class="input" type="date" id="edit-sch-date" required></div>
-          <div class="field"><label class="label" for="edit-sch-time">Jam</label><input class="input" type="time" id="edit-sch-time" required step="900"></div>
+          <div class="field"><label class="label" for="edit-sch-date">Tanggal</label><input class="input" type="date" id="edit-sch-date" required onchange="window.onSchFieldChange()"></div>
+          <div class="field"><label class="label" for="edit-sch-time">Jam</label><input class="input" type="time" id="edit-sch-time" required step="900" oninput="window.onSchFieldChange()" onchange="window.onSchFieldChange()" aria-describedby="edit-sch-time-hint"><p class="hint" id="edit-sch-time-hint" aria-live="polite"></p></div>
         </div>
         <div class="field"><label class="label" for="edit-sch-duration">Durasi</label>
-          <select class="select" id="edit-sch-duration">
+          <select class="select" id="edit-sch-duration" onchange="window.onSchFieldChange()">
             <option value="60">60 menit</option>
             <option value="90">90 menit</option>
             <option value="120">120 menit</option>
@@ -379,7 +379,7 @@
                 <button type="button" class="recurring-day-btn" data-day="0" onclick="window.toggleRecurringWeekday(this)">Min</button>
               </div>
             </div>
-            <div class="field"><label class="label" for="edit-sch-recurring-occurrences">Jumlah sesi</label><input class="input num" type="number" id="edit-sch-recurring-occurrences" min="2" max="52" value="4"></div>
+            <div class="field"><label class="label" for="edit-sch-recurring-occurrences">Jumlah sesi</label><input class="input num" type="number" id="edit-sch-recurring-occurrences" min="2" max="52" value="4" inputmode="numeric" oninput="window.onSchFieldChange()"></div>
           </div>
         </div>
         <div class="field"><label class="label" for="edit-sch-notes">Catatan</label><textarea class="textarea" id="edit-sch-notes" rows="2" placeholder="Opsional, mis. fokus latihan"></textarea></div>
