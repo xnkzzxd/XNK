@@ -5078,6 +5078,12 @@ function _coachRules_() {
   return out;
 }
 
+/** Sel tanggal cuti sebagai 'YYYY-MM-DD' (WIB), juga kalau Sheets mengubahnya jadi tanggal sungguhan. */
+function _isoDateCell_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v.getTime()) ? '' : Utilities.formatDate(v, REMINDER_TZ, 'yyyy-MM-dd');
+  return String(v == null ? '' : v).trim().slice(0, 10);
+}
+
 /** Cuti dari sheet CoachTimeOff (hanya baca). adminView=true menyertakan catatan. */
 function _coachTimeOff_(adminView) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
@@ -5086,7 +5092,7 @@ function _coachTimeOff_(adminView) {
   sheet.getDataRange().getValues().slice(1).forEach(function(r) {
     if (String(r[0]).trim() === '') return;
     const row = {
-      id: String(r[0]), coachId: String(r[1]).trim(), from: String(r[2]).trim(), to: String(r[3]).trim(),
+      id: String(r[0]), coachId: String(r[1]).trim(), from: _isoDateCell_(r[2]), to: _isoDateCell_(r[3]),
       hourFrom: String(r[4]) === '' ? null : _hourCell_(r[4]), hourTo: String(r[5]) === '' ? null : _hourCell_(r[5])
     };
     if (adminView) row.note = String(r[6] || '');
@@ -5413,6 +5419,7 @@ function addCoachTimeOff(token, data) {
     sheet.getRange('C:F').setNumberFormat('@');
     const id = 'OFF-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     sheet.appendRow([id, coachId, from, to, hourFrom === null ? '' : ('0' + hourFrom).slice(-2) + ':00', hourTo === null ? '' : ('0' + hourTo).slice(-2) + ':00', note, new Date().toISOString()]);
+    _bustSlots_();   // setelah tulis: cache yang terisi saat menunggu kunci ikut dibuang
     return { status: 'success', id: id, clashes: _timeOffClashes_(coachId, { from: from, to: to, hourFrom: hourFrom, hourTo: hourTo }) };
   } finally {
     lock.releaseLock();
