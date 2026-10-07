@@ -160,7 +160,7 @@
       var p = String(s.date).split('-').map(Number);
       var when = new Date(p[0], p[1] - 1, p[2], Number(String(s.time).slice(0, 2)), 0);
       if (!(when > new Date())) { _lsSet(PENDING_SLOT_KEY, null); return null; }
-      return { date: s.date, time: s.time, when: when };
+      return { date: s.date, time: s.time, coachId: s.coachId || '', when: when };
     } catch (e) { return null; }
   }
   function slotLabel(s) {
@@ -169,7 +169,8 @@
   function slotNote(suffix) {
     var s = pendingSlot();
     if (!s) return '';
-    return '<div class="slot-note">' + ICON.clock + '<div>Jam dipilih: <b>' + esc(slotLabel(s)) + '</b>' + (suffix ? '<br>' + suffix : '') + '</div></div>';
+    var cn = ''; landingCoaches.forEach(function (c) { if (s.coachId && String(c.id) === String(s.coachId)) cn = ' · ' + c.name; });
+    return '<div class="slot-note">' + ICON.clock + '<div>Jam dipilih: <b>' + esc(slotLabel(s) + cn) + '</b>' + (suffix ? '<br>' + suffix : '') + '</div></div>';
   }
 
   function chooserHtml() {
@@ -292,6 +293,7 @@
         '<p class="eyebrow">Langkah 2 / 2</p>' +
         '<h2 class="m-title">Pilih Paket Kamu</h2>' +
         '<div id="reg-packages" class="reg-pkgs"><div class="reg-pkg-card skeleton" style="height:96px"></div><div class="reg-pkg-card skeleton" style="height:96px"></div></div>' +
+        '<div id="reg-coach-wrap" class="field hide" style="margin-top:16px"><label class="label" for="reg-coach">Coach</label><select id="reg-coach" class="input"></select></div>' +
         '<p id="reg-step2-error" class="err hide" role="alert" style="margin-top:14px"></p>' +
         '<button type="button" id="reg-step2-btn" onclick="doRegisterStep2()" class="btn btn-dark btn-block" style="margin-top:18px">Konfirmasi &amp; Daftar</button>' +
       '</div>' +
@@ -309,6 +311,18 @@
     window._regSelectedPkg = null;
     window._regPackages = [];
     call('getPriceList').then(renderRegPackages).catch(function () { renderRegPackages([]); });
+    fillRegCoach();
+  }
+  // Dua coach aktif atau lebih: pendaftar wajib memilih coach bersama paketnya.
+  function fillRegCoach() {
+    var wrap = document.getElementById('reg-coach-wrap'), sel = document.getElementById('reg-coach');
+    if (!wrap || !sel || !multiCoach()) return;
+    var ps = pendingSlot();
+    var pre = ps && ps.coachId ? String(ps.coachId) : '';
+    sel.innerHTML = '<option value="">Pilih coach…</option>' + landingCoaches.map(function (c) {
+      return '<option value="' + esc(String(c.id)) + '"' + (String(c.id) === pre ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+    }).join('');
+    wrap.classList.remove('hide');
   }
   window.openRegistration = openRegistration;
 
@@ -384,9 +398,12 @@
     function fail(msg) { if (errEl) { errEl.textContent = msg; errEl.classList.remove('hide'); } }
     if (!data) { fail('Data form tidak lengkap. Silakan ulangi.'); return; }
     if (!pkg) { fail('Silakan pilih paket terlebih dahulu.'); return; }
+    var coachSel = document.getElementById('reg-coach');
+    var coachId = multiCoach() && coachSel ? coachSel.value : '';
+    if (multiCoach() && !coachId) { fail('Pilih coach dulu.'); return; }
     if (errEl) errEl.classList.add('hide');
     if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
-    call('registerNewClient', { name: data.name, phone: data.phone, goal: data.goal, packageId: pkg.id }).then(function (res) {
+    call('registerNewClient', { name: data.name, phone: data.phone, goal: data.goal, packageId: pkg.id, coachId: coachId }).then(function (res) {
       if (btn) { btn.disabled = false; btn.textContent = 'Konfirmasi & Daftar'; }
       res = res || {};
       if (res.status === 'exists') {
@@ -749,6 +766,7 @@
   function pickSlot(dayIdx, h) {
     var d = slots.days[dayIdx];
     if (!d || slotChecking) return;
+    if (multiCoach() && !slotCoach) { slotMsg('Pilih coach dulu.'); return; }
     var date = ymd(d.date);
     slotChecking = true;
     slotMsg('');
@@ -765,7 +783,7 @@
         slotMsg('Jam ' + pad2(h) + '.00 baru saja diambil orang lain. Pilih jam lain.');
         return;
       }
-      _lsSet(PENDING_SLOT_KEY, JSON.stringify({ date: date, time: pad2(h) + ':00' }));
+      _lsSet(PENDING_SLOT_KEY, JSON.stringify({ date: date, time: pad2(h) + ':00', coachId: multiCoach() ? slotCoach : '' }));
       renderSlotHours();
       openMemberCheck();
     });
@@ -823,11 +841,42 @@
     var d = new Date();
     txt.textContent = ok ? 'Live · ' + pad2(d.getHours()) + '.' + pad2(d.getMinutes()) : 'Tidak terhubung';
   }
+  // Dua coach aktif atau lebih: pilih coach dulu, jam kosong dihitung per coach di server.
+  var landingCoaches = [], slotCoach = '';
+  function multiCoach() { return landingCoaches.length > 1; }
+  function renderSlotCoaches() {
+    var box = document.getElementById('slot-coaches');
+    if (!box) return;
+    box.hidden = !multiCoach();
+    if (!multiCoach()) { box.innerHTML = ''; return; }
+    box.innerHTML = '<p class="slot-coach-label">Pilih coach</p><div class="slot-coach-row">' + landingCoaches.map(function (c) {
+      var on = String(c.id) === String(slotCoach);
+      return '<button type="button" class="slot-coach' + (on ? ' active' : '') + '" data-coach="' + esc(String(c.id)) + '" aria-pressed="' + on + '">' + esc(c.name) + '</button>';
+    }).join('') + '</div>';
+  }
+  function slotsNeedCoach() {
+    var box = document.getElementById('slot-hours');
+    var days = document.getElementById('slot-days');
+    if (days) days.innerHTML = '';
+    if (box) box.innerHTML = '<p class="slot-empty">Pilih coach dulu, lalu jam kosongnya akan muncul.</p>';
+    refreshLayout();
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.slot-coach');
+    if (!b) return;
+    slotCoach = b.getAttribute('data-coach');
+    slotMsg('');
+    slotsSig = '';
+    slots.days = [];
+    renderSlotCoaches();
+    loadSlots(false);
+  });
   var slotsBusy = false, slotsPromise = Promise.resolve(true), slotsSig = '';
   function loadSlots(isRefresh) {
+    if (multiCoach() && !slotCoach) { slotsNeedCoach(); return Promise.resolve(true); }
     if (slotsBusy) return slotsPromise;
     slotsBusy = true;
-    slotsPromise = call('getOpenSlots', { days: 7 })
+    slotsPromise = call('getOpenSlots', { days: 7, coachId: multiCoach() ? slotCoach : '' })
       .then(function (rows) {
         if (!Array.isArray(rows) || !rows.length) throw new Error('no slots');
         var sig = JSON.stringify(rows);
@@ -1432,7 +1481,10 @@
     .then(initializePricingUI).catch(function () { initializePricingUI([]); });
   call('getLandingStats').then(renderHeroStats).catch(function () { renderHeroStats({ totalClients: 0, completedSessions: 0, satisfactionPct: null, avgRating: null }); });
   call('getPublicTestimonials').then(renderTestimonials).catch(function () { renderTestimonials([]); });
-  loadSlots();
+  call('getCoaches').then(function (list) {
+    landingCoaches = Array.isArray(list) ? list : [];
+    renderSlotCoaches();
+  }).catch(function () {}).then(function () { loadSlots(); });
 
   // Foto hero tidak bisa dimuat → sembunyikan (JIZDAN & teks tetap tampil).
   $$('.figure-img').forEach(function (im) {

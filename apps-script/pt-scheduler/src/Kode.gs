@@ -1799,6 +1799,7 @@ function registerNewClient(data) {
 
   const pkg = getPriceList().find(function(p) { return String(p.id) === String(data.packageId); });
   if (!pkg) throw new Error('Paket tidak ditemukan. Muat ulang halaman lalu pilih paket lagi.');
+  const pickedCoachId = _requireClientCoach_(data.coachId);   // dua coach aktif atau lebih: wajib pilih coach
   const sessions = parseInt(pkg.jumlahSesi, 10) || 1;
   const priceStr = _formatRupiah_(pkg.harga);
 
@@ -1817,7 +1818,8 @@ function registerNewClient(data) {
     goal: goal + ' | [' + pkg.namaPaket + ' - ' + sessions + ' Sesi]',
     packageId: pkg.id,
     totalSessions: sessions,
-    usedSessions: 0
+    usedSessions: 0,
+    coachId: pickedCoachId
   }, { newOnly: true, silent: true });
 
   const isExisting = result.status === 'exists';
@@ -2077,11 +2079,34 @@ function getPortalBootstrap(memberToken) {
       businessHours: bh, coaches: _activeCoaches_().map(function(c) { return { id: c.id }; }),
       rules: _coachRules_(), timeOff: _coachTimeOff_(false), bookings: _slotBookings_(all), from: _wibParts_(now).date, days: horizon, now: now
     }),
+    openSlotsByCoach: _openSlotsByCoach_(all, bh, horizon, now),
     horizonDays: horizon,
     coaches: getCoaches(),
     priceList: getPriceList(),
     businessHours: bh
   };
+}
+
+/** Dua coach aktif atau lebih: jam kosong per coach (klien memilih coach lebih dulu). Solo: {} (tidak dipakai). */
+function _openSlotsByCoach_(all, bh, horizon, now) {
+  const coaches = _activeCoaches_().map(function(c) { return { id: c.id }; });
+  const out = {};
+  if (coaches.length < 2) return out;
+  const rules = _coachRules_(), off = _coachTimeOff_(false), bookings = _slotBookings_(all);
+  coaches.forEach(function(c) {
+    out[c.id] = _freeSlots_({ businessHours: bh, coaches: coaches, onlyCoach: c.id, rules: rules, timeOff: off, bookings: bookings, from: _wibParts_(now).date, days: horizon, now: now });
+  });
+  return out;
+}
+
+/** Klien wajib memilih coach kalau ada dua coach aktif atau lebih. Mengembalikan coachId valid ('' di mode solo). */
+function _requireClientCoach_(coachId) {
+  const active = _activeCoaches_();
+  if (active.length < 2) return '';
+  const id = String(coachId == null ? '' : coachId).trim();
+  if (!id) throw new Error('Pilih coach dulu.');
+  if (!active.some(function(c) { return c.id === id; })) throw new Error('Coach tidak ditemukan atau sedang tidak aktif. Pilih coach lain.');
+  return id;
 }
 
 /** Berapa hari jam kosong yang dikirim ke portal: sama dengan batas booking (maks 62). */
@@ -2529,7 +2554,7 @@ function _clientReschedule_(memberId, scheduleId, newStart, newEnd) {
 
       // 4. Waktu BARU harus boleh dibooking (jam operasional, coach, belum terisi); jadwal ini sendiri tidak dihitung.
       _assertNoOwnOverlap_(memberId, newStart, newEnd, scheduleId);
-      _assertClientSlotOpen_(newStart, newEnd, scheduleId);
+      _assertClientSlotOpen_(newStart, newEnd, scheduleId, '', _activeCoaches_().length > 1 ? String(data[i][8] || '') : '');
 
       const memberName = data[i][2];
       const oldStartStr = data[i][4];
@@ -2622,6 +2647,7 @@ function _validateSlot_(start, end) {
 function clientBookSchedule(memberToken, scheduleData) {
   const member = requireMember_(memberToken);
   scheduleData = scheduleData || {};
+  const pickedCoachId = _requireClientCoach_(scheduleData.coachId);   // dua coach aktif atau lebih: wajib pilih coach
   const snapped = _snapSlot_(scheduleData.start, scheduleData.end);
   scheduleData = { start: snapped.start, end: snapped.end, notes: scheduleData.notes };
   _validateSlot_(scheduleData.start, scheduleData.end);
@@ -2652,8 +2678,11 @@ function clientBookSchedule(memberToken, scheduleData) {
     }
     _assertQuota_(member.row, 1);
     _assertNoOwnOverlap_(member.row[0], scheduleData.start, scheduleData.end, '');
-    _assertClientSlotOpen_(scheduleData.start, scheduleData.end, '', classKey);
+    _assertClientSlotOpen_(scheduleData.start, scheduleData.end, '', classKey, pickedCoachId);
+    const pickedCoach = pickedCoachId ? _activeCoaches_().find(function(c) { return c.id === pickedCoachId; }) : null;
     addResult = _addScheduleInternal_({
+      coachId: pickedCoach ? pickedCoach.id : '',
+      coachName: pickedCoach ? pickedCoach.name : '',
       memberId: String(member.row[0]).trim(),
       memberName: memberName,
       phone: phone,
@@ -3946,20 +3975,27 @@ function getMemberProgressPhoto(token, photoId) {
 // coach. Setelah pembayaran diterima, admin menyetujui dengan satu ketukan: persis jalur "Perpanjang" di
 // form Tambah Klien (kuota di-reset sesuai paket, transaksi dicatat dengan harga saat itu).
 
-const RENEWAL_HEADERS = ["ID", "Member ID", "Paket ID", "Status", "Dibuat Pada", "Diputuskan Pada", "Harga"];
+const RENEWAL_HEADERS = ["ID", "Member ID", "Paket ID", "Status", "Dibuat Pada", "Diputuskan Pada", "Harga", "Coach ID"];
 const RENEWAL_THROTTLE_SECONDS = 20;
 
 function _renewalSheet_() {
-  return getOrCreateSheet_('RenewalRequests', RENEWAL_HEADERS);
+  const sheet = getOrCreateSheet_('RenewalRequests', RENEWAL_HEADERS);
+  // Kolom "Coach ID" ditambahkan di ujung kanan untuk sheet lama (idempoten).
+  if (sheet.getLastColumn() < RENEWAL_HEADERS.length || String(sheet.getRange(1, RENEWAL_HEADERS.length).getValue()).trim() === '') {
+    sheet.getRange(1, RENEWAL_HEADERS.length).setValue('Coach ID');
+    sheet.getRange(1, RENEWAL_HEADERS.length).setFontWeight('bold');
+  }
+  return sheet;
 }
 
 function _renewalFromRow_(r) {
-  return { id: String(r[0]), memberId: String(r[1]).trim(), packageId: String(r[2]), status: String(r[3]), createdAt: String(r[4]), decidedAt: String(r[5] || ''), harga: Number(r[6]) || 0 };
+  return { id: String(r[0]), memberId: String(r[1]).trim(), packageId: String(r[2]), status: String(r[3]), createdAt: String(r[4]), decidedAt: String(r[5] || ''), harga: Number(r[6]) || 0, coachId: String(r[7] || '').trim() };
 }
 
 /** Klien: minta perpanjang. Satu permintaan terbuka per klien (yang baru membatalkan yang lama). */
-function requestRenewal(memberToken, packageId) {
+function requestRenewal(memberToken, packageId, coachId) {
   const row = requireMember_(memberToken).row;
+  const pickedCoachId = _requireClientCoach_(coachId);   // dua coach aktif atau lebih: wajib pilih coach
   const memberId = String(row[0]).trim();
   const pid = String(packageId == null ? '' : packageId).trim();
   const pkg = getPriceList().find(function(p) { return String(p.id) === pid; });
@@ -3979,7 +4015,7 @@ function requestRenewal(memberToken, packageId) {
       }
     }
     id = 'REN-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([id, memberId, pkg.id, 'menunggu', now, '', pkg.harga]);
+    sheet.appendRow([id, memberId, pkg.id, 'menunggu', now, '', pkg.harga, pickedCoachId]);
   } finally {
     lock.releaseLock();
   }
@@ -4075,7 +4111,7 @@ function decideRenewal(token, id, approve) {
     const row = found.row;
     const res = _addMemberInternal_({
       name: String(row[1] || ''), phone: String(row[2] || ''), goal: String(row[3] || ''),
-      packageId: req.packageId, usedSessions: 0, coachId: String(row[10] || '')
+      packageId: req.packageId, usedSessions: 0, coachId: req.coachId || String(row[10] || '')
     }, { silent: true });
     return { status: 'disetujui', id: rid, packageName: res.packageName, totalSessions: res.totalSessions };
   } catch (e) {
@@ -5076,7 +5112,9 @@ function _coachAvailableAt_(coachId, rules, timeOff, date, hour, dow) {
  * out: [{ date, dow, closed, hours:[{hour, free}] }] — hanya jam di dalam jam operasional studio.
  */
 function _freeSlots_(o) {
-  const coaches = (o.coaches && o.coaches.length) ? o.coaches : [{ id: '' }];
+  let coaches = (o.coaches && o.coaches.length) ? o.coaches : [{ id: '' }];
+  // onlyCoach: jam kosong SATU coach (klien memilih coach dulu). Kursinya terpakai oleh booking coach itu; booking
+  // yang belum ditugaskan mengambil kursi coach lain yang masih kosong, dan baru menutup jam ini kalau tidak ada lagi.
   const known = {};
   coaches.forEach(function(c) { if (c.id) known[c.id] = true; });
   const out = [];
@@ -5095,7 +5133,8 @@ function _freeSlots_(o) {
           const avail = coaches.filter(function(c) { return !c.id || _coachAvailableAt_(c.id, o.rules, o.timeOff, date, h, dow); });
           const availIds = {};
           avail.forEach(function(c) { availIds[c.id] = true; });
-          let used = 0;
+          let used = 0, unassigned = 0;
+          const usedBy = {};
           const seenClass = {};
           (o.bookings || []).forEach(function(bk) {
             const bs = Math.floor(new Date(bk.start).getTime() / 3600000) * 3600000;
@@ -5104,14 +5143,22 @@ function _freeSlots_(o) {
             // Sesi kelas yang sama (kelas + jam mulai sama) berbagi SATU kursi coach; peserta dibatasi Kapasitas.
             if (bk.classKey) { if (seenClass[bk.classKey]) return; seenClass[bk.classKey] = true; }
             // Booking milik coach yang sedang tidak tersedia tidak memakai kursi; tanpa coach (atau coach tak dikenal) memakai kursi bersama.
-            if (!bk.coachId || !known[bk.coachId] || availIds[bk.coachId]) used++;
+            if (!bk.coachId || !known[bk.coachId]) { used++; unassigned++; }
+            else if (availIds[bk.coachId]) { used++; usedBy[bk.coachId] = (usedBy[bk.coachId] || 0) + 1; }
           });
-          free = Math.max(0, avail.length - used);
-          off = avail.length === 0;   // tidak ada coach yang bertugas jam ini (di luar jam kerja / cuti)
+          if (o.onlyCoach) {
+            const mineFree = availIds[o.onlyCoach] && !usedBy[o.onlyCoach];
+            const othersFree = avail.filter(function(c) { return c.id !== o.onlyCoach && !usedBy[c.id]; }).length;
+            free = mineFree && othersFree >= unassigned ? 1 : 0;
+            off = !availIds[o.onlyCoach];
+          } else {
+            free = Math.max(0, avail.length - used);
+            off = avail.length === 0;
+          }
         }
         const slot = { hour: h, free: free, off: off, past: past };
         // Jam kerja coach yang tertutup cuti: tampil sebagai PENUH (bukan disembunyikan), tidak bisa dipilih.
-        if (off && !past && coaches.some(function(c) { return c.id && _coachAvailableAt_(c.id, o.rules, [], date, h, dow); })) slot.leave = true;
+        if (off && !past && (o.onlyCoach ? coaches.filter(function(c) { return c.id === o.onlyCoach; }) : coaches).some(function(c) { return c.id && _coachAvailableAt_(c.id, o.rules, [], date, h, dow); })) slot.leave = true;
         hours.push(slot);
       }
     }
@@ -5137,7 +5184,7 @@ function getOpenSlots(opts) {
   opts = opts || {};
   const now = new Date();
   // Cache 10 detik di server (hemat kuota). fresh:true = dipakai pengecekan sebelum booking, selalu data terbaru.
-  const cacheKey = 'openslots:' + _slotsVersion_() + ':' + String(opts.from || '') + ':' + (parseInt(opts.days, 10) || 7);
+  const cacheKey = 'openslots:' + _slotsVersion_() + ':' + String(opts.from || '') + ':' + (parseInt(opts.days, 10) || 7) + ':' + String(opts.coachId || '');
   if (!opts.fresh) {
     try { const hit = CacheService.getScriptCache().get(cacheKey); if (hit) return JSON.parse(hit); } catch (e) {}
   }
@@ -5159,8 +5206,11 @@ function _getOpenSlotsCompute_(opts, now) {
   let from = String(opts.from || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) from = _wibParts_(now).date;
   const days = Math.max(1, Math.min(62, parseInt(opts.days, 10) || 7));
+  const only = String(opts.coachId || '').trim();
+  const coaches = _activeCoaches_().map(function(c) { return { id: c.id }; });
+  if (only && !coaches.some(function(c) { return c.id === only; })) return [];   // coach tidak aktif: tidak ada jam
   return _freeSlots_({
-    businessHours: _businessHours_(), coaches: _activeCoaches_().map(function(c) { return { id: c.id }; }),
+    businessHours: _businessHours_(), coaches: coaches, onlyCoach: only,
     rules: _coachRules_(), timeOff: _coachTimeOff_(false), bookings: _slotBookings_(), from: from, days: days, now: now
   });
 }
@@ -5221,7 +5271,7 @@ function _anyCoachAvailable_(coaches, rules, timeOff, start, end) {
  * code: 'past' | 'closed' | 'unavailable' | 'taken'. Memakai mesin slot yang sama dengan Landing & portal.
  * excludeId = jadwal yang sedang dipindah / baru dibuat (tidak dihitung sebagai bentrok).
  */
-function _slotProblem_(start, end, excludeId, allowPast, joinClassKey) {
+function _slotProblem_(start, end, excludeId, allowPast, joinClassKey, coachId) {
   const s = new Date(start), e = new Date(end);
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return { code: 'closed', message: 'Waktu jadwal tidak valid.' };
   if (!allowPast && s.getTime() <= Date.now()) return { code: 'past', message: 'Jam ini sudah lewat.' };
@@ -5237,7 +5287,7 @@ function _slotProblem_(start, end, excludeId, allowPast, joinClassKey) {
     const w = _wibParts_(new Date(t));
     const range = bh[w.day];
     if (!range || w.hour < range[0] || w.hour >= range[1]) return { code: 'closed', message: 'Jam ini di luar jam operasional.' };
-    const day = cache[w.date] || (cache[w.date] = _freeSlots_({ businessHours: bh, coaches: coaches, rules: rules, timeOff: off, bookings: bookings, from: w.date, days: 1, now: new Date(0) })[0]);
+    const day = cache[w.date] || (cache[w.date] = _freeSlots_({ businessHours: bh, coaches: coaches, onlyCoach: String(coachId || ''), rules: rules, timeOff: off, bookings: bookings, from: w.date, days: 1, now: new Date(0) })[0]);
     const hr = Array.from(day.hours).find(function(x) { return x.hour === w.hour; });
     if (!hr || hr.off) return { code: 'unavailable', message: 'Jam ini tidak tersedia.' };
     if (hr.free <= 0) return { code: 'taken', message: 'Jam ini sudah dibooking. Pilih jam lain.' };
@@ -5255,8 +5305,8 @@ function _slotWarnings_(start, end, excludeId) {
 }
 
 /** Klien: lempar error Indonesia kalau jam tidak boleh dibooking (lewat, tutup, coach tidak ada, atau sudah terisi). */
-function _assertClientSlotOpen_(start, end, excludeId, joinClassKey) {
-  const p = _slotProblem_(start, end, excludeId, false, joinClassKey);
+function _assertClientSlotOpen_(start, end, excludeId, joinClassKey, coachId) {
+  const p = _slotProblem_(start, end, excludeId, false, joinClassKey, coachId);
   if (p) throw new Error(p.message);
   _assertBookingHorizon_(start);
 }

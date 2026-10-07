@@ -189,13 +189,37 @@ test('the second of two identical bookings is refused (the check and the write a
   assert.equal(env.sheet('Schedules').rows.filter(r => r[4] === FUT(5, 15)).length, 1);
 });
 
-test('with two coaches an hour stays open until both are taken', () => {
+test('with two coaches the client must pick a coach, and each coach has their own seat for an hour', () => {
   const env = seededEnv();
   noSchedules(env);
-  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
   env.sheet('Schedules').rows.push(['S-B', 'PT-X', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
-  assert.equal(book(env, FUT(4, 10)).status, 'success');
-  assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(4, 10), end: FUT(4, 11) }), /sudah dibooking/);
+  const B = env.memberToken(require('./fixtures').KEY_B);
+  const win = { start: FUT(4, 10), end: FUT(4, 11) };
+  assert.throws(() => env.call('clientBookSchedule', B, win), /Pilih coach dulu/);
+  assert.throws(() => env.call('clientBookSchedule', B, Object.assign({ coachId: 'NOPE' }, win)), /Coach tidak ditemukan/);
+  assert.throws(() => env.call('clientBookSchedule', B, Object.assign({ coachId: 'C-1' }, win)), /sudah dibooking/);   // Rizky is taken at 10
+  assert.equal(env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_A), Object.assign({ coachId: dinaId }, win)).coachId, dinaId);
+  assert.throws(() => env.call('clientBookSchedule', B, Object.assign({ coachId: dinaId }, win)), /sudah dibooking/);   // now Dina is taken too
+});
+
+test('getOpenSlots({coachId}) shows only that coach\'s seat; the portal bootstrap carries one grid per coach', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
+  env.sheet('Schedules').rows.push(['S-B', 'PT-X', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
+  const date = new Date(FUT(4, 10)).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const free = (rows, h) => rows.find(d => d.date === date).hours.find(x => x.hour === h).free;
+  assert.equal(free(env.call('getOpenSlots', { days: 7, fresh: true, coachId: 'C-1' }), 10), 0);
+  assert.equal(free(env.call('getOpenSlots', { days: 7, fresh: true, coachId: dinaId }), 10), 1);
+  assert.equal(free(env.call('getOpenSlots', { days: 7, fresh: true }), 10), 1);   // all coaches: one seat left
+  assert.deepEqual(env.call('getOpenSlots', { days: 7, fresh: true, coachId: 'NOPE' }), []);
+  const boot = env.call('getPortalBootstrap', env.memberToken(require('./fixtures').KEY_A));
+  assert.deepEqual(Object.keys(boot.openSlotsByCoach).sort(), ['C-1', dinaId].sort());
+  assert.equal(free(boot.openSlotsByCoach['C-1'], 10), 0);
+  assert.equal(free(boot.openSlotsByCoach[dinaId], 10), 1);
 });
 
 test('clients cannot reschedule onto a booked hour or outside hours, but can onto a free hour or their own hour', () => {
@@ -271,9 +295,11 @@ test('an off-the-hour client booking is stored from the whole hour for the chose
 test('a client cannot hold two overlapping sessions even with two coaches', () => {
   const env = seededEnv();
   noSchedules(env);
-  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
-  book(env, FUT(4, 10));
-  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 11, 30)), /sudah punya sesi/);
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
+  const A = env.memberToken(require('./fixtures').KEY_A);
+  env.call('clientBookSchedule', A, { start: FUT(4, 10), end: FUT(4, 11), coachId: dinaId });
+  assert.throws(() => env.call('clientBookSchedule', A, { start: FUT(4, 10, 30), end: FUT(4, 11, 30), coachId: dinaId }), /sudah punya sesi/);
 });
 
 test('getOpenSlots is cached for a moment but fresh:true and writes bypass the cache', () => {
@@ -284,4 +310,19 @@ test('getOpenSlots is cached for a moment but fresh:true and writes bypass the c
   book(env, FUT(4, 10));
   assert.equal(hourOf(env.call('getOpenSlots', { days: 7 })), 0);
   assert.equal(hourOf(env.call('getOpenSlots', { days: 7, fresh: true })), 0);
+});
+
+test('per-coach view: a booking with no coach assigned takes a free coach\'s seat, and only closes the hour when none is left', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
+  env.sheet('Schedules').rows.push(['S-U', 'PT-X', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'unread', '', '', '', '']);   // nobody assigned
+  const date = new Date(FUT(4, 10)).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const free = id => env.call('getOpenSlots', { days: 7, fresh: true, coachId: id }).find(d => d.date === date).hours.find(x => x.hour === 10).free;
+  assert.equal(free('C-1'), 1);   // two coaches, one unassigned booking: each coach can still be chosen
+  assert.equal(free(dinaId), 1);
+  env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_A), { start: FUT(4, 10), end: FUT(4, 11), coachId: 'C-1' });
+  assert.equal(free('C-1'), 0);
+  assert.equal(free(dinaId), 0);   // the unassigned booking now needs Dina's seat
 });
