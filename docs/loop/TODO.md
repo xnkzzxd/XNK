@@ -32,4 +32,4 @@ Status: `[ ]` todo · `[~]` berjalan · `[x]` selesai. ID mulai T-600.
 
 | | ID | Task | Selesai bila |
 | --- | --- | --- | --- |
-| [ ] | T-630 | `icsFor` dan tombol "Tambah ke kalender" | Browser check |
+| [x] | T-630 | `icsFor` dan tombol "Tambah ke kalender" | Browser check |

@@ -3168,6 +3168,7 @@
         if (data.coachId) ui.bookCoach = '';   // booking berikutnya: pilih coach lagi
         window.updateUI();
         window.showToast(doneText(res));
+        if (s && !res.duplicate) offerCalendar([s.id], 'Booking terkirim');
       },
       function (res) {
         if (res.status === 'conflict') window.showToast(conflictTitle(res, label) + '. Pilih jam lain di Jadwal.', 'calendar-x');
@@ -3193,6 +3194,7 @@
         window.closeModal();
         window.updateUI();
         window.showToast(msg);
+        offerCalendar([id], 'Jadwal dipindah');
       },
       function (res) {
         window.showToast(res.status === 'conflict' ? conflictTitle(res, label) + '. Pilih jam lain di Jadwal.' : apply(res), res.status === 'conflict' ? 'calendar-x' : null);
@@ -3223,6 +3225,7 @@
         window.closeModal();
         window.updateUI();
         window.showToast(seriesDoneText(res));
+        if (!res.duplicate && Array.isArray(res.items) && res.items.length) offerCalendar(res.items.map(x => x.id), 'Jadwal berulang dibuat');
       },
       function (res) {
         if (res.status === 'conflict') window.showToast(seriesConflictText(res) + '. Pilih jam lain di Jadwal.', 'calendar-x');
@@ -4703,7 +4706,7 @@
       (done && s.dilatih ? '<p class="li-sub" style="white-space:normal">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.dilatih) + '</p>' : '') +
       (done && s.fokus ? '<p class="li-sub" style="white-space:normal">' + icon('target', 'style="width:12px;height:12px;vertical-align:-2px"') + ' Berikutnya: ' + h(s.fokus) + '</p>' : '') + '</div>' +
       '<div class="li-trail">' + (done ? '<span class="pill soft">' + icon('check') + 'Selesai</span>'
-        : upcoming ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah</button>'
+        : upcoming ? '<button type="button" class="icon-btn plain" aria-label="Tambah ke kalender" onclick="window.openAddToCalendar([\'' + h(s.id) + '\'])">' + icon('calendar-plus') + '</button><button type="button" class="btn btn-outline btn-sm" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah</button>'
         : '<span class="pill dashed soft">Terlewat</span>') + '</div></div>';
   }
 
@@ -4814,6 +4817,62 @@
     // Lingkar badan lainnya: terlipat supaya kartu tetap pendek di HP.
     return main + (more.length ? '<details class="pg-more"><summary>Lingkar badan lainnya (' + more.length + ')</summary><div class="stack" style="gap:18px">' + more.join('') + '</div></details>' : '');
   }
+
+  // ── Tambah ke kalender (Fase I4): .ics dan tautan Google Kalender, tanpa panggilan server ──
+  const icsStamp = d => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const icsEsc = t => String(t == null ? '' : t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  // RFC 5545: baris maksimal 75 karakter; lanjutan diawali satu spasi.
+  function icsFold(line) {
+    const out = []; let rest = line;
+    while (rest.length > 74) { out.push(rest.slice(0, 74)); rest = ' ' + rest.slice(74); }
+    out.push(rest);
+    return out.join('\r\n');
+  }
+  function calTitle(s) { return 'Sesi latihan XNK' + (s.coachName && !window.isSoloCoach() ? ' · ' + s.coachName : ''); }
+  // Murni: daftar sesi {id,start,end,coachName} → teks .ics (CRLF). now = waktu pembuatan (untuk DTSTAMP).
+  function buildIcs(items, now) {
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//XNK//Sesi PT//ID', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+    items.forEach(function (s) {
+      const start = new Date(s.start), end = new Date(s.end || (start.getTime() + 3600000));
+      lines.push('BEGIN:VEVENT', 'UID:' + icsEsc(s.id) + '@xnk.my.id', 'DTSTAMP:' + icsStamp(now || new Date()), 'DTSTART:' + icsStamp(start), 'DTEND:' + icsStamp(end),
+        'SUMMARY:' + icsEsc(calTitle(s)), 'DESCRIPTION:' + icsEsc('Dibooking lewat book.xnkbooking.my.id. Ubah jadwal lewat portal.'),
+        'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc('Sesi latihan 1 jam lagi'), 'TRIGGER:-PT1H', 'END:VALARM', 'END:VEVENT');
+    });
+    lines.push('END:VCALENDAR');
+    return lines.map(icsFold).join('\r\n') + '\r\n';
+  }
+  window.buildIcs = buildIcs;
+  function googleCalUrl(s) {
+    const start = new Date(s.start), end = new Date(s.end || (start.getTime() + 3600000));
+    return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(calTitle(s)) + '&dates=' + icsStamp(start) + '/' + icsStamp(end) +
+      '&details=' + encodeURIComponent('Dibooking lewat book.xnkbooking.my.id');
+  }
+  let calItems = [];
+  window.openAddToCalendar = function (ids, headline) {
+    calItems = (ids || []).map(id => window.schedules.find(x => String(x.id) === String(id))).filter(Boolean)
+      .filter(s => new Date(s.start) > new Date()).sort((x, y) => new Date(x.start) - new Date(y.start));
+    if (!calItems.length) { window.showToast('Tidak ada sesi mendatang untuk disimpan.'); return; }
+    $('cal-title').textContent = headline || 'Tambah ke kalender';
+    $('cal-sum').textContent = calItems.length === 1 ? whenLabel(calItems[0].start) + ' WIB' : calItems.length + ' sesi, mulai ' + whenLabel(calItems[0].start) + ' WIB';
+    const g = $('cal-google');
+    g.classList.toggle('hide', calItems.length !== 1);
+    if (calItems.length === 1) g.setAttribute('href', googleCalUrl(calItems[0]));
+    openSheet('modal-add-cal');
+  };
+  window.downloadIcs = function () {
+    if (!calItems.length) return;
+    try {
+      const blob = new Blob([buildIcs(calItems, new Date())], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = calItems.length === 1 ? 'sesi-xnk.ics' : 'sesi-xnk-' + calItems.length + '.ics';
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      window.closeModal();
+      window.showToast('File kalender diunduh. Buka untuk menyimpannya.');
+    } catch (e) { window.showToast('File kalender gagal dibuat.'); }
+  };
+  // Setelah booking berhasil: tawarkan simpan ke kalender (tidak untuk jawaban "sudah ada").
+  function offerCalendar(ids, headline) { setTimeout(function () { window.openAddToCalendar(ids, headline); }, 450); }
 
   // ── Penilaian cepat + evaluasi paket di portal (Fase I3) ─────────────────────
   // window.myFeedback = { enabled, pending: {scheduleId,start,end}|null, pkgEval: bool, stars, scheduleId }
@@ -5339,7 +5398,8 @@
         '<p class="num" style="font-size:var(--fs-3xl);font-weight:800;letter-spacing:-0.03em;margin:8px 0" id="pub-next-countdown" data-countdown-long="' + new Date(next.start).getTime() + '">' + h(countdownText(new Date(next.start))) + '</p>' +
         (window.isSoloCoach() ? '' : '<p class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(next.coachName || 'Menunggu coach') + '</p>') +
         '<div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-outline" onclick="window.openRescheduleModal(\'' + h(next.id) + '\')">' + icon('calendar-clock') + 'Reschedule</button>' +
-        '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button></div>'
+        '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
+        '<button type="button" class="btn btn-outline" id="pub-next-cal" onclick="window.openAddToCalendar([\'' + h(next.id) + '\'])">' + icon('calendar-plus') + 'Kalender</button></div>'
         : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
       '</div>';
 

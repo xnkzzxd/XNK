@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Disetujui 2026-10-07, dibangun bertahap (I1 → I4) |
+| Status | Dibangun penuh (I1 → I4), 2026-10-07 |
 | Terkait | [Design.md](Design.md) · [TODO.md](TODO.md) · [../Agent.md](../Agent.md) · [../coach/PRD.md](../coach/PRD.md) |
 
 ## 1. Latar belakang

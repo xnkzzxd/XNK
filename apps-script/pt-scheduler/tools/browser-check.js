@@ -1315,6 +1315,28 @@ async function contrastReport(page) {
     await fbRefresh();
     check(!(await visible(page, '#pub-feedback-card')), 'feedback: the owner switch hides the cards');
 
+    // ── Tambah ke kalender (Fase I4) ───────────────────────────────────────────
+    const calId = await page.evaluate(() => (window.schedules.filter(s => new Date(s.start) > new Date())[0] || {}).id);
+    check(!!calId && (await page.locator('#pub-next-cal').count()) === 1, 'calendar: the next-session card has a Kalender button');
+    await page.evaluate(id => window.openAddToCalendar([id]), calId);
+    await page.waitForTimeout(500);
+    check(await visible(page, '#modal-add-cal') && await visible(page, '#cal-google') && await visible(page, '#cal-ics'), 'calendar: the sheet offers Google Kalender and .ics');
+    const gUrl = await page.getAttribute('#cal-google', 'href');
+    check(/^https:\/\/calendar\.google\.com\/calendar\/render\?action=TEMPLATE&text=Sesi%20latihan%20XNK&dates=\d{8}T\d{6}Z\/\d{8}T\d{6}Z/.test(gUrl), 'calendar: the Google link carries the title and UTC start/end');
+    const calBtn = await page.locator('#modal-add-cal .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(calBtn === 0 && (await overflowX(page)) <= 0, 'calendar: buttons are at least 44 px and nothing scrolls sideways');
+    const dl = page.waitForEvent('download');
+    await page.click('#cal-ics');
+    const download = await dl;
+    const icsText = fs.readFileSync(await download.path(), 'utf8');
+    check(download.suggestedFilename() === 'sesi-xnk.ics' && icsText.startsWith('BEGIN:VCALENDAR\r\n') && icsText.includes('\r\nEND:VCALENDAR\r\n'), 'calendar: the .ics file downloads with CRLF lines');
+    check(icsText.includes('UID:' + calId + '@xnk.my.id') && /DTSTART:\d{8}T\d{6}Z/.test(icsText) && icsText.includes('SUMMARY:Sesi latihan XNK') && icsText.includes('TRIGGER:-PT1H'), 'calendar: the event has a stable UID, UTC times, a title and a 1-hour alarm');
+    const multi = await page.evaluate(() => window.buildIcs([{ id: 'A', start: '2030-01-07T00:00:00.000Z', end: '2030-01-07T01:00:00.000Z', coachName: 'Rizky, "Coach"; Satu' }, { id: 'B', start: '2030-01-08T00:00:00.000Z' }], new Date('2030-01-01T00:00:00Z')));
+    check((multi.match(/BEGIN:VEVENT/g) || []).length === 2 && multi.includes('DTSTART:20300107T000000Z') && multi.includes('DTEND:20300108T010000Z'), 'calendar: several sessions make one file, a missing end defaults to one hour');
+    check(multi.split('\r\n').every(l => l.length <= 75), 'calendar: long lines are folded to 75 characters');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.waitForTimeout(500);
@@ -1421,6 +1443,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(700);
     const booked = env.sheet('Schedules').rows.find(r => r[6] === 'Leg day');
     check(!!booked && booked[1] === 'PT-A' && booked[7] === 'unread', 'booking is saved for the logged-in client');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     const bookCalls = calls.slice(callsBeforeBook);
     check(bookCalls.length === 1 && bookCalls[0] === 'clientBookSchedule', 'booking is one server call (no pre-check, no reload afterwards): ' + bookCalls.join(','));
     check(await page.evaluate(id => window.schedules.some(s => s.id === id && s.memberId === 'PT-A'), booked && booked[0]), 'the new booking is on screen straight from the answer');
@@ -1435,6 +1458,7 @@ async function contrastReport(page) {
     await page.evaluate(() => document.querySelector('#form-edit-schedule button[type="submit"]').click());
     await page.waitForTimeout(700);
     check(!!env.sheet('Schedules').rows.find(r => r[6] === 'Fab booking' && r[1] === 'PT-A'), '"+" booking is saved too');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
 
     await page.evaluate(() => window.navigate('public-coaches'));
     await page.waitForTimeout(400);
@@ -1534,6 +1558,7 @@ async function contrastReport(page) {
     const pickIso = new Date(pick.date + 'T' + pick.time + ':00+07:00').getTime();
     const saved = env.sheet('Schedules').rows.find(r => r[1] === 'PT-A' && new Date(r[4]).getTime() === pickIso);
     check(!!saved && saved[7] === 'unread', 'conflict: the suggested hour is booked (' + pick.date + ' ' + pick.time + ')');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     check(calls.slice(callsBefore2).join(',') === 'clientBookSchedule', 'conflict: booking the suggestion is one more call: ' + calls.slice(callsBefore2).join(','));
     check(!(await page.evaluate(() => document.getElementById('sheet-layer').classList.contains('open'))), 'conflict: the sheet closes after booking');
     check((await page.textContent('#toast-msg')).includes('Booking terkirim'), 'conflict: "Booking terkirim ke coach!"');
@@ -1558,6 +1583,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(900);
     check(env.sheet('Schedules').rows.length === rowsBefore + 1, 'recurring: "Lewati" books only the free date');
     check((await page.textContent('#toast-msg')).includes('1 sesi dibuat, 1 tanggal dilewati'), 'recurring: "1 sesi dibuat, 1 tanggal dilewati."');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     noErrors(errors);
     await context.close();
   }
@@ -1591,6 +1617,7 @@ async function contrastReport(page) {
     check(env.sheet('Schedules').rows.length === rowsBefore && !!row && new Date(row[4]).toISOString() !== new Date(own.start).toISOString(),
       'reschedule: the same session moved, no extra session');
     check((await page.locator('.conflict-panel [data-act="time"]').count()) === 0 && (await page.textContent('#toast-msg')).includes('Jadwal dipindah'), 'reschedule: "Jadwal dipindah …"');
+    await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     noErrors(errors);
     await context.close();
   }

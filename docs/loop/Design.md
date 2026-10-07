@@ -32,4 +32,4 @@ Rujukan kode: `apps-script/pt-scheduler/src/`.
 
 ## 5. Kalender (I4)
 
-Murni browser: `.ics` dan tautan Google Kalender dari data sesi; tanpa panggilan server.
+Murni browser (`App.html`): `buildIcs(items, now)` menghasilkan teks `.ics` (CRLF, baris dilipat 75 karakter, waktu UTC, `UID = <id jadwal>@xnk.my.id` supaya sesi yang dipindah menggantikan acara lama, alarm 1 jam sebelum). `googleCalUrl` membuat tautan *render?action=TEMPLATE*. Lembar `modal-add-cal` dibuka dari tombol di baris sesi dan kartu *Sesi berikutnya*, serta otomatis setelah booking tunggal, booking berulang, dan pindah jadwal berhasil (tidak untuk jawaban `duplicate`). Tidak ada panggilan server atau data baru.
