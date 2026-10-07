@@ -326,3 +326,13 @@ test('per-coach view: a booking with no coach assigned takes a free coach\'s sea
   assert.equal(free('C-1'), 0);
   assert.equal(free(dinaId), 0);   // the unassigned booking now needs Dina's seat
 });
+
+test('a leave whose dates Sheets stored as real dates still blocks the coach', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const date = new Date(FUT(4, 10)).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  env.ss.seed('CoachTimeOff', [['ID', 'Coach ID', 'Dari', 'Sampai', 'Jam Mulai', 'Jam Selesai', 'Catatan', 'Dibuat'],
+    ['OFF-1', 'C-1', new Date(date + 'T00:00:00+07:00'), new Date(date + 'T00:00:00+07:00'), '', '', '', '']]);
+  const free = env.call('getOpenSlots', { days: 7, fresh: true }).find(d => d.date === date).hours.find(x => x.hour === 10);
+  assert.equal(free.free, 0);
+});
