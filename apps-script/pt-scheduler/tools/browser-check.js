@@ -20,7 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
-const { seededEnv, KEY_A, ADMIN_PIN, inDays, wibSlot } = require('../tests/fixtures');
+const { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays, wibSlot } = require('../tests/fixtures');
 
 const SRC = path.join(__dirname, '..', 'src');
 const ORIGIN = 'https://gas.test';
@@ -98,8 +98,9 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
     recordVideo: opts.video ? { dir: opts.video, size: opts.viewport || MOBILE } : undefined,
   });
   if (storage) await context.addInitScript(s => { for (const k in s) localStorage.setItem(k, s[k]); }, storage);
-  await context.exposeFunction('__gasCall', (name, argsJson) => {
+  await context.exposeFunction('__gasCall', async (name, argsJson) => {
     calls.push(name);
+    if (opts.delay && opts.delay[name]) await new Promise(r => setTimeout(r, opts.delay[name]));
     try {
       return JSON.stringify({ ok: true, value: env.call(name, ...JSON.parse(argsJson)) });
     } catch (e) {
@@ -316,7 +317,14 @@ async function contrastReport(page) {
     await page.waitForTimeout(1500);
     check(!(await page.evaluate(() => window.__splashShown)), 'login: only the button loads, the full-screen splash never shows');
     check(!(await visible(page, '#admin-login')) && (await page.evaluate(() => window.members.length)) === 3, 'login: dashboard is ready when the login box closes');
-    check(calls.filter(c => c === 'getAdminBootstrap').length === 1 && calls.includes('getAdminExtras'), 'login: one call for the first screen, one for the secondary data');
+    check(calls.filter(c => c === 'getAdminBootstrap').length === 1 && calls.includes('getAdminMore'), 'login: one call for the first screen, one for the secondary data');
+    check(calls.filter(c => /^get/.test(c)).length === 2 || calls.filter(c => /^get/.test(c)).join() === 'getAdminBootstrap,getAdminMore', 'fast: the panel opens with exactly two server calls (' + calls.join(',') + ')');
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(700);
+    const prof = calls.filter(c => /^get/.test(c)).slice(2);
+    await page.evaluate(() => window.closeDetail());
+    await page.waitForTimeout(300);
+    check(prof.length === 1 && prof[0] === 'getClientBundle', 'fast: opening a client page makes one call (' + prof.join(',') + ')');
 
     // Buka lagi dengan token: panel langsung terisi dari salinan, tanpa cek sesi terpisah
     const token = await page.evaluate(() => localStorage.getItem('xnk_admin_token'));
@@ -1284,7 +1292,7 @@ async function contrastReport(page) {
     const env = richEnv();
     const calls = [];
     const { page, context, errors, navigations } = await openPage(browser, env, '/Index?view=public', calls);
-    const adminCalls = ['getAdminBootstrap', 'getAdminExtras', 'getMembers', 'getSchedules', 'getMemberTransactionLog', 'getPackageTrendStats', 'getRevenueSummary', 'checkAdminSession'];
+    const adminCalls = ['getAdminBootstrap', 'getAdminExtras', 'getAdminMore', 'getMembers', 'getSchedules', 'getMemberTransactionLog', 'getPackageTrendStats', 'getRevenueSummary', 'checkAdminSession'];
     check(!calls.some(c => adminCalls.includes(c)), 'no admin functions called: ' + calls.join(','));
     check(!(await visible(page, '#admin-login')), 'admin PIN screen never appears in the client portal');
     check((await page.evaluate(() => window.members.length)) === 0, 'no client list in the browser');
@@ -1376,7 +1384,8 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     // Program latihan di portal: kartu per hari, centang tersimpan.
     env.call('saveMemberProgram', env.adminToken(), 'PT-A', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
-    await page.evaluate(() => { window.myProgram = null; });
+    await page.evaluate(() => { window.myProgram = null; window.loadMyProgram(true); });
+    await page.waitForTimeout(500);
     await page.evaluate(() => window.navigate('public-program'));
     await page.waitForTimeout(900);
     check((await page.locator('#pub-program-wrap .card').count()) === 2 && (await page.textContent('#pub-program-wrap')).includes('Bench press') && (await page.textContent('#pub-program-wrap')).includes('3 × 10'), 'program: the client sees both days with sets × reps');
@@ -1630,6 +1639,66 @@ async function contrastReport(page) {
     check((await revoked.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'client is told to log in with the WhatsApp number');
     noErrors(errors.concat(again.errors, revoked.errors));
     await context.close(); await again.context.close(); await revoked.context.close();
+  }
+  console.log('Portal klien · cepat (Fase K): panggilan, salinan, kerangka');
+  {
+    const env = richEnv();
+    const tokA = env.memberToken(KEY_A), tokB = env.memberToken(KEY_B);
+    const TK = 'xnk_member_token', CK = 'xnk_portal_cache';
+    // 1) Pembukaan dingin: tepat dua panggilan (bootstrap + more), tidak ada panggilan per-kartu.
+    const calls1 = [];
+    const cold = await openPage(browser, env, '/Index?view=public', calls1, { [TK]: tokA });
+    await cold.page.waitForTimeout(800);
+    const reads1 = () => calls1.filter(n => /^get/.test(n) && n !== 'getMyCoach');
+    check(reads1().length === 2 && calls1.includes('getPortalBootstrap') && calls1.includes('getPortalMore'), 'fast: opening the portal makes exactly two server calls (' + calls1.join(',') + ')');
+    for (const v of ['public-progress', 'public-program', 'public-info', 'public-more', 'public-catalog', 'public-coaches', 'public-dashboard']) {
+      await cold.page.evaluate(x => window.navigate(x), v);
+      await cold.page.waitForTimeout(350);
+    }
+    check(reads1().length === 2, 'fast: switching through all seven tabs reads nothing more from the server (' + calls1.join(',') + ')');
+    check((await cold.page.textContent('#pub-tasks-wrap, #pub-teasers')).length > 0 && (await cold.page.evaluate(() => !!window.myProgram && window.myProgram.state === 'ok' && !!window.myContent && !!window.myTasks)), 'fast: every tab already has its data from the one call');
+    const store = await cold.page.evaluate(() => Object.assign({}, localStorage));
+    check(!!store[CK] && store[CK].includes('Ani') && !store[CK].includes('openSlots'), 'fast: a copy is kept on the device (own data only, no free-hours grid)');
+    await cold.context.close();
+    // 2) Salinan ada: layar terisi SEBELUM server menjawab (server sengaja diperlambat 4 detik).
+    const calls2 = [];
+    const warm = await openPage(browser, env, '/Index?view=public', calls2, store, { delay: { getPortalBootstrap: 4000, getPortalMore: 4000 }, wait: 200, keepCelebration: true });
+    await warm.page.waitForTimeout(700);
+    check((await warm.page.textContent('#pub-dash-name')).includes('Ani') && !(await visible(warm.page, '#global-loader')), 'fast: with a copy, Beranda shows the client\'s own name while the server is still answering');
+    check((await warm.page.locator('#view-public-dashboard .portal-hero').count()) === 1 && !(await warm.page.locator('#view-public-dashboard .skel').count()), 'fast: the home screen is filled from the copy, no skeletons');
+    await warm.page.evaluate(() => window.navigate('public-program'));
+    await warm.page.waitForTimeout(300);
+    check((await warm.page.textContent('#pub-program-wrap')).includes('Program latihan') && !(await warm.page.locator('#pub-program-wrap .skel').count()), 'fast: other tabs also open filled while the server is slow');
+    check(!(await visible(warm.page, '#sheet-badge')), 'fast: a badge celebration never comes from the copy, only from fresh data');
+    await warm.page.waitForTimeout(4500);
+    check(calls2.length === 2 && calls2.includes('getPortalMore'), 'fast: the fresh data still arrives in the same two calls');
+    // 3) Keluar menghapus salinan.
+    await warm.page.evaluate(() => window.logoutPublic());
+    await warm.page.waitForTimeout(500);
+    check(!(await warm.page.evaluate(k => localStorage.getItem(k), CK)), 'fast: logging out removes the copy from the device');
+    await warm.context.close();
+    // 4) Salinan akun lain tidak dipakai.
+    const calls3 = [];
+    const other = await openPage(browser, env, '/Index?view=public', calls3, { [TK]: tokB, [CK]: store[CK] }, { delay: { getPortalBootstrap: 1500, getPortalMore: 1500 }, wait: 300, keepCelebration: true });
+    await other.page.waitForTimeout(300);
+    const nm = await other.page.evaluate(() => (document.getElementById('pub-dash-name') || {}).textContent || '');
+    check(!nm.includes('Ani'), 'fast: a copy that belongs to another login is never shown');
+    await other.page.waitForTimeout(3000);
+    check((await other.page.textContent('#pub-dash-name')).includes('Budi'), 'fast: the right client appears once the server answers');
+    await other.context.close();
+    // 5) Tanpa salinan: kerangka abu muncul di tab selagi data menyusul.
+    const calls4 = [];
+    const skel = await openPage(browser, env, '/Index?view=public', calls4, { [TK]: tokA }, { delay: { getPortalMore: 3000 }, wait: 300, keepCelebration: true });
+    await skel.page.waitForTimeout(500);
+    await skel.page.evaluate(() => window.navigate('public-program'));
+    await skel.page.waitForTimeout(300);
+    check((await skel.page.locator('#pub-program-wrap .skel').count()) > 0, 'fast: without a copy the Program tab shows grey skeletons while the data comes');
+    await skel.page.evaluate(() => window.navigate('public-progress'));
+    await skel.page.waitForTimeout(300);
+    check((await skel.page.locator('#pub-progress-wrap .skel').count()) > 0 && (await overflowX(skel.page)) <= 0, 'fast: the Progres tab shows skeletons too, with no sideways scroll');
+    await skel.page.waitForTimeout(3500);
+    check(!(await skel.page.locator('#pub-progress-wrap .skel').count()), 'fast: the skeletons are replaced when the data arrives');
+    await skel.context.close();
   }
   console.log('Portal klien · desktop');
   for (const scheme of ['light', 'dark']) {

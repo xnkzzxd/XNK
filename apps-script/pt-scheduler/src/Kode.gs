@@ -449,7 +449,7 @@ function getAppSettings(token) {
 }
 
 /** Simpan Pengaturan. String kosong/null pada satu kolom = hapus properti itu (balik ke default). */
-function updateAppSettings(token, payload) {
+function updateAppSettingsImpl_(token, payload) {
   requireAdmin_(token);
   payload = payload || {};
   const props = PropertiesService.getScriptProperties();
@@ -949,7 +949,7 @@ function _publicCoach_(c) {
 
 /** Publik: hanya coach aktif dan hanya field whitelist (CP-5). */
 function getCoaches() {
-  return _activeCoaches_().map(_publicCoach_);
+  return _sharedCached_('coaches', function() { return _activeCoaches_().map(_publicCoach_); });
 }
 
 /** Murni: validasi + bersihkan data profil coach. Melempar kalimat Indonesia yang diakhiri titik. */
@@ -1013,7 +1013,7 @@ function updateCoach(token, coachData) {
  * nama di klien (MemberData) dan jadwal yang belum selesai ikut diperbarui; jadwal selesai & log transaksi
  * tetap memakai nama saat itu. Foto lama dipindah ke tempat sampah bila diganti.
  */
-function saveCoach(token, data) {
+function saveCoachImpl_(token, data) {
   requireAdmin_(token);
   const clean = _validateCoach_(data);
   const lock = LockService.getScriptLock();
@@ -1111,7 +1111,7 @@ function getCoachesAdmin(token) {
   };
 }
 
-function setCoachActive(token, id, aktif) {
+function setCoachActiveImpl_(token, id, aktif) {
   requireAdmin_(token);
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -2102,6 +2102,35 @@ function getPortalBootstrap(memberToken) {
 }
 
 /**
+ * Portal klien (Fase K): SEMUA data sisa untuk Beranda dan tab (progres, PR, form kesehatan, asesmen, perpanjangan, tagihan,
+ * grup kelas, makan hari ini, program, konten, status coach) dalam SATU panggilan: satu autentikasi dan Schedules dibaca sekali.
+ * Setiap bagian bentuknya sama persis dengan fungsi lamanya (getMyProgress, getMyTasks, …). Bagian yang gagal menjadi
+ * { error } dan tidak merusak bagian lain. Hanya data klien itu sendiri.
+ */
+function getPortalMore(memberToken) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  const part = function(fn) { try { return fn(); } catch (e) { return { error: String((e && e.message) || e) }; } };
+  return _withSchedulesMemo_(function() {
+    const coachId = String(row[10] || '').trim();
+    return {
+      at: new Date().toISOString(),
+      progress: part(function() { return _myPayload_(row); }),
+      tasks: part(function() { return _myTasksFor_(row); }),
+      healthForm: part(function() { return _healthFormFor_(row); }),
+      assessment: part(function() { return _assessmentFor_(row); }),
+      renewal: part(function() { return _renewalFor_(row); }),
+      bills: part(function() { return _billsFor_(row); }),
+      classGroup: part(function() { return _classGroupFor_(row); }),
+      meal: part(function() { return _mealForMember_(row); }),
+      program: part(function() { return _programFor_(row); }),
+      content: part(function() { return _contentForClient_(); }),
+      coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; })
+    };
+  });
+}
+
+/**
  * Dua coach aktif atau lebih: jam kosong per coach (klien memilih coach lebih dulu), lewat cache yang sama.
  * Solo: {} (tidak dipakai). refresh = hitung ulang & simpan (write-through sesudah booking).
  */
@@ -2159,6 +2188,34 @@ function getAdminExtras(token) {
   };
 }
 
+/**
+ * Panel admin (Fase K2): SEMUA data susulan dalam satu panggilan, menggantikan getAdminExtras + prefetch pengaturan
+ * + omzet/keuangan + tren paket + coach hub. Tiap bagian berbentuk sama dengan fungsi lamanya; bagian yang gagal
+ * mengembalikan {error}. Detail Pengaturan (status pengingat, paket admin) dimuat saat halamannya dibuka.
+ */
+function getAdminMore(token, month, year) {
+  requireAdmin_(token);
+  const ymd = _wibParts_(new Date()).date.split('-').map(Number);
+  const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
+  const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
+  const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
+  return _withSchedulesMemo_(function () {
+    const finance = part(_finSettingsRead_);
+    const finOn = !!(finance && finance.enabled);
+    return {
+      at: Date.now(),
+      month: m, year: y,
+      transactionLog: part(function () { return getMemberTransactionLog(token); }),
+      taskSummary: part(function () { return getTaskSummary(token); }),
+      renewals: part(function () { return getRenewalRequests(token); }),
+      finance: finance,
+      revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
+      packageTrend: part(function () { return _packageTrendStats_(m, y); }),
+      hub: part(function () { return _coachHub_(new Date()); })
+    };
+  });
+}
+
 /** T-200: coach kosong = ID kosong + nama kosong. Baris lama yang menyimpan teks placeholder dibaca sebagai kosong. */
 function _coachNameOrEmpty_(v) {
   const n = sanitizeValue(v);
@@ -2171,7 +2228,16 @@ function _ensureScheduleClassHeader_(sheet) {
   if (c.getValue() === '') { c.setValue('Kelas ID'); c.setFontWeight('bold'); }
 }
 
+// Memo per eksekusi untuk bundle baca-saja (getPortalMore, dst.): Schedules dibaca sekali. Hanya diisi oleh _withSchedulesMemo_.
+let _schedMemo_ = null;
+function _withSchedulesMemo_(fn) {
+  const prev = _schedMemo_;
+  _schedMemo_ = _getSchedulesAll_();
+  try { return fn(); } finally { _schedMemo_ = prev; }
+}
+
 function _getSchedulesAll_() {
+  if (_schedMemo_) return _schedMemo_;
   const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID", "Kelas ID"];
   const sheet = getOrCreateSheet_('Schedules', headers);
   const data = sheet.getDataRange().getValues();
@@ -3570,7 +3636,7 @@ function getPriceList() {
 }
 
 /** Publik: paket aktif + kategori yang tampil di landing (urut tetap), untuk landing dan halaman /harga. */
-function getPriceListPublic() {
+function getPriceListPublicImpl_() {
   const cats = PACKAGE_CATEGORIES.filter(function(c) { return c.onLanding; }).map(function(c) { return { id: c.id, label: c.label }; });
   const ids = {};
   cats.forEach(function(c) { ids[c.id] = true; });
@@ -3683,7 +3749,7 @@ function _writePackageRow_(sheet, idx, rowNum, v) {
 }
 
 /** Tambah (tanpa data.id) atau ubah (dengan data.id) satu paket. Paket baru nonaktif kecuali data.aktif === true. */
-function savePackage(token, data) {
+function savePackageImpl_(token, data) {
   requireAdmin_(token);
   data = data || {};
   return _withPriceListLock_(function(ctx) {
@@ -3732,7 +3798,7 @@ function _findPackage_(ctx, id) {
   return p;
 }
 
-function setPackageActive(token, id, aktif) {
+function setPackageActiveImpl_(token, id, aktif) {
   requireAdmin_(token);
   return _withPriceListLock_(function(ctx) {
     const p = _findPackage_(ctx, id);
@@ -3757,7 +3823,7 @@ function deletePackage(token, id) {
 }
 
 /** Simpan urutan tampil satu kategori: `ids` dulu (sesuai urutan yang dikirim), sisanya menyusul. */
-function reorderPackages(token, category, ids) {
+function reorderPackagesImpl_(token, category, ids) {
   requireAdmin_(token);
   const cat = String(category == null ? '' : category).trim().toLowerCase();
   if (!Array.isArray(ids)) throw new Error('Daftar urutan tidak valid.');
@@ -4279,8 +4345,8 @@ function requestRenewal(memberToken, packageId, coachId) {
 }
 
 /** Klien: permintaan perpanjang terbaru (untuk status di beranda). null kalau belum pernah. */
-function getMyRenewal(memberToken) {
-  const memberId = String(requireMember_(memberToken).row[0]).trim();
+function _renewalFor_(row) {
+  const memberId = String(row[0]).trim();
   let last = null;
   _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     if (!r[0] || String(r[1]).trim() !== memberId || String(r[3]) === 'dibatalkan') return;
@@ -4291,6 +4357,7 @@ function getMyRenewal(memberToken) {
   last.packageName = pkg ? pkg.namaPaket : '';
   return last;
 }
+function getMyRenewal(memberToken) { return _renewalFor_(requireMember_(memberToken).row); }
 
 /** Admin: daftar permintaan, yang menunggu dulu. opts: { status, limit (bawaan 50, maks 200) }. */
 function getRenewalRequests(token, opts) {
@@ -4744,7 +4811,7 @@ function getLandingStats() {
  * Hanya mengembalikan response yang consent-nya "Ya" (boleh dipakai promosi).
  * Nama disamarkan otomatis kalau consent-nya minta anonim.
  */
-function getPublicTestimonials() {
+function getPublicTestimonialsImpl_() {
   try {
     const rows = _readEvaluasiRows_();
     const results = [];
@@ -5076,8 +5143,8 @@ const TASK_CLIENT_DONE_LIMIT = 20; // PR selesai/dilewati yang ikut dikirim ke p
  * lalu maksimal 20 PR selesai/dilewati terbaru. Field khusus admin tidak ikut.
  * @returns {Array<{id,title,description,category,dueDate,status,repeat,completedAt,clientNote,overdue}>}
  */
-function getMyTasks(memberToken) {
-  const memberId = String(requireMember_(memberToken).row[0]).trim();
+function _myTasksFor_(row) {
+  const memberId = String(row[0]).trim();
   const data = _tasksSheet_().getDataRange().getValues();
   const todo = [], finished = [];
   for (let i = 1; i < data.length; i++) {
@@ -5097,6 +5164,7 @@ function getMyTasks(memberToken) {
   finished.sort(function(a, b) { return String(b.completedAt).localeCompare(String(a.completedAt)); });
   return todo.concat(finished.slice(0, TASK_CLIENT_DONE_LIMIT));
 }
+function getMyTasks(memberToken) { return _myTasksFor_(requireMember_(memberToken).row); }
 
 /**
  * Klien: tandai PR milik sendiri selesai, dengan catatan opsional (maks 300 karakter).
@@ -5723,7 +5791,7 @@ function getCoachAvailability(token, coachId) {
 }
 
 /** week = { senin: [[6,10],[16,20]], ... }. Menggantikan semua aturan coach itu. week kosong = ikut jam operasional. */
-function saveCoachAvailability(token, coachId, week) {
+function saveCoachAvailabilityImpl_(token, coachId, week) {
   requireAdmin_(token);
   coachId = String(coachId || '');
   if (!_activeCoaches_().some(function(c) { return c.id === coachId; })) throw new Error('Pilih coach yang aktif.');
@@ -6054,6 +6122,23 @@ function _fitnessSummary_(byTest) {
 }
 
 /** Admin: semua data perawatan satu klien (catatan privat, kesehatan, assessment, tes). */
+/**
+ * Halaman klien di panel (Fase K2): PR, progres, perawatan, dan program dalam SATU panggilan.
+ * Tiap bagian sama persis dengan fungsi lamanya; bagian yang gagal diberi {error}. Hanya admin.
+ */
+function getClientBundle(token, memberId) {
+  requireAdmin_(token);
+  const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
+  return _withSchedulesMemo_(function () {
+    return {
+      tasks: part(function () { return getTasksForMember(token, memberId); }),
+      progress: part(function () { return getMemberProgress(token, memberId); }),
+      care: part(function () { return getClientCare(token, memberId); }),
+      program: part(function () { return getMemberProgram(token, memberId); })
+    };
+  });
+}
+
 function getClientCare(token, memberId) {
   requireAdmin_(token);
   const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
@@ -6276,7 +6361,7 @@ function getContentAdmin(token) {
 }
 
 /** Admin: buat atau ubah konten. data = { id?, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif }. */
-function saveContent(token, data) {
+function saveContentImpl_(token, data) {
   requireAdmin_(token);
   data = data || {};
   const L = CONTENT_LIMITS;
@@ -6319,7 +6404,7 @@ function saveContent(token, data) {
   }
 }
 
-function deleteContent(token, id) {
+function deleteContentImpl_(token, id) {
   requireAdmin_(token);
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
@@ -6336,8 +6421,11 @@ function deleteContent(token, id) {
 }
 
 /** Klien: konten yang sedang tayang (disematkan dulu, lalu terbaru). Tanpa data pribadi, bukan milik satu klien. */
-function getMyContent(memberToken) {
-  requireMember_(memberToken);
+function getMyContent(memberToken) { requireMember_(memberToken); return _contentForClient_(); }
+function _contentForClient_() {
+  return _sharedCached_('content', _contentForClientImpl_);
+}
+function _contentForClientImpl_() {
   const today = _todayWib_();
   return _contentSort_(_contentAll_().filter(function(c) { return _contentVisible_(c, today); })).map(function(c) {
     return { id: c.id, tipe: c.tipe, judul: c.judul, isi: c.isi, url: c.url, kategori: c.kategori, sematkan: c.sematkan, dibuat: c.dibuat };
@@ -6545,14 +6633,15 @@ function _programLogsFor_(memberId) {
 }
 
 /** Klien: program miliknya dan gerakan yang sudah dicentang hari ini { hari: [urutan] }. */
-function getMyProgram(memberToken) {
-  const id = String(requireMember_(memberToken).row[0]).trim();
+function _programFor_(row) {
+  const id = String(row[0]).trim();
   const p = _programDays_(id);
   const today = _todayWib_();
   const done = {};
   _programLogsFor_(id).forEach(function(l) { if (l.tanggal === today) done[l.hari] = l.selesai; });
   return { days: p.days, today: today, done: done, updatedAt: p.updatedAt };
 }
+function getMyProgram(memberToken) { return _programFor_(requireMember_(memberToken).row); }
 
 /** Klien: simpan centang satu hari program (hari ini, WIB). selesai = daftar urutan gerakan. Klien dari token. */
 function logMyProgramDay(memberToken, hari, selesai) {
@@ -6889,11 +6978,12 @@ function getSessionBriefing(token, scheduleId) {
 // ── Klien (portal) ──────────────────────────────────────────────────────────
 
 /** Klien: pertanyaan form kesehatan dan apakah sudah diisi. TIDAK mengembalikan jawaban. */
-function getMyHealthForm(memberToken) {
-  const id = String(requireMember_(memberToken).row[0]).trim();
+function _healthFormFor_(row) {
+  const id = String(row[0]).trim();
   const hs = _latestRowFor_('HealthScreening', id);
   return { questions: HEALTH_QUESTIONS, done: !!hs, date: hs ? String(hs.row[2]) : '' };
 }
+function getMyHealthForm(memberToken) { return _healthFormFor_(requireMember_(memberToken).row); }
 
 /** Klien: kirim form kesehatan. answers = { q: ['ya'|'tidak' x7], injuries, medication, other, consent }. */
 function submitMyHealthForm(memberToken, answers) {
@@ -6921,8 +7011,8 @@ function submitMyHealthForm(memberToken, answers) {
 }
 
 /** Klien: tujuan & preferensi dari assessment, dan hasil tes (pertama → terbaru). Tanpa catatan coach. */
-function getMyAssessment(memberToken) {
-  const id = String(requireMember_(memberToken).row[0]).trim();
+function _assessmentFor_(row) {
+  const id = String(row[0]).trim();
   const asm = _latestRowFor_('Assessments', id);
   const byTest = _fitnessByMember_(id);
   return {
@@ -6934,6 +7024,7 @@ function getMyAssessment(memberToken) {
     })
   };
 }
+function getMyAssessment(memberToken) { return _assessmentFor_(requireMember_(memberToken).row); }
 
 // ── Daftar "Perlu perhatian" (dipakai Beranda Coach) ─────────────────────────
 
@@ -7166,11 +7257,12 @@ function leaveClassGroup(memberToken) {
 }
 
 /** Klien: grup saya (atau null). Hanya nama depan anggota. */
-function getMyClassGroup(memberToken) {
-  const memberId = String(requireMember_(memberToken).row[0]).trim();
+function _classGroupFor_(row) {
+  const memberId = String(row[0]).trim();
   const g = _openGroupOf_(memberId);
   return g ? _publicGroup_(g, memberId) : null;
 }
+function getMyClassGroup(memberToken) { return _classGroupFor_(requireMember_(memberToken).row); }
 
 /** Admin: semua grup privat terbuka beserta anggotanya. */
 function getClassGroups(token) {
@@ -7183,3 +7275,83 @@ function getClassGroups(token) {
     return { id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '', createdAt: g.createdAt, members: g.members.map(function(m) { return { id: m, name: names[m] || '' }; }) };
   });
 }
+
+// ── Cache bersama (Fase K3) ──────────────────────────────────────────────────
+// Data yang sama untuk semua klien (testimoni, paket publik, coach publik, konten tayang) disimpan sebentar di
+// CacheService. Penulisnya memanggil _bustShared_() SESUDAH menulis (lewat pembungkus di bawah); salah-basi paling lama TTL.
+function _sharedVersion_() {
+  try { return CacheService.getScriptCache().get('shared:ver') || '0'; } catch (e) { return '0'; }
+}
+function _bustShared_() {
+  try { SpreadsheetApp.flush(); } catch (e) {}
+  try { CacheService.getScriptCache().put('shared:ver', String(Date.now()) + '.' + Math.floor(Math.random() * 1000000), 21600); } catch (e) {}
+}
+function _sharedCached_(name, fn) {
+  const ttl = Math.max(30, Math.min(600, Math.floor(_numProp_('SHARED_CACHE_SECONDS', 180))));
+  const ver = _sharedVersion_();   // dibaca SEBELUM sheet
+  const key = 'shared:' + name + ':' + ver;
+  try {
+    const hit = CacheService.getScriptCache().get(key);
+    if (hit) return JSON.parse(hit);
+  } catch (e) {}
+  const val = fn();
+  try {
+    const s = JSON.stringify(val);
+    if (s && s.length < 90000) CacheService.getScriptCache().put(key, s, ttl);
+  } catch (e) {}
+  return val;
+}
+
+function saveCoach(token, data) {
+  requireAdmin_(token);
+  try { return saveCoachImpl_(token, data); } finally { _bustShared_(); }
+}
+
+function setCoachActive(token, id, aktif) {
+  requireAdmin_(token);
+  try { return setCoachActiveImpl_(token, id, aktif); } finally { _bustShared_(); }
+}
+
+function saveCoachAvailability(token, coachId, week) {
+  requireAdmin_(token);
+  try { return saveCoachAvailabilityImpl_(token, coachId, week); } finally { _bustShared_(); }
+}
+
+function savePackage(token, data) {
+  requireAdmin_(token);
+  try { return savePackageImpl_(token, data); } finally { _bustShared_(); }
+}
+
+function setPackageActive(token, id, aktif) {
+  requireAdmin_(token);
+  try { return setPackageActiveImpl_(token, id, aktif); } finally { _bustShared_(); }
+}
+
+function reorderPackages(token, category, ids) {
+  requireAdmin_(token);
+  try { return reorderPackagesImpl_(token, category, ids); } finally { _bustShared_(); }
+}
+
+function saveContent(token, data) {
+  requireAdmin_(token);
+  try { return saveContentImpl_(token, data); } finally { _bustShared_(); }
+}
+
+function deleteContent(token, id) {
+  requireAdmin_(token);
+  try { return deleteContentImpl_(token, id); } finally { _bustShared_(); }
+}
+
+function updateAppSettings(token, payload) {
+  requireAdmin_(token);
+  try { return updateAppSettingsImpl_(token, payload); } finally { _bustShared_(); }
+}
+
+function getPriceListPublic() {
+  return _sharedCached_('prices', getPriceListPublicImpl_);
+}
+
+function getPublicTestimonials() {
+  return _sharedCached_('testimonials', getPublicTestimonialsImpl_);
+}
+
