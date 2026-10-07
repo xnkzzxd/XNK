@@ -34,6 +34,7 @@
     calMonth: (() => { const d = today0(); d.setDate(1); return d; })(),
     selectedDate: today0(),
     coachFilter: 'ALL',
+    bookCoach: '',   // klien: coach yang dipilih untuk booking (wajib kalau ada 2 coach aktif atau lebih)
     schedMode: 'month',
     clientFilter: 'all',
     clientQuery: '',
@@ -1759,6 +1760,29 @@
     window.openSlotsByDate = map;
     window.openSlotsAt = Date.now();
   }
+  // Dua coach aktif atau lebih: jam kosong per coach (klien pilih coach dulu, baru jam). Aturan sama dengan
+  // applyOpenSlots (lewat / libur = 0); openSlotsAtByCoach = kapan data coach itu diterima (aturan 2 menit).
+  window.openSlotsByCoachMap = {};
+  window.openSlotsAtByCoach = {};
+  function applyOpenSlotsForCoach(coachId, rows) {
+    if (!Array.isArray(rows)) return;
+    const m = {};
+    rows.forEach(function (d) {
+      if (!d || !d.date) return;
+      const f = {};
+      (d.hours || []).forEach(function (x) { f[x.hour] = (x.off || x.past) ? 0 : (Number(x.free) || 0); });
+      m[d.date] = f;
+    });
+    window.openSlotsByCoachMap[coachId] = m;
+    window.openSlotsAtByCoach[coachId] = Date.now();
+  }
+  function applyOpenSlotsByCoach(by) {
+    if (!by) return;
+    Object.keys(by).forEach(function (id) { applyOpenSlotsForCoach(id, by[id]); });
+  }
+  // Klien dengan 2 coach aktif atau lebih: coach yang dipilih untuk booking ('' = solo / belum dipilih).
+  const slotCoach = () => (window.isPublicView && !window.isSoloCoach() && window.coaches.length > 1) ? String(ui.bookCoach || '') : '';
+  const slotsAtNow = () => { const c = slotCoach(); return c ? (window.openSlotsAtByCoach[c] || 0) : window.openSlotsAt; };
   window.loadAllData = function () {
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
@@ -1834,6 +1858,7 @@
     if (b.horizonDays) window.bookingHorizonDays = b.horizonDays;
     if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
     if (b.openSlots) applyOpenSlots(b.openSlots);
+    applyOpenSlotsByCoach(b.openSlotsByCoach);
   }
   window.refreshPortalSchedules = function () {
     return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { applyPortalBootstrap(b || {}); });
@@ -1852,6 +1877,7 @@
     if (slot.at && Date.now() - Number(slot.at) > 30 * 60000) return;   // pilihan lama dari Landing (> 30 menit)
     const p = slot.date.split('-').map(Number);
     if (!(wibAt(slot.date, slot.time) > new Date())) return;
+    if (slot.coachId && window.coaches.some(c => String(c.id) === String(slot.coachId))) ui.bookCoach = String(slot.coachId);
     ui.selectedDate = new Date(p[0], p[1] - 1, p[2]);
     ui.calMonth = new Date(p[0], p[1] - 1, 1);
     window.navigate('calendar');
@@ -2270,6 +2296,8 @@
 
   // ── JADWAL (kalender bulan + daftar, minggu di desktop) ───────────────────
   function coachFilterOptions() {
+    // Klien: dropdown ini adalah pilihan coach untuk booking (wajib), bukan filter.
+    if (window.isPublicView) return '<option value="">Pilih coach…</option>' + window.coaches.map(c => '<option value="' + h(String(c.id)) + '"' + (String(ui.bookCoach) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
     return '<option value="ALL">Semua coach</option>' + window.coaches.map(c => '<option value="' + h(c.id) + '"' + (String(ui.coachFilter) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
   }
   function filteredSchedules() {
@@ -2284,7 +2312,7 @@
     let html = '<div class="page-head"><div><h2 class="page-title">Jadwal</h2><p class="page-sub">' +
       (pub ? 'Pilih tanggal untuk melihat jam yang masih kosong.' : 'Kelola semua sesi latihan klien.') + '</p></div>' +
       '<div class="row" style="flex-wrap:wrap">' +
-      (window.isSoloCoach() ? '' : '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="window.setCoachFilter(this.value)" aria-label="Filter coach">' + coachFilterOptions() + '</select>') +
+      (window.isSoloCoach() ? '' : '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="' + (window.isPublicView ? 'window.pickBookCoach(this.value)' : 'window.setCoachFilter(this.value)') + '" aria-label="' + (window.isPublicView ? 'Pilih coach' : 'Filter coach') + '">' + coachFilterOptions() + '</select>') +
       (!pub ? '<div class="seg only-desktop" id="sched-seg"><span class="seg-thumb"></span><button type="button" class="' + (ui.schedMode === 'month' ? 'active' : '') + '" onclick="window.setSchedMode(\'month\')">Bulan</button><button type="button" class="' + (ui.schedMode === 'week' ? 'active' : '') + '" onclick="window.setSchedMode(\'week\')">Minggu</button></div>' : '') +
       '<button type="button" class="btn btn-primary only-desktop" onclick="' + (pub ? 'window.handleFabClick()' : 'window.quickAction(\'booking\')') + '">' + icon('calendar-plus') + 'Booking</button>' +
       '</div></div>';
@@ -2426,7 +2454,13 @@
         '<p class="li-sub">Booking paling jauh ' + h(window.bookingHorizonDays) + ' hari ke depan.</p></div></div>';
     }
     const range = DAY_HOURS[day.getDay()];
+    const multi = !window.isSoloCoach() && window.coaches.length > 1;
+    if (multi && me) {
+      // Dua coach aktif atau lebih: pilih coach (dropdown di atas) dulu, baru jam. Jam kosong dihitung per coach di server.
+      if (!ui.bookCoach) return html + '<div class="notice">' + icon('user-round') + '<div class="grow"><p class="li-title">Pilih coach dulu</p><p class="li-sub">Pilih coach di dropdown atas, lalu jam kosongnya akan muncul.</p></div></div>';
+    }
     const coachCount = ui.coachFilter === 'ALL' ? Math.max(1, window.coaches.length) : 1;
+    const byCoach = multi && me ? window.openSlotsByCoachMap[ui.bookCoach] : null;
     const now = new Date();
     let slots = '';
     let free = 0;
@@ -2440,9 +2474,10 @@
         return bs < s1.getTime() && be > s0.getTime();
       });
       const isMine = me && overlapping.some(s => String(s.memberId) === String(me.id));
-      const eng = window.openSlotsByDate && window.openSlotsByDate[ymd(day)];
-      // Jam kosong dari server; hari di luar batas booking (tidak ada di openSlotsByDate) = penuh.
-      const taken = !isMine && (eng && eng[hh] !== undefined ? eng[hh] <= 0 : (window.openSlotsByDate ? true : overlapping.length >= coachCount));
+      const slotMap = multi && me ? byCoach : window.openSlotsByDate;
+      const eng = slotMap && slotMap[ymd(day)];
+      // Jam kosong dari server; hari di luar batas booking (tidak ada di peta) = penuh.
+      const taken = !isMine && (eng && eng[hh] !== undefined ? eng[hh] <= 0 : (slotMap ? true : overlapping.length >= coachCount));
       const past = s0 <= now;
       const label = pad(hh) + '.00';
       if (isMine) slots += '<button type="button" class="slot mine" disabled>' + icon('check', 'style="width:14px;height:14px"') + label + '</button>';
@@ -2450,7 +2485,8 @@
       else if (taken) slots += '<button type="button" class="slot taken" disabled aria-label="' + label + ' penuh">' + label + '</button>';
       else { free++; slots += '<button type="button" class="slot" onclick="window.bookSlot(\'' + ymd(day) + '\',\'' + pad(hh) + ':00\')" aria-label="Booking jam ' + label + '">' + label + '</button>'; }
     }
-    const fresh = window.openSlotsAt ? ' · diperbarui ' + fmtTime(new Date(window.openSlotsAt)) : '';
+    const at = slotsAtNow();
+    const fresh = at ? ' · diperbarui ' + fmtTime(new Date(at)) : '';
     html += '<div class="row-between" style="margin:6px 0 10px;gap:10px"><p class="eyebrow">Pilih jam</p><span class="li-sub num" id="slots-meta">' + free + ' jam kosong' + fresh + '</span></div>' +
       '<div class="slot-grid stagger">' + slots + '</div>' +
       '<div class="row" style="gap:16px;margin-top:14px;flex-wrap:wrap" aria-hidden="true">' +
@@ -2461,6 +2497,20 @@
     return html;
   }
 
+  // Dua coach aktif atau lebih: isi <select> coach (kosong = belum dipilih) dan tampilkan field-nya.
+  function fillCoachSelect(fieldId, selectId) {
+    const need = !window.isSoloCoach() && window.coaches.length > 1;
+    $(fieldId).classList.toggle('hide', !need);
+    if (need) $(selectId).innerHTML = '<option value="">Pilih coach…</option>' + window.coaches.map(c => '<option value="' + h(String(c.id)) + '">' + h(c.name) + '</option>').join('');
+    return need;
+  }
+  window.setBookCoach = function (id) { if (!window.isSoloCoach()) ui.bookCoach = String(id || ''); };
+  window.pickBookCoach = function (id) {
+    ui.bookCoach = String(id || '');
+    renderView('calendar', { animate: false });
+    // Jam kosong coach ini sudah ikut bootstrap; server hanya ditanya kalau datanya lebih dari 2 menit.
+    if (ui.bookCoach && window.refreshOpenSlots) window.refreshOpenSlots();
+  };
   window.bookSlot = function (date, time) {
     if (!window.publicLoggedMember) { window.showToast('Masuk dulu untuk booking.', 'lock'); window.navigate('public-login'); return; }
     window.handleFabClick();
@@ -2683,12 +2733,15 @@
   let slotsFetching = false;
   window.refreshOpenSlots = function (force) {
     if (!window.isPublicView || !window.publicLoggedMember || slotsFetching) return Promise.resolve();
-    if (!force && window.openSlotsAt && Date.now() - window.openSlotsAt < SLOTS_TTL_MS) return Promise.resolve();
+    const coach = slotCoach();   // dua coach atau lebih: jam kosong coach yang dipilih
+    const at = slotsAtNow();
+    if (!force && at && Date.now() - at < SLOTS_TTL_MS) return Promise.resolve();
     slotsFetching = true;
-    return publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14 }).then(function (rows) {
-      const before = JSON.stringify(window.openSlotsByDate);
-      applyOpenSlots(rows);
-      if (JSON.stringify(window.openSlotsByDate) !== before) window.updateUI();
+    const snap = () => JSON.stringify(coach ? window.openSlotsByCoachMap[coach] : window.openSlotsByDate);
+    return publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14, coachId: coach }).then(function (rows) {
+      const before = snap();
+      if (coach) applyOpenSlotsForCoach(coach, rows); else applyOpenSlots(rows);
+      if (snap() !== before) window.updateUI();
       else if (window.currentView === 'calendar') renderDayPanel();   // hanya "diperbarui HH.MM" yang berubah
     }).catch(function () {}).then(function () { slotsFetching = false; });
   };
@@ -2737,6 +2790,14 @@
     $('modal-sch-title').textContent = window.isPublicView ? 'Booking latihan' : 'Booking baru';
     $('edit-sch-client-name').textContent = who;
     $('sch-submit-btn').textContent = window.isPublicView ? 'Kirim booking' : 'Simpan booking';
+    // Klien dengan 2 coach aktif atau lebih wajib memilih coach di setiap booking.
+    const coachField = $('sch-coach-field');
+    const needCoach = window.isPublicView && !window.isSoloCoach() && window.coaches.length > 1;
+    coachField.classList.toggle('hide', !needCoach);
+    if (needCoach) {
+      $('sch-coach').innerHTML = '<option value="">Pilih coach…</option>' + window.coaches.map(c => '<option value="' + h(String(c.id)) + '">' + h(c.name) + '</option>').join('');
+      $('sch-coach').value = window.coaches.some(c => String(c.id) === String(ui.bookCoach)) ? String(ui.bookCoach) : '';
+    }
     prefillDateTime(opts.date, opts.time);
     updateTimeHint();
     openSheet('modal-edit-schedule');
@@ -2775,6 +2836,7 @@
     $('modal-sch-title').textContent = title;
     $('sch-member-field').classList.add('hide');
     resetSchSheet();
+    $('sch-coach-field').classList.add('hide');
     resetRecurring(false);
     updateTimeHint();
   }
@@ -3066,6 +3128,7 @@
     run().then(function (res) {
       res = res || {};
       if (res.openSlots) applyOpenSlots(res.openSlots);
+      if (res.openSlotsByCoach) applyOpenSlotsByCoach(res.openSlotsByCoach);
       if (live()) { finish(); onLive(res); } else onLate(res);
     }, function (err) {
       const isLive = live();
@@ -3102,6 +3165,7 @@
           ui.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
         }
         window.closeModal();
+        if (data.coachId) ui.bookCoach = '';   // booking berikutnya: pilih coach lagi
         window.updateUI();
         window.showToast(doneText(res));
       },
@@ -3207,6 +3271,11 @@
     if (!member) { window.showToast('Pilih klien dulu.'); if ($('sch-member')) $('sch-member').focus(); return; }
     data.memberId = member.id; data.memberName = member.name; data.phone = member.phone;
     const isClient = window.isPublicView;
+    if (isClient && !$('sch-coach-field').classList.contains('hide')) {
+      data.coachId = $('sch-coach').value;
+      if (!data.coachId) { window.showToast('Pilih coach dulu.'); $('sch-coach').focus(); return; }
+      ui.bookCoach = data.coachId;
+    }
 
     if ($('edit-sch-recurring-toggle').checked) {
       const weekdays = window.getSelectedRecurringWeekdays();
@@ -4653,6 +4722,7 @@
     }).catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
   };
   window.openRenewSheet = function () {
+    fillCoachSelect('renew-coach-field', 'renew-coach');
     const list = (window.priceListData || []).filter(p => p && p.aktif !== false);
     $('renew-list').innerHTML = list.length ? list.map(function (p) {
       const full = classFull(p) && String(p.id) !== String((window.publicLoggedMember || {}).packageId);
@@ -4665,8 +4735,12 @@
   window.renewPick = function (id) {
     const p = (window.priceListData || []).find(x => String(x.id) === String(id));
     if (!p) return;
-    window.showConfirmModal('Perpanjang <b>' + h(p.namaPaket) + '</b> (' + h(formatRp(p.harga)) + ')? Setelah ini WhatsApp ke coach terbuka untuk konfirmasi pembayaran.', function () {
-      memberCall('requestRenewal', id).then(function (res) {
+    const needCoach = !$('renew-coach-field').classList.contains('hide');
+    const coachId = needCoach ? $('renew-coach').value : '';
+    if (needCoach && !coachId) { window.showToast('Pilih coach dulu.'); $('renew-coach').focus(); return; }
+    const coachObj = window.coaches.find(c => String(c.id) === String(coachId));
+    window.showConfirmModal('Perpanjang <b>' + h(p.namaPaket) + '</b> (' + h(formatRp(p.harga)) + ')' + (coachObj ? ' bersama <b>' + h(coachObj.name) + '</b>' : '') + '? Setelah ini WhatsApp ke coach terbuka untuk konfirmasi pembayaran.', function () {
+      memberCall('requestRenewal', id, coachId).then(function (res) {
         window.myRenewal = res.request;
         window.closeModal();
         renderRenewSlot();
@@ -5637,6 +5711,7 @@
     $('reg-data-sessions').value = p.jumlahSesi ? parseInt(p.jumlahSesi, 10) : 1;
     $('reg-data-price').value = formatRp(p.harga);
     $('reg-data-type').value = cat;
+    fillCoachSelect('reg-coach-field', 'reg-coach');
     const me = window.publicLoggedMember;
     if (me) { $('reg-name').value = me.name || ''; $('reg-phone').value = String(me.phone || '').replace(/^62/, ''); }
     openSheet('modal-public-register');
@@ -5645,6 +5720,10 @@
   window.submitRegistration = function (e) {
     e.preventDefault();
     const data = { name: $('reg-name').value, phone: sanitizePhone($('reg-phone').value), goal: $('reg-goal').value, packageId: $('reg-data-package-id').value };
+    if (!$('reg-coach-field').classList.contains('hide')) {
+      data.coachId = $('reg-coach').value;
+      if (!data.coachId) { window.showToast('Pilih coach dulu.'); $('reg-coach').focus(); return; }
+    }
     const pkgName = $('reg-data-package').value, sessions = $('reg-data-sessions').value, price = $('reg-data-price').value, type = $('reg-data-type').value;
     const done = busy(e.target.querySelector('button[type=submit]'), 'Memproses…');
     publicCall('registerNewClient', data).then(function (res) {
@@ -5689,7 +5768,7 @@
       (c.location ? '<span class="pill">' + icon('map-pin') + h(c.location) + '</span>' : '') + '</div>';
     if (!opts.preview) {
       html += '<div class="btn-row"><button type="button" class="btn btn-lg btn-inverse" data-coach="' + h(c.id) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Chat WA</button>' +
-        '<button type="button" class="btn btn-lg btn-ghost-ink" onclick="' + (opts.inSheet ? 'window.closeModal();setTimeout(window.handleFabClick,300)' : 'window.handleFabClick()') + '">' + icon('calendar-plus') + 'Booking</button></div>';
+        '<button type="button" class="btn btn-lg btn-ghost-ink" onclick="' + 'window.setBookCoach(\'' + h(String(c.id)) + '\');' + (opts.inSheet ? 'window.closeModal();setTimeout(window.handleFabClick,300)' : 'window.handleFabClick()') + '">' + icon('calendar-plus') + 'Booking</button></div>';
     }
     html += '</div>';
     // KPI
@@ -5697,16 +5776,18 @@
     const kp = [['users', s.clients, 'Klien'], ['check-circle-2', s.sessions, 'Sesi selesai'], ['star', s.rating, 'Rating']].filter(k => k[1] !== '' && k[1] != null && Number(k[1]) !== 0);
     if (kp.length) html += '<div class="coach-kpis">' + kp.map(k => '<div class="kpi"><span class="kpi-icon">' + icon(k[0]) + '</span><span class="kpi-value num">' + h(String(k[1]).replace('.', ',')) + '</span><span class="kpi-label">' + h(k[2]) + '</span></div>').join('') + '</div>';
     // Slot kosong
-    if (!opts.preview && window.openSlotsByDate) {
+    // Dua coach aktif atau lebih: slot terdekat milik coach ini saja (bukan gabungan semua coach).
+    const coachSlots = (!window.isSoloCoach() && window.openSlotsByCoachMap && window.openSlotsByCoachMap[String(c.id)]) || window.openSlotsByDate;
+    if (!opts.preview && coachSlots) {
       const now = new Date(), picks = [];
-      Object.keys(window.openSlotsByDate).sort().forEach(function (d) {
-        Object.keys(window.openSlotsByDate[d]).sort((a, b) => a - b).forEach(function (hh) {
-          if (picks.length >= 4 || window.openSlotsByDate[d][hh] <= 0) return;
+      Object.keys(coachSlots).sort().forEach(function (d) {
+        Object.keys(coachSlots[d]).sort((a, b) => a - b).forEach(function (hh) {
+          if (picks.length >= 4 || coachSlots[d][hh] <= 0) return;
           const t = new Date(d + 'T' + pad(hh) + ':00:00');
           if (t > now) picks.push([d, hh, t]);
         });
       });
-      if (picks.length) html += section('calendar-clock', 'Slot kosong terdekat', '<div class="coach-slots">' + picks.map(x => '<button type="button" class="slot" onclick="window.bookSlot(\'' + x[0] + '\',\'' + pad(x[1]) + ':00\')">' + h(fmtShort(x[2])) + ' · ' + pad(x[1]) + '.00</button>').join('') + '</div>');
+      if (picks.length) html += section('calendar-clock', 'Slot kosong terdekat', '<div class="coach-slots">' + picks.map(x => '<button type="button" class="slot" onclick="window.setBookCoach(\'' + h(String(c.id)) + '\');window.bookSlot(\'' + x[0] + '\',\'' + pad(x[1]) + ':00\')">' + h(fmtShort(x[2])) + ' · ' + pad(x[1]) + '.00</button>').join('') + '</div>');
     }
     // Tentang
     if (c.bio || specs.length) html += section('user', 'Tentang', (c.bio ? '<p>' + h(c.bio) + '</p>' : '') + (specs.length ? '<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:12px">' + specs.map(x => '<span class="pill soft">' + h(x) + '</span>').join('') + '</div>' : ''));

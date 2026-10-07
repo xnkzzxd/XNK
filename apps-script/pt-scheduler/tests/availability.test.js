@@ -35,6 +35,19 @@ test('all-day and hourly days off block only what they cover', () => {
   assert.ok(hoursOf(run(env, { timeOff: hourly })[0]).includes(11));
 });
 
+test('a coach\'s leave marks working hours as leave (shown full on the landing); hours outside working time stay hidden', () => {
+  const env = seededEnv();
+  const hourly = [{ coachId: 'C-1', from: MON, to: MON, hourFrom: 10, hourTo: 11 }];
+  const rules = [{ coachId: 'C-1', hari: 'senin', startHour: 8, endHour: 14 }];
+  const hrs = Array.from(run(env, { timeOff: hourly, rules: rules })[0].hours);
+  const h = n => hrs.find(x => x.hour === n);
+  assert.equal(h(10).leave, true);
+  assert.equal(h(10).free, 0);
+  assert.equal(h(11).leave, undefined);   // free
+  assert.equal(h(16).off, true);          // outside working hours: off, not leave
+  assert.equal(h(16).leave, undefined);
+});
+
 test('a booking uses its coach; an unassigned booking uses shared capacity; two coaches keep an hour open', () => {
   const env = seededEnv();
   const bk = [{ start: at(MON, 9), end: at(MON, 10), coachId: '' }];
@@ -139,7 +152,8 @@ const FUT = (daysAhead, hour, min) => {
   const day = new Date(Date.now() + daysAhead * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
   return new Date(day + 'T' + ('0' + hour).slice(-2) + ':' + ('0' + (min || 0)).slice(-2) + ':00+07:00').toISOString();
 };
-const book = (env, start, end) => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_A), { start, end: end || new Date(new Date(start).getTime() + 3600000).toISOString() });
+// env.bookCoach: the coach a client picks when two or more coaches are active (ignored in solo mode).
+const book = (env, start, end) => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_A), { start, end: end || new Date(new Date(start).getTime() + 3600000).toISOString(), coachId: env.bookCoach });
 const noSchedules = env => { env.sheet('Schedules').rows.length = 1; };
 
 test('clients cannot book outside the opening hours or in the past', () => {
@@ -180,13 +194,37 @@ test('the second of two identical bookings is refused (the check and the write a
   assert.equal(env.sheet('Schedules').rows.filter(r => r[4] === FUT(5, 15)).length, 1);
 });
 
-test('with two coaches an hour stays open until both are taken', () => {
+test('with two coaches the client must pick a coach, and each coach has their own seat for an hour', () => {
   const env = seededEnv();
   noSchedules(env);
-  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
   env.sheet('Schedules').rows.push(['S-B', 'PT-X', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
-  assert.equal(book(env, FUT(4, 10)).status, 'success');
-  assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(4, 10), end: FUT(4, 11) }), /sudah dibooking/);
+  const B = env.memberToken(require('./fixtures').KEY_B);
+  const win = { start: FUT(4, 10), end: FUT(4, 11) };
+  assert.throws(() => env.call('clientBookSchedule', B, win), /Pilih coach dulu/);
+  assert.throws(() => env.call('clientBookSchedule', B, Object.assign({ coachId: 'NOPE' }, win)), /Coach tidak ditemukan/);
+  assert.throws(() => env.call('clientBookSchedule', B, Object.assign({ coachId: 'C-1' }, win)), /sudah dibooking/);   // Rizky is taken at 10
+  assert.equal(env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_A), Object.assign({ coachId: dinaId }, win)).coachId, dinaId);
+  assert.throws(() => env.call('clientBookSchedule', B, Object.assign({ coachId: dinaId }, win)), /sudah dibooking/);   // now Dina is taken too
+});
+
+test('getOpenSlots({coachId}) shows only that coach\'s seat; the portal bootstrap carries one grid per coach', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
+  env.sheet('Schedules').rows.push(['S-B', 'PT-X', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'read', 'C-1', 'Rizky', '', '']);
+  const date = new Date(FUT(4, 10)).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const free = (rows, h) => rows.find(d => d.date === date).hours.find(x => x.hour === h).free;
+  assert.equal(free(env.call('getOpenSlots', { days: 7, fresh: true, coachId: 'C-1' }), 10), 0);
+  assert.equal(free(env.call('getOpenSlots', { days: 7, fresh: true, coachId: dinaId }), 10), 1);
+  assert.equal(free(env.call('getOpenSlots', { days: 7, fresh: true }), 10), 1);   // all coaches: one seat left
+  assert.deepEqual(env.call('getOpenSlots', { days: 7, fresh: true, coachId: 'NOPE' }), []);
+  const boot = env.call('getPortalBootstrap', env.memberToken(require('./fixtures').KEY_A));
+  assert.deepEqual(Object.keys(boot.openSlotsByCoach).sort(), ['C-1', dinaId].sort());
+  assert.equal(free(boot.openSlotsByCoach['C-1'], 10), 0);
+  assert.equal(free(boot.openSlotsByCoach[dinaId], 10), 1);
 });
 
 test('clients cannot reschedule onto a booked hour or outside hours, but can onto a free hour or their own hour', () => {
@@ -260,10 +298,13 @@ test('an off-the-hour client booking is stored from the whole hour for the chose
 test('a client cannot hold two overlapping sessions even with two coaches', () => {
   const env = seededEnv();
   noSchedules(env);
-  env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
-  book(env, FUT(4, 10));
-  assert.throws(() => book(env, FUT(4, 10, 30), FUT(4, 12)), /sudah punya sesi/);   // 10:30–12:00 → 10:00–11:30
-  assert.equal(book(env, FUT(4, 10, 30), FUT(4, 11, 30)).duplicate, true);   // snaps to exactly the same session
+  // Two active coaches: a client must pick one; the own-overlap and duplicate rules still apply.
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
+  const A = env.memberToken(require('./fixtures').KEY_A);
+  env.call('clientBookSchedule', A, { start: FUT(4, 10), end: FUT(4, 11), coachId: dinaId });
+  assert.throws(() => env.call('clientBookSchedule', A, { start: FUT(4, 10, 30), end: FUT(4, 12), coachId: dinaId }), /sudah punya sesi/);   // 10:30–12:00 → 10:00–11:30
+  assert.equal(env.call('clientBookSchedule', A, { start: FUT(4, 10, 30), end: FUT(4, 11, 30), coachId: dinaId }).duplicate, true);   // snaps to exactly the same session
 });
 
 // ── Slot cache (2 min, keyed by WIB hour), soft booking conflicts and alternatives ──
@@ -275,7 +316,7 @@ const dayOf = iso => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia
 const hourOfIso = iso => Number(new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hourCycle: 'h23' }));
 const freeAt = (rows, iso) => rows.find(d => d.date === dayOf(iso)).hours.find(h => h.hour === hourOfIso(iso)).free;
 const plusMin = (iso, m) => new Date(new Date(iso).getTime() + m * 60000).toISOString();
-const softBook = (env, key, start, end) => env.call('clientBookSchedule', env.memberToken(key), { start, end: end || plusMin(start, 60) }, { soft: true });
+const softBook = (env, key, start, end) => env.call('clientBookSchedule', env.memberToken(key), { start, end: end || plusMin(start, 60), coachId: env.bookCoach }, { soft: true });
 const budiAt = (env, start, end, id) => env.sheet('Schedules').rows.push([id || 'S-BUDI', 'PT-B', 'Budi', '081222222222', start, end || plusMin(start, 60), 'Catatan Budi', 'read', 'C-1', 'Rizky', '', '']);
 // Every day open 06–21, so the tests below do not depend on the weekday they run on.
 const allWeek = env => { env.props.BUSINESS_HOURS_JSON = JSON.stringify({ 0: [6, 21], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] }); };
@@ -322,8 +363,8 @@ test('the server cache key holds the WIB hour, so an hour turns past at hh:00 wi
   assert.equal(h10(after).free, 0);
   const keys = slotKeys(env);
   assert.equal(keys.length, 2);
-  assert.ok(keys.some(k => k.endsWith(':2030-01-07T9:2030-01-07:1')), keys.join());
-  assert.ok(keys.some(k => k.endsWith(':2030-01-07T10:2030-01-07:1')), keys.join());
+  assert.ok(keys.some(k => k.endsWith(':2030-01-07T9:2030-01-07:1:')), keys.join());   // last part: coach ('' = all)
+  assert.ok(keys.some(k => k.endsWith(':2030-01-07T10:2030-01-07:1:')), keys.join());
 });
 
 test('from and days are normalised before the cache key is built', () => {
@@ -335,7 +376,7 @@ test('from and days are normalised before the cache key is built', () => {
   env.call('getOpenSlots', { from: '2026-02-31', days: '62' });
   const keys = slotKeys(env);
   assert.equal(keys.length, 1, keys.join());
-  assert.ok(keys[0].endsWith(':' + today + ':62'), keys[0]);
+  assert.ok(keys[0].endsWith(':' + today + ':62:'), keys[0]);
   const rows = env.call('getOpenSlots', { from: 'x', days: 999 });
   assert.equal(rows.length, 62);
   assert.equal(rows[0].date, today);
@@ -426,6 +467,7 @@ test('the same booking sent twice is one row and one notification (safe retry)',
 test('soft booking: own overlap is "mine" and the alternatives skip the client\'s own hours; a passed hour is "past"', () => {
   const env = slotEnv();
   env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });   // 10:00 stays open for others
+  env.bookCoach = 'C-1';   // two coaches: the client picks Rizky
   book(env, FUT(4, 10));
   const res = softBook(env, KEY_A, FUT(4, 10), FUT(4, 11, 30));   // 90 min over the client's own 10:00
   assert.equal(res.status, 'conflict');
@@ -531,6 +573,7 @@ test('soft reschedule: a clash keeps the old row and never offers the old start;
 test('soft reschedule onto the client\'s own other session is "mine"', () => {
   const env = slotEnv();
   env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  env.bookCoach = 'C-1';   // two coaches: the client picks Rizky
   const mt = env.memberToken(KEY_A);
   const a = book(env, FUT(6, 10));
   book(env, FUT(6, 12));
@@ -586,6 +629,7 @@ test('soft recurring: every clash is listed and nothing is written; skipTaken bo
 test('recurring now checks the client\'s own sessions on every date, with or without soft', () => {
   const env = slotEnv();
   env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });   // 10:00 stays open for others
+  env.bookCoach = 'C-1';   // two coaches: the client picks Rizky
   book(env, FUT(4, 10));
   const mt = env.memberToken(KEY_A);
   const rows = env.sheet('Schedules').rows.length;
@@ -658,4 +702,53 @@ test('the slot engine skips past history but gives the same hours', () => {
   }
   for (const k of Object.keys(env.cache)) if (k.indexOf('openslots') === 0) delete env.cache[k];
   assert.deepEqual(JSON.parse(JSON.stringify(env.call('getOpenSlots', { days: 14 }))), JSON.parse(JSON.stringify(base)));
+});
+
+test('per-coach view: a booking with no coach assigned takes a free coach\'s seat, and only closes the hour when none is left', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
+  env.sheet('Schedules').rows.push(['S-U', 'PT-X', 'Budi', '1', FUT(4, 10), FUT(4, 11), '', 'unread', '', '', '', '']);   // nobody assigned
+  const date = new Date(FUT(4, 10)).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const free = id => env.call('getOpenSlots', { days: 7, fresh: true, coachId: id }).find(d => d.date === date).hours.find(x => x.hour === 10).free;
+  assert.equal(free('C-1'), 1);   // two coaches, one unassigned booking: each coach can still be chosen
+  assert.equal(free(dinaId), 1);
+  env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_A), { start: FUT(4, 10), end: FUT(4, 11), coachId: 'C-1' });
+  assert.equal(free('C-1'), 0);
+  assert.equal(free(dinaId), 0);   // the unassigned booking now needs Dina's seat
+});
+
+test('a leave whose dates Sheets stored as real dates still blocks the coach', () => {
+  const env = seededEnv();
+  noSchedules(env);
+  const date = new Date(FUT(4, 10)).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  env.ss.seed('CoachTimeOff', [['ID', 'Coach ID', 'Dari', 'Sampai', 'Jam Mulai', 'Jam Selesai', 'Catatan', 'Dibuat'],
+    ['OFF-1', 'C-1', new Date(date + 'T00:00:00+07:00'), new Date(date + 'T00:00:00+07:00'), '', '', '', '']]);
+  const free = env.call('getOpenSlots', { days: 7, fresh: true }).find(d => d.date === date).hours.find(x => x.hour === 10);
+  assert.equal(free.free, 0);
+});
+
+test('two coaches: a soft conflict suggests the picked coach\'s free hours and carries per-coach slots', () => {
+  const env = slotEnv();
+  const dina = env.call('saveCoach', env.adminToken(), { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
+  // Rizky (C-1) is busy at 10:00 and 11:00; Dina is free all day.
+  budiAt(env, FUT(4, 10), null, 'S-R10');
+  budiAt(env, FUT(4, 11), null, 'S-R11');
+  const res = env.call('clientBookSchedule', env.memberToken(KEY_A), { start: FUT(4, 10), end: FUT(4, 11), coachId: 'C-1' }, { soft: true });
+  assert.equal(res.status, 'conflict');
+  assert.equal(res.code, 'taken');
+  assert.equal(res.coachId, 'C-1');
+  assert.ok(res.openSlotsByCoach && res.openSlotsByCoach['C-1'] && res.openSlotsByCoach[dinaId], 'per-coach slots in the answer');
+  assert.equal(freeAt(res.openSlotsByCoach['C-1'], FUT(4, 11)), 0);
+  assert.equal(freeAt(res.openSlotsByCoach[dinaId], FUT(4, 10)), 1);
+  assert.ok(res.alternatives.length >= 1);
+  for (const a of res.alternatives) assert.ok(a.start !== FUT(4, 11), 'Rizky is busy at 11:00, so 11:00 is never offered');
+  noOtherClient(JSON.stringify(res), 'multi-coach conflict');
+  // The same hour with Dina books fine and is saved on Dina.
+  const ok = env.call('clientBookSchedule', env.memberToken(KEY_A), { start: FUT(4, 10), end: FUT(4, 11), coachId: dinaId }, { soft: true });
+  assert.equal(ok.status, 'success');
+  assert.equal(ok.coachId, dinaId);
+  assert.equal(freeAt(ok.openSlotsByCoach[dinaId], FUT(4, 10)), 0);
 });

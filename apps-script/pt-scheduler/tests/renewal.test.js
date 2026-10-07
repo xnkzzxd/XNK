@@ -18,7 +18,7 @@ test('a client requests a renewal: it is recorded with the current price, the ow
   assert.deepEqual([row[1], row[2], row[3], row[6]], ['PT-A', 'P1', 'menunggu', 800000]);
   const notice = env.fetches.map(f => JSON.parse(f.options.payload).text).find(t => t.includes('MINTA PERPANJANG'));
   assert.ok(notice && notice.includes('Ani Anggraini') && notice.includes('Regular 8'));
-  assert.deepEqual(Array.from(sheetRows(env)[0]), ['ID', 'Member ID', 'Paket ID', 'Status', 'Dibuat Pada', 'Diputuskan Pada', 'Harga']);
+  assert.deepEqual(Array.from(sheetRows(env)[0]), ['ID', 'Member ID', 'Paket ID', 'Status', 'Dibuat Pada', 'Diputuskan Pada', 'Harga', 'Coach ID']);
 });
 
 test('only active packages can be requested', () => {
@@ -128,4 +128,19 @@ test('a deleted client cannot be renewed, and the request stays open', () => {
   env.call('deleteMember', admin, 'PT-A');
   assert.throws(() => env.call('decideRenewal', admin, id, true), /Klien sudah dihapus/);
   assert.equal(sheetRows(env)[1][3], 'menunggu');
+});
+
+test('with two active coaches, a renewal and a new registration must name a coach, and the renewal carries it to the approval', () => {
+  const { env, ani, admin } = setup();
+  const dina = env.call('saveCoach', admin, { name: 'Dina', phone: '081234567891' });
+  const dinaId = dina.id || (dina.coach && dina.coach.id);
+  assert.throws(() => env.call('requestRenewal', ani, 'P1'), /Pilih coach dulu/);
+  assert.throws(() => env.call('requestRenewal', ani, 'P1', 'NOPE'), /Coach tidak ditemukan/);
+  const res = env.call('requestRenewal', ani, 'P1', dinaId);
+  assert.equal(res.request.status, 'menunggu');
+  assert.equal(sheetRows(env)[1][7], dinaId);
+  assert.throws(() => env.call('registerNewClient', { name: 'Gita', phone: '081566666666', goal: 'x', packageId: 'P1' }), /Pilih coach dulu/);
+  env.call('registerNewClient', { name: 'Gita', phone: '081566666666', goal: 'x', packageId: 'P1', coachId: dinaId });
+  const gita = env.sheet('MemberData').rows.find(r => String(r[1]) === 'Gita');
+  assert.equal(String(gita[10]), dinaId);   // preferred coach
 });

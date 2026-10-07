@@ -351,6 +351,10 @@
           <label class="label" for="sch-member">Klien</label>
           <select class="select" id="sch-member"></select>
         </div>
+        <div class="field hide" id="sch-coach-field">
+          <label class="label" for="sch-coach">Coach</label>
+          <select class="select" id="sch-coach"></select>
+        </div>
         <div class="two">
           <div class="field"><label class="label" for="edit-sch-date">Tanggal</label><input class="input" type="date" id="edit-sch-date" required onchange="window.onSchFieldChange()"></div>
           <div class="field"><label class="label" for="edit-sch-time">Jam</label><input class="input" type="time" id="edit-sch-time" required step="900" oninput="window.onSchFieldChange()" onchange="window.onSchFieldChange()" aria-describedby="edit-sch-time-hint"><p class="hint" id="edit-sch-time-hint" aria-live="polite"></p></div>
@@ -400,6 +404,7 @@
         <input type="hidden" id="reg-data-package-id"><input type="hidden" id="reg-data-package"><input type="hidden" id="reg-data-sessions"><input type="hidden" id="reg-data-price"><input type="hidden" id="reg-data-type">
         <div class="field"><label class="label" for="reg-name">Nama lengkap</label><input class="input" type="text" id="reg-name" required autocomplete="name"></div>
         <div class="field"><label class="label" for="reg-phone">Nomor WhatsApp</label><div class="input-affix"><span class="affix">+62</span><input class="input" type="tel" inputmode="numeric" id="reg-phone" required placeholder="81234567890" autocomplete="tel"></div></div>
+        <div class="field hide" id="reg-coach-field"><label class="label" for="reg-coach">Coach</label><select class="select" id="reg-coach"></select></div>
         <div class="field"><label class="label" for="reg-goal">Tujuan latihan</label><input class="input" type="text" id="reg-goal" required placeholder="Contoh: lebih bugar & kuat"></div>
         <button type="submit" class="btn btn-primary btn-lg btn-block">Daftar &amp; lanjut ke WhatsApp</button>
         <p class="hint" style="text-align:center">Pembayaran dikonfirmasi coach lewat WhatsApp.</p>
@@ -655,7 +660,7 @@
     <div class="sheet tall hide" id="sheet-renew" role="dialog" aria-modal="true" aria-labelledby="renew-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="renew-title">Perpanjang paket</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
-      <div class="sheet-body stack"><p class="li-sub">Pilih paket. Setelah itu WhatsApp ke coach terbuka untuk konfirmasi pembayaran.</p><div class="list" id="renew-list"></div></div>
+      <div class="sheet-body stack"><p class="li-sub">Pilih paket. Setelah itu WhatsApp ke coach terbuka untuk konfirmasi pembayaran.</p><div class="field hide" id="renew-coach-field"><label class="label" for="renew-coach">Coach</label><select class="select" id="renew-coach"></select></div><div class="list" id="renew-list"></div></div>
     </div>
 
     <!-- Gabung grup kelas privat dengan kode (portal klien) -->
