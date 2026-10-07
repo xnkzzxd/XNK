@@ -2470,6 +2470,7 @@
     if (need) $(selectId).innerHTML = '<option value="">Pilih coach…</option>' + window.coaches.map(c => '<option value="' + h(String(c.id)) + '">' + h(c.name) + '</option>').join('');
     return need;
   }
+  window.setBookCoach = function (id) { if (!window.isSoloCoach()) ui.bookCoach = String(id || ''); };
   window.pickBookCoach = function (id) {
     ui.bookCoach = String(id || '');
     renderView('calendar', { animate: false });
@@ -5384,7 +5385,7 @@
       (c.location ? '<span class="pill">' + icon('map-pin') + h(c.location) + '</span>' : '') + '</div>';
     if (!opts.preview) {
       html += '<div class="btn-row"><button type="button" class="btn btn-lg btn-inverse" data-coach="' + h(c.id) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Chat WA</button>' +
-        '<button type="button" class="btn btn-lg btn-ghost-ink" onclick="' + (opts.inSheet ? 'window.closeModal();setTimeout(window.handleFabClick,300)' : 'window.handleFabClick()') + '">' + icon('calendar-plus') + 'Booking</button></div>';
+        '<button type="button" class="btn btn-lg btn-ghost-ink" onclick="' + 'window.setBookCoach(\'' + h(String(c.id)) + '\');' + (opts.inSheet ? 'window.closeModal();setTimeout(window.handleFabClick,300)' : 'window.handleFabClick()') + '">' + icon('calendar-plus') + 'Booking</button></div>';
     }
     html += '</div>';
     // KPI
@@ -5392,16 +5393,18 @@
     const kp = [['users', s.clients, 'Klien'], ['check-circle-2', s.sessions, 'Sesi selesai'], ['star', s.rating, 'Rating']].filter(k => k[1] !== '' && k[1] != null && Number(k[1]) !== 0);
     if (kp.length) html += '<div class="coach-kpis">' + kp.map(k => '<div class="kpi"><span class="kpi-icon">' + icon(k[0]) + '</span><span class="kpi-value num">' + h(String(k[1]).replace('.', ',')) + '</span><span class="kpi-label">' + h(k[2]) + '</span></div>').join('') + '</div>';
     // Slot kosong
-    if (!opts.preview && window.openSlotsByDate) {
+    // Dua coach aktif atau lebih: slot terdekat milik coach ini saja (bukan gabungan semua coach).
+    const coachSlots = (!window.isSoloCoach() && window.openSlotsByCoachMap && window.openSlotsByCoachMap[String(c.id)]) || window.openSlotsByDate;
+    if (!opts.preview && coachSlots) {
       const now = new Date(), picks = [];
-      Object.keys(window.openSlotsByDate).sort().forEach(function (d) {
-        Object.keys(window.openSlotsByDate[d]).sort((a, b) => a - b).forEach(function (hh) {
-          if (picks.length >= 4 || window.openSlotsByDate[d][hh] <= 0) return;
+      Object.keys(coachSlots).sort().forEach(function (d) {
+        Object.keys(coachSlots[d]).sort((a, b) => a - b).forEach(function (hh) {
+          if (picks.length >= 4 || coachSlots[d][hh] <= 0) return;
           const t = new Date(d + 'T' + pad(hh) + ':00:00');
           if (t > now) picks.push([d, hh, t]);
         });
       });
-      if (picks.length) html += section('calendar-clock', 'Slot kosong terdekat', '<div class="coach-slots">' + picks.map(x => '<button type="button" class="slot" onclick="window.bookSlot(\'' + x[0] + '\',\'' + pad(x[1]) + ':00\')">' + h(fmtShort(x[2])) + ' · ' + pad(x[1]) + '.00</button>').join('') + '</div>');
+      if (picks.length) html += section('calendar-clock', 'Slot kosong terdekat', '<div class="coach-slots">' + picks.map(x => '<button type="button" class="slot" onclick="window.setBookCoach(\'' + h(String(c.id)) + '\');window.bookSlot(\'' + x[0] + '\',\'' + pad(x[1]) + ':00\')">' + h(fmtShort(x[2])) + ' · ' + pad(x[1]) + '.00</button>').join('') + '</div>');
     }
     // Tentang
     if (c.bio || specs.length) html += section('user', 'Tentang', (c.bio ? '<p>' + h(c.bio) + '</p>' : '') + (specs.length ? '<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:12px">' + specs.map(x => '<span class="pill soft">' + h(x) + '</span>').join('') + '</div>' : ''));
