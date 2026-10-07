@@ -612,3 +612,12 @@ test('portal bootstrap: openSlots from the shared cache, the reschedule notice, 
   noOtherClient(JSON.stringify(Object.assign({}, b, { profile: null })), 'bootstrap');
   assert.equal(env.call('getPortalBootstrap', null).rescheduleCutoffHours, 6);
 });
+
+test('a fractional series count books the same whole number the quota was checked for', () => {
+  const env = slotEnv();
+  const mt = env.memberToken(KEY_A);
+  env.memberRow('PT-A')[9] = 6;   // 10 total, 6 used: 4 left
+  const ok = env.call('clientBookRecurring', mt, series(3, 10), { weekdays: [0, 1, 2, 3, 4, 5, 6], occurrences: 4.5 }, { soft: true });
+  assert.equal(ok.status, 'success');
+  assert.equal(ok.count, 4);
+});

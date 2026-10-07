@@ -2068,7 +2068,8 @@ function getPortalBootstrap(memberToken) {
   }
   const memberId = found ? String(found.row[0]).trim() : null;
   const ver = _slotsVersion_();
-  const all = _getSchedulesAll_();
+  // Tanpa klien yang masuk, sheet Schedules hanya dibaca kalau cache jam kosong kosong (hemat kuota).
+  const all = memberId ? _getSchedulesAll_() : undefined;
   const mine = memberId ? all.filter(function(x) { return String(x.memberId).trim() === memberId; }).map(_ownScheduleOut_) : [];
   const now = new Date();
   const horizon = _portalHorizonDays_();
@@ -2303,7 +2304,8 @@ function _addRecurringInternal_(baseScheduleData, recurrenceRule, status, opts) 
       throw new Error('Tanggal atau jam tidak valid.');
     }
     const weekdays = (recurrenceRule && recurrenceRule.weekdays) || [];
-    const occurrences = (recurrenceRule && recurrenceRule.occurrences) || 0;
+    // Bilangan bulat, sama dengan hitungan kuota di clientBookRecurring (4.5 tidak boleh jadi 5 sesi).
+    const occurrences = parseInt(recurrenceRule && recurrenceRule.occurrences, 10) || 0;
 
     if (!weekdays.length) throw new Error('Pilih minimal 1 hari untuk pola berulang.');
     if (!occurrences || occurrences < 1) throw new Error('Jumlah pengulangan tidak valid.');
