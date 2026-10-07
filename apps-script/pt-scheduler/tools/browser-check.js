@@ -1587,6 +1587,43 @@ async function contrastReport(page) {
     await context.close();
   }
   {
+    // Pick within 2 minutes: checked on screen, no call. After 2 minutes: one reload; a taken hour offers nearby free hours.
+    const env = seededEnv();
+    const calls = [];
+    const { page, context, errors } = await openPage(browser, env, '/Landing', calls, null, { touch: true, clock: true, wait: LANDING_WAIT });
+    const count = () => calls.filter(c => c === 'getOpenSlots').length;
+    await page.click('#slot-days [data-day="1"]');
+    await page.waitForTimeout(200);
+    const free = await page.locator('#slot-hours .slot-h:not(.taken):not(.past)').evaluateAll(els => els.map(e => Number(e.getAttribute('data-h'))));
+    check(free.length >= 3, 'Landing: tomorrow has free hours to pick (' + free.length + ')');
+    const before = count();
+    await page.locator('#slot-hours .slot-h[data-h="' + free[0] + '"]').first().click();
+    await page.waitForTimeout(200);
+    check(count() === before && await visible(page, '#member-check-modal'), 'Landing: a pick within 2 minutes opens the member check with no server call');
+    await page.keyboard.press('Escape');
+    await page.clock.runFor(600);
+    check(count() === before, 'Landing: closing the member check within 2 minutes sends no call');
+    // Someone books the next free hour; the server cache is cleared as an app write would do.
+    const h = free[1];
+    const day = new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const st = new Date(day + 'T' + String(h).padStart(2, '0') + ':00:00+07:00');
+    env.sheet('Schedules').rows.push(['SCH-LT', 'PT-B', 'Budi', '081222222222', st.toISOString(), new Date(st.getTime() + 3600000).toISOString(), '', 'read', 'C-1', 'Rizky', '', '']);
+    for (const k of Object.keys(env.cache)) if (k.indexOf('openslots') === 0) delete env.cache[k];
+    await page.clock.runFor(121000);
+    await page.locator('#slot-hours .slot-h[data-h="' + h + '"]').first().click();
+    await page.waitForTimeout(600);
+    const msg = (await page.textContent('#slot-msg')) || '';
+    check(count() === before + 1, 'Landing: a pick after 2 minutes reloads the hours once (' + before + ' → ' + count() + ')');
+    check(msg.includes('Jam ' + String(h).padStart(2, '0') + '.00 sudah terisi') && (await page.locator('#slot-msg .slot-alt').count()) >= 1, 'Landing: a taken hour shows "sudah terisi" with nearby free hours: ' + msg.trim());
+    const altBox = await page.locator('#slot-msg .slot-alt').first().boundingBox();
+    check(!!altBox && altBox.height >= 44, 'Landing: alternative hours are 44 px tap targets');
+    await page.locator('#slot-msg .slot-alt').first().click();
+    await page.waitForTimeout(300);
+    check(await visible(page, '#member-check-modal'), 'Landing: tapping an alternative hour opens the member check');
+    noErrors(errors);
+    await context.close();
+  }
+  {
     const env = seededEnv();
     const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', [], null, { touch: true });
     await page.evaluate(() => openRegistration());
