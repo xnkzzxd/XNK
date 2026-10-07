@@ -1673,10 +1673,16 @@ async function contrastReport(page) {
     await page.click('#slot-days [data-day="2"]');
     await page.waitForTimeout(200);
     check(await page.locator('#slot-msg').evaluate(el => el.hidden), 'Landing: switching day clears the "sudah terisi" message');
+    // A second hour is taken; after 2 minutes, picking it reloads once and offers hours for that same day.
+    const h2 = free[2];
+    const st2 = new Date(day + 'T' + String(h2).padStart(2, '0') + ':00:00+07:00');
+    env.sheet('Schedules').rows.push(['SCH-LT2', 'PT-C', 'Citra', '6283333333333', st2.toISOString(), new Date(st2.getTime() + 3600000).toISOString(), '', 'read', 'C-1', 'Rizky', '', '']);
+    for (const k of Object.keys(env.cache)) if (k.indexOf('openslots') === 0) delete env.cache[k];
+    await page.clock.runFor(121000);
     await page.click('#slot-days [data-day="1"]');
     await page.waitForTimeout(200);
-    await page.locator('#slot-hours .slot-h[data-h="' + h + '"]').first().click();   // data is fresh again: checked on screen
-    await page.waitForTimeout(300);
+    await page.locator('#slot-hours .slot-h[data-h="' + h2 + '"]').first().click();
+    await page.waitForTimeout(600);
     const altH = Number(await page.locator('#slot-msg .slot-alt').first().getAttribute('data-h'));
     await page.locator('#slot-msg .slot-alt').first().click();
     await page.waitForTimeout(300);
