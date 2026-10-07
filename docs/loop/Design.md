@@ -1,0 +1,28 @@
+# Design — Phase I
+
+Rujukan kode: `apps-script/pt-scheduler/src/`.
+
+## 1. Ukuran badan (I1)
+
+- `Progress` mendapat kolom di kanan (H–M): Lengan Kanan, Lengan Kiri, Perut, Paha Kanan, Paha Kiri, Dada (cm). Berat (D) dan Pinggang (E) tetap. Header ditambahkan oleh `_ensureProgressColumns_` (idempotent, di dalam lock `_saveMeasurement_`).
+- `PROGRESS_MEASURES` (kunci, label, satuan, kolom, batas) adalah satu-satunya daftar ukuran. `_saveMeasurement_(memberId, tanggal, vals, oleh)`, `_readProgress_`, `_progressPayload_` (`summary` per ukuran, `measures`) membacanya.
+- `saveMyMeasurement` (klien, 7 hari ke belakang) dan `saveMemberMeasurement` (coach) memakai `_parseMeasures_`.
+- `saveAssessment` menyimpan ukuran ke Progress sebagai catatan coach; `Assessments` J (lemak) dan M (pinggul) tetap, K dan L (dada, lengan lama) tidak diisi lagi.
+
+## 2. Timer dan tren (I1)
+
+- Timer murni di browser (`ftOpen/ftToggle/ftReset`, `App.html`): waktu dihitung dari `Date.now()`, bunyi lewat WebAudio, getar `navigator.vibrate`, layar tetap menyala lewat `wakeLock`. Berhenti sendiri bila sheet ditutup.
+- `getMyAssessment.tests[].history` (tanggal + nilai) dan `getClientCare.testHistory` memberi data grafik; `pgChartSvg` dipakai ulang.
+- `getTestResultMessage` memakai template `hasil-tes` (`RMD_TPL_DEFAULT`, override lewat Script Property `RMD_TPL_HASIL_TES`).
+
+## 3. Catatan sesi dan pesan pasca-sesi (I2)
+
+Dirancang di bagian I2; lihat [TODO.md](TODO.md).
+
+## 4. Penilaian dan evaluasi (I3)
+
+Dirancang di bagian I3; lihat [TODO.md](TODO.md).
+
+## 5. Kalender (I4)
+
+Murni browser: `.ics` dan tautan Google Kalender dari data sesi; tanpa panggilan server.

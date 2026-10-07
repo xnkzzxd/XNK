@@ -511,9 +511,8 @@
         <div class="two">
           <div class="field"><label class="label" for="as-weight">Berat (kg)</label><input class="input num" id="as-weight" type="text" inputmode="decimal"></div>
           <div class="field"><label class="label" for="as-waist">Pinggang (cm)</label><input class="input num" id="as-waist" type="text" inputmode="decimal"></div>
+          <div class="field"><label class="label" for="as-lenganKanan">Lengan kanan (cm)</label><input class="input num" id="as-lenganKanan" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-lenganKiri">Lengan kiri (cm)</label><input class="input num" id="as-lenganKiri" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-perut">Perut (cm)</label><input class="input num" id="as-perut" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-pahaKanan">Paha kanan (cm)</label><input class="input num" id="as-pahaKanan" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-pahaKiri">Paha kiri (cm)</label><input class="input num" id="as-pahaKiri" type="text" inputmode="decimal"></div><div class="field"><label class="label" for="as-dada">Dada (cm)</label><input class="input num" id="as-dada" type="text" inputmode="decimal"></div>
           <div class="field"><label class="label" for="as-fat">Lemak tubuh (%)</label><input class="input num" id="as-fat" type="text" inputmode="decimal"></div>
-          <div class="field"><label class="label" for="as-chest">Dada (cm)</label><input class="input num" id="as-chest" type="text" inputmode="decimal"></div>
-          <div class="field"><label class="label" for="as-arm">Lengan (cm)</label><input class="input num" id="as-arm" type="text" inputmode="decimal"></div>
           <div class="field"><label class="label" for="as-hip">Pinggul (cm)</label><input class="input num" id="as-hip" type="text" inputmode="decimal"></div>
         </div>
         <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan assessment</button>
@@ -525,6 +524,11 @@
       <div class="sheet-head"><h2 class="sheet-title" id="care-tests-title">Tes kebugaran</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <form class="sheet-body form-grid" onsubmit="window.submitCareTests(event)">
         <div class="field"><label class="label" for="ft-date">Tanggal</label><input class="input" id="ft-date" type="date" required></div>
+        <div class="tm-card hide" id="ft-timer" role="timer">
+          <p class="eyebrow" id="ft-timer-label"></p>
+          <p class="tm-time num" id="ft-timer-time" aria-live="off">1:00</p>
+          <div class="btn-row"><button type="button" class="btn btn-primary btn-lg" id="ft-timer-toggle" onclick="window.ftToggle()">Mulai</button><button type="button" class="btn btn-outline btn-lg" onclick="window.ftReset()">Ulang</button><button type="button" class="btn btn-ghost btn-lg" onclick="window.ftClose()">Tutup</button></div>
+        </div>
         <div id="ft-fields" class="form-grid"></div>
         <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan hasil tes</button>
       </form>
@@ -609,6 +613,7 @@
         <div class="field hide" id="pg-date-field"><label class="label" for="pg-tanggal">Tanggal</label><input class="input" type="date" id="pg-tanggal"></div>
         <div class="field"><label class="label" for="pg-berat">Berat (kg)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-berat" autocomplete="off" placeholder="72,4"></div>
         <div class="field"><label class="label" for="pg-pinggang">Lingkar pinggang (cm)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-pinggang" autocomplete="off" placeholder="80"></div>
+        <details class="pg-more" id="pg-more"><summary>Lingkar badan lainnya</summary><div class="two"><div class="field"><label class="label" for="pg-lenganKanan">Lengan kanan (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-lenganKanan" autocomplete="off" placeholder="32"></div><div class="field"><label class="label" for="pg-lenganKiri">Lengan kiri (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-lenganKiri" autocomplete="off" placeholder="32"></div><div class="field"><label class="label" for="pg-perut">Perut (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-perut" autocomplete="off" placeholder="85"></div><div class="field"><label class="label" for="pg-pahaKanan">Paha kanan (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-pahaKanan" autocomplete="off" placeholder="55"></div><div class="field"><label class="label" for="pg-pahaKiri">Paha kiri (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-pahaKiri" autocomplete="off" placeholder="55"></div><div class="field"><label class="label" for="pg-dada">Dada (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-dada" autocomplete="off" placeholder="95"></div></div></details>
         <p class="hint">Boleh isi salah satu. Catatan di hari yang sama diperbarui.</p>
         <p class="hint err-msg" id="pg-err" role="alert" style="display:block"></p>
       </form>

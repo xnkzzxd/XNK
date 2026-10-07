@@ -1260,6 +1260,15 @@ button.avatar { border: 0; cursor: pointer; }
 .pg-badge.locked { opacity: 0.38; border-style: dashed; }
 .pg-badge.locked .pg-badge-ic { background: var(--surface-3); color: var(--fg-muted); }
 .pg-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pg-more { border: 1px solid var(--border); border-radius: var(--r-md); padding: 0 12px; }
+.pg-more > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+.pg-more[open] { padding-bottom: 12px; }
+.pg-more[open] > summary { margin-bottom: 8px; }
+.tm-card { position: sticky; top: 0; z-index: 2; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px; text-align: center; display: flex; flex-direction: column; gap: 6px; }
+.tm-card.done { border-color: var(--ink); }
+.tm-time { font-size: 56px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tm-card .btn-row { justify-content: center; }
+.tm-start { min-height: 44px; }
 .pg-trophy { width: 72px; height: 72px; border-radius: 24px; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; animation: popIn var(--t-slow) var(--spring) both; }
 .pg-trophy svg.lucide { width: 36px; height: 36px; }
 .pg-badge-list { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }

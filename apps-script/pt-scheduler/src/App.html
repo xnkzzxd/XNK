@@ -4108,6 +4108,19 @@
     const sign = t.change > 0 ? '+' : '';
     return ' <span class="pill soft">' + sign + String(t.change).replace('.', ',') + ' ' + h(t.unit.split(' ')[0]) + (t.improved ? ' ↑' : '') + '</span>';
   }
+  // Tren satu tes: grafik garis dari riwayat (tanggal + nilai). Muncul bila ada dua hasil atau lebih.
+  function trendHtml(t, history) {
+    const pts = (history || []).map(x => ({ tanggal: x.tanggal, v: x.nilai }));
+    if (pts.length < 2) return '';
+    const note = t.better === 'lower' ? 'Makin rendah makin baik.' : 'Makin tinggi makin baik.';
+    return '<details class="pg-more" style="margin:2px 0 6px"><summary>Tren ' + h(t.label) + '</summary>' + pgChartSvg(pts, 'v', t.unit.split(' ')[0]) + '<p class="li-sub">' + h(note) + '</p></details>';
+  }
+  window.sendTestResult = function (memberId) {
+    adminCall('getTestResultMessage', memberId).then(function (r) {
+      const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+      window.sendToParentWA(m.phone || '', r.text);
+    }).catch(function (err) { window.showToast(err.message); });
+  };
   function careInner(memberId) {
     const d = care[memberId];
     if (!d) return '<p class="li-sub">Memuat catatan klien…</p>';
@@ -4130,12 +4143,13 @@
     if (d.assessment) {
       const a = d.assessment;
       html += (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
-      const ex = [['Lemak', a.bodyFat, '%'], ['Dada', a.chest, ' cm'], ['Lengan', a.arm, ' cm'], ['Pinggul', a.hip, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
+      const ex = [['Lemak', a.bodyFat, '%'], ['Pinggul', a.hip, ' cm'], ['Dada (lama)', a.chest, ' cm'], ['Lengan (lama)', a.arm, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
       if (ex.length) html += careRow('Ukuran', h(ex.join(' · ')));
     } else html += '<p class="li-sub">Belum diisi.</p>';
     html += '</div>';
     html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Tes kebugaran</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareTests(\'' + h(memberId) + '\')">' + icon('plus') + 'Tes</button></div>' +
-      (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t))).join('') : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div>';
+      (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') +
+        '<button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="window.sendTestResult(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim hasil via WA</button>' : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div>';
     return html;
   }
   window.loadClientCare = function (memberId) {
@@ -4159,22 +4173,99 @@
   window.openAssessment = function (id) {
     careMember = id; const a = (care[id] || {}).assessment || {};
     $('as-goal').value = a.goal || ''; $('as-history').value = a.history || ''; $('as-pref').value = a.schedulePref || ''; $('as-motivation').value = a.motivation || ''; $('as-coach-notes').value = a.coachNotes || '';
-    ['as-weight', 'as-waist'].forEach(k => { $(k).value = ''; });
-    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat; $('as-chest').value = a.chest === '' || a.chest == null ? '' : a.chest;
-    $('as-arm').value = a.arm === '' || a.arm == null ? '' : a.arm; $('as-hip').value = a.hip === '' || a.hip == null ? '' : a.hip;
+    ['as-weight', 'as-waist'].concat(PG_MEASURES.slice(2).map(m => 'as-' + m[0])).forEach(k => { $(k).value = ''; });
+    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat; $('as-hip').value = a.hip === '' || a.hip == null ? '' : a.hip;
     openSheet('modal-care-assess');
   };
   window.submitAssessment = function (e) {
     e.preventDefault();
     const v = k => $(k).value.trim().replace(',', '.');
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveAssessment', careMember, { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), chest: v('as-chest'), arm: v('as-arm'), hip: v('as-hip') })
-      .then(function () { done(); if (window.pgLoadAdmin) window.pgLoadAdmin(careMember); return careDone(careMember, 'Assessment disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+    adminCall('saveAssessment', careMember, { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), hip: v('as-hip'),
+      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada') })
+      .then(function () {
+        done(); if (window.pgLoadAdmin) window.pgLoadAdmin(careMember);
+        const first = !((care[careMember] || {}).tests || []).length, id = careMember;
+        return careDone(careMember, 'Assessment disimpan.').then(function () { if (first) setTimeout(function () { window.openCareTests(id); }, 250); });
+      }).catch(function (err) { done(); window.showToast(err.message); });
   };
+  // ── Timer tes kebugaran: hitung mundur 1 menit (push-up, squat) atau stopwatch (plank) ──
+  // Waktu dihitung dari jam sistem, bukan dari jumlah tick, jadi tetap benar kalau layar sempat redup.
+  const ft = { id: '', mode: 'down', running: false, end: 0, start: 0, left: 60000, elapsed: 0, int: null, wake: null };
+  const ftFmt = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); };
+  function ftBeep() {
+    try {
+      const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+      const c = new C(), o = c.createOscillator(), g = c.createGain();
+      o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = 0.25; o.start();
+      setTimeout(function () { try { o.stop(); c.close(); } catch (e) {} }, 700);
+    } catch (e) {}
+  }
+  function ftWake(on) {
+    try {
+      if (on && navigator.wakeLock) navigator.wakeLock.request('screen').then(function (w) { ft.wake = w; }).catch(function () {});
+      else if (!on && ft.wake) { ft.wake.release(); ft.wake = null; }
+    } catch (e) {}
+  }
+  function ftPaint() {
+    const card = $('ft-timer'); if (!card) return;
+    const ms = ft.mode === 'down' ? ft.left : ft.elapsed;
+    $('ft-timer-time').textContent = ft.mode === 'down' ? ftFmt(ms) : (Math.floor(ms / 1000) >= 60 ? Math.floor(ms / 60000) + ':' + ('0' + (Math.floor(ms / 1000) % 60)).slice(-2) : Math.floor(ms / 1000) + ' dtk');
+    $('ft-timer-toggle').textContent = ft.running ? (ft.mode === 'down' ? 'Jeda' : 'Berhenti') : (ft.mode === 'down' && ft.left < 60000 && ft.left > 0 ? 'Lanjut' : 'Mulai');
+  }
+  function ftStopTick() { clearInterval(ft.int); ft.int = null; ft.running = false; ftWake(false); }
+  function ftTick() {
+    const sheet = $('modal-care-tests');
+    if (!sheet || sheet.classList.contains('hide')) { ftStopTick(); return; }
+    const now = Date.now();
+    if (ft.mode === 'down') {
+      ft.left = Math.max(0, ft.end - now);
+      if (ft.left <= 0) {
+        ftStopTick(); ftPaint(); $('ft-timer').classList.add('done'); ftBeep();
+        try { if (navigator.vibrate) navigator.vibrate([300, 120, 300]); } catch (e) {}
+        const f = $('ft-' + ft.id); if (f) f.focus();
+        return;
+      }
+    } else ft.elapsed = now - ft.start;
+    ftPaint();
+  }
+  window.ftOpen = function (testId, mode) {
+    const t = ((care[careMember] || {}).testList || []).find(x => x.id === testId);
+    ftStopTick();
+    ft.id = testId; ft.mode = mode; ft.left = 60000; ft.elapsed = 0;
+    $('ft-timer').classList.remove('hide', 'done');
+    $('ft-timer-label').textContent = (t ? t.label : '') + (mode === 'down' ? ' · 1 menit' : ' · tahan selama bisa');
+    ftPaint();
+    $('ft-timer').scrollIntoView({ block: 'nearest' });
+  };
+  window.ftToggle = function () {
+    if (ft.running) {
+      if (ft.mode === 'down') { ft.left = Math.max(0, ft.end - Date.now()); ftStopTick(); ftPaint(); return; }
+      // Stopwatch berhenti: isi detiknya ke kolom tes.
+      const sec = Math.round((Date.now() - ft.start) / 1000); ftStopTick(); ft.elapsed = sec * 1000; ftPaint();
+      const f = $('ft-' + ft.id); if (f) f.value = String(sec);
+      $('ft-timer').classList.add('done');
+      return;
+    }
+    if (ft.mode === 'down') { if (ft.left <= 0) ft.left = 60000; ft.end = Date.now() + ft.left; }
+    else { ft.start = Date.now() - ft.elapsed; }
+    $('ft-timer').classList.remove('done');
+    ft.running = true; ftWake(true);
+    ft.int = setInterval(ftTick, 200); ftTick();
+  };
+  window.ftReset = function () { ftStopTick(); ft.left = 60000; ft.elapsed = 0; $('ft-timer').classList.remove('done'); ftPaint(); };
+  window.ftClose = ftClose;
+  function ftClose() { ftStopTick(); const c = $('ft-timer'); if (c) c.classList.add('hide'); }
   window.openCareTests = function (id) {
     careMember = id; const list = (care[id] || {}).testList || [];
     $('ft-date').value = ymd(new Date());
-    $('ft-fields').innerHTML = list.map(t => '<div class="field"><label class="label" for="ft-' + h(t.id) + '">' + h(t.label) + ' (' + h(t.unit) + ')</label><input class="input num" id="ft-' + h(t.id) + '" data-test="' + h(t.id) + '" type="text" inputmode="decimal"></div>').join('');
+    ftClose();
+    $('ft-fields').innerHTML = list.map(t => {
+      const mode = /1 menit/.test(t.unit) ? 'down' : (t.id === 'plank' ? 'up' : '');
+      return '<div class="field"><label class="label" for="ft-' + h(t.id) + '">' + h(t.label) + ' (' + h(t.unit) + ')</label><div class="row" style="gap:8px">' +
+        '<input class="input num grow" id="ft-' + h(t.id) + '" data-test="' + h(t.id) + '" type="text" inputmode="decimal">' +
+        (mode ? '<button type="button" class="btn btn-secondary tm-start" onclick="window.ftOpen(\'' + h(t.id) + '\',\'' + mode + '\')">' + icon('timer') + (mode === 'down' ? '1:00' : 'Stopwatch') + '</button>' : '') + '</div></div>';
+    }).join('');
     openSheet('modal-care-tests');
   };
   window.submitCareTests = function (e) {
@@ -4240,10 +4331,10 @@
     }
     const tests = myCare.assess && myCare.assess.tests || [];
     if (tests.length) {
-      html += '<div class="card"><div class="section-head"><h3 class="section-title">Tes kebugaran</h3></div><div class="stack" style="gap:6px">' + tests.map(function (t) {
+      html += '<div class="card"><div class="section-head"><h3 class="section-title">Hasil tes</h3></div><div class="stack" style="gap:6px">' + tests.map(function (t) {
         const unit = t.unit.split(' ')[0];
         const delta = t.change === null ? '' : (t.improved ? ' · ' + (t.better === 'lower' ? 'turun ' : 'naik ') + Math.abs(t.change).toString().replace('.', ',') + ' ' + unit + ' 🎉' : '');
-        return '<div class="row-between" style="min-height:40px;gap:8px"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700;text-align:right">' + h(t.first.nilai) + (t.latest.nilai !== t.first.nilai || t.change !== null ? ' → ' + h(t.latest.nilai) : '') + ' ' + h(unit) + '<span class="li-sub">' + h(delta) + '</span></span></div>';
+        return '<div class="row-between" style="min-height:40px;gap:8px"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700;text-align:right">' + h(t.first.nilai) + (t.latest.nilai !== t.first.nilai || t.change !== null ? ' → ' + h(t.latest.nilai) : '') + ' ' + h(unit) + '<span class="li-sub">' + h(delta) + '</span></span></div>' + trendHtml(t, t.history);
       }).join('') + '</div></div>';
     }
     return html;
@@ -4623,7 +4714,8 @@
   // ── Progres klien: berat, pinggang, foto (Fase D1) ──────────────────────────
   // Dipakai di portal klien (memberCall) dan di halaman klien panel (adminCall).
   const pg = { data: null, admin: {}, mode: 'member', memberId: null, side: 'depan', viewId: null };
-  const PG_MEASURES = [['berat', 'Berat', 'kg'], ['pinggang', 'Pinggang', 'cm']];
+  const PG_MEASURES = [['berat', 'Berat', 'kg', 20, 300], ['pinggang', 'Pinggang', 'cm', 30, 250], ['lenganKanan', 'Lengan kanan', 'cm', 10, 80], ['lenganKiri', 'Lengan kiri', 'cm', 10, 80],
+    ['perut', 'Perut', 'cm', 30, 250], ['pahaKanan', 'Paha kanan', 'cm', 20, 120], ['pahaKiri', 'Paha kiri', 'cm', 20, 120], ['dada', 'Dada', 'cm', 40, 200]];
   const pgNum = v => Number(v).toLocaleString('id-ID', { maximumFractionDigits: 1 });
   const pgDate = iso => { const p = String(iso).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
   const pgLabel = iso => pgDate(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
@@ -4657,13 +4749,17 @@
       (pts.length > 1 ? '<text x="' + (W - padX) + '" y="' + (H - 6) + '" text-anchor="end" class="pg-lbl">' + h(pgLabel(pts[pts.length - 1].tanggal)) + '</text>' : '') + '</svg>';
   }
 
+  function pgBlockHtml(d, m) {
+    const sum = d.summary && d.summary[m[0]];
+    if (!sum) return '';
+    return '<div class="pg-block"><div class="row-between"><span class="label">' + m[1] + '</span><span class="pg-now num">' + h(pgNum(sum.last.nilai)) + ' <small>' + m[2] + '</small></span></div>' +
+      '<p class="li-sub">' + h(pgChangeText(sum, m[2])) + '</p>' + pgChartSvg(d.entries, m[0], m[2]) + '</div>';
+  }
   function pgBlocksHtml(d) {
-    return PG_MEASURES.map(function (m) {
-      const sum = d.summary && d.summary[m[0]];
-      if (!sum) return '';
-      return '<div class="pg-block"><div class="row-between"><span class="label">' + m[1] + '</span><span class="pg-now num">' + h(pgNum(sum.last.nilai)) + ' <small>' + m[2] + '</small></span></div>' +
-        '<p class="li-sub">' + h(pgChangeText(sum, m[2])) + '</p>' + pgChartSvg(d.entries, m[0], m[2]) + '</div>';
-    }).join('');
+    const main = PG_MEASURES.slice(0, 2).map(m => pgBlockHtml(d, m)).join('');
+    const more = PG_MEASURES.slice(2).map(m => pgBlockHtml(d, m)).filter(String);
+    // Lingkar badan lainnya: terlipat supaya kartu tetap pendek di HP.
+    return main + (more.length ? '<details class="pg-more"><summary>Lingkar badan lainnya (' + more.length + ')</summary><div class="stack" style="gap:18px">' + more.join('') + '</div></details>' : '');
   }
 
   // ── Perpanjang paket dari portal (Fase D3) ──────────────────────────────────
@@ -4866,8 +4962,7 @@
       if (d.entries.length) {
         inner += '<div class="group-label"><span>Catatan</span></div><div class="list">' + d.entries.slice().reverse().slice(0, 10).map(function (e) {
           const parts = [];
-          if (e.berat !== '') parts.push(pgNum(e.berat) + ' kg');
-          if (e.pinggang !== '') parts.push(pgNum(e.pinggang) + ' cm');
+          PG_MEASURES.forEach(function (m) { if (e[m[0]] !== '' && e[m[0]] != null) parts.push((m[0] === 'berat' || m[0] === 'pinggang' ? '' : m[1] + ' ') + pgNum(e[m[0]]) + ' ' + m[2]); });
           return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title num">' + h(parts.join(' · ')) + '</p><p class="li-sub">' + h(pgLabel(e.tanggal)) + ' · <span class="pill">' + (e.oleh === 'coach' ? 'coach' : 'klien') + '</span></p></div>' +
             '<button type="button" class="icon-btn plain" aria-label="Hapus catatan ' + h(pgLabel(e.tanggal)) + '" onclick="window.pgDeleteAdminEntry(\'' + h(memberId) + '\',\'' + h(e.id) + '\')">' + icon('trash-2') + '</button></div>';
         }).join('') + '</div>';
@@ -4900,7 +4995,8 @@
   // Lembar "Catat"
   window.pgOpenEntry = function (mode, memberId) {
     pg.mode = mode; pg.memberId = memberId || null;
-    $('pg-berat').value = ''; $('pg-pinggang').value = '';
+    PG_MEASURES.forEach(function (m) { $('pg-' + m[0]).value = ''; });
+    $('pg-more').open = false;
     $('pg-tanggal').value = pgToday(); $('pg-tanggal').max = pgToday();
     $('pg-date-field').classList.toggle('hide', mode !== 'admin');
     $('pg-err').textContent = '';
@@ -4909,13 +5005,19 @@
   };
   window.pgSaveEntry = function (e) {
     e.preventDefault();
-    const berat = $('pg-berat').value.trim().replace(',', '.'), pinggang = $('pg-pinggang').value.trim().replace(',', '.');
     const fail = function (m) { $('pg-err').textContent = m; };
-    if (!berat && !pinggang) return fail('Isi berat atau lingkar pinggang.');
-    if (berat && (isNaN(Number(berat)) || Number(berat) < 20 || Number(berat) > 300)) return fail('Berat harus antara 20 dan 300 kg.');
-    if (pinggang && (isNaN(Number(pinggang)) || Number(pinggang) < 30 || Number(pinggang) > 250)) return fail('Lingkar pinggang harus antara 30 dan 250 cm.');
+    const data = {};
+    let any = false, bad = '';
+    PG_MEASURES.forEach(function (m) {
+      const v = $('pg-' + m[0]).value.trim().replace(',', '.');
+      data[m[0]] = v;
+      if (!v) return;
+      any = true;
+      if (!bad && (isNaN(Number(v)) || Number(v) < m[3] || Number(v) > m[4])) bad = m[1] + ' harus antara ' + m[3] + ' dan ' + m[4] + ' ' + m[2] + '.';
+    });
+    if (!any) return fail('Isi minimal satu ukuran (berat atau lingkar badan).');
+    if (bad) { if (/Lengan|Perut|Paha|Dada/.test(bad)) $('pg-more').open = true; return fail(bad); }
     fail('');
-    const data = { berat: berat, pinggang: pinggang };
     const done = busy($('pg-save-btn'), 'Menyimpan…');
     const call = pg.mode === 'admin'
       ? adminCall('saveMemberMeasurement', pg.memberId, Object.assign({ tanggal: $('pg-tanggal').value }, data))

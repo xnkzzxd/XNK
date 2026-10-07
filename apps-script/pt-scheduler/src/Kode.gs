@@ -3769,7 +3769,19 @@ function reorderPackages(token, category, ids) {
 // (TIDAK PERNAH dibagikan lewat link). Foto hanya keluar lewat fungsi yang memeriksa token
 // klien (fotonya sendiri) atau token admin.
 
-const PROGRESS_HEADERS = ["ID", "Member ID", "Tanggal", "Berat (kg)", "Pinggang (cm)", "Dicatat Oleh", "Diubah Pada"];
+const PROGRESS_HEADERS = ["ID", "Member ID", "Tanggal", "Berat (kg)", "Pinggang (cm)", "Dicatat Oleh", "Diubah Pada",
+  "Lengan Kanan (cm)", "Lengan Kiri (cm)", "Perut (cm)", "Paha Kanan (cm)", "Paha Kiri (cm)", "Dada (cm)"];
+/** Ukuran badan yang dicatat: kunci, nama, satuan, kolom (1-based) di sheet Progress, batas. Kolom hanya ditambah di kanan. */
+const PROGRESS_MEASURES = [
+  { key: 'berat', label: 'Berat', short: 'Berat', unit: 'kg', col: 4, min: 20, max: 300 },
+  { key: 'pinggang', label: 'Lingkar pinggang', short: 'Pinggang', unit: 'cm', col: 5, min: 30, max: 250 },
+  { key: 'lenganKanan', label: 'Lingkar lengan kanan', short: 'Lengan kanan', unit: 'cm', col: 8, min: 10, max: 80 },
+  { key: 'lenganKiri', label: 'Lingkar lengan kiri', short: 'Lengan kiri', unit: 'cm', col: 9, min: 10, max: 80 },
+  { key: 'perut', label: 'Lingkar perut', short: 'Perut', unit: 'cm', col: 10, min: 30, max: 250 },
+  { key: 'pahaKanan', label: 'Lingkar paha kanan', short: 'Paha kanan', unit: 'cm', col: 11, min: 20, max: 120 },
+  { key: 'pahaKiri', label: 'Lingkar paha kiri', short: 'Paha kiri', unit: 'cm', col: 12, min: 20, max: 120 },
+  { key: 'dada', label: 'Lingkar dada', short: 'Dada', unit: 'cm', col: 13, min: 40, max: 200 }
+];
 const PROGRESS_PHOTO_HEADERS = ["ID", "Member ID", "Tanggal", "Sisi", "File ID", "Dicatat Oleh"];
 const PROGRESS_LIMITS = { beratMin: 20, beratMax: 300, pinggangMin: 30, pinggangMax: 250, photosPerMember: 60, backDaysClient: 7, entriesShown: 120 };
 const PROGRESS_SIDES = ['depan', 'samping'];
@@ -3778,6 +3790,22 @@ function _progressSheet_() {
   const sheet = getOrCreateSheet_('Progress', PROGRESS_HEADERS);
   sheet.getRange('C:C').setNumberFormat('@');
   return sheet;
+}
+
+/** Sheet Progress lama hanya sampai kolom G: beri header kolom ukuran baru (hanya sel yang masih kosong). Idempotent. */
+function _ensureProgressColumns_(sheet) {
+  PROGRESS_MEASURES.forEach(function(m) {
+    if (m.col <= 7) return;
+    const cell = sheet.getRange(1, m.col);
+    if (cell.getValue() === '') { cell.setValue(PROGRESS_HEADERS[m.col - 1]); cell.setFontWeight('bold'); }
+  });
+}
+
+/** Murni: { key: nilai } dari data browser → { key: angka | '' } sudah divalidasi (lempar error Indonesia di luar batas). */
+function _parseMeasures_(data) {
+  const out = {};
+  PROGRESS_MEASURES.forEach(function(m) { out[m.key] = _parseMeasure_(data ? data[m.key] : '', m.min, m.max, m.label); });
+  return out;
 }
 function _progressPhotosSheet_() {
   const sheet = getOrCreateSheet_('ProgressPhotos', PROGRESS_PHOTO_HEADERS);
@@ -3814,11 +3842,9 @@ function _readProgress_(memberId) {
   const out = [];
   _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== id || !r[0]) return;
-    out.push({
-      id: String(r[0]), tanggal: String(r[2]),
-      berat: r[3] === '' ? '' : Number(r[3]), pinggang: r[4] === '' ? '' : Number(r[4]),
-      oleh: String(r[5] || 'klien')
-    });
+    const e = { id: String(r[0]), tanggal: String(r[2]), oleh: String(r[5] || 'klien') };
+    PROGRESS_MEASURES.forEach(function(m) { const v = r[m.col - 1]; e[m.key] = (v === '' || v == null) ? '' : Number(v); });
+    out.push(e);
   });
   out.sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); });
   return out;
@@ -3850,31 +3876,35 @@ function _progressPayload_(memberId) {
   return {
     entries: all.slice(-PROGRESS_LIMITS.entriesShown),
     photos: _readProgressPhotos_(memberId),
-    summary: { berat: _measureChange_(all, 'berat'), pinggang: _measureChange_(all, 'pinggang') },
+    summary: PROGRESS_MEASURES.reduce(function(o, m) { o[m.key] = _measureChange_(all, m.key); return o; }, {}),
+    measures: PROGRESS_MEASURES.map(function(m) { return { key: m.key, label: m.label, short: m.short, unit: m.unit, min: m.min, max: m.max }; }),
     streak: info.streak, bestStreak: info.bestStreak, completed: info.completed, badges: info.badges
   };
 }
 
 /** Simpan/ubah catatan (satu baris per klien per tanggal). Nilai kosong tidak menimpa nilai lama. */
-function _saveMeasurement_(memberId, tanggal, berat, pinggang, oleh) {
-  if (berat === '' && pinggang === '') throw new Error('Isi berat atau lingkar pinggang.');
+function _saveMeasurement_(memberId, tanggal, vals, oleh) {
+  vals = vals || {};
+  if (!PROGRESS_MEASURES.some(function(m) { return vals[m.key] !== '' && vals[m.key] != null; })) throw new Error('Isi minimal satu ukuran (berat atau lingkar badan).');
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
     const sheet = _progressSheet_();
+    _ensureProgressColumns_(sheet);
     const data = sheet.getDataRange().getValues();
     const now = new Date().toISOString();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][1]).trim() === String(memberId).trim() && String(data[i][2]) === tanggal) {
-        if (berat !== '') sheet.getRange(i + 1, 4).setValue(berat);
-        if (pinggang !== '') sheet.getRange(i + 1, 5).setValue(pinggang);
+        PROGRESS_MEASURES.forEach(function(m) { if (vals[m.key] !== '' && vals[m.key] != null) sheet.getRange(i + 1, m.col).setValue(vals[m.key]); });
         sheet.getRange(i + 1, 6).setValue(oleh);
         sheet.getRange(i + 1, 7).setValue(now);
         return { id: String(data[i][0]), tanggal: tanggal, updated: true };
       }
     }
     const id = 'PRG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([id, String(memberId).trim(), tanggal, berat, pinggang, oleh, now]);
+    const row = [id, String(memberId).trim(), tanggal, '', '', oleh, now, '', '', '', '', '', ''];
+    PROGRESS_MEASURES.forEach(function(m) { if (vals[m.key] != null) row[m.col - 1] = vals[m.key]; });
+    sheet.appendRow(row);
     return { id: id, tanggal: tanggal, updated: false };
   } finally {
     lock.releaseLock();
@@ -4028,9 +4058,7 @@ function saveMyMeasurement(memberToken, data) {
   data = data || {};
   const today = _todayWib_();
   const tanggal = _validProgressDate_(data.tanggal, today, PROGRESS_LIMITS.backDaysClient);
-  const berat = _parseMeasure_(data.berat, PROGRESS_LIMITS.beratMin, PROGRESS_LIMITS.beratMax, 'Berat');
-  const pinggang = _parseMeasure_(data.pinggang, PROGRESS_LIMITS.pinggangMin, PROGRESS_LIMITS.pinggangMax, 'Lingkar pinggang');
-  _saveMeasurement_(memberId, tanggal, berat, pinggang, 'klien');
+  _saveMeasurement_(memberId, tanggal, _parseMeasures_(data), 'klien');
   return _myPayloadFor_(memberId);
 }
 
@@ -4125,9 +4153,7 @@ function saveMemberMeasurement(token, memberId, data) {
   const id = String(memberId == null ? '' : memberId).trim();
   if (!_findMemberRow_(function(row) { return String(row[0]).trim() === id; })) throw new Error('Klien tidak ditemukan.');
   const tanggal = _validProgressDate_(data.tanggal, _todayWib_(), null);
-  const berat = _parseMeasure_(data.berat, PROGRESS_LIMITS.beratMin, PROGRESS_LIMITS.beratMax, 'Berat');
-  const pinggang = _parseMeasure_(data.pinggang, PROGRESS_LIMITS.pinggangMin, PROGRESS_LIMITS.pinggangMax, 'Lingkar pinggang');
-  _saveMeasurement_(id, tanggal, berat, pinggang, 'coach');
+  _saveMeasurement_(id, tanggal, _parseMeasures_(data), 'coach');
   return _progressPayload_(id);
 }
 
@@ -6006,6 +6032,28 @@ function getClientCare(token, memberId) {
   };
 }
 
+/** Murni: ringkasan tes (_fitnessSummary_) → baris pesan positif untuk klien. Tes yang baru sekali diukur hanya menampilkan nilainya. */
+function _testResultLines_(summary) {
+  return (summary || []).map(function(t) {
+    const unit = ' ' + t.unit;
+    if (!t.latest) return '';
+    if (t.change === null || t.change === undefined) return '• ' + t.label + ': ' + t.latest.nilai + unit;
+    const word = t.improved ? (t.better === 'lower' ? 'turun' : 'naik') : 'berubah';
+    const mark = t.change === 0 ? ' (tetap)' : t.improved ? ' (' + word + ' ' + Math.abs(t.change) + ')' : ' (' + (t.change > 0 ? '+' : '') + t.change + ')';
+    return '• ' + t.label + ': ' + t.first.nilai + ' → ' + t.latest.nilai + unit + mark;
+  }).filter(String);
+}
+
+/** Admin: pesan hasil tes siap kirim (teks dan tautan wa.me). Pemilik yang menekan kirim; tidak ada pengiriman otomatis. */
+function getTestResultMessage(token, memberId) {
+  requireAdmin_(token);
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const lines = _testResultLines_(_fitnessSummary_(_fitnessByMember_(id)));
+  if (!lines.length) throw new Error('Belum ada hasil tes untuk klien ini.');
+  const text = _rmdFill_(_rmdTemplate_('hasil-tes'), { nama: String(m.row[1] || '').trim().split(/\s+/)[0], hasil: lines.join('\n'), link: RMD_PORTAL_URL });
+  return { text: text, waLink: _waLink_(m.row[2], text) };
+}
+
 /** Admin: flag singkat + catatan privat + tanggal lahir. */
 function saveClientNotes(token, memberId, data) {
   requireAdmin_(token);
@@ -6037,7 +6085,7 @@ function snoozeCare(token, memberId, days) {
   return { status: 'success' };
 }
 
-/** Admin: assessment pertama / perubahan. Berat & pinggang (opsional) masuk ke Progres sebagai catatan coach. */
+/** Admin: assessment pertama / perubahan. Berat dan lingkar badan (opsional, 8 ukuran) masuk ke Progres sebagai catatan coach. */
 function saveAssessment(token, memberId, data) {
   requireAdmin_(token);
   data = data || {};
@@ -6047,12 +6095,14 @@ function saveAssessment(token, memberId, data) {
     _careStr_(data.goal, 200, 'Tujuan utama'), _careStr_(data.history, 500, 'Riwayat latihan'), _careStr_(data.schedulePref, 200, 'Preferensi jadwal'),
     _careStr_(data.motivation, 300, 'Motivasi'), _careStr_(data.coachNotes, 1000, 'Catatan coach'), new Date().toISOString()
   ];
-  [['bodyFat', 'Lemak tubuh', 3, 60], ['chest', 'Lingkar dada', 40, 200], ['arm', 'Lingkar lengan', 15, 80], ['hip', 'Lingkar pinggul', 40, 200]].forEach(function(f) {
-    row.push(_parseMeasure_(data[f[0]], f[2], f[3], f[1]));
-  });
-  const berat = _parseMeasure_(data.weight, PROGRESS_LIMITS.beratMin, PROGRESS_LIMITS.beratMax, 'Berat');
-  const pinggang = _parseMeasure_(data.waist, PROGRESS_LIMITS.pinggangMin, PROGRESS_LIMITS.pinggangMax, 'Lingkar pinggang');
-  if (!row[3] && !row[4] && !row[5] && !row[6] && !row[7] && berat === '' && pinggang === '' && !row.slice(9).some(function(v) { return v !== ''; })) throw new Error('Isi minimal satu bagian assessment.');
+  // Lemak tubuh (J) dan pinggul (M) tetap di Assessments; kolom lama dada/lengan (K, L) tidak diisi lagi (data lama tetap terbaca).
+  const bodyFat = _parseMeasure_(data.bodyFat, 3, 60, 'Lemak tubuh'), hip = _parseMeasure_(data.hip, 40, 200, 'Lingkar pinggul');
+  row.push(bodyFat, '', '', hip);
+  // Ukuran badan masuk ke Progres sebagai catatan coach. `weight` dan `waist` = nama lama untuk berat dan pinggang.
+  const src = Object.assign({}, data, { berat: data.berat !== undefined ? data.berat : data.weight, pinggang: data.pinggang !== undefined ? data.pinggang : data.waist });
+  const vals = _parseMeasures_(src);
+  const hasMeasure = PROGRESS_MEASURES.some(function(m) { return vals[m.key] !== ''; });
+  if (!row[3] && !row[4] && !row[5] && !row[6] && !row[7] && !hasMeasure && bodyFat === '' && hip === '') throw new Error('Isi minimal satu bagian assessment.');
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -6062,7 +6112,7 @@ function saveAssessment(token, memberId, data) {
   } finally {
     lock.releaseLock();
   }
-  if (berat !== '' || pinggang !== '') _saveMeasurement_(id, _todayWib_(), berat, pinggang, 'coach');
+  if (hasMeasure) _saveMeasurement_(id, _todayWib_(), vals, 'coach');
   return { status: 'success' };
 }
 
@@ -6182,10 +6232,13 @@ function submitMyHealthForm(memberToken, answers) {
 function getMyAssessment(memberToken) {
   const id = String(requireMember_(memberToken).row[0]).trim();
   const asm = _latestRowFor_('Assessments', id);
+  const byTest = _fitnessByMember_(id);
   return {
     goal: asm ? String(asm.row[3] || '') : '', schedulePref: asm ? String(asm.row[5] || '') : '',
-    tests: _fitnessSummary_(_fitnessByMember_(id)).map(function(t) {
-      return { id: t.id, label: t.label, unit: t.unit, better: t.better, first: t.first, latest: t.latest, change: t.change, improved: t.improved };
+    tests: _fitnessSummary_(byTest).map(function(t) {
+      // history = tanggal + nilai saja (untuk grafik tren); tanpa ID baris.
+      return { id: t.id, label: t.label, unit: t.unit, better: t.better, first: t.first, latest: t.latest, change: t.change, improved: t.improved,
+        history: (byTest[t.id] || []).map(function(x) { return { tanggal: x.tanggal, nilai: x.nilai }; }) };
     })
   };
 }

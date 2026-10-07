@@ -19,11 +19,11 @@ test('a client saves weight and waist for today; the entry comes back with a cha
   const { env, ani } = setup();
   const res = env.call('saveMyMeasurement', ani, { berat: 72.44, pinggang: '80,5' });
   assert.equal(res.entries.length, 1);
-  assert.deepEqual(res.entries[0], { id: res.entries[0].id, tanggal: today(env), berat: 72.4, pinggang: 80.5, oleh: 'klien' });
+  assert.deepEqual(res.entries[0], { id: res.entries[0].id, tanggal: today(env), berat: 72.4, pinggang: 80.5, lenganKanan: '', lenganKiri: '', perut: '', pahaKanan: '', pahaKiri: '', dada: '', oleh: 'klien' });
   assert.equal(res.summary.berat.change, 0);
   assert.equal(res.summary.berat.count, 1);
   const sheet = env.sheet('Progress').rows;
-  assert.deepEqual(Array.from(sheet[0]), ['ID', 'Member ID', 'Tanggal', 'Berat (kg)', 'Pinggang (cm)', 'Dicatat Oleh', 'Diubah Pada']);
+  assert.deepEqual(Array.from(sheet[0]).slice(0, 7), ['ID', 'Member ID', 'Tanggal', 'Berat (kg)', 'Pinggang (cm)', 'Dicatat Oleh', 'Diubah Pada']);
   assert.equal(sheet[1][1], 'PT-A');
 });
 
@@ -51,8 +51,8 @@ test('the change is measured from the first entry to the latest', () => {
 test('limits: needs a value, sane ranges, no future dates, clients only 7 days back', () => {
   const { env, ani, admin } = setup();
   const bad = (data, re) => assert.throws(() => env.call('saveMyMeasurement', ani, data), re);
-  bad({}, /Isi berat atau lingkar pinggang/);
-  bad({ berat: '', pinggang: '' }, /Isi berat/);
+  bad({}, /Isi minimal satu ukuran/);
+  bad({ berat: '', pinggang: '' }, /Isi minimal satu ukuran/);
   bad({ berat: 19 }, /Berat harus angka antara 20 dan 300/);
   bad({ berat: 301 }, /Berat/);
   bad({ berat: 'abc' }, /Berat/);
@@ -167,4 +167,40 @@ test('_addDaysIso_ handles month and year boundaries', () => {
   const env = seededEnv();
   assert.equal(env.call('_addDaysIso_', '2026-03-01', -1), '2026-02-28');
   assert.equal(env.call('_addDaysIso_', '2026-12-31', 1), '2027-01-01');
+});
+
+test('eight body measurements: saved by client and coach, ranges checked, the old 7-column sheet is extended in place', () => {
+  const { env, ani } = setup();
+  // An old Progress sheet from before the new columns: 7 headers and one row.
+  env.ss.seed('Progress', [['ID', 'Member ID', 'Tanggal', 'Berat (kg)', 'Pinggang (cm)', 'Dicatat Oleh', 'Diubah Pada'], ['PRG-OLD', 'PT-A', daysAgo(env, 20), 75, 84, 'klien', 'x']]);
+  const all = { berat: 74, pinggang: 82, lenganKanan: '32,5', lenganKiri: 32, perut: 90, pahaKanan: 55, pahaKiri: 54.5, dada: 100 };
+  const res = env.call('saveMyMeasurement', ani, all);
+  const e = res.entries[res.entries.length - 1];
+  assert.deepEqual([e.lenganKanan, e.lenganKiri, e.perut, e.pahaKanan, e.pahaKiri, e.dada], [32.5, 32, 90, 55, 54.5, 100]);
+  assert.equal(res.entries[0].dada, '');   // the old row reads blank, not NaN
+  assert.equal(res.summary.dada.count, 1);
+  assert.equal(res.summary.berat.change, -1);
+  assert.equal(res.measures.length, 8);
+  const head = Array.from(env.sheet('Progress').rows[0]);
+  assert.deepEqual(head.slice(7), ['Lengan Kanan (cm)', 'Lengan Kiri (cm)', 'Perut (cm)', 'Paha Kanan (cm)', 'Paha Kiri (cm)', 'Dada (cm)']);
+  env.call('saveMyMeasurement', ani, { perut: 89 });   // idempotent migration, same-day update keeps the others
+  assert.equal(env.sheet('Progress').rows.length, 3);
+  assert.throws(() => env.call('saveMyMeasurement', ani, { lenganKiri: 5 }), /lengan kiri harus angka antara 10 dan 80/i);
+  assert.throws(() => env.call('saveMyMeasurement', ani, { dada: 'abc' }), /dada/i);
+  const t = env.adminToken();
+  const out = env.call('saveMemberMeasurement', t, 'PT-A', { tanggal: daysAgo(env, 3), pahaKiri: 53 });
+  assert.equal(out.entries.find(x => x.tanggal === daysAgo(env, 3)).oleh, 'coach');
+});
+
+test('the assessment saves the eight measures to Progress as coach entries, keeping body fat and hip as extras', () => {
+  const { env } = setup();
+  const t = env.adminToken();
+  env.call('saveAssessment', t, 'PT-A', { goal: 'Kuat', weight: 70, waist: 80, lenganKanan: 31, lenganKiri: 30.5, perut: 85, pahaKanan: 54, pahaKiri: 53, dada: 98, bodyFat: 22, hip: 95 });
+  const prog = env.call('getMemberProgress', t, 'PT-A');
+  const e = prog.entries[0];
+  assert.deepEqual([e.berat, e.pinggang, e.lenganKanan, e.lenganKiri, e.perut, e.pahaKanan, e.pahaKiri, e.dada, e.oleh], [70, 80, 31, 30.5, 85, 54, 53, 98, 'coach']);
+  const a = env.call('getClientCare', t, 'PT-A').assessment;
+  assert.equal(a.bodyFat, 22);
+  assert.equal(a.hip, 95);
+  assert.throws(() => env.call('saveAssessment', t, 'PT-A', { perut: 5 }), /perut/i);
 });

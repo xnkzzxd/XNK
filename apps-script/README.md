@@ -87,6 +87,9 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
   bisa mengunggah foto progres (depan/samping); foto disimpan di folder Drive **privat** "XNK Progress"
   (tidak pernah dibagikan lewat link) dan hanya bisa dilihat klien itu dan Anda. Coach bisa menambah atau
   menghapus catatan dari halaman klien. Data ada di sheet `Progress` dan `ProgressPhotos`.
+- **Ukuran badan (Fase I1)**: selain berat dan pinggang, klien dan coach bisa mencatat lingkar **lengan kanan, lengan kiri, perut, paha kanan, paha kiri, dan dada** (terlipat di bawah "Lingkar badan lainnya"). Kolom baru ditambahkan otomatis di sheet `Progress` (H–M); catatan lama tetap aman. Pinggul dan lemak tubuh tetap bisa diisi di asesmen.
+- **Timer tes kebugaran**: di sheet **Tes kebugaran** (dan otomatis setelah asesmen pertama disimpan) push-up dan squat punya tombol **1:00** (hitung mundur, jeda, ulang, bunyi dan getar saat habis); plank punya **Stopwatch** yang mengisi detiknya ke kolom.
+- **Hasil dan tren tes**: portal menampilkan kartu **Hasil tes** (awal → terbaru, selisih, grafik tren). Di halaman klien ada tombol **Kirim hasil via WA** yang membuka WhatsApp dengan ringkasan hasil; kalimatnya bisa diganti lewat Script Property `RMD_TPL_HASIL_TES`.
 - **Streak & badge** (portal klien, kartu "Pencapaian"): streak = minggu berturut-turut (Senin–Minggu) dengan
   minimal satu sesi selesai; minggu yang sedang berjalan tidak memutus streak sebelum berakhir. Badge:
   10/25/50/100 sesi selesai dan streak 4/8/12 minggu (dihitung otomatis, tidak pernah hilang). Saat klien
