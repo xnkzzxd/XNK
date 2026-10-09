@@ -1389,4 +1389,101 @@ button.avatar { border: 0; cursor: pointer; }
   .guide-tip[data-dock="bottom"] { animation-name: fadeUp; }
 }
 @media (prefers-reduced-motion: reduce) { .guide-spot { transition: none; animation: none; } .guide-tip { animation: none; transition: none; } }
+
+/* ── Klien di PC (2026-10): satu DOM, ditata ulang oleh CSS ───────────────────
+   HP (< 768 px) sama persis seperti sebelumnya. >= 768: daftar jadi grid kartu.
+   >= 1200 di halaman Klien dengan panel terbuka (#app.detail-wide): panel lebar, daftar jadi nama ringkas,
+   isi profil dua kolom. */
+.client-card .cc-meter { margin-top: 8px; max-width: 220px; }
+.cc-meta { display: none; }
+.cp-col, .prg-days { display: contents; }
+.cc-line { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: var(--fs-xs); font-weight: 600; color: var(--fg-muted); }
+.cc-line svg { width: 14px; height: 14px; flex-shrink: 0; }
+.cc-line.cc-next { color: var(--fg); font-weight: 700; }
+.cc-renew { align-self: flex-start; }
+.cc-renew svg { width: 13px; height: 13px; }
+
+@media (min-width: 768px) {
+  /* Panel detail (tablet & PC): 5 tab satu baris, latar tab = latar panel, tanpa ruang tab bar di bawah */
+  .chips.cp-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; background: var(--surface); }
+  .chips.cp-tabs .chip { padding: 6px 0; }
+  .detail-body { padding-bottom: 40px; }
+
+  /* Daftar klien → grid kartu */
+  #client-list > .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: stretch; }
+  #client-list > .list > .group-label { grid-column: 1 / -1; margin: 14px 2px 0; }
+  #client-list > .list > .group-label:first-child { margin-top: 2px; }
+  #client-list .client-card {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-areas: "av title" "av sub" "pills pills" "trail trail" "meter meter" "meta meta";
+    column-gap: 12px; row-gap: 0;
+    align-items: center; align-content: start;
+    padding: 16px; border-radius: var(--r-lg);
+  }
+  #client-list .client-card > .grow { display: contents; }
+  #client-list .client-card > .avatar { grid-area: av; }
+  #client-list .client-card .li-title { grid-area: title; min-width: 0; align-self: end; }
+  #client-list .client-card .grow > .li-sub { grid-area: sub; min-width: 0; align-self: start; margin-top: 2px; }
+  #client-list .client-card .cc-pills { grid-area: pills; margin-top: 10px !important; }
+  #client-list .client-card > .li-trail { grid-area: trail; margin: 14px 0 0; justify-content: space-between; min-width: 0; }
+  #client-list .client-card .cc-count { display: flex; align-items: baseline; gap: 6px; }
+  #client-list .client-card .cc-meter { grid-area: meter; max-width: none; margin-top: 8px; }
+  #client-list .client-card .cc-meta { grid-area: meta; display: flex; flex-direction: column; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); min-width: 0; }
+  #client-list .client-card.interactive:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+  #client-list .client-card.muted-item { grid-template-areas: "av title" "av sub" "trail trail"; }
+  #client-list .client-card.muted-item > .li-trail { justify-content: flex-start; }
+}
+
+@media (min-width: 1200px) {
+  .detail-head { height: 76px; }   /* sejajar dengan topbar */
+
+  #app.detail-wide { --detail-w: clamp(420px, min((100vw - var(--sidebar-w)) * 0.62, 100vw - var(--sidebar-w) - 420px), 1080px); }
+
+  /* Daftar → nama ringkas (foto, nama, sisa sesi) */
+  #app.detail-wide #view-clients .client-kpis { display: none; }
+  #app.detail-wide #client-list > .list { display: flex; flex-direction: column; gap: 6px; }
+  #app.detail-wide #client-list > .list > .group-label { margin: 12px 2px 2px; }
+  #app.detail-wide #client-list .client-card { display: flex; gap: 10px; padding: 8px 12px; min-height: 52px; border-radius: var(--r-md); }
+  #app.detail-wide #client-list .client-card.interactive:hover { transform: none; }
+  #app.detail-wide #client-list .client-card > .grow { display: block; }
+  #app.detail-wide #client-list .client-card > .li-trail { margin: 0 0 0 auto; }
+  #app.detail-wide #client-list .client-card > .avatar { width: 36px; height: 36px; font-size: var(--fs-xs); }
+  #app.detail-wide #client-list .client-card .grow > :not(.li-title),
+  #app.detail-wide #client-list .client-card .cc-state,
+  #app.detail-wide #client-list .client-card .cc-count > .li-sub { display: none; }
+  #app.detail-wide #client-list .client-card.selected { background: var(--surface-2); }
+
+  /* Panel lebar. Tata letak dua kolom mengikuti lebar panel yang sebenarnya (container query), jadi layar
+     1200–1365 px yang panelnya lebih sempit tetap satu kolom yang rapi. */
+  #app.detail-wide .detail-body { padding-left: 28px; padding-right: 28px; container-type: inline-size; }
+  #app.detail-wide .detail:not([data-kind="client"]) .detail-body > * { max-width: 640px; margin-left: auto; margin-right: auto; }
+  #app.detail-wide .detail-body .btn-row .btn { flex: 0 0 auto; }
+  #app.detail-wide .detail-body .pg-chart { max-width: 420px; }
+  #app.detail-wide .prg-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px 24px; margin: 6px 0; }
+  #app.detail-wide .cp-pane[data-cppane="riwayat"] { max-width: 680px; }
+  @container (min-width: 540px) {
+    #app.detail-wide .chips.cp-tabs { gap: 8px; padding: 10px 0; }
+    #app.detail-wide .chips.cp-tabs .chip { flex-direction: row; min-height: 44px; gap: 6px; padding: 0 6px; font-size: var(--fs-sm); border-radius: var(--r-full); }
+    #app.detail-wide .pg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px !important; align-items: start; }
+    #app.detail-wide .pg-grid > .pg-more { grid-column: 1 / -1; }
+    #app.detail-wide .pg-grid > .pg-more > .stack { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); column-gap: 28px !important; }
+  }
+  @container (min-width: 600px) {
+    #app.detail-wide #profile-care-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px !important; align-items: start; }
+    #app.detail-wide #profile-care-wrap > .cp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  }
+  @container (min-width: 620px) {
+    #app.detail-wide .client-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "id ring" "acts ring"; column-gap: 32px; row-gap: 18px; align-items: center; }
+    #app.detail-wide .client-hero > .client-hero-id { grid-area: id; }
+    #app.detail-wide .client-hero > .client-ring-row { grid-area: ring; margin-top: 0; }
+    #app.detail-wide .client-hero > .client-hero-actions { grid-area: acts; margin-top: 0; }
+    #app.detail-wide .client-hero .ring-wrap.client-ring { width: 112px; height: 112px; }
+    #app.detail-wide .cp-pane[data-cppane="ringkasan"] { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); column-gap: 28px !important; align-items: start; }
+    #app.detail-wide .cp-pane[data-cppane="ringkasan"] > .cp-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  }
+  @container (min-width: 760px) {
+    #app.detail-wide .pg-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+}
 </style>
