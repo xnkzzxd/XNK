@@ -28,6 +28,7 @@ const SHOTS = process.env.SHOTS_DIR || '';
 const ASSETS = process.env.ASSETS_DIR || '';
 const MOBILE = { width: 390, height: 844 };
 const DESKTOP = { width: 1440, height: 900 };
+const DESKTOP_W = DESKTOP.width;
 let failures = 0;
 const check = (ok, msg) => { console.log((ok ? '  ✓ ' : '  ✗ ') + msg); if (!ok) failures++; };
 
@@ -154,6 +155,9 @@ async function brightness(page, x, y) {
   }), png.toString('base64'));
 }
 const overflowX = page => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+// Overflow inside one element (.main and the detail panel clip their content, so overflowX misses it).
+const elOverflow = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); return e ? e.scrollWidth - e.clientWidth : -1; }, sel);
+const gridTracks = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); const g = e ? getComputedStyle(e).gridTemplateColumns : 'none'; return g === 'none' ? 0 : g.split(' ').length; }, sel);
 const visible = (page, sel) => page.locator(sel).first().isVisible();
 async function shot(page, name) {
   if (!SHOTS) return;
@@ -253,6 +257,12 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.__xss)) === undefined, 'client name with <img onerror> is not executed');
     check((await page.textContent('#client-list')).includes('<img src=x'), 'client name is shown as plain text');
+    const phoneList = await page.evaluate(() => {
+      const l = document.querySelector('#client-list > .list'), c = document.querySelector('#client-list .client-card');
+      return { list: getComputedStyle(l).display + '/' + getComputedStyle(l).flexDirection, card: getComputedStyle(c).display, meter: getComputedStyle(c.querySelector('.cc-meter')).maxWidth,
+        meta: Array.from(document.querySelectorAll('#client-list .cc-meta, #client-list .cc-renew')).filter(e => e.getClientRects().length).length };
+    });
+    check(phoneList.list === 'flex/column' && phoneList.card === 'flex' && phoneList.meter === '220px' && phoneList.meta === 0, 'phone: the client list is the same one-column list (no desktop card details) ' + JSON.stringify(phoneList));
     await shot(page, 'admin-mobile-clients');
     await page.fill('#search-client', 'citra');
     await page.waitForTimeout(200);
@@ -264,6 +274,13 @@ async function contrastReport(page) {
     await page.waitForTimeout(700);
     const box = await page.locator('#detail-panel').boundingBox();
     check(!!box && box.width >= MOBILE.width - 1, 'client detail opens full-screen on phone');
+    const phoneProf = await page.evaluate(() => ({
+      tabs: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).gridTemplateColumns.split(' ').length,
+      cols: Array.from(document.querySelectorAll('#detail-body .cp-col')).map(e => getComputedStyle(e).display),
+      pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom),
+      wide: document.getElementById('app').classList.contains('detail-wide') && getComputedStyle(document.getElementById('detail-panel')).width,
+    }));
+    check(phoneProf.tabs === 4 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (4-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
     const detail = await page.textContent('#detail-panel');
     check(detail.includes('Citra') && !detail.includes('Kirim Link') && !detail.includes('Link Baru'), 'client detail shows the client, no member-link buttons');
     await shot(page, 'admin-mobile-client-detail');
@@ -400,15 +417,122 @@ async function contrastReport(page) {
     check(c.onInkMuted >= 4.5, 'muted text on black cards ≥ 4.5:1 (' + c.onInkMuted.toFixed(1) + ')');
     await shot(page, 'admin-desktop-' + scheme + '-dashboard');
 
+    // ── Klien di PC: grid kartu → profil lebar + daftar nama ringkas ─────────────
+    await page.evaluate(() => window.navigate('clients'));
+    await page.waitForTimeout(600);
+    const sideW = (await page.locator('#sidebar').boundingBox()).width;
+    const cards0 = await page.evaluate(() => Array.from(document.querySelectorAll('#client-list .client-card')).map(c => { const r = c.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top) }; }));
+    check((await gridTracks(page, '#client-list > .list')) >= 3 && cards0.length >= 3 && cards0[0].y === cards0[1].y && cards0[0].x !== cards0[1].x, 'Klien on PC: clients are a grid of cards, three or more per row');
+    const meta0 = await page.evaluate(() => ({
+      shown: Array.from(document.querySelectorAll('#client-list .cc-meta')).filter(e => e.getClientRects().length).length,
+      cards: document.querySelectorAll('#client-list .client-card[data-key]').length,
+      times: Array.from(document.querySelectorAll('#client-list .cc-next')).filter(e => /\d{2}\.\d{2}/.test(e.textContent)).length,
+      coach: document.querySelectorAll('#client-list .cc-coach').length, solo: window.isSoloCoach(),
+    }));
+    check(meta0.shown === meta0.cards && meta0.times >= 1 && meta0.coach === (meta0.solo ? 0 : meta0.cards), 'Klien on PC: each card shows the next session, last activity (and coach only with 2+ coaches) ' + JSON.stringify(meta0));
+    check((await elOverflow(page, '#client-list')) <= 1, 'Klien on PC: the card grid has no sideways overflow');
+    await shot(page, 'admin-desktop-' + scheme + '-clients-grid');
+
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(900);
+    const panel = await page.locator('#detail-panel').boundingBox();
+    const listBox = await page.locator('#client-list').boundingBox();
+    check(await page.evaluate(() => document.getElementById('app').classList.contains('detail-wide')) && !!panel && panel.width >= 0.55 * (DESKTOP_W - sideW) && Math.abs(panel.x + panel.width - DESKTOP_W) <= 1 && listBox.width >= 340,
+      'client detail opens as a wide right-hand column (' + Math.round(panel.width) + ' px), the list keeps ' + Math.round(listBox.width) + ' px');
+    check(await visible(page, '#client-list'), 'client list stays visible next to the detail');
+    check((await page.locator('#client-list .selected').count()) === 1, 'selected client is highlighted in the list');
+    const compact = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('#client-list .client-card')), sc = document.getElementById('main-scroll-area').getBoundingClientRect();
+      const sel = document.querySelector('#client-list .selected').getBoundingClientRect();
+      return { lefts: new Set(cards.map(c => Math.round(c.getBoundingClientRect().left))).size, meta: Array.from(document.querySelectorAll('#client-list .cc-meta, #client-list .cc-meter, #client-list .grow > .li-sub')).filter(e => e.getClientRects().length).length,
+        kpis: document.querySelector('#view-clients .client-kpis').getClientRects().length, selIn: sel.top >= sc.top && sel.bottom <= sc.bottom };
+    });
+    check(compact.lefts === 1 && compact.meta === 0 && compact.kpis === 0 && compact.selIn, 'open client: the list becomes one column of names (no details, no summary tiles) and the open client is in view ' + JSON.stringify(compact));
+    check((await elOverflow(page, '#detail-body')) <= 1 && (await elOverflow(page, '#client-list')) <= 1, 'open client: nothing overflows sideways in the panel or the list');
+    const wideProf = await page.evaluate(() => {
+      const r = s => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
+      const main = r('#detail-body .cp-col-main'), side = r('#detail-body .cp-col-side'), id = r('#detail-body .client-hero-id'), ring = r('#detail-body .client-ring-row');
+      return { cols: !!main && !!side && side.left >= main.right && Math.abs(side.top - main.top) <= 2, hero: !!id && !!ring && ring.left >= id.right,
+        btns: Array.from(document.querySelectorAll('#detail-body .client-hero-actions .btn')).every(b => b.getBoundingClientRect().width < 200),
+        tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size,
+        tabBg: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).backgroundColor === getComputedStyle(document.getElementById('detail-panel')).backgroundColor,
+        head: Math.round(r('.detail-head').height) === Math.round(r('#topbar').height), pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom) };
+    });
+    check(wideProf.cols && wideProf.hero && wideProf.btns && wideProf.tabs === 1 && wideProf.tabBg && wideProf.head && wideProf.pad <= 48, 'open client: two-column Ringkasan, wide hero, one row of tabs, header lined up with the top bar ' + JSON.stringify(wideProf));
+    await shot(page, 'admin-desktop-' + scheme + '-clients');
+
+    // ↑/↓ in the list opens the neighbouring client; arrows inside the panel keep scrolling it.
+    await page.focus('#client-list .selected');
+    const order = await page.evaluate(() => Array.from(document.querySelectorAll('#client-list [data-key^="client:"]')).map(e => e.getAttribute('data-key')));
+    const at = order.indexOf('client:PT-A'), dir = at < order.length - 1 ? 'ArrowDown' : 'ArrowUp', back = dir === 'ArrowDown' ? 'ArrowUp' : 'ArrowDown';
+    const nb = order[at + (dir === 'ArrowDown' ? 1 : -1)];
+    await page.keyboard.press(dir);
+    await page.waitForTimeout(500);
+    const k1 = await page.evaluate(() => ({ sel: (document.querySelector('#client-list .selected') || {}).getAttribute && document.querySelector('#client-list .selected').getAttribute('data-key'), act: document.activeElement && document.activeElement.getAttribute('data-key') }));
+    await page.keyboard.press(back);
+    await page.waitForTimeout(500);
+    const k2 = await page.evaluate(() => document.querySelector('#client-list .selected').getAttribute('data-key'));
+    check(k1.sel === nb && k1.act === nb && k2 === 'client:PT-A', 'keyboard: ' + dir + ' opens the next client in the list, ' + back + ' goes back ' + JSON.stringify([k1, k2]));
+    await page.click('#detail-body .profile-name');
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => document.querySelector('#client-list .selected').getAttribute('data-key'))) === 'client:PT-A', 'keyboard: arrows pressed inside the panel do not switch clients');
+
+    // Data refresh keeps the open tab, the search text and caret, and the summary tile state.
+    await page.evaluate(() => window.cpTab('progres'));
+    await page.evaluate(() => window.updateUI());
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => document.querySelector('#detail-body [data-cptab="progres"]').classList.contains('active') && !document.querySelector('#detail-body [data-cppane="progres"]').classList.contains('hide') && document.querySelector('#detail-body [data-cppane="ringkasan"]').classList.contains('hide')),
+      'client page: a data refresh keeps the open tab (no jump back to Ringkasan)');
+    await page.evaluate(() => window.closeDetail());
+    await page.waitForTimeout(600);
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(700);
+    await page.evaluate(() => window.updateUI());
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => document.querySelector('#detail-body [data-cptab="ringkasan"]').classList.contains('active')), 'client page: reopening a client starts at Ringkasan and a refresh keeps it there (no stale tab)');
+    await page.focus('#search-client');
+    await page.keyboard.type('an');
+    await page.evaluate(() => window.updateUI());
+    await page.waitForTimeout(300);
+    const caretState = await page.evaluate(() => ({ id: document.activeElement && document.activeElement.id, v: document.getElementById('search-client').value, s: document.getElementById('search-client').selectionStart }));
+    check(caretState.id === 'search-client' && caretState.v === 'an' && caretState.s === 2, 'Klien: a background refresh keeps typing in the search box ' + JSON.stringify(caretState));
+    await page.fill('#search-client', '');
+    await page.evaluate(() => window.filterClients());
+    await page.evaluate(() => window.setClientFilter('low'));
+    const kLow = await page.locator('#view-clients .kpi.active[data-filter="low"]').count();
+    await page.evaluate(() => window.setClientFilter('all'));
+    check(kLow === 1 && (await page.locator('#view-clients .kpi.active').count()) === 0 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the summary tiles and chips follow the chosen filter');
+
+    // Closing returns to the grid; a profile opened from another page keeps the normal 420 px panel.
+    await page.click('.detail-head .icon-btn[aria-label="Tutup detail"]');
+    await page.waitForTimeout(700);
+    check(!(await page.evaluate(() => document.getElementById('app').classList.contains('detail-wide'))) && (await gridTracks(page, '#client-list > .list')) >= 3, 'closing the client returns to the card grid');
+    await page.evaluate(() => window.navigate('dashboard'));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(900);
+    const dPanel = await page.locator('#detail-panel').boundingBox();
+    const dTabs = await page.evaluate(() => { const t = Array.from(document.querySelectorAll('#detail-body [data-cptab]')); return { rows: new Set(t.map(b => Math.round(b.getBoundingClientRect().top))).size, over: t.map(b => b.scrollWidth - b.clientWidth).filter(x => x > 1).length }; });
+    check(!(await page.evaluate(() => document.getElementById('app').classList.contains('detail-wide'))) && dPanel.width > 380 && dPanel.width < 460 && dTabs.rows === 1 && dTabs.over === 0,
+      'a client opened from the dashboard keeps the 420 px panel, five tabs on one row ' + JSON.stringify(dTabs));
+    await page.evaluate(() => window.closeDetail());
+    await page.waitForTimeout(600);
+
+    // 1280 × 720: the list keeps room, the profile falls back to one column where two would not fit.
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.evaluate(() => window.navigate('clients'));
     await page.waitForTimeout(400);
     await page.evaluate(() => window.openProfile('PT-A'));
-    await page.waitForTimeout(800);
-    const panel = await page.locator('#detail-panel').boundingBox();
-    check(!!panel && panel.x > 900 && panel.width > 380 && panel.width < 460, 'client detail opens as a right-hand column');
-    check(await visible(page, '#client-list'), 'client list stays visible next to the detail');
-    check((await page.locator('#client-list .selected').count()) === 1, 'selected client is highlighted in the list');
-    await shot(page, 'admin-desktop-' + scheme + '-clients');
+    await page.waitForTimeout(900);
+    const p1280 = await page.locator('#detail-panel').boundingBox(), l1280 = await page.locator('#client-list').boundingBox();
+    const one1280 = await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display);
+    check(p1280.width >= 0.55 * (1280 - sideW) && l1280.width >= 340 && (await elOverflow(page, '#detail-body')) <= 1 && (await elOverflow(page, '#client-list')) <= 1 && one1280 === 'flex',
+      '1280 × 720: wide panel ' + Math.round(p1280.width) + ' px, list ' + Math.round(l1280.width) + ' px, Ringkasan in one column (' + one1280 + ')');
+    await shot(page, 'admin-desktop-' + scheme + '-clients-1280');
+    await page.evaluate(() => window.closeDetail());
+    await page.setViewportSize(DESKTOP);
+    await page.waitForTimeout(600);
 
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
@@ -717,6 +841,9 @@ async function contrastReport(page) {
     await page.evaluate(() => window.cpTab('perawatan'));
     await page.waitForTimeout(300);
     check((await page.textContent('#profile-care-wrap')).includes('Catatan privat') && (await page.textContent('#profile-care-wrap')).includes('Tes kebugaran'), 'client page: private notes, health, assessment and fitness sections');
+    const careCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-care-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
+    check(careCols.length === 2 && careCols[1][0] > careCols[0][0] && Math.abs(careCols[1][1] - careCols[0][1]) <= 2 && (await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display)) === 'none',
+      'wide client page: Perawatan in two columns, hidden tabs stay hidden ' + JSON.stringify(careCols));
     await page.evaluate(() => window.openCareTests('PT-A'));
     await page.waitForTimeout(500);
     check(await visible(page, '#ft-pushup') && (await page.getAttribute('#ft-pushup', 'inputmode')) === 'decimal', 'fitness test sheet opens with a decimal keypad');
@@ -779,6 +906,8 @@ async function contrastReport(page) {
     await page.click('#prg-save');
     await page.waitForTimeout(800);
     check((await page.textContent('#profile-program-wrap')).includes('2 hari · 3 gerakan') && env.sheet('ProgramItems').rows.filter(r => r[1] === 'PT-A').length === 3, 'program: saved for the client and summarised on the client page');
+    const prgDays = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-program-wrap .prg-days > div')).map(d => { const r = d.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
+    check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
     await page.evaluate(() => window.cpTab('progres'));
     await page.waitForTimeout(300);
     check((await page.textContent('#profile-progress-wrap')).includes('sesi selesai') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
@@ -791,6 +920,8 @@ async function contrastReport(page) {
     const crow = env.sheet('Progress').rows.find(r => r[1] === 'PT-A' && r[5] === 'coach');
     check(!!crow && crow[3] === 73, 'client page: a coach entry is saved and marked "coach"');
     check((await page.textContent('#profile-progress-wrap')).includes('coach') && (await page.textContent('#profile-progress-wrap')).includes('73'), 'client page: the entry and its author are listed');
+    const chartW = await page.evaluate(() => { const c = document.querySelector('#profile-progress-wrap .pg-chart'); return c ? Math.round(c.getBoundingClientRect().width) : 0; });
+    check(chartW >= 200 && chartW <= 420, 'wide client page: the progress chart keeps a sensible size (' + chartW + ' px)');
     await page.click('#profile-progress-wrap .list-item .icon-btn');
     await page.waitForTimeout(300);
     await page.click('#btn-confirm-modal-yes');
@@ -1083,6 +1214,11 @@ async function contrastReport(page) {
     const adminToken = env.adminToken();
     const adm = await openPage(browser, env, '/Index', [], { xnk_admin_token: adminToken }, { viewport: DESKTOP, wait: 1500 });
     check(await visible(adm.page, '#renewals-card') && (await adm.page.textContent('#renewals-card')).includes('Ani Anggraini'), 'renewal: the dashboard shows "Minta perpanjang" with the client');
+    await adm.page.evaluate(() => window.navigate('clients'));
+    await adm.page.waitForTimeout(400);
+    check(await visible(adm.page, '#client-list [data-key="client:PT-A"] .cc-renew'), 'renewal: the client\'s card on the Klien page says "Minta perpanjang"');
+    await adm.page.evaluate(() => window.navigate('dashboard'));
+    await adm.page.waitForTimeout(400);
     await adm.page.click('#renewals-card .btn-primary');
     await adm.page.waitForTimeout(400);
     check(await visible(adm.page, '#modal-confirm'), 'renewal: approving asks for confirmation first');
