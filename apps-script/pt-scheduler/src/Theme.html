@@ -1401,7 +1401,6 @@ button.avatar { border: 0; cursor: pointer; }
 .cc-line svg { width: 14px; height: 14px; flex-shrink: 0; }
 .cc-line.cc-next { color: var(--fg); font-weight: 700; }
 .cc-renew { align-self: flex-start; }
-.cc-renew svg { width: 13px; height: 13px; }
 
 @media (min-width: 768px) {
   /* Panel detail (tablet & PC): 5 tab satu baris, latar tab = latar panel, tanpa ruang tab bar di bawah */
@@ -1430,7 +1429,8 @@ button.avatar { border: 0; cursor: pointer; }
   #client-list .client-card .cc-count { display: flex; align-items: baseline; gap: 6px; }
   #client-list .client-card .cc-meter { grid-area: meter; max-width: none; margin-top: 8px; }
   #client-list .client-card .cc-meta { grid-area: meta; display: flex; flex-direction: column; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); min-width: 0; }
-  #client-list .client-card.interactive:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+  /* translate (bukan transform): animasi masuk .stagger menahan transform */
+  #client-list .client-card.interactive:hover { translate: 0 -2px; box-shadow: var(--shadow-2); }
   #client-list .client-card.muted-item { grid-template-areas: "av title" "av sub" "trail trail"; }
   #client-list .client-card.muted-item > .li-trail { justify-content: flex-start; }
 }
@@ -1445,7 +1445,7 @@ button.avatar { border: 0; cursor: pointer; }
   #app.detail-wide #client-list > .list { display: flex; flex-direction: column; gap: 6px; }
   #app.detail-wide #client-list > .list > .group-label { margin: 12px 2px 2px; }
   #app.detail-wide #client-list .client-card { display: flex; gap: 10px; padding: 8px 12px; min-height: 52px; border-radius: var(--r-md); }
-  #app.detail-wide #client-list .client-card.interactive:hover { transform: none; }
+  #app.detail-wide #client-list .client-card.interactive:hover { translate: none; }
   #app.detail-wide #client-list .client-card > .grow { display: block; }
   #app.detail-wide #client-list .client-card > .li-trail { margin: 0 0 0 auto; }
   #app.detail-wide #client-list .client-card > .avatar { width: 36px; height: 36px; font-size: var(--fs-xs); }

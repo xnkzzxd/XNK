@@ -484,7 +484,13 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check(await page.evaluate(() => document.querySelector('#detail-body [data-cptab="progres"]').classList.contains('active') && !document.querySelector('#detail-body [data-cppane="progres"]').classList.contains('hide') && document.querySelector('#detail-body [data-cppane="ringkasan"]').classList.contains('hide')),
       'client page: a data refresh keeps the open tab (no jump back to Ringkasan)');
-    await page.evaluate(() => window.cpTab('ringkasan'));
+    await page.evaluate(() => window.closeDetail());
+    await page.waitForTimeout(600);
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(700);
+    await page.evaluate(() => window.updateUI());
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => document.querySelector('#detail-body [data-cptab="ringkasan"]').classList.contains('active')), 'client page: reopening a client starts at Ringkasan and a refresh keeps it there (no stale tab)');
     await page.focus('#search-client');
     await page.keyboard.type('an');
     await page.evaluate(() => window.updateUI());

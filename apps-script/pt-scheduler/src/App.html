@@ -478,6 +478,7 @@
     ui.wideTimer = setTimeout(function () { if (!panel.classList.contains('open')) $('app').classList.remove('detail-wide'); }, 460);
     const closedKey = ui.detail;
     ui.detail = null;
+    ui.cpTab = null;
     window.selectedScheduleDetailId = null;
     highlightSelection();
     let back = ui.detailFocus;
@@ -549,7 +550,7 @@
       if (s) { e.preventDefault(); s.focus(); }
     }
     // PC: panah atas/bawah di daftar Klien membuka klien sebelum/sesudahnya (hanya saat fokus di daftar).
-    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !typing && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.repeat && !typing && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
         window.currentView === 'clients' && /^client:/.test(ui.detail || '') && !isPhone()) {
       const a = document.activeElement;
       const cur = a && a.closest ? a.closest('#client-list [data-key^="client:"]') : null;
@@ -3585,19 +3586,19 @@
         q ? '' : '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button>'));
       return;
     }
-    // Info kartu PC (tersembunyi di HP): sesi berikutnya dan permintaan perpanjang, satu kali lewat data.
-    const now = Date.now(), nextBy = {}, renewBy = {}, solo = window.isSoloCoach();
-    window.schedules.forEach(function (s) {
+    // Info kartu PC (tidak dibuat di HP): sesi berikutnya dan permintaan perpanjang, satu kali lewat data.
+    const desk = !isPhone(), now = Date.now(), nextBy = {}, renewBy = {}, solo = window.isSoloCoach();
+    if (desk) window.schedules.forEach(function (s) {
       if (!s.memberId || isAvailable(s) || isDone(s)) return;
       const t = new Date(s.start).getTime(), k = String(s.memberId);
       if (t >= now && (!nextBy[k] || t < nextBy[k])) nextBy[k] = t;
     });
-    (window.renewals || []).forEach(function (r) { if (r.status === 'menunggu') renewBy[String(r.memberId)] = true; });
+    if (desk) (window.renewals || []).forEach(function (r) { if (r.status === 'menunggu') renewBy[String(r.memberId)] = true; });
     let html = '', group = '';
     entries.forEach(function (e) {
       const g = MONTHS[e.date.getMonth()] + ' ' + e.date.getFullYear();
       if (!q && g !== group) { html += '<div class="group-label month-divider"><span>' + g + '</span></div>'; group = g; }
-      html += e.type === 'live' ? clientRow(e.data, { date: e.date, next: nextBy[String(e.data.id)], renew: !!renewBy[String(e.data.id)], solo: solo }) : archiveRow(e.data);
+      html += e.type === 'live' ? clientRow(e.data, { desk: desk, date: e.date, next: nextBy[String(e.data.id)], renew: !!renewBy[String(e.data.id)], solo: solo }) : archiveRow(e.data);
     });
     setHTML(el, '<div class="list stagger">' + html + '</div>');
     staggerIndex(el);
@@ -3620,13 +3621,15 @@
     return '<div class="list-item interactive client-card" role="button" tabindex="0" data-key="client:' + h(m.id) + '" onclick="window.openProfile(\'' + h(m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
       avatar(m.photo, m.name) +
       '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4><p class="li-sub truncate">+' + h(m.phone) + (m.packageName ? ' · ' + h(m.packageName) : '') + '</p>' + taskPills +
-      '<div class="meter cc-meter' + (st === 'low' ? ' hatch' : '') + '"><i style="width:' + (total ? Math.min(100, Math.round(used / total * 100)) : 0) + '%"></i></div>' + clientMeta(m, x) + '</div>' +
+      '<div class="meter cc-meter' + (st === 'low' ? ' hatch' : '') + '"><i style="width:' + (total ? Math.min(100, Math.round(used / total * 100)) : 0) + '%"></i></div>' + (x.desk ? clientMeta(m, x) : '') + '</div>' +
       '<div class="li-trail"><div class="cc-count" style="text-align:right"><p class="num" style="font-weight:800;font-size:var(--fs-lg)">' + rem + '<span class="li-sub">/' + total + '</span></p><p class="li-sub">sisa sesi</p></div>' + pill + '</div></div>';
   }
   // Kartu PC: jadwal berikutnya, coach (kalau lebih dari satu), terakhir aktif, minta perpanjang. Disembunyikan di HP lewat CSS.
+  let lastFmt = null;
   function clientMeta(m, x) {
     const nx = x.next ? new Date(x.next) : null;
-    const last = x.date && x.date.getTime() > 0 ? x.date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+    if (!lastFmt) lastFmt = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    const last = x.date && x.date.getTime() > 0 ? lastFmt.format(x.date) : '-';
     return '<div class="cc-meta">' +
       '<p class="cc-line cc-next">' + icon('calendar-clock') + '<span class="truncate">' + (nx ? h(fmtShort(nx)) + ' · ' + fmtTime(nx) : 'Belum ada jadwal') + '</span></p>' +
       (x.solo ? '' : '<p class="cc-line cc-coach">' + icon('dumbbell') + '<span class="truncate">' + h(m.preferredCoachName || 'Belum ada coach') + '</span></p>') +
@@ -3673,6 +3676,7 @@
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
     const tab0 = (ui.detail === 'client:' + m.id && ui.cpTab && ui.cpTab.id === String(m.id) && tabs.some(t => t[0] === ui.cpTab.name)) ? ui.cpTab.name : 'ringkasan';
     const hid = n => n === tab0 ? '' : ' hide';
+    ui.cpTab = { id: String(m.id), name: tab0 };   // ingat tab yang benar-benar tampil (bukan tab kunjungan lama)
     body += '<div class="chips cp-tabs" role="tablist" aria-label="Bagian profil klien">' + tabs.map(t => '<button type="button" role="tab" class="chip' + (t[0] === tab0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (t[0] === tab0) + '" onclick="window.cpTab(\'' + t[0] + '\')">' + icon(t[2]) + t[1] + '</button>').join('') + '</div>';
     // Ringkasan (dua kolom di panel lebar PC; .cp-col = display:contents di HP)
     body += '<div class="cp-pane stack' + hid('ringkasan') + '" data-cppane="ringkasan" style="gap:16px"><div class="cp-col cp-col-main">';
@@ -7245,10 +7249,13 @@
   })();
 
   // Ganti layout saat ukuran layar berubah melewati batas desktop (tab Minggu).
-  let lastDesk = window.innerWidth >= 1024;
+  let lastDesk = window.innerWidth >= 1024, lastPhone = isPhone();
   window.addEventListener('resize', function () {
     const desk = window.innerWidth >= 1024;
     if (desk !== lastDesk) { lastDesk = desk; if (window.currentView === 'calendar' || window.currentView === 'dashboard') renderView(window.currentView, { animate: false }); }
+    // Kartu Klien punya info PC yang tidak dibuat di HP: buat ulang daftar saat melewati 768 px.
+    const ph = isPhone();
+    if (ph !== lastPhone) { lastPhone = ph; if (window.currentView === 'clients' && window.updateMemberUI) window.updateMemberUI(); }
     document.querySelectorAll('.seg').forEach(moveSegThumb);
   });
 
