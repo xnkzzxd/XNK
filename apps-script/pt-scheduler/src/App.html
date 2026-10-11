@@ -642,6 +642,8 @@
       else html += '<button type="button" class="icon-btn" id="nav-dashboard-btn" onclick="window.navigate(\'public-dashboard\')" aria-label="Beranda">' + avatar(window.publicLoggedMember.photo, window.publicLoggedMember.name, 'sm') + '</button>';
     }
     setHTML('topbar-actions', html);
+    const appEl = $('app');
+    if (appEl) appEl.classList.toggle('guest', ui.mode === 'public' && !window.publicLoggedMember);
     const sideAuth = $('side-auth-btn');
     if (sideAuth) sideAuth.classList.toggle('hide', !window.publicLoggedMember);
     updateBadges();
@@ -5053,11 +5055,22 @@
       })
       .withFailureHandler(function (err) {
         done();
-        window.showMemberLinkMessage(window.authMessage(err));
+        const msg = window.authMessage(err);
+        window.showMemberLinkMessage(msg);
         const f = $('view-public-login').querySelector('form');
         if (f) { f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake'); }
+        if (/tidak ditemukan/i.test(msg) && $('modal-not-member')) {
+          window._pendingPhone = phone;
+          $('nm-sum').textContent = 'Nomor +' + String(phone).replace(/^\+/, '') + ' belum jadi member. Pilih paket latihan dulu untuk mendaftar, atau coba nomor lain.';
+          openSheet('modal-not-member');
+        }
       })
       .memberLoginByPhone(phone);
+  };
+
+  window.notMemberToPackages = function () {
+    window.closeModal();
+    window.navigate('public-catalog');
   };
 
   window.startPublicPortal = function (key) {
@@ -6564,7 +6577,8 @@
     if (cats.indexOf(window.currentClientType) === -1) window.currentClientType = cats[0];
     const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
     let html = '<div class="page-head"><div><h2 class="page-title">Paket latihan</h2><p class="page-sub">Pilih paket, lalu konfirmasi pembayaran dengan coach lewat WhatsApp.</p>' +
-      (window.publicLoggedMember ? '<button type="button" class="btn btn-primary" id="catalog-renew-btn" style="margin-top:12px" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang paketku</button>' : '') + '</div>' +
+      (window.publicLoggedMember ? '<button type="button" class="btn btn-primary" id="catalog-renew-btn" style="margin-top:12px" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang paketku</button>'
+        : '<button type="button" class="btn btn-outline btn-sm" style="margin-top:12px" onclick="window.navigate(\'public-login\')">' + icon('arrow-left') + 'Sudah member? Masuk</button>') + '</div>' +
       (cats.length > 1 ? '<div class="seg ink" id="category-button-container">' + '<span class="seg-thumb"></span>' + cats.map(function (c, i) {
         return '<button type="button" class="cat-btn' + (c === window.currentClientType ? ' active' : '') + '" data-category="' + h(c) + '" onclick="window.setPriceCategory(this.getAttribute(\'data-category\'),' + i + ')">' + h(cap(c)) + '</button>';
       }).join('') + '</div>' : '') + '</div>';
@@ -6613,6 +6627,7 @@
     fillCoachSelect('reg-coach-field', 'reg-coach');
     const me = window.publicLoggedMember;
     if (me) { $('reg-name').value = me.name || ''; $('reg-phone').value = String(me.phone || '').replace(/^62/, ''); }
+    else if (window._pendingPhone) $('reg-phone').value = String(window._pendingPhone).replace(/^\+?62/, '').replace(/^0/, '');
     openSheet('modal-public-register');
   };
 
