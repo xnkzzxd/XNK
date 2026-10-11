@@ -598,8 +598,18 @@
     'public-progress': 'Progres', 'public-program': 'Program', 'public-info': 'Info & Tips', 'public-more': 'Lainnya'
   };
 
+  // Menu untuk pengunjung yang belum login: hanya yang boleh dilihat tanpa akun.
+  const GUEST_NAV = [
+    ['public-login', 'log-in', 'Masuk'],
+    ['calendar', 'calendar-days', 'Jadwal'],
+    ['public-catalog', 'package', 'Paket'],
+    ['public-coaches', 'dumbbell', 'Coach']
+  ];
+  function isGuest() { return ui.mode === 'public' && !window.publicLoggedMember; }
+
   function buildChrome() {
-    const items = NAV[ui.mode];
+    ui.chromeGuest = isGuest();
+    const items = ui.chromeGuest ? GUEST_NAV : NAV[ui.mode];
     const sideItems = items.concat(ui.mode === 'admin' ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
     setHTML('side-nav', sideItems.map(function (n) {
       return '<button type="button" class="nav-item" data-view="' + n[0] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
@@ -613,7 +623,7 @@
         '<button type="button" class="nav-item" id="side-auth-btn" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>';
     setHTML('side-foot', foot);
 
-    const t = ui.mode === 'public' ? PUBLIC_TABS : items;
+    const t = ui.mode === 'public' && !ui.chromeGuest ? PUBLIC_TABS : items;
     const tab = function (n) {
       return '<button type="button" class="tab" data-view="' + n[0] + '"' + (n[0] === 'public-more' ? ' data-group="' + MORE_GROUP.join(' ') + '"' : '') + ' onclick="window.navigate(\'' + n[0] + '\')" aria-label="' + n[2] + '">' +
         icon(n[1]) + '<span>' + n[2] + '</span>' + (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="tab-dot hide" id="tab-unread-dot"></span>' : '') +
@@ -642,8 +652,7 @@
       else html += '<button type="button" class="icon-btn" id="nav-dashboard-btn" onclick="window.navigate(\'public-dashboard\')" aria-label="Beranda">' + avatar(window.publicLoggedMember.photo, window.publicLoggedMember.name, 'sm') + '</button>';
     }
     setHTML('topbar-actions', html);
-    const appEl = $('app');
-    if (appEl) appEl.classList.toggle('guest', ui.mode === 'public' && !window.publicLoggedMember);
+    if (ui.mode === 'public' && ui.chromeGuest !== isGuest()) { buildChrome(); return; }
     const sideAuth = $('side-auth-btn');
     if (sideAuth) sideAuth.classList.toggle('hide', !window.publicLoggedMember);
     updateBadges();
