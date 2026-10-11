@@ -354,6 +354,10 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 }
 .detail-backdrop.open { opacity: 1; pointer-events: auto; }
 
+/* Belum login (portal): tanpa sidebar dan bar bawah */
+.app.guest .sidebar, .app.guest .tabbar { display: none !important; }
+.app.guest .main { padding-bottom: 48px; }
+
 /* Tablet */
 @media (min-width: 768px) {
   :root { --page-pad: 28px; }
