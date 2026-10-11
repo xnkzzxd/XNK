@@ -804,7 +804,7 @@ kbd { font-family: var(--font); font-size: 11px; font-weight: 700; color: var(--
 
 /* ── Segmented control ──────────────────────────────────────────────────── */
 .seg { position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 4px; border-radius: 14px; background: var(--surface-3); isolation: isolate; }
-.seg button { position: relative; z-index: 1; height: 36px; padding: 0 16px; border-radius: 10px; font-weight: 700; font-size: var(--fs-sm); color: var(--fg-muted); transition: color var(--t-base) var(--ease); white-space: nowrap; }
+.seg button { position: relative; z-index: 1; height: 44px; padding: 0 16px; border-radius: 10px; font-weight: 700; font-size: var(--fs-sm); color: var(--fg-muted); transition: color var(--t-base) var(--ease); white-space: nowrap; }
 .seg button.active { color: var(--fg); }
 .seg .seg-thumb { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 4px; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-1); transition: transform var(--t-base) var(--ease-out), width var(--t-base) var(--ease-out); }
 .seg.ink { background: var(--ink); }
@@ -816,7 +816,7 @@ kbd { font-family: var(--font); font-size: 11px; font-weight: 700; color: var(--
 .month-cal { background: var(--ink); color: var(--on-ink); border-radius: var(--r-xl); padding: 18px 16px 16px; box-shadow: var(--shadow-2); user-select: none; }
 .month-cal .mc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .month-cal .mc-title { font-weight: 800; font-size: var(--fs-lg); letter-spacing: -0.01em; }
-.month-cal .mc-nav { width: 36px; height: 36px; border-radius: 12px; color: var(--on-ink); display: inline-flex; align-items: center; justify-content: center; transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease); }
+.month-cal .mc-nav { width: 44px; height: 44px; border-radius: 12px; color: var(--on-ink); display: inline-flex; align-items: center; justify-content: center; transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease); }
 .month-cal .mc-nav:hover { background: color-mix(in srgb, var(--on-ink) 12%, transparent); }
 .month-cal .mc-nav:active { transform: scale(0.9); }
 .month-cal .mc-today { font-size: var(--fs-2xs); font-weight: 800; padding: 6px 10px; border-radius: var(--r-full); border: 1px solid color-mix(in srgb, var(--on-ink) 30%, transparent); color: var(--on-ink); }
@@ -881,7 +881,7 @@ kbd { font-family: var(--font); font-size: 11px; font-weight: 700; color: var(--
 .tl-item.hold .tl-card { border-style: dashed; border-width: 1.5px; border-color: var(--fg-muted); }
 .tl-item.available .tl-card { border-style: dashed; background: transparent; }
 .tl-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.tl-actions .btn { min-height: 32px; padding: 0 10px; font-size: var(--fs-xs); border-radius: 10px; }
+.tl-actions .btn { min-height: 44px; padding: 0 10px; font-size: var(--fs-xs); border-radius: 10px; }
 .tl-item.now .btn-secondary { background: color-mix(in srgb, var(--on-ink) 14%, transparent); color: var(--on-ink); }
 .tl-item.now .btn-outline { border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); color: var(--on-ink); }
 
@@ -1340,7 +1340,7 @@ button.avatar { border: 0; cursor: pointer; }
 .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .task-note { margin-top: 6px; padding: 8px 10px; border-radius: var(--r-md); background: var(--surface-2); font-size: var(--fs-xs); color: var(--fg-2); overflow-wrap: anywhere; }
 .task-acts { display: flex; gap: 2px; flex-shrink: 0; margin: -4px -6px -4px 0; }
-.task-acts .icon-btn { width: 36px; height: 36px; border-radius: 10px; }
+.task-acts .icon-btn { width: 44px; height: 44px; border-radius: 10px; }
 /* Keuangan (Fase H): sasaran sentuh 44 px di HP */
 @media (max-width: 767px) {
   #view-finance .chip, #view-finance .btn-sm, .sheet[id^="sheet-fin"] .chip, #settings-body .chip { min-height: 44px; height: auto; }
@@ -1491,4 +1491,9 @@ button.avatar { border: 0; cursor: pointer; }
     #app.detail-wide .pg-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 }
+/* Area ketuk: tombol kecil punya zona sentuh tak terlihat sampai 44 px */
+.icon-btn::before, .task-check::before, .prog-check::before, .star::before, .mc-nav::before { content: ''; position: absolute; inset: -6px; }
+.task-check, .prog-check, .star, .mc-nav { position: relative; }
+button, .btn, .chip { touch-action: manipulation; }
+.icon-btn svg, .tab svg, .tab-fab svg, .task-check svg, .prog-check svg { pointer-events: none; }
 </style>
