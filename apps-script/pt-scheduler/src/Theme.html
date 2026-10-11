@@ -1496,4 +1496,13 @@ button.avatar { border: 0; cursor: pointer; }
 .task-check, .prog-check, .star, .mc-nav { position: relative; }
 button, .btn, .chip { touch-action: manipulation; }
 .icon-btn svg, .tab svg, .tab-fab svg, .task-check svg, .prog-check svg { pointer-events: none; }
+/* Sentuh (HP): umpan balik tekan tanpa mengecilkan tombol, supaya jari yang lepas di tepi tetap terhitung klik */
+@media (hover: none), (pointer: coarse) {
+  .nav-item:active, .tab:active, .btn:active:not(:disabled), .icon-btn:active, .card.interactive:active, .chip:active,
+  .list-item.interactive:active, .month-cal .mc-nav:active, .slot:active:not(:disabled), .action-tile:active,
+  .settings-nav-item:active, .task-check:active { transform: none; opacity: 0.7; }
+  .tab-fab:hover, .tab-fab:active { transform: none; }
+  .tab-fab:active { opacity: 0.8; }
+  .btn, .icon-btn, .tab, .tab-fab, .chip, .nav-item { transition-duration: 0.01s; }
+}
 </style>
