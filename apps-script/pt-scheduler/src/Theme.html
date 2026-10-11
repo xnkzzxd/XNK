@@ -1495,7 +1495,8 @@ button.avatar { border: 0; cursor: pointer; }
 .icon-btn::before, .task-check::before, .prog-check::before, .star::before, .mc-nav::before { content: ''; position: absolute; inset: -6px; }
 .task-check, .prog-check, .star, .mc-nav { position: relative; }
 button, .btn, .chip { touch-action: manipulation; }
-.icon-btn svg, .tab svg, .tab-fab svg, .task-check svg, .prog-check svg { pointer-events: none; }
+/* Ikon tidak boleh jadi target sentuh: lucide mengganti <i> dengan <svg>, dan target yang hilang saat jari menekan membatalkan klik */
+button svg, button i, button img, [role="button"] svg, [role="button"] i, a.btn svg, label.btn svg { pointer-events: none; }
 /* Sentuh (HP): umpan balik tekan tanpa mengecilkan tombol, supaya jari yang lepas di tepi tetap terhitung klik */
 @media (hover: none), (pointer: coarse) {
   .nav-item:active, .tab:active, .btn:active:not(:disabled), .icon-btn:active, .card.interactive:active, .chip:active,
