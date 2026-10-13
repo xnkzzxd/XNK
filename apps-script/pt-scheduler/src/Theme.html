@@ -639,6 +639,12 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .kpi.ink .kpi-icon { background: color-mix(in srgb, var(--on-ink) 10%, transparent); border-color: transparent; }
 
 /* ── Chip, pill, status ─────────────────────────────────────────────────── */
+.ex-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 4px 8px 4px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
+.ex-row:active { transform: scale(0.98); }
+.ex-row img, .ex-row .ex-ph { width: 48px; height: 48px; flex: none; border-radius: 8px; background: var(--surface-2, var(--border)); object-fit: cover; }
+.ex-row .ex-t { min-width: 0; flex: 1; }
+.ex-row .ex-t b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-row .ex-t span { font-size: var(--fs-xs, 12px); color: var(--ink-3, var(--ink)); }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
 .chip {

@@ -4471,6 +4471,46 @@
       $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
     }).catch(function () {});
   };
+  // ── Pustaka gerakan (picker di editor program) ─────────────────────────────────
+  // Data statis dari GitHub Pages (exercises/exercises.min.json), dimuat malas saat picker dibuka, bukan lewat Apps Script.
+  // GIF hanya pratinjau untuk admin; tidak disimpan ke program klien (lisensi media Gym visual).
+  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v1', EX_SHOW = 30;
+  let exLib = null, exBody = '', exLimit = EX_SHOW, exLoading = false;
+  function exLoad() {
+    if (exLib || exLoading) return;
+    try { const c = localStorage.getItem(EX_KEY); if (c) { exLib = JSON.parse(c); exChips(); exFilter(); return; } } catch (e) {}
+    exLoading = true;
+    $('ex-list').innerHTML = '<p class="li-sub">Memuat pustaka…</p>';
+    fetch(EX_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); }).then(function (d) {
+      exLib = d; exLoading = false;
+      try { localStorage.setItem(EX_KEY, JSON.stringify(d)); } catch (e) {}
+      exChips(); exFilter();
+    }).catch(function () { exLoading = false; $('ex-list').innerHTML = '<p class="li-sub">Pustaka gerakan belum bisa dimuat. Coba lagi nanti, atau ketik gerakan manual.</p>'; });
+  }
+  function exChips() {
+    const parts = Array.from(new Set(exLib.items.map(x => x.b))).filter(Boolean).sort();
+    $('ex-chips').innerHTML = ['Semua'].concat(parts).map(p => '<button type="button" class="chip' + ((p === 'Semua' ? '' : p) === exBody ? ' active' : '') + '" data-b="' + h(p === 'Semua' ? '' : p) + '" onclick="window.exBodyPick(this.getAttribute(\'data-b\'))">' + h(p) + '</button>').join('');
+    $('ex-credit').textContent = exLib.credit || '';
+  }
+  window.exOpen = function (open) { if (open) exLoad(); };
+  window.exBodyPick = function (b) { exBody = b; exLimit = EX_SHOW; exChips(); exFilter(); };
+  window.exFilter = function () {
+    if (!exLib) return;
+    const q = $('ex-q').value.trim().toLowerCase();
+    const hits = exLib.items.filter(x => (!exBody || x.b === exBody) && (!q || (x.n + ' ' + x.t + ' ' + x.q).toLowerCase().indexOf(q) !== -1));
+    const rows = hits.slice(0, exLimit).map(x => '<button type="button" class="ex-row" onclick="window.exAdd(\'' + h(x.id) + '\')"><img loading="lazy" decoding="async" width="48" height="48" alt="" src="' + h(exLib.base + x.g) + '"><span class="ex-t"><b>' + h(x.n) + '</b><span>' + h(x.t) + ' · ' + h(x.q) + '</span></span>' + icon('plus', 'style="width:18px;height:18px"') + '</button>');
+    $('ex-list').innerHTML = rows.join('') || '<p class="li-sub">Tidak ada gerakan yang cocok.</p>';
+    if (hits.length > exLimit) $('ex-list').insertAdjacentHTML('beforeend', '<button type="button" class="btn btn-ghost btn-block" onclick="window.exMore()">Tampilkan lebih banyak (' + (hits.length - exLimit) + ')</button>');
+  };
+  window.exMore = function () { exLimit += EX_SHOW; window.exFilter(); };
+  window.exAdd = function (id) {
+    const x = exLib && exLib.items.find(i => i.id === id); if (!x) return;
+    const name = (x.n.charAt(0).toUpperCase() + x.n.slice(1)).replace(/[|\r\n]+/g, ' ').slice(0, 80);
+    const t = $('prg-text'), cur = t.value.replace(/\s+$/, '');
+    t.value = (cur ? cur + '\n' : '') + name + ' | 3x10 | ex:' + x.id + '\n';
+    t.scrollTop = t.scrollHeight;
+    window.showToast('Ditambahkan: ' + name);
+  };
   window.programLoadTemplate = function () {
     const name = $('prg-tpl').value, t = progTemplates.find(x => x.name === name);
     $('prg-tpl-del').classList.toggle('hide', !t);

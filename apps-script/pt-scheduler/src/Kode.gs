@@ -6437,11 +6437,18 @@ function _contentForClientImpl_() {
 // Sheet ProgramItems menyimpan program klien (Member ID terisi) dan template (Member ID kosong, Template terisi).
 // ProgramLog mencatat gerakan yang dicentang klien per hari.
 
-const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada"];
+const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada", "Exercise ID"];
 const PROGRAM_LOG_HEADERS = ["ID", "Member ID", "Tanggal", "Hari", "Selesai", "Dibuat Pada"];
 const PROGRAM_LIMITS = { days: 7, items: 12, name: 60, hari: 40, gerakan: 80, rep: 16, note: 200, url: 300, templates: 30 };
 
-function _programSheet_() { return getOrCreateSheet_('ProgramItems', PROGRAM_HEADERS); }
+function _programSheet_() {
+  const sheet = getOrCreateSheet_('ProgramItems', PROGRAM_HEADERS);
+  // Kolom "Exercise ID" ditambahkan di akhir (idempoten); baris lama tetap valid.
+  const cell = sheet.getRange(1, PROGRAM_HEADERS.length);
+  if (cell.getValue() === '') { cell.setValue('Exercise ID'); cell.setFontWeight('bold'); }
+  sheet.getRange('L:L').setNumberFormat('@');
+  return sheet;
+}
 function _programLogSheet_() { const s = getOrCreateSheet_('ProgramLog', PROGRAM_LOG_HEADERS); s.getRange('C:C').setNumberFormat('@'); return s; }
 
 /**
@@ -6474,10 +6481,17 @@ function _parseProgramText_(text) {
     if (gerakan.length > L.gerakan) throw new Error('Baris ' + n + ': nama gerakan maksimal ' + L.gerakan + ' karakter.');
     const m = /^(\d{1,2})\s*[x×*]\s*(.{1,16})$/i.exec(parts[1] || '');
     if (!m) throw new Error('Baris ' + n + ': tulis set dan rep seperti 3x10 (atau 3x30 dtk).');
-    const item = { gerakan: gerakan, set: parseInt(m[1], 10), rep: m[2].trim(), catatan: '', video: '' };
+    const item = { gerakan: gerakan, set: parseInt(m[1], 10), rep: m[2].trim(), catatan: '', video: '', exId: '' };
     if (item.set < 1 || item.set > 20) throw new Error('Baris ' + n + ': jumlah set harus 1 sampai 20.');
     parts.slice(2).forEach(function(f) {
       if (!f) return;
+      const ex = /^ex:(\S+)$/i.exec(f);
+      if (ex) {
+        if (!/^[A-Za-z0-9_-]{1,20}$/.test(ex[1])) throw new Error('Baris ' + n + ': kode gerakan (ex:) tidak valid.');
+        if (item.exId) throw new Error('Baris ' + n + ': hanya satu kode gerakan (ex:) per baris.');
+        item.exId = ex[1];
+        return;
+      }
       if (/^https?:\/\//i.test(f)) {
         if (!/^https:\/\/[^\s]+$/i.test(f)) throw new Error('Baris ' + n + ': link video harus diawali https:// tanpa spasi.');
         if (f.length > L.url) throw new Error('Baris ' + n + ': link video terlalu panjang.');
@@ -6498,7 +6512,7 @@ function _parseProgramText_(text) {
 function _programToText_(days) {
   return (days || []).map(function(d) {
     return '# ' + d.hari + '\n' + d.items.map(function(it) {
-      return [it.gerakan, it.set + 'x' + it.rep, it.catatan, it.video].filter(function(x, i) { return i < 2 || x; }).join(' | ');
+      return [it.gerakan, it.set + 'x' + it.rep, it.catatan, it.video, it.exId ? 'ex:' + it.exId : ''].filter(function(x, i) { return i < 2 || x; }).join(' | ');
     }).join('\n');
   }).join('\n\n');
 }
@@ -6516,7 +6530,7 @@ function _programDays_(memberId, templateName) {
   rows.forEach(function(r) {
     const hari = String(r[3]);
     if (!by[hari]) { by[hari] = { hari: hari, items: [] }; days.push(by[hari]); }
-    by[hari].items.push({ n: Number(r[4]), gerakan: String(r[5]), set: Number(r[6]) || 0, rep: String(r[7]), catatan: String(r[8] || ''), video: String(r[9] || '') });
+    by[hari].items.push({ n: Number(r[4]), gerakan: String(r[5]), set: Number(r[6]) || 0, rep: String(r[7]), catatan: String(r[8] || ''), video: String(r[9] || ''), exId: String(r[11] || '') });
     if (String(r[10]) > updatedAt) updatedAt = String(r[10]);
   });
   return { days: days, updatedAt: updatedAt };
@@ -6539,7 +6553,7 @@ function _programWrite_(memberId, templateName, days) {
     (days || []).forEach(function(d) {
       d.items.forEach(function(it) {
         n++;
-        sheet.appendRow(['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now]);
+        sheet.appendRow(['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now, it.exId || '']);
       });
     });
     return n;
@@ -6618,7 +6632,7 @@ function applyProgramTemplate(token, memberId, name) {
   const nm = _templateName_(name);
   const p = _programDays_(null, nm);
   if (!p.days.length) throw new Error('Template tidak ditemukan.');
-  _programWrite_(id, null, p.days.map(function(d) { return { hari: d.hari, items: d.items.map(function(it) { return { gerakan: it.gerakan, set: it.set, rep: it.rep, catatan: it.catatan, video: it.video }; }) }; }));
+  _programWrite_(id, null, p.days.map(function(d) { return { hari: d.hari, items: d.items.map(function(it) { return { gerakan: it.gerakan, set: it.set, rep: it.rep, catatan: it.catatan, video: it.video, exId: it.exId }; }) }; }));
   return getMemberProgram(token, id);
 }
 

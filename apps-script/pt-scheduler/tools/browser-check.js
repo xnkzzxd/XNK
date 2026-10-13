@@ -896,7 +896,15 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#prg-err')).includes('Baris 1: tulis set dan rep'), 'program editor: a bad line is named with its number');
     await page.fill('#prg-text', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
-    await page.click('#modal-program details > summary');
+    await page.route('https://xnk.my.id/exercises/exercises.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ v: 1, base: 'data:image/gif;base64,', credit: 'test', items: [{ id: '0025', n: 'barbell bench press', b: 'chest', q: 'barbell', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0026', n: 'goblet squat', b: 'upper legs', q: 'dumbbell', t: 'quads', g: 'R0lGODlhAQABAAAAACw=' }] }) }));
+    await page.click('#ex-pick > summary');
+    await page.fill('#ex-q', 'squat');
+    await page.waitForTimeout(500);
+    check((await page.locator('#ex-list .ex-row').count()) === 1 && (await overflowX(page)) <= 0, 'program editor: exercise search filters the library, no sideways scroll');
+    await page.click('#ex-list .ex-row');
+    check((await page.inputValue('#prg-text')).includes('Goblet squat | 3x10 | ex:0026'), 'program editor: tapping a library exercise adds a line with its code');
+    await page.fill('#prg-text', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
+    await page.click('#modal-program details:not(#ex-pick) > summary');
     await page.fill('#prg-tpl-name', 'Pemula 2 hari');
     await page.click('#prg-tpl-save');
     await page.waitForTimeout(700);
