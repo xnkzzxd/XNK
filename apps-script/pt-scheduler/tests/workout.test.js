@@ -130,3 +130,59 @@ test('stats ride along with the member and admin reads', () => {
   assert.equal(a.stats.exercises[0].pr.e1rm, 81.7);
   assert.equal(j(env.call('getWorkoutLog', t, 'PT-A')).stats.weeks[7].volume, 950);
 });
+
+test('PRs: first log is not a record; a higher estimated 1RM is; re-saving the same day does not repeat it', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), dayOf = n => env.call('_addDaysIso_', env.call('_todayWib_'), -n);
+  let r = j(env.call('saveWorkoutLog', t, 'PT-A', dayOf(6), '', [bench([set(60, 10)])]));
+  assert.deepEqual(r.prs, [], 'first entry sets the baseline');
+  r = j(env.call('saveWorkoutLog', t, 'PT-A', dayOf(3), '', [bench([set(50, 10)])]));
+  assert.deepEqual(r.prs, [], 'lower is no record');
+  r = j(env.call('saveWorkoutLog', t, 'PT-A', dayOf(1), '', [bench([set(70, 8)])]));
+  assert.equal(r.prs.length, 1);
+  assert.equal(r.prs[0].gerakan, 'Bench press');
+  assert.equal(r.prs[0].prev, 80);
+  r = j(env.call('saveWorkoutLog', t, 'PT-A', dayOf(1), '', [bench([set(70, 8)])]));
+  assert.deepEqual(r.prs, [], 'same data saved again is not a new record');
+  assert.equal(env.fetches.length, 0, 'Telegram is off by default');
+});
+
+test('PR Telegram note is opt-in and carries first name + exercise only', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), dayOf = n => env.call('_addDaysIso_', env.call('_todayWib_'), -n);
+  env.call('saveWorkoutLog', t, 'PT-A', dayOf(3), '', [bench([set(60, 10)])]);
+  env.props.WORKOUT_PR_NOTIFY = 'true';
+  env.props.TELEGRAM_BOT_TOKEN = 'x'; env.props.TELEGRAM_CHAT_ID = '1';
+  env.call('saveWorkoutLog', t, 'PT-A', dayOf(1), '', [bench([set(80, 8)])]);
+  const sent = env.fetches.map(f => JSON.stringify(f));
+  if (sent.length) { assert.match(sent.join(), /Bench press/); assert.doesNotMatch(sent.join(), /80|62811/); }
+});
+
+test('badges: logged days and personal records count toward catat-/pr- badges', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), dayOf = n => env.call('_addDaysIso_', env.call('_todayWib_'), -n);
+  const earned = () => j(env.call('getMemberProgress', t, 'PT-A')).badges.filter(b => b.earned && /^(catat|pr)-/.test(b.id)).map(b => b.id);
+  assert.deepEqual(earned(), []);
+  env.call('saveWorkoutLog', t, 'PT-A', dayOf(6), '', [bench([set(60, 10)])]);
+  env.call('saveWorkoutLog', t, 'PT-A', dayOf(5), '', [bench([set(70, 10)])]);
+  assert.deepEqual(earned(), ['pr-1']);
+  for (let i = 4; i >= 2; i--) env.call('saveWorkoutLog', t, 'PT-A', dayOf(i), '', [bench([set(50, 5)])]);
+  assert.deepEqual(earned().sort(), ['catat-5', 'pr-1']);
+});
+
+test('summary message: admin only, fills the template, shows sets, record and volume, is only a link', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), dayOf = n => env.call('_addDaysIso_', env.call('_todayWib_'), -n);
+  assert.throws(() => env.call('getWorkoutSummaryMessage', t, 'PT-A', dayOf(1)), /Belum ada latihan/);
+  env.call('saveWorkoutLog', t, 'PT-A', dayOf(3), '', [bench([set(60, 10)])]);
+  env.call('saveWorkoutLog', t, 'PT-A', dayOf(1), '', [bench([set(60, 10), set(65, 8)])]);
+  const r = j(env.call('getWorkoutSummaryMessage', t, 'PT-A', dayOf(1)));
+  assert.match(r.text, /Ani/);
+  assert.match(r.text, /Bench press: 60 kg × 10, 65 kg × 8/);
+  assert.match(r.text, /Rekor baru: Bench press/);
+  assert.match(r.text, /1\.120 kg/);
+  assert.match(r.waLink, /^https:\/\/wa\.me\//);
+  assert.equal(env.fetches.length, 0);
+  assert.throws(() => env.call('getWorkoutSummaryMessage', env.memberToken(KEY_A), 'PT-A', dayOf(1)), /AUTH_REQUIRED/);
+  assert.match(env.call('previewReminderText', t, 'ringkasan-latihan', '').text, /ringkasan latihanmu/);
+});

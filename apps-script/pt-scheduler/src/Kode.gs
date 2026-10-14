@@ -4029,7 +4029,12 @@ const BADGE_DEFS = [
   { id: 'sesi-100', kind: 'sesi', need: 100, label: '100 sesi' },
   { id: 'streak-4', kind: 'streak', need: 4, label: '4 minggu berturut-turut' },
   { id: 'streak-8', kind: 'streak', need: 8, label: '8 minggu berturut-turut' },
-  { id: 'streak-12', kind: 'streak', need: 12, label: '12 minggu berturut-turut' }
+  { id: 'streak-12', kind: 'streak', need: 12, label: '12 minggu berturut-turut' },
+  // Dari catatan latihan per set (Fase L4): hari yang dicatat dan jumlah rekor pribadi (estimasi 1RM naik).
+  { id: 'catat-5', kind: 'catat', need: 5, label: '5 hari latihan dicatat' },
+  { id: 'catat-20', kind: 'catat', need: 20, label: '20 hari latihan dicatat' },
+  { id: 'pr-1', kind: 'pr', need: 1, label: 'Rekor pribadi pertama' },
+  { id: 'pr-10', kind: 'pr', need: 10, label: '10 rekor pribadi' }
 ];
 
 /** Murni: tanggal 'YYYY-MM-DD' → tanggal Senin di minggu itu. */
@@ -4076,9 +4081,9 @@ function _bestStreak_(weeks) {
 }
 
 /** Murni: daftar badge dengan status earned. */
-function _badges_(completed, bestStreak) {
+function _badges_(completed, bestStreak, extra) {
   return BADGE_DEFS.map(function(b) {
-    const have = b.kind === 'sesi' ? completed : bestStreak;
+    const have = b.kind === 'sesi' ? completed : (b.kind === 'streak' ? bestStreak : Number((extra && extra[b.kind]) || 0));
     return { id: b.id, kind: b.kind, need: b.need, label: b.label, earned: have >= b.need };
   });
 }
@@ -4086,7 +4091,7 @@ function _badges_(completed, bestStreak) {
 function _streakInfo_(memberId) {
   const cw = _completedWeeks_(_getSchedulesAll_(), memberId);
   const best = _bestStreak_(cw.weeks);
-  return { streak: _streak_(cw.weeks, _todayWib_()), bestStreak: best, completed: cw.completed, badges: _badges_(cw.completed, best) };
+  return { streak: _streak_(cw.weeks, _todayWib_()), bestStreak: best, completed: cw.completed, badges: _badges_(cw.completed, best, _workoutBadgeStats_(memberId)) };
 }
 
 // ── Klien (token member; ID klien selalu dari token, bukan dari argumen) ────
@@ -6772,6 +6777,47 @@ function _parseWorkoutEntries_(entries) {
   });
 }
 
+/**
+ * Murni: baris WorkoutLog satu klien → { days, prs:[{ key, gerakan, tanggal, e1rm, berat, rep, prev }] }.
+ * Rekor = estimasi 1RM satu gerakan naik di atas terbaik sebelumnya; catatan pertama bukan rekor.
+ */
+function _workoutEvents_(rows) {
+  const dates = {}, byKey = {};
+  rows.forEach(function(r) {
+    const tgl = String(r[2]), key = _workoutKey_(r[6], r[7]);
+    dates[tgl] = true;
+    const e = _e1rm_(r[11], r[12]);
+    if (e <= 0) return;
+    const k = byKey[key] || (byKey[key] = { gerakan: String(r[7]), perDay: {} });
+    const cur = k.perDay[tgl];
+    if (!cur || e > cur.e1rm) k.perDay[tgl] = { e1rm: e, berat: Number(r[11]), rep: Number(r[12]) };
+  });
+  const prs = [];
+  Object.keys(byKey).forEach(function(key) {
+    let best = 0;
+    Object.keys(byKey[key].perDay).sort().forEach(function(t) {
+      const d = byKey[key].perDay[t];
+      if (best > 0 && d.e1rm > best) prs.push({ key: key, gerakan: byKey[key].gerakan, tanggal: t, e1rm: d.e1rm, berat: d.berat, rep: d.rep, prev: best });
+      if (d.e1rm > best) best = d.e1rm;
+    });
+  });
+  prs.sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); });
+  return { days: Object.keys(dates).length, prs: prs };
+}
+
+function _workoutRowsOf_(memberId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const id = String(memberId).trim();
+  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; });
+}
+
+/** Hitungan untuk badge: hari latihan yang dicatat dan jumlah rekor pribadi. Dihitung, tidak disimpan. */
+function _workoutBadgeStats_(memberId) {
+  const ev = _workoutEvents_(_workoutRowsOf_(memberId));
+  return { catat: ev.days, pr: ev.prs.length };
+}
+
 /** Tulis ulang set per (klien, tanggal, gerakan) di dalam lock. Admin boleh menimpa semua; klien hanya barisnya sendiri. */
 function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh) {
   return _locked_(function() {
@@ -6779,6 +6825,8 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh) {
     const keys = {};
     entries.forEach(function(e) { keys[e.key] = true; });
     const rows = sheet.getDataRange().getValues();
+    const beforeKeys = {};
+    _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; })).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
     for (let i = rows.length - 1; i >= 1; i--) {
       const r = rows[i];
       if (String(r[1]).trim() === memberId && String(r[2]) === tanggal && keys[_workoutKey_(r[6], r[7])] && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
@@ -6790,7 +6838,10 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh) {
       });
     });
     if (out.length) sheet.getRange(sheet.getLastRow() + 1, 1, out.length, WORKOUT_HEADERS.length).setValues(out);
-    return out.length;
+    // Rekor baru = rekor tanggal ini yang belum ada sebelum simpan (rekor yang sudah ada tidak dihitung ulang).
+    const after = _workoutEvents_(_workoutRowsOf_(memberId)).prs;
+    const prs = after.filter(function(p) { return p.tanggal === tanggal && keys[p.key] && !beforeKeys[p.key + '|' + p.tanggal]; });
+    return { count: out.length, prs: prs };
   });
 }
 
@@ -6914,8 +6965,11 @@ function saveWorkoutLog(token, memberId, date, scheduleId, entries) {
     if (!sched || String(sched.memberId).trim() !== id) throw new Error('Sesi tidak ditemukan.');
   }
   const clean = _parseWorkoutEntries_(entries);
-  _workoutSave_(id, tanggal, sid, clean, 'admin');
-  return _workoutFor_(row);
+  const saved = _workoutSave_(id, tanggal, sid, clean, 'admin');
+  const out = _workoutFor_(row);
+  out.prs = saved.prs;
+  _workoutNotifyPrs_(row, saved.prs);
+  return out;
 }
 
 function getMyWorkout(memberToken) { return _workoutFor_(requireMember_(memberToken).row); }
@@ -6928,9 +6982,52 @@ function logMyWorkout(memberToken, date, entries) {
   const today = _todayWib_();
   const tanggal = _validProgressDate_(date, today, WORKOUT_LIMITS.backClient);
   const clean = _parseWorkoutEntries_(entries);
-  _workoutSave_(id, tanggal, '', clean, 'klien');
+  const saved = _workoutSave_(id, tanggal, '', clean, 'klien');
   if (tanggal === today) _workoutTickProgram_(id, clean);
-  return _workoutFor_(row);
+  const out = _workoutFor_(row);
+  out.prs = saved.prs;
+  _workoutNotifyPrs_(row, saved.prs);
+  return out;
+}
+
+/** Telegram ke pemilik hanya bila WORKOUT_PR_NOTIFY=true (Script Property, mati bawaan); isi: nama depan + gerakan, tanpa angka beban. */
+function _workoutNotifyPrs_(row, prs) {
+  if (!prs || !prs.length || String(PropertiesService.getScriptProperties().getProperty('WORKOUT_PR_NOTIFY') || '').toLowerCase() !== 'true') return;
+  try {
+    kirimNotifTelegram_('🏆 <b>' + escapeHtmlTelegram(String(row[1] || '').trim().split(/\s+/)[0]) + '</b> rekor pribadi baru: ' + prs.map(function(p) { return escapeHtmlTelegram(p.gerakan); }).join(', '));
+  } catch (e) { Logger.log('Notif rekor gagal: ' + e); }
+}
+
+/**
+ * Admin: pesan WhatsApp ringkasan latihan satu hari (template "ringkasan-latihan"); tidak dikirim otomatis.
+ * Berisi set yang dicatat hari itu, rekor baru hari itu, dan total volume.
+ */
+function getWorkoutSummaryMessage(token, memberId, date) {
+  requireAdmin_(token);
+  const m = _memberRowOrThrow_(memberId);
+  const id = String(m.row[0]).trim();
+  const tanggal = _validProgressDate_(date, _todayWib_(), WORKOUT_LIMITS.backAdmin);
+  const rows = _workoutRowsOf_(id);
+  const day = _workoutGroup_(rows.filter(function(r) { return String(r[2]) === tanggal; })).days[0];
+  if (!day) throw new Error('Belum ada latihan yang dicatat di tanggal itu.');
+  const fmt = function(n) { return String(n).replace('.', ','); };
+  let volume = 0;
+  const ringkas = day.items.map(function(it) {
+    it.sets.forEach(function(s) { volume += (Number(s.berat) || 0) * (Number(s.rep) || 0); });
+    const withW = it.sets.filter(function(s) { return s.berat !== '' && s.rep !== ''; });
+    const parts = withW.length ? withW.slice(0, 4).map(function(s) { return fmt(s.berat) + ' kg × ' + s.rep; }).join(', ') + (withW.length > 4 ? ' (' + withW.length + ' set)' : '') :
+      it.sets.map(function(s) { return s.rep !== '' ? s.rep + ' rep' : (s.durasi !== '' ? s.durasi + ' dtk' : s.jarak + ' m'); }).join(', ');
+    return '• ' + it.gerakan + ': ' + parts;
+  }).join('\n');
+  const prs = _workoutEvents_(rows).prs.filter(function(p) { return p.tanggal === tanggal; });
+  const text = _rmdFill_(_rmdTemplate_('ringkasan-latihan'), {
+    nama: String(m.row[1] || '').trim().split(/\s+/)[0],
+    tanggal: Utilities.formatDate(new Date(tanggal + 'T12:00:00+07:00'), REMINDER_TZ, 'd MMM'),
+    ringkas: ringkas,
+    rekor: prs.length ? '\n🏆 Rekor baru: ' + prs.map(function(p) { return p.gerakan + ' (est. 1RM ' + fmt(p.e1rm) + ' kg)'; }).join(', ') : '',
+    volume: Math.round(volume).toLocaleString('id-ID')
+  });
+  return { status: 'success', text: text, waLink: _waLink_(m.row[2], text) };
 }
 
 /** Gerakan program yang semua setnya sudah dicatat hari ini ikut tercentang (hanya menambah, tidak pernah menghapus centang). */

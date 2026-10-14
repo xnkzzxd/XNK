@@ -926,6 +926,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(800);
     check(env.sheet('WorkoutLog') && env.sheet('WorkoutLog').rows.length === 2 && env.sheet('WorkoutLog').rows[1][7] === 'Bench press', 'workout: saving stores one row per filled set');
     check((await page.textContent('#profile-program-wrap')).includes('Terakhir dicatat'), 'workout: the client page shows the last logged day');
+    check((await page.textContent('#profile-program-wrap')).includes('Kirim ringkasan WA'), 'workout: after logging the coach can send the day summary by WhatsApp');
     check((await page.locator('#wk-admin-stats .wk-sum').count()) === 1 && (await page.locator('#wk-admin-stats svg.pg-chart').count()) >= 1 && (await overflowX(page)) <= 0, 'workout charts: the client page shows the summary and weekly volume without sideways scroll');
     const prgDays = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-program-wrap .prg-days > div')).map(d => { const r = d.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
@@ -1581,7 +1582,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.loadMyProgress(true));
     await page.waitForTimeout(800);
     check(!(await visible(page, '#sheet-badge')), 'portal: the same badge is not celebrated again');
-    check(await visible(page, '#pub-badges-wrap') && (await page.locator('#pub-badges-wrap .pg-badge').count()) === 7, 'portal: the Pencapaian card shows all 7 badges');
+    check(await visible(page, '#pub-badges-wrap') && (await page.locator('#pub-badges-wrap .pg-badge').count()) === 11 && (await overflowX(page)) <= 0, 'portal: the Pencapaian card shows all 11 badges without sideways scroll');
     check((await page.locator('#pub-badges-wrap .pg-badge.earned').count()) >= 1 && (await page.locator('#pub-badges-wrap .pg-badge.locked').count()) >= 1, 'portal: earned badges are solid and locked ones are faded');
     const streakTxt = await page.textContent('#pub-badges-wrap');
     check(streakTxt.includes('berturut-turut') || streakTxt.includes('Mulai streak'), 'portal: the streak line is shown');

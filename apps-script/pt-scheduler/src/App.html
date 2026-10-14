@@ -4450,7 +4450,8 @@
     } else html += '<p class="li-sub">Tulis program supaya klien melihatnya di tab Program.</p>';
     const wl = wkAdmin[memberId];
     if (wl && wl.days && wl.days.length) html += '<p class="li-sub" style="margin-top:6px">Terakhir dicatat: ' + h(pgLabel(wl.days[0].tanggal)) + ' · ' + wl.days[0].items.length + ' gerakan</p>';
-    html += '<div class="btn-row" style="margin-top:6px"><button type="button" class="btn btn-primary" onclick="window.openProgramEditor(\'' + h(memberId) + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button><button type="button" class="btn btn-outline" onclick="window.workoutOpenAdmin(\'' + h(memberId) + '\')">' + icon('dumbbell') + 'Catat latihan</button></div></div>';
+    html += '<div class="btn-row" style="margin-top:6px"><button type="button" class="btn btn-primary" onclick="window.openProgramEditor(\'' + h(memberId) + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button><button type="button" class="btn btn-outline" onclick="window.workoutOpenAdmin(\'' + h(memberId) + '\')">' + icon('dumbbell') + 'Catat latihan</button>' +
+      (wl && wl.days && wl.days.length ? '<button type="button" class="btn btn-outline" onclick="window.workoutSummaryWA(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim ringkasan WA</button>' : '') + '</div></div>';
     if (wl && wl.stats) html += '<div class="card-flat stack" style="gap:10px" id="wk-admin-stats">' + workoutStatsHtml(wl, 'adm') + '</div>';
     return html;
   }
@@ -4658,7 +4659,11 @@
       wk.busy = false; done();
       if (wk.mode === 'admin') window.wkSetAdmin(wk.memberId, r);
       else { window.myWorkout = { state: 'ok', data: r }; renderWorkoutCard(); window.loadMyProgram(true); }
-      window.closeModal(); window.showToast('Latihan disimpan.');
+      window.closeModal();
+      const prs = (r && r.prs) || [];
+      window.showToast(prs.length ? '🏆 Rekor baru: ' + prs.map(p => p.gerakan + ' (est. 1RM ' + wkKg(p.e1rm) + ' kg)').join(', ') : 'Latihan disimpan.');
+      if (wk.mode === 'client' && prs.length && window.refreshPortalMore) window.refreshPortalMore(true);
+      if (wk.mode === 'admin') window.wkLast = { memberId: wk.memberId, date: wk.date };
     }).catch(function (err) { wk.busy = false; done(); const m = $('wk-err'); if (m) m.textContent = window.authMessage(err); });
   };
   function wkIsoOf(iso) { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(iso)); } catch (e) { return pgToday(); } }
@@ -4735,6 +4740,14 @@
     }
     return html;
   }
+  // Ringkasan latihan hari terakhir yang dicatat → WhatsApp (tombol wa.me, tidak dikirim otomatis).
+  window.workoutSummaryWA = function (memberId) {
+    const wl = wkAdmin[memberId]; if (!wl || !wl.days || !wl.days.length) return;
+    adminCall('getWorkoutSummaryMessage', memberId, wl.days[0].tanggal).then(function (r) {
+      const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+      window.sendToParentWA(m.phone, r.text);
+    }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
   window.wkChartPick = function (scope, key) { wkPick[scope] = key; if (scope === 'me') renderWorkoutCard(); else if (wk.memberId || progMember) renderProgramAdmin(progMember || wk.memberId); };
   function renderWorkoutCard() { const el = $('pub-workout-wrap'); if (el) { const d = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null; setHTML(el, d ? workoutStatsHtml(d, 'me') : '<div class="section-head"><h3 class="section-title">Grafik latihan</h3></div>' + skel(2, true)); } }
   window.programLoadTemplate = function () {
@@ -5787,7 +5800,7 @@
       : '<p class="li-title">Mulai streak-mu</p><p class="li-sub">Selesaikan satu sesi minggu ini. ' + d.completed + ' sesi selesai sejauh ini.</p>';
     const badges = (d.badges || []).map(function (b) {
       return '<div class="pg-badge ' + (b.earned ? 'earned' : 'locked') + '" role="img" aria-label="' + h(b.label + (b.earned ? ', sudah diraih' : ', belum diraih')) + '">' +
-        '<span class="pg-badge-ic">' + icon(b.kind === 'streak' ? 'flame' : 'award') + '</span><span class="pg-badge-txt">' + h(pgShortBadge(b)) + '</span></div>';
+        '<span class="pg-badge-ic">' + icon(b.kind === 'streak' ? 'flame' : (b.kind === 'pr' ? 'trophy' : (b.kind === 'catat' ? 'dumbbell' : 'award'))) + '</span><span class="pg-badge-txt">' + h(pgShortBadge(b)) + '</span></div>';
     }).join('');
     const ch = d.challenge;
     const chHtml = ch ? '<div class="stack" style="gap:6px;margin:4px 0 14px"><div class="row-between"><span class="li-title">Tantangan bulan ini</span><span class="num" style="font-weight:800">' + Math.min(ch.done, ch.target) + ' / ' + ch.target + ' sesi</span></div>' +

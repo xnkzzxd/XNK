@@ -16,5 +16,7 @@ Plan: library picker → per-set workout log (coach + client) → stats/charts �
 - [x] T-820 Pure `_workoutStats_` (Epley est. 1RM for sets up to 12 reps, volume = kg × rep, 8 weeks Monday-start, volume by body part for the last 4 weeks, PR per exercise, last 10 sessions) computed on the server and returned as `stats` inside every workout read, so it rides in `getPortalMore` / `getClientBundle` with no new call.
 - [x] T-821 One renderer `workoutStatsHtml(w, scope)`: summary of the last session, exercise picker with PR and a line chart (reuses `pgChartSvg`), weekly volume bars, body-part bars. Mounted in the portal Progres tab (`#pub-workout-wrap`) and on the coach's client Program tab (`#wk-admin-stats`). Monochrome tokens, works in light and dark; exercises without weight get no strength chart.
 
-## L4 — PRs, badges, sharing (todo)
-- [ ] T-830 PR detection, badges, manual `wa.me` session summary.
+## L4 — PRs, badges, sharing (built)
+- [x] T-830 Personal records: a record is a higher estimated 1RM than the best earlier day for the same exercise (the first log is only the baseline; re-saving the same data repeats nothing). `saveWorkoutLog` / `logMyWorkout` return `prs`, shown as a toast. Optional Telegram note (first name + exercise, no weights) only when Script Property `WORKOUT_PR_NOTIFY=true`; off by default.
+- [x] T-831 Four badges computed from the log (not stored): `catat-5`, `catat-20` (days with a logged workout) and `pr-1`, `pr-10` (records). They join the existing Pencapaian grid (11 badges); the `selamat-milestone` reminder still only congratulates session and streak badges.
+- [x] T-832 Admin `getWorkoutSummaryMessage(token, memberId, date)` fills the manual template `ringkasan-latihan` (sets, new records, total volume); the client page's "Kirim ringkasan WA" opens a `wa.me` link for the last logged day. Nothing is sent automatically.
