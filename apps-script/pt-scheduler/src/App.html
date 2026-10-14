@@ -2023,7 +2023,7 @@
   }
   // Gambar ulang kartu yang sedang ada di layar (elemen yang tidak tampil dilewati).
   function renderPortalParts() {
-    renderMyTasksCard(); pgRenderCard(); renderRenewSlot(); renderBillSlot(); renderClassSlot(); renderMyMealCard(); renderProgramCard(); renderCoachStatusChip();
+    renderMyTasksCard(); pgRenderCard(); renderRenewSlot(); renderBillSlot(); renderClassSlot(); renderMyMealCard(); renderProgramCard(); renderWorkoutCard(); renderCoachStatusChip();
     const care = $('pub-care-wrap'); if (care) { care.innerHTML = myCareInner(); }
     const tests = $('pub-tests-wrap'); if (tests) { tests.innerHTML = myTestsInner(); }
     const info = $('pub-info-wrap'); if (info) { setHTML(info, infoInner()); if (window.currentView === 'public-info') markInfoSeen(); }
@@ -4451,6 +4451,7 @@
     const wl = wkAdmin[memberId];
     if (wl && wl.days && wl.days.length) html += '<p class="li-sub" style="margin-top:6px">Terakhir dicatat: ' + h(pgLabel(wl.days[0].tanggal)) + ' · ' + wl.days[0].items.length + ' gerakan</p>';
     html += '<div class="btn-row" style="margin-top:6px"><button type="button" class="btn btn-primary" onclick="window.openProgramEditor(\'' + h(memberId) + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button><button type="button" class="btn btn-outline" onclick="window.workoutOpenAdmin(\'' + h(memberId) + '\')">' + icon('dumbbell') + 'Catat latihan</button></div></div>';
+    if (wl && wl.stats) html += '<div class="card-flat stack" style="gap:10px" id="wk-admin-stats">' + workoutStatsHtml(wl, 'adm') + '</div>';
     return html;
   }
   function renderProgramAdmin(memberId) {
@@ -4656,7 +4657,7 @@
     p.then(function (r) {
       wk.busy = false; done();
       if (wk.mode === 'admin') window.wkSetAdmin(wk.memberId, r);
-      else { window.myWorkout = { state: 'ok', data: r }; window.loadMyProgram(true); }
+      else { window.myWorkout = { state: 'ok', data: r }; renderWorkoutCard(); window.loadMyProgram(true); }
       window.closeModal(); window.showToast('Latihan disimpan.');
     }).catch(function (err) { wk.busy = false; done(); const m = $('wk-err'); if (m) m.textContent = window.authMessage(err); });
   };
@@ -4693,6 +4694,49 @@
       wkBuild(); wkRender();
     }).catch(function (err) { $('wk-body').innerHTML = '<p class="li-sub">Gagal memuat: ' + h(window.authMessage(err)) + '</p>'; });
   };
+  // ── Grafik latihan (Fase L3): kartu yang sama untuk portal klien dan halaman klien di panel ──────
+  // Semua angka dihitung server (stats); browser hanya menggambar. Pilihan gerakan diingat per kartu (scope).
+  const wkPick = {};
+  const WK_PART = { 'waist': 'Perut', 'upper legs': 'Paha', 'back': 'Punggung', 'lower legs': 'Betis', 'chest': 'Dada', 'upper arms': 'Lengan atas', 'cardio': 'Kardio', 'shoulders': 'Bahu', 'lower arms': 'Lengan bawah', 'neck': 'Leher', 'lain': 'Lainnya' };
+  const wkKg = v => Number(v).toLocaleString('id-ID', { maximumFractionDigits: 1 });
+  function wkWeeksSvg(weeks) {
+    const W = 300, H = 110, padX = 10, top = 14, bottom = 22, n = weeks.length;
+    const max = Math.max.apply(null, weeks.map(w => w.volume).concat([1]));
+    const bw = (W - 2 * padX) / n;
+    const bars = weeks.map(function (w, i) {
+      const hh = w.volume ? Math.max(3, (w.volume / max) * (H - top - bottom)) : 0, x = padX + i * bw + bw * 0.18, ww = bw * 0.64;
+      const cur = i === n - 1;
+      return '<g><rect x="' + x.toFixed(1) + '" y="' + (H - bottom - hh).toFixed(1) + '" width="' + ww.toFixed(1) + '" height="' + hh.toFixed(1) + '" rx="3" class="wk-bar' + (cur ? ' cur' : '') + '"><title>' + h(pgLabel(w.start) + ': ' + wkKg(w.volume) + ' kg') + '</title></rect>' +
+        (w.volume && (cur || w.volume === max) ? '<text x="' + (x + ww / 2).toFixed(1) + '" y="' + (H - bottom - hh - 4).toFixed(1) + '" text-anchor="middle" class="pg-lbl">' + h(wkKg(w.volume)) + '</text>' : '') + '</g>';
+    }).join('');
+    return '<svg class="pg-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Volume angkat per minggu"><line x1="' + padX + '" y1="' + (H - bottom) + '" x2="' + (W - padX) + '" y2="' + (H - bottom) + '" class="pg-axis"/>' + bars +
+      '<text x="' + padX + '" y="' + (H - 6) + '" class="pg-lbl">' + h(pgLabel(weeks[0].start)) + '</text><text x="' + (W - padX) + '" y="' + (H - 6) + '" text-anchor="end" class="pg-lbl">Minggu ini</text></svg>';
+  }
+  function workoutStatsHtml(w, scope) {
+    const st = w && w.stats;
+    if (!st || !st.sessions || !st.sessions.length) return '<div class="section-head"><h3 class="section-title">Grafik latihan</h3></div>' + emptyState('bar-chart-3', 'Belum ada catatan angkatan', 'Catat set di tab Program, grafik kekuatan dan volume muncul di sini.', '');
+    let html = '<div class="section-head"><h3 class="section-title">Grafik latihan</h3><span class="li-sub">90 hari terakhir</span></div>';
+    const last = st.sessions[0];
+    html += '<div class="wk-sum"><div><span class="num wk-big">' + last.exercises + '</span><span class="li-sub">gerakan</span></div><div><span class="num wk-big">' + last.sets + '</span><span class="li-sub">set</span></div><div><span class="num wk-big">' + h(wkKg(last.volume)) + '</span><span class="li-sub">kg volume</span></div>' +
+      (last.durasi ? '<div><span class="num wk-big">' + Math.round(last.durasi / 60) + '</span><span class="li-sub">menit tahan</span></div>' : '') + '</div><p class="li-sub">Sesi terakhir: ' + h(pgLabel(last.tanggal)) + '</p>';
+    if (st.exercises.length) {
+      const pick = st.exercises.find(e => e.key === wkPick[scope]) || st.exercises[0];
+      const pts = pick.points.map(p => ({ tanggal: p.tanggal, v: p.e1rm || p.top }));
+      html += '<div class="wk-block"><div class="field"><label class="label" for="wk-ex-' + scope + '">Kekuatan per gerakan</label><select class="select" id="wk-ex-' + scope + '" onchange="window.wkChartPick(\'' + scope + '\',this.value)">' +
+        st.exercises.map(e => '<option value="' + h(e.key) + '"' + (e.key === pick.key ? ' selected' : '') + '>' + h(e.gerakan) + '</option>').join('') + '</select></div>' +
+        (pick.pr ? '<p class="li-sub"><b>PR:</b> ' + h(wkKg(pick.pr.berat)) + ' kg × ' + pick.pr.rep + ' · estimasi 1RM ' + h(wkKg(pick.pr.e1rm)) + ' kg (' + h(pgLabel(pick.pr.tanggal)) + ')</p>' : '') +
+        (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '<p class="li-sub">Catat lagi di sesi berikutnya untuk melihat tren.</p>') + '<p class="li-sub">Garis: estimasi 1RM tertinggi per sesi (rumus Epley, set sampai 12 rep).</p></div>';
+    }
+    html += '<div class="wk-block"><p class="label">Volume per minggu (kg × rep)</p>' + wkWeeksSvg(st.weeks) + '</div>';
+    if (st.topParts.length) {
+      const mx = st.topParts[0].volume;
+      html += '<div class="wk-block"><p class="label">Volume per otot · 4 minggu</p><div class="stack" style="gap:6px">' + st.topParts.slice(0, 6).map(p =>
+        '<div class="wk-part"><span class="li-sub">' + h(WK_PART[p.part] || p.part) + '</span><span class="wk-track"><span class="wk-fill" style="width:' + Math.max(4, Math.round(p.volume / mx * 100)) + '%"></span></span><span class="num li-sub">' + h(wkKg(p.volume)) + '</span></div>').join('') + '</div></div>';
+    }
+    return html;
+  }
+  window.wkChartPick = function (scope, key) { wkPick[scope] = key; if (scope === 'me') renderWorkoutCard(); else if (wk.memberId || progMember) renderProgramAdmin(progMember || wk.memberId); };
+  function renderWorkoutCard() { const el = $('pub-workout-wrap'); if (el) { const d = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null; setHTML(el, d ? workoutStatsHtml(d, 'me') : '<div class="section-head"><h3 class="section-title">Grafik latihan</h3></div>' + skel(2, true)); } }
   window.programLoadTemplate = function () {
     const name = $('prg-tpl').value, t = progTemplates.find(x => x.name === name);
     $('prg-tpl-del').classList.toggle('hide', !t);
@@ -6049,11 +6093,13 @@
     let left = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.');
     left += '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div>';
     left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
+    left += '<div class="card stack" style="gap:10px" id="pub-workout-wrap"></div>';
     left += '<div id="pub-tests-wrap" class="stack" style="gap:16px">' + myTestsInner() + '</div>';
     let right = insightsCard(me, mine);
     right += '<div class="card"><div class="section-head"><h3 class="section-title">Riwayat latihan</h3><span class="li-sub">' + history.length + ' sesi</span></div>' +
       '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>';
     setHTML(el, portalGrid(left, right));
+    renderWorkoutCard();
     renderConsistencyBars();
   }
 

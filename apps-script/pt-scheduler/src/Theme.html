@@ -645,6 +645,15 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .wk-set .wk-n { text-align: center; color: var(--ink-3, var(--ink)); font-size: var(--fs-xs, 12px); }
 .wk-set.wk-extra { grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 56px 44px; }
 .wk-cols { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 56px 44px; gap: 6px; font-size: var(--fs-xs, 12px); color: var(--ink-3, var(--ink)); text-align: center; }
+.wk-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.wk-sum > div { display: flex; flex-direction: column; }
+.wk-big { font-size: var(--fs-xl, 22px); font-weight: 800; letter-spacing: -0.02em; }
+.wk-block { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.wk-bar { fill: var(--border-strong); }
+.wk-bar.cur { fill: var(--fg); }
+.wk-part { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.wk-track { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.wk-fill { display: block; height: 100%; border-radius: 99px; background: var(--fg); }
 .ex-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 4px 8px 4px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
 .ex-row:active { transform: scale(0.98); }
 .ex-row img, .ex-row .ex-ph { width: 48px; height: 48px; flex: none; border-radius: 8px; background: var(--surface-2, var(--border)); object-fit: cover; }

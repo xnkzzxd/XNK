@@ -51,7 +51,8 @@ test('member save: token decides the client, isolation, back-date limit, throttl
   const today = env.call('_todayWib_');
   const r = j(env.call('logMyWorkout', a, today, [bench([set(40, 10)])]));
   assert.equal(r.days[0].items[0].oleh, 'klien');
-  assert.deepEqual(j(env.call('getMyWorkout', b)), { days: [], last: {} }, 'another client sees nothing');
+  const other = j(env.call('getMyWorkout', b));
+  assert.deepEqual([other.days, other.last, other.stats.exercises, other.stats.sessions], [[], {}, [], []], 'another client sees nothing');
   assert.throws(() => env.call('logMyWorkout', a, today, [bench([set(41, 10)])]), /Tunggu sebentar/);
   assert.throws(() => env.call('logMyWorkout', b, '2020-01-01', [bench([set(1, 1)])]), /7 hari/);
   assert.equal(env.sheet('WorkoutLog').rows.slice(1).every(row => row[1] === 'PT-A'), true);
@@ -90,4 +91,42 @@ test('bundles carry the workout part; one bad part does not break the rest', () 
   assert.equal(j(env.call('getPortalMore', a)).workout.days.length, 1);
   assert.equal(j(env.call('getClientBundle', t, 'PT-A')).workout.days.length, 1);
   assert.equal(j(env.call('getPortalMore', env.memberToken(KEY_B))).workout.days.length, 0);
+});
+
+test('stats: Epley 1RM, PR, weekly volume by body part, session summary', () => {
+  const env = seededEnv();
+  assert.equal(env.call('_e1rm_', 100, 10), 133.3);
+  assert.equal(env.call('_e1rm_', 100, 13), 0, 'over 12 reps does not count');
+  assert.equal(env.call('_e1rm_', '', 5), 0);
+  assert.equal(env.call('_isoWeekStart_', '2026-10-14'), '2026-10-12');
+  assert.equal(env.call('_isoWeekStart_', '2026-10-18'), '2026-10-12');
+  const it = (key, name, part, sets) => ({ key, gerakan: name, bodyPart: part, sets });
+  const days = [
+    { tanggal: '2026-10-14', items: [it('ex:1', 'Bench', 'chest', [{ berat: 60, rep: 10, durasi: '' }, { berat: 65, rep: 8, durasi: '' }])] },
+    { tanggal: '2026-10-07', items: [it('ex:1', 'Bench', 'chest', [{ berat: 55, rep: 10, durasi: '' }]), it('nm:plank', 'Plank', 'waist', [{ berat: '', rep: '', durasi: 60 }])] }
+  ];
+  const st = j(env.call('_workoutStats_', days, '2026-10-14'));
+  const bench = st.exercises.find(e => e.key === 'ex:1');
+  assert.deepEqual(bench.points.map(p => p.tanggal), ['2026-10-07', '2026-10-14'], 'oldest first');
+  assert.equal(bench.points[1].top, 65);
+  assert.equal(bench.pr.e1rm, 82.3);
+  assert.equal(bench.pr.tanggal, '2026-10-14');
+  assert.equal(st.exercises.some(e => e.key === 'nm:plank'), false, 'no weight = no strength chart');
+  assert.equal(st.weeks.length, 8);
+  const last = st.weeks[7], prev = st.weeks[6];
+  assert.equal(last.volume, 60 * 10 + 65 * 8);
+  assert.equal(prev.volume, 550);
+  assert.equal(prev.parts.chest, 550);
+  assert.equal(st.sessions[0].tanggal, '2026-10-14');
+  assert.equal(st.sessions[1].durasi, 60);
+  assert.equal(st.topParts[0].part, 'chest');
+});
+
+test('stats ride along with the member and admin reads', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), today = env.call('_todayWib_');
+  env.call('saveWorkoutLog', t, 'PT-A', today, '', [bench([set(60, 10), set(70, 5)])]);
+  const a = j(env.call('getMyWorkout', env.memberToken(KEY_A)));
+  assert.equal(a.stats.exercises[0].pr.e1rm, 81.7);
+  assert.equal(j(env.call('getWorkoutLog', t, 'PT-A')).stats.weeks[7].volume, 950);
 });

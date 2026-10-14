@@ -6819,12 +6819,81 @@ function _workoutGroup_(rows) {
   return { days: days, last: last };
 }
 
+/** Murni: Senin dari minggu yang memuat tanggal ISO (yyyy-MM-dd). */
+function _isoWeekStart_(iso) {
+  const p = String(iso).split('-').map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Murni: estimasi 1RM (Epley) dari satu set; 0 bila tidak berlaku (tanpa beban atau lebih dari 12 rep). */
+function _e1rm_(berat, rep) {
+  const w = Number(berat), r = Number(rep);
+  if (berat === '' || rep === '' || !(w > 0) || !(r >= 1) || r > 12) return 0;
+  return Math.round(w * (1 + r / 30) * 10) / 10;
+}
+
+/**
+ * Murni: statistik dari hari-hari latihan (baru dulu, bentuk _workoutGroup_).
+ * { exercises:[{ key, gerakan, bodyPart, points:[{tanggal, top, e1rm, vol}], pr:{e1rm, tanggal, berat, rep} }],
+ *   weeks:[{ start, volume, sets, parts:{ bodyPart: volume } }] (8 minggu, lama → baru),
+ *   sessions:[{ tanggal, exercises, sets, volume, durasi }] (10 terakhir, baru dulu), topParts:[{ part, volume }] (4 minggu terakhir) }
+ */
+function _workoutStats_(days, today) {
+  const byEx = {}, order = [];
+  const weekOf = {};
+  const thisWeek = _isoWeekStart_(today);
+  const weeks = [];
+  for (let i = 7; i >= 0; i--) { const w = { start: _addDaysIso_(thisWeek, -7 * i), volume: 0, sets: 0, parts: {} }; weeks.push(w); weekOf[w.start] = w; }
+  const sessions = [];
+  (days || []).slice().reverse().forEach(function(d) {
+    const ses = { tanggal: d.tanggal, exercises: d.items.length, sets: 0, volume: 0, durasi: 0 };
+    const wk = weekOf[_isoWeekStart_(d.tanggal)];
+    d.items.forEach(function(it) {
+      let top = 0, e1 = 0, vol = 0, topRep = 0;
+      it.sets.forEach(function(st) {
+        const w = Number(st.berat) || 0, r = Number(st.rep) || 0;
+        vol += w * r; ses.sets++; ses.durasi += Number(st.durasi) || 0;
+        if (w > top) { top = w; topRep = r; }
+        const e = _e1rm_(st.berat, st.rep);
+        if (e > e1) e1 = e;
+      });
+      ses.volume += vol;
+      if (wk) {
+        wk.volume += vol; wk.sets += it.sets.length;
+        const part = it.bodyPart || 'lain';
+        wk.parts[part] = (wk.parts[part] || 0) + vol;
+      }
+      if (top > 0) {
+        let ex = byEx[it.key];
+        if (!ex) { ex = byEx[it.key] = { key: it.key, gerakan: it.gerakan, bodyPart: it.bodyPart, points: [], pr: null }; order.push(it.key); }
+        ex.points.push({ tanggal: d.tanggal, top: top, e1rm: e1, vol: Math.round(vol) });
+        if (e1 > 0 && (!ex.pr || e1 > ex.pr.e1rm)) ex.pr = { e1rm: e1, tanggal: d.tanggal, berat: top, rep: topRep };
+      }
+    });
+    ses.volume = Math.round(ses.volume);
+    sessions.push(ses);
+  });
+  weeks.forEach(function(w) { w.volume = Math.round(w.volume); Object.keys(w.parts).forEach(function(k) { w.parts[k] = Math.round(w.parts[k]); }); });
+  const recent = {};
+  weeks.slice(-4).forEach(function(w) { Object.keys(w.parts).forEach(function(k) { recent[k] = (recent[k] || 0) + w.parts[k]; }); });
+  const exercises = order.map(function(k) { const e = byEx[k]; e.points = e.points.slice(-20); return e; })
+    .sort(function(a, b) { return b.points.length - a.points.length || (a.points[a.points.length - 1].tanggal < b.points[b.points.length - 1].tanggal ? 1 : -1); }).slice(0, 12);
+  return {
+    exercises: exercises, weeks: weeks, sessions: sessions.slice(-10).reverse(),
+    topParts: Object.keys(recent).map(function(k) { return { part: k, volume: recent[k] }; }).filter(function(x) { return x.volume > 0; }).sort(function(a, b) { return b.volume - a.volume; })
+  };
+}
+
 function _workoutFor_(row) {
   const id = String(row[0]).trim();
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  if (!sheet || sheet.getLastRow() < 2) return { days: [], last: {} };
-  const since = _addDaysIso_(_todayWib_(), -WORKOUT_LIMITS.readDays);
-  return _workoutGroup_(sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id && String(r[2]) >= since; }));
+  if (!sheet || sheet.getLastRow() < 2) return { days: [], last: {}, stats: _workoutStats_([], _todayWib_()) };
+  const today = _todayWib_(), since = _addDaysIso_(today, -WORKOUT_LIMITS.readDays);
+  const g = _workoutGroup_(sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id && String(r[2]) >= since; }));
+  g.stats = _workoutStats_(g.days, today);
+  return g;
 }
 
 /** Admin: catatan latihan satu klien (90 hari terakhir). */

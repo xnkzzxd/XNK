@@ -926,6 +926,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(800);
     check(env.sheet('WorkoutLog') && env.sheet('WorkoutLog').rows.length === 2 && env.sheet('WorkoutLog').rows[1][7] === 'Bench press', 'workout: saving stores one row per filled set');
     check((await page.textContent('#profile-program-wrap')).includes('Terakhir dicatat'), 'workout: the client page shows the last logged day');
+    check((await page.locator('#wk-admin-stats .wk-sum').count()) === 1 && (await page.locator('#wk-admin-stats svg.pg-chart').count()) >= 1 && (await overflowX(page)) <= 0, 'workout charts: the client page shows the summary and weekly volume without sideways scroll');
     const prgDays = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-program-wrap .prg-days > div')).map(d => { const r = d.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
     await page.evaluate(() => window.cpTab('progres'));
@@ -1568,6 +1569,11 @@ async function contrastReport(page) {
     await page.click('#wk-save');
     await page.waitForTimeout(800);
     check(env.sheet('WorkoutLog') && env.sheet('WorkoutLog').rows.filter(r => r[1] === 'PT-A' && r[7] === 'Squat').length === 4, 'workout: the client saves four sets');
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(600);
+    check((await page.locator('#pub-workout-wrap .wk-sum').count()) === 1 && (await page.locator('#pub-workout-wrap svg.pg-chart').count()) >= 1 && (await page.textContent('#pub-workout-wrap')).includes('Squat') && (await overflowX(page)) <= 0, 'workout charts: Progres shows the strength picker and weekly volume, no sideways scroll');
+    await page.evaluate(() => window.navigate('public-program'));
+    await page.waitForTimeout(400);
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(500);
     await page.evaluate(() => window.navigate('public-progress'));
