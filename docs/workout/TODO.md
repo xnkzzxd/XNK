@@ -20,3 +20,16 @@ Plan: library picker → per-set workout log (coach + client) → stats/charts �
 - [x] T-830 Personal records: a record is a higher estimated 1RM than the best earlier day for the same exercise (the first log is only the baseline; re-saving the same data repeats nothing). `saveWorkoutLog` / `logMyWorkout` return `prs`, shown as a toast. Optional Telegram note (first name + exercise, no weights) only when Script Property `WORKOUT_PR_NOTIFY=true`; off by default.
 - [x] T-831 Four badges computed from the log (not stored): `catat-5`, `catat-20` (days with a logged workout) and `pr-1`, `pr-10` (records). They join the existing Pencapaian grid (11 badges); the `selamat-milestone` reminder still only congratulates session and streak badges.
 - [x] T-832 Admin `getWorkoutSummaryMessage(token, memberId, date)` fills the manual template `ringkasan-latihan` (sets, new records, total volume); the client page's "Kirim ringkasan WA" opens a `wa.me` link for the last logged day. Nothing is sent automatically.
+
+# Phase M — live workout logger, program form editor (T-840+)
+
+Plan with the owner (2026-10): [PRD.md](PRD.md) (what), [Design.md](Design.md) (how). Replaces the L2 sheet for coach and client.
+
+- [x] T-840 Docs: PRD, Design, this list.
+- [x] T-841 Server: ProgramItems columns M–S (`_ensureProgramColumns_`), pure `_parseProgramDays_`, structured `saveMemberProgram` / `saveProgramTemplate` (text still accepted), WorkoutLog `Jenis Set` (warm-ups out of volume/1RM/PR), sheet `WorkoutSessions` (upsert per day, `CID`), `session` argument on both saves, 20 exercises, reads carry `sessions`, `next`, `suggest`, `best`; coach hub `workouts`. Tests.
+- [x] T-842 Program form editor in `#modal-program` (days, rows, scheme, superset, drag + ↑/↓, library picker, templates). Text editor removed.
+- [x] T-843 Live logger core `#wl-screen`: list, set rows, prefill + ✓, number pad, set kinds, supersets, stopwatch, skip / add / reorder, device draft.
+- [x] T-844 Rest timer, vibrate, beep, Wake Lock.
+- [x] T-845 Finish sheet (summary vs last time, PRs, feeling, note, WA), send queue with auto-retry, coach views (client page, hub).
+- [x] T-846 Entry points (Beranda card, Program "Mulai", resume bar, centre +, session detail), backfill date chip, edit past day, exercise history, desktop two columns, guide steps.
+- [x] T-847 Remove `#modal-workout`, update READMEs and Agent.md §7.

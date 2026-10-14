@@ -7,5 +7,6 @@ Phase H (Keuangan / financial CRUD, built): docs/finance/ (PRD, Design, TODO; ta
 Phase I (coach–client loop: session notes, ratings, body measures, calendar): docs/loop/ (PRD, Design, TODO; tasks T-600+).
 Phase J (client tabs: Progres, Program, Info & Tips, Lainnya): docs/portal/ (PRD, Design, TODO; tasks T-700+).
 Phase L (exercise library, workout log, charts): docs/workout/ (TODO; tasks T-800+).
+Phase M (live workout logger, form program editor, built): docs/workout/ (PRD, Design, TODO; tasks T-840+).
 
 @docs/Agent.md

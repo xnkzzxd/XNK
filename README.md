@@ -21,7 +21,7 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 | `apple-touch-icon.png` | iPhone/iPad home-screen icon (180 px). |
 | `robots.txt` | Tells search engines not to crawl the site. |
 | `_config.yml` | Keeps `apps-script/`, `docs/`, `CLAUDE.md` and this README off the public website. |
-| `docs/` | Upgrade plan: `PRD.md`, `Design.md`, `Task.md`, and `Agent.md` (rules for AI agents and developers). `docs/coach/` has the same four files for the coach phase (`PRD.md`, `Design.md`, `Agent.md`, `TODO.md`). Not published. |
+| `docs/` | Upgrade plan: `PRD.md`, `Design.md`, `Task.md`, and `Agent.md` (rules for AI agents and developers). `docs/coach/` has the same four files for the coach phase (`PRD.md`, `Design.md`, `Agent.md`, `TODO.md`); later phases have their own folders (`finance/`, `loop/`, `portal/`, `workout/`). Not published. |
 | `CLAUDE.md` | Loads `docs/Agent.md` for Claude Code. Not published. |
 | `apps-script/` | Source of the Apps Script apps (PT Scheduler), auto-deployed by GitHub Actions — see [apps-script/README.md](apps-script/README.md). |
 
@@ -48,6 +48,15 @@ Apps Script quota low. Every client booking is checked by the server under a loc
 same call that saves it. If the hour was just taken, the client is not shown an error: the
 booking sheet stays open with up to three nearby free times for the same duration. A time
 like 07:15 is booked as the whole hour from 07:00.
+
+**Workout logging.** The PT writes each client's program in a form (days, exercises,
+sets, rep range or a per-set scheme with warm-ups, target weight, rest, supersets). The
+client (portal) and the PT (panel) log a workout on one full-screen page: every set
+starts from last time's numbers (or a heavier weight once the top of the rep range was
+reached), one tap on ✓ logs it, a rest timer starts by itself, and the screen stays on.
+Every tap is kept on the phone, so closing the app loses nothing; the workout is sent
+once at the end, and if the signal drops it waits and is sent again later. Past days
+(client 7 days, PT 90 days) can be added or edited on the same page.
 
 ## Common changes
 
