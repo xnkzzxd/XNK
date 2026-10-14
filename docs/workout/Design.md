@@ -66,7 +66,9 @@ Desktop ≥ 768 px: `grid-template-columns: minmax(260px, 340px) 1fr`; the left 
 - ✓ marks the set done, copies its values into the next empty set, starts rest, vibrates. When all sets are done the exercise collapses and the next one (or the next in the superset) opens.
 - Exercise menu ⋮: RPE on/off, rest time, move up/down, skip / un-skip, remove (own exercise only), history.
 - Drag handle (pointer events) and ↑/↓ reorder.
-- Rest bar: `position: sticky; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom))`; end = vibrate + WebAudio beep. Wake Lock while the screen is open and live.
+- Rest bar: pinned to the bottom of the full-screen logger (`env(safe-area-inset-bottom)`). The logger covers the tab bar on phones, so the bar sits where the tab bar was (built that way instead of above the tab bar). End = vibrate + WebAudio beep. Wake Lock while the screen is open and live.
+- Resume bar `#wl-resume`: above the tab bar (phone) or bottom-right (desktop) while a draft exists or a save is queued.
+- Entry from the client **+**: a small sheet `sheet-quick-client` (Booking, Mulai latihan, Catat yang lewat); in-page Booking buttons keep opening the booking sheet directly.
 - Finish sheet `#wl-finish`: duration, sets, volume, ↑/↓ per exercise vs last time, PRs (celebration), feeling (5 faces), note, "Simpan". After saving: summary, "Kirim ke coach (WA)" (client) / "Kirim ringkasan WA" (coach).
 - Backfill: date chip (client 7 days, coach 90), no timer or rest, "✓ semua" per exercise.
 

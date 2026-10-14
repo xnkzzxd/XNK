@@ -111,6 +111,19 @@
 
   <nav class="tabbar" id="tabbar" aria-label="Navigasi"></nav>
 
+  <!-- Mode latihan (Fase M): layar penuh untuk coach dan klien -->
+  <div class="wl hide" id="wl-screen" role="dialog" aria-modal="true" aria-labelledby="wl-title">
+    <header class="wl-top">
+      <button type="button" class="icon-btn plain" onclick="window.wlClose()" aria-label="Tutup (latihan tetap tersimpan sebagai draf)"><i data-lucide="arrow-left"></i></button>
+      <div class="wl-head"><h2 class="wl-title truncate" id="wl-title">Latihan</h2><p class="wl-sub num" id="wl-sub"></p></div>
+      <button type="button" class="btn btn-primary btn-sm" id="wl-finish-btn" onclick="window.wlFinish()">Selesai</button>
+    </header>
+    <div class="wl-body" id="wl-body"></div>
+    <div class="wl-rest hide" id="wl-rest" role="timer" aria-live="off"></div>
+  </div>
+  <!-- Latihan berjalan / belum terkirim: bar tipis di atas tab bar -->
+  <div class="wl-resume hide" id="wl-resume" role="region" aria-label="Latihan berjalan"></div>
+
   <!-- Panduan klien baru (portal): layar gelap, satu tombol disorot -->
   <div class="guide-layer hide" id="guide-layer" role="dialog" aria-modal="true" aria-labelledby="guide-title">
     <svg class="guide-scrim" id="guide-scrim" aria-hidden="true" preserveAspectRatio="none"><path id="guide-hole" fill-rule="evenodd" d=""></path></svg>
@@ -151,6 +164,17 @@
     <div class="backdrop" onclick="window.closeModal()"></div>
 
     <!-- Aksi cepat (+) admin -->
+    <div class="sheet sm hide" id="sheet-quick-client" role="dialog" aria-modal="true" aria-labelledby="sheet-quick-client-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sheet-quick-client-title">Mau apa?</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body">
+        <div class="action-grid">
+          <button type="button" class="action-tile" onclick="window.clientQuick('booking')"><span class="at-icon"><i data-lucide="calendar-plus"></i></span>Booking</button>
+          <button type="button" class="action-tile" onclick="window.clientQuick('workout')"><span class="at-icon"><i data-lucide="dumbbell"></i></span>Mulai latihan</button>
+          <button type="button" class="action-tile" onclick="window.clientQuick('past')"><span class="at-icon"><i data-lucide="calendar-check"></i></span>Catat yang lewat</button>
+        </div>
+      </div>
+    </div>
     <div class="sheet sm hide" id="sheet-quick" role="dialog" aria-modal="true" aria-labelledby="sheet-quick-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="sheet-quick-title">Tambah cepat</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
@@ -573,9 +597,8 @@
       <form class="sheet-body form-grid" id="form-program" onsubmit="window.programSave(event)">
         <p class="li-sub" id="prg-who"></p>
         <div class="field"><label class="label" for="prg-tpl">Muat dari template</label><select class="select" id="prg-tpl" onchange="window.programLoadTemplate()"><option value="">Pilih template…</option></select></div>
-        <div class="field"><label class="label" for="prg-text">Program</label><textarea class="textarea prog-text" id="prg-text" rows="12" spellcheck="false" placeholder="# Hari A&#10;Bench press | 3x10 | turun pelan | https://youtu.be/…&#10;Push-up | 3x12"></textarea>
-          <p class="hint">Satu gerakan per baris: <b>Gerakan | 3x10 | catatan | link video (https)</b>. Catatan dan link boleh dikosongkan. Awali hari baru dengan <b>#</b>.</p></div>
-        <details class="pg-more" id="ex-pick" ontoggle="window.exOpen(this.open)"><summary>Cari gerakan (1.300+ latihan)</summary><div class="stack" style="gap:8px">
+        <div class="stack" id="prg-form" style="gap:12px"></div>
+        <details class="pg-more" id="ex-pick" ontoggle="window.exOpen(this.open)"><summary id="ex-pick-sum">Cari gerakan (1.300+ latihan)</summary><div class="stack" style="gap:8px">
           <input class="input" id="ex-q" type="search" inputmode="search" autocomplete="off" placeholder="Cari: squat, dumbbell, chest…" oninput="window.exFilter()" aria-label="Cari gerakan">
           <div class="chips" id="ex-chips" role="group" aria-label="Bagian tubuh"></div>
           <div class="stack" id="ex-list" style="gap:4px"></div>
@@ -587,12 +610,29 @@
       <div class="sheet-foot"><div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" id="prg-clear" onclick="window.programClear()">Hapus program</button><button type="submit" form="form-program" class="btn btn-primary btn-lg" id="prg-save">Simpan program</button></div></div>
     </div>
 
-    <!-- Catat latihan per set (Fase L2): dipakai coach (panel) dan klien (portal) -->
-    <div class="sheet hide" id="modal-workout" role="dialog" aria-modal="true" aria-labelledby="wk-title">
+    <!-- Mode latihan (Fase M): angka satu set (−/+ dan keypad) -->
+    <div class="sheet sm hide" id="modal-wl-pad" role="dialog" aria-modal="true" aria-labelledby="wlp-title">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h2 class="sheet-title" id="wk-title">Catat latihan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
-      <div class="sheet-body form-grid" id="wk-body"></div>
-      <div class="sheet-foot"><div class="btn-row"><button type="button" class="btn btn-primary btn-lg" id="wk-save" onclick="window.workoutSave()">Simpan latihan</button></div></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="wlp-title">Ubah angka</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body stack" style="gap:12px" id="form-wl-pad" onsubmit="window.wlPadSave(event)">
+        <div class="wlp-row">
+          <button type="button" class="wlp-step" id="wlp-minus" onclick="window.wlPadStep(-1)" aria-label="Kurangi"><i data-lucide="minus"></i></button>
+          <label class="wlp-field"><input class="input num" id="wlp-input" type="text" inputmode="decimal" autocomplete="off" aria-describedby="wlp-unit"><span id="wlp-unit">kg</span></label>
+          <button type="button" class="wlp-step" id="wlp-plus" onclick="window.wlPadStep(1)" aria-label="Tambah"><i data-lucide="plus"></i></button>
+        </div>
+        <div class="chips" id="wlp-quick" role="group" aria-label="Pilihan cepat"></div>
+        <p class="hint" id="wlp-hint"></p>
+      </form>
+      <div class="sheet-foot"><div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" id="wlp-del" onclick="window.wlPadDelete()"><i data-lucide="trash-2"></i> Hapus set</button><button type="submit" form="form-wl-pad" class="btn btn-primary btn-lg">Simpan</button></div></div>
+    </div>
+
+    <!-- Mode latihan: lembar serbaguna (menu gerakan, riwayat, tambah gerakan, selesai) -->
+    <div class="sheet hide" id="modal-wl" role="dialog" aria-modal="true" aria-labelledby="wls-title">
+      <div class="confetti hide" id="wls-confetti" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="wls-title"></h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px" id="wls-body"></div>
+      <div class="sheet-foot hide" id="wls-foot"></div>
     </div>
 
     <!-- Evaluasi paket (Fase I3), portal klien -->

@@ -27,9 +27,9 @@ Plan with the owner (2026-10): [PRD.md](PRD.md) (what), [Design.md](Design.md) (
 
 - [x] T-840 Docs: PRD, Design, this list.
 - [x] T-841 Server: ProgramItems columns M–S (`_ensureProgramColumns_`), pure `_parseProgramDays_`, structured `saveMemberProgram` / `saveProgramTemplate` (text still accepted), WorkoutLog `Jenis Set` (warm-ups out of volume/1RM/PR), sheet `WorkoutSessions` (upsert per day, `CID`), `session` argument on both saves, 20 exercises, reads carry `sessions`, `next`, `suggest`, `best`; coach hub `workouts`. Tests.
-- [ ] T-842 Program form editor in `#modal-program` (days, rows, scheme, superset, drag + ↑/↓, library picker, templates). Text editor removed.
-- [ ] T-843 Live logger core `#wl-screen`: list, set rows, prefill + ✓, number pad, set kinds, supersets, stopwatch, skip / add / reorder, device draft.
-- [ ] T-844 Rest timer, vibrate, beep, Wake Lock.
-- [ ] T-845 Finish sheet (summary vs last time, PRs, feeling, note, WA), send queue with auto-retry, coach views (client page, hub).
-- [ ] T-846 Entry points (Beranda card, Program "Mulai", resume bar, centre +, session detail), backfill date chip, edit past day, exercise history, desktop two columns, guide steps.
-- [ ] T-847 Remove `#modal-workout`, update READMEs and Agent.md §7.
+- [x] T-842 Program form editor in `#modal-program` (days, rows, scheme, superset, drag + ↑/↓, library picker, templates). Text editor removed.
+- [x] T-843 Live logger core `#wl-screen`: list, set rows, prefill + ✓, number pad, set kinds, supersets, stopwatch, skip / add / reorder, device draft.
+- [x] T-844 Rest timer, vibrate, beep, Wake Lock.
+- [x] T-845 Finish sheet (summary vs last time, PRs, feeling, note, WA), send queue with auto-retry, coach views (client page, hub).
+- [x] T-846 Entry points (Beranda card, Program "Mulai", resume bar, centre +, session detail), backfill date chip, edit past day, exercise history, desktop two columns, guide steps.
+- [x] T-847 Remove `#modal-workout`, update READMEs and Agent.md §7.
