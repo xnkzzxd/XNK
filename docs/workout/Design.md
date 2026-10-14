@@ -77,3 +77,10 @@ Days as sections (rename, delete, ↑/↓). Each exercise a row: summary line (`
 
 ## 4. Privacy
 Workout data stays out of Telegram (except the existing opt-in PR note: first name + exercise), the admin cache and public responses. A member function always takes the member from the token.
+
+## 5. Phase M2 (shorter screens)
+
+- **Logger cards** (`wlExHtml`): header (grip, name + superset label, pencil, ⋯), one line (suggestion, last time or target), then `.wl-tiles`: one 48 px tile per set (`80×8`, `8 rep`, `0:45`, `400 m`, prefix W/D/F, corner check when done, 🏆 when above the best 1RM) and a narrow "+" tile. Tap = `wlTick` (undo when done; empty → pad); a running stopwatch tile stops and ticks. The top bar has ⋯ (`wlTopMenu`: day, date, add exercise, discard). The `.wl-bar` row and the list/detail split on PC are gone; PC shows the cards in a grid (`minmax(360px, 1fr)`).
+- **Pad** (`wlPad(i, j)`): set chips, one −/+ row per field of the kind (+ RPE when on), "Mulai stopwatch" for timed exercises, kind chips, foot "Hapus set" and "Simpan & ✓" (only "Simpan" for a ticked set). New values carry to later unticked sets of the same kind.
+- **Exercise search** (`exSearchOpen(onPick, {title, admin, ret, extra})`): sheet `#ex-search`; empty box shows recent chips (`xnk_ex_recent`, device only, max 12) plus the current program's exercises; `ret` makes close/back/pick return to that sheet (`ui.sheetReturn`, checked in `closeModal`). GIF thumbnails for the admin only.
+- **Program form**: open item = kind `<select>` + delete, `.pf-grid` of numbers, `<details class="pf-more">` "Lainnya" (name, scheme toggle, superset, note, video; open state kept in `pf.more`).

@@ -33,3 +33,12 @@ Plan with the owner (2026-10): [PRD.md](PRD.md) (what), [Design.md](Design.md) (
 - [x] T-845 Finish sheet (summary vs last time, PRs, feeling, note, WA), send queue with auto-retry, coach views (client page, hub).
 - [x] T-846 Entry points (Beranda card, Program "Mulai", resume bar, centre +, session detail), backfill date chip, edit past day, exercise history, desktop two columns, guide steps.
 - [x] T-847 Remove `#modal-workout`, update READMEs and Agent.md §7.
+
+## Phase M2 — shorter screens (T-850+)
+
+Owner feedback after Phase M went live: the logger, the exercise search and the program form were too long.
+
+- [x] T-850 Logger: one compact card per exercise with set tiles (tap = ✓, tap again = undo, pencil = pad for the next set, "+" = add set). Target / last time / suggestion in one line; coach note, video, exercise note, add set, tick all, RPE, rest, move, skip, history in ⋯. Day, date, add exercise and discard move to a ⋯ in the top bar. PC shows the same cards in a grid.
+- [x] T-851 Pad: one sheet per set with set chips, −/+ rows for kg / rep (or seconds with stopwatch, metres, RPE), set kind chips and "Simpan & ✓".
+- [x] T-852 Exercise search: its own sheet (`#ex-search`) for the program editor and the logger, with a sticky search box, a body-part dropdown, "Sering dipakai" chips (`localStorage xnk_ex_recent` + current program) and results that scroll inside; from the program editor it returns to the program sheet with the form intact.
+- [x] T-853 Program form: kind as a dropdown, numbers in one compact grid (3 columns on phones, 5 on PC), name, per-set scheme, superset, note and video under "Lainnya" (opens by itself when any is set).
