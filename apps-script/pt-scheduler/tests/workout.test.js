@@ -190,7 +190,8 @@ test('summary message: admin only, fills the template, shows sets, record and vo
 test('end to end L1-L4: library code in a program, client logs sets, tick, stats, record, badge, summary', () => {
   const env = seededEnv();
   const t = env.adminToken(), a = env.memberToken(KEY_A);
-  const today = env.call('_todayWib_'), earlier = env.call('_addDaysIso_', today, -3);
+  // 8 days back is always in an earlier Monday-start week, so "this week" holds only today's sets on any weekday.
+  const today = env.call('_todayWib_'), earlier = env.call('_addDaysIso_', today, -8);
   env.call('saveMemberProgram', t, 'PT-A', '# Hari A\nBench press | 2x10 | ex:0025\nSquat | 2x8');
   assert.equal(j(env.call('getMyProgram', a)).days[0].items[0].exId, '0025');
   env.call('saveWorkoutLog', t, 'PT-A', earlier, '', [bench([set(60, 10)])]);
