@@ -18,9 +18,9 @@ test('parser: days, sets x reps, notes and https links in any order; empty days 
   const env = seededEnv();
   const p = j(env.call('_parseProgramText_', TEXT));
   assert.deepEqual(p.days.map(d => [d.hari, d.items.length]), [['Hari A — Dada', 3], ['Hari B', 1]]);
-  assert.deepEqual(p.days[0].items[0], { gerakan: 'Bench press', set: 3, rep: '10', catatan: 'turun pelan', video: 'https://youtu.be/abc' });
-  assert.deepEqual(p.days[0].items[2], { gerakan: 'Plank', set: 3, rep: '30 dtk', catatan: '', video: 'https://youtu.be/plank' });
-  assert.deepEqual(j(env.call('_parseProgramText_', 'Squat | 3×10 | https://x.id/v | catatan')).days[0].items[0], { gerakan: 'Squat', set: 3, rep: '10', catatan: 'catatan', video: 'https://x.id/v' });
+  assert.deepEqual(p.days[0].items[0], { gerakan: 'Bench press', set: 3, rep: '10', catatan: 'turun pelan', video: 'https://youtu.be/abc', exId: '' });
+  assert.deepEqual(p.days[0].items[2], { gerakan: 'Plank', set: 3, rep: '30 dtk', catatan: '', video: 'https://youtu.be/plank', exId: '' });
+  assert.deepEqual(j(env.call('_parseProgramText_', 'Squat | 3×10 | https://x.id/v | catatan')).days[0].items[0], { gerakan: 'Squat', set: 3, rep: '10', catatan: 'catatan', video: 'https://x.id/v', exId: '' });
   assert.equal(j(env.call('_parseProgramText_', 'Squat | 3x10')).days[0].hari, 'Latihan', 'no header = one day');
   assert.deepEqual(j(env.call('_parseProgramText_', '# Kosong\n\n# Hari B\nSquat | 3x10')).days.map(d => d.hari), ['Hari B']);
   assert.deepEqual(j(env.call('_parseProgramText_', '')), { days: [] });
@@ -132,4 +132,18 @@ test('the owner sees the last checked day; old logs do not count as today', () =
   env.ss.seed('ProgramLog', [['ID', 'Member ID', 'Tanggal', 'Hari', 'Selesai', 'Dibuat Pada'], ['PLG-OLD', 'PT-A', '2020-01-02', 'Hari B', '4', 'x']]);
   assert.deepEqual(j(env.call('getMyProgram', A(env))).done, {});
   assert.deepEqual(j(env.call('getMemberProgram', t, 'PT-A').last), { tanggal: '2020-01-02', hari: 'Hari B', selesai: 1 });
+});
+
+test('exercise library: ex:<id> token parses, round-trips, survives save and template apply', () => {
+  const env = seededEnv();
+  const p = j(env.call('_parseProgramText_', 'Bench press | 3x10 | ex:0025 | tahan 1 dtk'));
+  assert.equal(p.days[0].items[0].exId, '0025');
+  assert.equal(p.days[0].items[0].catatan, 'tahan 1 dtk');
+  assert.match(env.call('_programToText_', p.days), /Bench press \| 3x10 \| tahan 1 dtk \| ex:0025/);
+  assert.throws(() => env.call('_parseProgramText_', 'A | 3x10 | ex:1 | ex:2'), /Baris 1: hanya satu kode gerakan/);
+  assert.throws(() => env.call('_parseProgramText_', 'A | 3x10 | ex:bad!'), /Baris 1/);
+  env.call('_programWrite_', 'M1', null, p.days);
+  assert.equal(j(env.call('_programDays_', 'M1')).days[0].items[0].exId, '0025');
+  env.call('_programWrite_', null, 'Tpl', p.days);
+  assert.equal(j(env.call('_programDays_', null, 'Tpl')).days[0].items[0].exId, '0025');
 });

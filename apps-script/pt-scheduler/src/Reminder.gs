@@ -602,6 +602,7 @@ var RMD_TPL_DEFAULT = {
   // Pesan manual (bukan job terjadwal): dibuat saat pemilik menekan tombol. Template bisa diganti lewat Script Property RMD_TPL_<JENIS>.
   'hasil-tes': 'Halo {nama}, ini hasil tes kebugaranmu:\n{hasil}\n\nKemajuanmu keren, terus semangat! 💪 {link}',
   'pasca-sesi': 'Halo {nama}, terima kasih untuk sesi hari ini! 💪{dilatih}{fokus}\n\nSisa sesimu {sisa}. Sampai ketemu lagi!',
+  'ringkasan-latihan': 'Halo {nama}, ringkasan latihanmu {tanggal}:\n{ringkas}{rekor}\n\nTotal volume {volume} kg. Terus semangat! 💪',
   'evaluasi-paket': 'Halo {nama}, selamat, semua sesi paketmu sudah selesai! 🎉 Boleh minta penilaianmu? Buka {link} (Beranda → Evaluasi paket). Terima kasih!'
 };
 var RMD_PLACEHOLDERS = {
@@ -619,6 +620,7 @@ var RMD_PLACEHOLDERS = {
   'ringkasan-owner': ['bulan', 'sesi', 'jam', 'klienbaru', 'pendapatan', 'target'],
   'hasil-tes': ['nama', 'hasil', 'link'],
   'pasca-sesi': ['nama', 'dilatih', 'fokus', 'sisa'],
+  'ringkasan-latihan': ['nama', 'tanggal', 'ringkas', 'rekor', 'volume'],
   'evaluasi-paket': ['nama', 'link']
 };
 var MEMBER_REMIND_OFF_COL = 16;                            // Kolom P (1-based)
@@ -726,6 +728,7 @@ function _rmdSampleVars_(jenis) {
   else if (jenis === 'waktunya-ukur') { v.terakhir = ' Terakhir kamu catat tanggal 12 Sep.'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'hasil-tes') { v.hasil = '• Push-up: 20 → 28 kali / 1 menit (naik 8)\n• Plank: 45 → 70 detik (naik 25)'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'pasca-sesi') { v.dilatih = '\n🏋️ Hari ini: squat, lunges, plank'; v.fokus = '\n🎯 Berikutnya: perdalam teknik squat'; v.sisa = '5 dari 8'; }
+  else if (jenis === 'ringkasan-latihan') { v.tanggal = '14 Okt'; v.ringkas = '• Bench press: 60 kg × 10, 65 kg × 8\n• Squat: 80 kg × 8 (3 set)'; v.rekor = '\n🏆 Rekor baru: Bench press (est. 1RM 82 kg)'; v.volume = '2.640'; }
   else if (jenis === 'evaluasi-paket') v.link = RMD_PORTAL_URL;
   else if (jenis === 'pr') v.pr = '• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan 3 hari (tenggat 2/10)';
   else v.tip = 'Sarapan telur dan oatmeal, minum air putih dulu.';

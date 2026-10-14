@@ -6,5 +6,6 @@ Phase E (coach hub, coach profile, client care): docs/coach/ (PRD, Design, Agent
 Phase H (Keuangan / financial CRUD, built): docs/finance/ (PRD, Design, TODO; tasks T-400+).
 Phase I (coach–client loop: session notes, ratings, body measures, calendar): docs/loop/ (PRD, Design, TODO; tasks T-600+).
 Phase J (client tabs: Progres, Program, Info & Tips, Lainnya): docs/portal/ (PRD, Design, TODO; tasks T-700+).
+Phase L (exercise library, workout log, charts): docs/workout/ (TODO; tasks T-800+).
 
 @docs/Agent.md

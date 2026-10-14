@@ -896,7 +896,15 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#prg-err')).includes('Baris 1: tulis set dan rep'), 'program editor: a bad line is named with its number');
     await page.fill('#prg-text', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
-    await page.click('#modal-program details > summary');
+    await page.route('https://xnk.my.id/exercises/exercises.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ v: 1, base: 'data:image/gif;base64,', credit: 'test', items: [{ id: '0025', n: 'barbell bench press', b: 'chest', q: 'barbell', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0026', n: 'goblet squat', b: 'upper legs', q: 'dumbbell', t: 'quads', g: 'R0lGODlhAQABAAAAACw=' }] }) }));
+    await page.click('#ex-pick > summary');
+    await page.fill('#ex-q', 'squat');
+    await page.waitForTimeout(500);
+    check((await page.locator('#ex-list .ex-row').count()) === 1 && (await overflowX(page)) <= 0, 'program editor: exercise search filters the library, no sideways scroll');
+    await page.click('#ex-list .ex-row');
+    check((await page.inputValue('#prg-text')).includes('Goblet squat | 3x10 | ex:0026'), 'program editor: tapping a library exercise adds a line with its code');
+    await page.fill('#prg-text', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
+    await page.click('#modal-program details:not(#ex-pick) > summary');
     await page.fill('#prg-tpl-name', 'Pemula 2 hari');
     await page.click('#prg-tpl-save');
     await page.waitForTimeout(700);
@@ -906,6 +914,20 @@ async function contrastReport(page) {
     await page.click('#prg-save');
     await page.waitForTimeout(800);
     check((await page.textContent('#profile-program-wrap')).includes('2 hari · 3 gerakan') && env.sheet('ProgramItems').rows.filter(r => r[1] === 'PT-A').length === 3, 'program: saved for the client and summarised on the client page');
+    // Catat latihan per set (Fase L2), sisi coach.
+    await page.click('#profile-program-wrap .btn-outline');
+    await page.waitForTimeout(700);
+    check(await visible(page, '#wk-body') && (await page.locator('#wk-body .wk-entry').count()) === 2, 'workout: the admin sheet lists the exercises of the program day');
+    const wkTouch = await page.locator('#wk-body .wk-set input, #modal-workout .sheet-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(wkTouch === 0 && (await overflowX(page)) <= 0, 'workout: inputs and save are at least 44 px and nothing scrolls sideways');
+    await page.fill('#wk-body input[data-e="0"][data-s="0"][data-f="berat"]', '60');
+    await page.fill('#wk-body input[data-e="0"][data-s="0"][data-f="rep"]', '10');
+    await page.click('#wk-save');
+    await page.waitForTimeout(800);
+    check(env.sheet('WorkoutLog') && env.sheet('WorkoutLog').rows.length === 2 && env.sheet('WorkoutLog').rows[1][7] === 'Bench press', 'workout: saving stores one row per filled set');
+    check((await page.textContent('#profile-program-wrap')).includes('Terakhir dicatat'), 'workout: the client page shows the last logged day');
+    check((await page.textContent('#profile-program-wrap')).includes('Kirim ringkasan WA'), 'workout: after logging the coach can send the day summary by WhatsApp');
+    check((await page.locator('#wk-admin-stats .wk-sum').count()) === 1 && (await page.locator('#wk-admin-stats svg.pg-chart').count()) >= 1 && (await overflowX(page)) <= 0, 'workout charts: the client page shows the summary and weekly volume without sideways scroll');
     const prgDays = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-program-wrap .prg-days > div')).map(d => { const r = d.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
     await page.evaluate(() => window.cpTab('progres'));
@@ -1442,6 +1464,8 @@ async function contrastReport(page) {
     await page.click('#login-submit-btn');
     await page.waitForTimeout(600);
     check((await page.textContent('#member-link-message')).includes('tidak ditemukan'), 'unknown number → "Nomor WhatsApp tidak ditemukan"');
+    await page.evaluate(() => window.closeModal && window.closeModal());   // the unknown-number prompt leaves a backdrop
+    await page.waitForTimeout(500);
     await page.fill('#login-phone', '81111111111');
     await page.click('#login-submit-btn');
     await page.waitForTimeout(1400);
@@ -1536,6 +1560,21 @@ async function contrastReport(page) {
     check(!!logRow && logRow[3] === 'Hari A' && logRow[4] === '1,2', 'program: two taps are saved as one row for the day');
     check((await page.textContent('#pub-program-wrap .card')).includes('Selesai'), 'program: the finished day shows "Selesai"');
     check((await page.locator('#pub-tasks-wrap').count()) === 1 && (await page.locator('#pub-meal-slot').count()) === 1, 'program: PR and meal cards live in the same tab');
+    // Catat set (Fase L2), sisi klien.
+    await page.locator('#pub-program-wrap .card').nth(1).locator('button:has-text("Catat set")').first().click();
+    await page.waitForTimeout(600);
+    check(await visible(page, '#wk-body') && (await page.locator('#wk-body .wk-entry').count()) === 1 && (await page.locator('#wk-body .wk-set').count()) === 4, 'workout: the client sheet opens one exercise with its planned sets');
+    const wkc = await page.locator('#wk-body .wk-set input, #modal-workout .sheet-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(wkc === 0 && (await overflowX(page)) <= 0, 'workout: client sheet has 44 px inputs and no sideways scroll');
+    for (let i = 0; i < 4; i++) { await page.fill('#wk-body input[data-s="' + i + '"][data-f="berat"]', '80'); await page.fill('#wk-body input[data-s="' + i + '"][data-f="rep"]', '8'); }
+    await page.click('#wk-save');
+    await page.waitForTimeout(800);
+    check(env.sheet('WorkoutLog') && env.sheet('WorkoutLog').rows.filter(r => r[1] === 'PT-A' && r[7] === 'Squat').length === 4, 'workout: the client saves four sets');
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(600);
+    check((await page.locator('#pub-workout-wrap .wk-sum').count()) === 1 && (await page.locator('#pub-workout-wrap svg.pg-chart').count()) >= 1 && (await page.textContent('#pub-workout-wrap')).includes('Squat') && (await overflowX(page)) <= 0, 'workout charts: Progres shows the strength picker and weekly volume, no sideways scroll');
+    await page.evaluate(() => window.navigate('public-program'));
+    await page.waitForTimeout(400);
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(500);
     await page.evaluate(() => window.navigate('public-progress'));
@@ -1543,7 +1582,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.loadMyProgress(true));
     await page.waitForTimeout(800);
     check(!(await visible(page, '#sheet-badge')), 'portal: the same badge is not celebrated again');
-    check(await visible(page, '#pub-badges-wrap') && (await page.locator('#pub-badges-wrap .pg-badge').count()) === 7, 'portal: the Pencapaian card shows all 7 badges');
+    check(await visible(page, '#pub-badges-wrap') && (await page.locator('#pub-badges-wrap .pg-badge').count()) === 11 && (await overflowX(page)) <= 0, 'portal: the Pencapaian card shows all 11 badges without sideways scroll');
     check((await page.locator('#pub-badges-wrap .pg-badge.earned').count()) >= 1 && (await page.locator('#pub-badges-wrap .pg-badge.locked').count()) >= 1, 'portal: earned badges are solid and locked ones are faded');
     const streakTxt = await page.textContent('#pub-badges-wrap');
     check(streakTxt.includes('berturut-turut') || streakTxt.includes('Mulai streak'), 'portal: the streak line is shown');
