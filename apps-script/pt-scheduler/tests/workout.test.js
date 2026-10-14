@@ -186,3 +186,23 @@ test('summary message: admin only, fills the template, shows sets, record and vo
   assert.throws(() => env.call('getWorkoutSummaryMessage', env.memberToken(KEY_A), 'PT-A', dayOf(1)), /AUTH_REQUIRED/);
   assert.match(env.call('previewReminderText', t, 'ringkasan-latihan', '').text, /ringkasan latihanmu/);
 });
+
+test('end to end L1-L4: library code in a program, client logs sets, tick, stats, record, badge, summary', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), a = env.memberToken(KEY_A);
+  const today = env.call('_todayWib_'), earlier = env.call('_addDaysIso_', today, -3);
+  env.call('saveMemberProgram', t, 'PT-A', '# Hari A\nBench press | 2x10 | ex:0025\nSquat | 2x8');
+  assert.equal(j(env.call('getMyProgram', a)).days[0].items[0].exId, '0025');
+  env.call('saveWorkoutLog', t, 'PT-A', earlier, '', [bench([set(60, 10)])]);
+  const item = (n, name, exId, sets) => ({ n, hari: 'Hari A', exId, gerakan: name, bodyPart: exId ? 'chest' : 'upper legs', target: 'x', sets });
+  const r = j(env.call('logMyWorkout', a, today, [item(1, 'Bench press', '0025', [set(70, 10, 8), set(70, 8, 9)]), item(2, 'Squat', '', [set(80, 8), set(80, 8)])]));
+  assert.equal(r.prs.length, 1, 'new record on bench');
+  assert.equal(j(env.call('getPortalMore', a)).program.done['Hari A'].join(), '1,2', 'both items ticked');
+  const st = r.stats;
+  assert.ok(st.exercises.find(e => e.key === 'ex:0025').pr.e1rm > 80);
+  assert.equal(st.weeks[7].volume, 70 * 10 + 70 * 8 + 80 * 16);
+  assert.ok(j(env.call('getMyProgress', a)).badges.find(b => b.id === 'pr-1').earned);
+  const msg = j(env.call('getWorkoutSummaryMessage', t, 'PT-A', today));
+  assert.match(msg.text, /Rekor baru: Bench press/);
+  assert.equal(env.fetches.length, 0);
+});
