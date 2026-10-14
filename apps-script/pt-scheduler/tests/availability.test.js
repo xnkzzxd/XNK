@@ -155,6 +155,9 @@ const FUT = (daysAhead, hour, min) => {
 // env.bookCoach: the coach a client picks when two or more coaches are active (ignored in solo mode).
 const book = (env, start, end) => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_A), { start, end: end || new Date(new Date(start).getTime() + 3600000).toISOString(), coachId: env.bookCoach });
 const noSchedules = env => { env.sheet('Schedules').rows.length = 1; };
+// Every day open 06–21, so tests that use afternoon hours do not depend on the weekday they run on
+// (the default Sunday closes at 12:00).
+const allWeek = env => { env.props.BUSINESS_HOURS_JSON = JSON.stringify({ 0: [6, 21], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] }); };
 
 test('clients cannot book outside the opening hours or in the past', () => {
   const env = seededEnv();
@@ -188,6 +191,7 @@ test('clients cannot take an hour that is already booked, even partly, but a fre
 
 test('the second of two identical bookings is refused (the check and the write are one step)', () => {
   const env = seededEnv();
+  allWeek(env);
   noSchedules(env);
   book(env, FUT(5, 15));
   assert.throws(() => env.call('clientBookSchedule', env.memberToken(require('./fixtures').KEY_B), { start: FUT(5, 15), end: FUT(5, 16) }), /sudah dibooking/);
@@ -229,6 +233,7 @@ test('getOpenSlots({coachId}) shows only that coach\'s seat; the portal bootstra
 
 test('clients cannot reschedule onto a booked hour or outside hours, but can onto a free hour or their own hour', () => {
   const env = seededEnv();
+  allWeek(env);
   noSchedules(env);
   const mine = book(env, FUT(6, 10));
   env.sheet('Schedules').rows.push(['S-B', 'PT-B', 'Budi', '1', FUT(6, 14), FUT(6, 15), '', 'read', 'C-1', 'Rizky', '', '']);
@@ -318,8 +323,6 @@ const freeAt = (rows, iso) => rows.find(d => d.date === dayOf(iso)).hours.find(h
 const plusMin = (iso, m) => new Date(new Date(iso).getTime() + m * 60000).toISOString();
 const softBook = (env, key, start, end) => env.call('clientBookSchedule', env.memberToken(key), { start, end: end || plusMin(start, 60), coachId: env.bookCoach }, { soft: true });
 const budiAt = (env, start, end, id) => env.sheet('Schedules').rows.push([id || 'S-BUDI', 'PT-B', 'Budi', '081222222222', start, end || plusMin(start, 60), 'Catatan Budi', 'read', 'C-1', 'Rizky', '', '']);
-// Every day open 06–21, so the tests below do not depend on the weekday they run on.
-const allWeek = env => { env.props.BUSINESS_HOURS_JSON = JSON.stringify({ 0: [6, 21], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] }); };
 const slotEnv = () => { const env = seededEnv(); allWeek(env); noSchedules(env); return env; };
 const noOtherClient = (text, label) => {
   for (const s of ['PT-B', 'Budi', '081222222222', 'S-BUDI', 'Catatan Budi']) assert.ok(!text.includes(s), label + ' leaks ' + s);
