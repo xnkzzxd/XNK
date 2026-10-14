@@ -639,6 +639,12 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .kpi.ink .kpi-icon { background: color-mix(in srgb, var(--on-ink) 10%, transparent); border-color: transparent; }
 
 /* ── Chip, pill, status ─────────────────────────────────────────────────── */
+.wk-entry { border: 1px solid var(--border); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+.wk-set { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 56px 44px; gap: 6px; align-items: center; }
+.wk-set .input { min-height: 44px; padding: 0 8px; text-align: center; font-size: 16px; }
+.wk-set .wk-n { text-align: center; color: var(--ink-3, var(--ink)); font-size: var(--fs-xs, 12px); }
+.wk-set.wk-extra { grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 56px 44px; }
+.wk-cols { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 56px 44px; gap: 6px; font-size: var(--fs-xs, 12px); color: var(--ink-3, var(--ink)); text-align: center; }
 .ex-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 4px 8px 4px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
 .ex-row:active { transform: scale(0.98); }
 .ex-row img, .ex-row .ex-ph { width: 48px; height: 48px; flex: none; border-radius: 8px; background: var(--surface-2, var(--border)); object-fit: cover; }

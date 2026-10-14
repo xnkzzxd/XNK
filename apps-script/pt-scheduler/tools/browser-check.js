@@ -914,6 +914,18 @@ async function contrastReport(page) {
     await page.click('#prg-save');
     await page.waitForTimeout(800);
     check((await page.textContent('#profile-program-wrap')).includes('2 hari · 3 gerakan') && env.sheet('ProgramItems').rows.filter(r => r[1] === 'PT-A').length === 3, 'program: saved for the client and summarised on the client page');
+    // Catat latihan per set (Fase L2), sisi coach.
+    await page.click('#profile-program-wrap .btn-outline');
+    await page.waitForTimeout(700);
+    check(await visible(page, '#wk-body') && (await page.locator('#wk-body .wk-entry').count()) === 2, 'workout: the admin sheet lists the exercises of the program day');
+    const wkTouch = await page.locator('#wk-body .wk-set input, #modal-workout .sheet-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(wkTouch === 0 && (await overflowX(page)) <= 0, 'workout: inputs and save are at least 44 px and nothing scrolls sideways');
+    await page.fill('#wk-body input[data-e="0"][data-s="0"][data-f="berat"]', '60');
+    await page.fill('#wk-body input[data-e="0"][data-s="0"][data-f="rep"]', '10');
+    await page.click('#wk-save');
+    await page.waitForTimeout(800);
+    check(env.sheet('WorkoutLog') && env.sheet('WorkoutLog').rows.length === 2 && env.sheet('WorkoutLog').rows[1][7] === 'Bench press', 'workout: saving stores one row per filled set');
+    check((await page.textContent('#profile-program-wrap')).includes('Terakhir dicatat'), 'workout: the client page shows the last logged day');
     const prgDays = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-program-wrap .prg-days > div')).map(d => { const r = d.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
     await page.evaluate(() => window.cpTab('progres'));
@@ -1450,6 +1462,8 @@ async function contrastReport(page) {
     await page.click('#login-submit-btn');
     await page.waitForTimeout(600);
     check((await page.textContent('#member-link-message')).includes('tidak ditemukan'), 'unknown number → "Nomor WhatsApp tidak ditemukan"');
+    await page.evaluate(() => window.closeModal && window.closeModal());   // the unknown-number prompt leaves a backdrop
+    await page.waitForTimeout(500);
     await page.fill('#login-phone', '81111111111');
     await page.click('#login-submit-btn');
     await page.waitForTimeout(1400);
@@ -1544,6 +1558,16 @@ async function contrastReport(page) {
     check(!!logRow && logRow[3] === 'Hari A' && logRow[4] === '1,2', 'program: two taps are saved as one row for the day');
     check((await page.textContent('#pub-program-wrap .card')).includes('Selesai'), 'program: the finished day shows "Selesai"');
     check((await page.locator('#pub-tasks-wrap').count()) === 1 && (await page.locator('#pub-meal-slot').count()) === 1, 'program: PR and meal cards live in the same tab');
+    // Catat set (Fase L2), sisi klien.
+    await page.locator('#pub-program-wrap .card').nth(1).locator('button:has-text("Catat set")').first().click();
+    await page.waitForTimeout(600);
+    check(await visible(page, '#wk-body') && (await page.locator('#wk-body .wk-entry').count()) === 1 && (await page.locator('#wk-body .wk-set').count()) === 4, 'workout: the client sheet opens one exercise with its planned sets');
+    const wkc = await page.locator('#wk-body .wk-set input, #modal-workout .sheet-foot .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    check(wkc === 0 && (await overflowX(page)) <= 0, 'workout: client sheet has 44 px inputs and no sideways scroll');
+    for (let i = 0; i < 4; i++) { await page.fill('#wk-body input[data-s="' + i + '"][data-f="berat"]', '80'); await page.fill('#wk-body input[data-s="' + i + '"][data-f="rep"]', '8'); }
+    await page.click('#wk-save');
+    await page.waitForTimeout(800);
+    check(env.sheet('WorkoutLog') && env.sheet('WorkoutLog').rows.filter(r => r[1] === 'PT-A' && r[7] === 'Squat').length === 4, 'workout: the client saves four sets');
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(500);
     await page.evaluate(() => window.navigate('public-progress'));
