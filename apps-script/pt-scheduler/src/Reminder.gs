@@ -1501,9 +1501,8 @@ function _filterCoreClients_(activeClients, packages) {
 /** @returns {{clients:Array, skipped:number, corePackages:number}} klien aktif berpaket core */
 function _selectCoreClients_() {
   var pools = _loadClientPools_();
-  var r = _filterCoreClients_(pools.active, getPriceList());
-  if (!r.corePackages) Logger.log('Paket core: tidak ada paket berkategori "core" di PriceList (lihat T-01).');
-  return { clients: r.clients, skipped: pools.skipped, skippedNames: pools.skippedNames, corePackages: r.corePackages };
+  // 2026-10: pengingat makan untuk semua klien aktif, tidak lagi khusus paket core.
+  return { clients: pools.active, skipped: pools.skipped, skippedNames: pools.skippedNames };
 }
 
 /** Tes T-71 (murni, tanpa sheet). Jalankan dari editor. */
@@ -1538,7 +1537,7 @@ function _sendMakanDigest_(waktu, ctx) {
   var jenis = 'makan-' + waktu;
   var sel = _selectCoreClients_();
   var clients = sel.clients.filter(function(c) { return c.mealOn !== false && !_rmdIsOff_(c, jenis); });   // T-73 (kolom O) + T-123 (kolom P)
-  if (!clients.length) { Logger.log('Makan ' + waktu + ': tidak ada klien core dengan reminder makan aktif.'); return true; }
+  if (!clients.length) { Logger.log('Makan ' + waktu + ': tidak ada klien dengan reminder makan aktif.'); return true; }
   var tip = String(_pickTip_(waktu, _wibParts_(now).date) || '').trim();
   if (!tip) { Logger.log('Makan ' + waktu + ': tidak ada tip aktif di MealTips, tidak ada yang dikirim.'); return true; }
   var tpl = _rmdTemplate_(jenis);
@@ -1651,8 +1650,7 @@ function _mealTodayFor_(isCore, tipPagi, tipSore, tanggal) {
 /** @returns {{core:boolean, date?:string, pagi?:string, sore?:string}} */
 function getMyMealToday(memberToken) { return _mealForMember_(requireMember_(memberToken).row); }
 function _mealForMember_(row) {
-  var core = _isCorePackage_(row[6], getPriceList());
-  if (!core) return _mealTodayFor_(false);
+  // 2026-10: kartu makan untuk semua klien, tidak lagi khusus paket core.
   var date = _wibParts_(new Date()).date;
   return _mealTodayFor_(true, _pickTip_('pagi', date), _pickTip_('sore', date), date);
 }

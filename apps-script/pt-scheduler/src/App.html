@@ -695,8 +695,8 @@
     { id: 'sesi-besok', title: 'Sesi besok', sub: 'Tombol WhatsApp ke tiap klien yang punya sesi besok (tiap hari)' },
     { id: 'booking-minggu', title: 'Booking Minggu', sub: 'Ajakan booking + 3 slot kosong terdekat ke tiap klien (tiap Minggu)' },
     { id: 'pr', title: 'PR (Task)', sub: 'Tombol WhatsApp ke klien dengan PR telat, jatuh tempo hari ini/besok (tiap hari)' },
-    { id: 'makan-pagi', title: 'Makan pagi', sub: 'Tip makan pagi untuk klien paket core. Butuh tip aktif di sheet MealTips.' },
-    { id: 'makan-sore', title: 'Makan sore', sub: 'Tip makan sore untuk klien paket core. Butuh tip aktif di sheet MealTips.' },
+    { id: 'makan-pagi', title: 'Makan pagi', sub: 'Tip makan pagi untuk semua klien aktif. Butuh tip aktif di sheet MealTips.' },
+    { id: 'makan-sore', title: 'Makan sore', sub: 'Tip makan sore untuk semua klien aktif. Butuh tip aktif di sheet MealTips.' },
     { id: 'rekap-bulanan', title: 'Rekap bulanan', sub: 'Tanggal 1 tiap bulan: sesi, perubahan berat/pinggang, dan streak bulan lalu' },
     { id: 'selamat-milestone', title: 'Selamat milestone', sub: 'Tiap hari: klien yang baru meraih badge (10/25/50/100 sesi, streak 4/8/12 minggu)' },
     { id: 'waktunya-ukur', title: 'Waktunya ukur', sub: 'Tiap dua minggu (Senin): klien yang belum mencatat berat/pinggang 14 hari' },
@@ -3754,16 +3754,11 @@
     document.querySelectorAll('#detail-body [data-cppane]').forEach(function (p) { p.classList.toggle('hide', p.getAttribute('data-cppane') !== name); });
   };
 
-  // ── Reminder makan di profil klien (T-73) — hanya klien paket core ──────────
-  function isCoreMember(m) {
-    const pkg = (window.priceListData || []).find(p => String(p.id) === String(m.packageId));
-    return !!pkg && String(pkg.kategori || '').toLowerCase().trim() === 'core';
-  }
+  // ── Reminder makan di profil klien (T-73) — semua klien ──────────
   function mealToggleHtml(m) {
-    if (!isCoreMember(m)) return '';
     const on = m.mealReminder !== false, mid = h(m.id);
     return '<div class="list-item" id="profile-meal-wrap"><div class="grow" style="min-width:0"><p class="li-title">Reminder makan</p>' +
-      '<p class="li-sub">Ikut digest makan pagi &amp; sore ke Coach (paket core)</p></div>' +
+      '<p class="li-sub">Ikut digest makan pagi &amp; sore ke Coach</p></div>' +
       '<label class="toggle"><input type="checkbox" id="profile-meal-toggle" aria-label="Reminder makan klien"' + (on ? ' checked' : '') +
       ' onchange="window.toggleMealReminder(\'' + mid + '\',this)"><span></span></label></div>';
   }

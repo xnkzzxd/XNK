@@ -212,20 +212,31 @@ function withCore() {
   return env;
 }
 
-test('makan: core clients get a button, texts carry the tip, both opt-out columns are honoured', () => {
+test('makan: every active client gets a button (any package), texts carry the tip, both opt-out columns are honoured', () => {
   const env = withCore();
   env.callRaw('sendMakanPagiDigest_', ctx(env));
-  assert.match(messages(env)[0].text, /^🔔 <b>Makan pagi<\/b> · Rabu 30 Sep · 2 klien\n/);
-  assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi']);
+  assert.match(messages(env)[0].text, /^🔔 <b>Makan pagi<\/b> · Rabu 30 Sep · 3 klien\n/);
+  assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
   assert.equal(waText(buttons(env)[0]), 'Halo Ani Anggraini, pengingat makan pagi:\nSarapan telur dan oatmeal\nSemangat! 💪');
 
   const env2 = withCore();
   env2.memberRow('PT-A')[15] = 'makan-pagi';   // T-123 column P
   env2.memberRow('PT-B')[14] = 'tidak';         // T-73 column O
-  assert.equal(env2.callRaw('sendMakanPagiDigest_', ctx(env2)), true);
-  assert.equal(env2.fetches.length, 0);
+  env2.callRaw('sendMakanPagiDigest_', ctx(env2));
+  assert.deepEqual(buttons(env2).map(b => b.text), ['Citra']);
+  env2.fetches.length = 0;
   env2.callRaw('sendMakanSoreDigest_', ctx(env2));   // P only mutes pagi
-  assert.deepEqual(buttons(env2).map(b => b.text), ['Ani Anggraini']);
+  assert.deepEqual(buttons(env2).map(b => b.text), ['Ani Anggraini', 'Citra']);
+});
+
+test('makan: clients without a core package are included too', () => {
+  const env = withCore();
+  env.ss.seed('PriceList', [
+    ['ID', 'Nama Paket', 'Kategori', 'Harga', 'Jumlah Sesi', 'Durasi', 'Deskripsi', 'Benefit', 'Status Aktif'],
+    ['P1', 'Regular 8', 'regular', 900000, 8, '1 Bulan', '', '', true],
+  ]);
+  env.callRaw('sendMakanPagiDigest_', ctx(env));
+  assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
 });
 
 // ── owner-facing layout ──────────────────────────────────────────────────────
