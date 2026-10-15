@@ -212,20 +212,31 @@ function withCore() {
   return env;
 }
 
-test('makan: core clients get a button, texts carry the tip, both opt-out columns are honoured', () => {
+test('makan: every active client gets a button (any package), texts carry the tip, both opt-out columns are honoured', () => {
   const env = withCore();
   env.callRaw('sendMakanPagiDigest_', ctx(env));
-  assert.match(messages(env)[0].text, /^🔔 <b>Makan pagi<\/b> · Rabu 30 Sep · 2 klien\n/);
-  assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi']);
+  assert.match(messages(env)[0].text, /^🔔 <b>Makan pagi<\/b> · Rabu 30 Sep · 3 klien\n/);
+  assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
   assert.equal(waText(buttons(env)[0]), 'Halo Ani Anggraini, pengingat makan pagi:\nSarapan telur dan oatmeal\nSemangat! 💪');
 
   const env2 = withCore();
   env2.memberRow('PT-A')[15] = 'makan-pagi';   // T-123 column P
   env2.memberRow('PT-B')[14] = 'tidak';         // T-73 column O
-  assert.equal(env2.callRaw('sendMakanPagiDigest_', ctx(env2)), true);
-  assert.equal(env2.fetches.length, 0);
+  env2.callRaw('sendMakanPagiDigest_', ctx(env2));
+  assert.deepEqual(buttons(env2).map(b => b.text), ['Citra']);
+  env2.fetches.length = 0;
   env2.callRaw('sendMakanSoreDigest_', ctx(env2));   // P only mutes pagi
-  assert.deepEqual(buttons(env2).map(b => b.text), ['Ani Anggraini']);
+  assert.deepEqual(buttons(env2).map(b => b.text), ['Ani Anggraini', 'Citra']);
+});
+
+test('makan: clients without a core package are included too', () => {
+  const env = withCore();
+  env.ss.seed('PriceList', [
+    ['ID', 'Nama Paket', 'Kategori', 'Harga', 'Jumlah Sesi', 'Durasi', 'Deskripsi', 'Benefit', 'Status Aktif'],
+    ['P1', 'Regular 8', 'regular', 900000, 8, '1 Bulan', '', '', true],
+  ]);
+  env.callRaw('sendMakanPagiDigest_', ctx(env));
+  assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
 });
 
 // ── owner-facing layout ──────────────────────────────────────────────────────
@@ -431,4 +442,23 @@ test('tes-ulang: only clients whose last fitness test is 28+ days old get a butt
   fresh.ss.seed('FitnessTests', [['ID', 'Member ID', 'Tanggal', 'Tes', 'Nilai', 'Dicatat Oleh', 'Diubah Pada'], ['F1', 'PT-A', '2026-09-20', 'pushup', 20, 'coach', '']]);
   assert.equal(fresh.callRaw('sendTesUlangDigest_', ctx(fresh)), true);
   assert.equal(buttons(fresh).length, 0);
+});
+
+// ── hidup-sehat (05:00, every active client) ─────────────────────────────────
+
+test('hidup-sehat: every active client gets a cardio button; on by default at 05:00; opt-out respected', () => {
+  const env = seededEnv();
+  assert.equal(env.callRaw('sendHidupSehatDigest_', ctx(env)), true);
+  assert.match(messages(env)[0].text, /^🔔 <b>Hidup sehat<\/b>/);
+  assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
+  assert.match(waText(buttons(env)[1]), /^Selamat pagi Budi!.*cardio/s);
+
+  const env2 = seededEnv();
+  env2.memberRow('PT-A')[15] = 'hidup-sehat';
+  env2.callRaw('sendHidupSehatDigest_', ctx(env2));
+  assert.deepEqual(buttons(env2).map(b => b.text), ['Budi', 'Citra']);
+
+  const job = env.call('getAppSettings', env.adminToken()).reminder.jobs['hidup-sehat'];
+  assert.equal(job.enabled, true);
+  assert.match(JSON.stringify(job), /05:00|"hour":5|:5\b/);
 });
