@@ -443,3 +443,22 @@ test('tes-ulang: only clients whose last fitness test is 28+ days old get a butt
   assert.equal(fresh.callRaw('sendTesUlangDigest_', ctx(fresh)), true);
   assert.equal(buttons(fresh).length, 0);
 });
+
+// ── hidup-sehat (05:00, every active client) ─────────────────────────────────
+
+test('hidup-sehat: every active client gets a cardio button; on by default at 05:00; opt-out respected', () => {
+  const env = seededEnv();
+  assert.equal(env.callRaw('sendHidupSehatDigest_', ctx(env)), true);
+  assert.match(messages(env)[0].text, /^🔔 <b>Hidup sehat<\/b>/);
+  assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
+  assert.match(waText(buttons(env)[1]), /^Selamat pagi Budi!.*cardio/s);
+
+  const env2 = seededEnv();
+  env2.memberRow('PT-A')[15] = 'hidup-sehat';
+  env2.callRaw('sendHidupSehatDigest_', ctx(env2));
+  assert.deepEqual(buttons(env2).map(b => b.text), ['Budi', 'Citra']);
+
+  const job = env.call('getAppSettings', env.adminToken()).reminder.jobs['hidup-sehat'];
+  assert.equal(job.enabled, true);
+  assert.match(JSON.stringify(job), /05:00|"hour":5|:5\b/);
+});
