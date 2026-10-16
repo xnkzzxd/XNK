@@ -735,6 +735,9 @@ async function contrastReport(page) {
     await page.click('#rmd-status .btn');
     await page.waitForTimeout(500);
     check(env.triggers.length === 1 && (await page.textContent('#rmd-status')).includes('Trigger terpasang'), '"Pasang" installs the reminder trigger from the panel');
+    check((await page.locator('.rmd-acc').count()) >= 13 && (await page.locator('.rmd-acc[open]').count()) === 0, 'each reminder type folds its hour, message and test into a closed accordion');
+    await page.click('#rmd-acc-makan-pagi > summary');
+    check(await page.isVisible('[data-k="job-makan-pagi-hour"]'), 'tapping the accordion shows the hour field');
     await page.click('[data-k="job-makan-pagi-enabled"]');
     await page.fill('[data-k="job-makan-pagi-hour"]', '7');
     await page.click('#settings-save-btn');
@@ -744,6 +747,7 @@ async function contrastReport(page) {
     // ── Pesan ke klien: template + pratinjau, dan saklar per klien ────────────
     await page.click('.settings-nav-item[data-section="pengingat"]');
     await page.waitForTimeout(700);
+    await page.evaluate(() => document.querySelectorAll('.rmd-acc').forEach(d => { d.open = true; }));
     check(await page.locator('[data-k="job-sesi-besok-enabled"]').count() === 1, 'Pengingat has a "Sesi besok" card');
     check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 13, 'every reminder type has an editable client message');
     check((await page.textContent('#pv-pr')).startsWith('Halo Budi, pengingat PR kamu'), 'the preview shows the default client message with sample data');
@@ -1245,6 +1249,8 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     await page.click('.settings-nav-item[data-section="pengingat"]');
     await page.waitForTimeout(700);
+    await page.click('#rmd-acc-pr > summary');
+    await page.waitForTimeout(200);
     const bub = await page.locator('#pv-pr').boundingBox();
     check(!!bub && bub.width <= 322 && (await overflow()) <= 0, 'phone: the message preview is a WhatsApp-style bubble (' + Math.round(bub && bub.width) + ' px wide) without sideways scroll');
     check(((await page.textContent('#pv-pr')) || '').startsWith('Halo Budi'), 'phone: the preview text is loaded');
