@@ -788,10 +788,11 @@
       SET_RMD_JOBS.forEach(function (j) {
         const job = (r.jobs && r.jobs[j.id]) || { enabled: false, hour: '', defaultHour: '' };
         html += '<div class="card-flat stack">' + setToggleCard('job-' + j.id + '-enabled', j.title, j.sub, job.enabled !== false) +
+          '<details class="rmd-acc" id="rmd-acc-' + j.id + '"' + (rmdOpen[j.id] ? ' open' : '') + ' ontoggle="window.rmdAccT(\'' + j.id + '\',this.open)"><summary>' + icon('chevron-down') + '<span>Jam, pesan &amp; tes</span><span class="rmd-acc-hint">' + h(job.hour === '' ? '' : String(job.hour).padStart(2, '0') + ':00') + '</span></summary><div class="rmd-acc-body">' +
           setField('Jam kirim (WIB, 0–23)', '<div class="input-affix"><input class="input" type="number" inputmode="numeric" min="0" max="23" id="set-job-' + j.id + '-hour" data-k="job-' + j.id + '-hour" value="' + h(job.hour === job.defaultHour ? '' : job.hour) + '" placeholder="Bawaan ' + h(job.defaultHour) + ':00">' +
             '<button type="button" class="link-btn reset-link" onclick="window.settingsReset(\'job-' + j.id + '-hour\')">Bawaan</button></div>', 'job-' + j.id + '-hour', '') +
           '<button type="button" class="btn btn-outline btn-block" onclick="window.sendReminderTest(\'' + j.id + '\', this)">' + icon('send') + ' Kirim tes ' + h(j.title) + '</button>' +
-          rmdTemplateHtml(j, job) + '</div>';
+          rmdTemplateHtml(j, job) + '</div></details></div>';
       });
       html += '<div class="card-flat stack">' +
         setField('Kalimat tidur (reminder malam)', '<textarea class="textarea" id="set-tplSleep" data-k="tplSleep" rows="2" maxlength="300" placeholder="Kosongkan = tidak ditambahkan">' + h(r.tplSleep) + '</textarea>', 'tplSleep', 'Ditambahkan ke email & Telegram jadwal besok pada run malam saja. Simpan dulu sebelum kirim tes.') +
@@ -803,6 +804,10 @@
       return html;
     }
   };
+
+  // Accordion per jenis pengingat: yang terbuka tetap terbuka setelah simpan/render ulang
+  const rmdOpen = {};
+  window.rmdAccT = function (id, open) { if (open) rmdOpen[id] = true; else delete rmdOpen[id]; };
 
   // Template pesan ke klien + pratinjau (dari server, jadi sama persis dengan isi tombol WhatsApp)
   function rmdTemplateHtml(j, job) {

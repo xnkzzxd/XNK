@@ -769,6 +769,13 @@ html.wl-res-on #main-scroll-area .page { padding-bottom: 96px; }
 .pf-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .pf-line { display: flex; align-items: center; gap: 6px; }
 .pf-line .pf-kind { flex: 1; min-width: 0; font-size: 16px; }
+.rmd-acc { border-top: 1px solid var(--border); }
+.rmd-acc > summary { min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; color: var(--fg-2); list-style: none; }
+.rmd-acc > summary::-webkit-details-marker { display: none; }
+.rmd-acc > summary svg { width: 18px; height: 18px; transition: transform .2s; }
+.rmd-acc[open] > summary svg { transform: rotate(180deg); }
+.rmd-acc-hint { margin-left: auto; font-weight: 500; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.rmd-acc-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 6px; }
 .pf-more { border-top: 1px solid var(--border); padding-top: 4px; }
 .pf-more > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; color: var(--fg-2); }
 .pf-more-body { display: flex; flex-direction: column; gap: 10px; padding-bottom: 4px; }
