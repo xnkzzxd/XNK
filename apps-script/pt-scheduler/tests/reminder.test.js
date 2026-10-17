@@ -64,7 +64,7 @@ test('the default client texts speak to the client: name first, key fact present
   const facts = { 'sesi-besok': '07:00', 'booking-minggu': 'Rabu 1/10 07:00', 'pr': 'Latihan mobilitas', 'makan-pagi': 'Sarapan telur', 'makan-sore': 'Sarapan telur' };
   Object.keys(facts).forEach(j => {
     const text = env.call('previewReminderText', token, j, '').text;
-    assert.match(text, /^(Hai|Halo) Budi/, j);
+    assert.match(text, /^((Hai|Halo) )?Kak Budi/, j);
     assert.ok(text.includes(facts[j]) || j.startsWith('makan'), j + ' should contain ' + facts[j]);
     assert.ok(text.length < 500, j);
   });
@@ -88,8 +88,11 @@ test('sesi-besok: one button per client with a session tomorrow, addressed to th
   assert.deepEqual(bs.map(b => b.text), ['Ani Anggraini · 06:00', 'Budi · 07:00']);
   assert.ok(bs[0].url.startsWith('https://wa.me/6281111111111?text='));
   assert.ok(bs[1].url.startsWith('https://wa.me/6281222222222?text='));   // 08… normalised to 628…
-  assert.equal(waText(bs[0]), 'Hai Ani Anggraini, pengingat sesi besok jam 06:00 dengan Coach Rizky.\n\nSampai ketemu! 💪');
-  assert.equal(waText(bs[1]), 'Hai Budi, pengingat sesi besok jam 07:00 dan 17:00.\n\nSampai ketemu! 💪');   // no coach → no stray " ."
+  const t0 = waText(bs[0]), t1 = waText(bs[1]);
+  assert.match(t0, /Kak Ani\b/); assert.ok(!t0.includes('Anggraini'), t0);   // first name only
+  assert.ok(t0.includes('06:00') && t0.includes('dengan Coach Rizky'), t0);
+  assert.match(t1, /Kak Budi\b/); assert.ok(t1.includes('07:00 dan 17:00'), t1);
+  assert.ok(!/ [.,!?]/.test(t1) && !t1.includes('{'), t1);   // no coach → no stray " ." and no raw placeholder
 });
 
 test('sesi-besok: the old "Belum Ditugaskan" placeholder reads as no coach (T-200)', () => {
@@ -97,14 +100,16 @@ test('sesi-besok: the old "Belum Ditugaskan" placeholder reads as no coach (T-20
     sched('S1', 'PT-B', 'Budi', '081222222222', '2026-10-01T00:00:00Z', 'read', 'Belum Ditugaskan'),
   ]);
   assert.equal(env.callRaw('sendSesiBesokDigest_', ctx(env)), true);
-  assert.equal(waText(buttons(env)[0]), 'Hai Budi, pengingat sesi besok jam 07:00.\n\nSampai ketemu! 💪');
+  const t = waText(buttons(env)[0]);
+  assert.ok(t.includes('07:00') && !t.includes('Coach') && !t.includes('Belum'), t);
 });
 
 test('sesi-besok: the sleep sentence goes inside the client message', () => {
   const env = withSchedules([sched('S1', 'PT-A', 'Ani Anggraini', '6281111111111', '2026-09-30T23:00:00Z', 'read', 'Rizky')]);
   env.props.RMD_TPL_SLEEP = 'Tidur sebelum jam 10 ya.';
   env.callRaw('sendSesiBesokDigest_', ctx(env));
-  assert.equal(waText(buttons(env)[0]), 'Hai Ani Anggraini, pengingat sesi besok jam 06:00 dengan Coach Rizky.\n\n😴 Tidur sebelum jam 10 ya.\n\nSampai ketemu! 💪');
+  const t = waText(buttons(env)[0]);
+  assert.ok(t.includes('\n\n😴 Tidur sebelum jam 10 ya.') && t.includes('dengan Coach Rizky'), t);
 });
 
 test('sesi-besok: opted-out clients get no button, clients without a valid number are listed, nobody = no message', () => {
@@ -139,7 +144,8 @@ test('sesi-besok is a registered job (default 19:00, on) and can be tested from 
   const job = env.call('getAppSettings', token).reminder.jobs['sesi-besok'];
   assert.equal(job.defaultHour, 19);
   assert.equal(job.enabled, true);
-  assert.deepEqual(job.placeholders, ['nama', 'jam', 'coach', 'tidur']);
+  assert.deepEqual(job.placeholders, ['nama', 'jam', 'coach', 'tidur', 'personal']);
+  assert.equal(job.variasi, true);
   const res = env.call('sendReminderTest', token, 'sesi-besok');
   assert.equal(res.jenis, 'sesi-besok');
   assert.ok(env.fetches.some(f => JSON.parse(f.options.payload).text.includes('TES pengingat')));
@@ -166,7 +172,8 @@ test('booking-minggu: buttons say "Nama · sisa N", texts are addressed to the c
   const bs = buttons(env);
   assert.deepEqual(bs.map(b => b.text), ['Ani Anggraini · sisa 5', 'Budi · sisa 8']);
   const text = waText(bs[0]);
-  assert.match(text, /^Halo Ani Anggraini, minggu ini masih ada slot latihan kosong:\n• Rabu 30\/9 20:00\n• Kamis 1\/10 06:00\n• Kamis 1\/10 07:00\nMau booking yang mana\? 💪$/);
+  assert.match(text, /Kak Ani\b/);
+  assert.ok(text.includes('• Rabu 30/9 20:00\n• Kamis 1/10 06:00\n• Kamis 1/10 07:00'), text);
 });
 
 // ── PR ───────────────────────────────────────────────────────────────────────
@@ -189,8 +196,10 @@ test('pr: one button per client with a PR due, late first, text lists the PRs fo
   assert.match(messages(env)[0].text, /^🔔 <b>PR<\/b> · Rabu 30 Sep · 2 klien\n/);
   const bs = buttons(env);
   assert.deepEqual(bs.map(b => b.text), ['Ani Anggraini · 1 telat', 'Budi · 1 PR']);
-  assert.equal(waText(bs[0]), 'Halo Ani Anggraini, pengingat PR kamu:\n• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan (tenggat 1/10)\nSemangat, kamu pasti bisa! 💪');
-  assert.equal(waText(bs[1]), 'Halo Budi, pengingat PR kamu:\n• Tidur 8 jam (tenggat 30/9)\nSemangat, kamu pasti bisa! 💪');
+  assert.match(waText(bs[0]), /Kak Ani\b/);
+  assert.ok(waText(bs[0]).includes('• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan (tenggat 1/10)'));
+  assert.match(waText(bs[1]), /Kak Budi\b/);
+  assert.ok(waText(bs[1]).includes('• Tidur 8 jam (tenggat 30/9)'));
 });
 
 test('pr: a client who turned PR reminders off gets no button', () => {
@@ -217,7 +226,8 @@ test('makan: every active client gets a button (any package), texts carry the ti
   env.callRaw('sendMakanPagiDigest_', ctx(env));
   assert.match(messages(env)[0].text, /^🔔 <b>Makan pagi<\/b> · Rabu 30 Sep · 3 klien\n/);
   assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
-  assert.equal(waText(buttons(env)[0]), 'Halo Ani Anggraini, pengingat makan pagi:\nSarapan telur dan oatmeal\nSemangat! 💪');
+  assert.match(waText(buttons(env)[0]), /Kak Ani\b/);
+  assert.ok(waText(buttons(env)[0]).includes('\n\n💡 Sarapan telur dan oatmeal'));
 
   const env2 = withCore();
   env2.memberRow('PT-A')[15] = 'makan-pagi';   // T-123 column P
@@ -247,7 +257,7 @@ test('20 clients: 3 Telegram messages (8 + 8 + 4), short labels, wa.me links wit
   const tasks = [];
   for (let i = 1; i <= 20; i++) {
     const id = 'PT-' + String(i).padStart(2, '0');
-    rows.push([id, 'Klien Nomor ' + i, '62812000000' + String(i).padStart(2, '0'), '', '1/1/2026', '', 'P1', 'Regular 8', 10, 0, '', '', '1/1/2026', 'k'.repeat(31) + i % 10]);
+    rows.push([id, 'Klien' + i + ' Nomor', '62812000000' + String(i).padStart(2, '0'), '', '1/1/2026', '', 'P1', 'Regular 8', 10, 0, '', '', '1/1/2026', 'k'.repeat(31) + i % 10]);
     tasks.push(task('T' + i, id, 'Latihan ' + i, '28/9/2026'));
   }
   env.ss.seed('MemberData', rows);
@@ -267,8 +277,8 @@ test('20 clients: 3 Telegram messages (8 + 8 + 4), short labels, wa.me links wit
     assert.ok(m, b.url);
     const n = parseInt(m[1], 10);
     seen.add(n);
-    assert.ok(waText(b).startsWith('Halo Klien Nomor ' + n + ','), 'button for ' + n);   // the text belongs to the same client as the number
-    assert.ok(b.text.startsWith('Klien Nomor ' + n));
+    assert.match(waText(b), new RegExp('Kak Klien' + n + '\\b'), 'button for ' + n);   // the text belongs to the same client as the number
+    assert.ok(b.text.startsWith('Klien' + n + ' Nomor'));
   });
   assert.equal(seen.size, 20);
 });
@@ -306,9 +316,9 @@ test('a saved template is used for the client text, and the default is stored as
   const s = save('{nama}, PR-mu: {pr} 🙏');
   assert.equal(env.props.RMD_TPL_PR, '{nama}, PR-mu: {pr} 🙏');
   assert.equal(s.reminder.jobs.pr.tpl, '{nama}, PR-mu: {pr} 🙏');
-  assert.ok(s.reminder.jobs.pr.tplDefault.startsWith('Halo {nama}'));
-  env.callRaw('sendPrDigest_', ctx(env));
-  assert.equal(waText(buttons(env)[0]), 'Ani Anggraini, PR-mu: • Latihan (telat, tenggat 28/9) 🙏');
+  assert.ok(s.reminder.jobs.pr.tplDefault.startsWith('Halo Kak {nama}'));
+  env.callRaw('sendPrDigest_', ctx(env));   // pr uses the daily variations (owner's choice), not the saved template
+  assert.ok(!waText(buttons(env)[0]).includes('PR-mu') && waText(buttons(env)[0]).includes('• Latihan (telat, tenggat 28/9)'));
   save(s.reminder.jobs.pr.tplDefault);
   assert.equal(env.props.RMD_TPL_PR, undefined);
   save('{nama} lagi');
@@ -328,8 +338,8 @@ test('previewReminderText shows the message with sample data, falls back to the 
   const env = seededEnv();
   const token = env.adminToken();
   assert.equal(env.call('previewReminderText', token, 'sesi-besok', '').text,
-    'Hai Budi, pengingat sesi besok jam 07:00 dengan Coach Dika.\n\n😴 Tidur cukup malam ini ya.\n\nSampai ketemu! 💪');
-  assert.equal(env.call('previewReminderText', token, 'makan-pagi', 'Pagi {nama}: {tip}').text, 'Pagi Budi: Sarapan telur dan oatmeal, minum air putih dulu.');
+    'Kak Budi, pengingat sesi besok jam 07:00 dengan Coach Dika.\n\n😴 Tidur cukup malam ini ya.\n\nSampai ketemu! 💪');
+  assert.equal(env.call('previewReminderText', token, 'makan-pagi', 'Pagi Kak {nama}:{tip}').text, 'Pagi Kak Budi:\n\n💡 Sarapan telur dan oatmeal, minum air putih dulu.');
   assert.throws(() => env.call('previewReminderText', token, 'pr', '{slot}'), /tidak dikenal/);
   assert.throws(() => env.call('previewReminderText', token, 'tidur', 'x'), /tidak punya template/);
   env.props.RMD_TPL_SLEEP = 'Tidur jam 9 ya.';
@@ -392,7 +402,7 @@ test('ulang-tahun: only clients whose birthday is today get a button, addressed 
   const bs = buttons(env);
   assert.equal(bs.length, 1);
   assert.equal(bs[0].text, 'Ani Anggraini · ulang tahun');
-  assert.match(waText(bs[0]), /^Selamat ulang tahun Ani Anggraini!/);
+  assert.match(waText(bs[0]), /^Selamat ulang tahun Kak Ani!/);
   const other = seededEnv();
   telegramOn(other);
   const m2 = other.sheet('MemberData').rows;
@@ -407,7 +417,7 @@ test('the new types are off by default and listed with templates', () => {
   const r = env.call('getAppSettings', env.adminToken()).reminder;
   assert.equal(r.jobs['ulang-tahun'].enabled, false);
   assert.equal(r.jobs['ringkasan-owner'].enabled, false);
-  assert.match(env.call('previewReminderText', env.adminToken(), 'ulang-tahun', '').text, /^Selamat ulang tahun Budi/);
+  assert.match(env.call('previewReminderText', env.adminToken(), 'ulang-tahun', '').text, /^Selamat ulang tahun Kak Budi/);
   assert.match(env.call('previewReminderText', env.adminToken(), 'ringkasan-owner', '').text, /^📊 Ringkasan September/);
 });
 
@@ -436,7 +446,7 @@ test('tes-ulang: only clients whose last fitness test is 28+ days old get a butt
   const bs = buttons(env);
   assert.equal(bs.length, 1);
   assert.equal(bs[0].text, 'Ani Anggraini · tes ulang');
-  assert.match(waText(bs[0]), /^Hai Ani Anggraini, sudah sebulan sejak tes kebugaranmu \(20 Agu\)/);
+  assert.match(waText(bs[0]), /^Hai Kak Ani, sudah sebulan sejak tes kebugaranmu \(20 Agu\)/);
   const fresh = seededEnv();
   telegramOn(fresh);
   fresh.ss.seed('FitnessTests', [['ID', 'Member ID', 'Tanggal', 'Tes', 'Nilai', 'Dicatat Oleh', 'Diubah Pada'], ['F1', 'PT-A', '2026-09-20', 'pushup', 20, 'coach', '']]);
@@ -451,7 +461,7 @@ test('hidup-sehat: every active client gets a cardio button; on by default at 05
   assert.equal(env.callRaw('sendHidupSehatDigest_', ctx(env)), true);
   assert.match(messages(env)[0].text, /^🔔 <b>Hidup sehat<\/b>/);
   assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
-  assert.match(waText(buttons(env)[1]), /^Selamat pagi Budi!.*cardio/s);
+  assert.match(waText(buttons(env)[1]), /Kak Budi\b.*(cardio|gerak|jalan)/is);
 
   const env2 = seededEnv();
   env2.memberRow('PT-A')[15] = 'hidup-sehat';

@@ -83,9 +83,9 @@ test('the three new types are registered, off by default, with editable messages
   const jobs = env.call('getAppSettings', token).reminder.jobs;
   assert.deepEqual(['rekap-bulanan', 'selamat-milestone', 'waktunya-ukur'].map(j => [jobs[j].enabled, jobs[j].defaultHour]), [[false, 9], [false, 18], [false, 8]]);
   assert.deepEqual(jobs['rekap-bulanan'].placeholders, ['nama', 'bulan', 'sesi', 'berat', 'pinggang', 'streak', 'link']);
-  assert.match(env.call('previewReminderText', token, 'rekap-bulanan', '').text, /^Halo Budi, rekap latihan bulan September:\n💪 8 sesi latihan\n⚖️ Berat −2,1 kg\n📏 Pinggang −3 cm\n🔥 Streak 5 minggu\n\nLihat progresmu di https:\/\/book\.xnkbooking\.my\.id\nTerus semangat!$/);
-  assert.equal(env.call('previewReminderText', token, 'selamat-milestone', '').text, 'Selamat Budi! 🎉 Kamu baru meraih badge 25 sesi.\nBangga banget sama progresmu, terus semangat! 💪');
-  assert.match(env.call('previewReminderText', token, 'waktunya-ukur', '').text, /^Halo Budi, waktunya catat progres!.* Terakhir kamu catat tanggal 12 Sep\.\nCatat di https:\/\/book\.xnkbooking\.my\.id \(Beranda → Progres\)\.$/);
+  assert.match(env.call('previewReminderText', token, 'rekap-bulanan', '').text, /^Halo Kak Budi, rekap latihan bulan September:\n💪 8 sesi latihan\n⚖️ Berat −2,1 kg\n📏 Pinggang −3 cm\n🔥 Streak 5 minggu\n\nLihat progresmu di https:\/\/book\.xnkbooking\.my\.id\nTerus semangat!$/);
+  assert.equal(env.call('previewReminderText', token, 'selamat-milestone', '').text, 'Selamat Kak Budi! 🎉 Kamu baru meraih badge 25 sesi.\nBangga banget sama progresmu, terus semangat! 💪');
+  assert.match(env.call('previewReminderText', token, 'waktunya-ukur', '').text, /^Halo Kak Budi, waktunya catat progres!.* Terakhir kamu catat tanggal 12 Sep\.\nCatat di https:\/\/book\.xnkbooking\.my\.id \(Beranda → Progres\)\.$/);
   assert.throws(() => env.call('previewReminderText', token, 'rekap-bulanan', '{badge}'), /tidak dikenal/);   // {badge} belongs to another type
   assert.deepEqual(env.call('setMemberReminderPrefs', token, 'PT-A', { off: ['rekap-bulanan', 'waktunya-ukur'] }).reminderOff, ['rekap-bulanan', 'waktunya-ukur']);   // per-client switches accept the new types
 });
@@ -113,7 +113,7 @@ test('rekap-bulanan: one button per client who trained or logged last month, wit
   assert.match(msgs[0].text, /^🔔 <b>Rekap bulanan<\/b> · September · 1 klien\n/);   // the header names the month being summarised
   const bs = buttons(env);
   assert.deepEqual(bs.map(b => b.text), ['Ani Anggraini · 5 sesi']);
-  assert.equal(waText(bs[0]), 'Halo Ani Anggraini, rekap latihan bulan September:\n💪 5 sesi latihan\n⚖️ Berat −1,1 kg\n📏 Pinggang −4 cm\n🔥 Streak 5 minggu\n\nLihat progresmu di https://book.xnkbooking.my.id\nTerus semangat!');
+  assert.equal(waText(bs[0]), 'Halo Kak Ani, rekap latihan bulan September:\n💪 5 sesi latihan\n⚖️ Berat −1,1 kg\n📏 Pinggang −4 cm\n🔥 Streak 5 minggu\n\nLihat progresmu di https://book.xnkbooking.my.id\nTerus semangat!');
 });
 
 test('rekap-bulanan: measurements alone qualify, missing data leaves lines out, opt-outs and no-number clients are handled', () => {
@@ -123,7 +123,7 @@ test('rekap-bulanan: measurements alone qualify, missing data leaves lines out, 
   env.callRaw('sendRekapBulananDigest_', ctxAt(env, OCT1));
   const bs = buttons(env);
   assert.deepEqual(bs.map(b => b.text), ['Budi · 0 sesi']);
-  assert.equal(waText(bs[0]), 'Halo Budi, rekap latihan bulan September:\n💪 0 sesi latihan\n\nLihat progresmu di https://book.xnkbooking.my.id\nTerus semangat!');
+  assert.equal(waText(bs[0]), 'Halo Kak Budi, rekap latihan bulan September:\n💪 0 sesi latihan\n\nLihat progresmu di https://book.xnkbooking.my.id\nTerus semangat!');
 
   const env2 = recapEnv();
   progress(env2, [['PT-A', '2026-09-05', 74.5], ['PT-B', '2026-09-12', 90]]);
@@ -158,7 +158,7 @@ test('selamat-milestone: a new badge is congratulated once, then remembered in c
   assert.equal(env.callRaw('sendMilestoneDigest_', ctxAt(env, '2026-10-01T11:00:00Z')), true);
   const bs = buttons(env);
   assert.deepEqual(bs.map(b => b.text), ['Ani Anggraini · 10 sesi']);
-  assert.equal(waText(bs[0]), 'Selamat Ani Anggraini! 🎉 Kamu baru meraih badge 10 sesi.\nBangga banget sama progresmu, terus semangat! 💪');
+  assert.equal(waText(bs[0]), 'Selamat Kak Ani! 🎉 Kamu baru meraih badge 10 sesi.\nBangga banget sama progresmu, terus semangat! 💪');
   assert.equal(env.sheet('MemberData').rows[0][17], 'Badge Diselamati');
   assert.equal(env.memberRow('PT-A')[17], 'sesi-10');
   const sent = env.fetches.length;
@@ -219,8 +219,8 @@ test('waktunya-ukur: clients whose last entry is 14+ days old (or missing) get a
   assert.equal(env.callRaw('sendUkurDigest_', ctxAt(env, '2026-10-05T01:00:00Z')), true);
   const bs = buttons(env);
   assert.deepEqual(bs.map(b => b.text), ['Budi · 25 hari', 'Citra · baru']);
-  assert.equal(waText(bs[0]), 'Halo Budi, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya. Terakhir kamu catat tanggal 10 Sep.\nCatat di https://book.xnkbooking.my.id (Beranda → Progres).');
-  assert.equal(waText(bs[1]), 'Halo Citra, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.\nCatat di https://book.xnkbooking.my.id (Beranda → Progres).');
+  assert.equal(waText(bs[0]), 'Halo Kak Budi, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya. Terakhir kamu catat tanggal 10 Sep.\nCatat di https://book.xnkbooking.my.id (Beranda → Progres).');
+  assert.equal(waText(bs[1]), 'Halo Kak Citra, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.\nCatat di https://book.xnkbooking.my.id (Beranda → Progres).');
   assert.match(messages(env)[0].text, /^🔔 <b>Waktunya ukur<\/b> · Senin 5 Okt · 2 klien\n/);
 });
 

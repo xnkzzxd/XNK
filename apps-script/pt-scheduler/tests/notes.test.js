@@ -30,7 +30,7 @@ test('the post-session message fills the template, shows what was trained and th
   const t = env.adminToken();
   const fetches = env.fetches.length;
   const r = env.call('saveSessionNote', t, 'SCH-A1', { dilatih: 'Squat, lunges', fokus: 'Teknik squat' });
-  assert.match(r.text, /^Halo Ani, terima kasih untuk sesi hari ini!/);
+  assert.match(r.text, /^Halo Kak Ani, terima kasih untuk sesi hari ini!/);
   assert.match(r.text, /🏋️ Hari ini: Squat, lunges/);
   assert.match(r.text, /🎯 Berikutnya: Teknik squat/);
   assert.match(r.text, /Sisa sesimu 5 dari 10\./);

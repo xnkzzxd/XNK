@@ -123,7 +123,7 @@ test('test results: the member sees a dated history for trends; the owner gets a
   const push = j(mine.tests).find(x => x.id === 'pushup');
   assert.deepEqual(push.history, [{ tanggal: '2026-08-01', nilai: 20 }, { tanggal: '2026-09-01', nilai: 28 }]);
   const res = env.call('getTestResultMessage', t, 'PT-A');
-  assert.match(res.text, /Halo Ani,/);
+  assert.match(res.text, /Halo Kak Ani,/);
   assert.match(res.text, /Push-up: 20 → 28 kali \/ 1 menit \(naik 8\)/);
   assert.match(res.text, /Detak jantung istirahat: 80 → 72 bpm \(turun 8\)/);
   assert.match(res.text, /Plank: 45 detik/);   // measured once: value only
