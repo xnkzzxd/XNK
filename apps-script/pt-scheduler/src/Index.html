@@ -805,7 +805,8 @@
     <div class="sheet tall hide" id="sheet-renew" role="dialog" aria-modal="true" aria-labelledby="renew-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="renew-title">Perpanjang paket</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
-      <div class="sheet-body stack"><p class="li-sub">Pilih paket. Setelah itu WhatsApp ke coach terbuka untuk konfirmasi pembayaran.</p><div class="field hide" id="renew-coach-field"><label class="label" for="renew-coach">Coach</label><select class="select" id="renew-coach"></select></div><div class="list" id="renew-list"></div></div>
+      <div class="sheet-body stack"><p class="li-sub">Ketuk paket, lalu tekan tombol di bawah. WhatsApp ke coach terbuka untuk konfirmasi pembayaran.</p><div class="field hide" id="renew-coach-field"><label class="label" for="renew-coach">Coach</label><select class="select" id="renew-coach"></select></div><div class="list" id="renew-list"></div></div>
+      <div class="sheet-foot"><button type="button" class="btn btn-primary btn-lg btn-block" id="renew-go" onclick="window.renewGo()" disabled>Pilih paket dulu</button></div>
     </div>
 
     <!-- Gabung grup kelas privat dengan kode (portal klien) -->
