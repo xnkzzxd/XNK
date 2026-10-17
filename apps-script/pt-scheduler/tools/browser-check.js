@@ -1293,10 +1293,9 @@ async function contrastReport(page) {
     check((await page.textContent('#renew-list')).includes('Rp'), 'renewal: each package shows its price');
     check((await overflowX(page)) <= 0, 'renewal: the sheet has no sideways scroll');
     await shot(page, 'renew-mobile-sheet');
-    await page.click('#renew-list .list-item');
-    await page.waitForTimeout(400);
-    check(await visible(page, '#modal-confirm'), 'renewal: choosing a package asks to confirm first');
-    await page.click('#btn-confirm-modal-yes');
+    check((await page.getAttribute('#renew-list .list-item', 'aria-pressed')) === 'true' && (await page.textContent('#renew-go')).includes('Perpanjang'), 'renewal: the current package is first and already picked');
+    await page.click('#renew-go');
+    check(await visible(page, '#wa-prompt') && (await page.textContent('#pub-renew-slot')).includes('Menunggu konfirmasi'), 'renewal: one tap shows the pending status and WhatsApp button right away');
     await page.waitForTimeout(900);
     const req = env.sheet('RenewalRequests') && env.sheet('RenewalRequests').rows[1];
     check(!!req && req[1] === 'PT-A' && req[3] === 'menunggu', 'renewal: the request is recorded for this client');

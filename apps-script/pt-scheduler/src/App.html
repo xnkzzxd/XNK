@@ -6693,7 +6693,7 @@
         (rem === 0 ? 'Kuota sesimu sudah habis.' : 'Sisa ' + rem + ' sesi lagi.') + '</p><p class="muted" style="font-size:var(--fs-xs)">Perpanjang paket supaya jadwalmu tidak terputus.</p></div>' +
         '<button type="button" class="btn btn-on-ink btn-sm" id="pub-renew-btn" onclick="window.openRenewSheet()">Perpanjang</button></div>';
     }
-    return '';
+    return '<button type="button" class="btn btn-on-ink btn-sm" id="pub-renew-link" style="margin-top:16px" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang / beli paket</button>';
   }
   function renderRenewSlot() {
     const slot = $('pub-renew-slot'), me = window.publicLoggedMember;
@@ -6722,32 +6722,60 @@
     return memberCall('getMyBills').then(function (list) { window.myBills = list || []; renderBillSlot(); })
       .catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
   };
-  window.openRenewSheet = function () {
-    fillCoachSelect('renew-coach-field', 'renew-coach');
-    const list = (window.priceListData || []).filter(p => p && p.aktif !== false);
+  // Satu sheet untuk perpanjang dan beli paket lain: paket sekarang (atau yang diketuk di katalog)
+  // sudah terpilih, jadi biasanya cukup satu ketukan. Permintaan dikirim di latar belakang.
+  let renewSel = '';
+  function renewPkgs() { return (window.priceListData || []).filter(p => p && p.aktif !== false); }
+  function renewPaint() {
+    const p = renewPkgs().find(x => String(x.id) === renewSel);
+    const cur = String((window.publicLoggedMember || {}).packageId || '');
+    document.querySelectorAll('#renew-list [data-renew]').forEach(function (b) {
+      const on = b.getAttribute('data-renew') === renewSel;
+      b.classList.toggle('selected', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    const go = $('renew-go');
+    go.disabled = !p;
+    go.textContent = !p ? 'Pilih paket dulu' : (String(p.id) === cur ? 'Perpanjang' : 'Beli') + ' · ' + formatRp(p.harga);
+  }
+  window.openRenewSheet = function (preId) {
+    const me = window.publicLoggedMember || {};
+    if (fillCoachSelect('renew-coach-field', 'renew-coach') && me.preferredCoachId) $('renew-coach').value = String(me.preferredCoachId);
+    const cur = String(me.packageId || '');
+    const list = renewPkgs().slice().sort((a, b) => (String(b.id) === cur) - (String(a.id) === cur));
+    const ok = id => list.some(p => String(p.id) === String(id) && !(classFull(p) && String(p.id) !== cur));
+    renewSel = preId != null && ok(preId) ? String(preId) : (ok(cur) ? cur : '');
     $('renew-list').innerHTML = list.length ? list.map(function (p) {
-      const full = classFull(p) && String(p.id) !== String((window.publicLoggedMember || {}).packageId);
-      return '<button type="button" class="list-item interactive" style="min-height:64px"' + (full ? ' disabled' : '') + ' onclick="window.renewPick(\'' + h(p.id) + '\')"><span class="grow" style="min-width:0;text-align:left"><span class="li-title truncate" style="display:block">' + h(p.namaPaket) + '</span>' +
-        '<span class="li-sub">' + h((p.tipe === 'kelas' ? 'Kelas · ' + classSeatsText(p) + ' · ' : '') + (p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '')) + '</span></span>' +
+      const full = classFull(p) && String(p.id) !== cur;
+      return '<button type="button" class="list-item interactive" style="min-height:64px" data-renew="' + h(String(p.id)) + '"' + (full ? ' disabled' : '') + ' onclick="window.renewPick(this.getAttribute(\'data-renew\'))"><span class="grow" style="min-width:0;text-align:left"><span class="li-title truncate" style="display:block">' + h(p.namaPaket) + '</span>' +
+        '<span class="li-sub">' + h((String(p.id) === cur ? 'Paket sekarang · ' : '') + (p.tipe === 'kelas' ? 'Kelas · ' + classSeatsText(p) + ' · ' : '') + (p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '')) + '</span></span>' +
         '<span class="li-trail num" style="font-weight:800">' + h(formatRp(p.harga)) + '</span></button>';
     }).join('') : '<p class="li-sub">Belum ada paket yang bisa dipilih.</p>';
+    renewPaint();
     openSheet('sheet-renew');
   };
-  window.renewPick = function (id) {
-    const p = (window.priceListData || []).find(x => String(x.id) === String(id));
+  window.renewPick = function (id) { renewSel = String(id); renewPaint(); };
+  window.renewGo = function () {
+    const p = renewPkgs().find(x => String(x.id) === renewSel);
     if (!p) return;
     const needCoach = !$('renew-coach-field').classList.contains('hide');
     const coachId = needCoach ? $('renew-coach').value : '';
     if (needCoach && !coachId) { window.showToast('Pilih coach dulu.'); $('renew-coach').focus(); return; }
-    const coachObj = window.coaches.find(c => String(c.id) === String(coachId));
-    window.showConfirmModal('Perpanjang <b>' + h(p.namaPaket) + '</b> (' + h(formatRp(p.harga)) + ')' + (coachObj ? ' bersama <b>' + h(coachObj.name) + '</b>' : '') + '? Setelah ini WhatsApp ke coach terbuka untuk konfirmasi pembayaran.', function () {
-      memberCall('requestRenewal', id, coachId).then(function (res) {
-        window.myRenewal = res.request;
-        window.closeModal();
-        renderRenewSlot();
-        window.showWaPrompt(window.waUrl(renewCoachPhone(), res.text), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
-      }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
-    }, { title: 'Perpanjang paket?', confirmText: 'Ya, perpanjang' });
+    // Optimis: beranda langsung "Menunggu konfirmasi" dan tombol WhatsApp muncul; server menyusul.
+    const prev = window.myRenewal;
+    window.myRenewal = { id: '', status: 'menunggu', packageId: p.id, packageName: p.namaPaket, harga: p.harga, coachId: coachId };
+    window.closeModal();
+    renderRenewSlot();
+    const coach = (window.coaches || []).find(c => String(c.id) === String(coachId));
+    window.showWaPrompt(window.waUrl(coach ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
+    memberCall('requestRenewal', p.id, coachId).then(function (res) {
+      window.myRenewal = res.request;
+      renderRenewSlot();
+    }).catch(function (err) {
+      window.myRenewal = prev;
+      renderRenewSlot();
+      const w = document.getElementById('wa-prompt'); if (w) w.remove();
+      window.showToast('Gagal: ' + window.authMessage(err));
+    });
   };
   window.renewResend = function () {
     const r = window.myRenewal;
@@ -6778,8 +6806,10 @@
       ? 'Setujui perpanjangan <b>' + h(r.name) + '</b> (' + h(r.packageName) + ')? Sesi klien direset ke paket baru dan transaksi dicatat. Pastikan pembayaran sudah diterima.'
       : 'Tolak permintaan perpanjang <b>' + h(r.name) + '</b>? Data klien tidak berubah.';
     window.showConfirmModal(msg, function () {
+      window.renewals = (window.renewals || []).filter(x => x.id !== id);
+      window.renderDashboard();
+      window.showToast(approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.');
       adminCall('decideRenewal', id, approve).then(function () {
-        window.showToast(approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.');
         return approve ? window.loadAllData() : null;
       }).then(function () { return window.loadRenewals(); })
         .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); window.loadRenewals(); });
@@ -7899,11 +7929,14 @@
         '<p class="pkg-price num">' + h(formatRp(p.harga)) + '</p>' +
         (p.deskripsi ? '<p class="' + (featured ? 'muted' : 'li-sub') + '">' + h(p.deskripsi) + '</p>' : '') +
         (Array.isArray(p.benefit) && p.benefit.length ? '<ul class="benefits"' + (featured ? ' style="color:var(--on-ink)"' : '') + '>' + p.benefit.map(b => '<li>' + icon('check') + '<span' + (featured ? ' style="color:var(--on-ink)"' : '') + '>' + h(b) + '</span></li>').join('') + '</ul>' : '') +
-        '<button type="button" class="btn ' + (featured ? 'btn-on-ink' : 'btn-primary') + ' btn-block" style="margin-top:auto" data-pkg="' + h(String(p.id)) + '"' + (classFull(p) ? ' disabled' : '') + ' onclick="window.openRegistrationModal(this.getAttribute(\'data-pkg\'))">' + (classFull(p) ? 'Kelas penuh' : (p.tipe === 'kelas' ? 'Ikut kelas' : 'Pilih paket')) + '</button></div>';
+        '<button type="button" class="btn ' + (featured ? 'btn-on-ink' : 'btn-primary') + ' btn-block" style="margin-top:auto" data-pkg="' + h(String(p.id)) + '"' + (classFull(p) ? ' disabled' : '') + ' onclick="window.pickCatalogPkg(this.getAttribute(\'data-pkg\'))">' + (classFull(p) ? 'Kelas penuh' : (p.tipe === 'kelas' ? 'Ikut kelas' : 'Pilih paket')) + '</button></div>';
     }).join('') : emptyState('package', 'Belum ada paket', 'Belum ada paket di kategori ini.'));
     staggerIndex(el);
   };
 
+  window.pickCatalogPkg = function (id) {
+    if (window.publicLoggedMember) window.openRenewSheet(id); else window.openRegistrationModal(id);
+  };
   window.openRegistrationModal = function (id) {
     const p = window.priceListData.find(x => String(x.id) === String(id));
     if (!p) return;
