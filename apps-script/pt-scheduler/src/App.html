@@ -813,6 +813,7 @@
   function rmdTemplateHtml(j, job) {
     const ph = (job.placeholders || []).map(function (k) { return '{' + k + '}'; }).join(' ');
     return '<div class="group-label"><span>Pesan ke klien</span></div>' +
+      (job.variasi ? '<p class="li-sub">Teks berganti tiap hari (hari kerja, akhir pekan, Ramadan) dari sheet <b>PesanVariasi</b>. Pesan di bawah hanya dipakai bila sheet itu kosong.</p>' : '') +
       setField('Isi pesan', '<textarea class="textarea" id="set-job-' + j.id + '-tpl" data-k="job-' + j.id + '-tpl" data-default="' + h(job.tplDefault || '') + '" rows="5" maxlength="600" autocapitalize="sentences">' + h(job.tpl || job.tplDefault || '') + '</textarea>' +
         '<button type="button" class="link-btn" style="align-self:flex-start" onclick="window.settingsResetTpl(\'' + j.id + '\')">Kembalikan pesan bawaan</button>',
         'job-' + j.id + '-tpl', 'Bisa dipakai: ' + ph) +

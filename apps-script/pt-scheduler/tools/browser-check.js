@@ -742,7 +742,7 @@ async function contrastReport(page) {
     await page.fill('[data-k="job-makan-pagi-hour"]', '7');
     await page.click('#settings-save-btn');
     await page.waitForTimeout(500);
-    check(env.props.RMD_MAKAN_PAGI_ENABLED === 'true' && env.props.RMD_MAKAN_PAGI_HOUR === '7', 'meal reminders can be switched on and timed from the panel');
+    check(env.props.RMD_MAKAN_PAGI_ENABLED === 'false' && env.props.RMD_MAKAN_PAGI_HOUR === '7', 'meal reminders (on by default) can be switched off and timed from the panel');
 
     // ── Pesan ke klien: template + pratinjau, dan saklar per klien ────────────
     await page.click('.settings-nav-item[data-section="pengingat"]');
@@ -750,7 +750,7 @@ async function contrastReport(page) {
     await page.evaluate(() => document.querySelectorAll('.rmd-acc').forEach(d => { d.open = true; }));
     check(await page.locator('[data-k="job-sesi-besok-enabled"]').count() === 1, 'Pengingat has a "Sesi besok" card');
     check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 13, 'every reminder type has an editable client message');
-    check((await page.textContent('#pv-pr')).startsWith('Halo Budi, pengingat PR kamu'), 'the preview shows the default client message with sample data');
+    check((await page.textContent('#pv-pr')).startsWith('Halo Kak Budi, pengingat PR kamu'), 'the preview shows the default client message with sample data');
     check((await page.locator('[data-k="job-rekap-bulanan-enabled"]:not(:checked), [data-k="job-selamat-milestone-enabled"]:not(:checked), [data-k="job-waktunya-ukur-enabled"]:not(:checked)').count()) === 3, 'the three new message types (rekap, milestone, ukur) start switched off');
     check((await page.textContent('#pv-rekap-bulanan')).includes('rekap latihan bulan September') && (await page.textContent('#pv-selamat-milestone')).includes('badge 25 sesi') && (await page.textContent('#pv-waktunya-ukur')).includes('waktunya catat progres'), 'the new types show a preview of their client message');
     await page.click('[data-k="job-waktunya-ukur-enabled"]');
@@ -767,7 +767,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(700);
     check(env.props.RMD_TPL_PR === 'Hai {nama}, PR: {pr}', 'the message template is saved');
     await page.click('#set-job-pr-tpl ~ .link-btn');
-    check((await page.inputValue('#set-job-pr-tpl')).startsWith('Halo {nama}'), '"Kembalikan pesan bawaan" restores the default text');
+    check((await page.inputValue('#set-job-pr-tpl')).startsWith('Halo Kak {nama}'), '"Kembalikan pesan bawaan" restores the default text');
     await page.click('#settings-save-btn');
     await page.waitForTimeout(600);
     check(env.props.RMD_TPL_PR === undefined, 'saving the default text stores no override');
@@ -1253,7 +1253,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(200);
     const bub = await page.locator('#pv-pr').boundingBox();
     check(!!bub && bub.width <= 322 && (await overflow()) <= 0, 'phone: the message preview is a WhatsApp-style bubble (' + Math.round(bub && bub.width) + ' px wide) without sideways scroll');
-    check(((await page.textContent('#pv-pr')) || '').startsWith('Halo Budi'), 'phone: the preview text is loaded');
+    check(((await page.textContent('#pv-pr')) || '').startsWith('Halo Kak Budi'), 'phone: the preview text is loaded');
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(800);

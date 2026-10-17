@@ -31,6 +31,7 @@ PR di GitHub ──► cek otomatis (sintaks + tes) ──► merge ke main
 - `apps-script/pt-scheduler/src/` = isi proyek Apps Script, 1:1 dengan file di editor:
   - `Kode.gs` — server (data, login, keamanan, PR klien).
   - `Reminder.gs` — pengingat Telegram terjadwal (`runReminderTick`).
+  - `ReminderVariasi.gs`, `ReminderTeks.gs` — variasi pesan harian ke klien (sheet `PesanVariasi`).
   - `Index.html` + `Theme.html` + `App.html` — panel PT & portal klien (desain hitam-putih,
     terang/gelap otomatis, tata letak HP & desktop berbeda).
   - `Landing.html` + `LandingStyle.html` + `LandingScript.html` — halaman xnkbooking.my.id
@@ -74,6 +75,21 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
 - **Pengingat Klien**: saklar utama, tiap jenis (Booking Minggu, PR, Makan pagi/sore) dengan jam
   dan tombol tes, kalimat tidur, tombol **Pasang** trigger (tanpa membuka editor), dan riwayat
   pengingat (nama klien, bukan nomor).
+- **Variasi pesan harian**: Hidup sehat, Makan pagi/sore, Sesi besok, PR dan Booking Minggu
+  memakai 62 teks berbeda (44 hari kerja + 18 akhir pekan) yang berganti tiap hari, dan tiap
+  klien dapat teks yang berbeda. Teksnya ada di sheet **PesanVariasi** (dibuat otomatis saat
+  pengingat pertama jalan): kolom `Jenis`, `Hari` (`weekday`, `weekend`, `semua`, atau nama hari
+  libur), `Teks`, `Aktif` (`tidak` = tidak dipakai). Boleh diubah atau ditambah; baris yang salah
+  dilewati. Kunci khusus: `sesi-besok-banyak` / `pr-banyak` (2+ sesi atau PR), `booking-habis`
+  (paket habis → ajakan perpanjang), `ramadan-…`, `libur`, dan `personal-kangen` / `personal-sisa`
+  / `personal-streak` (satu baris tambahan bila klien lama tidak latihan, sisa sesi ≤ 2, atau
+  streak ≥ 3 minggu). Isi pesan di Pengaturan tidak dipakai untuk jenis ini.
+- Semua pesan menyapa klien **"Kak <nama depan>"**.
+- Hidup sehat, makan dan Booking Minggu dikirim ke **semua klien** bernomor, termasuk yang paketnya
+  habis. Makan pagi/sore **aktif bawaan** dan tetap jalan walau MealTips kosong (tip ditambahkan
+  bila ada). Selama Ramadan (tabel 2026–2030, bisa beda sehari dari sidang isbat) makan pagi jadi
+  pengingat sahur jam 03:00 dan makan sore jadi berbuka jam 17:00, kecuali jamnya sudah diatur.
+  Saklar utama pengingat tetap harus menyala.
 - **Pesan ke klien**: tiap jenis pengingat punya isi pesan yang bisa diubah (placeholder seperti
   `{nama}`, `{jam}`, `{coach}`, `{slot}`, `{pr}`, `{tip}`, `{tidur}`) dengan pratinjau. **Cara pakai**: bot
   Telegram mengirim satu pesan per jenis dengan satu tombol per klien; tekan nama klien → WhatsApp

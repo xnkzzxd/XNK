@@ -217,15 +217,14 @@ function _buildClientPools_(members, schedules, now) {
     upcoming[id] = (upcoming[id] || 0) + 1;
   });
 
-  var active = [], bookable = [], skipped = 0, skippedNames = [];
+  var active = [], bookable = [], all = [], skipped = 0, skippedNames = [], allSkippedNames = [];
   (members || []).forEach(function(row) {
     if (!row || !row[0]) return;
     var total = parseInt(row[8], 10); if (isNaN(total)) total = 10;   // sama dengan profil klien
     var used = parseInt(row[9], 10) || 0;
     var remaining = total - used;
-    if (remaining <= 0) return;
     var phone = _rmdNormalizePhone_(row[2]);
-    if (!phone) { skipped++; skippedNames.push(String(row[1] || '').trim()); return; }
+    if (!phone) { allSkippedNames.push(String(row[1] || '').trim()); if (remaining > 0) { skipped++; skippedNames.push(String(row[1] || '').trim()); } return; }
     var id = String(row[0]).trim();
     var c = {
       id: id, name: String(row[1] || '').trim(), phone: phone, mealOn: _mealOnFrom_(row[14]),
@@ -234,10 +233,12 @@ function _buildClientPools_(members, schedules, now) {
       packageId: String(row[6] || ''), coachId: String(row[10] || ''),
       off: _rmdOffFrom_(row[15])                       // T-123: jenis pengingat yang dimatikan untuk klien ini (kolom P)
     };
+    all.push(c);                                       // semua klien bernomor, termasuk paket habis
+    if (remaining <= 0) return;
     active.push(c);
     if (c.slots > 0) bookable.push(c);
   });
-  return { active: active, bookable: bookable, skipped: skipped, skippedNames: skippedNames };
+  return { active: active, bookable: bookable, all: all, skipped: skipped, skippedNames: skippedNames, allSkippedNames: allSkippedNames };
 }
 
 function _loadClientPools_() {
@@ -298,6 +299,7 @@ function _rmdRead_() {
       defaultHour: j.hour,
       tpl: String(props.getProperty('RMD_TPL_' + k) || ''),          // T-124: kosong = pakai bawaan
       tplDefault: RMD_TPL_DEFAULT[j.jenis] || '',
+      variasi: RMD_VARIASI_JENIS.indexOf(j.jenis) >= 0,     // teks berganti tiap hari dari sheet PesanVariasi
       placeholders: RMD_PLACEHOLDERS[j.jenis] || []
     };
   });
@@ -395,8 +397,8 @@ var REMINDER_JOBS = [
   { jenis: 'pr',             day: null, hour: 8,  handler: 'sendPrDigest_' },           // T-46
   // T-72: bawaan MATI (defaultEnabled:false) sampai tip disetujui Coach (T-75) — aktifkan lewat
   // properti RMD_MAKAN_PAGI_ENABLED / RMD_MAKAN_SORE_ENABLED = 'true' (UI menyusul).
-  { jenis: 'makan-pagi',     day: null, hour: 6,  handler: 'sendMakanPagiDigest_', defaultEnabled: false },
-  { jenis: 'makan-sore',     day: null, hour: 16, handler: 'sendMakanSoreDigest_', defaultEnabled: false },
+  { jenis: 'makan-pagi',     day: null, hour: 6,  handler: 'sendMakanPagiDigest_', defaultEnabled: true },
+  { jenis: 'makan-sore',     day: null, hour: 16, handler: 'sendMakanSoreDigest_', defaultEnabled: true },
   // Fase D4: bawaan MATI sampai pemilik menyalakannya di Pengaturan → Pengingat Klien.
   { jenis: 'rekap-bulanan',     day: null, hour: 9,  dayOfMonth: 1, handler: 'sendRekapBulananDigest_', defaultEnabled: false },
   { jenis: 'selamat-milestone', day: null, hour: 18, handler: 'sendMilestoneDigest_', defaultEnabled: false },
@@ -484,6 +486,8 @@ function runReminderTick() {
       var h = parseInt(props.getProperty('RMD_' + j.jenis.toUpperCase().replace(/-/g, '_') + '_HOUR'), 10);
       if (!isNaN(h) && h >= 0 && h <= 23) override[j.jenis] = h;
     });
+    if (_rmdIsRamadan_(parts.date)) Object.keys(RMD_RAMADAN_HOURS).forEach(function(k) { if (override[k] == null) override[k] = RMD_RAMADAN_HOURS[k]; });
+    try { _rmdSeedVariasi_(); } catch (e) { Logger.log('PesanVariasi gagal dibuat: ' + e); }
 
     _dueJobs_(parts, REMINDER_JOBS, override, REMINDER_TICK_TOLERANCE_HOURS).forEach(function(d) {
       if (!_rmdJobEnabled_(d.job.jenis)) return;                 // T-40: saklar per jenis
@@ -589,36 +593,36 @@ function getReminderLog(token, opts) {
 var RMD_MSG_MAX = 600;            // panjang template pesan
 var RMD_CLIENT_TEXT_MAX = 900;    // batas keras teks yang masuk link wa.me
 var RMD_TPL_DEFAULT = {
-  'sesi-besok': 'Hai {nama}, pengingat sesi besok jam {jam} {coach}.{tidur}\n\nSampai ketemu! 💪',
-  'booking-minggu': 'Halo {nama}, minggu ini masih ada slot latihan kosong:\n{slot}\nMau booking yang mana? 💪',
-  'pr': 'Halo {nama}, pengingat PR kamu:\n{pr}\nSemangat, kamu pasti bisa! 💪',
-  'makan-pagi': 'Halo {nama}, pengingat makan pagi:\n{tip}\nSemangat! 💪',
-  'makan-sore': 'Halo {nama}, pengingat makan sore:\n{tip}\nSemangat! 💪',
-  'rekap-bulanan': 'Halo {nama}, rekap latihan bulan {bulan}:\n💪 {sesi} sesi latihan{berat}{pinggang}{streak}\n\nLihat progresmu di {link}\nTerus semangat!',
-  'selamat-milestone': 'Selamat {nama}! 🎉 Kamu baru meraih badge {badge}.\nBangga banget sama progresmu, terus semangat! 💪',
-  'waktunya-ukur': 'Halo {nama}, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.{terakhir}\nCatat di {link} (Beranda → Progres).',
-  'tes-ulang': 'Hai {nama}, sudah sebulan sejak tes kebugaranmu ({terakhir}). Yuk tes ulang di sesi berikutnya, biar kelihatan kemajuanmu. 💪 {link}',
-  'hidup-sehat': 'Selamat pagi {nama}! ☀️ Yuk jalani hari ini dengan hidup sehat: makan bergizi, minum air putih yang cukup, dan jangan lupa cardio hari ini ya. 🏃 Semangat! 💪',
-  'ulang-tahun': 'Selamat ulang tahun {nama}! 🎂 Semoga sehat selalu dan makin semangat latihannya. 💪',
-  'tagihan': 'Hai {nama}, sisa pembayaran paket {paket} Rp{sisa}. Terima kasih 🙏',
+  'sesi-besok': 'Kak {nama}, pengingat sesi besok jam {jam} {coach}.{tidur}\n\nSampai ketemu! 💪{personal}',
+  'booking-minggu': 'Halo Kak {nama}, minggu ini masih ada slot latihan kosong:\n{slot}\nMau booking yang mana? 💪{personal}',
+  'pr': 'Halo Kak {nama}, pengingat PR kamu:\n{pr}\nSemangat, kamu pasti bisa! 💪{personal}',
+  'makan-pagi': 'Halo Kak {nama}, jangan lupa makan pagi ya.{tip}\n\nSemangat! 💪{personal}',
+  'makan-sore': 'Halo Kak {nama}, jangan lupa makan sore ya.{tip}\n\nSemangat! 💪{personal}',
+  'rekap-bulanan': 'Halo Kak {nama}, rekap latihan bulan {bulan}:\n💪 {sesi} sesi latihan{berat}{pinggang}{streak}\n\nLihat progresmu di {link}\nTerus semangat!',
+  'selamat-milestone': 'Selamat Kak {nama}! 🎉 Kamu baru meraih badge {badge}.\nBangga banget sama progresmu, terus semangat! 💪',
+  'waktunya-ukur': 'Halo Kak {nama}, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.{terakhir}\nCatat di {link} (Beranda → Progres).',
+  'tes-ulang': 'Hai Kak {nama}, sudah sebulan sejak tes kebugaranmu ({terakhir}). Yuk tes ulang di sesi berikutnya, biar kelihatan kemajuanmu. 💪 {link}',
+  'hidup-sehat': 'Selamat pagi Kak {nama}! ☀️ Yuk jalani hari ini dengan hidup sehat: makan bergizi, minum air putih yang cukup, dan jangan lupa cardio hari ini ya. 🏃 Semangat! 💪{personal}',
+  'ulang-tahun': 'Selamat ulang tahun Kak {nama}! 🎂 Semoga sehat selalu dan makin semangat latihannya. 💪',
+  'tagihan': 'Hai Kak {nama}, sisa pembayaran paket {paket} Rp{sisa}. Terima kasih 🙏',
   'ringkasan-owner': '📊 Ringkasan {bulan}\nSesi selesai: {sesi} ({jam} jam)\nKlien baru: {klienbaru}\nPendapatan (estimasi): {pendapatan}{target}',
   // Pesan manual (bukan job terjadwal): dibuat saat pemilik menekan tombol. Template bisa diganti lewat Script Property RMD_TPL_<JENIS>.
-  'hasil-tes': 'Halo {nama}, ini hasil tes kebugaranmu:\n{hasil}\n\nKemajuanmu keren, terus semangat! 💪 {link}',
-  'pasca-sesi': 'Halo {nama}, terima kasih untuk sesi hari ini! 💪{dilatih}{fokus}\n\nSisa sesimu {sisa}. Sampai ketemu lagi!',
-  'ringkasan-latihan': 'Halo {nama}, ringkasan latihanmu {tanggal}:\n{ringkas}{rekor}\n\nTotal volume {volume} kg. Terus semangat! 💪',
-  'evaluasi-paket': 'Halo {nama}, selamat, semua sesi paketmu sudah selesai! 🎉 Boleh minta penilaianmu? Buka {link} (Beranda → Evaluasi paket). Terima kasih!'
+  'hasil-tes': 'Halo Kak {nama}, ini hasil tes kebugaranmu:\n{hasil}\n\nKemajuanmu keren, terus semangat! 💪 {link}',
+  'pasca-sesi': 'Halo Kak {nama}, terima kasih untuk sesi hari ini! 💪{dilatih}{fokus}\n\nSisa sesimu {sisa}. Sampai ketemu lagi!',
+  'ringkasan-latihan': 'Halo Kak {nama}, ringkasan latihanmu {tanggal}:\n{ringkas}{rekor}\n\nTotal volume {volume} kg. Terus semangat! 💪',
+  'evaluasi-paket': 'Halo Kak {nama}, selamat, semua sesi paketmu sudah selesai! 🎉 Boleh minta penilaianmu? Buka {link} (Beranda → Evaluasi paket). Terima kasih!'
 };
 var RMD_PLACEHOLDERS = {
-  'sesi-besok': ['nama', 'jam', 'coach', 'tidur'],
-  'booking-minggu': ['nama', 'slot'],
-  'pr': ['nama', 'pr'],
-  'makan-pagi': ['nama', 'tip'],
-  'makan-sore': ['nama', 'tip'],
+  'sesi-besok': ['nama', 'jam', 'coach', 'tidur', 'personal'],
+  'booking-minggu': ['nama', 'slot', 'personal'],
+  'pr': ['nama', 'pr', 'personal'],
+  'makan-pagi': ['nama', 'tip', 'personal'],
+  'makan-sore': ['nama', 'tip', 'personal'],
   'rekap-bulanan': ['nama', 'bulan', 'sesi', 'berat', 'pinggang', 'streak', 'link'],
   'selamat-milestone': ['nama', 'badge'],
   'waktunya-ukur': ['nama', 'terakhir', 'link'],
   'tes-ulang': ['nama', 'terakhir', 'link'],
-  'hidup-sehat': ['nama'],
+  'hidup-sehat': ['nama', 'personal'],
   'ulang-tahun': ['nama'],
   'tagihan': ['nama', 'paket', 'sisa'],
   'ringkasan-owner': ['bulan', 'sesi', 'jam', 'klienbaru', 'pendapatan', 'target'],
@@ -639,6 +643,12 @@ function _rmdTemplate_(jenis) {
 
 /** Murni: isi placeholder {nama}… lalu rapikan spasi. Placeholder tak dikenal dibiarkan apa adanya. */
 function _rmdFill_(tpl, vars) {
+  if (vars && Object.prototype.hasOwnProperty.call(vars, 'nama')) {
+    var v2 = {};
+    Object.keys(vars).forEach(function(k) { v2[k] = vars[k]; });
+    v2.nama = _rmdSapa_(vars.nama);                     // klien selalu disapa "Kak <nama depan>"
+    vars = v2;
+  }
   var out = String(tpl == null ? '' : tpl).replace(/\{([a-z]+)\}/g, function(m, k) {
     return Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m;
   });
@@ -651,6 +661,11 @@ function _rmdFill_(tpl, vars) {
 function _rmdValidateTpl_(jenis, text) {
   var allowed = RMD_PLACEHOLDERS[jenis];
   if (!allowed) throw new Error('Jenis pengingat ini tidak punya template pesan.');
+  return _rmdCheckTpl_(allowed, text);
+}
+
+/** Murni: cek panjang dan placeholder terhadap daftar yang boleh. */
+function _rmdCheckTpl_(allowed, text) {
   var t = String(text == null ? '' : text).trim();
   if (t.length > RMD_MSG_MAX) throw new Error('Pesan maksimal ' + RMD_MSG_MAX + ' karakter.');
   var bad = null;
@@ -721,6 +736,7 @@ function _rmdJobActive_(jenis) {
 function _rmdSampleVars_(jenis) {
   var sleep = String(PropertiesService.getScriptProperties().getProperty('RMD_TPL_SLEEP') || '').trim();
   var v = { nama: 'Budi' };
+  if (RMD_VARIASI_JENIS.indexOf(jenis) >= 0) v.personal = '';
   if (jenis === 'sesi-besok') { v.jam = '07:00'; v.coach = 'dengan Coach Dika'; v.tidur = '\n\n😴 ' + (sleep || 'Tidur cukup malam ini ya.'); }
   else if (jenis === 'booking-minggu') v.slot = '• Rabu 1/10 07:00\n• Rabu 1/10 08:00\n• Kamis 2/10 17:00';
   else if (jenis === 'rekap-bulanan') { v.bulan = 'September'; v.sesi = '8'; v.berat = '\n⚖️ Berat −2,1 kg'; v.pinggang = '\n📏 Pinggang −3 cm'; v.streak = '\n🔥 Streak 5 minggu'; v.link = RMD_PORTAL_URL; }
@@ -735,7 +751,7 @@ function _rmdSampleVars_(jenis) {
   else if (jenis === 'ringkasan-latihan') { v.tanggal = '14 Okt'; v.ringkas = '• Bench press: 60 kg × 10, 65 kg × 8\n• Squat: 80 kg × 8 (3 set)'; v.rekor = '\n🏆 Rekor baru: Bench press (est. 1RM 82 kg)'; v.volume = '2.640'; }
   else if (jenis === 'evaluasi-paket') v.link = RMD_PORTAL_URL;
   else if (jenis === 'pr') v.pr = '• Latihan mobilitas (telat, tenggat 28/9)\n• Catat makan 3 hari (tenggat 2/10)';
-  else v.tip = 'Sarapan telur dan oatmeal, minum air putih dulu.';
+  else v.tip = '\n\n💡 Sarapan telur dan oatmeal, minum air putih dulu.';
   return v;
 }
 
@@ -793,7 +809,8 @@ function _rmdMemberIndex_() {
   _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
     if (!row || !row[0]) return;
     var id = String(row[0]).trim();
-    idx[id] = { id: id, name: String(row[1] || '').trim(), phone: _rmdNormalizePhone_(row[2]), off: _rmdOffFrom_(row[15]) };
+    var total = parseInt(row[8], 10); if (isNaN(total)) total = 10;
+    idx[id] = { id: id, name: String(row[1] || '').trim(), phone: _rmdNormalizePhone_(row[2]), off: _rmdOffFrom_(row[15]), remaining: total - (parseInt(row[9], 10) || 0) };
   });
   return idx;
 }
@@ -820,7 +837,7 @@ function sendSesiBesokDigest_(ctx) {
 
   var members = _rmdMemberIndex_();
   var sleep = String(PropertiesService.getScriptProperties().getProperty('RMD_TPL_SLEEP') || '').trim();
-  var tpl = _rmdTemplate_('sesi-besok');
+  var pool = _rmdVariantPool_(), act = _rmdActivity_(_getSchedulesAll_());
   var groupsSorted = order.map(function(k) { return groups[k]; }).sort(function(a, b) { return a.t0 - b.t0; });
   var items = [], noPhone = [];
   groupsSorted.forEach(function(g) {
@@ -833,7 +850,8 @@ function sendSesiBesokDigest_(ctx) {
     var jam = g.times.map(function(x) { return x.label; }).join(' dan ');
     items.push({
       name: name, phone: phone, fact: g.times[0].label,
-      text: _rmdFill_(tpl, { nama: name, jam: jam, coach: g.coach ? 'dengan Coach ' + g.coach : '', tidur: sleep ? '\n\n😴 ' + sleep : '' })
+      text: _rmdClientText_(pool, 'sesi-besok', tomorrow, { id: g.key, name: name, phone: phone, remaining: m ? m.remaining : 0 },
+        { jam: jam, coach: g.coach ? 'dengan Coach ' + g.coach : '', tidur: sleep ? '\n\n😴 ' + sleep : '' }, act, { banyak: g.times.length > 1, noKangen: true })
     });
   });
   return _rmdSendDigest_('Sesi besok', _rmdDateLabel_(tomorrow), items, noPhone);
@@ -1061,11 +1079,11 @@ function sendHidupSehatDigest_(ctx) {
   var now = (ctx && ctx.now) || new Date();
   var today = _wibParts_(now).date;
   var pools = _loadClientPools_();
-  var tpl = _rmdTemplate_('hidup-sehat');
-  var items = pools.active.filter(function(c) { return !_rmdIsOff_(c, 'hidup-sehat'); }).map(function(c) {
-    return { name: c.name, phone: c.phone, fact: '', text: _rmdFill_(tpl, { nama: c.name }) };
+  var pool = _rmdVariantPool_(), act = _rmdActivity_(_getSchedulesAll_());
+  var items = pools.all.filter(function(c) { return !_rmdIsOff_(c, 'hidup-sehat'); }).map(function(c) {
+    return { name: c.name, phone: c.phone, fact: '', text: _rmdClientText_(pool, 'hidup-sehat', today, c, {}, act) };
   });
-  return _rmdSendDigest_('Hidup sehat', _rmdDateLabel_(today), items, pools.skippedNames);
+  return _rmdSendDigest_('Hidup sehat', _rmdDateLabel_(today), items, pools.allSkippedNames);
 }
 
 /** Handler 'ulang-tahun': klien aktif yang ulang tahunnya hari ini (kolom U MemberData "Tanggal Lahir"). */
@@ -1184,7 +1202,7 @@ function _nearestFreeSlots_(schedules, now, n, dayHours, lookaheadDays, avail) {
 function sendBookingMingguDigest_(ctx) {
   var now = (ctx && ctx.now) || new Date();
   var pools = _loadClientPools_();
-  var clients = pools.bookable.filter(function(c) { return !_rmdIsOff_(c, 'booking-minggu'); });
+  var clients = pools.all.filter(function(c) { return !_rmdIsOff_(c, 'booking-minggu') && (c.slots > 0 || c.remaining <= 0); });   // bisa booking, atau paket habis (ajakan perpanjang)
   if (!clients.length) { Logger.log('Booking Minggu: tidak ada klien yang bisa booking.'); return true; }
 
   var slots = _nearestFreeSlots_(_getSchedulesAll_(), now, BOOKING_MAX_SLOTS, _businessHours_(), BOOKING_LOOKAHEAD_DAYS,
@@ -1192,11 +1210,14 @@ function sendBookingMingguDigest_(ctx) {
   if (!slots.length) { Logger.log('Booking Minggu: tidak ada slot kosong.'); return true; }
 
   var slotText = slots.map(function(s) { return '• ' + s.label; }).join('\n');
-  var tpl = _rmdTemplate_('booking-minggu');
-  var items = clients.map(function(c) {
-    return { name: c.name, phone: c.phone, fact: 'sisa ' + c.slots, text: _rmdFill_(tpl, { nama: c.name, slot: slotText }) };
+  var pool = _rmdVariantPool_(), act = _rmdActivity_(_getSchedulesAll_()), iso = _wibParts_(now).date;
+  var items = [];
+  clients.forEach(function(c) {
+    var habis = c.remaining <= 0;
+    var text = _rmdClientText_(pool, 'booking-minggu', iso, c, { slot: slotText }, act, { habis: habis });
+    if (text) items.push({ name: c.name, phone: c.phone, fact: habis ? 'paket habis' : 'sisa ' + c.slots, text: text });
   });
-  return _rmdSendDigest_('Booking minggu', _rmdDateLabel_(_wibParts_(now).date), items, pools.skippedNames);
+  return _rmdSendDigest_('Booking minggu', _rmdDateLabel_(iso), items, pools.skippedNames);
 }
 
 /** Tes murni (tanpa sheet/Telegram). Lempar error bila gagal. */
@@ -1286,9 +1307,10 @@ function sendPrDigest_(ctx) {
   var list = _buildPrDigest_(rows, active, today);
   if (!list.length) { Logger.log('PR digest: tidak ada PR yang perlu diingatkan.'); return true; }
 
-  var tpl = _rmdTemplate_('pr');
+  var pool = _rmdVariantPool_(), act = _rmdActivity_(_getSchedulesAll_()), iso = _wibParts_(now).date;
   var items = list.map(function(e) {
-    return { name: e.client.name, phone: e.client.phone, fact: _prFact_(e), text: _rmdFill_(tpl, { nama: e.client.name, pr: _prItemsText_(e) }) };
+    var n = e.late.length + e.today.length + e.tomorrow.length;
+    return { name: e.client.name, phone: e.client.phone, fact: _prFact_(e), text: _rmdClientText_(pool, 'pr', iso, e.client, { pr: _prItemsText_(e) }, act, { banyak: n > 1 }) };
   });
   return _rmdSendDigest_('PR', _rmdDateLabel_(_wibParts_(now).date), items, pools.skippedNames);
 }
@@ -1518,7 +1540,7 @@ function _filterCoreClients_(activeClients, packages) {
 function _selectCoreClients_() {
   var pools = _loadClientPools_();
   // 2026-10: pengingat makan untuk semua klien aktif, tidak lagi khusus paket core.
-  return { clients: pools.active, skipped: pools.skipped, skippedNames: pools.skippedNames };
+  return { clients: pools.all, skipped: pools.allSkippedNames.length, skippedNames: pools.allSkippedNames };   // termasuk paket habis
 }
 
 /** Tes T-71 (murni, tanpa sheet). Jalankan dari editor. */
@@ -1554,11 +1576,11 @@ function _sendMakanDigest_(waktu, ctx) {
   var sel = _selectCoreClients_();
   var clients = sel.clients.filter(function(c) { return c.mealOn !== false && !_rmdIsOff_(c, jenis); });   // T-73 (kolom O) + T-123 (kolom P)
   if (!clients.length) { Logger.log('Makan ' + waktu + ': tidak ada klien dengan reminder makan aktif.'); return true; }
-  var tip = String(_pickTip_(waktu, _wibParts_(now).date) || '').trim();
-  if (!tip) { Logger.log('Makan ' + waktu + ': tidak ada tip aktif di MealTips, tidak ada yang dikirim.'); return true; }
-  var tpl = _rmdTemplate_(jenis);
+  var iso = _wibParts_(now).date;
+  var tip = String(_pickTip_(waktu, iso) || '').trim();   // opsional: teks variasi sudah berisi saran makan
+  var pool = _rmdVariantPool_(), act = _rmdActivity_(_getSchedulesAll_());
   var items = clients.map(function(c) {
-    return { name: c.name, phone: c.phone, fact: '', text: _rmdFill_(tpl, { nama: c.name, tip: tip }) };
+    return { name: c.name, phone: c.phone, fact: '', text: _rmdClientText_(pool, jenis, iso, c, { tip: tip ? '\n\n💡 ' + tip : '' }, act) };
   });
   return _rmdSendDigest_(waktu === 'pagi' ? 'Makan pagi' : 'Makan sore', _rmdDateLabel_(_wibParts_(now).date), items, sel.skippedNames);
 }
