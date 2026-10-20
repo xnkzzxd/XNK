@@ -25,6 +25,8 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 | `CLAUDE.md` | Loads `docs/Agent.md` for Claude Code. Not published. |
 | `apps-script/` | Source of the Apps Script apps (PT Scheduler), auto-deployed by GitHub Actions — see [apps-script/README.md](apps-script/README.md). |
 
+**iPhone.** `index.html` measures the iPhone safe area (notch, home bar) and the keyboard height. It passes them to the app as plain numbers, because iOS hides both inside iframes. It also takes the app's theme colour for the Safari bars, and never lets Safari zoom the page out. The app docks its bottom bar on iPhones and suggests "Tambahkan ke Layar Utama" once. Details: [docs/ios/TODO.md](docs/ios/TODO.md).
+
 ## Access
 
 PTs log in **inside the app** with the admin PIN. The Apps Script server checks it,
