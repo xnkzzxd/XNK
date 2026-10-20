@@ -4413,23 +4413,47 @@
 
 
   // ── Konten untuk klien: halaman admin (Fase J3) ────────────────────────────
-  const cnt = { list: null, error: '', editId: '', tipe: 'tips' };
+  const cnt = { list: null, error: '', editId: '', tipe: 'tips', q: '', f: '' };
   const CN_LABEL = { pengumuman: 'Pengumuman', tips: 'Tips', video: 'Video' };
+  const CN_ICON = { pengumuman: 'megaphone', tips: 'lightbulb', video: 'circle-play' };
   const CN_STATUS = { tayang: ['Tayang', 'solid'], terjadwal: ['Terjadwal', 'soft'], berakhir: ['Berakhir', 'dashed'], mati: ['Mati', 'dashed'] };
+  function cnAdminCard(c) {
+    const st = CN_STATUS[c.status] || CN_STATUS.mati;
+    const when = c.mulai || c.sampai ? '<span>' + icon('calendar') + h((c.mulai || '…') + ' – ' + (c.sampai || '…')) + '</span>' : '';
+    const hasLink = /^https:\/\//.test(c.url || '') ? '<span>' + icon('link') + 'Ada link</span>' : '';
+    return '<button type="button" class="cn-card' + (c.status === 'mati' || c.status === 'berakhir' ? ' is-off' : '') + '" onclick="window.openContentEditor(\'' + h(c.id) + '\')">' +
+      '<span class="cn-head"><span class="pill soft">' + icon(CN_ICON[c.tipe] || 'file-text') + h(CN_LABEL[c.tipe] || c.tipe) + '</span>' + (c.kategori ? '<span class="pill soft">' + h(c.kategori) + '</span>' : '') +
+      (c.sematkan ? '<span class="pill soft">' + icon('pin') + 'Sematkan</span>' : '') + '<span class="pill ' + st[1] + ' cn-end">' + st[0] + '</span></span>' +
+      '<span class="cn-title">' + h(c.judul) + '</span>' + (c.isi ? '<span class="cn-body cn-clamp">' + h(c.isi) + '</span>' : '') +
+      (when || hasLink ? '<span class="cn-meta">' + when + hasLink + '</span>' : '') + '</button>';
+  }
+  function cnResultsHtml() {
+    const q = cnt.q.trim().toLowerCase();
+    const shown = cnt.list.filter(function (c) {
+      return (!cnt.f || c.tipe === cnt.f) && (!q || (c.judul + ' ' + (c.isi || '') + ' ' + (c.kategori || '')).toLowerCase().indexOf(q) !== -1);
+    });
+    if (!shown.length) return '<p class="li-sub" style="padding:12px 0">Tidak ada konten yang cocok.</p>';
+    return '<div class="cn-grid cn-grid-admin">' + shown.map(cnAdminCard).join('') + '</div>';
+  }
   function renderContentAdmin() {
     const el = $('view-content'); if (!el) return;
     let body;
     if (cnt.error) body = '<p class="li-sub">Gagal memuat: ' + h(cnt.error) + '</p>';
-    else if (!cnt.list) body = '<p class="li-sub">Memuat konten…</p>';
+    else if (!cnt.list) body = skel(3, true);
     else if (!cnt.list.length) body = emptyState('megaphone', 'Belum ada konten', 'Tulis pengumuman, tips, atau tempel link video. Klien membacanya di tab Info & Tips.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.openContentEditor(\'\')">' + icon('plus') + 'Tambah konten</button>');
-    else body = '<div class="list">' + cnt.list.map(function (c) {
-      const st = CN_STATUS[c.status] || CN_STATUS.mati;
-      return '<button type="button" class="list-item interactive" style="min-height:64px;text-align:left" onclick="window.openContentEditor(\'' + h(c.id) + '\')"><span class="grow" style="min-width:0"><span class="li-title truncate" style="display:block">' + (c.sematkan ? icon('pin', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' : '') + h(c.judul) + '</span>' +
-        '<span class="li-sub truncate" style="display:block">' + h(CN_LABEL[c.tipe] || c.tipe) + (c.kategori ? ' · ' + h(c.kategori) : '') + (c.mulai || c.sampai ? ' · ' + h((c.mulai || '…') + ' – ' + (c.sampai || '…')) : '') + '</span></span><span class="pill ' + st[1] + '">' + st[0] + '</span></button>';
-    }).join('') + '</div>';
+    else {
+      const n = function (st) { return cnt.list.filter(function (c) { return c.status === st; }).length; };
+      const chip = function (k, label) { return '<button type="button" class="chip chip-lg' + (cnt.f === k ? ' active' : '') + '" aria-pressed="' + (cnt.f === k) + '" onclick="window.contentFilter(\'' + k + '\')">' + label + '</button>'; };
+      body = '<div class="cn-stats"><div class="cn-stat"><b>' + n('tayang') + '</b><span>Tayang</span></div><div class="cn-stat"><b>' + n('terjadwal') + '</b><span>Terjadwal</span></div><div class="cn-stat"><b>' + (cnt.list.length - n('tayang') - n('terjadwal')) + '</b><span>Mati / berakhir</span></div></div>' +
+        '<div class="cn-tools"><div class="chips" role="group" aria-label="Jenis">' + chip('', 'Semua') + chip('pengumuman', 'Pengumuman') + chip('tips', 'Tips') + chip('video', 'Video') + '</div>' +
+        '<label class="cn-search">' + icon('search') + '<input class="input" type="search" id="cn-q" placeholder="Cari judul atau isi" value="' + h(cnt.q) + '" oninput="window.contentSearch(this.value)" aria-label="Cari konten"></label></div>' +
+        '<div id="cn-results">' + cnResultsHtml() + '</div>';
+    }
     setHTML(el, '<div class="page-head"><div><h1 class="page-title">Konten</h1><p class="page-sub">Pengumuman, tips, dan video untuk klien</p></div>' +
-      '<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" onclick="window.openContentEditor(\'\')">' + icon('plus') + 'Tambah</button></div></div><div class="stack" style="gap:var(--gap);max-width:720px">' + body + '</div>');
+      '<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" onclick="window.openContentEditor(\'\')">' + icon('plus') + 'Tambah</button></div></div><div class="cn-wrap">' + body + '</div>');
   }
+  window.contentFilter = function (k) { cnt.f = k || ''; renderContentAdmin(); };
+  window.contentSearch = function (v) { cnt.q = v || ''; const r = $('cn-results'); if (r && cnt.list) { setHTML(r, cnResultsHtml()); paintIcons(); } };
   window.loadContentAdmin = function () {
     return adminCall('getContentAdmin').then(function (l) { cnt.list = l; cnt.error = ''; if (window.currentView === 'content') renderContentAdmin(); })
       .catch(function (err) { cnt.error = window.authMessage(err); if (window.currentView === 'content') renderContentAdmin(); });
@@ -7224,11 +7248,14 @@
   }
   function markInfoSeen() { if (window.infoLatest) { try { _lsSet(INFO_SEEN_KEY, window.infoLatest); } catch (e) {} } renderInfoDots(); }
   function contentCardHtml(c) {
-    const pinned = c.sematkan ? '<span class="pill soft">' + icon('pin') + 'Disematkan</span>' : '';
-    const cat = c.kategori ? '<span class="pill soft">' + h(c.kategori) + '</span>' : '';
-    const link = /^https:\/\/[^\s"'<>]+$/.test(c.url || '') ? '<a class="btn ' + (c.tipe === 'video' ? 'btn-primary' : 'btn-outline') + ' btn-sm" style="min-height:44px;align-self:flex-start" href="' + h(c.url) + '" target="_blank" rel="noopener noreferrer">' + icon(c.tipe === 'video' ? 'circle-play' : 'external-link') + (c.tipe === 'video' ? 'Tonton video' : 'Buka link') + '</a>' : '';
-    return '<div class="' + (c.tipe === 'pengumuman' ? 'card-ink' : 'card') + ' content-card" data-tipe="' + h(c.tipe) + '"><div class="prog-meta"><span class="pill ' + (c.tipe === 'pengumuman' ? '' : 'soft') + '">' + icon(c.tipe === 'video' ? 'circle-play' : c.tipe === 'tips' ? 'lightbulb' : 'megaphone') + h(CN_LABEL[c.tipe] || c.tipe) + '</span>' + cat + pinned + '</div>' +
-      '<h3 class="section-title" style="margin:8px 0 4px">' + h(c.judul) + '</h3>' + (c.isi ? '<p style="white-space:pre-line;overflow-wrap:anywhere">' + h(c.isi) + '</p>' : '') + (link ? '<div style="margin-top:10px">' + link + '</div>' : '') + '</div>';
+    const ink = c.tipe === 'pengumuman';
+    const hasLink = /^https:\/\/[^\s"'<>]+$/.test(c.url || '');
+    const link = hasLink ? '<a class="btn ' + (c.tipe === 'video' ? 'btn-primary' : 'btn-outline') + ' btn-sm" href="' + h(c.url) + '" target="_blank" rel="noopener noreferrer">' + icon(c.tipe === 'video' ? 'circle-play' : 'external-link') + (c.tipe === 'video' ? 'Tonton video' : 'Buka link') + '</a>' : '';
+    const thumb = c.tipe === 'video' && hasLink ? '<a class="cn-video" href="' + h(c.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Tonton video: ' + h(c.judul) + '">' + icon('circle-play') + '</a>' : '';
+    return '<article class="cn-card' + (ink ? ' is-ink' : '') + '" data-tipe="' + h(c.tipe) + '">' + thumb +
+      '<div class="cn-head"><span class="pill ' + (ink ? '' : 'soft') + '">' + icon(CN_ICON[c.tipe] || 'file-text') + h(CN_LABEL[c.tipe] || c.tipe) + '</span>' +
+      (c.kategori ? '<span class="pill soft">' + h(c.kategori) + '</span>' : '') + (c.sematkan ? '<span class="pill soft cn-end">' + icon('pin') + 'Disematkan</span>' : '') + '</div>' +
+      '<h3 class="cn-title">' + h(c.judul) + '</h3>' + (c.isi ? '<p class="cn-body">' + h(c.isi) + '</p>' : '') + link + '</article>';
   }
   function infoInner() {
     const c = window.myContent;
@@ -7239,7 +7266,7 @@
     const chips = cats.length ? '<div class="chips" role="group" aria-label="Kategori"><button type="button" class="chip chip-lg' + (infoFilter ? '' : ' active') + '" onclick="window.infoSetFilter(\'\')">Semua</button>' +
       cats.map(k => '<button type="button" class="chip chip-lg' + (infoFilter === k ? ' active' : '') + '" onclick="window.infoSetFilter(this.getAttribute(\'data-k\'))" data-k="' + h(k) + '">' + h(k) + '</button>').join('') + '</div>' : '';
     const shown = c.list.filter(x => !infoFilter || x.kategori === infoFilter);
-    return chips + '<div class="stack" style="gap:var(--gap)">' + shown.map(contentCardHtml).join('') + '</div>';
+    return chips + '<div class="cn-grid">' + shown.map(contentCardHtml).join('') + '</div>';
   }
   window.infoSetFilter = function (k) { infoFilter = k || ''; const w = $('pub-info-wrap'); if (w) { setHTML(w, infoInner()); } };
   window.loadMyContent = function (force) {
@@ -7261,7 +7288,7 @@
   function renderPublicInfo() {
     const el = $('view-public-info'), me = window.publicLoggedMember;
     if (!el || !me) return;
-    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:720px">' + pageIntro('Info & Tips', 'Pengumuman, tips, dan video dari coach.') + '<div class="stack" style="gap:var(--gap)" id="pub-info-wrap">' + infoInner() + '</div></div>');
+    setHTML(el, '<div class="cn-wrap">' + pageIntro('Info & Tips', 'Pengumuman, tips, dan video dari coach.') + '<div class="stack" style="gap:var(--gap)" id="pub-info-wrap">' + infoInner() + '</div></div>');
     const c = window.myContent, latest = window.infoLatest || '';
     // Konten baru terdeteksi dari bootstrap (info.latestAt) tapi belum ada di daftar: muat daftar saja (satu panggilan kecil).
     if (!c || (c.state === 'ok' && latest && !c.list.some(x => x.dibuat >= latest))) window.loadMyContent(true);
