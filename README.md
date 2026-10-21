@@ -60,6 +60,15 @@ Every tap is kept on the phone, so closing the app loses nothing; the workout is
 once at the end, and if the signal drops it waits and is sent again later. Past days
 (client 7 days, PT 90 days) can be added or edited on the same page.
 
+Since Phase O the client's **Latihan** tab works like Hevy: "Mulai latihan kosong",
+one card per routine with "Mulai rutinitas", a routine page with a volume / reps /
+duration chart, routines the client builds or copies from the PT's shared templates
+(*Jelajahi*), and a logger with a duration / volume / sets bar, a muscle map and one
+table per exercise (SET | SEBELUMNYA | KG | REP | ✓). Exercise search filters by
+equipment and muscle, picks several at once and can create a custom exercise. Workout
+settings (rest, previous values, warm-up and plate calculators, RPE, sound) are kept on
+the device.
+
 ## Common changes
 
 **Booking app URL.** It is written once, in the `src` of the `<iframe>` in

@@ -6,7 +6,7 @@ Plan: library picker → per-set workout log (coach + client) → stats/charts �
 - [x] T-800 `tools/build-exercises.js` slims hasaneyldrm/exercises-dataset into `exercises/exercises.min.json` (id, name, body part, equipment, target, gif file; ~150 KB, English only). Served by GitHub Pages, so Apps Script and the bootstraps never carry it.
 - [x] T-801 Admin picker in the Program editor (`#ex-pick`): lazy `fetch` on first open, cached in `localStorage` (`xnk_ex_lib_v1`), search + body-part chips, 30 rows at a time. Tapping adds `Name | 3x10 | ex:<id>`.
 - [x] T-802 Program text token `ex:<id>`; `ProgramItems` column L "Exercise ID" (appended, idempotent). Free-typed exercises keep an empty ID.
-- Media: GIFs are © Gym visual and are **hotlinked for admin preview only**, never stored in a program or shown to clients (their terms are not MIT). Show "Exercises Dataset (MIT) · media © Gym visual" next to the picker. To refresh the data, re-run the build script on the upstream `data/exercises.json`.
+- Media: GIFs are © Gym visual and are **hotlinked for admin preview only**, never stored in a program (their terms are not MIT). Phase O: the owner chose to show them to clients as well (still hotlinked, never stored). Show "Exercises Dataset (MIT) · media © Gym visual" next to the picker. To refresh the data, re-run the build script on the upstream `data/exercises.json`.
 
 ## L2 — Workout log (built)
 - [x] T-810 Sheet `WorkoutLog` (one row per set; `Oleh` = admin|klien) + admin `saveWorkoutLog` / `getWorkoutLog`, member `logMyWorkout` / `getMyWorkout` (member from the token). Validation in the pure `_parseWorkoutEntries_` (≤ 12 exercises, ≤ 20 sets, 0–500 kg in 0.5 steps, rep, durasi, jarak, RPE 1–10, note ≤ 200). Same day + exercise is replaced inside `_locked_`; a client replaces only their own rows, the coach can replace all. Dates: client today … 7 days back, coach up to 90 days; a coach-supplied `scheduleId` must belong to the client. The part `workout` rides in `getPortalMore` and `getClientBundle`; nothing goes to Telegram or the admin cache.
@@ -42,3 +42,17 @@ Owner feedback after Phase M went live: the logger, the exercise search and the 
 - [x] T-851 Pad: one sheet per set with set chips, −/+ rows for kg / rep (or seconds with stopwatch, metres, RPE), set kind chips and "Simpan & ✓".
 - [x] T-852 Exercise search: its own sheet (`#ex-search`) for the program editor and the logger, with a sticky search box, a body-part dropdown, "Sering dipakai" chips (`localStorage xnk_ex_recent` + current program) and results that scroll inside; from the program editor it returns to the program sheet with the form intact.
 - [x] T-853 Program form: kind as a dropdown, numbers in one compact grid (3 columns on phones, 5 on PC), name, per-set scheme, superset, note and video under "Lainnya" (opens by itself when any is set).
+
+## Phase O — Latihan ala Hevy (T-860+)
+
+Owner request (2026-10-21) with five Hevy screenshots; plan in [PRD.md](PRD.md) and [Design.md](Design.md) §6.
+
+- [x] T-860 Docs: PRD, Design §6, this list.
+- [x] T-861 Server: ProgramItems T Pemilik / U Jelajahi, `saveMyRoutine`, `deleteMyRoutine`, `copyRoutineToMine`, `setTemplateExplore`, `own` / `explore` / `routineHist` in the reads, ProgramItems memo. Tests (`tests/routines.test.js`).
+- [x] T-862 Latihan page: Mulai latihan kosong, routine cards in folded groups, routine detail with chart and set tables, history.
+- [x] T-863 Client routine editor (program form in own mode) and Jelajahi.
+- [x] T-864 Logger: stats strip, muscle map, empty state, table rows with SEBELUMNYA, set-kind menu, rest picker, manual timer, plates.
+- [x] T-865 Tambah gerakan: equipment / muscle filters, recent rows with pictures for everyone, multi-select, inline history, Buat.
+- [x] T-866 Workout settings on the device, warm-up calculator.
+- [x] T-867 Coach: Jelajahi toggle on templates, client's own routines on the client page.
+- [x] T-868 Browser check, READMEs, Agent.md §7.
