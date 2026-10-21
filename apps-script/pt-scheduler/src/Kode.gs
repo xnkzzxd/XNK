@@ -2232,9 +2232,10 @@ function _ensureScheduleClassHeader_(sheet) {
 // Memo per eksekusi untuk bundle baca-saja (getPortalMore, dst.): Schedules dibaca sekali. Hanya diisi oleh _withSchedulesMemo_.
 let _schedMemo_ = null;
 function _withSchedulesMemo_(fn) {
-  const prev = _schedMemo_;
+  const prev = _schedMemo_, prevProg = _progMemo_;
   _schedMemo_ = _getSchedulesAll_();
-  try { return fn(); } finally { _schedMemo_ = prev; }
+  _progMemo_ = { rows: null };
+  try { return fn(); } finally { _schedMemo_ = prev; _progMemo_ = prevProg; }
 }
 
 function _getSchedulesAll_() {
@@ -6444,12 +6445,15 @@ function _contentForClientImpl_() {
 // Sheet ProgramItems menyimpan program klien (Member ID terisi) dan template (Member ID kosong, Template terisi).
 // ProgramLog mencatat gerakan yang dicentang klien per hari.
 
-const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada", "Exercise ID", "Rep Min", "Rep Max", "Target Kg", "Istirahat", "Superset", "Jenis", "Skema"];
+const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada", "Exercise ID", "Rep Min", "Rep Max", "Target Kg", "Istirahat", "Superset", "Jenis", "Skema", "Pemilik", "Jelajahi"];
 // Fase M: jenis gerakan menentukan arti angka rep (beban/badan = rep, waktu = detik, jarak = meter).
 const PROGRAM_KINDS = ['beban', 'badan', 'waktu', 'jarak'];
 const PROGRAM_REP_MAX = { beban: 999, badan: 999, waktu: 7200, jarak: 100000 };
 const PROGRAM_LOG_HEADERS = ["ID", "Member ID", "Tanggal", "Hari", "Selesai", "Dibuat Pada"];
-const PROGRAM_LIMITS = { days: 7, items: 12, name: 60, hari: 40, gerakan: 80, rep: 16, note: 200, url: 300, templates: 30 };
+const PROGRAM_LIMITS = { days: 7, items: 12, name: 60, hari: 40, gerakan: 80, rep: 16, note: 200, url: 300, templates: 30, own: 10 };
+// Fase O: kolom T "Pemilik" = 'klien' untuk rutinitas buatan klien sendiri ('' = program coach / template);
+// kolom U "Jelajahi" = 1 pada baris template yang boleh dilihat dan disalin klien (mati bawaan).
+const PROGRAM_OWN = 'klien';
 
 function _programSheet_() {
   const sheet = getOrCreateSheet_('ProgramItems', PROGRAM_HEADERS);
@@ -6457,7 +6461,7 @@ function _programSheet_() {
   sheet.getRange('L:L').setNumberFormat('@');
   return sheet;
 }
-/** Kolom L ("Exercise ID", Fase L1) dan M–S (Fase M) ditambahkan di akhir (idempoten); baris lama tetap valid. */
+/** Kolom L ("Exercise ID", Fase L1), M–S (Fase M) dan T–U (Fase O) ditambahkan di akhir (idempoten); baris lama tetap valid. */
 function _ensureProgramColumns_(sheet) {
   for (let c = 12; c <= PROGRAM_HEADERS.length; c++) {
     const cell = sheet.getRange(1, c);
@@ -6659,27 +6663,47 @@ function _programItemFromRow_(r) {
   return it;
 }
 
-/** Baris sheet → { days:[{hari, items:[{n, gerakan, set, rep, catatan, video, exId, jenis, repMin, repMax, kg, rest, ss, skema}]}] } untuk satu klien (memberId) atau satu template (name). */
-function _programDays_(memberId, templateName) {
+// Memo ProgramItems untuk bundle baca-saja (diisi hanya di dalam _withSchedulesMemo_; tulis mengosongkannya).
+let _progMemo_ = null;
+/** Semua baris data ProgramItems (tanpa header). */
+function _programRows_() {
+  if (_progMemo_ && _progMemo_.rows) return _progMemo_.rows;
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramItems');
-  if (!sheet || sheet.getLastRow() < 2) return { days: [], updatedAt: '' };
+  const rows = !sheet || sheet.getLastRow() < 2 ? [] : sheet.getDataRange().getValues().slice(1);
+  if (_progMemo_) _progMemo_.rows = rows;
+  return rows;
+}
+
+/** Baris milik satu klien (program coach, atau rutinitas sendiri bila own) atau satu template. */
+function _programRowMine_(r, memberId, templateName, own) {
+  if (memberId != null) return String(r[1]).trim() === String(memberId).trim() && (String(r[19] || '') === PROGRAM_OWN) === !!own;
+  return !String(r[1]).trim() && String(r[2]) === String(templateName);
+}
+
+/**
+ * Baris sheet → { days:[{hari, items:[{n, gerakan, set, rep, catatan, video, exId, jenis, repMin, repMax, kg, rest, ss, skema}]}] } untuk satu klien
+ * (memberId; own = rutinitas buatan klien, bukan program coach) atau satu template (name). Template membawa jelajahi.
+ */
+function _programDays_(memberId, templateName, own) {
   const days = [], by = {};
-  let updatedAt = '';
-  const rows = sheet.getDataRange().getValues().slice(1).filter(function(r) {
-    if (!r[0]) return false;
-    return memberId != null ? String(r[1]).trim() === String(memberId).trim() : (!String(r[1]).trim() && String(r[2]) === String(templateName));
+  let updatedAt = '', jelajahi = false;
+  const rows = _programRows_().filter(function(r) {
+    return r[0] && _programRowMine_(r, memberId, templateName, own);
   }).sort(function(a, b) { return Number(a[4]) - Number(b[4]); });
   rows.forEach(function(r) {
     const hari = String(r[3]);
     if (!by[hari]) { by[hari] = { hari: hari, items: [] }; days.push(by[hari]); }
     by[hari].items.push(_programItemFromRow_(r));
     if (String(r[10]) > updatedAt) updatedAt = String(r[10]);
+    if (String(r[20] || '') === '1' || r[20] === 1 || r[20] === true) jelajahi = true;
   });
-  return { days: days, updatedAt: updatedAt };
+  return { days: days, updatedAt: updatedAt, jelajahi: jelajahi };
 }
 
-/** Tulis ulang seluruh program satu klien / template (di dalam lock). days kosong = hapus. */
-function _programWrite_(memberId, templateName, days) {
+/** Tulis ulang seluruh program satu klien / template (di dalam lock). days kosong = hapus. opts: { own, jelajahi }. */
+function _programWrite_(memberId, templateName, days, opts) {
+  opts = opts || {};
+  if (_progMemo_) _progMemo_.rows = null;
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
@@ -6687,8 +6711,7 @@ function _programWrite_(memberId, templateName, days) {
     const rows = sheet.getDataRange().getValues();
     for (let i = rows.length - 1; i >= 1; i--) {
       const r = rows[i];
-      const mine = memberId != null ? String(r[1]).trim() === String(memberId).trim() : (!String(r[1]).trim() && String(r[2]) === String(templateName));
-      if (mine) sheet.deleteRow(i + 1);
+      if (r[0] && _programRowMine_(r, memberId, templateName, opts.own)) sheet.deleteRow(i + 1);
     }
     const now = new Date().toISOString();
     let n = 0;
@@ -6697,7 +6720,8 @@ function _programWrite_(memberId, templateName, days) {
         n++;
         const has = function(v) { return v === undefined || v === null ? '' : v; };
         sheet.appendRow(['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now, it.exId || '',
-          has(it.repMin), has(it.repMax), has(it.kg), has(it.rest), it.ss || '', it.jenis || '', it.skema && it.skema.length ? JSON.stringify(it.skema) : '']);
+          has(it.repMin), has(it.repMax), has(it.kg), has(it.rest), it.ss || '', it.jenis || '', it.skema && it.skema.length ? JSON.stringify(it.skema) : '',
+          memberId != null && opts.own ? PROGRAM_OWN : '', memberId == null && opts.jelajahi ? 1 : '']);
       });
     });
     return n;
@@ -6713,7 +6737,7 @@ function getMemberProgram(token, memberId) {
   const p = _programDays_(id);
   const logs = _programLogsFor_(id);
   const last = logs.length ? logs[logs.length - 1] : null;
-  return { days: p.days, text: _programToText_(p.days), updatedAt: p.updatedAt, last: last ? { tanggal: last.tanggal, hari: last.hari, selesai: last.selesai.length } : null };
+  return { days: p.days, text: _programToText_(p.days), updatedAt: p.updatedAt, own: _programDays_(id, null, true).days, last: last ? { tanggal: last.tanggal, hari: last.hari, selesai: last.selesai.length } : null };
 }
 
 /** Program dari editor form (array hari) atau teks lama (string, tetap diterima). */
@@ -6749,12 +6773,12 @@ function getProgramTemplates(token) {
   }
   return names.map(function(name) {
     const p = _programDays_(null, name);
-    return { name: name, days: p.days.length, items: p.days.reduce(function(s, d) { return s + d.items.length; }, 0), text: _programToText_(p.days), program: p.days };
+    return { name: name, days: p.days.length, items: p.days.reduce(function(s, d) { return s + d.items.length; }, 0), text: _programToText_(p.days), program: p.days, jelajahi: p.jelajahi };
   });
 }
 
-/** Admin: simpan template (nama yang sama menimpa). Teks kosong ditolak. */
-function saveProgramTemplate(token, name, program) {
+/** Admin: simpan template (nama yang sama menimpa). Teks kosong ditolak. opts.jelajahi (opsional) = tampil di Jelajahi klien; tanpa opts tetap seperti sebelumnya. */
+function saveProgramTemplate(token, name, program, opts) {
   requireAdmin_(token);
   const nm = _templateName_(name);
   const parsed = _parseProgramInput_(program);
@@ -6762,8 +6786,25 @@ function saveProgramTemplate(token, name, program) {
   const existing = getProgramTemplates(token).map(function(t) { return t.name.toLowerCase(); });
   if (existing.indexOf(nm.toLowerCase()) === -1 && existing.length >= PROGRAM_LIMITS.templates) throw new Error('Template sudah mencapai batas ' + PROGRAM_LIMITS.templates + '. Hapus yang tidak terpakai dulu.');
   const exact = getProgramTemplates(token).find(function(t) { return t.name.toLowerCase() === nm.toLowerCase(); });
-  _programWrite_(null, exact ? exact.name : nm, parsed.days);
-  return { status: 'success', name: exact ? exact.name : nm };
+  const jelajahi = opts && opts.jelajahi != null ? !!opts.jelajahi : !!(exact && exact.jelajahi);
+  _programWrite_(null, exact ? exact.name : nm, parsed.days, { jelajahi: jelajahi });
+  return { status: 'success', name: exact ? exact.name : nm, jelajahi: jelajahi };
+}
+
+/** Admin: tampilkan / sembunyikan satu template di Jelajahi klien (kolom U, tanpa menulis ulang isinya). */
+function setTemplateExplore(token, name, on) {
+  requireAdmin_(token);
+  const nm = _templateName_(name);
+  return _locked_(function() {
+    const sheet = _programSheet_();
+    const rows = sheet.getDataRange().getValues();
+    let found = 0;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][0] && _programRowMine_(rows[i], null, nm)) { sheet.getRange(i + 1, 21).setValue(on ? 1 : ''); found++; }
+    }
+    if (!found) throw new Error('Template tidak ditemukan.');
+    return { status: 'success', name: nm, jelajahi: !!on };
+  });
 }
 
 function deleteProgramTemplate(token, name) {
@@ -6802,7 +6843,122 @@ function _programFor_(row) {
   const today = _todayWib_();
   const done = {};
   _programLogsFor_(id).forEach(function(l) { if (l.tanggal === today) done[l.hari] = l.selesai; });
-  return { days: p.days, today: today, done: done, updatedAt: p.updatedAt };
+  return { days: p.days, today: today, done: done, updatedAt: p.updatedAt, own: _programDays_(id, null, true).days, explore: _exploreTemplates_() };
+}
+
+/** Template yang dibuka coach untuk Jelajahi: isi program saja (tanpa data klien). */
+function _exploreTemplates_() {
+  const names = [];
+  _programRows_().forEach(function(r) {
+    const on = String(r[20] || '') === '1' || r[20] === 1 || r[20] === true;
+    if (r[0] && on && !String(r[1]).trim() && String(r[2]).trim() && names.indexOf(String(r[2])) === -1) names.push(String(r[2]));
+  });
+  return names.map(function(name) { return { name: name, days: _programDays_(null, name).days }; }).filter(function(t) { return t.days.length; });
+}
+
+// ── Rutinitas buatan klien (Fase O) ──────────────────────────────────────────
+// Klien boleh membuat, mengubah, dan menghapus rutinitasnya sendiri (maks PROGRAM_LIMITS.own), juga menyalin
+// hari program coach atau template Jelajahi. Program coach tidak pernah tersentuh; klien selalu dari token.
+
+/** Murni: satu rutinitas dari browser → { hari, items } bersih (validasi sama dengan editor program). */
+function _parseOwnRoutine_(routine) {
+  const p = _parseProgramDays_([routine]);
+  if (!p.days.length || !p.days[0].items.length) throw new Error('Tambahkan minimal satu gerakan.');
+  return p.days[0];
+}
+
+/** Daftar rutinitas sendiri → tulis; nama unik dan tidak sama dengan hari program coach. */
+function _ownWrite_(memberId, list) {
+  if (list.length > PROGRAM_LIMITS.own) throw new Error('Maksimal ' + PROGRAM_LIMITS.own + ' rutinitas. Hapus yang tidak dipakai dulu.');
+  const coach = _programDays_(memberId).days.map(function(d) { return d.hari.toLowerCase(); });
+  const seen = {};
+  list.forEach(function(d) {
+    const k = d.hari.toLowerCase();
+    if (seen[k]) throw new Error('Nama rutinitas "' + d.hari + '" sudah dipakai.');
+    if (coach.indexOf(k) !== -1) throw new Error('Nama "' + d.hari + '" sudah dipakai program coach. Pakai nama lain.');
+    seen[k] = true;
+  });
+  _programWrite_(memberId, null, list, { own: true });
+}
+
+/** Nama yang belum dipakai: "Upper" → "Upper (2)". */
+function _ownFreeName_(name, taken) {
+  const low = taken.map(function(x) { return x.toLowerCase(); });
+  const base = String(name).slice(0, PROGRAM_LIMITS.hari - 4);
+  if (low.indexOf(String(name).toLowerCase()) === -1) return String(name);
+  for (let i = 2; i < 100; i++) { const t = base + ' (' + i + ')'; if (low.indexOf(t.toLowerCase()) === -1) return t; }
+  throw new Error('Nama rutinitas sudah dipakai.');
+}
+
+/** Klien: simpan satu rutinitas sendiri. oldName kosong = baru; selain itu mengganti rutinitas bernama oldName. */
+function saveMyRoutine(memberToken, oldName, routine) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  const clean = _parseOwnRoutine_(routine);
+  if (!_throttle_('rt_' + id, 2)) throw new Error('Tunggu sebentar sebelum menyimpan lagi.');
+  const old = String(oldName == null ? '' : oldName).trim();
+  _locked_(function() {
+    const list = _programDays_(id, null, true).days;
+    if (old) {
+      const i = list.findIndex(function(d) { return d.hari === old; });
+      if (i === -1) throw new Error('Rutinitas tidak ditemukan.');
+      list[i] = clean;
+    } else list.push(clean);
+    _ownWrite_(id, list);
+  });
+  return _programFor_(row);
+}
+
+/** Klien: hapus satu rutinitas sendiri (program coach tidak bisa dihapus klien). */
+function deleteMyRoutine(memberToken, name) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  const nm = String(name == null ? '' : name).trim();
+  _locked_(function() {
+    const list = _programDays_(id, null, true).days;
+    const i = list.findIndex(function(d) { return d.hari === nm; });
+    if (i === -1) throw new Error('Rutinitas tidak ditemukan.');
+    list.splice(i, 1);
+    _programWrite_(id, null, list, { own: true });
+  });
+  return _programFor_(row);
+}
+
+/**
+ * Klien: salin ke rutinitas sendiri. source = { template, hari? } (hanya template Jelajahi; tanpa hari = semua harinya)
+ * atau { hari } dari program coach miliknya. Nama yang bentrok mendapat (2), (3), …
+ */
+function copyRoutineToMine(memberToken, source) {
+  const row = requireMember_(memberToken).row;
+  const id = String(row[0]).trim();
+  source = source && typeof source === 'object' ? source : {};
+  const tpl = String(source.template == null ? '' : source.template).trim();
+  const hari = String(source.hari == null ? '' : source.hari).trim();
+  let picked;
+  if (tpl) {
+    const t = _exploreTemplates_().find(function(x) { return x.name === tpl; });
+    if (!t) throw new Error('Program tidak ditemukan.');
+    picked = hari ? t.days.filter(function(d) { return d.hari === hari; }) : t.days;
+  } else {
+    picked = _programDays_(id).days.filter(function(d) { return d.hari === hari; });
+  }
+  if (!picked.length) throw new Error('Rutinitas tidak ditemukan.');
+  if (!_throttle_('rt_' + id, 2)) throw new Error('Tunggu sebentar sebelum menyimpan lagi.');
+  const added = [];
+  _locked_(function() {
+    const list = _programDays_(id, null, true).days;
+    const taken = list.map(function(d) { return d.hari; }).concat(_programDays_(id).days.map(function(d) { return d.hari; }));
+    picked.forEach(function(d) {
+      const nm = _ownFreeName_(d.hari, taken);
+      taken.push(nm);
+      added.push(nm);
+      list.push({ hari: nm, items: d.items });
+    });
+    _ownWrite_(id, list);
+  });
+  const out = _programFor_(row);
+  out.added = added;
+  return out;
 }
 function getMyProgram(memberToken) { return _programFor_(requireMember_(memberToken).row); }
 
@@ -7185,6 +7341,39 @@ function _workoutSuggest_(lastSets, item, bodyPart) {
   return { kg: Math.min(500, heaviest + inc), why: 'Semua set mencapai ' + top + ' rep' };
 }
 
+/**
+ * Murni (Fase O): riwayat per rutinitas untuk grafik halaman rutinitas.
+ * days = bentuk _workoutGroup_ (baru dulu); sessions = baris WorkoutSessions. Nama rutinitas = "Hari" sesi itu,
+ * atau hari yang paling banyak dipakai gerakannya. { hari: [{ tanggal, volume, reps, durasi, sets }] } lama → baru, maks 30.
+ */
+function _workoutRoutineHist_(days, sessions) {
+  const ses = {};
+  (sessions || []).forEach(function(x) { if (!ses[x.tanggal]) ses[x.tanggal] = x; });
+  const out = {};
+  (days || []).slice().reverse().forEach(function(d) {
+    const s = ses[d.tanggal];
+    let hari = s && s.hari ? s.hari : '';
+    if (!hari) {
+      const cnt = {};
+      d.items.forEach(function(it) { if (it.hari) cnt[it.hari] = (cnt[it.hari] || 0) + 1; });
+      hari = Object.keys(cnt).sort(function(a, b) { return cnt[b] - cnt[a]; })[0] || '';
+    }
+    if (!hari) return;
+    let volume = 0, reps = 0, sets = 0;
+    d.items.forEach(function(it) {
+      it.sets.forEach(function(st) {
+        if (_isWarmup_(st.jenis)) return;
+        sets++;
+        reps += Number(st.rep) || 0;
+        volume += (Number(st.berat) || 0) * (Number(st.rep) || 0);
+      });
+    });
+    (out[hari] || (out[hari] = [])).push({ tanggal: d.tanggal, volume: Math.round(volume), reps: reps, sets: sets, durasi: s && s.durasi !== '' ? Number(s.durasi) || 0 : 0 });
+  });
+  Object.keys(out).forEach(function(k) { out[k] = out[k].slice(-30); });
+  return out;
+}
+
 function _workoutFor_(row) {
   const id = String(row[0]).trim();
   const today = _todayWib_(), since = _addDaysIso_(today, -WORKOUT_LIMITS.readDays);
@@ -7196,11 +7385,13 @@ function _workoutFor_(row) {
   const best = {};
   all.forEach(function(r) { if (_isWarmup_(r[19])) return; const e = _e1rm_(r[11], r[12]), k = _workoutKey_(r[6], r[7]); if (e > (best[k] || 0)) best[k] = e; });
   g.best = best;
-  g.sessions = _workoutSessionsOf_(id).slice(0, 20).map(function(x) { return { tanggal: x.tanggal, hari: x.hari, durasi: x.durasi, rasa: x.rasa, catatan: x.catatan, oleh: x.oleh }; });
+  const sesAll = _workoutSessionsOf_(id);
+  g.sessions = sesAll.slice(0, 20).map(function(x) { return { tanggal: x.tanggal, hari: x.hari, durasi: x.durasi, rasa: x.rasa, catatan: x.catatan, oleh: x.oleh }; });
+  g.routineHist = _workoutRoutineHist_(g.days, sesAll);
   const program = _programDays_(id).days;
   g.next = _workoutNextDay_(program, g.days, program.length ? _programLogsFor_(id) : [], today);
   const suggest = {};
-  program.forEach(function(d) {
+  program.concat(_programDays_(id, null, true).days).forEach(function(d) {
     d.items.forEach(function(it) {
       const key = _workoutKey_(it.exId, it.gerakan), last = g.last[key];
       if (!last || suggest[key]) return;

@@ -60,7 +60,7 @@ test('structured save round-trips through the sheet; old text programs still sav
   const bench = p.days[0].items[0];
   assert.deepEqual([bench.n, bench.jenis, bench.repMin, bench.repMax, bench.kg, bench.rest, bench.ss, bench.exId], [1, 'beban', 8, 12, 40, 120, 'A', '0025']);
   assert.equal(p.days[0].items[3].skema.length, 3);
-  assert.equal(env.sheet('ProgramItems').rows[0].length, 19, 'columns M–S added');
+  assert.equal(env.sheet('ProgramItems').rows[0].length, 21, 'columns M–U added');
   const mine = j(env.call('getMyProgram', env.memberToken(KEY_A)));
   assert.equal(mine.days[0].items[2].jenis, 'waktu');
   // Old text format: still accepted, targets guessed from the rep text.
