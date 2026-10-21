@@ -9,5 +9,6 @@ Phase J (client tabs: Progres, Program, Info & Tips, Lainnya): docs/portal/ (PRD
 Phase L (exercise library, workout log, charts): docs/workout/ (TODO; tasks T-800+).
 Phase M (live workout logger, form program editor, built): docs/workout/ (PRD, Design, TODO; tasks T-840+).
 Phase N (iPhone / Safari: host bridge, safe area, docked tab bar, keyboard, Home Screen hint, built): docs/ios/TODO.md (tasks T-900+).
+Phase O (Latihan ala Hevy: routines, table logger, search, settings, built): docs/workout/ (PRD, Design §6, TODO; tasks T-860+).
 
 @docs/Agent.md

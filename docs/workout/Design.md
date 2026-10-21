@@ -84,3 +84,20 @@ Workout data stays out of Telegram (except the existing opt-in PR note: first na
 - **Pad** (`wlPad(i, j)`): set chips, one −/+ row per field of the kind (+ RPE when on), "Mulai stopwatch" for timed exercises, kind chips, foot "Hapus set" and "Simpan & ✓" (only "Simpan" for a ticked set). New values carry to later unticked sets of the same kind.
 - **Exercise search** (`exSearchOpen(onPick, {title, admin, ret, extra})`): sheet `#ex-search`; empty box shows recent chips (`xnk_ex_recent`, device only, max 12) plus the current program's exercises; `ret` makes close/back/pick return to that sheet (`ui.sheetReturn`, checked in `closeModal`). GIF thumbnails for the admin only.
 - **Program form**: open item = kind `<select>` + delete, `.pf-grid` of numbers, `<details class="pf-more">` "Lainnya" (name, scheme toggle, superset, note, video; open state kept in `pf.more`).
+
+## 6. Phase O (Latihan ala Hevy)
+
+### Data
+- `ProgramItems` column T **Pemilik** (`klien` = the client's own routine, `''` = coach program or template) and U **Jelajahi** (`1` on template rows shown to clients). Appended by `_ensureProgramColumns_`. `_programRowMine_(r, memberId, template, own)` decides ownership, so `saveMemberProgram` never touches own routines and the client never touches the coach program.
+- ProgramItems is read once per portal bundle (`_progMemo_`, set inside `_withSchedulesMemo_`, cleared by `_programWrite_`).
+
+### Server
+- Member: `saveMyRoutine(memberToken, oldName, routine)` (one day, parsed by `_parseProgramDays_`, ≥ 1 exercise, unique name, not a coach day name, max `PROGRAM_LIMITS.own` = 10, 2 s throttle after validation), `deleteMyRoutine(memberToken, name)`, `copyRoutineToMine(memberToken, {template[, hari]} | {hari})` (free names "X (2)"). All return `_programFor_`.
+- Admin: `setTemplateExplore(token, name, on)`; `saveProgramTemplate(token, name, program, opts)` with optional `opts.jelajahi` (kept when omitted).
+- Reads: `_programFor_` / part `program` add `own` and `explore` (`_exploreTemplates_`); `getMemberProgram` adds `own`; workout reads add `routineHist` (`_workoutRoutineHist_`: per routine name `{tanggal, volume, reps, sets, durasi}`, old → new, max 30) and `suggest` covers own routines.
+
+### Browser
+- Latihan page: `programInner` (same id `#pub-program-wrap`), `rtCardHtml`, `rtGroupHtml` (`localStorage xnk_rt_fold`), routine detail `rtOpen` (sheet `#modal-wl`, chart `pgChartSvg`, `rt.metric`), `rtMenu`, `rtNew` / `rtEdit` (the program form `#modal-program` in `pf.mode = 'own'`, one day, coach-only parts hidden by `pfMode`), `rtDup`, `rtDelete`, `rtCopy`, `rtExplore`.
+- Logger: `#wl-stats` (`wlStatsHtml`, `wlMuscleSvg` front/back from `WK_PART` keys), `wlExHtml` table (`wlRowHtml`, `wlCellHtml`; typed cells update the set without a re-render through one `input` listener, `s.t` marks typed sets, values carry to later untyped sets of the same kind), `wlPrevAt` (warm-up ↔ warm-up, work ↔ work), `wlSetMenu` (kind / delete), `wlRestPick`, `wlTimerPick`, `wlPlateText`, `wlWarmApply`.
+- Settings: `wlPrefs()` / `wlPrefSet()` in `localStorage xnk_wl_prefs` (`sound, buzz, rest, prev, warm, wake, plate, bar, rpe`), sheet `wlSettings`.
+- Search `#ex-search`: header Batal · title · Buat, `#exs-equip` + `#exs-part`, `exs.sel` multi-select and `#exs-add`, `exsHist` inline history (`wkExHistHtml`), `exsCreate` custom exercise (`kind`, `part` passed to `onPick`).

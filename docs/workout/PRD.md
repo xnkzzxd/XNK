@@ -34,7 +34,7 @@ The Phase L2 logger (`#modal-workout`) is a bottom sheet with typed inputs. Clie
 - Program editor: form only (text editor removed). Per exercise: sets, rep range or per-set scheme (incl. planned warm-ups), target kg, rest, kind, superset, note, video. Drag + ↑/↓.
 
 ## Non-goals
-- GIFs for clients (library media licence: admin preview only).
+- GIFs for clients (library media licence: admin preview only). Superseded in Phase O: the owner chose to show them to clients too.
 - Automatic WhatsApp or Telegram messages.
 - Multi-client (class) logging.
 
@@ -42,3 +42,25 @@ The Phase L2 logger (`#modal-workout`) is a bottom sheet with typed inputs. Clie
 - A client logs a 5-exercise workout with ≤ 1 tap per set when following the plan.
 - Reloading or closing the app mid-workout loses nothing.
 - Phone (360–430 px) and desktop both pass the browser check in light and dark.
+
+# PRD — Phase O: Latihan ala Hevy (access, routines, logger, search, settings)
+
+## Problem
+The owner sent five Hevy screenshots (Workout tab, Log Workout, Add Exercise, Workout Settings, Routine) and asked for the same layout, UX, access and features. Phase M/M2 works but the program lives in a checklist page, clients cannot build their own routines, the set tiles hide the previous numbers, and there are no per-device workout settings.
+
+## Decisions (with the owner, 2026-10-21)
+- Access: the bottom bar stays; the **Program** page becomes **Latihan** (sidebar, Lainnya, guide).
+- Clients may **create their own routines** (max 10); coach routines stay coach-only. The coach can open a template to clients in **Jelajahi** (off by default).
+- Set rows become a **table** `SET | SEBELUMNYA | KG | REP | ✓`; the M2 tiles and pad are removed.
+- Exercise **GIFs are shown to clients too** (the owner accepts the Gym visual licence risk; hotlinked, never stored).
+- Colours stay monochrome (theme tokens), not Hevy blue.
+
+## Screens
+1. **Latihan**: Mulai latihan kosong · Rutinitas (Rutinitas baru, Jelajahi) · *Dari coach (n)* · *Rutinitas saya (n)* (fold, remembered per device) · Riwayat latihan; PR and meal cards stay.
+2. **Log latihan**: top bar ⌄ · title · ⏱ · ⋯ · Selesai; strip Durasi / Volume / Set + muscle map; empty state "Mulai dulu" with Tambah gerakan, Pilih rutinitas, Pengaturan, Buang latihan; per exercise: picture, coach note, rest, suggestion, plates, table, Tambah set.
+3. **Tambah gerakan**: Batal · title · Buat; search, Semua alat / Semua otot; Gerakan terakhir then A–Z; multi-select; 📈 history inline; Buat = custom exercise (name, kind, muscle).
+4. **Pengaturan latihan** (device only): sound, vibrate, default rest, previous values (last time / same routine), warm-up calculator, keep awake, plate calculator + bar weight, RPE.
+5. **Routine detail**: Mulai rutinitas, chart Volume / Rep / Durasi (90 days), exercises with rest and a SET / KG / REP table, Edit (own) or Salin ke rutinitas saya (coach).
+
+## Non-goals
+Folders of routines, social feed, sharing routines between clients, multi-client logging.
