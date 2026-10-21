@@ -1,0 +1,15 @@
+# Gizi — TODO (T-1000+)
+
+Urutan: coach dulu → pustaka & menu → log klien → pengingat. Ambil nomor terendah yang belum selesai.
+
+- [ ] **T-1000** Setujui [Rules.md](Rules.md); verifikasi baris ⚠ ke sumber (AKG 2019, Gizi Seimbang, ISSN/ACSM).
+- [ ] **T-1001** `tools/build-foods.js` + `foods/foods.min.json` (150–300 bahan TKPI) + tes sampel vs PDF.
+- [ ] **T-1002** Kolom MemberData baru + `_ensureNutritionColumns_`; fungsi murni BMI/WHtR/BMR/TDEE/target/pengaman + tes.
+- [ ] **T-1003** Admin `getClientNutrition`/`saveClientNutrition`; tab Gizi di profil klien (`getClientBundle`).
+- [ ] **T-1004** Saran adaptif (`_nutAdvise_`, `NutritionAdvice`) + kartu dashboard (`getCoachHub`).
+- [ ] **T-1010** Katalog ~50 menu jadi (estimasi, dicek owner) + porsi rumah tangga + tag pantangan/harga.
+- [ ] **T-1011** `_nutMenu_` (menu 1 hari, tukar item, Ramadan, belanja) + tes.
+- [ ] **T-1012** Portal: segmen Latihan | Makan, cincin/makro, onboarding, menu, aturan makan, (i).
+- [ ] **T-1020** `FoodLog`: `logMyFood`/`deleteMyFood`, sheet cari/porsi, favorit, salin kemarin, makanan sendiri; log di tab coach.
+- [ ] **T-1030** Baris personal di pengingat makan; `NUTRITION_ENABLED` di Pengaturan; saklar per klien.
+- [ ] **T-1031** Docs (Agent.md §7, READMEs), `tests/security.test.js`, browser-check 390×844 + desktop.

@@ -10,5 +10,6 @@ Phase L (exercise library, workout log, charts): docs/workout/ (TODO; tasks T-80
 Phase M (live workout logger, form program editor, built): docs/workout/ (PRD, Design, TODO; tasks T-840+).
 Phase N (iPhone / Safari: host bridge, safe area, docked tab bar, keyboard, Home Screen hint, built): docs/ios/TODO.md (tasks T-900+).
 Phase O (Latihan ala Hevy: routines, table logger, search, settings, built): docs/workout/ (PRD, Design §6, TODO; tasks T-860+).
+Phase P (Gizi: TKPI food library, BMI/WHtR/BMR/TDEE targets, menu, food log, planned): docs/nutrition/ (PRD, Design, Rules, TODO; tasks T-1000+).
 
 @docs/Agent.md
