@@ -3,7 +3,7 @@
 Urutan: coach dulu → pustaka & menu → log klien → pengingat. Ambil nomor terendah yang belum selesai.
 
 - [ ] **T-1000** Setujui [Rules.md](Rules.md); verifikasi baris ⚠ ke sumber (AKG 2019, Gizi Seimbang, ISSN/ACSM).
-- [ ] **T-1001** `tools/build-foods.js` + `foods/foods.min.json` (150–300 bahan TKPI) + tes sampel vs PDF.
+- [x] **T-1001** `tools/build-foods.js` + `foods/foods.min.json` + `tests/foods.test.js`. Memuat 1.046 dari 1.088 baris TKPI yang lolos cek energi; daftar 150–300 bahan umum (kurasi) menyusul di T-1010.
 - [ ] **T-1002** Kolom MemberData baru + `_ensureNutritionColumns_`; fungsi murni BMI/WHtR/BMR/TDEE/target/pengaman + tes.
 - [ ] **T-1003** Admin `getClientNutrition`/`saveClientNutrition`; tab Gizi di profil klien (`getClientBundle`).
 - [ ] **T-1004** Saran adaptif (`_nutAdvise_`, `NutritionAdvice`) + kartu dashboard (`getCoachHub`).
