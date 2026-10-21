@@ -334,6 +334,27 @@ The phone is the main device for both the owner and clients. Everything below is
 - **Client, WhatsApp:** the key fact in the first line ("Besok 07:00 sesi dengan Coach Dika"), short greeting, ≤ 500 characters, no long links.
 - **Client, portal (later, R-10):** a one-line "Pengingat · 4 aktif ›" card below "Makan hari ini", opening a bottom sheet of toggles.
 
+### 8.4b iPhone / Safari (Phase N)
+
+- **Safe area.**
+  - The app sits in iframes, where iOS reports `env(safe-area-inset-*)` as 0, so the wrapper page measures the insets and posts them (`hostBridge`).
+  - CSS uses `var(--sa-t|r|b|l)` (default `env()`) and `var(--tabbar-space)` for anything that sits above the bottom bar.
+- **Bottom bar on iPhone.**
+  - Flat against the bottom edge, full width, top corners rounded, covering the home bar (`html.ios`, < 768 px).
+  - Android keeps the floating bar.
+- **Keyboard.**
+  - The wrapper's `visualViewport` gives `--kb`.
+  - Sheets sit above the keyboard.
+  - The tab bar, save bar and resume bar hide while typing.
+  - The focused field scrolls to the centre.
+- **Home Screen.**
+  - One hint per device on iPhone Safari: "Bagikan → Tambahkan ke Layar Utama".
+  - In Home Screen mode a swipe from the left edge steps back one level.
+- **Never** zoom out:
+  - wrappers use `minimum-scale=1`;
+  - the iframe is `width:1px; min-width:100%`;
+  - nothing on screen is wider than the phone (browser check).
+
 ### 8.5 Mobile checks
 
 `tools/browser-check.js` gains a phone pass (390 × 844, touch enabled) for every new screen, in both themes. For each one it checks:

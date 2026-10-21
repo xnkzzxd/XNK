@@ -111,6 +111,18 @@
 
   <nav class="tabbar" id="tabbar" aria-label="Navigasi"></nav>
 
+  <!-- iPhone di Safari biasa: ajakan sekali untuk memasang ke Layar Utama (Fase N) -->
+  <div class="a2hs hide" id="a2hs" role="region" aria-label="Pasang di Layar Utama">
+    <div class="a2hs-row">
+      <span class="a2hs-ico"><i data-lucide="square-plus"></i></span>
+      <p>Pasang XNK di Layar Utama supaya terbuka penuh tanpa bar Safari: ketuk <i data-lucide="share" class="share-ico"></i> <b>Bagikan</b>, lalu <b>Tambahkan ke Layar Utama</b>.</p>
+    </div>
+    <div class="a2hs-actions">
+      <button type="button" class="btn btn-on-ink-ghost btn-sm" onclick="window.a2hsClose(false)">Nanti</button>
+      <button type="button" class="btn btn-on-ink btn-sm" onclick="window.a2hsClose(true)">Mengerti</button>
+    </div>
+  </div>
+
   <!-- Mode latihan (Fase M): layar penuh untuk coach dan klien -->
   <div class="wl hide" id="wl-screen" role="dialog" aria-modal="true" aria-labelledby="wl-title">
     <header class="wl-top">

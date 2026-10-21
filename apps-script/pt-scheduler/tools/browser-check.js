@@ -1602,12 +1602,12 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('public-info'));
     await page.waitForTimeout(900);
     check(await visible(page, '#view-public-info') && (await page.textContent('#view-public-info')).includes('Info & Tips'), 'nav: the Info & Tips tab opens');
-    check((await page.locator('#pub-info-wrap .content-card').count()) === 3 && !(await page.textContent('#pub-info-wrap')).includes('Rahasia nanti'), 'info: three items show; scheduled content stays hidden');
-    check((await page.locator('#pub-info-wrap .content-card').first().getAttribute('data-tipe')) === 'pengumuman', 'info: the pinned announcement comes first');
+    check((await page.locator('#pub-info-wrap .cn-card').count()) === 3 && !(await page.textContent('#pub-info-wrap')).includes('Rahasia nanti'), 'info: three items show; scheduled content stays hidden');
+    check((await page.locator('#pub-info-wrap .cn-card').first().getAttribute('data-tipe')) === 'pengumuman', 'info: the pinned announcement comes first');
     const vrel = await page.getAttribute('#pub-info-wrap a[href="https://youtu.be/squat"]', 'rel');
     check(!!vrel && vrel.includes('noopener') && (await page.textContent('#pub-info-wrap')).includes('Tonton video'), 'info: the video opens outside with rel=noopener');
     await page.click('#pub-info-wrap .chip[data-k="Nutrisi"]');
-    check((await page.locator('#pub-info-wrap .content-card').count()) === 1, 'info: a category chip filters the list');
+    check((await page.locator('#pub-info-wrap .cn-card').count()) === 1, 'info: a category chip filters the list');
     check((await overflowX(page)) <= 0, 'info: no sideways scroll');
     check(!(await visible(page, '#tab-more-new')), 'info: the dot is gone after reading');
     await page.evaluate(() => window.navigate('public-dashboard'));
@@ -2174,6 +2174,136 @@ async function contrastReport(page) {
     check((await bad.page.evaluate(() => window.currentView)) === 'public-login', 'unknown link → login page');
     check((await bad.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'unknown link → asked to log in with the number');
     await old.context.close(); await bad.context.close();
+  }
+
+  // ── iPhone / Safari (Fase N): zona aman, tab bar menempel, keyboard, Layar Utama ──
+  // Elements that stick out past the right edge make iOS stretch the iframe and
+  // shrink the whole page ("everything is tiny"). Rows that scroll sideways on
+  // purpose (chips) are fine: their own overflow clips them.
+  const wideElements = page => page.evaluate(() => {
+    const vw = window.innerWidth, out = [];
+    const clipped = el => { for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) { const o = getComputedStyle(p).overflowX; if (o !== 'visible') return true; } return false; };
+    document.querySelectorAll('body *').forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (!r.width || r.right <= vw + 1) return;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.position === 'fixed' && r.left >= vw) return;
+      if (el.closest('.hide, [hidden]') || clipped(el)) return;
+      out.push((el.id ? '#' + el.id : el.tagName.toLowerCase() + '.' + String(el.className).split(' ')[0]) + ' → ' + Math.round(r.right));
+    });
+    return out.slice(0, 5);
+  });
+  const IPHONE = { insets: { t: 47, r: 0, b: 34, l: 0 }, ios: true, standalone: false, kb: 0, v: 1, xnk: 'host' };
+  console.log('iPhone / Safari · portal + panel');
+  {
+    const env = seededEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, [], null, { touch: true });
+    for (const v of ['public-dashboard', 'calendar', 'public-progress', 'public-program', 'public-info', 'public-more']) {
+      await page.evaluate(v => window.navigate(v), v);
+      await page.waitForTimeout(350);
+      const wide = await wideElements(page);
+      check(wide.length === 0 && (await overflowX(page)) <= 0, 'portal ' + v + ': nothing wider than the phone' + (wide.length ? ' (' + wide.join(', ') + ')' : ''));
+    }
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    check(!(await page.evaluate(() => document.documentElement.classList.contains('ios'))), 'no host message → no iPhone layout');
+    const floating = await page.locator('#tabbar').boundingBox();
+    check(floating && Math.round(MOBILE.height - floating.y - floating.height) === 14 && floating.width < MOBILE.width, 'no host message → tab bar still floats (Android, desktop unchanged)');
+
+    await page.evaluate(d => window.applyHostInfo(d), IPHONE);
+    await page.waitForTimeout(500);
+    const bar = await page.locator('#tabbar').boundingBox();
+    check(bar && Math.round(bar.y + bar.height) === MOBILE.height && Math.round(bar.width) === MOBILE.width && Math.round(bar.height) === 68 + 34, 'iPhone: tab bar sits flat on the bottom edge and covers the home bar (' + JSON.stringify(bar) + ')');
+    const tabBox = await page.locator('#tabbar .tab').first().boundingBox();
+    check(tabBox && tabBox.y + tabBox.height <= MOBILE.height - 34 + 1, 'iPhone: tab buttons stay above the home bar');
+    const top = await page.locator('#topbar').boundingBox();
+    const title = await page.locator('#topbar .topbar-actions').boundingBox();
+    check(top && Math.round(top.height) === 64 + 47 && (!title || title.y >= 47), 'iPhone: top bar makes room for the notch');
+    await page.evaluate(() => window.showToast('Tes'));
+    await page.waitForTimeout(400);
+    const toast = await page.locator('#toast').boundingBox().catch(() => null);
+    check(!toast || toast.y + toast.height <= bar.y, 'iPhone: toast shows above the docked tab bar');
+
+    // "Tambahkan ke Layar Utama": once, after login, not in Home Screen mode
+    await page.evaluate(() => window.navigate('public-progress'));
+    await page.waitForTimeout(2900);
+    check(await visible(page, '#a2hs'), 'iPhone Safari: install hint shows once after login');
+    const hint = await page.locator('#a2hs').boundingBox();
+    check(hint && hint.y + hint.height <= bar.y, 'install hint sits above the tab bar');
+    await page.click('#a2hs .btn-on-ink');
+    check(!(await visible(page, '#a2hs')) && (await page.evaluate(() => localStorage.getItem('xnk_a2hs'))) === 'ok', '"Mengerti" hides it for good on this device');
+    noErrors(errors);
+    await context.close();
+
+    const again = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, [], { xnk_a2hs: 'ok' }, { touch: true });
+    await again.page.evaluate(d => window.applyHostInfo(d), IPHONE);
+    await again.page.evaluate(() => window.navigate('public-progress'));
+    await again.page.waitForTimeout(2900);
+    check(!(await visible(again.page, '#a2hs')), 'install hint does not come back');
+    await again.page.evaluate(d => window.applyHostInfo(Object.assign({}, d, { standalone: true })), IPHONE);
+    check(await again.page.evaluate(() => document.documentElement.classList.contains('standalone')), 'Home Screen mode is marked (edge swipe back on)');
+    await again.context.close();
+  }
+  {
+    const env = seededEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: env.adminToken(), xnk_a2hs: 'ok' }, { touch: true });
+    for (const v of ['dashboard', 'calendar', 'clients', 'settings']) {
+      await page.evaluate(v => window.navigate(v), v);
+      await page.waitForTimeout(400);
+      const wide = await wideElements(page);
+      check(wide.length === 0 && (await overflowX(page)) <= 0, 'panel ' + v + ': nothing wider than the phone' + (wide.length ? ' (' + wide.join(', ') + ')' : ''));
+    }
+    await page.evaluate(() => window.navigate('dashboard'));
+    await page.evaluate(d => window.applyHostInfo(d), IPHONE);
+    await page.evaluate(() => window.openSheet('sheet-fin-expense'));
+    await page.waitForTimeout(600);
+    const date = await page.locator('#fin-exp-date').boundingBox();
+    const form = await page.locator('#form-fin-exp').boundingBox();
+    check(date && form && date.x + date.width <= form.x + form.width + 1, 'iPhone: date field stays inside the form');
+    await page.focus('#fin-exp-date').catch(() => {});
+    await page.evaluate(d => window.applyHostInfo(Object.assign({}, d, { kb: 300 })), IPHONE);
+    await page.waitForTimeout(600);
+    const sheet = await page.locator('#sheet-fin-expense').boundingBox();
+    check(sheet && sheet.y + sheet.height <= MOBILE.height - 300 + 1 && sheet.y >= 47 - 1, 'keyboard open: the sheet sits above the keyboard and below the notch (' + JSON.stringify(sheet) + ')');
+    check(!(await visible(page, '#tabbar')), 'keyboard open: tab bar steps aside');
+    const foot = await page.locator('#fin-exp-save').boundingBox();
+    check(foot && foot.y + foot.height <= MOBILE.height - 300 + 1, 'keyboard open: "Simpan" stays reachable');
+    await page.evaluate(d => window.applyHostInfo(d), IPHONE);
+    await page.waitForTimeout(500);
+    check(await visible(page, '#tabbar') && !(await page.evaluate(() => document.documentElement.classList.contains('kb-open'))), 'keyboard closed: everything comes back');
+    noErrors(errors);
+    await context.close();
+  }
+
+  // ── Pembungkus xnk.my.id: jembatan host (zona aman, keyboard, warna tema) ──
+  console.log('Pembungkus xnk.my.id · host bridge');
+  {
+    const wrapper = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'index.html'), 'utf8');
+    const APP = 'https://n-test-0lu-script.googleusercontent.com';
+    const context = await browser.newContext({ viewport: MOBILE, hasTouch: true, isMobile: true });
+    await context.route('**/*', route => {
+      const url = route.request().url();
+      if (url.startsWith('https://xnk.my.id/')) return route.fulfill({ contentType: 'text/html', body: wrapper });
+      // Apps Script page → our HTML in a googleusercontent frame (as in production)
+      if (url.startsWith('https://script.google.com/')) return route.fulfill({ contentType: 'text/html', body: '<iframe src="' + APP + '/userCodeAppPanel" style="border:0;width:100%;height:100%"></iframe>' });
+      if (url.startsWith(APP)) return route.fulfill({ contentType: 'text/html', body: '<script>window.got=[];addEventListener("message",e=>{if(e.source===window.top)got.push({origin:e.origin,data:e.data})});top.postMessage({xnk:"host?"},"*");top.postMessage({xnk:"theme",color:"#0a0a0a"},"*");top.postMessage({xnk:"theme",color:"red;x"},"*");</script>' });
+      return route.fulfill({ status: 204, body: '' });
+    });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(String(e)));
+    await page.goto('https://xnk.my.id/');
+    await page.waitForTimeout(800);
+    const app = page.frames().find(f => f.url().startsWith(APP));
+    const got = app ? await app.evaluate(() => window.got) : [];
+    const msg = got[0] || {};
+    check(got.length >= 1 && msg.origin === 'https://xnk.my.id' && msg.data.xnk === 'host' && msg.data.v === 1 && typeof msg.data.insets.b === 'number' && msg.data.kb === 0, 'wrapper answers the app frame with safe-area numbers only (' + JSON.stringify(msg.data) + ')');
+    check(Object.keys(msg.data || {}).sort().join(',') === 'insets,ios,kb,standalone,v,xnk', 'wrapper sends nothing else');
+    check((await page.getAttribute('meta[name="theme-color"]', 'content')) === '#0a0a0a', 'wrapper takes the app theme colour for the Safari bars (bad values ignored)');
+    check((await page.getAttribute('meta[name="viewport"]', 'content')).includes('minimum-scale=1'), 'wrapper never zooms out (iOS "everything tiny")');
+    const ifr = await page.locator('#app').boundingBox();
+    check(ifr && Math.round(ifr.width) === MOBILE.width && Math.round(ifr.height) === MOBILE.height, 'wrapper iframe fills the phone exactly');
+    noErrors(errors);
+    await context.close();
   }
 
   // ── Landing xnkbooking.my.id ─────────────────────────────────────────────

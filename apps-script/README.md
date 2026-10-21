@@ -254,6 +254,14 @@ Klien yang **mendaftar sendiri** (dari landing atau katalog portal) mendapat pan
 - **Tombol back Android** menutup lapisan paling atas dulu (sheet, panel detail), lalu kembali ke Beranda. Di Beranda, back keluar dari aplikasi.
 - Panel menyimpan salinan data terakhir di perangkat admin supaya langsung terisi saat dibuka; data baru menyusul di belakang layar. Salinan dihapus saat keluar atau sesi habis.
 
+## Di iPhone (Safari)
+
+- **Pasang ke Layar Utama** supaya bar Safari hilang: buka xnk.my.id (atau book.xnkbooking.my.id untuk klien) di Safari → ketuk **Bagikan** → **Tambahkan ke Layar Utama**. Di iPhone, aplikasi menampilkan ajakan ini sekali saja; "Nanti" menanyakan lagi 7 hari kemudian.
+- Bar menu bawah menempel di tepi bawah layar (di atas garis home), tidak melayang. Bagian atas memberi ruang untuk poni/Dynamic Island.
+- Saat keyboard terbuka, lembar isian naik di atas keyboard dan menu bawah disembunyikan sementara.
+- Dari Layar Utama tidak ada tombol back Safari: **geser dari tepi kiri** untuk kembali satu langkah (menutup sheet, panel, atau halaman).
+- Warna bar status mengikuti tema terang/gelap aplikasi.
+
 ## Rollback (kalau versi baru bermasalah)
 
 - **Cepat (tanpa kode):** Apps Script → **Deploy → Manage deployments** → ✏️ Edit →

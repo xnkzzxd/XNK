@@ -317,6 +317,7 @@
     if (mode === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', mode);
     renderThemeSeg();
+    setTimeout(function () { if (window.hostPostTheme) window.hostPostTheme(); }, 50);
   };
   function renderThemeSeg() {
     ['theme-seg', 'theme-seg-2'].forEach(renderOneThemeSeg);
@@ -341,6 +342,103 @@
       thumb.style.transform = 'translateX(' + (active.offsetLeft - 4) + 'px)';
     });
   }
+
+  // ── iPhone / Safari: jembatan ke halaman pembungkus (Fase N) ────────────────
+  // Aplikasi berjalan di iframe (xnk.my.id, book.xnkbooking.my.id). Di iframe iOS
+  // memberi env(safe-area-inset-*) = 0 dan visualViewport tidak melihat keyboard,
+  // jadi halaman pembungkus mengukurnya dan mengirim angka saja. Tidak ada data,
+  // token, atau nomor yang lewat jalur ini.
+  const HOST_ORIGINS = ['https://xnk.my.id', 'https://book.xnkbooking.my.id', 'https://xnkbooking.my.id'];
+  const host = { ios: false, standalone: false, kb: 0 };
+  function hostNum(v) { v = Math.round(Number(v)); return isFinite(v) ? Math.max(0, Math.min(v, 600)) : 0; }
+  window.applyHostInfo = function (d) {
+    if (!d) return;
+    const root = document.documentElement, ins = d.insets || {};
+    ['t', 'r', 'b', 'l'].forEach(function (k) { root.style.setProperty('--sa-' + k, Math.min(hostNum(ins[k]), 200) + 'px'); });
+    const kb = hostNum(d.kb);
+    root.style.setProperty('--kb', kb + 'px');
+    host.ios = !!d.ios; host.standalone = !!d.standalone;
+    root.classList.toggle('ios', host.ios);
+    root.classList.toggle('standalone', host.standalone);
+    const open = kb > 80;
+    if (open !== root.classList.contains('kb-open')) {
+      root.classList.toggle('kb-open', open);
+      if (open) hostRevealFocus();
+    }
+    host.kb = kb;
+    a2hsMaybe();   // pesan host datang setelah layar pertama
+  };
+  // Keyboard terbuka: geser kolom yang sedang diketik ke tengah ruang yang tersisa.
+  function hostRevealFocus() {
+    const el = document.activeElement;
+    if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    setTimeout(function () { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {} }, 60);
+  }
+  function hostPostTheme() {
+    if (window.top === window) return;
+    // Token --bg (bukan warna body yang sedang bertransisi).
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(color)) return;
+    try { window.top.postMessage({ xnk: 'theme', color: color }, '*'); } catch (e) {}
+  }
+  window.hostPostTheme = hostPostTheme;
+  (function hostBridge() {
+    if (window.top === window) return;
+    window.addEventListener('message', function (e) {
+      if (e.source !== window.top || HOST_ORIGINS.indexOf(e.origin) === -1) return;
+      const d = e.data;
+      if (d && d.xnk === 'host' && d.v === 1) window.applyHostInfo(d);
+    });
+    try { window.top.postMessage({ xnk: 'host?' }, '*'); } catch (e) {}
+    // Fokus ke kolom saat keyboard sudah terbuka (pindah kolom) juga perlu digeser.
+    document.addEventListener('focusin', function () { if (host.kb > 80) hostRevealFocus(); });
+    // Tema otomatis ikut sistem: warna bar Safari ikut berubah.
+    try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { setTimeout(hostPostTheme, 50); }); } catch (e) {}
+    setTimeout(hostPostTheme, 0);
+  })();
+
+  // Mode Layar Utama di iPhone tidak punya gestur geser-kembali: geser dari tepi kiri = back.
+  (function edgeSwipeBack() {
+    let x0 = null, y0 = 0;
+    document.addEventListener('touchstart', function (e) {
+      x0 = null;
+      if (!host.standalone || !host.ios || e.touches.length !== 1 || !isPhone() || bk.n === 0) return;
+      const t = e.touches[0];
+      if (t.clientX > 20 || (e.target.closest && e.target.closest('.sheet-handle, .drag-grip, input, textarea'))) return;
+      x0 = t.clientX; y0 = t.clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', function (e) {
+      if (x0 === null) return;
+      const t = e.changedTouches[0], dx = t.clientX - x0, dy = Math.abs(t.clientY - y0);
+      x0 = null;
+      if (dx > 70 && dy < 40 && !ui.pulling) history.back();
+    }, { passive: true });
+    document.addEventListener('touchcancel', function () { x0 = null; }, { passive: true });
+  })();
+
+  // Ajakan pasang ke Layar Utama: iPhone di Safari biasa, sudah masuk, sekali saja
+  // ("Nanti" = tanya lagi 7 hari kemudian). Hanya di perangkat ini (localStorage).
+  const A2HS_KEY = 'xnk_a2hs';
+  let a2hsTimer = 0;
+  function a2hsMaybe() {
+    if (!host.ios || host.standalone || !isPhone() || ui.a2hsShown) return;
+    const loggedIn = window.isPublicView ? !!window.publicLoggedMember : !!_lsGet(ADMIN_TOKEN_KEY);
+    if (!loggedIn) return;
+    const v = _lsGet(A2HS_KEY);
+    if (v === 'ok' || (v && Date.now() < Number(v))) return;
+    clearTimeout(a2hsTimer);
+    a2hsTimer = setTimeout(function () {
+      if (ui.a2hsShown || ui.guideOn || ui.sheetOn || ui.wlOn) return;
+      ui.a2hsShown = true;
+      const el = $('a2hs');
+      if (el) { el.classList.remove('hide'); paintIcons(); }
+    }, 2500);
+  }
+  window.a2hsClose = function (forever) {
+    _lsSet(A2HS_KEY, forever ? 'ok' : String(Date.now() + 7 * 864e5));
+    const el = $('a2hs');
+    if (el) el.classList.add('hide');
+  };
 
   // ── Lapisan sheet / modal ───────────────────────────────────────────────────
   function openSheet(id) {
@@ -1482,6 +1580,7 @@
     syncBack();
     if (window.wlRenderResume) { window.wlRenderResume(); if (!ui.wlFlushed) { ui.wlFlushed = true; setTimeout(function () { window.wlFlush(); }, 1500); } }
     if (window.isPublicView && window.guideCheck) window.guideCheck();
+    a2hsMaybe();
   };
 
   function renderView(viewId, opts) {

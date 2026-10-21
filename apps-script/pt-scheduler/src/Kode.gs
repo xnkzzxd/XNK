@@ -106,7 +106,7 @@ function doGet(e) {
   return HtmlService.createTemplateFromFile(page).evaluate()
     .setFaviconUrl(faviconUrl)
     .setTitle('XNK Personal Training')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
