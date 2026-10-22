@@ -782,9 +782,16 @@ function getOrCreateSheet_(sheetName, headers) {
   let sheet = ss.getSheetByName(sheetName);
 
   if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
-    sheet.appendRow(headers);
-    sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+    // Beberapa panggilan bisa membuat sheet baru bersamaan (panel memanggil beberapa fungsi paralel).
+    // Yang kalah lomba mendapat error "sudah ada": ambil saja sheet yang sudah dibuat pemenangnya.
+    try {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(headers);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+    } catch (err) {
+      sheet = ss.getSheetByName(sheetName);
+      if (!sheet) throw err;
+    }
   } else {
     const a1 = sheet.getRange(1, 1).getValue();
     if (a1 !== "" && a1 !== headers[0]) {

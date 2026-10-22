@@ -323,7 +323,9 @@ function _nutAdvise_(entries, goal, today, ctx) {
 }
 
 function _nutAdviceRows_() {
-  return _nutAdviceSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(function(r) {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('NutritionAdvice');   // membaca tidak membuat sheet
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(function(r) {
     return { id: String(r[0]), memberId: String(r[1]).trim(), tanggal: String(r[2]), delta: Number(r[3]) || 0, alasan: String(r[4]), status: String(r[5]), diputuskan: String(r[6] || '') };
   });
 }

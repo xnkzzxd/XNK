@@ -94,3 +94,17 @@ test('clients with Gizi switched off, or with goal jaga, get no advice', () => {
   env.call('saveClientNutrition', admin, 'PT-A', { tinggi: 170, jk: 'P', goal: 'turun', aktif: false });
   assert.equal(j(env.call('getCoachHub', admin)).nutrition.length, 0);
 });
+
+test('reading advice never creates the sheet, and losing a sheet-creation race is harmless', () => {
+  const { env, admin } = withClient();
+  assert.equal(env.ss.getSheetByName ? !!env.ss.getSheetByName('NutritionAdvice') : false, false);
+  env.call('getClientNutrition', admin, 'PT-A');                           // a read: no sheet yet
+  assert.equal(!!env.ss.getSheetByName('NutritionAdvice'), false);
+  // Simulate the race: another call creates the sheet right after our "does it exist?" check.
+  const real = env.ss.insertSheet.bind(env.ss);
+  let first = true;
+  env.ss.insertSheet = name => { if (first) { first = false; real(name); const e = new Error('Sheet dengan nama "' + name + '" sudah ada. Masukkan nama lain.'); throw e; } return real(name); };
+  const sheet = env.callRaw('getOrCreateSheet_', 'NutritionAdvice', ['ID', 'Member ID']);
+  assert.ok(sheet);
+  assert.ok(env.ss.getSheetByName('NutritionAdvice'));
+});
