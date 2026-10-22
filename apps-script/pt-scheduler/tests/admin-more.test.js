@@ -46,10 +46,10 @@ test('a bad member fails one part, not the whole bundle shape; auth is required'
   assert.throws(() => env.call('getAdminMore', env.memberToken(KEY_A)));
 });
 
-test('the bundle reads far less than the five old calls', () => {
+test('the bundle reads far less than the separate calls', () => {
   const env = rich(), t = env.adminToken();
   env.resetReads(); env.call('getClientBundle', t, 'PT-A'); const bundle = env.reads().total;
   env.resetReads();
-  ['getTasksForMember', 'getMemberProgress', 'getClientCare', 'getMemberProgram', 'getWorkoutLog'].forEach(n => env.call(n, t, 'PT-A'));
+  ['getTasksForMember', 'getMemberProgress', 'getClientCare', 'getMemberProgram', 'getWorkoutLog', 'getClientNutrition'].forEach(n => env.call(n, t, 'PT-A'));
   assert.ok(bundle <= env.reads().total, bundle + ' vs ' + env.reads().total);
 });

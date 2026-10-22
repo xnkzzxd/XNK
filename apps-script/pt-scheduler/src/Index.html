@@ -543,6 +543,22 @@
       </form>
     </div>
 
+    <div class="sheet hide" id="modal-nut-edit" role="dialog" aria-modal="true" aria-labelledby="nut-edit-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-edit-title">Data gizi</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" onsubmit="window.submitNutEdit(event)">
+        <p class="hint">Hanya kamu yang melihat ini di panel. Target dihitung otomatis dari data ini, berat terbaru, dan sesi latihan.</p>
+        <div class="field"><label class="label" for="nut-tinggi">Tinggi badan (cm)</label><input class="input" id="nut-tinggi" type="text" inputmode="decimal" placeholder="170"></div>
+        <div class="field"><label class="label" for="nut-jk">Jenis kelamin</label><select class="select" id="nut-jk"><option value="">Belum diisi</option><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></div>
+        <div class="field"><label class="label" for="nut-goal">Goal gizi</label><select class="select" id="nut-goal"><option value="">Belum diisi</option><option value="turun">Turun lemak</option><option value="naik">Naik otot</option><option value="jaga">Jaga / sehat</option><option value="recomp">Recomp</option></select></div>
+        <div class="field"><label class="label" for="nut-anggaran">Anggaran makan</label><select class="select" id="nut-anggaran"><option value="hemat">Hemat</option><option value="standar">Standar</option><option value="bebas">Bebas</option></select></div>
+        <div class="field"><p class="label">Alergi dan pantangan</p><div class="chips" id="nut-tags"></div></div>
+        <div class="field"><p class="label">Kondisi khusus</p><div class="chips" id="nut-kondisi"></div></div>
+        <label class="toggle-row"><span>Gizi aktif untuk klien ini</span><input type="checkbox" id="nut-aktif" checked></label>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan</button>
+      </form>
+    </div>
+
     <div class="sheet hide" id="modal-care-assess" role="dialog" aria-modal="true" aria-labelledby="care-assess-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="care-assess-title">Assessment</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
@@ -565,6 +581,37 @@
     </div>
 
     <!-- Tambah ke kalender (Fase I4), portal klien -->
+    <div class="sheet sm hide" id="modal-nut-info" role="dialog" aria-modal="true" aria-labelledby="nut-info-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-info-title"></h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:10px"><p id="nut-info-text"></p><p class="li-sub" id="nut-info-src"></p><p class="li-sub">Angka ini perkiraan, bukan pengganti ahli gizi atau dokter.</p></div>
+    </div>
+
+    <div class="sheet hide" id="modal-nut-swap" role="dialog" aria-modal="true" aria-labelledby="nut-swap-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-swap-title">Ganti makanan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:8px"><div class="stack" style="gap:4px" id="nut-swap-list"></div>
+        <button type="button" class="btn btn-outline btn-lg btn-block hide" id="nut-swap-more" onclick="window.nutSwapMore()"><i data-lucide="shuffle"></i> Acak lagi</button></div>
+    </div>
+
+    <div class="sheet hide" id="modal-nut-shop" role="dialog" aria-modal="true" aria-labelledby="nut-shop-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-shop-title">Belanja 7 hari</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px" id="nut-shop-list"></div>
+    </div>
+
+    <div class="sheet hide" id="modal-nut-onb" role="dialog" aria-modal="true" aria-labelledby="nut-onb-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-onb-title">Isi data</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px" id="nut-onb-body"></div>
+    </div>
+
+    <div class="sheet hide" id="modal-nut-add" role="dialog" aria-modal="true" aria-labelledby="nut-add-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-add-title">Tambah makanan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px" id="nut-add-body"></div>
+    </div>
+
     <div class="sheet sm hide" id="modal-add-cal" role="dialog" aria-modal="true" aria-labelledby="cal-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="cal-title">Tambah ke kalender</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>

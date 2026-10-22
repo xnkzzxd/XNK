@@ -1,0 +1,23 @@
+# Gizi — Design
+
+## Data
+- `foods/foods.min.json` (GitHub Pages, lazy-load seperti `exercises/`), dibangun `tools/build-foods.js` dari teks TKPI. Field: `id` (kode TKPI), `nama`, `kelompok`, `per100` {kal, protein, lemak, karbo, serat, natrium, kalsium, besi}, `porsi` [{nama, gram}], `harga` 1–3, `alergen[]`, `laktosa`, `babi`, `estimasi`. Tes mencocokkan ~20–30 baris dengan PDF.
+- MemberData kolom baru (append, `_ensureNutritionColumns_`, idempotent, di bawah lock): Tinggi, Jenis Kelamin, Goal Gizi (`turun|naik|jaga|recomp`), Alergi/Pantangan, Anggaran, Gizi Aktif. Tanggal lahir = kolom U yang sudah ada. Goal teks lama tidak diubah.
+- Sheet `FoodLog` (satu baris per item, snapshot kal/makro), `NutritionAdvice` (saran adaptif: status setuju/tolak), `FoodFavorites` bila perlu. Berat dari `Progress` terakhir (> 4 minggu = minta timbang).
+
+## Server (`Nutrisi.gs`, fungsi murni diuji)
+`_nutBmi_`, `_nutWhtr_`, `_nutBmr_`, `_nutActivity_`, `_nutTarget_` (+ `warnings`), `_nutAdvise_`, `_nutMenu_` (3 makan, penukar, variasi harian, hari latihan/istirahat, Ramadan), `_nutShopping_`.
+Admin: `getClientNutrition`, `saveClientNutrition`, `decideNutritionAdvice`. Member: `getMyNutrition`, `saveMyNutritionProfile`, `logMyFood`, `deleteMyFood`. Semua masuk daftar `tests/security.test.js`; member dari token. Bagian `nutrition` ikut `getPortalMore` dan `getClientBundle`; `getCoachHub().nutrition` = saran menunggu. Pengingat makan: baris personal dari `_nutTarget_`.
+
+## UI
+- Portal: segmen sticky `Latihan | Makan` di `public-program`. Makan: cincin kalori + 3 batang makro (+ (i)) → Menu hari ini (tombol + per makan) → Catat → Aturan makan → Belanja. Sheet cari makanan, sheet porsi (chip rumah tangga + stepper 0,5 + gram), sheet tukar item (3 pengganti, "Acak lagi"), sheet onboarding 3 langkah, banner kuning pengaman. Monokrom; warna hanya data. 44 px, `var(--sa-*)`, light/dark.
+- Panel: tab Gizi di profil klien: Ringkasan → Input coach → Saran adaptif → Log 7 hari; dua kolom hanya lewat container query. Kartu dashboard: saran menunggu.
+
+## Data di server (T-1011)
+Apps Script tidak membaca JSON GitHub Pages dengan murah, jadi `tools/build-foods.js` juga menulis `src/NutrisiData.gs` (`NUT_FOODS`, `NUT_SLOTS`; dibuat otomatis, jangan diedit). Ubah daftar di `tools/foods-curated.json`, lalu jalankan `node tools/build-foods.js <tkpi.txt>`; tes memastikan `foods/foods.min.json` dan file server sinkron. Menu memilih pasangan karbo+protein per makan lewat sistem dua persamaan (kalori dan protein), lalu `_nutFitDay_` menyesuaikan hari penuh.
+
+## Catatan makan, saran, dan API klien (T-1004, T-1012, T-1020, T-1030)
+- `FoodLog`: satu baris per makanan (`ID, Member ID, Tanggal, Waktu, Food ID, Nama, Gram, Porsi, Kal, Protein, Lemak, Karbo, Sumber, Dibuat Pada`); angka disalin saat dicatat, jadi mengubah daftar makanan tidak mengubah riwayat. Batas 60 catatan per hari, mundur maksimal 7 hari; tanpa jeda per catatan. Favorit = dimakan 2 kali atau lebih dalam 30 hari; terakhir = 8 yang berbeda.
+- `NutritionAdvice`: saran ±125 kkal dari tren berat 28 hari (`_nutAdvise_`), status `menunggu|setuju|tolak`; setuju menambah kolom `Penyesuaian Kalori` (±300). Dibuat saat dashboard coach dibuka (paling sering sekali per 10 menit).
+- Jawaban klien tidak pernah memuat tag kondisi khusus atau baris saran; kondisi muncul sebagai satu peringatan umum `kondisi`.
+- Pengingat: `_nutReminderLine_(kal)` + `_nutBulkCalories_()` (tiap sheet dibaca sekali). Hanya kalori.

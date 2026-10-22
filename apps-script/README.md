@@ -248,6 +248,17 @@ Klien yang **mendaftar sendiri** (dari landing atau katalog portal) mendapat pan
 - Tercatat di kolom W `Panduan` sheet `MemberData` (`baru|beranda|…`, lalu `selesai`), jadi tetap jalan kalau klien ganti HP. Kolom dibuat otomatis saat pendaftaran pertama.
 - Nyala sejak awal. Matikan di **Pengaturan → Tampilan → Panduan klien baru** (langsung tersimpan; Script Property `CLIENT_GUIDE_ENABLED` = `false`).
 
+## Gizi & catat makan (Fase P)
+
+Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klien mengisi tinggi, jenis kelamin, tujuan, dan pantangan sekali (berat dan lingkar pinggang diambil dari tab Progres), lalu melihat BMI, WHtR, BMR, TDEE, target kalori dan makro, menu satu hari (bisa ditukar), daftar belanja 7 hari, dan catatan makan harian. Datanya dari **Tabel Komposisi Pangan Indonesia 2017** (Kemenkes); ±50 menu jadi (nasi padang, bakso, gorengan, dll.) adalah **perkiraan** dan diberi tanda "perkiraan".
+
+- **Kamu (coach):** tab **Gizi** di halaman klien menampilkan angkanya, input (tinggi, goal, pantangan, kondisi khusus seperti hamil), dan catatan makan 7 hari. Target selalu dihitung otomatis; kamu mengubah inputnya saja. Kalau berat tidak bergerak sesuai tujuan, dashboard menampilkan kartu **Saran target gizi** (±125 kkal) yang kamu setujui atau tolak.
+- **Pengingat makan pagi/sore** ditambah satu baris "Target hari ini N kkal." untuk klien yang datanya lengkap. Hanya kalori; tidak ada berat, BMI, atau kondisi di pesan.
+- **Nyala sejak awal.** Matikan untuk semua klien di **Pengaturan → Tampilan → Gizi & catat makan** (Script Property `NUTRITION_ENABLED` = `false`; data tetap tersimpan). Per klien: matikan "Gizi aktif" di tab Gizi.
+- **Perlu kamu cek sebelum diumumkan:** angka 50 menu perkiraan di `docs/nutrition/Estimasi.md`, dan aturan di `docs/nutrition/Rules.md` (baris bertanda ⚠ belum diverifikasi ke sumbernya: serat AKG 2019, persentase defisit, waktu makan sekitar latihan). Semua angka adalah estimasi, bukan pengganti ahli gizi atau dokter.
+- Sheet baru dibuat otomatis: `FoodLog`, `NutritionAdvice`; `MemberData` bertambah kolom X–AD. Data gizi bersifat privat (tidak ke Telegram, kecuali baris kalori di teks pengingat).
+- Mengubah daftar makanan: edit `apps-script/pt-scheduler/tools/foods-curated.json`, lalu jalankan `node tools/build-foods.js <teks-TKPI.txt>` (menulis `foods/foods.min.json` dan `src/NutrisiData.gs`; jangan diedit tangan).
+
 ## Di HP: pasang dari Chrome, tarik untuk muat ulang, tombol back
 
 - **Pasang dari Chrome** (lebih baik daripada bungkus Kodular): buka xnk.my.id di Chrome → menu ⋮ → *Instal aplikasi* / *Tambahkan ke layar utama*. Ikonnya sama, selalu versi terbaru, dan tombol back bekerja normal.

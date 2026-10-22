@@ -280,7 +280,7 @@ async function contrastReport(page) {
       pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom),
       wide: document.getElementById('app').classList.contains('detail-wide') && getComputedStyle(document.getElementById('detail-panel')).width,
     }));
-    check(phoneProf.tabs === 4 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (4-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
+    check(phoneProf.tabs === 3 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (3-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
     const detail = await page.textContent('#detail-panel');
     check(detail.includes('Citra') && !detail.includes('Kirim Link') && !detail.includes('Link Baru'), 'client detail shows the client, no member-link buttons');
     await shot(page, 'admin-mobile-client-detail');
@@ -515,7 +515,7 @@ async function contrastReport(page) {
     const dPanel = await page.locator('#detail-panel').boundingBox();
     const dTabs = await page.evaluate(() => { const t = Array.from(document.querySelectorAll('#detail-body [data-cptab]')); return { rows: new Set(t.map(b => Math.round(b.getBoundingClientRect().top))).size, over: t.map(b => b.scrollWidth - b.clientWidth).filter(x => x > 1).length }; });
     check(!(await page.evaluate(() => document.getElementById('app').classList.contains('detail-wide'))) && dPanel.width > 380 && dPanel.width < 460 && dTabs.rows === 1 && dTabs.over === 0,
-      'a client opened from the dashboard keeps the 420 px panel, five tabs on one row ' + JSON.stringify(dTabs));
+      'a client opened from the dashboard keeps the 420 px panel, six tabs on one row ' + JSON.stringify(dTabs));
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(600);
 
@@ -833,7 +833,7 @@ async function contrastReport(page) {
     check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
-    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 5, 'client page: dark hero and five tabs (Ringkasan, Progres, Program, Perawatan, Riwayat)');
+    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 6, 'client page: dark hero and six tabs (Ringkasan, Progres, Program, Perawatan, Gizi, Riwayat)');
     const tabBox = await page.evaluate(() => { const t = document.querySelector('#detail-body .cp-tabs'), d = document.querySelector('#detail-body'); if (!t || !d) return null; const r = t.getBoundingClientRect(), dr = d.getBoundingClientRect(); return { l: Math.round(r.left - dr.left), r: Math.round(dr.right - r.right), over: t.scrollWidth - t.clientWidth, chips: Array.from(t.children).map(c => Math.round(c.scrollWidth - c.clientWidth)) }; });
     check(!!tabBox && tabBox.l >= 0 && tabBox.r >= 0 && tabBox.over <= 1 && tabBox.chips.every(x => x <= 1), 'client page: the tab pills stay inside the panel (no bleed) ' + JSON.stringify(tabBox));
     await page.evaluate(() => { const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; });
@@ -845,6 +845,12 @@ async function contrastReport(page) {
     await page.evaluate(() => window.cpTab('perawatan'));
     await page.waitForTimeout(300);
     check((await page.textContent('#profile-care-wrap')).includes('Catatan privat') && (await page.textContent('#profile-care-wrap')).includes('Tes kebugaran'), 'client page: private notes, health, assessment and fitness sections');
+    await page.evaluate(() => window.cpTab('gizi'));
+    await page.waitForTimeout(400);
+    const gzCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-nut-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
+    check(gzCols.length === 2 && gzCols[1][0] > gzCols[0][0] && Math.abs(gzCols[1][1] - gzCols[0][1]) <= 2 && (await elOverflow(page, '#detail-body')) <= 1, 'wide client page: the Gizi tab has the numbers on the left and the coach inputs on the right ' + JSON.stringify(gzCols));
+    await page.evaluate(() => window.cpTab('perawatan'));
+    await page.waitForTimeout(300);
     const careCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-care-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(careCols.length === 2 && careCols[1][0] > careCols[0][0] && Math.abs(careCols[1][1] - careCols[0][1]) <= 2 && (await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display)) === 'none',
       'wide client page: Perawatan in two columns, hidden tabs stay hidden ' + JSON.stringify(careCols));
@@ -1270,9 +1276,13 @@ async function contrastReport(page) {
     check(hit, 'phone: the switch touch area is at least 44 × 44 px');
     check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');
     await shot(page, 'client-reminders-mobile-' + scheme);
-    for (const tab of ['ringkasan', 'progres', 'perawatan', 'riwayat']) {
+    for (const tab of ['ringkasan', 'progres', 'perawatan', 'gizi', 'riwayat']) {
       await page.evaluate(t => { window.cpTab(t); const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; }, tab);
       await page.waitForTimeout(250);
+      if (tab === 'gizi') {
+        const gz = await page.evaluate(() => { const w = document.getElementById('profile-nut-wrap'); return { txt: w ? w.textContent : '', over: w ? w.scrollWidth - w.clientWidth : 99, tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size }; });
+        check(/Ringkasan/.test(gz.txt) && /Lengkapi data|Target harian/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
+      }
       await shot(page, 'phone-client-' + tab + '-' + scheme);
     }
     await page.evaluate(() => { window.cpTab('ringkasan'); window.closeDetail(); window.navigate('clients', { force: true }); });
@@ -1502,6 +1512,16 @@ async function contrastReport(page) {
     await adm.page.click('#set-client-guide');
     await adm.page.waitForTimeout(800);
     check(env.props.CLIENT_GUIDE_ENABLED === 'false', 'guide: switching it off is saved');
+    // Gizi & catat makan (Phase P): global switch in the same section.
+    check(await adm.page.isChecked('#set-nutrition'), 'gizi: Pengaturan → Tampilan shows "Gizi & catat makan" switched on');
+    const nutBox = await adm.page.locator('#set-nutrition').evaluate(e => { const r = e.closest('.toggle').getBoundingClientRect(); return Math.round(r.height); });
+    check(nutBox >= 28, 'gizi: the switch is a normal-sized control ' + nutBox);
+    await adm.page.click('#set-nutrition');
+    await adm.page.waitForTimeout(800);
+    check(env.props.NUTRITION_ENABLED === 'false' && !(await adm.page.isChecked('#set-nutrition')), 'gizi: switching it off is saved');
+    await adm.page.click('#set-nutrition');
+    await adm.page.waitForTimeout(800);
+    check(env.props.NUTRITION_ENABLED === undefined && (await adm.page.isChecked('#set-nutrition')), 'gizi: switching it on again removes the override (back to the default)');
     noErrors(adm.errors);
     await adm.context.close();
     const off = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500 });
@@ -1634,6 +1654,90 @@ async function contrastReport(page) {
     const rtBad = await page.locator('#pub-program-wrap button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
     check(rtBad === 0 && (await overflowX(page)) <= 0, 'latihan: buttons are at least 44 px and nothing scrolls sideways');
     await shot(page, 'portal-mobile-latihan');
+    // Makan (Phase P): segmen di tab Latihan, isi data tiga langkah, target + menu.
+    {
+      check(await visible(page, '#lat-seg'), 'makan: the Latihan | Makan switch is on top of the page');
+      await page.evaluate(() => window.setLatSeg('makan'));
+      await page.waitForTimeout(400);
+      check(await visible(page, '#pub-makan-pane') && !(await visible(page, '#pub-latihan-pane')) && (await page.textContent('#pub-makan-pane')).includes('Lengkapi data'), 'makan: a new client is asked to complete the data first');
+      await page.click('#pub-makan-pane .btn-primary');
+      await page.waitForTimeout(500);
+      check(await visible(page, '#modal-nut-onb') && (await page.textContent('#nut-onb-title')).includes('Langkah 1 dari 3'), 'makan: the data sheet opens on step 1 of 3');
+      const px = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('nut-o-tinggi')).fontSize));
+      check(px >= 16, 'makan: inputs are 16 px (no iOS zoom)');
+      await page.fill('#nut-o-tinggi', '170');
+      await page.fill('#nut-o-berat', '70');
+      await page.click('#nut-onb-body .seg button >> nth=1');
+      await page.fill('#nut-o-birth', '1996-03-10');
+      await page.click('#nut-onb-next');
+      await page.click('#nut-onb-body .btn-lg >> nth=0');
+      await page.click('#nut-onb-next');
+      await page.click('#nut-onb-body .chip >> nth=0');
+      await page.click('#nut-onb-next');
+      await page.waitForTimeout(1200);
+      const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.card-flat .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
+      check(mk.ring && mk.bars === 3 && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && mk.over <= 1, 'makan: ring, three macro bars, today\'s menu and the rules show, no sideways scroll ' + JSON.stringify({ bars: mk.bars, meals: mk.meals, over: mk.over }));
+      check(mk.small === 0, 'makan: tap targets are at least 44 px ' + mk.small);
+      await page.click('#pub-makan-pane .list-item >> nth=0');
+      await page.waitForTimeout(700);
+      check(await visible(page, '#modal-nut-swap') && (await page.locator('#nut-swap-list .list-item').count()) >= 1, 'makan: tapping a menu item offers replacements');
+      await page.click('#nut-swap-list .list-item >> nth=0');
+      await page.waitForTimeout(800);
+      check(!(await visible(page, '#modal-nut-swap')), 'makan: picking a replacement closes the sheet');
+      await page.evaluate(() => window.nutInfo('protein'));
+      await page.waitForTimeout(300);
+      check(await visible(page, '#modal-nut-info') && (await page.textContent('#nut-info-src')).includes('ISSN'), 'makan: the (i) button explains the number and names the source');
+      await page.evaluate(() => window.closeModal());
+      await page.click('#pub-makan-pane .btn-sm:has-text("Belanja")');
+      await page.waitForTimeout(900);
+      check(await visible(page, '#modal-nut-shop') && (await page.locator('#nut-shop-list .eyebrow').count()) >= 3, 'makan: the shopping list shows groups');
+      await shot(page, 'portal-mobile-makan');
+      // Catat makan (T-1020)
+      await page.route('https://xnk.my.id/foods/foods.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: require('fs').readFileSync(require('path').join(__dirname, '../../../foods/foods.min.json'), 'utf8') }));
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(700);
+      await page.click('#nut-log-card button:has-text("Tambah") >> nth=1');   // makan siang
+      await page.waitForTimeout(700);
+      check(await visible(page, '#modal-nut-add') && (await page.textContent('#nut-add-title')).includes('Makan siang'), 'catat: the add sheet opens for the chosen meal');
+      await page.fill('#nut-add-q', 'tempe');
+      await page.waitForTimeout(400);
+      check((await page.locator('#nut-add-res .list-item').count()) >= 2, 'catat: searching lists matching foods');
+      const pxq = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('nut-add-q')).fontSize));
+      check(pxq >= 16, 'catat: the search box is 16 px (no iOS zoom)');
+      await page.click('#nut-add-res .list-item >> nth=0');
+      await page.waitForTimeout(300);
+      check(await visible(page, '#nut-pick-save') && (await page.textContent('#nut-pick-sum')).includes('kkal'), 'catat: choosing a food shows the portion with calories');
+      await page.click('button[aria-label="Tambah"]');
+      await page.waitForTimeout(200);
+      check((await page.textContent('#nut-pick-n')).trim() === '1,5', 'catat: the stepper adds half a portion');
+      await page.click('#nut-pick-save');
+      await page.waitForTimeout(1200);
+      check(!(await visible(page, '#modal-nut-add')) && (await page.textContent('#nut-log-card')).toLowerCase().includes('tempe') && /Dimakan [1-9]/.test(await page.textContent('#nut-eaten-line')), 'catat: the food is logged and the eaten line updates');
+      await page.click('#pub-makan-pane .icon-btn[aria-label^="Catat"] >> nth=0');
+      await page.waitForTimeout(1200);
+      check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: the check button logs a menu item in one tap');
+      await page.click('#nut-log-card button:has-text("Tambah") >> nth=3');
+      await page.waitForTimeout(600);
+      await page.click('#modal-nut-add button:has-text("Buat makanan sendiri")');
+      await page.fill('#nut-own-n', 'Keripik singkong');
+      await page.fill('#nut-own-kal', '150');
+      await page.click('#nut-own-save');
+      await page.waitForTimeout(1200);
+      check((await page.textContent('#nut-log-card')).includes('buatan sendiri'), 'catat: own food is saved and marked');
+      const bad2 = await page.evaluate(() => Array.from(document.querySelectorAll('#nut-log-card button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length);
+      check(bad2 === 0 && (await overflowX(page)) <= 0, 'catat: buttons are at least 44 px and nothing scrolls sideways ' + bad2);
+      await page.click('#nut-log-card button[aria-label^="Hapus"] >> nth=0');
+      await page.waitForTimeout(900);
+      check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: deleting removes the row');
+      await shot(page, 'portal-mobile-catat');
+      await page.evaluate(() => { window.closeModal(); window.setLatSeg('latihan'); });
+      // The weight typed in the data sheet must not leak into the Progres checks that follow.
+      env.sheet('Progress').rows.length = 1;
+      if (env.sheet('FoodLog')) env.sheet('FoodLog').rows.length = 1;
+      env.sheet('MemberData').rows.forEach(r => { if (r[0] === 'PT-A') for (let i = 23; i < r.length; i++) r[i] = ''; });
+      await page.evaluate(() => { window.myNutrition = undefined; return window.refreshPortalMore(true); });
+      await page.waitForTimeout(900);
+    }
     await page.click('#pub-program-wrap .rt-card >> nth=0 >> .rt-open');
     await page.waitForTimeout(500);
     check(await visible(page, '#modal-wl') && (await page.textContent('#wls-title')) === 'Hari A' && (await page.locator('#wls-body .rt-ex').count()) === 2 && (await page.textContent('#wls-body')).includes('Grafik muncul'), 'routine: the card opens its detail with each exercise and a chart placeholder');
@@ -2062,6 +2166,21 @@ async function contrastReport(page) {
     const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.portal-grid')).gridTemplateColumns.split(' ').length);
     check(cols === 2, scheme + ': Beranda uses two columns on desktop');
     await shot(page, 'portal-desktop-' + scheme + '-home');
+    // Makan on a wide screen (Phase P): two columns, nothing overflows, at 1440 and 1280.
+    env.call('saveMyMeasurement', token, { berat: 70, pinggang: 80 });
+    env.call('saveMyNutritionProfile', token, { tinggi: '170', jk: 'P', goal: 'turun', pantangan: [], anggaran: 'standar', birthDate: '1996-03-10' });
+    await page.evaluate(() => { window.navigate('public-program'); return window.refreshPortalMore(true); });
+    await page.waitForTimeout(1000);
+    for (const w of [1440, 1280]) {
+      await page.setViewportSize({ width: w, height: 900 });
+      await page.evaluate(() => window.setLatSeg('makan'));
+      await page.waitForTimeout(500);
+      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
+      check(mk.cols === '2' && mk.over <= 1 && mk.lefts === 2 && mk.ring && mk.bars === 3, scheme + ' ' + w + ': Makan flows in two columns without overflow ' + JSON.stringify(mk));
+      if (w === 1440) await shot(page, 'portal-desktop-' + scheme + '-makan');
+    }
+    await page.setViewportSize(DESKTOP);
+    await page.evaluate(() => window.setLatSeg('latihan'));
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
     await shot(page, 'portal-desktop-' + scheme + '-calendar');
