@@ -280,7 +280,7 @@ async function contrastReport(page) {
       pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom),
       wide: document.getElementById('app').classList.contains('detail-wide') && getComputedStyle(document.getElementById('detail-panel')).width,
     }));
-    check(phoneProf.tabs === 4 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (4-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
+    check(phoneProf.tabs === 3 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (3-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
     const detail = await page.textContent('#detail-panel');
     check(detail.includes('Citra') && !detail.includes('Kirim Link') && !detail.includes('Link Baru'), 'client detail shows the client, no member-link buttons');
     await shot(page, 'admin-mobile-client-detail');
