@@ -4478,6 +4478,7 @@
           (x.rasa ? '<span aria-label="Rasa ' + x.rasa + ' dari 5" style="font-size:20px">' + WL_FACES[x.rasa - 1][0] + '</span>' : '') + '</button>';
       }).join('') + '</div>';
     }
+    if (hub.nutrition && hub.nutrition.length) html += '<div class="card-flat stack" id="hub-nutrition" style="gap:8px"><div class="row-between"><p class="eyebrow">Saran target gizi</p><span class="li-sub">' + hub.nutrition.length + '</span></div>' + hub.nutrition.map(function (a) { return nutAdviceRow(a, true); }).join('') + '</div>';
     html += '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Target bulan ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTargetsSheet()">' + (hub.targets.length ? 'Ubah' : 'Atur target') + '</button></div>';
     if (!hub.targets.length) html += '<p class="li-sub">Belum ada target. Atur target sesi, klien, atau pendapatan.</p>';
     html += hub.targets.map(function (t) {
@@ -6224,6 +6225,10 @@
       html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Lengkapi data</p><p class="li-sub">Target belum bisa dihitung. Yang masih kurang:</p>' +
         (t.missingLabels || []).map(x => '<p>' + icon('circle-dashed', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(x) + '</p>').join('') + '</div>';
     }
+    const av = d.advice || {};
+    if (av.pending) html += '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Saran penyesuaian</p>' + nutAdviceRow(Object.assign({ memberId: memberId }, av.pending), false) + '</div>';
+    else if (av.last) html += '<p class="li-sub">Saran terakhir: ' + h(nutDeltaText(av.last.delta)) + ' · ' + (av.last.status === 'setuju' ? 'disetujui' : 'ditolak') + ' ' + h(av.last.diputuskan) + '</p>';
+    if (t.ok && t.adjust) html += '<p class="li-sub">Penyesuaian aktif: ' + h(nutDeltaText(t.adjust)) + '</p>';
     html += '</div><div class="cp-col cp-col-side"><div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Input coach</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutEdit(\'' + h(memberId) + '\')">Ubah</button></div>' +
       careRow('Tinggi', p.tinggi === '' || p.tinggi == null ? '-' : h(nutNum(p.tinggi, 1)) + ' cm') +
       careRow('Jenis kelamin', p.jk === 'L' ? 'Laki-laki' : p.jk === 'P' ? 'Perempuan' : '-') +
@@ -6234,6 +6239,22 @@
       careRow('Gizi aktif', p.aktif ? 'Ya' : 'Tidak') + '</div></div>';
     return html;
   }
+
+  const nutDeltaText = n => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n) + ' kkal';
+  function nutAdviceRow(a, withName) {
+    return '<div class="stack" style="gap:6px;padding:6px 0"><div class="row-between" style="gap:8px;align-items:flex-start"><span style="min-width:0">' +
+      (withName ? '<button type="button" class="link" style="font-weight:700;min-height:44px" onclick="window.openProfile(\'' + h(a.memberId) + '\')">' + h(a.name || 'Klien') + '</button><br>' : '') +
+      '<span class="li-sub">' + h(a.alasan) + '</span></span><span class="num" style="font-weight:800;white-space:nowrap">' + h(nutDeltaText(a.delta)) + '</span></div>' +
+      '<div class="btn-row"><button type="button" class="btn btn-primary" style="min-height:44px" onclick="window.decideNut(\'' + h(a.memberId) + '\',\'' + h(a.id) + '\',\'setuju\',this)">Setuju</button>' +
+      '<button type="button" class="btn btn-secondary" style="min-height:44px" onclick="window.decideNut(\'' + h(a.memberId) + '\',\'' + h(a.id) + '\',\'tolak\',this)">Tolak</button></div></div>';
+  }
+  window.decideNut = function (memberId, adviceId, decision, btn) {
+    const done = busy(btn, '…');
+    adminCall('decideNutritionAdvice', memberId, adviceId, decision).then(function () {
+      done(); window.showToast(decision === 'setuju' ? 'Target disesuaikan.' : 'Saran ditolak.');
+      window._hubAt = 0; loadHub(); return window.loadClientNutrition(memberId);
+    }).catch(function (err) { done(); window.showToast(err.message); });
+  };
   window.nutSet = function (memberId, d) {
     nut[memberId] = d;
     const w = $('profile-nut-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = nutInner(memberId);

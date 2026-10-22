@@ -6003,7 +6003,7 @@ function _coachHub_(now) {
   });
   return {
     selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
-    today: today, stats: stats, targets: targets, care: _careList_(now), feedback: _feedbackSummary_(now.getTime()), workouts: _workoutHubList_(),
+    today: today, stats: stats, targets: targets, care: _careList_(now), feedback: _feedbackSummary_(now.getTime()), workouts: _workoutHubList_(), nutrition: _nutHubList_(),
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }

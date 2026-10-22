@@ -6,8 +6,8 @@
 // ============================================================
 
 // Kolom MemberData baru (kanan dari "Panduan" kolom W). Tanggal lahir = MEMBER_BIRTH_COL.
-const NUT_COLS = { tinggi: 24, jk: 25, goal: 26, pantangan: 27, anggaran: 28, aktif: 29 };
-const NUT_HEADERS = { 24: 'Tinggi (cm)', 25: 'Jenis Kelamin', 26: 'Goal Gizi', 27: 'Pantangan Makanan', 28: 'Anggaran Makan', 29: 'Gizi Aktif' };
+const NUT_COLS = { tinggi: 24, jk: 25, goal: 26, pantangan: 27, anggaran: 28, aktif: 29, adjust: 30 };
+const NUT_HEADERS = { 24: 'Tinggi (cm)', 25: 'Jenis Kelamin', 26: 'Goal Gizi', 27: 'Pantangan Makanan', 28: 'Anggaran Makan', 29: 'Gizi Aktif', 30: 'Penyesuaian Kalori' };
 const NUT_GOALS = ['turun', 'naik', 'jaga', 'recomp'];
 
 /** Konstanta aturan (Rules.md). Ubah di sini dan di dokumen sekaligus. */
@@ -24,7 +24,9 @@ const NUT = {
   seratMin: 25,
   natriumMax: 2000,
   airMlKg: 33,
-  tinggiMin: 100, tinggiMax: 230
+  tinggiMin: 100, tinggiMax: 230,
+  adjustMax: 300,                 // penyesuaian kalori yang disetujui coach, maks ±300
+  adviceStep: 125, adviceWindowDays: 28, adviceMinSpanDays: 14, adviceCooldownDays: 14
 };
 
 function _nutRound_(n, dp) {
@@ -104,9 +106,11 @@ function _nutTarget_(inp) {
 
   let mult = NUT.goalKal[goal];
   if (mult < 1) mult = Math.max(mult, warnings.length ? NUT.riskMin : NUT.turunMin);
-  let kal = Math.round(tdee * mult);
+  const adj = Math.max(-NUT.adjustMax, Math.min(NUT.adjustMax, Math.round(Number(inp.adjust) || 0)));
+  let kal = Math.round(tdee * mult) + adj;
+  if (warnings.length && kal < tdee) kal = Math.max(kal, Math.round(tdee * NUT.riskMin));
   const floor = Math.max(NUT.floorKal[inp.sex], bmr);
-  if (kal < floor && mult < 1) { kal = Math.round(floor); warnings.push('batasBawah'); }
+  if (kal < floor && kal < tdee) { kal = Math.round(floor); warnings.push('batasBawah'); }
 
   // BMI >= 30: protein dihitung dari berat target (BMI 25), bukan berat aktual.
   const refKg = bmi.value >= 30 ? 25 * Math.pow(cm / 100, 2) : kg;
@@ -116,7 +120,7 @@ function _nutTarget_(inp) {
   return {
     ok: true,
     bmi: bmi, bmr: bmr, faktor: factor, tdee: tdee, goal: goal,
-    kal: kal, protein: protein, lemak: lemak, karbo: karbo,
+    kal: kal, adjust: adj, protein: protein, lemak: lemak, karbo: karbo,
     serat: Math.max(NUT.seratMin, Math.round(NUT.seratPer1000 * kal / 1000)),
     natrium: NUT.natriumMax,
     air: Math.round(NUT.airMlKg * kg),
@@ -186,6 +190,7 @@ function _nutProfileFrom_(row) {
     kondisi: tags.filter(function(t) { return NUT_TAGS_RISK.indexOf(t) !== -1; }),
     anggaran: NUT_BUDGETS.indexOf(String(c('anggaran'))) !== -1 ? String(c('anggaran')) : 'standar',
     aktif: String(c('aktif')).toLowerCase() !== 'tidak',
+    adjust: Number(c('adjust')) || 0,
     birthDate: String(row[MEMBER_BIRTH_COL - 1] || '')
   };
 }
@@ -211,7 +216,7 @@ function getClientNutrition(token, memberId) {
   const risks = _nutRisks_(hs ? [3, 4, 5, 6, 7, 8, 9].map(function(i) { return hs.row[i]; }) : [], hs ? hs.row[12] : '', profile.kondisi);
   const target = _nutTarget_({
     sex: profile.jk, kg: w ? w.v : 0, cm: profile.tinggi, birthDate: profile.birthDate, goal: profile.goal,
-    sessionsPerWeek: spw, bodyFat: bodyFat, risks: risks, today: today
+    sessionsPerWeek: spw, bodyFat: bodyFat, risks: risks, today: today, adjust: profile.adjust
   });
   if (!target.ok) target.missingLabels = target.missing.map(function(k) { return NUT_MISSING_LABELS[k] || k; });
   return {
@@ -221,6 +226,7 @@ function getClientNutrition(token, memberId) {
     bmi: w && profile.tinggi ? _nutBmi_(w.v, profile.tinggi) : null,
     whtr: waist && profile.tinggi ? _nutWhtr_(waist.v, profile.tinggi) : null,
     target: target,
+    advice: _nutAdviceFor_(id, profile, entries, today),
     options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD, kondisi: NUT_TAGS_RISK }
   };
 }
@@ -263,5 +269,137 @@ function saveClientNutrition(token, memberId, data) {
     put('tinggi', v.tinggi); put('jk', v.jk); put('goal', v.goal);
     put('pantangan', v.tags); put('anggaran', v.anggaran); put('aktif', v.aktif);
     return { status: 'success' };
+  });
+}
+
+// ------------------------------------------------------------
+// Saran penyesuaian target (T-1004): tren berat → saran ±125 kkal ke coach; coach setuju/tolak.
+// ------------------------------------------------------------
+const NUT_ADVICE_HEADERS = ['ID', 'Member ID', 'Tanggal', 'Delta Kkal', 'Alasan', 'Status', 'Diputuskan Pada'];
+
+function _nutAdviceSheet_() {
+  const sheet = getOrCreateSheet_('NutritionAdvice', NUT_ADVICE_HEADERS);
+  sheet.getRange('C:C').setNumberFormat('@');
+  sheet.getRange('G:G').setNumberFormat('@');
+  return sheet;
+}
+
+/**
+ * Murni. entries = [{tanggal, berat}] urut tanggal; ctx = { pending: bool, lastDecision: 'yyyy-MM-dd' | '' }.
+ * Mengembalikan { delta, alasan } atau null. Aturan: Rules.md baris 7.
+ */
+function _nutAdvise_(entries, goal, today, ctx) {
+  ctx = ctx || {};
+  if (ctx.pending || (goal !== 'turun' && goal !== 'naik')) return null;
+  if (ctx.lastDecision && _nutDaysBetween_(ctx.lastDecision, today) < NUT.adviceCooldownDays) return null;
+  const from = _addDaysIso_(today, -NUT.adviceWindowDays);
+  const pts = (entries || []).filter(function(e) {
+    return e.berat !== '' && e.berat != null && e.tanggal >= from && e.tanggal <= today && (!ctx.lastDecision || e.tanggal >= ctx.lastDecision);
+  });
+  if (pts.length < 3) return null;
+  const a = pts[0], b = pts[pts.length - 1];
+  const span = _nutDaysBetween_(a.tanggal, b.tanggal);
+  if (span < NUT.adviceMinSpanDays) return null;
+  const weeks = span / 7;
+  const slope = (Number(b.berat) - Number(a.berat)) / weeks;            // kg / minggu
+  const pct = slope / Number(a.berat) * 100;                            // % berat / minggu
+  const wk = Math.round(weeks);
+  if (goal === 'turun') {
+    if (pct < -1) return { delta: NUT.adviceStep, alasan: 'Berat turun lebih dari 1 % per minggu. Naikkan kalori sedikit agar otot terjaga.' };
+    if (slope > -0.1) return { delta: -NUT.adviceStep, alasan: 'Berat belum turun dalam ' + wk + ' minggu terakhir.' };
+  } else if (pct < 0.05) {
+    return { delta: NUT.adviceStep, alasan: 'Berat belum naik dalam ' + wk + ' minggu terakhir.' };
+  }
+  return null;
+}
+
+function _nutAdviceRows_() {
+  return _nutAdviceSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(function(r) {
+    return { id: String(r[0]), memberId: String(r[1]).trim(), tanggal: String(r[2]), delta: Number(r[3]) || 0, alasan: String(r[4]), status: String(r[5]), diputuskan: String(r[6] || '') };
+  });
+}
+
+/** Saran milik satu klien: yang menunggu + keputusan terakhir. */
+function _nutAdviceFor_(memberId, profile, entries, today) {
+  const rows = _nutAdviceRows_().filter(function(r) { return r.memberId === String(memberId).trim(); });
+  const pending = rows.filter(function(r) { return r.status === 'menunggu'; })[0] || null;
+  const decided = rows.filter(function(r) { return r.status !== 'menunggu'; });
+  const last = decided.length ? decided[decided.length - 1] : null;
+  return { pending: pending, last: last, canCreate: !!_nutAdvise_(entries, profile.goal, today, { pending: !!pending, lastDecision: last ? last.diputuskan : '' }) };
+}
+
+/** Tulis saran baru bila aturan memintanya (idempoten: tidak ada saran ganda). */
+function _nutRefreshAdvice_(memberId, profile, entries, today) {
+  if (!profile.aktif) return null;
+  return _locked_(function() {
+    const f = _nutAdviceFor_(memberId, profile, entries, today);
+    if (f.pending || !f.canCreate) return null;
+    const rows = _nutAdviceRows_().filter(function(r) { return r.memberId === String(memberId).trim() && r.status !== 'menunggu'; });
+    const last = rows.length ? rows[rows.length - 1] : null;
+    const a = _nutAdvise_(entries, profile.goal, today, { pending: false, lastDecision: last ? last.diputuskan : '' });
+    if (!a) return null;
+    const id = 'NA-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+    _nutAdviceSheet_().appendRow([id, String(memberId).trim(), today, a.delta, a.alasan, 'menunggu', '']);
+    return id;
+  });
+}
+
+/** Admin: setujui atau tolak saran. Setuju menambah penyesuaian kalori klien (maks ±300). */
+function decideNutritionAdvice(token, memberId, adviceId, decision) {
+  requireAdmin_(token);
+  decision = String(decision || '');
+  if (decision !== 'setuju' && decision !== 'tolak') throw new Error('Keputusan harus setuju atau tolak.');
+  return _locked_(function() {
+    const sheet = _nutAdviceSheet_();
+    const data = sheet.getDataRange().getValues();
+    let rowNum = 0, delta = 0;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(adviceId) && String(data[i][1]).trim() === String(memberId).trim()) {
+        if (String(data[i][5]) !== 'menunggu') throw new Error('Saran ini sudah diputuskan.');
+        rowNum = i + 1; delta = Number(data[i][3]) || 0; break;
+      }
+    }
+    if (!rowNum) throw new Error('Saran tidak ditemukan.');
+    if (decision === 'setuju') {
+      const m = _memberRowOrThrow_(memberId);
+      _ensureNutritionColumns_(m.sheet);
+      const cur = Number(m.row[NUT_COLS.adjust - 1]) || 0;
+      const next = Math.max(-NUT.adjustMax, Math.min(NUT.adjustMax, cur + delta));
+      m.sheet.getRange(m.rowNum, NUT_COLS.adjust).setNumberFormat('@').setValue(next);
+    }
+    sheet.getRange(rowNum, 6).setValue(decision);
+    sheet.getRange(rowNum, 7).setValue(_todayWib_());
+    CacheService.getScriptCache().remove('nut:scan');
+    return { status: 'success' };
+  });
+}
+
+/** Untuk dashboard coach: perbarui saran semua klien (maks sekali per 10 menit) lalu daftar yang menunggu. Nama depan saja. */
+function _nutHubList_() {
+  const cache = CacheService.getScriptCache();
+  const today = _todayWib_();
+  if (!cache.get('nut:scan')) {
+    try {
+      const w = {};
+      _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+        const v = r[3];
+        if (!r[0] || v === '' || v == null) return;
+        const id = String(r[1]).trim();
+        (w[id] = w[id] || []).push({ tanggal: String(r[2]), berat: Number(v) });
+      });
+      _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+        if (!row[0]) return;
+        const profile = _nutProfileFrom_(row), id = String(row[0]).trim();
+        if (!profile.aktif || (profile.goal !== 'turun' && profile.goal !== 'naik') || !w[id]) return;
+        w[id].sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); });
+        _nutRefreshAdvice_(id, profile, w[id], today);
+      });
+      cache.put('nut:scan', '1', 600);
+    } catch (err) { Logger.log('Saran gizi dilewati: ' + err); }
+  }
+  const names = {};
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (r[0]) names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
+  return _nutAdviceRows_().filter(function(r) { return r.status === 'menunggu'; }).map(function(r) {
+    return { id: r.id, memberId: r.memberId, name: names[r.memberId] || '', delta: r.delta, alasan: r.alasan };
   });
 }
