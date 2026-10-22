@@ -636,7 +636,7 @@ function _nutritionFor_(row) {
     enabled: true, today: c.today,
     profile: { tinggi: p.tinggi, jk: p.jk, goal: p.goal, pantangan: p.pantangan, anggaran: p.anggaran, birthDate: p.birthDate },
     inputs: { kg: c.inputs.kg, kgDate: c.inputs.kgDate, stale: c.inputs.stale, waist: c.inputs.waist, sessionsPerWeek: c.inputs.sessionsPerWeek },
-    bmi: c.bmi, whtr: c.whtr, target: _nutClientWarnings_(c.target), menu: null,
+    bmi: c.bmi, whtr: c.whtr, target: _nutClientWarnings_(c.target), menu: null, log: _foodLogDay_(c.id, c.today),
     options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD }
   };
   if (c.target.ok) out.menu = _nutMenu_(c.target, _nutMenuOpts_(c, 0));
@@ -701,4 +701,185 @@ function swapMyMenuItem(memberToken, item, mealKey, offset) {
   if (!(gram > 0 && gram < 2000)) throw new Error('Porsi tidak valid.');
   const p = _nutProfileFrom_(row);
   return _nutSwap_({ id: item.id, slot: item.slot, gram: gram }, String(mealKey || ''), { pantangan: p.pantangan, anggaran: p.anggaran }, Math.max(0, Math.min(50, Math.floor(Number(offset) || 0))));
+}
+
+
+// ------------------------------------------------------------
+// Catatan makan klien (T-1020): satu baris per makanan, angka disalin (snapshot) saat dicatat.
+// ------------------------------------------------------------
+const FOODLOG_HEADERS = ['ID', 'Member ID', 'Tanggal', 'Waktu', 'Food ID', 'Nama', 'Gram', 'Porsi', 'Kal', 'Protein', 'Lemak', 'Karbo', 'Sumber', 'Dibuat Pada'];
+const NUT_MEALS = ['sarapan', 'siang', 'malam', 'camilan'];
+const FOODLOG_LIMITS = { perDay: 60, backDays: 7, gramMax: 2000, throttleSeconds: 2, nameMax: 60, kalMax: 3000, macroMax: 500, favorites: 8, recent: 8 };
+
+function _foodLogSheet_() {
+  const sheet = getOrCreateSheet_('FoodLog', FOODLOG_HEADERS);
+  sheet.getRange('C:C').setNumberFormat('@');
+  sheet.getRange('E:E').setNumberFormat('@');
+  return sheet;
+}
+
+function _nutR1_(v) { return Math.round(v * 10) / 10; }
+
+/** Murni: validasi satu catatan dari browser → baris siap simpan (tanpa ID/tanggal). Lempar error Indonesia. */
+function _foodLogEntry_(e) {
+  e = e || {};
+  const waktu = String(e.waktu || '');
+  if (NUT_MEALS.indexOf(waktu) === -1) throw new Error('Pilih waktu makan.');
+  if (e.id && !e.custom) {
+    const f = NUT_FOODS[String(e.id)];
+    if (!f) throw new Error('Makanan tidak dikenal.');
+    let gram = Number(e.gram);
+    if (!(gram > 0) && Number(e.porsi) > 0) gram = Number(e.porsi) * f.por[0][1];
+    if (!(gram > 0 && gram <= FOODLOG_LIMITS.gramMax)) throw new Error('Porsi harus antara 1 dan ' + FOODLOG_LIMITS.gramMax + ' gram.');
+    gram = Math.round(gram * 10) / 10;
+    const x = gram / 100, por = gram / f.por[0][1];
+    return { waktu: waktu, foodId: String(e.id), nama: f.n, gram: gram, porsi: _nutR1_(por) + ' ' + f.por[0][0].replace(/^1 /, ''),
+      kal: Math.round(f.kal * x), p: _nutR1_(f.p * x), l: _nutR1_(f.l * x), k: _nutR1_(f.k * x), sumber: f.e ? 'perkiraan' : 'tkpi' };
+  }
+  const c = e.custom || {};
+  const nama = String(c.nama == null ? '' : c.nama).trim();
+  if (!nama) throw new Error('Isi nama makanan.');
+  if (nama.length > FOODLOG_LIMITS.nameMax) throw new Error('Nama makanan maksimal ' + FOODLOG_LIMITS.nameMax + ' karakter.');
+  const num = function(v, max, label) {
+    const t = String(v == null || v === '' ? 0 : v).replace(',', '.');
+    const n = Number(t);
+    if (isNaN(n) || n < 0 || n > max) throw new Error(label + ' harus antara 0 dan ' + max + '.');
+    return n;
+  };
+  const kal = num(c.kal, FOODLOG_LIMITS.kalMax, 'Kalori');
+  const p = num(c.p, FOODLOG_LIMITS.macroMax, 'Protein'), l = num(c.l, FOODLOG_LIMITS.macroMax, 'Lemak'), k = num(c.k, FOODLOG_LIMITS.macroMax, 'Karbo');
+  const n = Math.max(0.1, Math.min(20, Number(String(e.jumlah == null ? 1 : e.jumlah).replace(',', '.')) || 1));
+  return { waktu: waktu, foodId: '', nama: nama, gram: 0, porsi: _nutR1_(n) + ' porsi', kal: Math.round(kal * n), p: _nutR1_(p * n), l: _nutR1_(l * n), k: _nutR1_(k * n), sumber: 'sendiri' };
+}
+
+function _foodLogRows_(memberId) {
+  const id = String(memberId).trim();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FoodLog');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(function(r) {
+    return { id: String(r[0]), tanggal: String(r[2]), waktu: String(r[3]), foodId: String(r[4] || ''), nama: String(r[5]), gram: Number(r[6]) || 0, porsi: String(r[7]),
+      kal: Number(r[8]) || 0, p: Number(r[9]) || 0, l: Number(r[10]) || 0, k: Number(r[11]) || 0, sumber: String(r[12]) };
+  });
+}
+
+function _foodLogTotals_(items) {
+  return items.reduce(function(t, i) { return { kal: t.kal + i.kal, p: _nutR1_(t.p + i.p), l: _nutR1_(t.l + i.l), k: _nutR1_(t.k + i.k) }; }, { kal: 0, p: 0, l: 0, k: 0 });
+}
+
+/** Murni: catatan hari tertentu + yang sering dan terakhir dimakan (30 hari), dari semua baris klien. */
+function _foodLogView_(rows, day, today) {
+  const items = rows.filter(function(r) { return r.tanggal === day; });
+  const since = _addDaysIso_(today, -30);
+  const count = {}, last = {}, sample = {};
+  rows.filter(function(r) { return r.tanggal >= since && r.tanggal < day + 'z'; }).forEach(function(r) {
+    const key = r.foodId || ('~' + r.nama.toLowerCase());
+    count[key] = (count[key] || 0) + 1;
+    if (!last[key] || r.tanggal >= last[key]) { last[key] = r.tanggal; sample[key] = r; }
+  });
+  const pack = function(r) { return { foodId: r.foodId, nama: r.nama, gram: r.gram, porsi: r.porsi, kal: r.kal, p: r.p, l: r.l, k: r.k, sumber: r.sumber }; };
+  const keys = Object.keys(count);
+  const favorites = keys.filter(function(k) { return count[k] >= 2; }).sort(function(a, b) { return count[b] - count[a] || (a < b ? -1 : 1); }).slice(0, FOODLOG_LIMITS.favorites).map(function(k) { return pack(sample[k]); });
+  const recent = keys.sort(function(a, b) { return last[a] < last[b] ? 1 : last[a] > last[b] ? -1 : (a < b ? -1 : 1); }).slice(0, FOODLOG_LIMITS.recent).map(function(k) { return pack(sample[k]); });
+  return { tanggal: day, items: items, totals: _foodLogTotals_(items), favorites: favorites, recent: recent };
+}
+
+function _foodLogDay_(memberId, day) {
+  const today = _todayWib_();
+  return _foodLogView_(_foodLogRows_(memberId), day || today, today);
+}
+
+function _foodLogAppend_(sheet, memberId, day, entry) {
+  const id = 'FL-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+  sheet.appendRow([id, String(memberId).trim(), day, entry.waktu, entry.foodId, entry.nama, entry.gram, entry.porsi, entry.kal, entry.p, entry.l, entry.k, entry.sumber, new Date().toISOString()]);
+  return id;
+}
+
+function _foodLogDayArg_(tanggal) {
+  const today = _todayWib_();
+  const day = tanggal == null || tanggal === '' ? today : String(tanggal);
+  if (!_validDate_(day) || day > today || _nutDaysBetween_(day, today) > FOODLOG_LIMITS.backDays) throw new Error('Tanggal catatan tidak valid.');
+  return day;
+}
+
+/** Klien mencatat makanan (dari daftar atau buatan sendiri). Anggota dari token. */
+function logMyFood(memberToken, entry) {
+  const found = requireMember_(memberToken);
+  if (!_nutEnabled_()) throw new Error('Fitur gizi sedang dimatikan.');
+  const memberId = String(found.row[0]).trim();
+  const day = _foodLogDayArg_(entry && entry.tanggal);
+  const e = _foodLogEntry_(entry);
+  if (!_throttle_('foodlog_' + memberId, FOODLOG_LIMITS.throttleSeconds)) throw new Error('Terlalu cepat. Coba lagi sebentar.');
+  return _locked_(function() {
+    const sheet = _foodLogSheet_();
+    if (_foodLogRows_(memberId).filter(function(r) { return r.tanggal === day; }).length >= FOODLOG_LIMITS.perDay) throw new Error('Catatan hari ini sudah penuh.');
+    _foodLogAppend_(sheet, memberId, day, e);
+    return _foodLogDay_(memberId, day);
+  });
+}
+
+/** Hapus satu catatan milik sendiri. Catatan klien lain dijawab "tidak ditemukan". */
+function deleteMyFood(memberToken, logId) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  return _locked_(function() {
+    const sheet = _foodLogSheet_();
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(logId) && String(data[i][1]).trim() === memberId) {
+        const day = String(data[i][2]);
+        sheet.deleteRow(i + 1);
+        return _foodLogDay_(memberId, day);
+      }
+    }
+    throw new Error('Catatan tidak ditemukan.');
+  });
+}
+
+/** Catatan satu hari (default hari ini), favorit, dan terakhir dimakan. */
+function getMyFoodLog(memberToken, tanggal) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  if (!_nutEnabled_()) return { enabled: false };
+  return Object.assign({ enabled: true }, _foodLogDay_(memberId, _foodLogDayArg_(tanggal)));
+}
+
+/** Salin catatan kemarin (semua, atau satu waktu makan) ke hari ini. Hanya yang belum ada hari ini. */
+function copyMyFoodYesterday(memberToken, waktu) {
+  const memberId = String(requireMember_(memberToken).row[0]).trim();
+  if (!_nutEnabled_()) throw new Error('Fitur gizi sedang dimatikan.');
+  if (waktu && NUT_MEALS.indexOf(String(waktu)) === -1) throw new Error('Waktu makan tidak dikenal.');
+  const today = _todayWib_(), yesterday = _addDaysIso_(today, -1);
+  if (!_throttle_('foodcopy_' + memberId, FOODLOG_LIMITS.throttleSeconds)) throw new Error('Terlalu cepat. Coba lagi sebentar.');
+  return _locked_(function() {
+    const rows = _foodLogRows_(memberId);
+    const have = rows.filter(function(r) { return r.tanggal === today; });
+    const keyOf = function(r) { return [r.waktu, r.foodId, r.nama, r.gram, r.porsi].join('|'); };
+    const taken = {};
+    have.forEach(function(r) { taken[keyOf(r)] = (taken[keyOf(r)] || 0) + 1; });
+    const src = rows.filter(function(r) { return r.tanggal === yesterday && (!waktu || r.waktu === waktu); }).filter(function(r) {
+      if (taken[keyOf(r)] > 0) { taken[keyOf(r)]--; return false; }       // sudah ada hari ini: jangan dobel
+      return true;
+    });
+    if (!src.length) {
+      if (rows.some(function(r) { return r.tanggal === yesterday && (!waktu || r.waktu === waktu); })) return _foodLogDay_(memberId, today);
+      throw new Error('Kemarin belum ada catatan.');
+    }
+    if (have.length + src.length > FOODLOG_LIMITS.perDay) throw new Error('Catatan hari ini akan melebihi batas.');
+    const sheet = _foodLogSheet_();
+    src.forEach(function(r) { _foodLogAppend_(sheet, memberId, today, { waktu: r.waktu, foodId: r.foodId, nama: r.nama, gram: r.gram, porsi: r.porsi, kal: r.kal, p: r.p, l: r.l, k: r.k, sumber: r.sumber }); });
+    return _foodLogDay_(memberId, today);
+  });
+}
+
+/** Admin: catatan makan satu klien, 7 hari terakhir (per hari: total dan item). Privat. */
+function getClientFoodLog(token, memberId) {
+  requireAdmin_(token);
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const today = _todayWib_(), since = _addDaysIso_(today, -6);
+  const rows = _foodLogRows_(id).filter(function(r) { return r.tanggal >= since; });
+  const days = [];
+  for (let d = 0; d < 7; d++) {
+    const day = _addDaysIso_(today, -d);
+    const items = rows.filter(function(r) { return r.tanggal === day; });
+    days.push({ tanggal: day, items: items, totals: _foodLogTotals_(items) });
+  }
+  return { days: days };
 }
