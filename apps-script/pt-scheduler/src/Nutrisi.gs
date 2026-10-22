@@ -403,3 +403,190 @@ function _nutHubList_() {
     return { id: r.id, memberId: r.memberId, name: names[r.memberId] || '', delta: r.delta, alasan: r.alasan };
   });
 }
+
+// ------------------------------------------------------------
+// Menu sehari, tukar item, daftar belanja (T-1011). Fungsi murni; data makanan = NUT_FOODS (NutrisiData.gs).
+// Aturan: Rules.md baris 8, 9, 11.
+// ------------------------------------------------------------
+const NUT_MENU = {
+  shares: { biasa: [['sarapan', 'Sarapan', 0.30], ['siang', 'Makan siang', 0.40], ['malam', 'Makan malam', 0.30]],
+            ramadan: [['buka', 'Buka puasa', 0.45], ['sahur', 'Sahur', 0.35], ['camilan', 'Camilan malam', 0.20]] },
+  portionMin: 0.5, portionMax: 4, portionNatural: 3, portionFix: 6, swapCount: 3
+};
+
+function _nutHash_(str) {
+  let h = 5381;
+  const s = String(str);
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+/** Murni: id yang lolos pantangan + anggaran. opts = { pantangan: ['telur','seafood','kacang','susu','laktosa'], anggaran: 'hemat'|'standar'|'bebas' }. */
+function _nutAllowed_(ids, opts, noFried) {
+  opts = opts || {};
+  const ban = opts.pantangan || [];
+  const maxH = opts.anggaran === 'hemat' ? 1 : opts.anggaran === 'bebas' ? 3 : 2;
+  const base = ids.filter(function(id) {
+    const f = NUT_FOODS[id];
+    if (!f) return false;
+    if (f.a.some(function(a) { return ban.indexOf(a) !== -1; })) return false;
+    if (ban.indexOf('laktosa') !== -1 && f.lak) return false;
+    if (noFried && /goreng/i.test(f.n)) return false;
+    return true;
+  });
+  const cheap = base.filter(function(id) { return NUT_FOODS[id].h <= maxH; });
+  return cheap.length ? cheap : base;      // anggaran terlalu ketat: longgarkan dulu daripada tanpa pilihan
+}
+
+function _nutPortion_(id, gram) {
+  const f = NUT_FOODS[id], por = f.por[0];
+  const n = Math.round(gram / por[1] * 2) / 2;
+  return { porsi: n, porsiNama: por[0], porsiGram: por[1] };
+}
+
+function _nutItem_(id, slot, gram) {
+  const f = NUT_FOODS[id], x = gram / 100, r1 = function(v) { return Math.round(v * 10) / 10; };
+  return Object.assign({ id: id, n: f.n, slot: slot, gram: Math.round(gram), kal: Math.round(f.kal * x), p: r1(f.p * x), l: r1(f.l * x), k: r1(f.k * x), e: f.e }, _nutPortion_(id, gram));
+}
+
+/** Murni: dua bahan (karbo c, protein p) agar total kalori dan protein sebuah makan tepat. Mengembalikan gram atau null. */
+function _nutSolvePair_(cId, pId, kcal, prot) {
+  const c = NUT_FOODS[cId], p = NUT_FOODS[pId];
+  const a = c.kal / 100, b = p.kal / 100, d = c.p / 100, e = p.p / 100;
+  const det = a * e - b * d;
+  if (Math.abs(det) < 1e-6) return null;
+  const gC = (kcal * e - b * prot) / det, gP = (a * prot - d * kcal) / det;
+  const inRange = function(id, g, max) { const base = NUT_FOODS[id].por[0][1]; return g >= base * NUT_MENU.portionMin && g <= base * max; };
+  return { gC: gC, gP: gP, ok: inRange(cId, gC, NUT_MENU.portionMax) && inRange(pId, gP, NUT_MENU.portionMax),
+           natural: inRange(cId, gC, NUT_MENU.portionNatural) && inRange(pId, gP, NUT_MENU.portionNatural) };
+}
+
+function _nutShares_(opts) {
+  if (opts.ramadan) return NUT_MENU.shares.ramadan.map(function(s) { return s.slice(); });
+  const sh = NUT_MENU.shares.biasa.map(function(s) { return s.slice(); });
+  const h = opts.sessionHour;
+  if (h != null && h !== '') {
+    const w = Number(h) < 10 ? [0.35, 0.35, 0.30] : Number(h) < 15 ? [0.25, 0.45, 0.30] : [0.25, 0.35, 0.40];
+    sh.forEach(function(s, i) { s[2] = w[i]; });
+  }
+  return sh;
+}
+
+/**
+ * Menu satu hari. target = { kal, protein } (hasil _nutTarget_); opts = { pantangan, anggaran, seed, ramadan, sessionHour, dayFactor }.
+ * Mengembalikan { meals: [{ key, label, items, totals }], totals } dengan kalori ±5 % dan protein ≥ 95 % target (bila ada bahan yang layak).
+ */
+function _nutMenu_(target, opts) {
+  opts = opts || {};
+  const kalDay = target.kal * (opts.dayFactor || 1), protDay = target.protein;
+  const shares = _nutShares_(opts);
+  const meals = [];
+  let friedUsed = false;
+  shares.forEach(function(sh, mi) {
+    const key = sh[0], first = key === 'sarapan' || key === 'camilan';
+    const kcal = kalDay * sh[2], prot = protDay * sh[2];
+    const withVeg = key !== 'camilan';
+    const withFruit = key !== 'malam' && key !== 'sahur';
+    // sayur / buah: tetap satu porsi, ikut dihitung sebagai kalori tetap
+    const pick = function(list, salt) { const a = _nutAllowed_(list, opts); return a.length ? a[_nutHash_(opts.seed + key + salt) % a.length] : null; };
+    const vegId = withVeg ? pick(NUT_SLOTS.sayur, 'v') : null, fruitId = withFruit ? pick(NUT_SLOTS.buah, 'f') : null;
+    const fixed = [];
+    if (vegId) fixed.push(_nutItem_(vegId, 'sayur', NUT_FOODS[vegId].por[0][1]));
+    if (fruitId) fixed.push(_nutItem_(fruitId, 'buah', NUT_FOODS[fruitId].por[0][1]));
+    const fixK = fixed.reduce(function(s, i) { return s + NUT_FOODS[i.id].kal * i.gram / 100; }, 0);
+    const fixP = fixed.reduce(function(s, i) { return s + NUT_FOODS[i.id].p * i.gram / 100; }, 0);
+    const cands = _nutAllowed_(NUT_SLOTS.karbo[first ? 'sarapan' : 'utama'], opts);
+    const pList = _nutAllowed_(NUT_SLOTS.protein[first ? 'sarapan' : 'utama'], opts, friedUsed);
+    const feasible = [], natural = [];
+    let best = null;
+    cands.forEach(function(cId) {
+      pList.forEach(function(pId) {
+        const s = _nutSolvePair_(cId, pId, kcal - fixK, prot - fixP);
+        if (!s) return;
+        if (s.ok) { const pair = { c: cId, p: pId, gC: s.gC, gP: s.gP }; feasible.push(pair); if (s.natural) natural.push(pair); }
+        else {
+          const bC = NUT_FOODS[cId].por[0][1], bP = NUT_FOODS[pId].por[0][1];
+          const gC = Math.max(bC * NUT_MENU.portionMin, Math.min(bC * NUT_MENU.portionMax, s.gC)), gP = Math.max(bP * NUT_MENU.portionMin, Math.min(bP * NUT_MENU.portionMax, s.gP));
+          const err = Math.abs(gC - s.gC) / bC + Math.abs(gP - s.gP) / bP;
+          if (!best || err < best.err) best = { c: cId, p: pId, gC: gC, gP: gP, err: err };
+        }
+      });
+    });
+    const pool = natural.length ? natural : feasible;
+    const chosen = pool.length ? pool[_nutHash_(opts.seed + key + 'm') % pool.length] : best;
+    if (!chosen) { meals.push({ key: key, label: sh[1], items: fixed, totals: _nutSum_(fixed) }); return; }
+    const items = [_nutItem_(chosen.c, 'karbo', chosen.gC), _nutItem_(chosen.p, 'protein', chosen.gP)].concat(fixed);
+    if (/goreng/i.test(NUT_FOODS[chosen.p].n)) friedUsed = true;
+    meals.push({ key: key, label: sh[1], items: items, totals: _nutSum_(items) });
+  });
+  _nutFitDay_(meals, kalDay, protDay);
+  return { meals: meals, totals: _nutSum_([].concat.apply([], meals.map(function(m) { return m.items; }))) };
+}
+
+/** Koreksi hari penuh: kalau satu makan tidak bisa tepat (batas porsi), karbo dan protein di makan lain menyesuaikan. */
+function _nutFitDay_(meals, kalDay, protDay) {
+  const all = function() { return [].concat.apply([], meals.map(function(m) { return m.items; })); };
+  const rescale = function(slot, delta, per) {          // delta dalam kkal (slot karbo) atau gram protein (slot protein)
+    const its = all().filter(function(i) { return i.slot === slot; });
+    const base = its.reduce(function(a, i) { return a + (per === 'kal' ? NUT_FOODS[i.id].kal : NUT_FOODS[i.id].p) * i.gram / 100; }, 0);
+    if (base <= 0) return;
+    its.forEach(function(i) {
+      const f = NUT_FOODS[i.id], unit = (per === 'kal' ? f.kal : f.p) / 100;
+      if (unit <= 0) return;
+      const part = unit * i.gram / base;
+      const g = Math.max(f.por[0][1] * NUT_MENU.portionMin, Math.min(f.por[0][1] * NUT_MENU.portionFix, i.gram + delta * part / unit));
+      const m = meals.filter(function(x) { return x.items.indexOf(i) !== -1; })[0];
+      m.items[m.items.indexOf(i)] = _nutItem_(i.id, slot, g);
+    });
+  };
+  for (let n = 0; n < 4; n++) {
+    let tot = _nutSum_(all());
+    if (tot.p < protDay * 0.97) rescale('protein', protDay * 0.98 - tot.p, 'p');
+    tot = _nutSum_(all());
+    if (Math.abs(tot.kal - kalDay) > kalDay * 0.01) rescale('karbo', kalDay - tot.kal, 'kal');
+  }
+  meals.forEach(function(m) { m.totals = _nutSum_(m.items); });
+}
+
+function _nutSum_(items) {
+  const r1 = function(v) { return Math.round(v * 10) / 10; };
+  return items.reduce(function(t, i) { return { kal: t.kal + i.kal, p: r1(t.p + i.p), l: r1(t.l + i.l), k: r1(t.k + i.k) }; }, { kal: 0, p: 0, l: 0, k: 0 });
+}
+
+/**
+ * Tiga pengganti untuk satu item (slot yang sama, gizi utama sama). item = { id, slot, gram }; meal = 'sarapan'|…; offset = "Acak lagi".
+ * Karbo dicocokkan di kalori, protein di protein, sayur/buah di kalori; pengganti yang selisihnya > 25 % dilewati.
+ */
+function _nutSwap_(item, mealKey, opts, offset) {
+  opts = opts || {};
+  const first = mealKey === 'sarapan' || mealKey === 'camilan';
+  const list = item.slot === 'karbo' ? NUT_SLOTS.karbo[first ? 'sarapan' : 'utama'] : item.slot === 'protein' ? NUT_SLOTS.protein[first ? 'sarapan' : 'utama']
+    : item.slot === 'sayur' ? NUT_SLOTS.sayur : NUT_SLOTS.buah;
+  const old = NUT_FOODS[item.id], key = item.slot === 'protein' ? 'p' : 'kal';
+  const target = old[key] * item.gram / 100;
+  const out = _nutAllowed_(list, opts).filter(function(id) { return id !== item.id && NUT_FOODS[id][key] > 0; }).map(function(id) {
+    const g = target / NUT_FOODS[id][key] * 100, base = NUT_FOODS[id].por[0][1];
+    return { id: id, gram: g, ok: g >= base * NUT_MENU.portionMin && g <= base * NUT_MENU.portionMax, drift: Math.abs((NUT_FOODS[id][item.slot === 'protein' ? 'kal' : 'p'] * g / 100) - (old[item.slot === 'protein' ? 'kal' : 'p'] * item.gram / 100)) };
+  }).filter(function(c) { return c.ok; });
+  out.sort(function(a, b) { return a.drift - b.drift || (a.id < b.id ? -1 : 1); });
+  const n = out.length, start = n ? ((offset || 0) * NUT_MENU.swapCount) % n : 0;
+  const pick = [];
+  for (let i = 0; i < Math.min(NUT_MENU.swapCount, n); i++) pick.push(out[(start + i) % n]);
+  return pick.map(function(c) { return _nutItem_(c.id, item.slot, c.gram); });
+}
+
+/** Daftar belanja dari beberapa menu harian: jumlah gram per bahan, dikelompokkan, dalam porsi rumah tangga (dibulatkan ke atas). */
+function _nutShopping_(menus) {
+  const sum = {};
+  (menus || []).forEach(function(menu) {
+    menu.meals.forEach(function(m) { m.items.forEach(function(i) { sum[i.id] = (sum[i.id] || 0) + i.gram; }); });
+  });
+  const groups = {};
+  Object.keys(sum).forEach(function(id) {
+    const f = NUT_FOODS[id], por = f.por[0], gram = Math.ceil(sum[id] / 5) * 5;
+    (groups[f.g] = groups[f.g] || []).push({ id: id, n: f.n, gram: gram, jumlah: Math.ceil(sum[id] / por[1]), satuan: por[0], e: f.e });
+  });
+  return Object.keys(groups).sort().map(function(g) {
+    return { kelompok: g, items: groups[g].sort(function(a, b) { return a.n < b.n ? -1 : a.n > b.n ? 1 : 0; }) };
+  });
+}

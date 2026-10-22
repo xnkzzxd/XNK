@@ -12,3 +12,6 @@ Admin: `getClientNutrition`, `saveClientNutrition`, `decideNutritionAdvice`. Mem
 ## UI
 - Portal: segmen sticky `Latihan | Makan` di `public-program`. Makan: cincin kalori + 3 batang makro (+ (i)) → Menu hari ini (tombol + per makan) → Catat → Aturan makan → Belanja. Sheet cari makanan, sheet porsi (chip rumah tangga + stepper 0,5 + gram), sheet tukar item (3 pengganti, "Acak lagi"), sheet onboarding 3 langkah, banner kuning pengaman. Monokrom; warna hanya data. 44 px, `var(--sa-*)`, light/dark.
 - Panel: tab Gizi di profil klien: Ringkasan → Input coach → Saran adaptif → Log 7 hari; dua kolom hanya lewat container query. Kartu dashboard: saran menunggu.
+
+## Data di server (T-1011)
+Apps Script tidak membaca JSON GitHub Pages dengan murah, jadi `tools/build-foods.js` juga menulis `src/NutrisiData.gs` (`NUT_FOODS`, `NUT_SLOTS`; dibuat otomatis, jangan diedit). Ubah daftar di `tools/foods-curated.json`, lalu jalankan `node tools/build-foods.js <tkpi.txt>`; tes memastikan `foods/foods.min.json` dan file server sinkron. Menu memilih pasangan karbo+protein per makan lewat sistem dua persamaan (kalori dan protein), lalu `_nutFitDay_` menyesuaikan hari penuh.
