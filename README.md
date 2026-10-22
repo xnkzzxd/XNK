@@ -69,6 +69,15 @@ equipment and muscle, picks several at once and can create a custom exercise. Wo
 settings (rest, previous values, warm-up and plate calculators, RPE, sound) are kept on
 the device.
 
+Since Phase P the same tab has a **Makan** segment: the client fills in height, sex, goal
+and food restrictions once (weight comes from Progres), then sees BMI, WHtR, BMR, TDEE
+and a daily calorie / macro target (always computed by the server, never typed by the
+PT), a one-day menu built from the Indonesian food composition table (TKPI 2017, with
+household portions, swaps and a weekly shopping list), and a daily food log. The PT sees
+the numbers and the last 7 days of logs on the client page (tab Gizi) and approves or
+rejects suggested calorie changes from the dashboard. Everything is estimates, not
+medical advice; on by default, switch under Pengaturan → Tampilan.
+
 ## Common changes
 
 **Booking app URL.** It is written once, in the `src` of the `<iframe>` in

@@ -15,3 +15,9 @@ Admin: `getClientNutrition`, `saveClientNutrition`, `decideNutritionAdvice`. Mem
 
 ## Data di server (T-1011)
 Apps Script tidak membaca JSON GitHub Pages dengan murah, jadi `tools/build-foods.js` juga menulis `src/NutrisiData.gs` (`NUT_FOODS`, `NUT_SLOTS`; dibuat otomatis, jangan diedit). Ubah daftar di `tools/foods-curated.json`, lalu jalankan `node tools/build-foods.js <tkpi.txt>`; tes memastikan `foods/foods.min.json` dan file server sinkron. Menu memilih pasangan karbo+protein per makan lewat sistem dua persamaan (kalori dan protein), lalu `_nutFitDay_` menyesuaikan hari penuh.
+
+## Catatan makan, saran, dan API klien (T-1004, T-1012, T-1020, T-1030)
+- `FoodLog`: satu baris per makanan (`ID, Member ID, Tanggal, Waktu, Food ID, Nama, Gram, Porsi, Kal, Protein, Lemak, Karbo, Sumber, Dibuat Pada`); angka disalin saat dicatat, jadi mengubah daftar makanan tidak mengubah riwayat. Batas 60 catatan per hari, mundur maksimal 7 hari; tanpa jeda per catatan. Favorit = dimakan 2 kali atau lebih dalam 30 hari; terakhir = 8 yang berbeda.
+- `NutritionAdvice`: saran ±125 kkal dari tren berat 28 hari (`_nutAdvise_`), status `menunggu|setuju|tolak`; setuju menambah kolom `Penyesuaian Kalori` (±300). Dibuat saat dashboard coach dibuka (paling sering sekali per 10 menit).
+- Jawaban klien tidak pernah memuat tag kondisi khusus atau baris saran; kondisi muncul sebagai satu peringatan umum `kondisi`.
+- Pengingat: `_nutReminderLine_(kal)` + `_nutBulkCalories_()` (tiap sheet dibaca sekali). Hanya kalori.
