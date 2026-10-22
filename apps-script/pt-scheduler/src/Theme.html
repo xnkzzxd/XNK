@@ -1891,4 +1891,9 @@ html, body { overflow-x: hidden; }
 .lat-seg-wrap .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
 .nut-warn { background: var(--surface-3); border: 1.5px solid var(--fg); font-weight: 600; }
 #pub-makan-pane .kv .k .icon-btn { width: 28px; height: 28px; vertical-align: middle; }
+@media (min-width: 900px) {
+  /* PC: kartu Makan mengalir dalam dua kolom (target + tubuh di kiri, menu dan catatan di kanan) */
+  #pub-makan-pane > .stack { display: block; column-count: 2; column-gap: var(--gap); }
+  #pub-makan-pane > .stack > * { break-inside: avoid; margin-bottom: var(--gap); }
+}
 </style>

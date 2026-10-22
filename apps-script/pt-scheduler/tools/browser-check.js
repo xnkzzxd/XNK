@@ -845,6 +845,12 @@ async function contrastReport(page) {
     await page.evaluate(() => window.cpTab('perawatan'));
     await page.waitForTimeout(300);
     check((await page.textContent('#profile-care-wrap')).includes('Catatan privat') && (await page.textContent('#profile-care-wrap')).includes('Tes kebugaran'), 'client page: private notes, health, assessment and fitness sections');
+    await page.evaluate(() => window.cpTab('gizi'));
+    await page.waitForTimeout(400);
+    const gzCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-nut-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
+    check(gzCols.length === 2 && gzCols[1][0] > gzCols[0][0] && Math.abs(gzCols[1][1] - gzCols[0][1]) <= 2 && (await elOverflow(page, '#detail-body')) <= 1, 'wide client page: the Gizi tab has the numbers on the left and the coach inputs on the right ' + JSON.stringify(gzCols));
+    await page.evaluate(() => window.cpTab('perawatan'));
+    await page.waitForTimeout(300);
     const careCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-care-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(careCols.length === 2 && careCols[1][0] > careCols[0][0] && Math.abs(careCols[1][1] - careCols[0][1]) <= 2 && (await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display)) === 'none',
       'wide client page: Perawatan in two columns, hidden tabs stay hidden ' + JSON.stringify(careCols));
@@ -2160,6 +2166,21 @@ async function contrastReport(page) {
     const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.portal-grid')).gridTemplateColumns.split(' ').length);
     check(cols === 2, scheme + ': Beranda uses two columns on desktop');
     await shot(page, 'portal-desktop-' + scheme + '-home');
+    // Makan on a wide screen (Phase P): two columns, nothing overflows, at 1440 and 1280.
+    env.call('saveMyMeasurement', token, { berat: 70, pinggang: 80 });
+    env.call('saveMyNutritionProfile', token, { tinggi: '170', jk: 'P', goal: 'turun', pantangan: [], anggaran: 'standar', birthDate: '1996-03-10' });
+    await page.evaluate(() => { window.navigate('public-program'); return window.refreshPortalMore(true); });
+    await page.waitForTimeout(1000);
+    for (const w of [1440, 1280]) {
+      await page.setViewportSize({ width: w, height: 900 });
+      await page.evaluate(() => window.setLatSeg('makan'));
+      await page.waitForTimeout(500);
+      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
+      check(mk.cols === '2' && mk.over <= 1 && mk.lefts === 2 && mk.ring && mk.bars === 3, scheme + ' ' + w + ': Makan flows in two columns without overflow ' + JSON.stringify(mk));
+      if (w === 1440) await shot(page, 'portal-desktop-' + scheme + '-makan');
+    }
+    await page.setViewportSize(DESKTOP);
+    await page.evaluate(() => window.setLatSeg('latihan'));
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
     await shot(page, 'portal-desktop-' + scheme + '-calendar');
