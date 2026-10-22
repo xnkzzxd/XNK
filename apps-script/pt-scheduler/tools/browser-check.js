@@ -1666,7 +1666,7 @@ async function contrastReport(page) {
       await page.waitForTimeout(700);
       check(await visible(page, '#modal-nut-swap') && (await page.locator('#nut-swap-list .list-item').count()) >= 1, 'makan: tapping a menu item offers replacements');
       await page.click('#nut-swap-list .list-item >> nth=0');
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(800);
       check(!(await visible(page, '#modal-nut-swap')), 'makan: picking a replacement closes the sheet');
       await page.evaluate(() => window.nutInfo('protein'));
       await page.waitForTimeout(300);
@@ -1677,6 +1677,11 @@ async function contrastReport(page) {
       check(await visible(page, '#modal-nut-shop') && (await page.locator('#nut-shop-list .eyebrow').count()) >= 3, 'makan: the shopping list shows groups');
       await shot(page, 'portal-mobile-makan');
       await page.evaluate(() => { window.closeModal(); window.setLatSeg('latihan'); });
+      // The weight typed in the data sheet must not leak into the Progres checks that follow.
+      env.sheet('Progress').rows.length = 1;
+      env.sheet('MemberData').rows.forEach(r => { if (r[0] === 'PT-A') for (let i = 23; i < r.length; i++) r[i] = ''; });
+      await page.evaluate(() => { window.myNutrition = undefined; return window.refreshPortalMore(true); });
+      await page.waitForTimeout(900);
     }
     await page.click('#pub-program-wrap .rt-card >> nth=0 >> .rt-open');
     await page.waitForTimeout(500);
