@@ -1676,9 +1676,48 @@ async function contrastReport(page) {
       await page.waitForTimeout(900);
       check(await visible(page, '#modal-nut-shop') && (await page.locator('#nut-shop-list .eyebrow').count()) >= 3, 'makan: the shopping list shows groups');
       await shot(page, 'portal-mobile-makan');
+      // Catat makan (T-1020)
+      await page.route('https://xnk.my.id/foods/foods.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: require('fs').readFileSync(require('path').join(__dirname, '../../../foods/foods.min.json'), 'utf8') }));
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(700);
+      await page.click('#nut-log-card button:has-text("Tambah") >> nth=1');   // makan siang
+      await page.waitForTimeout(700);
+      check(await visible(page, '#modal-nut-add') && (await page.textContent('#nut-add-title')).includes('Makan siang'), 'catat: the add sheet opens for the chosen meal');
+      await page.fill('#nut-add-q', 'tempe');
+      await page.waitForTimeout(400);
+      check((await page.locator('#nut-add-res .list-item').count()) >= 2, 'catat: searching lists matching foods');
+      const pxq = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('nut-add-q')).fontSize));
+      check(pxq >= 16, 'catat: the search box is 16 px (no iOS zoom)');
+      await page.click('#nut-add-res .list-item >> nth=0');
+      await page.waitForTimeout(300);
+      check(await visible(page, '#nut-pick-save') && (await page.textContent('#nut-pick-sum')).includes('kkal'), 'catat: choosing a food shows the portion with calories');
+      await page.click('button[aria-label="Tambah"]');
+      await page.waitForTimeout(200);
+      check((await page.textContent('#nut-pick-n')).trim() === '1,5', 'catat: the stepper adds half a portion');
+      await page.click('#nut-pick-save');
+      await page.waitForTimeout(1200);
+      check(!(await visible(page, '#modal-nut-add')) && (await page.textContent('#nut-log-card')).toLowerCase().includes('tempe') && /Dimakan [1-9]/.test(await page.textContent('#nut-eaten-line')), 'catat: the food is logged and the eaten line updates');
+      await page.click('#pub-makan-pane .icon-btn[aria-label^="Catat"] >> nth=0');
+      await page.waitForTimeout(1200);
+      check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: the check button logs a menu item in one tap');
+      await page.click('#nut-log-card button:has-text("Tambah") >> nth=3');
+      await page.waitForTimeout(600);
+      await page.click('#modal-nut-add button:has-text("Buat makanan sendiri")');
+      await page.fill('#nut-own-n', 'Keripik singkong');
+      await page.fill('#nut-own-kal', '150');
+      await page.click('#nut-own-save');
+      await page.waitForTimeout(1200);
+      check((await page.textContent('#nut-log-card')).includes('buatan sendiri'), 'catat: own food is saved and marked');
+      const bad2 = await page.evaluate(() => Array.from(document.querySelectorAll('#nut-log-card button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length);
+      check(bad2 === 0 && (await overflowX(page)) <= 0, 'catat: buttons are at least 44 px and nothing scrolls sideways ' + bad2);
+      await page.click('#nut-log-card button[aria-label^="Hapus"] >> nth=0');
+      await page.waitForTimeout(900);
+      check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: deleting removes the row');
+      await shot(page, 'portal-mobile-catat');
       await page.evaluate(() => { window.closeModal(); window.setLatSeg('latihan'); });
       // The weight typed in the data sheet must not leak into the Progres checks that follow.
       env.sheet('Progress').rows.length = 1;
+      if (env.sheet('FoodLog')) env.sheet('FoodLog').rows.length = 1;
       env.sheet('MemberData').rows.forEach(r => { if (r[0] === 'PT-A') for (let i = 23; i < r.length; i++) r[i] = ''; });
       await page.evaluate(() => { window.myNutrition = undefined; return window.refreshPortalMore(true); });
       await page.waitForTimeout(900);

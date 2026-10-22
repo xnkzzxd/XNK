@@ -6144,7 +6144,8 @@ function getClientBundle(token, memberId) {
       care: part(function () { return getClientCare(token, memberId); }),
       program: part(function () { return getMemberProgram(token, memberId); }),
       workout: part(function () { return getWorkoutLog(token, memberId); }),
-      nutrition: part(function () { return getClientNutrition(token, memberId); })
+      nutrition: part(function () { return getClientNutrition(token, memberId); }),
+      foodLog: part(function () { return getClientFoodLog(token, memberId); })
     };
   });
 }
