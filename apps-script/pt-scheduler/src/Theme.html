@@ -565,7 +565,7 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .client-hero .profile-name { font-size: var(--fs-2xl); letter-spacing: -0.03em; }
 .client-hero .btn-inverse, .portal-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
 .client-hero .btn-ghost-ink, .portal-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
-.chips.cp-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; overflow: visible; padding: 0; margin: 0; }
+.chips.cp-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; overflow: visible; padding: 0; margin: 0; }
 .chips.cp-tabs .chip { min-height: 56px; width: 100%; min-width: 0; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: var(--fs-2xs); line-height: 1.1; white-space: nowrap; border-radius: 14px; }
 .chips.cp-tabs .chip svg { width: 16px; height: 16px; }
 .cp-pane.hide { display: none; }
@@ -1729,7 +1729,7 @@ button.avatar { border: 0; cursor: pointer; }
 
 @media (min-width: 768px) {
   /* Panel detail (tablet & PC): 5 tab satu baris, latar tab = latar panel, tanpa ruang tab bar di bawah */
-  .chips.cp-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; background: var(--surface); }
+  .chips.cp-tabs { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; background: var(--surface); }
   .chips.cp-tabs .chip { padding: 6px 0; }
   .detail-body { padding-bottom: 40px; }
 

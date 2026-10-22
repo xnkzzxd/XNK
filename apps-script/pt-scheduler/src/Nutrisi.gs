@@ -131,3 +131,137 @@ function _ensureNutritionColumns_(sheet) {
     if (cell.getValue() === '') { cell.setValue(NUT_HEADERS[col]); cell.setFontWeight('bold'); }
   });
 }
+
+// ------------------------------------------------------------
+// Admin: baca / simpan data gizi satu klien (T-1003)
+// ------------------------------------------------------------
+/** Pantangan makanan + penanda kondisi khusus yang diisi coach (disimpan sebagai daftar dipisah koma). */
+const NUT_TAGS_FOOD = ['telur', 'seafood', 'kacang', 'susu', 'laktosa'];
+const NUT_TAGS_RISK = ['hamil', 'gangguan-makan'];
+const NUT_BUDGETS = ['hemat', 'standar', 'bebas'];
+const NUT_STALE_DAYS = 28;
+
+/** Murni: sesi selesai 28 hari terakhir dibagi 4 minggu. schedules = [{memberId, status, start}], today = 'yyyy-MM-dd'. */
+function _nutSessionsPerWeek_(schedules, memberId, today) {
+  const id = String(memberId).trim();
+  const end = new Date(today + 'T23:59:59+07:00').getTime();
+  const from = end - 28 * 86400000;
+  let n = 0;
+  (schedules || []).forEach(function(sc) {
+    if (String(sc.memberId).trim() !== id || String(sc.status || '').toLowerCase() !== 'completed') return;
+    const t = new Date(sc.start).getTime();
+    if (!isNaN(t) && t > from && t <= end) n++;
+  });
+  return Math.round(n / 4 * 10) / 10;
+}
+
+/** Murni: hari antara dua 'yyyy-MM-dd'. */
+function _nutDaysBetween_(a, b) {
+  return Math.round((new Date(b + 'T00:00:00Z').getTime() - new Date(a + 'T00:00:00Z').getTime()) / 86400000);
+}
+
+function _nutSplit_(cell) {
+  return String(cell == null ? '' : cell).split(',').map(function(s) { return s.trim(); }).filter(String);
+}
+
+/** Murni: penanda risiko dari jawaban skrining (7 jawaban + kondisi lain) dan tag coach. */
+function _nutRisks_(healthAnswers, otherCondition, tags) {
+  const risks = [];
+  const a = (healthAnswers || []).map(function(x) { return String(x || '').trim().toLowerCase().indexOf('ya') === 0; });
+  if (a[0] || a[1] || a[2] || a[5]) risks.push('penyakit');
+  if (String(otherCondition || '').trim()) risks.push('penyakit');
+  if ((tags || []).indexOf('hamil') !== -1) risks.push('hamil');
+  if ((tags || []).indexOf('gangguan-makan') !== -1) risks.push('gangguanMakan');
+  return risks.filter(function(r, i) { return risks.indexOf(r) === i; });
+}
+
+function _nutProfileFrom_(row) {
+  const c = function(k) { return row[NUT_COLS[k] - 1]; };
+  const tags = _nutSplit_(c('pantangan'));
+  return {
+    tinggi: c('tinggi') === '' || c('tinggi') == null ? '' : Number(c('tinggi')),
+    jk: String(c('jk') || ''),
+    goal: String(c('goal') || ''),
+    pantangan: tags.filter(function(t) { return NUT_TAGS_FOOD.indexOf(t) !== -1; }),
+    kondisi: tags.filter(function(t) { return NUT_TAGS_RISK.indexOf(t) !== -1; }),
+    anggaran: NUT_BUDGETS.indexOf(String(c('anggaran'))) !== -1 ? String(c('anggaran')) : 'standar',
+    aktif: String(c('aktif')).toLowerCase() !== 'tidak',
+    birthDate: String(row[MEMBER_BIRTH_COL - 1] || '')
+  };
+}
+
+const NUT_MISSING_LABELS = { jenisKelamin: 'Jenis kelamin', tinggi: 'Tinggi badan', berat: 'Berat badan', tanggalLahir: 'Tanggal lahir', goal: 'Goal gizi' };
+
+/** Admin: profil gizi, input turunan, BMI, WHtR, dan target satu klien. Privat: hanya admin. */
+function getClientNutrition(token, memberId) {
+  requireAdmin_(token);
+  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+  const today = _todayWib_();
+  const profile = _nutProfileFrom_(m.row);
+  const entries = _readProgress_(id);
+  const lastOf = function(key) {
+    for (let i = entries.length - 1; i >= 0; i--) if (entries[i][key] !== '' && entries[i][key] != null) return { v: entries[i][key], date: entries[i].tanggal };
+    return null;
+  };
+  const w = lastOf('berat'), waist = lastOf('pinggang');
+  const asm = _latestRowFor_('Assessments', id), hs = _latestRowFor_('HealthScreening', id);
+  const bodyFat = asm && asm.row[9] !== '' ? Number(asm.row[9]) : null;
+  const stale = w ? _nutDaysBetween_(w.date, today) : null;
+  const spw = _nutSessionsPerWeek_(_getSchedulesAll_(), id, today);
+  const risks = _nutRisks_(hs ? [3, 4, 5, 6, 7, 8, 9].map(function(i) { return hs.row[i]; }) : [], hs ? hs.row[12] : '', profile.kondisi);
+  const target = _nutTarget_({
+    sex: profile.jk, kg: w ? w.v : 0, cm: profile.tinggi, birthDate: profile.birthDate, goal: profile.goal,
+    sessionsPerWeek: spw, bodyFat: bodyFat, risks: risks, today: today
+  });
+  if (!target.ok) target.missingLabels = target.missing.map(function(k) { return NUT_MISSING_LABELS[k] || k; });
+  return {
+    profile: profile,
+    inputs: { kg: w ? w.v : null, kgDate: w ? w.date : '', staleDays: stale, stale: stale != null && stale > NUT_STALE_DAYS,
+      waist: waist ? waist.v : null, bodyFat: bodyFat, sessionsPerWeek: spw, risks: risks },
+    bmi: w && profile.tinggi ? _nutBmi_(w.v, profile.tinggi) : null,
+    whtr: waist && profile.tinggi ? _nutWhtr_(waist.v, profile.tinggi) : null,
+    target: target,
+    options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD, kondisi: NUT_TAGS_RISK }
+  };
+}
+
+/** Murni: validasi data browser → nilai siap tulis (lempar error Indonesia). */
+function _nutValidateProfile_(data) {
+  data = data || {};
+  const out = {};
+  const t = String(data.tinggi == null ? '' : data.tinggi).replace(',', '.').trim();
+  if (t === '') out.tinggi = '';
+  else {
+    const n = Number(t);
+    if (!(n >= NUT.tinggiMin && n <= NUT.tinggiMax)) throw new Error('Tinggi badan harus antara ' + NUT.tinggiMin + ' dan ' + NUT.tinggiMax + ' cm.');
+    out.tinggi = Math.round(n * 10) / 10;
+  }
+  const jk = String(data.jk == null ? '' : data.jk).trim().toUpperCase();
+  if (jk !== '' && jk !== 'L' && jk !== 'P') throw new Error('Jenis kelamin harus L atau P.');
+  out.jk = jk;
+  const goal = String(data.goal == null ? '' : data.goal).trim();
+  if (goal !== '' && NUT_GOALS.indexOf(goal) === -1) throw new Error('Goal gizi tidak dikenal.');
+  out.goal = goal;
+  const tags = [].concat(data.pantangan || [], data.kondisi || []).map(function(x) { return String(x).trim(); }).filter(String);
+  tags.forEach(function(x) { if (NUT_TAGS_FOOD.indexOf(x) === -1 && NUT_TAGS_RISK.indexOf(x) === -1) throw new Error('Pantangan tidak dikenal: ' + x.slice(0, 30) + '.'); });
+  out.tags = tags.filter(function(x, i) { return tags.indexOf(x) === i; }).join(',');
+  const b = String(data.anggaran == null ? 'standar' : data.anggaran).trim() || 'standar';
+  if (NUT_BUDGETS.indexOf(b) === -1) throw new Error('Anggaran makan tidak dikenal.');
+  out.anggaran = b;
+  out.aktif = data.aktif === false || data.aktif === 'tidak' ? 'tidak' : 'ya';
+  return out;
+}
+
+/** Admin: simpan input gizi klien (tinggi, JK, goal, pantangan, kondisi, anggaran, aktif). */
+function saveClientNutrition(token, memberId, data) {
+  requireAdmin_(token);
+  const v = _nutValidateProfile_(data);
+  return _locked_(function() {
+    const m = _memberRowOrThrow_(memberId);
+    _ensureNutritionColumns_(m.sheet);
+    const put = function(k, val) { m.sheet.getRange(m.rowNum, NUT_COLS[k]).setNumberFormat('@').setValue(val); };
+    put('tinggi', v.tinggi); put('jk', v.jk); put('goal', v.goal);
+    put('pantangan', v.tags); put('anggaran', v.anggaran); put('aktif', v.aktif);
+    return { status: 'success' };
+  });
+}

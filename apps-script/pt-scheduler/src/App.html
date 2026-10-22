@@ -1917,7 +1917,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { _lsSet(ADMIN_CACHE_KEY, null); if (window.clearCareCache) window.clearCareCache(); if (window.wlForget) window.wlForget('admin'); }
+  function clearAdminCache() { _lsSet(ADMIN_CACHE_KEY, null); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -3813,7 +3813,7 @@
       '<div class="btn-row client-hero-actions"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
       '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div></div>';
     // Tab bagian halaman
-    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['program', 'Program', 'clipboard-list'], ['perawatan', 'Perawatan', 'heart-pulse'], ['riwayat', 'Riwayat', 'history']];
+    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['program', 'Program', 'clipboard-list'], ['perawatan', 'Perawatan', 'heart-pulse'], ['gizi', 'Gizi', 'apple'], ['riwayat', 'Riwayat', 'history']];
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
     const tab0 = (ui.detail === 'client:' + m.id && ui.cpTab && ui.cpTab.id === String(m.id) && tabs.some(t => t[0] === ui.cpTab.name)) ? ui.cpTab.name : 'ringkasan';
     const hid = n => n === tab0 ? '' : ' hide';
@@ -3839,6 +3839,7 @@
     // Perawatan
     body += '<div class="cp-pane' + hid('perawatan') + '" data-cppane="perawatan"><div id="profile-care-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     // Riwayat
+    body += '<div class="cp-pane' + hid('gizi') + '" data-cppane="gizi"><div id="profile-nut-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
     body += '<div class="cp-pane stack' + hid('riwayat') + '" data-cppane="riwayat" style="gap:16px"><div><div class="section-head"><h4 class="section-title">Riwayat</h4><span class="li-sub">' + past.length + ' sesi</span></div>' +
       (past.length ? '<div class="timeline" id="profile-history">' + past.slice(0, 12).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub" id="profile-history">Belum ada riwayat latihan.</p>') + '</div>' +
       '<div class="btn-row" style="margin-top:4px"><button type="button" class="btn btn-ghost" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
@@ -3974,6 +3975,7 @@
       window.pgSetAdmin(key, bad(b.progress) ? { error: msg(b.progress), entries: [], photos: [] } : b.progress);
       window.careSet(key, bad(b.care) ? { error: msg(b.care) } : b.care);
       window.programSetAdmin(key, bad(b.program) ? { error: msg(b.program) } : b.program);
+      window.nutSet(key, bad(b.nutrition) ? { error: msg(b.nutrition) } : b.nutrition);
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
     }).catch(function (err) {
       const m = window.authMessage(err);
@@ -3982,6 +3984,7 @@
       window.pgSetAdmin(key, { error: m, entries: [], photos: [] });
       window.careSet(key, { error: m });
       window.programSetAdmin(key, { error: m });
+      window.nutSet(key, { error: m });
     });
   };
   window.loadMemberTasks = function (memberId, force) {
@@ -6186,6 +6189,82 @@
       .then(function () { const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId); paintIcons(); });
   };
   window.clearCareCache = function () { Object.keys(care).forEach(k => delete care[k]); };
+
+  // ── Gizi (Phase P, T-1003): angka dan input gizi satu klien. Privat: hanya panel admin. ──
+  const nut = {};
+  const NUT_GOAL_LABEL = { turun: 'Turun lemak', naik: 'Naik otot', jaga: 'Jaga / sehat', recomp: 'Recomp' };
+  const NUT_TAG_LABEL = { telur: 'Telur', seafood: 'Seafood', kacang: 'Kacang', susu: 'Susu', laktosa: 'Laktosa', hamil: 'Hamil / menyusui', 'gangguan-makan': 'Riwayat gangguan makan' };
+  const NUT_BMI_LABEL = { kurus: 'Kurus', normal: 'Normal', lebih: 'Berat lebih', obesitas1: 'Obesitas I', obesitas2: 'Obesitas II' };
+  const NUT_WHTR_LABEL = { baik: 'Baik', waspada: 'Waspada', tinggi: 'Tinggi' };
+  const NUT_WARN_LABEL = { penyakit: 'Ada catatan kesehatan: konsultasikan dengan dokter atau ahli gizi.', hamil: 'Hamil / menyusui: target ini hanya perkiraan kasar, rujuk ke ahli gizi.', gangguanMakan: 'Riwayat gangguan makan: rujuk ke ahli gizi.',
+    usiaMuda: 'Usia di bawah 18 tahun: rujuk ke ahli gizi.', usiaLanjut: 'Usia di atas 65 tahun: rujuk ke ahli gizi.', bmiRendah: 'BMI sangat rendah: jangan memakai defisit kalori.', batasBawah: 'Kalori dinaikkan ke batas bawah yang aman.' };
+  const nutNum = (n, dp) => n == null || n === '' ? '-' : String(Math.round(n * Math.pow(10, dp || 0)) / Math.pow(10, dp || 0)).replace('.', ',');
+  function nutInner(memberId) {
+    const d = nut[memberId];
+    if (!d) return '<p class="li-sub">Memuat data gizi…</p>';
+    if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    const p = d.profile || {}, t = d.target || {}, i = d.inputs || {};
+    let html = '<div class="cp-col cp-col-main"><div class="card-flat stack" style="gap:8px"><p class="eyebrow">Ringkasan</p>';
+    html += '<div class="kv">' +
+      '<div><p class="k">BMI</p><p class="v">' + (d.bmi ? h(nutNum(d.bmi.value, 1)) + ' <span class="pill soft">' + h(NUT_BMI_LABEL[d.bmi.kategori] || '') + '</span>' : '-') + '</p></div>' +
+      '<div><p class="k">WHtR</p><p class="v">' + (d.whtr ? h(nutNum(d.whtr.value, 2)) + ' <span class="pill soft">' + h(NUT_WHTR_LABEL[d.whtr.kategori] || '') + '</span>' : '-') + '</p></div>' +
+      '<div><p class="k">BMR</p><p class="v">' + (t.ok ? h(nutNum(t.bmr)) + ' kkal' : '-') + '</p></div>' +
+      '<div><p class="k">TDEE</p><p class="v">' + (t.ok ? h(nutNum(t.tdee)) + ' kkal' : '-') + '</p></div></div>';
+    html += '<p class="li-sub">Berat ' + (i.kg != null ? h(nutNum(i.kg, 1)) + ' kg (' + h(i.kgDate) + ')' : 'belum ada') + (i.stale ? ' · sudah lebih dari 4 minggu, minta timbang ulang' : '') +
+      ' · Pinggang ' + (i.waist != null ? h(nutNum(i.waist, 1)) + ' cm' : '-') + ' · ' + h(nutNum(i.sessionsPerWeek, 1)) + ' sesi / minggu</p>';
+    html += '<p class="li-sub">Angka ini adalah estimasi, bukan pengganti ahli gizi.</p></div>';
+    if (t.ok) {
+      html += '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Target harian · ' + h(NUT_GOAL_LABEL[t.goal] || '') + '</p>' +
+        (t.warnings || []).map(w => '<p class="pill solid" style="white-space:normal">' + h(NUT_WARN_LABEL[w] || w) + '</p>').join('') +
+        '<p style="font-size:var(--fs-xl);font-weight:800">' + h(nutNum(t.kal)) + ' kkal</p>' +
+        '<div class="kv"><div><p class="k">Protein</p><p class="v">' + h(nutNum(t.protein)) + ' g</p></div><div><p class="k">Karbo</p><p class="v">' + h(nutNum(t.karbo)) + ' g</p></div>' +
+        '<div><p class="k">Lemak</p><p class="v">' + h(nutNum(t.lemak)) + ' g</p></div><div><p class="k">Serat</p><p class="v">≥ ' + h(nutNum(t.serat)) + ' g</p></div>' +
+        '<div><p class="k">Natrium</p><p class="v">&lt; ' + h(nutNum(t.natrium)) + ' mg</p></div><div><p class="k">Air</p><p class="v">± ' + h(nutNum(t.air)) + ' ml</p></div></div></div>';
+    } else {
+      html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Lengkapi data</p><p class="li-sub">Target belum bisa dihitung. Yang masih kurang:</p>' +
+        (t.missingLabels || []).map(x => '<p>' + icon('circle-dashed', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(x) + '</p>').join('') + '</div>';
+    }
+    html += '</div><div class="cp-col cp-col-side"><div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Input coach</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutEdit(\'' + h(memberId) + '\')">Ubah</button></div>' +
+      careRow('Tinggi', p.tinggi === '' || p.tinggi == null ? '-' : h(nutNum(p.tinggi, 1)) + ' cm') +
+      careRow('Jenis kelamin', p.jk === 'L' ? 'Laki-laki' : p.jk === 'P' ? 'Perempuan' : '-') +
+      careRow('Goal', h(NUT_GOAL_LABEL[p.goal] || '-')) +
+      careRow('Anggaran', h(p.anggaran || 'standar')) +
+      careRow('Pantangan', h((p.pantangan || []).map(x => NUT_TAG_LABEL[x] || x).join(', ') || '-')) +
+      careRow('Kondisi khusus', h((p.kondisi || []).map(x => NUT_TAG_LABEL[x] || x).join(', ') || '-')) +
+      careRow('Gizi aktif', p.aktif ? 'Ya' : 'Tidak') + '</div></div>';
+    return html;
+  }
+  window.nutSet = function (memberId, d) {
+    nut[memberId] = d;
+    const w = $('profile-nut-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = nutInner(memberId);
+    paintIcons();
+  };
+  window.loadClientNutrition = function (memberId) {
+    return adminCall('getClientNutrition', memberId).then(function (d) { window.nutSet(memberId, d); }).catch(function (err) { window.nutSet(memberId, { error: err.message }); });
+  };
+  window.clearNutCache = function () { Object.keys(nut).forEach(k => delete nut[k]); };
+  let nutMember = '';
+  function nutChips(id, tags, on) {
+    $(id).innerHTML = tags.map(t => '<label class="chip' + (on.indexOf(t) !== -1 ? ' active' : '') + '"><input type="checkbox" value="' + h(t) + '"' + (on.indexOf(t) !== -1 ? ' checked' : '') + ' style="position:absolute;opacity:0;pointer-events:none" onchange="this.parentNode.classList.toggle(\'active\', this.checked)">' + h(NUT_TAG_LABEL[t] || t) + '</label>').join('');
+  }
+  const nutPicked = id => Array.prototype.map.call($(id).querySelectorAll('input:checked'), x => x.value);
+  window.openNutEdit = function (id) {
+    nutMember = id; const d = nut[id] || {}, p = d.profile || {}, o = d.options || {};
+    $('nut-tinggi').value = p.tinggi === '' || p.tinggi == null ? '' : String(p.tinggi).replace('.', ',');
+    $('nut-jk').value = p.jk || ''; $('nut-goal').value = p.goal || ''; $('nut-anggaran').value = p.anggaran || 'standar';
+    $('nut-aktif').checked = p.aktif !== false;
+    nutChips('nut-tags', o.pantangan || [], p.pantangan || []);
+    nutChips('nut-kondisi', o.kondisi || [], p.kondisi || []);
+    openSheet('modal-nut-edit');
+  };
+  window.submitNutEdit = function (e) {
+    e.preventDefault();
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('saveClientNutrition', nutMember, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
+      pantangan: nutPicked('nut-tags'), kondisi: nutPicked('nut-kondisi'), aktif: $('nut-aktif').checked })
+      .then(function () { done(); window.closeModal(); window.showToast('Data gizi disimpan.'); return window.loadClientNutrition(nutMember); })
+      .catch(function (err) { done(); window.showToast(err.message); });
+  };
   function careDone(memberId, msg) { window.closeModal(); window.showToast(msg); return window.loadClientCare(memberId); }
   let careMember = '';
   window.openCareNotes = function (id) {

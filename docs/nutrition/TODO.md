@@ -5,7 +5,7 @@ Urutan: coach dulu → pustaka & menu → log klien → pengingat. Ambil nomor t
 - [ ] **T-1000** Setujui [Rules.md](Rules.md); verifikasi baris ⚠ ke sumber (AKG 2019, Gizi Seimbang, ISSN/ACSM).
 - [x] **T-1001** `tools/build-foods.js` + `foods/foods.min.json` + `tests/foods.test.js`. Memuat 1.046 dari 1.088 baris TKPI yang lolos cek energi; daftar 150–300 bahan umum (kurasi) menyusul di T-1010.
 - [x] **T-1002** `Nutrisi.gs`: `_nutBmi_`, `_nutWhtr_`, `_nutBmr_`, `_nutActivity_`, `_nutTarget_`, `_nutAge_`, kolom MemberData X–AC (`_ensureNutritionColumns_`) + `tests/nutrition.test.js`. Belum ada fungsi publik (T-1003).
-- [ ] **T-1003** Admin `getClientNutrition`/`saveClientNutrition`; tab Gizi di profil klien (`getClientBundle`).
+- [x] **T-1003** Admin `getClientNutrition`/`saveClientNutrition` (Nutrisi.gs), bagian `nutrition` di `getClientBundle`, tab Gizi di profil klien (ringkasan, target, input coach, sheet `modal-nut-edit`). Tab profil kini 6 (3 kolom di HP, 6 di PC). Tes: `tests/nutrition-admin.test.js`.
 - [ ] **T-1004** Saran adaptif (`_nutAdvise_`, `NutritionAdvice`) + kartu dashboard (`getCoachHub`).
 - [ ] **T-1010** Katalog ~50 menu jadi (estimasi, dicek owner) + porsi rumah tangga + tag pantangan/harga.
 - [ ] **T-1011** `_nutMenu_` (menu 1 hari, tukar item, Ramadan, belanja) + tes.

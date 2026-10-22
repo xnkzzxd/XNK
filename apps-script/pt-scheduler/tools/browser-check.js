@@ -515,7 +515,7 @@ async function contrastReport(page) {
     const dPanel = await page.locator('#detail-panel').boundingBox();
     const dTabs = await page.evaluate(() => { const t = Array.from(document.querySelectorAll('#detail-body [data-cptab]')); return { rows: new Set(t.map(b => Math.round(b.getBoundingClientRect().top))).size, over: t.map(b => b.scrollWidth - b.clientWidth).filter(x => x > 1).length }; });
     check(!(await page.evaluate(() => document.getElementById('app').classList.contains('detail-wide'))) && dPanel.width > 380 && dPanel.width < 460 && dTabs.rows === 1 && dTabs.over === 0,
-      'a client opened from the dashboard keeps the 420 px panel, five tabs on one row ' + JSON.stringify(dTabs));
+      'a client opened from the dashboard keeps the 420 px panel, six tabs on one row ' + JSON.stringify(dTabs));
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(600);
 
@@ -833,7 +833,7 @@ async function contrastReport(page) {
     check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
-    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 5, 'client page: dark hero and five tabs (Ringkasan, Progres, Program, Perawatan, Riwayat)');
+    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 6, 'client page: dark hero and six tabs (Ringkasan, Progres, Program, Perawatan, Gizi, Riwayat)');
     const tabBox = await page.evaluate(() => { const t = document.querySelector('#detail-body .cp-tabs'), d = document.querySelector('#detail-body'); if (!t || !d) return null; const r = t.getBoundingClientRect(), dr = d.getBoundingClientRect(); return { l: Math.round(r.left - dr.left), r: Math.round(dr.right - r.right), over: t.scrollWidth - t.clientWidth, chips: Array.from(t.children).map(c => Math.round(c.scrollWidth - c.clientWidth)) }; });
     check(!!tabBox && tabBox.l >= 0 && tabBox.r >= 0 && tabBox.over <= 1 && tabBox.chips.every(x => x <= 1), 'client page: the tab pills stay inside the panel (no bleed) ' + JSON.stringify(tabBox));
     await page.evaluate(() => { const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; });
@@ -1270,9 +1270,13 @@ async function contrastReport(page) {
     check(hit, 'phone: the switch touch area is at least 44 × 44 px');
     check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');
     await shot(page, 'client-reminders-mobile-' + scheme);
-    for (const tab of ['ringkasan', 'progres', 'perawatan', 'riwayat']) {
+    for (const tab of ['ringkasan', 'progres', 'perawatan', 'gizi', 'riwayat']) {
       await page.evaluate(t => { window.cpTab(t); const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; }, tab);
       await page.waitForTimeout(250);
+      if (tab === 'gizi') {
+        const gz = await page.evaluate(() => { const w = document.getElementById('profile-nut-wrap'); return { txt: w ? w.textContent : '', over: w ? w.scrollWidth - w.clientWidth : 99, tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size }; });
+        check(/Ringkasan/.test(gz.txt) && /Lengkapi data|Target harian/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
+      }
       await shot(page, 'phone-client-' + tab + '-' + scheme);
     }
     await page.evaluate(() => { window.cpTab('ringkasan'); window.closeDetail(); window.navigate('clients', { force: true }); });
