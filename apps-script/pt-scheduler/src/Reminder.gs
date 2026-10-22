@@ -1579,8 +1579,10 @@ function _sendMakanDigest_(waktu, ctx) {
   var iso = _wibParts_(now).date;
   var tip = String(_pickTip_(waktu, iso) || '').trim();   // opsional: teks variasi sudah berisi saran makan
   var pool = _rmdVariantPool_(), act = _rmdActivity_(_getSchedulesAll_());
+  var kalMap = {};
+  try { kalMap = _nutBulkCalories_(); } catch (e) { Logger.log('Baris target kalori dilewati: ' + e); }
   var items = clients.map(function(c) {
-    return { name: c.name, phone: c.phone, fact: '', text: _rmdClientText_(pool, jenis, iso, c, { tip: tip ? '\n\n💡 ' + tip : '' }, act) };
+    return { name: c.name, phone: c.phone, fact: '', text: _rmdClientText_(pool, jenis, iso, c, { tip: tip ? '\n\n💡 ' + tip : '' }, act) + _nutReminderLine_(kalMap[String(c.id).trim()]) };
   });
   return _rmdSendDigest_(waktu === 'pagi' ? 'Makan pagi' : 'Makan sore', _rmdDateLabel_(_wibParts_(now).date), items, sel.skippedNames);
 }

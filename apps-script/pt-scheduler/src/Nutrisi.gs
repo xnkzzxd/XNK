@@ -883,3 +883,44 @@ function getClientFoodLog(token, memberId) {
   }
   return { days: days };
 }
+
+
+// ------------------------------------------------------------
+// Pengingat makan (T-1030): satu baris "Target hari ini N kkal." Hanya kalori; tidak ada berat, BMI, protein, atau kondisi.
+// ------------------------------------------------------------
+function _nutReminderLine_(kal) {
+  const n = Math.round(Number(kal));
+  if (!(n > 0)) return '';
+  return '\n\nTarget hari ini ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' kkal.';
+}
+
+/** Kalori target semua klien yang Gizi-nya aktif dan datanya lengkap: { memberId: kkal }. Membaca tiap sheet satu kali. */
+function _nutBulkCalories_() {
+  const out = {};
+  if (!_nutEnabled_()) return out;
+  const today = _todayWib_();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rowsOf = function(name) { const sh = ss.getSheetByName(name); return sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : []; };
+  const weights = {};
+  rowsOf('Progress').forEach(function(r) {
+    const id = String(r[1]).trim(), kg = Number(r[3]), d = String(r[2]);
+    if (!r[0] || !(kg > 0)) return;
+    if (!weights[id] || d >= weights[id].d) weights[id] = { d: d, kg: kg };
+  });
+  const latest = function(name) { const m = {}; rowsOf(name).forEach(function(r) { if (r[0]) m[String(r[1]).trim()] = r; }); return m; };
+  const asm = latest('Assessments'), hs = latest('HealthScreening');
+  const schedules = _getSchedulesAll_();
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+    if (!row[0]) return;
+    const id = String(row[0]).trim(), profile = _nutProfileFrom_(row);
+    if (!profile.aktif || !profile.goal || !weights[id]) return;
+    const h = hs[id], a = asm[id];
+    const t = _nutTarget_({
+      sex: profile.jk, kg: weights[id].kg, cm: profile.tinggi, birthDate: profile.birthDate, goal: profile.goal,
+      sessionsPerWeek: _nutSessionsPerWeek_(schedules, id, today), bodyFat: a && a[9] !== '' ? Number(a[9]) : null,
+      risks: _nutRisks_(h ? [3, 4, 5, 6, 7, 8, 9].map(function(i) { return h[i]; }) : [], h ? h[12] : '', profile.kondisi), today: today, adjust: profile.adjust
+    });
+    if (t.ok) out[id] = t.kal;
+  });
+  return out;
+}

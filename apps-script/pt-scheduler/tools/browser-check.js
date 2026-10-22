@@ -1506,6 +1506,16 @@ async function contrastReport(page) {
     await adm.page.click('#set-client-guide');
     await adm.page.waitForTimeout(800);
     check(env.props.CLIENT_GUIDE_ENABLED === 'false', 'guide: switching it off is saved');
+    // Gizi & catat makan (Phase P): global switch in the same section.
+    check(await adm.page.isChecked('#set-nutrition'), 'gizi: Pengaturan → Tampilan shows "Gizi & catat makan" switched on');
+    const nutBox = await adm.page.locator('#set-nutrition').evaluate(e => { const r = e.closest('.toggle').getBoundingClientRect(); return Math.round(r.height); });
+    check(nutBox >= 28, 'gizi: the switch is a normal-sized control ' + nutBox);
+    await adm.page.click('#set-nutrition');
+    await adm.page.waitForTimeout(800);
+    check(env.props.NUTRITION_ENABLED === 'false' && !(await adm.page.isChecked('#set-nutrition')), 'gizi: switching it off is saved');
+    await adm.page.click('#set-nutrition');
+    await adm.page.waitForTimeout(800);
+    check(env.props.NUTRITION_ENABLED === undefined && (await adm.page.isChecked('#set-nutrition')), 'gizi: switching it on again removes the override (back to the default)');
     noErrors(adm.errors);
     await adm.context.close();
     const off = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500 });
