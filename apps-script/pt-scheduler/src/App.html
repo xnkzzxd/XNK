@@ -7859,7 +7859,7 @@
   let onb = null;
   window.openNutOnb = function () {
     const n = window.myNutrition || {}, p = n.profile || {};
-    onb = { step: 1, tinggi: p.tinggi === '' || p.tinggi == null ? '' : String(p.tinggi).replace('.', ','), jk: p.jk || '', birth: p.birthDate || '', hadBirth: !!p.birthDate, goal: p.goal || '', pantangan: (p.pantangan || []).slice(), anggaran: p.anggaran || 'standar' };
+    onb = { step: 1, needKg: !(n.inputs && n.inputs.kg) || !!(n.inputs && n.inputs.stale), berat: '', tinggi: p.tinggi === '' || p.tinggi == null ? '' : String(p.tinggi).replace('.', ','), jk: p.jk || '', birth: p.birthDate || '', hadBirth: !!p.birthDate, goal: p.goal || '', pantangan: (p.pantangan || []).slice(), anggaran: p.anggaran || 'standar' };
     nutOnbDraw(); openSheet('modal-nut-onb');
   };
   function nutOnbDraw() {
@@ -7869,6 +7869,7 @@
     if (o.step === 1) {
       html = '<div class="field"><label class="label" for="nut-o-tinggi">Tinggi badan (cm)</label><input class="input" id="nut-o-tinggi" type="text" inputmode="decimal" placeholder="170" value="' + h(o.tinggi) + '" oninput="window.nutOnbSet(\'tinggi\', this.value)"></div>' +
         '<div class="field"><p class="label">Jenis kelamin</p><div class="seg" style="display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (o.jk === 'L' ? 'active' : '') + '" onclick="window.nutOnbSet(\'jk\',\'L\',true)">Laki-laki</button><button type="button" class="' + (o.jk === 'P' ? 'active' : '') + '" onclick="window.nutOnbSet(\'jk\',\'P\',true)">Perempuan</button></div></div>' +
+        (o.needKg ? '<div class="field"><label class="label" for="nut-o-berat">Berat badan sekarang (kg)</label><input class="input" id="nut-o-berat" type="text" inputmode="decimal" placeholder="70" value="' + h(o.berat) + '" oninput="window.nutOnbSet(\'berat\', this.value)"></div>' : '') +
         (o.hadBirth ? '' : '<div class="field"><label class="label" for="nut-o-birth">Tanggal lahir</label><input class="input" id="nut-o-birth" type="date" value="' + h(o.birth) + '" onchange="window.nutOnbSet(\'birth\', this.value)"></div>');
     } else if (o.step === 2) {
       html = '<p class="label">Apa tujuan utamamu?</p><div class="stack" style="gap:8px">' + ['turun', 'naik', 'jaga', 'recomp'].map(function (g) {
@@ -7895,11 +7896,14 @@
       const t = Number(String(o.tinggi).replace(',', '.'));
       if (!(t >= 100 && t <= 230)) { window.showToast('Tinggi badan harus antara 100 dan 230 cm.'); return; }
       if (!o.jk) { window.showToast('Pilih jenis kelamin.'); return; }
+      if (o.needKg) { const b = Number(String(o.berat).replace(',', '.')); if (!(b >= 20 && b <= 300)) { window.showToast('Isi berat badan antara 20 dan 300 kg.'); return; } }
+      if (!o.hadBirth && !o.birth) { window.showToast('Isi tanggal lahir.'); return; }
     }
     if (d > 0 && o.step === 2 && !o.goal) { window.showToast('Pilih tujuanmu.'); return; }
     if (d > 0 && o.step === 3) {
       const done = busy($('nut-onb-next'), 'Menyimpan…');
-      memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth })
+      const weigh = o.needKg ? memberCall('saveMyMeasurement', { berat: String(o.berat).replace(',', '.') }) : Promise.resolve();
+      weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth }); })
         .then(function (r) { done(); window.myNutrition = r; window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
         .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
       return;

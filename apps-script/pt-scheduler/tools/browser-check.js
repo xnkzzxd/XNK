@@ -1650,6 +1650,7 @@ async function contrastReport(page) {
       const px = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('nut-o-tinggi')).fontSize));
       check(px >= 16, 'makan: inputs are 16 px (no iOS zoom)');
       await page.fill('#nut-o-tinggi', '170');
+      await page.fill('#nut-o-berat', '70');
       await page.click('#nut-onb-body .seg button >> nth=1');
       await page.fill('#nut-o-birth', '1996-03-10');
       await page.click('#nut-onb-next');
