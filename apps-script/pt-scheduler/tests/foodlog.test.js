@@ -52,10 +52,12 @@ test('validation: Indonesian messages, nothing written', () => {
   assert.equal(s.env.sheet('FoodLog') ? s.env.sheet('FoodLog').rows.length : 1, 1);
 });
 
-test('throttle, per-day cap and an off switch', () => {
+test('several foods can be logged back to back; the day is capped; an off switch', () => {
   const s = setup();
-  s.log(s.ani, { waktu: 'siang', id: 'AP001', gram: 100 });
-  assert.throws(() => s.env.call('logMyFood', s.ani, { waktu: 'siang', id: 'AP001', gram: 100 }), /Terlalu cepat/);
+  for (let i = 0; i < 3; i++) s.env.call('logMyFood', s.ani, { waktu: 'siang', id: 'AP001', gram: 100 });
+  assert.equal(j(s.env.call('getMyFoodLog', s.ani)).items.length, 3);
+  for (let i = 3; i < 60; i++) s.env.call('logMyFood', s.ani, { waktu: 'siang', id: 'AP001', gram: 10 });
+  assert.throws(() => s.env.call('logMyFood', s.ani, { waktu: 'siang', id: 'AP001', gram: 100 }), /Catatan hari ini sudah penuh/);
   s.env.props.NUTRITION_ENABLED = 'false';
   assert.throws(() => s.log(s.ani, { waktu: 'siang', id: 'AP001', gram: 100 }), /dimatikan/);
   assert.deepEqual(j(s.env.call('getMyFoodLog', s.ani)), { enabled: false });

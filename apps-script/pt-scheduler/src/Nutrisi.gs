@@ -808,7 +808,7 @@ function logMyFood(memberToken, entry) {
   const memberId = String(found.row[0]).trim();
   const day = _foodLogDayArg_(entry && entry.tanggal);
   const e = _foodLogEntry_(entry);
-  if (!_throttle_('foodlog_' + memberId, FOODLOG_LIMITS.throttleSeconds)) throw new Error('Terlalu cepat. Coba lagi sebentar.');
+  // Tanpa jeda per catatan: klien sering mencatat beberapa makanan berturut-turut. Pengaman = batas harian.
   return _locked_(function() {
     const sheet = _foodLogSheet_();
     if (_foodLogRows_(memberId).filter(function(r) { return r.tanggal === day; }).length >= FOODLOG_LIMITS.perDay) throw new Error('Catatan hari ini sudah penuh.');
