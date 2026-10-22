@@ -1638,6 +1638,45 @@ async function contrastReport(page) {
     const rtBad = await page.locator('#pub-program-wrap button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
     check(rtBad === 0 && (await overflowX(page)) <= 0, 'latihan: buttons are at least 44 px and nothing scrolls sideways');
     await shot(page, 'portal-mobile-latihan');
+    // Makan (Phase P): segmen di tab Latihan, isi data tiga langkah, target + menu.
+    {
+      check(await visible(page, '#lat-seg'), 'makan: the Latihan | Makan switch is on top of the page');
+      await page.evaluate(() => window.setLatSeg('makan'));
+      await page.waitForTimeout(400);
+      check(await visible(page, '#pub-makan-pane') && !(await visible(page, '#pub-latihan-pane')) && (await page.textContent('#pub-makan-pane')).includes('Lengkapi data'), 'makan: a new client is asked to complete the data first');
+      await page.click('#pub-makan-pane .btn-primary');
+      await page.waitForTimeout(500);
+      check(await visible(page, '#modal-nut-onb') && (await page.textContent('#nut-onb-title')).includes('Langkah 1 dari 3'), 'makan: the data sheet opens on step 1 of 3');
+      const px = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('nut-o-tinggi')).fontSize));
+      check(px >= 16, 'makan: inputs are 16 px (no iOS zoom)');
+      await page.fill('#nut-o-tinggi', '170');
+      await page.click('#nut-onb-body .seg button >> nth=1');
+      await page.fill('#nut-o-birth', '1996-03-10');
+      await page.click('#nut-onb-next');
+      await page.click('#nut-onb-body .btn-lg >> nth=0');
+      await page.click('#nut-onb-next');
+      await page.click('#nut-onb-body .chip >> nth=0');
+      await page.click('#nut-onb-next');
+      await page.waitForTimeout(1200);
+      const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.card-flat .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
+      check(mk.ring && mk.bars === 3 && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && mk.over <= 1, 'makan: ring, three macro bars, today\'s menu and the rules show, no sideways scroll ' + JSON.stringify({ bars: mk.bars, meals: mk.meals, over: mk.over }));
+      check(mk.small === 0, 'makan: tap targets are at least 44 px ' + mk.small);
+      await page.click('#pub-makan-pane .list-item >> nth=0');
+      await page.waitForTimeout(700);
+      check(await visible(page, '#modal-nut-swap') && (await page.locator('#nut-swap-list .list-item').count()) >= 1, 'makan: tapping a menu item offers replacements');
+      await page.click('#nut-swap-list .list-item >> nth=0');
+      await page.waitForTimeout(400);
+      check(!(await visible(page, '#modal-nut-swap')), 'makan: picking a replacement closes the sheet');
+      await page.evaluate(() => window.nutInfo('protein'));
+      await page.waitForTimeout(300);
+      check(await visible(page, '#modal-nut-info') && (await page.textContent('#nut-info-src')).includes('ISSN'), 'makan: the (i) button explains the number and names the source');
+      await page.evaluate(() => window.closeModal());
+      await page.click('#pub-makan-pane .btn-sm:has-text("Belanja")');
+      await page.waitForTimeout(900);
+      check(await visible(page, '#modal-nut-shop') && (await page.locator('#nut-shop-list .eyebrow').count()) >= 3, 'makan: the shopping list shows groups');
+      await shot(page, 'portal-mobile-makan');
+      await page.evaluate(() => { window.closeModal(); window.setLatSeg('latihan'); });
+    }
     await page.click('#pub-program-wrap .rt-card >> nth=0 >> .rt-open');
     await page.waitForTimeout(500);
     check(await visible(page, '#modal-wl') && (await page.textContent('#wls-title')) === 'Hari A' && (await page.locator('#wls-body .rt-ex').count()) === 2 && (await page.textContent('#wls-body')).includes('Grafik muncul'), 'routine: the card opens its detail with each exercise and a chart placeholder');

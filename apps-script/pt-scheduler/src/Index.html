@@ -581,6 +581,31 @@
     </div>
 
     <!-- Tambah ke kalender (Fase I4), portal klien -->
+    <div class="sheet sm hide" id="modal-nut-info" role="dialog" aria-modal="true" aria-labelledby="nut-info-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-info-title"></h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:10px"><p id="nut-info-text"></p><p class="li-sub" id="nut-info-src"></p><p class="li-sub">Angka ini perkiraan, bukan pengganti ahli gizi atau dokter.</p></div>
+    </div>
+
+    <div class="sheet hide" id="modal-nut-swap" role="dialog" aria-modal="true" aria-labelledby="nut-swap-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-swap-title">Ganti makanan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:8px"><div class="stack" style="gap:4px" id="nut-swap-list"></div>
+        <button type="button" class="btn btn-outline btn-lg btn-block hide" id="nut-swap-more" onclick="window.nutSwapMore()"><i data-lucide="shuffle"></i> Acak lagi</button></div>
+    </div>
+
+    <div class="sheet hide" id="modal-nut-shop" role="dialog" aria-modal="true" aria-labelledby="nut-shop-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-shop-title">Belanja 7 hari</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px" id="nut-shop-list"></div>
+    </div>
+
+    <div class="sheet hide" id="modal-nut-onb" role="dialog" aria-modal="true" aria-labelledby="nut-onb-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="nut-onb-title">Isi data</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px" id="nut-onb-body"></div>
+    </div>
+
     <div class="sheet sm hide" id="modal-add-cal" role="dialog" aria-modal="true" aria-labelledby="cal-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="cal-title">Tambah ke kalender</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
