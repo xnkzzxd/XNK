@@ -6,8 +6,8 @@
 // ============================================================
 
 // Kolom MemberData baru (kanan dari "Panduan" kolom W). Tanggal lahir = MEMBER_BIRTH_COL.
-const NUT_COLS = { tinggi: 24, jk: 25, goal: 26, pantangan: 27, anggaran: 28, aktif: 29, adjust: 30 };
-const NUT_HEADERS = { 24: 'Tinggi (cm)', 25: 'Jenis Kelamin', 26: 'Goal Gizi', 27: 'Pantangan Makanan', 28: 'Anggaran Makan', 29: 'Gizi Aktif', 30: 'Penyesuaian Kalori' };
+const NUT_COLS = { tinggi: 24, jk: 25, goal: 26, pantangan: 27, anggaran: 28, aktif: 29, adjust: 30, umur: 31, umurTgl: 32 };
+const NUT_HEADERS = { 24: 'Tinggi (cm)', 25: 'Jenis Kelamin', 26: 'Goal Gizi', 27: 'Pantangan Makanan', 28: 'Anggaran Makan', 29: 'Gizi Aktif', 30: 'Penyesuaian Kalori', 31: 'Umur (tahun)', 32: 'Umur Dicatat' };
 const NUT_GOALS = ['turun', 'naik', 'jaga', 'recomp'];
 
 /** Konstanta aturan (Rules.md). Ubah di sini dan di dokumen sekaligus. */
@@ -61,6 +61,20 @@ function _nutAge_(birthDate, today) {
   return age >= 0 && age < 120 ? age : null;
 }
 
+/**
+ * Umur sekarang: dari tanggal lahir bila ada, kalau tidak dari umur yang diisi coach/klien (+ tahun penuh sejak dicatat).
+ * profile = { birthDate, umur, umurTgl }. null bila tidak ada keduanya.
+ */
+function _nutAgeOf_(profile, today) {
+  const t = today || _todayWib_();
+  const fromBirth = _nutAge_(profile.birthDate, t);
+  if (fromBirth != null) return fromBirth;
+  const u = Number(profile.umur);
+  if (!(u > 0) || !profile.umurTgl) return null;
+  const elapsed = _nutAge_(profile.umurTgl, t);          // tahun penuh sejak umur dicatat
+  return u + (elapsed == null ? 0 : elapsed);
+}
+
 /** BMR (kkal/hari): Katch-McArdle bila lemak tubuh (%) ada, kalau tidak Mifflin-St Jeor. sex: 'L' | 'P'. */
 function _nutBmr_(sex, kg, cm, age, bodyFatPct) {
   kg = Number(kg); cm = Number(cm); age = Number(age);
@@ -89,7 +103,7 @@ function _nutTarget_(inp) {
   if (inp.sex !== 'L' && inp.sex !== 'P') missing.push('jenisKelamin');
   if (!(cm >= NUT.tinggiMin && cm <= NUT.tinggiMax)) missing.push('tinggi');
   if (!(kg > 0)) missing.push('berat');
-  if (age == null || isNaN(age)) missing.push('tanggalLahir');
+  if (age == null || isNaN(age)) missing.push('umur');
   if (!goal) missing.push('goal');
   if (missing.length) return { ok: false, missing: missing };
 
@@ -191,11 +205,13 @@ function _nutProfileFrom_(row) {
     anggaran: NUT_BUDGETS.indexOf(String(c('anggaran'))) !== -1 ? String(c('anggaran')) : 'standar',
     aktif: String(c('aktif')).toLowerCase() !== 'tidak',
     adjust: Number(c('adjust')) || 0,
-    birthDate: String(row[MEMBER_BIRTH_COL - 1] || '')
+    birthDate: String(row[MEMBER_BIRTH_COL - 1] || ''),
+    umur: c('umur') === '' || c('umur') == null ? '' : Number(c('umur')),
+    umurTgl: String(c('umurTgl') || '')
   };
 }
 
-const NUT_MISSING_LABELS = { jenisKelamin: 'Jenis kelamin', tinggi: 'Tinggi badan', berat: 'Berat badan', tanggalLahir: 'Tanggal lahir', goal: 'Goal gizi' };
+const NUT_MISSING_LABELS = { jenisKelamin: 'Jenis kelamin', tinggi: 'Tinggi badan', berat: 'Berat badan', umur: 'Umur atau tanggal lahir', goal: 'Goal gizi' };
 
 /** Hitung profil, input turunan, BMI, WHtR, dan target satu klien dari baris MemberData. Dipakai admin dan portal. */
 function _nutComputeFor_(row) {
@@ -214,7 +230,7 @@ function _nutComputeFor_(row) {
   const spw = _nutSessionsPerWeek_(_getSchedulesAll_(), id, today);
   const risks = _nutRisks_(hs ? [3, 4, 5, 6, 7, 8, 9].map(function(i) { return hs.row[i]; }) : [], hs ? hs.row[12] : '', profile.kondisi);
   const target = _nutTarget_({
-    sex: profile.jk, kg: w ? w.v : 0, cm: profile.tinggi, birthDate: profile.birthDate, goal: profile.goal,
+    sex: profile.jk, kg: w ? w.v : 0, cm: profile.tinggi, age: _nutAgeOf_(profile, today), goal: profile.goal,
     sessionsPerWeek: spw, bodyFat: bodyFat, risks: risks, today: today, adjust: profile.adjust
   });
   if (!target.ok) target.missingLabels = target.missing.map(function(k) { return NUT_MISSING_LABELS[k] || k; });
@@ -234,7 +250,7 @@ function getClientNutrition(token, memberId) {
   const m = _memberRowOrThrow_(memberId);
   const c = _nutComputeFor_(m.row);
   return {
-    profile: c.profile, inputs: c.inputs, bmi: c.bmi, whtr: c.whtr, target: c.target,
+    profile: c.profile, inputs: c.inputs, age: _nutAgeOf_(c.profile, c.today), bmi: c.bmi, whtr: c.whtr, target: c.target,
     advice: _nutAdviceFor_(c.id, c.profile, c.entries, c.today),
     options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD, kondisi: NUT_TAGS_RISK }
   };
@@ -264,7 +280,23 @@ function _nutValidateProfile_(data) {
   if (NUT_BUDGETS.indexOf(b) === -1) throw new Error('Anggaran makan tidak dikenal.');
   out.anggaran = b;
   out.aktif = data.aktif === false || data.aktif === 'tidak' ? 'tidak' : 'ya';
+  const u = String(data.umur == null ? '' : data.umur).replace(',', '.').trim();
+  if (u === '') out.umur = '';
+  else {
+    const n = Number(u);
+    if (!(n >= 10 && n <= 100) || Math.floor(n) !== n) throw new Error('Umur harus bilangan bulat antara 10 dan 100 tahun.');
+    out.umur = n;
+  }
   return out;
+}
+
+/** Tulis umur (dan tanggal pencatatannya) bila berubah; kosong menghapus. Umur yang sama tidak mengubah tanggal catat. */
+function _nutPutUmur_(m, umur) {
+  const cur = m.row[NUT_COLS.umur - 1];
+  const same = String(cur === '' || cur == null ? '' : Number(cur)) === String(umur);
+  if (same) return;
+  m.sheet.getRange(m.rowNum, NUT_COLS.umur).setNumberFormat('@').setValue(umur);
+  m.sheet.getRange(m.rowNum, NUT_COLS.umurTgl).setNumberFormat('@').setValue(umur === '' ? '' : _todayWib_());
 }
 
 /** Admin: simpan input gizi klien (tinggi, JK, goal, pantangan, kondisi, anggaran, aktif). */
@@ -277,6 +309,7 @@ function saveClientNutrition(token, memberId, data) {
     const put = function(k, val) { m.sheet.getRange(m.rowNum, NUT_COLS[k]).setNumberFormat('@').setValue(val); };
     put('tinggi', v.tinggi); put('jk', v.jk); put('goal', v.goal);
     put('pantangan', v.tags); put('anggaran', v.anggaran); put('aktif', v.aktif);
+    _nutPutUmur_(m, v.umur);
     return { status: 'success' };
   });
 }
@@ -636,7 +669,8 @@ function _nutritionFor_(row) {
   const p = c.profile;
   const out = {
     enabled: true, today: c.today,
-    profile: { tinggi: p.tinggi, jk: p.jk, goal: p.goal, pantangan: p.pantangan, anggaran: p.anggaran, birthDate: p.birthDate },
+    profile: { tinggi: p.tinggi, jk: p.jk, goal: p.goal, pantangan: p.pantangan, anggaran: p.anggaran, birthDate: p.birthDate, umur: p.umur },
+    age: _nutAgeOf_(p, c.today),
     inputs: { kg: c.inputs.kg, kgDate: c.inputs.kgDate, stale: c.inputs.stale, waist: c.inputs.waist, sessionsPerWeek: c.inputs.sessionsPerWeek },
     bmi: c.bmi, whtr: c.whtr, target: _nutClientWarnings_(c.target), menu: null, log: _foodLogDay_(c.id, c.today),
     options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD }
@@ -664,7 +698,7 @@ function saveMyNutritionProfile(memberToken, data) {
   if (!_nutEnabled_()) throw new Error('Fitur gizi sedang dimatikan.');
   data = data || {};
   const cur = _nutProfileFrom_(found.row);
-  const v = _nutValidateProfile_({ tinggi: data.tinggi, jk: data.jk, goal: data.goal, pantangan: data.pantangan, kondisi: cur.kondisi, anggaran: data.anggaran, aktif: cur.aktif });
+  const v = _nutValidateProfile_({ tinggi: data.tinggi, jk: data.jk, goal: data.goal, pantangan: data.pantangan, kondisi: cur.kondisi, anggaran: data.anggaran, aktif: cur.aktif, umur: data.umur == null || data.umur === '' ? cur.umur : data.umur });
   let birth = String(data.birthDate == null ? '' : data.birthDate).trim();
   if (birth && (!_validDate_(birth) || birth > _todayWib_())) throw new Error('Tanggal lahir tidak valid.');
   return _locked_(function() {
@@ -676,6 +710,7 @@ function saveMyNutritionProfile(memberToken, data) {
       _ensureCareColumns_(m.sheet);
       m.sheet.getRange(m.rowNum, MEMBER_BIRTH_COL).setNumberFormat('@').setValue(birth);
     }
+    _nutPutUmur_(m, v.umur);
     const fresh = _memberRowOrThrow_(found.row[0]);
     return _nutritionFor_(fresh.row);
   });
@@ -918,7 +953,7 @@ function _nutBulkCalories_() {
     if (!profile.aktif || !profile.goal || !weights[id]) return;
     const h = hs[id], a = asm[id];
     const t = _nutTarget_({
-      sex: profile.jk, kg: weights[id].kg, cm: profile.tinggi, birthDate: profile.birthDate, goal: profile.goal,
+      sex: profile.jk, kg: weights[id].kg, cm: profile.tinggi, age: _nutAgeOf_(profile, today), goal: profile.goal,
       sessionsPerWeek: _nutSessionsPerWeek_(schedules, id, today), bodyFat: a && a[9] !== '' ? Number(a[9]) : null,
       risks: _nutRisks_(h ? [3, 4, 5, 6, 7, 8, 9].map(function(i) { return h[i]; }) : [], h ? h[12] : '', profile.kondisi), today: today, adjust: profile.adjust
     });

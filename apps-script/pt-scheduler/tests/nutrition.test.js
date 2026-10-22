@@ -39,7 +39,7 @@ test('activity factor from sessions per week', () => {
 test('target lists missing data and never guesses', () => {
   const r = fn('_nutTarget_', { kg: 70 });
   assert.equal(r.ok, false);
-  assert.deepEqual(r.missing, ['jenisKelamin', 'tinggi', 'tanggalLahir', 'goal']);
+  assert.deepEqual(r.missing, ['jenisKelamin', 'tinggi', 'umur', 'goal']);
 });
 
 test('target by goal', () => {
