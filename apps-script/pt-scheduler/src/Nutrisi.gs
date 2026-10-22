@@ -197,12 +197,11 @@ function _nutProfileFrom_(row) {
 
 const NUT_MISSING_LABELS = { jenisKelamin: 'Jenis kelamin', tinggi: 'Tinggi badan', berat: 'Berat badan', tanggalLahir: 'Tanggal lahir', goal: 'Goal gizi' };
 
-/** Admin: profil gizi, input turunan, BMI, WHtR, dan target satu klien. Privat: hanya admin. */
-function getClientNutrition(token, memberId) {
-  requireAdmin_(token);
-  const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
+/** Hitung profil, input turunan, BMI, WHtR, dan target satu klien dari baris MemberData. Dipakai admin dan portal. */
+function _nutComputeFor_(row) {
+  const id = String(row[0]).trim();
   const today = _todayWib_();
-  const profile = _nutProfileFrom_(m.row);
+  const profile = _nutProfileFrom_(row);
   const entries = _readProgress_(id);
   const lastOf = function(key) {
     for (let i = entries.length - 1; i >= 0; i--) if (entries[i][key] !== '' && entries[i][key] != null) return { v: entries[i][key], date: entries[i].tanggal };
@@ -220,13 +219,23 @@ function getClientNutrition(token, memberId) {
   });
   if (!target.ok) target.missingLabels = target.missing.map(function(k) { return NUT_MISSING_LABELS[k] || k; });
   return {
-    profile: profile,
+    id: id, today: today, profile: profile, entries: entries, risks: risks,
     inputs: { kg: w ? w.v : null, kgDate: w ? w.date : '', staleDays: stale, stale: stale != null && stale > NUT_STALE_DAYS,
       waist: waist ? waist.v : null, bodyFat: bodyFat, sessionsPerWeek: spw, risks: risks },
     bmi: w && profile.tinggi ? _nutBmi_(w.v, profile.tinggi) : null,
     whtr: waist && profile.tinggi ? _nutWhtr_(waist.v, profile.tinggi) : null,
-    target: target,
-    advice: _nutAdviceFor_(id, profile, entries, today),
+    target: target
+  };
+}
+
+/** Admin: profil gizi, input turunan, BMI, WHtR, dan target satu klien. Privat: hanya admin. */
+function getClientNutrition(token, memberId) {
+  requireAdmin_(token);
+  const m = _memberRowOrThrow_(memberId);
+  const c = _nutComputeFor_(m.row);
+  return {
+    profile: c.profile, inputs: c.inputs, bmi: c.bmi, whtr: c.whtr, target: c.target,
+    advice: _nutAdviceFor_(c.id, c.profile, c.entries, c.today),
     options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD, kondisi: NUT_TAGS_RISK }
   };
 }
@@ -411,7 +420,7 @@ function _nutHubList_() {
 const NUT_MENU = {
   shares: { biasa: [['sarapan', 'Sarapan', 0.30], ['siang', 'Makan siang', 0.40], ['malam', 'Makan malam', 0.30]],
             ramadan: [['buka', 'Buka puasa', 0.45], ['sahur', 'Sahur', 0.35], ['camilan', 'Camilan malam', 0.20]] },
-  portionMin: 0.5, portionMax: 4, portionNatural: 3, portionFix: 6, swapCount: 3
+  portionMin: 0.5, portionMax: 4, portionNatural: 3, portionFix: 6, swapMax: 8, swapCount: 3
 };
 
 function _nutHash_(str) {
@@ -566,7 +575,7 @@ function _nutSwap_(item, mealKey, opts, offset) {
   const target = old[key] * item.gram / 100;
   const out = _nutAllowed_(list, opts).filter(function(id) { return id !== item.id && NUT_FOODS[id][key] > 0; }).map(function(id) {
     const g = target / NUT_FOODS[id][key] * 100, base = NUT_FOODS[id].por[0][1];
-    return { id: id, gram: g, ok: g >= base * NUT_MENU.portionMin && g <= base * NUT_MENU.portionMax, drift: Math.abs((NUT_FOODS[id][item.slot === 'protein' ? 'kal' : 'p'] * g / 100) - (old[item.slot === 'protein' ? 'kal' : 'p'] * item.gram / 100)) };
+    return { id: id, gram: g, ok: g >= base * NUT_MENU.portionMin && g <= base * NUT_MENU.swapMax, drift: Math.abs((NUT_FOODS[id][item.slot === 'protein' ? 'kal' : 'p'] * g / 100) - (old[item.slot === 'protein' ? 'kal' : 'p'] * item.gram / 100)) };
   }).filter(function(c) { return c.ok; });
   out.sort(function(a, b) { return a.drift - b.drift || (a.id < b.id ? -1 : 1); });
   const n = out.length, start = n ? ((offset || 0) * NUT_MENU.swapCount) % n : 0;
@@ -589,4 +598,107 @@ function _nutShopping_(menus) {
   return Object.keys(groups).sort().map(function(g) {
     return { kelompok: g, items: groups[g].sort(function(a, b) { return a.n < b.n ? -1 : a.n > b.n ? 1 : 0; }) };
   });
+}
+
+
+// ------------------------------------------------------------
+// Portal klien (T-1012): data gizi milik sendiri. Anggota selalu dari token, tidak pernah dari argumen.
+// ------------------------------------------------------------
+function _nutEnabled_() { return PropertiesService.getScriptProperties().getProperty('NUTRITION_ENABLED') !== 'false'; }
+
+/** Jam (WIB) sesi latihan hari ini milik klien, atau null. */
+function _nutSessionHour_(memberId, today) {
+  const id = String(memberId).trim();
+  let hour = null;
+  _getSchedulesAll_().forEach(function(sc) {
+    const st = String(sc.status || '').toLowerCase();
+    if (String(sc.memberId).trim() !== id || st === 'cancelled' || st === 'available') return;
+    const d = new Date(sc.start);
+    if (isNaN(d.getTime()) || Utilities.formatDate(d, 'Asia/Jakarta', 'yyyy-MM-dd') !== today) return;
+    if (hour == null) hour = Number(Utilities.formatDate(d, 'Asia/Jakarta', 'H'));
+  });
+  return hour;
+}
+
+function _nutMenuOpts_(c, dayOffset) {
+  const iso = dayOffset ? _addDaysIso_(c.today, dayOffset) : c.today;
+  return { pantangan: c.profile.pantangan, anggaran: c.profile.anggaran, seed: c.id + '|' + iso, ramadan: _rmdIsRamadan_(iso),
+    sessionHour: dayOffset ? null : _nutSessionHour_(c.id, c.today) };
+}
+
+/** Bentuk jawaban untuk klien: tanpa tag kondisi khusus, tanpa saran coach. */
+function _nutritionFor_(row) {
+  if (!_nutEnabled_()) return { enabled: false };
+  const c = _nutComputeFor_(row);
+  if (!c.profile.aktif) return { enabled: false };
+  const p = c.profile;
+  const out = {
+    enabled: true, today: c.today,
+    profile: { tinggi: p.tinggi, jk: p.jk, goal: p.goal, pantangan: p.pantangan, anggaran: p.anggaran, birthDate: p.birthDate },
+    inputs: { kg: c.inputs.kg, kgDate: c.inputs.kgDate, stale: c.inputs.stale, waist: c.inputs.waist, sessionsPerWeek: c.inputs.sessionsPerWeek },
+    bmi: c.bmi, whtr: c.whtr, target: _nutClientWarnings_(c.target), menu: null,
+    options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD }
+  };
+  if (c.target.ok) out.menu = _nutMenu_(c.target, _nutMenuOpts_(c, 0));
+  return out;
+}
+
+/** Kode kondisi khusus (milik coach/skrining) tampil ke klien sebagai satu peringatan umum. */
+function _nutClientWarnings_(target) {
+  if (!target.warnings) return target;
+  const t = JSON.parse(JSON.stringify(target));
+  t.warnings = t.warnings.map(function(w) { return (w === 'penyakit' || w === 'hamil' || w === 'gangguanMakan') ? 'kondisi' : w; })
+    .filter(function(w, i, a) { return a.indexOf(w) === i; });
+  return t;
+}
+
+function getMyNutrition(memberToken) {
+  return _nutritionFor_(requireMember_(memberToken).row);
+}
+
+/** Klien mengisi tinggi, jenis kelamin, goal, pantangan, anggaran (dan tanggal lahir bila masih kosong). Kondisi khusus tetap milik coach. */
+function saveMyNutritionProfile(memberToken, data) {
+  const found = requireMember_(memberToken);
+  if (!_nutEnabled_()) throw new Error('Fitur gizi sedang dimatikan.');
+  data = data || {};
+  const cur = _nutProfileFrom_(found.row);
+  const v = _nutValidateProfile_({ tinggi: data.tinggi, jk: data.jk, goal: data.goal, pantangan: data.pantangan, kondisi: cur.kondisi, anggaran: data.anggaran, aktif: cur.aktif });
+  let birth = String(data.birthDate == null ? '' : data.birthDate).trim();
+  if (birth && (!_validDate_(birth) || birth > _todayWib_())) throw new Error('Tanggal lahir tidak valid.');
+  return _locked_(function() {
+    const m = _memberRowOrThrow_(found.row[0]);
+    _ensureNutritionColumns_(m.sheet);
+    const put = function(k, val) { m.sheet.getRange(m.rowNum, NUT_COLS[k]).setNumberFormat('@').setValue(val); };
+    put('tinggi', v.tinggi); put('jk', v.jk); put('goal', v.goal); put('pantangan', v.tags); put('anggaran', v.anggaran);
+    if (birth && !String(m.row[MEMBER_BIRTH_COL - 1] || '').trim()) {
+      _ensureCareColumns_(m.sheet);
+      m.sheet.getRange(m.rowNum, MEMBER_BIRTH_COL).setNumberFormat('@').setValue(birth);
+    }
+    const fresh = _memberRowOrThrow_(found.row[0]);
+    return _nutritionFor_(fresh.row);
+  });
+}
+
+/** Daftar belanja 7 hari ke depan (dihitung hanya saat diminta). */
+function getMyShopping(memberToken) {
+  const row = requireMember_(memberToken).row;
+  if (!_nutEnabled_()) return { enabled: false, groups: [] };
+  const c = _nutComputeFor_(row);
+  if (!c.profile.aktif || !c.target.ok) return { enabled: false, groups: [] };
+  const menus = [];
+  for (let d = 0; d < 7; d++) menus.push(_nutMenu_(c.target, _nutMenuOpts_(c, d)));
+  return { enabled: true, groups: _nutShopping_(menus) };
+}
+
+/** Tiga pengganti untuk satu item menu hari ini. item = { id, slot, gram }. */
+function swapMyMenuItem(memberToken, item, mealKey, offset) {
+  const row = requireMember_(memberToken).row;
+  if (!_nutEnabled_()) throw new Error('Fitur gizi sedang dimatikan.');
+  item = item || {};
+  if (!NUT_FOODS[item.id]) throw new Error('Makanan tidak dikenal.');
+  if (['karbo', 'protein', 'sayur', 'buah'].indexOf(item.slot) === -1) throw new Error('Bagian menu tidak dikenal.');
+  const gram = Number(item.gram);
+  if (!(gram > 0 && gram < 2000)) throw new Error('Porsi tidak valid.');
+  const p = _nutProfileFrom_(row);
+  return _nutSwap_({ id: item.id, slot: item.slot, gram: gram }, String(mealKey || ''), { pantangan: p.pantangan, anggaran: p.anggaran }, Math.max(0, Math.min(50, Math.floor(Number(offset) || 0))));
 }

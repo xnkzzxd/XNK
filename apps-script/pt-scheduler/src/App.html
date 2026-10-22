@@ -6197,7 +6197,7 @@
   const NUT_TAG_LABEL = { telur: 'Telur', seafood: 'Seafood', kacang: 'Kacang', susu: 'Susu', laktosa: 'Laktosa', hamil: 'Hamil / menyusui', 'gangguan-makan': 'Riwayat gangguan makan' };
   const NUT_BMI_LABEL = { kurus: 'Kurus', normal: 'Normal', lebih: 'Berat lebih', obesitas1: 'Obesitas I', obesitas2: 'Obesitas II' };
   const NUT_WHTR_LABEL = { baik: 'Baik', waspada: 'Waspada', tinggi: 'Tinggi' };
-  const NUT_WARN_LABEL = { penyakit: 'Ada catatan kesehatan: konsultasikan dengan dokter atau ahli gizi.', hamil: 'Hamil / menyusui: target ini hanya perkiraan kasar, rujuk ke ahli gizi.', gangguanMakan: 'Riwayat gangguan makan: rujuk ke ahli gizi.',
+  const NUT_WARN_LABEL = { kondisi: 'Ada catatan kesehatan: konsultasikan dengan dokter atau ahli gizi.', hamil: 'Hamil / menyusui: target ini hanya perkiraan kasar, rujuk ke ahli gizi.', gangguanMakan: 'Riwayat gangguan makan: rujuk ke ahli gizi.',
     usiaMuda: 'Usia di bawah 18 tahun: rujuk ke ahli gizi.', usiaLanjut: 'Usia di atas 65 tahun: rujuk ke ahli gizi.', bmiRendah: 'BMI sangat rendah: jangan memakai defisit kalori.', batasBawah: 'Kalori dinaikkan ke batas bawah yang aman.' };
   const nutNum = (n, dp) => n == null || n === '' ? '-' : String(Math.round(n * Math.pow(10, dp || 0)) / Math.pow(10, dp || 0)).replace('.', ',');
   function nutInner(memberId) {

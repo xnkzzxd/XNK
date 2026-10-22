@@ -2125,6 +2125,7 @@ function getPortalMore(memberToken) {
       meal: part(function() { return _mealForMember_(row); }),
       program: part(function() { return _programFor_(row); }),
       workout: part(function() { return _workoutFor_(row); }),
+      nutrition: part(function() { return _nutritionFor_(row); }),
       content: part(function() { return _contentForClient_(); }),
       coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; })
     };
