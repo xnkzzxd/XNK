@@ -2056,3 +2056,19 @@ html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr
 .sheet-handle { background: color-mix(in srgb, var(--on-band) 35%, transparent); }
 .sheet-foot { border-top: 1px solid var(--border); }
 .toast { background: var(--ink); color: var(--on-ink); border-radius: var(--r-full); }
+
+/* ── Fase R3: data kiri-kanan, bukan satu baris per data ─────────────────── */
+*:has(> .cr) { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 0 16px; }
+.cr { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-top: 1px solid var(--border); min-width: 0; }
+.cr.w { grid-column: 1 / -1; }
+.cr-v { font-weight: 700; overflow-wrap: anywhere; }
+.kv.three { grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); }
+.kv.flat { gap: 0 16px; }
+.kv.flat > div { background: none; border: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 10px 0; }
+.kv .wide { grid-column: 1 / -1; }
+.kv { grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+.ins-list { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0 16px; }
+.ins-row { align-content: start; }
+.pg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 12px; }
+.sheet-handle { background: var(--band); border-radius: 28px 28px 0 0; }
+.sheet-handle::before { background: color-mix(in srgb, var(--on-band) 35%, transparent); }
