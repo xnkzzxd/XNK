@@ -119,3 +119,19 @@ test('admin answers and public answers do not change shape', () => {
   const boot = JSON.stringify(s.env.call('getAdminBootstrap', s.admin));
   assert.ok(!/Goal Gizi|"nutrition"|pantangan/i.test(boot));
 });
+
+test('a client who does not want to share a birth date can type an age; the coach\'s age also counts', () => {
+  const s = setup();
+  s.env.call('saveMyMeasurement', s.ani, { berat: 70 });
+  const r = j(s.env.call('saveMyNutritionProfile', s.ani, { tinggi: 170, jk: 'P', goal: 'jaga', umur: '27' }));
+  assert.equal(r.target.ok, true);
+  assert.equal(r.age, 27);
+  assert.equal(r.profile.umur, 27);
+  assert.throws(() => s.env.call('saveMyNutritionProfile', s.ani, { tinggi: 170, jk: 'P', goal: 'jaga', umur: 3 }), /Umur harus/);
+  // a later save without an age keeps it
+  assert.equal(j(s.env.call('saveMyNutritionProfile', s.ani, { tinggi: 171, jk: 'P', goal: 'jaga' })).age, 27);
+  // coach-entered age is enough for a client who never opened the sheet
+  s.env.call('saveMyMeasurement', s.budi, { berat: 80 });
+  s.env.call('saveClientNutrition', s.admin, 'PT-B', { tinggi: 175, jk: 'L', goal: 'naik', umur: 25 });
+  assert.equal(j(s.env.call('getMyNutrition', s.budi)).target.ok, true);
+});

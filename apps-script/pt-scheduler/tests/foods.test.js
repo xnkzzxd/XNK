@@ -9,7 +9,7 @@ const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../foods/foo
 const byId = {};
 data.items.forEach(function (i) { byId[i.id] = i; });
 
-// Values copied by hand from the TKPI 2017 PDF (per 100 g): id → [kal, protein, lemak, karbo]
+// Values copied by hand from the TKPI 2020 PDF (per 100 g): id → [kal, protein, lemak, karbo]
 const SPOT = {
   AP001: [180, 3, 0.3, 39.8],     // Nasi
   AP005: [149, 2.8, 0.4, 32.5],   // Nasi beras merah
@@ -23,6 +23,7 @@ const SPOT = {
   ER001: [85, 0.9, 6.5, 7.7],     // Alpukat
   KP002: [742, 0.5, 81.6, 1.4],   // Mentega
   MP007: [394, 0, 0, 94],         // Gula putih
+  ER031: [64, 0.9, 0.3, 12.2],    // Jambu biji (berubah dari 49 kkal di TKPI 2017)
 };
 
 test('spot rows match the PDF', function () {

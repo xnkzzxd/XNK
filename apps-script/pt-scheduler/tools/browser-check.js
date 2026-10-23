@@ -850,6 +850,17 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     const gzCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-nut-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(gzCols.length === 2 && gzCols[1][0] > gzCols[0][0] && Math.abs(gzCols[1][1] - gzCols[0][1]) <= 2 && (await elOverflow(page, '#detail-body')) <= 1, 'wide client page: the Gizi tab has the numbers on the left and the coach inputs on the right ' + JSON.stringify(gzCols));
+    // The coach can type an age for the client (Gizi → Ubah).
+    await page.evaluate(() => window.openNutEdit('PT-A'));
+    await page.waitForTimeout(600);
+    check(await visible(page, '#nut-umur') && (await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('nut-umur')).fontSize))) >= 16, 'umur: the Gizi edit sheet has an age field (16 px)');
+    await page.fill('#nut-umur', '29');
+    await page.fill('#nut-tinggi', '170');
+    await page.selectOption('#nut-jk', 'P');
+    await page.selectOption('#nut-goal', 'jaga');
+    await page.click('#modal-nut-edit button[type=submit]');
+    await page.waitForTimeout(1200);
+    check((await page.textContent('#profile-nut-wrap')).includes('29 tahun (diisi manual)'), 'umur: the typed age shows on the Gizi tab');
     await page.evaluate(() => window.cpTab('perawatan'));
     await page.waitForTimeout(300);
     const careCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-care-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
