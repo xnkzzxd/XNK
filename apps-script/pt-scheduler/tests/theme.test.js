@@ -73,3 +73,8 @@ test('buttons wrap and text holders use min-height', () => {
   assert.ok(!/white-space:\s*nowrap/.test(btn));
   for (const sel of ['.chip {', '.pill {']) assert.ok(!/(^|[;\s])height:/.test(block(sel)), sel);
 });
+
+test('Theme.html has one style block and nothing after it', () => {
+  assert.strictEqual(css.split('</style>').length, 2);
+  assert.strictEqual(css.trimEnd().slice(-8), '</style>');
+});
