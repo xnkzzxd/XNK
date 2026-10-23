@@ -2086,3 +2086,9 @@ html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr));
   .settings-nav-item:first-child { border-top: 0; }
   .sn-ic { background: var(--ink); color: var(--on-ink); }
 }
+
+/* ── Fase R5: formulir — kolom pendek berdampingan, yang panjang melebar ───── */
+.form-grid { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+.form-grid > :not(.field) { grid-column: 1 / -1; }
+.form-grid > .field:has(textarea), .form-grid > .field:has(.input-search), .form-grid > .field.wide, .form-grid > .field:has(.pkg-wrap) { grid-column: 1 / -1; }
+html.big-text .form-grid { grid-template-columns: minmax(0, 1fr); }
