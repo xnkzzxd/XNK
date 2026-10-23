@@ -2049,7 +2049,7 @@ html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr
 .seg button.active { color: var(--ink); }
 .seg .seg-thumb { background: var(--on-ink); }
 .kpi .kpi-icon, .icon-chip { background: var(--ink); color: var(--on-ink); border-color: transparent; }
-.sheet-head { background: var(--band); color: var(--on-band); border-radius: 28px 28px 0 0; }
+.sheet-head { background: var(--band); color: var(--on-band); border-radius: 0; }
 .sheet-head .icon-btn, .sheet-head .icon-btn.plain { color: var(--on-band); background: color-mix(in srgb, var(--on-band) 14%, transparent); }
 .sheet-handle { background: color-mix(in srgb, var(--on-band) 35%, transparent); }
 .sheet-foot { border-top: 1px solid var(--border); }
@@ -2068,7 +2068,7 @@ html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr
 .ins-list { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0 16px; }
 .ins-row { align-content: start; }
 .pg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 12px; }
-.sheet-handle { background: var(--band); border-radius: 28px 28px 0 0; }
+.sheet-handle { background: var(--band); border-radius: 0; }
 .sheet-handle::before { background: color-mix(in srgb, var(--on-band) 35%, transparent); }
 
 /* ── Fase R4: tab klien hitam, hero menggantung, Pengaturan daftar berkelompok ─ */
@@ -2085,11 +2085,6 @@ html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr));
   .sn-ic { background: var(--ink); color: var(--on-ink); }
 }
 
-/* ── Fase R5: formulir — kolom pendek berdampingan, yang panjang melebar ───── */
-.form-grid { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
-.form-grid > :not(.field) { grid-column: 1 / -1; }
-.form-grid > .field:has(textarea), .form-grid > .field:has(.input-search), .form-grid > .field.wide, .form-grid > .field:has(.pkg-wrap) { grid-column: 1 / -1; }
-html.big-text .form-grid { grid-template-columns: minmax(0, 1fr); }
 *:has(> .cr) > :not(.cr) { grid-column: 1 / -1; }
 
 @media (max-width: 767px) { .client-card .cc-phone, .client-card .cc-trend { display: none; } .client-card .cc-extra { margin-top: 4px; } }
@@ -2099,4 +2094,7 @@ html.big-text .form-grid { grid-template-columns: minmax(0, 1fr); }
 .fin-bill-top .li-title { flex: 1 1 8rem; min-width: 0; }
 .fin-bill-amt { font-size: var(--fs-lg); white-space: nowrap; }
 @media (min-width: 768px) { .topbar { height: calc(4rem + var(--sa-t)); } .page-head { padding-top: 6px; margin-top: -4px; border-radius: 0 0 32px 32px; } }
+.sheet { overflow: hidden; }
+.form-grid .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+html.big-text .form-grid .two { grid-template-columns: minmax(0, 1fr); }
 </style>
