@@ -4507,7 +4507,9 @@
     const solo = window.isSoloCoach();
     let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + (solo ? 'Profil dan jadwalmu' : window.coaches.length + ' coach aktif di tim') + '</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + (solo ? 'Tambah coach' : 'Coach baru') + '</button></div>';
-    html += '<div id="hub-wrap"></div>';
+    const ctab = window.ui && window.ui.coachTab === 'coach' ? 'coach' : 'klien';
+    html += '<div class="seg" id="coach-seg" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (ctab === 'klien' ? 'active' : '') + '" onclick="window.coachTab(\'klien\')">Klien</button><button type="button" class="' + (ctab === 'coach' ? 'active' : '') + '" onclick="window.coachTab(\'coach\')">Coach</button></div>';
+    html += '<div id="ct-klien"' + (ctab === 'klien' ? '' : ' class="hide"') + '><div id="hub-wrap"></div></div><div id="ct-coach"' + (ctab === 'coach' ? '' : ' class="hide"') + '>';
     const unassigned = window.schedules.filter(function (s) { return !s.coachId && !isDone(s) && !isAvailable(s); }).length;
     if (unassigned && window.coaches.length) {
       html += '<div class="card-flat row-between" style="margin-bottom:16px;gap:12px"><div><p class="li-title">' + unassigned + ' jadwal belum punya coach</p><p class="li-sub">Tetapkan semuanya ke coach "Ini saya".</p></div>' +
@@ -4530,9 +4532,15 @@
           '<div class="card-flat" style="padding:10px 12px"><p class="eyebrow">Klien</p><p class="num" style="font-weight:800;font-size:var(--fs-xl)">' + st.clients + '</p></div></div></div>';
       }).join('') + '</div>';
     }
+    html += '</div>';
     setHTML(el, html);
     loadHub();
   }
+  window.coachTab = function (k) {
+    window.ui = window.ui || {}; window.ui.coachTab = k;
+    const a = $('ct-klien'), b = $('ct-coach'); if (a) a.classList.toggle('hide', k !== 'klien'); if (b) b.classList.toggle('hide', k !== 'coach');
+    const seg = $('coach-seg'); if (seg) Array.prototype.forEach.call(seg.children, function (btn, i) { btn.classList.toggle('active', (i === 0) === (k === 'klien')); });
+  };
 
 
   // ── Jam kerja & cuti (E2) ───────────────────────────────────────────────────
@@ -8555,13 +8563,12 @@
     left += '<div class="portal-actions"><button type="button" class="btn btn-primary" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button>' +
       '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
       '<button type="button" class="btn btn-outline" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket</button></div>';
-    left += myCoachCardHtml(me);
-    left += '<div id="pub-class-wrap">' + classCardHtml() + '</div>';
+    left += '<details class="fold"><summary>Coach &amp; kelas' + icon('chevron-down') + '</summary><div class="fold-body stack" style="gap:12px">' + myCoachCardHtml(me) + '<div id="pub-class-wrap">' + classCardHtml() + '</div></div></details>';
     left += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
 
     left += '<div id="pub-care-wrap" class="stack" style="gap:16px">' + myCareInner() + '</div>';
     left += '<div class="card hide" id="pub-today-wl"></div>';
-    left += '<div class="card" id="pub-teasers">' + teasersInner() + '</div>';
+    left += '<div class="card hide" id="pub-teasers">' + teasersInner() + '</div>';
 
     let right = '<div class="month-cal" id="month-cal"></div>';
     right += '<div class="card"><div class="section-head"><h3 class="section-title">Jadwalku</h3><button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button></div>' +

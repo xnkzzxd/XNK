@@ -2072,3 +2072,17 @@ html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr
 .pg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 12px; }
 .sheet-handle { background: var(--band); border-radius: 28px 28px 0 0; }
 .sheet-handle::before { background: color-mix(in srgb, var(--on-band) 35%, transparent); }
+
+/* ── Fase R4: tab klien hitam, hero menggantung, Pengaturan daftar berkelompok ─ */
+.chips.cp-tabs { background: var(--ink); border-radius: var(--r-md); padding: 4px; gap: 4px; }
+.chips.cp-tabs .chip { background: transparent; border-color: transparent; color: var(--on-ink-muted); }
+.chips.cp-tabs .chip.active { background: var(--on-ink); color: var(--ink); }
+html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.page-head { margin-bottom: 36px; }
+.page-head + .stack .card-ink:first-child, .page-head + .portal-grid .card-ink:first-child { margin-top: -56px; position: relative; }
+@media (max-width: 767px) {
+  .settings-nav { gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-1); }
+  .settings-nav-item { border: 0; border-radius: 0; border-top: 1px solid var(--border); background: none; min-height: 60px; }
+  .settings-nav-item:first-child { border-top: 0; }
+  .sn-ic { background: var(--ink); color: var(--on-ink); }
+}
