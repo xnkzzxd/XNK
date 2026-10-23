@@ -2039,7 +2039,6 @@ html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr
 .page-head .icon-btn { color: var(--on-band); background: color-mix(in srgb, var(--on-band) 12%, transparent); border-color: transparent; }
 .topbar { background: var(--band); color: var(--on-band); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .topbar .icon-btn { color: var(--on-band); background: color-mix(in srgb, var(--on-band) 12%, transparent); border-color: transparent; }
-@media (min-width: 768px) { .topbar { background: var(--bg); color: var(--fg); } .topbar .icon-btn { color: var(--fg); background: var(--surface); border-color: var(--border); } }
 .card-ink, .insight-hero { background: var(--band-card); color: var(--on-band); border: 1px solid color-mix(in srgb, var(--on-band) 10%, transparent); }
 .page-head + .insight-hero, .page-head + .card-ink { margin-top: -40px; position: relative; }
 .section-title { display: flex; align-items: center; gap: 8px; }
@@ -2099,4 +2098,5 @@ html.big-text .form-grid { grid-template-columns: minmax(0, 1fr); }
 .fin-bill-top, .fin-bill-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 .fin-bill-top .li-title { flex: 1 1 8rem; min-width: 0; }
 .fin-bill-amt { font-size: var(--fs-lg); white-space: nowrap; }
+@media (min-width: 768px) { .topbar { height: calc(4rem + var(--sa-t)); } .page-head { padding-top: 6px; margin-top: -4px; border-radius: 0 0 32px 32px; } }
 </style>
