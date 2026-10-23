@@ -384,6 +384,11 @@
     try { window.top.postMessage({ xnk: 'theme', color: color }, '*'); } catch (e) {}
   }
   window.hostPostTheme = hostPostTheme;
+  // Teks besar (Fase R): font scaling tidak memicu media query, jadi periksa ukuran dasar.
+  (function bigText() {
+    function check() { try { document.documentElement.classList.toggle('big-text', parseFloat(getComputedStyle(document.documentElement).fontSize) >= 20); } catch (e) {} }
+    check(); window.addEventListener('resize', check);
+  })();
   (function hostBridge() {
     if (window.top === window) return;
     window.addEventListener('message', function (e) {
