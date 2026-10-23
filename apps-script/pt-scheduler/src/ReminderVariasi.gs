@@ -114,7 +114,7 @@ function _rmdVariantPool_() {
   var pool = {};
   try {
     var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RMD_VARIASI_SHEET);
-    if (sh && sh.getLastRow() > 1) pool = _rmdPoolFromRows_(sh.getDataRange().getValues());
+    if (sh && sh.getLastRow() > 1) pool = _rmdPoolFromRows_(_vals_(sh));
   } catch (e) { Logger.log('PesanVariasi dilewati: ' + e); }
   Object.keys(RMD_VARIANTS_DEFAULT).forEach(function(k) { if (!pool[k]) pool[k] = RMD_VARIANTS_DEFAULT[k]; });
   return pool;

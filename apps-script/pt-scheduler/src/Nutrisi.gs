@@ -358,7 +358,7 @@ function _nutAdvise_(entries, goal, today, ctx) {
 function _nutAdviceRows_() {
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('NutritionAdvice');   // membaca tidak membuat sheet
   if (!sh || sh.getLastRow() < 2) return [];
-  return sh.getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(function(r) {
+  return _vals_(sh).slice(1).filter(function(r) { return r[0]; }).map(function(r) {
     return { id: String(r[0]), memberId: String(r[1]).trim(), tanggal: String(r[2]), delta: Number(r[3]) || 0, alasan: String(r[4]), status: String(r[5]), diputuskan: String(r[6] || '') };
   });
 }
@@ -395,7 +395,7 @@ function decideNutritionAdvice(token, memberId, adviceId, decision) {
   if (decision !== 'setuju' && decision !== 'tolak') throw new Error('Keputusan harus setuju atau tolak.');
   return _locked_(function() {
     const sheet = _nutAdviceSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     let rowNum = 0, delta = 0;
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(adviceId) && String(data[i][1]).trim() === String(memberId).trim()) {
@@ -425,13 +425,13 @@ function _nutHubList_() {
   if (!cache.get('nut:scan')) {
     try {
       const w = {};
-      _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+      _vals_(_progressSheet_()).slice(1).forEach(function(r) {
         const v = r[3];
         if (!r[0] || v === '' || v == null) return;
         const id = String(r[1]).trim();
         (w[id] = w[id] || []).push({ tanggal: String(r[2]), berat: Number(v) });
       });
-      _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+      _vals_(_getMemberDataSheet_()).slice(1).forEach(function(row) {
         if (!row[0]) return;
         const profile = _nutProfileFrom_(row), id = String(row[0]).trim();
         if (!profile.aktif || (profile.goal !== 'turun' && profile.goal !== 'naik') || !w[id]) return;
@@ -442,7 +442,7 @@ function _nutHubList_() {
     } catch (err) { Logger.log('Saran gizi dilewati: ' + err); }
   }
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (r[0]) names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
+  _vals_(_getMemberDataSheet_()).slice(1).forEach(function(r) { if (r[0]) names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
   return _nutAdviceRows_().filter(function(r) { return r.status === 'menunggu'; }).map(function(r) {
     return { id: r.id, memberId: r.memberId, name: names[r.memberId] || '', delta: r.delta, alasan: r.alasan };
   });
@@ -793,7 +793,7 @@ function _foodLogRows_(memberId) {
   const id = String(memberId).trim();
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FoodLog');
   if (!sheet || sheet.getLastRow() < 2) return [];
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(function(r) {
+  return _vals_(sheet).slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(function(r) {
     return { id: String(r[0]), tanggal: String(r[2]), waktu: String(r[3]), foodId: String(r[4] || ''), nama: String(r[5]), gram: Number(r[6]) || 0, porsi: String(r[7]),
       kal: Number(r[8]) || 0, p: Number(r[9]) || 0, l: Number(r[10]) || 0, k: Number(r[11]) || 0, sumber: String(r[12]) };
   });
@@ -859,7 +859,7 @@ function deleteMyFood(memberToken, logId) {
   const memberId = String(requireMember_(memberToken).row[0]).trim();
   return _locked_(function() {
     const sheet = _foodLogSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(logId) && String(data[i][1]).trim() === memberId) {
         const day = String(data[i][2]);
@@ -937,7 +937,7 @@ function _nutBulkCalories_() {
   if (!_nutEnabled_()) return out;
   const today = _todayWib_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const rowsOf = function(name) { const sh = ss.getSheetByName(name); return sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : []; };
+  const rowsOf = function(name) { const sh = ss.getSheetByName(name); return sh && sh.getLastRow() >= 2 ? _vals_(sh).slice(1) : []; };
   const weights = {};
   rowsOf('Progress').forEach(function(r) {
     const id = String(r[1]).trim(), kg = Number(r[3]), d = String(r[2]);
@@ -947,7 +947,7 @@ function _nutBulkCalories_() {
   const latest = function(name) { const m = {}; rowsOf(name).forEach(function(r) { if (r[0]) m[String(r[1]).trim()] = r; }); return m; };
   const asm = latest('Assessments'), hs = latest('HealthScreening');
   const schedules = _getSchedulesAll_();
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+  _vals_(_getMemberDataSheet_()).slice(1).forEach(function(row) {
     if (!row[0]) return;
     const id = String(row[0]).trim(), profile = _nutProfileFrom_(row);
     if (!profile.aktif || !profile.goal || !weights[id]) return;

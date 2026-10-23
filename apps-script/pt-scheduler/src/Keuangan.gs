@@ -105,7 +105,7 @@ function _finDate_(v) {
 function _finRead_(name) {
   const sheet = _finSheet_(name, false);
   if (!sheet || sheet.getLastRow() <= 1) return [];
-  const values = sheet.getDataRange().getValues();
+  const values = _vals_(sheet);
   const header = values[0].map(String);
   const out = [];
   for (let i = 1; i < values.length; i++) {
@@ -207,7 +207,7 @@ function _finMigrate_() {
     const prices = _allPackagePrices_();
     const names = {};
     _getMembersAll_().forEach(function(m) { names[String(m.id)] = m.name; });
-    const log = _getMembersLogSheet_().getDataRange().getValues();
+    const log = _vals_(_getMembersLogSheet_());
     let created = 0, skipped = 0;
     for (let i = 1; i < log.length; i++) {
       const r = log[i], trxId = String(r[0] || '');
@@ -553,7 +553,7 @@ function _financeSummary_(month, year) {
   });
   const sch = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
   if (sch && sch.getLastRow() > 1) {
-    sch.getDataRange().getValues().slice(1).forEach(function(r) {
+    _vals_(sch).slice(1).forEach(function(r) {
       if (String(r[7]).toLowerCase() !== 'completed' || !r[10]) return;
       const d = new Date(r[10]);
       if (isNaN(d) || _finDate_(d).slice(0, 7) !== key) return;

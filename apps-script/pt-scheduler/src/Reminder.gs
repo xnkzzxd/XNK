@@ -242,7 +242,7 @@ function _buildClientPools_(members, schedules, now) {
 }
 
 function _loadClientPools_() {
-  var data = _getMemberDataSheet_().getDataRange().getValues().slice(1);
+  var data = _vals_(_getMemberDataSheet_()).slice(1);
   return _buildClientPools_(data, _getSchedulesAll_(), new Date());
 }
 
@@ -571,7 +571,7 @@ function getReminderLog(token, opts) {
     if (target !== '*') {
       if (!names) {
         names = {};
-        _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(m) { if (m[0]) names[String(m[0]).trim()] = String(m[1] || '').trim(); });
+        _vals_(_getMemberDataSheet_()).slice(1).forEach(function(m) { if (m[0]) names[String(m[0]).trim()] = String(m[1] || '').trim(); });
       }
       label = names[target] || 'Klien dihapus';
     }
@@ -806,7 +806,7 @@ function setMemberReminderPrefs(token, memberId, prefs) {
 /** Indeks klien untuk pengingat sesi: { id: {id, name, phone (62… atau null), off} }. */
 function _rmdMemberIndex_() {
   var idx = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+  _vals_(_getMemberDataSheet_()).slice(1).forEach(function(row) {
     if (!row || !row[0]) return;
     var id = String(row[0]).trim();
     var total = parseInt(row[8], 10); if (isNaN(total)) total = 10;
@@ -916,7 +916,7 @@ function _monthChange_(entries, key, from, to) {
 /** Satu kali baca sheet Progress → { memberId: [entri urut tanggal] }. */
 function _progressByMember_() {
   var out = {};
-  _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_progressSheet_()).slice(1).forEach(function(r) {
     if (!r[0]) return;
     var id = String(r[1]).trim();
     (out[id] = out[id] || []).push({ tanggal: String(r[2]), berat: r[3] === '' ? '' : Number(r[3]), pinggang: r[4] === '' ? '' : Number(r[4]) });
@@ -972,7 +972,7 @@ function _rmdMarkBadgesGiven_(map) {
   var head = sheet.getRange(1, MEMBER_BADGE_GIVEN_COL);
   if (head.getValue() === '') { head.setValue(MEMBER_BADGE_GIVEN_HEADER); head.setFontWeight('bold'); }
   else if (head.getValue() !== MEMBER_BADGE_GIVEN_HEADER) throw new Error('Kolom R di MemberData sudah dipakai untuk hal lain. Kosongkan/ganti dulu.');
-  var data = sheet.getDataRange().getValues();
+  var data = _vals_(sheet);
   for (var i = 1; i < data.length; i++) {
     var id = String(data[i][0]).trim();
     if (!map[id]) continue;
@@ -999,7 +999,7 @@ function sendMilestoneDigest_(ctx) {
   var isTest = !!(ctx && ctx.slot === 'tes');
   var today = _wibParts_(now).date, since = _addDaysIso_(today, -MILESTONE_RECENT_DAYS);
   var schedules = _getSchedulesAll_();
-  var data = _getMemberDataSheet_().getDataRange().getValues().slice(1);
+  var data = _vals_(_getMemberDataSheet_()).slice(1);
   var tpl = _rmdTemplate_('selamat-milestone'), items = [], noPhone = [], toMark = {};
   data.forEach(function(row) {
     if (!row || !row[0]) return;
@@ -1065,7 +1065,7 @@ function sendTesUlangDigest_(ctx) {
   var today = _wibParts_(now).date;
   var pools = _loadClientPools_(), last = {};
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FitnessTests');
-  if (sheet) sheet.getDataRange().getValues().slice(1).forEach(function(r) { var k = String(r[1]).trim(), d = String(r[2]); if (!last[k] || d > last[k]) last[k] = d; });
+  if (sheet) _vals_(sheet).slice(1).forEach(function(r) { var k = String(r[1]).trim(), d = String(r[2]); if (!last[k] || d > last[k]) last[k] = d; });
   var tpl = _rmdTemplate_('tes-ulang'), items = [];
   pools.active.filter(function(c) { return !_rmdIsOff_(c, 'tes-ulang') && last[c.id] && _daysBetween_(last[c.id], today) >= TES_ULANG_EVERY_DAYS; }).forEach(function(c) {
     var dm = last[c.id].split('-');
@@ -1091,7 +1091,7 @@ function sendUlangTahunDigest_(ctx) {
   var now = (ctx && ctx.now) || new Date();
   var today = _wibParts_(now).date;
   var pools = _loadClientPools_();
-  var rows = _getMemberDataSheet_().getDataRange().getValues().slice(1), births = {};
+  var rows = _vals_(_getMemberDataSheet_()).slice(1), births = {};
   rows.forEach(function(r) { if (r[0]) births[String(r[0]).trim()] = r[20]; });
   var tpl = _rmdTemplate_('ulang-tahun'), items = [];
   pools.active.filter(function(c) { return !_rmdIsOff_(c, 'ulang-tahun') && _isBirthdayToday_(births[c.id], today); }).forEach(function(c) {
@@ -1303,7 +1303,7 @@ function sendPrDigest_(ctx) {
   var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   var pools = _loadClientPools_();
   var active = pools.active.filter(function(c) { return !_rmdIsOff_(c, 'pr'); });
-  var rows = _tasksSheet_().getDataRange().getValues().slice(1);
+  var rows = _vals_(_tasksSheet_()).slice(1);
   var list = _buildPrDigest_(rows, active, today);
   if (!list.length) { Logger.log('PR digest: tidak ada PR yang perlu diingatkan.'); return true; }
 

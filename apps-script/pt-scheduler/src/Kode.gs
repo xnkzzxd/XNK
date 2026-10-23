@@ -567,7 +567,7 @@ function _issueMemberSession_(found) {
 // Cari baris member (1-based) + datanya. Kembalikan null kalau tidak ada.
 function _findMemberRow_(predicate) {
   const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] && predicate(data[i])) return { sheet: sheet, rowNum: i + 1, row: data[i] };
   }
@@ -793,14 +793,33 @@ function getOrCreateSheet_(sheetName, headers) {
       if (!sheet) throw err;
     }
   } else {
-    const a1 = sheet.getRange(1, 1).getValue();
-    if (a1 !== "" && a1 !== headers[0]) {
-      sheet.insertRowBefore(1);
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
-    }
+    _schemaOnce_('hdr:' + sheetName, function() {
+      const a1 = sheet.getRange(1, 1).getValue();
+      if (a1 !== "" && a1 !== headers[0]) {
+        sheet.insertRowBefore(1);
+        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+        sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+      }
+    });
   }
   return sheet;
+}
+
+/**
+ * Pemeriksaan skema (header, format kolom) cukup sekali: sekali per eksekusi (memo) dan sekali per 6 jam
+ * (CacheService). Sebelumnya setiap pemanggilan _getMemberDataSheet_() dkk. menulis format kolom dan membaca header
+ * lagi, belasan kali per layar. Kalau pemilik mengubah header sendiri, perbaikan berjalan lagi paling lama 6 jam kemudian.
+ */
+const SCHEMA_OK_SECONDS = 21600;
+let _schemaMemo_ = {};
+function _schemaOnce_(key, fn) {
+  if (_schemaMemo_[key]) return;
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) {}
+  try { if (cache && cache.get('schema:' + key)) { _schemaMemo_[key] = true; return; } } catch (e) {}
+  fn();
+  _schemaMemo_[key] = true;
+  try { if (cache) cache.put('schema:' + key, '1', SCHEMA_OK_SECONDS); } catch (e) {}
 }
 
 /**
@@ -919,7 +938,7 @@ function _coachList_(v) {
 function _coachesAll_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
   if (!sheet || sheet.getLastRow() < 2) return [];
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   const idx = _coachSchema_(data[0]);
   if (!idx) return [];
   const cell = function(row, key) { return idx[key] === undefined ? '' : sanitizeValue(row[idx[key]]); };
@@ -1071,12 +1090,12 @@ function _renameCoachEverywhere_(coachId, newName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const md = ss.getSheetByName('MemberData');
   if (md) {
-    const rows = md.getDataRange().getValues();
+    const rows = _vals_(md);
     for (let i = 1; i < rows.length; i++) if (String(rows[i][10]) === coachId) md.getRange(i + 1, 12).setValue(newName);
   }
   const sc = ss.getSheetByName('Schedules');
   if (sc) {
-    const rows = sc.getDataRange().getValues();
+    const rows = _vals_(sc);
     for (let i = 1; i < rows.length; i++) {
       if (String(rows[i][8]) === coachId && String(rows[i][7]).toLowerCase() !== 'completed') sc.getRange(i + 1, 10).setValue(newName);
     }
@@ -1093,11 +1112,11 @@ function _coachUsage_() {
     (usage[id] || (usage[id] = { sessions: 0, clients: 0, logEntries: 0 }))[key]++;
   };
   const sc = ss.getSheetByName('Schedules');
-  if (sc) sc.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[8], 'sessions'); });
+  if (sc) _vals_(sc).slice(1).forEach(function(r) { bump(r[8], 'sessions'); });
   const md = ss.getSheetByName('MemberData');
-  if (md) md.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[10], 'clients'); });
+  if (md) _vals_(md).slice(1).forEach(function(r) { bump(r[10], 'clients'); });
   const lg = ss.getSheetByName('Members');
-  if (lg) lg.getDataRange().getValues().slice(1).forEach(function(r) { bump(r[7], 'logEntries'); });
+  if (lg) _vals_(lg).slice(1).forEach(function(r) { bump(r[7], 'logEntries'); });
   return usage;
 }
 
@@ -1185,7 +1204,7 @@ function assignUnassignedToSelf(token, opts) {
     let sessions = 0, clients = 0;
     const sc = ss.getSheetByName('Schedules');
     if (sc) {
-      const rows = sc.getDataRange().getValues();
+      const rows = _vals_(sc);
       for (let i = 1; i < rows.length; i++) {
         if (!blank(rows[i][8]) || String(rows[i][7]).toLowerCase() === 'completed' || String(rows[i][0]) === '') continue;
         sessions++;
@@ -1194,7 +1213,7 @@ function assignUnassignedToSelf(token, opts) {
     }
     const md = ss.getSheetByName('MemberData');
     if (md) {
-      const rows = md.getDataRange().getValues();
+      const rows = _vals_(md);
       for (let i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === '' || !blank(rows[i][10])) continue;
         clients++;
@@ -1303,21 +1322,26 @@ const MEMBERS_LOG_HEADERS = ["Transaksi ID", "Member ID", "Tanggal", "Jenis Tran
  */
 function _getMemberDataSheet_() {
   const sheet = getOrCreateSheet_('MemberData', MEMBERDATA_HEADERS);
-  sheet.getRange('E:E').setNumberFormat('@');
-  sheet.getRange('M:M').setNumberFormat('@');
-  // Sheet lama belum punya kolom N "Kunci Link" (kunci sesi klien): tambahkan
-  // headernya — HANYA kalau sel N1 masih kosong, supaya kolom buatan sendiri tidak tertimpa.
-  const keyHeader = sheet.getRange(1, MEMBER_KEY_COL);
-  if (keyHeader.getValue() === '') {
-    keyHeader.setValue('Kunci Link');
-    keyHeader.setFontWeight('bold');
-  }
+  _schemaOnce_('fmt:MemberData', function() {
+    sheet.getRange('E:E').setNumberFormat('@');
+    sheet.getRange('M:M').setNumberFormat('@');
+    // Sheet lama belum punya kolom N "Kunci Link" (kunci sesi klien): tambahkan
+    // headernya — HANYA kalau sel N1 masih kosong, supaya kolom buatan sendiri tidak tertimpa.
+    const keyHeader = sheet.getRange(1, MEMBER_KEY_COL);
+    if (keyHeader.getValue() === '') {
+      keyHeader.setValue('Kunci Link');
+      keyHeader.setFontWeight('bold');
+    }
+  });
   return sheet;
 }
 
 // true kalau kolom N MemberData memang kolom "Kunci Link".
+let _keyColReady_ = false;
 function _memberKeyColumnReady_(sheet) {
-  return sheet.getRange(1, MEMBER_KEY_COL).getValue() === 'Kunci Link';
+  if (_keyColReady_) return true;
+  _keyColReady_ = sheet.getRange(1, MEMBER_KEY_COL).getValue() === 'Kunci Link';
+  return _keyColReady_;
 }
 
 /**
@@ -1328,9 +1352,11 @@ function _memberKeyColumnReady_(sheet) {
 const MEMBERS_LOG_PRICE_COL = 11;   // K "Harga": harga paket saat transaksi (untuk laporan pendapatan)
 function _getMembersLogSheet_() {
   const sheet = getOrCreateSheet_('Members', MEMBERS_LOG_HEADERS);
-  sheet.getRange('C:C').setNumberFormat('@');
-  const priceHeader = sheet.getRange(1, MEMBERS_LOG_PRICE_COL);
-  if (priceHeader.getValue() === '') { priceHeader.setValue('Harga'); priceHeader.setFontWeight('bold'); }
+  _schemaOnce_('fmt:Members', function() {
+    sheet.getRange('C:C').setNumberFormat('@');
+    const priceHeader = sheet.getRange(1, MEMBERS_LOG_PRICE_COL);
+    if (priceHeader.getValue() === '') { priceHeader.setValue('Harga'); priceHeader.setFontWeight('bold'); }
+  });
   return sheet;
 }
 
@@ -1360,7 +1386,7 @@ function _tulisLogTransaksiMember_(memberId, jenis, paketId, namaPaket, jumlahSe
 function getMemberTransactionLog(token) {
   requireAdmin_(token);
   const logSheet = _getMembersLogSheet_();
-  const logData = logSheet.getDataRange().getValues();
+  const logData = _vals_(logSheet);
   if (logData.length <= 1) return [];
 
   // Index nama & foto klien saat ini, keyed by ID
@@ -1452,13 +1478,13 @@ function migrateSplitMembersData() {
   }
 
   const memberDataSheet = _getMemberDataSheet_();
-  const existingRows = memberDataSheet.getDataRange().getValues();
+  const existingRows = _vals_(memberDataSheet);
   if (existingRows.length > 1) {
     Logger.log('MemberData sudah punya data, migrasi dibatalkan (supaya tidak dobel).');
     return { status: 'skipped', reason: 'MemberData sudah terisi' };
   }
 
-  const oldData = oldSheet.getDataRange().getValues();
+  const oldData = _vals_(oldSheet);
   if (oldData.length <= 1) {
     Logger.log('Sheet Members lama kosong, tidak ada yang dimigrasi.');
     return { status: 'skipped', reason: 'Members lama kosong' };
@@ -1552,7 +1578,7 @@ function getMembers(token) {
 
 function _getMembersAll_() {
   const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   if (data.length <= 1) return [];
   // Kunci sesi (kolom N) TIDAK ikut dikirim.
   const list = data.slice(1).filter(function(row) { return row[0]; }).map(_memberPublicProfile_);
@@ -1604,7 +1630,7 @@ function _addMemberInternal_(memberData, options) {
   lock.waitLock(20000);
   try {
     const sheet = _getMemberDataSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
 
     // 0. Cek apakah No WA ini sudah pernah terdaftar sebagai klien (deteksi klien lama)
     const existingRowIndex = _findMemberRowIndexByPhone_(data, memberData.phone); // index di `data` (0-based, termasuk header)
@@ -1746,7 +1772,7 @@ function updateMemberProfile(token, memberData) {
 
 function _updateMemberProfile_(memberData) {
   const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   const targetId = String(memberData.id).trim();
 
   for (let i = 1; i < data.length; i++) {
@@ -1905,7 +1931,7 @@ function deleteMember(token, memberId) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const memSheet = _getMemberDataSheet_();
 
-    const memData = memSheet.getDataRange().getValues();
+    const memData = _vals_(memSheet);
     const targetId = String(memberId).trim();
     let rowToDelete = -1;
     let deletedName = '';
@@ -1922,7 +1948,7 @@ function deleteMember(token, memberId) {
 
     const schSheet = ss.getSheetByName('Schedules');
     if (schSheet) {
-      const schData = schSheet.getDataRange().getValues();
+      const schData = _vals_(schSheet);
       for (let i = schData.length - 1; i >= 1; i--) {
         if (String(schData[i][1]).trim() === targetId) {
           schSheet.deleteRow(i + 1);
@@ -2075,6 +2101,10 @@ function getPublicSchedules(memberToken) {
  * openSlots datang dari cache server bersama (versi dibaca SEBELUM Schedules dibaca).
  */
 function getPortalBootstrap(memberToken) {
+  return _withReadMemo_(function() { return _portalBootstrap_(memberToken); });
+}
+
+function _portalBootstrap_(memberToken) {
   let found = null, authLost = '';
   if (memberToken) {
     try { found = requireMember_(memberToken); } catch (e) { authLost = String(e.message || e); }
@@ -2180,13 +2210,15 @@ function _portalHorizonDays_() {
 /** Panel admin: data utama dalam SATU panggilan (klien, jadwal, coach, paket, jam operasional). */
 function getAdminBootstrap(token) {
   requireAdmin_(token);
-  return {
-    members: getMembers(token),
-    schedules: _getSchedulesAll_(),
-    coaches: getCoachesAdmin(token),
-    priceList: getPriceList(),
-    businessHours: _businessHours_()
-  };
+  return _withReadMemo_(function() {
+    return {
+      members: getMembers(token),
+      schedules: _getSchedulesAll_(),
+      coaches: getCoachesAdmin(token),
+      priceList: getPriceList(),
+      businessHours: _businessHours_()
+    };
+  });
 }
 
 /** Panel admin: data susulan dalam SATU panggilan (riwayat transaksi, ringkasan PR, perpanjangan). */
@@ -2241,18 +2273,38 @@ function _ensureScheduleClassHeader_(sheet) {
 
 // Memo per eksekusi untuk bundle baca-saja (getPortalMore, dst.): Schedules dibaca sekali. Hanya diisi oleh _withSchedulesMemo_.
 let _schedMemo_ = null;
-function _withSchedulesMemo_(fn) {
-  const prev = _schedMemo_, prevProg = _progMemo_;
-  _schedMemo_ = _getSchedulesAll_();
+let _valsMemo_ = null;
+/**
+ * Isi sheet (getDataRange().getValues()) dibaca SEKALI per eksekusi di dalam bundle baca-saja
+ * (_withSchedulesMemo_ / _withReadMemo_). Di luar bundle langsung membaca sheet, jadi penulis tidak pernah melihat data basi.
+ * Baris yang dikembalikan dipakai bersama: jangan diubah oleh pemanggil.
+ */
+function _vals_(sheet) {
+  if (!_valsMemo_) return sheet.getDataRange().getValues();
+  const k = sheet.getName();
+  if (!_valsMemo_[k]) _valsMemo_[k] = sheet.getDataRange().getValues();
+  return _valsMemo_[k].slice();
+}
+/** Seperti _withSchedulesMemo_ tapi tanpa membaca Schedules dulu (untuk bootstrap yang bisa tanpa login). */
+function _withReadMemo_(fn) {
+  const prevV = _valsMemo_, prevProg = _progMemo_;
+  _valsMemo_ = prevV || {};
   _progMemo_ = { rows: null };
-  try { return fn(); } finally { _schedMemo_ = prev; _progMemo_ = prevProg; }
+  try { return fn(); } finally { _valsMemo_ = prevV; _progMemo_ = prevProg; }
+}
+function _withSchedulesMemo_(fn) {
+  const prev = _schedMemo_, prevV = _valsMemo_, prevProg = _progMemo_;
+  _valsMemo_ = prevV || {};
+  _progMemo_ = { rows: null };
+  _schedMemo_ = _getSchedulesAll_();
+  try { return fn(); } finally { _schedMemo_ = prev; _valsMemo_ = prevV; _progMemo_ = prevProg; }
 }
 
 function _getSchedulesAll_() {
   if (_schedMemo_) return _schedMemo_;
   const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID", "Kelas ID"];
   const sheet = getOrCreateSheet_('Schedules', headers);
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   if (data.length <= 1) return [];
   return data.slice(1).map(function(row) {
     return {
@@ -2584,7 +2636,7 @@ function deleteRecurringGroup(token, groupId) {
     const schSheet = ss.getSheetByName('Schedules');
     if (!schSheet) throw new Error('Sheet Schedules tidak ditemukan');
 
-    const schData = schSheet.getDataRange().getValues();
+    const schData = _vals_(schSheet);
     const rowsToDelete = []; // simpan index (1-based row number di sheet), urut DESC biar aman saat deleteRow berturut-turut
     const completedMemberIds = []; // memberId yang sesinya completed & perlu dikembalikan kuotanya
     let memberName = '';
@@ -2609,7 +2661,7 @@ function deleteRecurringGroup(token, groupId) {
     // Kembalikan kuota untuk tiap sesi completed yang ikut terhapus
     if (completedMemberIds.length > 0) {
       const memSheet = _getMemberDataSheet_();
-      const memData = memSheet.getDataRange().getValues();
+      const memData = _vals_(memSheet);
       completedMemberIds.forEach(function(memberId) {
         for (let i = 1; i < memData.length; i++) {
           if (memData[i][0] === memberId) {
@@ -2644,7 +2696,7 @@ function updateScheduleData(token, scheduleData) {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
     if (!sheet) throw new Error('Sheet Schedules tidak ditemukan');
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === scheduleData.id) {
         sheet.getRange(i + 1, 5).setValue(scheduleData.start);
@@ -2785,7 +2837,7 @@ function updateScheduleCoach(token, scheduleId, coachId) {
   const coachName = picked ? picked.name : '';
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
   if (!sheet) throw new Error('Sheet Jadwal tidak ditemukan');
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === scheduleId) {
       sheet.getRange(i + 1, 9).setValue(coachId);
@@ -3015,7 +3067,7 @@ function markSchedulesAsRead(token, ids) {
   if (!Array.isArray(ids)) ids = [];
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
   if (!sheet) return;
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   for (let i = 1; i < data.length; i++) {
     if (ids.includes(data[i][0])) {
       sheet.getRange(i + 1, 8).setValue('read');
@@ -3055,7 +3107,7 @@ function _completeSession_(scheduleId) {
   const schSheet = ss.getSheetByName('Schedules');
   if(!schSheet) throw new Error('Sheet Schedules tidak ditemukan');
   _ensureCompletedAtColumn_(schSheet);
-  const schData = schSheet.getDataRange().getValues();
+  const schData = _vals_(schSheet);
   let schRow = -1;
   for (let i = 1; i < schData.length; i++) {
     if (schData[i][0] === scheduleId) { schRow = i; break; }
@@ -3066,7 +3118,7 @@ function _completeSession_(scheduleId) {
   const alreadyDone = String(schData[schRow][7]).toLowerCase() === 'completed';
 
   const memSheet = _getMemberDataSheet_();
-  const memData = memSheet.getDataRange().getValues();
+  const memData = _vals_(memSheet);
   let memRow = -1;
   for (let i = 1; i < memData.length; i++) {
     if (String(memData[i][0]).trim() === memberId) { memRow = i; break; }
@@ -3132,7 +3184,7 @@ function _deleteSchedule_(scheduleId) {
     const schSheet = ss.getSheetByName('Schedules');
     if (!schSheet) throw new Error('Sheet Schedules tidak ditemukan');
 
-    const schData = schSheet.getDataRange().getValues();
+    const schData = _vals_(schSheet);
     let rowToDelete = -1;
     let memberId = null;
     let wasCompleted = false;
@@ -3154,7 +3206,7 @@ function _deleteSchedule_(scheduleId) {
 
     if (wasCompleted && memberId) {
       const memSheet = _getMemberDataSheet_();
-      const memData = memSheet.getDataRange().getValues();
+      const memData = _vals_(memSheet);
       for (let i = 1; i < memData.length; i++) {
         if (memData[i][0] === memberId) {
           let currentUsed = parseInt(memData[i][9]) || 0;
@@ -3569,7 +3621,7 @@ function _plCell_(row, idx, key) { return idx[key] === undefined ? '' : row[idx[
 
 /** Semua paket (aktif & nonaktif) dalam urutan tampil: kategori menurut kemunculan pertama, lalu Urutan, lalu baris sheet. */
 function _readPackages_(sheet, idx) {
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   const list = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -3618,7 +3670,7 @@ function _truthyCell_(v) { return v === true || String(v).trim().toUpperCase() =
 /** Kursi terisi per paket: klien yang masih punya sisa sesi di paket itu (klien yang kuotanya habis melepas kursi). */
 function _packageSeats_() {
   const seats = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_getMemberDataSheet_()).slice(1).forEach(function(r) {
     const id = String(r[6] || '').trim();
     if (!id || String(r[0]).trim() === '') return;
     if ((parseInt(r[9], 10) || 0) >= (parseInt(r[8], 10) || 0)) return;
@@ -3628,8 +3680,12 @@ function _packageSeats_() {
 }
 
 function getPriceList() {
-  const ctx = _priceListSheetAndColumns_();
-  const list = _readPackages_(ctx.sheet, ctx.idx).filter(function(p) { return p.aktif; });
+  // Paket jarang berubah: bagian tetapnya dari cache bersama (dibuang oleh savePackage dkk. lewat _bustShared_).
+  // Jumlah terisi kelas berubah tiap ada yang daftar, jadi dihitung ulang setiap kali (hanya bila ada kelas).
+  const list = _sharedCached_('packages', function() {
+    const ctx = _priceListSheetAndColumns_();
+    return _readPackages_(ctx.sheet, ctx.idx).filter(function(p) { return p.aktif; });
+  });
   const seats = list.some(function(p) { return p.tipe === 'kelas'; }) ? _packageSeats_() : {};
   return list.map(function(p) {
     const out = {
@@ -3662,11 +3718,11 @@ function getPriceListPublicImpl_() {
 
 function _packageUsage_() {
   const members = {}, log = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_getMemberDataSheet_()).slice(1).forEach(function(r) {
     const id = String(r[6] || '').trim();
     if (id) members[id] = (members[id] || 0) + 1;
   });
-  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_getMembersLogSheet_()).slice(1).forEach(function(r) {
     const id = String(r[4] || '').trim();
     if (id) log[id] = (log[id] || 0) + 1;
   });
@@ -3884,7 +3940,7 @@ const PROGRESS_SIDES = ['depan', 'samping'];
 
 function _progressSheet_() {
   const sheet = getOrCreateSheet_('Progress', PROGRESS_HEADERS);
-  sheet.getRange('C:C').setNumberFormat('@');
+  _schemaOnce_('fmt:Progress', function() { sheet.getRange('C:C').setNumberFormat('@'); });
   return sheet;
 }
 
@@ -3936,7 +3992,7 @@ function _validProgressDate_(iso, today, maxBackDays) {
 function _readProgress_(memberId) {
   const id = String(memberId).trim();
   const out = [];
-  _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_progressSheet_()).slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== id || !r[0]) return;
     const e = { id: String(r[0]), tanggal: String(r[2]), oleh: String(r[5] || 'klien') };
     PROGRESS_MEASURES.forEach(function(m) { const v = r[m.col - 1]; e[m.key] = (v === '' || v == null) ? '' : Number(v); });
@@ -3949,7 +4005,7 @@ function _readProgress_(memberId) {
 function _readProgressPhotos_(memberId) {
   const id = String(memberId).trim();
   const out = [];
-  _progressPhotosSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_progressPhotosSheet_()).slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== id || !r[0]) return;
     out.push({ id: String(r[0]), tanggal: String(r[2]), sisi: String(r[3]), oleh: String(r[5] || 'klien') });
   });
@@ -3987,7 +4043,7 @@ function _saveMeasurement_(memberId, tanggal, vals, oleh) {
   try {
     const sheet = _progressSheet_();
     _ensureProgressColumns_(sheet);
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     const now = new Date().toISOString();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][1]).trim() === String(memberId).trim() && String(data[i][2]) === tanggal) {
@@ -4012,7 +4068,7 @@ function _deleteMeasurement_(id, memberIdOrNull) {
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
     const sheet = _progressSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     const rid = String(id == null ? '' : id).trim();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) !== rid) continue;
@@ -4232,7 +4288,7 @@ function _photoDataUrl_(fileId) {
 
 function _findPhotoRow_(photoId) {
   const rid = String(photoId == null ? '' : photoId).trim();
-  const data = _progressPhotosSheet_().getDataRange().getValues();
+  const data = _vals_(_progressPhotosSheet_());
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === rid) return { rowNum: i + 1, memberId: String(data[i][1]).trim(), fileId: String(data[i][4]) };
   }
@@ -4282,7 +4338,7 @@ function deleteMemberMeasurement(token, id) {
   requireAdmin_(token);
   const sheetRow = (function() {
     const rid = String(id == null ? '' : id).trim();
-    const data = _progressSheet_().getDataRange().getValues();
+    const data = _vals_(_progressSheet_());
     for (let i = 1; i < data.length; i++) if (String(data[i][0]) === rid) return String(data[i][1]).trim();
     return null;
   })();
@@ -4337,7 +4393,7 @@ function requestRenewal(memberToken, packageId, coachId) {
   let id;
   try {
     const sheet = _renewalSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     const now = new Date().toISOString();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][1]).trim() === memberId && String(data[i][3]) === 'menunggu') {
@@ -4365,7 +4421,7 @@ function requestRenewal(memberToken, packageId, coachId) {
 function _renewalFor_(row) {
   const memberId = String(row[0]).trim();
   let last = null;
-  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_renewalSheet_()).slice(1).forEach(function(r) {
     if (!r[0] || String(r[1]).trim() !== memberId || String(r[3]) === 'dibatalkan') return;
     last = _renewalFromRow_(r);
   });
@@ -4385,12 +4441,12 @@ function getRenewalRequests(token, opts) {
   if (isNaN(limit) || limit < 1) limit = 50;
   if (limit > 200) limit = 200;
   const members = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
+  _vals_(_getMemberDataSheet_()).slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
   const pkgNames = {};
   const ctx = _priceListSheetAndColumns_();
   _readPackages_(ctx.sheet, ctx.idx).forEach(function(p) { pkgNames[p.id] = p.namaPaket; });
   const list = [];
-  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_renewalSheet_()).slice(1).forEach(function(r) {
     if (!r[0]) return;
     const q = _renewalFromRow_(r);
     if (want ? q.status !== want : q.status === 'dibatalkan') return;
@@ -4419,7 +4475,7 @@ function decideRenewal(token, id, approve) {
   let req, rowNum;
   try {
     const sheet = _renewalSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) !== rid) continue;
       req = _renewalFromRow_(data[i]); rowNum = i + 1;
@@ -4493,7 +4549,7 @@ function _maskNamaTestimoni_(fullName) {
 function _readEvaluasiRows_() {
   const ss = SpreadsheetApp.openById(EVAL_SHEET_ID);
   const sheet = ss.getSheets()[0];
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   return data.slice(1).filter(function(row) { return row[2]; }); // skip header & baris kosong (tanpa Nama Lengkap)
 }
 
@@ -4679,7 +4735,7 @@ function getPackageTrendStats(token, month, year) {
 function _packageTrendStats_(month, year) {
   try {
     const sheet = _getMembersLogSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     if (data.length <= 1) return [];
 
     const statsMap = {}; // paketId -> { namaPaket, count, totalSesi }
@@ -4746,7 +4802,7 @@ function _allPackagePrices_() {
 
 function _revenueSummary_(month, year) {
   const result = { total: 0, grossTotal: 0, share: REVENUE_SHARE, count: 0, byPackage: [] };
-  const log = _getMembersLogSheet_().getDataRange().getValues();
+  const log = _vals_(_getMembersLogSheet_());
   if (log.length <= 1) return result;
   const prices = _allPackagePrices_();
   const map = {};
@@ -4803,7 +4859,7 @@ function getLandingStats() {
     let completedSessions = 0;
     const schSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
     if (schSheet) {
-      const schData = schSheet.getDataRange().getValues();
+      const schData = _vals_(schSheet);
       for (let i = 1; i < schData.length; i++) {
         if (String(schData[i][7]).toLowerCase() === 'completed') completedSessions++;
       }
@@ -4965,7 +5021,7 @@ function _withTaskLock_(fn) {
 
 /** Cari baris Task (1-based di sheet) berdasarkan ID. null kalau tidak ada. */
 function _findTaskRow_(sheet, taskId) {
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(taskId)) return { rowNum: i + 1, row: data[i] };
   }
@@ -5107,7 +5163,7 @@ function getTasksForMember(token, memberId) {
   memberId = String(memberId == null ? '' : memberId).trim();
   if (!memberId) throw new Error('Klien wajib dipilih.');
 
-  const data = _tasksSheet_().getDataRange().getValues();
+  const data = _vals_(_tasksSheet_());
   const list = [];
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] && String(data[i][1]).trim() === memberId) list.push(_taskRowToObj_(data[i]));
@@ -5134,7 +5190,7 @@ function getTasksForMember(token, memberId) {
  */
 function getTaskSummary(token) {
   requireAdmin_(token);
-  const data = _tasksSheet_().getDataRange().getValues();
+  const data = _vals_(_tasksSheet_());
   const summary = {};
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
@@ -5162,7 +5218,7 @@ const TASK_CLIENT_DONE_LIMIT = 20; // PR selesai/dilewati yang ikut dikirim ke p
  */
 function _myTasksFor_(row) {
   const memberId = String(row[0]).trim();
-  const data = _tasksSheet_().getDataRange().getValues();
+  const data = _vals_(_tasksSheet_());
   const todo = [], finished = [];
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0] || String(data[i][1]).trim() !== memberId) continue;
@@ -5249,7 +5305,7 @@ function _spawnNextTaskInstance_(sheet, row) {
   const next = _nextRecurrence_(String(row[5] == null ? '' : row[5]).trim(), repeat);
   if (!next) return null;
 
-  const data = sheet.getDataRange().getValues();
+  const data = _vals_(sheet);
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][12]).trim() === groupId && String(data[i][6]) === 'todo') return null;
   }
@@ -5266,7 +5322,7 @@ function _spawnNextTaskInstance_(sheet, row) {
 function _rolloverRecurringTasks_() {
   return _withTaskLock_(function() {
     const sheet = _tasksSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     let count = 0;
@@ -5292,7 +5348,7 @@ function deleteTaskGroup(token, groupId) {
   if (!gid) throw new Error('ID grup PR wajib diisi.');
   return _withTaskLock_(function() {
     const sheet = _tasksSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     let deleted = 0;
     for (let i = data.length - 1; i >= 1; i--) { // dari bawah supaya nomor baris tidak bergeser
       if (String(data[i][12]).trim() === gid) { sheet.deleteRow(i + 1); deleted++; }
@@ -5320,7 +5376,7 @@ function _taskTemplatesSheet_() {
 /** Admin: daftar template PR (terbaru di atas). */
 function getTaskTemplates(token) {
   requireAdmin_(token);
-  const data = _taskTemplatesSheet_().getDataRange().getValues();
+  const data = _vals_(_taskTemplatesSheet_());
   const list = [];
   for (let i = 1; i < data.length; i++) {
     const r = data[i];
@@ -5349,7 +5405,7 @@ function saveTaskTemplate(token, data) {
 
   return _withTaskLock_(function() {
     const sheet = _taskTemplatesSheet_();
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     const key = title.toLowerCase();
     for (let i = 1; i < rows.length; i++) {
       if (String(rows[i][1]).trim().toLowerCase() === key) {
@@ -5373,7 +5429,7 @@ function deleteTaskTemplate(token, templateId) {
   if (!tid) throw new Error('ID template wajib diisi.');
   return _withTaskLock_(function() {
     const sheet = _taskTemplatesSheet_();
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     for (let i = 1; i < rows.length; i++) {
       if (String(rows[i][0]) === tid) { sheet.deleteRow(i + 1); return { status: 'success' }; }
     }
@@ -5404,7 +5460,7 @@ function _coachRules_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachAvailability');
   if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(sheet).slice(1).forEach(function(r) {
     if (String(r[0]).trim() === '') return;
     out.push({ coachId: String(r[0]).trim(), hari: String(r[1]).toLowerCase().trim(), startHour: _hourCell_(r[2]), endHour: _hourCell_(r[3]) });
   });
@@ -5422,7 +5478,7 @@ function _coachTimeOff_(adminView) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
   if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(sheet).slice(1).forEach(function(r) {
     if (String(r[0]).trim() === '') return;
     const row = {
       id: String(r[0]), coachId: String(r[1]).trim(), from: _isoDateCell_(r[2]), to: _isoDateCell_(r[3]),
@@ -5830,7 +5886,7 @@ function saveCoachAvailabilityImpl_(token, coachId, week) {
   try {
     const sheet = getOrCreateSheet_('CoachAvailability', COACH_AVAIL_HEADERS);
     sheet.getRange('C:D').setNumberFormat('@');
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     for (let i = data.length - 1; i >= 1; i--) if (String(data[i][0]).trim() === coachId) sheet.deleteRow(i + 1);
     rows.forEach(function(r) { sheet.appendRow(r); });
     _bustSlots_();   // sesudah menulis: buang cache jam kosong
@@ -5896,7 +5952,7 @@ function deleteCoachTimeOff(token, id) {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
     if (!sheet) throw new Error('Cuti tidak ditemukan.');
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(id)) {
         sheet.deleteRow(i + 1);
@@ -6002,7 +6058,7 @@ function _coachHub_(now) {
     else if (k === 'klienAktif') actual = stats.activeClients;
     else if (k === 'pendapatan') actual = _revenueSummary_(p[1], p[0]).total;
     else if (k === 'klienBaru') {
-      _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+      _vals_(_getMembersLogSheet_()).slice(1).forEach(function(r) {
         if (String(r[3]) !== 'Baru') return;
         const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
         if (t.length === 3 && parseInt(t[1], 10) === p[1] && parseInt(t[2], 10) === p[0]) actual++;
@@ -6032,7 +6088,7 @@ function _monthSummary_(y, m) {
     const a = new Date(s.start), b = new Date(s.end || s.start);
     if (!isNaN(a.getTime()) && !isNaN(b.getTime())) hours += Math.max(0, (b - a) / 3600000);
   });
-  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(_getMembersLogSheet_()).slice(1).forEach(function(r) {
     if (String(r[3]) !== 'Baru') return;
     const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
     if (t.length === 3 && parseInt(t[1], 10) === m && parseInt(t[2], 10) === y) newClients++;
@@ -6110,7 +6166,7 @@ function _careSheet_(name, headers) { return getOrCreateSheet_(name, headers); }
 function _latestRowFor_(sheetName, memberId) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   if (!sheet) return null;
-  const rows = sheet.getDataRange().getValues();
+  const rows = _vals_(sheet);
   for (let i = rows.length - 1; i >= 1; i--) if (String(rows[i][1]).trim() === memberId) return { row: rows[i], rowNum: i + 1, sheet: sheet };
   return null;
 }
@@ -6120,7 +6176,7 @@ function _fitnessByMember_(memberId) {
   const out = {};
   FITNESS_TESTS.forEach(function(t) { out[t.id] = []; });
   if (!sheet) return out;
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(sheet).slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== memberId || !out[String(r[3])]) return;
     out[String(r[3])].push({ id: String(r[0]), tanggal: String(r[2]), nilai: Number(r[4]) });
   });
@@ -6280,7 +6336,7 @@ function saveFitnessTests(token, memberId, data) {
   try {
     const sheet = _careSheet_('FitnessTests', FITNESS_HEADERS);
     sheet.getRange('C:C').setNumberFormat('@');
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     const now = new Date().toISOString();
     Object.keys(values).forEach(function(tid) {
       let found = 0;
@@ -6303,7 +6359,7 @@ function deleteFitnessTest(token, testId) {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FitnessTests');
     if (!sheet) throw new Error('Hasil tes tidak ditemukan.');
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     for (let i = 1; i < rows.length; i++) if (String(rows[i][0]) === String(testId)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
     throw new Error('Hasil tes tidak ditemukan.');
   } finally {
@@ -6359,7 +6415,7 @@ function _contentStatus_(c, today) {
 function _contentAll_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Content');
   if (!sheet || sheet.getLastRow() < 2) return [];
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(_contentFromRow_);
+  return _vals_(sheet).slice(1).filter(function(r) { return r[0]; }).map(_contentFromRow_);
 }
 
 /** Klien (bootstrap): waktu pembuatan konten tayang terbaru, untuk titik "baru". Kosong bila tak ada. */
@@ -6404,7 +6460,7 @@ function saveContentImpl_(token, data) {
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
     const sheet = _contentSheet_();
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     const id = String(data.id == null ? '' : data.id).trim();
     if (id) {
       for (let i = 1; i < rows.length; i++) {
@@ -6431,7 +6487,7 @@ function deleteContentImpl_(token, id) {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Content');
     if (sheet) {
-      const rows = sheet.getDataRange().getValues();
+      const rows = _vals_(sheet);
       for (let i = 1; i < rows.length; i++) if (String(rows[i][0]) === String(id)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
     }
     throw new Error('Konten tidak ditemukan.');
@@ -6681,7 +6737,7 @@ let _progMemo_ = null;
 function _programRows_() {
   if (_progMemo_ && _progMemo_.rows) return _progMemo_.rows;
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramItems');
-  const rows = !sheet || sheet.getLastRow() < 2 ? [] : sheet.getDataRange().getValues().slice(1);
+  const rows = !sheet || sheet.getLastRow() < 2 ? [] : _vals_(sheet).slice(1);
   if (_progMemo_) _progMemo_.rows = rows;
   return rows;
 }
@@ -6720,7 +6776,7 @@ function _programWrite_(memberId, templateName, days, opts) {
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
     const sheet = _programSheet_();
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     for (let i = rows.length - 1; i >= 1; i--) {
       const r = rows[i];
       if (r[0] && _programRowMine_(r, memberId, templateName, opts.own)) sheet.deleteRow(i + 1);
@@ -6779,7 +6835,7 @@ function getProgramTemplates(token) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramItems');
   const names = [];
   if (sheet && sheet.getLastRow() > 1) {
-    sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+    _vals_(sheet).slice(1).forEach(function(r) {
       if (r[0] && !String(r[1]).trim() && String(r[2]).trim() && names.indexOf(String(r[2])) === -1) names.push(String(r[2]));
     });
   }
@@ -6809,7 +6865,7 @@ function setTemplateExplore(token, name, on) {
   const nm = _templateName_(name);
   return _locked_(function() {
     const sheet = _programSheet_();
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     let found = 0;
     for (let i = 1; i < rows.length; i++) {
       if (rows[i][0] && _programRowMine_(rows[i], null, nm)) { sheet.getRange(i + 1, 21).setValue(on ? 1 : ''); found++; }
@@ -6843,7 +6899,7 @@ function _programLogsFor_(memberId) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProgramLog');
   if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; })
+  return _vals_(sheet).slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; })
     .map(function(r) { return { tanggal: String(r[2]), hari: String(r[3]), selesai: String(r[4] || '').split(',').filter(String).map(Number) }; })
     .sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); });
 }
@@ -6995,7 +7051,7 @@ function logMyProgramDay(memberToken, hari, selesai) {
   let wasComplete = false;
   try {
     const sheet = _programLogSheet_();
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     let found = 0;
     for (let i = 1; i < rows.length; i++) if (String(rows[i][1]).trim() === id && String(rows[i][2]) === today && String(rows[i][3]) === day.hari) { found = i + 1; break; }
     if (found) {
@@ -7131,7 +7187,7 @@ function _workoutRowsOf_(memberId) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
   if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; });
+  return _vals_(sheet).slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; });
 }
 
 /** Hitungan untuk badge: hari latihan yang dicatat dan jumlah rekor pribadi. Dihitung, tidak disimpan. */
@@ -7171,7 +7227,7 @@ function _parseWorkoutSession_(s) {
 /** Upsert satu baris WorkoutSessions per (klien, tanggal). Dipanggil di dalam lock _workoutSave_. */
 function _workoutSessionUpsert_(memberId, tanggal, scheduleId, ses, oleh) {
   const sheet = _workoutSessionSheet_();
-  const rows = sheet.getDataRange().getValues();
+  const rows = _vals_(sheet);
   const now = new Date().toISOString();
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][1]).trim() === memberId && String(rows[i][2]) === tanggal) {
@@ -7190,7 +7246,7 @@ function _workoutSessionsOf_(memberId) {
   if (!sheet || sheet.getLastRow() < 2) return [];
   const id = memberId == null ? null : String(memberId).trim();
   const num = function(v) { return v === '' || v == null ? '' : Number(v); };
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && (id == null || String(r[1]).trim() === id); })
+  return _vals_(sheet).slice(1).filter(function(r) { return r[0] && (id == null || String(r[1]).trim() === id); })
     .map(function(r) { return { memberId: String(r[1]).trim(), tanggal: String(r[2]), hari: String(r[4] || ''), durasi: num(r[7]), rasa: num(r[8]), catatan: String(r[9] || ''), oleh: String(r[10] || ''), diubah: String(r[11] || '') }; })
     .sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });
 }
@@ -7202,7 +7258,7 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh, session) {
     const sheet = _workoutSheet_();
     const keys = {};
     entries.forEach(function(e) { keys[e.key] = true; });
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     const beforeKeys = {};
     _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; })).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
     for (let i = rows.length - 1; i >= 1; i--) {
@@ -7390,7 +7446,7 @@ function _workoutFor_(row) {
   const id = String(row[0]).trim();
   const today = _todayWib_(), since = _addDaysIso_(today, -WORKOUT_LIMITS.readDays);
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  const all = sheet && sheet.getLastRow() >= 2 ? sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }) : [];
+  const all = sheet && sheet.getLastRow() >= 2 ? _vals_(sheet).slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }) : [];
   const g = _workoutGroup_(all.filter(function(r) { return String(r[2]) >= since; }));
   g.stats = _workoutStats_(g.days, today);
   // Estimasi 1RM terbaik sepanjang waktu per gerakan (untuk tanda 🏆 saat set dicatat).
@@ -7518,7 +7574,7 @@ function _workoutTickProgram_(memberId, entries) {
     const sheet = _programLogSheet_();
     const today = _todayWib_();
     hariList.forEach(function(hari) {
-      const rows = sheet.getDataRange().getValues();
+      const rows = _vals_(sheet);
       let found = 0, cur = [];
       for (let i = 1; i < rows.length; i++) if (String(rows[i][1]).trim() === memberId && String(rows[i][2]) === today && String(rows[i][3]) === hari) { found = i + 1; cur = String(rows[i][4] || '').split(',').filter(String).map(Number); break; }
       add[hari].forEach(function(n) { if (cur.indexOf(n) === -1) cur.push(n); });
@@ -7562,7 +7618,7 @@ function _readSheetRows_(name, fn, memberId) {
   if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
   const id = memberId == null ? null : String(memberId).trim();
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) { if (r[0] && (id === null || String(r[2 - (name === 'PackageEvaluations' ? 1 : 0)]).trim() === id)) out.push(fn(r)); });
+  _vals_(sheet).slice(1).forEach(function(r) { if (r[0] && (id === null || String(r[2 - (name === 'PackageEvaluations' ? 1 : 0)]).trim() === id)) out.push(fn(r)); });
   return out;
 }
 function _ratingsFor_(memberId) { return _readSheetRows_('SessionRatings', _ratingFromRow_, memberId); }
@@ -7603,7 +7659,7 @@ function rateSession(memberToken, scheduleId, stars, comment, consent) {
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
     const sheet = _ratingSheet_();
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     const now = new Date().toISOString();
     const vals = [n, text, consent ? 'ya' : ''];
     let found = 0;
@@ -7739,7 +7795,7 @@ function _notesForMember_(memberId) {
   if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) { if (r[0] && String(r[2]).trim() === id) out.push(_noteFromRow_(r)); });
+  _vals_(sheet).slice(1).forEach(function(r) { if (r[0] && String(r[2]).trim() === id) out.push(_noteFromRow_(r)); });
   out.sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });
   return out;
 }
@@ -7787,7 +7843,7 @@ function saveSessionNote(token, scheduleId, data) {
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
     const sheet = _sessionNotesSheet_();
-    const rows = sheet.getDataRange().getValues();
+    const rows = _vals_(sheet);
     const now = new Date().toISOString();
     const tanggal = Utilities.formatDate(new Date(sched.start), REMINDER_TZ, 'yyyy-MM-dd');
     let found = 0;
@@ -7891,11 +7947,11 @@ function _careList_(now) {
   if (!md) return [];
   const asmIds = {}, healthRows = {}, lastTest = {};
   const asm = ss.getSheetByName('Assessments');
-  if (asm) asm.getDataRange().getValues().slice(1).forEach(function(r) { asmIds[String(r[1]).trim()] = true; });
+  if (asm) _vals_(asm).slice(1).forEach(function(r) { asmIds[String(r[1]).trim()] = true; });
   const hs = ss.getSheetByName('HealthScreening');
-  if (hs) hs.getDataRange().getValues().slice(1).forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
+  if (hs) _vals_(hs).slice(1).forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
   const ft = ss.getSheetByName('FitnessTests');
-  if (ft) ft.getDataRange().getValues().slice(1).forEach(function(r) { const k = String(r[1]).trim(); if (!lastTest[k] || String(r[2]) > lastTest[k]) lastTest[k] = String(r[2]); });
+  if (ft) _vals_(ft).slice(1).forEach(function(r) { const k = String(r[1]).trim(); if (!lastTest[k] || String(r[2]) > lastTest[k]) lastTest[k] = String(r[2]); });
   const lastSession = {}, todaySession = {};
   _getSchedulesAll_().forEach(function(s) {
     const st = String(s.status || '').toLowerCase();
@@ -7907,7 +7963,7 @@ function _careList_(now) {
     if (st === 'completed' && (!lastSession[k] || day > lastSession[k])) lastSession[k] = day;
   });
   const out = [];
-  md.getDataRange().getValues().slice(1).forEach(function(r) {
+  _vals_(md).slice(1).forEach(function(r) {
     const id = String(r[0] || '').trim();
     if (!id) return;
     const rem = (parseInt(r[8], 10) || 0) - (parseInt(r[9], 10) || 0);
@@ -7999,7 +8055,7 @@ function _classPackage_(packageId) {
 
 /** Grup terbuka milik / berisi klien ini ({sheetRow, ...group}) atau null. */
 function _openGroupOf_(memberId) {
-  const data = _classGroupSheet_().getDataRange().getValues();
+  const data = _vals_(_classGroupSheet_());
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
     const g = _classGroupFromRow_(data[i]);
@@ -8022,7 +8078,7 @@ function _memberClassContext_(row) {
 
 function _publicGroup_(g, memberId) {
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
+  _vals_(_getMemberDataSheet_()).slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
   const pkg = _classPackage_(g.packageId);
   return {
     id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '',
@@ -8046,7 +8102,7 @@ function createClassGroup(memberToken) {
   try {
     if (_openGroupOf_(memberId)) throw new Error('Kamu sudah punya grup. Keluar dari grup itu dulu.');
     const sheet = _classGroupSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     const taken = {};
     data.slice(1).forEach(function(r) { taken[String(r[1])] = true; });
     g = { id: 'GRP-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), code: _newClassCode_(taken), packageId: pkg.id, creatorId: memberId, status: 'buka', createdAt: new Date().toISOString(), members: [memberId] };
@@ -8069,7 +8125,7 @@ function joinClassGroup(memberToken, code) {
   let g;
   try {
     const sheet = _classGroupSheet_();
-    const data = sheet.getDataRange().getValues();
+    const data = _vals_(sheet);
     let rowNum = -1;
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][1]) === kode && String(data[i][4]) === 'buka') { g = _classGroupFromRow_(data[i]); rowNum = i + 1; break; }
@@ -8123,8 +8179,8 @@ function getMyClassGroup(memberToken) { return _classGroupFor_(requireMember_(me
 function getClassGroups(token) {
   requireAdmin_(token);
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
-  return _classGroupSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[4]) === 'buka'; }).map(function(r) {
+  _vals_(_getMemberDataSheet_()).slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
+  return _vals_(_classGroupSheet_()).slice(1).filter(function(r) { return r[0] && String(r[4]) === 'buka'; }).map(function(r) {
     const g = _classGroupFromRow_(r);
     const pkg = _classPackage_(g.packageId);
     return { id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '', createdAt: g.createdAt, members: g.members.map(function(m) { return { id: m, name: names[m] || '' }; }) };
