@@ -2093,7 +2093,11 @@ html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr));
 .fin-bill-top, .fin-bill-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 .fin-bill-top .li-title { flex: 1 1 8rem; min-width: 0; }
 .fin-bill-amt { font-size: var(--fs-lg); white-space: nowrap; }
-@media (min-width: 768px) { .topbar { height: calc(4rem + var(--sa-t)); } .page-head { padding-top: 6px; margin-top: -4px; border-radius: 0 0 32px 32px; } }
+@media (min-width: 768px) {
+  .topbar { height: 0; min-height: 0; padding: 0; background: none; backdrop-filter: none; overflow: visible; }
+  .topbar-actions { position: absolute; top: 18px; right: max(var(--page-pad), var(--sa-r)); }
+  .page-head { margin-top: -4px; padding: 22px calc(var(--page-pad) + 60px) 24px var(--page-pad); border-radius: 0 0 32px 32px; min-height: 5.5rem; }
+}
 .sheet { overflow: hidden; }
 .form-grid .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 html.big-text .form-grid .two { grid-template-columns: minmax(0, 1fr); }
