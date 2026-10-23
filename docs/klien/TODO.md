@@ -8,6 +8,7 @@ Q1 fondasi
 - [x] T-1104 Kerapian awal (`#fff`, override KPI HP)
 - [x] T-1105 `tests/theme.test.js`
 
-Q2 mesin interpretasi (`Wawasan.gs`): T-1110…T-1116
+Q2 mesin interpretasi (`Wawasan.gs`)
+- [x] T-1110…T-1116 tafsir tubuh, kebugaran, hubungan, latihan, aktivitas, minggu ini; part `week` + `insight` di `getPortalMore`, `insight` (coach) di `getClientBundle`; `tests/insight.test.js`
 Q3 portal klien: T-1120…T-1129
 Q4 halaman Klien di panel: T-1130…T-1137

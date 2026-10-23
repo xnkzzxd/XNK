@@ -51,5 +51,7 @@ test('the bundle reads far less than the separate calls', () => {
   env.resetReads(); env.call('getClientBundle', t, 'PT-A'); const bundle = env.reads().total;
   env.resetReads();
   ['getTasksForMember', 'getMemberProgress', 'getClientCare', 'getMemberProgram', 'getWorkoutLog', 'getClientNutrition'].forEach(n => env.call(n, t, 'PT-A'));
-  assert.ok(bundle <= env.reads().total, bundle + ' vs ' + env.reads().total);
+  // Fase Q: bundle juga menghitung tafsir (insight) yang tidak punya panggilan lama; beri batas jelas untuk biayanya.
+  const INSIGHT_ALLOWANCE = 8;
+  assert.ok(bundle <= env.reads().total + INSIGHT_ALLOWANCE, bundle + ' vs ' + env.reads().total);
 });
