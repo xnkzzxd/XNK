@@ -378,8 +378,12 @@
   }
   function hostPostTheme() {
     if (window.top === window) return;
-    // Token --bg (bukan warna body yang sedang bertransisi).
-    const color = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toLowerCase();
+    // Di HP bagian atas layar adalah band hitam, jadi bilah status mengikuti --band; selain itu --bg.
+    // Token (bukan warna body yang sedang bertransisi).
+    const cs = getComputedStyle(document.documentElement);
+    const phone = window.matchMedia('(max-width: 767px)').matches;
+    let color = (phone ? cs.getPropertyValue('--band') : '').trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(color)) color = cs.getPropertyValue('--bg').trim().toLowerCase();
     if (!/^#[0-9a-f]{6}$/.test(color)) return;
     try { window.top.postMessage({ xnk: 'theme', color: color }, '*'); } catch (e) {}
   }
