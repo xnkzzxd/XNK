@@ -1295,7 +1295,7 @@ async function contrastReport(page) {
       await page.waitForTimeout(250);
       if (tab === 'gizi') {
         const gz = await page.evaluate(() => { const w = document.getElementById('profile-nut-wrap'); return { txt: w ? w.textContent : '', over: w ? w.scrollWidth - w.clientWidth : 99, tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size }; });
-        check(/Ringkasan/.test(gz.txt) && /Lengkapi data|Target harian/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
+        check(/Dasar perhitungan/.test(gz.txt) && /Lengkapi data|Target harian/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
       }
       await shot(page, 'phone-client-' + tab + '-' + scheme);
     }
@@ -1433,7 +1433,7 @@ async function contrastReport(page) {
     await page.click('#guide-tip .guide-x');
     await page.waitForTimeout(500);
     // Tab baru (Fase J4): tiap tab punya panduannya sendiri, sekali saja.
-    for (const [view, page_, title] of [['public-progress', 'progres', 'Pencapaian'], ['public-program', 'program', 'Latihan'], ['public-info', 'info', 'Info & Tips']]) {
+    for (const [view, page_, title] of [['public-progress', 'progres', 'Rapor tubuh'], ['public-program', 'program', 'Latihan'], ['public-info', 'info', 'Info & Tips']]) {
       await page.evaluate(v => window.navigate(v), view);
       await page.waitForTimeout(1700);
       check(await visible(page, '#guide-layer') && (await tipTitle(page)) === title, 'guide: the ' + page_ + ' tab shows its own guide first (' + title + ')');
