@@ -1680,7 +1680,21 @@
     const range = r ? '<div class="ih-range" role="group">' + r.options.map(function (o) {
       return '<button type="button" class="' + (o[0] === r.key ? 'on' : '') + '" onclick="' + r.onPick.replace('%k', o[0]) + '">' + h(o[1]) + '</button>';
     }).join('') + '</div>' : '';
-    return '<section class="card-ink insight-hero"><div class="ih-head"><span class="ih-eyebrow">' + h(cfg.eyebrow || '') + '</span>' + range + '</div>' + body + '</section>';
+    if (cfg.slim) {
+      // Ramping: satu baris (judul + kalimat | angka | tombol) untuk halaman yang isinya sedikit.
+      const st = cfg.stats && cfg.stats.length ? '<div class="ih-stats">' + cfg.stats.map(x => '<div class="ih-stat"><b>' + h(x.v) + (x.d ? ' <small>' + h(x.d) + '</small>' : '') + '</b><span>' + h(x.l) + '</span></div>').join('') + '</div>' : '';
+      return '<section class="card-ink insight-hero slim"><div class="ih-main"><span class="ih-eyebrow">' + h(cfg.eyebrow || '') + '</span>' + (cfg.text ? '<p class="ih-text">' + h(cfg.text) + '</p>' : '') + '</div>' + st +
+        (cfg.actions ? '<div class="ih-actions">' + cfg.actions + '</div>' : '') + '</section>';
+    }
+    return '<section class="card-ink insight-hero' + (cfg.empty ? ' is-empty' : '') + '"><div class="ih-head"><span class="ih-eyebrow">' + h(cfg.eyebrow || '') + '</span>' + range + '</div>' + body + '</section>';
+  }
+  // Tile angka (label kecil, angka besar, catatan) dan bagian lipat (accordion).
+  function mtileHtml(k, v, n, warn) {
+    return '<div class="mtile"><span class="k">' + h(k) + '</span><b class="v num">' + h(v) + '</b>' + (n ? '<span class="n' + (warn ? ' warn' : '') + '">' + h(n) + '</span>' : '') + '</div>';
+  }
+  function foldHtml(title, meta, body, open, metaId) {
+    return '<details class="fold"' + (open ? ' open' : '') + '><summary><span class="fold-t">' + h(title) + '</span><span class="fold-m"' + (metaId ? ' id="' + metaId + '"' : '') + '>' + h(meta || '') + '</span>' +
+      '<span class="fold-chev" aria-hidden="true">' + icon('chevron-down') + '</span></summary><div class="fold-body">' + body + '</div></details>';
   }
 
   // ── Loader & start ──────────────────────────────────────────────────────────
@@ -1718,6 +1732,7 @@
       if (params.view === 'public') {
         ui.mode = 'public';
         window.isPublicView = true;
+        document.documentElement.classList.add('portal');   // judul halaman pindah ke top bar
         buildChrome();
         window.startPublicPortal(params.k);
       } else {
@@ -3742,13 +3757,13 @@
   window.setClientSort = function (v) { ui.clientSort = v; _lsSet('xnk_client_sort', v); renderClientList(); };
   window.setClientView = function (v) { ui.clientView = v; _lsSet('xnk_client_view', v); document.querySelectorAll('#client-view-seg button').forEach(b => { const on = b.getAttribute('data-v') === v; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); }); renderClientList(); };
   function clientHeroHtml(counts) {
-    const g = window.clientSignals, ok = g && !g.error;
-    const n = counts.perhatian;
-    return insightHeroHtml({ eyebrow: 'Ringkasan klien',
-      stats: [{ v: String(counts.all), l: 'Klien' }, { v: ok ? String(g.totals.sesiMinggu) : '–', l: 'Sesi minggu ini' }, { v: ok ? g.totals.konsisten + '%' : '–', l: 'Aktif 14 hari' }, { v: ok ? String(n) : '–', l: 'Perlu perhatian' }],
-      text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatianmu.' : 'Semua klien aman hari ini.',
+    const g = window.clientSignals, ok = g && !g.error, n = counts.perhatian;
+    return insightHeroHtml({ slim: true, eyebrow: 'Ringkasan klien',
+      text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatianmu' : 'Semua klien aman hari ini',
+      stats: [{ v: String(counts.all), l: 'Klien' }, { v: ok ? String(g.totals.sesiMinggu) : '–', l: 'Sesi minggu ini' }, { v: ok ? g.totals.konsisten + '%' : '–', l: 'Aktif 14 hari' }],
       actions: ok && n ? '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.setClientFilter(\'perhatian\')">' + icon('eye') + 'Lihat siapa</button>' : '' });
   }
+
   function renderClients() {
     const el = $('view-clients');
     const ae = document.activeElement;
@@ -3931,22 +3946,24 @@
       '<div><p class="k">Bergabung</p><p class="v">' + h(m.joinDate || '-') + '</p></div>' +
       '<div><p class="k">Coach</p><p class="v">' + h(m.preferredCoachName || 'Belum ditentukan') + '</p></div>' +
       '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
-    body += '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>';
-    body += '<div><div class="section-head"><h4 class="section-title">Jadwal mendatang</h4><span class="li-sub">' + upcoming.length + '</span></div>' +
-      (upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
-    body += '<div><div class="section-head"><h4 class="section-title">Riwayat</h4><span class="li-sub">' + past.length + ' sesi</span></div>' +
-      (past.length ? '<div class="timeline" id="profile-history">' + past.slice(0, 12).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub" id="profile-history">Belum ada riwayat latihan.</p>') + '</div>' +
-      '<div class="btn-row" style="margin-top:4px"><button type="button" class="btn btn-ghost" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
-      '<button type="button" class="btn btn-ghost" onclick="window.openDeleteConfirmModal()">' + icon('trash-2') + 'Hapus klien</button></div>';
+    body += '<div class="btn-row cp-edit-row"><button type="button" class="btn btn-ghost btn-sm" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" onclick="window.openDeleteConfirmModal()">' + icon('trash-2') + 'Hapus klien</button></div>';
     body += '</div><div class="cp-col cp-col-side">';
+    // Bagian yang panjang dilipat (accordion) supaya kolom kanan terisi rapi, bukan kosong atau memanjang.
+    const nOpenTask = ((window.memberTasks[String(m.id)] || {}).list || []).filter(t => t.status === 'todo').length;
+    body += foldHtml('PR (Task)', nOpenTask ? nOpenTask + ' terbuka' : '', '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>', true, 'fold-pr-meta');
+    body += foldHtml('Jadwal mendatang', upcoming.length + ' sesi', upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>', upcoming.length > 0);
+    body += foldHtml('Riwayat', past.length + ' sesi', past.length ? '<div class="timeline" id="profile-history">' + past.slice(0, 12).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub" id="profile-history">Belum ada riwayat latihan.</p>', false);
     const remOn = REMIND_TYPES.filter(t => (m.reminderOff || []).indexOf(t[0]) === -1).length + (m.mealReminder !== false ? 1 : 0);
-    body += '<details class="fold"><summary><span>Pengingat WhatsApp</span><span class="li-sub">' + remOn + ' aktif</span></summary><div class="fold-body stack" style="gap:12px">' + mealToggleHtml(m) + reminderPrefsHtml(m) + '</div></details>';
+    body += foldHtml('Pengingat WhatsApp', remOn + ' aktif', '<div class="stack" style="gap:12px">' + mealToggleHtml(m) + reminderPrefsHtml(m) + '</div>', false);
     body += '</div></div>';
     // Progres: kartu hitam rapor + tafsir, lalu catatan progres dan perawatan (tes, form kesehatan)
+    // Urutan: rapor → indikator → grafik → rincian dalam lipatan (lingkar, catatan, kesehatan, asesmen, tes).
     body += '<div class="cp-pane stack' + hid('progres') + '" data-cppane="progres" style="gap:16px"><div id="cp-ph-progress">' + cpInsHtml(m.id, 'progresHero') + '</div>' +
-      '<div class="stack" style="gap:12px" id="cp-ins-progress">' + cpInsHtml(m.id, 'progresCards') + '</div>' +
-      '<div id="profile-progress-wrap" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>' +
-      '<div id="profile-care-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
+      '<div id="cp-ins-progress">' + cpInsHtml(m.id, 'progresCards') + '</div>' +
+      '<div id="profile-progress-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>' +
+      '<div id="cp-ins-folds" class="stack" style="gap:10px">' + cpInsHtml(m.id, 'progresFolds') + '</div>' +
+      '<div id="profile-care-wrap" class="stack" style="gap:10px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     // Latihan: kartu hitam minggu ini + tafsir, lalu program dan log (Fase J2/M)
     body += '<div class="cp-pane stack' + hid('latihan') + '" data-cppane="latihan" style="gap:16px"><div id="cp-ph-latihan">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
       '<div class="stack" style="gap:12px" id="cp-ins-latihan">' + cpInsHtml(m.id, 'latihanCards') + '</div>' +
@@ -3978,7 +3995,8 @@
     return insWith(raw, function () {
       switch (kind) {
         case 'progresHero': return insProgressHero(String(id));
-        case 'progresCards': return insBodyCard() + insMeasuresCard() + insFitnessCard() + insLinksCard();
+        case 'progresCards': { const pd = pg.admin[String(id)]; return insTiles(pd && !pd.error ? [mtileHtml('Minggu beruntun', String(pd.streak || 0), 'terbaik ' + (pd.bestStreak || 0)), mtileHtml('Sesi selesai', String(pd.completed || 0), '')] : []); }
+        case 'progresFolds': { const mb = insMeasuresBody(), lb = insLinksBody(); return (mb ? foldHtml('Lingkar badan & simetri', INS_RANGE_OPTS.filter(o => o[0] === insRange.v)[0][1], mb, false) : '') + (lb ? foldHtml('Yang berkaitan dengan hasil', '12 minggu', lb, false) : ''); }
         case 'latihanHero': return insTrainingHero(String(id));
         case 'latihanCards': return insActivityCard() + insStrengthCard() + insBalanceCard();
         case 'giziHero': return cpGiziHero(String(id));
@@ -3990,16 +4008,20 @@
     const d = nut[id];
     if (!d || d.error || !d.target) return '';
     const t = d.target;
-    if (!t.ok) return insightHeroHtml({ eyebrow: 'Gizi', empty: 'Data gizi klien belum lengkap, jadi target belum bisa dihitung.' });
-    const i = d.inputs || {};
-    return insightHeroHtml({ eyebrow: 'Gizi klien', stats: [{ v: String(t.kal), d: 'kkal', l: 'Target harian' }, { v: String(t.protein), d: 'g', l: 'Protein' }, { v: d.bmi ? nutNum(d.bmi.value, 1) : '–', l: 'BMI' }].concat(i.kg != null ? [{ v: nutNum(i.kg, 1), d: 'kg', l: 'Berat terakhir' }] : []),
-      text: i.stale ? 'Berat terakhir sudah lebih dari 4 minggu. Minta klien menimbang lagi supaya target akurat.' : 'Target dihitung otomatis dari data klien dan disesuaikan saran yang kamu setujui.' });
+    if (!t.ok) return insightHeroHtml({ eyebrow: 'Gizi klien', empty: 'Data gizi klien belum lengkap, jadi target belum bisa dihitung.' });
+    const wk = d.foodLog ? nutWeek(d) : [], logged = wk.filter(x => x.kal);
+    const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kal, 0) / logged.length) : null;
+    const diff = avg != null ? avg - t.kal : null;
+    return insightHeroHtml({ eyebrow: 'Gizi klien · ' + (NUT_GOAL_LABEL[t.goal] || ''), stats: [{ v: nutNum(t.kal), d: 'kkal', l: 'Target harian' }, { v: avg != null ? nutNum(avg) : '–', d: avg != null ? 'kkal' : '', l: 'Rata-rata 7 hari' }, { v: logged.length + '/7', l: 'Hari tercatat' }, { v: nutNum(t.protein), d: 'g', l: 'Protein' }],
+      text: d.inputs && d.inputs.stale ? 'Berat terakhir sudah lebih dari 4 minggu. Minta klien menimbang lagi supaya target akurat.' :
+        avg == null ? 'Belum ada catatan makan minggu ini.' : Math.abs(diff) <= t.kal * 0.1 ? 'Asupan rata-rata dekat dengan target.' : 'Asupan rata-rata ' + (diff > 0 ? 'di atas' : 'di bawah') + ' target ' + nutNum(Math.abs(diff)) + ' kkal per hari.' });
   }
+
   window.renderClientInsightNow = function () { renderClientInsight(); };
   function renderClientInsight() {
     const id = window.selectedMemberId;
     if (!id || !$('cp-ph-progress')) return;
-    [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards'], ['cp-ph-gizi', 'giziHero']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
+    [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards'], ['cp-ph-gizi', 'giziHero']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
     const hl = $('cp-highlight'); if (hl) { const m = window.members.find(x => String(x.id) === String(id)); if (m) hl.innerHTML = cpHighlightHtml(m); }
     paintIcons();
   }
@@ -4127,6 +4149,8 @@
     if (String(window.selectedMemberId) !== String(memberId)) return;
     const wrap = $('profile-tasks-wrap');
     if (wrap) setHTML(wrap, taskSectionHtml(memberId));
+    const meta = $('fold-pr-meta'), c = window.memberTasks[String(memberId)];
+    if (meta) { const n = c && c.list ? c.list.filter(t => t.status === 'todo').length : 0; meta.textContent = n ? n + ' terbuka' : ''; }
   }
 
   // Fase K2: satu panggilan mengisi PR, progres, perawatan, dan program halaman klien; bagian yang gagal diberi pesan di kartunya.
@@ -6322,33 +6346,38 @@
     if (!d) return '<p class="li-sub">Memuat catatan klien…</p>';
     if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
     const m = window.members.find(x => String(x.id) === String(memberId)) || {};
-    // Dua kolom di panel lebar PC (.cp-col = display:contents di HP, jadi urutan & tampilan sama).
-    let html = '<div class="cp-col"><div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Catatan privat</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareNotes(\'' + h(memberId) + '\')">Ubah</button></div>' +
-      (d.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(d.flag) + '</p>' : '') +
-      (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') + '</div>';
-    html += feedbackAdminHtml(d.feedback);
-    html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Kesehatan</p>';
+    // Rincian perawatan sebagai lipatan (accordion): ringkasan di judul, isi saat dibuka.
+    const editBtn = (js, label) => '<button type="button" class="btn btn-secondary btn-sm" onclick="' + js + '">' + label + '</button>';
+    const notes = (d.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'class="ic-inline"') + ' ' + h(d.flag) + '</p>' : '') +
+      (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') +
+      '<div class="btn-row">' + editBtn("window.openCareNotes('" + h(memberId) + "')", 'Ubah catatan') + '</div>';
+    let html = foldHtml('Catatan privat', d.flag ? 'ada tanda' : (d.notes ? 'ada catatan' : 'kosong'), '<div class="stack" style="gap:8px">' + notes + '</div>', !!d.flag);
+    let hBody, hMeta;
     if (!d.health) {
-      html += '<p class="li-sub">Belum mengisi form.</p><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">Kirim pengingat</button>';
+      hMeta = 'belum diisi';
+      hBody = '<p class="li-sub">Klien belum mengisi form kesehatan.</p><div class="btn-row"><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">' + icon('message-circle') + 'Minta isi via WA</button></div>';
     } else {
       const yes = d.health.answers.filter(a => a === 'ya').length, extra = d.health.injuries || d.health.medication || d.health.other;
-      html += '<p>' + (yes || extra ? '<b>Ada hal yang perlu dibaca</b>' : 'Tidak ada catatan') + ' <span class="li-sub">· ' + h(d.health.tanggal) + '</span></p>' +
-        '<p class="li-sub">' + (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau') + '</p>' +
-        '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareHealth(\'' + h(memberId) + '\')">Lihat jawaban</button>';
+      hMeta = (yes || extra ? 'perlu dibaca' : 'tidak ada catatan') + ' · ' + (d.health.reviewedAt ? 'ditinjau' : 'belum ditinjau');
+      hBody = '<p>' + (yes || extra ? '<b>Ada hal yang perlu dibaca</b>' : 'Tidak ada catatan') + ' <span class="li-sub">· ' + h(d.health.tanggal) + '</span></p>' +
+        '<div class="btn-row">' + editBtn("window.openCareHealth('" + h(memberId) + "')", 'Lihat jawaban') + '</div>';
     }
-    html += '</div></div><div class="cp-col">';
-    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Assessment</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openAssessment(\'' + h(memberId) + '\')">' + (d.assessment ? 'Ubah' : 'Isi') + '</button></div>';
+    html += foldHtml('Form kesehatan', hMeta, '<div class="stack" style="gap:8px">' + hBody + '</div>', false);
+    let aBody = '';
     if (d.assessment) {
       const a = d.assessment;
-      html += (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
+      aBody = (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
       const ex = [['Lemak', a.bodyFat, '%'], ['Pinggul', a.hip, ' cm'], ['Dada (lama)', a.chest, ' cm'], ['Lengan (lama)', a.arm, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
-      if (ex.length) html += careRow('Ukuran', h(ex.join(' · ')));
-    } else html += '<p class="li-sub">Belum diisi.</p>';
-    html += '</div>';
-    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Tes kebugaran</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareTests(\'' + h(memberId) + '\')">' + icon('plus') + 'Tes</button></div>' +
-      (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') +
-        '<button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="window.sendTestResult(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim hasil via WA</button>' : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div>';
-    return html + '</div>';
+      if (ex.length) aBody += careRow('Ukuran', h(ex.join(' · ')));
+    } else aBody = '<p class="li-sub">Belum diisi.</p>';
+    html += foldHtml('Asesmen', d.assessment ? (d.assessment.tanggal || 'sudah diisi') : 'belum diisi', '<div class="stack" style="gap:6px">' + aBody + '<div class="btn-row">' + editBtn("window.openAssessment('" + h(memberId) + "')", d.assessment ? 'Ubah asesmen' : 'Isi asesmen') + '</div></div>', false);
+    const tBody = (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') : '<p class="li-sub">Belum ada hasil tes.</p>') +
+      '<div class="btn-row">' + editBtn("window.openCareTests('" + h(memberId) + "')", icon('plus') + 'Tes baru') +
+      (d.tests.length ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.sendTestResult(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim hasil via WA</button>' : '') + '</div>';
+    html += foldHtml('Tes kebugaran', d.tests.length ? d.tests.length + ' tes' : 'belum ada', '<div class="stack" style="gap:6px">' + tBody + '</div>', false);
+    const fb = feedbackAdminHtml(d.feedback);
+    if (fb) html += foldHtml('Penilaian klien', (d.feedback.ratings.length + d.feedback.evals.length) + ' penilaian', fb, false);
+    return html;
   }
   window.careSet = function (memberId, d) {
     care[memberId] = d;
@@ -6370,44 +6399,59 @@
   const NUT_WARN_LABEL = { kondisi: 'Ada catatan kesehatan: konsultasikan dengan dokter atau ahli gizi.', hamil: 'Hamil / menyusui: target ini hanya perkiraan kasar, rujuk ke ahli gizi.', gangguanMakan: 'Riwayat gangguan makan: rujuk ke ahli gizi.',
     usiaMuda: 'Usia di bawah 18 tahun: rujuk ke ahli gizi.', usiaLanjut: 'Usia di atas 65 tahun: rujuk ke ahli gizi.', bmiRendah: 'BMI sangat rendah: jangan memakai defisit kalori.', batasBawah: 'Kalori dinaikkan ke batas bawah yang aman.' };
   const nutNum = (n, dp) => n == null || n === '' ? '-' : String(Math.round(n * Math.pow(10, dp || 0)) / Math.pow(10, dp || 0)).replace('.', ',');
+  // Batang kalori 7 hari terhadap target (garis putus-putus).
+  function kcalBarsHtml(days, goal) {
+    const mx = Math.max(goal || 0, ...days.map(x => x.kal), 1);
+    return '<div class="kbars" role="img" aria-label="Kalori 7 hari">' + days.map(function (x) {
+      const pct = Math.round(x.kal / mx * 100), over = goal && x.kal > goal * 1.1;
+      const gl = goal ? '<b class="kgoal" style="bottom:' + Math.round(goal / mx * 100) + '%"></b>' : '';
+      return '<div class="kbar' + (x.kal ? '' : ' none') + (over ? ' over' : '') + '"><span class="kbar-v num">' + (x.kal ? h(nutNum(x.kal)) : '–') + '</span><div class="kbar-col">' + gl + '<i style="height:' + Math.max(x.kal ? 4 : 0, pct) + '%"></i></div><span class="kbar-d">' + h(x.d) + '</span></div>';
+    }).join('') + '</div>';
+  }
+  function nutWeek(d) {
+    const out = [], byDay = {};
+    ((d.foodLog && d.foodLog.days) || []).forEach(x => { byDay[x.tanggal] = x; });
+    const dn = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    for (let i = 6; i >= 0; i--) {
+      const t = new Date(Date.now() - i * 86400000), k = ymd(t), x = byDay[k];
+      out.push({ k: k, d: dn[t.getDay()], kal: x && x.items.length ? Math.round(x.totals.kal) : 0, x: x });
+    }
+    return out;
+  }
   function nutInner(memberId) {
     const d = nut[memberId];
-    if (!d) return '<p class="li-sub">Memuat data gizi…</p>';
-    if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    if (!d) return '<div class="card">' + skel(3, true) + '</div>';
+    if (d.error) return '<div class="card">' + errorState(d.error) + '</div>';
     const p = d.profile || {}, t = d.target || {}, i = d.inputs || {};
-    let html = '<div class="cp-col cp-col-main"><div class="card-flat stack" style="gap:8px"><p class="eyebrow">Ringkasan</p>';
-    html += '<div class="kv">' +
-      '<div><p class="k">BMI</p><p class="v">' + (d.bmi ? h(nutNum(d.bmi.value, 1)) + ' <span class="pill soft">' + h(NUT_BMI_LABEL[d.bmi.kategori] || '') + '</span>' : '-') + '</p></div>' +
-      '<div><p class="k">WHtR</p><p class="v">' + (d.whtr ? h(nutNum(d.whtr.value, 2)) + ' <span class="pill soft">' + h(NUT_WHTR_LABEL[d.whtr.kategori] || '') + '</span>' : '-') + '</p></div>' +
-      '<div><p class="k">BMR</p><p class="v">' + (t.ok ? h(nutNum(t.bmr)) + ' kkal' : '-') + '</p></div>' +
-      '<div><p class="k">TDEE</p><p class="v">' + (t.ok ? h(nutNum(t.tdee)) + ' kkal' : '-') + '</p></div></div>';
-    html += '<p class="li-sub">Berat ' + (i.kg != null ? h(nutNum(i.kg, 1)) + ' kg (' + h(i.kgDate) + ')' : 'belum ada') + (i.stale ? ' · sudah lebih dari 4 minggu, minta timbang ulang' : '') +
-      ' · Pinggang ' + (i.waist != null ? h(nutNum(i.waist, 1)) + ' cm' : '-') + ' · ' + h(nutNum(i.sessionsPerWeek, 1)) + ' sesi / minggu</p>';
-    html += '<p class="li-sub">Angka ini adalah estimasi, bukan pengganti ahli gizi.</p></div>';
+    let html = '<div class="cp-col cp-col-main">';
+    // Tubuh: empat angka dasar
+    html += '<div class="card stack" style="gap:12px"><div class="section-head"><h4 class="section-title">Dasar perhitungan</h4><span class="li-sub">perkiraan, bukan diagnosis</span></div><div class="mtiles">' +
+      mtileHtml('BMI', d.bmi ? nutNum(d.bmi.value, 1) : '–', d.bmi ? NUT_BMI_LABEL[d.bmi.kategori] || '' : '') +
+      mtileHtml('Pinggang / tinggi', d.whtr ? nutNum(d.whtr.value, 2) : '–', d.whtr ? NUT_WHTR_LABEL[d.whtr.kategori] || '' : '') +
+      mtileHtml('BMR', t.ok ? nutNum(t.bmr) : '–', 'kkal istirahat') + mtileHtml('TDEE', t.ok ? nutNum(t.tdee) : '–', 'kkal dengan aktivitas') + '</div>' +
+      '<p class="li-sub">Berat ' + (i.kg != null ? h(nutNum(i.kg, 1)) + ' kg (' + h(i.kgDate) + ')' : 'belum ada') + (i.stale ? ' · lebih dari 4 minggu, minta timbang ulang' : '') +
+      ' · pinggang ' + (i.waist != null ? h(nutNum(i.waist, 1)) + ' cm' : '–') + ' · ' + h(nutNum(i.sessionsPerWeek, 1)) + ' sesi/minggu</p></div>';
     if (t.ok) {
-      html += '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Target harian · ' + h(NUT_GOAL_LABEL[t.goal] || '') + '</p>' +
-        (t.warnings || []).map(w => '<p class="pill solid" style="white-space:normal">' + h(NUT_WARN_LABEL[w] || w) + '</p>').join('') +
-        '<p style="font-size:var(--fs-xl);font-weight:800">' + h(nutNum(t.kal)) + ' kkal</p>' +
-        '<div class="kv"><div><p class="k">Protein</p><p class="v">' + h(nutNum(t.protein)) + ' g</p></div><div><p class="k">Karbo</p><p class="v">' + h(nutNum(t.karbo)) + ' g</p></div>' +
-        '<div><p class="k">Lemak</p><p class="v">' + h(nutNum(t.lemak)) + ' g</p></div><div><p class="k">Serat</p><p class="v">≥ ' + h(nutNum(t.serat)) + ' g</p></div>' +
-        '<div><p class="k">Natrium</p><p class="v">&lt; ' + h(nutNum(t.natrium)) + ' mg</p></div><div><p class="k">Air</p><p class="v">± ' + h(nutNum(t.air)) + ' ml</p></div></div></div>';
+      html += '<div class="card stack" style="gap:12px"><div class="section-head"><h4 class="section-title">Kebutuhan harian</h4><span class="li-sub">' + h(NUT_GOAL_LABEL[t.goal] || '') + '</span></div>' +
+        (t.warnings || []).map(w => '<p class="flag nut-flag">' + h(NUT_WARN_LABEL[w] || w) + '</p>').join('') +
+        '<div class="mtiles">' + mtileHtml('Protein', nutNum(t.protein) + ' g', '') + mtileHtml('Karbo', nutNum(t.karbo) + ' g', '') + mtileHtml('Lemak', nutNum(t.lemak) + ' g', '') + '</div>' +
+        '<p class="li-sub">Serat ≥ ' + h(nutNum(t.serat)) + ' g · natrium &lt; ' + h(nutNum(t.natrium)) + ' mg · air ± ' + h(nutNum(t.air)) + ' ml' + (t.adjust ? ' · penyesuaian aktif ' + h(nutDeltaText(t.adjust)) : '') + '</p></div>';
     } else {
-      html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Lengkapi data</p><p class="li-sub">Target belum bisa dihitung. Yang masih kurang:</p>' +
-        (t.missingLabels || []).map(x => '<p>' + icon('circle-dashed', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(x) + '</p>').join('') + '</div>';
+      html += '<div class="card stack" style="gap:8px"><h4 class="section-title">Lengkapi data</h4><p class="li-sub">Target belum bisa dihitung. Yang masih kurang:</p>' +
+        (t.missingLabels || []).map(x => '<p>' + icon('circle-dashed', 'class="ic-inline"') + ' ' + h(x) + '</p>').join('') + '</div>';
     }
     const av = d.advice || {};
-    if (av.pending) html += '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Saran penyesuaian</p>' + nutAdviceRow(Object.assign({ memberId: memberId }, av.pending), false) + '</div>';
-    else if (av.last) html += '<p class="li-sub">Saran terakhir: ' + h(nutDeltaText(av.last.delta)) + ' · ' + (av.last.status === 'setuju' ? 'disetujui' : 'ditolak') + ' ' + h(av.last.diputuskan) + '</p>';
-    if (t.ok && t.adjust) html += '<p class="li-sub">Penyesuaian aktif: ' + h(nutDeltaText(t.adjust)) + '</p>';
+    if (av.pending) html += '<div class="card stack" style="gap:8px"><h4 class="section-title">Saran penyesuaian</h4>' + nutAdviceRow(Object.assign({ memberId: memberId }, av.pending), false) + '</div>';
     if (d.foodLog && d.foodLog.days) {
-      const days = d.foodLog.days.filter(x => x.items.length);
-      html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Catatan makan klien (7 hari)</p>' + (days.length ? days.map(function (x) {
-        const goal = t.ok ? t.kal : 0;
-        return '<details><summary class="row-between" style="min-height:44px;cursor:pointer"><span>' + h(pgLabel(x.tanggal)) + '</span><span class="num li-sub">' + h(nutNum(x.totals.kal)) + (goal ? ' / ' + h(nutNum(goal)) : '') + ' kkal · P ' + h(nutNum(x.totals.p, 1)) + ' g</span></summary>' +
-          x.items.map(i => '<p class="li-sub" style="padding-left:8px">' + h(i.waktu) + ' · ' + h(i.nama) + ' · ' + h(i.porsi) + ' · ' + h(nutNum(i.kal)) + ' kkal</p>').join('') + '</details>';
-      }).join('') : '<p class="li-sub">Belum ada catatan makan dalam 7 hari terakhir.</p>') + '</div>';
+      const wk = nutWeek(d), logged = wk.filter(x => x.kal);
+      const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kal, 0) / logged.length) : 0;
+      html += '<div class="card stack" style="gap:12px"><div class="section-head"><h4 class="section-title">Catatan makan 7 hari</h4><span class="li-sub">' + logged.length + ' hari tercatat' + (avg ? ' · rata-rata ' + h(nutNum(avg)) + ' kkal' : '') + '</span></div>' +
+        (logged.length ? kcalBarsHtml(wk, t.ok ? t.kal : 0) + logged.slice().reverse().map(function (x) {
+          return foldHtml(pgLabel(x.k), nutNum(x.x.totals.kal) + ' kkal · P ' + nutNum(x.x.totals.p, 1) + ' g', x.x.items.map(it => '<p class="li-sub">' + h(it.waktu) + ' · ' + h(it.nama) + ' · ' + h(it.porsi) + ' · ' + h(nutNum(it.kal)) + ' kkal</p>').join(''), false);
+        }).join('') : emptyState('utensils', 'Belum ada catatan', 'Klien belum mencatat makan dalam 7 hari terakhir.')) + '</div>';
     }
-    html += '</div><div class="cp-col cp-col-side"><div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Input coach</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutEdit(\'' + h(memberId) + '\')">Ubah</button></div>' +
+    if (!av.pending && av.last) html += '<p class="li-sub">Saran terakhir: ' + h(nutDeltaText(av.last.delta)) + ' · ' + (av.last.status === 'setuju' ? 'disetujui' : 'ditolak') + ' ' + h(av.last.diputuskan) + '</p>';
+    html += '</div><div class="cp-col cp-col-side"><div class="card stack" style="gap:6px"><div class="section-head"><h4 class="section-title">Input coach</h4><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutEdit(\'' + h(memberId) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
       careRow('Umur', d.age != null ? h(d.age) + ' tahun' + (p.birthDate ? '' : p.umur !== '' && p.umur != null ? ' (diisi manual)' : '') : '-') +
       careRow('Tinggi', p.tinggi === '' || p.tinggi == null ? '-' : h(nutNum(p.tinggi, 1)) + ' cm') +
       careRow('Jenis kelamin', p.jk === 'L' ? 'Laki-laki' : p.jk === 'P' ? 'Perempuan' : '-') +
@@ -6418,6 +6462,7 @@
       careRow('Gizi aktif', p.aktif ? 'Ya' : 'Tidak') + '</div></div>';
     return html;
   }
+
 
   const nutDeltaText = n => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n) + ' kkal';
   function nutAdviceRow(a, withName) {
@@ -7492,28 +7537,26 @@
   // Panel: bagian "Progres" di halaman klien
   function pgAdminInner(memberId) {
     const d = pg.admin[memberId];
-    let inner;
-    if (!d) inner = '<p class="li-sub">Memuat progres…</p>';
-    else if (d.error) inner = '<p class="li-sub">Gagal memuat progres: ' + h(d.error) + '</p>';
-    else {
-      const earned = (d.badges || []).filter(function (b) { return b.earned; });
-      inner = '<p class="li-sub" style="margin-bottom:10px">' + icon('flame', 'style="width:14px;height:14px;vertical-align:-2px"') + ' <b class="num">' + (d.streak || 0) + '</b> minggu berturut-turut · terbaik ' + (d.bestStreak || 0) + ' · ' + (d.completed || 0) + ' sesi selesai</p>' +
-        '<div class="pg-pills">' + (earned.length ? earned.map(function (b) { return '<span class="pill">' + h(pgShortBadge(b)) + '</span>'; }).join('') : '<span class="li-sub">Belum ada badge.</span>') + '</div>' +
-        (d.entries.length ? '<div class="stack pg-grid" style="gap:18px;margin-top:14px">' + pgBlocksHtml(d) + '</div>' : '<p class="li-sub" style="margin-top:12px">Belum ada catatan.</p>');
-      if (d.entries.length) {
-        inner += '<div class="group-label"><span>Catatan</span></div><div class="list pg-notes">' + d.entries.slice().reverse().slice(0, 10).map(function (e) {
-          const parts = [];
-          PG_MEASURES.forEach(function (m) { if (e[m[0]] !== '' && e[m[0]] != null) parts.push((m[0] === 'berat' || m[0] === 'pinggang' ? '' : m[1] + ' ') + pgNum(e[m[0]]) + ' ' + m[2]); });
-          return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title num">' + h(parts.join(' · ')) + '</p><p class="li-sub">' + h(pgLabel(e.tanggal)) + ' · <span class="pill">' + (e.oleh === 'coach' ? 'coach' : 'klien') + '</span></p></div>' +
-            '<button type="button" class="icon-btn plain" aria-label="Hapus catatan ' + h(pgLabel(e.tanggal)) + '" onclick="window.pgDeleteAdminEntry(\'' + h(memberId) + '\',\'' + h(e.id) + '\')">' + icon('trash-2') + '</button></div>';
-        }).join('') + '</div>';
-      }
-    }
     const nPhoto = d && d.photos ? d.photos.length : 0;
-    return '<div class="section-head"><h4 class="section-title">Progres</h4></div>' + inner +
-      '<div class="btn-row" style="margin-top:12px"><button type="button" class="btn btn-outline" onclick="window.pgOpenEntry(\'admin\',\'' + h(memberId) + '\')">' + icon('plus') + 'Catat</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.pgOpenPhotos(\'admin\',\'' + h(memberId) + '\')">' + icon('camera') + 'Foto' + (nPhoto ? ' (' + nPhoto + ')' : '') + '</button></div>';
+    const btns = '<div class="btn-row"><button type="button" class="btn btn-secondary btn-sm" onclick="window.pgOpenEntry(\'admin\',\'' + h(memberId) + '\')">' + icon('plus') + 'Catat</button>' +
+      '<button type="button" class="btn btn-secondary btn-sm" onclick="window.pgOpenPhotos(\'admin\',\'' + h(memberId) + '\')">' + icon('camera') + 'Foto' + (nPhoto ? ' (' + nPhoto + ')' : '') + '</button></div>';
+    if (!d) return '<div class="card">' + skel(3, true) + '</div>';
+    if (d.error) return '<div class="card">' + errorState(d.error, "window.loadClientBundle('" + h(memberId) + "')") + '</div>';
+    let html = '<div class="card"><div class="section-head"><h4 class="section-title">Grafik ukuran</h4>' + btns + '</div>' +
+      (d.entries.length ? '<div class="stack pg-grid" style="gap:18px">' + pgBlocksHtml(d) + '</div>' : emptyState('trending-up', 'Belum ada catatan', 'Catat berat atau lingkar pinggang klien.')) + '</div>';
+    if (d.entries.length) {
+      html += foldHtml('Riwayat catatan ukur', d.entries.length + ' catatan', '<div class="list pg-notes">' + d.entries.slice().reverse().slice(0, 10).map(function (e) {
+        const parts = [];
+        PG_MEASURES.forEach(function (m) { if (e[m[0]] !== '' && e[m[0]] != null) parts.push((m[0] === 'berat' || m[0] === 'pinggang' ? '' : m[1] + ' ') + pgNum(e[m[0]]) + ' ' + m[2]); });
+        return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title num">' + h(parts.join(' · ')) + '</p><p class="li-sub">' + h(pgLabel(e.tanggal)) + ' · <span class="pill">' + (e.oleh === 'coach' ? 'coach' : 'klien') + '</span></p></div>' +
+          '<button type="button" class="icon-btn plain" aria-label="Hapus catatan ' + h(pgLabel(e.tanggal)) + '" onclick="window.pgDeleteAdminEntry(\'' + h(memberId) + '\',\'' + h(e.id) + '\')">' + icon('trash-2') + '</button></div>';
+      }).join('') + '</div>', false);
+    }
+    const earned = (d.badges || []).filter(b => b.earned);
+    html += foldHtml('Badge', earned.length + ' diraih', '<div class="pg-pills">' + (earned.length ? earned.map(b => '<span class="pill">' + h(pgShortBadge(b)) + '</span>').join('') : '<span class="li-sub">Belum ada badge.</span>') + '</div>', false);
+    return html;
   }
+
   function pgAdminRender(memberId) {
     const wrap = $('profile-progress-wrap');
     if (wrap && wrap.getAttribute('data-member') === String(memberId)) setHTML(wrap, pgAdminInner(memberId));
@@ -7767,6 +7810,35 @@
     if (!rows.length) return window.myNutrition && window.myNutrition.enabled !== false && !(window.myNutrition.profile && window.myNutrition.profile.tinggi) ? insCard('Indikator tubuh', '', '<p class="li-sub">Isi tinggi badan di tab Latihan → Makan supaya BMI dan rasio pinggang bisa dihitung.</p>') : '';
     return insCard('Indikator tubuh', 'perkiraan, bukan diagnosis', '<div class="ins-list">' + rows.join('') + '</div>');
   }
+  // Tile BMI, rasio pinggang–tinggi, lemak tubuh (+ tile tambahan).
+  function insTiles(extra) {
+    const d = insD(); if (!d) return '';
+    const b = d.body, t = [];
+    if (b.bmi) t.push(mtileHtml('BMI', insNum(b.bmi.value), b.bmi.label));
+    if (b.whtr) t.push(mtileHtml('Pinggang / tinggi', String(b.whtr.value).replace('.', ','), b.whtr.label));
+    if (b.bodyFat != null) t.push(mtileHtml('Lemak tubuh', insNum(b.bodyFat) + '%', 'asesmen terakhir'));
+    (extra || []).forEach(x => t.push(x));
+    return t.length ? '<div class="mtiles">' + t.join('') + '</div>' : '';
+  }
+  function insMeasuresBody() {
+    const d = insD(); if (!d) return '';
+    const r = d.body.ranges[insRange.v].measures, rows = [];
+    Object.keys(d.body.labels || {}).forEach(function (k) {
+      const pm = d.body.labels[k];
+      if (k === 'berat' || k === 'pinggang' || !r[k]) return;
+      rows.push(insRow(pm.short, insNum(r[k].to) + ' ' + pm.unit, insSigned(r[k].delta, pm.unit)));
+    });
+    (d.fitness.symmetry || []).forEach(function (s) { rows.push(insRow('Simetri ' + s.label.toLowerCase(), 'selisih ' + insNum(Math.abs(s.diff)) + ' cm', s.flag ? 'kanan–kiri belum seimbang' : 'seimbang', s.flag)); });
+    return rows.length ? '<div class="ins-list">' + rows.join('') + '</div>' : '';
+  }
+  function insLinksBody() {
+    const d = insD(); if (!d || !d.links.enough) return '';
+    const per = v => insSigned(v, 'kg') + '/mgg';
+    return '<ul class="ins-notes">' + d.links.items.map(function (i) {
+      if (i.id === 'rutin') return '<li>Minggu dengan 2 aktivitas atau lebih berkaitan dengan perubahan berat ' + per(i.rutin) + ', minggu yang lebih sepi ' + per(i.jarang) + '.</li>';
+      return '<li>Minggu dengan kalori dalam target berkaitan dengan perubahan berat ' + per(i.dalam) + ', di atas target ' + per(i.lebih) + '.</li>';
+    }).join('') + '</ul><p class="li-sub">Berkaitan bukan berarti penyebab; ini pola dari data sendiri.</p>';
+  }
   function insMeasuresCard() {
     const d = insD(); if (!d) return '';
     const r = d.body.ranges[insRange.v].measures, rows = [];
@@ -7791,9 +7863,25 @@
     }).join('');
     return insCard('Yang berkaitan dengan hasilmu', '12 minggu', '<ul class="ins-notes">' + out + '</ul><p class="li-sub">Berkaitan bukan berarti penyebab; ini pola dari datamu sendiri.</p>');
   }
+  let pgSeg = 'ringkasan';
+  window.setPgSeg = function (k) {
+    pgSeg = k;
+    document.querySelectorAll('#pg-seg [data-pgseg]').forEach(b => { const on = b.getAttribute('data-pgseg') === k; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('#view-public-progress [data-pgpane]').forEach(p => p.classList.toggle('hide', p.getAttribute('data-pgpane') !== k));
+    moveSegThumb($('pg-seg'));
+  };
+  // Ringkasan progres: tile indikator + streak, lalu hubungan (kalau datanya cukup).
+  function insProgressCards() {
+    const d = pg.data && !pg.data.error ? pg.data : null;
+    const tiles = insTiles(d ? [mtileHtml('Minggu beruntun', String(d.streak || 0), 'terbaik ' + (d.bestStreak || 0)), mtileHtml('Sesi selesai', String(d.completed || 0), '')] : []);
+    const hint = insD() && !insD().body.bmi && window.myNutrition && window.myNutrition.enabled !== false ? '<p class="li-sub">Isi tinggi badan di Latihan → Makan supaya BMI dan rasio pinggang bisa dihitung.</p>' : '';
+    return (tiles ? '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Indikator</h3><span class="li-sub">perkiraan, bukan diagnosis</span></div>' + tiles + hint + '</div>' : '') + insLinksCard();
+  }
   function renderInsightProgress() {
     const hero = $('ph-progress'); if (hero) setHTML(hero, insProgressHero());
-    const c = $('pub-ins-progress'); if (c) setHTML(c, insBodyCard() + insMeasuresCard() + insFitnessCard() + insLinksCard());
+    const c = $('pub-ins-progress'); if (c) setHTML(c, insProgressCards());
+    const m = $('pub-ins-measures'); if (m) setHTML(m, insMeasuresCard());
+    const f = $('pub-ins-fitness'); if (f) setHTML(f, insFitnessCard() || '');
   }
 
   function insTrainingHero(admin) {
@@ -7813,8 +7901,8 @@
     const d = insD(); if (!d) return '';
     const a = d.activity;
     const adh = a.adherence && a.adherence.length ? a.adherence[a.adherence.length - 1] : null;
-    return insCard('Kalender aktivitas', '12 minggu', heatHtml(a.levels) +
-      '<p class="li-sub" style="margin-top:8px">' + a.active + ' hari aktif dari 84 hari (sesi coach, latihan mandiri, catat makan).' + (adh ? ' Program minggu ini: ' + adh.done + ' dari ' + adh.planned + ' hari.' : '') + '</p>');
+    return insCard('Kalender aktivitas', '12 minggu', '<div class="act-row">' + heatHtml(a.levels) + '<div class="act-side">' +
+      mtileHtml('Hari aktif', a.active + ' / 84', 'sesi, latihan, catat makan') + (adh ? mtileHtml('Program minggu ini', adh.done + ' / ' + adh.planned, 'hari dijalankan') : '') + '</div></div>');
   }
   function insStrengthCard() {
     const d = insD(); if (!d || !d.training.strength.length) return '';
@@ -7875,22 +7963,22 @@
     const c = window.myContent;
     if (!c || c.state !== 'ok') return insSkel('Info & Tips');
     const n = c.list.length;
-    return insightHeroHtml({ eyebrow: 'Info & Tips', stats: [{ v: String(n), l: 'Info tayang' }, { v: String(c.list.filter(x => x.tipe === 'video').length), l: 'Video' }], text: infoHasNew() ? 'Ada info baru dari coach. Cek dulu ya.' : (n ? 'Kamu sudah membaca semua info terbaru.' : 'Belum ada info dari coach.') });
+    return insightHeroHtml({ slim: true, eyebrow: 'Info & Tips', stats: [{ v: String(n), l: 'Info tayang' }, { v: String(c.list.filter(x => x.tipe === 'video').length), l: 'Video' }], text: infoHasNew() ? 'Ada info baru dari coach. Cek dulu ya.' : (n ? 'Kamu sudah membaca semua info terbaru.' : 'Belum ada info dari coach.') });
   }
   function moreHeroHtml() {
     const q = insQuota(), w = window.myWeek && !window.myWeek.error ? window.myWeek : null;
     const stats = [{ v: String(q.rem), d: 'dari ' + q.total, l: 'Sisa sesi' }];
     if (w) stats.push({ v: String(w.streak), d: 'minggu', l: 'Beruntun' });
-    return insightHeroHtml({ eyebrow: 'Akunmu', stats: stats, text: (q.me.name || '') + ' · ' + (q.me.packageName || 'Member XNK'), actions: '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.openMyProfile()">' + icon('user-round') + 'Profil</button>' });
+    return insightHeroHtml({ slim: true, eyebrow: 'Akunmu', stats: stats, text: (q.me.name || '') + ' · ' + (q.me.packageName || 'Member XNK'), actions: '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.openMyProfile()">' + icon('user-round') + 'Profil</button>' });
   }
   function catalogHeroHtml() {
     if (!window.publicLoggedMember) return '';
     const q = insQuota();
-    return insightHeroHtml({ eyebrow: 'Paketmu sekarang', stats: [{ v: String(q.rem), d: 'dari ' + q.total, l: 'Sisa sesi' }], text: q.me.packageName || 'Member XNK', actions: '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang / beli paket</button>' });
+    return insightHeroHtml({ slim: true, eyebrow: 'Paketmu sekarang', stats: [{ v: String(q.rem), d: 'dari ' + q.total, l: 'Sisa sesi' }], text: q.me.packageName || 'Member XNK', actions: '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang / beli paket</button>' });
   }
   function coachesHeroHtml() {
     const n = (window.coaches || []).length;
-    return insightHeroHtml({ eyebrow: 'Tim coach', stats: [{ v: String(n), l: 'Coach aktif' }], text: 'Pilih coach untuk melihat profil, jam tersedia, dan testimoni.' });
+    return insightHeroHtml({ slim: true, eyebrow: 'Tim coach', stats: [{ v: String(n), l: 'Coach aktif' }], text: 'Pilih coach untuk melihat profil, jam tersedia, dan testimoni.' });
   }
 
   function renderInsight() { renderInsightProgress(); renderInsightLatihan(); renderInsightMakan(); renderWeekCard(); const ih = $('ph-info'); if (ih) setHTML(ih, infoHeroHtml()); paintIcons(); }
@@ -7901,17 +7989,20 @@
     const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
     const upcoming = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date());
     const history = mine.filter(s => upcoming.indexOf(s) === -1).sort((x, y) => new Date(y.start) - new Date(x.start));
-    let left = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.');
-    left += '<div id="ph-progress">' + insProgressHero() + '</div>';
-    left += '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div>';
-    left += '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>';
-    left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insBodyCard() + insMeasuresCard() + insFitnessCard() + insLinksCard() + '</div>';
-    left += '<div class="card stack" style="gap:10px" id="pub-workout-wrap"></div>';
-    left += '<div id="pub-tests-wrap" class="stack" style="gap:16px">' + myTestsInner() + '</div>';
-    let right = insightsCard(me, mine);
-    right += '<div class="card"><div class="section-head"><h3 class="section-title">Riwayat latihan</h3><span class="li-sub">' + history.length + ' sesi</span></div>' +
-      '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>';
-    setHTML(el, portalGrid(left, right));
+    // Empat bagian supaya halaman tidak memanjang: Ringkasan, Ukuran, Tes, Riwayat. Semua bagian tetap ada di DOM (diisi oleh render masing-masing).
+    const pane = (k, l, r) => '<div class="pg-pane' + (pgSeg === k ? '' : ' hide') + '" data-pgpane="' + k + '">' + portalGrid(l, r) + '</div>';
+    const segs = [['ringkasan', 'Ringkasan'], ['ukuran', 'Ukuran'], ['tes', 'Tes'], ['riwayat', 'Riwayat']];
+    let html = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.') +
+      '<div id="ph-progress">' + insProgressHero() + '</div>' +
+      '<div class="seg pg-seg" id="pg-seg" role="tablist" aria-label="Bagian progres">' + segs.map(x => '<button type="button" role="tab" data-pgseg="' + x[0] + '" class="' + (pgSeg === x[0] ? 'active' : '') + '" aria-selected="' + (pgSeg === x[0]) + '" onclick="window.setPgSeg(\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '<span class="seg-thumb"></span></div>';
+    html += pane('ringkasan', '<div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
+    html += pane('ukuran', '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>', '<div id="pub-ins-measures">' + insMeasuresCard() + '</div>');
+    html += pane('tes', '<div id="pub-ins-fitness">' + (insFitnessCard() || '') + '</div><div id="pub-tests-wrap" class="stack" style="gap:16px">' + (myTestsInner() || emptyState('activity', 'Belum ada hasil tes', 'Hasil tes kebugaran dari coach muncul di sini.')) + '</div>', '');
+    html += pane('riwayat', '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div><div class="card stack" style="gap:10px" id="pub-workout-wrap"></div>',
+      '<div class="card"><div class="section-head"><h3 class="section-title">Riwayat latihan</h3><span class="li-sub">' + history.length + ' sesi</span></div>' +
+      '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>');
+    setHTML(el, html);
+    moveSegThumb($('pg-seg'));
     renderWorkoutCard();
     renderConsistencyBars();
   }
@@ -8077,7 +8168,7 @@
     right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
     const showMakan = latSeg === 'makan' && nutOn();
     setHTML(el, (nutOn() ? latSegHtml() : '') + '<div id="pub-latihan-pane"' + (showMakan ? ' class="hide"' : '') + '>' + portalGrid(left, right) + '</div>' +
-      (nutOn() ? '<div id="pub-makan-pane"' + (showMakan ? '' : ' class="hide"') + '><div id="ph-makan">' + insMakanHero() + '</div>' + makanInner() + '</div>' : ''));
+      (nutOn() ? '<div id="pub-makan-pane"' + (showMakan ? '' : ' class="hide"') + '>' + makanInner() + '</div>' : ''));
   }
 
 
@@ -8135,39 +8226,45 @@
         '<button type="button" class="btn btn-primary btn-lg btn-block" onclick="window.openNutOnb()">Isi data</button></div></div>';
     }
     const C = 2 * Math.PI * 52;
-    let html = '<div class="stack" style="gap:var(--gap)">';
-    (t.warnings || []).forEach(function (w) { if (NUT_WARN[w]) html += '<div class="card-flat nut-warn" role="note">' + icon('alert-triangle', 'style="width:16px;height:16px;vertical-align:-3px"') + ' ' + h(NUT_WARN[w]) + '</div>'; });
-    if (n.inputs && n.inputs.stale) html += '<div class="card-flat"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
-    html += '<div class="card-flat stack" style="gap:12px"><div class="row" style="gap:14px"><div class="ring-wrap" style="width:116px;height:116px"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/><circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - Math.min(1, ((n.log && n.log.totals && n.log.totals.kal) || 0) / (t.kal || 1)))).toFixed(1) + '"/></svg>' +
-      '<div class="ring-center"><span class="num" style="font-size:var(--fs-2xl);font-weight:800">' + h(NUT_N(t.kal)) + '</span><span class="eyebrow">kkal</span></div></div>' +
-      '<div class="grow stack" style="gap:2px"><p class="eyebrow">Target hari ini ' + nutInfoBtn('kal') + '</p><p class="li-sub">' + h(NUT_GOALS_L[t.goal] || '') + (t.adjust ? ' · penyesuaian coach ' + (t.adjust > 0 ? '+' : '−') + Math.abs(t.adjust) : '') + '</p><p class="li-sub">Serat ≥ ' + h(NUT_N(t.serat)) + ' g ' + nutInfoBtn('serat') + '</p></div></div>';
     const eaten = (n.log && n.log.totals) || { kal: 0, p: 0, l: 0, k: 0 };
-    html += '<p class="li-sub" id="nut-eaten-line">Dimakan ' + h(NUT_N(eaten.kal)) + ' kkal · ' + (eaten.kal > t.kal ? 'lebih ' + h(NUT_N(eaten.kal - t.kal)) : 'sisa ' + h(NUT_N(t.kal - eaten.kal))) + ' kkal</p>';
-    html += macroBar('protein', 'Protein', t.protein, 4, eaten.p, 'p') + macroBar('karbo', 'Karbohidrat', t.karbo, 4, eaten.k, 'k') + macroBar('lemak', 'Lemak', t.lemak, 9, eaten.l, 'l') + '</div>';
-    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Tubuhmu</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">Ubah data</button></div><div class="kv">' +
-      '<div><p class="k">BMI ' + nutInfoBtn('bmi') + '</p><p class="v">' + (n.bmi ? h(NUT_N(n.bmi.value, 1)) : '-') + '</p></div><div><p class="k">WHtR ' + nutInfoBtn('whtr') + '</p><p class="v">' + (n.whtr ? h(NUT_N(n.whtr.value, 2)) : '-') + '</p></div>' +
-      '<div><p class="k">BMR ' + nutInfoBtn('bmr') + '</p><p class="v">' + h(NUT_N(t.bmr)) + ' kkal</p></div><div><p class="k">TDEE ' + nutInfoBtn('tdee') + '</p><p class="v">' + h(NUT_N(t.tdee)) + ' kkal</p></div></div><p class="li-sub">Semua angka adalah perkiraan, bukan pengganti ahli gizi.</p></div>';
+    const left = t.kal - eaten.kal, wk = window.myWeek && !window.myWeek.error ? window.myWeek : null;
+    let html = '<div class="stack makan-stack" style="gap:var(--gap)">';
+    // Kartu hitam: cincin kalori + sisa + makro hari ini.
+    html += '<section class="card-ink makan-hero"><div class="makan-top"><div class="ring-wrap makan-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/><circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - Math.min(1, eaten.kal / (t.kal || 1)))).toFixed(1) + '"/></svg>' +
+      '<div class="ring-center"><span class="num makan-num">' + h(NUT_N(eaten.kal)) + '</span><span class="eyebrow">dari ' + h(NUT_N(t.kal)) + '</span></div></div>' +
+      '<div class="makan-sum"><span class="ih-eyebrow">Makan hari ini</span><p class="makan-left" id="nut-eaten-line">' + (left >= 0 ? 'Sisa ' + h(NUT_N(left)) + ' kkal' : 'Lebih ' + h(NUT_N(-left)) + ' kkal') + '</p>' +
+      '<p class="makan-meta">' + h(NUT_GOALS_L[t.goal] || '') + (t.adjust ? ' · penyesuaian coach ' + (t.adjust > 0 ? '+' : '−') + Math.abs(t.adjust) : '') + (wk && wk.foodDays != null ? ' · ' + wk.foodDays + '/7 hari tercatat' : '') + '</p></div></div>' +
+      '<div class="makan-macros">' + macroBar('protein', 'Protein', t.protein, 4, eaten.p, 'p') + macroBar('karbo', 'Karbo', t.karbo, 4, eaten.k, 'k') + macroBar('lemak', 'Lemak', t.lemak, 9, eaten.l, 'l') + '</div></section>';
+    (t.warnings || []).forEach(function (w) { if (NUT_WARN[w]) html += '<div class="card nut-warn" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' ' + h(NUT_WARN[w]) + '</div>'; });
+    if (n.inputs && n.inputs.stale) html += '<div class="card"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
     if (n.menu) {
-      html += '<div class="row-between"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
+      const MEAL_IC = { sarapan: 'sunrise', pagi: 'sunrise', siang: 'sun', malam: 'moon', camilan: 'cookie', sahur: 'moon-star', buka: 'sunset' };
+      html += '<div class="card stack" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
       n.menu.meals.forEach(function (m, mi) {
-        html += '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="li-title">' + h(m.label) + '</p><span class="num li-sub">' + h(NUT_N(m.totals.kal)) + ' kkal · P ' + h(NUT_N(m.totals.p)) + ' g</span></div>' +
+        html += '<div class="meal-blk"><div class="meal-head"><span class="icon-chip">' + icon(MEAL_IC[m.key] || 'utensils') + '</span><b class="grow">' + h(m.label) + '</b><span class="num li-sub">' + h(NUT_N(m.totals.kal)) + ' kkal · P ' + h(NUT_N(m.totals.p)) + ' g</span></div>' +
           m.items.map(function (it, ii) {
-            return '<div class="row" style="gap:4px"><button type="button" class="list-item interactive grow" style="min-height:52px;text-align:left;gap:8px" onclick="window.nutSwapOpen(' + mi + ',' + ii + ')"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(it.n) + (it.e ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
+            return '<div class="row meal-item" style="gap:4px"><button type="button" class="list-item interactive grow" style="min-height:52px;text-align:left;gap:8px" onclick="window.nutSwapOpen(' + mi + ',' + ii + ')"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(it.n) + (it.e ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
               '<span class="li-sub">' + h(NUT_N(it.porsi, 1)) + ' ' + h(it.porsiNama.replace(/^1 /, '')) + ' · ' + h(it.gram) + ' g · ' + h(it.kal) + ' kkal</span></span>' + icon('repeat', 'style="width:16px;height:16px"') + '</button>' +
               '<button type="button" class="icon-btn" style="width:44px;height:44px" aria-label="Catat ' + h(it.n) + '" onclick="window.nutLogMenu(' + mi + ',' + ii + ',this)">' + icon('check') + '</button></div>';
           }).join('') + '</div>';
       });
+      html += '</div>';
     }
     html += logCardHtml(n);
-    html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Aturan makan</p>' +
-      '<p>' + icon('utensils', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Isi Piringku: ½ piring sayur dan buah, ¼ karbohidrat, ¼ lauk.</p>' +
-      '<p>' + icon('scale', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Batas harian: gula 50 g, garam 5 g, lemak 67 g.</p>' +
-      '<p>' + icon('clock', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Makan teratur, jangan lewat sarapan.</p>' +
-      '<p>' + icon('cup-soda', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Batasi alkohol dan minuman manis.</p>' +
-      '<p>' + icon('heart-handshake', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Cukup 80 % patuh; satu hari bebas per minggu boleh.</p></div></div>';
+    html += '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Tubuhmu</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">' + icon('pencil') + 'Ubah data</button></div><div class="mtiles">' +
+      mtileHtml('BMI', n.bmi ? NUT_N(n.bmi.value, 1) : '–', '') + mtileHtml('Pinggang / tinggi', n.whtr ? NUT_N(n.whtr.value, 2) : '–', '') +
+      mtileHtml('BMR', NUT_N(t.bmr), 'kkal istirahat') + mtileHtml('TDEE', NUT_N(t.tdee), 'kkal dengan aktivitas') + '</div>' +
+      '<p class="li-sub">Info tiap angka: ' + nutInfoBtn('bmi') + nutInfoBtn('whtr') + nutInfoBtn('tdee') + ' · Serat ≥ ' + h(NUT_N(t.serat)) + ' g ' + nutInfoBtn('serat') + '. Semua angka perkiraan, bukan pengganti ahli gizi.</p></div>';
+    html += foldHtml('Aturan makan', '5 kebiasaan', '<div class="stack" style="gap:8px">' +
+      '<p>' + icon('utensils', 'class="ic-inline"') + ' Isi Piringku: ½ piring sayur dan buah, ¼ karbohidrat, ¼ lauk.</p>' +
+      '<p>' + icon('scale', 'class="ic-inline"') + ' Batas harian: gula 50 g, garam 5 g, lemak 67 g.</p>' +
+      '<p>' + icon('clock', 'class="ic-inline"') + ' Makan teratur, jangan lewat sarapan.</p>' +
+      '<p>' + icon('cup-soda', 'class="ic-inline"') + ' Batasi alkohol dan minuman manis.</p>' +
+      '<p>' + icon('heart-handshake', 'class="ic-inline"') + ' Cukup 80 % patuh; satu hari bebas per minggu boleh.</p></div>', false);
+    html += '</div>';
     return html;
   }
-  function renderMakan() { const w = $('pub-makan-pane'); if (w) { setHTML(w, '<div id="ph-makan">' + insMakanHero() + '</div>' + makanInner()); paintIcons(); } }
+  function renderMakan() { const w = $('pub-makan-pane'); if (w) { setHTML(w, makanInner()); paintIcons(); } }
   window.nutInfo = function (key) {
     const d = NUT_INFO[key]; if (!d) return;
     $('nut-info-title').textContent = d[0]; $('nut-info-text').textContent = d[1]; $('nut-info-src').textContent = 'Sumber: ' + d[2];
@@ -8274,7 +8371,7 @@
   const NUT_MEAL_L = { sarapan: 'Sarapan', siang: 'Makan siang', malam: 'Makan malam', camilan: 'Camilan' };
   function logCardHtml(n) {
     const log = n.log || { items: [], totals: { kal: 0 } };
-    let html = '<div class="card-flat stack" style="gap:8px" id="nut-log-card"><div class="row-between"><p class="eyebrow">Dimakan hari ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button></div>';
+    let html = '<div class="card stack" style="gap:8px" id="nut-log-card"><div class="section-head"><h3 class="section-title">Dimakan hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button></div>';
     Object.keys(NUT_MEAL_L).forEach(function (k) {
       const its = log.items.filter(x => x.waktu === k), kal = its.reduce((a, x) => a + x.kal, 0);
       html += '<div class="stack" style="gap:0"><div class="row-between" style="min-height:44px"><span class="li-title">' + h(NUT_MEAL_L[k]) + (its.length ? ' <span class="li-sub">' + h(NUT_N(kal)) + ' kkal</span>' : '') + '</span>' +
@@ -8942,7 +9039,7 @@
     const next = mine.filter(x => !isDone(x) && new Date(x.end || x.start) > now).sort(byStart)[0];
     const stats = [{ v: String(upcoming), l: 'Mendatang' }, { v: String(monthDone), l: 'Selesai bulan ini' }];
     if (todayFree !== null) stats.push({ v: String(todayFree), l: 'Jam kosong hari ini' });
-    return '<div style="margin-bottom:16px">' + insightHeroHtml({ eyebrow: 'Jadwalmu', stats: stats, text: next ? 'Sesi berikutnya ' + fmtDate(new Date(next.start)) + ' · ' + fmtTime(new Date(next.start)) + '.' : 'Belum ada sesi terjadwal. Pilih tanggal di bawah untuk booking.' }) + '</div>';
+    return '<div style="margin-bottom:16px">' + insightHeroHtml({ slim: true, eyebrow: 'Jadwalmu', stats: stats, actions: '<button type="button" class="btn btn-on-ink btn-sm only-desktop" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button>', text: next ? 'Sesi berikutnya ' + fmtDate(new Date(next.start)) + ' · ' + fmtTime(new Date(next.start)) + '.' : 'Belum ada sesi terjadwal. Pilih tanggal di bawah untuk booking.' }) + '</div>';
   }
 
   window.chatCoach = function (kind) {
@@ -9215,21 +9312,20 @@
     const rows = (ic, items) => '<div>' + items.map(i => '<div class="coach-row"><span class="ico">' + icon(ic, 'style="width:16px;height:16px"') + '</span><span style="padding-top:6px">' + h(i) + '</span></div>').join('') + '</div>';
     const specs = String(c.specialty || '').split(',').map(x => x.trim()).filter(Boolean);
     let html = '<div class="stack stagger" style="gap:16px">';
-    // Hero (gaya kartu ink seperti dashboard)
-    html += '<div class="card-ink coach-hero">' + avatar(c.photo, c.name, 'xl') + '<h2 class="profile-name">' + h(c.name) + '</h2>' +
-      (c.headline ? '<p class="muted" style="margin-top:6px">' + h(c.headline) + '</p>' : '') +
+    // Hero ringkas: foto, nama, status dan angka dalam satu kartu; tombol di kanan (PC) atau di bawah (HP).
+    const s = p.stats || {};
+    const kp = [[s.clients, 'Klien'], [s.sessions, 'Sesi selesai'], [s.rating, 'Rating']].filter(k => k[0] !== '' && k[0] != null && Number(k[0]) !== 0);
+    html += '<div class="card-ink coach-hero compact"><div class="ch-id">' + avatar(c.photo, c.name, 'lg') + '<div class="ch-txt"><h2 class="profile-name">' + h(c.name) + '</h2>' +
+      (c.headline ? '<p class="muted">' + h(c.headline) + '</p>' : '') +
       '<div class="pill-row">' + (stLabel ? '<span class="pill solid"><span class="live-dot"></span>' + h(stLabel) + '</span>' : '') +
       (c.experience ? '<span class="pill">' + icon('medal') + h(c.experience) + '</span>' : '') +
-      (c.location ? '<span class="pill">' + icon('map-pin') + h(c.location) + '</span>' : '') + '</div>';
+      (c.location ? '<span class="pill">' + icon('map-pin') + h(c.location) + '</span>' : '') + '</div></div></div>' +
+      (kp.length ? '<div class="ih-stats ch-stats">' + kp.map(k => '<div class="ih-stat"><b>' + h(String(k[0]).replace('.', ',')) + '</b><span>' + h(k[1]) + '</span></div>').join('') + '</div>' : '');
     if (!opts.preview) {
-      html += '<div class="btn-row"><button type="button" class="btn btn-lg btn-inverse" data-coach="' + h(c.id) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Chat WA</button>' +
-        '<button type="button" class="btn btn-lg btn-ghost-ink" onclick="' + 'window.setBookCoach(\'' + h(String(c.id)) + '\');' + (opts.inSheet ? 'window.closeModal();setTimeout(window.handleFabClick,300)' : 'window.handleFabClick()') + '">' + icon('calendar-plus') + 'Booking</button></div>';
+      html += '<div class="btn-row ch-acts"><button type="button" class="btn btn-inverse" data-coach="' + h(c.id) + '" onclick="window.contactPublicCoach(this.getAttribute(\'data-coach\'))">' + icon('message-circle') + 'Chat WA</button>' +
+        '<button type="button" class="btn btn-ghost-ink" onclick="' + 'window.setBookCoach(\'' + h(String(c.id)) + '\');' + (opts.inSheet ? 'window.closeModal();setTimeout(window.handleFabClick,300)' : 'window.handleFabClick()') + '">' + icon('calendar-plus') + 'Booking</button></div>';
     }
     html += '</div>';
-    // KPI
-    const s = p.stats || {};
-    const kp = [['users', s.clients, 'Klien'], ['check-circle-2', s.sessions, 'Sesi selesai'], ['star', s.rating, 'Rating']].filter(k => k[1] !== '' && k[1] != null && Number(k[1]) !== 0);
-    if (kp.length) html += '<div class="coach-kpis">' + kp.map(k => '<div class="kpi"><span class="kpi-icon">' + icon(k[0]) + '</span><span class="kpi-value num">' + h(String(k[1]).replace('.', ',')) + '</span><span class="kpi-label">' + h(k[2]) + '</span></div>').join('') + '</div>';
     // Slot kosong
     // Dua coach aktif atau lebih: slot terdekat milik coach ini saja (bukan gabungan semua coach).
     const coachSlots = (!window.isSoloCoach() && window.openSlotsByCoachMap && window.openSlotsByCoachMap[String(c.id)]) || window.openSlotsByDate;

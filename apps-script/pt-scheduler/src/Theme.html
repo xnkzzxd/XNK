@@ -1807,8 +1807,6 @@ button.avatar { border: 0; cursor: pointer; }
     #app.detail-wide .pg-grid > .pg-more > .stack { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); column-gap: 28px !important; }
   }
   @container (min-width: 600px) {
-    #app.detail-wide #profile-care-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px !important; align-items: start; }
-    #app.detail-wide #profile-care-wrap > .cp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
     #app.detail-wide #profile-nut-wrap { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); column-gap: 20px !important; align-items: start; }
     #app.detail-wide #profile-nut-wrap > .cp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   }
@@ -1909,6 +1907,7 @@ html, body { overflow-x: hidden; }
   /* PC: kartu Makan mengalir dalam dua kolom (target + tubuh di kiri, menu dan catatan di kanan) */
   #pub-makan-pane > .stack { display: block; column-count: 2; column-gap: var(--gap); }
   #pub-makan-pane > .stack > * { break-inside: avoid; margin-bottom: var(--gap); }
+  #pub-makan-pane > .stack > .makan-hero { column-span: all; }
 }
 
 /* ── Fase Q: kartu insight, status, ringkasan ─────────────────────────────── */
@@ -1937,18 +1936,24 @@ html, body { overflow-x: hidden; }
 .stat-strip b { display: block; font-size: var(--fs-xl); font-weight: 800; line-height: 1.1; }
 .stat-strip span { font-size: var(--fs-xs); color: var(--fg-muted); }
 details.fold { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
-details.fold > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-weight: 700; cursor: pointer; list-style: none; }
+details.fold > summary { min-height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 14px; cursor: pointer; list-style: none; -webkit-tap-highlight-color: transparent; }
 details.fold > summary::-webkit-details-marker { display: none; }
+details.fold .fold-t { font-weight: 700; flex: 1; min-width: 0; }
+details.fold .fold-m { font-size: var(--fs-xs); color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
+details.fold .fold-chev { display: inline-flex; color: var(--fg-muted); transition: transform var(--t-fast) var(--ease); }
+details.fold .fold-chev svg { width: 18px; height: 18px; }
+details.fold[open] .fold-chev { transform: rotate(180deg); }
 details.fold > .fold-body { padding: 0 14px 14px; }
+@media (hover: hover) { details.fold > summary:hover { background: var(--surface-2); border-radius: var(--r-md); } }
+@media (prefers-reduced-motion: reduce) { details.fold .fold-chev { transition: none; } }
 .icon-chip { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-sm); background: var(--surface-3); color: var(--fg); flex: none; }
 .meter.low > i { background-image: repeating-linear-gradient(135deg, var(--ink) 0 4px, transparent 4px 8px); }
 .meter.empty > i { background: var(--danger); }
-.heat-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); gap: 3px; }
-.heat-grid i { width: 100%; aspect-ratio: 1; border-radius: 3px; background: var(--heat-0); }
+.heat-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); grid-auto-columns: 13px; gap: 3px; width: max-content; }
+.heat-grid i { width: 13px; height: 13px; border-radius: 3px; background: var(--heat-0); }
 .heat-grid i[data-l="1"] { background: var(--heat-1); } .heat-grid i[data-l="2"] { background: var(--heat-2); }
 .heat-grid i[data-l="3"] { background: var(--heat-3); } .heat-grid i[data-l="4"] { background: var(--heat-4); }
 
-.heat-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); max-width: 520px; }
 #ph-makan { margin-bottom: var(--gap); }
 .next-card { display: grid; gap: 10px; }
 .next-card .ih-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1997,8 +2002,98 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 .cc-wd { font-size: var(--fs-xs); font-weight: 700; color: var(--fg-2); }
 
 details.fold > summary > span:first-child { font-weight: 700; }
-details.fold[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+details.fold[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 12px; border-radius: var(--r-md) var(--r-md) 0 0; }
 
 .ih-range button::before { content: ''; position: absolute; inset: -6px -3px; }
 #view-clients .chips .chip { min-height: 44px; }
+
+/* Kartu hitam ramping: satu baris untuk halaman yang isinya sedikit */
+.insight-hero.slim { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 16px 20px; border-radius: var(--r-lg); }
+.insight-hero.slim::before { display: none; }
+.insight-hero.slim .ih-main { flex: 1 1 200px; min-width: 0; display: grid; gap: 2px; }
+.insight-hero.slim .ih-text { font-weight: 700; font-size: var(--fs-md); }
+.insight-hero.slim .ih-stats { display: flex; flex-wrap: wrap; gap: 8px 24px; flex: 0 1 auto; }
+.insight-hero.slim .ih-stat b { font-size: var(--fs-xl); }
+.insight-hero.slim .ih-actions { flex: 0 0 auto; }
+@media (max-width: 520px) { .insight-hero.slim .ih-actions { flex: 1 1 100%; } .insight-hero.slim .ih-actions .btn { width: 100%; } }
+.card-ink .state-pill.habis { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+/* Tile angka */
+.mtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+.mtile { display: grid; gap: 2px; align-content: start; min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
+.card .mtile, .card-flat .mtile { background: var(--surface-2); }
+.mtile .k { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--fg-muted); }
+.mtile .v { font-size: var(--fs-xl); font-weight: 800; line-height: 1.2; }
+.mtile .n { font-size: var(--fs-xs); color: var(--fg-muted); }
+.mtile .n.warn { color: var(--danger); }
+.ic-inline { width: 15px; height: 15px; vertical-align: -2px; }
+.nut-flag { white-space: normal; }
+/* Kalender aktivitas ringkas */
+.act-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px 24px; }
+.act-side { flex: 1 1 180px; display: grid; gap: 10px; min-width: 0; }
+/* Batang kalori 7 hari */
+.kbars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; }
+.kbar { display: grid; gap: 4px; justify-items: center; min-width: 0; }
+.kbar-v { font-size: var(--fs-2xs); color: var(--fg-muted); font-weight: 700; }
+.kbar-col { position: relative; width: 100%; max-width: 36px; height: 96px; border-radius: 6px; background: var(--surface-2); display: flex; align-items: flex-end; overflow: hidden; }
+.kbar-col i { display: block; width: 100%; background: var(--fg); border-radius: 6px 6px 0 0; }
+.kbar.over .kbar-col i { background: repeating-linear-gradient(135deg, var(--fg) 0 4px, var(--fg-muted) 4px 7px); }
+.kgoal { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed var(--fg-muted); z-index: 1; }
+.kbar-d { font-size: var(--fs-2xs); color: var(--fg-muted); }
+/* Ringkasan klien: tombol ubah/hapus, PR di dalam lipatan tanpa judul ganda */
+.cp-edit-row { margin-top: -4px; }
+details.fold #profile-tasks-wrap > .section-head .section-title { display: none; }
+details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; margin-bottom: 8px; }
+
+/* Portal: judul halaman ada di top bar, bukan di dalam isi */
+html.portal .topbar-title { opacity: 1; transform: none; }
+html.portal .page-intro { display: none; }
+html.portal .page-head .page-title, html.portal .page-head .page-sub { display: none; }
+html.portal .page-head { margin: 0 0 12px; justify-content: flex-end; }
+html.portal .page-head:not(:has(button, select, .seg)) { display: none; }
+html.portal .page-head > div:empty { display: none; }
+/* Kartu hitam kosong: ringkas */
+.insight-hero.is-empty { padding: 18px 22px; gap: 8px; }
+.insight-hero.is-empty::before { display: none; }
+/* Progres: segmen bagian */
+.pg-seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: var(--gap) 0; max-width: 560px; }
+.pg-seg button { min-height: 44px; }
+.pg-pane.hide { display: none; }
+/* Makan */
+.makan-hero { display: grid; gap: 18px; }
+.makan-top { display: flex; align-items: center; gap: 18px; }
+.makan-ring { width: 112px; height: 112px; flex: none; }
+.makan-num { font-size: var(--fs-2xl); font-weight: 800; line-height: 1; }
+.makan-sum { display: grid; gap: 4px; min-width: 0; }
+.makan-left { font-size: var(--fs-2xl); font-weight: 800; margin: 0; }
+.makan-meta { font-size: var(--fs-sm); color: var(--on-ink-muted); margin: 0; }
+.makan-macros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.makan-macros .li-title { font-size: var(--fs-sm); }
+.makan-macros .num { font-size: var(--fs-xs); }
+.makan-hero .row-between { gap: 6px; flex-wrap: wrap; }
+.makan-hero .icon-btn { color: var(--on-ink); background: transparent; border-color: transparent; }
+@media (max-width: 420px) { .makan-macros { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
+.meal-blk { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--border); }
+.meal-blk:first-of-type { border-top: 0; padding-top: 0; }
+.meal-head { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.meal-head .icon-chip { width: 32px; height: 32px; }
+.meal-head .icon-chip svg { width: 16px; height: 16px; }
+/* Coach: kartu hitam ringkas */
+.coach-hero.compact { text-align: left; padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.coach-hero.compact::before { display: none; }
+.coach-hero.compact .ch-id { display: flex; gap: 16px; align-items: center; min-width: 0; }
+.coach-hero.compact .avatar { margin: 0; flex: none; }
+.coach-hero.compact .ch-txt { min-width: 0; display: grid; gap: 4px; }
+.coach-hero.compact .profile-name { font-size: var(--fs-2xl); }
+.coach-hero.compact .pill-row { justify-content: flex-start; margin-top: 6px; }
+.coach-hero.compact .btn-row { margin-top: 0; }
+.coach-hero.compact .ch-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+@media (min-width: 900px) {
+  .coach-hero.compact { grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 28px; }
+  .coach-hero.compact .ch-acts { flex-wrap: nowrap; }
+}
+
+.ih-stat b { white-space: nowrap; }
+@media (max-width: 420px) { .insight-hero:not(.slim) .ih-stat b { font-size: var(--fs-xl); } }
+html.portal #view-calendar .page-head:not(:has(select)) { display: none; }
+html.portal #view-calendar .page-head .btn { display: none; }
 </style>
