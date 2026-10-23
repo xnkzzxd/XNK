@@ -280,7 +280,7 @@ async function contrastReport(page) {
       pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom),
       wide: document.getElementById('app').classList.contains('detail-wide') && getComputedStyle(document.getElementById('detail-panel')).width,
     }));
-    check(phoneProf.tabs === 3 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (3-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
+    check(phoneProf.tabs === 4 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (4-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
     const detail = await page.textContent('#detail-panel');
     check(detail.includes('Citra') && !detail.includes('Kirim Link') && !detail.includes('Link Baru'), 'client detail shows the client, no member-link buttons');
     await shot(page, 'admin-mobile-client-detail');
@@ -445,7 +445,7 @@ async function contrastReport(page) {
       const cards = Array.from(document.querySelectorAll('#client-list .client-card')), sc = document.getElementById('main-scroll-area').getBoundingClientRect();
       const sel = document.querySelector('#client-list .selected').getBoundingClientRect();
       return { lefts: new Set(cards.map(c => Math.round(c.getBoundingClientRect().left))).size, meta: Array.from(document.querySelectorAll('#client-list .cc-meta, #client-list .cc-meter, #client-list .grow > .li-sub')).filter(e => e.getClientRects().length).length,
-        kpis: document.querySelector('#view-clients .client-kpis').getClientRects().length, selIn: sel.top >= sc.top && sel.bottom <= sc.bottom };
+        kpis: document.querySelector('#view-clients .client-top').getClientRects().length, selIn: sel.top >= sc.top && sel.bottom <= sc.bottom };
     });
     check(compact.lefts === 1 && compact.meta === 0 && compact.kpis === 0 && compact.selIn, 'open client: the list becomes one column of names (no details, no summary tiles) and the open client is in view ' + JSON.stringify(compact));
     check((await elOverflow(page, '#detail-body')) <= 1 && (await elOverflow(page, '#client-list')) <= 1, 'open client: nothing overflows sideways in the panel or the list');
@@ -500,9 +500,9 @@ async function contrastReport(page) {
     await page.fill('#search-client', '');
     await page.evaluate(() => window.filterClients());
     await page.evaluate(() => window.setClientFilter('low'));
-    const kLow = await page.locator('#view-clients .kpi.active[data-filter="low"]').count();
+    const kLow = await page.locator('#view-clients .stat-tile.active[data-filter="low"]').count();
     await page.evaluate(() => window.setClientFilter('all'));
-    check(kLow === 1 && (await page.locator('#view-clients .kpi.active').count()) === 0 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the summary tiles and chips follow the chosen filter');
+    check(kLow === 1 && (await page.locator('#view-clients .stat-tile.active').count()) === 0 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the summary tiles and chips follow the chosen filter');
 
     // Closing returns to the grid; a profile opened from another page keeps the normal 420 px panel.
     await page.click('.detail-head .icon-btn[aria-label="Tutup detail"]');
@@ -515,7 +515,7 @@ async function contrastReport(page) {
     const dPanel = await page.locator('#detail-panel').boundingBox();
     const dTabs = await page.evaluate(() => { const t = Array.from(document.querySelectorAll('#detail-body [data-cptab]')); return { rows: new Set(t.map(b => Math.round(b.getBoundingClientRect().top))).size, over: t.map(b => b.scrollWidth - b.clientWidth).filter(x => x > 1).length }; });
     check(!(await page.evaluate(() => document.getElementById('app').classList.contains('detail-wide'))) && dPanel.width > 380 && dPanel.width < 460 && dTabs.rows === 1 && dTabs.over === 0,
-      'a client opened from the dashboard keeps the 420 px panel, six tabs on one row ' + JSON.stringify(dTabs));
+      'a client opened from the dashboard keeps the 420 px panel, four tabs on one row ' + JSON.stringify(dTabs));
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(600);
 
@@ -821,9 +821,10 @@ async function contrastReport(page) {
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.waitForTimeout(400);
-    check((await page.locator('#view-clients .client-kpis .kpi').count()) === 4, 'Klien list: four summary tiles that also filter');
+    check((await page.locator('#view-clients .client-tiles .stat-tile').count()) === 4 && await visible(page, '#client-hero .insight-hero'), 'Klien list: black summary card and four tiles that also filter');
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
+    await page.evaluate(() => { const f = document.querySelector('#detail-body details.fold'); if (f) f.open = true; });
     check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 9, 'client page: all nine reminder switches start on');
     await page.click('#profile-remind-prefs input[data-remind="pr"]');
     await page.waitForTimeout(600);
@@ -833,7 +834,7 @@ async function contrastReport(page) {
     check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
-    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 6, 'client page: dark hero and six tabs (Ringkasan, Progres, Program, Perawatan, Gizi, Riwayat)');
+    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 4, 'client page: dark hero and four tabs (Ringkasan, Progres, Latihan, Gizi)');
     const tabBox = await page.evaluate(() => { const t = document.querySelector('#detail-body .cp-tabs'), d = document.querySelector('#detail-body'); if (!t || !d) return null; const r = t.getBoundingClientRect(), dr = d.getBoundingClientRect(); return { l: Math.round(r.left - dr.left), r: Math.round(dr.right - r.right), over: t.scrollWidth - t.clientWidth, chips: Array.from(t.children).map(c => Math.round(c.scrollWidth - c.clientWidth)) }; });
     check(!!tabBox && tabBox.l >= 0 && tabBox.r >= 0 && tabBox.over <= 1 && tabBox.chips.every(x => x <= 1), 'client page: the tab pills stay inside the panel (no bleed) ' + JSON.stringify(tabBox));
     await page.evaluate(() => { const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; });
@@ -1281,13 +1282,14 @@ async function contrastReport(page) {
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(800);
     await page.evaluate(() => window.cpTab('ringkasan'));
+    await page.evaluate(() => { const f = document.querySelector('#detail-body details.fold'); if (f) f.open = true; });
     const remind = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
     check(remind.length === 9 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
     const hit = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs input[data-remind]')).map(e => e.getBoundingClientRect()).every(r => r.height >= 43.5 && r.width >= 43.5));
     check(hit, 'phone: the switch touch area is at least 44 × 44 px');
     check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');
     await shot(page, 'client-reminders-mobile-' + scheme);
-    for (const tab of ['ringkasan', 'progres', 'perawatan', 'gizi', 'riwayat']) {
+    for (const tab of ['ringkasan', 'progres', 'latihan', 'gizi']) {
       await page.evaluate(t => { window.cpTab(t); const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; }, tab);
       await page.waitForTimeout(250);
       if (tab === 'gizi') {
@@ -1341,7 +1343,7 @@ async function contrastReport(page) {
     check(await visible(adm.page, '#renewals-card') && (await adm.page.textContent('#renewals-card')).includes('Ani Anggraini'), 'renewal: the dashboard shows "Minta perpanjang" with the client');
     await adm.page.evaluate(() => window.navigate('clients'));
     await adm.page.waitForTimeout(400);
-    check(await visible(adm.page, '#client-list [data-key="client:PT-A"] .cc-renew'), 'renewal: the client\'s card on the Klien page says "Minta perpanjang"');
+    check((await adm.page.textContent('#client-list [data-key="client:PT-A"] .cc-flags')).includes('Minta perpanjang'), 'renewal: the client\'s card on the Klien page says "Minta perpanjang"');
     await adm.page.evaluate(() => window.navigate('dashboard'));
     await adm.page.waitForTimeout(400);
     await adm.page.click('#renewals-card .btn-primary');
@@ -1967,7 +1969,7 @@ async function contrastReport(page) {
     check((await page.textContent('#coach-sheet-body')).includes('Rizky') && await visible(page, '#coach-sheet-body .coach-hero'), 'tapping "Coach kamu" opens the full coach profile in a sheet');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
-    check(await visible(page, '#view-public-dashboard .portal-hero') && (await page.locator('#view-public-dashboard .portal-kpis .kpi').count()) === 3 && (await page.locator('#view-public-dashboard .portal-actions .btn').count()) === 3, 'portal home: dark hero, three KPI tiles and three quick actions');
+    check(await visible(page, '#view-public-dashboard .portal-hero') && await visible(page, '#view-public-dashboard .next-card') && await visible(page, '#pub-week .stat-strip') && (await page.locator('#view-public-dashboard .portal-actions .btn').count()) === 3, 'portal home: next session on top, dark hero, "Minggu ini" strip and three quick actions');
     check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'portal home: no sideways page scroll');
     await shot(page, 'portal-mobile-home-premium');
     await page.evaluate(() => window.openMyProfile());
@@ -1978,7 +1980,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
-    check((await page.locator('#view-calendar .portal-kpis .kpi').count()) >= 2, 'portal Jadwal: KPI tiles above the calendar');
+    check(await visible(page, '#view-calendar .insight-hero') && (await page.locator('#view-calendar .insight-hero .ih-stat').count()) >= 2, 'portal Jadwal: black summary card above the calendar');
     await page.evaluate(() => window.navigate('public-progress'));
     await page.waitForTimeout(400);
     await page.click('#pub-progress-wrap .btn-primary');

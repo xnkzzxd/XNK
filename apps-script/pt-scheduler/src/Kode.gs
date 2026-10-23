@@ -2122,19 +2122,28 @@ function getPortalMore(memberToken) {
   const part = function(fn) { try { return fn(); } catch (e) { return { error: String((e && e.message) || e) }; } };
   return _withSchedulesMemo_(function() {
     const coachId = String(row[10] || '').trim();
+    const spy = {};
+    const progress = part(function() { return _myPayload_(row); });
+    const assessment = part(function() { return _assessmentFor_(row, spy); });
+    const program = part(function() { return _programFor_(row); });
+    const workout = part(function() { return _workoutFor_(row); });
+    const nutrition = part(function() { return _nutritionFor_(row); });
+    const ins = part(function() { return _insightFor_(row, 'client', { progress: progress, assessment: assessment, program: program, workout: workout, nutrition: nutrition, bodyFat: spy.bodyFat }); });
     return {
       at: new Date().toISOString(),
-      progress: part(function() { return _myPayload_(row); }),
+      week: ins.error ? ins : ins.week,
+      insight: ins.error ? ins : { body: ins.body, fitness: ins.fitness, links: ins.links, training: ins.training, activity: ins.activity },
+      progress: progress,
       tasks: part(function() { return _myTasksFor_(row); }),
       healthForm: part(function() { return _healthFormFor_(row); }),
-      assessment: part(function() { return _assessmentFor_(row); }),
+      assessment: assessment,
       renewal: part(function() { return _renewalFor_(row); }),
       bills: part(function() { return _billsFor_(row); }),
       classGroup: part(function() { return _classGroupFor_(row); }),
       meal: part(function() { return _mealForMember_(row); }),
-      program: part(function() { return _programFor_(row); }),
-      workout: part(function() { return _workoutFor_(row); }),
-      nutrition: part(function() { return _nutritionFor_(row); }),
+      program: program,
+      workout: workout,
+      nutrition: nutrition,
       content: part(function() { return _contentForClient_(); }),
       coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; })
     };
@@ -2222,7 +2231,8 @@ function getAdminMore(token, month, year) {
       finance: finance,
       revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
       packageTrend: part(function () { return _packageTrendStats_(m, y); }),
-      hub: part(function () { return _coachHub_(new Date()); })
+      hub: part(function () { return _coachHub_(new Date()); }),
+      signals: part(function () { return _clientSignals_(new Date()); })
     };
   });
 }
@@ -6147,14 +6157,24 @@ function getClientBundle(token, memberId) {
   requireAdmin_(token);
   const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
   return _withSchedulesMemo_(function () {
+    const progress = part(function () { return getMemberProgress(token, memberId); });
+    const workout = part(function () { return getWorkoutLog(token, memberId); });
+    const program = part(function () { return getMemberProgram(token, memberId); });
+    const care = part(function () { return getClientCare(token, memberId); });
+    const insight = part(function () {
+      const row = _memberRowOrThrow_(memberId).row;
+      const bodyFat = care && care.assessment && care.assessment.bodyFat !== '' && care.assessment.bodyFat != null ? Number(care.assessment.bodyFat) : null;
+      return _insightFor_(row, 'coach', { progress: progress, workout: workout, bodyFat: bodyFat });
+    });
     return {
       tasks: part(function () { return getTasksForMember(token, memberId); }),
-      progress: part(function () { return getMemberProgress(token, memberId); }),
-      care: part(function () { return getClientCare(token, memberId); }),
-      program: part(function () { return getMemberProgram(token, memberId); }),
-      workout: part(function () { return getWorkoutLog(token, memberId); }),
+      progress: progress,
+      care: care,
+      program: program,
+      workout: workout,
       nutrition: part(function () { return getClientNutrition(token, memberId); }),
-      foodLog: part(function () { return getClientFoodLog(token, memberId); })
+      foodLog: part(function () { return getClientFoodLog(token, memberId); }),
+      insight: insight
     };
   });
 }
@@ -7866,9 +7886,10 @@ function submitMyHealthForm(memberToken, answers) {
 }
 
 /** Klien: tujuan & preferensi dari assessment, dan hasil tes (pertama → terbaru). Tanpa catatan coach. */
-function _assessmentFor_(row) {
+function _assessmentFor_(row, spy) {
   const id = String(row[0]).trim();
   const asm = _latestRowFor_('Assessments', id);
+  if (spy) spy.bodyFat = asm && asm.row[9] !== '' && asm.row[9] != null ? Number(asm.row[9]) : null;
   const byTest = _fitnessByMember_(id);
   return {
     goal: asm ? String(asm.row[3] || '') : '', schedulePref: asm ? String(asm.row[5] || '') : '',

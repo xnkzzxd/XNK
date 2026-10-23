@@ -324,3 +324,9 @@ Pengaturan → **Keuangan** (mati sampai Anda menyalakannya):
 - **Klien bisa lihat tagihan** (mati): kartu Tagihan read-only di portal klien.
 - Pengingat **Tagihan** (Pengingat Klien, mati): tombol WA ke klien yang belum lunas lebih dari 3 hari.
 - Sheet baru: `Tagihan`, `Pembayaran`, `Pengeluaran`, `KategoriKeuangan`; `Coaches` mendapat 2 kolom bagi hasil.
+
+## Tampilan Klien baru (Fase Q)
+
+- **Portal klien:** tiap tab dibuka dengan **kartu hitam** ringkasan. Beranda menampilkan sesi berikutnya paling atas, lalu kartu **Minggu ini** (sesi, latihan mandiri, catat makan, streak, tantangan). Tab **Progres** punya rapor tubuh (4 mgg · 3 bln · Semua) dengan kalimat kesimpulan, BMI/rasio pinggang dengan bahasa lembut, lingkar badan dan simetri, kemajuan tes, serta hubungan konsistensi dengan hasil. Tab **Latihan** punya perbandingan minggu ini vs biasanya, kalender aktivitas 12 minggu, kekuatan per gerakan (termasuk tanda mandek), dan keseimbangan otot.
+- **Panel Klien:** kartu hitam ringkasan, filter **Perlu perhatian** (tidak latihan ≥ 14 hari, kuota habis/hampir tanpa jadwal, PR telat, minta perpanjang, rating ≤ 3), urutkan, dan sakelar Kartu/Daftar di laptop. Halaman klien kini 4 tab: **Ringkasan** (Sorotan, data, PR, jadwal, Riwayat, pengingat WA yang dilipat), **Progres**, **Latihan**, **Gizi**.
+- Satu-satunya warna adalah merah kecil untuk tanda bahaya. Batas "tidak latihan" bisa diubah lewat Script Property `CLIENT_INACTIVE_DAYS` (bawaan 14, 3–90). Tidak ada sheet atau kolom baru.
