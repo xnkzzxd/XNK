@@ -384,6 +384,11 @@
     try { window.top.postMessage({ xnk: 'theme', color: color }, '*'); } catch (e) {}
   }
   window.hostPostTheme = hostPostTheme;
+  // Teks besar (Fase R): font scaling tidak memicu media query, jadi periksa ukuran dasar.
+  (function bigText() {
+    function check() { try { document.documentElement.classList.toggle('big-text', parseFloat(getComputedStyle(document.documentElement).fontSize) >= 20); } catch (e) {} }
+    check(); window.addEventListener('resize', check);
+  })();
   (function hostBridge() {
     if (window.top === window) return;
     window.addEventListener('message', function (e) {
@@ -6289,7 +6294,8 @@
   // ── Perawatan klien (E4): catatan privat, kesehatan, assessment, tes ─────────
   // Data sensitif: dimuat saat halaman klien dibuka dan TIDAK disimpan di cache panel.
   const care = {};
-  function careRow(label, value) { return '<div class="row-between" style="min-height:36px;gap:12px"><span class="li-sub">' + h(label) + '</span><span style="text-align:right">' + value + '</span></div>'; }
+  // Label di atas, nilai di bawah; baris berurutan mengisi 2 kolom (CSS :has). Nilai panjang melebar penuh.
+  function careRow(label, value) { return '<div class="cr' + (String(value).replace(/<[^>]*>/g, '').length > 36 ? ' w' : '') + '"><span class="li-sub">' + h(label) + '</span><span class="cr-v">' + value + '</span></div>'; }
   function careTestChange(t) {
     if (t.change === null) return '';
     const sign = t.change > 0 ? '+' : '';
