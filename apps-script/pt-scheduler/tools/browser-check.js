@@ -1043,6 +1043,7 @@ async function contrastReport(page) {
     check((await page.textContent('#profile-progress-wrap')).includes('coach') && (await page.textContent('#profile-progress-wrap')).includes('73'), 'client page: the entry and its author are listed');
     const chartW = await page.evaluate(() => { const c = document.querySelector('#profile-progress-wrap .pg-chart'); return c ? Math.round(c.getBoundingClientRect().width) : 0; });
     check(chartW >= 200 && chartW <= 420, 'wide client page: the progress chart keeps a sensible size (' + chartW + ' px)');
+    await page.evaluate(() => document.querySelectorAll('#profile-progress-wrap details.fold').forEach(f => { f.open = true; }));
     await page.click('#profile-progress-wrap .list-item .icon-btn');
     await page.waitForTimeout(300);
     await page.click('#btn-confirm-modal-yes');
