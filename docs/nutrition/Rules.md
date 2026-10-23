@@ -19,4 +19,4 @@ Status: **draf untuk disetujui owner**. Baris bertanda ⚠ harus dicek ke sumber
 | 12 | Aturan umum ke klien: Isi Piringku (½ sayur-buah, ¼ karbo, ¼ lauk); batas harian gula 50 g, garam 5 g (natrium 2.000 mg), lemak 67 g (batas berbasis WHO yang dipakai Permenkes 30/2013 tentang label gula-garam-lemak, bukan angka Pedoman Gizi Seimbang); makan teratur, jangan lewat sarapan; batasi alkohol & minuman manis. 80/20 + 1 hari bebas per minggu opsional (rata-rata mingguan dihitung). | Permenkes 30/2013; Isi Piringku (Permenkes 41/2014) |
 | 13 | Bahasa: ramah, singkat ("Kak {nama}, target hari ini 1.900 kkal"); porsi rumah tangga + gram; makanan estimasi diberi tanda. Suplemen tidak dibahas. | — |
 
-Sumber data makanan: TKPI 2017 (Kemenkes). ~50 menu jadi (nasi padang, bakso, gorengan, kopi susu, …) **bukan** dari TKPI: ditandai `estimasi` dan dicek owner.
+Sumber data makanan: TKPI 2020 (Kemenkes). ~50 menu jadi (nasi padang, bakso, gorengan, kopi susu, …) **bukan** dari TKPI: ditandai `estimasi` dan dicek owner.
