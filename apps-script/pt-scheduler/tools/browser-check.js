@@ -1689,7 +1689,7 @@ async function contrastReport(page) {
       await page.click('#nut-onb-body .chip >> nth=0');
       await page.click('#nut-onb-next');
       await page.waitForTimeout(1200);
-      const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.card-flat .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
+      const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.meal-blk .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
       check(mk.ring && mk.bars === 3 && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && mk.over <= 1, 'makan: ring, three macro bars, today\'s menu and the rules show, no sideways scroll ' + JSON.stringify({ bars: mk.bars, meals: mk.meals, over: mk.over }));
       check(mk.small === 0, 'makan: tap targets are at least 44 px ' + mk.small);
       await page.click('#pub-makan-pane .list-item >> nth=0');
@@ -1726,7 +1726,7 @@ async function contrastReport(page) {
       check((await page.textContent('#nut-pick-n')).trim() === '1,5', 'catat: the stepper adds half a portion');
       await page.click('#nut-pick-save');
       await page.waitForTimeout(1200);
-      check(!(await visible(page, '#modal-nut-add')) && (await page.textContent('#nut-log-card')).toLowerCase().includes('tempe') && /Dimakan [1-9]/.test(await page.textContent('#nut-eaten-line')), 'catat: the food is logged and the eaten line updates');
+      check(!(await visible(page, '#modal-nut-add')) && (await page.textContent('#nut-log-card')).toLowerCase().includes('tempe') && /(Sisa|Lebih) [0-9]/.test(await page.textContent('#nut-eaten-line')), 'catat: the food is logged and the eaten line updates');
       await page.click('#pub-makan-pane .icon-btn[aria-label^="Catat"] >> nth=0');
       await page.waitForTimeout(1200);
       check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: the check button logs a menu item in one tap');
@@ -1879,6 +1879,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.loadMyProgress(true));
     await page.waitForTimeout(800);
     check(!(await visible(page, '#sheet-badge')), 'portal: the same badge is not celebrated again');
+    await page.evaluate(() => window.setPgSeg('riwayat'));   // badge dan tantangan ada di sub-tab Riwayat
     check(await visible(page, '#pub-badges-wrap') && (await page.locator('#pub-badges-wrap .pg-badge').count()) === 11 && (await overflowX(page)) <= 0, 'portal: the Pencapaian card shows all 11 badges without sideways scroll');
     check((await page.locator('#pub-badges-wrap .pg-badge.earned').count()) >= 1 && (await page.locator('#pub-badges-wrap .pg-badge.locked').count()) >= 1, 'portal: earned badges are solid and locked ones are faded');
     const streakTxt = await page.textContent('#pub-badges-wrap');
@@ -1958,7 +1959,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
 
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
-    await page.evaluate(() => window.navigate('public-progress'));
+    await page.evaluate(() => { window.navigate('public-progress'); window.setPgSeg('ukuran'); });   // grafik dan tombol Catat ada di sub-tab Ukuran
     await page.waitForTimeout(600);
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.evaluate(() => window.navigate('public-dashboard'));
