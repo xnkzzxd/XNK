@@ -2092,3 +2092,11 @@ html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr));
 .form-grid > :not(.field) { grid-column: 1 / -1; }
 .form-grid > .field:has(textarea), .form-grid > .field:has(.input-search), .form-grid > .field.wide, .form-grid > .field:has(.pkg-wrap) { grid-column: 1 / -1; }
 html.big-text .form-grid { grid-template-columns: minmax(0, 1fr); }
+*:has(> .cr) > :not(.cr) { grid-column: 1 / -1; }
+
+@media (max-width: 767px) { .client-card .cc-phone, .client-card .cc-trend { display: none; } .client-card .cc-extra { margin-top: 4px; } }
+
+.fin-bill { flex-direction: column; align-items: stretch; gap: 4px; }
+.fin-bill-top, .fin-bill-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.fin-bill-top .li-title { flex: 1 1 8rem; min-width: 0; }
+.fin-bill-amt { font-size: var(--fs-lg); white-space: nowrap; }

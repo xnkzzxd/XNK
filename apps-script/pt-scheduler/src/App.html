@@ -2974,13 +2974,17 @@
       (!isDone(s) && !isAvailable(s) ? '<p class="num" style="margin-top:14px;font-weight:700" data-countdown="' + d.getTime() + '">' + h(timeUntil(d)) + '</p>' : '') + '</div>';
 
     if (!isAvailable(s)) {
-      body += '<button type="button" class="list-item interactive" onclick="' + (member ? 'window.openProfile(\'' + h(member.id) + '\')' : '') + '"' + (member ? '' : ' disabled') + '>' +
-        avatar(member && member.photo, s.title) + '<span class="grow"><span class="li-title" style="display:block">' + h(s.title) + '</span><span class="li-sub">+' + h(s.phone || '') +
-        (member ? ' · sisa ' + remainingOf(member) + ' sesi' : '') + '</span></span>' + (member ? icon('chevron-right') : '') + '</button>';
+      body += '<div class="kv">' +
+        '<div' + (member ? ' role="button" tabindex="0" style="cursor:pointer" onclick="window.openProfile(\'' + h(member.id) + '\')"' : '') + '><p class="k">Klien</p><p class="v">' + h(s.title) + '</p></div>' +
+        '<div><p class="k">Sisa sesi</p><p class="v">' + (member ? remainingOf(member) + ' sesi' : '—') + '</p></div>' +
+        '<div><p class="k">Status</p><p class="v">' + h(info.label) + '</p></div>' +
+        (s.phone ? '<div><p class="k">WhatsApp</p><p class="v">+' + h(s.phone) + '</p></div>' : '') +
+        '<div class="wide"><p class="k">Catatan</p><p class="v">' + (s.notes ? h(s.notes) : '<span class="muted" style="font-weight:500">Tidak ada catatan</span>') + '</p></div></div>';
+    } else {
+      body += '<div class="kv"><div class="wide"><p class="k">Catatan</p><p class="v">' + (s.notes ? h(s.notes) : '<span class="muted" style="font-weight:500">Tidak ada catatan</span>') + '</p></div></div>';
     }
     if (!window.isSoloCoach()) body += '<div class="field"><label class="label" for="detail-assign-coach">Coach</label><div class="row"><select class="select grow" id="detail-assign-coach">' + coachOpts + '</select>' +
       '<button type="button" class="btn btn-secondary" id="btn-save-coach" onclick="window.saveCoachAssignment()">Simpan</button></div></div>';
-    body += '<div class="card-flat"><p class="eyebrow">Catatan</p><p style="margin-top:6px">' + (s.notes ? h(s.notes) : '<span class="muted">Tidak ada catatan</span>') + '</p></div>';
 
     body += '<div class="stack" style="gap:8px" id="detail-complete-container">';
     if (isDone(s)) body += '<button type="button" class="btn btn-secondary btn-lg btn-block" onclick="window.openSessionNote(\'' + h(s.id) + '\')">' + icon('notebook-pen') + 'Catatan sesi &amp; kirim WA</button>';
@@ -3857,7 +3861,7 @@
       : '';
     return '<div class="list-item interactive client-card" role="button" tabindex="0" data-key="client:' + h(m.id) + '" onclick="window.openProfile(\'' + h(m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
       avatar(m.photo, m.name) +
-      '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4><p class="li-sub truncate">+' + h(m.phone) + (m.packageName ? ' · ' + h(m.packageName) : '') + '</p>' + taskPills +
+      '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4><p class="li-sub truncate"><span class="cc-phone">+' + h(m.phone) + (m.packageName ? ' · ' : '') + '</span>' + (m.packageName ? h(m.packageName) : '') + '</p>' + taskPills +
       '<div class="meter cc-meter' + (st === 'low' ? ' low' : st === 'empty' ? ' empty' : '') + '"><i style="width:' + (total ? Math.min(100, Math.round(used / total * 100)) : 0) + '%"></i></div>' + clientExtra(m, x) + (x.desk ? clientMeta(m, x) : '') + '</div>' +
       '<div class="li-trail"><div class="cc-count" style="text-align:right"><p class="num" style="font-weight:800;font-size:var(--fs-lg)">' + rem + '<span class="li-sub">/' + total + '</span></p><p class="li-sub">sisa sesi</p></div>' + pill + '</div></div>';
   }
@@ -6331,17 +6335,21 @@
           '<p class="li-sub">Motivasi ' + e.motivasi + ' · Keselamatan ' + e.keselamatan + ' · Kepuasan ' + e.kepuasan + ' · Komunikasi ' + e.komunikasi + ' · Profesional ' + e.profesionalisme + '</p>' + (e.komentar ? '<p>' + h(e.komentar) + '</p>' : '') + '</div>'; }).join('') +
       f.ratings.slice(0, 6).map(r => '<div class="row-between" style="gap:8px;align-items:flex-start"><span style="min-width:0"><span class="li-sub">' + h(r.tanggal) + '</span>' + (r.komentar ? '<span style="display:block">' + h(r.komentar) + '</span>' : '') + '</span><span class="num" aria-label="' + r.bintang + ' bintang">' + starsText(r.bintang) + '</span></div>').join('') + '</div>';
   }
+  // Bagian perawatan klien sebagai lipatan: judul + ringkasan satu baris, isi dibuka dengan ketukan.
+  function careOpen(title, summary) {
+    return '<details class="fold"><summary><span>' + h(title) + '<span class="li-sub" style="display:block;font-weight:500">' + h(summary) + '</span></span>' + icon('chevron-down') + '</summary><div class="fold-body stack" style="gap:6px">';
+  }
   function careInner(memberId) {
     const d = care[memberId];
     if (!d) return '<p class="li-sub">Memuat catatan klien…</p>';
     if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
     const m = window.members.find(x => String(x.id) === String(memberId)) || {};
     // Dua kolom di panel lebar PC (.cp-col = display:contents di HP, jadi urutan & tampilan sama).
-    let html = '<div class="cp-col"><div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Catatan privat</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareNotes(\'' + h(memberId) + '\')">Ubah</button></div>' +
+    let html = '<div class="cp-col">' + careOpen('Catatan privat', d.flag ? 'Perlu perhatian' : (d.notes ? 'Ada catatan' : 'Belum ada catatan')) + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareNotes(\'' + h(memberId) + '\')">Ubah</button></div>' +
       (d.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(d.flag) + '</p>' : '') +
-      (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') + '</div>';
+      (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') + '</div></details>';
     html += feedbackAdminHtml(d.feedback);
-    html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Kesehatan</p>';
+    html += careOpen('Kesehatan', !d.health ? 'Belum mengisi form' : (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau'));
     if (!d.health) {
       html += '<p class="li-sub">Belum mengisi form.</p><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">Kirim pengingat</button>';
     } else {
@@ -6350,18 +6358,18 @@
         '<p class="li-sub">' + (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau') + '</p>' +
         '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareHealth(\'' + h(memberId) + '\')">Lihat jawaban</button>';
     }
-    html += '</div></div><div class="cp-col">';
-    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Assessment</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openAssessment(\'' + h(memberId) + '\')">' + (d.assessment ? 'Ubah' : 'Isi') + '</button></div>';
+    html += '</div></details></div><div class="cp-col">';
+    html += careOpen('Assessment', d.assessment ? 'Sudah diisi' : 'Belum diisi') + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openAssessment(\'' + h(memberId) + '\')">' + (d.assessment ? 'Ubah' : 'Isi') + '</button></div>';
     if (d.assessment) {
       const a = d.assessment;
       html += (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
       const ex = [['Lemak', a.bodyFat, '%'], ['Pinggul', a.hip, ' cm'], ['Dada (lama)', a.chest, ' cm'], ['Lengan (lama)', a.arm, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
       if (ex.length) html += careRow('Ukuran', h(ex.join(' · ')));
     } else html += '<p class="li-sub">Belum diisi.</p>';
-    html += '</div>';
-    html += '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Tes kebugaran</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareTests(\'' + h(memberId) + '\')">' + icon('plus') + 'Tes</button></div>' +
+    html += '</div></details>';
+    html += careOpen('Tes kebugaran', d.tests.length ? d.tests.length + ' tes' : 'Belum ada hasil') + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareTests(\'' + h(memberId) + '\')">' + icon('plus') + 'Tes</button></div>' +
       (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') +
-        '<button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="window.sendTestResult(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim hasil via WA</button>' : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div>';
+        '<button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="window.sendTestResult(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim hasil via WA</button>' : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div></details>';
     return html + '</div>';
   }
   window.careSet = function (memberId, d) {
@@ -9472,10 +9480,13 @@
     }
     paintIcons();
   }
+  // Dua baris: nama + sisa tagihan (besar, kanan), lalu paket · tanggal · status.
   function finBillRow(b) {
-    return '<div class="list-item" data-key="bill:' + h(b.id) + '" role="button" tabindex="0" onclick="window.finOpenBill(\'' + h(b.id) + '\')" style="min-height:56px">' +
-      '<div style="min-width:0"><p class="li-title truncate">' + h(b.name || '(Tanpa nama)') + '</p><p class="li-sub truncate">' + h(b.packageName) + ' · ' + h(b.date) + (b.remaining ? ' · sisa ' + h(finRp(b.remaining)) : '') + '</p></div>' +
-      '<span class="li-trail">' + (b.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();window.finRestore(\'bill\',\'' + h(b.id) + '\')">Pulihkan</button>' : '<span class="' + FIN_STATUS_PILL[b.status] + '">' + h(b.status) + '</span>' + icon('chevron-right')) + '</span></div>';
+    const right = b.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();window.finRestore(\'bill\',\'' + h(b.id) + '\')">Pulihkan</button>'
+      : '<b class="num fin-bill-amt">' + h(finRp(b.remaining || 0)) + '</b>';
+    return '<div class="list-item fin-bill" data-key="bill:' + h(b.id) + '" role="button" tabindex="0" onclick="window.finOpenBill(\'' + h(b.id) + '\')">' +
+      '<div class="fin-bill-top"><p class="li-title clamp-2">' + h(b.name || '(Tanpa nama)') + '</p>' + right + '</div>' +
+      '<div class="fin-bill-sub"><span class="li-sub">' + h(b.packageName) + ' · ' + h(b.date) + '</span>' + (b.archived ? '' : '<span class="' + FIN_STATUS_PILL[b.status] + '">' + h(b.status) + '</span>') + '</div></div>';
   }
   function finExpRow(e) {
     return '<div class="list-item" role="button" tabindex="0" onclick="window.finOpenExpense(\'' + h(e.id) + '\')" style="min-height:56px">' +
