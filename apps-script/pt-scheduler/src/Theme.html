@@ -2032,7 +2032,8 @@ html.big-text .wl-tbl.c3 .wl-tr { grid-template-columns: 34px minmax(0, 1fr) min
 html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 48px; }
 
 /* ── Fase R2: band hitam, aksen hitam, sheet berkepala hitam ─────────────── */
-.page-head { background: var(--band); color: var(--on-band); margin: -4px calc(var(--page-pad) * -1) 20px; padding: 18px var(--page-pad) 24px; border-radius: 0 0 28px 28px; align-items: flex-end; }
+.page-head { position: relative; isolation: isolate; color: var(--on-band); margin: -4px calc(var(--page-pad) * -1) 20px; padding: 18px var(--page-pad) 24px; align-items: flex-end; }
+.page-head::before { content: ''; position: absolute; inset: 0 -100vmax; z-index: -1; background: var(--band); }
 .page-head .page-sub { color: var(--on-band-muted); }
 .page-head .btn-primary { background: var(--on-band); color: var(--band); }
 .page-head .btn-outline, .page-head .btn-secondary, .page-head .btn-ghost { color: var(--on-band); border-color: color-mix(in srgb, var(--on-band) 35%, transparent); background: transparent; }
@@ -2095,8 +2096,9 @@ html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr));
 .fin-bill-amt { font-size: var(--fs-lg); white-space: nowrap; }
 @media (min-width: 768px) {
   .topbar { height: 0; min-height: 0; padding: 0; background: none; backdrop-filter: none; overflow: visible; }
-  .topbar-actions { position: absolute; top: 18px; right: max(var(--page-pad), var(--sa-r)); }
-  .page-head { margin-top: -4px; padding: 22px calc(var(--page-pad) + 60px) 24px var(--page-pad); border-radius: 0 0 32px 32px; min-height: 5.5rem; }
+  .topbar > .topbar-title, .topbar > .topbar-brand { display: none; }
+  .topbar-actions { position: absolute; top: 26px; right: max(var(--page-pad), var(--sa-r)); }
+  .page-head { margin-top: -4px; padding: 16px calc(var(--page-pad) + 60px) 16px var(--page-pad); min-height: 6rem; align-items: center; }
 }
 .sheet { overflow: hidden; }
 .form-grid .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2104,4 +2106,10 @@ html.big-text .form-grid .two { grid-template-columns: minmax(0, 1fr); }
 .seg:not(:has(.seg-thumb)) button.active { background: var(--on-ink); }
 .chips.cp-tabs { border-radius: 16px; }
 .chips.cp-tabs .chip { border-radius: 12px; }
+#fin-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+#fin-head .kpi { min-height: 0; gap: 6px; padding: 12px 14px; }
+#fin-head .card-flat { padding: 12px 14px; }
+#fin-head .bars { height: 5.5rem; }
+.chips.cp-tabs, .chips.cp-tabs .chip, .chips.cp-tabs .chip.active { border-radius: 14px; }
+.chips.cp-tabs .chip { border-radius: 11px; }
 </style>
