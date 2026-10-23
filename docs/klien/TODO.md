@@ -8,7 +8,20 @@ Q1 fondasi
 - [x] T-1104 Kerapian awal (`#fff`, override KPI HP)
 - [x] T-1105 `tests/theme.test.js`
 
-Q2 mesin interpretasi (`Wawasan.gs`)
-- [x] T-1110…T-1116 tafsir tubuh, kebugaran, hubungan, latihan, aktivitas, minggu ini; part `week` + `insight` di `getPortalMore`, `insight` (coach) di `getClientBundle`; `tests/insight.test.js`
-Q3 portal klien: T-1120…T-1129
-Q4 halaman Klien di panel: T-1130…T-1137
+Q2 mesin tafsir (`Wawasan.gs`)
+- [x] T-1110…T-1116 tubuh, kebugaran, hubungan, latihan, aktivitas, minggu ini; part `week` + `insight` di `getPortalMore`, `insight` coach di `getClientBundle`; `tests/insight.test.js`
+
+Q3 portal klien
+- [x] T-1120 Beranda: sesi berikutnya di atas, hero ringkas, kartu "Minggu ini"
+- [x] T-1121 Progres, Latihan, Makan: kartu hitam + kartu tafsir
+- [x] T-1122 Jadwal, Info, Lainnya, Paket, Tim coach: kartu hitam
+- [x] T-1123 Judul seragam (`pageHead`/`pageIntro`), skeleton/empty/error seragam
+
+Q4 halaman Klien di panel
+- [x] T-1130 `_clientSignals_` + part `signals` di `getAdminMore`
+- [x] T-1131 Kartu hitam, tile filter (Perlu perhatian), urutkan, sakelar Kartu/Daftar
+- [x] T-1132 Kartu klien: status, tanda perhatian, sesi berikutnya (HP), tren 4 minggu
+- [x] T-1133 Detail klien 4 tab, Sorotan, Pengingat WA dilipat, Riwayat di Ringkasan
+- [x] T-1134 Kartu hitam + tafsir coach di Progres, Latihan, Gizi
+
+Belum: login portal dan tab bar masih seperti sebelumnya (hanya dirapikan lewat token); lihat catatan di PR.

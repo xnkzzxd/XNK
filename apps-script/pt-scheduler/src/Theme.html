@@ -572,7 +572,7 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .client-hero .profile-name { font-size: var(--fs-2xl); letter-spacing: -0.03em; }
 .client-hero .btn-inverse, .portal-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
 .client-hero .btn-ghost-ink, .portal-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
-.chips.cp-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; overflow: visible; padding: 0; margin: 0; }
+.chips.cp-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; overflow: visible; padding: 0; margin: 0; }
 .chips.cp-tabs .chip { min-height: 56px; width: 100%; min-width: 0; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: var(--fs-2xs); line-height: 1.1; white-space: nowrap; border-radius: 14px; }
 .chips.cp-tabs .chip svg { width: 16px; height: 16px; }
 .cp-pane.hide { display: none; }
@@ -1738,7 +1738,7 @@ button.avatar { border: 0; cursor: pointer; }
 
 @media (min-width: 768px) {
   /* Panel detail (tablet & PC): 5 tab satu baris, latar tab = latar panel, tanpa ruang tab bar di bawah */
-  .chips.cp-tabs { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; background: var(--surface); }
+  .chips.cp-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: var(--surface); }
   .chips.cp-tabs .chip { padding: 6px 0; }
   .detail-body { padding-bottom: 40px; }
 
@@ -1749,7 +1749,7 @@ button.avatar { border: 0; cursor: pointer; }
   #client-list .client-card {
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr);
-    grid-template-areas: "av title" "av sub" "pills pills" "trail trail" "meter meter" "meta meta";
+    grid-template-areas: "av title" "av sub" "pills pills" "trail trail" "meter meter" "extra extra" "meta meta";
     column-gap: 12px; row-gap: 0;
     align-items: center; align-content: start;
     padding: 16px; border-radius: var(--r-lg);
@@ -1762,6 +1762,10 @@ button.avatar { border: 0; cursor: pointer; }
   #client-list .client-card > .li-trail { grid-area: trail; margin: 14px 0 0; justify-content: space-between; min-width: 0; }
   #client-list .client-card .cc-count { display: flex; align-items: baseline; gap: 6px; }
   #client-list .client-card .cc-meter { grid-area: meter; max-width: none; margin-top: 8px; }
+  #client-list .client-card .cc-extra { grid-area: extra; }
+  .cc-next-m { display: none; }
+  #client-list > .list.cl-view-list { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  #client-list .cl-view-list .client-card .cc-meta { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
   #client-list .client-card .cc-meta { grid-area: meta; display: flex; flex-direction: column; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); min-width: 0; }
   /* translate (bukan transform): animasi masuk .stagger menahan transform */
   @media (hover: hover) { #client-list .client-card.interactive:hover { translate: 0 -2px; box-shadow: var(--shadow-2); } }
@@ -1775,7 +1779,7 @@ button.avatar { border: 0; cursor: pointer; }
   #app.detail-wide { --detail-w: clamp(420px, min((100vw - var(--sidebar-w)) * 0.62, 100vw - var(--sidebar-w) - 420px), 1080px); }
 
   /* Daftar → nama ringkas (foto, nama, sisa sesi) */
-  #app.detail-wide #view-clients .client-kpis { display: none; }
+  #app.detail-wide #view-clients .client-kpis, #app.detail-wide #view-clients .client-top { display: none; }
   #app.detail-wide #client-list > .list { display: flex; flex-direction: column; gap: 6px; }
   #app.detail-wide #client-list > .list > .group-label { margin: 12px 2px 2px; }
   #app.detail-wide #client-list .client-card { display: flex; gap: 10px; padding: 8px 12px; min-height: 52px; border-radius: var(--r-md); }
@@ -1795,7 +1799,6 @@ button.avatar { border: 0; cursor: pointer; }
   #app.detail-wide .detail-body .btn-row .btn { flex: 0 0 auto; }
   #app.detail-wide .detail-body .pg-chart { max-width: 420px; }
   #app.detail-wide .prg-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px 24px; margin: 6px 0; }
-  #app.detail-wide .cp-pane[data-cppane="riwayat"] { max-width: 680px; }
   @container (min-width: 540px) {
     #app.detail-wide .chips.cp-tabs { gap: 8px; padding: 10px 0; }
     #app.detail-wide .chips.cp-tabs .chip { flex-direction: row; min-height: 44px; gap: 6px; padding: 0 6px; font-size: var(--fs-sm); border-radius: var(--r-full); }
@@ -1945,7 +1948,7 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 .heat-grid i[data-l="1"] { background: var(--heat-1); } .heat-grid i[data-l="2"] { background: var(--heat-2); }
 .heat-grid i[data-l="3"] { background: var(--heat-3); } .heat-grid i[data-l="4"] { background: var(--heat-4); }
 
-.heat-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.heat-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); max-width: 520px; }
 #ph-makan { margin-bottom: var(--gap); }
 .next-card { display: grid; gap: 10px; }
 .next-card .ih-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1974,4 +1977,25 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 .ins-bar b { text-align: right; }
 .ins-chal { margin-top: 12px; display: grid; gap: 6px; }
 .ins-chal .meter { height: 8px; }
+
+.client-top { display: grid; gap: 12px; margin-bottom: 14px; }
+.client-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.stat-tile { cursor: pointer; min-width: 0; }
+.stat-tile span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-tile.active { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+@media (max-width: 420px) { .client-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cl-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cl-tools .input-search { flex: 1 1 220px; min-width: 0; }
+.cl-tools .select { width: auto; min-height: 44px; }
+.cc-extra { display: grid; gap: 6px; margin-top: 8px; }
+.cc-extra:empty { display: none; }
+.cc-flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.cc-trend { display: flex; align-items: center; gap: 10px; }
+.cc-bars { display: inline-flex; align-items: flex-end; gap: 3px; height: 18px; }
+.cc-bars i { width: 6px; height: 100%; background: var(--fg); border-radius: 2px; }
+.cc-bars i.z { background: var(--surface-3); }
+.cc-wd { font-size: var(--fs-xs); font-weight: 700; color: var(--fg-2); }
+
+details.fold > summary > span:first-child { font-weight: 700; }
+details.fold[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 12px; }
 </style>

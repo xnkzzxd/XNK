@@ -101,3 +101,7 @@ creating a *new* deployment gives a new URL that must be pasted here.
 
 In **Settings → Pages**, make sure **Enforce HTTPS** is ticked. The page also
 switches `http://` visits to `https://` itself, since the app sends the login PIN.
+
+### Client view upgrade (Phase Q)
+
+Every portal tab and every tab of the client page in the panel opens with a black summary card, and the Klien page gained an "attention" filter, sorting and a card/list switch. `Wawasan.gs` interprets progress, fitness tests, the workout log and the food log (body report, strength and stalls, muscle balance, activity calendar) for three ranges at once, in a client tone and a coach tone. No new sheets or public functions. See `docs/klien/`.

@@ -59,7 +59,8 @@ function _insightBody_(entries, prof, bodyFat, today, audience) {
   const nBerat = (entries || []).filter(function(e) { return _insNum_(e.berat) != null; }).length;
   const last = function(key) { for (let i = (entries || []).length - 1; i >= 0; i--) if (_insNum_(entries[i][key]) != null) return entries[i]; return null; };
   const lb = last('berat'), lp = last('pinggang');
-  const out = { sedikit: nBerat < 2, ranges: {}, bodyFat: bodyFat == null ? null : bodyFat };
+  const out = { sedikit: nBerat < 2, ranges: {}, bodyFat: bodyFat == null ? null : bodyFat, labels: {} };
+  PROGRESS_MEASURES.forEach(function(pm) { out.labels[pm.key] = { short: pm.short, unit: pm.unit }; });
   Object.keys(INS_RANGES).forEach(function(k) {
     const m = {};
     PROGRESS_MEASURES.forEach(function(pm) { const r = _insMeasureRange_(entries, pm.key, today, INS_RANGES[k]); if (r) m[pm.key] = r; });
@@ -293,4 +294,93 @@ function _insightFor_(row, audience, pre) {
     challenge: _monthlyChallenge_(id)
   }, today);
   return out;
+}
+
+// ── Sinyal klien untuk panel (Fase Q4) ─────────────────────────────────────────
+// Dihitung di server; hanya admin yang menerimanya (getAdminMore.signals) dan tidak disimpan di cache panel.
+
+/** Murni: batas "tidak latihan" dari Script Property (bawaan 14, batas 3–90). */
+function _inactiveDays_() { return Math.max(3, Math.min(90, Math.floor(_numProp_('CLIENT_INACTIVE_DAYS', 14)))); }
+
+/**
+ * Murni. ctx = { members:[{id,total,used,joined}], sessions:[{memberId,date,done}], weights:{id:[{t,v}]},
+ *   overdue:{id:n}, renewal:{id:true}, lowRating:{id:true}, inactiveDays }.
+ * Hasil: { byId:{id:{lastDone, weeks:[4 terbaru terakhir], weightDelta, flags}}, totals:{aktif, perhatian, sesiMinggu, konsisten} }
+ */
+function _clientSignalsCalc_(ctx, today) {
+  const byId = {};
+  const ws = _isoWeekStart_(today);
+  const days = ctx.inactiveDays || 14;
+  const sessBy = {};
+  (ctx.sessions || []).forEach(function(s) { (sessBy[s.memberId] || (sessBy[s.memberId] = [])).push(s); });
+  let aktif = 0, perhatian = 0, sesiMinggu = 0, konsisten = 0;
+  (ctx.members || []).forEach(function(m) {
+    const list = sessBy[m.id] || [];
+    const done = list.filter(function(s) { return s.done; }).map(function(s) { return s.date; }).sort();
+    const lastDone = done.length ? done[done.length - 1] : '';
+    const weeks = [0, 0, 0, 0];
+    done.forEach(function(d) { const k = Math.round(_insDays_(_isoWeekStart_(d), ws) / 7); if (k >= 0 && k < 4) weeks[3 - k]++; });
+    const wts = (ctx.weights && ctx.weights[m.id]) || [];
+    let weightDelta = null;
+    if (wts.length >= 2) {
+      const lastW = wts[wts.length - 1];
+      const ref = wts.filter(function(w) { return _insDays_(w.t, lastW.t) >= 7 && _insDays_(w.t, lastW.t) <= 45; });
+      const base = ref.length ? ref[ref.length - 1] : null;
+      if (base) weightDelta = _insR_(lastW.v - base.v, 1);
+    }
+    const rem = Math.max(0, (Number(m.total) || 0) - (Number(m.used) || 0)), total = Number(m.total) || 0;
+    const flags = [];
+    const ref0 = lastDone || m.joined || '';
+    if (total > 0 && rem > 0 && ref0 && _insDays_(ref0, today) >= days) flags.push('inaktif');
+    if (total > 0 && rem === 0) flags.push('habis');
+    else if (total > 0 && rem <= 2 && !list.some(function(s) { return !s.done && s.date >= today; })) flags.push('hampir');
+    if (ctx.overdue && ctx.overdue[m.id]) flags.push('pr-telat');
+    if (ctx.renewal && ctx.renewal[m.id]) flags.push('perpanjang');
+    if (ctx.lowRating && ctx.lowRating[m.id]) flags.push('rating-rendah');
+    byId[m.id] = { lastDone: lastDone, weeks: weeks, weightDelta: weightDelta, flags: flags };
+    if (total === 0 || rem > 0) {
+      aktif++;
+      if (lastDone && _insDays_(lastDone, today) <= 14) konsisten++;
+    }
+    if (flags.length) perhatian++;
+    sesiMinggu += weeks[3];
+  });
+  return { byId: byId, totals: { aktif: aktif, perhatian: perhatian, sesiMinggu: sesiMinggu, konsisten: aktif ? Math.round(konsisten / aktif * 100) : 0 } };
+}
+
+/** Kumpulkan data dari sheet lalu hitung sinyal semua klien (satu bacaan per sheet). */
+function _clientSignals_(now) {
+  const today = _wibParts_(now || new Date()).date;
+  const rows = _getMemberDataSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0]; });
+  const weights = {};
+  _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+    const v = r[3]; if (!r[0] || v === '' || v == null) return;
+    (weights[String(r[1]).trim()] || (weights[String(r[1]).trim()] = [])).push({ t: String(r[2]), v: Number(v) });
+  });
+  Object.keys(weights).forEach(function(k) { weights[k].sort(function(a, b) { return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; }); });
+  const overdue = {};
+  const sum = _tasksSheet_().getDataRange().getValues();
+  for (let i = 1; i < sum.length; i++) {
+    if (!sum[i][0]) continue;
+    const t = _taskRowToObj_(sum[i]);
+    if (t.status === 'todo' && t.memberId && t.overdue) overdue[t.memberId] = (overdue[t.memberId] || 0) + 1;
+  }
+  const renewal = {};
+  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (!r[0]) return; const q = _renewalFromRow_(r); if (q.status === 'menunggu') renewal[q.memberId] = true; });
+  const lowRating = {};
+  const cutoff = _addDaysIso_(today, -14);
+  _readSheetRows_('SessionRatings', _ratingFromRow_, null).forEach(function(r) { if (r.bintang > 0 && r.bintang <= 3 && String(r.tanggal) >= cutoff) lowRating[r.memberId] = true; });
+  return _clientSignalsCalc_({
+    members: rows.map(function(r) { return { id: String(r[0]).trim(), total: parseInt(sanitizeValue(r[8])) || 10, used: parseInt(sanitizeValue(r[9])) || 0, joined: _insIsoFromDmy_(sanitizeValue(r[4])) }; }),
+    sessions: _getSchedulesAll_().map(function(s) { return { memberId: String(s.memberId).trim(), date: _wibParts_(new Date(s.start)).date, done: String(s.status || '').toLowerCase() === 'completed' }; }),
+    weights: weights, overdue: overdue, renewal: renewal, lowRating: lowRating, inactiveDays: _inactiveDays_()
+  }, today);
+}
+
+/** Murni: 'd/M/yyyy' (atau yyyy-MM-dd) → 'yyyy-MM-dd'; '' bila tidak terbaca. */
+function _insIsoFromDmy_(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2) : '';
 }

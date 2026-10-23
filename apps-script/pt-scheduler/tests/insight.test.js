@@ -155,3 +155,61 @@ test('getClientBundle carries the coach insight with raw categories', () => {
   assert.ok(b.insight && !b.insight.error, JSON.stringify(b.insight).slice(0, 300));
   assert.ok(b.insight.body && b.insight.training);
 });
+
+// ── Sinyal klien untuk panel (Q4) ────────────────────────────────────────────
+
+test('signals: inactive, empty, low-without-booking, overdue PR, renewal and low rating flags', () => {
+  const env = seededEnv();
+  const ctx = {
+    inactiveDays: 14,
+    members: [
+      { id: 'A', total: 10, used: 5, joined: '2026-01-01' },   // sesi terakhir 20 hari lalu
+      { id: 'B', total: 8, used: 8, joined: '2026-01-01' },    // habis
+      { id: 'C', total: 8, used: 7, joined: '2026-01-01' },    // hampir, tanpa sesi terjadwal
+      { id: 'D', total: 8, used: 2, joined: '2026-10-20' }     // baru, tanpa sesi
+    ],
+    sessions: [
+      { memberId: 'A', date: '2026-10-03', done: true },
+      { memberId: 'C', date: '2026-10-21', done: true },
+      { memberId: 'C', date: '2026-10-14', done: true }
+    ],
+    weights: { C: [{ t: '2026-09-20', v: 80 }, { t: '2026-10-20', v: 78.5 }] },
+    overdue: { A: 2 }, renewal: { B: true }, lowRating: { C: true }
+  };
+  const r = env.call('_clientSignalsCalc_', ctx, TODAY);
+  assert.deepEqual(r.byId.A.flags, ['inaktif', 'pr-telat']);
+  assert.deepEqual(r.byId.B.flags, ['habis', 'perpanjang']);
+  assert.deepEqual(r.byId.C.flags, ['hampir', 'rating-rendah']);
+  assert.deepEqual(r.byId.D.flags, []);
+  assert.equal(r.byId.C.weightDelta, -1.5);
+  assert.equal(r.byId.C.lastDone, '2026-10-21');
+  assert.deepEqual(r.byId.C.weeks, [0, 0, 1, 1]);
+  assert.equal(r.totals.perhatian, 3);
+  assert.equal(r.totals.sesiMinggu, 1);
+  assert.equal(r.totals.aktif, 3, 'a finished package is not active');
+});
+
+test('signals: a booked session removes the "hampir" flag', () => {
+  const env = seededEnv();
+  const r = env.call('_clientSignalsCalc_', {
+    inactiveDays: 14, members: [{ id: 'C', total: 8, used: 7, joined: '2026-01-01' }],
+    sessions: [{ memberId: 'C', date: '2026-10-21', done: true }, { memberId: 'C', date: '2026-10-28', done: false }]
+  }, TODAY);
+  assert.deepEqual(r.byId.C.flags, []);
+});
+
+test('getAdminMore carries signals for admins only', () => {
+  const env = seededEnv();
+  const more = env.call('getAdminMore', env.adminToken(), 10, 2026);
+  assert.ok(more.signals && !more.signals.error, JSON.stringify(more.signals).slice(0, 200));
+  assert.ok(more.signals.byId['PT-A'] && Array.isArray(more.signals.byId['PT-A'].flags));
+  assert.ok(typeof more.signals.totals.aktif === 'number');
+  assert.throws(() => env.call('getAdminMore', env.memberToken(KEY_A), 10, 2026));
+});
+
+test('inactive days default to 14 and clamp 3–90', () => {
+  const env = seededEnv();
+  assert.equal(env.call('_inactiveDays_'), 14);
+  env.props.CLIENT_INACTIVE_DAYS = '1'; assert.equal(env.call('_inactiveDays_'), 3);
+  env.props.CLIENT_INACTIVE_DAYS = '500'; assert.equal(env.call('_inactiveDays_'), 90);
+});

@@ -2231,7 +2231,8 @@ function getAdminMore(token, month, year) {
       finance: finance,
       revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
       packageTrend: part(function () { return _packageTrendStats_(m, y); }),
-      hub: part(function () { return _coachHub_(new Date()); })
+      hub: part(function () { return _coachHub_(new Date()); }),
+      signals: part(function () { return _clientSignals_(new Date()); })
     };
   });
 }
