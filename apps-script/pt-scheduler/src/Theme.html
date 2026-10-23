@@ -2112,4 +2112,12 @@ html.big-text .form-grid .two { grid-template-columns: minmax(0, 1fr); }
 #fin-head .bars { height: 5.5rem; }
 .chips.cp-tabs, .chips.cp-tabs .chip, .chips.cp-tabs .chip.active { border-radius: 14px; }
 .chips.cp-tabs .chip { border-radius: 11px; }
+
+.fin-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
+.fin-bar .chip { min-height: 38px; padding: 0 12px; }
+.fin-bar #fin-filters .chips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
+.page-head { margin-bottom: 16px; }
+.page-head:has(+ .stack .card-ink:first-child), .page-head:has(+ .portal-grid .card-ink:first-child), .page-head:has(+ .insight-hero), .page-head:has(+ .card-ink) { margin-bottom: 36px; }
+.chips.cp-tabs .chip, .chips.cp-tabs .chip.active, .chips.cp-tabs button.chip.active { border-radius: 11px !important; }
+.chips.cp-tabs { border-radius: 15px !important; }
 </style>
