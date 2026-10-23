@@ -1629,6 +1629,58 @@
       (text ? '<span>' + h(text) + '</span>' : '') + (actionHtml || '') + '</div>';
   }
 
+  // ── Fase Q: komponen bersama ───────────────────────────────────────────────
+  function errorState(msg, retryJs) {
+    return emptyState('triangle-alert', 'Gagal memuat', msg || 'Coba lagi sebentar.',
+      retryJs ? '<button type="button" class="btn btn-secondary btn-sm" onclick="' + retryJs + '">Coba lagi</button>' : '');
+  }
+  function pageHead(title, sub, actionsHtml) {
+    return '<div class="page-head page-intro"><div><h2 class="page-title">' + h(title) + '</h2>' +
+      (sub ? '<p class="page-sub">' + h(sub) + '</p>' : '') + '</div>' + (actionsHtml || '') + '</div>';
+  }
+  // Satu sumber label status klien: aktif | hampir | habis.
+  function clientStateInfo(m) {
+    const st = clientState(m);
+    if (st === 'empty') return { key: 'habis', label: 'Habis' };
+    if (st === 'low') return { key: 'hampir', label: 'Hampir habis' };
+    return { key: 'aktif', label: 'Aktif' };
+  }
+  function statePillHtml(m) { const i = clientStateInfo(m); return '<span class="state-pill ' + i.key + '">' + h(i.label) + '</span>'; }
+  function flagHtml(text) { return '<span class="flag">' + h(text) + '</span>'; }
+  // Sparkline garis dari daftar angka (SVG, mengikuti currentColor).
+  function sparkHtml(values, cls) {
+    const v = (values || []).map(Number).filter(function (x) { return isFinite(x); });
+    if (v.length < 2) return '';
+    const mn = Math.min.apply(null, v), mx = Math.max.apply(null, v), span = (mx - mn) || 1;
+    const pts = v.map(function (x, i) { return (i / (v.length - 1) * 100).toFixed(1) + ',' + (36 - (x - mn) / span * 32 - 2).toFixed(1); }).join(' ');
+    return '<svg class="' + (cls || 'ih-spark') + '" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true"><polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  // Heatmap harian: levels = daftar 0..4, urut dari yang tertua; kolom = minggu.
+  function heatHtml(levels) {
+    return '<div class="heat-grid" role="img" aria-label="Kalender aktivitas">' + (levels || []).map(function (l) { return '<i data-l="' + (Number(l) || 0) + '"></i>'; }).join('') + '</div>';
+  }
+  // Kartu hitam ringkasan di atas tiap tab.
+  // cfg = { eyebrow, stats:[{v,l,d}], text, spark:[], range:{key,options:[[k,label]],onPick:'js'}, actions:'html', empty:'teks ajakan', emptyAction:'html' }
+  function insightHeroHtml(cfg) {
+    let body;
+    if (cfg.empty) {
+      body = '<p class="ih-empty">' + h(cfg.empty) + '</p>' + (cfg.emptyAction ? '<div class="ih-actions">' + cfg.emptyAction + '</div>' : '');
+    } else {
+      body = (cfg.stats && cfg.stats.length ? '<div class="ih-stats">' + cfg.stats.map(function (x) {
+        const d = x.d ? ' <small>' + h(x.d) + '</small>' : '';
+        return '<div class="ih-stat"><b>' + h(x.v) + d + '</b><span>' + h(x.l) + '</span></div>';
+      }).join('') + '</div>' : '') +
+        (cfg.spark ? sparkHtml(cfg.spark) : '') +
+        (cfg.text ? '<p class="ih-text">' + h(cfg.text) + '</p>' : '') +
+        (cfg.actions ? '<div class="ih-actions">' + cfg.actions + '</div>' : '');
+    }
+    const r = cfg.range;
+    const range = r ? '<div class="ih-range" role="group">' + r.options.map(function (o) {
+      return '<button type="button" class="' + (o[0] === r.key ? 'on' : '') + '" onclick="' + r.onPick.replace('%k', o[0]) + '">' + h(o[1]) + '</button>';
+    }).join('') + '</div>' : '';
+    return '<section class="card-ink insight-hero"><div class="ih-head"><span class="ih-eyebrow">' + h(cfg.eyebrow || '') + '</span>' + range + '</div>' + body + '</section>';
+  }
+
   // ── Loader & start ──────────────────────────────────────────────────────────
   // Layar awal tampil minimal sebentar supaya peralihannya terasa disengaja
   // (bukan kedip): bar penuh dulu, lalu layar memudar sementara isi naik.
@@ -7537,9 +7589,9 @@
     for (let i = 0; i < n; i++) s += '<div class="skel skel-line" style="width:' + (i === 0 ? 45 : i % 2 ? 90 : 70) + '%"></div>';
     return s + (block ? '<div class="skel skel-block"></div>' : '') + '</div>';
   }
-  function pageIntro(title, sub) { return '<div class="page-intro"><h2 class="section-title" style="font-size:var(--fs-2xl)">' + h(title) + '</h2><p class="li-sub">' + h(sub) + '</p></div>'; }
+  function pageIntro(title, sub) { return pageHead(title, sub); }
   function teaserRow(view, ic, title, sub, dot) {
-    return '<button type="button" class="teaser-row" onclick="window.navigate(\'' + view + '\')"><span class="more-ic" style="width:40px;height:40px;border-radius:12px;background:var(--surface-3);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">' + icon(ic) + '</span>' +
+    return '<button type="button" class="teaser-row" onclick="window.navigate(\'' + view + '\')"><span class="icon-chip">' + icon(ic) + '</span>' +
       '<span class="grow" style="min-width:0"><b style="display:block">' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + (dot ? '<span class="new-dot" aria-label="Baru"></span>' : '') + icon('chevron-right') + '</button>';
   }
   function teasersInner() {
