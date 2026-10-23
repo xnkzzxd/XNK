@@ -1,6 +1,6 @@
 # Gizi (Phase P) — PRD
 
-Sumber: `Tabel KPI Kemenkes.pdf` = Tabel Komposisi Pangan Indonesia (TKPI) 2017: ~1.000 bahan per 100 g. Itu data angka, bukan aturan; aturan ada di [Rules.md](Rules.md).
+Sumber: `TKPI 2020.pdf` = Tabel Komposisi Pangan Indonesia (TKPI) 2020: ~1.000 bahan per 100 g. Itu data angka, bukan aturan; aturan ada di [Rules.md](Rules.md).
 
 ## Tujuan
 Coach melihat kebutuhan gizi tiap klien (BMI, WHtR, BMR, TDEE, target) yang menyesuaikan goal dan program klien. Klien mendapat target, menu 1 hari, dan catatan makan yang bisa dipakai tanpa ahli gizi.

@@ -250,7 +250,7 @@ Klien yang **mendaftar sendiri** (dari landing atau katalog portal) mendapat pan
 
 ## Gizi & catat makan (Fase P)
 
-Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klien mengisi tinggi, jenis kelamin, tujuan, dan pantangan sekali (berat dan lingkar pinggang diambil dari tab Progres), lalu melihat BMI, WHtR, BMR, TDEE, target kalori dan makro, menu satu hari (bisa ditukar), daftar belanja 7 hari, dan catatan makan harian. Datanya dari **Tabel Komposisi Pangan Indonesia 2017** (Kemenkes); ±50 menu jadi (nasi padang, bakso, gorengan, dll.) adalah **perkiraan** dan diberi tanda "perkiraan".
+Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klien mengisi tinggi, jenis kelamin, tujuan, dan pantangan sekali (berat dan lingkar pinggang diambil dari tab Progres), lalu melihat BMI, WHtR, BMR, TDEE, target kalori dan makro, menu satu hari (bisa ditukar), daftar belanja 7 hari, dan catatan makan harian. Datanya dari **Tabel Komposisi Pangan Indonesia 2020** (Kemenkes); ±50 menu jadi (nasi padang, bakso, gorengan, dll.) adalah **perkiraan** dan diberi tanda "perkiraan".
 
 - **Kamu (coach):** tab **Gizi** di halaman klien menampilkan angkanya, input (tinggi, goal, pantangan, kondisi khusus seperti hamil), dan catatan makan 7 hari. Target selalu dihitung otomatis; kamu mengubah inputnya saja. Kalau berat tidak bergerak sesuai tujuan, dashboard menampilkan kartu **Saran target gizi** (±125 kkal) yang kamu setujui atau tolak.
 - **Pengingat makan pagi/sore** ditambah satu baris "Target hari ini N kkal." untuk klien yang datanya lengkap. Hanya kalori; tidak ada berat, BMI, atau kondisi di pesan.
