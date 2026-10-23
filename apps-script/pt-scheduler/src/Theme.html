@@ -1916,7 +1916,7 @@ html, body { overflow-x: hidden; }
 .insight-hero .ih-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .insight-hero .ih-eyebrow { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--on-ink-muted); }
 .ih-range { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-full); background: color-mix(in srgb, var(--on-ink) 10%, transparent); }
-.ih-range button { min-height: 28px; padding: 0 10px; border: 0; border-radius: var(--r-full); background: transparent; color: var(--on-ink-muted); font: inherit; font-size: var(--fs-xs); font-weight: 700; cursor: pointer; }
+.ih-range button { position: relative; min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--r-full); background: transparent; color: var(--on-ink-muted); font: inherit; font-size: var(--fs-xs); font-weight: 700; cursor: pointer; }
 .ih-range button.on { background: var(--on-ink); color: var(--ink); }
 .ih-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 10px; }
 .ih-stat b { display: block; font-size: var(--fs-2xl); font-weight: 800; line-height: 1.1; }
@@ -1998,4 +1998,7 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 
 details.fold > summary > span:first-child { font-weight: 700; }
 details.fold[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+
+.ih-range button::before { content: ''; position: absolute; inset: -6px -3px; }
+#view-clients .chips .chip { min-height: 44px; }
 </style>

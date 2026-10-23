@@ -7797,8 +7797,8 @@
     const d = insD();
     if (!d) return window.myInsight && window.myInsight.error ? insErr('Minggu ini') : insSkel('Minggu ini');
     const t = d.training, w = t.week;
-    const start = admin ? '' : insStartBtn('Mulai latihan', 'window.rtStartEmpty()');
-    if (!w.days.now && !w.days.avg && !t.strength.length) return insightHeroHtml({ eyebrow: 'Minggu ini', empty: admin ? 'Belum ada log latihan.' : 'Belum ada latihan tercatat. Mulai satu sesi dan lihat perkembanganmu di sini.', emptyAction: start || undefined });
+    const start = '';   // tombol "Mulai latihan kosong" sudah ada tepat di bawah kartu
+    if (!w.days.now && !w.days.avg && !t.strength.length) return insightHeroHtml({ eyebrow: 'Minggu ini', empty: admin ? 'Belum ada log latihan.' : 'Belum ada latihan tercatat. Mulai satu sesi di bawah dan lihat perkembanganmu di sini.', emptyAction: start || undefined });
     const pct = x => x.pct == null ? '' : (x.pct > 0 ? '↑' : x.pct < 0 ? '↓' : '') + Math.abs(x.pct) + '%';
     const stats = [{ v: String(w.days.now), l: 'Hari latihan', d: w.baseline ? 'rata-rata ' + w.days.avg : '' }, { v: w.sets.now + '', l: 'Set kerja', d: pct(w.sets) }, { v: Math.round(w.volume.now / 100) / 10 + 'k', d: pct(w.volume), l: 'Volume (kg)' }];
     if (w.durasi.now) stats.push({ v: Math.round(w.durasi.now / 60) + '', d: 'mnt', l: 'Durasi' });
