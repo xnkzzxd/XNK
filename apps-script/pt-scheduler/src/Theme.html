@@ -2120,4 +2120,7 @@ html.big-text .form-grid .two { grid-template-columns: minmax(0, 1fr); }
 .page-head:has(+ .stack .card-ink:first-child), .page-head:has(+ .portal-grid .card-ink:first-child), .page-head:has(+ .insight-hero), .page-head:has(+ .card-ink) { margin-bottom: 36px; }
 .chips.cp-tabs .chip, .chips.cp-tabs .chip.active, .chips.cp-tabs button.chip.active { border-radius: 11px !important; }
 .chips.cp-tabs { border-radius: 15px !important; }
+/* Tanpa scrollbar yang terlihat (merusak band di HP); scroll tetap jalan */
+html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar, ::-webkit-scrollbar { display: none; width: 0; height: 0; background: transparent; }
 </style>
