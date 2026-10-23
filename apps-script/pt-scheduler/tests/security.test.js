@@ -40,7 +40,7 @@ const OWNER = [
   'testDriveAccess', 'migrateSplitMembersData', 'pertahankanWABaruMemberData', 'pertahankanWABaru',
   'setupDailyTrigger', 'setupWeeklyReportTrigger', 'testNotif', 'setupReminderTrigger',
 ];
-const TRIGGER = ['sendDailyReminderEmail', 'sendWeeklyReportEmail', 'runReminderTick'];
+const TRIGGER = ['sendDailyReminderEmail', 'sendWeeklyReportEmail', 'runReminderTick', 'warmUp'];
 
 const AUTH = /AUTH_REQUIRED/;
 

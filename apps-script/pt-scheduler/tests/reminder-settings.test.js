@@ -26,10 +26,11 @@ test('installReminderTrigger installs exactly one trigger, even when run twice',
   const token = env.adminToken();
   const first = env.call('installReminderTrigger', token);
   assert.equal(first.triggerInstalled, true);
-  assert.equal(env.triggers.length, 1);
+  const tick = () => env.triggers.filter(t => t.getHandlerFunction() === 'runReminderTick').length;
+  assert.equal(tick(), 1);
   env.call('installReminderTrigger', token);
-  assert.equal(env.triggers.length, 1);
-  assert.equal(env.triggers[0].getHandlerFunction(), 'runReminderTick');
+  assert.equal(tick(), 1);
+  assert.equal(env.triggers.length, 2, 'the tick plus the warm-up');
 });
 
 function seedLog(env) {

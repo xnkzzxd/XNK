@@ -734,7 +734,7 @@ async function contrastReport(page) {
     check((await page.textContent('#rmd-status')).includes('belum terpasang'), 'reminder status says the trigger is not installed');
     await page.click('#rmd-status .btn');
     await page.waitForTimeout(500);
-    check(env.triggers.length === 1 && (await page.textContent('#rmd-status')).includes('Trigger terpasang'), '"Pasang" installs the reminder trigger from the panel');
+    check(env.triggers.length === 2 && env.triggers.some(t => t.getHandlerFunction() === 'warmUp') && (await page.textContent('#rmd-status')).includes('Trigger terpasang') && (await page.textContent('#rmd-status')).includes('Pemanas server aktif'), '"Pasang" installs the reminder trigger and the warm-up from the panel');
     check((await page.locator('.rmd-acc').count()) >= 13 && (await page.locator('.rmd-acc[open]').count()) === 0, 'each reminder type folds its hour, message and test into a closed accordion');
     await page.click('#rmd-acc-makan-pagi > summary');
     check(await page.isVisible('[data-k="job-makan-pagi-hour"]'), 'tapping the accordion shows the hour field');

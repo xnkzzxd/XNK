@@ -73,7 +73,7 @@ Pengaturan lain **tidak perlu** diisi manual: panel PT → **Pengaturan** (halam
 per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
 
 - **Pengingat Klien**: saklar utama, tiap jenis (Booking Minggu, PR, Makan pagi/sore) dengan jam
-  dan tombol tes, kalimat tidur, tombol **Pasang** trigger (tanpa membuka editor), dan riwayat
+  dan tombol tes, kalimat tidur, tombol **Pasang** trigger (tanpa membuka editor; sekalian memasang "pemanas" server tiap 5 menit supaya klien pertama tidak menunggu server dingin), dan riwayat
   pengingat (nama klien, bukan nomor).
 - **Variasi pesan harian**: Hidup sehat, Makan pagi/sore, Sesi besok, PR dan Booking Minggu
   memakai 62 teks berbeda (44 hari kerja + 18 akhir pekan) yang berganti tiap hari, dan tiap

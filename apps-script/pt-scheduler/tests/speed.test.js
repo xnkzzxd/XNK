@@ -49,3 +49,23 @@ test('package list: cached copy is dropped when a package changes', () => {
   const after = j(env.call('getPriceList'));
   assert.equal(after.length, first.length - 1);
 });
+
+test('warmUp fills the shared caches, changes no data, and is throttled', () => {
+  const env = seededEnv();
+  env.call('warmUp');
+  env.resetReads();
+  env.call('getPriceListPublic');
+  env.call('getCoaches');
+  assert.ok(!env.reads().bySheet.PriceList, 'prices already cached by the warm-up');
+  env.resetReads();
+  env.call('warmUp');
+  assert.equal(env.reads().total, 0, 'a second call within a minute does nothing');
+});
+
+test('installing the reminder trigger also installs the 5-minute warm-up, once', () => {
+  const env = seededEnv();
+  env.call('installReminderTrigger', env.adminToken());
+  const st = env.call('installReminderTrigger', env.adminToken());
+  assert.equal(st.warmInstalled, true);
+  assert.equal(env.triggers.filter(t => t.getHandlerFunction() === 'warmUp').length, 1);
+});

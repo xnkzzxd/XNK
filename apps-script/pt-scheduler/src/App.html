@@ -251,11 +251,28 @@
   window.adminApi = function () { return tokenRunner(function () { return _lsGet(ADMIN_TOKEN_KEY); }, function (err) { window.onAdminAuthLost(err); }); };
   window.memberApi = function () { return tokenRunner(function () { return _lsGet(MEMBER_TOKEN_KEY); }, function (err) { window.onMemberAuthLost(err); }); };
 
+  // Ukur lama tiap panggilan server (di perangkat ini saja, tanpa kirim apa pun): ringkasannya ada di Pengaturan → Akun.
+  const PERF_KEY = 'xnk_perf';
+  const perf = { list: (function () { try { return JSON.parse(localStorage.getItem(PERF_KEY) || '[]'); } catch (e) { return []; } })() };
+  function perfAdd(name, ms, ok) {
+    perf.list.push([name, Math.round(ms), ok ? 1 : 0]);
+    if (perf.list.length > 300) perf.list.splice(0, perf.list.length - 300);
+    try { localStorage.setItem(PERF_KEY, JSON.stringify(perf.list)); } catch (e) {}
+  }
+  window.perfSummary = function () {
+    const by = {};
+    perf.list.forEach(function (x) { const b = by[x[0]] || (by[x[0]] = { name: x[0], n: 0, sum: 0, max: 0 }); b.n++; b.sum += x[1]; if (x[1] > b.max) b.max = x[1]; });
+    return Object.keys(by).map(function (k) { const b = by[k]; return { name: b.name, n: b.n, avg: Math.round(b.sum / b.n), max: b.max }; }).sort(function (a, b) { return b.avg - a.avg; });
+  };
+  window.perfClear = function () { perf.list = []; try { localStorage.removeItem(PERF_KEY); } catch (e) {} };
+
   function call(runner, name) {
     const args = Array.prototype.slice.call(arguments, 2);
     return new Promise(function (resolve, reject) {
       if (!window.isGas) { reject(new Error('Mode pratinjau: server tidak tersedia.')); return; }
-      const r = runner.withSuccessHandler(resolve).withFailureHandler(reject);
+      const t0 = performance.now();
+      const r = runner.withSuccessHandler(function (v) { perfAdd(name, performance.now() - t0, true); resolve(v); })
+        .withFailureHandler(function (e) { perfAdd(name, performance.now() - t0, false); reject(e); });
       r[name].apply(r, args);
     });
   }
@@ -878,7 +895,8 @@
     keuangan: function () { return finSettingsHtml(); },
     akun: function () {
       return '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
-        '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>';
+        '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>' +
+        '<div class="card-flat stack" id="perf-card">' + perfCardHtml() + '</div>';
     },
     paket: function () { return '<div class="stack" id="pkg-root">' + pkgHtml() + '</div>'; },
     pengingat: function () {
@@ -950,6 +968,18 @@
     rmdPreviewTimers[m[1]] = setTimeout(function () { rmdPreview(m[1]); }, 350);
   }
 
+  function perfCardHtml() {
+    const rows = window.perfSummary().slice(0, 10);
+    let html = '<div class="group-label"><span>Kecepatan di perangkat ini</span></div>';
+    if (!rows.length) return html + '<p class="li-sub">Belum ada data. Pakai aplikasi dulu, lalu buka lagi halaman ini.</p>';
+    html += '<p class="hint">Rata-rata lama tiap panggilan server (milidetik), yang paling lambat di atas.</p>';
+    rows.forEach(function (r) {
+      html += '<div class="row-between"><span class="li-sub">' + h(r.name) + ' · ' + r.n + '×</span><span class="li-sub"><b>' + r.avg + '</b> ms · maks ' + r.max + '</span></div>';
+    });
+    return html + '<button type="button" class="btn btn-outline btn-block" onclick="window.perfReset()">Hapus data</button>';
+  }
+  window.perfReset = function () { window.perfClear(); const c = document.getElementById('perf-card'); if (c) c.innerHTML = perfCardHtml(); };
+
   function rmdStatusHtml() {
     const s = setState.status;
     if (!s) return '<span class="li-sub">Memuat status…</span>';
@@ -957,6 +987,7 @@
     let html = '<div class="row-between"><span class="li-sub"><span class="status-dot ' + (s.triggerInstalled ? 'ok' : 'warn') + '"></span> ' +
       h(s.triggerInstalled ? 'Trigger terpasang' + last : 'Trigger belum terpasang') + '</span>' +
       '<button type="button" class="btn btn-outline btn-sm" onclick="window.settingsInstallTrigger(this)">' + (s.triggerInstalled ? 'Pasang ulang' : 'Pasang') + '</button></div>';
+    html += '<span class="li-sub"><span class="status-dot ' + (s.warmInstalled ? 'ok' : 'warn') + '"></span> ' + (s.warmInstalled ? 'Pemanas server aktif (tiap 5 menit)' : 'Pemanas server belum terpasang: tekan Pasang ulang') + '</span>';
     if (!s.telegramReady) html += '<span class="li-sub"><span class="status-dot warn"></span> Telegram belum siap (token, Chat ID, atau saklar).</span>';
     return html;
   }

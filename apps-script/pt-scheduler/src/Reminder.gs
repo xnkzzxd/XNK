@@ -515,7 +515,33 @@ function _installReminderTrigger_() {
     if (t.getHandlerFunction() === 'runReminderTick') { ScriptApp.deleteTrigger(t); removed++; }
   });
   ScriptApp.newTrigger('runReminderTick').timeBased().everyHours(1).inTimezone(REMINDER_TZ).create();
+  _installWarmTrigger_();
   return removed;
+}
+
+/** Pemanas: tiap 5 menit mengisi cache bersama dan menjaga server tidak dingin. Pasang ulang aman (duplikat dihapus). */
+function _installWarmTrigger_() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'warmUp') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('warmUp').timeBased().everyMinutes(5).create();
+}
+
+/**
+ * Trigger handler (tiap 5 menit): membuka sheet dan mengisi cache yang dibaca klien pertama setiap hari
+ * (paket, coach, konten tayang, jam kosong), supaya klien itu tidak menunggu server dingin. Tidak mengubah data,
+ * tidak mengembalikan apa pun, dan dibatasi 1x per 60 detik kalau dipanggil dari browser.
+ */
+function warmUp() {
+  if (!_throttle_('warm', 60)) return;
+  var steps = [
+    function() { _getMemberDataSheet_(); },
+    function() { getPriceListPublic(); },
+    function() { getCoaches(); },
+    function() { _contentForClient_(); },
+    function() { getOpenSlots({ days: _portalHorizonDays_() }); }
+  ];
+  steps.forEach(function(fn) { try { fn(); } catch (e) { Logger.log('warmUp: ' + e); } });
 }
 
 /** Pemilik, dari editor: pasang trigger pengingat. */
@@ -533,6 +559,7 @@ function getReminderStatus(token) {
   var last = parseInt(props.getProperty('RMD_LAST_tick'), 10);
   return {
     triggerInstalled: installed > 0,
+    warmInstalled: ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'warmUp'; }),
     tickEveryMinutes: 60,
     lastTickAt: isNaN(last) ? '' : new Date(last).toISOString(),
     telegramReady: _telegramReady_(),
