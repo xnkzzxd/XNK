@@ -36,3 +36,9 @@ Nada: klien mendapat kalimat menyemangati + satu saran; coach mendapat angka fak
 - Halaman Klien: kartu hitam ringkasan (klien, sesi minggu ini, aktif 14 hari, perlu perhatian), `.stat-strip` filter (Aktif, Hampir habis, Habis, Perlu perhatian), cari, urutkan (Terbaru bawaan, Perlu perhatian, Nama, Sisa sesi, Lama tidak latihan; `xnk_client_sort`), sakelar Kartu/Daftar di PC (`xnk_client_view`).
 - Kartu: status, sisa + meter, tanda perhatian, sesi berikutnya (juga HP), batang 4 minggu + perubahan berat.
 - Detail klien: 4 tab. `Ringkasan` (Sorotan, data, PR, jadwal, Riwayat, Pengingat WA dilipat), `Progres` (rapor + tafsir, catatan progres, perawatan), `Latihan` (minggu ini + tafsir, program), `Gizi`. Nama tab lama dipetakan: `program`→`latihan`, `perawatan`→`progres`, `riwayat`→`ringkasan`.
+
+## 5. Redesign desktop (2026-10, masukan owner)
+
+- Kartu hitam **ramping** (`insightHeroHtml({slim:true})`, satu baris judul+kalimat | angka | tombol) untuk Ringkasan klien, Jadwal, Info, Paket, Lainnya, Tim coach. Kartu Coach ringkas (`.coach-hero.compact`, angka di dalam kartu).
+- Portal: judul tab ada di top bar (`html.portal` membuat `.topbar-title` selalu tampil dan menyembunyikan judul di isi halaman). Progres dibagi sub-tab `Ringkasan · Ukuran · Tes · Riwayat` (`pgSeg`, `setPgSeg`); panduan klien baru menunjuk `#ph-progress`, `#pg-seg`, tombol Catat. Makan dibuka kartu hitam (cincin kalori, sisa, makro), menu per waktu makan (`.meal-blk`), "Tubuhmu" sebagai tile, aturan makan dilipat.
+- Panel: Ringkasan klien dua kolom, kanan berisi lipatan (`foldHtml`) PR, Jadwal mendatang, Riwayat, Pengingat WA. Progres berurutan: rapor → tile (`mtileHtml`) → grafik → lipatan (riwayat catatan, badge, lingkar & simetri, catatan privat, form kesehatan, asesmen, tes, penilaian). Gizi: tile dasar dan kebutuhan harian, grafik kalori 7 hari (`kcalBarsHtml`), input coach di kanan. Kalender aktivitas ukuran tetap (13 px per hari).
