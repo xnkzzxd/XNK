@@ -1956,7 +1956,7 @@ async function contrastReport(page) {
     check((await page.textContent('#coach-sheet-body')).includes('Rizky') && await visible(page, '#coach-sheet-body .coach-hero'), 'tapping "Coach kamu" opens the full coach profile in a sheet');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
-    check(await visible(page, '#view-public-dashboard .portal-hero') && (await page.locator('#view-public-dashboard .portal-kpis .kpi').count()) === 3 && (await page.locator('#view-public-dashboard .portal-actions .btn').count()) === 3, 'portal home: dark hero, three KPI tiles and three quick actions');
+    check(await visible(page, '#view-public-dashboard .portal-hero') && await visible(page, '#view-public-dashboard .next-card') && await visible(page, '#pub-week .stat-strip') && (await page.locator('#view-public-dashboard .portal-actions .btn').count()) === 3, 'portal home: next session on top, dark hero, "Minggu ini" strip and three quick actions');
     check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'portal home: no sideways page scroll');
     await shot(page, 'portal-mobile-home-premium');
     await page.evaluate(() => window.openMyProfile());
@@ -1967,7 +1967,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
-    check((await page.locator('#view-calendar .portal-kpis .kpi').count()) >= 2, 'portal Jadwal: KPI tiles above the calendar');
+    check(await visible(page, '#view-calendar .insight-hero') && (await page.locator('#view-calendar .insight-hero .ih-stat').count()) >= 2, 'portal Jadwal: black summary card above the calendar');
     await page.evaluate(() => window.navigate('public-progress'));
     await page.waitForTimeout(400);
     await page.click('#pub-progress-wrap .btn-primary');
