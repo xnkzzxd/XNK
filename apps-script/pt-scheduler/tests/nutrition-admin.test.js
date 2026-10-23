@@ -88,3 +88,43 @@ test('nutrition data stays out of the bootstrap and public answers', () => {
   const bundle = env.call('getClientBundle', admin, 'PT-A');
   assert.equal(bundle.nutrition.profile.tinggi, 170);
 });
+
+test('the coach can enter an age instead of a birth date; it feeds the target', () => {
+  const env = seededEnv();
+  const admin = env.adminToken(), ani = env.memberToken(KEY_A);
+  env.call('saveMyMeasurement', ani, { berat: 70, pinggang: 80 });
+  env.call('saveClientNutrition', admin, 'PT-A', { tinggi: 170, jk: 'P', goal: 'jaga', umur: '30' });
+  const r = JSON.parse(JSON.stringify(env.call('getClientNutrition', admin, 'PT-A')));
+  assert.equal(r.profile.umur, 30);
+  assert.equal(r.age, 30);
+  assert.equal(r.target.ok, true);
+  assert.equal(r.target.bmr, Math.round(10 * 70 + 6.25 * 170 - 5 * 30 - 161));
+  // the sheet keeps the age and the day it was written; the birth date column stays empty (no false birthday greetings)
+  const row = env.memberRow('PT-A');
+  assert.equal(Number(row[30]), 30);
+  assert.equal(row[31], env.call('_todayWib_'));
+  assert.equal(String(row[20] || ''), '');
+  // saving again with the same age keeps the original date; a new age updates both
+  row[31] = '2025-01-01';
+  env.call('saveClientNutrition', admin, 'PT-A', { tinggi: 170, jk: 'P', goal: 'jaga', umur: 30 });
+  assert.equal(env.memberRow('PT-A')[31], '2025-01-01');
+  env.call('saveClientNutrition', admin, 'PT-A', { tinggi: 170, jk: 'P', goal: 'jaga', umur: 31 });
+  assert.equal(env.memberRow('PT-A')[31], env.call('_todayWib_'));
+  // empty clears both
+  env.call('saveClientNutrition', admin, 'PT-A', { tinggi: 170, jk: 'P', goal: 'jaga', umur: '' });
+  assert.equal(String(env.memberRow('PT-A')[30]), '');
+  assert.equal(JSON.parse(JSON.stringify(env.call('getClientNutrition', admin, 'PT-A'))).target.ok, false);
+});
+
+test('age validation, and the birth date wins over a typed age; a stored age grows by full years', () => {
+  const env = seededEnv();
+  const admin = env.adminToken();
+  assert.throws(() => env.call('saveClientNutrition', admin, 'PT-A', { umur: 5 }), /Umur harus bilangan bulat antara 10 dan 100/);
+  assert.throws(() => env.call('saveClientNutrition', admin, 'PT-A', { umur: 150 }), /Umur harus/);
+  assert.throws(() => env.call('saveClientNutrition', admin, 'PT-A', { umur: 30.5 }), /Umur harus/);
+  const age = (p, t) => env.callRaw('_nutAgeOf_', p, t);
+  assert.equal(age({ birthDate: '1990-06-15', umur: 99, umurTgl: '2026-01-01' }, '2026-10-22'), 36);
+  assert.equal(age({ birthDate: '', umur: 30, umurTgl: '2024-10-22' }, '2026-10-22'), 32);
+  assert.equal(age({ birthDate: '', umur: 30, umurTgl: '2024-10-23' }, '2026-10-22'), 31);
+  assert.equal(age({ birthDate: '', umur: '', umurTgl: '' }, '2026-10-22'), null);
+});

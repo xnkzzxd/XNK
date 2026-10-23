@@ -6242,6 +6242,7 @@
       }).join('') : '<p class="li-sub">Belum ada catatan makan dalam 7 hari terakhir.</p>') + '</div>';
     }
     html += '</div><div class="cp-col cp-col-side"><div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Input coach</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutEdit(\'' + h(memberId) + '\')">Ubah</button></div>' +
+      careRow('Umur', d.age != null ? h(d.age) + ' tahun' + (p.birthDate ? '' : p.umur !== '' && p.umur != null ? ' (diisi manual)' : '') : '-') +
       careRow('Tinggi', p.tinggi === '' || p.tinggi == null ? '-' : h(nutNum(p.tinggi, 1)) + ' cm') +
       careRow('Jenis kelamin', p.jk === 'L' ? 'Laki-laki' : p.jk === 'P' ? 'Perempuan' : '-') +
       careRow('Goal', h(NUT_GOAL_LABEL[p.goal] || '-')) +
@@ -6284,6 +6285,8 @@
   window.openNutEdit = function (id) {
     nutMember = id; const d = nut[id] || {}, p = d.profile || {}, o = d.options || {};
     $('nut-tinggi').value = p.tinggi === '' || p.tinggi == null ? '' : String(p.tinggi).replace('.', ',');
+    $('nut-umur').value = p.umur === '' || p.umur == null ? '' : String(p.umur);
+    $('nut-umur-hint').textContent = p.birthDate ? 'Tanggal lahir sudah diisi (' + p.birthDate + '); umur dihitung dari situ.' : 'Dipakai bila tanggal lahir belum diisi. Bertambah sendiri setiap tahun.';
     $('nut-jk').value = p.jk || ''; $('nut-goal').value = p.goal || ''; $('nut-anggaran').value = p.anggaran || 'standar';
     $('nut-aktif').checked = p.aktif !== false;
     nutChips('nut-tags', o.pantangan || [], p.pantangan || []);
@@ -6293,7 +6296,7 @@
   window.submitNutEdit = function (e) {
     e.preventDefault();
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveClientNutrition', nutMember, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
+    adminCall('saveClientNutrition', nutMember, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), umur: $('nut-umur').value.trim(), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
       pantangan: nutPicked('nut-tags'), kondisi: nutPicked('nut-kondisi'), aktif: $('nut-aktif').checked })
       .then(function () { done(); window.closeModal(); window.showToast('Data gizi disimpan.'); return window.loadClientNutrition(nutMember); })
       .catch(function (err) { done(); window.showToast(err.message); });
@@ -7873,7 +7876,7 @@
   let onb = null;
   window.openNutOnb = function () {
     const n = window.myNutrition || {}, p = n.profile || {};
-    onb = { step: 1, needKg: !(n.inputs && n.inputs.kg) || !!(n.inputs && n.inputs.stale), berat: '', tinggi: p.tinggi === '' || p.tinggi == null ? '' : String(p.tinggi).replace('.', ','), jk: p.jk || '', birth: p.birthDate || '', hadBirth: !!p.birthDate, goal: p.goal || '', pantangan: (p.pantangan || []).slice(), anggaran: p.anggaran || 'standar' };
+    onb = { step: 1, needKg: !(n.inputs && n.inputs.kg) || !!(n.inputs && n.inputs.stale), berat: '', tinggi: p.tinggi === '' || p.tinggi == null ? '' : String(p.tinggi).replace('.', ','), jk: p.jk || '', birth: p.birthDate || '', hadBirth: !!p.birthDate || (p.umur !== '' && p.umur != null), umur: '', goal: p.goal || '', pantangan: (p.pantangan || []).slice(), anggaran: p.anggaran || 'standar' };
     nutOnbDraw(); openSheet('modal-nut-onb');
   };
   function nutOnbDraw() {
@@ -7884,7 +7887,8 @@
       html = '<div class="field"><label class="label" for="nut-o-tinggi">Tinggi badan (cm)</label><input class="input" id="nut-o-tinggi" type="text" inputmode="decimal" placeholder="170" value="' + h(o.tinggi) + '" oninput="window.nutOnbSet(\'tinggi\', this.value)"></div>' +
         '<div class="field"><p class="label">Jenis kelamin</p><div class="seg" style="display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (o.jk === 'L' ? 'active' : '') + '" onclick="window.nutOnbSet(\'jk\',\'L\',true)">Laki-laki</button><button type="button" class="' + (o.jk === 'P' ? 'active' : '') + '" onclick="window.nutOnbSet(\'jk\',\'P\',true)">Perempuan</button></div></div>' +
         (o.needKg ? '<div class="field"><label class="label" for="nut-o-berat">Berat badan sekarang (kg)</label><input class="input" id="nut-o-berat" type="text" inputmode="decimal" placeholder="70" value="' + h(o.berat) + '" oninput="window.nutOnbSet(\'berat\', this.value)"></div>' : '') +
-        (o.hadBirth ? '' : '<div class="field"><label class="label" for="nut-o-birth">Tanggal lahir</label><input class="input" id="nut-o-birth" type="date" value="' + h(o.birth) + '" onchange="window.nutOnbSet(\'birth\', this.value)"></div>');
+        (o.hadBirth ? '' : '<div class="field"><label class="label" for="nut-o-birth">Tanggal lahir</label><input class="input" id="nut-o-birth" type="date" value="' + h(o.birth) + '" onchange="window.nutOnbSet(\'birth\', this.value)"></div>' +
+          '<div class="field"><label class="label" for="nut-o-umur">Atau isi umur saja (tahun)</label><input class="input" id="nut-o-umur" type="text" inputmode="numeric" placeholder="27" value="' + h(o.umur) + '" oninput="window.nutOnbSet(\'umur\', this.value)"></div>');
     } else if (o.step === 2) {
       html = '<p class="label">Apa tujuan utamamu?</p><div class="stack" style="gap:8px">' + ['turun', 'naik', 'jaga', 'recomp'].map(function (g) {
         return '<button type="button" class="btn ' + (o.goal === g ? 'btn-primary' : 'btn-outline') + ' btn-lg btn-block" style="justify-content:flex-start" onclick="window.nutOnbSet(\'goal\',\'' + g + '\',true)">' + h(NUT_GOALS_L[g]) + '</button>';
@@ -7911,13 +7915,13 @@
       if (!(t >= 100 && t <= 230)) { window.showToast('Tinggi badan harus antara 100 dan 230 cm.'); return; }
       if (!o.jk) { window.showToast('Pilih jenis kelamin.'); return; }
       if (o.needKg) { const b = Number(String(o.berat).replace(',', '.')); if (!(b >= 20 && b <= 300)) { window.showToast('Isi berat badan antara 20 dan 300 kg.'); return; } }
-      if (!o.hadBirth && !o.birth) { window.showToast('Isi tanggal lahir.'); return; }
+      if (!o.hadBirth && !o.birth && !String(o.umur).trim()) { window.showToast('Isi tanggal lahir atau umur.'); return; }
     }
     if (d > 0 && o.step === 2 && !o.goal) { window.showToast('Pilih tujuanmu.'); return; }
     if (d > 0 && o.step === 3) {
       const done = busy($('nut-onb-next'), 'Menyimpan…');
       const weigh = o.needKg ? memberCall('saveMyMeasurement', { berat: String(o.berat).replace(',', '.') }) : Promise.resolve();
-      weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth }); })
+      weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth, umur: o.hadBirth ? '' : String(o.umur).trim() }); })
         .then(function (r) { done(); window.myNutrition = r; window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
         .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
       return;
