@@ -18,7 +18,7 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 
 ## B — Kontras dan hirarki
 - [ ] **S5** Mode gelap: kartu "Sesi berikutnya" dan kartu hero lain memakai permukaan lebih terang dari latar; label, badge, tombol "Ingatkan/Detail" ≥ 4.5:1. Tes browser mengukur kontras (terang dan gelap). Dep: —. (P2)
-- [ ] **S6** Baris sesi (Dashboard, Jadwal, hub coach): "Selesai" solid sebagai aksi utama, "Ubah" dan "WA" sekunder (ikon + teks pendek, target 44 px), tombol rata kanan di desktop; kontras OK di kartu hitam dan gelap. Satu komponen `.sess-actions` bersama. Dep: S5. (P8, P14)
+- [x] **S6** Baris sesi (Dashboard, Jadwal, hub coach): "Selesai" solid sebagai aksi utama, "Ubah" dan "WA" sekunder (ikon + teks pendek, target 44 px), tombol rata kanan di desktop; kontras OK di kartu hitam dan gelap. Satu komponen `.sess-actions` bersama. Dep: S5. (P8, P14)
 
 ## C — Halaman Klien
 - [ ] **S7** Rampingkan layar atas Klien: hapus 4 tile (`.client-top`), ringkasan hitam satu baris di HP (angka + "Lihat siapa"), cari + sortir + Kartu/Daftar satu baris; klien pertama terlihat di 390×844. Perbarui cek browser yang menyebut `.client-top`. Dep: S4. (P3)

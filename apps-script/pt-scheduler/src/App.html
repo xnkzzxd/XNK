@@ -2331,6 +2331,17 @@
     return { cls: 'confirmed', pill: '<span class="pill">Terjadwal</span>', label: 'Terjadwal' };
   }
 
+  // Aksi baris sesi (satu komponen): Selesai = utama (solid), Ubah dan WA = sekunder.
+  function sessActionsHtml(s) {
+    if (!s || isDone(s) || isAvailable(s)) return '';
+    const id = h(s.id);
+    return '<div class="sess-actions" onclick="event.stopPropagation()">' +
+      '<button type="button" class="btn btn-primary sess-main" onclick="window.quickComplete(\'' + id + '\')">' + icon('check') + 'Selesai</button>' +
+      '<button type="button" class="btn btn-outline" onclick="window.quickEdit(\'' + id + '\')" aria-label="Ubah jadwal">' + icon('calendar-clock') + 'Ubah</button>' +
+      (s.phone ? '<button type="button" class="btn btn-outline" onclick="window.quickWa(\'' + id + '\')" aria-label="Chat WhatsApp klien">' + icon('message-circle') + 'WA</button>' : '') +
+      '</div>';
+  }
+
   // Item timeline sesi (admin). opts.actions = tampilkan aksi cepat.
   function sessionItem(s, opts) {
     opts = opts || {};
@@ -2342,11 +2353,7 @@
     const mins = Math.round((end - d) / 60000);
     let actions = '';
     if (opts.actions && !isAvailable(s)) {
-      actions = '<div class="tl-actions" onclick="event.stopPropagation()">' +
-        (!isDone(s) ? '<button type="button" class="btn btn-secondary" onclick="window.quickComplete(\'' + h(s.id) + '\')">' + icon('check') + 'Selesai</button>' : '') +
-        (!isDone(s) ? '<button type="button" class="btn btn-outline" onclick="window.quickEdit(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah</button>' : '') +
-        (s.phone ? '<button type="button" class="btn btn-outline" onclick="window.quickWa(\'' + h(s.id) + '\')" aria-label="Chat WhatsApp klien">' + icon('message-circle') + 'WA</button>' : '') +
-        '</div>';
+      actions = sessActionsHtml(s);
     }
     return '<div class="' + cls + '" data-key="session:' + h(s.id) + '">' +
       '<div class="tl-time">' + fmtTime(d) + '<small>' + mins + ' mnt</small></div>' +
@@ -4651,9 +4658,9 @@
     if (!hub.today.length) html += '<p class="li-sub" style="min-height:44px;display:flex;align-items:center">Tidak ada sesi hari ini.</p>';
     html += hub.today.map(function (t) {
       const d = new Date(t.start), done = t.status === 'completed';
-      return '<div class="row" style="gap:8px;min-height:56px;' + (done ? 'opacity:.55' : '') + '">' +
+      return '<div class="row" style="gap:8px;min-height:56px;flex-wrap:wrap;' + (done ? 'opacity:.55' : '') + '">' +
         '<button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openScheduleDetail(\'' + h(t.id) + '\')"><span class="num" style="font-weight:800;min-width:52px">' + fmtTime(d) + '</span><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(t.memberName) + '</span>' + (t.fokus && !done ? '<span class="li-sub truncate" style="display:block">' + icon('target', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(t.fokus) + '</span>' : '') + '</span></button>' +
-        (done ? '<span class="pill soft">Selesai</span>' : '<button type="button" class="btn btn-secondary" style="min-width:44px;min-height:44px" aria-label="Tandai selesai ' + h(t.memberName) + '" onclick="window.hubComplete(\'' + h(t.id) + '\')">' + icon('check') + '</button>') + '</div>';
+        (done ? '<span class="pill soft">Selesai</span>' : sessActionsHtml(window.schedules.find(x => String(x.id) === String(t.id)) || { id: t.id })) + '</div>';
     }).join('') + '</div>';
     html += careListHtml(hub.care);
     if (hub.feedback && hub.feedback.count) {
