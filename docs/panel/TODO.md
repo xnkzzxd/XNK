@@ -18,7 +18,8 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 - [ ] **S4** Padding bawah semua view HP = `var(--tabbar-space)` + bayangan/gradasi tipis di atas bar tab; tidak ada baris atau tombol terpotong separuh di scroll akhir. Cek di Dashboard, Jadwal, Klien, Coach, Keuangan. Dep: —. (P5)
 
 ## B — Kontras dan hirarki
-- [ ] **S5** Mode gelap: kartu "Sesi berikutnya" dan kartu hero lain memakai permukaan lebih terang dari latar; label, badge, tombol "Ingatkan/Detail" ≥ 4.5:1. Tes browser mengukur kontras (terang dan gelap). Dep: —. (P2)
+- [x] **S5** Mode gelap: kartu "Sesi berikutnya" dan kartu hero lain memakai permukaan lebih terang dari latar; label, badge, tombol "Ingatkan/Detail" ≥ 4.5:1. Tes browser mengukur kontras (terang dan gelap). Dep: —. (P2)
+  - Hasil: penyebab: `.card-ink` dipaksa ke `--band-card` tetapi tombol/label di dalamnya masih memakai `--on-ink` (gelap di mode gelap), jadi "Ingatkan" dan badge hilang. Perbaikan: `.card-ink`, `.insight-hero`, `.kpi.ink` memetakan ulang `--ink/--on-ink/--on-ink-muted` ke token band; `--band-card` gelap jadi `#2a2a2a` (lebih terang dari latar). Cek baru: kartu "Sesi berikutnya" lebih terang dari halaman (gelap) dan semua teks/tombol ≥ 4.5:1 (terang dan gelap). Dua cek gagal yang tersisa (pull down, header lined up) milik S2 dan S1.
 - [ ] **S6** Baris sesi (Dashboard, Jadwal, hub coach): "Selesai" solid sebagai aksi utama, "Ubah" dan "WA" sekunder (ikon + teks pendek, target 44 px), tombol rata kanan di desktop; kontras OK di kartu hitam dan gelap. Satu komponen `.sess-actions` bersama. Dep: S5. (P8, P14)
 
 ## C — Halaman Klien
