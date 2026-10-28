@@ -13,7 +13,7 @@ Clients and the coach can make a PNG card for Instagram Story / WhatsApp Status.
 
 ## Tasks
 - [x] T-1300 Docs (this file).
-- [x] T-1301 Server: `_workoutStats_` sessions carry `prs` and radar `parts`, `durasi` from `WorkoutSessions`; `Bagikan.gs` (`_shareEnabled_`, `_shareSummary_`, `_shareFor_`); part `share` in `getPortalMore` / `getClientBundle`; `shareEnabled` in `getPortalBootstrap`, `getAppSettings`, `getAdminMore`, `updateAppSettings`. Tests `tests/share.test.js`.
+- [x] T-1301 Server: `_workoutStats_` sessions carry `prs` and radar `parts`, `durasi` from `WorkoutSessions`; `BagikanData.gs` (`_shareEnabled_`, `_shareSummary_`, `_shareFor_`); part `share` in `getPortalMore` / `getClientBundle`; `shareEnabled` in `getPortalBootstrap`, `getAppSettings`, `getAdminMore`, `updateAppSettings`. Tests `tests/share.test.js`.
 - [x] T-1302 Renderer `Bagikan.html` (`shareDraw`: radar, bars, line, macro ring, list, badges, emblem, medal).
 - [x] T-1303 `#sheet-share` (preview on checkerboard, style/size/ink/position chips, name, Bagikan / Salin / Simpan), prefs in `localStorage xnk_share_prefs`, settings toggle.
 - [x] T-1304 Portal and panel entry points: hero buttons (Latihan, Rekap, Progres, Gizi), auto-open after Selesai, badge celebration.

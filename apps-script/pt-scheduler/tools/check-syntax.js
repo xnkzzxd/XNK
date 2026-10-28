@@ -4,6 +4,9 @@
 //   - every inline <script> block in the HTML files (template scriptlets
 //     like <?= x ?> are replaced with a literal first)
 //   - appsscript.json must be valid JSON
+//   - no two files share a name without the extension: Apps Script keeps one
+//     name space for .gs and .html, so Bagikan.gs + Bagikan.html makes
+//     clasp push fail with "A file with this name already exists"
 // Exits non-zero on the first file with errors, printing file:line.
 'use strict';
 const fs = require('fs');
@@ -47,6 +50,18 @@ for (const name of fs.readdirSync(SRC).sort()) {
       failures++;
       console.error(`✗ src/${name}: ${err.message}`);
     }
+  }
+}
+
+const seen = {};
+for (const name of fs.readdirSync(SRC).sort()) {
+  if (!/\.(gs|html)$/.test(name)) continue;
+  const base = name.replace(/\.(gs|html)$/, '').toLowerCase();
+  if (seen[base]) {
+    failures++;
+    console.error(`✗ src/${seen[base]} and src/${name} have the same name; Apps Script rejects the push. Rename one of them.`);
+  } else {
+    seen[base] = name;
   }
 }
 

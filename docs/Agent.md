@@ -69,6 +69,8 @@ Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks
 - Time zone for reminders is `Asia/Jakarta` (`REMINDER_TZ`, `_wibParts_`).
 - Telegram to the owner goes through `kirimNotifTelegram_` / `kirimTelegramTombol_`. Both skip quietly when Telegram is off.
 
+- A new file in `src/` needs a name no other file has without its extension: Apps Script keeps `.gs` and `.html` in one name space, so `Bagikan.gs` next to `Bagikan.html` makes every `clasp push` fail (the deploy step now fails on it, and `check-syntax.js` catches it first).
+
 **Client (`.html`)**
 - Call the server only through `adminCall(name, …)` (adds the admin token), `memberCall` or `publicCall`.
 - Escape every dynamic string with `h()` before putting it in HTML.
