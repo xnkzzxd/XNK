@@ -2004,6 +2004,16 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 .cl-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .cl-tools .input-search { flex: 1 1 220px; min-width: 0; }
 .cl-tools .select { width: auto; min-height: 44px; }
+@media (max-width: 767px) {
+  .client-top { margin-bottom: 10px; }
+  .client-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--r-lg, 16px); }
+  .client-line-t { font-size: var(--fs-md, 1rem); }
+  .client-line-t .num { font-size: var(--fs-xl); margin-right: 2px; }
+  .client-line-s { color: var(--on-ink-2, inherit); opacity: .8; font-size: var(--fs-sm); }
+  .cl-tools { flex-wrap: nowrap; }
+  .cl-tools .input-search { flex: 1 1 0; }
+  .cl-tools .select { flex: 0 0 auto; max-width: 42%; }
+}
 .cc-extra { display: grid; gap: 6px; margin-top: 8px; }
 .cc-extra:empty { display: none; }
 .cc-flags { display: flex; flex-wrap: wrap; gap: 6px; }

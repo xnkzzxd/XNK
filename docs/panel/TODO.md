@@ -21,7 +21,7 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 - [x] **S6** Baris sesi (Dashboard, Jadwal, hub coach): "Selesai" solid sebagai aksi utama, "Ubah" dan "WA" sekunder (ikon + teks pendek, target 44 px), tombol rata kanan di desktop; kontras OK di kartu hitam dan gelap. Satu komponen `.sess-actions` bersama. Dep: S5. (P8, P14)
 
 ## C — Halaman Klien
-- [ ] **S7** Rampingkan layar atas Klien: hapus 4 tile (`.client-top`), ringkasan hitam satu baris di HP (angka + "Lihat siapa"), cari + sortir + Kartu/Daftar satu baris; klien pertama terlihat di 390×844. Perbarui cek browser yang menyebut `.client-top`. Dep: S4. (P3)
+- [x] **S7** Rampingkan layar atas Klien: hapus 4 tile (`.client-top`), ringkasan hitam satu baris di HP (angka + "Lihat siapa"), cari + sortir + Kartu/Daftar satu baris; klien pertama terlihat di 390×844. Perbarui cek browser yang menyebut `.client-top`. Dep: S4. (P3)
 - [ ] **S8** Label dasar pengelompokan klien ("Bergabung · Januari 2026", "Sisa sesi · Habis", dll.) mengikuti urutan terpilih; sembunyikan pembagi bila hanya satu grup. Dep: S7. (P4)
 - [ ] **S9** Profil klien HP: hero lebih pendek (cincin sisa sesi dan tombol satu baris), tab hitam lebih rendah; "Sorotan" muncul dalam layar pertama. Dep: S1. (P12)
 

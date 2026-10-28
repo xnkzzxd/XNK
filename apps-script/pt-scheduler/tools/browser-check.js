@@ -445,7 +445,7 @@ async function contrastReport(page) {
       const cards = Array.from(document.querySelectorAll('#client-list .client-card')), sc = document.getElementById('main-scroll-area').getBoundingClientRect();
       const sel = document.querySelector('#client-list .selected').getBoundingClientRect();
       return { lefts: new Set(cards.map(c => Math.round(c.getBoundingClientRect().left))).size, meta: Array.from(document.querySelectorAll('#client-list .cc-meta, #client-list .cc-meter, #client-list .grow > .li-sub')).filter(e => e.getClientRects().length).length,
-        kpis: document.querySelector('#view-clients .client-top').getClientRects().length, selIn: sel.top >= sc.top && sel.bottom <= sc.bottom };
+        kpis: document.querySelector('#view-clients #client-hero').getClientRects().length, selIn: sel.top >= sc.top && sel.bottom <= sc.bottom };
     });
     check(compact.lefts === 1 && compact.meta === 0 && compact.kpis === 0 && compact.selIn, 'open client: the list becomes one column of names (no details, no summary tiles) and the open client is in view ' + JSON.stringify(compact));
     check((await elOverflow(page, '#detail-body')) <= 1 && (await elOverflow(page, '#client-list')) <= 1, 'open client: nothing overflows sideways in the panel or the list');
