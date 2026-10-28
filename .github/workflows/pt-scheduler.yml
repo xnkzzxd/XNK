@@ -87,7 +87,15 @@ jobs:
       - name: Push code to Apps Script
         if: steps.cfg.outputs.ready == 'true'
         working-directory: apps-script/pt-scheduler
-        run: clasp push --force
+        # clasp 2.4.2 prints Google's error but still exits 0 and says
+        # "Pushed N files", so read its output and stop the deploy on an error.
+        run: |
+          set -o pipefail
+          clasp push --force 2>&1 | tee "$RUNNER_TEMP/clasp-push.log"
+          if grep -qE "GaxiosError|errors: \[|code: [45][0-9][0-9]|already exists in the current project" "$RUNNER_TEMP/clasp-push.log"; then
+            echo "::error title=clasp push gagal::Apps Script menolak kode. Versi baru TIDAK dibuat; lihat log di atas."
+            exit 1
+          fi
 
       - name: Deploy new version to the existing web app deployment
         if: steps.cfg.outputs.ready == 'true'
