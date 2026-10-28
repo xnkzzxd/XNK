@@ -1831,6 +1831,8 @@ button.avatar { border: 0; cursor: pointer; }
     #app.detail-wide .pg-grid > .pg-more > .stack { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); column-gap: 28px !important; }
   }
   @container (min-width: 600px) {
+    #app.detail-wide #profile-care-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px !important; align-items: start; }
+    #app.detail-wide #profile-care-wrap > .cp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
     #app.detail-wide #profile-nut-wrap { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); column-gap: 20px !important; align-items: start; }
     #app.detail-wide #profile-nut-wrap > .cp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   }

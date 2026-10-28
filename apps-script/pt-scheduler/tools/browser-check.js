@@ -920,9 +920,9 @@ async function contrastReport(page) {
     check((await page.textContent('#profile-nut-wrap')).includes('29 tahun (diisi manual)'), 'umur: the typed age shows on the Gizi tab');
     await page.evaluate(() => window.cpTab('perawatan'));
     await page.waitForTimeout(300);
-    const careFolds = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-care-wrap > details.fold')).map(f => f.querySelector('.fold-t').textContent));
-    check(careFolds.length >= 4 && careFolds.includes('Tes kebugaran') && (await elOverflow(page, '#detail-body')) <= 1 && (await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display)) === 'none',
-      'wide client page: care details sit in folds (notes, health form, assessment, tests), hidden tabs stay hidden ' + JSON.stringify(careFolds));
+    const careCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-care-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
+    check(careCols.length === 2 && careCols[1][0] > careCols[0][0] && Math.abs(careCols[1][1] - careCols[0][1]) <= 2 && (await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display)) === 'none',
+      'wide client page: Perawatan in two columns, hidden tabs stay hidden ' + JSON.stringify(careCols));
     await page.evaluate(() => window.openCareTests('PT-A'));
     await page.waitForTimeout(500);
     check(await visible(page, '#ft-pushup') && (await page.getAttribute('#ft-pushup', 'inputmode')) === 'decimal', 'fitness test sheet opens with a decimal keypad');
