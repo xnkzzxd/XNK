@@ -2226,6 +2226,8 @@ async function contrastReport(page) {
     check(calls2b.includes('getPortalMore'), 'cache: after a change on the server the portal fetches the data again (' + calls2b.join(',') + ')');
     // 2c) Tanpa sinyal: catat makan tampil "belum terkirim", lalu terkirim sekali saat sinyal kembali.
     await changed.context.close();
+    // Data gizi lengkap supaya kartu "Dimakan hari ini" tampil.
+    env.call('saveMyNutritionProfile', tokA, { tinggi: '160', jk: 'P', goal: 'turun', pantangan: [], anggaran: 'standar', birthDate: '1995-01-01' });
     const net = { down: false };
     const calls2c = [];
     const off = await openPage(browser, env, '/Index?view=public', calls2c, await warm.page.evaluate(() => Object.assign({}, localStorage)), { wait: 1200, keepCelebration: true, net: net });
