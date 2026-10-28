@@ -6507,19 +6507,18 @@
     html += feedbackAdminHtml(d.feedback);
     html += careOpen('Kesehatan', !d.health ? 'Belum mengisi form' : (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau'));
     if (!d.health) {
-      hMeta = 'belum diisi';
-      hBody = '<p class="li-sub">Klien belum mengisi form kesehatan.</p><div class="btn-row"><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">' + icon('message-circle') + 'Minta isi via WA</button></div>';
+      html += '<p class="li-sub">Belum mengisi form.</p><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">Kirim pengingat</button>';
     } else {
       const yes = d.health.answers.filter(a => a === 'ya').length, extra = d.health.injuries || d.health.medication || d.health.other;
-      hMeta = (yes || extra ? 'perlu dibaca' : 'tidak ada catatan') + ' · ' + (d.health.reviewedAt ? 'ditinjau' : 'belum ditinjau');
-      hBody = '<p>' + (yes || extra ? '<b>Ada hal yang perlu dibaca</b>' : 'Tidak ada catatan') + ' <span class="li-sub">· ' + h(d.health.tanggal) + '</span></p>' +
-        '<div class="btn-row">' + editBtn("window.openCareHealth('" + h(memberId) + "')", 'Lihat jawaban') + '</div>';
+      html += '<p>' + (yes || extra ? '<b>Ada hal yang perlu dibaca</b>' : 'Tidak ada catatan') + ' <span class="li-sub">· ' + h(d.health.tanggal) + '</span></p>' +
+        '<p class="li-sub">' + (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau') + '</p>' +
+        '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareHealth(\'' + h(memberId) + '\')">Lihat jawaban</button>';
     }
     html += '</div></details></div><div class="cp-col">';
     html += careOpen('Assessment', d.assessment ? 'Sudah diisi' : 'Belum diisi') + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openAssessment(\'' + h(memberId) + '\')">' + (d.assessment ? 'Ubah' : 'Isi') + '</button></div>';
     if (d.assessment) {
       const a = d.assessment;
-      aBody = (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
+      html += (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
       const ex = [['Lemak', a.bodyFat, '%'], ['Pinggul', a.hip, ' cm'], ['Dada (lama)', a.chest, ' cm'], ['Lengan (lama)', a.arm, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
       if (ex.length) html += careRow('Ukuran', h(ex.join(' · ')));
     } else html += '<p class="li-sub">Belum diisi.</p>';
