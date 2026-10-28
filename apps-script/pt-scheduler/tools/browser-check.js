@@ -2582,7 +2582,7 @@ async function contrastReport(page) {
     const got = app ? await app.evaluate(() => window.got) : [];
     const msg = got[0] || {};
     check(got.length >= 1 && msg.origin === 'https://xnk.my.id' && msg.data.xnk === 'host' && msg.data.v === 1 && typeof msg.data.insets.b === 'number' && msg.data.kb === 0, 'wrapper answers the app frame with safe-area numbers only (' + JSON.stringify(msg.data) + ')');
-    check(Object.keys(msg.data || {}).sort().join(',') === 'insets,ios,kb,standalone,v,xnk', 'wrapper sends nothing else');
+    check(Object.keys(msg.data || {}).sort().join(',') === 'insets,ios,kb,share,standalone,v,xnk', 'wrapper sends nothing else (safe area, keyboard, iOS flags and the Phase T share flag)');
     check((await page.getAttribute('meta[name="theme-color"]', 'content')) === '#0a0a0a', 'wrapper takes the app theme colour for the Safari bars (bad values ignored)');
     check((await page.getAttribute('meta[name="viewport"]', 'content')).includes('minimum-scale=1'), 'wrapper never zooms out (iOS "everything tiny")');
     const ifr = await page.locator('#app').boundingBox();
