@@ -3846,10 +3846,27 @@
       if (t >= now && (!nextBy[k] || t < nextBy[k])) nextBy[k] = t;
     });
     (window.renewals || []).forEach(function (r) { if (r.status === 'menunggu') renewBy[String(r.memberId)] = true; });
+    // Pembagi grup mengikuti urutan terpilih ("Aktivitas · Januari 2026", "Sisa sesi · Habis"); disembunyikan bila hanya satu grup.
+    const gl = function (e) {
+      if (e.type !== 'live') return '';
+      const m = e.data, so = ui.clientSort;
+      if (so === 'nama') { const c = String(m.name || '').trim().charAt(0).toUpperCase(); return 'Nama · ' + (/[A-Z]/.test(c) ? c : '#'); }
+      if (so === 'perhatian') return flagsOf(m).length ? 'Perlu perhatian' : 'Aman';
+      if (so === 'sisa') { const r = remainingOf(m); return 'Sisa sesi · ' + (r <= 0 ? 'Habis' : r <= 3 ? '1–3 sesi' : '4 sesi atau lebih'); }
+      if (so === 'lama') {
+        const x = sigOf(m), d = x && x.lastDone ? new Date(x.lastDone) : null;
+        if (!d || isNaN(d)) return 'Latihan terakhir · Belum ada';
+        const days = Math.floor((now - d.getTime()) / 864e5);
+        return 'Latihan terakhir · ' + (days <= 7 ? '7 hari terakhir' : days <= 30 ? '8–30 hari lalu' : 'Lebih dari 30 hari');
+      }
+      return 'Aktivitas · ' + MONTHS[e.date.getMonth()] + ' ' + e.date.getFullYear();
+    };
+    const labels = entries.map(gl);
+    const showDiv = !q && labels.filter(function (l, i) { return l && labels.indexOf(l) === i; }).length > 1;
     let html = '', group = '';
-    entries.forEach(function (e) {
-      const g = MONTHS[e.date.getMonth()] + ' ' + e.date.getFullYear();
-      if (!q && ui.clientSort === 'terbaru' && g !== group) { html += '<div class="group-label month-divider"><span>' + g + '</span></div>'; group = g; }
+    entries.forEach(function (e, i) {
+      const g = labels[i];
+      if (showDiv && g && g !== group) { html += '<div class="group-label month-divider"><span>' + h(g) + '</span></div>'; group = g; }
       html += e.type === 'live' ? clientRow(e.data, { desk: desk, date: e.date, next: nextBy[String(e.data.id)], renew: !!renewBy[String(e.data.id)], solo: solo }) : archiveRow(e.data);
     });
     setHTML(el, '<div class="list stagger' + (ui.clientView === 'list' ? ' cl-view-list' : '') + '">' + html + '</div>');
