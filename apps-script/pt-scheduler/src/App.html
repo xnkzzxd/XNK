@@ -1983,7 +1983,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); }
+  function clearAdminCache() { window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -2074,6 +2074,7 @@
       if (ok(b.finance)) finApplySettings(b.finance);
       if (ok(b.packageTrend)) { window._trendCache = window._trendCache || {}; window._trendCache[mo + '-' + yr] = b.packageTrend; }
       if (ok(b.hub)) { window._hub = b.hub; window._hubAt = Date.now(); }
+      if (ok(b.memberVers)) { window.memberVers = b.memberVers; window.memberVersAt = Date.now(); }   // versi data per klien (salinan halaman klien)
       ui.revenue = ok(b.revenue) ? b.revenue : { error: true };
       renderRevenueKpi();
       window.updateUI();
@@ -2102,12 +2103,15 @@
       window.hideGlobalLoader(true);
       window.navigate(window.currentView && window.currentView !== 'public-login' ? window.currentView : 'public-dashboard');
     }
-    // Panggilan 1: profil, jadwalku, jam kosong, coach, paket (cepat). Panggilan 2 (lazy, sesudah layar tampil): semua data sisanya.
+    // Panggilan 1: profil, jadwalku, jam kosong, coach, paket (cepat). Panggilan 2 (getPortalMore, data sisanya): tanpa salinan
+    // langsung bersamaan; dengan salinan hanya bila versi data di bootstrap berbeda (moreUpToDate).
     const boot = publicCall('getPortalBootstrap', token).catch(function () { return null; });
-    if (token) setTimeout(function () { window.refreshPortalMore(true); }, 0);
+    const haveMore = cached && !!portalMoreRaw;
+    if (token && !haveMore) setTimeout(function () { window.refreshPortalMore(true); }, 0);
     return boot.then(function (b) {
       b = b || {};
       applyPortalBootstrap(b);
+      if (token && haveMore && !b.authLost) { if (!moreUpToDate(b)) window.refreshPortalMore(true); else window.wlFlush(); }
       window.coaches = b.coaches || [];
       window.priceListData = b.priceList || [];
       if (b.businessHours) Object.assign(DAY_HOURS, b.businessHours);
@@ -2129,6 +2133,8 @@
       }
       savePortalCache();
       openPendingSlot();
+      // Pustaka gerakan & makanan disimpan di perangkat lebih awal, supaya cari & catat tetap jalan tanpa sinyal.
+      if (token && !ui.libsWarm) { ui.libsWarm = true; setTimeout(function () { if (navigator.onLine === false) return; exEnsure().catch(function () {}); if (nutOn()) foodEnsure().catch(function () {}); }, 4000); }
     });
   };
 
@@ -2138,6 +2144,21 @@
   const PORTAL_CACHE_KEY = 'xnk_portal_cache';
   const tokenSig = t => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
   let portalMoreRaw = null, portalMoreInflight = null, portalMoreAt = 0;
+  const MORE_MAX_AGE = 6 * 3600000;   // batas aman: salinan lebih tua dari 6 jam selalu disegarkan
+  // Salinan "more" masih sama dengan server: versi sama, hari (WIB) sama, belum 6 jam, dan tidak ada tulisan sendiri sejak itu.
+  function moreUpToDate(b) {
+    const m = portalMoreRaw;
+    return !!(m && m.ver && b && b.moreVer && m.ver === b.moreVer && m.day === wkToday() && portalMoreAt && Date.now() - portalMoreAt < MORE_MAX_AGE);
+  }
+  // Tulis-terus: hasil simpan langsung masuk salinan di perangkat (buka lagi = langsung tampil, tanpa memuat).
+  // Versi dikosongkan supaya ringkasan (insight, minggu ini) dihitung ulang sekali di belakang layar saat buka berikutnya.
+  function patchMore(part, value) {
+    if (!portalMoreRaw || value == null) return;
+    portalMoreRaw[part] = value;
+    portalMoreRaw.ver = '';
+    savePortalCache();
+  }
+  window.patchPortalMore = patchMore;
   function portalSig() { return JSON.stringify([window.publicLoggedMember, window.schedules, window.coaches, window.priceListData]); }
   function savePortalCache() {
     const token = _lsGet(MEMBER_TOKEN_KEY);
@@ -2147,12 +2168,13 @@
         v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules, coaches: window.coaches,
         priceList: window.priceListData, hours: DAY_HOURS, horizon: window.bookingHorizonDays, cutoff: window.rescheduleCutoffHours,
         infoLatest: window.infoLatest || '', feedback: window.myFeedback ? { enabled: window.myFeedback.enabled, pending: window.myFeedback.pending, pkgEval: window.myFeedback.pkgEval } : null,
-        more: portalMoreRaw
+        more: portalMoreRaw, moreAt: portalMoreAt
       }));
     } catch (e) {}
   }
   window.clearPortalCache = function () {
     if (window.wlForget) window.wlForget('client');
+    if (window.fqForget) window.fqForget();
     _lsSet(PORTAL_CACHE_KEY, null);
     portalMoreRaw = null; portalMoreInflight = null; portalMoreAt = 0;
     window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; window.myBills = undefined;
@@ -2171,7 +2193,7 @@
       if (c.cutoff != null) window.rescheduleCutoffHours = c.cutoff;
       window.infoLatest = c.infoLatest || '';
       window.myFeedback = Object.assign({ enabled: true, pending: null, pkgEval: false }, c.feedback || {}, { stars: 0, scheduleId: '' });
-      if (c.more) applyPortalMore(c.more, true);
+      if (c.more) { applyPortalMore(c.more, true); portalMoreAt = Number(c.moreAt) || 0; }
       renderTopbarActions();
       return true;
     } catch (e) { return false; }
@@ -2208,7 +2230,7 @@
   // Gambar ulang kartu yang sedang ada di layar (elemen yang tidak tampil dilewati).
   function renderPortalParts() {
     renderMyTasksCard(); pgRenderCard(); renderRenewSlot(); renderBillSlot(); renderClassSlot(); renderMyMealCard(); renderProgramCard(); renderWorkoutCard(); renderTodayWorkout(); renderCoachStatusChip();
-    wlRenderResume(); window.wlFlush(); renderMakan(); renderInsight();
+    wlRenderResume(); window.wlFlush(); window.fqFlush(); renderMakan(); renderInsight();
     const care = $('pub-care-wrap'); if (care) { care.innerHTML = myCareInner(); }
     const tests = $('pub-tests-wrap'); if (tests) { tests.innerHTML = myTestsInner(); }
     const info = $('pub-info-wrap'); if (info) { setHTML(info, infoInner()); if (window.currentView === 'public-info') markInfoSeen(); }
@@ -2235,8 +2257,10 @@
     if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
     if (!window.isPublicView || !window.publicLoggedMember || !hiddenAt || Date.now() - hiddenAt < 120000) return;
     hiddenAt = 0;
-    window.refreshPortalSchedules().then(function () { window.updateUI(); savePortalCache(); }).catch(function () {});
-    window.refreshPortalMore(true);
+    window.refreshPortalSchedules().then(function (b) {
+      window.updateUI(); savePortalCache();
+      if (!moreUpToDate(b)) window.refreshPortalMore(true);
+    }).catch(function () { window.refreshPortalMore(true); });
   });
 
   // Jadwalku + jam kosong dari getPortalBootstrap (jadwal klien lain tidak pernah dikirim ke browser).
@@ -2249,9 +2273,10 @@
     window.infoLatest = (b.info && b.info.latestAt) || '';
     renderInfoDots();
     window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
+    if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }
   window.refreshPortalSchedules = function () {
-    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { applyPortalBootstrap(b || {}); savePortalCache(); });
+    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b); savePortalCache(); return b; });
   };
 
   // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form
@@ -4149,14 +4174,50 @@
   }
 
   // Fase K2: satu panggilan mengisi PR, progres, perawatan, dan program halaman klien; bagian yang gagal diberi pesan di kartunya.
-  window.loadClientBundle = function (memberId) {
-    const key = String(memberId);
-    const cT = window.memberTasks[key];
-    if (!cT || cT.state !== 'ok') { window.memberTasks[key] = { list: [], state: 'loading' }; renderTaskSection(key); }
-    return adminCall('getClientBundle', key).then(function (b) {
-      b = b || {};
-      const bad = v => !v || v.error;
-      const msg = v => (v && v.error) || 'Tidak ada jawaban.';
+  // Salinan di perangkat coach (2026-10, keputusan pemilik): xnk_client_cache, maks 15 klien terakhir, dihapus saat keluar /
+  // sesi habis. Buka klien = langsung dari salinan; getClientBundle hanya bila versi data klien (getAdminMore.memberVers)
+  // berubah, hari berganti, atau salinan sudah tua. Tidak pernah di xnk_admin_cache, Telegram, atau jawaban publik.
+  const CC_KEY = 'xnk_client_cache', CC_MAX = 15, CC_RECENT = 2 * 60000, CC_VERS_AGE = 10 * 60000, CC_MAX_AGE = 6 * 3600000;
+  const cc = { inflight: {}, at: {}, applying: false };   // at: memberId → { at, ver, day } data yang sedang di memori
+  function ccRead() {
+    const t = _lsGet(ADMIN_TOKEN_KEY), empty = { v: 1, th: t ? tokenSig(t) : '', items: {}, order: [] };
+    if (!t) return empty;
+    try { const c = JSON.parse(localStorage.getItem(CC_KEY) || 'null'); return c && c.v === 1 && c.th === empty.th && c.items && Array.isArray(c.order) ? c : empty; } catch (e) { return empty; }
+  }
+  function ccWrite(c) {
+    // Penyimpanan penuh: buang klien yang paling lama tidak dibuka, lalu coba lagi.
+    for (;;) {
+      try { localStorage.setItem(CC_KEY, JSON.stringify(c)); return; } catch (e) {
+        if (!c.order.length) { try { localStorage.removeItem(CC_KEY); } catch (e2) {} return; }
+        delete c.items[c.order.pop()];
+      }
+    }
+  }
+  function ccPut(id, b, meta) {
+    if (!_lsGet(ADMIN_TOKEN_KEY)) return;
+    const c = ccRead();
+    c.items[id] = Object.assign({ b: b }, meta);
+    c.order = [id].concat(c.order.filter(x => x !== id));
+    while (c.order.length > CC_MAX) delete c.items[c.order.pop()];
+    ccWrite(c);
+  }
+  // Tulisan coach: bagian itu langsung masuk salinan; versi dikosongkan supaya tafsir dihitung ulang sekali di belakang layar.
+  function ccPatch(id, parts) {
+    if (cc.applying) return;
+    id = String(id);
+    if (cc.at[id]) cc.at[id].ver = '';
+    const c = ccRead(), it = c.items[id];
+    if (!it) return;
+    Object.assign(it.b, parts); it.ver = '';
+    ccWrite(c);
+  }
+  window.ccPatch = ccPatch;
+  window.clearClientCache = function () { try { localStorage.removeItem(CC_KEY); } catch (e) {} cc.at = {}; cc.inflight = {}; };
+  function applyBundle(key, b) {
+    const bad = v => !v || v.error;
+    const msg = v => (v && v.error) || 'Tidak ada jawaban.';
+    cc.applying = true;
+    try {
       window.memberTasks[key] = bad(b.tasks) ? { list: [], state: 'error', error: msg(b.tasks) } : { list: b.tasks, state: 'ok' };
       renderTaskSection(key);
       window.pgSetAdmin(key, bad(b.progress) ? { error: msg(b.progress), entries: [], photos: [] } : b.progress);
@@ -4166,7 +4227,35 @@
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();
+    } finally { cc.applying = false; }
+  }
+  // Data di memori masih bisa dipakai tanpa memanggil server?
+  function ccFresh(key) {
+    const cur = cc.at[key];
+    if (!cur || cur.day !== wkToday() || Date.now() - cur.at > CC_MAX_AGE) return false;
+    if (Date.now() - cur.at < CC_RECENT) return true;   // baru dimuat (mis. updateUI menggambar ulang halaman klien)
+    const want = window.memberVers && window.memberVers[key];
+    return !!(cur.ver && want && cur.ver === want && Date.now() - (window.memberVersAt || 0) < CC_VERS_AGE);
+  }
+  window.loadClientBundle = function (memberId, opts) {
+    const key = String(memberId), force = !!(opts && opts.force);
+    if (!cc.at[key]) {
+      const c = ccRead().items[key];
+      if (c && c.b) { applyBundle(key, c.b); cc.at[key] = { at: c.at || 0, ver: c.ver || '', day: c.day || '' }; }
+    }
+    if (!force && ccFresh(key)) return Promise.resolve();
+    if (cc.inflight[key]) return cc.inflight[key];
+    const had = !!cc.at[key];
+    const cT = window.memberTasks[key];
+    if (!cT || cT.state !== 'ok') { window.memberTasks[key] = { list: [], state: 'loading' }; renderTaskSection(key); }
+    const p = adminCall('getClientBundle', key).then(function (b) {
+      b = b || {};
+      applyBundle(key, b);
+      const meta = { at: Date.now(), ver: b.ver || '', day: b.day || wkToday() };
+      cc.at[key] = Object.assign({}, meta);
+      ccPut(key, b, meta);
     }).catch(function (err) {
+      if (had) return;   // salinan tetap tampil; dicoba lagi saat dibuka berikutnya
       const m = window.authMessage(err);
       window.memberTasks[key] = { list: [], state: 'error', error: m };
       renderTaskSection(key);
@@ -4174,7 +4263,9 @@
       window.careSet(key, { error: m });
       window.programSetAdmin(key, { error: m });
       window.nutSet(key, { error: m });
-    });
+    }).then(function () { delete cc.inflight[key]; });
+    cc.inflight[key] = p;
+    return p;
   };
   window.loadMemberTasks = function (memberId, force) {
     const key = String(memberId), c = window.memberTasks[key];
@@ -4183,6 +4274,7 @@
     renderTaskSection(key);
     return adminCall('getTasksForMember', key).then(function (list) {
       window.memberTasks[key] = { list: list || [], state: 'ok' };
+      ccPatch(key, { tasks: list || [] });
       renderTaskSection(key);
     }).catch(function (err) {
       window.memberTasks[key] = { list: [], state: 'error', error: String((err && err.message) || err) };
@@ -4818,9 +4910,9 @@
     const w = $('profile-program-wrap');
     if (w && w.getAttribute('data-member') === String(memberId)) { setHTML(w, programAdminInner(memberId)); }
   }
-  window.programSetAdmin = function (memberId, d) { progAdmin[memberId] = d; renderProgramAdmin(memberId); };
+  window.programSetAdmin = function (memberId, d) { progAdmin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { program: d }); renderProgramAdmin(memberId); };
   window.loadAdminProgram = function (memberId) {
-    return adminCall('getMemberProgram', memberId).then(function (d) { progAdmin[memberId] = d; renderProgramAdmin(memberId); })
+    return adminCall('getMemberProgram', memberId).then(function (d) { window.programSetAdmin(memberId, d); })
       .catch(function (err) { progAdmin[memberId] = { error: window.authMessage ? window.authMessage(err) : err.message }; renderProgramAdmin(memberId); });
   };
   // Lembar yang sama dipakai dua cara: program coach (panel) dan rutinitas klien (portal). Bagian khusus coach disembunyikan untuk klien.
@@ -5202,7 +5294,7 @@
   // terakhir (atau saran naik beban dari server), satu ketukan ✓ per set, timer istirahat, draf di perangkat setiap
   // perubahan, satu simpan ke server saat Selesai, antrean kirim ulang bila sinyal hilang. Server memvalidasi semuanya.
   const wkAdmin = {};   // memberId → bagian workout (dari getClientBundle / simpan)
-  window.wkSetAdmin = function (memberId, d) { wkAdmin[memberId] = d; if (progAdmin[memberId]) renderProgramAdmin(memberId); };
+  window.wkSetAdmin = function (memberId, d) { wkAdmin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { workout: d }); if (progAdmin[memberId]) renderProgramAdmin(memberId); };
   function wkKeyOf(e) { return e.exId ? 'ex:' + e.exId : 'nm:' + String(e.gerakan).trim().toLowerCase(); }
   function wkInfo(id) { return exLib && id ? exLib.items.find(x => x.id === id) : null; }
   function wkIsoOf(iso) { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(iso)); } catch (e) { return pgToday(); } }
@@ -5829,7 +5921,8 @@
     } catch (e) {}
   }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { if (ui.wlOn) { wlWake(true); wlRestTick(); } window.wlFlush(); } });
-  window.addEventListener('online', function () { window.wlFlush(); });
+  window.addEventListener('online', function () { window.wlFlush(); if (window.fqFlush) window.fqFlush(); });
+  window.addEventListener('offline', function () { if (window.publicLoggedMember || ui.mode === 'admin') window.showToast('Tidak ada sinyal. Catatan latihan dan makan tetap disimpan di HP.'); });
   let wlResizeT = null;
   window.addEventListener('resize', function () { if (!ui.wlOn) return; clearTimeout(wlResizeT); wlResizeT = setTimeout(wlRender, 150); });
 
@@ -6091,10 +6184,14 @@
     const prs = (r && r.prs) || [];
     if (it.mode === 'admin') { window.wkSetAdmin(it.memberId, r); window.wkLast = { memberId: it.memberId, date: it.date }; }
     else {
-      window.myWorkout = { state: 'ok', data: r };
+      const w = Object.assign({}, r); delete w.program;
+      window.myWorkout = { state: 'ok', data: w };
+      window.patchPortalMore('workout', w);
+      // Rutinitas (centang hari ini) ikut di jawaban: tidak perlu getMyProgram lagi.
+      if (r && r.program) { window.myProgram = { state: 'ok', data: r.program }; window.patchPortalMore('program', r.program); renderProgramCard(); }
+      else if (window.loadMyProgram) window.loadMyProgram(true);
       renderWorkoutCard(); renderTodayWorkout();
-      if (window.loadMyProgram) window.loadMyProgram(true);
-      if (prs.length && window.refreshPortalMore) window.refreshPortalMore(true);
+      if (prs.length && window.refreshPortalMore) window.refreshPortalMore(true);   // badge baru
     }
     if (ui.sheetOn || ui.wlOn) { window.showToast(prs.length ? '🏆 Rekor baru: ' + prs.map(p => p.gerakan).join(', ') : 'Latihan disimpan.'); return; }
     const vol = it.entries.reduce((v, e) => v + e.sets.filter(s => s.jenis !== 'w').reduce((a, s) => a + (Number(s.berat) || 0) * (Number(s.rep) || 0), 0), 0);
@@ -6147,6 +6244,13 @@
     el.classList.toggle('hide', !html);
     document.documentElement.classList.toggle('wl-res-on', !!html);
     setHTML(el, html);
+    // Antrean berubah (masuk / terkirim): riwayat latihan ikut menampilkan atau melepas baris "Menunggu sinyal".
+    const qSig = wlQueue().map(x => x.id + (x.retry ? '' : '!')).join(',');
+    if (qSig !== wlRt.qSig) {
+      wlRt.qSig = qSig;
+      if (mode === 'client') renderProgramCard();
+      else if (window.selectedMemberId && progAdmin[window.selectedMemberId]) renderProgramAdmin(window.selectedMemberId);
+    }
     clearInterval(wlRt.resumeTimer);
     if (html && wlRt.resumeAt) wlRt.resumeTimer = setInterval(function () { const t = $('wl-res-time'); if (!t || ui.wlOn) { clearInterval(wlRt.resumeTimer); return; } t.textContent = wlClock((Date.now() - wlRt.resumeAt) / 1000) + ' · ' + wlRt.resumeDone + ' set dicentang'; }, 1000);
   }
@@ -6214,10 +6318,17 @@
   // Riwayat latihan (sesi tercatat, rasa, durasi) dengan tombol ubah; dipakai kartu grafik portal dan halaman klien.
   function workoutSessionsHtml(w, scope, memberId) {
     const days = (w && w.days) || [];
-    if (!days.length) return '';
+    // Latihan yang masih di antrean (tanpa sinyal) tetap terlihat di riwayat.
+    const pend = wlQueue().filter(wlCanSend).filter(q => scope === 'adm' ? q.mode === 'admin' && String(q.memberId) === String(memberId) : q.mode === 'client');
+    if (!days.length && !pend.length) return '';
     const ses = {}; ((w && w.sessions) || []).forEach(x => { ses[x.tanggal] = x; });
     const min = wkAddDays(wkToday(), scope === 'adm' ? -90 : -7);
-    return '<div class="wk-block"><p class="label">Riwayat latihan</p><div class="stack" style="gap:4px">' + days.slice(0, 6).map(function (d) {
+    const pendHtml = pend.map(function (q) {
+      const sets = q.entries.reduce((n, e) => n + e.sets.length, 0);
+      return '<div class="wl-hist-row"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(pgLabel(q.date)) + ' · ' + h(q.hari || 'Latihan bebas') + '</b><span class="li-sub truncate" style="display:block">' + h(q.entries.length + ' gerakan · ' + sets + ' set') + '</span></span>' +
+        '<span class="pill soft">' + (q.retry ? 'Menunggu sinyal' : 'Gagal') + '</span></div>';
+    }).join('');
+    return '<div class="wk-block"><p class="label">Riwayat latihan</p><div class="stack" style="gap:4px">' + pendHtml + days.slice(0, 6).map(function (d) {
       const x = ses[d.tanggal] || {}, hr = x.hari || (d.items.find(i => i.hari) || {}).hari || 'Latihan bebas';
       const sets = d.items.reduce((n, it) => n + it.sets.length, 0);
       const meta = [d.items.length + ' gerakan', sets + ' set'];
@@ -6384,11 +6495,12 @@
   }
   window.careSet = function (memberId, d) {
     care[memberId] = d;
+    if (d && !d.error) window.ccPatch(memberId, { care: d });
     const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId);
     paintIcons();
   };
   window.loadClientCare = function (memberId) {
-    return adminCall('getClientCare', memberId).then(function (d) { care[memberId] = d; }).catch(function (err) { care[memberId] = { error: err.message }; })
+    return adminCall('getClientCare', memberId).then(function (d) { care[memberId] = d; window.ccPatch(memberId, { care: d }); }).catch(function (err) { care[memberId] = { error: err.message }; })
       .then(function () { const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId); paintIcons(); });
   };
   window.clearCareCache = function () { Object.keys(care).forEach(k => delete care[k]); };
@@ -6468,6 +6580,7 @@
   };
   window.nutSet = function (memberId, d) {
     nut[memberId] = d;
+    if (d && !d.error) { const x = Object.assign({}, d); delete x.foodLog; window.ccPatch(memberId, { nutrition: x, foodLog: d.foodLog || null }); }
     const w = $('profile-nut-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = nutInner(memberId);
     paintIcons();
   };
@@ -7487,7 +7600,7 @@
     $('pg-badge-list').innerHTML = labels.map(function (l) { return '<li>' + h(l) + '</li>'; }).join('');
     $('pg-badge-share').setAttribute('data-text', 'Aku baru meraih badge ' + labels.join(' dan ') + ' di XNK Personal Training! 💪');
     openSheet('sheet-badge');
-    memberCall('markBadgesSeen', ids).then(function (r) { if (r) pg.data = r; }).catch(function () {});
+    memberCall('markBadgesSeen', ids).then(function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r); } }).catch(function () {});
   }
   window.pgShareBadge = function () { window.sendToParentWA('', $('pg-badge-share').getAttribute('data-text') || ''); };
 
@@ -7513,7 +7626,7 @@
     if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
     if (pg.data && !pg.data.error && !force) { pgRenderCard(); return Promise.resolve(); }
     if (!pg.data || force) { pg.data = null; pgRenderCard(); }
-    return memberCall('getMyProgress').then(function (d) { pg.data = d; pgRenderCard(); pgCelebrate(d); })
+    return memberCall('getMyProgress').then(function (d) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); pgCelebrate(d); })
       .catch(function (err) {
         if (window.isAuthError && window.isAuthError(err)) return;
         pg.data = { error: String((err && err.message) || err), entries: [], photos: [] };
@@ -7550,20 +7663,20 @@
     const wrap = $('profile-progress-wrap');
     if (wrap && wrap.getAttribute('data-member') === String(memberId)) setHTML(wrap, pgAdminInner(memberId));
   }
-  window.pgSetAdmin = function (memberId, d) { pg.admin[memberId] = d; pgAdminRender(memberId); };
+  window.pgSetAdmin = function (memberId, d) { pg.admin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { progress: d }); pgAdminRender(memberId); };
   window.pgLoadAdmin = function (memberId) {
-    return adminCall('getMemberProgress', memberId).then(function (d) { pg.admin[memberId] = d; pgAdminRender(memberId); })
+    return adminCall('getMemberProgress', memberId).then(function (d) { window.pgSetAdmin(memberId, d); })
       .catch(function (err) { pg.admin[memberId] = { error: window.authMessage(err), entries: [], photos: [] }; pgAdminRender(memberId); });
   };
   window.pgDeleteAdminEntry = function (memberId, id) {
     window.showConfirmModal('Catatan ini dihapus permanen.', function () {
-      adminCall('deleteMemberMeasurement', id).then(function (d) { pg.admin[memberId] = d; pgAdminRender(memberId); window.showToast('Catatan dihapus.'); })
+      adminCall('deleteMemberMeasurement', id).then(function (d) { window.pgSetAdmin(memberId, d); window.showToast('Catatan dihapus.'); })
         .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
     }, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
   };
   function pgStore(d) {
-    if (pg.mode === 'admin') { pg.admin[pg.memberId] = d; pgAdminRender(pg.memberId); }
-    else { pg.data = d; pgRenderCard(); }
+    if (pg.mode === 'admin') { window.pgSetAdmin(pg.memberId, d); }
+    else { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); }
   }
 
   // Lembar "Catat"
@@ -7643,7 +7756,7 @@
     pgResize(file, 1600).then(function (b64) {
       if (b64.length > 6900000) throw new Error('Foto terlalu besar. Coba foto lain.');
       return memberCall('uploadMyProgressPhoto', b64, 'image/jpeg', pg.side);
-    }).then(function (d) { done(); pg.data = d; pgRenderCard(); pgRenderPhotoList(); window.showToast('Foto tersimpan.'); })
+    }).then(function (d) { done(); pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); pgRenderPhotoList(); window.showToast('Foto tersimpan.'); })
       .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
   };
   window.pgViewPhoto = function (id) {
@@ -7663,7 +7776,7 @@
   window.pgDeletePhoto = function () {
     const id = pg.viewId;
     window.showConfirmModal('Foto ini dihapus permanen dari Drive.', function () {
-      memberCall('deleteMyProgressPhoto', id).then(function (d) { pg.data = d; pgRenderCard(); window.pgOpenPhotos('member'); window.showToast('Foto dihapus.'); })
+      memberCall('deleteMyProgressPhoto', id).then(function (d) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); window.pgOpenPhotos('member'); window.showToast('Foto dihapus.'); })
         .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
     }, { title: 'Hapus foto?', confirmText: 'Hapus', variant: 'danger' });
   };
@@ -7697,6 +7810,7 @@
     renderMyTasksCard();
     return memberCall('getMyTasks').then(function (list) {
       window.myTasks = { list: list || [], state: 'ok' };
+      window.patchPortalMore('tasks', list || []);
       renderMyTasksCard();
     }).catch(function (err) {
       if (window.isAuthError && window.isAuthError(err)) return;
@@ -7874,8 +7988,11 @@
   function insMakanHero() {
     const n = window.myNutrition, w = window.myWeek && !window.myWeek.error ? window.myWeek : null;
     if (!n && !w) return insSkel('Makan hari ini');
-    const k = w && w.kcal;
-    if (!k) return insightHeroHtml({ eyebrow: 'Makan hari ini', empty: 'Lengkapi data dirimu dan catat makan untuk melihat kalori harianmu.' });
+    const k0 = w && w.kcal;
+    if (!k0) return insightHeroHtml({ eyebrow: 'Makan hari ini', empty: 'Lengkapi data dirimu dan catat makan untuk melihat kalori harianmu.' });
+    // Catatan baru (juga yang belum terkirim) langsung terhitung, tanpa menunggu ringkasan dari server.
+    const lg = window.nutEffLog && window.nutEffLog();
+    const k = lg && lg.tanggal === wkToday() && lg.totals ? Object.assign({}, k0, { today: lg.totals.kal }) : k0;
     const left = k.target - k.today;
     return insightHeroHtml({ eyebrow: 'Makan hari ini', stats: [{ v: String(k.today), d: 'kkal', l: 'Sudah dimakan' }, { v: String(k.target), d: 'kkal', l: 'Target' }, { v: w.foodDays + '/7', l: 'Hari tercatat' }],
       text: left > 0 ? 'Sisa ' + left + ' kkal untuk hari ini.' : 'Targetmu hari ini sudah tercapai.' });
@@ -7994,14 +8111,14 @@
     if (c && c.state === 'ok' && c.data.today === pgToday() && !force) { renderProgramCard(); return Promise.resolve(); }
     if (!c || c.state !== 'ok') window.myProgram = { state: 'loading' };
     renderProgramCard();
-    return memberCall('getMyProgram').then(function (data) { window.myProgram = { state: 'ok', data: data || { days: [], done: {} } }; renderProgramCard(); })
+    return memberCall('getMyProgram').then(function (data) { window.myProgram = { state: 'ok', data: data || { days: [], done: {} } }; window.patchPortalMore('program', window.myProgram.data); renderProgramCard(); })
       .catch(function (err) {
         if (window.isAuthError && window.isAuthError(err)) return;
         window.myProgram = { state: 'error', error: String((err && err.message) || err) }; renderProgramCard();
       });
   };
   // Hasil tulis rutinitas (simpan, hapus, salin) = getMyProgram baru.
-  function rtSaved(d, msg) { window.myProgram = { state: 'ok', data: d || { days: [], done: {} } }; renderProgramCard(); renderTodayWorkout(); if (msg) window.showToast(msg); }
+  function rtSaved(d, msg) { window.myProgram = { state: 'ok', data: d || { days: [], done: {} } }; window.patchPortalMore('program', window.myProgram.data); renderProgramCard(); renderTodayWorkout(); if (msg) window.showToast(msg); }
   window.rtStartEmpty = function () { window.wlStart({ mode: 'client', hari: '', date: wkToday(), live: true }); };
 
   // Detail rutinitas: mulai, grafik volume / rep / durasi per kali dicatat, daftar gerakan dengan set.
@@ -8157,7 +8274,7 @@
     return '<div class="stack" style="gap:4px"><div class="row-between"><span class="li-title">' + h(label) + nutInfoBtn(key) + '</span><span class="num" style="font-weight:800">' + h(NUT_N(eaten)) + ' / ' + h(NUT_N(goal)) + ' g</span></div><div class="meter" aria-label="' + h(label) + ' ' + pct + ' persen dari target"><i style="width:' + pct + '%"></i></div></div>';
   }
   function makanInner() {
-    const n = window.myNutrition;
+    const n = nutEff(window.myNutrition);
     if (!n) return '<div class="card-flat">' + skel(4, true) + '</div>';
     if (n.enabled === false) return '<div class="card-flat"><p class="li-sub">Fitur makan sedang tidak aktif.</p></div>';
     const t = n.target || {};
@@ -8295,7 +8412,7 @@
       const done = busy($('nut-onb-next'), 'Menyimpan…');
       const weigh = o.needKg ? memberCall('saveMyMeasurement', { berat: String(o.berat).replace(',', '.') }) : Promise.resolve();
       weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth, umur: o.hadBirth ? '' : String(o.umur).trim() }); })
-        .then(function (r) { done(); window.myNutrition = r; window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
+        .then(function (r) { done(); window.myNutrition = r; window.patchPortalMore('nutrition', r); window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
         .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
       return;
     }
@@ -8306,13 +8423,14 @@
   const NUT_MEAL_L = { sarapan: 'Sarapan', siang: 'Makan siang', malam: 'Makan malam', camilan: 'Camilan' };
   function logCardHtml(n) {
     const log = n.log || { items: [], totals: { kal: 0 } };
-    let html = '<div class="card-flat stack" style="gap:8px" id="nut-log-card"><div class="row-between"><p class="eyebrow">Dimakan hari ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button></div>';
+    const nPend = log.items.filter(x => x.pending).length;
+    let html = '<div class="card-flat stack" style="gap:8px" id="nut-log-card"><div class="row-between"><p class="eyebrow">Dimakan hari ini' + (nPend ? ' · <span class="pill soft">' + nPend + ' menunggu sinyal</span>' : '') + '</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button></div>';
     Object.keys(NUT_MEAL_L).forEach(function (k) {
       const its = log.items.filter(x => x.waktu === k), kal = its.reduce((a, x) => a + x.kal, 0);
       html += '<div class="stack" style="gap:0"><div class="row-between" style="min-height:44px"><span class="li-title">' + h(NUT_MEAL_L[k]) + (its.length ? ' <span class="li-sub">' + h(NUT_N(kal)) + ' kkal</span>' : '') + '</span>' +
         '<button type="button" class="btn btn-outline btn-sm" style="min-height:44px" onclick="window.openNutAdd(\'' + k + '\')">' + icon('plus') + 'Tambah</button></div>' +
         its.map(function (x) {
-          return '<div class="row" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
+          return '<div class="row" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.pending ? ' <span class="pill soft">' + icon('cloud-off', 'style="width:12px;height:12px;vertical-align:-2px"') + ' belum terkirim</span>' : x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
             '<span class="li-sub">' + h(x.porsi) + ' · ' + h(NUT_N(x.kal)) + ' kkal · P ' + h(NUT_N(x.p, 1)) + ' g</span></span>' +
             '<button type="button" class="icon-btn plain" style="width:44px;height:44px" aria-label="Hapus ' + h(x.nama) + '" onclick="window.nutDelLog(\'' + h(x.id) + '\',this)">' + icon('trash-2') + '</button></div>';
         }).join('') + '</div>';
@@ -8320,20 +8438,96 @@
     return html + '</div>';
   }
   function nutSetLog(day) {
-    if (window.myNutrition && day) { window.myNutrition.log = day; renderMakan(); }
+    if (window.myNutrition && day) { window.myNutrition.log = day; window.patchPortalMore('nutrition', window.myNutrition); renderMakan(); }
   }
+  // ── Antrean catat makan (tanpa sinyal, 2026-10) ──────────────────────────────
+  // Setiap catatan langsung tampil (angka dihitung di browser dari daftar makanan, rumus sama dengan _foodLogEntry_),
+  // disimpan di xnk_food_queue, lalu dikirim berurutan. cid membuat kiriman ulang tidak dobel di server.
+  const FQ_KEY = 'xnk_food_queue';
+  const fqRt = { flushing: false, retry: null, tries: 0 };
+  function fqScope() { const t = _lsGet(MEMBER_TOKEN_KEY); return t ? 'm:' + tokenSig(t) : ''; }
+  function fqAll() { try { const q = JSON.parse(_lsGet(FQ_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; } }
+  function fqSet(q) { _lsSet(FQ_KEY, q.length ? JSON.stringify(q) : null); }
+  function fqMine() { const sc = fqScope(); return sc ? fqAll().filter(x => x.scope === sc) : []; }
+  window.fqForget = function () { fqSet([]); clearTimeout(fqRt.retry); };
+  const r1 = v => Math.round(v * 10) / 10;
+  function fqCalc(e) {
+    if (e.id && !e.custom) {
+      const f = foodLib && foodLib.items.find(x => x.id === e.id);
+      if (!f) return null;
+      const gram = Math.round(Number(e.gram) * 10) / 10, x = gram / 100, por = gram / f.por[0][1];
+      return { waktu: e.waktu, foodId: e.id, nama: f.n, gram: gram, porsi: r1(por) + ' ' + f.por[0][0].replace(/^1 /, ''), kal: Math.round(f.kal * x), p: r1(f.p * x), l: r1(f.l * x), k: r1(f.k * x), sumber: f.e ? 'perkiraan' : 'tkpi' };
+    }
+    const c = e.custom || {}, num = v => Number(String(v == null || v === '' ? 0 : v).replace(',', '.')) || 0;
+    const n = Math.max(0.1, Math.min(20, num(e.jumlah) || 1));
+    return { waktu: e.waktu, foodId: '', nama: String(c.nama || '').trim(), gram: 0, porsi: r1(n) + ' porsi', kal: Math.round(num(c.kal) * n), p: r1(num(c.p) * n), l: r1(num(c.l) * n), k: r1(num(c.k) * n), sumber: 'sendiri' };
+  }
+  // Log yang tampil = catatan server + catatan di antrean − hapusan di antrean.
+  function nutEff(n) {
+    if (!n || !n.log) return n;
+    const q = fqMine(), day = n.log.tanggal || wkToday();
+    if (!q.length) return n;
+    const del = {}; q.forEach(x => { if (x.op === 'del') del[x.logId] = true; });
+    const have = {}; n.log.items.forEach(x => { if (x.cid) have[x.cid] = true; });
+    const items = n.log.items.filter(x => !del[x.id]).concat(q.filter(x => x.op === 'add' && x.tanggal === day && !have[x.id] && x.view).map(x => Object.assign({}, x.view, { id: x.id, cid: x.id, pending: true })));
+    const totals = items.reduce((t, i) => ({ kal: t.kal + i.kal, p: r1(t.p + i.p), l: r1(t.l + i.l), k: r1(t.k + i.k) }), { kal: 0, p: 0, l: 0, k: 0 });
+    return Object.assign({}, n, { log: Object.assign({}, n.log, { items: items, totals: totals }) });
+  }
+  window.nutEffLog = function () { const n = nutEff(window.myNutrition); return n && n.log; };
+  function fqPush(item) {
+    const q = fqAll(); q.push(Object.assign({ scope: fqScope(), at: Date.now(), tries: 0 }, item)); fqSet(q);
+    renderMakan(); renderInsightMakan();
+    window.fqFlush();
+  }
+  // Satu pintu untuk semua "catat makan": tampil seketika, kirim di belakang layar.
+  function nutQueueAdd(entry) {
+    const id = 'fq-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const e = Object.assign({}, entry, { cid: id, tanggal: wkToday() });
+    const view = fqCalc(e);
+    if (e.custom && !(view && view.nama)) { window.showToast('Isi nama makanan.'); return false; }
+    fqPush({ id: id, op: 'add', tanggal: e.tanggal, entry: e, view: view });
+    window.showToast(navigator.onLine === false ? 'Disimpan di HP. Dikirim saat ada sinyal.' : 'Dicatat.');
+    return true;
+  }
+  window.fqFlush = function () {
+    if (fqRt.flushing || !_lsGet(MEMBER_TOKEN_KEY)) return;
+    const it = fqMine()[0]; if (!it) return;
+    fqRt.flushing = true; clearTimeout(fqRt.retry);
+    const call = it.op === 'del' ? memberCall('deleteMyFood', it.logId) : memberCall('logMyFood', it.entry);
+    const drop = function () { fqSet(fqAll().filter(x => x.id !== it.id)); };
+    call.then(function (d) {
+      fqRt.flushing = false; fqRt.tries = 0; drop();
+      if (d && window.myNutrition && (!window.myNutrition.log || d.tanggal === window.myNutrition.log.tanggal || d.tanggal === wkToday())) nutSetLog(d); else { renderMakan(); }
+      renderInsightMakan();
+      window.fqFlush();
+    }).catch(function (err) {
+      fqRt.flushing = false;
+      const msg = window.authMessage(err);
+      if (window.isAuthError(err)) return;
+      if (it.op === 'del' && /tidak ditemukan/i.test(msg)) { drop(); renderMakan(); return window.fqFlush(); }   // sudah terhapus
+      if (wlRetryable(err)) {
+        fqRt.tries++;
+        fqRt.retry = setTimeout(window.fqFlush, Math.min(300000, 20000 * Math.pow(2, Math.min(4, fqRt.tries - 1))));
+        return;
+      }
+      drop(); renderMakan(); renderInsightMakan();
+      window.showToast('Catatan makan tidak tersimpan: ' + msg);
+      window.fqFlush();
+    });
+  };
   window.nutLogMenu = function (mi, ii, btn) {
     const m = window.myNutrition.menu.meals[mi], it = m.items[ii];
     const waktu = ({ sarapan: 'sarapan', siang: 'siang', malam: 'malam', buka: 'malam', sahur: 'sarapan', camilan: 'camilan' })[m.key] || 'siang';
     const done = busy(btn, '…');
-    memberCall('logMyFood', { waktu: waktu, id: it.id, gram: it.gram }).then(function (d) { done(); nutSetLog(d); window.showToast('Dicatat.'); })
-      .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+    foodEnsure().catch(function () {}).then(function () { done(); nutQueueAdd({ waktu: waktu, id: it.id, gram: it.gram }); });
   };
-  window.nutDelLog = function (id, btn) {
-    const done = busy(btn, '…');
-    memberCall('deleteMyFood', id).then(function (d) { done(); nutSetLog(d); }).catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+  window.nutDelLog = function (id) {
+    const q = fqAll();
+    if (q.some(x => x.id === id && x.op === 'add')) { fqSet(q.filter(x => x.id !== id)); renderMakan(); renderInsightMakan(); return; }   // belum terkirim: cukup dibuang
+    fqPush({ id: 'fd-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), op: 'del', logId: id });
   };
   window.nutCopyYesterday = function (btn) {
+    if (navigator.onLine === false) { window.showToast('Butuh sinyal untuk menyalin catatan kemarin.'); return; }
     const done = busy(btn, '…');
     memberCall('copyMyFoodYesterday').then(function (d) { done(); nutSetLog(d); window.showToast('Catatan kemarin disalin.'); })
       .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
@@ -8420,9 +8614,7 @@
       if (!x) return;
       f = x.foodId && foodLib ? foodLib.items.filter(y => y.id === x.foodId)[0] : null;
       if (!f) {                                         // makanan buatan sendiri: catat ulang apa adanya
-        const done = busy(null);
-        memberCall('logMyFood', { waktu: add.waktu, custom: { nama: x.nama, kal: x.kal, p: x.p, l: x.l, k: x.k }, jumlah: 1 })
-          .then(function (d) { window.closeModal(); nutSetLog(d); window.showToast('Dicatat.'); }).catch(function (err) { window.showToast(window.authMessage(err)); });
+        if (nutQueueAdd({ waktu: add.waktu, custom: { nama: x.nama, kal: x.kal, p: x.p, l: x.l, k: x.k }, jumlah: 1 })) window.closeModal();
         return;
       }
     }
@@ -8442,15 +8634,13 @@
   };
   window.nutPickSave = function () {
     const f = add.pick, v = nutPortionVals();
-    const done = busy($('nut-pick-save'), 'Menyimpan…');
-    memberCall('logMyFood', { waktu: add.waktu, id: f.id, gram: Math.round(v.gram * 10) / 10 })
-      .then(function (d) { done(); window.closeModal(); nutSetLog(d); window.showToast('Dicatat.'); }).catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+    if (nutQueueAdd({ waktu: add.waktu, id: f.id, gram: Math.round(v.gram * 10) / 10 })) window.closeModal();
   };
   window.nutOwnSave = function () {
     const v = id => $('nut-own-' + id).value.trim().replace(',', '.');
-    const done = busy($('nut-own-save'), 'Menyimpan…');
-    memberCall('logMyFood', { waktu: add.waktu, custom: { nama: $('nut-own-n').value, kal: v('kal'), p: v('p'), l: v('l'), k: v('k') }, jumlah: v('j') || 1 })
-      .then(function (d) { done(); window.closeModal(); nutSetLog(d); window.showToast('Dicatat.'); }).catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+    const num = k => { const x = v(k); return x === '' || (!isNaN(Number(x)) && Number(x) >= 0 && Number(x) <= (k === 'kal' ? 3000 : 500)); };
+    if (!['kal', 'p', 'l', 'k'].every(num)) { window.showToast('Angka gizi tidak valid.'); return; }
+    if (nutQueueAdd({ waktu: add.waktu, custom: { nama: $('nut-own-n').value, kal: v('kal'), p: v('p'), l: v('l'), k: v('k') }, jumlah: v('j') || 1 })) window.closeModal();
   };
   // Info & Tips: window.myContent = { state, list }. Titik "baru" bila ada konten lebih baru dari yang terakhir dilihat (per perangkat).
   const INFO_SEEN_KEY = 'xnk_info_seen';

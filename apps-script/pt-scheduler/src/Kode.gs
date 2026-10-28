@@ -1579,7 +1579,7 @@ function _getMembersAll_() {
 /** Admin: tambah klien baru, atau perpanjang kalau No WA sudah terdaftar. */
 function addMember(token, memberData) {
   requireAdmin_(token);
-  return _addMemberInternal_(memberData);
+  return _bumpAfter_('*', _addMemberInternal_(memberData));   // klien baru atau perpanjang lewat nomor yang sama
 }
 
 function _findMemberRowIndexByPhone_(data, phone) {
@@ -1741,7 +1741,7 @@ function _addMemberInternal_(memberData, options) {
  */
 function updateMemberProfile(token, memberData) {
   requireAdmin_(token);
-  return _locked_(function() { return _updateMemberProfile_(memberData || {}); });
+  return _locked_(function() { return _bumpAfter_((memberData || {}).id, _updateMemberProfile_(memberData || {})); });
 }
 
 function _updateMemberProfile_(memberData) {
@@ -2080,6 +2080,8 @@ function getPortalBootstrap(memberToken) {
     try { found = requireMember_(memberToken); } catch (e) { authLost = String(e.message || e); }
   }
   const memberId = found ? String(found.row[0]).trim() : null;
+  // Versi data klien (dibaca sebelum sheet lain): sama dengan salinan di perangkat = getPortalMore tidak perlu dipanggil.
+  const moreVer = memberId ? _memberVer_(memberId) : '';
   const ver = _slotsVersion_();
   // Tanpa klien yang masuk, sheet Schedules hanya dibaca kalau cache jam kosong kosong (hemat kuota).
   const all = memberId ? _getSchedulesAll_() : undefined;
@@ -2106,7 +2108,10 @@ function getPortalBootstrap(memberToken) {
     rescheduleCutoffHours: _rescheduleCutoff_(),
     coaches: getCoaches(),
     priceList: getPriceList(),
-    businessHours: _businessHours_()
+    businessHours: _businessHours_(),
+    moreVer: moreVer,
+    // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati).
+    coachStatus: found ? (function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } })() : null
   };
 }
 
@@ -2119,6 +2124,7 @@ function getPortalBootstrap(memberToken) {
 function getPortalMore(memberToken) {
   const row = requireMember_(memberToken).row;
   const id = String(row[0]).trim();
+  const ver = _memberVer_(id);   // sebelum sheet data dibaca
   const part = function(fn) { try { return fn(); } catch (e) { return { error: String((e && e.message) || e) }; } };
   return _withSchedulesMemo_(function() {
     const coachId = String(row[10] || '').trim();
@@ -2131,6 +2137,8 @@ function getPortalMore(memberToken) {
     const ins = part(function() { return _insightFor_(row, 'client', { progress: progress, assessment: assessment, program: program, workout: workout, nutrition: nutrition, bodyFat: spy.bodyFat }); });
     return {
       at: new Date().toISOString(),
+      ver: ver,
+      day: _todayWib_(),
       week: ins.error ? ins : ins.week,
       insight: ins.error ? ins : { body: ins.body, fitness: ins.fitness, links: ins.links, training: ins.training, activity: ins.activity },
       progress: progress,
@@ -2232,7 +2240,8 @@ function getAdminMore(token, month, year) {
       revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
       packageTrend: part(function () { return _packageTrendStats_(m, y); }),
       hub: part(function () { return _coachHub_(new Date()); }),
-      signals: part(function () { return _clientSignals_(new Date()); })
+      signals: part(function () { return _clientSignals_(new Date()); }),
+      memberVers: part(_memberVersAll_)
     };
   });
 }
@@ -2292,7 +2301,7 @@ function addSchedule(token, scheduleData) {
       const left = found ? _memberQuotaLeft_(found.row) : null;
       if (left !== null && left < 0 && new Date(scheduleData.start).getTime() > Date.now()) res.warnings = (res.warnings || []).concat(['Sesi klien ini sudah habis terpakai/terbooking.']);
     } catch (e) { Logger.log('Cek kuota gagal: ' + e); }
-    return res;
+    return _bumpAfter_(scheduleData && scheduleData.memberId, res);
   });
 }
 
@@ -2390,7 +2399,7 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif, deferBust
  */
 function addRecurringSchedule(token, baseScheduleData, recurrenceRule) {
   requireAdmin_(token);
-  return _locked_(function() { return _addRecurringInternal_(baseScheduleData, recurrenceRule, 'read'); });   // satu lock dengan booking klien
+  return _locked_(function() { return _bumpAfter_(baseScheduleData && baseScheduleData.memberId, _addRecurringInternal_(baseScheduleData, recurrenceRule, 'read')); });   // satu lock dengan booking klien
 }
 
 /**
@@ -2412,7 +2421,7 @@ function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule, opts
   try {
     const ver = _slotsVersion_();   // versi dulu, baru sheet (lihat _bustSlots_)
     const all = _getSchedulesAll_();
-    return _addRecurringInternal_({
+    return _bumpAfter_(String(member.row[0]).trim(), _addRecurringInternal_({
       memberId: String(member.row[0]).trim(),
       memberName: member.row[1],
       phone: String(member.row[2]),
@@ -2420,7 +2429,7 @@ function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule, opts
       startDate: String(base.startDate || ''),
       time: String(base.time || ''),
       duration: base.duration
-    }, recurrenceRule, 'unread', { soft: soft, skipTaken: skipTaken, memberRow: member.row, all: all, ver: ver });
+    }, recurrenceRule, 'unread', { soft: soft, skipTaken: skipTaken, memberRow: member.row, all: all, ver: ver }));
   } finally {
     lock.releaseLock();
   }
@@ -2615,6 +2624,7 @@ function deleteRecurringGroup(token, groupId) {
     rowsToDelete.sort(function(a, b) { return b - a; });
     rowsToDelete.forEach(function(rowNum) { schSheet.deleteRow(rowNum); });
     _bustSlots_();   // sesudah menulis: buang cache jam kosong
+    _bumpMember_('*');   // satu seri bisa milik siapa saja; jarang dipakai
 
     // Kembalikan kuota untuk tiap sesi completed yang ikut terhapus
     if (completedMemberIds.length > 0) {
@@ -2663,6 +2673,7 @@ function updateScheduleData(token, scheduleData) {
         const currentNotes = data[i][6];
         sheet.getRange(i + 1, 7).setValue(scheduleData.notes || currentNotes);
         _bustSlots_();   // sesudah menulis: buang cache jam kosong
+        _bumpMember_(data[i][1]);
 
         try {
           kirimNotifTelegram_("🔄 <b>JADWAL DIUBAH</b>\n\n" +
@@ -2709,7 +2720,7 @@ function clientRescheduleSchedule(memberToken, scheduleId, newStart, newEnd, opt
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
-    return _clientReschedule_(memberId, scheduleId, newStart, newEnd, soft);
+    return _bumpAfter_(memberId, _clientReschedule_(memberId, scheduleId, newStart, newEnd, soft));
   } finally {
     lock.releaseLock();
   }
@@ -2801,6 +2812,7 @@ function updateScheduleCoach(token, scheduleId, coachId) {
       sheet.getRange(i + 1, 9).setValue(coachId);
       sheet.getRange(i + 1, 10).setValue(coachName);
       _bustSlots_();   // sesudah menulis: kursi coach berpindah
+      _bumpMember_(data[i][1]);
 
       try {
         kirimNotifTelegram_("🏋️ <b>COACH DITUGASKAN</b>\n\n" +
@@ -2962,6 +2974,7 @@ function clientBookSchedule(memberToken, scheduleData, opts) {
     } finally {
       slotsVer = _bustSlots_();   // sesudah menulis (flush, lalu versi naik)
     }
+    _bumpMember_(memberId, true);   // _bustSlots_ sudah flush
     const row = {
       id: addResult.id, memberId: memberId, title: memberName, phone: phone, start: req.start, end: req.end, notes: notes,
       status: 'unread', coachId: addResult.coachId || '', coachName: addResult.coachName || '', completedAt: '',
@@ -3056,7 +3069,10 @@ function _ensureCompletedAtColumn_(sheet) {
 function completeSession(token, scheduleId, memberId) {
   requireAdmin_(token);
   // memberId dari browser diabaikan: klien yang dipotong selalu pemilik jadwal ini (kolom B).
-  return _locked_(function() { return _completeSession_(scheduleId); });
+  return _locked_(function() {
+    const owner = _scheduleMemberId_(scheduleId);
+    return _bumpAfter_(owner, _completeSession_(scheduleId));
+  });
 }
 
 function _completeSession_(scheduleId) {
@@ -3130,9 +3146,10 @@ function _completeSession_(scheduleId) {
 function deleteSchedule(token, scheduleId) {
   requireAdmin_(token);
   return _locked_(function() {
+    const owner = _scheduleMemberId_(scheduleId);
     const res = _deleteSchedule_(scheduleId);
     _bustSlots_();   // sesudah menulis, masih di dalam lock: buang cache jam kosong
-    return res;
+    return _bumpAfter_(owner, res);
   });
 }
 
@@ -4181,22 +4198,22 @@ function markBadgesSeen(memberToken, ids) {
   } finally {
     lock.releaseLock();
   }
-  return _myPayload_(row);
+  return _bumpAfter_(memberId, _myPayload_(row));
 }
 
 function saveMyMeasurement(memberToken, data) {
   const memberId = String(requireMember_(memberToken).row[0]).trim();
   data = data || {};
   const today = _todayWib_();
-  const tanggal = _validProgressDate_(data.tanggal, today, PROGRESS_LIMITS.backDaysClient);
+  const tanggal = _validProgressDate_(data.tanggal, today, data.cid ? OFFLINE_BACK_DAYS : PROGRESS_LIMITS.backDaysClient);
   _saveMeasurement_(memberId, tanggal, _parseMeasures_(data), 'klien');
-  return _myPayloadFor_(memberId);
+  return _bumpAfter_(memberId, _myPayloadFor_(memberId));
 }
 
 function deleteMyMeasurement(memberToken, id) {
   const memberId = String(requireMember_(memberToken).row[0]).trim();
   _deleteMeasurement_(id, memberId);
-  return _myPayloadFor_(memberId);
+  return _bumpAfter_(memberId, _myPayloadFor_(memberId));
 }
 
 /** Folder Drive privat untuk foto progres. TIDAK ada setSharing di mana pun untuk folder/berkas ini. */
@@ -4232,7 +4249,7 @@ function uploadMyProgressPhoto(memberToken, base64Data, mimeType, sisi) {
   } finally {
     lock.releaseLock();
   }
-  return _myPayloadFor_(memberId);
+  return _bumpAfter_(memberId, _myPayloadFor_(memberId));
 }
 
 function _photoDataUrl_(fileId) {
@@ -4268,7 +4285,7 @@ function deleteMyProgressPhoto(memberToken, photoId) {
   } finally {
     lock.releaseLock();
   }
-  return _myPayloadFor_(memberId);
+  return _bumpAfter_(memberId, _myPayloadFor_(memberId));
 }
 
 // ── Admin / coach ───────────────────────────────────────────────────────────
@@ -4285,7 +4302,7 @@ function saveMemberMeasurement(token, memberId, data) {
   if (!_findMemberRow_(function(row) { return String(row[0]).trim() === id; })) throw new Error('Klien tidak ditemukan.');
   const tanggal = _validProgressDate_(data.tanggal, _todayWib_(), null);
   _saveMeasurement_(id, tanggal, _parseMeasures_(data), 'coach');
-  return _progressPayload_(id);
+  return _bumpAfter_(id, _progressPayload_(id));
 }
 
 function deleteMemberMeasurement(token, id) {
@@ -4298,7 +4315,7 @@ function deleteMemberMeasurement(token, id) {
   })();
   if (sheetRow === null) throw new Error('Catatan tidak ditemukan.');
   _deleteMeasurement_(id, null);
-  return _progressPayload_(sheetRow);
+  return _bumpAfter_(sheetRow, _progressPayload_(sheetRow));
 }
 
 function getMemberProgressPhoto(token, photoId) {
@@ -4365,6 +4382,7 @@ function requestRenewal(memberToken, packageId, coachId) {
     kirimNotifTelegram_('🔁 <b>MINTA PERPANJANG PAKET</b>\n\n👤 <b>Klien:</b> ' + escapeHtmlTelegram(name) + '\n📦 <b>Paket:</b> ' + escapeHtmlTelegram(pkg.namaPaket) +
       ' (' + _formatRupiah_(pkg.harga) + ')\n\nSetelah pembayaran diterima, setujui di panel: Dashboard → Minta perpanjang.');
   } catch (e) { Logger.log('Notif perpanjang gagal: ' + e); }
+  _bumpMember_(memberId);
   return {
     request: { id: id, status: 'menunggu', packageId: pkg.id, packageName: pkg.namaPaket, harga: pkg.harga },
     text: 'Halo Coach, saya ' + name + '. Saya mau perpanjang paket ' + pkg.namaPaket + ' (' + _formatRupiah_(pkg.harga) + ').'
@@ -4442,7 +4460,7 @@ function decideRenewal(token, id, approve) {
   } finally {
     lock.releaseLock();
   }
-  if (!approve) return { status: 'ditolak', id: rid };
+  if (!approve) return _bumpAfter_(req.memberId, { status: 'ditolak', id: rid });
   // Di luar lock: _addMemberInternal_ memakai lock yang sama.
   try {
     const found = _findMemberRow_(function(r) { return String(r[0]).trim() === req.memberId; });
@@ -4455,6 +4473,7 @@ function decideRenewal(token, id, approve) {
       name: String(row[1] || ''), phone: String(row[2] || ''), goal: String(row[3] || ''),
       packageId: req.packageId, usedSessions: 0, coachId: req.coachId || String(row[10] || '')
     }, { silent: true });
+    _bumpMember_(req.memberId);
     return { status: 'disetujui', id: rid, packageName: res.packageName, totalSessions: res.totalSessions };
   } catch (e) {
     const l2 = LockService.getScriptLock();
@@ -5009,7 +5028,7 @@ function addTask(token, data) {
     const id = 'TSK-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const groupId = repeat === 'none' ? '' : _newTaskGroupId_();
     sheet.appendRow([id, memberId, title, description, category, dueDate, 'todo', repeat, 'coach', new Date().toISOString(), '', '', groupId]);
-    return { status: 'success', id: id };
+    return _bumpAfter_(memberId, { status: 'success', id: id });
   });
 }
 
@@ -5060,7 +5079,7 @@ function updateTask(token, data) {
     }
     sheet.getRange(found.rowNum, 1, 1, TASKS_HEADERS.length).setValues([row]);
     if (statusChanged && (row[6] === 'done' || row[6] === 'skipped')) _spawnNextTaskInstance_(sheet, row);
-    return { status: 'success' };
+    return _bumpAfter_(row[1], { status: 'success' });
   });
 }
 
@@ -5074,7 +5093,7 @@ function deleteTask(token, taskId) {
     const found = _findTaskRow_(sheet, taskId);
     if (!found) throw new Error('PR tidak ditemukan.');
     sheet.deleteRow(found.rowNum);
-    return { status: 'success' };
+    return _bumpAfter_(found.row[1], { status: 'success' });
   });
 }
 
@@ -5204,7 +5223,7 @@ function completeMyTask(memberToken, taskId, note) {
   if (!id) throw new Error('ID PR wajib diisi.');
   const clientNote = _taskText_(note, TASK_CLIENT_NOTE_MAX, 'Catatan', false);
 
-  return _withTaskLock_(function() {
+  return _bumpAfter_(memberId, _withTaskLock_(function() {
     const sheet = _tasksSheet_();
     const found = _findTaskRow_(sheet, id);
     if (!found || String(found.row[1]).trim() !== memberId) throw new Error('PR tidak ditemukan.');
@@ -5213,7 +5232,7 @@ function completeMyTask(memberToken, taskId, note) {
     sheet.getRange(found.rowNum, 11, 1, 2).setValues([[new Date().toISOString(), clientNote]]);
     _spawnNextTaskInstance_(sheet, found.row);
     return { status: 'success' };
-  });
+  }));
 }
 
 
@@ -5304,11 +5323,12 @@ function deleteTaskGroup(token, groupId) {
     const sheet = _tasksSheet_();
     const data = sheet.getDataRange().getValues();
     let deleted = 0;
+    const owners = [];
     for (let i = data.length - 1; i >= 1; i--) { // dari bawah supaya nomor baris tidak bergeser
-      if (String(data[i][12]).trim() === gid) { sheet.deleteRow(i + 1); deleted++; }
+      if (String(data[i][12]).trim() === gid) { owners.push(data[i][1]); sheet.deleteRow(i + 1); deleted++; }
     }
     if (!deleted) throw new Error('Grup PR tidak ditemukan.');
-    return { status: 'success', deleted: deleted };
+    return _bumpAfter_(owners, { status: 'success', deleted: deleted });
   });
 }
 
@@ -6155,6 +6175,7 @@ function _fitnessSummary_(byTest) {
  */
 function getClientBundle(token, memberId) {
   requireAdmin_(token);
+  const ver = _memberVer_(memberId);   // sebelum sheet data dibaca
   const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
   return _withSchedulesMemo_(function () {
     const progress = part(function () { return getMemberProgress(token, memberId); });
@@ -6167,6 +6188,8 @@ function getClientBundle(token, memberId) {
       return _insightFor_(row, 'coach', { progress: progress, workout: workout, bodyFat: bodyFat });
     });
     return {
+      ver: ver,
+      day: _todayWib_(),
       tasks: part(function () { return getTasksForMember(token, memberId); }),
       progress: progress,
       care: care,
@@ -6235,7 +6258,7 @@ function saveClientNotes(token, memberId, data) {
     m.sheet.getRange(m.rowNum, MEMBER_FLAG_COL).setValue(flag);
     m.sheet.getRange(m.rowNum, MEMBER_NOTES_COL).setValue(notes);
     m.sheet.getRange(m.rowNum, MEMBER_BIRTH_COL).setNumberFormat('@').setValue(birth);
-    return { status: 'success' };
+    return _bumpAfter_(m.row[0], { status: 'success' });
   } finally {
     lock.releaseLock();
   }
@@ -6248,7 +6271,7 @@ function snoozeCare(token, memberId, days) {
   const m = _memberRowOrThrow_(memberId);
   _ensureCareColumns_(m.sheet);
   m.sheet.getRange(m.rowNum, MEMBER_SNOOZE_COL).setNumberFormat('@').setValue(_addDaysIso_(_todayWib_(), n));
-  return { status: 'success' };
+  return _bumpAfter_(m.row[0], { status: 'success' });
 }
 
 /** Admin: assessment pertama / perubahan. Berat dan lingkar badan (opsional, 8 ukuran) masuk ke Progres sebagai catatan coach. */
@@ -6279,7 +6302,7 @@ function saveAssessment(token, memberId, data) {
     lock.releaseLock();
   }
   if (hasMeasure) _saveMeasurement_(id, _todayWib_(), vals, 'coach');
-  return { status: 'success' };
+  return _bumpAfter_(id, { status: 'success' });
 }
 
 /** Admin: nilai tes kebugaran. values = { pushup: 24, plank: 60 }; kosong diabaikan. Upsert per klien, tanggal, dan tes. */
@@ -6313,6 +6336,7 @@ function saveFitnessTests(token, memberId, data) {
   } finally {
     lock.releaseLock();
   }
+  _bumpMember_(id);
   return { status: 'success', tests: _fitnessSummary_(_fitnessByMember_(id)) };
 }
 
@@ -6324,7 +6348,7 @@ function deleteFitnessTest(token, testId) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FitnessTests');
     if (!sheet) throw new Error('Hasil tes tidak ditemukan.');
     const rows = sheet.getDataRange().getValues();
-    for (let i = 1; i < rows.length; i++) if (String(rows[i][0]) === String(testId)) { sheet.deleteRow(i + 1); return { status: 'success' }; }
+    for (let i = 1; i < rows.length; i++) if (String(rows[i][0]) === String(testId)) { sheet.deleteRow(i + 1); return _bumpAfter_(rows[i][1], { status: 'success' }); }
     throw new Error('Hasil tes tidak ditemukan.');
   } finally {
     lock.releaseLock();
@@ -6339,7 +6363,7 @@ function markHealthReviewed(token, memberId, note) {
   if (!hs) throw new Error('Klien ini belum mengisi form kesehatan.');
   hs.sheet.getRange(hs.rowNum, 15).setValue(new Date().toISOString());
   hs.sheet.getRange(hs.rowNum, 16).setValue(_careStr_(note, 300, 'Catatan'));
-  return { status: 'success' };
+  return _bumpAfter_(id, { status: 'success' });
 }
 
 // ── Konten untuk klien: pengumuman, tips, video (Fase J3) ─────────────────────
@@ -6783,7 +6807,7 @@ function saveMemberProgram(token, memberId, program) {
   const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
   const parsed = _parseProgramInput_(program);
   _programWrite_(id, null, parsed.days);
-  return getMemberProgram(token, id);
+  return _bumpAfter_(id, getMemberProgram(token, id));
 }
 
 function _templateName_(name) {
@@ -6820,7 +6844,7 @@ function saveProgramTemplate(token, name, program, opts) {
   const exact = getProgramTemplates(token).find(function(t) { return t.name.toLowerCase() === nm.toLowerCase(); });
   const jelajahi = opts && opts.jelajahi != null ? !!opts.jelajahi : !!(exact && exact.jelajahi);
   _programWrite_(null, exact ? exact.name : nm, parsed.days, { jelajahi: jelajahi });
-  return { status: 'success', name: exact ? exact.name : nm, jelajahi: jelajahi };
+  return _bumpAfter_('*', { status: 'success', name: exact ? exact.name : nm, jelajahi: jelajahi });   // Jelajahi semua klien
 }
 
 /** Admin: tampilkan / sembunyikan satu template di Jelajahi klien (kolom U, tanpa menulis ulang isinya). */
@@ -6835,7 +6859,7 @@ function setTemplateExplore(token, name, on) {
       if (rows[i][0] && _programRowMine_(rows[i], null, nm)) { sheet.getRange(i + 1, 21).setValue(on ? 1 : ''); found++; }
     }
     if (!found) throw new Error('Template tidak ditemukan.');
-    return { status: 'success', name: nm, jelajahi: !!on };
+    return _bumpAfter_('*', { status: 'success', name: nm, jelajahi: !!on });
   });
 }
 
@@ -6844,7 +6868,7 @@ function deleteProgramTemplate(token, name) {
   const nm = _templateName_(name);
   if (!_programDays_(null, nm).days.length) throw new Error('Template tidak ditemukan.');
   _programWrite_(null, nm, []);
-  return { status: 'success' };
+  return _bumpAfter_('*', { status: 'success' });
 }
 
 /** Admin: salin template jadi program klien (menggantikan program yang ada). */
@@ -6855,7 +6879,7 @@ function applyProgramTemplate(token, memberId, name) {
   const p = _programDays_(null, nm);
   if (!p.days.length) throw new Error('Template tidak ditemukan.');
   _programWrite_(id, null, p.days);
-  return getMemberProgram(token, id);
+  return _bumpAfter_(id, getMemberProgram(token, id));
 }
 
 /** Log centang satu klien, lama → baru: [{tanggal, hari, selesai:[urutan]}]. */
@@ -6938,7 +6962,7 @@ function saveMyRoutine(memberToken, oldName, routine) {
     } else list.push(clean);
     _ownWrite_(id, list);
   });
-  return _programFor_(row);
+  return _bumpAfter_(id, _programFor_(row));
 }
 
 /** Klien: hapus satu rutinitas sendiri (program coach tidak bisa dihapus klien). */
@@ -6953,7 +6977,7 @@ function deleteMyRoutine(memberToken, name) {
     list.splice(i, 1);
     _programWrite_(id, null, list, { own: true });
   });
-  return _programFor_(row);
+  return _bumpAfter_(id, _programFor_(row));
 }
 
 /**
@@ -6988,6 +7012,7 @@ function copyRoutineToMine(memberToken, source) {
     });
     _ownWrite_(id, list);
   });
+  _bumpMember_(id);
   const out = _programFor_(row);
   out.added = added;
   return out;
@@ -7032,7 +7057,7 @@ function logMyProgramDay(memberToken, hari, selesai) {
   if (complete && !wasComplete) {
     try { kirimNotifTelegram_('💪 <b>' + escapeHtmlTelegram(String(row[1] || '').trim().split(/\s+/)[0]) + '</b> menyelesaikan program: ' + escapeHtmlTelegram(day.hari)); } catch (e) { Logger.log('Notif program gagal: ' + e); }
   }
-  return { status: 'success', hari: day.hari, selesai: picked, complete: complete };
+  return _bumpAfter_(id, { status: 'success', hari: day.hari, selesai: picked, complete: complete });
 }
 
 // ── Catatan latihan per set (Fase L2) ────────────────────────────────────────
@@ -7045,6 +7070,8 @@ const WORKOUT_SET_KINDS = ['', 'w', 'drop', 'gagal'];
 // Satu baris per klien per tanggal: kapan mulai/selesai, rasa (1-5), catatan latihan. CID = id latihan dari browser (kirim ulang menimpa).
 const WORKOUT_SESSION_HEADERS = ["ID", "Member ID", "Tanggal", "Schedule ID", "Hari", "Mulai", "Selesai", "Durasi", "Rasa", "Catatan", "Oleh", "Diubah Pada", "CID"];
 const WORKOUT_LOWER_BODY = ['upper legs', 'lower legs'];
+// Catatan dari antrean offline (membawa cid) boleh sampai 30 hari ke belakang; catatan biasa tetap ikut batas masing-masing.
+const OFFLINE_BACK_DAYS = 30;
 const WORKOUT_LIMITS = { exercises: 20, sets: 20, berat: 500, rep: 999, durasi: 7200, jarak: 100000, rpe: 10, note: 200, name: 80, target: 40, hari: 40, backClient: 7, backAdmin: 90, readDays: 90 };
 const WORKOUT_BODY_PARTS = ['waist', 'upper legs', 'back', 'lower legs', 'chest', 'upper arms', 'cardio', 'shoulders', 'lower arms', 'neck'];
 
@@ -7457,6 +7484,7 @@ function saveWorkoutLog(token, memberId, date, scheduleId, entries, session) {
   const clean = _parseWorkoutEntries_(entries);
   const ses = _parseWorkoutSession_(session);
   const saved = _workoutSave_(id, tanggal, sid, clean, 'admin', ses);
+  _bumpMember_(id);
   const out = _workoutFor_(row);
   out.prs = saved.prs;
   _workoutNotifyPrs_(row, saved.prs);
@@ -7469,15 +7497,19 @@ function getMyWorkout(memberToken) { return _workoutFor_(requireMember_(memberTo
 function logMyWorkout(memberToken, date, entries, session) {
   const row = requireMember_(memberToken).row;
   const id = String(row[0]).trim();
-  if (!_throttle_('wk_' + id, 3)) throw new Error('Tunggu sebentar sebelum menyimpan lagi.');
-  const today = _todayWib_();
-  const tanggal = _validProgressDate_(date, today, WORKOUT_LIMITS.backClient);
-  const clean = _parseWorkoutEntries_(entries);
   const ses = _parseWorkoutSession_(session);
+  // Antrean offline mengirim beberapa latihan berurutan (cid berbeda); jeda 3 detik berlaku per latihan.
+  if (!_throttle_('wk_' + id + (ses && ses.cid ? '_' + ses.cid : ''), 3)) throw new Error('Tunggu sebentar sebelum menyimpan lagi.');
+  const today = _todayWib_();
+  const tanggal = _validProgressDate_(date, today, ses && ses.cid ? OFFLINE_BACK_DAYS : WORKOUT_LIMITS.backClient);
+  const clean = _parseWorkoutEntries_(entries);
   const saved = _workoutSave_(id, tanggal, '', clean, 'klien', ses);
   if (tanggal === today) _workoutTickProgram_(id, clean);
+  _bumpMember_(id);
   const out = _workoutFor_(row);
   out.prs = saved.prs;
+  // Rutinitas ikut dikirim (centang hari ini berubah), supaya portal tidak perlu memanggil getMyProgram lagi.
+  try { out.program = _programFor_(row); } catch (e) {}
   _workoutNotifyPrs_(row, saved.prs);
   return out;
 }
@@ -7637,7 +7669,7 @@ function rateSession(memberToken, scheduleId, stars, comment, consent) {
   if (n <= 3) {
     try { kirimNotifTelegram_('⚠️ <b>PENILAIAN SESI RENDAH</b>\n\n👤 ' + escapeHtmlTelegram(String(row[1] || '').trim().split(/\s+/)[0]) + ' memberi ' + n + ' dari 5 bintang. Lihat di halaman klien.'); } catch (e) { Logger.log('Notif penilaian gagal: ' + e); }
   }
-  return { status: 'success' };
+  return _bumpAfter_(memberId, { status: 'success' });
 }
 
 /** Murni: apakah sisa sesi sudah 0 dan evaluasi belum diisi sejak sesi terakhir selesai? */
@@ -7705,7 +7737,7 @@ function submitMyPackageEval(memberToken, data) {
   }
   const avg = Math.round(vals.reduce(function(s, v) { return s + v; }, 0) / vals.length * 10) / 10;
   try { kirimNotifTelegram_('⭐ <b>EVALUASI PAKET</b>\n\n👤 ' + escapeHtmlTelegram(String(row[1] || '').trim().split(/\s+/)[0]) + ' · rata-rata ' + String(avg).replace('.', ',') + ' dari 5. Lihat di halaman klien.'); } catch (e) { Logger.log('Notif evaluasi gagal: ' + e); }
-  return { status: 'success' };
+  return _bumpAfter_(memberId, { status: 'success' });
 }
 
 /** Admin: penilaian dan evaluasi satu klien (komentar ikut), terbaru dulu. */
@@ -7826,6 +7858,7 @@ function saveSessionNote(token, scheduleId, data) {
     nama: String(m.row[1] || '').trim().split(/\s+/)[0],
     dilatih: dilatih ? '\n🏋️ Hari ini: ' + dilatih.split('\n')[0] : '', fokus: fokus ? '\n🎯 Berikutnya: ' + fokus.split('\n')[0] : '', sisa: _sisaText_(m.row)
   });
+  _bumpMember_(sched.memberId);
   return { status: 'success', text: text, waLink: _waLink_(m.row[2], text) };
 }
 
@@ -7882,7 +7915,7 @@ function submitMyHealthForm(memberToken, answers) {
   }
   // Hanya nama klien; jawaban tidak pernah dikirim ke Telegram.
   try { kirimNotifTelegram_('🩺 <b>' + _escHtml_(String(row[1] || '').trim()) + '</b> mengisi form kesehatan. Perlu ditinjau di panel.'); } catch (e) { Logger.log('Notif Telegram gagal: ' + e); }
-  return { status: 'success' };
+  return _bumpAfter_(id, { status: 'success' });
 }
 
 /** Klien: tujuan & preferensi dari assessment, dan hasil tes (pertama → terbaru). Tanpa catatan coach. */
@@ -8075,7 +8108,7 @@ function createClassGroup(memberToken) {
   } finally {
     lock.releaseLock();
   }
-  return _publicGroup_(g, memberId);
+  return _bumpAfter_(memberId, _publicGroup_(g, memberId));
 }
 
 /** Klien: gabung grup pakai kode. Wajib sudah memegang paket kelas yang sama (sisa sesi) dan grup belum penuh. */
@@ -8109,7 +8142,7 @@ function joinClassGroup(memberToken, code) {
   } finally {
     lock.releaseLock();
   }
-  return _publicGroup_(g, memberId);
+  return _bumpAfter_(g.members, _publicGroup_(g, memberId));
 }
 
 /** Klien: keluar dari grup. Pembuat yang keluar menutup grup; sesi yang sudah dibooking tetap berlaku. */
@@ -8117,9 +8150,11 @@ function leaveClassGroup(memberToken) {
   const memberId = String(requireMember_(memberToken).row[0]).trim();
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
+  let touched = [memberId];
   try {
     const g = _openGroupOf_(memberId);
     if (!g) return { status: 'success' };
+    touched = g.members.concat([memberId]);
     const sheet = _classGroupSheet_();
     if (g.creatorId === memberId) {
       sheet.getRange(g._row, 5).setValue('tutup');
@@ -8129,7 +8164,7 @@ function leaveClassGroup(memberToken) {
   } finally {
     lock.releaseLock();
   }
-  return { status: 'success' };
+  return _bumpAfter_(touched, { status: 'success' });
 }
 
 /** Klien: grup saya (atau null). Hanya nama depan anggota. */
@@ -8231,3 +8266,67 @@ function getPublicTestimonials() {
   return _sharedCached_('testimonials', getPublicTestimonialsImpl_);
 }
 
+
+// ── Versi data per klien (cache & offline, 2026-10) ──────────────────────────
+// Portal dan panel menyimpan salinan data klien di perangkat. Setiap penulis data yang ikut getPortalMore /
+// getClientBundle menaikkan versi klien itu SESUDAH menulis (_bumpMember_ / _bumpAfter_); pembaca membaca versi
+// SEBELUM sheet. Versi sama = salinan di perangkat masih benar, tidak perlu memanggil data berat lagi.
+// 'mv:*' = versi untuk semua klien (penulis yang menyentuh banyak klien sekaligus: grup kelas, keuangan, template).
+const MEMBER_VER_TTL = 21600;
+function _newVer_() { return String(Date.now()) + '.' + Math.floor(Math.random() * 1000000); }
+function _memberVers_(ids) {
+  const out = {};
+  const keys = ids.map(function(id) { return 'mv:' + String(id).trim(); });
+  try {
+    const c = CacheService.getScriptCache();
+    const got = c.getAll ? c.getAll(keys) : {};
+    const missing = {};
+    keys.forEach(function(k) {
+      let v = got[k] || (c.getAll ? null : c.get(k));
+      if (!v) { v = _newVer_(); missing[k] = v; }
+      out[k.slice(3)] = v;
+    });
+    if (Object.keys(missing).length) {
+      if (c.putAll) c.putAll(missing, MEMBER_VER_TTL);
+      else Object.keys(missing).forEach(function(k) { c.put(k, missing[k], MEMBER_VER_TTL); });
+    }
+  } catch (e) { return {}; }
+  return out;
+}
+/** Versi lengkap data satu klien: miliknya + semua klien + data bersama. '' = tidak diketahui (selalu ambil). */
+function _memberVer_(memberId) {
+  const id = String(memberId == null ? '' : memberId).trim();
+  if (!id) return '';
+  const v = _memberVers_([id, '*']);
+  if (!v[id] || !v['*']) return '';
+  return v[id] + '|' + v['*'] + '|' + _sharedVersion_();
+}
+/** Naikkan versi klien (id, daftar id, atau '*' = semua). Panggil SESUDAH menulis: flush dulu, baru versi naik (flushed = sudah di-flush). */
+function _bumpMember_(ids, flushed) {
+  const list = (Array.isArray(ids) ? ids : [ids]).map(function(x) { return String(x == null ? '' : x).trim(); }).filter(Boolean);
+  if (!list.length) return;
+  if (!flushed) try { SpreadsheetApp.flush(); } catch (e) {}
+  try {
+    const c = CacheService.getScriptCache();
+    list.forEach(function(id) { c.put('mv:' + id, _newVer_(), MEMBER_VER_TTL); });
+  } catch (e) {}
+}
+/** Naikkan versi lalu kembalikan hasil penulisan (bentuk jawaban tidak berubah). */
+function _bumpAfter_(ids, result) { _bumpMember_(ids); return result; }
+
+/** Pemilik (Member ID) satu jadwal, '' kalau tidak ada. Untuk _bumpMember_ di penulis yang hanya tahu ID jadwal. */
+function _scheduleMemberId_(scheduleId) {
+  const sid = String(scheduleId == null ? '' : scheduleId);
+  const s = _getSchedulesAll_().find(function(x) { return String(x.id) === sid; });
+  return s ? String(s.memberId).trim() : '';
+}
+
+/** Panel: versi data semua klien (untuk salinan halaman klien di perangkat coach). Nilai = sama dengan _memberVer_. */
+function _memberVersAll_() {
+  const ids = _getMemberDataSheet_().getDataRange().getValues().slice(1).map(function(r) { return String(r[0]).trim(); }).filter(Boolean);
+  const v = _memberVers_(ids.concat(['*']));
+  const shared = _sharedVersion_(), all = v['*'], out = {};
+  if (!all) return out;
+  ids.forEach(function(id) { if (v[id]) out[id] = v[id] + '|' + all + '|' + shared; });
+  return out;
+}

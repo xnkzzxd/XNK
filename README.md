@@ -51,6 +51,14 @@ same call that saves it. If the hour was just taken, the client is not shown an 
 booking sheet stays open with up to three nearby free times for the same duration. A time
 like 07:15 is booked as the whole hour from 07:00.
 
+**Fast reopen and offline logging.** The client portal and the PT's client pages keep the
+last data on the device, so workout logs, food logs and progress show at once. The server
+gives every client a data version; the heavy data is fetched again only when that version
+changed (someone saved something), the day changed or the copy is old. The PT's device keeps
+at most 15 recent clients and forgets them on logout. Workout and food logs also work without
+signal: they show at once marked "waiting for signal" and are sent automatically, without
+duplicates, when the connection is back.
+
 **Workout logging.** The PT writes each client's program in a form (days, exercises,
 sets, rep range or a per-set scheme with warm-ups, target weight, rest, supersets). The
 client (portal) and the PT (panel) log a workout on one full-screen page: every set
