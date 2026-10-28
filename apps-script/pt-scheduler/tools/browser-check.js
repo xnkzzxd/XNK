@@ -2234,7 +2234,9 @@ async function contrastReport(page) {
     await off.page.waitForTimeout(300);
     const queued = await off.page.evaluate(() => { const n = window.myNutrition; return n && n.log ? null : 'no food log in the portal data'; });
     if (!queued) {
-      await off.page.evaluate(() => { window.openNutAdd('siang'); window.nutAddOwn(true); });
+      await off.page.evaluate(() => window.openNutAdd('siang'));
+      await off.page.waitForTimeout(600);   // daftar makanan selesai dimuat (atau gagal) dulu
+      await off.page.evaluate(() => window.nutAddOwn(true));
       await off.page.waitForTimeout(300);
       await off.page.fill('#nut-own-n', 'Bakso uji');
       await off.page.fill('#nut-own-kal', '300');
