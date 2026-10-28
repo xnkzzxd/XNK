@@ -109,7 +109,7 @@ test('workout sessions: upsert per day, feeling and note, duration from start/fi
   const ses = { cid: 'wl-abc', hari: 'Hari A', mulai: '2026-10-14T01:00:00Z', selesai: '2026-10-14T01:52:00Z', rasa: 4, catatan: 'enak' };
   let r = j(env.call('logMyWorkout', a, today, sets, ses));
   assert.deepEqual(r.sessions[0], { tanggal: today, hari: 'Hari A', durasi: 3120, rasa: 4, catatan: 'enak', oleh: 'klien' });
-  env.context.CacheService.getScriptCache().remove('throttle_wk_PT-A');
+  env.context.CacheService.getScriptCache().remove('throttle_wk_PT-A_wl-abc');   // jeda per latihan (cid)
   r = j(env.call('logMyWorkout', a, today, sets, Object.assign({}, ses, { rasa: 5 })));
   assert.equal(env.sheet('WorkoutSessions').rows.length, 2, 'same day is one row');
   assert.equal(r.sessions[0].rasa, 5);
@@ -168,4 +168,18 @@ test('suggestion: heavier only when every working set hit the top of the range; 
   env.call('saveWorkoutLog', t, 'PT-A', env.call('_addDaysIso_', env.call('_todayWib_'), -2), '', [{ n: 1, hari: 'Hari A', exId: '0025', gerakan: 'Bench press', bodyPart: 'chest', sets: [{ berat: 40, rep: 12 }, { berat: 40, rep: 12 }] }]);
   assert.equal(j(env.call('getMyWorkout', env.memberToken(KEY_A))).suggest['ex:0025'].kg, 42.5);
   assert.equal(j(env.call('getPortalMore', env.memberToken(KEY_A))).workout.suggest['ex:0025'].kg, 42.5);
+});
+
+test('offline queue: a workout with a cid may be up to 30 days old; without one the 7-day limit stays', () => {
+  const env = seededEnv();
+  const a = env.memberToken(KEY_A), today = env.call('_todayWib_');
+  const old = env.call('_addDaysIso_', today, -20), tooOld = env.call('_addDaysIso_', today, -31);
+  const sets = [{ gerakan: 'Squat', sets: [{ berat: 40, rep: 8 }] }];
+  assert.throws(() => env.call('logMyWorkout', a, old, sets), /7 hari/);
+  const r = j(env.call('logMyWorkout', a, old, sets, { cid: 'wl-old' }));
+  assert.equal(r.days[0].tanggal, old);
+  assert.throws(() => env.call('logMyWorkout', a, tooOld, sets, { cid: 'wl-older' }), /30 hari/);
+  // Two different queued workouts right after each other are not throttled.
+  env.call('logMyWorkout', a, today, sets, { cid: 'wl-x1' });
+  env.call('logMyWorkout', a, today, [{ gerakan: 'Row', sets: [{ berat: 30, rep: 8 }] }], { cid: 'wl-x2' });
 });

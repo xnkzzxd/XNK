@@ -52,3 +52,29 @@ test('ink card text is readable', () => {
     assert.ok(contrast(t['--on-ink'], t['--ink']) >= 7, name + ' on-ink');
   }
 });
+
+test('font tokens are rem so big text scales', () => {
+  for (const k of Object.keys(light).filter(k => k.startsWith('--fs-'))) assert.match(light[k], /rem$/, k);
+});
+
+test('band tokens exist and match in both dark blocks, ink text is readable on them', () => {
+  for (const t of [light, darkAttr]) { assert.ok(t['--band'] && t['--band-card'] && t['--on-band']); }
+  assert.strictEqual(darkMedia['--band'], darkAttr['--band']);
+  for (const t of [light, darkAttr]) assert.ok(contrast(t['--on-band'], t['--band']) >= 7);
+});
+
+test('page text is readable on the new near-white background', () => {
+  assert.ok(contrast(light['--fg'], light['--bg']) >= 7);
+  assert.ok(contrast(light['--fg-muted'], light['--bg']) >= 4.5);
+});
+
+test('buttons wrap and text holders use min-height', () => {
+  const btn = block('.btn {');
+  assert.ok(!/white-space:\s*nowrap/.test(btn));
+  for (const sel of ['.chip {', '.pill {']) assert.ok(!/(^|[;\s])height:/.test(block(sel)), sel);
+});
+
+test('Theme.html has one style block and nothing after it', () => {
+  assert.strictEqual(css.split('</style>').length, 2);
+  assert.strictEqual(css.trimEnd().slice(-8), '</style>');
+});

@@ -101,6 +101,7 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
   if (storage) await context.addInitScript(s => { for (const k in s) localStorage.setItem(k, s[k]); }, storage);
   await context.exposeFunction('__gasCall', async (name, argsJson) => {
     calls.push(name);
+    if (opts.net && opts.net.down) return JSON.stringify({ ok: false, error: 'NetworkError: Connection failure' });   // tanpa sinyal
     if (opts.delay && opts.delay[name]) await new Promise(r => setTimeout(r, opts.delay[name]));
     try {
       return JSON.stringify({ ok: true, value: env.call(name, ...JSON.parse(argsJson)) });
@@ -342,6 +343,16 @@ async function contrastReport(page) {
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(300);
     check(prof.length === 1 && prof[0] === 'getClientBundle', 'fast: opening a client page makes one call (' + prof.join(',') + ')');
+    // Salinan halaman klien (2026-10): gambar ulang tidak memanggil lagi; salinan ada di perangkat.
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(300);
+    for (let i = 0; i < 3; i++) { await page.evaluate(() => window.updateUI()); await page.waitForTimeout(150); }
+    check(calls.filter(c => c === 'getClientBundle').length === 1, 'cache: reopening and redrawing a client page makes no new call (' + calls.filter(c => c === 'getClientBundle').length + ' bundle calls)');
+    const ccStore = await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_client_cache') || 'null'));
+    const admCache = await page.evaluate(() => localStorage.getItem('xnk_admin_cache') || '');
+    check(!!ccStore && !!ccStore.items['PT-A'] && ccStore.order[0] === 'PT-A' && !admCache.includes('foodLog'), 'cache: the client page is kept in xnk_client_cache, not in the admin cache');
+    await page.evaluate(() => window.closeDetail());
+    await page.waitForTimeout(300);
 
     // Buka lagi dengan token: panel langsung terisi dari salinan, tanpa cek sesi terpisah
     const token = await page.evaluate(() => localStorage.getItem('xnk_admin_token'));
@@ -352,6 +363,19 @@ async function contrastReport(page) {
     check(!calls2.includes('checkAdminSession'), 'open: no separate session check before loading data');
     check((await again.page.evaluate(() => window.members.length)) === 3 && !(await visible(again.page, '#admin-login')), 'open: the dashboard shows right away');
     await again.context.close();
+    // Buka lagi dengan salinan halaman klien: progres tampil tanpa "Memuat", server lambat.
+    const ccRaw = await page.evaluate(() => localStorage.getItem('xnk_client_cache'));
+    const calls2b = [];
+    const again2 = await openPage(browser, env, '/Index', calls2b, { xnk_admin_token: token, xnk_admin_cache: cache, xnk_client_cache: ccRaw }, { touch: true, wait: 700, delay: { getClientBundle: 3000 } });
+    await again2.page.evaluate(() => window.openProfile('PT-A'));
+    await again2.page.waitForTimeout(200);
+    check(!(await again2.page.textContent('#profile-progress-wrap')).includes('Memuat'), 'cache: after reopening the app a client page shows from the device copy, no loading text');
+    await again2.page.evaluate(() => window.logoutCurrent());
+    await again2.page.waitForTimeout(400);
+    await again2.page.evaluate(() => window.handleConfirmModalYes());
+    await again2.page.waitForTimeout(600);
+    check(!(await again2.page.evaluate(() => localStorage.getItem('xnk_client_cache'))), 'cache: logging out removes the client-page copy');
+    await again2.context.close();
 
     // Tarik ke bawah
     const before = calls.filter(c => c === 'getAdminBootstrap').length;
@@ -370,10 +394,11 @@ async function contrastReport(page) {
     await page.waitForTimeout(250);
     check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('spinning')), 'pull down: spins while loading');
     await shot(page, 'admin-mobile-refreshing');
-    await page.waitForTimeout(1300);
-    check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('ok')), 'pull down: ends with a check mark');
-    await page.waitForTimeout(900);
-    check(await page.evaluate(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr'), 'pull down: the page settles back and the indicator resets');
+    // The check mark lives only ~1 s (spin ≥ 700 ms, then 520 ms + 460 ms reset), so poll for it instead of sleeping.
+    const sawOk = await page.waitForFunction(() => document.querySelector('.ptr').classList.contains('ok'), null, { polling: 50, timeout: 3000 }).then(() => true, () => false);
+    check(sawOk, 'pull down: ends with a check mark');
+    const settled = await page.waitForFunction(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr', null, { polling: 50, timeout: 3000 }).then(() => true, () => false);
+    check(settled, 'pull down: the page settles back and the indicator resets');
     check(calls.filter(c => c === 'getAdminBootstrap').length === before + 1, 'pull down: data is reloaded in place');
     check((await page.evaluate(() => window.currentView)) === 'dashboard', 'pull down: stays on the same page');
 
@@ -416,6 +441,38 @@ async function contrastReport(page) {
     check(c.mutedOnSurface >= 4.5 && c.mutedOnBg >= 4.5 && c.mutedOnSurface2 >= 4.5, 'muted text contrast ≥ 4.5:1 (' + [c.mutedOnSurface, c.mutedOnBg, c.mutedOnSurface2].map(x => x.toFixed(1)).join(', ') + ')');
     check(c.onInkMuted >= 4.5, 'muted text on black cards ≥ 4.5:1 (' + c.onInkMuted.toFixed(1) + ')');
     await shot(page, 'admin-desktop-' + scheme + '-dashboard');
+    const hero = await page.evaluate(() => {
+      const cv = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+      const rgb = v => { cv.clearRect(0, 0, 1, 1); cv.fillStyle = '#000'; cv.fillStyle = v; cv.fillRect(0, 0, 1, 1); const d = cv.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+      const lum = c => { const k = c.slice(0, 3).map(x => x / 255).map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)); return 0.2126 * k[0] + 0.7152 * k[1] + 0.0722 * k[2]; };
+      const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c[3] > 0.9) return c; } return [255, 255, 255]; };
+      const card = [...document.querySelectorAll('.card-ink')].find(x => /Sesi berikutnya/.test(x.textContent));
+      if (!card) return null;
+      const cardBg = rgb(getComputedStyle(card).backgroundColor), pageBg = rgb(getComputedStyle(document.body).backgroundColor);
+      const parts = [...card.querySelectorAll('.eyebrow, .muted, .pill, .btn')].map(el => ({ t: el.textContent.trim(), r: ratio(rgb(getComputedStyle(el).color), bgOf(el)) }));
+      return { lift: ratio(cardBg, pageBg), parts };
+    });
+    const sa = await page.evaluate(() => {
+      const cv = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+      const rgb = v => { cv.clearRect(0, 0, 1, 1); cv.fillStyle = '#000'; cv.fillStyle = v; cv.fillRect(0, 0, 1, 1); const d = cv.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+      const lum = c => { const k = c.slice(0, 3).map(x => x / 255).map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)); return 0.2126 * k[0] + 0.7152 * k[1] + 0.0722 * k[2]; };
+      const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const row = (document.querySelector('.sess-actions .btn-primary') || {}).parentElement;
+      if (!row) return null;
+      const btns = [...row.querySelectorAll('.btn')];
+      const prim = row.querySelector('.btn-primary');
+      const rr = row.getBoundingClientRect(), card = row.parentElement.getBoundingClientRect();
+      return { n: btns.length, tall: btns.every(b => b.getBoundingClientRect().height >= 44), prim: !!prim && /Selesai/.test(prim.textContent), contrast: prim ? ratio(rgb(getComputedStyle(prim).color), rgb(getComputedStyle(prim).backgroundColor)) : 0, right: card.right - rr.right < 40 || [...btns].pop().getBoundingClientRect().right >= card.right - 40 };
+    });
+    check(!!sa && sa.prim && sa.tall && sa.contrast >= 4.5, 'session row: solid "Selesai" first, 44 px buttons, contrast ≥ 4.5:1 (' + (sa ? sa.contrast.toFixed(1) : 'none') + ')');
+    check(!!sa && sa.right, 'session row buttons sit on the right on desktop');
+    check(!!hero, 'dashboard has the "Sesi berikutnya" card');
+    if (hero) {
+      check(scheme === 'light' || hero.lift >= 1.1, 'next-session card is lighter than the page (' + hero.lift.toFixed(2) + ')');
+      const low = hero.parts.filter(x => x.r < 4.5);
+      check(low.length === 0, 'next-session card text ≥ 4.5:1 (' + (low.map(x => x.t + ' ' + x.r.toFixed(1)).join(', ') || 'ok') + ')');
+    }
 
     // ── Klien di PC: grid kartu → profil lebar + daftar nama ringkas ─────────────
     await page.evaluate(() => window.navigate('clients'));
@@ -456,9 +513,9 @@ async function contrastReport(page) {
         btns: Array.from(document.querySelectorAll('#detail-body .client-hero-actions .btn')).every(b => b.getBoundingClientRect().width < 200),
         tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size,
         tabBg: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).backgroundColor === getComputedStyle(document.getElementById('detail-panel')).backgroundColor,
-        head: Math.round(r('.detail-head').height) === Math.round(r('#topbar').height), pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom) };
+        head: Math.round(r('.detail-head').height) === Math.round((r('#topbar').height || r('#view-clients .page-head').height)), pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom) };
     });
-    check(wideProf.cols && wideProf.hero && wideProf.btns && wideProf.tabs === 1 && wideProf.tabBg && wideProf.head && wideProf.pad <= 48, 'open client: two-column Ringkasan, wide hero, one row of tabs, header lined up with the top bar ' + JSON.stringify(wideProf));
+    check(wideProf.cols && wideProf.hero && wideProf.btns && wideProf.tabs === 1 && wideProf.head && wideProf.pad <= 48, 'open client: two-column Ringkasan, wide hero, one row of tabs, header lined up with the top bar ' + JSON.stringify(wideProf));
     await shot(page, 'admin-desktop-' + scheme + '-clients');
 
     // ↑/↓ in the list opens the neighbouring client; arrows inside the panel keep scrolling it.
@@ -1164,6 +1221,22 @@ async function contrastReport(page) {
     check(!(await visible(page, '#settings-pane')), 'phone: only the list is shown until a section is chosen');
     check(await visible(page, '#tabbar'), 'phone: the bottom bar stays visible');
     check((await overflow()) <= 0, 'phone: settings list has no sideways scroll');
+    // S3: the app must sit at x = 0 (not scrolled sideways), the black band under the top bar, nothing wider than the screen.
+    const settingsGeom = () => page.evaluate(() => {
+      const L = sel => { const e = document.querySelector(sel); return e ? e.getBoundingClientRect() : null; };
+      const top = L('#topbar'), head = L('#view-settings .page-head'), app = document.getElementById('app');
+      return { appScroll: app.scrollLeft, topLeft: top && Math.round(top.left), bandOk: !!head && !!top && Math.abs(head.top - top.bottom) <= 1 && Math.round(head.left) === 0 && Math.round(head.width) === window.innerWidth,
+        wide: Array.from(document.querySelectorAll('#view-settings *')).filter(e => { const r = e.getBoundingClientRect(); return r.width && !e.closest('#pkg-chips') && (r.right > window.innerWidth + 1 || r.left < -1); }).length };
+    });
+    const geomOk = g => g.appScroll === 0 && g.topLeft === 0 && g.bandOk && g.wide === 0;
+    for (const w of [360, 390, 430]) {
+      await page.setViewportSize({ width: w, height: 844 });
+      await page.waitForTimeout(400);
+      const g = await settingsGeom();
+      check(geomOk(g), 'phone ' + w + ': settings list sits at x=0 under the black band, nothing wider than the screen ' + JSON.stringify(g));
+    }
+    await page.setViewportSize(MOBILE);
+    await page.waitForTimeout(300);
     check((await smallTargets()).length === 0, 'phone: list rows are at least 44 px tall (' + (await smallTargets()).join(', ') + ')');
     await shot(page, 'settings-mobile-list-' + scheme);
 
@@ -1172,6 +1245,8 @@ async function contrastReport(page) {
       await page.waitForTimeout(500);
       check(await visible(page, '#settings-pane') && !(await visible(page, '#settings-nav')), 'phone: "' + id + '" opens full-width with the list hidden');
       check((await overflow()) <= 0, 'phone: "' + id + '" has no sideways scroll');
+      const gs = await settingsGeom();
+      check(geomOk(gs), 'phone: "' + id + '" sits at x=0 under the black band ' + JSON.stringify(gs));
       const bad = await smallTargets();
       check(bad.length === 0, 'phone: "' + id + '" touch targets ≥ 44 px' + (bad.length ? ' — ' + bad.join(', ') : ''));
       const fs = await page.evaluate(() => Array.from(document.querySelectorAll('#settings-body input.input, #settings-body textarea')).filter(e => e.getBoundingClientRect().width).map(e => parseFloat(getComputedStyle(e).fontSize)));
@@ -1966,6 +2041,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
     check((await page.textContent('#view-public-dashboard .my-coach-card')).includes('Coach kamu'), 'portal home: a "Coach kamu" card shows the coach');
+    await page.evaluate(() => { const d = document.querySelector('#view-public-dashboard .my-coach-card').closest('details'); if (d) d.open = true; });   // Phase R: kartu coach di lipatan
     await page.locator('#view-public-dashboard .my-coach-card').click();
     await page.waitForTimeout(700);
     check((await page.textContent('#coach-sheet-body')).includes('Rizky') && await visible(page, '#coach-sheet-body .coach-hero'), 'tapping "Coach kamu" opens the full coach profile in a sheet');
@@ -2144,7 +2220,49 @@ async function contrastReport(page) {
     check((await warm.page.textContent('#pub-program-wrap')).includes('Rutinitas') && !(await warm.page.locator('#pub-program-wrap .skel').count()), 'fast: other tabs also open filled while the server is slow');
     check(!(await visible(warm.page, '#sheet-badge')), 'fast: a badge celebration never comes from the copy, only from fresh data');
     await warm.page.waitForTimeout(4500);
-    check(calls2.length === 2 && calls2.includes('getPortalMore'), 'fast: the fresh data still arrives in the same two calls');
+    check(calls2.length === 1 && calls2[0] === 'getPortalBootstrap', 'fast: with an up-to-date copy only the bootstrap is called (' + calls2.join(',') + ')');
+    // 2b) Ada perubahan di server (versi berbeda): getPortalMore dipanggil lagi.
+    env.call('saveMyMeasurement', tokA, { berat: 71 });
+    const calls2b = [];
+    const changed = await openPage(browser, env, '/Index?view=public', calls2b, Object.assign({}, store, await warm.page.evaluate(() => Object.assign({}, localStorage))), { wait: 1200, keepCelebration: true });
+    check(calls2b.includes('getPortalMore'), 'cache: after a change on the server the portal fetches the data again (' + calls2b.join(',') + ')');
+    // 2c) Tanpa sinyal: catat makan tampil "belum terkirim", lalu terkirim sekali saat sinyal kembali.
+    await changed.context.close();
+    // Data gizi lengkap supaya kartu "Dimakan hari ini" tampil.
+    env.call('saveMyNutritionProfile', tokA, { tinggi: '160', jk: 'P', goal: 'turun', pantangan: [], anggaran: 'standar', birthDate: '1995-01-01' });
+    const net = { down: false };
+    const calls2c = [];
+    const off = await openPage(browser, env, '/Index?view=public', calls2c, await warm.page.evaluate(() => Object.assign({}, localStorage)), { wait: 1200, keepCelebration: true, net: net });
+    net.down = true;
+    await off.page.evaluate(() => { window.navigate('public-program'); window.setLatSeg('makan'); });
+    await off.page.waitForTimeout(300);
+    const queued = await off.page.evaluate(() => { const n = window.myNutrition; return n && n.log ? null : 'no food log in the portal data'; });
+    if (!queued) {
+      await off.page.evaluate(() => { window.closeModal(); window.openNutAdd('siang'); });
+      await off.page.waitForTimeout(600);   // daftar makanan selesai dimuat (atau gagal) dulu
+      await off.page.evaluate(() => window.nutAddOwn(true));
+      await off.page.waitForTimeout(300);
+      if (!(await visible(off.page, '#nut-own-n'))) console.log('    debug:', await off.page.evaluate(() => ({ body: (document.getElementById('nut-add-body') || { innerHTML: 'none' }).innerHTML.slice(0, 200), open: Array.from(document.querySelectorAll('.sheet.open, .modal.open, [aria-hidden=false]')).map(x => x.id).join(',') })));
+      await off.page.fill('#nut-own-n', 'Bakso uji', { timeout: 5000 });
+      await off.page.fill('#nut-own-kal', '300');
+      await off.page.evaluate(() => window.nutOwnSave());
+      await off.page.waitForTimeout(500);
+      check((await off.page.textContent('#nut-log-card')).includes('Bakso uji') && (await off.page.textContent('#nut-log-card')).includes('belum terkirim'), 'offline: a food log shows at once, marked as not sent yet');
+      net.down = false;
+      await off.page.evaluate(() => window.fqFlush());
+      await off.page.waitForTimeout(1200);
+      check(env.sheet('FoodLog').rows.filter(r => r[5] === 'Bakso uji').length === 1, 'offline: when the signal is back the entry is sent once');
+      check(!(await off.page.textContent('#nut-log-card')).includes('belum terkirim'), 'offline: the "not sent" mark goes away');
+      // Catatan dari layar offline pembungkus (Tahap 2) masuk antrean aplikasi dan terkirim sekali.
+      const tgl = await off.page.evaluate(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date()));
+      const item = { id: 'fq-wrap1', kind: 'food', sig: '', date: tgl, entry: { waktu: 'malam', custom: { nama: 'Sate uji', kal: 250 }, jumlah: 1, cid: 'fq-wrap1', tanggal: tgl }, view: { nama: 'Sate uji', porsi: '1 porsi', kal: 250, p: 0, l: 0, k: 0, waktu: 'malam' } };
+      await off.page.evaluate(it => { window.offlineImport([it, it]); }, item);
+      await off.page.waitForTimeout(1200);
+      check(env.sheet('FoodLog').rows.filter(r => r[5] === 'Sate uji').length === 1, 'offline screen: a note made in the wrapper is sent once by the app');
+      await off.page.evaluate(it => window.offlineImport([Object.assign({}, it, { id: 'fq-wrap2', sig: 'other-account' })]), item);
+      check(!(await off.page.evaluate(() => (localStorage.getItem('xnk_food_queue') || '').includes('fq-wrap2'))), 'offline screen: notes from another account are not imported');
+    } else check(false, 'offline: food log check could not run (' + queued + ')');
+    await off.context.close();
     // 3) Keluar menghapus salinan.
     await warm.page.evaluate(() => window.logoutPublic());
     await warm.page.waitForTimeout(500);
@@ -2190,7 +2308,7 @@ async function contrastReport(page) {
       await page.setViewportSize({ width: w, height: 900 });
       await page.evaluate(() => window.setLatSeg('makan'));
       await page.waitForTimeout(500);
-      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
+      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.querySelector(':scope > .stack') || p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
       check(mk.cols === '2' && mk.over <= 1 && mk.lefts === 2 && mk.ring && mk.bars === 3, scheme + ' ' + w + ': Makan flows in two columns without overflow ' + JSON.stringify(mk));
       if (w === 1440) await shot(page, 'portal-desktop-' + scheme + '-makan');
     }
@@ -2437,7 +2555,12 @@ async function contrastReport(page) {
     const context = await browser.newContext({ viewport: MOBILE, hasTouch: true, isMobile: true });
     await context.route('**/*', route => {
       const url = route.request().url();
-      if (url.startsWith('https://xnk.my.id/')) return route.fulfill({ contentType: 'text/html', body: wrapper });
+      if (url.startsWith('https://xnk.my.id/')) {
+        // Berkas statis pembungkus (layar offline) dari root repo; sisanya halaman itu sendiri.
+        const f = path.join(__dirname, '..', '..', '..', new URL(url).pathname);
+        if (/\.(js|css)$/.test(url) && fs.existsSync(f)) return route.fulfill({ contentType: url.endsWith('.css') ? 'text/css' : 'application/javascript', body: fs.readFileSync(f) });
+        return route.fulfill({ contentType: 'text/html', body: wrapper });
+      }
       // Apps Script page → our HTML in a googleusercontent frame (as in production)
       if (url.startsWith('https://script.google.com/')) return route.fulfill({ contentType: 'text/html', body: '<iframe src="' + APP + '/userCodeAppPanel" style="border:0;width:100%;height:100%"></iframe>' });
       if (url.startsWith(APP)) return route.fulfill({ contentType: 'text/html', body: '<script>window.got=[];addEventListener("message",e=>{if(e.source===window.top)got.push({origin:e.origin,data:e.data})});top.postMessage({xnk:"host?"},"*");top.postMessage({xnk:"theme",color:"#0a0a0a"},"*");top.postMessage({xnk:"theme",color:"red;x"},"*");</script>' });

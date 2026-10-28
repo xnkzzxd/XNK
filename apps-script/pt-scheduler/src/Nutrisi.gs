@@ -310,7 +310,7 @@ function saveClientNutrition(token, memberId, data) {
     put('tinggi', v.tinggi); put('jk', v.jk); put('goal', v.goal);
     put('pantangan', v.tags); put('anggaran', v.anggaran); put('aktif', v.aktif);
     _nutPutUmur_(m, v.umur);
-    return { status: 'success' };
+    return _bumpAfter_(m.row[0], { status: 'success' });
   });
 }
 
@@ -414,7 +414,7 @@ function decideNutritionAdvice(token, memberId, adviceId, decision) {
     sheet.getRange(rowNum, 6).setValue(decision);
     sheet.getRange(rowNum, 7).setValue(_todayWib_());
     CacheService.getScriptCache().remove('nut:scan');
-    return { status: 'success' };
+    return _bumpAfter_(memberId, { status: 'success' });
   });
 }
 
@@ -712,7 +712,7 @@ function saveMyNutritionProfile(memberToken, data) {
     }
     _nutPutUmur_(m, v.umur);
     const fresh = _memberRowOrThrow_(found.row[0]);
-    return _nutritionFor_(fresh.row);
+    return _bumpAfter_(found.row[0], _nutritionFor_(fresh.row));
   });
 }
 
@@ -744,7 +744,9 @@ function swapMyMenuItem(memberToken, item, mealKey, offset) {
 // ------------------------------------------------------------
 // Catatan makan klien (T-1020): satu baris per makanan, angka disalin (snapshot) saat dicatat.
 // ------------------------------------------------------------
-const FOODLOG_HEADERS = ['ID', 'Member ID', 'Tanggal', 'Waktu', 'Food ID', 'Nama', 'Gram', 'Porsi', 'Kal', 'Protein', 'Lemak', 'Karbo', 'Sumber', 'Dibuat Pada'];
+// Kolom O "CID" (2026-10): id catatan dari browser (antrean offline). Kirim ulang dengan CID yang sama tidak menambah baris.
+const FOODLOG_HEADERS = ['ID', 'Member ID', 'Tanggal', 'Waktu', 'Food ID', 'Nama', 'Gram', 'Porsi', 'Kal', 'Protein', 'Lemak', 'Karbo', 'Sumber', 'Dibuat Pada', 'CID'];
+const FOODLOG_CID_COL = 15;
 const NUT_MEALS = ['sarapan', 'siang', 'malam', 'camilan'];
 const FOODLOG_LIMITS = { perDay: 60, backDays: 7, gramMax: 2000, throttleSeconds: 2, nameMax: 60, kalMax: 3000, macroMax: 500, favorites: 8, recent: 8 };
 
@@ -753,6 +755,13 @@ function _foodLogSheet_() {
   sheet.getRange('C:C').setNumberFormat('@');
   sheet.getRange('E:E').setNumberFormat('@');
   return sheet;
+}
+/** Sheet lama belum punya kolom O "CID": beri header-nya (idempoten). */
+function _ensureFoodLogCid_(sheet) {
+  const head = sheet.getRange(1, FOODLOG_CID_COL);
+  const v = head.getValue();
+  if (v === '') { head.setValue('CID'); head.setFontWeight('bold'); }
+  else if (v !== 'CID') throw new Error('Kolom O di FoodLog sudah dipakai untuk hal lain. Kosongkan/ganti dulu.');
 }
 
 function _nutR1_(v) { return Math.round(v * 10) / 10; }
@@ -795,7 +804,7 @@ function _foodLogRows_(memberId) {
   if (!sheet || sheet.getLastRow() < 2) return [];
   return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(function(r) {
     return { id: String(r[0]), tanggal: String(r[2]), waktu: String(r[3]), foodId: String(r[4] || ''), nama: String(r[5]), gram: Number(r[6]) || 0, porsi: String(r[7]),
-      kal: Number(r[8]) || 0, p: Number(r[9]) || 0, l: Number(r[10]) || 0, k: Number(r[11]) || 0, sumber: String(r[12]) };
+      kal: Number(r[8]) || 0, p: Number(r[9]) || 0, l: Number(r[10]) || 0, k: Number(r[11]) || 0, sumber: String(r[12]), cid: String(r[14] || '') };
   });
 }
 
@@ -827,14 +836,14 @@ function _foodLogDay_(memberId, day) {
 
 function _foodLogAppend_(sheet, memberId, day, entry) {
   const id = 'FL-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
-  sheet.appendRow([id, String(memberId).trim(), day, entry.waktu, entry.foodId, entry.nama, entry.gram, entry.porsi, entry.kal, entry.p, entry.l, entry.k, entry.sumber, new Date().toISOString()]);
+  sheet.appendRow([id, String(memberId).trim(), day, entry.waktu, entry.foodId, entry.nama, entry.gram, entry.porsi, entry.kal, entry.p, entry.l, entry.k, entry.sumber, new Date().toISOString(), entry.cid || '']);
   return id;
 }
 
-function _foodLogDayArg_(tanggal) {
+function _foodLogDayArg_(tanggal, backDays) {
   const today = _todayWib_();
   const day = tanggal == null || tanggal === '' ? today : String(tanggal);
-  if (!_validDate_(day) || day > today || _nutDaysBetween_(day, today) > FOODLOG_LIMITS.backDays) throw new Error('Tanggal catatan tidak valid.');
+  if (!_validDate_(day) || day > today || _nutDaysBetween_(day, today) > (backDays || FOODLOG_LIMITS.backDays)) throw new Error('Tanggal catatan tidak valid.');
   return day;
 }
 
@@ -843,15 +852,22 @@ function logMyFood(memberToken, entry) {
   const found = requireMember_(memberToken);
   if (!_nutEnabled_()) throw new Error('Fitur gizi sedang dimatikan.');
   const memberId = String(found.row[0]).trim();
-  const day = _foodLogDayArg_(entry && entry.tanggal);
+  const cid = String(entry && entry.cid != null ? entry.cid : '').trim();
+  if (cid && !/^[A-Za-z0-9_-]{1,40}$/.test(cid)) throw new Error('Kode catatan tidak valid.');
+  // Dari antrean offline (membawa cid): boleh sampai 30 hari ke belakang.
+  const day = _foodLogDayArg_(entry && entry.tanggal, cid ? OFFLINE_BACK_DAYS : null);
   const e = _foodLogEntry_(entry);
+  e.cid = cid;
   // Tanpa jeda per catatan: klien sering mencatat beberapa makanan berturut-turut. Pengaman = batas harian.
-  return _locked_(function() {
+  return _bumpAfter_(memberId, _locked_(function() {
     const sheet = _foodLogSheet_();
-    if (_foodLogRows_(memberId).filter(function(r) { return r.tanggal === day; }).length >= FOODLOG_LIMITS.perDay) throw new Error('Catatan hari ini sudah penuh.');
+    if (cid) _ensureFoodLogCid_(sheet);
+    const rows = _foodLogRows_(memberId);
+    if (cid && rows.some(function(r) { return r.cid === cid; })) return _foodLogDay_(memberId, day);   // kiriman ulang
+    if (rows.filter(function(r) { return r.tanggal === day; }).length >= FOODLOG_LIMITS.perDay) throw new Error('Catatan hari ini sudah penuh.');
     _foodLogAppend_(sheet, memberId, day, e);
     return _foodLogDay_(memberId, day);
-  });
+  }));
 }
 
 /** Hapus satu catatan milik sendiri. Catatan klien lain dijawab "tidak ditemukan". */
@@ -864,7 +880,7 @@ function deleteMyFood(memberToken, logId) {
       if (String(data[i][0]) === String(logId) && String(data[i][1]).trim() === memberId) {
         const day = String(data[i][2]);
         sheet.deleteRow(i + 1);
-        return _foodLogDay_(memberId, day);
+        return _bumpAfter_(memberId, _foodLogDay_(memberId, day));
       }
     }
     throw new Error('Catatan tidak ditemukan.');
@@ -885,7 +901,7 @@ function copyMyFoodYesterday(memberToken, waktu) {
   if (waktu && NUT_MEALS.indexOf(String(waktu)) === -1) throw new Error('Waktu makan tidak dikenal.');
   const today = _todayWib_(), yesterday = _addDaysIso_(today, -1);
   if (!_throttle_('foodcopy_' + memberId, FOODLOG_LIMITS.throttleSeconds)) throw new Error('Terlalu cepat. Coba lagi sebentar.');
-  return _locked_(function() {
+  return _bumpAfter_(memberId, _locked_(function() {
     const rows = _foodLogRows_(memberId);
     const have = rows.filter(function(r) { return r.tanggal === today; });
     const keyOf = function(r) { return [r.waktu, r.foodId, r.nama, r.gram, r.porsi].join('|'); };
@@ -903,7 +919,7 @@ function copyMyFoodYesterday(memberToken, waktu) {
     const sheet = _foodLogSheet_();
     src.forEach(function(r) { _foodLogAppend_(sheet, memberId, today, { waktu: r.waktu, foodId: r.foodId, nama: r.nama, gram: r.gram, porsi: r.porsi, kal: r.kal, p: r.p, l: r.l, k: r.k, sumber: r.sumber }); });
     return _foodLogDay_(memberId, today);
-  });
+  }));
 }
 
 /** Admin: catatan makan satu klien, 7 hari terakhir (per hari: total dan item). Privat. */

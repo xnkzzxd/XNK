@@ -253,6 +253,12 @@ function createEnv(opts = {}) {
           return e.value;
         },
         put: (k, v, ttl) => { env.cache[k] = { value: String(v), expires: clock() + (ttl || 600) * 1000 }; },
+        getAll(keys) {
+          const out = {};
+          keys.forEach(k => { const v = this.get(k); if (v != null) out[k] = v; });
+          return out;
+        },
+        putAll(map, ttl) { Object.keys(map).forEach(k => this.put(k, map[k], ttl)); },
         remove: k => { delete env.cache[k]; },
       }),
     },
