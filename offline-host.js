@@ -10,7 +10,8 @@
   var off = window.XNKOffline, app = document.getElementById('app'), ready = false;
   if (!off || !app) return;
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-    window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+    // Langsung, bukan saat window "load": load menunggu iframe Apps Script yang bisa lama atau tidak pernah selesai.
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
   }
   function reconnect() {
     if (navigator.onLine === false) return;
