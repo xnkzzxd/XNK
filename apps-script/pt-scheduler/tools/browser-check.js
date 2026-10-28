@@ -370,8 +370,9 @@ async function contrastReport(page) {
     await page.waitForTimeout(250);
     check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('spinning')), 'pull down: spins while loading');
     await shot(page, 'admin-mobile-refreshing');
-    await page.waitForTimeout(1300);
-    check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('ok')), 'pull down: ends with a check mark');
+    // The check mark lives only ~1 s (spin ≥ 700 ms, then 520 ms + 460 ms reset), so poll for it instead of sleeping.
+    const sawOk = await page.waitForFunction(() => document.querySelector('.ptr').classList.contains('ok'), null, { polling: 50, timeout: 3000 }).then(() => true, () => false);
+    check(sawOk, 'pull down: ends with a check mark');
     await page.waitForTimeout(900);
     check(await page.evaluate(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr'), 'pull down: the page settles back and the indicator resets');
     check(calls.filter(c => c === 'getAdminBootstrap').length === before + 1, 'pull down: data is reloaded in place');
@@ -456,9 +457,9 @@ async function contrastReport(page) {
         btns: Array.from(document.querySelectorAll('#detail-body .client-hero-actions .btn')).every(b => b.getBoundingClientRect().width < 200),
         tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size,
         tabBg: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).backgroundColor === getComputedStyle(document.getElementById('detail-panel')).backgroundColor,
-        head: Math.round(r('.detail-head').height) === Math.round(r('#topbar').height), pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom) };
+        head: Math.round(r('.detail-head').height) === Math.round((r('#topbar').height || r('#view-clients .page-head').height)), pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom) };
     });
-    check(wideProf.cols && wideProf.hero && wideProf.btns && wideProf.tabs === 1 && wideProf.tabBg && wideProf.head && wideProf.pad <= 48, 'open client: two-column Ringkasan, wide hero, one row of tabs, header lined up with the top bar ' + JSON.stringify(wideProf));
+    check(wideProf.cols && wideProf.hero && wideProf.btns && wideProf.tabs === 1 && wideProf.head && wideProf.pad <= 48, 'open client: two-column Ringkasan, wide hero, one row of tabs, header lined up with the top bar ' + JSON.stringify(wideProf));
     await shot(page, 'admin-desktop-' + scheme + '-clients');
 
     // ↑/↓ in the list opens the neighbouring client; arrows inside the panel keep scrolling it.
@@ -1163,6 +1164,22 @@ async function contrastReport(page) {
     check(!(await visible(page, '#settings-pane')), 'phone: only the list is shown until a section is chosen');
     check(await visible(page, '#tabbar'), 'phone: the bottom bar stays visible');
     check((await overflow()) <= 0, 'phone: settings list has no sideways scroll');
+    // S3: the app must sit at x = 0 (not scrolled sideways), the black band under the top bar, nothing wider than the screen.
+    const settingsGeom = () => page.evaluate(() => {
+      const L = sel => { const e = document.querySelector(sel); return e ? e.getBoundingClientRect() : null; };
+      const top = L('#topbar'), head = L('#view-settings .page-head'), app = document.getElementById('app');
+      return { appScroll: app.scrollLeft, topLeft: top && Math.round(top.left), bandOk: !!head && !!top && Math.abs(head.top - top.bottom) <= 1 && Math.round(head.left) === 0 && Math.round(head.width) === window.innerWidth,
+        wide: Array.from(document.querySelectorAll('#view-settings *')).filter(e => { const r = e.getBoundingClientRect(); return r.width && !e.closest('#pkg-chips') && (r.right > window.innerWidth + 1 || r.left < -1); }).length };
+    });
+    const geomOk = g => g.appScroll === 0 && g.topLeft === 0 && g.bandOk && g.wide === 0;
+    for (const w of [360, 390, 430]) {
+      await page.setViewportSize({ width: w, height: 844 });
+      await page.waitForTimeout(400);
+      const g = await settingsGeom();
+      check(geomOk(g), 'phone ' + w + ': settings list sits at x=0 under the black band, nothing wider than the screen ' + JSON.stringify(g));
+    }
+    await page.setViewportSize(MOBILE);
+    await page.waitForTimeout(300);
     check((await smallTargets()).length === 0, 'phone: list rows are at least 44 px tall (' + (await smallTargets()).join(', ') + ')');
     await shot(page, 'settings-mobile-list-' + scheme);
 
@@ -1171,6 +1188,8 @@ async function contrastReport(page) {
       await page.waitForTimeout(500);
       check(await visible(page, '#settings-pane') && !(await visible(page, '#settings-nav')), 'phone: "' + id + '" opens full-width with the list hidden');
       check((await overflow()) <= 0, 'phone: "' + id + '" has no sideways scroll');
+      const gs = await settingsGeom();
+      check(geomOk(gs), 'phone: "' + id + '" sits at x=0 under the black band ' + JSON.stringify(gs));
       const bad = await smallTargets();
       check(bad.length === 0, 'phone: "' + id + '" touch targets ≥ 44 px' + (bad.length ? ' — ' + bad.join(', ') : ''));
       const fs = await page.evaluate(() => Array.from(document.querySelectorAll('#settings-body input.input, #settings-body textarea')).filter(e => e.getBoundingClientRect().width).map(e => parseFloat(getComputedStyle(e).fontSize)));
