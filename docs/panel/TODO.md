@@ -14,7 +14,7 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 - [ ] **S1** Sejajarkan `.detail-head` dengan `#topbar` (band hitam, tinggi sama) di panel klien dan coach, desktop dan HP. Cek `header lined up with the top bar` jadi hijau. Dep: —. (P1)
 - [x] **S2** Tangani `pull down: ends with a check mark`: reproduksi, tentukan bug app atau waktu tunggu tes, perbaiki yang benar, jelaskan di commit. Dep: —. (P15)
 - [ ] **S3** Verifikasi Pengaturan HP (daftar dan sub-halaman) di 360/390/430 px: bukan tangkapan di tengah transisi; bila overflow/geser, perbaiki; tambah cek `elOverflow` dan posisi band. Dep: —. (P6)
-- [ ] **S4** Padding bawah semua view HP = `var(--tabbar-space)` + bayangan/gradasi tipis di atas bar tab; tidak ada baris atau tombol terpotong separuh di scroll akhir. Cek di Dashboard, Jadwal, Klien, Coach, Keuangan. Dep: —. (P5)
+- [x] **S4** Padding bawah semua view HP = `var(--tabbar-space)` + bayangan/gradasi tipis di atas bar tab; tidak ada baris atau tombol terpotong separuh di scroll akhir. Cek di Dashboard, Jadwal, Klien, Coach, Keuangan. Dep: —. (P5)
 
 ## B — Kontras dan hirarki
 - [ ] **S5** Mode gelap: kartu "Sesi berikutnya" dan kartu hero lain memakai permukaan lebih terang dari latar; label, badge, tombol "Ingatkan/Detail" ≥ 4.5:1. Tes browser mengukur kontras (terang dan gelap). Dep: —. (P2)
