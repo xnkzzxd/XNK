@@ -533,9 +533,9 @@ async function contrastReport(page) {
     await page.fill('#search-client', '');
     await page.evaluate(() => window.filterClients());
     await page.evaluate(() => window.setClientFilter('low'));
-    const kLow = await page.locator('#view-clients .stat-tile.active[data-filter="low"]').count();
+    const kLow = await page.locator('#view-clients .chip.active[data-filter="low"]').count();
     await page.evaluate(() => window.setClientFilter('all'));
-    check(kLow === 1 && (await page.locator('#view-clients .stat-tile.active').count()) === 0 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the summary tiles and chips follow the chosen filter');
+    check(kLow === 1 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the chips follow the chosen filter');
 
     // Closing returns to the grid; a profile opened from another page keeps the normal 420 px panel.
     await page.click('.detail-head .icon-btn[aria-label="Tutup detail"]');
@@ -854,7 +854,7 @@ async function contrastReport(page) {
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.waitForTimeout(400);
-    check((await page.locator('#view-clients .client-tiles .stat-tile').count()) === 4 && await visible(page, '#client-hero .insight-hero'), 'Klien list: black summary card and four tiles that also filter');
+    check((await page.locator('#view-clients .stat-tile').count()) === 0 && await visible(page, '#client-hero .insight-hero'), 'Klien list: black summary card, no duplicate tiles (the chips filter)');
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
     await page.evaluate(() => { const f = document.querySelector('#detail-body details.fold'); if (f) f.open = true; });
@@ -1742,7 +1742,7 @@ async function contrastReport(page) {
       const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.card-flat .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
       check(mk.ring && mk.bars === 3 && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && mk.over <= 1, 'makan: ring, three macro bars, today\'s menu and the rules show, no sideways scroll ' + JSON.stringify({ bars: mk.bars, meals: mk.meals, over: mk.over }));
       check(mk.small === 0, 'makan: tap targets are at least 44 px ' + mk.small);
-      await page.click('#pub-makan-pane .list-item >> nth=0');
+      await page.click('#pub-makan-pane [onclick^="window.nutSwapOpen"] >> nth=0');
       await page.waitForTimeout(700);
       check(await visible(page, '#modal-nut-swap') && (await page.locator('#nut-swap-list .list-item').count()) >= 1, 'makan: tapping a menu item offers replacements');
       await page.click('#nut-swap-list .list-item >> nth=0');
@@ -2015,6 +2015,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
     check((await page.textContent('#view-public-dashboard .my-coach-card')).includes('Coach kamu'), 'portal home: a "Coach kamu" card shows the coach');
+    await page.evaluate(() => { const d = document.querySelector('#view-public-dashboard .my-coach-card').closest('details'); if (d) d.open = true; });
     await page.locator('#view-public-dashboard .my-coach-card').click();
     await page.waitForTimeout(700);
     check((await page.textContent('#coach-sheet-body')).includes('Rizky') && await visible(page, '#coach-sheet-body .coach-hero'), 'tapping "Coach kamu" opens the full coach profile in a sheet');
@@ -2240,7 +2241,7 @@ async function contrastReport(page) {
       await page.evaluate(() => window.setLatSeg('makan'));
       await page.waitForTimeout(500);
       const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
-      check(mk.cols === '2' && mk.over <= 1 && mk.lefts === 2 && mk.ring && mk.bars === 3, scheme + ' ' + w + ': Makan flows in two columns without overflow ' + JSON.stringify(mk));
+      check(mk.over <= 1 && mk.lefts === 2 && mk.ring && mk.bars === 3, scheme + ' ' + w + ': Makan flows in two columns without overflow ' + JSON.stringify(mk));
       if (w === 1440) await shot(page, 'portal-desktop-' + scheme + '-makan');
     }
     await page.setViewportSize(DESKTOP);
