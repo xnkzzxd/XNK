@@ -370,8 +370,9 @@ async function contrastReport(page) {
     await page.waitForTimeout(250);
     check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('spinning')), 'pull down: spins while loading');
     await shot(page, 'admin-mobile-refreshing');
-    await page.waitForTimeout(1300);
-    check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('ok')), 'pull down: ends with a check mark');
+    // The check mark lives only ~1 s (spin ≥ 700 ms, then 520 ms + 460 ms reset), so poll for it instead of sleeping.
+    const sawOk = await page.waitForFunction(() => document.querySelector('.ptr').classList.contains('ok'), null, { polling: 50, timeout: 3000 }).then(() => true, () => false);
+    check(sawOk, 'pull down: ends with a check mark');
     await page.waitForTimeout(900);
     check(await page.evaluate(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr'), 'pull down: the page settles back and the indicator resets');
     check(calls.filter(c => c === 'getAdminBootstrap').length === before + 1, 'pull down: data is reloaded in place');
