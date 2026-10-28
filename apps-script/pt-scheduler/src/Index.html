@@ -832,6 +832,14 @@
       </div>
     </div>
 
+    <!-- Kartu bagikan (gambar PNG dibuat di browser) -->
+    <div class="sheet tall hide" id="sheet-share" role="dialog" aria-modal="true" aria-labelledby="share-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="share-title">Bagikan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" id="share-body"></div>
+      <div class="sheet-foot" id="share-foot"></div>
+    </div>
+
     <!-- Progres: lihat satu foto -->
     <div class="sheet tall hide" id="sheet-photo-view" role="dialog" aria-modal="true" aria-labelledby="pg-view-title">
       <div class="sheet-handle"></div>
@@ -912,5 +920,6 @@
 
   <?!= include('Scripts.html') ?>
   <?!= include('App.html') ?>
+  <?!= include('Bagikan.html') ?>
 </body>
 </html>

@@ -435,6 +435,7 @@ function getAppSettings(token) {
     notifEmail: props.getProperty('NOTIF_EMAIL') || '',
     clientGuideEnabled: _guideEnabled_(),
     feedbackEnabled: _feedbackEnabled_(),
+    shareEnabled: _shareEnabled_(),
     nutritionEnabled: _nutEnabled_(),
     businessHours: _businessHours_()
   };
@@ -483,6 +484,7 @@ function updateAppSettingsImpl_(token, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'telegramChatIds')) setOrDelete('TELEGRAM_CHAT_IDS', String(payload.telegramChatIds || '').trim());
   if (Object.prototype.hasOwnProperty.call(payload, 'notifEmail')) setOrDelete('NOTIF_EMAIL', String(payload.notifEmail || '').trim());
   if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
+  if (Object.prototype.hasOwnProperty.call(payload, 'shareEnabled')) setOrDelete('SHARE_ENABLED', payload.shareEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'feedbackEnabled')) setOrDelete('FEEDBACK_ENABLED', payload.feedbackEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'nutritionEnabled')) setOrDelete('NUTRITION_ENABLED', payload.nutritionEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'businessHours')) {
@@ -2099,6 +2101,7 @@ function getPortalBootstrap(memberToken) {
     authLost: authLost.indexOf(AUTH_ERROR_PREFIX) !== -1 ? authLost : '',
     schedules: mine,
     feedbackEnabled: feedbackOn,
+    shareEnabled: _shareEnabled_(),
     pendingRating: found && feedbackOn ? _pendingRating_(memberId, all) : null,
     packageEval: { eligible: !!(found && feedbackOn && _packageEvalEligible_(found.row, all)) },
     info: { latestAt: found ? _contentLatestAt_() : '' },
@@ -2153,7 +2156,8 @@ function getPortalMore(memberToken) {
       workout: workout,
       nutrition: nutrition,
       content: part(function() { return _contentForClient_(); }),
-      coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; })
+      coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
+      share: part(function() { return _shareFor_(row, workout, progress); })
     };
   });
 }
@@ -2237,6 +2241,7 @@ function getAdminMore(token, month, year) {
       taskSummary: part(function () { return getTaskSummary(token); }),
       renewals: part(function () { return getRenewalRequests(token); }),
       finance: finance,
+      shareEnabled: _shareEnabled_(),
       revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
       packageTrend: part(function () { return _packageTrendStats_(m, y); }),
       hub: part(function () { return _coachHub_(new Date()); }),
@@ -6197,6 +6202,7 @@ function getClientBundle(token, memberId) {
       workout: workout,
       nutrition: part(function () { return getClientNutrition(token, memberId); }),
       foodLog: part(function () { return getClientFoodLog(token, memberId); }),
+      share: part(function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
       insight: insight
     };
   });
@@ -7316,7 +7322,7 @@ function _e1rm_(berat, rep) {
  *   weeks:[{ start, volume, sets, parts:{ bodyPart: volume } }] (8 minggu, lama → baru),
  *   sessions:[{ tanggal, exercises, sets, volume, durasi }] (10 terakhir, baru dulu), topParts:[{ part, volume }] (4 minggu terakhir) }
  */
-function _workoutStats_(days, today) {
+function _workoutStats_(days, today, prsByDate) {
   const byEx = {}, order = [];
   const weekOf = {};
   const thisWeek = _isoWeekStart_(today);
@@ -7324,7 +7330,7 @@ function _workoutStats_(days, today) {
   for (let i = 7; i >= 0; i--) { const w = { start: _addDaysIso_(thisWeek, -7 * i), volume: 0, sets: 0, parts: {} }; weeks.push(w); weekOf[w.start] = w; }
   const sessions = [];
   (days || []).slice().reverse().forEach(function(d) {
-    const ses = { tanggal: d.tanggal, exercises: d.items.length, sets: 0, volume: 0, durasi: 0 };
+    const ses = { tanggal: d.tanggal, exercises: d.items.length, sets: 0, volume: 0, durasi: 0, prs: (prsByDate && prsByDate[d.tanggal]) || 0, parts: {} };
     const wk = weekOf[_isoWeekStart_(d.tanggal)];
     d.items.forEach(function(it) {
       let top = 0, e1 = 0, vol = 0, topRep = 0;
@@ -7340,6 +7346,8 @@ function _workoutStats_(days, today) {
         if (e > e1) e1 = e;
       });
       ses.volume += vol;
+      const grp = SHARE_PART_GROUP[it.bodyPart];
+      if (grp && vol > 0) ses.parts[grp] = Math.round(((ses.parts[grp] || 0) + vol) * 10) / 10;
       if (wk) {
         wk.volume += vol; wk.sets += working;
         const part = it.bodyPart || 'lain';
@@ -7439,7 +7447,9 @@ function _workoutFor_(row) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
   const all = sheet && sheet.getLastRow() >= 2 ? sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }) : [];
   const g = _workoutGroup_(all.filter(function(r) { return String(r[2]) >= since; }));
-  g.stats = _workoutStats_(g.days, today);
+  const prsByDate = {};
+  _workoutEvents_(all).prs.forEach(function(p) { prsByDate[p.tanggal] = (prsByDate[p.tanggal] || 0) + 1; });
+  g.stats = _workoutStats_(g.days, today, prsByDate);
   // Estimasi 1RM terbaik sepanjang waktu per gerakan (untuk tanda 🏆 saat set dicatat).
   const best = {};
   all.forEach(function(r) { if (_isWarmup_(r[19])) return; const e = _e1rm_(r[11], r[12]), k = _workoutKey_(r[6], r[7]); if (e > (best[k] || 0)) best[k] = e; });
@@ -7447,6 +7457,7 @@ function _workoutFor_(row) {
   const sesAll = _workoutSessionsOf_(id);
   g.sessions = sesAll.slice(0, 20).map(function(x) { return { tanggal: x.tanggal, hari: x.hari, durasi: x.durasi, rasa: x.rasa, catatan: x.catatan, oleh: x.oleh }; });
   g.routineHist = _workoutRoutineHist_(g.days, sesAll);
+  g.stats.sessions.forEach(function(x) { const m = sesAll.find(function(y) { return y.tanggal === x.tanggal; }); if (m && Number(m.durasi) > 0) x.durasi = Number(m.durasi); if (m && m.hari) x.hari = m.hari; });
   const program = _programDays_(id).days;
   g.next = _workoutNextDay_(program, g.days, program.length ? _programLogsFor_(id) : [], today);
   const suggest = {};
