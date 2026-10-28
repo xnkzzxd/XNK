@@ -219,7 +219,7 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
-  padding: 4px max(var(--page-pad), var(--sa-r)) calc(var(--tabbar-space) + 26px) max(var(--page-pad), var(--sa-l));
+  padding: 4px max(var(--page-pad), var(--sa-r)) calc(var(--tabbar-space) + 16px) max(var(--page-pad), var(--sa-l));
 }
 .page { max-width: 1240px; margin: 0 auto; width: 100%; }
 
@@ -290,6 +290,15 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .topbar-title { font-size: var(--fs-xl); font-weight: 800; letter-spacing: -0.02em; }
 .topbar-brand { display: flex; align-items: center; gap: 10px; }
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* Gradasi tipis di atas bar tab (HP): konten memudar, tidak terpotong tajam */
+.main-col::after {
+  content: ''; position: fixed; left: 0; right: 0; bottom: 0; height: calc(var(--tabbar-space) + 22px);
+  background: linear-gradient(to bottom, transparent, var(--bg) 70%);
+  pointer-events: none; z-index: 39;
+}
+@media (min-width: 768px) { .main-col::after { display: none; } }
+html.kb-open .main-col::after { display: none; }
 
 /* Bar bawah melayang (mobile) */
 .tabbar {
