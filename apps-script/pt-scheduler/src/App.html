@@ -3763,10 +3763,13 @@
   function clientHeroHtml(counts) {
     const g = window.clientSignals, ok = g && !g.error;
     const n = counts.perhatian;
-    return insightHeroHtml({ eyebrow: 'Ringkasan klien',
+    const btn = ok && n ? '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.setClientFilter(\'perhatian\')">' + icon('eye') + 'Lihat siapa</button>' : '';
+    const full = insightHeroHtml({ eyebrow: 'Ringkasan klien',
       stats: [{ v: String(counts.all), l: 'Klien' }, { v: ok ? String(g.totals.sesiMinggu) : '–', l: 'Sesi minggu ini' }, { v: ok ? g.totals.konsisten + '%' : '–', l: 'Aktif 14 hari' }, { v: ok ? String(n) : '–', l: 'Perlu perhatian' }],
       text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatianmu.' : 'Semua klien aman hari ini.',
-      actions: ok && n ? '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.setClientFilter(\'perhatian\')">' + icon('eye') + 'Lihat siapa</button>' : '' });
+      actions: btn });
+    const line = '<div class="card-ink client-line"><span class="client-line-t"><b class="num">' + (ok ? n : '–') + '</b> perlu perhatian <span class="client-line-s">dari ' + counts.all + ' klien</span></span>' + btn + '</div>';
+    return '<div class="only-desktop">' + full + '</div><div class="only-mobile">' + line + '</div>';
   }
   function renderClients() {
     const el = $('view-clients');
@@ -3776,15 +3779,12 @@
     loadClientPrefs();
     const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
     window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
-    const tiles = [['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian']];
-    const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian'], ['archive', 'Riwayat paket']];
+        const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian'], ['archive', 'Riwayat paket']];
     const sorts = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
     const html = '<div class="page-head"><div><h2 class="page-title">Klien</h2><p class="page-sub">' + counts.all + ' klien · ' + (counts.active + counts.low) + ' punya sisa sesi</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button></div>' +
       '<div class="client-top" id="client-top"><div id="client-hero">' + clientHeroHtml(counts) + '</div>' +
-      '<div class="stat-strip client-tiles">' + tiles.map(function (k) {
-        return '<button type="button" class="stat-tile' + (ui.clientFilter === k[0] ? ' active' : '') + '" data-filter="' + k[0] + '" aria-pressed="' + (ui.clientFilter === k[0]) + '" onclick="window.setClientFilter(\'' + k[0] + '\')"><b class="num">' + counts[k[0]] + '</b><span>' + k[1] + '</span></button>';
-      }).join('') + '</div></div>' +
+      '</div>' +
       '<div class="stack" style="gap:12px;margin-bottom:8px">' +
         '<div class="cl-tools"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari nama atau nomor…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
         '<select class="select" id="sort-client" aria-label="Urutkan klien" onchange="window.setClientSort(this.value)">' + sorts.map(o => '<option value="' + o[0] + '"' + (ui.clientSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>' +
