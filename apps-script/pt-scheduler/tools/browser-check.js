@@ -2234,11 +2234,12 @@ async function contrastReport(page) {
     await off.page.waitForTimeout(300);
     const queued = await off.page.evaluate(() => { const n = window.myNutrition; return n && n.log ? null : 'no food log in the portal data'; });
     if (!queued) {
-      await off.page.evaluate(() => window.openNutAdd('siang'));
+      await off.page.evaluate(() => { window.closeModal(); window.openNutAdd('siang'); });
       await off.page.waitForTimeout(600);   // daftar makanan selesai dimuat (atau gagal) dulu
       await off.page.evaluate(() => window.nutAddOwn(true));
       await off.page.waitForTimeout(300);
-      await off.page.fill('#nut-own-n', 'Bakso uji');
+      if (!(await visible(off.page, '#nut-own-n'))) console.log('    debug:', await off.page.evaluate(() => ({ body: (document.getElementById('nut-add-body') || { innerHTML: 'none' }).innerHTML.slice(0, 200), open: Array.from(document.querySelectorAll('.sheet.open, .modal.open, [aria-hidden=false]')).map(x => x.id).join(',') })));
+      await off.page.fill('#nut-own-n', 'Bakso uji', { timeout: 5000 });
       await off.page.fill('#nut-own-kal', '300');
       await off.page.evaluate(() => window.nutOwnSave());
       await off.page.waitForTimeout(500);
