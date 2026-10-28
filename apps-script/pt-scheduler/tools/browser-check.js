@@ -101,6 +101,7 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
   if (storage) await context.addInitScript(s => { for (const k in s) localStorage.setItem(k, s[k]); }, storage);
   await context.exposeFunction('__gasCall', async (name, argsJson) => {
     calls.push(name);
+    if (opts.net && opts.net.down) return JSON.stringify({ ok: false, error: 'NetworkError: Connection failure' });   // tanpa sinyal
     if (opts.delay && opts.delay[name]) await new Promise(r => setTimeout(r, opts.delay[name]));
     try {
       return JSON.stringify({ ok: true, value: env.call(name, ...JSON.parse(argsJson)) });
@@ -342,6 +343,15 @@ async function contrastReport(page) {
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(300);
     check(prof.length === 1 && prof[0] === 'getClientBundle', 'fast: opening a client page makes one call (' + prof.join(',') + ')');
+    // Salinan halaman klien (2026-10): gambar ulang tidak memanggil lagi; salinan ada di perangkat.
+    await page.evaluate(() => window.openProfile('PT-A'));
+    await page.waitForTimeout(300);
+    for (let i = 0; i < 3; i++) { await page.evaluate(() => window.updateUI()); await page.waitForTimeout(150); }
+    check(calls.filter(c => c === 'getClientBundle').length === 1, 'cache: reopening and redrawing a client page makes no new call (' + calls.filter(c => c === 'getClientBundle').length + ' bundle calls)');
+    const ccStore = await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_client_cache') || 'null'));
+    check(!!ccStore && !!ccStore.items['PT-A'] && ccStore.order[0] === 'PT-A' && !(localStorage.xnk_admin_cache || '').includes('foodLog'), 'cache: the client page is kept in xnk_client_cache, not in the admin cache');
+    await page.evaluate(() => window.closeDetail());
+    await page.waitForTimeout(300);
 
     // Buka lagi dengan token: panel langsung terisi dari salinan, tanpa cek sesi terpisah
     const token = await page.evaluate(() => localStorage.getItem('xnk_admin_token'));
@@ -352,6 +362,19 @@ async function contrastReport(page) {
     check(!calls2.includes('checkAdminSession'), 'open: no separate session check before loading data');
     check((await again.page.evaluate(() => window.members.length)) === 3 && !(await visible(again.page, '#admin-login')), 'open: the dashboard shows right away');
     await again.context.close();
+    // Buka lagi dengan salinan halaman klien: progres tampil tanpa "Memuat", server lambat.
+    const ccRaw = await page.evaluate(() => localStorage.getItem('xnk_client_cache'));
+    const calls2b = [];
+    const again2 = await openPage(browser, env, '/Index', calls2b, { xnk_admin_token: token, xnk_admin_cache: cache, xnk_client_cache: ccRaw }, { touch: true, wait: 700, delay: { getClientBundle: 3000 } });
+    await again2.page.evaluate(() => window.openProfile('PT-A'));
+    await again2.page.waitForTimeout(200);
+    check(!(await again2.page.textContent('#profile-progress-wrap')).includes('Memuat'), 'cache: after reopening the app a client page shows from the device copy, no loading text');
+    await again2.page.evaluate(() => window.logoutCurrent());
+    await again2.page.waitForTimeout(400);
+    await again2.page.evaluate(() => window.handleConfirmModalYes());
+    await again2.page.waitForTimeout(600);
+    check(!(await again2.page.evaluate(() => localStorage.getItem('xnk_client_cache'))), 'cache: logging out removes the client-page copy');
+    await again2.context.close();
 
     // Tarik ke bawah
     const before = calls.filter(c => c === 'getAdminBootstrap').length;
@@ -373,8 +396,8 @@ async function contrastReport(page) {
     // The check mark lives only ~1 s (spin ≥ 700 ms, then 520 ms + 460 ms reset), so poll for it instead of sleeping.
     const sawOk = await page.waitForFunction(() => document.querySelector('.ptr').classList.contains('ok'), null, { polling: 50, timeout: 3000 }).then(() => true, () => false);
     check(sawOk, 'pull down: ends with a check mark');
-    await page.waitForTimeout(900);
-    check(await page.evaluate(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr'), 'pull down: the page settles back and the indicator resets');
+    const settled = await page.waitForFunction(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr', null, { polling: 50, timeout: 3000 }).then(() => true, () => false);
+    check(settled, 'pull down: the page settles back and the indicator resets');
     check(calls.filter(c => c === 'getAdminBootstrap').length === before + 1, 'pull down: data is reloaded in place');
     check((await page.evaluate(() => window.currentView)) === 'dashboard', 'pull down: stays on the same page');
 
@@ -2015,6 +2038,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
     check((await page.textContent('#view-public-dashboard .my-coach-card')).includes('Coach kamu'), 'portal home: a "Coach kamu" card shows the coach');
+    await page.evaluate(() => { const d = document.querySelector('#view-public-dashboard .my-coach-card').closest('details'); if (d) d.open = true; });   // Phase R: kartu coach di lipatan
     await page.locator('#view-public-dashboard .my-coach-card').click();
     await page.waitForTimeout(700);
     check((await page.textContent('#coach-sheet-body')).includes('Rizky') && await visible(page, '#coach-sheet-body .coach-hero'), 'tapping "Coach kamu" opens the full coach profile in a sheet');
@@ -2194,6 +2218,35 @@ async function contrastReport(page) {
     check(!(await visible(warm.page, '#sheet-badge')), 'fast: a badge celebration never comes from the copy, only from fresh data');
     await warm.page.waitForTimeout(4500);
     check(calls2.length === 1 && calls2[0] === 'getPortalBootstrap', 'fast: with an up-to-date copy only the bootstrap is called (' + calls2.join(',') + ')');
+    // 2b) Ada perubahan di server (versi berbeda): getPortalMore dipanggil lagi.
+    env.call('saveMyMeasurement', tokA, { berat: 71 });
+    const calls2b = [];
+    const changed = await openPage(browser, env, '/Index?view=public', calls2b, Object.assign({}, store, await warm.page.evaluate(() => Object.assign({}, localStorage))), { wait: 1200, keepCelebration: true });
+    check(calls2b.includes('getPortalMore'), 'cache: after a change on the server the portal fetches the data again (' + calls2b.join(',') + ')');
+    // 2c) Tanpa sinyal: catat makan tampil "belum terkirim", lalu terkirim sekali saat sinyal kembali.
+    await changed.context.close();
+    const net = { down: false };
+    const calls2c = [];
+    const off = await openPage(browser, env, '/Index?view=public', calls2c, await warm.page.evaluate(() => Object.assign({}, localStorage)), { wait: 1200, keepCelebration: true, net: net });
+    net.down = true;
+    await off.page.evaluate(() => { window.navigate('public-program'); window.setLatSeg('makan'); });
+    await off.page.waitForTimeout(300);
+    const queued = await off.page.evaluate(() => { const n = window.myNutrition; return n && n.log ? null : 'no food log in the portal data'; });
+    if (!queued) {
+      await off.page.evaluate(() => { window.openNutAdd('siang'); window.nutAddOwn(true); });
+      await off.page.waitForTimeout(300);
+      await off.page.fill('#nut-own-n', 'Bakso uji');
+      await off.page.fill('#nut-own-kal', '300');
+      await off.page.evaluate(() => window.nutOwnSave());
+      await off.page.waitForTimeout(500);
+      check((await off.page.textContent('#nut-log-card')).includes('Bakso uji') && (await off.page.textContent('#nut-log-card')).includes('belum terkirim'), 'offline: a food log shows at once, marked as not sent yet');
+      net.down = false;
+      await off.page.evaluate(() => window.fqFlush());
+      await off.page.waitForTimeout(1200);
+      check(env.sheet('FoodLog').rows.filter(r => r[5] === 'Bakso uji').length === 1, 'offline: when the signal is back the entry is sent once');
+      check(!(await off.page.textContent('#nut-log-card')).includes('belum terkirim'), 'offline: the "not sent" mark goes away');
+    } else check(false, 'offline: food log check could not run (' + queued + ')');
+    await off.context.close();
     // 3) Keluar menghapus salinan.
     await warm.page.evaluate(() => window.logoutPublic());
     await warm.page.waitForTimeout(500);
@@ -2239,7 +2292,7 @@ async function contrastReport(page) {
       await page.setViewportSize({ width: w, height: 900 });
       await page.evaluate(() => window.setLatSeg('makan'));
       await page.waitForTimeout(500);
-      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
+      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.querySelector(':scope > .stack') || p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
       check(mk.cols === '2' && mk.over <= 1 && mk.lefts === 2 && mk.ring && mk.bars === 3, scheme + ' ' + w + ': Makan flows in two columns without overflow ' + JSON.stringify(mk));
       if (w === 1440) await shot(page, 'portal-desktop-' + scheme + '-makan');
     }

@@ -22,6 +22,8 @@ const NO_MEMBER_DATA = [
   // data panel saja (tidak di portal maupun halaman klien)
   'saveTaskTemplate', 'deleteTaskTemplate', 'setMemberReminderPrefs', 'markSchedulesAsRead', 'saveExpense', 'saveFinanceCategory',
   'deleteFinanceCategory', 'uploadFinanceProof', 'swapMyMenuItem',
+  // tanda badge sudah dirayakan: jawaban sudah lengkap, portal menambalnya sendiri
+  'markBadgesSeen',
   // pengingat, trigger, perawatan pemilik
   'installReminderTrigger', 'runReminderTick', 'sendReminderTest', 'sendTelegramTest', 'sendDailyReminderEmail', 'sendWeeklyReportEmail',
   'setupDailyTrigger', 'setupReminderTrigger', 'setupWeeklyReportTrigger', 'testDriveAccess', 'testNotif', 'migrateSplitMembersData',

@@ -4198,7 +4198,7 @@ function markBadgesSeen(memberToken, ids) {
   } finally {
     lock.releaseLock();
   }
-  return _bumpAfter_(memberId, _myPayload_(row));
+  return _myPayload_(row);   // hanya tanda badge sudah dirayakan; tidak menaikkan versi data
 }
 
 function saveMyMeasurement(memberToken, data) {

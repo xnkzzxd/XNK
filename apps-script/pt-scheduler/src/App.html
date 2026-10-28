@@ -2152,10 +2152,10 @@
   }
   // Tulis-terus: hasil simpan langsung masuk salinan di perangkat (buka lagi = langsung tampil, tanpa memuat).
   // Versi dikosongkan supaya ringkasan (insight, minggu ini) dihitung ulang sekali di belakang layar saat buka berikutnya.
-  function patchMore(part, value) {
+  function patchMore(part, value, keepVer) {
     if (!portalMoreRaw || value == null) return;
     portalMoreRaw[part] = value;
-    portalMoreRaw.ver = '';
+    if (!keepVer) portalMoreRaw.ver = '';
     savePortalCache();
   }
   window.patchPortalMore = patchMore;
@@ -7600,7 +7600,7 @@
     $('pg-badge-list').innerHTML = labels.map(function (l) { return '<li>' + h(l) + '</li>'; }).join('');
     $('pg-badge-share').setAttribute('data-text', 'Aku baru meraih badge ' + labels.join(' dan ') + ' di XNK Personal Training! 💪');
     openSheet('sheet-badge');
-    memberCall('markBadgesSeen', ids).then(function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r); } }).catch(function () {});
+    memberCall('markBadgesSeen', ids).then(function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r, true); } }).catch(function () {});
   }
   window.pgShareBadge = function () { window.sendToParentWA('', $('pg-badge-share').getAttribute('data-text') || ''); };
 
