@@ -48,6 +48,12 @@ PR di GitHub ──► cek otomatis (sintaks + tes) ──► merge ke main
 Setiap deploy menimpa seluruh kode di editor Apps Script dengan isi `apps-script/pt-scheduler/src/`.
 Perubahan yang diketik langsung di editor online akan hilang pada deploy berikutnya.
 
+Setiap deploy selalu mengirim isi **`main` terbaru**, bukan commit yang memicu run itu.
+Jadi kalau beberapa PR di-merge berdekatan, run yang lebih lambat tidak bisa lagi
+mengembalikan kode lama; versi terakhir di Apps Script selalu berisi semua PR yang
+sudah masuk `main`. Tutup atau muat ulang tab editor Apps Script yang lama sebelum
+menyimpan apa pun di sana, karena tab lama masih memegang kode versi lama.
+
 Rahasia (token bot, PIN, password) **tidak boleh** ditulis di kode. Simpan di
 Apps Script → ⚙️ Project Settings → **Script Properties**.
 

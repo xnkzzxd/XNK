@@ -4,6 +4,9 @@ name: PT Scheduler
 # deploy — push to main only: clasp push to the Apps Script project, then
 #          point the existing web app deployment at the new version, so the
 #          /exec URL (and xnk.my.id) never changes.
+#          Every deploy ships the newest main, not the commit that started the
+#          run: when merges land close together, a slower older run can reach
+#          the deploy job last, and it must not put older code back.
 on:
   pull_request:
     paths:
@@ -57,10 +60,19 @@ jobs:
 
       - uses: actions/checkout@v4
         if: steps.cfg.outputs.ready == 'true'
+        with:
+          ref: main
       - uses: actions/setup-node@v4
         if: steps.cfg.outputs.ready == 'true'
         with:
           node-version: 20
+
+      - name: Check the newest main
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          echo "Run dipicu oleh ${GITHUB_SHA::7}, yang di-deploy: main $(git rev-parse --short HEAD)"
+          node apps-script/pt-scheduler/tools/check-syntax.js
+          node --test apps-script/pt-scheduler/tests/*.test.js
 
       - name: Install clasp
         if: steps.cfg.outputs.ready == 'true'
@@ -80,7 +92,7 @@ jobs:
       - name: Deploy new version to the existing web app deployment
         if: steps.cfg.outputs.ready == 'true'
         working-directory: apps-script/pt-scheduler
-        run: clasp deploy --deploymentId "$PT_DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"
+        run: clasp deploy --deploymentId "$PT_DEPLOYMENT_ID" --description "GitHub $(git rev-parse --short HEAD)"
 
       - name: Remove credentials
         if: always()
