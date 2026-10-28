@@ -423,7 +423,7 @@ async function contrastReport(page) {
       const lum = c => { const k = c.slice(0, 3).map(x => x / 255).map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)); return 0.2126 * k[0] + 0.7152 * k[1] + 0.0722 * k[2]; };
       const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
       const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c[3] > 0.9) return c; } return [255, 255, 255]; };
-      const card = [...document.querySelectorAll('.card-ink')].find(x => /Sesi berikutnya/.test(x.textContent));
+      const card = [...document.querySelectorAll('.card-ink')].find(x => /Sesi berikutnya/.test(x.textContent)) || document.querySelector('#dash-agenda .tl-item.now .tl-card');
       if (!card) return null;
       const cardBg = rgb(getComputedStyle(card).backgroundColor), pageBg = rgb(getComputedStyle(document.body).backgroundColor);
       const parts = [...card.querySelectorAll('.eyebrow, .muted, .pill, .btn')].map(el => ({ t: el.textContent.trim(), r: ratio(rgb(getComputedStyle(el).color), bgOf(el)) }));
@@ -443,7 +443,7 @@ async function contrastReport(page) {
     });
     check(!!sa && sa.prim && sa.tall && sa.contrast >= 4.5, 'session row: solid "Selesai" first, 44 px buttons, contrast ≥ 4.5:1 (' + (sa ? sa.contrast.toFixed(1) : 'none') + ')');
     check(!!sa && sa.right, 'session row buttons sit on the right on desktop');
-    check(!!hero, 'dashboard has the "Sesi berikutnya" card');
+    check(!!hero, 'dashboard highlights the next session (hero card, or the agenda row when it is today)');
     if (hero) {
       check(scheme === 'light' || hero.lift >= 1.1, 'next-session card is lighter than the page (' + hero.lift.toFixed(2) + ')');
       const low = hero.parts.filter(x => x.r < 4.5);
@@ -536,6 +536,11 @@ async function contrastReport(page) {
     const kLow = await page.locator('#view-clients .chip.active[data-filter="low"]').count();
     await page.evaluate(() => window.setClientFilter('all'));
     check(kLow === 1 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the chips follow the chosen filter');
+    // S8: pembagi grup menyebut dasar urutannya dan hilang bila hanya ada satu grup.
+    const divs = async sort => { await page.evaluate(v => window.setClientSort(v), sort); return page.evaluate(() => Array.from(document.querySelectorAll('#client-list .month-divider')).map(e => e.textContent.trim())); };
+    const dTerbaru = await divs('terbaru'), dPerhatian = await divs('perhatian');
+    check(dTerbaru.every(t => t.startsWith('Aktif terakhir')) && dTerbaru.length !== 1 && dPerhatian.includes('Perlu perhatian') && dPerhatian.includes('Aman'), 'Klien: group dividers name their basis and a single group has none ' + JSON.stringify({ dTerbaru, dPerhatian }));
+    await divs('terbaru');
 
     // Closing returns to the grid; a profile opened from another page keeps the normal 420 px panel.
     await page.click('.detail-head .icon-btn[aria-label="Tutup detail"]');
@@ -2447,6 +2452,51 @@ async function contrastReport(page) {
     await again.page.evaluate(d => window.applyHostInfo(Object.assign({}, d, { standalone: true })), IPHONE);
     check(await again.page.evaluate(() => document.documentElement.classList.contains('standalone')), 'Home Screen mode is marked (edge swipe back on)');
     await again.context.close();
+  }
+  // ── Fase S (S17): setiap layar admin di semua lebar, terang dan gelap ───────
+  {
+    const sizes = [[360, 780], [390, 844], [430, 932], [1280, 800], [1440, 900]];
+    for (const scheme of ['light', 'dark']) {
+      for (const [w, ht] of sizes) {
+        const env = seededEnv();
+        const phone = w < 768;
+        const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: env.adminToken(), xnk_a2hs: 'ok' }, { viewport: { width: w, height: ht }, touch: phone, colorScheme: scheme, wait: 1400 });
+        const tag = scheme + ' ' + w + ': ';
+        const over = [];
+        for (const v of ['dashboard', 'calendar', 'clients', 'coaches', 'settings']) {
+          await page.evaluate(x => window.navigate(x, { force: true }), v);
+          await page.waitForTimeout(450);
+          if ((await overflowX(page)) > 0) over.push(v);
+          if (v === 'dashboard') {
+            const d = await page.evaluate(() => { const a = document.getElementById('dash-agenda'), tb = document.getElementById('tabbar'); const hero = document.querySelector('#view-dashboard .dash-next'); const next = document.querySelector('#dash-agenda .tl-item.now'); return { aTop: a ? Math.round(a.getBoundingClientRect().top) : -1, tb: tb && tb.getClientRects().length ? Math.round(tb.getBoundingClientRect().top) : innerHeight, dup: !!hero && !!next, dots: document.querySelectorAll('.tab-dot:not(.hide)').length }; });
+            if (w === 390 || w === 1440) await shot(page, 'admin-s17-' + scheme + '-' + w + '-dashboard');
+            check(d.aTop > 0 && (!phone || d.aTop < d.tb - 120) && !d.dup, tag + 'Dashboard: today\'s agenda is on the first screen and the next session is not shown twice ' + JSON.stringify(d));
+          }
+          if (v === 'clients') {
+            const c = await page.evaluate(() => { const row = document.querySelector('#client-list .list > :not(.month-divider)'), tb = document.getElementById('tabbar'); return { bottom: row ? Math.round(row.getBoundingClientRect().bottom) : -1, tb: tb && tb.getClientRects().length ? Math.round(tb.getBoundingClientRect().top) : innerHeight }; });
+            if (w === 390 || w === 1440) await shot(page, 'admin-s17-' + scheme + '-' + w + '-clients');
+            check(c.bottom > 0 && c.bottom <= c.tb, tag + 'Klien: the first client is fully visible on the first screen ' + JSON.stringify(c));
+          }
+          if (v === 'calendar') {
+            const k = await page.evaluate(() => { const m = document.getElementById('month-cal'), dp = document.getElementById('day-panel'), tb = document.getElementById('tabbar'); const first = dp && dp.querySelector('.tl-item, .empty'); return { strip: !!m && m.classList.contains('mc-strip'), mBottom: m ? Math.round(m.getBoundingClientRect().bottom) : -1, firstTop: first ? Math.round(first.getBoundingClientRect().top) : -1, tb: tb && tb.getClientRects().length ? Math.round(tb.getBoundingClientRect().top) : innerHeight, h: innerHeight }; });
+            if (phone) check(k.strip && k.firstTop > 0 && k.firstTop < k.tb - 100, tag + 'Jadwal: week strip shows and the day\'s first session is on the first screen ' + JSON.stringify(k));
+            else check(k.mBottom >= k.h - 220, tag + 'Jadwal: the calendar fills the screen height ' + JSON.stringify(k));
+            if (w === 390 || w === 1440) await shot(page, 'admin-s17-' + scheme + '-' + w + '-calendar');
+          }
+        }
+        if (phone) {
+          await page.evaluate(() => window.openProfile('PT-A'));
+          await page.waitForTimeout(900);
+          const s9 = await page.evaluate(() => { const hero = document.querySelector('#detail-body .client-hero').getBoundingClientRect(), tabs = document.querySelector('#detail-body .cp-tabs').getBoundingClientRect(), hl = document.querySelector('#cp-highlight'), tb = document.getElementById('tabbar'); return { hero: Math.round(hero.height), tab: Math.round(tabs.height), hlTop: hl ? Math.round(hl.getBoundingClientRect().top) : -1, limit: tb ? Math.round(tb.getBoundingClientRect().top) : innerHeight, over: document.documentElement.scrollWidth - innerWidth }; });
+          check(s9.hero <= 210 && s9.tab <= 64 && s9.hlTop > 0 && s9.hlTop < s9.limit - 100 && s9.over <= 0, tag + 'client page: short hero, low tabs, and "Sorotan" on the first screen ' + JSON.stringify(s9));
+        }
+        check(over.length === 0, tag + 'admin views have no sideways scroll ' + JSON.stringify(over));
+        const small = await page.evaluate(() => { const bad = []; document.querySelectorAll('#view-dashboard button, #view-dashboard [role=button], #tabbar .tab').forEach(b => { if (!b.getClientRects().length) return; const r = b.getBoundingClientRect(); if (r.width && r.height && (r.height < 40 || r.width < 40) && !b.closest('.hide') && getComputedStyle(b).visibility !== 'hidden') bad.push((b.textContent || b.className).trim().slice(0, 18) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); }); return bad; });
+        check(small.length === 0, tag + 'Dashboard tap targets are at least 40 px ' + JSON.stringify(small));
+        check(errors.length === 0, tag + 'no JavaScript errors ' + JSON.stringify(errors.slice(0, 2)));
+        await context.close();
+      }
+    }
   }
   {
     const env = seededEnv();

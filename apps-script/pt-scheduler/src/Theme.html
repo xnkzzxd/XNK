@@ -2150,4 +2150,48 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar, ::-webkit-scrollbar { display: none; width: 0; height: 0; background: transparent; }
 .cp-pane { min-height: 55dvh; }
 .detail-body { scrollbar-gutter: auto; }
+/* S9: hero profil klien ringkas di HP (identitas + cincin sebaris, aksi di bawahnya), tab lebih rendah */
+@media (max-width: 767px) {
+  .client-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "id ring" "acts acts"; column-gap: 12px; row-gap: 12px; align-items: center; padding: 14px; }
+  .client-hero > .client-hero-id { grid-area: id; gap: 12px; }
+  .client-hero > .client-ring-row { grid-area: ring; margin-top: 0; }
+  .client-hero > .client-ring-row > .grow { display: none; }
+  .client-hero > .client-hero-actions { grid-area: acts; margin-top: 0; }
+  .client-hero .client-ring { width: 72px; height: 72px; }
+  .client-hero .client-ring .num { font-size: var(--fs-lg) !important; }
+  .client-hero .client-hero-actions .btn { min-height: 44px; }
+  .chips.cp-tabs .chip { min-height: 44px; flex-direction: row; gap: 6px; font-size: var(--fs-xs); }
+  .chips.cp-tabs .chip svg { display: none; }
+}
+/* S10/S11: keadaan kosong satu baris; di HP agenda hari ini naik dan KPI jadi satu baris yang bisa digeser */
+.empty-line { display: flex; align-items: center; gap: 10px; color: var(--fg-muted); font-size: var(--fs-sm); padding: 6px 2px; }
+.empty-line svg { flex: 0 0 auto; width: 18px; height: 18px; }
+@media (max-width: 767px) {
+  .dash-grid > #renewals-card { order: -2; }
+  .dash-grid > .dash-agenda { order: -1; }
+  .dash-kpis .kpi-grid { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; padding-bottom: 2px; }
+  .dash-kpis .kpi-grid > .kpi { flex: 0 0 9rem; scroll-snap-align: start; }
+  .dash-kpis .kpi-grid > .kpi.wide { flex-basis: 13rem; }
+}
+/* S12: strip minggu di HP; di desktop kalender mengisi tinggi layar (tanpa ruang kosong di bawahnya) */
+.month-cal .mc-today { min-height: 32px; }
+.month-cal .mc-toggle { background: color-mix(in srgb, var(--on-ink) 14%, transparent); }
+.month-cal.mc-strip { padding-bottom: 12px; }
+.month-cal.mc-strip .mc-title { font-size: var(--fs-md); white-space: nowrap; }
+.month-cal .mc-today { white-space: nowrap; }
+.month-cal.mc-strip .mc-day { aspect-ratio: auto; min-height: 48px; }
+.month-cal.mc-strip .mc-dow { padding-bottom: 4px; }
+@media (min-width: 1024px) {
+  .sched-layout > :first-child .month-cal { min-height: calc(100dvh - 11rem); display: flex; flex-direction: column; }
+  .sched-layout > :first-child .month-cal .mc-grid:not(:has(.mc-dow)) { flex: 1 1 auto; grid-auto-rows: 1fr; }
+  .sched-layout > :first-child .month-cal .mc-day { aspect-ratio: auto; height: 52px; align-self: center; }
+}
+/* S15: penanda berangka/berteks (bukan titik tanpa label); ikon KPI dihapus di HP dan dikecilkan di desktop */
+.tab .tab-dot { width: auto; min-width: 16px; height: 16px; min-height: 16px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; font-size: .625rem; font-weight: 800; line-height: 1; color: var(--ink); background: var(--on-ink); right: calc(50% - 22px); top: 4px; }
+.kpi .kpi-icon { width: 30px; height: 30px; border-radius: 10px; }
+.kpi .kpi-icon svg { width: 16px; height: 16px; }
+@media (max-width: 767px) { .kpi-grid .kpi .kpi-icon { display: none; } }
+/* S16: tingkat kartu hitam: band > satu hero per layar > permukaan netral. Kalender admin dan tile pendapatan netral. */
+.month-cal.neutral { --ink: var(--surface); --on-ink: var(--fg); --on-ink-muted: var(--fg-muted); background: var(--surface); border: 1px solid var(--border); box-shadow: none; }
+.month-cal.neutral .mc-day.out { color: var(--fg-subtle, var(--fg-muted)); }
 </style>

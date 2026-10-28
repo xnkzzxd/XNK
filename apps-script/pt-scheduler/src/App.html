@@ -2291,7 +2291,8 @@
       const el = $(b[0]);
       if (!el) return;
       el.classList.toggle('hide', n === 0);
-      if (b[1]) el.textContent = n > 9 ? '9+' : String(n);
+      el.textContent = n > 9 ? '9+' : String(n);
+      el.setAttribute('aria-label', n + ' booking baru');
     });
   }
   window.checkUnreadBookings = updateBadges;
@@ -2342,6 +2343,9 @@
       '</div>';
   }
 
+  // Keadaan kosong satu baris untuk kartu kecil (bukan ilustrasi besar).
+  function emptyLine(ic, text) { return '<p class="empty-line">' + icon(ic) + '<span>' + h(text) + '</span></p>'; }
+
   function sessionItem(s, opts) {
     opts = opts || {};
     const d = new Date(s.start), end = new Date(s.end || (d.getTime() + 3600000));
@@ -2360,7 +2364,7 @@
       '<div class="tl-card interactive" role="button" tabindex="0" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
         '<div class="row-between"><span class="li-title truncate">' + h(isAvailable(s) ? 'Slot tersedia' : opts.inProfile ? (s.notes || 'Sesi latihan') : s.title) + '</span>' + info.pill + '</div>' +
         '<span class="li-sub">' + (window.isSoloCoach() ? '' : icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Belum ada coach')) +
-          (opts.showDate ? (window.isSoloCoach() ? '' : ' · ') + h(fmtShort(d)) : '') + (live ? ' · Berlangsung' : '') + '</span>' +
+          (opts.showDate ? (window.isSoloCoach() ? '' : ' · ') + h(fmtShort(d)) : '') + (live ? ' · Berlangsung' : '') + (opts.highlight && !live && !isDone(s) ? (window.isSoloCoach() && !opts.showDate ? '' : ' · ') + '<span class="num" data-countdown="' + d.getTime() + '">' + h(timeUntil(d)) + '</span>' : '') + '</span>' +
         actions +
       '</div></div>';
   }
@@ -2406,19 +2410,21 @@
     html += renewalsCardHtml();
 
     // Sesi berikutnya (kartu hitam)
-    html += '<div class="span-5">' + nextSessionCard(next) + '</div>';
+    // Bila sesi berikutnya sudah ada di agenda hari ini, ia disorot di baris agenda (dengan hitung mundur), bukan digandakan di sini.
+    const nextInAgenda = !!next && todays.some(s => s.id === next.id);
+    if (!nextInAgenda) html += '<div class="span-5 dash-next">' + nextSessionCard(next) + '</div>';
 
     // KPI
-    html += '<div class="span-7"><div class="kpi-grid five">' +
+    html += '<div class="' + (nextInAgenda ? 'span-12' : 'span-7') + ' dash-kpis"><div class="kpi-grid five">' +
       kpi('users', 'Klien aktif', 'kpi-clients', active, window.members.length + ' klien terdaftar') +
       kpi('calendar-check', 'Sesi hari ini', 'kpi-today', todays.filter(isBooked).length, todays.filter(isDone).length + ' sudah selesai') +
       kpi('calendar-range', 'Sesi minggu ini', 'kpi-week', weekCount, 'Senin – Minggu') +
       kpi('circle-check', 'Tingkat selesai', 'kpi-rate', rate, 'dari ' + past.length + ' sesi yang sudah lewat', '%') +
-      '<div class="kpi ink wide" id="kpi-revenue-tile"></div>' +
+      '<div class="kpi wide" id="kpi-revenue-tile"></div>' +
       '</div></div>';
 
     // Timeline hari ini
-    html += '<div class="span-7 card"><div class="section-head"><div><h3 class="section-title">Hari ini</h3><p class="li-sub">' + todays.length + ' sesi · ' + h(fmtDate(now, { day: 'numeric', month: 'long' })) + '</p></div>' +
+    html += '<div class="span-7 card dash-agenda" id="dash-agenda"><div class="section-head"><div><h3 class="section-title">Hari ini</h3><p class="li-sub">' + todays.length + ' sesi · ' + h(fmtDate(now, { day: 'numeric', month: 'long' })) + '</p></div>' +
       '<button type="button" class="link-btn" onclick="window.navigate(\'calendar\')">Kalender ' + icon('arrow-right', 'style="width:14px;height:14px"') + '</button></div>' +
       (todays.length ? '<div class="timeline stagger">' + todays.map(s => sessionItem(s, { actions: true, highlight: next && s.id === next.id })).join('') + '</div>'
         : emptyState('coffee', 'Tidak ada sesi hari ini', 'Waktu yang pas untuk follow-up klien.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.quickAction(\'booking\')">' + icon('plus') + 'Buat booking</button>')) +
@@ -2431,8 +2437,8 @@
       (unread.length ? '<div class="list stagger">' + unread.slice(0, 4).map(function (s) {
         const d = new Date(s.start);
         return '<button type="button" class="list-item interactive" data-key="session:' + h(s.id) + '" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')">' + avatar('', s.title, 'sm') +
-          '<span class="grow"><span class="li-title truncate" style="display:block">' + h(s.title) + '</span><span class="li-sub">' + h(fmtShort(d)) + ' · ' + fmtTime(d) + '</span></span><span class="dot pulse"></span></button>';
-      }).join('') + '</div>' : emptyState('inbox', 'Semua sudah dibaca', 'Booking dari portal klien muncul di sini.')) + '</div>';
+          '<span class="grow"><span class="li-title truncate" style="display:block">' + h(s.title) + '</span><span class="li-sub">' + h(fmtShort(d)) + ' · ' + fmtTime(d) + '</span></span><span class="pill solid">Baru</span></button>';
+      }).join('') + '</div>' : emptyLine('inbox', 'Semua sudah dibaca · booking dari portal muncul di sini.')) + '</div>';
 
     html += '<div class="card"><div class="section-head"><h3 class="section-title">Perlu perhatian</h3>' +
       '<button type="button" class="link-btn" onclick="window.navigate(\'coaches\')">Perawatan ' + icon('arrow-right', 'style="width:14px;height:14px"') + '</button>' +
@@ -2441,7 +2447,7 @@
         return '<div class="list-item interactive" role="button" tabindex="0" data-key="client:' + h(a.m.id) + '" onclick="window.openProfile(\'' + h(a.m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' + avatar(a.m.photo, a.m.name, 'sm') +
           '<span class="grow"><span class="li-title truncate" style="display:block">' + h(a.m.name) + '</span><span class="li-sub">' + h(a.reason) + '</span></span>' +
           '<button type="button" class="icon-btn" onclick="event.stopPropagation();window.attentionWa(\'' + h(a.m.id) + '\')" aria-label="Chat WhatsApp ' + h(a.m.name) + '">' + icon('message-circle') + '</button></div>';
-      }).join('') + '</div>' : emptyState('shield-check', 'Semua klien aman', 'Tidak ada kuota yang hampir habis.')) + '</div>';
+      }).join('') + '</div>' : emptyLine('shield-check', 'Semua klien aman · tidak ada kuota yang hampir habis.')) + '</div>';
     html += '</div>';
 
     // Statistik
@@ -2493,7 +2499,7 @@
     const month = MONTHS[new Date().getMonth()];
     const r = ui.revenue;
     let body;
-    if (!r) body = '<span class="skeleton" style="height:30px;width:60%;background:color-mix(in srgb,var(--on-ink) 14%,transparent)"></span><span class="kpi-note">Menghitung…</span>';
+    if (!r) body = '<span class="skeleton" style="height:30px;width:60%;background:color-mix(in srgb,var(--fg) 12%,transparent)"></span><span class="kpi-note">Menghitung…</span>';
     else if (r.error) body = '<span class="kpi-value">–</span><span class="kpi-note">Belum bisa dimuat</span>';
     else if (r.fin) body = '<span class="kpi-value" id="kpi-revenue">' + h(rupiahShort(r.o.masuk || 0)) + '</span><span class="kpi-note">Laba ' + h(rupiahShort(r.o.laba || 0)) + ' · tunggakan ' + h(rupiahShort(r.o.tunggakan || 0)) + '</span>';
     else body = '<span class="kpi-value" id="kpi-revenue">' + h(rupiahShort(r.total || 0)) + '</span><span class="kpi-note">' + Math.round((r.share || 0.65) * 100) + '% dari harga paket · ' + (r.count || 0) + ' pembelian/perpanjangan</span>';
@@ -2718,7 +2724,7 @@
       setTimeout(window.initCalendar, 30);
       return;
     }
-    html += '<div class="sched-layout"><div><div class="month-cal" id="month-cal"></div></div><div id="day-panel"></div></div>';
+    html += '<div class="sched-layout"><div><div class="month-cal neutral" id="month-cal"></div></div><div id="day-panel"></div></div>';
     setHTML(el, html);
     moveSegThumb($('sched-seg'));
     renderMonthCal();
@@ -2736,6 +2742,10 @@
     const startOffset = (first.getDay() + 6) % 7;
     const gridStart = new Date(first); gridStart.setDate(1 - startOffset);
     const t0 = today0();
+    // HP (panel): bawaan strip satu minggu supaya sesi hari terpilih terlihat di layar pertama; judul bulan membuka bulan penuh.
+    const strip = !pub && isPhone() && ui.calStrip !== false;
+    const sel0 = new Date(ui.selectedDate || t0), wkOff = (sel0.getDay() + 6) % 7;
+    if (strip) { gridStart.setTime(new Date(sel0.getFullYear(), sel0.getMonth(), sel0.getDate() - wkOff).getTime()); }
     const perDay = {};
     filteredSchedules().forEach(function (s) {
       const d = new Date(s.start), k = ymd(d);
@@ -2747,11 +2757,11 @@
       else if (isBooked(s)) perDay[k].active++;
     });
     let cells = '';
-    for (let i = 0; i < 42; i++) {
+    for (let i = 0; i < (strip ? 7 : 42); i++) {
       const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
       const k = ymd(d), info = perDay[k];
       const cls = ['mc-day'];
-      if (d.getMonth() !== first.getMonth()) cls.push('out');
+      if (!strip && d.getMonth() !== first.getMonth()) cls.push('out');
       if (d < t0) cls.push('past');
       if (sameDay(d, t0)) cls.push('today');
       if (sameDay(d, ui.selectedDate)) cls.push('selected');
@@ -2769,16 +2779,27 @@
     const legend = pub
       ? '<span><i></i>Jadwalku</span><span><i class="ring"></i>Ada yang booking</span>'
       : '<span><i></i>Terjadwal</span><span><i class="ring"></i>Selesai</span>';
+    const shown = strip ? new Date(sel0.getFullYear(), sel0.getMonth(), 1) : first;
+    const toggle = !pub && isPhone() ? '<button type="button" class="mc-today mc-toggle" onclick="window.toggleCalStrip()" aria-expanded="' + !strip + '">' + (strip ? 'Bulan' : 'Minggu') + '</button>' : '';
+    el.classList.toggle('mc-strip', strip);
     el.innerHTML = '<div class="mc-head">' +
-      '<button type="button" class="mc-nav" onclick="window.shiftMonth(-1)" aria-label="Bulan sebelumnya">' + icon('chevron-left') + '</button>' +
-      '<div class="row" style="gap:10px"><span class="mc-title">' + MONTHS[first.getMonth()] + ' ' + first.getFullYear() + '</span>' +
-      '<button type="button" class="mc-today" onclick="window.goToday()">Hari ini</button></div>' +
-      '<button type="button" class="mc-nav" onclick="window.shiftMonth(1)" aria-label="Bulan berikutnya">' + icon('chevron-right') + '</button></div>' +
+      '<button type="button" class="mc-nav" onclick="window.' + (strip ? 'shiftWeek(-1)' : 'shiftMonth(-1)') + '" aria-label="' + (strip ? 'Minggu sebelumnya' : 'Bulan sebelumnya') + '">' + icon('chevron-left') + '</button>' +
+      '<div class="row" style="gap:10px"><span class="mc-title">' + MONTHS[shown.getMonth()] + ' ' + shown.getFullYear() + '</span>' +
+      '<button type="button" class="mc-today" onclick="window.goToday()">Hari ini</button>' + toggle + '</div>' +
+      '<button type="button" class="mc-nav" onclick="window.' + (strip ? 'shiftWeek(1)' : 'shiftMonth(1)') + '" aria-label="' + (strip ? 'Minggu berikutnya' : 'Bulan berikutnya') + '">' + icon('chevron-right') + '</button></div>' +
       '<div class="mc-grid">' + ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map(x => '<span class="mc-dow">' + x.toUpperCase() + '</span>').join('') + '</div>' +
       '<div class="mc-grid' + (dir ? (dir > 0 ? ' anim-next' : ' anim-prev') : '') + '">' + cells + '</div>' +
-      '<div class="mc-legend">' + legend + '</div>';
+      (strip ? '' : '<div class="mc-legend">' + legend + '</div>');
     paintIcons();
   }
+
+  window.toggleCalStrip = function () { ui.calStrip = ui.calStrip === false; renderMonthCal(); };
+  window.shiftWeek = function (delta) {
+    const d = new Date(ui.selectedDate || today0()); d.setDate(d.getDate() + 7 * delta);
+    ui.selectedDate = d; ui.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+    renderMonthCal(delta);
+    renderDayPanel();
+  };
 
   window.shiftMonth = function (delta) {
     ui.calMonth = new Date(ui.calMonth.getFullYear(), ui.calMonth.getMonth() + delta, 1);
@@ -3786,7 +3807,7 @@
       '<div class="client-top" id="client-top"><div id="client-hero">' + clientHeroHtml(counts) + '</div>' +
       '</div>' +
       '<div class="stack" style="gap:12px;margin-bottom:8px">' +
-        '<div class="cl-tools"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari nama atau nomor…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
+        '<div class="cl-tools"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari klien…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
         '<select class="select" id="sort-client" aria-label="Urutkan klien" onchange="window.setClientSort(this.value)">' + sorts.map(o => '<option value="' + o[0] + '"' + (ui.clientSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>' +
         '<div class="seg only-desktop" id="client-view-seg" role="group" aria-label="Tampilan"><button type="button" data-v="card" class="' + (ui.clientView === 'card' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'card') + '" onclick="window.setClientView(\'card\')">Kartu</button><button type="button" data-v="list" class="' + (ui.clientView === 'list' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'list') + '" onclick="window.setClientView(\'list\')">Daftar</button></div></div>' +
         '<div class="chips" role="tablist" aria-label="Filter klien">' + chips.map(c => '<button type="button" role="tab" class="chip' + (ui.clientFilter === c[0] ? ' active' : '') + '" data-filter="' + c[0] + '" aria-selected="' + (ui.clientFilter === c[0]) + '" onclick="window.setClientFilter(\'' + c[0] + '\')">' + c[1] + ' <span class="chip-count num">' + counts[c[0]] + '</span></button>').join('') + '</div>' +
@@ -3845,10 +3866,21 @@
       if (t >= now && (!nextBy[k] || t < nextBy[k])) nextBy[k] = t;
     });
     (window.renewals || []).forEach(function (r) { if (r.status === 'menunggu') renewBy[String(r.memberId)] = true; });
+    // Pembagi grup memakai dasar yang sama dengan urutan, dan namanya menyebut dasar itu. Satu grup saja = tanpa pembagi.
+    const groupOf = function (e) {
+      if (e.type !== 'live') return 'Riwayat paket';
+      if (ui.clientSort === 'terbaru') return 'Aktif terakhir · ' + MONTHS[e.date.getMonth()] + ' ' + e.date.getFullYear();
+      if (ui.clientSort === 'sisa') { const r = remainingOf(e.data); return r <= 0 ? 'Sisa sesi · Habis' : r <= 2 ? 'Sisa sesi · 1–2 lagi' : 'Sisa sesi · 3 atau lebih'; }
+      if (ui.clientSort === 'perhatian') return flagsOf(e.data).length ? 'Perlu perhatian' : 'Aman';
+      return '';
+    };
+    const groups = {};
+    entries.forEach(function (e) { groups[groupOf(e)] = 1; });
+    const useGroups = !q && Object.keys(groups).length > 1 && Object.keys(groups)[0] !== '';
     let html = '', group = '';
     entries.forEach(function (e) {
-      const g = MONTHS[e.date.getMonth()] + ' ' + e.date.getFullYear();
-      if (!q && ui.clientSort === 'terbaru' && g !== group) { html += '<div class="group-label month-divider"><span>' + g + '</span></div>'; group = g; }
+      const g = groupOf(e);
+      if (useGroups && g !== group) { html += '<div class="group-label month-divider"><span>' + h(g) + '</span></div>'; group = g; }
       html += e.type === 'live' ? clientRow(e.data, { desk: desk, date: e.date, next: nextBy[String(e.data.id)], renew: !!renewBy[String(e.data.id)], solo: solo }) : archiveRow(e.data);
     });
     setHTML(el, '<div class="list stagger' + (ui.clientView === 'list' ? ' cl-view-list' : '') + '">' + html + '</div>');
@@ -4522,7 +4554,7 @@
     let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + (solo ? 'Profil dan jadwalmu' : window.coaches.length + ' coach aktif di tim') + '</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + (solo ? 'Tambah coach' : 'Coach baru') + '</button></div>';
     const ctab = window.ui && window.ui.coachTab === 'coach' ? 'coach' : 'klien';
-    html += '<div class="seg" id="coach-seg" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (ctab === 'klien' ? 'active' : '') + '" onclick="window.coachTab(\'klien\')">Klien</button><button type="button" class="' + (ctab === 'coach' ? 'active' : '') + '" onclick="window.coachTab(\'coach\')">Coach</button></div>';
+    html += '<div class="seg" id="coach-seg" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (ctab === 'klien' ? 'active' : '') + '" onclick="window.coachTab(\'klien\')">Hari ini</button><button type="button" class="' + (ctab === 'coach' ? 'active' : '') + '" onclick="window.coachTab(\'coach\')">Profil</button></div>';
     html += '<div id="ct-klien"' + (ctab === 'klien' ? '' : ' class="hide"') + '><div id="hub-wrap"></div></div><div id="ct-coach"' + (ctab === 'coach' ? '' : ' class="hide"') + '>';
     const unassigned = window.schedules.filter(function (s) { return !s.coachId && !isDone(s) && !isAvailable(s); }).length;
     if (unassigned && window.coaches.length) {
@@ -6688,13 +6720,16 @@
 
   // Daftar "Perlu perhatian" di Beranda Coach
   const CARE_CHIPS = { 'flag-today': 'Perhatian hari ini', 'health-review': 'Form belum ditinjau', 'retest': 'Tes ulang', 'no-assessment': 'Belum ada assessment', 'no-health': 'Belum isi form', 'gap': '14 hari tanpa sesi' };
+  // Diringkas per jenis: satu baris "N klien · alasan", daftar nama (dengan "Nanti") terbuka bila diketuk.
   function careListHtml(list) {
     if (!list || !list.length) return '<div class="card-flat"><p class="eyebrow">Perlu perhatian</p><p class="li-sub" style="min-height:44px;display:flex;align-items:center">Semua klien beres.</p></div>';
-    return '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + '</span></div>' + list.slice(0, 8).map(function (c) {
-      return '<div class="row" style="gap:6px;min-height:56px"><button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="grow" style="min-width:0"><span class="li-title truncate" style="display:block">' + h(c.name) + '</span>' +
-        '<span class="row" style="gap:4px;flex-wrap:wrap">' + c.reasons.slice(0, 2).map(r => '<span class="pill soft">' + h(CARE_CHIPS[r] || r) + '</span>').join('') + '</span></span>' + icon('chevron-right') + '</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
-    }).join('') + (list.length > 8 ? '<p class="li-sub">+' + (list.length - 8) + ' lainnya</p>' : '') + '</div>';
+    const groups = Object.keys(CARE_CHIPS).map(function (k) { return { k: k, items: list.filter(c => (c.reasons || []).indexOf(k) !== -1) }; }).filter(g => g.items.length);
+    return '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + ' klien</span></div>' + groups.map(function (g) {
+      return '<details class="fold care-group"><summary><span>' + g.items.length + ' klien · ' + h(CARE_CHIPS[g.k]) + '</span>' + icon('chevron-down') + '</summary><div class="fold-body stack" style="gap:2px">' + g.items.slice(0, 8).map(function (c) {
+        return '<div class="row" style="gap:6px;min-height:48px"><button type="button" class="list-item interactive grow" style="min-height:48px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="li-title truncate grow">' + h(c.name) + '</span>' + icon('chevron-right') + '</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
+      }).join('') + (g.items.length > 8 ? '<p class="li-sub">+' + (g.items.length - 8) + ' lainnya</p>' : '') + '</div></details>';
+    }).join('') + '</div>';
   }
   window.snoozeCareUI = function (id) {
     adminCall('snoozeCare', id, 7).then(function () { window.showToast('Disembunyikan 7 hari.'); loadHub(); }).catch(function (err) { window.showToast(err.message); });
@@ -9379,6 +9414,14 @@
   // ── Keuangan (Fase H): tagihan, pembayaran, pengeluaran, laporan ─────────────
   const FIN_STATUS_PILL = { 'Lunas': 'pill solid', 'DP': 'pill', 'Belum bayar': 'pill dashed' };
   const fin = { month: new Date().getMonth() + 1, year: new Date().getFullYear(), tab: 'bills', filter: 'open', ov: null, bills: null, exps: null, arrears: null, cats: null, methods: ['Tunai', 'Transfer bank', 'QRIS / e-wallet'], portal: false, billId: null, payPick: '', payId: null, expId: null, proof: null };
+  // Tile: angka ringkas ("Rp 2,3 jt", "Rp 250 rb") supaya tidak turun baris; angka penuh ada di title dan aria-label.
+  const finRpShort = function (n) {
+    const v = Math.round(n || 0), a = Math.abs(v), sg = v < 0 ? '−' : '';
+    if (a >= 1e9) return sg + 'Rp ' + (a / 1e9).toFixed(1).replace('.', ',').replace(/,0$/, '') + ' M';
+    if (a >= 1e6) return sg + 'Rp ' + (a / 1e6).toFixed(1).replace('.', ',').replace(/,0$/, '') + ' jt';
+    if (a >= 1e3) return sg + 'Rp ' + Math.round(a / 1e3) + ' rb';
+    return finRp(v);
+  };
   const finRp = function (n) { return (n < 0 ? '−' : '') + 'Rp ' + String(Math.abs(Math.round(n || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
   const finNum = function (s) { return parseInt(String(s || '').replace(/\D/g, ''), 10) || 0; };
   function finOn() { try { return localStorage.getItem('xnk_fin_on') === '1'; } catch (e) { return false; } }
@@ -9455,13 +9498,15 @@
     const o = fin.ov;
     const k = function (label, val, note, ic, on) {
       return '<div class="kpi"' + (on ? ' role="button" tabindex="0" onclick="' + on + '"' : '') + '><div class="row-between"><span class="kpi-label">' + label + '</span><span class="kpi-icon">' + icon(ic) + '</span></div>' +
-        '<span class="kpi-value num">' + (o ? h(finRp(val)) : '<span class="skeleton" style="height:26px;width:70%"></span>') + '</span><span class="kpi-note">' + h(note) + '</span></div>';
+        '<span class="kpi-value num"' + (o ? ' title="' + h(finRp(val)) + '" aria-label="' + h(label + ' ' + finRp(val)) + '"' : '') + '>' + (o ? h(finRpShort(val)) : '<span class="skeleton" style="height:26px;width:70%"></span>') + '</span><span class="kpi-note">' + h(note) + '</span></div>';
     };
     let bars = '';
     if (o) {
       const max = Math.max(1, Math.max.apply(null, o.series.map(function (s) { return Math.max(s.masuk, s.keluar); })));
-      bars = '<div class="card-flat"><div class="section-head"><h4 class="li-title">6 bulan terakhir</h4><span class="li-sub">masuk vs keluar</span></div><div class="bars" id="fin-bars">' +
-        o.series.map(function (s) {
+      const used = o.series.filter(function (s) { return s.masuk || s.keluar; });
+      if (!used.length) bars = '<div class="card-flat"><div class="section-head"><h4 class="li-title">6 bulan terakhir</h4></div>' + emptyLine('trending-up', 'Belum ada pemasukan atau pengeluaran tercatat.') + '</div>';
+      else bars = '<div class="card-flat"><div class="section-head"><h4 class="li-title">6 bulan terakhir</h4><span class="li-sub">masuk vs keluar</span></div><div class="bars" id="fin-bars">' +
+        o.series.filter(function (s) { return used.length > 2 ? true : (s.masuk || s.keluar); }).map(function (s) {
           return '<div class="bar-col"><div class="bar-track" style="gap:3px;align-items:flex-end"><div class="bar" data-h="' + Math.max(s.masuk ? 6 : 2, Math.round(s.masuk / max * 100)) + '" data-tip="' + h(finRp(s.masuk)) + '"></div>' +
             '<div class="bar soft" data-h="' + Math.max(s.keluar ? 6 : 2, Math.round(s.keluar / max * 100)) + '" data-tip="' + h(finRp(s.keluar)) + '"></div></div><span class="bar-lbl">' + MONTHS[s.month - 1].slice(0, 3) + '</span></div>';
         }).join('') + '</div></div>';
