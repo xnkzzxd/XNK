@@ -11,7 +11,7 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 ```
 
 ## A — Dasar (dulu, kecil, jelas)
-- [ ] **S1** Sejajarkan `.detail-head` dengan `#topbar` (band hitam, tinggi sama) di panel klien dan coach, desktop dan HP. Cek `header lined up with the top bar` jadi hijau. Dep: —. (P1)
+- [x] **S1** Sejajarkan `.detail-head` dengan `#topbar` (band hitam, tinggi sama) di panel klien dan coach, desktop dan HP. Cek `header lined up with the top bar` jadi hijau. Dep: —. (P1)
 - [x] **S2** Tangani `pull down: ends with a check mark`: reproduksi, tentukan bug app atau waktu tunggu tes, perbaiki yang benar, jelaskan di commit. Dep: —. (P15)
 - [x] **S3** Verifikasi Pengaturan HP (daftar dan sub-halaman) di 360/390/430 px: bukan tangkapan di tengah transisi; bila overflow/geser, perbaiki; tambah cek `elOverflow` dan posisi band. Dep: —. (P6)
   - Hasil: P6 nyata, bukan transisi. `#app` (`overflow:hidden`) tergulir 330 px ke kanan (fokus/`scrollIntoView` ke panel di luar layar), jadi band dan kartu tampak bergeser. Perbaikan: `overflow: clip` pada `.app`. Cek baru di `browser-check.js`: `scrollLeft` app = 0, top bar di x=0, band tepat di bawah top bar, tak ada elemen melebihi layar (360/390/430 dan tiap sub-halaman; chip kategori Paket boleh menggulir di barisnya sendiri).

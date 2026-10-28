@@ -2049,6 +2049,8 @@ html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr
 .page-head .btn-outline, .page-head .btn-secondary, .page-head .btn-ghost { color: var(--on-band); border-color: color-mix(in srgb, var(--on-band) 35%, transparent); background: transparent; }
 .page-head .icon-btn { color: var(--on-band); background: color-mix(in srgb, var(--on-band) 12%, transparent); border-color: transparent; }
 .topbar { background: var(--band); color: var(--on-band); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.detail-head { background: var(--band); color: var(--on-band); }
+.detail-head .icon-btn { color: var(--on-band); background: color-mix(in srgb, var(--on-band) 12%, transparent); border-color: transparent; }
 .topbar .icon-btn { color: var(--on-band); background: color-mix(in srgb, var(--on-band) 12%, transparent); border-color: transparent; }
 .card-ink, .insight-hero { background: var(--band-card); color: var(--on-band); border: 1px solid color-mix(in srgb, var(--on-band) 10%, transparent); }
 .page-head + .insight-hero, .page-head + .card-ink { margin-top: -40px; position: relative; }
@@ -2108,6 +2110,7 @@ html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr));
   .topbar { height: 0; min-height: 0; padding: 0; background: none; backdrop-filter: none; overflow: visible; }
   .topbar > .topbar-title, .topbar > .topbar-brand { display: none; }
   .topbar-actions { position: absolute; top: 26px; right: max(var(--page-pad), var(--sa-r)); }
+  .detail-head { height: auto; min-height: calc(6rem + var(--sa-t)); }
   .page-head { margin-top: -4px; padding: 16px calc(var(--page-pad) + 60px) 16px var(--page-pad); min-height: 6rem; align-items: center; }
 }
 .sheet { overflow: hidden; }
