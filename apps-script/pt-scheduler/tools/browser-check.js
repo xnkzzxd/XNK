@@ -349,7 +349,8 @@ async function contrastReport(page) {
     for (let i = 0; i < 3; i++) { await page.evaluate(() => window.updateUI()); await page.waitForTimeout(150); }
     check(calls.filter(c => c === 'getClientBundle').length === 1, 'cache: reopening and redrawing a client page makes no new call (' + calls.filter(c => c === 'getClientBundle').length + ' bundle calls)');
     const ccStore = await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_client_cache') || 'null'));
-    check(!!ccStore && !!ccStore.items['PT-A'] && ccStore.order[0] === 'PT-A' && !(localStorage.xnk_admin_cache || '').includes('foodLog'), 'cache: the client page is kept in xnk_client_cache, not in the admin cache');
+    const admCache = await page.evaluate(() => localStorage.getItem('xnk_admin_cache') || '');
+    check(!!ccStore && !!ccStore.items['PT-A'] && ccStore.order[0] === 'PT-A' && !admCache.includes('foodLog'), 'cache: the client page is kept in xnk_client_cache, not in the admin cache');
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(300);
 
