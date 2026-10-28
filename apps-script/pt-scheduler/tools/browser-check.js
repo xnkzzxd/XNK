@@ -1053,7 +1053,12 @@ async function contrastReport(page) {
     check(wlRows.length === 2 && wlRows.some(r => r[7] === 'Goblet squat' && r[11] === 25) && wlRows.some(r => r[7] === 'Bench press'), 'finish: only the ticked sets are saved ' + JSON.stringify(wlRows.map(r => [r[7], r[11], r[12]])));
     const sesRow = env.sheet('WorkoutSessions') && env.sheet('WorkoutSessions').rows.find(r => r[1] === 'PT-A');
     check(!!sesRow && sesRow[8] === 4 && sesRow[4] === 'Hari A' && sesRow[10] === 'admin', 'finish: the workout row keeps the day, feeling and who logged it');
-    check(!(await visible(page, '#wl-screen')) && await visible(page, '#modal-wl') && (await page.textContent('#wls-foot')).includes('Kirim ringkasan WA'), 'finish: the screen closes and the saved summary offers the WhatsApp summary');
+    check(!(await visible(page, '#wl-screen')) && await visible(page, '#sheet-share'), 'finish: the screen closes and the share card opens straight away');
+    await page.waitForFunction(() => { const i = document.getElementById('share-img'); return i && i.src && i.naturalWidth > 0; }, null, { timeout: 5000 }).catch(() => {});
+    const shareDims = await page.evaluate(() => { const i = document.getElementById('share-img'); return i ? [i.naturalWidth, i.naturalHeight] : [0, 0]; });
+    check(shareDims[0] === 1080 && shareDims[1] >= 1080, 'finish: the share card is a real 1080 px PNG ' + shareDims.join('x'));
+    await page.click('#share-foot .btn-ghost');
+    check(await visible(page, '#modal-wl') && (await page.textContent('#wls-foot')).includes('Kirim ringkasan WA'), 'finish: "Ringkasan" shows the saved summary with the WhatsApp summary');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(500);
     check((await page.textContent('#profile-program-wrap')).includes('Terakhir dicatat'), 'workout: the client page shows the last logged day');
@@ -1660,9 +1665,9 @@ async function contrastReport(page) {
     await page.click('#pg-badge-share');
     await page.waitForTimeout(300);
     const shared = await page.evaluate(() => window.__opened.map(w => w.location.href).pop() || '');
-    check(shared.startsWith('https://wa.me/?text=') && decodeURIComponent(shared).includes('10 sesi'), 'portal: "Bagikan" opens WhatsApp with a proud message (contact chosen by the client)');
+    check(shared === '' && await visible(page, '#sheet-share') && (await page.textContent('#share-title')).includes('badge'), 'portal: "Bagikan" on the celebration opens the badge share card');
     await shot(page, 'portal-mobile-celebration');
-    await page.click('#sheet-badge .btn-secondary');
+    await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(700);
     check(!(await visible(page, '#sheet-badge')), 'portal: the celebration closes');
     // Info & Tips (Fase J3): konten dari pemilik, titik "baru".
@@ -1885,6 +1890,8 @@ async function contrastReport(page) {
     check(env.sheet('WorkoutLog') && env.sheet('WorkoutLog').rows.filter(r => r[1] === 'PT-A' && r[7] === 'Squat').length === 4, 'workout: the client saves four sets');
     const cSes = env.sheet('WorkoutSessions').rows.find(r => r[1] === 'PT-A' && r[10] === 'klien');
     check(!!cSes && cSes[8] === 5 && cSes[4] === 'Hari B' && cSes[7] !== '', 'workout: the client workout keeps day, feeling and duration');
+    check(await visible(page, '#sheet-share'), 'finish: the client sees the share card first');
+    await page.click('#share-foot .btn-ghost');
     check(await visible(page, '#modal-wl') && (await page.textContent('#wls-foot')).includes('Kirim ke coach'), 'finish: the client can send the workout to the coach on WhatsApp');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(500);

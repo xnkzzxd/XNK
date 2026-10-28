@@ -2233,6 +2233,7 @@ function getAdminMore(token, month, year) {
       taskSummary: part(function () { return getTaskSummary(token); }),
       renewals: part(function () { return getRenewalRequests(token); }),
       finance: finance,
+      shareEnabled: _shareEnabled_(),
       revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
       packageTrend: part(function () { return _packageTrendStats_(m, y); }),
       hub: part(function () { return _coachHub_(new Date()); }),

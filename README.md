@@ -105,3 +105,7 @@ switches `http://` visits to `https://` itself, since the app sends the login PI
 ### Client view upgrade (Phase Q)
 
 Every portal tab and every tab of the client page in the panel opens with a black summary card, and the Klien page gained an "attention" filter, sorting and a card/list switch. `Wawasan.gs` interprets progress, fitness tests, the workout log and the food log (body report, strength and stalls, muscle balance, activity calendar) for three ranges at once, in a client tone and a coach tone. No new sheets or public functions. See `docs/klien/`.
+
+## Share cards (Phase T)
+
+Clients and coaches can create transparent PNG cards (workout, records, progress, nutrition, monthly recap, badges) for Instagram Stories and WhatsApp Status. The images are drawn in the browser (`Bagikan.html`) and shared through the wrapper page's native share sheet; nothing is uploaded. On by default; `SHARE_ENABLED=false` turns it off. Check: `tools/share-check.js`.

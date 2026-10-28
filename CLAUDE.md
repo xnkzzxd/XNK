@@ -13,6 +13,7 @@ Phase O (Latihan ala Hevy: routines, table logger, search, settings, built): doc
 Phase P (Gizi: TKPI food library, BMI/WHtR/BMR/TDEE targets, menu, food log, planned): docs/nutrition/ (PRD, Design, Rules, TODO; tasks T-1000+).
 Phase R (teks besar, band hitam, data kiri-kanan, in progress): docs/ui/ (TODO; tasks T-1200+).
 Phase S (audit UI/UX panel admin, planned): docs/panel/ (PRD, TODO; tasks S1–S18).
+Phase T (kartu bagikan ala Strava/Hevy, PNG transparan, built): docs/share/ (TODO; tasks T-1300+).
 Phase Q (upgrade tampilan Klien + interpretasi data, in progress): docs/klien/ (PRD, TODO; tasks T-1100+).
 
 @docs/Agent.md
