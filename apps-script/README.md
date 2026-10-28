@@ -251,6 +251,15 @@ Klien yang **mendaftar sendiri** (dari landing atau katalog portal) mendapat pan
 - Tercatat di kolom W `Panduan` sheet `MemberData` (`baru|beranda|…`, lalu `selesai`), jadi tetap jalan kalau klien ganti HP. Kolom dibuat otomatis saat pendaftaran pertama.
 - Nyala sejak awal. Matikan di **Pengaturan → Tampilan → Panduan klien baru** (langsung tersimpan; Script Property `CLIENT_GUIDE_ENABLED` = `false`).
 
+## Kartu bagikan (Fase T)
+
+Klien (dan kamu, lewat halaman klien) bisa membuat gambar PNG untuk Story Instagram atau Status WhatsApp, seperti kartu Strava dan Hevy.
+
+- **Kartu:** Latihan (satu hari), Daftar gerakan, Rekor, Progres, Gizi hari ini, Rekap bulan ini, Badge baru. Gaya: Transparan, Transparan + grafik, Kartu gelap, Foto (angka ditempel di foto dari HP). Ukuran Story 9:16 atau Kotak 1:1.
+- **Tombol:** di kartu hitam Progres, Latihan, dan Makan, dan otomatis terbuka setelah klien menekan **Selesai** latihan (tombol "Ringkasan" membuka ringkasan lama). Perubahan berat/pinggang baru tampil kalau klien menyalakannya.
+- **Bagikan / Salin / Simpan:** memakai menu bagikan bawaan HP lewat halaman pembungkus (`index.html`). Gambar dibuat di HP dan tidak diunggah.
+- **Nyala sejak awal.** Matikan di **Pengaturan → Tampilan → Kartu bagikan** (Script Property `SHARE_ENABLED` = `false`). Minta izin klien sebelum memposting kartu klien di akun XNK.
+
 ## Gizi & catat makan (Fase P)
 
 Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klien mengisi tinggi, jenis kelamin, tujuan, dan pantangan sekali (berat dan lingkar pinggang diambil dari tab Progres), lalu melihat BMI, WHtR, BMR, TDEE, target kalori dan makro, menu satu hari (bisa ditukar), daftar belanja 7 hari, dan catatan makan harian. Datanya dari **Tabel Komposisi Pangan Indonesia 2020** (Kemenkes); ±50 menu jadi (nasi padang, bakso, gorengan, dll.) adalah **perkiraan** dan diberi tanda "perkiraan".
