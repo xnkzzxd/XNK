@@ -2193,7 +2193,7 @@ async function contrastReport(page) {
     check((await warm.page.textContent('#pub-program-wrap')).includes('Rutinitas') && !(await warm.page.locator('#pub-program-wrap .skel').count()), 'fast: other tabs also open filled while the server is slow');
     check(!(await visible(warm.page, '#sheet-badge')), 'fast: a badge celebration never comes from the copy, only from fresh data');
     await warm.page.waitForTimeout(4500);
-    check(calls2.length === 2 && calls2.includes('getPortalMore'), 'fast: the fresh data still arrives in the same two calls');
+    check(calls2.length === 1 && calls2[0] === 'getPortalBootstrap', 'fast: with an up-to-date copy only the bootstrap is called (' + calls2.join(',') + ')');
     // 3) Keluar menghapus salinan.
     await warm.page.evaluate(() => window.logoutPublic());
     await warm.page.waitForTimeout(500);
