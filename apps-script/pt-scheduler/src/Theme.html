@@ -110,7 +110,7 @@
     --danger: #ff6b5e;
     --danger-soft: #2a1412;
     --band: #161616;
-    --band-card: #202020;
+    --band-card: #2a2a2a;
     --on-band: #ffffff;
     --on-band-muted: #a7a7a4;
     --heat-0: #242424;
@@ -144,7 +144,7 @@
   --danger: #ff6b5e;
   --danger-soft: #2a1412;
     --band: #161616;
-    --band-card: #202020;
+    --band-card: #2a2a2a;
     --on-band: #ffffff;
     --on-band-muted: #a7a7a4;
   --heat-0: #242424;
@@ -1240,8 +1240,10 @@ kbd { font-family: var(--font); font-size: .6875rem; font-weight: 700; color: va
 .tl-item.done .tl-card { background: var(--surface-2); color: var(--fg-muted); }
 .tl-item.hold .tl-card { border-style: dashed; border-width: 1.5px; border-color: var(--fg-muted); }
 .tl-item.available .tl-card { border-style: dashed; background: transparent; }
-.tl-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.tl-actions .btn { min-height: 44px; padding: 0 10px; font-size: var(--fs-xs); border-radius: 10px; }
+.sess-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.sess-actions .btn { min-height: 44px; padding: 0 12px; font-size: var(--fs-xs); border-radius: 10px; }
+.sess-actions .btn-primary { order: -1; }
+@media (min-width: 768px) { .sess-actions { justify-content: flex-end; } }
 .tl-item.now .btn-secondary { background: color-mix(in srgb, var(--on-ink) 14%, transparent); color: var(--on-ink); }
 .tl-item.now .btn-outline { border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); color: var(--on-ink); }
 
@@ -2052,7 +2054,7 @@ html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr
 .detail-head { background: var(--band); color: var(--on-band); }
 .detail-head .icon-btn { color: var(--on-band); background: color-mix(in srgb, var(--on-band) 12%, transparent); border-color: transparent; }
 .topbar .icon-btn { color: var(--on-band); background: color-mix(in srgb, var(--on-band) 12%, transparent); border-color: transparent; }
-.card-ink, .insight-hero { background: var(--band-card); color: var(--on-band); border: 1px solid color-mix(in srgb, var(--on-band) 10%, transparent); }
+.card-ink, .insight-hero, .kpi.ink { --ink: var(--band-card); --on-ink: var(--on-band); --on-ink-muted: var(--on-band-muted); background: var(--band-card); color: var(--on-band); border: 1px solid color-mix(in srgb, var(--on-band) 10%, transparent); }
 .page-head + .insight-hero, .page-head + .card-ink { margin-top: -40px; position: relative; }
 .section-title { display: flex; align-items: center; gap: 8px; }
 .section-title::before { content: ''; width: 4px; height: 1.1em; border-radius: 2px; background: var(--ink); flex: none; }
