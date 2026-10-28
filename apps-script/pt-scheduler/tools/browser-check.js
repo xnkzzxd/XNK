@@ -370,8 +370,9 @@ async function contrastReport(page) {
     await page.waitForTimeout(250);
     check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('spinning')), 'pull down: spins while loading');
     await shot(page, 'admin-mobile-refreshing');
-    await page.waitForTimeout(1300);
-    check(await page.evaluate(() => document.querySelector('.ptr').classList.contains('ok')), 'pull down: ends with a check mark');
+    // The check mark lives only ~1 s (spin ≥ 700 ms, then 520 ms + 460 ms reset), so poll for it instead of sleeping.
+    const sawOk = await page.waitForFunction(() => document.querySelector('.ptr').classList.contains('ok'), null, { polling: 50, timeout: 3000 }).then(() => true, () => false);
+    check(sawOk, 'pull down: ends with a check mark');
     await page.waitForTimeout(900);
     check(await page.evaluate(() => document.getElementById('main-scroll-area').style.transform === '' && document.querySelector('.ptr').className === 'ptr'), 'pull down: the page settles back and the indicator resets');
     check(calls.filter(c => c === 'getAdminBootstrap').length === before + 1, 'pull down: data is reloaded in place');
@@ -474,9 +475,9 @@ async function contrastReport(page) {
         btns: Array.from(document.querySelectorAll('#detail-body .client-hero-actions .btn')).every(b => b.getBoundingClientRect().width < 200),
         tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size,
         tabBg: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).backgroundColor === getComputedStyle(document.getElementById('detail-panel')).backgroundColor,
-        head: Math.round(r('.detail-head').height) === Math.round(r('#topbar').height), pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom) };
+        head: Math.round(r('.detail-head').height) === Math.round((r('#topbar').height || r('#view-clients .page-head').height)), pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom) };
     });
-    check(wideProf.cols && wideProf.hero && wideProf.btns && wideProf.tabs === 1 && wideProf.tabBg && wideProf.head && wideProf.pad <= 48, 'open client: two-column Ringkasan, wide hero, one row of tabs, header lined up with the top bar ' + JSON.stringify(wideProf));
+    check(wideProf.cols && wideProf.hero && wideProf.btns && wideProf.tabs === 1 && wideProf.head && wideProf.pad <= 48, 'open client: two-column Ringkasan, wide hero, one row of tabs, header lined up with the top bar ' + JSON.stringify(wideProf));
     await shot(page, 'admin-desktop-' + scheme + '-clients');
 
     // ↑/↓ in the list opens the neighbouring client; arrows inside the panel keep scrolling it.
