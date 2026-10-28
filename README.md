@@ -19,6 +19,7 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 | `icon-192.png`, `icon-512.png` | App icons (rounded black square). |
 | `icon-maskable-512.png` | Android app icon; the logo is smaller so Android can crop it to any shape. |
 | `apple-touch-icon.png` | iPhone/iPad home-screen icon (180 px). |
+| `offline.js`, `offline-host.js`, `offline.css`, `sw.js` | The no-signal "Catat offline" screen and the service worker that lets this page open offline. |
 | `robots.txt` | Tells search engines not to crawl the site. |
 | `_config.yml` | Keeps `apps-script/`, `docs/`, `CLAUDE.md` and this README off the public website. |
 | `docs/` | Upgrade plan: `PRD.md`, `Design.md`, `Task.md`, and `Agent.md` (rules for AI agents and developers). `docs/coach/` has the same four files for the coach phase (`PRD.md`, `Design.md`, `Agent.md`, `TODO.md`); later phases have their own folders (`finance/`, `loop/`, `portal/`, `workout/`). Not published. |
@@ -50,6 +51,17 @@ Apps Script quota low. Every client booking is checked by the server under a loc
 same call that saves it. If the hour was just taken, the client is not shown an error: the
 booking sheet stays open with up to three nearby free times for the same duration. A time
 like 07:15 is booked as the whole hour from 07:00.
+
+**Fast reopen and offline logging.** The client portal and the PT's client pages keep the
+last data on the device, so workout logs, food logs and progress show at once. The server
+gives every client a data version; the heavy data is fetched again only when that version
+changed (someone saved something), the day changed or the copy is old. The PT's device keeps
+at most 15 recent clients and forgets them on logout. Workout and food logs also work without
+signal: they show at once marked "waiting for signal" and are sent automatically, without
+duplicates, when the connection is back. Both sites also open with no signal at all: a small
+"Catat offline" screen (`offline.js`, `offline-host.js`, `offline.css`, cached by `sw.js`) shows the last copy and
+keeps new notes until the app is open again. The same four files are copied to BookingPT-Client with
+`apps-script/pt-scheduler/tools/sync-offline.js`.
 
 **Workout logging.** The PT writes each client's program in a form (days, exercises,
 sets, rep range or a per-set scheme with warm-ups, target weight, rest, supersets). The

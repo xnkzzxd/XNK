@@ -238,7 +238,7 @@ function _finMigrate_() {
 function syncFinanceTransactions(token) {
   requireAdmin_(token);
   _finRequire_();
-  return _finMigrate_();
+  return _bumpAfter_('*', _finMigrate_());
 }
 
 function _finBillView_(b, payments, members) {
@@ -298,7 +298,7 @@ function saveBillAdjust(token, billId, data) {
   requireAdmin_(token);
   _finRequire_();
   data = data || {};
-  return _finLocked_(function() {
+  return _bumpAfter_('*', _finLocked_(function() {
     const b = _finRead_('Tagihan').filter(function(x) { return x['ID Tagihan'] === String(billId); })[0];
     if (!b) throw new Error('Tagihan tidak ditemukan.');
     const upd = { 'Diubah Pada': _finNow_() };
@@ -321,7 +321,7 @@ function saveBillAdjust(token, billId, data) {
     _finUpdate_('Tagihan', b._row, upd);
     _finCacheStatus_(b['ID Tagihan']);
     return getBillDetail(token, billId);
-  });
+  }));
 }
 
 // ── Pembayaran ──────────────────────────────────────────────────────────────
@@ -346,7 +346,7 @@ function savePayment(token, p) {
   requireAdmin_(token);
   _finRequire_();
   p = p || {};
-  return _finLocked_(function() {
+  return _bumpAfter_('*', _finLocked_(function() {
     _finEnsure_();
     const amount = _finAmount_(p.amount, 'Jumlah');
     const date = _finCheckDate_(p.date);
@@ -372,7 +372,7 @@ function savePayment(token, p) {
     else { id = _finId_('BY'); _finAppend_('Pembayaran', Object.assign({ 'ID Bayar': id, 'Dibuat Pada': now }, fields)); }
     if (bill) _finCacheStatus_(bill['ID Tagihan']);
     return { id: id };
-  });
+  }));
 }
 
 // ── Pengeluaran dan kategori ────────────────────────────────────────────────
@@ -486,8 +486,8 @@ function _finArchive_(kind, id, on) {
   });
 }
 
-function archiveFinanceItem(token, kind, id) { requireAdmin_(token); _finRequire_(); return _finArchive_(kind, id, true); }
-function restoreFinanceItem(token, kind, id) { requireAdmin_(token); _finRequire_(); return _finArchive_(kind, id, false); }
+function archiveFinanceItem(token, kind, id) { requireAdmin_(token); _finRequire_(); return _bumpAfter_('*', _finArchive_(kind, id, true)); }
+function restoreFinanceItem(token, kind, id) { requireAdmin_(token); _finRequire_(); return _bumpAfter_('*', _finArchive_(kind, id, false)); }
 
 // ── Bagi hasil coach ────────────────────────────────────────────────────────
 

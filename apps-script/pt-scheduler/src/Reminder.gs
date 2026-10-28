@@ -1645,7 +1645,7 @@ function setMemberMealReminder(token, memberId, aktif) {
     for (var i = 1; i < ids.length; i++) {
       if (String(ids[i][0]).trim() === id) {
         sheet.getRange(i + 1, MEMBER_MEAL_COL).setValue(on ? 'ya' : 'tidak');
-        return { id: id, mealReminder: on };
+        return _bumpAfter_(id, { id: id, mealReminder: on });
       }
     }
     throw new Error('Klien tidak ditemukan');

@@ -13,6 +13,7 @@
     <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/offline.css">
     <!-- Start the connection to Apps Script early -->
     <link rel="preconnect" href="https://script.google.com">
     <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
@@ -211,7 +212,8 @@
             function queue() { if (!raf) raf = requestAnimationFrame(send); }
             window.addEventListener('message', function (e) {
                 if (!appOrigin(e.origin) || !e.data) return;
-                if (e.data.xnk === 'host?') { target = e.source; targetOrigin = e.origin; send(); }
+                if (e.data.xnk === 'host?') { target = e.source; targetOrigin = e.origin; send(); if (window.XNKOfflineHost) window.XNKOfflineHost.appReady(); }
+                else if (/^offline-/.test(e.data.xnk || '')) { if (window.XNKOffline) window.XNKOffline.message(e); }
                 else if (e.data.xnk === 'theme' && /^#[0-9a-f]{6}$/i.test(e.data.color || '')) {
                     meta.setAttribute('content', e.data.color);
                     document.documentElement.style.background = e.data.color;
@@ -226,6 +228,10 @@
             }
         })();
     </script>
+
+    <!-- Tanpa sinyal: layar "Catat offline" dari salinan terakhir (offline.js), halaman ini disimpan oleh sw.js. -->
+    <script src="/offline.js" data-mode="coach"></script>
+    <script src="/offline-host.js"></script>
 
 </body>
 </html>

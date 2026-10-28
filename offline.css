@@ -1,0 +1,60 @@
+/* XNK — layar "Catat offline" (offline.js). Satu sumber di XNK; salinan di BookingPT-Client dibuat oleh tools/sync-offline.js. */
+#xoff {
+  --x-bg: #fafaf9; --x-card: #fff; --x-ink: #0b0b0b; --x-mute: #6b6b68; --x-line: #e4e4e1; --x-band: #0b0b0b; --x-on-band: #fff; --x-danger: #b42318;
+  position: fixed; inset: 0; z-index: 50; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--x-bg); color: var(--x-ink);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+@media (prefers-color-scheme: dark) {
+  #xoff { --x-bg: #0b0b0b; --x-card: #171716; --x-ink: #f4f4f2; --x-mute: #a7a7a4; --x-line: #2b2b29; --x-band: #000; --x-danger: #f97066; }
+}
+#xoff[hidden] { display: none; }
+#xoff * { box-sizing: border-box; }
+.xoff-head {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px; background: var(--x-band); color: var(--x-on-band);
+}
+.xoff-head small { display: block; color: #a7a7a4; font-size: .8125rem; }
+.xoff-head .xoff-btn { background: var(--x-on-band); color: var(--x-band); border-color: var(--x-on-band); }
+.xoff-warn, .xoff-msg { margin: 12px 16px 0; padding: 10px 12px; border-radius: 12px; background: var(--x-card); border: 1px solid var(--x-line); font-size: .9375rem; }
+.xoff-warn { color: var(--x-danger); border-color: var(--x-danger); }
+.xoff-tabs { display: flex; gap: 4px; margin: 12px 16px 0; padding: 4px; border-radius: 14px; background: var(--x-band); }
+.xoff-tabs button { flex: 1; min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: #a7a7a4; font: inherit; font-weight: 600; }
+.xoff-tabs button.on { background: var(--x-on-band); color: var(--x-band); }
+.xoff-body { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; max-width: 720px; margin: 0 auto; }
+.xoff-title { margin: 4px 0; font-size: 1.375rem; }
+.xoff-label { margin: 10px 0 0; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--x-mute); }
+.xoff-note { margin: 0; color: var(--x-mute); font-size: .9375rem; }
+.xoff-card, .xoff-sheet, .xoff-meal { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 16px; background: var(--x-card); border: 1px solid var(--x-line); }
+.xoff-card small { color: var(--x-mute); }
+.xoff-stat b { font-size: 2rem; line-height: 1; }
+.xoff-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }
+.xoff-row small { color: var(--x-mute); }
+.xoff-btn {
+  min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--x-line); background: var(--x-card); color: var(--x-ink);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.xoff-primary { background: var(--x-ink); color: var(--x-bg); border-color: var(--x-ink); }
+.xoff-block { width: 100%; }
+.xoff-link { min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--x-ink); font: inherit; text-decoration: underline; cursor: pointer; align-self: flex-start; }
+.xoff-item {
+  display: block; width: 100%; min-height: 48px; padding: 10px 14px; text-align: left; border-radius: 12px; border: 1px solid var(--x-line);
+  background: var(--x-card); color: var(--x-ink); font: inherit; cursor: pointer;
+}
+.xoff-item small { color: var(--x-mute); }
+.xoff-item[disabled] { opacity: .5; }
+.xoff-input {
+  width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--x-line);
+  background: var(--x-bg); color: var(--x-ink); font: inherit; font-size: 16px;
+}
+.xoff-field { display: flex; flex-direction: column; gap: 4px; font-size: .875rem; color: var(--x-mute); }
+.xoff-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.xoff-set { display: grid; grid-template-columns: 2.5rem 1fr 1fr 44px; gap: 8px; align-items: center; }
+.xoff-set-h { font-size: .75rem; font-weight: 700; color: var(--x-mute); text-transform: uppercase; }
+.xoff-check { width: 28px; height: 28px; justify-self: center; accent-color: var(--x-ink); }
+#xoff-offer {
+  position: fixed; z-index: 40; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  min-height: 48px; padding: 0 22px; border-radius: 999px; border: 0; background: #fff; color: #0b0b0b;
+  font: 600 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); cursor: pointer;
+}
