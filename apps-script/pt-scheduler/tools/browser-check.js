@@ -881,7 +881,7 @@ async function contrastReport(page) {
     check((await page.locator('#view-clients .client-tiles .stat-tile').count()) === 4 && await visible(page, '#client-hero .insight-hero'), 'Klien list: black summary card and four tiles that also filter');
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
-    await page.evaluate(() => { const f = document.querySelector('#detail-body details.fold'); if (f) f.open = true; });
+    await page.evaluate(() => { document.querySelectorAll('#detail-body details.fold').forEach(f => { f.open = true; }); });
     check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 9, 'client page: all nine reminder switches start on');
     await page.click('#profile-remind-prefs input[data-remind="pr"]');
     await page.waitForTimeout(600);
@@ -1093,8 +1093,8 @@ async function contrastReport(page) {
     check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
     await page.evaluate(() => window.cpTab('progres'));
     await page.waitForTimeout(300);
-    check((await page.textContent('#profile-progress-wrap')).includes('sesi selesai') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
-    await page.click('#profile-progress-wrap .btn-outline');
+    check((await page.textContent('#detail-body [data-cppane="progres"]')).includes('Sesi selesai') && (await page.textContent('#detail-body [data-cppane="progres"]')).includes('Minggu beruntun') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
+    await page.click('#profile-progress-wrap .section-head .btn');
     await page.waitForTimeout(600);
     check(await visible(page, '#pg-date-field'), 'client page: the coach can choose the date');
     await page.fill('#pg-berat', '73');
@@ -1105,6 +1105,7 @@ async function contrastReport(page) {
     check((await page.textContent('#profile-progress-wrap')).includes('coach') && (await page.textContent('#profile-progress-wrap')).includes('73'), 'client page: the entry and its author are listed');
     const chartW = await page.evaluate(() => { const c = document.querySelector('#profile-progress-wrap .pg-chart'); return c ? Math.round(c.getBoundingClientRect().width) : 0; });
     check(chartW >= 200 && chartW <= 420, 'wide client page: the progress chart keeps a sensible size (' + chartW + ' px)');
+    await page.evaluate(() => document.querySelectorAll('#profile-progress-wrap details.fold').forEach(f => { f.open = true; }));
     await page.click('#profile-progress-wrap .list-item .icon-btn');
     await page.waitForTimeout(300);
     await page.click('#btn-confirm-modal-yes');
@@ -1362,7 +1363,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(800);
     await page.evaluate(() => window.cpTab('ringkasan'));
-    await page.evaluate(() => { const f = document.querySelector('#detail-body details.fold'); if (f) f.open = true; });
+    await page.evaluate(() => { document.querySelectorAll('#detail-body details.fold').forEach(f => { f.open = true; }); });
     const remind = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
     check(remind.length === 9 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
     const hit = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs input[data-remind]')).map(e => e.getBoundingClientRect()).every(r => r.height >= 43.5 && r.width >= 43.5));
@@ -1374,7 +1375,7 @@ async function contrastReport(page) {
       await page.waitForTimeout(250);
       if (tab === 'gizi') {
         const gz = await page.evaluate(() => { const w = document.getElementById('profile-nut-wrap'); return { txt: w ? w.textContent : '', over: w ? w.scrollWidth - w.clientWidth : 99, tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size }; });
-        check(/Ringkasan/.test(gz.txt) && /Lengkapi data|Target harian/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
+        check(/Dasar perhitungan/.test(gz.txt) && /Lengkapi data|Target harian/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
       }
       await shot(page, 'phone-client-' + tab + '-' + scheme);
     }
@@ -1512,7 +1513,7 @@ async function contrastReport(page) {
     await page.click('#guide-tip .guide-x');
     await page.waitForTimeout(500);
     // Tab baru (Fase J4): tiap tab punya panduannya sendiri, sekali saja.
-    for (const [view, page_, title] of [['public-progress', 'progres', 'Pencapaian'], ['public-program', 'program', 'Latihan'], ['public-info', 'info', 'Info & Tips']]) {
+    for (const [view, page_, title] of [['public-progress', 'progres', 'Rapor tubuh'], ['public-program', 'program', 'Latihan'], ['public-info', 'info', 'Info & Tips']]) {
       await page.evaluate(v => window.navigate(v), view);
       await page.waitForTimeout(1700);
       check(await visible(page, '#guide-layer') && (await tipTitle(page)) === title, 'guide: the ' + page_ + ' tab shows its own guide first (' + title + ')');
@@ -1768,7 +1769,7 @@ async function contrastReport(page) {
       await page.click('#nut-onb-body .chip >> nth=0');
       await page.click('#nut-onb-next');
       await page.waitForTimeout(1200);
-      const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.card-flat .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
+      const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.meal-blk .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
       check(mk.ring && mk.bars === 3 && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && mk.over <= 1, 'makan: ring, three macro bars, today\'s menu and the rules show, no sideways scroll ' + JSON.stringify({ bars: mk.bars, meals: mk.meals, over: mk.over }));
       check(mk.small === 0, 'makan: tap targets are at least 44 px ' + mk.small);
       await page.click('#pub-makan-pane .list-item >> nth=0');
@@ -1805,7 +1806,7 @@ async function contrastReport(page) {
       check((await page.textContent('#nut-pick-n')).trim() === '1,5', 'catat: the stepper adds half a portion');
       await page.click('#nut-pick-save');
       await page.waitForTimeout(1200);
-      check(!(await visible(page, '#modal-nut-add')) && (await page.textContent('#nut-log-card')).toLowerCase().includes('tempe') && /Dimakan [1-9]/.test(await page.textContent('#nut-eaten-line')), 'catat: the food is logged and the eaten line updates');
+      check(!(await visible(page, '#modal-nut-add')) && (await page.textContent('#nut-log-card')).toLowerCase().includes('tempe') && /(Sisa|Lebih) [0-9]/.test(await page.textContent('#nut-eaten-line')), 'catat: the food is logged and the eaten line updates');
       await page.click('#pub-makan-pane .icon-btn[aria-label^="Catat"] >> nth=0');
       await page.waitForTimeout(1200);
       check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: the check button logs a menu item in one tap');
@@ -1960,6 +1961,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.loadMyProgress(true));
     await page.waitForTimeout(800);
     check(!(await visible(page, '#sheet-badge')), 'portal: the same badge is not celebrated again');
+    await page.evaluate(() => window.setPgSeg('riwayat'));   // badge dan tantangan ada di sub-tab Riwayat
     check(await visible(page, '#pub-badges-wrap') && (await page.locator('#pub-badges-wrap .pg-badge').count()) === 11 && (await overflowX(page)) <= 0, 'portal: the Pencapaian card shows all 11 badges without sideways scroll');
     check((await page.locator('#pub-badges-wrap .pg-badge.earned').count()) >= 1 && (await page.locator('#pub-badges-wrap .pg-badge.locked').count()) >= 1, 'portal: earned badges are solid and locked ones are faded');
     const streakTxt = await page.textContent('#pub-badges-wrap');
@@ -2039,7 +2041,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
 
     // ── Progres klien (Fase D1) ────────────────────────────────────────────────
-    await page.evaluate(() => window.navigate('public-progress'));
+    await page.evaluate(() => { window.navigate('public-progress'); window.setPgSeg('ukuran'); });   // grafik dan tombol Catat ada di sub-tab Ukuran
     await page.waitForTimeout(600);
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.evaluate(() => window.navigate('public-dashboard'));
@@ -2580,7 +2582,7 @@ async function contrastReport(page) {
     const got = app ? await app.evaluate(() => window.got) : [];
     const msg = got[0] || {};
     check(got.length >= 1 && msg.origin === 'https://xnk.my.id' && msg.data.xnk === 'host' && msg.data.v === 1 && typeof msg.data.insets.b === 'number' && msg.data.kb === 0, 'wrapper answers the app frame with safe-area numbers only (' + JSON.stringify(msg.data) + ')');
-    check(Object.keys(msg.data || {}).sort().join(',') === 'insets,ios,kb,standalone,v,xnk', 'wrapper sends nothing else');
+    check(Object.keys(msg.data || {}).sort().join(',') === 'insets,ios,kb,share,standalone,v,xnk', 'wrapper sends nothing else (safe area, keyboard, iOS flags and the Phase T share flag)');
     check((await page.getAttribute('meta[name="theme-color"]', 'content')) === '#0a0a0a', 'wrapper takes the app theme colour for the Safari bars (bad values ignored)');
     check((await page.getAttribute('meta[name="viewport"]', 'content')).includes('minimum-scale=1'), 'wrapper never zooms out (iOS "everything tiny")');
     const ifr = await page.locator('#app').boundingBox();

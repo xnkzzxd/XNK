@@ -24,4 +24,6 @@ Q4 halaman Klien di panel
 - [x] T-1133 Detail klien 4 tab, Sorotan, Pengingat WA dilipat, Riwayat di Ringkasan
 - [x] T-1134 Kartu hitam + tafsir coach di Progres, Latihan, Gizi
 
+- [x] T-1140 Redesign desktop: kartu ramping, judul di top bar, sub-tab Progres, Makan, Coach ringkas, accordion di halaman klien, Gizi, kalender kecil
+
 Belum: login portal dan tab bar masih seperti sebelumnya (hanya dirapikan lewat token); lihat catatan di PR.
