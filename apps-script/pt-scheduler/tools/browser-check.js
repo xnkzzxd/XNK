@@ -2251,6 +2251,14 @@ async function contrastReport(page) {
       await off.page.waitForTimeout(1200);
       check(env.sheet('FoodLog').rows.filter(r => r[5] === 'Bakso uji').length === 1, 'offline: when the signal is back the entry is sent once');
       check(!(await off.page.textContent('#nut-log-card')).includes('belum terkirim'), 'offline: the "not sent" mark goes away');
+      // Catatan dari layar offline pembungkus (Tahap 2) masuk antrean aplikasi dan terkirim sekali.
+      const tgl = await off.page.evaluate(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date()));
+      const item = { id: 'fq-wrap1', kind: 'food', sig: '', date: tgl, entry: { waktu: 'malam', custom: { nama: 'Sate uji', kal: 250 }, jumlah: 1, cid: 'fq-wrap1', tanggal: tgl }, view: { nama: 'Sate uji', porsi: '1 porsi', kal: 250, p: 0, l: 0, k: 0, waktu: 'malam' } };
+      await off.page.evaluate(it => { window.offlineImport([it, it]); }, item);
+      await off.page.waitForTimeout(1200);
+      check(env.sheet('FoodLog').rows.filter(r => r[5] === 'Sate uji').length === 1, 'offline screen: a note made in the wrapper is sent once by the app');
+      await off.page.evaluate(it => window.offlineImport([Object.assign({}, it, { id: 'fq-wrap2', sig: 'other-account' })]), item);
+      check(!(await off.page.evaluate(() => (localStorage.getItem('xnk_food_queue') || '').includes('fq-wrap2'))), 'offline screen: notes from another account are not imported');
     } else check(false, 'offline: food log check could not run (' + queued + ')');
     await off.context.close();
     // 3) Keluar menghapus salinan.
@@ -2545,7 +2553,12 @@ async function contrastReport(page) {
     const context = await browser.newContext({ viewport: MOBILE, hasTouch: true, isMobile: true });
     await context.route('**/*', route => {
       const url = route.request().url();
-      if (url.startsWith('https://xnk.my.id/')) return route.fulfill({ contentType: 'text/html', body: wrapper });
+      if (url.startsWith('https://xnk.my.id/')) {
+        // Berkas statis pembungkus (layar offline) dari root repo; sisanya halaman itu sendiri.
+        const f = path.join(__dirname, '..', '..', '..', new URL(url).pathname);
+        if (/\.(js|css)$/.test(url) && fs.existsSync(f)) return route.fulfill({ contentType: url.endsWith('.css') ? 'text/css' : 'application/javascript', body: fs.readFileSync(f) });
+        return route.fulfill({ contentType: 'text/html', body: wrapper });
+      }
       // Apps Script page → our HTML in a googleusercontent frame (as in production)
       if (url.startsWith('https://script.google.com/')) return route.fulfill({ contentType: 'text/html', body: '<iframe src="' + APP + '/userCodeAppPanel" style="border:0;width:100%;height:100%"></iframe>' });
       if (url.startsWith(APP)) return route.fulfill({ contentType: 'text/html', body: '<script>window.got=[];addEventListener("message",e=>{if(e.source===window.top)got.push({origin:e.origin,data:e.data})});top.postMessage({xnk:"host?"},"*");top.postMessage({xnk:"theme",color:"#0a0a0a"},"*");top.postMessage({xnk:"theme",color:"red;x"},"*");</script>' });

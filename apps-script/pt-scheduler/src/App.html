@@ -351,7 +351,7 @@
   // jadi halaman pembungkus mengukurnya dan mengirim angka saja. Tidak ada data,
   // token, atau nomor yang lewat jalur ini.
   const HOST_ORIGINS = ['https://xnk.my.id', 'https://book.xnkbooking.my.id', 'https://xnkbooking.my.id'];
-  const host = { ios: false, standalone: false, kb: 0 };
+  const host = { ios: false, standalone: false, kb: 0, origin: '' };
   function hostNum(v) { v = Math.round(Number(v)); return isFinite(v) ? Math.max(0, Math.min(v, 600)) : 0; }
   window.applyHostInfo = function (d) {
     if (!d) return;
@@ -398,7 +398,12 @@
     window.addEventListener('message', function (e) {
       if (e.source !== window.top || HOST_ORIGINS.indexOf(e.origin) === -1) return;
       const d = e.data;
-      if (d && d.xnk === 'host' && d.v === 1) window.applyHostInfo(d);
+      if (d && d.xnk === 'host' && d.v === 1) {
+        const first = !host.origin;
+        host.origin = e.origin;
+        window.applyHostInfo(d);
+        if (first) setTimeout(offlineSync, 0);   // pembungkus dikenal: kirim salinan & ambil catatan offline
+      } else if (d && d.xnk === 'offline-queue' && Array.isArray(d.items)) offlineImport(d.items);
     });
     try { window.top.postMessage({ xnk: 'host?' }, '*'); } catch (e) {}
     // Fokus ke kolom saat keyboard sudah terbuka (pindah kolom) juga perlu digeser.
@@ -1969,6 +1974,7 @@
         priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || []
       }));
     } catch (e) {}
+    window.offlineSnapSoon();
   }
   function loadAdminCache() {
     try {
@@ -1983,7 +1989,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); }
+  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -2053,6 +2059,7 @@
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (r[0] && r[1]) saveAdminCache();
+      window.offlineSync();
       loadAdminExtras();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
     });
@@ -2132,6 +2139,7 @@
         window.updateUI();
       }
       savePortalCache();
+      window.offlineSync();
       openPendingSlot();
       // Pustaka gerakan & makanan disimpan di perangkat lebih awal, supaya cari & catat tetap jalan tanpa sinyal.
       if (token && !ui.libsWarm) { ui.libsWarm = true; setTimeout(function () { if (navigator.onLine === false) return; exEnsure().catch(function () {}); if (nutOn()) foodEnsure().catch(function () {}); }, 4000); }
@@ -2171,8 +2179,10 @@
         more: portalMoreRaw, moreAt: portalMoreAt
       }));
     } catch (e) {}
+    offlineSnapSoon();
   }
   window.clearPortalCache = function () {
+    window.offlineClear();
     if (window.wlForget) window.wlForget('client');
     if (window.fqForget) window.fqForget();
     _lsSet(PORTAL_CACHE_KEY, null);
@@ -4200,6 +4210,7 @@
     c.order = [id].concat(c.order.filter(x => x !== id));
     while (c.order.length > CC_MAX) delete c.items[c.order.pop()];
     ccWrite(c);
+    window.offlineSnapSoon();
   }
   // Tulisan coach: bagian itu langsung masuk salinan; versi dikosongkan supaya tafsir dihitung ulang sekali di belakang layar.
   function ccPatch(id, parts) {
@@ -10055,5 +10066,114 @@
       for (let j = 0; j < added.length; j++) { if (added[j].nodeType === 1) { paintIcons(); return; } }
     }
   }).observe(document.body, { childList: true, subtree: true });
+
+  // ── Jembatan "Catat offline" (Tahap 2, 2026-10) ────────────────────────────────
+  // Halaman pembungkus (xnk.my.id / book.xnkbooking.my.id) menyimpan salinan kecil supaya bisa dibuka tanpa sinyal,
+  // dan menyimpan catatan yang dibuat di sana. Hanya ke origin pembungkus yang sudah menyapa (host.origin), tanpa token,
+  // tanpa nomor WA. Catatan dari pembungkus masuk ke antrean aplikasi (cid sama = tidak dobel di server).
+  const AQ_KEY = 'xnk_adm_queue';
+  function hostSend(msg) { if (!host.origin || window.top === window) return; try { window.top.postMessage(msg, host.origin); } catch (e) {} }
+  let offSnapTimer = 0;
+  function offlineSnapSoon() { clearTimeout(offSnapTimer); offSnapTimer = setTimeout(function () { const s = offlineSnap(); if (s) hostSend({ xnk: 'offline-snap', snap: s }); }, 400); }
+  window.offlineSnapSoon = offlineSnapSoon;
+  function offlineSync() {
+    const signed = window.isPublicView ? !!(window.publicLoggedMember && _lsGet(MEMBER_TOKEN_KEY)) : !!_lsGet(ADMIN_TOKEN_KEY);
+    if (!signed) return;
+    offlineSnapSoon();
+    hostSend({ xnk: 'offline-queue?' });
+  }
+  window.offlineSync = offlineSync;
+  window.offlineClear = function () { hostSend({ xnk: 'offline-clear' }); };
+  const offFirst = n => String(n || '').trim().split(/\s+/)[0];
+  const offRoutines = p => (p && !p.error ? (p.days || []).concat(p.own || []) : []).map(d => ({ hari: d.hari, items: (d.items || []).map(it => ({ gerakan: it.gerakan, exId: it.exId || '' })) }));
+  function offLast(w, routines) {
+    const keys = {}, out = {};
+    routines.forEach(r => r.items.forEach(it => { keys[wkKeyOf(it)] = 1; }));
+    if (w && w.last) Object.keys(w.last).forEach(k => { if (keys[k]) out[k] = { sets: (w.last[k].sets || []).map(x => ({ berat: x.berat, rep: x.rep, jenis: x.jenis || '' })) }; });
+    return out;
+  }
+  const offMeasures = d => (d && d.entries ? d.entries.slice(-2).map(e => { const o = { tanggal: e.tanggal }; PG_MEASURES.forEach(m => { o[m[0]] = e[m[0]]; }); return o; }) : []);
+  function offlineSnap() {
+    if (window.isPublicView) {
+      const t = _lsGet(MEMBER_TOKEN_KEY), me = window.publicLoggedMember;
+      if (!t || !me) return null;
+      const routines = offRoutines(window.myProgram && window.myProgram.state === 'ok' ? window.myProgram.data : null);
+      const n = window.myNutrition, lg = n && n.log ? nutEff(n).log : null;
+      const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0;
+      return { mode: 'client', sig: tokenSig(t), at: Date.now(), name: offFirst(me.name), sisa: total ? Math.max(0, total - used) : '',
+        sessions: (window.schedules || []).filter(s => String(s.memberId) === String(me.id) && !isDone(s) && new Date(s.end || s.start) > new Date()).slice(0, 10).map(s => ({ start: s.start, coach: s.coachName || '' })),
+        routines: routines, last: offLast(window.myWorkout && window.myWorkout.data, routines),
+        target: n && n.target && n.target.ok ? { kal: n.target.kal } : null,
+        log: lg ? { tanggal: lg.tanggal, items: lg.items.map(x => ({ nama: x.nama, porsi: x.porsi, kal: x.kal, waktu: x.waktu })) } : null,
+        measures: offMeasures(pg.data) };
+    }
+    const t = _lsGet(ADMIN_TOKEN_KEY);
+    if (!t) return null;
+    const today = wkToday(), tomorrow = wkAddDays(today, 1), names = {};
+    (window.members || []).forEach(m => { names[String(m.id)] = offFirst(m.name); });
+    const ses = (window.schedules || []).filter(s => { const d = wkIsoOf(s.start); return (d === today || d === tomorrow) && s.memberId && status(s) !== 'cancelled'; })
+      .map(s => ({ id: String(s.id), memberId: String(s.memberId), name: names[String(s.memberId)] || offFirst(s.title), start: s.start }));
+    const ids = ses.map(s => s.memberId), stored = ccRead();
+    stored.order.forEach(id => { if (ids.indexOf(id) === -1) ids.push(id); });
+    const clients = {};
+    ids.slice(0, 40).forEach(function (id) {
+      const b = (stored.items[id] || {}).b || {};
+      const prog = progAdmin[id] || b.program, wk = wkAdmin[id] || b.workout, prg = pg.admin[id] || b.progress;
+      const routines = offRoutines(prog);
+      clients[id] = { name: names[id] || id, routines: routines, last: offLast(wk, routines), measures: offMeasures(prg) };
+    });
+    return { mode: 'coach', sig: tokenSig(t), at: Date.now(), today: ses, clients: clients };
+  }
+  function aqAll() { try { const q = JSON.parse(_lsGet(AQ_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; } }
+  function aqSet(q) { _lsSet(AQ_KEY, q.length ? JSON.stringify(q) : null); }
+  window.aqForget = function () { aqSet([]); };
+  // Catatan dari pembungkus → antrean aplikasi. Hanya milik akun yang sedang masuk (sig sama, atau dibuat tanpa salinan).
+  function offlineImport(items) {
+    const coach = !window.isPublicView, t = _lsGet(coach ? ADMIN_TOKEN_KEY : MEMBER_TOKEN_KEY);
+    if (!t) return;
+    const sig = tokenSig(t), done = [];
+    const wq = wlQueue(), fq = fqAll(), aq = aqAll();
+    items.forEach(function (x) {
+      if (!x || !x.id || (x.sig && x.sig !== sig)) return;
+      if (x.kind === 'wl') {
+        if (coach && !x.memberId) return;
+        if (!wq.some(y => y.id === x.id)) wq.push({ id: x.id, scope: coach ? 'adm:' + x.memberId : 'm:' + sig, mode: coach ? 'admin' : 'client', memberId: x.memberId || '', name: x.name || '', date: x.date, scheduleId: '', hari: x.hari || '', entries: x.entries || [], at: x.at || Date.now(), tries: 0, err: '', retry: true, session: x.session });
+      } else if (x.kind === 'food' && !coach) {
+        if (!fq.some(y => y.id === x.id)) fq.push({ id: x.id, op: 'add', scope: 'm:' + sig, at: x.at || Date.now(), tries: 0, tanggal: x.entry.tanggal, entry: x.entry, view: x.view });
+      } else if ((x.kind === 'measure' || x.kind === 'note') && coach) {
+        if (!aq.some(y => y.id === x.id)) aq.push(x);
+      } else return;
+      done.push(x.id);
+    });
+    wlQueueSet(wq); fqSet(fq); aqSet(aq);
+    if (done.length) {
+      hostSend({ xnk: 'offline-ack', ids: done });
+      window.showToast(done.length + ' catatan offline dikirim.');
+      window.wlFlush(); if (!coach) window.fqFlush(); else aqFlush();
+    }
+  }
+  // Antrean coach: ukuran tubuh dan catatan sesi (keduanya upsert di server, jadi kirim ulang aman).
+  let aqBusy = false;
+  function aqFlush() {
+    if (aqBusy || !_lsGet(ADMIN_TOKEN_KEY)) return;
+    const it = aqAll()[0]; if (!it) return;
+    aqBusy = true;
+    const call = it.kind === 'measure' ? adminCall('saveMemberMeasurement', it.memberId, it.data) : adminCall('saveSessionNote', it.scheduleId, it.data);
+    call.then(function (r) {
+      aqBusy = false; aqSet(aqAll().filter(x => x.id !== it.id));
+      if (it.kind === 'measure' && r) window.pgSetAdmin(it.memberId, r);
+      aqFlush();
+    }).catch(function (err) {
+      aqBusy = false;
+      if (window.isAuthError(err)) return;
+      if (wlRetryable(err)) { setTimeout(aqFlush, 30000); return; }
+      aqSet(aqAll().filter(x => x.id !== it.id));
+      window.showToast('Catatan offline tidak tersimpan: ' + window.authMessage(err));
+      aqFlush();
+    });
+  }
+  window.aqFlush = aqFlush;
+  window.offlineImport = offlineImport;   // juga untuk browser-check
+  window.addEventListener('online', aqFlush);
 })();
 </script>
