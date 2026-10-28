@@ -429,6 +429,20 @@ async function contrastReport(page) {
       const parts = [...card.querySelectorAll('.eyebrow, .muted, .pill, .btn')].map(el => ({ t: el.textContent.trim(), r: ratio(rgb(getComputedStyle(el).color), bgOf(el)) }));
       return { lift: ratio(cardBg, pageBg), parts };
     });
+    const sa = await page.evaluate(() => {
+      const cv = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+      const rgb = v => { cv.clearRect(0, 0, 1, 1); cv.fillStyle = '#000'; cv.fillStyle = v; cv.fillRect(0, 0, 1, 1); const d = cv.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+      const lum = c => { const k = c.slice(0, 3).map(x => x / 255).map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)); return 0.2126 * k[0] + 0.7152 * k[1] + 0.0722 * k[2]; };
+      const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const row = (document.querySelector('.sess-actions .btn-primary') || {}).parentElement;
+      if (!row) return null;
+      const btns = [...row.querySelectorAll('.btn')];
+      const prim = row.querySelector('.btn-primary');
+      const rr = row.getBoundingClientRect(), card = row.parentElement.getBoundingClientRect();
+      return { n: btns.length, tall: btns.every(b => b.getBoundingClientRect().height >= 44), prim: !!prim && /Selesai/.test(prim.textContent), contrast: prim ? ratio(rgb(getComputedStyle(prim).color), rgb(getComputedStyle(prim).backgroundColor)) : 0, right: card.right - rr.right < 40 || [...btns].pop().getBoundingClientRect().right >= card.right - 40 };
+    });
+    check(!!sa && sa.prim && sa.tall && sa.contrast >= 4.5, 'session row: solid "Selesai" first, 44 px buttons, contrast ≥ 4.5:1 (' + (sa ? sa.contrast.toFixed(1) : 'none') + ')');
+    check(!!sa && sa.right, 'session row buttons sit on the right on desktop');
     check(!!hero, 'dashboard has the "Sesi berikutnya" card');
     if (hero) {
       check(scheme === 'light' || hero.lift >= 1.1, 'next-session card is lighter than the page (' + hero.lift.toFixed(2) + ')');
