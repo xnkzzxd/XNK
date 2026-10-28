@@ -37,14 +37,15 @@ async function openWrapper(browser, dir) {
   const base = 'http://localhost:' + srv.address().port;
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   // Aplikasi Apps Script dan pustaka di xnk.my.id: tidak ke internet.
-  await context.route(/script\.google(usercontent)?\.com/, r => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>app</p>' }));
+  // Aplikasi Apps Script tidak pernah selesai dimuat (lambat): service worker tetap harus terpasang.
+  await context.route(/script\.google(usercontent)?\.com/, () => {});
   await context.route(/xnk\.my\.id\/foods\//, r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: FOODS }));
   await context.route(/xnk\.my\.id\/exercises\//, r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: EXS }));
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
-  await page.goto(base + '/');
-  await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 8000 }).catch(() => page.reload().then(() => page.waitForTimeout(800)));
+  await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 8000 }).catch(() => {});
   return { srv, base, context, page, errors };
 }
 // Pesan jembatan seperti dari aplikasi; balasan offline.js ditangkap di window.__replies.
@@ -65,7 +66,7 @@ const bridge = (page, data) => page.evaluate(d => {
     await bridge(w.page, { xnk: 'offline-snap', snap: { mode: 'coach', sig: 'S1', at: Date.now(), today: [{ id: 'SCH-1', memberId: 'PT-A', name: 'Ani', start: start }],
       clients: { 'PT-A': { name: 'Ani', routines: [{ hari: 'Hari A', items: [{ gerakan: 'Squat', exId: '' }] }], last: { 'nm:squat': { sets: [{ berat: 40, rep: 8 }] } }, measures: [{ tanggal: '2026-10-01', berat: 70 }] } } } });
     await w.context.setOffline(true);
-    await w.page.reload();
+    await w.page.reload({ waitUntil: 'domcontentloaded' });
     await w.page.waitForTimeout(800);
     check(await w.page.isVisible('#xoff'), 'offline: the wrapper opens straight into "Catat offline"');
     check((await w.page.textContent('#xoff')).includes('Ani'), 'offline: today\'s schedule comes from the saved copy');
@@ -105,7 +106,7 @@ const bridge = (page, data) => page.evaluate(d => {
       sessions: [{ start: new Date(Date.now() + 86400000).toISOString(), coach: 'Rizky' }], routines: [{ hari: 'Hari A', items: [{ gerakan: 'Bench press', exId: '' }] }], last: {},
       target: { kal: 1800 }, log: { tanggal: day, items: [{ nama: 'Nasi', porsi: '1 piring', kal: 360, waktu: 'siang' }] }, measures: [{ tanggal: '2026-10-01', berat: 71 }, { tanggal: '2026-10-20', berat: 70 }] } });
     await w.context.setOffline(true);
-    await w.page.reload();
+    await w.page.reload({ waitUntil: 'domcontentloaded' });
     await w.page.waitForTimeout(800);
     check(await w.page.isVisible('#xoff'), 'offline: the client wrapper opens into "Catat offline"');
     await w.page.click('#xoff [data-tab="makan"]');
