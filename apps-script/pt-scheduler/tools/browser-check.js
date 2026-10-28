@@ -264,6 +264,20 @@ async function contrastReport(page) {
     });
     check(phoneList.list === 'flex/column' && phoneList.card === 'flex' && phoneList.meter === '220px' && phoneList.meta === 0, 'phone: the client list is the same one-column list (no desktop card details) ' + JSON.stringify(phoneList));
     await shot(page, 'admin-mobile-clients');
+    const topPhone = await page.evaluate(() => {
+      const r = s => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
+      const hero = r('#client-hero .insight-hero'), tools = r('.cl-tools'), sort = r('#sort-client'), search = r('#search-client'), first = r('#client-list .client-card');
+      return { tiles: document.querySelectorAll('#view-clients .stat-tile').length, heroH: hero && Math.round(hero.height), oneRow: !!sort && !!search && Math.abs(sort.top - search.top) < 8,
+        firstIn: !!first && first.bottom <= innerHeight - 70, toolsH: tools && Math.round(tools.height) };
+    });
+    check(topPhone.tiles === 0 && topPhone.heroH <= 72 && topPhone.oneRow && topPhone.firstIn, 'phone: Klien top is lean (no tiles, one-line summary, search + sort on one row, first client on screen) ' + JSON.stringify(topPhone));
+    const grp = await page.evaluate(() => ({ labels: Array.from(document.querySelectorAll('#client-list .group-label span')).map(e => e.textContent) }));
+    check(grp.labels.every(l => l.indexOf(' · ') > 0), 'phone: group labels name their basis ' + JSON.stringify(grp));
+    await page.selectOption('#sort-client', 'sisa');
+    await page.waitForTimeout(200);
+    const grp2 = await page.evaluate(() => Array.from(document.querySelectorAll('#client-list .group-label span')).map(e => e.textContent));
+    check(grp2.every(l => l.indexOf('Sisa sesi · ') === 0), 'phone: the group labels follow the chosen order ' + JSON.stringify(grp2));
+    await page.selectOption('#sort-client', 'terbaru');
     await page.fill('#search-client', 'citra');
     await page.waitForTimeout(200);
     check((await page.locator('#client-list .client-card').count()) === 1, 'search narrows the client list');
@@ -281,6 +295,12 @@ async function contrastReport(page) {
       wide: document.getElementById('app').classList.contains('detail-wide') && getComputedStyle(document.getElementById('detail-panel')).width,
     }));
     check(phoneProf.tabs === 4 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (4-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
+    const hl = await page.evaluate(() => {
+      const r = s => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
+      const hero = r('#detail-body .client-hero'), ring = r('#detail-body .client-ring-row'), acts = r('#detail-body .client-hero-actions'), tabs = r('#detail-body .cp-tabs'), sor = r('#cp-highlight');
+      return { heroH: hero && Math.round(hero.height), oneRow: !!ring && !!acts && acts.left >= ring.right - 2 && Math.abs(acts.top - ring.top) < 40, tabH: tabs && Math.round(tabs.height), sorTop: sor && Math.round(sor.top), inFirst: !!sor && sor.top < innerHeight - 120 };
+    });
+    check(hl.heroH <= 250 && hl.oneRow && hl.tabH <= 60 && hl.inFirst, 'phone: client page hero is short (ring and buttons on one row), tabs low, Sorotan is on the first screen ' + JSON.stringify(hl));
     const detail = await page.textContent('#detail-panel');
     check(detail.includes('Citra') && !detail.includes('Kirim Link') && !detail.includes('Link Baru'), 'client detail shows the client, no member-link buttons');
     await shot(page, 'admin-mobile-client-detail');
@@ -501,9 +521,9 @@ async function contrastReport(page) {
     await page.fill('#search-client', '');
     await page.evaluate(() => window.filterClients());
     await page.evaluate(() => window.setClientFilter('low'));
-    const kLow = await page.locator('#view-clients .stat-tile.active[data-filter="low"]').count();
+    const kLow = await page.locator('#view-clients .chip.active[data-filter="low"]').count();
     await page.evaluate(() => window.setClientFilter('all'));
-    check(kLow === 1 && (await page.locator('#view-clients .stat-tile.active').count()) === 0 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the summary tiles and chips follow the chosen filter');
+    check(kLow === 1 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1 && (await page.locator('#view-clients .stat-tile').count()) === 0, 'Klien: the filter chips follow the chosen filter (the four tiles are gone)');
 
     // Closing returns to the grid; a profile opened from another page keeps the normal 420 px panel.
     await page.click('.detail-head .icon-btn[aria-label="Tutup detail"]');
@@ -822,7 +842,7 @@ async function contrastReport(page) {
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.waitForTimeout(400);
-    check((await page.locator('#view-clients .client-tiles .stat-tile').count()) === 4 && await visible(page, '#client-hero .insight-hero'), 'Klien list: black summary card and four tiles that also filter');
+    check((await page.locator('#view-clients .stat-tile').count()) === 0 && await visible(page, '#client-hero .insight-hero'), 'Klien list: one black summary card, no tiles');
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
     await page.evaluate(() => { const f = document.querySelector('#detail-body details.fold'); if (f) f.open = true; });

@@ -1689,7 +1689,7 @@
     const range = r ? '<div class="ih-range" role="group">' + r.options.map(function (o) {
       return '<button type="button" class="' + (o[0] === r.key ? 'on' : '') + '" onclick="' + r.onPick.replace('%k', o[0]) + '">' + h(o[1]) + '</button>';
     }).join('') + '</div>' : '';
-    return '<section class="card-ink insight-hero"><div class="ih-head"><span class="ih-eyebrow">' + h(cfg.eyebrow || '') + '</span>' + range + '</div>' + body + '</section>';
+    return '<section class="card-ink insight-hero' + (cfg.cls ? ' ' + cfg.cls : '') + '"><div class="ih-head"><span class="ih-eyebrow">' + h(cfg.eyebrow || '') + '</span>' + range + '</div>' + body + '</section>';
   }
 
   // ── Loader & start ──────────────────────────────────────────────────────────
@@ -3757,9 +3757,9 @@
   function clientHeroHtml(counts) {
     const g = window.clientSignals, ok = g && !g.error;
     const n = counts.perhatian;
-    return insightHeroHtml({ eyebrow: 'Ringkasan klien',
+    return insightHeroHtml({ cls: 'ih-one', eyebrow: 'Ringkasan klien',
       stats: [{ v: String(counts.all), l: 'Klien' }, { v: ok ? String(g.totals.sesiMinggu) : '–', l: 'Sesi minggu ini' }, { v: ok ? g.totals.konsisten + '%' : '–', l: 'Aktif 14 hari' }, { v: ok ? String(n) : '–', l: 'Perlu perhatian' }],
-      text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatianmu.' : 'Semua klien aman hari ini.',
+      text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatianmu' : 'Semua klien aman hari ini',
       actions: ok && n ? '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.setClientFilter(\'perhatian\')">' + icon('eye') + 'Lihat siapa</button>' : '' });
   }
   function renderClients() {
@@ -3770,15 +3770,11 @@
     loadClientPrefs();
     const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
     window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
-    const tiles = [['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian']];
     const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian'], ['archive', 'Riwayat paket']];
     const sorts = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
     const html = '<div class="page-head"><div><h2 class="page-title">Klien</h2><p class="page-sub">' + counts.all + ' klien · ' + (counts.active + counts.low) + ' punya sisa sesi</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button></div>' +
-      '<div class="client-top" id="client-top"><div id="client-hero">' + clientHeroHtml(counts) + '</div>' +
-      '<div class="stat-strip client-tiles">' + tiles.map(function (k) {
-        return '<button type="button" class="stat-tile' + (ui.clientFilter === k[0] ? ' active' : '') + '" data-filter="' + k[0] + '" aria-pressed="' + (ui.clientFilter === k[0]) + '" onclick="window.setClientFilter(\'' + k[0] + '\')"><b class="num">' + counts[k[0]] + '</b><span>' + k[1] + '</span></button>';
-      }).join('') + '</div></div>' +
+      '<div class="client-top" id="client-top"><div id="client-hero">' + clientHeroHtml(counts) + '</div></div>' +
       '<div class="stack" style="gap:12px;margin-bottom:8px">' +
         '<div class="cl-tools"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari nama atau nomor…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
         '<select class="select" id="sort-client" aria-label="Urutkan klien" onchange="window.setClientSort(this.value)">' + sorts.map(o => '<option value="' + o[0] + '"' + (ui.clientSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>' +
@@ -3799,14 +3795,29 @@
     renderClientList();
   };
 
+  // Dasar pengelompokan daftar klien, sesuai urutan yang dipilih (S8).
+  function clientGroupLabel(e) {
+    const mon = e.date && e.date.getTime() > 0 ? MONTHS[e.date.getMonth()] + ' ' + e.date.getFullYear() : 'Tanpa tanggal';
+    if (e.type !== 'live') return 'Riwayat paket · ' + mon;
+    const m = e.data;
+    switch (ui.clientSort) {
+      case 'perhatian': { const n = flagsOf(m).length; return n ? 'Perlu perhatian · ' + n + ' tanda' : 'Perlu perhatian · Aman'; }
+      case 'nama': { const c = String(m.name || '').trim().charAt(0).toUpperCase(); return 'Nama · ' + (/[A-Z]/.test(c) ? c : '#'); }
+      case 'sisa': { const r = remainingOf(m); return 'Sisa sesi · ' + (r === 0 ? 'Habis' : r <= 2 ? '1–2 sesi' : r <= 5 ? '3–5 sesi' : '6+ sesi'); }
+      case 'lama': {
+        const g = sigOf(m), d = g && g.lastDone ? Math.round((Date.now() - new Date(g.lastDone + 'T00:00:00+07:00')) / 86400000) : null;
+        return 'Lama tidak latihan · ' + (d == null ? 'Belum pernah' : d >= 30 ? '30+ hari' : d >= 14 ? '14–29 hari' : d >= 7 ? '7–13 hari' : 'Kurang dari 7 hari');
+      }
+      default: return 'Aktivitas terakhir · ' + mon;
+    }
+  }
   function renderClientList() {
     const el = $('client-list');
     if (!el) return;
     const fKey = focusedRowKey();
     document.querySelectorAll('#view-clients [data-filter]').forEach(function (c) {
       const f = c.getAttribute('data-filter'), on = f === ui.clientFilter;
-      if (c.classList.contains('stat-tile')) { c.classList.toggle('active', on); c.setAttribute('aria-pressed', on); }
-      else { c.classList.toggle('active', on); c.setAttribute('aria-selected', on); }
+      c.classList.toggle('active', on); c.setAttribute('aria-selected', on);
     });
     const q = ui.clientQuery.trim().toLowerCase();
     const match = x => !q || String(x.name || '').toLowerCase().indexOf(q) !== -1 || String(x.phone || '').indexOf(q.replace(/\D/g, '') || '\u0000') !== -1;
@@ -3839,10 +3850,12 @@
       if (t >= now && (!nextBy[k] || t < nextBy[k])) nextBy[k] = t;
     });
     (window.renewals || []).forEach(function (r) { if (r.status === 'menunggu') renewBy[String(r.memberId)] = true; });
+    // Label grup mengikuti urutan terpilih; bila hanya satu grup, pembagi disembunyikan.
+    const labels = q ? [] : entries.map(clientGroupLabel);
+    const showGroups = labels.length > 0 && labels.some(l => l !== labels[0]);
     let html = '', group = '';
-    entries.forEach(function (e) {
-      const g = MONTHS[e.date.getMonth()] + ' ' + e.date.getFullYear();
-      if (!q && ui.clientSort === 'terbaru' && g !== group) { html += '<div class="group-label month-divider"><span>' + g + '</span></div>'; group = g; }
+    entries.forEach(function (e, i) {
+      if (showGroups && labels[i] !== group) { html += '<div class="group-label month-divider"><span>' + h(labels[i]) + '</span></div>'; group = labels[i]; }
       html += e.type === 'live' ? clientRow(e.data, { desk: desk, date: e.date, next: nextBy[String(e.data.id)], renew: !!renewBy[String(e.data.id)], solo: solo }) : archiveRow(e.data);
     });
     setHTML(el, '<div class="list stagger' + (ui.clientView === 'list' ? ' cl-view-list' : '') + '">' + html + '</div>');

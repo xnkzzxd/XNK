@@ -22,9 +22,12 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 - [ ] **S6** Baris sesi (Dashboard, Jadwal, hub coach): "Selesai" solid sebagai aksi utama, "Ubah" dan "WA" sekunder (ikon + teks pendek, target 44 px), tombol rata kanan di desktop; kontras OK di kartu hitam dan gelap. Satu komponen `.sess-actions` bersama. Dep: S5. (P8, P14)
 
 ## C — Halaman Klien
-- [ ] **S7** Rampingkan layar atas Klien: hapus 4 tile (`.client-top`), ringkasan hitam satu baris di HP (angka + "Lihat siapa"), cari + sortir + Kartu/Daftar satu baris; klien pertama terlihat di 390×844. Perbarui cek browser yang menyebut `.client-top`. Dep: S4. (P3)
-- [ ] **S8** Label dasar pengelompokan klien ("Bergabung · Januari 2026", "Sisa sesi · Habis", dll.) mengikuti urutan terpilih; sembunyikan pembagi bila hanya satu grup. Dep: S7. (P4)
-- [ ] **S9** Profil klien HP: hero lebih pendek (cincin sisa sesi dan tombol satu baris), tab hitam lebih rendah; "Sorotan" muncul dalam layar pertama. Dep: S1. (P12)
+- [x] **S7** Rampingkan layar atas Klien: hapus 4 tile (`.client-top`), ringkasan hitam satu baris di HP (angka + "Lihat siapa"), cari + sortir + Kartu/Daftar satu baris; klien pertama terlihat di 390×844. Perbarui cek browser yang menyebut `.client-top`. Dep: S4. (P3)
+  - Hasil: tile dihapus; ringkasan hitam satu baris di HP (`ih-one`, statistik tetap di desktop); cari + sortir satu baris; klien pertama terlihat di 390×844.
+- [x] **S8** Label dasar pengelompokan klien ("Bergabung · Januari 2026", "Sisa sesi · Habis", dll.) mengikuti urutan terpilih; sembunyikan pembagi bila hanya satu grup. Dep: S7. (P4)
+  - Hasil: `clientGroupLabel` memberi label sesuai urutan ("Aktivitas terakhir · bulan", "Sisa sesi · Habis", dst.; dasar tanggal memang aktivitas terakhir, bukan tanggal gabung); pembagi disembunyikan bila hanya satu grup.
+- [x] **S9** Profil klien HP: hero lebih pendek (cincin sisa sesi dan tombol satu baris), tab hitam lebih rendah; "Sorotan" muncul dalam layar pertama. Dep: S1. (P12)
+  - Hasil: HP: cincin dan tombol satu baris, tab 52 px, Sorotan mulai di y≈400. Catatan: `browser-check.js` masih time-out di portal (kartu coach, `.my-coach-card` dalam lipatan) — sudah ada sebelum S7–S9.
 
 ## D — Dashboard dan Jadwal
 - [ ] **S10** Dashboard HP: agenda "Hari ini" naik tepat di bawah salam; tile jadi satu baris yang bisa digeser (snap, tanpa scroll sideways pada halaman). Dep: S6. (P7)
