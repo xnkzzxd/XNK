@@ -127,3 +127,31 @@ test('admin sees seven days of one client; members and the bootstrap do not', ()
   assert.throws(() => s.env.call('getClientFoodLog', s.ani, 'PT-A'));
   assert.ok(!/FoodLog|Nasi/.test(JSON.stringify(s.env.call('getAdminBootstrap', s.admin))));
 });
+
+test('offline queue: the same cid twice is one row; a cid allows dates up to 30 days back', () => {
+  const s = setup();
+  const day = d => s.env.call('_addDaysIso_', s.env.call('_todayWib_'), -d);
+  const e = { waktu: 'siang', custom: { nama: 'Bakso', kal: 300 }, jumlah: 1, cid: 'fq-abc1', tanggal: day(12) };
+  const r1 = s.log(s.ani, e), r2 = s.log(s.ani, e);
+  assert.equal(r1.tanggal, day(12));
+  assert.equal(r2.items.length, 1, 'retry did not add a second row');
+  assert.equal(r2.items[0].cid, 'fq-abc1');
+  const rows = s.env.sheet('FoodLog').rows;
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0][14], 'CID');
+  assert.throws(() => s.log(s.ani, Object.assign({}, e, { cid: '', tanggal: day(12) })), /Tanggal catatan tidak valid/, 'without cid the 7-day limit stays');
+  assert.throws(() => s.log(s.ani, Object.assign({}, e, { cid: 'fq-2', tanggal: day(31) })), /Tanggal catatan tidak valid/);
+  assert.throws(() => s.log(s.ani, Object.assign({}, e, { cid: 'a b' })), /Kode catatan/);
+  // Another client with the same cid is a different note.
+  assert.equal(s.log(s.budi, Object.assign({}, e, { tanggal: '' })).items.length, 1);
+});
+
+test('the CID header is added to an old FoodLog sheet once', () => {
+  const s = setup();
+  s.env.ss.seed('FoodLog', [['ID', 'Member ID', 'Tanggal', 'Waktu', 'Food ID', 'Nama', 'Gram', 'Porsi', 'Kal', 'Protein', 'Lemak', 'Karbo', 'Sumber', 'Dibuat Pada']]);
+  s.log(s.ani, { waktu: 'siang', id: 'AP001', gram: 100, cid: 'fq-1' });
+  s.log(s.ani, { waktu: 'siang', id: 'AP001', gram: 100, cid: 'fq-2' });
+  const rows = s.env.sheet('FoodLog').rows;
+  assert.equal(rows[0][14], 'CID');
+  assert.equal(rows.length, 3);
+});
