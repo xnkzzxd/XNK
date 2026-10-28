@@ -1164,6 +1164,22 @@ async function contrastReport(page) {
     check(!(await visible(page, '#settings-pane')), 'phone: only the list is shown until a section is chosen');
     check(await visible(page, '#tabbar'), 'phone: the bottom bar stays visible');
     check((await overflow()) <= 0, 'phone: settings list has no sideways scroll');
+    // S3: the app must sit at x = 0 (not scrolled sideways), the black band under the top bar, nothing wider than the screen.
+    const settingsGeom = () => page.evaluate(() => {
+      const L = sel => { const e = document.querySelector(sel); return e ? e.getBoundingClientRect() : null; };
+      const top = L('#topbar'), head = L('#view-settings .page-head'), app = document.getElementById('app');
+      return { appScroll: app.scrollLeft, topLeft: top && Math.round(top.left), bandOk: !!head && !!top && Math.abs(head.top - top.bottom) <= 1 && Math.round(head.left) === 0 && Math.round(head.width) === window.innerWidth,
+        wide: Array.from(document.querySelectorAll('#view-settings *')).filter(e => { const r = e.getBoundingClientRect(); return r.width && !e.closest('#pkg-chips') && (r.right > window.innerWidth + 1 || r.left < -1); }).length };
+    });
+    const geomOk = g => g.appScroll === 0 && g.topLeft === 0 && g.bandOk && g.wide === 0;
+    for (const w of [360, 390, 430]) {
+      await page.setViewportSize({ width: w, height: 844 });
+      await page.waitForTimeout(400);
+      const g = await settingsGeom();
+      check(geomOk(g), 'phone ' + w + ': settings list sits at x=0 under the black band, nothing wider than the screen ' + JSON.stringify(g));
+    }
+    await page.setViewportSize(MOBILE);
+    await page.waitForTimeout(300);
     check((await smallTargets()).length === 0, 'phone: list rows are at least 44 px tall (' + (await smallTargets()).join(', ') + ')');
     await shot(page, 'settings-mobile-list-' + scheme);
 
@@ -1172,6 +1188,8 @@ async function contrastReport(page) {
       await page.waitForTimeout(500);
       check(await visible(page, '#settings-pane') && !(await visible(page, '#settings-nav')), 'phone: "' + id + '" opens full-width with the list hidden');
       check((await overflow()) <= 0, 'phone: "' + id + '" has no sideways scroll');
+      const gs = await settingsGeom();
+      check(geomOk(gs), 'phone: "' + id + '" sits at x=0 under the black band ' + JSON.stringify(gs));
       const bad = await smallTargets();
       check(bad.length === 0, 'phone: "' + id + '" touch targets ≥ 44 px' + (bad.length ? ' — ' + bad.join(', ') : ''));
       const fs = await page.evaluate(() => Array.from(document.querySelectorAll('#settings-body input.input, #settings-body textarea')).filter(e => e.getBoundingClientRect().width).map(e => parseFloat(getComputedStyle(e).fontSize)));
