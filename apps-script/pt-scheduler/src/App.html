@@ -2274,7 +2274,7 @@
     if (!_lsGet(MEMBER_TOKEN_KEY)) return Promise.resolve();
     if (portalMoreInflight) return portalMoreInflight;
     if (!force && portalMoreAt && Date.now() - portalMoreAt < 20000) return Promise.resolve();
-    portalMoreInflight = memberCall('getPortalMore').then(function (m) { portalMoreAt = Date.now(); applyPortalMore(m, false); savePortalCache(); })
+    portalMoreInflight = memberCall('getPortalMore').then(function (m) { if (!m || typeof m !== 'object') throw new Error('Server tidak mengirim data.'); portalMoreAt = Date.now(); applyPortalMore(m, false); savePortalCache(); })
       .catch(function (err) {
         if (window.isAuthError && window.isAuthError(err)) return;
         // Tidak ada data sama sekali: kartu menampilkan "Coba lagi" (bukan skeleton selamanya).
@@ -4257,6 +4257,10 @@
   }
   window.ccPatch = ccPatch;
   window.clearClientCache = function () { try { localStorage.removeItem(CC_KEY); } catch (e) {} cc.at = {}; cc.inflight = {}; };
+  // Paket utuh = semua bagian inti ada dan tanpa error. Salinan yang tidak utuh (mis. dari jawaban null sebelum perbaikan) tidak dipakai dan tidak disimpan.
+  function bundleOk(b) {
+    return !!b && typeof b === 'object' && ['tasks', 'progress', 'care', 'program', 'insight'].every(function (k) { return b[k] && !b[k].error; });
+  }
   function applyBundle(key, b) {
     const bad = v => !v || v.error;
     const msg = v => (v && v.error) || 'Tidak ada jawaban.';
@@ -4286,7 +4290,8 @@
     const key = String(memberId), force = !!(opts && opts.force);
     if (!cc.at[key]) {
       const c = ccRead().items[key];
-      if (c && c.b) { applyBundle(key, c.b); cc.at[key] = { at: c.at || 0, ver: c.ver || '', day: c.day || '' }; }
+      if (c && c.b && !bundleOk(c.b)) { const store = ccRead(); delete store.items[key]; store.order = store.order.filter(function (x) { return x !== key; }); ccWrite(store); }
+      else if (c && c.b) { applyBundle(key, c.b); cc.at[key] = { at: c.at || 0, ver: c.ver || '', day: c.day || '' }; }
     }
     if (!force && ccFresh(key)) return Promise.resolve();
     if (cc.inflight[key]) return cc.inflight[key];
@@ -4294,11 +4299,12 @@
     const cT = window.memberTasks[key];
     if (!cT || cT.state !== 'ok') { window.memberTasks[key] = { list: [], state: 'loading' }; renderTaskSection(key); }
     const p = adminCall('getClientBundle', key).then(function (b) {
-      b = b || {};
+      // google.script.run memberi null bila jawaban tak bisa dikirim: jangan disimpan sebagai data segar.
+      if (!b || typeof b !== 'object') throw new Error('Server tidak mengirim data. Tarik layar ke bawah untuk mencoba lagi.');
       applyBundle(key, b);
       const meta = { at: Date.now(), ver: b.ver || '', day: b.day || wkToday() };
       cc.at[key] = Object.assign({}, meta);
-      ccPut(key, b, meta);
+      if (bundleOk(b)) ccPut(key, b, meta); else cc.at[key].at = 0;   // sebagian gagal: tampil apa adanya, tidak disimpan, dicoba lagi saat dibuka berikutnya
     }).catch(function (err) {
       if (had) return;   // salinan tetap tampil; dicoba lagi saat dibuka berikutnya
       const m = window.authMessage(err);
