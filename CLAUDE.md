@@ -15,5 +15,6 @@ Phase R (teks besar, band hitam, data kiri-kanan, in progress): docs/ui/ (TODO; 
 Phase S (audit UI/UX panel admin, planned): docs/panel/ (PRD, TODO; tasks S1–S18).
 Phase T (kartu bagikan ala Strava/Hevy, PNG transparan, built): docs/share/ (TODO; tasks T-1300+).
 Phase Q (upgrade tampilan Klien + interpretasi data, in progress): docs/klien/ (PRD, TODO; tasks T-1100+).
+Phase V (migrasi ke Supabase + Cloudflare + domain baru, SaaS multi-coach, app Android, planned): docs/platform/ (PRD, Design, Risks, TODO; tasks T-1400+).
 
 @docs/Agent.md
