@@ -36,7 +36,7 @@ Owner request (2026-10-28): the preview was broken (tiny, white on white), badge
 - New cards: **Ukuran tubuh**, **Koleksi badge**, **Konsistensi** (heatmap + 12-week bars), **Foto progres** (before/after, client only). The coach gets every card except Foto progres.
 - Body numbers stay **off by default** on Progres/Foto; when on, the client picks which of the 8 measures and **Perubahan** (default) or **Nilai**.
 - Card language **English | Indonesia** (default English).
-- Phone: full-screen dark editor, preview on top, tabs **Kartu · Gaya · Isi · Teks**, swipe the preview to change card, tap = full screen. Desktop: two columns (preview left, all controls right), ←/→ change card.
+- Phone: full-screen dark editor; the preview fills the screen. Under it a compact tool bar (Kartu, Template, Gaya, Ukuran, Tata letak, Isi, Teks, Ekspor); a tool opens a small panel only when tapped (tap again or tap the preview to close). Swipe the preview to change card, tap = full screen (owner, 2026-10-29: "preview adalah area terbesar"). Desktop: two columns (preview left, all controls right), ←/→ change card.
 - Templates (Minimal, Bold, Strava, Hevy, Polos) and stat order (▲/▼, on/off per number).
 - Period (Latihan ini / Minggu / Bulan / 3 bulan / tanggal) for Latihan, Gerakan, Gizi, Ukuran, loaded from the server only when picked.
 - Comparison **vs previous period on by default**, also since start and vs target.

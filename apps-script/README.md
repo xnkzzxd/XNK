@@ -268,7 +268,7 @@ Klien (dan kamu, lewat halaman klien) bisa membuat gambar PNG untuk Story Instag
 
 **Versi lengkap (Fase T2):**
 - **Kartu baru:** Ukuran tubuh (8 lingkar + berat, grafik per ukuran atau sebelum–sesudah), Koleksi badge (semua badge dengan ikon dan nama), Konsistensi (kalender + batang per minggu), Foto progres (sebelum–sesudah dari foto progres; hanya klien sendiri). Gaya baru **Kartu terang**, ukuran baru **Portrait 4:5**.
-- **Editor:** di HP layar penuh gelap: pratinjau di atas, tab **Kartu · Gaya · Isi · Teks**, geser pratinjau untuk ganti kartu, ketuk untuk layar penuh. Di laptop: pratinjau kiri, semua pengaturan kanan, panah ←/→ ganti kartu.
+- **Editor:** di HP layar penuh gelap: pratinjau memenuhi layar, di bawahnya bilah alat ringkas (Kartu, Template, Gaya, Ukuran, Tata letak, Isi, Teks, Ekspor) yang panelnya baru muncul saat diketuk. Geser pratinjau untuk ganti kartu, ketuk untuk layar penuh. Di laptop: pratinjau besar di kiri, kolom alat ramping di kanan, panah ←/→ ganti kartu.
 - **Atur sendiri:** template (Minimal, Bold, Strava, Hevy, Polos), angka mana yang tampil dan urutannya, jenis grafik, judul, rata kiri/tengah, posisi, ukuran teks, sudut, bingkai, bahasa kartu English/Indonesia, periode (latihan ini, minggu, bulan, 3 bulan, tanggal), perbandingan (bawaan: vs periode lalu), nama, foto profil, "Coached by" + foto coach, kode QR.
 - **Privasi:** angka tubuh mati bawaan (bisa perubahan atau nilai), "Sembunyikan beban", mozaik/potong wajah di kartu foto. Foto tidak pernah diunggah.
 - **Ekspor:** Gambar, Gambar HQ, **Video 6 detik** (angka naik, grafik tergambar), dan sampai 5 kartu sekaligus (tombol **+ Set**).
