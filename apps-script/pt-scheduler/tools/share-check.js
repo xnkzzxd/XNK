@@ -14,7 +14,7 @@ const OUT = process.env.SHOTS_DIR || '';
   const mask = /--logo-mask:[^\n]+/.exec(theme)[0];
   const mm = app.slice(app.indexOf('const WL_MM_FRONT = ['), app.indexOf('window.WL_MM = '));
   const share = fs.readFileSync(path.join(SRC, 'Bagikan.html'), 'utf8');
-  const html = `<!doctype html><html><head><style>:root{${mask}}</style></head><body><div class="sheet hide" id="sheet-share"></div><div id="share-nudge" class="hide"><p id="share-nudge-msg"></p></div>
+  const html = `<!doctype html><html><head><link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><style>:root{${mask}}</style></head><body><div class="sheet hide" id="sheet-share"></div><div id="share-nudge" class="hide"><p id="share-nudge-msg"></p></div>
   <script>${mm} window.WL_MM = { front: WL_MM_FRONT, back: WL_MM_BACK };</script>${share}
   <script>window.openSheet=function(id){document.getElementById(id).classList.remove('hide')};window.showToast=function(m){console.log('toast',m)};window.icon=function(){return ''};</script></body></html>`;
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
@@ -61,6 +61,7 @@ const OUT = process.env.SHOTS_DIR || '';
   });
 
   const run = (args) => p.evaluate(async ([kind, style, size, align, lang, extra]) => {
+    document.getElementById('share-img').removeAttribute('src');
     window.shareSet('kind', kind);
     window.shareSet('lang', lang); window.shareSet('size', size); window.shareSet('align', align);
     if (style === 'foto') { window.shareSet('style', 'grafik'); } else window.shareSet('style', style);
@@ -79,6 +80,7 @@ const OUT = process.env.SHOTS_DIR || '';
     }
     await new Promise(r => setTimeout(r, 200));
     const img = document.getElementById('share-img');
+    for (let i = 0; i < 100 && !img.getAttribute('src'); i++) await new Promise(r => setTimeout(r, 50));
     const bl = await fetch(img.src).then(r => r.blob());
     const im = await createImageBitmap(bl); const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0);
     const card = window.shareCheck.card(), L = window.shareCheck.layout();
@@ -130,6 +132,23 @@ const OUT = process.env.SHOTS_DIR || '';
     if (extra.hideKg) check(!d.stats.some(v => /kg/.test(v)), `${tag}: no kg with "Sembunyikan beban"`);
     if (extra.period) check(d.stats.length > 0, `${tag}: period data used`);
   }
+
+  // Motion graphics (T3): both styles × 6/10/15 s on every card; the last frame is the still card.
+  for (const kind of want) {
+    for (const anim of ['minimal', 'kinetic']) for (const dur of [6, 10, 15]) {
+      const keep = !!OUT && dur === 10 && ['latihan', 'progres', 'record', 'gizi'].includes(kind);
+      const r = await p.evaluate(async ([kind, anim, dur, keep]) => {
+        window.shareSet('kind', kind); window.shareSet('style', 'gelap'); window.shareSet('size', 'story');
+        await new Promise(res => setTimeout(res, 60));
+        const ts = keep ? Array.from({ length: 12 }, (_, i) => i * dur / 11) : [0, dur * .25, dur * .5, dur * .75, dur];
+        return await window.shareCheck.anim(anim, dur, ts, keep);
+      }, [kind, anim, dur, keep]);
+      check(r.endIsStill, `${kind} ${anim} ${dur}s: frames render and the last frame equals the still card`);
+      if (keep) r.frames.forEach((u, i) => fs.writeFileSync(path.join(OUT, `anim-${kind}-${anim}-${String(i).padStart(2, '0')}.png`), Buffer.from(u.split(',')[1], 'base64')));
+    }
+  }
+  const anton = await p.evaluate(() => document.fonts.check('400 60px Anton'));
+  console.log('  · Anton loaded in the check page: ' + anton + ' (falls back to Impact/sans-serif offline)');
 
   // QR: finder patterns in the three corners, version fits the URL.
   const qr = await p.evaluate(() => { const q = window.shareCheck.qr('https://xnkbooking.my.id'); const f = (x, y) => [0, 1, 2, 3, 4, 5, 6].every(i => q.mods[y][x + i] && q.mods[y + 6][x + i] && q.mods[y + i][x] && q.mods[y + i][x + 6]); return { size: q.size, ok: f(0, 0) && f(q.size - 7, 0) && f(0, q.size - 7) }; });
