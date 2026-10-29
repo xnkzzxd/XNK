@@ -1,6 +1,6 @@
 # Platform migration & SaaS: TODO (Phase V, T-1400+)
 
-Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md). Mark a task `[~]` when you start it and `[x]` when it is done. Each task is one PR with tests and a rollback note. Screens stay pixel-identical until V9 (D1).
+Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md). Mark a task `[~]` when you start it and `[x]` when it is done. Each task is one PR with tests and a rollback note. Screens stay pixel-identical until V9 (D1). **XNK keeps working at every step (D70, Design §0).**
 
 ## V0 Discovery
 - [ ] T-1400 Brand/domain brainstorm: shortlist of names + .id/.com availability; the owner picks (D32).
@@ -14,9 +14,9 @@ Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md). Mark a
 - [ ] T-1412 GAS `doPost` RPC dispatcher (allow-list from `tests/security.test.js`; same auth checks).
 - [ ] T-1413 Worker `/rpc/:name` proxy to GAS + rate limits; staging + prod deploy workflows.
 - [ ] T-1414 Top-level host bridge: `--sa-*` from `env()` when not framed (P3).
-- [ ] T-1415 Handoff: the old domain flushes queues → one-time code → the new domain imports token, drafts, prefs (P1).
-- [ ] T-1416 Final `sw.js` for xnk.my.id and BookingPT-Client: handoff, install prompt, unregister (P2).
-- [ ] T-1417 Portal banner 2 weeks before the switch (D51); 301s from the old domains.
+- [ ] T-1415 (ships in V4) Handoff: the old domain flushes queues → one-time code → the new domain imports token, drafts, prefs (P1).
+- [ ] T-1416 (ships in V4) Final `sw.js` for xnk.my.id and BookingPT-Client: handoff, install prompt, unregister (P2).
+- [ ] T-1417 (ships in V4) Portal banner 2 weeks before the switch (D51); 301s from the old domains only after cutover passes (Design §0.2).
 - [ ] T-1418 Pixel-diff check of GAS vs. the new host (390×844, 1280, 1440, both themes).
 
 ## V2 Schema + import
@@ -33,9 +33,12 @@ Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md). Mark a
 - [ ] T-1444 GAS request logger + `tools/replay.js` golden replay (0 diffs).
 - [ ] T-1445 Shadow reads for one week.
 - [ ] T-1446 Rollback script Postgres → Sheets; two rehearsals.
+- [ ] T-1447 Dual-maintenance CI: the suite runs on GAS and on the Worker; shared pure-helper file (Design §0.3).
+- [ ] T-1448 XNK settings pin test: SaaS defaults equal today's XNK behaviour (Design §0.8).
 
 ## V4 Cutover
-- [ ] T-1450 Runbook + night window (not days 1–3 of the month, D5); Sheets read-only for 30 days.
+- [ ] T-1450 Runbook + night window (not days 1–3 of the month, D5): GAS triggers off → flip → Cron on; logs queue on devices during the window.
+- [ ] T-1451 Nightly + on-demand Postgres → Sheets export for 30 days; rollback ≤ 15 min (Design §0.6).
 
 ## V5 Login + notifications
 - [ ] T-1460 Google sign-in + number linking with coach confirmation (D21, D37); magic link; coach one-time code.

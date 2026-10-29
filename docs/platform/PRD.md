@@ -127,3 +127,8 @@ Goals:
 | D68 | Timing: **after the Android app** (V8). Design work (map → clickable prototype artifact) may start earlier, but nothing is built before then. The owner's judgement decides, using the prototype. |
 | D69 | i18n (D20) runs **together with** the UX tidy-up, so every string is touched only once. |
 
+**Round 5: XNK keeps working**
+| # | Decision |
+|---|---|
+| D70 | **XNK keeps working at every step of the migration.** The live app on today's domains and the Apps Script backend stay in service until the new stack has proven itself. Every phase can be undone on its own, and clients and the owner never lose a feature, data, or a login. Rules: Design §0.
+

@@ -2,6 +2,21 @@
 
 What and why: [PRD.md](PRD.md). Decision numbers (D1…D69) refer to the PRD decision log.
 
+## 0. XNK continuity (D70, non-negotiable)
+
+The migration runs **beside** the live XNK app, never instead of it, until the switch is proven.
+
+1. **The current app stays the source of truth until V4.** xnk.my.id, xnkbooking.my.id and book.xnkbooking.my.id keep working exactly as today. The clasp deploy from `main` keeps running, and normal XNK feature and bug-fix PRs continue.
+2. **New stack in parallel.** V1–V3 run on the new domain and on staging. The new domain first opens only for the owner; the old domains are **not** redirected until V4 has passed (the old 301 step moves from V1 to V4).
+3. **Dual-maintenance rule.** From V3 on, every change to `apps-script/pt-scheduler/src/` that alters behaviour must carry the same change in `worker/` in the same PR, with a test on both. CI runs the suite on GAS and on the Worker, and a PR that is green on only one fails. Pure helpers live in one shared file used by both, so they never drift.
+4. **No double side effects.** Only one backend runs schedules at a time. GAS triggers (`runReminderTick`, report emails) stay on, and Worker Cron stays **off** until cutover. At cutover: GAS triggers off first, then Cron on. Shadow mode never writes, sends or bumps caches.
+5. **Cutover keeps the app usable.** During the read-only window (1–2 h, at night, not on days 1–3 of the month), reads still work and workout/food/measurement logs queue on the device (existing `cid` queues), then sync after the switch. Bookings show the banner "Sebentar, sistem sedang diperbarui" and resume after the switch.
+6. **Instant rollback for 30 days.** After cutover a **nightly + on-demand Postgres → Sheets export** (the V3 rollback script, on a schedule) keeps the GAS copy current. Rolling back = flip the Worker registry back to the GAS proxy and turn the GAS triggers on (target ≤ 15 min, rehearsed twice). The GAS deployment is not deleted before V12.
+7. **Logins survive.** Same HMAC secret and token format (P11), plus the device handoff (P1), so nobody has to log in again because of the migration. Google sign-in (V5) arrives only on the next normal login.
+8. **XNK defaults are frozen.** Every new SaaS setting (time zone, session length, booking rules, templates, modules, GIFs) defaults to XNK's current behaviour. A test pins XNK's tenant settings so a SaaS PR can't change XNK by accident.
+9. **One area at a time after cutover.** V5–V9 ship behind per-tenant switches, turned on for XNK only after they have run on a test tenant. Telegram stays on for XNK until the outbox + push path has run cleanly for 2 weeks.
+10. **Stop rule.** If any parity gate fails, or XNK shows a regression, the phase stops and is rolled back before more work is merged.
+
 ## 1. Problems found and how the plan handles them
 
 | # | Problem | Handling |
@@ -72,10 +87,10 @@ Cloudflare Worker  api.<brand>/rpc/:name   auth · tenant · role · rate limit 
 | Phase | Content | Exit |
 |---|---|---|
 | **V0 Discovery** | Brand/domain brainstorm with availability; **interactive mind map** (built from `NAV`, `PUBLIC_TABS`, `MORE_GROUP`, views, `openSheet`/`openDetail` ids, with the RPCs per node); tier proposal; `docs/platform/{PRD,Design,TODO,IA,Risks}.md` (T-1400+) | Owner approves name, map, tiers |
-| **V1 New host, same backend** | Buy domain, Cloudflare DNS; `tools/build-static.js`; Pages; transport swap in `App.html:233-266` + `LandingScript.html`; Worker proxies to a new GAS `doPost`; **handoff + final old SW** (P1/P2); staging | Same app on the new domain, browser/offline/share checks + pixel diff pass |
+| **V1 New host, same backend** | Buy domain, Cloudflare DNS; `tools/build-static.js`; Pages; transport swap in `App.html:233-266` + `LandingScript.html`; Worker proxies to a new GAS `doPost`; staging. Old domains untouched (§0.2); the new domain is owner-only | Same app on the new domain, browser/offline/share checks + pixel diff pass; XNK on the old domains unchanged |
 | **V2 Schema + import** | Schema; idempotent import of Sheets + Forms answers → Postgres and Drive → R2; nightly import to staging | Counts and checksums match |
-| **V3 Port** | Shims, repos, registry; contract tests; golden replay; rollback script (Postgres → Sheets) rehearsed | 482 green, 0 diffs, 2 rehearsals |
-| **V4 Cutover** | Night window, not days 1–3 of the month: read-only banner → final import → flip → smoke tests | p50 < 150 ms, no loss; Sheets read-only 30 days |
+| **V3 Port** | Shims, repos, registry; contract tests; golden replay; rollback script (Postgres → Sheets) rehearsed; dual-maintenance CI (§0.3) | 482 green on both, 0 diffs, 2 rehearsals |
+| **V4 Cutover** | Night window, not days 1–3 of the month: banner 2 weeks before → read-only window (logs queue on devices) → final import → GAS triggers off → flip → Cron on → smoke tests → **then** handoff + final old SW + 301s (P1/P2) | p50 < 150 ms, no loss; nightly Postgres → Sheets export keeps rollback ≤ 15 min for 30 days |
 | **V5 Login + notifications** | Google + number linking, magic link, coach code; outbox + "Kirim hari ini" list; web push + FCM; Telegram limited to owner system alerts; Resend reports | XNK runs without client data in Telegram |
 | **V6 SaaS core** | Tenants, businesses, roles (D12), timezone (D18), coach signup + approval, template landing, multi-connection clients (D13/D14), leave/copy rules (D10), deletion/export (D11), media rule (D30), super-owner console (approvals, QRIS/transfer verification, downgrade), plan limits, analytics | Isolation suite green for every RPC × role |
 | **V6b Coaching models** | Branches + rooms (D36), home visits (D34), online packages + check-ins + video-call quota (D35), per-tenant booking rules + session lengths (D48), package expiry, CSV import (D43), branding (D47), neutral templates (D50), platform content (D39), support form + FAQ (D41), legal docs (D40), age gate (D42) | Each feature off by default per tenant; XNK unchanged |
