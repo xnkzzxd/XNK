@@ -1,0 +1,81 @@
+# Platform migration & SaaS: TODO (Phase V, T-1400+)
+
+Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md). Mark a task `[~]` when you start it and `[x]` when it is done. Each task is one PR with tests and a rollback note. Screens stay pixel-identical until V9 (D1). **XNK keeps working at every step (D70, Design §0).**
+
+## How sessions work (automatic)
+- One task (or a small task group) = one session = one branch `claude/v-t14xx` = one PR. Run one at a time.
+- A **conductor session** starts each task session, checks its PR against Design §0 (D70) and the gates below, and starts the next task after the merge and a live smoke test. A **nightly scheduled task** takes the next task if nothing is running and no Phase V PR is open.
+- Every task session starts by reading `CLAUDE.md` → `docs/platform/{PRD,Design,TODO,STATUS}.md`, marks its task `[~]`, runs every check in Agent.md §5, ticks the task, adds an entry at the top of [STATUS.md](STATUS.md), and opens a PR with auto-merge on.
+- **Auto-merge gates**: CI green with every Agent.md §5 check (T-1404). PRs touching live files (`apps-script/pt-scheduler/src/`, `index.html`, `sw.js`, `offline*.js`) also need a clean pixel diff. If the post-merge smoke test on live XNK fails, the conductor opens a revert PR and stops the chain.
+- **Owner-only steps stop the chain** (marked 👤): choosing the brand, buying the domain, creating accounts and secrets (never in chat), approving the tiers, reviewing the legal docs, cutover night, old-domain redirects, the Telegram shut-off, Play testers and release, and any deletion.
+
+## V0 Discovery
+- [ ] T-1404 CI runs on every PR (not just `apps-script/**`): syntax, tests, browser check (Playwright), offline check, pixel diff for live files; required checks + auto-merge on `main` (👤 the owner turns on "Allow auto-merge" and branch protection if the token can't).
+- [x] T-1405 `STATUS.md` + session handoff protocol (this section).
+- [ ] T-1400 👤 Brand/domain brainstorm: shortlist of names + .id/.com availability; the owner picks (D32).
+- [ ] T-1401 Interactive mind map of every screen, tab, sheet and menu (from `NAV`, `PUBLIC_TABS`, `MORE_GROUP`, views, `openSheet`/`openDetail` ids), with the RPCs per node (D31). Published as an artifact; source in `docs/platform/IA.md`.
+- [ ] T-1402 👤 Plan tiers (Free / Pro / Gym): limits, modules, prices, 14-day trial (D16, D64).
+- [ ] T-1403 👤 Account setup checklist: domain, Cloudflare, Supabase (prod SG + staging), Resend, Play Console, Sentry; 2FA (D6, D7).
+
+## V1 New host, same backend
+- [ ] T-1410 `tools/build-static.js`: resolves `include()` and writes the static shell + landing; byte-compare against the HtmlService output.
+- [ ] T-1411 Transport swap in `App.html` `call()`/`tokenRunner` and `LandingScript.html` (fetch `/rpc/:name`; same handlers and `AUTH_REQUIRED` errors).
+- [ ] T-1412 GAS `doPost` RPC dispatcher (allow-list from `tests/security.test.js`; same auth checks).
+- [ ] T-1413 Worker `/rpc/:name` proxy to GAS + rate limits; staging + prod deploy workflows.
+- [ ] T-1414 Top-level host bridge: `--sa-*` from `env()` when not framed (P3).
+- [ ] T-1415 (ships in V4) Handoff: the old domain flushes queues → one-time code → the new domain imports token, drafts, prefs (P1).
+- [ ] T-1416 (ships in V4) Final `sw.js` for xnk.my.id and BookingPT-Client: handoff, install prompt, unregister (P2).
+- [ ] T-1417 (ships in V4) Portal banner 2 weeks before the switch (D51); 301s from the old domains only after cutover passes (Design §0.2).
+- [ ] T-1418 Pixel-diff check of GAS vs. the new host (390×844, 1280, 1440, both themes).
+
+## V2 Schema + import
+- [ ] T-1420 Postgres schema for every sheet (original IDs, `tenant_id`, indexes, RLS guard).
+- [ ] T-1421 Idempotent import Sheets → Postgres, including Form answers (D8, D9); counts + checksums.
+- [ ] T-1422 Drive → R2 (private photos and proofs; public coach photos).
+- [ ] T-1423 Nightly masked import to staging.
+
+## V3 Port
+- [ ] T-1430 Service shims (properties, cache, lock, fetch, crypto, storage, mail).
+- [ ] T-1431 RPC registry + auth (same HMAC tokens, P11) + `_plainJson_` serializer (P4).
+- [ ] T-1432 Test adapter: run the existing suite on the Worker (Miniflare + `supabase start`).
+- [ ] T-1433…T-1443 Port by domain, one PR each: auth/settings · members/packages · schedules/slots/booking (DO lock + exclusion constraint, P5) · progress/photos · program/workout · nutrition · finance · content/feedback/notes · reminders/outbox · share · bundles.
+- [ ] T-1444 GAS request logger + `tools/replay.js` golden replay (0 diffs).
+- [ ] T-1445 Shadow reads for one week.
+- [ ] T-1446 Rollback script Postgres → Sheets; two rehearsals.
+- [ ] T-1447 Dual-maintenance CI: the suite runs on GAS and on the Worker; shared pure-helper file (Design §0.3).
+- [ ] T-1448 XNK settings pin test: SaaS defaults equal today's XNK behaviour (Design §0.8).
+
+## V4 Cutover
+- [ ] T-1450 Runbook + night window (not days 1–3 of the month, D5): GAS triggers off → flip → Cron on; logs queue on devices during the window.
+- [ ] T-1451 Nightly + on-demand Postgres → Sheets export for 30 days; rollback ≤ 15 min (Design §0.6).
+
+## V5 Login + notifications
+- [ ] T-1460 Google sign-in + number linking with coach confirmation (D21, D37); magic link; coach one-time code.
+- [ ] T-1461 Outbox + "Kirim hari ini" list; web push + FCM; Telegram for owner system alerts only (D22, D23).
+- [ ] T-1462 Report emails via Resend (D24).
+
+## V6 SaaS core
+- [ ] T-1470 Tenants, businesses, roles (D12); per-tenant timezone (D18).
+- [ ] T-1471 Coach signup + approval, template landing (D17, D19).
+- [ ] T-1472 Multi-coach client links, leave/copy rules, deletion/export (D10, D11, D13).
+- [ ] T-1473 Super-owner console: approvals, QRIS/transfer verification, downgrade, dashboard (D14, D63).
+- [ ] T-1474 Plan limits + trial; exercise media rule (D30); analytics (D26).
+- [ ] T-1475 Tenant × role isolation suite over every RPC.
+
+## V6b Coaching models
+- [ ] T-1480 Branches + rooms (D36) · T-1481 Home visits (D34) · T-1482 Online packages + check-ins + video calls (D35) · T-1483 Booking rules + session lengths + package expiry (D48, R7) · T-1484 CSV import (D43) · T-1485 Branding (D47) · T-1486 Neutral templates (D50) · T-1487 Platform content (D39) · T-1488 Support form + FAQ (D41) · T-1489 Legal docs + age gate (D40, D42).
+
+## V6c Billing & reports
+- [ ] T-1490 Invoices, numbering, receipts, credit notes, proof upload (D53–D55, D58) · T-1491 Overdue jobs + booking block (D56) · T-1492 Promo codes + vouchers (D57, D62) · T-1493 Contracts + waiver e-sign (D62, R9) · T-1494 Shop + stock (D62, R10) · T-1495 Payroll slips (D62) · T-1496 Platform subscription invoices (D53, D64) · T-1497 PDF renderer + R2 cache (D61, R11) · T-1498 Reports + dashboard + scheduled emails (D60, D61).
+
+## V7 Realtime
+- [ ] T-1500 Durable Object WebSocket for the live logger + schedule (D25, P17).
+
+## V8 Android app
+- [ ] T-1510 Capacitor shell + OTA (D27) · T-1511 Public signup + connect-to-coach · T-1512 FCM + rest-timer notification · T-1513 Health Connect read/write (D44) · T-1514 Barcode, custom foods, recipes (D38) · T-1515 Play listing, Data Safety, closed test 12 × 14 days (P16).
+
+## V9 UX tidy-up + i18n
+- [ ] T-1520 Prototypes: client page, Pengaturan, Beranda + Lainnya (D65–D68) · T-1521 Build area by area · T-1522 `t()` + EN dictionary (D69).
+
+## V11–V12
+- [ ] T-1530 Marketplace "Cari coach" · T-1540 Decommission GAS and BookingPT-Client.
