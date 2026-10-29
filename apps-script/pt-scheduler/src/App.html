@@ -709,11 +709,11 @@
     ['public-more', 'layout-grid', 'Lainnya']
   ];
   // Tab "Lainnya" menyala untuk halaman isinya.
-  const MORE_GROUP = ['public-more', 'public-program', 'public-info', 'public-catalog', 'public-coaches'];
+  const MORE_GROUP = ['public-more', 'public-program', 'public-info', 'public-catalog', 'public-coaches', 'public-share'];
   const TITLES = {
     'dashboard': 'Dashboard', 'calendar': 'Jadwal', 'clients': 'Klien', 'coaches': 'Coach', 'finance': 'Keuangan', 'settings': 'Pengaturan', 'content': 'Konten',
     'public-login': 'Masuk member', 'public-dashboard': 'Beranda', 'public-catalog': 'Paket', 'public-coaches': 'Coach',
-    'public-progress': 'Progres', 'public-program': 'Latihan', 'public-info': 'Info & Tips', 'public-more': 'Lainnya'
+    'public-progress': 'Progres', 'public-program': 'Latihan', 'public-info': 'Info & Tips', 'public-more': 'Lainnya', 'public-share': 'Kartu saya'
   };
 
   // Menu untuk pengunjung yang belum login: hanya yang boleh dilihat tanpa akun.
@@ -855,7 +855,9 @@
         '<p class="hint">Langsung tersimpan. Komentar hanya terlihat olehmu di halaman klien.</p></div>' +
         '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Kartu bagikan</p><p class="li-sub">Klien dan coach bisa membuat gambar latihan, progres, dan gizi (PNG transparan) untuk Story dan WhatsApp.</p></div>' +
         '<label class="toggle"><input type="checkbox" id="set-share" onchange="window.setShare(this)" aria-label="Kartu bagikan"' + (setState.data.shareEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
-        '<p class="hint">Langsung tersimpan. Gambar dibuat di HP dan tidak diunggah.</p></div>' +
+        '<p class="hint">Langsung tersimpan. Gambar dibuat di HP dan tidak diunggah.</p>' +
+        '<div class="field"><label class="label" for="set-share-qr">Alamat kode QR di kartu</label><div class="row" style="gap:8px"><input class="input grow" id="set-share-qr" type="url" inputmode="url" autocomplete="off" maxlength="200" placeholder="' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '" value="' + h(setState.data.shareQrUrl || '') + '">' +
+        '<button type="button" class="btn btn-outline" onclick="window.setShareQr(this)">Simpan</button></div><p class="hint">QR mati bawaan; klien menyalakannya sendiri di kartu. Kosong = ' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '.</p></div></div>' +
         '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Gizi &amp; catat makan</p><p class="li-sub">Segmen Makan di portal klien: target kalori, menu harian, dan catatan makan. Pengingat makan ikut memuat target kalori.</p></div>' +
         '<label class="toggle"><input type="checkbox" id="set-nutrition" onchange="window.setNutrition(this)" aria-label="Gizi dan catat makan"' + (setState.data.nutritionEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
         '<p class="hint">Langsung tersimpan. Dimatikan = segmen Makan hilang untuk semua klien; data tetap tersimpan. Per klien bisa dimatikan di tab Gizi.</p></div>';
@@ -1563,7 +1565,7 @@
   };
 
   // ── Navigasi ────────────────────────────────────────────────────────────────
-  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'content', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches', 'public-progress', 'public-program', 'public-info', 'public-more'];
+  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'content', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches', 'public-progress', 'public-program', 'public-info', 'public-more', 'public-share'];
 
   window.navigate = function (viewId, opts) {
     opts = opts || {};
@@ -1572,7 +1574,7 @@
     if (viewId === 'coach-profile') viewId = 'coaches';
     const isPub = viewId.indexOf('public-') === 0 || (viewId === 'calendar' && window.isPublicView);
     if (viewId !== 'calendar') window.isPublicView = isPub;
-    if (['public-dashboard', 'public-progress', 'public-program', 'public-info', 'public-more'].indexOf(viewId) !== -1 && !window.publicLoggedMember) viewId = 'public-login';
+    if (['public-dashboard', 'public-progress', 'public-program', 'public-info', 'public-more', 'public-share'].indexOf(viewId) !== -1 && !window.publicLoggedMember) viewId = 'public-login';
 
     const changed = window.currentView !== viewId;
     if (viewId === 'settings' && changed) { setState.built = false; setState.pushed = false; if (isPhone()) setState.open = null; }   // muat ulang pengaturan tiap masuk halaman; HP mulai dari daftar
@@ -1626,6 +1628,7 @@
         case 'public-program': renderPublicProgram(); break;
         case 'public-info': renderPublicInfo(); break;
         case 'public-more': renderPublicMore(); break;
+        case 'public-share': renderPublicShare(); break;
       }
     } catch (e) {
       console.error(e);
@@ -5345,7 +5348,7 @@
 
   const WL_V = 1, WL_QUEUE = 'xnk_wl_queue', WL_PREFS = 'xnk_wl_prefs';
   // Pengaturan latihan (Fase O): kemudahan per perangkat, boleh hilang. Istirahat program per gerakan tetap menang.
-  const WL_PREF_DEF = { sound: true, buzz: true, rest: 90, prev: 'gerakan', warm: '', wake: true, plate: true, bar: 20, rpe: false };
+  const WL_PREF_DEF = { sound: true, buzz: true, rest: 90, prev: 'gerakan', warm: '', wake: true, plate: true, bar: 20, rpe: false, shareNudge: true };
   function wlPrefs() { let p = null; try { p = JSON.parse(localStorage.getItem(WL_PREFS) || 'null'); } catch (e) {} return Object.assign({}, WL_PREF_DEF, p && typeof p === 'object' ? p : {}); }
   function wlPrefSet(k, v) { const p = wlPrefs(); p[k] = v; try { localStorage.setItem(WL_PREFS, JSON.stringify(p)); } catch (e) {} }
   const WL_WARM = { '40-60-80': [[0.4, 10], [0.6, 5], [0.8, 3]], '50-75': [[0.5, 8], [0.75, 4]] };
@@ -5695,6 +5698,7 @@
     ['upper legs', 'rect', 'x="13.6" y="47" width="5.8" height="14" rx="2.8"'], ['upper legs', 'rect', 'x="20.6" y="47" width="5.8" height="14" rx="2.8"'],
     ['lower legs', 'rect', 'x="14.2" y="62.5" width="4.8" height="14" rx="2.4"'], ['lower legs', 'rect', 'x="21" y="62.5" width="4.8" height="14" rx="2.4"']
   ];
+  window.WL_MM = { front: WL_MM_FRONT, back: WL_MM_BACK };
   function wlMuscleSvg(parts, label) {
     const fig = shapes => '<circle class="mm" cx="20" cy="6.5" r="4.6"/>' + shapes.map(s => '<' + s[1] + ' class="mm' + (s[0] && parts[s[0]] ? ' on' : '') + '" ' + s[2] + '/>').join('');
     return '<svg class="wl-mm" viewBox="0 0 84 80" role="img" aria-label="' + h(label) + '"><g>' + fig(WL_MM_FRONT) + '</g><g transform="translate(44 0)">' + fig(WL_MM_BACK) + '</g></svg>';
@@ -6112,7 +6116,8 @@
       tg('wake', 'Tetap menyala selama latihan', 'Layar tidak tidur saat latihan berjalan.') +
       tg('plate', 'Kalkulator piringan', 'Gerakan barbell menampilkan piringan per sisi.') +
       sel('bar', 'Berat bar', '', [[20, '20 kg'], [15, '15 kg'], [10, '10 kg']]) +
-      tg('rpe', 'Catat RPE', 'Kolom RPE (1–10) untuk gerakan baru.') + '</div>');
+      tg('rpe', 'Catat RPE', 'Kolom RPE (1–10) untuk gerakan baru.') +
+      (window.shareOn !== false && wl && wl.mode !== 'admin' ? tg('shareNudge', 'Ajakan bagikan', 'Sesudah rekor, ukur badan, atau target kalori: tawarkan kartu (maks sekali sehari).') : '') + '</div>');
   };
   window.wlPref = function (k, v) {
     wlPrefSet(k, k === 'rest' || k === 'bar' ? Number(v) : v);
@@ -6235,7 +6240,11 @@
       renderWorkoutCard(); renderTodayWorkout();
       if (prs.length && window.refreshPortalMore) window.refreshPortalMore(true);   // badge baru
     }
-    if (ui.sheetOn || ui.wlOn) { window.showToast(prs.length ? '🏆 Rekor baru: ' + prs.map(p => p.gerakan).join(', ') : 'Latihan disimpan.'); return; }
+    if (ui.sheetOn || ui.wlOn) {
+      window.showToast(prs.length ? '🏆 Rekor baru: ' + prs.map(p => p.gerakan).join(', ') : 'Latihan disimpan.');
+      if (prs.length && it.mode !== 'admin' && window.shareMoment) window.shareMoment('record', 'Rekor baru! Bagikan kartunya?', { date: it.date });
+      return;
+    }
     const vol = it.entries.reduce((v, e) => v + e.sets.filter(s => s.jenis !== 'w').reduce((a, s) => a + (Number(s.berat) || 0) * (Number(s.rep) || 0), 0), 0);
     const sets = it.entries.reduce((n, e) => n + e.sets.length, 0);
     let body = '<div class="stack" style="align-items:center;text-align:center;gap:6px"><span class="pg-trophy" aria-hidden="true">' + icon(prs.length ? 'trophy' : 'check') + '</span>' +
@@ -6271,28 +6280,63 @@
   // ── Bagikan: kartu gambar (Phase T). Renderer ada di Bagikan.html; di sini hanya sumber data dan tombol. ──
   const shareAdmin = {};
   function shareIso() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  // Data periode (minggu, bulan, …) dan foto profil diambil sekali per periode, hanya saat dipilih.
+  const shareCache = {};
+  function shareLoader(admin) {
+    return function (period, o) {
+      const key = (admin || 'me') + '|' + period + (o && o.avatars ? '|av' : '') + '|' + shareIso();
+      if (!shareCache[key]) shareCache[key] = (admin ? adminCall('getMemberShareData', admin, period, o || {}) : memberCall('getMyShareData', period, o || {}))
+        .catch(function (e) { delete shareCache[key]; throw new Error(window.authMessage ? window.authMessage(e) : String((e && e.message) || e)); });
+      return shareCache[key];
+    };
+  }
   function shareSrcFor(admin, extra) {
     const today = shareIso(), src = { today: today, admin: !!admin, date: today };
     if (admin) {
       const id = String(admin), n = nut[id], fl = n && n.foodLog && n.foodLog.days ? n.foodLog.days.find(x => x.tanggal === today) : null;
-      src.workout = wkAdmin[id]; src.progress = pg.admin[id]; src.share = shareAdmin[id]; src.first = '';
+      const pd = pg.admin[id];
+      src.workout = wkAdmin[id]; src.progress = pd && !pd.error ? pd : null; src.share = shareAdmin[id]; src.first = '';
       src.nutrition = n && !n.error ? Object.assign({}, n, { log: fl || { totals: { kal: 0, p: 0, l: 0, k: 0 } } }) : null;
     } else {
       const me = window.publicLoggedMember || {};
       src.workout = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null; src.progress = pg.data; src.share = window.myShare;
       src.nutrition = window.myNutrition; src.first = String(me.name || '').trim().split(/\s+/)[0] || '';
+      src.photos = (pg.data && pg.data.photos) || [];
+      src.photoLoader = function (pid) { return memberCall('getMyProgressPhoto', pid).then(r => r.dataUrl); };
     }
+    if (src.workout && src.workout.error) src.workout = null;
+    if (src.share && src.share.error) src.share = null;
+    src.loadPeriod = shareLoader(admin ? String(admin) : '');
     return Object.assign(src, extra || {});
   }
+  window.shareSrcFor = shareSrcFor;
   window.shareCard = function (kind, admin, extra) {
     if (window.shareOn === false) return;
     window.shareOpen(kind, shareSrcFor(admin || '', extra), extra && extra.opts);
   };
-  const SHARE_LBL = { latihan: 'Bagikan latihan', rekap: 'Rekap bulan', progres: 'Bagikan progres', gizi: 'Bagikan gizi' };
+  const SHARE_LBL = { latihan: 'Bagikan latihan', rekap: 'Rekap bulan', progres: 'Bagikan progres', gizi: 'Bagikan gizi', ukuran: 'Ukuran tubuh', badges: 'Badge', konsistensi: 'Konsistensi', foto: 'Foto progres', all: 'Semua kartu' };
   function shareBtns(admin, kinds) {
     if (window.shareOn === false) return '';
-    return kinds.map(k => '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.shareCard(\'' + k + '\',\'' + (admin || '') + '\')">' + icon('share-2') + SHARE_LBL[k] + '</button>').join('');
+    return kinds.filter(k => !(admin && k === 'foto')).map(k => k === 'all' && !admin
+      ? '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.navigate(\'public-share\')">' + icon('layout-grid') + SHARE_LBL.all + '</button>'
+      : '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.shareCard(\'' + (k === 'all' ? 'latihan' : k) + '\',\'' + (admin || '') + '\')">' + icon(k === 'all' ? 'layout-grid' : 'share-2') + SHARE_LBL[k] + '</button>').join('');
   }
+  window.shareBtns = shareBtns;
+  // Halaman "Kartu saya": semua kartu sebagai gambar kecil; ketuk = buka editor di kartu itu.
+  function renderPublicShare() {
+    const el = $('view-public-share'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    if (window.shareOn === false) { setHTML(el, emptyState('share-2', 'Kartu bagikan dimatikan', 'Coach mematikan fitur ini.')); return; }
+    setHTML(el, '<div class="stack" style="gap:var(--gap)">' + pageIntro('Kartu saya', 'Pilih kartu, atur tampilannya, lalu bagikan ke Story atau Status.') + '<div class="sh-gallery" id="share-gallery"></div></div>');
+    const src = shareSrcFor('');
+    window.shareGallery($('share-gallery'), src, function (k) { window.shareOpen(k, shareSrcFor(''), {}); });
+  }
+
+  // Ajakan bagikan (toast kecil, maks sekali sehari) sesudah rekor, badge, ukur badan, atau target kalori tercapai.
+  window.shareMoment = function (kind, msg, extra) {
+    if (window.shareOn === false || !window.shareNudge || !window.publicLoggedMember) return;
+    setTimeout(function () { window.shareNudge(kind, msg, shareSrcFor('', extra)); }, 600);
+  };
 
 
   // ── Bar "latihan berjalan / belum terkirim" ───────────────────────────────────
@@ -7669,7 +7713,8 @@
     const chHtml = ch ? '<div class="stack" style="gap:6px;margin:4px 0 14px"><div class="row-between"><span class="li-title">Tantangan bulan ini</span><span class="num" style="font-weight:800">' + Math.min(ch.done, ch.target) + ' / ' + ch.target + ' sesi</span></div>' +
       '<div class="challenge-bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + ch.target + '" aria-valuenow="' + Math.min(ch.done, ch.target) + '"><div style="width:' + Math.min(100, Math.round(ch.done / ch.target * 100)) + '%"></div></div>' +
       '<p class="li-sub">' + (ch.done >= ch.target ? 'Tantangan selesai, keren! 🎉' : 'Sisa ' + (ch.target - ch.done) + ' sesi lagi bulan ini.') + '</p></div>' : '';
-    return '<div class="section-head"><h3 class="section-title">Pencapaian</h3></div>' + chHtml +
+    const shareBtn = window.shareOn !== false ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.shareCard(\'badges\',\'\')">' + icon('share-2') + 'Bagikan</button>' : '';
+    return '<div class="section-head row-between"><h3 class="section-title">Pencapaian</h3>' + shareBtn + '</div>' + chHtml +
       '<div class="pg-streak"><span class="pg-flame' + (d.streak > 0 ? ' on' : '') + '">' + icon('flame') + '</span><div>' + streakLine + '</div></div>' +
       '<div class="pg-badges">' + badges + '</div>';
   }
@@ -7802,7 +7847,10 @@
     const call = pg.mode === 'admin'
       ? adminCall('saveMemberMeasurement', pg.memberId, Object.assign({ tanggal: $('pg-tanggal').value }, data))
       : memberCall('saveMyMeasurement', data);
-    call.then(function (d) { done(); pgStore(d); window.closeModal(); window.showToast('Tersimpan.'); })
+    call.then(function (d) {
+      done(); pgStore(d); window.closeModal(); window.showToast('Tersimpan.');
+      if (pg.mode !== 'admin' && window.shareMoment && d && d.entries && d.entries.length >= 2) window.shareMoment('ukuran', 'Ukuran tersimpan. Bagikan perubahanmu?');
+    })
       .catch(function (err) { done(); fail(window.authMessage(err)); });
   };
 
@@ -7813,7 +7861,7 @@
     $('pg-photo-list').innerHTML = list.length ? list.map(function (p) {
       return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title">' + (p.sisi === 'samping' ? 'Samping' : 'Depan') + ' · ' + h(pgLabel(p.tanggal)) + '</p><p class="li-sub">oleh ' + (p.oleh === 'coach' ? 'coach' : 'klien') + '</p></div>' +
         '<button type="button" class="btn btn-outline" onclick="window.pgViewPhoto(\'' + h(p.id) + '\')">Lihat</button></div>';
-    }).join('') : '<p class="li-sub">Belum ada foto. Foto hanya bisa dilihat kamu dan coach, dan tidak dibagikan lewat link.</p>';
+    }).join('') + (pg.mode !== 'admin' && window.shareOn !== false ? '<button type="button" class="btn btn-secondary btn-block" style="margin-top:10px" onclick="window.shareCard(\'foto\',\'\')">' + icon('columns-2') + 'Buat kartu sebelum–sesudah</button><p class="li-sub">Kartu dibuat di HP-mu; foto tidak diunggah ke mana pun.</p>' : '') : '<p class="li-sub">Belum ada foto. Foto hanya bisa dilihat kamu dan coach, dan tidak dibagikan lewat link.</p>';
     ['depan', 'samping'].forEach(function (s) { const b = $('pg-side-' + s); if (b) b.classList.toggle('active', pg.side === s); });
     paintIcons();
   }
@@ -7989,7 +8037,7 @@
     if (m.berat && m.berat.perWeek != null) stats.push({ v: insSigned(m.berat.perWeek), d: 'kg', l: 'per minggu' });
     const ch = !admin && pg.data && !pg.data.error ? pg.data.challenge : null;
     if (ch) stats.push({ v: Math.min(ch.done, ch.target) + '/' + ch.target, l: 'Sesi bulan ini' });
-    return insightHeroHtml({ eyebrow: 'Rapor tubuh', range: { key: insRange.v, options: INS_RANGE_OPTS, onPick: "window.setInsRange('%k')" }, stats: stats.slice(0, 4), spark: b.spark.map(p => p.v), text: r.text, actions: insStartBtn(admin ? 'Catat' : 'Catat hari ini', admin ? "window.pgOpenEntry('admin','" + admin + "')" : "window.pgOpenEntry('member')") + shareBtns(admin, ['progres']) });
+    return insightHeroHtml({ eyebrow: 'Rapor tubuh', range: { key: insRange.v, options: INS_RANGE_OPTS, onPick: "window.setInsRange('%k')" }, stats: stats.slice(0, 4), spark: b.spark.map(p => p.v), text: r.text, actions: insStartBtn(admin ? 'Catat' : 'Catat hari ini', admin ? "window.pgOpenEntry('admin','" + admin + "')" : "window.pgOpenEntry('member')") + shareBtns(admin, ['progres', 'ukuran', 'all']) });
   }
 
   function insRow(label, val, note, flag) {
@@ -8091,7 +8139,7 @@
     if (w.durasi.now) stats.push({ v: Math.round(w.durasi.now / 60) + '', d: 'mnt', l: 'Durasi' });
     if (admin && w.rpe != null) stats.push({ v: insNum(w.rpe), l: 'RPE rata-rata' });
     if (admin && w.rasa != null) stats.push({ v: insNum(w.rasa) + '/5', l: 'Rasa latihan' });
-    return insightHeroHtml({ eyebrow: 'Minggu ini vs biasanya', stats: stats.slice(0, 4), text: t.text, actions: shareBtns(admin, ['latihan', 'rekap']) || start || undefined });
+    return insightHeroHtml({ eyebrow: 'Minggu ini vs biasanya', stats: stats.slice(0, 4), text: t.text, actions: shareBtns(admin, ['latihan', 'rekap', 'konsistensi']) || start || undefined });
   }
   function insActivityCard() {
     const d = insD(); if (!d) return '';
@@ -8646,6 +8694,9 @@
       fqRt.flushing = false; fqRt.tries = 0; drop();
       if (d && window.myNutrition && (!window.myNutrition.log || d.tanggal === window.myNutrition.log.tanggal || d.tanggal === wkToday())) nutSetLog(d); else { renderMakan(); }
       renderInsightMakan();
+      // Target kalori tercapai (±10 %) hari ini: tawarkan kartu Gizi sekali.
+      const tg = window.myNutrition && window.myNutrition.target, tot = d && d.totals;
+      if (it.op !== 'del' && tg && tg.ok && tot && d.tanggal === wkToday() && Math.abs(tot.kal - tg.kal) <= tg.kal * 0.1 && window.shareMoment) window.shareMoment('gizi', 'Target kalori hari ini tercapai. Bagikan?');
       window.fqFlush();
     }).catch(function (err) {
       fqRt.flushing = false;
@@ -8863,6 +8914,7 @@
       '<div class="more-list">' +
       row(go('public-program'), 'activity', 'Latihan', 'Rutinitas, log latihan, PR, dan makan') +
       row(go('public-info'), 'megaphone', 'Info & Tips', 'Pengumuman dan tips dari coach').replace('</button>', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span></button>') +
+      (window.shareOn !== false ? row(go('public-share'), 'share-2', 'Kartu saya', 'Bagikan latihan, progres, badge, dan gizi') : '') +
       row(go('public-catalog'), 'package', 'Paket', 'Lihat dan perpanjang paketmu') +
       row(go('public-coaches'), 'dumbbell', 'Coach', 'Profil dan kontak coach') +
       row('window.openSettings()', 'sun-moon', 'Tampilan', 'Terang, gelap, atau ikut sistem') +
@@ -10117,6 +10169,14 @@
       window.showToast(s.feedbackEnabled ? 'Penilaian klien aktif.' : 'Penilaian klien dimatikan.');
     }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
       .then(function () { el.disabled = false; });
+  };
+  window.setShareQr = function (btn) {
+    const v = String($('set-share-qr').value || '').trim();
+    const done = busy(btn, 'Menyimpan…');
+    adminCall('updateAppSettings', { shareQrUrl: v }).then(function (s) {
+      done(); if (setState.data) { setState.data.shareQrUrl = s.shareQrUrl; }
+      window.showToast(v ? 'Alamat QR tersimpan.' : 'Kembali ke alamat bawaan.');
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
   };
   window.setShare = function (el) {
     el.disabled = true;
