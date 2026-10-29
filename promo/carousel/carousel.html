@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>XNK Carousel</title>
+<!--
+  Instagram carousel, 8 slides of 1080×1350 drawn as one 8640 px panorama, so a few elements
+  (the red strike, a phone, the share card) run across the slide edges and pull the viewer on.
+  render.js screenshots it and cuts it into slide-1.png … slide-8.png.
+  The phone screens are the real app UI from ../video/ui (capture.js). All names and numbers are invented.
+-->
+<style>
+  html, body { margin: 0; }
+  body { width: 8640px; height: 1350px; overflow: hidden; background: #000; }
+  #pano { position: relative; width: 8640px; height: 1350px; overflow: hidden; }
+  .a { position: absolute; }
+  .d { font-family: 'Inter Display', Inter, sans-serif; font-weight: 900; letter-spacing: -0.045em; line-height: .86; white-space: nowrap; }
+  .m { font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
+  .i { font-family: Inter, sans-serif; }
+  .ph { position: absolute; background: #0B0B0B; border-radius: 78px; box-shadow: 0 50px 120px rgba(0,0,0,.45), inset 0 0 0 2px #2A2A2A; }
+  .ph .scr { position: absolute; left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 64px; overflow: hidden; background: #0A0A0A; }
+  .ph .isl { position: absolute; left: 50%; top: 30px; width: 136px; height: 38px; margin-left: -68px; border-radius: 20px; background: #000; z-index: 9; }
+  .sb { position: absolute; left: 44px; top: 17px; font: 600 19px Inter; color: #fff; }
+  .sbr { position: absolute; right: 40px; top: 20px; display: flex; gap: 6px; align-items: flex-end; }
+  .sbr i { display: block; width: 5px; background: #fff; border-radius: 2px; }
+  .chip { position: absolute; font-family: 'Inter Display'; font-weight: 900; letter-spacing: -0.04em; line-height: 1; padding: 16px 28px 20px; white-space: nowrap; box-shadow: 0 18px 40px rgba(0,0,0,.2); }
+  .lbl { font: 600 15px Inter; letter-spacing: .06em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div id="pano"></div>
+<script>
+'use strict';
+const SW_ = 1080, SH_ = 1350, N = 8;
+const RED = '#FF2D2D', INK = '#0A0A0A', PAPER = '#FAFAF9', SAND = '#EFEEEA';
+const LOGO = '../../logo.png';
+const X = k => k * SW_;                       // left edge of slide k (0-based)
+const div = (style, inner = '', cls = 'a') => `<div class="${cls}" style="${style}">${inner}</div>`;
+const tf = (x, y, s = 1, r = 0) => `left:${x}px;top:${y}px;transform:translate(-50%,-50%) scale(${s}) rotate(${r}deg)`;
+const mctx = document.createElement('canvas').getContext('2d');
+function textW(txt, size) { mctx.font = '900 100px "Inter Display"'; mctx.letterSpacing = '-4.5px'; return mctx.measureText(txt).width * size / 100; }
+const fit = (txt, maxW, maxPx) => Math.min(maxPx, maxPx * maxW / textW(txt, maxPx));
+const text = (x, y, txt, size, color = '#fff', extra = '') => div(`left:${x}px;top:${y}px;font-size:${size}px;color:${color};${extra}`, txt, 'a d');
+const chip = (x, y, txt, size = 72, { dark = true, red = false, rot = -2 } = {}) =>
+  div(`left:${x}px;top:${y}px;transform:rotate(${rot}deg);font-size:${size}px;background:${red ? RED : dark ? INK : '#fff'};color:${red || dark ? '#fff' : INK}`, txt, 'chip');
+const logo = (x, y, size, inv = false) => `<img class="a" src="${LOGO}" style="${tf(x, y)};width:${size}px;height:${size}px;${inv ? 'filter:invert(1)' : ''}">`;
+const outline = (x, y, txt, size, color, op = .12) => div(`left:${x}px;top:${y}px;font-size:${size}px;color:transparent;-webkit-text-stroke:3px ${color};opacity:${op}`, txt, 'a d');
+const tag = (k, txt, color) => div(`left:${X(k) + 72}px;top:70px;font-size:26px;color:${color};opacity:.85`, txt, 'a m');
+// slide counter + swipe hint at the bottom of each slide
+const foot = (k, color) => div(`left:${X(k) + 72}px;top:1262px;font-size:24px;color:${color};opacity:.6`, `0${k + 1} / 0${N}`, 'a m') +
+  (k < N - 1 ? div(`left:${X(k) + 1008}px;top:1262px;transform:translateX(-100%);font-size:24px;color:${color};opacity:.6`, 'Geser →', 'a m') : '');
+
+// Phone with a real screen: 52 px status bar + a 390×808 screenshot at 472 px wide.
+const PW = 500, SB = 52, SWI = PW - 28, UIH = Math.round(SWI * 808 / 390), PH = SB + UIH + 28;
+function phone(cx, cy, s, rot, name, z = null) {
+  const zoom = z ? `transform:scale(${z.s});transform-origin:${z.ox * 100}% ${z.oy * 100}%;` : '';
+  const scr = `<div class="a" style="left:0;top:${SB}px;width:${SWI}px;height:${UIH}px;overflow:hidden"><img src="../video/ui/${name}.png" style="display:block;width:${SWI}px;height:${UIH}px;${zoom}"></div>
+    <div class="sb">09.41</div><div class="sbr"><i style="height:8px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:20px;opacity:.4"></i></div>`;
+  return div(`${tf(cx, cy, s, rot)};width:${PW}px;height:${PH}px`, `<div class="scr">${scr}</div><div class="isl"></div>`, 'ph');
+}
+
+// The five old tools (same drawing as ../video/ad.html).
+function tool(k, w = 430, h = 310) {
+  const base = `width:${w}px;height:${h}px;border-radius:30px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.22);font-family:Inter;position:relative;`;
+  if (k === 0) { // WhatsApp-style chat
+    const b = (txt, me, y) => div(`${me ? 'right' : 'left'}:18px;top:${y}px;max-width:300px;background:${me ? '#D9FDD3' : '#fff'};padding:12px 16px;border-radius:18px;font:500 20px Inter;color:#111;box-shadow:0 1px 1px rgba(0,0,0,.1)`, txt);
+    return `<div style="${base}background:#ECE5DD">${div(`left:0;right:0;top:0;height:64px;background:#1F2C34;color:#fff;font:700 21px Inter;padding:20px 22px;box-sizing:border-box`, 'Klien PT (24) 🔔')}
+      ${b('kak besok jam brp? 🙏', 0, 82)}${b('sisa sesi saya brp ya', 0, 146)}${b('udah transfer ya kak', 0, 210)}${b('cek dulu ya…', 1, 254)}</div>`;
+  }
+  if (k === 1) { // paper note
+    let lines = '';
+    for (let y = 70; y < h; y += 40) lines += div(`left:0;right:0;top:${y}px;height:2px;background:#C9DCEB`);
+    const hw = (txt, y, x = 34, extra = '') => div(`left:${x}px;top:${y}px;font:italic 500 30px 'FreeSerif','DejaVu Serif',serif;color:#1E3A8A;${extra}`, txt);
+    return `<div style="${base}background:#FFFDF0">${lines}${div(`left:70px;top:0;bottom:0;width:2px;background:#F2A7A7`)}
+      ${hw('Senin', 30, 86, 'font-weight:700')}${hw('07 Rina — sisa 5?', 70, 86)}${hw('08 Budi (bayar??)', 110, 86)}${hw('16 Sari / Dimas', 150, 86, 'text-decoration:line-through')}${hw('17 ??? lupa', 190, 86)}${hw('jgn lupa tagih!!', 236, 120, 'transform:rotate(-4deg)')}</div>`;
+  }
+  if (k === 2) { // spreadsheet
+    const cols = ['', 'A', 'B', 'C', 'D'], data = [['Nama', 'Sesi', 'Bayar', 'Sisa'], ['Rina', '7', '1.8jt', '5'], ['Budi', '3', '#REF!', '?'], ['Sari', '10', '1.8jt', '2'], ['Dimas', '1', '', '#N/A']];
+    let g = '';
+    const cw = [44, 110, 80, 100, 96];
+    cols.forEach((c, j) => { g += div(`left:${cw.slice(0, j).reduce((a, b) => a + b, 0)}px;top:0;width:${cw[j]}px;height:44px;background:#F1F3F4;border:1px solid #DADCE0;box-sizing:border-box;font:600 17px Inter;color:#5F6368;text-align:center;line-height:42px`, c); });
+    data.forEach((row, r) => {
+      g += div(`left:0;top:${44 + r * 52}px;width:44px;height:52px;background:#F1F3F4;border:1px solid #DADCE0;box-sizing:border-box;font:600 17px Inter;color:#5F6368;text-align:center;line-height:50px`, r + 1);
+      row.forEach((v, j) => {
+        const err = v[0] === '#';
+        g += div(`left:${cw.slice(0, j + 1).reduce((a, b) => a + b, 0)}px;top:${44 + r * 52}px;width:${cw[j + 1]}px;height:52px;border:1px solid #DADCE0;box-sizing:border-box;font:${r ? 500 : 700} 19px Inter;color:${err ? '#C5221F' : '#202124'};padding:13px 10px;background:${err ? '#FCE8E6' : '#fff'}`, v);
+      });
+    });
+    return `<div style="${base}background:#fff">${g}${div(`left:0;right:0;bottom:0;height:40px;background:#188038`)}</div>`;
+  }
+  if (k === 3) { // calendar
+    let g = '';
+    const busy = [2, 3, 5, 9, 10, 11, 12, 16, 17, 19, 23, 24, 26];
+    for (let d = 0; d < 28; d++) {
+      const c = d % 7, r = Math.floor(d / 7), on = busy.includes(d), clash = d === 11;
+      g += div(`left:${18 + c * 58}px;top:${86 + r * 54}px;width:52px;height:48px;border-radius:10px;background:${clash ? '#FFE1E1' : on ? '#E8F0FE' : '#fff'};border:1px solid #E5E7EB;box-sizing:border-box;font:600 16px Inter;color:#374151;padding:5px 7px`,
+        (d + 1) + (on ? `<div style="height:5px;border-radius:3px;background:${clash ? '#E11D48' : '#4285F4'};margin-top:6px"></div>` : ''));
+    }
+    return `<div style="${base}background:#fff">${div(`left:22px;top:20px;font:800 28px Inter;color:#1F2937`, 'November')}${div(`right:22px;top:24px;font:700 18px Inter;color:#E11D48`, 'Bentrok!')}${g}</div>`;
+  }
+  // calculator
+  let keys = '';
+  ['7', '8', '9', '÷', '4', '5', '6', '×', '1', '2', '3', '−', '0', ',', '=', '+'].forEach((v, j) => {
+    keys += div(`left:${20 + (j % 4) * 100}px;top:${124 + Math.floor(j / 4) * 46}px;width:90px;height:40px;border-radius:12px;background:${j % 4 === 3 ? '#FF9F0A' : '#333'};color:#fff;font:600 22px Inter;text-align:center;line-height:40px`, v);
+  });
+  return `<div style="${base}background:#111">${div(`right:24px;top:16px;font:300 22px Inter;color:#8E8E93`, '65% × 1.800.000')}${div(`right:24px;top:46px;font:300 58px Inter;color:#fff`, '1.170.000')}${keys}</div>`;
+}
+
+/* ------------------------------------------------------------ slides */
+function build() {
+let h = '';
+const bg = (k, color, extra = '') => { h += div(`left:${X(k)}px;top:0;width:${SW_}px;height:${SH_}px;background:${color};${extra}`); };
+['#000', PAPER, '#000', SAND, '#0B0B0B', SAND, '#0B0B0B', '#000'].forEach((c, k) => bg(k, c));
+h += div(`left:${X(1)}px;top:0;width:${SW_}px;height:${SH_}px;background-image:radial-gradient(#D6D3D1 2px,transparent 2px);background-size:36px 36px;opacity:.6`);
+
+// 1 · hook
+{
+  const k = 0, big = 360, small = 118, lh = Math.round(big * .9);
+  const d5 = textW('5', big), d1 = textW('1', big);
+  h += text(X(k) + 86, 210, '5', big) + text(X(k) + 86 + d5 + 30, 210 + lh - small * 1.02, 'aplikasi.', small);
+  h += text(X(k) + 86, 210 + lh + 10, '1', big) + text(X(k) + 86 + d1 + 30, 210 + 2 * lh + 10 - small * 1.02, 'coach.', small);
+  h += text(X(k) + 86, 210 + 2 * lh + 60, 'Capek.', fit('Capek.', 900, 270), RED);
+  h += tag(k, 'UNTUK PERSONAL TRAINER', '#fff') + foot(k, '#fff');
+}
+// 2 · the chaos, and the red strike that starts on slide 1
+{
+  const k = 1;
+  const pile = [[315, 470, -8], [720, 560, 7], [350, 830, 5], [720, 920, -6], [530, 700, -2]];
+  pile.forEach(([x, y, r], i) => { h += div(`${tf(X(k) + x, y, 0.92, r)}`, tool(i)); });
+  ['3 pesan baru', 'Bentrok!', '#REF!', 'Lupa tagih?'].forEach((n, i) => {
+    const [x, y] = [[190, 300], [870, 390], [880, 1080], [170, 1010]][i];
+    h += div(`${tf(X(k) + x, y, 1, i % 2 ? 6 : -6)};background:${INK};color:#fff;font:800 30px Inter;padding:14px 22px;border-radius:40px;white-space:nowrap;box-shadow:0 10px 30px rgba(0,0,0,.25)`, n);
+  });
+  h += text(X(k) + 72, 1130, 'Ribet.', 120, INK);
+  h += div(`left:${X(k) + 72}px;top:150px;font:700 30px 'JetBrains Mono';color:${INK}`, 'WhatsApp · Kertas · Excel · Kalender · Kalkulator');
+  h += tag(k, 'CARA LAMA', INK) + foot(k, INK);
+  // the strike: from slide 1's "Capek." across the whole pile
+  h += div(`left:${X(0) + 700}px;top:1040px;width:1500px;height:50px;background:${RED};transform-origin:0 50%;transform:rotate(-22deg)`);
+}
+// 3 · one phone; the phone runs into slide 4
+{
+  const k = 2;
+  h += logo(X(k) + 300, 250, 330);
+  const size = 170, y0 = 450;
+  [['SEMUA.', '#fff'], ['DALAM.', '#fff'], ['SATU', RED], ['HP.', '#fff']].forEach(([w, c], i) => { h += text(X(k) + 80, y0 + i * size * .9, w, size, c); });
+  h += tag(k, 'CARA BARU', '#fff') + foot(k, '#fff');
+}
+// 4 · booking
+{
+  const k = 3;
+  h += outline(X(k) - 40, 1000, 'BOOKING', 330, INK, .1);
+  h += phone(X(k) + 700, 690, 0.84, 4, 'client-booked');
+  h += chip(X(k) + 60, 150, 'Klien booking', 78, { rot: -3 }) + chip(X(k) + 520, 260, 'sendiri.', 78, { rot: 2 });
+  h += div(`left:${X(k) + 72}px;top:1172px;width:520px;font:600 30px/1.3 Inter;color:${INK}`, 'Klien pilih jam kosong sendiri. Jadwalmu langsung rapi.');
+  h += tag(k, '01 — BOOKING & JADWAL', INK) + foot(k, INK);
+  // phone from slide 3 crossing into slide 4
+  h += phone(X(3) - 20, 690, 0.84, -8, 'coach-dashboard');
+}
+// 5 · workout + PR; the share card crosses into slide 6
+{
+  const k = 4;
+  h += outline(X(k) - 60, 1010, 'WORKOUT', 330, '#fff', .1);
+  h += phone(X(k) + 600, 690, 0.86, -3, 'client-workout-pr');
+  h += chip(X(k) + 60, 150, 'Catat', 80, { dark: false, rot: -3 }) + chip(X(k) + 330, 250, 'tiap set.', 80, { dark: false, rot: 2 });
+  h += chip(X(k) + 640, 1090, 'Rekor baru!', 60, { red: true, rot: 4 });
+  h += div(`left:${X(k) + 72}px;top:1172px;width:470px;font:600 30px/1.3 Inter;color:#fff`, 'Klien centang set, rekor tercatat sendiri.');
+  h += tag(k, '02 — WORKOUT', '#fff') + foot(k, '#fff');
+  h += `<div class="a" style="left:${X(5) - 170}px;top:560px;width:340px;height:440px;transform:rotate(7deg);background:${INK};border-radius:28px;box-shadow:0 30px 70px rgba(0,0,0,.5);border:2px solid #333;color:#fff;padding:26px;box-sizing:border-box;font-family:Inter;z-index:3">
+    <img src="${LOGO}" style="width:110px;height:110px;margin:-30px 0 0 -30px">
+    <div class="d" style="font-size:56px;margin-top:-6px">PUSH DAY</div>
+    <div style="font:500 19px Inter;color:#A3A3A3;margin-top:8px">Bench Press · 80 kg × 5</div>
+    <div style="margin-top:24px;display:grid;gap:12px">
+      <div><div class="lbl" style="color:#A3A3A3">Volume</div><div class="m" style="font-size:32px">2.010 kg</div></div>
+      <div><div class="lbl" style="color:#A3A3A3">Rekor</div><div class="m" style="font-size:32px;color:${RED}">1 PR</div></div></div></div>`;
+}
+// 6 · progress
+{
+  const k = 5;
+  h += outline(X(k) - 60, 1010, 'PROGRESS', 330, INK, .1);
+  h += phone(X(k) + 380, 700, 0.8, -5, 'coach-client-progres');
+  h += phone(X(k) + 760, 690, 0.84, 4, 'client-progres');
+  h += chip(X(k) + 300, 150, 'Progress', 80, { rot: -3 }) + chip(X(k) + 520, 255, 'kelihatan.', 80, { rot: 2 });
+  h += div(`left:${X(k) + 72}px;top:1172px;width:520px;font:600 30px/1.3 Inter;color:${INK}`, 'Berat, ukuran tubuh, rapor. Kamu dan klien lihat angka yang sama.');
+  h += tag(k, '03 — PROGRESS', INK) + foot(k, INK);
+}
+// 7 · nutrition + finance
+{
+  const k = 6;
+  h += outline(X(k) - 60, 1010, 'GIZI · RP', 330, '#fff', .1);
+  h += phone(X(k) + 310, 700, 0.8, -5, 'client-makan');
+  h += phone(X(k) + 760, 690, 0.84, 4, 'coach-keuangan');
+  h += chip(X(k) + 60, 150, 'Target kalori', 74, { dark: false, rot: -3 }) + chip(X(k) + 560, 255, 'Tagihan beres.', 66, { dark: false, rot: 2 });
+  h += div(`left:${X(k) + 72}px;top:1172px;width:560px;font:600 30px/1.3 Inter;color:#fff`, 'Kalori klien dihitung otomatis. Pembayaran dan laporan di satu layar.');
+  h += tag(k, '04 — NUTRITION & KEUANGAN', '#fff') + foot(k, '#fff');
+}
+// 8 · end: logo, tagline, call to action
+{
+  const k = 7;
+  [520, 700, 880].forEach((r, i) => { h += div(`left:${X(k) + 540 - r / 2}px;top:${470 - r / 2}px;width:${r}px;height:${r}px;border-radius:50%;border:2px solid #fff;opacity:${.16 - i * .05}`); });
+  h += logo(X(k) + 540, 470, 640);
+  const tw = textW('Move Better.', 128);
+  h += text(X(k) + 540 - tw / 2, 820, 'Move Better.', 128);
+  h += div(`left:${X(k) + 540}px;top:1035px;transform:translateX(-50%);background:#fff;color:${INK};font:800 40px 'Inter Display';letter-spacing:-0.02em;padding:24px 44px;border-radius:60px;white-space:nowrap`, 'Mau coba? DM atau chat WA');
+  h += div(`left:${X(k) + 540}px;top:1140px;transform:translateX(-50%);font:500 26px Inter;color:#A3A3A3;white-space:nowrap`, 'Semua klien. Satu HP.');
+  h += foot(k, '#fff');
+}
+document.getElementById('pano').innerHTML = h;
+}
+
+window.ready = Promise.all([
+  document.fonts.load('900 100px "Inter Display"'), document.fonts.load('800 100px "Inter Display"'),
+  document.fonts.load('700 40px "JetBrains Mono"'), document.fonts.load('500 40px Inter'), document.fonts.load('600 40px Inter'),
+  document.fonts.load('800 40px Inter'), document.fonts.load('italic 500 30px FreeSerif'),
+]).then(build).then(() => Promise.all([...document.images].map(i => i.decode().catch(() => {}))));
+</script>
+</body>
+</html>
