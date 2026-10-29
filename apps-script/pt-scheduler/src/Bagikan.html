@@ -1023,6 +1023,7 @@
       h += group('Periode', PERIODS.map(p => chip('period', p, { hari: cur === 'gizi' ? 'Hari ini' : (cur === 'ukuran' ? 'Semua' : 'Latihan ini'), minggu: 'Minggu ini', bulan: 'Bulan ini', '3bulan': '3 bulan' }[p], per)).join('') +
         '<label class="chip sh-date' + (/^tanggal:/.test(per) ? ' active' : '') + '">' + ic('calendar') + '<input type="date" aria-label="Pilih tanggal" max="' + esc(st.src.today) + '" value="' + esc(/^tanggal:/.test(per) ? per.slice(8) : '') + '" onchange="window.shareSet(\'period\', this.value ? \'tanggal:\' + this.value : \'hari\')"></label>');
     }
+    h += '<div class="field sh-field only-mobile"><span class="label">Format</span>' + fmtSeg() + '</div>';
     const modes = cmpModes();
     if (modes.length) h += group('Perbandingan', [['none', 'Tidak ada']].concat(modes).map(m => chip('cmp', m[0], m[1], k.cmp)).join(''));
     return h;
@@ -1112,15 +1113,19 @@
     el.innerHTML = st.kinds.map(k => '<i class="' + (k === st.kind ? 'on' : '') + '"></i>').join('');
   }
   function canVideo() { return typeof MediaRecorder !== 'undefined' && !!HTMLCanvasElement.prototype.captureStream; }
+  function fmtSeg(cls) {
+    return '<div class="seg sh-seg' + (cls ? ' ' + cls : '') + '" role="radiogroup" aria-label="Format">' + [['png', 'Gambar'], ['hq', 'HQ'], ['video', 'Video']].filter(x => x[0] !== 'video' || canVideo()).map(x => '<button type="button" role="radio" class="' + (P.fmt === x[0] ? 'active' : '') + '" aria-checked="' + (P.fmt === x[0]) + '" onclick="window.shareSet(\'fmt\',\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '</div>';
+  }
   function renderFoot() {
-    const n = st.tray.length;
-    let h = '<div class="sh-fmt">' + '<div class="seg sh-seg" role="radiogroup" aria-label="Format">' + [['png', 'Gambar'], ['hq', 'HQ'], ['video', 'Video']].filter(x => x[0] !== 'video' || canVideo()).map(x => '<button type="button" role="radio" class="' + (P.fmt === x[0] ? 'active' : '') + '" aria-checked="' + (P.fmt === x[0]) + '" onclick="window.shareSet(\'fmt\',\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '</div>' +
-      '<button type="button" class="btn btn-ghost btn-sm sh-add" onclick="window.shareTrayAdd()"' + (n >= 5 || P.fmt === 'video' ? ' disabled' : '') + '>' + ic('plus') + 'Set' + (n ? ' (' + n + ')' : '') + '</button></div>';
+    const n = st.tray.length, addOff = n >= 5 || P.fmt === 'video';
+    // HP: format ada di tab Kartu; bilah bawah satu baris. Desktop: format + set di kiri.
+    let h = '<div class="sh-fmt only-desktop">' + fmtSeg() + '<button type="button" class="btn btn-ghost btn-sm sh-add" onclick="window.shareTrayAdd()"' + (addOff ? ' disabled' : '') + '>' + ic('plus') + 'Set' + (n ? ' (' + n + ')' : '') + '</button></div>';
     if (n) h += '<div class="sh-tray" aria-label="Kartu dalam set">' + st.tray.map((t, i) => '<span class="sh-thumb"><img src="' + t.url + '" alt="' + esc(KIND_NAME[t.kind]) + '"><button type="button" class="icon-btn plain" onclick="window.shareTrayDel(' + i + ')" aria-label="Hapus dari set">' + ic('x') + '</button></span>').join('') + '<button type="button" class="btn btn-ghost btn-sm" onclick="window.shareTrayClear()">Kosongkan</button></div>';
     h += '<div class="sh-btns">' + (st.opts.summary ? '<button type="button" class="btn btn-ghost" id="share-summary" onclick="window.shareSummary()">Ringkasan</button>' : '') +
+      '<button type="button" class="btn btn-outline sh-add only-mobile" onclick="window.shareTrayAdd()" aria-label="Tambah ke set"' + (addOff ? ' disabled' : '') + '>' + ic('plus') + 'Set' + (n ? ' ' + n : '') + '</button>' +
       '<button type="button" class="btn btn-outline" onclick="window.shareSave()">' + ic('download') + 'Simpan</button>' +
-      (P.fmt === 'video' || n ? '' : '<button type="button" class="btn btn-outline" onclick="window.shareCopy()">' + ic('copy') + 'Salin</button>') +
-      '<button type="button" class="btn btn-primary" id="share-go" onclick="window.shareGo()">' + ic('share-2') + (n ? 'Bagikan ' + (n + (st.blob ? 0 : 0)) : 'Bagikan') + '</button></div>';
+      (P.fmt === 'video' || n ? '' : '<button type="button" class="btn btn-outline only-desktop" onclick="window.shareCopy()">' + ic('copy') + 'Salin</button>') +
+      '<button type="button" class="btn btn-primary" id="share-go" onclick="window.shareGo()">' + ic('share-2') + (n ? 'Bagikan (' + n + ')' : 'Bagikan') + '</button></div>';
     $('share-foot').innerHTML = h;
     if (window.scheduleIconUpdate) window.scheduleIconUpdate();
   }

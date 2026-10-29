@@ -1710,7 +1710,7 @@ async function contrastReport(page) {
     check(smallTargets === 0, 'share editor (phone): chips, tabs and buttons are touch-sized');
     await page.click('#share-body [data-pane="gaya"] .chip:has-text("Kartu gelap")');
     await page.waitForTimeout(300);
-    await page.click('#share-foot .sh-add');
+    await page.click('#share-foot .sh-add:visible');
     await page.waitForTimeout(400);
     check((await page.locator('#share-foot .sh-thumb').count()) === 1, 'share editor: "+ Set" adds the card to the multi-card tray');
     await shot(page, 'portal-mobile-share-editor');
