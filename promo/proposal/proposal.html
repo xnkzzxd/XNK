@@ -70,6 +70,8 @@
   table.cmp th.hot span { color: #A3A3A3; }
   table.cmp tr.grp td { font: 700 11.5px 'JetBrains Mono'; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding-top: 11px; border-bottom: 2px solid var(--ink); }
   table.cmp .yes { font-weight: 900; font-size: 15px; } table.cmp .no { color: #C4C0BB; }
+  table.cmp.pay td { padding: 12px 10px; font-size: 14px; } table.cmp.pay .c { font: 800 16px 'Inter Display'; }
+  table.cmp .sub { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
   table.cmp tr.setup-row td { font-weight: 800; border-top: 2px solid var(--ink); border-bottom: 0; }
   .badge { position: absolute; top: -12px; right: 18px; background: var(--red); color: #fff; font: 800 12px Inter; padding: 6px 12px; border-radius: 20px; letter-spacing: .03em; }
   .fill { font-family: 'JetBrains Mono'; background: #FFF3C4; padding: 1px 6px; border-radius: 5px; }
@@ -112,14 +114,15 @@
     <div><div class="eyebrow">Untuk</div><div class="d" style="font-size:24px;margin-top:6px">PT perorangan</div></div>
     <div><div class="eyebrow">Dipakai di</div><div class="d" style="font-size:24px;margin-top:6px">HP & laptop</div></div>
     <div><div class="eyebrow">Siap pakai</div><div class="d" style="font-size:24px;margin-top:6px">± 3 hari</div></div>
-    <div><div class="eyebrow">Mulai dari</div><div class="d" style="font-size:24px;margin-top:6px">Rp 99rb/bln</div></div>
+    <div><div class="eyebrow">Mulai dari</div><div class="d" style="font-size:24px;margin-top:6px">Rp 149rb/bln</div></div>
   </div>
   <h2 style="margin-top:34px">Isi proposal</h2>
   <table>
     <tr><td class="m">02</td><td>Masalah coach hari ini</td><td class="m">06</td><td>Keamanan & data</td></tr>
     <tr><td class="m">03</td><td>Solusi: satu aplikasi, dua sisi</td><td class="m">07</td><td>Paket & harga</td></tr>
     <tr><td class="m">04</td><td>Fitur untuk coach</td><td class="m">08</td><td>Perbandingan fitur</td></tr>
-    <tr><td class="m">05</td><td>Fitur untuk klien</td><td class="m">09</td><td>Cara mulai & kontak</td></tr>
+    <tr><td class="m">05</td><td>Fitur untuk klien</td><td class="m">09</td><td>Pilihan pembayaran</td></tr>
+    <tr><td class="m"></td><td></td><td class="m">10</td><td>Cara mulai & kontak</td></tr>
   </table>
   <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>02</span></div>
 </section>
@@ -235,42 +238,42 @@
 <!-- 8 · Paket & harga -->
 <section class="page">
   <div class="eyebrow">07 · Paket & harga</div>
-  <h1>Pilih sesuai<br>cara kerjamu.</h1>
-  <div class="grid3" style="margin-top:26px;align-items:stretch">
+  <h1 style="font-size:44px">Pilih sesuai cara kerjamu.</h1>
+  <div class="grid3" style="margin-top:20px;align-items:stretch">
     <div class="price">
       <div class="eyebrow">Starter</div>
-      <div class="amt">Rp 99.000</div><div class="per">per bulan · 1 coach, s.d. 15 klien</div>
-      <div class="setup">Setup sekali bayar <b>Rp 299.000</b></div>
+      <div class="amt">Rp 149.000</div><div class="per">per bulan · 1 coach, s.d. 15 klien</div>
       <ul class="tick"><li>Booking & jadwal mandiri</li><li>Mode latihan & rekor</li><li>Berat & ukuran tubuh</li><li>Pengingat sesi & booking</li></ul>
       <div class="for">Untuk PT yang baru mulai merapikan klien.</div>
     </div>
     <div class="price hot">
       <span class="badge">PALING DIPILIH</span>
       <div class="eyebrow">Pro</div>
-      <div class="amt">Rp 199.000</div><div class="per">per bulan · 1 coach, klien tanpa batas</div>
-      <div class="setup">Setup sekali bayar <b>Rp 499.000</b></div>
+      <div class="amt">Rp 249.000</div><div class="per">per bulan · 1 coach, klien tanpa batas</div>
       <ul class="tick"><li>Semua di Starter</li><li>Keuangan & tagihan</li><li>Gizi & target kalori</li><li>Foto progres, asesmen, catatan sesi</li><li>Kartu bagikan & template program</li></ul>
       <div class="for">Untuk PT full-time yang ingin klien bertahan lama.</div>
     </div>
     <div class="price">
       <div class="eyebrow">Studio</div>
-      <div class="amt">Rp 449.000</div><div class="per">per bulan · s.d. 5 coach</div>
-      <div class="setup">Setup sekali bayar <b>Rp 1.499.000</b></div>
+      <div class="amt">Rp 549.000</div><div class="per">per bulan · s.d. 5 coach</div>
       <ul class="tick"><li>Semua di Pro</li><li>Banyak coach, klien pilih coach</li><li>Kelas grup & bagi hasil coach</li><li>Landing page booking publik</li></ul>
-      <div class="for">Untuk tim kecil atau studio privat.</div>
+      <div class="for">Untuk tim kecil atau studio privat. Wajib setup Custom.</div>
     </div>
   </div>
-  <div class="card" style="margin-top:18px">
-    <div class="eyebrow" style="margin-bottom:10px">Biaya setup sudah termasuk</div>
-    <ul class="tick" style="columns:2;column-gap:28px">
-      <li>Pemasangan aplikasi di akun Google-mu</li><li>Impor data klien dari Excel / catatan</li><li>Atur paket, harga, jam operasional</li><li>Teks pengingat WhatsApp sesuai gayamu</li><li>Sesi pelatihan 1 jam (online)</li><li>Studio: landing page & profil tiap coach</li>
-    </ul>
+  <div class="eyebrow" style="margin:24px 0 10px">Biaya setup · sekali bayar</div>
+  <div class="grid2">
+    <div class="card">
+      <h2>Setup Standar</h2><div class="d" style="font-size:28px;margin:4px 0 8px">Rp 400.000</div>
+      <p style="margin-bottom:10px">Aplikasi siap pakai dengan tampilan XNK.</p>
+      <ul class="tick"><li>Pemasangan di akun Google-mu</li><li>Impor data klien dari Excel / catatan</li><li>Atur paket, harga, jam operasional</li><li>Pelatihan online 1 jam</li></ul>
+    </div>
+    <div class="card ink">
+      <h2>Setup Custom</h2><div class="d" style="font-size:28px;margin:4px 0 8px">Rp 2.100.000</div>
+      <p style="margin-bottom:10px">Semua di Standar, plus sesuai permintaanmu.</p>
+      <ul class="tick" style="color:#fff"><li>Nama, logo & warna brand-mu sendiri</li><li>Landing page booking untuk calon klien</li><li>Penyesuaian fitur, teks & tampilan</li><li>Impor riwayat lama, pelatihan 2 sesi</li></ul>
+    </div>
   </div>
-  <div class="card ink" style="margin-top:14px;display:grid;grid-template-columns:1fr 1.3fr;gap:20px;align-items:center">
-    <div><div class="eyebrow">Hitung balik modal</div><div class="d" style="font-size:36px;margin-top:8px">1 sesi = <span class="red">lunas</span></div></div>
-    <p>Kalau satu sesi PT-mu Rp 200.000, cukup <b>satu sesi tambahan per bulan</b>, dari klien yang tidak jadi berhenti atau dari jam admin yang terpakai untuk melatih, untuk menutup paket Pro.</p>
-  </div>
-  <p class="note" style="margin-top:12px">Bayar tahunan: gratis 2 bulan. Harga belum termasuk domain khusus (bila diminta). Harga dapat berubah; berlaku sesuai masa proposal.</p>
+  <p class="note" style="margin-top:10px">Domain khusus (misalnya namamu.com) tidak termasuk; biayanya mengikuti harga penyedia domain dan dibayar langsung oleh coach. Bayar tahunan, lifetime dan beli putus: halaman 10.</p>
   <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>08</span></div>
 </section>
 
@@ -279,29 +282,60 @@
   <div class="eyebrow">08 · Perbandingan fitur</div>
   <h1 style="font-size:40px;margin-bottom:8px">Apa saja yang kamu dapat.</h1>
   <table class="cmp">
-    <tr><th></th><th class="c">Starter<br><span>Rp 99rb</span></th><th class="c hot">Pro<br><span>Rp 199rb</span></th><th class="c">Studio<br><span>Rp 449rb</span></th></tr>
+    <tr><th></th><th class="c">Starter<br><span>Rp 149rb/bln</span></th><th class="c hot">Pro<br><span>Rp 249rb/bln</span></th><th class="c">Studio<br><span>Rp 549rb/bln</span></th></tr>
     <tr class="grp"><td colspan="4">Dasar</td></tr><tr><td>Panel coach + portal klien</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Klien aktif</td><td class="c">15</td><td class="c hot">Tanpa batas</td><td class="c">Tanpa batas</td></tr><tr><td>Jumlah coach</td><td class="c">1</td><td class="c hot">1</td><td class="c">s.d. 5</td></tr><tr><td>Booking & reschedule mandiri oleh klien</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Jadwal, kalender, sisa sesi otomatis</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Paket & harga, jam operasional</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Notifikasi Telegram untuk coach</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr class="grp"><td colspan="4">Latihan & progres</td></tr><tr><td>Mode latihan, timer istirahat, rekor (PR)</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Program latihan per klien</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Template program & Jelajahi</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Berat & ukuran tubuh, grafik</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Foto progres privat, rapor tubuh, badge</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Catatan sesi, rating & evaluasi paket</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Asesmen & tes kebugaran</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr class="grp"><td colspan="4">Bisnis & klien</td></tr><tr><td>Pengingat WhatsApp siap kirim</td><td class="c">Sesi & booking</td><td class="c hot">Semua jenis</td><td class="c">Semua jenis</td></tr><tr><td>Gizi: target kalori, menu, catat makan</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Keuangan: tagihan, pembayaran, laporan, CSV</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Kartu bagikan untuk Instagram</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Info & tips untuk klien</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Banyak coach, klien pilih coach</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="no">—</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Kelas grup & bagi hasil coach</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="no">—</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Landing page booking publik</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="no">—</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Dukungan</td><td class="c">Jam kerja</td><td class="c hot">Prioritas</td><td class="c">Prioritas + review</td></tr>
-    <tr class="setup-row"><td>Biaya setup (sekali)</td><td class="c">Rp 299rb</td><td class="c hot">Rp 499rb</td><td class="c">Rp 1,499jt</td></tr>
+    <tr class="setup-row"><td>Biaya setup (sekali)</td><td class="c">mulai Rp 400rb</td><td class="c hot">mulai Rp 400rb</td><td class="c">Rp 2,1jt</td></tr>
   </table>
   <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>09</span></div>
 </section>
 
-<!-- 10 · Cara mulai -->
+<!-- 10 · Pilihan pembayaran -->
 <section class="page">
-  <div class="eyebrow">09 · Cara mulai</div>
+  <div class="eyebrow">09 · Pilihan pembayaran</div>
+  <h1>Bayar bulanan,<br>tahunan, atau sekali.</h1>
+  <table class="cmp pay" style="margin-top:18px">
+    <tr><th></th><th class="c">Starter</th><th class="c hot">Pro</th><th class="c">Studio</th></tr>
+    <tr><td><b>Bulanan</b><div class="sub">Bayar tiap bulan, berhenti kapan saja</div></td><td class="c">Rp 149rb</td><td class="c hot">Rp 249rb</td><td class="c">Rp 549rb</td></tr>
+    <tr><td><b>Tahunan</b><div class="sub">12 bulan di muka, gratis 2 bulan</div></td><td class="c">Rp 1,49jt</td><td class="c hot">Rp 2,49jt</td><td class="c">Rp 5,49jt</td></tr>
+    <tr><td><b>Lifetime</b><div class="sub">Bayar sekali, update & dukungan selama layanan XNK berjalan, setup Standar gratis</div></td><td class="c">Rp 3,9jt</td><td class="c hot">Rp 6,9jt</td><td class="c">Rp 14,9jt</td></tr>
+    <tr><td><b>Beli putus</b><div class="sub">Bayar sekali, aplikasi jadi milikmu; garansi perbaikan 30 hari, tanpa update & dukungan setelahnya</div></td><td class="c">Rp 2,9jt</td><td class="c hot">Rp 4,9jt</td><td class="c">Rp 10,9jt</td></tr>
+  </table>
+  <p class="note" style="margin-top:8px">Bulanan, tahunan dan beli putus ditambah biaya setup (Standar Rp 400rb atau Custom Rp 2,1jt). Lifetime sudah termasuk setup Standar; setup Custom tetap Rp 2,1jt. Domain tidak termasuk.</p>
+  <div class="grid2" style="margin-top:20px">
+    <div class="card"><h2>Mana yang cocok?</h2>
+      <ul class="tick" style="margin-top:8px"><li><b>Bulanan</b>: mau coba dulu dengan modal kecil.</li><li><b>Tahunan</b>: sudah yakin, ingin hemat 2 bulan.</li><li><b>Lifetime</b>: tidak mau ada tagihan rutin, tetap dapat fitur baru.</li><li><b>Beli putus</b>: ingin memegang aplikasinya sendiri sepenuhnya.</li></ul></div>
+    <div class="card ink"><h2>Contoh pembayaran awal</h2>
+      <table style="margin-top:6px;font-size:13.5px;color:#fff">
+        <tr><td style="border-color:#2A2A2A">Pro bulanan + setup Standar</td><td class="m" style="border-color:#2A2A2A;text-align:right;white-space:nowrap">Rp 649rb</td></tr>
+        <tr><td style="border-color:#2A2A2A">Pro tahunan + setup Standar</td><td class="m" style="border-color:#2A2A2A;text-align:right;white-space:nowrap">Rp 2,89jt</td></tr>
+        <tr><td style="border-color:#2A2A2A">Pro lifetime (setup Standar gratis)</td><td class="m" style="border-color:#2A2A2A;text-align:right;white-space:nowrap">Rp 6,9jt</td></tr>
+        <tr><td style="border:0">Studio bulanan + setup Custom</td><td class="m" style="border:0;text-align:right;white-space:nowrap">Rp 2,65jt</td></tr>
+      </table></div>
+  </div>
+  <div class="card" style="margin-top:18px;display:grid;grid-template-columns:1fr 1.4fr;gap:20px;align-items:center;background:var(--sand);border:0">
+    <div><div class="eyebrow">Hitung balik modal</div><div class="d" style="font-size:32px;margin-top:8px">± 1 sesi / bulan</div></div>
+    <p>Kalau satu sesi PT-mu Rp 200.000–250.000, <b>satu sesi tambahan per bulan</b>, dari klien yang tidak jadi berhenti atau dari jam admin yang terpakai untuk melatih, sudah menutup paket Pro.</p>
+  </div>
+  <p class="note" style="margin-top:14px">Beli putus dan lifetime adalah lisensi pemakaian untuk satu coach / studio, tidak untuk dijual ulang. Harga berlaku sesuai masa proposal.</p>
+  <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>10</span></div>
+</section>
+
+<!-- 11 · Cara mulai -->
+<section class="page">
+  <div class="eyebrow">10 · Cara mulai</div>
   <h1>Siap pakai<br>dalam ± 3 hari.</h1>
   <div style="margin-top:28px;display:grid;gap:14px">
     <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">1</div><div><h2>Demo 30 menit</h2><p>Kami tunjukkan aplikasinya langsung di HP-mu, sesuai cara kerjamu sekarang.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 1</div></div>
-    <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">2</div><div><h2>Setup & impor data</h2><p>Setelah biaya setup, kami pasang aplikasimu, atur paket & harga, jam operasional, lalu masukkan daftar klien dari Excel atau catatanmu.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 1–2</div></div>
+    <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">2</div><div><h2>Setup & impor data</h2><p>Setelah biaya setup dibayar, kami pasang aplikasimu, atur paket & harga, jam operasional, lalu masukkan daftar klien dari Excel atau catatanmu.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 1–2</div></div>
     <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">3</div><div><h2>Ajak klien masuk</h2><p>Klien dapat link portal + pesan WhatsApp siap kirim. Panduan di dalam aplikasi menuntun mereka langkah demi langkah.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 3</div></div>
     <div class="card ink" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px;background:#fff;color:#0A0A0A">4</div><div><h2>Jalan & didampingi</h2><p>Bulan pertama didampingi lewat WhatsApp. Langganan bulanan mulai berjalan sejak aplikasi dipakai klien.</p></div><div class="m" style="text-align:right;color:#A3A3A3">Hari 3–17</div></div>
   </div>
   <h2 style="margin-top:28px">Dukungan setelah berlangganan</h2>
   <ul class="tick" style="columns:2;column-gap:28px"><li>Bantuan lewat WhatsApp di jam kerja</li><li>Pembaruan fitur tanpa biaya tambahan</li><li>Bantuan atur pengingat & teks pesan</li><li>Riwayat versi data dari Google Sheets</li></ul>
-  <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>10</span></div>
+  <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>11</span></div>
 </section>
 
-<!-- 11 · Penutup -->
+<!-- 12 · Penutup -->
 <section class="page dark" style="padding:0">
   <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 34%,#1c1c1c 0,#0A0A0A 55%)"></div>
   <img src="../../logo.png" style="position:absolute;left:50%;top:120px;width:380px;margin-left:-190px">
