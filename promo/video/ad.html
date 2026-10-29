@@ -449,8 +449,8 @@ scene(2.4, 6.4, t => {
   // light background shrinking into a point (iris) on black
   const R = lerp(1500, 0, iris);
   let bgHtml = div(`left:${cx - R}px;top:${cy - R}px;width:${2 * R}px;height:${2 * R}px;border-radius:50%;background:${PAPER}`);
-  if (t < 5.3) bgHtml = div(`left:0;top:0;width:${W}px;height:${H}px;background:${PAPER}`) +
-    div(`left:0;top:0;width:${W}px;height:${H}px;background-image:radial-gradient(#D6D3D1 2px,transparent 2px);background-size:36px 36px;opacity:.6`);
+  if (t < 5.3) bgHtml = div(`left:-150px;top:-150px;width:${W + 300}px;height:${H + 300}px;background:${PAPER}`) +
+    div(`left:-150px;top:-150px;width:${W + 300}px;height:${H + 300}px;background-image:radial-gradient(#D6D3D1 2px,transparent 2px);background-size:36px 36px;opacity:.6`);
   h += bgHtml;
   // counter
   const n = cl(Math.floor((t - 2.4) / B) + 1, 1, 5);
@@ -541,11 +541,11 @@ scene(6.4, 8.8, t => {
     h += slam(t, t0, w, { x: cx, y: yy, size: k === 3 ? size * 1.0 : size, color: words[k][2], from: 1.8 });
   });
   // white flash
-  if (t < 6.55) h += div(`left:0;top:0;width:${W}px;height:${H}px;background:#fff;opacity:${1 - P(t, 6.4, 6.55)}`);
+  if (t < 6.55) h += div(`left:-150px;top:-150px;width:${W + 300}px;height:${H + 300}px;background:#fff;opacity:${1 - P(t, 6.4, 6.55)}`);
   // the light wipe that brings the phone
   if (t >= 8.4) {
     const p = E.inOut(P(t, 8.4, 8.8));
-    h += div(`left:0;top:${lerp(H, 0, p)}px;width:${W}px;height:${H}px;background:${SAND}`);
+    h += div(`left:-150px;top:${lerp(H, 0, p)}px;width:${W + 300}px;height:${H}px;background:${SAND}`);
     h += phone(505, lerp(H + 700, 900, E.expo(P(t, 8.45, 8.9))), 1, 0, layer(0, bookingScreen(0)));
   }
   const sh = [shake(t, 6.4, 40, 0.6), shake(t, 7.2, 10, .2), shake(t, 7.6, 10, .2), shake(t, 8.0, 16, .25)].reduce((a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]);
@@ -715,13 +715,15 @@ scene(25.6, 30.01, t => {
     const caret = n < txt.length || Math.floor(t * 2.5) % 2 === 0;
     if (t < 28.6 && caret) h += div(`left:${540 - w / 2 + textW(txt.slice(0, n), size) + 10}px;top:1180px;width:10px;height:${size * 0.82}px;background:#fff`);
   }
-  if (t < 25.7) h += div(`left:0;top:0;width:${W}px;height:${H}px;background:#fff;opacity:${1 - P(t, 25.6, 25.7)}`);
-  if (t >= 29.0) h += div(`left:0;top:0;width:${W}px;height:${H}px;background:#000;opacity:${E.inOut(P(t, 29.0, 30.0))}`);
+  if (t < 25.7) h += div(`left:-150px;top:-150px;width:${W + 300}px;height:${H + 300}px;background:#fff;opacity:${1 - P(t, 25.6, 25.7)}`);
+  if (t >= 29.0) h += div(`left:-150px;top:-150px;width:${W + 300}px;height:${H + 300}px;background:#000;opacity:${E.inOut(P(t, 29.0, 30.0))}`);
   const sh = shake(t, 25.6, 36, 0.6);
   return { bg: '#000', h, cam: { x: sh[0], y: sh[1], r: sh[2], s: 1 } };
 });
 
 /* ------------------------------------------------------------ render */
+// ?ox=35 shifts the picture right for the 4:5 crop (no side buttons in the feed)
+const OX = +(new URLSearchParams(location.search).get('ox') || 0);
 const camEl = document.getElementById('cam'), stage = document.getElementById('stage');
 const grainCtx = document.getElementById('grain').getContext('2d');
 const gimg = grainCtx.createImageData(540, 960);
@@ -741,7 +743,7 @@ window.seek = t => {
   const r = sc.fn(t);
   stage.style.background = r.bg;
   const c = r.cam;
-  camEl.style.transform = `translate(${c.x}px,${c.y}px) rotate(${c.r || 0}deg) scale(${c.s})`;
+  camEl.style.transform = `translate(${c.x + OX}px,${c.y}px) rotate(${c.r || 0}deg) scale(${c.s})`;
   camEl.innerHTML = r.h;
   grain(Math.floor(t * FPS));
 };

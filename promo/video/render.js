@@ -4,6 +4,7 @@
 //   node promo/video/render.js --out xnk-iklan-30s.mp4 --work /tmp/xnk-frames
 //   node promo/video/render.js --preview --work /tmp/xnk-frames           (key stills with safe-area guides)
 //   node promo/video/render.js --preview 3.5,11 --work /tmp/xnk-frames    (chosen stills)
+//   node promo/video/render.js --format 4x5 --work /tmp/xnk-frames        (1080×1350 feed version)
 //
 // Music: python3 promo/video/music.py <work>/music.wav runs first unless --music is given.
 'use strict';
@@ -18,8 +19,13 @@ const FPS = 30, DUR = 30, FRAMES = FPS * DUR;
 const work = path.resolve(opt('--work', 'frames'));
 const preview = opt('--preview', false);
 const workers = +opt('--workers', 4);
-const out = path.resolve(opt('--out', path.join(work, 'xnk-iklan-30s.mp4')));
-const page = 'file://' + path.join(__dirname, 'ad.html') + (preview ? '?safe=1' : '');
+// 4:5 crops y 205…1555 of the 9:16 stage (the safe area is y 260…1500) and recentres x by 35 px.
+const FORMATS = { '9x16': { q: '', vf: [] }, '4x5': { q: 'ox=35', vf: ['-vf', 'crop=1080:1350:0:205'] } };
+const fmtName = opt('--format', '9x16'), FMT = FORMATS[fmtName];
+if (!FMT) throw new Error('unknown --format ' + fmtName);
+const out = path.resolve(opt('--out', path.join(work, fmtName === '9x16' ? 'xnk-iklan-30s.mp4' : `xnk-iklan-30s-${fmtName}.mp4`)));
+const query = [preview ? 'safe=1' : '', FMT.q].filter(Boolean).join('&');
+const page = 'file://' + path.join(__dirname, 'ad.html') + (query ? '?' + query : '');
 fs.mkdirSync(work, { recursive: true });
 
 async function shoot(browser, frames, file) {
@@ -64,7 +70,7 @@ async function shoot(browser, frames, file) {
     execFileSync('python3', ['-I', path.join(__dirname, 'music.py'), music], { stdio: 'inherit' });
   }
   execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
-    '-framerate', String(FPS), '-i', path.join(dir, 'f%04d.png'), '-i', music,
+    '-framerate', String(FPS), '-i', path.join(dir, 'f%04d.png'), '-i', music, ...FMT.vf,
     '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out], { stdio: 'inherit' });
   console.log('wrote', out);
