@@ -83,6 +83,7 @@
           <section class="view hide" id="view-public-program" aria-label="Program"></section>
           <section class="view hide" id="view-public-info" aria-label="Info dan tips"></section>
           <section class="view hide" id="view-public-more" aria-label="Lainnya"></section>
+          <section class="view hide" id="view-public-share" aria-label="Kartu saya"></section>
         </div>
       </main>
     </div>
@@ -914,6 +915,7 @@
     </div>
   </div>
 
+  <div class="share-nudge hide" id="share-nudge" role="status" aria-live="polite"><p id="share-nudge-msg"></p><button type="button" class="btn btn-sm" onclick="window._shareNudgeGo && window._shareNudgeGo()"><i data-lucide="share-2"></i> Bagikan</button><button type="button" class="icon-btn plain" onclick="window.shareNudgeClose()" aria-label="Tutup ajakan"><i data-lucide="x"></i></button></div>
   <div class="toast" id="toast" role="status" aria-live="polite"><i data-lucide="check-circle-2"></i><span id="toast-msg"></span></div>
   <div class="tooltip" id="chart-tooltip" role="tooltip"></div>
   <input type="file" id="pub-avatar-input" accept="image/*" class="sr-only" aria-label="Pilih foto profil">

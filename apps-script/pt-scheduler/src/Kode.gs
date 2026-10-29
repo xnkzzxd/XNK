@@ -436,6 +436,8 @@ function getAppSettings(token) {
     clientGuideEnabled: _guideEnabled_(),
     feedbackEnabled: _feedbackEnabled_(),
     shareEnabled: _shareEnabled_(),
+    shareQrUrl: PropertiesService.getScriptProperties().getProperty('SHARE_QR_URL') || '',
+    shareQrDefault: SHARE_QR_DEFAULT,
     nutritionEnabled: _nutEnabled_(),
     businessHours: _businessHours_()
   };
@@ -470,6 +472,7 @@ function updateAppSettingsImpl_(token, payload) {
     }
   });
 
+  const qrUrl = Object.prototype.hasOwnProperty.call(payload, 'shareQrUrl') ? _shareQrValidate_(payload.shareQrUrl) : null;
   const rmdMap = _rmdValidate_(payload.reminder);   // T-40: validasi dulu, tulis belakangan
   const finMap = _finValidate_(payload.finance);    // Fase H
 
@@ -485,6 +488,7 @@ function updateAppSettingsImpl_(token, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'notifEmail')) setOrDelete('NOTIF_EMAIL', String(payload.notifEmail || '').trim());
   if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'shareEnabled')) setOrDelete('SHARE_ENABLED', payload.shareEnabled ? '' : 'false');
+  if (qrUrl !== null) setOrDelete('SHARE_QR_URL', qrUrl);
   if (Object.prototype.hasOwnProperty.call(payload, 'feedbackEnabled')) setOrDelete('FEEDBACK_ENABLED', payload.feedbackEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'nutritionEnabled')) setOrDelete('NUTRITION_ENABLED', payload.nutritionEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'businessHours')) {

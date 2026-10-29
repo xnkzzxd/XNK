@@ -215,18 +215,25 @@
                 if (e.data.xnk === 'host?') { target = e.source; targetOrigin = e.origin; send(); if (window.XNKOfflineHost) window.XNKOfflineHost.appReady(); }
                 else if (/^offline-/.test(e.data.xnk || '')) { if (window.XNKOffline) window.XNKOffline.message(e); }
                 else if (e.data.xnk === 'share' || e.data.xnk === 'copy') {
-                    // Share card (PNG made in the app). Only from the app frame that asked for host info.
-                    var blob = e.data.blob, kind = e.data.xnk, src = e.source, org = e.origin;
+                    // Share card (PNG or short video made in the app; up to 5 files). Only from the app frame that asked for host info.
+                    var kind = e.data.xnk, src = e.source, org = e.origin;
                     var reply = function (m) { try { src.postMessage(m, org); } catch (x) {} };
-                    if (src !== target || !blob || blob.type !== 'image/png' || blob.size > 8 * 1024 * 1024) return reply({ xnk: kind + '-done', ok: false });
+                    var list = Array.isArray(e.data.files) ? e.data.files : [{ blob: e.data.blob, name: e.data.name }];
+                    var okType = function (b) { return b && (b.type === 'image/png' || (kind === 'share' && (b.type === 'video/mp4' || b.type === 'video/webm'))); };
+                    if (src !== target || !list.length || list.length > 5) return reply({ xnk: kind + '-done', ok: false });
+                    for (var i = 0; i < list.length; i++) if (!list[i] || !okType(list[i].blob) || list[i].blob.size > (list[i].blob.type === 'image/png' ? 8 : 40) * 1024 * 1024) return reply({ xnk: kind + '-done', ok: false });
                     if (kind === 'copy') {
-                        try { navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(function () { reply({ xnk: 'copy-done', ok: true }); }, function () { reply({ xnk: 'copy-done', ok: false }); }); }
+                        try { navigator.clipboard.write([new ClipboardItem({ 'image/png': list[0].blob })]).then(function () { reply({ xnk: 'copy-done', ok: true }); }, function () { reply({ xnk: 'copy-done', ok: false }); }); }
                         catch (x) { reply({ xnk: 'copy-done', ok: false }); }
                         return;
                     }
-                    var name = /^[\w.-]{1,60}$/.test(e.data.name || '') ? e.data.name : 'xnk.png', file = new File([blob], name, { type: 'image/png' });
-                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                        navigator.share({ files: [file] }).then(function () { reply({ xnk: 'share-done', ok: true, how: 'share' }); }, function (er) { reply({ xnk: 'share-done', ok: !!er && er.name === 'AbortError', how: 'share' }); });
+                    var files = list.map(function (f, n) {
+                        var ext = f.blob.type === 'image/png' ? 'png' : f.blob.type === 'video/mp4' ? 'mp4' : 'webm';
+                        var name = /^[\w.-]{1,60}$/.test(f.name || '') ? f.name : 'xnk-' + (n + 1) + '.' + ext;
+                        return new File([f.blob], name, { type: f.blob.type });
+                    });
+                    if (navigator.canShare && navigator.canShare({ files: files })) {
+                        navigator.share({ files: files }).then(function () { reply({ xnk: 'share-done', ok: true, how: 'share' }); }, function (er) { reply({ xnk: 'share-done', ok: !!er && er.name === 'AbortError', how: 'share' }); });
                     } else reply({ xnk: 'share-done', ok: false });
                 }
                 else if (e.data.xnk === 'theme' && /^#[0-9a-f]{6}$/i.test(e.data.color || '')) {

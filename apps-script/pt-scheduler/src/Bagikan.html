@@ -1,33 +1,106 @@
 <script>
-/* Kartu bagikan (Phase T). Gambar dibuat di browser (Canvas) dan tidak pernah diunggah.
-   App.html memanggil window.shareOpen(kind, src, opts); src berisi data yang sudah dihitung server. */
+/* Kartu bagikan (Phase T + T2). Gambar dan video dibuat di browser (Canvas) dan tidak pernah diunggah.
+   App.html memanggil window.shareOpen(kind, src, opts); src berisi data yang sudah dihitung server.
+   Periode lain (minggu, bulan, …) datang dari src.loadPeriod(period) → getMyShareData / getMemberShareData. */
 (function () {
   'use strict';
   const W = 1080, GOLD = '#F5C400', GOLD2 = '#F59E0B';
-  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  const AXES = [['back', 'Back'], ['legs', 'Legs'], ['chest', 'Chest'], ['arms', 'Arms'], ['core', 'Core'], ['shoulders', 'Shoulders']];
+  const SIZES = { story: 1920, portrait: 1350, kotak: 1080 };
+  const PREF_KEY = 'xnk_share_prefs', NUDGE_KEY = 'xnk_share_nudge';
+  const AXES = ['back', 'legs', 'chest', 'arms', 'core', 'shoulders'];
   const PART_GROUP = { 'back': 'back', 'upper legs': 'legs', 'lower legs': 'legs', 'chest': 'chest', 'shoulders': 'shoulders', 'neck': 'shoulders', 'waist': 'core', 'upper arms': 'arms', 'lower arms': 'arms' };
-  const PREF_KEY = 'xnk_share_prefs';
-  const st = { card: null, src: null, opts: {}, style: 'grafik', size: 'story', ink: 'putih', pos: 'bawah', name: '', body: false, photo: null, blob: null, url: '', host: false, token: 0, pending: null };
+  const GROUP_PARTS = { back: ['back'], legs: ['upper legs', 'lower legs'], chest: ['chest'], shoulders: ['shoulders', 'neck'], core: ['waist'], arms: ['upper arms', 'lower arms'] };
+  const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri'];
+  const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'gizi', 'rekap', 'foto', 'badge'];
+  const PERIOD_KINDS = { latihan: 1, exercises: 1, gizi: 1, ukuran: 1 };
+  const PERIODS = ['hari', 'minggu', 'bulan', '3bulan'];
 
+  // ── Bahasa kartu (EN bawaan, ID pilihan) ─────────────────────────────────────
+  const L = {
+    en: {
+      dow: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], mon: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      monLong: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+      duration: 'Duration', volume: 'Volume', sets: 'Sets', reps: 'Reps', records: 'Records', exercises: 'Exercises', workouts: 'Workouts', sessions: 'Sessions',
+      coachSessions: 'PT sessions', streak: 'Streak', bestStreak: 'Best streak', badges: 'Badges', thisMonth: 'This month', calories: 'Calories', protein: 'Protein', carbs: 'Carbs', fat: 'Fat',
+      avgKcal: 'Avg calories', onTarget: 'On target', daysLogged: 'Days logged', mealDays: 'Meals logged', bestSet: 'Best set', e1rm: 'Est. 1RM', vsPrev: 'vs previous', improvement: 'Improvement',
+      workout: 'Workout', myProgress: 'My progress', nutrition: 'Nutrition', newBadge: 'New badge', badgeWall: 'Badges', consistency: 'Consistency', body: 'Body', progressPics: 'Progress',
+      monthlyRecap: 'Monthly recap', weeklyVolume: 'Weekly volume', week: 'week', weeks: 'weeks', wk: 'wk', days: 'days', more: 'more', of: 'of', coachedBy: 'Coached by', before: 'Before', after: 'After',
+      today: 'Today', thisWeek: 'This week', thisMonthP: 'This month', last3: 'Last 3 months', perDay: '/day', sessionsPerWeek: 'Sessions per week', dailyKcal: 'Calories per day',
+      vs: { session: 'vs last session', minggu: 'vs last week', bulan: 'vs last month', '3bulan': 'vs previous 3 months', day: 'vs day before', month: 'vs last month' }, sinceStart: 'since start', ofTarget: 'of target', pickPhoto: 'Pick a photo', noData: 'No data yet',
+      parts: { back: 'Back', legs: 'Legs', chest: 'Chest', arms: 'Arms', core: 'Core', shoulders: 'Shoulders' },
+      m: { berat: 'Weight', pinggang: 'Waist', perut: 'Belly', dada: 'Chest', lenganKanan: 'Right arm', lenganKiri: 'Left arm', pahaKanan: 'Right thigh', pahaKiri: 'Left thigh' },
+      badge: { sesi: n => n + ' sessions', streak: n => n + '-week streak', catat: n => n + ' days logged', pr: n => n === 1 ? 'First PR' : n + ' PRs' }
+    },
+    id: {
+      dow: ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'], mon: ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'],
+      monLong: ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'],
+      duration: 'Durasi', volume: 'Volume', sets: 'Set', reps: 'Rep', records: 'Rekor', exercises: 'Gerakan', workouts: 'Latihan', sessions: 'Sesi',
+      coachSessions: 'Sesi PT', streak: 'Streak', bestStreak: 'Streak terbaik', badges: 'Badge', thisMonth: 'Bulan ini', calories: 'Kalori', protein: 'Protein', carbs: 'Karbo', fat: 'Lemak',
+      avgKcal: 'Rata-rata kalori', onTarget: 'Sesuai target', daysLogged: 'Hari dicatat', mealDays: 'Makan dicatat', bestSet: 'Set terbaik', e1rm: 'Estimasi 1RM', vsPrev: 'vs sebelumnya', improvement: 'Peningkatan',
+      workout: 'Latihan', myProgress: 'Progresku', nutrition: 'Gizi', newBadge: 'Badge baru', badgeWall: 'Badge', consistency: 'Konsistensi', body: 'Tubuh', progressPics: 'Progres',
+      monthlyRecap: 'Rekap bulanan', weeklyVolume: 'Volume per minggu', week: 'minggu', weeks: 'minggu', wk: 'mgg', days: 'hari', more: 'lagi', of: 'dari', coachedBy: 'Dilatih oleh', before: 'Sebelum', after: 'Sesudah',
+      today: 'Hari ini', thisWeek: 'Minggu ini', thisMonthP: 'Bulan ini', last3: '3 bulan terakhir', perDay: '/hari', sessionsPerWeek: 'Sesi per minggu', dailyKcal: 'Kalori per hari',
+      vs: { session: 'vs sesi lalu', minggu: 'vs minggu lalu', bulan: 'vs bulan lalu', '3bulan': 'vs 3 bulan sebelumnya', day: 'vs hari sebelumnya', month: 'vs bulan lalu' }, sinceStart: 'sejak awal', ofTarget: 'dari target', pickPhoto: 'Pilih foto', noData: 'Belum ada data',
+      parts: { back: 'Punggung', legs: 'Kaki', chest: 'Dada', arms: 'Lengan', core: 'Perut', shoulders: 'Bahu' },
+      m: { berat: 'Berat', pinggang: 'Pinggang', perut: 'Perut', dada: 'Dada', lenganKanan: 'Lengan kanan', lenganKiri: 'Lengan kiri', pahaKanan: 'Paha kanan', pahaKiri: 'Paha kiri' },
+      badge: { sesi: n => n + ' sesi', streak: n => 'Streak ' + n + ' minggu', catat: n => n + ' hari dicatat', pr: n => n === 1 ? 'Rekor pertama' : n + ' rekor' }
+    }
+  };
+  let T = L.en;
+
+  // ── Pilihan tampilan (perangkat ini saja) ────────────────────────────────────
+  const PRESETS = {
+    minimal: { style: 'teks', align: 'tengah', scale: 'm', corner: 'bulat', frame: false, graphNone: true },
+    bold: { style: 'teks', align: 'kiri', scale: 'l', corner: 'bulat', frame: false, graphNone: true },
+    strava: { style: 'grafik', align: 'kiri', scale: 'm', corner: 'bulat', frame: false },
+    hevy: { style: 'gelap', align: 'kiri', scale: 'm', corner: 'bulat', frame: false },
+    polos: { style: 'terang', align: 'kiri', scale: 'm', corner: 'kotak', frame: true }
+  };
+  const DEF = { v: 2, preset: 'strava', style: 'grafik', size: 'story', ink: 'putih', align: 'kiri', pos: 'bawah', scale: 'm', corner: 'bulat', frame: false, lang: 'en', name: null, fmt: 'png',
+    foot: { date: true, logo: true, me: false, coach: true, coachPic: false, qr: false }, k: {} };
+  const KDEF = { order: [], off: [], graph: '', period: 'hari', cmp: 'prev', body: false, measures: [], bodyVal: false, hideKg: false, title: '', blur: 'none', blurH: 24 };
+  let P = null;
+  function loadPrefs() {
+    let p = {};
+    try { p = JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch (e) {}
+    const out = JSON.parse(JSON.stringify(DEF));
+    if (p.v !== 2) {   // pilihan lama (Phase T): gaya, ukuran, warna, posisi, nama
+      ['style', 'size', 'ink', 'pos'].forEach(function (k) { if (p[k]) out[k] = p[k]; });
+      if (p.name != null) out.name = p.name;
+      if (out.style === 'foto') out.style = 'grafik';
+      return out;
+    }
+    Object.keys(DEF).forEach(function (k) { if (p[k] != null) out[k] = k === 'foot' ? Object.assign(out.foot, p.foot) : p[k]; });
+    if (out.style === 'foto') out.style = 'grafik';
+    return out;
+  }
+  function savePrefs() {
+    try {
+      const p = JSON.parse(JSON.stringify(P));
+      if (st.src && st.src.admin) p.name = st.prevName;   // nama coach tidak menimpa nama klien di perangkat yang sama
+      localStorage.setItem(PREF_KEY, JSON.stringify(p));
+    } catch (e) {}
+  }
+  function kp(kind) { kind = kind || st.kind; P.k[kind] = Object.assign({}, KDEF, P.k[kind] || {}); return P.k[kind]; }
+
+  // ── format ───────────────────────────────────────────────────────────────────
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const num = (v, d) => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: d || 0 });
+  const num = (v, d) => Number(v || 0).toLocaleString(P && P.lang === 'id' ? 'id-ID' : 'en-US', { maximumFractionDigits: d || 0 });
   const kg = v => num(Math.round(Number(v) * 10) / 10, 1);
   const iso = d => String(d || '').slice(0, 10);
+  const sign = v => (v > 0 ? '+' : v < 0 ? '−' : '±');
   function fmtDate(s) {
     const p = iso(s).split('-').map(Number); if (p.length !== 3 || !p[0]) return '';
     const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
-    return DOW[d.getUTCDay()] + ', ' + p[2] + ' ' + MON[p[1] - 1] + ' ' + p[0];
+    return T.dow[d.getUTCDay()] + ', ' + p[2] + ' ' + T.mon[p[1] - 1] + ' ' + p[0];
   }
+  function fmtShort(s) { const p = iso(s).split('-').map(Number); return p[0] ? p[2] + ' ' + T.mon[p[1] - 1] : ''; }
+  function fmtRange(a, b) { if (!a) return ''; if (a === b) return fmtDate(a); return fmtShort(a) + ' – ' + fmtShort(b) + ' ' + iso(b).slice(0, 4); }
   function fmtDur(sec) {
     const m = Math.round(Number(sec) / 60); if (!(m > 0)) return '';
-    return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60 ? ' ' + (m % 60) + 'min' : '').trim() : m + 'min';
+    return m >= 60 ? Math.floor(m / 60) + 'h' + (m % 60 ? ' ' + (m % 60) + 'm' : '') : m + 'min';
   }
-  function prefs() { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch (e) { return {}; } }
-  function savePrefs() {
-    try { const p = { style: st.style, size: st.size, ink: st.ink, pos: st.pos }; if (!st.src.admin) p.name = st.name; localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch (e) {}
-  }
+  function periodLabel(k) { return { hari: T.today, minggu: T.thisWeek, bulan: T.thisMonthP, '3bulan': T.last3 }[k] || ''; }
 
   // ── data kartu (hanya memilih dan memformat; angka sudah dihitung server) ─────
   function groupParts(day) {
@@ -39,107 +112,277 @@
     return o;
   }
   function dayTotals(day) {
-    let vol = 0, sets = 0;
-    ((day && day.items) || []).forEach(function (it) { it.sets.forEach(function (s) { if (s.jenis === 'w') return; sets++; vol += (Number(s.berat) || 0) * (Number(s.rep) || 0); }); });
-    return { vol: Math.round(vol), sets: sets };
+    let vol = 0, sets = 0, reps = 0, dur = 0;
+    ((day && day.items) || []).forEach(function (it) { it.sets.forEach(function (s) { dur += Number(s.durasi) || 0; if (s.jenis === 'w') return; sets++; reps += Number(s.rep) || 0; vol += (Number(s.berat) || 0) * (Number(s.rep) || 0); }); });
+    return { vol: Math.round(vol), sets: sets, reps: reps, dur: dur };
   }
-  function bestSet(it) {
+  function bestSet(sets) {
     let best = null, be = -1;
-    it.sets.forEach(function (s) {
+    (sets || []).forEach(function (s) {
       if (s.jenis === 'w') return;
       const w = Number(s.berat) || 0, r = Number(s.rep) || 0;
-      const e = w > 0 ? w * (1 + Math.min(r, 12) / 30) : r;
+      const e = w > 0 ? w * (1 + Math.min(r, 12) / 30) : r || (Number(s.durasi) || 0) / 60;
       if (e > be) { be = e; best = s; }
     });
     return best;
   }
-  function setText(s) {
+  function setText(s, hideKg) {
     if (!s) return '';
     const w = Number(s.berat) || 0, r = Number(s.rep) || 0;
-    if (w > 0 && r > 0) return kg(w) + ' kg × ' + r;
-    if (r > 0) return r + ' reps';
+    if (w > 0 && r > 0) return hideKg ? '× ' + r : kg(w) + ' kg × ' + r;
+    if (r > 0) return r + ' ' + T.reps.toLowerCase();
     if (Number(s.durasi) > 0) return fmtDur(s.durasi) || s.durasi + 's';
     return '';
   }
   function workoutDay(src) {
     const w = src.workout || {}, date = iso(src.date);
     const day = (w.days || []).find(d => d.tanggal === date) || (w.days || [])[0];
-    const ses = ((w.stats && w.stats.sessions) || []).find(x => day && x.tanggal === day.tanggal) || {};
-    return { w: w, day: day, ses: ses };
+    const sess = (w.stats && w.stats.sessions) || [];
+    const ses = sess.find(x => day && x.tanggal === day.tanggal) || {};
+    const prev = day ? (sess.find(x => x.tanggal < day.tanggal && ses.hari && x.hari === ses.hari) || sess.find(x => x.tanggal < day.tanggal)) : null;
+    return { w: w, day: day, ses: ses, prev: prev };
   }
-  function buildLatihan(src, ex) {
+  const stat = (id, l, v, x) => Object.assign({ id: id, l: l, v: v }, x || {});
+  // Perbandingan: {prev:[sekarang, sebelumnya], pct:true} | start: teks | target: angka
+  const cmpPrev = (cur, prev, pct, unit) => (prev == null || prev === '' || !isFinite(prev) ? null : { cur: Number(cur) || 0, prev: Number(prev) || 0, pct: !!pct, unit: unit || '' });
+  function bodyText(m, ch, val, unit) {
+    if (val != null && ch == null) return kg(val) + ' ' + unit;
+    return sign(ch) + kg(Math.abs(ch)) + ' ' + unit;
+  }
+  function measureUnit(k) { return k === 'berat' ? 'kg' : 'cm'; }
+  function bodyStats(src, k, per) {
+    // per = data periode (server) atau null → perubahan sejak catatan pertama dari progress.summary
+    const out = [], prog = src.progress || {};
+    (k.measures.length ? k.measures : ['berat', 'pinggang']).forEach(function (m) {
+      const unit = measureUnit(m);
+      if (per && per.body && per.body[m]) {
+        const b = per.body[m];
+        if (k.bodyVal && b.last != null) out.push(stat('m:' + m, T.m[m], kg(b.last) + ' ' + unit, { cmp: { start: b.start && b.start.change != null ? bodyText(m, b.start.change, null, unit) : '' } }));
+        else if (b.change != null) out.push(stat('m:' + m, T.m[m], bodyText(m, b.change, null, unit), { cmp: { start: b.start && b.start.change != null ? bodyText(m, b.start.change, null, unit) : '' } }));
+        return;
+      }
+      const s = (prog.summary || {})[m];
+      if (!s) return;
+      if (k.bodyVal) out.push(stat('m:' + m, T.m[m], kg(s.last.nilai) + ' ' + unit, { cmp: { start: s.count >= 2 ? bodyText(m, s.change, null, unit) : '' } }));
+      else if (s.count >= 2) out.push(stat('m:' + m, T.m[m], bodyText(m, s.change, null, unit)));
+    });
+    return out;
+  }
+  function measureSeries(src, m, per) {
+    if (per && per.body && per.body[m]) return per.body[m].pts.map(p => p.v);
+    return ((src.progress || {}).entries || []).map(e => Number(e[m])).filter(v => v > 0);
+  }
+  function measuresWithData(src) {
+    const s = (src.progress || {}).summary || {};
+    return MEASURES.filter(m => s[m]);
+  }
+  function badgeLabel(b) { const f = T.badge[b.kind]; return f ? f(b.need) : String(b.label || ''); }
+
+  function buildLatihan(src, k, per, ex) {
+    const hideKg = k.hideKg;
+    if (per) {
+      const w = per.workout || {};
+      if (!w.workoutDays) return null;
+      const pv = (per.compare && per.compare.prev && per.compare.prev.workout) || {};
+      const stats = [
+        stat('workouts', T.workouts, String(w.workoutDays), { cmp: { prev: cmpPrev(w.workoutDays, pv.workoutDays) } }),
+        stat('duration', T.duration, fmtDur(w.durasi) || '–', { cmp: { prev: w.durasi ? cmpPrev(Math.round(w.durasi / 60), Math.round((pv.durasi || 0) / 60), true) : null } }),
+        stat('volume', T.volume, num(w.volume) + ' kg', { kg: true, cmp: { prev: cmpPrev(w.volume, pv.volume, true) } }),
+        stat('sets', T.sets, String(w.sets), { cmp: { prev: cmpPrev(w.sets, pv.sets) } }),
+        stat('reps', T.reps, num(w.reps), { cmp: { prev: cmpPrev(w.reps, pv.reps, true) } }),
+        stat('records', T.records, String(w.prs || 0), { medal: true, cmp: { prev: cmpPrev(w.prs, pv.prs) } }),
+        stat('sessions', T.coachSessions, String(per.sessionsDone || 0), { cmp: { prev: cmpPrev(per.sessionsDone, per.compare && per.compare.prev.sessionsDone), target: per.period.key === 'bulan' ? per.compare.target.sessions : 0 } })
+      ];
+      const card = { kind: ex ? 'exercises' : 'latihan', title: periodLabel(per.period.key) || T.workout, date: fmtRange(per.period.from, per.period.to), stats: stats, vsKey: per.period.key, fname: 'workout-' + per.period.key + '-' + per.period.to, graphs: {} };
+      if (ex) {
+        const rows = (w.exercises || []).map(e => ({ n: e.gerakan, v: setText(e.best, hideKg) + (e.sets > 1 ? '  · ' + e.sets + ' ' + T.sets.toLowerCase() : ''), pr: e.pr }));
+        card.graphs.list = { type: 'list', rows: rows.slice(0, 8), more: Math.max(0, rows.length - 8) };
+      } else {
+        card.graphs.radar = { type: 'radar', vals: AXES.map(a => Number((w.parts || {})[a]) || 0) };
+        card.graphs.bodymap = { type: 'bodymap', parts: w.parts || {} };
+        card.graphs.partbars = { type: 'hbars', rows: AXES.map(a => [T.parts[a], Number((w.parts || {})[a]) || 0]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]) };
+      }
+      return card;
+    }
     const o = workoutDay(src), day = o.day;
     if (!day) return null;
-    const t = dayTotals(day), ses = o.ses;
+    const t = dayTotals(day), ses = o.ses, prev = o.prev || null;
     const parts = ses.parts && Object.keys(ses.parts).length ? ses.parts : groupParts(day);
-    const stats = [];
-    const dur = fmtDur(ses.durasi); if (dur) stats.push({ l: 'Duration', v: dur });
-    stats.push({ l: 'Volume', v: num(ses.volume != null && ses.volume ? ses.volume : t.vol) + ' kg' });
-    stats.push({ l: 'Sets', v: String(ses.sets || t.sets) });
-    stats.push({ l: 'Records', v: String(ses.prs || 0), medal: true });
-    const card = { kind: ex ? 'exercises' : 'latihan', title: ses.hari || 'Workout', date: fmtDate(day.tanggal), stats: stats, fname: 'workout-' + day.tanggal };
+    const dur = Number(ses.durasi) || t.dur;
+    const stats = [
+      stat('duration', T.duration, fmtDur(dur) || '–', { cmp: { prev: prev && prev.durasi && dur ? cmpPrev(Math.round(dur / 60), Math.round(prev.durasi / 60), true) : null } }),
+      stat('volume', T.volume, num(ses.volume || t.vol) + ' kg', { kg: true, cmp: { prev: prev ? cmpPrev(ses.volume || t.vol, prev.volume, true) : null } }),
+      stat('sets', T.sets, String(ses.sets || t.sets), { cmp: { prev: prev ? cmpPrev(ses.sets || t.sets, prev.sets) : null } }),
+      stat('records', T.records, String(ses.prs || 0), { medal: true }),
+      stat('exercises', T.exercises, String(day.items.length), { cmp: { prev: prev ? cmpPrev(day.items.length, prev.exercises) : null } }),
+      stat('reps', T.reps, num(t.reps))
+    ];
+    const card = { kind: ex ? 'exercises' : 'latihan', title: ses.hari || T.workout, date: fmtDate(day.tanggal), stats: stats, vsKey: 'session', fname: 'workout-' + day.tanggal, graphs: {}, defOff: ['reps', 'exercises'] };
     if (ex) {
       const pts = {}; (((o.w.stats || {}).exercises) || []).forEach(function (e) { pts[e.key] = e.points || []; });
-      const rows = day.items.filter(it => bestSet(it)).map(function (it) {
+      const rows = day.items.filter(it => bestSet(it.sets)).map(function (it) {
         const p = pts[it.key] || [], i = p.findIndex(x => x.tanggal === day.tanggal);
         let pr = false;
         if (i > 0) { const before = Math.max.apply(null, p.slice(0, i).map(x => x.e1rm || 0)); pr = (p[i].e1rm || 0) > before && before > 0; }
-        return { n: it.gerakan, v: setText(bestSet(it)), pr: pr };
+        const work = it.sets.filter(s => s.jenis !== 'w').length;
+        return { n: it.gerakan, v: setText(bestSet(it.sets), hideKg) + (work > 1 ? '  · ' + work + ' ' + T.sets.toLowerCase() : ''), pr: pr };
       });
-      card.g = { type: 'list', rows: rows.slice(0, 8), more: Math.max(0, rows.length - 8) };
-    } else card.g = { type: 'radar', vals: AXES.map(a => Number(parts[a[0]]) || 0) };
+      card.graphs.list = { type: 'list', rows: rows.slice(0, 8), more: Math.max(0, rows.length - 8) };
+    } else {
+      card.graphs.radar = { type: 'radar', vals: AXES.map(a => Number(parts[a]) || 0) };
+      card.graphs.bodymap = { type: 'bodymap', parts: parts };
+      card.graphs.partbars = { type: 'hbars', rows: AXES.map(a => [T.parts[a], Number(parts[a]) || 0]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]) };
+    }
     return card;
   }
-  function buildRecord(src) {
-    const stats = ((src.workout || {}).stats || {}).exercises || [];
-    const ex = stats.find(e => e.key === src.exKey) || stats.find(e => e.pr && e.pr.tanggal === iso(src.date)) || stats[0];
+  function buildRecord(src, k) {
+    const exs = ((src.workout || {}).stats || {}).exercises || [];
+    const ex = exs.find(e => e.key === src.exKey) || exs.find(e => e.pr && e.pr.tanggal === iso(src.date)) || exs.find(e => e.pr) || exs[0];
     if (!ex || !ex.points || !ex.points.length) return null;
     const pr = ex.pr || ex.points[ex.points.length - 1], pts = ex.points.filter(p => p.e1rm > 0);
-    const prev = pts.length > 1 ? pts[pts.length - 2].e1rm : 0, last = pts[pts.length - 1];
-    const s = [{ l: 'Best set', v: kg(pr.berat) + ' kg × ' + pr.rep, medal: true }, { l: 'Est. 1RM', v: kg(pr.e1rm) + ' kg' }];
-    if (prev && last) s.push({ l: 'vs previous', v: (last.e1rm >= prev ? '+' : '−') + kg(Math.abs(last.e1rm - prev)) + ' kg' });
-    return { kind: 'record', title: ex.gerakan, date: fmtDate(pr.tanggal), stats: s, g: { type: 'line', pts: pts.map(p => p.e1rm) }, fname: 'record-' + pr.tanggal };
-  }
-  function buildProgres(src, body) {
-    const p = src.progress || {}, sh = src.share || {};
-    const earned = (p.badges || []).filter(b => b.earned);
-    const stats = [{ l: 'Streak', v: (p.streak || 0) + (p.streak === 1 ? ' week' : ' weeks') }, { l: 'Sessions', v: String(p.completed || 0) }, { l: 'Badges', v: earned.length + '/' + (p.badges || []).length }];
-    let g = { type: 'badges', total: (p.badges || []).length, earned: earned.length };
-    if (body && sh.body) {
-      const bits = [];
-      if (sh.body.weight) bits.push({ l: 'Weight', v: (sh.body.weight.change > 0 ? '+' : '−') + kg(Math.abs(sh.body.weight.change)) + ' kg' });
-      if (sh.body.waist) bits.push({ l: 'Waist', v: (sh.body.waist.change > 0 ? '+' : '−') + kg(Math.abs(sh.body.waist.change)) + ' cm' });
-      bits.forEach(b => stats.push(b));
-      const ser = (p.entries || []).map(e => Number(e.berat)).filter(v => v > 0);
-      if (sh.body.weight && ser.length >= 2) g = { type: 'line', pts: ser };
+    if (!pts.length) return null;
+    const prev = pts.length > 1 ? pts[pts.length - 2].e1rm : 0, last = pts[pts.length - 1], first = pts[0];
+    const s = [];
+    if (k.hideKg) {
+      s.push(stat('best', T.bestSet, '× ' + pr.rep, { medal: true }));
+      if (first.e1rm > 0 && pts.length > 1) s.push(stat('impr', T.improvement, sign(last.e1rm - first.e1rm) + Math.round(Math.abs(last.e1rm - first.e1rm) / first.e1rm * 100) + '%'));
+    } else {
+      s.push(stat('best', T.bestSet, kg(pr.berat) + ' kg × ' + pr.rep, { medal: true }), stat('e1rm', T.e1rm, kg(pr.e1rm) + ' kg', { kg: true }));
+      if (prev && last) s.push(stat('vsprev', T.vsPrev, sign(last.e1rm - prev) + kg(Math.abs(last.e1rm - prev)) + ' kg', { kg: true }));
+      if (pts.length > 2) s.push(stat('impr', T.improvement, sign(last.e1rm - first.e1rm) + Math.round(Math.abs(last.e1rm - first.e1rm) / first.e1rm * 100) + '%'));
     }
-    return { kind: 'progres', title: 'My progress', date: fmtDate(src.today), stats: stats, g: g, fname: 'progress-' + iso(src.today) };
+    const lifts = exs.filter(e => (e.points || []).filter(p => p.e1rm > 0).length >= 2).sort((a, b) => b.points.length - a.points.length).slice(0, 3)
+      .map(e => ({ n: e.gerakan, pts: e.points.filter(p => p.e1rm > 0).map(p => p.e1rm), last: k.hideKg ? '' : kg(e.points[e.points.length - 1].e1rm) + ' kg' }));
+    const g = { line: { type: 'line', pts: pts.map(p => p.e1rm) } };
+    if (lifts.length) g.lifts = { type: 'lines', series: lifts };
+    return { kind: 'record', title: ex.gerakan, date: fmtDate(pr.tanggal), stats: s, graphs: g, fname: 'record-' + pr.tanggal };
   }
-  function buildGizi(src) {
+  function buildProgres(src, k) {
+    const p = src.progress || {}, sh = src.share || {}, mo = sh.month || {}, pm = sh.prevMonth || {};
+    const earned = (p.badges || []).filter(b => b.earned);
+    const stats = [
+      stat('streak', T.streak, (p.streak || 0) + ' ' + (p.streak === 1 ? T.week : T.weeks), { cmp: { start: '' } }),
+      stat('sessions', T.sessions, String(p.completed || 0)),
+      stat('month', T.thisMonth, String(mo.sessions || 0) + (mo.target ? '/' + mo.target : ''), { cmp: { prev: mo.label ? cmpPrev(mo.sessions, pm.sessions) : null, target: mo.target || 0 } }),
+      stat('badges', T.badges, earned.length + '/' + (p.badges || []).length)
+    ];
+    if (k.body) bodyStats(src, k, null).forEach(s => stats.push(s));
+    const g = {};
+    if ((p.badges || []).length) g.badges = { type: 'badges', list: p.badges };
+    const m0 = (k.measures[0] || 'berat'), ser = measureSeries(src, m0, null);
+    if (k.body && ser.length >= 2) g.bodyline = { type: 'line', pts: ser, cap: T.m[m0] };
+    return { kind: 'progres', title: T.myProgress, date: fmtDate(src.today), stats: stats, graphs: g, vsKey: 'month', fname: 'progress-' + iso(src.today) };
+  }
+  function buildUkuran(src, k, per) {
+    const avail = measuresWithData(src);
+    if (!avail.length) return null;
+    const kk = Object.assign({}, k, { measures: k.measures.length ? k.measures.filter(m => avail.indexOf(m) !== -1) : avail.slice(0, 4) });
+    if (!kk.measures.length) kk.measures = avail.slice(0, 4);
+    const stats = bodyStats(src, kk, per);
+    const series = kk.measures.map(m => ({ n: T.m[m], pts: measureSeries(src, m, per), last: '' })).filter(s => s.pts.length >= 2);
+    const pairs = kk.measures.map(function (m) {
+      if (per && per.body && per.body[m]) { const b = per.body[m]; return b.first != null && b.last != null ? { n: T.m[m], a: b.first, b: b.last, unit: measureUnit(m) } : null; }
+      const s = ((src.progress || {}).summary || {})[m];
+      return s && s.count >= 2 ? { n: T.m[m], a: s.first.nilai, b: s.last.nilai, unit: measureUnit(m) } : null;
+    }).filter(Boolean);
+    const g = {};
+    if (series.length) g.lines = { type: 'lines', series: series, noVals: !kk.bodyVal };
+    if (pairs.length) g.pairs = { type: 'pairs', rows: pairs, noVals: !kk.bodyVal };
+    const title = per ? periodLabel(per.period.key) : T.body;
+    return { kind: 'ukuran', title: title === T.today ? T.body : title, date: per && per.period.key !== 'hari' ? fmtRange(per.period.from, per.period.to) : fmtDate(src.today), stats: stats, graphs: g, fname: 'body-' + iso(src.today) };
+  }
+  function buildGizi(src, k, per) {
     const n = src.nutrition || {}, t = n.target || {};
+    if (per && per.period.key !== 'hari') {
+      const x = per.nutrition || {};
+      if (!x.days) return null;
+      const pv = (per.compare && per.compare.prev && per.compare.prev.nutrition) || {};
+      const stats = [
+        stat('avg', T.avgKcal, num(x.avgKal) + ' kcal', { cmp: { prev: cmpPrev(x.avgKal, pv.days ? pv.avgKal : null, true), target: x.target } }),
+        stat('protein', T.protein, num(x.avgP) + ' g' + T.perDay, { cmp: { prev: cmpPrev(x.avgP, pv.days ? pv.avgP : null, true), target: per.compare.target.protein } }),
+        stat('carbs', T.carbs, num(x.avgK) + ' g' + T.perDay), stat('fat', T.fat, num(x.avgL) + ' g' + T.perDay),
+        stat('logged', T.daysLogged, String(x.days), { cmp: { prev: cmpPrev(x.days, pv.days) } }),
+        stat('ontarget', T.onTarget, x.onTarget + ' ' + T.days, { cmp: { prev: cmpPrev(x.onTarget, pv.onTarget) } })
+      ];
+      const g = { kcalbars: { type: 'bars', vals: x.daily.map(d => d.kal), target: x.target, cap: T.dailyKcal } };
+      if (x.target) g.macro = { type: 'macro', kal: x.avgKal, target: x.target, bars: [[T.protein, x.avgP, per.compare.target.protein], [T.carbs, x.avgK, 0], [T.fat, x.avgL, 0]] };
+      return { kind: 'gizi', title: periodLabel(per.period.key) || T.nutrition, date: fmtRange(per.period.from, per.period.to), stats: stats, graphs: g, vsKey: per.period.key, fname: 'nutrition-' + per.period.key + '-' + per.period.to, defOff: ['carbs', 'fat'] };
+    }
     if (!t.ok) return null;
     const e = (n.log && n.log.totals) || { kal: 0, p: 0, l: 0, k: 0 };
-    return { kind: 'gizi', title: 'Nutrition', date: fmtDate(src.today), fname: 'nutrition-' + iso(src.today),
-      stats: [{ l: 'Calories', v: num(e.kal) + ' kcal' }, { l: 'Protein', v: num(e.p) + ' g' }, { l: 'Carbs', v: num(e.k) + ' g' }, { l: 'Fat', v: num(e.l) + ' g' }],
-      g: { type: 'macro', kal: e.kal, target: t.kal, bars: [['Protein', e.p, t.protein], ['Carbs', e.k, t.karbo], ['Fat', e.l, t.lemak]] } };
+    return { kind: 'gizi', title: T.nutrition, date: fmtDate(src.today), fname: 'nutrition-' + iso(src.today),
+      stats: [stat('kcal', T.calories, num(e.kal) + ' kcal', { cmp: { target: t.kal } }), stat('protein', T.protein, num(e.p) + ' g', { cmp: { target: t.protein } }), stat('carbs', T.carbs, num(e.k) + ' g', { cmp: { target: t.karbo } }), stat('fat', T.fat, num(e.l) + ' g', { cmp: { target: t.lemak } })],
+      graphs: { macro: { type: 'macro', kal: e.kal, target: t.kal, bars: [[T.protein, e.p, t.protein], [T.carbs, e.k, t.karbo], [T.fat, e.l, t.lemak]] } } };
   }
   function buildRekap(src) {
-    const m = (src.share || {}).month; if (!m) return null;
+    const sh = src.share || {}, m = sh.month, pm = sh.prevMonth || {}; if (!m) return null;
     const p = String(m.label).split('-').map(Number);
     const weeks = (((src.workout || {}).stats || {}).weeks || []).map(w => w.volume || 0);
-    return { kind: 'rekap', title: MONTH_LONG[p[1] - 1] + ' ' + p[0], date: 'Monthly recap', fname: 'recap-' + m.label,
-      stats: [{ l: 'Sessions', v: m.sessions + (m.target ? '/' + m.target : '') }, { l: 'Workouts', v: String(m.workoutDays) }, { l: 'Volume', v: num(m.volume) + ' kg' }, { l: 'Records', v: String(m.prs), medal: true }, { l: 'Meals logged', v: m.foodDays + ' days' }],
-      g: { type: 'bars', vals: weeks, cap: 'Weekly volume' } };
+    const days = ((sh.activity || {}).days || []).filter(d => d.d.slice(0, 7) === m.label);
+    const g = { heat: { type: 'heat', mode: 'month', month: m.label, cells: days } };
+    if (weeks.some(v => v > 0)) g.weekbars = { type: 'bars', vals: weeks, cap: T.weeklyVolume };
+    return { kind: 'rekap', title: T.monLong[p[1] - 1] + ' ' + p[0], date: T.monthlyRecap, fname: 'recap-' + m.label, vsKey: 'month', graphs: g,
+      stats: [stat('sessions', T.sessions, m.sessions + (m.target ? '/' + m.target : ''), { cmp: { prev: cmpPrev(m.sessions, pm.sessions), target: m.target } }), stat('workouts', T.workouts, String(m.workoutDays), { cmp: { prev: cmpPrev(m.workoutDays, pm.workoutDays) } }),
+        stat('volume', T.volume, num(m.volume) + ' kg', { kg: true, cmp: { prev: cmpPrev(m.volume, pm.volume, true) } }), stat('records', T.records, String(m.prs), { medal: true, cmp: { prev: cmpPrev(m.prs, pm.prs) } }), stat('meals', T.mealDays, m.foodDays + ' ' + T.days)] };
+  }
+  function buildBadges(src) {
+    const p = src.progress || {}, list = p.badges || [];
+    if (!list.length) return null;
+    const earned = list.filter(b => b.earned).length;
+    return { kind: 'badges', title: T.badgeWall, date: fmtDate(src.today), fname: 'badges-' + iso(src.today), graphs: { badges: { type: 'badges', list: list } },
+      stats: [stat('earned', T.badges, earned + '/' + list.length), stat('best', T.bestStreak, (p.bestStreak || 0) + ' ' + T.wk), stat('sessions', T.sessions, String(p.completed || 0))] };
   }
   function buildBadge(src) {
     const b = src.badge; if (!b) return null;
     const p = src.progress || {};
-    return { kind: 'badge', title: 'New badge', date: fmtDate(src.today), fname: 'badge-' + b.id,
-      stats: [{ l: 'Sessions', v: String(p.completed || 0) }, { l: 'Best streak', v: (p.bestStreak || 0) + ' wk' }], g: { type: 'emblem', label: String(b.label || '').replace(' berturut-turut', '') } };
+    return { kind: 'badge', title: T.newBadge, date: fmtDate(src.today), fname: 'badge-' + b.id, graphs: { emblem: { type: 'emblem', label: badgeLabel(b), kind: b.kind, need: b.need } },
+      stats: [stat('sessions', T.sessions, String(p.completed || 0)), stat('best', T.bestStreak, (p.bestStreak || 0) + ' ' + T.wk)] };
   }
-  const BUILD = { latihan: s => buildLatihan(s, false), exercises: s => buildLatihan(s, true), record: buildRecord, progres: (s, o) => buildProgres(s, o.body), gizi: buildGizi, rekap: buildRekap, badge: buildBadge };
+  function buildKonsistensi(src) {
+    const p = src.progress || {}, sh = src.share || {}, a = sh.activity, mo = sh.month || {}, pm = sh.prevMonth || {};
+    if (!a) return null;
+    return { kind: 'konsistensi', title: T.consistency, date: fmtDate(src.today), fname: 'consistency-' + iso(src.today), vsKey: 'month',
+      stats: [stat('streak', T.streak, (p.streak || 0) + ' ' + (p.streak === 1 ? T.week : T.weeks)), stat('best', T.bestStreak, (p.bestStreak || 0) + ' ' + T.wk),
+        stat('month', T.thisMonth, (mo.sessions || 0) + (mo.target ? '/' + mo.target : ''), { cmp: { prev: cmpPrev(mo.sessions, pm.sessions), target: mo.target } }), stat('workouts', T.workouts, String(mo.workoutDays || 0), { cmp: { prev: cmpPrev(mo.workoutDays, pm.workoutDays) } })],
+      graphs: { heat: { type: 'heat', mode: 'weeks', cells: a.days, today: src.today }, weekbars: { type: 'bars', vals: a.weeks.map(w => w.n), cap: T.sessionsPerWeek, ints: true } } };
+  }
+  function buildFoto(src, k) {
+    if (src.admin) return null;
+    const stats = k.body ? bodyStats(src, k, null) : [];
+    return { kind: 'foto', title: T.progressPics, date: fmtDate(src.today), stats: stats, fname: 'progress-photo-' + iso(src.today), graphs: { photos: { type: 'photos' } } };
+  }
+  const BUILD = {
+    latihan: (s, k, p) => buildLatihan(s, k, p, false), exercises: (s, k, p) => buildLatihan(s, k, p, true), record: buildRecord, progres: buildProgres,
+    ukuran: buildUkuran, gizi: buildGizi, rekap: buildRekap, badges: buildBadges, badge: buildBadge, konsistensi: buildKonsistensi, foto: buildFoto
+  };
+  const KIND_NAME = { latihan: 'Latihan', exercises: 'Gerakan', record: 'Rekor', progres: 'Progres', ukuran: 'Ukuran tubuh', konsistensi: 'Konsistensi', badges: 'Koleksi badge', gizi: 'Gizi', rekap: 'Rekap bulan', foto: 'Foto progres', badge: 'Badge baru' };
+  const KIND_ICON = { latihan: 'dumbbell', exercises: 'list', record: 'trophy', progres: 'trending-up', ukuran: 'ruler', konsistensi: 'calendar-check', badges: 'award', gizi: 'apple', rekap: 'calendar', foto: 'image', badge: 'medal' };
+  const GRAPH_NAME = { radar: 'Radar', bodymap: 'Peta otot', partbars: 'Bagian tubuh', list: 'Daftar', line: '1RM', lifts: 'Top 3 gerakan', badges: 'Badge', bodyline: 'Grafik tubuh', lines: 'Grafik per ukuran', pairs: 'Sebelum–sesudah', macro: 'Cincin makro', kcalbars: 'Kalori harian', weekbars: 'Batang mingguan', heat: 'Kalender', emblem: 'Lambang', photos: 'Foto', none: 'Tanpa grafik' };
+  const STAT_NAME = { duration: 'Durasi', volume: 'Volume', sets: 'Set', reps: 'Rep', records: 'Rekor', exercises: 'Jumlah gerakan', workouts: 'Hari latihan', sessions: 'Sesi', streak: 'Streak', month: 'Bulan ini', badges: 'Badge', best: 'Terbaik', earned: 'Badge diraih', kcal: 'Kalori', protein: 'Protein', carbs: 'Karbo', fat: 'Lemak', avg: 'Rata-rata kalori', logged: 'Hari dicatat', ontarget: 'Sesuai target', meals: 'Makan dicatat', e1rm: 'Estimasi 1RM', vsprev: 'vs sebelumnya', impr: 'Peningkatan' };
 
-  // ── gambar ───────────────────────────────────────────────────────────────────
+  /** Kartu jadi: urutan & on/off angka, grafik terpilih, judul sendiri. */
+  function makeCard(kind, src, per) {
+    const k = kp(kind);
+    const base = BUILD[kind] && BUILD[kind](src, k, per);
+    if (!base) return null;
+    let stats = base.stats.filter(s => !(k.hideKg && s.kg));
+    const ids = stats.map(s => s.id);
+    const order = k.order.filter(id => ids.indexOf(id) !== -1).concat(ids.filter(id => k.order.indexOf(id) === -1));
+    const off = k.off.length || k.order.length ? k.off : (base.defOff || []);
+    base.allStats = order.map(id => stats.find(s => s.id === id));
+    base.stats = base.allStats.filter(s => off.indexOf(s.id) === -1);
+    base.offIds = off;
+    const gids = Object.keys(base.graphs || {});
+    let gid = k.graph && (k.graph === 'none' || gids.indexOf(k.graph) !== -1) ? k.graph : (gids[0] || 'none');
+    if (!k.graph && P.style === 'teks' && PRESETS[P.preset] && PRESETS[P.preset].graphNone && kind !== 'exercises' && kind !== 'foto' && kind !== 'badge') gid = 'none';
+    base.gid = gid;
+    base.g = gid === 'none' ? null : base.graphs[gid];
+    base.gids = gids;
+    if (k.title) base.title = k.title;
+    return base;
+  }
+
+  // ── gambar: pembantu ─────────────────────────────────────────────────────────
   let logoImg = null;
   function logo() {
     if (logoImg) return Promise.resolve(logoImg);
@@ -149,261 +392,1024 @@
       const im = new Image(); im.onload = function () { logoImg = im; res(im); }; im.onerror = function () { res(null); }; im.src = m[1];
     });
   }
-  function font(ctx, w, px) { ctx.font = w + ' ' + px + 'px Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'; }
-  function T(ctx, s, x, y, px, w, a, al) { font(ctx, w, px); ctx.globalAlpha = a == null ? 1 : a; ctx.textAlign = al || 'left'; ctx.fillText(s, x, y); ctx.globalAlpha = 1; }
-  function fit(ctx, s, px, w, max) { font(ctx, w, px); while (px > 24 && ctx.measureText(s).width > max) { px -= 2; font(ctx, w, px); } return px; }
+  const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  function font(ctx, w, px) { ctx.font = w + ' ' + Math.round(px) + 'px ' + FONT; }
+  function Tx(ctx, s, x, y, px, w, a, al) { font(ctx, w, px); ctx.globalAlpha = a == null ? 1 : a; ctx.textAlign = al || 'left'; ctx.fillText(s, x, y); ctx.globalAlpha = 1; }
+  function fit(ctx, s, px, w, max) { font(ctx, w, px); while (px > 20 && ctx.measureText(s).width > max) { px -= 2; font(ctx, w, px); } return px; }
+  function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, Math.max(0, Math.min(r, w / 2, h / 2))); else ctx.rect(x, y, w, h); }
   function medal(ctx, cx, cy, r) {
-    ctx.save(); ctx.globalAlpha = 1;
+    ctx.save(); ctx.globalAlpha = 1; ctx.shadowColor = 'transparent';
     ctx.fillStyle = GOLD2; ctx.beginPath(); ctx.moveTo(cx - r * .7, cy + r * .5); ctx.lineTo(cx - r * 1.05, cy + r * 1.5); ctx.lineTo(cx - r * .35, cy + r * 1.15); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(cx + r * .7, cy + r * .5); ctx.lineTo(cx + r * 1.05, cy + r * 1.5); ctx.lineTo(cx + r * .35, cy + r * 1.15); ctx.closePath(); ctx.fill();
     ctx.fillStyle = GOLD; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(cx - r * .25, cy - r * .3, r * .45, 0, 7); ctx.fill();
     ctx.restore();
   }
-  function drawLogo(ctx, img, x, y, hgt, color) {
-    if (!img) return 0;
-    const w = Math.round(hgt * img.width / img.height), c = document.createElement('canvas'); c.width = w; c.height = hgt;
-    const k = c.getContext('2d'); k.drawImage(img, 0, 0, w, hgt); k.globalCompositeOperation = 'source-in'; k.fillStyle = color; k.fillRect(0, 0, w, hgt);
-    ctx.drawImage(c, x, y); return w;
+  function tinted(img, w, h, color) {
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h));
+    const k = c.getContext('2d'); k.drawImage(img, 0, 0, c.width, c.height); k.globalCompositeOperation = 'source-in'; k.fillStyle = color; k.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+  function drawCover(ctx, im, x, y, w, h, focusY) {
+    const s = Math.max(w / im.width, h / im.height), dw = im.width * s, dh = im.height * s;
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.drawImage(im, x + (w - dw) / 2, y + (h - dh) * (focusY == null ? .5 : focusY), dw, dh); ctx.restore();
+  }
+  // Samarkan wajah: bagian atas foto dibuat mozaik (bekerja di semua browser, juga Safari tanpa ctx.filter).
+  function pixelate(ctx, x, y, w, h, block) {
+    if (h <= 0 || w <= 0) return;
+    const sw = Math.max(1, Math.round(w / block)), sh = Math.max(1, Math.round(h / block));
+    const c = document.createElement('canvas'); c.width = sw; c.height = sh;
+    const k = c.getContext('2d'); k.imageSmoothingEnabled = true;
+    const sc = ctx.getTransform ? ctx.getTransform().a || 1 : 1;
+    k.drawImage(ctx.canvas, x * sc, y * sc, w * sc, h * sc, 0, 0, sw, sh);
+    ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(c, 0, 0, sw, sh, x, y, w, h); ctx.restore();
+  }
+  const ease = t => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
+  // Animasi: angka di teks naik dari 0 (k = 0..1).
+  function animText(s, k) {
+    if (k >= 1) return s;
+    return String(s).replace(/\d[\d.,]*/g, function (m) {
+      const sep = P.lang === 'id' ? { th: '.', dec: ',' } : { th: ',', dec: '.' };
+      const raw = Number(m.split(sep.th).join('').replace(sep.dec, '.'));
+      if (!isFinite(raw)) return m;
+      const d = (m.split(sep.dec)[1] || '').length;
+      return num(raw * k, d);
+    });
   }
 
-  function radar(ctx, b, vals, ink) {
-    const cx = b.x + b.w / 2, cy = b.y + b.h / 2, R = Math.min(b.w / 2 - 190, b.h / 2 - 60), mx = Math.max.apply(null, vals) || 1;
+  // ── grafik ───────────────────────────────────────────────────────────────────
+  function radar(ctx, b, vals, ink, k, s) {
+    const lab = 34 * s;
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2, R = Math.max(60, Math.min(b.w / 2 - lab * 4.6, b.h / 2 - lab * 1.6)), mx = Math.max.apply(null, vals) || 1;
     ctx.lineCap = 'round';
+    for (let ring = 1; ring <= 3; ring++) {
+      ctx.strokeStyle = ink; ctx.globalAlpha = .12; ctx.lineWidth = 2; ctx.beginPath();
+      AXES.forEach(function (a, i) { const ang = (-90 + i * 60) * Math.PI / 180, r = R * ring / 3; i ? ctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r) : ctx.moveTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r); });
+      ctx.closePath(); ctx.stroke();
+    }
     AXES.forEach(function (a, i) {
-      const ang = (-120 + i * 60) * Math.PI / 180, ca = Math.cos(ang), sa = Math.sin(ang);
-      ctx.strokeStyle = ink; ctx.globalAlpha = .22; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx - ca * R, cy - sa * R); ctx.lineTo(cx + ca * R, cy + sa * R); ctx.stroke(); ctx.globalAlpha = 1;
-      ctx.fillStyle = ink; T(ctx, a[1], cx + ca * (R + 40), cy + sa * (R + 40) + (sa > .3 ? 36 : (sa < -.3 ? -4 : 14)), 38, 500, .6, ca > .3 ? 'left' : (ca < -.3 ? 'right' : 'center'));
+      const ang = (-90 + i * 60) * Math.PI / 180, ca = Math.cos(ang), sa = Math.sin(ang);
+      ctx.strokeStyle = ink; ctx.globalAlpha = .2; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + ca * R, cy + sa * R); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillStyle = ink; Tx(ctx, T.parts[a], cx + ca * (R + lab * .9), cy + sa * (R + lab * .9) + (sa > .3 ? lab : (sa < -.3 ? -lab * .2 : lab * .35)), lab, 600, vals[i] > 0 ? .85 : .45, ca > .3 ? 'left' : (ca < -.3 ? 'right' : 'center'));
     });
     ctx.beginPath();
-    vals.forEach(function (v, i) { const ang = (-120 + i * 60) * Math.PI / 180, r = Math.max(8, R * Math.sqrt(v / mx)); const x = cx + Math.cos(ang) * r, y = cy + Math.sin(ang) * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    vals.forEach(function (v, i) { const ang = (-90 + i * 60) * Math.PI / 180, r = Math.max(R * .08, R * Math.sqrt(v / mx)) * k; const x = cx + Math.cos(ang) * r, y = cy + Math.sin(ang) * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
     ctx.closePath(); ctx.globalAlpha = .28; ctx.fillStyle = ink; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = ink; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.stroke();
   }
-  function bars(ctx, b, vals, ink, cap) {
-    const n = vals.length || 1, gap = 18, bw = (b.w - gap * (n - 1)) / n, mx = Math.max.apply(null, vals) || 1, base = b.y + b.h - 50;
+  let mmShapes = null;
+  function mmPaths() {
+    if (mmShapes) return mmShapes;
+    const src = window.WL_MM;
+    if (!src) return null;
+    const attr = (s, n) => Number((new RegExp(n + '="([^"]+)"').exec(s) || [])[1] || 0);
+    const conv = list => list.map(function (x) {
+      const p = new Path2D(), a = x[2];
+      if (x[1] === 'rect') { const X = attr(a, 'x'), Y = attr(a, 'y'), w = attr(a, 'width'), hh = attr(a, 'height'), r = attr(a, 'rx'); if (p.roundRect) p.roundRect(X, Y, w, hh, r); else p.rect(X, Y, w, hh); }
+      else if (x[1] === 'circle') p.arc(attr(a, 'cx'), attr(a, 'cy'), attr(a, 'r'), 0, Math.PI * 2);
+      else { const d = (/d="([^"]+)"/.exec(a) || [])[1]; if (d) p.addPath(new Path2D(d)); }
+      return { part: x[0], p: p };
+    });
+    const head = new Path2D(); head.arc(20, 6.5, 4.6, 0, Math.PI * 2);
+    mmShapes = { front: [{ part: '', p: head }].concat(conv(src.front)), back: [{ part: '', p: head }].concat(conv(src.back)) };
+    return mmShapes;
+  }
+  function bodymap(ctx, b, parts, ink, k, s) {
+    const sh = mmPaths();
+    const mx = Math.max.apply(null, AXES.map(a => Number(parts[a]) || 0)) || 1;
+    if (!sh) { radar(ctx, b, AXES.map(a => Number(parts[a]) || 0), ink, k, s); return; }
+    const lab = 32 * s, availH = b.h - lab * 2.2, sc = Math.min(availH / 80, (b.w * .92) / 84), w = 84 * sc, x0 = b.x + (b.w - w) / 2, y0 = b.y + (b.h - 80 * sc - lab * 1.6) / 2;
+    [['front', 0], ['back', 44]].forEach(function (f) {
+      ctx.save(); ctx.translate(x0 + f[1] * sc, y0); ctx.scale(sc, sc);
+      sh[f[0]].forEach(function (x) {
+        const g = PART_GROUP[x.part], v = g ? (Number(parts[g]) || 0) / mx : 0;
+        ctx.fillStyle = ink; ctx.globalAlpha = v > 0 ? (.35 + .65 * v) * k + .14 * (1 - k) : .14; ctx.fill(x.p);
+      });
+      ctx.restore();
+    });
+    ctx.globalAlpha = 1; ctx.fillStyle = ink;
+    const ty = y0 + 80 * sc + lab * 1.4;
+    Tx(ctx, P.lang === 'id' ? 'Depan' : 'Front', x0 + 20 * sc, ty, lab, 600, .6, 'center'); Tx(ctx, P.lang === 'id' ? 'Belakang' : 'Back', x0 + 64 * sc, ty, lab, 600, .6, 'center');
+  }
+  function hbars(ctx, b, rows, ink, k, s) {
+    if (!rows.length) return;
+    const n = Math.min(rows.length, 6), rh = Math.min(110 * s, b.h / n), mx = rows[0][1] || 1, lab = 38 * s, tot = rows.reduce((a, r) => a + r[1], 0) || 1;
+    let y = b.y + (b.h - rh * n) / 2;
+    rows.slice(0, n).forEach(function (r) {
+      ctx.fillStyle = ink;
+      Tx(ctx, r[0], b.x, y + lab, lab, 600, .9); Tx(ctx, Math.round(r[1] / tot * 100) + '%', b.x + b.w, y + lab, lab, 700, .9, 'right');
+      const by = y + lab + 16 * s, bh = Math.max(10, 18 * s);
+      ctx.globalAlpha = .18; rrect(ctx, b.x, by, b.w, bh, bh / 2); ctx.fill(); ctx.globalAlpha = 1;
+      rrect(ctx, b.x, by, Math.max(bh, b.w * r[1] / mx * k), bh, bh / 2); ctx.fill();
+      y += rh;
+    });
+  }
+  function bars(ctx, b, g, ink, k, s) {
+    const vals = g.vals || [], n = vals.length || 1, gap = Math.max(6, Math.min(18, b.w / n * .2)), cap = g.cap ? 50 * s : 0;
+    const bw = (b.w - gap * (n - 1)) / n, mx = Math.max.apply(null, vals.concat([g.target || 0])) || 1, base = b.y + b.h - cap;
     ctx.fillStyle = ink;
     vals.forEach(function (v, i) {
-      const h = Math.max(8, (base - b.y - 10) * v / mx), x = b.x + i * (bw + gap);
-      ctx.globalAlpha = i === n - 1 ? 1 : .45; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, base - h, bw, h, 12) : ctx.rect(x, base - h, bw, h); ctx.fill();
+      const h = v > 0 ? Math.max(8, (base - b.y - 10) * v / mx * k) : 4, x = b.x + i * (bw + gap);
+      ctx.globalAlpha = i === n - 1 ? 1 : .5; rrect(ctx, x, base - h, bw, h, Math.min(12, bw / 3)); ctx.fill();
     });
-    ctx.globalAlpha = 1; if (cap) T(ctx, cap, b.x + b.w / 2, b.y + b.h - 6, 36, 500, .6, 'center');
+    ctx.globalAlpha = 1;
+    if (g.target) { const ty = base - (base - b.y - 10) * g.target / mx; ctx.save(); ctx.setLineDash([14, 12]); ctx.strokeStyle = ink; ctx.globalAlpha = .6; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(b.x, ty); ctx.lineTo(b.x + b.w, ty); ctx.stroke(); ctx.restore(); }
+    if (g.cap) Tx(ctx, g.cap, b.x + b.w / 2, b.y + b.h - 8, 34 * s, 500, .65, 'center');
   }
-  function line(ctx, b, pts, ink) {
+  function line(ctx, b, pts, ink, k, s, cap) {
     if (pts.length < 2) return;
-    const mn = Math.min.apply(null, pts), mx = Math.max.apply(null, pts), rg = mx - mn || 1, pad = 30;
-    const P = pts.map((v, i) => [b.x + pad + i * (b.w - 2 * pad) / (pts.length - 1), b.y + b.h - pad - (v - mn) / rg * (b.h - 2 * pad)]);
-    ctx.beginPath(); P.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.lineTo(P[P.length - 1][0], b.y + b.h); ctx.lineTo(P[0][0], b.y + b.h); ctx.closePath();
+    const capH = cap ? 50 * s : 0, bh = b.h - capH;
+    const mn = Math.min.apply(null, pts), mx = Math.max.apply(null, pts), rg = mx - mn || 1, pad = 24;
+    const P2 = pts.map((v, i) => [b.x + pad + i * (b.w - 2 * pad) / (pts.length - 1), b.y + bh - pad - (v - mn) / rg * (bh - 2 * pad)]);
+    ctx.save(); ctx.beginPath(); ctx.rect(b.x - 30, b.y - 30, (b.w + 60) * k, bh + 60); ctx.clip();
+    ctx.beginPath(); P2.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.lineTo(P2[P2.length - 1][0], b.y + bh); ctx.lineTo(P2[0][0], b.y + bh); ctx.closePath();
     ctx.globalAlpha = .14; ctx.fillStyle = ink; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.beginPath(); P.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.strokeStyle = ink; ctx.lineWidth = 9; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
-    const l = P[P.length - 1]; ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(l[0], l[1], 16, 0, 7); ctx.fill();
+    ctx.beginPath(); P2.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.strokeStyle = ink; ctx.lineWidth = 9; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.restore();
+    if (k >= 1) { const l = P2[P2.length - 1]; ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(l[0], l[1], 16, 0, 7); ctx.fill(); }
+    if (cap) Tx(ctx, cap, b.x + b.w / 2, b.y + b.h - 8, 34 * s, 500, .65, 'center');
   }
-  function macro(ctx, b, g, ink) {
-    const D = Math.min(b.h, b.w * .46), cx = b.x + D / 2, cy = b.y + b.h / 2, r = D / 2 - 24, pct = g.target > 0 ? Math.min(1, g.kal / g.target) : 0;
-    ctx.lineWidth = 36; ctx.lineCap = 'round'; ctx.strokeStyle = ink; ctx.globalAlpha = .2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+  // Beberapa garis kecil (top 3 gerakan, ukuran tubuh): satu baris per seri.
+  function lines(ctx, b, g, ink, k, s) {
+    const list = g.series.slice(0, 4), n = list.length || 1, rh = b.h / n, lab = 36 * s;
+    list.forEach(function (sr, i) {
+      const y = b.y + i * rh;
+      ctx.fillStyle = ink;
+      Tx(ctx, sr.n, b.x, y + lab, fit(ctx, sr.n, lab, 600, b.w * .6), 600, .9);
+      const first = sr.pts[0], last = sr.pts[sr.pts.length - 1];
+      const right = sr.last || (g.noVals ? sign(last - first) + kg(Math.abs(last - first)) : kg(last));
+      Tx(ctx, right, b.x + b.w, y + lab, lab, 700, .9, 'right');
+      line(ctx, { x: b.x, y: y + lab + 6, w: b.w, h: Math.max(40, rh - lab - 26 * s) }, sr.pts, ink, k, s * .7);
+    });
+  }
+  function pairs(ctx, b, g, ink, k, s) {
+    const rows = g.rows.slice(0, 6), n = rows.length || 1, rh = Math.min(150 * s, b.h / n), lab = 34 * s;
+    let y = b.y + (b.h - rh * n) / 2;
+    rows.forEach(function (r) {
+      const mx = Math.max(r.a, r.b) || 1, bh = Math.max(10, 16 * s);
+      ctx.fillStyle = ink;
+      Tx(ctx, r.n, b.x, y + lab, lab, 600, .9);
+      Tx(ctx, g.noVals ? sign(r.b - r.a) + kg(Math.abs(r.b - r.a)) + ' ' + r.unit : kg(r.a) + ' → ' + kg(r.b) + ' ' + r.unit, b.x + b.w, y + lab, lab, 700, .9, 'right');
+      ctx.globalAlpha = .35; rrect(ctx, b.x, y + lab + 14 * s, b.w * r.a / mx, bh, bh / 2); ctx.fill();
+      ctx.globalAlpha = 1; rrect(ctx, b.x, y + lab + 18 * s + bh, Math.max(bh, b.w * r.b / mx * k), bh, bh / 2); ctx.fill();
+      y += rh;
+    });
+    ctx.globalAlpha = 1;
+  }
+  function macro(ctx, b, g, ink, k, s) {
+    const D = Math.min(b.h, b.w * .46), cx = b.x + D / 2, cy = b.y + b.h / 2, r = D / 2 - 26, pct = g.target > 0 ? Math.min(1, g.kal / g.target) * k : 0;
+    ctx.lineWidth = Math.max(20, D * .09); ctx.lineCap = 'round'; ctx.strokeStyle = ink; ctx.globalAlpha = .2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
     if (pct > 0) { ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + pct * Math.PI * 2); ctx.stroke(); }
-    ctx.fillStyle = ink; T(ctx, num(g.kal), cx, cy + 8, 78, 800, 1, 'center'); T(ctx, 'of ' + num(g.target) + ' kcal', cx, cy + 62, 34, 500, .65, 'center');
-    const x0 = b.x + D + 56, w = b.x + b.w - x0; let y = cy - 150;
-    g.bars.forEach(function (r) {
-      const p = r[2] > 0 ? Math.min(1, r[1] / r[2]) : 0;
-      T(ctx, r[0], x0, y, 38, 600, .85); T(ctx, num(r[1]) + (r[2] ? ' / ' + num(r[2]) : '') + ' g', x0 + w, y, 38, 600, .85, 'right');
-      ctx.globalAlpha = .2; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, y + 18, w, 18, 9) : ctx.rect(x0, y + 18, w, 18); ctx.fill(); ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, y + 18, Math.max(18, w * p), 18, 9) : ctx.rect(x0, y + 18, Math.max(18, w * p), 18); ctx.fill(); y += 110;
+    ctx.fillStyle = ink; Tx(ctx, num(g.kal * k), cx, cy + 10, fit(ctx, num(g.kal), 76 * s, 800, r * 1.5), 800, 1, 'center'); Tx(ctx, T.of + ' ' + num(g.target) + ' kcal', cx, cy + 58 * s, 30 * s, 500, .65, 'center');
+    const x0 = b.x + D + 48, w = b.x + b.w - x0, lab = 34 * s, step = Math.min(120 * s, b.h / 3);
+    let y = cy - step * 1.5 + lab;
+    g.bars.forEach(function (row) {
+      const p = row[2] > 0 ? Math.min(1, row[1] / row[2]) : 0;
+      Tx(ctx, row[0], x0, y, lab, 600, .85); Tx(ctx, num(row[1]) + (row[2] ? ' / ' + num(row[2]) : '') + ' g', x0 + w, y, lab, 600, .85, 'right');
+      const bh = Math.max(10, 16 * s);
+      ctx.globalAlpha = .2; rrect(ctx, x0, y + 16, w, bh, bh / 2); ctx.fill(); ctx.globalAlpha = 1;
+      if (row[2]) { rrect(ctx, x0, y + 16, Math.max(bh, w * p * k), bh, bh / 2); ctx.fill(); }
+      y += step;
     });
   }
-  function list(ctx, b, g, ink, center) {
-    let y = b.y + 50;
-    g.rows.forEach(function (r) {
-      const px = fit(ctx, r.n, 42, 600, b.w * .55);
-      if (center) { T(ctx, r.n + '  ' + r.v, b.x + b.w / 2, y, 40, 500, .9, 'center'); }
-      else { ctx.fillStyle = ink; T(ctx, r.n, b.x, y, px, 600, 1); T(ctx, r.v, b.x + b.w - (r.pr ? 56 : 0), y, 40, 500, .8, 'right'); if (r.pr) medal(ctx, b.x + b.w - 20, y - 14, 16); ctx.globalAlpha = .15; ctx.fillRect(b.x, y + 20, b.w, 2); ctx.globalAlpha = 1; }
-      y += center ? 62 : 70;
+  function list(ctx, b, g, ink, k, s, center) {
+    const n = g.rows.length + (g.more ? 1 : 0), rh = Math.min(76 * s, b.h / Math.max(1, n)), px0 = Math.min(42 * s, rh * .58);
+    let y = b.y + (b.h - rh * n) / 2 + px0;
+    g.rows.forEach(function (r, i) {
+      ctx.globalAlpha = Math.min(1, Math.max(0, k * n - i));
+      ctx.fillStyle = ink;
+      if (center) { Tx(ctx, r.n + '  ' + r.v, b.x + b.w / 2, y, fit(ctx, r.n + '  ' + r.v, px0, 500, b.w), 500, .9 * ctx.globalAlpha, 'center'); if (r.pr) { font(ctx, 500, px0); medal(ctx, b.x + b.w / 2 + ctx.measureText(r.n + '  ' + r.v).width / 2 + 30, y - px0 * .35, px0 * .38); } }
+      else {
+        font(ctx, 500, px0 * .95); const vw = ctx.measureText(r.v).width + (r.pr ? px0 * 1.4 : 0);
+        Tx(ctx, r.n, b.x, y, fit(ctx, r.n, px0, 600, b.w - vw - 30), 600, ctx.globalAlpha);
+        Tx(ctx, r.v, b.x + b.w - (r.pr ? px0 * 1.4 : 0), y, px0 * .95, 500, .8 * ctx.globalAlpha, 'right');
+        if (r.pr) medal(ctx, b.x + b.w - px0 * .5, y - px0 * .35, px0 * .38);
+        ctx.globalAlpha = .15 * ctx.globalAlpha; ctx.fillRect(b.x, y + rh * .32, b.w, 2);
+      }
+      y += rh;
     });
-    if (g.more) T(ctx, '+' + g.more + ' more', center ? b.x + b.w / 2 : b.x, y, 36, 500, .6, center ? 'center' : 'left');
+    ctx.globalAlpha = 1;
+    if (g.more) Tx(ctx, '+' + g.more + ' ' + T.more, center ? b.x + b.w / 2 : b.x, y, px0 * .85, 500, .6, center ? 'center' : 'left');
   }
-  function badgesRow(ctx, b, g, ink) {
-    const n = g.total || 11, per = 6, r = Math.min(60, (b.w - 20) / per / 2 - 8), cols = Math.min(n, per), rows = Math.ceil(n / per);
-    const w = cols * (r * 2 + 16), x0 = b.x + (b.w - w) / 2 + r + 8, y0 = b.y + b.h / 2 - (rows * (r * 2 + 16)) / 2 + r + 8;
-    for (let i = 0; i < n; i++) {
-      const x = x0 + (i % per) * (r * 2 + 16), y = y0 + Math.floor(i / per) * (r * 2 + 16);
-      ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 6; ctx.globalAlpha = i < g.earned ? 1 : .25;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); i < g.earned ? ctx.fill() : ctx.stroke();
+  // Lambang badge: cakram angka (sesi), api (streak), buku (catat), piala (rekor).
+  function glyph(ctx, kind, need, cx, cy, r, ink, on) {
+    ctx.save();
+    ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = Math.max(3, r * .1); ctx.globalAlpha = on ? 1 : .28;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); on ? ctx.fill() : ctx.stroke();
+    const fg = on ? (ink === '#FFFFFF' ? '#0B0B0B' : '#FFFFFF') : ink;
+    ctx.fillStyle = fg; ctx.strokeStyle = fg; ctx.globalAlpha = on ? 1 : .4;
+    const q = r * .5;
+    if (kind === 'sesi') { Tx(ctx, String(need), cx, cy + r * .2, fit(ctx, String(need), r * .78, 800, r * 1.5), 800, ctx.globalAlpha, 'center'); }
+    else if (kind === 'streak') {
+      ctx.beginPath(); ctx.moveTo(cx, cy - q * 1.3); ctx.bezierCurveTo(cx + q * 1.2, cy - q * .2, cx + q * .9, cy + q * 1.1, cx, cy + q * 1.1);
+      ctx.bezierCurveTo(cx - q * .9, cy + q * 1.1, cx - q * 1.1, cy, cx - q * .4, cy - q * .5); ctx.quadraticCurveTo(cx - q * .3, cy, cx, cy - q * 1.3); ctx.fill();
+    } else if (kind === 'catat') {
+      rrect(ctx, cx - q * .8, cy - q, q * 1.6, q * 2, q * .2); ctx.fill();
+      ctx.strokeStyle = on ? ink : fg; ctx.lineWidth = Math.max(2, r * .06); ctx.globalAlpha = on ? 1 : .4;
+      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(cx - q * .45, cy - q * .45 + i * q * .45); ctx.lineTo(cx + q * .45, cy - q * .45 + i * q * .45); ctx.stroke(); }
+    } else {
+      ctx.beginPath(); ctx.moveTo(cx - q, cy - q); ctx.lineTo(cx + q, cy - q); ctx.lineTo(cx + q * .7, cy + q * .2); ctx.quadraticCurveTo(cx, cy + q * .7, cx - q * .7, cy + q * .2); ctx.closePath(); ctx.fill();
+      ctx.fillRect(cx - q * .14, cy + q * .4, q * .28, q * .5); ctx.fillRect(cx - q * .55, cy + q * .85, q * 1.1, q * .24);
+      if (need > 1) Tx(ctx, String(need), cx, cy - q * .05, q * .8, 800, on ? 1 : .4, 'center');
+    }
+    ctx.restore();
+  }
+  function badges(ctx, b, g, ink, k, s) {
+    const items = g.list || [], n = items.length || 1;
+    let cols = Math.min(n, b.w > 800 ? 4 : 3), rows = Math.ceil(n / cols);
+    const lab = 30 * s;
+    let cw = b.w / cols, rh = b.h / rows, r = Math.min(cw * .32, (rh - lab * 1.9) / 2);
+    if (r < 34 && cols < 6) { cols = Math.min(n, 6); rows = Math.ceil(n / cols); cw = b.w / cols; rh = b.h / rows; r = Math.min(cw * .32, (rh - lab * 1.9) / 2); }
+    r = Math.max(18, r);
+    items.forEach(function (it, i) {
+      const c = i % cols, row = Math.floor(i / cols), cx = b.x + cw * (c + .5), cy = b.y + rh * row + (rh - (2 * r + lab * 1.6)) / 2 + r;
+      const on = it.earned && (i + 1) / n <= k + .001;
+      glyph(ctx, it.kind, it.need, cx, cy, r, ink, on);
+      ctx.fillStyle = ink; const l = badgeLabel(it);
+      Tx(ctx, l, cx, cy + r + lab * 1.25, fit(ctx, l, lab, 600, cw - 12), 600, it.earned ? .95 : .45, 'center');
+    });
+  }
+  function emblem(ctx, b, g, ink, k, s) {
+    const R = Math.min(b.w, b.h - 160 * s) * .36, cx = b.x + b.w / 2, cy = b.y + (b.h - 140 * s) / 2;
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(.6 + .4 * k, .6 + .4 * k); glyph(ctx, g.kind || 'sesi', g.need || '', 0, 0, R, ink, true); ctx.restore();
+    ctx.fillStyle = ink; const px = fit(ctx, g.label, 72 * s, 800, b.w); Tx(ctx, g.label, cx, cy + R + 110 * s, px, 800, k, 'center');
+  }
+  function heat(ctx, b, g, ink, k, s) {
+    const by = {}; (g.cells || []).forEach(c => { by[c.d] = c; });
+    const val = c => (c ? (c.s && c.w ? 1 : (c.s ? .75 : .5)) : 0);
+    const lab = 28 * s;
+    if (g.mode === 'month') {
+      const p = String(g.month).split('-').map(Number), days = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate(), first = (new Date(Date.UTC(p[0], p[1] - 1, 1)).getUTCDay() + 6) % 7;
+      const rows = Math.ceil((first + days) / 7), cs = Math.min(b.w / 7, (b.h - lab * 1.6) / rows), gap = cs * .14, x0 = b.x + (b.w - cs * 7) / 2;
+      const dn = P.lang === 'id' ? ['S', 'S', 'R', 'K', 'J', 'S', 'M'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+      ctx.fillStyle = ink; dn.forEach((d, i) => Tx(ctx, d, x0 + cs * (i + .5), b.y + lab, lab, 600, .55, 'center'));
+      const y0 = b.y + lab * 1.6;
+      for (let d = 1; d <= days; d++) {
+        const i = first + d - 1, x = x0 + (i % 7) * cs, y = y0 + Math.floor(i / 7) * cs, key = g.month + '-' + ('0' + d).slice(-2), v = val(by[key]);
+        ctx.globalAlpha = v ? v * Math.min(1, k * days / d) : .12; rrect(ctx, x + gap / 2, y + gap / 2, cs - gap, cs - gap, cs * .2); ctx.fill();
+        ctx.globalAlpha = v ? 1 : .5; ctx.fillStyle = v ? (ink === '#FFFFFF' ? '#0B0B0B' : '#FFFFFF') : ink;
+        Tx(ctx, String(d), x + cs / 2, y + cs / 2 + cs * .12, cs * .3, 600, v ? .9 : .45, 'center'); ctx.fillStyle = ink;
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    // 13 minggu × 7 hari, Senin di atas
+    const end = iso(g.today) || iso(new Date().toISOString());
+    const pe = end.split('-').map(Number), endD = new Date(Date.UTC(pe[0], pe[1] - 1, pe[2])), dow = (endD.getUTCDay() + 6) % 7;
+    const weeksN = 13, cs = Math.min(b.w / weeksN, (b.h - lab * 1.8) / 7), gap = cs * .16, x0 = b.x + (b.w - cs * weeksN) / 2, y0 = b.y + (b.h - cs * 7 - lab * 1.8) / 2;
+    const startD = new Date(endD.getTime() - (dow + 7 * (weeksN - 1)) * 86400000);
+    ctx.fillStyle = ink;
+    for (let wI = 0; wI < weeksN; wI++) {
+      for (let d = 0; d < 7; d++) {
+        const dt = new Date(startD.getTime() + (wI * 7 + d) * 86400000); if (dt > endD) continue;
+        const key = dt.toISOString().slice(0, 10), v = val(by[key]);
+        ctx.globalAlpha = v ? v * Math.min(1, k * weeksN / (wI + 1)) : .12; rrect(ctx, x0 + wI * cs + gap / 2, y0 + d * cs + gap / 2, cs - gap, cs - gap, cs * .2); ctx.fill();
+        if (d === 0 && dt.getUTCDate() <= 7) { ctx.globalAlpha = 1; Tx(ctx, T.mon[dt.getUTCMonth()], x0 + wI * cs, y0 + cs * 7 + lab * 1.4, lab, 600, .6); }
+      }
     }
     ctx.globalAlpha = 1;
   }
-  function emblem(ctx, b, g, ink) {
-    const cx = b.x + b.w / 2, cy = b.y + b.h / 2 - 40, R = Math.min(b.w, b.h) * .3;
-    ctx.strokeStyle = ink; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.stroke();
-    ctx.fillStyle = ink; ctx.beginPath();
-    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? R * .26 : R * .6; i ? ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
-    ctx.closePath(); ctx.fill();
-    const px = fit(ctx, g.label, 70, 800, b.w); T(ctx, g.label, cx, cy + R + 100, px, 800, 1, 'center');
+  function photos(ctx, b, ink, o, s) {
+    const a = st.photoA, c = st.photoB, k = kp('foto');
+    const half = (b.w - 20) / 2, lab = 34 * s;
+    [[a, T.before, st.photoAInfo, b.x], [c, T.after, st.photoBInfo, b.x + half + 20]].forEach(function (x) {
+      const im = x[0], px = x[3], ph = b.h - lab * 1.9;
+      rrect(ctx, px, b.y, half, ph, 28); ctx.save(); ctx.clip();
+      if (im) {
+        drawCover(ctx, im, px, b.y, half, ph, k.blur === 'potong' ? .85 : .3);
+        if (k.blur === 'blur') pixelate(ctx, px, b.y, half, ph * k.blurH / 100, 28);
+      } else { ctx.globalAlpha = .15; ctx.fillStyle = ink; ctx.fillRect(px, b.y, half, ph); ctx.globalAlpha = 1; ctx.fillStyle = ink; Tx(ctx, T.pickPhoto, px + half / 2, b.y + ph / 2, 34 * s, 600, .6, 'center'); }
+      ctx.restore();
+      ctx.fillStyle = ink;
+      Tx(ctx, x[1], px, b.y + ph + lab * 1.3, lab, 700, 1);
+      if (x[2]) Tx(ctx, fmtShort(x[2]) + ' ' + iso(x[2]).slice(0, 4), px + half, b.y + ph + lab * 1.3, lab * .9, 500, .65, 'right');
+    });
   }
-  function graphic(ctx, b, g, ink, center) {
+  function graphic(ctx, b, g, ink, k, s, o, center) {
+    if (!g || b.h < 40) return;
     ctx.save();
-    if (g.type === 'radar') radar(ctx, b, g.vals, ink); else if (g.type === 'bars') bars(ctx, b, g.vals, ink, g.cap); else if (g.type === 'line') line(ctx, b, g.pts, ink);
-    else if (g.type === 'macro') macro(ctx, b, g, ink); else if (g.type === 'list') list(ctx, b, g, ink, center); else if (g.type === 'badges') badgesRow(ctx, b, g, ink); else if (g.type === 'emblem') emblem(ctx, b, g, ink);
+    if (g.type === 'radar') radar(ctx, b, g.vals, ink, k, s);
+    else if (g.type === 'bodymap') bodymap(ctx, b, g.parts, ink, k, s);
+    else if (g.type === 'hbars') hbars(ctx, b, g.rows, ink, k, s);
+    else if (g.type === 'bars') bars(ctx, b, g, ink, k, s);
+    else if (g.type === 'line') line(ctx, b, g.pts, ink, k, s, g.cap);
+    else if (g.type === 'lines') lines(ctx, b, g, ink, k, s);
+    else if (g.type === 'pairs') pairs(ctx, b, g, ink, k, s);
+    else if (g.type === 'macro') macro(ctx, b, g, ink, k, s);
+    else if (g.type === 'list') list(ctx, b, g, ink, k, s, center);
+    else if (g.type === 'badges') badges(ctx, b, g, ink, k, s);
+    else if (g.type === 'emblem') emblem(ctx, b, g, ink, k, s);
+    else if (g.type === 'heat') heat(ctx, b, g, ink, k, s);
+    else if (g.type === 'photos') photos(ctx, b, ink, o, s);
+    ctx.restore();
+  }
+  // Grafik yang butuh ruang tinggi minimum (px pada skala 1).
+  function graphMin(g) {
+    if (!g) return 0;
+    return { list: 110 * Math.min(8, g.rows ? g.rows.length + (g.more ? 1 : 0) : 4) * .6, badges: 360, photos: 520, emblem: 420, heat: 340, macro: 340, lines: 300, pairs: 300 }[g.type] || 320;
+  }
+
+  // ── QR (byte mode, koreksi M, versi 1–10). Dari algoritme Project Nayuki (MIT), diringkas. ─────────
+  const QR = (function () {
+    const ECC = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26], BLK = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+    function rawMods(v) { let r = (16 * v + 128) * v + 64; if (v >= 2) { const n = Math.floor(v / 7) + 2; r -= (25 * n - 10) * n - 55; if (v >= 7) r -= 36; } return r; }
+    const dataCw = v => Math.floor(rawMods(v) / 8) - ECC[v] * BLK[v];
+    function mul(x, y) { let z = 0; for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z; }
+    function divisor(d) { const r = new Array(d).fill(0); r[d - 1] = 1; let root = 1; for (let i = 0; i < d; i++) { for (let j = 0; j < r.length; j++) { r[j] = mul(r[j], root); if (j + 1 < r.length) r[j] ^= r[j + 1]; } root = mul(root, 2); } return r; }
+    function remainder(data, dv) { const r = dv.map(() => 0); data.forEach(function (b) { const f = b ^ r.shift(); r.push(0); dv.forEach((c, i) => { r[i] ^= mul(c, f); }); }); return r; }
+    function align(v, size) { if (v === 1) return []; const n = Math.floor(v / 7) + 2, step = Math.ceil((v * 4 + 4) / (n * 2 - 2)) * 2, r = [6]; for (let p = size - 7; r.length < n; p -= step) r.splice(1, 0, p); return r; }
+    const MASKS = [(x, y) => (x + y) % 2, (x, y) => y % 2, (x, y) => x % 3, (x, y) => (x + y) % 3, (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2,
+      (x, y) => x * y % 2 + x * y % 3, (x, y) => (x * y % 2 + x * y % 3) % 2, (x, y) => ((x + y) % 2 + x * y % 3) % 2];
+    function make(text) {
+      const bytes = Array.from(new TextEncoder().encode(String(text)));
+      let v = 1; while (v <= 10 && 4 + (v < 10 ? 8 : 16) + bytes.length * 8 > dataCw(v) * 8) v++;
+      if (v > 10) return null;
+      const size = v * 4 + 17, cap = dataCw(v) * 8, bits = [];
+      const put = (val, n) => { for (let i = n - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+      put(4, 4); put(bytes.length, v < 10 ? 8 : 16); bytes.forEach(b => put(b, 8));
+      put(0, Math.min(4, cap - bits.length)); put(0, (8 - bits.length % 8) % 8);
+      for (let p = 0xEC; bits.length < cap; p ^= 0xEC ^ 0x11) put(p, 8);
+      const data = []; for (let i = 0; i < bits.length; i += 8) { let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j]; data.push(b); }
+      const nb = BLK[v], el = ECC[v], raw = Math.floor(rawMods(v) / 8), nShort = nb - raw % nb, shortLen = Math.floor(raw / nb), dv = divisor(el), blocks = [];
+      for (let i = 0, k = 0; i < nb; i++) { const d = data.slice(k, k + shortLen - el + (i < nShort ? 0 : 1)); k += d.length; const e = remainder(d, dv); if (i < nShort) d.push(0); blocks.push(d.concat(e)); }
+      const cw = []; for (let i = 0; i < blocks[0].length; i++) blocks.forEach((bl, j) => { if (i !== shortLen - el || j >= nShort) cw.push(bl[i]); });
+      const M = [], F = []; for (let y = 0; y < size; y++) { M.push(new Array(size).fill(false)); F.push(new Array(size).fill(false)); }
+      const set = (x, y, d) => { M[y][x] = d; F[y][x] = true; };
+      for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+      [[3, 3], [size - 4, 3], [3, size - 4]].forEach(function (c) { for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const d = Math.max(Math.abs(dx), Math.abs(dy)), xx = c[0] + dx, yy = c[1] + dy; if (xx >= 0 && xx < size && yy >= 0 && yy < size) set(xx, yy, d !== 2 && d !== 4); } });
+      const ap = align(v, size), na = ap.length;
+      for (let i = 0; i < na; i++) for (let j = 0; j < na; j++) { if ((i === 0 && j === 0) || (i === 0 && j === na - 1) || (i === na - 1 && j === 0)) continue; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(ap[i] + dx, ap[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1); }
+      const fmt = function (mask) {
+        const d = (0 << 3) | mask; let r = d; for (let i = 0; i < 10; i++) r = (r << 1) ^ ((r >>> 9) * 0x537);
+        const b = ((d << 10) | r) ^ 0x5412, g = i => ((b >>> i) & 1) === 1;
+        for (let i = 0; i <= 5; i++) set(8, i, g(i));
+        set(8, 7, g(6)); set(8, 8, g(7)); set(7, 8, g(8));
+        for (let i = 9; i < 15; i++) set(14 - i, 8, g(i));
+        for (let i = 0; i < 8; i++) set(size - 1 - i, 8, g(i));
+        for (let i = 8; i < 15; i++) set(8, size - 15 + i, g(i));
+        set(8, size - 8, true);
+      };
+      fmt(0);
+      if (v >= 7) { let r = v; for (let i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1F25); const b = (v << 12) | r; for (let i = 0; i < 18; i++) { const bit = ((b >>> i) & 1) === 1, a = size - 11 + i % 3, c = Math.floor(i / 3); set(a, c, bit); set(c, a, bit); } }
+      let i = 0;
+      for (let right = size - 1; right >= 1; right -= 2) {
+        if (right === 6) right = 5;
+        for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++) {
+          const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+          if (!F[y][x] && i < cw.length * 8) { M[y][x] = ((cw[i >>> 3] >>> (7 - (i & 7))) & 1) === 1; i++; }
+        }
+      }
+      // Pilih mask dengan penalti terkecil (aturan baris, blok 2×2 dan keseimbangan).
+      let best = null, bestP = Infinity;
+      for (let m = 0; m < 8; m++) {
+        const G = M.map((row, y) => row.map((d, x) => (F[y][x] ? d : d !== (MASKS[m](x, y) === 0))));
+        let pen = 0, dark = 0;
+        for (let y = 0; y < size; y++) {
+          let run = 1, runC = 1;
+          for (let x = 0; x < size; x++) {
+            if (G[y][x]) dark++;
+            if (x > 0) { if (G[y][x] === G[y][x - 1]) { run++; if (run === 5) pen += 3; else if (run > 5) pen++; } else run = 1; }
+            if (x > 0) { if (G[x][y] === G[x - 1][y]) { runC++; if (runC === 5) pen += 3; else if (runC > 5) pen++; } else runC = 1; }
+            if (x < size - 1 && y < size - 1 && G[y][x] === G[y][x + 1] && G[y][x] === G[y + 1][x] && G[y][x] === G[y + 1][x + 1]) pen += 3;
+          }
+        }
+        pen += Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+        if (pen < bestP) { bestP = pen; best = m; }
+      }
+      const out = M.map((row, y) => row.map((d, x) => (F[y][x] ? d : d !== (MASKS[best](x, y) === 0))));
+      // format bits for the chosen mask
+      const save = { M: M, F: F }; fmt(best);
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (F[y][x]) out[y][x] = M[y][x];
+      void save;
+      return { size: size, mods: out, version: v, mask: best };
+    }
+    return { make: make };
+  })();
+  function drawQr(ctx, text, x, y, size, ink) {
+    const q = QR.make(text); if (!q) return;
+    const n = q.size + 2, cs = size / n, bg = ink === '#FFFFFF' ? '#0B0B0B' : '#FFFFFF';
+    ctx.save(); ctx.shadowColor = 'transparent';
+    ctx.fillStyle = ink; rrect(ctx, x - cs, y - cs, size + 2 * cs, size + 2 * cs, cs * 2); ctx.fill();
+    ctx.fillStyle = bg;
+    for (let yy = 0; yy < q.size; yy++) for (let xx = 0; xx < q.size; xx++) if (q.mods[yy][xx]) ctx.fillRect(Math.floor(x + (xx + 1) * cs), Math.floor(y + (yy + 1) * cs), Math.ceil(cs), Math.ceil(cs));
     ctx.restore();
   }
 
-  function footer(ctx, img, o, x, y, w, centered, ink) {
+  // ── tata letak: ukur dulu, lalu gambar ───────────────────────────────────────
+  function opts() {
+    const k = kp();
+    const size = P.size, H = SIZES[size] || 1920;
+    return { style: P.style, size: size, H: H, ink: P.ink, align: P.align, pos: P.pos, s: P.scale === 'l' ? 1.18 : P.scale === 's' ? .86 : 1, corner: P.corner, frame: P.frame,
+      foot: P.foot, name: String(P.name == null ? (st.src.first || '') : P.name).trim(), coach: (st.src.share && st.src.share.coach) || st.src.coach || '', cmp: PERIOD_KINDS[st.kind] || st.card.vsKey ? k.cmp : 'none', photo: st.photoBg, qrUrl: (st.src.share && st.src.share.qrUrl) || 'https://xnkbooking.my.id', avatars: st.avatars || {} };
+  }
+  function cmpText(stt, mode, vsKey) {
+    const c = stt.cmp; if (!c || mode === 'none') return '';
+    if (mode === 'prev' && c.prev) {
+      const d = c.prev.cur - c.prev.prev;
+      if (!c.prev.prev && !c.prev.cur) return '';
+      const vs = T.vs[vsKey] || T.vsPrev;
+      if (c.prev.pct && c.prev.prev > 0) return { up: d >= 0, t: Math.round(Math.abs(d) / c.prev.prev * 100) + '% ' + vs };
+      return { up: d >= 0, t: (d >= 0 ? '+' : '−') + num(Math.abs(d)) + ' ' + vs };
+    }
+    if (mode === 'start' && c.start) return { t: c.start + ' ' + T.sinceStart };
+    if (mode === 'target' && c.target) return { t: T.of + ' ' + num(c.target) + (/kcal/.test(stt.v) ? ' kcal' : / g/.test(stt.v) ? ' g' : '') };
+    return '';
+  }
+  function measure(ctx, card, o) {
+    const s = o.s, stack = o.style === 'teks', cmpOn = o.cmp && o.cmp !== 'none' && card.stats.some(x => cmpText(x, o.cmp, card.vsKey));
+    const hd = (card.title ? 64 * s : 0) + (o.foot.date && card.date ? 50 * s : 0) + 28 * s;
+    const cols = stack ? 1 : Math.min(3, Math.max(1, card.stats.length === 4 ? 2 : card.stats.length));
+    const rows = Math.ceil(card.stats.length / cols);
+    const cellH = stack ? (176 + (cmpOn ? 42 : 0)) * s : (124 + (cmpOn ? 40 : 0)) * s;
+    const statsH = card.stats.length ? rows * cellH + 10 * s : 0;
+    const footH = (o.foot.logo ? 54 : 0) * s + (o.name ? 50 * s : 0) + (o.foot.coach && o.coach ? 44 * s : 0) + 34 * s;
+    const footBox = Math.max(footH, o.foot.qr ? 170 * s : 0);
+    return { hd: hd, cols: cols, rows: rows, cellH: cellH, statsH: statsH, footH: footBox, cmpOn: cmpOn };
+  }
+  /** Kotak tiap blok di kanvas (untuk menggambar dan untuk tools/share-check.js). */
+  function layout(card, o) {
+    const cnv = document.createElement('canvas'), ctx = cnv.getContext('2d');
+    const boxed = o.style === 'gelap' || o.style === 'terang';
+    const pad = 72, H = o.H, transparentStory = !boxed && o.size === 'story';
+    const safeTop = transparentStory ? 170 : pad, safeBot = transparentStory ? 220 : pad;
+    let s = o.s, m, gH, avail, total;
+    for (let tries = 0; tries < 10; tries++) {
+      m = measure(ctx, card, Object.assign({}, o, { s: s }));
+      avail = H - safeTop - safeBot;
+      const gMin = card.g ? graphMin(card.g) * s : 0;
+      const gap = card.g ? 30 * s : 0;
+      const fixed = m.hd + m.statsH + gap + 34 * s + m.footH;
+      gH = card.g ? Math.max(gMin, Math.min(boxed ? Infinity : 820 * s, avail - fixed)) : 0;
+      total = fixed + gH;
+      if (total <= avail + .5 || s < .62) break;
+      s *= .92;
+    }
+    if (total > avail && card.g) gH = Math.max(80, gH - (total - avail));
+    total = m.hd + m.statsH + (card.g ? 30 * s : 0) + gH + 34 * s + m.footH;
+    let y;
+    if (boxed) y = pad + Math.max(0, (avail - total) / 2) * 0;
+    else y = o.pos === 'atas' ? safeTop : o.pos === 'tengah' ? safeTop + (avail - total) / 2 : safeTop + avail - total;
+    y = Math.max(safeTop, y);
+    const x = pad, w = W - pad * 2;
+    const R = {};
+    R.head = { x: x, y: y, w: w, h: m.hd }; y += m.hd;
+    R.stats = { x: x, y: y, w: w, h: m.statsH, cols: m.cols, cellH: m.cellH, cmpOn: m.cmpOn }; y += m.statsH;
+    if (card.g) { y += 30 * s; R.graph = { x: x, y: y, w: w, h: gH }; y += gH; }
+    y += 34 * s;
+    if (boxed) y = Math.max(y, H - pad - m.footH);
+    R.foot = { x: x, y: y, w: w, h: m.footH };
+    R.s = s; R.H = H;
+    return R;
+  }
+  function drawHead(ctx, card, R, o, ink, k) {
+    const b = R.head, s = R.s, c = o.align === 'tengah', ax = c ? b.x + b.w / 2 : b.x, al = c ? 'center' : 'left';
     ctx.fillStyle = ink;
-    const lh = 54;
-    const wm = 'XNK'; font(ctx, 800, 62); const tw = ctx.measureText(wm).width, lw = img ? Math.round(lh * img.width / img.height) : 0;
-    const total = lw + (lw ? 16 : 0) + tw, x0 = centered ? x + (w - total) / 2 : x;
-    drawLogo(ctx, img, x0, y, lh, ink); ctx.fillStyle = ink; T(ctx, wm, x0 + lw + (lw ? 16 : 0), y + 46, 62, 800, 1);
-    let y2 = y + lh + 52;
-    if (o.name) { T(ctx, o.name, centered ? x + w / 2 : x, y2, 42, 500, .95, centered ? 'center' : 'left'); y2 += 46; }
-    if (o.coach) T(ctx, 'Coached by ' + o.coach, centered ? x + w / 2 : x, y2, 32, 400, .65, centered ? 'center' : 'left');
+    let y = b.y;
+    if (card.title) { const px = fit(ctx, card.title, 58 * s, 800, b.w); Tx(ctx, card.title, ax, y + 52 * s, px, 800, k); y += 64 * s; }
+    if (o.foot.date && card.date) Tx(ctx, card.date, ax, y + 38 * s, 36 * s, 500, .72 * k, al);
   }
-  const footH = o => 54 + 52 + (o.name ? 46 : 0) + (o.coach ? 40 : 0);
-
-  function layoutStack(ctx, card, img, o, H, ink) {
-    const hasList = card.g && card.g.type === 'list', rowsN = hasList ? card.g.rows.length + (card.g.more ? 1 : 0) : 0;
-    const hd = (card.title ? 64 : 0) + (card.date ? 52 : 0) + 20, bodyH = card.stats.length * 170 + (rowsN ? rowsN * 62 + 40 : 0), total = hd + bodyH + 40 + footH(o);
-    let y = o.size === 'story' ? (o.pos === 'atas' ? 170 : o.pos === 'bawah' ? H - 220 - total : (H - total) / 2) : (H - total) / 2;
-    y = Math.max(40, y);
-    ctx.fillStyle = ink; if (card.title) { const px = fit(ctx, card.title, 58, 700, W - 140); T(ctx, card.title, W / 2, y + 52, px, 700, 1, 'center'); y += 64; }
-    if (card.date) { T(ctx, card.date, W / 2, y + 40, 38, 400, .75, 'center'); y += 52; }
-    y += 20;
-    card.stats.forEach(function (s) {
-      const px = fit(ctx, s.v, 104, 800, W - 260); font(ctx, 800, px); const vw = ctx.measureText(s.v).width;
-      T(ctx, s.v, W / 2 - (s.medal ? 34 : 0), y + 100, px, 800, 1, 'center');
-      if (s.medal) medal(ctx, W / 2 + vw / 2 + 12 + 6, y + 70, 26);
-      T(ctx, s.l, W / 2, y + 150, 46, 400, .85, 'center'); y += 170;
+  function arrow(ctx, x, y, sz, up) {
+    ctx.beginPath();
+    if (up) { ctx.moveTo(x, y); ctx.lineTo(x + sz, y); ctx.lineTo(x + sz / 2, y - sz * .9); }
+    else { ctx.moveTo(x, y - sz * .9); ctx.lineTo(x + sz, y - sz * .9); ctx.lineTo(x + sz / 2, y); }
+    ctx.closePath(); ctx.fill();
+  }
+  function drawStats(ctx, card, R, o, ink, k) {
+    const b = R.stats, s = R.s, stack = o.style === 'teks', c = o.align === 'tengah';
+    card.stats.forEach(function (stt, i) {
+      const col = i % b.cols, row = Math.floor(i / b.cols), cw = b.w / b.cols, x = b.x + col * cw, y = b.y + row * b.cellH;
+      const ax = c ? x + cw / 2 : x, al = c ? 'center' : 'left';
+      const kk = ease(k * card.stats.length - i * .6);
+      const v = animText(stt.v, kk), vpx = fit(ctx, stt.v, (stack ? 100 : 62) * s, 800, cw - (stt.medal ? 70 * s : 16));
+      ctx.fillStyle = ink;
+      if (stack) { Tx(ctx, v, ax - (stt.medal && c ? 30 * s : 0), y + 96 * s, vpx, 800, Math.min(1, kk * 2)); Tx(ctx, stt.l, ax, y + 148 * s, 40 * s, 500, .82 * Math.min(1, kk * 2), al); }
+      else { Tx(ctx, stt.l, ax, y + 36 * s, 34 * s, 500, .78 * Math.min(1, kk * 2), al); Tx(ctx, v, ax, y + 100 * s, vpx, 800, Math.min(1, kk * 2), al); }
+      if (stt.medal) { font(ctx, 800, vpx); const vw = ctx.measureText(stt.v).width; const mx = c ? ax + vw / 2 + 34 * s - (stack ? 30 * s : 0) : ax + vw + 34 * s; medal(ctx, mx, y + (stack ? 66 : 80) * s, (stack ? 26 : 22) * s); }
+      if (b.cmpOn) {
+        const t = cmpText(stt, o.cmp, card.vsKey);
+        if (t) {
+          const yy = y + (stack ? 194 : 144) * s, px = 28 * s;
+          font(ctx, 600, px); const tw = ctx.measureText(t.t).width + (t.up != null ? px : 0);
+          let xx = c ? ax - tw / 2 : ax;
+          ctx.globalAlpha = .8 * Math.min(1, kk * 2);
+          if (t.up != null) { arrow(ctx, xx, yy - 2, px * .72, t.up); xx += px; }
+          Tx(ctx, t.t, xx, yy, fit(ctx, t.t, px, 600, cw - 20 - px), 600, .8 * Math.min(1, kk * 2));
+        }
+      }
     });
-    if (rowsN) { list(ctx, { x: 80, y: y + 10, w: W - 160, h: rowsN * 62 }, card.g, ink, true); y += rowsN * 62 + 40; }
-    footer(ctx, img, o, 0, y + 20, W, true, ink);
   }
-  function layoutChart(ctx, card, img, o, H, ink, dark) {
-    const pad = 64, cw = W - pad * 2, rows = Math.ceil(card.stats.length / 3), hd = (card.title ? 60 : 0) + (card.date ? 50 : 0) + 24, rowH = 132;
-    const fh = footH(o), chartH = o.size === 'story' && !dark ? 760 : Math.max(380, H - pad * 2 - hd - rows * rowH - fh - 30);
-    const total = hd + rows * rowH + chartH + 30 + fh;
-    let y = dark || o.size !== 'story' ? pad : (o.pos === 'atas' ? 170 : o.pos === 'bawah' ? H - 220 - total : (H - total) / 2);
-    y = Math.max(40, y);
-    ctx.fillStyle = ink;
-    if (card.title) { const px = fit(ctx, card.title, 54, 700, cw); T(ctx, card.title, pad, y + 48, px, 700, 1); y += 60; }
-    if (card.date) { T(ctx, card.date, pad, y + 36, 36, 400, .7); y += 50; }
-    y += 24;
-    card.stats.forEach(function (s, i) {
-      const col = i % 3, x = pad + col * (cw / 3), yy = y + Math.floor(i / 3) * rowH;
-      T(ctx, s.l, x, yy + 36, 38, 400, .8);
-      const px = fit(ctx, s.v, 62, 800, cw / 3 - 20); font(ctx, 800, px); const vw = ctx.measureText(s.v).width;
-      T(ctx, s.v, x, yy + 102, px, 800, 1); if (s.medal) medal(ctx, x + vw + 36, yy + 82, 22);
-    });
-    y += rows * rowH;
-    graphic(ctx, { x: pad, y: y, w: cw, h: chartH }, card.g || { type: 'none' }, ink, false);
-    y += chartH + 30;
-    footer(ctx, img, o, pad, y, cw, false, ink);
+  function drawAvatar(ctx, src, x, y, d) {
+    if (!src || !src.complete || !src.naturalWidth) return 0;
+    ctx.save(); ctx.shadowColor = 'transparent'; ctx.beginPath(); ctx.arc(x + d / 2, y + d / 2, d / 2, 0, 7); ctx.clip(); drawCover(ctx, src, x, y, d, d); ctx.restore();
+    return d;
   }
-  function drawCover(ctx, im, W2, H2) {
-    const s = Math.max(W2 / im.width, H2 / im.height), w = im.width * s, h = im.height * s; ctx.drawImage(im, (W2 - w) / 2, (H2 - h) / 2, w, h);
+  function drawFoot(ctx, card, R, o, ink, img, k) {
+    const b = R.foot, s = R.s, c = o.align === 'tengah' && !o.foot.qr;
+    ctx.globalAlpha = k; ctx.fillStyle = ink;
+    const qr = o.foot.qr ? 150 * s : 0, w = b.w - (qr ? qr + 30 : 0);
+    let y = b.y;
+    if (o.foot.logo) {
+      const lh = 54 * s; font(ctx, 800, 60 * s); const tw = ctx.measureText('XNK').width, lw = img ? Math.round(lh * img.width / img.height) : 0;
+      const tot = lw + (lw ? 16 : 0) + tw, x0 = c ? b.x + (w - tot) / 2 : b.x;
+      if (img) ctx.drawImage(tinted(img, lw, lh, ink), x0, y);
+      Tx(ctx, 'XNK', x0 + lw + (lw ? 16 : 0), y + lh * .85, 60 * s, 800, k);
+      y += lh + 12 * s;
+    }
+    const me = o.foot.me && st.avImg.me, cp = o.foot.coachPic && st.avImg.coach;
+    if (o.name) {
+      const d = 46 * s; let x0 = b.x;
+      font(ctx, 600, 40 * s); const nw = ctx.measureText(o.name).width + (me && me.naturalWidth ? d + 14 : 0);
+      if (c) x0 = b.x + (w - nw) / 2;
+      if (me && me.naturalWidth) { drawAvatar(ctx, me, x0, y + 4 * s, d); x0 += d + 14; }
+      Tx(ctx, o.name, x0, y + 40 * s, fit(ctx, o.name, 40 * s, 600, w), 600, .95 * k);
+      y += 52 * s;
+    }
+    if (o.foot.coach && o.coach) {
+      const t = T.coachedBy + ' ' + o.coach, d = 38 * s; let x0 = b.x;
+      font(ctx, 500, 32 * s); const nw = ctx.measureText(t).width + (cp && cp.naturalWidth ? d + 12 : 0);
+      if (c) x0 = b.x + (w - nw) / 2;
+      if (cp && cp.naturalWidth) { drawAvatar(ctx, cp, x0, y + 4 * s, d); x0 += d + 12; }
+      Tx(ctx, t, x0, y + 34 * s, 32 * s, 500, .7 * k);
+    }
+    if (qr) drawQr(ctx, o.qrUrl, b.x + b.w - qr, b.y + Math.max(0, (b.h - qr) / 2), qr, ink);
+    ctx.globalAlpha = 1;
   }
-  async function draw(card, o) {
-    const dark = o.style === 'gelap', H = dark || o.size === 'kotak' ? 1080 : 1920;
-    const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+  /** Gambar satu kartu. o.t = waktu animasi 0..1 (1 = gambar diam), o.scale = 1 atau 2 (HQ), o.video = latar penuh. */
+  async function draw(card, o, canvas) {
+    const sc = o.scale || 1, H = o.H;
+    canvas = canvas || document.createElement('canvas');
+    if (canvas.width !== W * sc || canvas.height !== H * sc) { canvas.width = W * sc; canvas.height = H * sc; }
     const ctx = canvas.getContext('2d');
-    try { await Promise.all([document.fonts.load('800 60px Inter'), document.fonts.load('600 40px Inter'), document.fonts.load('400 40px Inter')]); } catch (e) {}
+    ctx.setTransform(sc, 0, 0, sc, 0, 0); ctx.clearRect(0, 0, W, H);
+    if (!o.noFonts) { try { await Promise.all([document.fonts.load('800 60px Inter'), document.fonts.load('600 40px Inter'), document.fonts.load('500 40px Inter')]); } catch (e) {} }
     const img = await logo();
-    let ink = dark ? '#FFFFFF' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF');
-    if (dark) { ctx.fillStyle = '#0B0B0B'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(0, 0, W, H, 72) : ctx.rect(0, 0, W, H); ctx.fill(); }
-    if (o.style === 'foto' && o.photo) {
-      drawCover(ctx, o.photo, W, H);
-      const g = ctx.createLinearGradient(0, 0, 0, H), c = ink === '#FFFFFF' ? '0,0,0' : '255,255,255';
-      const a = o.size === 'story' ? (o.pos === 'atas' ? [.6, 0, 0] : o.pos === 'bawah' ? [0, 0, .7] : [.15, .45, .15]) : [.2, .35, .65];
-      g.addColorStop(0, 'rgba(' + c + ',' + a[0] + ')'); g.addColorStop(.5, 'rgba(' + c + ',' + a[1] + ')'); g.addColorStop(1, 'rgba(' + c + ',' + a[2] + ')'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    } else if (o.style === 'foto') { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, 0, W, H); T(ctx, 'Pick a photo', W / 2, H / 2, 54, 600, .5, 'center'); }
+    paint(ctx, card, o, img);
+    return canvas;
+  }
+  function paint(ctx, card, o, img) {
+    const H = o.H, k = o.t == null ? 1 : o.t;
+    const boxed = o.style === 'gelap' || o.style === 'terang';
+    let ink = o.style === 'gelap' ? '#FFFFFF' : o.style === 'terang' ? '#0B0B0B' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF');
+    const rad = o.corner === 'bulat' ? 72 : 0;
+    if (o.video && !boxed && o.style !== 'foto') { ctx.fillStyle = ink === '#FFFFFF' ? '#0B0B0B' : '#FFFFFF'; ctx.fillRect(0, 0, W, H); }
+    if (boxed) { ctx.fillStyle = o.style === 'gelap' ? '#0B0B0B' : '#FFFFFF'; rrect(ctx, 0, 0, W, H, o.video ? 0 : rad); ctx.fill(); }
+    if (o.style === 'foto') {
+      if (o.photo) {
+        drawCover(ctx, o.photo, 0, 0, W, H);
+        const kk = kp();
+        if (kk.blur === 'blur') pixelate(ctx, 0, 0, W, H * kk.blurH / 100, 36);
+        const g = ctx.createLinearGradient(0, 0, 0, H), c = ink === '#FFFFFF' ? '0,0,0' : '255,255,255';
+        const a = o.pos === 'atas' ? [.65, .1, 0] : o.pos === 'bawah' ? [0, .15, .75] : [.2, .5, .2];
+        g.addColorStop(0, 'rgba(' + c + ',' + a[0] + ')'); g.addColorStop(.5, 'rgba(' + c + ',' + a[1] + ')'); g.addColorStop(1, 'rgba(' + c + ',' + a[2] + ')'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      } else { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, 0, W, H); Tx(ctx, T.pickPhoto, W / 2, H / 2, 54, 600, .5, 'center'); }
+      if (rad && !o.video) { ctx.globalCompositeOperation = 'destination-in'; ctx.fillStyle = '#000'; rrect(ctx, 0, 0, W, H, rad); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
+    }
+    if (o.frame) { ctx.save(); ctx.strokeStyle = ink; ctx.globalAlpha = .9; ctx.lineWidth = 6; rrect(ctx, 30, 30, W - 60, H - 60, Math.max(0, rad - 30)); ctx.stroke(); ctx.restore(); }
     ctx.fillStyle = ink; ctx.textBaseline = 'alphabetic';
-    if (ink === '#FFFFFF' && !dark && o.style !== 'foto') { ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 2; }
-    if (o.style === 'teks' || (o.style === 'foto' && !(card.g && card.g.type !== 'list'))) layoutStack(ctx, card, img, o, H, ink);
-    else layoutChart(ctx, card, img, o, H, ink, dark);
-    return new Promise(function (res) { canvas.toBlob(res, 'image/png'); });
+    if (ink === '#FFFFFF' && !boxed && o.style !== 'foto' && !o.video) { ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 2; }
+    const R = layout(card, o);
+    drawHead(ctx, card, R, o, ink, ease(k * 3));
+    drawStats(ctx, card, R, o, ink, ease((k - .1) * 1.6));
+    if (R.graph) graphic(ctx, R.graph, card.g, ink, ease((k - .3) * 1.6), R.s, o, o.align === 'tengah');
+    drawFoot(ctx, card, R, o, ink, img, ease((k - .55) * 2.5));
+    ctx.shadowColor = 'transparent';
+    return R;
   }
 
-  // ── lembar bagikan ───────────────────────────────────────────────────────────
+  // ── lembar editor ────────────────────────────────────────────────────────────
+  const st = { kind: '', src: null, opts: {}, card: null, kinds: [], per: {}, perLoading: '', blob: null, url: '', host: false, token: 0, pending: null, tray: [], tab: 'kartu',
+    photoA: null, photoB: null, photoAInfo: '', photoBInfo: '', photoBg: null, avatars: null, avImg: {}, prevName: null, recording: false, full: false };
   const $ = id => document.getElementById(id);
-  const chip = (grp, val, label, cur) => '<button type="button" class="chip' + (cur === val ? ' active' : '') + '" role="radio" aria-checked="' + (cur === val) + '" onclick="window.shareSet(\'' + grp + '\',\'' + val + '\')">' + esc(label) + '</button>';
+  const isDesk = () => window.innerWidth >= 768;
+  const chip = (grp, val, label, cur, extra) => '<button type="button" class="chip' + (String(cur) === String(val) ? ' active' : '') + '" role="radio" aria-checked="' + (String(cur) === String(val)) + '" onclick="window.shareSet(\'' + grp + '\',\'' + val + '\')"' + (extra || '') + '>' + label + '</button>';
+  const toggle = (id, label, on, grp) => '<label class="row-between sh-toggle"><span>' + label + '</span><span class="toggle"><input type="checkbox"' + (on ? ' checked' : '') + ' onchange="window.shareSet(\'' + grp + '\',this.checked)" aria-label="' + esc(label) + '"><span></span></span></label>';
+  const ic = n => (window.icon ? window.icon(n) : '');
+
+  function ensureShell() {
+    const sh = $('sheet-share');
+    if (!sh || $('share-stage')) return;
+    sh.classList.add('share-sheet');
+    sh.innerHTML = '<div class="sh-top"><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup">' + ic('x') + '</button>' +
+      '<h2 class="sh-title" id="share-title">Bagikan</h2><button type="button" class="btn btn-ghost btn-sm sh-reset" onclick="window.shareReset()">Reset</button></div>' +
+      '<div class="sh-main"><div class="sh-stage" id="share-stage">' +
+      '<button type="button" class="icon-btn plain sh-arrow prev" onclick="window.shareStep(-1)" aria-label="Kartu sebelumnya">' + ic('chevron-left') + '</button>' +
+      '<div class="share-preview" id="share-box" role="button" tabindex="0" aria-label="Pratinjau kartu. Geser untuk ganti kartu, ketuk untuk layar penuh."><img id="share-img" alt="Pratinjau kartu bagikan" draggable="false"><div class="sh-busy hide" id="share-busy"></div></div>' +
+      '<button type="button" class="icon-btn plain sh-arrow next" onclick="window.shareStep(1)" aria-label="Kartu berikutnya">' + ic('chevron-right') + '</button>' +
+      '<div class="sh-dots" id="share-dots" aria-hidden="true"></div></div>' +
+      '<div class="sh-side"><div class="sh-tools" id="share-tabs" role="tablist" aria-label="Alat kartu"></div><div class="sh-body" id="share-body"></div></div></div>' +
+      '<div class="sh-foot" id="share-foot"></div>' +
+      '<input type="file" id="share-file" accept="image/*" class="sr-only" onchange="window.shareFile(this)" aria-label="Pilih foto">';
+    stageGestures($('share-box'));
+  }
+  function stageGestures(box) {
+    let x0 = null, y0 = 0, moved = false;
+    box.addEventListener('pointerdown', function (e) { x0 = e.clientX; y0 = e.clientY; moved = false; }, { passive: true });
+    box.addEventListener('pointermove', function (e) { if (x0 !== null && Math.abs(e.clientX - x0) > 8) moved = true; }, { passive: true });
+    box.addEventListener('pointerup', function (e) {
+      if (x0 === null) return;
+      const dx = e.clientX - x0, dy = e.clientY - y0; x0 = null;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) { window.shareStep(dx < 0 ? 1 : -1); return; }
+      if (!moved) { if (!isDesk() && st.tab) window.shareTab(''); else window.shareFull(); }
+    });
+    box.addEventListener('pointercancel', function () { x0 = null; });
+    box.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.shareFull(); } });
+  }
+  // Alat: di HP bilah ikon di bawah pratinjau (panel terbuka hanya saat diketuk), di desktop kolom kanan yang ramping.
+  const TOOLS = [['kartu', 'Kartu', 'layers'], ['template', 'Template', 'sparkles'], ['gaya', 'Gaya', 'palette'], ['ukuran', 'Ukuran', 'ratio'],
+    ['tata', 'Tata letak', 'layout-template'], ['isi', 'Isi', 'list-checks'], ['teks', 'Teks', 'type'], ['ekspor', 'Ekspor', 'download']];
+  const row = (label, inner) => '<div class="sh-row"><span class="sh-lbl">' + label + '</span><div class="sh-chips" role="radiogroup" aria-label="' + esc(label) + '">' + inner + '</div></div>';
+  function paneKartu() {
+    const k = kp(), cur = st.kind;
+    let h = '<div class="sh-kinds" role="radiogroup" aria-label="Jenis kartu">' + st.kinds.map(kd => '<button type="button" class="sh-kind' + (kd === cur ? ' active' : '') + '" role="radio" aria-checked="' + (kd === cur) + '" onclick="window.shareSet(\'kind\',\'' + kd + '\')">' + ic(KIND_ICON[kd]) + '<span>' + KIND_NAME[kd] + '</span></button>').join('') + '</div>';
+    if (PERIOD_KINDS[cur] && st.src.loadPeriod) {
+      const per = k.period;
+      h += row('Periode', PERIODS.map(p => chip('period', p, { hari: cur === 'gizi' ? 'Hari ini' : (cur === 'ukuran' ? 'Semua' : 'Latihan ini'), minggu: 'Minggu', bulan: 'Bulan', '3bulan': '3 bulan' }[p], per)).join('') +
+        '<label class="chip sh-date' + (/^tanggal:/.test(per) ? ' active' : '') + '">' + ic('calendar') + '<input type="date" aria-label="Pilih tanggal" max="' + esc(st.src.today) + '" value="' + esc(/^tanggal:/.test(per) ? per.slice(8) : '') + '" onchange="window.shareSet(\'period\', this.value ? \'tanggal:\' + this.value : \'hari\')"></label>');
+    }
+    const modes = cmpModes();
+    if (modes.length) h += row('Banding', [['none', 'Tidak']].concat(modes).map(m => chip('cmp', m[0], m[1], k.cmp)).join(''));
+    return h;
+  }
+  function cmpModes() {
+    const c = st.card; if (!c) return [];
+    const has = m => c.allStats.some(x => x.cmp && (m === 'prev' ? x.cmp.prev : x.cmp[m]));
+    const out = [];
+    if (has('prev')) out.push(['prev', c.vsKey === 'session' ? 'Sesi lalu' : c.vsKey === 'month' ? 'Bulan lalu' : 'Periode lalu']);
+    if (has('start')) out.push(['start', 'Sejak awal']);
+    if (has('target')) out.push(['target', 'Target']);
+    return out;
+  }
+  function paneTemplate() {
+    return row('Template', Object.keys(PRESETS).map(p => chip('preset', p, { minimal: 'Minimal', bold: 'Bold', strava: 'Strava', hevy: 'Hevy', polos: 'Polos' }[p], P.preset)).join('') + (P.preset === 'kustom' ? chip('preset', 'kustom', 'Kustom', 'kustom') : ''));
+  }
+  function paneGaya() {
+    const boxed = P.style === 'gelap' || P.style === 'terang';
+    let h = row('Gaya', [['teks', 'Transparan'], ['grafik', 'Transp. + grafik'], ['gelap', 'Gelap'], ['terang', 'Terang'], ['foto', 'Foto']].map(x => chip('style', x[0], x[1], P.style)).join(''));
+    if (!boxed) h += row('Warna teks', chip('ink', 'putih', 'Putih', P.ink) + chip('ink', 'hitam', 'Hitam', P.ink));
+    if (P.style === 'foto') h += row('Foto latar', '<button type="button" class="chip" onclick="window.sharePick(\'bg\')">' + ic('image') + (st.photoBg ? 'Ganti foto' : 'Pilih foto') + '</button>') + blurField();
+    return h;
+  }
+  function paneUkuran() {
+    return row('Ukuran', [['story', 'Story 9:16'], ['portrait', 'Portrait 4:5'], ['kotak', 'Kotak 1:1']].map(x => chip('size', x[0], x[1], P.size)).join(''));
+  }
+  function paneTata() {
+    const boxed = P.style === 'gelap' || P.style === 'terang';
+    let h = row('Rata', chip('align', 'kiri', 'Kiri', P.align) + chip('align', 'tengah', 'Tengah', P.align));
+    if (!boxed) h += row('Posisi', chip('pos', 'atas', 'Atas', P.pos) + chip('pos', 'tengah', 'Tengah', P.pos) + chip('pos', 'bawah', 'Bawah', P.pos));
+    h += row('Teks', chip('scale', 's', 'Kecil', P.scale) + chip('scale', 'm', 'Sedang', P.scale) + chip('scale', 'l', 'Besar', P.scale));
+    h += row('Sudut', chip('corner', 'bulat', 'Bulat', P.corner) + chip('corner', 'kotak', 'Kotak', P.corner) + chip('frame', !P.frame, 'Bingkai', 'false', P.frame ? ' aria-pressed="true"' : '').replace('class="chip"', 'class="chip' + (P.frame ? ' active' : '') + '"'));
+    return h;
+  }
+  function paneEkspor() {
+    const n = st.tray.length;
+    return row('Format', fmtSeg()) +
+      '<p class="sh-note">' + (P.fmt === 'video' ? 'Video 6 detik tanpa suara; latar transparan jadi gelap.' : P.fmt === 'hq' ? 'Gambar 2160 px untuk hasil paling tajam.' : 'Gambar PNG 1080 px.') + ' Set: ' + n + '/5 kartu.</p>';
+  }
+  function blurField() {
+    const k = kp();
+    return row('Wajah', chip('blur', 'none', 'Tidak', k.blur) + chip('blur', 'blur', 'Mozaik', k.blur) + chip('blur', 'potong', 'Potong atas', k.blur)) +
+      (k.blur === 'blur' ? '<div class="sh-row"><label class="sh-lbl" for="share-blurh">Mozaik ' + k.blurH + '%</label><input type="range" id="share-blurh" min="10" max="50" step="2" value="' + k.blurH + '" oninput="window.shareSet(\'blurH\', this.value)"></div>' : '');
+  }
+  function paneIsi() {
+    const c = st.card, k = kp(), kind = st.kind;
+    let h = '';
+    if (kind === 'foto') {
+      const list = (st.src.photos || []);
+      const pick = (slot, cur) => '<div class="sh-photo-pick"><span class="label">' + (slot === 'a' ? 'Sebelum' : 'Sesudah') + '</span><div class="chips sh-chips">' +
+        list.slice(0, 24).map(p => '<button type="button" class="chip' + (cur === p.id ? ' active' : '') + '" onclick="window.sharePhoto(\'' + slot + '\',\'' + esc(p.id) + '\')">' + esc(fmtShort(p.tanggal)) + ' · ' + esc(p.sisi) + '</button>').join('') +
+        '<button type="button" class="chip" onclick="window.sharePick(\'' + slot + '\')">' + ic('smartphone') + 'Dari HP</button></div></div>';
+      h += '<div class="field sh-field">' + (list.length ? '' : '<p class="li-sub">Belum ada foto progres. Pilih dari HP.</p>') + pick('a', st.photoAId) + pick('b', st.photoBId) + '</div>' + blurField();
+    }
+    if (c && c.allStats.length) {
+      h += '<div class="sh-stats" role="list" aria-label="Angka di kartu">' + c.allStats.map(function (s, i) {
+        const on = c.offIds.indexOf(s.id) === -1, nm = s.id.indexOf('m:') === 0 ? s.l : (STAT_NAME[s.id] || s.l);
+        return '<div class="sh-stat" role="listitem"><label class="sh-stat-on"><span class="toggle"><input type="checkbox"' + (on ? ' checked' : '') + ' onchange="window.shareStat(\'' + esc(s.id) + '\', this.checked)" aria-label="Tampilkan ' + esc(nm) + '"><span></span></span><span class="sh-stat-n">' + esc(nm) + '</span><span class="sh-stat-v num">' + esc(s.v) + '</span></label>' +
+          '<button type="button" class="icon-btn plain" ' + (i === 0 ? 'disabled ' : '') + 'onclick="window.shareMove(\'' + esc(s.id) + '\',-1)" aria-label="Naikkan ' + esc(nm) + '">' + ic('chevron-up') + '</button>' +
+          '<button type="button" class="icon-btn plain" ' + (i === c.allStats.length - 1 ? 'disabled ' : '') + 'onclick="window.shareMove(\'' + esc(s.id) + '\',1)" aria-label="Turunkan ' + esc(nm) + '">' + ic('chevron-down') + '</button></div>';
+      }).join('') + '</div>';
+    }
+    if (c && c.gids.length && kind !== 'foto') h += row('Grafik', c.gids.concat(kind === 'badge' ? [] : ['none']).map(g => chip('graph', g, GRAPH_NAME[g] || g, c.gid)).join(''));
+    if (kind === 'progres' || kind === 'foto') h += '<div class="sh-toggles">' + toggle('body', 'Tampilkan data tubuh', k.body, 'body') + '</div>';
+    if ((kind === 'progres' || kind === 'foto') && k.body || kind === 'ukuran') {
+      const avail = measuresWithData(st.src);
+      const sel = k.measures.length ? k.measures : (kind === 'ukuran' ? avail.slice(0, 4) : ['berat', 'pinggang']);
+      h += '<div class="sh-row"><span class="sh-lbl">Ukuran</span><div class="sh-chips">' + avail.map(m => '<button type="button" class="chip' + (sel.indexOf(m) !== -1 ? ' active' : '') + '" role="checkbox" aria-checked="' + (sel.indexOf(m) !== -1) + '" onclick="window.shareMeasure(\'' + m + '\')">' + esc(L.id.m[m]) + '</button>').join('') + (avail.length ? '' : '<p class="li-sub">Belum ada ukuran tubuh.</p>') + '</div></div>';
+      h += row('Angka', chip('bodyVal', 'false', 'Perubahan', String(!!k.bodyVal)) + chip('bodyVal', 'true', 'Nilai', String(!!k.bodyVal)));
+    }
+    if (['latihan', 'exercises', 'record', 'rekap'].indexOf(kind) !== -1) h += '<div class="sh-toggles">' + toggle('hideKg', 'Sembunyikan beban (kg)', k.hideKg, 'hideKg') + '</div>';
+    h += '<div class="sh-row"><label class="sh-lbl" for="share-ttl">Judul</label><input class="input sh-input" id="share-ttl" maxlength="40" value="' + esc(k.title) + '" placeholder="' + esc(c ? (BUILD[kind](st.src, Object.assign({}, k, { title: '' }), st.per[periodKey()] || null) || {}).title || '' : '') + '" oninput="window.shareText(\'title\', this.value)" autocomplete="off"></div>';
+    return h;
+  }
+  function paneTeks() {
+    const f = P.foot;
+    let h = '<div class="sh-row"><label class="sh-lbl" for="share-name">Nama</label><input class="input sh-input" id="share-name" maxlength="30" value="' + esc(P.name == null ? (st.src.first || '') : P.name) + '" placeholder="@kamu" oninput="window.shareText(\'name\', this.value)" autocomplete="off"></div>';
+    h += '<div class="sh-toggles">' + toggle('date', 'Tanggal', f.date, 'f:date') + toggle('logo', 'Logo XNK', f.logo, 'f:logo') + (st.src.admin ? '' : toggle('me', 'Foto profil', f.me, 'f:me')) +
+      toggle('coach', '"Coached by"', f.coach, 'f:coach') + (f.coach ? toggle('coachPic', 'Foto coach', f.coachPic, 'f:coachPic') : '') + toggle('qr', 'Kode QR booking', f.qr, 'f:qr') + '</div>';
+    h += row('Bahasa', chip('lang', 'en', 'English', P.lang) + chip('lang', 'id', 'Indonesia', P.lang));
+    if (st.src.admin) h += '<p class="sh-note">Minta izin klien sebelum memposting kartu ini.</p>';
+    return h;
+  }
+  const PANES = { kartu: paneKartu, template: paneTemplate, gaya: paneGaya, ukuran: paneUkuran, tata: paneTata, isi: paneIsi, teks: paneTeks, ekspor: paneEkspor };
   function renderControls() {
-    const k = st.card.kind, dark = st.style === 'gelap', foto = st.style === 'foto';
-    let h = '<div class="share-preview" id="share-box"><img id="share-img" alt="Share card preview"></div>';
-    h += '<div class="field"><span class="label">Gaya</span><div class="chips" style="flex-wrap:wrap" role="radiogroup">' + chip('style', 'teks', 'Transparan', st.style) + chip('style', 'grafik', 'Transparan + grafik', st.style) + chip('style', 'gelap', 'Kartu gelap', st.style) + chip('style', 'foto', 'Foto', st.style) + '</div></div>';
-    if (!dark) h += '<div class="field"><span class="label">Ukuran</span><div class="chips" role="radiogroup">' + chip('size', 'story', 'Story 9:16', st.size) + chip('size', 'kotak', 'Kotak 1:1', st.size) + '</div></div>';
-    if (!dark) h += '<div class="field"><span class="label">Warna teks</span><div class="chips" role="radiogroup">' + chip('ink', 'putih', 'Putih', st.ink) + chip('ink', 'hitam', 'Hitam', st.ink) + '</div></div>';
-    if (foto) h += '<div class="field"><span class="label">Foto</span><button type="button" class="btn btn-secondary" onclick="window.sharePick()">' + (st.photo ? 'Ganti foto' : 'Pilih foto') + '</button><input type="file" id="share-file" accept="image/*" class="sr-only" onchange="window.shareFile(this)"></div>' + (st.size === 'story' ? '<div class="field"><span class="label">Posisi</span><div class="chips" role="radiogroup">' + chip('pos', 'atas', 'Atas', st.pos) + chip('pos', 'tengah', 'Tengah', st.pos) + chip('pos', 'bawah', 'Bawah', st.pos) + '</div></div>' : '');
-    if (k === 'progres') h += '<div class="row-between field"><span class="label" style="margin:0">Tampilkan perubahan berat &amp; pinggang</span><label class="toggle"><input type="checkbox" id="share-body"' + (st.body ? ' checked' : '') + ' onchange="window.shareSet(\'body\',this.checked)" aria-label="Tampilkan perubahan tubuh"><span></span></label></div>';
-    const canRec = !!(st.src.workout && st.src.workout.stats && (st.src.workout.stats.exercises || []).length);
-    if (k === 'latihan' || k === 'exercises' || k === 'record') h += '<div class="field"><span class="label">Isi</span><div class="chips" role="radiogroup">' + chip('kind', 'latihan', 'Ringkasan', k) + chip('kind', 'exercises', 'Daftar gerakan', k) + (canRec ? chip('kind', 'record', 'Rekor', k) : '') + '</div></div>';
-    h += '<div class="field"><label class="label" for="share-name">Nama / handle</label><input class="input" id="share-name" maxlength="30" value="' + esc(st.name) + '" placeholder="@kamu" oninput="window.shareName(this.value)" autocomplete="off" style="font-size:16px"></div>';
-    if (st.src.admin) h += '<p class="li-sub">Minta izin klien sebelum memposting kartu ini.</p>';
-    $('share-body').innerHTML = h;
-    $('share-foot').innerHTML = (st.opts.summary ? '<button type="button" class="btn btn-ghost" onclick="window.shareSummary()">Ringkasan</button>' : '') + '<button type="button" class="btn btn-outline" onclick="window.shareSave()">Simpan</button><button type="button" class="btn btn-outline" onclick="window.shareCopy()">Salin</button><button type="button" class="btn btn-primary" id="share-go" onclick="window.shareGo()">Bagikan</button>';
+    const tabs = $('share-tabs'), body = $('share-body'), sh = $('sheet-share');
+    if (isDesk() && !st.tab) st.tab = 'kartu';
+    tabs.innerHTML = TOOLS.map(t => '<button type="button" role="tab" class="sh-tool' + (st.tab === t[0] ? ' active' : '') + '" data-tool="' + t[0] + '" aria-selected="' + (st.tab === t[0]) + '" onclick="window.shareTab(\'' + t[0] + '\')">' + ic(t[2]) + '<span>' + t[1] + '</span></button>').join('');
+    const scroll = body.scrollTop;
+    body.innerHTML = st.tab ? '<section class="sh-pane on" data-pane="' + st.tab + '">' + PANES[st.tab]() + '</section>' : '';
+    body.scrollTop = scroll;
+    if (sh) sh.classList.toggle('tool-open', !!st.tab);
+    renderFoot(); renderDots();
+    requestAnimationFrame(fitBox);
+    $('share-title').textContent = 'Kartu ' + (KIND_NAME[st.kind] || '').toLowerCase();
     if (window.scheduleIconUpdate) window.scheduleIconUpdate();
+  }
+  function renderDots() {
+    const el = $('share-dots'); if (!el) return;
+    el.innerHTML = st.kinds.map(k => '<i class="' + (k === st.kind ? 'on' : '') + '"></i>').join('');
+  }
+  function canVideo() { return typeof MediaRecorder !== 'undefined' && !!HTMLCanvasElement.prototype.captureStream; }
+  function fmtSeg(cls) {
+    return '<div class="seg sh-seg' + (cls ? ' ' + cls : '') + '" role="radiogroup" aria-label="Format">' + [['png', 'Gambar'], ['hq', 'HQ'], ['video', 'Video']].filter(x => x[0] !== 'video' || canVideo()).map(x => '<button type="button" role="radio" class="' + (P.fmt === x[0] ? 'active' : '') + '" aria-checked="' + (P.fmt === x[0]) + '" onclick="window.shareSet(\'fmt\',\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '</div>';
+  }
+  function renderFoot() {
+    const n = st.tray.length, addOff = n >= 5 || P.fmt === 'video';
+    let h = '';
+    if (n) h += '<div class="sh-tray" aria-label="Kartu dalam set">' + st.tray.map((t, i) => '<span class="sh-thumb"><img src="' + t.url + '" alt="' + esc(KIND_NAME[t.kind]) + '"><button type="button" class="icon-btn plain" onclick="window.shareTrayDel(' + i + ')" aria-label="Hapus dari set">' + ic('x') + '</button></span>').join('') + '<button type="button" class="btn btn-ghost btn-sm" onclick="window.shareTrayClear()">Kosongkan</button></div>';
+    h += '<div class="sh-btns">' + (st.opts.summary ? '<button type="button" class="btn btn-ghost" id="share-summary" onclick="window.shareSummary()">Ringkasan</button>' : '') +
+      '<button type="button" class="btn btn-outline sh-add" onclick="window.shareTrayAdd()" aria-label="Tambah ke set"' + (addOff ? ' disabled' : '') + '>' + ic('plus') + 'Set' + (n ? ' ' + n : '') + '</button>' +
+      '<button type="button" class="btn btn-outline sh-ic" onclick="window.shareSave()" aria-label="Simpan">' + ic('download') + '<span>Simpan</span></button>' +
+      (P.fmt === 'video' || n ? '' : '<button type="button" class="btn btn-outline sh-ic only-desktop" onclick="window.shareCopy()" aria-label="Salin">' + ic('copy') + '<span>Salin</span></button>') +
+      '<button type="button" class="btn btn-primary" id="share-go" onclick="window.shareGo()">' + ic('share-2') + (n ? 'Bagikan (' + n + ')' : 'Bagikan') + (P.fmt !== 'png' ? ' · ' + (P.fmt === 'hq' ? 'HQ' : 'Video') : '') + '</button></div>';
+    $('share-foot').innerHTML = h;
+    if (window.scheduleIconUpdate) window.scheduleIconUpdate();
+    requestAnimationFrame(fitBox);
+  }
+  function periodKey() { const k = kp(); return PERIOD_KINDS[st.kind] && k.period !== 'hari' ? k.period : ''; }
+  function rebuild() {
+    T = L[P.lang] || L.en;
+    const pk = periodKey(), per = pk ? st.per[pk] : null;
+    st.card = makeCard(st.kind, st.src, per && !per.error ? per : null) || (pk ? makeCard(st.kind, st.src, null) : null) || st.card;
+  }
+  function loadPeriod() {
+    const pk = periodKey();
+    if (!pk || st.per[pk] || !st.src.loadPeriod) return;
+    st.perLoading = pk; busy(true);
+    st.src.loadPeriod(pk).then(function (d) { st.per[pk] = d || { error: 'kosong' }; }).catch(function (e) { st.per[pk] = null; window.showToast((e && e.message) || 'Gagal memuat periode.'); kp().period = 'hari'; })
+      .then(function () { st.perLoading = ''; busy(false); rebuild(); renderControls(); refresh(); });
+  }
+  function busy(on) { const b = $('share-busy'); if (b) b.classList.toggle('hide', !on); }
+  function needAvatars() {
+    if (st.avatars || !st.src.loadPeriod || !((P.foot.me && !st.src.admin) || (P.foot.coach && P.foot.coachPic))) return;
+    st.avatars = {};
+    st.src.loadPeriod('hari', { avatars: true }).then(function (d) {
+      st.avatars = (d && d.avatars) || {};
+      ['me', 'coach'].forEach(function (k) { if (st.avatars[k]) { const im = new Image(); im.onload = refresh; im.src = st.avatars[k]; st.avImg[k] = im; } });
+    }).catch(function () {});
   }
   let timer = 0;
   function refresh() {
     clearTimeout(timer);
     timer = setTimeout(async function () {
+      if (!st.card) return;
       const my = ++st.token;
-      const dark = st.style === 'gelap';
-      const blob = await draw(st.card, { style: st.style, size: dark ? 'kotak' : st.size, ink: st.ink, pos: st.pos, photo: st.photo, name: st.name.trim(), coach: (st.src.share && st.src.share.coach) || st.src.coach || '' });
+      const o = opts();
+      const cnv = await draw(st.card, o);
+      const blob = await new Promise(r => cnv.toBlob(r, 'image/png'));
       if (my !== st.token || !blob) return;
       st.blob = blob; if (st.url) URL.revokeObjectURL(st.url); st.url = URL.createObjectURL(blob);
       const im = $('share-img'); if (im) im.src = st.url;
-      const box = $('share-box'); if (box) box.classList.toggle('dark', dark || st.style === 'foto');
-    }, 60);
+      const box = $('share-box');
+      st.ratio = o.H / 1080; fitBox();
+      if (box) {
+        box.classList.toggle('ink-dark', !(o.style === 'gelap' || o.style === 'terang' || o.style === 'foto') && o.ink === 'hitam');
+        box.classList.toggle('solid', o.style === 'gelap' || o.style === 'terang' || o.style === 'foto');
+      }
+    }, 50);
   }
-  function rebuild() { const c = BUILD[st.card.kind] && BUILD[st.card.kind](st.src, { body: st.body }); if (c) st.card = c; }
+  // Pratinjau sebesar mungkin di ruang yang ada, rasio tepat (story, portrait, kotak).
+  function fitBox() {
+    const stage = $('share-stage'), box = $('share-box'); if (!stage || !box || !stage.clientHeight) return;
+    const cs = getComputedStyle(stage), padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight), padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const dots = $('share-dots'), dh = dots && dots.offsetParent ? dots.offsetHeight + 6 : 0;
+    const maxW = stage.clientWidth - padX, maxH = stage.clientHeight - padY - dh, r = st.ratio || 1920 / 1080;
+    let h = Math.max(120, maxH), w = h / r;
+    if (w > maxW) { w = maxW; h = w * r; }
+    box.style.width = Math.floor(w) + 'px'; box.style.height = Math.floor(h) + 'px';
+  }
+  let fitRaf = 0;
+  window.addEventListener('resize', function () { cancelAnimationFrame(fitRaf); fitRaf = requestAnimationFrame(fitBox); });
+  function availableKinds(src) {
+    return KINDS.filter(function (kd) {
+      if (kd === 'badge' && !src.badge) return false;
+      if (kd === 'foto') return !src.admin && !!src.progress;
+      try { return !!(BUILD[kd] && BUILD[kd](src, kp(kd), null)); } catch (e) { return false; }
+    });
+  }
+  function markCustom() { if (P.preset !== 'kustom') P.preset = 'kustom'; }
 
   window.shareEnabled = function () { return window.shareOn !== false; };
-  window.shareOpen = function (kind, src, opts) {
-    src = src || {}; opts = opts || {};
-    const p = prefs(), card = BUILD[kind] && BUILD[kind](src, { body: false });
-    if (!card) { window.showToast('Belum ada data untuk dibagikan.'); return; }
-    st.src = src; st.card = card; st.opts = opts; st.body = false; st.photo = null; st.blob = null;
-    st.style = ['teks', 'grafik', 'gelap', 'foto'].indexOf(p.style) !== -1 ? p.style : 'grafik';
-    if (st.style === 'foto') st.style = 'grafik';
-    st.size = p.size === 'kotak' ? 'kotak' : 'story'; st.ink = p.ink === 'hitam' ? 'hitam' : 'putih'; st.pos = p.pos || 'bawah';
-    st.name = src.admin ? '' : (p.name != null ? p.name : (src.first || ''));
-    $('share-title').textContent = { latihan: 'Bagikan latihan', exercises: 'Bagikan latihan', record: 'Bagikan rekor', progres: 'Bagikan progres', gizi: 'Bagikan gizi', rekap: 'Rekap bulan ini', badge: 'Bagikan badge' }[kind] || 'Bagikan';
-    renderControls(); window.openSheet('sheet-share'); refresh();
+  window.shareOpen = function (kind, src, o) {
+    src = src || {}; o = o || {};
+    P = loadPrefs(); T = L[P.lang] || L.en;
+    ensureShell();
+    st.src = src; st.opts = o; st.per = {}; st.photoBg = null; st.blob = null; st.avatars = null; st.avImg = {}; st.full = false;
+    st.prevName = P.name; if (src.admin) P.name = '';
+    st.kinds = availableKinds(src);
+    if (st.kinds.indexOf(kind) === -1) {
+      if (!st.kinds.length) { window.showToast('Belum ada data untuk dibagikan.'); return; }
+      if (o.strict) { window.showToast('Belum ada data untuk dibagikan.'); return; }
+      kind = st.kinds[0];
+    }
+    st.kind = kind; st.tab = isDesk() ? 'kartu' : '';
+    rebuild();
+    if (!st.card) { window.showToast('Belum ada data untuk dibagikan.'); return; }
+    if (kind === 'foto') initPhotos();
+    const sh = $('sheet-share'); if (sh) sh.classList.remove('full');
+    renderControls(); window.openSheet('sheet-share'); refresh(); loadPeriod(); needAvatars();
   };
+  window.shareStep = function (d) {
+    if (!st.kinds.length) return;
+    const i = st.kinds.indexOf(st.kind), n = st.kinds.length;
+    window.shareSet('kind', st.kinds[(i + d + n) % n]);
+  };
+  window.shareTab = function (t) { st.tab = st.tab === t && !isDesk() ? '' : t; renderControls(); };
   window.shareSet = function (k, v) {
-    if (k === 'kind') { st.card = BUILD[v](st.src, { body: st.body }) || st.card; }
-    else if (k === 'body') { st.body = !!v; rebuild(); }
-    else st[k] = v;
-    if (k === 'style' && v === 'foto' && !st.photo) { renderControls(); window.sharePick(); refresh(); savePrefs(); return; }
-    savePrefs(); renderControls(); refresh();
+    const kk = kp();
+    if (k === 'kind') { st.kind = v; if (v === 'foto') initPhotos(); }
+    else if (k === 'preset') { if (PRESETS[v]) { Object.assign(P, { style: PRESETS[v].style, align: PRESETS[v].align, scale: PRESETS[v].scale, corner: PRESETS[v].corner, frame: PRESETS[v].frame }); P.preset = v; Object.keys(P.k).forEach(x => { P.k[x].graph = ''; }); } }
+    else if (k === 'period') kk.period = v;
+    else if (k === 'cmp') kk.cmp = v;
+    else if (k === 'graph') kk.graph = v;
+    else if (k === 'body') kk.body = !!v;
+    else if (k === 'bodyVal') kk.bodyVal = v === true || v === 'true';
+    else if (k === 'hideKg') kk.hideKg = !!v;
+    else if (k === 'blur') kk.blur = v;
+    else if (k === 'blurH') { kk.blurH = Number(v) || 24; const l = document.querySelector('label[for="share-blurh"]'); if (l) l.textContent = 'Tinggi mozaik ' + kk.blurH + '%'; savePrefs(); refresh(); return; }
+    else if (k.indexOf('f:') === 0) P.foot[k.slice(2)] = !!v;
+    else if (k === 'frame') { P.frame = v === true || v === 'true'; markCustom(); }
+    else if (k === 'fmt') P.fmt = v;
+    else { P[k] = v; if (['style', 'align', 'scale', 'corner', 'size', 'ink', 'pos'].indexOf(k) !== -1 && k !== 'size' && k !== 'ink' && k !== 'pos') markCustom(); }
+    if (k === 'style' && v === 'foto' && !st.photoBg) { savePrefs(); rebuild(); renderControls(); refresh(); window.sharePick('bg'); return; }
+    savePrefs(); rebuild(); renderControls(); refresh();
+    if (k === 'period' || k === 'kind') loadPeriod();
+    if (k.indexOf('f:') === 0) needAvatars();
   };
+  window.shareStat = function (id, on) {
+    const k = kp(), c = st.card;
+    if (!k.off.length && !k.order.length && c.offIds) k.off = c.offIds.slice();
+    k.off = k.off.filter(x => x !== id); if (!on) k.off.push(id);
+    if (!k.order.length) k.order = c.allStats.map(s => s.id);
+    savePrefs(); rebuild(); refresh();
+  };
+  window.shareMove = function (id, d) {
+    const k = kp(), c = st.card;
+    if (!k.off.length && !k.order.length && c.offIds) k.off = c.offIds.slice();
+    const order = c.allStats.map(s => s.id), i = order.indexOf(id), j = i + d;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    order.splice(i, 1); order.splice(j, 0, id); k.order = order;
+    savePrefs(); rebuild(); renderControls(); refresh();
+  };
+  window.shareMeasure = function (m) {
+    const k = kp(), avail = measuresWithData(st.src);
+    let sel = k.measures.length ? k.measures.slice() : (st.kind === 'ukuran' ? avail.slice(0, 4) : ['berat', 'pinggang']);
+    sel = sel.indexOf(m) !== -1 ? sel.filter(x => x !== m) : sel.concat([m]);
+    if (!sel.length) return;
+    k.measures = MEASURES.filter(x => sel.indexOf(x) !== -1);
+    k.order = k.order.filter(id => id.indexOf('m:') !== 0 || sel.indexOf(id.slice(2)) !== -1);
+    savePrefs(); rebuild(); renderControls(); refresh();
+  };
+  window.shareText = function (k, v) {
+    if (k === 'name') P.name = v; else kp().title = String(v).slice(0, 40);
+    savePrefs(); rebuild(); refresh();
+  };
+  window.shareReset = function () {
+    const name = P.name;
+    P = JSON.parse(JSON.stringify(DEF)); P.name = name;
+    st.tray.forEach(t => URL.revokeObjectURL(t.url)); st.tray = [];
+    savePrefs(); rebuild(); renderControls(); refresh();
+    window.showToast('Kembali ke bawaan.');
+  };
+  window.shareFull = function () { const sh = $('sheet-share'); if (sh) { st.full = !st.full; sh.classList.toggle('full', st.full); requestAnimationFrame(fitBox); } };
   window.shareSummary = function () { const f = st.opts.summary; if (f) f(); };
-  window.shareName = function (v) { st.name = v; savePrefs(); refresh(); };
-  window.sharePick = function () { const f = $('share-file'); if (f) { f.value = ''; f.click(); } };
+  // Foto: latar (bg) atau sebelum/sesudah (a/b) dari HP; foto progres dari server lewat src.photoLoader.
+  let pickSlot = 'bg';
+  window.sharePick = function (slot) { pickSlot = slot || 'bg'; const f = $('share-file'); if (f) { f.value = ''; f.click(); } };
   window.shareFile = function (inp) {
     const f = inp.files && inp.files[0]; if (!f) return;
     const u = URL.createObjectURL(f), im = new Image();
-    im.onload = function () { st.photo = im; URL.revokeObjectURL(u); renderControls(); refresh(); };
+    im.onload = function () {
+      if (pickSlot === 'bg') st.photoBg = im;
+      else if (pickSlot === 'a') { st.photoA = im; st.photoAId = ''; st.photoAInfo = ''; }
+      else { st.photoB = im; st.photoBId = ''; st.photoBInfo = ''; }
+      URL.revokeObjectURL(u); renderControls(); refresh();
+    };
     im.onerror = function () { URL.revokeObjectURL(u); window.showToast('Foto tidak bisa dibaca.'); };
     im.src = u;
   };
-  function fname() { return 'xnk-' + (st.card.fname || 'share') + '.png'; }
-  window.shareSave = function () {
-    if (!st.blob) return;
-    const a = document.createElement('a'); a.href = st.url; a.download = fname(); document.body.appendChild(a); a.click(); a.remove();
-    window.showToast('Gambar disimpan. Di iPhone: tekan lama gambar → Simpan ke Foto.');
+  function loadPhoto(slot, id) {
+    const p = (st.src.photos || []).find(x => x.id === id); if (!p || !st.src.photoLoader) return Promise.resolve();
+    busy(true);
+    return st.src.photoLoader(id).then(function (url) {
+      return new Promise(function (res) {
+        const im = new Image(); im.onload = function () {
+          if (slot === 'a') { st.photoA = im; st.photoAId = id; st.photoAInfo = p.tanggal; } else { st.photoB = im; st.photoBId = id; st.photoBInfo = p.tanggal; }
+          res();
+        }; im.onerror = res; im.src = url;
+      });
+    }).catch(function () { window.showToast('Foto tidak bisa dimuat.'); }).then(function () { busy(false); });
+  }
+  window.sharePhoto = function (slot, id) { loadPhoto(slot, id).then(function () { renderControls(); refresh(); }); };
+  function initPhotos() {
+    if (st.photoA || st.photoB) return;
+    const list = (st.src.photos || []).slice().sort((a, b) => (a.tanggal < b.tanggal ? -1 : 1));
+    if (list.length < 1) return;
+    const front = list.filter(p => p.sisi === 'depan'), use = front.length >= 2 ? front : list;
+    Promise.all([loadPhoto('a', use[0].id), use.length > 1 ? loadPhoto('b', use[use.length - 1].id) : null]).then(function () { renderControls(); refresh(); });
+  }
+
+  // ── simpan / bagikan / set / video ───────────────────────────────────────────
+  function fname(ext) { return 'xnk-' + (st.card.fname || 'share') + '.' + (ext || 'png'); }
+  async function renderOut() {
+    const o = opts();
+    if (P.fmt === 'hq') { o.scale = 2; const c = await draw(st.card, o); const b = await new Promise(r => c.toBlob(r, 'image/png')); return { blob: b, name: fname('png') }; }
+    if (P.fmt === 'video') return recordVideo();
+    return { blob: st.blob, name: fname('png') };
+  }
+  function videoType() {
+    const c = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    for (let i = 0; i < c.length; i++) if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c[i])) return c[i];
+    return '';
+  }
+  /** Video 6 detik tanpa suara: angka naik dan grafik tergambar, lalu diam. */
+  async function recordVideo(durMs) {
+    if (st.recording) return null;
+    st.recording = true; busy(true);
+    const go = $('share-go'); if (go) go.disabled = true;
+    try {
+      const o = opts(); o.video = true; o.noFonts = true;
+      const cnv = document.createElement('canvas'); cnv.width = W; cnv.height = o.H;
+      await draw(st.card, Object.assign({}, o, { t: 0, noFonts: false }), cnv);
+      const img = await logo(), ctx = cnv.getContext('2d');
+      const type = videoType(), stream = cnv.captureStream(30), rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 6000000 } : undefined), chunks = [];
+      rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      const done = new Promise(r => { rec.onstop = r; });
+      const total = durMs || 6000, anim = 3600, t0 = performance.now();
+      rec.start(250);
+      await new Promise(function (res) {
+        (function frame() {
+          const el = performance.now() - t0;
+          ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, o.H);
+          paint(ctx, st.card, Object.assign({}, o, { t: Math.min(1, el / anim) }), img);
+          const bar = $('share-busy'); if (bar) bar.style.setProperty('--p', Math.min(100, Math.round(el / total * 100)) + '%');
+          if (el < total) requestAnimationFrame(frame); else res();
+        })();
+      });
+      rec.stop(); await done;
+      stream.getTracks().forEach(t => t.stop());
+      const mt = (type || 'video/webm').split(';')[0];
+      return { blob: new Blob(chunks, { type: mt }), name: fname(mt === 'video/mp4' ? 'mp4' : 'webm') };
+    } catch (e) { window.showToast('Video tidak bisa dibuat di perangkat ini. Pakai Gambar.'); return null; }
+    finally { st.recording = false; busy(false); const g = $('share-go'); if (g) g.disabled = false; const bar = $('share-busy'); if (bar) bar.style.removeProperty('--p'); }
+  }
+  function download(blob, name) {
+    const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+  }
+  window.shareSave = async function () {
+    if (st.tray.length) { st.tray.forEach(t => download(t.blob, t.name)); window.showToast(st.tray.length + ' gambar disimpan.'); return; }
+    const out = await renderOut(); if (!out || !out.blob) return;
+    download(out.blob, out.name);
+    window.showToast(/video/.test(out.blob.type) ? 'Video disimpan.' : 'Gambar disimpan. Di iPhone: tekan lama gambar → Simpan ke Foto.');
   };
-  window.shareGo = function () {
-    if (!st.blob) return;
-    if (st.host) { st.pending = setTimeout(function () { st.pending = null; shareInFrame(); }, 1500); try { window.top.postMessage({ xnk: 'share', blob: st.blob, name: fname() }, '*'); return; } catch (e) { clearTimeout(st.pending); } }
-    shareInFrame();
+  window.shareGo = async function () {
+    // Gambar biasa: blob sudah siap sebelum tombol ditekan (aktivasi pengguna tetap utuh untuk navigator.share).
+    let files;
+    if (st.tray.length) files = st.tray.map(t => ({ blob: t.blob, name: t.name }));
+    else if (P.fmt === 'png') { if (!st.blob) return; files = [{ blob: st.blob, name: fname('png') }]; }
+    else { const out = await renderOut(); if (!out || !out.blob) return; files = [out]; }
+    if (st.host) {
+      st.pending = setTimeout(function () { st.pending = null; shareInFrame(files); }, 1500);
+      try { window.top.postMessage(files.length === 1 ? { xnk: 'share', blob: files[0].blob, name: files[0].name } : { xnk: 'share', files: files }, '*'); return; } catch (e) { clearTimeout(st.pending); }
+    }
+    shareInFrame(files);
   };
-  function shareInFrame() {
-    const f = new File([st.blob], fname(), { type: 'image/png' });
-    if (navigator.canShare && navigator.canShare({ files: [f] })) navigator.share({ files: [f] }).catch(function () {});
-    else window.shareSave();
+  function shareInFrame(files) {
+    const fl = files.map(f => new File([f.blob], f.name, { type: f.blob.type }));
+    if (navigator.canShare && navigator.canShare({ files: fl })) navigator.share({ files: fl }).catch(function () {});
+    else files.forEach(f => download(f.blob, f.name));
   }
   window.shareCopy = function () {
     if (!st.blob) return;
     if (st.host) { try { window.top.postMessage({ xnk: 'copy', blob: st.blob }, '*'); return; } catch (e) {} }
     try { navigator.clipboard.write([new ClipboardItem({ 'image/png': st.blob })]).then(function () { window.showToast('Disalin. Tempel di Story Instagram.'); }, function () { window.showToast('Salin tidak didukung. Pakai Simpan.'); }); } catch (e) { window.showToast('Salin tidak didukung. Pakai Simpan.'); }
   };
+  window.shareTrayAdd = async function () {
+    if (st.tray.length >= 5) return;
+    const out = await renderOut(); if (!out || !out.blob) return;
+    st.tray.push({ blob: out.blob, name: out.name.replace(/\.png$/, '-' + (st.tray.length + 1) + '.png'), url: URL.createObjectURL(out.blob), kind: st.kind });
+    renderFoot(); window.showToast('Ditambahkan ke set (' + st.tray.length + '/5). Geser untuk kartu lain.');
+  };
+  window.shareTrayDel = function (i) { const t = st.tray.splice(i, 1)[0]; if (t) URL.revokeObjectURL(t.url); renderFoot(); };
+  window.shareTrayClear = function () { st.tray.forEach(t => URL.revokeObjectURL(t.url)); st.tray = []; renderFoot(); };
   window.addEventListener('message', function (e) {
     if (window.top === window || e.source !== window.top) return;
     const d = e.data; if (!d || typeof d !== 'object') return;
@@ -411,6 +1417,74 @@
     else if (d.xnk === 'share-done') { clearTimeout(st.pending); st.pending = null; if (!d.ok) window.shareSave(); }
     else if (d.xnk === 'copy-done') window.showToast(d.ok ? 'Disalin. Tempel di Story Instagram.' : 'Salin tidak didukung. Pakai Simpan.');
   });
-  window.shareDraw = draw;
+  document.addEventListener('keydown', function (e) {
+    const sh = $('sheet-share');
+    if (!sh || sh.classList.contains('hide') || !isDesk()) return;
+    if (/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) return;
+    if (e.key === 'ArrowLeft') window.shareStep(-1); else if (e.key === 'ArrowRight') window.shareStep(1);
+  });
+
+  // ── galeri "Kartu saya": gambar kecil semua kartu yang tersedia ──────────────
+  window.shareGallery = function (el, src, onPick) {
+    if (!el) return;
+    P = P || loadPrefs(); T = L[P.lang] || L.en;
+    const saved = st.src; st.src = src;
+    const kinds = availableKinds(src).filter(k => k !== 'foto');
+    st.src = saved;
+    el.innerHTML = kinds.length ? kinds.map(k => '<button type="button" class="sh-gal-item" data-kind="' + k + '" onclick="window.shareGalleryPick(\'' + k + '\')"><span class="sh-gal-img skel"><img alt=""></span><span class="sh-gal-name">' + ic(KIND_ICON[k]) + KIND_NAME[k] + '</span></button>').join('') +
+      (src.admin ? '' : '<button type="button" class="sh-gal-item" onclick="window.shareGalleryPick(\'foto\')"><span class="sh-gal-img sh-gal-ph">' + ic('image') + '</span><span class="sh-gal-name">' + ic('image') + 'Foto progres</span></button>')
+      : '<p class="li-sub">Belum ada data untuk dibagikan. Catat latihan atau ukuran dulu.</p>';
+    window.shareGalleryPick = function (k) { if (onPick) onPick(k); };
+    if (window.scheduleIconUpdate) window.scheduleIconUpdate();
+    const items = Array.from(el.querySelectorAll('.sh-gal-item[data-kind]'));
+    const drawOne = async function (btn) {
+      const k = btn.getAttribute('data-kind'), prev = { src: st.src, kind: st.kind, card: st.card };
+      st.src = src; st.kind = k;
+      try {
+        const card = makeCard(k, src, null); if (!card) return;
+        st.card = card;
+        const o = opts(); o.scale = .25; o.style = o.style === 'foto' ? 'gelap' : o.style;
+        if (o.style === 'teks' || o.style === 'grafik') o.style = 'gelap';
+        const c = await draw(card, o);
+        const im = btn.querySelector('img'); im.src = c.toDataURL('image/png'); btn.querySelector('.sh-gal-img').classList.remove('skel');
+      } catch (e) {} finally { st.src = prev.src; st.kind = prev.kind; st.card = prev.card; }
+    };
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver(function (es) { es.forEach(function (en) { if (en.isIntersecting) { io.unobserve(en.target); drawOne(en.target); } }); }, { rootMargin: '200px' });
+      items.forEach(b => io.observe(b));
+    } else items.forEach(drawOne);
+  };
+
+  // ── ajakan bagikan setelah momen (toast kecil, maks 1× per hari) ─────────────
+  window.shareNudge = function (kind, msg, src, extra) {
+    if (window.shareOn === false || !src) return false;
+    let pf = {}; try { pf = JSON.parse(localStorage.getItem('xnk_wl_prefs') || '{}') || {}; } catch (e) {}
+    if (pf.shareNudge === false) return false;
+    const today = iso(src.today);
+    try { if (localStorage.getItem(NUDGE_KEY) === today) return false; localStorage.setItem(NUDGE_KEY, today); } catch (e) { return false; }
+    const el = $('share-nudge'), txt = $('share-nudge-msg');
+    if (!el || !txt) return false;
+    txt.textContent = msg;
+    el.classList.remove('hide');
+    requestAnimationFrame(function () { el.classList.add('show'); });
+    window._shareNudgeGo = function () { el.classList.remove('show'); setTimeout(() => el.classList.add('hide'), 300); window.shareOpen(kind, src, extra || {}); };
+    clearTimeout(window._shareNudgeT);
+    window._shareNudgeT = setTimeout(function () { el.classList.remove('show'); setTimeout(() => el.classList.add('hide'), 300); }, 7000);
+    return true;
+  };
+  window.shareNudgeClose = function () { const el = $('share-nudge'); if (el) { el.classList.remove('show'); setTimeout(() => el.classList.add('hide'), 300); } };
+
+  // Untuk tools/share-check.js: gambar kartu tanpa lembar, ambil kotak tata letak dan QR.
+  window.shareDraw = function (card, o) { return draw(card, o); };
+  window.shareCheck = {
+    card: function () { return st.card; },
+    layout: function () { return layout(st.card, opts()); },
+    opts: function () { return opts(); },
+    qr: function (t) { return QR.make(t); },
+    render: async function (fmt) { const f = P.fmt; P.fmt = fmt; try { return await renderOut(); } finally { P.fmt = f; } },
+    video: function (ms) { return recordVideo(ms); },
+    kinds: function () { return st.kinds.slice(); },
+    setPhotos: function (a, b) { st.photoA = a; st.photoB = b; st.photoAInfo = '2026-08-01'; st.photoBInfo = '2026-10-28'; refresh(); }
+  };
 })();
 </script>
