@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>XNK Ad</title>
+<!--
+  XNK ad, 1080×1920, 30 s. Every frame is a pure function of time:
+  window.seek(t) draws the frame at t seconds. render.js steps through it.
+  Open with ?t=12.3 to see one frame, ?safe=1 to draw the Reels/TikTok/Story safe area.
+  150 BPM half-time: one beat = 0.4 s, so every cut sits on a whole frame at 30 fps.
+  All names and numbers in the phone screens are invented.
+-->
+<style>
+  html, body { margin: 0; background: #000; }
+  body { width: 1080px; height: 1920px; overflow: hidden; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #000; }
+  #cam, #fx { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: 0; width: 1080px; height: 1920px; opacity: .085; mix-blend-mode: overlay; pointer-events: none; }
+  #guides { position: absolute; inset: 0; pointer-events: none; }
+  .a { position: absolute; }
+  .d { font-family: 'Inter Display', Inter, sans-serif; font-weight: 900; letter-spacing: -0.045em; line-height: .86; white-space: nowrap; }
+  .m { font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
+  .i { font-family: Inter, sans-serif; }
+
+  /* phone */
+  .ph { position: absolute; background: #0B0B0B; border-radius: 78px; box-shadow: 0 50px 120px rgba(0,0,0,.45), inset 0 0 0 2px #2A2A2A; }
+  .ph .scr { position: absolute; left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 64px; overflow: hidden; background: #FAFAF9; }
+  .ph .isl { position: absolute; left: 50%; top: 30px; width: 136px; height: 38px; margin-left: -68px; border-radius: 20px; background: #000; z-index: 9; }
+  .layer { position: absolute; inset: 0; font-family: Inter, sans-serif; color: #111; }
+  .sb { position: absolute; left: 44px; top: 34px; font: 600 19px Inter; color: #fff; z-index: 5; }
+  .sbr { position: absolute; right: 40px; top: 38px; display: flex; gap: 6px; align-items: flex-end; z-index: 5; }
+  .sbr i { display: block; width: 5px; background: #fff; border-radius: 2px; }
+  .hd { background: #0A0A0A; color: #fff; padding: 92px 30px 30px; position: relative; }
+  .hd .t { font: 800 46px/1 'Inter Display'; letter-spacing: -0.03em; }
+  .hd .s { font: 500 20px/1.2 Inter; color: #A3A3A3; margin-top: 10px; }
+  .hd .pill { position: absolute; right: 26px; bottom: 30px; background: #fff; color: #000; font: 700 19px Inter; padding: 11px 20px; border-radius: 30px; }
+  .card { background: #fff; border: 1px solid #E7E5E4; border-radius: 24px; margin: 14px 18px; padding: 20px; position: relative; }
+  .lbl { font: 600 15px Inter; color: #78716C; letter-spacing: .06em; text-transform: uppercase; }
+  .tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 96px; background: #fff; border-top: 1px solid #E7E5E4; display: flex; justify-content: space-around; align-items: flex-start; padding-top: 16px; }
+  .tabs div { width: 80px; text-align: center; font: 600 14px Inter; color: #A8A29E; }
+  .tabs div b { display: block; width: 28px; height: 28px; margin: 0 auto 6px; border-radius: 9px; border: 3px solid currentColor; box-sizing: border-box; }
+  .tabs div.on { color: #0A0A0A; }
+  .tabs div.plus b { width: 46px; height: 46px; border-radius: 23px; background: #0A0A0A; border: 0; margin-top: -8px; }
+
+  .chip { position: absolute; font-family: 'Inter Display'; font-weight: 900; letter-spacing: -0.04em; line-height: 1; padding: 18px 30px 22px; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="cam"></div>
+  <div id="fx"></div>
+  <canvas id="grain" width="540" height="960"></canvas>
+  <div id="guides"></div>
+</div>
+<script>
+'use strict';
+const W = 1080, H = 1920, B = 0.4, FPS = 30, DUR = 30;
+const RED = '#FF2D2D', INK = '#0A0A0A', PAPER = '#FAFAF9', SAND = '#EFEEEA';
+const LOGO = '../../logo.png';
+
+/* ------------------------------------------------------------ math & easing */
+const cl = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const P = (t, a, b) => cl((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const E = {
+  out: p => 1 - Math.pow(1 - p, 3),
+  expo: p => p >= 1 ? 1 : 1 - Math.pow(2, -10 * p),
+  in: p => p * p * p,
+  in2: p => p * p,
+  inOut: p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2,
+  back: p => { const c = 2.2; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); },
+  spring: p => p >= 1 ? 1 : 1 - Math.exp(-6.5 * p) * Math.cos(10.5 * p),
+};
+const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const sgn = n => hash(n) * 2 - 1;
+// decaying camera shake that starts at t0
+function shake(t, t0, amp, dur = 0.4) {
+  if (t < t0 || t > t0 + dur) return [0, 0, 0];
+  const k = Math.pow(1 - (t - t0) / dur, 2), f = Math.floor((t - t0) * FPS);
+  return [sgn(f + t0 * 31) * amp * k, sgn(f * 1.7 + t0 * 17) * amp * k, sgn(f * 2.3 + t0) * amp * k * .04];
+}
+const fmt = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const fmt1 = n => n.toFixed(1).replace('.', ',');
+
+/* ------------------------------------------------------------ text measuring */
+const mctx = document.createElement('canvas').getContext('2d');
+const mcache = {};
+function textW(txt, size, ls = -0.045, fam = '"Inter Display"', wt = 900) {
+  const k = txt + '|' + ls + fam + wt;
+  if (!(k in mcache)) {
+    mctx.font = `${wt} 100px ${fam}`;
+    mctx.letterSpacing = (ls * 100) + 'px';
+    mcache[k] = mctx.measureText(txt).width;
+  }
+  return mcache[k] * size / 100;
+}
+const fit = (txt, maxW, maxPx, ls) => Math.min(maxPx, maxPx * maxW / textW(txt, maxPx, ls));
+
+/* ------------------------------------------------------------ html helpers */
+const st = o => Object.entries(o).map(([k, v]) => `${k}:${v}`).join(';');
+const div = (style, inner = '', cls = 'a') => `<div class="${cls}" style="${style}">${inner}</div>`;
+const tf = (x, y, s = 1, r = 0, ax = '-50%', ay = '-50%') =>
+  `left:${x}px;top:${y}px;transform:translate(${ax},${ay}) scale(${s}) rotate(${r}deg)`;
+
+/** Text that slams in at t0: big → normal with two motion-blur ghosts. */
+function slam(t, t0, txt, o) {
+  if (t < t0) return '';
+  const { x, y, size, color = '#fff', from = 1.7, dur = 0.2, ax = '-50%', ay = '-50%', rot = 0, dy = 0, blend = '', cls = 'd', extra = '' } = o;
+  let out = '';
+  const draw = (tt, op) => {
+    const e = E.expo(P(tt, t0, t0 + dur));
+    const s = lerp(from, 1, e), yy = y + lerp(dy, 0, e);
+    const a = cl((tt - t0) / 0.035) * op;
+    return div(`${tf(x, yy, s, rot, ax, ay)};font-size:${size}px;color:${color};opacity:${a};transform-origin:${ax === '0' ? '0 50%' : '50% 50%'};${blend}${extra}`, txt, 'a ' + cls);
+  };
+  if (t - t0 < dur) for (const g of [0.05, 0.025]) if (t - g >= t0) out += draw(t - g, 0.22);
+  return out + draw(t, 1);
+}
+
+/** Solid label chip that wipes in from the left and out to the right. */
+function chip(t, t0, t1, txt, o) {
+  if (t < t0 || t > t1) return '';
+  const { x, y, size = 80, dark = true, rot = -2, red = false } = o;
+  const pin = E.expo(P(t, t0, t0 + 0.22)), pout = E.in(P(t, t1 - 0.16, t1));
+  const clip = `inset(0 ${(1 - pin) * 100}% 0 ${pout * 100}%)`;
+  const bg = red ? RED : dark ? INK : '#fff', fg = red ? '#fff' : dark ? '#fff' : INK;
+  const yy = y + (1 - E.out(P(t, t0, t0 + 0.25))) * 26;
+  return div(`left:${x}px;top:${yy}px;transform:rotate(${rot}deg);font-size:${size}px;background:${bg};color:${fg};clip-path:${clip};box-shadow:0 18px 40px rgba(0,0,0,.18)`, txt, 'chip');
+}
+
+/** Huge outline words that scroll across the background. */
+function marquee(t, txt, y, speed, color, size = 330, op = 0.13) {
+  const unit = textW(txt + ' ', size, -0.045) + 40;
+  const off = -(((t * speed) % unit) + unit) % unit;
+  let s = '';
+  for (let k = 0; k < 4; k++) s += `<span style="margin-right:40px">${txt}</span>`;
+  return div(`left:${off - (speed < 0 ? unit : 0)}px;top:${y}px;font-size:${size}px;color:transparent;-webkit-text-stroke:3px ${color};opacity:${op}`, s, 'a d');
+}
+
+const logo = (x, y, size, s = 1, r = 0, op = 1, inv = false) =>
+  `<img class="a" src="${LOGO}" style="${tf(x, y, s, r)};width:${size}px;height:${size}px;opacity:${op};${inv ? 'filter:invert(1)' : ''}">`;
+
+/* ------------------------------------------------------------ phone + screens */
+const PW = 500, PH = 1064, SW = PW - 28, SH = PH - 28;
+function phone(cx, cy, s, rot, layers, op = 1) {
+  return div(`${tf(cx, cy, s, rot)};width:${PW}px;height:${PH}px;opacity:${op}`,
+    `<div class="scr">${layers}</div><div class="isl"></div>`, 'ph');
+}
+const statusBar = () => `<div class="sb">09.41</div><div class="sbr"><i style="height:8px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:20px;opacity:.4"></i></div>`;
+const head = (title, sub, pill = '') => `${statusBar()}<div class="hd"><div class="t">${title}</div><div class="s">${sub}</div>${pill ? `<div class="pill">${pill}</div>` : ''}</div>`;
+const tabs = on => `<div class="tabs">${['Beranda', 'Jadwal', '', 'Progres', 'Lainnya'].map((n, k) =>
+  `<div class="${k === 2 ? 'plus' : ''} ${k === on ? 'on' : ''}"><b></b>${n}</div>`).join('')}</div>`;
+const layer = (x, inner, bg = PAPER) => `<div class="layer" style="transform:translateX(${x}px);background:${bg}">${inner}</div>`;
+
+// --- booking grid
+const HOURS = ['06', '07', '08', '09', '10', '15', '16', '17', '18'];
+const DAYS = [['Sen', 3], ['Sel', 4], ['Rab', 5], ['Kam', 6], ['Jum', 7], ['Sab', 8]];
+const BOOKED = [[0, 1, 'RS'], [2, 2, 'BH'], [4, 0, 'AN'], [1, 6, 'DP'], [3, 1, 'SW'], [5, 3, 'MK'], [0, 7, 'YT'], [2, 5, 'FA'],
+  [4, 6, 'RS'], [1, 2, 'LI'], [3, 8, 'BH'], [5, 0, 'GT'], [0, 4, 'NP'], [2, 7, 'DP'], [4, 3, 'HR'], [1, 8, 'SW'],
+  [3, 5, 'AN'], [5, 6, 'YT'], [0, 2, 'KM'], [2, 0, 'RS'], [4, 8, 'FA'], [5, 7, 'MK']];
+const TAP = [3, 7];
+const GX = 84, GY = 352, CW = 56, CH = 58, GAP = 6;
+function bookingScreen(t) {
+  let g = '';
+  HOURS.forEach((h, r) => { g += div(`left:20px;top:${GY + r * (CH + GAP) + 17}px;font:600 17px 'JetBrains Mono';color:#A8A29E`, h + '.00'); });
+  for (let c = 0; c < 6; c++) for (let r = 0; r < 9; r++)
+    g += div(`left:${GX + c * (CW + GAP)}px;top:${GY + r * (CH + GAP)}px;width:${CW}px;height:${CH}px;border-radius:14px;background:#fff;border:1.5px dashed #D6D3D1;box-sizing:border-box`);
+  BOOKED.forEach(([c, r, ini], k) => {
+    const t0 = 9.1 + k * 0.06;
+    if (t < t0) return;
+    const s = E.back(P(t, t0, t0 + 0.18));
+    g += div(`left:${GX + c * (CW + GAP) + CW / 2}px;top:${GY + r * (CH + GAP) + CH / 2}px;width:${CW}px;height:${CH}px;transform:translate(-50%,-50%) scale(${s});border-radius:14px;background:${INK};color:#fff;font:700 17px 'JetBrains Mono';display:flex;align-items:center;justify-content:center`, ini);
+  });
+  // the tap on a free hour
+  const tx = GX + TAP[0] * (CW + GAP) + CW / 2, ty = GY + TAP[1] * (CH + GAP) + CH / 2;
+  if (t >= 10.8) {
+    const s = E.back(P(t, 10.8, 10.98));
+    g += div(`left:${tx}px;top:${ty}px;width:${CW + 8}px;height:${CH + 8}px;transform:translate(-50%,-50%) scale(${s});border-radius:16px;background:${INK};color:#fff;font:800 30px Inter;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 5px #fff,0 0 0 8px ${INK}`, '✓');
+  }
+  if (t >= 10.35 && t < 11.3) {
+    const p = E.inOut(P(t, 10.35, 10.75));
+    const fx = lerp(SW + 40, tx + 18, p), fy = lerp(SH - 80, ty + 22, p);
+    const press = t >= 10.75 && t < 10.9 ? 0.85 : 1;
+    const fo = 1 - P(t, 11.0, 11.3);
+    g += div(`left:${fx}px;top:${fy}px;width:64px;height:64px;transform:translate(-50%,-50%) scale(${press});border-radius:32px;background:rgba(255,255,255,.75);border:4px solid ${INK};box-sizing:border-box;opacity:${fo}`);
+    if (t >= 10.8) {
+      const rp = P(t, 10.8, 11.2);
+      g += div(`left:${tx}px;top:${ty}px;width:${60 + rp * 160}px;height:${60 + rp * 160}px;transform:translate(-50%,-50%);border-radius:50%;border:4px solid ${INK};opacity:${1 - rp}`);
+    }
+  }
+  // toast
+  let toast = '';
+  if (t >= 10.9) {
+    const p = E.expo(P(t, 10.9, 11.2));
+    toast = div(`left:24px;right:24px;top:${lerp(SH, SH - 210, p)}px;background:${INK};color:#fff;border-radius:22px;padding:20px 24px;font:600 21px Inter;display:flex;gap:16px;align-items:center;box-shadow:0 20px 40px rgba(0,0,0,.25)`,
+      `<span style="width:40px;height:40px;border-radius:20px;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;font-weight:900">✓</span><span>Booking masuk<br><span style="color:#A3A3A3;font-weight:500">Dimas · Kamis 17.00</span></span>`);
+  }
+  const days = DAYS.map(([d, n], k) => div(`left:${GX + k * (CW + GAP)}px;top:${262}px;width:${CW}px;height:72px;border-radius:16px;background:${k === 3 ? INK : '#fff'};color:${k === 3 ? '#fff' : '#57534E'};border:1px solid #E7E5E4;box-sizing:border-box;text-align:center;font:600 15px Inter;padding-top:10px`,
+    `${d}<div style="font:800 26px 'Inter Display';margin-top:2px">${n}</div>`)).join('');
+  return head('Jadwal', 'Minggu ini · klien pilih jam sendiri') + days + g + toast + tabs(1);
+}
+
+const TODAY = [['07.00', 'Rina S.', 'Leg day', '7/12'], ['08.00', 'Budi H.', 'Full body', '3/8'], ['16.00', 'Sari W.', 'Mobility', '10/12'],
+  ['17.00', 'Dimas P.', 'Push', '1/12'], ['18.00', 'Kelas Pagi', '4 orang · HIIT', 'Kelas']];
+function todayScreen(t, t0) {
+  let rows = '';
+  TODAY.forEach(([tm, n, f, q], k) => {
+    const a = t0 + k * 0.2, p = E.expo(P(t, a, a + 0.3));
+    if (t < a) return;
+    rows += `<div class="card" style="display:flex;align-items:center;gap:18px;transform:translateY(${(1 - p) * 60}px);opacity:${p};padding:18px 20px">
+      <div class="m" style="font-size:22px;width:76px">${tm}</div>
+      <div style="flex:1"><div style="font:700 23px Inter">${n}</div><div style="font:500 18px Inter;color:#78716C;margin-top:3px">${f}</div></div>
+      <div class="m" style="font-size:17px;background:${SAND};padding:8px 12px;border-radius:12px">${q}</div></div>`;
+  });
+  return head('Hari ini', 'Rabu, 5 Nov · 5 sesi') + `<div style="padding-top:8px">${rows}</div>` + tabs(1);
+}
+
+const SETS = [['60 × 10', '60', '10'], ['70 × 8', '72,5', '8'], ['75 × 6', '77,5', '6'], ['80 × 5', '82,5', '5']];
+function loggerScreen(t) {
+  const done = SETS.filter((_, k) => t >= 13.6 + k * B).length;
+  const vol = [0, 600, 1180, 1645, 2057.5][done];
+  let rows = '';
+  SETS.forEach(([prev, kg, rep], k) => {
+    const a = 13.6 + k * B, on = t >= a, pop = on ? E.back(P(t, a, a + 0.16)) : 1;
+    const pr = k === 3 && t >= 15.0;
+    rows += `<div style="display:grid;grid-template-columns:56px 1fr 92px 76px 52px;align-items:center;height:64px;border-radius:14px;background:${on ? SAND : 'transparent'};padding:0 6px;margin-top:6px">
+      <div class="m" style="font-size:22px;text-align:center">${k + 1}</div>
+      <div class="m" style="font-size:19px;color:#A8A29E;font-weight:500">${prev}</div>
+      <div class="m" style="font-size:25px;transform:scale(${pop});text-align:center">${kg}</div>
+      <div class="m" style="font-size:25px;text-align:center">${rep}</div>
+      <div style="width:44px;height:44px;border-radius:12px;background:${on ? INK : '#E7E5E4'};color:#fff;display:flex;align-items:center;justify-content:center;font:900 24px Inter;transform:scale(${pop})">${on ? '✓' : ''}</div></div>`;
+    if (pr) {
+      const s = E.back(P(t, 15.0, 15.2));
+      rows += div(`right:64px;top:${238 + k * 70}px;transform:scale(${s});transform-origin:100% 50%;background:${RED};color:#fff;font:900 18px Inter;padding:7px 12px;border-radius:10px;letter-spacing:.04em`, 'PR');
+    }
+  });
+  const strip = [['Durasi', '42m'], ['Volume', fmt(vol) + ' kg'], ['Set', done + '/12']].map(([l, v]) =>
+    `<div style="flex:1"><div class="lbl">${l}</div><div class="m" style="font-size:27px;margin-top:6px">${v}</div></div>`).join('');
+  return head('Push Day', 'Latihan · 42:18', 'Selesai') +
+    `<div class="card" style="display:flex;gap:10px">${strip}</div>
+     <div class="card" style="padding:18px 16px">
+       <div style="display:flex;gap:16px;align-items:center;margin:0 4px 12px">
+         <div style="width:66px;height:66px;border-radius:16px;background:${SAND};display:flex;align-items:center;justify-content:center"><div style="width:40px;height:10px;background:${INK};border-radius:4px;box-shadow:-18px 0 0 -1px ${INK},18px 0 0 -1px ${INK}"></div></div>
+         <div><div style="font:800 27px 'Inter Display'">Bench Press</div><div style="font:500 18px Inter;color:#78716C;margin-top:4px">Dada · Barbel</div></div></div>
+       <div style="display:grid;grid-template-columns:56px 1fr 92px 76px 52px;padding:0 6px" class="lbl"><div style="text-align:center">Set</div><div>Sebelumnya</div><div style="text-align:center">Kg</div><div style="text-align:center">Rep</div><div>✓</div></div>
+       <div style="position:relative">${rows}</div></div>
+     <div class="card" style="display:flex;gap:16px;align-items:center">
+       <div style="width:66px;height:66px;border-radius:16px;background:${SAND}"></div>
+       <div><div style="font:800 27px 'Inter Display'">Incline DB Press</div><div style="font:500 18px Inter;color:#78716C;margin-top:4px">3 set · 8–12 rep</div></div></div>` + tabs(2);
+}
+
+const WEIGHT = [78.4, 78.0, 77.1, 76.9, 76.0, 75.4, 74.9, 74.2];
+function progressScreen(t, t0) {
+  const p = E.inOut(P(t, t0 + 0.2, t0 + 1.0));
+  const cw = 420, ch = 250, xs = k => 10 + k * (cw - 20) / 7, ys = v => 20 + (78.6 - v) / (78.6 - 74.0) * (ch - 40);
+  const pts = WEIGHT.map((v, k) => [xs(k), ys(v)]);
+  const d = 'M' + pts.map(q => q.join(',')).join(' L');
+  let len = 0; for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+  const dots = pts.map((q, k) => k / 7 <= p + 0.001 ? `<circle cx="${q[0]}" cy="${q[1]}" r="${k === 7 ? 9 : 6}" fill="${k === 7 ? INK : '#fff'}" stroke="${INK}" stroke-width="4"/>` : '').join('');
+  const grid = [0, 1, 2, 3].map(k => `<line x1="0" x2="${cw}" y1="${20 + k * 70}" y2="${20 + k * 70}" stroke="#E7E5E4" stroke-width="2"/>`).join('');
+  const kg = -4.2 * E.out(P(t, t0 + 0.2, t0 + 1.0));
+  const tiles = [['Pinggang', '−6 cm'], ['Streak', '6 mgg'], ['Sesi', '22']].map(([l, v], k) => {
+    const a = t0 + 0.8 + k * 0.1, q = E.expo(P(t, a, a + 0.3));
+    return `<div class="card" style="flex:1;margin:0;padding:16px;opacity:${q};transform:translateY(${(1 - q) * 30}px)"><div class="lbl">${l}</div><div class="m" style="font-size:26px;margin-top:6px">${v}</div></div>`;
+  }).join('');
+  return head('Progres', 'Berat badan · 8 minggu') +
+    `<div class="card"><div class="lbl">Turun</div>
+       <div class="d" style="font-size:118px;margin-top:10px;letter-spacing:-0.05em">${kg === 0 ? '0,0' : '−' + fmt1(-kg)}<span style="font-size:44px;letter-spacing:0"> kg</span></div>
+       <div class="m" style="font-size:19px;color:#78716C;font-weight:500;margin-top:10px">78,4 → 74,2 kg</div>
+       <svg width="${cw}" height="${ch}" style="margin-top:18px;display:block">${grid}
+         <path d="${d}" fill="none" stroke="${INK}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="${len}" stroke-dashoffset="${len * (1 - p)}"/>${dots}</svg></div>
+     <div style="display:flex;gap:12px;margin:0 18px">${tiles}</div>` + tabs(3);
+}
+
+function nutritionScreen(t) {
+  const r = 118, C = 2 * Math.PI * r, p = E.out(P(t, 17.9, 18.8)) * 0.78;
+  const eaten = 1443 * E.out(P(t, 17.9, 18.8));
+  const macros = [['Protein', 128, 140], ['Karbo', 160, 210], ['Lemak', 48, 60]].map(([n, v, max], k) => {
+    const a = 18.4 + k * 0.2, q = E.expo(P(t, a, a + 0.35));
+    return `<div style="display:grid;grid-template-columns:110px 1fr 110px;align-items:center;gap:14px;margin-top:${k ? 18 : 0}px">
+      <div style="font:600 20px Inter">${n}</div>
+      <div style="height:14px;border-radius:7px;background:${SAND};overflow:hidden"><div style="height:100%;width:${q * v / max * 100}%;background:${INK};border-radius:7px"></div></div>
+      <div class="m" style="font-size:19px;text-align:right">${Math.round(q * v)}/${max} g</div></div>`;
+  }).join('');
+  const meals = [['Sarapan', 'Oat, telur rebus, pisang', '420'], ['Siang', 'Nasi, ayam bakar, sayur', '610']].map(([m, f, k], j) => {
+    const a = 19.0 + j * 0.2, q = E.expo(P(t, a, a + 0.3));
+    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-top:${j ? '1px solid #E7E5E4' : '0'};opacity:${q};transform:translateX(${(1 - q) * 40}px)">
+      <div style="flex:1"><div style="font:700 21px Inter">${m}</div><div style="font:500 17px Inter;color:#78716C;margin-top:3px">${f}</div></div>
+      <div class="m" style="font-size:20px">${k} kkal</div></div>`;
+  }).join('');
+  return head('Makan', 'Hari ini · target otomatis') +
+    `<div class="card" style="display:flex;justify-content:center;padding:26px 20px">
+       <div style="position:relative;width:${2 * r + 40}px;height:${2 * r + 40}px">
+         <svg width="${2 * r + 40}" height="${2 * r + 40}" style="transform:rotate(-90deg)"><circle cx="${r + 20}" cy="${r + 20}" r="${r}" fill="none" stroke="${SAND}" stroke-width="26"/>
+         <circle cx="${r + 20}" cy="${r + 20}" r="${r}" fill="none" stroke="${INK}" stroke-width="26" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p)}"/></svg>
+         <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+           <div class="d" style="font-size:72px">${fmt(eaten)}</div><div style="font:500 19px Inter;color:#78716C;margin-top:8px">dari 1.850 kkal</div></div></div></div>
+     <div class="card">${macros}</div>
+     <div class="card" style="padding-top:6px;padding-bottom:6px">${meals}</div>` + tabs(3);
+}
+
+function financeScreen(t) {
+  const rp = 14750000 * E.out(P(t, 20.0, 20.75));
+  const months = [['Mei', .52], ['Jun', .61], ['Jul', .58], ['Agu', .74], ['Sep', .83], ['Okt', 1]];
+  const bars = months.map(([m, v], k) => {
+    const a = 20.15 + k * 0.08, q = E.back(P(t, a, a + 0.3));
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:180px">
+      <div style="width:44px;height:${150 * v * q}px;border-radius:10px;background:${k === 5 ? INK : '#D6D3D1'}"></div>
+      <div style="font:600 15px Inter;color:#78716C;margin-top:8px">${m}</div></div>`;
+  }).join('');
+  const bills = [['Rina S.', 'Paket 12 sesi', '1.800.000'], ['Budi H.', 'Paket 8 sesi · sisa 400rb', '1.200.000']].map(([n, p, v], j) =>
+    `<div style="display:flex;align-items:center;gap:14px;padding:16px 0;border-top:${j ? '1px solid #E7E5E4' : '0'}">
+      <div style="width:50px;height:50px;border-radius:25px;background:${SAND};font:700 19px Inter;display:flex;align-items:center;justify-content:center">${n[0]}</div>
+      <div style="flex:1"><div style="font:700 21px Inter">${n}</div><div style="font:500 17px Inter;color:#78716C;margin-top:3px">${p}</div></div>
+      <div class="m" style="font-size:19px">${v}</div></div>`).join('');
+  let stamp = '';
+  if (t >= 21.0) {
+    const q = P(t, 21.0, 21.14), s = lerp(2.4, 1, E.in2(q));
+    stamp = div(`right:42px;top:28px;transform:rotate(-14deg) scale(${s});opacity:${cl(q * 3)};border:5px solid ${RED};color:${RED};font:900 34px 'Inter Display';letter-spacing:.06em;padding:6px 16px;border-radius:12px;background:rgba(255,255,255,.85)`, 'LUNAS');
+  }
+  return head('Keuangan', 'Oktober 2026') +
+    `<div class="card"><div class="lbl">Pendapatan bulan ini</div>
+       <div class="m" style="font-size:50px;margin-top:10px;letter-spacing:-0.04em">Rp ${fmt(rp)}</div>
+       <div style="font:600 18px Inter;color:#57534E;margin-top:8px">↑ 18% dari September</div>
+       <div style="display:flex;gap:6px;margin-top:18px">${bars}</div></div>
+     <div class="card" style="padding-top:4px;padding-bottom:4px"><div style="position:relative">${bills}${stamp}</div></div>` + tabs(4);
+}
+
+function homeScreen() {
+  const tiles = [['Hari ini', '5 sesi'], ['Klien aktif', '24'], ['Tagihan', '2'], ['Kalori', 'on']].map(([l, v]) =>
+    `<div class="card" style="margin:0;padding:18px"><div class="lbl">${l}</div><div class="d" style="font-size:46px;margin-top:8px">${v}</div></div>`).join('');
+  return `${statusBar()}<div class="hd" style="padding-bottom:36px"><img src="${LOGO}" style="width:120px;height:120px;margin:-26px 0 -18px -26px"><div class="t">Halo, Coach</div><div class="s">Semua klien di satu tempat</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 18px">${tiles}</div>
+    <div class="card"><div class="lbl">Berikutnya</div><div style="font:700 24px Inter;margin-top:8px">07.00 · Rina S.</div><div style="font:500 18px Inter;color:#78716C;margin-top:4px">Leg day · sesi 7/12</div></div>` + tabs(0);
+}
+
+/* ------------------------------------------------------------ the five old tools */
+function tool(k, w = 430, h = 310) {
+  const base = `width:${w}px;height:${h}px;border-radius:30px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.22);font-family:Inter;position:relative;`;
+  if (k === 0) { // WhatsApp-style chat
+    const b = (txt, me, y) => div(`${me ? 'right' : 'left'}:18px;top:${y}px;max-width:300px;background:${me ? '#D9FDD3' : '#fff'};padding:12px 16px;border-radius:18px;font:500 20px Inter;color:#111;box-shadow:0 1px 1px rgba(0,0,0,.1)`, txt);
+    return `<div style="${base}background:#ECE5DD">${div(`left:0;right:0;top:0;height:64px;background:#1F2C34;color:#fff;font:700 21px Inter;padding:20px 22px;box-sizing:border-box`, 'Klien PT (24) 🔔')}
+      ${b('kak besok jam brp? 🙏', 0, 82)}${b('sisa sesi saya brp ya', 0, 146)}${b('udah transfer ya kak', 0, 210)}${b('cek dulu ya…', 1, 254)}</div>`;
+  }
+  if (k === 1) { // paper note
+    let lines = '';
+    for (let y = 70; y < h; y += 40) lines += div(`left:0;right:0;top:${y}px;height:2px;background:#C9DCEB`);
+    const hw = (txt, y, x = 34, extra = '') => div(`left:${x}px;top:${y}px;font:italic 500 30px 'FreeSerif','DejaVu Serif',serif;color:#1E3A8A;${extra}`, txt);
+    return `<div style="${base}background:#FFFDF0">${lines}${div(`left:70px;top:0;bottom:0;width:2px;background:#F2A7A7`)}
+      ${hw('Senin', 30, 86, 'font-weight:700')}${hw('07 Rina — sisa 5?', 70, 86)}${hw('08 Budi (bayar??)', 110, 86)}${hw('16 Sari / Dimas', 150, 86, 'text-decoration:line-through')}${hw('17 ??? lupa', 190, 86)}${hw('jgn lupa tagih!!', 236, 120, 'transform:rotate(-4deg)')}</div>`;
+  }
+  if (k === 2) { // spreadsheet
+    const cols = ['', 'A', 'B', 'C', 'D'], data = [['Nama', 'Sesi', 'Bayar', 'Sisa'], ['Rina', '7', '1.8jt', '5'], ['Budi', '3', '#REF!', '?'], ['Sari', '10', '1.8jt', '2'], ['Dimas', '1', '', '#N/A']];
+    let g = '';
+    const cw = [44, 110, 80, 100, 96];
+    cols.forEach((c, j) => { g += div(`left:${cw.slice(0, j).reduce((a, b) => a + b, 0)}px;top:0;width:${cw[j]}px;height:44px;background:#F1F3F4;border:1px solid #DADCE0;box-sizing:border-box;font:600 17px Inter;color:#5F6368;text-align:center;line-height:42px`, c); });
+    data.forEach((row, r) => {
+      g += div(`left:0;top:${44 + r * 52}px;width:44px;height:52px;background:#F1F3F4;border:1px solid #DADCE0;box-sizing:border-box;font:600 17px Inter;color:#5F6368;text-align:center;line-height:50px`, r + 1);
+      row.forEach((v, j) => {
+        const err = v[0] === '#';
+        g += div(`left:${cw.slice(0, j + 1).reduce((a, b) => a + b, 0)}px;top:${44 + r * 52}px;width:${cw[j + 1]}px;height:52px;border:1px solid #DADCE0;box-sizing:border-box;font:${r ? 500 : 700} 19px Inter;color:${err ? '#C5221F' : '#202124'};padding:13px 10px;background:${err ? '#FCE8E6' : '#fff'}`, v);
+      });
+    });
+    return `<div style="${base}background:#fff">${g}${div(`left:0;right:0;bottom:0;height:40px;background:#188038`)}</div>`;
+  }
+  if (k === 3) { // calendar
+    let g = '';
+    const busy = [2, 3, 5, 9, 10, 11, 12, 16, 17, 19, 23, 24, 26];
+    for (let d = 0; d < 28; d++) {
+      const c = d % 7, r = Math.floor(d / 7), on = busy.includes(d), clash = d === 11;
+      g += div(`left:${18 + c * 58}px;top:${86 + r * 54}px;width:52px;height:48px;border-radius:10px;background:${clash ? '#FFE1E1' : on ? '#E8F0FE' : '#fff'};border:1px solid #E5E7EB;box-sizing:border-box;font:600 16px Inter;color:#374151;padding:5px 7px`,
+        (d + 1) + (on ? `<div style="height:5px;border-radius:3px;background:${clash ? '#E11D48' : '#4285F4'};margin-top:6px"></div>` : ''));
+    }
+    return `<div style="${base}background:#fff">${div(`left:22px;top:20px;font:800 28px Inter;color:#1F2937`, 'November')}${div(`right:22px;top:24px;font:700 18px Inter;color:#E11D48`, 'Bentrok!')}${g}</div>`;
+  }
+  // calculator
+  let keys = '';
+  ['7', '8', '9', '÷', '4', '5', '6', '×', '1', '2', '3', '−', '0', ',', '=', '+'].forEach((v, j) => {
+    keys += div(`left:${20 + (j % 4) * 100}px;top:${124 + Math.floor(j / 4) * 46}px;width:90px;height:40px;border-radius:12px;background:${j % 4 === 3 ? '#FF9F0A' : '#333'};color:#fff;font:600 22px Inter;text-align:center;line-height:40px`, v);
+  });
+  return `<div style="${base}background:#111">${div(`right:24px;top:16px;font:300 22px Inter;color:#8E8E93`, '65% × 1.800.000')}${div(`right:24px;top:46px;font:300 58px Inter;color:#fff`, '1.170.000')}${keys}</div>`;
+}
+const TOOL_NAMES = ['WhatsApp.', 'Kertas.', 'Excel.', 'Kalender.', 'Kalkulator.'];
+const PILE = [[315, 590, -8], [705, 680, 7], [345, 975, 5], [700, 1080, -6], [520, 830, -2]];
+const FROM = [[-500, 300], [1500, 400], [-500, 1300], [1500, 1500], [540, 2300]];
+
+/* ------------------------------------------------------------ scenes */
+const SCENES = [];
+const scene = (a, b, fn) => SCENES.push({ a, b, fn });
+
+// 0 – 2.4 · hook: "5 aplikasi. 1 coach. Capek."
+scene(0, 2.4, t => {
+  let h = '', cam = { x: 0, y: 0, s: 1, r: 0 };
+  const big = 400, lh = Math.round(big * .9), small = 132;
+  const row = (y0, digitHtml, word, wt0, op, digit = '5') => {
+    const dW = textW(digit, big);
+    let o = div(`left:96px;top:${y0}px;width:${dW + 20}px;height:${lh}px;overflow:hidden;opacity:${op}`, digitHtml);
+    if (t >= wt0) {
+      const p = E.expo(P(t, wt0, wt0 + 0.3));
+      o += div(`left:${96 + dW + 34}px;top:${y0 + lh - small * 1.12}px;height:${small * 1.06}px;overflow:hidden;opacity:${op}`,
+        `<div class="d" style="font-size:${small}px;color:#fff;transform:translateY(${(1 - p) * 110}%)">${word}</div>`);
+    }
+    return o;
+  };
+  const dim = t >= 1.6 ? lerp(1, 0.28, E.out(P(t, 1.6, 1.75))) : 1;
+  const away = E.in(P(t, 2.0, 2.35));
+  // row 1: a slot-machine 1 → 5
+  const v = 1 + 4 * E.out(P(t, 0, 0.36));
+  let col = '';
+  for (let d = 1; d <= 5; d++) col += `<div class="d" style="height:${lh}px;font-size:${big}px;line-height:${lh}px;color:#fff">${d}</div>`;
+  const blur = t < 0.36 ? 6 * (1 - P(t, 0.1, 0.36)) : 0;
+  h += `<div class="a" style="left:0;top:0;transform:translateY(${-away * 300}px);opacity:${1 - away}">` +
+    row(330, `<div style="transform:translateY(${-(v - 1) * lh}px);filter:blur(${blur}px)">${col}</div>`, 'aplikasi.', 0.1, dim);
+  // row 2: "1 coach."
+  if (t >= 0.8) {
+    const e = E.expo(P(t, 0.8, 1.0)), s = lerp(2.3, 1, e);
+    let one = '';
+    if (t < 1.0) one += `<div class="d" style="font-size:${big}px;line-height:${lh}px;color:#fff;opacity:.2;transform:scale(${lerp(2.3, 1, E.expo(P(t - 0.04, 0.8, 1.0)))});transform-origin:50% 60%">1</div>`;
+    one = `<div class="d" style="position:absolute;font-size:${big}px;line-height:${lh}px;color:#fff;transform:scale(${s});transform-origin:50% 60%;opacity:${cl((t - 0.8) / 0.04)}">1</div>` + one;
+    h += row(330 + lh + 20, `<div style="position:relative;height:${lh}px">${one}</div>`, 'coach.', 0.92, dim, '1');
+  }
+  h += '</div>';
+  // row 3: "Capek." in red, letters sag and fall when it's too much
+  if (t >= 1.6) {
+    const size = fit('Capek.', 860, 300), y = 330 + 2 * (lh + 20) + 20;
+    const e = E.expo(P(t, 1.6, 1.78)), s = lerp(1.9, 1, e);
+    let letters = '';
+    [...'Capek.'].forEach((c, k) => {
+      const tt = Math.max(0, t - 2.0 - k * 0.035);
+      const dy = 0.5 * 9000 * tt * tt, rot = sgn(k + 3) * 40 * tt * 4;
+      letters += `<span style="display:inline-block;transform:translateY(${dy}px) rotate(${rot}deg)">${c}</span>`;
+    });
+    if (t < 1.78) h += div(`left:96px;top:${y}px;font-size:${size}px;color:${RED};opacity:.25;transform:scale(${lerp(1.9, 1, E.expo(P(t - 0.04, 1.6, 1.78)))});transform-origin:0 50%`, 'Capek.', 'a d');
+    h += div(`left:96px;top:${y}px;font-size:${size}px;color:${RED};transform:scale(${s});transform-origin:0 50%`, letters, 'a d');
+  }
+  const sh = [shake(t, 0, 10, 0.3), shake(t, 0.8, 14, 0.3), shake(t, 1.6, 34, 0.5)].reduce((a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]);
+  cam = { x: sh[0], y: sh[1], r: sh[2], s: 1 + 0.025 * E.out(P(t, 0, 2.4)) + (t >= 1.6 ? 0.04 * (1 - P(t, 1.6, 1.9)) : 0) };
+  return { bg: '#000', h, cam };
+});
+
+// 2.4 – 6.4 · the chaos of five tools, the strike, "Cukup.", silence
+scene(2.4, 6.4, t => {
+  let h = '';
+  const jit = t >= 4.0 ? 3 + 30 * Math.pow(P(t, 4.0, 5.2), 2) : 0;
+  const f = Math.floor(t * FPS);
+  const collapse = E.in(P(t, 5.26, 5.58));
+  const iris = E.in(P(t, 5.3, 5.62));
+  const cx = 540, cy = 880;
+  // light background shrinking into a point (iris) on black
+  const R = lerp(1500, 0, iris);
+  let bgHtml = div(`left:${cx - R}px;top:${cy - R}px;width:${2 * R}px;height:${2 * R}px;border-radius:50%;background:${PAPER}`);
+  if (t < 5.3) bgHtml = div(`left:0;top:0;width:${W}px;height:${H}px;background:${PAPER}`) +
+    div(`left:0;top:0;width:${W}px;height:${H}px;background-image:radial-gradient(#D6D3D1 2px,transparent 2px);background-size:36px 36px;opacity:.6`);
+  h += bgHtml;
+  // counter
+  const n = cl(Math.floor((t - 2.4) / B) + 1, 1, 5);
+  if (t < 5.26) h += div(`left:72px;top:272px;font-size:34px;color:${INK}`, `0${n}<span style="color:#A8A29E">/05</span>`, 'a m');
+  // tiles
+  PILE.forEach(([x, y, r], k) => {
+    const t0 = 2.4 + k * B;
+    if (t < t0) return;
+    const e = E.expo(P(t, t0, t0 + 0.24));
+    const squash = 1 + 0.07 * Math.sin(Math.PI * P(t, t0 + 0.12, t0 + 0.3));
+    let px = lerp(FROM[k][0], x, e), py = lerp(FROM[k][1], y, e), rr = r + (1 - e) * (k % 2 ? 40 : -40);
+    px += sgn(f * 3 + k) * jit; py += sgn(f * 5 + k * 7) * jit; rr += sgn(f + k * 11) * jit * 0.15;
+    px = lerp(px, cx, collapse); py = lerp(py, cy, collapse);
+    const s = squash * lerp(1, 0.04, collapse); rr += collapse * 200 * (k % 2 ? 1 : -1);
+    if (t - t0 < 0.24) for (const g of [0.06, 0.03]) {
+      const eg = E.expo(P(t - g, t0, t0 + 0.24));
+      if (t - g >= t0) h += div(`${tf(lerp(FROM[k][0], x, eg), lerp(FROM[k][1], y, eg), 1, r)};opacity:.18`, tool(k));
+    }
+    h += div(`${tf(px, py, s, rr)};opacity:${1 - P(collapse, 0.85, 1)}`, tool(k));
+  });
+  // notifications popping during the jitter
+  const NOTE = ['3 pesan baru', 'Bentrok!', '#REF!', 'Lupa tagih?', 'Sisa sesi?', '+12', 'Jam brp kak?', 'Belum bayar', 'Ganti jadwal?', '+37'];
+  NOTE.forEach((txt, k) => {
+    const a = 4.0 + k * 0.115;
+    if (t < a || t > 5.58) return;
+    const s = E.back(P(t, a, a + 0.14));
+    const x = 120 + hash(k * 9.1) * 700, y = 420 + hash(k * 3.7 + 1) * 900;
+    h += div(`${tf(lerp(x, cx, collapse), lerp(y, cy, collapse), s * (1 - collapse), sgn(k) * 8)};background:${INK};color:#fff;font:800 30px Inter;padding:14px 22px;border-radius:40px;white-space:nowrap;box-shadow:0 10px 30px rgba(0,0,0,.25)`, txt);
+  });
+  // tool label
+  if (t < 5.2) {
+    const k = cl(Math.floor((t - 2.4) / B), 0, 4);
+    const txt = t >= 4.4 ? 'Ribet.' : TOOL_NAMES[k], t0 = t >= 4.4 ? 4.4 : 2.4 + k * B;
+    const size = fit(txt, 860, 150);
+    h += slam(t, t0, txt, { x: 80, y: 1395, size, color: INK, ax: '0', from: 1.4 });
+  }
+  // the red strike
+  if (t >= 5.2) {
+    const p = E.expo(P(t, 5.2, 5.32)), w = 1400 * p * (1 - collapse);
+    h += div(`left:${cx}px;top:${cy}px;width:${w}px;height:${54 * (1 - collapse * .7)}px;background:${RED};transform:translate(-50%,-50%) rotate(-14deg)`);
+  }
+  // "Cukup." lands once the light has closed
+  if (t >= 5.6 && t < 6.0) {
+    const size = fit('Cukup.', 820, 260), out = E.in(P(t, 5.85, 6.0));
+    h += slam(t, 5.6, 'Cukup.', { x: cx, y: cy, size: size * (1 - out * .95), color: '#fff', from: 1.6 });
+  }
+  // the point in the silence
+  if (t >= 5.85) {
+    const r = t < 6.0 ? 5 : 5 + 4 * E.in(P(t, 6.0, 6.4)) + Math.sin(t * 40) * 1.2;
+    h += div(`left:${cx - r}px;top:${cy - r}px;width:${2 * r}px;height:${2 * r}px;border-radius:50%;background:#fff;box-shadow:0 0 ${20 + r * 4}px ${r}px rgba(255,255,255,.5)`);
+  }
+  const sh = [shake(t, 5.2, 24, 0.35), shake(t, 5.6, 30, 0.35)].reduce((a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]);
+  let lands = [0, 0, 0];
+  for (let k = 0; k < 5; k++) { const s2 = shake(t, 2.4 + k * B + 0.2, 12, 0.25); lands = [lands[0] + s2[0], lands[1] + s2[1], 0]; }
+  return { bg: '#000', h, cam: { x: sh[0] + lands[0], y: sh[1] + lands[1], r: sh[2], s: 1 + 0.03 * P(t, 4.0, 5.2) } };
+});
+
+// 6.4 – 8.8 · drop: logo burst, "SEMUA. DALAM. SATU HP."
+scene(6.4, 8.8, t => {
+  let h = '';
+  const cx = 540;
+  const move = E.inOut(P(t, 6.95, 7.2));
+  const exit = E.in2(P(t, 8.28, 8.5));
+  const ly = lerp(860, 400, move), lsize = lerp(700, 330, move);
+  // speed lines
+  if (t < 6.9) {
+    const p = E.expo(P(t, 6.4, 6.9));
+    for (let k = 0; k < 28; k++) {
+      const a = k / 28 * Math.PI * 2 + hash(k) * .2, r0 = 160 + p * 700, len = (1 - p) * 260 + 10;
+      h += div(`left:${cx + Math.cos(a) * r0}px;top:${860 + Math.sin(a) * r0}px;width:${len}px;height:${k % 3 ? 4 : 8}px;background:#fff;transform:translate(-50%,-50%) rotate(${a}rad);opacity:${1 - p}`);
+    }
+  }
+  // rings
+  [[6.4, 1], [6.48, 0.6]].forEach(([t0, o]) => {
+    if (t < t0) return;
+    const p = E.expo(P(t, t0, t0 + 0.6)), r = p * 980;
+    h += div(`left:${cx - r}px;top:${860 - r}px;width:${2 * r}px;height:${2 * r}px;border-radius:50%;border:${lerp(40, 1, p)}px solid #fff;box-sizing:border-box;opacity:${(1 - p) * o}`);
+  });
+  // logo
+  const ls = E.spring(P(t, 6.4, 7.0)), lr = lerp(-35, 0, E.out(P(t, 6.4, 6.9)));
+  h += `<div class="a" style="left:0;top:0;transform:translateY(${-exit * 700}px)">` + logo(cx, ly, lsize, ls, lr) + '</div>';
+  // words
+  const words = [['SEMUA.', 7.2, '#fff'], ['DALAM.', 7.6, '#fff'], ['SATU', 8.0, RED], ['HP.', 8.2, '#fff']];
+  const size = Math.min(fit('SEMUA.', 840, 220), fit('DALAM.', 840, 220));
+  const top0 = 640, step = size * 0.9;
+  words.forEach(([w, t0], k) => {
+    const yy = top0 + k * step + size * 0.43 - exit * (900 + k * 120);
+    h += slam(t, t0, w, { x: cx, y: yy, size: k === 3 ? size * 1.0 : size, color: words[k][2], from: 1.8 });
+  });
+  // white flash
+  if (t < 6.55) h += div(`left:0;top:0;width:${W}px;height:${H}px;background:#fff;opacity:${1 - P(t, 6.4, 6.55)}`);
+  // the light wipe that brings the phone
+  if (t >= 8.4) {
+    const p = E.inOut(P(t, 8.4, 8.8));
+    h += div(`left:0;top:${lerp(H, 0, p)}px;width:${W}px;height:${H}px;background:${SAND}`);
+    h += phone(505, lerp(H + 700, 900, E.expo(P(t, 8.45, 8.9))), 1, 0, layer(0, bookingScreen(0)));
+  }
+  const sh = [shake(t, 6.4, 40, 0.6), shake(t, 7.2, 10, .2), shake(t, 7.6, 10, .2), shake(t, 8.0, 16, .25)].reduce((a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]);
+  return { bg: '#000', h, cam: { x: sh[0], y: sh[1], r: sh[2], s: 1 + 0.06 * (1 - E.out(P(t, 6.4, 7.0))) } };
+});
+
+/** A feature scene: background, outline marquee, phone with layers, chips. */
+function feature(t, { a, b, bg, line, words, ink, screens, chips, extra = '', tag }) {
+  let h = '';
+  h += marquee(t, words[0], 120, 260, ink, 330, 0.12);
+  h += marquee(t + 3, words[1], 1540, -200, ink, 330, 0.12);
+  // section tag
+  h += div(`left:72px;top:272px;font-size:28px;color:${ink};opacity:${E.out(P(t, a, a + 0.3))}`, tag, 'a m');
+  // phone whip in/out
+  const pin = E.expo(P(t, a, a + 0.32)), pout = E.in(P(t, b - 0.16, b));
+  const x = 505 + (1 - pin) * 1100 - pout * 1100;
+  const rot = (1 - pin) * 8 - pout * 8;
+  let layers = '';
+  screens.forEach(([s0, s1, fn]) => {
+    if (t < s0 - 0.3 || t > s1 + 0.3) return;
+    const lin = s0 === a ? 1 : E.expo(P(t, s0, s0 + 0.3)), lout = s1 === b ? 0 : E.expo(P(t, s1, s1 + 0.3));
+    if (lout >= 1 || (lin <= 0 && s0 !== a)) return;
+    layers += layer((1 - lin) * SW - lout * SW, fn(t));
+  });
+  if (t < a + 0.32 && t > a) for (const g of [0.05, 0.025]) {
+    const xg = 505 + (1 - E.expo(P(t - g, a, a + 0.32))) * 1100;
+    h += phone(xg, 900, 1, (1 - E.expo(P(t - g, a, a + 0.32))) * 8, layers, 0.15);
+  }
+  if (t > b - 0.16) for (const g of [0.05, 0.025]) {
+    const xg = 505 - E.in(P(t - g, b - 0.16, b)) * 1100;
+    h += phone(xg, 900, 1, 0, layers, 0.15);
+  }
+  h += phone(x, 900, 1 + 0.015 * Math.sin((t - a) * Math.PI / B) * 0, rot, layers);
+  h += extra;
+  chips.forEach(([c0, c1, txt, o]) => { h += chip(t, c0, c1, txt, o); });
+  return { bg, h, cam: { x: 0, y: 0, r: 0, s: 1 } };
+}
+
+// 8.8 – 13.2 · Booking & jadwal
+scene(8.8, 13.2, t => feature(t, {
+  a: 8.8, b: 13.2, bg: SAND, ink: INK, words: ['BOOKING', 'JADWAL'], tag: '01 — BOOKING & JADWAL',
+  screens: [[8.8, 11.6, bookingScreen], [11.6, 13.2, tt => todayScreen(tt, 11.8)]],
+  chips: [[9.6, 11.5, 'Klien booking', { x: 70, y: 1150, size: 84, rot: -3 }], [9.8, 11.5, 'sendiri.', { x: 520, y: 1280, size: 84, rot: 2 }],
+    [11.8, 13.1, 'Jadwal', { x: 70, y: 1150, size: 84, rot: -3 }], [12.0, 13.1, 'auto rapi.', { x: 450, y: 1280, size: 84, rot: 2 }]],
+}));
+
+// 13.2 – 17.6 · Workout & Progress
+scene(13.2, 17.6, t => {
+  let extra = '';
+  if (t >= 15.0 && t < 15.6) {
+    const p = E.expo(P(t, 15.0, 15.3));
+    for (let k = 0; k < 16; k++) {
+      const an = k / 16 * Math.PI * 2, r0 = 70 + p * 260;
+      extra += div(`left:${790 + Math.cos(an) * r0}px;top:${760 + Math.sin(an) * r0}px;width:${(1 - p) * 90 + 6}px;height:7px;background:${RED};transform:translate(-50%,-50%) rotate(${an}rad);opacity:${1 - P(t, 15.2, 15.6)}`);
+    }
+  }
+  // share card flips in
+  if (t >= 16.8) {
+    const p = E.expo(P(t, 16.8, 17.15)), out = E.in(P(t, 17.44, 17.6));
+    extra += `<div class="a" style="left:${640 - out * 1100}px;top:880px;width:320px;height:420px;transform:perspective(1400px) rotateY(${(1 - p) * 95}deg) rotate(7deg);transform-origin:0 50%;background:${INK};border-radius:28px;box-shadow:0 30px 70px rgba(0,0,0,.5);border:2px solid #333;color:#fff;padding:26px;box-sizing:border-box;font-family:Inter">
+      <img src="${LOGO}" style="width:110px;height:110px;margin:-30px 0 0 -30px">
+      <div class="d" style="font-size:52px;margin-top:-6px">PUSH DAY</div>
+      <div style="font:500 18px Inter;color:#A3A3A3;margin-top:8px">Rabu · 42 menit</div>
+      <div style="margin-top:22px;display:grid;gap:12px">
+        <div><div class="lbl" style="color:#A3A3A3">Volume</div><div class="m" style="font-size:30px">4.250 kg</div></div>
+        <div><div class="lbl" style="color:#A3A3A3">Rekor</div><div class="m" style="font-size:30px;color:${RED}">1 PR</div></div></div></div>`;
+  }
+  return feature(t, {
+    a: 13.2, b: 17.6, bg: '#0B0B0B', ink: '#fff', words: ['WORKOUT', 'PROGRESS'], tag: '02 — WORKOUT & PROGRESS',
+    screens: [[13.2, 15.6, loggerScreen], [15.6, 17.6, tt => progressScreen(tt, 15.6)]],
+    chips: [[13.6, 15.5, 'Catat', { x: 70, y: 1170, size: 84, rot: -3, dark: false }], [13.8, 15.5, 'tiap set.', { x: 430, y: 1300, size: 84, rot: 2, dark: false }],
+      [15.0, 15.5, 'Rekor baru!', { x: 470, y: 420, size: 72, rot: 4, red: true }],
+      [15.9, 17.5, 'Progress', { x: 70, y: 1150, size: 84, rot: -3, dark: false }], [16.1, 17.5, 'kelihatan.', { x: 90, y: 1280, size: 84, rot: 2, dark: false }]],
+    extra,
+  });
+});
+
+// 17.6 – 19.8 · Nutrition, 19.8 – 22 · Keuangan
+scene(17.6, 19.8, t => feature(t, {
+  a: 17.6, b: 19.8, bg: SAND, ink: INK, words: ['NUTRITION', 'GIZI'], tag: '03 — NUTRITION',
+  screens: [[17.6, 19.8, nutritionScreen]],
+  chips: [[18.0, 19.7, 'Target kalori', { x: 70, y: 1180, size: 80, rot: -3 }], [18.2, 19.7, 'otomatis.', { x: 480, y: 1305, size: 80, rot: 2 }]],
+}));
+scene(19.8, 22.0, t => feature(t, {
+  a: 19.8, b: 22.0, bg: '#0B0B0B', ink: '#fff', words: ['KEUANGAN', 'TAGIHAN'], tag: '04 — KEUANGAN',
+  screens: [[19.8, 22.0, financeScreen]],
+  chips: [[20.2, 21.95, 'Tagihan', { x: 70, y: 1190, size: 84, rot: -3, dark: false }], [20.4, 21.95, 'beres.', { x: 560, y: 1315, size: 84, rot: 2, dark: false }]],
+}));
+
+// 22 – 24 · word montage
+const MONTAGE = ['Booking.', 'Workout.', 'Progress.', 'Nutrition.', 'Keuangan.'];
+scene(22.0, 24.0, t => {
+  const k = cl(Math.floor((t - 22.0) / B), 0, 4), t0 = 22.0 + k * B, dark = k % 2 === 0;
+  const fg = dark ? '#fff' : INK, bg = dark ? '#000' : PAPER;
+  const size = fit(MONTAGE[k], 860, 250);
+  let h = slam(t, t0, MONTAGE[k], { x: 540, y: 880, size, color: fg, from: 1.35, rot: -3 });
+  // the outline echo behind
+  h = div(`${tf(540, 880 - size * 1.0, 1, -3)};font-size:${size}px;color:transparent;-webkit-text-stroke:2px ${fg};opacity:.18`, MONTAGE[k], 'a d') +
+      div(`${tf(540, 880 + size * 1.0, 1, -3)};font-size:${size}px;color:transparent;-webkit-text-stroke:2px ${fg};opacity:.18`, MONTAGE[k], 'a d') + h;
+  // five-segment bar
+  let bar = '';
+  for (let j = 0; j < 5; j++) bar += div(`left:${200 + j * 140}px;top:1360px;width:124px;height:12px;border-radius:6px;background:${fg};opacity:${j <= k ? 1 : .15}`);
+  h += bar + div(`left:540px;top:1410px;transform:translateX(-50%);font-size:28px;color:${fg};opacity:.7`, `0${k + 1} / 05`, 'a m');
+  const sh = shake(t, t0, 14, 0.2);
+  return { bg, h, cam: { x: sh[0], y: sh[1], r: sh[2], s: 1 + 0.03 * (1 - P(t, t0, t0 + B)) } };
+});
+
+// 24 – 25.6 · the five tools drop into the phone: 5 → 1
+const ICON_AT = k => 24.05 + k * 0.3;
+scene(24.0, 25.6, t => {
+  let h = '';
+  const absorbed = [0, 1, 2, 3, 4].filter(k => t >= ICON_AT(k) + 0.24).length;
+  const pulse = [0, 1, 2, 3, 4].reduce((m, k) => m + Math.max(0, 1 - Math.abs(t - ICON_AT(k) - 0.26) / 0.1) * 0.035, 0);
+  const pin = E.expo(P(t, 24.0, 24.3));
+  h += phone(540, lerp(1500, 1090, pin), 0.68 + pulse, 0, layer(0, homeScreen()));
+  // number: 5 → 1
+  const big = 330, lh = Math.round(big * .9);
+  const shown = Math.max(1, 5 - absorbed);
+  const target = 5 - shown, prev = Math.max(0, target - 1);
+  const lastAt = target > 0 ? ICON_AT(target - 1) + 0.24 : 24;
+  const roll = lerp(prev, target, E.out(P(t, lastAt, lastAt + 0.16)));
+  let col = '';
+  for (let d = 5; d >= 1; d--) col += `<div class="d" style="height:${lh}px;font-size:${big}px;line-height:${lh}px;color:${d === 1 && absorbed >= 4 ? RED : '#fff'}">${d}</div>`;
+  const dW = textW('5', big);
+  h += div(`left:150px;top:290px;width:${dW + 20}px;height:${lh}px;overflow:hidden`, `<div style="transform:translateY(${-roll * lh}px)">${col}</div>`);
+  h += div(`left:${150 + dW + 30}px;top:${290 + lh - 140}px;font-size:118px;color:#fff`, 'aplikasi.', 'a d');
+  // the five tools as cards around the phone, flying in one by one
+  const spots = [[200, 720], [880, 720], [150, 1100], [930, 1100], [540, 650]];
+  spots.forEach(([x, y], k) => {
+    const pop = E.back(P(t, 24.0 + k * 0.04, 24.2 + k * 0.04));
+    const f0 = ICON_AT(k), p = E.in(P(t, f0, f0 + 0.24));
+    if (p >= 1) return;
+    const px = lerp(x, 540, p), py = lerp(y, 1060, p), s = 0.34 * pop * (1 - p * 0.9);
+    if (p > 0) h += div(`${tf(lerp(x, 540, E.in(P(t - 0.04, f0, f0 + 0.24))), lerp(y, 1060, E.in(P(t - 0.04, f0, f0 + 0.24))), s, 0)};opacity:.25`, tool(k));
+    h += div(`${tf(px, py, s, (k % 2 ? 6 : -6) * (1 - p))}`, tool(k));
+  });
+  if (absorbed >= 5) {
+    const q = E.expo(P(t, ICON_AT(4) + 0.24, ICON_AT(4) + 0.5));
+    h += div(`left:540px;top:1090px;width:${q * 700}px;height:${q * 700}px;transform:translate(-50%,-50%);border-radius:50%;border:6px solid #fff;opacity:${1 - q}`);
+  }
+  let sh = [0, 0, 0];
+  for (let k = 0; k < 5; k++) { const s2 = shake(t, ICON_AT(k) + 0.24, 10, 0.2); sh = [sh[0] + s2[0], sh[1] + s2[1], 0]; }
+  return { bg: '#000', h, cam: { x: sh[0], y: sh[1], r: 0, s: 1 } };
+});
+
+// 25.6 – 30 · end card: logo + "Move Better."
+scene(25.6, 30.01, t => {
+  let h = '';
+  const shrink = E.in(P(t, 25.6, 25.8));
+  if (shrink < 1) h += phone(540, 1090 - shrink * 250, 0.7 * (1 - shrink), shrink * 90, layer(0, homeScreen()));
+  [[25.6, 1], [25.7, .5]].forEach(([t0, o]) => {
+    if (t < t0) return;
+    const p = E.expo(P(t, t0, t0 + 0.8)), r = p * 1000;
+    h += div(`left:${540 - r}px;top:${820 - r}px;width:${2 * r}px;height:${2 * r}px;border-radius:50%;border:${lerp(30, 1, p)}px solid #fff;box-sizing:border-box;opacity:${(1 - p) * o}`);
+  });
+  const ls = E.spring(P(t, 25.7, 26.3)), push = 1 + 0.05 * P(t, 26, 30);
+  h += logo(540, 820, 640, ls * push, lerp(25, 0, E.out(P(t, 25.7, 26.2))));
+  // "Move Better." types on
+  const txt = 'Move Better.', n = Math.floor(cl((t - 26.4) / 0.075, 0, txt.length));
+  if (t >= 26.4) {
+    const size = 128, w = textW(txt, size);
+    const shownTxt = [...txt].map((c, k) => {
+      const a = 26.4 + k * 0.075, q = E.expo(P(t, a, a + 0.18));
+      return `<span style="display:inline-block;opacity:${k < n || t >= a ? q : 0};transform:translateY(${(1 - q) * 30}px)">${c === ' ' ? '&nbsp;' : c}</span>`;
+    }).join('');
+    h += div(`left:${540 - w / 2}px;top:1170px;font-size:${size}px;color:#fff;transform:scale(${push});transform-origin:50% 0`, shownTxt, 'a d');
+    const caret = n < txt.length || Math.floor(t * 2.5) % 2 === 0;
+    if (t < 28.6 && caret) h += div(`left:${540 - w / 2 + textW(txt.slice(0, n), size) + 10}px;top:1180px;width:10px;height:${size * 0.82}px;background:#fff`);
+  }
+  if (t < 25.7) h += div(`left:0;top:0;width:${W}px;height:${H}px;background:#fff;opacity:${1 - P(t, 25.6, 25.7)}`);
+  if (t >= 29.0) h += div(`left:0;top:0;width:${W}px;height:${H}px;background:#000;opacity:${E.inOut(P(t, 29.0, 30.0))}`);
+  const sh = shake(t, 25.6, 36, 0.6);
+  return { bg: '#000', h, cam: { x: sh[0], y: sh[1], r: sh[2], s: 1 } };
+});
+
+/* ------------------------------------------------------------ render */
+const camEl = document.getElementById('cam'), stage = document.getElementById('stage');
+const grainCtx = document.getElementById('grain').getContext('2d');
+const gimg = grainCtx.createImageData(540, 960);
+function grain(f) {
+  let s = (f * 2654435761) >>> 0;
+  const d = gimg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    const v = s & 255;
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  grainCtx.putImageData(gimg, 0, 0);
+}
+window.seek = t => {
+  t = Math.min(t, DUR - 1e-6);
+  const sc = SCENES.find(s => t >= s.a && t < s.b) || SCENES[SCENES.length - 1];
+  const r = sc.fn(t);
+  stage.style.background = r.bg;
+  const c = r.cam;
+  camEl.style.transform = `translate(${c.x}px,${c.y}px) rotate(${c.r || 0}deg) scale(${c.s})`;
+  camEl.innerHTML = r.h;
+  grain(Math.floor(t * FPS));
+};
+const q = new URLSearchParams(location.search);
+if (q.get('safe')) document.getElementById('guides').innerHTML =
+  div(`left:70px;top:260px;width:870px;height:1240px;border:3px dashed #0f0;box-sizing:border-box`) +
+  div(`left:0;top:0;width:${W}px;height:260px;background:rgba(0,255,0,.12)`) +
+  div(`left:0;top:1500px;width:${W}px;height:420px;background:rgba(0,255,0,.12)`) +
+  div(`left:940px;top:0;width:140px;height:${H}px;background:rgba(0,255,0,.12)`);
+window.ready = Promise.all([
+  document.fonts.load('900 100px "Inter Display"'), document.fonts.load('800 100px "Inter Display"'),
+  document.fonts.load('700 40px "JetBrains Mono"'), document.fonts.load('500 40px "JetBrains Mono"'),
+  document.fonts.load('400 40px Inter'), document.fonts.load('500 40px Inter'), document.fonts.load('600 40px Inter'),
+  document.fonts.load('700 40px Inter'), document.fonts.load('800 40px Inter'), document.fonts.load('italic 500 30px FreeSerif'),
+]).then(() => { for (const k in mcache) delete mcache[k]; window.seek(+(q.get('t') || 0)); });
+</script>
+</body>
+</html>
