@@ -9,6 +9,18 @@ Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md). Mark a
 - **Auto-merge gates**: CI green with every Agent.md §5 check (T-1404). PRs touching live files (`apps-script/pt-scheduler/src/`, `index.html`, `sw.js`, `offline*.js`) also need a clean pixel diff. If the post-merge smoke test on live XNK fails, the conductor opens a revert PR and stops the chain.
 - **Owner-only steps stop the chain** (marked 👤): choosing the brand, buying the domain, creating accounts and secrets (never in chat), approving the tiers, reviewing the legal docs, cutover night, old-domain redirects, the Telegram shut-off, Play testers and release, and any deletion.
 
+## Model per task (the conductor picks it when starting the session)
+| Tag | Model | Used for |
+|---|---|---|
+| **S** | `claude-sonnet-5-5` | Docs, checklists, copy, small UI text, config |
+| **O** | `claude-opus-5-5` | Normal feature and port work |
+| **O+** | `claude-opus-5-5`, told to think hard and double-check | Data, money, auth, locking, cutover: mistakes here lose data or break XNK |
+
+- **S**: T-1403, T-1405, T-1417, T-1423, T-1462, T-1485, T-1486, T-1487, T-1488, T-1489, T-1515
+- **O**: T-1400, T-1401, T-1402, T-1404, T-1410, T-1413, T-1414, T-1416, T-1418, T-1422, T-1432, T-1436–T-1440, T-1442, T-1444, T-1445, T-1447, T-1448, T-1461, T-1471, T-1473, T-1474, T-1480–T-1482, T-1484, T-1491–T-1498, T-1510–T-1514, T-1520–T-1522, T-1530, T-1540
+- **O+**: T-1411, T-1412, T-1415, T-1420, T-1421, T-1430, T-1431, T-1433, T-1434, T-1435 (booking), T-1441, T-1443, T-1446, T-1450, T-1451, T-1460, T-1470, T-1472, T-1475, T-1483, T-1490, T-1500
+- A task with no tag uses **O**. A task session that finds its task harder than tagged writes that in STATUS.md, and the conductor restarts the task one level up.
+
 ## V0 Discovery
 - [ ] T-1404 CI runs on every PR (not just `apps-script/**`): syntax, tests, browser check (Playwright), offline check, pixel diff for live files; required checks + auto-merge on `main` (👤 the owner turns on "Allow auto-merge" and branch protection if the token can't).
 - [x] T-1405 `STATUS.md` + session handoff protocol (this section).
