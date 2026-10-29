@@ -864,7 +864,7 @@
     const b = R.head, s = R.s, c = o.align === 'tengah', ax = c ? b.x + b.w / 2 : b.x, al = c ? 'center' : 'left';
     ctx.fillStyle = ink;
     let y = b.y;
-    if (card.title) { const px = fit(ctx, card.title, 58 * s, 800, b.w); Tx(ctx, card.title, ax, y + 52 * s, px, 800, k); y += 64 * s; }
+    if (card.title) { const px = fit(ctx, card.title, 58 * s, 800, b.w); Tx(ctx, card.title, ax, y + 52 * s, px, 800, k, al); y += 64 * s; }
     if (o.foot.date && card.date) Tx(ctx, card.date, ax, y + 38 * s, 36 * s, 500, .72 * k, al);
   }
   function arrow(ctx, x, y, sz, up) {
@@ -881,7 +881,7 @@
       const kk = ease(k * card.stats.length - i * .6);
       const v = animText(stt.v, kk), vpx = fit(ctx, stt.v, (stack ? 100 : 62) * s, 800, cw - (stt.medal ? 70 * s : 16));
       ctx.fillStyle = ink;
-      if (stack) { Tx(ctx, v, ax - (stt.medal && c ? 30 * s : 0), y + 96 * s, vpx, 800, Math.min(1, kk * 2)); Tx(ctx, stt.l, ax, y + 148 * s, 40 * s, 500, .82 * Math.min(1, kk * 2), al); }
+      if (stack) { Tx(ctx, v, ax - (stt.medal && c ? 30 * s : 0), y + 96 * s, vpx, 800, Math.min(1, kk * 2), al); Tx(ctx, stt.l, ax, y + 148 * s, 40 * s, 500, .82 * Math.min(1, kk * 2), al); }
       else { Tx(ctx, stt.l, ax, y + 36 * s, 34 * s, 500, .78 * Math.min(1, kk * 2), al); Tx(ctx, v, ax, y + 100 * s, vpx, 800, Math.min(1, kk * 2), al); }
       if (stt.medal) { font(ctx, 800, vpx); const vw = ctx.measureText(stt.v).width; const mx = c ? ax + vw / 2 + 34 * s - (stack ? 30 * s : 0) : ax + vw + 34 * s; medal(ctx, mx, y + (stack ? 66 : 80) * s, (stack ? 26 : 22) * s); }
       if (b.cmpOn) {
