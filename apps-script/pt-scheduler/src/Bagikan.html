@@ -981,7 +981,6 @@
   const $ = id => document.getElementById(id);
   const isDesk = () => window.innerWidth >= 768;
   const chip = (grp, val, label, cur, extra) => '<button type="button" class="chip' + (String(cur) === String(val) ? ' active' : '') + '" role="radio" aria-checked="' + (String(cur) === String(val)) + '" onclick="window.shareSet(\'' + grp + '\',\'' + val + '\')"' + (extra || '') + '>' + label + '</button>';
-  const group = (label, inner, cls) => '<div class="field sh-field' + (cls ? ' ' + cls : '') + '"><span class="label">' + label + '</span><div class="chips sh-chips" role="radiogroup" aria-label="' + esc(label) + '">' + inner + '</div></div>';
   const toggle = (id, label, on, grp) => '<label class="row-between sh-toggle"><span>' + label + '</span><span class="toggle"><input type="checkbox"' + (on ? ' checked' : '') + ' onchange="window.shareSet(\'' + grp + '\',this.checked)" aria-label="' + esc(label) + '"><span></span></span></label>';
   const ic = n => (window.icon ? window.icon(n) : '');
 
@@ -992,11 +991,11 @@
     sh.innerHTML = '<div class="sh-top"><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup">' + ic('x') + '</button>' +
       '<h2 class="sh-title" id="share-title">Bagikan</h2><button type="button" class="btn btn-ghost btn-sm sh-reset" onclick="window.shareReset()">Reset</button></div>' +
       '<div class="sh-main"><div class="sh-stage" id="share-stage">' +
-      '<button type="button" class="icon-btn plain sh-arrow prev only-desktop" onclick="window.shareStep(-1)" aria-label="Kartu sebelumnya">' + ic('chevron-left') + '</button>' +
+      '<button type="button" class="icon-btn plain sh-arrow prev" onclick="window.shareStep(-1)" aria-label="Kartu sebelumnya">' + ic('chevron-left') + '</button>' +
       '<div class="share-preview" id="share-box" role="button" tabindex="0" aria-label="Pratinjau kartu. Geser untuk ganti kartu, ketuk untuk layar penuh."><img id="share-img" alt="Pratinjau kartu bagikan" draggable="false"><div class="sh-busy hide" id="share-busy"></div></div>' +
-      '<button type="button" class="icon-btn plain sh-arrow next only-desktop" onclick="window.shareStep(1)" aria-label="Kartu berikutnya">' + ic('chevron-right') + '</button>' +
+      '<button type="button" class="icon-btn plain sh-arrow next" onclick="window.shareStep(1)" aria-label="Kartu berikutnya">' + ic('chevron-right') + '</button>' +
       '<div class="sh-dots" id="share-dots" aria-hidden="true"></div></div>' +
-      '<div class="sh-side"><div class="sh-tabs" id="share-tabs" role="tablist"></div><div class="sh-body" id="share-body"></div></div></div>' +
+      '<div class="sh-side"><div class="sh-tools" id="share-tabs" role="tablist" aria-label="Alat kartu"></div><div class="sh-body" id="share-body"></div></div></div>' +
       '<div class="sh-foot" id="share-foot"></div>' +
       '<input type="file" id="share-file" accept="image/*" class="sr-only" onchange="window.shareFile(this)" aria-label="Pilih foto">';
     stageGestures($('share-box'));
@@ -1009,23 +1008,25 @@
       if (x0 === null) return;
       const dx = e.clientX - x0, dy = e.clientY - y0; x0 = null;
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) { window.shareStep(dx < 0 ? 1 : -1); return; }
-      if (!moved) window.shareFull();
+      if (!moved) { if (!isDesk() && st.tab) window.shareTab(''); else window.shareFull(); }
     });
     box.addEventListener('pointercancel', function () { x0 = null; });
     box.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.shareFull(); } });
   }
-  const TABS = [['kartu', 'Kartu'], ['gaya', 'Gaya'], ['isi', 'Isi'], ['teks', 'Teks']];
+  // Alat: di HP bilah ikon di bawah pratinjau (panel terbuka hanya saat diketuk), di desktop kolom kanan yang ramping.
+  const TOOLS = [['kartu', 'Kartu', 'layers'], ['template', 'Template', 'sparkles'], ['gaya', 'Gaya', 'palette'], ['ukuran', 'Ukuran', 'ratio'],
+    ['tata', 'Tata letak', 'layout-template'], ['isi', 'Isi', 'list-checks'], ['teks', 'Teks', 'type'], ['ekspor', 'Ekspor', 'download']];
+  const row = (label, inner) => '<div class="sh-row"><span class="sh-lbl">' + label + '</span><div class="sh-chips" role="radiogroup" aria-label="' + esc(label) + '">' + inner + '</div></div>';
   function paneKartu() {
     const k = kp(), cur = st.kind;
     let h = '<div class="sh-kinds" role="radiogroup" aria-label="Jenis kartu">' + st.kinds.map(kd => '<button type="button" class="sh-kind' + (kd === cur ? ' active' : '') + '" role="radio" aria-checked="' + (kd === cur) + '" onclick="window.shareSet(\'kind\',\'' + kd + '\')">' + ic(KIND_ICON[kd]) + '<span>' + KIND_NAME[kd] + '</span></button>').join('') + '</div>';
     if (PERIOD_KINDS[cur] && st.src.loadPeriod) {
       const per = k.period;
-      h += group('Periode', PERIODS.map(p => chip('period', p, { hari: cur === 'gizi' ? 'Hari ini' : (cur === 'ukuran' ? 'Semua' : 'Latihan ini'), minggu: 'Minggu ini', bulan: 'Bulan ini', '3bulan': '3 bulan' }[p], per)).join('') +
+      h += row('Periode', PERIODS.map(p => chip('period', p, { hari: cur === 'gizi' ? 'Hari ini' : (cur === 'ukuran' ? 'Semua' : 'Latihan ini'), minggu: 'Minggu', bulan: 'Bulan', '3bulan': '3 bulan' }[p], per)).join('') +
         '<label class="chip sh-date' + (/^tanggal:/.test(per) ? ' active' : '') + '">' + ic('calendar') + '<input type="date" aria-label="Pilih tanggal" max="' + esc(st.src.today) + '" value="' + esc(/^tanggal:/.test(per) ? per.slice(8) : '') + '" onchange="window.shareSet(\'period\', this.value ? \'tanggal:\' + this.value : \'hari\')"></label>');
     }
-    h += '<div class="field sh-field only-mobile"><span class="label">Format</span>' + fmtSeg() + '</div>';
     const modes = cmpModes();
-    if (modes.length) h += group('Perbandingan', [['none', 'Tidak ada']].concat(modes).map(m => chip('cmp', m[0], m[1], k.cmp)).join(''));
+    if (modes.length) h += row('Banding', [['none', 'Tidak']].concat(modes).map(m => chip('cmp', m[0], m[1], k.cmp)).join(''));
     return h;
   }
   function cmpModes() {
@@ -1037,25 +1038,36 @@
     if (has('target')) out.push(['target', 'Target']);
     return out;
   }
+  function paneTemplate() {
+    return row('Template', Object.keys(PRESETS).map(p => chip('preset', p, { minimal: 'Minimal', bold: 'Bold', strava: 'Strava', hevy: 'Hevy', polos: 'Polos' }[p], P.preset)).join('') + (P.preset === 'kustom' ? chip('preset', 'kustom', 'Kustom', 'kustom') : ''));
+  }
   function paneGaya() {
     const boxed = P.style === 'gelap' || P.style === 'terang';
-    let h = group('Template', Object.keys(PRESETS).map(p => chip('preset', p, { minimal: 'Minimal', bold: 'Bold', strava: 'Strava', hevy: 'Hevy', polos: 'Polos' }[p], P.preset)).join('') + (P.preset === 'kustom' ? chip('preset', 'kustom', 'Kustom', 'kustom') : ''));
-    h += group('Gaya', [['teks', 'Transparan'], ['grafik', 'Transparan + grafik'], ['gelap', 'Kartu gelap'], ['terang', 'Kartu terang'], ['foto', 'Foto']].map(x => chip('style', x[0], x[1], P.style)).join(''));
-    if (P.style === 'foto') h += '<div class="field sh-field"><span class="label">Foto latar</span><div class="btn-row"><button type="button" class="btn btn-secondary" onclick="window.sharePick(\'bg\')">' + ic('image') + (st.photoBg ? 'Ganti foto' : 'Pilih foto') + '</button></div></div>' + blurField();
-    h += group('Ukuran', [['story', 'Story 9:16'], ['portrait', 'Portrait 4:5'], ['kotak', 'Kotak 1:1']].map(x => chip('size', x[0], x[1], P.size)).join(''));
-    if (!boxed) h += group('Warna teks', chip('ink', 'putih', 'Putih', P.ink) + chip('ink', 'hitam', 'Hitam', P.ink));
-    h += group('Rata', chip('align', 'kiri', 'Kiri', P.align) + chip('align', 'tengah', 'Tengah', P.align));
-    if (!boxed) h += group('Posisi', chip('pos', 'atas', 'Atas', P.pos) + chip('pos', 'tengah', 'Tengah', P.pos) + chip('pos', 'bawah', 'Bawah', P.pos));
-    h += group('Ukuran teks', chip('scale', 's', 'Kecil', P.scale) + chip('scale', 'm', 'Sedang', P.scale) + chip('scale', 'l', 'Besar', P.scale));
-    h += group('Sudut', chip('corner', 'bulat', 'Bulat', P.corner) + chip('corner', 'kotak', 'Kotak', P.corner));
-    h += '<div class="sh-toggles">' + toggle('frame', 'Bingkai garis', P.frame, 'frame') + '</div>';
-    h += group('Bahasa kartu', chip('lang', 'en', 'English', P.lang) + chip('lang', 'id', 'Indonesia', P.lang));
+    let h = row('Gaya', [['teks', 'Transparan'], ['grafik', 'Transp. + grafik'], ['gelap', 'Gelap'], ['terang', 'Terang'], ['foto', 'Foto']].map(x => chip('style', x[0], x[1], P.style)).join(''));
+    if (!boxed) h += row('Warna teks', chip('ink', 'putih', 'Putih', P.ink) + chip('ink', 'hitam', 'Hitam', P.ink));
+    if (P.style === 'foto') h += row('Foto latar', '<button type="button" class="chip" onclick="window.sharePick(\'bg\')">' + ic('image') + (st.photoBg ? 'Ganti foto' : 'Pilih foto') + '</button>') + blurField();
     return h;
+  }
+  function paneUkuran() {
+    return row('Ukuran', [['story', 'Story 9:16'], ['portrait', 'Portrait 4:5'], ['kotak', 'Kotak 1:1']].map(x => chip('size', x[0], x[1], P.size)).join(''));
+  }
+  function paneTata() {
+    const boxed = P.style === 'gelap' || P.style === 'terang';
+    let h = row('Rata', chip('align', 'kiri', 'Kiri', P.align) + chip('align', 'tengah', 'Tengah', P.align));
+    if (!boxed) h += row('Posisi', chip('pos', 'atas', 'Atas', P.pos) + chip('pos', 'tengah', 'Tengah', P.pos) + chip('pos', 'bawah', 'Bawah', P.pos));
+    h += row('Teks', chip('scale', 's', 'Kecil', P.scale) + chip('scale', 'm', 'Sedang', P.scale) + chip('scale', 'l', 'Besar', P.scale));
+    h += row('Sudut', chip('corner', 'bulat', 'Bulat', P.corner) + chip('corner', 'kotak', 'Kotak', P.corner) + chip('frame', !P.frame, 'Bingkai', 'false', P.frame ? ' aria-pressed="true"' : '').replace('class="chip"', 'class="chip' + (P.frame ? ' active' : '') + '"'));
+    return h;
+  }
+  function paneEkspor() {
+    const n = st.tray.length;
+    return row('Format', fmtSeg()) +
+      '<p class="sh-note">' + (P.fmt === 'video' ? 'Video 6 detik tanpa suara; latar transparan jadi gelap.' : P.fmt === 'hq' ? 'Gambar 2160 px untuk hasil paling tajam.' : 'Gambar PNG 1080 px.') + ' Set: ' + n + '/5 kartu.</p>';
   }
   function blurField() {
     const k = kp();
-    return group('Samarkan wajah', chip('blur', 'none', 'Tidak', k.blur) + chip('blur', 'blur', 'Mozaik', k.blur) + chip('blur', 'potong', 'Potong atas', k.blur)) +
-      (k.blur === 'blur' ? '<div class="field sh-field"><label class="label" for="share-blurh">Tinggi mozaik ' + k.blurH + '%</label><input type="range" id="share-blurh" min="10" max="50" step="2" value="' + k.blurH + '" oninput="window.shareSet(\'blurH\', this.value)"></div>' : '');
+    return row('Wajah', chip('blur', 'none', 'Tidak', k.blur) + chip('blur', 'blur', 'Mozaik', k.blur) + chip('blur', 'potong', 'Potong atas', k.blur)) +
+      (k.blur === 'blur' ? '<div class="sh-row"><label class="sh-lbl" for="share-blurh">Mozaik ' + k.blurH + '%</label><input type="range" id="share-blurh" min="10" max="50" step="2" value="' + k.blurH + '" oninput="window.shareSet(\'blurH\', this.value)"></div>' : '');
   }
   function paneIsi() {
     const c = st.card, k = kp(), kind = st.kind;
@@ -1068,43 +1080,45 @@
       h += '<div class="field sh-field">' + (list.length ? '' : '<p class="li-sub">Belum ada foto progres. Pilih dari HP.</p>') + pick('a', st.photoAId) + pick('b', st.photoBId) + '</div>' + blurField();
     }
     if (c && c.allStats.length) {
-      h += '<div class="field sh-field"><span class="label">Angka di kartu</span><div class="sh-stats" role="list">' + c.allStats.map(function (s, i) {
+      h += '<div class="sh-stats" role="list" aria-label="Angka di kartu">' + c.allStats.map(function (s, i) {
         const on = c.offIds.indexOf(s.id) === -1, nm = s.id.indexOf('m:') === 0 ? s.l : (STAT_NAME[s.id] || s.l);
         return '<div class="sh-stat" role="listitem"><label class="sh-stat-on"><span class="toggle"><input type="checkbox"' + (on ? ' checked' : '') + ' onchange="window.shareStat(\'' + esc(s.id) + '\', this.checked)" aria-label="Tampilkan ' + esc(nm) + '"><span></span></span><span class="sh-stat-n">' + esc(nm) + '</span><span class="sh-stat-v num">' + esc(s.v) + '</span></label>' +
           '<button type="button" class="icon-btn plain" ' + (i === 0 ? 'disabled ' : '') + 'onclick="window.shareMove(\'' + esc(s.id) + '\',-1)" aria-label="Naikkan ' + esc(nm) + '">' + ic('chevron-up') + '</button>' +
           '<button type="button" class="icon-btn plain" ' + (i === c.allStats.length - 1 ? 'disabled ' : '') + 'onclick="window.shareMove(\'' + esc(s.id) + '\',1)" aria-label="Turunkan ' + esc(nm) + '">' + ic('chevron-down') + '</button></div>';
-      }).join('') + '</div></div>';
+      }).join('') + '</div>';
     }
-    if (c && c.gids.length && kind !== 'foto') h += group('Grafik', c.gids.concat(kind === 'badge' ? [] : ['none']).map(g => chip('graph', g, GRAPH_NAME[g] || g, c.gid)).join(''));
+    if (c && c.gids.length && kind !== 'foto') h += row('Grafik', c.gids.concat(kind === 'badge' ? [] : ['none']).map(g => chip('graph', g, GRAPH_NAME[g] || g, c.gid)).join(''));
     if (kind === 'progres' || kind === 'foto') h += '<div class="sh-toggles">' + toggle('body', 'Tampilkan data tubuh', k.body, 'body') + '</div>';
     if ((kind === 'progres' || kind === 'foto') && k.body || kind === 'ukuran') {
       const avail = measuresWithData(st.src);
       const sel = k.measures.length ? k.measures : (kind === 'ukuran' ? avail.slice(0, 4) : ['berat', 'pinggang']);
-      h += '<div class="field sh-field"><span class="label">Ukuran yang tampil</span><div class="chips sh-chips">' + avail.map(m => '<button type="button" class="chip' + (sel.indexOf(m) !== -1 ? ' active' : '') + '" role="checkbox" aria-checked="' + (sel.indexOf(m) !== -1) + '" onclick="window.shareMeasure(\'' + m + '\')">' + esc(L.id.m[m]) + '</button>').join('') + (avail.length ? '' : '<p class="li-sub">Belum ada ukuran tubuh.</p>') + '</div></div>';
-      h += group('Angka tubuh', chip('bodyVal', 'false', 'Perubahan', String(!!k.bodyVal)) + chip('bodyVal', 'true', 'Nilai', String(!!k.bodyVal)));
+      h += '<div class="sh-row"><span class="sh-lbl">Ukuran</span><div class="sh-chips">' + avail.map(m => '<button type="button" class="chip' + (sel.indexOf(m) !== -1 ? ' active' : '') + '" role="checkbox" aria-checked="' + (sel.indexOf(m) !== -1) + '" onclick="window.shareMeasure(\'' + m + '\')">' + esc(L.id.m[m]) + '</button>').join('') + (avail.length ? '' : '<p class="li-sub">Belum ada ukuran tubuh.</p>') + '</div></div>';
+      h += row('Angka', chip('bodyVal', 'false', 'Perubahan', String(!!k.bodyVal)) + chip('bodyVal', 'true', 'Nilai', String(!!k.bodyVal)));
     }
     if (['latihan', 'exercises', 'record', 'rekap'].indexOf(kind) !== -1) h += '<div class="sh-toggles">' + toggle('hideKg', 'Sembunyikan beban (kg)', k.hideKg, 'hideKg') + '</div>';
-    h += '<div class="field sh-field"><label class="label" for="share-ttl">Judul</label><input class="input" id="share-ttl" maxlength="40" value="' + esc(k.title) + '" placeholder="' + esc(c ? (BUILD[kind](st.src, Object.assign({}, k, { title: '' }), st.per[periodKey()] || null) || {}).title || '' : '') + '" oninput="window.shareText(\'title\', this.value)" autocomplete="off"></div>';
+    h += '<div class="sh-row"><label class="sh-lbl" for="share-ttl">Judul</label><input class="input sh-input" id="share-ttl" maxlength="40" value="' + esc(k.title) + '" placeholder="' + esc(c ? (BUILD[kind](st.src, Object.assign({}, k, { title: '' }), st.per[periodKey()] || null) || {}).title || '' : '') + '" oninput="window.shareText(\'title\', this.value)" autocomplete="off"></div>';
     return h;
   }
   function paneTeks() {
     const f = P.foot;
-    let h = '<div class="field sh-field"><label class="label" for="share-name">Nama / handle</label><input class="input" id="share-name" maxlength="30" value="' + esc(P.name == null ? (st.src.first || '') : P.name) + '" placeholder="@kamu" oninput="window.shareText(\'name\', this.value)" autocomplete="off"></div>';
+    let h = '<div class="sh-row"><label class="sh-lbl" for="share-name">Nama</label><input class="input sh-input" id="share-name" maxlength="30" value="' + esc(P.name == null ? (st.src.first || '') : P.name) + '" placeholder="@kamu" oninput="window.shareText(\'name\', this.value)" autocomplete="off"></div>';
     h += '<div class="sh-toggles">' + toggle('date', 'Tanggal', f.date, 'f:date') + toggle('logo', 'Logo XNK', f.logo, 'f:logo') + (st.src.admin ? '' : toggle('me', 'Foto profil', f.me, 'f:me')) +
       toggle('coach', '"Coached by"', f.coach, 'f:coach') + (f.coach ? toggle('coachPic', 'Foto coach', f.coachPic, 'f:coachPic') : '') + toggle('qr', 'Kode QR booking', f.qr, 'f:qr') + '</div>';
-    if (st.src.admin) h += '<p class="li-sub">Minta izin klien sebelum memposting kartu ini.</p>';
+    h += row('Bahasa', chip('lang', 'en', 'English', P.lang) + chip('lang', 'id', 'Indonesia', P.lang));
+    if (st.src.admin) h += '<p class="sh-note">Minta izin klien sebelum memposting kartu ini.</p>';
     return h;
   }
+  const PANES = { kartu: paneKartu, template: paneTemplate, gaya: paneGaya, ukuran: paneUkuran, tata: paneTata, isi: paneIsi, teks: paneTeks, ekspor: paneEkspor };
   function renderControls() {
-    const tabs = $('share-tabs'), body = $('share-body');
-    tabs.innerHTML = TABS.map(t => '<button type="button" role="tab" class="sh-tab' + (st.tab === t[0] ? ' active' : '') + '" aria-selected="' + (st.tab === t[0]) + '" onclick="window.shareTab(\'' + t[0] + '\')">' + t[1] + '</button>').join('');
+    const tabs = $('share-tabs'), body = $('share-body'), sh = $('sheet-share');
+    if (isDesk() && !st.tab) st.tab = 'kartu';
+    tabs.innerHTML = TOOLS.map(t => '<button type="button" role="tab" class="sh-tool' + (st.tab === t[0] ? ' active' : '') + '" data-tool="' + t[0] + '" aria-selected="' + (st.tab === t[0]) + '" onclick="window.shareTab(\'' + t[0] + '\')">' + ic(t[2]) + '<span>' + t[1] + '</span></button>').join('');
     const scroll = body.scrollTop;
-    body.innerHTML = '<section class="sh-pane' + (st.tab === 'kartu' ? ' on' : '') + '" data-pane="kartu"><h3 class="sh-h only-desktop">Kartu</h3>' + paneKartu() + '</section>' +
-      '<section class="sh-pane' + (st.tab === 'gaya' ? ' on' : '') + '" data-pane="gaya"><h3 class="sh-h only-desktop">Gaya</h3>' + paneGaya() + '</section>' +
-      '<section class="sh-pane' + (st.tab === 'isi' ? ' on' : '') + '" data-pane="isi"><h3 class="sh-h only-desktop">Isi</h3>' + paneIsi() + '</section>' +
-      '<section class="sh-pane' + (st.tab === 'teks' ? ' on' : '') + '" data-pane="teks"><h3 class="sh-h only-desktop">Teks & identitas</h3>' + paneTeks() + '</section>';
+    body.innerHTML = st.tab ? '<section class="sh-pane on" data-pane="' + st.tab + '">' + PANES[st.tab]() + '</section>' : '';
     body.scrollTop = scroll;
+    if (sh) sh.classList.toggle('tool-open', !!st.tab);
     renderFoot(); renderDots();
+    requestAnimationFrame(fitBox);
     $('share-title').textContent = 'Kartu ' + (KIND_NAME[st.kind] || '').toLowerCase();
     if (window.scheduleIconUpdate) window.scheduleIconUpdate();
   }
@@ -1118,16 +1132,16 @@
   }
   function renderFoot() {
     const n = st.tray.length, addOff = n >= 5 || P.fmt === 'video';
-    // HP: format ada di tab Kartu; bilah bawah satu baris. Desktop: format + set di kiri.
-    let h = '<div class="sh-fmt only-desktop">' + fmtSeg() + '<button type="button" class="btn btn-ghost btn-sm sh-add" onclick="window.shareTrayAdd()"' + (addOff ? ' disabled' : '') + '>' + ic('plus') + 'Set' + (n ? ' (' + n + ')' : '') + '</button></div>';
+    let h = '';
     if (n) h += '<div class="sh-tray" aria-label="Kartu dalam set">' + st.tray.map((t, i) => '<span class="sh-thumb"><img src="' + t.url + '" alt="' + esc(KIND_NAME[t.kind]) + '"><button type="button" class="icon-btn plain" onclick="window.shareTrayDel(' + i + ')" aria-label="Hapus dari set">' + ic('x') + '</button></span>').join('') + '<button type="button" class="btn btn-ghost btn-sm" onclick="window.shareTrayClear()">Kosongkan</button></div>';
     h += '<div class="sh-btns">' + (st.opts.summary ? '<button type="button" class="btn btn-ghost" id="share-summary" onclick="window.shareSummary()">Ringkasan</button>' : '') +
-      '<button type="button" class="btn btn-outline sh-add only-mobile" onclick="window.shareTrayAdd()" aria-label="Tambah ke set"' + (addOff ? ' disabled' : '') + '>' + ic('plus') + 'Set' + (n ? ' ' + n : '') + '</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.shareSave()">' + ic('download') + 'Simpan</button>' +
-      (P.fmt === 'video' || n ? '' : '<button type="button" class="btn btn-outline only-desktop" onclick="window.shareCopy()">' + ic('copy') + 'Salin</button>') +
-      '<button type="button" class="btn btn-primary" id="share-go" onclick="window.shareGo()">' + ic('share-2') + (n ? 'Bagikan (' + n + ')' : 'Bagikan') + '</button></div>';
+      '<button type="button" class="btn btn-outline sh-add" onclick="window.shareTrayAdd()" aria-label="Tambah ke set"' + (addOff ? ' disabled' : '') + '>' + ic('plus') + 'Set' + (n ? ' ' + n : '') + '</button>' +
+      '<button type="button" class="btn btn-outline sh-ic" onclick="window.shareSave()" aria-label="Simpan">' + ic('download') + '<span>Simpan</span></button>' +
+      (P.fmt === 'video' || n ? '' : '<button type="button" class="btn btn-outline sh-ic only-desktop" onclick="window.shareCopy()" aria-label="Salin">' + ic('copy') + '<span>Salin</span></button>') +
+      '<button type="button" class="btn btn-primary" id="share-go" onclick="window.shareGo()">' + ic('share-2') + (n ? 'Bagikan (' + n + ')' : 'Bagikan') + (P.fmt !== 'png' ? ' · ' + (P.fmt === 'hq' ? 'HQ' : 'Video') : '') + '</button></div>';
     $('share-foot').innerHTML = h;
     if (window.scheduleIconUpdate) window.scheduleIconUpdate();
+    requestAnimationFrame(fitBox);
   }
   function periodKey() { const k = kp(); return PERIOD_KINDS[st.kind] && k.period !== 'hari' ? k.period : ''; }
   function rebuild() {
@@ -1164,13 +1178,25 @@
       st.blob = blob; if (st.url) URL.revokeObjectURL(st.url); st.url = URL.createObjectURL(blob);
       const im = $('share-img'); if (im) im.src = st.url;
       const box = $('share-box');
+      st.ratio = o.H / 1080; fitBox();
       if (box) {
-        box.style.aspectRatio = '1080 / ' + o.H;
         box.classList.toggle('ink-dark', !(o.style === 'gelap' || o.style === 'terang' || o.style === 'foto') && o.ink === 'hitam');
         box.classList.toggle('solid', o.style === 'gelap' || o.style === 'terang' || o.style === 'foto');
       }
     }, 50);
   }
+  // Pratinjau sebesar mungkin di ruang yang ada, rasio tepat (story, portrait, kotak).
+  function fitBox() {
+    const stage = $('share-stage'), box = $('share-box'); if (!stage || !box || !stage.clientHeight) return;
+    const cs = getComputedStyle(stage), padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight), padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const dots = $('share-dots'), dh = dots && dots.offsetParent ? dots.offsetHeight + 6 : 0;
+    const maxW = stage.clientWidth - padX, maxH = stage.clientHeight - padY - dh, r = st.ratio || 1920 / 1080;
+    let h = Math.max(120, maxH), w = h / r;
+    if (w > maxW) { w = maxW; h = w * r; }
+    box.style.width = Math.floor(w) + 'px'; box.style.height = Math.floor(h) + 'px';
+  }
+  let fitRaf = 0;
+  window.addEventListener('resize', function () { cancelAnimationFrame(fitRaf); fitRaf = requestAnimationFrame(fitBox); });
   function availableKinds(src) {
     return KINDS.filter(function (kd) {
       if (kd === 'badge' && !src.badge) return false;
@@ -1193,7 +1219,7 @@
       if (o.strict) { window.showToast('Belum ada data untuk dibagikan.'); return; }
       kind = st.kinds[0];
     }
-    st.kind = kind; st.tab = 'kartu';
+    st.kind = kind; st.tab = isDesk() ? 'kartu' : '';
     rebuild();
     if (!st.card) { window.showToast('Belum ada data untuk dibagikan.'); return; }
     if (kind === 'foto') initPhotos();
@@ -1205,7 +1231,7 @@
     const i = st.kinds.indexOf(st.kind), n = st.kinds.length;
     window.shareSet('kind', st.kinds[(i + d + n) % n]);
   };
-  window.shareTab = function (t) { st.tab = t; renderControls(); };
+  window.shareTab = function (t) { st.tab = st.tab === t && !isDesk() ? '' : t; renderControls(); };
   window.shareSet = function (k, v) {
     const kk = kp();
     if (k === 'kind') { st.kind = v; if (v === 'foto') initPhotos(); }
@@ -1219,7 +1245,7 @@
     else if (k === 'blur') kk.blur = v;
     else if (k === 'blurH') { kk.blurH = Number(v) || 24; const l = document.querySelector('label[for="share-blurh"]'); if (l) l.textContent = 'Tinggi mozaik ' + kk.blurH + '%'; savePrefs(); refresh(); return; }
     else if (k.indexOf('f:') === 0) P.foot[k.slice(2)] = !!v;
-    else if (k === 'frame') { P.frame = !!v; markCustom(); }
+    else if (k === 'frame') { P.frame = v === true || v === 'true'; markCustom(); }
     else if (k === 'fmt') P.fmt = v;
     else { P[k] = v; if (['style', 'align', 'scale', 'corner', 'size', 'ink', 'pos'].indexOf(k) !== -1 && k !== 'size' && k !== 'ink' && k !== 'pos') markCustom(); }
     if (k === 'style' && v === 'foto' && !st.photoBg) { savePrefs(); rebuild(); renderControls(); refresh(); window.sharePick('bg'); return; }
@@ -1262,7 +1288,7 @@
     savePrefs(); rebuild(); renderControls(); refresh();
     window.showToast('Kembali ke bawaan.');
   };
-  window.shareFull = function () { const sh = $('sheet-share'); if (sh) { st.full = !st.full; sh.classList.toggle('full', st.full); } };
+  window.shareFull = function () { const sh = $('sheet-share'); if (sh) { st.full = !st.full; sh.classList.toggle('full', st.full); requestAnimationFrame(fitBox); } };
   window.shareSummary = function () { const f = st.opts.summary; if (f) f(); };
   // Foto: latar (bg) atau sebelum/sesudah (a/b) dari HP; foto progres dari server lewat src.photoLoader.
   let pickSlot = 'bg';
