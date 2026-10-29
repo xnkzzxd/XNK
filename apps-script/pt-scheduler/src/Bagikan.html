@@ -819,7 +819,7 @@
     const hd = (card.title ? 64 * s : 0) + (o.foot.date && card.date ? 50 * s : 0) + 28 * s;
     const cols = stack ? 1 : Math.min(3, Math.max(1, card.stats.length === 4 ? 2 : card.stats.length));
     const rows = Math.ceil(card.stats.length / cols);
-    const cellH = stack ? (150 + (cmpOn ? 40 : 0)) * s : (124 + (cmpOn ? 40 : 0)) * s;
+    const cellH = stack ? (176 + (cmpOn ? 42 : 0)) * s : (124 + (cmpOn ? 40 : 0)) * s;
     const statsH = card.stats.length ? rows * cellH + 10 * s : 0;
     const footH = (o.foot.logo ? 54 : 0) * s + (o.name ? 50 * s : 0) + (o.foot.coach && o.coach ? 44 * s : 0) + 34 * s;
     const footBox = Math.max(footH, o.foot.qr ? 170 * s : 0);
@@ -881,13 +881,13 @@
       const kk = ease(k * card.stats.length - i * .6);
       const v = animText(stt.v, kk), vpx = fit(ctx, stt.v, (stack ? 100 : 62) * s, 800, cw - (stt.medal ? 70 * s : 16));
       ctx.fillStyle = ink;
-      if (stack) { Tx(ctx, v, ax - (stt.medal && c ? 30 * s : 0), y + 96 * s, vpx, 800, Math.min(1, kk * 2)); Tx(ctx, stt.l, ax, y + 140 * s, 40 * s, 500, .82 * Math.min(1, kk * 2), al); }
+      if (stack) { Tx(ctx, v, ax - (stt.medal && c ? 30 * s : 0), y + 96 * s, vpx, 800, Math.min(1, kk * 2)); Tx(ctx, stt.l, ax, y + 148 * s, 40 * s, 500, .82 * Math.min(1, kk * 2), al); }
       else { Tx(ctx, stt.l, ax, y + 36 * s, 34 * s, 500, .78 * Math.min(1, kk * 2), al); Tx(ctx, v, ax, y + 100 * s, vpx, 800, Math.min(1, kk * 2), al); }
       if (stt.medal) { font(ctx, 800, vpx); const vw = ctx.measureText(stt.v).width; const mx = c ? ax + vw / 2 + 34 * s - (stack ? 30 * s : 0) : ax + vw + 34 * s; medal(ctx, mx, y + (stack ? 66 : 80) * s, (stack ? 26 : 22) * s); }
       if (b.cmpOn) {
         const t = cmpText(stt, o.cmp, card.vsKey);
         if (t) {
-          const yy = y + (stack ? 182 : 144) * s, px = 28 * s;
+          const yy = y + (stack ? 194 : 144) * s, px = 28 * s;
           font(ctx, 600, px); const tw = ctx.measureText(t.t).width + (t.up != null ? px : 0);
           let xx = c ? ax - tw / 2 : ax;
           ctx.globalAlpha = .8 * Math.min(1, kk * 2);
@@ -1104,7 +1104,7 @@
       '<section class="sh-pane' + (st.tab === 'teks' ? ' on' : '') + '" data-pane="teks"><h3 class="sh-h only-desktop">Teks & identitas</h3>' + paneTeks() + '</section>';
     body.scrollTop = scroll;
     renderFoot(); renderDots();
-    $('share-title').textContent = KIND_NAME[st.kind] || 'Bagikan';
+    $('share-title').textContent = 'Kartu ' + (KIND_NAME[st.kind] || '').toLowerCase();
     if (window.scheduleIconUpdate) window.scheduleIconUpdate();
   }
   function renderDots() {
@@ -1117,7 +1117,7 @@
     let h = '<div class="sh-fmt">' + '<div class="seg sh-seg" role="radiogroup" aria-label="Format">' + [['png', 'Gambar'], ['hq', 'HQ'], ['video', 'Video']].filter(x => x[0] !== 'video' || canVideo()).map(x => '<button type="button" role="radio" class="' + (P.fmt === x[0] ? 'active' : '') + '" aria-checked="' + (P.fmt === x[0]) + '" onclick="window.shareSet(\'fmt\',\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '</div>' +
       '<button type="button" class="btn btn-ghost btn-sm sh-add" onclick="window.shareTrayAdd()"' + (n >= 5 || P.fmt === 'video' ? ' disabled' : '') + '>' + ic('plus') + 'Set' + (n ? ' (' + n + ')' : '') + '</button></div>';
     if (n) h += '<div class="sh-tray" aria-label="Kartu dalam set">' + st.tray.map((t, i) => '<span class="sh-thumb"><img src="' + t.url + '" alt="' + esc(KIND_NAME[t.kind]) + '"><button type="button" class="icon-btn plain" onclick="window.shareTrayDel(' + i + ')" aria-label="Hapus dari set">' + ic('x') + '</button></span>').join('') + '<button type="button" class="btn btn-ghost btn-sm" onclick="window.shareTrayClear()">Kosongkan</button></div>';
-    h += '<div class="sh-btns">' + (st.opts.summary ? '<button type="button" class="btn btn-ghost" onclick="window.shareSummary()">Ringkasan</button>' : '') +
+    h += '<div class="sh-btns">' + (st.opts.summary ? '<button type="button" class="btn btn-ghost" id="share-summary" onclick="window.shareSummary()">Ringkasan</button>' : '') +
       '<button type="button" class="btn btn-outline" onclick="window.shareSave()">' + ic('download') + 'Simpan</button>' +
       (P.fmt === 'video' || n ? '' : '<button type="button" class="btn btn-outline" onclick="window.shareCopy()">' + ic('copy') + 'Salin</button>') +
       '<button type="button" class="btn btn-primary" id="share-go" onclick="window.shareGo()">' + ic('share-2') + (n ? 'Bagikan ' + (n + (st.blob ? 0 : 0)) : 'Bagikan') + '</button></div>';

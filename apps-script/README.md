@@ -266,6 +266,15 @@ Klien (dan kamu, lewat halaman klien) bisa membuat gambar PNG untuk Story Instag
 - **Bagikan / Salin / Simpan:** memakai menu bagikan bawaan HP lewat halaman pembungkus (`index.html`). Gambar dibuat di HP dan tidak diunggah.
 - **Nyala sejak awal.** Matikan di **Pengaturan → Tampilan → Kartu bagikan** (Script Property `SHARE_ENABLED` = `false`). Minta izin klien sebelum memposting kartu klien di akun XNK.
 
+**Versi lengkap (Fase T2):**
+- **Kartu baru:** Ukuran tubuh (8 lingkar + berat, grafik per ukuran atau sebelum–sesudah), Koleksi badge (semua badge dengan ikon dan nama), Konsistensi (kalender + batang per minggu), Foto progres (sebelum–sesudah dari foto progres; hanya klien sendiri). Gaya baru **Kartu terang**, ukuran baru **Portrait 4:5**.
+- **Editor:** di HP layar penuh gelap: pratinjau di atas, tab **Kartu · Gaya · Isi · Teks**, geser pratinjau untuk ganti kartu, ketuk untuk layar penuh. Di laptop: pratinjau kiri, semua pengaturan kanan, panah ←/→ ganti kartu.
+- **Atur sendiri:** template (Minimal, Bold, Strava, Hevy, Polos), angka mana yang tampil dan urutannya, jenis grafik, judul, rata kiri/tengah, posisi, ukuran teks, sudut, bingkai, bahasa kartu English/Indonesia, periode (latihan ini, minggu, bulan, 3 bulan, tanggal), perbandingan (bawaan: vs periode lalu), nama, foto profil, "Coached by" + foto coach, kode QR.
+- **Privasi:** angka tubuh mati bawaan (bisa perubahan atau nilai), "Sembunyikan beban", mozaik/potong wajah di kartu foto. Foto tidak pernah diunggah.
+- **Ekspor:** Gambar, Gambar HQ, **Video 6 detik** (angka naik, grafik tergambar), dan sampai 5 kartu sekaligus (tombol **+ Set**).
+- **Kartu saya:** menu di Lainnya berisi semua kartu siap bagi. Sesudah rekor baru, ukur badan, atau target kalori tercapai muncul ajakan kecil "Bagikan?" (maks sekali sehari; bisa dimatikan di Pengaturan latihan klien).
+- **Kode QR:** mati bawaan di tiap kartu. Alamatnya di **Pengaturan → Tampilan → Kartu bagikan** (kosong = `https://xnkbooking.my.id`).
+
 ## Gizi & catat makan (Fase P)
 
 Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klien mengisi tinggi, jenis kelamin, tujuan, dan pantangan sekali (berat dan lingkar pinggang diambil dari tab Progres), lalu melihat BMI, WHtR, BMR, TDEE, target kalori dan makro, menu satu hari (bisa ditukar), daftar belanja 7 hari, dan catatan makan harian. Datanya dari **Tabel Komposisi Pangan Indonesia 2020** (Kemenkes); ±50 menu jadi (nasi padang, bakso, gorengan, dll.) adalah **perkiraan** dan diberi tanda "perkiraan".
