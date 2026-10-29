@@ -273,6 +273,7 @@ Klien (dan kamu, lewat halaman klien) bisa membuat gambar PNG untuk Story Instag
 - **Privasi:** angka tubuh mati bawaan (bisa perubahan atau nilai), "Sembunyikan beban", mozaik/potong wajah di kartu foto. Foto tidak pernah diunggah.
 - **Ekspor:** Gambar, Gambar HQ, **Video 6 detik** (angka naik, grafik tergambar), dan sampai 5 kartu sekaligus (tombol **+ Set**).
 - **Kartu saya:** menu di Lainnya berisi semua kartu siap bagi. Sesudah rekor baru, ukur badan, atau target kalori tercapai muncul ajakan kecil "Bagikan?" (maks sekali sehari; bisa dimatikan di Pengaturan latihan klien).
+- **Premium (Fase T3):** angka besar dan judul memakai huruf Anton; kartu gelap/terang/foto diberi butir film dan cahaya lembut (bisa dimatikan: Gaya → Efek → Polos). Video punya dua gaya animasi: **Minimal** (angka naik, grafik tergambar) dan **Kinetic** (judul dan angka raksasa masuk satu per satu ala Nike, medali "Rekor baru", lalu kartu lengkap), panjang **6 / 10 / 15 detik**, dan tombol **Putar pratinjau** di Ekspor.
 - **Kode QR:** mati bawaan di tiap kartu. Alamatnya di **Pengaturan → Tampilan → Kartu bagikan** (kosong = `https://xnkbooking.my.id`).
 
 ## Gizi & catat makan (Fase P)

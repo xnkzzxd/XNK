@@ -58,3 +58,15 @@ Owner request (2026-10-28): the preview was broken (tiny, white on white), badge
 - [x] T-1317 Checks: `tools/share-check.js` (11 cards × 8 style/size pairs + EN/ID/centre, body, period, no-kg, QR; bounds, overlap, graph drawn, QR finder patterns, HQ size, video), browser-check editor steps (phone + 1280 px).
 - [x] T-1318 READMEs, Agent.md §7.
 - [x] T-1319 Comparison, HQ export, video.
+
+# Phase T3 — Premium: motion graphics + tampilan diam (T-1320+)
+
+Owner request (2026-10-29): "lebih premium, motion graphics, animation". Decisions: upgrade the video and the still cards (not the editor UI); stay monochrome (gold only for records); two animation styles, Minimal (Strava) and Kinetic (Nike); video 6 / 10 / 15 s; Anton for every big number and title; grain + soft light on the still cards.
+
+## Tasks
+- [x] T-1320 Docs (this section).
+- [x] T-1321 Anton (`font()` weight 800 = Anton display, uppercase titles; wordmark stays Inter 900); spaced caps labels (`caps()`); Anton added to the Index.html font link; `loadFonts()`.
+- [x] T-1322 Premium background pass (`paintBg`, `paintGrain`): dark card light + vignette + sheen line, light card paper gradient, photo vignette, seeded 256 px film grain (overlay, clipped to the card, moves per video frame). Option **Efek: Grain + cahaya | Polos** (Gaya tool, default on) for Gelap / Terang / Foto; transparent styles stay clean with a soft text glow.
+- [x] T-1323 Motion engine `animFrame(ctx, card, o, img, t, frame)`: **Minimal** (staggered reveal, count-up, graphs drawn, slow pull-back) and **Kinetic** (`kineticScenes`: title slam with motion ghosts, one giant Anton number per stat with wipe line and zoom/push transitions, graph scene, gold "NEW RECORD / REKOR BARU" drop, then the card assembles). Scenes per length: 3 / 5 / 7. The last frame equals the still card.
+- [x] T-1324 Ekspor tool: Animasi Minimal | Kinetic, Durasi 6 / 10 / 15 dtk, **Putar pratinjau** (plays once in the preview at half resolution; tap stops). Prefs `anim`, `dur`, `fx` in `xnk_share_prefs`.
+- [x] T-1325 Checks: share-check renders both styles × 3 lengths on every card and compares the last frame with the still card; browser-check covers the effect option, video options and preview playback.

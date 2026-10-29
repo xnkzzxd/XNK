@@ -56,7 +56,7 @@
     hevy: { style: 'gelap', align: 'kiri', scale: 'm', corner: 'bulat', frame: false },
     polos: { style: 'terang', align: 'kiri', scale: 'm', corner: 'kotak', frame: true }
   };
-  const DEF = { v: 2, preset: 'strava', style: 'grafik', size: 'story', ink: 'putih', align: 'kiri', pos: 'bawah', scale: 'm', corner: 'bulat', frame: false, lang: 'en', name: null, fmt: 'png',
+  const DEF = { v: 2, preset: 'strava', style: 'grafik', size: 'story', ink: 'putih', align: 'kiri', pos: 'bawah', scale: 'm', corner: 'bulat', frame: false, lang: 'en', name: null, fmt: 'png', anim: 'minimal', dur: 6, fx: 'halus',
     foot: { date: true, logo: true, me: false, coach: true, coachPic: false, qr: false }, k: {} };
   const KDEF = { order: [], off: [], graph: '', period: 'hari', cmp: 'prev', body: false, measures: [], bodyVal: false, hideKg: false, title: '', blur: 'none', blurH: 24 };
   let P = null;
@@ -393,12 +393,23 @@
     });
   }
   const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  function font(ctx, w, px) { ctx.font = w + ' ' + Math.round(px) + 'px ' + FONT; }
+  // Angka besar dan judul memakai Anton (huruf display, gaya Nike); teks kecil tetap Inter.
+  const DISPLAY = 'Anton, Impact, "Arial Narrow Bold", "Helvetica Neue", sans-serif';
+  function font(ctx, w, px) { ctx.font = w === 800 ? '400 ' + Math.round(px * 1.08) + 'px ' + DISPLAY : w + ' ' + Math.round(px) + 'px ' + FONT; }
   function Tx(ctx, s, x, y, px, w, a, al) { font(ctx, w, px); ctx.globalAlpha = a == null ? 1 : a; ctx.textAlign = al || 'left'; ctx.fillText(s, x, y); ctx.globalAlpha = 1; }
+  // Label kecil huruf kapital berjarak (gaya editorial).
+  function caps(ctx, s, x, y, px, a, al, max) {
+    const t = String(s).toUpperCase(), ls = 'letterSpacing' in ctx;
+    if (ls) ctx.letterSpacing = Math.round(px * .14) + 'px';
+    const p = fit(ctx, t, px, 600, max || 2000);
+    Tx(ctx, t, x, y, p, 600, a, al);
+    if (ls) ctx.letterSpacing = '0px';
+  }
   function fit(ctx, s, px, w, max) { font(ctx, w, px); while (px > 20 && ctx.measureText(s).width > max) { px -= 2; font(ctx, w, px); } return px; }
   function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, Math.max(0, Math.min(r, w / 2, h / 2))); else ctx.rect(x, y, w, h); }
-  function medal(ctx, cx, cy, r) {
-    ctx.save(); ctx.globalAlpha = 1; ctx.shadowColor = 'transparent';
+  function medal(ctx, cx, cy, r, a) {
+    if (!(r > 0) || a === 0) return;
+    ctx.save(); ctx.globalAlpha = a == null ? 1 : a; ctx.shadowColor = 'transparent';
     ctx.fillStyle = GOLD2; ctx.beginPath(); ctx.moveTo(cx - r * .7, cy + r * .5); ctx.lineTo(cx - r * 1.05, cy + r * 1.5); ctx.lineTo(cx - r * .35, cy + r * 1.15); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(cx + r * .7, cy + r * .5); ctx.lineTo(cx + r * 1.05, cy + r * 1.5); ctx.lineTo(cx + r * .35, cy + r * 1.15); ctx.closePath(); ctx.fill();
     ctx.fillStyle = GOLD; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
@@ -798,7 +809,7 @@
   function opts() {
     const k = kp();
     const size = P.size, H = SIZES[size] || 1920;
-    return { style: P.style, size: size, H: H, ink: P.ink, align: P.align, pos: P.pos, s: P.scale === 'l' ? 1.18 : P.scale === 's' ? .86 : 1, corner: P.corner, frame: P.frame,
+    return { anim: P.anim === 'kinetic' ? 'kinetic' : 'minimal', dur: [6, 10, 15].indexOf(Number(P.dur)) !== -1 ? Number(P.dur) : 6, fx: P.fx === 'polos' ? 'polos' : 'halus', style: P.style, size: size, H: H, ink: P.ink, align: P.align, pos: P.pos, s: P.scale === 'l' ? 1.18 : P.scale === 's' ? .86 : 1, corner: P.corner, frame: P.frame,
       foot: P.foot, name: String(P.name == null ? (st.src.first || '') : P.name).trim(), coach: (st.src.share && st.src.share.coach) || st.src.coach || '', cmp: PERIOD_KINDS[st.kind] || st.card.vsKey ? k.cmp : 'none', photo: st.photoBg, qrUrl: (st.src.share && st.src.share.qrUrl) || 'https://xnkbooking.my.id', avatars: st.avatars || {} };
   }
   function cmpText(stt, mode, vsKey) {
@@ -864,7 +875,7 @@
     const b = R.head, s = R.s, c = o.align === 'tengah', ax = c ? b.x + b.w / 2 : b.x, al = c ? 'center' : 'left';
     ctx.fillStyle = ink;
     let y = b.y;
-    if (card.title) { const px = fit(ctx, card.title, 58 * s, 800, b.w); Tx(ctx, card.title, ax, y + 52 * s, px, 800, k, al); y += 64 * s; }
+    if (card.title) { const t = card.title.toUpperCase(), px = fit(ctx, t, 58 * s, 800, b.w); Tx(ctx, t, ax, y + 52 * s, px, 800, k, al); y += 64 * s; }
     if (o.foot.date && card.date) Tx(ctx, card.date, ax, y + 38 * s, 36 * s, 500, .72 * k, al);
   }
   function arrow(ctx, x, y, sz, up) {
@@ -882,8 +893,8 @@
       const v = animText(stt.v, kk), vpx = fit(ctx, stt.v, (stack ? 100 : 62) * s, 800, cw - (stt.medal ? 70 * s : 16));
       ctx.fillStyle = ink;
       if (stack) { Tx(ctx, v, ax - (stt.medal && c ? 30 * s : 0), y + 96 * s, vpx, 800, Math.min(1, kk * 2), al); Tx(ctx, stt.l, ax, y + 148 * s, 40 * s, 500, .82 * Math.min(1, kk * 2), al); }
-      else { Tx(ctx, stt.l, ax, y + 36 * s, 34 * s, 500, .78 * Math.min(1, kk * 2), al); Tx(ctx, v, ax, y + 100 * s, vpx, 800, Math.min(1, kk * 2), al); }
-      if (stt.medal) { font(ctx, 800, vpx); const vw = ctx.measureText(stt.v).width; const mx = c ? ax + vw / 2 + 34 * s - (stack ? 30 * s : 0) : ax + vw + 34 * s; medal(ctx, mx, y + (stack ? 66 : 80) * s, (stack ? 26 : 22) * s); }
+      else { caps(ctx, stt.l, ax, y + 36 * s, 26 * s, .7 * Math.min(1, kk * 2), al, cw - 16); Tx(ctx, v, ax, y + 104 * s, vpx, 800, Math.min(1, kk * 2), al); }
+      if (stt.medal) { font(ctx, 800, vpx); const vw = ctx.measureText(stt.v).width; const mx = c ? ax + vw / 2 + 34 * s - (stack ? 30 * s : 0) : ax + vw + 34 * s; medal(ctx, mx, y + (stack ? 66 : 80) * s, (stack ? 26 : 22) * s, Math.min(1, kk * 2)); }
       if (b.cmpOn) {
         const t = cmpText(stt, o.cmp, card.vsKey);
         if (t) {
@@ -908,10 +919,10 @@
     const qr = o.foot.qr ? 150 * s : 0, w = b.w - (qr ? qr + 30 : 0);
     let y = b.y;
     if (o.foot.logo) {
-      const lh = 54 * s; font(ctx, 800, 60 * s); const tw = ctx.measureText('XNK').width, lw = img ? Math.round(lh * img.width / img.height) : 0;
+      const lh = 54 * s; font(ctx, 900, 60 * s); const tw = ctx.measureText('XNK').width, lw = img ? Math.round(lh * img.width / img.height) : 0;
       const tot = lw + (lw ? 16 : 0) + tw, x0 = c ? b.x + (w - tot) / 2 : b.x;
       if (img) ctx.drawImage(tinted(img, lw, lh, ink), x0, y);
-      Tx(ctx, 'XNK', x0 + lw + (lw ? 16 : 0), y + lh * .85, 60 * s, 800, k);
+      Tx(ctx, 'XNK', x0 + lw + (lw ? 16 : 0), y + lh * .85, 60 * s, 900, k);
       y += lh + 12 * s;
     }
     const me = o.foot.me && st.avImg.me, cp = o.foot.coachPic && st.avImg.coach;
@@ -933,6 +944,11 @@
     if (qr) drawQr(ctx, o.qrUrl, b.x + b.w - qr, b.y + Math.max(0, (b.h - qr) / 2), qr, ink);
     ctx.globalAlpha = 1;
   }
+  let fontsP = null;
+  function loadFonts() {
+    if (!fontsP) fontsP = Promise.all(['400 60px Anton', '900 60px Inter', '600 40px Inter', '500 40px Inter'].map(f => document.fonts.load(f).catch(() => null))).catch(() => null);
+    return fontsP;
+  }
   /** Gambar satu kartu. o.t = waktu animasi 0..1 (1 = gambar diam), o.scale = 1 atau 2 (HQ), o.video = latar penuh. */
   async function draw(card, o, canvas) {
     const sc = o.scale || 1, H = o.H;
@@ -940,18 +956,58 @@
     if (canvas.width !== W * sc || canvas.height !== H * sc) { canvas.width = W * sc; canvas.height = H * sc; }
     const ctx = canvas.getContext('2d');
     ctx.setTransform(sc, 0, 0, sc, 0, 0); ctx.clearRect(0, 0, W, H);
-    if (!o.noFonts) { try { await Promise.all([document.fonts.load('800 60px Inter'), document.fonts.load('600 40px Inter'), document.fonts.load('500 40px Inter')]); } catch (e) {} }
+    if (!o.noFonts) await loadFonts();
     const img = await logo();
     paint(ctx, card, o, img);
     return canvas;
   }
-  function paint(ctx, card, o, img) {
-    const H = o.H, k = o.t == null ? 1 : o.t;
-    const boxed = o.style === 'gelap' || o.style === 'terang';
-    let ink = o.style === 'gelap' ? '#FFFFFF' : o.style === 'terang' ? '#0B0B0B' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF');
+  const inkOf = o => (o.style === 'gelap' ? '#FFFFFF' : o.style === 'terang' ? '#0B0B0B' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF'));
+  const isBoxed = o => o.style === 'gelap' || o.style === 'terang';
+  const fxOn = o => o.fx !== 'polos' && (isBoxed(o) || o.style === 'foto' || o.video);
+  // Butir film: satu ubin 256 px dengan derau tetap (seed), dipakai ulang.
+  let grainTile = null;
+  function grain() {
+    if (grainTile) return grainTile;
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const x = c.getContext('2d'), d = x.createImageData(256, 256);
+    let seed = 1337;
+    for (let i = 0; i < d.data.length; i += 4) { seed = (seed * 16807) % 2147483647; const v = 128 + ((seed / 2147483647) - .5) * 200; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+    x.putImageData(d, 0, 0);
+    grainTile = c; return c;
+  }
+  function clipCard(ctx, o) { const rad = o.corner === 'bulat' && !o.video ? 72 : 0; rrect(ctx, 0, 0, W, o.H, rad); ctx.clip(); }
+  /** Latar kartu (polos, gelap/terang dengan cahaya lembut, foto). Mengembalikan warna tinta. */
+  function paintBg(ctx, o) {
+    const H = o.H, boxed = isBoxed(o), ink = inkOf(o), fx = fxOn(o);
     const rad = o.corner === 'bulat' ? 72 : 0;
     if (o.video && !boxed && o.style !== 'foto') { ctx.fillStyle = ink === '#FFFFFF' ? '#0B0B0B' : '#FFFFFF'; ctx.fillRect(0, 0, W, H); }
-    if (boxed) { ctx.fillStyle = o.style === 'gelap' ? '#0B0B0B' : '#FFFFFF'; rrect(ctx, 0, 0, W, H, o.video ? 0 : rad); ctx.fill(); }
+    if (boxed) {
+      ctx.save(); clipCard(ctx, o);
+      if (o.style === 'gelap') {
+        ctx.fillStyle = '#0B0B0B'; ctx.fillRect(0, 0, W, H);
+        if (fx) {
+          let g = ctx.createRadialGradient(W * .12, H * .04, 0, W * .12, H * .04, Math.max(W, H) * .85);
+          g.addColorStop(0, 'rgba(255,255,255,.10)'); g.addColorStop(.45, 'rgba(255,255,255,.03)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+          g = ctx.createRadialGradient(W * .9, H, 0, W * .9, H, H * .6);
+          g.addColorStop(0, 'rgba(255,255,255,.04)'); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        }
+      } else {
+        const g = ctx.createLinearGradient(0, 0, W * .4, H);
+        g.addColorStop(0, '#FFFFFF'); g.addColorStop(1, fx ? '#EFEEEB' : '#FFFFFF'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      }
+      if (fx) {
+        const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.hypot(W, H) * .62);
+        v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, o.style === 'gelap' ? 'rgba(0,0,0,.55)' : 'rgba(0,0,0,.08)'); ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+      }
+      ctx.restore();
+      if (fx && o.style === 'gelap' && !o.video) {   // garis kilau tipis di tepi atas
+        ctx.save(); clipCard(ctx, o);
+        const sh = ctx.createLinearGradient(0, 0, W, 0);
+        sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(.3, 'rgba(255,255,255,.35)'); sh.addColorStop(.7, 'rgba(255,255,255,.12)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = sh; ctx.lineWidth = 2; rrect(ctx, 1, 1, W - 2, H - 2, Math.max(0, rad - 1)); ctx.stroke(); ctx.restore();
+      }
+    }
     if (o.style === 'foto') {
       if (o.photo) {
         drawCover(ctx, o.photo, 0, 0, W, H);
@@ -960,12 +1016,29 @@
         const g = ctx.createLinearGradient(0, 0, 0, H), c = ink === '#FFFFFF' ? '0,0,0' : '255,255,255';
         const a = o.pos === 'atas' ? [.65, .1, 0] : o.pos === 'bawah' ? [0, .15, .75] : [.2, .5, .2];
         g.addColorStop(0, 'rgba(' + c + ',' + a[0] + ')'); g.addColorStop(.5, 'rgba(' + c + ',' + a[1] + ')'); g.addColorStop(1, 'rgba(' + c + ',' + a[2] + ')'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        if (fx) { const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .4, W / 2, H / 2, Math.hypot(W, H) * .6); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)'); ctx.fillStyle = v; ctx.fillRect(0, 0, W, H); }
       } else { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, 0, W, H); Tx(ctx, T.pickPhoto, W / 2, H / 2, 54, 600, .5, 'center'); }
       if (rad && !o.video) { ctx.globalCompositeOperation = 'destination-in'; ctx.fillStyle = '#000'; rrect(ctx, 0, 0, W, H, rad); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
     }
     if (o.frame) { ctx.save(); ctx.strokeStyle = ink; ctx.globalAlpha = .9; ctx.lineWidth = 6; rrect(ctx, 30, 30, W - 60, H - 60, Math.max(0, rad - 30)); ctx.stroke(); ctx.restore(); }
     ctx.fillStyle = ink; ctx.textBaseline = 'alphabetic';
-    if (ink === '#FFFFFF' && !boxed && o.style !== 'foto' && !o.video) { ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 2; }
+    return ink;
+  }
+  /** Teks putih di atas transparan: cahaya lembut agar terbaca di foto apa pun. */
+  function textShadow(ctx, o, ink) {
+    if (ink === '#FFFFFF' && !isBoxed(o) && o.style !== 'foto' && !o.video) { ctx.shadowColor = 'rgba(0,0,0,.42)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 1; }
+  }
+  /** Butir film di atas semuanya (hanya di dalam kartu, tidak di area transparan). */
+  function paintGrain(ctx, o, frame) {
+    if (!fxOn(o)) return;
+    ctx.save(); ctx.shadowColor = 'transparent'; clipCard(ctx, o);
+    ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = o.style === 'terang' ? .07 : .10;
+    const t = grain(), ox = frame ? (frame * 97) % 256 : 0, oy = frame ? (frame * 61) % 256 : 0;
+    ctx.translate(-ox, -oy); ctx.fillStyle = ctx.createPattern(t, 'repeat'); ctx.fillRect(0, 0, W + 256, o.H + 256);
+    ctx.restore();
+  }
+  function paintContent(ctx, card, o, img, ink, k) {
+    textShadow(ctx, o, ink);
     const R = layout(card, o);
     drawHead(ctx, card, R, o, ink, ease(k * 3));
     drawStats(ctx, card, R, o, ink, ease((k - .1) * 1.6));
@@ -974,7 +1047,107 @@
     ctx.shadowColor = 'transparent';
     return R;
   }
+  function paint(ctx, card, o, img) {
+    const ink = paintBg(ctx, o);
+    const R = paintContent(ctx, card, o, img, ink, o.t == null ? 1 : o.t);
+    paintGrain(ctx, o, 0);
+    return R;
+  }
 
+  // ── Motion graphics: Minimal (Strava) dan Kinetic (Nike). Bingkai terakhir = kartu diam. ─────
+  const E = {
+    outExpo: t => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+    outBack: t => { const c = 1.70158, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; },
+    inOutCubic: t => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+    outQuint: t => 1 - Math.pow(1 - t, 5)
+  };
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  /** Adegan kinetic dari isi kartu, sesuai durasi. */
+  function kineticScenes(card, dur) {
+    const max = dur >= 15 ? 7 : dur >= 10 ? 5 : 3, out = [{ type: 'title' }];
+    const rec = card.stats.find(x => x.medal && !/^0\b/.test(String(x.v)) && String(x.v) !== '0');
+    const stats = card.stats.slice(0, 4);
+    stats.forEach(x => out.push({ type: 'stat', s: x }));
+    if (card.g && card.g.type !== 'photos') out.push({ type: 'graph' });
+    if (rec) out.push({ type: 'record', s: rec });
+    let list = out.slice(0, max);
+    if (rec && max >= 4 && !list.some(x => x.type === 'record')) list[list.length - 1] = { type: 'record', s: rec };
+    if (list.length < 2) list.push({ type: 'title' });
+    return list;
+  }
+  function sceneStat(ctx, sc, o, ink, p, idx) {
+    const H = o.H, inP = clamp01(p / .28), outP = clamp01((p - .86) / .14);
+    const v = String(sc.s.v), count = animText(v, E.outQuint(clamp01(p / .6)));
+    const px = fit(ctx, v, Math.min(H * .2, 330), 800, W * .84);
+    ctx.save();
+    const zoom = idx % 2 ? 1 + 1.2 * (1 - E.outExpo(inP)) : 1, dx = idx % 2 ? 0 : W * (1 - E.outExpo(inP));
+    const ex = 1 + .18 * E.inOutCubic(outP);
+    ctx.translate(W / 2 + dx, H / 2); ctx.scale(zoom * ex, zoom * ex);
+    ctx.globalAlpha = (idx % 2 ? clamp01(inP * 2) : 1) * (1 - outP);
+    ctx.fillStyle = ink;
+    // garis penyapu di bawah angka
+    ctx.fillRect(-W * .3 * E.outExpo(clamp01((p - .1) / .4)), px * .28, W * .6 * E.outExpo(clamp01((p - .1) / .4)), Math.max(4, px * .03));
+    Tx(ctx, count, 0, px * .12, px, 800, ctx.globalAlpha, 'center');
+    caps(ctx, sc.s.l, 0, px * .28 + 80, 44, ctx.globalAlpha * .85, 'center', W * .8);
+    if (sc.s.medal) medal(ctx, 0, -px * 1.05 - 60, 52 * E.outBack(clamp01((p - .2) / .3)));
+    ctx.restore();
+  }
+  function sceneTitle(ctx, card, o, ink, p) {
+    const H = o.H, t = String(card.title || 'XNK').toUpperCase(), inP = clamp01(p / .35), outP = clamp01((p - .85) / .15);
+    const px = fit(ctx, t, Math.min(H * .16, 260), 800, W * .86), sc = 1 + .35 * (1 - E.outExpo(inP));
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.fillStyle = ink;
+    for (let g = 3; g >= 1; g--) { const gs = sc + g * .06 * (1 - inP); ctx.save(); ctx.scale(gs, gs); Tx(ctx, t, 0, px * .35, px, 800, .12 * (1 - inP) * (1 - outP), 'center'); ctx.restore(); }
+    ctx.scale(sc * (1 + .12 * outP), sc * (1 + .12 * outP));
+    Tx(ctx, t, 0, px * .35, px, 800, (1 - outP), 'center');
+    if (card.date) Tx(ctx, card.date, 0, px * .35 + 90, 44, 500, .75 * clamp01((p - .25) / .25) * (1 - outP), 'center');
+    ctx.restore();
+  }
+  function sceneGraph(ctx, card, o, ink, p) {
+    const H = o.H, outP = clamp01((p - .88) / .12), b = { x: 80, y: H * .22, w: W - 160, h: H * .56 };
+    ctx.save(); ctx.globalAlpha = 1 - outP; ctx.translate(W / 2, H / 2); const z = 1 + .06 * (1 - E.outExpo(clamp01(p / .4))); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
+    graphic(ctx, b, card.g, ink, E.outQuint(clamp01((p - .05) / .7)), 1.15, o, true);
+    ctx.restore();
+  }
+  function sceneRecord(ctx, sc, o, ink, p) {
+    const H = o.H, drop = E.outBack(clamp01(p / .35)), outP = clamp01((p - .86) / .14);
+    ctx.save(); ctx.globalAlpha = 1 - outP;
+    medal(ctx, W / 2, H * .36 * drop - H * .05 * (1 - drop) + 0, 110);
+    const t = P.lang === 'id' ? 'REKOR BARU' : 'NEW RECORD', px = fit(ctx, t, 190, 800, W * .86);
+    ctx.fillStyle = ink; Tx(ctx, t, W / 2, H * .55, px, 800, clamp01((p - .15) / .2) * (1 - outP), 'center');
+    Tx(ctx, String(sc.s.v), W / 2, H * .55 + 120, fit(ctx, String(sc.s.v), 90, 800, W * .8), 800, clamp01((p - .3) / .2) * (1 - outP), 'center');
+    ctx.restore();
+  }
+  /**
+   * Satu bingkai video pada detik t. o.anim = 'minimal' | 'kinetic', o.dur = detik. Bingkai akhir sama dengan kartu diam.
+   */
+  function animFrame(ctx, card, o, img, t, frame) {
+    const dur = o.dur || 6, H = o.H;
+    ctx.clearRect(0, 0, W, H);
+    const ink = paintBg(ctx, o);
+    if (o.anim === 'kinetic') {
+      const assemble = Math.min(2, dur * .22), hold = Math.max(.9, dur * .1), scenesT = Math.max(1, dur - assemble - hold);
+      const scenes = kineticScenes(card, dur), per = scenesT / scenes.length;
+      if (t < scenesT) {
+        const i = Math.min(scenes.length - 1, Math.floor(t / per)), p = (t - i * per) / per, sc = scenes[i];
+        if (sc.type === 'title') sceneTitle(ctx, card, o, ink, p);
+        else if (sc.type === 'stat') sceneStat(ctx, sc, o, ink, p, i);
+        else if (sc.type === 'graph') sceneGraph(ctx, card, o, ink, p);
+        else if (sc.type === 'record') sceneRecord(ctx, sc, o, ink, p);
+      } else {
+        const p = clamp01((t - scenesT) / assemble), z = 1 + .14 * (1 - E.outExpo(p));
+        ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
+        paintContent(ctx, card, o, img, ink, E.outQuint(p));
+        ctx.restore();
+      }
+    } else {
+      const reveal = Math.min(3.6, dur * .6), k = clamp01(t / reveal);
+      const z = 1 + .03 * (1 - E.inOutCubic(clamp01(t / dur)));
+      ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
+      paintContent(ctx, card, o, img, ink, k);
+      ctx.restore();
+    }
+    paintGrain(ctx, o, t >= dur ? 0 : frame);
+  }
   // ── lembar editor ────────────────────────────────────────────────────────────
   const st = { kind: '', src: null, opts: {}, card: null, kinds: [], per: {}, perLoading: '', blob: null, url: '', host: false, token: 0, pending: null, tray: [], tab: 'kartu',
     photoA: null, photoB: null, photoAInfo: '', photoBInfo: '', photoBg: null, avatars: null, avImg: {}, prevName: null, recording: false, full: false };
@@ -1008,7 +1181,7 @@
       if (x0 === null) return;
       const dx = e.clientX - x0, dy = e.clientY - y0; x0 = null;
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) { window.shareStep(dx < 0 ? 1 : -1); return; }
-      if (!moved) { if (!isDesk() && st.tab) window.shareTab(''); else window.shareFull(); }
+      if (!moved) { if (st.playing) { stopPlay(); renderControls(); } else if (!isDesk() && st.tab) window.shareTab(''); else window.shareFull(); }
     });
     box.addEventListener('pointercancel', function () { x0 = null; });
     box.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.shareFull(); } });
@@ -1045,6 +1218,7 @@
     const boxed = P.style === 'gelap' || P.style === 'terang';
     let h = row('Gaya', [['teks', 'Transparan'], ['grafik', 'Transp. + grafik'], ['gelap', 'Gelap'], ['terang', 'Terang'], ['foto', 'Foto']].map(x => chip('style', x[0], x[1], P.style)).join(''));
     if (!boxed) h += row('Warna teks', chip('ink', 'putih', 'Putih', P.ink) + chip('ink', 'hitam', 'Hitam', P.ink));
+    if (boxed || P.style === 'foto') h += row('Efek', chip('fx', 'halus', 'Grain + cahaya', P.fx || 'halus') + chip('fx', 'polos', 'Polos', P.fx || 'halus'));
     if (P.style === 'foto') h += row('Foto latar', '<button type="button" class="chip" onclick="window.sharePick(\'bg\')">' + ic('image') + (st.photoBg ? 'Ganti foto' : 'Pilih foto') + '</button>') + blurField();
     return h;
   }
@@ -1061,8 +1235,13 @@
   }
   function paneEkspor() {
     const n = st.tray.length;
-    return row('Format', fmtSeg()) +
-      '<p class="sh-note">' + (P.fmt === 'video' ? 'Video 6 detik tanpa suara; latar transparan jadi gelap.' : P.fmt === 'hq' ? 'Gambar 2160 px untuk hasil paling tajam.' : 'Gambar PNG 1080 px.') + ' Set: ' + n + '/5 kartu.</p>';
+    let h = row('Format', fmtSeg());
+    if (P.fmt === 'video') {
+      h += row('Animasi', chip('anim', 'minimal', 'Minimal', P.anim || 'minimal') + chip('anim', 'kinetic', 'Kinetic', P.anim || 'minimal'));
+      h += row('Durasi', [6, 10, 15].map(d => chip('dur', d, d + ' dtk', String(P.dur || 6))).join(''));
+      h += '<button type="button" class="chip sh-play" id="share-play" onclick="window.sharePlay()">' + ic(st.playing ? 'square' : 'play') + (st.playing ? 'Berhenti' : 'Putar pratinjau') + '</button>';
+    }
+    return h + '<p class="sh-note">' + (P.fmt === 'video' ? (P.anim === 'kinetic' ? 'Kinetic: judul dan angka besar masuk satu per satu, lalu kartu lengkap.' : 'Minimal: angka naik, grafik tergambar, lalu kartu diam.') + ' Tanpa suara; latar transparan jadi gelap.' : P.fmt === 'hq' ? 'Gambar 2160 px untuk hasil paling tajam.' : 'Gambar PNG 1080 px.') + ' Set: ' + n + '/5 kartu.</p>';
   }
   function blurField() {
     const k = kp();
@@ -1167,6 +1346,7 @@
   }
   let timer = 0;
   function refresh() {
+    if (st.playing) stopPlay();
     clearTimeout(timer);
     timer = setTimeout(async function () {
       if (!st.card) return;
@@ -1352,13 +1532,15 @@
       const type = videoType(), stream = cnv.captureStream(30), rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 6000000 } : undefined), chunks = [];
       rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
       const done = new Promise(r => { rec.onstop = r; });
-      const total = durMs || 6000, anim = 3600, t0 = performance.now();
+      const total = durMs || (o.dur || 6) * 1000, t0 = performance.now();
+      const vo = Object.assign({}, o, { dur: total / 1000 });
       rec.start(250);
+      let n = 0;
       await new Promise(function (res) {
         (function frame() {
           const el = performance.now() - t0;
-          ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, o.H);
-          paint(ctx, st.card, Object.assign({}, o, { t: Math.min(1, el / anim) }), img);
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          animFrame(ctx, st.card, vo, img, Math.min(el, total) / 1000, n++);
           const bar = $('share-busy'); if (bar) bar.style.setProperty('--p', Math.min(100, Math.round(el / total * 100)) + '%');
           if (el < total) requestAnimationFrame(frame); else res();
         })();
@@ -1370,6 +1552,29 @@
     } catch (e) { window.showToast('Video tidak bisa dibuat di perangkat ini. Pakai Gambar.'); return null; }
     finally { st.recording = false; busy(false); const g = $('share-go'); if (g) g.disabled = false; const bar = $('share-busy'); if (bar) bar.style.removeProperty('--p'); }
   }
+  // Pratinjau animasi di kotak pratinjau (setengah resolusi, sekali putar).
+  function stopPlay() {
+    st.playing = false; cancelAnimationFrame(st.playRaf);
+    const c = document.getElementById('share-anim'); if (c) c.remove();
+  }
+  window.sharePlay = async function () {
+    if (st.playing) { stopPlay(); renderControls(); return; }
+    const box = $('share-box'); if (!box || !st.card) return;
+    const o = opts(); o.video = true;
+    await loadFonts(); const img = await logo();
+    const c = document.createElement('canvas'), sc = .5; c.id = 'share-anim'; c.className = 'sh-anim'; c.width = W * sc; c.height = o.H * sc;
+    box.appendChild(c);
+    const ctx = c.getContext('2d'), t0 = performance.now(), total = o.dur;
+    st.playing = true; renderControls();
+    let n = 0;
+    (function tick() {
+      if (!st.playing) return;
+      const t = (performance.now() - t0) / 1000;
+      ctx.setTransform(sc, 0, 0, sc, 0, 0);
+      animFrame(ctx, st.card, o, img, Math.min(t, total), n++);
+      if (t < total + .8) st.playRaf = requestAnimationFrame(tick); else { stopPlay(); renderControls(); }
+    })();
+  };
   function download(blob, name) {
     const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
@@ -1484,6 +1689,16 @@
     render: async function (fmt) { const f = P.fmt; P.fmt = fmt; try { return await renderOut(); } finally { P.fmt = f; } },
     video: function (ms) { return recordVideo(ms); },
     kinds: function () { return st.kinds.slice(); },
+    anim: async function (anim, dur, ts, keep) {
+      const o = opts(); o.video = true; o.anim = anim; o.dur = dur;
+      await loadFonts(); const img = await logo();
+      const c = document.createElement('canvas'); c.width = W; c.height = o.H; const ctx = c.getContext('2d');
+      const frames = [];
+      ts.forEach(function (t) { ctx.setTransform(1, 0, 0, 1, 0, 0); animFrame(ctx, st.card, o, img, t, Math.round(t * 30)); frames.push(keep || t === ts[ts.length - 1] ? c.toDataURL('image/png') : ''); });
+      const s2 = document.createElement('canvas'); s2.width = W; s2.height = o.H; paint(s2.getContext('2d'), st.card, o, img);
+      const still = s2.toDataURL('image/png');
+      return { endIsStill: frames[frames.length - 1] === still, frames: keep ? frames : [] };
+    },
     setPhotos: function (a, b) { st.photoA = a; st.photoB = b; st.photoAInfo = '2026-08-01'; st.photoBInfo = '2026-10-28'; refresh(); }
   };
 })();
