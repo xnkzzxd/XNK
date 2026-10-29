@@ -57,6 +57,20 @@
   .price .per { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
   .price.hot .per { color: #A3A3A3; }
   .price ul.tick li { font-size: 13.5px; }
+  .price .setup { font-size: 13px; background: var(--sand); border-radius: 10px; padding: 8px 10px; margin-bottom: 14px; }
+  .price.hot .setup { background: #222; color: #D6D3D1; }
+  .price .for { margin-top: auto; padding-top: 12px; font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+  .price.hot .for { color: #A3A3A3; }
+  table.cmp { margin-top: 10px; font-size: 12.5px; }
+  table.cmp td, table.cmp th { padding: 4.5px 10px; line-height: 1.3; }
+  table.cmp th { font: 800 15px 'Inter Display'; letter-spacing: -0.01em; text-transform: none; color: var(--ink); vertical-align: bottom; }
+  table.cmp th span { font: 600 12px 'JetBrains Mono'; color: var(--muted); }
+  table.cmp .c { text-align: center; width: 112px; }
+  table.cmp .hot { background: var(--ink); color: #fff; }
+  table.cmp th.hot span { color: #A3A3A3; }
+  table.cmp tr.grp td { font: 700 11.5px 'JetBrains Mono'; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding-top: 11px; border-bottom: 2px solid var(--ink); }
+  table.cmp .yes { font-weight: 900; font-size: 15px; } table.cmp .no { color: #C4C0BB; }
+  table.cmp tr.setup-row td { font-weight: 800; border-top: 2px solid var(--ink); border-bottom: 0; }
   .badge { position: absolute; top: -12px; right: 18px; background: var(--red); color: #fff; font: 800 12px Inter; padding: 6px 12px; border-radius: 20px; letter-spacing: .03em; }
   .fill { font-family: 'JetBrains Mono'; background: #FFF3C4; padding: 1px 6px; border-radius: 5px; }
   .dark .fill { background: #3A3320; color: #FFE08A; }
@@ -80,7 +94,7 @@
     <p class="lead">Aplikasi coaching XNK untuk personal trainer: jadwal, latihan, progres, gizi, dan keuangan klien dalam satu aplikasi.</p>
   </div>
   <div style="position:absolute;left:64px;right:64px;bottom:56px;display:flex;justify-content:space-between;font:600 13px 'JetBrains Mono';color:#A3A3A3">
-    <span>Disiapkan untuk: <span class="fill">[nama coach]</span></span><span><span class="fill">[tanggal]</span></span>
+    <span>Disiapkan untuk: <span class="fill">[nama coach]</span></span><span>29 Oktober 2026</span>
   </div>
 </section>
 
@@ -104,8 +118,8 @@
   <table>
     <tr><td class="m">02</td><td>Masalah coach hari ini</td><td class="m">06</td><td>Keamanan & data</td></tr>
     <tr><td class="m">03</td><td>Solusi: satu aplikasi, dua sisi</td><td class="m">07</td><td>Paket & harga</td></tr>
-    <tr><td class="m">04</td><td>Fitur untuk coach</td><td class="m">08</td><td>Cara mulai</td></tr>
-    <tr><td class="m">05</td><td>Fitur untuk klien</td><td class="m">09</td><td>Penutup & kontak</td></tr>
+    <tr><td class="m">04</td><td>Fitur untuk coach</td><td class="m">08</td><td>Perbandingan fitur</td></tr>
+    <tr><td class="m">05</td><td>Fitur untuk klien</td><td class="m">09</td><td>Cara mulai & kontak</td></tr>
   </table>
   <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>02</span></div>
 </section>
@@ -221,54 +235,73 @@
 <!-- 8 · Paket & harga -->
 <section class="page">
   <div class="eyebrow">07 · Paket & harga</div>
-  <h1>Pilih sesuai<br>jumlah klienmu.</h1>
+  <h1>Pilih sesuai<br>cara kerjamu.</h1>
   <div class="grid3" style="margin-top:26px;align-items:stretch">
     <div class="price">
       <div class="eyebrow">Starter</div>
-      <div class="amt">Rp 99.000</div><div class="per">per bulan · s.d. 15 klien aktif</div>
-      <ul class="tick"><li>Panel coach + portal klien</li><li>Booking, jadwal, sisa sesi</li><li>Latihan, rekor, progres</li><li>Pengingat WhatsApp</li></ul>
+      <div class="amt">Rp 99.000</div><div class="per">per bulan · 1 coach, s.d. 15 klien</div>
+      <div class="setup">Setup sekali bayar <b>Rp 299.000</b></div>
+      <ul class="tick"><li>Booking & jadwal mandiri</li><li>Mode latihan & rekor</li><li>Berat & ukuran tubuh</li><li>Pengingat sesi & booking</li></ul>
+      <div class="for">Untuk PT yang baru mulai merapikan klien.</div>
     </div>
     <div class="price hot">
       <span class="badge">PALING DIPILIH</span>
       <div class="eyebrow">Pro</div>
-      <div class="amt">Rp 199.000</div><div class="per">per bulan · klien tanpa batas</div>
-      <ul class="tick"><li>Semua di Starter</li><li>Keuangan: tagihan, pembayaran, laporan</li><li>Gizi: target kalori, menu, catat makan</li><li>Kartu bagikan & program template</li></ul>
+      <div class="amt">Rp 199.000</div><div class="per">per bulan · 1 coach, klien tanpa batas</div>
+      <div class="setup">Setup sekali bayar <b>Rp 499.000</b></div>
+      <ul class="tick"><li>Semua di Starter</li><li>Keuangan & tagihan</li><li>Gizi & target kalori</li><li>Foto progres, asesmen, catatan sesi</li><li>Kartu bagikan & template program</li></ul>
+      <div class="for">Untuk PT full-time yang ingin klien bertahan lama.</div>
     </div>
     <div class="price">
       <div class="eyebrow">Studio</div>
       <div class="amt">Rp 449.000</div><div class="per">per bulan · s.d. 5 coach</div>
-      <ul class="tick"><li>Semua di Pro</li><li>Banyak coach, klien pilih coach</li><li>Kelas grup & bagi hasil coach</li><li>Laporan per coach</li></ul>
+      <div class="setup">Setup sekali bayar <b>Rp 1.499.000</b></div>
+      <ul class="tick"><li>Semua di Pro</li><li>Banyak coach, klien pilih coach</li><li>Kelas grup & bagi hasil coach</li><li>Landing page booking publik</li></ul>
+      <div class="for">Untuk tim kecil atau studio privat.</div>
     </div>
   </div>
-  <div class="card" style="margin-top:22px">
+  <div class="card" style="margin-top:18px">
+    <div class="eyebrow" style="margin-bottom:10px">Biaya setup sudah termasuk</div>
     <ul class="tick" style="columns:2;column-gap:28px">
-      <li>Gratis coba 14 hari</li><li>Gratis pemasangan & impor data klien</li><li>Bayar tahunan: gratis 2 bulan</li><li>Bisa berhenti kapan saja, data tetap milikmu</li>
+      <li>Pemasangan aplikasi di akun Google-mu</li><li>Impor data klien dari Excel / catatan</li><li>Atur paket, harga, jam operasional</li><li>Teks pengingat WhatsApp sesuai gayamu</li><li>Sesi pelatihan 1 jam (online)</li><li>Studio: landing page & profil tiap coach</li>
     </ul>
   </div>
-  <div class="card ink" style="margin-top:16px;display:grid;grid-template-columns:1fr 1.3fr;gap:20px;align-items:center">
-    <div><div class="eyebrow">Hitung balik modal</div><div class="d" style="font-size:38px;margin-top:8px">1 sesi = <span class="red">lunas</span></div></div>
+  <div class="card ink" style="margin-top:14px;display:grid;grid-template-columns:1fr 1.3fr;gap:20px;align-items:center">
+    <div><div class="eyebrow">Hitung balik modal</div><div class="d" style="font-size:36px;margin-top:8px">1 sesi = <span class="red">lunas</span></div></div>
     <p>Kalau satu sesi PT-mu Rp 200.000, cukup <b>satu sesi tambahan per bulan</b>, dari klien yang tidak jadi berhenti atau dari jam admin yang terpakai untuk melatih, untuk menutup paket Pro.</p>
   </div>
-  <p class="note" style="margin-top:14px">Harga di atas adalah usulan dan bisa disesuaikan. Belum termasuk biaya domain khusus bila diminta.</p>
+  <p class="note" style="margin-top:12px">Bayar tahunan: gratis 2 bulan. Harga belum termasuk domain khusus (bila diminta). Harga dapat berubah; berlaku sesuai masa proposal.</p>
   <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>08</span></div>
 </section>
 
-<!-- 9 · Cara mulai -->
+<!-- 9 · Perbandingan fitur -->
 <section class="page">
-  <div class="eyebrow">08 · Cara mulai</div>
-  <h1>Siap pakai<br>dalam ± 3 hari.</h1>
-  <div style="margin-top:28px;display:grid;gap:14px">
-    <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">1</div><div><h2>Demo 30 menit</h2><p>Kami tunjukkan aplikasinya langsung di HP-mu, sesuai cara kerjamu sekarang.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 1</div></div>
-    <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">2</div><div><h2>Pemasangan & impor data</h2><p>Kami pasang aplikasimu, atur paket & harga, jam operasional, lalu masukkan daftar klien dari Excel atau catatanmu.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 1–2</div></div>
-    <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">3</div><div><h2>Ajak klien masuk</h2><p>Klien dapat link portal + pesan WhatsApp siap kirim. Panduan di dalam aplikasi menuntun mereka langkah demi langkah.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 3</div></div>
-    <div class="card ink" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px;background:#fff;color:#0A0A0A">4</div><div><h2>Jalan & didampingi</h2><p>14 hari coba gratis dengan pendampingan lewat WhatsApp. Lanjut berlangganan hanya kalau cocok.</p></div><div class="m" style="text-align:right;color:#A3A3A3">Hari 3–17</div></div>
-  </div>
-  <h2 style="margin-top:28px">Dukungan setelah berlangganan</h2>
-  <ul class="tick" style="columns:2;column-gap:28px"><li>Bantuan lewat WhatsApp di jam kerja</li><li>Pembaruan fitur tanpa biaya tambahan</li><li>Bantuan atur pengingat & teks pesan</li><li>Cadangan data otomatis di Google Drive</li></ul>
+  <div class="eyebrow">08 · Perbandingan fitur</div>
+  <h1 style="font-size:40px;margin-bottom:8px">Apa saja yang kamu dapat.</h1>
+  <table class="cmp">
+    <tr><th></th><th class="c">Starter<br><span>Rp 99rb</span></th><th class="c hot">Pro<br><span>Rp 199rb</span></th><th class="c">Studio<br><span>Rp 449rb</span></th></tr>
+    <tr class="grp"><td colspan="4">Dasar</td></tr><tr><td>Panel coach + portal klien</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Klien aktif</td><td class="c">15</td><td class="c hot">Tanpa batas</td><td class="c">Tanpa batas</td></tr><tr><td>Jumlah coach</td><td class="c">1</td><td class="c hot">1</td><td class="c">s.d. 5</td></tr><tr><td>Booking & reschedule mandiri oleh klien</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Jadwal, kalender, sisa sesi otomatis</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Paket & harga, jam operasional</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Notifikasi Telegram untuk coach</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr class="grp"><td colspan="4">Latihan & progres</td></tr><tr><td>Mode latihan, timer istirahat, rekor (PR)</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Program latihan per klien</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Template program & Jelajahi</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Berat & ukuran tubuh, grafik</td><td class="c"><span class="yes">✓</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Foto progres privat, rapor tubuh, badge</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Catatan sesi, rating & evaluasi paket</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Asesmen & tes kebugaran</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr class="grp"><td colspan="4">Bisnis & klien</td></tr><tr><td>Pengingat WhatsApp siap kirim</td><td class="c">Sesi & booking</td><td class="c hot">Semua jenis</td><td class="c">Semua jenis</td></tr><tr><td>Gizi: target kalori, menu, catat makan</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Keuangan: tagihan, pembayaran, laporan, CSV</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Kartu bagikan untuk Instagram</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Info & tips untuk klien</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Banyak coach, klien pilih coach</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="no">—</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Kelas grup & bagi hasil coach</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="no">—</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Landing page booking publik</td><td class="c"><span class="no">—</span></td><td class="c hot"><span class="no">—</span></td><td class="c"><span class="yes">✓</span></td></tr><tr><td>Dukungan</td><td class="c">Jam kerja</td><td class="c hot">Prioritas</td><td class="c">Prioritas + review</td></tr>
+    <tr class="setup-row"><td>Biaya setup (sekali)</td><td class="c">Rp 299rb</td><td class="c hot">Rp 499rb</td><td class="c">Rp 1,499jt</td></tr>
+  </table>
   <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>09</span></div>
 </section>
 
-<!-- 10 · Penutup -->
+<!-- 10 · Cara mulai -->
+<section class="page">
+  <div class="eyebrow">09 · Cara mulai</div>
+  <h1>Siap pakai<br>dalam ± 3 hari.</h1>
+  <div style="margin-top:28px;display:grid;gap:14px">
+    <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">1</div><div><h2>Demo 30 menit</h2><p>Kami tunjukkan aplikasinya langsung di HP-mu, sesuai cara kerjamu sekarang.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 1</div></div>
+    <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">2</div><div><h2>Setup & impor data</h2><p>Setelah biaya setup, kami pasang aplikasimu, atur paket & harga, jam operasional, lalu masukkan daftar klien dari Excel atau catatanmu.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 1–2</div></div>
+    <div class="card" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px">3</div><div><h2>Ajak klien masuk</h2><p>Klien dapat link portal + pesan WhatsApp siap kirim. Panduan di dalam aplikasi menuntun mereka langkah demi langkah.</p></div><div class="m" style="text-align:right;color:#6B6560">Hari 3</div></div>
+    <div class="card ink" style="display:grid;grid-template-columns:54px 1fr 120px;gap:16px;align-items:center"><div class="num" style="margin:0;width:44px;height:44px;border-radius:22px;font-size:18px;background:#fff;color:#0A0A0A">4</div><div><h2>Jalan & didampingi</h2><p>Bulan pertama didampingi lewat WhatsApp. Langganan bulanan mulai berjalan sejak aplikasi dipakai klien.</p></div><div class="m" style="text-align:right;color:#A3A3A3">Hari 3–17</div></div>
+  </div>
+  <h2 style="margin-top:28px">Dukungan setelah berlangganan</h2>
+  <ul class="tick" style="columns:2;column-gap:28px"><li>Bantuan lewat WhatsApp di jam kerja</li><li>Pembaruan fitur tanpa biaya tambahan</li><li>Bantuan atur pengingat & teks pesan</li><li>Riwayat versi data dari Google Sheets</li></ul>
+  <div class="foot"><img src="../../logo.png"><span>XNK · Proposal untuk coach</span><span>10</span></div>
+</section>
+
+<!-- 11 · Penutup -->
 <section class="page dark" style="padding:0">
   <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 34%,#1c1c1c 0,#0A0A0A 55%)"></div>
   <img src="../../logo.png" style="position:absolute;left:50%;top:120px;width:380px;margin-left:-190px">
@@ -279,13 +312,13 @@
   <div style="position:absolute;left:120px;right:120px;top:720px;background:#fff;color:#0A0A0A;border-radius:28px;padding:30px 36px">
     <div class="eyebrow" style="color:#6B6560">Hubungi kami</div>
     <table style="margin-top:10px;font-size:16px">
-      <tr><td style="width:150px;color:#6B6560">Nama</td><td><span class="fill">[nama]</span></td></tr>
-      <tr><td style="color:#6B6560">WhatsApp</td><td><span class="fill">[nomor WA]</span></td></tr>
-      <tr><td style="color:#6B6560">Email</td><td><span class="fill">[email]</span></td></tr>
-      <tr><td style="color:#6B6560;border:0">Instagram</td><td style="border:0"><span class="fill">[@username]</span></td></tr>
+      <tr><td style="width:150px;color:#6B6560">Nama</td><td>Yandura Jizdan Hasya Husnayain</td></tr>
+      <tr><td style="color:#6B6560">WhatsApp</td><td>+62 882-2125-4305</td></tr>
+      <tr><td style="color:#6B6560">Email</td><td>xnkzzxd@gmail.com</td></tr>
+      <tr><td style="color:#6B6560;border:0">Instagram</td><td style="border:0">@jiz.dan</td></tr>
     </table>
   </div>
-  <div style="position:absolute;left:0;right:0;bottom:56px;text-align:center;font:600 13px 'JetBrains Mono';color:#A3A3A3">Proposal ini berlaku 30 hari sejak <span class="fill">[tanggal]</span>.</div>
+  <div style="position:absolute;left:0;right:0;bottom:56px;text-align:center;font:600 13px 'JetBrains Mono';color:#A3A3A3">Proposal ini berlaku 30 hari sejak 29 Oktober 2026.</div>
 </section>
 
 <script>
