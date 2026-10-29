@@ -55,3 +55,21 @@ test('the bundle reads far less than the separate calls', () => {
   const INSIGHT_ALLOWANCE = 8;
   assert.ok(bundle <= env.reads().total + INSIGHT_ALLOWANCE, bundle + ' vs ' + env.reads().total);
 });
+
+test('date cells in free-text care answers never reach the bundle as Date objects', () => {
+  // google.script.run answers null for the WHOLE result when it holds a Date ("Tidak ada jawaban." on every card).
+  const env = rich(), t = env.adminToken();
+  env.call('saveAssessment', t, 'PT-A', { goal: 'Turun 5 kg', schedulePref: 'pagi', bodyFat: 20 });
+  const D = require('vm').runInContext('Date', env.context);
+  const asm = env.sheet('Assessments'), last = asm.rows[asm.getLastRow() - 1];
+  // "19.00" typed as a time: Sheets builds 1899-12-30 19:00 in the sheet's zone (Jakarta then = LMT +07:07:12).
+  last[5] = new D(Date.UTC(1899, 11, 30, 19, 0, 0) - (7 * 3600 + 7 * 60 + 12) * 1000);
+  last[3] = new D('2026-07-08T00:00:00+07:00');   // "7-8" read as a date
+  const isDate = x => Object.prototype.toString.call(x) === '[object Date]';
+  const hasDate = x => isDate(x) || (!!x && typeof x === 'object' && Object.keys(x).some(k => hasDate(x[k])));
+  const raw = env.callRaw('getClientBundle', t, 'PT-A');
+  assert.equal(hasDate(raw), false);
+  assert.equal(raw.care.assessment.schedulePref, '19.00');
+  assert.equal(raw.care.assessment.goal, '2026-07-08');
+  assert.equal(hasDate(env.callRaw('getClientCare', t, 'PT-A')), false);
+});

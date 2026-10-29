@@ -2133,7 +2133,7 @@ function getPortalMore(memberToken) {
   const id = String(row[0]).trim();
   const ver = _memberVer_(id);   // sebelum sheet data dibaca
   const part = function(fn) { try { return fn(); } catch (e) { return { error: String((e && e.message) || e) }; } };
-  return _withSchedulesMemo_(function() {
+  return _plainJson_(_withSchedulesMemo_(function() {
     const coachId = String(row[10] || '').trim();
     const spy = {};
     const progress = part(function() { return _myPayload_(row); });
@@ -2163,7 +2163,7 @@ function getPortalMore(memberToken) {
       coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
       share: part(function() { return _shareFor_(row, workout, progress); })
     };
-  });
+  }));
 }
 
 /**
@@ -6186,7 +6186,7 @@ function getClientBundle(token, memberId) {
   requireAdmin_(token);
   const ver = _memberVer_(memberId);   // sebelum sheet data dibaca
   const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
-  return _withSchedulesMemo_(function () {
+  return _plainJson_(_withSchedulesMemo_(function () {
     const progress = part(function () { return getMemberProgress(token, memberId); });
     const workout = part(function () { return getWorkoutLog(token, memberId); });
     const program = part(function () { return getMemberProgram(token, memberId); });
@@ -6209,8 +6209,24 @@ function getClientBundle(token, memberId) {
       share: part(function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
       insight: insight
     };
-  });
+  }));
 }
+
+/**
+ * Sel isian bebas (Assessments, HealthScreening) bisa diubah Sheets jadi tanggal/jam ("19.00", "7-8", "3/4").
+ * google.script.run mengembalikan null untuk SELURUH jawaban bila ada objek Date di dalamnya, jadi Date
+ * dikirim sebagai teks seperti yang tampil di sheet.
+ */
+function _careCell_(v) {
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return '';
+    return Utilities.formatDate(v, 'Asia/Jakarta', v.getFullYear() < 1900 ? 'HH.mm' : 'yyyy-MM-dd');
+  }
+  return v === undefined || v === null ? '' : v;
+}
+
+/** Salinan JSON murni: Date apa pun jadi teks ISO, jadi satu sel tanggal tak terduga tidak mengosongkan seluruh jawaban. */
+function _plainJson_(x) { return JSON.parse(JSON.stringify(x)); }
 
 function getClientCare(token, memberId) {
   requireAdmin_(token);
@@ -6221,10 +6237,10 @@ function getClientCare(token, memberId) {
   return {
     flag: String(m.row[MEMBER_FLAG_COL - 1] || ''), notes: String(m.row[MEMBER_NOTES_COL - 1] || ''),
     birthDate: String(m.row[MEMBER_BIRTH_COL - 1] || ''), snoozedUntil: String(m.row[MEMBER_SNOOZE_COL - 1] || ''),
-    assessment: a ? { tanggal: String(a[2]), goal: a[3], history: a[4], schedulePref: a[5], motivation: a[6], coachNotes: a[7], bodyFat: a[9], chest: a[10], arm: a[11], hip: a[12] } : null,
+    assessment: a ? { tanggal: _careCell_(a[2]), goal: _careCell_(a[3]), history: _careCell_(a[4]), schedulePref: _careCell_(a[5]), motivation: _careCell_(a[6]), coachNotes: _careCell_(a[7]), bodyFat: _careCell_(a[9]), chest: _careCell_(a[10]), arm: _careCell_(a[11]), hip: _careCell_(a[12]) } : null,
     health: hr ? {
-      tanggal: String(hr[2]), answers: [3, 4, 5, 6, 7, 8, 9].map(function(i) { return String(hr[i]); }),
-      injuries: hr[10], medication: hr[11], other: hr[12], reviewedAt: String(hr[14] || ''), reviewNote: String(hr[15] || '')
+      tanggal: _careCell_(hr[2]), answers: [3, 4, 5, 6, 7, 8, 9].map(function(i) { return String(hr[i]); }),
+      injuries: _careCell_(hr[10]), medication: _careCell_(hr[11]), other: _careCell_(hr[12]), reviewedAt: String(hr[14] || ''), reviewNote: String(hr[15] || '')
     } : null,
     tests: _fitnessSummary_(byTest), testHistory: byTest, testList: FITNESS_TESTS, questions: HEALTH_QUESTIONS,
     feedback: _feedbackFor_(id)
