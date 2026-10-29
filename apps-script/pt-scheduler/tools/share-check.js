@@ -86,11 +86,14 @@ const OUT = process.env.SHOTS_DIR || '';
     // count non-transparent pixels in the graph area (graph actually drawn)
     let ink = 0;
     if (L.graph && L.graph.h > 10) { const d = x.getImageData(L.graph.x, L.graph.y, L.graph.w, Math.min(L.graph.h, c.height - L.graph.y)).data; for (let i = 3; i < d.length; i += 4 * 7) if (d[i] > 0) ink++; }
+    // horizontal centre of the drawn head + stats (for centred cards)
+    let mid = null;
+    if (L.head && L.stats) { const y0 = Math.round(L.head.y), hh = Math.round(L.stats.y + L.stats.h - L.head.y); const d = x.getImageData(0, y0, c.width, hh).data; let mn = c.width, mx = 0; for (let yy = 0; yy < hh; yy += 3) for (let xx = 0; xx < c.width; xx += 2) if (d[(yy * c.width + xx) * 4 + 3] > 200) { if (xx < mn) mn = xx; if (xx > mx) mx = xx; } if (mx > mn) mid = (mn + mx) / 2; }
     let b64 = ''; if (window.__save) { const u = new Uint8Array(await bl.arrayBuffer()); let s = ''; u.forEach(v => s += String.fromCharCode(v)); b64 = btoa(s); }
     // reset per-card options so the next case starts clean
     if (extra.body) window.shareSet('body', false); if (extra.hideKg) window.shareSet('hideKg', false); if (extra.qr) window.shareSet('f:qr', false); if (extra.period) window.shareSet('period', 'hari');
     return { w: im.width, h: im.height, a0: x.getImageData(2, 2, 1, 1).data[3], a1: x.getImageData(im.width / 2, im.height / 2, 1, 1).data[3],
-      blocks, H: L.H, gtype: card.g && card.g.type, ink, stats: card.stats.map(s => s.v), b64 };
+      blocks, H: L.H, gtype: card.g && card.g.type, ink, stats: card.stats.map(s => s.v), b64, mid };
   }, args);
   await p.evaluate(save => { window.__save = save; }, !!OUT);
 
@@ -99,6 +102,7 @@ const OUT = process.env.SHOTS_DIR || '';
   for (const kind of want) {
     for (const [style, size] of [['teks', 'story'], ['grafik', 'story'], ['grafik', 'kotak'], ['grafik', 'portrait'], ['gelap', 'kotak'], ['gelap', 'story'], ['terang', 'portrait'], ['foto', 'story']]) cases.push([kind, style, size, 'kiri', 'en', {}]);
     cases.push([kind, 'grafik', 'story', 'tengah', 'id', {}]);
+    cases.push([kind, 'teks', 'kotak', 'tengah', 'en', {}]);
   }
   cases.push(['progres', 'grafik', 'story', 'kiri', 'en', { body: true }]);
   cases.push(['latihan', 'grafik', 'story', 'kiri', 'en', { period: 'bulan' }]);
@@ -118,6 +122,7 @@ const OUT = process.env.SHOTS_DIR || '';
     check(inside, `${tag}: every block inside the canvas ${JSON.stringify(d.blocks.map(x => [x.k, Math.round(x.y), Math.round(x.h)]))}`);
     const sorted = d.blocks.slice().sort((a, b2) => a.y - b2.y);
     check(sorted.every((bk, i) => !i || sorted[i - 1].y + sorted[i - 1].h <= bk.y + 1), `${tag}: blocks do not overlap`);
+    if (align === 'tengah' && style === 'teks' && d.mid != null) check(Math.abs(d.mid - 540) < 40, `${tag}: centred text is centred (middle at ${Math.round(d.mid)})`);
     if (d.gtype && d.gtype !== 'photos') check(d.ink > 20, `${tag}: graph ${d.gtype} drawn (${d.ink})`);
     if ((kind === 'badges' || (kind === 'progres' && !extra.body)) && style !== 'teks') check(d.gtype === 'badges', `${tag}: badge grid shown`);
     if (kind === 'progres' && !extra.body) check(!d.stats.some(v => / kg$| cm$/.test(v)), `${tag}: body numbers stay off by default`);
