@@ -27,20 +27,10 @@
   .ph .scr { position: absolute; left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 64px; overflow: hidden; background: #FAFAF9; }
   .ph .isl { position: absolute; left: 50%; top: 30px; width: 136px; height: 38px; margin-left: -68px; border-radius: 20px; background: #000; z-index: 9; }
   .layer { position: absolute; inset: 0; font-family: Inter, sans-serif; color: #111; }
-  .sb { position: absolute; left: 44px; top: 34px; font: 600 19px Inter; color: #fff; z-index: 5; }
-  .sbr { position: absolute; right: 40px; top: 38px; display: flex; gap: 6px; align-items: flex-end; z-index: 5; }
+  .sb { position: absolute; left: 44px; top: 17px; font: 600 19px Inter; color: #fff; z-index: 5; }
+  .sbr { position: absolute; right: 40px; top: 20px; display: flex; gap: 6px; align-items: flex-end; z-index: 5; }
   .sbr i { display: block; width: 5px; background: #fff; border-radius: 2px; }
-  .hd { background: #0A0A0A; color: #fff; padding: 92px 30px 30px; position: relative; }
-  .hd .t { font: 800 46px/1 'Inter Display'; letter-spacing: -0.03em; }
-  .hd .s { font: 500 20px/1.2 Inter; color: #A3A3A3; margin-top: 10px; }
-  .hd .pill { position: absolute; right: 26px; bottom: 30px; background: #fff; color: #000; font: 700 19px Inter; padding: 11px 20px; border-radius: 30px; }
-  .card { background: #fff; border: 1px solid #E7E5E4; border-radius: 24px; margin: 14px 18px; padding: 20px; position: relative; }
   .lbl { font: 600 15px Inter; color: #78716C; letter-spacing: .06em; text-transform: uppercase; }
-  .tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 96px; background: #fff; border-top: 1px solid #E7E5E4; display: flex; justify-content: space-around; align-items: flex-start; padding-top: 16px; }
-  .tabs div { width: 80px; text-align: center; font: 600 14px Inter; color: #A8A29E; }
-  .tabs div b { display: block; width: 28px; height: 28px; margin: 0 auto 6px; border-radius: 9px; border: 3px solid currentColor; box-sizing: border-box; }
-  .tabs div.on { color: #0A0A0A; }
-  .tabs div.plus b { width: 46px; height: 46px; border-radius: 23px; background: #0A0A0A; border: 0; margin-top: -8px; }
 
   .chip { position: absolute; font-family: 'Inter Display'; font-weight: 900; letter-spacing: -0.04em; line-height: 1; padding: 18px 30px 22px; white-space: nowrap; }
 </style>
@@ -52,6 +42,7 @@
   <canvas id="grain" width="540" height="960"></canvas>
   <div id="guides"></div>
 </div>
+<script src="ui/rects.js"></script>
 <script>
 'use strict';
 const W = 1080, H = 1920, B = 0.4, FPS = 30, DUR = 30;
@@ -143,197 +134,59 @@ const logo = (x, y, size, s = 1, r = 0, op = 1, inv = false) =>
 /* ------------------------------------------------------------ phone + screens */
 // Phone centre: 505 keeps it clear of the Reels/TikTok side buttons; ?px=540 centres it (4:5 feed).
 const PX = +(new URLSearchParams(location.search).get('px') || 505);
-const PW = 500, PH = 1064, SW = PW - 28, SH = PH - 28;
+const PW = 500, SB = 52, SW = PW - 28, UIH = Math.round(SW * 808 / 390), SH = SB + UIH, PH = SH + 28;
 function phone(cx, cy, s, rot, layers, op = 1) {
   return div(`${tf(cx, cy, s, rot)};width:${PW}px;height:${PH}px;opacity:${op}`,
     `<div class="scr">${layers}</div><div class="isl"></div>`, 'ph');
 }
-const statusBar = () => `<div class="sb">09.41</div><div class="sbr"><i style="height:8px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:20px;opacity:.4"></i></div>`;
-const head = (title, sub, pill = '') => `${statusBar()}<div class="hd"><div class="t">${title}</div><div class="s">${sub}</div>${pill ? `<div class="pill">${pill}</div>` : ''}</div>`;
-const tabs = on => `<div class="tabs">${['Beranda', 'Jadwal', '', 'Progres', 'Lainnya'].map((n, k) =>
-  `<div class="${k === 2 ? 'plus' : ''} ${k === on ? 'on' : ''}"><b></b>${n}</div>`).join('')}</div>`;
-const layer = (x, inner, bg = PAPER) => `<div class="layer" style="transform:translateX(${x}px);background:${bg}">${inner}</div>`;
+const statusBar = () => `<div class="a" style="left:0;top:0;right:0;height:${SB}px;background:${INK};z-index:4"></div><div class="sb">09.41</div><div class="sbr"><i style="height:8px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:20px;opacity:.4"></i></div>`;
+const layer = (x, inner, bg = INK) => `<div class="layer" style="transform:translateX(${x}px);background:${bg}">${inner}</div>`;
 
-// --- booking grid
-const HOURS = ['06', '07', '08', '09', '10', '15', '16', '17', '18'];
-const DAYS = [['Sen', 3], ['Sel', 4], ['Rab', 5], ['Kam', 6], ['Jum', 7], ['Sab', 8]];
-const BOOKED = [[0, 1, 'RS'], [2, 2, 'BH'], [4, 0, 'AN'], [1, 6, 'DP'], [3, 1, 'SW'], [5, 3, 'MK'], [0, 7, 'YT'], [2, 5, 'FA'],
-  [4, 6, 'RS'], [1, 2, 'LI'], [3, 8, 'BH'], [5, 0, 'GT'], [0, 4, 'NP'], [2, 7, 'DP'], [4, 3, 'HR'], [1, 8, 'SW'],
-  [3, 5, 'AN'], [5, 6, 'YT'], [0, 2, 'KM'], [2, 0, 'RS'], [4, 8, 'FA'], [5, 7, 'MK']];
-const TAP = [3, 7];
-const GX = 84, GY = 352, CW = 56, CH = 58, GAP = 6;
-function bookingScreen(t) {
-  let g = '';
-  HOURS.forEach((h, r) => { g += div(`left:20px;top:${GY + r * (CH + GAP) + 17}px;font:600 17px 'JetBrains Mono';color:#A8A29E`, h + '.00'); });
-  for (let c = 0; c < 6; c++) for (let r = 0; r < 9; r++)
-    g += div(`left:${GX + c * (CW + GAP)}px;top:${GY + r * (CH + GAP)}px;width:${CW}px;height:${CH}px;border-radius:14px;background:#fff;border:1.5px dashed #D6D3D1;box-sizing:border-box`);
-  BOOKED.forEach(([c, r, ini], k) => {
-    const t0 = 9.1 + k * 0.06;
-    if (t < t0) return;
-    const s = E.back(P(t, t0, t0 + 0.18));
-    g += div(`left:${GX + c * (CW + GAP) + CW / 2}px;top:${GY + r * (CH + GAP) + CH / 2}px;width:${CW}px;height:${CH}px;transform:translate(-50%,-50%) scale(${s});border-radius:14px;background:${INK};color:#fff;font:700 17px 'JetBrains Mono';display:flex;align-items:center;justify-content:center`, ini);
-  });
-  // the tap on a free hour
-  const tx = GX + TAP[0] * (CW + GAP) + CW / 2, ty = GY + TAP[1] * (CH + GAP) + CH / 2;
-  if (t >= 10.8) {
-    const s = E.back(P(t, 10.8, 10.98));
-    g += div(`left:${tx}px;top:${ty}px;width:${CW + 8}px;height:${CH + 8}px;transform:translate(-50%,-50%) scale(${s});border-radius:16px;background:${INK};color:#fff;font:800 30px Inter;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 5px #fff,0 0 0 8px ${INK}`, '✓');
-  }
-  if (t >= 10.35 && t < 11.3) {
-    const p = E.inOut(P(t, 10.35, 10.75));
-    const fx = lerp(SW + 40, tx + 18, p), fy = lerp(SH - 80, ty + 22, p);
-    const press = t >= 10.75 && t < 10.9 ? 0.85 : 1;
-    const fo = 1 - P(t, 11.0, 11.3);
-    g += div(`left:${fx}px;top:${fy}px;width:64px;height:64px;transform:translate(-50%,-50%) scale(${press});border-radius:32px;background:rgba(255,255,255,.75);border:4px solid ${INK};box-sizing:border-box;opacity:${fo}`);
-    if (t >= 10.8) {
-      const rp = P(t, 10.8, 11.2);
-      g += div(`left:${tx}px;top:${ty}px;width:${60 + rp * 160}px;height:${60 + rp * 160}px;transform:translate(-50%,-50%);border-radius:50%;border:4px solid ${INK};opacity:${1 - rp}`);
+/* ------------------------------------------------------------ real app screens (capture.js → ui/) */
+// One screenshot under the status bar. z = { s, ox, oy } zooms around a point given in 0…1.
+function shot(name, op = 1, z = null, dy = 0) {
+  const zoom = z ? `transform:scale(${z.s});transform-origin:${z.ox * 100}% ${z.oy * 100}%;` : '';
+  return `<div class="a" style="left:0;top:${SB}px;width:${SW}px;height:${UIH}px;overflow:hidden;opacity:${op}"><img src="ui/${name}.png" style="display:block;width:${SW}px;height:${UIH}px;transform:translateY(${dy}px);${zoom}"></div>`;
+}
+// Screen states [[t0, name], …]: each new one fades in over 0.12 s (sliding up `slide` px).
+function states(t, seq, z = null, slide = 0) {
+  let k = 0;
+  seq.forEach(([t0], i) => { if (t >= t0) k = i; });
+  const p = E.out(P(t, seq[k][0], seq[k][0] + 0.12));
+  let h = '';
+  if (k > 0 && p < 1) h += shot(seq[k - 1][1], 1, z, -slide * p);
+  h += shot(seq[k][1], k > 0 ? p : 1, z, slide * (1 - p));
+  return h + statusBar();
+}
+// A finger that glides in, presses each rect at its time (with a ripple), moves on, then fades out.
+const RECTS = window.UI_RECTS || {};
+const at = r => [(r.x + r.w / 2) * SW, SB + (r.y + r.h / 2) * UIH];
+function finger(t, presses) {
+  const first = presses[0][0], last = presses[presses.length - 1][0];
+  if (t < first - 0.4 || t > last + 0.5) return '';
+  const pts = presses.map(([t0, r]) => [t0, at(r)]);
+  let x, y;
+  if (t < first) {
+    const p = E.inOut(P(t, first - 0.4, first - 0.05));
+    [x, y] = [lerp(SW + 60, pts[0][1][0], p), lerp(SH + 40, pts[0][1][1], p)];
+  } else {
+    let k = 0;
+    pts.forEach(([t0], i) => { if (t >= t0) k = i; });
+    [x, y] = pts[k][1];
+    if (k < pts.length - 1) {
+      const p = E.inOut(P(t, pts[k][0] + 0.12, pts[k + 1][0] - 0.05));
+      x = lerp(x, pts[k + 1][1][0], p); y = lerp(y, pts[k + 1][1][1], p);
     }
   }
-  // toast
-  let toast = '';
-  if (t >= 10.9) {
-    const p = E.expo(P(t, 10.9, 11.2));
-    toast = div(`left:24px;right:24px;top:${lerp(SH, SH - 210, p)}px;background:${INK};color:#fff;border-radius:22px;padding:20px 24px;font:600 21px Inter;display:flex;gap:16px;align-items:center;box-shadow:0 20px 40px rgba(0,0,0,.25)`,
-      `<span style="width:40px;height:40px;border-radius:20px;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;font-weight:900">✓</span><span>Booking masuk<br><span style="color:#A3A3A3;font-weight:500">Dimas · Kamis 17.00</span></span>`);
-  }
-  const days = DAYS.map(([d, n], k) => div(`left:${GX + k * (CW + GAP)}px;top:${262}px;width:${CW}px;height:72px;border-radius:16px;background:${k === 3 ? INK : '#fff'};color:${k === 3 ? '#fff' : '#57534E'};border:1px solid #E7E5E4;box-sizing:border-box;text-align:center;font:600 15px Inter;padding-top:10px`,
-    `${d}<div style="font:800 26px 'Inter Display';margin-top:2px">${n}</div>`)).join('');
-  return head('Jadwal', 'Minggu ini · klien pilih jam sendiri') + days + g + toast + tabs(1);
-}
-
-const TODAY = [['07.00', 'Rina S.', 'Leg day', '7/12'], ['08.00', 'Budi H.', 'Full body', '3/8'], ['16.00', 'Sari W.', 'Mobility', '10/12'],
-  ['17.00', 'Dimas P.', 'Push', '1/12'], ['18.00', 'Kelas Pagi', '4 orang · HIIT', 'Kelas']];
-function todayScreen(t, t0) {
-  let rows = '';
-  TODAY.forEach(([tm, n, f, q], k) => {
-    const a = t0 + k * 0.2, p = E.expo(P(t, a, a + 0.3));
-    if (t < a) return;
-    rows += `<div class="card" style="display:flex;align-items:center;gap:18px;transform:translateY(${(1 - p) * 60}px);opacity:${p};padding:18px 20px">
-      <div class="m" style="font-size:22px;width:76px">${tm}</div>
-      <div style="flex:1"><div style="font:700 23px Inter">${n}</div><div style="font:500 18px Inter;color:#78716C;margin-top:3px">${f}</div></div>
-      <div class="m" style="font-size:17px;background:${SAND};padding:8px 12px;border-radius:12px">${q}</div></div>`;
+  const pressed = pts.some(([t0]) => t >= t0 - 0.03 && t < t0 + 0.09);
+  let h = '';
+  pts.forEach(([t0, [px, py]]) => {
+    if (t < t0 || t > t0 + 0.4) return;
+    const rp = P(t, t0, t0 + 0.4);
+    h += div(`left:${px}px;top:${py}px;width:${50 + rp * 150}px;height:${50 + rp * 150}px;transform:translate(-50%,-50%);border-radius:50%;border:4px solid ${INK};opacity:${(1 - rp) * .8};z-index:6`);
   });
-  return head('Hari ini', 'Rabu, 5 Nov · 5 sesi') + `<div style="padding-top:8px">${rows}</div>` + tabs(1);
-}
-
-const SETS = [['60 × 10', '60', '10'], ['70 × 8', '72,5', '8'], ['75 × 6', '77,5', '6'], ['80 × 5', '82,5', '5']];
-function loggerScreen(t) {
-  const done = SETS.filter((_, k) => t >= 13.6 + k * B).length;
-  const vol = [0, 600, 1180, 1645, 2057.5][done];
-  let rows = '';
-  SETS.forEach(([prev, kg, rep], k) => {
-    const a = 13.6 + k * B, on = t >= a, pop = on ? E.back(P(t, a, a + 0.16)) : 1;
-    const pr = k === 3 && t >= 15.0;
-    rows += `<div style="display:grid;grid-template-columns:56px 1fr 92px 76px 52px;align-items:center;height:64px;border-radius:14px;background:${on ? SAND : 'transparent'};padding:0 6px;margin-top:6px">
-      <div class="m" style="font-size:22px;text-align:center">${k + 1}</div>
-      <div class="m" style="font-size:19px;color:#A8A29E;font-weight:500">${prev}</div>
-      <div class="m" style="font-size:25px;transform:scale(${pop});text-align:center">${kg}</div>
-      <div class="m" style="font-size:25px;text-align:center">${rep}</div>
-      <div style="width:44px;height:44px;border-radius:12px;background:${on ? INK : '#E7E5E4'};color:#fff;display:flex;align-items:center;justify-content:center;font:900 24px Inter;transform:scale(${pop})">${on ? '✓' : ''}</div></div>`;
-    if (pr) {
-      const s = E.back(P(t, 15.0, 15.2));
-      rows += div(`right:64px;top:${238 + k * 70}px;transform:scale(${s});transform-origin:100% 50%;background:${RED};color:#fff;font:900 18px Inter;padding:7px 12px;border-radius:10px;letter-spacing:.04em`, 'PR');
-    }
-  });
-  const strip = [['Durasi', '42m'], ['Volume', fmt(vol) + ' kg'], ['Set', done + '/12']].map(([l, v]) =>
-    `<div style="flex:1"><div class="lbl">${l}</div><div class="m" style="font-size:27px;margin-top:6px">${v}</div></div>`).join('');
-  return head('Push Day', 'Latihan · 42:18', 'Selesai') +
-    `<div class="card" style="display:flex;gap:10px">${strip}</div>
-     <div class="card" style="padding:18px 16px">
-       <div style="display:flex;gap:16px;align-items:center;margin:0 4px 12px">
-         <div style="width:66px;height:66px;border-radius:16px;background:${SAND};display:flex;align-items:center;justify-content:center"><div style="width:40px;height:10px;background:${INK};border-radius:4px;box-shadow:-18px 0 0 -1px ${INK},18px 0 0 -1px ${INK}"></div></div>
-         <div><div style="font:800 27px 'Inter Display'">Bench Press</div><div style="font:500 18px Inter;color:#78716C;margin-top:4px">Dada · Barbel</div></div></div>
-       <div style="display:grid;grid-template-columns:56px 1fr 92px 76px 52px;padding:0 6px" class="lbl"><div style="text-align:center">Set</div><div>Sebelumnya</div><div style="text-align:center">Kg</div><div style="text-align:center">Rep</div><div>✓</div></div>
-       <div style="position:relative">${rows}</div></div>
-     <div class="card" style="display:flex;gap:16px;align-items:center">
-       <div style="width:66px;height:66px;border-radius:16px;background:${SAND}"></div>
-       <div><div style="font:800 27px 'Inter Display'">Incline DB Press</div><div style="font:500 18px Inter;color:#78716C;margin-top:4px">3 set · 8–12 rep</div></div></div>` + tabs(2);
-}
-
-const WEIGHT = [78.4, 78.0, 77.1, 76.9, 76.0, 75.4, 74.9, 74.2];
-function progressScreen(t, t0) {
-  const p = E.inOut(P(t, t0 + 0.2, t0 + 1.0));
-  const cw = 420, ch = 250, xs = k => 10 + k * (cw - 20) / 7, ys = v => 20 + (78.6 - v) / (78.6 - 74.0) * (ch - 40);
-  const pts = WEIGHT.map((v, k) => [xs(k), ys(v)]);
-  const d = 'M' + pts.map(q => q.join(',')).join(' L');
-  let len = 0; for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
-  const dots = pts.map((q, k) => k / 7 <= p + 0.001 ? `<circle cx="${q[0]}" cy="${q[1]}" r="${k === 7 ? 9 : 6}" fill="${k === 7 ? INK : '#fff'}" stroke="${INK}" stroke-width="4"/>` : '').join('');
-  const grid = [0, 1, 2, 3].map(k => `<line x1="0" x2="${cw}" y1="${20 + k * 70}" y2="${20 + k * 70}" stroke="#E7E5E4" stroke-width="2"/>`).join('');
-  const kg = -4.2 * E.out(P(t, t0 + 0.2, t0 + 1.0));
-  const tiles = [['Pinggang', '−6 cm'], ['Streak', '6 mgg'], ['Sesi', '22']].map(([l, v], k) => {
-    const a = t0 + 0.8 + k * 0.1, q = E.expo(P(t, a, a + 0.3));
-    return `<div class="card" style="flex:1;margin:0;padding:16px;opacity:${q};transform:translateY(${(1 - q) * 30}px)"><div class="lbl">${l}</div><div class="m" style="font-size:26px;margin-top:6px">${v}</div></div>`;
-  }).join('');
-  return head('Progres', 'Berat badan · 8 minggu') +
-    `<div class="card"><div class="lbl">Turun</div>
-       <div class="d" style="font-size:118px;margin-top:10px;letter-spacing:-0.05em">${kg === 0 ? '0,0' : '−' + fmt1(-kg)}<span style="font-size:44px;letter-spacing:0"> kg</span></div>
-       <div class="m" style="font-size:19px;color:#78716C;font-weight:500;margin-top:10px">78,4 → 74,2 kg</div>
-       <svg width="${cw}" height="${ch}" style="margin-top:18px;display:block">${grid}
-         <path d="${d}" fill="none" stroke="${INK}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="${len}" stroke-dashoffset="${len * (1 - p)}"/>${dots}</svg></div>
-     <div style="display:flex;gap:12px;margin:0 18px">${tiles}</div>` + tabs(3);
-}
-
-function nutritionScreen(t) {
-  const r = 118, C = 2 * Math.PI * r, p = E.out(P(t, 17.9, 18.8)) * 0.78;
-  const eaten = 1443 * E.out(P(t, 17.9, 18.8));
-  const macros = [['Protein', 128, 140], ['Karbo', 160, 210], ['Lemak', 48, 60]].map(([n, v, max], k) => {
-    const a = 18.4 + k * 0.2, q = E.expo(P(t, a, a + 0.35));
-    return `<div style="display:grid;grid-template-columns:110px 1fr 110px;align-items:center;gap:14px;margin-top:${k ? 18 : 0}px">
-      <div style="font:600 20px Inter">${n}</div>
-      <div style="height:14px;border-radius:7px;background:${SAND};overflow:hidden"><div style="height:100%;width:${q * v / max * 100}%;background:${INK};border-radius:7px"></div></div>
-      <div class="m" style="font-size:19px;text-align:right">${Math.round(q * v)}/${max} g</div></div>`;
-  }).join('');
-  const meals = [['Sarapan', 'Oat, telur rebus, pisang', '420'], ['Siang', 'Nasi, ayam bakar, sayur', '610']].map(([m, f, k], j) => {
-    const a = 19.0 + j * 0.2, q = E.expo(P(t, a, a + 0.3));
-    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-top:${j ? '1px solid #E7E5E4' : '0'};opacity:${q};transform:translateX(${(1 - q) * 40}px)">
-      <div style="flex:1"><div style="font:700 21px Inter">${m}</div><div style="font:500 17px Inter;color:#78716C;margin-top:3px">${f}</div></div>
-      <div class="m" style="font-size:20px">${k} kkal</div></div>`;
-  }).join('');
-  return head('Makan', 'Hari ini · target otomatis') +
-    `<div class="card" style="display:flex;justify-content:center;padding:26px 20px">
-       <div style="position:relative;width:${2 * r + 40}px;height:${2 * r + 40}px">
-         <svg width="${2 * r + 40}" height="${2 * r + 40}" style="transform:rotate(-90deg)"><circle cx="${r + 20}" cy="${r + 20}" r="${r}" fill="none" stroke="${SAND}" stroke-width="26"/>
-         <circle cx="${r + 20}" cy="${r + 20}" r="${r}" fill="none" stroke="${INK}" stroke-width="26" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p)}"/></svg>
-         <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
-           <div class="d" style="font-size:72px">${fmt(eaten)}</div><div style="font:500 19px Inter;color:#78716C;margin-top:8px">dari 1.850 kkal</div></div></div></div>
-     <div class="card">${macros}</div>
-     <div class="card" style="padding-top:6px;padding-bottom:6px">${meals}</div>` + tabs(3);
-}
-
-function financeScreen(t) {
-  const rp = 14750000 * E.out(P(t, 20.0, 20.75));
-  const months = [['Mei', .52], ['Jun', .61], ['Jul', .58], ['Agu', .74], ['Sep', .83], ['Okt', 1]];
-  const bars = months.map(([m, v], k) => {
-    const a = 20.15 + k * 0.08, q = E.back(P(t, a, a + 0.3));
-    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:180px">
-      <div style="width:44px;height:${150 * v * q}px;border-radius:10px;background:${k === 5 ? INK : '#D6D3D1'}"></div>
-      <div style="font:600 15px Inter;color:#78716C;margin-top:8px">${m}</div></div>`;
-  }).join('');
-  const bills = [['Rina S.', 'Paket 12 sesi', '1.800.000'], ['Budi H.', 'Paket 8 sesi · sisa 400rb', '1.200.000']].map(([n, p, v], j) =>
-    `<div style="display:flex;align-items:center;gap:14px;padding:16px 0;border-top:${j ? '1px solid #E7E5E4' : '0'}">
-      <div style="width:50px;height:50px;border-radius:25px;background:${SAND};font:700 19px Inter;display:flex;align-items:center;justify-content:center">${n[0]}</div>
-      <div style="flex:1"><div style="font:700 21px Inter">${n}</div><div style="font:500 17px Inter;color:#78716C;margin-top:3px">${p}</div></div>
-      <div class="m" style="font-size:19px">${v}</div></div>`).join('');
-  let stamp = '';
-  if (t >= 21.0) {
-    const q = P(t, 21.0, 21.14), s = lerp(2.4, 1, E.in2(q));
-    stamp = div(`right:42px;top:28px;transform:rotate(-14deg) scale(${s});opacity:${cl(q * 3)};border:5px solid ${RED};color:${RED};font:900 34px 'Inter Display';letter-spacing:.06em;padding:6px 16px;border-radius:12px;background:rgba(255,255,255,.85)`, 'LUNAS');
-  }
-  return head('Keuangan', 'Oktober 2026') +
-    `<div class="card"><div class="lbl">Pendapatan bulan ini</div>
-       <div class="m" style="font-size:50px;margin-top:10px;letter-spacing:-0.04em">Rp ${fmt(rp)}</div>
-       <div style="font:600 18px Inter;color:#57534E;margin-top:8px">↑ 18% dari September</div>
-       <div style="display:flex;gap:6px;margin-top:18px">${bars}</div></div>
-     <div class="card" style="padding-top:4px;padding-bottom:4px"><div style="position:relative">${bills}${stamp}</div></div>` + tabs(4);
-}
-
-function homeScreen() {
-  const tiles = [['Hari ini', '5 sesi'], ['Klien aktif', '24'], ['Tagihan', '2'], ['Kalori', 'on']].map(([l, v]) =>
-    `<div class="card" style="margin:0;padding:18px"><div class="lbl">${l}</div><div class="d" style="font-size:46px;margin-top:8px">${v}</div></div>`).join('');
-  return `${statusBar()}<div class="hd" style="padding-bottom:36px"><img src="${LOGO}" style="width:120px;height:120px;margin:-26px 0 -18px -26px"><div class="t">Halo, Coach</div><div class="s">Semua klien di satu tempat</div></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 18px">${tiles}</div>
-    <div class="card"><div class="lbl">Berikutnya</div><div style="font:700 24px Inter;margin-top:8px">07.00 · Rina S.</div><div style="font:500 18px Inter;color:#78716C;margin-top:4px">Leg day · sesi 7/12</div></div>` + tabs(0);
+  const fo = 1 - P(t, last + 0.2, last + 0.5);
+  return h + div(`left:${x}px;top:${y}px;width:64px;height:64px;transform:translate(-50%,-50%) scale(${pressed ? 0.82 : 1});border-radius:32px;background:rgba(255,255,255,.7);border:4px solid ${INK};box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:${fo};z-index:7`);
 }
 
 /* ------------------------------------------------------------ the five old tools */
@@ -548,12 +401,13 @@ scene(6.4, 8.8, t => {
   if (t >= 8.4) {
     const p = E.inOut(P(t, 8.4, 8.8));
     h += div(`left:-150px;top:${lerp(H, 0, p)}px;width:${W + 300}px;height:${H}px;background:${SAND}`);
-    h += phone(PX, lerp(H + 700, 900, E.expo(P(t, 8.45, 8.9))), 1, 0, layer(0, bookingScreen(0)));
+    h += phone(PX, lerp(H + 700, 900, E.expo(P(t, 8.45, 8.9))), 1.1, 0, layer(0, states(0, [[0, 'client-jadwal']])));
   }
   const sh = [shake(t, 6.4, 40, 0.6), shake(t, 7.2, 10, .2), shake(t, 7.6, 10, .2), shake(t, 8.0, 16, .25)].reduce((a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]);
   return { bg: '#000', h, cam: { x: sh[0], y: sh[1], r: sh[2], s: 1 + 0.06 * (1 - E.out(P(t, 6.4, 7.0))) } };
 });
 
+const PS = 1.1;   // phone scale in the feature scenes
 /** A feature scene: background, outline marquee, phone with layers, chips. */
 function feature(t, { a, b, bg, line, words, ink, screens, chips, extra = '', tag }) {
   let h = '';
@@ -574,13 +428,13 @@ function feature(t, { a, b, bg, line, words, ink, screens, chips, extra = '', ta
   });
   if (t < a + 0.32 && t > a) for (const g of [0.05, 0.025]) {
     const xg = PX + (1 - E.expo(P(t - g, a, a + 0.32))) * 1100;
-    h += phone(xg, 900, 1, (1 - E.expo(P(t - g, a, a + 0.32))) * 8, layers, 0.15);
+    h += phone(xg, 900, PS, (1 - E.expo(P(t - g, a, a + 0.32))) * 8, layers, 0.15);
   }
   if (t > b - 0.16) for (const g of [0.05, 0.025]) {
     const xg = PX - E.in(P(t - g, b - 0.16, b)) * 1100;
-    h += phone(xg, 900, 1, 0, layers, 0.15);
+    h += phone(xg, 900, PS, 0, layers, 0.15);
   }
-  h += phone(x, 900, 1 + 0.015 * Math.sin((t - a) * Math.PI / B) * 0, rot, layers);
+  h += phone(x, 900, PS, rot, layers);
   h += extra;
   chips.forEach(([c0, c1, txt, o]) => { h += chip(t, c0, c1, txt, o); });
   return { bg, h, cam: { x: 0, y: 0, r: 0, s: 1 } };
@@ -589,21 +443,15 @@ function feature(t, { a, b, bg, line, words, ink, screens, chips, extra = '', ta
 // 8.8 – 13.2 · Booking & jadwal
 scene(8.8, 13.2, t => feature(t, {
   a: 8.8, b: 13.2, bg: SAND, ink: INK, words: ['BOOKING', 'JADWAL'], tag: '01 — BOOKING & JADWAL',
-  screens: [[8.8, 11.6, bookingScreen], [11.6, 13.2, tt => todayScreen(tt, 11.8)]],
-  chips: [[9.6, 11.5, 'Klien booking', { x: 70, y: 1150, size: 84, rot: -3 }], [9.8, 11.5, 'sendiri.', { x: 520, y: 1280, size: 84, rot: 2 }],
+  screens: [[8.8, 11.6, tt => states(tt, [[8.8, 'client-jadwal'], [9.6, 'client-booking'], [10.85, 'client-booked']], null, 80) + finger(tt, [[10.8, RECTS.kirim]])],
+    [11.6, 13.2, tt => states(tt, [[11.6, 'coach-jadwal'], [12.4, 'coach-jadwal-today']], null, 80)]],
+  chips: [[9.6, 11.5, 'Klien booking', { x: 70, y: 330, size: 84, rot: -3 }], [9.8, 11.5, 'sendiri.', { x: 520, y: 460, size: 84, rot: 2 }],
     [11.8, 13.1, 'Jadwal', { x: 70, y: 1150, size: 84, rot: -3 }], [12.0, 13.1, 'auto rapi.', { x: 450, y: 1280, size: 84, rot: 2 }]],
 }));
 
 // 13.2 – 17.6 · Workout & Progress
 scene(13.2, 17.6, t => {
   let extra = '';
-  if (t >= 15.0 && t < 15.6) {
-    const p = E.expo(P(t, 15.0, 15.3));
-    for (let k = 0; k < 16; k++) {
-      const an = k / 16 * Math.PI * 2, r0 = 70 + p * 260;
-      extra += div(`left:${790 + Math.cos(an) * r0}px;top:${760 + Math.sin(an) * r0}px;width:${(1 - p) * 90 + 6}px;height:7px;background:${RED};transform:translate(-50%,-50%) rotate(${an}rad);opacity:${1 - P(t, 15.2, 15.6)}`);
-    }
-  }
   // share card flips in
   if (t >= 16.8) {
     const p = E.expo(P(t, 16.8, 17.15)), out = E.in(P(t, 17.44, 17.6));
@@ -612,13 +460,15 @@ scene(13.2, 17.6, t => {
       <div class="d" style="font-size:52px;margin-top:-6px">PUSH DAY</div>
       <div style="font:500 18px Inter;color:#A3A3A3;margin-top:8px">Rabu · 42 menit</div>
       <div style="margin-top:22px;display:grid;gap:12px">
-        <div><div class="lbl" style="color:#A3A3A3">Volume</div><div class="m" style="font-size:30px">4.250 kg</div></div>
+        <div><div class="lbl" style="color:#A3A3A3">Volume</div><div class="m" style="font-size:30px">2.010 kg</div></div>
         <div><div class="lbl" style="color:#A3A3A3">Rekor</div><div class="m" style="font-size:30px;color:${RED}">1 PR</div></div></div></div>`;
   }
   return feature(t, {
     a: 13.2, b: 17.6, bg: '#0B0B0B', ink: '#fff', words: ['WORKOUT', 'PROGRESS'], tag: '02 — WORKOUT & PROGRESS',
-    screens: [[13.2, 15.6, loggerScreen], [15.6, 17.6, tt => progressScreen(tt, 15.6)]],
-    chips: [[13.6, 15.5, 'Catat', { x: 70, y: 1170, size: 84, rot: -3, dark: false }], [13.8, 15.5, 'tiap set.', { x: 430, y: 1300, size: 84, rot: 2, dark: false }],
+    screens: [[13.2, 15.6, tt => states(tt, [[13.2, 'client-workout-0'], [13.6, 'client-workout-1'], [14.0, 'client-workout-2'], [14.4, 'client-workout-3'], [14.8, 'client-workout-pr']])
+        + finger(tt, [[13.6, RECTS.tick0], [14.0, RECTS.tick1], [14.4, RECTS.tick2], [14.8, RECTS.tick3]])],
+      [15.6, 17.6, tt => states(tt, [[15.6, 'client-progres']], { s: lerp(1, 1.22, E.inOut(P(tt, 15.9, 16.5))), ox: .5, oy: .1 })]],
+    chips: [[13.6, 15.5, 'Catat', { x: 70, y: 330, size: 84, rot: -3, dark: false }], [13.8, 15.5, 'tiap set.', { x: 430, y: 460, size: 84, rot: 2, dark: false }],
       [15.0, 15.5, 'Rekor baru!', { x: 470, y: 420, size: 72, rot: 4, red: true }],
       [15.9, 17.5, 'Progress', { x: 70, y: 1150, size: 84, rot: -3, dark: false }], [16.1, 17.5, 'kelihatan.', { x: 90, y: 1280, size: 84, rot: 2, dark: false }]],
     extra,
@@ -628,13 +478,13 @@ scene(13.2, 17.6, t => {
 // 17.6 – 19.8 · Nutrition, 19.8 – 22 · Keuangan
 scene(17.6, 19.8, t => feature(t, {
   a: 17.6, b: 19.8, bg: SAND, ink: INK, words: ['NUTRITION', 'GIZI'], tag: '03 — NUTRITION',
-  screens: [[17.6, 19.8, nutritionScreen]],
+  screens: [[17.6, 19.8, tt => states(tt, [[17.6, 'client-makan'], [18.8, 'client-makan-2']], { s: tt < 18.8 ? lerp(1, 1.18, E.inOut(P(tt, 17.9, 18.5))) : 1, ox: .3, oy: .18 }, 80)]],
   chips: [[18.0, 19.7, 'Target kalori', { x: 70, y: 1180, size: 80, rot: -3 }], [18.2, 19.7, 'otomatis.', { x: 480, y: 1305, size: 80, rot: 2 }]],
 }));
 scene(19.8, 22.0, t => feature(t, {
   a: 19.8, b: 22.0, bg: '#0B0B0B', ink: '#fff', words: ['KEUANGAN', 'TAGIHAN'], tag: '04 — KEUANGAN',
-  screens: [[19.8, 22.0, financeScreen]],
-  chips: [[20.2, 21.95, 'Tagihan', { x: 70, y: 1190, size: 84, rot: -3, dark: false }], [20.4, 21.95, 'beres.', { x: 560, y: 1315, size: 84, rot: 2, dark: false }]],
+  screens: [[19.8, 22.0, tt => states(tt, [[19.8, 'coach-keuangan'], [20.8, 'coach-keuangan-2']], null, 80)]],
+  chips: [[20.2, 21.95, 'Tagihan', { x: 70, y: 330, size: 84, rot: -3, dark: false }], [20.4, 21.95, 'beres.', { x: 560, y: 460, size: 84, rot: 2, dark: false }]],
 }));
 
 // 22 – 24 · word montage
@@ -662,7 +512,7 @@ scene(24.0, 25.6, t => {
   const absorbed = [0, 1, 2, 3, 4].filter(k => t >= ICON_AT(k) + 0.24).length;
   const pulse = [0, 1, 2, 3, 4].reduce((m, k) => m + Math.max(0, 1 - Math.abs(t - ICON_AT(k) - 0.26) / 0.1) * 0.035, 0);
   const pin = E.expo(P(t, 24.0, 24.3));
-  h += phone(540, lerp(1500, 1090, pin), 0.68 + pulse, 0, layer(0, homeScreen()));
+  h += phone(540, lerp(1500, 1090, pin), 0.68 + pulse, 0, layer(0, states(t, [[0, 'coach-dashboard']])));
   // number: 5 → 1
   const big = 330, lh = Math.round(big * .9);
   const shown = Math.max(1, 5 - absorbed);
@@ -697,7 +547,7 @@ scene(24.0, 25.6, t => {
 scene(25.6, 30.01, t => {
   let h = '';
   const shrink = E.in(P(t, 25.6, 25.8));
-  if (shrink < 1) h += phone(540, 1090 - shrink * 250, 0.7 * (1 - shrink), shrink * 90, layer(0, homeScreen()));
+  if (shrink < 1) h += phone(540, 1090 - shrink * 250, 0.7 * (1 - shrink), shrink * 90, layer(0, states(t, [[0, 'coach-dashboard']])));
   [[25.6, 1], [25.7, .5]].forEach(([t0, o]) => {
     if (t < t0) return;
     const p = E.expo(P(t, t0, t0 + 0.8)), r = p * 1000;
