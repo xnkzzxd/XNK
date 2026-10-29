@@ -2,11 +2,20 @@
 
 Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md). Mark a task `[~]` when you start it and `[x]` when it is done. Each task is one PR with tests and a rollback note. Screens stay pixel-identical until V9 (D1). **XNK keeps working at every step (D70, Design §0).**
 
+## How sessions work (automatic)
+- One task (or a small task group) = one session = one branch `claude/v-t14xx` = one PR. Run one at a time.
+- A **conductor session** starts each task session, checks its PR against Design §0 (D70) and the gates below, and starts the next task after the merge and a live smoke test. A **nightly scheduled task** takes the next task if nothing is running and no Phase V PR is open.
+- Every task session starts by reading `CLAUDE.md` → `docs/platform/{PRD,Design,TODO,STATUS}.md`, marks its task `[~]`, runs every check in Agent.md §5, ticks the task, adds an entry at the top of [STATUS.md](STATUS.md), and opens a PR with auto-merge on.
+- **Auto-merge gates**: CI green with every Agent.md §5 check (T-1404). PRs touching live files (`apps-script/pt-scheduler/src/`, `index.html`, `sw.js`, `offline*.js`) also need a clean pixel diff. If the post-merge smoke test on live XNK fails, the conductor opens a revert PR and stops the chain.
+- **Owner-only steps stop the chain** (marked 👤): choosing the brand, buying the domain, creating accounts and secrets (never in chat), approving the tiers, reviewing the legal docs, cutover night, old-domain redirects, the Telegram shut-off, Play testers and release, and any deletion.
+
 ## V0 Discovery
-- [ ] T-1400 Brand/domain brainstorm: shortlist of names + .id/.com availability; the owner picks (D32).
+- [ ] T-1404 CI runs on every PR (not just `apps-script/**`): syntax, tests, browser check (Playwright), offline check, pixel diff for live files; required checks + auto-merge on `main` (👤 the owner turns on "Allow auto-merge" and branch protection if the token can't).
+- [x] T-1405 `STATUS.md` + session handoff protocol (this section).
+- [ ] T-1400 👤 Brand/domain brainstorm: shortlist of names + .id/.com availability; the owner picks (D32).
 - [ ] T-1401 Interactive mind map of every screen, tab, sheet and menu (from `NAV`, `PUBLIC_TABS`, `MORE_GROUP`, views, `openSheet`/`openDetail` ids), with the RPCs per node (D31). Published as an artifact; source in `docs/platform/IA.md`.
-- [ ] T-1402 Plan tiers (Free / Pro / Gym): limits, modules, prices, 14-day trial (D16, D64).
-- [ ] T-1403 Account setup checklist: domain, Cloudflare, Supabase (prod SG + staging), Resend, Play Console, Sentry; 2FA (D6, D7).
+- [ ] T-1402 👤 Plan tiers (Free / Pro / Gym): limits, modules, prices, 14-day trial (D16, D64).
+- [ ] T-1403 👤 Account setup checklist: domain, Cloudflare, Supabase (prod SG + staging), Resend, Play Console, Sentry; 2FA (D6, D7).
 
 ## V1 New host, same backend
 - [ ] T-1410 `tools/build-static.js`: resolves `include()` and writes the static shell + landing; byte-compare against the HtmlService output.
