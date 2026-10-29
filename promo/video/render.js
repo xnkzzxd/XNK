@@ -19,8 +19,8 @@ const FPS = 30, DUR = 30, FRAMES = FPS * DUR;
 const work = path.resolve(opt('--work', 'frames'));
 const preview = opt('--preview', false);
 const workers = +opt('--workers', 4);
-// 4:5 crops y 205…1555 of the 9:16 stage (the safe area is y 260…1500) and recentres x by 35 px.
-const FORMATS = { '9x16': { q: '', vf: [] }, '4x5': { q: 'ox=35', vf: ['-vf', 'crop=1080:1350:0:205'] } };
+// 4:5 crops y 205…1555 of the 9:16 stage (the safe area is y 260…1500) and centres the phone.
+const FORMATS = { '9x16': { q: '', vf: [] }, '4x5': { q: 'px=540', vf: ['-vf', 'crop=1080:1350:0:205'] } };
 const fmtName = opt('--format', '9x16'), FMT = FORMATS[fmtName];
 if (!FMT) throw new Error('unknown --format ' + fmtName);
 const out = path.resolve(opt('--out', path.join(work, fmtName === '9x16' ? 'xnk-iklan-30s.mp4' : `xnk-iklan-30s-${fmtName}.mp4`)));
