@@ -1,0 +1,69 @@
+name: Checks
+
+# Every pull request, whatever it touches (docs too): every check from docs/Agent.md §5.
+# The job is named `checks` so branch protection can require it (see docs/platform/CI.md).
+# Deploying stays in pt-scheduler.yml (push to main, apps-script/** only).
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PLAYWRIGHT_VERSION: 1.63.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax check (.gs + HTML <script> + appsscript.json)
+        run: node apps-script/pt-scheduler/tools/check-syntax.js
+      - name: Tests
+        run: node --test apps-script/pt-scheduler/tests/*.test.js
+
+      # Playwright outside the repo (no package.json here); the tools find it through NODE_PATH.
+      - name: Install Playwright + Chromium
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "playwright@$PLAYWRIGHT_VERSION"
+          npx playwright install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+
+      - name: Browser check (phone pass included)
+        run: node apps-script/pt-scheduler/tools/browser-check.js
+      - name: Share card check
+        run: node apps-script/pt-scheduler/tools/share-check.js
+
+      # The client wrapper lives in xnkzzxd/BookingPT-Client (public). If it can't be fetched,
+      # the offline check still runs on the coach wrapper and says the client part was skipped.
+      - name: Check out BookingPT-Client
+        id: client
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: xnkzzxd/BookingPT-Client
+          path: _BookingPT-Client
+          persist-credentials: false
+      - name: Offline copies match BookingPT-Client
+        if: steps.client.outcome == 'success'
+        run: node apps-script/pt-scheduler/tools/sync-offline.js _BookingPT-Client --check
+      - name: Offline check
+        run: |
+          if [ "${{ steps.client.outcome }}" = "success" ]; then
+            node apps-script/pt-scheduler/tools/offline-check.js _BookingPT-Client
+          else
+            echo "::warning title=BookingPT-Client tidak terjangkau::Repo xnkzzxd/BookingPT-Client tidak bisa diambil; sync-offline --check dan bagian klien offline-check dilewati. Hanya pembungkus coach yang diperiksa."
+            node apps-script/pt-scheduler/tools/offline-check.js
+          fi

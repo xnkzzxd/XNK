@@ -1810,9 +1810,16 @@ async function contrastReport(page) {
       const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.meal-blk .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
       check(mk.ring && mk.bars === 3 && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && mk.over <= 1, 'makan: ring, three macro bars, today\'s menu and the rules show, no sideways scroll ' + JSON.stringify({ bars: mk.bars, meals: mk.meals, over: mk.over }));
       check(mk.small === 0, 'makan: tap targets are at least 44 px ' + mk.small);
-      await page.click('#pub-makan-pane .list-item >> nth=0');
-      await page.waitForTimeout(700);
-      check(await visible(page, '#modal-nut-swap') && (await page.locator('#nut-swap-list .list-item').count()) >= 1, 'makan: tapping a menu item offers replacements');
+      // The menu changes with the date, and a few foods (e.g. E47 or BR013 as karbo) have no allowed swap, which
+      // shows "Tidak ada pengganti…". Try the next menu item then, so the check doesn't fail on some days only.
+      let swapOk = false;
+      for (let i = 0; i < Math.min(mk.meals, 6) && !swapOk; i++) {
+        if (i) { await page.evaluate(() => window.closeModal()); await page.waitForTimeout(400); }
+        await page.click('#pub-makan-pane .meal-blk .list-item >> nth=' + i);
+        await page.waitForTimeout(700);
+        swapOk = await visible(page, '#modal-nut-swap') && (await page.locator('#nut-swap-list .list-item').count()) >= 1;
+      }
+      check(swapOk, 'makan: tapping a menu item offers replacements');
       await page.click('#nut-swap-list .list-item >> nth=0');
       await page.waitForTimeout(800);
       check(!(await visible(page, '#modal-nut-swap')), 'makan: picking a replacement closes the sheet');
