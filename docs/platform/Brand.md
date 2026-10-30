@@ -1,6 +1,6 @@
 # Brand shortlist (T-1400, D32)
 
-Status: **waiting on the owner** (👤 pick one). Written 2026-10-30; availability checked 2026-10-30 (see "Availability check" below). Nothing was bought or registered.
+Status: **decided: XNK Coach** (owner, 2026-10-30, D72). Written 2026-10-30; availability checked 2026-10-30 (see "Availability check" below). Nothing was bought or registered.
 
 Context: an Indonesian coach SaaS (PTs, gyms, online coaching, D12, D33) plus a free workout + nutrition logger on Android (D27, D28). Today's brand is XNK. `<brand>` in the other Phase V docs is a placeholder for the name chosen here.
 

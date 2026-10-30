@@ -2,6 +2,11 @@
 
 Every task session adds one entry at the top: date, task, PR, what is done, what is half-done, questions for the owner, and the next task.
 
+## 2026-10-30 · Owner picked the brand: XNK Coach
+- Done: T-1400 `[x]`, decision D72 in [PRD.md](PRD.md), Brand.md status updated. Nothing bought yet.
+- Owner: buy the domain and file the PDKI mark (classes 9, 41, 42, 44) soon; recommended `xnkcoach.id` + `xnk.coach`, handles `@xnkcoach`, Play package id `id.xnkcoach.app`.
+- Next task: **T-1403** account checklist (uses XNK Coach).
+
 ## 2026-10-30 · T-1400 brand availability check (owner's laptop)
 - Done: checked XNK Coach, Astro, Mona, Latih, Nadi, Repku (+ astrofit, astrocoach, monafit, monacoach) for `.id` / `.com` / `.app` / `.coach` (registry RDAP), PDKI classes 9/41/42/44, Play / App Store, and Instagram / TikTok handles. Results and verdicts are in [Brand.md](Brand.md) → "Availability check (2026-10-30)". Nothing bought, registered or signed up for. Docs only.
 - Result: Astro, Mona, Latih and Nadi clash with registered PDKI marks (ASTRO 42, MONA 9/42, Latih 9 + LATIH LOGIKA 41, NADI 9/44) and most domains are taken. **Recommendation: XNK Coach** (`xnkcoach.id` + `xnk.coach`, all four `xnkcoach` domains free, no PDKI hit, all handles free). Runner-up: Repku.
