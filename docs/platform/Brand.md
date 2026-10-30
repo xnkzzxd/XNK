@@ -1,6 +1,6 @@
 # Brand shortlist (T-1400, D32)
 
-Status: **waiting on the owner** (👤 pick one). Written 2026-10-30. Nothing was bought or registered.
+Status: **waiting on the owner** (👤 pick one). Written 2026-10-30; availability checked 2026-10-30 (see "Availability check" below). Nothing was bought or registered.
 
 Context: an Indonesian coach SaaS (PTs, gyms, online coaching, D12, D33) plus a free workout + nutrition logger on Android (D27, D28). Today's brand is XNK. `<brand>` in the other Phase V docs is a placeholder for the name chosen here.
 
@@ -46,7 +46,7 @@ Play package ids follow reverse-domain style; use the domain you actually own (e
 
 ## Owner's candidates (2026-10-30)
 
-The owner wants these three checked, not the research top 3. Domains and trademarks are **belum dicek**: the check runs once `rdap.org` and `pdki-indonesia.dgip.go.id` are allowed in the environment's network settings.
+The owner wants these three checked, not the research top 3. Checked on 2026-10-30 from the owner's laptop: see [Availability check (2026-10-30)](#availability-check-2026-10-30) below.
 
 | Name | Angle | Play package id | Known risks |
 |---|---|---|---|
@@ -54,7 +54,48 @@ The owner wants these three checked, not the research top 3. Domains and tradema
 | **Astro** | Short, modern, easy in Indonesian and English. | `id.astro.app` (likely taken; e.g. `id.astrofit.app`) | Very common name: Astro is a large Malaysian media group and an Indonesian quick-commerce app (Astro Technologies). `.com` / `.id` almost surely taken, and trademark clashes are likely in several classes. A suffix (AstroFit, AstroCoach) lowers the risk. |
 | **Mona** | Short, friendly, easy to remember. | `id.mona.app` (likely taken; e.g. `id.monafit.app`) | Very common personal and brand name; `.com` / `.id` almost surely taken; trademark clashes are likely. A suffix (MonaFit, MonaCoach) lowers the risk. |
 
-Next: once the network is open, a session re-checks these three plus Latih, Nadi and Repku (domains `.id` / `.com` / `.app` / `.coach`, PDKI classes 9/41/42/44, Play/App Store, Instagram/TikTok handles).
+## Availability check (2026-10-30)
+
+Run from the owner's laptop (the cloud sessions could not reach these hosts). Nothing was bought, registered or signed up for.
+
+How each column was checked:
+- **Domains**: RDAP, queried at each registry's own RDAP server (rdap.org redirects there but started answering HTTP 429 after 15 lookups): PANDI `rdap.pandi.id` (.id), Verisign (.com), Google Registry (.app), Identity Digital (.coach). 200 = registered, 404 = not registered (probably free; premium/reserved names can still be blocked at checkout).
+- **PDKI**: pdki-indonesia.dgip.go.id → Merek, text search, filtered to classes **9, 41, 42, 44** (Latih, Repku and "xnk" were searched without the class filter and had 4 / 0 / 0 hits in all classes). Only live marks count (Didaftar, Dalam Proses, Masa Pengumuman); expired (Kadaluarsa) and rejected (Ditolak) marks are left out. Variants were searched as two words ("astro fit", "astro coach", "mona fit", "mona coach", "xnk coach") and as one word ("astrofit", "monafit"). A text search is not legal clearance; a phonetic search (Fonetik) was not run.
+- **Stores**: App Store via the iTunes Search API (country ID), Google Play web search (gl=ID). Only same or near-same names are listed.
+- **Socials**: Instagram public profile page (taken = a profile page with that @handle; "free" = no public profile, which can also mean a banned or deactivated account) and TikTok profile data (status 10221 = no such user). Handles checked: `@<name>`, `@<name>.id`, `@<name>app`.
+
+### Table
+
+| Name | .id | .com | .app | .coach | PDKI (9/41/42/44) | Play / App Store | Instagram | TikTok |
+|---|---|---|---|---|---|---|---|---|
+| **XNK Coach** (`xnkcoach`) | free | free | free | free | none ("xnk" and "xnk coach": 0 hits) | no app named XNK Coach | @xnkcoach, .id, app: free | @xnkcoach, .id, app: free |
+| ↳ `xnk.*` (bonus) | free | taken | taken | free | — | — | — | — |
+| **Astro** | taken | taken | taken | taken | **ASTRO registered in 42** (Amazon Technologies; MEASAT Broadcast); 146 hits in these classes | **Astro – Groceries in Minutes** (PT Astro Technologies Indonesia), My Astro (Astro Malaysia) | @astro, @astroapp taken; @astro.id free | @astro, @astro.id, @astroapp taken |
+| ↳ astrofit | free | taken | taken | free | none ("astrofit", "astro fit") | **AstroFit AI** (fitness, both stores), "AstroFit – AI Wellness Coach", "Astro Fit" (Play) | @astrofit, .id, app taken | @astrofit, @astrofitapp taken; .id free |
+| ↳ astrocoach | free | taken | taken | free | none ("astro coach") | AstroCoach (astrology coaching app, both stores) | @astrocoach, @astrocoachapp taken; .id free | @astrocoach taken (private); .id, app free |
+| **Mona** | taken | taken | taken | taken | **MONA registered in 42 + 9** (PT Kharisma Nusantara Teknologi); MoNA LiSA registered in 9/41 (Barry Callebaut) | MONA (PT Metropolitan Land), **Mona – HRT journal** (Health & Fitness), several other "Mona" apps | @mona, .id, app taken | @mona, .id, app taken |
+| ↳ monafit | free | taken | free | free | none ("monafit", "mona fit") | none (Mona ellebody on Play is a similar fitness name) | @monafit, .id, app free | @monafit taken; .id, app free |
+| ↳ monacoach | free | taken | free | free | none ("mona coach") | none | @monacoach taken; .id, app free | @monacoach taken ("Mona Mall"); .id, app free |
+| **Latih** | taken | taken | taken | free | **"Latih + Logo" registered in 9** (education software/apps; PT Rasi Latih Nusantara); **LATIH LOGIKA registered in 41** (incl. coaching) | no app named Latih ("tutur: Latih Komunikasi", "Latih Tubi Matematik" use the word) | @latih, @latih.id taken; @latihapp free | @latih, @latih.id ("LATIH", ~1.8k followers) taken; @latihapp free |
+| **Nadi** | taken | taken | taken | taken | **NADI registered in 9** (Koperasi Nasari) and **44** (PT Fantail Farm); **"nadi" pending in 42**; **Satu Nadi** (Telkom, 42 + 44, digital health) | **Nadi (Nasari Digital)** in both stores; NADI Member, Nadi Tarangini (health) | @nadi, .id, app taken | @nadi, .id, app taken |
+| **Repku** | free | taken | free | free | none (0 hits, all classes) | no app named Repku (nearest: **Reku**, a crypto app by PT Rekeningku; Repperoo, a workout saver) | @repku taken (personal); .id, app free | @repku taken (14 followers); .id, app free |
+
+Nothing in the table is "unknown": every cell above was answered by its source on 2026-10-30. Still not checked: PDKI phonetic search, `.co.id` / `.my.id`, other social networks.
+
+### Verdict per name
+
+- **XNK Coach**: the only name that is clean everywhere: all four domains free (plus `xnk.coach` and `xnk.id`), no XNK mark in PDKI, no store clash, every handle free. Weak point stays the same: "XNK" means nothing to new users and is hard to say.
+- **Astro**: not usable. Every domain taken, ASTRO registered in class 42 by two large owners, and a big Indonesian "Astro" app. AstroFit clashes with an existing fitness app named AstroFit AI and the @astrofit handles; AstroCoach is an existing coaching app and handle.
+- **Mona**: not usable as "Mona": MONA is registered in classes 9 and 42 (software) in Indonesia. MonaFit / MonaCoach have free `.id` / `.app` / `.coach` and no own PDKI hit, but they contain a registered software mark, so the trademark risk stays high.
+- **Latih**: only `.coach` is free; "Latih + Logo" is registered for apps (class 9) and LATIH LOGIKA for coaching (class 41). High risk.
+- **Nadi**: every domain taken, live NADI marks in 9, 42 (pending) and 44, plus Telkom's "Satu Nadi" health product. Not usable.
+- **Repku**: second cleanest: `repku.id` / `.app` / `.coach` free, no PDKI hit, no store clash; only `.com` and the bare @repku handles are taken (small personal accounts). Watch the closeness to "Reku" (crypto app) when filing.
+
+### Recommendation
+
+**XNK Coach** on **`xnkcoach.id`** (+ `xnk.coach` as the short link; `xnkcoach.com` / `.app` are also free if the owner wants to hold them), handles `@xnkcoach` on Instagram and TikTok, Play package id `id.xnkcoach.app`. Reasons: it is the only candidate with zero conflicts in all four checks, it keeps the brand the current clients already know (xnk.my.id), and a coined mark like "XNK" is easier to register in PDKI than a dictionary word. Runner-up: **Repku** (`repku.id` / `repku.app`, `@repku.id`), if the owner prefers a pronounceable name and accepts that the bare handles are taken.
+
+**Owner picks next.** Before buying, file the PDKI application soon after choosing (classes 9, 41, 42, 44), because availability can change any day. Then T-1403 (account checklist).
 
 ## Top 3 (research recommendation)
 
