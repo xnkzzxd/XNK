@@ -22,7 +22,8 @@ self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
-  if (req.mode === 'navigate' && url.origin === self.location.origin) {
+  // Hanya halaman pembungkus; halaman lain (mis. /demo/) tidak boleh menimpa salinan '/'.
+  if (req.mode === 'navigate' && url.origin === self.location.origin && (url.pathname === '/' || url.pathname === '/index.html')) {
     // Halaman: jaringan dulu (selalu versi terbaru), tanpa sinyal pakai salinan.
     e.respondWith(fetch(req).then(function (res) {
       var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put('/', copy); });
