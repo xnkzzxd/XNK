@@ -92,6 +92,27 @@ test('swap gives three distinct, valid replacements; "acak lagi" rotates them', 
   egg.forEach(a => assert.ok(!NUT_FOODS[a.id].a.includes('telur')));
 });
 
+test('every menu item has at least one swap without dietary restrictions', () => {
+  const empty = [];
+  for (let kal = 1500; kal <= 2400; kal += 100) {
+    for (const anggaran of ['hemat', 'standar', 'bebas']) {
+      for (let s = 1; s <= 31; s++) {
+        const menu = call('_nutMenu_', targetOf(kal), { anggaran, seed: 'PT-A|2026-10-' + s });
+        menu.meals.forEach(m => m.items.forEach(i => {
+          const alts = call('_nutSwap_', i, m.key, { anggaran }, 0);
+          if (!alts.length) empty.push(i.id + ' ' + i.slot + ' ' + m.key);
+          alts.forEach(a => { assert.notEqual(a.id, i.id); assert.equal(a.slot, i.slot); assert.ok(a.gram > 0); });
+        }));
+      }
+    }
+  }
+  assert.deepEqual(empty, []);
+  // E47 at breakfast used to get nothing: the fallback still keeps the calories.
+  const e47 = call('_nutSwap_', { id: 'E47', slot: 'karbo', gram: 400 }, 'sarapan', {}, 0);
+  assert.ok(e47.length >= 1);
+  e47.forEach(a => assert.ok(Math.abs(a.kal - NUT_FOODS.E47.kal * 4) <= 2, a.id + ' ' + a.kal));
+});
+
 test('shopping list adds up the week and groups by kind', () => {
   const t = targetOf(2000), menus = [1, 2, 3, 4, 5, 6, 7].map(d => call('_nutMenu_', t, { seed: 'wk' + d }));
   const list = call('_nutShopping_', menus);

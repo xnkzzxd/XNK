@@ -600,6 +600,7 @@ function _nutSum_(items) {
 /**
  * Tiga pengganti untuk satu item (slot yang sama, gizi utama sama). item = { id, slot, gram }; meal = 'sarapan'|…; offset = "Acak lagi".
  * Karbo dicocokkan di kalori, protein di protein, sayur/buah di kalori; pengganti yang selisihnya > 25 % dilewati.
+ * Bila tak satu pun porsinya di rentang wajar (portionMin…swapMax × porsi), yang paling mendekati rentang itu yang ditawarkan.
  */
 function _nutSwap_(item, mealKey, opts, offset) {
   opts = opts || {};
@@ -608,11 +609,15 @@ function _nutSwap_(item, mealKey, opts, offset) {
     : item.slot === 'sayur' ? NUT_SLOTS.sayur : NUT_SLOTS.buah;
   const old = NUT_FOODS[item.id], key = item.slot === 'protein' ? 'p' : 'kal';
   const target = old[key] * item.gram / 100;
-  const out = _nutAllowed_(list, opts).filter(function(id) { return id !== item.id && NUT_FOODS[id][key] > 0; }).map(function(id) {
-    const g = target / NUT_FOODS[id][key] * 100, base = NUT_FOODS[id].por[0][1];
-    return { id: id, gram: g, ok: g >= base * NUT_MENU.portionMin && g <= base * NUT_MENU.swapMax, drift: Math.abs((NUT_FOODS[id][item.slot === 'protein' ? 'kal' : 'p'] * g / 100) - (old[item.slot === 'protein' ? 'kal' : 'p'] * item.gram / 100)) };
-  }).filter(function(c) { return c.ok; });
+  const all = _nutAllowed_(list, opts).filter(function(id) { return id !== item.id && NUT_FOODS[id][key] > 0; }).map(function(id) {
+    const g = target / NUT_FOODS[id][key] * 100, base = NUT_FOODS[id].por[0][1], lo = base * NUT_MENU.portionMin, hi = base * NUT_MENU.swapMax;
+    // miss = seberapa jauh porsinya di luar rentang (rasio log); 0 = cocok.
+    return { id: id, gram: g, miss: g < lo ? Math.log(lo / g) : g > hi ? Math.log(g / hi) : 0, drift: Math.abs((NUT_FOODS[id][item.slot === 'protein' ? 'kal' : 'p'] * g / 100) - (old[item.slot === 'protein' ? 'kal' : 'p'] * item.gram / 100)) };
+  });
+  let out = all.filter(function(c) { return c.miss === 0; });
   out.sort(function(a, b) { return a.drift - b.drift || (a.id < b.id ? -1 : 1); });
+  // Tidak ada yang porsinya wajar: tawarkan yang paling mendekati (gizi utama tetap sama) daripada kosong.
+  if (!out.length) out = all.sort(function(a, b) { return a.miss - b.miss || a.drift - b.drift || (a.id < b.id ? -1 : 1); }).slice(0, NUT_MENU.swapCount);
   const n = out.length, start = n ? ((offset || 0) * NUT_MENU.swapCount) % n : 0;
   const pick = [];
   for (let i = 0; i < Math.min(NUT_MENU.swapCount, n); i++) pick.push(out[(start + i) % n]);
