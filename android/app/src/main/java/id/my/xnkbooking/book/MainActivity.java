@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        s.setUserAgentString(s.getUserAgentString() + " XNKAndroid"); // the portal hides its on-screen back arrows
         s.setSupportMultipleWindows(false); // target=_blank links come through shouldOverrideUrlLoading
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true); // the portal is a script.google.com iframe
 

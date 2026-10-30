@@ -92,7 +92,7 @@
     <div class="detail-backdrop" id="detail-backdrop" onclick="window.closeDetail()"></div>
     <aside class="detail" id="detail-panel" aria-hidden="true" aria-labelledby="detail-title">
       <div class="detail-head">
-        <button type="button" class="icon-btn plain" onclick="window.closeDetail()" aria-label="Tutup detail"><span class="only-mobile-detail" style="display:inline-flex"><i data-lucide="arrow-left"></i></span><span class="only-desktop-detail"><i data-lucide="x"></i></span></button>
+        <button type="button" class="icon-btn plain nav-back" onclick="window.closeDetail()" aria-label="Tutup detail"><span class="only-mobile-detail" style="display:inline-flex"><i data-lucide="arrow-left"></i></span><span class="only-desktop-detail"><i data-lucide="x"></i></span></button>
         <h2 class="detail-title grow truncate" id="detail-title"></h2>
         <div class="row" id="detail-actions"></div>
       </div>
@@ -844,7 +844,7 @@
     <!-- Progres: lihat satu foto -->
     <div class="sheet tall hide" id="sheet-photo-view" role="dialog" aria-modal="true" aria-labelledby="pg-view-title">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h2 class="sheet-title" id="pg-view-title">Foto</h2><button type="button" class="icon-btn plain" onclick="window.pgClosePhotoView()" aria-label="Kembali ke daftar foto"><i data-lucide="chevron-left"></i></button></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pg-view-title">Foto</h2><button type="button" class="icon-btn plain nav-back" onclick="window.pgClosePhotoView()" aria-label="Kembali ke daftar foto"><i data-lucide="chevron-left"></i></button></div>
       <div class="sheet-body stack">
         <p class="li-sub" id="pg-view-loading">Memuat foto…</p>
         <img id="pg-view-img" class="pg-photo" alt="Foto progres">
