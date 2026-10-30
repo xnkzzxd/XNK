@@ -1,11 +1,12 @@
 // Demo runtime (browser). build-demo.js inlines this file into demo/*.html with the
-// real server code (src/*.gs) in place of __GS__ and the page kind in __MODE__.
+// real server code (src/*.gs) in place of __GS__. One page, two views: /demo/ is the
+// coach panel, /demo/?klien the client portal (the pill at the top switches).
 // The Google services are faked in memory (a browser port of tests/harness.js) and
 // google.script.run calls the server functions directly, so the demo needs no
 // Google account and never touches the real data. Everything resets on reload.
 (function () {
   'use strict';
-  var MODE = '__MODE__';            // 'admin' (xnk.my.id) or 'public' (book.xnkbooking.my.id)
+  var MODE = /[?&](klien|view=public)\b/.test(location.search) ? 'public' : 'admin';
   var DEMO_PIN = '123456';
   var DEMO_KEY = 'd'.repeat(32);    // link key of the demo client (Sari)
 
@@ -318,11 +319,16 @@
     if (MODE === 'admin') localStorage.setItem('xnk_admin_token', token);
   } catch (e) {}
 
+  // Pill at the top: which view this is, and a switch to the other (a reload, so data starts fresh).
   document.addEventListener('DOMContentLoaded', function () {
     var b = document.createElement('div');
-    b.textContent = MODE === 'admin' ? 'DEMO · PIN ' + DEMO_PIN : 'DEMO · data contoh';
-    b.setAttribute('style', 'position:fixed;top:calc(var(--sa-t,0px) + 6px);left:50%;transform:translateX(-50%);z-index:99999;pointer-events:none;' +
-      'background:#e11d48;color:#fff;font:600 11px/1 system-ui,sans-serif;padding:5px 10px;white-space:nowrap;border-radius:999px;letter-spacing:.04em;opacity:.92');
+    var tab = function (label, href, on) {
+      return '<a href="' + href + '" style="color:#fff;text-decoration:none;padding:6px 10px;border-radius:999px;' + (on ? 'background:rgba(0,0,0,.35)' : 'opacity:.8') + '">' + label + '</a>';
+    };
+    b.innerHTML = '<span style="padding:0 6px 0 8px">DEMO</span>' + tab('Coach', './', MODE === 'admin') + tab('Klien', './?klien', MODE === 'public');
+    b.title = MODE === 'admin' ? 'PIN demo ' + DEMO_PIN + ' · data contoh, kembali seperti awal saat dimuat ulang' : 'Klien contoh Sari (WA 081200000001) · data contoh';
+    b.setAttribute('style', 'position:fixed;top:calc(var(--sa-t,0px) + 6px);left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:2px;' +
+      'background:#e11d48;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:3px;white-space:nowrap;border-radius:999px;letter-spacing:.03em;box-shadow:0 2px 8px rgba(0,0,0,.25)');
     document.body.appendChild(b);
   });
 })();

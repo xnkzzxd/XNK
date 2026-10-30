@@ -20,7 +20,7 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 | `icon-maskable-512.png` | Android app icon; the logo is smaller so Android can crop it to any shape. |
 | `apple-touch-icon.png` | iPhone/iPad home-screen icon (180 px). |
 | `offline.js`, `offline-host.js`, `offline.css`, `sw.js` | The no-signal "Catat offline" screen and the service worker that lets this page open offline. |
-| `demo/` | Offline demo with sample data: `demo/` = PT panel (PIN 123456), `demo/klien/` = client portal. Built by `apps-script/pt-scheduler/tools/build-demo.js`; never edit by hand. |
+| `demo/` | Offline demo with sample data: `demo/` = PT panel (PIN 123456), `demo/?klien` = client portal; the pill at the top switches. Built by `apps-script/pt-scheduler/tools/build-demo.js`; never edit by hand. |
 | `robots.txt` | Tells search engines not to crawl the site. |
 | `_config.yml` | Keeps `apps-script/`, `docs/`, `CLAUDE.md` and this README off the public website. |
 | `docs/` | Upgrade plan: `PRD.md`, `Design.md`, `Task.md`, and `Agent.md` (rules for AI agents and developers). `docs/coach/` has the same four files for the coach phase (`PRD.md`, `Design.md`, `Agent.md`, `TODO.md`); later phases have their own folders (`finance/`, `loop/`, `portal/`, `workout/`). Not published. |
