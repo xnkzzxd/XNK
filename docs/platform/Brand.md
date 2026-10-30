@@ -44,7 +44,19 @@ Also noted: **Fita** (Indico/Telkomsel group) already runs an Indonesian coach p
 
 Play package ids follow reverse-domain style; use the domain you actually own (e.g. `id.latih.app` if you own `latih.id`, `app.latih` if you own `latih.app`). The package id can never change after the first Play upload, so pick it together with the domain.
 
-## Top 3 (recommendation)
+## Owner's candidates (2026-10-30)
+
+The owner wants these three checked, not the research top 3. Domains and trademarks are **belum dicek**: the check runs once `rdap.org` and `pdki-indonesia.dgip.go.id` are allowed in the environment's network settings.
+
+| Name | Angle | Play package id | Known risks |
+|---|---|---|---|
+| **XNK Coach** | Keeps the current brand; existing clients already know XNK. Clear about what it is (coaching). | `id.xnkcoach.app` | Two words, so the domain is likely `xnkcoach.*` or `xnk.coach`. "XNK" means nothing to new users and is hard to say aloud. |
+| **Astro** | Short, modern, easy in Indonesian and English. | `id.astro.app` (likely taken; e.g. `id.astrofit.app`) | Very common name: Astro is a large Malaysian media group and an Indonesian quick-commerce app (Astro Technologies). `.com` / `.id` almost surely taken, and trademark clashes are likely in several classes. A suffix (AstroFit, AstroCoach) lowers the risk. |
+| **Mona** | Short, friendly, easy to remember. | `id.mona.app` (likely taken; e.g. `id.monafit.app`) | Very common personal and brand name; `.com` / `.id` almost surely taken; trademark clashes are likely. A suffix (MonaFit, MonaCoach) lowers the risk. |
+
+Next: once the network is open, a session re-checks these three plus Latih, Nadi and Repku (domains `.id` / `.com` / `.app` / `.coach`, PDKI classes 9/41/42/44, Play/App Store, Instagram/TikTok handles).
+
+## Top 3 (research recommendation)
 
 1. **Latih**: the clearest meaning for both products (coach *melatih*, user *berlatih*), two syllables, no mispronunciation in English. Risk: generic word, so a weak trademark and `.com` probably taken; plan on `latih.app` or `latih.id` (+ `latih.my.id` as backup). Check PDKI class 9 (software) and 41/44 (training, health) before buying.
 2. **Nadi**: warm, health-related, easy in both languages, works for the logger and for the gym. Same `.com` risk as Latih, but less descriptive, so a better trademark chance.

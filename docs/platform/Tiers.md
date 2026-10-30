@@ -1,5 +1,7 @@
 # Plan tiers draft: Free / Pro / Gym (T-1402, D16)
 
+> **Status: approved by the owner on 2026-10-30, as drafted (D71).**
+
 Status: **waiting on the owner** (👤 approve or change the prices and limits). Written 2026-10-30. This is a proposal, not a decision; nothing in the app uses it yet (limits ship in T-1474, billing in T-1473 / T-1496).
 
 Exchange rate used for every Rp figure from a USD price: **Rp 16.500 / USD** (assumption; recheck before publishing prices).

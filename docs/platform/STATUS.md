@@ -2,6 +2,10 @@
 
 Every task session adds one entry at the top: date, task, PR, what is done, what is half-done, questions for the owner, and the next task.
 
+## 2026-10-30 · Owner decisions on T-1400 / T-1402 (conductor)
+- Done: #93 merged. **Prices approved as drafted** (D71, T-1402 `[x]`). Brand: the owner wants **XNK Coach, Astro, Mona** checked; added to Brand.md with risk notes. T-1400 stays `[~]`.
+- Owner: allow `rdap.org` and `pdki-indonesia.dgip.go.id` under Network access (environment settings → Edit → Allowed domains), then the conductor starts the check session. Next after the brand: T-1403 (account checklist) → owner buys the domain and creates the accounts.
+
 ## 2026-10-30 · T-1400 brand shortlist + T-1402 tier draft (waiting on owner)
 - Done: [Brand.md](Brand.md): 12 names (Latih, Nadi, Repku, Pacu, Raga, Rutin, Tegap, Kuatin, Gerakin, Coachin, Sesiku, Bina) with meaning, domains to check (.id/.com/.app/.co.id), Play package id, web-search clash notes; Gaspol and Sigap dropped (existing apps); top 3 **Latih, Nadi, Repku**. [Tiers.md](Tiers.md): Free / Pro / Gym table (limits, modules, PDF footer per D61), 14-day trial, manual QRIS/transfer, downgrade-to-Free rules, competitor prices with sources (2026-10-30), recommended Pro Rp 99.000 and Gym Rp 349.000 (+ Rp 79.000 / coach, + Rp 99.000 / branch), cost per tenant vs. the Rp 500rb budget (fixed ≈ Rp 520rb, break-even 6 Pro tenants). No app code changed. Both tasks are `[~]`, not ticked.
 - Half-done: domain (RDAP/WHOIS) and trademark (PDKI) checks could not run: the session's network policy blocks rdap.org, the registry RDAP servers, DNS and pdki-indonesia.dgip.go.id. Every domain/trademark cell says "belum dicek". Competitor prices come from third-party pages; infrastructure prices are list prices as known, not re-fetched.
