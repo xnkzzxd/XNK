@@ -22,7 +22,7 @@ Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md) · [Roa
 - A task with no tag uses **O**. A task session that finds its task harder than tagged writes that in STATUS.md, and the conductor restarts the task one level up.
 
 ## V0 Discovery
-- [ ] T-1404 CI runs on every PR (not just `apps-script/**`): syntax, tests, browser check (Playwright), offline check, pixel diff for live files; required checks + auto-merge on `main` (👤 the owner turns on "Allow auto-merge" and branch protection if the token can't).
+- [x] T-1404 CI runs on every PR (not just `apps-script/**`): syntax, tests, browser check (Playwright), offline check, pixel diff for live files; required checks + auto-merge on `main` (👤 the owner turns on "Allow auto-merge" and branch protection if the token can't). Built: `.github/workflows/checks.yml`, job `checks`; owner steps in [CI.md](CI.md). The pixel diff for live files is not in CI yet (no baseline tool); the conductor still checks it.
 - [x] T-1405 `STATUS.md` + session handoff protocol (this section).
 - [ ] T-1400 👤 Brand/domain brainstorm: shortlist of names + .id/.com availability; the owner picks (D32).
 - [ ] T-1401 Interactive mind map of every screen, tab, sheet and menu (from `NAV`, `PUBLIC_TABS`, `MORE_GROUP`, views, `openSheet`/`openDetail` ids), with the RPCs per node (D31). Published as an artifact; source in `docs/platform/IA.md`.
