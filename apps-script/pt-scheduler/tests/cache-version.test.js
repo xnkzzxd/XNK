@@ -12,7 +12,7 @@ const boot = (env, key) => j(env.call('getPortalBootstrap', env.memberToken(key)
 // _bumpMember_ / _bumpAfter_; kalau tidak, daftarkan di sini dengan alasan.
 const NO_MEMBER_DATA = [
   // login, sesi, pengaturan akun
-  'adminLogin', 'memberLoginByKey', 'memberLoginByPhone', 'registerNewClient', 'changeAdminPin', 'markGuideSeen',
+  'adminLogin', 'memberLoginByKey', 'memberLoginByPhone', 'registerNewClient', 'changeAdminPin', 'markGuideSeen', 'doPost' /* hanya meneruskan ke fungsi klien yang menaikkan versinya sendiri */,
   // profil & foto profil ikut getPortalBootstrap (selalu segar)
   'uploadMemberPhoto', 'updateMemberPhoto', 'deleteMember',
   // coach, paket, konten, pengaturan: cache bersama (_bustShared_ masuk versi) atau bootstrap

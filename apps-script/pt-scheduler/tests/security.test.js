@@ -7,7 +7,7 @@ const { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays, wibSlot } = require('./fixtu
 // browser through google.script.run. Each one must be classified here, so a
 // new server function added without a guard makes this test fail.
 const PUBLIC = [
-  'doGet', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
+  'doGet', 'doPost', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
   'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
@@ -307,4 +307,20 @@ test('doGet sets the tab icon per site, and the landing draws the real X mark (n
   const landing = env.call('doGet', { parameter: { view: 'Landing' } }).content;
   assert.ok(!landing.includes('M7 11l5-5 5 5'), 'chevron path is gone');
   assert.equal((landing.match(/fill-rule="evenodd" d="M/g) || []).length, 3, 'nav, intro and footer use the X mark');
+});
+
+test('doPost gateway: only whitelisted client functions, member token still required', () => {
+  const env = seededEnv();
+  const post = body => JSON.parse(env.call('doPost', { postData: { contents: typeof body === 'string' ? body : JSON.stringify(body) } }).content);
+  assert.equal(post('not json').ok, false);
+  assert.equal(post({ fn: 'getMembers', args: [env.adminToken()] }).ok, false);   // admin fn not exposed
+  assert.equal(post({ fn: 'constructor', args: [] }).ok, false);
+  const noAuth = post({ fn: 'getPortalMore', args: ['nope'] });
+  assert.equal(noAuth.ok, false);
+  assert.equal(noAuth.auth, true);
+  assert.equal(post({ fn: 'getPortalMore', args: [env.adminToken()] }).auth, true);
+  const ok = post({ fn: 'getPortalMore', args: [env.memberToken(KEY_A)] });
+  assert.equal(ok.ok, true);
+  assert.ok(ok.data);
+  assert.equal(post({ fn: 'memberLoginByPhone', args: ['081111111111'] }).data.member.id, 'PT-A');
 });

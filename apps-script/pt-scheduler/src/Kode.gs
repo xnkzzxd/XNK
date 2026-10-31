@@ -110,6 +110,37 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+// Pintu JSON untuk aplikasi klien mandiri (PWA offline). Hanya fungsi klien di
+// daftar putih ini; setiap fungsi tetap menjaga dirinya lewat requireMember_
+// (token di argumen pertama), jadi tidak ada jalan masuk baru ke data admin.
+const APP_API_MAX_BYTES = 200000;
+function _appApi_() {
+  return { memberLoginByPhone: memberLoginByPhone, getPortalBootstrap: getPortalBootstrap, getPortalMore: getPortalMore,
+    getMyWorkout: getMyWorkout, logMyWorkout: logMyWorkout, getMyNutrition: getMyNutrition, getMyFoodLog: getMyFoodLog,
+    logMyFood: logMyFood, deleteMyFood: deleteMyFood, saveMyMeasurement: saveMyMeasurement,
+    deleteMyMeasurement: deleteMyMeasurement, getMyProgress: getMyProgress };
+}
+function _appApiReply_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+/** Body: {fn, args:[...]} sebagai teks biasa (text/plain, tanpa preflight CORS). Jawaban: {ok, data} atau {ok:false, error, auth}. */
+function doPost(e) {
+  try {
+    const raw = e && e.postData && e.postData.contents ? String(e.postData.contents) : '';
+    if (!raw || raw.length > APP_API_MAX_BYTES) throw new Error('Permintaan tidak valid.');
+    const req = JSON.parse(raw);
+    const fn = req && req.fn;
+    const api = _appApi_();
+    if (typeof fn !== 'string' || !Object.prototype.hasOwnProperty.call(api, fn)) throw new Error('Permintaan tidak valid.');
+    const args = Array.isArray(req.args) ? req.args : [];
+    const data = api[fn].apply(null, args);
+    return _appApiReply_({ ok: true, data: _plainJson_(data === undefined ? null : data) });
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err);
+    return _appApiReply_({ ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 });
+  }
+}
+
 /**
  * Include helper untuk modular HTML components.
  * Memungkinkan file GAS HTML dipisah menjadi partials.
