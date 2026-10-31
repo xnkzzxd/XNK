@@ -1,0 +1,26 @@
+name: ios
+
+on:
+  push:
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+        working-directory: ios
+      # Unsigned: sign on install (Sideloadly / AltStore) or add a signing step once there is an Apple Developer account.
+      - run: |
+          xcodebuild -project XNK.xcodeproj -scheme XNK -configuration Release -sdk iphoneos \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir Payload && cp -R build/Build/Products/Release-iphoneos/XNK.app Payload/
+          zip -qr XNK.ipa Payload
+        working-directory: ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xnk-ipa
+          path: ios/XNK.ipa

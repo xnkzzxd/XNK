@@ -393,8 +393,8 @@
     function check() { try { document.documentElement.classList.toggle('big-text', parseFloat(getComputedStyle(document.documentElement).fontSize) >= 20); } catch (e) {} }
     check(); window.addEventListener('resize', check);
   })();
-  // App Android XNK: back sistem (tombol / geser samping) menggantikan panah kembali di layar.
-  document.documentElement.classList.toggle('android-app', /XNKAndroid/.test(navigator.userAgent));
+  // App Android / iOS XNK: back sistem (tombol / geser samping) menggantikan panah kembali di layar.
+  document.documentElement.classList.toggle('app-shell', /XNKAndroid|XNKiOS/.test(navigator.userAgent));
   (function hostBridge() {
     if (window.top === window) return;
     window.addEventListener('message', function (e) {
