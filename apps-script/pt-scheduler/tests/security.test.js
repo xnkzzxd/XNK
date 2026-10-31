@@ -322,5 +322,9 @@ test('doPost gateway: only whitelisted client functions, member token still requ
   const ok = post({ fn: 'getPortalMore', args: [env.memberToken(KEY_A)] });
   assert.equal(ok.ok, true);
   assert.ok(ok.data);
+  assert.equal(post({ fn: 'getMyProgressPhoto', args: [env.memberToken(KEY_A), 'PHT-x'] }).error, 'Foto tidak ditemukan.');
+  assert.equal(post({ fn: 'deleteMyProgressPhoto', args: ['nope', 'PHT-x'] }).auth, true);
+  assert.equal(post({ fn: 'getPortalMore', args: ['x'.repeat(250000)] }).ok, false);   // only photos may be large
+  assert.equal(post({ fn: 'uploadMyProgressPhoto', args: [env.memberToken(KEY_A), 'x'.repeat(250000), 'image/gif', 'depan'] }).error, 'Foto harus berupa JPG, PNG, atau WEBP.');
   assert.equal(post({ fn: 'memberLoginByPhone', args: ['081111111111'] }).data.member.id, 'PT-A');
 });
