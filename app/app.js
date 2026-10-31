@@ -82,7 +82,7 @@ async function sync(manual) {
     else $('#st').textContent = 'Offline';
   } finally { syncing = false; render(); }
 }
-function logout() { ['x_name', 'x_token', 'x_more', 'x_queue', 'x_failed', 'x_draft', 'x_del', 'x_lastw'].forEach(k => kvSet(k, null)); token = more = draft = null; queue = []; failed = []; delIds = []; render(); }
+function logout() { remindApply(null); ['x_name', 'x_remind', 'x_token', 'x_more', 'x_queue', 'x_failed', 'x_draft', 'x_del', 'x_lastw'].forEach(k => kvSet(k, null)); token = more = draft = null; queue = []; failed = []; delIds = []; render(); }
 addEventListener('online', () => sync());
 
 // ── Pustaka (di-cache service worker) ────────────────────────────────────────────
@@ -276,7 +276,8 @@ function photoView() {
     (ph.length ? ph.map(p => `<div class="card"><div class="row"><b style="flex:1">${esc(p.tanggal)} · ${esc(p.sisi)}</b><button data-pv="${esc(p.id)}">Lihat</button><button class="d" data-pdl="${esc(p.id)}">Hapus</button></div><div id="im-${esc(p.id)}">${photoCache[p.id] ? `<img src="${photoCache[p.id]}" style="width:100%;border-radius:10px">` : ''}</div></div>`).join('') : '<p class="mut">Belum ada foto.</p>') +
     (failed.length ? `<h2 style="margin-top:20px">Ditolak server (${failed.length})</h2>` + failed.map(f => `<div class="card"><div class="mut">${esc(f.fn)}</div><div>${esc(f.error)}</div><div class="row" style="margin-top:8px"><button data-retry="${f.id}">Coba lagi</button><button class="d" data-drop="${f.id}">Buang</button></div></div>`).join('') : '') +
     `<div class="card"><h2>Kartu bagikan</h2><div class="row" style="flex-wrap:wrap">${Object.entries(SHARE_KINDS).map(([k, l]) => `<button data-sk="${k}">${l}</button>`).join('')}</div></div>` +
-    `<div class="card"><button class="d" id="out" style="width:100%">Keluar</button></div>`;
+    remindHtml() + `<div class="card"><button class="d" id="out" style="width:100%">Keluar</button></div>`;
+  remindBind();
   let side = '';
   $('#main').querySelectorAll('[data-sk]').forEach(b => b.onclick = () => openShare(b.dataset.sk));
   $('#main').querySelectorAll('[data-side]').forEach(b => b.onclick = () => { side = b.dataset.side; $('#pf').value = ''; $('#pf').click(); });
@@ -341,6 +342,42 @@ addEventListener('message', async e => {
   }
 });
 
+// Pengingat lokal (opt-in): notifikasi harian dari perangkat, jalan tanpa sinyal. Hanya di app Android (Capacitor). ──
+// WhatsApp dari coach tidak berubah. Teks tetap, tanpa data tubuh. Tidak ada pintar-pintar: waktu tetap tiap hari.
+const LN = () => { const C = window.Capacitor; return C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.LocalNotifications; };
+const REMIND_DEF = { on: false, w: '17:00', f: ['07:30', '12:30', '19:00'] };
+const remindGet = () => ({ ...REMIND_DEF, ...(kv('x_remind') || {}) });
+async function remindApply(r) {   // r = null: matikan semua
+  const ln = LN(); if (!ln) return;
+  try {
+    const pend = await ln.getPending(); if (pend.notifications.length) await ln.cancel({ notifications: pend.notifications.map(n => ({ id: n.id })) });
+    if (!r || !r.on) return;
+    const at = t => { const [hour, minute] = t.split(':').map(Number); return { on: { hour, minute }, allowWhileIdle: true }; };
+    const list = [{ id: 9001, title: 'Waktunya latihan', body: 'Catat setnya di XNK Catat.', schedule: at(r.w) }];
+    ['sarapan', 'makan siang', 'makan malam'].forEach((n, i) => list.push({ id: 9002 + i, title: 'Catat makan', body: 'Jangan lupa catat ' + n + '.', schedule: at(r.f[i]) }));
+    await ln.schedule({ notifications: list });
+  } catch (e) { toast('Pengingat gagal diatur.'); }
+}
+function remindHtml() {
+  if (!LN()) return `<div class="card"><h2>Pengingat</h2><p class="mut">Pengingat di perangkat tersedia di aplikasi Android XNK Catat.</p></div>`;
+  const r = remindGet(), t = (id, v) => `<input id="${id}" type="time" value="${esc(v)}" style="width:8.5rem">`;
+  return `<div class="card"><h2>Pengingat</h2><p class="mut">Notifikasi harian dari perangkat, tanpa sinyal. Pesan dari coach lewat WhatsApp tidak berubah.</p>
+  <div class="row"><label style="flex:1">Aktifkan</label><input id="rm-on" type="checkbox" ${r.on ? 'checked' : ''} style="width:auto;min-height:0"></div>
+  <div class="row"><span style="flex:1">Latihan</span>${t('rm-w', r.w)}</div>
+  <div class="row"><span style="flex:1">Sarapan</span>${t('rm-f0', r.f[0])}</div>
+  <div class="row"><span style="flex:1">Makan siang</span>${t('rm-f1', r.f[1])}</div>
+  <div class="row"><span style="flex:1">Makan malam</span>${t('rm-f2', r.f[2])}</div>
+  <button class="p" id="rm-save" style="width:100%">Simpan pengingat</button></div>`;
+}
+function remindBind() {
+  if (!$('#rm-save')) return;
+  $('#rm-save').onclick = async () => {
+    const r = { on: $('#rm-on').checked, w: $('#rm-w').value || REMIND_DEF.w, f: [0, 1, 2].map(i => $('#rm-f' + i).value || REMIND_DEF.f[i]) };
+    if (r.on) { const p = await LN().requestPermissions(); if (p.display !== 'granted') { $('#rm-on').checked = false; return toast('Izin notifikasi ditolak. Aktifkan di pengaturan Android.'); } }
+    kvSet('x_remind', r); await remindApply(r); toast(r.on ? 'Pengingat aktif.' : 'Pengingat dimatikan.');
+  };
+}
+
 // ── Mulai ──────────────────────────────────────────────────────────────────
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab = b.dataset.t; render(); });
 $('#syncb').onclick = () => sync(true);
@@ -348,4 +385,5 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 kvOpen().then(() => {
   token = kv('x_token', ''); more = kv('x_more', null); queue = kv('x_queue', []); failed = kv('x_failed', []); draft = kv('x_draft', null); delIds = kv('x_del', []);
   render(); sync();
+  if (remindGet().on) remindApply(remindGet());   // jadwal ulang tiap buka (aman diulang)
 });

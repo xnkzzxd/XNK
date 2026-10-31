@@ -1,0 +1,36 @@
+name: capacitor-apk
+
+# Builds the debug APK of the offline client app (app/ wrapped by Capacitor).
+# The native android/ project is generated here, not committed: capacitor/ stays small.
+on:
+  push:
+    paths: ['capacitor/**', 'app/**', '.github/workflows/capacitor-apk.yml']
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: capacitor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: capacitor/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - run: node tools/build-www.js
+      - run: npx cap add android
+      - run: npx cap sync android
+      - run: ./gradlew assembleDebug --no-daemon
+        working-directory: capacitor/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xnk-catat-apk
+          path: capacitor/android/app/build/outputs/apk/debug/app-debug.apk
