@@ -1,0 +1,8 @@
+{
+  "appId": "id.my.xnk.catat",
+  "appName": "XNK Catat",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}
