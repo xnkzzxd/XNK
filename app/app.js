@@ -82,7 +82,7 @@ async function sync(manual) {
     else $('#st').textContent = 'Offline';
   } finally { syncing = false; render(); }
 }
-function logout() { remindApply(null); ['x_remind', 'x_token', 'x_more', 'x_queue', 'x_failed', 'x_draft', 'x_del', 'x_lastw'].forEach(k => kvSet(k, null)); token = more = draft = null; queue = []; failed = []; delIds = []; render(); }
+function logout() { remindApply(null); ['x_name', 'x_remind', 'x_token', 'x_more', 'x_queue', 'x_failed', 'x_draft', 'x_del', 'x_lastw'].forEach(k => kvSet(k, null)); token = more = draft = null; queue = []; failed = []; delIds = []; render(); }
 addEventListener('online', () => sync());
 
 // ── Pustaka (di-cache service worker) ────────────────────────────────────────────
@@ -109,7 +109,7 @@ function loginView() {
   <input id="ph" type="tel" inputmode="numeric" placeholder="08xxxxxxxxxx"><div class="row" style="margin-top:10px"><button class="p" id="go" style="flex:1">Masuk</button></div></div>`;
   $('#go').onclick = async () => {
     $('#go').disabled = true;
-    try { const r = await api('memberLoginByPhone', $('#ph').value); token = r.token; kvSet('x_token', token); await sync(); }
+    try { const r = await api('memberLoginByPhone', $('#ph').value); token = r.token; kvSet('x_token', token); kvSet('x_name', (r.member && r.member.name) || ''); await sync(); }
     catch (e) { toast(e.message || 'Gagal masuk.'); }
     $('#go').disabled = false; render();
   };
@@ -140,10 +140,12 @@ function workoutView() {
     $('#main').innerHTML = `<button class="p" id="start" style="width:100%">Mulai latihan kosong</button>` +
       (days.length ? `<h2 style="margin-top:20px">Program</h2>` + days.map((d, i) => `<div class="card"><div class="row"><b style="flex:1">${esc(d.hari)}</b>${next && next.hari === d.hari ? '<span class="mut">berikutnya</span>' : ''}<button data-pd="${i}">Mulai</button></div><div class="mut">${esc(d.items.map(x => x.gerakan).join(' · '))}</div></div>`).join('') : '') +
       (kv('x_lastw') ? `<button id="shl" style="width:100%;margin-top:12px">Bagikan latihan terakhir</button>` : '') +
+      `<button id="shm" style="width:100%;margin-top:8px">Kartu bagikan lainnya</button>` +
       `<h2 style="margin-top:20px">Riwayat</h2>` + (ses.length ? ses.slice(0, 10).map(s => `<div class="card"><b>${esc(s.tanggal)}</b> ${esc(s.hari || '')}<div class="mut">${s.durasi ? Math.round(s.durasi / 60) + ' menit' : ''}</div></div>`).join('') : '<p class="mut">Belum ada. Setelah sinkron, riwayat muncul di sini.</p>');
     $('#start').onclick = () => { draft = { cid: uid(), mulai: new Date().toISOString(), items: [] }; dSave(); render(); };
     $('#main').querySelectorAll('[data-pd]').forEach(b => b.onclick = () => { draft = fromProgramDay(days[b.dataset.pd]); dSave(); render(); });
     if ($('#shl')) $('#shl').onclick = () => shareCard(kv('x_lastw'));
+    $('#shm').onclick = () => openShare('latihan');
     return;
   }
   $('#main').innerHTML = (draft.hari ? `<h2>${esc(draft.hari)}</h2>` : '') + draft.items.map((it, i) => {
@@ -273,9 +275,11 @@ function photoView() {
   <input id="pf" type="file" accept="image/*" class="hide"></div>` +
     (ph.length ? ph.map(p => `<div class="card"><div class="row"><b style="flex:1">${esc(p.tanggal)} · ${esc(p.sisi)}</b><button data-pv="${esc(p.id)}">Lihat</button><button class="d" data-pdl="${esc(p.id)}">Hapus</button></div><div id="im-${esc(p.id)}">${photoCache[p.id] ? `<img src="${photoCache[p.id]}" style="width:100%;border-radius:10px">` : ''}</div></div>`).join('') : '<p class="mut">Belum ada foto.</p>') +
     (failed.length ? `<h2 style="margin-top:20px">Ditolak server (${failed.length})</h2>` + failed.map(f => `<div class="card"><div class="mut">${esc(f.fn)}</div><div>${esc(f.error)}</div><div class="row" style="margin-top:8px"><button data-retry="${f.id}">Coba lagi</button><button class="d" data-drop="${f.id}">Buang</button></div></div>`).join('') : '') +
+    `<div class="card"><h2>Kartu bagikan</h2><div class="row" style="flex-wrap:wrap">${Object.entries(SHARE_KINDS).map(([k, l]) => `<button data-sk="${k}">${l}</button>`).join('')}</div></div>` +
     remindHtml() + `<div class="card"><button class="d" id="out" style="width:100%">Keluar</button></div>`;
   remindBind();
   let side = '';
+  $('#main').querySelectorAll('[data-sk]').forEach(b => b.onclick = () => openShare(b.dataset.sk));
   $('#main').querySelectorAll('[data-side]').forEach(b => b.onclick = () => { side = b.dataset.side; $('#pf').value = ''; $('#pf').click(); });
   $('#pf').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
@@ -296,6 +300,47 @@ function photoView() {
   $('#main').querySelectorAll('[data-drop]').forEach(b => b.onclick = () => { failed = failed.filter(x => x.id !== b.dataset.drop); fSave(); render(); });
   $('#out').onclick = () => { if (queue.length && !confirm('Masih ada ' + queue.length + ' catatan belum terkirim. Keluar akan membuangnya. Lanjut?')) return; logout(); };
 }
+
+// Editor kartu bagikan: share.html (dibuat dari Bagikan.html milik panel) berjalan di iframe layar penuh. ──
+// Data dari salinan lokal; hanya periode lain dan foto yang butuh sinyal (RPC lewat sini, token tidak masuk iframe).
+const SHARE_KINDS = { latihan: 'Latihan', rekap: 'Rekap bulan', progres: 'Progres', gizi: 'Gizi', ukuran: 'Ukuran tubuh', badges: 'Badge', konsistensi: 'Konsistensi', foto: 'Foto progres' };
+const SHARE_RPC = ['getMyShareData', 'getMyProgressPhoto'];
+let shareJob = null;
+const nativeShare = () => { const P = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins; return P && P.Share && P.Filesystem ? P : null; };
+function openShare(kind) {
+  if (!more) return toast('Sinkron dulu untuk membuka kartu.');
+  const first = String(kv('x_name', '')).trim().split(/\s+/)[0] || '';
+  const prog = more.progress && !more.progress.error ? more.progress : null;
+  shareJob = { kind, opts: {}, src: { today: today(), date: today(), admin: false, first,
+    workout: more.workout && !more.workout.error ? more.workout : null, progress: prog, share: more.share && !more.share.error ? more.share : null,
+    nutrition: more.nutrition, photos: (prog && prog.photos) || [] } };
+  const f = document.createElement('iframe'); f.id = 'shf'; f.src = 'share.html';
+  f.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:50;background:#000'; document.body.appendChild(f);
+}
+addEventListener('message', async e => {
+  const f = $('#shf'); if (!f || e.source !== f.contentWindow) return;
+  const d = e.data || {}, reply = m => f.contentWindow.postMessage(m, '*');
+  if (d.xk === 'ready') { reply({ xnk: 'host', share: !!nativeShare() }); reply({ xk: 'open', ...shareJob }); }
+  else if (d.xk === 'close') f.remove();
+  else if (d.xk === 'rpc' && SHARE_RPC.includes(d.fn)) {
+    try { reply({ xk: 'rpc-done', id: d.id, ok: true, data: await api(d.fn, token, ...(d.args || [])) }); }
+    catch (er) { reply({ xk: 'rpc-done', id: d.id, ok: false, error: er.server ? er.message : 'Perlu sinyal.' }); }
+  } else if (d.xnk === 'share') {
+    let ok = false;
+    try {
+      const P = nativeShare(), files = d.files || [{ blob: d.blob, name: d.name }], uris = [];
+      for (const x of files) {
+        const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(x.blob); });
+        uris.push((await P.Filesystem.writeFile({ path: x.name, data: b64, directory: 'CACHE' })).uri);
+      }
+      await P.Share.share({ files: uris }); ok = true;
+    } catch (er) { ok = false; }
+    reply({ xnk: 'share-done', ok });
+  } else if (d.xnk === 'copy') {
+    let ok = false; try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': d.blob })]); ok = true; } catch (er) {}
+    reply({ xnk: 'copy-done', ok });
+  }
+});
 
 // Pengingat lokal (opt-in): notifikasi harian dari perangkat, jalan tanpa sinyal. Hanya di app Android (Capacitor). ──
 // WhatsApp dari coach tidak berubah. Teks tetap, tanpa data tubuh. Tidak ada pintar-pintar: waktu tetap tiap hari.
