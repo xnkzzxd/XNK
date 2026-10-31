@@ -1,0 +1,24 @@
+name: XNK
+options:
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  XNK:
+    type: application
+    platform: iOS
+    sources: [XNK]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: id.my.xnkbooking.book
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: XNK
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSCameraUsageDescription: Untuk mengambil foto progres.
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Untuk memilih foto progres.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
