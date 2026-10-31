@@ -120,7 +120,7 @@ function _appApi_() {
     getMyWorkout: getMyWorkout, logMyWorkout: logMyWorkout, getMyNutrition: getMyNutrition, getMyFoodLog: getMyFoodLog,
     logMyFood: logMyFood, deleteMyFood: deleteMyFood, saveMyMeasurement: saveMyMeasurement,
     deleteMyMeasurement: deleteMyMeasurement, getMyProgress: getMyProgress,
-    uploadMyProgressPhoto: uploadMyProgressPhoto, getMyProgressPhoto: getMyProgressPhoto, deleteMyProgressPhoto: deleteMyProgressPhoto };
+    uploadMyProgressPhoto: uploadMyProgressPhoto, getMyProgressPhoto: getMyProgressPhoto, deleteMyProgressPhoto: deleteMyProgressPhoto, getMyShareData: getMyShareData };
 }
 function _appApiReply_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
