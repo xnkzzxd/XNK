@@ -127,6 +127,7 @@ Goals:
 | D68 | Timing: **after the Android app** (V8). Design work (map → clickable prototype artifact) may start earlier, but nothing is built before then. The owner's judgement decides, using the prototype. |
 | D69 | i18n (D20) runs **together with** the UX tidy-up, so every string is touched only once. |
 | D71 | **Plan prices approved** (2026-10-30), as drafted in [Tiers.md](Tiers.md): Free (5 clients) · Pro Rp 99.000/month (75 clients) · Gym Rp 349.000/month (3 coaches, 2 branches) + Rp 79.000 per extra coach + Rp 99.000 per extra branch; 14-day Pro trial; manual QRIS/transfer. |
+| D72 | **Brand: XNK Coach** (owner, 2026-10-30), chosen after the availability check in [Brand.md](Brand.md): all `xnkcoach` domains (.id/.com/.app/.coach) and `xnk.coach` free, no PDKI mark, all handles free. `<brand>` in the Phase V docs means XNK Coach; the exact domain is bought in T-1403 (recommended `xnkcoach.id` + `xnk.coach`). Replaces D32. |
 
 **Round 5: XNK keeps working**
 | # | Decision |
