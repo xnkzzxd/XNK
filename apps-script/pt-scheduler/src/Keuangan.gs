@@ -89,7 +89,7 @@ function _finEnsure_() {
   });
   const cat = _finSheet_('KategoriKeuangan', true);
   if (cat.getLastRow() <= 1) {
-    FIN_DEFAULT_CATS.forEach(function(c, i) { cat.appendRow(['KAT-' + (i + 1), c[0], c[1], i + 1, true]); });
+    FIN_DEFAULT_CATS.forEach(function(c, i) { _appendRow_(cat, ['KAT-' + (i + 1), c[0], c[1], i + 1, true]); });
   }
 }
 
@@ -121,7 +121,7 @@ function _finRead_(name) {
 function _finAppend_(name, obj) {
   const sheet = _finSheet_(name, true);
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-  sheet.appendRow(header.map(function(h) { return obj[h] === undefined ? '' : obj[h]; }));
+  _appendRow_(sheet, header.map(function(h) { return obj[h] === undefined ? '' : obj[h]; }));
 }
 
 function _finUpdate_(name, rowNum, obj) {

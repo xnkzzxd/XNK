@@ -355,7 +355,7 @@ function _clientSignals_(now) {
   const weights = {};
   _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     const v = r[3]; if (!r[0] || v === '' || v == null) return;
-    (weights[String(r[1]).trim()] || (weights[String(r[1]).trim()] = [])).push({ t: String(r[2]), v: Number(v) });
+    (weights[String(r[1]).trim()] || (weights[String(r[1]).trim()] = [])).push({ t: _isoDateCell_(r[2]), v: Number(v) });
   });
   Object.keys(weights).forEach(function(k) { weights[k].sort(function(a, b) { return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; }); });
   const overdue = {};

@@ -111,7 +111,7 @@ function _shareFor_(row, workout, progress) {
   const fs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FoodLog');
   if (fs && fs.getLastRow() >= 2) {
     const seen = {};
-    fs.getDataRange().getValues().slice(1).forEach(function(r) { if (String(r[1]).trim() === id && String(r[2]).slice(0, 7) === month) seen[String(r[2])] = true; });
+    fs.getDataRange().getValues().slice(1).forEach(function(r) { if (String(r[1]).trim() === id && _isoDateCell_(r[2]).slice(0, 7) === month) seen[_isoDateCell_(r[2])] = true; });
     foodDays = Object.keys(seen).length;
   }
   const all = _getSchedulesAll_();
