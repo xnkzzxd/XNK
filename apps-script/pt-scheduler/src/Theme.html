@@ -2206,9 +2206,12 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
 .makan-hero .row-between { gap: 6px; flex-wrap: wrap; }
 .makan-hero .icon-btn { color: var(--on-ink); background: transparent; border-color: transparent; }
 @media (max-width: 420px) { .makan-macros { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
-.meal-blk { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--border); }
+.meal-blk { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding-top: 10px; border-top: 1px solid var(--border); }
 .meal-blk:first-of-type { border-top: 0; padding-top: 0; }
-.meal-head { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.meal-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 44px; }
+.meal-head b { min-width: 0; }
+.meal-head .li-sub { white-space: normal; }
+.meal-item { min-width: 0; }
 .meal-head .icon-chip { width: 32px; height: 32px; }
 .meal-head .icon-chip svg { width: 16px; height: 16px; }
 /* Coach: kartu hitam ringkas */

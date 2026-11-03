@@ -5974,7 +5974,7 @@
       if (wl && wl.live && wlPrefs().wake && navigator.wakeLock && !wlRt.wake) navigator.wakeLock.request('screen').then(function (w) { wlRt.wake = w; w.addEventListener && w.addEventListener('release', function () { wlRt.wake = null; }); }).catch(function () {});
     } catch (e) {}
   }
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { if (ui.wlOn) { wlWake(true); wlRestTick(); } window.wlFlush(); } });
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { if (ui.wlOn) { wlWake(true); wlRestTick(); } window.wlFlush(); if (window.fqFlush) window.fqFlush(); } });
   window.addEventListener('online', function () { window.wlFlush(); if (window.fqFlush) window.fqFlush(); });
   window.addEventListener('offline', function () { if (window.publicLoggedMember || ui.mode === 'admin') window.showToast('Tidak ada sinyal. Catatan latihan dan makan tetap disimpan di HP.'); });
   let wlResizeT = null;
@@ -8647,12 +8647,23 @@
   // Setiap catatan langsung tampil (angka dihitung di browser dari daftar makanan, rumus sama dengan _foodLogEntry_),
   // disimpan di xnk_food_queue, lalu dikirim berurutan. cid membuat kiriman ulang tidak dobel di server.
   const FQ_KEY = 'xnk_food_queue';
-  const fqRt = { flushing: false, retry: null, tries: 0 };
+  const fqRt = { flushing: false, retry: null, tries: 0, watch: null, run: 0 };
+  const FQ_WAIT_MS = 45000;   // jawaban server tak datang (HP tidur, sinyal putus): lepas dan kirim ulang; cid mencegah dobel
   function fqScope() { const t = _lsGet(MEMBER_TOKEN_KEY); return t ? 'm:' + tokenSig(t) : ''; }
-  function fqAll() { try { const q = JSON.parse(_lsGet(FQ_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; } }
-  function fqSet(q) { _lsSet(FQ_KEY, q.length ? JSON.stringify(q) : null); }
+  // Penyimpanan HP penuh / diblokir: antrean tetap jalan di memori (hilang bila halaman ditutup), bukan hilang diam-diam.
+  let fqMem = null;
+  function fqAll() {
+    if (fqMem) return fqMem.slice();
+    try { const q = JSON.parse(_lsGet(FQ_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; }
+  }
+  function fqSet(q) {
+    try {
+      if (q.length) localStorage.setItem(FQ_KEY, JSON.stringify(q)); else localStorage.removeItem(FQ_KEY);
+      fqMem = null;
+    } catch (e) { fqMem = q.slice(); }
+  }
   function fqMine() { const sc = fqScope(); return sc ? fqAll().filter(x => x.scope === sc) : []; }
-  window.fqForget = function () { fqSet([]); clearTimeout(fqRt.retry); };
+  window.fqForget = function () { fqSet([]); fqMem = null; clearTimeout(fqRt.retry); clearTimeout(fqRt.watch); fqRt.flushing = false; };
   const r1 = v => Math.round(v * 10) / 10;
   function fqCalc(e) {
     if (e.id && !e.custom) {
@@ -8672,7 +8683,7 @@
     if (!q.length) return n;
     const del = {}; q.forEach(x => { if (x.op === 'del') del[x.logId] = true; });
     const have = {}; n.log.items.forEach(x => { if (x.cid) have[x.cid] = true; });
-    const items = n.log.items.filter(x => !del[x.id]).concat(q.filter(x => x.op === 'add' && x.tanggal === day && !have[x.id] && x.view).map(x => Object.assign({}, x.view, { id: x.id, cid: x.id, pending: true })));
+    const items = n.log.items.filter(x => !del[x.id]).concat(q.filter(x => x.op === 'add' && x.tanggal === day && !have[x.id]).map(x => Object.assign({ waktu: x.entry && x.entry.waktu, nama: 'Makanan', porsi: '', kal: 0, p: 0, l: 0, k: 0 }, x.view, { id: x.id, cid: x.id, pending: true })));
     const totals = items.reduce((t, i) => ({ kal: t.kal + i.kal, p: r1(t.p + i.p), l: r1(t.l + i.l), k: r1(t.k + i.k) }), { kal: 0, p: 0, l: 0, k: 0 });
     return Object.assign({}, n, { log: Object.assign({}, n.log, { items: items, totals: totals }) });
   }
@@ -8683,22 +8694,28 @@
     window.fqFlush();
   }
   // Satu pintu untuk semua "catat makan": tampil seketika, kirim di belakang layar.
-  function nutQueueAdd(entry) {
+  function nutQueueAdd(entry, viewHint) {
     const id = 'fq-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const e = Object.assign({}, entry, { cid: id, tanggal: wkToday() });
-    const view = fqCalc(e);
+    const view = fqCalc(e) || viewHint || null;
     if (e.custom && !(view && view.nama)) { window.showToast('Isi nama makanan.'); return false; }
     fqPush({ id: id, op: 'add', tanggal: e.tanggal, entry: e, view: view });
-    window.showToast(navigator.onLine === false ? 'Disimpan di HP. Dikirim saat ada sinyal.' : 'Dicatat.');
+    window.showToast(navigator.onLine === false ? 'Disimpan di HP. Dikirim saat ada sinyal.' : fqMem ? 'Dicatat. Memori HP penuh: biarkan halaman terbuka sampai terkirim.' : 'Dicatat.');
     return true;
   }
   window.fqFlush = function () {
     if (fqRt.flushing || !_lsGet(MEMBER_TOKEN_KEY)) return;
     const it = fqMine()[0]; if (!it) return;
     fqRt.flushing = true; clearTimeout(fqRt.retry);
-    const call = it.op === 'del' ? memberCall('deleteMyFood', it.logId) : memberCall('logMyFood', it.entry);
+    const run = ++fqRt.run;
+    const call = Promise.race([
+      it.op === 'del' ? memberCall('deleteMyFood', it.logId) : memberCall('logMyFood', it.entry),
+      new Promise(function (res, rej) { clearTimeout(fqRt.watch); fqRt.watch = setTimeout(function () { rej(new Error('timeout')); }, FQ_WAIT_MS); })
+    ]);
     const drop = function () { fqSet(fqAll().filter(x => x.id !== it.id)); };
     call.then(function (d) {
+      if (run !== fqRt.run) return;
+      clearTimeout(fqRt.watch);
       fqRt.flushing = false; fqRt.tries = 0; drop();
       if (d && window.myNutrition && (!window.myNutrition.log || d.tanggal === window.myNutrition.log.tanggal || d.tanggal === wkToday())) nutSetLog(d); else { renderMakan(); }
       renderInsightMakan();
@@ -8707,6 +8724,8 @@
       if (it.op !== 'del' && tg && tg.ok && tot && d.tanggal === wkToday() && Math.abs(tot.kal - tg.kal) <= tg.kal * 0.1 && window.shareMoment) window.shareMoment('gizi', 'Target kalori hari ini tercapai. Bagikan?');
       window.fqFlush();
     }).catch(function (err) {
+      if (run !== fqRt.run) return;
+      clearTimeout(fqRt.watch);
       fqRt.flushing = false;
       const msg = window.authMessage(err);
       if (window.isAuthError(err)) return;
@@ -8724,8 +8743,9 @@
   window.nutLogMenu = function (mi, ii, btn) {
     const m = window.myNutrition.menu.meals[mi], it = m.items[ii];
     const waktu = ({ sarapan: 'sarapan', siang: 'siang', malam: 'malam', buka: 'malam', sahur: 'sarapan', camilan: 'camilan' })[m.key] || 'siang';
-    const done = busy(btn, '…');
-    foodEnsure().catch(function () {}).then(function () { done(); nutQueueAdd({ waktu: waktu, id: it.id, gram: it.gram }); });
+    // Langsung dicatat dari angka menu (sudah dari server); daftar makanan tidak perlu ditunggu (sinyal lemah = macet).
+    nutQueueAdd({ waktu: waktu, id: it.id, gram: it.gram }, { waktu: waktu, foodId: it.id, nama: it.n, gram: it.gram, porsi: NUT_N(it.porsi, 1) + ' ' + String(it.porsiNama || '').replace(/^1 /, ''), kal: it.kal, p: it.p, l: it.l, k: it.k, sumber: it.e ? 'perkiraan' : 'tkpi' });
+    foodEnsure().catch(function () {});
   };
   window.nutDelLog = function (id) {
     const q = fqAll();

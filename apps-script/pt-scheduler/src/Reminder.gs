@@ -132,7 +132,7 @@ function _logReminder_(jenis, slot, target, hasil) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
-    _reminderLogSheet_().appendRow([
+    _appendRow_(_reminderLogSheet_(), [
       _reminderKey_(jenis, slot, target), String(jenis), String(slot),
       target == null || target === '' ? '*' : String(target),
       new Date().toISOString(), hasil === 'gagal' ? 'gagal' : 'ok'
@@ -919,7 +919,7 @@ function _progressByMember_() {
   _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     if (!r[0]) return;
     var id = String(r[1]).trim();
-    (out[id] = out[id] || []).push({ tanggal: String(r[2]), berat: r[3] === '' ? '' : Number(r[3]), pinggang: r[4] === '' ? '' : Number(r[4]) });
+    (out[id] = out[id] || []).push({ tanggal: _isoDateCell_(r[2]), berat: r[3] === '' ? '' : Number(r[3]), pinggang: r[4] === '' ? '' : Number(r[4]) });
   });
   Object.keys(out).forEach(function(k) { out[k].sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); }); });
   return out;
@@ -1065,7 +1065,7 @@ function sendTesUlangDigest_(ctx) {
   var today = _wibParts_(now).date;
   var pools = _loadClientPools_(), last = {};
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FitnessTests');
-  if (sheet) sheet.getDataRange().getValues().slice(1).forEach(function(r) { var k = String(r[1]).trim(), d = String(r[2]); if (!last[k] || d > last[k]) last[k] = d; });
+  if (sheet) sheet.getDataRange().getValues().slice(1).forEach(function(r) { var k = String(r[1]).trim(), d = _isoDateCell_(r[2]); if (!last[k] || d > last[k]) last[k] = d; });
   var tpl = _rmdTemplate_('tes-ulang'), items = [];
   pools.active.filter(function(c) { return !_rmdIsOff_(c, 'tes-ulang') && last[c.id] && _daysBetween_(last[c.id], today) >= TES_ULANG_EVERY_DAYS; }).forEach(function(c) {
     var dm = last[c.id].split('-');

@@ -359,7 +359,7 @@ function _nutAdviceRows_() {
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('NutritionAdvice');   // membaca tidak membuat sheet
   if (!sh || sh.getLastRow() < 2) return [];
   return sh.getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(function(r) {
-    return { id: String(r[0]), memberId: String(r[1]).trim(), tanggal: String(r[2]), delta: Number(r[3]) || 0, alasan: String(r[4]), status: String(r[5]), diputuskan: String(r[6] || '') };
+    return { id: String(r[0]), memberId: String(r[1]).trim(), tanggal: _isoDateCell_(r[2]), delta: Number(r[3]) || 0, alasan: String(r[4]), status: String(r[5]), diputuskan: String(r[6] || '') };
   });
 }
 
@@ -383,7 +383,7 @@ function _nutRefreshAdvice_(memberId, profile, entries, today) {
     const a = _nutAdvise_(entries, profile.goal, today, { pending: false, lastDecision: last ? last.diputuskan : '' });
     if (!a) return null;
     const id = 'NA-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
-    _nutAdviceSheet_().appendRow([id, String(memberId).trim(), today, a.delta, a.alasan, 'menunggu', '']);
+    _appendRow_(_nutAdviceSheet_(), [id, String(memberId).trim(), today, a.delta, a.alasan, 'menunggu', '']);
     return id;
   });
 }
@@ -429,7 +429,7 @@ function _nutHubList_() {
         const v = r[3];
         if (!r[0] || v === '' || v == null) return;
         const id = String(r[1]).trim();
-        (w[id] = w[id] || []).push({ tanggal: String(r[2]), berat: Number(v) });
+        (w[id] = w[id] || []).push({ tanggal: _isoDateCell_(r[2]), berat: Number(v) });
       });
       _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
         if (!row[0]) return;
@@ -803,7 +803,7 @@ function _foodLogRows_(memberId) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FoodLog');
   if (!sheet || sheet.getLastRow() < 2) return [];
   return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(function(r) {
-    return { id: String(r[0]), tanggal: String(r[2]), waktu: String(r[3]), foodId: String(r[4] || ''), nama: String(r[5]), gram: Number(r[6]) || 0, porsi: String(r[7]),
+    return { id: String(r[0]), tanggal: _isoDateCell_(r[2]), waktu: String(r[3]), foodId: String(r[4] || ''), nama: String(r[5]), gram: Number(r[6]) || 0, porsi: String(r[7]),
       kal: Number(r[8]) || 0, p: Number(r[9]) || 0, l: Number(r[10]) || 0, k: Number(r[11]) || 0, sumber: String(r[12]), cid: String(r[14] || '') };
   });
 }
@@ -836,7 +836,7 @@ function _foodLogDay_(memberId, day) {
 
 function _foodLogAppend_(sheet, memberId, day, entry) {
   const id = 'FL-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
-  sheet.appendRow([id, String(memberId).trim(), day, entry.waktu, entry.foodId, entry.nama, entry.gram, entry.porsi, entry.kal, entry.p, entry.l, entry.k, entry.sumber, new Date().toISOString(), entry.cid || '']);
+  _appendRow_(sheet, [id, String(memberId).trim(), day, entry.waktu, entry.foodId, entry.nama, entry.gram, entry.porsi, entry.kal, entry.p, entry.l, entry.k, entry.sumber, new Date().toISOString(), entry.cid || '']);
   return id;
 }
 
@@ -878,7 +878,7 @@ function deleteMyFood(memberToken, logId) {
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(logId) && String(data[i][1]).trim() === memberId) {
-        const day = String(data[i][2]);
+        const day = _isoDateCell_(data[i][2]);
         sheet.deleteRow(i + 1);
         return _bumpAfter_(memberId, _foodLogDay_(memberId, day));
       }
@@ -956,7 +956,7 @@ function _nutBulkCalories_() {
   const rowsOf = function(name) { const sh = ss.getSheetByName(name); return sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : []; };
   const weights = {};
   rowsOf('Progress').forEach(function(r) {
-    const id = String(r[1]).trim(), kg = Number(r[3]), d = String(r[2]);
+    const id = String(r[1]).trim(), kg = Number(r[3]), d = _isoDateCell_(r[2]);
     if (!r[0] || !(kg > 0)) return;
     if (!weights[id] || d >= weights[id].d) weights[id] = { d: d, kg: kg };
   });

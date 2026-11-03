@@ -814,6 +814,25 @@ function _assertBookingHorizon_(start) {
 // #############################################################################
 
 /**
+ * appendRow, lalu pastikan teks tanggal ('2026-11-03', '2026-11-03T05:56:05.123Z') tetap teks.
+ * Sheets kadang mengubahnya jadi tanggal sungguhan walau kolomnya '@' (FoodLog, FitnessTests, … sejak 2026-10);
+ * pembaca yang memakai String(sel) lalu tidak pernah cocok lagi ("data tidak berubah"). Sel itu ditulis ulang sebagai teks.
+ */
+const SHEET_ISO_TEXT_RE_ = /^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/;
+function _appendRow_(sheet, row) {
+  sheet.appendRow(row);
+  const fix = [];
+  row.forEach(function(v, i) { if (typeof v === 'string' && SHEET_ISO_TEXT_RE_.test(v)) fix.push(i); });
+  if (!fix.length) return;
+  let n = sheet.getLastRow();
+  const key = String(row[0]);
+  for (let k = 0; k < 5 && n > 1 && String(sheet.getRange(n, 1).getValue()) !== key; k++) n--;
+  if (n < 1 || String(sheet.getRange(n, 1).getValue()) !== key) return;
+  const got = sheet.getRange(n, 1, 1, row.length).getValues()[0];
+  fix.forEach(function(i) { if (got[i] !== row[i]) sheet.getRange(n, i + 1).setNumberFormat('@').setValue(row[i]); });
+}
+
+/**
  * Fungsi pembantu untuk membuat Sheet baru jika belum ada,
  * atau memastikan baris header sudah tertulis dengan benar.
  */
@@ -899,12 +918,12 @@ function logToSheet_(pesan, status = "INFO") {
     // Jika sheet "Logs" belum ada, buat otomatis
     if (!sheet) {
       sheet = ss.insertSheet("Logs");
-      sheet.appendRow(["Timestamp", "Status", "Pesan"]);
+      _appendRow_(sheet, ["Timestamp", "Status", "Pesan"]);
       sheet.getRange("A1:C1").setFontWeight("bold"); // Bold header
     }
     
     const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-    sheet.appendRow([timestamp, status, pesan]);
+    _appendRow_(sheet, [timestamp, status, pesan]);
   } catch (e) {
     Logger.log("Gagal menulis log ke sheet: " + e.message);
   }
@@ -1087,7 +1106,7 @@ function saveCoachImpl_(token, data) {
       row[idx.id] = id;
       row[idx.aktif] = true;
       Object.keys(values).forEach(function(k) { row[idx[k]] = values[k]; });
-      sheet.appendRow(row);
+      _appendRow_(sheet, row);
       _bustSlots_();   // sesudah menulis: coach baru menambah kursi
       return { status: 'success', id: id };
     }
@@ -1384,7 +1403,7 @@ function _tulisLogTransaksiMember_(memberId, jenis, paketId, namaPaket, jumlahSe
   const now = new Date();
   const dateStr = now.getDate() + '/' + (now.getMonth() + 1) + '/' + now.getFullYear();
   const price = (typeof harga === 'number' && isFinite(harga)) ? harga : '';   // harga saat transaksi; '' = tidak diketahui
-  sheet.appendRow([trxId, memberId, dateStr, jenis, paketId || '', namaPaket || '', jumlahSesi || 0, coachId || '', namaCoach || '', catatan || '', price]);
+  _appendRow_(sheet, [trxId, memberId, dateStr, jenis, paketId || '', namaPaket || '', jumlahSesi || 0, coachId || '', namaCoach || '', catatan || '', price]);
   _finBillFromTransaction_({ trxId: trxId, memberId: memberId, paketId: paketId, namaPaket: namaPaket, coachId: coachId, dateStr: dateStr, price: price });   // Fase H: tagihan (hanya bila aktif)
   return trxId;
 }
@@ -1728,7 +1747,7 @@ function _addMemberInternal_(memberData, options) {
         memberKey = _newMemberKey_();
         newRow.push(memberKey);
       }
-      sheet.appendRow(newRow);
+      _appendRow_(sheet, newRow);
 
       _tulisLogTransaksiMember_(id, 'Baru', paketId, paketNama, totalSessions, coachId, coachNama, 'Klien baru', paketHarga);
     }
@@ -2263,8 +2282,46 @@ function getAdminExtras(token) {
  * + omzet/keuangan + tren paket + coach hub. Tiap bagian berbentuk sama dengan fungsi lamanya; bagian yang gagal
  * mengembalikan {error}. Detail Pengaturan (status pengingat, paket admin) dimuat saat halamannya dibuka.
  */
+// Sel "Tanggal" yang terlanjur diubah Sheets jadi tanggal sungguhan (lihat _appendRow_) dikembalikan jadi teks 'YYYY-MM-DD'.
+// Berjalan sendiri dari getAdminMore paling sering 6 jam sekali; pemilik juga bisa menjalankan repairDateCells dari editor.
+const DATE_TEXT_SHEETS_ = ['FoodLog', 'WorkoutLog', 'WorkoutSessions', 'Progress', 'ProgressPhotos', 'FitnessTests', 'SessionRatings', 'SessionNotes',
+  'NutritionAdvice', 'Assessments', 'HealthScreening', 'ProgramLog', 'Tagihan', 'Pembayaran', 'Pengeluaran', 'PackageEvaluations'];
+function _repairDateCells_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let fixed = 0;
+  DATE_TEXT_SHEETS_.forEach(function(name) {
+    const sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return;
+    sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].forEach(function(h, c) {
+      if (String(h).trim() !== 'Tanggal') return;
+      sh.getRange(2, c + 1, sh.getLastRow() - 1, 1).getValues().forEach(function(v, i) {
+        if (Object.prototype.toString.call(v[0]) !== '[object Date]' || isNaN(v[0].getTime())) return;
+        sh.getRange(i + 2, c + 1).setNumberFormat('@').setValue(_isoDateCell_(v[0]));
+        fixed++;
+      });
+    });
+  });
+  if (fixed) _bumpMember_('*');
+  return fixed;
+}
+function _repairDateCellsSoon_() {
+  try {
+    const c = CacheService.getScriptCache();
+    if (c.get('datefix')) return;
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(3000)) return;
+    try { _repairDateCells_(); c.put('datefix', '1', 21600); } finally { lock.releaseLock(); }
+  } catch (e) {}
+}
+/** Editor saja: perbaiki semua sel Tanggal sekarang. Mengembalikan jumlah sel yang diperbaiki. */
+function repairDateCells() {
+  requireOwner_();
+  return _bumpAfter_('*', _locked_(_repairDateCells_));
+}
+
 function getAdminMore(token, month, year) {
   requireAdmin_(token);
+  _repairDateCellsSoon_();
   const ymd = _wibParts_(new Date()).date.split('-').map(Number);
   const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
   const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
@@ -2388,7 +2445,7 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif, deferBust
       if (!coachId && allActive.length === 1 && actives.length === 1) { coachId = actives[0].id; coachName = actives[0].name; }
     }
 
-    sheet.appendRow([
+    _appendRow_(sheet, [
       id, scheduleData.memberId, scheduleData.memberName, scheduleData.phone.toString(),
       scheduleData.start, scheduleData.end, scheduleData.notes, status,
       coachId, coachName || "", "", scheduleData.recurringGroupId || "", scheduleData.classId || ""
@@ -3853,7 +3910,7 @@ function savePackageImpl_(token, data) {
       const row = [];
       for (let c = 0; c < width; c++) row.push('');
       row[ctx.idx.id] = savedId;
-      ctx.sheet.appendRow(row);
+      _appendRow_(ctx.sheet, row);
       v.aktif = data.aktif === true;
       v.urutan = _nextPackageOrder_(list, v.kategori);
       _writePackageRow_(ctx.sheet, ctx.idx, ctx.sheet.getLastRow(), v);
@@ -4008,7 +4065,7 @@ function _readProgress_(memberId) {
   const out = [];
   _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== id || !r[0]) return;
-    const e = { id: String(r[0]), tanggal: String(r[2]), oleh: String(r[5] || 'klien') };
+    const e = { id: String(r[0]), tanggal: _isoDateCell_(r[2]), oleh: String(r[5] || 'klien') };
     PROGRESS_MEASURES.forEach(function(m) { const v = r[m.col - 1]; e[m.key] = (v === '' || v == null) ? '' : Number(v); });
     out.push(e);
   });
@@ -4021,7 +4078,7 @@ function _readProgressPhotos_(memberId) {
   const out = [];
   _progressPhotosSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== id || !r[0]) return;
-    out.push({ id: String(r[0]), tanggal: String(r[2]), sisi: String(r[3]), oleh: String(r[5] || 'klien') });
+    out.push({ id: String(r[0]), tanggal: _isoDateCell_(r[2]), sisi: String(r[3]), oleh: String(r[5] || 'klien') });
   });
   out.sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });   // terbaru dulu
   return out;
@@ -4060,7 +4117,7 @@ function _saveMeasurement_(memberId, tanggal, vals, oleh) {
     const data = sheet.getDataRange().getValues();
     const now = new Date().toISOString();
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][1]).trim() === String(memberId).trim() && String(data[i][2]) === tanggal) {
+      if (String(data[i][1]).trim() === String(memberId).trim() && _isoDateCell_(data[i][2]) === tanggal) {
         PROGRESS_MEASURES.forEach(function(m) { if (vals[m.key] !== '' && vals[m.key] != null) sheet.getRange(i + 1, m.col).setValue(vals[m.key]); });
         sheet.getRange(i + 1, 6).setValue(oleh);
         sheet.getRange(i + 1, 7).setValue(now);
@@ -4070,7 +4127,7 @@ function _saveMeasurement_(memberId, tanggal, vals, oleh) {
     const id = 'PRG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const row = [id, String(memberId).trim(), tanggal, '', '', oleh, now, '', '', '', '', '', ''];
     PROGRESS_MEASURES.forEach(function(m) { if (vals[m.key] != null) row[m.col - 1] = vals[m.key]; });
-    sheet.appendRow(row);
+    _appendRow_(sheet, row);
     return { id: id, tanggal: tanggal, updated: false };
   } finally {
     lock.releaseLock();
@@ -4288,7 +4345,7 @@ function uploadMyProgressPhoto(memberToken, base64Data, mimeType, sisi) {
     const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, 'PRG_' + memberId + '_' + tanggal + '_' + side + '.' + ext);
     const file = _progressFolder_().createFile(blob);     // sengaja tanpa setSharing: berkas tetap privat
     const id = 'PHT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    _progressPhotosSheet_().appendRow([id, memberId, tanggal, side, file.getId(), 'klien']);
+    _appendRow_(_progressPhotosSheet_(), [id, memberId, tanggal, side, file.getId(), 'klien']);
   } finally {
     lock.releaseLock();
   }
@@ -4416,7 +4473,7 @@ function requestRenewal(memberToken, packageId, coachId) {
       }
     }
     id = 'REN-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([id, memberId, pkg.id, 'menunggu', now, '', pkg.harga, pickedCoachId]);
+    _appendRow_(sheet, [id, memberId, pkg.id, 'menunggu', now, '', pkg.harga, pickedCoachId]);
   } finally {
     lock.releaseLock();
   }
@@ -5070,7 +5127,7 @@ function addTask(token, data) {
     const sheet = _tasksSheet_();
     const id = 'TSK-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const groupId = repeat === 'none' ? '' : _newTaskGroupId_();
-    sheet.appendRow([id, memberId, title, description, category, dueDate, 'todo', repeat, 'coach', new Date().toISOString(), '', '', groupId]);
+    _appendRow_(sheet, [id, memberId, title, description, category, dueDate, 'todo', repeat, 'coach', new Date().toISOString(), '', '', groupId]);
     return _bumpAfter_(memberId, { status: 'success', id: id });
   });
 }
@@ -5326,7 +5383,7 @@ function _spawnNextTaskInstance_(sheet, row) {
     if (String(data[i][12]).trim() === groupId && String(data[i][6]) === 'todo') return null;
   }
   const id = 'TSK-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-  sheet.appendRow([id, row[1], row[2], row[3], row[4], next, 'todo', repeat, row[8], new Date().toISOString(), '', '', groupId]);
+  _appendRow_(sheet, [id, row[1], row[2], row[3], row[4], next, 'todo', repeat, row[8], new Date().toISOString(), '', '', groupId]);
   return id;
 }
 
@@ -5434,7 +5491,7 @@ function saveTaskTemplate(token, data) {
       throw new Error('Template sudah mencapai batas ' + TASK_TEMPLATE_LIMIT + '. Hapus yang tidak terpakai dulu.');
     }
     const id = 'TPL-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([id, title, description, category, repeat, new Date().toISOString()]);
+    _appendRow_(sheet, [id, title, description, category, repeat, new Date().toISOString()]);
     return { status: 'success', id: id, updated: false };
   });
 }
@@ -5905,7 +5962,7 @@ function saveCoachAvailabilityImpl_(token, coachId, week) {
     sheet.getRange('C:D').setNumberFormat('@');
     const data = sheet.getDataRange().getValues();
     for (let i = data.length - 1; i >= 1; i--) if (String(data[i][0]).trim() === coachId) sheet.deleteRow(i + 1);
-    rows.forEach(function(r) { sheet.appendRow(r); });
+    rows.forEach(function(r) { _appendRow_(sheet, r); });
     _bustSlots_();   // sesudah menulis: buang cache jam kosong
     return { status: 'success', count: rows.length };
   } finally {
@@ -5954,7 +6011,7 @@ function addCoachTimeOff(token, data) {
     const sheet = getOrCreateSheet_('CoachTimeOff', COACH_TIMEOFF_HEADERS);
     sheet.getRange('C:F').setNumberFormat('@');
     const id = 'OFF-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([id, coachId, from, to, hourFrom === null ? '' : ('0' + hourFrom).slice(-2) + ':00', hourTo === null ? '' : ('0' + hourTo).slice(-2) + ':00', note, new Date().toISOString()]);
+    _appendRow_(sheet, [id, coachId, from, to, hourFrom === null ? '' : ('0' + hourFrom).slice(-2) + ':00', hourTo === null ? '' : ('0' + hourTo).slice(-2) + ':00', note, new Date().toISOString()]);
     _bustSlots_();   // sesudah menulis: buang cache jam kosong
     return { status: 'success', id: id, clashes: _timeOffClashes_(coachId, { from: from, to: to, hourFrom: hourFrom, hourTo: hourTo }) };
   } finally {
@@ -6195,7 +6252,7 @@ function _fitnessByMember_(memberId) {
   if (!sheet) return out;
   sheet.getDataRange().getValues().slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== memberId || !out[String(r[3])]) return;
-    out[String(r[3])].push({ id: String(r[0]), tanggal: String(r[2]), nilai: Number(r[4]) });
+    out[String(r[3])].push({ id: String(r[0]), tanggal: _isoDateCell_(r[2]), nilai: Number(r[4]) });
   });
   Object.keys(out).forEach(function(k) { out[k].sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); }); });
   return out;
@@ -6357,7 +6414,7 @@ function saveAssessment(token, memberId, data) {
   try {
     const sheet = _careSheet_('Assessments', ASSESSMENT_HEADERS);
     sheet.getRange('C:C').setNumberFormat('@');
-    sheet.appendRow(row);
+    _appendRow_(sheet, row);
   } finally {
     lock.releaseLock();
   }
@@ -6388,10 +6445,10 @@ function saveFitnessTests(token, memberId, data) {
     Object.keys(values).forEach(function(tid) {
       let found = 0;
       for (let i = 1; i < rows.length; i++) {
-        if (String(rows[i][1]).trim() === id && String(rows[i][2]) === tanggal && String(rows[i][3]) === tid) { found = i + 1; break; }
+        if (String(rows[i][1]).trim() === id && _isoDateCell_(rows[i][2]) === tanggal && String(rows[i][3]) === tid) { found = i + 1; break; }
       }
       if (found) { sheet.getRange(found, 5).setValue(values[tid]); sheet.getRange(found, 7).setValue(now); }
-      else sheet.appendRow(['FIT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, tanggal, tid, values[tid], 'coach', now]);
+      else _appendRow_(sheet, ['FIT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, tanggal, tid, values[tid], 'coach', now]);
     });
   } finally {
     lock.releaseLock();
@@ -6521,7 +6578,7 @@ function saveContentImpl_(token, data) {
     }
     if (rows.length - 1 >= L.items) throw new Error('Konten sudah mencapai batas ' + L.items + '. Hapus yang tidak terpakai dulu.');
     const nid = 'CNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([nid, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif, new Date().toISOString()]);
+    _appendRow_(sheet, [nid, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif, new Date().toISOString()]);
     return { status: 'success', id: nid, updated: false };
   } finally {
     lock.releaseLock();
@@ -6835,7 +6892,7 @@ function _programWrite_(memberId, templateName, days, opts) {
       d.items.forEach(function(it) {
         n++;
         const has = function(v) { return v === undefined || v === null ? '' : v; };
-        sheet.appendRow(['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now, it.exId || '',
+        _appendRow_(sheet, ['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now, it.exId || '',
           has(it.repMin), has(it.repMax), has(it.kg), has(it.rest), it.ss || '', it.jenis || '', it.skema && it.skema.length ? JSON.stringify(it.skema) : '',
           memberId != null && opts.own ? PROGRAM_OWN : '', memberId == null && opts.jelajahi ? 1 : '']);
       });
@@ -7108,7 +7165,7 @@ function logMyProgramDay(memberToken, hari, selesai) {
       if (picked.length) sheet.getRange(found, 5).setValue(picked.join(','));
       else sheet.deleteRow(found);
     } else if (picked.length) {
-      sheet.appendRow(['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, today, day.hari, picked.join(','), new Date().toISOString()]);
+      _appendRow_(sheet, ['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, today, day.hari, picked.join(','), new Date().toISOString()]);
     }
   } finally {
     lock.releaseLock();
@@ -7212,7 +7269,7 @@ function _parseWorkoutEntries_(entries) {
 function _workoutEvents_(rows) {
   const dates = {}, byKey = {};
   rows.forEach(function(r) {
-    const tgl = String(r[2]), key = _workoutKey_(r[6], r[7]);
+    const tgl = _isoDateCell_(r[2]), key = _workoutKey_(r[6], r[7]);
     dates[tgl] = true;
     if (_isWarmup_(r[19])) return;
     const e = _e1rm_(r[11], r[12]);
@@ -7288,7 +7345,7 @@ function _workoutSessionUpsert_(memberId, tanggal, scheduleId, ses, oleh) {
       return;
     }
   }
-  sheet.appendRow(['WKS-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, tanggal, scheduleId || '', ses.hari, ses.mulai, ses.selesai, ses.durasi, ses.rasa, ses.catatan, oleh, now, ses.cid]);
+  _appendRow_(sheet, ['WKS-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, tanggal, scheduleId || '', ses.hari, ses.mulai, ses.selesai, ses.durasi, ses.rasa, ses.catatan, oleh, now, ses.cid]);
 }
 
 /** Baris WorkoutSessions satu klien (atau semua bila memberId null), terbaru dulu. */
@@ -7298,7 +7355,7 @@ function _workoutSessionsOf_(memberId) {
   const id = memberId == null ? null : String(memberId).trim();
   const num = function(v) { return v === '' || v == null ? '' : Number(v); };
   return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && (id == null || String(r[1]).trim() === id); })
-    .map(function(r) { return { memberId: String(r[1]).trim(), tanggal: String(r[2]), hari: String(r[4] || ''), durasi: num(r[7]), rasa: num(r[8]), catatan: String(r[9] || ''), oleh: String(r[10] || ''), diubah: String(r[11] || '') }; })
+    .map(function(r) { return { memberId: String(r[1]).trim(), tanggal: _isoDateCell_(r[2]), hari: String(r[4] || ''), durasi: num(r[7]), rasa: num(r[8]), catatan: String(r[9] || ''), oleh: String(r[10] || ''), diubah: String(r[11] || '') }; })
     .sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });
 }
 
@@ -7314,7 +7371,7 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh, session) {
     _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; })).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
     for (let i = rows.length - 1; i >= 1; i--) {
       const r = rows[i];
-      if (String(r[1]).trim() === memberId && String(r[2]) === tanggal && keys[_workoutKey_(r[6], r[7])] && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
+      if (String(r[1]).trim() === memberId && _isoDateCell_(r[2]) === tanggal && keys[_workoutKey_(r[6], r[7])] && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
     }
     const now = new Date().toISOString(), stamp = new Date().getTime(), out = [];
     entries.forEach(function(e, ei) {
@@ -7334,7 +7391,7 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh, session) {
 function _workoutGroup_(rows) {
   const byDate = {};
   rows.forEach(function(r) {
-    const tgl = String(r[2]), key = _workoutKey_(r[6], r[7]);
+    const tgl = _isoDateCell_(r[2]), key = _workoutKey_(r[6], r[7]);
     const day = byDate[tgl] || (byDate[tgl] = { tanggal: tgl, items: [], idx: {} });
     let it = day.idx[key];
     if (!it) {
@@ -7500,7 +7557,7 @@ function _workoutFor_(row) {
   const today = _todayWib_(), since = _addDaysIso_(today, -WORKOUT_LIMITS.readDays);
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
   const all = sheet && sheet.getLastRow() >= 2 ? sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }) : [];
-  const g = _workoutGroup_(all.filter(function(r) { return String(r[2]) >= since; }));
+  const g = _workoutGroup_(all.filter(function(r) { return _isoDateCell_(r[2]) >= since; }));
   const prsByDate = {};
   _workoutEvents_(all).prs.forEach(function(p) { prsByDate[p.tanggal] = (prsByDate[p.tanggal] || 0) + 1; });
   g.stats = _workoutStats_(g.days, today, prsByDate);
@@ -7597,7 +7654,7 @@ function getWorkoutSummaryMessage(token, memberId, date) {
   const id = String(m.row[0]).trim();
   const tanggal = _validProgressDate_(date, _todayWib_(), WORKOUT_LIMITS.backAdmin);
   const rows = _workoutRowsOf_(id);
-  const day = _workoutGroup_(rows.filter(function(r) { return String(r[2]) === tanggal; })).days[0];
+  const day = _workoutGroup_(rows.filter(function(r) { return _isoDateCell_(r[2]) === tanggal; })).days[0];
   if (!day) throw new Error('Belum ada latihan yang dicatat di tanggal itu.');
   const fmt = function(n) { return String(n).replace('.', ','); };
   let volume = 0;
@@ -7641,7 +7698,7 @@ function _workoutTickProgram_(memberId, entries) {
       add[hari].forEach(function(n) { if (cur.indexOf(n) === -1) cur.push(n); });
       cur.sort(function(a, b) { return a - b; });
       if (found) sheet.getRange(found, 5).setValue(cur.join(','));
-      else sheet.appendRow(['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, today, hari, cur.join(','), new Date().toISOString()]);
+      else _appendRow_(sheet, ['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, today, hari, cur.join(','), new Date().toISOString()]);
     });
   });
 }
@@ -7666,10 +7723,10 @@ function _evalSheet_() { const s = getOrCreateSheet_('PackageEvaluations', EVAL_
 
 /** Murni: baris penilaian → objek. */
 function _ratingFromRow_(r) {
-  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: String(r[3]), bintang: Number(r[4]) || 0, komentar: String(r[5] || ''), izin: String(r[6] || '') === 'ya', dibuat: String(r[7] || '') };
+  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: _isoDateCell_(r[3]), bintang: Number(r[4]) || 0, komentar: String(r[5] || ''), izin: String(r[6] || '') === 'ya', dibuat: String(r[7] || '') };
 }
 function _evalFromRow_(r) {
-  const o = { id: String(r[0]), memberId: String(r[1]).trim(), paket: String(r[2] || ''), tanggal: String(r[3]), komentar: String(r[9] || ''), izin: String(r[10] || '') === 'ya', dibuat: String(r[11] || '') };
+  const o = { id: String(r[0]), memberId: String(r[1]).trim(), paket: String(r[2] || ''), tanggal: _isoDateCell_(r[3]), komentar: String(r[9] || ''), izin: String(r[10] || '') === 'ya', dibuat: String(r[11] || '') };
   EVAL_ASPECTS.forEach(function(a, i) { o[a[0]] = Number(r[4 + i]) || 0; });
   return o;
 }
@@ -7726,7 +7783,7 @@ function rateSession(memberToken, scheduleId, stars, comment, consent) {
     let found = 0;
     for (let i = 1; i < rows.length; i++) if (String(rows[i][1]) === String(sched.id)) { found = i + 1; break; }
     if (found) { sheet.getRange(found, 5, 1, 3).setValues([vals]); sheet.getRange(found, 8).setValue(now); }
-    else sheet.appendRow(['RTG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), memberId, Utilities.formatDate(new Date(sched.start), REMINDER_TZ, 'yyyy-MM-dd'), n, text, consent ? 'ya' : '', now]);
+    else _appendRow_(sheet, ['RTG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), memberId, Utilities.formatDate(new Date(sched.start), REMINDER_TZ, 'yyyy-MM-dd'), n, text, consent ? 'ya' : '', now]);
   } finally {
     lock.releaseLock();
   }
@@ -7796,7 +7853,7 @@ function submitMyPackageEval(memberToken, data) {
   try {
     if (!_packageEvalEligible_(row)) throw new Error('Evaluasi paket belum tersedia atau sudah diisi.');
     const now = new Date().toISOString();
-    _evalSheet_().appendRow(['EVL-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, String(row[7] || ''), _todayWib_()].concat(vals, [komentar, data.consent ? 'ya' : '', now]));
+    _appendRow_(_evalSheet_(), ['EVL-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, String(row[7] || ''), _todayWib_()].concat(vals, [komentar, data.consent ? 'ya' : '', now]));
   } finally {
     lock.releaseLock();
   }
@@ -7846,7 +7903,7 @@ function _sessionNotesSheet_() {
 
 /** Murni: baris sheet → objek catatan. */
 function _noteFromRow_(r) {
-  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: String(r[3]), dilatih: String(r[4] || ''), fokus: String(r[5] || ''),
+  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: _isoDateCell_(r[3]), dilatih: String(r[4] || ''), fokus: String(r[5] || ''),
     rpe: r[6] === '' || r[6] == null ? '' : Number(r[6]), pribadi: String(r[7] || '') };
 }
 
@@ -7914,7 +7971,7 @@ function saveSessionNote(token, scheduleId, data) {
     } else if (found) {
       sheet.getRange(found, 5, 1, 5).setValues([[dilatih, fokus, rpe, pribadi, now]]);
     } else {
-      sheet.appendRow(['SNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), String(sched.memberId).trim(), tanggal, dilatih, fokus, rpe, pribadi, now]);
+      _appendRow_(sheet, ['SNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), String(sched.memberId).trim(), tanggal, dilatih, fokus, rpe, pribadi, now]);
     }
   } finally {
     lock.releaseLock();
@@ -7974,7 +8031,7 @@ function submitMyHealthForm(memberToken, answers) {
     const sheet = _careSheet_('HealthScreening', HEALTH_HEADERS);
     sheet.getRange('C:C').setNumberFormat('@');
     const now = new Date().toISOString();
-    sheet.appendRow(['KES-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, _todayWib_()].concat(q, [inj, med, oth, 'ya', '', '', now]));
+    _appendRow_(sheet, ['KES-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, _todayWib_()].concat(q, [inj, med, oth, 'ya', '', '', now]));
   } finally {
     lock.releaseLock();
   }
@@ -8014,7 +8071,7 @@ function _careList_(now) {
   const hs = ss.getSheetByName('HealthScreening');
   if (hs) hs.getDataRange().getValues().slice(1).forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
   const ft = ss.getSheetByName('FitnessTests');
-  if (ft) ft.getDataRange().getValues().slice(1).forEach(function(r) { const k = String(r[1]).trim(); if (!lastTest[k] || String(r[2]) > lastTest[k]) lastTest[k] = String(r[2]); });
+  if (ft) ft.getDataRange().getValues().slice(1).forEach(function(r) { const k = String(r[1]).trim(); const d = _isoDateCell_(r[2]); if (!lastTest[k] || d > lastTest[k]) lastTest[k] = d; });
   const lastSession = {}, todaySession = {};
   _getSchedulesAll_().forEach(function(s) {
     const st = String(s.status || '').toLowerCase();
@@ -8169,7 +8226,7 @@ function createClassGroup(memberToken) {
     const taken = {};
     data.slice(1).forEach(function(r) { taken[String(r[1])] = true; });
     g = { id: 'GRP-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), code: _newClassCode_(taken), packageId: pkg.id, creatorId: memberId, status: 'buka', createdAt: new Date().toISOString(), members: [memberId] };
-    sheet.appendRow([g.id, g.code, g.packageId, g.creatorId, g.status, g.createdAt, g.members.join(',')]);
+    _appendRow_(sheet, [g.id, g.code, g.packageId, g.creatorId, g.status, g.createdAt, g.members.join(',')]);
   } finally {
     lock.releaseLock();
   }

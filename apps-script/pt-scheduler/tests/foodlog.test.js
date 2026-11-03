@@ -155,3 +155,28 @@ test('the CID header is added to an old FoodLog sheet once', () => {
   assert.equal(rows[0][14], 'CID');
   assert.equal(rows.length, 3);
 });
+
+// 2026-11: Sheets sometimes turns the text '2026-11-03' into a real date even in a '@' column. The client's entry then
+// never matched "today" and the ring did not move. Writes fix it right away, reads accept it, and old cells are repaired.
+test('a Tanggal cell that Sheets turned into a date still counts, is rewritten as text, and old cells are repaired', () => {
+  const s = setup();
+  const day = s.env.context._todayWib_();
+  const [y, m, d] = day.split('-').map(Number);
+  const asDate = () => new Date(Date.UTC(y, m - 1, d) - 7 * 3600000);   // 00:00 WIB, like Sheets stores it
+  const sheet = () => s.env.sheet('FoodLog');
+  s.log(s.ani, { waktu: 'sarapan', id: 'HR002', porsi: 1 });
+  // Simulate the conversion on the next appendRow.
+  const sh = s.env.context.SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FoodLog');
+  const orig = sh.appendRow.bind(sh);
+  sh.appendRow = row => orig(row.map(v => (v === day ? asDate() : v)));
+  const r = s.log(s.ani, { waktu: 'siang', id: 'AP001', gram: 100, cid: 'fq-test1' });
+  assert.equal(r.items.length, 2, 'both entries are counted for today');
+  assert.equal(sheet().rows[2][2], day, 'the converted cell was written back as text');
+  // An old row that is already a date: reads accept it, the repair turns it into text.
+  sheet().rows[1][2] = asDate();
+  const again = j(s.env.call('getMyFoodLog', s.ani));
+  assert.equal(again.items.length, 2);
+  assert.equal(s.env.context._repairDateCells_(), 1);
+  assert.equal(sheet().rows[1][2], day);
+  assert.equal(s.env.context._repairDateCells_(), 0, 'idempotent');
+});
