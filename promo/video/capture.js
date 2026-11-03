@@ -62,7 +62,14 @@ const CLIENTS = [ // name, phone, goal
   ['Dimas Pratama', '081300000011', 'Strength'], ['Maya Kusuma', '081300000012', 'Weight Loss'],
   ['Yoga Tirta', '081300000013', 'Muscle Gain'], ['Nadia Putri', '081300000014', 'Weight Loss'],
   ['Fajar Aditya', '081300000015', 'General'], ['Hendra Rahman', '081300000016', 'Strength'],
+  ['Laras Ayuningtyas', '081300000017', 'Weight Loss'], ['Kevin Santoso', '081300000018', 'Muscle Gain'],
+  ['Putri Anjani', '081300000019', 'General'], ['Reza Mahendra', '081300000020', 'Strength'],
+  ['Citra Lestari', '081300000021', 'Weight Loss'], ['Galih Saputra', '081300000022', 'Muscle Gain'],
+  ['Wulan Sari', '081300000023', 'General'], ['Bayu Nugroho', '081300000024', 'Strength'],
+  ['Intan Permata', '081300000025', 'Weight Loss'], ['Rizal Firmansyah', '081300000026', 'General'],
 ];
+// The client the tutorial adds on screen (number 20).
+const NEW_CLIENT = ['Arif Wicaksono', '081300000099', 'Strength'];
 
 function demoEnv() {
   const env = seededEnv();
@@ -152,6 +159,8 @@ async function open(browser, env, url) {
   page.on('pageerror', e => console.warn('page error:', e.message));
   await page.goto(ORIGIN + url);
   await page.waitForTimeout(1200);
+  // a few spare history entries, so an extra back step from closeModal/closeDetail never leaves the app
+  await page.evaluate(() => { for (let k = 0; k < 12; k++) history.pushState(history.state, '', location.href); });
   return { page, ctx };
 }
 const wait = (page, ms = 700) => page.waitForTimeout(ms);
@@ -176,6 +185,22 @@ const closeSheets = page => page.evaluate(() => { const b = document.getElementB
     const { page, ctx } = await open(browser, env, '/Index');
     await page.evaluate(tok => { localStorage.setItem('xnk_admin_token', tok); }, env.adminToken());
     await page.reload(); await wait(page, 1800);
+    // tutorial step 1: "Klien baru" with a package, then the new client's page (client number 20)
+    await page.evaluate(() => window.navigate('clients')); await wait(page, 700);
+    await page.evaluate(() => window.openAddMemberModal()); await wait(page, 600);
+    await page.fill('#member-name', NEW_CLIENT[0]);
+    await page.fill('#member-phone', NEW_CLIENT[1]);
+    await page.fill('#member-goal', NEW_CLIENT[2]);
+    await page.evaluate(() => window.selectPackageOption('member', 'P1')); await wait(page, 300);
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await snap(page, 'coach-add-member');
+    await rect(page, 'simpanKlien', '#form-add-member button[type=submit]');
+    await page.click('#form-add-member button[type=submit]'); await wait(page, 1500);
+    const newId = await page.evaluate(n => { const m = window.members.find(x => x.name === n); return m && m.id; }, NEW_CLIENT[0]);
+    // the app offers "Kirim info booking ke klien baru" (a wa.me prompt that stays up); dismiss it like the coach would
+    await page.evaluate(id => { const w = document.getElementById('wa-prompt'); if (w) w.remove(); window.openProfile(id); }, newId); await wait(page, 2500);
+    await snap(page, 'coach-client-new');
+    await page.evaluate(() => { window.closeDetail(); window.navigate('dashboard'); }); await wait(page, 900);
     await snap(page, 'coach-dashboard');
     await page.evaluate(() => window.navigate('calendar')); await wait(page, 900);
     await snap(page, 'coach-jadwal');
@@ -191,6 +216,46 @@ const closeSheets = page => page.evaluate(() => { const b = document.getElementB
     await snap(page, 'coach-keuangan');
     await page.evaluate(() => { const s = document.getElementById('main-scroll-area'); if (s) s.scrollTop = 460; }); await wait(page, 400);
     await snap(page, 'coach-keuangan-2');
+    // tutorial step 5: the new client's bill → Bayar → Lunas
+    await page.evaluate(() => { const s = document.getElementById('main-scroll-area'); if (s) s.scrollTop = 0; }); await wait(page, 300);
+    await page.locator(`#fin-list .list-item:has-text("${NEW_CLIENT[0]}")`).first().click(); await wait(page, 900);
+    await snap(page, 'coach-bill');
+    await rect(page, 'bayar', '#detail-body .btn-primary');
+    await page.locator('#detail-body .btn-primary').first().click(); await wait(page, 700);
+    await page.fill('#fin-pay-amount', '1800000');
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await snap(page, 'coach-payment');
+    await rect(page, 'simpanBayar', '#fin-pay-save');
+    await page.click('#fin-pay-save'); await wait(page, 1200);
+    await snap(page, 'coach-bill-paid');
+    await page.evaluate(() => { window.closeModal && window.closeModal(); window.closeDetail(); }); await wait(page, 500);
+    // tutorial step 3: today's next session → Selesai → confirm → session note
+    const sid = await page.evaluate(() => {
+      const today = new Date().toDateString();
+      const open = window.schedules.filter(s => s.status !== 'completed' && new Date(s.start).toDateString() === today);
+      const next = open.length ? open : window.schedules.filter(s => s.status !== 'completed' && new Date(s.start) > new Date());
+      next.sort((a, b) => new Date(a.start) - new Date(b.start));
+      return next[0] && next[0].id;
+    });
+    await page.evaluate(id => { window.navigate('calendar'); window.openScheduleDetail(id); }, sid); await wait(page, 1000);
+    await snap(page, 'coach-session');
+    await rect(page, 'selesai', '#btn-complete-session');
+    await page.click('#btn-complete-session'); await wait(page, 600);
+    await snap(page, 'coach-session-confirm');
+    await rect(page, 'yaSelesai', '#btn-confirm-modal-yes');
+    await page.click('#btn-confirm-modal-yes'); await wait(page, 1500);
+    await page.fill('#sn-dilatih', 'Squat 4x8, RDL 3x10, plank');
+    await page.fill('#sn-fokus', 'Lutut jangan masuk saat squat');
+    await page.fill('#sn-rpe', '8');
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await snap(page, 'coach-session-note');
+    await rect(page, 'kirimWa', '#sn-wa-btn');
+    await page.evaluate(() => window.closeModal && window.closeModal()); await wait(page, 500);
+    await page.evaluate(() => window.closeDetail()); await wait(page, 500);
+    // tutorial step 4: the coach's program form for Rina
+    await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); }); await wait(page, 1000);
+    await page.evaluate(() => window.openProgramEditor('PT-A')); await wait(page, 1000);
+    await snap(page, 'coach-program-form');
     await ctx.close();
   }
 

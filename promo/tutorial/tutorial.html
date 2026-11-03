@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>XNK Tutorial</title>
+<!--
+  XNK video 2: a calm 30-second tutorial for coaches, "Cara aku ngurus 20 klien cuma dari HP", in six steps
+  on the real app screens (../video/ui, captured by ../video/capture.js; all names and numbers invented).
+  Every frame is a pure function of time: window.seek(t). Render with
+    node promo/video/render.js --page ../tutorial/tutorial.html --music-py ../tutorial/music.py --name xnk-tutorial-30s
+  ?t=12 shows one frame, ?safe=1 draws the Reels/TikTok/Story safe area, ?px=540 centres everything (4:5).
+  96 BPM in music.py: the hook, each step and the end card are 1.5 bars (3.75 s) each.
+-->
+<style>
+  html, body { margin: 0; background: #FAFAF9; }
+  body { width: 1080px; height: 1920px; overflow: hidden; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #FAFAF9; }
+  #cam { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: 0; width: 1080px; height: 1920px; opacity: .05; mix-blend-mode: overlay; pointer-events: none; }
+  #guides { position: absolute; inset: 0; pointer-events: none; }
+  .a { position: absolute; }
+  .d { font-family: 'Inter Display', Inter, sans-serif; font-weight: 900; letter-spacing: -0.04em; line-height: .9; white-space: nowrap; }
+  .m { font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
+  .ph { position: absolute; background: #0B0B0B; border-radius: 78px; box-shadow: 0 60px 120px rgba(0,0,0,.22), 0 12px 30px rgba(0,0,0,.12), inset 0 0 0 2px #2A2A2A; }
+  .ph .scr { position: absolute; left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 64px; overflow: hidden; background: #0A0A0A; }
+  .ph .isl { position: absolute; left: 50%; top: 30px; width: 136px; height: 38px; margin-left: -68px; border-radius: 20px; background: #000; z-index: 9; }
+  .sb { position: absolute; left: 44px; top: 17px; font: 600 19px Inter; color: #fff; z-index: 5; }
+  .sbr { position: absolute; right: 40px; top: 20px; display: flex; gap: 6px; align-items: flex-end; z-index: 5; }
+  .sbr i { display: block; width: 5px; background: #fff; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="cam"></div>
+  <canvas id="grain" width="540" height="960"></canvas>
+  <div id="guides"></div>
+</div>
+<script src="../video/ui/rects.js"></script>
+<script>
+'use strict';
+const W = 1080, H = 1920, FPS = 30, DUR = 30;
+const RED = '#FF2D2D', INK = '#0A0A0A', PAPER = '#FAFAF9', MUTED = '#6B6560';
+const LOGO = '../../logo.png', UI = '../video/ui/';
+const HOOK = 3.75, STEP = 3.75, END = HOOK + 6 * STEP;       // 26.25
+const S = k => HOOK + k * STEP;
+
+/* ------------------------------------------------------------ math & easing */
+const cl = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const P = (t, a, b) => cl((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const E = {
+  out: p => 1 - Math.pow(1 - p, 3),
+  in: p => p * p * p,
+  inOut: p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2,
+};
+
+/* ------------------------------------------------------------ text */
+const mctx = document.createElement('canvas').getContext('2d');
+function textW(txt, size, wt = 900) {
+  mctx.font = `${wt} 100px "Inter Display"`;
+  mctx.letterSpacing = '-4px';
+  return mctx.measureText(txt).width * size / 100;
+}
+const fit = (txt, maxW, maxPx, wt) => Math.min(maxPx, maxPx * maxW / textW(txt, maxPx, wt));
+const div = (style, inner = '', cls = 'a') => `<div class="${cls}" style="${style}">${inner}</div>`;
+// Centred text block that fades in (rising 22 px) over [t0, t0+0.45] and out (rising on) over [t1-0.3, t1].
+function soft(t, t0, t1, html, style, cls = 'a') {
+  if (t < t0 || t > t1) return '';
+  const pin = E.out(P(t, t0, t0 + 0.45)), pout = E.in(P(t, t1 - 0.3, t1));
+  const y = (1 - pin) * 22 - pout * 18;
+  return div(`${style};opacity:${pin * (1 - pout)};transform:translate(-50%,${y}px)`, html, cls);
+}
+
+/* ------------------------------------------------------------ phone with real screens */
+// Phone centre: 505 keeps it clear of the Reels/TikTok side buttons; ?px=540 centres it (4:5 feed).
+const PX = +(new URLSearchParams(location.search).get('px') || 505);
+const PW = 500, SB = 52, SW = PW - 28, UIH = Math.round(SW * 808 / 390), SH = SB + UIH, PH = SH + 28;
+const PS = 0.95, PY = 545 + PH * PS / 2;                       // phone top at y 545 in the steps
+function phone(cx, cy, s, rot, layers, op = 1) {
+  return div(`left:${cx}px;top:${cy}px;transform:translate(-50%,-50%) scale(${s}) rotate(${rot}deg);width:${PW}px;height:${PH}px;opacity:${op}`,
+    `<div class="scr">${layers}</div><div class="isl"></div>`, 'ph');
+}
+const statusBar = () => `<div class="a" style="left:0;top:0;right:0;height:${SB}px;background:${INK};z-index:4"></div><div class="sb">09.41</div><div class="sbr"><i style="height:8px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:20px;opacity:.4"></i></div>`;
+function shot(name, op, zoom) {
+  const z = zoom ? `transform:scale(${zoom.s});transform-origin:${zoom.ox * 100}% ${zoom.oy * 100}%;` : '';
+  return `<div class="a" style="left:0;top:${SB}px;width:${SW}px;height:${UIH}px;overflow:hidden;opacity:${op}"><img src="${UI}${name}.png" style="display:block;width:${SW}px;height:${UIH}px;${z}"></div>`;
+}
+
+/* ------------------------------------------------------------ the six steps */
+// seq: [time in the step, screen, zoom?]; zoom = { at: [t0, t1, from, to], ox, oy } (times in the step).
+// taps: [time in the step, rect name from ui/rects.js]; the screen changes 0.05 s after a tap.
+const STEPS = [
+  { title: 'Tambah klien & paket', sub: 'Isi nama, nomor WA dan paket.<br>Sisa sesi & tagihan langsung jalan.',
+    seq: [[0, 'coach-add-member'], [1.45, 'coach-client-new', { at: [2.0, 3.5, 1, 1.14], ox: .5, oy: .2 }]], taps: [[1.4, 'simpanKlien']] },
+  { title: 'Klien booking sendiri', sub: 'Kirim link portal ke klien.<br>Mereka pilih jam kosong, jadwalmu terisi.',
+    seq: [[0, 'client-jadwal'], [1.0, 'client-booking'], [2.1, 'client-booked']], taps: [[2.05, 'kirim']] },
+  { title: 'Sesi selesai & catatan', sub: 'Satu ketuk, sisa sesi berkurang.<br>Catatan & pesan WA siap kirim.',
+    seq: [[0, 'coach-session'], [0.9, 'coach-session-confirm'], [1.55, 'coach-session-note']], taps: [[0.85, 'selesai'], [1.5, 'yaSelesai'], [2.9, 'kirimWa']] },
+  { title: 'Program & latihan', sub: 'Susun program di form.<br>Klien centang set, rekor tercatat sendiri.',
+    seq: [[0, 'coach-program-form'], [1.5, 'client-workout-2'], [2.15, 'client-workout-3'], [2.75, 'client-workout-pr']], taps: [[2.1, 'tick2'], [2.7, 'tick3']] },
+  { title: 'Tagihan & pembayaran', sub: 'Tagihan dibuat otomatis dari paket.<br>Catat bayar, status jadi Lunas.',
+    seq: [[0, 'coach-bill'], [1.0, 'coach-payment'], [2.2, 'coach-bill-paid', { at: [2.5, 3.6, 1, 1.16], ox: .7, oy: .22 }]], taps: [[0.95, 'bayar'], [2.15, 'simpanBayar']] },
+  { title: 'Progres klien', sub: 'Berat, ukuran tubuh, rapor.<br>Kamu dan klien lihat angka yang sama.',
+    seq: [[0, 'coach-client-progres', { at: [0.3, 3.7, 1, 1.2], ox: .5, oy: .55 }]], taps: [] },
+];
+// one list of every screen state over the whole video
+const STATES = [{ t0: 0, name: 'coach-klien', fade: 0 }];
+STEPS.forEach((st, k) => st.seq.forEach(([dt, name, z], i) => STATES.push({ t0: S(k) + dt, name, fade: i ? 0.16 : 0.35, z: z && { ...z, at: [S(k) + z.at[0], S(k) + z.at[1], z.at[2], z.at[3]] } })));
+const zoomAt = (t, z) => z ? { s: lerp(z.at[2], z.at[3], E.inOut(P(t, z.at[0], z.at[1]))), ox: z.ox, oy: z.oy } : null;
+function screens(t) {
+  let k = 0;
+  STATES.forEach((s, i) => { if (t >= s.t0) k = i; });
+  const cur = STATES[k], p = cur.fade ? E.out(P(t, cur.t0, cur.t0 + cur.fade)) : 1;
+  let h = '';
+  if (k > 0 && p < 1) h += shot(STATES[k - 1].name, 1, zoomAt(t, STATES[k - 1].z));
+  return h + shot(cur.name, p, zoomAt(t, cur.z)) + statusBar();
+}
+
+const RECTS = window.UI_RECTS || {};
+const at = r => [(r.x + r.w / 2) * SW, SB + (r.y + r.h / 2) * UIH];
+// A finger that glides in, presses each target (with a soft ripple), moves on, then fades.
+function finger(t, presses) {
+  presses = presses.filter(([, r]) => r);
+  if (!presses.length) return '';
+  const first = presses[0][0], last = presses[presses.length - 1][0];
+  if (t < first - 0.5 || t > last + 0.55) return '';
+  const pts = presses.map(([t0, r]) => [t0, at(r)]);
+  let x, y;
+  if (t < first) {
+    const p = E.inOut(P(t, first - 0.5, first - 0.05));
+    [x, y] = [lerp(SW + 70, pts[0][1][0], p), lerp(SH + 60, pts[0][1][1], p)];
+  } else {
+    let k = 0;
+    pts.forEach(([t0], i) => { if (t >= t0) k = i; });
+    [x, y] = pts[k][1];
+    if (k < pts.length - 1) {
+      const p = E.inOut(P(t, pts[k][0] + 0.15, pts[k + 1][0] - 0.06));
+      x = lerp(x, pts[k + 1][1][0], p); y = lerp(y, pts[k + 1][1][1], p);
+    }
+  }
+  const pressed = pts.some(([t0]) => t >= t0 - 0.04 && t < t0 + 0.1);
+  let h = '';
+  pts.forEach(([t0, [px, py]]) => {
+    if (t < t0 || t > t0 + 0.6) return;
+    const rp = E.out(P(t, t0, t0 + 0.6));
+    h += div(`left:${px}px;top:${py}px;width:${50 + rp * 130}px;height:${50 + rp * 130}px;transform:translate(-50%,-50%);border-radius:50%;border:3px solid ${INK};opacity:${(1 - rp) * .55};z-index:6`);
+  });
+  const fo = Math.min(P(t, first - 0.5, first - 0.3), 1 - P(t, last + 0.25, last + 0.55));
+  return h + div(`left:${x}px;top:${y}px;width:60px;height:60px;transform:translate(-50%,-50%) scale(${pressed ? 0.84 : 1});border-radius:30px;background:rgba(255,255,255,.72);border:3px solid ${INK};box-sizing:border-box;box-shadow:0 8px 22px rgba(0,0,0,.2);opacity:${fo};z-index:7`);
+}
+
+/* ------------------------------------------------------------ frame */
+function frame(t) {
+  let h = '';
+  // soft light behind the phone
+  h += div(`left:${PX - 700}px;top:${PY - 800}px;width:1400px;height:1400px;border-radius:50%;background:radial-gradient(circle,#FFFFFF 0,rgba(255,255,255,0) 65%)`);
+
+  // hook text
+  if (t < HOOK) {
+    const end = HOOK - 0.05;
+    h += soft(t, 0.15, end, 'Cara aku ngurus', `left:${PX}px;top:330px;font-size:${fit('Cara aku ngurus', 820, 88, 800)}px;color:${INK};font-weight:800`, 'a d');
+    const big = fit('20 klien', 840, 210);
+    h += soft(t, 0.65, end, `<span style="color:${RED}">20</span> klien`, `left:${PX}px;top:440px;font-size:${big}px;color:${INK}`, 'a d');
+    h += soft(t, 1.15, end, 'cuma dari HP.', `left:${PX}px;top:${440 + big * 0.95}px;font-size:${fit('cuma dari HP.', 820, 88, 800)}px;color:${INK};font-weight:800`, 'a d');
+  }
+
+  // step label, progress bar, title, explanation
+  if (t >= HOOK - 0.1 && t < END) {
+    const k = cl(Math.floor((t - HOOK) / STEP), 0, 5), s0 = S(k), s1 = s0 + STEP, st = STEPS[k];
+    const barIn = E.out(P(t, HOOK - 0.1, HOOK + 0.4)), barOut = 1 - E.in(P(t, END - 0.35, END));
+    const bw = 760, gap = 10, sw = (bw - 5 * gap) / 6;
+    let bar = '';
+    for (let j = 0; j < 6; j++) {
+      const fill = j < k ? 1 : j > k ? 0 : P(t, s0, s1);
+      bar += div(`left:${j * (sw + gap)}px;top:0;width:${sw}px;height:6px;border-radius:3px;background:#E7E5E4;overflow:hidden`,
+        div(`left:0;top:0;height:6px;width:${fill * 100}%;background:${j === k ? RED : INK}`));
+    }
+    h += div(`left:${PX - bw / 2}px;top:262px;width:${bw}px;height:6px;opacity:${barIn * barOut}`, bar);
+    const tin = k === 0 ? s0 + 0.05 : s0 + 0.08, tout = k === 5 ? END - 0.05 : s1;
+    h += soft(t, tin, tout, `LANGKAH <span style="color:${RED}">0${k + 1}</span> / 06`, `left:${PX}px;top:290px;font-size:26px;color:${MUTED}`, 'a m');
+    h += soft(t, tin + 0.06, tout, st.title, `left:${PX}px;top:334px;font-size:${fit(st.title, 840, 84)}px;color:${INK}`, 'a d');
+    h += soft(t, tin + 0.14, tout, st.sub, `left:${PX}px;top:430px;width:860px;text-align:center;font:500 30px/1.34 Inter;color:#57534E`);
+  }
+
+  // the phone: rises during the hook, moves up into the step layout, breathes, sinks away at the end
+  if (t < END + 0.8) {
+    const rise = E.out(P(t, 1.45, 2.7)), lift = E.inOut(P(t, HOOK - 0.15, HOOK + 0.55));
+    let cy = lerp(H + 700, PY + 250, rise);
+    cy = lerp(cy, PY, lift);
+    cy += Math.sin(t * 0.9) * 5 - E.in(P(t, END - 0.05, END + 0.7)) * 700;
+    const k = Math.floor((t - HOOK) / STEP);
+    const bump = t > HOOK && k >= 1 && k <= 5 ? Math.sin(Math.PI * P(t, S(k) - 0.1, S(k) + 0.45)) : 0;
+    const s = PS * (1 - 0.012 * bump), rot = Math.sin(t * 0.6) * 0.5;
+    let layers = screens(t);
+    STEPS.forEach((st, j) => { layers += finger(t, st.taps.map(([dt, n]) => [S(j) + dt, RECTS[n]])); });
+    h += phone(PX, cy, s, rot, layers, 1 - P(t, END + 0.2, END + 0.7));
+  }
+
+  // end card on black
+  if (t >= END) {
+    h += div(`left:-100px;top:-100px;width:${W + 200}px;height:${H + 200}px;background:${INK};opacity:${E.inOut(P(t, END, END + 0.65))}`);
+    const lp = E.out(P(t, END + 0.35, END + 1.2));
+    h += `<img class="a" src="${LOGO}" style="left:${PX}px;top:730px;width:560px;height:560px;transform:translate(-50%,-50%) scale(${lerp(.96, 1, lp)});opacity:${lp}">`;
+    h += soft(t, END + 0.8, 40, 'Move Better.', `left:${PX}px;top:990px;font-size:118px;color:#fff`, 'a d');
+    h += soft(t, END + 1.3, 40, 'Mulai Rp 149rb/bulan', `left:${PX}px;top:1175px;background:#fff;color:${INK};font:800 46px 'Inter Display';letter-spacing:-0.02em;padding:22px 44px;border-radius:60px;white-space:nowrap`);
+    h += soft(t, END + 1.7, 40, 'DM @jiz.dan · WA +62 882-2125-4305', `left:${PX}px;top:1320px;font-size:29px;color:#A8A29E`, 'a m');
+    h += div(`left:-100px;top:-100px;width:${W + 200}px;height:${H + 200}px;background:#000;opacity:${E.inOut(P(t, 29.25, 30))}`);
+  }
+  return h;
+}
+
+/* ------------------------------------------------------------ render */
+const camEl = document.getElementById('cam');
+const grainCtx = document.getElementById('grain').getContext('2d');
+const gimg = grainCtx.createImageData(540, 960);
+function grain(f) {
+  let s = (f * 2654435761) >>> 0;
+  const d = gimg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    d[i] = d[i + 1] = d[i + 2] = s & 255; d[i + 3] = 255;
+  }
+  grainCtx.putImageData(gimg, 0, 0);
+}
+window.seek = t => {
+  t = Math.min(t, DUR - 1e-6);
+  camEl.innerHTML = frame(t);
+  grain(Math.floor(t * FPS));
+};
+const q = new URLSearchParams(location.search);
+if (q.get('safe')) document.getElementById('guides').innerHTML =
+  div(`left:70px;top:260px;width:870px;height:1240px;border:3px dashed #0f0;box-sizing:border-box`) +
+  div(`left:0;top:0;width:${W}px;height:260px;background:rgba(0,255,0,.12)`) +
+  div(`left:0;top:1500px;width:${W}px;height:420px;background:rgba(0,255,0,.12)`) +
+  div(`left:940px;top:0;width:140px;height:${H}px;background:rgba(0,255,0,.12)`);
+window.ready = Promise.all([
+  document.fonts.load('900 100px "Inter Display"'), document.fonts.load('800 100px "Inter Display"'),
+  document.fonts.load('700 40px "JetBrains Mono"'), document.fonts.load('500 40px Inter'),
+]).then(() => window.seek(+(q.get('t') || 0)));
+</script>
+</body>
+</html>

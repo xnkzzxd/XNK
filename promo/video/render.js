@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// Render ad.html to an MP4 frame by frame (Playwright + ffmpeg).
+// Render a 30-second video page (default ad.html) to an MP4 frame by frame (Playwright + ffmpeg).
 //
 //   node promo/video/render.js --out xnk-iklan-30s.mp4 --work /tmp/xnk-frames
 //   node promo/video/render.js --preview --work /tmp/xnk-frames           (key stills with safe-area guides)
 //   node promo/video/render.js --preview 3.5,11 --work /tmp/xnk-frames    (chosen stills)
 //   node promo/video/render.js --format 4x5 --work /tmp/xnk-frames        (1080×1350 feed version)
+//   node promo/video/render.js --page ../tutorial/tutorial.html --music-py ../tutorial/music.py --name xnk-tutorial-30s
 //
-// Music: python3 promo/video/music.py <work>/music.wav runs first unless --music is given.
+// --page and --music-py are relative to this folder. Music: the --music-py script (default music.py)
+// writes <work>/music.wav first unless --music <wav> is given.
 'use strict';
 const path = require('path');
 const fs = require('fs');
@@ -23,9 +25,10 @@ const workers = +opt('--workers', 4);
 const FORMATS = { '9x16': { q: '', vf: [] }, '4x5': { q: 'px=540', vf: ['-vf', 'crop=1080:1350:0:205'] } };
 const fmtName = opt('--format', '9x16'), FMT = FORMATS[fmtName];
 if (!FMT) throw new Error('unknown --format ' + fmtName);
-const out = path.resolve(opt('--out', path.join(work, fmtName === '9x16' ? 'xnk-iklan-30s.mp4' : `xnk-iklan-30s-${fmtName}.mp4`)));
+const base = opt('--name', 'xnk-iklan-30s');
+const out = path.resolve(opt('--out', path.join(work, fmtName === '9x16' ? `${base}.mp4` : `${base}-${fmtName}.mp4`)));
 const query = [preview ? 'safe=1' : '', FMT.q].filter(Boolean).join('&');
-const page = 'file://' + path.join(__dirname, 'ad.html') + (query ? '?' + query : '');
+const page = 'file://' + path.resolve(__dirname, opt('--page', 'ad.html')) + (query ? '?' + query : '');
 fs.mkdirSync(work, { recursive: true });
 
 async function shoot(browser, frames, file) {
@@ -67,7 +70,7 @@ async function shoot(browser, frames, file) {
   let music = opt('--music', null);
   if (!music) {
     music = path.join(work, 'music.wav');
-    execFileSync('python3', ['-I', path.join(__dirname, 'music.py'), music], { stdio: 'inherit' });
+    execFileSync('python3', ['-I', path.resolve(__dirname, opt('--music-py', 'music.py')), music], { stdio: 'inherit' });
   }
   execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
     '-framerate', String(FPS), '-i', path.join(dir, 'f%04d.png'), '-i', music, ...FMT.vf,
