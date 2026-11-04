@@ -218,7 +218,7 @@ R -= R.mean()
 peak = max(np.abs(L).max(), np.abs(R).max())
 L, R = np.tanh(L / peak * 1.8), np.tanh(R / peak * 1.8)
 peak = max(np.abs(L).max(), np.abs(R).max())
-g = 10 ** (-1 / 20) / peak
+g = 10 ** (-5 / 20) / peak                 # -5 dBFS: AAC overshoots this dense, limited mix by ~4 dB
 pcm = (np.clip(np.stack([L * g, R * g], axis=1), -1, 1) * 32767).astype('<i2')
 
 path = sys.argv[1] if len(sys.argv) > 1 else 'music.wav'
