@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>XNK Edit</title>
+<!--
+  XNK video 3: a 20-second After-Effects-style montage that loops seamlessly (the last frame flows into the
+  first). Real app screens from ../video/ui (capture.js, invented data). Every frame is a pure function of
+  time: window.seek(t). Render with
+    node promo/video/render.js --page ../edit/edit.html --music-py ../edit/music.py --name xnk-edit-20s --dur 20 --sub 4
+  ?t=5 shows one frame, ?safe=1 draws the Reels/TikTok/Story safe area, ?px=540 centres it for 4:5.
+  144 BPM: one beat = 5/12 s, one bar = 5/3 s, twelve bars.
+-->
+<style>
+  html, body { margin: 0; background: #050505; }
+  body { width: 1080px; height: 1920px; overflow: hidden; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #050505; }
+  #cam, #over { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: 0; width: 1080px; height: 1920px; opacity: .09; mix-blend-mode: overlay; pointer-events: none; }
+  #guides { position: absolute; inset: 0; pointer-events: none; }
+  .a { position: absolute; }
+  .d { font-family: 'Inter Display', Inter, sans-serif; font-weight: 900; letter-spacing: -0.045em; line-height: .9; white-space: nowrap; }
+  .m { font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+  .scr { position: absolute; left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 64px; overflow: hidden; background: #0A0A0A; }
+  .isl { position: absolute; left: 50%; top: 30px; width: 136px; height: 38px; margin-left: -68px; border-radius: 20px; background: #000; z-index: 9; }
+  .sb { position: absolute; left: 44px; top: 17px; font: 600 19px Inter; color: #fff; z-index: 5; }
+  .sbr { position: absolute; right: 40px; top: 20px; display: flex; gap: 6px; align-items: flex-end; z-index: 5; }
+  .sbr i { display: block; width: 5px; background: #fff; border-radius: 2px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <!-- RGB split: the three channels pulled apart sideways, recombined with screen blending -->
+  <filter id="rgb" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+    <feOffset in="r" id="rdx" dx="0" dy="0" result="ro"/>
+    <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+    <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+    <feOffset in="b" id="bdx" dx="0" dy="0" result="bo"/>
+    <feBlend in="ro" in2="g" mode="screen" result="rg"/>
+    <feBlend in="rg" in2="bo" mode="screen"/>
+  </filter>
+</svg>
+<div id="stage">
+  <div id="cam"></div>
+  <div id="over"></div>
+  <canvas id="grain" width="540" height="960"></canvas>
+  <div id="guides"></div>
+</div>
+<script src="../video/ui/rects.js"></script>
+<script>
+'use strict';
+const W = 1080, H = 1920, FPS = 30, DUR = 20;
+const RED = '#FF2D2D', INK = '#0A0A0A';
+const LOGO = '../../logo.png', UI = '../video/ui/';
+const BEAT = 5 / 12, BAR = 5 / 3;
+const b = n => n * BEAT;                                   // beat n → seconds
+
+/* ------------------------------------------------------------ math */
+const cl = (x, a = 0, c = 1) => Math.min(c, Math.max(a, x));
+const P = (t, a, c) => cl((t - a) / (c - a));
+const lerp = (a, c, p) => a + (c - a) * p;
+const E = {
+  out: p => 1 - Math.pow(1 - p, 3),
+  expo: p => p >= 1 ? 1 : 1 - Math.pow(2, -10 * p),
+  in: p => p * p * p,
+  in4: p => p * p * p * p,
+  inOut: p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2,
+  back: p => { const c = 2; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); },
+};
+const TAU = Math.PI * 2;
+const loopSin = (t, k, ph = 0) => Math.sin(TAU * k * t / DUR + ph);   // periodic over the loop
+const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const sgn = n => hash(n) * 2 - 1;
+
+/* ------------------------------------------------------------ text */
+const mctx = document.createElement('canvas').getContext('2d');
+function textW(txt, size, wt = 900) { mctx.font = `${wt} 100px "Inter Display"`; mctx.letterSpacing = '-4.5px'; return mctx.measureText(txt).width * size / 100; }
+const fit = (txt, maxW, maxPx) => Math.min(maxPx, maxPx * maxW / textW(txt, maxPx));
+const div = (style, inner = '', cls = 'a') => `<div class="${cls}" style="${style}">${inner}</div>`;
+const PX = +(new URLSearchParams(location.search).get('px') || 505);
+const GLOW = 'text-shadow:0 0 34px rgba(255,255,255,.38),0 0 2px rgba(255,255,255,.6),0 6px 26px rgba(0,0,0,.55)';
+const GLOW_RED = 'text-shadow:0 0 40px rgba(255,45,45,.7),0 0 2px rgba(255,80,80,.8),0 6px 26px rgba(0,0,0,.55)';
+
+/** Mask reveal: the line rises out of a slot over 0.28 s at t0 and leaves upward before t1. */
+function reveal(t, t0, t1, txt, { y, size, color = '#fff', x = PX, cls = 'd', glow = GLOW }) {
+  if (t < t0 || t > t1) return '';
+  const pin = E.expo(P(t, t0, t0 + 0.28)), pout = E.in(P(t, t1 - 0.2, t1));
+  const ty = (1 - pin) * 110 - pout * 110;
+  return div(`left:${x}px;top:${y}px;transform:translateX(-50%);height:${size * 1.06}px;overflow:hidden;padding:0 30px`,
+    `<div class="${cls}" style="font-size:${size}px;color:${color};transform:translateY(${ty}%);${glow}">${txt}</div>`);
+}
+/** Slam: big → normal in 0.18 s with two motion ghosts, leaves with a quick scale-down. */
+function slam(t, t0, t1, txt, { y, size, color = '#fff', x = PX, rot = 0, glow = GLOW }) {
+  if (t < t0 || t > t1) return '';
+  const one = (tt, op) => {
+    const e = E.expo(P(tt, t0, t0 + 0.18)), out = E.in(P(tt, t1 - 0.12, t1));
+    const s = lerp(1.9, 1, e) * (1 - out * 0.3);
+    return div(`left:${x}px;top:${y}px;transform:translate(-50%,-50%) scale(${s}) rotate(${rot}deg);font-size:${size}px;color:${color};opacity:${cl((tt - t0) / 0.03) * op * (1 - out)};${glow}`, txt, 'a d');
+  };
+  let h = '';
+  if (t - t0 < 0.18) for (const g of [0.05, 0.025]) if (t - g >= t0) h += one(t - g, 0.25);
+  return h + one(t, 1);
+}
+/** Blur-in: comes into focus (and fades in) over 0.35 s. */
+function focusIn(t, t0, t1, txt, { y, size, color = '#fff', x = PX, glow = GLOW }) {
+  if (t < t0 || t > t1) return '';
+  const p = E.out(P(t, t0, t0 + 0.35)), out = P(t, t1 - 0.2, t1);
+  return div(`left:${x}px;top:${y}px;transform:translateX(-50%) scale(${lerp(1.08, 1, p)});font-size:${size}px;color:${color};opacity:${p * (1 - out)};filter:blur(${(1 - p) * 18 + out * 14}px);${glow}`, txt, 'a d');
+}
+/** Huge outline word far behind everything, slightly out of focus. */
+const bgWord = (t, txt, y = 760) => div(`left:${PX}px;top:${y}px;transform:translateX(calc(-50% + ${loopSin(t, 1) * 90}px));font-size:${fit(txt, 1500, 360)}px;color:transparent;-webkit-text-stroke:3px rgba(255,255,255,.55);opacity:.16;filter:blur(3px)`, txt, 'a d');
+
+/* ------------------------------------------------------------ phones */
+const PW = 500, SB = 52, SW = PW - 28, UIH = Math.round(SW * 808 / 390), SH = SB + UIH, PH = SH + 28, T = 34;
+const statusBar = () => `<div class="a" style="left:0;top:0;right:0;height:${SB}px;background:${INK};z-index:4"></div><div class="sb">09.41</div><div class="sbr"><i style="height:8px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:20px;opacity:.4"></i></div>`;
+const shot = (name, op = 1) => `<div class="a" style="left:0;top:${SB}px;width:${SW}px;height:${UIH}px;opacity:${op}"><img src="${UI}${name}.png" style="display:block;width:${SW}px;height:${UIH}px"></div>`;
+/** Screen states [[t0, name], …] with a quick cross-fade. */
+function screens(t, seq, fade = 0.07) {
+  let k = 0;
+  seq.forEach(([t0], i) => { if (t >= t0) k = i; });
+  const p = k ? E.out(P(t, seq[k][0], seq[k][0] + fade)) : 1;
+  return (k && p < 1 ? shot(seq[k - 1][1]) : '') + shot(seq[k][1], p) + statusBar();
+}
+const RECTS = window.UI_RECTS || {};
+const at = r => [(r.x + r.w / 2) * SW, SB + (r.y + r.h / 2) * UIH];
+/** A finger that glides in, taps each target with a ripple, and leaves. */
+function finger(t, presses) {
+  presses = presses.filter(([, r]) => r);
+  if (!presses.length) return '';
+  const first = presses[0][0], last = presses[presses.length - 1][0];
+  if (t < first - 0.3 || t > last + 0.35) return '';
+  const pts = presses.map(([t0, r]) => [t0, at(r)]);
+  let x, y;
+  if (t < first) { const p = E.out(P(t, first - 0.3, first - 0.03)); [x, y] = [lerp(SW + 80, pts[0][1][0], p), lerp(SH + 80, pts[0][1][1], p)]; }
+  else {
+    let k = 0; pts.forEach(([t0], i) => { if (t >= t0) k = i; });
+    [x, y] = pts[k][1];
+    if (k < pts.length - 1) { const p = E.inOut(P(t, pts[k][0] + 0.06, pts[k + 1][0] - 0.03)); x = lerp(x, pts[k + 1][1][0], p); y = lerp(y, pts[k + 1][1][1], p); }
+  }
+  const pressed = pts.some(([t0]) => t >= t0 - 0.03 && t < t0 + 0.07);
+  let h = '';
+  pts.forEach(([t0, [px, py]]) => {
+    if (t < t0 || t > t0 + 0.35) return;
+    const rp = E.out(P(t, t0, t0 + 0.35));
+    h += div(`left:${px}px;top:${py}px;width:${46 + rp * 150}px;height:${46 + rp * 150}px;transform:translate(-50%,-50%);border-radius:50%;border:4px solid #fff;box-shadow:0 0 18px rgba(255,255,255,.6);opacity:${(1 - rp) * .9};z-index:6`);
+  });
+  const fo = 1 - P(t, last + 0.15, last + 0.35);
+  return h + div(`left:${x}px;top:${y}px;width:58px;height:58px;transform:translate(-50%,-50%) scale(${pressed ? 0.82 : 1});border-radius:29px;background:rgba(255,255,255,.75);border:3px solid ${INK};box-sizing:border-box;box-shadow:0 0 24px rgba(255,255,255,.5);opacity:${fo};z-index:7`);
+}
+
+/**
+ * The 3D hero phone: front (real screen + glass glare), back (logo), and stacked edge layers for thickness.
+ * ry in degrees; the back shows when ry mod 360 is between 90 and 270.
+ */
+function phone3d({ x = PX, y = 960, s = 1, rx = 0, ry = 0, rz = 0, screen = '', logoGlow = 0.5, blur = 0, op = 1 }) {
+  const glare = 50 + ((ry % 360) + 360) % 360 / 360 * 300 - 150;
+  let edges = '';
+  for (let k = 1; k < 10; k++) {
+    const z = -T / 2 + k * T / 10;
+    edges += `<div style="position:absolute;inset:0;border-radius:78px;background:${k % 3 ? '#1E1E20' : '#2B2B2E'};transform:translateZ(${z}px)"></div>`;
+  }
+  const front = `<div style="position:absolute;inset:0;border-radius:78px;background:#0B0B0B;box-shadow:inset 0 0 0 2px #3A3A3C;transform:translateZ(${T / 2}px);backface-visibility:hidden">
+      <div class="scr">${screen}<div class="a" style="inset:0;background:linear-gradient(115deg,rgba(255,255,255,0) ${glare - 22}%,rgba(255,255,255,.16) ${glare}%,rgba(255,255,255,0) ${glare + 18}%);z-index:8"></div></div><div class="isl"></div></div>`;
+  const back = `<div style="position:absolute;inset:0;border-radius:78px;background:linear-gradient(150deg,#232326 0%,#0D0D0F 60%,#18181A 100%);box-shadow:inset 0 0 0 2px #3A3A3C;transform:rotateY(180deg) translateZ(${T / 2}px);backface-visibility:hidden;overflow:hidden">
+      <div class="a" style="left:34px;top:34px;width:170px;height:170px;border-radius:46px;background:#161618;box-shadow:inset 0 0 0 2px #333"><i class="a" style="left:22px;top:22px;width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#3a3a44,#050505 60%);box-shadow:0 0 0 5px #222"></i><i class="a" style="left:92px;top:22px;width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#3a3a44,#050505 60%);box-shadow:0 0 0 5px #222"></i><i class="a" style="left:22px;top:92px;width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#3a3a44,#050505 60%);box-shadow:0 0 0 5px #222"></i></div>
+      <img src="${LOGO}" style="position:absolute;left:50%;top:52%;width:520px;height:520px;transform:translate(-50%,-50%);filter:drop-shadow(0 0 ${20 + logoGlow * 50}px rgba(255,255,255,${0.25 + logoGlow * 0.55}))"></div>`;
+  return div(`left:0;top:0;width:${W}px;height:${H}px;perspective:2400px;perspective-origin:${x}px ${y}px;opacity:${op};${blur ? `filter:blur(${blur}px);` : ''}`,
+    `<div style="position:absolute;left:${x - PW / 2}px;top:${y - PH / 2}px;width:${PW}px;height:${PH}px;transform-style:preserve-3d;transform:scale(${s}) rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg)">${edges}${back}${front}</div>`);
+}
+/** A flat, out-of-focus phone in the background (depth of field). */
+function flatPhone({ x, y, s, ry, rz = 0, name, blur, op = 1 }) {
+  return div(`left:0;top:0;width:${W}px;height:${H}px;perspective:2400px;perspective-origin:${x}px ${y}px;opacity:${op};filter:blur(${blur}px) brightness(.8)`,
+    `<div style="position:absolute;left:${x - PW / 2}px;top:${y - PH / 2}px;width:${PW}px;height:${PH}px;border-radius:78px;background:#0B0B0B;box-shadow:inset 0 0 0 2px #3A3A3C;transform:scale(${s}) rotateY(${ry}deg) rotateZ(${rz}deg)"><div class="scr">${shot(name)}${statusBar()}</div><div class="isl"></div></div>`);
+}
+/** A real screen filling the whole frame (after a zoom-through), darkened so the words read. */
+function uiFull(name, s = 1, rot = 0, dark = .45, oy = 50) {
+  const ih = W * 808 / 390;
+  return div(`left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;background:#000`,
+    `<img src="${UI}${name}.png" style="position:absolute;left:0;top:${(H - ih) / 2}px;width:${W}px;height:${ih}px;transform:scale(${s}) rotate(${rot}deg);transform-origin:50% ${oy}%">` +
+    div(`inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(0,0,0,${dark * 0.6}) 0,rgba(0,0,0,${dark + 0.2}) 100%)`));
+}
+/** Foreground bokeh: big soft discs close to the lens, drifting (periodic over the loop). */
+function bokeh(t, op = 1) {
+  let h = '';
+  for (let k = 0; k < 6; k++) {
+    const x = 120 + hash(k * 3.1) * 840 + loopSin(t, 1 + (k % 3), k) * 140;
+    const y = 200 + hash(k * 7.7) * 1500 + loopSin(t, 1 + (k % 2), k * 2) * 160;
+    const r = 70 + hash(k * 1.3) * 160, red = k === 2;
+    h += div(`left:${x - r}px;top:${y - r}px;width:${2 * r}px;height:${2 * r}px;border-radius:50%;background:radial-gradient(circle,${red ? 'rgba(255,45,45,.32)' : 'rgba(255,255,255,.22)'} 0,rgba(255,255,255,0) 70%);filter:blur(${10 + hash(k) * 14}px);opacity:${op}`);
+  }
+  return h;
+}
+
+/* ------------------------------------------------------------ the loop pose (t = 0 and t = 20) */
+// Shared drift: the phone turns slowly (-7.2°/s), bobs and rolls with loop-periodic curves.
+const drift = t => ({ y: 960 + loopSin(t, 2) * 14, rx: 8 + loopSin(t, 1) * 2, rz: loopSin(t, 2, 1) * 1.6 });
+const POSE_RY = -28, DRIFT = -7.2;
+
+/* ------------------------------------------------------------ shots */
+function scene(t) {
+  let h = '', rgb = 0, blur = 0, leak = 0.12, flash = 0, cx = 0, cy = 0;
+  const d = drift(t);
+
+  if (t < 1.6667) {                                                // A · loop pose, "SEMUA KLIEN"
+    h += bgWord(t, 'SEMUA KLIEN');
+    h += phone3d({ y: d.y, rx: d.rx, rz: d.rz, ry: POSE_RY + DRIFT * t, screen: screens(t, [[0, 'coach-dashboard']]) });
+    h += bokeh(t);
+    h += reveal(t, b(1), 1.6, 'SEMUA', { y: 280, size: 150 });
+    h += reveal(t, b(2), 1.6, 'KLIEN.', { y: 430, size: 150, color: RED, glow: GLOW_RED });
+  } else if (t < 2.0) {                                            // B1 · zoom-through into the Klien screen
+    const p = E.in(P(t, 1.6667, 2.0));
+    h += phone3d({ y: lerp(drift(1.6667).y, 960, p), rx: lerp(drift(1.6667).rx, 0, p), rz: lerp(drift(1.6667).rz, 0, p),
+      ry: lerp(POSE_RY + DRIFT * 1.6667, 0, E.out(P(t, 1.6667, 1.95))), s: lerp(1, 2.95, p),
+      screen: screens(t, [[0, 'coach-dashboard'], [1.72, 'coach-klien']]) });
+    rgb = 6 * p;
+  } else if (t < 3.3333) {                                         // B2 · full-screen UI, "20 KLIEN.", whip left
+    const whip = E.in(P(t, 2.92, 3.3333));
+    cx = -whip * 1500;
+    h += uiFull('coach-klien', lerp(1.27, 1.04, E.out(P(t, 2.0, 2.6))), 0, .5);
+    h += slam(t, b(5), 3.3333, '20', { x: PX - 150, y: 960, size: 380, color: RED, glow: GLOW_RED, rot: -4 });
+    h += slam(t, b(6), 3.3333, 'KLIEN.', { x: PX + 60, y: 1190, size: 170, rot: -4 });
+    h += reveal(t, b(7), 3.3333, 'SATU LAYAR', { y: 1320, size: 40, cls: 'm' });
+    if (t < 2.15) flash = 1 - P(t, 2.0, 2.15);
+  } else if (t < 5.0) {                                            // C · whip in, booking tap, "KLIEN BOOKING SENDIRI."
+    const pin = E.out(P(t, 3.3333, 3.8)), spin = E.in(P(t, 4.58, 5.0));
+    h += bgWord(t, 'BOOKING');
+    h += phone3d({ x: PX + (1 - pin) * 1500, y: 1010, s: 1.02, rx: 6, rz: lerp(6, -2, pin), ry: lerp(48, -12, pin) - spin * 40,
+      screen: screens(t, [[3.3333, 'client-booking'], [4.21, 'client-booked']]) + finger(t, [[b(10), RECTS.kirim]]) });
+    h += bokeh(t, .8);
+    h += reveal(t, b(9), 4.9, 'KLIEN BOOKING', { y: 300, size: fit('KLIEN BOOKING', 860, 120) });
+    h += reveal(t, b(10), 4.9, 'SENDIRI.', { y: 430, size: 120, color: RED, glow: GLOW_RED });
+    cx = (1 - pin) * 300;
+  } else if (t < 6.6667) {                                         // D · 360° spin into the workout, ticks, "PR!"
+    const spin = E.out(P(t, 5.0, 5.45)), dolly = E.inOut(P(t, 5.45, 6.6));
+    h += bgWord(t, 'WORKOUT');
+    h += phone3d({ y: 1010, s: lerp(1.02, 1.14, dolly), rx: 5, rz: lerp(-2, 2, dolly), ry: lerp(-52, -360, spin) + Math.sin(t * 3) * 2 * dolly,
+      logoGlow: 1, screen: screens(t, [[5.0, 'client-booked'], [5.12, 'client-workout-0'], [b(13.5) + .01, 'client-workout-1'], [b(14) + .01, 'client-workout-2'], [b(14.5) + .01, 'client-workout-3'], [b(15) + .01, 'client-workout-pr']])
+        + finger(t, [[b(13.5), RECTS.tick0], [b(14), RECTS.tick1], [b(14.5), RECTS.tick2], [b(15), RECTS.tick3]]) });
+    h += bokeh(t, .8);
+    h += reveal(t, b(13), 6.2, 'CATAT TIAP SET.', { y: 300, size: fit('CATAT TIAP SET.', 860, 110) });
+    h += slam(t, b(15), 6.6667, 'PR!', { x: PX + 210, y: 1330, size: 300, color: RED, glow: GLOW_RED, rot: 6 });
+  } else if (t < 8.3333) {                                         // E · match cut (red ring) into progress, dolly, whip up
+    const ring = E.out(P(t, 6.6667, 7.05)), whip = E.in(P(t, 8.0, 8.3333)), dolly = E.inOut(P(t, 6.9, 8.1));
+    const inner = bgWord(t, 'PROGRESS') +
+      phone3d({ y: lerp(1050, 1330, dolly), s: lerp(1.0, 1.55, dolly), rx: lerp(14, 4, dolly), rz: lerp(-4, 0, dolly), ry: lerp(22, 4, dolly),
+        screen: screens(t, [[0, 'client-progres']]) }) + bokeh(t, .7) +
+      reveal(t, b(17), 8.2, 'PROGRESS.', { y: 300, size: 140 }) +
+      reveal(t, b(18), 8.2, '−1,8 kg', { y: 455, size: 96, color: RED, glow: GLOW_RED });
+    if (ring < 1) {
+      // the PR shot keeps playing under a red ring that opens onto the new scene
+      const old = bgWord(t, 'WORKOUT') + phone3d({ y: 1010, s: 1.14, rx: 5, rz: 2, ry: -360, screen: screens(t, [[0, 'client-workout-pr']]) });
+      const r = ring * 2300, ox = PX + 210, oy = 1330;
+      h += old + div(`inset:0;clip-path:circle(${r}px at ${ox}px ${oy}px);background:#050505`, inner) +
+        div(`left:${ox - r}px;top:${oy - r}px;width:${2 * r}px;height:${2 * r}px;border-radius:50%;border:${lerp(60, 8, ring)}px solid ${RED};box-shadow:0 0 60px ${RED};box-sizing:border-box`);
+    } else h += inner;
+    cy = -whip * 1700;
+    rgb = 3 * whip;
+  } else if (t < 10.0) {                                           // F · three phones, parallax pass, "SATU HP."
+    const pin = E.out(P(t, 8.3333, 8.8)), pan = lerp(170, -170, E.inOut(P(t, 8.3333, 10.0))), rack = E.in(P(t, 9.6, 10.0));
+    cy = (1 - pin) * 1700;
+    h += bgWord(t, 'SATU HP');
+    h += flatPhone({ x: PX - 360 + pan * .5, y: 1060, s: .74, ry: 30, rz: -3, name: 'client-makan', blur: 7, op: .8 });
+    h += flatPhone({ x: PX + 360 + pan * .5, y: 1060, s: .74, ry: -30, rz: 3, name: 'coach-jadwal-today', blur: 7, op: .8 });
+    h += phone3d({ x: PX + pan, y: 1040, s: .92, rx: 7, rz: loopSin(t, 3) * 2, ry: -pan * 0.06, screen: screens(t, [[0, 'coach-keuangan']]) });
+    h += bokeh(t + 3, 1);
+    h += reveal(t, b(21), 9.95, 'SATU HP.', { y: 300, size: 150 });
+    h += reveal(t, b(22), 9.95, 'jadwal · latihan · gizi · keuangan', { y: 450, size: 34, cls: 'm' });
+    blur = rack * 26;
+  } else if (t < 11.6667) {                                        // G · breakdown: slow float, light leak, focus words
+    const rack = 1 - E.out(P(t, 10.0, 10.45)), zoom = E.in(P(t, 11.2, 11.6667));
+    h += phone3d({ y: lerp(1010 + Math.sin(t * 2) * 10, 960, zoom), s: lerp(.92, 3.0, zoom), rx: lerp(10, 0, zoom), rz: lerp(Math.sin(t * 1.4) * 2, 0, zoom),
+      ry: lerp(-22 + (t - 10) * 26, 0, zoom), screen: screens(t, [[0, 'coach-client-new'], [11.3, 'client-makan']]) });
+    h += bokeh(t, 1 - zoom);
+    h += focusIn(t, 10.15, 11.25, 'Kamu melatih.', { y: 290, size: 112 });
+    h += focusIn(t, 10.75, 11.25, 'Sisanya beres.', { y: 420, size: 112, color: RED, glow: GLOW_RED });
+    blur = rack * 26;
+    leak = 0.55 + 0.25 * Math.sin((t - 10) * 3);
+    rgb = 5 * zoom;
+  } else if (t < 13.3333) {                                        // H · the drop: one cut per beat
+    const CUTS = [['client-makan', 'GIZI.'], ['coach-bill-paid', 'LUNAS.'], ['coach-program-form', 'PROGRAM.'], ['coach-session-note', 'CATATAN.']];
+    const k = cl(Math.floor((t - 11.6667) / BEAT), 0, 3), t0 = 11.6667 + k * BEAT, p = P(t, t0, t0 + BEAT);
+    const punch = lerp(1.32, 1.06, E.expo(p)) + (k === 3 ? E.in(P(t, 13.15, 13.3333)) * 0.8 : 0);
+    h += uiFull(CUTS[k][0], punch, (k % 2 ? 2 : -2) * (1 - E.out(p)), .55, 40);
+    h += slam(t, t0, t0 + BEAT, CUTS[k][1], { y: 980, size: fit(CUTS[k][1], 880, 240), color: k === 1 ? RED : '#fff', glow: k === 1 ? GLOW_RED : GLOW, rot: k % 2 ? 3 : -3 });
+    if (t < 11.82) flash = 1 - P(t, 11.6667, 11.82);
+  } else if (t < 15.0) {                                           // I · zoom out of the screen, spin to the back
+    const out = E.out(P(t, 13.3333, 13.95)), spin = E.in4(P(t, 14.35, 15.0));
+    h += bgWord(t, 'XNK');
+    h += phone3d({ y: lerp(960, 1010, out), s: lerp(2.95, 1, out), rx: lerp(0, 6, out), rz: lerp(0, -2, out), ry: lerp(0, -8, out) - spin * 172,
+      logoGlow: 1, screen: screens(t, [[0, 'coach-dashboard']]) });
+    h += bokeh(t, out);
+    h += reveal(t, b(33), 14.6, 'SEMUA DALAM', { y: 300, size: fit('SEMUA DALAM', 860, 130) });
+    h += reveal(t, b(34), 14.6, 'SATU HP.', { y: 440, size: 130, color: RED, glow: GLOW_RED });
+    rgb = 8 * spin;
+  } else if (t < 16.6667) {                                        // J · the back, glowing logo, rings, "Move Better."
+    const p = P(t, 15.0, 16.6667);
+    h += bgWord(t, 'MOVE BETTER');
+    [[15.0, 1], [15.8333, .6]].forEach(([r0, o]) => {
+      if (t < r0) return;
+      const q = E.out(P(t, r0, r0 + 0.9)), r = 200 + q * 900;
+      h += div(`left:${PX - r}px;top:${1010 - r}px;width:${2 * r}px;height:${2 * r}px;border-radius:50%;border:${lerp(26, 2, q)}px solid #fff;box-shadow:0 0 50px rgba(255,255,255,.5);box-sizing:border-box;opacity:${(1 - q) * o}`);
+    });
+    h += phone3d({ y: 1010, s: 1, rx: 6, rz: -2, ry: -180 - 25 * E.out(p), logoGlow: .6 + .4 * Math.sin(t * 8) ** 2, screen: screens(t, [[0, 'coach-dashboard']]) });
+    h += bokeh(t, .9);
+    h += reveal(t, b(37), 16.55, 'Move Better.', { y: 300, size: 140 });
+    if (t < 15.15) flash = 1 - P(t, 15.0, 15.15);
+    leak = 0.35;
+  } else if (t < 18.3333) {                                        // K · price + contact in front of a soft phone
+    const p = P(t, 16.6667, 18.3333), soft = E.out(P(t, 16.6667, 17.0));
+    h += bgWord(t, 'XNK');
+    h += phone3d({ y: 1010, s: 1, rx: 6, rz: -2, ry: -205 - 30 * p, logoGlow: .7, blur: soft * 9, op: 1 - soft * .35, screen: screens(t, [[0, 'coach-dashboard']]) });
+    h += reveal(t, b(40) + 0.1, 18.2, 'MULAI', { y: 760, size: 44, cls: 'm' });
+    h += reveal(t, b(41), 18.2, 'Rp 149rb/bln', { y: 830, size: fit('Rp 149rb/bln', 860, 160) });
+    if (t >= b(42) && t < 18.2) {
+      const q = E.back(P(t, b(42), b(42) + 0.3)), out = P(t, 18.0, 18.2);
+      h += div(`left:${PX}px;top:1060px;transform:translateX(-50%) scale(${q * (1 - out)});background:#fff;color:${INK};font:800 50px 'Inter Display';letter-spacing:-0.02em;padding:22px 46px;border-radius:60px;white-space:nowrap;box-shadow:0 0 50px rgba(255,255,255,.35)`, 'DM @jiz.dan');
+    }
+    h += bokeh(t, 1);
+    leak = 0.3;
+  } else {                                                         // L · flip back to the front, land in the loop pose
+    const p1 = E.inOut(P(t, 18.3333, 19.4)), sharp = E.out(P(t, 18.3333, 18.7));
+    const ryEnd = POSE_RY + DRIFT * (t - DUR) - 360;                // the loop pose, one turn further
+    const ry = t < 19.4 ? lerp(-235, POSE_RY + DRIFT * (19.4 - DUR) - 360, p1) : ryEnd;
+    const land = E.inOut(P(t, 18.3333, 19.4));
+    h += bgWord(t, 'SEMUA KLIEN');
+    h += phone3d({ y: lerp(1010, d.y, land), rx: lerp(6, d.rx, land), rz: lerp(-2, d.rz, land), ry, blur: (1 - sharp) * 9,
+      screen: screens(t, [[0, 'coach-dashboard']]) });
+    h += bokeh(t);
+  }
+
+  // shake on the big hits (frames, deterministic)
+  const HITS = [[b(10), 14], [b(15), 34], [6.6667, 20], [11.6667, 40], [12.0833, 16], [12.5, 16], [12.9167, 16], [15.0, 34], [2.0, 24]];
+  let sx = 0, sy = 0, sr = 0;
+  for (const [h0, amp] of HITS) {
+    if (t < h0 || t > h0 + 0.35) continue;
+    const k = Math.pow(1 - (t - h0) / 0.35, 2), f = Math.floor((t - h0) * 120);
+    sx += sgn(f + h0 * 31) * amp * k; sy += sgn(f * 1.7 + h0 * 17) * amp * k; sr += sgn(f * 2.3 + h0) * amp * k * .03;
+  }
+  // RGB split spikes on every cut
+  for (const c of [1.6667, 2.0, 3.3333, 5.0, 6.6667, 8.3333, 11.6667, 12.0833, 12.5, 12.9167, 13.3333, 15.0, 18.3333]) {
+    if (t >= c && t < c + 0.5) rgb += 16 * Math.exp(-(t - c) / 0.09);
+  }
+  // light leak swells around the transitions
+  for (const c of [1.6667, 3.3333, 6.6667, 11.6667, 15.0]) leak += 0.6 * Math.exp(-Math.pow((t - c) / 0.25, 2));
+  return { h, rgb, blur, leak: cl(leak, 0, 1), flash, cam: { x: cx + sx, y: cy + sy, r: sr } };
+}
+
+/* ------------------------------------------------------------ overlays + render */
+function overlays(t, s) {
+  const lx = PX + loopSin(t, 1) * 380, ly = 700 + loopSin(t, 2, 1) * 500;
+  let h = div(`inset:0;mix-blend-mode:screen;opacity:${s.leak};background:radial-gradient(ellipse 60% 40% at ${lx}px ${ly}px,rgba(255,60,40,.75) 0,rgba(255,60,40,0) 70%),radial-gradient(ellipse 50% 30% at ${W - lx + 200}px ${ly + 700}px,rgba(255,230,210,.55) 0,rgba(255,230,210,0) 70%)`);
+  h += div(`inset:0;background:radial-gradient(ellipse 75% 60% at 50% 50%,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%)`);
+  if (s.flash > 0) h += div(`inset:0;background:#fff;opacity:${s.flash}`);
+  return h;
+}
+const camEl = document.getElementById('cam'), overEl = document.getElementById('over');
+const rdx = document.getElementById('rdx'), bdx = document.getElementById('bdx');
+const grainCtx = document.getElementById('grain').getContext('2d');
+const gimg = grainCtx.createImageData(540, 960);
+function grain(f) {
+  let s = (f * 2654435761) >>> 0;
+  const dta = gimg.data;
+  for (let i = 0; i < dta.length; i += 4) { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; dta[i] = dta[i + 1] = dta[i + 2] = s & 255; dta[i + 3] = 255; }
+  grainCtx.putImageData(gimg, 0, 0);
+}
+window.seek = t => {
+  t = ((t % DUR) + DUR) % DUR;
+  const s = scene(t);
+  camEl.innerHTML = s.h;
+  camEl.style.transform = `translate(${s.cam.x}px,${s.cam.y}px) rotate(${s.cam.r}deg)`;
+  const amt = Math.min(s.rgb, 26);
+  rdx.setAttribute('dx', amt.toFixed(2)); bdx.setAttribute('dx', (-amt).toFixed(2));
+  camEl.style.filter = [amt > 0.4 ? 'url(#rgb)' : '', s.blur > 0.3 ? `blur(${s.blur.toFixed(1)}px)` : ''].filter(Boolean).join(' ') || 'none';
+  overEl.innerHTML = overlays(t, s);
+  grain(Math.floor(t * 120));
+};
+const q = new URLSearchParams(location.search);
+if (q.get('safe')) document.getElementById('guides').innerHTML =
+  div(`left:70px;top:260px;width:870px;height:1240px;border:3px dashed #0f0;box-sizing:border-box`) +
+  div(`left:0;top:0;width:${W}px;height:260px;background:rgba(0,255,0,.12)`) +
+  div(`left:0;top:1500px;width:${W}px;height:420px;background:rgba(0,255,0,.12)`) +
+  div(`left:940px;top:0;width:140px;height:${H}px;background:rgba(0,255,0,.12)`);
+window.ready = Promise.all([
+  document.fonts.load('900 100px "Inter Display"'), document.fonts.load('800 100px "Inter Display"'),
+  document.fonts.load('700 40px "JetBrains Mono"'), document.fonts.load('600 20px Inter'),
+]).then(() => window.seek(+(q.get('t') || 0)));
+</script>
+</body>
+</html>

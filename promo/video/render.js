@@ -6,9 +6,12 @@
 //   node promo/video/render.js --preview 3.5,11 --work /tmp/xnk-frames    (chosen stills)
 //   node promo/video/render.js --format 4x5 --work /tmp/xnk-frames        (1080×1350 feed version)
 //   node promo/video/render.js --page ../tutorial/tutorial.html --music-py ../tutorial/music.py --name xnk-tutorial-30s
+//   node promo/video/render.js --page ../edit/edit.html --music-py ../edit/music.py --name xnk-edit-20s --dur 20 --sub 4
 //
 // --page and --music-py are relative to this folder. Music: the --music-py script (default music.py)
-// writes <work>/music.wav first unless --music <wav> is given.
+// writes <work>/music.wav first unless --music <wav> is given. --dur sets the length (default 30 s).
+// --sub n renders n sub-frames per output frame, centred on the frame time and wrapped mod --dur (for
+// looping videos), and averages them in ffmpeg: real motion blur on fast moves.
 'use strict';
 const path = require('path');
 const fs = require('fs');
@@ -17,12 +20,12 @@ const { chromium } = require('playwright');
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i < 0 ? def : (args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true); };
-const FPS = 30, DUR = 30, FRAMES = FPS * DUR;
+const FPS = 30, DUR = +opt('--dur', 30), FRAMES = Math.round(FPS * DUR), SUB = Math.max(1, +opt('--sub', 1));
 const work = path.resolve(opt('--work', 'frames'));
 const preview = opt('--preview', false);
 const workers = +opt('--workers', 4);
 // 4:5 crops y 205…1555 of the 9:16 stage (the safe area is y 260…1500) and centres the phone.
-const FORMATS = { '9x16': { q: '', vf: [] }, '4x5': { q: 'px=540', vf: ['-vf', 'crop=1080:1350:0:205'] } };
+const FORMATS = { '9x16': { q: '', crop: null }, '4x5': { q: 'px=540', crop: 'crop=1080:1350:0:205' } };
 const fmtName = opt('--format', '9x16'), FMT = FORMATS[fmtName];
 if (!FMT) throw new Error('unknown --format ' + fmtName);
 const base = opt('--name', 'xnk-iklan-30s');
@@ -60,12 +63,13 @@ async function shoot(browser, frames, file) {
   const dir = path.join(work, 'png');
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir);
-  const all = [...Array(FRAMES).keys()].map(i => ({ i, t: i / FPS }));
+  const wrap = t => ((t % DUR) + DUR) % DUR;
+  const all = [...Array(FRAMES * SUB).keys()].map(i => ({ i, t: wrap((i - (SUB - 1) / 2) / (FPS * SUB)) }));
   const t0 = Date.now();
   await Promise.all([...Array(workers).keys()].map(w =>
-    shoot(browser, all.filter(f => f.i % workers === w), f => path.join(dir, `f${String(f.i).padStart(4, '0')}.png`))));
+    shoot(browser, all.filter(f => f.i % workers === w), f => path.join(dir, `f${String(f.i).padStart(5, '0')}.png`))));
   await browser.close();
-  console.log(`${FRAMES} frames in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  console.log(`${all.length} frames in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 
   let music = opt('--music', null);
   if (!music) {
@@ -73,7 +77,8 @@ async function shoot(browser, frames, file) {
     execFileSync('python3', ['-I', path.resolve(__dirname, opt('--music-py', 'music.py')), music], { stdio: 'inherit' });
   }
   execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
-    '-framerate', String(FPS), '-i', path.join(dir, 'f%04d.png'), '-i', music, ...FMT.vf,
+    '-framerate', String(FPS * SUB), '-i', path.join(dir, 'f%05d.png'), '-i', music,
+    '-vf', [SUB > 1 ? `tmix=frames=${SUB},select='eq(mod(n,${SUB}),${SUB - 1})',setpts=N/${FPS}/TB` : null, FMT.crop].filter(Boolean).join(',') || 'null', '-r', String(FPS),
     '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out], { stdio: 'inherit' });
   console.log('wrote', out);
