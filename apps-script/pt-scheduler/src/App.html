@@ -4963,7 +4963,7 @@
     const n = d.days.reduce((s, x) => s + x.items.length, 0);
     let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Program latihan</p><span class="li-sub">' + (n ? d.days.length + ' hari · ' + n + ' gerakan' : 'Belum ada') + '</span></div>';
     if (n) {
-      html += '<div class="prg-days">' + d.days.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p>' + day.items.map(it => '<p class="li-sub">' + h(it.gerakan) + ' · ' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'style="width:12px;height:12px;vertical-align:-2px"') : '') + '</p>').join('') + '</div>').join('') + '</div>';
+      html += '<div class="prg-days">' + d.days.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p>' + day.items.map(it => '<p class="li-sub">' + h(exNm(it)) + ' · ' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'style="width:12px;height:12px;vertical-align:-2px"') : '') + '</p>').join('') + '</div>').join('') + '</div>';
       if (d.last) html += '<p class="li-sub" style="margin-top:6px">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
     } else html += '<p class="li-sub">Tulis program supaya klien melihatnya di tab Latihan.</p>';
     if (d.own && d.own.length) html += '<details class="pg-more"><summary>Rutinitas buatan klien (' + d.own.length + ')</summary><div class="prg-days">' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => it.gerakan + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div></details>';
@@ -5066,15 +5066,15 @@
     let html = '<div class="pf-item' + (open ? ' open' : '') + (it.join ? ' joined' : '') + '" data-d="' + d + '" data-i="' + i + '">' +
       '<div class="pf-row"><span class="drag-grip" aria-hidden="true">' + icon('grip-vertical') + '</span>' +
       (g ? '<img class="pf-gif" loading="lazy" alt="" src="' + h(exLib.base + g.g) + '">' : '') +
-      '<button type="button" class="pf-sum" aria-expanded="' + open + '" onclick="window.pfToggle(' + d + ',' + i + ')"><b>' + h(it.gerakan) + (it.join ? ' <span class="pill soft">superset</span>' : '') + '</b><span>' + h(pfSummary(it)) + '</span></button>' +
-      '<button type="button" class="icon-btn plain" aria-label="Naikkan ' + h(it.gerakan) + '"' + (i ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',-1)">' + icon('chevron-up') + '</button>' +
-      '<button type="button" class="icon-btn plain" aria-label="Turunkan ' + h(it.gerakan) + '"' + (i < pf.days[d].items.length - 1 ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',1)">' + icon('chevron-down') + '</button></div>';
+      '<button type="button" class="pf-sum" aria-expanded="' + open + '" onclick="window.pfToggle(' + d + ',' + i + ')"><b>' + h(exNm(it)) + (it.join ? ' <span class="pill soft">superset</span>' : '') + '</b><span>' + h(pfSummary(it)) + '</span></button>' +
+      '<button type="button" class="icon-btn plain" aria-label="Naikkan ' + h(exNm(it)) + '"' + (i ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',-1)">' + icon('chevron-up') + '</button>' +
+      '<button type="button" class="icon-btn plain" aria-label="Turunkan ' + h(exNm(it)) + '"' + (i < pf.days[d].items.length - 1 ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',1)">' + icon('chevron-down') + '</button></div>';
     if (open) {
       const p = 'd' + d + 'i' + i;
       const moreOn = pf.more[key] !== undefined ? pf.more[key] : !!(it.skemaOn || it.join || it.catatan || it.video);
       html += '<div class="pf-edit"><div class="pf-line"><select class="select pf-kind" aria-label="Jenis gerakan" onchange="window.pfKind(' + d + ',' + i + ',this.value)">' +
         PF_KINDS.map(k => '<option value="' + k[0] + '"' + (it.jenis === k[0] ? ' selected' : '') + '>' + k[1] + '</option>').join('') + '</select>' +
-        '<button type="button" class="icon-btn plain" aria-label="Hapus ' + h(it.gerakan) + '" onclick="window.pfDel(' + d + ',' + i + ')">' + icon('trash-2') + '</button></div>';
+        '<button type="button" class="icon-btn plain" aria-label="Hapus ' + h(exNm(it)) + '" onclick="window.pfDel(' + d + ',' + i + ')">' + icon('trash-2') + '</button></div>';
       if (!it.skemaOn) {
         html += '<div class="pf-grid">' + pfNum(p + '.set', it.set, 'numeric', 'Set', '3') +
           pfNum(p + '.repMin', it.repMin, 'numeric', u === 'rep' ? 'Rep min' : (u === 'dtk' ? 'Detik' : 'Meter'), u === 'rep' ? '8' : '') +
@@ -5224,17 +5224,33 @@
   // Data statis dari GitHub Pages (exercises/exercises.min.json), dimuat malas saat dicari, bukan lewat Apps Script.
   // Satu lembar cari untuk editor program / rutinitas (kembali ke lembar program) dan mode latihan. GIF di-hotlink (bukan disimpan)
   // untuk coach dan klien (keputusan pemilik, Fase O); kredit pustaka selalu tampil.
-  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v1', EX_SHOW = 20, EX_RECENT = 'xnk_ex_recent';
+  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v2', EX_SHOW = 20, EX_RECENT = 'xnk_ex_recent';
   let exLib = null;
   const exs = { onPick: null, ret: '', limit: EX_SHOW, extra: [], sel: [], hist: '', data: null, creating: false };
   const WK_EQUIP = { 'body weight': 'Berat badan', 'dumbbell': 'Dumbbell', 'cable': 'Kabel', 'barbell': 'Barbell', 'leverage machine': 'Mesin', 'band': 'Band', 'smith machine': 'Smith machine', 'kettlebell': 'Kettlebell',
     'weighted': 'Beban tambahan', 'stability ball': 'Bola stabilitas', 'ez barbell': 'EZ bar', 'assisted': 'Dibantu', 'sled machine': 'Sled', 'medicine ball': 'Medicine ball', 'rope': 'Tali', 'roller': 'Roller', 'resistance band': 'Resistance band', 'olympic barbell': 'Barbell olimpiade', 'trap bar': 'Trap bar' };
   const exCap = s => { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); };
+  // Fase U: nama tampilan ala Hevy dari pustaka (v2: `n` = nama, `r` = nama mentah). Baris lama di sheet tidak diubah;
+  // gerakan yang punya Exercise ID tampil dengan nama pustaka saat pustaka sudah ada di perangkat.
+  let exById = null;
+  function exLibSync() {
+    if (!exLib) { try { localStorage.removeItem('xnk_ex_lib_v1'); const c = localStorage.getItem(EX_KEY); if (c) exLib = JSON.parse(c); } catch (e) {} }
+    return exLib;
+  }
+  function exNm(o) {
+    if (!o) return '';
+    const id = o.exId || (/^ex:/.test(String(o.key || '')) ? String(o.key).slice(3) : '');
+    const lib = id ? exLibSync() : null;
+    if (lib && !exById) { exById = {}; lib.items.forEach(x => { exById[x.id] = x; }); }
+    const x = lib && exById ? exById[id] : null;
+    return x ? x.n : String(o.gerakan || '');
+  }
+  window.exNm = exNm;
   function exEnsure() {
     if (exLib) return Promise.resolve(exLib);
     try { const c = localStorage.getItem(EX_KEY); if (c) { exLib = JSON.parse(c); return Promise.resolve(exLib); } } catch (e) {}
     return fetch(EX_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); }).then(function (d) {
-      exLib = d; try { localStorage.setItem(EX_KEY, JSON.stringify(d)); } catch (e) {} return d;
+      exLib = d; exById = null; try { localStorage.setItem(EX_KEY, JSON.stringify(d)); } catch (e) {} return d;
     });
   }
   // Gerakan yang baru dipilih di perangkat ini (kemudahan saja, boleh hilang).
@@ -5300,9 +5316,9 @@
     }
     if (!exLib) { setHTML(box, html + '<p class="li-sub" style="padding:12px 0">Memuat pustaka gerakan…</p>'); return; }
     if (!exs.sorted) exs.sorted = exLib.items.slice().sort((a, b) => a.n.localeCompare(b.n));
-    let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!q || (x.n + ' ' + x.t + ' ' + x.q).toLowerCase().indexOf(q) !== -1));
+    let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!q || (x.n + ' ' + (x.r || '') + ' ' + x.t + ' ' + x.q).toLowerCase().indexOf(q) !== -1));
     // Cari: nama yang diawali kata itu dulu, lalu yang memuatnya di nama, lalu sisanya (otot/alat); nama pendek dulu.
-    if (q) { const rank = x => (x.n.indexOf(q) === 0 ? 0 : (x.n.indexOf(q) !== -1 ? 1 : 2)); hits = hits.map(x => [rank(x), x]).sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length).map(p => p[1]); }
+    if (q) { const rank = x => { const nl = x.n.toLowerCase(); return nl.indexOf(q) === 0 ? 0 : (nl.indexOf(q) !== -1 || String(x.r || '').indexOf(q) !== -1 ? 1 : 2); }; hits = hits.map(x => [rank(x), x]).sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length).map(p => p[1]); }
     html += '<p class="label exs-lbl">' + (q || part || eq ? hits.length + ' gerakan' : 'Semua gerakan (A–Z)') + '</p>' + (hits.slice(0, exs.limit).map(exsRowLib).join('') || '<p class="li-sub" style="padding:8px 0">Tidak ada gerakan yang cocok. Ketuk Buat untuk gerakan sendiri.</p>');
     if (hits.length > exs.limit) html += '<button type="button" class="btn btn-ghost btn-block" onclick="window.exsMore()">Lihat lebih banyak (' + (hits.length - exs.limit) + ')</button>';
     setHTML(box, html);
@@ -5670,10 +5686,10 @@
   }
   function wlExHtml(i) {
     const e = wl.entries[i], ss = wlSsLabel(i), cur = i === wl.open && !e.skipped, done = e.sets.length > 0 && e.sets.every(s => s.done);
-    let html = '<section class="wl-ex' + (cur ? ' cur' : '') + (done ? ' done' : '') + (e.skipped ? ' skipped' : '') + '" data-i="' + i + '" aria-label="' + h(e.gerakan) + '">' +
+    let html = '<section class="wl-ex' + (cur ? ' cur' : '') + (done ? ' done' : '') + (e.skipped ? ' skipped' : '') + '" data-i="' + i + '" aria-label="' + h(exNm(e)) + '">' +
       '<div class="wl-ex-head"><span class="drag-grip" aria-hidden="true">' + icon('grip-vertical') + '</span>' +
-      '<button type="button" class="wl-ex-name" onclick="window.wlHistory(' + i + ')" aria-label="' + h(e.gerakan) + ': riwayat">' + wlThumb(e, 'wl-thumb') + '<span class="truncate">' + h(e.gerakan) + '</span>' + (ss ? '<span class="pill soft">' + h(ss) + '</span>' : '') + '</button>' +
-      '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(e.gerakan) + '" onclick="window.wlMenu(' + i + ')">' + icon('more-horizontal') + '</button></div>';
+      '<button type="button" class="wl-ex-name" onclick="window.wlHistory(' + i + ')" aria-label="' + h(exNm(e)) + ': riwayat">' + wlThumb(e, 'wl-thumb') + '<span class="truncate">' + h(exNm(e)) + '</span>' + (ss ? '<span class="pill soft">' + h(ss) + '</span>' : '') + '</button>' +
+      '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(exNm(e)) + '" onclick="window.wlMenu(' + i + ')">' + icon('more-horizontal') + '</button></div>';
     if (e.plan && e.plan.catatan) html += '<p class="wl-ex-note">' + icon('message-square-quote') + '<span>' + h(e.plan.catatan) + '</span></p>';
     if (e.skipped) return html + '<p class="wl-ex-sub">Dilewati · buka ⋯ untuk membatalkan</p></section>';
     if (wl.live) html += '<button type="button" class="wl-rest-link" onclick="window.wlRestPick(' + i + ')">' + icon('timer') + 'Istirahat: ' + h(wlRestText(wlRestOf(e))) + '</button>';
@@ -5682,7 +5698,7 @@
     const plate = wlPlateText(e);
     if (plate) html += '<p class="wl-ex-sub wl-plate">' + h(plate) + '</p>';
     const cols = wlCols(e);
-    html += '<div class="wl-tbl c' + cols.length + ' k-' + e.kind + '" role="table" aria-label="Set ' + h(e.gerakan) + '"><div class="wl-tr wl-th" role="row"><span role="columnheader">SET</span><span role="columnheader">SEBELUMNYA</span>' +
+    html += '<div class="wl-tbl c' + cols.length + ' k-' + e.kind + '" role="table" aria-label="Set ' + h(exNm(e)) + '"><div class="wl-tr wl-th" role="row"><span role="columnheader">SET</span><span role="columnheader">SEBELUMNYA</span>' +
       cols.map(f => '<span role="columnheader">' + WL_COL[f] + '</span>').join('') + '<span role="columnheader">' + icon('check') + '</span></div>' +
       e.sets.map((s, j) => wlRowHtml(i, j)).join('') + '</div>';
     if (!wl.live && e.sets.some(s => !s.done)) html += '<button type="button" class="btn btn-ghost btn-block wl-addset" onclick="window.wlTickAll(' + i + ')">' + icon('check-check') + 'Centang semua</button>';
@@ -6036,7 +6052,7 @@
     const e = wl.entries[i]; if (!e) return;
     window.closeModal();
     const go = function () { if (e.had) { e.sets = []; e.removed = true; e.skipped = true; } else wl.entries.splice(i, 1); wl.open = Math.min(wl.open, Math.max(0, wl.entries.length - 1)); wlChanged(); };
-    if (e.had) window.showConfirmModal('Catatan <b>' + h(e.gerakan) + '</b> di tanggal ini dihapus saat latihan disimpan.', go, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
+    if (e.had) window.showConfirmModal('Catatan <b>' + h(exNm(e)) + '</b> di tanggal ini dihapus saat latihan disimpan.', go, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
     else go();
   };
   window.wlHistory = function (i) {
@@ -6161,10 +6177,10 @@
     const rows = wl.entries.filter(e => !e.skipped && e.sets.some(s => s.done)).map(function (e) {
       const sets = e.sets.filter(s => s.done), v = wlVolume(e, sets);
       vol += v;
-      if (sets.some(s => wlIsPr(e, s))) prs.push(e.gerakan);
+      if (sets.some(s => wlIsPr(e, s))) prs.push(exNm(e));
       const lv = e.last ? wlVolume(e, e.last.sets) : 0;
       const trend = e.kind === 'beban' && lv && v ? (v > lv ? '<span class="wl-up">↑ ' + Math.round((v - lv) / lv * 100) + '%</span>' : (v < lv ? '<span class="wl-down">↓ ' + Math.round((lv - v) / lv * 100) + '%</span>' : '<span class="li-sub">=</span>')) : '';
-      return '<div class="wl-sum-row"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(e.gerakan) + '</b><span class="li-sub">' + sets.map(s => (s.jenis === 'w' ? 'W ' : '') + h(wlSetText(e, s))).join(' · ') + '</span></span>' + trend + '</div>';
+      return '<div class="wl-sum-row"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(exNm(e)) + '</b><span class="li-sub">' + sets.map(s => (s.jenis === 'w' ? 'W ' : '') + h(wlSetText(e, s))).join(' · ') + '</span></span>' + trend + '</div>';
     });
     const mins = wl.live && wl.startedAt ? Math.round((Date.now() - wl.startedAt) / 60000) : 0;
     let body = '<div class="wk-sum">' + (mins ? '<div><span class="num wk-big">' + mins + '</span><span class="li-sub">menit</span></div>' : '') +
@@ -6273,7 +6289,7 @@
     const sets = it.entries.reduce((n, e) => n + e.sets.length, 0);
     let body = '<div class="stack" style="align-items:center;text-align:center;gap:6px"><span class="pg-trophy" aria-hidden="true">' + icon(prs.length ? 'trophy' : 'check') + '</span>' +
       '<p class="li-title">' + h(it.hari || 'Latihan') + ' · ' + h(it.date === wkToday() ? 'hari ini' : pgLabel(it.date)) + '</p><p class="li-sub">' + sets + ' set' + (vol ? ' · ' + h(wkKg(vol)) + ' kg volume' : '') + '</p></div>';
-    if (prs.length) body += '<ul class="pg-badge-list">' + prs.map(p => '<li>' + h(p.gerakan) + ' · est. 1RM ' + h(wkKg(p.e1rm)) + ' kg</li>').join('') + '</ul>';
+    if (prs.length) body += '<ul class="pg-badge-list">' + prs.map(p => '<li>' + h(exNm(p)) + ' · est. 1RM ' + h(wkKg(p.e1rm)) + ' kg</li>').join('') + '</ul>';
     const foot = it.mode === 'admin'
       ? '<div class="btn-row"><button type="button" class="btn btn-secondary btn-lg" onclick="window.closeModal()">Tutup</button><button type="button" class="btn btn-primary btn-lg" onclick="window.workoutSummaryWA(\'' + h(it.memberId) + '\',\'' + h(it.date) + '\')">' + icon('message-circle') + 'Kirim ringkasan WA</button></div>'
       : '<div class="btn-row"><button type="button" class="btn btn-secondary btn-lg" onclick="window.closeModal()">Tutup</button><button type="button" class="btn btn-primary btn-lg" onclick="window.wlShareCoach()">' + icon('message-circle') + 'Kirim ke coach</button></div>';
@@ -6491,7 +6507,7 @@
       const pick = st.exercises.find(e => e.key === wkPick[scope]) || st.exercises[0];
       const pts = pick.points.map(p => ({ tanggal: p.tanggal, v: p.e1rm || p.top }));
       html += '<div class="wk-block"><div class="field"><label class="label" for="wk-ex-' + scope + '">Kekuatan per gerakan</label><select class="select" id="wk-ex-' + scope + '" onchange="window.wkChartPick(\'' + scope + '\',this.value)">' +
-        st.exercises.map(e => '<option value="' + h(e.key) + '"' + (e.key === pick.key ? ' selected' : '') + '>' + h(e.gerakan) + '</option>').join('') + '</select></div>' +
+        st.exercises.map(e => '<option value="' + h(e.key) + '"' + (e.key === pick.key ? ' selected' : '') + '>' + h(exNm(e)) + '</option>').join('') + '</select></div>' +
         (pick.pr ? '<p class="li-sub"><b>PR:</b> ' + h(wkKg(pick.pr.berat)) + ' kg × ' + pick.pr.rep + ' · estimasi 1RM ' + h(wkKg(pick.pr.e1rm)) + ' kg (' + h(pgLabel(pick.pr.tanggal)) + ')</p>' : '') +
         (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '<p class="li-sub">Catat lagi di sesi berikutnya untuk melihat tren.</p>') + '<p class="li-sub">Garis: estimasi 1RM tertinggi per sesi (rumus Epley, set sampai 12 rep).</p></div>';
     }
@@ -8176,7 +8192,7 @@
     const d = insD(); if (!d || !d.training.strength.length) return '';
     const rows = d.training.strength.map(function (s) {
       const note = (s.perBw != null ? insNum(s.perBw) + '× berat badan' : '') + (s.stalled ? (s.perBw != null ? ' · ' : '') + 'mandek, coba +1 rep atau +2,5 kg' : '');
-      return '<div class="ins-ex"><div class="ins-ex-h"><b>' + h(s.gerakan) + '</b><span class="' + (s.pct < 0 ? 'ins-n warn' : 'ins-n') + '">' + (s.pct == null ? '' : (s.pct > 0 ? '↑ ' : s.pct < 0 ? '↓ ' : '') + Math.abs(s.pct) + '%') + '</span></div>' +
+      return '<div class="ins-ex"><div class="ins-ex-h"><b>' + h(exNm(s)) + '</b><span class="' + (s.pct < 0 ? 'ins-n warn' : 'ins-n') + '">' + (s.pct == null ? '' : (s.pct > 0 ? '↑ ' : s.pct < 0 ? '↓ ' : '') + Math.abs(s.pct) + '%') + '</span></div>' +
         '<div class="ins-ex-b"><span class="li-sub">Est. 1RM ' + insNum(s.e1rm) + ' kg' + (note ? ' · ' + h(note) : '') + '</span>' + sparkHtml(s.spark, 'ins-spark') + '</div></div>';
     }).join('');
     return insCard('Kekuatan', 'perkiraan 1RM', '<div class="stack" style="gap:12px">' + rows + '</div>');
@@ -8353,7 +8369,7 @@
     const rows = it.skema && it.skema.length ? it.skema.map(s => ({ w: s.w, rep: s.rep, kg: s.kg })) : Array.from({ length: it.set || 1 }, () => ({ w: 0, rep: it.repMax !== '' && it.repMax != null ? it.repMin + '–' + it.repMax : it.repMin, kg: it.kg }));
     let n = 0;
     return '<div class="rt-ex"><div class="rt-ex-head">' + (x ? '<img class="wl-thumb" loading="lazy" alt="" src="' + h(exLib.base + x.g) + '">' : '<span class="wl-thumb ph" aria-hidden="true">' + icon('dumbbell') + '</span>') +
-      '<b>' + h(it.gerakan) + '</b></div>' + (it.catatan ? '<p class="li-sub">' + h(it.catatan) + '</p>' : '') +
+      '<b>' + h(exNm(it)) + '</b></div>' + (it.catatan ? '<p class="li-sub">' + h(it.catatan) + '</p>' : '') +
       (it.rest !== '' && it.rest != null ? '<p class="rt-rest">' + icon('timer') + 'Istirahat ' + h(wlRestText(it.rest)) + '</p>' : '') +
       '<div class="rt-tbl' + (kg ? ' kg' : '') + '"><div class="rt-tr rt-th"><span>SET</span>' + (kg ? '<span>KG</span>' : '') + '<span>' + unit + '</span></div>' +
       rows.map(r => '<div class="rt-tr"><span>' + (r.w ? 'W' : ++n) + '</span>' + (kg ? '<span class="num">' + (r.kg === '' || r.kg == null ? '–' : h(wlNum(r.kg))) + '</span>' : '') + '<span class="num">' + h(r.rep === '' || r.rep == null ? '–' : r.rep) + '</span></div>').join('') + '</div>' +

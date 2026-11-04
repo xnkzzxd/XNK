@@ -973,7 +973,7 @@ async function contrastReport(page) {
     await page.click('#prg-form button:has-text("Tambah hari")');
     await page.waitForTimeout(200);
     check((await page.locator('#prg-form .pf-day').count()) === 1 && (await page.inputValue('#prg-form .pf-hari')) === 'Hari A', 'program form: "Tambah hari" adds Hari A');
-    await page.route('https://xnk.my.id/exercises/exercises.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ v: 1, base: 'data:image/gif;base64,', credit: 'test', items: [{ id: '0025', n: 'barbell bench press', b: 'chest', q: 'barbell', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0026', n: 'goblet squat', b: 'upper legs', q: 'dumbbell', t: 'quads', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0030', n: 'push-up', b: 'chest', q: 'body weight', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }] }) }));
+    await page.route('https://xnk.my.id/exercises/exercises.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ v: 2, base: 'data:image/gif;base64,', credit: 'test', items: [{ id: '0025', n: 'Bench Press (Barbell)', r: 'barbell bench press', b: 'chest', q: 'barbell', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0026', n: 'Goblet Squat (Dumbbell)', r: 'goblet squat', b: 'upper legs', q: 'dumbbell', t: 'quads', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0030', n: 'Push Up', r: 'push-up', b: 'chest', q: 'body weight', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }] }) }));
     await page.click('#prg-form .pf-day button:has-text("Gerakan")');
     await page.waitForTimeout(400);
     check(await visible(page, '#ex-search') && (await page.textContent('#exs-title')).includes('Hari A') && (await page.locator('#exs-part').count()) === 1 && !(await visible(page, '#modal-program')), 'search: "+ Gerakan" opens its own search sheet with a body-part dropdown');
@@ -986,14 +986,14 @@ async function contrastReport(page) {
     check(await visible(page, '#exs-foot') && (await page.textContent('#exs-add')).includes('Tambah gerakan') && (await page.locator('#exs-list .ex-li.on').count()) === 1, 'search: a tap selects the row and shows the "Tambah" button');
     await page.click('#exs-add');
     await page.waitForTimeout(300);
-    check(await visible(page, '#modal-program') && !(await visible(page, '#ex-search')) && (await page.locator('#prg-form .pf-item').count()) === 1 && (await page.textContent('#prg-form .pf-item')).includes('Goblet squat') && (await page.textContent('#prg-form .pf-item')).includes('3 × 8–12'), 'search: picking returns to the program sheet with a 3 × 8–12 row');
+    check(await visible(page, '#modal-program') && !(await visible(page, '#ex-search')) && (await page.locator('#prg-form .pf-item').count()) === 1 && (await page.textContent('#prg-form .pf-item')).includes('Goblet Squat (Dumbbell)') && (await page.textContent('#prg-form .pf-item')).includes('3 × 8–12'), 'search: picking returns to the program sheet with a 3 × 8–12 row');
     const pfFont = await page.locator('#prg-form .pf-edit input.input, #prg-form .pf-edit select').evaluateAll(els => els.filter(e => parseFloat(getComputedStyle(e).fontSize) < 16).length);
     check(pfFont === 0 && (await page.locator('#prg-form .pf-edit select.pf-kind').count()) === 1 && (await gridTracks(page, '#prg-form .pf-grid')) === 5 && !(await page.locator('#prg-form .pf-more[open]').count()), 'program form: kind is a dropdown, numbers sit in one row on PC, "Lainnya" starts closed, 16 px fields');
     await page.fill('#prg-form [data-pf="d0i0.kg"]', '20');
     await page.fill('#prg-form [data-pf="d0i0.rest"]', '60');
     await page.click('#prg-form .pf-day button:has-text("Gerakan")');
     await page.waitForTimeout(400);
-    check((await page.textContent('#exs-list .exs-lbl >> nth=0')) === 'Gerakan terakhir' && (await page.textContent('#exs-list .ex-li >> nth=0')).includes('Goblet squat'), 'search: the exercise just picked shows first under "Gerakan terakhir"');
+    check((await page.textContent('#exs-list .exs-lbl >> nth=0')) === 'Gerakan terakhir' && (await page.textContent('#exs-list .ex-li >> nth=0')).includes('Goblet Squat (Dumbbell)'), 'search: the exercise just picked shows first under "Gerakan terakhir"');
     await page.fill('#exs-q', 'Bench press');
     await page.waitForTimeout(400);
     await page.click('#exs-list .ex-pick >> nth=0');
@@ -1012,10 +1012,10 @@ async function contrastReport(page) {
     await page.selectOption('#exs-part', 'chest');
     await page.waitForTimeout(300);
     check((await page.locator('#exs-list .ex-li').count()) === 2 && (await page.locator('#exs-equip').count()) === 1, 'search: the body-part dropdown filters without typing; an equipment dropdown sits next to it');
-    await page.click('#exs-list .ex-pick:has-text("Push-up")');
+    await page.click('#exs-list .ex-pick:has-text("Push Up")');
     await page.click('#exs-add');
     await page.waitForTimeout(300);
-    check((await page.textContent('#prg-form .pf-day >> nth=1')).includes('Push-up') && (await page.textContent('#prg-form .pf-day >> nth=1')).includes('3 × 10'), 'program form: a bodyweight exercise gets reps only');
+    check((await page.textContent('#prg-form .pf-day >> nth=1')).includes('Push Up') && (await page.textContent('#prg-form .pf-day >> nth=1')).includes('3 × 10'), 'program form: a bodyweight exercise gets reps only');
     await page.click('#prg-form .pf-day >> nth=0 >> .pf-item >> nth=1 >> button[aria-label^="Naikkan"]');
     await page.waitForTimeout(200);
     check((await page.textContent('#prg-form .pf-day >> nth=0 >> .pf-item >> nth=0')).includes('Bench press'), 'program form: ↑ moves an exercise up');
@@ -1051,7 +1051,7 @@ async function contrastReport(page) {
     check(await visible(page, '#wl-stats') && (await page.textContent('#wl-stats')).includes('Volume') && (await page.locator('#wl-stats svg.wl-mm').count()) === 1, 'live workout: duration, volume, sets and the muscle map sit under the top bar');
     await shot(page, 'admin-live-workout');
     const kg0 = '#wl-screen .wl-in[data-i="0"][data-j="0"][data-f="berat"]';
-    check((await page.textContent('#wl-screen .wl-ex >> nth=0')).includes('Goblet squat') && (await page.getAttribute(kg0, 'placeholder')) === '20' && (await page.inputValue(kg0)) === '', 'live workout: rows start grey from the coach\'s target weight');
+    check((await page.textContent('#wl-screen .wl-ex >> nth=0')).includes('Goblet Squat (Dumbbell)') && (await page.getAttribute(kg0, 'placeholder')) === '20' && (await page.inputValue(kg0)) === '', 'live workout: rows start grey from the coach\'s target weight');
     await page.fill(kg0, '25');
     await page.waitForTimeout(100);
     check((await page.getAttribute('#wl-screen .wl-in[data-i="0"][data-j="2"][data-f="berat"]', 'placeholder')) === '25', 'table: a typed weight carries to the next untouched sets');
@@ -1061,7 +1061,7 @@ async function contrastReport(page) {
     check((await page.textContent('#wl-screen .wl-ex.cur')).includes('Bench press') && !(await visible(page, '#wl-rest')), 'superset: after a squat set the logger jumps to the bench press without rest');
     await page.click('#wl-screen .wl-ex >> nth=1 >> .wl-ck >> nth=0');
     await page.waitForTimeout(400);
-    check((await page.textContent('#wl-screen .wl-ex.cur')).includes('Goblet squat') && await visible(page, '#wl-rest') && (await page.textContent('#wl-rest')).includes('Istirahat'), 'superset: after one round the rest timer starts and the first exercise returns');
+    check((await page.textContent('#wl-screen .wl-ex.cur')).includes('Goblet Squat (Dumbbell)') && await visible(page, '#wl-rest') && (await page.textContent('#wl-rest')).includes('Istirahat'), 'superset: after one round the rest timer starts and the first exercise returns');
     const restBox = await page.locator('#wl-rest').boundingBox();
     check(restBox && restBox.y + restBox.height <= DESKTOP.height, 'rest timer: sits on screen');
     await page.click('#wl-rest button:has-text("Lewati")');
@@ -1074,7 +1074,7 @@ async function contrastReport(page) {
     await page.click('#wl-save-btn');
     await page.waitForTimeout(1200);
     const wlRows = (env.sheet('WorkoutLog') ? env.sheet('WorkoutLog').rows : []).filter(r => r[1] === 'PT-A');
-    check(wlRows.length === 2 && wlRows.some(r => r[7] === 'Goblet squat' && r[11] === 25) && wlRows.some(r => r[7] === 'Bench press'), 'finish: only the ticked sets are saved ' + JSON.stringify(wlRows.map(r => [r[7], r[11], r[12]])));
+    check(wlRows.length === 2 && wlRows.some(r => r[7] === 'Goblet Squat (Dumbbell)' && r[11] === 25) && wlRows.some(r => r[7] === 'Bench press'), 'finish: only the ticked sets are saved ' + JSON.stringify(wlRows.map(r => [r[7], r[11], r[12]])));
     const sesRow = env.sheet('WorkoutSessions') && env.sheet('WorkoutSessions').rows.find(r => r[1] === 'PT-A');
     check(!!sesRow && sesRow[8] === 4 && sesRow[4] === 'Hari A' && sesRow[10] === 'admin', 'finish: the workout row keeps the day, feeling and who logged it');
     check(!(await visible(page, '#wl-screen')) && await visible(page, '#sheet-share'), 'finish: the screen closes and the share card opens straight away');

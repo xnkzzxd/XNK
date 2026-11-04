@@ -116,7 +116,7 @@ Otot fokus dipilih dari **16 otot detail** (label Indonesia + nama Inggris); di 
 
 **Nama ala Hevy (semua 1.324):**
 - `tools/exercise-names.js` (murni, diuji): pola `<Gerakan> (<Alat>)`; peta alat `barbell→Barbell, dumbbell→Dumbbell, cable→Cable, leverage machine/sled machine→Machine, smith machine→Smith Machine, band→Band, kettlebell→Kettlebell`, body weight tanpa label; buang kata alat dari nama, Title Case, perbaiki mojibake (`в°`→`°`), "v. 2" → varian, ganda diberi pembeda. Plus `tools/exercise-names-override.json` untuk ±150 gerakan umum (mis. `0861 Seated Cable Row`, `2330 Lat Pulldown (Cable)`, `0739 Leg Press (45°)`, `0585 Leg Extension (Machine)`, `0596 Chest Fly (Machine)`, `0493 Incline Push Up`).
-- `build-exercises.js` menambah field `d` (nama tampilan) dan `m` (otot pendukung, dari peta target → otot); `n` tetap untuk pencarian (cari pakai `n` dan `d`). Jangan edit `exercises.min.json` manual.
+- (Dibangun di T-1601: `n` = nama tampilan, `r` = nama mentah; bukan field `d`.) `build-exercises.js` menambah field `d` (nama tampilan) dan `m` (otot pendukung, dari peta target → otot); `n` tetap untuk pencarian (cari pakai `n` dan `d`). Jangan edit `exercises.min.json` manual.
 - App: `exCap` (`App.html:5232`) diganti `exName(it)` = `it.d || exCap(it.n)` di picker, logger, rutinitas, kartu bagikan. Baris lama di ProgramItems/WorkoutLog tetap; bila ada `exId`, tampilan pakai `d`.
 
 **Katalog gym XNK** — sheet `GymExercises` (kolom: ID `gym:<slug>`, Nama, Exercise ID library (opsional, untuk GIF), Level Min, Pola (`lutut|pinggul|dorong-h|dorong-v|tarik-h|tarik-v|isolasi`), Otot Utama, Otot Pendukung, Jenis, Rep Min/Max bawaan, Hindari Bila (tag), Aktif, Urutan). Seed idempoten (di bawah `LockService`) dengan 8 gerakan pemula-banget:
@@ -179,7 +179,7 @@ Tujuan: "GIF sendiri" untuk **semua pola gerakan**, monokrom (token Theme.html, 
 
 ## 2c. Anggaran kecepatan (dicek otomatis)
 - Pembukaan portal/panel: **tidak ada panggilan server baru**; data program otomatis ikut `getPortalMore` / `getClientBundle` (versi data, salinan perangkat). Generator hanya jalan saat simpan profil, tukar gerakan, dan job 04:00 — tidak pernah saat baca.
-- `figure.min.json` (peta otot + rig + pose semua pola, dua figur) ≤ **250 KB** gzip; dimuat malas (saat logger/rutinitas/kartu dibuka pertama kali), di-cache di localStorage/`sw.js` seperti `exercises.min.json`. `exercises.min.json` setelah field `d`/`m` tumbuh ≤ 25 %.
+- `figure.min.json` (peta otot + rig + pose semua pola, dua figur) ≤ **250 KB** gzip; dimuat malas (saat logger/rutinitas/kartu dibuka pertama kali), di-cache di localStorage/`sw.js` seperti `exercises.min.json`. `exercises.min.json` v2 (field `r`): 30 → 39 KB gzip (+30 %, diterima); field `m` nanti ≤ +10 KB gzip.
 - Animasi hanya `transform`/`opacity` (GPU); maks satu figur bergerak sekaligus, sisanya diam; berhenti di luar layar (`IntersectionObserver`) dan saat tab tersembunyi; `prefers-reduced-motion` = diam.
 - `tools/figure-check.js` dan `browser-check.js` mengukur: ukuran file, waktu render peta otot < 16 ms per frame di emulasi HP 4× CPU throttle, tidak ada layout shift di logger.
 - Job `program-otomatis` di bawah batas waktu Apps Script: diproses per kelompok klien dengan penanda lanjut (seperti reminder), satu baca sheet per jalan.

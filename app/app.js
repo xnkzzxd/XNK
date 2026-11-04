@@ -162,7 +162,7 @@ function workoutView() {
   $('#main').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { draft.items.splice(b.dataset.rm, 1); dSave(); render(); });
   $('#exq').oninput = async e => {
     const q = e.target.value.trim().toLowerCase(); if (q.length < 2) { $('#exr').innerHTML = ''; return; }
-    const hits = (await loadLib('ex')).filter(x => x.n.includes(q)).slice(0, 8);
+    const hits = (await loadLib('ex')).filter(x => (x.n + ' ' + (x.r || '')).toLowerCase().includes(q)).slice(0, 8);
     $('#exr').innerHTML = hits.map(x => `<div class="hit" data-x="${esc(x.id)}">${esc(x.n)} <span class="mut">${esc(x.t)}</span></div>`).join('') + `<div class="hit mut" data-x="">Tambah “${esc(q)}” sendiri</div>`;
     $('#exr').querySelectorAll('[data-x]').forEach(h => h.onclick = () => {
       const id = h.dataset.x, ex = id && lib.ex.find(x => x.id === id);
