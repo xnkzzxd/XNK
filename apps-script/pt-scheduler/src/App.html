@@ -3986,7 +3986,7 @@
 
     const doneCount = sessions.filter(isDone).length;
     const stPill = statePillHtml(m);
-    let body = '<div class="stack" style="gap:16px">';
+    let body = '<div class="stack" style="gap:16px">' + '<div id="cc-sync" data-member="' + h(m.id) + '">' + window.ccSyncHtml(m.id) + '</div>';
     // Hero (kartu ink seperti dashboard): identitas, sisa sesi, tiga angka, aksi cepat
     body += '<div class="card-ink client-hero"><div class="row client-hero-id" style="gap:14px">' + avatar(m.photo, m.name, 'lg') +
       '<div class="grow" style="min-width:0"><h3 class="profile-name truncate">' + h(m.name) + '</h3><p class="muted" id="profile-phone">+' + h(m.phone) + '</p>' +
@@ -4223,7 +4223,21 @@
   // sesi habis. Buka klien = langsung dari salinan; getClientBundle hanya bila versi data klien (getAdminMore.memberVers)
   // berubah, hari berganti, atau salinan sudah tua. Tidak pernah di xnk_admin_cache, Telegram, atau jawaban publik.
   const CC_KEY = 'xnk_client_cache', CC_MAX = 15, CC_RECENT = 2 * 60000, CC_VERS_AGE = 10 * 60000, CC_MAX_AGE = 6 * 3600000;
-  const cc = { inflight: {}, at: {}, applying: false };   // at: memberId → { at, ver, day } data yang sedang di memori
+  const cc = { inflight: {}, at: {}, applying: false, sync: {} };
+  // Salinan di layar sedang diperbarui / gagal diperbarui: tampilkan, jangan diam-diam (2026-11: coach melihat catatan makan lama).
+  window.ccSyncHtml = function (key) {
+    const st = cc.sync[String(key)], cur = cc.at[String(key)];
+    if (!st) return '';
+    const when = cur && cur.at ? new Date(cur.at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+    if (st === 'loading') return '<p class="li-sub" role="status">' + icon('refresh-cw', 'class="ic-inline"') + ' Memperbarui data' + (when ? ' (salinan ' + h(when) + ')' : '') + '…</p>';
+    return '<div class="card-flat row-between" role="alert" style="gap:8px"><span class="li-sub">Data belum terbaru' + (when ? ' (salinan ' + h(when) + ')' : '') + '. ' + h(st.error) + '</span>' +
+      '<button type="button" class="btn btn-secondary btn-sm" onclick="window.loadClientBundle(\'' + h(key) + '\', { force: true })">' + icon('refresh-cw') + 'Coba lagi</button></div>';
+  };
+  function ccSyncPaint(key, st) {
+    cc.sync[key] = st;
+    const el = document.getElementById('cc-sync');
+    if (el && el.getAttribute('data-member') === key) { setHTML(el, window.ccSyncHtml(key)); paintIcons(); }
+  }   // at: memberId → { at, ver, day } data yang sedang di memori
   function ccRead() {
     const t = _lsGet(ADMIN_TOKEN_KEY), empty = { v: 1, th: t ? tokenSig(t) : '', items: {}, order: [] };
     if (!t) return empty;
@@ -4258,7 +4272,7 @@
     ccWrite(c);
   }
   window.ccPatch = ccPatch;
-  window.clearClientCache = function () { try { localStorage.removeItem(CC_KEY); } catch (e) {} cc.at = {}; cc.inflight = {}; };
+  window.clearClientCache = function () { try { localStorage.removeItem(CC_KEY); } catch (e) {} cc.at = {}; cc.inflight = {}; cc.sync = {}; };
   // Paket utuh = semua bagian inti ada dan tanpa error. Salinan yang tidak utuh (mis. dari jawaban null sebelum perbaikan) tidak dipakai dan tidak disimpan.
   function bundleOk(b) {
     return !!b && typeof b === 'object' && ['tasks', 'progress', 'care', 'program', 'insight'].every(function (k) { return b[k] && !b[k].error; });
@@ -4298,6 +4312,7 @@
     if (!force && ccFresh(key)) return Promise.resolve();
     if (cc.inflight[key]) return cc.inflight[key];
     const had = !!cc.at[key];
+    if (had) ccSyncPaint(key, 'loading');
     const cT = window.memberTasks[key];
     if (!cT || cT.state !== 'ok') { window.memberTasks[key] = { list: [], state: 'loading' }; renderTaskSection(key); }
     const p = adminCall('getClientBundle', key).then(function (b) {
@@ -4307,8 +4322,9 @@
       const meta = { at: Date.now(), ver: b.ver || '', day: b.day || wkToday() };
       cc.at[key] = Object.assign({}, meta);
       if (bundleOk(b)) ccPut(key, b, meta); else cc.at[key].at = 0;   // sebagian gagal: tampil apa adanya, tidak disimpan, dicoba lagi saat dibuka berikutnya
+      ccSyncPaint(key, null);
     }).catch(function (err) {
-      if (had) return;   // salinan tetap tampil; dicoba lagi saat dibuka berikutnya
+      if (had) { ccSyncPaint(key, { error: window.authMessage(err) }); return; }   // salinan tetap tampil, dengan tanda dan tombol Coba lagi
       const m = window.authMessage(err);
       window.memberTasks[key] = { list: [], state: 'error', error: m };
       renderTaskSection(key);
