@@ -474,7 +474,44 @@
     mmShapes = { front: [{ part: '', p: head }].concat(conv(src.front)), back: [{ part: '', p: head }].concat(conv(src.back)) };
     return mmShapes;
   }
+  // Fase U (T-1610): peta otot sendiri (figure.min.json) bila sudah ada di perangkat; nilai per kelompok (PART_GROUP).
+  const FIG_PART = { pectorals: 'chest', lats: 'back', 'upper back': 'back', traps: 'back', spine: 'back', delts: 'shoulders', biceps: 'upper arms', triceps: 'upper arms',
+    forearms: 'lower arms', abs: 'waist', quads: 'upper legs', hamstrings: 'upper legs', glutes: 'upper legs', adductors: 'upper legs', abductors: 'upper legs', calves: 'lower legs' };
+  let figP2 = null;
+  function figPaths(sex) {
+    const f = window.figSync ? window.figSync() : null;
+    if (!f || !f.views) return null;
+    const v = f.views[sex] || f.views.m;
+    if (figP2 && figP2.v === v) return figP2;
+    const conv = function (side) {
+      const vb = side.vb.split(' ').map(Number), mk = function (d) { return new Path2D(d); };
+      return { vb: vb, outline: mk(side.outline), base: side.base.map(mk), parts: Object.keys(side.parts).map(function (t) { return { t: t, p: side.parts[t].map(mk) }; }) };
+    };
+    figP2 = { v: v, front: conv(v.front), back: conv(v.back) };
+    return figP2;
+  }
+  function bodymapFig(ctx, b, parts, ink, k, s, fp) {
+    const mx = Math.max.apply(null, AXES.map(a => Number(parts[a]) || 0)) || 1;
+    const lab = 32 * s, availH = b.h - lab * 2.2, sc = Math.min(availH / 1448, (b.w * .92) / (724 * 2)), w = 724 * 2 * sc, x0 = b.x + (b.w - w) / 2, y0 = b.y + (b.h - 1448 * sc - lab * 1.6) / 2;
+    [['front', 0], ['back', 724]].forEach(function (f) {
+      const sd = fp[f[0]];
+      ctx.save(); ctx.translate(x0 + f[1] * sc, y0); ctx.scale(sc * 1448 / sd.vb[3], sc * 1448 / sd.vb[3]); ctx.translate(-sd.vb[0], -sd.vb[1]);
+      ctx.fillStyle = ink; ctx.globalAlpha = .07; ctx.fill(sd.outline);
+      ctx.globalAlpha = .12; sd.base.forEach(function (p) { ctx.fill(p); });
+      sd.parts.forEach(function (x) {
+        const g = PART_GROUP[FIG_PART[x.t]], v = g ? (Number(parts[g]) || 0) / mx : 0;
+        ctx.globalAlpha = v > 0 ? (.35 + .65 * v) * k + .14 * (1 - k) : .16;
+        x.p.forEach(function (p) { ctx.fill(p); });
+      });
+      ctx.restore();
+    });
+    ctx.globalAlpha = 1; ctx.fillStyle = ink;
+    const ty = y0 + 1448 * sc + lab * 1.4;
+    Tx(ctx, P.lang === 'id' ? 'Depan' : 'Front', x0 + 362 * sc, ty, lab, 600, .6, 'center'); Tx(ctx, P.lang === 'id' ? 'Belakang' : 'Back', x0 + 1086 * sc, ty, lab, 600, .6, 'center');
+  }
   function bodymap(ctx, b, parts, ink, k, s) {
+    const fp = figPaths(window.shareFigSex || 'm');
+    if (fp) { bodymapFig(ctx, b, parts, ink, k, s, fp); return; }
     const sh = mmPaths();
     const mx = Math.max.apply(null, AXES.map(a => Number(parts[a]) || 0)) || 1;
     if (!sh) { radar(ctx, b, AXES.map(a => Number(parts[a]) || 0), ink, k, s); return; }

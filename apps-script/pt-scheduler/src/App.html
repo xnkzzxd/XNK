@@ -5742,26 +5742,82 @@
     ['lower legs', 'rect', 'x="14.2" y="62.5" width="4.8" height="14" rx="2.4"'], ['lower legs', 'rect', 'x="21" y="62.5" width="4.8" height="14" rx="2.4"']
   ];
   window.WL_MM = { front: WL_MM_FRONT, back: WL_MM_BACK };
-  function wlMuscleSvg(parts, label) {
-    const fig = shapes => '<circle class="mm" cx="20" cy="6.5" r="4.6"/>' + shapes.map(s => '<' + s[1] + ' class="mm' + (s[0] && parts[s[0]] ? ' on' : '') + '" ' + s[2] + '/>').join('');
-    return '<svg class="wl-mm" viewBox="0 0 84 80" role="img" aria-label="' + h(label) + '"><g>' + fig(WL_MM_FRONT) + '</g><g transform="translate(44 0)">' + fig(WL_MM_BACK) + '</g></svg>';
+  // Fase U (T-1610): peta otot sendiri (pria/wanita, depan/belakang, 16 otot target pustaka) dari figure/figure.min.json
+  // (GitHub Pages, dimuat malas, disimpan di perangkat). Otot utama gelap, otot pendukung terang. Bentuk di atas
+  // (WL_MM_*) tetap dipakai sampai file itu ada di perangkat (pertama kali / tanpa sinyal).
+  const FIG_URL = 'https://xnk.my.id/figure/figure.min.json', FIG_KEY = 'xnk_fig_v1';
+  let fig = null, figLoading = null;
+  function figSync() { if (!fig) { try { const c = localStorage.getItem(FIG_KEY); if (c) fig = JSON.parse(c); } catch (e) {} } return fig; }
+  function figEnsure() {
+    if (figSync()) return Promise.resolve(fig);
+    if (!figLoading) figLoading = fetch(FIG_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); })
+      .then(function (d) { fig = d; try { localStorage.setItem(FIG_KEY, JSON.stringify(d)); } catch (e) {} return d; })
+      .catch(function () { figLoading = null; return null; });
+    return figLoading;
+  }
+  window.figSync = figSync; window.figEnsure = figEnsure;
+  // Bagian tubuh lama (log tanpa otot target) → otot target; otot pendukung per otot utama (perkiraan anatomi umum,
+  // diganti daftar per gerakan dari docs/program/Otot.md di Rilis 2).
+  const MM_PART_TARGETS = { chest: ['pectorals'], back: ['lats', 'upper back', 'traps', 'spine'], shoulders: ['delts'], 'upper arms': ['biceps', 'triceps'],
+    'lower arms': ['forearms'], waist: ['abs'], 'upper legs': ['quads', 'hamstrings', 'glutes', 'adductors', 'abductors'], 'lower legs': ['calves'], neck: ['traps'] };
+  const MM_SECONDARY = { pectorals: ['delts', 'triceps'], lats: ['biceps', 'upper back'], 'upper back': ['biceps', 'delts', 'lats'], delts: ['triceps', 'traps'],
+    quads: ['glutes', 'adductors'], glutes: ['hamstrings', 'quads'], hamstrings: ['glutes'], spine: ['glutes', 'hamstrings'], biceps: ['forearms'], traps: ['upper back'],
+    abductors: ['glutes'] };
+  /** [{ target?, bodyPart? }] → { otot: 2 (utama) | 1 (pendukung) }. */
+  function mmLevels(list) {
+    const lv = {};
+    (list || []).forEach(function (x) {
+      const prim = x.target && x.target !== 'cardiovascular system' ? [x.target] : (MM_PART_TARGETS[x.bodyPart] || []);
+      prim.forEach(function (t) { lv[t] = 2; });
+      prim.forEach(function (t) { (MM_SECONDARY[t] || []).forEach(function (s) { if (!lv[s]) lv[s] = 1; }); });
+    });
+    return lv;
+  }
+  window.mmLevels = mmLevels;
+  function figSexOf(mode, memberId) {
+    const p = mode === 'client' ? window.myNutrition && window.myNutrition.profile : (nut[memberId] && nut[memberId].profile);
+    return p && p.jk === 'P' ? 'f' : 'm';
+  }
+  window.figSexOf = figSexOf;
+  /** SVG peta otot depan + belakang; null bila file figur belum ada di perangkat. */
+  function mmFigSvg(lv, label, sex, cls) {
+    const f = figSync();
+    const v = f && f.views && (f.views[sex] || f.views.m);
+    if (!v) return null;
+    const side = function (s, x) {
+      const vb = s.vb.split(' ').map(Number);
+      return '<svg x="' + x + '" y="0" width="100" height="200" viewBox="' + s.vb + '" preserveAspectRatio="xMidYMid meet"><path class="mmf-body" d="' + s.outline + '"/>' +
+        s.base.map(function (d) { return '<path class="mmf-base" d="' + d + '"/>'; }).join('') +
+        Object.keys(s.parts).map(function (t) { const c = lv[t] === 2 ? ' on' : (lv[t] === 1 ? ' half' : ''); return s.parts[t].map(function (d) { return '<path class="mmf' + c + '" d="' + d + '"/>'; }).join(''); }).join('') + '</svg>';
+    };
+    return '<svg class="' + (cls || 'wl-mm') + ' mm-fig" viewBox="0 0 200 200" role="img" aria-label="' + h(label) + '">' + side(v.front, 0) + side(v.back, 100) + '</svg>';
+  }
+  window.mmFigSvg = mmFigSvg;
+  function wlMuscleSvg(parts, label, lv, sex) {
+    const nf = lv ? mmFigSvg(lv, label, sex) : null;
+    if (nf) return nf;
+    const fig0 = shapes => '<circle class="mm" cx="20" cy="6.5" r="4.6"/>' + shapes.map(s => '<' + s[1] + ' class="mm' + (s[0] && parts[s[0]] ? ' on' : '') + '" ' + s[2] + '/>').join('');
+    return '<svg class="wl-mm" viewBox="0 0 84 80" role="img" aria-label="' + h(label) + '"><g>' + fig0(WL_MM_FRONT) + '</g><g transform="translate(44 0)">' + fig0(WL_MM_BACK) + '</g></svg>';
   }
   function wlStatsHtml() {
     let vol = 0, sets = 0;
-    const parts = {}, names = [];
+    const parts = {}, names = [], tg = [];
     wl.entries.forEach(function (e) {
       if (e.skipped) return;
       const done = e.sets.filter(s => s.done);
       if (!done.length) return;
       sets += done.length; vol += wlVolume(e, done);
-      const p = e.bodyPart || (wkInfo(e.exId) || {}).b;
+      const info = wkInfo(e.exId) || {};
+      const p = e.bodyPart || info.b;
+      tg.push({ target: e.target || info.t || '', bodyPart: p || '' });
       if (p && !parts[p]) { parts[p] = true; names.push(WK_PART[p] || p); }
     });
+    if (!figSync()) figEnsure().then(function (f) { if (f) wlRenderStats(); });
     const dur = wl.live && wl.startedAt ? wlClock((Date.now() - wl.startedAt) / 1000) : '–';
     return '<div class="wl-st"><span>Durasi</span><b class="num wl-st-dur" id="wl-st-dur">' + dur + '</b></div>' +
       '<div class="wl-st"><span>Volume</span><b class="num">' + h(wkKg(vol)) + ' kg</b></div>' +
       '<div class="wl-st"><span>Set</span><b class="num">' + sets + '</b></div>' +
-      wlMuscleSvg(parts, names.length ? 'Otot dilatih: ' + names.join(', ') : 'Belum ada otot yang dilatih');
+      wlMuscleSvg(parts, names.length ? 'Otot dilatih: ' + names.join(', ') : 'Belum ada otot yang dilatih', mmLevels(tg), figSexOf(wl.mode, wl.memberId));
   }
   function wlRenderStats() { const el = $('wl-stats'); if (el && wl && !wl.loading) setHTML(el, wlStatsHtml()); else if (el) el.innerHTML = ''; }
   function wlRender() {
@@ -6335,6 +6391,8 @@
   }
   function shareSrcFor(admin, extra) {
     const today = shareIso(), src = { today: today, admin: !!admin, date: today };
+    // Fase U: kartu memakai figur otot sesuai jenis kelamin klien (pria bila tidak diketahui); file figur dimuat bila belum ada.
+    window.shareFigSex = figSexOf(admin ? 'admin' : 'client', String(admin || '')); figEnsure();
     if (admin) {
       const id = String(admin), n = nut[id], fl = n && n.foodLog && n.foodLog.days ? n.foodLog.days.find(x => x.tanggal === today) : null;
       const pd = pg.admin[id];

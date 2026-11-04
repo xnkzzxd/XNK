@@ -1076,6 +1076,12 @@ html.wl-on, html.wl-on body { overflow: hidden; }
 .wl-mm { width: 72px; height: 68px; }
 .wl-mm .mm { fill: color-mix(in srgb, var(--fg) 16%, transparent); stroke: none; transition: fill var(--t-base) var(--ease); }
 .wl-mm .mm.on { fill: var(--fg); stroke: var(--fg); }
+.mm-fig .mmf-body { fill: color-mix(in srgb, var(--fg) 6%, transparent); stroke: color-mix(in srgb, var(--fg) 22%, transparent); stroke-width: 3; }
+.mm-fig .mmf-base { fill: color-mix(in srgb, var(--fg) 10%, transparent); }
+.mm-fig .mmf { fill: color-mix(in srgb, var(--fg) 16%, transparent); transition: fill var(--t-base) var(--ease); }
+.mm-fig .mmf.half { fill: color-mix(in srgb, var(--fg) 45%, transparent); }
+.mm-fig .mmf.on { fill: var(--fg); animation: mmf-pulse 2.4s ease-in-out infinite; }
+@keyframes mmf-pulse { 50% { opacity: .78; } }
 /* Kartu gerakan + tabel set ala Hevy (Fase O) */
 .wl-list { display: flex; flex-direction: column; gap: 10px; }
 .wl-ex { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); padding: 2px 10px 10px 2px; display: flex; flex-direction: column; gap: 6px; scroll-margin: 12px 0 120px; transition: transform var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
@@ -1316,7 +1322,7 @@ html.wl-res-on #main-scroll-area .page { padding-bottom: 96px; }
   .wl-resume { left: auto; right: 24px; bottom: 24px; width: 420px; }
   html.wl-res-on .save-bar { bottom: 28px; }
 }
-@media (prefers-reduced-motion: reduce) { .wl, .wl-ck, .wl-rest-fill, .wl-mm .mm { transition: none; } .wl-watch.run, .wl-res-ico.live svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .wl, .wl-ck, .wl-rest-fill, .wl-mm .mm, .mm-fig .mmf { transition: none; } .mm-fig .mmf.on { animation: none; } .wl-watch.run, .wl-res-ico.live svg { animation: none; } }
 .wk-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
 .wk-sum > div { display: flex; flex-direction: column; }
 .wk-big { font-size: var(--fs-xl, 22px); font-weight: 800; letter-spacing: -0.02em; }
@@ -9412,26 +9418,82 @@ html.app-shell .nav-back { display: none; }
     ['lower legs', 'rect', 'x="14.2" y="62.5" width="4.8" height="14" rx="2.4"'], ['lower legs', 'rect', 'x="21" y="62.5" width="4.8" height="14" rx="2.4"']
   ];
   window.WL_MM = { front: WL_MM_FRONT, back: WL_MM_BACK };
-  function wlMuscleSvg(parts, label) {
-    const fig = shapes => '<circle class="mm" cx="20" cy="6.5" r="4.6"/>' + shapes.map(s => '<' + s[1] + ' class="mm' + (s[0] && parts[s[0]] ? ' on' : '') + '" ' + s[2] + '/>').join('');
-    return '<svg class="wl-mm" viewBox="0 0 84 80" role="img" aria-label="' + h(label) + '"><g>' + fig(WL_MM_FRONT) + '</g><g transform="translate(44 0)">' + fig(WL_MM_BACK) + '</g></svg>';
+  // Fase U (T-1610): peta otot sendiri (pria/wanita, depan/belakang, 16 otot target pustaka) dari figure/figure.min.json
+  // (GitHub Pages, dimuat malas, disimpan di perangkat). Otot utama gelap, otot pendukung terang. Bentuk di atas
+  // (WL_MM_*) tetap dipakai sampai file itu ada di perangkat (pertama kali / tanpa sinyal).
+  const FIG_URL = 'https://xnk.my.id/figure/figure.min.json', FIG_KEY = 'xnk_fig_v1';
+  let fig = null, figLoading = null;
+  function figSync() { if (!fig) { try { const c = localStorage.getItem(FIG_KEY); if (c) fig = JSON.parse(c); } catch (e) {} } return fig; }
+  function figEnsure() {
+    if (figSync()) return Promise.resolve(fig);
+    if (!figLoading) figLoading = fetch(FIG_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); })
+      .then(function (d) { fig = d; try { localStorage.setItem(FIG_KEY, JSON.stringify(d)); } catch (e) {} return d; })
+      .catch(function () { figLoading = null; return null; });
+    return figLoading;
+  }
+  window.figSync = figSync; window.figEnsure = figEnsure;
+  // Bagian tubuh lama (log tanpa otot target) → otot target; otot pendukung per otot utama (perkiraan anatomi umum,
+  // diganti daftar per gerakan dari docs/program/Otot.md di Rilis 2).
+  const MM_PART_TARGETS = { chest: ['pectorals'], back: ['lats', 'upper back', 'traps', 'spine'], shoulders: ['delts'], 'upper arms': ['biceps', 'triceps'],
+    'lower arms': ['forearms'], waist: ['abs'], 'upper legs': ['quads', 'hamstrings', 'glutes', 'adductors', 'abductors'], 'lower legs': ['calves'], neck: ['traps'] };
+  const MM_SECONDARY = { pectorals: ['delts', 'triceps'], lats: ['biceps', 'upper back'], 'upper back': ['biceps', 'delts', 'lats'], delts: ['triceps', 'traps'],
+    quads: ['glutes', 'adductors'], glutes: ['hamstrings', 'quads'], hamstrings: ['glutes'], spine: ['glutes', 'hamstrings'], biceps: ['forearms'], traps: ['upper back'],
+    abductors: ['glutes'] };
+  /** [{ target?, bodyPart? }] → { otot: 2 (utama) | 1 (pendukung) }. */
+  function mmLevels(list) {
+    const lv = {};
+    (list || []).forEach(function (x) {
+      const prim = x.target && x.target !== 'cardiovascular system' ? [x.target] : (MM_PART_TARGETS[x.bodyPart] || []);
+      prim.forEach(function (t) { lv[t] = 2; });
+      prim.forEach(function (t) { (MM_SECONDARY[t] || []).forEach(function (s) { if (!lv[s]) lv[s] = 1; }); });
+    });
+    return lv;
+  }
+  window.mmLevels = mmLevels;
+  function figSexOf(mode, memberId) {
+    const p = mode === 'client' ? window.myNutrition && window.myNutrition.profile : (nut[memberId] && nut[memberId].profile);
+    return p && p.jk === 'P' ? 'f' : 'm';
+  }
+  window.figSexOf = figSexOf;
+  /** SVG peta otot depan + belakang; null bila file figur belum ada di perangkat. */
+  function mmFigSvg(lv, label, sex, cls) {
+    const f = figSync();
+    const v = f && f.views && (f.views[sex] || f.views.m);
+    if (!v) return null;
+    const side = function (s, x) {
+      const vb = s.vb.split(' ').map(Number);
+      return '<svg x="' + x + '" y="0" width="100" height="200" viewBox="' + s.vb + '" preserveAspectRatio="xMidYMid meet"><path class="mmf-body" d="' + s.outline + '"/>' +
+        s.base.map(function (d) { return '<path class="mmf-base" d="' + d + '"/>'; }).join('') +
+        Object.keys(s.parts).map(function (t) { const c = lv[t] === 2 ? ' on' : (lv[t] === 1 ? ' half' : ''); return s.parts[t].map(function (d) { return '<path class="mmf' + c + '" d="' + d + '"/>'; }).join(''); }).join('') + '</svg>';
+    };
+    return '<svg class="' + (cls || 'wl-mm') + ' mm-fig" viewBox="0 0 200 200" role="img" aria-label="' + h(label) + '">' + side(v.front, 0) + side(v.back, 100) + '</svg>';
+  }
+  window.mmFigSvg = mmFigSvg;
+  function wlMuscleSvg(parts, label, lv, sex) {
+    const nf = lv ? mmFigSvg(lv, label, sex) : null;
+    if (nf) return nf;
+    const fig0 = shapes => '<circle class="mm" cx="20" cy="6.5" r="4.6"/>' + shapes.map(s => '<' + s[1] + ' class="mm' + (s[0] && parts[s[0]] ? ' on' : '') + '" ' + s[2] + '/>').join('');
+    return '<svg class="wl-mm" viewBox="0 0 84 80" role="img" aria-label="' + h(label) + '"><g>' + fig0(WL_MM_FRONT) + '</g><g transform="translate(44 0)">' + fig0(WL_MM_BACK) + '</g></svg>';
   }
   function wlStatsHtml() {
     let vol = 0, sets = 0;
-    const parts = {}, names = [];
+    const parts = {}, names = [], tg = [];
     wl.entries.forEach(function (e) {
       if (e.skipped) return;
       const done = e.sets.filter(s => s.done);
       if (!done.length) return;
       sets += done.length; vol += wlVolume(e, done);
-      const p = e.bodyPart || (wkInfo(e.exId) || {}).b;
+      const info = wkInfo(e.exId) || {};
+      const p = e.bodyPart || info.b;
+      tg.push({ target: e.target || info.t || '', bodyPart: p || '' });
       if (p && !parts[p]) { parts[p] = true; names.push(WK_PART[p] || p); }
     });
+    if (!figSync()) figEnsure().then(function (f) { if (f) wlRenderStats(); });
     const dur = wl.live && wl.startedAt ? wlClock((Date.now() - wl.startedAt) / 1000) : '–';
     return '<div class="wl-st"><span>Durasi</span><b class="num wl-st-dur" id="wl-st-dur">' + dur + '</b></div>' +
       '<div class="wl-st"><span>Volume</span><b class="num">' + h(wkKg(vol)) + ' kg</b></div>' +
       '<div class="wl-st"><span>Set</span><b class="num">' + sets + '</b></div>' +
-      wlMuscleSvg(parts, names.length ? 'Otot dilatih: ' + names.join(', ') : 'Belum ada otot yang dilatih');
+      wlMuscleSvg(parts, names.length ? 'Otot dilatih: ' + names.join(', ') : 'Belum ada otot yang dilatih', mmLevels(tg), figSexOf(wl.mode, wl.memberId));
   }
   function wlRenderStats() { const el = $('wl-stats'); if (el && wl && !wl.loading) setHTML(el, wlStatsHtml()); else if (el) el.innerHTML = ''; }
   function wlRender() {
@@ -10005,6 +10067,8 @@ html.app-shell .nav-back { display: none; }
   }
   function shareSrcFor(admin, extra) {
     const today = shareIso(), src = { today: today, admin: !!admin, date: today };
+    // Fase U: kartu memakai figur otot sesuai jenis kelamin klien (pria bila tidak diketahui); file figur dimuat bila belum ada.
+    window.shareFigSex = figSexOf(admin ? 'admin' : 'client', String(admin || '')); figEnsure();
     if (admin) {
       const id = String(admin), n = nut[id], fl = n && n.foodLog && n.foodLog.days ? n.foodLog.days.find(x => x.tanggal === today) : null;
       const pd = pg.admin[id];
@@ -14640,7 +14704,44 @@ html.app-shell .nav-back { display: none; }
     mmShapes = { front: [{ part: '', p: head }].concat(conv(src.front)), back: [{ part: '', p: head }].concat(conv(src.back)) };
     return mmShapes;
   }
+  // Fase U (T-1610): peta otot sendiri (figure.min.json) bila sudah ada di perangkat; nilai per kelompok (PART_GROUP).
+  const FIG_PART = { pectorals: 'chest', lats: 'back', 'upper back': 'back', traps: 'back', spine: 'back', delts: 'shoulders', biceps: 'upper arms', triceps: 'upper arms',
+    forearms: 'lower arms', abs: 'waist', quads: 'upper legs', hamstrings: 'upper legs', glutes: 'upper legs', adductors: 'upper legs', abductors: 'upper legs', calves: 'lower legs' };
+  let figP2 = null;
+  function figPaths(sex) {
+    const f = window.figSync ? window.figSync() : null;
+    if (!f || !f.views) return null;
+    const v = f.views[sex] || f.views.m;
+    if (figP2 && figP2.v === v) return figP2;
+    const conv = function (side) {
+      const vb = side.vb.split(' ').map(Number), mk = function (d) { return new Path2D(d); };
+      return { vb: vb, outline: mk(side.outline), base: side.base.map(mk), parts: Object.keys(side.parts).map(function (t) { return { t: t, p: side.parts[t].map(mk) }; }) };
+    };
+    figP2 = { v: v, front: conv(v.front), back: conv(v.back) };
+    return figP2;
+  }
+  function bodymapFig(ctx, b, parts, ink, k, s, fp) {
+    const mx = Math.max.apply(null, AXES.map(a => Number(parts[a]) || 0)) || 1;
+    const lab = 32 * s, availH = b.h - lab * 2.2, sc = Math.min(availH / 1448, (b.w * .92) / (724 * 2)), w = 724 * 2 * sc, x0 = b.x + (b.w - w) / 2, y0 = b.y + (b.h - 1448 * sc - lab * 1.6) / 2;
+    [['front', 0], ['back', 724]].forEach(function (f) {
+      const sd = fp[f[0]];
+      ctx.save(); ctx.translate(x0 + f[1] * sc, y0); ctx.scale(sc * 1448 / sd.vb[3], sc * 1448 / sd.vb[3]); ctx.translate(-sd.vb[0], -sd.vb[1]);
+      ctx.fillStyle = ink; ctx.globalAlpha = .07; ctx.fill(sd.outline);
+      ctx.globalAlpha = .12; sd.base.forEach(function (p) { ctx.fill(p); });
+      sd.parts.forEach(function (x) {
+        const g = PART_GROUP[FIG_PART[x.t]], v = g ? (Number(parts[g]) || 0) / mx : 0;
+        ctx.globalAlpha = v > 0 ? (.35 + .65 * v) * k + .14 * (1 - k) : .16;
+        x.p.forEach(function (p) { ctx.fill(p); });
+      });
+      ctx.restore();
+    });
+    ctx.globalAlpha = 1; ctx.fillStyle = ink;
+    const ty = y0 + 1448 * sc + lab * 1.4;
+    Tx(ctx, P.lang === 'id' ? 'Depan' : 'Front', x0 + 362 * sc, ty, lab, 600, .6, 'center'); Tx(ctx, P.lang === 'id' ? 'Belakang' : 'Back', x0 + 1086 * sc, ty, lab, 600, .6, 'center');
+  }
   function bodymap(ctx, b, parts, ink, k, s) {
+    const fp = figPaths(window.shareFigSex || 'm');
+    if (fp) { bodymapFig(ctx, b, parts, ink, k, s, fp); return; }
     const sh = mmPaths();
     const mx = Math.max.apply(null, AXES.map(a => Number(parts[a]) || 0)) || 1;
     if (!sh) { radar(ctx, b, AXES.map(a => Number(parts[a]) || 0), ink, k, s); return; }

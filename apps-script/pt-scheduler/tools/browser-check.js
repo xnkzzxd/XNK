@@ -126,6 +126,8 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
         return route.fulfill({ contentType: REAL[real][1], headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ASSETS, REAL[real][0])) });
       }
     }
+    // Fase U (T-1610): our own muscle figure, served from the repo copy.
+    if (url.includes('xnk.my.id/figure/figure.min.json')) return route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(__dirname, '..', '..', '..', 'figure', 'figure.min.json')) });
     const stub = Object.keys(STUBS).find(k => url.includes(k));
     if (stub) return route.fulfill({ contentType: 'application/javascript', body: STUBS[stub] });
     return route.fulfill({ status: 204, body: '' }); // fonts, images, analytics
@@ -1058,6 +1060,7 @@ async function contrastReport(page) {
     await page.click('#wl-screen .wl-ex >> nth=0 >> .wl-ck >> nth=0');
     await page.waitForTimeout(400);
     check((await page.locator('#wl-screen .wl-ex >> nth=0 >> .wl-tr.done').count()) === 1 && (await page.textContent('#wl-stats')).includes('200 kg'), 'table: ✓ ticks the row and the volume counts it (25 × 8)');
+    check((await page.locator('#wl-stats svg.mm-fig').count()) === 1 && (await page.locator('#wl-stats svg.mm-fig .mmf.on').count()) > 0 && (await page.locator('#wl-stats svg.mm-fig .mmf.half').count()) > 0, 'muscle map: our own figure marks the ticked exercise\'s main muscle dark and helpers light');
     check((await page.textContent('#wl-screen .wl-ex.cur')).includes('Bench press') && !(await visible(page, '#wl-rest')), 'superset: after a squat set the logger jumps to the bench press without rest');
     await page.click('#wl-screen .wl-ex >> nth=1 >> .wl-ck >> nth=0');
     await page.waitForTimeout(400);
