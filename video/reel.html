@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>XNK Reel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+@font-face { font-family: Anton; src: url(assets/fonts/Anton.ttf); }
+@font-face { font-family: Inter; font-weight: 600; src: url(assets/fonts/Inter-600.ttf); }
+@font-face { font-family: Inter; font-weight: 800; src: url(assets/fonts/Inter-800.ttf); }
+@font-face { font-family: Mono; src: url(assets/fonts/JetBrainsMono.ttf); }
+:root { --red: #D21F1B; --red2: #8E0F0C; --ink: #0B0B0B; --paper: #EFEDE8; --u: 10.8px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--ink); }
+#stage { position: absolute; inset: 0; overflow: hidden; background: var(--ink); }
+.scene { position: absolute; inset: 0; overflow: hidden; display: none; }
+.scene.on { display: block; }
+.abs { position: absolute; }
+.hero { font-family: Anton, Impact, sans-serif; line-height: .86; text-transform: uppercase; letter-spacing: -.01em; white-space: nowrap; }
+.mono { font-family: Mono, monospace; text-transform: uppercase; letter-spacing: .08em; }
+.phone { position: absolute; border-radius: calc(var(--u) * 4.2); overflow: hidden; background: #fff;
+  box-shadow: 0 calc(var(--u)*2) calc(var(--u)*6) rgba(0,0,0,.45); border: calc(var(--u)*.7) solid var(--ink); }
+.phone img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; filter: grayscale(1) contrast(1.15); }
+.mul img { mix-blend-mode: multiply; }
+.phone.mul { background: transparent; box-shadow: none; }
+.bg-red { background: var(--red); } .bg-ink { background: var(--ink); } .bg-paper { background: var(--paper); }
+.c-red { color: var(--red); } .c-ink { color: var(--ink); } .c-paper { color: var(--paper); }
+/* overlays */
+#grain, #scan, #vig, #hud { position: absolute; inset: 0; pointer-events: none; }
+#grain { opacity: .16; mix-blend-mode: overlay; background-size: 256px 256px; }
+#scan { opacity: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.35) 0 2px, transparent 2px 5px); }
+#vig { background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.45) 100%); }
+#hud .mono { position: absolute; font-size: calc(var(--u)*1.35); color: var(--paper); opacity: .85; line-height: 1.35; }
+#cap { position: absolute; left: 0; right: 0; bottom: calc(var(--H) * .055); text-align: center; font: 600 calc(var(--u)*2.6)/1.2 Inter, sans-serif;
+  color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+#cap > div { display: inline-block; background: rgba(11,11,11,.72); padding: .35em .7em .3em; }
+#cap span { background: var(--red); color: #fff; padding: 0 .25em; }
+#cap small { display: block; font: 500 calc(var(--u)*1.2)/1.6 Mono, monospace; letter-spacing: .15em; opacity: .7; text-transform: uppercase; margin-top: .4em; text-shadow: none; }
+.rule { position: absolute; height: calc(var(--u)*.35); background: currentColor; }
+.ticket { position: absolute; background: var(--paper); color: var(--ink); font-family: Inter, sans-serif; }
+.stamp { position: absolute; border: calc(var(--u)*.7) solid var(--red); color: var(--red); border-radius: 50%; display: grid; place-items: center;
+  font: 400 calc(var(--u)*3)/1 Anton, sans-serif; text-align: center; mix-blend-mode: multiply; }
+.row { display: flex; align-items: center; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="grain"></div><div id="scan"></div><div id="vig"></div>
+<div id="hud">
+  <div class="mono" id="hud-tl">XNK — EDISI 01<br>PERSONAL TRAINING<br>JAKARTA · 2026</div>
+  <div class="mono" id="hud-tr" style="text-align:right">XNK.MY.ID<br><span id="hud-f">0000</span></div>
+</div>
+<div id="cap"></div>
+<script>
+'use strict';
+const BEATS = window.BEATS || [0.348, 0.743, 1.173, 1.602, 2.067, 2.531, 2.984, 3.402, 3.82, 4.249, 4.679, 5.108, 5.538, 5.968, 6.397, 6.827, 7.256, 7.686, 8.115, 8.533, 8.963, 9.392, 9.834, 10.263, 10.67, 11.111, 11.54, 11.97, 12.399, 12.829, 13.259, 13.688, 14.153, 14.582, 15.012, 15.418, 15.859, 16.289, 16.718, 17.136, 17.578, 18.007, 18.437];
+const DUR = window.DUR || 18.85;
+const B = i => i <= 0 ? 0 : (i < BEATS.length ? BEATS[i] : BEATS[BEATS.length - 1] + (i - BEATS.length + 1) * 0.4296);
+const stage = document.getElementById('stage');
+let W = innerWidth, H = innerHeight, U = Math.min(W, H) / 100, TALL = H / W > 1.3;
+document.documentElement.style.setProperty('--u', U + 'px');
+document.documentElement.style.setProperty('--H', H + 'px');
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eo = k => 1 - Math.pow(1 - clamp(k), 3);           // ease out
+const eio = k => { k = clamp(k); return k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; };
+const rnd = s => { const x = Math.sin(s * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+function lastBeat(t) { let i = -1; for (let k = 0; k < BEATS.length; k++) if (BEATS[k] <= t) i = k; return i; }
+const punch = (t, amt) => { const i = lastBeat(t); const d = i < 0 ? 9 : t - BEATS[i]; return 1 + (amt || .06) * Math.exp(-d * 14); };
+function el(tag, cls, css, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (css) e.style.cssText = css; if (html != null) e.innerHTML = html; return e; }
+function px(v) { return v + 'px'; }
+function phone(src, w, mul) {
+  const h = w * 844 / 390;
+  const p = el('div', 'phone' + (mul ? ' mul' : ''), 'width:' + px(w) + ';height:' + px(h));
+  p.appendChild(el('img', '', '', null)); p.firstChild.src = 'assets/screens/' + src + '.png';
+  return p;
+}
+function place(e, x, y, s, r, o) {
+  e.style.left = px(x); e.style.top = px(y);
+  e.style.transform = 'translate(-50%,-50%) scale(' + (s == null ? 1 : s) + ') rotate(' + (r || 0) + 'deg)';
+  if (o != null) e.style.opacity = o;
+}
+function fitText(e, maxW, maxH) {   // set font-size so one line fills maxW (and fits maxH)
+  e.style.fontSize = '100px'; const r = e.getBoundingClientRect();
+  let fs = 100 * maxW / r.width; if (maxH) fs = Math.min(fs, 100 * maxH / r.height); e.style.fontSize = px(fs); return fs;
+}
+
+// ---------- scenes ----------
+const scenes = [];
+function scene(b0, b1, bg, build0, update, cap) {
+  const build = root => { root.classList.add(bg); return build0(root); };
+  const s = { t0: b0 === 0 ? 0 : B(b0), t1: b1 == null ? DUR + 1 : B(b1), cap, build, update }; scenes.push(s); return s;
+}
+const big = Math.min(W, H);
+
+// 0 · intro / loop frame: XNK on black (the last scene ends on exactly this frame)
+function introBuild(root) {
+  const r = {};
+  r.ph = crop('p-next', W, H * .2, .25, .49, 2.7, { blend: 'screen', contrast: 2 }); root.appendChild(r.ph);
+  r.x = el('div', 'abs hero c-paper', '', 'XNK'); root.appendChild(r.x);
+  fitText(r.x, W * .9, H * (TALL ? .42 : .62));
+  r.bar = el('div', 'abs bg-red', ''); root.appendChild(r.bar);
+  r.sub = el('div', 'abs mono c-paper', 'font-size:' + px(U * 1.8) + ';text-align:center;white-space:nowrap', 'BOOK · TRAIN · TRACK · EAT · SHARE'); root.appendChild(r.sub);
+  return r;
+}
+function introUpdate(r, lt, t, outro) {
+  // static at lt=0; little flicker on the two intro hits
+  const k = outro ? 0 : (t > B(1) && t < B(1) + .08 || t > B(2) && t < B(2) + .08) ? 1 : 0;
+  place(r.ph, W * .5, H * .5 + (k ? U * 2 : 0), 1, 0, 1);
+  r.ph.style.opacity = .22;
+  place(r.x, W * .5, H * .5, 1, 0);
+  r.x.style.color = k ? 'var(--red)' : 'var(--paper)';
+  r.bar.style.cssText += ';left:0;width:' + px(W) + ';top:' + px(H * (TALL ? .73 : .74)) + ';height:' + px(U * 1.2) + ';transform:none';
+  place(r.sub, W * .5, H * (TALL ? .77 : .79), 1, 0, 1);
+}
+scene(0, 3, 'bg-ink', introBuild, (r, lt, t) => introUpdate(r, lt, t), ['<span>XNK</span> — coach pribadimu, di saku', 'personal training app']);
+
+// ---------- UI pieces (cut-outs, no phone frames) ----------
+const SZ = {"p-badges":[1050,378],"p-cal":[1074,1275],"p-client1":[1074,300],"p-clienthero":[1074,540],"p-coachnext":[1074,1056],"p-day":[1074,1590],"p-foodlog":[1074,1137],"p-heat":[960,516],"p-lat":[1074,840],"p-makan":[1074,1074],"p-next":[1074,861],"p-prog":[1074,1227],"p-revenue":[1074,405],"p-routine":[1074,438],"p-share1":[519,924],"p-sisa":[1074,987],"p-timeline":[1074,1635],"p-week":[1074,846],"p-wlex":[1074,1299],"p-wlstats":[1170,267]};
+function tornPath(seed, top, bottom, left, right) {      // jagged paper edge as a clip-path
+  const pts = [], n = 26, j = (k, a) => (rnd(seed + k * 7.3) * a).toFixed(2);
+  for (let i = 0; i <= n; i++) pts.push((i / n * 100).toFixed(2) + '% ' + (top ? j(i, 3) : 0) + '%');
+  for (let i = 0; i <= n; i++) pts.push((right ? 100 - j(i + 50, 2) : 100) + '% ' + (i / n * 100).toFixed(2) + '%');
+  for (let i = n; i >= 0; i--) pts.push((i / n * 100).toFixed(2) + '% ' + (bottom ? 100 - j(i + 99, 3) : 100) + '%');
+  for (let i = n; i >= 0; i--) pts.push((left ? j(i + 150, 2) : 0) + '% ' + (i / n * 100).toFixed(2) + '%');
+  return 'polygon(' + pts.join(',') + ')';
+}
+// piece: the whole cut-out at width w. opts: blend, torn (seed), dot (halftone), tape, inv, tint
+function piece(name, w, o) {
+  o = o || {};
+  const [iw, ih] = SZ[name], h = w * ih / iw;
+  const d = el('div', 'abs', 'width:' + px(w) + ';height:' + px(h) + (o.blend ? ';mix-blend-mode:' + o.blend : ''));
+  const inner = el('div', 'abs', 'inset:0;overflow:hidden' + (o.torn != null ? ';clip-path:' + tornPath(o.torn, true, true, o.tornSides, o.tornSides) : ''));
+  const img = el('img', '', 'display:block;width:100%;height:100%;filter:grayscale(1) contrast(' + (o.contrast || 1.25) + ')' + (o.inv ? ' invert(1)' : ''));
+  img.src = 'assets/screens/' + name + '.png'; inner.appendChild(img); d.appendChild(inner);
+  if (o.dot) inner.appendChild(el('div', 'abs', 'inset:0;mix-blend-mode:multiply;opacity:' + o.dot + ';background:radial-gradient(circle, #000 28%, transparent 31%) 0 0/' + px(U * .9) + ' ' + px(U * .9)));
+  if (o.tint) inner.appendChild(el('div', 'abs', 'inset:0;mix-blend-mode:' + (o.tintBlend || 'multiply') + ';background:' + o.tint));
+  if (o.tape) [[-.04, -.03, -8], [.78, -.03, 9]].forEach(([x, y, r]) => d.appendChild(el('div', 'abs', 'left:' + (x * 100) + '%;top:' + (y * 100) + '%;width:' + px(w * .26) + ';height:' + px(U * 4) +
+    ';background:rgba(239,237,232,.72);transform:rotate(' + r + 'deg);box-shadow:0 1px 3px rgba(0,0,0,.2)')));
+  d.w = w; d.h = h;
+  return d;
+}
+// crop: a w×h window onto a piece, centred on (cx, cy) of the image (0..1), image shown at zoom × w wide
+function crop(name, w, h, cx, cy, zoom, o) {
+  o = o || {};
+  const [iw, ih] = SZ[name], dw = w * zoom, dh = dw * ih / iw;
+  const d = el('div', 'abs', 'width:' + px(w) + ';height:' + px(h) + ';overflow:hidden' + (o.blend ? ';mix-blend-mode:' + o.blend : '') + (o.torn != null ? ';clip-path:' + tornPath(o.torn, true, true, true, true) : ''));
+  const img = el('img', 'abs', 'width:' + px(dw) + ';height:' + px(dh) + ';left:' + px(w / 2 - cx * dw) + ';top:' + px(h / 2 - cy * dh) +
+    ';filter:grayscale(1) contrast(' + (o.contrast || 1.4) + ')' + (o.inv ? ' invert(1)' : ''));
+  img.src = 'assets/screens/' + name + '.png'; d.appendChild(img);
+  if (o.dot) d.appendChild(el('div', 'abs', 'inset:0;mix-blend-mode:multiply;opacity:' + o.dot + ';background:radial-gradient(circle, #000 28%, transparent 31%) 0 0/' + px(U * 1.1) + ' ' + px(U * 1.1)));
+  d.img = img; d.w = w; d.h = h; d.dw = dw; d.dh = dh; d.cx = cx; d.cy = cy;
+  return d;
+}
+function recrop(d, cx, cy, zoom) {          // move a crop's window (for slow pans / zooms)
+  const dw = d.w * zoom, dh = dw * d.dh / d.dw;
+  d.img.style.width = px(dw); d.img.style.height = px(dh);
+  d.img.style.left = px(d.w / 2 - cx * dw); d.img.style.top = px(d.h / 2 - cy * dh);
+}
+const sub = (t, b, parts) => Math.floor((t - B(b)) / ((B(b + 1) - B(b)) / (parts || 2)));   // half-beat counter
+
+// 1 · BOOK — giant calendar printed onto red, hour chips torn strip, BOOK stack
+scene(3, 6, 'bg-red', root => {
+  const r = { rows: [] };
+  r.cal = piece('p-cal', W * (TALL ? 1.55 : 1.15), { blend: 'multiply', dot: .25 }); root.appendChild(r.cal);
+  for (let i = 0; i < 3; i++) { const e = el('div', 'abs hero c-paper', '', 'BOOK'); root.appendChild(e); fitText(e, W * .7, H * (TALL ? .19 : .27)); r.rows.push(e); }
+  r.strip = crop('p-day', W * 1.1, H * (TALL ? .16 : .2), .5, .66, 1.05, { torn: 3, contrast: 1.6 }); root.appendChild(r.strip);
+  r.n = el('div', 'abs hero c-ink', 'font-size:' + px(U * 9), '04.11'); root.appendChild(r.n);
+  return r;
+}, (r, lt, t) => {
+  place(r.cal, W * .62, H * .42, lerp(1.08, 1, eo(lt / .5)) * punch(t, .02), -9);
+  const n = 1 + Math.min(2, lastBeat(t) - 3), rowH = H * (TALL ? .17 : .25);
+  r.rows.forEach((e, i) => { e.style.visibility = i < n ? 'visible' : 'hidden';
+    place(e, W * (.36 + i * .06), H * (TALL ? .25 : .2) + i * rowH, i === n - 1 ? punch(t, .1) : 1, 0); });
+  place(r.strip, W * .5 + lerp(W * .4, 0, eo(lt / .4)), H * (TALL ? .78 : .8), 1, 4);
+  place(r.n, W * .84, H * (TALL ? .6 : .62), 1, -90, n >= 2 ? 1 : 0);
+}, ['booking sesi <span>dalam 3 ketukan</span>', 'jadwal · coach · jam kosong']);
+
+// 2 · YOUR COACH — paper poster, torn scrap with tape, countdown strip
+scene(6, 9, 'bg-paper', root => {
+  const r = {};
+  r.a = el('div', 'abs hero c-red', '', 'YOUR'); root.appendChild(r.a); fitText(r.a, W * .92, H * .22);
+  r.b = el('div', 'abs hero c-red', '', 'COACH'); root.appendChild(r.b); fitText(r.b, W * .96, H * .3);
+  r.sc = piece('p-coachnext', big * (TALL ? .74 : .5), { torn: 11, tape: true, dot: .12 }); root.appendChild(r.sc);
+  r.cd = crop('p-next', W * 1.2, H * (TALL ? .13 : .17), '.25'*1, .49, 2.45, { torn: 21, inv: true, contrast: 2 }); root.appendChild(r.cd);
+  r.cdr = el('div', 'abs bg-red', 'mix-blend-mode:multiply'); root.appendChild(r.cdr);
+  r.l = el('div', 'abs mono c-ink', 'font-size:' + px(U * 1.5) + ';line-height:1.5', 'SESI BERIKUTNYA<br>SISA PAKET<br>CHAT COACH<br>PERPANJANG 1 TAP'); root.appendChild(r.l);
+  return r;
+}, (r, lt, t) => {
+  place(r.a, W * .5, H * (TALL ? .2 : .16), 1, 0);
+  place(r.b, W * .5, H * (TALL ? .38 : .42), punch(t, .03), 0);
+  place(r.sc, W * .52, H * (TALL ? .53 : .56) + lerp(H * .5, 0, eo(lt / .3)), 1, lerp(-14, -5, eo(lt / .5)));
+  const on = lastBeat(t) >= 7;
+  place(r.cd, W * .5, H * (TALL ? .84 : .82), 1, -3, on ? 1 : 0);
+  r.cdr.style.cssText += ';left:0;top:' + px(H * (TALL ? .78 : .74)) + ';width:' + px(W) + ';height:' + px(H * (TALL ? .12 : .16)) + ';transform:rotate(-3deg);opacity:' + (on ? 1 : 0);
+  place(r.l, W * .14, H * (TALL ? .6 : .62), 1, 0, 1);
+}, ['sesi & sisa paket <span>di satu layar</span>', 'portal klien']);
+
+// 3 · TRAIN — the logger table sliced into strips that jump every half beat
+scene(9, 12, 'bg-ink', root => {
+  const r = { s: [] };
+  const w = W * (TALL ? 1.25 : 1.05), [iw, ih] = SZ['p-wlex'], h = w * ih / iw, n = 6;
+  r.box = el('div', 'abs', 'width:' + px(w) + ';height:' + px(h)); root.appendChild(r.box);
+  for (let i = 0; i < n; i++) {
+    const s = el('div', 'abs', 'left:0;width:100%;top:' + px(h * i / n) + ';height:' + px(h / n + 1) + ';overflow:hidden');
+    const img = el('img', 'abs', 'left:0;top:' + px(-h * i / n) + ';width:' + px(w) + ';height:' + px(h) + ';filter:grayscale(1) contrast(1.4) invert(1)');
+    img.src = 'assets/screens/p-wlex.png'; s.appendChild(img); r.box.appendChild(s); r.s.push(s);
+  }
+  const tw = TALL ? H * .92 : W * .98, th = TALL ? W * .9 : H * .6;
+  r.w = el('div', 'abs hero c-red', 'mix-blend-mode:screen', 'TRAIN'); root.appendChild(r.w); fitText(r.w, tw, th);
+  r.o = el('div', 'abs hero', '-webkit-text-stroke:' + px(U * .35) + ' var(--paper);color:transparent', 'TRAIN'); root.appendChild(r.o); fitText(r.o, tw, th);
+  return r;
+}, (r, lt, t) => {
+  const k = sub(t, lastBeat(t)), bi = lastBeat(t);
+  place(r.box, W * .5, H * .5, lerp(1.3, 1, eo(lt / .4)), 6);
+  r.s.forEach((s, i) => { const off = (rnd(bi * 13 + i * 3 + k) - .5) * W * .22 * Math.exp(-(t - B(bi)) * 6); s.style.transform = 'translateX(' + px(off) + ')'; });
+  const p = punch(t, .07), rot = TALL ? -90 : 0;
+  place(r.w, W * .5, H * .5, p, rot, 1); place(r.o, W * .5 + U * 1.2, H * .5 + U * 1.2, p, rot, .8);
+}, ['catat <span>set · rep · kg</span> secara live', 'workout logger']);
+
+// 4 · SET. REP. KG. — set rows cut from the logger, printed on red
+scene(12, 15, 'bg-red', root => {
+  const r = { rows: [], labels: [] };
+  ['SET.', 'REP.', 'KG.'].forEach(s => { const e = el('div', 'abs hero c-ink', '', s); root.appendChild(e); fitText(e, W * .5, H * (TALL ? .15 : .22)); r.rows.push(e); });
+  [.565, .65, .735, .82].forEach((cy, i) => { const c = crop('p-wlex', W * (TALL ? .9 : .6), H * (TALL ? .075 : .1), .5, cy, TALL ? 1.05 : .72, { blend: 'multiply', torn: 30 + i, contrast: 1.8 }); root.appendChild(c); r.labels.push(c); });
+  r.big = el('div', 'abs hero c-paper', '', '57,5'); root.appendChild(r.big); fitText(r.big, W * .9, H * .3);
+  return r;
+}, (r, lt, t) => {
+  const n = 1 + Math.min(2, lastBeat(t) - 12), rowH = H * (TALL ? .15 : .22);
+  place(r.big, W * .5, H * .5, punch(t, .04), -6, .18);
+  r.rows.forEach((e, i) => { e.style.visibility = i < n ? 'visible' : 'hidden'; e.style.left = px(W * .06); e.style.top = px(H * (TALL ? .12 : .08) + i * rowH); e.style.transform = 'none'; });
+  const m = Math.min(4, 1 + sub(t, 12, 2));
+  r.labels.forEach((c, i) => place(c, W * (TALL ? .52 : .66), H * (TALL ? .63 : .5) + i * H * (TALL ? .07 : .1), 1, (i % 2 ? 2 : -2), i < m ? 1 : 0));
+}, ['rutinitas, <span>rekor</span>, grafik volume', 'program dari coach']);
+
+// 5 · TRACK — iris onto a huge crop of the body numbers, halftone
+scene(15, 18, 'bg-ink', root => {
+  const r = {};
+  r.heat = crop('p-heat', W, H * .5, .5, .5, 1.2, { inv: true, contrast: 2 }); root.appendChild(r.heat);
+  r.heat.style.opacity = .25;
+  r.w = el('div', 'abs hero c-red', '', 'TRACK'); root.appendChild(r.w); fitText(r.w, W * .96, H * (TALL ? .3 : .22));
+  r.d0 = big * (TALL ? .78 : .56);
+  r.iris = crop('p-prog', r.d0, r.d0, .17, .17, 2.6, { dot: .2, contrast: 1.6 }); root.appendChild(r.iris);
+  r.iris.style.borderRadius = '50%';
+  r.ring = el('div', 'abs', 'border-radius:50%;border:' + px(U * 1.2) + ' solid var(--red)'); root.appendChild(r.ring);
+  r.tag = el('div', 'abs hero c-paper bg-red', 'font-size:' + px(U * 6) + ';padding:0 .2em', '−1,8 KG'); root.appendChild(r.tag);
+  return r;
+}, (r, lt, t) => {
+  const k = eo(lt / .45), d = r.d0 * lerp(.2, 1, k) * punch(t, .03);
+  r.iris.style.clipPath = 'circle(' + (d / 2) + 'px at 50% 50%)';
+  place(r.iris, W * .5, H * .54, 1, 0);
+  recrop(r.iris, lerp(.17, .3, lt / 1.4), lerp(.17, .25, lt / 1.4), lerp(2.6, 2.1, lt / 1.4));
+  r.ring.style.width = r.ring.style.height = px(d + U * 2.4); place(r.ring, W * .5, H * .54, 1, 0);
+  place(r.heat, W * .5, H * .54, 1.2, 0);
+  place(r.w, W * .5, H * (TALL ? .17 : .14), 1, 0);
+  place(r.tag, W * .72, H * .54 + r.d0 * .42, punch(t, .12), -8, lastBeat(t) >= 16 ? 1 : 0);
+}, ['berat, lingkar, foto — <span>progresmu terlihat</span>', 'progres tubuh']);
+
+// 6 · NEW PR — stutter rows + the real badge pills on a red label
+scene(18, 21, 'bg-ink', root => {
+  const r = { rows: [] };
+  for (let i = 0; i < 3; i++) { const e = el('div', 'abs hero c-paper', '', 'NEW PR'); root.appendChild(e); fitText(e, W * .82, H * .16); r.rows.push(e);
+    const ln = el('div', 'rule c-red', ''); root.appendChild(ln); e.ln = ln; }
+  r.lab = el('div', 'abs bg-red', 'padding:' + px(U * 2)); root.appendChild(r.lab);
+  r.bd = piece('p-badges', big * (TALL ? .7 : .4), { blend: 'multiply', contrast: 1.6 }); r.bd.style.position = 'relative'; r.lab.appendChild(r.bd);
+  return r;
+}, (r, lt, t) => {
+  const k = sub(t, 18), gap = H * (TALL ? .15 : .22);
+  r.rows.forEach((e, i) => {
+    place(e, W * .5, H * (TALL ? .38 : .4) + (i - 1) * gap, 1, 0, i <= Math.min(2, k) ? 1 : 0);
+    e.style.color = i === k % 3 ? 'var(--red)' : 'var(--paper)';
+    e.ln.style.cssText += ';left:' + px(W * .08) + ';width:' + px(W * .84) + ';top:' + px(H * (TALL ? .38 : .4) + (i - .5) * gap);
+  });
+  place(r.lab, W * .62, H * (TALL ? .7 : .8), punch(t, .1), -6, lastBeat(t) >= 19 ? 1 : 0);
+}, ['rekor pribadi & badge <span>otomatis</span>', '11 badge · streak mingguan']);
+
+// 7 · EAT — the calorie ring blown up, RGB split, diagonal red wipe
+scene(21, 24, 'bg-ink', root => {
+  const r = {};
+  r.wipe = el('div', 'abs bg-red', 'inset:0'); root.appendChild(r.wipe);
+  const cw = big * (TALL ? 1.05 : .62);
+  r.c1 = crop('p-makan', cw, cw, .205, .165, 4.2, { blend: 'screen', contrast: 1.8 }); root.appendChild(r.c1); r.c1.style.filter = 'sepia(1) saturate(6) hue-rotate(150deg)';
+  r.c2 = crop('p-makan', cw, cw, .205, .165, 4.2, { blend: 'screen', contrast: 1.8 }); root.appendChild(r.c2); r.c2.style.filter = 'sepia(1) saturate(8) hue-rotate(-30deg)';
+  r.c = crop('p-makan', cw, cw, .205, .165, 4.2, { blend: 'screen', contrast: 1.8 }); root.appendChild(r.c);
+  [r.c1, r.c2, r.c].forEach(c => c.style.borderRadius = '50%');
+  r.w = el('div', 'abs hero c-paper', '', 'EAT'); root.appendChild(r.w); fitText(r.w, W * .7, H * (TALL ? .3 : .34));
+  r.k = el('div', 'abs hero c-ink', 'font-size:' + px(U * 9), 'RIGHT.'); root.appendChild(r.k);
+  r.kc = el('div', 'abs mono c-paper', 'font-size:' + px(U * 1.6) + ';line-height:1.5', 'BMI · BMR · TDEE<br>PROTEIN · KARBO · LEMAK<br>MENU 3X SEHARI'); root.appendChild(r.kc);
+  return r;
+}, (r, lt, t) => {
+  const k = eo(lt / .3);
+  r.wipe.style.clipPath = 'polygon(0 0,' + (k * 160) + '% 0,' + (k * 160 - 60) + '% 100%,0 100%)';
+  const g = (t - B(lastBeat(t))) < .07 ? U * 2.2 : U * .4, y = H * (TALL ? .58 : .6), s = lerp(.7, 1, eo(lt / .35)) * punch(t, .03);
+  place(r.c1, W * .5 - g, y, s, lt * 8); place(r.c2, W * .5 + g, y, s, lt * 8); place(r.c, W * .5, y, s, lt * 8);
+  place(r.w, W * .5, H * (TALL ? .16 : .17), punch(t, .05), 0);
+  place(r.k, W * .78, H * (TALL ? .82 : .86), 1, -6, lastBeat(t) >= 22 ? 1 : 0);
+  place(r.kc, W * .2, H * (TALL ? .82 : .86), 1, 0, 1);
+}, ['target kalori & menu <span>otomatis</span>', 'gizi · data TKPI']);
+
+// 8 · stutter: half-beat swaps of extreme crops
+const ST = [
+  ['BOOK', 'p-cal', .38, .33, 3.2, 'bg-red', 'multiply'],
+  ['TRAIN', 'p-wlex', .85, .7, 2.6, 'bg-ink', 'normal', true],
+  ['TRACK', 'p-prog', .2, .17, 2.8, 'bg-paper', 'multiply'],
+  ['EAT', 'p-makan', .205, .165, 3.6, 'bg-red', 'multiply'],
+  ['SHARE', 'p-share1', .5, .45, 1.6, 'bg-ink', 'normal'],
+  ['REPEAT', 'p-sisa', .18, .55, 3.2, 'bg-paper', 'multiply']];
+scene(24, 27, 'bg-ink', root => {
+  const r = { f: [] };
+  ST.forEach(([w, s, cx, cy, z, bg, bl, inv], j) => {
+    const f = el('div', 'abs ' + bg, 'inset:0'); root.appendChild(f);
+    f.c = crop(s, W, H, cx, cy, z, { blend: bl, inv, dot: bg === 'bg-ink' ? 0 : .22, contrast: 1.8 }); f.appendChild(f.c);
+    f.w = el('div', 'abs hero ' + (bg === 'bg-red' ? 'c-paper' : 'c-red'), '', w); f.appendChild(f.w); fitText(f.w, W * .95, H * .3);
+    r.f.push(f);
+  });
+  return r;
+}, (r, lt, t) => {
+  const i = Math.floor((t - B(24)) / ((B(25) - B(24)) / 2)) % r.f.length;
+  r.f.forEach((f, j) => {
+    f.style.display = j === i ? 'block' : 'none';
+    if (j === i) { place(f.w, W * .5, H * (j % 2 ? .25 : .75), 1, j % 2 ? -4 : 4); place(f.c, W * .5, H * .5, 1 + (t - B(24)) * .05, 0); }
+  });
+  document.getElementById('scan').style.opacity = .5;
+}, ['booking · latihan · progres · <span>gizi</span>', 'semua di satu app']);
+
+// 9 · ONE PANEL — coach side as a pinned collage of torn scraps
+scene(27, 30, 'bg-ink', root => {
+  const r = {};
+  r.half = el('div', 'abs bg-red', ''); root.appendChild(r.half);
+  r.w = el('div', 'abs hero c-paper', '', 'ONE PANEL'); root.appendChild(r.w); fitText(r.w, W * .92, H * .18);
+  const k = TALL ? 1 : .72;
+  r.sc = [
+    [piece('p-timeline', big * .5 * k, { torn: 41, tape: true }), .28, .55, -6],
+    [piece('p-clienthero', big * .62 * k, { torn: 42, tape: true, inv: true }), .66, .42, 5],
+    [piece('p-client1', big * .66 * k, { torn: 43 }), .62, .66, -3],
+    [piece('p-week', big * .5 * k, { torn: 44, tape: true }), .7, .82, 7]];
+  r.sc.forEach(([p]) => root.appendChild(p));
+  r.m = el('div', 'abs mono c-paper', 'font-size:' + px(U * 1.4) + ';line-height:1.5', 'UNTUK COACH<br>JADWAL · KLIEN · KEUANGAN<br>PENGINGAT WHATSAPP'); root.appendChild(r.m);
+  return r;
+}, (r, lt, t) => {
+  r.half.style.cssText += ';left:0;top:0;width:' + px(W * .5 * eio(lt / .35)) + ';height:' + px(H);
+  place(r.w, W * .5, H * (TALL ? .14 : .12), punch(t, .04), 0);
+  const n = sub(t, 27, 2);
+  r.sc.forEach(([p, x, y, rot], i) => { const on = (t - B(27)) >= i * (B(28) - B(27)) / 2, dd = on ? t - B(27) - i * (B(28) - B(27)) / 2 : 0;
+    place(p, W * x, H * y, on ? lerp(1.35, 1, eo(dd / .12)) : 1, rot, on ? 1 : 0); });
+  r.m.style.cssText += ';left:' + px(W * .05) + ';top:' + px(H * (TALL ? .9 : .88)) + ';transform:none';
+}, ['satu panel untuk <span>semua klien</span>', 'panel coach']);
+
+// 10 · SHARE — real share cards fanned like posters
+scene(30, 32, 'bg-red', root => {
+  const r = { c: [] };
+  r.w = el('div', 'abs hero c-ink', '', 'SHARE IT'); root.appendChild(r.w); fitText(r.w, W * .92, H * .22);
+  for (let i = 0; i < 3; i++) { const p = piece('p-share1', big * (TALL ? .42 : .3), { contrast: 1.3 }); p.style.boxShadow = '0 ' + px(U * 2) + ' ' + px(U * 5) + ' rgba(0,0,0,.5)'; root.appendChild(p); r.c.push(p); }
+  return r;
+}, (r, lt, t) => {
+  place(r.w, W * .5, H * (TALL ? .16 : .15), punch(t, .05), -3);
+  const n = sub(t, 30, 2);
+  r.c.forEach((p, i) => place(p, W * (.5 + (i - 1) * .27), H * .58 + Math.abs(i - 1) * U * 3, 1, (i - 1) * 12, i <= n ? 1 : 0));
+}, ['kartu ala Strava — <span>bagikan latihanmu</span>', 'PNG · video · story']);
+
+// 11 · ticket poster (quieter section)
+scene(32, 36, 'bg-ink', root => {
+  const r = {};
+  const tw = W * (TALL ? .84 : .62), th = tw * 1.25;
+  r.tk = el('div', 'ticket', 'width:' + px(tw) + ';height:' + px(th) + ';padding:' + px(tw * .07)); root.appendChild(r.tk);
+  const fs = tw / 100;
+  r.tk.innerHTML =
+    '<div class="row" style="justify-content:space-between;font:500 ' + px(fs * 2.6) + ' Mono,monospace;letter-spacing:.1em">BOOK.XNKBOOKING.MY.ID<span>№ 0412</span></div>' +
+    '<div class="hero" style="font-size:' + px(fs * 22) + ';margin-top:' + px(fs * 6) + '">BOOKED.</div>' +
+    '<div style="height:' + px(fs * 1.6) + ';background:var(--red);margin:' + px(fs * 4) + ' 0"></div>' +
+    '<div class="row" style="gap:' + px(fs * 6) + ';font:600 ' + px(fs * 3.4) + '/1.35 Inter,sans-serif">' +
+      '<div><div class="mono" style="font-size:' + px(fs * 2.4) + ';opacity:.6">TANGGAL</div>RABU, 04.11.2026</div>' +
+      '<div><div class="mono" style="font-size:' + px(fs * 2.4) + ';opacity:.6">JAM</div>10.00 — 11.00</div></div>' +
+    '<div class="row" style="gap:' + px(fs * 6) + ';margin-top:' + px(fs * 4) + ';font:600 ' + px(fs * 3.4) + '/1.35 Inter,sans-serif">' +
+      '<div><div class="mono" style="font-size:' + px(fs * 2.4) + ';opacity:.6">KLIEN</div>SARI W.</div>' +
+      '<div><div class="mono" style="font-size:' + px(fs * 2.4) + ';opacity:.6">SESI</div>5 / 12</div>' +
+      '<div><div class="mono" style="font-size:' + px(fs * 2.4) + ';opacity:.6">COACH</div>XNK</div></div>' +
+    '<div style="position:absolute;left:' + px(tw * .07) + ';right:' + px(tw * .07) + ';bottom:' + px(tw * .07) + ';font:500 ' + px(fs * 2.2) + '/1.6 Mono,monospace;letter-spacing:.08em;opacity:.75">' +
+      'BOOK, TRAIN, TRACK, EAT, SHARE — BOOK, TRAIN, TRACK, EAT, SHARE —<br>PERSONAL TRAINING · DATA PRIBADI TETAP PRIBADI</div>' +
+    '<svg style="position:absolute;right:' + px(tw * .1) + ';bottom:' + px(tw * .22) + '" width="' + px(tw * .32) + '" height="' + px(tw * .14) + '" viewBox="0 0 160 70"><path d="M5 50 C 25 5, 35 70, 55 30 S 80 10, 90 45 S 120 60, 155 15" fill="none" stroke="#0B0B0B" stroke-width="3" stroke-linecap="round"/></svg>';
+  r.st = el('div', 'stamp', 'width:' + px(tw * .42) + ';height:' + px(tw * .42) + ';font-size:' + px(tw * .07), 'XNK<br>CONFIRMED'); root.appendChild(r.st);
+  r.tw = tw; r.th = th;
+  return r;
+}, (r, lt, t) => {
+  place(r.tk, W * .5, H * .48 + lerp(U * 4, 0, eo(lt / .5)), 1, lerp(-4, -2, eo(lt / .6)));
+  const sOn = t >= B(33);
+  place(r.st, W * .5 - r.tw * .18, H * .48 + r.th * .12, sOn ? lerp(1.6, 1, eo((t - B(33)) / .12)) : 1, -18, sOn ? .9 : 0);
+}, ['booking terkonfirmasi, <span>pengingat otomatis</span>', 'kalender · whatsapp']);
+
+// 12 · VHS glitch → tilted repeating collage → zoom into the intro X
+scene(36, null, 'bg-red', root => {
+  const r = { lines: [] };
+  r.g = el('div', 'abs', 'left:50%;top:50%'); root.appendChild(r.g);
+  const words = ['BOOK', 'TRAIN', 'TRACK', 'EAT', 'SHARE', 'XNK'];
+  for (let i = 0; i < 14; i++) {
+    let s = ''; for (let k = 0; k < 10; k++) s += '<span style="' + ((i + k) % 3 === 0 ? 'color:var(--paper)' : '') + '">' + words[(i * 2 + k) % words.length] + '</span> ';
+    const e = el('div', 'abs hero c-ink', 'font-size:' + px(big * .16) + ';left:0;top:0', s); r.g.appendChild(e); r.lines.push(e);
+  }
+  r.intro = el('div', 'abs bg-ink', 'inset:0'); root.appendChild(r.intro);
+  r.ir = introBuild(r.intro);
+  return r;
+}, (r, lt, t) => {
+  const lh = big * .16 * .9;
+  r.lines.forEach((e, i) => {
+    const dir = i % 2 ? 1 : -1, speed = W * (.25 + .15 * (i % 3));
+    e.style.transform = 'translate(' + px(-W * 1.2 + dir * speed * lt * (1 + lt * .4)) + ',' + px((i - 7) * lh) + ')';
+  });
+  r.g.style.transform = 'rotate(-14deg) scale(' + lerp(1, 1.5, eio((t - B(38)) / .9)) + ')';
+  // glitch on entry
+  const gl = lt < .45;
+  document.getElementById('scan').style.opacity = gl ? .6 : 0;
+  r.g.style.filter = gl && (lt * 20 | 0) % 2 ? 'contrast(2) hue-rotate(-20deg)' : 'none';
+  // iris into the loop frame (= scene 0 at t = 0), done by 17.3 s, then held
+  const k = eio((t - B(38) - .2) / .9);
+  r.intro.style.clipPath = 'circle(' + (k * 75) + '% at 50% 50%)';
+  r.intro.style.display = k > 0 ? 'block' : 'none';
+  introUpdate(r.ir, 0, 0, true);
+}, ['<span>XNK</span> · book.xnkbooking.my.id', 'xnk.my.id']);
+
+// ---------- overlays ----------
+const grains = [];
+for (let i = 0; i < 6; i++) {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); const d = g.createImageData(256, 256);
+  for (let p = 0; p < d.data.length; p += 4) { const v = rnd(p * 0.37 + i * 999) * 255; d.data[p] = d.data[p + 1] = d.data[p + 2] = v; d.data[p + 3] = 255; }
+  g.putImageData(d, 0, 0); grains.push('url(' + c.toDataURL() + ')');
+}
+const hudTL = document.getElementById('hud-tl'), hudTR = document.getElementById('hud-tr'), hudF = document.getElementById('hud-f'), cap = document.getElementById('cap');
+hudTL.style.left = hudTL.style.top = px(U * 4); hudTR.style.right = px(U * 4); hudTR.style.top = px(U * 4);
+if (TALL) { hudTL.style.top = hudTR.style.top = px(H * .07); }
+
+window.seek = function (t) {
+  t = clamp(t, 0, DUR - 1e-6);
+  document.getElementById('scan').style.opacity = 0;
+  let cur = null;
+  scenes.forEach(s => { const on = t >= s.t0 && t < s.t1; s.root.classList.toggle('on', on); if (on) cur = s; });
+  if (cur) {
+    cur.update(cur.ref, t - cur.t0, t);
+    const c = cur.cap; cap.innerHTML = c ? '<div>' + c[0] + '<small>' + c[1] + '</small></div>' : '';
+    // the loop frame shows the intro caption so first and last frames match
+    if (cur === scenes[scenes.length - 1] && t > B(38) + .6) cap.innerHTML = '<div>' + scenes[0].cap[0] + '<small>' + scenes[0].cap[1] + '</small></div>';
+  }
+  const f = Math.round(t * 30);
+  // the end holds the very first frame: grain/counter repeat frame 0 for the last 0.5 s
+  const ff = t > DUR - .5 ? 0 : f;
+  document.getElementById('grain').style.backgroundImage = grains[(ff >> 1) % grains.length];
+  hudF.textContent = String(ff).padStart(4, '0');
+};
+window.ready = Promise.all([document.fonts.load('100px Anton'), document.fonts.load('600 20px Inter'), document.fonts.load('20px Mono')]).then(() => {
+  scenes.forEach(s => { s.root = el('div', 'scene on'); stage.appendChild(s.root); s.ref = s.build(s.root) || {}; s.root.classList.remove('on'); });
+  return Promise.all([...document.images].map(i => i.decode().catch(() => {})));
+}).then(() => { window.seek(0); return true; });
+</script>
+</body>
+</html>
