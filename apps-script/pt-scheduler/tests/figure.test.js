@@ -36,3 +36,16 @@ test('figure: small enough to load lazily, credits and licence shipped', () => {
   assert.match(cr, /MIT/);
   assert.ok(fs.existsSync(path.join(DIR, 'LICENSE-react-muscle-highlighter.txt')));
 });
+
+test('muscle levels: gym exercises use the EMG table (Otot.md), others the general map', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.html'), 'utf8');
+  const body = src.slice(src.indexOf('const MM_PART_TARGETS'), src.indexOf('window.mmLevels = mmLevels;'));
+  const mmLevels = new Function(body + '; return mmLevels;')();
+  assert.deepEqual(mmLevels([{ exId: '0739', target: 'glutes' }]), { quads: 2, glutes: 1 }, 'Leg Press: quads main, glutes helper');
+  assert.deepEqual(mmLevels([{ exId: '0585', target: 'quads' }]), { quads: 2 }, 'Leg Extension: no helpers');
+  assert.equal(mmLevels([{ exId: '2330' }]).biceps, 1);
+  assert.deepEqual(mmLevels([{ target: 'hamstrings' }]), { hamstrings: 2, glutes: 1 });
+  assert.equal(mmLevels([{ bodyPart: 'chest' }]).pectorals, 2, 'old rows with only a body part still light up');
+  const otot = fs.readFileSync(path.join(DIR, '..', 'docs', 'program', 'Otot.md'), 'utf8');
+  ['0493', '2330', '0739', '0585', '0861', '0596'].forEach(id => assert.ok(otot.includes('| ' + id + ' |'), id + ' documented in Otot.md'));
+});

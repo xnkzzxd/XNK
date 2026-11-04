@@ -9439,13 +9439,18 @@ html.app-shell .nav-back { display: none; }
   const MM_SECONDARY = { pectorals: ['delts', 'triceps'], lats: ['biceps', 'upper back'], 'upper back': ['biceps', 'delts', 'lats'], delts: ['triceps', 'traps'],
     quads: ['glutes', 'adductors'], glutes: ['hamstrings', 'quads'], hamstrings: ['glutes'], spine: ['glutes', 'hamstrings'], biceps: ['forearms'], traps: ['upper back'],
     abductors: ['glutes'] };
-  /** [{ target?, bodyPart? }] → { otot: 2 (utama) | 1 (pendukung) }. */
+  // Otot per gerakan gym dari studi EMG (docs/program/Otot.md): menang atas peta umum di atas.
+  const MM_BY_EX = { '0493': [['pectorals'], ['delts', 'triceps', 'abs']], '2330': [['lats'], ['upper back', 'biceps', 'delts']],
+    '0739': [['quads'], ['glutes']], '0585': [['quads'], []], '0861': [['upper back'], ['lats', 'biceps', 'delts']], '0596': [['pectorals'], ['delts']] };
+  /** [{ exId?, target?, bodyPart? }] → { otot: 2 (utama) | 1 (pendukung) }. */
   function mmLevels(list) {
     const lv = {};
     (list || []).forEach(function (x) {
-      const prim = x.target && x.target !== 'cardiovascular system' ? [x.target] : (MM_PART_TARGETS[x.bodyPart] || []);
+      const by = x.exId ? MM_BY_EX[x.exId] : null;
+      const prim = by ? by[0] : (x.target && x.target !== 'cardiovascular system' ? [x.target] : (MM_PART_TARGETS[x.bodyPart] || []));
+      const sec = by ? by[1] : [].concat.apply([], prim.map(function (t) { return MM_SECONDARY[t] || []; }));
       prim.forEach(function (t) { lv[t] = 2; });
-      prim.forEach(function (t) { (MM_SECONDARY[t] || []).forEach(function (s) { if (!lv[s]) lv[s] = 1; }); });
+      sec.forEach(function (t) { if (!lv[t]) lv[t] = 1; });
     });
     return lv;
   }
@@ -9485,7 +9490,7 @@ html.app-shell .nav-back { display: none; }
       sets += done.length; vol += wlVolume(e, done);
       const info = wkInfo(e.exId) || {};
       const p = e.bodyPart || info.b;
-      tg.push({ target: e.target || info.t || '', bodyPart: p || '' });
+      tg.push({ exId: e.exId || '', target: e.target || info.t || '', bodyPart: p || '' });
       if (p && !parts[p]) { parts[p] = true; names.push(WK_PART[p] || p); }
     });
     if (!figSync()) figEnsure().then(function (f) { if (f) wlRenderStats(); });
