@@ -6823,6 +6823,8 @@ function _parseProgramDays_(input) {
 /** Murni: baris ProgramItems → item; baris lama (tanpa kolom M–S) mendapat target dari teks rep. */
 function _programItemFromRow_(r) {
   const it = { n: Number(r[4]), gerakan: String(r[5]), set: Number(r[6]) || 0, rep: String(r[7]), catatan: String(r[8] || ''), video: String(r[9] || ''), exId: String(r[11] || '') };
+  // Fase U: nama manual yang persis sama dengan pustaka (atau alias coach) memakai Exercise ID itu.
+  if (!it.exId && it.gerakan) it.exId = _exResolve_('', it.gerakan, '', '').exId;
   const num = function(v) { return v === '' || v == null || isNaN(Number(v)) ? '' : Number(v); };
   let skema = [];
   try { const p = r[18] ? JSON.parse(String(r[18])) : []; if (Array.isArray(p)) skema = p.map(function(x) { return { rep: num(x.rep), kg: num(x.kg), w: x.w ? 1 : 0 }; }); } catch (e) { skema = []; }
@@ -7295,7 +7297,8 @@ function _workoutRowsOf_(memberId) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
   if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; });
+  // Fase U: gerakan manual diisi Exercise ID / otot saat baca (_exResolveRow_, LatihanAlias.gs).
+  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_);
 }
 
 /** Hitungan untuk badge: hari latihan yang dicatat dan jumlah rekor pribadi. Dihitung, tidak disimpan. */
@@ -7368,10 +7371,10 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh, session) {
     entries.forEach(function(e) { keys[e.key] = true; });
     const rows = sheet.getDataRange().getValues();
     const beforeKeys = {};
-    _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; })).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
+    _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; }).map(_exResolveRow_)).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
     for (let i = rows.length - 1; i >= 1; i--) {
       const r = rows[i];
-      if (String(r[1]).trim() === memberId && _isoDateCell_(r[2]) === tanggal && keys[_workoutKey_(r[6], r[7])] && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
+      if (String(r[1]).trim() === memberId && _isoDateCell_(r[2]) === tanggal && (keys[_workoutKey_(r[6], r[7])] || keys[_exKeyOf_(r[6], r[7])]) && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
     }
     const now = new Date().toISOString(), stamp = new Date().getTime(), out = [];
     entries.forEach(function(e, ei) {
@@ -7556,7 +7559,7 @@ function _workoutFor_(row) {
   const id = String(row[0]).trim();
   const today = _todayWib_(), since = _addDaysIso_(today, -WORKOUT_LIMITS.readDays);
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  const all = sheet && sheet.getLastRow() >= 2 ? sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }) : [];
+  const all = sheet && sheet.getLastRow() >= 2 ? sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_) : [];
   const g = _workoutGroup_(all.filter(function(r) { return _isoDateCell_(r[2]) >= since; }));
   const prsByDate = {};
   _workoutEvents_(all).prs.forEach(function(p) { prsByDate[p.tanggal] = (prsByDate[p.tanggal] || 0) + 1; });
@@ -7574,7 +7577,7 @@ function _workoutFor_(row) {
   const suggest = {};
   program.concat(_programDays_(id, null, true).days).forEach(function(d) {
     d.items.forEach(function(it) {
-      const key = _workoutKey_(it.exId, it.gerakan), last = g.last[key];
+      const key = _exKeyOf_(it.exId, it.gerakan), last = g.last[key];
       if (!last || suggest[key]) return;
       const day = g.days.find(function(x) { return x.tanggal === last.tanggal; });
       const logged = day && day.items.find(function(x) { return x.key === key; });

@@ -795,6 +795,7 @@
     ['notifikasi', 'send', 'Notifikasi Admin'],
     ['jam', 'calendar-clock', 'Jam Operasional'],
     ['keuangan', 'wallet', 'Keuangan'],
+    ['latihan', 'dumbbell', 'Latihan & Alat'],
     ['keamanan', 'lock', 'Keamanan'],
     ['akun', 'user-plus', 'Akun']
   ];
@@ -899,6 +900,7 @@
         setNumField('loginMaxFails') + setNumField('loginLockSeconds') + setNumField('memberLoginMaxFails') + setNumField('adminSessionDays') + setNumField('rescheduleCutoffHours') + '</div>';
     },
     keuangan: function () { return finSettingsHtml(); },
+    latihan: function () { return exAliasHtml(); },
     akun: function () {
       return '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
         '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>';
@@ -1362,6 +1364,7 @@
     if (id === 'tampilan') renderThemeSeg();
     if (id === 'paket') pkgLoad();
     if (id === 'keuangan') finSettingsLoad();
+    if (id === 'latihan') exAliasLoad();
     if (id === 'pengingat') { setState.log = null; window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); rmdPreviewAll(); }
     refreshSettingsNav();
     const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 });
@@ -10170,6 +10173,55 @@
   };
 
   // Pengaturan → Keuangan (tombol langsung, tanpa bar simpan)
+  // ── Pengaturan → Latihan & Alat (Fase U, T-1603): otot untuk gerakan yang diketik manual di log ────────────
+  // Server menggabung nama yang persis sama dengan pustaka; sisanya ditebak dari kata kunci. Coach bisa memastikan:
+  // pilih gerakan pustaka yang sama (riwayat digabung) atau cukup otot target. Sheet log tidak diubah.
+  const exAl = { data: null, busy: {} };
+  const EX_TGT_LBL = { abs: 'Abs', quads: 'Quads', lats: 'Lats', calves: 'Calves', pectorals: 'Chest', glutes: 'Glutes', hamstrings: 'Hamstrings',
+    adductors: 'Adductors', abductors: 'Abductors', triceps: 'Triceps', biceps: 'Biceps', delts: 'Shoulders', forearms: 'Forearms', traps: 'Traps',
+    'upper back': 'Upper Back', spine: 'Lower Back', 'serratus anterior': 'Serratus', 'levator scapulae': 'Neck', 'cardiovascular system': 'Cardio' };
+  function exAliasHtml() {
+    return '<div class="card-flat stack"><h4 class="li-title">Gerakan manual di log</h4><p class="li-sub">Nama yang diketik sendiri (tanpa pustaka). Nama yang persis sama dengan gerakan pustaka langsung digabung; sisanya ditebak ototnya. Pastikan di sini: pilih gerakan pustaka yang sama, atau ototnya saja. Catatan lama tidak diubah.</p><div id="exal-list" class="stack" style="gap:0"><span class="li-sub">Memuat…</span></div></div>';
+  }
+  function exAliasLoad() {
+    exEnsure().catch(function () {}).then(function () { return adminCall('getManualExercises'); })
+      .then(function (d) { exAl.data = d; exAliasRender(); })
+      .catch(function (e) { const el = $('exal-list'); if (el) el.innerHTML = '<span class="li-sub">' + h(e.message || 'Gagal memuat.') + '</span>'; });
+  }
+  function exAliasRender() {
+    const el = $('exal-list');
+    if (!el || !exAl.data) return;
+    const d = exAl.data;
+    if (!d.items.length) { el.innerHTML = '<span class="li-sub">Belum ada gerakan manual di log.</span>'; return; }
+    const SRC = { pustaka: 'sama dengan pustaka', alias: 'sudah dipastikan', tebakan: 'tebakan', '': 'belum dikenali' };
+    el.innerHTML = d.items.map(function (it, i) {
+      const lib = it.exId ? exNm({ exId: it.exId, gerakan: it.exId }) : '';
+      const now = lib ? '= ' + lib : (it.target ? EX_TGT_LBL[it.target] || it.target : '—');
+      const opts = '<option value="">Otot…</option>' + d.targets.map(function (t) { return '<option value="' + h(t) + '"' + (t === it.target ? ' selected' : '') + '>' + h(EX_TGT_LBL[t] || t) + '</option>'; }).join('');
+      const fixed = it.src === 'pustaka';
+      return '<div class="stack" style="gap:6px;padding:10px 0;border-top:1px solid var(--line)"><div class="row-between" style="gap:8px"><span style="min-width:0"><b class="truncate" style="display:block">' + h(it.nama) + '</b><span class="li-sub">' + it.sets + ' set · ' + it.klien + ' klien · ' + h(now) + ' <span class="pill soft">' + h(SRC[it.src] || '') + '</span></span></span></div>' +
+        (fixed ? '' : '<div class="row" style="gap:6px;flex-wrap:wrap"><select class="select" style="flex:1;min-width:140px" aria-label="Otot ' + h(it.nama) + '" onchange="window.exAliasSave(' + i + ',{target:this.value})">' + opts + '</select>' +
+        '<button type="button" class="btn btn-outline" onclick="window.exAliasPick(' + i + ')">' + icon('search') + ' Pustaka</button>' +
+        (it.src === 'alias' ? '<button type="button" class="icon-btn" aria-label="Hapus pilihan ' + h(it.nama) + '" onclick="window.exAliasSave(' + i + ',{hapus:true})">' + icon('rotate-ccw') + '</button>' : '') + '</div>') + '</div>';
+    }).join('');
+    paintIcons();
+  }
+  window.exAliasSave = function (i, v) {
+    const it = exAl.data && exAl.data.items[i];
+    if (!it || exAl.busy[it.kunci]) return;
+    if (!v.hapus && !v.exId && !v.target) return;
+    exAl.busy[it.kunci] = true;
+    adminCall('saveExerciseAlias', [Object.assign({ nama: it.nama }, v)])
+      .then(function (d) { exAl.data = d; exAliasRender(); showToast('Tersimpan'); })
+      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); exAliasRender(); })
+      .then(function () { delete exAl.busy[it.kunci]; });
+  };
+  window.exAliasPick = function (i) {
+    const it = exAl.data && exAl.data.items[i];
+    if (!it) return;
+    exSearchOpen(function (x) { if (x && x.id) window.exAliasSave(i, { exId: x.id }); else showToast('Pilih gerakan dari pustaka.'); }, { title: 'Sama dengan: ' + it.nama });
+    setTimeout(function () { const q = $('exs-q'); if (q) { q.value = it.nama; window.exsFilter(); } }, 50);
+  };
   function finSettingsHtml() {
     const f = (setState.data && setState.data.finance) || { enabled: false, portalVisible: false, methods: fin.methods };
     const tg = function (id, title, sub, on, fn) {

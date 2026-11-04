@@ -726,7 +726,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check(await visible(page, '#view-settings'), 'sidebar "Pengaturan" opens the full settings page');
     check(await visible(page, '#settings-nav') && await visible(page, '#settings-pane'), 'desktop shows the section list and the open section side by side');
-    check((await page.locator('#settings-nav .settings-nav-item').count()) === 8, 'settings list has 8 sections');
+    check((await page.locator('#settings-nav .settings-nav-item').count()) === 9, 'settings list has 9 sections');
     check(!(await visible(page, '#settings-savebar')), 'no save bar until something changes');
     await page.click('.settings-nav-item[data-section="notifikasi"]');
     check((await page.inputValue('#set-tgToken')) === '', 'the saved Telegram token is never put in the form');
@@ -1613,6 +1613,17 @@ async function contrastReport(page) {
     await adm.page.click('#set-nutrition');
     await adm.page.waitForTimeout(800);
     check(env.props.NUTRITION_ENABLED === 'false' && !(await adm.page.isChecked('#set-nutrition')), 'gizi: switching it off is saved');
+    // Fase U (T-1603): Pengaturan → Latihan & Alat lists manual exercise names with a guessed muscle; picking one saves an alias.
+    env.call('saveWorkoutLog', env.adminToken(), 'PT-A', '2026-10-01', '', [{ gerakan: 'Lat pulldown', sets: [{ berat: 35, rep: 10 }] }]);
+    await adm.page.evaluate(() => window.settingsOpen('latihan'));
+    await adm.page.waitForTimeout(900);
+    const alTxt = await adm.page.textContent('#exal-list');
+    check(alTxt.includes('Lat pulldown') && alTxt.includes('Lats') && alTxt.includes('tebakan'), 'latihan & alat: a manual name shows its guessed muscle');
+    await adm.page.selectOption('#exal-list select >> nth=0', 'upper back');
+    await adm.page.waitForTimeout(900);
+    check(env.sheet('ExerciseAlias').rows.length === 2 && env.sheet('ExerciseAlias').rows[1][4] === 'upper back' && (await adm.page.textContent('#exal-list')).includes('sudah dipastikan'), 'latihan & alat: choosing a muscle saves the alias');
+    await adm.page.evaluate(() => window.settingsOpen('tampilan'));
+    await adm.page.waitForTimeout(600);
     await adm.page.click('#set-nutrition');
     await adm.page.waitForTimeout(800);
     check(env.props.NUTRITION_ENABLED === undefined && (await adm.page.isChecked('#set-nutrition')), 'gizi: switching it on again removes the override (back to the default)');
