@@ -724,6 +724,22 @@ html.wl-on, html.wl-on body { overflow: hidden; }
 .wl-thumb { flex: none; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: var(--surface-3); border: 1px solid var(--border); }
 .wl-thumb.ph, .ex-th.ph { display: grid; place-items: center; background: var(--surface-3); color: var(--fg-muted); }
 .wl-thumb.ph svg { width: 20px; height: 20px; }
+/* Fase U (T-1611): animasi gerakan sendiri (figure/rig.min.json). Monokrom, hanya transform yang bergerak. */
+.rig-th { display: block; overflow: hidden; background: var(--surface-3); }
+.rig-th .rig { display: block; width: 100%; height: 100%; transform: scale(1.35); transform-origin: 55% 60%; }
+.mm-fig.rig .mmf-body { stroke-width: 1.4; fill: color-mix(in srgb, var(--fg) 7%, var(--surface)); stroke: color-mix(in srgb, var(--fg) 38%, transparent); }
+.mm-fig.rig .mmf { fill: transparent; }
+.mm-fig.rig .mmf.half { fill: color-mix(in srgb, var(--fg) 42%, transparent); }
+.mm-fig.rig .mmf.on { fill: var(--fg); animation: none; }
+.rig g { transform-box: view-box; transform-origin: 0 0; }
+.rig .rg-eq { fill: color-mix(in srgb, var(--fg) 20%, transparent); }
+.rig .rg-eq.soft { fill: none; }
+.rig .rg-eq-l { fill: none; stroke: color-mix(in srgb, var(--fg) 28%, transparent); stroke-width: 2.5; }
+.rig .rg-cab { stroke: color-mix(in srgb, var(--fg) 40%, transparent); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.rig .rg-cab.thick { stroke-width: 5; }
+.rig-big { display: grid; place-items: center; margin: 0 0 12px; border-radius: var(--r-lg, 16px); background: var(--surface-2); border: 1px solid var(--border); }
+.rig-big .rig { width: min(100%, 280px); height: auto; aspect-ratio: 1; }
+@media (prefers-reduced-motion: reduce) { .rig.anim g { animation: none !important; } }
 .wl-ex-sub { margin: 0 0 0 10px; font-size: var(--fs-sm); color: var(--fg-muted); }
 .wl-ex-sub b { color: var(--fg); }
 .wl-ex-note { margin: 0 0 0 10px; display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-sm); color: var(--fg-2); }

@@ -121,7 +121,7 @@ Every portal tab and every tab of the client page in the panel opens with a blac
 
 ## Automatic training programs (Phase U)
 
-Evidence-based automatic programs built from the gym's own equipment list (Pengaturan → Latihan & Alat), Hevy-style English exercise names, muscles for manually typed lifts, and our own muscle map. On by default; `PROGRAM_AUTO_ENABLED=false` turns it off. Coach programs are never overwritten. Rules and sources: [docs/program/Rules.md](docs/program/Rules.md); plan: [docs/program/PRD.md](docs/program/PRD.md).
+Evidence-based automatic programs built from the gym's own equipment list (Pengaturan → Latihan & Alat), Hevy-style English exercise names, muscles for manually typed lifts, and our own muscle map. On by default; `PROGRAM_AUTO_ENABLED=false` turns it off. Coach programs are never overwritten. Rules and sources: [docs/program/Rules.md](docs/program/Rules.md); plan: [docs/program/PRD.md](docs/program/PRD.md). The 8 beginner gym lifts are drawn with our own animated figure (`figure/rig.min.json`, built by `tools/build-rig.js`, joint angles sourced in [docs/program/Gerak.md](docs/program/Gerak.md)) instead of third-party GIFs.
 
 ## Share cards (Phase T)
 

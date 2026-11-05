@@ -127,6 +127,7 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
       }
     }
     // Fase U (T-1610): our own muscle figure, served from the repo copy.
+    if (url.includes('xnk.my.id/figure/rig.min.json')) return route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(__dirname, '..', '..', '..', 'figure', 'rig.min.json')) });
     if (url.includes('xnk.my.id/figure/figure.min.json')) return route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(__dirname, '..', '..', '..', 'figure', 'figure.min.json')) });
     const stub = Object.keys(STUBS).find(k => url.includes(k));
     if (stub) return route.fulfill({ contentType: 'application/javascript', body: STUBS[stub] });
@@ -1842,6 +1843,24 @@ async function contrastReport(page) {
     await page.waitForTimeout(1200);
     check((await page.textContent('#pub-autoprog')).includes('Blok 1') && (await page.textContent('#pub-program-wrap')).includes('Full Body A') && (await page.textContent('#pub-program-wrap')).includes('Hari A'), 'program otomatis: accepting builds Full Body days and keeps the coach days as own routines');
     await shot(page, 'portal-mobile-autoprog');
+    // Animasi gerakan sendiri (T-1611): gerakan gym → pola, figur tergambar di dalam kotak, bergerak hanya dengan transform.
+    {
+      await page.evaluate(() => window.rigEnsure());
+      const rg = await page.evaluate(() => {
+        const pats = ['leg-extension', 'leg-press', 'squat-machine', 'hip-thrust-machine', 'lat-pulldown', 'seated-cable-row', 'chest-fly-machine', 'incline-push-up'];
+        const box = document.createElement('div'); box.className = 'rig-big'; box.id = 'rig-test'; document.body.appendChild(box);
+        const out = pats.map(function (p) {
+          box.innerHTML = window.rigSvg(p, { anim: true });
+          const svg = box.querySelector('svg'), r = svg.getBoundingClientRect(), sc = r.width / 200;
+          const out = Array.from(svg.querySelectorAll('g')).filter(g => /^rg-(torso|thigh|shin|foot|head|ua|fa)$/.test(g.getAttribute('class'))).some(g => { const b = g.getBoundingClientRect(); return b.left < r.left - 2 || b.right > r.right + 2 || b.top < r.top - 2 || b.bottom > r.bottom + 2; });
+          return { p: p, ok: !!svg && !out && svg.querySelectorAll('.mmf.on').length > 0 && /@keyframes/.test(svg.innerHTML), anim: getComputedStyle(svg.querySelector('.rg-shin')).animationName };
+        });
+        box.remove();
+        return { out: out, map: [window.rigPatOf({ exId: '0739' }), window.rigPatOf({ gerakan: 'Squat (Machine)' }), window.rigPatOf({ gerakan: 'Hip Thrust (Machine)' }), window.rigPatOf({ exId: '0025' })] };
+      });
+      check(rg.out.every(x => x.ok && x.anim && x.anim !== 'none'), 'exercise animation: all 8 beginner patterns draw inside the box with main muscles dark and a CSS animation ' + JSON.stringify(rg.out.filter(x => !x.ok).map(x => x.p)));
+      check(rg.map.join(',') === 'leg-press,squat-machine,hip-thrust-machine,', 'exercise animation: library ID and gym names pick the pattern; other lifts keep their picture');
+    }
     check((await overflowX(page)) <= 0, 'program otomatis: nothing scrolls sideways');
     await page.setViewportSize(DESKTOP);
     await page.waitForTimeout(400);
