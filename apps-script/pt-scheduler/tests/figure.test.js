@@ -41,11 +41,13 @@ test('muscle levels: gym exercises use the EMG table (Otot.md), others the gener
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.html'), 'utf8');
   const body = src.slice(src.indexOf('const MM_PART_TARGETS'), src.indexOf('window.mmLevels = mmLevels;'));
   const mmLevels = new Function(body + '; return mmLevels;')();
-  assert.deepEqual(mmLevels([{ exId: '0739', target: 'glutes' }]), { quads: 2, glutes: 1 }, 'Leg Press: quads main, glutes helper');
+  assert.deepEqual(mmLevels([{ exId: '0739', target: 'glutes' }]), { quads: 2, glutes: 1, adductors: 1 }, 'Leg Press: quads main, glutes + adductors helpers (Kinoshita 2026)');
   assert.deepEqual(mmLevels([{ exId: '0585', target: 'quads' }]), { quads: 2 }, 'Leg Extension: no helpers');
   assert.equal(mmLevels([{ exId: '2330' }]).biceps, 1);
   assert.deepEqual(mmLevels([{ target: 'hamstrings' }]), { hamstrings: 2, glutes: 1 });
   assert.equal(mmLevels([{ bodyPart: 'chest' }]).pectorals, 2, 'old rows with only a body part still light up');
   const otot = fs.readFileSync(path.join(DIR, '..', 'docs', 'program', 'Otot.md'), 'utf8');
   ['0493', '2330', '0739', '0585', '0861', '0596'].forEach(id => assert.ok(otot.includes('| ' + id + ' |'), id + ' documented in Otot.md'));
+  assert.ok(!otot.includes('⚠'), 'every gym exercise has a source');
+  assert.ok(!fs.readFileSync(path.join(DIR, '..', 'docs', 'program', 'Rules.md'), 'utf8').match(/⚠ belum|belum dicek/), 'no unchecked rule left');
 });
