@@ -7,7 +7,7 @@
 | `.github/workflows/checks.yml` | every pull request (any file, docs too), or by hand | **`checks`**: every Agent.md §5 check: syntax, `node --test`, browser check (Playwright, phone pass included), share-card check, `sync-offline.js --check` against `xnkzzxd/BookingPT-Client`, offline check (coach + client wrapper) |
 | `.github/workflows/pt-scheduler.yml` | push to `main` touching `apps-script/pt-scheduler/**` (deploy); PRs on the same paths (quick `check`) | `check`, then `deploy` (clasp push + redeploy). Unchanged by T-1404, so docs-only merges never deploy. |
 
-- BookingPT-Client is public, so CI checks it out without a token. If the checkout ever fails, the run shows a warning ("BookingPT-Client tidak terjangkau"), skips the sync check and the client half of the offline check, and still checks the coach wrapper.
+- BookingPT-Client is public, so CI checks it out without a token. It uses the BookingPT-Client branch with the same name as the PR branch when one exists (a change to the shared offline files is pushed to both repos on one branch name), otherwise `main`. If the checkout ever fails, the run shows a warning ("BookingPT-Client tidak terjangkau"), skips the sync check and the client half of the offline check, and still checks the coach wrapper.
 - Playwright is pinned in `checks.yml` (`PLAYWRIGHT_VERSION`) and installed outside the repo; the tools find it through `NODE_PATH`.
 - The full run takes about 10 minutes (the browser check alone is about 6).
 

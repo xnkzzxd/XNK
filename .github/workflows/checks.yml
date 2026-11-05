@@ -48,12 +48,24 @@ jobs:
 
       # The client wrapper lives in xnkzzxd/BookingPT-Client (public). If it can't be fetched,
       # the offline check still runs on the coach wrapper and says the client part was skipped.
+      # A change to the shared offline files lands in both repos on the same branch name (see
+      # sync-offline.js), so compare against that branch when it exists, otherwise against main.
+      - name: Pick BookingPT-Client branch
+        id: cref
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          ref=main
+          if [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads https://github.com/xnkzzxd/BookingPT-Client "refs/heads/$HEAD_REF" >/dev/null 2>&1; then ref="$HEAD_REF"; fi
+          echo "BookingPT-Client ref: $ref"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
       - name: Check out BookingPT-Client
         id: client
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: xnkzzxd/BookingPT-Client
+          ref: ${{ steps.cref.outputs.ref }}
           path: _BookingPT-Client
           persist-credentials: false
       - name: Offline copies match BookingPT-Client
