@@ -989,7 +989,7 @@ async function contrastReport(page) {
     check(await visible(page, '#ex-search') && (await page.textContent('#exs-title')).includes('Hari A') && (await page.locator('#exs-part').count()) === 1 && !(await visible(page, '#modal-program')), 'search: "+ Gerakan" opens its own search sheet with a body-part dropdown');
     await page.fill('#exs-q', 'squat');
     await page.waitForTimeout(500);
-    check((await page.locator('#exs-list .ex-li').count()) === 2 && (await page.locator('#exs-list img.ex-th').count()) === 1 && (await overflowX(page)) <= 0, 'search: filters the library, offers the typed name, shows the picture, no sideways scroll');
+    check((await page.locator('#exs-list .ex-li').count()) === 2 && (await page.locator('#exs-list img.ex-th, #exs-list .ex-th.rig-th').count()) === 1 && (await overflowX(page)) <= 0, 'search: filters the library, offers the typed name, shows the picture (our figure for Goblet Squat), no sideways scroll');
     await shot(page, 'admin-ex-search');
     await page.click('#exs-list .ex-pick >> nth=1');
     await page.waitForTimeout(200);
@@ -1847,7 +1847,7 @@ async function contrastReport(page) {
     {
       await page.evaluate(() => window.rigEnsure());
       const rg = await page.evaluate(() => {
-        const pats = ['leg-extension', 'leg-press', 'squat-machine', 'hip-thrust-machine', 'lat-pulldown', 'seated-cable-row', 'chest-fly-machine', 'incline-push-up'];
+        const pats = Object.keys(window.rigSync().pats);
         const box = document.createElement('div'); box.className = 'rig-big'; box.id = 'rig-test'; document.body.appendChild(box);
         const out = pats.map(function (p) {
           box.innerHTML = window.rigSvg(p, { anim: true });
@@ -1858,7 +1858,7 @@ async function contrastReport(page) {
         box.remove();
         return { out: out, map: [window.rigPatOf({ exId: '0739' }), window.rigPatOf({ gerakan: 'Squat (Machine)' }), window.rigPatOf({ gerakan: 'Hip Thrust (Machine)' }), window.rigPatOf({ exId: '0025' })] };
       });
-      check(rg.out.every(x => x.ok && x.anim && x.anim !== 'none'), 'exercise animation: all 8 beginner patterns draw inside the box with main muscles dark and a CSS animation ' + JSON.stringify(rg.out.filter(x => !x.ok).map(x => x.p)));
+      check(rg.out.every(x => x.ok && x.anim && x.anim !== 'none'), 'exercise animation: every pattern draws inside the box with main muscles dark and a CSS animation ' + JSON.stringify(rg.out.filter(x => !x.ok).map(x => x.p)));
       check(rg.map.join(',') === 'leg-press,squat-machine,hip-thrust-machine,', 'exercise animation: library ID and gym names pick the pattern; other lifts keep their picture');
     }
     check((await overflowX(page)) <= 0, 'program otomatis: nothing scrolls sideways');

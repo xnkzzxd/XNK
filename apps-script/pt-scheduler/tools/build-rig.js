@@ -69,9 +69,10 @@ function solve(p) {
   const hipF = norm(trunk + 180 - leg[0]);
   const elbow0 = Math.abs(norm(arm[0] - arm[1]));
   const shoulderF = norm(trunk + 180 - arm[0]);
+  const ankle0 = norm(footA - (leg[1] - 90));   // 0 = kaki tegak lurus tulang kering; + = plantarfleksi
   return {
     s: { torso: seg(hip, trunk), thigh: seg(hip, leg[0]), shin: seg(knee, leg[1]), foot: seg(ankle, footA), ua: seg(shoulder, arm[0], sx), fa: seg(elbow, arm[1], sx), head: seg(neck, trunk) },
-    j: { knee: Math.round(knee0), hip: Math.round(hipF), elbow: Math.round(elbow0), shoulder: Math.round(shoulderF) },
+    j: { knee: Math.round(knee0), hip: Math.round(hipF), elbow: Math.round(elbow0), shoulder: Math.round(shoulderF), ankle: Math.round(ankle0) },
     p: { hip: [r1(hip[0]), r1(hip[1])], shoulder: [r1(shoulder[0]), r1(shoulder[1])], knee: [r1(knee[0]), r1(knee[1])], ankle: [r1(ankle[0]), r1(ankle[1])],
       wrist: [r1(wrist[0]), r1(wrist[1])], elbow: [r1(elbow[0]), r1(elbow[1])] }
   };
@@ -174,6 +175,66 @@ const PATTERNS = {
       return { pelvis: hip, trunk: a, leg: { F: 0, K: 0, foot: a + 90 }, arm: { ik: hand, bend: 1 }, neck: 0 };
     },
     eq: [{ d: 'M144 138 H186 V146 H144 Z' }, { d: 'M150 146 V184 M180 146 V184' }]
+  },
+  // T-1612 ── pola tambahan (level pemula). Sumber: docs/program/Gerak.md.
+  // Push Up (lantai): sama dengan Incline Push Up, tangan di lantai; siku lurus penuh → ±95° (Kang 2019).
+  'push-up': {
+    name: 'Push Up', muscles: [['pectorals'], ['delts', 'triceps', 'abs']],
+    pose: t => {
+      const ankle = [28, 176], hand = [150, 178], legLen = LEN.thigh + LEN.shin, body = legLen + LEN.torso;
+      const want = lerp(armReach(4), armReach(95), t);
+      let lo = -60, hi = 0;
+      for (let k = 0; k < 60; k++) { const m = (lo + hi) / 2; const sh = add(ankle, m, body); if (dist(sh, hand) > want) lo = m; else hi = m; }
+      const a = (lo + hi) / 2, hip = add(ankle, a, legLen);
+      return { pelvis: hip, trunk: a, leg: { F: 0, K: 0, foot: a + 90 }, arm: { ik: hand, bend: 1 }, neck: 0 };
+    },
+    eq: [{ d: 'M14 182 H190 V186 H14 Z' }]
+  },
+  // Seated Leg Curl (Machine): duduk, pinggul fleksi (posisi duduk lebih baik dari telungkup, Maeo 2021); lutut dari hampir
+  // lurus ke tekuk. Rentang lutut 10° → 100° = batas mesin pada gambar (bukan angka studi, lihat Gerak.md).
+  'seated-leg-curl': {
+    name: 'Seated Leg Curl (Machine)', muscles: [['hamstrings'], []],
+    pose: t => ({ pelvis: [76, 128], trunk: -100, leg: { F: 90, K: lerp(10, 100, t) }, arm: { S: 15, E: 35 } }),
+    eq: [{ d: 'M50 140 H102 V148 H50 Z' }, { d: 'M38 70 L48 66 L64 132 L54 136 Z' }, { d: 'M72 148 V184 M58 184 H94' },
+      { f: 'knee', d: 'M-14 -14 H6 V-9 H-14 Z' }, { f: 'ankle', d: 'M2 -6 h10 v12 h-10 Z' }]
+  },
+  // Bicep Curl (Cable): berdiri, lengan atas di samping badan; siku 0° → 135° (ROM penuh, Pedrosa 2023). Posisi bahu tidak
+  // mengubah hasil (Attarieh 2025), jadi lengan atas lurus ke bawah.
+  'bicep-curl-cable': {
+    name: 'Bicep Curl (Cable)', muscles: [['biceps'], ['forearms']],
+    pose: t => ({ pelvis: [96, 100], trunk: -90, leg: { F: 0, K: 4, foot: 0 }, arm: { S: 4, E: lerp(2, 135, t) } }),
+    eq: [{ d: 'M74 186 H124 V190 H74 Z' }, { d: 'M168 30 V186 M158 186 H178', line: true }, { f: 'wrist', d: 'M-3 -6 H3 V6 H-3 Z' }, { f: 'wrist', cable: [166, 176] }]
+  },
+  // Triceps Pushdown (Cable): berdiri, lengan atas di samping badan (posisi netral); siku 90° → 0° (Maeo 2022).
+  'triceps-pushdown': {
+    name: 'Triceps Pushdown (Cable)', muscles: [['triceps'], []],
+    pose: t => ({ pelvis: [92, 100], trunk: -84, leg: { F: 0, K: 6, foot: 0 }, arm: { S: 6, E: lerp(90, 2, t) } }),
+    eq: [{ d: 'M70 186 H120 V190 H70 Z' }, { d: 'M150 8 V186 M140 186 H160', line: true }, { f: 'wrist', d: 'M-8 -2 H8 V2 H-8 Z' }, { f: 'wrist', cable: [148, 12] }]
+  },
+  // Standing Calf Raise (Machine): ujung kaki di pijakan, tumit dari dorsofleksi −25° ke plantarfleksi +25° (Kassiano 2023).
+  'calf-raise-machine': {
+    name: 'Standing Calf Raise (Machine)', muscles: [['calves'], []],
+    pose: t => {
+      const toe = [118, 180], fa = lerp(-25, 25, t);
+      const ankle = [toe[0] - LEN.foot * Math.cos(rad(fa)), toe[1] - LEN.foot * Math.sin(rad(fa))];
+      const pelvis = [ankle[0], ankle[1] - LEN.thigh - LEN.shin];
+      return { pelvis: pelvis, trunk: -90, leg: { F: 0, K: 0, foot: fa }, arm: { S: 20, E: 120 } };
+    },
+    eq: [{ d: 'M104 182 H150 V192 H104 Z' }, { f: 'shoulder', d: 'M-10 -7 H10 V-1 H-10 Z' }, { d: 'M150 48 V192', line: true }]
+  },
+  // Goblet Squat (Dumbbell): kaki tetap di lantai, beban di depan dada; lutut 5° → 100° seperti squat mesin
+  // (Larsen 2025; squat penuh: Kubo 2019).
+  'goblet-squat': {
+    name: 'Goblet Squat (Dumbbell)', muscles: [['quads'], ['glutes', 'adductors']],
+    pose: t => {
+      const K = lerp(5, 100, t), ankle = [100, 176];
+      const shinUp = lerp(-92, -64, t);
+      const knee = add(ankle, shinUp, LEN.shin);
+      const hip = add(knee, (shinUp + 180) - K + 180, LEN.thigh);
+      const trunk = lerp(-88, -70, t), sh = add(hip, trunk, LEN.torso);
+      return { pelvis: hip, trunk: trunk, leg: { ik: ankle, bend: 1, foot: 0 }, arm: { ik: [sh[0] + 12, sh[1] + 16], bend: 1 } };
+    },
+    eq: [{ d: 'M70 182 H140 V186 H70 Z' }, { f: 'wrist', d: 'M-5 -7 H5 V7 H-5 Z' }]
   }
 };
 
@@ -181,7 +242,12 @@ const PATTERNS = {
 const EX = {
   '0585': 'leg-extension', '0739': 'leg-press', '2330': 'lat-pulldown', '0861': 'seated-cable-row', '0596': 'chest-fly-machine', '0493': 'incline-push-up',
   'leg extension (machine)': 'leg-extension', 'leg press (45°)': 'leg-press', 'squat (machine)': 'squat-machine', 'hip thrust (machine)': 'hip-thrust-machine',
-  'lat pulldown (cable)': 'lat-pulldown', 'seated cable row': 'seated-cable-row', 'chest fly (machine)': 'chest-fly-machine', 'incline push up': 'incline-push-up'
+  'lat pulldown (cable)': 'lat-pulldown', 'seated cable row': 'seated-cable-row', 'chest fly (machine)': 'chest-fly-machine', 'incline push up': 'incline-push-up',
+  // T-1612
+  '0662': 'push-up', '0599': 'seated-leg-curl', '0868': 'bicep-curl-cable', '0201': 'triceps-pushdown', '0605': 'calf-raise-machine', '1760': 'goblet-squat',
+  '1350': 'seated-cable-row', 'push up': 'push-up', 'seated leg curl (machine)': 'seated-leg-curl', 'bicep curl (cable)': 'bicep-curl-cable',
+  'triceps pushdown (cable)': 'triceps-pushdown', 'standing calf raise (machine)': 'calf-raise-machine', 'goblet squat (dumbbell)': 'goblet-squat',
+  'seated row (machine)': 'seated-cable-row'
 };
 
 function build() {
