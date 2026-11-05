@@ -75,9 +75,15 @@ function _gymFromRow_(r) {
 
 /** Semua baris katalog (urut Urutan). */
 function _gymCatalog_() {
-  const sh = _gymSheet_();
-  return sh.getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(_gymFromRow_)
+  if (_readMemo_ && _readMemo_.gymCatalog) return _readMemo_.gymCatalog;
+  // Baca tanpa membuat sheet: sebelum owner membuka Latihan & Alat, katalog = isi seed (tanpa menulis apa pun).
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('GymExercises');
+  const now = '';
+  const rows = sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : GYM_SEED_.map(function(x, i) { return _gymRowFromSeed_(x, i, now); });
+  const out = rows.filter(function(r) { return r[0]; }).map(_gymFromRow_)
     .sort(function(a, b) { return a.urutan - b.urutan; });
+  if (_readMemo_) _readMemo_.gymCatalog = out;
+  return out;
 }
 
 /** Murni: validasi satu gerakan katalog dari form admin; lempar error Indonesia. */
@@ -113,9 +119,10 @@ function _gymValidate_(it) {
     jenis: it.jenis || 'beban', repMin: repMin, repMax: repMax, hindari: tags, varian: String(it.varian || '').trim(), unilateral: !!it.unilateral, aktif: it.aktif !== false };
 }
 
-/** Admin: katalog alat gym + daftar pilihan untuk form. */
+/** Admin: katalog alat gym + daftar pilihan untuk form (membuat + mengisi sheet saat pertama dibuka). */
 function getGymCatalog(token) {
   requireAdmin_(token);
+  _gymSheet_();
   return { items: _gymCatalog_(), levels: GYM_LEVELS.slice(), patterns: GYM_PATTERNS.slice(), targets: EX_TARGETS.slice(), tags: GYM_AVOID_TAGS.slice() };
 }
 

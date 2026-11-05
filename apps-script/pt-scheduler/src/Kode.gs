@@ -120,7 +120,9 @@ function _appApi_() {
     getMyWorkout: getMyWorkout, logMyWorkout: logMyWorkout, getMyNutrition: getMyNutrition, getMyFoodLog: getMyFoodLog,
     logMyFood: logMyFood, deleteMyFood: deleteMyFood, saveMyMeasurement: saveMyMeasurement,
     deleteMyMeasurement: deleteMyMeasurement, getMyProgress: getMyProgress,
-    uploadMyProgressPhoto: uploadMyProgressPhoto, getMyProgressPhoto: getMyProgressPhoto, deleteMyProgressPhoto: deleteMyProgressPhoto, getMyShareData: getMyShareData };
+    uploadMyProgressPhoto: uploadMyProgressPhoto, getMyProgressPhoto: getMyProgressPhoto, deleteMyProgressPhoto: deleteMyProgressPhoto, getMyShareData: getMyShareData,
+    getMyProgramProfile: getMyProgramProfile, saveMyProgramProfile: saveMyProgramProfile, acceptAutoProgram: acceptAutoProgram,
+    setMyProgramAuto: setMyProgramAuto, swapMyProgramExercise: swapMyProgramExercise };
 }
 function _appApiReply_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -2215,6 +2217,7 @@ function getPortalMore(memberToken) {
       program: program,
       workout: workout,
       nutrition: nutrition,
+      programGen: part(function() { return _programGenFor_(row, false); }),
       content: part(function() { return _contentForClient_(); }),
       coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
       share: part(function() { return _shareFor_(row, workout, progress); })
@@ -2363,11 +2366,21 @@ function _ensureScheduleClassHeader_(sheet) {
 
 // Memo per eksekusi untuk bundle baca-saja (getPortalMore, dst.): Schedules dibaca sekali. Hanya diisi oleh _withSchedulesMemo_.
 let _schedMemo_ = null;
+let _readMemo_ = null;
+/** Nilai sheet (tanpa header) — sekali per bundle bila di dalam _withSchedulesMemo_, selain itu baca langsung. */
+function _sheetRowsMemo_(name) {
+  if (_readMemo_ && _readMemo_[name]) return _readMemo_[name];
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  const rows = sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : [];
+  if (_readMemo_) _readMemo_[name] = rows;
+  return rows;
+}
 function _withSchedulesMemo_(fn) {
-  const prev = _schedMemo_, prevProg = _progMemo_;
+  const prev = _schedMemo_, prevProg = _progMemo_, prevRead = _readMemo_;
   _schedMemo_ = _getSchedulesAll_();
   _progMemo_ = { rows: null };
-  try { return fn(); } finally { _schedMemo_ = prev; _progMemo_ = prevProg; }
+  _readMemo_ = {};   // Fase U: WorkoutLog, GymExercises dan HealthScreening dibaca sekali per bundle
+  try { return fn(); } finally { _schedMemo_ = prev; _progMemo_ = prevProg; _readMemo_ = prevRead; }
 }
 
 function _getSchedulesAll_() {
@@ -6285,8 +6298,10 @@ function getClientBundle(token, memberId) {
     const workout = part(function () { return getWorkoutLog(token, memberId); });
     const program = part(function () { return getMemberProgram(token, memberId); });
     const care = part(function () { return getClientCare(token, memberId); });
+    let mrow = null;
+    const memberRow = function() { return mrow || (mrow = _memberRowOrThrow_(memberId).row); };
     const insight = part(function () {
-      const row = _memberRowOrThrow_(memberId).row;
+      const row = memberRow();
       const bodyFat = care && care.assessment && care.assessment.bodyFat !== '' && care.assessment.bodyFat != null ? Number(care.assessment.bodyFat) : null;
       return _insightFor_(row, 'coach', { progress: progress, workout: workout, bodyFat: bodyFat });
     });
@@ -6299,6 +6314,7 @@ function getClientBundle(token, memberId) {
       program: program,
       workout: workout,
       nutrition: part(function () { return getClientNutrition(token, memberId); }),
+      programGen: part(function () { return _programGenFor_(memberRow(), true); }),
       foodLog: part(function () { return getClientFoodLog(token, memberId); }),
       share: part(function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
       insight: insight
@@ -7305,11 +7321,9 @@ function _workoutEvents_(rows) {
 }
 
 function _workoutRowsOf_(memberId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
   // Fase U: gerakan manual diisi Exercise ID / otot saat baca (_exResolveRow_, LatihanAlias.gs).
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_);
+  return _sheetRowsMemo_('WorkoutLog').filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_);
 }
 
 /** Hitungan untuk badge: hari latihan yang dicatat dan jumlah rekor pribadi. Dihitung, tidak disimpan. */
@@ -7570,8 +7584,7 @@ function _workoutRoutineHist_(days, sessions) {
 function _workoutFor_(row) {
   const id = String(row[0]).trim();
   const today = _todayWib_(), since = _addDaysIso_(today, -WORKOUT_LIMITS.readDays);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  const all = sheet && sheet.getLastRow() >= 2 ? sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_) : [];
+  const all = _sheetRowsMemo_('WorkoutLog').filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_);
   const g = _workoutGroup_(all.filter(function(r) { return _isoDateCell_(r[2]) >= since; }));
   const prsByDate = {};
   _workoutEvents_(all).prs.forEach(function(p) { prsByDate[p.tanggal] = (prsByDate[p.tanggal] || 0) + 1; });
@@ -7597,6 +7610,14 @@ function _workoutFor_(row) {
       if (sug) suggest[key] = sug;
     });
   });
+  // Fase U: program otomatis memakai progresi rep → set → beban dengan gerbang form (aturan 9a); program coach tetap seperti dulu.
+  if (/^auto:/.test(_programDays_(id).sumber || '')) {
+    try {
+      const prog = _pgProgressFor_(row, program, g);
+      g.progress = prog;
+      Object.keys(prog).forEach(function(k) { if (prog[k].step === 'beban') suggest[k] = { kg: prog[k].kg, why: prog[k].why }; else delete suggest[k]; });
+    } catch (e) { g.progress = {}; }
+  }
   g.suggest = suggest;
   return g;
 }
