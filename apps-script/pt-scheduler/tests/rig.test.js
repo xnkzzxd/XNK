@@ -49,6 +49,30 @@ test('joint ranges match docs/program/Gerak.md', () => {
   assert.ok(fly.every(f => near(f.j.shoulder, 88, 1) && near(f.j.elbow, 15, 1)) && fly[0].s.ua[3] < 0.3 && fly[fly.length - 1].s.ua[3] > 0.95);
 });
 
+test('T-1612 patterns: joint ranges match Gerak.md and muscles match the catalog rows', () => {
+  // Push Up (floor): full elbow extension at the top (Kang 2019)
+  assert.ok(first('push-up').j.elbow <= 6 && near(last('push-up').j.elbow, 95, 3));
+  // Bicep Curl: elbow 0° → 135° full ROM (Pedrosa 2023)
+  assert.ok(first('bicep-curl-cable').j.elbow <= 3 && near(last('bicep-curl-cable').j.elbow, 135, 1));
+  // Triceps Pushdown: elbow 90° → 0°, neutral arm (Maeo 2022)
+  assert.ok(near(first('triceps-pushdown').j.elbow, 90, 1) && last('triceps-pushdown').j.elbow <= 3 && Math.abs(first('triceps-pushdown').j.shoulder) <= 10);
+  // Calf Raise: ankle −25° → +25° (Kassiano 2023)
+  assert.ok(near(first('calf-raise-machine').j.ankle, -25, 1) && near(last('calf-raise-machine').j.ankle, 25, 1));
+  // Goblet Squat: knee 5° → 100° (same range as the machine squat)
+  assert.ok(near(first('goblet-squat').j.knee, 5, 1) && near(last('goblet-squat').j.knee, 100, 1));
+  // Seated Leg Curl: seated (hip flexed, Maeo 2021), knee bends
+  assert.ok(data.pats['seated-leg-curl'].frames.every(f => near(f.j.hip, 90, 2)) && last('seated-leg-curl').j.knee > first('seated-leg-curl').j.knee + 60);
+  // muscles = catalog main / helper muscles of the same lift
+  const seed = fs.readFileSync(path.join(__dirname, '..', 'src', 'LatihanKatalog.gs'), 'utf8');
+  [...seed.matchAll(/\['gym:[^']+', '([^']+)', '([^']*)', '[^']+', '[^']+', '([^']*)', '([^']*)'/g)].forEach(m => {
+    const pat = data.ex[m[1].toLowerCase()];
+    if (!pat || ['seated-cable-row'].includes(pat) && m[1] !== 'Seated Cable Row') return;   // machine row shares the cable row pattern
+    const want = [m[3].split(',').filter(Boolean), m[4].split(',').filter(Boolean)];
+    assert.deepEqual(data.pats[pat].muscles, want, m[1] + ' muscles = catalog');
+  });
+  ['0662', '0599', '0868', '0201', '0605', '1760', '1350'].forEach(id => assert.ok(data.ex[id], 'library ' + id + ' has a pattern'));
+});
+
 test('segments stay attached and pinned points stay put', () => {
   const L = data.len;
   const end = (s, len) => [s[0] + len * Math.cos(s[2] * Math.PI / 180), s[1] + len * Math.sin(s[2] * Math.PI / 180)];
@@ -72,6 +96,8 @@ test('segments stay attached and pinned points stay put', () => {
   assert.ok(still('squat-machine', 'ankle'), 'squat: feet stay on the platform');
   assert.ok(still('hip-thrust-machine', 'ankle') && still('hip-thrust-machine', 'shoulder'), 'hip thrust: feet and upper back stay put');
   assert.ok(still('incline-push-up', 'wrist') && still('incline-push-up', 'ankle'), 'push up: hands and feet stay put');
+  assert.ok(still('push-up', 'wrist') && still('push-up', 'ankle') && still('goblet-squat', 'ankle'), 'floor push up and goblet squat: hands / feet stay put');
+  assert.ok(still('seated-leg-curl', 'hip') && still('bicep-curl-cable', 'shoulder') && still('triceps-pushdown', 'elbow'), 'curl / pushdown: the upper arm stays still');
   assert.ok(still('leg-press', 'hip') && still('leg-extension', 'hip') && still('lat-pulldown', 'hip'), 'seated lifts: the hips stay on the seat');
 });
 

@@ -19,7 +19,8 @@ Rencana lengkap: [PRD.md](PRD.md). Urutan rilis (keputusan owner): **Rilis 1** n
 
 ## Rilis 3 — animasi otot sendiri
 - [x] T-1611 Animasi gerakan sendiri, 8 pola pemula banget: `tools/build-rig.js` (FK / IK dua ruas, 13 frame per pola, kabel / tuas ikut sendi) → `figure/rig.min.json` (±8 KB gzip; satu file untuk rig + pose, bukan `poses.json` terpisah), sudut bersumber di [Gerak.md](Gerak.md). App: `rigEnsure` / `rigSync` (localStorage `xnk_rig_v1`, dimuat bersama pustaka gerakan), `rigPatOf` (Exercise ID lalu nama gerakan gym), `rigSvg(pat, {anim, sex})` (CSS `@keyframes` hanya transform, reduced motion = diam), `exThumb` menggantikan GIF di logger, pencarian gerakan, detail rutinitas dan form program untuk gerakan yang punya pola; riwayat gerakan di logger menampilkan figur bergerak besar. Tampak samping saja (tampak depan menyusul T-1612). Pria/wanita = lebar ruas. Test `tests/rig.test.js` (sudut terhadap Gerak.md, ruas tidak lepas, titik dipaku diam, otot = Otot.md) + browser check. `tools/figure-check.js` tidak dibuat: cek kotak dan animasi ada di browser check.
-- [ ] T-1612 Pola sisanya, `Gerak.md` dengan sumber sudut sendi.
+- [x] T-1612 Pola tambahan level pemula: Push Up, Seated Leg Curl, Bicep Curl (Cable), Triceps Pushdown (Cable), Standing Calf Raise (Machine), Goblet Squat; Seated Row (Machine) memakai pola Seated Cable Row. Sumber di [Gerak.md](Gerak.md) (Maeo 2021, Pedrosa 2023, Attarieh 2025, Maeo 2022, Kassiano 2023). Otot pola = otot katalog (diuji). 14 pola, ±12 KB gzip.
+- [ ] T-1612b Pola yang belum bersumber / butuh tampak depan: RDL, Chest Press, Bench Press (Dumbbell), Shoulder Press, Bent Over Row (Dumbbell), Lateral Raise, Hip Abduction (tampak depan), Dead Bug, Treadmill, Stationary Bike.
 - [ ] T-1613 Ganti GIF bertahap; hapus hotlink setelah semua pola selesai (keputusan owner).
 
 ## Rencana berikutnya (bukan fase ini)
