@@ -2215,7 +2215,7 @@
     _lsSet(PORTAL_CACHE_KEY, null);
     portalMoreRaw = null; portalMoreInflight = null; portalMoreAt = 0;
     window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; window.myBills = undefined;
-    window.myProgram = undefined; window.myInsight = undefined; window.myWeek = undefined; window.myNutrition = undefined; window.myContent = undefined; window.myCoachStatus = undefined; pg.data = null; myCare.form = null; myCare.assess = null;
+    window.myProgram = undefined; window.myInsight = undefined; window.myWeek = undefined; window.myNutrition = undefined; window.myProgramGen = undefined; window.myContent = undefined; window.myCoachStatus = undefined; pg.data = null; myCare.form = null; myCare.assess = null;
   };
   function loadPortalCache(token) {
     try {
@@ -2258,6 +2258,7 @@
     if (Array.isArray(m.content)) window.myContent = { state: 'ok', list: m.content, at: Date.now() };
     else if (m.content && !window.myContent) window.myContent = { state: 'error', error: moreErr(m.content), list: [] };
     if (m.nutrition && !moreBad(m.nutrition)) window.myNutrition = m.nutrition;
+    if (m.programGen && !moreBad(m.programGen)) window.myProgramGen = m.programGen;
     if (m.coachStatus && !moreBad(m.coachStatus)) window.myCoachStatus = m.coachStatus;
     if (m.share && !moreBad(m.share)) window.myShare = m.share;
     if (m.insight) window.myInsight = m.insight;
@@ -4292,6 +4293,7 @@
       window.programSetAdmin(key, bad(b.program) ? { error: msg(b.program) } : b.program);
       window.nutSet(key, bad(b.nutrition) ? Object.assign({ error: msg(b.nutrition) }) : Object.assign({}, b.nutrition, { foodLog: bad(b.foodLog) ? null : b.foodLog }));
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
+      pgAdminGen[key] = bad(b.programGen) ? null : b.programGen;
       shareAdmin[key] = bad(b.share) ? null : b.share;
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();
@@ -4963,6 +4965,9 @@
     const d = progAdmin[memberId];
     if (!d) return '<p class="li-sub">Memuat program…</p>';
     if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    return autoProgAdminHtml(memberId) + programAdminInner0(memberId, d);
+  }
+  function programAdminInner0(memberId, d) {
     const n = d.days.reduce((s, x) => s + x.items.length, 0);
     let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Program latihan</p><span class="li-sub">' + (n ? d.days.length + ' hari · ' + n + ' gerakan' : 'Belum ada') + '</span></div>';
     if (n) {
@@ -5449,6 +5454,7 @@
   // Set awal satu gerakan program: rep/beban dari catatan terakhir, saran naik beban dari server, atau target coach.
   function wlFromPlan(it, hari, data) {
     const key = wkKeyOf(it), last = (data.last || {})[key], sug = (data.suggest || {})[key] || null;
+    const prog = (data.progress || {})[key] || null;   // Fase U: langkah progresi program otomatis (rep → set → beban)
     const kind = it.jenis || 'beban', skema = it.skema || [];
     const n = skema.length || Math.max(1, Math.min(20, Number(it.set) || 3));
     const prevAll = last ? last.sets : [], prevWork = prevAll.filter(s => s.jenis !== 'w');
@@ -5473,9 +5479,18 @@
       sets.push(s);
     }
     return { key: key, n: it.n, hari: hari, exId: it.exId || '', gerakan: it.gerakan, bodyPart: '', target: '', kind: kind, rest: it.rest === '' || it.rest == null ? '' : Number(it.rest), ss: it.ss || '',
-      plan: { set: n, repMin: it.repMin, repMax: it.repMax, kg: it.kg, catatan: it.catatan || '', video: it.video || '' }, last: last ? { tanggal: last.tanggal, sets: last.sets } : null, sug: sug,
+      plan: { set: n, repMin: it.repMin, repMax: it.repMax, kg: it.kg, catatan: it.catatan || '', video: it.video || '' }, last: last ? { tanggal: last.tanggal, sets: last.sets } : null, sug: sug, prog: prog, form: '',
       skipped: false, own: false, rpeOn: wlPrefs().rpe, catatan: '', had: false, sets: sets };
   }
+  window.wlForm = function (i, v) { const e = wl && wl.entries[i]; if (!e) return; e.form = e.form === v ? '' : v; wlSave(); wlRender(); };
+  window.wlFormOk = function (i, on) {
+    const e = wl && wl.entries[i]; if (!e) return;
+    const id = wl.memberId, key = wkKeyOf(e);
+    adminCall('setFormOk', id, key, !!on).then(function (r) {
+      if (pgAdminGen[id]) { pgAdminGen[id].formOk = r.formOk; window.ccPatch(id, { programGen: pgAdminGen[id] }); }
+      wlRender(); showToast(on ? 'Form ditandai OK.' : 'Tanda form dihapus.');
+    }).catch(function (err) { showToast(err.message || 'Gagal.'); });
+  };
   function wlFromLog(l, data, date) {
     const info = wkInfo(l.exId), last = (data.last || {})[l.key];
     return { key: l.key, n: l.n, hari: l.hari || '', exId: l.exId || '', gerakan: l.gerakan, bodyPart: l.bodyPart || '', target: l.target || '', kind: wlKindGuess(info, l.sets), rest: '', ss: '', plan: null,
@@ -5697,6 +5712,7 @@
     if (e.skipped) return html + '<p class="wl-ex-sub">Dilewati · buka ⋯ untuk membatalkan</p></section>';
     if (wl.live) html += '<button type="button" class="wl-rest-link" onclick="window.wlRestPick(' + i + ')">' + icon('timer') + 'Istirahat: ' + h(wlRestText(wlRestOf(e))) + '</button>';
     if (e.sug && !e.had) html += '<p class="wl-ex-sub"><b>Naik ke ' + h(wlNum(e.sug.kg)) + ' kg</b> · ' + h(e.sug.why) + '</p>';
+    else if (e.prog && e.prog.why && !e.had) html += '<p class="wl-ex-sub">' + h(e.prog.why) + '</p>';
     else if (!e.last && e.plan) html += '<p class="wl-ex-sub">Target ' + h(wlPlanText(e)) + '</p>';
     const plate = wlPlateText(e);
     if (plate) html += '<p class="wl-ex-sub wl-plate">' + h(plate) + '</p>';
@@ -5706,6 +5722,16 @@
       e.sets.map((s, j) => wlRowHtml(i, j)).join('') + '</div>';
     if (!wl.live && e.sets.some(s => !s.done)) html += '<button type="button" class="btn btn-ghost btn-block wl-addset" onclick="window.wlTickAll(' + i + ')">' + icon('check-check') + 'Centang semua</button>';
     if (e.sets.length < 20) html += '<button type="button" class="btn btn-secondary btn-block wl-addset" onclick="window.wlAddSet(' + i + ')">' + icon('plus') + 'Tambah set</button>';
+    // Fase U (aturan 9a): setelah set terakhir, klien menilai form-nya; coach menandai Form OK (gerbang kenaikan beban).
+    if (done && e.kind !== 'waktu' && e.kind !== 'jarak') {
+      if (wl.mode === 'client') html += '<div class="wl-form row" style="gap:6px;align-items:center" role="group" aria-label="Form ' + h(exNm(e)) + '"><span class="li-sub grow">Form terasa rapi?</span>' +
+        '<button type="button" class="chip' + (e.form === 'ok' ? ' active' : '') + '" aria-pressed="' + (e.form === 'ok') + '" onclick="window.wlForm(' + i + ',\'ok\')">Rapi</button>' +
+        '<button type="button" class="chip' + (e.form === 'ragu' ? ' active' : '') + '" aria-pressed="' + (e.form === 'ragu') + '" onclick="window.wlForm(' + i + ',\'ragu\')">Ragu</button></div>';
+      else if (pgAdminGen[wl.memberId] && pgAdminGen[wl.memberId].isAuto) {
+        const fk = wkKeyOf(e), on = !!(pgAdminGen[wl.memberId].formOk || {})[fk];
+        html += '<button type="button" class="btn btn-ghost btn-block" aria-pressed="' + on + '" onclick="window.wlFormOk(' + i + ',' + (!on) + ')">' + icon(on ? 'badge-check' : 'badge') + (on ? 'Form OK' : 'Tandai form OK') + '</button>';
+      }
+    }
     return html + '</section>';
   }
   // Riwayat satu gerakan (rekor, grafik est. 1RM, 5 catatan terakhir); dipakai mode latihan dan lembar cari gerakan.
@@ -6271,7 +6297,7 @@
         durasi: e.kind === 'waktu' ? s.durasi : '', jarak: e.kind === 'jarak' ? s.jarak : '', rpe: e.rpeOn ? s.rpe : '', jenis: s.jenis || '' }));
       if (!sets.length && !e.had) return;
       const info = wkInfo(e.exId);
-      out.push({ n: e.n, hari: e.hari, exId: e.exId, gerakan: e.gerakan, bodyPart: e.bodyPart || (info ? info.b : ''), target: e.target || (info ? info.t : ''), catatan: sets.length ? e.catatan : '', sets: sets });
+      out.push({ n: e.n, hari: e.hari, exId: e.exId, gerakan: e.gerakan, bodyPart: e.bodyPart || (info ? info.b : ''), target: e.target || (info ? info.t : ''), catatan: sets.length ? e.catatan : '', form: sets.length && (e.form === 'ok' || e.form === 'ragu') ? e.form : '', sets: sets });
     });
     return out;
   }
@@ -8510,11 +8536,132 @@
     wlSheet('Jelajahi', body);
   };
 
+  // ── Program otomatis (Fase U, T-1607) ──────────────────────────────────────────────────────────────────────
+  // Data: window.myProgramGen (getPortalMore.programGen) dan pgAdminGen[id] (getClientBundle.programGen). Server menghitung
+  // semuanya; browser hanya menampilkan. Nama otot dan petunjuk latihan dalam bahasa Inggris (keputusan owner).
+  const pgAdminGen = {};
+  const PG_LVL_LBL = { 'pemula-banget': 'Pemula banget', pemula: 'Pemula', menengah: 'Menengah' };
+  const PG_GOAL_LBL = { kekuatan: 'Kekuatan', otot: 'Bentuk otot', fatloss: 'Turun lemak', bugar: 'Kebugaran' };
+  const PG_REASON_LBL = { 'form-belum': 'form kesehatan belum diisi', parq: 'ada jawaban "ya" di form kesehatan', cedera: 'ada cedera/operasi', obat: 'minum obat rutin', kondisi: 'ada kondisi lain', hamil: 'hamil/menyusui', remaja: 'usia di bawah 18', lansia: 'usia di atas 65' };
+  const PG_POLA_LBL = { lutut: 'Knee', pinggul: 'Hip', 'dorong-h': 'Push', 'dorong-v': 'Overhead push', 'tarik-h': 'Row', 'tarik-v': 'Pulldown' };
+  function autoProgCardHtml() {
+    const g = window.myProgramGen;
+    if (!g || g.error || !g.enabled) return '';
+    if (!g.auto) return '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Program otomatis</p><p class="li-sub">Dimatikan. Program yang ada tetap bisa dipakai.</p><button type="button" class="btn btn-outline" onclick="window.pgSetAuto(true)">Nyalakan lagi</button></div>';
+    if (g.needsProfile) return '<div class="card stack" style="gap:8px"><p class="eyebrow">Program otomatis</p><p class="li-title">Buat program latihanmu</p><p class="li-sub">Jawab 3 pertanyaan singkat. Program disusun dari alat di gym dan aturan berbasis penelitian.</p><button type="button" class="btn btn-primary btn-lg" onclick="window.pgProfileOpen()">Mulai</button></div>';
+    if (g.hasCoachProgram) return '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Program otomatis</p><p class="li-sub">Kamu punya program dari coach. Mau coba program otomatis? Program coach disimpan di Rutinitas saya.</p><div class="btn-row"><button type="button" class="btn btn-ghost" onclick="window.pgProfileOpen()">Ubah data</button><button type="button" class="btn btn-primary" onclick="window.pgAccept()">Coba</button></div></div>';
+    const p = g.profile || {};
+    let html = '<div class="card stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Program otomatis</p><span class="pill soft">Blok ' + h(g.block || 1) + '</span></div>' +
+      '<p class="li-title">' + h(PG_LVL_LBL[p.level] || '') + ' · ' + h(p.hari) + ' hari · ' + h(p.durasi) + ' menit · ' + h(PG_GOAL_LBL[p.tujuan] || '') + '</p>';
+    if (g.light) html += '<p class="li-sub" role="note">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Program ringan. Konsultasikan dengan coach atau dokter sebelum menambah beban.</p>';
+    html += (g.why || []).filter(function (w) { return !/^Light mode/.test(w); }).slice(0, 3).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('');
+    html += '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-ghost" onclick="window.pgProfileOpen()">Ubah data</button><button type="button" class="btn btn-ghost" onclick="window.pgSwapOpen()">' + icon('repeat') + ' Tukar gerakan</button><button type="button" class="btn btn-ghost" onclick="window.pgSetAuto(false)">Matikan</button></div></div>';
+    return html;
+  }
+  function renderAutoProg() { const el = $('pub-autoprog'); if (el) { setHTML(el, autoProgCardHtml()); paintIcons(); } }
+  function pgApply(r) {
+    if (r && r.programGen) { window.myProgramGen = r.programGen; window.patchPortalMore('programGen', r.programGen); }
+    if (r && r.program) { window.myProgram = { state: 'ok', data: r.program }; window.patchPortalMore('program', r.program); }
+    renderAutoProg(); renderProgramCard();
+  }
+  const pgOnb = { step: 1, v: {} };
+  window.pgProfileOpen = function () {
+    const g = window.myProgramGen || {}, p = g.profile || {};
+    pgOnb.step = 1; pgOnb.v = { level: p.level || '', tujuan: g.profile && g.profile.tujuan || '', hari: p.hari || '', durasi: p.durasi || '', fokus: (p.fokus || []).slice() };
+    pgOnbRender();
+    openSheet('sheet-pg-profile');
+  };
+  function pgOnbRender() {
+    const g = window.myProgramGen || {}, v = pgOnb.v, el = $('pg-profile-body');
+    if (!el) return;
+    const chip = function (key, val, lbl, sub) { return '<button type="button" class="list-item interactive' + (String(v[key]) === String(val) ? ' active' : '') + '" style="min-height:56px;text-align:left" aria-pressed="' + (String(v[key]) === String(val)) + '" onclick="window.pgOnbSet(\'' + key + '\',\'' + h(val) + '\')"><span class="grow"><b>' + h(lbl) + '</b>' + (sub ? '<span class="li-sub" style="display:block">' + h(sub) + '</span>' : '') + '</span>' + (String(v[key]) === String(val) ? icon('check') : '') + '</button>'; };
+    let html = '<p class="li-sub">Langkah ' + pgOnb.step + ' dari 3</p>';
+    if (pgOnb.step === 1) {
+      html += '<p class="li-title">Seberapa lama kamu sudah latihan beban?</p><div class="stack" style="gap:6px">' +
+        chip('level', 'pemula-banget', 'Pemula banget', 'Belum pernah / kurang dari 3 bulan') + chip('level', 'pemula', 'Pemula', '3–12 bulan') + chip('level', 'menengah', 'Menengah', 'Lebih dari 1 tahun rutin') + '</div>';
+    } else if (pgOnb.step === 2) {
+      html += '<p class="li-title">Tujuan utamamu?</p><div class="stack" style="gap:6px">' + (g.goals || ['kekuatan', 'otot', 'fatloss', 'bugar']).map(function (t) { return chip('tujuan', t, PG_GOAL_LBL[t] || t, ''); }).join('') + '</div>' +
+        '<p class="label" style="margin-top:12px">Otot fokus (opsional, maks 2)</p><div class="chips" style="flex-wrap:wrap">' + (g.muscles || []).map(function (m) { const on = v.fokus.indexOf(m) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgOnbFocus(\'' + h(m) + '\')">' + h(EX_TGT_LBL[m] || m) + '</button>'; }).join('') + '</div>';
+    } else {
+      html += '<p class="li-title">Berapa hari latihan sendiri per minggu?</p><div class="seg" style="display:grid;grid-template-columns:repeat(3,1fr)">' + (g.daysOptions || [2, 3, 4]).map(function (d) { return '<button type="button" class="' + (Number(v.hari) === d ? 'active' : '') + '" onclick="window.pgOnbSet(\'hari\',' + d + ')">' + d + ' hari</button>'; }).join('') + '</div>' +
+        '<p class="li-title" style="margin-top:12px">Berapa lama per sesi?</p><div class="seg" style="display:grid;grid-template-columns:repeat(3,1fr)">' + (g.durations || [30, 45, 60]).map(function (d) { return '<button type="button" class="' + (Number(v.durasi) === d ? 'active' : '') + '" onclick="window.pgOnbSet(\'durasi\',' + d + ')">' + d + ' mnt</button>'; }).join('') + '</div>' +
+        '<p class="li-sub">Sesi PT dengan coach tidak dihitung di sini.</p>';
+    }
+    html += '<p class="li-sub" id="pg-onb-err" role="alert"></p><div class="btn-row">' + (pgOnb.step > 1 ? '<button type="button" class="btn btn-ghost btn-lg" onclick="window.pgOnbStep(-1)">Kembali</button>' : '') +
+      '<button type="button" class="btn btn-primary btn-lg" id="pg-onb-next" onclick="window.pgOnbStep(1)">' + (pgOnb.step < 3 ? 'Lanjut' : 'Buat program') + '</button></div>';
+    setHTML(el, html); paintIcons();
+  }
+  window.pgOnbSet = function (k, val) { pgOnb.v[k] = val; pgOnbRender(); };
+  window.pgOnbFocus = function (m) { const f = pgOnb.v.fokus, i = f.indexOf(m); if (i !== -1) f.splice(i, 1); else if (f.length < 2) f.push(m); else showToast('Maksimal 2 otot fokus.'); pgOnbRender(); };
+  window.pgOnbStep = function (d) {
+    const v = pgOnb.v, err = $('pg-onb-err');
+    if (d > 0 && pgOnb.step === 1 && !v.level) { err.textContent = 'Pilih salah satu.'; return; }
+    if (d > 0 && pgOnb.step === 2 && !v.tujuan) { err.textContent = 'Pilih tujuan.'; return; }
+    if (d > 0 && pgOnb.step === 3) {
+      if (!v.hari || !v.durasi) { err.textContent = 'Pilih hari dan durasi.'; return; }
+      const btn = $('pg-onb-next'); if (btn) { btn.disabled = true; btn.textContent = 'Menyusun…'; }
+      memberCall('saveMyProgramProfile', { level: v.level, tujuan: v.tujuan, hari: Number(v.hari), durasi: Number(v.durasi), fokus: v.fokus })
+        .then(function (r) { pgApply(r); window.closeModal(); showToast(r.skipped === 'coach' ? 'Data disimpan.' : 'Program siap.'); })
+        .catch(function (e) { err.textContent = e.message || 'Gagal menyimpan.'; if (btn) { btn.disabled = false; btn.textContent = 'Buat program'; } });
+      return;
+    }
+    pgOnb.step = Math.max(1, Math.min(3, pgOnb.step + d)); pgOnbRender();
+  };
+  window.pgAccept = function () {
+    window.showConfirmModal('Program coach disimpan ke Rutinitas saya, lalu program otomatis dibuat.', function () {
+      memberCall('acceptAutoProgram').then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+    }, { title: 'Coba program otomatis?', confirmText: 'Coba' });
+  };
+  window.pgSetAuto = function (on) {
+    const go = function () { memberCall('setMyProgramAuto', !!on).then(function (r) { pgApply(r); showToast(on ? 'Program otomatis aktif.' : 'Program otomatis dimatikan.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    if (on) go(); else window.showConfirmModal('Program yang sekarang tetap ada dan tidak berubah lagi otomatis.', go, { title: 'Matikan program otomatis?', confirmText: 'Matikan' });
+  };
+  window.pgSwapOpen = function () {
+    const g = window.myProgramGen || {}, opts = g.options || {}, tk = g.tukar || {};
+    const html = Object.keys(opts).filter(function (p) { return opts[p].length > 1; }).map(function (p) {
+      return '<p class="group-label"><span>' + h(PG_POLA_LBL[p] || p) + '</span></p>' + opts[p].map(function (x) {
+        const on = tk[p] === x.id;
+        return '<button type="button" class="list-item interactive" style="min-height:52px;text-align:left" onclick="window.pgSwap(\'' + h(p) + '\',\'' + h(x.id) + '\')"><span class="grow">' + h(x.nama) + '</span>' + (on ? icon('check') : '') + '</button>';
+      }).join('');
+    }).join('') || '<p class="li-sub">Belum ada pilihan lain di gym untuk levelmu.</p>';
+    wlSheet('Tukar gerakan', '<p class="li-sub">Pilih gerakan dengan pola sama. Program disusun ulang dengan pilihanmu.</p>' + html);
+  };
+  window.pgSwap = function (pola, id) {
+    memberCall('swapMyProgramExercise', pola, id).then(function (r) { pgApply(r); window.closeModal(); showToast('Gerakan ditukar.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+  };
+  // Panel coach: kartu di tab Latihan klien.
+  function autoProgAdminHtml(memberId) {
+    const g = pgAdminGen[memberId];
+    if (!g || g.error || !g.enabled) return '';
+    const p = g.profile || {}, id = h(memberId);
+    let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Program otomatis</p><span class="pill soft">' + (g.isAuto ? 'Aktif · blok ' + h(g.block || 1) : (g.hasCoachProgram ? 'Program coach' : (g.auto ? 'Belum dibuat' : 'Mati'))) + '</span></div>';
+    html += '<p class="li-sub">' + h(PG_LVL_LBL[p.level] || 'Level belum diisi') + (p.hari ? ' · ' + h(p.hari) + ' hari' : '') + (p.durasi ? ' · ' + h(p.durasi) + ' menit' : '') + ' · ' + h(PG_GOAL_LBL[p.tujuan] || '') + '</p>';
+    if (g.light) html += '<p class="li-sub" role="note">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Mode ringan: ' + h((g.reasons || []).map(function (r) { return PG_REASON_LBL[r] || r; }).join(', ')) + '.</p>';
+    if ((g.gaps || []).length) html += '<p class="li-sub">Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.</p>';
+    html += (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('');
+    html += '<p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div>';
+    html += '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-outline" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + ' Buat ulang</button><button type="button" class="btn btn-ghost" onclick="window.pgAdminAuto(\'' + id + '\',' + (!g.auto) + ')">' + (g.auto ? 'Matikan otomatis' : 'Nyalakan otomatis') + '</button></div></div>';
+    return html;
+  }
+  function pgAdminApply(id, g) { pgAdminGen[id] = g; window.ccPatch(id, { programGen: g }); renderProgramAdmin(id); }
+  window.pgAdminRegen = function (id) {
+    const g = pgAdminGen[id];
+    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
+  };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+  window.pgAdminTag = function (id, t) {
+    const g = pgAdminGen[id]; if (!g) return;
+    const list = (g.pantangan || []).slice(), i = list.indexOf(t);
+    if (i !== -1) list.splice(i, 1); else list.push(t);
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+  };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
     if (!el || !me) return;
     let left = pageIntro('Latihan', 'Rutinitas dari coach dan buatanmu sendiri.');
     left += '<div id="ph-latihan">' + insTrainingHero() + '</div>';
+    left += '<div id="pub-autoprog">' + autoProgCardHtml() + '</div>';
     left += '<div class="stack" style="gap:var(--gap)" id="pub-program-wrap">' + programInner() + '</div>';
     left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';

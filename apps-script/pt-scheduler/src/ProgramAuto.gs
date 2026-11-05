@@ -35,9 +35,9 @@ function _pgMuscleLookup_(catalog) {
   };
 }
 
-/** Hari tanpa catatan latihan (999 bila belum pernah). */
+/** Hari sejak catatan latihan terakhir. Belum pernah mencatat = 0 (klien baru bukan "kembali setelah absen", aturan 22). */
 function _pgAbsenceDays_(days, today) {
-  if (!days || !days.length) return 999;
+  if (!days || !days.length) return 0;
   const last = days[0].tanggal;
   return Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(last + 'T00:00:00Z')) / 86400000);
 }

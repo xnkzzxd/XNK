@@ -286,6 +286,17 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 - Sheet baru dibuat otomatis: `FoodLog`, `NutritionAdvice`; `MemberData` bertambah kolom X–AF (termasuk Umur). Data gizi bersifat privat (tidak ke Telegram, kecuali baris kalori di teks pengingat).
 - Mengubah daftar makanan: edit `apps-script/pt-scheduler/tools/foods-curated.json`, lalu jalankan `node tools/build-foods.js <teks-TKPI.txt>` (menulis `foods/foods.min.json` dan `src/NutrisiData.gs`; jangan diedit tangan).
 
+## Program latihan otomatis (Fase U)
+
+- **Nyala bawaan untuk semua klien.** Matikan untuk semua lewat Script Property `PROGRAM_AUTO_ENABLED` = `false`; per klien lewat tombol di tab Latihan klien (panel) atau tombol "Matikan" milik klien.
+- **Alat gym**: Pengaturan → **Latihan & Alat**. Nyalakan gerakan yang alatnya ada di gym. Bawaan: 8 gerakan pemula banget + Treadmill + Stationary Bike aktif, usulan level pemula/menengah mati. Bisa tambah gerakan sendiri (nama Inggris, otot utama/pendukung).
+- **Klien** mengisi 3 langkah di tab Latihan (level, tujuan + otot fokus, hari + durasi). Program langsung dibuat. Klien yang sudah punya program dari coach hanya **ditawari**; kalau setuju, program coach disimpan di Rutinitas saya.
+- **Program buatan coach tidak pernah ditimpa**, kecuali coach menekan **Buat ulang**.
+- **Form OK**: di layar latihan klien, coach menekan "Tandai form OK" per gerakan. Beban otomatis baru naik setelah itu dan bila klien tidak menjawab "Ragu".
+- **Mode ringan** otomatis bila form kesehatan belum diisi / ada jawaban "ya" / cedera / obat / hamil / usia < 18 atau > 65. Klien hanya melihat "Program ringan"; alasannya hanya di panel.
+- Tinjauan blok tiap hari mulai 04:00 (ikut pemicu pengingat; Pengingat Klien harus aktif). Tidak mengirim pesan apa pun.
+- Aturan dan sumbernya: `docs/program/Rules.md`; otot per gerakan: `docs/program/Otot.md`.
+
 ## Di HP: pasang dari Chrome, tarik untuk muat ulang, tombol back
 
 - **Pasang dari Chrome** (lebih baik daripada bungkus Kodular): buka xnk.my.id di Chrome → menu ⋮ → *Instal aplikasi* / *Tambahkan ke layar utama*. Ikonnya sama, selalu versi terbaru, dan tombol back bekerja normal.

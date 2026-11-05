@@ -1811,6 +1811,36 @@ async function contrastReport(page) {
     const rtBad = await page.locator('#pub-program-wrap button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
     check(rtBad === 0 && (await overflowX(page)) <= 0, 'latihan: buttons are at least 44 px and nothing scrolls sideways');
     await shot(page, 'portal-mobile-latihan');
+    // Fase U (T-1607): kartu program otomatis. Klien dengan program coach ditawari; data 3 langkah, lalu "Coba".
+    await page.evaluate(() => window.refreshPortalMore(true));
+    await page.waitForTimeout(900);
+    await page.evaluate(() => window.navigate('public-program'));
+    await page.waitForTimeout(600);
+    check((await page.textContent('#pub-autoprog')).includes('Coba program otomatis') === false && (await page.textContent('#pub-autoprog')).includes('Buat program latihanmu'), 'program otomatis: a client without a training profile is invited to build one');
+    await page.click('#pub-autoprog button:has-text("Mulai")');
+    await page.waitForTimeout(400);
+    await page.click('#pg-profile-body button:has-text("Pemula banget")');
+    await page.click('#pg-onb-next');
+    await page.click('#pg-profile-body button:has-text("Bentuk otot")');
+    await page.click('#pg-onb-next');
+    await page.click('#pg-profile-body button:has-text("2 hari")');
+    await page.click('#pg-profile-body button:has-text("45 mnt")');
+    const pgBad = await page.locator('#pg-profile-body button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    await page.click('#pg-onb-next');
+    await page.waitForTimeout(1000);
+    check((await page.textContent('#pub-autoprog')).includes('program dari coach') && pgBad === 0, 'program otomatis: the 3-step profile saves (44 px targets) and a coach program is not replaced, only offered');
+    await page.click('#pub-autoprog button:has-text("Coba")');
+    await page.waitForTimeout(300);
+    await page.click('#btn-confirm-modal-yes');
+    await page.waitForTimeout(1200);
+    check((await page.textContent('#pub-autoprog')).includes('Blok 1') && (await page.textContent('#pub-program-wrap')).includes('Full Body A') && (await page.textContent('#pub-program-wrap')).includes('Hari A'), 'program otomatis: accepting builds Full Body days and keeps the coach days as own routines');
+    await shot(page, 'portal-mobile-autoprog');
+    check((await overflowX(page)) <= 0, 'program otomatis: nothing scrolls sideways');
+    // Back to the coach program for the checks below.
+    env.call('_programWrite_', 'PT-A', null, [], { own: true });
+    env.call('saveMemberProgram', env.adminToken(), 'PT-A', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
+    await page.evaluate(() => { window.myProgram = null; window.loadMyProgram(true); });
+    await page.waitForTimeout(600);
     // Makan (Phase P): segmen di tab Latihan, isi data tiga langkah, target + menu.
     {
       check(await visible(page, '#lat-seg'), 'makan: the Latihan | Makan switch is on top of the page');
