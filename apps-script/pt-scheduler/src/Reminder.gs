@@ -502,6 +502,16 @@ function runReminderTick() {
     });
 
     try { if (parts.hour === 3) _pruneReminderLog_(now); } catch (e) { Logger.log('Prune gagal: ' + e); }
+    // Fase U (T-1606): tinjauan program otomatis tiap hari mulai 04:00 WIB, sekali per hari (bukan jenis pengingat,
+    // tidak mengirim pesan; tidak muncul di Pengaturan → Pengingat).
+    try {
+      var pgSlot = parts.date + 'T04';
+      if (parts.hour >= 4 && !_alreadySent_('program-otomatis', pgSlot, '*')) {
+        var pgOk = runProgramAutoJob_({ slot: pgSlot, now: now }) === true;
+        _logReminder_('program-otomatis', pgSlot, '*', pgOk ? 'ok' : 'gagal');
+        res.ran.push('program-otomatis|' + pgSlot + '|' + (pgOk ? 'ok' : 'gagal'));
+      }
+    } catch (e) { Logger.log('Program otomatis gagal: ' + e); }
   } finally {
     lock.releaseLock();
   }

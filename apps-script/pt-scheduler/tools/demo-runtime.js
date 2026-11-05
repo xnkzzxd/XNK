@@ -291,6 +291,9 @@
   seed('saveMyNutritionProfile', sari, { tinggi: '162', jk: 'P', goal: 'turun', pantangan: [], anggaran: 'standar', birthDate: '1995-05-12' });
   seed('logMyFood', sari, { waktu: 'sarapan', custom: { nama: 'Oatmeal pisang', kal: 320 }, jumlah: 1 });
   seed('logMyFood', sari, { waktu: 'siang', custom: { nama: 'Nasi + ayam bakar + sayur', kal: 560 }, jumlah: 1 });
+  // Fase U: Sari sudah isi form kesehatan + profil latihan; karena ada program coach, portal menawarkan program otomatis.
+  seed('submitMyHealthForm', sari, { q: ['tidak', 'tidak', 'tidak', 'tidak', 'tidak', 'tidak', 'tidak'], injuries: '', medication: '', other: '', consent: 'ya' });
+  seed('saveMyProgramProfile', sari, { level: 'pemula-banget', tujuan: 'fatloss', hari: 3, durasi: 45, fokus: ['glutes'] });
 
   // ── google.script.* for the app ──────────────────────────────────────────
   var params = {};

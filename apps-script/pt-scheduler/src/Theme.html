@@ -705,6 +705,12 @@ html.wl-on, html.wl-on body { overflow: hidden; }
 .wl-mm { width: 72px; height: 68px; }
 .wl-mm .mm { fill: color-mix(in srgb, var(--fg) 16%, transparent); stroke: none; transition: fill var(--t-base) var(--ease); }
 .wl-mm .mm.on { fill: var(--fg); stroke: var(--fg); }
+.mm-fig .mmf-body { fill: color-mix(in srgb, var(--fg) 6%, transparent); stroke: color-mix(in srgb, var(--fg) 22%, transparent); stroke-width: 3; }
+.mm-fig .mmf-base { fill: color-mix(in srgb, var(--fg) 10%, transparent); }
+.mm-fig .mmf { fill: color-mix(in srgb, var(--fg) 16%, transparent); transition: fill var(--t-base) var(--ease); }
+.mm-fig .mmf.half { fill: color-mix(in srgb, var(--fg) 45%, transparent); }
+.mm-fig .mmf.on { fill: var(--fg); animation: mmf-pulse 2.4s ease-in-out infinite; }
+@keyframes mmf-pulse { 50% { opacity: .78; } }
 /* Kartu gerakan + tabel set ala Hevy (Fase O) */
 .wl-list { display: flex; flex-direction: column; gap: 10px; }
 .wl-ex { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); padding: 2px 10px 10px 2px; display: flex; flex-direction: column; gap: 6px; scroll-margin: 12px 0 120px; transition: transform var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
@@ -945,7 +951,7 @@ html.wl-res-on #main-scroll-area .page { padding-bottom: 96px; }
   .wl-resume { left: auto; right: 24px; bottom: 24px; width: 420px; }
   html.wl-res-on .save-bar { bottom: 28px; }
 }
-@media (prefers-reduced-motion: reduce) { .wl, .wl-ck, .wl-rest-fill, .wl-mm .mm { transition: none; } .wl-watch.run, .wl-res-ico.live svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .wl, .wl-ck, .wl-rest-fill, .wl-mm .mm, .mm-fig .mmf { transition: none; } .mm-fig .mmf.on { animation: none; } .wl-watch.run, .wl-res-ico.live svg { animation: none; } }
 .wk-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
 .wk-sum > div { display: flex; flex-direction: column; }
 .wk-big { font-size: var(--fs-xl, 22px); font-weight: 800; letter-spacing: -0.02em; }

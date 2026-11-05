@@ -404,7 +404,7 @@
     if (multiCoach() && !coachId) { fail('Pilih coach dulu.'); return; }
     if (errEl) errEl.classList.add('hide');
     if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
-    call('registerNewClient', { name: data.name, phone: data.phone, goal: data.goal, packageId: pkg.id, coachId: coachId }).then(function (res) {
+    call('registerNewClient', { name: data.name, phone: data.phone, goal: data.goal, packageId: pkg.id, coachId: coachId, experience: data.experience || '' }).then(function (res) {
       if (btn) { btn.disabled = false; btn.textContent = 'Konfirmasi & Daftar'; }
       res = res || {};
       if (res.status === 'exists') {

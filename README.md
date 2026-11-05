@@ -119,6 +119,10 @@ switches `http://` visits to `https://` itself, since the app sends the login PI
 
 Every portal tab and every tab of the client page in the panel opens with a black summary card, and the Klien page gained an "attention" filter, sorting and a card/list switch. `Wawasan.gs` interprets progress, fitness tests, the workout log and the food log (body report, strength and stalls, muscle balance, activity calendar) for three ranges at once, in a client tone and a coach tone. No new sheets or public functions. See `docs/klien/`.
 
+## Automatic training programs (Phase U)
+
+Evidence-based automatic programs built from the gym's own equipment list (Pengaturan → Latihan & Alat), Hevy-style English exercise names, muscles for manually typed lifts, and our own muscle map. On by default; `PROGRAM_AUTO_ENABLED=false` turns it off. Coach programs are never overwritten. Rules and sources: [docs/program/Rules.md](docs/program/Rules.md); plan: [docs/program/PRD.md](docs/program/PRD.md).
+
 ## Share cards (Phase T)
 
 Clients and coaches can create transparent PNG cards (workout, records, progress, nutrition, monthly recap, badges) for Instagram Stories and WhatsApp Status. The images are drawn in the browser (`Bagikan.html`) and shared through the wrapper page's native share sheet; nothing is uploaded. Phase T2 adds body-measurement, badge-collection, consistency and before/after photo cards, a full-screen editor (phone: preview + tabs + swipe; desktop: two columns), templates, per-number on/off and order, EN/ID labels, period and comparison data from `getMyShareData` / `getMemberShareData`, an optional QR code, HQ PNG, a 6-second video and multi-card sharing. On by default; `SHARE_ENABLED=false` turns it off. Check: `tools/share-check.js`.

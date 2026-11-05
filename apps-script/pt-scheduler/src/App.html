@@ -795,6 +795,7 @@
     ['notifikasi', 'send', 'Notifikasi Admin'],
     ['jam', 'calendar-clock', 'Jam Operasional'],
     ['keuangan', 'wallet', 'Keuangan'],
+    ['latihan', 'dumbbell', 'Latihan & Alat'],
     ['keamanan', 'lock', 'Keamanan'],
     ['akun', 'user-plus', 'Akun']
   ];
@@ -899,6 +900,7 @@
         setNumField('loginMaxFails') + setNumField('loginLockSeconds') + setNumField('memberLoginMaxFails') + setNumField('adminSessionDays') + setNumField('rescheduleCutoffHours') + '</div>';
     },
     keuangan: function () { return finSettingsHtml(); },
+    latihan: function () { return exAliasHtml(); },
     akun: function () {
       return '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
         '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>';
@@ -1362,6 +1364,7 @@
     if (id === 'tampilan') renderThemeSeg();
     if (id === 'paket') pkgLoad();
     if (id === 'keuangan') finSettingsLoad();
+    if (id === 'latihan') exAliasLoad();
     if (id === 'pengingat') { setState.log = null; window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); rmdPreviewAll(); }
     refreshSettingsNav();
     const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 });
@@ -2212,7 +2215,7 @@
     _lsSet(PORTAL_CACHE_KEY, null);
     portalMoreRaw = null; portalMoreInflight = null; portalMoreAt = 0;
     window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; window.myBills = undefined;
-    window.myProgram = undefined; window.myInsight = undefined; window.myWeek = undefined; window.myNutrition = undefined; window.myContent = undefined; window.myCoachStatus = undefined; pg.data = null; myCare.form = null; myCare.assess = null;
+    window.myProgram = undefined; window.myInsight = undefined; window.myWeek = undefined; window.myNutrition = undefined; window.myProgramGen = undefined; window.myContent = undefined; window.myCoachStatus = undefined; pg.data = null; myCare.form = null; myCare.assess = null;
   };
   function loadPortalCache(token) {
     try {
@@ -2255,6 +2258,7 @@
     if (Array.isArray(m.content)) window.myContent = { state: 'ok', list: m.content, at: Date.now() };
     else if (m.content && !window.myContent) window.myContent = { state: 'error', error: moreErr(m.content), list: [] };
     if (m.nutrition && !moreBad(m.nutrition)) window.myNutrition = m.nutrition;
+    if (m.programGen && !moreBad(m.programGen)) window.myProgramGen = m.programGen;
     if (m.coachStatus && !moreBad(m.coachStatus)) window.myCoachStatus = m.coachStatus;
     if (m.share && !moreBad(m.share)) window.myShare = m.share;
     if (m.insight) window.myInsight = m.insight;
@@ -4289,6 +4293,7 @@
       window.programSetAdmin(key, bad(b.program) ? { error: msg(b.program) } : b.program);
       window.nutSet(key, bad(b.nutrition) ? Object.assign({ error: msg(b.nutrition) }) : Object.assign({}, b.nutrition, { foodLog: bad(b.foodLog) ? null : b.foodLog }));
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
+      pgAdminGen[key] = bad(b.programGen) ? null : b.programGen;
       shareAdmin[key] = bad(b.share) ? null : b.share;
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();
@@ -4836,6 +4841,7 @@
           (x.rasa ? '<span aria-label="Rasa ' + x.rasa + ' dari 5" style="font-size:20px">' + WL_FACES[x.rasa - 1][0] + '</span>' : '') + '</button>';
       }).join('') + '</div>';
     }
+    html += pgHubHtml(hub.programAuto);
     if (hub.nutrition && hub.nutrition.length) html += '<div class="card-flat stack" id="hub-nutrition" style="gap:8px"><div class="row-between"><p class="eyebrow">Saran target gizi</p><span class="li-sub">' + hub.nutrition.length + '</span></div>' + hub.nutrition.map(function (a) { return nutAdviceRow(a, true); }).join('') + '</div>';
     html += '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Target bulan ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTargetsSheet()">' + (hub.targets.length ? 'Ubah' : 'Atur target') + '</button></div>';
     if (!hub.targets.length) html += '<p class="li-sub">Belum ada target. Atur target sesi, klien, atau pendapatan.</p>';
@@ -4850,6 +4856,28 @@
     html += '<div class="kv"><div><p class="k">Minggu ini</p><p class="v num">' + st.weekSessions + ' sesi · ' + st.weekHours + ' jam</p></div><div><p class="k">Bulan ini</p><p class="v num">' + st.monthSessions + ' sesi · ' + st.monthHours + ' jam</p></div>' +
       '<div><p class="k">Klien aktif</p><p class="v num">' + st.activeClients + '</p></div><div><p class="k">Streak</p><p class="v num">' + (st.streak ? '🔥 ' + st.streak + ' minggu' : '-') + '</p></div></div></div>';
     return html;
+  }
+  // Fase U (T-1607b): program otomatis di hub coach — mode ringan dan peristiwa 14 hari (nama depan saja).
+  const PG_HUB_LBL = { baru: 'Program baru', blok: 'Blok baru', naik: 'Naik level', ulang: 'Mulai lagi dari blok 1' };
+  function pgHubHtml(p) {
+    if (!p || (!(p.light || []).length && !(p.events || []).length)) return '';
+    const row = function (id, name, sub, pill) {
+      return '<button type="button" class="list-item interactive" style="min-height:52px;text-align:left;gap:8px" onclick="window.openProfile(\'' + h(id) + '\')"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(name) + '</span>' +
+        (sub ? '<span class="li-sub truncate" style="display:block">' + h(sub) + '</span>' : '') + '</span>' + (pill ? '<span class="pill soft">' + h(pill) + '</span>' : '') + '</button>';
+    };
+    const lvl = { 'pemula-banget': 'Pemula banget', pemula: 'Pemula', menengah: 'Menengah' };
+    let html = '<div class="card-flat stack" id="hub-autoprog" style="gap:4px"><p class="eyebrow">Program otomatis</p>';
+    if ((p.light || []).length) {
+      html += '<p class="li-sub">' + icon('alert-triangle', 'style="width:14px;height:14px;vertical-align:-2px"') + ' Mode ringan (' + p.light.length + '): cek form kesehatan di halaman klien.</p>' +
+        p.light.slice(0, 8).map(function (x) { return row(x.memberId, x.name, '', 'Ringan'); }).join('') + (p.light.length > 8 ? '<p class="li-sub">+' + (p.light.length - 8) + ' lainnya</p>' : '');
+    }
+    (p.events || []).forEach(function (e) {
+      const sub = [pgLabel(e.tanggal)];
+      if (e.jenis === 'blok' && e.blok) sub.push('Blok ' + e.blok);
+      if (e.level) sub.push(lvl[e.level] || e.level);
+      html += row(e.memberId, e.name, sub.join(' · '), PG_HUB_LBL[e.jenis] || e.jenis);
+    });
+    return html + '</div>';
   }
   function loadHub() {
     const draw = function () { const w = $('hub-wrap'); if (w && window._hub) w.innerHTML = hubHtml(window._hub); };
@@ -4960,10 +4988,13 @@
     const d = progAdmin[memberId];
     if (!d) return '<p class="li-sub">Memuat program…</p>';
     if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    return autoProgAdminHtml(memberId) + programAdminInner0(memberId, d);
+  }
+  function programAdminInner0(memberId, d) {
     const n = d.days.reduce((s, x) => s + x.items.length, 0);
     let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Program latihan</p><span class="li-sub">' + (n ? d.days.length + ' hari · ' + n + ' gerakan' : 'Belum ada') + '</span></div>';
     if (n) {
-      html += '<div class="prg-days">' + d.days.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p>' + day.items.map(it => '<p class="li-sub">' + h(it.gerakan) + ' · ' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'style="width:12px;height:12px;vertical-align:-2px"') : '') + '</p>').join('') + '</div>').join('') + '</div>';
+      html += '<div class="prg-days">' + d.days.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p>' + day.items.map(it => '<p class="li-sub">' + h(exNm(it)) + ' · ' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'style="width:12px;height:12px;vertical-align:-2px"') : '') + '</p>').join('') + '</div>').join('') + '</div>';
       if (d.last) html += '<p class="li-sub" style="margin-top:6px">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
     } else html += '<p class="li-sub">Tulis program supaya klien melihatnya di tab Latihan.</p>';
     if (d.own && d.own.length) html += '<details class="pg-more"><summary>Rutinitas buatan klien (' + d.own.length + ')</summary><div class="prg-days">' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => it.gerakan + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div></details>';
@@ -5066,15 +5097,15 @@
     let html = '<div class="pf-item' + (open ? ' open' : '') + (it.join ? ' joined' : '') + '" data-d="' + d + '" data-i="' + i + '">' +
       '<div class="pf-row"><span class="drag-grip" aria-hidden="true">' + icon('grip-vertical') + '</span>' +
       (g ? '<img class="pf-gif" loading="lazy" alt="" src="' + h(exLib.base + g.g) + '">' : '') +
-      '<button type="button" class="pf-sum" aria-expanded="' + open + '" onclick="window.pfToggle(' + d + ',' + i + ')"><b>' + h(it.gerakan) + (it.join ? ' <span class="pill soft">superset</span>' : '') + '</b><span>' + h(pfSummary(it)) + '</span></button>' +
-      '<button type="button" class="icon-btn plain" aria-label="Naikkan ' + h(it.gerakan) + '"' + (i ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',-1)">' + icon('chevron-up') + '</button>' +
-      '<button type="button" class="icon-btn plain" aria-label="Turunkan ' + h(it.gerakan) + '"' + (i < pf.days[d].items.length - 1 ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',1)">' + icon('chevron-down') + '</button></div>';
+      '<button type="button" class="pf-sum" aria-expanded="' + open + '" onclick="window.pfToggle(' + d + ',' + i + ')"><b>' + h(exNm(it)) + (it.join ? ' <span class="pill soft">superset</span>' : '') + '</b><span>' + h(pfSummary(it)) + '</span></button>' +
+      '<button type="button" class="icon-btn plain" aria-label="Naikkan ' + h(exNm(it)) + '"' + (i ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',-1)">' + icon('chevron-up') + '</button>' +
+      '<button type="button" class="icon-btn plain" aria-label="Turunkan ' + h(exNm(it)) + '"' + (i < pf.days[d].items.length - 1 ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',1)">' + icon('chevron-down') + '</button></div>';
     if (open) {
       const p = 'd' + d + 'i' + i;
       const moreOn = pf.more[key] !== undefined ? pf.more[key] : !!(it.skemaOn || it.join || it.catatan || it.video);
       html += '<div class="pf-edit"><div class="pf-line"><select class="select pf-kind" aria-label="Jenis gerakan" onchange="window.pfKind(' + d + ',' + i + ',this.value)">' +
         PF_KINDS.map(k => '<option value="' + k[0] + '"' + (it.jenis === k[0] ? ' selected' : '') + '>' + k[1] + '</option>').join('') + '</select>' +
-        '<button type="button" class="icon-btn plain" aria-label="Hapus ' + h(it.gerakan) + '" onclick="window.pfDel(' + d + ',' + i + ')">' + icon('trash-2') + '</button></div>';
+        '<button type="button" class="icon-btn plain" aria-label="Hapus ' + h(exNm(it)) + '" onclick="window.pfDel(' + d + ',' + i + ')">' + icon('trash-2') + '</button></div>';
       if (!it.skemaOn) {
         html += '<div class="pf-grid">' + pfNum(p + '.set', it.set, 'numeric', 'Set', '3') +
           pfNum(p + '.repMin', it.repMin, 'numeric', u === 'rep' ? 'Rep min' : (u === 'dtk' ? 'Detik' : 'Meter'), u === 'rep' ? '8' : '') +
@@ -5224,17 +5255,33 @@
   // Data statis dari GitHub Pages (exercises/exercises.min.json), dimuat malas saat dicari, bukan lewat Apps Script.
   // Satu lembar cari untuk editor program / rutinitas (kembali ke lembar program) dan mode latihan. GIF di-hotlink (bukan disimpan)
   // untuk coach dan klien (keputusan pemilik, Fase O); kredit pustaka selalu tampil.
-  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v1', EX_SHOW = 20, EX_RECENT = 'xnk_ex_recent';
+  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v2', EX_SHOW = 20, EX_RECENT = 'xnk_ex_recent';
   let exLib = null;
   const exs = { onPick: null, ret: '', limit: EX_SHOW, extra: [], sel: [], hist: '', data: null, creating: false };
   const WK_EQUIP = { 'body weight': 'Berat badan', 'dumbbell': 'Dumbbell', 'cable': 'Kabel', 'barbell': 'Barbell', 'leverage machine': 'Mesin', 'band': 'Band', 'smith machine': 'Smith machine', 'kettlebell': 'Kettlebell',
     'weighted': 'Beban tambahan', 'stability ball': 'Bola stabilitas', 'ez barbell': 'EZ bar', 'assisted': 'Dibantu', 'sled machine': 'Sled', 'medicine ball': 'Medicine ball', 'rope': 'Tali', 'roller': 'Roller', 'resistance band': 'Resistance band', 'olympic barbell': 'Barbell olimpiade', 'trap bar': 'Trap bar' };
   const exCap = s => { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); };
+  // Fase U: nama tampilan ala Hevy dari pustaka (v2: `n` = nama, `r` = nama mentah). Baris lama di sheet tidak diubah;
+  // gerakan yang punya Exercise ID tampil dengan nama pustaka saat pustaka sudah ada di perangkat.
+  let exById = null;
+  function exLibSync() {
+    if (!exLib) { try { localStorage.removeItem('xnk_ex_lib_v1'); const c = localStorage.getItem(EX_KEY); if (c) exLib = JSON.parse(c); } catch (e) {} }
+    return exLib;
+  }
+  function exNm(o) {
+    if (!o) return '';
+    const id = o.exId || (/^ex:/.test(String(o.key || '')) ? String(o.key).slice(3) : '');
+    const lib = id ? exLibSync() : null;
+    if (lib && !exById) { exById = {}; lib.items.forEach(x => { exById[x.id] = x; }); }
+    const x = lib && exById ? exById[id] : null;
+    return x ? x.n : String(o.gerakan || '');
+  }
+  window.exNm = exNm;
   function exEnsure() {
     if (exLib) return Promise.resolve(exLib);
     try { const c = localStorage.getItem(EX_KEY); if (c) { exLib = JSON.parse(c); return Promise.resolve(exLib); } } catch (e) {}
     return fetch(EX_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); }).then(function (d) {
-      exLib = d; try { localStorage.setItem(EX_KEY, JSON.stringify(d)); } catch (e) {} return d;
+      exLib = d; exById = null; try { localStorage.setItem(EX_KEY, JSON.stringify(d)); } catch (e) {} return d;
     });
   }
   // Gerakan yang baru dipilih di perangkat ini (kemudahan saja, boleh hilang).
@@ -5300,9 +5347,9 @@
     }
     if (!exLib) { setHTML(box, html + '<p class="li-sub" style="padding:12px 0">Memuat pustaka gerakan…</p>'); return; }
     if (!exs.sorted) exs.sorted = exLib.items.slice().sort((a, b) => a.n.localeCompare(b.n));
-    let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!q || (x.n + ' ' + x.t + ' ' + x.q).toLowerCase().indexOf(q) !== -1));
+    let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!q || (x.n + ' ' + (x.r || '') + ' ' + x.t + ' ' + x.q).toLowerCase().indexOf(q) !== -1));
     // Cari: nama yang diawali kata itu dulu, lalu yang memuatnya di nama, lalu sisanya (otot/alat); nama pendek dulu.
-    if (q) { const rank = x => (x.n.indexOf(q) === 0 ? 0 : (x.n.indexOf(q) !== -1 ? 1 : 2)); hits = hits.map(x => [rank(x), x]).sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length).map(p => p[1]); }
+    if (q) { const rank = x => { const nl = x.n.toLowerCase(); return nl.indexOf(q) === 0 ? 0 : (nl.indexOf(q) !== -1 || String(x.r || '').indexOf(q) !== -1 ? 1 : 2); }; hits = hits.map(x => [rank(x), x]).sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length).map(p => p[1]); }
     html += '<p class="label exs-lbl">' + (q || part || eq ? hits.length + ' gerakan' : 'Semua gerakan (A–Z)') + '</p>' + (hits.slice(0, exs.limit).map(exsRowLib).join('') || '<p class="li-sub" style="padding:8px 0">Tidak ada gerakan yang cocok. Ketuk Buat untuk gerakan sendiri.</p>');
     if (hits.length > exs.limit) html += '<button type="button" class="btn btn-ghost btn-block" onclick="window.exsMore()">Lihat lebih banyak (' + (hits.length - exs.limit) + ')</button>';
     setHTML(box, html);
@@ -5430,6 +5477,7 @@
   // Set awal satu gerakan program: rep/beban dari catatan terakhir, saran naik beban dari server, atau target coach.
   function wlFromPlan(it, hari, data) {
     const key = wkKeyOf(it), last = (data.last || {})[key], sug = (data.suggest || {})[key] || null;
+    const prog = (data.progress || {})[key] || null;   // Fase U: langkah progresi program otomatis (rep → set → beban)
     const kind = it.jenis || 'beban', skema = it.skema || [];
     const n = skema.length || Math.max(1, Math.min(20, Number(it.set) || 3));
     const prevAll = last ? last.sets : [], prevWork = prevAll.filter(s => s.jenis !== 'w');
@@ -5454,9 +5502,18 @@
       sets.push(s);
     }
     return { key: key, n: it.n, hari: hari, exId: it.exId || '', gerakan: it.gerakan, bodyPart: '', target: '', kind: kind, rest: it.rest === '' || it.rest == null ? '' : Number(it.rest), ss: it.ss || '',
-      plan: { set: n, repMin: it.repMin, repMax: it.repMax, kg: it.kg, catatan: it.catatan || '', video: it.video || '' }, last: last ? { tanggal: last.tanggal, sets: last.sets } : null, sug: sug,
+      plan: { set: n, repMin: it.repMin, repMax: it.repMax, kg: it.kg, catatan: it.catatan || '', video: it.video || '' }, last: last ? { tanggal: last.tanggal, sets: last.sets } : null, sug: sug, prog: prog, form: '',
       skipped: false, own: false, rpeOn: wlPrefs().rpe, catatan: '', had: false, sets: sets };
   }
+  window.wlForm = function (i, v) { const e = wl && wl.entries[i]; if (!e) return; e.form = e.form === v ? '' : v; wlSave(); wlRender(); };
+  window.wlFormOk = function (i, on) {
+    const e = wl && wl.entries[i]; if (!e) return;
+    const id = wl.memberId, key = wkKeyOf(e);
+    adminCall('setFormOk', id, key, !!on).then(function (r) {
+      if (pgAdminGen[id]) { pgAdminGen[id].formOk = r.formOk; window.ccPatch(id, { programGen: pgAdminGen[id] }); }
+      wlRender(); showToast(on ? 'Form ditandai OK.' : 'Tanda form dihapus.');
+    }).catch(function (err) { showToast(err.message || 'Gagal.'); });
+  };
   function wlFromLog(l, data, date) {
     const info = wkInfo(l.exId), last = (data.last || {})[l.key];
     return { key: l.key, n: l.n, hari: l.hari || '', exId: l.exId || '', gerakan: l.gerakan, bodyPart: l.bodyPart || '', target: l.target || '', kind: wlKindGuess(info, l.sets), rest: '', ss: '', plan: null,
@@ -5670,23 +5727,34 @@
   }
   function wlExHtml(i) {
     const e = wl.entries[i], ss = wlSsLabel(i), cur = i === wl.open && !e.skipped, done = e.sets.length > 0 && e.sets.every(s => s.done);
-    let html = '<section class="wl-ex' + (cur ? ' cur' : '') + (done ? ' done' : '') + (e.skipped ? ' skipped' : '') + '" data-i="' + i + '" aria-label="' + h(e.gerakan) + '">' +
+    let html = '<section class="wl-ex' + (cur ? ' cur' : '') + (done ? ' done' : '') + (e.skipped ? ' skipped' : '') + '" data-i="' + i + '" aria-label="' + h(exNm(e)) + '">' +
       '<div class="wl-ex-head"><span class="drag-grip" aria-hidden="true">' + icon('grip-vertical') + '</span>' +
-      '<button type="button" class="wl-ex-name" onclick="window.wlHistory(' + i + ')" aria-label="' + h(e.gerakan) + ': riwayat">' + wlThumb(e, 'wl-thumb') + '<span class="truncate">' + h(e.gerakan) + '</span>' + (ss ? '<span class="pill soft">' + h(ss) + '</span>' : '') + '</button>' +
-      '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(e.gerakan) + '" onclick="window.wlMenu(' + i + ')">' + icon('more-horizontal') + '</button></div>';
+      '<button type="button" class="wl-ex-name" onclick="window.wlHistory(' + i + ')" aria-label="' + h(exNm(e)) + ': riwayat">' + wlThumb(e, 'wl-thumb') + '<span class="truncate">' + h(exNm(e)) + '</span>' + (ss ? '<span class="pill soft">' + h(ss) + '</span>' : '') + '</button>' +
+      '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(exNm(e)) + '" onclick="window.wlMenu(' + i + ')">' + icon('more-horizontal') + '</button></div>';
     if (e.plan && e.plan.catatan) html += '<p class="wl-ex-note">' + icon('message-square-quote') + '<span>' + h(e.plan.catatan) + '</span></p>';
     if (e.skipped) return html + '<p class="wl-ex-sub">Dilewati · buka ⋯ untuk membatalkan</p></section>';
     if (wl.live) html += '<button type="button" class="wl-rest-link" onclick="window.wlRestPick(' + i + ')">' + icon('timer') + 'Istirahat: ' + h(wlRestText(wlRestOf(e))) + '</button>';
     if (e.sug && !e.had) html += '<p class="wl-ex-sub"><b>Naik ke ' + h(wlNum(e.sug.kg)) + ' kg</b> · ' + h(e.sug.why) + '</p>';
+    else if (e.prog && e.prog.why && !e.had) html += '<p class="wl-ex-sub">' + h(e.prog.why) + '</p>';
     else if (!e.last && e.plan) html += '<p class="wl-ex-sub">Target ' + h(wlPlanText(e)) + '</p>';
     const plate = wlPlateText(e);
     if (plate) html += '<p class="wl-ex-sub wl-plate">' + h(plate) + '</p>';
     const cols = wlCols(e);
-    html += '<div class="wl-tbl c' + cols.length + ' k-' + e.kind + '" role="table" aria-label="Set ' + h(e.gerakan) + '"><div class="wl-tr wl-th" role="row"><span role="columnheader">SET</span><span role="columnheader">SEBELUMNYA</span>' +
+    html += '<div class="wl-tbl c' + cols.length + ' k-' + e.kind + '" role="table" aria-label="Set ' + h(exNm(e)) + '"><div class="wl-tr wl-th" role="row"><span role="columnheader">SET</span><span role="columnheader">SEBELUMNYA</span>' +
       cols.map(f => '<span role="columnheader">' + WL_COL[f] + '</span>').join('') + '<span role="columnheader">' + icon('check') + '</span></div>' +
       e.sets.map((s, j) => wlRowHtml(i, j)).join('') + '</div>';
     if (!wl.live && e.sets.some(s => !s.done)) html += '<button type="button" class="btn btn-ghost btn-block wl-addset" onclick="window.wlTickAll(' + i + ')">' + icon('check-check') + 'Centang semua</button>';
     if (e.sets.length < 20) html += '<button type="button" class="btn btn-secondary btn-block wl-addset" onclick="window.wlAddSet(' + i + ')">' + icon('plus') + 'Tambah set</button>';
+    // Fase U (aturan 9a): setelah set terakhir, klien menilai form-nya; coach menandai Form OK (gerbang kenaikan beban).
+    if (done && e.kind !== 'waktu' && e.kind !== 'jarak') {
+      if (wl.mode === 'client') html += '<div class="wl-form row" style="gap:6px;align-items:center" role="group" aria-label="Form ' + h(exNm(e)) + '"><span class="li-sub grow">Form terasa rapi?</span>' +
+        '<button type="button" class="chip' + (e.form === 'ok' ? ' active' : '') + '" aria-pressed="' + (e.form === 'ok') + '" onclick="window.wlForm(' + i + ',\'ok\')">Rapi</button>' +
+        '<button type="button" class="chip' + (e.form === 'ragu' ? ' active' : '') + '" aria-pressed="' + (e.form === 'ragu') + '" onclick="window.wlForm(' + i + ',\'ragu\')">Ragu</button></div>';
+      else if (pgAdminGen[wl.memberId] && pgAdminGen[wl.memberId].isAuto) {
+        const fk = wkKeyOf(e), on = !!(pgAdminGen[wl.memberId].formOk || {})[fk];
+        html += '<button type="button" class="btn btn-ghost btn-block" aria-pressed="' + on + '" onclick="window.wlFormOk(' + i + ',' + (!on) + ')">' + icon(on ? 'badge-check' : 'badge') + (on ? 'Form OK' : 'Tandai form OK') + '</button>';
+      }
+    }
     return html + '</section>';
   }
   // Riwayat satu gerakan (rekor, grafik est. 1RM, 5 catatan terakhir); dipakai mode latihan dan lembar cari gerakan.
@@ -5723,26 +5791,87 @@
     ['lower legs', 'rect', 'x="14.2" y="62.5" width="4.8" height="14" rx="2.4"'], ['lower legs', 'rect', 'x="21" y="62.5" width="4.8" height="14" rx="2.4"']
   ];
   window.WL_MM = { front: WL_MM_FRONT, back: WL_MM_BACK };
-  function wlMuscleSvg(parts, label) {
-    const fig = shapes => '<circle class="mm" cx="20" cy="6.5" r="4.6"/>' + shapes.map(s => '<' + s[1] + ' class="mm' + (s[0] && parts[s[0]] ? ' on' : '') + '" ' + s[2] + '/>').join('');
-    return '<svg class="wl-mm" viewBox="0 0 84 80" role="img" aria-label="' + h(label) + '"><g>' + fig(WL_MM_FRONT) + '</g><g transform="translate(44 0)">' + fig(WL_MM_BACK) + '</g></svg>';
+  // Fase U (T-1610): peta otot sendiri (pria/wanita, depan/belakang, 16 otot target pustaka) dari figure/figure.min.json
+  // (GitHub Pages, dimuat malas, disimpan di perangkat). Otot utama gelap, otot pendukung terang. Bentuk di atas
+  // (WL_MM_*) tetap dipakai sampai file itu ada di perangkat (pertama kali / tanpa sinyal).
+  const FIG_URL = 'https://xnk.my.id/figure/figure.min.json', FIG_KEY = 'xnk_fig_v1';
+  let fig = null, figLoading = null;
+  function figSync() { if (!fig) { try { const c = localStorage.getItem(FIG_KEY); if (c) fig = JSON.parse(c); } catch (e) {} } return fig; }
+  function figEnsure() {
+    if (figSync()) return Promise.resolve(fig);
+    if (!figLoading) figLoading = fetch(FIG_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); })
+      .then(function (d) { fig = d; try { localStorage.setItem(FIG_KEY, JSON.stringify(d)); } catch (e) {} return d; })
+      .catch(function () { figLoading = null; return null; });
+    return figLoading;
+  }
+  window.figSync = figSync; window.figEnsure = figEnsure;
+  // Bagian tubuh lama (log tanpa otot target) → otot target; otot pendukung per otot utama (perkiraan anatomi umum,
+  // diganti daftar per gerakan dari docs/program/Otot.md di Rilis 2).
+  const MM_PART_TARGETS = { chest: ['pectorals'], back: ['lats', 'upper back', 'traps', 'spine'], shoulders: ['delts'], 'upper arms': ['biceps', 'triceps'],
+    'lower arms': ['forearms'], waist: ['abs'], 'upper legs': ['quads', 'hamstrings', 'glutes', 'adductors', 'abductors'], 'lower legs': ['calves'], neck: ['traps'] };
+  const MM_SECONDARY = { pectorals: ['delts', 'triceps'], lats: ['biceps', 'upper back'], 'upper back': ['biceps', 'delts', 'lats'], delts: ['triceps', 'traps'],
+    quads: ['glutes', 'adductors'], glutes: ['hamstrings', 'quads'], hamstrings: ['glutes'], spine: ['glutes', 'hamstrings'], biceps: ['forearms'], traps: ['upper back'],
+    abductors: ['glutes'] };
+  // Otot per gerakan gym dari studi EMG (docs/program/Otot.md): menang atas peta umum di atas.
+  const MM_BY_EX = { '0493': [['pectorals'], ['delts', 'triceps', 'abs']], '2330': [['lats'], ['upper back', 'biceps', 'delts']],
+    '0739': [['quads'], ['glutes', 'adductors']], '0585': [['quads'], []], '0861': [['upper back'], ['lats', 'biceps', 'delts']], '0596': [['pectorals'], ['delts']] };
+  /** [{ exId?, target?, bodyPart? }] → { otot: 2 (utama) | 1 (pendukung) }. */
+  function mmLevels(list) {
+    const lv = {};
+    (list || []).forEach(function (x) {
+      const by = x.exId ? MM_BY_EX[x.exId] : null;
+      const prim = by ? by[0] : (x.target && x.target !== 'cardiovascular system' ? [x.target] : (MM_PART_TARGETS[x.bodyPart] || []));
+      const sec = by ? by[1] : [].concat.apply([], prim.map(function (t) { return MM_SECONDARY[t] || []; }));
+      prim.forEach(function (t) { lv[t] = 2; });
+      sec.forEach(function (t) { if (!lv[t]) lv[t] = 1; });
+    });
+    return lv;
+  }
+  window.mmLevels = mmLevels;
+  function figSexOf(mode, memberId) {
+    const p = mode === 'client' ? window.myNutrition && window.myNutrition.profile : (nut[memberId] && nut[memberId].profile);
+    return p && p.jk === 'P' ? 'f' : 'm';
+  }
+  window.figSexOf = figSexOf;
+  /** SVG peta otot depan + belakang; null bila file figur belum ada di perangkat. */
+  function mmFigSvg(lv, label, sex, cls) {
+    const f = figSync();
+    const v = f && f.views && (f.views[sex] || f.views.m);
+    if (!v) return null;
+    const side = function (s, x) {
+      const vb = s.vb.split(' ').map(Number);
+      return '<svg x="' + x + '" y="0" width="100" height="200" viewBox="' + s.vb + '" preserveAspectRatio="xMidYMid meet"><path class="mmf-body" d="' + s.outline + '"/>' +
+        s.base.map(function (d) { return '<path class="mmf-base" d="' + d + '"/>'; }).join('') +
+        Object.keys(s.parts).map(function (t) { const c = lv[t] === 2 ? ' on' : (lv[t] === 1 ? ' half' : ''); return s.parts[t].map(function (d) { return '<path class="mmf' + c + '" d="' + d + '"/>'; }).join(''); }).join('') + '</svg>';
+    };
+    return '<svg class="' + (cls || 'wl-mm') + ' mm-fig" viewBox="0 0 200 200" role="img" aria-label="' + h(label) + '">' + side(v.front, 0) + side(v.back, 100) + '</svg>';
+  }
+  window.mmFigSvg = mmFigSvg;
+  function wlMuscleSvg(parts, label, lv, sex) {
+    const nf = lv ? mmFigSvg(lv, label, sex) : null;
+    if (nf) return nf;
+    const fig0 = shapes => '<circle class="mm" cx="20" cy="6.5" r="4.6"/>' + shapes.map(s => '<' + s[1] + ' class="mm' + (s[0] && parts[s[0]] ? ' on' : '') + '" ' + s[2] + '/>').join('');
+    return '<svg class="wl-mm" viewBox="0 0 84 80" role="img" aria-label="' + h(label) + '"><g>' + fig0(WL_MM_FRONT) + '</g><g transform="translate(44 0)">' + fig0(WL_MM_BACK) + '</g></svg>';
   }
   function wlStatsHtml() {
     let vol = 0, sets = 0;
-    const parts = {}, names = [];
+    const parts = {}, names = [], tg = [];
     wl.entries.forEach(function (e) {
       if (e.skipped) return;
       const done = e.sets.filter(s => s.done);
       if (!done.length) return;
       sets += done.length; vol += wlVolume(e, done);
-      const p = e.bodyPart || (wkInfo(e.exId) || {}).b;
+      const info = wkInfo(e.exId) || {};
+      const p = e.bodyPart || info.b;
+      tg.push({ exId: e.exId || '', target: e.target || info.t || '', bodyPart: p || '' });
       if (p && !parts[p]) { parts[p] = true; names.push(WK_PART[p] || p); }
     });
+    if (!figSync()) figEnsure().then(function (f) { if (f) wlRenderStats(); });
     const dur = wl.live && wl.startedAt ? wlClock((Date.now() - wl.startedAt) / 1000) : '–';
     return '<div class="wl-st"><span>Durasi</span><b class="num wl-st-dur" id="wl-st-dur">' + dur + '</b></div>' +
       '<div class="wl-st"><span>Volume</span><b class="num">' + h(wkKg(vol)) + ' kg</b></div>' +
       '<div class="wl-st"><span>Set</span><b class="num">' + sets + '</b></div>' +
-      wlMuscleSvg(parts, names.length ? 'Otot dilatih: ' + names.join(', ') : 'Belum ada otot yang dilatih');
+      wlMuscleSvg(parts, names.length ? 'Otot dilatih: ' + names.join(', ') : 'Belum ada otot yang dilatih', mmLevels(tg), figSexOf(wl.mode, wl.memberId));
   }
   function wlRenderStats() { const el = $('wl-stats'); if (el && wl && !wl.loading) setHTML(el, wlStatsHtml()); else if (el) el.innerHTML = ''; }
   function wlRender() {
@@ -6036,7 +6165,7 @@
     const e = wl.entries[i]; if (!e) return;
     window.closeModal();
     const go = function () { if (e.had) { e.sets = []; e.removed = true; e.skipped = true; } else wl.entries.splice(i, 1); wl.open = Math.min(wl.open, Math.max(0, wl.entries.length - 1)); wlChanged(); };
-    if (e.had) window.showConfirmModal('Catatan <b>' + h(e.gerakan) + '</b> di tanggal ini dihapus saat latihan disimpan.', go, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
+    if (e.had) window.showConfirmModal('Catatan <b>' + h(exNm(e)) + '</b> di tanggal ini dihapus saat latihan disimpan.', go, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
     else go();
   };
   window.wlHistory = function (i) {
@@ -6161,10 +6290,10 @@
     const rows = wl.entries.filter(e => !e.skipped && e.sets.some(s => s.done)).map(function (e) {
       const sets = e.sets.filter(s => s.done), v = wlVolume(e, sets);
       vol += v;
-      if (sets.some(s => wlIsPr(e, s))) prs.push(e.gerakan);
+      if (sets.some(s => wlIsPr(e, s))) prs.push(exNm(e));
       const lv = e.last ? wlVolume(e, e.last.sets) : 0;
       const trend = e.kind === 'beban' && lv && v ? (v > lv ? '<span class="wl-up">↑ ' + Math.round((v - lv) / lv * 100) + '%</span>' : (v < lv ? '<span class="wl-down">↓ ' + Math.round((lv - v) / lv * 100) + '%</span>' : '<span class="li-sub">=</span>')) : '';
-      return '<div class="wl-sum-row"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(e.gerakan) + '</b><span class="li-sub">' + sets.map(s => (s.jenis === 'w' ? 'W ' : '') + h(wlSetText(e, s))).join(' · ') + '</span></span>' + trend + '</div>';
+      return '<div class="wl-sum-row"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(exNm(e)) + '</b><span class="li-sub">' + sets.map(s => (s.jenis === 'w' ? 'W ' : '') + h(wlSetText(e, s))).join(' · ') + '</span></span>' + trend + '</div>';
     });
     const mins = wl.live && wl.startedAt ? Math.round((Date.now() - wl.startedAt) / 60000) : 0;
     let body = '<div class="wk-sum">' + (mins ? '<div><span class="num wk-big">' + mins + '</span><span class="li-sub">menit</span></div>' : '') +
@@ -6191,7 +6320,7 @@
         durasi: e.kind === 'waktu' ? s.durasi : '', jarak: e.kind === 'jarak' ? s.jarak : '', rpe: e.rpeOn ? s.rpe : '', jenis: s.jenis || '' }));
       if (!sets.length && !e.had) return;
       const info = wkInfo(e.exId);
-      out.push({ n: e.n, hari: e.hari, exId: e.exId, gerakan: e.gerakan, bodyPart: e.bodyPart || (info ? info.b : ''), target: e.target || (info ? info.t : ''), catatan: sets.length ? e.catatan : '', sets: sets });
+      out.push({ n: e.n, hari: e.hari, exId: e.exId, gerakan: e.gerakan, bodyPart: e.bodyPart || (info ? info.b : ''), target: e.target || (info ? info.t : ''), catatan: sets.length ? e.catatan : '', form: sets.length && (e.form === 'ok' || e.form === 'ragu') ? e.form : '', sets: sets });
     });
     return out;
   }
@@ -6273,7 +6402,7 @@
     const sets = it.entries.reduce((n, e) => n + e.sets.length, 0);
     let body = '<div class="stack" style="align-items:center;text-align:center;gap:6px"><span class="pg-trophy" aria-hidden="true">' + icon(prs.length ? 'trophy' : 'check') + '</span>' +
       '<p class="li-title">' + h(it.hari || 'Latihan') + ' · ' + h(it.date === wkToday() ? 'hari ini' : pgLabel(it.date)) + '</p><p class="li-sub">' + sets + ' set' + (vol ? ' · ' + h(wkKg(vol)) + ' kg volume' : '') + '</p></div>';
-    if (prs.length) body += '<ul class="pg-badge-list">' + prs.map(p => '<li>' + h(p.gerakan) + ' · est. 1RM ' + h(wkKg(p.e1rm)) + ' kg</li>').join('') + '</ul>';
+    if (prs.length) body += '<ul class="pg-badge-list">' + prs.map(p => '<li>' + h(exNm(p)) + ' · est. 1RM ' + h(wkKg(p.e1rm)) + ' kg</li>').join('') + '</ul>';
     const foot = it.mode === 'admin'
       ? '<div class="btn-row"><button type="button" class="btn btn-secondary btn-lg" onclick="window.closeModal()">Tutup</button><button type="button" class="btn btn-primary btn-lg" onclick="window.workoutSummaryWA(\'' + h(it.memberId) + '\',\'' + h(it.date) + '\')">' + icon('message-circle') + 'Kirim ringkasan WA</button></div>'
       : '<div class="btn-row"><button type="button" class="btn btn-secondary btn-lg" onclick="window.closeModal()">Tutup</button><button type="button" class="btn btn-primary btn-lg" onclick="window.wlShareCoach()">' + icon('message-circle') + 'Kirim ke coach</button></div>';
@@ -6316,6 +6445,8 @@
   }
   function shareSrcFor(admin, extra) {
     const today = shareIso(), src = { today: today, admin: !!admin, date: today };
+    // Fase U: kartu memakai figur otot sesuai jenis kelamin klien (pria bila tidak diketahui); file figur dimuat bila belum ada.
+    window.shareFigSex = figSexOf(admin ? 'admin' : 'client', String(admin || '')); figEnsure();
     if (admin) {
       const id = String(admin), n = nut[id], fl = n && n.foodLog && n.foodLog.days ? n.foodLog.days.find(x => x.tanggal === today) : null;
       const pd = pg.admin[id];
@@ -6491,7 +6622,7 @@
       const pick = st.exercises.find(e => e.key === wkPick[scope]) || st.exercises[0];
       const pts = pick.points.map(p => ({ tanggal: p.tanggal, v: p.e1rm || p.top }));
       html += '<div class="wk-block"><div class="field"><label class="label" for="wk-ex-' + scope + '">Kekuatan per gerakan</label><select class="select" id="wk-ex-' + scope + '" onchange="window.wkChartPick(\'' + scope + '\',this.value)">' +
-        st.exercises.map(e => '<option value="' + h(e.key) + '"' + (e.key === pick.key ? ' selected' : '') + '>' + h(e.gerakan) + '</option>').join('') + '</select></div>' +
+        st.exercises.map(e => '<option value="' + h(e.key) + '"' + (e.key === pick.key ? ' selected' : '') + '>' + h(exNm(e)) + '</option>').join('') + '</select></div>' +
         (pick.pr ? '<p class="li-sub"><b>PR:</b> ' + h(wkKg(pick.pr.berat)) + ' kg × ' + pick.pr.rep + ' · estimasi 1RM ' + h(wkKg(pick.pr.e1rm)) + ' kg (' + h(pgLabel(pick.pr.tanggal)) + ')</p>' : '') +
         (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '<p class="li-sub">Catat lagi di sesi berikutnya untuk melihat tren.</p>') + '<p class="li-sub">Garis: estimasi 1RM tertinggi per sesi (rumus Epley, set sampai 12 rep).</p></div>';
     }
@@ -8176,7 +8307,7 @@
     const d = insD(); if (!d || !d.training.strength.length) return '';
     const rows = d.training.strength.map(function (s) {
       const note = (s.perBw != null ? insNum(s.perBw) + '× berat badan' : '') + (s.stalled ? (s.perBw != null ? ' · ' : '') + 'mandek, coba +1 rep atau +2,5 kg' : '');
-      return '<div class="ins-ex"><div class="ins-ex-h"><b>' + h(s.gerakan) + '</b><span class="' + (s.pct < 0 ? 'ins-n warn' : 'ins-n') + '">' + (s.pct == null ? '' : (s.pct > 0 ? '↑ ' : s.pct < 0 ? '↓ ' : '') + Math.abs(s.pct) + '%') + '</span></div>' +
+      return '<div class="ins-ex"><div class="ins-ex-h"><b>' + h(exNm(s)) + '</b><span class="' + (s.pct < 0 ? 'ins-n warn' : 'ins-n') + '">' + (s.pct == null ? '' : (s.pct > 0 ? '↑ ' : s.pct < 0 ? '↓ ' : '') + Math.abs(s.pct) + '%') + '</span></div>' +
         '<div class="ins-ex-b"><span class="li-sub">Est. 1RM ' + insNum(s.e1rm) + ' kg' + (note ? ' · ' + h(note) : '') + '</span>' + sparkHtml(s.spark, 'ins-spark') + '</div></div>';
     }).join('');
     return insCard('Kekuatan', 'perkiraan 1RM', '<div class="stack" style="gap:12px">' + rows + '</div>');
@@ -8353,7 +8484,7 @@
     const rows = it.skema && it.skema.length ? it.skema.map(s => ({ w: s.w, rep: s.rep, kg: s.kg })) : Array.from({ length: it.set || 1 }, () => ({ w: 0, rep: it.repMax !== '' && it.repMax != null ? it.repMin + '–' + it.repMax : it.repMin, kg: it.kg }));
     let n = 0;
     return '<div class="rt-ex"><div class="rt-ex-head">' + (x ? '<img class="wl-thumb" loading="lazy" alt="" src="' + h(exLib.base + x.g) + '">' : '<span class="wl-thumb ph" aria-hidden="true">' + icon('dumbbell') + '</span>') +
-      '<b>' + h(it.gerakan) + '</b></div>' + (it.catatan ? '<p class="li-sub">' + h(it.catatan) + '</p>' : '') +
+      '<b>' + h(exNm(it)) + '</b></div>' + (it.catatan ? '<p class="li-sub">' + h(it.catatan) + '</p>' : '') +
       (it.rest !== '' && it.rest != null ? '<p class="rt-rest">' + icon('timer') + 'Istirahat ' + h(wlRestText(it.rest)) + '</p>' : '') +
       '<div class="rt-tbl' + (kg ? ' kg' : '') + '"><div class="rt-tr rt-th"><span>SET</span>' + (kg ? '<span>KG</span>' : '') + '<span>' + unit + '</span></div>' +
       rows.map(r => '<div class="rt-tr"><span>' + (r.w ? 'W' : ++n) + '</span>' + (kg ? '<span class="num">' + (r.kg === '' || r.kg == null ? '–' : h(wlNum(r.kg))) + '</span>' : '') + '<span class="num">' + h(r.rep === '' || r.rep == null ? '–' : r.rep) + '</span></div>').join('') + '</div>' +
@@ -8428,11 +8559,132 @@
     wlSheet('Jelajahi', body);
   };
 
+  // ── Program otomatis (Fase U, T-1607) ──────────────────────────────────────────────────────────────────────
+  // Data: window.myProgramGen (getPortalMore.programGen) dan pgAdminGen[id] (getClientBundle.programGen). Server menghitung
+  // semuanya; browser hanya menampilkan. Nama otot dan petunjuk latihan dalam bahasa Inggris (keputusan owner).
+  const pgAdminGen = {};
+  const PG_LVL_LBL = { 'pemula-banget': 'Pemula banget', pemula: 'Pemula', menengah: 'Menengah' };
+  const PG_GOAL_LBL = { kekuatan: 'Kekuatan', otot: 'Bentuk otot', fatloss: 'Turun lemak', bugar: 'Kebugaran' };
+  const PG_REASON_LBL = { 'form-belum': 'form kesehatan belum diisi', parq: 'ada jawaban "ya" di form kesehatan', cedera: 'ada cedera/operasi', obat: 'minum obat rutin', kondisi: 'ada kondisi lain', hamil: 'hamil/menyusui', remaja: 'usia di bawah 18', lansia: 'usia di atas 65' };
+  const PG_POLA_LBL = { lutut: 'Knee', pinggul: 'Hip', 'dorong-h': 'Push', 'dorong-v': 'Overhead push', 'tarik-h': 'Row', 'tarik-v': 'Pulldown' };
+  function autoProgCardHtml() {
+    const g = window.myProgramGen;
+    if (!g || g.error || !g.enabled) return '';
+    if (!g.auto) return '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Program otomatis</p><p class="li-sub">Dimatikan. Program yang ada tetap bisa dipakai.</p><button type="button" class="btn btn-outline" onclick="window.pgSetAuto(true)">Nyalakan lagi</button></div>';
+    if (g.needsProfile) return '<div class="card stack" style="gap:8px"><p class="eyebrow">Program otomatis</p><p class="li-title">Buat program latihanmu</p><p class="li-sub">Jawab 3 pertanyaan singkat. Program disusun dari alat di gym dan aturan berbasis penelitian.</p><button type="button" class="btn btn-primary btn-lg" onclick="window.pgProfileOpen()">Mulai</button></div>';
+    if (g.hasCoachProgram) return '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Program otomatis</p><p class="li-sub">Kamu punya program dari coach. Mau coba program otomatis? Program coach disimpan di Rutinitas saya.</p><div class="btn-row"><button type="button" class="btn btn-ghost" onclick="window.pgProfileOpen()">Ubah data</button><button type="button" class="btn btn-primary" onclick="window.pgAccept()">Coba</button></div></div>';
+    const p = g.profile || {};
+    let html = '<div class="card stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Program otomatis</p><span class="pill soft">Blok ' + h(g.block || 1) + '</span></div>' +
+      '<p class="li-title">' + h(PG_LVL_LBL[p.level] || '') + ' · ' + h(p.hari) + ' hari · ' + h(p.durasi) + ' menit · ' + h(PG_GOAL_LBL[p.tujuan] || '') + '</p>';
+    if (g.light) html += '<p class="li-sub" role="note">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Program ringan. Konsultasikan dengan coach atau dokter sebelum menambah beban.</p>';
+    html += (g.why || []).filter(function (w) { return !/^Light mode/.test(w); }).slice(0, 3).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('');
+    html += '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-ghost" onclick="window.pgProfileOpen()">Ubah data</button><button type="button" class="btn btn-ghost" onclick="window.pgSwapOpen()">' + icon('repeat') + ' Tukar gerakan</button><button type="button" class="btn btn-ghost" onclick="window.pgSetAuto(false)">Matikan</button></div></div>';
+    return html;
+  }
+  function renderAutoProg() { const el = $('pub-autoprog'); if (el) { setHTML(el, autoProgCardHtml()); paintIcons(); } }
+  function pgApply(r) {
+    if (r && r.programGen) { window.myProgramGen = r.programGen; window.patchPortalMore('programGen', r.programGen); }
+    if (r && r.program) { window.myProgram = { state: 'ok', data: r.program }; window.patchPortalMore('program', r.program); }
+    renderAutoProg(); renderProgramCard();
+  }
+  const pgOnb = { step: 1, v: {} };
+  window.pgProfileOpen = function () {
+    const g = window.myProgramGen || {}, p = g.profile || {};
+    pgOnb.step = 1; pgOnb.v = { level: p.level || '', tujuan: g.profile && g.profile.tujuan || '', hari: p.hari || '', durasi: p.durasi || '', fokus: (p.fokus || []).slice() };
+    pgOnbRender();
+    openSheet('sheet-pg-profile');
+  };
+  function pgOnbRender() {
+    const g = window.myProgramGen || {}, v = pgOnb.v, el = $('pg-profile-body');
+    if (!el) return;
+    const chip = function (key, val, lbl, sub) { return '<button type="button" class="list-item interactive' + (String(v[key]) === String(val) ? ' active' : '') + '" style="min-height:56px;text-align:left" aria-pressed="' + (String(v[key]) === String(val)) + '" onclick="window.pgOnbSet(\'' + key + '\',\'' + h(val) + '\')"><span class="grow"><b>' + h(lbl) + '</b>' + (sub ? '<span class="li-sub" style="display:block">' + h(sub) + '</span>' : '') + '</span>' + (String(v[key]) === String(val) ? icon('check') : '') + '</button>'; };
+    let html = '<p class="li-sub">Langkah ' + pgOnb.step + ' dari 3</p>';
+    if (pgOnb.step === 1) {
+      html += '<p class="li-title">Seberapa lama kamu sudah latihan beban?</p><div class="stack" style="gap:6px">' +
+        chip('level', 'pemula-banget', 'Pemula banget', 'Belum pernah / kurang dari 3 bulan') + chip('level', 'pemula', 'Pemula', '3–12 bulan') + chip('level', 'menengah', 'Menengah', 'Lebih dari 1 tahun rutin') + '</div>';
+    } else if (pgOnb.step === 2) {
+      html += '<p class="li-title">Tujuan utamamu?</p><div class="stack" style="gap:6px">' + (g.goals || ['kekuatan', 'otot', 'fatloss', 'bugar']).map(function (t) { return chip('tujuan', t, PG_GOAL_LBL[t] || t, ''); }).join('') + '</div>' +
+        '<p class="label" style="margin-top:12px">Otot fokus (opsional, maks 2)</p><div class="chips" style="flex-wrap:wrap">' + (g.muscles || []).map(function (m) { const on = v.fokus.indexOf(m) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgOnbFocus(\'' + h(m) + '\')">' + h(EX_TGT_LBL[m] || m) + '</button>'; }).join('') + '</div>';
+    } else {
+      html += '<p class="li-title">Berapa hari latihan sendiri per minggu?</p><div class="seg" style="display:grid;grid-template-columns:repeat(3,1fr)">' + (g.daysOptions || [2, 3, 4]).map(function (d) { return '<button type="button" class="' + (Number(v.hari) === d ? 'active' : '') + '" onclick="window.pgOnbSet(\'hari\',' + d + ')">' + d + ' hari</button>'; }).join('') + '</div>' +
+        '<p class="li-title" style="margin-top:12px">Berapa lama per sesi?</p><div class="seg" style="display:grid;grid-template-columns:repeat(3,1fr)">' + (g.durations || [30, 45, 60]).map(function (d) { return '<button type="button" class="' + (Number(v.durasi) === d ? 'active' : '') + '" onclick="window.pgOnbSet(\'durasi\',' + d + ')">' + d + ' mnt</button>'; }).join('') + '</div>' +
+        '<p class="li-sub">Sesi PT dengan coach tidak dihitung di sini.</p>';
+    }
+    html += '<p class="li-sub" id="pg-onb-err" role="alert"></p><div class="btn-row">' + (pgOnb.step > 1 ? '<button type="button" class="btn btn-ghost btn-lg" onclick="window.pgOnbStep(-1)">Kembali</button>' : '') +
+      '<button type="button" class="btn btn-primary btn-lg" id="pg-onb-next" onclick="window.pgOnbStep(1)">' + (pgOnb.step < 3 ? 'Lanjut' : 'Buat program') + '</button></div>';
+    setHTML(el, html); paintIcons();
+  }
+  window.pgOnbSet = function (k, val) { pgOnb.v[k] = val; pgOnbRender(); };
+  window.pgOnbFocus = function (m) { const f = pgOnb.v.fokus, i = f.indexOf(m); if (i !== -1) f.splice(i, 1); else if (f.length < 2) f.push(m); else showToast('Maksimal 2 otot fokus.'); pgOnbRender(); };
+  window.pgOnbStep = function (d) {
+    const v = pgOnb.v, err = $('pg-onb-err');
+    if (d > 0 && pgOnb.step === 1 && !v.level) { err.textContent = 'Pilih salah satu.'; return; }
+    if (d > 0 && pgOnb.step === 2 && !v.tujuan) { err.textContent = 'Pilih tujuan.'; return; }
+    if (d > 0 && pgOnb.step === 3) {
+      if (!v.hari || !v.durasi) { err.textContent = 'Pilih hari dan durasi.'; return; }
+      const btn = $('pg-onb-next'); if (btn) { btn.disabled = true; btn.textContent = 'Menyusun…'; }
+      memberCall('saveMyProgramProfile', { level: v.level, tujuan: v.tujuan, hari: Number(v.hari), durasi: Number(v.durasi), fokus: v.fokus })
+        .then(function (r) { pgApply(r); window.closeModal(); showToast(r.skipped === 'coach' ? 'Data disimpan.' : 'Program siap.'); })
+        .catch(function (e) { err.textContent = e.message || 'Gagal menyimpan.'; if (btn) { btn.disabled = false; btn.textContent = 'Buat program'; } });
+      return;
+    }
+    pgOnb.step = Math.max(1, Math.min(3, pgOnb.step + d)); pgOnbRender();
+  };
+  window.pgAccept = function () {
+    window.showConfirmModal('Program coach disimpan ke Rutinitas saya, lalu program otomatis dibuat.', function () {
+      memberCall('acceptAutoProgram').then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+    }, { title: 'Coba program otomatis?', confirmText: 'Coba' });
+  };
+  window.pgSetAuto = function (on) {
+    const go = function () { memberCall('setMyProgramAuto', !!on).then(function (r) { pgApply(r); showToast(on ? 'Program otomatis aktif.' : 'Program otomatis dimatikan.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    if (on) go(); else window.showConfirmModal('Program yang sekarang tetap ada dan tidak berubah lagi otomatis.', go, { title: 'Matikan program otomatis?', confirmText: 'Matikan' });
+  };
+  window.pgSwapOpen = function () {
+    const g = window.myProgramGen || {}, opts = g.options || {}, tk = g.tukar || {};
+    const html = Object.keys(opts).filter(function (p) { return opts[p].length > 1; }).map(function (p) {
+      return '<p class="group-label"><span>' + h(PG_POLA_LBL[p] || p) + '</span></p>' + opts[p].map(function (x) {
+        const on = tk[p] === x.id;
+        return '<button type="button" class="list-item interactive" style="min-height:52px;text-align:left" onclick="window.pgSwap(\'' + h(p) + '\',\'' + h(x.id) + '\')"><span class="grow">' + h(x.nama) + '</span>' + (on ? icon('check') : '') + '</button>';
+      }).join('');
+    }).join('') || '<p class="li-sub">Belum ada pilihan lain di gym untuk levelmu.</p>';
+    wlSheet('Tukar gerakan', '<p class="li-sub">Pilih gerakan dengan pola sama. Program disusun ulang dengan pilihanmu.</p>' + html);
+  };
+  window.pgSwap = function (pola, id) {
+    memberCall('swapMyProgramExercise', pola, id).then(function (r) { pgApply(r); window.closeModal(); showToast('Gerakan ditukar.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+  };
+  // Panel coach: kartu di tab Latihan klien.
+  function autoProgAdminHtml(memberId) {
+    const g = pgAdminGen[memberId];
+    if (!g || g.error || !g.enabled) return '';
+    const p = g.profile || {}, id = h(memberId);
+    let html = '<div class="card-flat stack" style="gap:6px"><div class="row-between"><p class="eyebrow">Program otomatis</p><span class="pill soft">' + (g.isAuto ? 'Aktif · blok ' + h(g.block || 1) : (g.hasCoachProgram ? 'Program coach' : (g.auto ? 'Belum dibuat' : 'Mati'))) + '</span></div>';
+    html += '<p class="li-sub">' + h(PG_LVL_LBL[p.level] || 'Level belum diisi') + (p.hari ? ' · ' + h(p.hari) + ' hari' : '') + (p.durasi ? ' · ' + h(p.durasi) + ' menit' : '') + ' · ' + h(PG_GOAL_LBL[p.tujuan] || '') + '</p>';
+    if (g.light) html += '<p class="li-sub" role="note">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' Mode ringan: ' + h((g.reasons || []).map(function (r) { return PG_REASON_LBL[r] || r; }).join(', ')) + '.</p>';
+    if ((g.gaps || []).length) html += '<p class="li-sub">Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.</p>';
+    html += (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('');
+    html += '<p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div>';
+    html += '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-outline" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + ' Buat ulang</button><button type="button" class="btn btn-ghost" onclick="window.pgAdminAuto(\'' + id + '\',' + (!g.auto) + ')">' + (g.auto ? 'Matikan otomatis' : 'Nyalakan otomatis') + '</button></div></div>';
+    return html;
+  }
+  function pgAdminApply(id, g) { pgAdminGen[id] = g; window.ccPatch(id, { programGen: g }); renderProgramAdmin(id); }
+  window.pgAdminRegen = function (id) {
+    const g = pgAdminGen[id];
+    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
+  };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+  window.pgAdminTag = function (id, t) {
+    const g = pgAdminGen[id]; if (!g) return;
+    const list = (g.pantangan || []).slice(), i = list.indexOf(t);
+    if (i !== -1) list.splice(i, 1); else list.push(t);
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+  };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
     if (!el || !me) return;
     let left = pageIntro('Latihan', 'Rutinitas dari coach dan buatanmu sendiri.');
     left += '<div id="ph-latihan">' + insTrainingHero() + '</div>';
+    left += '<div id="pub-autoprog">' + autoProgCardHtml() + '</div>';
     left += '<div class="stack" style="gap:var(--gap)" id="pub-program-wrap">' + programInner() + '</div>';
     left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
@@ -10154,6 +10406,118 @@
   };
 
   // Pengaturan → Keuangan (tombol langsung, tanpa bar simpan)
+  // ── Pengaturan → Latihan & Alat (Fase U, T-1603): otot untuk gerakan yang diketik manual di log ────────────
+  // Server menggabung nama yang persis sama dengan pustaka; sisanya ditebak dari kata kunci. Coach bisa memastikan:
+  // pilih gerakan pustaka yang sama (riwayat digabung) atau cukup otot target. Sheet log tidak diubah.
+  const exAl = { data: null, busy: {} };
+  const EX_TGT_LBL = { abs: 'Abs', quads: 'Quads', lats: 'Lats', calves: 'Calves', pectorals: 'Chest', glutes: 'Glutes', hamstrings: 'Hamstrings',
+    adductors: 'Adductors', abductors: 'Abductors', triceps: 'Triceps', biceps: 'Biceps', delts: 'Shoulders', forearms: 'Forearms', traps: 'Traps',
+    'upper back': 'Upper Back', spine: 'Lower Back', 'serratus anterior': 'Serratus', 'levator scapulae': 'Neck', 'cardiovascular system': 'Cardio' };
+  function exAliasHtml() {
+    return '<div class="card-flat stack"><h4 class="li-title">Alat gym</h4><p class="li-sub">Gerakan yang boleh dipakai program otomatis, per level. Nyalakan yang alatnya ada di gym. Otot dan sumbernya: docs/program/Otot.md.</p><div id="gym-cat" class="stack" style="gap:0"><span class="li-sub">Memuat…</span></div></div>' +
+      '<div class="card-flat stack"><h4 class="li-title">Gerakan manual di log</h4><p class="li-sub">Nama yang diketik sendiri (tanpa pustaka). Nama yang persis sama dengan gerakan pustaka langsung digabung; sisanya ditebak ototnya. Pastikan di sini: pilih gerakan pustaka yang sama, atau ototnya saja. Catatan lama tidak diubah.</p><div id="exal-list" class="stack" style="gap:0"><span class="li-sub">Memuat…</span></div></div>';
+  }
+  // Katalog alat gym (Fase U, T-1602). Nama gerakan dan otot dalam bahasa Inggris (keputusan owner).
+  const GYM_LVL_LBL = { 'pemula-banget': 'Pemula banget', pemula: 'Pemula', menengah: 'Menengah' };
+  const GYM_POLA_LBL = { lutut: 'Knee dominant', pinggul: 'Hip dominant', 'dorong-h': 'Horizontal push', 'dorong-v': 'Vertical push', 'tarik-h': 'Horizontal pull', 'tarik-v': 'Vertical pull', isolasi: 'Isolation', kardio: 'Cardio', keseimbangan: 'Balance' };
+  const gymSt = { data: null, edit: null, busy: false };
+  function gymLoad() {
+    adminCall('getGymCatalog').then(function (d) { gymSt.data = d; gymRender(); })
+      .catch(function (e) { const el = $('gym-cat'); if (el) el.innerHTML = '<span class="li-sub">' + h(e.message || 'Gagal memuat.') + '</span>'; });
+  }
+  function gymRender() {
+    const el = $('gym-cat'), d = gymSt.data;
+    if (!el || !d) return;
+    if (gymSt.edit) { el.innerHTML = gymFormHtml(gymSt.edit); paintIcons(); return; }
+    el.innerHTML = d.levels.map(function (lv) {
+      const rows = d.items.filter(function (x) { return x.level === lv; });
+      return '<p class="group-label"><span>' + h(GYM_LVL_LBL[lv]) + ' · ' + rows.filter(function (x) { return x.aktif; }).length + ' aktif</span></p>' + rows.map(function (x) {
+        const mus = x.utama.map(function (m) { return EX_TGT_LBL[m] || m; }).join(', ') + (x.pendukung.length ? ' + ' + x.pendukung.map(function (m) { return EX_TGT_LBL[m] || m; }).join(', ') : '');
+        return '<div class="row-between" style="min-height:52px;gap:8px;border-top:1px solid var(--line)"><button type="button" class="list-item interactive grow" style="min-height:48px;text-align:left" onclick="window.gymEdit(\'' + h(x.id) + '\')"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(x.nama) + '</b><span class="li-sub truncate" style="display:block">' + h(GYM_POLA_LBL[x.pola] || x.pola) + ' · ' + h(mus) + '</span></span></button>' +
+          '<label class="toggle"><input type="checkbox"' + (x.aktif ? ' checked' : '') + ' aria-label="Alat ' + h(x.nama) + ' ada di gym" onchange="window.gymActive(\'' + h(x.id) + '\',this.checked)"><span></span></label></div>';
+      }).join('');
+    }).join('') + '<button type="button" class="btn btn-outline" style="margin-top:12px" onclick="window.gymEdit(\'\')">' + icon('plus') + ' Tambah gerakan</button>';
+    paintIcons();
+  }
+  function gymFormHtml(x) {
+    const d = gymSt.data;
+    const sel = function (id, list, val, lbl) { return '<select class="select" id="' + id + '">' + list.map(function (v) { return '<option value="' + h(v) + '"' + (v === val ? ' selected' : '') + '>' + h(lbl ? (lbl[v] || v) : v) + '</option>'; }).join('') + '</select>'; };
+    const chips = function (name, list, on, lbl) { return '<div class="chips" style="flex-wrap:wrap">' + list.map(function (v) { return '<label class="chip"><input type="checkbox" name="' + name + '" value="' + h(v) + '"' + (on.indexOf(v) !== -1 ? ' checked' : '') + '> ' + h(lbl ? (lbl[v] || v) : v) + '</label>'; }).join('') + '</div>'; };
+    const tg = d.targets.filter(function (t) { return ['serratus anterior', 'levator scapulae'].indexOf(t) === -1; });
+    return '<form class="stack" style="gap:12px" onsubmit="window.gymSave(event)">' +
+      '<div class="field"><label class="label" for="gym-n">Nama (English)</label><input class="input" id="gym-n" maxlength="80" required value="' + h(x.nama || '') + '" placeholder="mis. Leg Curl (Machine)"></div>' +
+      '<div class="field"><label class="label" for="gym-lv">Level minimal</label>' + sel('gym-lv', d.levels, x.level || 'pemula-banget', GYM_LVL_LBL) + '</div>' +
+      '<div class="field"><label class="label" for="gym-po">Pola</label>' + sel('gym-po', d.patterns, x.pola || 'isolasi', GYM_POLA_LBL) + '</div>' +
+      '<div class="field"><label class="label" for="gym-je">Jenis</label>' + sel('gym-je', ['beban', 'badan', 'waktu', 'jarak'], x.jenis || 'beban', { beban: 'Beban (kg × rep)', badan: 'Berat badan', waktu: 'Waktu', jarak: 'Jarak' }) + '</div>' +
+      '<div class="field"><p class="label">Otot utama</p>' + chips('gym-ut', tg, x.utama || [], EX_TGT_LBL) + '</div>' +
+      '<div class="field"><p class="label">Otot pendukung</p>' + chips('gym-pe', tg, x.pendukung || [], EX_TGT_LBL) + '</div>' +
+      '<div class="row" style="gap:8px"><div class="field grow"><label class="label" for="gym-r1">Rep min</label><input class="input" id="gym-r1" type="text" inputmode="numeric" value="' + h(x.repMin === '' || x.repMin == null ? '' : x.repMin) + '"></div><div class="field grow"><label class="label" for="gym-r2">Rep maks</label><input class="input" id="gym-r2" type="text" inputmode="numeric" value="' + h(x.repMax === '' || x.repMax == null ? '' : x.repMax) + '"></div></div>' +
+      '<div class="field"><p class="label">Hindari bila klien punya</p>' + chips('gym-hi', d.tags, x.hindari || [], { lutut: 'Masalah lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }) + '</div>' +
+      '<div class="field"><label class="label" for="gym-ex">Kode pustaka (opsional, untuk gambar)</label><input class="input" id="gym-ex" maxlength="20" value="' + h(x.exId || '') + '"></div>' +
+      '<p class="li-sub" id="gym-err" role="alert"></p>' +
+      '<div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" onclick="window.gymEditClose()">Batal</button><button type="submit" class="btn btn-primary btn-lg">Simpan</button></div></form>';
+  }
+  window.gymEdit = function (id) {
+    if (!gymSt.data) return;
+    gymSt.edit = id ? Object.assign({}, gymSt.data.items.find(function (x) { return x.id === id; })) : { id: '', aktif: true };
+    gymRender();
+  };
+  window.gymEditClose = function () { gymSt.edit = null; gymRender(); };
+  window.gymSave = function (ev) {
+    if (ev) ev.preventDefault();
+    if (gymSt.busy || !gymSt.edit) return;
+    const picked = function (n) { return Array.prototype.map.call(document.querySelectorAll('#gym-cat input[name="' + n + '"]:checked'), function (i) { return i.value; }); };
+    const it = Object.assign({}, gymSt.edit, { nama: $('gym-n').value, level: $('gym-lv').value, pola: $('gym-po').value, jenis: $('gym-je').value,
+      utama: picked('gym-ut'), pendukung: picked('gym-pe'), hindari: picked('gym-hi'), repMin: $('gym-r1').value.trim(), repMax: $('gym-r2').value.trim(), exId: $('gym-ex').value.trim() });
+    gymSt.busy = true;
+    adminCall('saveGymExercise', it).then(function (d) { gymSt.data = d; gymSt.edit = null; gymRender(); showToast('Tersimpan'); })
+      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = e.message || 'Gagal menyimpan.'; })
+      .then(function () { gymSt.busy = false; });
+  };
+  window.gymActive = function (id, on) {
+    adminCall('setGymExerciseActive', id, on).then(function (d) { gymSt.data = d; gymRender(); })
+      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); gymRender(); });
+  };
+  function exAliasLoad() {
+    gymLoad();
+    exEnsure().catch(function () {}).then(function () { return adminCall('getManualExercises'); })
+      .then(function (d) { exAl.data = d; exAliasRender(); })
+      .catch(function (e) { const el = $('exal-list'); if (el) el.innerHTML = '<span class="li-sub">' + h(e.message || 'Gagal memuat.') + '</span>'; });
+  }
+  function exAliasRender() {
+    const el = $('exal-list');
+    if (!el || !exAl.data) return;
+    const d = exAl.data;
+    if (!d.items.length) { el.innerHTML = '<span class="li-sub">Belum ada gerakan manual di log.</span>'; return; }
+    const SRC = { pustaka: 'sama dengan pustaka', alias: 'sudah dipastikan', tebakan: 'tebakan', '': 'belum dikenali' };
+    el.innerHTML = d.items.map(function (it, i) {
+      const lib = it.exId ? exNm({ exId: it.exId, gerakan: it.exId }) : '';
+      const now = lib ? '= ' + lib : (it.target ? EX_TGT_LBL[it.target] || it.target : '—');
+      const opts = '<option value="">Otot…</option>' + d.targets.map(function (t) { return '<option value="' + h(t) + '"' + (t === it.target ? ' selected' : '') + '>' + h(EX_TGT_LBL[t] || t) + '</option>'; }).join('');
+      const fixed = it.src === 'pustaka';
+      return '<div class="stack" style="gap:6px;padding:10px 0;border-top:1px solid var(--line)"><div class="row-between" style="gap:8px"><span style="min-width:0"><b class="truncate" style="display:block">' + h(it.nama) + '</b><span class="li-sub">' + it.sets + ' set · ' + it.klien + ' klien · ' + h(now) + ' <span class="pill soft">' + h(SRC[it.src] || '') + '</span></span></span></div>' +
+        (fixed ? '' : '<div class="row" style="gap:6px;flex-wrap:wrap"><select class="select" style="flex:1;min-width:140px" aria-label="Otot ' + h(it.nama) + '" onchange="window.exAliasSave(' + i + ',{target:this.value})">' + opts + '</select>' +
+        '<button type="button" class="btn btn-outline" onclick="window.exAliasPick(' + i + ')">' + icon('search') + ' Pustaka</button>' +
+        (it.src === 'alias' ? '<button type="button" class="icon-btn" aria-label="Hapus pilihan ' + h(it.nama) + '" onclick="window.exAliasSave(' + i + ',{hapus:true})">' + icon('rotate-ccw') + '</button>' : '') + '</div>') + '</div>';
+    }).join('');
+    paintIcons();
+  }
+  window.exAliasSave = function (i, v) {
+    const it = exAl.data && exAl.data.items[i];
+    if (!it || exAl.busy[it.kunci]) return;
+    if (!v.hapus && !v.exId && !v.target) return;
+    exAl.busy[it.kunci] = true;
+    adminCall('saveExerciseAlias', [Object.assign({ nama: it.nama }, v)])
+      .then(function (d) { exAl.data = d; exAliasRender(); showToast('Tersimpan'); })
+      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); exAliasRender(); })
+      .then(function () { delete exAl.busy[it.kunci]; });
+  };
+  window.exAliasPick = function (i) {
+    const it = exAl.data && exAl.data.items[i];
+    if (!it) return;
+    exSearchOpen(function (x) { if (x && x.id) window.exAliasSave(i, { exId: x.id }); else showToast('Pilih gerakan dari pustaka.'); }, { title: 'Sama dengan: ' + it.nama });
+    setTimeout(function () { const q = $('exs-q'); if (q) { q.value = it.nama; window.exsFilter(); } }, 50);
+  };
   function finSettingsHtml() {
     const f = (setState.data && setState.data.finance) || { enabled: false, portalVisible: false, methods: fin.methods };
     const tg = function (id, title, sub, on, fn) {

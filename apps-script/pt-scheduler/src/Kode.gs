@@ -120,7 +120,9 @@ function _appApi_() {
     getMyWorkout: getMyWorkout, logMyWorkout: logMyWorkout, getMyNutrition: getMyNutrition, getMyFoodLog: getMyFoodLog,
     logMyFood: logMyFood, deleteMyFood: deleteMyFood, saveMyMeasurement: saveMyMeasurement,
     deleteMyMeasurement: deleteMyMeasurement, getMyProgress: getMyProgress,
-    uploadMyProgressPhoto: uploadMyProgressPhoto, getMyProgressPhoto: getMyProgressPhoto, deleteMyProgressPhoto: deleteMyProgressPhoto, getMyShareData: getMyShareData };
+    uploadMyProgressPhoto: uploadMyProgressPhoto, getMyProgressPhoto: getMyProgressPhoto, deleteMyProgressPhoto: deleteMyProgressPhoto, getMyShareData: getMyShareData,
+    getMyProgramProfile: getMyProgramProfile, saveMyProgramProfile: saveMyProgramProfile, acceptAutoProgram: acceptAutoProgram,
+    setMyProgramAuto: setMyProgramAuto, swapMyProgramExercise: swapMyProgramExercise };
 }
 function _appApiReply_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -1946,6 +1948,9 @@ function registerNewClient(data) {
     _ensureGuideColumn_(found.sheet);
     found.sheet.getRange(found.rowNum, MEMBER_GUIDE_COL).setValue('baru');
     found.row[MEMBER_GUIDE_COL - 1] = 'baru';
+    // Fase U: pengalaman latihan dari form daftar menjadi level awal program otomatis (dibulatkan ke bawah).
+    const lvl = _pgLevelFromExperience_(data.experience);
+    if (lvl) _pgWrite_(found, { level: lvl });
   } finally {
     lock.releaseLock();
   }
@@ -2212,6 +2217,7 @@ function getPortalMore(memberToken) {
       program: program,
       workout: workout,
       nutrition: nutrition,
+      programGen: part(function() { return _programGenFor_(row, false); }),
       content: part(function() { return _contentForClient_(); }),
       coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
       share: part(function() { return _shareFor_(row, workout, progress); })
@@ -2360,11 +2366,21 @@ function _ensureScheduleClassHeader_(sheet) {
 
 // Memo per eksekusi untuk bundle baca-saja (getPortalMore, dst.): Schedules dibaca sekali. Hanya diisi oleh _withSchedulesMemo_.
 let _schedMemo_ = null;
+let _readMemo_ = null;
+/** Nilai sheet (tanpa header) — sekali per bundle bila di dalam _withSchedulesMemo_, selain itu baca langsung. */
+function _sheetRowsMemo_(name) {
+  if (_readMemo_ && _readMemo_[name]) return _readMemo_[name];
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  const rows = sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : [];
+  if (_readMemo_) _readMemo_[name] = rows;
+  return rows;
+}
 function _withSchedulesMemo_(fn) {
-  const prev = _schedMemo_, prevProg = _progMemo_;
+  const prev = _schedMemo_, prevProg = _progMemo_, prevRead = _readMemo_;
   _schedMemo_ = _getSchedulesAll_();
   _progMemo_ = { rows: null };
-  try { return fn(); } finally { _schedMemo_ = prev; _progMemo_ = prevProg; }
+  _readMemo_ = {};   // Fase U: WorkoutLog, GymExercises dan HealthScreening dibaca sekali per bundle
+  try { return fn(); } finally { _schedMemo_ = prev; _progMemo_ = prevProg; _readMemo_ = prevRead; }
 }
 
 function _getSchedulesAll_() {
@@ -6143,7 +6159,7 @@ function _coachHub_(now) {
   });
   return {
     selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
-    today: today, stats: stats, targets: targets, care: _careList_(now), feedback: _feedbackSummary_(now.getTime()), workouts: _workoutHubList_(), nutrition: _nutHubList_(),
+    today: today, stats: stats, targets: targets, care: _careList_(now), feedback: _feedbackSummary_(now.getTime()), workouts: _workoutHubList_(), nutrition: _nutHubList_(), programAuto: _pgHubList_(),
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }
@@ -6282,8 +6298,10 @@ function getClientBundle(token, memberId) {
     const workout = part(function () { return getWorkoutLog(token, memberId); });
     const program = part(function () { return getMemberProgram(token, memberId); });
     const care = part(function () { return getClientCare(token, memberId); });
+    let mrow = null;
+    const memberRow = function() { return mrow || (mrow = _memberRowOrThrow_(memberId).row); };
     const insight = part(function () {
-      const row = _memberRowOrThrow_(memberId).row;
+      const row = memberRow();
       const bodyFat = care && care.assessment && care.assessment.bodyFat !== '' && care.assessment.bodyFat != null ? Number(care.assessment.bodyFat) : null;
       return _insightFor_(row, 'coach', { progress: progress, workout: workout, bodyFat: bodyFat });
     });
@@ -6296,6 +6314,7 @@ function getClientBundle(token, memberId) {
       program: program,
       workout: workout,
       nutrition: part(function () { return getClientNutrition(token, memberId); }),
+      programGen: part(function () { return _programGenFor_(memberRow(), true); }),
       foodLog: part(function () { return getClientFoodLog(token, memberId); }),
       share: part(function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
       insight: insight
@@ -6618,7 +6637,7 @@ function _contentForClientImpl_() {
 // Sheet ProgramItems menyimpan program klien (Member ID terisi) dan template (Member ID kosong, Template terisi).
 // ProgramLog mencatat gerakan yang dicentang klien per hari.
 
-const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada", "Exercise ID", "Rep Min", "Rep Max", "Target Kg", "Istirahat", "Superset", "Jenis", "Skema", "Pemilik", "Jelajahi"];
+const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada", "Exercise ID", "Rep Min", "Rep Max", "Target Kg", "Istirahat", "Superset", "Jenis", "Skema", "Pemilik", "Jelajahi", "Sumber"];
 // Fase M: jenis gerakan menentukan arti angka rep (beban/badan = rep, waktu = detik, jarak = meter).
 const PROGRAM_KINDS = ['beban', 'badan', 'waktu', 'jarak'];
 const PROGRAM_REP_MAX = { beban: 999, badan: 999, waktu: 7200, jarak: 100000 };
@@ -6626,6 +6645,7 @@ const PROGRAM_LOG_HEADERS = ["ID", "Member ID", "Tanggal", "Hari", "Selesai", "D
 const PROGRAM_LIMITS = { days: 7, items: 12, name: 60, hari: 40, gerakan: 80, rep: 16, note: 200, url: 300, templates: 30, own: 10 };
 // Fase O: kolom T "Pemilik" = 'klien' untuk rutinitas buatan klien sendiri ('' = program coach / template);
 // kolom U "Jelajahi" = 1 pada baris template yang boleh dilihat dan disalin klien (mati bawaan).
+// Fase U: kolom V "Sumber" = 'auto:<versi aturan>' bila program klien dibuat generator; kosong = buatan coach (tidak pernah ditimpa generator).
 const PROGRAM_OWN = 'klien';
 
 function _programSheet_() {
@@ -6823,6 +6843,8 @@ function _parseProgramDays_(input) {
 /** Murni: baris ProgramItems → item; baris lama (tanpa kolom M–S) mendapat target dari teks rep. */
 function _programItemFromRow_(r) {
   const it = { n: Number(r[4]), gerakan: String(r[5]), set: Number(r[6]) || 0, rep: String(r[7]), catatan: String(r[8] || ''), video: String(r[9] || ''), exId: String(r[11] || '') };
+  // Fase U: nama manual yang persis sama dengan pustaka (atau alias coach) memakai Exercise ID itu.
+  if (!it.exId && it.gerakan) it.exId = _exResolve_('', it.gerakan, '', '').exId;
   const num = function(v) { return v === '' || v == null || isNaN(Number(v)) ? '' : Number(v); };
   let skema = [];
   try { const p = r[18] ? JSON.parse(String(r[18])) : []; if (Array.isArray(p)) skema = p.map(function(x) { return { rep: num(x.rep), kg: num(x.kg), w: x.w ? 1 : 0 }; }); } catch (e) { skema = []; }
@@ -6859,7 +6881,7 @@ function _programRowMine_(r, memberId, templateName, own) {
  */
 function _programDays_(memberId, templateName, own) {
   const days = [], by = {};
-  let updatedAt = '', jelajahi = false;
+  let updatedAt = '', jelajahi = false, sumber = '';
   const rows = _programRows_().filter(function(r) {
     return r[0] && _programRowMine_(r, memberId, templateName, own);
   }).sort(function(a, b) { return Number(a[4]) - Number(b[4]); });
@@ -6869,8 +6891,9 @@ function _programDays_(memberId, templateName, own) {
     by[hari].items.push(_programItemFromRow_(r));
     if (String(r[10]) > updatedAt) updatedAt = String(r[10]);
     if (String(r[20] || '') === '1' || r[20] === 1 || r[20] === true) jelajahi = true;
+    if (String(r[21] || '')) sumber = String(r[21]);
   });
-  return { days: days, updatedAt: updatedAt, jelajahi: jelajahi };
+  return { days: days, updatedAt: updatedAt, jelajahi: jelajahi, sumber: sumber };
 }
 
 /** Tulis ulang seluruh program satu klien / template (di dalam lock). days kosong = hapus. opts: { own, jelajahi }. */
@@ -6894,7 +6917,7 @@ function _programWrite_(memberId, templateName, days, opts) {
         const has = function(v) { return v === undefined || v === null ? '' : v; };
         _appendRow_(sheet, ['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now, it.exId || '',
           has(it.repMin), has(it.repMax), has(it.kg), has(it.rest), it.ss || '', it.jenis || '', it.skema && it.skema.length ? JSON.stringify(it.skema) : '',
-          memberId != null && opts.own ? PROGRAM_OWN : '', memberId == null && opts.jelajahi ? 1 : '']);
+          memberId != null && opts.own ? PROGRAM_OWN : '', memberId == null && opts.jelajahi ? 1 : '', memberId != null && !opts.own && opts.sumber ? String(opts.sumber) : '']);
       });
     });
     return n;
@@ -7181,7 +7204,9 @@ function logMyProgramDay(memberToken, hari, selesai) {
 // Satu baris per set di sheet WorkoutLog. Coach (panel) dan klien (portal) sama-sama menulis; kolom "Oleh" membedakan.
 // Data privat: tidak ke Telegram, respons publik, atau cache panel. Klien dibaca dari token, tidak pernah dari argumen.
 
-const WORKOUT_HEADERS = ["ID", "Member ID", "Tanggal", "Schedule ID", "Hari", "Program N", "Exercise ID", "Gerakan", "Body Part", "Target", "Set", "Berat", "Rep", "Durasi", "Jarak", "RPE", "Catatan", "Oleh", "Dibuat Pada", "Jenis Set"];
+const WORKOUT_HEADERS = ["ID", "Member ID", "Tanggal", "Schedule ID", "Hari", "Program N", "Exercise ID", "Gerakan", "Body Part", "Target", "Set", "Berat", "Rep", "Durasi", "Jarak", "RPE", "Catatan", "Oleh", "Dibuat Pada", "Jenis Set", "Form"];
+// Fase U: kolom U "Form" = jawaban klien "Form terasa rapi?" per gerakan per sesi (ok | ragu | kosong), di baris set pertama.
+const WORKOUT_FORM_VALUES = ['', 'ok', 'ragu'];
 // Fase M: jenis set ('' biasa, w pemanasan, drop, gagal). Pemanasan tidak dihitung volume, 1RM, maupun rekor.
 const WORKOUT_SET_KINDS = ['', 'w', 'drop', 'gagal'];
 // Satu baris per klien per tanggal: kapan mulai/selesai, rasa (1-5), catatan latihan. CID = id latihan dari browser (kirim ulang menimpa).
@@ -7194,8 +7219,10 @@ const WORKOUT_BODY_PARTS = ['waist', 'upper legs', 'back', 'lower legs', 'chest'
 
 function _workoutSheet_() {
   const sheet = getOrCreateSheet_('WorkoutLog', WORKOUT_HEADERS);
-  const cell = sheet.getRange(1, WORKOUT_HEADERS.length);
-  if (cell.getValue() === '') { cell.setValue(WORKOUT_HEADERS[WORKOUT_HEADERS.length - 1]); cell.setFontWeight('bold'); }
+  for (let c = 20; c <= WORKOUT_HEADERS.length; c++) {
+    const cell = sheet.getRange(1, c);
+    if (cell.getValue() === '') { cell.setValue(WORKOUT_HEADERS[c - 1]); cell.setFontWeight('bold'); }
+  }
   sheet.getRange('C:C').setNumberFormat('@');
   return sheet;
 }
@@ -7239,8 +7266,10 @@ function _parseWorkoutEntries_(entries) {
     const hari = _careStr_(e.hari, L.hari, 'Nama hari');
     const bodyPart = WORKOUT_BODY_PARTS.indexOf(String(e.bodyPart || '')) === -1 ? '' : String(e.bodyPart);
     const catatan = _careStr_(e.catatan, L.note, gerakan + ': catatan');
+    const form = String(e.form == null ? '' : e.form);
+    if (WORKOUT_FORM_VALUES.indexOf(form) === -1) throw new Error(gerakan + ': jawaban form tidak dikenal.');
     return {
-      key: key, n: n, hari: hari, exId: exId, gerakan: gerakan, bodyPart: bodyPart, target: _careStr_(e.target, L.target, 'Otot target'), catatan: catatan,
+      key: key, n: n, hari: hari, exId: exId, gerakan: gerakan, bodyPart: bodyPart, target: _careStr_(e.target, L.target, 'Otot target'), catatan: catatan, form: form,
       sets: sets.map(function(s, i) {
         s = s || {};
         const lbl = gerakan + ' set ' + (i + 1) + ': ';
@@ -7292,10 +7321,9 @@ function _workoutEvents_(rows) {
 }
 
 function _workoutRowsOf_(memberId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; });
+  // Fase U: gerakan manual diisi Exercise ID / otot saat baca (_exResolveRow_, LatihanAlias.gs).
+  return _sheetRowsMemo_('WorkoutLog').filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_);
 }
 
 /** Hitungan untuk badge: hari latihan yang dicatat dan jumlah rekor pribadi. Dihitung, tidak disimpan. */
@@ -7368,15 +7396,15 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh, session) {
     entries.forEach(function(e) { keys[e.key] = true; });
     const rows = sheet.getDataRange().getValues();
     const beforeKeys = {};
-    _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; })).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
+    _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; }).map(_exResolveRow_)).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
     for (let i = rows.length - 1; i >= 1; i--) {
       const r = rows[i];
-      if (String(r[1]).trim() === memberId && _isoDateCell_(r[2]) === tanggal && keys[_workoutKey_(r[6], r[7])] && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
+      if (String(r[1]).trim() === memberId && _isoDateCell_(r[2]) === tanggal && (keys[_workoutKey_(r[6], r[7])] || keys[_exKeyOf_(r[6], r[7])]) && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
     }
     const now = new Date().toISOString(), stamp = new Date().getTime(), out = [];
     entries.forEach(function(e, ei) {
       e.sets.forEach(function(s, si) {
-        out.push(['WKL-' + stamp + '-' + ei + '-' + si, memberId, tanggal, scheduleId || '', e.hari, e.n, e.exId, e.gerakan, e.bodyPart, e.target, si + 1, s.berat, s.rep, s.durasi, s.jarak, s.rpe, si === 0 ? e.catatan : '', oleh, now, s.jenis || '']);
+        out.push(['WKL-' + stamp + '-' + ei + '-' + si, memberId, tanggal, scheduleId || '', e.hari, e.n, e.exId, e.gerakan, e.bodyPart, e.target, si + 1, s.berat, s.rep, s.durasi, s.jarak, s.rpe, si === 0 ? e.catatan : '', oleh, now, s.jenis || '', si === 0 ? (e.form || '') : '']);
       });
     });
     if (out.length) sheet.getRange(sheet.getLastRow() + 1, 1, out.length, WORKOUT_HEADERS.length).setValues(out);
@@ -7395,10 +7423,11 @@ function _workoutGroup_(rows) {
     const day = byDate[tgl] || (byDate[tgl] = { tanggal: tgl, items: [], idx: {} });
     let it = day.idx[key];
     if (!it) {
-      it = { key: key, n: r[5] === '' ? '' : Number(r[5]), hari: String(r[4] || ''), exId: String(r[6] || ''), gerakan: String(r[7]), bodyPart: String(r[8] || ''), target: String(r[9] || ''), scheduleId: String(r[3] || ''), oleh: String(r[17] || 'klien'), catatan: '', sets: [] };
+      it = { key: key, n: r[5] === '' ? '' : Number(r[5]), hari: String(r[4] || ''), exId: String(r[6] || ''), gerakan: String(r[7]), bodyPart: String(r[8] || ''), target: String(r[9] || ''), scheduleId: String(r[3] || ''), oleh: String(r[17] || 'klien'), catatan: '', form: '', sets: [] };
       day.idx[key] = it; day.items.push(it);
     }
     if (String(r[16] || '') && !it.catatan) it.catatan = String(r[16]);
+    if (String(r[20] || '') && !it.form) it.form = String(r[20]);
     const num = function(v) { return v === '' || v == null ? '' : Number(v); };
     it.sets.push({ set: Number(r[10]) || it.sets.length + 1, berat: num(r[11]), rep: num(r[12]), durasi: num(r[13]), jarak: num(r[14]), rpe: num(r[15]), jenis: String(r[19] || '') });
   });
@@ -7555,8 +7584,7 @@ function _workoutRoutineHist_(days, sessions) {
 function _workoutFor_(row) {
   const id = String(row[0]).trim();
   const today = _todayWib_(), since = _addDaysIso_(today, -WORKOUT_LIMITS.readDays);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  const all = sheet && sheet.getLastRow() >= 2 ? sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }) : [];
+  const all = _sheetRowsMemo_('WorkoutLog').filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_);
   const g = _workoutGroup_(all.filter(function(r) { return _isoDateCell_(r[2]) >= since; }));
   const prsByDate = {};
   _workoutEvents_(all).prs.forEach(function(p) { prsByDate[p.tanggal] = (prsByDate[p.tanggal] || 0) + 1; });
@@ -7574,7 +7602,7 @@ function _workoutFor_(row) {
   const suggest = {};
   program.concat(_programDays_(id, null, true).days).forEach(function(d) {
     d.items.forEach(function(it) {
-      const key = _workoutKey_(it.exId, it.gerakan), last = g.last[key];
+      const key = _exKeyOf_(it.exId, it.gerakan), last = g.last[key];
       if (!last || suggest[key]) return;
       const day = g.days.find(function(x) { return x.tanggal === last.tanggal; });
       const logged = day && day.items.find(function(x) { return x.key === key; });
@@ -7582,6 +7610,14 @@ function _workoutFor_(row) {
       if (sug) suggest[key] = sug;
     });
   });
+  // Fase U: program otomatis memakai progresi rep → set → beban dengan gerbang form (aturan 9a); program coach tetap seperti dulu.
+  if (/^auto:/.test(_programDays_(id).sumber || '')) {
+    try {
+      const prog = _pgProgressFor_(row, program, g);
+      g.progress = prog;
+      Object.keys(prog).forEach(function(k) { if (prog[k].step === 'beban') suggest[k] = { kg: prog[k].kg, why: prog[k].why }; else delete suggest[k]; });
+    } catch (e) { g.progress = {}; }
+  }
   g.suggest = suggest;
   return g;
 }

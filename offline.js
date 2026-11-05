@@ -250,7 +250,7 @@
     });
     html += '<input class="xoff-input" id="xoff-exq" type="search" placeholder="Tambah gerakan (cari atau ketik nama)" value="' + h(w.q) + '" autocomplete="off">';
     if (w.q.trim()) {
-      var q = w.q.trim().toLowerCase(), hits = lib.ex ? lib.ex.items.filter(function (x) { return x.n.toLowerCase().indexOf(q) !== -1; }).slice(0, 15) : [];
+      var q = w.q.trim().toLowerCase(), hits = lib.ex ? lib.ex.items.filter(function (x) { return (x.n + ' ' + (x.r || '')).toLowerCase().indexOf(q) !== -1; }).slice(0, 15) : [];
       html += hits.map(function (x) { return '<button type="button" class="xoff-item" data-act="ex-add" data-id="' + h(x.id) + '">' + h(x.n) + '</button>'; }).join('') +
         '<button type="button" class="xoff-item" data-act="ex-add" data-id="">+ "' + h(w.q.trim()) + '"</button>';
     }

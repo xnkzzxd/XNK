@@ -126,6 +126,8 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
         return route.fulfill({ contentType: REAL[real][1], headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ASSETS, REAL[real][0])) });
       }
     }
+    // Fase U (T-1610): our own muscle figure, served from the repo copy.
+    if (url.includes('xnk.my.id/figure/figure.min.json')) return route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(__dirname, '..', '..', '..', 'figure', 'figure.min.json')) });
     const stub = Object.keys(STUBS).find(k => url.includes(k));
     if (stub) return route.fulfill({ contentType: 'application/javascript', body: STUBS[stub] });
     return route.fulfill({ status: 204, body: '' }); // fonts, images, analytics
@@ -626,6 +628,13 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.textContent('#view-coaches')).includes('Hari ini'), 'coach hub shows Hari ini');
     check((await page.textContent('#view-coaches')).includes('Atur target'), 'coach hub offers to set targets');
+    // Program otomatis di hub (T-1607b): peristiwa terbaru, nama depan saja; dihapus lagi sesudahnya.
+    env.props.PG_HUB_EVENTS = JSON.stringify([{ id: 'PT-A', jenis: 'baru', tanggal: env.call('_todayWib_'), level: 'pemula-banget' }]);
+    await page.evaluate(() => { window._hubAt = 0; window.navigate('dashboard'); window.navigate('coaches'); });
+    await page.waitForTimeout(900);
+    const hubTxt = (await visible(page, '#hub-autoprog')) ? await page.textContent('#hub-autoprog') : '';
+    check(hubTxt.includes('Program baru') && hubTxt.includes('Pemula banget') && (await overflowX(page)) <= 0, 'coach hub: the automatic-program card lists a new program without sideways scroll');
+    delete env.props.PG_HUB_EVENTS;
     // Catatan sesi (Fase I2): sheet bawah, RPE angka, simpan & kirim WA membuka WhatsApp dengan pesan pasca-sesi.
     await page.evaluate(() => { window.__wa = []; window.sendToParentWA = (ph, text) => window.__wa.push({ ph, text }); window.openSessionNote('SCH-A1', true); });
     await page.waitForTimeout(500);
@@ -726,7 +735,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check(await visible(page, '#view-settings'), 'sidebar "Pengaturan" opens the full settings page');
     check(await visible(page, '#settings-nav') && await visible(page, '#settings-pane'), 'desktop shows the section list and the open section side by side');
-    check((await page.locator('#settings-nav .settings-nav-item').count()) === 8, 'settings list has 8 sections');
+    check((await page.locator('#settings-nav .settings-nav-item').count()) === 9, 'settings list has 9 sections');
     check(!(await visible(page, '#settings-savebar')), 'no save bar until something changes');
     await page.click('.settings-nav-item[data-section="notifikasi"]');
     check((await page.inputValue('#set-tgToken')) === '', 'the saved Telegram token is never put in the form');
@@ -973,7 +982,7 @@ async function contrastReport(page) {
     await page.click('#prg-form button:has-text("Tambah hari")');
     await page.waitForTimeout(200);
     check((await page.locator('#prg-form .pf-day').count()) === 1 && (await page.inputValue('#prg-form .pf-hari')) === 'Hari A', 'program form: "Tambah hari" adds Hari A');
-    await page.route('https://xnk.my.id/exercises/exercises.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ v: 1, base: 'data:image/gif;base64,', credit: 'test', items: [{ id: '0025', n: 'barbell bench press', b: 'chest', q: 'barbell', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0026', n: 'goblet squat', b: 'upper legs', q: 'dumbbell', t: 'quads', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0030', n: 'push-up', b: 'chest', q: 'body weight', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }] }) }));
+    await page.route('https://xnk.my.id/exercises/exercises.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ v: 2, base: 'data:image/gif;base64,', credit: 'test', items: [{ id: '0025', n: 'Bench Press (Barbell)', r: 'barbell bench press', b: 'chest', q: 'barbell', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0026', n: 'Goblet Squat (Dumbbell)', r: 'goblet squat', b: 'upper legs', q: 'dumbbell', t: 'quads', g: 'R0lGODlhAQABAAAAACw=' }, { id: '0030', n: 'Push Up', r: 'push-up', b: 'chest', q: 'body weight', t: 'pectorals', g: 'R0lGODlhAQABAAAAACw=' }] }) }));
     await page.click('#prg-form .pf-day button:has-text("Gerakan")');
     await page.waitForTimeout(400);
     check(await visible(page, '#ex-search') && (await page.textContent('#exs-title')).includes('Hari A') && (await page.locator('#exs-part').count()) === 1 && !(await visible(page, '#modal-program')), 'search: "+ Gerakan" opens its own search sheet with a body-part dropdown');
@@ -986,14 +995,14 @@ async function contrastReport(page) {
     check(await visible(page, '#exs-foot') && (await page.textContent('#exs-add')).includes('Tambah gerakan') && (await page.locator('#exs-list .ex-li.on').count()) === 1, 'search: a tap selects the row and shows the "Tambah" button');
     await page.click('#exs-add');
     await page.waitForTimeout(300);
-    check(await visible(page, '#modal-program') && !(await visible(page, '#ex-search')) && (await page.locator('#prg-form .pf-item').count()) === 1 && (await page.textContent('#prg-form .pf-item')).includes('Goblet squat') && (await page.textContent('#prg-form .pf-item')).includes('3 × 8–12'), 'search: picking returns to the program sheet with a 3 × 8–12 row');
+    check(await visible(page, '#modal-program') && !(await visible(page, '#ex-search')) && (await page.locator('#prg-form .pf-item').count()) === 1 && (await page.textContent('#prg-form .pf-item')).includes('Goblet Squat (Dumbbell)') && (await page.textContent('#prg-form .pf-item')).includes('3 × 8–12'), 'search: picking returns to the program sheet with a 3 × 8–12 row');
     const pfFont = await page.locator('#prg-form .pf-edit input.input, #prg-form .pf-edit select').evaluateAll(els => els.filter(e => parseFloat(getComputedStyle(e).fontSize) < 16).length);
     check(pfFont === 0 && (await page.locator('#prg-form .pf-edit select.pf-kind').count()) === 1 && (await gridTracks(page, '#prg-form .pf-grid')) === 5 && !(await page.locator('#prg-form .pf-more[open]').count()), 'program form: kind is a dropdown, numbers sit in one row on PC, "Lainnya" starts closed, 16 px fields');
     await page.fill('#prg-form [data-pf="d0i0.kg"]', '20');
     await page.fill('#prg-form [data-pf="d0i0.rest"]', '60');
     await page.click('#prg-form .pf-day button:has-text("Gerakan")');
     await page.waitForTimeout(400);
-    check((await page.textContent('#exs-list .exs-lbl >> nth=0')) === 'Gerakan terakhir' && (await page.textContent('#exs-list .ex-li >> nth=0')).includes('Goblet squat'), 'search: the exercise just picked shows first under "Gerakan terakhir"');
+    check((await page.textContent('#exs-list .exs-lbl >> nth=0')) === 'Gerakan terakhir' && (await page.textContent('#exs-list .ex-li >> nth=0')).includes('Goblet Squat (Dumbbell)'), 'search: the exercise just picked shows first under "Gerakan terakhir"');
     await page.fill('#exs-q', 'Bench press');
     await page.waitForTimeout(400);
     await page.click('#exs-list .ex-pick >> nth=0');
@@ -1012,10 +1021,10 @@ async function contrastReport(page) {
     await page.selectOption('#exs-part', 'chest');
     await page.waitForTimeout(300);
     check((await page.locator('#exs-list .ex-li').count()) === 2 && (await page.locator('#exs-equip').count()) === 1, 'search: the body-part dropdown filters without typing; an equipment dropdown sits next to it');
-    await page.click('#exs-list .ex-pick:has-text("Push-up")');
+    await page.click('#exs-list .ex-pick:has-text("Push Up")');
     await page.click('#exs-add');
     await page.waitForTimeout(300);
-    check((await page.textContent('#prg-form .pf-day >> nth=1')).includes('Push-up') && (await page.textContent('#prg-form .pf-day >> nth=1')).includes('3 × 10'), 'program form: a bodyweight exercise gets reps only');
+    check((await page.textContent('#prg-form .pf-day >> nth=1')).includes('Push Up') && (await page.textContent('#prg-form .pf-day >> nth=1')).includes('3 × 10'), 'program form: a bodyweight exercise gets reps only');
     await page.click('#prg-form .pf-day >> nth=0 >> .pf-item >> nth=1 >> button[aria-label^="Naikkan"]');
     await page.waitForTimeout(200);
     check((await page.textContent('#prg-form .pf-day >> nth=0 >> .pf-item >> nth=0')).includes('Bench press'), 'program form: ↑ moves an exercise up');
@@ -1051,17 +1060,18 @@ async function contrastReport(page) {
     check(await visible(page, '#wl-stats') && (await page.textContent('#wl-stats')).includes('Volume') && (await page.locator('#wl-stats svg.wl-mm').count()) === 1, 'live workout: duration, volume, sets and the muscle map sit under the top bar');
     await shot(page, 'admin-live-workout');
     const kg0 = '#wl-screen .wl-in[data-i="0"][data-j="0"][data-f="berat"]';
-    check((await page.textContent('#wl-screen .wl-ex >> nth=0')).includes('Goblet squat') && (await page.getAttribute(kg0, 'placeholder')) === '20' && (await page.inputValue(kg0)) === '', 'live workout: rows start grey from the coach\'s target weight');
+    check((await page.textContent('#wl-screen .wl-ex >> nth=0')).includes('Goblet Squat (Dumbbell)') && (await page.getAttribute(kg0, 'placeholder')) === '20' && (await page.inputValue(kg0)) === '', 'live workout: rows start grey from the coach\'s target weight');
     await page.fill(kg0, '25');
     await page.waitForTimeout(100);
     check((await page.getAttribute('#wl-screen .wl-in[data-i="0"][data-j="2"][data-f="berat"]', 'placeholder')) === '25', 'table: a typed weight carries to the next untouched sets');
     await page.click('#wl-screen .wl-ex >> nth=0 >> .wl-ck >> nth=0');
     await page.waitForTimeout(400);
     check((await page.locator('#wl-screen .wl-ex >> nth=0 >> .wl-tr.done').count()) === 1 && (await page.textContent('#wl-stats')).includes('200 kg'), 'table: ✓ ticks the row and the volume counts it (25 × 8)');
+    check((await page.locator('#wl-stats svg.mm-fig').count()) === 1 && (await page.locator('#wl-stats svg.mm-fig .mmf.on').count()) > 0 && (await page.locator('#wl-stats svg.mm-fig .mmf.half').count()) > 0, 'muscle map: our own figure marks the ticked exercise\'s main muscle dark and helpers light');
     check((await page.textContent('#wl-screen .wl-ex.cur')).includes('Bench press') && !(await visible(page, '#wl-rest')), 'superset: after a squat set the logger jumps to the bench press without rest');
     await page.click('#wl-screen .wl-ex >> nth=1 >> .wl-ck >> nth=0');
     await page.waitForTimeout(400);
-    check((await page.textContent('#wl-screen .wl-ex.cur')).includes('Goblet squat') && await visible(page, '#wl-rest') && (await page.textContent('#wl-rest')).includes('Istirahat'), 'superset: after one round the rest timer starts and the first exercise returns');
+    check((await page.textContent('#wl-screen .wl-ex.cur')).includes('Goblet Squat (Dumbbell)') && await visible(page, '#wl-rest') && (await page.textContent('#wl-rest')).includes('Istirahat'), 'superset: after one round the rest timer starts and the first exercise returns');
     const restBox = await page.locator('#wl-rest').boundingBox();
     check(restBox && restBox.y + restBox.height <= DESKTOP.height, 'rest timer: sits on screen');
     await page.click('#wl-rest button:has-text("Lewati")');
@@ -1074,7 +1084,7 @@ async function contrastReport(page) {
     await page.click('#wl-save-btn');
     await page.waitForTimeout(1200);
     const wlRows = (env.sheet('WorkoutLog') ? env.sheet('WorkoutLog').rows : []).filter(r => r[1] === 'PT-A');
-    check(wlRows.length === 2 && wlRows.some(r => r[7] === 'Goblet squat' && r[11] === 25) && wlRows.some(r => r[7] === 'Bench press'), 'finish: only the ticked sets are saved ' + JSON.stringify(wlRows.map(r => [r[7], r[11], r[12]])));
+    check(wlRows.length === 2 && wlRows.some(r => r[7] === 'Goblet Squat (Dumbbell)' && r[11] === 25) && wlRows.some(r => r[7] === 'Bench press'), 'finish: only the ticked sets are saved ' + JSON.stringify(wlRows.map(r => [r[7], r[11], r[12]])));
     const sesRow = env.sheet('WorkoutSessions') && env.sheet('WorkoutSessions').rows.find(r => r[1] === 'PT-A');
     check(!!sesRow && sesRow[8] === 4 && sesRow[4] === 'Hari A' && sesRow[10] === 'admin', 'finish: the workout row keeps the day, feeling and who logged it');
     check(!(await visible(page, '#wl-screen')) && await visible(page, '#sheet-share'), 'finish: the screen closes and the share card opens straight away');
@@ -1613,6 +1623,28 @@ async function contrastReport(page) {
     await adm.page.click('#set-nutrition');
     await adm.page.waitForTimeout(800);
     check(env.props.NUTRITION_ENABLED === 'false' && !(await adm.page.isChecked('#set-nutrition')), 'gizi: switching it off is saved');
+    // Fase U (T-1603): Pengaturan → Latihan & Alat lists manual exercise names with a guessed muscle; picking one saves an alias.
+    env.call('saveWorkoutLog', env.adminToken(), 'PT-A', '2026-10-01', '', [{ gerakan: 'Lat pulldown', sets: [{ berat: 35, rep: 10 }] }]);
+    await adm.page.evaluate(() => window.settingsOpen('latihan'));
+    await adm.page.waitForTimeout(900);
+    const alTxt = await adm.page.textContent('#exal-list');
+    check(alTxt.includes('Lat pulldown') && alTxt.includes('Lats') && alTxt.includes('tebakan'), 'latihan & alat: a manual name shows its guessed muscle');
+    await adm.page.selectOption('#exal-list select >> nth=0', 'upper back');
+    await adm.page.waitForTimeout(900);
+    check(env.sheet('ExerciseAlias').rows.length === 2 && env.sheet('ExerciseAlias').rows[1][4] === 'upper back' && (await adm.page.textContent('#exal-list')).includes('sudah dipastikan'), 'latihan & alat: choosing a muscle saves the alias');
+    const gymTxt = await adm.page.textContent('#gym-cat');
+    check(gymTxt.includes('Leg Press (45°)') && gymTxt.includes('Pemula banget · 8 aktif') === false && gymTxt.includes('Pemula banget · 10 aktif') && gymTxt.includes('Menengah · 0 aktif'), 'latihan & alat: the gym list shows the owner\'s beginner set active and later levels off');
+    await adm.page.check('#gym-cat input[aria-label="Alat Chest Press (Machine) ada di gym"]');
+    await adm.page.waitForTimeout(800);
+    check(env.sheet('GymExercises').rows.some(r => r[0] === 'gym:chest-press-machine' && r[13] === 'ya'), 'latihan & alat: switching an item on saves it');
+    await adm.page.click('#gym-cat button:has-text("Tambah gerakan")');
+    await adm.page.fill('#gym-n', 'Leg Curl (Machine)');
+    await adm.page.check('#gym-cat input[name="gym-ut"][value="hamstrings"]');
+    await adm.page.click('#gym-cat button[type="submit"]');
+    await adm.page.waitForTimeout(800);
+    check(env.sheet('GymExercises').rows.some(r => r[1] === 'Leg Curl (Machine)' && r[5] === 'hamstrings') && (await adm.page.textContent('#gym-cat')).includes('Leg Curl (Machine)'), 'latihan & alat: a new gym exercise is saved and listed');
+    await adm.page.evaluate(() => window.settingsOpen('tampilan'));
+    await adm.page.waitForTimeout(600);
     await adm.page.click('#set-nutrition');
     await adm.page.waitForTimeout(800);
     check(env.props.NUTRITION_ENABLED === undefined && (await adm.page.isChecked('#set-nutrition')), 'gizi: switching it on again removes the override (back to the default)');
@@ -1786,6 +1818,41 @@ async function contrastReport(page) {
     const rtBad = await page.locator('#pub-program-wrap button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
     check(rtBad === 0 && (await overflowX(page)) <= 0, 'latihan: buttons are at least 44 px and nothing scrolls sideways');
     await shot(page, 'portal-mobile-latihan');
+    // Fase U (T-1607): kartu program otomatis. Klien dengan program coach ditawari; data 3 langkah, lalu "Coba".
+    await page.evaluate(() => window.refreshPortalMore(true));
+    await page.waitForTimeout(900);
+    await page.evaluate(() => window.navigate('public-program'));
+    await page.waitForTimeout(600);
+    check((await page.textContent('#pub-autoprog')).includes('Coba program otomatis') === false && (await page.textContent('#pub-autoprog')).includes('Buat program latihanmu'), 'program otomatis: a client without a training profile is invited to build one');
+    await page.click('#pub-autoprog button:has-text("Mulai")');
+    await page.waitForTimeout(400);
+    await page.click('#pg-profile-body button:has-text("Pemula banget")');
+    await page.click('#pg-onb-next');
+    await page.click('#pg-profile-body button:has-text("Bentuk otot")');
+    await page.click('#pg-onb-next');
+    await page.click('#pg-profile-body button:has-text("2 hari")');
+    await page.click('#pg-profile-body button:has-text("45 mnt")');
+    const pgBad = await page.locator('#pg-profile-body button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
+    await page.click('#pg-onb-next');
+    await page.waitForTimeout(1000);
+    check((await page.textContent('#pub-autoprog')).includes('program dari coach') && pgBad === 0, 'program otomatis: the 3-step profile saves (44 px targets) and a coach program is not replaced, only offered');
+    await page.click('#pub-autoprog button:has-text("Coba")');
+    await page.waitForTimeout(300);
+    await page.click('#btn-confirm-modal-yes');
+    await page.waitForTimeout(1200);
+    check((await page.textContent('#pub-autoprog')).includes('Blok 1') && (await page.textContent('#pub-program-wrap')).includes('Full Body A') && (await page.textContent('#pub-program-wrap')).includes('Hari A'), 'program otomatis: accepting builds Full Body days and keeps the coach days as own routines');
+    await shot(page, 'portal-mobile-autoprog');
+    check((await overflowX(page)) <= 0, 'program otomatis: nothing scrolls sideways');
+    await page.setViewportSize(DESKTOP);
+    await page.waitForTimeout(400);
+    check(await visible(page, '#pub-autoprog') && (await overflowX(page)) <= 0, 'program otomatis: the card fits at 1440 px too');
+    await page.setViewportSize(MOBILE);
+    await page.waitForTimeout(300);
+    // Back to the coach program for the checks below.
+    env.call('_programWrite_', 'PT-A', null, [], { own: true });
+    env.call('saveMemberProgram', env.adminToken(), 'PT-A', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
+    await page.evaluate(() => { window.myProgram = null; window.loadMyProgram(true); });
+    await page.waitForTimeout(600);
     // Makan (Phase P): segmen di tab Latihan, isi data tiga langkah, target + menu.
     {
       check(await visible(page, '#lat-seg'), 'makan: the Latihan | Makan switch is on top of the page');
