@@ -294,6 +294,7 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 - **Program buatan coach tidak pernah ditimpa**, kecuali coach menekan **Buat ulang**.
 - **Form OK**: di layar latihan klien, coach menekan "Tandai form OK" per gerakan. Beban otomatis baru naik setelah itu dan bila klien tidak menjawab "Ragu".
 - **Mode ringan** otomatis bila form kesehatan belum diisi / ada jawaban "ya" / cedera / obat / hamil / usia < 18 atau > 65. Klien hanya melihat "Program ringan"; alasannya hanya di panel.
+- **Hub coach** menampilkan kartu "Program otomatis": klien yang sedang mode ringan (cek form kesehatannya) dan program baru / blok baru / naik level 14 hari terakhir.
 - Tinjauan blok tiap hari mulai 04:00 (ikut pemicu pengingat; Pengingat Klien harus aktif). Tidak mengirim pesan apa pun.
 - Aturan dan sumbernya: `docs/program/Rules.md`; otot per gerakan: `docs/program/Otot.md`.
 

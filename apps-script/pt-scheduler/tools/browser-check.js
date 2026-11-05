@@ -628,6 +628,13 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.textContent('#view-coaches')).includes('Hari ini'), 'coach hub shows Hari ini');
     check((await page.textContent('#view-coaches')).includes('Atur target'), 'coach hub offers to set targets');
+    // Program otomatis di hub (T-1607b): peristiwa terbaru, nama depan saja; dihapus lagi sesudahnya.
+    env.props.PG_HUB_EVENTS = JSON.stringify([{ id: 'PT-A', jenis: 'baru', tanggal: env.call('_todayWib_'), level: 'pemula-banget' }]);
+    await page.evaluate(() => { window._hubAt = 0; window.navigate('dashboard'); window.navigate('coaches'); });
+    await page.waitForTimeout(900);
+    const hubTxt = (await visible(page, '#hub-autoprog')) ? await page.textContent('#hub-autoprog') : '';
+    check(hubTxt.includes('Program baru') && hubTxt.includes('Pemula banget') && (await overflowX(page)) <= 0, 'coach hub: the automatic-program card lists a new program without sideways scroll');
+    delete env.props.PG_HUB_EVENTS;
     // Catatan sesi (Fase I2): sheet bawah, RPE angka, simpan & kirim WA membuka WhatsApp dengan pesan pasca-sesi.
     await page.evaluate(() => { window.__wa = []; window.sendToParentWA = (ph, text) => window.__wa.push({ ph, text }); window.openSessionNote('SCH-A1', true); });
     await page.waitForTimeout(500);
@@ -1836,6 +1843,11 @@ async function contrastReport(page) {
     check((await page.textContent('#pub-autoprog')).includes('Blok 1') && (await page.textContent('#pub-program-wrap')).includes('Full Body A') && (await page.textContent('#pub-program-wrap')).includes('Hari A'), 'program otomatis: accepting builds Full Body days and keeps the coach days as own routines');
     await shot(page, 'portal-mobile-autoprog');
     check((await overflowX(page)) <= 0, 'program otomatis: nothing scrolls sideways');
+    await page.setViewportSize(DESKTOP);
+    await page.waitForTimeout(400);
+    check(await visible(page, '#pub-autoprog') && (await overflowX(page)) <= 0, 'program otomatis: the card fits at 1440 px too');
+    await page.setViewportSize(MOBILE);
+    await page.waitForTimeout(300);
     // Back to the coach program for the checks below.
     env.call('_programWrite_', 'PT-A', null, [], { own: true });
     env.call('saveMemberProgram', env.adminToken(), 'PT-A', '# Hari A\nBench press | 3x10 | turun pelan | https://youtu.be/abc\nPush-up | 3x12\n\n# Hari B\nSquat | 4x8');
