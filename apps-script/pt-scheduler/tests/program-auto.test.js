@@ -129,3 +129,23 @@ test('doPost whitelist exposes the new member functions only', () => {
   assert.equal(post({ fn: 'getMyProgramProfile', args: ['nope'] }).auth, true);
   ['regenerateProgram', 'setFormOk', 'getProgramGenPreview'].forEach(fn => assert.equal(post({ fn, args: [env.adminToken(), 'PT-A'] }).ok, false, fn));
 });
+
+test('coach hub lists light-mode auto clients and new-program events, first names only, no health answers', () => {
+  const { env, mt } = setup();
+  env.call('submitMyHealthForm', mt, Object.assign({}, HEALTH_OK, { q: ['ya', 'tidak', 'tidak', 'tidak', 'tidak', 'tidak', 'tidak'], injuries: 'Lutut kiri' }));
+  env.call('saveMyProgramProfile', mt, PROFILE);
+  const hub = j(env.call('getCoachHub', env.adminToken()));
+  assert.equal(hub.programAuto.light.length, 1);
+  assert.equal(hub.programAuto.light[0].memberId, 'PT-A');
+  assert.equal(/\s/.test(hub.programAuto.light[0].name), false, 'first name only');
+  assert.equal(hub.programAuto.events[0].jenis, 'baru');
+  assert.equal(JSON.stringify(hub.programAuto).includes('Lutut'), false);
+  assert.equal(JSON.stringify(hub.programAuto).includes('parq'), false);
+  // a second generation of an already-auto program is not a new event
+  env.now = Date.now() + 10000;
+  env.call('saveMyProgramProfile', mt, Object.assign({}, PROFILE, { hari: 2 }));
+  assert.equal(j(env.call('getCoachHub', env.adminToken())).programAuto.events.length, 1);
+  // owner switch off → empty
+  env.props.PROGRAM_AUTO_ENABLED = 'false';
+  assert.deepEqual(j(env.call('getCoachHub', env.adminToken())).programAuto, { light: [], events: [] });
+});

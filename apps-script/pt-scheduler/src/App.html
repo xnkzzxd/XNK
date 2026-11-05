@@ -4841,6 +4841,7 @@
           (x.rasa ? '<span aria-label="Rasa ' + x.rasa + ' dari 5" style="font-size:20px">' + WL_FACES[x.rasa - 1][0] + '</span>' : '') + '</button>';
       }).join('') + '</div>';
     }
+    html += pgHubHtml(hub.programAuto);
     if (hub.nutrition && hub.nutrition.length) html += '<div class="card-flat stack" id="hub-nutrition" style="gap:8px"><div class="row-between"><p class="eyebrow">Saran target gizi</p><span class="li-sub">' + hub.nutrition.length + '</span></div>' + hub.nutrition.map(function (a) { return nutAdviceRow(a, true); }).join('') + '</div>';
     html += '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Target bulan ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTargetsSheet()">' + (hub.targets.length ? 'Ubah' : 'Atur target') + '</button></div>';
     if (!hub.targets.length) html += '<p class="li-sub">Belum ada target. Atur target sesi, klien, atau pendapatan.</p>';
@@ -4855,6 +4856,28 @@
     html += '<div class="kv"><div><p class="k">Minggu ini</p><p class="v num">' + st.weekSessions + ' sesi · ' + st.weekHours + ' jam</p></div><div><p class="k">Bulan ini</p><p class="v num">' + st.monthSessions + ' sesi · ' + st.monthHours + ' jam</p></div>' +
       '<div><p class="k">Klien aktif</p><p class="v num">' + st.activeClients + '</p></div><div><p class="k">Streak</p><p class="v num">' + (st.streak ? '🔥 ' + st.streak + ' minggu' : '-') + '</p></div></div></div>';
     return html;
+  }
+  // Fase U (T-1607b): program otomatis di hub coach — mode ringan dan peristiwa 14 hari (nama depan saja).
+  const PG_HUB_LBL = { baru: 'Program baru', blok: 'Blok baru', naik: 'Naik level', ulang: 'Mulai lagi dari blok 1' };
+  function pgHubHtml(p) {
+    if (!p || (!(p.light || []).length && !(p.events || []).length)) return '';
+    const row = function (id, name, sub, pill) {
+      return '<button type="button" class="list-item interactive" style="min-height:52px;text-align:left;gap:8px" onclick="window.openProfile(\'' + h(id) + '\')"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(name) + '</span>' +
+        (sub ? '<span class="li-sub truncate" style="display:block">' + h(sub) + '</span>' : '') + '</span>' + (pill ? '<span class="pill soft">' + h(pill) + '</span>' : '') + '</button>';
+    };
+    const lvl = { 'pemula-banget': 'Pemula banget', pemula: 'Pemula', menengah: 'Menengah' };
+    let html = '<div class="card-flat stack" id="hub-autoprog" style="gap:4px"><p class="eyebrow">Program otomatis</p>';
+    if ((p.light || []).length) {
+      html += '<p class="li-sub">' + icon('alert-triangle', 'style="width:14px;height:14px;vertical-align:-2px"') + ' Mode ringan (' + p.light.length + '): cek form kesehatan di halaman klien.</p>' +
+        p.light.slice(0, 8).map(function (x) { return row(x.memberId, x.name, '', 'Ringan'); }).join('') + (p.light.length > 8 ? '<p class="li-sub">+' + (p.light.length - 8) + ' lainnya</p>' : '');
+    }
+    (p.events || []).forEach(function (e) {
+      const sub = [pgLabel(e.tanggal)];
+      if (e.jenis === 'blok' && e.blok) sub.push('Blok ' + e.blok);
+      if (e.level) sub.push(lvl[e.level] || e.level);
+      html += row(e.memberId, e.name, sub.join(' · '), PG_HUB_LBL[e.jenis] || e.jenis);
+    });
+    return html + '</div>';
   }
   function loadHub() {
     const draw = function () { const w = $('hub-wrap'); if (w && window._hub) w.innerHTML = hubHtml(window._hub); };

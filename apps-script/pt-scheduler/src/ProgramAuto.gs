@@ -82,7 +82,55 @@ function _pgGenerate_(memberId, opts) {
     if (opts.newBlock || !c.profile.blokMulai || c.res.block === 1 && c.profile.blokKe !== 1) v.blokMulai = c.today;
     _pgWrite_(m, v);
   });
+  if (!/^auto:/.test(cur.sumber || '')) _pgHubEvent_(id, 'baru', { level: c.res.level });
   return { ok: true, res: c.res };
+}
+
+// ── Coach hub (T-1607b) ───────────────────────────────────────────────────────
+// Peristiwa program otomatis untuk hub coach: Script Property PG_HUB_EVENTS (JSON, maks PG_HUB_MAX, 14 hari).
+// Hanya ID klien, jenis, blok, level, tanggal — tanpa data kesehatan. Hub menampilkan nama depan saja.
+const PG_HUB_MAX = 30;
+const PG_HUB_DAYS = 14;
+
+/** Catat satu peristiwa (baru | blok | naik | ulang). Satu peristiwa terbaru per klien. */
+function _pgHubEvent_(id, jenis, extra) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    let list = [];
+    try { list = JSON.parse(props.getProperty('PG_HUB_EVENTS') || '[]'); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    const today = _todayWib_(), since = _addDaysIso_(today, -PG_HUB_DAYS);
+    list = list.filter(function(x) { return x && x.id !== String(id) && x.tanggal >= since; });
+    list.unshift(Object.assign({ id: String(id), jenis: jenis, tanggal: today }, extra || {}));
+    props.setProperty('PG_HUB_EVENTS', JSON.stringify(list.slice(0, PG_HUB_MAX)));
+  } catch (e) { Logger.log('PG_HUB_EVENTS: ' + e); }
+}
+
+/** Hub coach: klien program otomatis dalam mode ringan + peristiwa 14 hari (program baru, blok baru, naik level). Nama depan saja. */
+function _pgHubList_() {
+  if (!_pgEnabled_()) return { light: [], events: [] };
+  const prevRead = _readMemo_;
+  if (!_readMemo_) _readMemo_ = {};   // HealthScreening sekali untuk semua klien
+  try {
+    const autoIds = {};
+    _programRows_().forEach(function(r) {
+      if (r[0] && String(r[1]).trim() && String(r[19] || '') !== PROGRAM_OWN && /^auto:/.test(String(r[21] || ''))) autoIds[String(r[1]).trim()] = true;
+    });
+    const names = {}, light = [];
+    _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+      if (!row[0]) return;
+      const id = String(row[0]).trim();
+      names[id] = String(row[1] || '').trim().split(/\s+/)[0];
+      if (!autoIds[id] || !_pgProfileFrom_(row).auto) return;
+      if (_pgSafetyFor_(row).light) light.push({ memberId: id, name: names[id] });
+    });
+    let ev = [];
+    try { ev = JSON.parse(PropertiesService.getScriptProperties().getProperty('PG_HUB_EVENTS') || '[]'); } catch (e) { ev = []; }
+    const since = _addDaysIso_(_todayWib_(), -PG_HUB_DAYS);
+    const events = (Array.isArray(ev) ? ev : []).filter(function(x) { return x && names[x.id] !== undefined && x.tanggal >= since; }).slice(0, 10)
+      .map(function(x) { return { memberId: x.id, name: names[x.id], jenis: x.jenis, blok: x.blok || 0, level: x.level || '', tanggal: x.tanggal }; });
+    return { light: light, events: events };
+  } finally { _readMemo_ = prevRead; }
 }
 
 /** Bagian `programGen` untuk portal (admin=false) dan panel (admin=true). Tidak pernah membawa jawaban kesehatan ke klien. */
@@ -303,7 +351,10 @@ function runProgramAutoJob_(ctx) {
       if (r === 'restart') v.blokKe = 1;
       v.blokMulai = today;
       _locked_(function() { _pgWrite_(_memberRowOrThrow_(id), v); });
-      if (_pgGenerate_(id, {}).ok) { changed++; _bumpMember_(id); }
+      if (_pgGenerate_(id, {}).ok) {
+        changed++; _bumpMember_(id);
+        _pgHubEvent_(id, r === 'level-up' ? 'naik' : (r === 'restart' ? 'ulang' : 'blok'), { blok: v.blokKe, level: v.level || c.res.level });
+      }
     } catch (e) { Logger.log('program-otomatis ' + id + ': ' + e); }
   });
   props.setProperty('PG_JOB_CURSOR', String(start + PG_JOB_MAX >= ids.length ? 0 : start + PG_JOB_MAX));
