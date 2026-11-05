@@ -1625,6 +1625,17 @@ async function contrastReport(page) {
     await adm.page.selectOption('#exal-list select >> nth=0', 'upper back');
     await adm.page.waitForTimeout(900);
     check(env.sheet('ExerciseAlias').rows.length === 2 && env.sheet('ExerciseAlias').rows[1][4] === 'upper back' && (await adm.page.textContent('#exal-list')).includes('sudah dipastikan'), 'latihan & alat: choosing a muscle saves the alias');
+    const gymTxt = await adm.page.textContent('#gym-cat');
+    check(gymTxt.includes('Leg Press (45°)') && gymTxt.includes('Pemula banget · 8 aktif') === false && gymTxt.includes('Pemula banget · 10 aktif') && gymTxt.includes('Menengah · 0 aktif'), 'latihan & alat: the gym list shows the owner\'s beginner set active and later levels off');
+    await adm.page.check('#gym-cat input[aria-label="Alat Chest Press (Machine) ada di gym"]');
+    await adm.page.waitForTimeout(800);
+    check(env.sheet('GymExercises').rows.some(r => r[0] === 'gym:chest-press-machine' && r[13] === 'ya'), 'latihan & alat: switching an item on saves it');
+    await adm.page.click('#gym-cat button:has-text("Tambah gerakan")');
+    await adm.page.fill('#gym-n', 'Leg Curl (Machine)');
+    await adm.page.check('#gym-cat input[name="gym-ut"][value="hamstrings"]');
+    await adm.page.click('#gym-cat button[type="submit"]');
+    await adm.page.waitForTimeout(800);
+    check(env.sheet('GymExercises').rows.some(r => r[1] === 'Leg Curl (Machine)' && r[5] === 'hamstrings') && (await adm.page.textContent('#gym-cat')).includes('Leg Curl (Machine)'), 'latihan & alat: a new gym exercise is saved and listed');
     await adm.page.evaluate(() => window.settingsOpen('tampilan'));
     await adm.page.waitForTimeout(600);
     await adm.page.click('#set-nutrition');

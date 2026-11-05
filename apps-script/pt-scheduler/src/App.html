@@ -10244,9 +10244,72 @@
     adductors: 'Adductors', abductors: 'Abductors', triceps: 'Triceps', biceps: 'Biceps', delts: 'Shoulders', forearms: 'Forearms', traps: 'Traps',
     'upper back': 'Upper Back', spine: 'Lower Back', 'serratus anterior': 'Serratus', 'levator scapulae': 'Neck', 'cardiovascular system': 'Cardio' };
   function exAliasHtml() {
-    return '<div class="card-flat stack"><h4 class="li-title">Gerakan manual di log</h4><p class="li-sub">Nama yang diketik sendiri (tanpa pustaka). Nama yang persis sama dengan gerakan pustaka langsung digabung; sisanya ditebak ototnya. Pastikan di sini: pilih gerakan pustaka yang sama, atau ototnya saja. Catatan lama tidak diubah.</p><div id="exal-list" class="stack" style="gap:0"><span class="li-sub">Memuat…</span></div></div>';
+    return '<div class="card-flat stack"><h4 class="li-title">Alat gym</h4><p class="li-sub">Gerakan yang boleh dipakai program otomatis, per level. Nyalakan yang alatnya ada di gym. Otot dan sumbernya: docs/program/Otot.md.</p><div id="gym-cat" class="stack" style="gap:0"><span class="li-sub">Memuat…</span></div></div>' +
+      '<div class="card-flat stack"><h4 class="li-title">Gerakan manual di log</h4><p class="li-sub">Nama yang diketik sendiri (tanpa pustaka). Nama yang persis sama dengan gerakan pustaka langsung digabung; sisanya ditebak ototnya. Pastikan di sini: pilih gerakan pustaka yang sama, atau ototnya saja. Catatan lama tidak diubah.</p><div id="exal-list" class="stack" style="gap:0"><span class="li-sub">Memuat…</span></div></div>';
   }
+  // Katalog alat gym (Fase U, T-1602). Nama gerakan dan otot dalam bahasa Inggris (keputusan owner).
+  const GYM_LVL_LBL = { 'pemula-banget': 'Pemula banget', pemula: 'Pemula', menengah: 'Menengah' };
+  const GYM_POLA_LBL = { lutut: 'Knee dominant', pinggul: 'Hip dominant', 'dorong-h': 'Horizontal push', 'dorong-v': 'Vertical push', 'tarik-h': 'Horizontal pull', 'tarik-v': 'Vertical pull', isolasi: 'Isolation', kardio: 'Cardio', keseimbangan: 'Balance' };
+  const gymSt = { data: null, edit: null, busy: false };
+  function gymLoad() {
+    adminCall('getGymCatalog').then(function (d) { gymSt.data = d; gymRender(); })
+      .catch(function (e) { const el = $('gym-cat'); if (el) el.innerHTML = '<span class="li-sub">' + h(e.message || 'Gagal memuat.') + '</span>'; });
+  }
+  function gymRender() {
+    const el = $('gym-cat'), d = gymSt.data;
+    if (!el || !d) return;
+    if (gymSt.edit) { el.innerHTML = gymFormHtml(gymSt.edit); paintIcons(); return; }
+    el.innerHTML = d.levels.map(function (lv) {
+      const rows = d.items.filter(function (x) { return x.level === lv; });
+      return '<p class="group-label"><span>' + h(GYM_LVL_LBL[lv]) + ' · ' + rows.filter(function (x) { return x.aktif; }).length + ' aktif</span></p>' + rows.map(function (x) {
+        const mus = x.utama.map(function (m) { return EX_TGT_LBL[m] || m; }).join(', ') + (x.pendukung.length ? ' + ' + x.pendukung.map(function (m) { return EX_TGT_LBL[m] || m; }).join(', ') : '');
+        return '<div class="row-between" style="min-height:52px;gap:8px;border-top:1px solid var(--line)"><button type="button" class="list-item interactive grow" style="min-height:48px;text-align:left" onclick="window.gymEdit(\'' + h(x.id) + '\')"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(x.nama) + '</b><span class="li-sub truncate" style="display:block">' + h(GYM_POLA_LBL[x.pola] || x.pola) + ' · ' + h(mus) + '</span></span></button>' +
+          '<label class="toggle"><input type="checkbox"' + (x.aktif ? ' checked' : '') + ' aria-label="Alat ' + h(x.nama) + ' ada di gym" onchange="window.gymActive(\'' + h(x.id) + '\',this.checked)"><span></span></label></div>';
+      }).join('');
+    }).join('') + '<button type="button" class="btn btn-outline" style="margin-top:12px" onclick="window.gymEdit(\'\')">' + icon('plus') + ' Tambah gerakan</button>';
+    paintIcons();
+  }
+  function gymFormHtml(x) {
+    const d = gymSt.data;
+    const sel = function (id, list, val, lbl) { return '<select class="select" id="' + id + '">' + list.map(function (v) { return '<option value="' + h(v) + '"' + (v === val ? ' selected' : '') + '>' + h(lbl ? (lbl[v] || v) : v) + '</option>'; }).join('') + '</select>'; };
+    const chips = function (name, list, on, lbl) { return '<div class="chips" style="flex-wrap:wrap">' + list.map(function (v) { return '<label class="chip"><input type="checkbox" name="' + name + '" value="' + h(v) + '"' + (on.indexOf(v) !== -1 ? ' checked' : '') + '> ' + h(lbl ? (lbl[v] || v) : v) + '</label>'; }).join('') + '</div>'; };
+    const tg = d.targets.filter(function (t) { return ['serratus anterior', 'levator scapulae'].indexOf(t) === -1; });
+    return '<form class="stack" style="gap:12px" onsubmit="window.gymSave(event)">' +
+      '<div class="field"><label class="label" for="gym-n">Nama (English)</label><input class="input" id="gym-n" maxlength="80" required value="' + h(x.nama || '') + '" placeholder="mis. Leg Curl (Machine)"></div>' +
+      '<div class="field"><label class="label" for="gym-lv">Level minimal</label>' + sel('gym-lv', d.levels, x.level || 'pemula-banget', GYM_LVL_LBL) + '</div>' +
+      '<div class="field"><label class="label" for="gym-po">Pola</label>' + sel('gym-po', d.patterns, x.pola || 'isolasi', GYM_POLA_LBL) + '</div>' +
+      '<div class="field"><label class="label" for="gym-je">Jenis</label>' + sel('gym-je', ['beban', 'badan', 'waktu', 'jarak'], x.jenis || 'beban', { beban: 'Beban (kg × rep)', badan: 'Berat badan', waktu: 'Waktu', jarak: 'Jarak' }) + '</div>' +
+      '<div class="field"><p class="label">Otot utama</p>' + chips('gym-ut', tg, x.utama || [], EX_TGT_LBL) + '</div>' +
+      '<div class="field"><p class="label">Otot pendukung</p>' + chips('gym-pe', tg, x.pendukung || [], EX_TGT_LBL) + '</div>' +
+      '<div class="row" style="gap:8px"><div class="field grow"><label class="label" for="gym-r1">Rep min</label><input class="input" id="gym-r1" type="text" inputmode="numeric" value="' + h(x.repMin === '' || x.repMin == null ? '' : x.repMin) + '"></div><div class="field grow"><label class="label" for="gym-r2">Rep maks</label><input class="input" id="gym-r2" type="text" inputmode="numeric" value="' + h(x.repMax === '' || x.repMax == null ? '' : x.repMax) + '"></div></div>' +
+      '<div class="field"><p class="label">Hindari bila klien punya</p>' + chips('gym-hi', d.tags, x.hindari || [], { lutut: 'Masalah lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }) + '</div>' +
+      '<div class="field"><label class="label" for="gym-ex">Kode pustaka (opsional, untuk gambar)</label><input class="input" id="gym-ex" maxlength="20" value="' + h(x.exId || '') + '"></div>' +
+      '<p class="li-sub" id="gym-err" role="alert"></p>' +
+      '<div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" onclick="window.gymEditClose()">Batal</button><button type="submit" class="btn btn-primary btn-lg">Simpan</button></div></form>';
+  }
+  window.gymEdit = function (id) {
+    if (!gymSt.data) return;
+    gymSt.edit = id ? Object.assign({}, gymSt.data.items.find(function (x) { return x.id === id; })) : { id: '', aktif: true };
+    gymRender();
+  };
+  window.gymEditClose = function () { gymSt.edit = null; gymRender(); };
+  window.gymSave = function (ev) {
+    if (ev) ev.preventDefault();
+    if (gymSt.busy || !gymSt.edit) return;
+    const picked = function (n) { return Array.prototype.map.call(document.querySelectorAll('#gym-cat input[name="' + n + '"]:checked'), function (i) { return i.value; }); };
+    const it = Object.assign({}, gymSt.edit, { nama: $('gym-n').value, level: $('gym-lv').value, pola: $('gym-po').value, jenis: $('gym-je').value,
+      utama: picked('gym-ut'), pendukung: picked('gym-pe'), hindari: picked('gym-hi'), repMin: $('gym-r1').value.trim(), repMax: $('gym-r2').value.trim(), exId: $('gym-ex').value.trim() });
+    gymSt.busy = true;
+    adminCall('saveGymExercise', it).then(function (d) { gymSt.data = d; gymSt.edit = null; gymRender(); showToast('Tersimpan'); })
+      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = e.message || 'Gagal menyimpan.'; })
+      .then(function () { gymSt.busy = false; });
+  };
+  window.gymActive = function (id, on) {
+    adminCall('setGymExerciseActive', id, on).then(function (d) { gymSt.data = d; gymRender(); })
+      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); gymRender(); });
+  };
   function exAliasLoad() {
+    gymLoad();
     exEnsure().catch(function () {}).then(function () { return adminCall('getManualExercises'); })
       .then(function (d) { exAl.data = d; exAliasRender(); })
       .catch(function (e) { const el = $('exal-list'); if (el) el.innerHTML = '<span class="li-sub">' + h(e.message || 'Gagal memuat.') + '</span>'; });
