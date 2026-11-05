@@ -23,3 +23,8 @@ licensed MIT:
 Changes: the package's muscle regions are regrouped onto the exercise library's 16 target muscles
 (`upper-back` → lats + upper back, `gluteal` → glutes + abductors, `obliques` → abs, …); head, hands,
 knees and feet become the plain body. No images from other sources (Gym visual GIFs, stock photos) are used.
+
+
+## rig.min.json
+
+Our own work (no third-party shapes): simple capsule segments and neutral equipment drawn in `apps-script/pt-scheduler/tools/build-rig.js`. Joint angles and their sources: `docs/program/Gerak.md`.

@@ -18,7 +18,7 @@ Rencana lengkap: [PRD.md](PRD.md). Urutan rilis (keputusan owner): **Rilis 1** n
 - [x] T-1608 Browser check: alur portal Program otomatis di 390 px + kartu di 1440 px, kartu hub coach (light + dark); demo Sari punya form kesehatan + profil latihan; READMEs (apps-script, root) dan Agent.md §7. Rilis 2 selesai.
 
 ## Rilis 3 — animasi otot sendiri
-- [ ] T-1611 Rig figur (samping + depan, pria/wanita), alat netral, `poses.json`, `tools/figure-check.js`; 8 pola pemula banget dulu.
+- [x] T-1611 Animasi gerakan sendiri, 8 pola pemula banget: `tools/build-rig.js` (FK / IK dua ruas, 13 frame per pola, kabel / tuas ikut sendi) → `figure/rig.min.json` (±8 KB gzip; satu file untuk rig + pose, bukan `poses.json` terpisah), sudut bersumber di [Gerak.md](Gerak.md). App: `rigEnsure` / `rigSync` (localStorage `xnk_rig_v1`, dimuat bersama pustaka gerakan), `rigPatOf` (Exercise ID lalu nama gerakan gym), `rigSvg(pat, {anim, sex})` (CSS `@keyframes` hanya transform, reduced motion = diam), `exThumb` menggantikan GIF di logger, pencarian gerakan, detail rutinitas dan form program untuk gerakan yang punya pola; riwayat gerakan di logger menampilkan figur bergerak besar. Tampak samping saja (tampak depan menyusul T-1612). Pria/wanita = lebar ruas. Test `tests/rig.test.js` (sudut terhadap Gerak.md, ruas tidak lepas, titik dipaku diam, otot = Otot.md) + browser check. `tools/figure-check.js` tidak dibuat: cek kotak dan animasi ada di browser check.
 - [ ] T-1612 Pola sisanya, `Gerak.md` dengan sumber sudut sendi.
 - [ ] T-1613 Ganti GIF bertahap; hapus hotlink setelah semua pola selesai (keputusan owner).
 

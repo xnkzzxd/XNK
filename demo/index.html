@@ -1098,6 +1098,22 @@ html.wl-on, html.wl-on body { overflow: hidden; }
 .wl-thumb { flex: none; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: var(--surface-3); border: 1px solid var(--border); }
 .wl-thumb.ph, .ex-th.ph { display: grid; place-items: center; background: var(--surface-3); color: var(--fg-muted); }
 .wl-thumb.ph svg { width: 20px; height: 20px; }
+/* Fase U (T-1611): animasi gerakan sendiri (figure/rig.min.json). Monokrom, hanya transform yang bergerak. */
+.rig-th { display: block; overflow: hidden; background: var(--surface-3); }
+.rig-th .rig { display: block; width: 100%; height: 100%; transform: scale(1.35); transform-origin: 55% 60%; }
+.mm-fig.rig .mmf-body { stroke-width: 1.4; fill: color-mix(in srgb, var(--fg) 7%, var(--surface)); stroke: color-mix(in srgb, var(--fg) 38%, transparent); }
+.mm-fig.rig .mmf { fill: transparent; }
+.mm-fig.rig .mmf.half { fill: color-mix(in srgb, var(--fg) 42%, transparent); }
+.mm-fig.rig .mmf.on { fill: var(--fg); animation: none; }
+.rig g { transform-box: view-box; transform-origin: 0 0; }
+.rig .rg-eq { fill: color-mix(in srgb, var(--fg) 20%, transparent); }
+.rig .rg-eq.soft { fill: none; }
+.rig .rg-eq-l { fill: none; stroke: color-mix(in srgb, var(--fg) 28%, transparent); stroke-width: 2.5; }
+.rig .rg-cab { stroke: color-mix(in srgb, var(--fg) 40%, transparent); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.rig .rg-cab.thick { stroke-width: 5; }
+.rig-big { display: grid; place-items: center; margin: 0 0 12px; border-radius: var(--r-lg, 16px); background: var(--surface-2); border: 1px solid var(--border); }
+.rig-big .rig { width: min(100%, 280px); height: auto; aspect-ratio: 1; }
+@media (prefers-reduced-motion: reduce) { .rig.anim g { animation: none !important; } }
 .wl-ex-sub { margin: 0 0 0 10px; font-size: var(--fs-sm); color: var(--fg-muted); }
 .wl-ex-sub b { color: var(--fg); }
 .wl-ex-note { margin: 0 0 0 10px; display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-sm); color: var(--fg-2); }
@@ -8782,7 +8798,7 @@ html.app-shell .nav-back { display: none; }
     const g = it.exId && exLib ? exLib.items.find(x => x.id === it.exId) : null;
     let html = '<div class="pf-item' + (open ? ' open' : '') + (it.join ? ' joined' : '') + '" data-d="' + d + '" data-i="' + i + '">' +
       '<div class="pf-row"><span class="drag-grip" aria-hidden="true">' + icon('grip-vertical') + '</span>' +
-      (g ? '<img class="pf-gif" loading="lazy" alt="" src="' + h(exLib.base + g.g) + '">' : '') +
+      (g || rigPatOf(it) ? exThumb(it, 'pf-gif', g) : '') +
       '<button type="button" class="pf-sum" aria-expanded="' + open + '" onclick="window.pfToggle(' + d + ',' + i + ')"><b>' + h(exNm(it)) + (it.join ? ' <span class="pill soft">superset</span>' : '') + '</b><span>' + h(pfSummary(it)) + '</span></button>' +
       '<button type="button" class="icon-btn plain" aria-label="Naikkan ' + h(exNm(it)) + '"' + (i ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',-1)">' + icon('chevron-up') + '</button>' +
       '<button type="button" class="icon-btn plain" aria-label="Turunkan ' + h(exNm(it)) + '"' + (i < pf.days[d].items.length - 1 ? '' : ' disabled') + ' onclick="window.pfMove(' + d + ',' + i + ',1)">' + icon('chevron-down') + '</button></div>';
@@ -8964,11 +8980,12 @@ html.app-shell .nav-back { display: none; }
   }
   window.exNm = exNm;
   function exEnsure() {
+    const rg = rigEnsure();   // animasi sendiri dimuat bersama pustaka (tidak ditunggu bila pustaka sudah di perangkat)
     if (exLib) return Promise.resolve(exLib);
     try { const c = localStorage.getItem(EX_KEY); if (c) { exLib = JSON.parse(c); return Promise.resolve(exLib); } } catch (e) {}
-    return fetch(EX_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); }).then(function (d) {
+    return Promise.all([fetch(EX_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); }).then(function (d) {
       exLib = d; exById = null; try { localStorage.setItem(EX_KEY, JSON.stringify(d)); } catch (e) {} return d;
-    });
+    }), rg]).then(function (a) { return a[0]; });
   }
   // Gerakan yang baru dipilih di perangkat ini (kemudahan saja, boleh hilang).
   function exRecent() { try { const r = JSON.parse(localStorage.getItem(EX_RECENT) || '[]'); return Array.isArray(r) ? r.filter(x => x && x.n) : []; } catch (e) { return []; } }
@@ -9011,7 +9028,7 @@ html.app-shell .nav-back { display: none; }
   function exsHasHist(key) { return !!(exs.data && (exs.data.days || []).some(d => d.items.some(it => it.key === key))); }
   function exsRow(id, n, sub, x) {
     const key = exsKey(id, n), on = exs.sel.some(s => exsKey(s.id, s.n) === key), hist = exsHasHist(key);
-    const th = x && exLib ? '<img class="ex-th" loading="lazy" decoding="async" width="48" height="48" alt="" src="' + h(exLib.base + x.g) + '">' : '<span class="ex-th ph" aria-hidden="true">' + icon('dumbbell') + '</span>';
+    const th = exThumb({ exId: id, n: n }, 'ex-th', x);
     return '<div class="ex-li' + (on ? ' on' : '') + '"><button type="button" class="ex-pick" aria-pressed="' + on + '" data-id="' + h(id) + '" data-n="' + h(n) + '" onclick="window.exsToggle(this.dataset.id,this.dataset.n)">' + th +
       '<span class="ex-t"><b>' + h(exCap(n)) + '</b><span>' + h(sub) + '</span></span>' + (on ? '<span class="ex-on" aria-hidden="true">' + icon('check') + '</span>' : '') + '</button>' +
       (hist ? '<button type="button" class="icon-btn plain ex-hbtn" aria-label="Riwayat ' + h(exCap(n)) + '" aria-expanded="' + (exs.hist === key) + '" data-k="' + h(key) + '" onclick="window.exsHist(this.dataset.k)">' + icon('trending-up') + '</button>' : '') + '</div>' +
@@ -9407,10 +9424,7 @@ html.app-shell .nav-back { display: none; }
     WL_PLATES.forEach(p => { while (side >= p - 1e-9) { out.push(p); side = Math.round((side - p) * 100) / 100; } });
     return 'Piringan per sisi untuk ' + wlNum(kg) + ' kg: ' + out.map(wlNum).join(' + ') + (side > 0 ? ' (+' + wlNum(side) + ' kg)' : '') + ' · bar ' + wlNum(bar) + ' kg';
   }
-  function wlThumb(e, cls) {
-    const x = wkInfo(e.exId);
-    return x && exLib ? '<img class="' + cls + '" loading="lazy" decoding="async" alt="" src="' + h(exLib.base + x.g) + '">' : '<span class="' + cls + ' ph" aria-hidden="true">' + icon('dumbbell') + '</span>';
-  }
+  function wlThumb(e, cls) { return exThumb(Object.assign({ sex: figSexOf(wl.mode, wl.memberId) }, e), cls, wkInfo(e.exId)); }
   function wlExHtml(i) {
     const e = wl.entries[i], ss = wlSsLabel(i), cur = i === wl.open && !e.skipped, done = e.sets.length > 0 && e.sets.every(s => s.done);
     let html = '<section class="wl-ex' + (cur ? ' cur' : '') + (done ? ' done' : '') + (e.skipped ? ' skipped' : '') + '" data-i="' + i + '" aria-label="' + h(exNm(e)) + '">' +
@@ -9533,6 +9547,80 @@ html.app-shell .nav-back { display: none; }
     return '<svg class="' + (cls || 'wl-mm') + ' mm-fig" viewBox="0 0 200 200" role="img" aria-label="' + h(label) + '">' + side(v.front, 0) + side(v.back, 100) + '</svg>';
   }
   window.mmFigSvg = mmFigSvg;
+  // Fase U (T-1611): animasi gerakan buatan sendiri dari figure/rig.min.json (tools/build-rig.js; sudut sendi bersumber
+  // di docs/program/Gerak.md). Figur samping dari ruas sederhana, otot utama gelap / pendukung terang, alat netral.
+  // Gerakan yang punya pola memakai figur ini, bukan GIF. Hanya transform yang dianimasikan; reduced motion = diam.
+  const RIG_URL = 'https://xnk.my.id/figure/rig.min.json', RIG_KEY = 'xnk_rig_v1';
+  let rig = null, rigLoading = null;
+  function rigSync() { if (!rig) { try { const c = localStorage.getItem(RIG_KEY); if (c) rig = JSON.parse(c); } catch (e) {} } return rig; }
+  function rigEnsure() {
+    if (rigSync()) return Promise.resolve(rig);
+    if (!rigLoading) rigLoading = fetch(RIG_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); })
+      .then(function (d) { rig = d; try { localStorage.setItem(RIG_KEY, JSON.stringify(d)); } catch (e) {} return d; })
+      .catch(function () { rigLoading = null; return null; });
+    return rigLoading;
+  }
+  /** Pola animasi untuk gerakan (Exercise ID pustaka, lalu nama gerakan gym); '' bila belum ada. */
+  function rigPatOf(o) {
+    const R = rigSync();
+    if (!R || !o) return '';
+    const id = o.exId || (/^ex:/.test(String(o.key || '')) ? String(o.key).slice(3) : '');
+    return (id && R.ex[id]) || R.ex[String(exNm(o) || o.n || '').trim().toLowerCase()] || R.ex[String(o.gerakan || '').trim().toLowerCase()] || '';
+  }
+  let rigSeq = 0;
+  /** SVG figur bergerak. opts: { anim, cls, label, sex }. Tanpa anim = frame akhir (posisi kontraksi), diam. */
+  function rigSvg(pat, opts) {
+    opts = opts || {};
+    const R = rigSync(), P = R && R.pats[pat];
+    if (!P) return '';
+    const W = R.w[opts.sex] || R.w.m, L = R.len, f = P.frames, n = f.length, fr = f[n - 1];
+    const lv = {};
+    P.muscles[1].forEach(function (m) { lv[m] = 1; });
+    P.muscles[0].forEach(function (m) { lv[m] = 2; });
+    const r1 = function (v) { return Math.round(v * 10) / 10; };
+    const tf = function (s) { return 'translate(' + s[0] + ' ' + s[1] + ') rotate(' + s[2] + ')' + (s[3] != null ? ' scale(' + s[3] + ' 1)' : ''); };
+    const css = function (s) { return 'translate(' + s[0] + 'px,' + s[1] + 'px) rotate(' + s[2] + 'deg) scale(' + (s[3] != null ? s[3] : 1) + ',1)'; };
+    const id = 'rg' + (++rigSeq);
+    const cabIx = []; let ci = 0;
+    P.eq.forEach(function (e, k) { cabIx[k] = e.cable ? ci++ : -1; });
+    let style = '';
+    if (opts.anim) {
+      const kf = function (name, get) { return '@keyframes ' + id + name + '{' + f.map(function (x, i) { return r1(i / (n - 1) * 100) + '%{transform:' + get(x) + '}'; }).join('') + '}' +
+        '.' + id + ' .rg' + name + '{animation:' + id + name + ' 1.7s ease-in-out infinite alternate}'; };
+      ['torso', 'thigh', 'shin', 'foot', 'head', 'ua', 'fa'].forEach(function (sg) { style += kf('-' + sg, function (x) { return css(x.s[sg]); }); });
+      P.eq.forEach(function (e, k) {
+        if (e.cable) style += kf('-e' + k, function (x) { const c = x.c[cabIx[k]]; return 'translate(' + c[0] + 'px,' + c[1] + 'px) rotate(' + c[2] + 'deg) scale(' + c[3] + ',1)'; });
+        else if (e.f) style += kf('-e' + k, function (x) { const p = x.p[e.f]; return 'translate(' + p[0] + 'px,' + p[1] + 'px) rotate(' + (e.rot || 0) + 'deg) scale(1,1)'; });
+      });
+    }
+    const cap = function (len, w) { const r = w / 2; return 'M0 ' + (-r) + 'H' + len + 'A' + r + ' ' + r + ' 0 0 1 ' + len + ' ' + r + 'H0A' + r + ' ' + r + ' 0 0 1 0 ' + (-r) + 'Z'; };
+    const mus = function (sg) {
+      return R.muscles.filter(function (m) { return m[0] === sg && lv[m[1]]; }).map(function (m) {
+        const wd = W[sg], cy = m[3] * (sg === 'torso' ? 1 : -1) * wd * 0.28;
+        return '<ellipse class="mmf ' + (lv[m[1]] === 2 ? 'on' : 'half') + '" cx="' + r1(m[2] * L[sg]) + '" cy="' + r1(cy) + '" rx="' + m[4] + '" ry="' + Math.min(m[5], r1(wd * 0.42)) + '"/>';
+      }).join('');
+    };
+    const seg = function (sg) {
+      const body = sg === 'head' ? '<circle class="mmf-body" cx="' + L.head + '" cy="0" r="' + W.head + '"/>' : '<path class="mmf-body" d="' + cap(L[sg], W[sg]) + '"/>' + mus(sg);
+      return '<g class="rg-' + sg + '" transform="' + tf(fr.s[sg]) + '">' + body + '</g>';
+    };
+    const eq = P.eq.map(function (e, k) {
+      if (e.cable) { const c = fr.c[cabIx[k]]; return '<g class="rg-e' + k + '" transform="translate(' + c[0] + ' ' + c[1] + ') rotate(' + c[2] + ') scale(' + c[3] + ' 1)"><path class="rg-cab' + (e.thick ? ' thick' : '') + '" d="M0 0H1"/></g>'; }
+      const shape = '<path class="' + (e.line ? 'rg-eq-l' : 'rg-eq' + (e.soft ? ' soft' : '')) + '" d="' + e.d + '"/>';
+      if (!e.f) return shape;
+      const p = fr.p[e.f];
+      return '<g class="rg-e' + k + '" transform="translate(' + p[0] + ' ' + p[1] + ') rotate(' + (e.rot || 0) + ')">' + shape + '</g>';
+    }).join('');
+    return '<svg class="mm-fig rig ' + id + (opts.anim ? ' anim' : '') + (opts.cls ? ' ' + opts.cls : '') + '" viewBox="0 0 200 200" role="img" aria-label="' + h(opts.label || P.name) + '" data-pat="' + h(pat) + '">' +
+      (style ? '<style>' + style + '</style>' : '') + eq + seg('thigh') + seg('shin') + seg('foot') + seg('torso') + seg('head') + seg('ua') + seg('fa') + '</svg>';
+  }
+  window.rigSync = rigSync; window.rigEnsure = rigEnsure; window.rigPatOf = rigPatOf; window.rigSvg = rigSvg;
+  /** Gambar kecil gerakan: animasi sendiri (diam) bila ada pola, lalu GIF pustaka, lalu ikon. */
+  function exThumb(o, cls, x) {
+    const p = rigPatOf(o);
+    if (p) return '<span class="' + cls + ' rig-th" aria-hidden="true">' + rigSvg(p, { sex: o.sex }) + '</span>';
+    return x && exLib ? '<img class="' + cls + '" loading="lazy" decoding="async" alt="" src="' + h(exLib.base + x.g) + '">' : '<span class="' + cls + ' ph" aria-hidden="true">' + icon('dumbbell') + '</span>';
+  }
   function wlMuscleSvg(parts, label, lv, sex) {
     const nf = lv ? mmFigSvg(lv, label, sex) : null;
     if (nf) return nf;
@@ -9553,6 +9641,7 @@ html.app-shell .nav-back { display: none; }
       if (p && !parts[p]) { parts[p] = true; names.push(WK_PART[p] || p); }
     });
     if (!figSync()) figEnsure().then(function (f) { if (f) wlRenderStats(); });
+    if (!rigSync()) rigEnsure().then(function (r) { if (r && wl) wlRender(); });
     const dur = wl.live && wl.startedAt ? wlClock((Date.now() - wl.startedAt) / 1000) : '–';
     return '<div class="wl-st"><span>Durasi</span><b class="num wl-st-dur" id="wl-st-dur">' + dur + '</b></div>' +
       '<div class="wl-st"><span>Volume</span><b class="num">' + h(wkKg(vol)) + ' kg</b></div>' +
@@ -9856,7 +9945,8 @@ html.app-shell .nav-back { display: none; }
   };
   window.wlHistory = function (i) {
     const e = wl.entries[i]; if (!e) return;
-    wlSheet('Riwayat · ' + e.gerakan, wlHistoryHtml(i));
+    const pat = rigPatOf(e);
+    wlSheet('Riwayat · ' + exNm(e), (pat ? '<div class="rig-big">' + rigSvg(pat, { anim: true, sex: figSexOf(wl.mode, wl.memberId), label: exNm(e) + ': contoh gerakan' }) + '</div>' : '') + wlHistoryHtml(i));
     if (!wlRt.data) { wlEnsureData(); }
   };
   // Ganti hari program / tanggal: susunan dibangun ulang. Ada set yang sudah dicentang (belum disimpan) → tanya dulu.
@@ -12169,7 +12259,7 @@ html.app-shell .nav-back { display: none; }
     const unit = it.jenis === 'waktu' ? 'DETIK' : (it.jenis === 'jarak' ? 'METER' : 'REP'), kg = it.jenis === 'beban';
     const rows = it.skema && it.skema.length ? it.skema.map(s => ({ w: s.w, rep: s.rep, kg: s.kg })) : Array.from({ length: it.set || 1 }, () => ({ w: 0, rep: it.repMax !== '' && it.repMax != null ? it.repMin + '–' + it.repMax : it.repMin, kg: it.kg }));
     let n = 0;
-    return '<div class="rt-ex"><div class="rt-ex-head">' + (x ? '<img class="wl-thumb" loading="lazy" alt="" src="' + h(exLib.base + x.g) + '">' : '<span class="wl-thumb ph" aria-hidden="true">' + icon('dumbbell') + '</span>') +
+    return '<div class="rt-ex"><div class="rt-ex-head">' + exThumb(it, 'wl-thumb', x) +
       '<b>' + h(exNm(it)) + '</b></div>' + (it.catatan ? '<p class="li-sub">' + h(it.catatan) + '</p>' : '') +
       (it.rest !== '' && it.rest != null ? '<p class="rt-rest">' + icon('timer') + 'Istirahat ' + h(wlRestText(it.rest)) + '</p>' : '') +
       '<div class="rt-tbl' + (kg ? ' kg' : '') + '"><div class="rt-tr rt-th"><span>SET</span>' + (kg ? '<span>KG</span>' : '') + '<span>' + unit + '</span></div>' +
