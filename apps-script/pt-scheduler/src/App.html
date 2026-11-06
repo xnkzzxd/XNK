@@ -9,7 +9,6 @@
   'use strict';
 
   // ── State ───────────────────────────────────────────────────────────────────
-  window.isGas = typeof google !== 'undefined' && !!google.script;
   window.members = [];
   window.taskSummary = {}; // {memberId:{open,overdue}} dari getTaskSummary (panel PT)
   window.memberArchive = [];
@@ -239,12 +238,12 @@
         if (prop === 'withFailureHandler') return function (fn) { onFail = fn; return proxy; };
         return function () {
           const args = [getToken()].concat(Array.prototype.slice.call(arguments));
-          let run = google.script.run.withFailureHandler(function (err) {
+          const ok = onOk, fail = onFail;
+          // rpc: google.script.run, fetch ke doPost, atau XNK_TRANSPORT (Scripts.html). then(a, b): galat di ok() tidak memanggil fail().
+          rpc(prop, args).then(function (res) { if (ok) ok(res); }, function (err) {
             if (window.isAuthError(err) && onAuthLost) onAuthLost(err);
-            if (onFail) onFail(err);
+            if (fail) fail(err);
           });
-          if (onOk) run = run.withSuccessHandler(onOk);
-          return run[prop].apply(run, args);
         };
       }
     });
@@ -256,14 +255,14 @@
   function call(runner, name) {
     const args = Array.prototype.slice.call(arguments, 2);
     return new Promise(function (resolve, reject) {
-      if (!window.isGas) { reject(new Error('Mode pratinjau: server tidak tersedia.')); return; }
+      if (!hasServer()) { reject(new Error('Mode pratinjau: server tidak tersedia.')); return; }
       const r = runner.withSuccessHandler(resolve).withFailureHandler(reject);
       r[name].apply(r, args);
     });
   }
   const adminCall = function (name) { return call.apply(null, [window.adminApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
   const memberCall = function (name) { return call.apply(null, [window.memberApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
-  const publicCall = function (name) { return call.apply(null, [window.isGas ? google.script.run : null, name].concat(Array.prototype.slice.call(arguments, 1))); };
+  const publicCall = function (name) { return rpc(name, Array.prototype.slice.call(arguments, 1)); };
 
   // ── Tombol sibuk ────────────────────────────────────────────────────────────
   function busy(btn, label) {
@@ -1766,7 +1765,7 @@
         window.startAdminPanel();
       }
     };
-    if (window.isGas && google.script.url) {
+    if (typeof google !== 'undefined' && google.script && google.script.url) {
       google.script.url.getLocation(function (loc) { start(loc.parameter || {}); });
     } else {
       const p = {};
@@ -1902,7 +1901,7 @@
 
   // ── Auth admin ─────────────────────────────────────────────────────────────
   window.startAdminPanel = function () {
-    if (!window.isGas) { window.hideGlobalLoader(); window.navigate('dashboard'); window.showToast('Mode pratinjau: data tidak dimuat.', 'info'); return; }
+    if (!hasServer()) { window.hideGlobalLoader(); window.navigate('dashboard'); window.showToast('Mode pratinjau: data tidak dimuat.', 'info'); return; }
     if (!_lsGet(ADMIN_TOKEN_KEY)) { window.showAdminLogin(); return; }
     // Tanpa cek sesi terpisah: kalau token sudah tidak berlaku, panggilan data
     // gagal dengan AUTH_REQUIRED dan layar login muncul (onAdminAuthLost).
@@ -1938,8 +1937,8 @@
     const err = $('admin-login-error');
     if (!pin) { $('admin-pin').focus(); return; }
     const done = busy($('admin-login-btn'), 'Memeriksa…');
-    google.script.run
-      .withSuccessHandler(function (res) {
+    rpc('adminLogin', [pin])
+      .then(function (res) {
         // Tombol tetap "Memeriksa…" sampai data siap: satu loading saja.
         _lsSet(ADMIN_TOKEN_KEY, res.token);
         window.loadAllData().then(function () {
@@ -1948,16 +1947,14 @@
           err.classList.add('hide');
           if (_lsGet(ADMIN_TOKEN_KEY)) $('admin-login').classList.add('hide');
         });
-      })
-      .withFailureHandler(function (e2) {
+      }, function (e2) {
         done();
         err.textContent = window.authMessage(e2);
         err.classList.remove('hide');
         const f = $('admin-login').querySelector('form');
         f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake');
         $('admin-pin').select();
-      })
-      .adminLogin(pin);
+      });
   };
 
   window.submitChangePin = function (e) {
@@ -7461,18 +7458,17 @@
     const phone = sanitizePhone(input ? input.value : '');
     if (!phone) { if (input) input.focus(); return; }
     window.showMemberLinkMessage('');
-    if (!window.isGas) { window.showMemberLinkMessage('Mode pratinjau: login tidak tersedia.'); return; }
+    if (!hasServer()) { window.showMemberLinkMessage('Mode pratinjau: login tidak tersedia.'); return; }
     const done = busy($('login-submit-btn'), 'Memeriksa…');
-    google.script.run
-      .withSuccessHandler(function (res) {
+    rpc('memberLoginByPhone', [phone])
+      .then(function (res) {
         done();
         _lsSet(MEMBER_TOKEN_KEY, res.token);
         if (input) input.value = '';
         window.setPublicMember(res.member);
         window.showToast('Selamat datang, ' + (res.member.name || 'member') + '!', 'hand');
         window.loadPublicData();
-      })
-      .withFailureHandler(function (err) {
+      }, function (err) {
         done();
         const msg = window.authMessage(err);
         window.showMemberLinkMessage(msg);
@@ -7483,8 +7479,7 @@
           $('nm-sum').textContent = 'Nomor +' + String(phone).replace(/^\+/, '') + ' belum jadi member. Pilih paket latihan dulu untuk mendaftar, atau coba nomor lain.';
           openSheet('modal-not-member');
         }
-      })
-      .memberLoginByPhone(phone);
+      });
   };
 
   window.notMemberToPackages = function () {
@@ -7493,22 +7488,20 @@
   };
 
   window.startPublicPortal = function (key) {
-    if (!window.isGas) { window.hideGlobalLoader(); window.navigate('public-login'); return; }
+    if (!hasServer()) { window.hideGlobalLoader(); window.navigate('public-login'); return; }
     if (!key) { window.loadPublicData(); return; }
-    google.script.run
-      .withSuccessHandler(function (res) {
+    rpc('memberLoginByKey', [key])
+      .then(function (res) {
         _lsSet(MEMBER_TOKEN_KEY, res.token);
         window.setPublicMember(res.member);
         window.loadPublicData();
-      })
-      .withFailureHandler(function (err) {
+      }, function (err) {
         _lsSet(MEMBER_TOKEN_KEY, null);
         window.loadPublicData().then(function () {
           window.navigate('public-login');
           window.showMemberLinkMessage(window.authMessage(err));
         });
-      })
-      .memberLoginByKey(key);
+      });
   };
 
   window.setPublicMember = function (member) {

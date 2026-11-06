@@ -47,26 +47,19 @@ test('contract: the landing page only calls public functions', () => {
   for (const n of found) assert.ok(L.PUBLIC_API.includes(n), `LandingScript.html: call('${n}') is not in PUBLIC_API`);
 });
 
-test('contract: direct google.script.run chains call functions in the door list', () => {
-  // A chain is written as `google.script.run` alone on a line, then `.withX(...)` lines and the
-  // server call at the same indentation. Chains inside the call helpers are not matched.
-  const found = [];
-  for (const { f, t } of all) {
-    const lines = t.split('\n');
-    lines.forEach((line, i) => {
-      const m = /^(\s*)google\.script\.run\s*$/.exec(line);
-      if (!m) return;
-      const pad = m[1].length + 2;
-      for (let j = i + 1; j < lines.length && j < i + 200; j++) {
-        const c = /^(\s*)\.([A-Za-z][A-Za-z0-9_]*)\(/.exec(lines[j]);
-        if (c && c[1].length === pad && !/^with/.test(c[2])) { found.push([c[2], f]); return; }
-      }
-      found.push(['<none>', f]);
-    });
-  }
-  assert.ok(found.length >= 3, 'expected direct run chains, found ' + found.length);
-  for (const [n, f] of found) assert.ok(L.API_FUNCTIONS.includes(n), `${f}: google.script.run.${n} is not in the door list`);
+test('contract: rpc("name") literals are in the door list', () => {
+  const found = scan(/\brpc\(\s*'([A-Za-z0-9_]+)'/g);
   assert.deepEqual(found.map(x => x[0]).sort(), ['adminLogin', 'memberLoginByKey', 'memberLoginByPhone']);
+  for (const [n, f] of found) assert.ok(L.PUBLIC_API.includes(n), `${f}: rpc('${n}') is not in PUBLIC_API`);
+});
+
+test('contract: only Scripts.html touches google.script.run (everything else goes through rpc)', () => {
+  const code = t => t.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).map(l => l.replace(/\/\/.*$/, '')).join('\n');
+  for (const { f, t } of all) {
+    if (f === 'Scripts.html') continue;
+    const bad = [...code(t).matchAll(/google\.script\.(run|host)\b/g)];
+    assert.equal(bad.length, 0, `${f} uses google.script.${bad[0] && bad[0][1]} directly; use rpc()`);
+  }
 });
 
 test('contract: UI calls with a computed name are reviewed', () => {
