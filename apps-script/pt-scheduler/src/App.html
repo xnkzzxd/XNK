@@ -2092,8 +2092,21 @@
   };
 
   // Fase K2: satu panggilan untuk semua data susulan (riwayat, PR, perpanjangan, keuangan/omzet, tren paket, hub).
+  // Pustaka statis (gerakan + animasi, peta otot, makanan) disimpan di perangkat sekali setelah layar pertama, supaya cari,
+  // catat, figur gerakan dan peta otot tetap jalan tanpa sinyal (T-1614). Panel coach juga, tanpa pustaka makanan.
+  function warmLibs(portal) {
+    if (ui.libsWarm) return;
+    ui.libsWarm = true;
+    setTimeout(function () {
+      if (navigator.onLine === false) return;
+      exEnsure().catch(function () {});   // juga rigEnsure (animasi gerakan)
+      figEnsure();
+      if (portal && nutOn()) foodEnsure().catch(function () {});
+    }, 4000);
+  }
   // Pengaturan dimuat saat halamannya dibuka.
   function loadAdminExtras() {
+    warmLibs(false);
     const now = new Date();
     const mo = now.getMonth() + 1, yr = now.getFullYear();
     ui.revenue = null; window._trendCache = {};
@@ -2169,7 +2182,7 @@
       window.offlineSync();
       openPendingSlot();
       // Pustaka gerakan & makanan disimpan di perangkat lebih awal, supaya cari & catat tetap jalan tanpa sinyal.
-      if (token && !ui.libsWarm) { ui.libsWarm = true; setTimeout(function () { if (navigator.onLine === false) return; exEnsure().catch(function () {}); if (nutOn()) foodEnsure().catch(function () {}); }, 4000); }
+      if (token) warmLibs(true);
     });
   };
 
