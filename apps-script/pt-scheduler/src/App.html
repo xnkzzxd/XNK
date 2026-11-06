@@ -2196,7 +2196,8 @@
   // Salinan "more" masih sama dengan server: versi sama, hari (WIB) sama, belum 6 jam, dan tidak ada tulisan sendiri sejak itu.
   function moreUpToDate(b) {
     const m = portalMoreRaw;
-    return !!(m && m.ver && b && b.moreVer && m.ver === b.moreVer && m.day === wkToday() && portalMoreAt && Date.now() - portalMoreAt < MORE_MAX_AGE);
+    // Salinan dari versi aplikasi lama tanpa bagian baru (mis. programGen, 2026-11) selalu disegarkan sekali.
+    return !!(m && m.ver && 'programGen' in m && b && b.moreVer && m.ver === b.moreVer && m.day === wkToday() && portalMoreAt && Date.now() - portalMoreAt < MORE_MAX_AGE);
   }
   // Tulis-terus: hasil simpan langsung masuk salinan di perangkat (buka lagi = langsung tampil, tanpa memuat).
   // Versi dikosongkan supaya ringkasan (insight, minggu ini) dihitung ulang sekali di belakang layar saat buka berikutnya.
@@ -4292,7 +4293,8 @@
   window.clearClientCache = function () { try { localStorage.removeItem(CC_KEY); } catch (e) {} cc.at = {}; cc.inflight = {}; cc.sync = {}; };
   // Paket utuh = semua bagian inti ada dan tanpa error. Salinan yang tidak utuh (mis. dari jawaban null sebelum perbaikan) tidak dipakai dan tidak disimpan.
   function bundleOk(b) {
-    return !!b && typeof b === 'object' && ['tasks', 'progress', 'care', 'program', 'insight'].every(function (k) { return b[k] && !b[k].error; });
+    // Salinan tanpa bagian baru (programGen, share; dari versi aplikasi sebelum 2026-11) dibuang supaya kartu baru langsung muncul.
+    return !!b && typeof b === 'object' && ['tasks', 'progress', 'care', 'program', 'insight'].every(function (k) { return b[k] && !b[k].error; }) && 'programGen' in b && 'share' in b;
   }
   function applyBundle(key, b) {
     const bad = v => !v || v.error;
@@ -4303,10 +4305,11 @@
       renderTaskSection(key);
       window.pgSetAdmin(key, bad(b.progress) ? { error: msg(b.progress), entries: [], photos: [] } : b.progress);
       window.careSet(key, bad(b.care) ? { error: msg(b.care) } : b.care);
+      // programGen dulu: programSetAdmin langsung menggambar tab Latihan, termasuk kartu Program otomatis.
+      pgAdminGen[key] = bad(b.programGen) ? null : b.programGen;
       window.programSetAdmin(key, bad(b.program) ? { error: msg(b.program) } : b.program);
       window.nutSet(key, bad(b.nutrition) ? Object.assign({ error: msg(b.nutrition) }) : Object.assign({}, b.nutrition, { foodLog: bad(b.foodLog) ? null : b.foodLog }));
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
-      pgAdminGen[key] = bad(b.programGen) ? null : b.programGen;
       shareAdmin[key] = bad(b.share) ? null : b.share;
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();

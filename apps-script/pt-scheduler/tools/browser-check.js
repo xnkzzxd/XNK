@@ -977,6 +977,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.cpTab('program'));
     await page.waitForTimeout(300);
     check((await page.textContent('#profile-program-wrap')).includes('Belum ada') && (await page.textContent('#profile-program-wrap')).includes('Buat program'), 'client page: the Program tab starts empty with a "Buat program" button');
+    check((await page.textContent('#profile-program-wrap')).includes('Program otomatis'), 'client page: the auto-program card shows on the first render of the Latihan tab (not only after a refresh)');
     await page.click('#profile-program-wrap .btn-primary');
     await page.waitForTimeout(600);
     check(await visible(page, '#prg-form') && !(await page.locator('#prg-text').count()), 'program editor: opens as a form (the text box is gone)');
