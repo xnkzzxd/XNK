@@ -11,7 +11,6 @@
   var IMG_BASE = 'https://xnkbooking.my.id/img/';
   var BOOKING_URL = 'https://book.xnkbooking.my.id';
   var DESK_Q = '(min-width: 1024px)';
-  var isGas = typeof google !== 'undefined' && google.script && google.script.run;
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   var root = document.documentElement;
@@ -68,13 +67,12 @@
   function call(name) {
     var args = Array.prototype.slice.call(arguments, 1);
     return new Promise(function (resolve, reject) {
-      if (!isGas) {
+      if (!hasServer()) {
         if (MOCK[name] !== undefined) setTimeout(function () { resolve(MOCK[name]); }, 350);
         else reject(new Error('Mode pratinjau: fitur ini hanya jalan di aplikasi.'));
         return;
       }
-      var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-      r[name].apply(r, args);
+      rpc(name, args).then(resolve, reject);   // rpc ada di Scripts.html
     });
   }
 

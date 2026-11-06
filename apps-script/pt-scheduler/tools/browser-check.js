@@ -62,6 +62,48 @@ const CDN_ANIMATION = ['dist/gsap.min.js', 'dist/ScrollTrigger.min.js', 'dist/Sp
 const INTER_CSS = "@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(https://assets.test/inter.woff2) format('woff2');}" +
   "@font-face{font-family:'Anton';font-style:normal;font-weight:400;font-display:swap;src:url(https://assets.test/anton.woff2) format('woff2');}";
 
+// How the page reaches the server (Phase AAA). Default `fetch`: the page has no google.script, it posts to
+// XNK_CONFIG.exec like the static GitHub Pages build and the answer comes from the real doPost (src/Kode.gs).
+// RPC_MODE=gas keeps the old google.script.run bridge, the fallback when Apps Script serves the page.
+const RPC_MODE = process.env.RPC_MODE === 'gas' ? 'gas' : 'fetch';
+const EXEC = 'https://script.google.com/macros/s/TEST_DEPLOYMENT/exec';
+// PAGES=static serves the pages from the static build (tools/build-static.js: separate hashed css/js files and
+// config.js) instead of rendering the Apps Script templates from src/. Needs the fetch mode (the page reads
+// its server address from config.js, built here with EXEC). The landing's assets live under /landing-assets/
+// because both sites have their own config.js.
+const PAGES = process.env.PAGES === 'static' ? 'static' : 'src';
+if (PAGES === 'static' && RPC_MODE !== 'fetch') { console.error('PAGES=static needs RPC_MODE=fetch'); process.exit(1); }
+const STATIC = PAGES === 'static' ? (() => {
+  const { build } = require('./build-static');
+  const app = build({ site: 'app', exec: EXEC }), landing = build({ site: 'landing', exec: EXEC });
+  const landingHtml = landing['index.html'].replace(/(src|href)="([a-z]+(?:\.[0-9a-f]{10})?\.(?:js|css))"/g, '$1="/landing-assets/$2"');
+  return { app, landing, landingHtml };
+})() : null;
+const ASSET_TYPE = { js: 'application/javascript', css: 'text/css' };
+function staticResponse(pathname) {
+  if (!STATIC) return null;
+  if (pathname === '/Landing') return { contentType: 'text/html', body: STATIC.landingHtml };
+  if (pathname.startsWith('/landing-assets/')) {
+    const f = pathname.slice('/landing-assets/'.length);
+    return STATIC.landing[f] !== undefined ? { contentType: ASSET_TYPE[f.split('.').pop()], body: STATIC.landing[f] } : null;
+  }
+  if (pathname === '/' || pathname === '/Index') return { contentType: 'text/html', body: STATIC.app['index.html'] };
+  const f = pathname.slice(1);
+  return f !== 'index.html' && STATIC.app[f] !== undefined ? { contentType: ASSET_TYPE[f.split('.').pop()], body: STATIC.app[f] } : null;
+}
+console.log('pages: ' + PAGES + ', rpc mode: ' + RPC_MODE);
+
+// Runs in the page before any app script (fetch mode): server address + window.open capture.
+function fetchShim(exec) {
+  window.XNK_CONFIG = { exec };
+  window.__opened = [];
+  window.open = url => {
+    const w = { location: { href: url || '' }, closed: false, close() { this.closed = true; } };
+    window.__opened.push(w);
+    return w;
+  };
+}
+
 // Runs in the page before any app script: google.script.* bridge + window.open capture.
 function gasShim() {
   const params = {};
@@ -99,22 +141,44 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
     recordVideo: opts.video ? { dir: opts.video, size: opts.viewport || MOBILE } : undefined,
   });
   if (storage) await context.addInitScript(s => { for (const k in s) localStorage.setItem(k, s[k]); }, storage);
-  await context.exposeFunction('__gasCall', async (name, argsJson) => {
-    calls.push(name);
-    if (opts.net && opts.net.down) return JSON.stringify({ ok: false, error: 'NetworkError: Connection failure' });   // tanpa sinyal
-    if (opts.delay && opts.delay[name]) await new Promise(r => setTimeout(r, opts.delay[name]));
-    try {
-      return JSON.stringify({ ok: true, value: env.call(name, ...JSON.parse(argsJson)) });
-    } catch (e) {
-      return JSON.stringify({ ok: false, error: e.message });
-    }
-  });
-  await context.addInitScript(gasShim);
+  if (RPC_MODE === 'gas') {
+    await context.exposeFunction('__gasCall', async (name, argsJson) => {
+      calls.push(name);
+      if (opts.net && opts.net.down) return JSON.stringify({ ok: false, error: 'NetworkError: Connection failure' });   // tanpa sinyal
+      if (opts.delay && opts.delay[name]) await new Promise(r => setTimeout(r, opts.delay[name]));
+      try {
+        if (env.__serverFault) env.__serverFault(name, JSON.parse(argsJson));   // a test can make one call fail (see openPage)
+        return JSON.stringify({ ok: true, value: env.call(name, ...JSON.parse(argsJson)) });
+      } catch (e) {
+        return JSON.stringify({ ok: false, error: e.message });
+      }
+    });
+    await context.addInitScript(gasShim);
+  } else {
+    await context.addInitScript(fetchShim, EXEC);
+  }
   const navigations = [];
   await context.route('**/*', route => {
     const url = route.request().url();
+    if (RPC_MODE === 'fetch' && url.startsWith(EXEC) && route.request().method() === 'POST') {
+      const raw = route.request().postData() || '';
+      let fn = ''; try { fn = JSON.parse(raw).fn; } catch (e) {}
+      calls.push(fn);
+      if ((opts.net && opts.net.down) || context.__netDown) return route.abort('failed');   // tanpa sinyal
+      return (async () => {
+        if (opts.delay && opts.delay[fn]) await new Promise(r => setTimeout(r, opts.delay[fn]));
+        if (env.__serverFault) {
+          try { env.__serverFault(fn, JSON.parse(raw).args); }   // a test can make one call fail, answered like doPost's catch
+          catch (e) { return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ ok: false, error: e.message, auth: false, v: 1 }) }); }
+        }
+        const out = env.call('doPost', { postData: { contents: raw } });   // the real gateway, allow-list and all
+        return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: out.content });
+      })();
+    }
     if (route.request().isNavigationRequest()) navigations.push(url);
     if (url.startsWith(ORIGIN)) {
+      const st = staticResponse(new URL(url).pathname);
+      if (st) return route.fulfill(st);
       const page = new URL(url).pathname.replace('/', '') || 'Index';
       return route.fulfill({ contentType: 'text/html', body: render(page) });
     }
@@ -149,6 +213,15 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
 }
 
 // Average brightness (0–255) of a small screenshot area, read back through a canvas.
+// Signal lost / back, in the middle of a page's life (both rpc modes).
+async function setNetDown(page, down) {
+  if (RPC_MODE === 'fetch') { page.context().__netDown = !!down; return; }
+  await page.evaluate(d => {
+    if (d) { window.__gasReal = window.__gasCall; window.__gasCall = () => Promise.resolve(JSON.stringify({ ok: false, error: 'NetworkError: Connection failure due to HTTP 0' })); }
+    else window.__gasCall = window.__gasReal;
+  }, !!down);
+}
+
 async function brightness(page, x, y) {
   const png = await page.screenshot({ clip: { x: Math.round(x), y: Math.round(y), width: 6, height: 6 } });
   return page.evaluate(b64 => new Promise(res => {
@@ -2060,7 +2133,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check(!(await visible(page, '#wl-resume')), 'draft: the resume bar is gone after saving');
     // Sinyal hilang: simpan masuk antrean, bar "belum terkirim", kirim ulang berhasil.
-    await page.evaluate(() => { window.__gasReal = window.__gasCall; window.__gasCall = () => Promise.resolve(JSON.stringify({ ok: false, error: 'NetworkError: Connection failure due to HTTP 0' })); });
+    await setNetDown(page, true);
     await page.evaluate(() => window.workoutOpenClient(undefined, true));
     await page.waitForTimeout(800);
     check(await visible(page, '#wl-screen') && (await page.textContent('#wl-sub')).startsWith('Catat ') && !(await page.textContent('#wl-sub')).includes(':'), 'backfill: yesterday, no stopwatch clock');
@@ -2076,7 +2149,7 @@ async function contrastReport(page) {
     await page.click('#wl-save-btn');
     await page.waitForTimeout(900);
     check(await visible(page, '#wl-resume') && (await page.textContent('#wl-resume')).includes('belum terkirim') && (await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_wl_queue') || '[]').length)) === 1, 'offline: the save waits in the queue with a "belum terkirim" bar');
-    await page.evaluate(() => { window.__gasCall = window.__gasReal; });
+    await setNetDown(page, false);
     await page.waitForTimeout(3200);
     await page.click('#wl-resume button:has-text("Kirim ulang")');
     await page.waitForTimeout(1200);
@@ -2847,12 +2920,8 @@ async function contrastReport(page) {
   {
     // The first load fails: "Coba lagi" in the box loads the hours (no polling otherwise).
     const env = seededEnv();
-    const orig = env.call.bind(env);
     let failOnce = true;
-    env.call = (name, ...args) => {
-      if (name === 'getOpenSlots' && failOnce) { failOnce = false; throw new Error('Server error'); }
-      return orig(name, ...args);
-    };
+    env.__serverFault = name => { if (name === 'getOpenSlots' && failOnce) { failOnce = false; throw new Error('Server error'); } };
     const calls = [];
     const { page, context, errors } = await openPage(browser, env, '/Landing', calls, null, { touch: true, wait: LANDING_WAIT });
     check(await visible(page, '#slot-hours .slot-retry'), 'Landing: a failed first load shows "Coba lagi"');

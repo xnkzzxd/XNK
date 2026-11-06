@@ -30,10 +30,10 @@ Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md) · [Roa
 - [ ] T-1403 👤 Account setup checklist: domain, Cloudflare, Supabase (prod SG + staging), Resend, Play Console, Sentry; 2FA (D6, D7).
 
 ## V1 New host, same backend
-- [ ] T-1410 `tools/build-static.js`: resolves `include()` and writes the static shell + landing; byte-compare against the HtmlService output.
-- [ ] T-1411 Transport swap in `App.html` `call()`/`tokenRunner` and `LandingScript.html` (fetch `/rpc/:name`; same handlers and `AUTH_REQUIRED` errors).
-- [ ] T-1412 GAS `doPost` RPC dispatcher (allow-list from `tests/security.test.js`; same auth checks).
-- [ ] T-1413 Worker `/rpc/:name` proxy to GAS + rate limits; staging + prod deploy workflows.
+- [ ] T-1410 *(digantikan Phase AAA, lihat docs/aaa/)* `tools/build-static.js`: resolves `include()` and writes the static shell + landing; byte-compare against the HtmlService output.
+- [ ] T-1411 *(digantikan Phase AAA, lihat docs/aaa/)* Transport swap in `App.html` `call()`/`tokenRunner` and `LandingScript.html` (fetch `/rpc/:name`; same handlers and `AUTH_REQUIRED` errors).
+- [ ] T-1412 *(digantikan Phase AAA, lihat docs/aaa/)* GAS `doPost` RPC dispatcher (allow-list from `tests/security.test.js`; same auth checks).
+- [ ] T-1413 *(digantikan Phase AAA, lihat docs/aaa/)* Worker `/rpc/:name` proxy to GAS + rate limits; staging + prod deploy workflows.
 - [ ] T-1414 Top-level host bridge: `--sa-*` from `env()` when not framed (P3).
 - [ ] T-1415 (ships in V4) Handoff: the old domain flushes queues → one-time code → the new domain imports token, drafts, prefs (P1).
 - [ ] T-1416 (ships in V4) Final `sw.js` for xnk.my.id and BookingPT-Client: handoff, install prompt, unregister (P2).

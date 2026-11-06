@@ -39,7 +39,7 @@ Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks
    - editor-only maintenance: `requireOwner_();`
    - otherwise, name it with a trailing `_`.
 
-   Then add the name to the matching list in `tests/security.test.js`. The test fails on any unclassified function.
+   Then add the name to the matching list in `tests/api-lists.js` (`security.test.js` reads it) and run `node apps-script/pt-scheduler/tools/build-api.js` to refresh the generated `src/Api.gs` (the door list for `doPost`; Phase AAA). The tests fail on any unclassified function and on a stale `Api.gs`.
 4. **Sheets: append columns, never reorder or delete.** Existing rows and IDs stay valid. New code maps columns by header name where it can. Migrations must be idempotent and run under `LockService.getScriptLock()`.
 5. **Default = today's behavior.** A new feature is off (or `manual`) until the owner turns it on in Settings.
 6. **Don't reintroduce `Test.gs` or in-editor `test*` functions.** They were removed on purpose; tests live in `tests/` (Node).

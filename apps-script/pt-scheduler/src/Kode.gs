@@ -110,33 +110,35 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-// Pintu JSON untuk aplikasi klien mandiri (PWA offline). Hanya fungsi klien di
-// daftar putih ini; setiap fungsi tetap menjaga dirinya lewat requireMember_
-// (token di argumen pertama), jadi tidak ada jalan masuk baru ke data admin.
-const APP_API_MAX_BYTES = 200000;
-const APP_API_PHOTO_BYTES = 1600000;   // foto sudah diperkecil di browser (~1280 px)
-function _appApi_() {
-  return { memberLoginByPhone: memberLoginByPhone, getPortalBootstrap: getPortalBootstrap, getPortalMore: getPortalMore,
-    getMyWorkout: getMyWorkout, logMyWorkout: logMyWorkout, getMyNutrition: getMyNutrition, getMyFoodLog: getMyFoodLog,
-    logMyFood: logMyFood, deleteMyFood: deleteMyFood, saveMyMeasurement: saveMyMeasurement,
-    deleteMyMeasurement: deleteMyMeasurement, getMyProgress: getMyProgress,
-    uploadMyProgressPhoto: uploadMyProgressPhoto, getMyProgressPhoto: getMyProgressPhoto, deleteMyProgressPhoto: deleteMyProgressPhoto, getMyShareData: getMyShareData,
-    getMyProgramProfile: getMyProgramProfile, saveMyProgramProfile: saveMyProgramProfile, acceptAutoProgram: acceptAutoProgram,
-    setMyProgramAuto: setMyProgramAuto, swapMyProgramExercise: swapMyProgramExercise };
-}
+// Pintu JSON (Phase AAA): halaman statis di GitHub Pages dan app klien mandiri memanggil fungsi server
+// lewat fetch. Daftar fungsi yang boleh dipanggil ada di Api.gs (_apiTable_, dibuat dari
+// tests/api-lists.js: fungsi publik, admin dan member; tidak pernah owner, trigger, doGet/doPost/include).
+// Tiap fungsi tetap menjaga dirinya (requireAdmin_ / requireMember_ sebagai pernyataan pertama), jadi
+// pintu ini tidak memberi izin baru. doPost anonim, jadi requireOwner_ selalu menolak.
+const API_VERSION = 1;                   // naik bila bentuk jawaban doPost berubah tidak kompatibel
+const APP_API_MAX_BYTES = 200000;        // batas isi permintaan biasa
+const APP_API_PHOTO_BYTES = 1600000;     // foto progres sudah diperkecil di browser (~1280 px)
+const APP_API_UPLOAD_BYTES = 7200000;    // unggahan foto/bukti lain; fungsinya sendiri membatasi base64 7.000.000
+const API_BODY_LIMITS = { uploadMyProgressPhoto: APP_API_PHOTO_BYTES, uploadMemberPhoto: APP_API_UPLOAD_BYTES,
+  uploadCoachPhoto: APP_API_UPLOAD_BYTES, uploadFinanceProof: APP_API_UPLOAD_BYTES };
+function _appApi_() { return _apiTable_(); }
 function _appApiReply_(obj) {
+  obj.v = API_VERSION;
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
-/** Body: {fn, args:[...]} sebagai teks biasa (text/plain, tanpa preflight CORS). Jawaban: {ok, data} atau {ok:false, error, auth}. */
+/** Body: {fn, args:[...]} sebagai teks biasa (text/plain, tanpa preflight CORS). Jawaban: {ok, data, v} atau {ok:false, error, auth, v}. */
 function doPost(e) {
   try {
     const raw = e && e.postData && e.postData.contents ? String(e.postData.contents) : '';
-    if (!raw || raw.length > APP_API_PHOTO_BYTES) throw new Error('Permintaan tidak valid.');
+    if (!raw || raw.length > APP_API_UPLOAD_BYTES) throw new Error('Permintaan tidak valid.');
     const req = JSON.parse(raw);
     const fn = req && req.fn;
-    if (raw.length > APP_API_MAX_BYTES && fn !== 'uploadMyProgressPhoto') throw new Error('Permintaan tidak valid.');
     const api = _appApi_();
     if (typeof fn !== 'string' || !Object.prototype.hasOwnProperty.call(api, fn)) throw new Error('Permintaan tidak valid.');
+    const limit = Object.prototype.hasOwnProperty.call(API_BODY_LIMITS, fn) ? API_BODY_LIMITS[fn] : APP_API_MAX_BYTES;
+    if (raw.length > limit) throw new Error('Permintaan tidak valid.');
+    // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
+    try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
     const args = Array.isArray(req.args) ? req.args : [];
     const data = api[fn].apply(null, args);
     return _appApiReply_({ ok: true, data: _plainJson_(data === undefined ? null : data) });

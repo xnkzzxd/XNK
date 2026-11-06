@@ -295,26 +295,24 @@
   seed('submitMyHealthForm', sari, { q: ['tidak', 'tidak', 'tidak', 'tidak', 'tidak', 'tidak', 'tidak'], injuries: '', medication: '', other: '', consent: 'ya' });
   seed('saveMyProgramProfile', sari, { level: 'pemula-banget', tujuan: 'fatloss', hari: 3, durasi: 45, fokus: ['glutes'] });
 
-  // ── google.script.* for the app ──────────────────────────────────────────
-  var params = {};
-  new URLSearchParams(location.search).forEach(function (v, k) { params[k] = v; });
-  if (MODE === 'public') { params.view = 'public'; if (!params.k) params.k = DEMO_KEY; }
-  var runner = function (ok, fail) {
-    return new Proxy({}, { get: function (_, prop) {
-      if (prop === 'withSuccessHandler') return function (fn) { return runner(fn, fail); };
-      if (prop === 'withFailureHandler') return function (fn) { return runner(ok, fn); };
-      if (prop === 'withUserObject') return function () { return runner(ok, fail); };
-      return function () {
-        var args = arguments;
-        setTimeout(function () {   // async like the real thing
-          var res, err;
-          try { res = call.apply(null, [prop].concat([].slice.call(args))); } catch (e) { err = e; }
-          if (err) { if (fail) fail(err); } else if (ok) ok(res);
-        }, 60);
-      };
-    } });
+  // ── server calls for the app: rpc() (Scripts.html) uses this instead of google.script.run ──
+  // ?view / ?k come from the address like on the static pages, so the app reads URLSearchParams.
+  if (MODE === 'public') {
+    var qs = new URLSearchParams(location.search);
+    if (!qs.get('view') || !qs.get('k')) {
+      qs.set('view', 'public'); if (!qs.get('k')) qs.set('k', DEMO_KEY);
+      history.replaceState(null, '', location.pathname + '?' + qs.toString() + location.hash);
+    }
+  }
+  window.XNK_TRANSPORT = function (fn, args) {
+    return new Promise(function (resolve, reject) {
+      setTimeout(function () {   // async like the real thing
+        var res;
+        try { res = call.apply(null, [fn].concat(args || [])); } catch (e) { reject(e); return; }
+        resolve(res === undefined ? null : res);
+      }, 60);
+    });
   };
-  window.google = { script: { run: runner(null, null), url: { getLocation: function (cb) { setTimeout(function () { cb({ parameter: params, hash: '' }); }, 0); } } } };
 
   // Fresh device state each load: drop the app's own copies, then sign in.
   try {
