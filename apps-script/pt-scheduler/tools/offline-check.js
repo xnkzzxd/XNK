@@ -16,6 +16,8 @@ const check = (ok, msg) => { console.log((ok ? '  ✓ ' : '  ✗ ') + msg); if (
 const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 const FOODS = fs.readFileSync(path.join(XNK, 'foods/foods.min.json'));
 const EXS = fs.readFileSync(path.join(XNK, 'exercises/exercises.min.json'));
+const FIG = fs.readFileSync(path.join(XNK, 'figure/figure.min.json'));
+const RIG = fs.readFileSync(path.join(XNK, 'figure/rig.min.json'));
 
 function serve(dir) {
   return new Promise(resolve => {
@@ -41,6 +43,8 @@ async function openWrapper(browser, dir) {
   await context.route(/script\.google(usercontent)?\.com/, () => {});
   await context.route(/xnk\.my\.id\/foods\//, r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: FOODS }));
   await context.route(/xnk\.my\.id\/exercises\//, r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: EXS }));
+  await context.route(/xnk\.my\.id\/figure\/figure\.min\.json/, r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: FIG }));
+  await context.route(/xnk\.my\.id\/figure\/rig\.min\.json/, r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: RIG }));
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
@@ -62,6 +66,8 @@ const bridge = (page, data) => page.evaluate(d => {
   {
     const w = await openWrapper(browser, XNK);
     check(await w.page.evaluate(() => !!navigator.serviceWorker.controller), 'service worker controls the page');
+    const cached = await w.page.evaluate(async () => { const c = await caches.open('xnk-off-v2'); const keys = (await c.keys()).map(r => r.url); return ['figure.min.json', 'rig.min.json'].every(f => keys.some(k => k.endsWith('/figure/' + f))); });
+    check(cached, 'the muscle map and exercise animations are in the offline cache (T-1614)');
     const start = new Date(Date.now() + 3600000).toISOString();
     await bridge(w.page, { xnk: 'offline-snap', snap: { mode: 'coach', sig: 'S1', at: Date.now(), today: [{ id: 'SCH-1', memberId: 'PT-A', name: 'Ani', start: start }],
       clients: { 'PT-A': { name: 'Ani', routines: [{ hari: 'Hari A', items: [{ gerakan: 'Squat', exId: '' }] }], last: { 'nm:squat': { sets: [{ berat: 40, rep: 8 }] } }, measures: [{ tanggal: '2026-10-01', berat: 70 }] } } } });

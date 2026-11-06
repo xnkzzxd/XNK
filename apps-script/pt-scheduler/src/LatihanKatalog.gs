@@ -22,22 +22,24 @@ const GYM_SEED_ = [
   ['gym:chest-fly-machine', 'Chest Fly (Machine)', '0596', 'pemula-banget', 'isolasi', 'pectorals', 'delts', 'beban', 10, 15, 'bahu', '', false, true],
   ['gym:treadmill', 'Treadmill', '', 'pemula-banget', 'kardio', 'cardiovascular system', '', 'waktu', '', '', '', '', false, true],
   ['gym:stationary-bike', 'Stationary Bike', '', 'pemula-banget', 'kardio', 'cardiovascular system', '', 'waktu', '', '', '', '', false, true],
-  // Usulan (nonaktif sampai owner memastikan alatnya ada).
-  ['gym:push-up', 'Push Up', '0662', 'pemula', 'dorong-h', 'pectorals', 'delts,triceps,abs', 'badan', 6, 12, 'bahu', '', false, false],
+  // Level berikut. Aktif = alat yang ada di gym owner (2026-11-06: dumbbell + bangku, kabel, mesin abduktor, row, leg curl,
+  // calf raise; tanpa Chest Press / Shoulder Press mesin). Sisanya nonaktif sampai owner menyalakan.
+  ['gym:push-up', 'Push Up', '0662', 'pemula', 'dorong-h', 'pectorals', 'delts,triceps,abs', 'badan', 6, 12, 'bahu', '', false, true],
   ['gym:chest-press-machine', 'Chest Press (Machine)', '0577', 'pemula', 'dorong-h', 'pectorals', 'delts,triceps', 'beban', 8, 12, 'bahu', '', false, false],
-  ['gym:db-bench-press', 'Bench Press (Dumbbell)', '0289', 'pemula', 'dorong-h', 'pectorals', 'delts,triceps', 'beban', 8, 12, 'bahu', '', false, false],
+  ['gym:db-bench-press', 'Bench Press (Dumbbell)', '0289', 'pemula', 'dorong-h', 'pectorals', 'delts,triceps', 'beban', 8, 12, 'bahu', '', false, true],
   ['gym:shoulder-press-machine', 'Shoulder Press (Machine)', '0603', 'pemula', 'dorong-v', 'delts', 'triceps', 'beban', 8, 12, 'bahu', '', false, false],
-  ['gym:seated-row-machine', 'Seated Row (Machine)', '1350', 'pemula', 'tarik-h', 'upper back', 'lats,biceps,delts', 'beban', 8, 12, '', '', false, false],
-  ['gym:db-row', 'Bent Over Row (Dumbbell)', '0293', 'pemula', 'tarik-h', 'upper back', 'lats,biceps', 'beban', 8, 12, 'punggung-bawah', '', false, false],
-  ['gym:db-rdl', 'Romanian Deadlift (Dumbbell)', '1459', 'pemula', 'pinggul', 'hamstrings', 'glutes,spine', 'beban', 8, 12, 'punggung-bawah,hamil', '', false, false],
-  ['gym:goblet-squat', 'Goblet Squat (Dumbbell)', '1760', 'pemula', 'lutut', 'quads', 'glutes,adductors', 'beban', 8, 12, 'lutut', '', false, false],
-  ['gym:seated-leg-curl', 'Seated Leg Curl (Machine)', '0599', 'pemula', 'isolasi', 'hamstrings', '', 'beban', 10, 15, '', '', false, false],
-  ['gym:db-lateral-raise', 'Lateral Raise (Dumbbell)', '0334', 'pemula', 'isolasi', 'delts', '', 'beban', 10, 20, 'bahu', '', false, false],
-  ['gym:cable-curl', 'Bicep Curl (Cable)', '0868', 'pemula', 'isolasi', 'biceps', 'forearms', 'beban', 10, 15, '', '', false, false],
-  ['gym:triceps-pushdown', 'Triceps Pushdown (Cable)', '0201', 'pemula', 'isolasi', 'triceps', '', 'beban', 10, 15, '', '', false, false],
-  ['gym:hip-abduction', 'Hip Abduction (Machine)', '0597', 'pemula', 'isolasi', 'abductors', 'glutes', 'beban', 10, 20, '', '', false, false],
-  ['gym:calf-raise-machine', 'Standing Calf Raise (Machine)', '0605', 'pemula', 'isolasi', 'calves', '', 'beban', 10, 20, '', '', false, false],
-  ['gym:dead-bug', 'Dead Bug', '0276', 'pemula', 'isolasi', 'abs', '', 'badan', 8, 15, 'hamil', '', false, false],
+  ['gym:seated-row-machine', 'Seated Row (Machine)', '1350', 'pemula', 'tarik-h', 'upper back', 'lats,biceps,delts', 'beban', 8, 12, '', '', false, true],
+  ['gym:db-row', 'Bent Over Row (Dumbbell)', '0293', 'pemula', 'tarik-h', 'upper back', 'lats,biceps', 'beban', 8, 12, 'punggung-bawah', '', false, true],
+  ['gym:db-rdl', 'Romanian Deadlift (Dumbbell)', '1459', 'pemula', 'pinggul', 'hamstrings', 'glutes,spine', 'beban', 8, 12, 'punggung-bawah,hamil', '', false, true],
+  ['gym:goblet-squat', 'Goblet Squat (Dumbbell)', '1760', 'pemula', 'lutut', 'quads', 'glutes,adductors', 'beban', 8, 12, 'lutut', '', false, true],
+  ['gym:seated-leg-curl', 'Seated Leg Curl (Machine)', '0599', 'pemula', 'isolasi', 'hamstrings', '', 'beban', 10, 15, '', '', false, true],
+  ['gym:db-lateral-raise', 'Lateral Raise (Dumbbell)', '0334', 'pemula', 'isolasi', 'delts', '', 'beban', 10, 20, 'bahu', '', false, true],
+  ['gym:cable-curl', 'Bicep Curl (Cable)', '0868', 'pemula', 'isolasi', 'biceps', 'forearms', 'beban', 10, 15, '', '', false, true],
+  ['gym:triceps-pushdown', 'Triceps Pushdown (Cable)', '0201', 'pemula', 'isolasi', 'triceps', '', 'beban', 10, 15, '', '', false, true],
+  ['gym:hip-abduction', 'Hip Abduction (Machine)', '0597', 'pemula', 'isolasi', 'abductors', 'glutes', 'beban', 10, 20, '', '', false, true],
+  ['gym:calf-raise-machine', 'Standing Calf Raise (Machine)', '0605', 'pemula', 'isolasi', 'calves', '', 'beban', 10, 20, '', '', false, true],
+  ['gym:dead-bug', 'Dead Bug', '0276', 'pemula', 'isolasi', 'abs', '', 'badan', 8, 15, 'hamil', '', false, true],
+  ['gym:db-shoulder-press', 'Seated Shoulder Press (Dumbbell)', '0405', 'pemula', 'dorong-v', 'delts', 'triceps', 'beban', 8, 12, 'bahu', '', false, true],
   ['gym:bb-bench-press', 'Bench Press (Barbell)', '0025', 'menengah', 'dorong-h', 'pectorals', 'delts,triceps', 'beban', 6, 12, 'bahu', '', false, false],
   ['gym:bb-squat', 'Squat (Barbell)', '0043', 'menengah', 'lutut', 'quads', 'glutes,adductors', 'beban', 6, 12, 'lutut,punggung-bawah', '', false, false],
   ['gym:bb-rdl', 'Romanian Deadlift (Barbell)', '0085', 'menengah', 'pinggul', 'hamstrings', 'glutes,spine', 'beban', 6, 12, 'punggung-bawah,hamil', '', false, false],
@@ -59,9 +61,49 @@ function _gymSheet_() {
       const now = new Date().toISOString();
       const rows = GYM_SEED_.map(function(x, i) { return _gymRowFromSeed_(x, i, now); });
       sh.getRange(2, 1, rows.length, GYM_HEADERS.length).setValues(rows);
+      PropertiesService.getScriptProperties().setProperty(GYM_EQUIP_PROP, '1');   // seed sudah berisi alat owner
     });
   }
+  _gymOwnerEquip_(sh);
   return sh;
+}
+
+// T-1615: alat yang ada di gym owner (jawaban owner 2026-11-06). Sheet yang sudah di-seed sebelumnya dinyalakan sekali;
+// gerakan seed yang belum ada di sheet (Seated Shoulder Press (Dumbbell)) ditambahkan. Sekali saja (Script Property),
+// jadi gerakan yang nanti dimatikan owner tidak dinyalakan ulang.
+const GYM_EQUIP_PROP = 'GYM_OWNER_EQUIP_V1';
+const GYM_OWNER_EQUIP = ['gym:push-up', 'gym:db-bench-press', 'gym:seated-row-machine', 'gym:db-row', 'gym:db-rdl', 'gym:goblet-squat',
+  'gym:seated-leg-curl', 'gym:db-lateral-raise', 'gym:cable-curl', 'gym:triceps-pushdown', 'gym:hip-abduction', 'gym:calf-raise-machine',
+  'gym:dead-bug', 'gym:db-shoulder-press'];
+function _gymOwnerEquip_(sh) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(GYM_EQUIP_PROP) || !sh || sh.getLastRow() < 2) return false;
+  let changed = false;
+  _locked_(function() {
+    if (props.getProperty(GYM_EQUIP_PROP)) return;
+    const data = sh.getDataRange().getValues();
+    const now = new Date().toISOString();
+    const have = {};
+    let maxOrder = 0;
+    for (let i = 1; i < data.length; i++) {
+      const id = String(data[i][0]);
+      have[id] = true;
+      maxOrder = Math.max(maxOrder, Number(data[i][14]) || 0);
+      if (GYM_OWNER_EQUIP.indexOf(id) !== -1 && String(data[i][13]) === 'tidak') {
+        sh.getRange(i + 1, 14).setValue('ya');
+        sh.getRange(i + 1, 16).setValue(now);
+        changed = true;
+      }
+    }
+    GYM_SEED_.forEach(function(x) {
+      if (have[x[0]] || GYM_OWNER_EQUIP.indexOf(x[0]) === -1) return;
+      _appendRow_(sh, _gymRowFromSeed_(x, maxOrder++, now));
+      changed = true;
+    });
+    props.setProperty(GYM_EQUIP_PROP, '1');
+  });
+  if (changed) _bumpMember_('*');
+  return changed;
 }
 
 /** Murni: baris sheet → objek katalog. */
@@ -78,6 +120,7 @@ function _gymCatalog_() {
   if (_readMemo_ && _readMemo_.gymCatalog) return _readMemo_.gymCatalog;
   // Baca tanpa membuat sheet: sebelum owner membuka Latihan & Alat, katalog = isi seed (tanpa menulis apa pun).
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('GymExercises');
+  if (sh) _gymOwnerEquip_(sh);   // sekali saja (T-1615)
   const now = '';
   const rows = sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : GYM_SEED_.map(function(x, i) { return _gymRowFromSeed_(x, i, now); });
   const out = rows.filter(function(r) { return r[0]; }).map(_gymFromRow_)

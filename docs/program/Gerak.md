@@ -30,15 +30,33 @@ Otot utama (gelap) dan pendukung (terang) diambil dari [Otot.md](Otot.md), sama 
 | `goblet-squat` | Goblet Squat (Dumbbell) | Lutut 5° → 100°, kaki tetap, beban di depan dada | Rentang sama dengan Squat (Machine): Larsen 2025, Kubo 2019 (di atas) |
 | `seated-cable-row` | Seated Row (Machine) | Sama dengan Seated Cable Row (pola tarik horizontal yang sama) | Di Fonza 2026 (di atas) |
 
+### Tampak depan dan gerakan dumbbell / berat badan (T-1612b)
+
+Studi untuk gerakan-gerakan ini memberi **otot yang bekerja dan bahwa gerakannya efektif**, bukan angka sudut. Rentang di
+bawah adalah definisi gerakan (posisi awal dan akhir yang lazim), ditandai sebagai pilihan gambar.
+
+| Pola | Gerakan | Gerak yang dianimasikan (pilihan gambar) | Sumber gerakan / otot |
+|---|---|---|---|
+| `lateral-raise` (tampak depan) | Lateral Raise (Dumbbell) | Abduksi bahu 4° → 90° (lengan setinggi bahu), siku sedikit tekuk | Larsen 2025: lateral raise dumbbell dan kabel sama efektif untuk hipertrofi deltoid lateral. Front Physiol 16:1611468. PMID 40692697, [doi:10.3389/fphys.2025.1611468](https://doi.org/10.3389/fphys.2025.1611468) |
+| `hip-abduction-machine` (tampak depan) | Hip Abduction (Machine) | Duduk, abduksi pinggul 6° → 40° | Attarieh 2026: latihan abduksi pinggul menumbuhkan gluteus maximus bagian atas dan gluteus medius/minimus (MRI, 10 minggu). J Strength Cond Res. PMID 42842490, [doi:10.1519/JSC.0000000000005701](https://doi.org/10.1519/JSC.0000000000005701) |
+| `db-bench-press` | Bench Press (Dumbbell) | Telentang; lengan lurus di atas dada → siku tekuk, dumbbell di samping dada | Uribe 2010: dumbbell chest press mengaktifkan pektoral dan deltoid anterior. J Strength Cond Res 24:1028. PMID 20300023, [doi:10.1519/JSC.0b013e3181ca4fb8](https://doi.org/10.1519/JSC.0b013e3181ca4fb8); Patterson 2015 (ROM dumbbell bench press). PeerJ 3:e1365. PMID 26528421, [doi:10.7717/peerj.1365](https://doi.org/10.7717/peerj.1365) |
+| `db-shoulder-press` | Seated Shoulder Press (Dumbbell) | Duduk tegak; dumbbell setinggi telinga → di atas kepala, siku hampir lurus | Kohler 2010: seated dumbbell shoulder press = deltoid anterior & tengah, triseps. J Strength Cond Res 24:313. PMID 20072068, [doi:10.1519/JSC.0b013e3181c8655a](https://doi.org/10.1519/JSC.0b013e3181c8655a); Uribe 2010 (di atas) |
+| `db-row` | Bent Over Row (Dumbbell) | Badan condong ±68°, lutut 20°; lengan lurus → siku lewat badan | Di Fonza 2026 (review EMG row, di atas) |
+| `db-rdl` | Romanian Deadlift (Dumbbell) | Lutut tetap 15°, pinggul fleksi ±79° → tegak, lengan lurus | Hermann 2026 memakai Romanian deadlift dalam program hipertrofi hamstring (Int J Exerc Sci 19:1008, PMID 42516618, [doi:10.70252/IJES2026108](https://doi.org/10.70252/IJES2026108)); otot = katalog |
+| `dead-bug` | Dead Bug | Telentang; posisi meja (pinggul & lutut 90°, lengan tegak) → lengan ke atas kepala, kaki lurus (satu sisi) | Jeon 2026: dead bug memberi aktivasi abdominal (TrA/IO dan rektus) tertinggi dari tiga latihan stabilisasi. J Back Musculoskelet Rehabil. PMID 42960974, [doi:10.1177/10538127261502121](https://doi.org/10.1177/10538127261502121); Kim 2016, PM&R 8:979, PMID 27317910, [doi:10.1016/j.pmrj.2016.05.017](https://doi.org/10.1016/j.pmrj.2016.05.017) |
+
+Tampak depan: figur menghadap penonton, kiri = cermin kanan (diuji). Pada Hip Abduction paha mengarah ke penonton, jadi
+digambar lebih pendek (proyeksi), seperti lengan Chest Fly di tampak samping.
+
 Otot utama / pendukung pola tambahan = kolom `Otot Utama` / `Otot Pendukung` katalog gym (`src/LatihanKatalog.gs`), diuji di `tests/rig.test.js`.
 
-**Belum dianimasikan (butuh sumber atau tampak depan):** Romanian Deadlift, Chest Press (Machine), Bench Press (Dumbbell), Shoulder Press (Machine), Bent Over Row (Dumbbell), Lateral Raise dan Hip Abduction (gerak di bidang frontal, butuh tampak depan), Dead Bug, Treadmill, Stationary Bike. Gerakan itu tetap memakai GIF pustaka.
+**Belum dianimasikan:** Chest Press (Machine) dan Shoulder Press (Machine) (tidak ada di gym owner), Treadmill dan Stationary Bike (kardio, tidak dianimasikan), gerakan level menengah (barbel, Pull Up; mati di katalog). Gerakan pustaka lain tetap memakai GIF (keputusan owner, T-1613).
 
 ## Yang bukan dari studi (dicatat terus terang)
 - Bentuk figur (kapsul sederhana), panjang ruas, dan bentuk alat adalah gambar kita sendiri, netral, tanpa merek, tidak meniru gambar mana pun.
 - Posisi badan yang tidak diatur studi (sandaran kursi, condong badan pada squat mesin, posisi tangan memegang pegangan) dipilih agar gerakan terbaca; tidak dipakai sebagai aturan latihan.
 - Tempo animasi 1,7 detik per arah hanya untuk tampilan. Tempo latihan bebas (Rules.md, Schoenfeld 2015).
 
-## Pola berikutnya (T-1612b)
-Hinge / RDL, bench / chest press, overhead press, dumbbell row, lateral raise dan hip abduction (tampak depan), dead bug,
-treadmill, sepeda. Tiap pola baru butuh baris di tabel ini dengan sumber sebelum dianimasikan.
+## Pola berikutnya
+Bila owner menyalakan gerakan baru di katalog (mis. level menengah), polanya dibuat dengan baris baru di tabel ini lebih
+dulu. `tests/rig.test.js` gagal bila gerakan katalog yang aktif tidak punya pola (kecuali kardio).

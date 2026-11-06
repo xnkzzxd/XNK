@@ -289,7 +289,7 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 ## Program latihan otomatis (Fase U)
 
 - **Nyala bawaan untuk semua klien.** Matikan untuk semua lewat Script Property `PROGRAM_AUTO_ENABLED` = `false`; per klien lewat tombol di tab Latihan klien (panel) atau tombol "Matikan" milik klien.
-- **Alat gym**: Pengaturan → **Latihan & Alat**. Nyalakan gerakan yang alatnya ada di gym. Bawaan: 8 gerakan pemula banget + Treadmill + Stationary Bike aktif, usulan level pemula/menengah mati. Bisa tambah gerakan sendiri (nama Inggris, otot utama/pendukung).
+- **Alat gym**: Pengaturan → **Latihan & Alat**. Sudah dinyalakan sesuai alat gym (2026-11-06): dumbbell + bangku (Bench Press, Bent Over Row, Romanian Deadlift, Goblet Squat, Lateral Raise, Seated Shoulder Press), kabel (Bicep Curl, Triceps Pushdown), mesin abduktor, Seated Row, Seated Leg Curl, Standing Calf Raise, Push Up, Dead Bug. Chest Press dan Shoulder Press mesin tetap mati. Yang dimatikan lagi di sini tidak akan dinyalakan ulang otomatis. Nyalakan gerakan yang alatnya ada di gym. Bawaan: 8 gerakan pemula banget + Treadmill + Stationary Bike aktif, usulan level pemula/menengah mati. Bisa tambah gerakan sendiri (nama Inggris, otot utama/pendukung).
 - **Klien** mengisi 3 langkah di tab Latihan (level, tujuan + otot fokus, hari + durasi). Program langsung dibuat. Klien yang sudah punya program dari coach hanya **ditawari**; kalau setuju, program coach disimpan di Rutinitas saya.
 - **Program buatan coach tidak pernah ditimpa**, kecuali coach menekan **Buat ulang**.
 - **Form OK**: di layar latihan klien, coach menekan "Tandai form OK" per gerakan. Beban otomatis baru naik setelah itu dan bila klien tidak menjawab "Ragu".
@@ -297,7 +297,7 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 - **Hub coach** menampilkan kartu "Program otomatis": klien yang sedang mode ringan (cek form kesehatannya) dan program baru / blok baru / naik level 14 hari terakhir.
 - Tinjauan blok tiap hari mulai 04:00 (ikut pemicu pengingat; Pengingat Klien harus aktif). Tidak mengirim pesan apa pun.
 - Aturan dan sumbernya: `docs/program/Rules.md`; otot per gerakan: `docs/program/Otot.md`.
-- **Animasi gerakan sendiri**: 8 gerakan pemula banget (Leg Press, Squat Machine, Hip Thrust Machine, Leg Extension, Lat Pulldown, Seated Cable Row, Chest Fly, Incline Push Up) tampil dengan figur kita sendiri, bukan GIF. Juga Push Up, Seated Leg Curl, Bicep Curl (Cable), Triceps Pushdown, Standing Calf Raise, Goblet Squat dan Seated Row (Machine). Ketuk nama gerakan di layar latihan untuk melihat figur bergerak. Sudut gerak dan sumbernya: `docs/program/Gerak.md`.
+- **Animasi gerakan sendiri**: 8 gerakan pemula banget (Leg Press, Squat Machine, Hip Thrust Machine, Leg Extension, Lat Pulldown, Seated Cable Row, Chest Fly, Incline Push Up) tampil dengan figur kita sendiri, bukan GIF. Juga semua gerakan lain yang menyala di katalog (Push Up, Seated Leg Curl, Bicep Curl, Triceps Pushdown, Calf Raise, Goblet Squat, Seated Row, Bench Press / Shoulder Press / Bent Over Row / Romanian Deadlift dumbbell, Dead Bug); Lateral Raise dan Hip Abduction tampak depan. Gerakan pustaka lain tetap GIF. Ketuk nama gerakan di layar latihan untuk melihat figur bergerak. Sudut gerak dan sumbernya: `docs/program/Gerak.md`.
 
 ## Di HP: pasang dari Chrome, tarik untuk muat ulang, tombol back
 

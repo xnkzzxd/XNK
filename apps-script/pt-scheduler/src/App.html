@@ -2092,8 +2092,21 @@
   };
 
   // Fase K2: satu panggilan untuk semua data susulan (riwayat, PR, perpanjangan, keuangan/omzet, tren paket, hub).
+  // Pustaka statis (gerakan + animasi, peta otot, makanan) disimpan di perangkat sekali setelah layar pertama, supaya cari,
+  // catat, figur gerakan dan peta otot tetap jalan tanpa sinyal (T-1614). Panel coach juga, tanpa pustaka makanan.
+  function warmLibs(portal) {
+    if (ui.libsWarm) return;
+    ui.libsWarm = true;
+    setTimeout(function () {
+      if (navigator.onLine === false) return;
+      exEnsure().catch(function () {});   // juga rigEnsure (animasi gerakan)
+      figEnsure();
+      if (portal && nutOn()) foodEnsure().catch(function () {});
+    }, 4000);
+  }
   // Pengaturan dimuat saat halamannya dibuka.
   function loadAdminExtras() {
+    warmLibs(false);
     const now = new Date();
     const mo = now.getMonth() + 1, yr = now.getFullYear();
     ui.revenue = null; window._trendCache = {};
@@ -2169,7 +2182,7 @@
       window.offlineSync();
       openPendingSlot();
       // Pustaka gerakan & makanan disimpan di perangkat lebih awal, supaya cari & catat tetap jalan tanpa sinyal.
-      if (token && !ui.libsWarm) { ui.libsWarm = true; setTimeout(function () { if (navigator.onLine === false) return; exEnsure().catch(function () {}); if (nutOn()) foodEnsure().catch(function () {}); }, 4000); }
+      if (token) warmLibs(true);
     });
   };
 
@@ -2183,7 +2196,8 @@
   // Salinan "more" masih sama dengan server: versi sama, hari (WIB) sama, belum 6 jam, dan tidak ada tulisan sendiri sejak itu.
   function moreUpToDate(b) {
     const m = portalMoreRaw;
-    return !!(m && m.ver && b && b.moreVer && m.ver === b.moreVer && m.day === wkToday() && portalMoreAt && Date.now() - portalMoreAt < MORE_MAX_AGE);
+    // Salinan dari versi aplikasi lama tanpa bagian baru (mis. programGen, 2026-11) selalu disegarkan sekali.
+    return !!(m && m.ver && 'programGen' in m && b && b.moreVer && m.ver === b.moreVer && m.day === wkToday() && portalMoreAt && Date.now() - portalMoreAt < MORE_MAX_AGE);
   }
   // Tulis-terus: hasil simpan langsung masuk salinan di perangkat (buka lagi = langsung tampil, tanpa memuat).
   // Versi dikosongkan supaya ringkasan (insight, minggu ini) dihitung ulang sekali di belakang layar saat buka berikutnya.
@@ -4279,7 +4293,8 @@
   window.clearClientCache = function () { try { localStorage.removeItem(CC_KEY); } catch (e) {} cc.at = {}; cc.inflight = {}; cc.sync = {}; };
   // Paket utuh = semua bagian inti ada dan tanpa error. Salinan yang tidak utuh (mis. dari jawaban null sebelum perbaikan) tidak dipakai dan tidak disimpan.
   function bundleOk(b) {
-    return !!b && typeof b === 'object' && ['tasks', 'progress', 'care', 'program', 'insight'].every(function (k) { return b[k] && !b[k].error; });
+    // Salinan tanpa bagian baru (programGen, share; dari versi aplikasi sebelum 2026-11) dibuang supaya kartu baru langsung muncul.
+    return !!b && typeof b === 'object' && ['tasks', 'progress', 'care', 'program', 'insight'].every(function (k) { return b[k] && !b[k].error; }) && 'programGen' in b && 'share' in b;
   }
   function applyBundle(key, b) {
     const bad = v => !v || v.error;
@@ -4290,10 +4305,11 @@
       renderTaskSection(key);
       window.pgSetAdmin(key, bad(b.progress) ? { error: msg(b.progress), entries: [], photos: [] } : b.progress);
       window.careSet(key, bad(b.care) ? { error: msg(b.care) } : b.care);
+      // programGen dulu: programSetAdmin langsung menggambar tab Latihan, termasuk kartu Program otomatis.
+      pgAdminGen[key] = bad(b.programGen) ? null : b.programGen;
       window.programSetAdmin(key, bad(b.program) ? { error: msg(b.program) } : b.program);
       window.nutSet(key, bad(b.nutrition) ? Object.assign({ error: msg(b.nutrition) }) : Object.assign({}, b.nutrition, { foodLog: bad(b.foodLog) ? null : b.foodLog }));
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
-      pgAdminGen[key] = bad(b.programGen) ? null : b.programGen;
       shareAdmin[key] = bad(b.share) ? null : b.share;
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();
@@ -5871,7 +5887,11 @@
     opts = opts || {};
     const R = rigSync(), P = R && R.pats[pat];
     if (!P) return '';
-    const W = R.w[opts.sex] || R.w.m, L = R.len, f = P.frames, n = f.length, fr = f[n - 1];
+    const front = P.view === 'front', WS = front && R.wf ? R.wf : R.w;
+    const W = WS[opts.sex] || WS.m, L = R.len, f = P.frames, n = f.length, fr = f[opts.frame != null ? opts.frame : n - 1];
+    // Tampak depan (T-1612b) punya ruas kiri/kanan (uaL, thighR, …); ukuran ruas dari nama dasarnya.
+    const order = P.order || ['thigh', 'shin', 'foot', 'torso', 'head', 'ua', 'fa'];
+    const base = function (sg) { return sg.replace(/[LR]$/, ''); };
     const lv = {};
     P.muscles[1].forEach(function (m) { lv[m] = 1; });
     P.muscles[0].forEach(function (m) { lv[m] = 2; });
@@ -5885,7 +5905,7 @@
     if (opts.anim) {
       const kf = function (name, get) { return '@keyframes ' + id + name + '{' + f.map(function (x, i) { return r1(i / (n - 1) * 100) + '%{transform:' + get(x) + '}'; }).join('') + '}' +
         '.' + id + ' .rg' + name + '{animation:' + id + name + ' 1.7s ease-in-out infinite alternate}'; };
-      ['torso', 'thigh', 'shin', 'foot', 'head', 'ua', 'fa'].forEach(function (sg) { style += kf('-' + sg, function (x) { return css(x.s[sg]); }); });
+      order.forEach(function (sg) { style += kf('-' + sg, function (x) { return css(x.s[sg]); }); });
       P.eq.forEach(function (e, k) {
         if (e.cable) style += kf('-e' + k, function (x) { const c = x.c[cabIx[k]]; return 'translate(' + c[0] + 'px,' + c[1] + 'px) rotate(' + c[2] + 'deg) scale(' + c[3] + ',1)'; });
         else if (e.f) style += kf('-e' + k, function (x) { const p = x.p[e.f]; return 'translate(' + p[0] + 'px,' + p[1] + 'px) rotate(' + (e.rot || 0) + 'deg) scale(1,1)'; });
@@ -5893,13 +5913,17 @@
     }
     const cap = function (len, w) { const r = w / 2; return 'M0 ' + (-r) + 'H' + len + 'A' + r + ' ' + r + ' 0 0 1 ' + len + ' ' + r + 'H0A' + r + ' ' + r + ' 0 0 1 0 ' + (-r) + 'Z'; };
     const mus = function (sg) {
-      return R.muscles.filter(function (m) { return m[0] === sg && lv[m[1]]; }).map(function (m) {
-        const wd = W[sg], cy = m[3] * (sg === 'torso' ? 1 : -1) * wd * 0.28;
-        return '<ellipse class="mmf ' + (lv[m[1]] === 2 ? 'on' : 'half') + '" cx="' + r1(m[2] * L[sg]) + '" cy="' + r1(cy) + '" rx="' + m[4] + '" ry="' + Math.min(m[5], r1(wd * 0.42)) + '"/>';
+      const b = base(sg), wd = W[b];
+      // Tampak depan: daftar otot per ruas milik pola (sisi = arah lokal langsung); samping: daftar umum per jenis ruas.
+      const list = front ? (P.fm || []).filter(function (m) { return m[0] === sg && lv[m[1]]; }) : R.muscles.filter(function (m) { return m[0] === b && lv[m[1]]; });
+      return list.map(function (m) {
+        const cy = m[3] * (front ? 1 : (b === 'torso' ? 1 : -1)) * wd * 0.28;
+        return '<ellipse class="mmf ' + (lv[m[1]] === 2 ? 'on' : 'half') + '" cx="' + r1(m[2] * L[b]) + '" cy="' + r1(cy) + '" rx="' + m[4] + '" ry="' + Math.min(m[5], r1(wd * 0.42)) + '"/>';
       }).join('');
     };
     const seg = function (sg) {
-      const body = sg === 'head' ? '<circle class="mmf-body" cx="' + L.head + '" cy="0" r="' + W.head + '"/>' : '<path class="mmf-body" d="' + cap(L[sg], W[sg]) + '"/>' + mus(sg);
+      const b = base(sg);
+      const body = b === 'head' ? '<circle class="mmf-body" cx="' + L.head + '" cy="0" r="' + W.head + '"/>' : '<path class="mmf-body" d="' + cap(L[b], W[b]) + '"/>' + mus(sg);
       return '<g class="rg-' + sg + '" transform="' + tf(fr.s[sg]) + '">' + body + '</g>';
     };
     const eq = P.eq.map(function (e, k) {
@@ -5910,7 +5934,7 @@
       return '<g class="rg-e' + k + '" transform="translate(' + p[0] + ' ' + p[1] + ') rotate(' + (e.rot || 0) + ')">' + shape + '</g>';
     }).join('');
     return '<svg class="mm-fig rig ' + id + (opts.anim ? ' anim' : '') + (opts.cls ? ' ' + opts.cls : '') + '" viewBox="0 0 200 200" role="img" aria-label="' + h(opts.label || P.name) + '" data-pat="' + h(pat) + '">' +
-      (style ? '<style>' + style + '</style>' : '') + eq + seg('thigh') + seg('shin') + seg('foot') + seg('torso') + seg('head') + seg('ua') + seg('fa') + '</svg>';
+      (style ? '<style>' + style + '</style>' : '') + eq + order.map(seg).join('') + '</svg>';
   }
   window.rigSync = rigSync; window.rigEnsure = rigEnsure; window.rigPatOf = rigPatOf; window.rigSvg = rigSvg;
   /** Gambar kecil gerakan: animasi sendiri (diam) bila ada pola, lalu GIF pustaka, lalu ikon. */

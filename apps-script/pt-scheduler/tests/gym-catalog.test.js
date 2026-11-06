@@ -8,16 +8,43 @@ const { seededEnv } = require('./fixtures');
 
 const j = x => JSON.parse(JSON.stringify(x));
 
-test('seed: the owner\'s 8 beginner exercises + cardio are active, proposals for later levels are off', () => {
+test('seed: the owner\'s 8 beginner exercises, cardio and the owner\'s equipment are active; chest/shoulder machines and later levels are off', () => {
   const env = seededEnv();
   const c = j(env.call('getGymCatalog', env.adminToken()));
   const on = c.items.filter(x => x.aktif);
-  assert.deepEqual(on.filter(x => x.pola !== 'kardio').map(x => x.nama).sort(), ['Chest Fly (Machine)', 'Hip Thrust (Machine)', 'Incline Push Up', 'Lat Pulldown (Cable)', 'Leg Extension (Machine)', 'Leg Press (45°)', 'Seated Cable Row', 'Squat (Machine)']);
-  assert.ok(on.every(x => x.level === 'pemula-banget'));
+  assert.deepEqual(on.filter(x => x.level === 'pemula-banget' && x.pola !== 'kardio').map(x => x.nama).sort(), ['Chest Fly (Machine)', 'Hip Thrust (Machine)', 'Incline Push Up', 'Lat Pulldown (Cable)', 'Leg Extension (Machine)', 'Leg Press (45°)', 'Seated Cable Row', 'Squat (Machine)']);
   assert.deepEqual(on.filter(x => x.pola === 'kardio').map(x => x.nama).sort(), ['Stationary Bike', 'Treadmill']);
-  assert.ok(c.items.filter(x => x.level !== 'pemula-banget').every(x => !x.aktif), 'proposed levels wait for the owner');
+  // T-1615: owner's equipment (dumbbells + bench, cables, abductor, row / leg curl / calf machines) and bodyweight lifts
+  assert.deepEqual(on.filter(x => x.level === 'pemula').map(x => x.id).sort(), ['gym:cable-curl', 'gym:calf-raise-machine', 'gym:db-bench-press', 'gym:db-lateral-raise',
+    'gym:db-rdl', 'gym:db-row', 'gym:db-shoulder-press', 'gym:dead-bug', 'gym:goblet-squat', 'gym:hip-abduction', 'gym:push-up', 'gym:seated-leg-curl', 'gym:seated-row-machine', 'gym:triceps-pushdown']);
+  const by = Object.fromEntries(c.items.map(x => [x.id, x]));
+  assert.equal(by['gym:chest-press-machine'].aktif, false, 'no chest press machine in the gym');
+  assert.equal(by['gym:shoulder-press-machine'].aktif, false, 'no shoulder press machine in the gym');
+  assert.ok(c.items.filter(x => x.level === 'menengah').every(x => !x.aktif), 'intermediate lifts wait for the owner');
   j(env.call('getGymCatalog', env.adminToken()));
   assert.equal(env.sheet('GymExercises').rows.length, c.items.length + 1, 'seeding happens once');
+});
+
+test('an older seeded sheet gets the owner\'s equipment once; lifts the owner turns off later stay off', () => {
+  const env = seededEnv();
+  j(env.call('getGymCatalog', env.adminToken()));
+  const sh = env.sheet('GymExercises');
+  // simulate the sheet as seeded before T-1615: proposals off, no shoulder press row, no marker
+  sh.rows = sh.rows.filter(r => r[0] !== 'gym:db-shoulder-press');
+  sh.rows.forEach((r, i) => { if (i && String(r[3]) === 'pemula') r[13] = 'tidak'; });
+  delete env.props.GYM_OWNER_EQUIP_V1;
+  let c = j(env.call('getGymCatalog', env.adminToken()));
+  let by = Object.fromEntries(c.items.map(x => [x.id, x]));
+  assert.equal(by['gym:db-bench-press'].aktif, true);
+  assert.equal(by['gym:db-shoulder-press'].aktif, true, 'missing seed row is added');
+  assert.equal(by['gym:db-shoulder-press'].pola, 'dorong-v');
+  assert.equal(by['gym:chest-press-machine'].aktif, false);
+  assert.equal(sh.rows.filter(r => r[0] === 'gym:db-shoulder-press').length, 1);
+  env.call('setGymExerciseActive', env.adminToken(), 'gym:cable-curl', false);
+  c = j(env.call('getGymCatalog', env.adminToken()));
+  by = Object.fromEntries(c.items.map(x => [x.id, x]));
+  assert.equal(by['gym:cable-curl'].aktif, false, 'the one-time switch-on never runs again');
+  assert.equal(sh.rows.filter(r => r[0] === 'gym:db-shoulder-press').length, 1);
 });
 
 test('seed muscles match docs/program/Otot.md for the gym exercises', () => {
