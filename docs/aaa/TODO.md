@@ -8,7 +8,7 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 
 ## AAA1 — Gerbang backend
 - [x] T-1702 `tests/api-lists.js` (daftar dipindah dari `security.test.js`, diimpor kedua pihak).
-- [ ] T-1703 `tools/build-api.js` → `src/Api.gs`; tes gagal bila basi.
+- [x] T-1703 `tools/build-api.js` → `src/Api.gs`; tes gagal bila basi.
 - [ ] T-1704 Perluas `doPost`: tabel penuh, batas ukuran per fungsi, `API_VERSION`, `_applyPendingConfig_`; `_appApi_` jadi alias.
 - [ ] T-1705 Tes `doPost` (admin tanpa/dengan token member ditolak, `constructor`, OWNER/TRIGGER tidak terekspos, ukuran); perbarui tes lama.
 - [ ] T-1706 Tes kontrak statis: nama di `adminCall/memberCall/publicCall/call/google.script.run` ada di tabel dengan kategori cocok.
