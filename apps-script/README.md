@@ -289,7 +289,7 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 ## Program latihan otomatis (Fase U)
 
 - **Nyala bawaan untuk semua klien.** Matikan untuk semua lewat Script Property `PROGRAM_AUTO_ENABLED` = `false`; per klien lewat tombol di tab Latihan klien (panel) atau tombol "Matikan" milik klien.
-- **Alat gym**: Pengaturan → **Latihan & Alat**. Nyalakan gerakan yang alatnya ada di gym. Bawaan: 8 gerakan pemula banget + Treadmill + Stationary Bike aktif, usulan level pemula/menengah mati. Bisa tambah gerakan sendiri (nama Inggris, otot utama/pendukung).
+- **Alat gym**: Pengaturan → **Latihan & Alat**. Sudah dinyalakan sesuai alat gym (2026-11-06): dumbbell + bangku (Bench Press, Bent Over Row, Romanian Deadlift, Goblet Squat, Lateral Raise, Seated Shoulder Press), kabel (Bicep Curl, Triceps Pushdown), mesin abduktor, Seated Row, Seated Leg Curl, Standing Calf Raise, Push Up, Dead Bug. Chest Press dan Shoulder Press mesin tetap mati. Yang dimatikan lagi di sini tidak akan dinyalakan ulang otomatis. Nyalakan gerakan yang alatnya ada di gym. Bawaan: 8 gerakan pemula banget + Treadmill + Stationary Bike aktif, usulan level pemula/menengah mati. Bisa tambah gerakan sendiri (nama Inggris, otot utama/pendukung).
 - **Klien** mengisi 3 langkah di tab Latihan (level, tujuan + otot fokus, hari + durasi). Program langsung dibuat. Klien yang sudah punya program dari coach hanya **ditawari**; kalau setuju, program coach disimpan di Rutinitas saya.
 - **Program buatan coach tidak pernah ditimpa**, kecuali coach menekan **Buat ulang**.
 - **Form OK**: di layar latihan klien, coach menekan "Tandai form OK" per gerakan. Beban otomatis baru naik setelah itu dan bila klien tidak menjawab "Ragu".

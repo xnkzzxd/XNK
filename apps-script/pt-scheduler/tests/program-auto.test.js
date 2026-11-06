@@ -149,3 +149,15 @@ test('coach hub lists light-mode auto clients and new-program events, first name
   env.props.PROGRAM_AUTO_ENABLED = 'false';
   assert.deepEqual(j(env.call('getCoachHub', env.adminToken())).programAuto, { light: [], events: [] });
 });
+
+test('T-1615: a "pemula" client gets a full program from the owner\'s equipment (dumbbells, cables) with no missing pattern', () => {
+  const { env, mt } = setup();
+  env.call('submitMyHealthForm', mt, HEALTH_OK);
+  env.call('saveMyProgramProfile', mt, Object.assign({}, PROFILE, { level: 'pemula', hari: 3, durasi: 60 }));
+  const g = j(env.call('getProgramGenPreview', env.adminToken(), 'PT-A'));
+  assert.equal(g.light, false);
+  assert.deepEqual(g.gaps.filter(x => x !== 'kardio'), [], 'no equipment gap: ' + JSON.stringify(g.gaps));
+  const names = g.preview.flatMap(d => d.items.map(i => i.gerakan));
+  assert.ok(names.some(n => /Dumbbell|Cable|Push Up|Seated Row \(Machine\)/.test(n)), 'uses the newly switched-on equipment: ' + names.join(', '));
+  assert.ok(!names.some(n => /Chest Press \(Machine\)|Shoulder Press \(Machine\)/.test(n)), 'never machines the gym does not have');
+});
