@@ -25,5 +25,10 @@ Rencana lengkap: [PRD.md](PRD.md). Urutan rilis (keputusan owner): **Rilis 1** n
 - [x] T-1612b Tampak depan (`solveFront`, ruas kiri/kanan, cermin; `rigSvg` menggambar ruas dari `P.order`) untuk Lateral Raise dan Hip Abduction, plus Bench Press, Seated Shoulder Press, Bent Over Row, Romanian Deadlift (dumbbell) dan Dead Bug. 21 pola; semua gerakan katalog yang aktif punya figur kecuali kardio (diuji). Sumber + pilihan gambar di [Gerak.md](Gerak.md).
 - [x] T-1613 Keputusan owner (2026-11-06): **GIF tetap** untuk gerakan pustaka tanpa figur; figur sendiri menggantikan GIF di gerakan yang punya pola. Tidak ada penghapusan hotlink.
 
+## Rilis 4 — rapikan tampilan (2026-11-06, permintaan owner)
+- [x] T-1620 Panel → klien → Latihan: satu kartu **Program** (status, level/tujuan/hari/durasi, hari + gerakan dengan figur, satu tombol utama *Mulai latihan* + *Ubah program*, sisanya di lipatan *Lainnya*: catat yang lewat, ringkasan WA, pantangan, buat ulang, nyala/mati otomatis). Kartu Program kini di atas kartu tafsir (kalender, kekuatan, keseimbangan). Kartu "Program otomatis" terpisah dihapus.
+- [x] T-1621 Portal → Latihan → Program otomatis: kartu hitam *Berikutnya / gerakan / durasi* + **Mulai latihan**, batang minggu 1–4, lipatan *Semua hari* dan *Kenapa program ini?*, wizard 4 langkah (batang progres, layar ringkasan, tombol menempel di bawah).
+- [x] T-1622 Pengaturan → Latihan & Alat: ubin ringkasan, katalog per level sebagai lipatan dengan figur, cari + filter pola, gerakan manual dengan segmen *Perlu dipastikan | Semua* dan tombol *Terima tebakan*.
+
 ## Rencana berikutnya (bukan fase ini)
 - Migrasi frontend ke GitHub Pages: API admin lewat `doPost` (daftar putih, token di body, batas laju). Catatan CORS di PRD §2d.

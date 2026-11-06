@@ -977,8 +977,9 @@ async function contrastReport(page) {
     await page.evaluate(() => window.cpTab('program'));
     await page.waitForTimeout(300);
     check((await page.textContent('#profile-program-wrap')).includes('Belum ada') && (await page.textContent('#profile-program-wrap')).includes('Buat program'), 'client page: the Program tab starts empty with a "Buat program" button');
-    check((await page.textContent('#profile-program-wrap')).includes('Program otomatis'), 'client page: the auto-program card shows on the first render of the Latihan tab (not only after a refresh)');
-    await page.click('#profile-program-wrap .btn-primary');
+    check((await page.textContent('#profile-program-wrap')).includes('Program latihan') && (await page.locator('#profile-program-wrap .prg-card .btn-primary').count()) === 1 && (await page.locator('#profile-program-wrap details.fold:has-text("Lainnya")').count()) === 1, 'client page: one Program card with a single primary button and the rare actions folded into "Lainnya"');
+    check(await page.evaluate(() => { const w = document.getElementById('profile-program-wrap'), c = document.getElementById('cp-ins-latihan'); return !!(w && c && (w.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING)); }), 'client page: the Program card comes before the insight cards on the Latihan tab');
+    await page.click('#profile-program-wrap .prg-card .btn-outline');
     await page.waitForTimeout(600);
     check(await visible(page, '#prg-form') && !(await page.locator('#prg-text').count()), 'program editor: opens as a form (the text box is gone)');
     await page.click('#prg-form button:has-text("Tambah hari")');
@@ -1050,7 +1051,7 @@ async function contrastReport(page) {
     await page.click('#prg-save');
     await page.waitForTimeout(800);
     const prgRows = env.sheet('ProgramItems').rows.filter(r => r[1] === 'PT-A');
-    check((await page.textContent('#profile-program-wrap')).includes('2 hari · 3 gerakan') && prgRows.length === 3, 'program: saved for the client and summarised on the client page');
+    check((await page.textContent('#profile-program-wrap')).includes('Hari A') && (await page.locator('#profile-program-wrap .prg-card .prg-ex').count()) === 3 && prgRows.length === 3, 'program: saved for the client and summarised on the client page');
     check(prgRows[0][16] === 'A' && prgRows[1][16] === 'A' && prgRows[0][14] === 20 && prgRows[0][15] === 60 && prgRows[2][17] === 'badan', 'program: superset, target kg, rest and kind are stored ' + JSON.stringify(prgRows.map(r => r.slice(12, 18))));
     // Mode latihan (Fase M), coach di PC: dua kolom, superset bergantian, simpan dengan rasa.
     await page.click('#profile-program-wrap button:has-text("Mulai latihan")');
@@ -1633,13 +1634,16 @@ async function contrastReport(page) {
     check(alTxt.includes('Lat pulldown') && alTxt.includes('Lats') && alTxt.includes('tebakan'), 'latihan & alat: a manual name shows its guessed muscle');
     await adm.page.selectOption('#exal-list select >> nth=0', 'upper back');
     await adm.page.waitForTimeout(900);
+    check((await adm.page.textContent('#exal-list')).includes('Semua nama sudah dikenali'), 'latihan & alat: a confirmed name leaves the "Perlu dipastikan" view');
+    await adm.page.click('#exal-list button:has-text("Semua (")');
     check(env.sheet('ExerciseAlias').rows.length === 2 && env.sheet('ExerciseAlias').rows[1][4] === 'upper back' && (await adm.page.textContent('#exal-list')).includes('sudah dipastikan'), 'latihan & alat: choosing a muscle saves the alias');
     const gymTxt = await adm.page.textContent('#gym-cat');
-    check(gymTxt.includes('Leg Press (45°)') && gymTxt.includes('Pemula banget · 8 aktif') === false && gymTxt.includes('Pemula banget · 10 aktif') && gymTxt.includes('Menengah · 0 aktif'), 'latihan & alat: the gym list shows the owner\'s beginner set active and later levels off');
+    check(gymTxt.includes('Leg Press (45°)') && /Pemula banget\s*14 aktif/.test(gymTxt) === false && /Pemula banget\s*10 aktif/.test(gymTxt) && /Menengah\s*0 aktif/.test(gymTxt) && (await adm.page.textContent('#gym-sum')).includes('Gerakan aktif'), 'latihan & alat: the gym list shows the owner\'s beginner set active and later levels off');
+    await adm.page.fill('#gym-q', 'Chest Press');
     await adm.page.check('#gym-cat input[aria-label="Alat Chest Press (Machine) ada di gym"]');
     await adm.page.waitForTimeout(800);
     check(env.sheet('GymExercises').rows.some(r => r[0] === 'gym:chest-press-machine' && r[13] === 'ya'), 'latihan & alat: switching an item on saves it');
-    await adm.page.click('#gym-cat button:has-text("Tambah gerakan")');
+    await adm.page.click('#gym-cat .gym-tools button:has-text("Tambah")');
     await adm.page.fill('#gym-n', 'Leg Curl (Machine)');
     await adm.page.check('#gym-cat input[name="gym-ut"][value="hamstrings"]');
     await adm.page.click('#gym-cat button[type="submit"]');
@@ -1834,6 +1838,8 @@ async function contrastReport(page) {
     await page.click('#pg-onb-next');
     await page.click('#pg-profile-body button:has-text("2 hari")');
     await page.click('#pg-profile-body button:has-text("45 mnt")');
+    await page.click('#pg-onb-next');
+    check((await page.textContent('#pg-profile-body')).includes('Cek dulu') && (await page.textContent('#pg-profile-body')).includes('Pemula banget') && (await page.textContent('#pg-profile-body')).includes('45 menit'), 'program otomatis: step 4 shows a summary before the program is built');
     const pgBad = await page.locator('#pg-profile-body button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
     await page.click('#pg-onb-next');
     await page.waitForTimeout(1000);
@@ -1842,7 +1848,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(300);
     await page.click('#btn-confirm-modal-yes');
     await page.waitForTimeout(1200);
-    check((await page.textContent('#pub-autoprog')).includes('Blok 1') && (await page.textContent('#pub-program-wrap')).includes('Full Body A') && (await page.textContent('#pub-program-wrap')).includes('Hari A'), 'program otomatis: accepting builds Full Body days and keeps the coach days as own routines');
+    check((await page.textContent('#pub-autoprog')).includes('blok 1') && (await page.textContent('#pub-program-wrap')).includes('Full Body A') && (await page.textContent('#pub-program-wrap')).includes('Hari A'), 'program otomatis: accepting builds Full Body days and keeps the coach days as own routines');
     await shot(page, 'portal-mobile-autoprog');
     // Animasi gerakan sendiri (T-1611): gerakan gym → pola, figur tergambar di dalam kotak, bergerak hanya dengan transform.
     {
