@@ -67,7 +67,31 @@ const INTER_CSS = "@font-face{font-family:'Inter';font-style:normal;font-weight:
 // RPC_MODE=gas keeps the old google.script.run bridge, the fallback when Apps Script serves the page.
 const RPC_MODE = process.env.RPC_MODE === 'gas' ? 'gas' : 'fetch';
 const EXEC = 'https://script.google.com/macros/s/TEST_DEPLOYMENT/exec';
-console.log('rpc mode: ' + RPC_MODE);
+// PAGES=static serves the pages from the static build (tools/build-static.js: separate hashed css/js files and
+// config.js) instead of rendering the Apps Script templates from src/. Needs the fetch mode (the page reads
+// its server address from config.js, built here with EXEC). The landing's assets live under /landing-assets/
+// because both sites have their own config.js.
+const PAGES = process.env.PAGES === 'static' ? 'static' : 'src';
+if (PAGES === 'static' && RPC_MODE !== 'fetch') { console.error('PAGES=static needs RPC_MODE=fetch'); process.exit(1); }
+const STATIC = PAGES === 'static' ? (() => {
+  const { build } = require('./build-static');
+  const app = build({ site: 'app', exec: EXEC }), landing = build({ site: 'landing', exec: EXEC });
+  const landingHtml = landing['index.html'].replace(/(src|href)="([a-z]+(?:\.[0-9a-f]{10})?\.(?:js|css))"/g, '$1="/landing-assets/$2"');
+  return { app, landing, landingHtml };
+})() : null;
+const ASSET_TYPE = { js: 'application/javascript', css: 'text/css' };
+function staticResponse(pathname) {
+  if (!STATIC) return null;
+  if (pathname === '/Landing') return { contentType: 'text/html', body: STATIC.landingHtml };
+  if (pathname.startsWith('/landing-assets/')) {
+    const f = pathname.slice('/landing-assets/'.length);
+    return STATIC.landing[f] !== undefined ? { contentType: ASSET_TYPE[f.split('.').pop()], body: STATIC.landing[f] } : null;
+  }
+  if (pathname === '/' || pathname === '/Index') return { contentType: 'text/html', body: STATIC.app['index.html'] };
+  const f = pathname.slice(1);
+  return f !== 'index.html' && STATIC.app[f] !== undefined ? { contentType: ASSET_TYPE[f.split('.').pop()], body: STATIC.app[f] } : null;
+}
+console.log('pages: ' + PAGES + ', rpc mode: ' + RPC_MODE);
 
 // Runs in the page before any app script (fetch mode): server address + window.open capture.
 function fetchShim(exec) {
@@ -153,6 +177,8 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
     }
     if (route.request().isNavigationRequest()) navigations.push(url);
     if (url.startsWith(ORIGIN)) {
+      const st = staticResponse(new URL(url).pathname);
+      if (st) return route.fulfill(st);
       const page = new URL(url).pathname.replace('/', '') || 'Index';
       return route.fulfill({ contentType: 'text/html', body: render(page) });
     }

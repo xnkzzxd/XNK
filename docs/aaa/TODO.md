@@ -21,9 +21,9 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 - [x] T-1710 `browser-check.js` dua mode (`fetch` bawaan lewat `doPost` sungguhan, `RPC_MODE=gas` jalan lama; 1135 centang lolos di keduanya, ±9 menit per mode), `demo-runtime.js` lewat `XNK_TRANSPORT`, `checks.yml` menjalankan kedua mode.
 
 ## AAA3 — Build statis dan Pages
-- [ ] T-1711 `tools/build-static.js` + `config.js`.
-- [ ] T-1712 `tests/build-static.test.js`.
-- [ ] T-1713 `pages.yml`; `checks.yml` dan `check-syntax.js` memeriksa hasil build.
+- [x] T-1711 `tools/build-static.js app|landing`: includes jadi berkas berhash (`theme/scripts/app/bagikan` atau `landing`), `config.js` (`exec`, `site`), head meniru yang ditambah `doGet` dan pembungkus lama. Landing tetap memakai judul dan deskripsi sendiri (`Coach Jizdan · XNK Personal Training`) dan tanpa `noindex`, bukan judul `doGet`, karena halaman ini nanti jadi halaman publik sendiri.
+- [x] T-1712 `tests/build-static.test.js` (13 tes) dan mode `PAGES=static` di `browser-check.js` (halaman disajikan dari hasil build; semua centang berjalan terhadap keluaran build).
+- [x] T-1713 `tools/build-site.js` (daftar putih berkas yang diterbitkan Pages hari ini + `next/` dan `next/landing/`, `.nojekyll`; `tests/build-site.test.js` gagal bila ada berkas root baru yang belum diklasifikasi), `.github/workflows/pages.yml` (build tiap push ke `main`; deploy hanya bila variabel `PAGES_ACTIONS=true`, menunggu deploy backend commit yang sama), `checks.yml` (langkah build + `PAGES=static` + `RPC_MODE=gas`), `dist/` di `.gitignore`.
 - [ ] T-1714 👤 Pages XNK: Source = "GitHub Actions".
 - [ ] T-1715 Pratinjau pemilik `xnk.my.id/next/`.
 

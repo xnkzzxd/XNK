@@ -1,0 +1,73 @@
+name: Pages
+
+# Builds the whole xnk.my.id site (tools/build-site.js: today's files + the static app under /next/) and,
+# once the owner has switched Pages to "GitHub Actions" and set the repo variable PAGES_ACTIONS=true,
+# publishes it. Until then the build still runs on every push to main (harmless, and the artifact can be
+# downloaded from the run to check it) and the old branch deploy keeps serving the site.
+# Order: the Apps Script backend (pt-scheduler.yml) is deployed first, then the frontend, because the
+# backend is always compatible with the previous frontend but not the other way round.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build the site
+        env:
+          PT_DEPLOYMENT_ID: ${{ vars.PT_DEPLOYMENT_ID }}
+        run: node apps-script/pt-scheduler/tools/build-site.js
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/site
+
+  deploy:
+    needs: build
+    if: ${{ vars.PAGES_ACTIONS == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Wait for the backend deploy of this commit
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          # Only when this push changed the Apps Script app; a failed backend deploy stops the frontend too.
+          if git diff --name-only HEAD^ HEAD | grep -q '^apps-script/pt-scheduler/'; then
+            id=""
+            for i in $(seq 1 30); do
+              id=$(gh run list --workflow pt-scheduler.yml --commit "$GITHUB_SHA" --json databaseId --jq '.[0].databaseId // empty' || true)
+              [ -n "$id" ] && break
+              sleep 10
+            done
+            if [ -n "$id" ]; then gh run watch "$id" --exit-status; else echo "No backend run found for $GITHUB_SHA; continuing."; fi
+          fi
+      - name: Publish
+        id: deploy
+        uses: actions/deploy-pages@v4

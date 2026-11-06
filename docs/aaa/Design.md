@@ -14,6 +14,9 @@ Frontend membandingkan `v` dengan `XNK_CONFIG.apiMin`; bila tidak cocok tampil "
 ## Build dan deploy
 `tools/build-static.js`: `src/Index.html` / `Landing.html` → `dist/` (include diganti, `<style>`/`<script>` besar dipecah jadi `theme.<hash>.css` / `app.<hash>.js`, `config.js` berisi `exec`, `apiMin`, `site`, berkas statis disalin). Sumber kebenaran tetap `src/*.html`. Workflow `pages.yml`: build → artefak Pages; situs lain didorong oleh repo ini. Setelah `pt-scheduler.yml` (clasp).
 
+## Build statis (T-1711..T-1713)
+`tools/build-static.js app|landing` mengubah `src/Index.html` / `Landing.html`: setiap `<?!= include() ?>` menjadi berkas `<nama>.<hash10>.css|js` (satu blok `<style>`/`<script>` per berkas, urutan dan isi sama), ditambah `config.js` (`window.XNK_CONFIG = {exec, site}`, tanpa hash). Panel dan portal klien satu halaman (`?view=public&k=`), jadi hanya dua build: `app` dan `landing`. `tools/build-site.js` merakit seluruh situs (daftar putih berkas root yang diterbitkan hari ini + `next/` dan `next/landing/`). `pages.yml` membangun tiap push ke `main` dan menerbitkan bila `PAGES_ACTIONS=true` (setelah backend selesai). Landing memakai judul dan deskripsinya sendiri.
+
 ## Adaptor host lokal
 `host-local.js` untuk halaman top-level: safe-area, `kb` dari `visualViewport`, `standalone`/`ios`, share/copy langsung, `theme-color`, HTTPS; memanggil `applyHostInfo(d)`. Offline: `offline.js` dipanggil langsung same-origin; `offline-host.js` mendukung mode tanpa iframe. Perubahan pada empat berkas offline harus kompatibel mundur dengan pembungkus iframe dan disalin ke BookingPT-Client lewat `sync-offline.js` di PR yang sama.
 
