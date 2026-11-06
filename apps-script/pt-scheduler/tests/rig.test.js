@@ -76,7 +76,7 @@ test('T-1612 patterns: joint ranges match Gerak.md and muscles match the catalog
 test('segments stay attached and pinned points stay put', () => {
   const L = data.len;
   const end = (s, len) => [s[0] + len * Math.cos(s[2] * Math.PI / 180), s[1] + len * Math.sin(s[2] * Math.PI / 180)];
-  Object.keys(data.pats).forEach(k => {
+  Object.keys(data.pats).filter(k => data.pats[k].view !== 'front').forEach(k => {
     data.pats[k].frames.forEach((f, i) => {
       const chain = [['torso', 'head', L.torso + 0], ['thigh', 'shin', L.thigh], ['shin', 'foot', L.shin], ['ua', 'fa', L.ua]];
       chain.forEach(([a, b, len]) => {
@@ -99,6 +99,42 @@ test('segments stay attached and pinned points stay put', () => {
   assert.ok(still('push-up', 'wrist') && still('push-up', 'ankle') && still('goblet-squat', 'ankle'), 'floor push up and goblet squat: hands / feet stay put');
   assert.ok(still('seated-leg-curl', 'hip') && still('bicep-curl-cable', 'shoulder') && still('triceps-pushdown', 'elbow'), 'curl / pushdown: the upper arm stays still');
   assert.ok(still('leg-press', 'hip') && still('leg-extension', 'hip') && still('lat-pulldown', 'hip'), 'seated lifts: the hips stay on the seat');
+});
+
+test('T-1612b: front view is a mirror image, and the dumbbell / bodyweight lifts follow Gerak.md', () => {
+  ['lateral-raise', 'hip-abduction-machine'].forEach(k => {
+    const P = data.pats[k];
+    assert.equal(P.view, 'front');
+    P.frames.forEach((f, i) => {
+      ['ua', 'fa', 'thigh', 'shin'].forEach(sg => {
+        assert.ok(Math.abs((180 - f.s[sg + 'R'][2]) - f.s[sg + 'L'][2]) < 0.6, k + ' frame ' + i + ' ' + sg + ' mirrors');
+        assert.ok(Math.abs((200 - f.s[sg + 'R'][0]) - f.s[sg + 'L'][0]) < 0.6, k + ' frame ' + i + ' ' + sg + ' symmetric about the middle');
+      });
+      P.order.forEach(sg => assert.ok(f.s[sg], k + ' has segment ' + sg));
+    });
+  });
+  // Lateral Raise: arm from the side to shoulder height
+  assert.ok(first('lateral-raise').j.shoulderAbd <= 6 && near(last('lateral-raise').j.shoulderAbd, 90, 1));
+  // Hip Abduction: knees apart
+  assert.ok(first('hip-abduction-machine').j.hipAbd <= 8 && near(last('hip-abduction-machine').j.hipAbd, 40, 1));
+  // RDL: hip flexed (trunk forward) → upright, knee constant and slightly bent
+  assert.ok(first('db-rdl').j.hip >= 60 && last('db-rdl').j.hip <= 15 && data.pats['db-rdl'].frames.every(f => near(f.j.knee, 15, 2)));
+  // Bench Press: arm straight over the chest → elbow bent
+  assert.ok(first('db-bench-press').j.elbow <= 6 && last('db-bench-press').j.elbow >= 90);
+  // Shoulder Press: elbow bent → nearly straight overhead
+  assert.ok(first('db-shoulder-press').j.elbow >= 90 && last('db-shoulder-press').j.elbow <= 10);
+  // Bent Over Row: straight arm → elbow bent past the trunk
+  assert.ok(first('db-row').j.elbow <= 6 && last('db-row').j.elbow >= 110);
+  // Dead Bug: table-top → arm overhead and leg long
+  assert.ok(near(first('dead-bug').j.hip, 90, 1) && near(first('dead-bug').j.knee, 90, 1) && last('dead-bug').j.knee <= 2 && last('dead-bug').j.shoulder >= 140);
+  ['0334', '0597', '0289', '0405', '0293', '1459', '0276'].forEach(id => assert.ok(data.ex[id], 'library ' + id + ' has a pattern'));
+});
+
+test('every active lift in the gym catalog has a pattern, except cardio', () => {
+  const seed = fs.readFileSync(path.join(__dirname, '..', 'src', 'LatihanKatalog.gs'), 'utf8');
+  const active = [...seed.matchAll(/\['gym:[^']+', '([^']+)', '([^']*)', '[^']+', '([^']+)',.*, (true|false)\],/g)].filter(m => m[4] === 'true' && m[3] !== 'kardio');
+  assert.ok(active.length >= 22);
+  active.forEach(m => assert.ok(data.ex[m[1].toLowerCase()], 'pattern for ' + m[1]));
 });
 
 test('muscles match Otot.md (MM_BY_EX in App.html)', () => {

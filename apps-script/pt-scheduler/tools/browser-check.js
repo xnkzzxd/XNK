@@ -1852,8 +1852,8 @@ async function contrastReport(page) {
         const out = pats.map(function (p) {
           box.innerHTML = window.rigSvg(p, { anim: true });
           const svg = box.querySelector('svg'), r = svg.getBoundingClientRect(), sc = r.width / 200;
-          const out = Array.from(svg.querySelectorAll('g')).filter(g => /^rg-(torso|thigh|shin|foot|head|ua|fa)$/.test(g.getAttribute('class'))).some(g => { const b = g.getBoundingClientRect(); return b.left < r.left - 2 || b.right > r.right + 2 || b.top < r.top - 2 || b.bottom > r.bottom + 2; });
-          return { p: p, ok: !!svg && !out && svg.querySelectorAll('.mmf.on').length > 0 && /@keyframes/.test(svg.innerHTML), anim: getComputedStyle(svg.querySelector('.rg-shin')).animationName };
+          const out = Array.from(svg.querySelectorAll('g')).filter(g => /^rg-(torso|thigh|shin|foot|head|ua|fa)[LR]?$/.test(g.getAttribute('class'))).some(g => { const b = g.getBoundingClientRect(); return b.left < r.left - 2 || b.right > r.right + 2 || b.top < r.top - 2 || b.bottom > r.bottom + 2; });
+          return { p: p, ok: !!svg && !out && svg.querySelectorAll('.mmf.on').length > 0 && /@keyframes/.test(svg.innerHTML), anim: getComputedStyle(svg.querySelector('[class^="rg-shin"]')).animationName };
         });
         box.remove();
         return { out: out, map: [window.rigPatOf({ exId: '0739' }), window.rigPatOf({ gerakan: 'Squat (Machine)' }), window.rigPatOf({ gerakan: 'Hip Thrust (Machine)' }), window.rigPatOf({ exId: '0025' })] };

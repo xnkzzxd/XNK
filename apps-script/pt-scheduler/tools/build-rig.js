@@ -16,6 +16,13 @@ const WIDTH = {
   m: { torso: 23, thigh: 15, shin: 10.5, foot: 6, ua: 10.5, fa: 8, head: 8.5 },
   f: { torso: 20, thigh: 15.5, shin: 10, foot: 5.5, ua: 9, fa: 7, head: 8 }
 };
+// Tampak depan (T-1612b): lebar badan = lebar bahu; panggul / bahu kiri-kanan dari garis tengah.
+const WIDTH_FRONT = {
+  m: { torso: 34, thigh: 15, shin: 10.5, ua: 10.5, fa: 8, head: 9 },
+  f: { torso: 30, thigh: 16, shin: 10, ua: 9, fa: 7, head: 8.5 }
+};
+const FRONT = { shoulderX: 15, shoulderDown: 6, hipX: 8 };
+const FRONT_ORDER = ['thighL', 'shinL', 'thighR', 'shinR', 'torso', 'head', 'uaL', 'faL', 'uaR', 'faR'];
 // Otot di permukaan ruas: [ruas, otot, posisi sepanjang ruas (0–1), sisi (+1 depan / −1 belakang / 0 tengah), rx, ry].
 // Sisi depan: badan = +y lokal, anggota gerak = −y lokal (lihat side()).
 const MUSCLES = [
@@ -76,6 +83,33 @@ function solve(p) {
     p: { hip: [r1(hip[0]), r1(hip[1])], shoulder: [r1(shoulder[0]), r1(shoulder[1])], knee: [r1(knee[0]), r1(knee[1])], ankle: [r1(ankle[0]), r1(ankle[1])],
       wrist: [r1(wrist[0]), r1(wrist[1])], elbow: [r1(elbow[0]), r1(elbow[1])] }
   };
+}
+
+/**
+ * Tampak depan: figur menghadap penonton, lengan / kaki kanan (R) di sisi kanan gambar. armAbd / legAbd = abduksi bahu /
+ * pinggul (0 = lengan / paha lurus ke bawah). thighSx = pemendekan paha yang mengarah ke penonton (duduk).
+ */
+function solveFront(p) {
+  const r1 = v => Math.round(v * 10) / 10;
+  const seg = (o, a, sx) => sx == null || sx === 1 ? [r1(o[0]), r1(o[1]), r1(a)] : [r1(o[0]), r1(o[1]), r1(a), Math.round(sx * 100) / 100];
+  const pel = p.pelvis, top = [pel[0], pel[1] - LEN.torso];
+  const shY = top[1] + FRONT.shoulderDown;
+  const sh = { L: [pel[0] - FRONT.shoulderX, shY], R: [pel[0] + FRONT.shoulderX, shY] };
+  const hp = { L: [pel[0] - FRONT.hipX, pel[1]], R: [pel[0] + FRONT.hipX, pel[1]] };
+  const out = { s: { torso: seg(pel, -90), head: seg(add(top, -90, LEN.neck - 4), -90) }, j: {}, p: {} };
+  const tsx = p.thighSx == null ? 1 : p.thighSx;
+  ['L', 'R'].forEach(function(side) {
+    const dir = side === 'R' ? -1 : 1;                    // R: sudut berkurang (ke kanan), L: bertambah
+    const ua = 90 + dir * p.armAbd, fa = ua + dir * (p.elbow || 0);
+    const elbow = add(sh[side], ua, LEN.ua), wrist = add(elbow, fa, LEN.fa);
+    const th = 90 + dir * p.legAbd, knee = add(hp[side], th, LEN.thigh * tsx), shin = p.shinDown ? 90 : th, ankle = add(knee, shin, LEN.shin);
+    out.s['ua' + side] = seg(sh[side], ua); out.s['fa' + side] = seg(elbow, fa);
+    out.s['thigh' + side] = seg(hp[side], th, tsx); out.s['shin' + side] = seg(knee, shin);
+    out.p['wrist' + side] = [r1(wrist[0]), r1(wrist[1])]; out.p['knee' + side] = [r1(knee[0]), r1(knee[1])]; out.p['ankle' + side] = [r1(ankle[0]), r1(ankle[1])];
+  });
+  out.j = { shoulderAbd: Math.round(p.armAbd), hipAbd: Math.round(p.legAbd) };
+  out.p.hip = [r1(pel[0]), r1(pel[1])];
+  return out;
 }
 
 /** Jarak pinggul–pergelangan kaki untuk fleksi lutut K (hukum kosinus). */
@@ -235,6 +269,71 @@ const PATTERNS = {
       return { pelvis: hip, trunk: trunk, leg: { ik: ankle, bend: 1, foot: 0 }, arm: { ik: [sh[0] + 12, sh[1] + 16], bend: 1 } };
     },
     eq: [{ d: 'M70 182 H140 V186 H70 Z' }, { f: 'wrist', d: 'M-5 -7 H5 V7 H-5 Z' }]
+  },
+  // T-1612b ── tampak depan + gerakan dumbbell / berat badan (sumber dan pilihan gambar: Gerak.md).
+  // Lateral Raise (Dumbbell): abduksi bahu 0° → 90° (lengan setinggi bahu), siku sedikit tekuk; tampak depan.
+  'lateral-raise': {
+    name: 'Lateral Raise (Dumbbell)', muscles: [['delts'], []], view: 'front',
+    pose: t => ({ pelvis: [100, 104], armAbd: lerp(4, 90, t), elbow: 10, legAbd: 3 }),
+    fm: [['uaL', 'delts', 0.12, 0, 7, 6], ['uaR', 'delts', 0.12, 0, 7, 6]],
+    eq: [{ d: 'M62 192 H138 V196 H62 Z' }, { f: 'wristL', d: 'M-4 -7 H4 V7 H-4 Z' }, { f: 'wristR', d: 'M-4 -7 H4 V7 H-4 Z' }]
+  },
+  // Hip Abduction (Machine): duduk, paha mengarah ke penonton (dipendekkan); abduksi pinggul 0° → 40°; tampak depan.
+  'hip-abduction-machine': {
+    name: 'Hip Abduction (Machine)', muscles: [['abductors'], ['glutes']], view: 'front',
+    pose: t => ({ pelvis: [100, 120], armAbd: 14, elbow: -14, legAbd: lerp(6, 40, t), thighSx: 0.6, shinDown: true }),
+    order: ['torso', 'head', 'uaL', 'faL', 'uaR', 'faR', 'shinL', 'shinR', 'thighL', 'thighR'],   // paha ke arah penonton: di depan badan
+    fm: [['thighL', 'abductors', 0.45, 1, 9, 4], ['thighR', 'abductors', 0.45, -1, 9, 4], ['thighL', 'glutes', 0.05, 1, 5, 4], ['thighR', 'glutes', 0.05, -1, 5, 4]],
+    eq: [{ d: 'M70 126 H130 V134 H70 Z' }, { d: 'M96 134 V186 M80 186 H120' }, { f: 'kneeL', d: 'M-9 -6 H-3 V8 H-9 Z' }, { f: 'kneeR', d: 'M3 -6 H9 V8 H3 Z' }]
+  },
+  // Bench Press (Dumbbell): telentang di bangku; lengan lurus di atas dada → dumbbell turun ke samping dada (siku ±90°).
+  'db-bench-press': {
+    name: 'Bench Press (Dumbbell)', muscles: [['pectorals'], ['delts', 'triceps']],
+    pose: t => {
+      const hip = [112, 128], trunk = 180, sh = add(hip, trunk, LEN.torso);
+      const top = add(sh, -90, armReach(4)), low = [sh[0] + 2, sh[1] - 14];
+      return { pelvis: hip, trunk: trunk, leg: { ik: [150, 176], bend: -1, foot: 0 }, arm: { ik: [lerp(top[0], low[0], t), lerp(top[1], low[1], t)], bend: -1 }, neck: 0 };
+    },
+    eq: [{ d: 'M40 134 H130 V142 H40 Z' }, { d: 'M52 142 V186 M118 142 V186' }, { f: 'wrist', d: 'M-8 -3 H8 V3 H-8 Z' }]
+  },
+  // Seated Shoulder Press (Dumbbell): duduk tegak; dumbbell dari setinggi telinga ke atas kepala (siku hampir lurus).
+  'db-shoulder-press': {
+    name: 'Seated Shoulder Press (Dumbbell)', muscles: [['delts'], ['triceps']],
+    pose: t => {
+      const hip = [84, 132], trunk = -90, sh = add(hip, trunk, LEN.torso);
+      const low = [sh[0] + 4, sh[1] - 12], top = add(sh, -88, armReach(6));
+      return { pelvis: hip, trunk: trunk, leg: { F: 90, K: 90 }, arm: { ik: [lerp(low[0], top[0], t), lerp(low[1], top[1], t)], bend: 1 } };
+    },
+    eq: [{ d: 'M58 140 H108 V148 H58 Z' }, { d: 'M60 66 L68 64 L76 136 L68 138 Z' }, { d: 'M84 148 V184 M68 184 H100' }, { f: 'wrist', d: 'M-8 -3 H8 V3 H-8 Z' }]
+  },
+  // Bent Over Row (Dumbbell): badan condong ke depan, lutut sedikit tekuk; dumbbell dari lengan lurus ke samping pinggang.
+  'db-row': {
+    name: 'Bent Over Row (Dumbbell)', muscles: [['upper back'], ['lats', 'biceps']],
+    pose: t => {
+      const ankle = [96, 176], shinUp = -80, knee = add(ankle, shinUp, LEN.shin);
+      const hip = add(knee, (shinUp + 180) - 20 + 180, LEN.thigh), trunk = -22, sh = add(hip, trunk, LEN.torso);
+      const low = [sh[0], sh[1] + armReach(4)], high = [sh[0] - 10, sh[1] + 18];
+      return { pelvis: hip, trunk: trunk, leg: { ik: ankle, bend: 1, foot: 0 }, arm: { ik: [lerp(low[0], high[0], t), lerp(low[1], high[1], t)], bend: -1 } };
+    },
+    eq: [{ d: 'M66 182 H136 V186 H66 Z' }, { f: 'wrist', d: 'M-8 -3 H8 V3 H-8 Z' }]
+  },
+  // Romanian Deadlift (Dumbbell): lutut tetap sedikit tekuk, pinggul fleksi (badan condong) → berdiri tegak; lengan lurus.
+  'db-rdl': {
+    name: 'Romanian Deadlift (Dumbbell)', muscles: [['hamstrings'], ['glutes', 'spine']],
+    pose: t => {
+      const ankle = [100, 176], shinUp = -84, knee = add(ankle, shinUp, LEN.shin);
+      const hip = add(knee, (shinUp + 180) - 15 + 180, LEN.thigh), trunk = lerp(-20, -88, t);
+      const sh = add(hip, trunk, LEN.torso);
+      return { pelvis: hip, trunk: trunk, leg: { ik: ankle, bend: 1, foot: 0 }, arm: { ik: [sh[0] + 2, sh[1] + armReach(3)], bend: 1 } };
+    },
+    eq: [{ d: 'M70 182 H140 V186 H70 Z' }, { f: 'wrist', d: 'M-8 -3 H8 V3 H-8 Z' }]
+  },
+  // Dead Bug: telentang di lantai; dari posisi meja (pinggul & lutut 90°, lengan ke atas) → lengan ke atas kepala dan kaki
+  // lurus mendekati lantai (satu sisi; sisi lain bergantian).
+  'dead-bug': {
+    name: 'Dead Bug', muscles: [['abs'], []],
+    pose: t => ({ pelvis: [108, 170], trunk: 180, leg: { F: lerp(90, 25, t), K: lerp(90, 0, t) }, arm: { S: lerp(90, 150, t), E: 0 }, neck: 0 }),
+    eq: [{ d: 'M14 180 H190 V184 H14 Z' }]
   }
 };
 
@@ -247,7 +346,11 @@ const EX = {
   '0662': 'push-up', '0599': 'seated-leg-curl', '0868': 'bicep-curl-cable', '0201': 'triceps-pushdown', '0605': 'calf-raise-machine', '1760': 'goblet-squat',
   '1350': 'seated-cable-row', 'push up': 'push-up', 'seated leg curl (machine)': 'seated-leg-curl', 'bicep curl (cable)': 'bicep-curl-cable',
   'triceps pushdown (cable)': 'triceps-pushdown', 'standing calf raise (machine)': 'calf-raise-machine', 'goblet squat (dumbbell)': 'goblet-squat',
-  'seated row (machine)': 'seated-cable-row'
+  'seated row (machine)': 'seated-cable-row',
+  // T-1612b
+  '0334': 'lateral-raise', '0597': 'hip-abduction-machine', '0289': 'db-bench-press', '0405': 'db-shoulder-press', '0293': 'db-row', '1459': 'db-rdl', '0276': 'dead-bug',
+  'lateral raise (dumbbell)': 'lateral-raise', 'hip abduction (machine)': 'hip-abduction-machine', 'bench press (dumbbell)': 'db-bench-press',
+  'seated shoulder press (dumbbell)': 'db-shoulder-press', 'bent over row (dumbbell)': 'db-row', 'romanian deadlift (dumbbell)': 'db-rdl', 'dead bug': 'dead-bug'
 };
 
 function build() {
@@ -255,7 +358,8 @@ function build() {
   Object.keys(PATTERNS).forEach(function(k) {
     const P = PATTERNS[k];
     const frames = [];
-    for (let i = 0; i < FRAMES; i++) frames.push(solve(P.pose(ease(i / (FRAMES - 1)))));
+    const solver = P.view === 'front' ? solveFront : solve;
+    for (let i = 0; i < FRAMES; i++) frames.push(solver(P.pose(ease(i / (FRAMES - 1)))));
     // Sudut ruas dibuat bersambung antar frame (tidak lompat 179 → −179) supaya animasi CSS tidak berputar balik.
     Object.keys(frames[0].s).forEach(function(sg) {
       for (let i = 1; i < frames.length; i++) {
@@ -273,8 +377,9 @@ function build() {
       if (c.length) fr.c = c;
     });
     pats[k] = { name: P.name, muscles: P.muscles, eq: P.eq, frames: frames };
+    if (P.view === 'front') { pats[k].view = 'front'; pats[k].order = P.order || FRONT_ORDER; pats[k].fm = P.fm; }
   });
-  return { v: 1, len: LEN, w: WIDTH, muscles: MUSCLES, pats: pats, ex: EX, frames: FRAMES };
+  return { v: 1, len: LEN, w: WIDTH, wf: WIDTH_FRONT, muscles: MUSCLES, pats: pats, ex: EX, frames: FRAMES };
 }
 
 if (require.main === module) {
@@ -285,8 +390,9 @@ if (require.main === module) {
   console.log('wrote ' + path.relative(process.cwd(), OUT) + ' (' + raw.length + ' B, ' + zlib.gzipSync(raw).length + ' B gzip)');
   Object.keys(data.pats).forEach(function(k) {
     const f = data.pats[k].frames, a = f[0].j, b = f[f.length - 1].j;
+    if (data.pats[k].view === 'front') { console.log(k.padEnd(20) + ' front: shoulderAbd ' + a.shoulderAbd + '→' + b.shoulderAbd + ' hipAbd ' + a.hipAbd + '→' + b.hipAbd); return; }
     console.log(k.padEnd(20) + ' knee ' + a.knee + '→' + b.knee + ' hip ' + a.hip + '→' + b.hip + ' elbow ' + a.elbow + '→' + b.elbow + ' shoulder ' + a.shoulder + '→' + b.shoulder);
   });
 }
 
-module.exports = { build, solve, ik, LEN, PATTERNS, EX, legReach, armReach };
+module.exports = { build, solve, solveFront, ik, LEN, PATTERNS, EX, legReach, armReach };
