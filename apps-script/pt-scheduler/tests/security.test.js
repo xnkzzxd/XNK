@@ -6,41 +6,7 @@ const { seededEnv, KEY_A, KEY_B, ADMIN_PIN, inDays, wibSlot } = require('./fixtu
 // Every top-level function without a trailing "_" can be called from any
 // browser through google.script.run. Each one must be classified here, so a
 // new server function added without a guard makes this test fail.
-const PUBLIC = [
-  'doGet', 'doPost', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
-  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap',
-  'sanitizeValue', 'escapeHtmlTelegram',
-];
-const ADMIN = [
-  'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras', 'getAdminMore', 'getClientBundle', 'getClientNutrition', 'saveClientNutrition', 'decideNutritionAdvice', 'getClientFoodLog',
-  'getMembers', 'getMemberTransactionLog', 'getSchedules',
-  'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto',
-  'saveCoach', 'previewCoachProfile', 'getClientCare', 'saveClientNotes', 'getWorkoutLog', 'saveWorkoutLog', 'getWorkoutSummaryMessage', 'snoozeCare', 'saveAssessment', 'saveFitnessTests', 'deleteFitnessTest', 'getTestResultMessage', 'markHealthReviewed', 'getSessionBriefing', 'getContentAdmin', 'saveContent', 'deleteContent', 'getMemberProgram', 'saveMemberProgram', 'getManualExercises', 'saveExerciseAlias', 'getGymCatalog', 'saveGymExercise', 'setGymExerciseActive', 'getProgramGenPreview', 'regenerateProgram', 'setClientProgramAuto', 'setFormOk', 'getProgramTemplates', 'saveProgramTemplate', 'deleteProgramTemplate', 'applyProgramTemplate', 'setTemplateExplore', 'saveSessionNote', 'getSessionNote', 'getCoachHub', 'saveCoachTargets', 'getCoachAvailability', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',
-  'addMember', 'updateMemberProfile', 'deleteMember',
-  'addSchedule', 'addRecurringSchedule', 'deleteRecurringGroup', 'updateScheduleData', 'updateScheduleCoach',
-  'markSchedulesAsRead', 'completeSession', 'deleteSchedule',
-  'getPeakHourData', 'getCoachMonthlyStats', 'getPackageTrendStats', 'getRevenueSummary',
-  'getAppSettings', 'updateAppSettings', 'sendTelegramTest',
-  'addTask', 'updateTask', 'deleteTask', 'deleteTaskGroup', 'getTasksForMember', 'getTaskSummary',
-  'getTaskTemplates', 'saveTaskTemplate', 'deleteTaskTemplate', 'setMemberMealReminder', 'sendReminderTest',
-  'getReminderStatus', 'installReminderTrigger', 'getReminderLog',
-  'previewReminderText', 'setMemberReminderPrefs',
-  'getRenewalRequests', 'decideRenewal',
-  'getMemberProgress', 'saveMemberMeasurement', 'deleteMemberMeasurement', 'getMemberProgressPhoto', 'getMemberShareData',
-  'getPriceListAdmin', 'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'getClassGroups',
-  'syncFinanceTransactions', 'getBills', 'getBillDetail', 'saveBillAdjust', 'savePayment', 'saveExpense', 'getExpenses', 'getFinanceCategories', 'saveFinanceCategory', 'deleteFinanceCategory', 'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'getFinanceOverview', 'uploadFinanceProof', 'getFinanceProof', 'exportFinanceCsv',
-];
-const MEMBER = [
-  'getMemberProfile', 'getMemberSessions', 'clientBookSchedule', 'clientBookRecurring',
-  'clientRescheduleSchedule', 'uploadMemberPhoto', 'updateMemberPhoto',
-  'getMyTasks', 'completeMyTask', 'getMyMealToday',
-  'getMyCoach', 'getPortalMore', 'getMyNutrition', 'saveMyNutritionProfile', 'getMyShopping', 'swapMyMenuItem', 'logMyFood', 'deleteMyFood', 'getMyFoodLog', 'copyMyFoodYesterday', 'getMyContent', 'getMyProgram', 'logMyProgramDay', 'getMyProgramProfile', 'saveMyProgramProfile', 'acceptAutoProgram', 'setMyProgramAuto', 'swapMyProgramExercise', 'saveMyRoutine', 'deleteMyRoutine', 'copyRoutineToMine', 'getMyWorkout', 'logMyWorkout', 'rateSession', 'getMyPackageEval', 'submitMyPackageEval', 'getMyHealthForm', 'submitMyHealthForm', 'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'requestRenewal', 'getMyRenewal', 'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'getMyProgressPhoto', 'deleteMyProgressPhoto', 'getMyShareData', 'createClassGroup', 'joinClassGroup', 'leaveClassGroup', 'getMyClassGroup', 'getMyBills', 'markGuideSeen',
-];
-const OWNER = [
-  'testDriveAccess', 'migrateSplitMembersData', 'pertahankanWABaruMemberData', 'pertahankanWABaru',
-  'setupDailyTrigger', 'setupWeeklyReportTrigger', 'testNotif', 'setupReminderTrigger', 'repairDateCells',
-];
-const TRIGGER = ['sendDailyReminderEmail', 'sendWeeklyReportEmail', 'runReminderTick'];
+const { PUBLIC, ADMIN, MEMBER, OWNER, TRIGGER } = require('./api-lists');
 
 const AUTH = /AUTH_REQUIRED/;
 

@@ -7,7 +7,7 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 - [x] T-1701 **Gerbang go/no-go: lolos (2026-11-06, Chrome pemilik, 12 panggilan berurutan).** CORS dan redirect `xnk.my.id` → `script.google.com` → `script.googleusercontent.com` jalan (status 200, jawaban JSON terbaca). `google.script.run.getPriceList()` median **3608 ms** (dingin 3183, min 2799, p90 3862). `fetch` ke `doPost` untuk `getPriceList` median **2156 ms** (dingin 2354, min 1767, p90 2592), tetapi panggilan itu **ditolak** oleh daftar putih lama, jadi tanpa kerja server; batas ±30 % = 4690 ms. Muat halaman Landing lewat GAS sekarang 7811 ms sampai tampil. `getPortalBootstrap` anonim lewat `fetch`: median 6415 ms, 130,62 KB. **Belum adil sepenuhnya:** ukur ulang fungsi yang sama dua arah (sukses) di T-1705 setelah `getPriceList` ada di daftar putih, lalu tulis angkanya di sini.
 
 ## AAA1 — Gerbang backend
-- [ ] T-1702 `tests/api-lists.js` (daftar dipindah dari `security.test.js`, diimpor kedua pihak).
+- [x] T-1702 `tests/api-lists.js` (daftar dipindah dari `security.test.js`, diimpor kedua pihak).
 - [ ] T-1703 `tools/build-api.js` → `src/Api.gs`; tes gagal bila basi.
 - [ ] T-1704 Perluas `doPost`: tabel penuh, batas ukuran per fungsi, `API_VERSION`, `_applyPendingConfig_`; `_appApi_` jadi alias.
 - [ ] T-1705 Tes `doPost` (admin tanpa/dengan token member ditolak, `constructor`, OWNER/TRIGGER tidak terekspos, ukuran); perbarui tes lama.
