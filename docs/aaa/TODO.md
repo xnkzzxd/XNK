@@ -12,7 +12,7 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 - [x] T-1704 Perluas `doPost`: tabel penuh, batas ukuran per fungsi, `API_VERSION`, `_applyPendingConfig_`; `_appApi_` jadi alias.
 - [x] T-1705 Tes `doPost` (semua fungsi admin/member menolak token buruk dan token member lewat `doPost`, `constructor`/OWNER/TRIGGER/helper tidak terekspos, putaran login admin, `v` di balasan, batas ukuran per fungsi); tes lama diperbarui (554 lolos).
 - [ ] T-1705b Setelah AAA1 di-merge dan ter-deploy: ukur ulang `getPriceList` dua arah (`fetch` vs `google.script.run`, keduanya sukses, 12 panggilan, Chrome pemilik) dan tulis angkanya di T-1701. 👤
-- [ ] T-1706 Tes kontrak statis: nama di `adminCall/memberCall/publicCall/call/google.script.run` ada di tabel dengan kategori cocok.
+- [x] T-1706 Tes kontrak statis: nama di `adminCall/memberCall/publicCall/call/google.script.run` ada di tabel dengan kategori cocok.
 
 ## AAA2 — Lapisan rpc
 - [ ] T-1707 `rpc` di `Scripts.html` (transport, error, timeout, retry aman).
