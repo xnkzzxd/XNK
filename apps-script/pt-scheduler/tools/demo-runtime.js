@@ -2,10 +2,47 @@
 // real server code (src/*.gs) in place of __GS__. One page, two views: /demo/ is the
 // coach panel, /demo/?klien the client portal (the pill at the top switches).
 // The Google services are faked in memory (a browser port of tests/harness.js) and
-// google.script.run calls the server functions directly, so the demo needs no
-// Google account and never touches the real data. Everything resets on reload.
+// the app's server calls (rpc → XNK_TRANSPORT) reach the server functions directly, so
+// the demo needs no Google account and never touches the real data. Everything resets on reload.
 (function () {
   'use strict';
+
+  // The demo shares its origin (xnk.my.id) with the real app. Its device state (tokens, cached
+  // client data, unsent workout queue …) therefore lives in memory only: the real localStorage is
+  // never read, written or wiped, and the demo never sees a real session. Only the theme choice
+  // (xnk_theme) is shared. If the browser won't let us replace localStorage, the demo does not start.
+  (function isolateStorage() {
+    var mem = Object.create(null), real = null;
+    try { real = window.localStorage; } catch (e) {}
+    var shared = function (k) { return k === 'xnk_theme'; };
+    var api = {
+      getItem: function (k) { k = String(k); if (shared(k)) { try { return real.getItem(k); } catch (e) { return null; } } return k in mem ? mem[k] : null; },
+      setItem: function (k, v) { k = String(k); if (shared(k)) { try { real.setItem(k, String(v)); } catch (e) {} return; } mem[k] = String(v); },
+      removeItem: function (k) { k = String(k); if (shared(k)) { try { real.removeItem(k); } catch (e) {} return; } delete mem[k]; },
+      clear: function () { mem = Object.create(null); },
+      key: function (i) { var ks = Object.keys(mem); return i < ks.length ? ks[i] : null; },
+    };
+    var store = new Proxy(api, {
+      get: function (t, p) {
+        if (p === 'length') return Object.keys(mem).length;
+        if (typeof p === 'symbol') return undefined;
+        if (Object.prototype.hasOwnProperty.call(api, p)) return api[p];
+        return p in mem ? mem[p] : undefined;
+      },
+      set: function (t, p, v) { api.setItem(p, v); return true; },
+      deleteProperty: function (t, p) { api.removeItem(p); return true; },
+      has: function (t, p) { return p in mem || Object.prototype.hasOwnProperty.call(api, p); },
+      ownKeys: function () { return Object.keys(mem); },
+      getOwnPropertyDescriptor: function (t, p) { return p in mem ? { value: mem[p], enumerable: true, configurable: true, writable: true } : undefined; },
+    });
+    try {
+      Object.defineProperty(window, 'localStorage', { value: store, configurable: true });
+      if (window.localStorage !== store) throw new Error('not replaced');
+    } catch (e) {
+      document.write('<p style="font:16px sans-serif;padding:24px">Demo tidak bisa dibuka di browser ini tanpa mengganggu data aplikasi yang asli. Buka di Chrome atau Safari biasa.</p>');
+      throw new Error('demo: localStorage could not be isolated');
+    }
+  })();
   var MODE = /[?&](klien|view=public)\b/.test(location.search) ? 'public' : 'admin';
   var DEMO_PIN = '123456';
   var DEMO_KEY = 'd'.repeat(32);    // link key of the demo client (Sari)
@@ -314,11 +351,8 @@
     });
   };
 
-  // Fresh device state each load: drop the app's own copies, then sign in.
-  try {
-    Object.keys(localStorage).forEach(function (k) { if (/^xnk_/.test(k) && k !== 'xnk_theme') localStorage.removeItem(k); });
-    if (MODE === 'admin') localStorage.setItem('xnk_admin_token', token);
-  } catch (e) {}
+  // Fresh device state each load (localStorage is the in-memory copy above), then sign in.
+  if (MODE === 'admin') localStorage.setItem('xnk_admin_token', token);
 
   // Pill at the top: which view this is, and a switch to the other (a reload, so data starts fresh).
   document.addEventListener('DOMContentLoaded', function () {

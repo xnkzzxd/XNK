@@ -24,8 +24,10 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 - [x] T-1711 `tools/build-static.js app|landing`: includes jadi berkas berhash (`theme/scripts/app/bagikan` atau `landing`), `config.js` (`exec`, `site`), head meniru yang ditambah `doGet` dan pembungkus lama. Landing tetap memakai judul dan deskripsi sendiri (`Coach Jizdan · XNK Personal Training`) dan tanpa `noindex`, bukan judul `doGet`, karena halaman ini nanti jadi halaman publik sendiri.
 - [x] T-1712 `tests/build-static.test.js` (13 tes) dan mode `PAGES=static` di `browser-check.js` (halaman disajikan dari hasil build; semua centang berjalan terhadap keluaran build).
 - [x] T-1713 `tools/build-site.js` (daftar putih berkas yang diterbitkan Pages hari ini + `next/` dan `next/landing/`, `.nojekyll`; `tests/build-site.test.js` gagal bila ada berkas root baru yang belum diklasifikasi), `.github/workflows/pages.yml` (build tiap push ke `main`; deploy hanya bila variabel `PAGES_ACTIONS=true`, menunggu deploy backend commit yang sama), `checks.yml` (langkah build + `PAGES=static` + `RPC_MODE=gas`), `dist/` di `.gitignore`.
-- [ ] T-1714 👤 Pages XNK: Source = "GitHub Actions".
-- [ ] T-1715 Pratinjau pemilik `xnk.my.id/next/`.
+- [x] T-1714 Source Pages = GitHub Actions dan variabel `PAGES_ACTIONS=true` (2026-11-06, lewat agen panel Chrome pemilik); run Pages #2 hijau (build 13 dtk, deploy 49 dtk).
+- [x] T-1715 Pratinjau terbit: `/next/` (login panel), `/next/?view=public`, `/next/landing/`, `/app/`, `/demo/`, `foods|exercises|figure` JSON semua terbuka tanpa galat, `/` tetap pembungkus lama. Ukuran muat sebelum vs sesudah belum diukur; ukur di AAA4 saat panel pindah. Temuan: lihat T-1715b.
+
+- [x] T-1715b Temuan dari pratinjau: `/demo/` dan `/next/` satu origin (`xnk.my.id`), dan demo dulu menghapus semua kunci `xnk_*` di localStorage (token admin, `xnk_client_cache`, antrean latihan yang belum terkirim) lalu menulis data contoh; `/next/?view=public` sempat menampilkan data Sari dari salinan perangkat. Perbaikan: `demo-runtime.js` menyimpan state perangkat demo hanya di memori (localStorage diganti Proxy; hanya `xnk_theme` dibagi; bila browser menolak, demo tidak jalan). `tools/demo-check.js` (Playwright, dijalankan di `checks.yml`) membuktikan demo terbuka masuk, tidak menyentuh kunci asli, dan tidak meninggalkan kunci; pada demo lama pengecekan ini gagal 6 kali. Harus beres sebelum AAA4 karena panel akan berbagi origin dengan `/demo/`.
 
 ## AAA4 — Panel (xnk.my.id)
 - [ ] T-1716 `host-local.js` (safe-area, keyboard, share/copy, theme, HTTPS).
