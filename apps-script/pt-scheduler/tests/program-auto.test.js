@@ -119,7 +119,7 @@ test('daily job: generates for profiled clients without a program, never touches
   assert.equal(j(env.call('getMemberProgram', env.adminToken(), 'PT-B')).days[0].hari, 'Coach');
 });
 
-test('doPost whitelist exposes the new member functions only', () => {
+test('doPost reaches the program functions and keeps the admin ones behind the admin token', () => {
   const env = seededEnv();
   const mt = env.memberToken(KEY_A);
   const post = body => JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify(body) } }).content);
@@ -127,7 +127,7 @@ test('doPost whitelist exposes the new member functions only', () => {
   assert.equal(r.ok, true);
   assert.equal(r.data.needsProfile, true);
   assert.equal(post({ fn: 'getMyProgramProfile', args: ['nope'] }).auth, true);
-  ['regenerateProgram', 'setFormOk', 'getProgramGenPreview'].forEach(fn => assert.equal(post({ fn, args: [env.adminToken(), 'PT-A'] }).ok, false, fn));
+  ['regenerateProgram', 'setFormOk', 'getProgramGenPreview'].forEach(fn => assert.equal(post({ fn, args: [mt, 'PT-A'] }).auth, true, fn));   // a member token never reaches them
 });
 
 test('coach hub lists light-mode auto clients and new-program events, first names only, no health answers', () => {

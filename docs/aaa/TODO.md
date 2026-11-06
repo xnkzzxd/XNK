@@ -9,8 +9,9 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 ## AAA1 — Gerbang backend
 - [x] T-1702 `tests/api-lists.js` (daftar dipindah dari `security.test.js`, diimpor kedua pihak).
 - [x] T-1703 `tools/build-api.js` → `src/Api.gs`; tes gagal bila basi.
-- [ ] T-1704 Perluas `doPost`: tabel penuh, batas ukuran per fungsi, `API_VERSION`, `_applyPendingConfig_`; `_appApi_` jadi alias.
-- [ ] T-1705 Tes `doPost` (admin tanpa/dengan token member ditolak, `constructor`, OWNER/TRIGGER tidak terekspos, ukuran); perbarui tes lama.
+- [x] T-1704 Perluas `doPost`: tabel penuh, batas ukuran per fungsi, `API_VERSION`, `_applyPendingConfig_`; `_appApi_` jadi alias.
+- [x] T-1705 Tes `doPost` (semua fungsi admin/member menolak token buruk dan token member lewat `doPost`, `constructor`/OWNER/TRIGGER/helper tidak terekspos, putaran login admin, `v` di balasan, batas ukuran per fungsi); tes lama diperbarui (554 lolos).
+- [ ] T-1705b Setelah AAA1 di-merge dan ter-deploy: ukur ulang `getPriceList` dua arah (`fetch` vs `google.script.run`, keduanya sukses, 12 panggilan, Chrome pemilik) dan tulis angkanya di T-1701. 👤
 - [ ] T-1706 Tes kontrak statis: nama di `adminCall/memberCall/publicCall/call/google.script.run` ada di tabel dengan kategori cocok.
 
 ## AAA2 — Lapisan rpc

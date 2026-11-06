@@ -275,11 +275,13 @@ test('doGet sets the tab icon per site, and the landing draws the real X mark (n
   assert.equal((landing.match(/fill-rule="evenodd" d="M/g) || []).length, 3, 'nav, intro and footer use the X mark');
 });
 
-test('doPost gateway: only whitelisted client functions, member token still required', () => {
+test('doPost gateway: member token still required, unknown and non-API names refused', () => {
   const env = seededEnv();
   const post = body => JSON.parse(env.call('doPost', { postData: { contents: typeof body === 'string' ? body : JSON.stringify(body) } }).content);
   assert.equal(post('not json').ok, false);
-  assert.equal(post({ fn: 'getMembers', args: [env.adminToken()] }).ok, false);   // admin fn not exposed
+  assert.equal(post({ fn: 'getMembers', args: [env.adminToken()] }).ok, true);    // admin fn reachable, with the admin token
+  assert.equal(post({ fn: 'getMembers', args: [env.memberToken(KEY_A)] }).auth, true);
+  assert.equal(post({ fn: 'getMembers', args: [] }).auth, true);
   assert.equal(post({ fn: 'constructor', args: [] }).ok, false);
   const noAuth = post({ fn: 'getPortalMore', args: ['nope'] });
   assert.equal(noAuth.ok, false);
@@ -290,8 +292,58 @@ test('doPost gateway: only whitelisted client functions, member token still requ
   assert.ok(ok.data);
   assert.equal(post({ fn: 'getMyProgressPhoto', args: [env.memberToken(KEY_A), 'PHT-x'] }).error, 'Foto tidak ditemukan.');
   assert.equal(post({ fn: 'deleteMyProgressPhoto', args: ['nope', 'PHT-x'] }).auth, true);
-  assert.equal(post({ fn: 'getPortalMore', args: ['x'.repeat(250000)] }).ok, false);   // only photos may be large
+  assert.equal(post({ fn: 'getPortalMore', args: ['x'.repeat(250000)] }).ok, false);   // only uploads may be large
   assert.equal(post({ fn: 'uploadMyProgressPhoto', args: [env.memberToken(KEY_A), 'x'.repeat(250000), 'image/gif', 'depan'] }).error, 'Foto harus berupa JPG, PNG, atau WEBP.');
   assert.equal(post({ fn: 'getMyShareData', args: ['nope', 'minggu'] }).auth, true);
   assert.equal(post({ fn: 'memberLoginByPhone', args: ['081111111111'] }).data.member.id, 'PT-A');
+});
+
+test('doPost gateway: every admin and member function refuses a bad token with auth:true', () => {
+  const env = seededEnv();
+  const post = body => JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify(body) } }).content);
+  for (const fn of [...ADMIN, ...MEMBER]) {
+    const r = post({ fn, args: ['nope'] });
+    assert.equal(r.ok, false, fn);
+    assert.equal(r.auth, true, fn + ' must answer AUTH_REQUIRED through doPost');
+  }
+  const mt = env.memberToken(KEY_A);
+  for (const fn of ADMIN) assert.equal(post({ fn, args: [mt] }).auth, true, fn + ' must refuse a member token');
+});
+
+test('doPost gateway: owner, trigger, entry points and helpers are not reachable', () => {
+  const env = seededEnv();
+  const post = body => JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify(body) } }).content);
+  const names = [...OWNER, ...TRIGGER, 'doGet', 'doPost', 'include', 'sanitizeValue', 'escapeHtmlTelegram', '_apiTable_', '_appApi_', 'requireAdmin_', 'hasOwnProperty', 'toString', '__proto__'];
+  for (const fn of names) {
+    const r = post({ fn, args: [] });
+    assert.equal(r.ok, false, fn);
+    assert.equal(r.error, 'Permintaan tidak valid.', fn);
+  }
+});
+
+test('doPost gateway: public functions work without a token; admin login round trip; replies carry the API version', () => {
+  const env = seededEnv();
+  const raw = body => JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify(body) } }).content);
+  assert.equal(raw({ fn: 'getPriceListPublic', args: [] }).ok, true);
+  assert.equal(raw({ fn: 'getCoaches', args: [] }).ok, true);
+  const bad = raw({ fn: 'adminLogin', args: ['000000'] });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.v, 1);
+  const good = raw({ fn: 'adminLogin', args: [ADMIN_PIN] });
+  assert.equal(good.ok, true);
+  assert.equal(good.v, 1);
+  assert.equal(raw({ fn: 'checkAdminSession', args: [good.data.token] }).ok, true);
+  assert.equal(raw({ fn: 'nope', args: [] }).v, 1);
+});
+
+test('doPost gateway: size limits per function', () => {
+  const env = seededEnv();
+  const post = body => JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify(body) } }).content);
+  const mt = env.memberToken(KEY_A);
+  const big = 'x'.repeat(1700000);
+  // progress photos stay at 1.6 MB (resized in the browser); other uploads may be larger and reach their own checks
+  assert.equal(post({ fn: 'uploadMyProgressPhoto', args: [mt, big, 'image/jpeg', 'depan'] }).error, 'Permintaan tidak valid.');
+  assert.notEqual(post({ fn: 'uploadMemberPhoto', args: [mt, big, 'a.gif', 'image/gif'] }).error, 'Permintaan tidak valid.');
+  assert.equal(post({ fn: 'getMemberProfile', args: [mt, big] }).error, 'Permintaan tidak valid.');
+  assert.equal(post({ fn: 'uploadMemberPhoto', args: [mt, 'x'.repeat(7300000), 'a.gif', 'image/gif'] }).error, 'Permintaan tidak valid.');
 });

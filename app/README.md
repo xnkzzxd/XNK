@@ -7,7 +7,7 @@ PWA statis, jalan tanpa sinyal. Dilayani GitHub Pages di `xnk.my.id/app/`.
 - Pustaka gerakan dan makanan diambil dari `../exercises` dan `../foods` (di-cache `sw.js`).
 - Kartu bagikan lengkap: `share.html` (dibuat oleh `apps-script/pt-scheduler/tools/build-app-share.js` dari Theme.html + Bagikan.html; jangan diedit; tes `app-share.test.js` menjaganya tetap baru) berjalan di iframe, dengan `share-shim.js` sebagai jembatan. Setelah mengubah Bagikan.html atau Theme.html, jalankan tool itu.
 - Layar: Latihan (program coach, cari gerakan, set, kartu bagikan PNG), Makan (target, menu, cari TKPI, hapus), Ukuran, Foto (foto progres privat, item ditolak, keluar). Data di IndexedDB. Foto hanya online (lewat `uploadMyProgressPhoto`, diperkecil 1280 px).
-- Fungsi baru untuk app ini harus ditambah ke `_appApi_` dan tes `doPost` di `tests/security.test.js`.
+- `doPost` melayani semua fungsi publik, admin dan member (tabel `src/Api.gs`, dibuat dari `tests/api-lists.js` oleh `tools/build-api.js`; Phase AAA). Fungsi baru cukup masuk `api-lists.js` lalu jalankan `build-api.js`; tiap fungsi tetap menjaga dirinya lewat token.
 
 ## APK (Capacitor)
 
