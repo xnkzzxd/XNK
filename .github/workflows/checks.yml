@@ -41,8 +41,10 @@ jobs:
           npx playwright install --with-deps chromium
           echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
 
-      - name: Browser check (phone pass included)
+      - name: Browser check (phone pass included; pages call the server through fetch + doPost)
         run: node apps-script/pt-scheduler/tools/browser-check.js
+      - name: Browser check, Apps Script fallback (google.script.run)
+        run: RPC_MODE=gas node apps-script/pt-scheduler/tools/browser-check.js
       - name: Share card check
         run: node apps-script/pt-scheduler/tools/share-check.js
 

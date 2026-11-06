@@ -15,10 +15,10 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 - [x] T-1706 Tes kontrak statis: nama di `adminCall/memberCall/publicCall/call/google.script.run` ada di tabel dengan kategori cocok.
 
 ## AAA2 — Lapisan rpc
-- [ ] T-1707 `rpc` di `Scripts.html` (transport, error, timeout, retry aman).
-- [ ] T-1708 `tokenRunner`/`call`/`publicCall` dan 3 panggilan langsung di `App.html`.
-- [ ] T-1709 `LandingScript.html`, `isGas` → `hasServer`, parameter URL hanya `URLSearchParams`.
-- [ ] T-1710 `browser-check.js` dua mode (fetch utama, smoke GAS); `demo-runtime.js` lewat `XNK_TRANSPORT`.
+- [x] T-1707 `rpc` di `Scripts.html` (transport, galat, timeout; tanpa coba ulang otomatis, sejajar `google.script.run`; 10 tes di `tests/rpc.test.js`).
+- [x] T-1708 `tokenRunner`/`publicCall` dan 3 panggilan langsung di `App.html` lewat `rpc`.
+- [x] T-1709 `LandingScript.html` lewat `rpc`; `isGas` → `hasServer()`; parameter URL lewat `URLSearchParams` bila tidak ada `google.script.url`.
+- [x] T-1710 `browser-check.js` dua mode (`fetch` bawaan lewat `doPost` sungguhan, `RPC_MODE=gas` jalan lama; 1135 centang lolos di keduanya, ±9 menit per mode), `demo-runtime.js` lewat `XNK_TRANSPORT`, `checks.yml` menjalankan kedua mode.
 
 ## AAA3 — Build statis dan Pages
 - [ ] T-1711 `tools/build-static.js` + `config.js`.
