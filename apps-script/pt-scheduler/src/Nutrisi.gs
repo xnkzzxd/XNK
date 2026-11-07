@@ -418,7 +418,7 @@ function decideNutritionAdvice(token, memberId, adviceId, decision) {
   });
 }
 
-/** Untuk dashboard coach: perbarui saran semua klien (maks sekali per 10 menit) lalu daftar yang menunggu. Nama depan saja. */
+/** Untuk dashboard coach: perbarui saran semua klien (maks sekali per 30 menit) lalu daftar yang menunggu. Nama depan saja. */
 function _nutHubList_() {
   const cache = CacheService.getScriptCache();
   const today = _todayWib_();
@@ -438,7 +438,8 @@ function _nutHubList_() {
         w[id].sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); });
         _nutRefreshAdvice_(id, profile, w[id], today);
       });
-      cache.put('nut:scan', '1', 600);
+      // Fase W: pemindaian ini memakan 3–8 dtk di getAdminMore; saran gizi berubah per minggu, jadi cukup tiap 30 menit (NUT_SCAN_SECONDS, 600–7200).
+      cache.put('nut:scan', '1', Math.max(600, Math.min(7200, Math.floor(_numProp_('NUT_SCAN_SECONDS', 1800)))));
     } catch (err) { Logger.log('Saran gizi dilewati: ' + err); }
   }
   const names = {};
