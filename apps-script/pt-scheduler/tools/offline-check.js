@@ -23,7 +23,8 @@ function serve(dir) {
   return new Promise(resolve => {
     const srv = http.createServer((req, res) => {
       let p = decodeURIComponent(req.url.split('?')[0]);
-      if (p === '/') p = '/index.html';
+      // After the portal cutover (AAA6) the client repo's index.html is the static app; the old wrapper is legacy.html there.
+      if (p === '/' || p === '/index.html') p = fs.existsSync(path.join(dir, 'legacy.html')) ? '/legacy.html' : '/index.html';
       const f = path.join(dir, p);
       if (!f.startsWith(dir) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream' });

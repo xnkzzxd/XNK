@@ -55,12 +55,12 @@ Cutover (T-1722, T-1726, T-1731) dilakukan Claude sendiri sesuai instruksi pemil
 
 ## AAA5 — Landing (xnkbooking.my.id)
 - [x] T-1723 BookingPT ada di sesi (add_repo); build `site=landing`. Temuan: BookingPT `index.html` adalah halaman SEO (dibuat `tools/build.js`) yang memuat landing Apps Script dalam satu iframe; yang diganti hanya `src` iframe itu (teks SEO dan tata letak tetap), ke landing statis same-origin di `/l/`.
-- [~] T-1724 `redirectToBooking`, `IMG_BASE`, cermin harga (`?view=prices`) tetap.
+- [x] T-1724 `redirectToBooking`, `IMG_BASE`, cermin harga (`?view=prices`) tetap.
 - [x] T-1725 Serah-terima landing → portal: landing hanya membuka `BOOKING_URL` (tanpa token); `?k=` dipakai tautan pengingat dan dibaca `startPublicPortal`, tidak berubah. Tidak ada localStorage bersama yang diandalkan.
-- [ ] T-1726 Cutover landing.
+- [x] T-1726 Cutover landing (2026-11-07): BookingPT PR #13 menunjuk iframe ke `/l/` (landing statis hasil tarikan). Dicek hidup dengan Chromium headless: iframe `/l/`, `site=landing`, teks SEO utuh, tanpa galat. Jalan kembali: kembalikan `src` iframe ke alamat Apps Script `/exec?view=Landing` (alamat ada di `tools/sync-prices.js`).
 
 ## AAA6 — Portal (book.xnkbooking.my.id)
-- [~] T-1727 **Tarik, bukan dorong (perubahan desain 2026-11-07, agar tidak perlu secret dari pemilik).** `build-site.js` menerbitkan juga `client/` (`site=client`: tanpa query membuka portal) dan `landing-pub/` (`site=landing`) beserta `manifest.json` (daftar berkas dan hash) di `xnk.my.id`. Repo BookingPT-Client (dan BookingPT) punya workflow sendiri (`schedule` tiap jam + `workflow_dispatch`) yang mengunduh berkas dari `https://xnk.my.id/…` ke `main`-nya bila `manifest.json` berubah, memakai `GITHUB_TOKEN` repo itu sendiri (`contents: write`). Pilihan lama (XNK mendorong ke repo lain dengan secret) tetap bisa dipakai nanti bila pemilik membuat tokennya.
+- [x] T-1727 **Tarik, bukan dorong (perubahan desain 2026-11-07, agar tidak perlu secret dari pemilik).** `build-site.js` menerbitkan juga `client/` (`site=client`: tanpa query membuka portal) dan `landing-pub/` (`site=landing`) beserta `manifest.json` (daftar berkas dan hash) di `xnk.my.id`. Repo BookingPT-Client (dan BookingPT) punya workflow sendiri (`schedule` tiap jam + `workflow_dispatch`) yang mengunduh berkas dari `https://xnk.my.id/…` ke `main`-nya bila `manifest.json` berubah, memakai `GITHUB_TOKEN` repo itu sendiri (`contents: write`). Pilihan lama (XNK mendorong ke repo lain dengan secret) tetap bisa dipakai nanti bila pemilik membuat tokennya.
 - [ ] T-1728 Build `site=client` ke BookingPT-Client; `legacy.html`.
 - [ ] T-1729 `sync-offline.js --check`, `offline-check.js ../BookingPT-Client`.
 - [ ] T-1730 Cek ulang `android/`, `ios/` (UA `XNKAndroid`/`XNKiOS`), `app/`, Capacitor.
