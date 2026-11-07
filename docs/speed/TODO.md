@@ -8,14 +8,16 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. 👤 = perlu pemilik.
 
 ## W0 — Ukur baseline
 - [x] T-1800 `ms` per bagian di `getPortalMore`, `getAdminMore`, `getClientBundle` (`_traceStart_` / `_tp_` / `_traceEnd_` di `Kode.gs`; angka saja, satu baris `console.log`, `SPEED_TRACE=false` mematikan; bawaan nyala, pengecualian sadar dari aturan 5 karena dipakai untuk mengukur). Tes: `tests/speed-trace.test.js`.
-- [ ] T-1801 👤 Setelah di-merge dan ter-deploy: buka portal dan panel di perangkat pemilik, ambil `ms` (tab Network di /next/: respons berisi `ms`; atau Executions di editor Apps Script: baris `speed getPortalMore …`), 5+ panggilan dingin dan hangat per fungsi. Tulis median per bagian di sini. Bagian < ~100 ms tidak disentuh.
+- [~] T-1801 Baseline langsung diukur 2026-11-07 dari pane browser pemilik (panel `/next/`, 57 klien, tanpa cache server). `getPortalMore` belum (butuh kunci klien). Tabel di bawah.
 
-Baseline (diisi T-1801):
-| Fungsi | Total | Bagian terbesar |
-| --- | --- | --- |
-| getPortalMore | ? | ? |
-| getAdminMore | ? | ? |
-| getClientBundle | ? | ? |
+Baseline (T-1801, waktu server dari field `ms`, jam dinding dari browser):
+| Fungsi | Dinding | Server | Bagian terbesar (ms) |
+| --- | --- | --- | --- |
+| getAdminMore (n=6 dinding, 2 dengan ms) | 19,8–33,6 dtk (median ~25) | 19,0–22,2 dtk | hub 8.600–10.000, signals 3.100–3.300, revenue 1.800–1.900, transactionLog 1.300–1.900, renewals 1.200–1.300, packageTrend 600, taskSummary 450–570, memberVers 480–570 |
+| getClientBundle (n=7 dinding, 3 dengan ms) | 13,0–17,5 dtk (median ~14) | 10,3–12,3 dtk | insight 1.600–2.200, nutrition 1.400–2.000, care 1.200–1.400, progress 1.000–1.200, workout 850–1.300, share 600–1.300, program 590–990, foodLog 700–900, programGen 470–740, tasks 400–450 |
+| getPortalMore | belum diukur | — | — |
+
+Temuan: (1) dinding − server ≈ 3 dtk (alihan Apps Script + jaringan), tak bisa dihindari. (2) Setiap bagian bundel ≈ 0,4–2 dtk, kira-kira satu baca sheet; jadi bundel mahal karena jumlah baca sheet, bukan satu fungsi lambat. (3) `getAdminMore` memakai ~20 dtk server dan itu jalan di latar saat panel dibuka; hub (~9 dtk) adalah target pertama. Hub dipecah per bagian (`hub.care`, `hub.nutrition`, …) di commit berikutnya untuk menemukan yang paling mahal.
 
 ## W1 — Cache hasil jadi di server
 - [x] T-1802 Hasil jadi `getPortalMore` (kunci klien + hari WIB + versi) dan `getClientBundle` (TTL 30–300 dtk, bawaan 180; izin pemilik untuk data perawatan) di CacheService, dipecah 30.000 karakter per nilai; `coachStatus` selalu segar (tergantung jam); bundel yang ada bagian `{error}` tidak disimpan; `PAYLOAD_CACHE=false` mematikan, `PAYLOAD_CACHE_SECONDS` (bawaan 300, 30–1800). `getAdminMore` tidak di-cache: tidak ada versi yang menutup semua penulisnya (dikerjakan bersama W2). Tes: `tests/payload-cache.test.js`.
