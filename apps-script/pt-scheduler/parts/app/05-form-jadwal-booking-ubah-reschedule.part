@@ -457,7 +457,50 @@
     return row;
   }
 
+  // Jam kosong menurut data slot di browser (openSlotsByDate / per coach, umur <= 2 menit)? Semua jam yang disentuh sesi harus > 0.
+  function localSlotFree(start, end, coachId) {
+    const at = coachId ? (window.openSlotsAtByCoach[coachId] || 0) : window.openSlotsAt;
+    const map = coachId ? window.openSlotsByCoachMap[coachId] : window.openSlotsByDate;
+    if (!map || !at || Date.now() - at > 120000) return false;
+    const s = Date.parse(start), e = Date.parse(end);
+    if (!(e > s)) return false;
+    for (let t = Math.floor(s / 3600000) * 3600000; t < e; t += 3600000) {
+      const w = new Date(t + 7 * 3600000), day = map[w.toISOString().slice(0, 10)];
+      if (!day || !(Number(day[w.getUTCHours()]) > 0)) return false;
+    }
+    return true;
+  }
+  // Optimistic: sesi langsung masuk Jadwalku; ditolak server = sesi dihapus lagi, lembar dibuka dengan pesan/alternatif jam.
+  function clientBookFast(form, data, member) {
+    const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
+    const tmpId = 'tmp-' + Date.now();
+    window.schedules.push(normalizeSchedules([{ id: tmpId, memberId: member.id, title: member.name, notes: data.notes, status: 'unread', start: data.start, end: data.end, coachId: data.coachId || '', pending: true }])[0]);
+    const d = new Date(data.start);
+    ui.selectedDate = new Date(d); ui.selectedDate.setHours(0, 0, 0, 0);
+    ui.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+    if (data.coachId) ui.bookCoach = '';
+    window.closeModal();
+    window.updateUI();
+    window.showToast('Booking terkirim ke coach!');
+    const drop = function () { window.schedules = window.schedules.filter(x => String(x.id) !== tmpId); };
+    const reopen = function (show) { drop(); window.updateUI(); if (sheetId) { openSheet(sheetId); show(); } };
+    memberCall('clientBookSchedule', data, { soft: true }).then(function (res) {
+      res = res || {};
+      if (res.openSlots) applyOpenSlots(res.openSlots);
+      if (res.openSlotsByCoach) applyOpenSlotsByCoach(res.openSlotsByCoach);
+      if (res.status === 'conflict') { reopen(function () { showConflict(form, res); }); window.showToast('Jam itu baru saja terisi. Pilih jam lain.', 'calendar-x'); return; }
+      drop();
+      const s = addOwnBooking(res, data, member);
+      window.updateUI();
+      if (s && !res.duplicate) offerCalendar([s.id], 'Booking terkirim');
+    }, function (err) {
+      if (window.isAuthError(err)) { drop(); window.updateUI(); return; }
+      reopen(function () { showFormNotice(form, err); });
+    });
+  }
+
   function clientBookSingle(form, btn, data, member) {
+    if (navigator.onLine !== false && localSlotFree(data.start, data.end, data.coachId)) { clientBookFast(form, data, member); return; }
     const label = hourLabel(data.start);
     const doneText = res => res.duplicate ? 'Jam ini sudah jadi jadwalmu.' : 'Booking terkirim ke coach!';
     schRequest(form, btn, 'Memeriksa…', 'Memeriksa jam ' + label + '…',
@@ -484,7 +527,40 @@
       });
   }
 
+  function clientRescheduleFast(form, id, data, notes) {
+    const s = window.schedules.find(x => String(x.id) === String(id));
+    if (!s) return false;
+    const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
+    const old = { start: s.start, end: s.end, notes: s.notes };
+    s.start = data.start; s.end = data.end; s.notes = notes;
+    window.closeModal();
+    window.updateUI();
+    window.showToast('Jadwal dipindah ke ' + whenLabel(data.start) + '.');
+    const back = function (show) {
+      Object.assign(s, old); window.updateUI();
+      if (!sheetId) return;
+      window.isRescheduleMode = true; window.rescheduleScheduleId = id;   // closeModal mengosongkan keduanya
+      openSheet(sheetId); show();
+    };
+    memberCall('clientRescheduleSchedule', id, data.start, data.end, { soft: true }).then(function (res) {
+      res = res || {};
+      if (res.openSlots) applyOpenSlots(res.openSlots);
+      if (res.openSlotsByCoach) applyOpenSlotsByCoach(res.openSlotsByCoach);
+      if (res.status === 'conflict') { back(function () { showConflict(form, res); }); window.showToast('Jam itu baru saja terisi. Pilih jam lain.', 'calendar-x'); return; }
+      s.start = res.newStart || data.start; s.end = res.newEnd || data.end;
+      window.updateUI();
+      offerCalendar([id], 'Jadwal dipindah');
+    }, function (err) {
+      if (window.isAuthError(err)) { Object.assign(s, old); window.updateUI(); return; }
+      back(function () { showFormNotice(form, err); });
+    });
+    return true;
+  }
+
   function clientReschedule(form, btn, id, data, notes) {
+    const own = window.schedules.find(x => String(x.id) === String(id));
+    if (navigator.onLine !== false && localSlotFree(data.start, data.end, own && own.coachId && window.openSlotsByCoachMap[own.coachId] ? String(own.coachId) : '') &&
+        clientRescheduleFast(form, id, data, notes)) return;
     const label = hourLabel(data.start);
     const apply = function (res) {
       const ns = res.newStart || data.start, ne = res.newEnd || data.end;
@@ -560,15 +636,12 @@
 
     if (window.isEditScheduleMode) {
       data.id = window.selectedScheduleDetailId;
-      const done = busy(btn, 'Menyimpan…');
-      adminCall('updateScheduleData', data).then(function () {
-        done();
-        const s = window.schedules.find(x => String(x.id) === String(data.id));
-        if (s) { s.start = data.start; s.end = data.end; s.notes = notes; }
-        window.closeModal();
-        window.updateUI();
-        window.showToast('Jadwal diperbarui.');
-      }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+      const s = window.schedules.find(x => String(x.id) === String(data.id));
+      const old = s ? { start: s.start, end: s.end, notes: s.notes } : null;
+      optimistic({ call: function () { return adminCall('updateScheduleData', data); }, sheet: true, ok: 'Jadwal diperbarui.', label: 'Jadwal',
+        undo: function () { if (s && old) { Object.assign(s, old); window.updateUI(); } window.isEditScheduleMode = true; } });
+      if (s) { s.start = data.start; s.end = data.end; s.notes = notes; }
+      window.updateUI();
       return;
     }
 
@@ -609,23 +682,15 @@
 
     if (isClient) { clientBookSingle(form, btn, data, member); return; }
 
-    const done = busy(btn, 'Menyimpan…');
-    adminCall('addSchedule', data).then(function (res) {
-      done();
-      data.id = res.id;
-      data.title = member.name;
-      data.status = 'read';
-      data.coachId = res.coachId || '';
-      data.coachName = res.coachName || '';
-      window.schedules.push(data);
-      ui.selectedDate = new Date(start); ui.selectedDate.setHours(0, 0, 0, 0);
-      ui.calMonth = new Date(start.getFullYear(), start.getMonth(), 1);
-      window.closeModal();
-      window.updateUI();
-      window.showToast('Booking tersimpan.');
-    }).catch(function (err) {
-      done(); window.showToast('Gagal booking: ' + window.authMessage(err));
-    });
+    // Optimistic: sesi langsung di kalender dengan id sementara; ditolak = dihapus lagi + pop-up, lembar dibuka.
+    const row = Object.assign({}, data, { id: 'tmp-' + Date.now(), title: member.name, status: 'read', coachId: '', coachName: '', pending: true });
+    optimistic({ call: function () { return adminCall('addSchedule', data); }, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
+      then: function (res) { row.id = res.id; row.coachId = res.coachId || ''; row.coachName = res.coachName || ''; delete row.pending; window.updateUI(); },
+      undo: function () { window.schedules = window.schedules.filter(x => x !== row); window.updateUI(); } });
+    window.schedules.push(row);
+    ui.selectedDate = new Date(start); ui.selectedDate.setHours(0, 0, 0, 0);
+    ui.calMonth = new Date(start.getFullYear(), start.getMonth(), 1);
+    window.updateUI();
   };
 
   // ── KLIEN (admin) ──────────────────────────────────────────────────────────
