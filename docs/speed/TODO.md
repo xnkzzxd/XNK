@@ -62,3 +62,30 @@ Ukuran awal (jam dinding dari browser pemilik): login 4,0 dtk; `getPortalBootstr
 - [-] T-1810 Tidak dikerjakan: `Bagikan.html` hanya ~113 KB skrip yang di-parse sekali (puluhan ms); di mode Apps Script berkas ini inline, dan mengeluarkannya mengubah `build-static.js`, `share-check.js`, `build-demo.js` demi untung kecil.
 - [-] T-1811 Tidak dikerjakan: skeleton portal/panel sudah ada (`skel()`); landing menunda animasi karena `defer`. Tanpa ukuran yang menunjukkan masalah.
 - [x] T-1812 Dikerjakan 2026-11-07 setelah AAA: sumber `App.html` (14 bagian) dan `Theme.html` (4 bagian) kini ada di `apps-script/pt-scheduler/parts/` dan digabung byte demi byte oleh `tools/build-parts.js` ke `src/App.html` / `src/Theme.html`. Berkas hasil tetap satu blok, jadi semua alat build, tes dan Apps Script tidak berubah; `tests/parts.test.js` menjaga agar hasil tidak basi. (App.html satu IIFE besar, jadi dipecah di tingkat berkas sumber, bukan di tingkat skrip.)
+
+## W6 — Backend lebih cepat: hitung di latar, simpan ringan, ringkasan per klien (rencana 2026-11-07)
+Latar: tampilan sudah "langsung berhasil" (PR #135, #136), jadi yang tersisa adalah (a) buka pertama setelah cache kedaluwarsa (`getAdminMore` 13–17 dtk, `getClientBundle` ±10 dtk di server) dan (b) lamanya simpan di belakang. Batas Apps Script (±1,2–1,8 dtk per panggilan + ±2–3 dtk alihan/jaringan) tidak berubah; itu hanya hilang di Phase V.
+Urutan: W6a → W6b → W6c. W6c memakai pemicu W6a.
+
+### W6a — Hangatkan cache di latar (poin 1)
+- [x] T-1820 Pemicu baru `runWarmTick` (nama publik tanpa `_`, digolongkan TRIGGER di `tests/api-lists.js`) tiap 15 menit, hanya 05:00–22:00 WIB, dipasang/dilepas dari Pengaturan bersama pemicu pengingat. **Mati bawaan** (`WARM_ENABLED`, aturan 5).
+- [x] T-1821 (`src/Hangat.gs`; admin lewat token sementara di memori server, klien lewat `getClientBundle` + `getPortalMoreImpl_` — pembangun yang sama, tidak perlu dipecah; urutan klien `_warmPick_`) Isi pekerjaan, berhenti saat anggaran waktu habis (`WARM_BUDGET_MS`, bawaan 30.000): (1) `getAdminMore` bulan ini bila kuncinya belum ada di cache; (2) `getClientBundle` dan `getPortalMore` untuk klien dengan sesi hari ini/besok, lalu klien aktif 7 hari terakhir, terbaru dulu, hanya bila versi kliennya berubah sejak dihangatkan. Memakai fungsi isi yang sama (dipecah jadi `…Build_` tanpa token) supaya hasil identik dengan panggilan biasa.
+- [x] T-1822 (`CLIENT_BUNDLE_CACHE_SECONDS` juga 180 → 900, batas 1.800) TTL dinaikkan karena kunci sudah memuat versi: `ADMIN_MORE_CACHE_SECONDS` bawaan 90 → 900, `PAYLOAD_CACHE_SECONDS` 300 → 1800. Bagian yang tergantung jam (hub "hari ini", `coachStatus`) tetap segar: `coachStatus` sudah dihitung ulang tiap hit; hub dicek ulang bila kunci jamnya beda (tambah jam WIB ke kunci `am:`).
+- [~] T-1823 (sebagian: tiap putaran mencatat `{warm:{admin,clients,ms}}` di log; perpanjangan jeda otomatis belum, tunggu angka nyata) Kuota: akun Gmail biasa ±90 menit jalan pemicu per hari. 68 putaran × ≤30 dtk ≈ 34 menit, ditambah pengingat. Catat `ms` tiap putaran di log; bila total harian > 60 menit, perpanjang jeda otomatis.
+- [x] T-1824 (`tests/warm.test.js`; ukur hit nyata setelah pemilik menyalakan) Tes: hasil hangat = hasil panggilan biasa (byte sama tanpa `at`/`ms`), anggaran dihormati, mati bawaan, jam malam dilewati. Ukur sesudahnya: persentase hit `getAdminMore` / `getClientBundle` dari jejak `SPEED_TRACE` (target ≥ 90 %).
+
+### W6b — Simpan yang ringan (poin 3)
+- [ ] T-1825 Ukur dulu: `_traceStart_`/`_traceEnd_` di penulis yang paling sering (`saveMyMeasurement`, `saveMemberMeasurement`, `logMyFood`, `logMyWorkout`, `completeMyTask`, `saveSessionNote`, `completeSession`, `clientBookSchedule`, `updateMemberProfile`). Pisahkan waktu tulis, `flush`, versi, dan hitung jawaban.
+- [ ] T-1826 Penulis yang menghabiskan > 0,5 dtk untuk menyusun jawaban (mis. riwayat progres lengkap setelah simpan ukuran) menerima `opts.lite`: jawab `{ ok, id, ver }` saja. Browser (helper `optimistic`) mengirim `lite` bila layar tidak butuh jawaban penuh, dan menandai salinan perangkat basi supaya ringkasan dihitung sekali di latar (pola `patchPortalMore` sekarang). Tanpa `lite` perilaku lama tetap (aplikasi `app/` dan antrean offline tidak berubah).
+- [ ] T-1827 Kerja yang tidak perlu ditunggu klien dipindah ke belakang jawaban: notifikasi Telegram (rating rendah, paket habis) dan pemindaian lain dicatat ke antrean kecil yang diproses `runWarmTick`. Pengecualian: yang mengubah data yang langsung dibaca lagi.
+- [ ] T-1828 Tes: `lite` dan penuh menulis baris yang sama; versi tetap naik; tes `cache-version` tetap lolos.
+
+### W6c — Ringkasan per klien yang disimpan (poin 4, dulu T-1805)
+- [ ] T-1829 Sheet `MemberStats` (satu baris per klien, kolom ditambah di akhir saja): sisa sesi, sesi terpakai, sesi akan datang, sesi terakhir, streak minggu, berat terakhir + tanggal, latihan terakhir, tanda perhatian (`gap`, `retest`, `no-health`, …), versi klien saat dihitung, `Dihitung Pada`.
+- [ ] T-1830 Kapan dihitung: `_bumpMember_(id)` sudah dipanggil setiap penulis data klien (dijaga `tests/cache-version.test.js`). Di sana klien hanya **ditandai kotor** (daftar di CacheService), tanpa menambah waktu simpan. `runWarmTick` menghitung ulang baris kotor dengan fungsi yang sama yang dipakai sekarang.
+- [ ] T-1831 Pembaca (`_clientSignals_`, `hub.care`, `hub.programAuto`, daftar perhatian) memakai baris `MemberStats` bila versinya sama dengan versi klien sekarang; bila tidak (kotor/kosong), hitung seperti sekarang. Jadi angka tidak pernah salah, paling buruk sama lambatnya dengan hari ini.
+- [ ] T-1832 Tes: hasil dari baris tersimpan = hasil hitung langsung untuk data contoh; baris kotor dilewati; migrasi idempoten di bawah kunci skrip. Ukur `getAdminMore` miss sebelum/sesudah (target: `signals` + `hub` turun dari ±7–10 dtk ke < 3 dtk).
+
+### Pemilik
+- 👤 Nyalakan `WARM_ENABLED` dan pasang pemicu dari Pengaturan setelah W6a di-merge.
+- 👤 Pastikan jenis akun (Gmail biasa atau Workspace) untuk batas kuota pemicu.

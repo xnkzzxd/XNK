@@ -45,7 +45,7 @@ const OWNER = [
   'testDriveAccess', 'migrateSplitMembersData', 'pertahankanWABaruMemberData', 'pertahankanWABaru',
   'setupDailyTrigger', 'setupWeeklyReportTrigger', 'testNotif', 'setupReminderTrigger', 'repairDateCells',
 ];
-const TRIGGER = ['sendDailyReminderEmail', 'sendWeeklyReportEmail', 'runReminderTick'];
+const TRIGGER = ['sendDailyReminderEmail', 'sendWeeklyReportEmail', 'runReminderTick', 'runWarmTick'];
 
 // In PUBLIC for the completeness test, but not real browser API calls.
 const NOT_API = ['doGet', 'doPost', 'include', 'sanitizeValue', 'escapeHtmlTelegram'];
