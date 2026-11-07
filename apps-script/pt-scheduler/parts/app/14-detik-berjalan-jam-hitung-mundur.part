@@ -1,0 +1,770 @@
+  // ── Detik berjalan: jam & hitung mundur ────────────────────────────────────
+  setInterval(function () {
+    const clock = $('live-clock');
+    if (clock) clock.textContent = fmtTime(new Date());
+    document.querySelectorAll('[data-countdown]').forEach(function (n) { n.textContent = timeUntil(new Date(Number(n.getAttribute('data-countdown')))); });
+    document.querySelectorAll('[data-countdown-long]').forEach(function (n) { n.textContent = countdownText(new Date(Number(n.getAttribute('data-countdown-long')))); });
+  }, 1000);
+
+  // ── Keuangan (Fase H): tagihan, pembayaran, pengeluaran, laporan ─────────────
+  const FIN_STATUS_PILL = { 'Lunas': 'pill solid', 'DP': 'pill', 'Belum bayar': 'pill dashed' };
+  const fin = { month: new Date().getMonth() + 1, year: new Date().getFullYear(), tab: 'bills', filter: 'open', ov: null, bills: null, exps: null, arrears: null, cats: null, methods: ['Tunai', 'Transfer bank', 'QRIS / e-wallet'], portal: false, billId: null, payPick: '', payId: null, expId: null, proof: null };
+  const finRp = function (n) { return (n < 0 ? '−' : '') + 'Rp ' + String(Math.abs(Math.round(n || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+  const finNum = function (s) { return parseInt(String(s || '').replace(/\D/g, ''), 10) || 0; };
+  function finOn() { try { return localStorage.getItem('xnk_fin_on') === '1'; } catch (e) { return false; } }
+  function finApplySettings(f) {
+    if (!f) return;
+    let was = finOn();
+    try { localStorage.setItem('xnk_fin_on', f.enabled ? '1' : '0'); } catch (e) {}
+    fin.methods = f.methods && f.methods.length ? f.methods : fin.methods;
+    fin.portal = !!f.portalVisible;
+    if (was !== !!f.enabled && ui.mode === 'admin') buildChrome();
+    finTiles();
+  }
+  function finTiles() { document.querySelectorAll('.fin-tile').forEach(function (t) { t.classList.toggle('hide', !(ui.mode === 'admin' && finOn())); }); }
+  function finErr(err) { window.showToast('Gagal: ' + window.authMessage(err)); }
+  function finMonthLabel() { return MONTHS[fin.month - 1] + ' ' + fin.year; }
+  function finToday() { return ymd(new Date()); }
+
+  window.finGo = function () { if (finOn()) window.navigate('finance'); };
+  window.finMonth = function (d) {
+    let m = fin.month + d, y = fin.year;
+    if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
+    fin.month = m; fin.year = y;
+    finLoad();
+  };
+  window.finTab = function (t) { fin.tab = t; fin.filter = t === 'bills' ? 'open' : 'all'; renderFinance(true); finLoadTab(); };
+  window.finFilter = function (f) { fin.filter = f; finLoadTab(); finRenderList(); };
+
+  function renderFinance(keepData) {
+    const el = $('view-finance');
+    if (!el) return;
+    if (!finOn()) { el.innerHTML = emptyState('wallet', 'Keuangan belum aktif', 'Nyalakan di Pengaturan → Keuangan.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.navigate(\'settings\')">Buka Pengaturan</button>'); paintIcons(); return; }
+    const tabs = [['bills', 'Tagihan'], ['exps', 'Pengeluaran'], ['report', 'Laporan']].map(function (t) {
+      return '<button type="button" class="chip' + (fin.tab === t[0] ? ' active' : '') + '" onclick="window.finTab(\'' + t[0] + '\')">' + t[1] + '</button>';
+    }).join('');
+    el.innerHTML = '<div class="page-head"><div><h1 class="page-title">Keuangan</h1><p class="page-sub">Tagihan, pembayaran, dan pengeluaran</p></div>' +
+      '<div class="btn-row"><button type="button" class="btn btn-secondary btn-sm" onclick="window.finOpenExpense(null)">' + icon('receipt') + 'Pengeluaran</button>' +
+      '<button type="button" class="btn btn-primary btn-sm" onclick="window.finOpenPayment(null)">' + icon('banknote') + 'Pembayaran</button></div></div>' +
+      '<div class="stack" style="gap:var(--gap)"><div class="row-between"><button type="button" class="icon-btn" onclick="window.finMonth(-1)" aria-label="Bulan sebelumnya">' + icon('chevron-left') + '</button>' +
+      '<b id="fin-month">' + h(finMonthLabel()) + '</b><button type="button" class="icon-btn" onclick="window.finMonth(1)" aria-label="Bulan berikutnya">' + icon('chevron-right') + '</button></div>' +
+      '<div id="fin-head"></div><div class="fin-bar"><div class="chips" role="tablist" aria-label="Bagian keuangan">' + tabs + '</div><div id="fin-filters"></div></div><div id="fin-list" class="stack"></div></div>';
+    paintIcons();
+    finRenderHead();
+    finRenderList();
+    if (!keepData) finLoad();
+  }
+  function finLoad() {
+    fin.ov = null; fin.bills = null; fin.exps = null; fin.arrears = null;
+    const mEl = $('fin-month'); if (mEl) mEl.textContent = finMonthLabel();
+    finRenderHead(); finRenderList();
+    adminCall('getFinanceOverview', fin.month, fin.year).then(function (ov) { fin.ov = ov; finRenderHead(); finRenderList(); }).catch(finErr);
+    finLoadTab();
+  }
+  function finLoadTab() {
+    const m = fin.month, y = fin.year;
+    if (fin.tab === 'bills') {
+      const f = fin.filter, q = {};
+      if (f === 'arsip') q.archived = true;
+      else if (f === 'open') q.status = 'open';
+      else { q.month = m; q.year = y; if (f !== 'all') q.status = f; }
+      fin.bills = null; finRenderList();
+      adminCall('getBills', q).then(function (r) { fin.bills = r; finRenderList(); }).catch(finErr);
+    } else if (fin.tab === 'exps') {
+      fin.exps = null; finRenderList();
+      adminCall('getExpenses', { month: m, year: y, archived: fin.filter === 'arsip' }).then(function (r) { fin.exps = r; finRenderList(); }).catch(finErr);
+    } else {
+      fin.exps = null; fin.arrears = null; finRenderList();
+      adminCall('getExpenses', { month: m, year: y }).then(function (r) { fin.exps = r; finRenderList(); }).catch(finErr);
+      adminCall('getBills', { status: 'open' }).then(function (r) { fin.arrears = r; finRenderList(); }).catch(finErr);
+    }
+  }
+  function finRenderHead() {
+    const el = $('fin-head');
+    if (!el) return;
+    const o = fin.ov;
+    const k = function (label, val, note, ic, on) {
+      return '<div class="kpi"' + (on ? ' role="button" tabindex="0" onclick="' + on + '"' : '') + '><div class="row-between"><span class="kpi-label">' + label + '</span><span class="kpi-icon">' + icon(ic) + '</span></div>' +
+        '<span class="kpi-value num">' + (o ? h(finRp(val)) : '<span class="skeleton" style="height:26px;width:70%"></span>') + '</span><span class="kpi-note">' + h(note) + '</span></div>';
+    };
+    let bars = '';
+    if (o) {
+      const max = Math.max(1, Math.max.apply(null, o.series.map(function (s) { return Math.max(s.masuk, s.keluar); })));
+      bars = '<div class="card-flat"><div class="section-head"><h4 class="li-title">6 bulan terakhir</h4><span class="li-sub">masuk vs keluar</span></div><div class="bars" id="fin-bars">' +
+        o.series.map(function (s) {
+          return '<div class="bar-col"><div class="bar-track" style="gap:3px;align-items:flex-end"><div class="bar" data-h="' + Math.max(s.masuk ? 6 : 2, Math.round(s.masuk / max * 100)) + '" data-tip="' + h(finRp(s.masuk)) + '"></div>' +
+            '<div class="bar soft" data-h="' + Math.max(s.keluar ? 6 : 2, Math.round(s.keluar / max * 100)) + '" data-tip="' + h(finRp(s.keluar)) + '"></div></div><span class="bar-lbl">' + MONTHS[s.month - 1].slice(0, 3) + '</span></div>';
+        }).join('') + '</div></div>';
+    }
+    el.innerHTML = '<div class="kpi-grid">' + k('Masuk', o && o.masuk, 'Pembayaran diterima', 'arrow-down-left') + k('Keluar', o && o.keluar, 'Pengeluaran', 'arrow-up-right') +
+      k('Laba', o && o.laba, 'Masuk − keluar', 'trending-up') + k('Tunggakan', o && o.tunggakan, o ? o.openBills + ' tagihan belum lunas' : '', 'clock', 'window.finFilter(\'open\');window.finTab(\'bills\')') + '</div>' + bars;
+    paintIcons();
+    el.querySelectorAll('.bar').forEach(function (b, i) { setTimeout(function () { b.style.height = b.getAttribute('data-h') + '%'; }, 40 + i * 30); });
+  }
+  function finChip(label, val) { return '<button type="button" class="chip' + (fin.filter === val ? ' active' : '') + '" onclick="window.finFilter(\'' + val + '\')">' + label + '</button>'; }
+  function finRenderList() {
+    const el = $('fin-list'), fl = $('fin-filters');
+    if (!el || !fl) return;
+    const skel = '<div class="skeleton" style="height:64px"></div><div class="skeleton" style="height:64px"></div>';
+    if (fin.tab === 'bills') {
+      fl.innerHTML = '<div class="chips">' + finChip('Belum lunas', 'open') + finChip('Semua bulan ini', 'all') + finChip('DP', 'DP') + finChip('Lunas', 'Lunas') + finChip('Arsip', 'arsip') + '</div>';
+      if (!fin.bills) { el.innerHTML = skel; return; }
+      el.innerHTML = fin.bills.length ? '<div class="list">' + fin.bills.map(finBillRow).join('') + '</div>' : emptyState('receipt', fin.filter === 'open' ? 'Tidak ada tunggakan' : 'Belum ada tagihan', 'Tagihan dibuat otomatis saat ada paket baru atau perpanjangan.');
+    } else if (fin.tab === 'exps') {
+      fl.innerHTML = '<div class="chips">' + finChip('Bulan ini', 'all') + finChip('Arsip', 'arsip') + '</div>';
+      if (!fin.exps) { el.innerHTML = skel; return; }
+      el.innerHTML = fin.exps.length ? '<div class="list">' + fin.exps.map(finExpRow).join('') + '</div>' : emptyState('receipt', 'Belum ada pengeluaran', 'Catat sewa tempat, alat, iklan, dan lainnya.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.finOpenExpense(null)">' + icon('plus') + 'Pengeluaran</button>');
+    } else {
+      fl.innerHTML = '';
+      el.innerHTML = finReportHtml();
+    }
+    paintIcons();
+  }
+  // Dua baris: nama + sisa tagihan (besar, kanan), lalu paket · tanggal · status.
+  function finBillRow(b) {
+    const right = b.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();window.finRestore(\'bill\',\'' + h(b.id) + '\')">Pulihkan</button>'
+      : '<b class="num fin-bill-amt">' + h(finRp(b.remaining || 0)) + '</b>';
+    return '<div class="list-item fin-bill" data-key="bill:' + h(b.id) + '" role="button" tabindex="0" onclick="window.finOpenBill(\'' + h(b.id) + '\')">' +
+      '<div class="fin-bill-top"><p class="li-title clamp-2">' + h(b.name || '(Tanpa nama)') + '</p>' + right + '</div>' +
+      '<div class="fin-bill-sub"><span class="li-sub">' + h(b.packageName) + ' · ' + h(b.date) + '</span>' + (b.archived ? '' : '<span class="' + FIN_STATUS_PILL[b.status] + '">' + h(b.status) + '</span>') + '</div></div>';
+  }
+  function finExpRow(e) {
+    return '<div class="list-item" role="button" tabindex="0" onclick="window.finOpenExpense(\'' + h(e.id) + '\')" style="min-height:56px">' +
+      '<div style="min-width:0"><p class="li-title truncate">' + h(e.category) + (e.note ? ' · ' + h(e.note) : '') + '</p><p class="li-sub">' + h(e.date) + ' · ' + h(e.method) + (e.hasProof ? ' · 📎' : '') + '</p></div>' +
+      '<span class="li-trail">' + (e.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();window.finRestore(\'expense\',\'' + h(e.id) + '\')">Pulihkan</button>' : '<b class="num">' + h(finRp(e.amount)) + '</b>') + '</span></div>';
+  }
+  function finReportHtml() {
+    const o = fin.ov;
+    let html = '<div class="card-flat stack"><h4 class="li-title">Bagi hasil coach · ' + h(finMonthLabel()) + '</h4>';
+    if (!o) html += '<div class="skeleton" style="height:40px"></div>';
+    else if (!o.coachShare.length) html += '<p class="li-sub">Belum ada tagihan lunas atau sesi selesai bulan ini.</p>';
+    else html += '<div class="kv">' + o.coachShare.map(function (c) {
+      return '<div><p class="k">' + h(c.name || '(Tanpa coach)') + ' · ' + (c.tipe === 'persen' ? c.nilai + '%' : finRp(c.nilai) + '/sesi' + (c.sesi ? ' × ' + c.sesi : '')) + '</p><p class="v num">' + h(finRp(c.amount)) + '</p></div>';
+    }).join('') + '</div>';
+    html += '</div>';
+    const cats = {};
+    (fin.exps || []).forEach(function (e) { cats[e.category] = (cats[e.category] || 0) + e.amount; });
+    const keys = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; });
+    const total = keys.reduce(function (s, k) { return s + cats[k]; }, 0) || 1;
+    html += '<div class="card-flat stack"><h4 class="li-title">Pengeluaran per kategori</h4>' + (fin.exps ? (keys.length ? keys.map(function (k) {
+      return '<div class="hbar"><span class="li-sub">' + h(k) + '</span><b class="num">' + h(finRp(cats[k])) + '</b><div class="hbar-track"><div style="height:100%;width:' + Math.round(cats[k] / total * 100) + '%;background:var(--fg)"></div></div></div>';
+    }).join('') : '<p class="li-sub">Belum ada pengeluaran bulan ini.</p>') : '<div class="skeleton" style="height:40px"></div>') + '</div>';
+    html += '<div class="card-flat stack"><h4 class="li-title">Daftar tunggakan</h4>' + (fin.arrears ? (fin.arrears.length ? '<div class="list">' + fin.arrears.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).map(function (b) {
+      return '<div class="list-item" role="button" tabindex="0" onclick="window.finOpenBill(\'' + h(b.id) + '\')"><div style="min-width:0"><p class="li-title truncate">' + h(b.name) + '</p><p class="li-sub">' + h(b.packageName) + ' · ' + b.ageDays + ' hari</p></div><span class="li-trail"><b class="num">' + h(finRp(b.remaining)) + '</b></span></div>';
+    }).join('') + '</div>' : '<p class="li-sub">Semua tagihan lunas.</p>') : '<div class="skeleton" style="height:40px"></div>') + '</div>';
+    const first = fin.year + '-' + ('0' + fin.month).slice(-2) + '-01', last = fin.year + '-' + ('0' + fin.month).slice(-2) + '-' + ('0' + new Date(fin.year, fin.month, 0).getDate()).slice(-2);
+    html += '<div class="card-flat stack"><h4 class="li-title">Ekspor CSV</h4><div class="two"><input class="input" type="date" id="fin-exp-from" value="' + first + '" aria-label="Dari"><input class="input" type="date" id="fin-exp-to" value="' + last + '" aria-label="Sampai"></div>' +
+      '<div class="btn-row"><button type="button" class="btn btn-outline btn-sm" onclick="window.finExport(\'pembayaran\',this)">Pembayaran</button><button type="button" class="btn btn-outline btn-sm" onclick="window.finExport(\'pengeluaran\',this)">Pengeluaran</button><button type="button" class="btn btn-outline btn-sm" onclick="window.finExport(\'tagihan\',this)">Tagihan</button></div></div>';
+    return html;
+  }
+  window.finExport = function (kind, btn) {
+    const done = busy(btn, 'Mengekspor…');
+    adminCall('exportFinanceCsv', kind, $('fin-exp-from').value, $('fin-exp-to').value).then(function (r) {
+      done();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([r.csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = r.filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.showToast(r.count + ' baris diekspor.');
+    }).catch(function (err) { done(); finErr(err); });
+  };
+  window.finRestore = function (kind, id) {
+    adminCall('restoreFinanceItem', kind, id).then(function () { window.showToast('Dipulihkan.'); finLoad(); }).catch(finErr);
+  };
+
+  // Detail tagihan
+  window.finOpenBill = function (id) {
+    adminCall('getBillDetail', id).then(function (r) {
+      const b = r.bill;
+      fin.billId = id;
+      const pays = r.payments.map(function (p) {
+        return '<div class="tl-item"><div class="tl-card"><div class="row-between"><b>' + h(finRp(p.amount)) + '</b><span class="li-sub">' + h(p.date) + '</span></div>' +
+          '<p class="li-sub">' + h(p.method) + (p.note ? ' · ' + h(p.note) : '') + (p.hasProof ? ' · 📎' : '') + (p.archived ? ' · diarsipkan' : '') + '</p>' +
+          '<div class="btn-row">' + (p.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.finRestore(\'payment\',\'' + h(p.id) + '\')">Pulihkan</button>' : '<button type="button" class="btn btn-outline btn-sm" onclick="window.finOpenPayment(\'' + h(p.id) + '\')">Ubah</button>') + '</div></div></div>';
+      }).join('');
+      const wa = b.phone ? '<button type="button" class="btn btn-secondary" onclick="window.finBill_wa(\'' + h(id) + '\')">' + icon('message-circle') + 'WA tagih</button>' : '';
+      fin.detail = r;
+      openDetail('bill:' + id, b.name || 'Tagihan',
+        '<button type="button" class="icon-btn" onclick="window.finBillMenu(\'' + h(id) + '\')" aria-label="Menu tagihan">' + icon('more-horizontal') + '</button>',
+        '<div class="stack"><p class="li-sub">' + h(b.packageName) + ' · ' + h(b.date) + '</p>' +
+        '<div class="kv"><div><p class="k">Total</p><p class="v num">' + h(finRp(b.total)) + '</p></div><div><p class="k">Diskon</p><p class="v num">' + h(finRp(b.discount)) + '</p></div>' +
+        '<div><p class="k">Dibayar</p><p class="v num">' + h(finRp(b.paid)) + '</p></div><div><p class="k">Sisa</p><p class="v num">' + h(finRp(b.remaining)) + ' <span class="' + FIN_STATUS_PILL[b.status] + '">' + h(b.status) + '</span></p></div></div>' +
+        (b.note ? '<p class="li-sub">' + h(b.note) + '</p>' : '') +
+        '<div class="group-label"><span>Pembayaran</span></div>' + (pays ? '<div class="timeline">' + pays + '</div>' : '<p class="li-sub">Belum ada pembayaran.</p>') +
+        '<div class="btn-row" style="position:sticky;bottom:0;background:var(--bg);padding:8px 0">' + wa +
+        (b.remaining ? '<button type="button" class="btn btn-outline" onclick="window.finOpenPayment(null,\'' + h(id) + '\',' + b.remaining + ')">Lunasi</button>' : '') +
+        '<button type="button" class="btn btn-primary" onclick="window.finOpenPayment(null,\'' + h(id) + '\')">' + icon('plus') + 'Bayar</button></div></div>');
+    }).catch(finErr);
+  };
+  window.finBill_wa = function (id) {
+    const b = fin.detail && fin.detail.bill;
+    if (!b || !b.phone) return;
+    const first = String(b.name || '').split(' ')[0] || '';
+    const text = 'Hai ' + first + ', sisa pembayaran paket ' + b.packageName + ' Rp' + String(b.remaining).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '. Terima kasih 🙏';
+    window.open('https://wa.me/' + String(b.phone).replace(/\D/g, '') + '?text=' + encodeURIComponent(text), '_blank');
+  };
+  window.finBillMenu = function (id) {
+    const b = fin.detail && fin.detail.bill;
+    if (!b) return;
+    $('fin-bill-title').textContent = b.name || 'Tagihan';
+    $('fin-bill-discount').value = b.discount ? String(b.discount).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+    $('fin-bill-total').value = String(b.total).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    $('fin-bill-reason').value = '';
+    $('fin-bill-note').value = b.note || '';
+    $('fin-bill-err').textContent = '';
+    openSheet('sheet-fin-bill');
+  };
+  window.finBillSave = function (e) {
+    e.preventDefault();
+    const b = fin.detail.bill, btn = $('fin-bill-save'), done = busy(btn, 'Menyimpan…');
+    adminCall('saveBillAdjust', b.id, { diskon: finNum($('fin-bill-discount').value), total: finNum($('fin-bill-total').value), alasan: $('fin-bill-reason').value, catatan: $('fin-bill-note').value }).then(function () {
+      done(); window.closeModal(); window.showToast('Tagihan disimpan.'); window.finOpenBill(b.id); finLoad();
+    }).catch(function (err) { done(); $('fin-bill-err').textContent = window.authMessage(err); });
+  };
+  window.finBillArchive = function () {
+    const id = fin.detail.bill.id;
+    adminCall('archiveFinanceItem', 'bill', id).then(function () { window.closeModal(); window.closeDetail(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+  };
+
+  // Sheet pembayaran / pengeluaran
+  window.finFmt = function (el) { const n = finNum(el.value); el.value = n ? String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''; };
+  function finChips(id, list, sel) {
+    return list.map(function (v) { return '<button type="button" class="chip' + (v === sel ? ' active' : '') + '" data-v="' + h(v) + '" onclick="window.finPick(\'' + id + '\',this)">' + h(v) + '</button>'; }).join('');
+  }
+  window.finPick = function (id, btn) {
+    $(id).querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('active', c === btn); });
+  };
+  function finPicked(id) { const c = $(id).querySelector('.chip.active'); return c ? c.getAttribute('data-v') : ''; }
+  function finCats(type) {
+    return (fin.cats || []).filter(function (c) { return c.type === type && c.active; }).map(function (c) { return c.name; });
+  }
+  function finEnsureCats() {
+    return fin.cats ? Promise.resolve(fin.cats) : adminCall('getFinanceCategories').then(function (c) { fin.cats = c; return c; });
+  }
+  function finShrink(file) {
+    return new Promise(function (resolve, reject) {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        const s = Math.min(1, 1280 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.8).split(',')[1]);
+      };
+      img.onerror = function () { reject(new Error('Foto tidak bisa dibaca.')); };
+      img.src = url;
+    });
+  }
+  window.finProofChange = function (input) {
+    const f = input.files && input.files[0];
+    fin.proof = null;
+    if (!f) { $(input.getAttribute('data-lbl')).textContent = 'Tambah foto bukti'; return; }
+    finShrink(f).then(function (b64) { fin.proof = b64; $(input.getAttribute('data-lbl')).textContent = 'Foto siap diunggah'; }).catch(finErr);
+  };
+  function finUploadProof(kind, id) {
+    if (!fin.proof) return Promise.resolve();
+    const b64 = fin.proof; fin.proof = null;
+    return adminCall('uploadFinanceProof', kind, id, b64, 'image/jpeg');
+  }
+  window.finViewProof = function (kind, id, boxId) {
+    adminCall('getFinanceProof', kind, id).then(function (r) { $(boxId).innerHTML = '<img src="' + r.dataUrl + '" alt="Bukti" style="max-width:100%;border-radius:12px">'; }).catch(finErr);
+  };
+
+  window.finOpenPayment = function (payId, billId, remaining) {
+    Promise.all([finEnsureCats(), (!billId && !payId) ? adminCall('getBills', { status: 'open' }) : Promise.resolve([])]).then(function (res) {
+      fin.payId = payId || null; fin.payPick = billId || '';
+      const edit = payId && fin.detail ? fin.detail.payments.filter(function (p) { return p.id === payId; })[0] : null;
+      const bills = res[1].filter(function (b) { return !b.archived && b.remaining > 0; });
+      const billSel = '<option value="">— Tanpa tagihan (pemasukan lain) —</option>' + bills.map(function (b) { return '<option value="' + h(b.id) + '">' + h(b.name + ' · ' + b.packageName + ' · sisa ' + finRp(b.remaining)) + '</option>'; }).join('') +
+        (billId && !bills.some(function (b) { return b.id === billId; }) ? '<option value="' + h(billId) + '">Tagihan ini</option>' : '');
+      $('fin-pay-title').textContent = edit ? 'Ubah pembayaran' : 'Pembayaran';
+      $('fin-pay-bill').innerHTML = billSel;
+      $('fin-pay-bill').value = billId || (edit ? edit.billId : '');
+      $('fin-pay-bill-wrap').classList.toggle('hide', !!billId || !!edit);
+      $('fin-pay-amount').value = remaining ? String(remaining).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : (edit ? String(edit.amount).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '');
+      $('fin-pay-date').value = edit ? edit.date : finToday();
+      $('fin-pay-note').value = edit ? edit.note : '';
+      $('fin-pay-method').innerHTML = finChips('fin-pay-method', fin.methods, edit ? edit.method : fin.methods[0]);
+      $('fin-pay-cat').innerHTML = finChips('fin-pay-cat', finCats('masuk'), edit ? edit.category : finCats('masuk')[0]);
+      $('fin-pay-cat-wrap').classList.toggle('hide', !!(billId || (edit && edit.billId)));
+      $('fin-pay-proof').value = ''; $('fin-pay-proof-lbl').textContent = edit && edit.hasProof ? 'Ganti foto bukti' : 'Tambah foto bukti'; fin.proof = null;
+      $('fin-pay-view').classList.toggle('hide', !(edit && edit.hasProof));
+      $('fin-pay-view').onclick = function () { window.finViewProof('payment', payId, 'fin-pay-proof-box'); };
+      $('fin-pay-proof-box').innerHTML = '';
+      $('fin-pay-archive').classList.toggle('hide', !edit);
+      $('fin-pay-err').textContent = '';
+      const sel = $('fin-pay-bill');
+      sel.onchange = function () { const b = bills.filter(function (x) { return x.id === sel.value; })[0]; $('fin-pay-cat-wrap').classList.toggle('hide', !!sel.value); if (b) { $('fin-pay-amount').value = String(b.remaining).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); } };
+      openSheet('sheet-fin-payment');
+    }).catch(finErr);
+  };
+  window.finPaySave = function (e) {
+    e.preventDefault();
+    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
+    const billId = fin.payPick || $('fin-pay-bill').value;
+    const p = { id: fin.payId || undefined, billId: billId || undefined, amount: finNum($('fin-pay-amount').value), date: $('fin-pay-date').value, method: finPicked('fin-pay-method'), note: $('fin-pay-note').value, category: finPicked('fin-pay-cat') };
+    adminCall('savePayment', p).then(function (r) { return finUploadProof('payment', r.id); }).then(function () {
+      done(); window.closeModal(); window.showToast('Pembayaran tersimpan.'); finLoad(); if (fin.billId && ui.detail === 'bill:' + fin.billId) window.finOpenBill(fin.billId);
+    }).catch(function (err) { done(); $('fin-pay-err').textContent = window.authMessage(err); });
+  };
+  window.finPayArchive = function () {
+    adminCall('archiveFinanceItem', 'payment', fin.payId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat tagihannya.'); finLoad(); if (fin.billId) window.finOpenBill(fin.billId); }).catch(finErr);
+  };
+
+  window.finOpenExpense = function (id) {
+    finEnsureCats().then(function () {
+      fin.expId = id || null;
+      const edit = id ? (fin.exps || []).filter(function (x) { return x.id === id; })[0] : null;
+      $('fin-exp-title').textContent = edit ? 'Ubah pengeluaran' : 'Pengeluaran';
+      $('fin-exp-amount').value = edit ? String(edit.amount).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+      $('fin-exp-date').value = edit ? edit.date : finToday();
+      $('fin-exp-note').value = edit ? edit.note : '';
+      $('fin-exp-cat').innerHTML = finChips('fin-exp-cat', finCats('keluar'), edit ? edit.category : finCats('keluar')[0]);
+      $('fin-exp-method').innerHTML = finChips('fin-exp-method', fin.methods, edit ? edit.method : fin.methods[0]);
+      $('fin-exp-proof').value = ''; $('fin-exp-proof-lbl').textContent = edit && edit.hasProof ? 'Ganti foto nota' : 'Tambah foto nota'; fin.proof = null;
+      $('fin-exp-view').classList.toggle('hide', !(edit && edit.hasProof));
+      $('fin-exp-view').onclick = function () { window.finViewProof('expense', id, 'fin-exp-proof-box'); };
+      $('fin-exp-proof-box').innerHTML = '';
+      $('fin-exp-archive').classList.toggle('hide', !edit);
+      $('fin-exp-err').textContent = '';
+      openSheet('sheet-fin-expense');
+    }).catch(finErr);
+  };
+  window.finExpSave = function (e) {
+    e.preventDefault();
+    const btn = $('fin-exp-save'), done = busy(btn, 'Menyimpan…');
+    adminCall('saveExpense', { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value })
+      .then(function (r) { return finUploadProof('expense', r.id); }).then(function () { done(); window.closeModal(); window.showToast('Pengeluaran tersimpan.'); finLoad(); })
+      .catch(function (err) { done(); $('fin-exp-err').textContent = window.authMessage(err); });
+  };
+  window.finExpArchive = function () {
+    adminCall('archiveFinanceItem', 'expense', fin.expId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+  };
+  window.finQuick = function (kind) {
+    window.closeModal();
+    setTimeout(function () {
+      if (!finOn()) { window.showToast('Nyalakan Keuangan di Pengaturan dulu.'); return; }
+      if (window.currentView !== 'finance') window.navigate('finance');
+      if (kind === 'payment') window.finOpenPayment(null);
+      else window.finOpenExpense(null);
+    }, 120);
+  };
+
+  // Pengaturan → Keuangan (tombol langsung, tanpa bar simpan)
+  // ── Pengaturan → Latihan & Alat (Fase U, T-1603): otot untuk gerakan yang diketik manual di log ────────────
+  // Server menggabung nama yang persis sama dengan pustaka; sisanya ditebak dari kata kunci. Coach bisa memastikan:
+  // pilih gerakan pustaka yang sama (riwayat digabung) atau cukup otot target. Sheet log tidak diubah.
+  const exAl = { data: null, busy: {}, all: false };
+  const EX_TGT_LBL = { abs: 'Abs', quads: 'Quads', lats: 'Lats', calves: 'Calves', pectorals: 'Chest', glutes: 'Glutes', hamstrings: 'Hamstrings',
+    adductors: 'Adductors', abductors: 'Abductors', triceps: 'Triceps', biceps: 'Biceps', delts: 'Shoulders', forearms: 'Forearms', traps: 'Traps',
+    'upper back': 'Upper Back', spine: 'Lower Back', 'serratus anterior': 'Serratus', 'levator scapulae': 'Neck', 'cardiovascular system': 'Cardio' };
+  function exAliasHtml() {
+    return '<div id="gym-sum" class="mtiles"></div><div class="card-flat stack"><h4 class="li-title">Alat gym</h4><p class="li-sub">Nyalakan gerakan yang alatnya ada di gym. Program otomatis hanya memakai yang menyala.</p><div id="gym-cat" class="stack" style="gap:0"><span class="li-sub">Memuat…</span></div></div>' +
+      '<div class="card-flat stack"><h4 class="li-title">Gerakan manual di log</h4><p class="li-sub">Nama yang diketik sendiri (tanpa pustaka). Nama yang persis sama dengan gerakan pustaka langsung digabung; sisanya ditebak ototnya. Pastikan di sini: pilih gerakan pustaka yang sama, atau ototnya saja. Catatan lama tidak diubah.</p><div id="exal-list" class="stack" style="gap:0"><span class="li-sub">Memuat…</span></div></div>';
+  }
+  // Katalog alat gym (Fase U, T-1602). Nama gerakan dan otot dalam bahasa Inggris (keputusan owner).
+  const GYM_LVL_LBL = { 'pemula-banget': 'Pemula banget', pemula: 'Pemula', menengah: 'Menengah' };
+  const GYM_POLA_LBL = { lutut: 'Knee dominant', pinggul: 'Hip dominant', 'dorong-h': 'Horizontal push', 'dorong-v': 'Vertical push', 'tarik-h': 'Horizontal pull', 'tarik-v': 'Vertical pull', isolasi: 'Isolation', kardio: 'Cardio', keseimbangan: 'Balance' };
+  const gymSt = { data: null, edit: null, busy: false, q: '', pola: '' };
+  function gymLoad() {
+    adminCall('getGymCatalog').then(function (d) { gymSt.data = d; gymRender(); })
+      .catch(function (e) { const el = $('gym-cat'); if (el) el.innerHTML = '<span class="li-sub">' + h(e.message || 'Gagal memuat.') + '</span>'; });
+  }
+  function gymSumRender() {
+    const el = $('gym-sum'), d = gymSt.data;
+    if (!el || !d) return;
+    const on = d.items.filter(function (x) { return x.aktif; }).length;
+    const todo = exAl.data ? exAl.data.items.filter(function (x) { return x.src !== 'pustaka' && x.src !== 'alias'; }).length : null;
+    setHTML(el, mtileHtml('Gerakan aktif', String(on), 'dari ' + d.items.length) + (todo == null ? '' : mtileHtml('Nama manual', String(todo), todo ? 'perlu dipastikan' : 'semua dikenali', !!todo)));
+  }
+  function gymRender() {
+    const el = $('gym-cat'), d = gymSt.data;
+    if (!el || !d) return;
+    gymSumRender();
+    if (gymSt.edit) { el.innerHTML = gymFormHtml(gymSt.edit); paintIcons(); return; }
+    const pol = d.patterns.filter(function (po) { return d.items.some(function (x) { return x.pola === po; }); });
+    el.innerHTML = '<div class="gym-tools"><input class="input" type="search" id="gym-q" placeholder="Cari gerakan" autocomplete="off" enterkeyhint="search" aria-label="Cari gerakan" value="' + h(gymSt.q || '') + '" oninput="window.gymFilter(this.value)">' +
+      '<button type="button" class="btn btn-outline" onclick="window.gymEdit(\'\')">' + icon('plus') + ' Tambah</button></div>' +
+      '<div class="chips" style="flex-wrap:wrap"><button type="button" class="chip' + (gymSt.pola ? '' : ' active') + '" aria-pressed="' + !gymSt.pola + '" onclick="window.gymPola(\'\')">Semua</button>' +
+      pol.map(function (po) { return '<button type="button" class="chip' + (gymSt.pola === po ? ' active' : '') + '" aria-pressed="' + (gymSt.pola === po) + '" onclick="window.gymPola(\'' + h(po) + '\')">' + h(GYM_POLA_LBL[po] || po) + '</button>'; }).join('') + '</div>' +
+      '<div id="gym-list" class="stack" style="gap:8px"></div>';
+    gymListRender();
+  }
+  function gymListRender() {
+    const el = $('gym-list'), d = gymSt.data;
+    if (!el || !d) return;
+    const q = String(gymSt.q || '').trim().toLowerCase(), searching = !!(q || gymSt.pola);
+    const match = function (x) { return (!q || x.nama.toLowerCase().indexOf(q) !== -1) && (!gymSt.pola || x.pola === gymSt.pola); };
+    let firstOpen = true;
+    const html = d.levels.map(function (lv) {
+      const all = d.items.filter(function (x) { return x.level === lv; }), rows = all.filter(match);
+      if (!rows.length) return '';
+      const body = rows.map(function (x) {
+        const mus = x.utama.map(function (m) { return EX_TGT_LBL[m] || m; }).join(', ') + (x.pendukung.length ? ' + ' + x.pendukung.map(function (m) { return EX_TGT_LBL[m] || m; }).join(', ') : '');
+        return '<div class="gym-row"><button type="button" class="list-item interactive grow" style="min-height:52px;text-align:left" onclick="window.gymEdit(\'' + h(x.id) + '\')">' + exThumb({ exId: x.exId, n: x.nama }, 'prg-th', wkInfo(x.exId)) +
+          '<span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(x.nama) + '</b><span class="li-sub truncate" style="display:block">' + h(GYM_POLA_LBL[x.pola] || x.pola) + ' · ' + h(mus) + '</span></span></button>' +
+          '<label class="toggle"><input type="checkbox"' + (x.aktif ? ' checked' : '') + ' aria-label="Alat ' + h(x.nama) + ' ada di gym" onchange="window.gymActive(\'' + h(x.id) + '\',this.checked)"><span></span></label></div>';
+      }).join('');
+      const open = searching || firstOpen; firstOpen = false;
+      return foldHtml(GYM_LVL_LBL[lv], all.filter(function (x) { return x.aktif; }).length + ' aktif', '<div class="stack" style="gap:2px">' + body + '</div>', open);
+    }).join('');
+    setHTML(el, html || '<p class="li-sub">Tidak ada gerakan yang cocok.</p>');
+    paintIcons();
+  }
+  window.gymFilter = function (v) { gymSt.q = v; gymListRender(); };
+  window.gymPola = function (po) { gymSt.pola = po; gymRender(); };
+  function gymFormHtml(x) {
+    const d = gymSt.data;
+    const sel = function (id, list, val, lbl) { return '<select class="select" id="' + id + '">' + list.map(function (v) { return '<option value="' + h(v) + '"' + (v === val ? ' selected' : '') + '>' + h(lbl ? (lbl[v] || v) : v) + '</option>'; }).join('') + '</select>'; };
+    const chips = function (name, list, on, lbl) { return '<div class="chips" style="flex-wrap:wrap">' + list.map(function (v) { return '<label class="chip"><input type="checkbox" name="' + name + '" value="' + h(v) + '"' + (on.indexOf(v) !== -1 ? ' checked' : '') + '> ' + h(lbl ? (lbl[v] || v) : v) + '</label>'; }).join('') + '</div>'; };
+    const tg = d.targets.filter(function (t) { return ['serratus anterior', 'levator scapulae'].indexOf(t) === -1; });
+    return '<form class="stack" style="gap:12px" onsubmit="window.gymSave(event)">' +
+      '<div class="field"><label class="label" for="gym-n">Nama (English)</label><input class="input" id="gym-n" maxlength="80" required value="' + h(x.nama || '') + '" placeholder="mis. Leg Curl (Machine)"></div>' +
+      '<div class="field"><label class="label" for="gym-lv">Level minimal</label>' + sel('gym-lv', d.levels, x.level || 'pemula-banget', GYM_LVL_LBL) + '</div>' +
+      '<div class="field"><label class="label" for="gym-po">Pola</label>' + sel('gym-po', d.patterns, x.pola || 'isolasi', GYM_POLA_LBL) + '</div>' +
+      '<div class="field"><label class="label" for="gym-je">Jenis</label>' + sel('gym-je', ['beban', 'badan', 'waktu', 'jarak'], x.jenis || 'beban', { beban: 'Beban (kg × rep)', badan: 'Berat badan', waktu: 'Waktu', jarak: 'Jarak' }) + '</div>' +
+      '<div class="field"><p class="label">Otot utama</p>' + chips('gym-ut', tg, x.utama || [], EX_TGT_LBL) + '</div>' +
+      '<div class="field"><p class="label">Otot pendukung</p>' + chips('gym-pe', tg, x.pendukung || [], EX_TGT_LBL) + '</div>' +
+      '<div class="row" style="gap:8px"><div class="field grow"><label class="label" for="gym-r1">Rep min</label><input class="input" id="gym-r1" type="text" inputmode="numeric" value="' + h(x.repMin === '' || x.repMin == null ? '' : x.repMin) + '"></div><div class="field grow"><label class="label" for="gym-r2">Rep maks</label><input class="input" id="gym-r2" type="text" inputmode="numeric" value="' + h(x.repMax === '' || x.repMax == null ? '' : x.repMax) + '"></div></div>' +
+      '<div class="field"><p class="label">Hindari bila klien punya</p>' + chips('gym-hi', d.tags, x.hindari || [], { lutut: 'Masalah lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }) + '</div>' +
+      '<div class="field"><label class="label" for="gym-ex">Kode pustaka (opsional, untuk gambar)</label><input class="input" id="gym-ex" maxlength="20" value="' + h(x.exId || '') + '"></div>' +
+      '<p class="li-sub" id="gym-err" role="alert"></p>' +
+      '<div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" onclick="window.gymEditClose()">Batal</button><button type="submit" class="btn btn-primary btn-lg">Simpan</button></div></form>';
+  }
+  window.gymEdit = function (id) {
+    if (!gymSt.data) return;
+    gymSt.edit = id ? Object.assign({}, gymSt.data.items.find(function (x) { return x.id === id; })) : { id: '', aktif: true };
+    gymRender();
+  };
+  window.gymEditClose = function () { gymSt.edit = null; gymRender(); };
+  window.gymSave = function (ev) {
+    if (ev) ev.preventDefault();
+    if (gymSt.busy || !gymSt.edit) return;
+    const picked = function (n) { return Array.prototype.map.call(document.querySelectorAll('#gym-cat input[name="' + n + '"]:checked'), function (i) { return i.value; }); };
+    const it = Object.assign({}, gymSt.edit, { nama: $('gym-n').value, level: $('gym-lv').value, pola: $('gym-po').value, jenis: $('gym-je').value,
+      utama: picked('gym-ut'), pendukung: picked('gym-pe'), hindari: picked('gym-hi'), repMin: $('gym-r1').value.trim(), repMax: $('gym-r2').value.trim(), exId: $('gym-ex').value.trim() });
+    gymSt.busy = true;
+    adminCall('saveGymExercise', it).then(function (d) { gymSt.data = d; gymSt.edit = null; gymSt.q = ''; gymSt.pola = ''; gymRender(); showToast('Tersimpan'); })
+      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = e.message || 'Gagal menyimpan.'; })
+      .then(function () { gymSt.busy = false; });
+  };
+  window.gymActive = function (id, on) {
+    adminCall('setGymExerciseActive', id, on).then(function (d) { gymSt.data = d; gymRender(); })
+      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); gymRender(); });
+  };
+  function exAliasLoad() {
+    exEnsure().catch(function () {}).then(function () { gymLoad(); return adminCall('getManualExercises'); })
+      .then(function (d) { exAl.data = d; exAliasRender(); gymSumRender(); })
+      .catch(function (e) { const el = $('exal-list'); if (el) el.innerHTML = '<span class="li-sub">' + h(e.message || 'Gagal memuat.') + '</span>'; });
+  }
+  function exAliasRender() {
+    const el = $('exal-list');
+    if (!el || !exAl.data) return;
+    const d = exAl.data;
+    if (!d.items.length) { el.innerHTML = '<span class="li-sub">Belum ada gerakan manual di log.</span>'; return; }
+    const todoN = d.items.filter(function (x) { return x.src !== 'pustaka' && x.src !== 'alias'; }).length;
+    const seg = '<div class="seg" style="display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (exAl.all ? '' : 'active') + '" onclick="window.exAliasAll(false)">Perlu dipastikan (' + todoN + ')</button><button type="button" class="' + (exAl.all ? 'active' : '') + '" onclick="window.exAliasAll(true)">Semua (' + d.items.length + ')</button></div>';
+    const SRC = { pustaka: 'sama dengan pustaka', alias: 'sudah dipastikan', tebakan: 'tebakan', '': 'belum dikenali' };
+    el.innerHTML = seg + (!exAl.all && !todoN ? '<p class="li-sub">Semua nama sudah dikenali. Tidak ada yang perlu dipastikan.</p>' : '') + d.items.map(function (it, i) {
+      if (!exAl.all && (it.src === 'pustaka' || it.src === 'alias')) return '';
+      const lib = it.exId ? exNm({ exId: it.exId, gerakan: it.exId }) : '';
+      const now = lib ? '= ' + lib : (it.target ? EX_TGT_LBL[it.target] || it.target : '—');
+      const opts = '<option value="">Otot…</option>' + d.targets.map(function (t) { return '<option value="' + h(t) + '"' + (t === it.target ? ' selected' : '') + '>' + h(EX_TGT_LBL[t] || t) + '</option>'; }).join('');
+      const fixed = it.src === 'pustaka';
+      return '<div class="stack" style="gap:6px;padding:10px 0;border-top:1px solid var(--line)"><div class="row-between" style="gap:8px"><span style="min-width:0"><b class="truncate" style="display:block">' + h(it.nama) + '</b><span class="li-sub">' + it.sets + ' set · ' + it.klien + ' klien · ' + h(now) + ' <span class="pill soft">' + h(SRC[it.src] || '') + '</span></span></span></div>' +
+        (fixed ? '' : '<div class="row" style="gap:6px;flex-wrap:wrap"><select class="select" style="flex:1;min-width:140px" aria-label="Otot ' + h(it.nama) + '" onchange="window.exAliasSave(' + i + ',{target:this.value})">' + opts + '</select>' +
+        (it.src === 'tebakan' && it.target ? '<button type="button" class="btn btn-primary" onclick="window.exAliasSave(' + i + ',{target:\'' + h(it.target) + '\'})">' + icon('check') + ' Terima tebakan</button>' : '') +
+        '<button type="button" class="btn btn-outline" onclick="window.exAliasPick(' + i + ')">' + icon('search') + ' Pustaka</button>' +
+        (it.src === 'alias' ? '<button type="button" class="icon-btn" aria-label="Hapus pilihan ' + h(it.nama) + '" onclick="window.exAliasSave(' + i + ',{hapus:true})">' + icon('rotate-ccw') + '</button>' : '') + '</div>') + '</div>';
+    }).join('');
+    paintIcons();
+  }
+  window.exAliasAll = function (on) { exAl.all = !!on; exAliasRender(); };
+  window.exAliasSave = function (i, v) {
+    const it = exAl.data && exAl.data.items[i];
+    if (!it || exAl.busy[it.kunci]) return;
+    if (!v.hapus && !v.exId && !v.target) return;
+    exAl.busy[it.kunci] = true;
+    adminCall('saveExerciseAlias', [Object.assign({ nama: it.nama }, v)])
+      .then(function (d) { exAl.data = d; exAliasRender(); gymSumRender(); showToast('Tersimpan'); })
+      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); exAliasRender(); })
+      .then(function () { delete exAl.busy[it.kunci]; });
+  };
+  window.exAliasPick = function (i) {
+    const it = exAl.data && exAl.data.items[i];
+    if (!it) return;
+    exSearchOpen(function (x) { if (x && x.id) window.exAliasSave(i, { exId: x.id }); else showToast('Pilih gerakan dari pustaka.'); }, { title: 'Sama dengan: ' + it.nama });
+    setTimeout(function () { const q = $('exs-q'); if (q) { q.value = it.nama; window.exsFilter(); } }, 50);
+  };
+  function finSettingsHtml() {
+    const f = (setState.data && setState.data.finance) || { enabled: false, portalVisible: false, methods: fin.methods };
+    const tg = function (id, title, sub, on, fn) {
+      return '<div class="row-between"><div><p class="li-title">' + title + '</p><p class="li-sub">' + sub + '</p></div><label class="toggle"><input type="checkbox" id="' + id + '" onchange="' + fn + '(this)"' + (on ? ' checked' : '') + ' aria-label="' + title + '"><span></span></label></div>';
+    };
+    let html = '<div class="card-flat stack">' + tg('fin-set-on', 'Fitur keuangan', 'Tagihan otomatis dari paket, pembayaran, pengeluaran, laporan. Pertama dinyalakan: transaksi lama dicatat Lunas.', f.enabled, 'window.finSetOn') +
+      tg('fin-set-portal', 'Klien bisa lihat tagihan', 'Kartu Tagihan di portal klien (hanya miliknya sendiri)', f.portalVisible, 'window.finSetPortal') + '</div>';
+    if (f.enabled) {
+      html += '<div class="card-flat stack"><h4 class="li-title">Metode bayar</h4><div class="chips" style="flex-wrap:wrap">' + f.methods.map(function (m, i) {
+        return '<span class="chip">' + h(m) + '<button type="button" class="chip-x" onclick="window.finMethodDel(' + i + ')" aria-label="Hapus ' + h(m) + '">' + icon('x') + '</button></span>';
+      }).join('') + '</div><div class="pkg-benefit-add"><input class="input" type="text" id="fin-set-method" maxlength="30" placeholder="Metode baru, mis. DANA" enterkeyhint="done"><button type="button" class="btn btn-outline" onclick="window.finMethodAdd()">Tambah</button></div></div>' +
+        '<div class="card-flat stack"><h4 class="li-title">Kategori</h4><div id="fin-set-cats"><span class="li-sub">Memuat…</span></div></div>' +
+        '<div class="card-flat stack"><h4 class="li-title">Bagi hasil coach</h4><div id="fin-set-share"><span class="li-sub">Memuat…</span></div></div>' +
+        '<button type="button" class="btn btn-outline btn-block" onclick="window.finSync(this)">' + icon('refresh-cw') + ' Sinkronkan transaksi</button>';
+    }
+    return html;
+  }
+  function finSettingsLoad() {
+    if (!finOn()) return;
+    adminCall('getFinanceCategories').then(function (c) { fin.cats = c; finCatsRender(); }).catch(finErr);
+    adminCall('getCoachesAdmin').then(function (r) { fin.coaches = r.coaches; finShareRender(); }).catch(finErr);
+  }
+  function finCatsRender() {
+    const el = $('fin-set-cats');
+    if (!el) return;
+    const grp = function (type, title) {
+      return '<p class="group-label"><span>' + title + '</span></p>' + (fin.cats || []).filter(function (c) { return c.type === type; }).map(function (c) {
+        return '<div class="row-between" style="min-height:44px"><span>' + h(c.name) + '</span><span class="row" style="gap:8px"><label class="toggle"><input type="checkbox" onchange="window.finCatActive(\'' + h(c.id) + '\',this.checked)"' + (c.active ? ' checked' : '') + ' aria-label="Aktif ' + h(c.name) + '"><span></span></label>' +
+          '<button type="button" class="icon-btn" onclick="window.finCatDel(\'' + h(c.id) + '\')" aria-label="Hapus ' + h(c.name) + '">' + icon('trash-2') + '</button></span></div>';
+      }).join('') + '<div class="pkg-benefit-add"><input class="input" type="text" id="fin-cat-' + type + '" maxlength="40" placeholder="Kategori baru"><button type="button" class="btn btn-outline" onclick="window.finCatAdd(\'' + type + '\')">Tambah</button></div>';
+    };
+    el.innerHTML = grp('masuk', 'Pemasukan') + grp('keluar', 'Pengeluaran');
+    paintIcons();
+  }
+  function finShareRender() {
+    const el = $('fin-set-share');
+    if (!el) return;
+    el.innerHTML = (fin.coaches || []).map(function (c) {
+      const tipe = c.shareType === 'sesi' ? 'sesi' : 'persen', val = c.shareValue === '' || c.shareValue == null ? (tipe === 'persen' ? 65 : 0) : c.shareValue;
+      return '<div class="field"><label class="label">' + h(c.name) + '</label><div class="two"><select class="select" id="fin-sh-t-' + h(c.id) + '"><option value="persen"' + (tipe === 'persen' ? ' selected' : '') + '>Persen dari harga paket</option><option value="sesi"' + (tipe === 'sesi' ? ' selected' : '') + '>Rupiah per sesi selesai</option></select>' +
+        '<input class="input num" type="text" inputmode="numeric" id="fin-sh-v-' + h(c.id) + '" value="' + h(val) + '" aria-label="Nilai"></div>' +
+        '<button type="button" class="btn btn-outline btn-sm" onclick="window.finShareSave(\'' + h(c.id) + '\',this)">Simpan</button></div>';
+    }).join('') || '<span class="li-sub">Belum ada coach.</span>';
+  }
+  window.setNutrition = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { nutritionEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.nutritionEnabled = s.nutritionEnabled;
+      window.showToast(s.nutritionEnabled ? 'Gizi untuk klien aktif.' : 'Gizi untuk klien dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
+  window.setFeedback = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { feedbackEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.feedbackEnabled = s.feedbackEnabled;
+      window.showToast(s.feedbackEnabled ? 'Penilaian klien aktif.' : 'Penilaian klien dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
+  window.setShareQr = function (btn) {
+    const v = String($('set-share-qr').value || '').trim();
+    const done = busy(btn, 'Menyimpan…');
+    adminCall('updateAppSettings', { shareQrUrl: v }).then(function (s) {
+      done(); if (setState.data) { setState.data.shareQrUrl = s.shareQrUrl; }
+      window.showToast(v ? 'Alamat QR tersimpan.' : 'Kembali ke alamat bawaan.');
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  window.setShare = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { shareEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.shareEnabled = s.shareEnabled;
+      window.shareOn = s.shareEnabled !== false;
+      window.showToast(s.shareEnabled ? 'Kartu bagikan aktif.' : 'Kartu bagikan dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
+  window.setClientGuide = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { clientGuideEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.clientGuideEnabled = s.clientGuideEnabled;
+      window.showToast(s.clientGuideEnabled ? 'Panduan klien baru aktif.' : 'Panduan klien baru dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
+
+  function finSaveSettings(patch, then) {
+    return adminCall('updateAppSettings', { finance: patch }).then(function (s) {
+      if (setState.data) setState.data.finance = s.finance;
+      finApplySettings(s.finance);
+      if (then) then(s);
+    }).catch(finErr);
+  }
+  function finRerenderSettings() { if (setState.open === 'keuangan') { $('settings-body').innerHTML = finSettingsHtml(); paintIcons(); finSettingsLoad(); } refreshSettingsNav(); }
+  window.finSetOn = function (el) {
+    el.disabled = true;
+    finSaveSettings({ enabled: el.checked }, function () { window.showToast(el.checked ? 'Keuangan aktif.' : 'Keuangan dimatikan.'); loadRevenue(); finRerenderSettings(); }).then(function () { el.disabled = false; });
+  };
+  window.finSetPortal = function (el) { finSaveSettings({ portalVisible: el.checked }, function () { window.showToast(el.checked ? 'Klien bisa melihat tagihan.' : 'Tagihan disembunyikan dari klien.'); }); };
+  window.finMethodAdd = function () {
+    const v = $('fin-set-method').value.trim();
+    if (!v) return;
+    finSaveSettings({ methods: fin.methods.concat([v]) }, finRerenderSettings);
+  };
+  window.finMethodDel = function (i) {
+    if (fin.methods.length <= 1) { window.showToast('Minimal satu metode bayar.'); return; }
+    finSaveSettings({ methods: fin.methods.filter(function (m, k) { return k !== i; }) }, finRerenderSettings);
+  };
+  window.finCatAdd = function (type) {
+    const v = $('fin-cat-' + type).value.trim();
+    if (!v) return;
+    adminCall('saveFinanceCategory', { type: type, name: v }).then(function () { fin.cats = null; return adminCall('getFinanceCategories'); }).then(function (c) { fin.cats = c; finCatsRender(); }).catch(finErr);
+  };
+  window.finCatActive = function (id, on) {
+    const c = (fin.cats || []).filter(function (x) { return x.id === id; })[0];
+    if (!c) return;
+    adminCall('saveFinanceCategory', { id: id, name: c.name, active: on }).then(function () { c.active = on; }).catch(finErr);
+  };
+  window.finCatDel = function (id) {
+    adminCall('deleteFinanceCategory', id).then(function () { fin.cats = (fin.cats || []).filter(function (c) { return c.id !== id; }); finCatsRender(); }).catch(finErr);
+  };
+  window.finShareSave = function (id, btn) {
+    const done = busy(btn, 'Menyimpan…');
+    adminCall('saveCoachShare', id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)).then(function () { done(); window.showToast('Bagi hasil tersimpan.'); }).catch(function (err) { done(); finErr(err); });
+  };
+  window.finSync = function (btn) {
+    const done = busy(btn, 'Menyinkronkan…');
+    adminCall('syncFinanceTransactions').then(function (r) { done(); window.showToast(r.created + ' transaksi baru dicatat.'); }).catch(function (err) { done(); finErr(err); });
+  };
+
+  // Judul kecil di topbar muncul setelah judul besar halaman tergulir.
+  (function topbarOnScroll() {
+    const sc = $('main-scroll-area'), bar = $('topbar');
+    if (!sc || !bar) return;
+    let ticking = false;
+    sc.addEventListener('scroll', function () {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(function () { bar.classList.toggle('scrolled', sc.scrollTop > 56); ticking = false; });
+    }, { passive: true });
+  })();
+
+  // Ganti layout saat ukuran layar berubah melewati batas desktop (tab Minggu).
+  let lastDesk = window.innerWidth >= 1024, lastPhone = isPhone();
+  window.addEventListener('resize', function () {
+    const desk = window.innerWidth >= 1024;
+    if (desk !== lastDesk) { lastDesk = desk; if (window.currentView === 'calendar' || window.currentView === 'dashboard') renderView(window.currentView, { animate: false }); }
+    // Kartu Klien punya info PC yang tidak dibuat di HP: buat ulang daftar saat melewati 768 px.
+    const ph = isPhone();
+    if (ph !== lastPhone) { lastPhone = ph; if (window.currentView === 'clients' && window.updateMemberUI) window.updateMemberUI(); }
+    document.querySelectorAll('.seg').forEach(moveSegThumb);
+  });
+
+  // Ikon untuk elemen statis saat halaman pertama dibuka.
+  // (Hanya elemen baru; teks jam/hitung mundur yang berubah tiap detik diabaikan.)
+  new MutationObserver(function (list) {
+    for (let i = 0; i < list.length; i++) {
+      const added = list[i].addedNodes;
+      for (let j = 0; j < added.length; j++) { if (added[j].nodeType === 1) { paintIcons(); return; } }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+
+  // ── Jembatan "Catat offline" (Tahap 2, 2026-10) ────────────────────────────────
+  // Halaman pembungkus (xnk.my.id / book.xnkbooking.my.id) menyimpan salinan kecil supaya bisa dibuka tanpa sinyal,
+  // dan menyimpan catatan yang dibuat di sana. Hanya ke origin pembungkus yang sudah menyapa (host.origin), tanpa token,
+  // tanpa nomor WA. Catatan dari pembungkus masuk ke antrean aplikasi (cid sama = tidak dobel di server).
+  const AQ_KEY = 'xnk_adm_queue';
+  function hostSend(msg) { if (!host.origin || (window.top === window && !hostLocal())) return; try { window.top.postMessage(msg, host.origin); } catch (e) {} }
+  let offSnapTimer = 0;
+  function offlineSnapSoon() { clearTimeout(offSnapTimer); offSnapTimer = setTimeout(function () { const s = offlineSnap(); if (s) hostSend({ xnk: 'offline-snap', snap: s }); }, 400); }
+  window.offlineSnapSoon = offlineSnapSoon;
+  function offlineSync() {
+    const signed = window.isPublicView ? !!(window.publicLoggedMember && _lsGet(MEMBER_TOKEN_KEY)) : !!_lsGet(ADMIN_TOKEN_KEY);
+    if (!signed) return;
+    offlineSnapSoon();
+    hostSend({ xnk: 'offline-queue?' });
+  }
+  window.offlineSync = offlineSync;
+  window.offlineClear = function () { hostSend({ xnk: 'offline-clear' }); };
+  const offFirst = n => String(n || '').trim().split(/\s+/)[0];
+  const offRoutines = p => (p && !p.error ? (p.days || []).concat(p.own || []) : []).map(d => ({ hari: d.hari, items: (d.items || []).map(it => ({ gerakan: it.gerakan, exId: it.exId || '' })) }));
+  function offLast(w, routines) {
+    const keys = {}, out = {};
+    routines.forEach(r => r.items.forEach(it => { keys[wkKeyOf(it)] = 1; }));
+    if (w && w.last) Object.keys(w.last).forEach(k => { if (keys[k]) out[k] = { sets: (w.last[k].sets || []).map(x => ({ berat: x.berat, rep: x.rep, jenis: x.jenis || '' })) }; });
+    return out;
+  }
+  const offMeasures = d => (d && d.entries ? d.entries.slice(-2).map(e => { const o = { tanggal: e.tanggal }; PG_MEASURES.forEach(m => { o[m[0]] = e[m[0]]; }); return o; }) : []);
+  function offlineSnap() {
+    if (window.isPublicView) {
+      const t = _lsGet(MEMBER_TOKEN_KEY), me = window.publicLoggedMember;
+      if (!t || !me) return null;
+      const routines = offRoutines(window.myProgram && window.myProgram.state === 'ok' ? window.myProgram.data : null);
+      const n = window.myNutrition, lg = n && n.log ? nutEff(n).log : null;
+      const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0;
+      return { mode: 'client', sig: tokenSig(t), at: Date.now(), name: offFirst(me.name), sisa: total ? Math.max(0, total - used) : '',
+        sessions: (window.schedules || []).filter(s => String(s.memberId) === String(me.id) && !isDone(s) && new Date(s.end || s.start) > new Date()).slice(0, 10).map(s => ({ start: s.start, coach: s.coachName || '' })),
+        routines: routines, last: offLast(window.myWorkout && window.myWorkout.data, routines),
+        target: n && n.target && n.target.ok ? { kal: n.target.kal } : null,
+        log: lg ? { tanggal: lg.tanggal, items: lg.items.map(x => ({ nama: x.nama, porsi: x.porsi, kal: x.kal, waktu: x.waktu })) } : null,
+        measures: offMeasures(pg.data) };
+    }
+    const t = _lsGet(ADMIN_TOKEN_KEY);
+    if (!t) return null;
+    const today = wkToday(), tomorrow = wkAddDays(today, 1), names = {};
+    (window.members || []).forEach(m => { names[String(m.id)] = offFirst(m.name); });
+    const ses = (window.schedules || []).filter(s => { const d = wkIsoOf(s.start); return (d === today || d === tomorrow) && s.memberId && status(s) !== 'cancelled'; })
+      .map(s => ({ id: String(s.id), memberId: String(s.memberId), name: names[String(s.memberId)] || offFirst(s.title), start: s.start }));
+    const ids = ses.map(s => s.memberId), stored = ccRead();
+    stored.order.forEach(id => { if (ids.indexOf(id) === -1) ids.push(id); });
+    const clients = {};
+    ids.slice(0, 40).forEach(function (id) {
+      const b = (stored.items[id] || {}).b || {};
+      const prog = progAdmin[id] || b.program, wk = wkAdmin[id] || b.workout, prg = pg.admin[id] || b.progress;
+      const routines = offRoutines(prog);
+      clients[id] = { name: names[id] || id, routines: routines, last: offLast(wk, routines), measures: offMeasures(prg) };
+    });
+    return { mode: 'coach', sig: tokenSig(t), at: Date.now(), today: ses, clients: clients };
+  }
+  function aqAll() { try { const q = JSON.parse(_lsGet(AQ_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; } }
+  function aqSet(q) { _lsSet(AQ_KEY, q.length ? JSON.stringify(q) : null); }
+  window.aqForget = function () { aqSet([]); };
+  // Catatan dari pembungkus → antrean aplikasi. Hanya milik akun yang sedang masuk (sig sama, atau dibuat tanpa salinan).
+  function offlineImport(items) {
+    const coach = !window.isPublicView, t = _lsGet(coach ? ADMIN_TOKEN_KEY : MEMBER_TOKEN_KEY);
+    if (!t) return;
+    const sig = tokenSig(t), done = [];
+    const wq = wlQueue(), fq = fqAll(), aq = aqAll();
+    items.forEach(function (x) {
+      if (!x || !x.id || (x.sig && x.sig !== sig)) return;
+      if (x.kind === 'wl') {
+        if (coach && !x.memberId) return;
+        if (!wq.some(y => y.id === x.id)) wq.push({ id: x.id, scope: coach ? 'adm:' + x.memberId : 'm:' + sig, mode: coach ? 'admin' : 'client', memberId: x.memberId || '', name: x.name || '', date: x.date, scheduleId: '', hari: x.hari || '', entries: x.entries || [], at: x.at || Date.now(), tries: 0, err: '', retry: true, session: x.session });
+      } else if (x.kind === 'food' && !coach) {
+        if (!fq.some(y => y.id === x.id)) fq.push({ id: x.id, op: 'add', scope: 'm:' + sig, at: x.at || Date.now(), tries: 0, tanggal: x.entry.tanggal, entry: x.entry, view: x.view });
+      } else if ((x.kind === 'measure' || x.kind === 'note') && coach) {
+        if (!aq.some(y => y.id === x.id)) aq.push(x);
+      } else return;
+      done.push(x.id);
+    });
+    wlQueueSet(wq); fqSet(fq); aqSet(aq);
+    if (done.length) {
+      hostSend({ xnk: 'offline-ack', ids: done });
+      window.showToast(done.length + ' catatan offline dikirim.');
+      window.wlFlush(); if (!coach) window.fqFlush(); else aqFlush();
+    }
+  }
+  // Antrean coach: ukuran tubuh dan catatan sesi (keduanya upsert di server, jadi kirim ulang aman).
+  let aqBusy = false;
+  function aqFlush() {
+    if (aqBusy || !_lsGet(ADMIN_TOKEN_KEY)) return;
+    const it = aqAll()[0]; if (!it) return;
+    aqBusy = true;
+    const call = it.kind === 'measure' ? adminCall('saveMemberMeasurement', it.memberId, it.data) : adminCall('saveSessionNote', it.scheduleId, it.data);
+    call.then(function (r) {
+      aqBusy = false; aqSet(aqAll().filter(x => x.id !== it.id));
+      if (it.kind === 'measure' && r) window.pgSetAdmin(it.memberId, r);
+      aqFlush();
+    }).catch(function (err) {
+      aqBusy = false;
+      if (window.isAuthError(err)) return;
+      if (wlRetryable(err)) { setTimeout(aqFlush, 30000); return; }
+      aqSet(aqAll().filter(x => x.id !== it.id));
+      window.showToast('Catatan offline tidak tersimpan: ' + window.authMessage(err));
+      aqFlush();
+    });
+  }
+  window.aqFlush = aqFlush;
+  window.offlineImport = offlineImport;   // juga untuk browser-check
+  window.addEventListener('online', aqFlush);
+})();
+</script>

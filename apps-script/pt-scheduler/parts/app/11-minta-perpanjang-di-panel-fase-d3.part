@@ -1,0 +1,740 @@
+  // ── Minta perpanjang di panel (Fase D3) ─────────────────────────────────────
+  function renewalsCardHtml() {
+    const list = (window.renewals || []).filter(r => r.status === 'menunggu');
+    if (!list.length) return '';
+    return '<div class="span-12 card" id="renewals-card"><div class="section-head"><h3 class="section-title">Minta perpanjang</h3><span class="pill num">' + list.length + '</span></div><div class="list">' +
+      list.map(function (r) {
+        return '<div class="list-item" style="flex-wrap:wrap;gap:10px" data-renewal="' + h(r.id) + '"><div class="grow" style="min-width:0"><p class="li-title truncate">' + h(r.name) + '</p>' +
+          '<p class="li-sub">' + h(r.packageName) + ' · ' + h(formatRp(r.harga)) + ' · ' + h(fmtShort(new Date(r.createdAt))) + '</p></div>' +
+          '<div class="row" style="gap:8px"><button type="button" class="btn btn-outline" onclick="window.renewalDecide(\'' + h(r.id) + '\', false)">Tolak</button>' +
+          '<button type="button" class="btn btn-primary" onclick="window.renewalDecide(\'' + h(r.id) + '\', true)">' + icon('check') + 'Setujui</button></div></div>';
+      }).join('') + '</div><p class="hint" style="margin-top:8px">Setujui setelah pembayaran diterima: sesi klien direset sesuai paket dan transaksi dicatat.</p></div>';
+  }
+  window.loadRenewals = function () {
+    return adminCall('getRenewalRequests').then(function (r) { window.renewals = r || []; window.renderDashboard(); })
+      .catch(function (err) { if (!window.isAuthError(err)) console.warn(err); });
+  };
+  window.renewalDecide = function (id, approve) {
+    const r = (window.renewals || []).find(x => x.id === id);
+    if (!r) return;
+    const msg = approve
+      ? 'Setujui perpanjangan <b>' + h(r.name) + '</b> (' + h(r.packageName) + ')? Sesi klien direset ke paket baru dan transaksi dicatat. Pastikan pembayaran sudah diterima.'
+      : 'Tolak permintaan perpanjang <b>' + h(r.name) + '</b>? Data klien tidak berubah.';
+    window.showConfirmModal(msg, function () {
+      window.renewals = (window.renewals || []).filter(x => x.id !== id);
+      window.renderDashboard();
+      window.showToast(approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.');
+      adminCall('decideRenewal', id, approve).then(function () {
+        return approve ? window.loadAllData() : null;
+      }).then(function () { return window.loadRenewals(); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); window.loadRenewals(); });
+    }, approve ? { title: 'Setujui perpanjangan?', confirmText: 'Setujui' } : { title: 'Tolak permintaan?', confirmText: 'Tolak', variant: 'danger' });
+  };
+
+  // ── Streak & badge (Fase D2) ────────────────────────────────────────────────
+  const pgShortBadge = b => String(b.label).replace(' berturut-turut', '');
+  function pgBadgesInner() {
+    const d = pg.data;
+    if (!d || d.error) return '';
+    const streakLine = d.streak > 0
+      ? '<p class="li-title num">' + d.streak + ' minggu berturut-turut</p><p class="li-sub">Terbaik ' + d.bestStreak + ' minggu · ' + d.completed + ' sesi selesai</p>'
+      : '<p class="li-title">Mulai streak-mu</p><p class="li-sub">Selesaikan satu sesi minggu ini. ' + d.completed + ' sesi selesai sejauh ini.</p>';
+    const badges = (d.badges || []).map(function (b) {
+      return '<div class="pg-badge ' + (b.earned ? 'earned' : 'locked') + '" role="img" aria-label="' + h(b.label + (b.earned ? ', sudah diraih' : ', belum diraih')) + '">' +
+        '<span class="pg-badge-ic">' + icon(b.kind === 'streak' ? 'flame' : (b.kind === 'pr' ? 'trophy' : (b.kind === 'catat' ? 'dumbbell' : 'award'))) + '</span><span class="pg-badge-txt">' + h(pgShortBadge(b)) + '</span></div>';
+    }).join('');
+    const ch = d.challenge;
+    const chHtml = ch ? '<div class="stack" style="gap:6px;margin:4px 0 14px"><div class="row-between"><span class="li-title">Tantangan bulan ini</span><span class="num" style="font-weight:800">' + Math.min(ch.done, ch.target) + ' / ' + ch.target + ' sesi</span></div>' +
+      '<div class="challenge-bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + ch.target + '" aria-valuenow="' + Math.min(ch.done, ch.target) + '"><div style="width:' + Math.min(100, Math.round(ch.done / ch.target * 100)) + '%"></div></div>' +
+      '<p class="li-sub">' + (ch.done >= ch.target ? 'Tantangan selesai, keren! 🎉' : 'Sisa ' + (ch.target - ch.done) + ' sesi lagi bulan ini.') + '</p></div>' : '';
+    const shareBtn = window.shareOn !== false ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.shareCard(\'badges\',\'\')">' + icon('share-2') + 'Bagikan</button>' : '';
+    return '<div class="section-head row-between"><h3 class="section-title">Pencapaian</h3>' + shareBtn + '</div>' + chHtml +
+      '<div class="pg-streak"><span class="pg-flame' + (d.streak > 0 ? ' on' : '') + '">' + icon('flame') + '</span><div>' + streakLine + '</div></div>' +
+      '<div class="pg-badges">' + badges + '</div>';
+  }
+  function pgRenderBadges() {
+    const wrap = $('pub-badges-wrap');
+    if (!wrap) return;
+    const html = pgBadgesInner();
+    wrap.classList.toggle('hide', !html);
+    if (html) setHTML(wrap, html);
+  }
+
+  // Perayaan badge baru: sekali per badge (ditandai di server begitu ditampilkan)
+  function pgCelebrate(d) {
+    const ids = (d && d.newBadges) || [];
+    if (!ids.length || window.currentView !== 'public-dashboard') return;
+    const layer = $('sheet-layer');
+    if (layer && !layer.classList.contains('hide')) return;   // ada lembar lain terbuka: nanti saja
+    const labels = (d.badges || []).filter(function (b) { return ids.indexOf(b.id) !== -1; }).map(pgShortBadge);
+    $('pg-badge-list').innerHTML = labels.map(function (l) { return '<li>' + h(l) + '</li>'; }).join('');
+    window.shareBadge = (d.badges || []).filter(function (b) { return ids.indexOf(b.id) !== -1; }).pop() || null;
+    $('pg-badge-share').setAttribute('data-text', 'Aku baru meraih badge ' + labels.join(' dan ') + ' di XNK Personal Training! 💪');
+    openSheet('sheet-badge');
+    memberCall('markBadgesSeen', ids).then(function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r, true); } }).catch(function () {});
+  }
+  window.pgShareBadge = function () {
+    if (window.shareOn !== false && window.shareBadge && window.shareOpen) { window.shareCard('badge', '', { badge: window.shareBadge }); return; }
+    window.sendToParentWA('', $('pg-badge-share').getAttribute('data-text') || '');
+  };
+
+  function pgCardInner() {
+    const d = pg.data;
+    let inner;
+    if (!d) inner = skel(3, true);
+    else if (d.error) inner = '<p class="li-sub">Gagal memuat progres: ' + h(d.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgress(true)">Coba lagi</button>';
+    else if (!d.entries.length) inner = emptyState('trending-up', 'Belum ada catatan', 'Catat berat atau lingkar pinggangmu, lalu lihat perubahannya di sini.');
+    else inner = '<div class="stack" style="gap:18px">' + pgBlocksHtml(d) + '</div>';
+    const nPhoto = d && d.photos ? d.photos.length : 0;
+    return '<div class="section-head"><h3 class="section-title">Progres</h3></div>' + inner +
+      '<div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-primary" onclick="window.pgOpenEntry(\'member\')">' + icon('plus') + 'Catat hari ini</button>' +
+      '<button type="button" class="btn btn-outline" onclick="window.pgOpenPhotos(\'member\')">' + icon('camera') + 'Foto' + (nPhoto ? ' (' + nPhoto + ')' : '') + '</button></div>';
+  }
+  function pgRenderCard() {
+    const wrap = $('pub-progress-wrap');
+    if (wrap) { setHTML(wrap, pgCardInner()); }
+    pgRenderBadges();
+    renderTeasers();
+  }
+  window.loadMyProgress = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    if (pg.data && !pg.data.error && !force) { pgRenderCard(); return Promise.resolve(); }
+    if (!pg.data || force) { pg.data = null; pgRenderCard(); }
+    return memberCall('getMyProgress').then(function (d) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); pgCelebrate(d); })
+      .catch(function (err) {
+        if (window.isAuthError && window.isAuthError(err)) return;
+        pg.data = { error: String((err && err.message) || err), entries: [], photos: [] };
+        pgRenderCard();
+      });
+  };
+
+  // Panel: bagian "Progres" di halaman klien
+  function pgAdminInner(memberId) {
+    const d = pg.admin[memberId];
+    const nPhoto = d && d.photos ? d.photos.length : 0;
+    const btns = '<div class="btn-row"><button type="button" class="btn btn-secondary btn-sm" onclick="window.pgOpenEntry(\'admin\',\'' + h(memberId) + '\')">' + icon('plus') + 'Catat</button>' +
+      '<button type="button" class="btn btn-secondary btn-sm" onclick="window.pgOpenPhotos(\'admin\',\'' + h(memberId) + '\')">' + icon('camera') + 'Foto' + (nPhoto ? ' (' + nPhoto + ')' : '') + '</button></div>';
+    if (!d) return '<div class="card">' + skel(3, true) + '</div>';
+    if (d.error) return '<div class="card">' + errorState(d.error, "window.loadClientBundle('" + h(memberId) + "')") + '</div>';
+    let html = '<div class="card"><div class="section-head"><h4 class="section-title">Grafik ukuran</h4>' + btns + '</div>' +
+      (d.entries.length ? '<div class="stack pg-grid" style="gap:18px">' + pgBlocksHtml(d) + '</div>' : emptyState('trending-up', 'Belum ada catatan', 'Catat berat atau lingkar pinggang klien.')) + '</div>';
+    if (d.entries.length) {
+      html += foldHtml('Riwayat catatan ukur', d.entries.length + ' catatan', '<div class="list pg-notes">' + d.entries.slice().reverse().slice(0, 10).map(function (e) {
+        const parts = [];
+        PG_MEASURES.forEach(function (m) { if (e[m[0]] !== '' && e[m[0]] != null) parts.push((m[0] === 'berat' || m[0] === 'pinggang' ? '' : m[1] + ' ') + pgNum(e[m[0]]) + ' ' + m[2]); });
+        return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title num">' + h(parts.join(' · ')) + '</p><p class="li-sub">' + h(pgLabel(e.tanggal)) + ' · <span class="pill">' + (e.oleh === 'coach' ? 'coach' : 'klien') + '</span></p></div>' +
+          '<button type="button" class="icon-btn plain" aria-label="Hapus catatan ' + h(pgLabel(e.tanggal)) + '" onclick="window.pgDeleteAdminEntry(\'' + h(memberId) + '\',\'' + h(e.id) + '\')">' + icon('trash-2') + '</button></div>';
+      }).join('') + '</div>', false);
+    }
+    const earned = (d.badges || []).filter(b => b.earned);
+    html += foldHtml('Badge', earned.length + ' diraih', '<div class="pg-pills">' + (earned.length ? earned.map(b => '<span class="pill">' + h(pgShortBadge(b)) + '</span>').join('') : '<span class="li-sub">Belum ada badge.</span>') + '</div>', false);
+    return html;
+  }
+
+  function pgAdminRender(memberId) {
+    const wrap = $('profile-progress-wrap');
+    if (wrap && wrap.getAttribute('data-member') === String(memberId)) setHTML(wrap, pgAdminInner(memberId));
+  }
+  window.pgSetAdmin = function (memberId, d) { pg.admin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { progress: d }); pgAdminRender(memberId); };
+  window.pgLoadAdmin = function (memberId) {
+    return adminCall('getMemberProgress', memberId).then(function (d) { window.pgSetAdmin(memberId, d); })
+      .catch(function (err) { pg.admin[memberId] = { error: window.authMessage(err), entries: [], photos: [] }; pgAdminRender(memberId); });
+  };
+  window.pgDeleteAdminEntry = function (memberId, id) {
+    window.showConfirmModal('Catatan ini dihapus permanen.', function () {
+      adminCall('deleteMemberMeasurement', id).then(function (d) { window.pgSetAdmin(memberId, d); window.showToast('Catatan dihapus.'); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
+  };
+  function pgStore(d) {
+    if (pg.mode === 'admin') { window.pgSetAdmin(pg.memberId, d); }
+    else { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); }
+  }
+
+  // Lembar "Catat"
+  window.pgOpenEntry = function (mode, memberId) {
+    pg.mode = mode; pg.memberId = memberId || null;
+    PG_MEASURES.forEach(function (m) { $('pg-' + m[0]).value = ''; });
+    $('pg-more').open = false;
+    $('pg-tanggal').value = pgToday(); $('pg-tanggal').max = pgToday();
+    $('pg-date-field').classList.toggle('hide', mode !== 'admin');
+    $('pg-err').textContent = '';
+    $('pg-entry-title').textContent = mode === 'admin' ? 'Catat progres klien' : 'Catat hari ini';
+    openSheet('sheet-progress');
+  };
+  window.pgSaveEntry = function (e) {
+    e.preventDefault();
+    const fail = function (m) { $('pg-err').textContent = m; };
+    const data = {};
+    let any = false, bad = '';
+    PG_MEASURES.forEach(function (m) {
+      const v = $('pg-' + m[0]).value.trim().replace(',', '.');
+      data[m[0]] = v;
+      if (!v) return;
+      any = true;
+      if (!bad && (isNaN(Number(v)) || Number(v) < m[3] || Number(v) > m[4])) bad = m[1] + ' harus antara ' + m[3] + ' dan ' + m[4] + ' ' + m[2] + '.';
+    });
+    if (!any) return fail('Isi minimal satu ukuran (berat atau lingkar badan).');
+    if (bad) { if (/Lengan|Perut|Paha|Dada/.test(bad)) $('pg-more').open = true; return fail(bad); }
+    fail('');
+    const done = busy($('pg-save-btn'), 'Menyimpan…');
+    const call = pg.mode === 'admin'
+      ? adminCall('saveMemberMeasurement', pg.memberId, Object.assign({ tanggal: $('pg-tanggal').value }, data))
+      : memberCall('saveMyMeasurement', data);
+    call.then(function (d) {
+      done(); pgStore(d); window.closeModal(); window.showToast('Tersimpan.');
+      if (pg.mode !== 'admin' && window.shareMoment && d && d.entries && d.entries.length >= 2) window.shareMoment('ukuran', 'Ukuran tersimpan. Bagikan perubahanmu?');
+    })
+      .catch(function (err) { done(); fail(window.authMessage(err)); });
+  };
+
+  // Lembar foto
+  function pgPhotos() { return (pg.mode === 'admin' ? (pg.admin[pg.memberId] || {}) : (pg.data || {})).photos || []; }
+  function pgRenderPhotoList() {
+    const list = pgPhotos();
+    $('pg-photo-list').innerHTML = list.length ? list.map(function (p) {
+      return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title">' + (p.sisi === 'samping' ? 'Samping' : 'Depan') + ' · ' + h(pgLabel(p.tanggal)) + '</p><p class="li-sub">oleh ' + (p.oleh === 'coach' ? 'coach' : 'klien') + '</p></div>' +
+        '<button type="button" class="btn btn-outline" onclick="window.pgViewPhoto(\'' + h(p.id) + '\')">Lihat</button></div>';
+    }).join('') + (pg.mode !== 'admin' && window.shareOn !== false ? '<button type="button" class="btn btn-secondary btn-block" style="margin-top:10px" onclick="window.shareCard(\'foto\',\'\')">' + icon('columns-2') + 'Buat kartu sebelum–sesudah</button><p class="li-sub">Kartu dibuat di HP-mu; foto tidak diunggah ke mana pun.</p>' : '') : '<p class="li-sub">Belum ada foto. Foto hanya bisa dilihat kamu dan coach, dan tidak dibagikan lewat link.</p>';
+    ['depan', 'samping'].forEach(function (s) { const b = $('pg-side-' + s); if (b) b.classList.toggle('active', pg.side === s); });
+    paintIcons();
+  }
+  window.pgOpenPhotos = function (mode, memberId) {
+    pg.mode = mode; pg.memberId = memberId || null;
+    $('pg-photo-upload').classList.toggle('hide', mode === 'admin');
+    pgRenderPhotoList();
+    openSheet('sheet-progress-photos');
+  };
+  window.pgSetSide = function (side) { pg.side = side; pgRenderPhotoList(); };
+  window.pgPickPhoto = function () { const i = $('pg-photo-input'); if (i) { i.value = ''; i.click(); } };
+
+  // Perkecil di browser: maksimal 1600 px, JPEG (hemat kuota Drive dan waktu unggah)
+  function pgResize(file, maxDim) {
+    return new Promise(function (resolve, reject) {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.82).split(',')[1]);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Foto tidak bisa dibaca. Coba foto lain.')); };
+      img.src = url;
+    });
+  }
+  window.pgUploadPhoto = function (input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const btn = $('pg-photo-btn'), done = busy(btn, 'Mengunggah…');
+    pgResize(file, 1600).then(function (b64) {
+      if (b64.length > 6900000) throw new Error('Foto terlalu besar. Coba foto lain.');
+      return memberCall('uploadMyProgressPhoto', b64, 'image/jpeg', pg.side);
+    }).then(function (d) { done(); pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); pgRenderPhotoList(); window.showToast('Foto tersimpan.'); })
+      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  window.pgViewPhoto = function (id) {
+    pg.viewId = id;
+    const p = pgPhotos().filter(function (x) { return x.id === id; })[0];
+    $('pg-view-title').textContent = p ? (p.sisi === 'samping' ? 'Samping' : 'Depan') + ' · ' + pgLabel(p.tanggal) : 'Foto';
+    $('pg-view-img').removeAttribute('src');
+    $('pg-view-del').classList.toggle('hide', pg.mode === 'admin');
+    $('pg-view-loading').classList.remove('hide');
+    openSheet('sheet-photo-view');
+    (pg.mode === 'admin' ? adminCall('getMemberProgressPhoto', id) : memberCall('getMyProgressPhoto', id)).then(function (r) {
+      if (pg.viewId !== id) return;
+      $('pg-view-img').src = r.dataUrl; $('pg-view-loading').classList.add('hide');
+    }).catch(function (err) { $('pg-view-loading').textContent = 'Gagal memuat foto: ' + window.authMessage(err); });
+  };
+  window.pgClosePhotoView = function () { window.pgOpenPhotos(pg.mode, pg.memberId); };
+  window.pgDeletePhoto = function () {
+    const id = pg.viewId;
+    window.showConfirmModal('Foto ini dihapus permanen dari Drive.', function () {
+      memberCall('deleteMyProgressPhoto', id).then(function (d) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); window.pgOpenPhotos('member'); window.showToast('Foto dihapus.'); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus foto?', confirmText: 'Hapus', variant: 'danger' });
+  };
+
+  function myTasksCardInner() {
+    const c = window.myTasks;
+    let inner;
+    if (!c || c.state === 'loading') inner = skel(3);
+    else if (c.state === 'error') inner = '<p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyTasks(true)">Coba lagi</button>';
+    else if (!c.list.length) inner = emptyState('clipboard-check', 'Belum ada PR', 'PR dari coach untuk di luar gym muncul di sini.');
+    else {
+      const openL = c.list.filter(t => t.status === 'todo'), closedL = c.list.filter(t => t.status !== 'todo');
+      inner = (openL.length ? '<div class="list">' + openL.map(myTaskItemHtml).join('') + '</div>' : '<p class="li-sub">Semua PR sudah selesai. Kerja bagus!</p>') +
+        (closedL.length ? '<div class="group-label"><span>Sudah selesai</span></div><div class="list">' + closedL.slice(0, 3).map(myTaskItemHtml).join('') + '</div>' : '');
+    }
+    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : 0;
+    return '<div class="section-head"><h3 class="section-title">PR-ku</h3>' + (nOpen ? '<span class="pill num">' + nOpen + ' terbuka</span>' : '') + '</div>' + inner;
+  }
+
+  function renderMyTasksCard() {
+    const wrap = $('pub-tasks-wrap');
+    if (wrap) setHTML(wrap, myTasksCardInner());
+    renderTeasers();
+  }
+
+  window.loadMyTasks = function (force) {
+    const token = _lsGet(MEMBER_TOKEN_KEY);
+    if (!token || !window.publicLoggedMember) return Promise.resolve();
+    if (window.myTasks && window.myTasks.state === 'ok' && !force) { renderMyTasksCard(); return Promise.resolve(); }
+    if (!window.myTasks || window.myTasks.state !== 'ok') window.myTasks = { list: [], state: 'loading' };
+    renderMyTasksCard();
+    return memberCall('getMyTasks').then(function (list) {
+      window.myTasks = { list: list || [], state: 'ok' };
+      window.patchPortalMore('tasks', list || []);
+      renderMyTasksCard();
+    }).catch(function (err) {
+      if (window.isAuthError && window.isAuthError(err)) return;
+      window.myTasks = { list: [], state: 'error', error: String((err && err.message) || err) };
+      renderMyTasksCard();
+    });
+  };
+
+  window.openTaskDone = function (taskId) {
+    const t = window.myTasks && window.myTasks.list.find(x => String(x.id) === String(taskId));
+    if (!t || t.status !== 'todo') return;
+    window.taskDoneId = String(t.id);
+    $('task-done-name').textContent = t.title;
+    $('task-done-note').value = '';
+    openSheet('modal-task-done');
+  };
+
+  window.submitTaskDone = function (e) {
+    e.preventDefault();
+    const id = window.taskDoneId;
+    if (!id) return;
+    const done = busy($('task-done-submit'), 'Menyimpan…');
+    memberCall('completeMyTask', id, $('task-done-note').value.trim()).then(function () {
+      done();
+      window.taskDoneId = null;
+      window.closeModal();
+      window.showToast('PR selesai. Kerja bagus!');
+      return window.loadMyTasks(true);
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+
+  // ── Tab klien: Progres, Program, Info & Tips, Lainnya (Fase J) ───────────────
+  function portalGrid(left, right) {
+    return '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + (right || '') + '</div></div>';
+  }
+  // Kerangka abu (skeleton) selagi data belum datang: n baris teks + blok opsional.
+  function skel(n, block) {
+    let s = '<div class="skel-wrap" aria-hidden="true">';
+    for (let i = 0; i < n; i++) s += '<div class="skel skel-line" style="width:' + (i === 0 ? 45 : i % 2 ? 90 : 70) + '%"></div>';
+    return s + (block ? '<div class="skel skel-block"></div>' : '') + '</div>';
+  }
+  // Judul kecil di halaman yang sudah punya judul di top bar (HP): disembunyikan di bawah 768 px.
+  function pageIntro(title, sub) { return pageHead(title, sub).replace('class="page-head"', 'class="page-head page-intro"'); }
+  function teaserRow(view, ic, title, sub, dot) {
+    return '<button type="button" class="teaser-row" onclick="window.navigate(\'' + view + '\')"><span class="icon-chip">' + icon(ic) + '</span>' +
+      '<span class="grow" style="min-width:0"><b style="display:block">' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + (dot ? '<span class="new-dot" aria-label="Baru"></span>' : '') + icon('chevron-right') + '</button>';
+  }
+  function teasersInner() {
+    const c = window.myTasks;
+    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : null;
+    const chal = pg.data && !pg.data.error ? pg.data.challenge : null;
+    const chSub = chal ? 'Tantangan bulan ini: ' + Math.min(chal.done, chal.target) + ' dari ' + chal.target + ' sesi' : 'Ukuran badan, hasil tes, dan badge';
+    const prSub = nOpen === null ? 'PR dari coach dan makan hari ini' : (nOpen ? nOpen + ' PR belum selesai' : 'Semua PR beres, kerja bagus!');
+    return '<div class="section-head"><h3 class="section-title">Jelajahi</h3></div><div class="stack" style="gap:2px">' +
+      teaserRow('public-program', 'activity', 'Latihan & PR', prSub) +
+      teaserRow('public-progress', 'trending-up', 'Progres', chSub) +
+      teaserRow('public-info', 'megaphone', 'Info & Tips', infoHasNew() ? 'Ada info baru dari coach' : 'Pengumuman dan tips dari coach', infoHasNew()) + '</div>';
+  }
+  function renderTeasers() { const el = $('pub-teasers'); if (el) setHTML(el, teasersInner()); }
+
+  // ── Fase Q: kartu hitam dan tafsir data di portal ──────────────────────────────
+  // Data: window.myInsight / window.myWeek (getPortalMore.insight / .week). Rentang dipilih di browser; tidak ada panggilan baru.
+  const insRange = { v: 'w4' };
+  const INS_RANGE_OPTS = [['w4', '4 mgg'], ['m3', '3 bln'], ['all', 'Semua']];
+  window.setInsRange = function (k) { insRange.v = k; renderInsight(); if (window.renderClientInsightNow) window.renderClientInsightNow(); };
+  let insOverride = null;   // panel: tafsir klien yang sedang dibuka (versi coach); portal memakai window.myInsight
+  function insD() { if (insOverride) return insOverride; const m = window.myInsight; return m && !m.error ? m : null; }
+  function insWith(d, fn) { const prev = insOverride; insOverride = d && !d.error ? d : null; try { return fn(); } finally { insOverride = prev; } }
+  function insSigned(v, unit) { v = Number(v) || 0; return (v > 0 ? '+' : v < 0 ? '−' : '') + String(Math.abs(Math.round(v * 10) / 10)).replace('.', ',') + (unit ? ' ' + unit : ''); }
+  function insNum(v) { return String(Math.round(v * 10) / 10).replace('.', ','); }
+  function insSkel(eyebrow) { return '<section class="card-ink insight-hero"><div class="ih-head"><span class="ih-eyebrow">' + h(eyebrow) + '</span></div><div class="skel skel-line" style="width:60%"></div><div class="skel skel-line" style="width:85%"></div></section>'; }
+  function insErr(eyebrow) { return '<section class="card-ink insight-hero"><div class="ih-head"><span class="ih-eyebrow">' + h(eyebrow) + '</span></div><p class="ih-empty">Ringkasan belum bisa dimuat. Tarik layar ke bawah untuk menyegarkan.</p></section>'; }
+  function insStartBtn(label, js) { return '<button type="button" class="btn btn-on-ink btn-sm" onclick="' + js + '">' + icon('plus') + h(label) + '</button>'; }
+
+  function insProgressHero(admin) {
+    const d = insD();
+    if (!d) return window.myInsight && window.myInsight.error ? insErr('Rapor tubuh') : insSkel('Rapor tubuh');
+    const b = d.body, r = b.ranges[insRange.v], m = r.measures;
+    if (b.sedikit) return insightHeroHtml({ eyebrow: 'Rapor tubuh', empty: 'Catat berat badanmu dua kali atau lebih, lalu lihat tren dan kesimpulannya di sini.', emptyAction: insStartBtn('Catat berat', admin ? "window.pgOpenEntry('admin','" + admin + "')" : "window.pgOpenEntry('member')") });
+    const stats = [];
+    if (m.berat) stats.push({ v: insSigned(m.berat.delta), d: 'kg', l: 'Berat' });
+    if (m.pinggang) stats.push({ v: insSigned(m.pinggang.delta), d: 'cm', l: 'Pinggang' });
+    if (m.berat && m.berat.perWeek != null) stats.push({ v: insSigned(m.berat.perWeek), d: 'kg', l: 'per minggu' });
+    const ch = !admin && pg.data && !pg.data.error ? pg.data.challenge : null;
+    if (ch) stats.push({ v: Math.min(ch.done, ch.target) + '/' + ch.target, l: 'Sesi bulan ini' });
+    return insightHeroHtml({ eyebrow: 'Rapor tubuh', range: { key: insRange.v, options: INS_RANGE_OPTS, onPick: "window.setInsRange('%k')" }, stats: stats.slice(0, 4), spark: b.spark.map(p => p.v), text: r.text, actions: insStartBtn(admin ? 'Catat' : 'Catat hari ini', admin ? "window.pgOpenEntry('admin','" + admin + "')" : "window.pgOpenEntry('member')") + shareBtns(admin, ['progres', 'ukuran', 'all']) });
+  }
+
+  function insRow(label, val, note, flag) {
+    return '<div class="ins-row"><span class="ins-l">' + h(label) + '</span><b class="ins-v">' + h(val) + '</b>' + (note ? '<span class="ins-n' + (flag ? ' warn' : '') + '">' + h(note) + '</span>' : '') + '</div>';
+  }
+  function insCard(title, sub, body) { return '<div class="card"><div class="section-head"><h3 class="section-title">' + h(title) + '</h3>' + (sub ? '<span class="li-sub">' + h(sub) + '</span>' : '') + '</div>' + body + '</div>'; }
+
+  function insBodyCard() {
+    const d = insD(); if (!d) return '';
+    const b = d.body, rows = [];
+    if (b.bmi) rows.push(insRow('BMI', insNum(b.bmi.value), b.bmi.label));
+    if (b.whtr) rows.push(insRow('Rasio pinggang–tinggi', String(b.whtr.value).replace('.', ','), b.whtr.label));
+    if (b.bodyFat != null) rows.push(insRow('Lemak tubuh', insNum(b.bodyFat) + '%', 'dari asesmen terakhir'));
+    if (!rows.length) return window.myNutrition && window.myNutrition.enabled !== false && !(window.myNutrition.profile && window.myNutrition.profile.tinggi) ? insCard('Indikator tubuh', '', '<p class="li-sub">Isi tinggi badan di tab Latihan → Makan supaya BMI dan rasio pinggang bisa dihitung.</p>') : '';
+    return insCard('Indikator tubuh', 'perkiraan, bukan diagnosis', '<div class="ins-list">' + rows.join('') + '</div>');
+  }
+  // Tile BMI, rasio pinggang–tinggi, lemak tubuh (+ tile tambahan).
+  function insTiles(extra) {
+    const d = insD(); if (!d) return '';
+    const b = d.body, t = [];
+    if (b.bmi) t.push(mtileHtml('BMI', insNum(b.bmi.value), b.bmi.label));
+    if (b.whtr) t.push(mtileHtml('Pinggang / tinggi', String(b.whtr.value).replace('.', ','), b.whtr.label));
+    if (b.bodyFat != null) t.push(mtileHtml('Lemak tubuh', insNum(b.bodyFat) + '%', 'asesmen terakhir'));
+    (extra || []).forEach(x => t.push(x));
+    return t.length ? '<div class="mtiles">' + t.join('') + '</div>' : '';
+  }
+  function insMeasuresBody() {
+    const d = insD(); if (!d) return '';
+    const r = d.body.ranges[insRange.v].measures, rows = [];
+    Object.keys(d.body.labels || {}).forEach(function (k) {
+      const pm = d.body.labels[k];
+      if (k === 'berat' || k === 'pinggang' || !r[k]) return;
+      rows.push(insRow(pm.short, insNum(r[k].to) + ' ' + pm.unit, insSigned(r[k].delta, pm.unit)));
+    });
+    (d.fitness.symmetry || []).forEach(function (s) { rows.push(insRow('Simetri ' + s.label.toLowerCase(), 'selisih ' + insNum(Math.abs(s.diff)) + ' cm', s.flag ? 'kanan–kiri belum seimbang' : 'seimbang', s.flag)); });
+    return rows.length ? '<div class="ins-list">' + rows.join('') + '</div>' : '';
+  }
+  function insLinksBody() {
+    const d = insD(); if (!d || !d.links.enough) return '';
+    const per = v => insSigned(v, 'kg') + '/mgg';
+    return '<ul class="ins-notes">' + d.links.items.map(function (i) {
+      if (i.id === 'rutin') return '<li>Minggu dengan 2 aktivitas atau lebih berkaitan dengan perubahan berat ' + per(i.rutin) + ', minggu yang lebih sepi ' + per(i.jarang) + '.</li>';
+      return '<li>Minggu dengan kalori dalam target berkaitan dengan perubahan berat ' + per(i.dalam) + ', di atas target ' + per(i.lebih) + '.</li>';
+    }).join('') + '</ul><p class="li-sub">Berkaitan bukan berarti penyebab; ini pola dari data sendiri.</p>';
+  }
+  function insMeasuresCard() {
+    const d = insD(); if (!d) return '';
+    const r = d.body.ranges[insRange.v].measures, rows = [];
+    Object.keys(d.body.labels || {}).forEach(function (k) {
+      const pm = d.body.labels[k];
+      if (k === 'berat' || k === 'pinggang' || !r[k]) return;
+      rows.push(insRow(pm.short, insNum(r[k].to) + ' ' + pm.unit, insSigned(r[k].delta, pm.unit)));
+    });
+    (d.fitness.symmetry || []).forEach(function (s) { rows.push(insRow('Simetri ' + s.label.toLowerCase(), 'selisih ' + insNum(Math.abs(s.diff)) + ' cm', s.flag ? 'kanan–kiri belum seimbang' : 'seimbang', s.flag)); });
+    return rows.length ? insCard('Lingkar badan', INS_RANGE_OPTS.filter(o => o[0] === insRange.v)[0][1], '<div class="ins-list">' + rows.join('') + '</div>') : '';
+  }
+  function insFitnessCard() {
+    const d = insD(); if (!d || !d.fitness.tests.length) return '';
+    return insCard('Kemajuan kebugaran', 'sejak tes pertama', '<div class="ins-list">' + d.fitness.tests.map(t => insRow(t.label, t.latest + ' ' + t.unit, (t.pct > 0 ? '↑ ' : t.pct < 0 ? '↓ ' : '') + Math.abs(t.pct) + '%', t.pct < 0)).join('') + '</div>');
+  }
+  function insLinksCard() {
+    const d = insD(); if (!d || !d.links.enough) return '';
+    const per = v => insSigned(v, 'kg') + '/mgg';
+    const out = d.links.items.map(function (i) {
+      if (i.id === 'rutin') return '<li>Minggu dengan 2 aktivitas atau lebih berkaitan dengan perubahan berat ' + per(i.rutin) + ', minggu yang lebih sepi ' + per(i.jarang) + '.</li>';
+      return '<li>Minggu dengan kalori dalam target berkaitan dengan perubahan berat ' + per(i.dalam) + ', di atas target ' + per(i.lebih) + '.</li>';
+    }).join('');
+    return insCard('Yang berkaitan dengan hasilmu', '12 minggu', '<ul class="ins-notes">' + out + '</ul><p class="li-sub">Berkaitan bukan berarti penyebab; ini pola dari datamu sendiri.</p>');
+  }
+  let pgSeg = 'ringkasan';
+  window.setPgSeg = function (k) {
+    pgSeg = k;
+    document.querySelectorAll('#pg-seg [data-pgseg]').forEach(b => { const on = b.getAttribute('data-pgseg') === k; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('#view-public-progress [data-pgpane]').forEach(p => p.classList.toggle('hide', p.getAttribute('data-pgpane') !== k));
+    moveSegThumb($('pg-seg'));
+  };
+  // Ringkasan progres: tile indikator + streak, lalu hubungan (kalau datanya cukup).
+  function insProgressCards() {
+    const d = pg.data && !pg.data.error ? pg.data : null;
+    const tiles = insTiles(d ? [mtileHtml('Minggu beruntun', String(d.streak || 0), 'terbaik ' + (d.bestStreak || 0)), mtileHtml('Sesi selesai', String(d.completed || 0), '')] : []);
+    const hint = insD() && !insD().body.bmi && window.myNutrition && window.myNutrition.enabled !== false ? '<p class="li-sub">Isi tinggi badan di Latihan → Makan supaya BMI dan rasio pinggang bisa dihitung.</p>' : '';
+    return (tiles ? '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Indikator</h3><span class="li-sub">perkiraan, bukan diagnosis</span></div>' + tiles + hint + '</div>' : '') + insLinksCard();
+  }
+  function renderInsightProgress() {
+    const hero = $('ph-progress'); if (hero) setHTML(hero, insProgressHero());
+    const c = $('pub-ins-progress'); if (c) setHTML(c, insProgressCards());
+    const m = $('pub-ins-measures'); if (m) setHTML(m, insMeasuresCard());
+    const f = $('pub-ins-fitness'); if (f) setHTML(f, insFitnessCard() || '');
+  }
+
+  function insTrainingHero(admin) {
+    const d = insD();
+    if (!d) return window.myInsight && window.myInsight.error ? insErr('Minggu ini') : insSkel('Minggu ini');
+    const t = d.training, w = t.week;
+    const start = '';   // tombol "Mulai latihan kosong" sudah ada tepat di bawah kartu
+    if (!w.days.now && !w.days.avg && !t.strength.length) return insightHeroHtml({ eyebrow: 'Minggu ini', empty: admin ? 'Belum ada log latihan.' : 'Belum ada latihan tercatat. Mulai satu sesi di bawah dan lihat perkembanganmu di sini.', emptyAction: start || undefined });
+    const pct = x => x.pct == null ? '' : (x.pct > 0 ? '↑' : x.pct < 0 ? '↓' : '') + Math.abs(x.pct) + '%';
+    const stats = [{ v: String(w.days.now), l: 'Hari latihan', d: w.baseline ? 'rata-rata ' + w.days.avg : '' }, { v: w.sets.now + '', l: 'Set kerja', d: pct(w.sets) }, { v: Math.round(w.volume.now / 100) / 10 + 'k', d: pct(w.volume), l: 'Volume (kg)' }];
+    if (w.durasi.now) stats.push({ v: Math.round(w.durasi.now / 60) + '', d: 'mnt', l: 'Durasi' });
+    if (admin && w.rpe != null) stats.push({ v: insNum(w.rpe), l: 'RPE rata-rata' });
+    if (admin && w.rasa != null) stats.push({ v: insNum(w.rasa) + '/5', l: 'Rasa latihan' });
+    return insightHeroHtml({ eyebrow: 'Minggu ini vs biasanya', stats: stats.slice(0, 4), text: t.text, actions: shareBtns(admin, ['latihan', 'rekap', 'konsistensi']) || start || undefined });
+  }
+  function insActivityCard() {
+    const d = insD(); if (!d) return '';
+    const a = d.activity;
+    const adh = a.adherence && a.adherence.length ? a.adherence[a.adherence.length - 1] : null;
+    return insCard('Kalender aktivitas', '12 minggu', '<div class="act-row">' + heatHtml(a.levels) + '<div class="act-side">' +
+      mtileHtml('Hari aktif', a.active + ' / 84', 'sesi, latihan, catat makan') + (adh ? mtileHtml('Program minggu ini', adh.done + ' / ' + adh.planned, 'hari dijalankan') : '') + '</div></div>');
+  }
+  function insStrengthCard() {
+    const d = insD(); if (!d || !d.training.strength.length) return '';
+    const rows = d.training.strength.map(function (s) {
+      const note = (s.perBw != null ? insNum(s.perBw) + '× berat badan' : '') + (s.stalled ? (s.perBw != null ? ' · ' : '') + 'mandek, coba +1 rep atau +2,5 kg' : '');
+      return '<div class="ins-ex"><div class="ins-ex-h"><b>' + h(exNm(s)) + '</b><span class="' + (s.pct < 0 ? 'ins-n warn' : 'ins-n') + '">' + (s.pct == null ? '' : (s.pct > 0 ? '↑ ' : s.pct < 0 ? '↓ ' : '') + Math.abs(s.pct) + '%') + '</span></div>' +
+        '<div class="ins-ex-b"><span class="li-sub">Est. 1RM ' + insNum(s.e1rm) + ' kg' + (note ? ' · ' + h(note) : '') + '</span>' + sparkHtml(s.spark, 'ins-spark') + '</div></div>';
+    }).join('');
+    return insCard('Kekuatan', 'perkiraan 1RM', '<div class="stack" style="gap:12px">' + rows + '</div>');
+  }
+  function insBalanceCard() {
+    const d = insD(); if (!d || !d.training.balance.enough) return '';
+    const bal = d.training.balance;
+    const bars = bal.groups.filter(g => g.volume > 0).map(g => '<div class="ins-bar"><span>' + h(g.label) + '</span><div class="meter"><i style="width:' + g.share + '%"></i></div><b>' + g.share + '%</b></div>').join('');
+    const notes = [];
+    if (bal.pushPull != null) notes.push('Rasio dorong : tarik ' + insNum(bal.pushPull) + ' : 1' + (bal.pushPull > 1.5 ? ' — tambah gerakan menarik (row, pull-up).' : bal.pushPull < 0.67 ? ' — tambah gerakan mendorong.' : ' — cukup seimbang.'));
+    if (bal.missed.length) notes.push('Belum dilatih 2 minggu: ' + bal.missed.join(', ') + '.');
+    return insCard('Keseimbangan otot', '4 minggu', '<div class="stack" style="gap:8px">' + bars + '</div>' + (notes.length ? '<ul class="ins-notes">' + notes.map(n => '<li>' + h(n) + '</li>').join('') + '</ul>' : ''));
+  }
+  function renderInsightLatihan() {
+    const hero = $('ph-latihan'); if (hero) setHTML(hero, insTrainingHero());
+    const c = $('pub-ins-latihan'); if (c) setHTML(c, insActivityCard() + insStrengthCard() + insBalanceCard());
+  }
+
+  function insMakanHero() {
+    const n = window.myNutrition, w = window.myWeek && !window.myWeek.error ? window.myWeek : null;
+    if (!n && !w) return insSkel('Makan hari ini');
+    const k0 = w && w.kcal;
+    if (!k0) return insightHeroHtml({ eyebrow: 'Makan hari ini', empty: 'Lengkapi data dirimu dan catat makan untuk melihat kalori harianmu.' });
+    // Catatan baru (juga yang belum terkirim) langsung terhitung, tanpa menunggu ringkasan dari server.
+    const lg = window.nutEffLog && window.nutEffLog();
+    const k = lg && lg.tanggal === wkToday() && lg.totals ? Object.assign({}, k0, { today: lg.totals.kal }) : k0;
+    const left = k.target - k.today;
+    return insightHeroHtml({ eyebrow: 'Makan hari ini', stats: [{ v: String(k.today), d: 'kkal', l: 'Sudah dimakan' }, { v: String(k.target), d: 'kkal', l: 'Target' }, { v: w.foodDays + '/7', l: 'Hari tercatat' }],
+      text: left > 0 ? 'Sisa ' + left + ' kkal untuk hari ini.' : 'Targetmu hari ini sudah tercapai.', actions: shareBtns('', ['gizi']) || undefined });
+  }
+  function renderInsightMakan() { const hero = $('ph-makan'); if (hero) setHTML(hero, insMakanHero()); }
+
+  // "Minggu ini" di Beranda: sesi, latihan mandiri, catat makan, streak dan tantangan.
+  function weekCardHtml() {
+    const w = window.myWeek;
+    if (!w) return insCard('Minggu ini', '', skel(2));
+    if (w.error) return '';
+    const ch = w.challenge, cells = [
+      ['Sesi coach', w.sessionsDone + (w.sessionsBooked ? '+' + w.sessionsBooked : ''), w.sessionsBooked ? w.sessionsBooked + ' terjadwal' : 'selesai'],
+      ['Latihan mandiri', String(w.workoutDays), 'hari']
+    ];
+    if (w.foodDays != null) cells.push(['Catat makan', w.foodDays + '/7', 'hari']);
+    cells.push(['Minggu beruntun', String(w.streak), 'minggu']);
+    return '<div class="card"><div class="section-head"><h3 class="section-title">Minggu ini</h3></div><div class="stat-strip">' +
+      cells.map(c => '<div><b>' + h(c[1]) + '</b><span>' + h(c[0]) + '</span></div>').join('') + '</div>' +
+      (ch && ch.target ? '<div class="ins-chal"><span class="li-sub">Tantangan bulan ini: ' + Math.min(ch.done, ch.target) + ' dari ' + ch.target + ' sesi</span><div class="meter"><i style="width:' + Math.min(100, Math.round(ch.done / ch.target * 100)) + '%"></i></div></div>' : '') + '</div>';
+  }
+  function renderWeekCard() { const el = $('pub-week'); if (el) setHTML(el, weekCardHtml()); }
+
+  function insQuota() {
+    const me = window.publicLoggedMember || {}, total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0;
+    return { total: total, rem: Math.max(0, total - used), me: me };
+  }
+  function infoHeroHtml() {
+    const c = window.myContent;
+    if (!c || c.state !== 'ok') return insSkel('Info & Tips');
+    const n = c.list.length;
+    return insightHeroHtml({ slim: true, eyebrow: 'Info & Tips', stats: [{ v: String(n), l: 'Info tayang' }, { v: String(c.list.filter(x => x.tipe === 'video').length), l: 'Video' }], text: infoHasNew() ? 'Ada info baru dari coach. Cek dulu ya.' : (n ? 'Kamu sudah membaca semua info terbaru.' : 'Belum ada info dari coach.') });
+  }
+  function moreHeroHtml() {
+    const q = insQuota(), w = window.myWeek && !window.myWeek.error ? window.myWeek : null;
+    const stats = [{ v: String(q.rem), d: 'dari ' + q.total, l: 'Sisa sesi' }];
+    if (w) stats.push({ v: String(w.streak), d: 'minggu', l: 'Beruntun' });
+    return insightHeroHtml({ slim: true, eyebrow: 'Akunmu', stats: stats, text: (q.me.name || '') + ' · ' + (q.me.packageName || 'Member XNK'), actions: '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.openMyProfile()">' + icon('user-round') + 'Profil</button>' });
+  }
+  function catalogHeroHtml() {
+    if (!window.publicLoggedMember) return '';
+    const q = insQuota();
+    return insightHeroHtml({ slim: true, eyebrow: 'Paketmu sekarang', stats: [{ v: String(q.rem), d: 'dari ' + q.total, l: 'Sisa sesi' }], text: q.me.packageName || 'Member XNK', actions: '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang / beli paket</button>' });
+  }
+  function coachesHeroHtml() {
+    const n = (window.coaches || []).length;
+    return insightHeroHtml({ slim: true, eyebrow: 'Tim coach', stats: [{ v: String(n), l: 'Coach aktif' }], text: 'Pilih coach untuk melihat profil, jam tersedia, dan testimoni.' });
+  }
+
+  function renderInsight() { renderInsightProgress(); renderInsightLatihan(); renderInsightMakan(); renderWeekCard(); const ih = $('ph-info'); if (ih) setHTML(ih, infoHeroHtml()); paintIcons(); }
+
+  function renderPublicProgress() {
+    const el = $('view-public-progress'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
+    const upcoming = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date());
+    const history = mine.filter(s => upcoming.indexOf(s) === -1).sort((x, y) => new Date(y.start) - new Date(x.start));
+    // Empat bagian supaya halaman tidak memanjang: Ringkasan, Ukuran, Tes, Riwayat. Semua bagian tetap ada di DOM (diisi oleh render masing-masing).
+    const pane = (k, l, r) => '<div class="pg-pane' + (pgSeg === k ? '' : ' hide') + '" data-pgpane="' + k + '">' + portalGrid(l, r) + '</div>';
+    const segs = [['ringkasan', 'Ringkasan'], ['ukuran', 'Ukuran'], ['tes', 'Tes'], ['riwayat', 'Riwayat']];
+    let html = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.') +
+      '<div id="ph-progress">' + insProgressHero() + '</div>' +
+      '<div class="seg pg-seg" id="pg-seg" role="tablist" aria-label="Bagian progres">' + segs.map(x => '<button type="button" role="tab" data-pgseg="' + x[0] + '" class="' + (pgSeg === x[0] ? 'active' : '') + '" aria-selected="' + (pgSeg === x[0]) + '" onclick="window.setPgSeg(\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '<span class="seg-thumb"></span></div>';
+    html += pane('ringkasan', '<div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
+    html += pane('ukuran', '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>', '<div id="pub-ins-measures">' + insMeasuresCard() + '</div>');
+    html += pane('tes', '<div id="pub-ins-fitness">' + (insFitnessCard() || '') + '</div><div id="pub-tests-wrap" class="stack" style="gap:16px">' + (myTestsInner() || emptyState('activity', 'Belum ada hasil tes', 'Hasil tes kebugaran dari coach muncul di sini.')) + '</div>', '');
+    html += pane('riwayat', '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div><div class="card stack" style="gap:10px" id="pub-workout-wrap"></div>',
+      '<div class="card"><div class="section-head"><h3 class="section-title">Riwayat latihan</h3><span class="li-sub">' + history.length + ' sesi</span></div>' +
+      '<div class="list" id="pub-dash-history">' + (history.length ? history.slice(0, 12).map(memberSessionRow).join('') : '<p class="li-sub">Riwayat latihan muncul di sini.</p>') + '</div></div>');
+    setHTML(el, html);
+    moveSegThumb($('pg-seg'));
+    renderWorkoutCard();
+    renderConsistencyBars();
+  }
+
+  // ── Halaman Latihan (Fase O, ala Hevy) ───────────────────────────────────────
+  // window.myProgram = { state, data:{ days (program coach), own (rutinitas sendiri), explore (template Jelajahi), done, today } }.
+  // Satu kartu per rutinitas dengan "Mulai rutinitas"; ketuk kartu = detail dengan grafik. Data dari getPortalMore, tanpa panggilan saat tab dibuka.
+  const safeHttps = u => /^https:\/\/[^\s"'<>]+$/.test(String(u || ''));
+  const RT_FOLD = 'xnk_rt_fold';
+  const rt = { metric: 'volume' };
+  function rtFold() { try { const f = JSON.parse(localStorage.getItem(RT_FOLD) || '{}'); return f && typeof f === 'object' ? f : {}; } catch (e) { return {}; } }
+  window.rtFoldT = function (k) { const f = rtFold(); f[k] = !f[k]; try { localStorage.setItem(RT_FOLD, JSON.stringify(f)); } catch (e) {} renderProgramCard(); };
+  function rtData() { const c = window.myProgram; return c && c.state === 'ok' ? c.data : null; }
+  function rtFind(src, hari) { const d = rtData(); return d ? ((src === 'own' ? d.own : d.days) || []).find(x => x.hari === hari) : null; }
+  const rtAttr = s => h(s).replace(/'/g, '&#39;');
+  function rtCardHtml(d, src, next) {
+    const names = d.items.map(it => it.gerakan).join(', ');
+    return '<article class="rt-card"><div class="rt-head"><button type="button" class="rt-open" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtOpen(this.dataset.src,this.dataset.hari)">' +
+      '<span class="rt-name"><b class="truncate">' + h(d.hari) + '</b>' + (next ? '<span class="pill solid">Berikutnya</span>' : '') + '</span><span class="rt-sub">' + h(names) + '</span></button>' +
+      '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(d.hari) + '" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtMenu(this.dataset.src,this.dataset.hari)">' + icon('more-horizontal') + '</button></div>' +
+      '<button type="button" class="btn btn-primary btn-block rt-go" data-hari="' + h(d.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">Mulai rutinitas</button></article>';
+  }
+  function rtGroupHtml(key, title, list, src, next) {
+    const shut = !!rtFold()[key];
+    return '<div class="rt-group"><button type="button" class="rt-gbtn" aria-expanded="' + !shut + '" onclick="window.rtFoldT(\'' + key + '\')">' + icon(shut ? 'chevron-right' : 'chevron-down') + h(title) + ' (' + list.length + ')</button>' +
+      (shut ? '' : '<div class="rt-grid">' + list.map(d => rtCardHtml(d, src, next === d.hari)).join('') + '</div>') + '</div>';
+  }
+  function programInner() {
+    const c = window.myProgram;
+    if (!c || c.state === 'loading') return '<div class="section-head"><h3 class="section-title">Rutinitas</h3></div>' + skel(3, true);
+    if (c.state === 'error') return '<div class="section-head"><h3 class="section-title">Rutinitas</h3></div><p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgram(true)">Coba lagi</button>';
+    const days = c.data.days || [], own = c.data.own || [];
+    const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
+    let html = '<button type="button" class="rt-empty-btn" onclick="window.rtStartEmpty()">' + icon('plus') + '<span>Mulai latihan kosong</span></button>' +
+      '<div class="rt-sec"><h3 class="section-title">Rutinitas</h3><button type="button" class="icon-btn plain" aria-label="Pengaturan latihan" onclick="window.wlSettings()">' + icon('settings') + '</button>' +
+      '<button type="button" class="icon-btn plain" aria-label="Rutinitas baru" onclick="window.rtNew()">' + icon('folder-plus') + '</button></div>' +
+      '<div class="rt-actions"><button type="button" class="rt-act" onclick="window.rtNew()">' + icon('clipboard-list') + '<span>Rutinitas baru</span></button><button type="button" class="rt-act" onclick="window.rtExplore()">' + icon('search') + '<span>Jelajahi</span></button></div>';
+    if (days.length) html += rtGroupHtml('coach', 'Dari coach', days, 'coach', w && w.next);
+    if (own.length) html += rtGroupHtml('own', 'Rutinitas saya', own, 'own', '');
+    if (!days.length && !own.length) html += emptyState('clipboard-list', 'Belum ada rutinitas', 'Buat rutinitas sendiri, salin dari Jelajahi, atau tanya coach lewat Chat.', '<button type="button" class="btn btn-outline btn-sm" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>');
+    if (w) html += workoutSessionsHtml(w, 'me', '');
+    return html;
+  }
+  function renderProgramCard() { const w = $('pub-program-wrap'); if (w) { setHTML(w, programInner()); } }
+  window.loadMyProgram = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    const c = window.myProgram;
+    if (c && c.state === 'ok' && c.data.today === pgToday() && !force) { renderProgramCard(); return Promise.resolve(); }
+    if (!c || c.state !== 'ok') window.myProgram = { state: 'loading' };
+    renderProgramCard();
+    return memberCall('getMyProgram').then(function (data) { window.myProgram = { state: 'ok', data: data || { days: [], done: {} } }; window.patchPortalMore('program', window.myProgram.data); renderProgramCard(); })
+      .catch(function (err) {
+        if (window.isAuthError && window.isAuthError(err)) return;
+        window.myProgram = { state: 'error', error: String((err && err.message) || err) }; renderProgramCard();
+      });
+  };
+  // Hasil tulis rutinitas (simpan, hapus, salin) = getMyProgram baru.
+  function rtSaved(d, msg) { window.myProgram = { state: 'ok', data: d || { days: [], done: {} } }; window.patchPortalMore('program', window.myProgram.data); renderProgramCard(); renderTodayWorkout(); if (msg) window.showToast(msg); }
+  window.rtStartEmpty = function () { window.wlStart({ mode: 'client', hari: '', date: wkToday(), live: true }); };
+
+  // Detail rutinitas: mulai, grafik volume / rep / durasi per kali dicatat, daftar gerakan dengan set.
+  const RT_METRIC = { volume: ['Volume', 'kg'], reps: ['Rep', 'rep'], durasi: ['Durasi', 'menit'] };
+  function rtChartHtml(hari) {
+    const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
+    const hist = (w && w.routineHist && w.routineHist[hari]) || [];
+    if (!hist.length) return '<p class="li-sub rt-nochart">' + icon('bar-chart-3') + ' Grafik muncul setelah rutinitas ini dicatat.</p>';
+    const m = rt.metric, val = p => (m === 'durasi' ? Math.round((p.durasi || 0) / 60) : p[m]);
+    const pts = hist.map(p => ({ tanggal: p.tanggal, v: val(p) })), last = pts[pts.length - 1];
+    return '<div class="rt-chart"><p class="rt-big"><b class="num">' + h(wkKg(last.v)) + ' ' + RT_METRIC[m][1] + '</b> <span>' + h(pgLabel(last.tanggal)) + '</span></p>' +
+      pgChartSvg(pts, 'v', RT_METRIC[m][1]) +
+      '<div class="chips" role="radiogroup" aria-label="Ukuran grafik">' + Object.keys(RT_METRIC).map(k => '<button type="button" role="radio" class="chip chip-lg' + (k === m ? ' active' : '') + '" aria-checked="' + (k === m) + '" data-hari="' + h(hari) + '" onclick="window.rtMetric(\'' + k + '\',this.dataset.hari)">' + RT_METRIC[k][0] + '</button>').join('') + '</div></div>';
+  }
+  window.rtMetric = function (k, hari) { rt.metric = k; const el = $('rt-chart-slot'); if (el) setHTML(el, rtChartHtml(hari)); };
+  function rtItemHtml(it) {
+    const x = it.exId && exLib ? exLib.items.find(i => i.id === it.exId) : null;
+    const unit = it.jenis === 'waktu' ? 'DETIK' : (it.jenis === 'jarak' ? 'METER' : 'REP'), kg = it.jenis === 'beban';
+    const rows = it.skema && it.skema.length ? it.skema.map(s => ({ w: s.w, rep: s.rep, kg: s.kg })) : Array.from({ length: it.set || 1 }, () => ({ w: 0, rep: it.repMax !== '' && it.repMax != null ? it.repMin + '–' + it.repMax : it.repMin, kg: it.kg }));
+    let n = 0;
+    return '<div class="rt-ex"><div class="rt-ex-head">' + exThumb(it, 'wl-thumb', x) +
+      '<b>' + h(exNm(it)) + '</b></div>' + (it.catatan ? '<p class="li-sub">' + h(it.catatan) + '</p>' : '') +
+      (it.rest !== '' && it.rest != null ? '<p class="rt-rest">' + icon('timer') + 'Istirahat ' + h(wlRestText(it.rest)) + '</p>' : '') +
+      '<div class="rt-tbl' + (kg ? ' kg' : '') + '"><div class="rt-tr rt-th"><span>SET</span>' + (kg ? '<span>KG</span>' : '') + '<span>' + unit + '</span></div>' +
+      rows.map(r => '<div class="rt-tr"><span>' + (r.w ? 'W' : ++n) + '</span>' + (kg ? '<span class="num">' + (r.kg === '' || r.kg == null ? '–' : h(wlNum(r.kg))) + '</span>' : '') + '<span class="num">' + h(r.rep === '' || r.rep == null ? '–' : r.rep) + '</span></div>').join('') + '</div>' +
+      (safeHttps(it.video) ? '<a class="btn btn-ghost btn-sm" style="min-height:44px;align-self:flex-start" href="' + h(it.video) + '" target="_blank" rel="noopener noreferrer">' + icon('circle-play') + 'Video contoh</a>' : '') + '</div>';
+  }
+  window.rtOpen = function (src, hari) {
+    const d = rtFind(src, hari); if (!d) return;
+    const ex = d.items.length, est = Math.round(d.items.reduce((s, it) => s + (it.skema && it.skema.length ? it.skema.length : it.set || 1) * ((Number(it.rest) || wlPrefs().rest) + 40), 0) / 60);
+    const body = '<p class="li-sub">' + (src === 'own' ? 'Buatan kamu' : 'Dari coach') + ' · ' + ex + ' gerakan · ±' + est + ' menit</p>' +
+      '<button type="button" class="btn btn-primary btn-lg btn-block" data-hari="' + h(hari) + '" onclick="window.closeModal();window.workoutOpenClient(this.dataset.hari)">' + icon('play') + 'Mulai rutinitas</button>' +
+      '<div id="rt-chart-slot">' + rtChartHtml(hari) + '</div>' +
+      '<div class="rt-sec"><h3 class="section-title">Gerakan</h3>' + (src === 'own' ? '<button type="button" class="btn btn-ghost btn-sm" data-hari="' + h(hari) + '" onclick="window.rtEdit(this.dataset.hari)">' + icon('pencil') + 'Edit rutinitas</button>' : '') + '</div>' +
+      '<div class="stack" style="gap:12px">' + d.items.map(rtItemHtml).join('') + '</div>';
+    wlSheet(hari, body);
+    if (!exLib) exEnsure().then(function () { if (!$('modal-wl').classList.contains('hide') && $('wls-title').textContent === hari) window.rtOpen(src, hari); }).catch(function () {});
+  };
+  window.rtMenu = function (src, hari) {
+    const btn = (ic, label, sub, fn, extra) => '<button type="button" class="wl-menu-btn' + (extra || '') + '" data-src="' + src + '" data-hari="' + h(hari) + '" onclick="' + fn + '">' + icon(ic) + '<span><b>' + label + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span></button>';
+    let body = '<div class="stack" style="gap:4px">' + btn('play', 'Mulai rutinitas', '', 'window.closeModal();window.workoutOpenClient(this.dataset.hari)') + btn('eye', 'Lihat detail dan grafik', '', 'window.rtOpen(this.dataset.src,this.dataset.hari)');
+    if (src === 'own') body += btn('pencil', 'Edit rutinitas', '', 'window.rtEdit(this.dataset.hari)') + btn('copy', 'Duplikat', '', 'window.rtDup(this.dataset.hari)') + btn('trash-2', 'Hapus rutinitas', '', 'window.closeModal();window.rtDelete(this.dataset.hari)', ' danger');
+    else body += btn('copy', 'Salin ke rutinitas saya', 'Ubah sendiri tanpa mengubah program coach', 'window.rtCopy(\'\',this.dataset.hari)');
+    wlSheet(hari, body + '</div>');
+  };
+  window.rtNew = function () {
+    const own = (rtData() || {}).own || [];
+    if (own.length >= 10) { window.showToast('Maksimal 10 rutinitas. Hapus yang tidak dipakai dulu.'); return; }
+    pfMode('own');
+    $('prg-err').textContent = ''; $('prg-clear').classList.add('hide');
+    pfLoad([{ hari: '', items: [] }]);
+    openSheet('modal-program');
+    if (!exLib) exEnsure().then(function () { if (pf.mode === 'own') pfRender(); }).catch(function () {});
+  };
+  window.rtEdit = function (hari) {
+    const d = rtFind('own', hari); if (!d) return;
+    pfMode('own'); pf.oldName = hari;
+    $('prg-title').textContent = 'Ubah rutinitas';
+    $('prg-err').textContent = ''; $('prg-clear').classList.remove('hide');
+    pfLoad([d]); pf.mode = 'own'; pf.oldName = hari;
+    openSheet('modal-program');
+    if (!exLib) exEnsure().then(function () { if (pf.mode === 'own') pfRender(); }).catch(function () {});
+  };
+  window.rtDelete = function (hari) {
+    if (!hari) return;
+    window.showConfirmModal('Rutinitas <b>' + h(hari) + '</b> dihapus. Catatan latihannya tetap tersimpan.', function () {
+      memberCall('deleteMyRoutine', hari).then(function (d) { rtSaved(d, 'Rutinitas dihapus.'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus rutinitas?', confirmText: 'Hapus', variant: 'danger' });
+  };
+  window.rtDup = function (hari) {
+    const d = rtFind('own', hari), data = rtData(); if (!d || !data) return;
+    const taken = (data.own || []).concat(data.days || []).map(x => x.hari.toLowerCase());
+    let n = 2, name;
+    do { name = hari.slice(0, 36) + ' (' + n + ')'; n++; } while (taken.indexOf(name.toLowerCase()) !== -1);
+    window.closeModal();
+    memberCall('saveMyRoutine', '', { hari: name, items: d.items }).then(function (r) { rtSaved(r, 'Disalin jadi "' + name + '".'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  // Salin hari program coach (template kosong) atau template Jelajahi ke rutinitas sendiri.
+  window.rtCopy = function (template, hari) {
+    window.closeModal();
+    memberCall('copyRoutineToMine', template ? { template: template } : { hari: hari }).then(function (r) {
+      rtSaved(r, (r.added || []).length ? 'Ditambahkan ke Rutinitas saya: ' + r.added.join(', ') : 'Disalin.');
+    }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  window.rtExplore = function () {
+    const list = (rtData() || {}).explore || [];
+    const body = list.length ? '<p class="li-sub">Program yang dibagikan coach. Simpan ke Rutinitas saya, lalu ubah sesukamu.</p><div class="stack" style="gap:10px">' + list.map(function (t) {
+      const n = t.days.reduce((s, d) => s + d.items.length, 0);
+      return '<div class="rt-card"><div class="rt-name"><b class="truncate">' + h(t.name) + '</b></div><p class="li-sub">' + t.days.length + ' rutinitas · ' + n + ' gerakan</p>' +
+        '<ul class="rt-xlist">' + t.days.map(d => '<li><b>' + h(d.hari) + '</b> · ' + h(d.items.map(it => it.gerakan).join(', ')) + '</li>').join('') + '</ul>' +
+        '<button type="button" class="btn btn-primary btn-block" data-t="' + h(t.name) + '" onclick="window.rtCopy(this.dataset.t)">' + icon('plus') + 'Simpan ke rutinitas saya</button></div>';
+    }).join('') + '</div>'
+      : emptyState('search', 'Belum ada program di Jelajahi', 'Coach bisa membagikan template program di sini. Sementara itu, buat rutinitas sendiri.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.closeModal();window.rtNew()">' + icon('plus') + 'Rutinitas baru</button>');
+    wlSheet('Jelajahi', body);
+  };
+

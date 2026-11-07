@@ -1,0 +1,823 @@
+  // ── Badge booking baru ─────────────────────────────────────────────────────
+  function unreadList() { return window.schedules.filter(s => status(s) === 'unread').sort(byStart); }
+  function updateBadges() {
+    if (ui.mode !== 'admin') return;
+    const n = unreadList().length;
+    [['unread-badge', true], ['nav-unread-badge', true], ['tab-unread-dot', false]].forEach(function (b) {
+      const el = $(b[0]);
+      if (!el) return;
+      el.classList.toggle('hide', n === 0);
+      if (b[1]) el.textContent = n > 9 ? '9+' : String(n);
+    });
+  }
+  window.checkUnreadBookings = updateBadges;
+
+  window.openNotificationModal = function () {
+    const list = unreadList();
+    setHTML('notification-list', list.length ? list.map(function (s) {
+      const d = new Date(s.start);
+      return '<button type="button" class="list-item interactive" onclick="window.closeModal();window.openScheduleDetail(\'' + h(s.id) + '\')">' +
+        avatar('', s.title, 'sm') +
+        '<span class="grow"><span class="li-title truncate" style="display:block">' + h(s.title) + '</span><span class="li-sub">' + h(fmtShort(d)) + ' · ' + fmtTime(d) + '</span></span>' +
+        '<span class="pill solid"><span class="dot" style="background:currentColor;width:6px;height:6px"></span>Baru</span></button>';
+    }).join('') : emptyState('inbox', 'Tidak ada booking baru', 'Booking dari klien akan muncul di sini.'));
+    $('notification-action').classList.toggle('hide', list.length === 0);
+    openSheet('modal-notifications');
+  };
+
+  window.markNotificationsRead = function (ids) {
+    ids = ids || unreadList().map(s => s.id);
+    if (!ids.length) { window.closeModal(); return; }
+    adminCall('markSchedulesAsRead', ids).then(function () {
+      window.schedules.forEach(function (s) { if (ids.indexOf(s.id) !== -1) s.status = 'read'; });
+      window.closeModal();
+      window.updateUI();
+      window.showToast(ids.length + ' booking ditandai dibaca.');
+    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+  window.closeNotificationModal = window.closeModal;
+
+  // ── Status sesi (monokrom) ─────────────────────────────────────────────────
+  function statusInfo(s) {
+    const st = status(s);
+    if (st === 'completed') return { cls: 'done', pill: '<span class="pill soft">' + icon('check') + 'Selesai</span>', label: 'Selesai' };
+    if (st === 'unread') return { cls: 'new', pill: '<span class="pill solid">Baru</span>', label: 'Booking baru' };
+    if (st === 'hold') return { cls: 'hold', pill: '<span class="pill dashed">Hold</span>', label: 'Hold' };
+    if (st === 'available') return { cls: 'available', pill: '<span class="pill dashed soft">Tersedia</span>', label: 'Tersedia' };
+    return { cls: 'confirmed', pill: '<span class="pill">Terjadwal</span>', label: 'Terjadwal' };
+  }
+
+  // Item timeline sesi (admin). opts.actions = tampilkan aksi cepat.
+  // Satu komponen aksi sesi: "Selesai" solid (utama), "Ubah" dan "WA" sekunder.
+  function sessActions(id, o) {
+    const q = h(id);
+    return '<div class="sess-actions" onclick="event.stopPropagation()">' +
+      (!o.done ? '<button type="button" class="btn btn-primary" onclick="window.' + (o.hub ? 'hubComplete' : 'quickComplete') + '(\'' + q + '\')">' + icon('check') + 'Selesai</button>' : '') +
+      (!o.done && !o.hub ? '<button type="button" class="btn btn-outline" onclick="window.quickEdit(\'' + q + '\')">' + icon('calendar-clock') + 'Ubah</button>' : '') +
+      (o.phone ? '<button type="button" class="btn btn-outline" onclick="window.quickWa(\'' + q + '\')" aria-label="Chat WhatsApp klien">' + icon('message-circle') + 'WA</button>' : '') +
+      '</div>';
+  }
+
+  function sessionItem(s, opts) {
+    opts = opts || {};
+    const d = new Date(s.start), end = new Date(s.end || (d.getTime() + 3600000));
+    const info = statusInfo(s);
+    const now = Date.now();
+    const live = d.getTime() <= now && end.getTime() > now && !isDone(s);
+    const cls = 'tl-item ' + info.cls + (live || opts.highlight ? ' now' : '');
+    const mins = Math.round((end - d) / 60000);
+    let actions = '';
+    if (opts.actions && !isAvailable(s)) {
+      actions = sessActions(s.id, { done: isDone(s), phone: s.phone });
+    }
+    return '<div class="' + cls + '" data-key="session:' + h(s.id) + '">' +
+      '<div class="tl-time">' + fmtTime(d) + '<small>' + mins + ' mnt</small></div>' +
+      '<div class="tl-rail"><span class="tl-node"></span></div>' +
+      '<div class="tl-card interactive" role="button" tabindex="0" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
+        '<div class="row-between"><span class="li-title truncate">' + h(isAvailable(s) ? 'Slot tersedia' : opts.inProfile ? (s.notes || 'Sesi latihan') : s.title) + '</span>' + info.pill + '</div>' +
+        '<span class="li-sub">' + (window.isSoloCoach() ? '' : icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Belum ada coach')) +
+          (opts.showDate ? (window.isSoloCoach() ? '' : ' · ') + h(fmtShort(d)) : '') + (live ? ' · Berlangsung' : '') + '</span>' +
+        actions +
+      '</div></div>';
+  }
+
+  window.quickWa = function (id) {
+    const s = window.schedules.find(x => String(x.id) === String(id));
+    if (!s) return;
+    const d = new Date(s.start);
+    window.sendToParentWA(s.phone, 'Halo ' + s.title + ', ini Coach XNK. Mengingatkan jadwal latihan kita ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB. Sampai ketemu!');
+  };
+  window.quickEdit = function (id) { window.selectedScheduleDetailId = id; window.openEditScheduleDetailModal(); };
+  window.quickComplete = function (id) { window.selectedScheduleDetailId = id; window.markSessionCompleted(); };
+
+  // ── DASHBOARD (admin) ──────────────────────────────────────────────────────
+  function weekRange() {
+    const d = today0(), day = d.getDay(), diff = (day === 0 ? -6 : 1) - day;
+    const start = new Date(d); start.setDate(d.getDate() + diff);
+    const end = new Date(start); end.setDate(start.getDate() + 7);
+    return [start, end];
+  }
+
+  function renderDashboard() {
+    const el = $('view-dashboard');
+    const now = new Date();
+    const booked = window.schedules.filter(isBooked);
+    const todays = window.schedules.filter(s => sameDay(new Date(s.start), now)).sort(byStart);
+    const wr = weekRange();
+    const weekCount = booked.filter(s => { const d = new Date(s.start); return d >= wr[0] && d < wr[1]; }).length;
+    const past = booked.filter(s => new Date(s.start) < now);
+    const rate = past.length ? Math.round(past.filter(isDone).length / past.length * 100) : 0;
+    const active = window.members.filter(m => remainingOf(m) > 0).length;
+    const next = booked.filter(s => !isDone(s) && new Date(s.end || s.start) > now).sort(byStart)[0];
+    const unread = unreadList();
+    const attention = attentionList();
+
+    let html = '<div class="page-head">' +
+      '<div><p class="eyebrow" id="live-date">' + h(fmtDate(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</p>' +
+      '<h2 class="page-title">' + greeting() + ', Coach</h2></div>' +
+      '<div class="row"><span class="pill soft num" id="live-clock">' + fmtTime(now) + '</span>' +
+      '<button type="button" class="btn btn-primary only-desktop" onclick="window.quickAction(\'booking\')">' + icon('calendar-plus') + 'Booking</button></div></div>';
+
+    html += '<div class="dash-grid stagger">';
+    html += renewalsCardHtml();
+
+    // Sesi berikutnya (kartu hitam)
+    html += '<div class="span-5">' + nextSessionCard(next) + '</div>';
+
+    // KPI
+    html += '<div class="span-7"><div class="kpi-grid five">' +
+      kpi('users', 'Klien aktif', 'kpi-clients', active, window.members.length + ' klien terdaftar') +
+      kpi('calendar-check', 'Sesi hari ini', 'kpi-today', todays.filter(isBooked).length, todays.filter(isDone).length + ' sudah selesai') +
+      kpi('calendar-range', 'Sesi minggu ini', 'kpi-week', weekCount, 'Senin – Minggu') +
+      kpi('circle-check', 'Tingkat selesai', 'kpi-rate', rate, 'dari ' + past.length + ' sesi yang sudah lewat', '%') +
+      '<div class="kpi ink wide" id="kpi-revenue-tile"></div>' +
+      '</div></div>';
+
+    // Timeline hari ini
+    html += '<div class="span-7 card"><div class="section-head"><div><h3 class="section-title">Hari ini</h3><p class="li-sub">' + todays.length + ' sesi · ' + h(fmtDate(now, { day: 'numeric', month: 'long' })) + '</p></div>' +
+      '<button type="button" class="link-btn" onclick="window.navigate(\'calendar\')">Kalender ' + icon('arrow-right', 'style="width:14px;height:14px"') + '</button></div>' +
+      (todays.length ? '<div class="timeline stagger">' + todays.map(s => sessionItem(s, { actions: true, highlight: next && s.id === next.id })).join('') + '</div>'
+        : emptyState('coffee', 'Tidak ada sesi hari ini', 'Waktu yang pas untuk follow-up klien.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.quickAction(\'booking\')">' + icon('plus') + 'Buat booking</button>')) +
+      '</div>';
+
+    // Booking baru + perlu perhatian
+    html += '<div class="span-5 stack" style="gap:var(--gap)">';
+    html += '<div class="card"><div class="section-head"><div class="row"><h3 class="section-title">Booking baru</h3>' + (unread.length ? '<span class="pill solid num">' + unread.length + '</span>' : '') + '</div>' +
+      (unread.length ? '<button type="button" class="link-btn" onclick="window.markNotificationsRead()">Tandai dibaca</button>' : '') + '</div>' +
+      (unread.length ? '<div class="list stagger">' + unread.slice(0, 4).map(function (s) {
+        const d = new Date(s.start);
+        return '<button type="button" class="list-item interactive" data-key="session:' + h(s.id) + '" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')">' + avatar('', s.title, 'sm') +
+          '<span class="grow"><span class="li-title truncate" style="display:block">' + h(s.title) + '</span><span class="li-sub">' + h(fmtShort(d)) + ' · ' + fmtTime(d) + '</span></span><span class="dot pulse"></span></button>';
+      }).join('') + '</div>' : emptyState('inbox', 'Semua sudah dibaca', 'Booking dari portal klien muncul di sini.')) + '</div>';
+
+    html += '<div class="card"><div class="section-head"><h3 class="section-title">Perlu perhatian</h3>' +
+      '<button type="button" class="link-btn" onclick="window.navigate(\'coaches\')">Perawatan ' + icon('arrow-right', 'style="width:14px;height:14px"') + '</button>' +
+      (attention.length > 4 ? '<button type="button" class="link-btn" onclick="window.setClientFilter(\'low\');window.navigate(\'clients\')">Lihat semua</button>' : '') + '</div>' +
+      (attention.length ? '<div class="list stagger">' + attention.slice(0, 4).map(function (a) {
+        return '<div class="list-item interactive" role="button" tabindex="0" data-key="client:' + h(a.m.id) + '" onclick="window.openProfile(\'' + h(a.m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' + avatar(a.m.photo, a.m.name, 'sm') +
+          '<span class="grow"><span class="li-title truncate" style="display:block">' + h(a.m.name) + '</span><span class="li-sub">' + h(a.reason) + '</span></span>' +
+          '<button type="button" class="icon-btn" onclick="event.stopPropagation();window.attentionWa(\'' + h(a.m.id) + '\')" aria-label="Chat WhatsApp ' + h(a.m.name) + '">' + icon('message-circle') + '</button></div>';
+      }).join('') + '</div>' : emptyState('shield-check', 'Semua klien aman', 'Tidak ada kuota yang hampir habis.')) + '</div>';
+    html += '</div>';
+
+    // Statistik
+    const statsOpen = window.innerWidth >= 1024 || ui.statsOpen;
+    html += '<div class="span-12 card collapse' + (statsOpen ? '' : ' closed') + '" id="stats-collapse">' +
+      '<button type="button" class="collapse-head" onclick="window.toggleStats()" aria-expanded="' + statsOpen + '"><div><h3 class="section-title">Statistik</h3><p class="li-sub">Tren booking, jam ramai, performa coach & paket</p></div>' + icon('chevron-down', 'class="chev"') + '</button>' +
+      '<div class="collapse-body"><div><div class="grid" style="margin-top:16px">' +
+        '<div class="dash-grid">' +
+          '<div class="span-7 card-flat"><div class="section-head"><h4 class="li-title">Booking 7 hari terakhir</h4></div><div class="bars" id="weekly-chart"></div></div>' +
+          (window.isSoloCoach() ? '' : '<div class="span-5 card-flat"><div class="section-head"><h4 class="li-title">Coach tersibuk</h4><span class="li-sub">semua waktu</span></div><div class="stack" id="coach-leaderboard"></div></div>') +
+          '<div class="span-12 card-flat"><div class="section-head"><h4 class="li-title">Jam ramai</h4><div class="heat-legend">Sepi<span class="heat-cell"></span><span class="heat-cell l1"></span><span class="heat-cell l2"></span><span class="heat-cell l3"></span><span class="heat-cell l4"></span>Ramai</div></div><div id="peak-hour-heatmap" style="overflow-x:auto"></div></div>' +
+          '<div class="span-12 row-between" style="flex-wrap:wrap"><h4 class="li-title">Laporan bulanan</h4><select class="select" id="coach-monthly-filter" style="width:auto;min-height:40px" onchange="window.renderMonthlyStats()"></select></div>' +
+          (window.isSoloCoach() ? '' : '<div class="span-6 card-flat"><div class="section-head"><h4 class="li-title">Performa coach</h4><span class="li-sub">sesi selesai</span></div><div class="stack" id="coach-monthly-stats-list"></div></div>') +
+          '<div class="span-6 card-flat"><div class="section-head"><h4 class="li-title">Paket terlaris</h4><span class="li-sub">transaksi</span></div><div class="stack" id="package-trend-list"></div></div>' +
+        '</div>' +
+      '</div></div></div></div>';
+
+    html += '</div>';
+    setHTML(el, html);
+
+    countUp($('kpi-clients'), active);
+    countUp($('kpi-today'), todays.filter(isBooked).length);
+    countUp($('kpi-week'), weekCount);
+    countUp($('kpi-rate'), rate, { format: v => v + '%' });
+    renderRevenueKpi();
+    renderWeeklyChart();
+    renderLeaderboard();
+    renderHeatmap();
+    populateMonthFilter();
+    window.renderMonthlyStats();
+  }
+
+  window.toggleStats = function () {
+    const c = $('stats-collapse');
+    if (!c) return;
+    const closed = c.classList.toggle('closed');
+    ui.statsOpen = !closed;
+    c.querySelector('.collapse-head').setAttribute('aria-expanded', String(!closed));
+  };
+
+  function kpi(iconName, label, id, value, note, suffix) {
+    return '<div class="kpi"><div class="row-between"><span class="kpi-label">' + h(label) + '</span><span class="kpi-icon">' + icon(iconName) + '</span></div>' +
+      '<span class="kpi-value" id="' + id + '">' + value + (suffix || '') + '</span><span class="kpi-note">' + h(note) + '</span></div>';
+  }
+
+  function renderRevenueKpi() {
+    const el = $('kpi-revenue-tile');
+    if (!el) return;
+    const month = MONTHS[new Date().getMonth()];
+    const r = ui.revenue;
+    let body;
+    if (!r) body = '<span class="skeleton" style="height:30px;width:60%;background:color-mix(in srgb,var(--on-ink) 14%,transparent)"></span><span class="kpi-note">Menghitung…</span>';
+    else if (r.error) body = '<span class="kpi-value">–</span><span class="kpi-note">Belum bisa dimuat</span>';
+    else if (r.fin) body = '<span class="kpi-value" id="kpi-revenue">' + h(rupiahShort(r.o.masuk || 0)) + '</span><span class="kpi-note">Laba ' + h(rupiahShort(r.o.laba || 0)) + ' · tunggakan ' + h(rupiahShort(r.o.tunggakan || 0)) + '</span>';
+    else body = '<span class="kpi-value" id="kpi-revenue">' + h(rupiahShort(r.total || 0)) + '</span><span class="kpi-note">' + Math.round((r.share || 0.65) * 100) + '% dari harga paket · ' + (r.count || 0) + ' pembelian/perpanjangan</span>';
+    el.innerHTML = '<div class="row-between"><span class="kpi-label">' + (r && r.fin ? 'Keuangan bulan ini' : 'Pendapatan paket') + ' · ' + h(month) + '</span><span class="kpi-icon">' + icon('wallet') + '</span></div>' + body;
+    el.onclick = r && r.fin ? window.finGo : null;
+    el.style.cursor = r && r.fin ? 'pointer' : '';
+    paintIcons();
+  }
+
+  function nextSessionCard(next) {
+    if (!next) {
+      return '<div class="card-ink" style="min-height:100%"><p class="eyebrow">Sesi berikutnya</p>' +
+        '<h3 style="font-size:var(--fs-2xl);font-weight:800;margin:10px 0 6px">Belum ada jadwal</h3><p class="muted">Buat booking untuk klien dari sini.</p>' +
+        '<div class="btn-row" style="margin-top:22px"><button type="button" class="btn btn-on-ink" onclick="window.quickAction(\'booking\')">' + icon('calendar-plus') + 'Buat booking</button></div></div>';
+    }
+    const d = new Date(next.start);
+    return '<div class="card-ink" style="min-height:100%;display:flex;flex-direction:column;gap:16px">' +
+      '<div class="row-between"><p class="eyebrow">Sesi berikutnya</p>' + statusInfo(next).pill + '</div>' +
+      '<div class="row" style="gap:14px">' + avatar('', next.title, 'lg') +
+        '<div class="grow"><h3 style="font-size:var(--fs-2xl);font-weight:800;letter-spacing:-0.02em" class="truncate">' + h(next.title) + '</h3>' +
+        '<p class="muted">' + h(fmtDate(d, { weekday: 'long', day: 'numeric', month: 'short' })) + ' · ' + fmtTime(d) + '</p></div></div>' +
+      '<div class="row" style="gap:18px;flex-wrap:wrap">' +
+        '<div><p class="eyebrow">Mulai</p><p class="num" style="font-size:var(--fs-3xl);font-weight:800;letter-spacing:-0.03em" data-countdown="' + d.getTime() + '">' + h(timeUntil(d)) + '</p></div>' +
+        '<div><p class="eyebrow">Coach</p><p style="font-weight:700;margin-top:6px">' + h(next.coachName || 'Belum ada') + '</p></div>' +
+      '</div>' +
+      '<div class="btn-row" style="margin-top:auto">' +
+        '<button type="button" class="btn btn-on-ink" onclick="window.openScheduleDetail(\'' + h(next.id) + '\')">Detail</button>' +
+        (next.phone ? '<button type="button" class="btn btn-on-ink-ghost" onclick="window.quickWa(\'' + h(next.id) + '\')">' + icon('message-circle') + 'Ingatkan</button>' : '') +
+      '</div></div>';
+  }
+
+  function lastSessionDate(memberId) {
+    let last = null;
+    window.schedules.forEach(function (s) {
+      if (String(s.memberId) !== String(memberId) || isAvailable(s)) return;
+      const d = new Date(s.start);
+      if (d <= new Date() && (!last || d > last)) last = d;
+    });
+    return last;
+  }
+
+  function attentionList() {
+    const out = [];
+    const now = Date.now();
+    window.members.forEach(function (m) {
+      const total = Number(m.totalSessions) || 0, rem = remainingOf(m);
+      if (total > 0 && rem === 0) { out.push({ m: m, score: 3, kind: 'empty', reason: 'Kuota habis · ' + total + ' sesi terpakai' }); return; }
+      if (total > 0 && rem <= 2) { out.push({ m: m, score: 2, kind: 'low', reason: 'Sisa ' + rem + ' sesi' }); return; }
+      const last = lastSessionDate(m.id);
+      const upcoming = window.schedules.some(s => String(s.memberId) === String(m.id) && new Date(s.start) > new Date() && isBooked(s));
+      if (!upcoming && last) {
+        const days = Math.floor((now - last) / 86400000);
+        if (days >= 14) out.push({ m: m, score: 1, kind: 'idle', reason: 'Tidak latihan ' + days + ' hari' });
+      }
+    });
+    return out.sort((a, b) => b.score - a.score);
+  }
+
+  window.attentionWa = function (id) {
+    const a = attentionList().find(x => String(x.m.id) === String(id));
+    const m = a ? a.m : window.members.find(x => String(x.id) === String(id));
+    if (!m) return;
+    let text = 'Halo ' + m.name + ', ini Coach XNK. ';
+    if (a && a.kind === 'empty') text += 'Kuota sesi latihan kamu sudah habis. Mau lanjut perpanjang paket?';
+    else if (a && a.kind === 'low') text += 'Sesi latihan kamu tinggal ' + remainingOf(m) + '. Yuk jadwalkan sesi berikutnya!';
+    else text += 'Sudah lama nggak ketemu di gym. Yuk jadwalkan sesi latihan berikutnya!';
+    window.sendToParentWA(m.phone, text);
+  };
+
+  // Grafik: booking 7 hari terakhir
+  function renderWeeklyChart() {
+    const el = $('weekly-chart');
+    if (!el) return;
+    const buckets = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = today0(); d.setDate(d.getDate() - i);
+      const count = window.schedules.filter(s => isBooked(s) && sameDay(new Date(s.start), d)).length;
+      buckets.push({ label: DOW_SHORT[d.getDay()], date: d, count: count, today: i === 0 });
+    }
+    const max = Math.max(1, ...buckets.map(b => b.count));
+    el.innerHTML = buckets.map(function (b) {
+      return '<div class="bar-col' + (b.today ? ' today' : '') + '"><div class="bar-track"><div class="bar' + (b.count ? '' : ' soft') + '" data-h="' + Math.max(b.count ? 6 : 2, Math.round(b.count / max * 100)) + '" data-tip="' + h(fmtShort(b.date)) + ': ' + b.count + ' sesi"><span class="bar-val num">' + b.count + '</span></div></div><span class="bar-lbl">' + b.label + '</span></div>';
+    }).join('');
+    requestAnimationFrame(function () {
+      el.querySelectorAll('.bar').forEach(function (bar, i) { setTimeout(function () { bar.style.height = bar.getAttribute('data-h') + '%'; }, 60 + i * 60); });
+      setTimeout(function () { el.classList.add('ready'); }, 200);
+    });
+  }
+
+  function hbarList(el, rows, emptyHtml) {
+    if (!el) return;
+    if (!rows.length) { setHTML(el, emptyHtml); return; }
+    const max = Math.max(1, ...rows.map(r => r.value));
+    setHTML(el, rows.map(function (r) {
+      return '<div class="hbar" data-tip="' + h(r.label + ': ' + r.tip) + '">' +
+        '<span class="row" style="gap:8px;min-width:0">' + avatar('', r.label, 'sm') + '<span class="li-title truncate">' + h(r.label) + '</span></span>' +
+        '<span class="li-sub num" style="font-weight:700">' + h(r.note) + '</span>' +
+        '<span class="hbar-track"><i data-w="' + Math.round(r.value / max * 100) + '"></i></span></div>';
+    }).join(''));
+    requestAnimationFrame(function () {
+      el.querySelectorAll('[data-w]').forEach(function (bar, i) { setTimeout(function () { bar.style.width = bar.getAttribute('data-w') + '%'; }, 80 + i * 70); });
+    });
+  }
+
+  function renderLeaderboard() {
+    if (!$('coach-leaderboard')) return;
+    const counts = {};
+    window.schedules.filter(isBooked).forEach(function (s) { const n = s.coachName || 'Belum ada coach'; counts[n] = (counts[n] || 0) + 1; });
+    const rows = Object.keys(counts).map(k => ({ label: k, value: counts[k], note: counts[k] + ' sesi', tip: counts[k] + ' sesi' }))
+      .sort((a, b) => b.value - a.value).slice(0, 5);
+    hbarList($('coach-leaderboard'), rows, emptyState('dumbbell', 'Belum ada data', ''));
+  }
+
+  function renderHeatmap() {
+    const el = $('peak-hour-heatmap');
+    if (!el) return;
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    const counts = {};
+    window.schedules.forEach(function (s) {
+      if (!s.start) return;
+      const d = new Date(s.start);
+      if (isNaN(d)) return;
+      const k = d.getDay() + '-' + d.getHours();
+      counts[k] = (counts[k] || 0) + 1;
+    });
+    let max = 1;
+    Object.keys(counts).forEach(k => { if (counts[k] > max) max = counts[k]; });
+    const hours = [];
+    for (let hh = 6; hh < 21; hh++) hours.push(hh);
+    let html = '<div class="heat" style="grid-template-columns:34px repeat(' + hours.length + ',minmax(18px,1fr));min-width:420px">';
+    html += '<span></span>' + hours.map(hh => '<span class="heat-lbl" style="justify-content:center">' + hh + '</span>').join('');
+    order.forEach(function (dow) {
+      const range = DAY_HOURS[dow];
+      html += '<span class="heat-lbl">' + DOW_SHORT[dow] + '</span>';
+      hours.forEach(function (hh) {
+        if (hh < range[0] || hh >= range[1]) { html += '<span class="heat-cell none"></span>'; return; }
+        const c = counts[dow + '-' + hh] || 0;
+        const lvl = c === 0 ? '' : ' l' + Math.max(1, Math.ceil(c / max * 4));
+        html += '<span class="heat-cell' + lvl + '" data-tip="' + DOW_SHORT[dow] + ' ' + pad(hh) + '.00 · ' + c + ' booking"></span>';
+      });
+    });
+    el.innerHTML = html + '</div>';
+  }
+
+  function populateMonthFilter() {
+    const el = $('coach-monthly-filter');
+    if (!el) return;
+    const now = new Date();
+    let html = '';
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const v = (d.getMonth() + 1) + '-' + d.getFullYear();
+      html += '<option value="' + v + '">' + MONTHS[d.getMonth()] + ' ' + d.getFullYear() + '</option>';
+    }
+    el.innerHTML = html;
+    el.value = ui.statsMonth || ((now.getMonth() + 1) + '-' + now.getFullYear());
+  }
+
+  window.renderMonthlyStats = function () {
+    const f = $('coach-monthly-filter');
+    if (!f || !f.value) return;
+    ui.statsMonth = f.value;
+    const mm = f.value.split('-').map(Number), month = mm[0], year = mm[1];
+    const map = {};
+    window.schedules.forEach(function (s) {
+      if (!isDone(s) || !s.completedAt) return;
+      const d = new Date(s.completedAt);
+      if (isNaN(d) || d.getMonth() + 1 !== month || d.getFullYear() !== year) return;
+      const k = s.coachId || '_';
+      if (!map[k]) map[k] = { name: s.coachName || 'Belum ada coach', n: 0, clients: {} };
+      map[k].n++;
+      if (s.memberId) map[k].clients[s.memberId] = 1;
+    });
+    const rows = Object.keys(map).map(function (k) {
+      const c = Object.keys(map[k].clients).length;
+      return { label: map[k].name, value: map[k].n, note: map[k].n + ' sesi · ' + c + ' klien', tip: map[k].n + ' sesi selesai, ' + c + ' klien' };
+    }).sort((a, b) => b.value - a.value);
+    if ($('coach-monthly-stats-list')) hbarList($('coach-monthly-stats-list'), rows, emptyState('calendar-x', 'Belum ada sesi selesai', 'Sesi yang ditandai selesai di bulan ini muncul di sini.'));
+
+    const listEl = $('package-trend-list');
+    if (!listEl) return;
+    setHTML(listEl, '<span class="skeleton" style="height:18px"></span><span class="skeleton" style="height:18px;width:70%"></span><span class="skeleton" style="height:18px;width:50%"></span>');
+    const tkey = month + '-' + year;
+    const trendP = (window._trendCache && window._trendCache[tkey]) ? Promise.resolve(window._trendCache[tkey]) : (window._morePending || Promise.resolve()).then(function () { return window._trendCache && window._trendCache[tkey] ? window._trendCache[tkey] : adminCall('getPackageTrendStats', month, year).then(function (r) { (window._trendCache = window._trendCache || {})[tkey] = r; return r; }); });
+    trendP.then(function (res) {
+      hbarList(listEl, (res || []).map(r => ({ label: r.namaPaket || '(tanpa nama)', value: r.count, note: r.count + '×', tip: r.count + ' transaksi' })),
+        emptyState('package', 'Belum ada transaksi', 'Pembelian & perpanjangan paket di bulan ini muncul di sini.'));
+    }).catch(function (err) { setHTML(listEl, emptyState('triangle-alert', 'Gagal memuat', err.message)); });
+  };
+  window.renderCoachMonthlyStats = window.renderMonthlyStats;
+  window.renderPackageTrendStats = window.renderMonthlyStats;
+  window.renderDashboard = function () { if (window.currentView === 'dashboard') renderView('dashboard', { animate: false }); };
+
+  // ── JADWAL (kalender bulan + daftar, minggu di desktop) ───────────────────
+  function coachFilterOptions() {
+    // Klien: dropdown ini adalah pilihan coach untuk booking (wajib), bukan filter.
+    if (window.isPublicView) return '<option value="">Pilih coach…</option>' + window.coaches.map(c => '<option value="' + h(String(c.id)) + '"' + (String(ui.bookCoach) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
+    return '<option value="ALL">Semua coach</option>' + window.coaches.map(c => '<option value="' + h(c.id) + '"' + (String(ui.coachFilter) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
+  }
+  function filteredSchedules() {
+    return window.schedules.filter(s => ui.coachFilter === 'ALL' || String(s.coachId) === String(ui.coachFilter));
+  }
+
+  function renderSchedule() {
+    const el = $('view-calendar');
+    const pub = window.isPublicView;
+    const isDesk = window.innerWidth >= 1024;
+    if (ui.schedMode === 'week' && (pub || !isDesk)) ui.schedMode = 'month';
+    let html = '<div class="page-head"><div><h2 class="page-title">Jadwal</h2><p class="page-sub">' +
+      (pub ? 'Pilih tanggal untuk melihat jam yang masih kosong.' : 'Kelola semua sesi latihan klien.') + '</p></div>' +
+      '<div class="row" style="flex-wrap:wrap">' +
+      (window.isSoloCoach() ? '' : '<select class="select" id="calendar-coach-filter" style="width:auto;min-height:44px" onchange="' + (window.isPublicView ? 'window.pickBookCoach(this.value)' : 'window.setCoachFilter(this.value)') + '" aria-label="' + (window.isPublicView ? 'Pilih coach' : 'Filter coach') + '">' + coachFilterOptions() + '</select>') +
+      (!pub ? '<div class="seg only-desktop" id="sched-seg"><span class="seg-thumb"></span><button type="button" class="' + (ui.schedMode === 'month' ? 'active' : '') + '" onclick="window.setSchedMode(\'month\')">Bulan</button><button type="button" class="' + (ui.schedMode === 'week' ? 'active' : '') + '" onclick="window.setSchedMode(\'week\')">Minggu</button></div>' : '') +
+      '<button type="button" class="btn btn-primary only-desktop" onclick="' + (pub ? 'window.handleFabClick()' : 'window.quickAction(\'booking\')') + '">' + icon('calendar-plus') + 'Booking</button>' +
+      '</div></div>';
+    if (pub) html += portalScheduleKpis();
+
+    if (ui.schedMode === 'week') {
+      html += '<div class="week-wrap"><div id="calendar"></div></div>';
+      setHTML(el, html);
+      moveSegThumb($('sched-seg'));
+      setTimeout(window.initCalendar, 30);
+      return;
+    }
+    html += '<div class="sched-layout"><div><div class="month-cal" id="month-cal"></div></div><div id="day-panel"></div></div>';
+    setHTML(el, html);
+    moveSegThumb($('sched-seg'));
+    renderMonthCal();
+    renderDayPanel();
+  }
+
+  window.setCoachFilter = function (v) { ui.coachFilter = v || 'ALL'; renderView('calendar', { animate: false }); };
+  window.setSchedMode = function (m) { ui.schedMode = m; renderView('calendar', { animate: false }); };
+
+  function renderMonthCal(dir) {
+    const el = $('month-cal');
+    if (!el) return;
+    const pub = window.isPublicView, me = window.publicLoggedMember;
+    const first = new Date(ui.calMonth);
+    const startOffset = (first.getDay() + 6) % 7;
+    const gridStart = new Date(first); gridStart.setDate(1 - startOffset);
+    const t0 = today0();
+    const perDay = {};
+    filteredSchedules().forEach(function (s) {
+      const d = new Date(s.start), k = ymd(d);
+      if (!perDay[k]) perDay[k] = { mine: 0, active: 0, done: 0, other: 0 };
+      if (pub) {
+        if (me && String(s.memberId) === String(me.id)) perDay[k].mine++;
+        else if (isBooked(s)) perDay[k].other++;
+      } else if (isDone(s)) perDay[k].done++;
+      else if (isBooked(s)) perDay[k].active++;
+    });
+    let cells = '';
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
+      const k = ymd(d), info = perDay[k];
+      const cls = ['mc-day'];
+      if (d.getMonth() !== first.getMonth()) cls.push('out');
+      if (d < t0) cls.push('past');
+      if (sameDay(d, t0)) cls.push('today');
+      if (sameDay(d, ui.selectedDate)) cls.push('selected');
+      let dots = '';
+      if (info) {
+        const filled = pub ? info.mine : info.active;
+        const ring = pub ? info.other : info.done;
+        const n = Math.min(ring ? 2 : 3, filled);
+        for (let j = 0; j < n; j++) dots += '<i></i>';
+        if (ring) dots += '<i class="ring"></i>';
+      }
+      const label = fmtDate(d, { weekday: 'long', day: 'numeric', month: 'long' }) + (info ? ', ada jadwal' : '');
+      cells += '<button type="button" class="' + cls.join(' ') + '" data-date="' + k + '" onclick="window.selectDate(\'' + k + '\')" aria-label="' + h(label) + '"' + (sameDay(d, ui.selectedDate) ? ' aria-pressed="true"' : '') + '>' + d.getDate() + (dots ? '<span class="mc-dots">' + dots + '</span>' : '') + '</button>';
+    }
+    const legend = pub
+      ? '<span><i></i>Jadwalku</span><span><i class="ring"></i>Ada yang booking</span>'
+      : '<span><i></i>Terjadwal</span><span><i class="ring"></i>Selesai</span>';
+    el.innerHTML = '<div class="mc-head">' +
+      '<button type="button" class="mc-nav" onclick="window.shiftMonth(-1)" aria-label="Bulan sebelumnya">' + icon('chevron-left') + '</button>' +
+      '<div class="row" style="gap:10px"><span class="mc-title">' + MONTHS[first.getMonth()] + ' ' + first.getFullYear() + '</span>' +
+      '<button type="button" class="mc-today" onclick="window.goToday()">Hari ini</button></div>' +
+      '<button type="button" class="mc-nav" onclick="window.shiftMonth(1)" aria-label="Bulan berikutnya">' + icon('chevron-right') + '</button></div>' +
+      '<div class="mc-grid">' + ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map(x => '<span class="mc-dow">' + x.toUpperCase() + '</span>').join('') + '</div>' +
+      '<div class="mc-grid' + (dir ? (dir > 0 ? ' anim-next' : ' anim-prev') : '') + '">' + cells + '</div>' +
+      '<div class="mc-legend">' + legend + '</div>';
+    paintIcons();
+  }
+
+  window.shiftMonth = function (delta) {
+    ui.calMonth = new Date(ui.calMonth.getFullYear(), ui.calMonth.getMonth() + delta, 1);
+    renderMonthCal(delta);
+  };
+  window.goToday = function () {
+    ui.selectedDate = today0();
+    const m = today0(); m.setDate(1);
+    const dir = m > ui.calMonth ? 1 : (m < ui.calMonth ? -1 : 0);
+    ui.calMonth = m;
+    renderMonthCal(dir);
+    renderDayPanel();
+  };
+  window.selectDate = function (key) {
+    const p = key.split('-').map(Number);
+    ui.selectedDate = new Date(p[0], p[1] - 1, p[2]);
+    if (ui.selectedDate.getMonth() !== ui.calMonth.getMonth() || ui.selectedDate.getFullYear() !== ui.calMonth.getFullYear()) {
+      const dir = ui.selectedDate > ui.calMonth ? 1 : -1;
+      ui.calMonth = new Date(p[0], p[1] - 1, 1);
+      renderMonthCal(dir);
+    } else {
+      document.querySelectorAll('#month-cal .mc-day').forEach(function (b) {
+        const sel = b.getAttribute('data-date') === key;
+        b.classList.toggle('selected', sel);
+        if (sel) b.setAttribute('aria-pressed', 'true'); else b.removeAttribute('aria-pressed');
+      });
+    }
+    renderDayPanel(true);
+  };
+
+  function renderDayPanel(animate) {
+    const el = $('day-panel');
+    if (!el) return;
+    const day = ui.selectedDate;
+    const list = filteredSchedules().filter(s => sameDay(new Date(s.start), day)).sort(byStart);
+    const head = '<div class="section-head" style="margin-top:4px"><div><p class="eyebrow">' + (sameDay(day, today0()) ? 'Hari ini' : h(fmtDate(day, { weekday: 'long' }))) + '</p>' +
+      '<h3 class="section-title" style="font-size:var(--fs-2xl)">' + h(fmtDate(day, { day: 'numeric', month: 'long', year: 'numeric' })) + '</h3></div>';
+    let html;
+    if (!window.isPublicView) {
+      html = head + '<span class="pill soft num">' + list.filter(isBooked).length + ' sesi</span></div>' +
+        (list.length ? '<div class="timeline stagger">' + list.map(s => sessionItem(s, { actions: true })).join('') + '</div>'
+          : emptyState('calendar-x', 'Tidak ada sesi', 'Belum ada jadwal di tanggal ini.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openBookingSheet({date:\'' + ymd(day) + '\'})">' + icon('plus') + 'Buat booking</button>'));
+    } else {
+      html = head + '</div>' + publicDayPanel(day, list);
+    }
+    setHTML(el, html);
+    if (animate) { el.style.animation = 'none'; void el.offsetWidth; el.style.animation = 'fadeUp var(--t-slow) var(--ease-out)'; }
+    staggerIndex(el);
+    highlightSelection();
+  }
+
+  // Portal: jadwalku di tanggal itu + pilihan jam kosong.
+  function publicDayPanel(day, list) {
+    const me = window.publicLoggedMember;
+    const mine = me ? list.filter(s => String(s.memberId) === String(me.id)) : [];
+    let html = '';
+    if (mine.length) {
+      html += '<p class="eyebrow" style="margin:6px 0 8px">Jadwalku</p><div class="list stagger" style="margin-bottom:18px">' + mine.map(memberSessionRow).join('') + '</div>';
+    }
+    scheduleHourRedraw();
+    if (me && !window.openSlotsByDate) return html + '<div class="notice" role="status">' + icon('clock') + '<div class="grow"><p class="li-title">Memuat jam kosong…</p></div></div>' + skel(2, true);
+    const slotMap = window.openSlotsByDate;
+    const slotDates = slotMap ? Object.keys(slotMap).sort() : [];
+    // Lewat batas booking: belum ada jam yang dibuka, jadi tidak ada kisi jam.
+    if (slotDates.length && ymd(day) > slotDates[slotDates.length - 1]) {
+      return html + '<div class="notice" role="status" style="margin-top:6px">' + icon('calendar-off') + '<div class="grow"><p class="li-title">Belum dibuka</p>' +
+        '<p class="li-sub">Booking paling jauh ' + h(window.bookingHorizonDays) + ' hari ke depan.</p></div></div>';
+    }
+    const range = DAY_HOURS[day.getDay()];
+    const multi = !window.isSoloCoach() && window.coaches.length > 1;
+    if (multi && me) {
+      // Dua coach aktif atau lebih: pilih coach (dropdown di atas) dulu, baru jam. Jam kosong dihitung per coach di server.
+      if (!ui.bookCoach) return html + '<div class="notice">' + icon('user-round') + '<div class="grow"><p class="li-title">Pilih coach dulu</p><p class="li-sub">Pilih coach di dropdown atas, lalu jam kosongnya akan muncul.</p></div></div>';
+    }
+    const coachCount = ui.coachFilter === 'ALL' ? Math.max(1, window.coaches.length) : 1;
+    const byCoach = multi && me ? window.openSlotsByCoachMap[ui.bookCoach] : null;
+    const now = new Date();
+    let slots = '';
+    let free = 0;
+    for (let hh = range[0]; hh < range[1]; hh++) {
+      const s0 = wibAt(ymd(day), pad(hh) + ':00');
+      const s1 = new Date(s0.getTime() + 3600000);
+      const overlapping = list.filter(s => {
+        if (!isBooked(s)) return false;
+        // Sama dengan server: sesi dihitung dari jam bulat awalnya selama durasinya.
+        const bs = Math.floor(new Date(s.start).getTime() / 3600000) * 3600000, be = Math.max(bs + (new Date(s.end || s.start) - new Date(s.start)), new Date(s.end || s.start).getTime());
+        return bs < s1.getTime() && be > s0.getTime();
+      });
+      const isMine = me && overlapping.some(s => String(s.memberId) === String(me.id));
+      const slotMap = multi && me ? byCoach : window.openSlotsByDate;
+      const eng = slotMap && slotMap[ymd(day)];
+      // Jam kosong dari server; hari di luar batas booking (tidak ada di peta) = penuh.
+      const taken = !isMine && (eng && eng[hh] !== undefined ? eng[hh] <= 0 : (slotMap ? true : overlapping.length >= coachCount));
+      const past = s0 <= now;
+      const label = pad(hh) + '.00';
+      if (isMine) slots += '<button type="button" class="slot mine" disabled>' + icon('check', 'style="width:14px;height:14px"') + label + '</button>';
+      else if (past) slots += '<button type="button" class="slot past" disabled aria-label="' + label + ' sudah lewat">' + label + '</button>';
+      else if (taken) slots += '<button type="button" class="slot taken" disabled aria-label="' + label + ' penuh">' + label + '</button>';
+      else { free++; slots += '<button type="button" class="slot" onclick="window.bookSlot(\'' + ymd(day) + '\',\'' + pad(hh) + ':00\')" aria-label="Booking jam ' + label + '">' + label + '</button>'; }
+    }
+    const at = slotsAtNow();
+    const fresh = at ? ' · diperbarui ' + fmtTime(new Date(at)) : '';
+    html += '<div class="row-between" style="margin:6px 0 10px;gap:10px"><p class="eyebrow">Pilih jam</p><span class="li-sub num" id="slots-meta">' + free + ' jam kosong' + fresh + '</span></div>' +
+      '<div class="slot-grid stagger">' + slots + '</div>' +
+      '<div class="row" style="gap:16px;margin-top:14px;flex-wrap:wrap" aria-hidden="true">' +
+        '<span class="li-sub row" style="gap:6px"><span class="slot" style="width:22px;height:16px;border-radius:6px"></span>Kosong</span>' +
+        '<span class="li-sub row" style="gap:6px"><span class="slot taken" style="width:22px;height:16px;border-radius:6px"></span>Penuh</span>' +
+        '<span class="li-sub row" style="gap:6px"><span class="slot mine" style="width:22px;height:16px;border-radius:6px"></span>Jadwalku</span></div>';
+    if (!me) html += '<div class="notice" style="margin-top:16px">' + icon('lock') + '<div class="grow"><p class="li-title">Masuk untuk booking</p><p class="li-sub">Pakai nomor WhatsApp yang terdaftar di coach.</p></div><button type="button" class="btn btn-primary btn-sm" onclick="window.navigate(\'public-login\')">Masuk</button></div>';
+    return html;
+  }
+
+  // Dua coach aktif atau lebih: isi <select> coach (kosong = belum dipilih) dan tampilkan field-nya.
+  function fillCoachSelect(fieldId, selectId) {
+    const need = !window.isSoloCoach() && window.coaches.length > 1;
+    $(fieldId).classList.toggle('hide', !need);
+    if (need) $(selectId).innerHTML = '<option value="">Pilih coach…</option>' + window.coaches.map(c => '<option value="' + h(String(c.id)) + '">' + h(c.name) + '</option>').join('');
+    return need;
+  }
+  window.setBookCoach = function (id) { if (!window.isSoloCoach()) ui.bookCoach = String(id || ''); };
+  window.pickBookCoach = function (id) {
+    ui.bookCoach = String(id || '');
+    renderView('calendar', { animate: false });
+    // Jam kosong coach ini sudah ikut bootstrap; server hanya ditanya kalau datanya lebih dari 2 menit.
+    if (ui.bookCoach && window.refreshOpenSlots) window.refreshOpenSlots();
+  };
+  window.bookSlot = function (date, time) {
+    if (!window.publicLoggedMember) { window.showToast('Masuk dulu untuk booking.', 'lock'); window.navigate('public-login'); return; }
+    window.handleFabClick();
+    $('edit-sch-date').value = date;
+    $('edit-sch-time').value = time;
+    updateTimeHint();
+  };
+
+  // FullCalendar (tab Minggu, admin desktop)
+  window.initCalendar = function () {
+    const el = $('calendar');
+    if (!el) return;
+    if (typeof FullCalendar === 'undefined') {
+      // FullCalendar dimuat defer (tidak menahan tampilan pertama); gambar kalender begitu pustakanya siap.
+      if (!window._calWait) { window._calWait = 1; window.addEventListener('load', function () { window._calWait = 0; if (typeof FullCalendar !== 'undefined') window.initCalendar(); }, { once: true }); }
+      return;
+    }
+    if (window.calendarInstance) { try { window.calendarInstance.destroy(); } catch (e) {} }
+    el.innerHTML = '';
+    const events = filteredSchedules().map(function (s) {
+      const info = statusInfo(s);
+      return {
+        id: s.id,
+        title: (isAvailable(s) ? 'Tersedia' : s.title) + (s.coachName ? ' · ' + s.coachName : ''),
+        start: s.start, end: s.end,
+        classNames: ['ev-' + (info.cls === 'confirmed' ? 'confirmed' : info.cls)],
+        extendedProps: { status: status(s), notes: s.notes, phone: s.phone, coachId: s.coachId }
+      };
+    });
+    window.calendarInstance = new FullCalendar.Calendar(el, {
+      initialView: 'timeGridWeek',
+      initialDate: ui.selectedDate,
+      firstDay: 1,
+      locale: 'id',
+      headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
+      buttonText: { today: 'Hari ini' },
+      height: 'auto',
+      slotMinTime: '06:00:00', slotMaxTime: '22:00:00', allDaySlot: false,
+      slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+      nowIndicator: true,
+      selectable: true, editable: true,
+      events: events,
+      select: function (info) { window.openBookingSheet({ date: ymd(info.start), time: hm(info.start) }); },
+      eventDrop: function (info) { window.updateDraggedEvent(info.event, info.revert); },
+      eventResize: function (info) { window.updateDraggedEvent(info.event, info.revert); },
+      eventClick: function (info) { window.openScheduleDetail(info.event.id); }
+    });
+    window.calendarInstance.render();
+  };
+
+  window.updateDraggedEvent = function (event, revert) {
+    if (window.isPublicView) { revert(); return; }
+    const s = window.schedules.find(x => String(x.id) === String(event.id));
+    const data = {
+      id: event.id,
+      start: event.start.toISOString(),
+      end: event.end ? event.end.toISOString() : new Date(event.start.getTime() + 3600000).toISOString(),
+      notes: (s && s.notes) || ''
+    };
+    adminCall('updateScheduleData', data).then(function () {
+      if (s) { s.start = data.start; s.end = data.end; }
+      window.showToast('Jadwal dipindah ke ' + fmtShort(event.start) + ' ' + fmtTime(event.start) + '.');
+      refreshDetail();
+    }).catch(function (err) { revert(); window.showToast('Gagal memindah jadwal: ' + err.message); });
+  };
+
+  // ── Detail sesi (admin) ─────────────────────────────────────────────────────
+  window.openScheduleDetail = function (id) {
+    if (window.isPublicView) return;
+    const s = window.schedules.find(x => String(x.id) === String(id));
+    if (!s) return;
+    window.selectedScheduleDetailId = s.id;
+    const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000);
+    const info = statusInfo(s);
+    const member = window.members.find(m => String(m.id) === String(s.memberId));
+    const coachOpts = '<option value="">Belum ada coach</option>' + window.coaches.map(c => '<option value="' + h(c.id) + '"' + (String(s.coachId) === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>').join('');
+    let body = '<div class="stack" style="gap:16px">';
+    body += '<div id="detail-briefing"></div>';
+    body += '<div class="card-ink"><div class="row-between"><p class="eyebrow">' + h(info.label) + '</p>' + info.pill + '</div>' +
+      '<p style="font-size:var(--fs-4xl);font-weight:800;letter-spacing:-0.03em;margin-top:10px" class="num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' +
+      '<p class="muted" style="margin-top:4px">' + h(fmtDate(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</p>' +
+      (!isDone(s) && !isAvailable(s) ? '<p class="num" style="margin-top:14px;font-weight:700" data-countdown="' + d.getTime() + '">' + h(timeUntil(d)) + '</p>' : '') + '</div>';
+
+    if (!isAvailable(s)) {
+      body += '<div class="kv">' +
+        '<div' + (member ? ' role="button" tabindex="0" style="cursor:pointer" onclick="window.openProfile(\'' + h(member.id) + '\')"' : '') + '><p class="k">Klien</p><p class="v">' + h(s.title) + '</p></div>' +
+        '<div><p class="k">Sisa sesi</p><p class="v">' + (member ? remainingOf(member) + ' sesi' : '—') + '</p></div>' +
+        '<div><p class="k">Status</p><p class="v">' + h(info.label) + '</p></div>' +
+        (s.phone ? '<div><p class="k">WhatsApp</p><p class="v">+' + h(s.phone) + '</p></div>' : '') +
+        '<div class="wide"><p class="k">Catatan</p><p class="v">' + (s.notes ? h(s.notes) : '<span class="muted" style="font-weight:500">Tidak ada catatan</span>') + '</p></div></div>';
+    } else {
+      body += '<div class="kv"><div class="wide"><p class="k">Catatan</p><p class="v">' + (s.notes ? h(s.notes) : '<span class="muted" style="font-weight:500">Tidak ada catatan</span>') + '</p></div></div>';
+    }
+    if (!window.isSoloCoach()) body += '<div class="field"><label class="label" for="detail-assign-coach">Coach</label><div class="row"><select class="select grow" id="detail-assign-coach">' + coachOpts + '</select>' +
+      '<button type="button" class="btn btn-secondary" id="btn-save-coach" onclick="window.saveCoachAssignment()">Simpan</button></div></div>';
+
+    body += '<div class="stack" style="gap:8px" id="detail-complete-container">';
+    if (isDone(s)) body += '<button type="button" class="btn btn-secondary btn-lg btn-block" onclick="window.openSessionNote(\'' + h(s.id) + '\')">' + icon('notebook-pen') + 'Catatan sesi &amp; kirim WA</button>';
+    if (member && !isAvailable(s)) body += '<button type="button" class="btn btn-outline btn-lg btn-block" onclick="window.workoutOpenAdmin(\'' + h(member.id) + '\',\'' + h(s.id) + '\',\'' + h(s.start) + '\')">' + icon('dumbbell') + 'Catat latihan</button>';
+    if (!isDone(s) && !isAvailable(s)) body += '<button type="button" class="btn btn-primary btn-lg btn-block" id="btn-complete-session" onclick="window.markSessionCompleted()">' + icon('check-circle-2') + 'Tandai selesai & potong 1 sesi</button>';
+    body += '<div class="btn-row">' +
+      (!isDone(s) ? '<button type="button" class="btn btn-outline" onclick="window.openEditScheduleDetailModal()">' + icon('calendar-clock') + 'Ubah jadwal</button>' : '') +
+      (s.phone ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailMember()">' + icon('message-circle') + 'Chat klien</button>' : '') +
+      (s.coachId && !window.isSoloCoach() ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailCoach()">' + icon('dumbbell') + 'Chat coach</button>' : '') +
+      '</div>';
+    body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-schedule" onclick="window.deleteScheduleFromDetail()">' + icon('trash-2') + 'Hapus sesi ini</button>';
+    if (s.recurringGroupId) body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-recurring-group" onclick="window.deleteRecurringGroupFromDetail()">' + icon('repeat') + 'Hapus seluruh seri berulang</button>';
+    body += '</div></div>';
+    openDetail('session:' + s.id, isAvailable(s) ? 'Slot tersedia' : 'Detail sesi', '', body);
+    if (!isAvailable(s) && s.memberId) window.loadSessionBriefing(s.id);
+    if (status(s) === 'unread') window.markNotificationsReadSilently([s.id]);
+  };
+  window.openScheduleDetailModal = function (event) { window.openScheduleDetail(event && event.id); };
+
+  window.markNotificationsReadSilently = function (ids) {
+    adminCall('markSchedulesAsRead', ids).then(function () {
+      window.schedules.forEach(function (s) { if (ids.indexOf(s.id) !== -1) s.status = 'read'; });
+      updateBadges();
+      if (window.currentView === 'dashboard' || window.currentView === 'calendar') renderView(window.currentView, { animate: false });
+    }).catch(function () {});
+  };
+
+  window.saveCoachAssignment = function () {
+    const sel = $('detail-assign-coach');
+    const coachId = sel ? sel.value : '';
+    const coach = window.coaches.find(c => String(c.id) === String(coachId));
+    const coachName = coach ? coach.name : '';
+    const done = busy($('btn-save-coach'), '…');
+    adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId).then(function () {
+      const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+      if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
+      done();
+      window.showToast(coach ? 'Coach ' + coach.name + ' ditugaskan.' : 'Coach dikosongkan.');
+      window.updateUI();
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+  };
+
+  window.contactDetailMember = function () { window.quickWa(window.selectedScheduleDetailId); };
+  window.contactDetailCoach = function () {
+    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    if (!s || !s.coachId) { window.showToast('Pilih coach dulu.'); return; }
+    const c = window.coaches.find(x => String(x.id) === String(s.coachId));
+    if (!c) return;
+    const d = new Date(s.start);
+    window.sendToParentWA(c.phone, 'Halo Coach ' + c.name + ', kamu ditugaskan untuk sesi bersama ' + s.title + ' pada ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB.');
+  };
+
+  window.markSessionCompleted = function () {
+    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    if (!s) return;
+    const m = window.members.find(x => String(x.id) === String(s.memberId));
+    if (m && Number(m.usedSessions) >= Number(m.totalSessions)) { window.showToast('Kuota sesi klien ini sudah habis.'); return; }
+    window.showConfirmModal('Sesi <b>' + h(s.title) + '</b> ditandai selesai dan kuota klien berkurang 1.', function () {
+      const btn = $('btn-complete-session');
+      const done = busy(btn, 'Memproses…');
+      adminCall('completeSession', s.id, s.memberId).then(function (result) {
+        done();
+        s.status = 'completed';
+        s.completedAt = new Date().toISOString();
+        if (m) m.usedSessions = (Number(m.usedSessions) || 0) + 1;
+        window.updateUI();
+        window.showToast('Sesi selesai. Kuota dipotong.');
+        // Catatan sesi + pesan pasca-sesi (memuat sisa sesi) menggantikan konfirmasi "kirim info sisa sesi".
+        setTimeout(function () { window.openSessionNote(s.id, true, result); }, 350);
+      }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    }, { title: 'Tandai sesi selesai?', confirmText: 'Ya, selesai', icon: 'check-circle-2' });
+  };
+
+  window.deleteScheduleFromDetail = function () {
+    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    if (!s) return;
+    window.showConfirmModal('Sesi <b>' + h(s.title) + '</b> pada ' + h(fmtShort(new Date(s.start))) + ' akan dihapus.' + (isDone(s) ? ' Kuota klien dikembalikan 1.' : ''), function () {
+      adminCall('deleteSchedule', s.id).then(function () {
+        window.schedules = window.schedules.filter(x => String(x.id) !== String(s.id));
+        if (isDone(s)) { const m = window.members.find(x => String(x.id) === String(s.memberId)); if (m) m.usedSessions = Math.max(0, (Number(m.usedSessions) || 0) - 1); }
+        window.closeDetail();
+        window.updateUI();
+        window.showToast('Sesi dihapus.');
+      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }, { title: 'Hapus sesi?', confirmText: 'Hapus', variant: 'danger' });
+  };
+  window.confirmDeleteSchedule = window.deleteScheduleFromDetail;
+
+  window.deleteRecurringGroupFromDetail = function () {
+    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    if (!s || !s.recurringGroupId) return;
+    const groupId = s.recurringGroupId;
+    window.showConfirmModal('<b>Semua sesi</b> dalam seri berulang ini akan dihapus, termasuk yang sudah lewat. Kuota dari sesi yang sudah selesai dikembalikan.', function () {
+      adminCall('deleteRecurringGroup', groupId).then(function (res) {
+        window.schedules = window.schedules.filter(x => String(x.recurringGroupId) !== String(groupId));
+        return adminCall('getMembers').then(function (fresh) {
+          window.members = fresh || window.members;
+          window.closeDetail();
+          window.updateUI();
+          window.showToast((res && res.deletedCount) + ' sesi berulang dihapus.');
+        });
+      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }, { title: 'Hapus seluruh seri?', confirmText: 'Hapus semua', variant: 'danger' });
+  };
+

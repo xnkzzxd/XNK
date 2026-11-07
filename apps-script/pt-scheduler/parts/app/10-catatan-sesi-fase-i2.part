@@ -1,0 +1,762 @@
+  // ── Catatan sesi (Fase I2) ──────────────────────────────────────────────────
+  // Dibuka otomatis setelah "Selesai" (afterDone = true) dan dari detail sesi yang sudah selesai.
+  let noteSched = null;
+  window.openSessionNote = function (scheduleId, afterDone, result) {
+    const s = window.schedules.find(x => String(x.id) === String(scheduleId));
+    if (!s) return;
+    noteSched = s;
+    ['sn-dilatih', 'sn-fokus', 'sn-rpe', 'sn-pribadi'].forEach(k => { $(k).value = ''; });
+    $('sn-err').textContent = '';
+    $('sn-who').textContent = s.title + ' · ' + fmtShort(new Date(s.start)) + ' ' + fmtTime(new Date(s.start));
+    $('sn-title').textContent = afterDone ? 'Sesi selesai: catat sesi' : 'Catatan sesi';
+    // Paket habis: tawarkan ajakan evaluasi lewat WhatsApp (tombol, tidak dikirim otomatis).
+    const pk = $('sn-pkg');
+    pk.classList.toggle('hide', !(result && result.packageDone));
+    pk.onclick = result && result.packageDone ? function () { window.sendToParentWA(s.phone, result.evalText); } : null;
+    openSheet('modal-session-note');
+    adminCall('getSessionNote', s.id).then(function (n) {
+      if (noteSched !== s) return;
+      if (!$('sn-dilatih').value && !$('sn-fokus').value) { $('sn-dilatih').value = n.dilatih || ''; $('sn-fokus').value = n.fokus || ''; $('sn-rpe').value = n.rpe === '' ? '' : n.rpe; $('sn-pribadi').value = n.pribadi || ''; }
+    }).catch(function () {});
+  };
+  window.sessionNoteSave = function (e, withWa) {
+    if (e) e.preventDefault();
+    if (!noteSched) return;
+    const s = noteSched;
+    const rpe = $('sn-rpe').value.trim();
+    if (rpe && !/^(10|[1-9])$/.test(rpe)) { $('sn-err').textContent = 'RPE harus bilangan bulat 1 sampai 10.'; return; }
+    $('sn-err').textContent = '';
+    const done = busy($(withWa ? 'sn-wa-btn' : 'sn-save-btn'), 'Menyimpan…');
+    adminCall('saveSessionNote', s.id, { dilatih: $('sn-dilatih').value, fokus: $('sn-fokus').value, rpe: rpe, pribadi: $('sn-pribadi').value }).then(function (r) {
+      done(); window.closeModal();
+      window.showToast('Catatan sesi disimpan.');
+      if (withWa) setTimeout(function () { window.sendToParentWA(s.phone, r.text); }, 200);
+    }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
+  };
+
+  // Daftar "Perlu perhatian" di Beranda Coach
+  const CARE_CHIPS = { 'flag-today': 'Perhatian hari ini', 'health-review': 'Form belum ditinjau', 'retest': 'Tes ulang', 'no-assessment': 'Belum ada assessment', 'no-health': 'Belum isi form', 'gap': '14 hari tanpa sesi' };
+  function careListHtml(list) {
+    if (!list || !list.length) return '<div class="card-flat"><p class="eyebrow">Perlu perhatian</p><p class="li-sub" style="min-height:44px;display:flex;align-items:center">Semua klien beres.</p></div>';
+    return '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + '</span></div>' + list.slice(0, 8).map(function (c) {
+      return '<div class="row" style="gap:6px;min-height:56px"><button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="grow" style="min-width:0"><span class="li-title truncate" style="display:block">' + h(c.name) + '</span>' +
+        '<span class="row" style="gap:4px;flex-wrap:wrap">' + c.reasons.slice(0, 2).map(r => '<span class="pill soft">' + h(CARE_CHIPS[r] || r) + '</span>').join('') + '</span></span>' + icon('chevron-right') + '</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
+    }).join('') + (list.length > 8 ? '<p class="li-sub">+' + (list.length - 8) + ' lainnya</p>' : '') + '</div>';
+  }
+  window.snoozeCareUI = function (id) {
+    adminCall('snoozeCare', id, 7).then(function () { window.showToast('Disembunyikan 7 hari.'); loadHub(); }).catch(function (err) { window.showToast(err.message); });
+  };
+
+  // Portal: form kesehatan + tes kebugaran
+  const myCare = { form: null, assess: null };
+  function myCareInner() {   // Beranda: hanya kartu form kesehatan
+    let html = '';
+    if (myCare.form && !myCare.form.done) {
+      html += '<div class="card"><div class="section-head"><h3 class="section-title">Form kesehatan</h3></div><p class="li-sub">Isi sekali saja supaya coach tahu kondisimu sebelum latihan.</p>' +
+        '<button type="button" class="btn btn-primary btn-block" style="margin-top:12px" onclick="window.openPortalHealth()">Isi sekarang</button></div>';
+    }
+    return html;
+  }
+  function myTestsInner() {   // Progres: kartu hasil tes dan tren
+    let html = '';
+    const tests = myCare.assess && myCare.assess.tests || [];
+    if (tests.length) {
+      html += '<div class="card"><div class="section-head"><h3 class="section-title">Hasil tes</h3></div><div class="stack" style="gap:6px">' + tests.map(function (t) {
+        const unit = t.unit.split(' ')[0];
+        const delta = t.change === null ? '' : (t.improved ? ' · ' + (t.better === 'lower' ? 'turun ' : 'naik ') + Math.abs(t.change).toString().replace('.', ',') + ' ' + unit + ' 🎉' : '');
+        return '<div class="row-between" style="min-height:40px;gap:8px"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700;text-align:right">' + h(t.first.nilai) + (t.latest.nilai !== t.first.nilai || t.change !== null ? ' → ' + h(t.latest.nilai) : '') + ' ' + h(unit) + '<span class="li-sub">' + h(delta) + '</span></span></div>' + trendHtml(t, t.history);
+      }).join('') + '</div></div>';
+    }
+    return html;
+  }
+  window.loadMyCare = function () {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return;
+    Promise.all([memberCall('getMyHealthForm').catch(() => null), memberCall('getMyAssessment').catch(() => null)]).then(function (r) {
+      myCare.form = r[0]; myCare.assess = r[1];
+      const w = $('pub-care-wrap'); if (w) { w.innerHTML = myCareInner(); paintIcons(); }
+      const wt = $('pub-tests-wrap'); if (wt) { wt.innerHTML = myTestsInner(); paintIcons(); }
+    });
+  };
+  window.openPortalHealth = function () {
+    const qs = (myCare.form && myCare.form.questions) || [];
+    $('ph-questions').innerHTML = qs.map((q, i) => '<div class="stack" style="gap:6px"><p>' + (i + 1) + '. ' + h(q) + '</p><div class="seg" role="radiogroup" aria-label="Pertanyaan ' + (i + 1) + '"><span class="seg-thumb"></span>' +
+      '<button type="button" data-q="' + i + '" data-v="ya" style="min-height:44px" onclick="window.phPick(this)">Ya</button><button type="button" data-q="' + i + '" data-v="tidak" style="min-height:44px" onclick="window.phPick(this)">Tidak</button></div></div>').join('');
+    $('ph-injuries').value = $('ph-med').value = $('ph-other').value = ''; $('ph-consent').checked = false;
+    openSheet('modal-portal-health');
+  };
+  window.phPick = function (btn) {
+    Array.prototype.forEach.call(btn.parentNode.querySelectorAll('button'), b => b.classList.toggle('active', b === btn));
+  };
+  window.submitPortalHealth = function (e) {
+    e.preventDefault();
+    const n = (myCare.form.questions || []).length, q = [];
+    for (let i = 0; i < n; i++) { const b = document.querySelector('#ph-questions button.active[data-q="' + i + '"]'); q.push(b ? b.getAttribute('data-v') : ''); }
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Mengirim…');
+    memberCall('submitMyHealthForm', { q: q, injuries: $('ph-injuries').value, medication: $('ph-med').value, other: $('ph-other').value, consent: $('ph-consent').checked ? 'ya' : '' })
+      .then(function () { done(); window.closeModal(); window.showToast('Terima kasih, coach akan membacanya.'); window.loadMyCare(); })
+      .catch(function (err) { done(); window.showToast(err.message); });
+  };
+
+  window.assignUnassignedConfirm = function () {
+    adminCall('assignUnassignedToSelf', { dryRun: true }).then(function (r) {
+      if (!r.sessions && !r.clients) { window.showToast('Semua jadwal sudah punya coach.'); return; }
+      window.showConfirmModal('<b>' + r.sessions + '</b> jadwal dan <b>' + r.clients + '</b> klien tanpa coach akan ditetapkan ke <b>' + h(r.coachName) + '</b>. Sesi yang sudah selesai tidak berubah.', function () {
+        adminCall('assignUnassignedToSelf', {}).then(function () { window.showToast('Selesai ditetapkan.'); return window.loadAllData(); })
+          .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      }, { title: 'Tetapkan ke saya?', confirmText: 'Tetapkan' });
+    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+
+  function reloadCoaches() {
+    return adminCall('getCoachesAdmin').then(function (res) { applyCoachesAdmin(res); saveAdminCache(); window.updateUI(); });
+  }
+  window.setCoachActiveUI = function (id, aktif) {
+    adminCall('setCoachActive', id, aktif).then(function () { window.closeDetail(); return reloadCoaches(); })
+      .then(function () { window.showToast(aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.'); })
+      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+  window.setSelfCoachUI = function (id) {
+    adminCall('setSelfCoach', id).then(function () { return reloadCoaches(); })
+      .then(function () { window.showToast('Ditandai sebagai "Ini saya".'); window.openCoachProfile(id); })
+      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  };
+  window.updateCoachUI = function () { if (window.currentView === 'coaches') renderView('coaches', { animate: false }); };
+
+  window.openCoachProfile = function (id) {
+    const c = coachList().find(x => String(x.id) === String(id));
+    if (!c) return;
+    window.currentCoachId = c.id;
+    const st = coachStats(c);
+    let body = '<div class="stack" style="gap:16px">' +
+      '<div class="card-ink" style="text-align:center;padding:28px 20px">' + avatar(c.photo, c.name, 'xl', 'margin:0 auto 14px') +
+      '<h3 class="profile-name">' + h(c.name) + '</h3><p class="muted" style="margin-top:4px">' + h(c.headline || c.specialty || 'Personal trainer') + '</p>' +
+      (c.experience ? '<span class="pill" style="margin-top:12px">' + h(c.experience) + ' pengalaman</span>' : '') + '</div>' +
+      '<div class="kv"><div><p class="k">Sesi bulan ini</p><p class="v num">' + st.month + '</p></div><div><p class="k">Jadwal mendatang</p><p class="v num">' + st.upcoming + '</p></div>' +
+      '<div><p class="k">Klien dilatih</p><p class="v num">' + st.clients + '</p></div><div><p class="k">WhatsApp</p><p class="v">+' + h(c.phone || '-') + '</p></div></div>' +
+      '<div class="card-flat"><p class="eyebrow">Bio</p><p style="margin-top:6px">' + (c.bio ? h(c.bio) : '<span class="muted">Belum ada bio.</span>') + '</p></div>' +
+      ((c.certifications && c.certifications.length) ? '<div class="card-flat"><p class="eyebrow">Sertifikasi</p><p style="margin-top:6px">' + c.certifications.map(h).join(' · ') + '</p></div>' : '') +
+      ((c.achievements && c.achievements.length) ? '<div class="card-flat"><p class="eyebrow">Prestasi</p><p style="margin-top:6px">' + c.achievements.map(h).join(' · ') + '</p></div>' : '') +
+      ((c.location || c.instagram) ? '<div class="card-flat"><p class="eyebrow">Lokasi & sosial</p><p style="margin-top:6px">' + h(c.location || '') + (c.location && c.instagram ? ' · ' : '') + (c.instagram ? '@' + h(c.instagram) : '') + '</p></div>' : '') +
+      '<div class="btn-row"><button type="button" class="btn btn-primary" data-wa="' + h(c.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
+      '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
+      (c.id === window.coachSelfId ? '<button type="button" class="btn btn-secondary btn-block" onclick="window.openCoachPreview()">' + icon('eye') + 'Lihat seperti klien</button>' : '') +
+      (c.aktif !== false && c.id !== window.coachSelfId ? '<button type="button" class="btn btn-outline btn-block" onclick="window.setSelfCoachUI(\'' + h(c.id) + '\')">' + icon('user-check') + 'Jadikan "Ini saya"</button>' : '') +
+      '<button type="button" class="btn btn-outline btn-block" onclick="window.setCoachActiveUI(\'' + h(c.id) + '\',' + (c.aktif === false ? 'true' : 'false') + ')">' + icon('power') + (c.aktif === false ? 'Aktifkan coach' : 'Nonaktifkan coach') + '</button>' +
+      '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>';
+    openDetail('coach:' + c.id, 'Profil coach', '<button type="button" class="icon-btn plain" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')" aria-label="Ubah coach">' + icon('pencil') + '</button>', body);
+  };
+
+  window.deleteCoachConfirm = function (id) {
+    const c = coachList().find(x => String(x.id) === String(id));
+    if (!c) return;
+    window.showConfirmModal('<b>' + h(c.name) + '</b> dihapus dari tim. Coach yang masih dipakai jadwal atau klien tidak bisa dihapus; nonaktifkan saja.', function () {
+      adminCall('deleteCoach', id).then(function () {
+        window.closeDetail();
+        return reloadCoaches().then(function () { window.showToast('Coach dihapus.'); });
+      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }, { title: 'Hapus coach?', confirmText: 'Hapus', variant: 'danger' });
+  };
+
+  function setCoachPreview(photo) {
+    const img = $('coach-photo-preview'), fb = $('coach-photo-preview-fallback');
+    if (photo) { img.src = photo; img.classList.remove('hide'); if (fb) fb.classList.add('hide'); }
+    else { img.classList.add('hide'); img.removeAttribute('src'); const f2 = $('coach-photo-preview-fallback') || img.parentNode.querySelector('svg'); if (f2) f2.classList.remove('hide'); }
+  }
+  window.openAddCoachModal = function () {
+    $('coach-modal-title').textContent = 'Coach baru';
+    ['coach-edit-id', 'coach-name', 'coach-phone', 'coach-specialty', 'coach-experience', 'coach-bio', 'coach-headline', 'coach-certs', 'coach-achievements', 'coach-location', 'coach-instagram'].forEach(id => { $(id).value = ''; });
+    window.pendingCoachBase64 = null;
+    setCoachPreview('');
+    openSheet('modal-add-coach');
+  };
+  window.openEditCoachModal = function (id) {
+    const c = coachList().find(x => String(x.id) === String(id));
+    if (!c) return;
+    window.openAddCoachModal();
+    $('coach-modal-title').textContent = 'Ubah coach';
+    $('coach-edit-id').value = c.id;
+    $('coach-name').value = c.name || '';
+    $('coach-phone').value = c.phone || '';
+    $('coach-specialty').value = c.specialty || '';
+    $('coach-experience').value = c.experience || '';
+    $('coach-bio').value = c.bio || '';
+    $('coach-headline').value = c.headline || '';
+    $('coach-certs').value = (c.certifications || []).join(', ');
+    $('coach-achievements').value = (c.achievements || []).join(', ');
+    $('coach-location').value = c.location || '';
+    $('coach-instagram').value = c.instagram || '';
+    setCoachPreview(c.photo);
+  };
+  window.previewCoachPhoto = function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { window.showToast('Pilih file gambar (JPG/PNG).'); return; }
+    window.cropContext = 'coach';
+    window.openCropModal(file);
+    e.target.value = '';
+  };
+  window.submitAddCoach = function (e) {
+    e.preventDefault();
+    const editId = $('coach-edit-id').value;
+    const old = editId ? coachList().find(c => String(c.id) === String(editId)) : null;
+    const data = {
+      name: $('coach-name').value, phone: sanitizePhone($('coach-phone').value), specialty: $('coach-specialty').value,
+      bio: $('coach-bio').value, experience: $('coach-experience').value, headline: $('coach-headline').value,
+      certifications: $('coach-certs').value, achievements: $('coach-achievements').value,
+      location: $('coach-location').value, instagram: $('coach-instagram').value,
+      photo: old ? old.photo || '' : '', fotoFileId: old ? old.photoFileId || '' : ''
+    };
+    if (editId) data.id = editId;
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    const upload = window.pendingCoachBase64
+      ? adminCall('uploadCoachPhoto', window.pendingCoachBase64, 'coach_' + Date.now() + '.jpg', 'image/jpeg').then(function (r) { data.photo = r.url; data.fotoFileId = r.fileId || ''; window.pendingCoachBase64 = null; })
+      : Promise.resolve();
+    upload.then(function () { return adminCall('saveCoach', data); }).then(function () { return reloadCoaches(); }).then(function () {
+      done();
+      window.closeModal();
+      window.showToast(editId ? 'Coach diperbarui.' : 'Coach ditambahkan.');
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+  };
+
+  // ── Potong foto (coach & klien) ────────────────────────────────────────────
+  let cropper = null;
+  window.cropContext = null;
+  window.pendingCoachBase64 = null;
+  window.openCropModal = function (file) {
+    const reader = new FileReader();
+    reader.onload = function (ev) {
+      const img = $('cropper-image');
+      img.src = ev.target.result;
+      openSheet('modal-crop-avatar');
+      if (cropper) { try { cropper.destroy(); } catch (e) {} }
+      setTimeout(function () {
+        if (typeof Cropper === 'undefined') return;
+        cropper = new Cropper(img, { aspectRatio: 1, viewMode: 1, dragMode: 'move', autoCropArea: 0.9, restore: false, guides: true, center: true, highlight: false, toggleDragModeOnDblclick: false });
+      }, 260);
+    };
+    reader.readAsDataURL(file);
+  };
+  window.cancelCrop = function () {
+    if (window.cropContext === 'coach') openSheet('modal-add-coach'); else window.closeModal();
+  };
+  window.saveCroppedAvatar = function () {
+    if (!cropper) return;
+    const canvas = cropper.getCroppedCanvas({ width: 400, height: 400, imageSmoothingEnabled: true, imageSmoothingQuality: 'high' });
+    const url = canvas.toDataURL('image/jpeg', 0.85), b64 = url.split(',')[1];
+    if (window.cropContext === 'coach') {
+      window.pendingCoachBase64 = b64;
+      openSheet('modal-add-coach');
+      setCoachPreview(url);
+      return;
+    }
+    const me = window.publicLoggedMember;
+    if (!me) return;
+    const done = busy($('btn-save-crop'), 'Mengunggah…');
+    memberCall('uploadMemberPhoto', b64, 'avatar_' + me.id + '.jpg', 'image/jpeg').then(function (res) {
+      return memberCall('updateMemberPhoto', res.url).then(function () {
+        done();
+        me.photo = res.url;
+        window.closeModal();
+        window.updateUI();
+        window.showToast('Foto profil diperbarui.');
+      });
+    }).catch(function (err) { done(); window.showToast('Gagal mengunggah foto: ' + window.authMessage(err)); });
+  };
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'pub-avatar-input') {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!/^image\//.test(file.type)) { window.showToast('Pilih file gambar (JPG/PNG).'); return; }
+      window.cropContext = 'member';
+      window.openCropModal(file);
+      e.target.value = '';
+    }
+  });
+
+  // ── PORTAL: login ──────────────────────────────────────────────────────────
+  function renderPublicLogin() {
+    const el = $('view-public-login');
+    if (el.querySelector('#login-phone')) return; // pertahankan isian & pesan
+    setHTML(el, '<div class="auth embedded"><form class="auth-form" onsubmit="window.handlePublicLogin(event)" novalidate style="padding-top:12px">' +
+      '<div class="auth-logo"><span class="logo-mark"></span></div>' +
+      '<p class="eyebrow">Member area</p><h2 class="auth-title">Halo, selamat datang</h2>' +
+      '<p class="auth-sub">Masuk dengan nomor WhatsApp yang terdaftar di coach untuk booking & cek sisa sesi.</p>' +
+      '<p id="member-link-message" class="form-error hide" role="alert" style="margin-bottom:14px"></p>' +
+      '<div class="field"><label class="label" for="login-phone">Nomor WhatsApp</label><div class="input-affix"><span class="affix">+62</span>' +
+      '<input class="input" type="tel" inputmode="numeric" id="login-phone" required placeholder="81234567890" autocomplete="tel"></div></div>' +
+      '<button type="submit" id="login-submit-btn" class="btn btn-primary btn-lg btn-block" style="margin-top:18px">Masuk ' + icon('arrow-right') + '</button>' +
+      '<p class="hint" style="margin-top:14px;text-align:center">HP ini akan mengingat login-mu selama 90 hari.</p>' +
+      '<div class="group-label" style="margin:26px 0 14px"><span>Belum jadi member?</span></div>' +
+      '<div class="stack" style="gap:10px"><button type="button" class="btn btn-outline btn-block" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + 'Lihat jadwal kosong</button>' +
+      '<button type="button" class="btn btn-outline btn-block" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Lihat paket latihan</button></div>' +
+      '</form><div class="auth-art" aria-hidden="true"><div class="art-grid"></div><div class="art-orb o3"></div><div class="art-orb o2"></div><div class="art-orb o1"></div>' +
+      '<span class="logo-mark art-logo"></span><div class="art-caption"><b>XNK Personal Training</b><span>Booking latihan tanpa ribet.</span></div></div></div>');
+  }
+
+  window.showMemberLinkMessage = function (message) {
+    renderPublicLogin();
+    const el = $('member-link-message');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('hide', !message);
+  };
+
+  window.handlePublicLogin = function (e) {
+    if (e) e.preventDefault();
+    const input = $('login-phone');
+    const phone = sanitizePhone(input ? input.value : '');
+    if (!phone) { if (input) input.focus(); return; }
+    window.showMemberLinkMessage('');
+    if (!hasServer()) { window.showMemberLinkMessage('Mode pratinjau: login tidak tersedia.'); return; }
+    const done = busy($('login-submit-btn'), 'Memeriksa…');
+    rpc('memberLoginByPhone', [phone])
+      .then(function (res) {
+        done();
+        _lsSet(MEMBER_TOKEN_KEY, res.token);
+        if (input) input.value = '';
+        window.setPublicMember(res.member);
+        window.showToast('Selamat datang, ' + (res.member.name || 'member') + '!', 'hand');
+        window.loadPublicData();
+      }, function (err) {
+        done();
+        const msg = window.authMessage(err);
+        window.showMemberLinkMessage(msg);
+        const f = $('view-public-login').querySelector('form');
+        if (f) { f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake'); }
+        if (/tidak ditemukan/i.test(msg) && $('modal-not-member')) {
+          window._pendingPhone = phone;
+          $('nm-sum').textContent = 'Nomor +' + String(phone).replace(/^\+/, '') + ' belum jadi member. Pilih paket latihan dulu untuk mendaftar, atau coba nomor lain.';
+          openSheet('modal-not-member');
+        }
+      });
+  };
+
+  window.notMemberToPackages = function () {
+    window.closeModal();
+    window.navigate('public-catalog');
+  };
+
+  window.startPublicPortal = function (key) {
+    if (!hasServer()) { window.hideGlobalLoader(); window.navigate('public-login'); return; }
+    if (!key) { window.loadPublicData(); return; }
+    rpc('memberLoginByKey', [key])
+      .then(function (res) {
+        _lsSet(MEMBER_TOKEN_KEY, res.token);
+        window.setPublicMember(res.member);
+        window.loadPublicData();
+      }, function (err) {
+        _lsSet(MEMBER_TOKEN_KEY, null);
+        window.loadPublicData().then(function () {
+          window.navigate('public-login');
+          window.showMemberLinkMessage(window.authMessage(err));
+        });
+      });
+  };
+
+  window.setPublicMember = function (member) {
+    const was = !!window.publicLoggedMember;
+    window.publicLoggedMember = member;
+    if (!was) window._openMemberDashboard = true;
+    renderTopbarActions();
+  };
+
+  window.onMemberAuthLost = function (err) {
+    window.clearPortalCache();
+    _lsSet(MEMBER_TOKEN_KEY, null);
+    window.publicLoggedMember = null;
+    renderTopbarActions();
+    window.navigate('public-login');
+    window.showMemberLinkMessage(window.authMessage(err));
+  };
+
+  window.logoutPublic = function () {
+    window.clearPortalCache();
+    window.publicLoggedMember = null;
+    _lsSet(MEMBER_TOKEN_KEY, null);
+    try { localStorage.removeItem('xnk_remembered_phone'); } catch (e) {}
+    renderTopbarActions();
+    window.navigate('public-login');
+    window.showMemberLinkMessage('');
+    window.showToast('Kamu sudah keluar.', 'log-out');
+    window.loadPublicData();
+  };
+
+  // ── PORTAL: beranda ─────────────────────────────────────────────────────────
+  function memberSessionRow(s) {
+    const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000);
+    const done = isDone(s), upcoming = !done && d >= new Date();
+    return '<div class="list-item">' +
+      '<div style="width:52px;text-align:center;flex-shrink:0"><p class="eyebrow">' + DOW_SHORT[d.getDay()] + '</p><p class="num" style="font-size:var(--fs-2xl);font-weight:800;line-height:1.1">' + d.getDate() + '</p></div>' +
+      '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' + (window.isSoloCoach() ? '' : '<p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p>') +
+      (done && s.dilatih ? '<p class="li-sub" style="white-space:normal">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.dilatih) + '</p>' : '') +
+      (done && s.fokus ? '<p class="li-sub" style="white-space:normal">' + icon('target', 'style="width:12px;height:12px;vertical-align:-2px"') + ' Berikutnya: ' + h(s.fokus) + '</p>' : '') + '</div>' +
+      '<div class="li-trail">' + (done ? '<span class="pill soft">' + icon('check') + 'Selesai</span>'
+        : upcoming ? '<button type="button" class="icon-btn plain" aria-label="Tambah ke kalender" onclick="window.openAddToCalendar([\'' + h(s.id) + '\'])">' + icon('calendar-plus') + '</button><button type="button" class="btn btn-outline btn-sm" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah</button>'
+        : '<span class="pill dashed soft">Terlewat</span>') + '</div></div>';
+  }
+
+  // ── Makan hari ini di Dashboardku portal (T-74) — hanya klien paket core ────
+  // window.myMeal: {state:'loading'|'ok'|'error', data, day, error}. undefined = belum dimuat.
+  function todayKey() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function mealRowHtml(ic, label, tip) {
+    return '<div class="list-item"><div class="grow" style="min-width:0"><p class="li-sub">' + icon(ic, 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(label) + '</p>' +
+      (tip ? '<p class="li-title" style="overflow-wrap:anywhere;white-space:pre-line">' + h(tip) + '</p>' : '<p class="li-sub">Belum ada tip.</p>') + '</div></div>';
+  }
+  function myMealCardHtml() {
+    const c = window.myMeal;
+    if (!c || c.state === 'loading') return '';                               // tidak mengganggu layout sebelum tahu klien core
+    if (c.state === 'error') return '<div class="card"><div class="section-head"><h3 class="section-title">Makan hari ini</h3></div><p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyMeal(true)">Coba lagi</button></div>';
+    const d = c.data;
+    if (!d || !d.core) return '';
+    const inner = (d.pagi || d.sore)
+      ? '<div class="list">' + mealRowHtml('sunrise', 'Pagi', d.pagi) + mealRowHtml('sunset', 'Sore', d.sore) + '</div>'
+      : emptyState('utensils', 'Belum ada tip makan', 'Tip makan dari coach untuk hari ini muncul di sini.');
+    return '<div class="card"><div class="section-head"><h3 class="section-title">Makan hari ini</h3></div>' + inner + '</div>';
+  }
+  function renderMyMealCard() {
+    const wrap = $('pub-meal-slot');
+    if (wrap) setHTML(wrap, myMealCardHtml());
+  }
+  window.loadMyMeal = function (force) {
+    const token = _lsGet(MEMBER_TOKEN_KEY);
+    if (!token || !window.publicLoggedMember) return Promise.resolve();
+    const c = window.myMeal;
+    if (c && c.state === 'ok' && c.day === todayKey() && !force) { renderMyMealCard(); return Promise.resolve(); }
+    if (!c || c.state !== 'ok') window.myMeal = { state: 'loading' };
+    renderMyMealCard();
+    return memberCall('getMyMealToday').then(function (data) {
+      window.myMeal = { state: 'ok', data: data || { core: false }, day: todayKey() };
+      renderMyMealCard();
+    }).catch(function (err) {
+      if (window.isAuthError && window.isAuthError(err)) return;
+      window.myMeal = { state: 'error', error: String((err && err.message) || err) };
+      renderMyMealCard();
+    });
+  };
+
+  // ── PR-ku di Dashboardku portal (T-23) ──────────────────────────────────────
+  // window.myTasks: {list, state:'loading'|'ok'|'error', error}. undefined = belum dimuat.
+  function myTaskItemHtml(t) {
+    const done = t.status === 'done', skipped = t.status === 'skipped', open = t.status === 'todo';
+    let meta = '<span class="pill soft">' + h(TASK_CAT_LABEL[t.category] || t.category) + '</span>';
+    if (t.dueDate) meta += '<span class="pill ' + (t.overdue ? 'solid' : 'soft') + ' num">' + (t.overdue ? 'Telat · ' : 'Tenggat ') + h(t.dueDate) + '</span>';
+    if (t.repeat && t.repeat !== 'none') meta += '<span class="pill soft">' + icon('repeat') + h(TASK_REPEAT_LABEL[t.repeat] || t.repeat) + '</span>';
+    if (skipped) meta += '<span class="pill dashed">Dilewati</span>';
+    const tid = h(t.id);
+    return '<div class="list-item task-item' + (open ? '' : ' done') + (t.overdue ? ' late' : '') + '">' +
+      (open ? '<button type="button" class="task-check" onclick="window.openTaskDone(\'' + tid + '\')" aria-label="Selesaikan: ' + h(t.title) + '"></button>'
+            : '<span class="task-check' + (done ? ' on' : '') + '" aria-hidden="true">' + (done ? icon('check') : '') + '</span>') +
+      '<div class="grow" style="min-width:0"><p class="li-title" style="overflow-wrap:anywhere">' + h(t.title) + '</p>' +
+      (t.description ? '<p class="li-sub" style="margin-top:2px;overflow-wrap:anywhere">' + h(t.description) + '</p>' : '') +
+      '<div class="task-meta">' + meta + '</div>' +
+      (t.clientNote ? '<p class="task-note"><b>Catatanku:</b> ' + h(t.clientNote) + '</p>' : '') + '</div></div>';
+  }
+
+  // ── Progres klien: berat, pinggang, foto (Fase D1) ──────────────────────────
+  // Dipakai di portal klien (memberCall) dan di halaman klien panel (adminCall).
+  const pg = { data: null, admin: {}, mode: 'member', memberId: null, side: 'depan', viewId: null };
+  const PG_MEASURES = [['berat', 'Berat', 'kg', 20, 300], ['pinggang', 'Pinggang', 'cm', 30, 250], ['lenganKanan', 'Lengan kanan', 'cm', 10, 80], ['lenganKiri', 'Lengan kiri', 'cm', 10, 80],
+    ['perut', 'Perut', 'cm', 30, 250], ['pahaKanan', 'Paha kanan', 'cm', 20, 120], ['pahaKiri', 'Paha kiri', 'cm', 20, 120], ['dada', 'Dada', 'cm', 40, 200]];
+  const pgNum = v => Number(v).toLocaleString('id-ID', { maximumFractionDigits: 1 });
+  const pgDate = iso => { const p = String(iso).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+  const pgLabel = iso => pgDate(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+  const pgToday = () => { const d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+
+  function pgChangeText(sum, unit) {
+    if (!sum || sum.count < 2) return 'Catatan pertama. Catat lagi nanti untuk melihat perubahan.';
+    const c = sum.change;
+    return (c === 0 ? 'Tidak berubah' : (c < 0 ? '−' : '+') + pgNum(Math.abs(c)) + ' ' + unit) + ' sejak ' + pgLabel(sum.first.tanggal);
+  }
+
+  // Grafik garis SVG tanpa pustaka. Titik bisa disentuh untuk melihat nilainya.
+  function pgChartSvg(entries, key, unit) {
+    const pts = entries.filter(e => e[key] !== '').slice(-26);
+    if (!pts.length) return '';
+    const W = 300, H = 128, padX = 14, top = 16, bottom = 24;
+    const ts = pts.map(p => pgDate(p.tanggal).getTime());
+    const vs = pts.map(p => p[key]);
+    const t0 = Math.min.apply(null, ts), t1 = Math.max.apply(null, ts);
+    let v0 = Math.min.apply(null, vs), v1 = Math.max.apply(null, vs);
+    const pad = Math.max((v1 - v0) * 0.2, 0.5);
+    v0 -= pad; v1 += pad;
+    const x = t => (t1 === t0 ? W / 2 : padX + (t - t0) / (t1 - t0) * (W - 2 * padX));
+    const y = v => top + (1 - (v - v0) / (v1 - v0)) * (H - top - bottom);
+    const line = pts.map((p, i) => (i ? 'L' : 'M') + x(ts[i]).toFixed(1) + ' ' + y(vs[i]).toFixed(1)).join(' ');
+    const dots = pts.map((p, i) => '<circle cx="' + x(ts[i]).toFixed(1) + '" cy="' + y(vs[i]).toFixed(1) + '" r="' + (i === pts.length - 1 ? 5 : 3.5) + '" class="pg-dot" tabindex="0" role="button" aria-label="' + h(pgNum(vs[i]) + ' ' + unit + ', ' + pgLabel(p.tanggal)) + '" onclick="window.showToast(\'' + h(pgNum(vs[i]) + ' ' + unit + ' · ' + pgLabel(p.tanggal)) + '\',\'trending-up\')"/>').join('');
+    return '<svg class="pg-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Grafik ' + h(key) + '">' +
+      '<line x1="' + padX + '" y1="' + (H - bottom) + '" x2="' + (W - padX) + '" y2="' + (H - bottom) + '" class="pg-axis"/>' +
+      (pts.length > 1 ? '<path d="' + line + '" class="pg-line" fill="none"/>' : '') + dots +
+      '<text x="' + padX + '" y="' + (H - 6) + '" class="pg-lbl">' + h(pgLabel(pts[0].tanggal)) + '</text>' +
+      (pts.length > 1 ? '<text x="' + (W - padX) + '" y="' + (H - 6) + '" text-anchor="end" class="pg-lbl">' + h(pgLabel(pts[pts.length - 1].tanggal)) + '</text>' : '') + '</svg>';
+  }
+
+  function pgBlockHtml(d, m) {
+    const sum = d.summary && d.summary[m[0]];
+    if (!sum) return '';
+    return '<div class="pg-block"><div class="row-between"><span class="label">' + m[1] + '</span><span class="pg-now num">' + h(pgNum(sum.last.nilai)) + ' <small>' + m[2] + '</small></span></div>' +
+      '<p class="li-sub">' + h(pgChangeText(sum, m[2])) + '</p>' + pgChartSvg(d.entries, m[0], m[2]) + '</div>';
+  }
+  function pgBlocksHtml(d) {
+    const main = PG_MEASURES.slice(0, 2).map(m => pgBlockHtml(d, m)).join('');
+    const more = PG_MEASURES.slice(2).map(m => pgBlockHtml(d, m)).filter(String);
+    // Lingkar badan lainnya: terlipat supaya kartu tetap pendek di HP.
+    return main + (more.length ? '<details class="pg-more"><summary>Lingkar badan lainnya (' + more.length + ')</summary><div class="stack" style="gap:18px">' + more.join('') + '</div></details>' : '');
+  }
+
+  // ── Tambah ke kalender (Fase I4): .ics dan tautan Google Kalender, tanpa panggilan server ──
+  const icsStamp = d => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const icsEsc = t => String(t == null ? '' : t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  // RFC 5545: baris maksimal 75 karakter; lanjutan diawali satu spasi.
+  function icsFold(line) {
+    const out = []; let rest = line;
+    while (rest.length > 74) { out.push(rest.slice(0, 74)); rest = ' ' + rest.slice(74); }
+    out.push(rest);
+    return out.join('\r\n');
+  }
+  function calTitle(s) { return 'Sesi latihan XNK' + (s.coachName && !window.isSoloCoach() ? ' · ' + s.coachName : ''); }
+  // Murni: daftar sesi {id,start,end,coachName} → teks .ics (CRLF). now = waktu pembuatan (untuk DTSTAMP).
+  function buildIcs(items, now) {
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//XNK//Sesi PT//ID', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+    items.forEach(function (s) {
+      const start = new Date(s.start), end = new Date(s.end || (start.getTime() + 3600000));
+      lines.push('BEGIN:VEVENT', 'UID:' + icsEsc(s.id) + '@xnk.my.id', 'DTSTAMP:' + icsStamp(now || new Date()), 'DTSTART:' + icsStamp(start), 'DTEND:' + icsStamp(end),
+        'SUMMARY:' + icsEsc(calTitle(s)), 'DESCRIPTION:' + icsEsc('Dibooking lewat book.xnkbooking.my.id. Ubah jadwal lewat portal.'),
+        'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc('Sesi latihan 1 jam lagi'), 'TRIGGER:-PT1H', 'END:VALARM', 'END:VEVENT');
+    });
+    lines.push('END:VCALENDAR');
+    return lines.map(icsFold).join('\r\n') + '\r\n';
+  }
+  window.buildIcs = buildIcs;
+  function googleCalUrl(s) {
+    const start = new Date(s.start), end = new Date(s.end || (start.getTime() + 3600000));
+    return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(calTitle(s)) + '&dates=' + icsStamp(start) + '/' + icsStamp(end) +
+      '&details=' + encodeURIComponent('Dibooking lewat book.xnkbooking.my.id');
+  }
+  let calItems = [];
+  window.openAddToCalendar = function (ids, headline) {
+    calItems = (ids || []).map(id => window.schedules.find(x => String(x.id) === String(id))).filter(Boolean)
+      .filter(s => new Date(s.start) > new Date()).sort((x, y) => new Date(x.start) - new Date(y.start));
+    if (!calItems.length) { window.showToast('Tidak ada sesi mendatang untuk disimpan.'); return; }
+    $('cal-title').textContent = headline || 'Tambah ke kalender';
+    $('cal-sum').textContent = calItems.length === 1 ? whenLabel(calItems[0].start) + ' WIB' : calItems.length + ' sesi, mulai ' + whenLabel(calItems[0].start) + ' WIB';
+    const g = $('cal-google');
+    g.classList.toggle('hide', calItems.length !== 1);
+    if (calItems.length === 1) g.setAttribute('href', googleCalUrl(calItems[0]));
+    openSheet('modal-add-cal');
+  };
+  window.downloadIcs = function () {
+    if (!calItems.length) return;
+    try {
+      const blob = new Blob([buildIcs(calItems, new Date())], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = calItems.length === 1 ? 'sesi-xnk.ics' : 'sesi-xnk-' + calItems.length + '.ics';
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      window.closeModal();
+      window.showToast('File kalender diunduh. Buka untuk menyimpannya.');
+    } catch (e) { window.showToast('File kalender gagal dibuat.'); }
+  };
+  // Setelah booking berhasil: tawarkan simpan ke kalender (tidak untuk jawaban "sudah ada").
+  function offerCalendar(ids, headline) { setTimeout(function () { window.openAddToCalendar(ids, headline); }, 450); }
+
+  // ── Penilaian cepat + evaluasi paket di portal (Fase I3) ─────────────────────
+  // window.myFeedback = { enabled, pending: {scheduleId,start,end}|null, pkgEval: bool, stars, scheduleId }
+  function starsHtml(name, value, onclick) {
+    let s = '<div class="stars" role="radiogroup" aria-label="' + h(name) + '">';
+    for (let i = 1; i <= 5; i++) s += '<button type="button" class="star' + (i <= value ? ' on' : '') + '" role="radio" aria-checked="' + (i === value) + '" aria-label="' + i + ' bintang" data-v="' + i + '" onclick="' + onclick + '(' + i + ',this)">' + icon('star') + '</button>';
+    return s + '</div>';
+  }
+  function feedbackCardHtml() {
+    const f = window.myFeedback;
+    if (!f || !f.enabled) return '';
+    if (f.pkgEval) {
+      return '<div class="card" id="pub-feedback-card"><div class="section-head"><h3 class="section-title">Evaluasi paket</h3></div><p class="li-sub">Semua sesi paketmu sudah selesai 🎉 Lihat kemajuanmu dan beri penilaian ke coach.</p>' +
+        '<button type="button" class="btn btn-primary btn-block" style="margin-top:12px" onclick="window.openPackageEval()">' + icon('clipboard-check') + 'Lihat &amp; beri evaluasi</button></div>';
+    }
+    if (!f.pending) return '';
+    const sub = fmtShort(new Date(f.pending.start)) + ' · ' + fmtTime(new Date(f.pending.start));
+    if (f.scheduleId === f.pending.scheduleId && f.stars) {
+      return '<div class="card" id="pub-feedback-card"><div class="section-head"><h3 class="section-title">Terima kasih!</h3></div>' + starsHtml('Penilaian sesi', f.stars, 'window.fbStar') +
+        '<div class="field" style="margin-top:10px"><label class="label" for="fb-comment">Mau tambah satu kalimat? (opsional)</label><input class="input" id="fb-comment" type="text" maxlength="300" placeholder="Misalnya: latihannya seru"></div>' +
+        (f.stars >= 4 ? '<label class="row" style="gap:10px;min-height:44px"><input type="checkbox" id="fb-consent"> <span class="li-sub">Boleh dipakai sebagai testimoni</span></label>' : '') +
+        '<div class="btn-row"><button type="button" class="btn btn-primary" id="fb-send" onclick="window.fbSendComment()">Kirim</button><button type="button" class="btn btn-ghost" onclick="window.fbDone()">Selesai</button></div></div>';
+    }
+    return '<div class="card" id="pub-feedback-card"><div class="section-head"><h3 class="section-title">Bagaimana sesi tadi?</h3></div><p class="li-sub">' + h(sub) + '</p>' + starsHtml('Penilaian sesi', 0, 'window.fbStar') + '</div>';
+  }
+  function fbRender() { const el = $('pub-feedback-slot'); if (el) { setHTML(el, feedbackCardHtml()); paintIcons(); } }
+  window.fbStar = function (n) {
+    const f = window.myFeedback; if (!f || !f.pending) return;
+    f.stars = n; f.scheduleId = f.pending.scheduleId; fbRender();
+    memberCall('rateSession', f.pending.scheduleId, n, '', false).catch(function (err) { window.showToast(window.authMessage ? window.authMessage(err) : err.message); });
+  };
+  window.fbSendComment = function () {
+    const f = window.myFeedback; if (!f || !f.pending) return;
+    const c = $('fb-comment').value.trim(), consent = !!($('fb-consent') && $('fb-consent').checked);
+    if (!c && !consent) { window.fbDone(); return; }
+    const done = busy($('fb-send'), 'Mengirim…');
+    // Tunggu sedikit: simpan bintang dan komentar tidak boleh berebut (jeda 3 detik di server).
+    setTimeout(function () {
+      memberCall('rateSession', f.pending.scheduleId, f.stars, c, consent).then(function () { done(); window.showToast('Terima kasih!'); window.fbDone(); })
+        .catch(function (err) { done(); window.showToast(err.message); });
+    }, 0);
+  };
+  window.fbDone = function () { const f = window.myFeedback; if (f) { f.pending = null; f.stars = 0; } fbRender(); };
+
+  const pe = { data: null, vals: {} };
+  window.openPackageEval = function () {
+    pe.data = null; pe.vals = {};
+    $('pe-body').innerHTML = '<p class="li-sub">Memuat…</p>';
+    $('pe-err').textContent = '';
+    openSheet('modal-pkg-eval');
+    memberCall('getMyPackageEval').then(function (d) {
+      if (!d.eligible) { $('pe-body').innerHTML = '<p class="li-sub">Evaluasi paket belum tersedia atau sudah kamu isi. Terima kasih!</p>'; return; }
+      pe.data = d;
+      const ch = (v, u) => (v > 0 ? '+' : v < 0 ? '−' : '') + String(Math.abs(v)).replace('.', ',') + ' ' + u;
+      let html = '<div class="card-ink"><p class="eyebrow">' + h(d.packageName || 'Paketmu') + '</p><p class="num" style="font-size:var(--fs-4xl);font-weight:800">' + d.sessions + ' sesi</p><p class="muted">selesai' + (d.bestStreak ? ' · streak terbaik ' + d.bestStreak + ' minggu' : '') + '</p></div>';
+      if (d.measures.length || d.tests.length) {
+        html += '<div class="card-flat stack" style="gap:6px"><p class="eyebrow">Kemajuanmu</p>' + d.measures.map(m => '<div class="row-between"><span>' + h(m.label) + '</span><span class="num" style="font-weight:700">' + h(pgNum(m.first)) + ' → ' + h(pgNum(m.last)) + ' ' + h(m.unit) + ' <span class="li-sub">(' + h(ch(m.change, m.unit)) + ')</span></span></div>').join('') +
+          d.tests.map(t => '<div class="row-between"><span>' + h(t.label) + '</span><span class="num" style="font-weight:700">' + h(pgNum(t.first)) + ' → ' + h(pgNum(t.latest)) + ' ' + h(t.unit) + (t.improved ? ' 🎉' : '') + '</span></div>').join('') + '</div>';
+      }
+      html += '<p class="eyebrow" style="margin-top:6px">Bagaimana pengalamanmu?</p>' + d.aspects.map(a => '<div class="row-between" style="gap:8px;flex-wrap:wrap"><span>' + h(a.label) + '</span><span id="pe-st-' + h(a.key) + '">' + starsHtml(a.label, 0, 'window.peStar.bind(null,\'' + h(a.key) + '\')') + '</span></div>').join('') +
+        '<div class="field"><label class="label" for="pe-comment">Cerita singkat (opsional)</label><textarea class="textarea" id="pe-comment" rows="3" maxlength="500"></textarea></div>' +
+        '<label class="row" style="gap:10px;min-height:44px;align-items:flex-start"><input type="checkbox" id="pe-consent"> <span>Boleh dipakai sebagai testimoni</span></label>';
+      $('pe-body').innerHTML = html;
+      $('pe-foot').classList.remove('hide');
+      paintIcons();
+    }).catch(function (err) { $('pe-body').innerHTML = '<p class="li-sub">Gagal memuat: ' + h(err.message) + '</p>'; });
+  };
+  window.peStar = function (key, n) {
+    pe.vals[key] = n;
+    $('pe-st-' + key).innerHTML = starsHtml(key, n, 'window.peStar.bind(null,\'' + key + '\')'); paintIcons();
+  };
+  window.peSubmit = function () {
+    if (!pe.data) return;
+    const missing = pe.data.aspects.find(a => !pe.vals[a.key]);
+    if (missing) { $('pe-err').textContent = 'Beri bintang untuk ' + missing.label.toLowerCase() + '.'; return; }
+    $('pe-err').textContent = '';
+    const done = busy($('pe-send'), 'Mengirim…');
+    memberCall('submitMyPackageEval', Object.assign({}, pe.vals, { komentar: $('pe-comment').value, consent: $('pe-consent').checked }))
+      .then(function () { done(); window.closeModal(); window.showToast('Terima kasih atas evaluasinya!'); if (window.myFeedback) window.myFeedback.pkgEval = false; fbRender(); })
+      .catch(function (err) { done(); $('pe-err').textContent = err.message; });
+  };
+  window.peRenew = function () { window.closeModal(); setTimeout(function () { if (window.openRenewSheet) window.openRenewSheet(); }, 300); };
+
+  // ── Perpanjang paket dari portal (Fase D3) ──────────────────────────────────
+  // window.myRenewal: undefined = belum dimuat, null = belum pernah minta, objek = permintaan terbaru
+  function renewCoachPhone() {
+    const me = window.publicLoggedMember || {};
+    const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId));
+    return coach ? coach.phone : window.coachContactNumber();
+  }
+  function renewText(pkgName, harga) {
+    const me = window.publicLoggedMember || {};
+    return 'Halo Coach, saya ' + (me.name || '') + '. Saya mau perpanjang paket ' + pkgName + (harga ? ' (' + formatRp(harga) + ')' : '') + '.';
+  }
+  function renewNoticeHtml(rem, total) {
+    const r = window.myRenewal;
+    const box = 'margin-top:16px;background:transparent;border-color:var(--on-ink)';
+    if (r && r.status === 'menunggu') {
+      return '<div class="notice" id="pub-renew-pending" style="' + box + '">' + icon('clock') + '<div class="grow"><p class="li-title">Menunggu konfirmasi</p>' +
+        '<p class="muted" style="font-size:var(--fs-xs)">Perpanjang ' + h(r.packageName || 'paket') + ' sudah diminta. Coach mengaktifkannya setelah pembayaran diterima.</p></div>' +
+        '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.renewResend()">Kirim ulang WA</button></div>';
+    }
+    if (r && r.status === 'disetujui' && r.decidedAt && Date.now() - new Date(r.decidedAt).getTime() < 3 * 86400000) {
+      return '<div class="notice" id="pub-renew-done" style="' + box + '">' + icon('check-circle-2') + '<div class="grow"><p class="li-title">Paketmu sudah diperpanjang</p>' +
+        '<p class="muted" style="font-size:var(--fs-xs)">Selamat latihan lagi! 💪</p></div></div>';
+    }
+    if (total > 0 && rem <= 2) {
+      return '<div class="notice" id="pub-quota-warning" style="' + box + '">' + icon('triangle-alert') + '<div class="grow"><p class="li-title" id="pub-quota-warning-text">' +
+        (rem === 0 ? 'Kuota sesimu sudah habis.' : 'Sisa ' + rem + ' sesi lagi.') + '</p><p class="muted" style="font-size:var(--fs-xs)">Perpanjang paket supaya jadwalmu tidak terputus.</p></div>' +
+        '<button type="button" class="btn btn-on-ink btn-sm" id="pub-renew-btn" onclick="window.openRenewSheet()">Perpanjang</button></div>';
+    }
+    return '<button type="button" class="btn btn-on-ink btn-sm" id="pub-renew-link" style="margin-top:16px" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang / beli paket</button>';
+  }
+  function renderRenewSlot() {
+    const slot = $('pub-renew-slot'), me = window.publicLoggedMember;
+    if (!slot || !me) return;
+    const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0;
+    setHTML(slot, renewNoticeHtml(Math.max(0, total - used), total));
+  }
+  window.loadMyRenewal = function () {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    return memberCall('getMyRenewal').then(function (r) { window.myRenewal = r || null; renderRenewSlot(); })
+      .catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
+  };
+  // Kartu Tagihan (Fase H): server mengembalikan [] kecuali owner mengizinkan; tanpa tombol, hanya baca.
+  function renderBillSlot() {
+    const slot = $('pub-bill-slot');
+    if (!slot) return;
+    const bills = (Array.isArray(window.myBills) ? window.myBills : []).filter(function (b) { return b.status !== 'Lunas'; }).slice(0, 3);
+    const rp = function (n) { return 'Rp ' + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+    setHTML(slot, bills.length ? '<div class="card-flat stack" id="pub-bill-card"><h4 class="li-title">Tagihan</h4>' + bills.map(function (b) {
+      return '<div class="row-between"><div style="min-width:0"><p class="li-title truncate">' + h(b.paket) + '</p><p class="li-sub">' + (b.lastPaid ? 'Terakhir bayar ' + h(b.lastPaid) : 'Belum ada pembayaran') + '</p></div>' +
+        '<div style="text-align:right"><b class="num">' + h(rp(b.remaining)) + '</b><p><span class="pill' + (b.status === 'DP' ? '' : ' dashed') + '">' + h(b.status) + '</span></p></div></div>';
+    }).join('') + '<p class="hint">Pembayaran dilakukan langsung ke coach.</p></div>' : '');
+  }
+  window.loadMyBills = function () {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    return memberCall('getMyBills').then(function (list) { window.myBills = list || []; renderBillSlot(); })
+      .catch(function (err) { if (!(window.isAuthError && window.isAuthError(err))) console.warn(err); });
+  };
+  // Satu sheet untuk perpanjang dan beli paket lain: paket sekarang (atau yang diketuk di katalog)
+  // sudah terpilih, jadi biasanya cukup satu ketukan. Permintaan dikirim di latar belakang.
+  let renewSel = '';
+  function renewPkgs() { return (window.priceListData || []).filter(p => p && p.aktif !== false); }
+  function renewPaint() {
+    const p = renewPkgs().find(x => String(x.id) === renewSel);
+    const cur = String((window.publicLoggedMember || {}).packageId || '');
+    document.querySelectorAll('#renew-list [data-renew]').forEach(function (b) {
+      const on = b.getAttribute('data-renew') === renewSel;
+      b.classList.toggle('selected', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    const go = $('renew-go');
+    go.disabled = !p;
+    go.textContent = !p ? 'Pilih paket dulu' : (String(p.id) === cur ? 'Perpanjang' : 'Beli') + ' · ' + formatRp(p.harga);
+  }
+  window.openRenewSheet = function (preId) {
+    const me = window.publicLoggedMember || {};
+    if (fillCoachSelect('renew-coach-field', 'renew-coach') && me.preferredCoachId) $('renew-coach').value = String(me.preferredCoachId);
+    const cur = String(me.packageId || '');
+    const list = renewPkgs().slice().sort((a, b) => (String(b.id) === cur) - (String(a.id) === cur));
+    const ok = id => list.some(p => String(p.id) === String(id) && !(classFull(p) && String(p.id) !== cur));
+    renewSel = preId != null && ok(preId) ? String(preId) : (ok(cur) ? cur : '');
+    $('renew-list').innerHTML = list.length ? list.map(function (p) {
+      const full = classFull(p) && String(p.id) !== cur;
+      return '<button type="button" class="list-item interactive" style="min-height:64px" data-renew="' + h(String(p.id)) + '"' + (full ? ' disabled' : '') + ' onclick="window.renewPick(this.getAttribute(\'data-renew\'))"><span class="grow" style="min-width:0;text-align:left"><span class="li-title truncate" style="display:block">' + h(p.namaPaket) + '</span>' +
+        '<span class="li-sub">' + h((String(p.id) === cur ? 'Paket sekarang · ' : '') + (p.tipe === 'kelas' ? 'Kelas · ' + classSeatsText(p) + ' · ' : '') + (p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '')) + '</span></span>' +
+        '<span class="li-trail num" style="font-weight:800">' + h(formatRp(p.harga)) + '</span></button>';
+    }).join('') : '<p class="li-sub">Belum ada paket yang bisa dipilih.</p>';
+    renewPaint();
+    openSheet('sheet-renew');
+  };
+  window.renewPick = function (id) { renewSel = String(id); renewPaint(); };
+  window.renewGo = function () {
+    const p = renewPkgs().find(x => String(x.id) === renewSel);
+    if (!p) return;
+    const needCoach = !$('renew-coach-field').classList.contains('hide');
+    const coachId = needCoach ? $('renew-coach').value : '';
+    if (needCoach && !coachId) { window.showToast('Pilih coach dulu.'); $('renew-coach').focus(); return; }
+    // Optimis: beranda langsung "Menunggu konfirmasi" dan tombol WhatsApp muncul; server menyusul.
+    const prev = window.myRenewal;
+    window.myRenewal = { id: '', status: 'menunggu', packageId: p.id, packageName: p.namaPaket, harga: p.harga, coachId: coachId };
+    window.closeModal();
+    renderRenewSlot();
+    const coach = (window.coaches || []).find(c => String(c.id) === String(coachId));
+    window.showWaPrompt(window.waUrl(coach ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
+    memberCall('requestRenewal', p.id, coachId).then(function (res) {
+      window.myRenewal = res.request;
+      renderRenewSlot();
+    }).catch(function (err) {
+      window.myRenewal = prev;
+      renderRenewSlot();
+      const w = document.getElementById('wa-prompt'); if (w) w.remove();
+      window.showToast('Gagal: ' + window.authMessage(err));
+    });
+  };
+  window.renewResend = function () {
+    const r = window.myRenewal;
+    if (!r) return;
+    window.showWaPrompt(window.waUrl(renewCoachPhone(), renewText(r.packageName || 'paket', r.harga)), 'Kirim pesan perpanjang ke coach lewat WhatsApp.');
+  };
+
