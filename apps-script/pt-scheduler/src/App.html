@@ -5124,6 +5124,7 @@
   window.contentSave = function (e) {
     if (e) e.preventDefault();
     $('cn-err').textContent = '';
+    if (!$('cn-judul').value.trim()) { $('cn-err').textContent = 'Judul wajib diisi.'; $('cn-judul').focus(); return; }   // cek di browser dulu (sama dengan server)
     const data = { id: cnt.editId, tipe: cnt.tipe, judul: $('cn-judul').value, isi: $('cn-isi').value, url: $('cn-url').value.trim(), kategori: $('cn-kategori').value,
       mulai: $('cn-mulai').value, sampai: $('cn-sampai').value, sematkan: $('cn-sematkan').checked, aktif: $('cn-aktif').checked };
     optimistic(Object.assign(data.id ? { q: { mode: 'admin', fn: 'saveContent', args: [data] } } : { call: function () { return adminCall('saveContent', data); } },
