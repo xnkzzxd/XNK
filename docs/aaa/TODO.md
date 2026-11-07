@@ -29,6 +29,8 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 
 - [x] T-1715b Temuan dari pratinjau: `/demo/` dan `/next/` satu origin (`xnk.my.id`), dan demo dulu menghapus semua kunci `xnk_*` di localStorage (token admin, `xnk_client_cache`, antrean latihan yang belum terkirim) lalu menulis data contoh; `/next/?view=public` sempat menampilkan data Sari dari salinan perangkat. Perbaikan: `demo-runtime.js` menyimpan state perangkat demo hanya di memori (localStorage diganti Proxy; hanya `xnk_theme` dibagi; bila browser menolak, demo tidak jalan). `tools/demo-check.js` (Playwright, dijalankan di `checks.yml`) membuktikan demo terbuka masuk, tidak menyentuh kunci asli, dan tidak meninggalkan kunci; pada demo lama pengecekan ini gagal 6 kali. Harus beres sebelum AAA4 karena panel akan berbagi origin dengan `/demo/`.
 
+- [x] T-1715c CI dipecah: `checks.yml` jadi tiga job paralel (`fast checks`, `browser check (static build)`, `browser check (Apps Script fallback)`) plus job `checks` yang hanya mengumpulkan hasilnya (nama itu tetap satu-satunya yang diwajibkan branch protection); Playwright lewat composite action `.github/actions/setup-playwright`. Sebelumnya satu job ±30 menit dari batas 40; sekarang tiap job ±10–12 menit.
+
 ## AAA4 — Panel (xnk.my.id)
 - [ ] T-1716 `host-local.js` (safe-area, keyboard, share/copy, theme, HTTPS).
 - [ ] T-1717 Offline same-origin; `offline-host.js` tanpa iframe; sinkron ke BookingPT-Client.

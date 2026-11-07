@@ -1,8 +1,14 @@
 name: Checks
 
 # Every pull request, whatever it touches (docs too): every check from docs/Agent.md §5.
-# The job is named `checks` so branch protection can require it (see docs/platform/CI.md).
-# Deploying stays in pt-scheduler.yml (push to main, apps-script/** only).
+# Three jobs run side by side (the two browser-check runs take ~10 minutes each and used to run one
+# after the other, which brought the single job close to its 40-minute limit):
+#   fast            syntax, node tests, site build, share/demo/offline checks
+#   browser-static  browser-check against the static build (fetch + the real doPost)
+#   browser-gas     browser-check against the Apps Script templates (google.script.run fallback)
+# The job named `checks` only collects their results, so branch protection can keep requiring the
+# single name `checks` (see docs/platform/CI.md).
+# Deploying stays in pt-scheduler.yml (push to main, apps-script/** only) and pages.yml.
 on:
   pull_request:
   workflow_dispatch:
@@ -14,13 +20,14 @@ concurrency:
   group: checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  PLAYWRIGHT_VERSION: 1.63.0
+
 jobs:
-  checks:
-    name: checks
+  fast:
+    name: fast checks
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    env:
-      PLAYWRIGHT_VERSION: 1.63.0
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,21 +39,12 @@ jobs:
       - name: Tests
         run: node --test apps-script/pt-scheduler/tests/*.test.js
 
-      # Playwright outside the repo (no package.json here); the tools find it through NODE_PATH.
-      - name: Install Playwright + Chromium
-        run: |
-          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
-          npm init -y > /dev/null
-          npm install --no-audit --no-fund "playwright@$PLAYWRIGHT_VERSION"
-          npx playwright install --with-deps chromium
-          echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-playwright
+        with:
+          version: ${{ env.PLAYWRIGHT_VERSION }}
 
       - name: "Site build (build-site.js: today's files and the static app under /next/)"
         run: node apps-script/pt-scheduler/tools/build-site.js
-      - name: Browser check against the static build (phone pass included; fetch + the real doPost)
-        run: PAGES=static node apps-script/pt-scheduler/tools/browser-check.js
-      - name: "Browser check, Apps Script fallback (templates from src, google.script.run)"
-        run: RPC_MODE=gas node apps-script/pt-scheduler/tools/browser-check.js
       - name: Share card check
         run: node apps-script/pt-scheduler/tools/share-check.js
       - name: Demo check (opens signed in, leaves the real app's device state alone)
@@ -85,3 +83,49 @@ jobs:
             echo "::warning title=BookingPT-Client tidak terjangkau::Repo xnkzzxd/BookingPT-Client tidak bisa diambil; sync-offline --check dan bagian klien offline-check dilewati. Hanya pembungkus coach yang diperiksa."
             node apps-script/pt-scheduler/tools/offline-check.js
           fi
+
+  browser-static:
+    name: browser check (static build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: ./.github/actions/setup-playwright
+        with:
+          version: ${{ env.PLAYWRIGHT_VERSION }}
+      - name: Browser check against the static build (phone pass included; fetch + the real doPost)
+        run: PAGES=static node apps-script/pt-scheduler/tools/browser-check.js
+
+  browser-gas:
+    name: browser check (Apps Script fallback)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: ./.github/actions/setup-playwright
+        with:
+          version: ${{ env.PLAYWRIGHT_VERSION }}
+      - name: "Browser check, Apps Script fallback (templates from src, google.script.run)"
+        run: RPC_MODE=gas node apps-script/pt-scheduler/tools/browser-check.js
+
+  # The one required check: green only when all three jobs above passed (a skipped, failed or
+  # cancelled job counts as red).
+  checks:
+    name: checks
+    needs: [fast, browser-static, browser-gas]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job must have passed
+        run: |
+          echo "fast: ${{ needs.fast.result }}"
+          echo "browser-static: ${{ needs.browser-static.result }}"
+          echo "browser-gas: ${{ needs.browser-gas.result }}"
+          test "${{ needs.fast.result }}" = "success" && test "${{ needs.browser-static.result }}" = "success" && test "${{ needs.browser-gas.result }}" = "success"
