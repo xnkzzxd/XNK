@@ -11,7 +11,7 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | The page: loading screen and the booking app in an iframe. |
+| `index.html` | The old page wrapper (booking app in an iframe). Published at `/legacy/` (and at `/` again with the rollback variable `ROOT_LEGACY=true`); the live `/` is the static app built by `tools/build-static.js` (Phase AAA, see `docs/aaa/`). |
 | `404.html` | Shown for unknown addresses; sends visitors back to the home page. |
 | `manifest.webmanifest` | Name, colors and icons used when the site is installed on a phone. |
 | `logo.png` | Original logo (white mark on transparent). Source for all icons. |

@@ -27,6 +27,8 @@ Instructions for any AI agent (Claude Code or another) or developer changing thi
 | `Landing.html`, `LandingStyle.html`, `LandingScript.html` | Marketing page |
 | `Scripts.html` | Helpers shared by Index and Landing |
 
+**Phase AAA (static frontends, [aaa/](aaa/PRD.md)).** All three sites now run the same `src/*.html` as static files calling Apps Script through `doPost` (`rpc()` in `Scripts.html`); the Apps Script pages (`doGet`) and the old iframe wrappers still work and are the rollback ([aaa/Rollback.md](aaa/Rollback.md)). `tools/build-static.js` builds `app` (panel + portal), `client` (portal at its own root) and `landing`; `tools/build-site.js` assembles `xnk.my.id` and also publishes `client/` and `landing-pub/` with a sha256 `manifest.json`. BookingPT-Client and BookingPT **pull** those folders hourly (`tools/pull-xnk.js` + workflow `pull-xnk.yml` there; no tokens or secrets). The landing is a same-origin iframe at `/l/` inside BookingPT's SEO page; the portal is the repo root of BookingPT-Client with `legacy.html` as the old wrapper. A change to the pages reaches the other two sites within an hour (or at once by running their pull workflow). CI keeps both modes green: `browser-check` runs against the static build (`PAGES=static`) and against the Apps Script pages (`RPC_MODE=gas`).
+
 Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks, TaskTemplates, ReminderLog, MealTips). Settings and secrets live in Script Properties.
 
 ## 2. Rules you must not break
