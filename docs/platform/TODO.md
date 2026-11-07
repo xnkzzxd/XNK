@@ -34,7 +34,7 @@ Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md) · [Roa
 - [ ] T-1411 *(digantikan Phase AAA, lihat docs/aaa/)* Transport swap in `App.html` `call()`/`tokenRunner` and `LandingScript.html` (fetch `/rpc/:name`; same handlers and `AUTH_REQUIRED` errors).
 - [ ] T-1412 *(digantikan Phase AAA, lihat docs/aaa/)* GAS `doPost` RPC dispatcher (allow-list from `tests/security.test.js`; same auth checks).
 - [ ] T-1413 *(digantikan Phase AAA, lihat docs/aaa/)* Worker `/rpc/:name` proxy to GAS + rate limits; staging + prod deploy workflows.
-- [ ] T-1414 Top-level host bridge: `--sa-*` from `env()` when not framed (P3).
+- [x] T-1414 *(selesai di Phase AAA, T-1716: `host-local.js`)* Top-level host bridge: `--sa-*` from `env()` when not framed (P3).
 - [ ] T-1415 (ships in V4) Handoff: the old domain flushes queues → one-time code → the new domain imports token, drafts, prefs (P1).
 - [ ] T-1416 (ships in V4) Final `sw.js` for xnk.my.id and BookingPT-Client: handoff, install prompt, unregister (P2).
 - [ ] T-1417 (ships in V4) Portal banner 2 weeks before the switch (D51); 301s from the old domains only after cutover passes (Design §0.2).
