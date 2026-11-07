@@ -140,8 +140,12 @@ function doPost(e) {
     // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
     try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
     const args = Array.isArray(req.args) ? req.args : [];
-    const data = api[fn].apply(null, args);
-    return _appApiReply_({ ok: true, data: _plainJson_(data === undefined ? null : data) });
+    // Fase W6b (T-1825): satu baris "speed rpc <fn>" per panggilan (run = kerja fungsi, json = salin jawaban). SPEED_TRACE=false mematikan.
+    const tr = _traceStart_();
+    const data = _tp_(tr, 'run', function () { return api[fn].apply(null, args); });
+    const out = _tp_(tr, 'json', function () { return _plainJson_(data === undefined ? null : data); });
+    _traceEnd_(tr, 'rpc ' + fn);
+    return _appApiReply_({ ok: true, data: out });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
     return _appApiReply_({ ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 });
@@ -4445,8 +4449,11 @@ function saveMyMeasurement(memberToken, data) {
   data = data || {};
   const today = _todayWib_();
   const tanggal = _validProgressDate_(data.tanggal, today, data.cid ? OFFLINE_BACK_DAYS : PROGRESS_LIMITS.backDaysClient);
-  _saveMeasurement_(memberId, tanggal, _parseMeasures_(data), 'klien');
-  return _bumpAfter_(memberId, _myPayloadFor_(memberId));
+  const tr = _traceStart_();   // W6b: tulis vs menyusun jawaban
+  _tp_(tr, 'write', function () { _saveMeasurement_(memberId, tanggal, _parseMeasures_(data), 'klien'); });
+  const out = _tp_(tr, 'reply', function () { return _myPayloadFor_(memberId); });
+  _traceEnd_(tr, 'saveMyMeasurement');
+  return _bumpAfter_(memberId, out);
 }
 
 function deleteMyMeasurement(memberToken, id) {
@@ -7815,14 +7822,16 @@ function logMyWorkout(memberToken, date, entries, session) {
   const today = _todayWib_();
   const tanggal = _validProgressDate_(date, today, ses && ses.cid ? OFFLINE_BACK_DAYS : WORKOUT_LIMITS.backClient);
   const clean = _parseWorkoutEntries_(entries);
-  const saved = _workoutSave_(id, tanggal, '', clean, 'klien', ses);
-  if (tanggal === today) _workoutTickProgram_(id, clean);
+  const tr = _traceStart_();   // W6b: tulis vs menyusun jawaban
+  const saved = _tp_(tr, 'write', function () { return _workoutSave_(id, tanggal, '', clean, 'klien', ses); });
+  if (tanggal === today) _tp_(tr, 'tick', function () { _workoutTickProgram_(id, clean); });
   _bumpMember_(id);
-  const out = _workoutFor_(row);
+  const out = _tp_(tr, 'reply', function () { return _workoutFor_(row); });
   out.prs = saved.prs;
   // Rutinitas ikut dikirim (centang hari ini berubah), supaya portal tidak perlu memanggil getMyProgram lagi.
-  try { out.program = _programFor_(row); } catch (e) {}
+  _tp_(tr, 'program', function () { try { out.program = _programFor_(row); } catch (e) {} });
   _workoutNotifyPrs_(row, saved.prs);
+  _traceEnd_(tr, 'logMyWorkout');
   return out;
 }
 
