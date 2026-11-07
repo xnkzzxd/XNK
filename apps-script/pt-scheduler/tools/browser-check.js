@@ -1140,6 +1140,15 @@ async function contrastReport(page) {
     await shot(page, 'admin-live-workout');
     const kg0 = '#wl-screen .wl-in[data-i="0"][data-j="0"][data-f="berat"]';
     check((await page.textContent('#wl-screen .wl-ex >> nth=0')).includes('Goblet Squat (Dumbbell)') && (await page.getAttribute(kg0, 'placeholder')) === '20' && (await page.inputValue(kg0)) === '', 'live workout: rows start grey from the coach\'s target weight');
+    {   // Keyboard HP (Android) mengecilkan tinggi layar: kolom yang diketik harus tetap fokus (tidak dirender ulang).
+      const vp = page.viewportSize();
+      await page.focus(kg0);
+      await page.setViewportSize({ width: vp.width, height: Math.round(vp.height * 0.6) });
+      await page.waitForTimeout(400);
+      check(await page.evaluate(sel => document.activeElement === document.querySelector(sel), kg0), 'live workout: a height-only resize (phone keyboard) keeps the typed field focused');
+      await page.setViewportSize(vp);
+      await page.waitForTimeout(300);
+    }
     await page.fill(kg0, '25');
     await page.waitForTimeout(100);
     check((await page.getAttribute('#wl-screen .wl-in[data-i="0"][data-j="2"][data-f="berat"]', 'placeholder')) === '25', 'table: a typed weight carries to the next untouched sets');
