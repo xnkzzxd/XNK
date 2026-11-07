@@ -35,6 +35,9 @@ Temuan: (1) dinding − server ≈ 3 dtk (alihan Apps Script + jaringan), tak bi
 | getClientBundle | ~14 dtk / 10–12 dtk | 2,5–2,8 dtk / 0,2 dtk | ±12,6 dtk / 9,6 dtk |
 Panggilan berulang (buka klien yang sama, buka panel lagi dalam 90/180 dtk) kini sekitar 4–6 kali lebih cepat; sisa ~2,3–3 dtk adalah alihan Apps Script + jaringan yang tak bisa dihindari. Miss pertama hampir tidak membaik (baca sheet masih banyak).
 
+## W1c — Miss panel
+- [x] T-1815 Pemindaian saran gizi di hub (3–8 dtk, penyebab hub 15 dtk pada miss tertentu) jalan tiap 30 menit, bukan 10 (`NUT_SCAN_SECONDS`, bawaan 1800, 600–7200). Saran berubah per minggu; keputusan coach tetap menghapus tanda pindai.
+
 ## W2 — Hitung saat menulis (mulai dari satu sheet)
 - [-] T-1805 Ditunda dengan sengaja. Alasan: cache W1/W1b sudah mengubah panggilan berulang jadi 2,5–4 dtk, dan `getAdminMore` berjalan di latar saat panel dibuka sehingga miss 16–26 dtk tidak menahan layar pertama. `MemberStats` menyentuh banyak penulis data (selesai sesi, latihan, progres, transaksi, keuangan) dan hanya mempercepat miss; risiko selisih data lebih besar daripada untungnya sekarang. Buka lagi bila pemilik mengeluh soal miss pertama atau jumlah klien naik jauh. Calon pertama: `hub.care`, `hub.programAuto`, `signals` (masing-masing 1–3 dtk).
 
