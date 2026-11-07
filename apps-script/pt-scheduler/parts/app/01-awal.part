@@ -309,6 +309,90 @@
     window._toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3200);
   };
 
+  // ── Simpan langsung berhasil (optimistic UI) ────────────────────────────────
+  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, ok, label, then(res), undo() })
+  //   Layar langsung berubah (lembar `sheet` ditutup, toast `ok`), server bekerja di belakang.
+  //   Sukses: then(res) (muat ulang / ganti data sementara). Tanpa sinyal + `q`: masuk outbox
+  //   `xnk_outbox`, dikirim ulang sendiri. Ditolak server: undo(), lembar dibuka lagi (isinya
+  //   masih ada) dan pop-up "Coba lagi / Tutup". Sesi habis: jalur login biasa.
+  const OB_KEY = 'xnk_outbox';
+  const ob = { timer: null, wait: 20000, flushing: false };
+  function obCall(it) { return (it.mode === 'admin' ? adminCall : memberCall).apply(null, [it.fn].concat(it.args || [])); }
+  function obNet(err) {
+    if (window.isAuthError(err)) return false;
+    const m = String((err && err.message) || err || '');
+    return !m || /network|jaringan|koneksi|failure|failed to fetch|timeout|timed out|HTTP 0|offline|sibuk|Tunggu sebentar|quota|internal/i.test(m);
+  }
+  function obSig(mode) { const t = _lsGet(mode === 'admin' ? ADMIN_TOKEN_KEY : MEMBER_TOKEN_KEY); return t ? tokenSig(t) : ''; }
+  function obRead() { try { const a = JSON.parse(_lsGet(OB_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function obWrite(a) { _lsSet(OB_KEY, a.length ? JSON.stringify(a) : null); }
+  window.obCount = function () { return obRead().length; };
+  window.obForget = function (mode) { obWrite(obRead().filter(it => it.mode !== mode)); };
+  function obAdd(q, label) {
+    const a = obRead();
+    a.push({ mode: q.mode, fn: q.fn, args: q.args || [], sig: obSig(q.mode), label: label || '', at: Date.now() });
+    obWrite(a);
+    window.showToast('Tersimpan di perangkat. Dikirim saat ada sinyal.', 'cloud-off');
+    obLater();
+  }
+  function obLater() { clearTimeout(ob.timer); ob.timer = setTimeout(function () { window.obFlush(); }, ob.wait); ob.wait = Math.min(ob.wait * 2, 300000); }
+  // ponytail: dikirim satu per satu sesuai urutan; item akun lain dibiarkan sampai akun itu masuk lagi.
+  window.obFlush = function () {
+    if (ob.flushing) return Promise.resolve();
+    const a = obRead(), i = a.findIndex(it => it.sig && it.sig === obSig(it.mode));
+    if (i < 0) return Promise.resolve();
+    ob.flushing = true;
+    const it = a[i];
+    return obCall(it).then(function () {
+      obWrite(obRead().filter(x => !(x.at === it.at && x.fn === it.fn)));
+      ob.flushing = false; ob.wait = 20000;
+      if (window.refreshAll && !window.obCount()) try { window.refreshAll(true); } catch (e) {}
+      return window.obFlush();
+    }, function (err) {
+      ob.flushing = false;
+      if (obNet(err)) { obLater(); return; }
+      obWrite(obRead().filter(x => !(x.at === it.at && x.fn === it.fn)));
+      if (!window.isAuthError(err)) failPopup(it.label, err);
+      return window.obFlush();
+    });
+  };
+  window.addEventListener('online', function () { ob.wait = 20000; window.obFlush(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) window.obFlush(); });
+
+  const fp = { n: 0, last: '' };
+  function failPopup(label, err, retry) {
+    const msg = window.authMessage(err) || 'Terjadi kesalahan.';
+    fp.n++; fp.last = msg;
+    const more = fp.n > 1 ? '<p class="li-sub" style="margin-top:8px">' + fp.n + ' perubahan belum tersimpan.</p>' : '';
+    window.showConfirmModal('<b>' + h(label || 'Perubahan') + '</b> belum tersimpan.<br>' + h(msg) + more, function () {
+      fp.n = 0; if (retry) retry();
+    }, { title: 'Gagal menyimpan', confirmText: retry ? 'Coba lagi' : 'Oke', cancelText: 'Tutup', variant: 'danger', icon: 'circle-alert' });
+    const no = $('btn-confirm-modal-no');
+    if (no) no.onclick = function () { fp.n = 0; window.closeConfirmModal(); };
+  }
+  window.failPopup = failPopup;
+
+  function optimistic(o) {
+    const send = o.call || function () { return obCall(o.q); };
+    if (o.sheet === true) {   // lembar yang sedang terbuka; dibuka lagi bila ditolak
+      const cur = ui.sheetOn && document.querySelector('#sheet-layer > .sheet:not(.hide)');
+      o = Object.assign({}, o, { sheet: cur ? cur.id : '' });
+    }
+    if (o.sheet) window.closeModal();
+    if (o.ok !== false) window.showToast(o.ok || 'Tersimpan.');
+    return send().then(function (res) {
+      if (o.then) try { o.then(res); } catch (e) { console.error(e); }
+      return res;
+    }, function (err) {
+      if (window.isAuthError(err)) { if (o.undo) o.undo(); return; }
+      if (o.q && obNet(err)) { obAdd(o.q, o.label); return; }
+      if (o.undo) try { o.undo(); } catch (e) { console.error(e); }
+      if (o.sheet) openSheet(o.sheet);
+      failPopup(o.label, err, function () { optimistic(o); });
+    });
+  }
+  window.optimistic = optimistic;
+
   // ── Tema ────────────────────────────────────────────────────────────────────
   function currentTheme() {
     try { return localStorage.getItem('xnk_theme') || 'system'; } catch (e) { return 'system'; }

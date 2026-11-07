@@ -443,7 +443,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); }
+  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -499,6 +499,7 @@
   const slotCoach = () => (window.isPublicView && !window.isSoloCoach() && window.coaches.length > 1) ? String(ui.bookCoach || '') : '';
   const slotsAtNow = () => { const c = slotCoach(); return c ? (window.openSlotsAtByCoach[c] || 0) : window.openSlotsAt; };
   window.loadAllData = function () {
+    setTimeout(function () { if (window.obFlush) window.obFlush(); }, 1500);
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
     return safe(adminCall('getAdminBootstrap')).then(function (b) {
@@ -567,6 +568,7 @@
   };
 
   window.loadPublicData = function () {
+    setTimeout(function () { if (window.obFlush) window.obFlush(); }, 1500);
     const token = _lsGet(MEMBER_TOKEN_KEY);
     window.members = []; window.memberArchive = [];
     // Salinan terakhir di perangkat (hanya saat aplikasi baru dibuka): layar langsung terisi, data segar menyusul.
@@ -654,6 +656,7 @@
   window.clearPortalCache = function () {
     window.offlineClear();
     if (window.wlForget) window.wlForget('client');
+    if (window.obForget) window.obForget('member');
     if (window.fqForget) window.fqForget();
     _lsSet(PORTAL_CACHE_KEY, null);
     portalMoreRaw = null; portalMoreInflight = null; portalMoreAt = 0;
