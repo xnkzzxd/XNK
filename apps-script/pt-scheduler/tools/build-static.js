@@ -2,7 +2,7 @@
 // Builds the static pages for GitHub Pages (Phase AAA, T-1711): the same Apps Script templates
 // (src/Index.html, src/Landing.html) with their <?!= include() ?> tags resolved into separate,
 // content-hashed files, plus config.js (where the Apps Script /exec address lives).
-//   node apps-script/pt-scheduler/tools/build-static.js app|landing [outDir] [--exec URL]
+//   node apps-script/pt-scheduler/tools/build-static.js app|client|landing [outDir] [--exec URL]
 // Node built-ins only. Sources stay in src/*.html; the Apps Script pages keep working from them.
 const fs = require('fs');
 const path = require('path');
@@ -39,6 +39,9 @@ const SITES = {
   },
 };
 
+// The client portal at book.xnkbooking.my.id: the same page as the panel, but with no query it opens the portal (App.html reads XNK_CONFIG.site).
+SITES.client = Object.assign({}, SITES.app, { favicon: 'https://xnk.my.id/favicon.ico' });
+
 const read = f => fs.readFileSync(path.join(SRC, f), 'utf8');
 const hash = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 10);
 
@@ -64,7 +67,7 @@ function build(opts) {
   opts = opts || {};
   const site = opts.site;
   const def = SITES[site];
-  if (!def) throw new Error('site must be app or landing');
+  if (!def) throw new Error('site must be app, client or landing');
   const exec = opts.exec || defaultExec();
   const files = {};
   let html = read(def.page);
@@ -97,7 +100,7 @@ function build(opts) {
   ].concat(def.head);
   // Served from the site root (the panel replaces the old wrapper): the Home Screen manifest is scoped to '/'.
   if (site === 'app' && opts.root) extra.push('<link rel="manifest" href="/manifest.webmanifest">');
-  if (site === 'app') extra.push(
+  if (def.local) extra.push(
     '<script>if (location.protocol === "http:" && !/^(localhost|127\\.0\\.0\\.1)$/.test(location.hostname)) location.replace("https://" + location.host + location.pathname + location.search);</script>');
   const m = /<meta name="viewport"[^>]*>\n/.exec(html);
   if (!m) throw new Error(`${def.page}: viewport line not found`);
@@ -141,7 +144,7 @@ if (require.main === module) {
   const ei = args.indexOf('--exec');
   const exec = ei >= 0 ? args.splice(ei, 2)[1] : undefined;
   const [site, out] = args;
-  if (!SITES[site]) { console.error('usage: build-static.js app|landing [outDir] [--exec URL]'); process.exit(1); }
+  if (!SITES[site]) { console.error('usage: build-static.js app|client|landing [outDir] [--exec URL]'); process.exit(1); }
   const dir = out || path.join(__dirname, '..', '..', '..', 'dist', site);
   const files = build({ site, exec });
   write(dir, files);

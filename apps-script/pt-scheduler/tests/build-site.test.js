@@ -75,3 +75,22 @@ test('rollback: the ROOT_LEGACY environment variable does the same as the option
     assert.notEqual(fs.readFileSync(path.join(dir, 'index.html'), 'utf8'), fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'));
   } finally { if (keep === undefined) delete process.env.ROOT_LEGACY; else process.env.ROOT_LEGACY = keep; fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('pull-based publishing: client/ and landing-pub/ carry a manifest with the sha256 of every file', () => {
+  const crypto = require('crypto');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-site-'));
+  try {
+    buildSite({ outDir: dir, exec: 'https://script.test/exec' });
+    for (const [folder, site] of [['client', 'client'], ['landing-pub', 'landing']]) {
+      const m = JSON.parse(fs.readFileSync(path.join(dir, folder, 'manifest.json'), 'utf8'));
+      assert.equal(m.v, 1);
+      assert.equal(m.site, site);
+      assert.ok(m.files['index.html'] && m.files['config.js']);
+      const onDisk = fs.readdirSync(path.join(dir, folder)).filter(n => n !== 'manifest.json').sort();
+      assert.deepEqual(Object.keys(m.files).sort(), onDisk);
+      for (const [n, h] of Object.entries(m.files)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, folder, n))).digest('hex'), h, n);
+      assert.match(fs.readFileSync(path.join(dir, folder, 'config.js'), 'utf8'), new RegExp('"site":"' + site + '"'));
+    }
+    assert.ok(fs.existsSync(path.join(dir, 'client', 'sw-app.js')) && !fs.existsSync(path.join(dir, 'landing-pub', 'sw-app.js')));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
