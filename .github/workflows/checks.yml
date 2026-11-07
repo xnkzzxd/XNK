@@ -51,6 +51,8 @@ jobs:
         run: node apps-script/pt-scheduler/tools/demo-check.js
       - name: Host check (the static page answers its own host messages, service worker, offline open)
         run: node apps-script/pt-scheduler/tools/host-check.js
+      - name: Site check (/ is the static panel, /legacy/ the old wrapper, workers do not clash; rollback build)
+        run: node apps-script/pt-scheduler/tools/site-check.js
 
       # The client wrapper lives in xnkzzxd/BookingPT-Client (public). If it can't be fetched,
       # the offline check still runs on the coach wrapper and says the client part was skipped.

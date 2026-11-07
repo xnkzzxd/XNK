@@ -4,7 +4,7 @@ Instructions for any AI agent (Claude Code or another) or developer changing thi
 
 ## 1. What this repo is
 
-- **xnk.my.id**: a GitHub Pages site (root `index.html`) that shows the Apps Script web app full-screen. Pushing to `main` publishes it.
+- **xnk.my.id**: a GitHub Pages site published by `.github/workflows/pages.yml` (`tools/build-site.js`). Since Phase AAA (T-1722) `/` is the static panel (`Index.html` built by `tools/build-static.js`, calling Apps Script through `doPost`); the old iframe wrapper is `index.html` at the repo root (published at `/legacy/`, and at `/` again when the repo variable `ROOT_LEGACY` is `true`). `/next/` is the same build for previews, `/demo/` and `/app/` are separate. Pushing to `main` builds and publishes it.
 - **PT Scheduler**: the Google Apps Script app in `apps-script/pt-scheduler/`. One deployment (`AKfycbyVOm1…BgJ`) serves three sites:
 
 | Site | Page | Who |

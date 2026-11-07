@@ -95,6 +95,8 @@ function build(opts) {
     '<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>',
     '<link rel="icon" href="' + def.favicon + '">',
   ].concat(def.head);
+  // Served from the site root (the panel replaces the old wrapper): the Home Screen manifest is scoped to '/'.
+  if (site === 'app' && opts.root) extra.push('<link rel="manifest" href="/manifest.webmanifest">');
   if (site === 'app') extra.push(
     '<script>if (location.protocol === "http:" && !/^(localhost|127\\.0\\.0\\.1)$/.test(location.hostname)) location.replace("https://" + location.host + location.pathname + location.search);</script>');
   const m = /<meta name="viewport"[^>]*>\n/.exec(html);
@@ -120,9 +122,9 @@ function build(opts) {
   if (def.local) {
     // Service worker for this folder: precache the page, every hashed file and config.js; the cache name changes with the content.
     const assets = Object.keys(files).filter(n => n !== 'index.html').sort();
-    const cache = 'xnk-app-' + hash(assets.map(n => n + files[n]).join('\n') + files['index.html']);
+    const version = hash(assets.map(n => n + files[n]).join('\n') + files['index.html']);
     files['sw-app.js'] = fs.readFileSync(path.join(__dirname, 'sw-app.template.js'), 'utf8')
-      .replace("'__CACHE__'", JSON.stringify(cache)).replace('__ASSETS__', JSON.stringify(assets));
+      .replace("'__HASH__'", JSON.stringify(version)).replace('__ASSETS__', JSON.stringify(assets));
   }
   return files;
 }
