@@ -2412,7 +2412,7 @@ function getAdminMore(token, month, year) {
       shareEnabled: _shareEnabled_(),
       revenue: part('revenue', function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
       packageTrend: part('packageTrend', function () { return _packageTrendStats_(m, y); }),
-      hub: part('hub', function () { return _coachHub_(new Date()); }),
+      hub: part('hub', function () { return _coachHub_(new Date(), tr); }),
       signals: part('signals', function () { return _clientSignals_(new Date()); }),
       memberVers: part('memberVers', _memberVersAll_),
       ms: _traceEnd_(tr, 'getAdminMore')
@@ -6163,8 +6163,8 @@ function _targetPace_(goal, actual, day, daysInMonth) {
 }
 
 /** Murni-ish: ringkasan Beranda Coach untuk tanggal `now`. */
-function _coachHub_(now) {
-  const self = _selfCoach_();
+function _coachHub_(now, tr) {
+  const self = _tp_(tr, 'hub.self', _selfCoach_);
   const wib = _wibParts_(now);
   const mine = function(s) { return !s.coachId || (self && s.coachId === self.id); };
   const all = _getSchedulesAll_().filter(mine);
@@ -6190,7 +6190,7 @@ function _coachHub_(now) {
   stats.weekHours = Math.round(stats.weekHours * 10) / 10;
   stats.monthHours = Math.round(stats.monthHours * 10) / 10;
   stats.streak = _streak_(weeks, wib.date);
-  const members = _getMembersAll_();
+  const members = _tp_(tr, 'hub.members', _getMembersAll_);
   stats.activeClients = members.filter(function(m) { return Number(m.totalSessions) > Number(m.usedSessions); }).length;
 
   const today = all.filter(function(s) {
@@ -6214,7 +6214,7 @@ function _coachHub_(now) {
     let actual = 0;
     if (k === 'sesi') actual = stats.monthSessions;
     else if (k === 'klienAktif') actual = stats.activeClients;
-    else if (k === 'pendapatan') actual = _revenueSummary_(p[1], p[0]).total;
+    else if (k === 'pendapatan') actual = _tp_(tr, 'hub.revenue', function() { return _revenueSummary_(p[1], p[0]).total; });
     else if (k === 'klienBaru') {
       _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
         if (String(r[3]) !== 'Baru') return;
@@ -6227,7 +6227,12 @@ function _coachHub_(now) {
   });
   return {
     selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
-    today: today, stats: stats, targets: targets, care: _careList_(now), feedback: _feedbackSummary_(now.getTime()), workouts: _workoutHubList_(), nutrition: _nutHubList_(), programAuto: _pgHubList_(),
+    today: today, stats: stats, targets: targets,
+    care: _tp_(tr, 'hub.care', function() { return _careList_(now); }),
+    feedback: _tp_(tr, 'hub.feedback', function() { return _feedbackSummary_(now.getTime()); }),
+    workouts: _tp_(tr, 'hub.workouts', _workoutHubList_),
+    nutrition: _tp_(tr, 'hub.nutrition', _nutHubList_),
+    programAuto: _tp_(tr, 'hub.programAuto', _pgHubList_),
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }
