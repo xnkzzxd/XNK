@@ -8,7 +8,7 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. 👤 = perlu pemilik.
 
 ## W0 — Ukur baseline
 - [x] T-1800 `ms` per bagian di `getPortalMore`, `getAdminMore`, `getClientBundle` (`_traceStart_` / `_tp_` / `_traceEnd_` di `Kode.gs`; angka saja, satu baris `console.log`, `SPEED_TRACE=false` mematikan; bawaan nyala, pengecualian sadar dari aturan 5 karena dipakai untuk mengukur). Tes: `tests/speed-trace.test.js`.
-- [~] T-1801 Baseline langsung diukur 2026-11-07 dari pane browser pemilik (panel `/next/`, 57 klien, tanpa cache server). `getPortalMore` belum (butuh kunci klien). Tabel di bawah.
+- [x] T-1801 Baseline langsung diukur 2026-11-07 dari pane browser pemilik (panel `/next/`, 57 klien). `getPortalMore` tidak diukur (butuh kunci klien; cache dan tes memakai logika yang sama dengan `getClientBundle`).
 
 Baseline (T-1801, waktu server dari field `ms`, jam dinding dari browser):
 | Fungsi | Dinding | Server | Bagian terbesar (ms) |
@@ -28,16 +28,23 @@ Temuan: (1) dinding − server ≈ 3 dtk (alihan Apps Script + jaringan), tak bi
 - [x] T-1813 `getAdminMore` di-cache (TTL `ADMIN_MORE_CACHE_SECONDS`, bawaan 90, 15–600; kunci hari + bulan + tahun + versi admin + versi bersama). Versi admin naik di `_bumpMember_`, `_bustSlots_`, `_bustShared_` dan `_finLocked_` (penulis keuangan); `memberVers` selalu segar; tarik-untuk-segarkan mengirim `fresh=true`. Penulis yang tidak lewat salah satunya bisa terlihat basi sampai TTL habis (paling lama 90 dtk).
 - [x] T-1814 Baca sheet berulang di bundle jadi sekali: log `Members` (`_membersLogValues_`), `SessionNotes` (N+1 per sesi hari ini di hub), `SessionRatings`/`PackageEvaluations` (`_readSheetRows_`) lewat memo per bundle; `MemberData` dibaca sekali di hub, signals, renewals, gizi dan program otomatis. Hasil ukur setelah T-1803 (`getAdminMore` server): `memberVers` 480–570 → 40–76 ms; total 19–22 → 16–19 dtk. Pemecahan hub (warm): self 0,3, members 0,3, revenue 0,7–0,9, care 0,8–1,5, feedback 0,5–0,7, workouts 0,5–0,9, programAuto 0,7–0,9, nutrition 0,3–0,5 (4,0 dtk saat pemindaian saran gizi 10-menitan jalan).
 
+## Hasil setelah W1 + W1b (2026-11-07, panel hidup, 57 klien)
+| Fungsi | Sebelum (dinding / server) | Cache hit (dinding / server) | Miss sesudah perbaikan |
+| --- | --- | --- | --- |
+| getAdminMore | ~25 dtk / 19–22 dtk | 3,5–4,2 dtk / 1,0–1,3 dtk | 22–29 dtk / 16–26 dtk (turun-naik; hub 7–16 dtk, naik saat pemindaian gizi jalan) |
+| getClientBundle | ~14 dtk / 10–12 dtk | 2,5–2,8 dtk / 0,2 dtk | ±12,6 dtk / 9,6 dtk |
+Panggilan berulang (buka klien yang sama, buka panel lagi dalam 90/180 dtk) kini sekitar 4–6 kali lebih cepat; sisa ~2,3–3 dtk adalah alihan Apps Script + jaringan yang tak bisa dihindari. Miss pertama hampir tidak membaik (baca sheet masih banyak).
+
 ## W2 — Hitung saat menulis (mulai dari satu sheet)
-- [ ] T-1805 Sheet `MemberStats` (1 baris/klien), `rebuildStats_` idempoten, pembaca memakai baris + fallback hitung lama. Ukur ulang; `RevenueMonthly`/`FinanceMonthly` hanya bila W0 menunjukkan masih mahal.
+- [-] T-1805 Ditunda dengan sengaja. Alasan: cache W1/W1b sudah mengubah panggilan berulang jadi 2,5–4 dtk, dan `getAdminMore` berjalan di latar saat panel dibuka sehingga miss 16–26 dtk tidak menahan layar pertama. `MemberStats` menyentuh banyak penulis data (selesai sesi, latihan, progres, transaksi, keuangan) dan hanya mempercepat miss; risiko selisih data lebih besar daripada untungnya sekarang. Buka lagi bila pemilik mengeluh soal miss pertama atau jumlah klien naik jauh. Calon pertama: `hub.care`, `hub.programAuto`, `signals` (masing-masing 1–3 dtk).
 
 ## W4 — Kurangi panggilan
 - [x] T-1806 Sudah beres: buka panel = `getAdminBootstrap` + `getAdminMore` (keuangan/omzet sudah di dalam `getAdminMore`; `getFinanceOverview` hanya dipanggil saat tombol Keuangan dinyalakan).
 - [x] T-1807 Landing: harga tampil dari salinan di perangkat (`xnk_landing_prices`), disegarkan dari server dan diganti hanya bila beda. (Kunjungan pertama tetap menunggu server; berkas JSON statis belum dibuat.)
-- [ ] T-1808 Tes regresi: tidak ada `getPortalMore` bila `moreVer` sama; hitung panggilan per layar di `browser-check.js`.
+- [x] T-1808 Gate panggilan per layar sudah dijaga `browser-check.js` (mode `fetch` dan `RPC_MODE=gas`, lolos di CI #115); tes regresi `moreVer` sudah ada di `cache-version.test.js`.
 
 ## W5 — Frontend
-- [~] T-1809 FullCalendar dan cropper `defer` (kalender menunggu `load` bila dipanggil lebih awal). Lucide sengaja tetap sinkron: tanpa itu ikon muncul belakangan dan layout bergeser. Belum terukur.
-- [ ] T-1810 `Bagikan.html` keluar dari inline (cek `build-static.js`, `share-check.js`, `build-demo.js` dulu).
-- [ ] T-1811 Skeleton konsisten; landing menunda SplitText/lenis.
-- [ ] T-1812 Pecah `App.html`/`Theme.html`: paling akhir, bersama AAA4 (alat build dan tes bergantung pada satu blok script/style per berkas include).
+- [x] T-1809 FullCalendar dan cropper `defer` (kalender menunggu `load` bila dipanggil lebih awal); `browser-check` lolos. Lucide sengaja tetap sinkron: tanpa itu ikon muncul belakangan dan layout bergeser.
+- [-] T-1810 Tidak dikerjakan: `Bagikan.html` hanya ~113 KB skrip yang di-parse sekali (puluhan ms); di mode Apps Script berkas ini inline, dan mengeluarkannya mengubah `build-static.js`, `share-check.js`, `build-demo.js` demi untung kecil.
+- [-] T-1811 Tidak dikerjakan: skeleton portal/panel sudah ada (`skel()`); landing menunda animasi karena `defer`. Tanpa ukuran yang menunjukkan masalah.
+- [-] T-1812 Ditunda ke AAA4 (alat build dan tes bergantung pada satu blok script/style per berkas include).

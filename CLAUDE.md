@@ -18,6 +18,6 @@ Phase Q (upgrade tampilan Klien + interpretasi data, in progress): docs/klien/ (
 Phase U (program latihan otomatis berbasis bukti, katalog alat gym, nama gerakan ala Hevy, otot & animasi sendiri, planned): docs/program/ (PRD, TODO; tasks T-1600+).
 Phase AAA (frontend statis di GitHub Pages, backend tetap Apps Script, domain tetap, planned, di luar Phase V): docs/aaa/ (PRD, Design, TODO; tasks T-1700+).
 Phase V (migrasi ke Supabase + Cloudflare + domain baru, SaaS multi-coach, app Android, planned): docs/platform/ (PRD, Design, Risks, TODO; tasks T-1400+).
-Phase W (kecepatan: ukur dulu, cache hasil jadi, MemberStats, kurangi panggilan, in progress): docs/speed/ (TODO; tasks T-1800+).
+Phase W (kecepatan: ukur, cache hasil jadi server, memo baca sheet, built; W2 MemberStats sengaja ditunda): docs/speed/ (TODO; tasks T-1800+).
 
 @docs/Agent.md
