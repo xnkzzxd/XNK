@@ -26,12 +26,12 @@ Baseline (diisi T-1801):
 - [ ] T-1805 Sheet `MemberStats` (1 baris/klien), `rebuildStats_` idempoten, pembaca memakai baris + fallback hitung lama. Ukur ulang; `RevenueMonthly`/`FinanceMonthly` hanya bila W0 menunjukkan masih mahal.
 
 ## W4 — Kurangi panggilan
-- [ ] T-1806 Panel: gabung panggilan keuangan ke bootstrap/`getAdminMore`.
-- [ ] T-1807 Landing: JSON harga statis hanya untuk tampilan pertama, tetap segarkan dari server.
+- [x] T-1806 Sudah beres: buka panel = `getAdminBootstrap` + `getAdminMore` (keuangan/omzet sudah di dalam `getAdminMore`; `getFinanceOverview` hanya dipanggil saat tombol Keuangan dinyalakan).
+- [x] T-1807 Landing: harga tampil dari salinan di perangkat (`xnk_landing_prices`), disegarkan dari server dan diganti hanya bila beda. (Kunjungan pertama tetap menunggu server; berkas JSON statis belum dibuat.)
 - [ ] T-1808 Tes regresi: tidak ada `getPortalMore` bila `moreVer` sama; hitung panggilan per layar di `browser-check.js`.
 
 ## W5 — Frontend
-- [ ] T-1809 `defer` lucide; fullcalendar dan cropper lazy; preconnect font.
+- [~] T-1809 FullCalendar dan cropper `defer` (kalender menunggu `load` bila dipanggil lebih awal). Lucide sengaja tetap sinkron: tanpa itu ikon muncul belakangan dan layout bergeser. Belum terukur.
 - [ ] T-1810 `Bagikan.html` keluar dari inline (cek `build-static.js`, `share-check.js`, `build-demo.js` dulu).
 - [ ] T-1811 Skeleton konsisten; landing menunda SplitText/lenis.
 - [ ] T-1812 Pecah `App.html`/`Theme.html`: paling akhir, bersama AAA4 (alat build dan tes bergantung pada satu blok script/style per berkas include).
