@@ -254,7 +254,7 @@ function _insightFor_(row, audience, pre) {
   const assessment = ok(pre.assessment) || _assessmentFor_(row, spy);
   const bodyFat = pre.bodyFat !== undefined ? pre.bodyFat : (spy.bodyFat == null ? null : spy.bodyFat);
   const sessions = _getSchedulesAll_().filter(function(s) { return String(s.memberId).trim() === id; });
-  const sessDates = sessions.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; }).map(function(s) { return _wibParts_(new Date(s.start)).date; });
+  const sessDates = sessions.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; }).map(function(s) { return _wibDate_(s.start); });
   const nutOn = _nutEnabled_() && prof.aktif;
   const foodRows = nutOn ? _foodLogRows_(id) : [];
   const foodDates = foodRows.map(function(r) { return r.tanggal; }).filter(function(d, i, a) { return a.indexOf(d) === i; });
@@ -286,7 +286,7 @@ function _insightFor_(row, audience, pre) {
     activity: _insightActivity_({ sessionDates: sessDates, workoutDates: workout.days.map(function(d) { return d.tanggal; }), foodDates: foodDates, workoutDays: workout.days, programNames: program.map(function(d) { return d.hari; }) }, today)
   };
   out.week = _portalWeek_({
-    sessions: sessions.map(function(s) { return { date: _wibParts_(new Date(s.start)).date, done: String(s.status || '').toLowerCase() === 'completed' }; }),
+    sessions: sessions.map(function(s) { return { date: _wibDate_(s.start), done: String(s.status || '').toLowerCase() === 'completed' }; }),
     workoutDates: workout.days.map(function(d) { return d.tanggal; }),
     foodDates: nutOn ? foodDates : null,
     kcal: nutOn && kcalTarget ? { today: Math.round(kcalByDay[today] || 0), target: kcalTarget } : null,
@@ -372,7 +372,7 @@ function _clientSignals_(now) {
   _readSheetRows_('SessionRatings', _ratingFromRow_, null).forEach(function(r) { if (r.bintang > 0 && r.bintang <= 3 && String(r.tanggal) >= cutoff) lowRating[r.memberId] = true; });
   return _clientSignalsCalc_({
     members: rows.map(function(r) { return { id: String(r[0]).trim(), total: parseInt(sanitizeValue(r[8])) || 10, used: parseInt(sanitizeValue(r[9])) || 0, joined: _insIsoFromDmy_(sanitizeValue(r[4])) }; }),
-    sessions: _getSchedulesAll_().map(function(s) { return { memberId: String(s.memberId).trim(), date: _wibParts_(new Date(s.start)).date, done: String(s.status || '').toLowerCase() === 'completed' }; }),
+    sessions: _getSchedulesAll_().map(function(s) { return { memberId: String(s.memberId).trim(), date: _wibDate_(s.start), done: String(s.status || '').toLowerCase() === 'completed' }; }),
     weights: weights, overdue: overdue, renewal: renewal, lowRating: lowRating, inactiveDays: _inactiveDays_()
   }, today);
 }

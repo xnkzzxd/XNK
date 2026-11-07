@@ -6192,6 +6192,14 @@ function _targetPace_(goal, actual, day, daysInMonth) {
 }
 
 /** Murni-ish: ringkasan Beranda Coach untuk tanggal `now`. */
+/**
+ * Fase W: tanggal 'yyyy-MM-dd' di WIB (UTC+7, Asia/Jakarta tanpa DST) lewat hitungan, tanpa Utilities.formatDate.
+ * Dipakai di loop atas ribuan sesi (hub, sinyal, perawatan); formatDate adalah panggilan layanan dan lambat jika diulang. '' bila tanggal tak terbaca.
+ */
+function _wibDate_(d) {
+  const t = d instanceof Date ? d.getTime() : new Date(d).getTime();
+  return isNaN(t) ? '' : new Date(t + 25200000).toISOString().slice(0, 10);
+}
 function _coachHub_(now, tr) {
   const self = _tp_(tr, 'hub.self', _selfCoach_);
   const wib = _wibParts_(now);
@@ -6200,7 +6208,7 @@ function _coachHub_(now, tr) {
   const done = all.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; });
   const dateOf = function(s) {
     const d = new Date(s.completedAt || s.start);
-    return isNaN(d.getTime()) ? null : Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd');
+    return isNaN(d.getTime()) ? null : _wibDate_(d);
   };
   const hoursOf = function(s) {
     const a = new Date(s.start), b = new Date(s.end || s.start);
@@ -6226,7 +6234,7 @@ function _coachHub_(now, tr) {
     const st = String(s.status || '').toLowerCase();
     if (st === 'cancelled' || st === 'available') return false;
     const d = new Date(s.start);
-    return !isNaN(d.getTime()) && Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd') === wib.date;
+    return !isNaN(d.getTime()) && _wibDate_(d) === wib.date;
   }).sort(function(a, b) { return new Date(a.start) - new Date(b.start); }).map(function(s) {
     // "Fokus" = fokus berikutnya dari catatan sesi sebelumnya klien ini (bukan sesi hari ini).
     const prev = s.memberId ? _notesForMember_(s.memberId).filter(function(n) { return n.scheduleId !== String(s.id) && n.fokus; })[0] : null;
@@ -6275,7 +6283,7 @@ function _monthSummary_(y, m) {
     if (String(s.status || '').toLowerCase() !== 'completed') return;
     if (s.coachId && self && s.coachId !== self.id) return;
     const d = new Date(s.completedAt || s.start);
-    if (isNaN(d.getTime()) || Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM') !== key) return;
+    if (isNaN(d.getTime()) || _wibDate_(d).slice(0, 7) !== key) return;
     sessions++;
     const a = new Date(s.start), b = new Date(s.end || s.start);
     if (!isNaN(a.getTime()) && !isNaN(b.getTime())) hours += Math.max(0, (b - a) / 3600000);
@@ -8230,7 +8238,7 @@ function _careList_(now) {
     if (st === 'cancelled' || st === 'available') return;
     const d = new Date(s.start);
     if (isNaN(d.getTime())) return;
-    const day = Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd'), k = String(s.memberId).trim();
+    const day = _wibDate_(d), k = String(s.memberId).trim();
     if (day === today) todaySession[k] = true;
     if (st === 'completed' && (!lastSession[k] || day > lastSession[k])) lastSession[k] = day;
   });
