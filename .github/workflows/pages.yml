@@ -30,6 +30,8 @@ jobs:
       - name: Build the site
         env:
           PT_DEPLOYMENT_ID: ${{ vars.PT_DEPLOYMENT_ID }}
+          # Rollback: set the repo variable ROOT_LEGACY to "true" and re-run this workflow; / is then the old iframe wrapper again.
+          ROOT_LEGACY: ${{ vars.ROOT_LEGACY }}
         run: node apps-script/pt-scheduler/tools/build-site.js
       - name: Upload the site
         uses: actions/upload-pages-artifact@v3

@@ -90,7 +90,7 @@ const TYPE = { js: 'application/javascript', css: 'text/css', html: 'text/html' 
   await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller === null ? false : true, null, { timeout: 5000 }).catch(() => {});
   const reg = await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); if (!r) return null; await navigator.serviceWorker.ready; return { scope: r.scope, active: !!r.active }; });
   check(reg && reg.active && reg.scope.endsWith('/next/'), `the service worker is active in the page's folder (${reg && reg.scope})`);
-  const cached = await page.evaluate(async () => { const keys = await caches.keys(); const k = keys.find(x => x.indexOf('xnk-app-') === 0); if (!k) return null; const c = await caches.open(k); return (await c.keys()).map(r => new URL(r.url).pathname); });
+  const cached = await page.evaluate(async () => { const keys = await caches.keys(); const k = keys.find(x => x.indexOf('xnk-page-') === 0); if (!k) return null; const c = await caches.open(k); return (await c.keys()).map(r => new URL(r.url).pathname); });
   check(cached && cached.includes('/next/') && cached.some(p => /\/app\.[0-9a-f]{10}\.js$/.test(p)) && cached.some(p => /\/theme\.[0-9a-f]{10}\.css$/.test(p)), `the page and its hashed files are in the cache (${cached ? cached.length : 0} entries)`);
   await page.reload();   // under the worker's control from now on
   await page.waitForTimeout(800);

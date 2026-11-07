@@ -143,8 +143,31 @@ test('app: sw-app.js precaches the page, every hashed file and config.js, and it
   const assets = JSON.parse(/var ASSETS = (\[.*?\]);/.exec(sw)[1]);
   assert.deepEqual(assets.sort(), Object.keys(a).filter(n => n !== 'index.html' && n !== 'sw-app.js').sort());
   assert.ok(assets.includes('config.js') && assets.some(n => /^app\./.test(n)) && assets.some(n => /^theme\./.test(n)));
-  assert.ok(!sw.includes('__CACHE__') && !sw.includes('__ASSETS__'));
-  const cacheOf = f => /var CACHE = "(xnk-app-[0-9a-f]{10})"/.exec(f['sw-app.js'])[1];
+  assert.ok(!sw.includes('__HASH__') && !sw.includes('__ASSETS__'));
+  const cacheOf = f => /var HASH = "([0-9a-f]{10})"/.exec(f['sw-app.js'])[1];
   assert.equal(cacheOf(a), cacheOf(build({ site: 'app', exec: EXEC })));                    // stable for the same build
   assert.notEqual(cacheOf(a), cacheOf(build({ site: 'app', exec: 'https://other/exec' })));  // config.js changed -> new cache
+});
+
+test('app: built for the site root (root: true) it also links the Home Screen manifest; landing never does', () => {
+  assert.ok(build({ site: 'app', exec: EXEC, root: true })['index.html'].includes('<link rel="manifest" href="/manifest.webmanifest">'));
+  assert.ok(!build({ site: 'app', exec: EXEC })['index.html'].includes('manifest.webmanifest'));
+  assert.ok(!build({ site: 'landing', exec: EXEC, root: true })['index.html'].includes('manifest.webmanifest'));
+});
+
+test('service workers on xnk.my.id share one cache storage: each deletes only its own prefix', () => {
+  const root = f => fs.readFileSync(path.join(__dirname, '..', '..', '..', f), 'utf8');
+  const pageSw = build({ site: 'app', exec: EXEC })['sw-app.js'];
+  assert.ok(pageSw.includes('k.indexOf(PREFIX) === 0 && k !== CACHE'));
+  // the page worker's prefix follows its scope: the same file runs at / and at /next/ and the two must not delete each other's cache
+  const prefixAt = scope => { const ctx = vm.createContext({ self: { registration: { scope } }, URL }); vm.runInContext(pageSw.slice(pageSw.indexOf('var HASH'), pageSw.indexOf('var ASSETS')), ctx); return ctx.PREFIX; };
+  const rootPrefix = prefixAt('https://xnk.my.id/'), nextPrefix = prefixAt('https://xnk.my.id/next/');
+  assert.equal(rootPrefix, 'xnk-page-root-');
+  assert.equal(nextPrefix, 'xnk-page-next-');
+  const appSw = root('app/sw.js');
+  assert.ok(appSw.includes("k.indexOf('xnk-app-v') === 0 && k !== V"), "app/sw.js must not delete other workers' caches");
+  assert.match(root('sw.js'), /k\.indexOf\('xnk-off-'\) === 0 && k !== CACHE/);
+  // no prefix starts with another one, so a prefix test can never catch a neighbour's cache
+  const names = [rootPrefix, nextPrefix, 'xnk-app-v', 'xnk-off-'];
+  for (const a of names) for (const b of names) if (a !== b) assert.ok(!a.startsWith(b) && !b.startsWith(a), `${a} and ${b} overlap`);
 });

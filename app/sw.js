@@ -1,8 +1,10 @@
 // Cache-first untuk berkas app dan dua pustaka statis; panggilan ke Apps Script tidak pernah di-cache.
+// Penyimpanan cache itu satu per origin (xnk.my.id): hanya cache 'xnk-app-v…' milik berkas ini yang dihapus; cache service worker lain
+// (halaman statis 'xnk-page-…', pembungkus lama 'xnk-off-…') tidak disentuh.
 const V = 'xnk-app-v3';
 const FILES = ['./', './index.html', './app.js', './share.html', './share-shim.js', './manifest.webmanifest', '../foods/foods.min.json', '../exercises/exercises.min.json'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.indexOf('xnk-app-v') === 0 && k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 // Muat dari cache dulu (offline jalan), lalu segarkan di belakang: versi baru dipakai pada buka berikutnya.
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);

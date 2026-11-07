@@ -3,8 +3,14 @@
  * Menyimpan halaman, berkas berhash (tema, skrip, layar "Catat offline"), config.js, dan pustaka statis (gerakan, makanan,
  * peta otot, animasi gerakan) supaya halaman bisa dibuka tanpa sinyal. Aplikasi Apps Script (doPost) tidak disentuh.
  * Cakupan = folder tempat berkas ini berada; sw.js di akar (pembungkus lama) tetap terpisah dan tidak berubah.
+ * Penyimpanan cache itu satu per origin dan dipakai bersama service worker lain (app/sw.js: 'xnk-app-v…', pembungkus lama:
+ * 'xnk-off-…', salinan lain berkas ini di cakupan lain), jadi tiap worker hanya menghapus awalannya sendiri.
  */
-var CACHE = '__CACHE__';
+var HASH = '__HASH__';
+// Awalan cache mengikuti cakupan worker (akar dan /next/ menjalankan berkas ini bersamaan di origin yang sama dan tidak boleh
+// saling menghapus cache): 'xnk-page-root-…', 'xnk-page-next-…'.
+var PREFIX = 'xnk-page-' + (new URL(self.registration.scope).pathname.replace(/^\/|\/$/g, '').replace(/[^a-z0-9]+/gi, '-') || 'root') + '-';
+var CACHE = PREFIX + HASH;
 var ASSETS = __ASSETS__;   // alamat relatif terhadap berkas ini
 var LIBS = ['https://xnk.my.id/exercises/exercises.min.json', 'https://xnk.my.id/foods/foods.min.json',
   'https://xnk.my.id/figure/figure.min.json', 'https://xnk.my.id/figure/rig.min.json'];
@@ -20,7 +26,7 @@ self.addEventListener('install', function (e) {
 });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.filter(function (k) { return k.indexOf('xnk-app-') === 0 && k !== CACHE; }).map(function (k) { return caches.delete(k); }));
+    return Promise.all(keys.filter(function (k) { return k.indexOf(PREFIX) === 0 && k !== CACHE; }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 function swr(req, key) {
