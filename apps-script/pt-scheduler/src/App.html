@@ -375,8 +375,10 @@
     if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
     setTimeout(function () { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {} }, 60);
   }
+  // Halaman statis di level atas: host-local.js menjawab pesan yang sama dari window itu sendiri (Phase AAA).
+  const hostLocal = () => window.top === window && window.XNKHostLocal === true;
   function hostPostTheme() {
-    if (window.top === window) return;
+    if (window.top === window && !hostLocal()) return;
     // Di HP bagian atas layar adalah band hitam, jadi bilah status mengikuti --band; selain itu --bg.
     // Token (bukan warna body yang sedang bertransisi).
     const cs = getComputedStyle(document.documentElement);
@@ -395,9 +397,9 @@
   // App Android / iOS XNK: back sistem (tombol / geser samping) menggantikan panah kembali di layar.
   document.documentElement.classList.toggle('app-shell', /XNKAndroid|XNKiOS/.test(navigator.userAgent));
   (function hostBridge() {
-    if (window.top === window) return;
+    if (window.top === window && !hostLocal()) return;
     window.addEventListener('message', function (e) {
-      if (e.source !== window.top || HOST_ORIGINS.indexOf(e.origin) === -1) return;
+      if (e.source !== window.top || (HOST_ORIGINS.indexOf(e.origin) === -1 && !(hostLocal() && e.origin === location.origin))) return;
       const d = e.data;
       if (d && d.xnk === 'host' && d.v === 1) {
         const first = !host.origin;
@@ -10850,7 +10852,7 @@
   // dan menyimpan catatan yang dibuat di sana. Hanya ke origin pembungkus yang sudah menyapa (host.origin), tanpa token,
   // tanpa nomor WA. Catatan dari pembungkus masuk ke antrean aplikasi (cid sama = tidak dobel di server).
   const AQ_KEY = 'xnk_adm_queue';
-  function hostSend(msg) { if (!host.origin || window.top === window) return; try { window.top.postMessage(msg, host.origin); } catch (e) {} }
+  function hostSend(msg) { if (!host.origin || (window.top === window && !hostLocal())) return; try { window.top.postMessage(msg, host.origin); } catch (e) {} }
   let offSnapTimer = 0;
   function offlineSnapSoon() { clearTimeout(offSnapTimer); offSnapTimer = setTimeout(function () { const s = offlineSnap(); if (s) hostSend({ xnk: 'offline-snap', snap: s }); }, 400); }
   window.offlineSnapSoon = offlineSnapSoon;
