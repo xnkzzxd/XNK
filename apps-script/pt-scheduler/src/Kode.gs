@@ -1404,6 +1404,13 @@ function _memberKeyColumnReady_(sheet) {
  * mencegah Sheets auto-convert "D/M/YYYY" jadi tipe Date yang kacaukan parsing.
  */
 const MEMBERS_LOG_PRICE_COL = 11;   // K "Harga": harga paket saat transaksi (untuk laporan pendapatan)
+// Fase W: isi sheet Members (log transaksi) dengan header di baris 0; sekali per bundle baca-saja (omzet, tren, hub, log memakai data yang sama).
+function _membersLogValues_() {
+  if (_readMemo_ && _readMemo_.__membersLog) return _readMemo_.__membersLog;
+  const v = _getMembersLogSheet_().getDataRange().getValues();
+  if (_readMemo_) _readMemo_.__membersLog = v;
+  return v;
+}
 function _getMembersLogSheet_() {
   const sheet = getOrCreateSheet_('Members', MEMBERS_LOG_HEADERS);
   sheet.getRange('C:C').setNumberFormat('@');
@@ -2390,7 +2397,7 @@ function repairDateCells() {
   return _bumpAfter_('*', _locked_(_repairDateCells_));
 }
 
-function getAdminMore(token, month, year) {
+function getAdminMore(token, month, year, fresh) {
   const tr = _traceStart_();
   _tp_(tr, 'auth', function() { requireAdmin_(token); });
   _tp_(tr, 'repairDates', _repairDateCellsSoon_);
@@ -2398,7 +2405,22 @@ function getAdminMore(token, month, year) {
   const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
   const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
   const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
-  return _withMemberMemo_(function () { return _withSchedulesMemo_(function () {
+  // Fase W: hasil jadi disimpan sebentar (TTL ADMIN_MORE_CACHE_SECONDS, bawaan 90, 15–600). Kunci memuat hari WIB, bulan, tahun,
+  // versi admin (naik di setiap _bumpMember_ / _bustSlots_ / _bustShared_) dan versi bersama. fresh=true (tarik-untuk-segarkan) melewati
+  // pembacaan cache tetapi tetap menyimpan hasil baru. memberVers selalu segar.
+  const ckey = _payloadCacheOn_() ? 'am:' + _todayWib_() + ':' + m + ':' + y + ':' + _admVer_() + ':' + _sharedVersion_() : '';
+  return _withMemberMemo_(function () {
+    if (ckey && !fresh) {
+      const hit = _payloadGet_(ckey);
+      if (hit) {
+        hit.at = Date.now();
+        hit.memberVers = part('memberVers', _memberVersAll_);
+        const ms = _traceEnd_(tr, 'getAdminMore:hit');
+        if (ms) { ms.hit = true; hit.ms = ms; }
+        return hit;
+      }
+    }
+    const result = _withSchedulesMemo_(function() {
     const finance = part('finSettings', _finSettingsRead_);
     const finOn = !!(finance && finance.enabled);
     return {
@@ -2416,7 +2438,14 @@ function getAdminMore(token, month, year) {
       memberVers: part('memberVers', _memberVersAll_),
       ms: _traceEnd_(tr, 'getAdminMore')
     };
-  }); });
+    });
+    if (ckey && !_anyPartFailed_(result)) {
+      const copy = Object.assign({}, result);
+      delete copy.ms;
+      _payloadPut_(ckey, copy, Math.max(15, Math.min(600, Math.floor(_numProp_('ADMIN_MORE_CACHE_SECONDS', 90)))));
+    }
+    return result;
+  });
 }
 
 /** T-200: coach kosong = ID kosong + nama kosong. Baris lama yang menyimpan teks placeholder dibaca sebagai kosong. */
@@ -3876,7 +3905,7 @@ function _packageUsage_() {
     const id = String(r[6] || '').trim();
     if (id) members[id] = (members[id] || 0) + 1;
   });
-  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _membersLogValues_().slice(1).forEach(function(r) {
     const id = String(r[4] || '').trim();
     if (id) log[id] = (log[id] || 0) + 1;
   });
@@ -4958,7 +4987,7 @@ function _allPackagePrices_() {
 
 function _revenueSummary_(month, year) {
   const result = { total: 0, grossTotal: 0, share: REVENUE_SHARE, count: 0, byPackage: [] };
-  const log = _getMembersLogSheet_().getDataRange().getValues();
+  const log = _membersLogValues_();
   if (log.length <= 1) return result;
   const prices = _allPackagePrices_();
   const map = {};
@@ -5801,6 +5830,7 @@ function _bustSlots_() {
   try { SpreadsheetApp.flush(); } catch (e) {}
   const ver = String(Date.now()) + '.' + Math.floor(Math.random() * 1000000);
   try { CacheService.getScriptCache().put('openslots:ver', ver, 21600); } catch (e) {}
+  _bumpAdmin_();
   return ver;
 }
 
@@ -6215,7 +6245,7 @@ function _coachHub_(now, tr) {
     else if (k === 'klienAktif') actual = stats.activeClients;
     else if (k === 'pendapatan') actual = _tp_(tr, 'hub.revenue', function() { return _revenueSummary_(p[1], p[0]).total; });
     else if (k === 'klienBaru') {
-      _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+      _membersLogValues_().slice(1).forEach(function(r) {
         if (String(r[3]) !== 'Baru') return;
         const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
         if (t.length === 3 && parseInt(t[1], 10) === p[1] && parseInt(t[2], 10) === p[0]) actual++;
@@ -6250,7 +6280,7 @@ function _monthSummary_(y, m) {
     const a = new Date(s.start), b = new Date(s.end || s.start);
     if (!isNaN(a.getTime()) && !isNaN(b.getTime())) hours += Math.max(0, (b - a) / 3600000);
   });
-  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _membersLogValues_().slice(1).forEach(function(r) {
     if (String(r[3]) !== 'Baru') return;
     const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
     if (t.length === 3 && parseInt(t[1], 10) === m && parseInt(t[2], 10) === y) newClients++;
@@ -7861,11 +7891,9 @@ function _evalFromRow_(r) {
 }
 
 function _readSheetRows_(name, fn, memberId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
   const id = memberId == null ? null : String(memberId).trim();
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) { if (r[0] && (id === null || String(r[2 - (name === 'PackageEvaluations' ? 1 : 0)]).trim() === id)) out.push(fn(r)); });
+  _sheetRowsMemo_(name).forEach(function(r) { if (r[0] && (id === null || String(r[2 - (name === 'PackageEvaluations' ? 1 : 0)]).trim() === id)) out.push(fn(r)); });
   return out;
 }
 function _ratingsFor_(memberId) { return _readSheetRows_('SessionRatings', _ratingFromRow_, memberId); }
@@ -8038,11 +8066,9 @@ function _noteFromRow_(r) {
 
 /** Semua catatan satu klien, terbaru dulu. Sheet belum ada = []. */
 function _notesForMember_(memberId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SessionNotes');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) { if (r[0] && String(r[2]).trim() === id) out.push(_noteFromRow_(r)); });
+  _sheetRowsMemo_('SessionNotes').forEach(function(r) { if (r[0] && String(r[2]).trim() === id) out.push(_noteFromRow_(r)); });
   out.sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });
   return out;
 }
@@ -8447,6 +8473,7 @@ function _sharedVersion_() {
 function _bustShared_() {
   try { SpreadsheetApp.flush(); } catch (e) {}
   try { CacheService.getScriptCache().put('shared:ver', String(Date.now()) + '.' + Math.floor(Math.random() * 1000000), 21600); } catch (e) {}
+  _bumpAdmin_();
 }
 function _sharedCached_(name, fn) {
   const ttl = Math.max(30, Math.min(600, Math.floor(_numProp_('SHARED_CACHE_SECONDS', 180))));
@@ -8561,9 +8588,18 @@ function _bumpMember_(ids, flushed) {
     const c = CacheService.getScriptCache();
     list.forEach(function(id) { c.put('mv:' + id, _newVer_(), MEMBER_VER_TTL); });
   } catch (e) {}
+  _bumpAdmin_();
 }
 /** Naikkan versi lalu kembalikan hasil penulisan (bentuk jawaban tidak berubah). */
 function _bumpAfter_(ids, result) { _bumpMember_(ids); return result; }
+
+// Versi data panel (Fase W): naik di setiap penulisan data klien, jadwal atau data bersama; dipakai kunci cache getAdminMore.
+function _admVer_() {
+  try { return CacheService.getScriptCache().get('adm:ver') || '0'; } catch (e) { return '0'; }
+}
+function _bumpAdmin_() {
+  try { CacheService.getScriptCache().put('adm:ver', _newVer_(), MEMBER_VER_TTL); } catch (e) {}
+}
 
 // ── Cache hasil jadi (Fase W1) ───────────────────────────────────────────────
 // Hasil akhir getPortalMore / getClientBundle disimpan di CacheService dengan kunci = klien + hari WIB + versi data klien.

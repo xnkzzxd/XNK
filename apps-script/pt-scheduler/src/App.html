@@ -1820,6 +1820,7 @@
   window.refreshAll = function () {
     if (ui.pulling) return Promise.resolve();
     ui.pulling = true;
+    window._freshMore = true;   // tarik-untuk-segarkan: getAdminMore melewati cache server
     const job = window.isPublicView ? window.loadPublicData() : window.loadAllData();
     return Promise.resolve(job).catch(function () {}).then(function () { ui.pulling = false; });
   };
@@ -2103,11 +2104,12 @@
   }
   // Pengaturan dimuat saat halamannya dibuka.
   function loadAdminExtras() {
+    const freshMore = !!window._freshMore; window._freshMore = false;
     warmLibs(false);
     const now = new Date();
     const mo = now.getMonth() + 1, yr = now.getFullYear();
     ui.revenue = null; window._trendCache = {};
-    window._morePending = adminCall('getAdminMore', mo, yr).then(function (b) {
+    window._morePending = adminCall('getAdminMore', mo, yr, freshMore).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY) || !b) return;
       const ok = v => v && !v.error;
       if (ok(b.transactionLog)) window.memberArchive = b.transactionLog;

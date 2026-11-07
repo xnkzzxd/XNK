@@ -79,3 +79,17 @@ test('MemberData is read once per getAdminMore and once per getClientBundle miss
   env.call('getClientBundle', adm, id);
   assert.equal(reads.n, 1, 'getClientBundle');
 });
+
+test('getAdminMore is cached; any client write, slot change or fresh=true recomputes; memberVers stay live', () => {
+  const env = seededEnv();
+  const adm = env.adminToken();
+  const a = j(env.call('getAdminMore', adm));
+  assert.ok(!a.ms.hit);
+  const b = j(env.call('getAdminMore', adm));
+  assert.equal(b.ms.hit, true);
+  assert.deepEqual(Object.keys(b.memberVers).sort(), Object.keys(a.memberVers).sort());
+  assert.ok(!j(env.call('getAdminMore', adm, undefined, undefined, true)).ms.hit, 'fresh bypasses the read');
+  assert.equal(j(env.call('getAdminMore', adm)).ms.hit, true, 'fresh wrote the result back');
+  env.call('logMyWorkout', env.memberToken(KEY_A), '', [{ gerakan: 'Squat', sets: [{ berat: 40, rep: 8 }] }], { cid: 'wl-adm' });
+  assert.ok(!j(env.call('getAdminMore', adm)).ms.hit, 'a client write bumps the admin version');
+});
