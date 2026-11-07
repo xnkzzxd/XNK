@@ -2182,6 +2182,24 @@ function getPortalBootstrap(memberToken) {
   };
 }
 
+// Fase W0: waktu server per bagian. Hanya angka milidetik (tanpa data klien) di field `ms` balasan + satu baris log.
+// SPEED_TRACE=false (Script Property) mematikannya; bawaan nyala karena dipakai untuk mengukur sebelum mengoptimalkan.
+function _traceStart_() {
+  if (String(PropertiesService.getScriptProperties().getProperty('SPEED_TRACE') || '').trim().toLowerCase() === 'false') return null;
+  return { t0: Date.now(), parts: {} };
+}
+function _tp_(tr, name, fn) {
+  if (!tr) return fn();
+  const t = Date.now();
+  try { return fn(); } finally { tr.parts[name] = Date.now() - t; }
+}
+function _traceEnd_(tr, label) {
+  if (!tr) return undefined;
+  const out = { total: Date.now() - tr.t0, parts: tr.parts };
+  try { console.log('speed ' + label + ' ' + JSON.stringify(out)); } catch (e) {}
+  return out;
+}
+
 /**
  * Portal klien (Fase K): SEMUA data sisa untuk Beranda dan tab (progres, PR, form kesehatan, asesmen, perpanjangan, tagihan,
  * grup kelas, makan hari ini, program, konten, status coach) dalam SATU panggilan: satu autentikasi dan Schedules dibaca sekali.
@@ -2189,19 +2207,20 @@ function getPortalBootstrap(memberToken) {
  * { error } dan tidak merusak bagian lain. Hanya data klien itu sendiri.
  */
 function getPortalMore(memberToken) {
-  const row = requireMember_(memberToken).row;
+  const tr = _traceStart_();
+  const row = _tp_(tr, 'auth', function() { return requireMember_(memberToken).row; });
   const id = String(row[0]).trim();
   const ver = _memberVer_(id);   // sebelum sheet data dibaca
-  const part = function(fn) { try { return fn(); } catch (e) { return { error: String((e && e.message) || e) }; } };
+  const part = function(name, fn) { try { return _tp_(tr, name, fn); } catch (e) { return { error: String((e && e.message) || e) }; } };
   return _plainJson_(_withSchedulesMemo_(function() {
     const coachId = String(row[10] || '').trim();
     const spy = {};
-    const progress = part(function() { return _myPayload_(row); });
-    const assessment = part(function() { return _assessmentFor_(row, spy); });
-    const program = part(function() { return _programFor_(row); });
-    const workout = part(function() { return _workoutFor_(row); });
-    const nutrition = part(function() { return _nutritionFor_(row); });
-    const ins = part(function() { return _insightFor_(row, 'client', { progress: progress, assessment: assessment, program: program, workout: workout, nutrition: nutrition, bodyFat: spy.bodyFat }); });
+    const progress = part('progress', function() { return _myPayload_(row); });
+    const assessment = part('assessment', function() { return _assessmentFor_(row, spy); });
+    const program = part('program', function() { return _programFor_(row); });
+    const workout = part('workout', function() { return _workoutFor_(row); });
+    const nutrition = part('nutrition', function() { return _nutritionFor_(row); });
+    const ins = part('insight', function() { return _insightFor_(row, 'client', { progress: progress, assessment: assessment, program: program, workout: workout, nutrition: nutrition, bodyFat: spy.bodyFat }); });
     return {
       at: new Date().toISOString(),
       ver: ver,
@@ -2209,20 +2228,21 @@ function getPortalMore(memberToken) {
       week: ins.error ? ins : ins.week,
       insight: ins.error ? ins : { body: ins.body, fitness: ins.fitness, links: ins.links, training: ins.training, activity: ins.activity },
       progress: progress,
-      tasks: part(function() { return _myTasksFor_(row); }),
-      healthForm: part(function() { return _healthFormFor_(row); }),
+      tasks: part('tasks', function() { return _myTasksFor_(row); }),
+      healthForm: part('healthForm', function() { return _healthFormFor_(row); }),
       assessment: assessment,
-      renewal: part(function() { return _renewalFor_(row); }),
-      bills: part(function() { return _billsFor_(row); }),
-      classGroup: part(function() { return _classGroupFor_(row); }),
-      meal: part(function() { return _mealForMember_(row); }),
+      renewal: part('renewal', function() { return _renewalFor_(row); }),
+      bills: part('bills', function() { return _billsFor_(row); }),
+      classGroup: part('classGroup', function() { return _classGroupFor_(row); }),
+      meal: part('meal', function() { return _mealForMember_(row); }),
       program: program,
       workout: workout,
       nutrition: nutrition,
-      programGen: part(function() { return _programGenFor_(row, false); }),
-      content: part(function() { return _contentForClient_(); }),
-      coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
-      share: part(function() { return _shareFor_(row, workout, progress); })
+      programGen: part('programGen', function() { return _programGenFor_(row, false); }),
+      content: part('content', function() { return _contentForClient_(); }),
+      coachStatus: part('coachStatus', function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
+      share: part('share', function() { return _shareFor_(row, workout, progress); }),
+      ms: _traceEnd_(tr, 'getPortalMore')
     };
   }));
 }
@@ -2328,28 +2348,30 @@ function repairDateCells() {
 }
 
 function getAdminMore(token, month, year) {
-  requireAdmin_(token);
-  _repairDateCellsSoon_();
+  const tr = _traceStart_();
+  _tp_(tr, 'auth', function() { requireAdmin_(token); });
+  _tp_(tr, 'repairDates', _repairDateCellsSoon_);
   const ymd = _wibParts_(new Date()).date.split('-').map(Number);
   const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
   const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
-  const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
+  const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
   return _withSchedulesMemo_(function () {
-    const finance = part(_finSettingsRead_);
+    const finance = part('finSettings', _finSettingsRead_);
     const finOn = !!(finance && finance.enabled);
     return {
       at: Date.now(),
       month: m, year: y,
-      transactionLog: part(function () { return getMemberTransactionLog(token); }),
-      taskSummary: part(function () { return getTaskSummary(token); }),
-      renewals: part(function () { return getRenewalRequests(token); }),
+      transactionLog: part('transactionLog', function () { return getMemberTransactionLog(token); }),
+      taskSummary: part('taskSummary', function () { return getTaskSummary(token); }),
+      renewals: part('renewals', function () { return getRenewalRequests(token); }),
       finance: finance,
       shareEnabled: _shareEnabled_(),
-      revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
-      packageTrend: part(function () { return _packageTrendStats_(m, y); }),
-      hub: part(function () { return _coachHub_(new Date()); }),
-      signals: part(function () { return _clientSignals_(new Date()); }),
-      memberVers: part(_memberVersAll_)
+      revenue: part('revenue', function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
+      packageTrend: part('packageTrend', function () { return _packageTrendStats_(m, y); }),
+      hub: part('hub', function () { return _coachHub_(new Date()); }),
+      signals: part('signals', function () { return _clientSignals_(new Date()); }),
+      memberVers: part('memberVers', _memberVersAll_),
+      ms: _traceEnd_(tr, 'getAdminMore')
     };
   });
 }
@@ -6292,17 +6314,18 @@ function _fitnessSummary_(byTest) {
  * Tiap bagian sama persis dengan fungsi lamanya; bagian yang gagal diberi {error}. Hanya admin.
  */
 function getClientBundle(token, memberId) {
-  requireAdmin_(token);
+  const tr = _traceStart_();
+  _tp_(tr, 'auth', function() { requireAdmin_(token); });
   const ver = _memberVer_(memberId);   // sebelum sheet data dibaca
-  const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
+  const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
   return _plainJson_(_withSchedulesMemo_(function () {
-    const progress = part(function () { return getMemberProgress(token, memberId); });
-    const workout = part(function () { return getWorkoutLog(token, memberId); });
-    const program = part(function () { return getMemberProgram(token, memberId); });
-    const care = part(function () { return getClientCare(token, memberId); });
+    const progress = part('progress', function () { return getMemberProgress(token, memberId); });
+    const workout = part('workout', function () { return getWorkoutLog(token, memberId); });
+    const program = part('program', function () { return getMemberProgram(token, memberId); });
+    const care = part('care', function () { return getClientCare(token, memberId); });
     let mrow = null;
     const memberRow = function() { return mrow || (mrow = _memberRowOrThrow_(memberId).row); };
-    const insight = part(function () {
+    const insight = part('insight', function () {
       const row = memberRow();
       const bodyFat = care && care.assessment && care.assessment.bodyFat !== '' && care.assessment.bodyFat != null ? Number(care.assessment.bodyFat) : null;
       return _insightFor_(row, 'coach', { progress: progress, workout: workout, bodyFat: bodyFat });
@@ -6310,16 +6333,17 @@ function getClientBundle(token, memberId) {
     return {
       ver: ver,
       day: _todayWib_(),
-      tasks: part(function () { return getTasksForMember(token, memberId); }),
+      tasks: part('tasks', function () { return getTasksForMember(token, memberId); }),
       progress: progress,
       care: care,
       program: program,
       workout: workout,
-      nutrition: part(function () { return getClientNutrition(token, memberId); }),
-      programGen: part(function () { return _programGenFor_(memberRow(), true); }),
-      foodLog: part(function () { return getClientFoodLog(token, memberId); }),
-      share: part(function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
-      insight: insight
+      nutrition: part('nutrition', function () { return getClientNutrition(token, memberId); }),
+      programGen: part('programGen', function () { return _programGenFor_(memberRow(), true); }),
+      foodLog: part('foodLog', function () { return getClientFoodLog(token, memberId); }),
+      share: part('share', function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
+      insight: insight,
+      ms: _traceEnd_(tr, 'getClientBundle')
     };
   }));
 }
