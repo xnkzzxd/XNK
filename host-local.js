@@ -66,7 +66,9 @@
       if (sw) navigator.serviceWorker.register(sw).catch(function () {});
     }
     off.onReconnect = function () { if (navigator.onLine !== false) location.reload(); };
-    if (navigator.onLine === false) off.show();
+    // Tanpa sinyal saat dibuka: layar offline hanya bila aplikasi belum menyapa atau ada catatan yang menunggu. Aplikasi dari
+    // salinan (service worker) bisa menyapa sebelum atau sesudah titik ini; hasilnya sama: aplikasi tampil, kecuali ada antrean.
+    if (navigator.onLine === false && (!ready || off.pending())) off.show();
     else setTimeout(function () { if (!ready) off.offerButton(); }, 10000);
     window.addEventListener('offline', function () { if (!ready) off.show(); });
     window.addEventListener('online', function () { if (off.isOpen() && !ready) off.onReconnect(); });

@@ -94,13 +94,28 @@ const TYPE = { js: 'application/javascript', css: 'text/css', html: 'text/html' 
   check(cached && cached.includes('/next/') && cached.some(p => /\/app\.[0-9a-f]{10}\.js$/.test(p)) && cached.some(p => /\/theme\.[0-9a-f]{10}\.css$/.test(p)), `the page and its hashed files are in the cache (${cached ? cached.length : 0} entries)`);
   await page.reload();   // under the worker's control from now on
   await page.waitForTimeout(800);
+  const xoffHidden = () => page.waitForFunction(() => { const x = document.getElementById('xoff'); return !x || x.hidden; }, null, { timeout: 8000 }).then(() => true, () => false);
+  const xoffShown = () => page.waitForFunction(() => { const x = document.getElementById('xoff'); return !!x && !x.hidden; }, null, { timeout: 8000 }).then(() => true, () => false);
+  // A: opened without signal, nothing waiting: the cached app opens and the offline screen does not cover it.
   await ctx.setOffline(true);
   await page.goto(base + '/next/?view=public').catch(() => {});
-  await page.waitForTimeout(1500);
-  const off = await page.evaluate(() => ({ title: document.title, app: typeof window.navigate === 'function', screen: !!document.getElementById('xoff') && !document.getElementById('xoff').hidden }));
-  check(off.app, `the page opens without a network (${off.title})`);
-  check(off.screen, 'the "Catat offline" screen shows when there is no signal at open');
+  await page.waitForFunction(() => typeof window.navigate === 'function', null, { timeout: 8000 }).catch(() => {});
+  const app = await page.evaluate(() => ({ title: document.title, app: typeof window.navigate === 'function' }));
+  check(app.app, `the page opens without a network (${app.title})`);
+  check(await xoffHidden(), 'nothing waiting: the offline screen gives way to the app once it has greeted');
+  await page.waitForTimeout(800);
+  check(await page.evaluate(() => { const x = document.getElementById('xoff'); return !x || x.hidden; }), '... and stays out of the way');
   await ctx.setOffline(false);
+  // B: a note made offline is waiting: the offline screen stays, so it can be sent when the signal is back.
+  await page.goto(base + '/next/');
+  await page.evaluate(() => localStorage.setItem('xnk_off_queue', JSON.stringify([{ id: 'ms-t1', kind: 'measure', memberId: 'PT-A', date: '2026-11-07', data: { tanggal: '2026-11-07', berat: '70', cid: 'ms-t1' }, sig: '', at: Date.now() }])));
+  await ctx.setOffline(true);
+  await page.goto(base + '/next/').catch(() => {});
+  check(await xoffShown(), 'a note waiting to be sent: the "Catat offline" screen shows when opened without signal');
+  await page.waitForTimeout(800);
+  check(await page.evaluate(() => { const x = document.getElementById('xoff'); return !!x && !x.hidden; }), '... and stays, even after the app has greeted');
+  await ctx.setOffline(false);
+  await page.evaluate(() => localStorage.removeItem('xnk_off_queue'));
 
   console.log('Local host · inside a frame');
   await ctx.unroute('**/*');
