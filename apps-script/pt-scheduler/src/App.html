@@ -6390,7 +6390,14 @@
   window.addEventListener('online', function () { window.wlFlush(); if (window.fqFlush) window.fqFlush(); });
   window.addEventListener('offline', function () { if (window.publicLoggedMember || ui.mode === 'admin') window.showToast('Tidak ada sinyal. Catatan latihan dan makan tetap disimpan di HP.'); });
   let wlResizeT = null;
-  window.addEventListener('resize', function () { if (!ui.wlOn) return; clearTimeout(wlResizeT); wlResizeT = setTimeout(wlRender, 150); });
+  // Hanya bila LEBAR berubah (HP ↔ dua kolom). Keyboard Android mengecilkan tinggi layar dan memicu resize;
+  // render ulang saat itu membuang kolom yang sedang diketik sehingga keyboard langsung menutup lagi.
+  let wlLastW = window.innerWidth;
+  window.addEventListener('resize', function () {
+    if (!ui.wlOn || window.innerWidth === wlLastW) return;
+    wlLastW = window.innerWidth;
+    clearTimeout(wlResizeT); wlResizeT = setTimeout(wlRender, 150);
+  });
 
   // ── Menu gerakan, riwayat, ganti hari / tanggal, tambah gerakan ───────────────
   function wlSheet(title, body, foot) {
