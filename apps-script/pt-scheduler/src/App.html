@@ -1755,7 +1755,7 @@
     initPullRefresh();
     const start = function (params) {
       params = params || {};
-      if (params.view === 'public') {
+      if (params.view === 'public' || (window.XNK_CONFIG && window.XNK_CONFIG.site === 'client')) {
         ui.mode = 'public';
         window.isPublicView = true;
         document.documentElement.classList.add('portal');   // judul halaman pindah ke top bar

@@ -8,6 +8,7 @@
 // repo root, is published at /legacy/ and, as a one-variable rollback, at / again when the repo variable
 // ROOT_LEGACY is "true" (or buildSite({ rootLegacy: true })): set it, re-run the Pages workflow, done.
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const { build, write } = require('./build-static');
 
@@ -54,6 +55,15 @@ function buildSite(opts) {
   if (!rootLegacy) write(out, build({ site: 'app', exec: opts.exec, root: true }));
   write(path.join(out, 'next'), build({ site: 'app', exec: opts.exec }));
   write(path.join(out, 'next', 'landing'), build({ site: 'landing', exec: opts.exec }));
+  // Pull-based publishing (T-1727): the portal repo (BookingPT-Client) and the landing repo (BookingPT) fetch these folders
+  // with their own workflow. manifest.json lists every file and its sha256, so a puller can tell what changed and verify it.
+  for (const [dir, site] of [['client', 'client'], ['landing-pub', 'landing']]) {
+    const files = build({ site, exec: opts.exec });
+    write(path.join(out, dir), files);
+    const list = {};
+    for (const n of Object.keys(files).sort()) list[n] = crypto.createHash('sha256').update(files[n]).digest('hex');
+    fs.writeFileSync(path.join(out, dir, 'manifest.json'), JSON.stringify({ v: 1, site, files: list }, null, 1) + '\n');
+  }
   return out;
 }
 
