@@ -648,6 +648,41 @@ function requireMember_(token) {
   return found;
 }
 
+/**
+ * Fase W: autentikasi untuk bundel BACA-SAJA klien (getPortalBootstrap, getPortalMore). Tanda tangan dan masa berlaku token
+ * selalu dicek penuh; hanya pembacaan seluruh MemberData yang dilewati: baris klien yang sudah tervalidasi disimpan di
+ * CacheService dengan kunci klien + tanda tangan token + versi data klien (AUTH_CACHE_SECONDS, bawaan 60, 10–300).
+ * Setiap penulis baris MemberData menaikkan versi (_bumpMember_), jadi kunci berubah dan pengecekan penuh jalan lagi
+ * (hapus klien, foto, panduan, dll.). Penulis tidak boleh memakai fungsi ini: mereka butuh sheet dan nomor baris segar.
+ * PAYLOAD_CACHE=false mematikan. Mengembalikan { row, rowNum }.
+ */
+function requireMemberRead_(token) {
+  const payload = _readToken_(token);
+  if (!payload || payload.r !== 'member' || !payload.m) {
+    throw _authError_('Sesi berakhir. Silakan masuk lagi dengan nomor WhatsApp.');
+  }
+  const id = String(payload.m).trim();
+  const ver = _payloadCacheOn_() ? _memberVer_(id) : '';   // sebelum sheet dibaca
+  const ckey = ver ? 'ma:' + id + ':' + String(token).split('.')[1] + ':' + ver : '';
+  if (ckey) {
+    try {
+      const hit = CacheService.getScriptCache().get(ckey);
+      if (hit) {
+        const o = JSON.parse(hit, function(k, v) { return v && typeof v === 'object' && v.__d !== undefined ? new Date(v.__d) : v; });
+        if (o && Array.isArray(o.row)) return { row: o.row, rowNum: o.n };
+      }
+    } catch (e) {}
+  }
+  const found = requireMember_(token);   // pengecekan penuh terhadap sheet
+  if (ckey) {
+    try {
+      const str = JSON.stringify({ n: found.rowNum, row: found.row }, function(k, v) { return this[k] instanceof Date ? { __d: this[k].getTime() } : v; });
+      if (str.length < 90000) CacheService.getScriptCache().put(ckey, str, Math.max(10, Math.min(300, Math.floor(_numProp_('AUTH_CACHE_SECONDS', 60)))));
+    } catch (e) {}
+  }
+  return { row: found.row, rowNum: found.rowNum };
+}
+
 // Data profil yang boleh dilihat klien itu sendiri (tanpa kunci link).
 function _memberPublicProfile_(row) {
   const joinDate = sanitizeValue(row[4]);
@@ -763,6 +798,7 @@ function markGuideSeen(memberToken, page) {
     const done = GUIDE_PAGES.filter(function(p) { return parts.indexOf(p) !== -1; });
     const value = page === 'semua' || done.length === GUIDE_PAGES.length ? 'selesai' : ['baru'].concat(done).join('|');
     cell.setValue(value);
+    _bumpMember_(String(found.row[0]).trim());
     return _guideFrom_(value);
   } finally {
     lock.releaseLock();
@@ -2017,6 +2053,7 @@ function deleteMember(token, memberId) {
       }
     }
     _bustSlots_();   // sesudah menulis: jadwal klien ini ikut terhapus
+    _bumpMember_('*');   // baris bergeser dan sesi klien ini tidak berlaku lagi: cache autentikasi ikut gugur
 
     try {
       kirimNotifTelegram_("🗑️ <b>KLIEN DIHAPUS</b>\n\n👤 <b>Nama:</b> " + escapeHtmlTelegram(deletedName) + "\n\nSemua jadwal terkait juga sudah dihapus. Riwayat transaksi tetap tersimpan sebagai arsip.");
@@ -2074,6 +2111,7 @@ function uploadMemberPhoto(memberToken, base64Data, fileName, mimeType) {
 
 function _saveMemberPhoto_(member, photoUrl) {
   member.sheet.getRange(member.rowNum, 6).setValue(photoUrl);
+  _bumpMember_(String(member.row[0]).trim());
   try {
     kirimNotifTelegram_("🖼️ <b>FOTO KLIEN DIPERBARUI</b>\n\n👤 <b>Nama:</b> " + escapeHtmlTelegram(member.row[1]));
   } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
@@ -2168,7 +2206,7 @@ function getPortalBootstrapImpl_(memberToken) {
   const tr = _traceStart_();
   let found = null, authLost = '';
   if (memberToken) {
-    try { found = _tp_(tr, 'auth', function() { return requireMember_(memberToken); }); } catch (e) { authLost = String(e.message || e); }
+    try { found = _tp_(tr, 'auth', function() { return requireMemberRead_(memberToken); }); } catch (e) { authLost = String(e.message || e); }
   }
   const memberId = found ? String(found.row[0]).trim() : null;
   // Versi data klien (dibaca sebelum sheet lain): sama dengan salinan di perangkat = getPortalMore tidak perlu dipanggil.
@@ -2235,7 +2273,7 @@ function _traceEnd_(tr, label) {
 function getPortalMore(memberToken) {
   const tr = _traceStart_();
   return _withMemberMemo_(function() {
-    const row = _tp_(tr, 'auth', function() { return requireMember_(memberToken).row; });
+    const row = _tp_(tr, 'auth', function() { return requireMemberRead_(memberToken).row; });
     return getPortalMoreImpl_(row, tr);
   });
 }
