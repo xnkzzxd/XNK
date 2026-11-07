@@ -20,7 +20,7 @@ for (const site of Object.keys(SITES)) {
     const files = build({ site, exec: EXEC });
     const html = files['index.html'];
     assert.ok(!html.includes('<?'), 'template tag left');
-    const refs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(m => m[1]).filter(u => !/^(https?:|data:|\/\/|#|mailto:|tel:)/.test(u));
+    const refs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(m => m[1]).filter(u => !/^(https?:|data:|\/|#|mailto:|tel:)/.test(u));
     assert.ok(refs.length >= 3, 'expected local files, got ' + refs.join(','));
     for (const r of refs) assert.ok(files[r] !== undefined, `${site}: ${r} is not in the build`);
   });
@@ -153,6 +153,7 @@ test('app: built for the site root (root: true) it also links the Home Screen ma
   assert.ok(build({ site: 'app', exec: EXEC, root: true })['index.html'].includes('<link rel="manifest" href="/manifest.webmanifest">'));
   assert.ok(!build({ site: 'app', exec: EXEC })['index.html'].includes('manifest.webmanifest'));
   assert.ok(!build({ site: 'landing', exec: EXEC, root: true })['index.html'].includes('manifest.webmanifest'));
+  assert.ok(build({ site: 'client', exec: EXEC })['index.html'].includes('<link rel="manifest" href="/manifest.webmanifest">'), 'the portal is always served from its own site root');
 });
 
 test('service workers on xnk.my.id share one cache storage: each deletes only its own prefix', () => {

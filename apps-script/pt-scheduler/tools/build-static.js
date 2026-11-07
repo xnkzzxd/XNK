@@ -99,7 +99,7 @@ function build(opts) {
     '<link rel="icon" href="' + def.favicon + '">',
   ].concat(def.head);
   // Served from the site root (the panel replaces the old wrapper): the Home Screen manifest is scoped to '/'.
-  if (site === 'app' && opts.root) extra.push('<link rel="manifest" href="/manifest.webmanifest">');
+  if ((site === 'app' && opts.root) || site === 'client') extra.push('<link rel="manifest" href="/manifest.webmanifest">');
   if (def.local) extra.push(
     '<script>if (location.protocol === "http:" && !/^(localhost|127\\.0\\.0\\.1)$/.test(location.hostname)) location.replace("https://" + location.host + location.pathname + location.search);</script>');
   const m = /<meta name="viewport"[^>]*>\n/.exec(html);
