@@ -31,13 +31,26 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 
 - [x] T-1715c CI dipecah: `checks.yml` jadi tiga job paralel (`fast checks`, `browser check (static build)`, `browser check (Apps Script fallback)`) plus job `checks` yang hanya mengumpulkan hasilnya (nama itu tetap satu-satunya yang diwajibkan branch protection); Playwright lewat composite action `.github/actions/setup-playwright`. Sebelumnya satu job ±30 menit dari batas 40; sekarang tiap job ±10–12 menit.
 
+## Gerbang W: AAA4 menunggu Phase W (keputusan pemilik 2026-11-07)
+
+Pemilik menyuruh Claude menyelesaikan AAA tanpa keterlibatan pemilik, dan **menunggu Phase W** ([../speed/TODO.md](../speed/TODO.md)) karena keduanya menyentuh berkas yang sama (`Index.html`, `App.html`, `Bagikan.html`, `Theme.html`, `sw.js`, `offline*.js`, `tools/browser-check.js`, `tools/build-static.js`, `tools/demo-runtime.js`). Pekerjaan server Phase W (`Kode.gs` dan lainnya) tidak bentrok dengan AAA.
+
+AAA4 mulai hanya bila semua ini benar di `main`:
+1. `docs/speed/TODO.md`: T-1805 (W2), T-1810 (Bagikan keluar dari inline) dan T-1811 (skeleton, landing) berstatus `[x]` atau `[-]`. T-1812 (memecah `App.html`/`Theme.html`) dikerjakan **bersama AAA4**, bukan ditunggu.
+2. Tidak ada PR terbuka (mis. dari cabang `claude/speed-*`) yang mengubah berkas di daftar atas.
+3. `main` hijau (workflow `Checks` terakhir sukses).
+
+Selama menunggu, Claude hanya mengerjakan hal yang tidak menyentuh berkas itu (dokumen AAA, rencana). Pemeriksaan dilakukan berkala oleh tugas terjadwal "Cek gerbang W (AAA4)". Syarat belum terpenuhi = tidak melakukan apa pun dan tidak mengirim pesan.
+
+Cutover (T-1722, T-1726, T-1731) dilakukan Claude sendiri sesuai instruksi pemilik, hanya bila: semua tes dan CI hijau, pratinjau `/next/` diperiksa dengan Chromium headless (termasuk jalur galat login memakai PIN/nomor salah ke backend sungguhan, yang bisa diuji tanpa kredensial), dan jalan kembali (`legacy`) sudah ada dan dicoba. **Celah yang diketahui:** login berhasil dengan PIN/nomor sungguhan tidak bisa diuji oleh Claude; jalurnya sama dengan jalur galat dan sudah dicakup tes `doPost`, dan pemulihan = menyalin `legacy.html` menjadi `index.html`.
+
 ## AAA4 — Panel (xnk.my.id)
 - [ ] T-1716 `host-local.js` (safe-area, keyboard, share/copy, theme, HTTPS).
 - [ ] T-1717 Offline same-origin; `offline-host.js` tanpa iframe; sinkron ke BookingPT-Client.
 - [ ] T-1718 `sw.js` precache `dist` (`xnk-off-v3`).
 - [ ] T-1719 `offline-check.js`, bagian pembungkus `browser-check.js`, `share-check.js` disesuaikan.
 - [ ] T-1720 Pembungkus lama ke `/legacy/`.
-- [ ] T-1721 👤 Setujui waktu cutover.
+- [ ] T-1721 Cutover dijadwalkan di jam sepi (WIB 00.00–05.00) dan dilakukan Claude (lihat Gerbang W); tidak menunggu persetujuan waktu dari pemilik.
 - [ ] T-1722 Cutover panel: `index.html` root = panel statis.
 
 ## AAA5 — Landing (xnkbooking.my.id)
@@ -47,7 +60,7 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. Ambil nomor terendah yang bel
 - [ ] T-1726 Cutover landing.
 
 ## AAA6 — Portal (book.xnkbooking.my.id)
-- [ ] T-1727 👤 Secret token untuk mendorong build ke BookingPT-Client dan BookingPT.
+- [ ] T-1727 **Tarik, bukan dorong (perubahan desain 2026-11-07, agar tidak perlu secret dari pemilik).** `build-site.js` menerbitkan juga `client/` (`site=client`: tanpa query membuka portal) dan `landing-pub/` (`site=landing`) beserta `manifest.json` (daftar berkas dan hash) di `xnk.my.id`. Repo BookingPT-Client (dan BookingPT) punya workflow sendiri (`schedule` tiap jam + `workflow_dispatch`) yang mengunduh berkas dari `https://xnk.my.id/…` ke `main`-nya bila `manifest.json` berubah, memakai `GITHUB_TOKEN` repo itu sendiri (`contents: write`). Pilihan lama (XNK mendorong ke repo lain dengan secret) tetap bisa dipakai nanti bila pemilik membuat tokennya.
 - [ ] T-1728 Build `site=client` ke BookingPT-Client; `legacy.html`.
 - [ ] T-1729 `sync-offline.js --check`, `offline-check.js ../BookingPT-Client`.
 - [ ] T-1730 Cek ulang `android/`, `ios/` (UA `XNKAndroid`/`XNKiOS`), `app/`, Capacitor.
