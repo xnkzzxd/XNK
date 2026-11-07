@@ -310,7 +310,7 @@
   };
 
   // ── Simpan langsung berhasil (optimistic UI) ────────────────────────────────
-  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, ok, label, then(res), undo() })
+  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, errEl, ok, label, then(res), undo() })
   //   Layar langsung berubah (lembar `sheet` ditutup, toast `ok`), server bekerja di belakang.
   //   Sukses: then(res) (muat ulang / ganti data sementara). Tanpa sinyal + `q`: masuk outbox
   //   `xnk_outbox`, dikirim ulang sendiri. Ditolak server: undo(), lembar dibuka lagi (isinya
@@ -388,6 +388,9 @@
       if (o.q && obNet(err)) { obAdd(o.q, o.label); return; }
       if (o.undo) try { o.undo(); } catch (e) { console.error(e); }
       if (o.sheet) openSheet(o.sheet);
+      // Lembar punya kotak galat sendiri: pesan server tampil di sana (tanpa pop-up kedua).
+      const box = o.errEl && o.sheet && document.getElementById(o.errEl);
+      if (box) { box.textContent = window.authMessage(err); return; }
       failPopup(o.label, err, function () { optimistic(o); });
     });
   }

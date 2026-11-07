@@ -178,7 +178,7 @@
     if (bad) { if (/Lengan|Perut|Paha|Dada/.test(bad)) $('pg-more').open = true; return fail(bad); }
     fail('');
     const mode = pg.mode, mid = pg.memberId, tgl = $('pg-tanggal').value;
-    optimistic({ sheet: true, ok: 'Tersimpan.', label: 'Ukuran tubuh',
+    optimistic({ sheet: true, errEl: 'pg-err', ok: 'Tersimpan.', label: 'Ukuran tubuh',
       call: function () { return mode === 'admin' ? adminCall('saveMemberMeasurement', mid, Object.assign({ tanggal: tgl }, data)) : memberCall('saveMyMeasurement', data); },
       then: function (d) {
         pgStore(d);

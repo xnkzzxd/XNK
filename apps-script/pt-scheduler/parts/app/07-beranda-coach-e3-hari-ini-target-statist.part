@@ -152,7 +152,7 @@
     const data = { id: cnt.editId, tipe: cnt.tipe, judul: $('cn-judul').value, isi: $('cn-isi').value, url: $('cn-url').value.trim(), kategori: $('cn-kategori').value,
       mulai: $('cn-mulai').value, sampai: $('cn-sampai').value, sematkan: $('cn-sematkan').checked, aktif: $('cn-aktif').checked };
     optimistic(Object.assign(data.id ? { q: { mode: 'admin', fn: 'saveContent', args: [data] } } : { call: function () { return adminCall('saveContent', data); } },
-      { sheet: true, ok: 'Konten disimpan.', label: 'Konten', then: function () { window.loadContentAdmin(); } }));
+      { sheet: true, errEl: 'cn-err', ok: 'Konten disimpan.', label: 'Konten', then: function () { window.loadContentAdmin(); } }));
   };
   window.contentDelete = function () {
     const id = cnt.editId; if (!id) return;

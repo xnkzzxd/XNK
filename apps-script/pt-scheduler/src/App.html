@@ -310,7 +310,7 @@
   };
 
   // ── Simpan langsung berhasil (optimistic UI) ────────────────────────────────
-  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, ok, label, then(res), undo() })
+  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, errEl, ok, label, then(res), undo() })
   //   Layar langsung berubah (lembar `sheet` ditutup, toast `ok`), server bekerja di belakang.
   //   Sukses: then(res) (muat ulang / ganti data sementara). Tanpa sinyal + `q`: masuk outbox
   //   `xnk_outbox`, dikirim ulang sendiri. Ditolak server: undo(), lembar dibuka lagi (isinya
@@ -388,6 +388,9 @@
       if (o.q && obNet(err)) { obAdd(o.q, o.label); return; }
       if (o.undo) try { o.undo(); } catch (e) { console.error(e); }
       if (o.sheet) openSheet(o.sheet);
+      // Lembar punya kotak galat sendiri: pesan server tampil di sana (tanpa pop-up kedua).
+      const box = o.errEl && o.sheet && document.getElementById(o.errEl);
+      if (box) { box.textContent = window.authMessage(err); return; }
       failPopup(o.label, err, function () { optimistic(o); });
     });
   }
@@ -5066,7 +5069,7 @@
     const data = { id: cnt.editId, tipe: cnt.tipe, judul: $('cn-judul').value, isi: $('cn-isi').value, url: $('cn-url').value.trim(), kategori: $('cn-kategori').value,
       mulai: $('cn-mulai').value, sampai: $('cn-sampai').value, sematkan: $('cn-sematkan').checked, aktif: $('cn-aktif').checked };
     optimistic(Object.assign(data.id ? { q: { mode: 'admin', fn: 'saveContent', args: [data] } } : { call: function () { return adminCall('saveContent', data); } },
-      { sheet: true, ok: 'Konten disimpan.', label: 'Konten', then: function () { window.loadContentAdmin(); } }));
+      { sheet: true, errEl: 'cn-err', ok: 'Konten disimpan.', label: 'Konten', then: function () { window.loadContentAdmin(); } }));
   };
   window.contentDelete = function () {
     const id = cnt.editId; if (!id) return;
@@ -7287,7 +7290,7 @@
       }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
       return;
     }
-    optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
+    optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, errEl: 'sn-err', ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
   };
 
   // Daftar "Perlu perhatian" di Beranda Coach
@@ -8194,7 +8197,7 @@
     if (bad) { if (/Lengan|Perut|Paha|Dada/.test(bad)) $('pg-more').open = true; return fail(bad); }
     fail('');
     const mode = pg.mode, mid = pg.memberId, tgl = $('pg-tanggal').value;
-    optimistic({ sheet: true, ok: 'Tersimpan.', label: 'Ukuran tubuh',
+    optimistic({ sheet: true, errEl: 'pg-err', ok: 'Tersimpan.', label: 'Ukuran tubuh',
       call: function () { return mode === 'admin' ? adminCall('saveMemberMeasurement', mid, Object.assign({ tanggal: tgl }, data)) : memberCall('saveMyMeasurement', data); },
       then: function (d) {
         pgStore(d);
