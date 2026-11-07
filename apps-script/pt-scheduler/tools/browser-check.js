@@ -135,7 +135,10 @@ function gasShim() {
 
 async function openPage(browser, env, pagePath, calls, storage, opts) {
   opts = opts || {};
+  // serviceWorkers: 'block' - the static page registers sw-app.js; a worker would answer library requests (exercises, foods,
+  // figure) before this file's page.route stubs see them. The worker itself is checked by tools/host-check.js.
   const context = await browser.newContext({
+    serviceWorkers: 'block',
     viewport: opts.viewport || MOBILE, colorScheme: opts.colorScheme || 'light', reducedMotion: opts.reducedMotion || 'no-preference',
     hasTouch: !!opts.touch, isMobile: !!opts.touch, timezoneId: opts.timezoneId,
     recordVideo: opts.video ? { dir: opts.video, size: opts.viewport || MOBILE } : undefined,

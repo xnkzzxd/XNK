@@ -9,6 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const SRC = path.join(__dirname, '..', 'src');
+const ROOT = path.join(__dirname, '..', '..', '..');   // host-local.js, offline.js, offline.css live at the repo root (one source)
 const DEFAULT_DEPLOYMENT = 'AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ';   // same default as .github/workflows/pt-scheduler.yml
 const INCLUDE = /<\?!=\s*include\('([^']+)'\)\s*\?>/g;
 
@@ -16,6 +17,7 @@ const INCLUDE = /<\?!=\s*include\('([^']+)'\)\s*\?>/g;
 const SITES = {
   app: {   // panel + client portal (one page; ?view=public&k= opens the portal)
     page: 'Index.html',
+    local: true,   // top-level page without the iframe wrapper: host-local.js, "Catat offline" screen, service worker
     out: { 'Theme.html': { kind: 'css', base: 'theme' }, 'Scripts.html': { kind: 'js', base: 'scripts' }, 'App.html': { kind: 'js', base: 'app' }, 'Bagikan.html': { kind: 'js', base: 'bagikan' } },
     favicon: 'https://xnk.my.id/favicon.ico',
     head: [
@@ -84,8 +86,13 @@ function build(opts) {
   const vp = 'initial-scale=1, viewport-fit=cover';
   if (!html.includes(vp)) throw new Error(`${def.page}: viewport meta not found`);
   html = html.replace(vp, 'initial-scale=1, minimum-scale=1, viewport-fit=cover');
+  // The first call goes to script.google.com and its answer is redirected to script.googleusercontent.com:
+  // open both connections while the page loads (the old wrapper did the same).
+  const execHost = new URL(exec).origin;
   const extra = [
     '<script src="config.js"></script>',
+    '<link rel="preconnect" href="' + execHost + '">',
+    '<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>',
     '<link rel="icon" href="' + def.favicon + '">',
   ].concat(def.head);
   if (site === 'app') extra.push(
@@ -95,8 +102,28 @@ function build(opts) {
   const at = m.index + m[0].length;
   html = html.slice(0, at) + extra.map(l => '  ' + l + '\n').join('') + html.slice(at);
 
-  files['config.js'] = `window.XNK_CONFIG = ${JSON.stringify({ exec, site })};\n`;
+  const config = { exec, site };
+  if (def.local) {
+    // The wrapper's jobs, done in the page itself (see host-local.js); one source file each at the repo root.
+    const rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+    const emit = (base, kind, body) => { const n = `${base}.${hash(body)}.${kind}`; files[n] = body; return n; };
+    const hl = emit('host-local', 'js', rd('host-local.js')), oc = emit('offline', 'css', rd('offline.css')), oj = emit('offline', 'js', rd('offline.js'));
+    // offline.js reads data-mode from its own tag: coach for the panel, client for the portal (?view=public / ?k=).
+    const loader = `<script>document.write('<script src="${oj}" data-mode="' + (/[?&](view=public|k=)/.test(location.search) || (window.XNK_CONFIG && window.XNK_CONFIG.site === 'client') ? 'client' : 'coach') + '"><\\/script>');</script>`;
+    const extra2 = [`<script src="${hl}"></script>`, `<link rel="stylesheet" href="${oc}">`, loader];
+    const at2 = html.indexOf('<script src="config.js"></script>\n') + '<script src="config.js"></script>\n'.length;
+    html = html.slice(0, at2) + extra2.map(l => '  ' + l + '\n').join('') + html.slice(at2);
+    config.sw = 'sw-app.js';
+  }
+  files['config.js'] = `window.XNK_CONFIG = ${JSON.stringify(config)};\n`;
   files['index.html'] = html;
+  if (def.local) {
+    // Service worker for this folder: precache the page, every hashed file and config.js; the cache name changes with the content.
+    const assets = Object.keys(files).filter(n => n !== 'index.html').sort();
+    const cache = 'xnk-app-' + hash(assets.map(n => n + files[n]).join('\n') + files['index.html']);
+    files['sw-app.js'] = fs.readFileSync(path.join(__dirname, 'sw-app.template.js'), 'utf8')
+      .replace("'__CACHE__'", JSON.stringify(cache)).replace('__ASSETS__', JSON.stringify(assets));
+  }
   return files;
 }
 

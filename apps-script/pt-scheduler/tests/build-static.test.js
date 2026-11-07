@@ -41,7 +41,8 @@ for (const site of Object.keys(SITES)) {
   test(`${site}: the css and js files are the unchanged blocks of the include files, in the original order`, () => {
     const files = build({ site, exec: EXEC });
     const html = files['index.html'];
-    const order = [...html.matchAll(/<(?:script src|link rel="stylesheet" href)="(?!https?:)([^"]+\.(?:js|css))"/g)].map(m => m[1]).filter(n => n !== 'config.js');
+    const bases = new Set(Object.values(def.out).map(o => o.base));
+    const order = [...html.matchAll(/<(?:script src|link rel="stylesheet" href)="(?!https?:)([^"]+\.(?:js|css))"/g)].map(m => m[1]).filter(n => bases.has(n.split('.')[0]) && !/^(offline|host-local)\./.test(n));
     assert.equal(order.length, Object.keys(def.out).length);
     // order of appearance = order of the include tags in the template
     const tags = [...read(def.page).matchAll(/include\('([^']+)'\)/g)].map(m => m[1]);
@@ -56,7 +57,7 @@ for (const site of Object.keys(SITES)) {
     const files = build({ site, exec: EXEC });
     const ctx = vm.createContext({ window: {} });
     vm.runInContext(files['config.js'], ctx);
-    assert.deepEqual(JSON.parse(JSON.stringify(ctx.window.XNK_CONFIG)), { exec: EXEC, site });
+    assert.deepEqual(JSON.parse(JSON.stringify(ctx.window.XNK_CONFIG)), Object.assign({ exec: EXEC, site }, def.local ? { sw: 'sw-app.js' } : {}));
     const html = files['index.html'];
     assert.ok(html.indexOf('src="config.js"') > 0 && html.indexOf('src="config.js"') < html.search(/src="(scripts|app|landing)\./));
   });
@@ -69,6 +70,14 @@ for (const site of Object.keys(SITES)) {
     for (const [name, text] of Object.entries(files)) if (name.endsWith('.js')) assert.doesNotThrow(() => new vm.Script(text, { filename: name }), name);
   });
 }
+
+test('both pages open the connections the first server call needs (exec host and the redirect target)', () => {
+  for (const site of Object.keys(SITES)) {
+    const html = build({ site, exec: EXEC })['index.html'];
+    assert.ok(html.includes('<link rel="preconnect" href="https://script.google.com">'), site + ': preconnect to the exec host');
+    assert.ok(html.includes('<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>'), site + ': preconnect to the redirect target');
+  }
+});
 
 test('app: panel page is private (noindex, app meta); the landing is public and keeps its own title', () => {
   const app = build({ site: 'app', exec: EXEC })['index.html'];
@@ -105,4 +114,37 @@ test('write puts every file on disk', () => {
     write(dir, files);
     for (const [n, t] of Object.entries(files)) assert.equal(fs.readFileSync(path.join(dir, n), 'utf8'), t);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('app: the static page does the old wrapper\'s jobs itself (host-local, offline screen, service worker)', () => {
+  const files = build({ site: 'app', exec: EXEC });
+  const html = files['index.html'];
+  const root = f => fs.readFileSync(path.join(__dirname, '..', '..', '..', f), 'utf8');
+  const hl = Object.keys(files).find(n => /^host-local\.[0-9a-f]{10}\.js$/.test(n));
+  const oj = Object.keys(files).find(n => /^offline\.[0-9a-f]{10}\.js$/.test(n));
+  const oc = Object.keys(files).find(n => /^offline\.[0-9a-f]{10}\.css$/.test(n));
+  assert.ok(hl && oj && oc, 'host-local, offline.js and offline.css are in the build');
+  assert.equal(files[hl], root('host-local.js'));      // one source each, at the repo root
+  assert.equal(files[oj], root('offline.js'));
+  assert.equal(files[oc], root('offline.css'));
+  // host-local runs before the app scripts; offline.js is written with the mode that fits the URL
+  assert.ok(html.indexOf(hl) > 0 && html.indexOf(hl) < html.indexOf('src="scripts.'));
+  assert.match(html, /data-mode="' \+ \(\/\[\?&\]\(view=public\|k=\)\/\.test\(location\.search\)/);
+  assert.ok(html.includes(`<script>document.write('<script src="${oj}"`));
+  // the landing needs none of it
+  const land = Object.keys(build({ site: 'landing', exec: EXEC }));
+  assert.ok(!land.some(n => /^(host-local|offline|sw-app)/.test(n)));
+});
+
+test('app: sw-app.js precaches the page, every hashed file and config.js, and its cache name follows the content', () => {
+  const a = build({ site: 'app', exec: EXEC });
+  const sw = a['sw-app.js'];
+  assert.doesNotThrow(() => new vm.Script(sw, { filename: 'sw-app.js' }));
+  const assets = JSON.parse(/var ASSETS = (\[.*?\]);/.exec(sw)[1]);
+  assert.deepEqual(assets.sort(), Object.keys(a).filter(n => n !== 'index.html' && n !== 'sw-app.js').sort());
+  assert.ok(assets.includes('config.js') && assets.some(n => /^app\./.test(n)) && assets.some(n => /^theme\./.test(n)));
+  assert.ok(!sw.includes('__CACHE__') && !sw.includes('__ASSETS__'));
+  const cacheOf = f => /var CACHE = "(xnk-app-[0-9a-f]{10})"/.exec(f['sw-app.js'])[1];
+  assert.equal(cacheOf(a), cacheOf(build({ site: 'app', exec: EXEC })));                    // stable for the same build
+  assert.notEqual(cacheOf(a), cacheOf(build({ site: 'app', exec: 'https://other/exec' })));  // config.js changed -> new cache
 });

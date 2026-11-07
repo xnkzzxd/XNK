@@ -49,6 +49,8 @@ jobs:
         run: node apps-script/pt-scheduler/tools/share-check.js
       - name: Demo check (opens signed in, leaves the real app's device state alone)
         run: node apps-script/pt-scheduler/tools/demo-check.js
+      - name: Host check (the static page answers its own host messages, service worker, offline open)
+        run: node apps-script/pt-scheduler/tools/host-check.js
 
       # The client wrapper lives in xnkzzxd/BookingPT-Client (public). If it can't be fetched,
       # the offline check still runs on the coach wrapper and says the client part was skipped.

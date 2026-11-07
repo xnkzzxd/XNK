@@ -18,6 +18,7 @@ const PUBLISHED = [
 ];
 const NOT_PUBLISHED = [
   '.git', '.github', '.gitignore', '.nojekyll', 'CLAUDE.md', 'README.md', '_config.yml',
+  'host-local.js',   // source of the static pages' local host; build-static.js ships it hashed under next/
   'apps-script', 'docs', 'android', 'ios', 'capacitor', 'dist', 'node_modules', '.DS_Store',
 ];
 
