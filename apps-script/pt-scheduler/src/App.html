@@ -949,6 +949,9 @@
         '<p class="hint">Langsung tersimpan. Gambar dibuat di HP dan tidak diunggah.</p>' +
         '<div class="field"><label class="label" for="set-share-qr">Alamat kode QR di kartu</label><div class="row" style="gap:8px"><input class="input grow" id="set-share-qr" type="url" inputmode="url" autocomplete="off" maxlength="200" placeholder="' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '" value="' + h(setState.data.shareQrUrl || '') + '">' +
         '<button type="button" class="btn btn-outline" onclick="window.setShareQr(this)">Simpan</button></div><p class="hint">QR mati bawaan; klien menyalakannya sendiri di kartu. Kosong = ' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '.</p></div></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Siapkan data di latar</p><p class="li-sub">Server menyiapkan data panel dan halaman klien tiap 15 menit (05:00–22:00), jadi saat dibuka langsung cepat.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-warm" onchange="window.setWarm(this)" aria-label="Siapkan data di latar"' + (setState.data.warmEnabled ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Memakai kuota pemicu Google (±30 menit per hari).</p></div>' +
         '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Gizi &amp; catat makan</p><p class="li-sub">Segmen Makan di portal klien: target kalori, menu harian, dan catatan makan. Pengingat makan ikut memuat target kalori.</p></div>' +
         '<label class="toggle"><input type="checkbox" id="set-nutrition" onchange="window.setNutrition(this)" aria-label="Gizi dan catat makan"' + (setState.data.nutritionEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
         '<p class="hint">Langsung tersimpan. Dimatikan = segmen Makan hilang untuk semua klien; data tetap tersimpan. Per klien bisa dimatikan di tab Gizi.</p></div>';
@@ -10831,6 +10834,14 @@
       if (setState.data) setState.data.shareEnabled = s.shareEnabled;
       window.shareOn = s.shareEnabled !== false;
       window.showToast(s.shareEnabled ? 'Kartu bagikan aktif.' : 'Kartu bagikan dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
+  window.setWarm = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { warmEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.warmEnabled = s.warmEnabled;
+      window.showToast(s.warmEnabled ? 'Data disiapkan di latar tiap 15 menit.' : 'Penyiapan data di latar dimatikan.');
     }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
       .then(function () { el.disabled = false; });
   };

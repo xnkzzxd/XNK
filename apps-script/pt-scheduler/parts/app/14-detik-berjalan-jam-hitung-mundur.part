@@ -573,6 +573,14 @@
     }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
       .then(function () { el.disabled = false; });
   };
+  window.setWarm = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { warmEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.warmEnabled = s.warmEnabled;
+      window.showToast(s.warmEnabled ? 'Data disiapkan di latar tiap 15 menit.' : 'Penyiapan data di latar dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
   window.setClientGuide = function (el) {
     el.disabled = true;
     adminCall('updateAppSettings', { clientGuideEnabled: el.checked }).then(function (s) {
