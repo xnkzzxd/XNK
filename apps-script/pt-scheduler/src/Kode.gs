@@ -140,8 +140,12 @@ function doPost(e) {
     // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
     try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
     const args = Array.isArray(req.args) ? req.args : [];
-    const data = api[fn].apply(null, args);
-    return _appApiReply_({ ok: true, data: _plainJson_(data === undefined ? null : data) });
+    // Fase W6b (T-1825): satu baris "speed rpc <fn>" per panggilan (run = kerja fungsi, json = salin jawaban). SPEED_TRACE=false mematikan.
+    const tr = _traceStart_();
+    const data = _tp_(tr, 'run', function () { return api[fn].apply(null, args); });
+    const out = _tp_(tr, 'json', function () { return _plainJson_(data === undefined ? null : data); });
+    _traceEnd_(tr, 'rpc ' + fn);
+    return _appApiReply_({ ok: true, data: out });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
     return _appApiReply_({ ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 });
@@ -474,6 +478,7 @@ function getAppSettings(token) {
     clientGuideEnabled: _guideEnabled_(),
     feedbackEnabled: _feedbackEnabled_(),
     shareEnabled: _shareEnabled_(),
+    warmEnabled: _warmEnabled_(),
     shareQrUrl: PropertiesService.getScriptProperties().getProperty('SHARE_QR_URL') || '',
     shareQrDefault: SHARE_QR_DEFAULT,
     nutritionEnabled: _nutEnabled_(),
@@ -527,6 +532,10 @@ function updateAppSettingsImpl_(token, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'shareEnabled')) setOrDelete('SHARE_ENABLED', payload.shareEnabled ? '' : 'false');
   if (qrUrl !== null) setOrDelete('SHARE_QR_URL', qrUrl);
+  if (Object.prototype.hasOwnProperty.call(payload, 'warmEnabled')) {   // Fase W6a: sakelar + pemicu sekaligus
+    setOrDelete('WARM_ENABLED', payload.warmEnabled ? 'true' : '');
+    if (payload.warmEnabled) _installWarmTrigger_(); else _removeWarmTrigger_();
+  }
   if (Object.prototype.hasOwnProperty.call(payload, 'feedbackEnabled')) setOrDelete('FEEDBACK_ENABLED', payload.feedbackEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'nutritionEnabled')) setOrDelete('NUTRITION_ENABLED', payload.nutritionEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'businessHours')) {
@@ -648,41 +657,6 @@ function requireMember_(token) {
   return found;
 }
 
-/**
- * Fase W: autentikasi untuk bundel BACA-SAJA klien (getPortalBootstrap, getPortalMore). Tanda tangan dan masa berlaku token
- * selalu dicek penuh; hanya pembacaan seluruh MemberData yang dilewati: baris klien yang sudah tervalidasi disimpan di
- * CacheService dengan kunci klien + tanda tangan token + versi data klien (AUTH_CACHE_SECONDS, bawaan 60, 10–300).
- * Setiap penulis baris MemberData menaikkan versi (_bumpMember_), jadi kunci berubah dan pengecekan penuh jalan lagi
- * (hapus klien, foto, panduan, dll.). Penulis tidak boleh memakai fungsi ini: mereka butuh sheet dan nomor baris segar.
- * PAYLOAD_CACHE=false mematikan. Mengembalikan { row, rowNum }.
- */
-function requireMemberRead_(token) {
-  const payload = _readToken_(token);
-  if (!payload || payload.r !== 'member' || !payload.m) {
-    throw _authError_('Sesi berakhir. Silakan masuk lagi dengan nomor WhatsApp.');
-  }
-  const id = String(payload.m).trim();
-  const ver = _payloadCacheOn_() ? _memberVer_(id) : '';   // sebelum sheet dibaca
-  const ckey = ver ? 'ma:' + id + ':' + String(token).split('.')[1] + ':' + ver : '';
-  if (ckey) {
-    try {
-      const hit = CacheService.getScriptCache().get(ckey);
-      if (hit) {
-        const o = JSON.parse(hit, function(k, v) { return v && typeof v === 'object' && v.__d !== undefined ? new Date(v.__d) : v; });
-        if (o && Array.isArray(o.row)) return { row: o.row, rowNum: o.n };
-      }
-    } catch (e) {}
-  }
-  const found = requireMember_(token);   // pengecekan penuh terhadap sheet
-  if (ckey) {
-    try {
-      const str = JSON.stringify({ n: found.rowNum, row: found.row }, function(k, v) { return this[k] instanceof Date ? { __d: this[k].getTime() } : v; });
-      if (str.length < 90000) CacheService.getScriptCache().put(ckey, str, Math.max(10, Math.min(300, Math.floor(_numProp_('AUTH_CACHE_SECONDS', 60)))));
-    } catch (e) {}
-  }
-  return { row: found.row, rowNum: found.rowNum };
-}
-
 // Data profil yang boleh dilihat klien itu sendiri (tanpa kunci link).
 function _memberPublicProfile_(row) {
   const joinDate = sanitizeValue(row[4]);
@@ -798,7 +772,6 @@ function markGuideSeen(memberToken, page) {
     const done = GUIDE_PAGES.filter(function(p) { return parts.indexOf(p) !== -1; });
     const value = page === 'semua' || done.length === GUIDE_PAGES.length ? 'selesai' : ['baru'].concat(done).join('|');
     cell.setValue(value);
-    _bumpMember_(String(found.row[0]).trim());
     return _guideFrom_(value);
   } finally {
     lock.releaseLock();
@@ -2053,7 +2026,6 @@ function deleteMember(token, memberId) {
       }
     }
     _bustSlots_();   // sesudah menulis: jadwal klien ini ikut terhapus
-    _bumpMember_('*');   // baris bergeser dan sesi klien ini tidak berlaku lagi: cache autentikasi ikut gugur
 
     try {
       kirimNotifTelegram_("🗑️ <b>KLIEN DIHAPUS</b>\n\n👤 <b>Nama:</b> " + escapeHtmlTelegram(deletedName) + "\n\nSemua jadwal terkait juga sudah dihapus. Riwayat transaksi tetap tersimpan sebagai arsip.");
@@ -2111,7 +2083,6 @@ function uploadMemberPhoto(memberToken, base64Data, fileName, mimeType) {
 
 function _saveMemberPhoto_(member, photoUrl) {
   member.sheet.getRange(member.rowNum, 6).setValue(photoUrl);
-  _bumpMember_(String(member.row[0]).trim());
   try {
     kirimNotifTelegram_("🖼️ <b>FOTO KLIEN DIPERBARUI</b>\n\n👤 <b>Nama:</b> " + escapeHtmlTelegram(member.row[1]));
   } catch(e) { Logger.log("Notif Telegram gagal: " + e); }
@@ -2206,7 +2177,7 @@ function getPortalBootstrapImpl_(memberToken) {
   const tr = _traceStart_();
   let found = null, authLost = '';
   if (memberToken) {
-    try { found = _tp_(tr, 'auth', function() { return requireMemberRead_(memberToken); }); } catch (e) { authLost = String(e.message || e); }
+    try { found = _tp_(tr, 'auth', function() { return requireMember_(memberToken); }); } catch (e) { authLost = String(e.message || e); }
   }
   const memberId = found ? String(found.row[0]).trim() : null;
   // Versi data klien (dibaca sebelum sheet lain): sama dengan salinan di perangkat = getPortalMore tidak perlu dipanggil.
@@ -2273,7 +2244,7 @@ function _traceEnd_(tr, label) {
 function getPortalMore(memberToken) {
   const tr = _traceStart_();
   return _withMemberMemo_(function() {
-    const row = _tp_(tr, 'auth', function() { return requireMemberRead_(memberToken).row; });
+    const row = _tp_(tr, 'auth', function() { return requireMember_(memberToken).row; });
     return getPortalMoreImpl_(row, tr);
   });
 }
@@ -2332,7 +2303,7 @@ function getPortalMoreImpl_(row, tr) {
   if (ckey && !_anyPartFailed_(result)) {
     const copy = Object.assign({}, result);
     delete copy.ms;
-    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('PAYLOAD_CACHE_SECONDS', 300)))));
+    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('PAYLOAD_CACHE_SECONDS', 1800)))));
   }
   return result;
 }
@@ -2453,7 +2424,7 @@ function getAdminMore(token, month, year, fresh) {
   // Fase W: hasil jadi disimpan sebentar (TTL ADMIN_MORE_CACHE_SECONDS, bawaan 90, 15–600). Kunci memuat hari WIB, bulan, tahun,
   // versi admin (naik di setiap _bumpMember_ / _bustSlots_ / _bustShared_) dan versi bersama. fresh=true (tarik-untuk-segarkan) melewati
   // pembacaan cache tetapi tetap menyimpan hasil baru. memberVers selalu segar.
-  const ckey = _payloadCacheOn_() ? 'am:' + _todayWib_() + ':' + m + ':' + y + ':' + _admVer_() + ':' + _sharedVersion_() : '';
+  const ckey = _payloadCacheOn_() ? 'am:' + _todayWib_() + ':' + _wibParts_(new Date()).hour + ':' + m + ':' + y + ':' + _admVer_() + ':' + _sharedVersion_() : '';
   return _withMemberMemo_(function () {
     if (ckey && !fresh) {
       const hit = _payloadGet_(ckey);
@@ -2487,7 +2458,7 @@ function getAdminMore(token, month, year, fresh) {
     if (ckey && !_anyPartFailed_(result)) {
       const copy = Object.assign({}, result);
       delete copy.ms;
-      _payloadPut_(ckey, copy, Math.max(15, Math.min(600, Math.floor(_numProp_('ADMIN_MORE_CACHE_SECONDS', 90)))));
+      _payloadPut_(ckey, copy, Math.max(15, Math.min(1800, Math.floor(_numProp_('ADMIN_MORE_CACHE_SECONDS', 900)))));
     }
     return result;
   });
@@ -4478,8 +4449,11 @@ function saveMyMeasurement(memberToken, data) {
   data = data || {};
   const today = _todayWib_();
   const tanggal = _validProgressDate_(data.tanggal, today, data.cid ? OFFLINE_BACK_DAYS : PROGRESS_LIMITS.backDaysClient);
-  _saveMeasurement_(memberId, tanggal, _parseMeasures_(data), 'klien');
-  return _bumpAfter_(memberId, _myPayloadFor_(memberId));
+  const tr = _traceStart_();   // W6b: tulis vs menyusun jawaban
+  _tp_(tr, 'write', function () { _saveMeasurement_(memberId, tanggal, _parseMeasures_(data), 'klien'); });
+  const out = _tp_(tr, 'reply', function () { return _myPayloadFor_(memberId); });
+  _traceEnd_(tr, 'saveMyMeasurement');
+  return _bumpAfter_(memberId, out);
 }
 
 function deleteMyMeasurement(memberToken, id) {
@@ -6504,7 +6478,7 @@ function getClientBundleImpl_(token, memberId, tr) {
   if (ckey && !_anyPartFailed_(result)) {
     const copy = Object.assign({}, result);
     delete copy.ms;
-    _payloadPut_(ckey, copy, Math.max(30, Math.min(300, Math.floor(_numProp_('CLIENT_BUNDLE_CACHE_SECONDS', 180)))));
+    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('CLIENT_BUNDLE_CACHE_SECONDS', 900)))));
   }
   return result;
 }
@@ -7848,14 +7822,16 @@ function logMyWorkout(memberToken, date, entries, session) {
   const today = _todayWib_();
   const tanggal = _validProgressDate_(date, today, ses && ses.cid ? OFFLINE_BACK_DAYS : WORKOUT_LIMITS.backClient);
   const clean = _parseWorkoutEntries_(entries);
-  const saved = _workoutSave_(id, tanggal, '', clean, 'klien', ses);
-  if (tanggal === today) _workoutTickProgram_(id, clean);
+  const tr = _traceStart_();   // W6b: tulis vs menyusun jawaban
+  const saved = _tp_(tr, 'write', function () { return _workoutSave_(id, tanggal, '', clean, 'klien', ses); });
+  if (tanggal === today) _tp_(tr, 'tick', function () { _workoutTickProgram_(id, clean); });
   _bumpMember_(id);
-  const out = _workoutFor_(row);
+  const out = _tp_(tr, 'reply', function () { return _workoutFor_(row); });
   out.prs = saved.prs;
   // Rutinitas ikut dikirim (centang hari ini berubah), supaya portal tidak perlu memanggil getMyProgram lagi.
-  try { out.program = _programFor_(row); } catch (e) {}
+  _tp_(tr, 'program', function () { try { out.program = _programFor_(row); } catch (e) {} });
   _workoutNotifyPrs_(row, saved.prs);
+  _traceEnd_(tr, 'logMyWorkout');
   return out;
 }
 

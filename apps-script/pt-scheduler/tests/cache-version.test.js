@@ -25,7 +25,7 @@ const NO_MEMBER_DATA = [
   // tanda badge sudah dirayakan: jawaban sudah lengkap, portal menambalnya sendiri
   'markBadgesSeen',
   // pengingat, trigger, perawatan pemilik
-  'installReminderTrigger', 'runReminderTick', 'sendReminderTest', 'sendTelegramTest', 'sendDailyReminderEmail', 'sendWeeklyReportEmail',
+  'installReminderTrigger', 'runReminderTick', 'runWarmTick', 'sendReminderTest', 'sendTelegramTest', 'sendDailyReminderEmail', 'sendWeeklyReportEmail',
   'setupDailyTrigger', 'setupReminderTrigger', 'setupWeeklyReportTrigger', 'testDriveAccess', 'testNotif', 'migrateSplitMembersData',
   'pertahankanWABaru', 'pertahankanWABaruMemberData',
 ];

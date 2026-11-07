@@ -19,7 +19,7 @@ test('getPortalMore: second call is a cache hit (far fewer sheet reads), same da
   const reads = countReads(env, 'MemberData');
   const b = j(env.call('getPortalMore', t));
   assert.equal(b.ms.hit, true);
-  assert.equal(reads.n, 0, 'no MemberData read on a hit: the validated row comes from the auth cache');
+  assert.equal(reads.n, 1, 'only the auth read on a hit');
   delete a.ms; delete b.ms; delete a.coachStatus; delete b.coachStatus;
   assert.deepEqual(b, a);
 });
@@ -102,40 +102,5 @@ test('getPortalBootstrap reads Schedules and MemberData once (coach status and s
   const out = j(env.call('getPortalBootstrap', t));
   assert.ok(out.profile && out.ms && typeof out.ms.total === 'number');
   assert.ok(sched.n <= 1, 'Schedules reads: ' + sched.n);
-  assert.equal(mem.n, 0, 'MemberData reads (auth cache is warm)');
-});
-
-test('read-only auth cache: deleting the client or tampering with the token ends access at once', () => {
-  const env = seededEnv();
-  const t = env.memberToken(KEY_A);
-  const id = j(env.call('getPortalBootstrap', t)).profile.id;
-  env.call('getPortalMore', t);
-  assert.equal(j(env.call('getPortalMore', t)).ms.hit, true);
-  const bad = t.slice(0, -2) + (t.endsWith('AA') ? 'BB' : 'AA');
-  assert.throws(() => env.call('getPortalMore', bad), /Sesi berakhir/);
-  env.call('deleteMember', env.adminToken(), id);
-  assert.throws(() => env.call('getPortalMore', t), /Sesi berakhir/);
-  assert.equal(j(env.call('getPortalBootstrap', t)).profile, null);
-});
-
-test('read-only auth cache: a new photo shows at once; another client never reads a cached row', () => {
-  const env = seededEnv();
-  const ta = env.memberToken(KEY_A), tb = env.memberToken(KEY_B);
-  const a1 = j(env.call('getPortalBootstrap', ta)), b1 = j(env.call('getPortalBootstrap', tb));
-  assert.notEqual(a1.profile.id, b1.profile.id);
-  env.call('getPortalBootstrap', ta);   // warm
-  const url = 'https://lh3.googleusercontent.com/d/abc123';
-  env.call('updateMemberPhoto', ta, url);
-  assert.equal(j(env.call('getPortalBootstrap', ta)).profile.photo, url);
-  assert.equal(j(env.call('getPortalBootstrap', tb)).profile.id, b1.profile.id);
-});
-
-test('AUTH cache off switch (PAYLOAD_CACHE=false) reads MemberData every time', () => {
-  const env = seededEnv();
-  env.props.PAYLOAD_CACHE = 'false';
-  const t = env.memberToken(KEY_A);
-  env.call('getPortalBootstrap', t);
-  const mem = countReads(env, 'MemberData');
-  env.call('getPortalBootstrap', t);
-  assert.equal(mem.n, 1);
+  assert.equal(mem.n, 1, 'MemberData reads');
 });

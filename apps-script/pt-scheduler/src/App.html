@@ -310,7 +310,7 @@
   };
 
   // ── Simpan langsung berhasil (optimistic UI) ────────────────────────────────
-  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, ok, label, then(res), undo() })
+  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, errEl, ok, label, then(res), undo() })
   //   Layar langsung berubah (lembar `sheet` ditutup, toast `ok`), server bekerja di belakang.
   //   Sukses: then(res) (muat ulang / ganti data sementara). Tanpa sinyal + `q`: masuk outbox
   //   `xnk_outbox`, dikirim ulang sendiri. Ditolak server: undo(), lembar dibuka lagi (isinya
@@ -388,6 +388,9 @@
       if (o.q && obNet(err)) { obAdd(o.q, o.label); return; }
       if (o.undo) try { o.undo(); } catch (e) { console.error(e); }
       if (o.sheet) openSheet(o.sheet);
+      // Lembar punya kotak galat sendiri: pesan server tampil di sana (tanpa pop-up kedua).
+      const box = o.errEl && o.sheet && document.getElementById(o.errEl);
+      if (box) { box.textContent = window.authMessage(err); return; }
       failPopup(o.label, err, function () { optimistic(o); });
     });
   }
@@ -946,6 +949,9 @@
         '<p class="hint">Langsung tersimpan. Gambar dibuat di HP dan tidak diunggah.</p>' +
         '<div class="field"><label class="label" for="set-share-qr">Alamat kode QR di kartu</label><div class="row" style="gap:8px"><input class="input grow" id="set-share-qr" type="url" inputmode="url" autocomplete="off" maxlength="200" placeholder="' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '" value="' + h(setState.data.shareQrUrl || '') + '">' +
         '<button type="button" class="btn btn-outline" onclick="window.setShareQr(this)">Simpan</button></div><p class="hint">QR mati bawaan; klien menyalakannya sendiri di kartu. Kosong = ' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '.</p></div></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Siapkan data di latar</p><p class="li-sub">Server menyiapkan data panel dan halaman klien tiap 15 menit (05:00–22:00), jadi saat dibuka langsung cepat.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-warm" onchange="window.setWarm(this)" aria-label="Siapkan data di latar"' + (setState.data.warmEnabled ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Memakai kuota pemicu Google (±30 menit per hari).</p></div>' +
         '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Gizi &amp; catat makan</p><p class="li-sub">Segmen Makan di portal klien: target kalori, menu harian, dan catatan makan. Pengingat makan ikut memuat target kalori.</p></div>' +
         '<label class="toggle"><input type="checkbox" id="set-nutrition" onchange="window.setNutrition(this)" aria-label="Gizi dan catat makan"' + (setState.data.nutritionEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
         '<p class="hint">Langsung tersimpan. Dimatikan = segmen Makan hilang untuk semua klien; data tetap tersimpan. Per klien bisa dimatikan di tab Gizi.</p></div>';
@@ -5128,7 +5134,7 @@
     const data = { id: cnt.editId, tipe: cnt.tipe, judul: $('cn-judul').value, isi: $('cn-isi').value, url: $('cn-url').value.trim(), kategori: $('cn-kategori').value,
       mulai: $('cn-mulai').value, sampai: $('cn-sampai').value, sematkan: $('cn-sematkan').checked, aktif: $('cn-aktif').checked };
     optimistic(Object.assign(data.id ? { q: { mode: 'admin', fn: 'saveContent', args: [data] } } : { call: function () { return adminCall('saveContent', data); } },
-      { sheet: true, ok: 'Konten disimpan.', label: 'Konten', then: function () { window.loadContentAdmin(); } }));
+      { sheet: true, errEl: 'cn-err', ok: 'Konten disimpan.', label: 'Konten', then: function () { window.loadContentAdmin(); } }));
   };
   window.contentDelete = function () {
     const id = cnt.editId; if (!id) return;
@@ -7349,7 +7355,7 @@
       }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
       return;
     }
-    optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
+    optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, errEl: 'sn-err', ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
   };
 
   // Daftar "Perlu perhatian" di Beranda Coach
@@ -8256,7 +8262,7 @@
     if (bad) { if (/Lengan|Perut|Paha|Dada/.test(bad)) $('pg-more').open = true; return fail(bad); }
     fail('');
     const mode = pg.mode, mid = pg.memberId, tgl = $('pg-tanggal').value;
-    optimistic({ sheet: true, ok: 'Tersimpan.', label: 'Ukuran tubuh',
+    optimistic({ sheet: true, errEl: 'pg-err', ok: 'Tersimpan.', label: 'Ukuran tubuh',
       call: function () { return mode === 'admin' ? adminCall('saveMemberMeasurement', mid, Object.assign({ tanggal: tgl }, data)) : memberCall('saveMyMeasurement', data); },
       then: function (d) {
         pgStore(d);
@@ -10890,6 +10896,14 @@
       if (setState.data) setState.data.shareEnabled = s.shareEnabled;
       window.shareOn = s.shareEnabled !== false;
       window.showToast(s.shareEnabled ? 'Kartu bagikan aktif.' : 'Kartu bagikan dimatikan.');
+    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
+      .then(function () { el.disabled = false; });
+  };
+  window.setWarm = function (el) {
+    el.disabled = true;
+    adminCall('updateAppSettings', { warmEnabled: el.checked }).then(function (s) {
+      if (setState.data) setState.data.warmEnabled = s.warmEnabled;
+      window.showToast(s.warmEnabled ? 'Data disiapkan di latar tiap 15 menit.' : 'Penyiapan data di latar dimatikan.');
     }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
       .then(function () { el.disabled = false; });
   };

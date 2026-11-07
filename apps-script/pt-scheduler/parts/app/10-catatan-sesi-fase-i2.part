@@ -35,7 +35,7 @@
       }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
       return;
     }
-    optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
+    optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, errEl: 'sn-err', ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
   };
 
   // Daftar "Perlu perhatian" di Beranda Coach
