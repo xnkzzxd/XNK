@@ -18,9 +18,9 @@ Baseline (diisi T-1801):
 | getClientBundle | ? | ? |
 
 ## W1 — Cache hasil jadi di server
-- [ ] T-1802 Cache payload `getPortalMore` / `getClientBundle` / `getAdminMore` di CacheService, kunci `_memberVer_`; payload > ~90 KB dipecah per bagian. `getClientBundle` (data kesehatan/perawatan) boleh disimpan dengan TTL pendek 120–300 dtk (izin pemilik); tetap tidak ke Telegram, `xnk_admin_cache`, atau jawaban publik.
-- [ ] T-1803 Satu baca `MemberData` per request (`requireMember_` → `_memberRowOrThrow_` → `_memberVersAll_`).
-- [ ] T-1804 Perluas `_sharedCached_` ke `getCoaches`, `getPriceList`, `_businessHours_`. (WorkoutLog dll. sudah memo per bundle lewat `_sheetRowsMemo_`.)
+- [x] T-1802 Hasil jadi `getPortalMore` (kunci klien + hari WIB + versi) dan `getClientBundle` (TTL 30–300 dtk, bawaan 180; izin pemilik untuk data perawatan) di CacheService, dipecah 30.000 karakter per nilai; `coachStatus` selalu segar (tergantung jam); bundel yang ada bagian `{error}` tidak disimpan; `PAYLOAD_CACHE=false` mematikan, `PAYLOAD_CACHE_SECONDS` (bawaan 300, 30–1800). `getAdminMore` tidak di-cache: tidak ada versi yang menutup semua penulisnya (dikerjakan bersama W2). Tes: `tests/payload-cache.test.js`.
+- [x] T-1803 `_withMemberMemo_` + `_memberValues_`: MemberData dibaca sekali per bundle (`getPortalMore`, `getAdminMore`, `getClientBundle`); penulis tidak memakai memo.
+- [-] T-1804 Ditunda: `getPriceList`/`getCoaches`/`_businessHours_` dibaca juga oleh penulis dan pemeriksa harga; tidak semua penulisnya lewat `_bustShared_`. Dikerjakan setelah baseline menunjukkan perlu. (WorkoutLog dll. sudah memo per bundle lewat `_sheetRowsMemo_`.)
 
 ## W2 — Hitung saat menulis (mulai dari satu sheet)
 - [ ] T-1805 Sheet `MemberStats` (1 baris/klien), `rebuildStats_` idempoten, pembaca memakai baris + fallback hitung lama. Ukur ulang; `RevenueMonthly`/`FinanceMonthly` hanya bila W0 menunjukkan masih mahal.
