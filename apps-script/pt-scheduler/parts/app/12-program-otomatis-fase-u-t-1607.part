@@ -1,0 +1,758 @@
+  // ── Program otomatis (Fase U, T-1607) ──────────────────────────────────────────────────────────────────────
+  // Data: window.myProgramGen (getPortalMore.programGen) dan pgAdminGen[id] (getClientBundle.programGen). Server menghitung
+  // semuanya; browser hanya menampilkan. Nama otot dan petunjuk latihan dalam bahasa Inggris (keputusan owner).
+  const pgAdminGen = {};
+  const PG_LVL_LBL = { 'pemula-banget': 'Pemula banget', pemula: 'Pemula', menengah: 'Menengah' };
+  const PG_GOAL_LBL = { kekuatan: 'Kekuatan', otot: 'Bentuk otot', fatloss: 'Turun lemak', bugar: 'Kebugaran' };
+  const PG_REASON_LBL = { 'form-belum': 'form kesehatan belum diisi', parq: 'ada jawaban "ya" di form kesehatan', cedera: 'ada cedera/operasi', obat: 'minum obat rutin', kondisi: 'ada kondisi lain', hamil: 'hamil/menyusui', remaja: 'usia di bawah 18', lansia: 'usia di atas 65' };
+  const PG_POLA_LBL = { lutut: 'Knee', pinggul: 'Hip', 'dorong-h': 'Push', 'dorong-v': 'Overhead push', 'tarik-h': 'Row', 'tarik-v': 'Pulldown' };
+  function pgWeekOf(g) {
+    const m = String(g.blokMulai || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return 1;
+    const days = Math.floor((Date.parse(wkToday() + 'T00:00:00Z') - Date.UTC(+m[1], +m[2] - 1, +m[3])) / 86400000);
+    return Math.max(1, Math.min(4, Math.floor(days / 7) + 1));
+  }
+  function pgDaysHtml(days) {
+    return days.map(function (day) {
+      return '<div class="prg-day stack" style="gap:4px"><p class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></p>' +
+        day.items.map(function (it) { return '<div class="prg-ex">' + exThumb(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + h(it.set) + '×' + h(it.rep) + '</span></span></div>'; }).join('') + '</div>';
+    }).join('');
+  }
+  function autoProgCardHtml() {
+    const g = window.myProgramGen;
+    if (!g || g.error || !g.enabled) return '';
+    if (!g.auto) return '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Program otomatis</p><p class="li-sub">Dimatikan. Program yang ada tetap bisa dipakai.</p><button type="button" class="btn btn-outline" onclick="window.pgSetAuto(true)">Nyalakan lagi</button></div>';
+    if (g.needsProfile) return insightHeroHtml({ eyebrow: 'Program otomatis', empty: 'Buat program latihanmu. Tiga pertanyaan singkat, disusun dari alat di gym dan aturan berbasis penelitian.', emptyAction: '<button type="button" class="btn btn-on-ink" onclick="window.pgProfileOpen()">' + icon('sparkles') + 'Mulai</button>' });
+    if (g.hasCoachProgram) return '<div class="card-flat stack" style="gap:8px"><p class="eyebrow">Program otomatis</p><p class="li-sub">Kamu punya program dari coach. Mau coba program otomatis? Program coach disimpan di Rutinitas saya.</p><div class="btn-row"><button type="button" class="btn btn-ghost" onclick="window.pgProfileOpen()">Ubah data</button><button type="button" class="btn btn-primary" onclick="window.pgAccept()">Coba</button></div></div>';
+    const p = g.profile || {}, prog = window.myProgram && window.myProgram.state === 'ok' ? window.myProgram.data : null, days = (prog && prog.days) || [];
+    const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
+    const hari = (w && w.next) || (days[0] && days[0].hari) || '';
+    let di = days.findIndex(function (d) { return d.hari === hari; }); if (di < 0) di = 0;
+    const day = days[di], wk = pgWeekOf(g), mins = g.minutes && g.minutes[di];
+    let html = '<div class="stack" style="gap:12px">';
+    html += insightHeroHtml({ eyebrow: 'Program otomatis · blok ' + (g.block || 1),
+      stats: day ? [{ v: day.hari, l: 'Berikutnya' }, { v: String(day.items.length), d: 'gerakan', l: 'Hari ini' }].concat(mins ? [{ v: '±' + mins, d: 'mnt', l: 'Durasi' }] : []) : [{ v: String(p.hari || ''), d: 'hari', l: 'Per minggu' }],
+      text: 'Minggu ' + wk + ' dari 4 · ' + (PG_LVL_LBL[p.level] || '') + ' · ' + (PG_GOAL_LBL[p.tujuan] || ''),
+      actions: day ? '<button type="button" class="btn btn-on-ink" data-hari="' + h(day.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">' + icon('play') + 'Mulai latihan</button>' : '' });
+    html += '<div class="pg-wk" role="img" aria-label="Minggu ' + wk + ' dari 4"><span style="width:' + (wk * 25) + '%"></span></div>';
+    if (g.light) html += '<div class="card-flat row" style="gap:10px" role="note">' + icon('alert-triangle') + '<span class="li-sub">Program ringan. Konsultasikan dengan coach atau dokter sebelum menambah beban.</span></div>';
+    if (days.length) html += foldHtml('Semua hari', days.length + ' hari', '<div class="stack" style="gap:10px">' + pgDaysHtml(days) + '</div>', false);
+    const why = (g.why || []).filter(function (x) { return !/^Light mode/.test(x); }).slice(0, 3);
+    if (why.length) html += foldHtml('Kenapa program ini?', '', '<div class="stack" style="gap:6px">' + why.map(function (x) { return '<p class="li-sub">' + h(x) + '</p>'; }).join('') + '</div>', false);
+    html += '<div class="pg-tools"><button type="button" class="btn btn-ghost btn-sm" onclick="window.pgSwapOpen()">' + icon('repeat') + ' Tukar gerakan</button><button type="button" class="btn btn-ghost btn-sm" onclick="window.pgProfileOpen()">' + icon('sliders-horizontal') + ' Ubah data</button><button type="button" class="btn btn-ghost btn-sm" onclick="window.pgSetAuto(false)">Matikan</button></div></div>';
+    return html;
+  }
+  function renderAutoProg() { const el = $('pub-autoprog'); if (el) { setHTML(el, autoProgCardHtml()); paintIcons(); } }
+  function pgApply(r) {
+    if (r && r.programGen) { window.myProgramGen = r.programGen; window.patchPortalMore('programGen', r.programGen); }
+    if (r && r.program) { window.myProgram = { state: 'ok', data: r.program }; window.patchPortalMore('program', r.program); }
+    renderAutoProg(); renderProgramCard();
+  }
+  const pgOnb = { step: 1, v: {} };
+  window.pgProfileOpen = function () {
+    const g = window.myProgramGen || {}, p = g.profile || {};
+    pgOnb.step = 1; pgOnb.v = { level: p.level || '', tujuan: g.profile && g.profile.tujuan || '', hari: p.hari || '', durasi: p.durasi || '', fokus: (p.fokus || []).slice() };
+    pgOnbRender();
+    openSheet('sheet-pg-profile');
+  };
+  function pgOnbRender() {
+    const g = window.myProgramGen || {}, v = pgOnb.v, el = $('pg-profile-body');
+    if (!el) return;
+    const chip = function (key, val, lbl, sub) { return '<button type="button" class="list-item interactive' + (String(v[key]) === String(val) ? ' active' : '') + '" style="min-height:56px;text-align:left" aria-pressed="' + (String(v[key]) === String(val)) + '" onclick="window.pgOnbSet(\'' + key + '\',\'' + h(val) + '\')"><span class="grow"><b>' + h(lbl) + '</b>' + (sub ? '<span class="li-sub" style="display:block">' + h(sub) + '</span>' : '') + '</span>' + (String(v[key]) === String(val) ? icon('check') : '') + '</button>'; };
+    let html = '<div class="pg-steps" role="img" aria-label="Langkah ' + pgOnb.step + ' dari 4">' + [1, 2, 3, 4].map(function (n) { return '<span' + (n <= pgOnb.step ? ' class="on"' : '') + '></span>'; }).join('') + '</div>';
+    if (pgOnb.step === 1) {
+      html += '<p class="li-title">Seberapa lama kamu sudah latihan beban?</p><div class="stack" style="gap:6px">' +
+        chip('level', 'pemula-banget', 'Pemula banget', 'Belum pernah / kurang dari 3 bulan') + chip('level', 'pemula', 'Pemula', '3–12 bulan') + chip('level', 'menengah', 'Menengah', 'Lebih dari 1 tahun rutin') + '</div>';
+    } else if (pgOnb.step === 2) {
+      html += '<p class="li-title">Tujuan utamamu?</p><div class="stack" style="gap:6px">' + (g.goals || ['kekuatan', 'otot', 'fatloss', 'bugar']).map(function (t) { return chip('tujuan', t, PG_GOAL_LBL[t] || t, ''); }).join('') + '</div>' +
+        '<p class="label" style="margin-top:12px">Otot fokus (opsional, maks 2)</p><div class="chips" style="flex-wrap:wrap">' + (g.muscles || []).map(function (m) { const on = v.fokus.indexOf(m) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgOnbFocus(\'' + h(m) + '\')">' + h(EX_TGT_LBL[m] || m) + '</button>'; }).join('') + '</div>';
+    } else if (pgOnb.step === 4) {
+      const kv = function (k, val) { return '<div><p class="k">' + h(k) + '</p><p class="v">' + h(val) + '</p></div>'; };
+      html += '<p class="li-title">Cek dulu, lalu buat programnya</p><div class="kv">' + kv('Level', PG_LVL_LBL[v.level] || '–') + kv('Tujuan', PG_GOAL_LBL[v.tujuan] || '–') + kv('Hari', v.hari + ' / minggu') + kv('Durasi', v.durasi + ' menit') + '</div>' +
+        (v.fokus.length ? '<p class="li-sub">Otot fokus: ' + h(v.fokus.map(function (m) { return EX_TGT_LBL[m] || m; }).join(', ')) + '</p>' : '') +
+        '<p class="li-sub">Program disusun dari alat di gym dan bisa diubah kapan saja lewat Ubah data.</p>';
+    } else {
+      html += '<p class="li-title">Berapa hari latihan sendiri per minggu?</p><div class="seg" style="display:grid;grid-template-columns:repeat(3,1fr)">' + (g.daysOptions || [2, 3, 4]).map(function (d) { return '<button type="button" class="' + (Number(v.hari) === d ? 'active' : '') + '" onclick="window.pgOnbSet(\'hari\',' + d + ')">' + d + ' hari</button>'; }).join('') + '</div>' +
+        '<p class="li-title" style="margin-top:12px">Berapa lama per sesi?</p><div class="seg" style="display:grid;grid-template-columns:repeat(3,1fr)">' + (g.durations || [30, 45, 60]).map(function (d) { return '<button type="button" class="' + (Number(v.durasi) === d ? 'active' : '') + '" onclick="window.pgOnbSet(\'durasi\',' + d + ')">' + d + ' mnt</button>'; }).join('') + '</div>' +
+        '<p class="li-sub">Sesi PT dengan coach tidak dihitung di sini.</p>';
+    }
+    html += '<p class="li-sub" id="pg-onb-err" role="alert"></p><div class="btn-row pg-foot">' + (pgOnb.step > 1 ? '<button type="button" class="btn btn-ghost btn-lg" onclick="window.pgOnbStep(-1)">Kembali</button>' : '') +
+      '<button type="button" class="btn btn-primary btn-lg" id="pg-onb-next" onclick="window.pgOnbStep(1)">' + (pgOnb.step < 4 ? 'Lanjut' : 'Buat program') + '</button></div>';
+    setHTML(el, html); paintIcons();
+  }
+  window.pgOnbSet = function (k, val) { pgOnb.v[k] = val; pgOnbRender(); };
+  window.pgOnbFocus = function (m) { const f = pgOnb.v.fokus, i = f.indexOf(m); if (i !== -1) f.splice(i, 1); else if (f.length < 2) f.push(m); else showToast('Maksimal 2 otot fokus.'); pgOnbRender(); };
+  window.pgOnbStep = function (d) {
+    const v = pgOnb.v, err = $('pg-onb-err');
+    if (d > 0 && pgOnb.step === 1 && !v.level) { err.textContent = 'Pilih salah satu.'; return; }
+    if (d > 0 && pgOnb.step === 2 && !v.tujuan) { err.textContent = 'Pilih tujuan.'; return; }
+    if (d > 0 && pgOnb.step === 3 && (!v.hari || !v.durasi)) { err.textContent = 'Pilih hari dan durasi.'; return; }
+    if (d > 0 && pgOnb.step === 4) {
+      const btn = $('pg-onb-next'); if (btn) { btn.disabled = true; btn.textContent = 'Menyusun…'; }
+      memberCall('saveMyProgramProfile', { level: v.level, tujuan: v.tujuan, hari: Number(v.hari), durasi: Number(v.durasi), fokus: v.fokus })
+        .then(function (r) { pgApply(r); window.closeModal(); showToast(r.skipped === 'coach' ? 'Data disimpan.' : 'Program siap.'); })
+        .catch(function (e) { err.textContent = e.message || 'Gagal menyimpan.'; if (btn) { btn.disabled = false; btn.textContent = 'Buat program'; } });
+      return;
+    }
+    pgOnb.step = Math.max(1, Math.min(4, pgOnb.step + d)); pgOnbRender();
+  };
+  window.pgAccept = function () {
+    window.showConfirmModal('Program coach disimpan ke Rutinitas saya, lalu program otomatis dibuat.', function () {
+      memberCall('acceptAutoProgram').then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+    }, { title: 'Coba program otomatis?', confirmText: 'Coba' });
+  };
+  window.pgSetAuto = function (on) {
+    const go = function () { memberCall('setMyProgramAuto', !!on).then(function (r) { pgApply(r); showToast(on ? 'Program otomatis aktif.' : 'Program otomatis dimatikan.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    if (on) go(); else window.showConfirmModal('Program yang sekarang tetap ada dan tidak berubah lagi otomatis.', go, { title: 'Matikan program otomatis?', confirmText: 'Matikan' });
+  };
+  window.pgSwapOpen = function () {
+    const g = window.myProgramGen || {}, opts = g.options || {}, tk = g.tukar || {};
+    const html = Object.keys(opts).filter(function (p) { return opts[p].length > 1; }).map(function (p) {
+      return '<p class="group-label"><span>' + h(PG_POLA_LBL[p] || p) + '</span></p>' + opts[p].map(function (x) {
+        const on = tk[p] === x.id;
+        return '<button type="button" class="list-item interactive" style="min-height:52px;text-align:left" onclick="window.pgSwap(\'' + h(p) + '\',\'' + h(x.id) + '\')"><span class="grow">' + h(x.nama) + '</span>' + (on ? icon('check') : '') + '</button>';
+      }).join('');
+    }).join('') || '<p class="li-sub">Belum ada pilihan lain di gym untuk levelmu.</p>';
+    wlSheet('Tukar gerakan', '<p class="li-sub">Pilih gerakan dengan pola sama. Program disusun ulang dengan pilihanmu.</p>' + html);
+  };
+  window.pgSwap = function (pola, id) {
+    memberCall('swapMyProgramExercise', pola, id).then(function (r) { pgApply(r); window.closeModal(); showToast('Gerakan ditukar.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+  };
+  // Panel coach: kartu di tab Latihan klien.
+  // Kartu coach untuk program otomatis kini bagian dari kartu Program (programAdminInner0).
+  function pgAdminApply(id, g) { pgAdminGen[id] = g; window.ccPatch(id, { programGen: g }); renderProgramAdmin(id); }
+  window.pgAdminRegen = function (id) {
+    const g = pgAdminGen[id];
+    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
+  };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+  window.pgAdminTag = function (id, t) {
+    const g = pgAdminGen[id]; if (!g) return;
+    const list = (g.pantangan || []).slice(), i = list.indexOf(t);
+    if (i !== -1) list.splice(i, 1); else list.push(t);
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+  };
+  function renderPublicProgram() {
+    const el = $('view-public-program'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    let left = pageIntro('Latihan', 'Rutinitas dari coach dan buatanmu sendiri.');
+    left += '<div id="ph-latihan">' + insTrainingHero() + '</div>';
+    left += '<div id="pub-autoprog">' + autoProgCardHtml() + '</div>';
+    left += '<div class="stack" style="gap:var(--gap)" id="pub-program-wrap">' + programInner() + '</div>';
+    left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
+    let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
+    right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
+    const showMakan = latSeg === 'makan' && nutOn();
+    setHTML(el, (nutOn() ? latSegHtml() : '') + '<div id="pub-latihan-pane"' + (showMakan ? ' class="hide"' : '') + '>' + portalGrid(left, right) + '</div>' +
+      (nutOn() ? '<div id="pub-makan-pane"' + (showMakan ? '' : ' class="hide"') + '>' + makanInner() + '</div>' : ''));
+  }
+
+
+  // ── Makan (Phase P, T-1012): target, menu hari ini, tukar item, belanja. Data: window.myNutrition (getPortalMore.nutrition). ──
+  let latSeg = 'latihan';
+  const nutOn = () => !window.myNutrition || window.myNutrition.enabled !== false;
+  function latSegHtml() {
+    return '<div class="lat-seg-wrap"><div class="seg" id="lat-seg" role="tablist" aria-label="Latihan atau Makan">' +
+      '<button type="button" role="tab" class="' + (latSeg === 'latihan' ? 'active' : '') + '" aria-selected="' + (latSeg === 'latihan') + '" onclick="window.setLatSeg(\'latihan\')">Latihan</button>' +
+      '<button type="button" role="tab" class="' + (latSeg === 'makan' ? 'active' : '') + '" aria-selected="' + (latSeg === 'makan') + '" onclick="window.setLatSeg(\'makan\')">Makan</button>' +
+      '<span class="seg-thumb" style="width:calc(50% - 4px);transform:translateX(' + (latSeg === 'makan' ? '100%' : '0') + ')"></span></div></div>';
+  }
+  window.setLatSeg = function (name) {
+    latSeg = name === 'makan' ? 'makan' : 'latihan';
+    const a = $('pub-latihan-pane'), b = $('pub-makan-pane'), sg = $('lat-seg');
+    if (a) a.classList.toggle('hide', latSeg === 'makan');
+    if (b) b.classList.toggle('hide', latSeg !== 'makan');
+    if (sg) {
+      sg.querySelectorAll('button').forEach(function (btn, i) { const on = (i === 1) === (latSeg === 'makan'); btn.classList.toggle('active', on); btn.setAttribute('aria-selected', on); });
+      const th = sg.querySelector('.seg-thumb'); if (th) th.style.transform = 'translateX(' + (latSeg === 'makan' ? '100%' : '0') + ')';
+    }
+    if (latSeg === 'makan') renderMakan();
+  };
+  const NUT_N = (n, dp) => n == null || n === '' ? '-' : String(Math.round(n * Math.pow(10, dp || 0)) / Math.pow(10, dp || 0)).replace('.', ',');
+  const NUT_GOALS_L = { turun: 'Turun lemak', naik: 'Naik otot', jaga: 'Jaga / sehat', recomp: 'Recomp' };
+  const NUT_TAGS_L = { telur: 'Telur', seafood: 'Seafood', kacang: 'Kacang', susu: 'Susu', laktosa: 'Laktosa' };
+  const NUT_BUD_L = { hemat: 'Hemat', standar: 'Standar', bebas: 'Bebas' };
+  const NUT_INFO = {
+    bmi: ['BMI', 'Berat dibagi tinggi kuadrat. Batas Asia-Pasifik: di bawah 18,5 kurus, 18,5–22,9 normal, 23–24,9 berat lebih, 25 ke atas obesitas. Hanya penanda, bukan diagnosis.', 'WHO Asia-Pasifik'],
+    whtr: ['WHtR', 'Lingkar pinggang dibagi tinggi badan. Di bawah 0,5 baik, 0,5–0,59 waspada, 0,6 ke atas tinggi. Menunjukkan lemak perut.', 'Ashwell et al.'],
+    bmr: ['BMR', 'Perkiraan kalori yang dibakar tubuh saat istirahat total. Dihitung dari berat, tinggi, usia, dan jenis kelamin (Mifflin-St Jeor; Katch-McArdle bila lemak tubuh diketahui).', 'Mifflin-St Jeor 1990'],
+    tdee: ['TDEE', 'BMR dikalikan faktor aktivitas dari jumlah sesi latihanmu per minggu. Ini kalori yang kamu butuhkan untuk menjaga berat.', 'FAO/WHO'],
+    kal: ['Target kalori', 'TDEE disesuaikan dengan goalmu: turun lemak sekitar 18 % di bawah, naik otot sekitar 12 % di atas, jaga sama dengan TDEE. Tidak pernah di bawah batas aman.', 'ISSN / ACSM'],
+    protein: ['Protein', '1,6–2,2 gram per kg berat badan (dari berat target bila BMI 30 ke atas). Bagi rata 3–4 kali makan, 20–40 gram per makan.', 'ISSN 2017'],
+    karbo: ['Karbohidrat', 'Sisa kalori setelah protein dan lemak. Sumber energi untuk latihan.', 'Isi Piringku'],
+    lemak: ['Lemak', 'Sekitar 25 % kalori (minimal 0,6 g per kg). Pilih lemak dari ikan, kacang, dan minyak secukupnya.', 'AKG 2019'],
+    serat: ['Serat', '14 gram per 1.000 kkal, minimal 25 gram. Dari sayur, buah, dan kacang-kacangan.', 'AKG 2019'],
+    natrium: ['Natrium', 'Batas harian 2.000 mg (setara 5 gram garam).', 'Permenkes 30/2013']
+  };
+  const NUT_WARN = { kondisi: 'Ada catatan kesehatan di profilmu. Angka ini hanya perkiraan; konsultasikan dengan dokter atau ahli gizi.', usiaMuda: 'Usia di bawah 18 tahun: angka ini hanya perkiraan, rujuk ke ahli gizi.', usiaLanjut: 'Usia di atas 65 tahun: angka ini hanya perkiraan, rujuk ke ahli gizi.',
+    bmiRendah: 'BMI sangat rendah: jangan memakai defisit kalori. Konsultasikan dengan ahli gizi.', batasBawah: 'Kalori dinaikkan ke batas bawah yang aman.' };
+  function nutInfoBtn(key) { return '<button type="button" class="icon-btn plain" style="width:44px;height:44px" aria-label="Penjelasan ' + h(NUT_INFO[key][0]) + '" onclick="window.nutInfo(\'' + key + '\')">' + icon('info') + '</button>'; }
+  function macroBar(key, label, goal, kcalPer, eaten, kind) {
+    const pct = goal ? Math.min(100, Math.round(eaten / goal * 100)) : 0;
+    return '<div class="stack" style="gap:4px"><div class="row-between"><span class="li-title">' + h(label) + nutInfoBtn(key) + '</span><span class="num" style="font-weight:800">' + h(NUT_N(eaten)) + ' / ' + h(NUT_N(goal)) + ' g</span></div><div class="meter" aria-label="' + h(label) + ' ' + pct + ' persen dari target"><i style="width:' + pct + '%"></i></div></div>';
+  }
+  function makanInner() {
+    const n = nutEff(window.myNutrition);
+    if (!n) return '<div class="card-flat">' + skel(4, true) + '</div>';
+    if (n.enabled === false) return '<div class="card-flat"><p class="li-sub">Fitur makan sedang tidak aktif.</p></div>';
+    const t = n.target || {};
+    if (!t.ok) {
+      return '<div class="stack" style="gap:var(--gap)"><div class="card-flat stack" style="gap:8px"><p class="eyebrow">Lengkapi data</p><p>Isi beberapa data supaya target dan menu makanmu bisa dihitung.</p>' +
+        (t.missingLabels || []).map(x => '<p>' + icon('circle-dashed', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(x) + '</p>').join('') +
+        '<button type="button" class="btn btn-primary btn-lg btn-block" onclick="window.openNutOnb()">Isi data</button></div></div>';
+    }
+    const C = 2 * Math.PI * 52;
+    const eaten = (n.log && n.log.totals) || { kal: 0, p: 0, l: 0, k: 0 };
+    const left = t.kal - eaten.kal, wk = window.myWeek && !window.myWeek.error ? window.myWeek : null;
+    let html = '<div class="stack makan-stack" style="gap:var(--gap)">';
+    // Kartu hitam: cincin kalori + sisa + makro hari ini.
+    html += '<section class="card-ink makan-hero"><div class="makan-top"><div class="ring-wrap makan-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/><circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - Math.min(1, eaten.kal / (t.kal || 1)))).toFixed(1) + '"/></svg>' +
+      '<div class="ring-center"><span class="num makan-num">' + h(NUT_N(eaten.kal)) + '</span><span class="eyebrow">dari ' + h(NUT_N(t.kal)) + '</span></div></div>' +
+      '<div class="makan-sum"><span class="ih-eyebrow">Makan hari ini</span><p class="makan-left" id="nut-eaten-line">' + (left >= 0 ? 'Sisa ' + h(NUT_N(left)) + ' kkal' : 'Lebih ' + h(NUT_N(-left)) + ' kkal') + '</p>' +
+      '<p class="makan-meta">' + h(NUT_GOALS_L[t.goal] || '') + (t.adjust ? ' · penyesuaian coach ' + (t.adjust > 0 ? '+' : '−') + Math.abs(t.adjust) : '') + (wk && wk.foodDays != null ? ' · ' + wk.foodDays + '/7 hari tercatat' : '') + '</p></div></div>' +
+      '<div class="makan-macros">' + macroBar('protein', 'Protein', t.protein, 4, eaten.p, 'p') + macroBar('karbo', 'Karbo', t.karbo, 4, eaten.k, 'k') + macroBar('lemak', 'Lemak', t.lemak, 9, eaten.l, 'l') + '</div></section>';
+    (t.warnings || []).forEach(function (w) { if (NUT_WARN[w]) html += '<div class="card nut-warn" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' ' + h(NUT_WARN[w]) + '</div>'; });
+    if (n.inputs && n.inputs.stale) html += '<div class="card"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
+    if (n.menu) {
+      const MEAL_IC = { sarapan: 'sunrise', pagi: 'sunrise', siang: 'sun', malam: 'moon', camilan: 'cookie', sahur: 'moon-star', buka: 'sunset' };
+      html += '<div class="card stack" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
+      n.menu.meals.forEach(function (m, mi) {
+        html += '<div class="meal-blk"><div class="meal-head"><span class="icon-chip">' + icon(MEAL_IC[m.key] || 'utensils') + '</span><b class="grow">' + h(m.label) + '</b><span class="num li-sub">' + h(NUT_N(m.totals.kal)) + ' kkal · P ' + h(NUT_N(m.totals.p)) + ' g</span></div>' +
+          m.items.map(function (it, ii) {
+            return '<div class="row meal-item" style="gap:4px"><button type="button" class="list-item interactive grow" style="min-height:52px;text-align:left;gap:8px" onclick="window.nutSwapOpen(' + mi + ',' + ii + ')"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(it.n) + (it.e ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
+              '<span class="li-sub">' + h(NUT_N(it.porsi, 1)) + ' ' + h(it.porsiNama.replace(/^1 /, '')) + ' · ' + h(it.gram) + ' g · ' + h(it.kal) + ' kkal</span></span>' + icon('repeat', 'style="width:16px;height:16px"') + '</button>' +
+              '<button type="button" class="icon-btn" style="width:44px;height:44px" aria-label="Catat ' + h(it.n) + '" onclick="window.nutLogMenu(' + mi + ',' + ii + ',this)">' + icon('check') + '</button></div>';
+          }).join('') + '</div>';
+      });
+      html += '</div>';
+    }
+    html += logCardHtml(n);
+    html += '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Tubuhmu</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">' + icon('pencil') + 'Ubah data</button></div><div class="mtiles">' +
+      mtileHtml('BMI', n.bmi ? NUT_N(n.bmi.value, 1) : '–', '') + mtileHtml('Pinggang / tinggi', n.whtr ? NUT_N(n.whtr.value, 2) : '–', '') +
+      mtileHtml('BMR', NUT_N(t.bmr), 'kkal istirahat') + mtileHtml('TDEE', NUT_N(t.tdee), 'kkal dengan aktivitas') + '</div>' +
+      '<p class="li-sub">Info tiap angka: ' + nutInfoBtn('bmi') + nutInfoBtn('whtr') + nutInfoBtn('tdee') + ' · Serat ≥ ' + h(NUT_N(t.serat)) + ' g ' + nutInfoBtn('serat') + '. Semua angka perkiraan, bukan pengganti ahli gizi.</p></div>';
+    html += foldHtml('Aturan makan', '5 kebiasaan', '<div class="stack" style="gap:8px">' +
+      '<p>' + icon('utensils', 'class="ic-inline"') + ' Isi Piringku: ½ piring sayur dan buah, ¼ karbohidrat, ¼ lauk.</p>' +
+      '<p>' + icon('scale', 'class="ic-inline"') + ' Batas harian: gula 50 g, garam 5 g, lemak 67 g.</p>' +
+      '<p>' + icon('clock', 'class="ic-inline"') + ' Makan teratur, jangan lewat sarapan.</p>' +
+      '<p>' + icon('cup-soda', 'class="ic-inline"') + ' Batasi alkohol dan minuman manis.</p>' +
+      '<p>' + icon('heart-handshake', 'class="ic-inline"') + ' Cukup 80 % patuh; satu hari bebas per minggu boleh.</p></div>', false);
+    html += '</div>';
+    return html;
+  }
+  function renderMakan() { const w = $('pub-makan-pane'); if (w) { setHTML(w, makanInner()); paintIcons(); } }
+  window.nutInfo = function (key) {
+    const d = NUT_INFO[key]; if (!d) return;
+    $('nut-info-title').textContent = d[0]; $('nut-info-text').textContent = d[1]; $('nut-info-src').textContent = 'Sumber: ' + d[2];
+    openSheet('modal-nut-info');
+  };
+  // Tukar item: pengganti hanya di layar (menu dihitung ulang dari server besok); total makan dihitung ulang di sini.
+  let swapCtx = null;
+  window.nutSwapOpen = function (mi, ii) {
+    const n = window.myNutrition, m = n && n.menu && n.menu.meals[mi]; if (!m || !m.items[ii]) return;
+    const it = m.items[ii]; swapCtx = { mi: mi, ii: ii, offset: 0 };
+    $('nut-swap-title').textContent = 'Ganti ' + it.n;
+    $('nut-swap-list').innerHTML = skel(3);
+    openSheet('modal-nut-swap');
+    nutSwapLoad();
+  };
+  function nutSwapLoad() {
+    const n = window.myNutrition, m = n.menu.meals[swapCtx.mi], it = m.items[swapCtx.ii];
+    memberCall('swapMyMenuItem', { id: it.id, slot: it.slot, gram: it.gram }, m.key, swapCtx.offset).then(function (alts) {
+      swapCtx.alts = alts || [];
+      $('nut-swap-list').innerHTML = swapCtx.alts.length ? swapCtx.alts.map(function (a, i) {
+        return '<button type="button" class="list-item interactive" style="min-height:56px;text-align:left" onclick="window.nutSwapPick(' + i + ')"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(a.n) + '</b><span class="li-sub">' + h(NUT_N(a.porsi, 1)) + ' ' + h(a.porsiNama.replace(/^1 /, '')) + ' · ' + h(a.gram) + ' g · ' + h(a.kal) + ' kkal · P ' + h(NUT_N(a.p)) + ' g</span></span></button>';
+      }).join('') : '<p class="li-sub">Tidak ada pengganti yang cocok dengan pantangan dan anggaranmu.</p>';
+      $('nut-swap-more').classList.toggle('hide', (swapCtx.alts || []).length < 3);
+    }).catch(function (err) { $('nut-swap-list').innerHTML = '<p class="li-sub">' + h(window.authMessage(err)) + '</p>'; });
+  }
+  window.nutSwapMore = function () { swapCtx.offset++; $('nut-swap-list').innerHTML = skel(3); nutSwapLoad(); };
+  window.nutSwapPick = function (i) {
+    const n = window.myNutrition, m = n.menu.meals[swapCtx.mi], a = swapCtx.alts[i]; if (!a) return;
+    m.items[swapCtx.ii] = a;
+    const sum = items => items.reduce((t, x) => ({ kal: t.kal + x.kal, p: Math.round((t.p + x.p) * 10) / 10 }), { kal: 0, p: 0 });
+    m.totals = Object.assign({}, m.totals, sum(m.items));
+    n.menu.totals = Object.assign({}, n.menu.totals, sum([].concat.apply([], n.menu.meals.map(x => x.items))));
+    window.closeModal(); renderMakan(); window.showToast('Diganti.');
+  };
+  window.openNutShop = function () {
+    $('nut-shop-list').innerHTML = skel(5, true); openSheet('modal-nut-shop');
+    memberCall('getMyShopping').then(function (r) {
+      const g = (r && r.groups) || [];
+      $('nut-shop-list').innerHTML = g.length ? g.map(function (gr) {
+        return '<div class="stack" style="gap:2px"><p class="eyebrow">' + h(gr.kelompok) + '</p>' + gr.items.map(function (i) {
+          return '<div class="row-between" style="min-height:40px;gap:8px"><span style="min-width:0">' + h(i.n) + (i.e ? ' <span class="pill soft">perkiraan</span>' : '') + '</span><span class="num li-sub" style="white-space:nowrap">' + h(i.jumlah) + ' ' + h(i.satuan.replace(/^1 /, '')) + ' · ' + h(i.gram) + ' g</span></div>';
+        }).join('') + '</div>';
+      }).join('') : '<p class="li-sub">Daftar belanja belum tersedia. Lengkapi datamu dulu.</p>';
+    }).catch(function (err) { $('nut-shop-list').innerHTML = '<p class="li-sub">' + h(window.authMessage(err)) + '</p>'; });
+  };
+  // Isi data pertama kali: tiga langkah (tubuh → goal → pantangan & anggaran).
+  let onb = null;
+  window.openNutOnb = function () {
+    const n = window.myNutrition || {}, p = n.profile || {};
+    onb = { step: 1, needKg: !(n.inputs && n.inputs.kg) || !!(n.inputs && n.inputs.stale), berat: '', tinggi: p.tinggi === '' || p.tinggi == null ? '' : String(p.tinggi).replace('.', ','), jk: p.jk || '', birth: p.birthDate || '', hadBirth: !!p.birthDate || (p.umur !== '' && p.umur != null), umur: '', goal: p.goal || '', pantangan: (p.pantangan || []).slice(), anggaran: p.anggaran || 'standar' };
+    nutOnbDraw(); openSheet('modal-nut-onb');
+  };
+  function nutOnbDraw() {
+    const o = onb, el = $('nut-onb-body');
+    $('nut-onb-title').textContent = 'Langkah ' + o.step + ' dari 3';
+    let html = '';
+    if (o.step === 1) {
+      html = '<div class="field"><label class="label" for="nut-o-tinggi">Tinggi badan (cm)</label><input class="input" id="nut-o-tinggi" type="text" inputmode="decimal" placeholder="170" value="' + h(o.tinggi) + '" oninput="window.nutOnbSet(\'tinggi\', this.value)"></div>' +
+        '<div class="field"><p class="label">Jenis kelamin</p><div class="seg" style="display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (o.jk === 'L' ? 'active' : '') + '" onclick="window.nutOnbSet(\'jk\',\'L\',true)">Laki-laki</button><button type="button" class="' + (o.jk === 'P' ? 'active' : '') + '" onclick="window.nutOnbSet(\'jk\',\'P\',true)">Perempuan</button></div></div>' +
+        (o.needKg ? '<div class="field"><label class="label" for="nut-o-berat">Berat badan sekarang (kg)</label><input class="input" id="nut-o-berat" type="text" inputmode="decimal" placeholder="70" value="' + h(o.berat) + '" oninput="window.nutOnbSet(\'berat\', this.value)"></div>' : '') +
+        (o.hadBirth ? '' : '<div class="field"><label class="label" for="nut-o-birth">Tanggal lahir</label><input class="input" id="nut-o-birth" type="date" value="' + h(o.birth) + '" onchange="window.nutOnbSet(\'birth\', this.value)"></div>' +
+          '<div class="field"><label class="label" for="nut-o-umur">Atau isi umur saja (tahun)</label><input class="input" id="nut-o-umur" type="text" inputmode="numeric" placeholder="27" value="' + h(o.umur) + '" oninput="window.nutOnbSet(\'umur\', this.value)"></div>');
+    } else if (o.step === 2) {
+      html = '<p class="label">Apa tujuan utamamu?</p><div class="stack" style="gap:8px">' + ['turun', 'naik', 'jaga', 'recomp'].map(function (g) {
+        return '<button type="button" class="btn ' + (o.goal === g ? 'btn-primary' : 'btn-outline') + ' btn-lg btn-block" style="justify-content:flex-start" onclick="window.nutOnbSet(\'goal\',\'' + g + '\',true)">' + h(NUT_GOALS_L[g]) + '</button>';
+      }).join('') + '</div>';
+    } else {
+      html = '<div class="field"><p class="label">Alergi dan pantangan</p><div class="chips">' + Object.keys(NUT_TAGS_L).map(function (t) {
+        const on = o.pantangan.indexOf(t) !== -1;
+        return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.nutOnbTag(\'' + t + '\')">' + h(NUT_TAGS_L[t]) + '</button>';
+      }).join('') + '</div><p class="hint">Semua menu sudah halal dan tanpa babi.</p></div>' +
+        '<div class="field"><p class="label">Anggaran makan</p><div class="seg" style="display:grid;grid-template-columns:repeat(3,1fr)">' + ['hemat', 'standar', 'bebas'].map(function (b) {
+          return '<button type="button" class="' + (o.anggaran === b ? 'active' : '') + '" onclick="window.nutOnbSet(\'anggaran\',\'' + b + '\',true)">' + h(NUT_BUD_L[b]) + '</button>';
+        }).join('') + '</div></div>';
+    }
+    html += '<div class="btn-row" style="margin-top:8px">' + (o.step > 1 ? '<button type="button" class="btn btn-outline btn-lg" onclick="window.nutOnbGo(-1)">Kembali</button>' : '') +
+      '<button type="button" class="btn btn-primary btn-lg grow" id="nut-onb-next" onclick="window.nutOnbGo(1)">' + (o.step === 3 ? 'Simpan' : 'Lanjut') + '</button></div>';
+    el.innerHTML = html;
+  }
+  window.nutOnbSet = function (k, v, redraw) { onb[k] = v; if (redraw) nutOnbDraw(); };
+  window.nutOnbTag = function (t) { const i = onb.pantangan.indexOf(t); if (i === -1) onb.pantangan.push(t); else onb.pantangan.splice(i, 1); nutOnbDraw(); };
+  window.nutOnbGo = function (d) {
+    const o = onb;
+    if (d > 0 && o.step === 1) {
+      const t = Number(String(o.tinggi).replace(',', '.'));
+      if (!(t >= 100 && t <= 230)) { window.showToast('Tinggi badan harus antara 100 dan 230 cm.'); return; }
+      if (!o.jk) { window.showToast('Pilih jenis kelamin.'); return; }
+      if (o.needKg) { const b = Number(String(o.berat).replace(',', '.')); if (!(b >= 20 && b <= 300)) { window.showToast('Isi berat badan antara 20 dan 300 kg.'); return; } }
+      if (!o.hadBirth && !o.birth && !String(o.umur).trim()) { window.showToast('Isi tanggal lahir atau umur.'); return; }
+    }
+    if (d > 0 && o.step === 2 && !o.goal) { window.showToast('Pilih tujuanmu.'); return; }
+    if (d > 0 && o.step === 3) {
+      const done = busy($('nut-onb-next'), 'Menyimpan…');
+      const weigh = o.needKg ? memberCall('saveMyMeasurement', { berat: String(o.berat).replace(',', '.') }) : Promise.resolve();
+      weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth, umur: o.hadBirth ? '' : String(o.umur).trim() }); })
+        .then(function (r) { done(); window.myNutrition = r; window.patchPortalMore('nutrition', r); window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
+        .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+      return;
+    }
+    o.step = Math.max(1, Math.min(3, o.step + d)); nutOnbDraw();
+  };
+
+  // ── Catat makan (T-1020) ──
+  const NUT_MEAL_L = { sarapan: 'Sarapan', siang: 'Makan siang', malam: 'Makan malam', camilan: 'Camilan' };
+  function logCardHtml(n) {
+    const log = n.log || { items: [], totals: { kal: 0 } };
+    const nPend = log.items.filter(x => x.pending).length;
+    let html = '<div class="card-flat stack" style="gap:8px" id="nut-log-card"><div class="row-between"><p class="eyebrow">Dimakan hari ini' + (nPend ? ' · <span class="pill soft">' + nPend + ' menunggu sinyal</span>' : '') + '</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button></div>';
+    Object.keys(NUT_MEAL_L).forEach(function (k) {
+      const its = log.items.filter(x => x.waktu === k), kal = its.reduce((a, x) => a + x.kal, 0);
+      html += '<div class="stack" style="gap:0"><div class="row-between" style="min-height:44px"><span class="li-title">' + h(NUT_MEAL_L[k]) + (its.length ? ' <span class="li-sub">' + h(NUT_N(kal)) + ' kkal</span>' : '') + '</span>' +
+        '<button type="button" class="btn btn-outline btn-sm" style="min-height:44px" onclick="window.openNutAdd(\'' + k + '\')">' + icon('plus') + 'Tambah</button></div>' +
+        its.map(function (x) {
+          return '<div class="row" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.pending ? ' <span class="pill soft">' + icon('cloud-off', 'style="width:12px;height:12px;vertical-align:-2px"') + ' belum terkirim</span>' : x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
+            '<span class="li-sub">' + h(x.porsi) + ' · ' + h(NUT_N(x.kal)) + ' kkal · P ' + h(NUT_N(x.p, 1)) + ' g</span></span>' +
+            '<button type="button" class="icon-btn plain" style="width:44px;height:44px" aria-label="Hapus ' + h(x.nama) + '" onclick="window.nutDelLog(\'' + h(x.id) + '\',this)">' + icon('trash-2') + '</button></div>';
+        }).join('') + '</div>';
+    });
+    return html + '</div>';
+  }
+  function nutSetLog(day) {
+    if (window.myNutrition && day) { window.myNutrition.log = day; window.patchPortalMore('nutrition', window.myNutrition); renderMakan(); }
+  }
+  // ── Antrean catat makan (tanpa sinyal, 2026-10) ──────────────────────────────
+  // Setiap catatan langsung tampil (angka dihitung di browser dari daftar makanan, rumus sama dengan _foodLogEntry_),
+  // disimpan di xnk_food_queue, lalu dikirim berurutan. cid membuat kiriman ulang tidak dobel di server.
+  const FQ_KEY = 'xnk_food_queue';
+  const fqRt = { flushing: false, retry: null, tries: 0, watch: null, run: 0 };
+  const FQ_WAIT_MS = 45000;   // jawaban server tak datang (HP tidur, sinyal putus): lepas dan kirim ulang; cid mencegah dobel
+  function fqScope() { const t = _lsGet(MEMBER_TOKEN_KEY); return t ? 'm:' + tokenSig(t) : ''; }
+  // Penyimpanan HP penuh / diblokir: antrean tetap jalan di memori (hilang bila halaman ditutup), bukan hilang diam-diam.
+  let fqMem = null;
+  function fqAll() {
+    if (fqMem) return fqMem.slice();
+    try { const q = JSON.parse(_lsGet(FQ_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; }
+  }
+  function fqSet(q) {
+    try {
+      if (q.length) localStorage.setItem(FQ_KEY, JSON.stringify(q)); else localStorage.removeItem(FQ_KEY);
+      fqMem = null;
+    } catch (e) { fqMem = q.slice(); }
+  }
+  function fqMine() { const sc = fqScope(); return sc ? fqAll().filter(x => x.scope === sc) : []; }
+  window.fqForget = function () { fqSet([]); fqMem = null; clearTimeout(fqRt.retry); clearTimeout(fqRt.watch); fqRt.flushing = false; };
+  const r1 = v => Math.round(v * 10) / 10;
+  function fqCalc(e) {
+    if (e.id && !e.custom) {
+      const f = foodLib && foodLib.items.find(x => x.id === e.id);
+      if (!f) return null;
+      const gram = Math.round(Number(e.gram) * 10) / 10, x = gram / 100, por = gram / f.por[0][1];
+      return { waktu: e.waktu, foodId: e.id, nama: f.n, gram: gram, porsi: r1(por) + ' ' + f.por[0][0].replace(/^1 /, ''), kal: Math.round(f.kal * x), p: r1(f.p * x), l: r1(f.l * x), k: r1(f.k * x), sumber: f.e ? 'perkiraan' : 'tkpi' };
+    }
+    const c = e.custom || {}, num = v => Number(String(v == null || v === '' ? 0 : v).replace(',', '.')) || 0;
+    const n = Math.max(0.1, Math.min(20, num(e.jumlah) || 1));
+    return { waktu: e.waktu, foodId: '', nama: String(c.nama || '').trim(), gram: 0, porsi: r1(n) + ' porsi', kal: Math.round(num(c.kal) * n), p: r1(num(c.p) * n), l: r1(num(c.l) * n), k: r1(num(c.k) * n), sumber: 'sendiri' };
+  }
+  // Log yang tampil = catatan server + catatan di antrean − hapusan di antrean.
+  function nutEff(n) {
+    if (!n || !n.log) return n;
+    const q = fqMine(), day = n.log.tanggal || wkToday();
+    if (!q.length) return n;
+    const del = {}; q.forEach(x => { if (x.op === 'del') del[x.logId] = true; });
+    const have = {}; n.log.items.forEach(x => { if (x.cid) have[x.cid] = true; });
+    const items = n.log.items.filter(x => !del[x.id]).concat(q.filter(x => x.op === 'add' && x.tanggal === day && !have[x.id]).map(x => Object.assign({ waktu: x.entry && x.entry.waktu, nama: 'Makanan', porsi: '', kal: 0, p: 0, l: 0, k: 0 }, x.view, { id: x.id, cid: x.id, pending: true })));
+    const totals = items.reduce((t, i) => ({ kal: t.kal + i.kal, p: r1(t.p + i.p), l: r1(t.l + i.l), k: r1(t.k + i.k) }), { kal: 0, p: 0, l: 0, k: 0 });
+    return Object.assign({}, n, { log: Object.assign({}, n.log, { items: items, totals: totals }) });
+  }
+  window.nutEffLog = function () { const n = nutEff(window.myNutrition); return n && n.log; };
+  function fqPush(item) {
+    const q = fqAll(); q.push(Object.assign({ scope: fqScope(), at: Date.now(), tries: 0 }, item)); fqSet(q);
+    renderMakan(); renderInsightMakan();
+    window.fqFlush();
+  }
+  // Satu pintu untuk semua "catat makan": tampil seketika, kirim di belakang layar.
+  function nutQueueAdd(entry, viewHint) {
+    const id = 'fq-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const e = Object.assign({}, entry, { cid: id, tanggal: wkToday() });
+    const view = fqCalc(e) || viewHint || null;
+    if (e.custom && !(view && view.nama)) { window.showToast('Isi nama makanan.'); return false; }
+    fqPush({ id: id, op: 'add', tanggal: e.tanggal, entry: e, view: view });
+    window.showToast(navigator.onLine === false ? 'Disimpan di HP. Dikirim saat ada sinyal.' : fqMem ? 'Dicatat. Memori HP penuh: biarkan halaman terbuka sampai terkirim.' : 'Dicatat.');
+    return true;
+  }
+  window.fqFlush = function () {
+    if (fqRt.flushing || !_lsGet(MEMBER_TOKEN_KEY)) return;
+    const it = fqMine()[0]; if (!it) return;
+    fqRt.flushing = true; clearTimeout(fqRt.retry);
+    const run = ++fqRt.run;
+    const call = Promise.race([
+      it.op === 'del' ? memberCall('deleteMyFood', it.logId) : memberCall('logMyFood', it.entry),
+      new Promise(function (res, rej) { clearTimeout(fqRt.watch); fqRt.watch = setTimeout(function () { rej(new Error('timeout')); }, FQ_WAIT_MS); })
+    ]);
+    const drop = function () { fqSet(fqAll().filter(x => x.id !== it.id)); };
+    call.then(function (d) {
+      if (run !== fqRt.run) return;
+      clearTimeout(fqRt.watch);
+      fqRt.flushing = false; fqRt.tries = 0; drop();
+      if (d && window.myNutrition && (!window.myNutrition.log || d.tanggal === window.myNutrition.log.tanggal || d.tanggal === wkToday())) nutSetLog(d); else { renderMakan(); }
+      renderInsightMakan();
+      // Target kalori tercapai (±10 %) hari ini: tawarkan kartu Gizi sekali.
+      const tg = window.myNutrition && window.myNutrition.target, tot = d && d.totals;
+      if (it.op !== 'del' && tg && tg.ok && tot && d.tanggal === wkToday() && Math.abs(tot.kal - tg.kal) <= tg.kal * 0.1 && window.shareMoment) window.shareMoment('gizi', 'Target kalori hari ini tercapai. Bagikan?');
+      window.fqFlush();
+    }).catch(function (err) {
+      if (run !== fqRt.run) return;
+      clearTimeout(fqRt.watch);
+      fqRt.flushing = false;
+      const msg = window.authMessage(err);
+      if (window.isAuthError(err)) return;
+      if (it.op === 'del' && /tidak ditemukan/i.test(msg)) { drop(); renderMakan(); return window.fqFlush(); }   // sudah terhapus
+      if (wlRetryable(err)) {
+        fqRt.tries++;
+        fqRt.retry = setTimeout(window.fqFlush, Math.min(300000, 20000 * Math.pow(2, Math.min(4, fqRt.tries - 1))));
+        return;
+      }
+      drop(); renderMakan(); renderInsightMakan();
+      window.showToast('Catatan makan tidak tersimpan: ' + msg);
+      window.fqFlush();
+    });
+  };
+  window.nutLogMenu = function (mi, ii, btn) {
+    const m = window.myNutrition.menu.meals[mi], it = m.items[ii];
+    const waktu = ({ sarapan: 'sarapan', siang: 'siang', malam: 'malam', buka: 'malam', sahur: 'sarapan', camilan: 'camilan' })[m.key] || 'siang';
+    // Langsung dicatat dari angka menu (sudah dari server); daftar makanan tidak perlu ditunggu (sinyal lemah = macet).
+    nutQueueAdd({ waktu: waktu, id: it.id, gram: it.gram }, { waktu: waktu, foodId: it.id, nama: it.n, gram: it.gram, porsi: NUT_N(it.porsi, 1) + ' ' + String(it.porsiNama || '').replace(/^1 /, ''), kal: it.kal, p: it.p, l: it.l, k: it.k, sumber: it.e ? 'perkiraan' : 'tkpi' });
+    foodEnsure().catch(function () {});
+  };
+  window.nutDelLog = function (id) {
+    const q = fqAll();
+    if (q.some(x => x.id === id && x.op === 'add')) { fqSet(q.filter(x => x.id !== id)); renderMakan(); renderInsightMakan(); return; }   // belum terkirim: cukup dibuang
+    fqPush({ id: 'fd-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), op: 'del', logId: id });
+  };
+  window.nutCopyYesterday = function (btn) {
+    if (navigator.onLine === false) { window.showToast('Butuh sinyal untuk menyalin catatan kemarin.'); return; }
+    const done = busy(btn, '…');
+    memberCall('copyMyFoodYesterday').then(function (d) { done(); nutSetLog(d); window.showToast('Catatan kemarin disalin.'); })
+      .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+  };
+  // Lembar tambah: cari di daftar (GitHub Pages, dimuat malas), terakhir/favorit, atau buat sendiri.
+  const FOOD_URL = 'https://xnk.my.id/foods/foods.min.json', FOOD_KEY = 'xnk_foods_v2';
+  let foodLib = null;
+  const add = { waktu: 'sarapan', q: '', g: '', pick: null, own: false };
+  function foodEnsure() {
+    if (foodLib) return Promise.resolve(foodLib);
+    try { const c = localStorage.getItem(FOOD_KEY); if (c) { foodLib = JSON.parse(c); return Promise.resolve(foodLib); } } catch (e) {}
+    return fetch(FOOD_URL).then(function (r) { if (!r.ok) throw new Error('x'); return r.json(); }).then(function (d) {
+      foodLib = d; try { localStorage.setItem(FOOD_KEY, JSON.stringify(d)); } catch (e) {} return d;
+    });
+  }
+  window.openNutAdd = function (waktu) {
+    add.waktu = waktu; add.q = ''; add.g = ''; add.pick = null; add.own = false;
+    $('nut-add-title').textContent = 'Tambah · ' + NUT_MEAL_L[waktu];
+    nutAddDraw(); openSheet('modal-nut-add');
+    foodEnsure().then(function () { nutAddDraw(); }).catch(function () { $('nut-add-body').innerHTML = '<p class="li-sub">Daftar makanan gagal dimuat. Periksa koneksimu, lalu buka lagi.</p>'; });
+  };
+  function foodMatch(f) {
+    const q = add.q.trim().toLowerCase();
+    if (add.g && f.g !== add.g) return false;
+    return !q || f.n.toLowerCase().indexOf(q) !== -1;
+  }
+  function nutPackRow(x, i, kind) {
+    return '<button type="button" class="list-item interactive" style="min-height:52px;text-align:left" onclick="window.nutAddPick(\'' + kind + '\',' + i + ')"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(x.n || x.nama) + '</b><span class="li-sub">' + h(x.sub) + '</span></span></button>';
+  }
+  function nutAddDraw() {
+    const el = $('nut-add-body'), n = window.myNutrition || {};
+    if (add.own) {
+      el.innerHTML = '<p class="li-sub">Isi dari label kemasan, per satu porsi.</p>' +
+        '<div class="field"><label class="label" for="nut-own-n">Nama makanan</label><input class="input" id="nut-own-n" type="text" maxlength="60" placeholder="Keripik singkong"></div>' +
+        ['kal:Kalori (kkal)', 'p:Protein (g)', 'l:Lemak (g)', 'k:Karbo (g)'].map(function (x) { const a = x.split(':'); return '<div class="field"><label class="label" for="nut-own-' + a[0] + '">' + a[1] + '</label><input class="input" id="nut-own-' + a[0] + '" type="text" inputmode="decimal" placeholder="0"></div>'; }).join('') +
+        '<div class="field"><label class="label" for="nut-own-j">Jumlah porsi</label><input class="input" id="nut-own-j" type="text" inputmode="decimal" value="1"></div>' +
+        '<div class="btn-row"><button type="button" class="btn btn-outline btn-lg" onclick="window.nutAddOwn(false)">Kembali</button><button type="button" class="btn btn-primary btn-lg grow" id="nut-own-save" onclick="window.nutOwnSave()">Catat</button></div>';
+      return;
+    }
+    if (add.pick) {
+      const f = add.pick, base = f.por[0], v = nutPortionVals();
+      el.innerHTML = '<div class="stack" style="gap:2px"><b>' + h(f.n) + '</b><span class="li-sub" id="nut-pick-sum">' + h(v.text) + '</span></div>' +
+        '<div class="chips">' + f.por.map(function (p, i) { return '<button type="button" class="chip' + (add.por === i ? ' active' : '') + '" onclick="window.nutPortion(\'por\',' + i + ')">' + h(p[0]) + ' (' + p[1] + ' g)</button>'; }).join('') + '</div>' +
+        '<div class="row" style="gap:10px;justify-content:center"><button type="button" class="icon-btn" style="width:48px;height:48px" aria-label="Kurangi" onclick="window.nutPortion(\'n\',-0.5)">' + icon('minus') + '</button>' +
+        '<span class="num" id="nut-pick-n" style="min-width:90px;text-align:center;font-weight:800;font-size:var(--fs-xl)">' + h(NUT_N(add.n, 1)) + '</span>' +
+        '<button type="button" class="icon-btn" style="width:48px;height:48px" aria-label="Tambah" onclick="window.nutPortion(\'n\',0.5)">' + icon('plus') + '</button></div>' +
+        '<div class="field"><label class="label" for="nut-pick-g">Atau isi gram</label><input class="input" id="nut-pick-g" type="text" inputmode="decimal" value="' + h(Math.round(v.gram)) + '" onchange="window.nutPortion(\'g\',this.value)"></div>' +
+        '<div class="btn-row"><button type="button" class="btn btn-outline btn-lg" onclick="window.nutAddBack()">Kembali</button><button type="button" class="btn btn-primary btn-lg grow" id="nut-pick-save" onclick="window.nutPickSave()">Catat</button></div>';
+      return;
+    }
+    let html = '<div class="field"><input class="input" id="nut-add-q" type="search" inputmode="search" placeholder="Cari makanan" value="' + h(add.q) + '" oninput="window.nutAddQ(this.value)" aria-label="Cari makanan"></div>';
+    const log = n.log || {};
+    const pack = function (arr, kind) { return arr.map(function (x, i) { return nutPackRow(Object.assign({}, x, { sub: x.porsi + ' · ' + NUT_N(x.kal) + ' kkal' }), i, kind); }).join(''); };
+    if (!add.q && !add.g) {
+      if ((log.favorites || []).length) html += '<p class="eyebrow">Favorit</p><div class="stack" style="gap:0">' + pack(log.favorites, 'fav') + '</div>';
+      if ((log.recent || []).length) html += '<p class="eyebrow">Terakhir dimakan</p><div class="stack" style="gap:0">' + pack(log.recent, 'rec') + '</div>';
+    }
+    const groups = foodLib ? Array.from(new Set(foodLib.items.map(f => f.g))).sort() : [];
+    html += '<div class="chips" style="flex-wrap:nowrap;overflow-x:auto"><button type="button" class="chip' + (!add.g ? ' active' : '') + '" onclick="window.nutAddG(\'\')">Semua</button>' + groups.map(g => '<button type="button" class="chip' + (add.g === g ? ' active' : '') + '" onclick="window.nutAddG(\'' + h(g) + '\')">' + h(g) + '</button>').join('') + '</div>';
+    if (!foodLib) html += skel(4);
+    else {
+      const res = foodLib.items.filter(foodMatch).slice(0, 30);
+      html += res.length ? '<div class="stack" style="gap:0" id="nut-add-res">' + res.map(function (f, i) {
+        const q = f.por[0]; return nutPackRow({ n: f.n + (f.e ? ' (perkiraan)' : ''), sub: q[0] + ' (' + q[1] + ' g) · ' + NUT_N(f.kal * q[1] / 100) + ' kkal' }, i, 'db');
+      }).join('') + '</div>' : '<p class="li-sub">Tidak ada yang cocok.</p>';
+    }
+    html += '<button type="button" class="btn btn-outline btn-lg btn-block" onclick="window.nutAddOwn(true)">' + icon('square-pen') + 'Buat makanan sendiri</button>';
+    el.innerHTML = html;
+    paintIcons();
+  }
+  window.nutAddQ = function (v) {
+    add.q = v; const q = $('nut-add-q'), pos = q ? q.selectionStart : 0; nutAddDraw();
+    const q2 = $('nut-add-q'); if (q2) { q2.focus(); try { q2.setSelectionRange(pos, pos); } catch (e) {} }
+  };
+  window.nutAddG = function (g) { add.g = g; nutAddDraw(); };
+  window.nutAddOwn = function (on) { add.own = on; add.pick = null; nutAddDraw(); };
+  window.nutAddBack = function () { add.pick = null; nutAddDraw(); };
+  window.nutAddPick = function (kind, i) {
+    const log = (window.myNutrition && window.myNutrition.log) || {};
+    let f = null;
+    if (kind === 'db') f = foodLib.items.filter(foodMatch).slice(0, 30)[i];
+    else {
+      const x = (kind === 'fav' ? log.favorites : log.recent)[i];
+      if (!x) return;
+      f = x.foodId && foodLib ? foodLib.items.filter(y => y.id === x.foodId)[0] : null;
+      if (!f) {                                         // makanan buatan sendiri: catat ulang apa adanya
+        if (nutQueueAdd({ waktu: add.waktu, custom: { nama: x.nama, kal: x.kal, p: x.p, l: x.l, k: x.k }, jumlah: 1 })) window.closeModal();
+        return;
+      }
+    }
+    if (!f) return;
+    add.pick = f; add.por = 0; add.n = 1; add.gramOverride = null; nutAddDraw();
+  };
+  function nutPortionVals() {
+    const f = add.pick, base = f.por[add.por || 0][1];
+    const gram = add.gramOverride != null ? add.gramOverride : add.n * base;
+    return { gram: gram, text: NUT_N(gram) + ' g · ' + NUT_N(f.kal * gram / 100) + ' kkal · P ' + NUT_N(f.p * gram / 100, 1) + ' g' };
+  }
+  window.nutPortion = function (k, v) {
+    if (k === 'por') { add.por = v; add.gramOverride = null; }
+    else if (k === 'n') { add.n = Math.max(0.5, Math.min(20, add.n + v)); add.gramOverride = null; }
+    else if (k === 'g') { const g = Number(String(v).replace(',', '.')); add.gramOverride = g > 0 ? Math.min(2000, g) : null; }
+    nutAddDraw();
+  };
+  window.nutPickSave = function () {
+    const f = add.pick, v = nutPortionVals();
+    if (nutQueueAdd({ waktu: add.waktu, id: f.id, gram: Math.round(v.gram * 10) / 10 })) window.closeModal();
+  };
+  window.nutOwnSave = function () {
+    const v = id => $('nut-own-' + id).value.trim().replace(',', '.');
+    const num = k => { const x = v(k); return x === '' || (!isNaN(Number(x)) && Number(x) >= 0 && Number(x) <= (k === 'kal' ? 3000 : 500)); };
+    if (!['kal', 'p', 'l', 'k'].every(num)) { window.showToast('Angka gizi tidak valid.'); return; }
+    if (nutQueueAdd({ waktu: add.waktu, custom: { nama: $('nut-own-n').value, kal: v('kal'), p: v('p'), l: v('l'), k: v('k') }, jumlah: v('j') || 1 })) window.closeModal();
+  };
+  // Info & Tips: window.myContent = { state, list }. Titik "baru" bila ada konten lebih baru dari yang terakhir dilihat (per perangkat).
+  const INFO_SEEN_KEY = 'xnk_info_seen';
+  let infoFilter = '';
+  function infoHasNew() { const l = window.infoLatest || ''; return !!l && l > (_lsGet(INFO_SEEN_KEY) || ''); }
+  window.renderInfoDotsLate = function () { renderInfoDots(); };
+  function renderInfoDots() {
+    const on = infoHasNew();
+    ['tab-more-new'].forEach(id => { const d = $(id); if (d) d.classList.toggle('hide', !on); });
+    document.querySelectorAll('#side-nav .nav-item[data-view="public-info"]').forEach(b => {
+      let d = b.querySelector('.new-dot');
+      if (on && !d) b.insertAdjacentHTML('beforeend', '<span class="new-dot" style="margin-left:auto" aria-label="Baru"></span>');
+      else if (!on && d) d.remove();
+    });
+    const m = $('more-info-dot'); if (m) m.classList.toggle('hide', !on);
+    renderTeasers();
+  }
+  function markInfoSeen() { if (window.infoLatest) { try { _lsSet(INFO_SEEN_KEY, window.infoLatest); } catch (e) {} } renderInfoDots(); }
+  function contentCardHtml(c) {
+    const ink = c.tipe === 'pengumuman';
+    const hasLink = /^https:\/\/[^\s"'<>]+$/.test(c.url || '');
+    const link = hasLink ? '<a class="btn ' + (c.tipe === 'video' ? 'btn-primary' : 'btn-outline') + ' btn-sm" href="' + h(c.url) + '" target="_blank" rel="noopener noreferrer">' + icon(c.tipe === 'video' ? 'circle-play' : 'external-link') + (c.tipe === 'video' ? 'Tonton video' : 'Buka link') + '</a>' : '';
+    const thumb = c.tipe === 'video' && hasLink ? '<a class="cn-video" href="' + h(c.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Tonton video: ' + h(c.judul) + '">' + icon('circle-play') + '</a>' : '';
+    return '<article class="cn-card' + (ink ? ' is-ink' : '') + '" data-tipe="' + h(c.tipe) + '">' + thumb +
+      '<div class="cn-head"><span class="pill ' + (ink ? '' : 'soft') + '">' + icon(CN_ICON[c.tipe] || 'file-text') + h(CN_LABEL[c.tipe] || c.tipe) + '</span>' +
+      (c.kategori ? '<span class="pill soft">' + h(c.kategori) + '</span>' : '') + (c.sematkan ? '<span class="pill soft cn-end">' + icon('pin') + 'Disematkan</span>' : '') + '</div>' +
+      '<h3 class="cn-title">' + h(c.judul) + '</h3>' + (c.isi ? '<p class="cn-body">' + h(c.isi) + '</p>' : '') + link + '</article>';
+  }
+  function infoInner() {
+    const c = window.myContent;
+    if (!c || c.state === 'loading') return skel(3, true);
+    if (c.state === 'error') return '<p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyContent(true)">Coba lagi</button>';
+    if (!c.list.length) return emptyState('megaphone', 'Belum ada info', 'Pengumuman, tips, dan video dari coach muncul di sini.');
+    const cats = c.list.map(x => x.kategori).filter((v, i, arr) => v && arr.indexOf(v) === i);
+    const chips = cats.length ? '<div class="chips" role="group" aria-label="Kategori"><button type="button" class="chip chip-lg' + (infoFilter ? '' : ' active') + '" onclick="window.infoSetFilter(\'\')">Semua</button>' +
+      cats.map(k => '<button type="button" class="chip chip-lg' + (infoFilter === k ? ' active' : '') + '" onclick="window.infoSetFilter(this.getAttribute(\'data-k\'))" data-k="' + h(k) + '">' + h(k) + '</button>').join('') + '</div>' : '';
+    const shown = c.list.filter(x => !infoFilter || x.kategori === infoFilter);
+    return chips + '<div class="cn-grid">' + shown.map(contentCardHtml).join('') + '</div>';
+  }
+  window.infoSetFilter = function (k) { infoFilter = k || ''; const w = $('pub-info-wrap'); if (w) { setHTML(w, infoInner()); } };
+  window.loadMyContent = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
+    const c = window.myContent;
+    if (c && c.state === 'ok' && !force && Date.now() - c.at < 120000) { markInfoSeen(); return Promise.resolve(); }
+    if (!c || c.state !== 'ok') window.myContent = { state: 'loading', list: [] };
+    const w = $('pub-info-wrap'); if (w) setHTML(w, infoInner());
+    return memberCall('getMyContent').then(function (list) {
+      window.myContent = { state: 'ok', list: list || [], at: Date.now() };
+      const w2 = $('pub-info-wrap'); if (w2) setHTML(w2, infoInner());
+      paintIcons(); markInfoSeen();
+    }).catch(function (err) {
+      if (window.isAuthError && window.isAuthError(err)) return;
+      window.myContent = { state: 'error', error: String((err && err.message) || err), list: [] };
+      const w3 = $('pub-info-wrap'); if (w3) setHTML(w3, infoInner());
+    });
+  };
+  function renderPublicInfo() {
+    const el = $('view-public-info'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    setHTML(el, '<div class="cn-wrap">' + pageIntro('Info & Tips', 'Pengumuman, tips, dan video dari coach.') + '<div id="ph-info" style="margin-bottom:var(--gap)">' + infoHeroHtml() + '</div><div class="stack" style="gap:var(--gap)" id="pub-info-wrap">' + infoInner() + '</div></div>');
+    const c = window.myContent, latest = window.infoLatest || '';
+    // Konten baru terdeteksi dari bootstrap (info.latestAt) tapi belum ada di daftar: muat daftar saja (satu panggilan kecil).
+    if (!c || (c.state === 'ok' && latest && !c.list.some(x => x.dibuat >= latest))) window.loadMyContent(true);
+    else if (c.state === 'ok') markInfoSeen();
+  }
+
+  function renderPublicMore() {
+    const el = $('view-public-more'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const row = (onclick, ic, title, sub) => '<button type="button" class="more-row" onclick="' + onclick + '"><span class="more-ic">' + icon(ic) + '</span><span class="more-txt"><b>' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + icon('chevron-right') + '</button>';
+    const go = v => 'window.navigate(\'' + v + '\')';
+    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:640px">' + pageIntro('Lainnya', 'Semua yang kamu butuhkan di satu tempat.') + moreHeroHtml() +
+      '<div class="more-list">' +
+      row(go('public-program'), 'activity', 'Latihan', 'Rutinitas, log latihan, PR, dan makan') +
+      row(go('public-info'), 'megaphone', 'Info & Tips', 'Pengumuman dan tips dari coach').replace('</button>', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span></button>') +
+      (window.shareOn !== false ? row(go('public-share'), 'share-2', 'Kartu saya', 'Bagikan latihan, progres, badge, dan gizi') : '') +
+      row(go('public-catalog'), 'package', 'Paket', 'Lihat dan perpanjang paketmu') +
+      row(go('public-coaches'), 'dumbbell', 'Coach', 'Profil dan kontak coach') +
+      row('window.openSettings()', 'sun-moon', 'Tampilan', 'Terang, gelap, atau ikut sistem') +
+      row('window.logoutCurrent()', 'log-out', 'Keluar', 'Keluar dari akun ini') + '</div></div>');
+  }
+
+  window.renderPublicDashboard = function () {
+    const el = $('view-public-dashboard');
+    const me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0, rem = Math.max(0, total - used);
+    const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
+    const upcoming = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart);
+    const history = mine.filter(s => !(upcoming.indexOf(s) !== -1)).sort((a, b) => new Date(b.start) - new Date(a.start));
+    const next = upcoming[0];
+    const C = 2 * Math.PI * 52, pct = total ? rem / total : 0;
+
+    const completedMine = mine.filter(isDone);
+    const weeksP = weeklyBuckets(completedMine.slice().sort(byStart), me.joinDate);
+    let streakP = 0;
+    for (let i = weeksP.length - 1; i >= 0; i--) { if (weeksP[i].count > 0) streakP++; else if (i === weeksP.length - 1) continue; else break; }
+
+    let left = '';
+    left += '<div class="card-ink next-card" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
+      '<div class="ih-head"><span class="ih-eyebrow">Sesi berikutnya</span>' + (next ? statusInfo(next).pill : '') + '</div>' +
+      (next ? '<p id="pub-next-session-label" class="next-when">' + h(fmtDate(new Date(next.start))) + ' · ' + fmtTime(new Date(next.start)) + '</p>' +
+        '<p class="num" style="font-size:var(--fs-3xl);font-weight:800;letter-spacing:-0.03em;margin:8px 0" id="pub-next-countdown" data-countdown-long="' + new Date(next.start).getTime() + '">' + h(countdownText(new Date(next.start))) + '</p>' +
+        (window.isSoloCoach() ? '' : '<p class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(next.coachName || 'Menunggu coach') + '</p>') +
+        '<div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-on-ink-ghost" onclick="window.openRescheduleModal(\'' + h(next.id) + '\')">' + icon('calendar-clock') + 'Reschedule</button>' +
+        '<button type="button" class="btn btn-on-ink-ghost" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
+        '<button type="button" class="btn btn-on-ink-ghost" id="pub-next-cal" onclick="window.openAddToCalendar([\'' + h(next.id) + '\'])">' + icon('calendar-plus') + 'Kalender</button></div>'
+        : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
+      '</div>';
+
+    left += '<div class="card-ink portal-hero compact"><div class="row" style="gap:14px">' +
+      '<button type="button" class="avatar lg interactive" id="pub-avatar-btn" onclick="document.getElementById(\'pub-avatar-input\').click()" aria-label="Ganti foto profil" style="position:relative">' +
+        (me.photo ? '<img src="' + h(me.photo) + '" alt="" id="pub-avatar-img">' : h(initials(me.name))) +
+        '<span style="position:absolute;right:-2px;bottom:-2px;width:26px;height:26px;border-radius:50%;background:var(--on-ink);color:var(--ink);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--ink)">' + icon('camera', 'style="width:13px;height:13px"') + '</span></button>' +
+      '<div class="grow" style="min-width:0"><p class="eyebrow">' + greeting() + '</p><h2 class="profile-name">Halo, <span id="pub-dash-name">' + h(me.name) + '</span>!</h2>' +
+      '<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap"><span class="pill">' + h(me.packageName || 'Member XNK') + '</span>' + (me.joinDate ? '<span class="pill">sejak ' + h(me.joinDate) + '</span>' : '') + '</div></div>' +
+      '<button type="button" class="icon-btn" onclick="window.openMyProfile()" aria-label="Profil saya">' + icon('user-round') + '</button></div>' +
+      '<div class="row" style="gap:20px;margin-top:20px">' +
+      '<div class="ring-wrap"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
+      '<circle class="ring-fill" id="pub-quota-ring" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
+      '<div class="ring-center"><span class="num" style="font-size:var(--fs-4xl);font-weight:800;line-height:1" id="pub-dash-remaining">' + rem + '</span><span class="eyebrow">dari <span id="pub-dash-total">' + total + '</span></span></div></div>' +
+      '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p>' +
+      '<p class="muted">' + used + ' sesi sudah dipakai</p></div></div>' +
+      '<div id="pub-renew-slot">' + renewNoticeHtml(rem, total) + '</div>' +
+      '<div id="pub-bill-slot"></div>' +
+      '</div>';
+
+    left += '<div id="pub-week">' + weekCardHtml() + '</div>';
+    left += '<div class="portal-actions"><button type="button" class="btn btn-primary" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button>' +
+      '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
+      '<button type="button" class="btn btn-outline" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket</button></div>';
+    left += '<details class="fold"><summary>Coach &amp; kelas' + icon('chevron-down') + '</summary><div class="fold-body stack" style="gap:12px">' + myCoachCardHtml(me) + '<div id="pub-class-wrap">' + classCardHtml() + '</div></div></details>';
+    left += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
+
+    left += '<div id="pub-care-wrap" class="stack" style="gap:16px">' + myCareInner() + '</div>';
+    left += '<div class="card hide" id="pub-today-wl"></div>';
+    left += '<div class="card hide" id="pub-teasers">' + teasersInner() + '</div>';
+
+    let right = '<div class="month-cal" id="month-cal"></div>';
+    right += '<div class="card"><div class="section-head"><h3 class="section-title">Jadwalku</h3><button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button></div>' +
+      (upcoming.length ? '<div class="list stagger">' + upcoming.map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
+
+    setHTML(el, '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + right + '</div></div>');
+    renderTodayWorkout();
+    renderMonthCal();
+    requestAnimationFrame(function () {
+      const ring = $('pub-quota-ring');
+      if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 150);
+      countUp($('pub-dash-remaining'), rem);
+    });
+    // Semua data sisa datang dari satu panggilan (refreshPortalMore); render hanya membaca state.
+    renderBillSlot(); renderCoachStatusChip();
+  };
+
+  // Tanggal di beranda: pindah ke tab Jadwal pada tanggal itu.
+  const _selectDate = window.selectDate;
+  window.selectDate = function (key) {
+    if (window.currentView === 'public-dashboard') {
+      const p = key.split('-').map(Number);
+      ui.selectedDate = new Date(p[0], p[1] - 1, p[2]);
+      ui.calMonth = new Date(p[0], p[1] - 1, 1);
+      window.navigate('calendar');
+      return;
+    }
+    _selectDate(key);
+  };
+

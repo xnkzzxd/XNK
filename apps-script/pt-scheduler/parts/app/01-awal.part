@@ -1,0 +1,781 @@
+<script>
+/* =============================================================================
+   XNK Personal Training — aplikasi panel PT & portal klien (hanya Index.html).
+   Landing TIDAK memuat file ini. Helper bersama (escapeHtml, sanitizePhone,
+   formatRp, _lsGet/_lsSet, ADMIN_TOKEN_KEY, MEMBER_TOKEN_KEY) ada di Scripts.html.
+   Semua yang dipanggil dari HTML (onclick) diekspos di window.*.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  // ── State ───────────────────────────────────────────────────────────────────
+  window.members = [];
+  window.taskSummary = {}; // {memberId:{open,overdue}} dari getTaskSummary (panel PT)
+  window.memberArchive = [];
+  window.schedules = [];
+  window.coaches = [];
+  // Mode solo: tepat satu coach aktif. window.coaches hanya berisi coach aktif, jadi cukup dihitung.
+  window.isSoloCoach = function () { return (window.coaches || []).length === 1; };
+  window.priceListData = [];
+  window.currentView = null;
+  window.isPublicView = false;
+  window.publicLoggedMember = null;
+  window.selectedMemberId = null;
+  window.selectedScheduleDetailId = null;
+  window.currentClientType = null;
+  window.isEditScheduleMode = false;
+  window.isRescheduleMode = false;
+  window.rescheduleScheduleId = null;
+
+  const today0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+  const ui = {
+    mode: 'admin',
+    calMonth: (() => { const d = today0(); d.setDate(1); return d; })(),
+    selectedDate: today0(),
+    coachFilter: 'ALL',
+    bookCoach: '',   // klien: coach yang dipilih untuk booking (wajib kalau ada 2 coach aktif atau lebih)
+    schedMode: 'month',
+    clientFilter: 'all',
+    clientQuery: '',
+    clientSort: 'terbaru',   // terbaru | perhatian | nama | sisa | lama (disimpan di perangkat ini)
+    clientView: 'card',      // card | list (PC)
+    statsMonth: null,
+    detail: null,
+    revenue: null,
+    lastFocus: null,
+    bookingMemberId: null,
+    dataReady: false,
+    cpTab: null,       // tab halaman klien terakhir {id, name}: bertahan saat data diperbarui
+    wideTimer: 0,      // PC: lepas #app.detail-wide setelah panel selesai menutup
+    revealTimer: 0
+  };
+
+  const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const DOW_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  const COACH_WA_NUMBER = '';
+
+  // ── Util ────────────────────────────────────────────────────────────────────
+  const h = escapeHtml;
+  const $ = id => document.getElementById(id);
+  const icon = (name, attrs) => '<i data-lucide="' + name + '"' + (attrs ? ' ' + attrs : '') + '></i>';
+  const pad = n => String(n).padStart(2, '0');
+  const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  const hm = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
+  // Portal klien: semua jam dibaca & ditulis dalam WIB (UTC+7), apa pun zona waktu HP.
+  const wibAt = (date, time) => new Date(date + 'T' + time + ':00+07:00');
+  const wibParts = d => { const w = new Date(d.getTime() + 7 * 3600000); return { date: w.getUTCFullYear() + '-' + pad(w.getUTCMonth() + 1) + '-' + pad(w.getUTCDate()), hour: w.getUTCHours(), min: w.getUTCMinutes() }; };
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const fmtTime = d => pad(d.getHours()) + '.' + pad(d.getMinutes());
+  const fmtDate = (d, o) => d.toLocaleDateString('id-ID', o || { weekday: 'long', day: 'numeric', month: 'long' });
+  const fmtShort = d => d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+  const status = s => String((s && s.status) || '').toLowerCase();
+  const isAvailable = s => status(s) === 'available';
+  const isDone = s => status(s) === 'completed';
+  const isBooked = s => !isAvailable(s);
+  const byStart = (a, b) => new Date(a.start) - new Date(b.start);
+  const remainingOf = m => Math.max(0, (Number(m.totalSessions) || 0) - (Number(m.usedSessions) || 0));
+
+  function initials(name) {
+    const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
+    return ((parts[0] || '?')[0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+  }
+
+  function avatar(photo, name, cls, style) {
+    const ini = h(initials(name));
+    const attrs = 'class="avatar' + (cls ? ' ' + cls : '') + '"' + (style ? ' style="' + style + '"' : '');
+    if (photo) {
+      return '<span ' + attrs + ' data-ini="' + ini + '"><img src="' + h(photo) + '" alt="" loading="lazy" ' +
+        'onerror="this.parentNode.textContent=this.parentNode.getAttribute(\'data-ini\')"></span>';
+    }
+    return '<span ' + attrs + '>' + ini + '</span>';
+  }
+
+  window.parseFlexibleDate = function (str) {
+    if (!str) return new Date(0);
+    if (str instanceof Date) return str;
+    const parts = String(str).split('/');
+    if (parts.length === 3) {
+      const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      if (!isNaN(d)) return d;
+    }
+    const f = new Date(str);
+    return isNaN(f) ? new Date(0) : f;
+  };
+
+  function timeUntil(date) {
+    const diff = date - new Date();
+    if (diff <= 0) return 'Berlangsung';
+    const mins = Math.round(diff / 60000);
+    if (mins < 60) return mins + ' mnt lagi';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + ' jam ' + (mins % 60 ? (mins % 60) + ' mnt ' : '') + 'lagi';
+    return Math.floor(hrs / 24) + ' hari lagi';
+  }
+
+  function countdownText(date) {
+    const diff = date - Date.now();
+    if (diff <= 0) return 'Sesi sedang berlangsung';
+    const d = Math.floor(diff / 86400000);
+    const hh = Math.floor((diff % 86400000) / 3600000);
+    const mm = Math.floor((diff % 3600000) / 60000);
+    const ss = Math.floor((diff % 60000) / 1000);
+    return d > 0 ? d + ' hari ' + hh + ' jam lagi' : pad(hh) + ':' + pad(mm) + ':' + pad(ss);
+  }
+
+  function greeting() {
+    const hr = new Date().getHours();
+    if (hr < 11) return 'Selamat pagi';
+    if (hr < 15) return 'Selamat siang';
+    if (hr < 18) return 'Selamat sore';
+    return 'Selamat malam';
+  }
+
+  // Ikon lucide dibuat ulang setelah DOM berubah (debounce).
+  let iconTimer = null;
+  function paintIcons() {
+    clearTimeout(iconTimer);
+    iconTimer = setTimeout(function () { try { if (window.lucide) window.lucide.createIcons(); } catch (e) {} }, 16);
+  }
+  window.scheduleIconUpdate = paintIcons;
+
+  function setHTML(el, html) {
+    if (typeof el === 'string') el = $(el);
+    if (!el) return;
+    el.innerHTML = html;
+    paintIcons();
+  }
+
+  function staggerIndex(root) {
+    (root || document).querySelectorAll('.stagger').forEach(function (list) {
+      Array.prototype.forEach.call(list.children, function (c, i) { c.style.setProperty('--i', Math.min(i, 12)); });
+    });
+  }
+
+  function countUp(el, target, opts) {
+    if (!el) return;
+    opts = opts || {};
+    const fmt = opts.format || (v => String(v));
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !target) { el.textContent = fmt(target || 0); return; }
+    const dur = opts.duration || 900, t0 = performance.now();
+    (function tick(now) {
+      const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmt(Math.round(target * e));
+      if (p < 1) requestAnimationFrame(tick); else el.textContent = fmt(target);
+    })(t0);
+  }
+
+  const rupiahShort = v => {
+    if (v >= 1e9) return 'Rp' + (v / 1e9).toFixed(1).replace('.', ',') + ' M';
+    if (v >= 1e6) return 'Rp' + (v / 1e6).toFixed(1).replace('.', ',') + ' jt';
+    return formatRp(v);
+  };
+
+  // ── WhatsApp ────────────────────────────────────────────────────────────────
+  window.waUrl = function (phone, text) {
+    return 'https://wa.me/' + sanitizePhone(phone || '') + '?text=' + encodeURIComponent(text || '');
+  };
+  window.sendToParentWA = function (phone, text) {
+    window.open(window.waUrl(phone, text), '_blank');
+  };
+  // Tampilkan tombol "Buka WhatsApp" setelah aksi berhasil. Pengguna membukanya
+  // dengan ketukan sendiri (link biasa), jadi tidak ada tab kosong yang dibuka
+  // lebih dulu dan tidak diblokir popup blocker.
+  window.showWaPrompt = function (url, message) {
+    if (!/^https:\/\/wa\.me\//.test(String(url || ''))) return;
+    const old = document.getElementById('wa-prompt');
+    if (old) old.remove();
+    const box = document.createElement('div');
+    box.id = 'wa-prompt';
+    box.setAttribute('role', 'status');
+    box.style.cssText = 'position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:9999;' +
+      'max-width:calc(100vw - 32px);display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;' +
+      'padding:12px 14px;border-radius:16px;background:#111;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.28);' +
+      'font-size:14px;line-height:1.35;';
+    const txt = document.createElement('span');
+    txt.textContent = message || 'Lanjutkan lewat WhatsApp.';
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = 'Buka WhatsApp';
+    a.style.cssText = 'background:#25D366;color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:10px;white-space:nowrap;';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Tutup');
+    close.textContent = '\u00d7';
+    close.style.cssText = 'background:transparent;border:0;color:#fff;font-size:22px;line-height:1;cursor:pointer;padding:0 4px;';
+    const dismiss = function () { clearTimeout(window._waPromptTimer); box.remove(); };
+    close.addEventListener('click', dismiss);
+    a.addEventListener('click', function () { setTimeout(dismiss, 300); });
+    box.appendChild(txt); box.appendChild(a); box.appendChild(close);
+    document.body.appendChild(box);
+    clearTimeout(window._waPromptTimer);
+    window._waPromptTimer = setTimeout(dismiss, 30000);
+  };
+  window.coachContactNumber = function () {
+    const fixed = sanitizePhone(COACH_WA_NUMBER || '');
+    if (fixed.length >= 10) return fixed;
+    const first = (window.coaches || []).find(c => c && c.phone);
+    return first ? sanitizePhone(first.phone) : '';
+  };
+
+  // ── Server (google.script.run) ─────────────────────────────────────────────
+  window.isAuthError = function (err) {
+    return !!err && String(err.message || err).indexOf('AUTH_REQUIRED') !== -1;
+  };
+  window.authMessage = function (err) {
+    return String((err && err.message) || err || '').replace(/^.*AUTH_REQUIRED:\s*/, '');
+  };
+
+  // Seperti google.script.run, tapi token disisipkan sebagai argumen pertama dan
+  // sesi yang habis membuka layar login lagi.
+  function tokenRunner(getToken, onAuthLost) {
+    let onOk = null, onFail = null;
+    const proxy = new Proxy({}, {
+      get: function (_, prop) {
+        if (prop === 'withSuccessHandler') return function (fn) { onOk = fn; return proxy; };
+        if (prop === 'withFailureHandler') return function (fn) { onFail = fn; return proxy; };
+        return function () {
+          const args = [getToken()].concat(Array.prototype.slice.call(arguments));
+          const ok = onOk, fail = onFail;
+          // rpc: google.script.run, fetch ke doPost, atau XNK_TRANSPORT (Scripts.html). then(a, b): galat di ok() tidak memanggil fail().
+          rpc(prop, args).then(function (res) { if (ok) ok(res); }, function (err) {
+            if (window.isAuthError(err) && onAuthLost) onAuthLost(err);
+            if (fail) fail(err);
+          });
+        };
+      }
+    });
+    return proxy;
+  }
+  window.adminApi = function () { return tokenRunner(function () { return _lsGet(ADMIN_TOKEN_KEY); }, function (err) { window.onAdminAuthLost(err); }); };
+  window.memberApi = function () { return tokenRunner(function () { return _lsGet(MEMBER_TOKEN_KEY); }, function (err) { window.onMemberAuthLost(err); }); };
+
+  function call(runner, name) {
+    const args = Array.prototype.slice.call(arguments, 2);
+    return new Promise(function (resolve, reject) {
+      if (!hasServer()) { reject(new Error('Mode pratinjau: server tidak tersedia.')); return; }
+      const r = runner.withSuccessHandler(resolve).withFailureHandler(reject);
+      r[name].apply(r, args);
+    });
+  }
+  const adminCall = function (name) { return call.apply(null, [window.adminApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
+  const memberCall = function (name) { return call.apply(null, [window.memberApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
+  const publicCall = function (name) { return rpc(name, Array.prototype.slice.call(arguments, 1)); };
+
+  // ── Tombol sibuk ────────────────────────────────────────────────────────────
+  function busy(btn, label) {
+    if (!btn) return function () {};
+    const html = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin" aria-hidden="true"></span> ' + h(label || 'Memproses…');
+    return function () { btn.disabled = false; btn.innerHTML = html; paintIcons(); };
+  }
+
+  // Klien: panel "memeriksa ketersediaan" (skeleton) di atas form selama server mengecek booking.
+  function showChecking(form, text) {
+    let el = form.querySelector('.checking-panel');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'checking-panel notice';
+      el.setAttribute('role', 'status');
+      el.style.cssText = 'flex-direction:column;align-items:stretch;gap:10px';
+      form.insertBefore(el, form.firstChild);
+    }
+    el.innerHTML = '<p class="li-title row" style="gap:8px"><span class="spin" aria-hidden="true"></span><span class="chk-text">' + h(text) + '</span></p>' +
+      '<div class="skeleton" style="height:14px;width:80%"></div><div class="skeleton" style="height:14px;width:55%"></div>';
+    form.setAttribute('aria-busy', 'true');
+    form.querySelectorAll('input,select,textarea').forEach(function (i) { i.dataset.wasDisabled = i.disabled ? '1' : ''; i.disabled = true; });
+  }
+  function setChecking(form, text) { const t = form.querySelector('.chk-text'); if (t) t.textContent = text; }
+  function hideChecking(form) {
+    const el = form.querySelector('.checking-panel');
+    if (el) el.remove();
+    form.removeAttribute('aria-busy');
+    form.querySelectorAll('input,select,textarea').forEach(function (i) { if (!i.dataset.wasDisabled) i.disabled = false; });
+  }
+
+  // ── Toast ───────────────────────────────────────────────────────────────────
+  window.showToast = function (msg, iconName) {
+    const el = $('toast'), txt = $('toast-msg');
+    if (!el || !txt) return;
+    txt.textContent = msg;
+    const ic = el.querySelector('svg, i');
+    if (ic) ic.outerHTML = icon(iconName || (/gagal|error|tidak|habis|salah/i.test(msg) ? 'alert-circle' : 'check-circle-2'));
+    paintIcons();
+    el.classList.add('show');
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3200);
+  };
+
+  // ── Tema ────────────────────────────────────────────────────────────────────
+  function currentTheme() {
+    try { return localStorage.getItem('xnk_theme') || 'system'; } catch (e) { return 'system'; }
+  }
+  window.setTheme = function (mode) {
+    try { if (mode === 'system') localStorage.removeItem('xnk_theme'); else localStorage.setItem('xnk_theme', mode); } catch (e) {}
+    if (mode === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', mode);
+    renderThemeSeg();
+    setTimeout(function () { if (window.hostPostTheme) window.hostPostTheme(); }, 50);
+  };
+  function renderThemeSeg() {
+    ['theme-seg', 'theme-seg-2'].forEach(renderOneThemeSeg);
+  }
+  function renderOneThemeSeg(segId) {
+    const seg = $(segId);
+    if (!seg) return;
+    const mode = currentTheme();
+    const opts = [['system', 'monitor', 'Otomatis'], ['light', 'sun', 'Terang'], ['dark', 'moon', 'Gelap']];
+    seg.innerHTML = '<span class="seg-thumb"></span>' + opts.map(function (o) {
+      return '<button type="button" role="radio" aria-checked="' + (o[0] === mode) + '" class="' + (o[0] === mode ? 'active' : '') + '" onclick="window.setTheme(\'' + o[0] + '\')">' + icon(o[1], 'style="width:15px;height:15px;vertical-align:-3px"') + ' ' + o[2] + '</button>';
+    }).join('');
+    paintIcons();
+    moveSegThumb(seg);
+  }
+  function moveSegThumb(seg) {
+    if (!seg) return;
+    requestAnimationFrame(function () {
+      const active = seg.querySelector('button.active'), thumb = seg.querySelector('.seg-thumb');
+      if (!active || !thumb) return;
+      thumb.style.width = active.offsetWidth + 'px';
+      thumb.style.transform = 'translateX(' + (active.offsetLeft - 4) + 'px)';
+    });
+  }
+
+  // ── iPhone / Safari: jembatan ke halaman pembungkus (Fase N) ────────────────
+  // Aplikasi berjalan di iframe (xnk.my.id, book.xnkbooking.my.id). Di iframe iOS
+  // memberi env(safe-area-inset-*) = 0 dan visualViewport tidak melihat keyboard,
+  // jadi halaman pembungkus mengukurnya dan mengirim angka saja. Tidak ada data,
+  // token, atau nomor yang lewat jalur ini.
+  const HOST_ORIGINS = ['https://xnk.my.id', 'https://book.xnkbooking.my.id', 'https://xnkbooking.my.id'];
+  const host = { ios: false, standalone: false, kb: 0, origin: '' };
+  function hostNum(v) { v = Math.round(Number(v)); return isFinite(v) ? Math.max(0, Math.min(v, 600)) : 0; }
+  window.applyHostInfo = function (d) {
+    if (!d) return;
+    const root = document.documentElement, ins = d.insets || {};
+    ['t', 'r', 'b', 'l'].forEach(function (k) { root.style.setProperty('--sa-' + k, Math.min(hostNum(ins[k]), 200) + 'px'); });
+    const kb = hostNum(d.kb);
+    root.style.setProperty('--kb', kb + 'px');
+    host.ios = !!d.ios; host.standalone = !!d.standalone;
+    root.classList.toggle('ios', host.ios);
+    root.classList.toggle('standalone', host.standalone);
+    const open = kb > 80;
+    if (open !== root.classList.contains('kb-open')) {
+      root.classList.toggle('kb-open', open);
+      if (open) hostRevealFocus();
+    }
+    host.kb = kb;
+    a2hsMaybe();   // pesan host datang setelah layar pertama
+  };
+  // Keyboard terbuka: geser kolom yang sedang diketik ke tengah ruang yang tersisa.
+  function hostRevealFocus() {
+    const el = document.activeElement;
+    if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    setTimeout(function () { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {} }, 60);
+  }
+  // Halaman statis di level atas: host-local.js menjawab pesan yang sama dari window itu sendiri (Phase AAA).
+  const hostLocal = () => window.top === window && window.XNKHostLocal === true;
+  function hostPostTheme() {
+    if (window.top === window && !hostLocal()) return;
+    // Di HP bagian atas layar adalah band hitam, jadi bilah status mengikuti --band; selain itu --bg.
+    // Token (bukan warna body yang sedang bertransisi).
+    const cs = getComputedStyle(document.documentElement);
+    const phone = window.matchMedia('(max-width: 767px)').matches;
+    let color = (phone ? cs.getPropertyValue('--band') : '').trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(color)) color = cs.getPropertyValue('--bg').trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(color)) return;
+    try { window.top.postMessage({ xnk: 'theme', color: color }, '*'); } catch (e) {}
+  }
+  window.hostPostTheme = hostPostTheme;
+  // Teks besar (Fase R): font scaling tidak memicu media query, jadi periksa ukuran dasar.
+  (function bigText() {
+    function check() { try { document.documentElement.classList.toggle('big-text', parseFloat(getComputedStyle(document.documentElement).fontSize) >= 20); } catch (e) {} }
+    check(); window.addEventListener('resize', check);
+  })();
+  // App Android / iOS XNK: back sistem (tombol / geser samping) menggantikan panah kembali di layar.
+  document.documentElement.classList.toggle('app-shell', /XNKAndroid|XNKiOS/.test(navigator.userAgent));
+  (function hostBridge() {
+    if (window.top === window && !hostLocal()) return;
+    window.addEventListener('message', function (e) {
+      if (e.source !== window.top || (HOST_ORIGINS.indexOf(e.origin) === -1 && !(hostLocal() && e.origin === location.origin))) return;
+      const d = e.data;
+      if (d && d.xnk === 'host' && d.v === 1) {
+        const first = !host.origin;
+        host.origin = e.origin;
+        window.applyHostInfo(d);
+        if (first) setTimeout(offlineSync, 0);   // pembungkus dikenal: kirim salinan & ambil catatan offline
+      } else if (d && d.xnk === 'offline-queue' && Array.isArray(d.items)) offlineImport(d.items);
+    });
+    try { window.top.postMessage({ xnk: 'host?' }, '*'); } catch (e) {}
+    // Fokus ke kolom saat keyboard sudah terbuka (pindah kolom) juga perlu digeser.
+    document.addEventListener('focusin', function () { if (host.kb > 80) hostRevealFocus(); });
+    // Tema otomatis ikut sistem: warna bar Safari ikut berubah.
+    try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { setTimeout(hostPostTheme, 50); }); } catch (e) {}
+    setTimeout(hostPostTheme, 0);
+  })();
+
+  // Mode Layar Utama di iPhone tidak punya gestur geser-kembali: geser dari tepi kiri = back.
+  (function edgeSwipeBack() {
+    let x0 = null, y0 = 0;
+    document.addEventListener('touchstart', function (e) {
+      x0 = null;
+      if (!host.standalone || !host.ios || e.touches.length !== 1 || !isPhone() || bk.n === 0) return;
+      const t = e.touches[0];
+      if (t.clientX > 20 || (e.target.closest && e.target.closest('.sheet-handle, .drag-grip, input, textarea'))) return;
+      x0 = t.clientX; y0 = t.clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', function (e) {
+      if (x0 === null) return;
+      const t = e.changedTouches[0], dx = t.clientX - x0, dy = Math.abs(t.clientY - y0);
+      x0 = null;
+      if (dx > 70 && dy < 40 && !ui.pulling) history.back();
+    }, { passive: true });
+    document.addEventListener('touchcancel', function () { x0 = null; }, { passive: true });
+  })();
+
+  // Ajakan pasang ke Layar Utama: iPhone di Safari biasa, sudah masuk, sekali saja
+  // ("Nanti" = tanya lagi 7 hari kemudian). Hanya di perangkat ini (localStorage).
+  const A2HS_KEY = 'xnk_a2hs';
+  let a2hsTimer = 0;
+  function a2hsMaybe() {
+    if (!host.ios || host.standalone || !isPhone() || ui.a2hsShown) return;
+    const loggedIn = window.isPublicView ? !!window.publicLoggedMember : !!_lsGet(ADMIN_TOKEN_KEY);
+    if (!loggedIn) return;
+    const v = _lsGet(A2HS_KEY);
+    if (v === 'ok' || (v && Date.now() < Number(v))) return;
+    clearTimeout(a2hsTimer);
+    a2hsTimer = setTimeout(function () {
+      if (ui.a2hsShown || ui.guideOn || ui.sheetOn || ui.wlOn) return;
+      ui.a2hsShown = true;
+      const el = $('a2hs');
+      if (el) { el.classList.remove('hide'); paintIcons(); }
+    }, 2500);
+  }
+  window.a2hsClose = function (forever) {
+    _lsSet(A2HS_KEY, forever ? 'ok' : String(Date.now() + 7 * 864e5));
+    const el = $('a2hs');
+    if (el) el.classList.add('hide');
+  };
+
+  // ── Lapisan sheet / modal ───────────────────────────────────────────────────
+  function openSheet(id) {
+    const layer = $('sheet-layer'), sheet = $(id);
+    if (!layer || !sheet) return;
+    clearTimeout(ui.closeTimer);
+    if (layer.classList.contains('hide')) ui.lastFocus = document.activeElement;
+    layer.querySelectorAll(':scope > .sheet').forEach(function (s) { s.classList.add('hide'); s.style.transform = ''; });
+    sheet.classList.remove('hide');
+    layer.classList.remove('hide');
+    requestAnimationFrame(function () { requestAnimationFrame(function () { layer.classList.add('open'); }); });
+    paintIcons();
+    setTimeout(function () {
+      const f = sheet.querySelector('input:not([type=hidden]):not(.sr-only), select, textarea, button.btn-primary');
+      if (f && window.innerWidth >= 768) try { f.focus({ preventScroll: true }); } catch (e) {}
+    }, 260);
+    ui.sheetOn = true;
+    syncBack();
+  }
+  window.openSheet = openSheet;
+
+  window.closeModal = function () {
+    const layer = $('sheet-layer');
+    if (!layer || layer.classList.contains('hide')) return;
+    // Lembar cari gerakan dari editor program: tutup/back kembali ke lembar program (isi form tetap).
+    if (ui.sheetReturn && ui.sheetOn && !$('ex-search').classList.contains('hide')) { const r = ui.sheetReturn; ui.sheetReturn = ''; openSheet(r); return; }
+    ui.sheetReturn = '';
+    layer.classList.remove('open');
+    ui.sheetOn = false;
+    window.isRescheduleMode = false;
+    window.rescheduleScheduleId = null;
+    document.querySelectorAll('.pkg-panel').forEach(function (p) { p.classList.add('hide'); });
+    clearTimeout(ui.closeTimer);
+    ui.closeTimer = setTimeout(function () {
+      layer.classList.add('hide');
+      layer.querySelectorAll(':scope > .sheet').forEach(function (s) { s.classList.add('hide'); s.style.transform = ''; });
+      if (ui.lastFocus && ui.lastFocus.focus) try { ui.lastFocus.focus({ preventScroll: true }); } catch (e) {}
+    }, 440);
+    syncBack();
+  };
+
+  // Tarik sheet ke bawah untuk menutup (HP).
+  (function enableSheetDrag() {
+    document.addEventListener('pointerdown', function (e) {
+      const handle = e.target.closest && e.target.closest('.sheet-handle');
+      if (!handle || window.innerWidth >= 768) return;
+      const sheet = handle.closest('.sheet');
+      const layer = sheet && sheet.closest('.layer');
+      if (!sheet || !layer) return;
+      const y0 = e.clientY;
+      let dy = 0;
+      sheet.classList.add('dragging');
+      function move(ev) { dy = Math.max(0, ev.clientY - y0); sheet.style.transform = 'translateY(' + dy + 'px)'; }
+      function up() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        sheet.classList.remove('dragging');
+        if (dy > 110) {
+          if (layer.id === 'modal-confirm') window.closeConfirmModal(); else window.closeModal();
+        } else {
+          sheet.style.transform = '';
+        }
+      }
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    });
+  })();
+
+  // Konfirmasi
+  window.showConfirmModal = function (message, onConfirm, opts) {
+    opts = opts || {};
+    window.confirmCallback = onConfirm;
+    $('confirm-modal-title').textContent = opts.title || 'Yakin?';
+    $('confirm-modal-message').innerHTML = message;
+    const yes = $('btn-confirm-modal-yes'), no = $('btn-confirm-modal-no');
+    yes.textContent = opts.confirmText || 'Ya, lanjutkan';
+    no.textContent = opts.cancelText || 'Batal';
+    const danger = opts.variant === 'danger';
+    yes.className = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
+    const wrap = $('confirm-modal-icon-wrap');
+    wrap.className = 'confirm-icon' + (danger ? ' danger' : '');
+    wrap.innerHTML = icon(opts.icon || (danger ? 'triangle-alert' : 'circle-help'));
+    const layer = $('modal-confirm');
+    clearTimeout(ui.confirmTimer);
+    layer.querySelector('.sheet').style.transform = '';
+    layer.classList.remove('hide');
+    requestAnimationFrame(function () { requestAnimationFrame(function () { layer.classList.add('open'); }); });
+    paintIcons();
+    setTimeout(function () { try { yes.focus({ preventScroll: true }); } catch (e) {} }, 200);
+  };
+  window.closeConfirmModal = function () {
+    const layer = $('modal-confirm');
+    layer.classList.remove('open');
+    clearTimeout(ui.confirmTimer);
+    ui.confirmTimer = setTimeout(function () { layer.classList.add('hide'); layer.querySelector('.sheet').style.transform = ''; }, 440);
+  };
+  window.handleConfirmModalYes = function () {
+    const cb = window.confirmCallback;
+    window.confirmCallback = null;
+    window.closeConfirmModal();
+    if (typeof cb === 'function') cb();
+  };
+
+  // ── Panel detail ────────────────────────────────────────────────────────────
+  function openDetail(key, title, actionsHtml, bodyHtml) {
+    const panel = $('detail-panel');
+    const prevKey = ui.detail;
+    panel.classList.toggle('static', !!ui.refreshing && ui.detail === key);
+    ui.detail = key;
+    panel.setAttribute('data-kind', String(key).split(':')[0]);
+    // PC (>= 1200 px, lewat CSS): di halaman Klien panel jadi lebar dan daftar jadi ringkas. View lain tetap 420 px.
+    clearTimeout(ui.wideTimer);
+    $('app').classList.toggle('detail-wide', window.currentView === 'clients');
+    $('detail-title').textContent = title || '';
+    setHTML('detail-actions', actionsHtml || '');
+    setHTML('detail-body', bodyHtml);
+    staggerIndex(panel);
+    const wasOpen = panel.classList.contains('open');
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+    $('detail-backdrop').classList.add('open');
+    $('app').classList.add('detail-open');
+    if (!wasOpen) ui.detailFocus = document.activeElement;
+    if (!wasOpen || prevKey !== key) $('detail-body').scrollTop = 0;   // pindah klien mulai dari atas
+    highlightSelection();
+    if (!ui.refreshing && window.currentView === 'clients' && /^client:/.test(key)) revealSelected(wasOpen ? 0 : 460);
+    syncBack();
+  }
+  window.closeDetail = function () {
+    const panel = $('detail-panel');
+    if (!panel.classList.contains('open')) return;
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+    $('detail-backdrop').classList.remove('open');
+    $('app').classList.remove('detail-open');
+    // Lepas mode lebar sesudah transisi menutup (--t-slow), supaya isi panel tidak menyempit di tengah animasi.
+    clearTimeout(ui.wideTimer); clearTimeout(ui.revealTimer);
+    ui.wideTimer = setTimeout(function () { if (!panel.classList.contains('open')) $('app').classList.remove('detail-wide'); }, 460);
+    const closedKey = ui.detail;
+    ui.detail = null;
+    ui.cpTab = null;
+    window.selectedScheduleDetailId = null;
+    highlightSelection();
+    let back = ui.detailFocus;
+    // Daftar klien bisa sudah dirender ulang: kembalikan fokus ke kartu yang sama.
+    if (back && !back.isConnected && closedKey) back = document.querySelector('#client-list [data-key="' + String(closedKey).replace(/["\\]/g, '') + '"]');
+    if (back && back.focus) try { back.focus({ preventScroll: true }); } catch (e) {}
+    syncBack();
+  };
+  function refreshDetail() {
+    if (!ui.detail) return;
+    ui.refreshing = true;
+    try { refreshDetailInner(); } finally { ui.refreshing = false; }
+  }
+  function refreshDetailInner() {
+    const parts = ui.detail.split(':'), kind = parts[0], id = parts.slice(1).join(':');
+    if (kind === 'client') {
+      if (window.members.some(m => String(m.id) === id)) window.openProfile(id); else window.closeDetail();
+    } else if (kind === 'coach') {
+      if (window.coaches.some(c => String(c.id) === id)) window.openCoachProfile(id); else window.closeDetail();
+    } else if (kind === 'session') {
+      if (window.schedules.some(s => String(s.id) === id)) window.openScheduleDetail(id); else window.closeDetail();
+    }
+  }
+  function highlightSelection() {
+    const key = ui.detail || '';
+    document.querySelectorAll('[data-key]').forEach(function (el) {
+      el.classList.toggle('selected', el.getAttribute('data-key') === key);
+    });
+  }
+  // PC: setelah daftar berubah jadi ringkas (panel lebar), pastikan klien yang dibuka tetap terlihat di daftar.
+  function revealSelected(delay) {
+    clearTimeout(ui.revealTimer);
+    ui.revealTimer = setTimeout(function () {
+      if (isPhone()) return;
+      const row = document.querySelector('#client-list .selected'), sc = $('main-scroll-area');
+      if (!row || !sc) return;
+      const r = row.getBoundingClientRect(), b = sc.getBoundingClientRect();
+      if (r.top < b.top + 8 || r.bottom > b.bottom - 8) sc.scrollTo({ top: Math.max(0, sc.scrollTop + r.top - b.top - (b.height - r.height) / 2) });
+    }, delay);
+  }
+
+  // Tooltip grafik
+  (function tooltips() {
+    let tip = null;
+    document.addEventListener('pointerover', function (e) {
+      const t = e.target.closest && e.target.closest('[data-tip]');
+      tip = tip || $('chart-tooltip');
+      if (!tip) return;
+      if (!t) { tip.classList.remove('show'); return; }
+      const r = t.getBoundingClientRect();
+      tip.textContent = t.getAttribute('data-tip');
+      tip.style.left = (r.left + r.width / 2) + 'px';
+      tip.style.top = r.top + 'px';
+      tip.classList.add('show');
+    });
+    document.addEventListener('scroll', function () { if (tip) tip.classList.remove('show'); }, true);
+  })();
+
+  // Keyboard: Esc menutup lapisan paling atas, "/" mencari klien.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (!$('modal-confirm').classList.contains('hide')) { window.closeConfirmModal(); return; }
+      if (!$('sheet-layer').classList.contains('hide')) { window.closeModal(); return; }
+      if (ui.wlOn) { window.wlClose(); return; }
+      if ($('detail-panel').classList.contains('open')) { window.closeDetail(); return; }
+    }
+    const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
+    if (e.key === '/' && !typing && window.currentView === 'clients') {
+      const s = $('search-client');
+      if (s) { e.preventDefault(); s.focus(); }
+    }
+    // PC: panah atas/bawah di daftar Klien membuka klien sebelum/sesudahnya (hanya saat fokus di daftar).
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.repeat && !typing && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+        window.currentView === 'clients' && /^client:/.test(ui.detail || '') && !isPhone()) {
+      const a = document.activeElement;
+      const cur = a && a.closest ? a.closest('#client-list [data-key^="client:"]') : null;
+      if (!cur) return;
+      const rows = Array.prototype.slice.call(document.querySelectorAll('#client-list [data-key^="client:"]'));
+      const next = rows[rows.indexOf(cur) + (e.key === 'ArrowDown' ? 1 : -1)];
+      if (!next) return;
+      e.preventDefault();
+      next.focus({ preventScroll: true });
+      ui.detailFocus = next;
+      window.openProfile(next.getAttribute('data-key').slice(7));
+    }
+  });
+
+  // ── Chrome: sidebar, topbar, bar bawah ─────────────────────────────────────
+  const NAV = {
+    admin: [
+      ['dashboard', 'layout-dashboard', 'Dashboard'],
+      ['calendar', 'calendar-days', 'Jadwal'],
+      ['clients', 'users', 'Klien'],
+      ['coaches', 'dumbbell', 'Coach']
+    ],
+    // Sidebar desktop: semua tab. Bar bawah HP (publicTabs): Beranda, Jadwal, [+], Progres, Lainnya.
+    public: [
+      ['public-dashboard', 'house', 'Beranda'],
+      ['calendar', 'calendar-days', 'Jadwal'],
+      ['public-progress', 'trending-up', 'Progres'],
+      ['public-program', 'activity', 'Latihan'],
+      ['public-info', 'megaphone', 'Info & Tips'],
+      ['public-catalog', 'package', 'Paket'],
+      ['public-coaches', 'dumbbell', 'Coach']
+    ]
+  };
+  const PUBLIC_TABS = [
+    ['public-dashboard', 'house', 'Beranda'],
+    ['calendar', 'calendar-days', 'Jadwal'],
+    ['public-progress', 'trending-up', 'Progres'],
+    ['public-more', 'layout-grid', 'Lainnya']
+  ];
+  // Tab "Lainnya" menyala untuk halaman isinya.
+  const MORE_GROUP = ['public-more', 'public-program', 'public-info', 'public-catalog', 'public-coaches', 'public-share'];
+  const TITLES = {
+    'dashboard': 'Dashboard', 'calendar': 'Jadwal', 'clients': 'Klien', 'coaches': 'Coach', 'finance': 'Keuangan', 'settings': 'Pengaturan', 'content': 'Konten',
+    'public-login': 'Masuk member', 'public-dashboard': 'Beranda', 'public-catalog': 'Paket', 'public-coaches': 'Coach',
+    'public-progress': 'Progres', 'public-program': 'Latihan', 'public-info': 'Info & Tips', 'public-more': 'Lainnya', 'public-share': 'Kartu saya'
+  };
+
+  // Menu untuk pengunjung yang belum login: hanya yang boleh dilihat tanpa akun.
+  const GUEST_NAV = [
+    ['public-login', 'log-in', 'Masuk'],
+    ['calendar', 'calendar-days', 'Jadwal'],
+    ['public-catalog', 'package', 'Paket'],
+    ['public-coaches', 'dumbbell', 'Coach']
+  ];
+  function isGuest() { return ui.mode === 'public' && !window.publicLoggedMember; }
+
+  function buildChrome() {
+    ui.chromeGuest = isGuest();
+    const items = ui.chromeGuest ? GUEST_NAV : NAV[ui.mode];
+    const sideItems = items.concat(ui.mode === 'admin' ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
+    setHTML('side-nav', sideItems.map(function (n) {
+      return '<button type="button" class="nav-item" data-view="' + n[0] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
+        icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' +
+        (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="nav-badge hide" id="nav-unread-badge"></span>' : '') + '</button>';
+    }).join(''));
+
+    const foot = ui.mode === 'admin'
+      ? '<button type="button" class="nav-item" data-view="settings" onclick="window.navigate(\'settings\')">' + icon('settings') + '<span class="nav-label">Pengaturan</span></button>'
+      : '<button type="button" class="nav-item" onclick="window.openSettings()">' + icon('sun-moon') + '<span class="nav-label">Tampilan</span></button>' +
+        '<button type="button" class="nav-item" id="side-auth-btn" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>';
+    setHTML('side-foot', foot);
+
+    const t = ui.mode === 'public' && !ui.chromeGuest ? PUBLIC_TABS : items;
+    const tab = function (n) {
+      return '<button type="button" class="tab" data-view="' + n[0] + '"' + (n[0] === 'public-more' ? ' data-group="' + MORE_GROUP.join(' ') + '"' : '') + ' onclick="window.navigate(\'' + n[0] + '\')" aria-label="' + n[2] + '">' +
+        icon(n[1]) + '<span>' + n[2] + '</span>' + (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="tab-dot hide" id="tab-unread-dot"></span>' : '') +
+        (n[0] === 'public-more' ? '<span class="tab-dot-new hide" id="tab-more-new"></span>' : '') + '</button>';
+    };
+    const fab = ui.mode === 'admin'
+      ? '<button type="button" class="tab-fab" id="client-booking-fab" onclick="window.openSheet(\'sheet-quick\')" aria-label="Tambah cepat">' + icon('plus') + '</button>'
+      : '<button type="button" class="tab-fab" id="client-booking-fab" onclick="window.clientPlus()" aria-label="Booking atau mulai latihan">' + icon('plus') + '</button>';
+    setHTML('tabbar', tab(t[0]) + tab(t[1]) + fab + tab(t[2]) + tab(t[3]));
+    renderTopbarActions();
+    renderThemeSeg();
+    finTiles();
+    if (ui.mode === 'public' && window.renderInfoDotsLate) window.renderInfoDotsLate();
+    const sa = $('settings-admin');
+    if (sa) sa.classList.toggle('hide', ui.mode !== 'admin');
+  }
+
+  function renderTopbarActions() {
+    let html = '';
+    if (ui.mode === 'admin') {
+      html += '<button type="button" class="icon-btn" id="notification-btn" onclick="window.openNotificationModal()" aria-label="Booking baru">' + icon('bell') + '<span class="badge-dot hide" id="unread-badge"></span></button>';
+      html += '<button type="button" class="icon-btn only-mobile" onclick="window.openSettings()" aria-label="Pengaturan">' + icon('settings') + '</button>';
+    } else {
+      html += '<button type="button" class="icon-btn only-mobile" onclick="window.openSettings()" aria-label="Tampilan">' + icon('sun-moon') + '</button>';
+      if (!window.publicLoggedMember) html += '<button type="button" class="btn btn-primary btn-sm" id="nav-login-btn" onclick="window.navigate(\'public-login\')">Masuk</button>';
+      else html += '<button type="button" class="icon-btn" id="nav-dashboard-btn" onclick="window.navigate(\'public-dashboard\')" aria-label="Beranda">' + avatar(window.publicLoggedMember.photo, window.publicLoggedMember.name, 'sm') + '</button>';
+    }
+    setHTML('topbar-actions', html);
+    if (ui.mode === 'public' && ui.chromeGuest !== isGuest()) { buildChrome(); return; }
+    const sideAuth = $('side-auth-btn');
+    if (sideAuth) sideAuth.classList.toggle('hide', !window.publicLoggedMember);
+    updateBadges();
+  }
+

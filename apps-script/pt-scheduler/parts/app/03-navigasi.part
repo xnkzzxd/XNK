@@ -1,0 +1,792 @@
+  // ── Navigasi ────────────────────────────────────────────────────────────────
+  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'content', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches', 'public-progress', 'public-program', 'public-info', 'public-more', 'public-share'];
+
+  window.navigate = function (viewId, opts) {
+    opts = opts || {};
+    if (settingsLeaveGuard(viewId, opts)) return;
+    if (viewId === 'profile') viewId = 'clients';
+    if (viewId === 'coach-profile') viewId = 'coaches';
+    const isPub = viewId.indexOf('public-') === 0 || (viewId === 'calendar' && window.isPublicView);
+    if (viewId !== 'calendar') window.isPublicView = isPub;
+    if (['public-dashboard', 'public-progress', 'public-program', 'public-info', 'public-more', 'public-share'].indexOf(viewId) !== -1 && !window.publicLoggedMember) viewId = 'public-login';
+
+    const changed = window.currentView !== viewId;
+    if (viewId === 'settings' && changed) { setState.built = false; setState.pushed = false; if (isPhone()) setState.open = null; }   // muat ulang pengaturan tiap masuk halaman; HP mulai dari daftar
+    VIEWS.forEach(function (v) { const el = $('view-' + v); if (el) el.classList.add('hide'); });
+    const target = $('view-' + viewId);
+    window.currentView = viewId;
+    if (viewId === 'calendar' && window.isPublicView && window.refreshOpenSlots) window.refreshOpenSlots();
+    if (changed && !opts.keepDetail) window.closeDetail();
+    document.title = (TITLES[viewId] ? TITLES[viewId] + ' · ' : '') + 'XNK Personal Training';
+    $('page-title').textContent = TITLES[viewId] || 'XNK';
+
+    document.querySelectorAll('.nav-item[data-view], .tab[data-view]').forEach(function (b) {
+      const group = (b.getAttribute('data-group') || '').split(' ');
+      const active = b.getAttribute('data-view') === viewId || group.indexOf(viewId) !== -1 || (viewId === 'public-login' && b.getAttribute('data-view') === 'public-dashboard');
+      b.classList.toggle('active', active);
+      if (active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+
+    if (target) {
+      target.classList.remove('hide', 'static');
+      if (changed) { target.style.animation = 'none'; void target.offsetWidth; target.style.animation = ''; }
+      renderView(viewId, { animate: true });
+    }
+    if (changed) { const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 }); $('topbar').classList.remove('scrolled'); }
+    updateBadges();
+    syncSettingsBar();
+    syncBack();
+    if (window.wlRenderResume) { window.wlRenderResume(); if (!ui.wlFlushed) { ui.wlFlushed = true; setTimeout(function () { window.wlFlush(); }, 1500); } }
+    if (window.isPublicView && window.guideCheck) window.guideCheck();
+    a2hsMaybe();
+  };
+
+  function renderView(viewId, opts) {
+    const el = $('view-' + viewId);
+    if (!el) return;
+    el.classList.toggle('static', !(opts && opts.animate));
+    try {
+      switch (viewId) {
+        case 'dashboard': renderDashboard(); break;
+        case 'calendar': renderSchedule(); break;
+        case 'clients': renderClients(); break;
+        case 'coaches': renderCoaches(); break;
+        case 'finance': renderFinance(); break;
+        case 'content': renderContentAdmin(); if (!cnt.list || (opts && opts.animate)) window.loadContentAdmin(); break;
+        case 'settings': window.renderSettings(); break;
+        case 'public-login': renderPublicLogin(); break;
+        case 'public-dashboard': window.renderPublicDashboard(); break;
+        case 'public-catalog': renderCatalog(); break;
+        case 'public-coaches': window.renderPublicCoaches(); break;
+        case 'public-progress': renderPublicProgress(); break;
+        case 'public-program': renderPublicProgram(); break;
+        case 'public-info': renderPublicInfo(); break;
+        case 'public-more': renderPublicMore(); break;
+        case 'public-share': renderPublicShare(); break;
+      }
+    } catch (e) {
+      console.error(e);
+      setHTML(el, emptyState('triangle-alert', 'Tampilan gagal dimuat', String(e.message || e)));
+    }
+    staggerIndex(el);
+    highlightSelection();
+  }
+
+  // Render ulang tampilan aktif setelah data berubah (tanpa animasi masuk).
+  window.updateUI = function () {
+    if (window.currentView) renderView(window.currentView, { animate: false });
+    refreshDetail();
+    updateBadges();
+    renderTopbarActions();
+  };
+
+  function emptyState(iconName, title, text, actionHtml) {
+    return '<div class="empty">' + '<span class="empty-icon">' + icon(iconName) + '</span><b>' + h(title) + '</b>' +
+      (text ? '<span>' + h(text) + '</span>' : '') + (actionHtml || '') + '</div>';
+  }
+
+  // ── Fase Q: komponen bersama ───────────────────────────────────────────────
+  function errorState(msg, retryJs) {
+    return emptyState('triangle-alert', 'Gagal memuat', msg || 'Coba lagi sebentar.',
+      retryJs ? '<button type="button" class="btn btn-secondary btn-sm" onclick="' + retryJs + '">Coba lagi</button>' : '');
+  }
+  function pageHead(title, sub, actionsHtml) {
+    return '<div class="page-head"><div><h2 class="page-title">' + h(title) + '</h2>' +
+      (sub ? '<p class="page-sub">' + h(sub) + '</p>' : '') + '</div>' + (actionsHtml || '') + '</div>';
+  }
+  // Satu sumber label status klien: aktif | hampir | habis.
+  function clientStateInfo(m) {
+    const st = clientState(m);
+    if (st === 'empty') return { key: 'habis', label: 'Habis' };
+    if (st === 'low') return { key: 'hampir', label: 'Hampir habis' };
+    return { key: 'aktif', label: 'Aktif' };
+  }
+  function statePillHtml(m) { const i = clientStateInfo(m); return '<span class="state-pill ' + i.key + '">' + h(i.label) + '</span>'; }
+  function flagHtml(text) { return '<span class="flag">' + h(text) + '</span>'; }
+  // Sparkline garis dari daftar angka (SVG, mengikuti currentColor).
+  function sparkHtml(values, cls) {
+    const v = (values || []).map(Number).filter(function (x) { return isFinite(x); });
+    if (v.length < 2) return '';
+    const mn = Math.min.apply(null, v), mx = Math.max.apply(null, v), span = (mx - mn) || 1;
+    const pts = v.map(function (x, i) { return (i / (v.length - 1) * 100).toFixed(1) + ',' + (36 - (x - mn) / span * 32 - 2).toFixed(1); }).join(' ');
+    return '<svg class="' + (cls || 'ih-spark') + '" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true"><polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  // Heatmap harian: levels = daftar 0..4, urut dari yang tertua; kolom = minggu.
+  function heatHtml(levels) {
+    return '<div class="heat-grid" role="img" aria-label="Kalender aktivitas">' + (levels || []).map(function (l) { return '<i data-l="' + (Number(l) || 0) + '"></i>'; }).join('') + '</div>';
+  }
+  // Kartu hitam ringkasan di atas tiap tab.
+  // cfg = { eyebrow, stats:[{v,l,d}], text, spark:[], range:{key,options:[[k,label]],onPick:'js'}, actions:'html', empty:'teks ajakan', emptyAction:'html' }
+  function insightHeroHtml(cfg) {
+    let body;
+    if (cfg.empty) {
+      body = '<p class="ih-empty">' + h(cfg.empty) + '</p>' + (cfg.emptyAction ? '<div class="ih-actions">' + cfg.emptyAction + '</div>' : '');
+    } else {
+      body = (cfg.stats && cfg.stats.length ? '<div class="ih-stats">' + cfg.stats.map(function (x) {
+        const d = x.d ? ' <small>' + h(x.d) + '</small>' : '';
+        return '<div class="ih-stat"><b>' + h(x.v) + d + '</b><span>' + h(x.l) + '</span></div>';
+      }).join('') + '</div>' : '') +
+        (cfg.spark ? sparkHtml(cfg.spark) : '') +
+        (cfg.text ? '<p class="ih-text">' + h(cfg.text) + '</p>' : '') +
+        (cfg.actions ? '<div class="ih-actions">' + cfg.actions + '</div>' : '');
+    }
+    const r = cfg.range;
+    const range = r ? '<div class="ih-range" role="group">' + r.options.map(function (o) {
+      return '<button type="button" class="' + (o[0] === r.key ? 'on' : '') + '" onclick="' + r.onPick.replace('%k', o[0]) + '">' + h(o[1]) + '</button>';
+    }).join('') + '</div>' : '';
+    if (cfg.slim) {
+      // Ramping: satu baris (judul + kalimat | angka | tombol) untuk halaman yang isinya sedikit.
+      const st = cfg.stats && cfg.stats.length ? '<div class="ih-stats">' + cfg.stats.map(x => '<div class="ih-stat"><b>' + h(x.v) + (x.d ? ' <small>' + h(x.d) + '</small>' : '') + '</b><span>' + h(x.l) + '</span></div>').join('') + '</div>' : '';
+      return '<section class="card-ink insight-hero slim"><div class="ih-main"><span class="ih-eyebrow">' + h(cfg.eyebrow || '') + '</span>' + (cfg.text ? '<p class="ih-text">' + h(cfg.text) + '</p>' : '') + '</div>' + st +
+        (cfg.actions ? '<div class="ih-actions">' + cfg.actions + '</div>' : '') + '</section>';
+    }
+    return '<section class="card-ink insight-hero' + (cfg.empty ? ' is-empty' : '') + '"><div class="ih-head"><span class="ih-eyebrow">' + h(cfg.eyebrow || '') + '</span>' + range + '</div>' + body + '</section>';
+  }
+  // Tile angka (label kecil, angka besar, catatan) dan bagian lipat (accordion).
+  function mtileHtml(k, v, n, warn) {
+    return '<div class="mtile"><span class="k">' + h(k) + '</span><b class="v num">' + h(v) + '</b>' + (n ? '<span class="n' + (warn ? ' warn' : '') + '">' + h(n) + '</span>' : '') + '</div>';
+  }
+  function foldHtml(title, meta, body, open, metaId) {
+    return '<details class="fold"' + (open ? ' open' : '') + '><summary><span class="fold-t">' + h(title) + '</span><span class="fold-m"' + (metaId ? ' id="' + metaId + '"' : '') + '>' + h(meta || '') + '</span>' +
+      '<span class="fold-chev" aria-hidden="true">' + icon('chevron-down') + '</span></summary><div class="fold-body">' + body + '</div></details>';
+  }
+
+  // ── Loader & start ──────────────────────────────────────────────────────────
+  // Layar awal tampil minimal sebentar supaya peralihannya terasa disengaja
+  // (bukan kedip): bar penuh dulu, lalu layar memudar sementara isi naik.
+  const SPLASH_MIN = 700, splashAt = performance.now();
+  let splashLeaving = false;
+  window.hideGlobalLoader = function (fast) {
+    const el = $('global-loader');
+    if (!el || splashLeaving || el.classList.contains('gone')) return;
+    splashLeaving = true;
+    // fast = layar sudah bisa diisi dari salinan di perangkat: tidak perlu menahan layar awal.
+    const wait = fast ? 0 : Math.max(0, SPLASH_MIN - (performance.now() - splashAt));
+    setTimeout(function () {
+      el.classList.add('done');
+      setTimeout(function () {
+        const app = $('app');
+        if (app) { app.classList.remove('reveal'); void app.offsetWidth; app.classList.add('reveal'); }
+        el.classList.add('gone');
+        splashLeaving = false;
+      }, 280);
+    }, wait);
+  };
+  window.showGlobalLoader = function () {
+    const el = $('global-loader');
+    if (el) el.classList.remove('gone', 'done');
+  };
+
+  window.onload = function () {
+    if (!$('main-scroll-area')) return;
+    paintIcons();
+    initPullRefresh();
+    const start = function (params) {
+      params = params || {};
+      if (params.view === 'public' || (window.XNK_CONFIG && window.XNK_CONFIG.site === 'client')) {
+        ui.mode = 'public';
+        window.isPublicView = true;
+        document.documentElement.classList.add('portal');   // judul halaman pindah ke top bar
+        buildChrome();
+        window.startPublicPortal(params.k);
+      } else {
+        ui.mode = 'admin';
+        buildChrome();
+        window.startAdminPanel();
+      }
+    };
+    if (typeof google !== 'undefined' && google.script && google.script.url) {
+      google.script.url.getLocation(function (loc) { start(loc.parameter || {}); });
+    } else {
+      const p = {};
+      new URLSearchParams(location.search).forEach(function (v, k) { p[k] = v; });
+      start(p);
+    }
+  };
+
+  // ── Tombol back Android ─────────────────────────────────────────────────────
+  // Tiap lapisan yang terbuka (halaman selain beranda, panel detail, sheet)
+  // memegang satu entri riwayat. Back menutup lapisan paling atas; di beranda
+  // tanpa lapisan, back keluar dari aplikasi seperti biasa.
+  const bk = { n: 0, silent: false };
+  function bkIsHome(v) { return v === 'dashboard' || v === 'public-dashboard' || v === 'public-login' || !v; }
+  function bkLevels() {
+    const panel = $('detail-panel');
+    return (bkIsHome(window.currentView) ? 0 : 1)
+      + (panel && panel.classList.contains('open') ? 1 : 0)
+      + (ui.sheetOn ? 1 : 0)
+      + (ui.wlOn ? 1 : 0)
+      + (ui.guideOn ? 1 : 0);
+  }
+  function syncBack() {
+    if (!isPhone() || !window.history || !history.pushState) return;
+    const want = bkLevels();
+    try {
+      while (bk.n < want) { history.pushState({ xnkBk: bk.n + 1 }, ''); bk.n++; }
+      if (bk.n > want) {
+        const k = bk.n - want;
+        bk.n = want; bk.silent = true;
+        setTimeout(function () { bk.silent = false; }, 600);
+        history.go(-k);
+      }
+    } catch (e) {}
+  }
+  window.syncBack = syncBack;
+  window.addEventListener('popstate', function () {
+    if (bk.silent) { bk.silent = false; return; }
+    if (setState.subPop) { setState.subPop = false; return; }
+    if (!isPhone() || bk.n === 0) return;
+    bk.n--;
+    const panel = $('detail-panel');
+    if (ui.guideOn) window.guideClose();
+    else if (ui.sheetOn) window.closeModal();
+    else if (ui.wlOn) window.wlClose();
+    else if (panel && panel.classList.contains('open')) window.closeDetail();
+    else if (!bkIsHome(window.currentView)) window.navigate(window.isPublicView ? 'public-dashboard' : 'dashboard');
+    syncBack();
+  });
+
+  // ── Tarik ke bawah untuk muat ulang ─────────────────────────────────────────
+  window.refreshAll = function () {
+    if (ui.pulling) return Promise.resolve();
+    ui.pulling = true;
+    window._freshMore = true;   // tarik-untuk-segarkan: getAdminMore melewati cache server
+    const job = window.isPublicView ? window.loadPublicData() : window.loadAllData();
+    return Promise.resolve(job).catch(function () {}).then(function () { ui.pulling = false; });
+  };
+  function initPullRefresh() {
+    const sc = $('main-scroll-area');
+    if (!sc || sc._ptr) return;
+    sc._ptr = true;
+    const el = document.createElement('div');
+    el.className = 'ptr'; el.setAttribute('aria-hidden', 'true');
+    el.innerHTML = '<div class="ptr-dot"><svg class="ptr-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="14"></circle></svg>' +
+      '<span class="ptr-ico ptr-arrow">' + icon('arrow-down') + '</span><span class="ptr-ico ptr-check">' + icon('check') + '</span></div>';
+    document.body.appendChild(el); paintIcons();
+    const TRIGGER = 64, HOLD = 60, MAX = 150, MIN_SPIN = 700;
+    let y0 = null, x0 = 0, dy = 0, top = 0, armed = false, locked = false, busy = false;
+    const vibrate = function () { try { if (navigator.vibrate) navigator.vibrate(10); } catch (e) {} };
+    // Indikator berada di celah yang terbuka di atas isi halaman.
+    const place = function (y, p) {
+      const size = 0.6 + 0.4 * Math.min(1, y / 40);
+      el.style.opacity = Math.max(0, Math.min(1, (y - 6) / 26));
+      el.style.transform = 'translate3d(0,' + (top + y / 2 - 18) + 'px,0) scale(' + size + ')';
+      el.style.setProperty('--off', String(88 * (1 - p)));
+    };
+    const move = function (y, animate) {
+      sc.style.transition = animate ? 'transform 440ms var(--ease-out)' : 'none';
+      sc.style.transform = y ? 'translate3d(0,' + y + 'px,0)' : '';
+    };
+    const moveEl = function (y, p, animate) {
+      el.style.transition = animate ? 'transform 440ms var(--ease-out), opacity 300ms var(--ease)' : 'none';
+      place(y, p);
+    };
+    const blocked = function () { return !isPhone() || busy || ui.pulling || setState.dirty || bkLevels() > (bkIsHome(window.currentView) ? 0 : 1); };
+    const reset = function () {
+      move(0, true); moveEl(0, 0, true);
+      setTimeout(function () {
+        if (busy || y0 !== null) return;
+        sc.style.transition = ''; sc.style.willChange = '';
+        el.className = 'ptr'; el.style.opacity = ''; el.style.transform = ''; el.style.transition = '';
+      }, 460);
+    };
+    sc.addEventListener('touchstart', function (e) {
+      y0 = null;
+      if (sc.scrollTop > 0 || e.touches.length !== 1 || blocked()) return;
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; armed = false; locked = false;
+      top = sc.getBoundingClientRect().top;
+    }, { passive: true });
+    sc.addEventListener('touchmove', function (e) {
+      if (y0 === null) return;
+      const d = e.touches[0].clientY - y0, dx = e.touches[0].clientX - x0;
+      if (!locked) {
+        if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(d)) { y0 = null; return; }   // gerak menyamping: bukan tarikan
+        if (d < 4) return;
+        locked = true; sc.style.willChange = 'transform';
+      }
+      if (sc.scrollTop > 0) return;
+      dy = d <= 0 ? 0 : MAX * (1 - Math.exp(-d / (MAX * 1.1)));
+      move(dy, false); moveEl(dy, Math.min(1, dy / TRIGGER), false);
+      const now = dy >= TRIGGER;
+      if (now !== armed) { armed = now; el.classList.toggle('armed', armed); if (armed) vibrate(); }
+    }, { passive: true });
+    const end = function () {
+      if (y0 === null) return;
+      const go = locked && armed;
+      y0 = null; locked = false;
+      if (!go) { armed = false; el.classList.remove('armed'); reset(); return; }
+      busy = true; el.classList.remove('armed'); el.classList.add('spinning');
+      move(HOLD, true); moveEl(HOLD, 1, true);
+      const t0 = performance.now();
+      window.refreshAll().then(function () {
+        const wait = Math.max(0, MIN_SPIN - (performance.now() - t0));
+        setTimeout(function () {
+          el.classList.remove('spinning'); el.classList.add('ok');
+          setTimeout(function () { busy = false; reset(); }, 520);
+        }, wait);
+      });
+    };
+    sc.addEventListener('touchend', end, { passive: true });
+    sc.addEventListener('touchcancel', end, { passive: true });
+  }
+
+  // ── Auth admin ─────────────────────────────────────────────────────────────
+  window.startAdminPanel = function () {
+    if (!hasServer()) { window.hideGlobalLoader(); window.navigate('dashboard'); window.showToast('Mode pratinjau: data tidak dimuat.', 'info'); return; }
+    if (!_lsGet(ADMIN_TOKEN_KEY)) { window.showAdminLogin(); return; }
+    // Tanpa cek sesi terpisah: kalau token sudah tidak berlaku, panggilan data
+    // gagal dengan AUTH_REQUIRED dan layar login muncul (onAdminAuthLost).
+    if (loadAdminCache()) {
+      ui.dataReady = true;
+      window.hideGlobalLoader();
+      window.navigate('dashboard');
+    }
+    window.loadAllData().catch(function (err) {
+      if (!window.isAuthError(err)) window.showAdminLogin('Gagal terhubung: ' + err.message);
+    });
+  };
+
+  window.showAdminLogin = function (message) {
+    window.hideGlobalLoader();
+    const box = $('admin-login'), err = $('admin-login-error');
+    box.classList.remove('hide');
+    if (message) { err.textContent = message; err.classList.remove('hide'); } else { err.classList.add('hide'); }
+    paintIcons();
+    setTimeout(function () { try { $('admin-pin').focus(); } catch (e) {} }, 100);
+  };
+
+  window.onAdminAuthLost = function (err) {
+    if (window.isPublicView) return;
+    _lsSet(ADMIN_TOKEN_KEY, null); clearAdminCache();
+    window.members = []; window.schedules = []; window.memberArchive = []; window.taskSummary = {}; window.clientSignals = null;
+    window.showAdminLogin(window.authMessage(err));
+  };
+
+  window.handleAdminLogin = function (e) {
+    if (e) e.preventDefault();
+    const pin = $('admin-pin').value.trim();
+    const err = $('admin-login-error');
+    if (!pin) { $('admin-pin').focus(); return; }
+    const done = busy($('admin-login-btn'), 'Memeriksa…');
+    rpc('adminLogin', [pin])
+      .then(function (res) {
+        // Tombol tetap "Memeriksa…" sampai data siap: satu loading saja.
+        _lsSet(ADMIN_TOKEN_KEY, res.token);
+        window.loadAllData().then(function () {
+          done();
+          $('admin-pin').value = '';
+          err.classList.add('hide');
+          if (_lsGet(ADMIN_TOKEN_KEY)) $('admin-login').classList.add('hide');
+        });
+      }, function (e2) {
+        done();
+        err.textContent = window.authMessage(e2);
+        err.classList.remove('hide');
+        const f = $('admin-login').querySelector('form');
+        f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake');
+        $('admin-pin').select();
+      });
+  };
+
+  window.submitChangePin = function (e) {
+    e.preventDefault();
+    const oldPin = $('pin-old').value, newPin = $('pin-new').value;
+    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    adminCall('changeAdminPin', oldPin, newPin).then(function (res) {
+      done();
+      _lsSet(ADMIN_TOKEN_KEY, res.token);
+      $('pin-old').value = ''; $('pin-new').value = '';
+      window.closeModal();
+      window.showToast('PIN diganti. Perangkat lain perlu login ulang.');
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+
+  window.logoutCurrent = function () {
+    if (ui.mode === 'public') { window.closeModal(); window.logoutPublic(); return; }
+    window.showConfirmModal('Kamu akan keluar dari panel di perangkat ini.', function () {
+      window.closeModal();
+      _lsSet(ADMIN_TOKEN_KEY, null); clearAdminCache();
+      window.members = []; window.schedules = []; window.memberArchive = []; window.taskSummary = {}; window.clientSignals = null;
+      window.closeDetail();
+      window.showAdminLogin();
+    }, { title: 'Keluar dari panel?', confirmText: 'Keluar', icon: 'log-out' });
+  };
+  window.openAdminProfileMenu = window.openSettings;
+
+  // ── Data ───────────────────────────────────────────────────────────────────
+  function normalizeSchedules(list) {
+    return (list || []).map(function (s) { s.status = String(s.status || '').toLowerCase(); return s; });
+  }
+
+  // Salinan terakhir data panel (hanya di perangkat admin) supaya panel langsung
+  // terisi saat dibuka; data segar menyusul di belakang layar.
+  const ADMIN_CACHE_KEY = 'xnk_admin_cache';
+  function saveAdminCache() {
+    try {
+      _lsSet(ADMIN_CACHE_KEY, JSON.stringify({
+        members: window.members, schedules: window.schedules, coaches: window.coaches,
+        priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || []
+      }));
+    } catch (e) {}
+    window.offlineSnapSoon();
+  }
+  function loadAdminCache() {
+    try {
+      const c = JSON.parse(_lsGet(ADMIN_CACHE_KEY) || 'null');
+      if (!c || !Array.isArray(c.members) || !Array.isArray(c.schedules)) return false;
+      window.members = c.members;
+      window.schedules = normalizeSchedules(c.schedules);
+      window.coaches = c.coaches || [];
+      window.priceListData = c.priceList || [];
+      window.taskSummary = c.taskSummary || {};
+      window.renewals = c.renewals || [];
+      return true;
+    } catch (e) { return false; }
+  }
+  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); }
+
+  // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
+  // dan omzet menyusul setelah layar tampil.
+  // Daftar semua coach (aktif & nonaktif) untuk layar Tim coach; window.coaches hanya yang aktif.
+  window.coachesAll = [];
+  window.coachSelfId = '';
+  function applyCoachesAdmin(res) {
+    window.coachesAll = res.coaches || [];
+    window.coachSelfId = res.selfId || '';
+    window.coaches = window.coachesAll.filter(function (c) { return c.aktif; });
+  }
+  // E2: jam kosong dari mesin slot server (jam operasional, jam kerja & cuti coach, kapasitas),
+  // dikirim lewat getPortalBootstrap. Kalau gagal, panel jam memakai hitungan lama di publicDayPanel.
+  // Jam yang sudah lewat atau coach libur dicatat 0 (tidak bisa dipilih). openSlotsAt = kapan data ini diterima;
+  // tanggal yang tidak ada di peta (lewat batas booking) tampil "Belum dibuka".
+  window.openSlotsByDate = null;
+  window.openSlotsAt = 0;
+  window.bookingHorizonDays = 21;
+  window.rescheduleCutoffHours = null;
+  function applyOpenSlots(rows) {
+    if (!Array.isArray(rows)) return;
+    const map = {};
+    rows.forEach(function (d) {
+      if (!d || !d.date) return;
+      const f = {};
+      (d.hours || []).forEach(function (x) { f[x.hour] = (x.off || x.past) ? 0 : (Number(x.free) || 0); });
+      map[d.date] = f;
+    });
+    window.openSlotsByDate = map;
+    window.openSlotsAt = Date.now();
+  }
+  // Dua coach aktif atau lebih: jam kosong per coach (klien pilih coach dulu, baru jam). Aturan sama dengan
+  // applyOpenSlots (lewat / libur = 0); openSlotsAtByCoach = kapan data coach itu diterima (aturan 2 menit).
+  window.openSlotsByCoachMap = {};
+  window.openSlotsAtByCoach = {};
+  function applyOpenSlotsForCoach(coachId, rows) {
+    if (!Array.isArray(rows)) return;
+    const m = {};
+    rows.forEach(function (d) {
+      if (!d || !d.date) return;
+      const f = {};
+      (d.hours || []).forEach(function (x) { f[x.hour] = (x.off || x.past) ? 0 : (Number(x.free) || 0); });
+      m[d.date] = f;
+    });
+    window.openSlotsByCoachMap[coachId] = m;
+    window.openSlotsAtByCoach[coachId] = Date.now();
+  }
+  function applyOpenSlotsByCoach(by) {
+    if (!by) return;
+    Object.keys(by).forEach(function (id) { applyOpenSlotsForCoach(id, by[id]); });
+  }
+  // Klien dengan 2 coach aktif atau lebih: coach yang dipilih untuk booking ('' = solo / belum dipilih).
+  const slotCoach = () => (window.isPublicView && !window.isSoloCoach() && window.coaches.length > 1) ? String(ui.bookCoach || '') : '';
+  const slotsAtNow = () => { const c = slotCoach(); return c ? (window.openSlotsAtByCoach[c] || 0) : window.openSlotsAt; };
+  window.loadAllData = function () {
+    const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
+    // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
+    return safe(adminCall('getAdminBootstrap')).then(function (b) {
+      if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
+      const r = b ? [b.members, b.schedules, b.coaches, b.priceList, b.businessHours] : [];
+      // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
+      if (r[0]) window.members = r[0];
+      if (r[1]) window.schedules = normalizeSchedules(r[1]);
+      if (r[2]) applyCoachesAdmin(r[2]);
+      if (r[3]) window.priceListData = r[3];
+      if (r[4]) Object.assign(DAY_HOURS, r[4]);
+      ui.dataReady = true;
+      window.hideGlobalLoader();
+      if (r[0] && r[1]) saveAdminCache();
+      window.offlineSync();
+      loadAdminExtras();
+      if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
+    });
+  };
+
+  // Fase K2: satu panggilan untuk semua data susulan (riwayat, PR, perpanjangan, keuangan/omzet, tren paket, hub).
+  // Pustaka statis (gerakan + animasi, peta otot, makanan) disimpan di perangkat sekali setelah layar pertama, supaya cari,
+  // catat, figur gerakan dan peta otot tetap jalan tanpa sinyal (T-1614). Panel coach juga, tanpa pustaka makanan.
+  function warmLibs(portal) {
+    if (ui.libsWarm) return;
+    ui.libsWarm = true;
+    setTimeout(function () {
+      if (navigator.onLine === false) return;
+      exEnsure().catch(function () {});   // juga rigEnsure (animasi gerakan)
+      figEnsure();
+      if (portal && nutOn()) foodEnsure().catch(function () {});
+    }, 4000);
+  }
+  // Pengaturan dimuat saat halamannya dibuka.
+  function loadAdminExtras() {
+    const freshMore = !!window._freshMore; window._freshMore = false;
+    warmLibs(false);
+    const now = new Date();
+    const mo = now.getMonth() + 1, yr = now.getFullYear();
+    ui.revenue = null; window._trendCache = {};
+    window._morePending = adminCall('getAdminMore', mo, yr, freshMore).then(function (b) {
+      if (!_lsGet(ADMIN_TOKEN_KEY) || !b) return;
+      const ok = v => v && !v.error;
+      if (ok(b.transactionLog)) window.memberArchive = b.transactionLog;
+      if (ok(b.taskSummary)) window.taskSummary = b.taskSummary;
+      if (ok(b.signals)) window.clientSignals = b.signals;   // data tubuh: hanya di memori, tidak masuk xnk_admin_cache
+      if (ok(b.renewals)) window.renewals = b.renewals;
+      if (ok(b.finance)) finApplySettings(b.finance);
+      if (b.shareEnabled === false || b.shareEnabled === true) window.shareOn = b.shareEnabled;
+      if (ok(b.packageTrend)) { window._trendCache = window._trendCache || {}; window._trendCache[mo + '-' + yr] = b.packageTrend; }
+      if (ok(b.hub)) { window._hub = b.hub; window._hubAt = Date.now(); }
+      if (ok(b.memberVers)) { window.memberVers = b.memberVers; window.memberVersAt = Date.now(); }   // versi data per klien (salinan halaman klien)
+      ui.revenue = ok(b.revenue) ? b.revenue : { error: true };
+      renderRevenueKpi();
+      window.updateUI();
+      saveAdminCache();
+    }).catch(function (err) { if (!window.isAuthError(err)) console.warn(err); ui.revenue = { error: true }; renderRevenueKpi(); });
+  }
+
+  // Muat ulang ringkasan PR (pill di daftar klien). Dipanggil setelah PR berubah.
+  window.refreshTaskSummary = function () {
+    return adminCall('getTaskSummary').then(function (res) {
+      window.taskSummary = res || {};
+      if (window.updateMemberUI) window.updateMemberUI();
+    }).catch(function (err) { if (!window.isAuthError(err)) console.warn(err); });
+  };
+
+  window.loadPublicData = function () {
+    const token = _lsGet(MEMBER_TOKEN_KEY);
+    window.members = []; window.memberArchive = [];
+    // Salinan terakhir di perangkat (hanya saat aplikasi baru dibuka): layar langsung terisi, data segar menyusul.
+    const cached = !!token && !ui.dataReady && loadPortalCache(token);
+    let sigBefore = '';
+    if (cached) {
+      sigBefore = portalSig();
+      ui.dataReady = true;
+      window._openMemberDashboard = false;
+      window.hideGlobalLoader(true);
+      window.navigate(window.currentView && window.currentView !== 'public-login' ? window.currentView : 'public-dashboard');
+    }
+    // Panggilan 1: profil, jadwalku, jam kosong, coach, paket (cepat). Panggilan 2 (getPortalMore, data sisanya): tanpa salinan
+    // langsung bersamaan; dengan salinan hanya bila versi data di bootstrap berbeda (moreUpToDate).
+    const boot = publicCall('getPortalBootstrap', token).catch(function () { return null; });
+    const haveMore = cached && !!portalMoreRaw;
+    if (token && !haveMore) setTimeout(function () { window.refreshPortalMore(true); }, 0);
+    return boot.then(function (b) {
+      b = b || {};
+      applyPortalBootstrap(b);
+      if (token && haveMore && !b.authLost) { if (!moreUpToDate(b)) window.refreshPortalMore(true); else window.wlFlush(); }
+      window.coaches = b.coaches || [];
+      window.priceListData = b.priceList || [];
+      if (b.businessHours) Object.assign(DAY_HOURS, b.businessHours);
+      if (token && b.authLost) window.onMemberAuthLost(new Error(b.authLost));
+      else if (token && b.profile) window.setPublicMember(b.profile);
+      ui.dataReady = true;
+      window.hideGlobalLoader();
+      if (cached) {
+        // Sudah tampil dari salinan: gambar ulang hanya bila ada yang berubah (tanpa loncat).
+        window._openMemberDashboard = false;
+        if (portalSig() !== sigBefore) window.updateUI();
+      } else if (window._openMemberDashboard && window.publicLoggedMember) {
+        window._openMemberDashboard = false;
+        window.navigate('public-dashboard');
+      } else if (!window.currentView) {
+        window.navigate(window.publicLoggedMember ? 'public-dashboard' : 'public-login');
+      } else {
+        window.updateUI();
+      }
+      savePortalCache();
+      window.offlineSync();
+      openPendingSlot();
+      // Pustaka gerakan & makanan disimpan di perangkat lebih awal, supaya cari & catat tetap jalan tanpa sinyal.
+      if (token) warmLibs(true);
+    });
+  };
+
+  // ── Salinan portal di perangkat + satu panggilan "more" (Fase K) ───────────────────────────────
+  // Hanya data klien itu sendiri. Dibersihkan saat keluar atau sesi habis. Kunci memuat sidik token, jadi akun lain tidak
+  // pernah melihat salinan ini. Jam kosong tidak disimpan (selalu dari server).
+  const PORTAL_CACHE_KEY = 'xnk_portal_cache';
+  const tokenSig = t => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
+  let portalMoreRaw = null, portalMoreInflight = null, portalMoreAt = 0;
+  const MORE_MAX_AGE = 6 * 3600000;   // batas aman: salinan lebih tua dari 6 jam selalu disegarkan
+  // Salinan "more" masih sama dengan server: versi sama, hari (WIB) sama, belum 6 jam, dan tidak ada tulisan sendiri sejak itu.
+  function moreUpToDate(b) {
+    const m = portalMoreRaw;
+    // Salinan dari versi aplikasi lama tanpa bagian baru (mis. programGen, 2026-11) selalu disegarkan sekali.
+    return !!(m && m.ver && 'programGen' in m && b && b.moreVer && m.ver === b.moreVer && m.day === wkToday() && portalMoreAt && Date.now() - portalMoreAt < MORE_MAX_AGE);
+  }
+  // Tulis-terus: hasil simpan langsung masuk salinan di perangkat (buka lagi = langsung tampil, tanpa memuat).
+  // Versi dikosongkan supaya ringkasan (insight, minggu ini) dihitung ulang sekali di belakang layar saat buka berikutnya.
+  function patchMore(part, value, keepVer) {
+    if (!portalMoreRaw || value == null) return;
+    portalMoreRaw[part] = value;
+    if (!keepVer) portalMoreRaw.ver = '';
+    savePortalCache();
+  }
+  window.patchPortalMore = patchMore;
+  function portalSig() { return JSON.stringify([window.publicLoggedMember, window.schedules, window.coaches, window.priceListData]); }
+  function savePortalCache() {
+    const token = _lsGet(MEMBER_TOKEN_KEY);
+    if (!token || !window.publicLoggedMember) return;
+    try {
+      _lsSet(PORTAL_CACHE_KEY, JSON.stringify({
+        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules, coaches: window.coaches,
+        priceList: window.priceListData, hours: DAY_HOURS, horizon: window.bookingHorizonDays, cutoff: window.rescheduleCutoffHours,
+        infoLatest: window.infoLatest || '', feedback: window.myFeedback ? { enabled: window.myFeedback.enabled, pending: window.myFeedback.pending, pkgEval: window.myFeedback.pkgEval } : null,
+        more: portalMoreRaw, moreAt: portalMoreAt
+      }));
+    } catch (e) {}
+    offlineSnapSoon();
+  }
+  window.clearPortalCache = function () {
+    window.offlineClear();
+    if (window.wlForget) window.wlForget('client');
+    if (window.fqForget) window.fqForget();
+    _lsSet(PORTAL_CACHE_KEY, null);
+    portalMoreRaw = null; portalMoreInflight = null; portalMoreAt = 0;
+    window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; window.myBills = undefined;
+    window.myProgram = undefined; window.myInsight = undefined; window.myWeek = undefined; window.myNutrition = undefined; window.myProgramGen = undefined; window.myContent = undefined; window.myCoachStatus = undefined; pg.data = null; myCare.form = null; myCare.assess = null;
+  };
+  function loadPortalCache(token) {
+    try {
+      const c = JSON.parse(_lsGet(PORTAL_CACHE_KEY) || 'null');
+      if (!c || c.v !== 1 || c.th !== tokenSig(token) || !c.profile || !Array.isArray(c.schedules)) { if (c) _lsSet(PORTAL_CACHE_KEY, null); return false; }
+      window.publicLoggedMember = c.profile;
+      window.schedules = normalizeSchedules(c.schedules);
+      window.coaches = c.coaches || [];
+      window.priceListData = c.priceList || [];
+      if (c.hours) Object.assign(DAY_HOURS, c.hours);
+      if (c.horizon) window.bookingHorizonDays = c.horizon;
+      if (c.cutoff != null) window.rescheduleCutoffHours = c.cutoff;
+      window.infoLatest = c.infoLatest || '';
+      window.myFeedback = Object.assign({ enabled: true, pending: null, pkgEval: false }, c.feedback || {}, { stars: 0, scheduleId: '' });
+      if (c.more) { applyPortalMore(c.more, true); portalMoreAt = Number(c.moreAt) || 0; }
+      renderTopbarActions();
+      return true;
+    } catch (e) { return false; }
+  }
+  const moreBad = v => !!v && typeof v === 'object' && !Array.isArray(v) && typeof v.error === 'string' && Object.keys(v).length === 1;
+  const moreErr = v => String(v.error);
+  // Terapkan jawaban getPortalMore ke state portal, lalu gambar ulang hanya bagian yang sedang tampil.
+  function applyPortalMore(m, fromCache) {
+    if (!m || typeof m !== 'object') return;
+    portalMoreRaw = m;
+    if (Array.isArray(m.tasks)) window.myTasks = { list: m.tasks, state: 'ok' };
+    else if (m.tasks && moreBad(m.tasks) && !(window.myTasks && window.myTasks.state === 'ok')) window.myTasks = { list: [], state: 'error', error: moreErr(m.tasks) };
+    if (m.progress && !moreBad(m.progress)) pg.data = m.progress;
+    else if (m.progress && !pg.data) pg.data = { error: moreErr(m.progress), entries: [], photos: [] };
+    if (m.healthForm !== undefined) myCare.form = moreBad(m.healthForm) ? myCare.form : m.healthForm;
+    if (m.assessment !== undefined) myCare.assess = moreBad(m.assessment) ? myCare.assess : m.assessment;
+    if (m.renewal !== undefined && !moreBad(m.renewal)) window.myRenewal = m.renewal || null;
+    if (Array.isArray(m.bills)) window.myBills = m.bills;
+    if (m.classGroup !== undefined && !moreBad(m.classGroup)) window.myGroup = m.classGroup || null;
+    if (m.meal !== undefined && !moreBad(m.meal)) window.myMeal = { state: 'ok', data: m.meal || { core: false }, day: todayKey() };
+    else if (m.meal && !window.myMeal) window.myMeal = { state: 'error', error: moreErr(m.meal) };
+    if (m.workout && !moreBad(m.workout)) window.myWorkout = { state: 'ok', data: m.workout };
+    if (m.program && !moreBad(m.program)) window.myProgram = { state: 'ok', data: m.program };
+    else if (m.program && !window.myProgram) window.myProgram = { state: 'error', error: moreErr(m.program) };
+    if (Array.isArray(m.content)) window.myContent = { state: 'ok', list: m.content, at: Date.now() };
+    else if (m.content && !window.myContent) window.myContent = { state: 'error', error: moreErr(m.content), list: [] };
+    if (m.nutrition && !moreBad(m.nutrition)) window.myNutrition = m.nutrition;
+    if (m.programGen && !moreBad(m.programGen)) window.myProgramGen = m.programGen;
+    if (m.coachStatus && !moreBad(m.coachStatus)) window.myCoachStatus = m.coachStatus;
+    if (m.share && !moreBad(m.share)) window.myShare = m.share;
+    if (m.insight) window.myInsight = m.insight;
+    if (m.week) window.myWeek = m.week;
+    renderPortalParts();
+    if (!fromCache && pg.data && !pg.data.error) pgCelebrate(pg.data);
+  }
+  // Gambar ulang kartu yang sedang ada di layar (elemen yang tidak tampil dilewati).
+  function renderPortalParts() {
+    renderMyTasksCard(); pgRenderCard(); renderRenewSlot(); renderBillSlot(); renderClassSlot(); renderMyMealCard(); renderProgramCard(); renderWorkoutCard(); renderTodayWorkout(); renderCoachStatusChip();
+    wlRenderResume(); window.wlFlush(); window.fqFlush(); renderMakan(); renderInsight();
+    const care = $('pub-care-wrap'); if (care) { care.innerHTML = myCareInner(); }
+    const tests = $('pub-tests-wrap'); if (tests) { tests.innerHTML = myTestsInner(); }
+    const info = $('pub-info-wrap'); if (info) { setHTML(info, infoInner()); if (window.currentView === 'public-info') markInfoSeen(); }
+    paintIcons();
+  }
+  // Satu panggilan untuk semua data sisa. Panggilan yang bersamaan digabung; sebelum 20 detik tidak diulang kecuali dipaksa.
+  window.refreshPortalMore = function (force) {
+    if (!_lsGet(MEMBER_TOKEN_KEY)) return Promise.resolve();
+    if (portalMoreInflight) return portalMoreInflight;
+    if (!force && portalMoreAt && Date.now() - portalMoreAt < 20000) return Promise.resolve();
+    portalMoreInflight = memberCall('getPortalMore').then(function (m) { if (!m || typeof m !== 'object') throw new Error('Server tidak mengirim data.'); portalMoreAt = Date.now(); applyPortalMore(m, false); savePortalCache(); })
+      .catch(function (err) {
+        if (window.isAuthError && window.isAuthError(err)) return;
+        // Tidak ada data sama sekali: kartu menampilkan "Coba lagi" (bukan skeleton selamanya).
+        [['myTasks', { list: [], state: 'error' }], ['myProgram', { state: 'error' }], ['myContent', { list: [], state: 'error' }]].forEach(function (p) { if (!window[p[0]]) window[p[0]] = Object.assign({ error: String((err && err.message) || err) }, p[1]); });
+        renderPortalParts();
+      })
+      .then(function () { portalMoreInflight = null; });
+    return portalMoreInflight;
+  };
+  // Kembali ke aplikasi setelah lama: segarkan diam-diam (bukan saat pindah tab).
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    if (!window.isPublicView || !window.publicLoggedMember || !hiddenAt || Date.now() - hiddenAt < 120000) return;
+    hiddenAt = 0;
+    window.refreshPortalSchedules().then(function (b) {
+      window.updateUI(); savePortalCache();
+      if (!moreUpToDate(b)) window.refreshPortalMore(true);
+    }).catch(function () { window.refreshPortalMore(true); });
+  });
+
+  // Jadwalku + jam kosong dari getPortalBootstrap (jadwal klien lain tidak pernah dikirim ke browser).
+  function applyPortalBootstrap(b) {
+    window.schedules = normalizeSchedules(b.schedules);
+    if (b.horizonDays) window.bookingHorizonDays = b.horizonDays;
+    if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
+    if (b.openSlots) applyOpenSlots(b.openSlots);
+    applyOpenSlotsByCoach(b.openSlotsByCoach);
+    window.infoLatest = (b.info && b.info.latestAt) || '';
+    renderInfoDots();
+    window.shareOn = b.shareEnabled !== false;
+    window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
+    if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
+  }
+  window.refreshPortalSchedules = function () {
+    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b); savePortalCache(); return b; });
+  };
+
+  // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form
+  // booking dengan tanggal & jam itu. Dipakai sekali lalu dihapus.
+  function openPendingSlot() {
+    if (!window.isPublicView || !window.publicLoggedMember) return;
+    const raw = _lsGet(PENDING_SLOT_KEY);
+    if (!raw) return;
+    _lsSet(PENDING_SLOT_KEY, null);
+    let slot = null;
+    try { slot = JSON.parse(raw); } catch (e) { return; }
+    if (!slot || !/^\d{4}-\d{2}-\d{2}$/.test(slot.date) || !/^\d{2}:\d{2}$/.test(slot.time)) return;
+    if (slot.at && Date.now() - Number(slot.at) > 30 * 60000) return;   // pilihan lama dari Landing (> 30 menit)
+    const p = slot.date.split('-').map(Number);
+    if (!(wibAt(slot.date, slot.time) > new Date())) return;
+    if (slot.coachId && window.coaches.some(c => String(c.id) === String(slot.coachId))) ui.bookCoach = String(slot.coachId);
+    ui.selectedDate = new Date(p[0], p[1] - 1, p[2]);
+    ui.calMonth = new Date(p[0], p[1] - 1, 1);
+    window.navigate('calendar');
+    window.bookSlot(slot.date, slot.time);
+  }
+
+  function loadRevenue() {
+    const now = new Date();
+    ui.revenue = null;
+    const call = finOn() ? adminCall('getFinanceOverview', now.getMonth() + 1, now.getFullYear()).then(function (o) { return { fin: true, o: o }; })
+      : adminCall('getRevenueSummary', now.getMonth() + 1, now.getFullYear()).then(function (res) { return res || { total: 0, count: 0 }; });
+    call.then(function (r) { ui.revenue = r; renderRevenueKpi(); }).catch(function () { ui.revenue = { error: true }; renderRevenueKpi(); });
+  }
+

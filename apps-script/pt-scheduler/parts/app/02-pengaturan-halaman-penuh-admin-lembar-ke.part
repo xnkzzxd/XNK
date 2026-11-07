@@ -1,0 +1,791 @@
+  // ── Pengaturan: halaman penuh (admin) + lembar kecil (klien) ────────────────
+  window.openSettings = function () {
+    if (ui.mode === 'admin') { window.navigate('settings'); return; }
+    renderThemeSeg();
+    const lo = $('settings-logout');
+    if (lo) lo.classList.toggle('hide', ui.mode === 'public' && !window.publicLoggedMember);
+    openSheet('sheet-settings');
+    moveSegThumb($('theme-seg'));
+  };
+
+  const SET_SECTIONS = [
+    ['tampilan', 'sun-moon', 'Tampilan'],
+    ['paket', 'package', 'Paket & Harga'],
+    ['pengingat', 'bell', 'Pengingat Klien'],
+    ['notifikasi', 'send', 'Notifikasi Admin'],
+    ['jam', 'calendar-clock', 'Jam Operasional'],
+    ['keuangan', 'wallet', 'Keuangan'],
+    ['latihan', 'dumbbell', 'Latihan & Alat'],
+    ['keamanan', 'lock', 'Keamanan'],
+    ['akun', 'user-plus', 'Akun']
+  ];
+  const SET_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const SET_NUM = {
+    loginMaxFails: { label: 'Batas gagal login admin', min: 1, max: 1000 },
+    loginLockSeconds: { label: 'Lama kunci (detik)', min: 10, max: 86400 },
+    memberLoginMaxFails: { label: 'Batas nomor WA tak dikenal', min: 1, max: 1000 },
+    adminSessionDays: { label: 'Lama sesi admin (hari)', min: 1, max: 365 },
+    rescheduleCutoffHours: { label: 'Batas ganti jadwal klien (jam sebelum sesi)', min: 0, max: 72 }
+  };
+  // Jenis pengingat: sama dengan REMINDER_JOBS di Reminder.gs
+  const SET_RMD_JOBS = [
+    { id: 'sesi-besok', title: 'Sesi besok', sub: 'Tombol WhatsApp ke tiap klien yang punya sesi besok (tiap hari)' },
+    { id: 'booking-minggu', title: 'Booking Minggu', sub: 'Ajakan booking + 3 slot kosong terdekat ke tiap klien (tiap Minggu)' },
+    { id: 'pr', title: 'PR (Task)', sub: 'Tombol WhatsApp ke klien dengan PR telat, jatuh tempo hari ini/besok (tiap hari)' },
+    { id: 'makan-pagi', title: 'Makan pagi', sub: 'Tip makan pagi untuk semua klien aktif. Butuh tip aktif di sheet MealTips.' },
+    { id: 'makan-sore', title: 'Makan sore', sub: 'Tip makan sore untuk semua klien aktif. Butuh tip aktif di sheet MealTips.' },
+    { id: 'rekap-bulanan', title: 'Rekap bulanan', sub: 'Tanggal 1 tiap bulan: sesi, perubahan berat/pinggang, dan streak bulan lalu' },
+    { id: 'selamat-milestone', title: 'Selamat milestone', sub: 'Tiap hari: klien yang baru meraih badge (10/25/50/100 sesi, streak 4/8/12 minggu)' },
+    { id: 'waktunya-ukur', title: 'Waktunya ukur', sub: 'Tiap dua minggu (Senin): klien yang belum mencatat berat/pinggang 14 hari' },
+    { id: 'tes-ulang', title: 'Tes ulang', sub: 'Tiap Senin: klien yang tes kebugaran terakhirnya 28 hari lalu atau lebih' },
+    { id: 'hidup-sehat', title: 'Hidup sehat', sub: 'Tiap pagi (bawaan 05:00): tombol WhatsApp ajakan hidup sehat dan cardio untuk semua klien aktif' },
+    { id: 'ulang-tahun', title: 'Ulang tahun', sub: 'Tiap hari: tombol WhatsApp ucapan untuk klien yang berulang tahun' },
+    { id: 'tagihan', title: 'Tagihan', sub: 'Tiap hari: klien yang belum lunas lebih dari 3 hari, dengan tombol WhatsApp. Butuh Keuangan aktif.' },
+    { id: 'ringkasan-owner', title: 'Ringkasan bulanan (untukmu)', sub: 'Tanggal 1: satu pesan Telegram berisi sesi, klien baru, pendapatan, dan hasil target bulan lalu' }
+  ];
+  const setState = { data: null, open: null, snap: {}, dirty: false, built: false, pushed: false, forcePop: false, status: null, log: null, onlyFailed: false, saving: false };
+  const isPhone = function () { return !(window.matchMedia && window.matchMedia('(min-width: 768px)').matches); };
+
+  // Nilai tampil untuk kolom angka: sama dengan bawaan = kosong (placeholder "Bawaan …")
+  function setNumValue(name) {
+    const d = setState.data;
+    return d[name] === d.defaults[name] ? '' : d[name];
+  }
+  function setField(label, inner, key, hint) {
+    return '<div class="field" data-fk="' + h(key) + '"><label class="label" for="set-' + h(key) + '">' + h(label) + '</label>' + inner +
+      '<p class="hint">' + (hint ? h(hint) : '') + '</p><p class="hint err-msg" role="alert"></p></div>';
+  }
+  function setNumField(name) {
+    const f = SET_NUM[name];
+    const inner = '<div class="input-affix"><input class="input" type="number" inputmode="numeric" min="' + f.min + '" max="' + f.max + '" id="set-' + name + '" data-k="' + name + '" value="' + h(setNumValue(name)) + '" placeholder="Bawaan ' + h(setState.data.defaults[name]) + '">' +
+      '<button type="button" class="link-btn reset-link" onclick="window.settingsReset(\'' + name + '\')">Bawaan</button></div>';
+    return setField(f.label, inner, name, '');
+  }
+  function setToggleCard(key, title, sub, checked) {
+    return '<div class="row-between"><div><p class="li-title">' + h(title) + '</p>' + (sub ? '<p class="li-sub">' + h(sub) + '</p>' : '') + '</div>' +
+      '<label class="toggle"><input type="checkbox" data-k="' + h(key) + '" aria-label="' + h(title) + '"' + (checked ? ' checked' : '') + '><span></span></label></div>';
+  }
+
+  const SET_RENDER = {
+    tampilan: function () {
+      return '<div class="card-flat stack"><span class="label">Tema tampilan</span><div class="seg" id="theme-seg-2" role="radiogroup" aria-label="Tema"></div>' +
+        '<p class="hint">Tersimpan di perangkat ini saja.</p></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Panduan klien baru</p><p class="li-sub">Layar gelap yang menunjukkan tombol yang perlu diklik di portal, untuk klien yang baru daftar.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-client-guide" onchange="window.setClientGuide(this)" aria-label="Panduan klien baru"' + (setState.data.clientGuideEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Klien lama dan yang perpanjang tidak melihat panduan.</p></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Penilaian sesi &amp; evaluasi paket</p><p class="li-sub">Klien menilai sesi yang baru selesai (bintang) dan mengisi evaluasi saat sisa sesi 0.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-feedback" onchange="window.setFeedback(this)" aria-label="Penilaian sesi dan evaluasi paket"' + (setState.data.feedbackEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Komentar hanya terlihat olehmu di halaman klien.</p></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Kartu bagikan</p><p class="li-sub">Klien dan coach bisa membuat gambar latihan, progres, dan gizi (PNG transparan) untuk Story dan WhatsApp.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-share" onchange="window.setShare(this)" aria-label="Kartu bagikan"' + (setState.data.shareEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Gambar dibuat di HP dan tidak diunggah.</p>' +
+        '<div class="field"><label class="label" for="set-share-qr">Alamat kode QR di kartu</label><div class="row" style="gap:8px"><input class="input grow" id="set-share-qr" type="url" inputmode="url" autocomplete="off" maxlength="200" placeholder="' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '" value="' + h(setState.data.shareQrUrl || '') + '">' +
+        '<button type="button" class="btn btn-outline" onclick="window.setShareQr(this)">Simpan</button></div><p class="hint">QR mati bawaan; klien menyalakannya sendiri di kartu. Kosong = ' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '.</p></div></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Gizi &amp; catat makan</p><p class="li-sub">Segmen Makan di portal klien: target kalori, menu harian, dan catatan makan. Pengingat makan ikut memuat target kalori.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-nutrition" onchange="window.setNutrition(this)" aria-label="Gizi dan catat makan"' + (setState.data.nutritionEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Dimatikan = segmen Makan hilang untuk semua klien; data tetap tersimpan. Per klien bisa dimatikan di tab Gizi.</p></div>';
+    },
+    notifikasi: function () {
+      const d = setState.data;
+      return '<div class="card-flat stack">' + setToggleCard('tgEnabled', 'Notifikasi Telegram', 'Kirim update booking & laporan ke Telegram', d.telegramEnabled) + '</div>' +
+        '<div class="form-grid">' +
+        setField('Token Bot Telegram', '<input class="input" type="password" id="set-tgToken" data-k="tgToken" autocomplete="off" placeholder="' + h(d.telegramBotTokenMask || 'Belum diisi') + '">' +
+          (d.telegramBotTokenMask ? '<button type="button" class="link-btn" style="align-self:flex-start" onclick="window.settingsClearToken()">Hapus token tersimpan</button>' : ''),
+          'tgToken', d.telegramBotTokenMask ? 'Kosongkan = tetap pakai token yang tersimpan.' : '') +
+        setField('Chat ID Telegram', '<input class="input" type="text" id="set-tgChat" data-k="tgChat" autocomplete="off" inputmode="numeric" placeholder="111111, 222222" value="' + h(d.telegramChatIds) + '">', 'tgChat', 'Pisahkan dengan koma kalau lebih dari satu.') +
+        '<button type="button" class="btn btn-outline btn-block" id="btn-telegram-test" onclick="window.sendTelegramTest()">' + icon('send') + ' Kirim pesan tes</button>' +
+        setField('Email Notifikasi', '<input class="input" type="email" id="set-email" data-k="email" autocomplete="off" placeholder="Kosongkan = email pemilik akun" value="' + h(d.notifEmail) + '">', 'email', '') +
+        '</div>';
+    },
+    jam: function () {
+      const d = setState.data;
+      let rows = '';
+      for (let i = 0; i < 7; i++) {
+        const r = (d.businessHours && d.businessHours[i]) || [0, 0];
+        rows += '<div class="hours-row" data-fk="hours' + i + '"><span class="hours-day">' + SET_DAYS[i] + '</span>' +
+          '<input class="input num" type="number" inputmode="numeric" min="0" max="24" data-k="h' + i + 's" aria-label="' + SET_DAYS[i] + ' jam buka" value="' + h(r[0]) + '">' +
+          '<span class="hours-sep" aria-hidden="true">–</span>' +
+          '<input class="input num" type="number" inputmode="numeric" min="0" max="24" data-k="h' + i + 'e" aria-label="' + SET_DAYS[i] + ' jam tutup" value="' + h(r[1]) + '">' +
+          '<p class="hint err-msg" role="alert"></p></div>';
+      }
+      return '<div class="card-flat stack"><p class="li-sub">Jam buka dan tutup (0–24). Dipakai halaman booking, portal klien, dan peta jam sibuk.</p>' + rows + '</div>';
+    },
+    keamanan: function () {
+      return '<form class="stack" onsubmit="window.submitChangePin(event)"><div class="form-grid">' +
+        '<div class="field"><label class="label" for="pin-old">PIN lama</label><input class="input" type="password" id="pin-old" inputmode="numeric" autocomplete="current-password" required></div>' +
+        '<div class="field"><label class="label" for="pin-new">PIN baru (min. 6 karakter)</label><input class="input" type="password" id="pin-new" inputmode="numeric" autocomplete="new-password" minlength="6" required></div>' +
+        '</div><p class="hint">Mengganti PIN membuat semua perangkat lain keluar dari panel.</p>' +
+        '<button type="submit" class="btn btn-outline btn-block">' + icon('lock') + ' Ganti PIN</button></form>' +
+        '<div class="group-label"><span>Batas &amp; sesi</span></div><div class="form-grid">' +
+        setNumField('loginMaxFails') + setNumField('loginLockSeconds') + setNumField('memberLoginMaxFails') + setNumField('adminSessionDays') + setNumField('rescheduleCutoffHours') + '</div>';
+    },
+    keuangan: function () { return finSettingsHtml(); },
+    latihan: function () { return exAliasHtml(); },
+    akun: function () {
+      return '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
+        '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>';
+    },
+    paket: function () { return '<div class="stack" id="pkg-root">' + pkgHtml() + '</div>'; },
+    pengingat: function () {
+      const r = setState.data.reminder || { enabled: false, tplSleep: '', jobs: {} };
+      let html = '<div class="card-flat stack">' + setToggleCard('rmdEnabled', 'Pengingat otomatis', 'Digest ke Telegram Coach: booking, PR, makan, dan tidur', r.enabled) +
+        '<p class="hint">Butuh Telegram aktif dan trigger terpasang. Mati = perilaku lama.</p>' +
+        '<div class="stack" id="rmd-status">' + rmdStatusHtml() + '</div></div>';
+      SET_RMD_JOBS.forEach(function (j) {
+        const job = (r.jobs && r.jobs[j.id]) || { enabled: false, hour: '', defaultHour: '' };
+        html += '<div class="card-flat stack">' + setToggleCard('job-' + j.id + '-enabled', j.title, j.sub, job.enabled !== false) +
+          '<details class="rmd-acc" id="rmd-acc-' + j.id + '"' + (rmdOpen[j.id] ? ' open' : '') + ' ontoggle="window.rmdAccT(\'' + j.id + '\',this.open)"><summary>' + icon('chevron-down') + '<span>Jam, pesan &amp; tes</span><span class="rmd-acc-hint">' + h(job.hour === '' ? '' : String(job.hour).padStart(2, '0') + ':00') + '</span></summary><div class="rmd-acc-body">' +
+          setField('Jam kirim (WIB, 0–23)', '<div class="input-affix"><input class="input" type="number" inputmode="numeric" min="0" max="23" id="set-job-' + j.id + '-hour" data-k="job-' + j.id + '-hour" value="' + h(job.hour === job.defaultHour ? '' : job.hour) + '" placeholder="Bawaan ' + h(job.defaultHour) + ':00">' +
+            '<button type="button" class="link-btn reset-link" onclick="window.settingsReset(\'job-' + j.id + '-hour\')">Bawaan</button></div>', 'job-' + j.id + '-hour', '') +
+          '<button type="button" class="btn btn-outline btn-block" onclick="window.sendReminderTest(\'' + j.id + '\', this)">' + icon('send') + ' Kirim tes ' + h(j.title) + '</button>' +
+          rmdTemplateHtml(j, job) + '</div></details></div>';
+      });
+      html += '<div class="card-flat stack">' +
+        setField('Kalimat tidur (reminder malam)', '<textarea class="textarea" id="set-tplSleep" data-k="tplSleep" rows="2" maxlength="300" placeholder="Kosongkan = tidak ditambahkan">' + h(r.tplSleep) + '</textarea>', 'tplSleep', 'Ditambahkan ke email & Telegram jadwal besok pada run malam saja. Simpan dulu sebelum kirim tes.') +
+        '<button type="button" class="btn btn-outline btn-block" onclick="window.sendReminderTest(\'tidur\', this)">' + icon('send') + ' Kirim tes kalimat tidur</button></div>';
+      html += '<div class="group-label"><span>Riwayat</span></div><div class="card-flat stack">' +
+        '<div class="row-between"><div><p class="li-title">Hanya yang gagal</p><p class="li-sub">Saring riwayat pengingat</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="rmd-log-failed" onchange="window.settingsLoadLog()"' + (setState.onlyFailed ? ' checked' : '') + ' aria-label="Hanya yang gagal"><span></span></label></div>' +
+        '<div class="list" id="rmd-log">' + rmdLogHtml() + '</div></div>';
+      return html;
+    }
+  };
+
+  // Accordion per jenis pengingat: yang terbuka tetap terbuka setelah simpan/render ulang
+  const rmdOpen = {};
+  window.rmdAccT = function (id, open) { if (open) rmdOpen[id] = true; else delete rmdOpen[id]; };
+
+  // Template pesan ke klien + pratinjau (dari server, jadi sama persis dengan isi tombol WhatsApp)
+  function rmdTemplateHtml(j, job) {
+    const ph = (job.placeholders || []).map(function (k) { return '{' + k + '}'; }).join(' ');
+    return '<div class="group-label"><span>Pesan ke klien</span></div>' +
+      (job.variasi ? '<p class="li-sub">Teks berganti tiap hari (hari kerja, akhir pekan, Ramadan) dari sheet <b>PesanVariasi</b>. Pesan di bawah hanya dipakai bila sheet itu kosong.</p>' : '') +
+      setField('Isi pesan', '<textarea class="textarea" id="set-job-' + j.id + '-tpl" data-k="job-' + j.id + '-tpl" data-default="' + h(job.tplDefault || '') + '" rows="5" maxlength="600" autocapitalize="sentences">' + h(job.tpl || job.tplDefault || '') + '</textarea>' +
+        '<button type="button" class="link-btn" style="align-self:flex-start" onclick="window.settingsResetTpl(\'' + j.id + '\')">Kembalikan pesan bawaan</button>',
+        'job-' + j.id + '-tpl', 'Bisa dipakai: ' + ph) +
+      '<p class="li-sub">Pratinjau (contoh data)</p><div class="wa-preview"><div class="wa-bubble" id="pv-' + j.id + '" aria-live="polite">…</div></div>';
+  }
+  window.settingsResetTpl = function (jobId) {
+    const el = $('set-job-' + jobId + '-tpl');
+    if (!el) return;
+    el.value = el.getAttribute('data-default') || '';
+    onSettingsEdit();
+  };
+  const rmdPreviewTimers = {}, rmdPreviewSeq = {};
+  function rmdPreview(jobId) {
+    const el = $('set-job-' + jobId + '-tpl'), out = $('pv-' + jobId);
+    if (!el || !out) return;
+    const seq = (rmdPreviewSeq[jobId] = (rmdPreviewSeq[jobId] || 0) + 1);   // abaikan jawaban lama kalau pengguna sudah mengetik lagi
+    adminCall('previewReminderText', jobId, el.value).then(function (r) {
+      if (seq !== rmdPreviewSeq[jobId]) return;
+      out.textContent = r.text;
+      out.classList.remove('wa-error');
+    }).catch(function (err) {
+      if (seq !== rmdPreviewSeq[jobId]) return;
+      out.textContent = window.authMessage(err);
+      out.classList.add('wa-error');
+    });
+  }
+  function rmdPreviewAll() { SET_RMD_JOBS.forEach(function (j) { rmdPreview(j.id); }); }
+  function rmdSchedulePreview(target) {
+    const k = target && target.getAttribute && target.getAttribute('data-k');
+    const m = k && /^job-(.+)-tpl$/.exec(k);
+    if (!m) return;
+    clearTimeout(rmdPreviewTimers[m[1]]);
+    rmdPreviewTimers[m[1]] = setTimeout(function () { rmdPreview(m[1]); }, 350);
+  }
+
+  function rmdStatusHtml() {
+    const s = setState.status;
+    if (!s) return '<span class="li-sub">Memuat status…</span>';
+    const last = s.lastTickAt ? ' · tick terakhir ' + fmtShort(new Date(s.lastTickAt)) : '';
+    let html = '<div class="row-between"><span class="li-sub"><span class="status-dot ' + (s.triggerInstalled ? 'ok' : 'warn') + '"></span> ' +
+      h(s.triggerInstalled ? 'Trigger terpasang' + last : 'Trigger belum terpasang') + '</span>' +
+      '<button type="button" class="btn btn-outline btn-sm" onclick="window.settingsInstallTrigger(this)">' + (s.triggerInstalled ? 'Pasang ulang' : 'Pasang') + '</button></div>';
+    if (!s.telegramReady) html += '<span class="li-sub"><span class="status-dot warn"></span> Telegram belum siap (token, Chat ID, atau saklar).</span>';
+    return html;
+  }
+  function rmdLogHtml() {
+    if (!setState.log) return '<span class="li-sub">Memuat riwayat…</span>';
+    if (!setState.log.length) return '<span class="li-sub">Belum ada riwayat.</span>';
+    return setState.log.map(function (r) {
+      const ok = r.hasil === 'ok';
+      return '<div class="list-item"><div style="min-width:0"><p class="li-title truncate">' + h(r.jenis) + ' · ' + h(r.target) + '</p><p class="li-sub">' + h(r.slot) + '</p></div>' +
+        '<span class="li-trail"><span class="pill' + (ok ? '' : ' dashed') + '">' + (ok ? 'Terkirim' : 'Gagal') + '</span></span></div>';
+    }).join('');
+  }
+
+  function setSectionStatus(id) {
+    const d = setState.data;
+    if (!d) return '';
+    switch (id) {
+      case 'tampilan': return ({ system: 'Otomatis', light: 'Terang', dark: 'Gelap' })[currentTheme()] || '';
+      case 'paket': return pkgState.data ? pkgState.data.packages.filter(function (p) { return p.aktif; }).length + ' paket aktif' : '';
+      case 'pengingat': return (d.reminder && d.reminder.enabled ? 'Aktif' : 'Mati') + (setState.status ? (setState.status.triggerInstalled ? ' · trigger terpasang' : ' · trigger belum terpasang') : '');
+      case 'notifikasi': return d.telegramEnabled ? (d.telegramBotTokenMask ? 'Telegram aktif' : 'Telegram: token belum diisi') : 'Telegram mati';
+      case 'jam': return 'Buka ' + Object.keys(d.businessHours || {}).length + ' hari';
+      case 'keamanan': return 'Sesi ' + d.adminSessionDays + ' hari';
+      case 'keuangan': return d.finance && d.finance.enabled ? 'Aktif' : 'Mati';
+      default: return '';
+    }
+  }
+  function settingsNavHtml() {
+    return SET_SECTIONS.map(function (s) {
+      return '<button type="button" class="settings-nav-item' + (setState.open === s[0] ? ' active' : '') + '" data-section="' + s[0] + '" onclick="window.settingsOpen(\'' + s[0] + '\')">' +
+        '<span class="sn-ic">' + icon(s[1]) + '</span><span class="sn-txt"><b>' + s[2] + '</b><small>' + h(setSectionStatus(s[0])) + '</small></span>' + icon('chevron-right', 'class="sn-chev"') + '</button>';
+    }).join('');
+  }
+
+  // ── Paket & Harga (Pengaturan → bagian "paket") ─────────────────────────────
+  // Berbeda dengan bagian lain, tiap aksi di sini langsung tersimpan (tidak ada bar simpan).
+  const pkgState = { data: null, cat: '__all', showInactive: false, reorder: false, editing: null, benefits: [], menuId: null };
+
+  function pkgList() {
+    if (!pkgState.data) return [];
+    return pkgState.data.packages.filter(function (p) {
+      if (pkgState.cat !== '__all' && p.kategori !== pkgState.cat) return false;
+      return pkgState.showInactive || pkgState.reorder || p.aktif;
+    });
+  }
+  function pkgFind(id) {
+    return pkgState.data ? pkgState.data.packages.filter(function (p) { return p.id === id; })[0] : null;
+  }
+  function pkgCatLabel(id) {
+    const c = pkgState.data && pkgState.data.categories.filter(function (x) { return x.id === id; })[0];
+    return c ? c.label : id;
+  }
+  function pkgUsageText(p) {
+    const u = p.usage || { activeMembers: 0, logEntries: 0 };
+    return u.activeMembers + ' klien';
+  }
+
+  function pkgHtml() {
+    const d = pkgState.data;
+    if (!d) return '<span class="li-sub">Memuat paket…</span>';
+    const chips = [['__all', 'Semua']].concat(d.categories.map(function (c) { return [c.id, c.label]; })).map(function (c) {
+      const n = d.packages.filter(function (p) { return (c[0] === '__all' || p.kategori === c[0]) && p.aktif; }).length;
+      return '<button type="button" class="chip' + (pkgState.cat === c[0] ? ' active' : '') + '" data-cat="' + h(c[0]) + '" onclick="window.pkgSetCat(\'' + h(c[0]) + '\')">' + h(c[1]) + ' <span class="chip-count">' + n + '</span></button>';
+    }).join('');
+    const canReorder = pkgState.cat !== '__all';
+    let html = '<div class="chips" id="pkg-chips" role="tablist" aria-label="Kategori paket">' + chips + '</div>' +
+      '<div class="row-between"><div><p class="li-title">Tampilkan nonaktif</p><p class="li-sub">Paket yang disembunyikan dari halaman booking</p></div>' +
+      '<label class="toggle"><input type="checkbox" id="pkg-show-inactive" onchange="window.pkgToggleInactive(this)"' + (pkgState.showInactive ? ' checked' : '') + ' aria-label="Tampilkan nonaktif"><span></span></label></div>' +
+      '<div class="pkg-toolbar"><button type="button" class="btn btn-dark" id="pkg-add" onclick="window.pkgEdit(null)">' + icon('plus') + ' Paket</button>' +
+      '<button type="button" class="btn btn-outline" id="pkg-reorder-btn" onclick="window.pkgToggleReorder()"' + (canReorder ? '' : ' disabled') + '>' + (pkgState.reorder ? icon('check') + ' Selesai' : icon('repeat') + ' Urutkan') + '</button></div>' +
+      (canReorder ? '' : '<p class="hint">Pilih satu kategori untuk mengubah urutan.</p>');
+    const list = pkgList();
+    if (!list.length) {
+      html += '<div class="empty"><span class="empty-icon">' + icon('package') + '</span><b>Belum ada paket</b><span>' + (d.packages.length ? 'Tidak ada paket aktif di kategori ini. Nyalakan "Tampilkan nonaktif" untuk melihat semuanya.' : 'Tambahkan paket pertama dengan tombol + Paket.') + '</span></div>';
+      return html;
+    }
+    html += '<div class="list" id="pkg-list">' + list.map(function (p, i) {
+      const meta = (p.tipe === 'kelas' ? 'Kelas ' + p.kapasitas + ' kursi · ' : '') + (p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '') + ' · ' + pkgUsageText(p);
+      const right = pkgState.reorder
+        ? '<button type="button" class="icon-btn plain" aria-label="Naikkan ' + h(p.namaPaket) + '"' + (i === 0 ? ' disabled' : '') + ' onclick="window.pkgMove(\'' + h(p.id) + '\', -1)">' + icon('chevron-up') + '</button>' +
+          '<button type="button" class="icon-btn plain" aria-label="Turunkan ' + h(p.namaPaket) + '"' + (i === list.length - 1 ? ' disabled' : '') + ' onclick="window.pkgMove(\'' + h(p.id) + '\', 1)">' + icon('chevron-down') + '</button>'
+        : '<label class="toggle"><input type="checkbox" data-pkg="' + h(p.id) + '" onchange="window.pkgToggle(\'' + h(p.id) + '\', this)"' + (p.aktif ? ' checked' : '') + ' aria-label="Aktif: ' + h(p.namaPaket) + '"><span></span></label>' +
+          '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(p.namaPaket) + '" onclick="window.pkgMenu(\'' + h(p.id) + '\')">' + icon('ellipsis') + '</button>';
+      return '<div class="list-item pkg-row' + (p.aktif ? '' : ' pkg-inactive') + '" data-pkg-row="' + h(p.id) + '">' +
+        '<button type="button" class="pkg-main" onclick="window.pkgEdit(\'' + h(p.id) + '\')"' + (pkgState.reorder ? ' disabled' : '') + '>' +
+        '<span class="li-title truncate" style="display:block">' + h(p.namaPaket) + (p.aktif ? '' : ' <span class="pill dashed">Nonaktif</span>') + '</span>' +
+        '<span class="li-sub num" style="display:block;font-weight:700">' + h(formatRp(p.harga)) + '</span>' +
+        '<span class="li-sub" style="display:block">' + h(pkgCatLabel(p.kategori) + ' · ' + meta) + '</span></button>' +
+        '<span class="li-trail">' + right + '</span></div>';
+    }).join('') + '</div>';
+    return html;
+  }
+  function pkgRefreshView() {
+    const el = $('pkg-root');
+    if (el) { el.innerHTML = pkgHtml(); paintIcons(); }
+    refreshSettingsNav();
+  }
+  function pkgLoad() {
+    return adminCall('getPriceListAdmin').then(function (d) { pkgState.data = d; pkgRefreshView(); })
+      .catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); });
+  }
+  // Setelah perubahan: form klien, katalog portal, dan pilihan paket ikut yang terbaru tanpa muat ulang.
+  function pkgRefreshPublic() {
+    return publicCall('getPriceList').then(function (r) { window.priceListData = r || []; }).catch(function () {});
+  }
+  function pkgAfterChange() {
+    return Promise.all([pkgLoad(), pkgRefreshPublic()]);
+  }
+
+  window.pkgSetCat = function (cat) { pkgState.cat = cat; if (cat === '__all') pkgState.reorder = false; pkgRefreshView(); };
+  window.pkgToggleInactive = function (el) { pkgState.showInactive = !!el.checked; pkgRefreshView(); };
+  window.pkgToggleReorder = function () { pkgState.reorder = !pkgState.reorder; pkgRefreshView(); };
+
+  window.pkgToggle = function (id, el) {
+    const want = !!el.checked;
+    el.disabled = true;
+    adminCall('setPackageActive', id, want).then(function () {
+      window.showToast(want ? 'Paket ditampilkan.' : 'Paket disembunyikan.');
+      return pkgAfterChange();
+    }).catch(function (err) {
+      el.checked = !want; el.disabled = false;
+      window.showToast('Gagal: ' + window.authMessage(err));
+    });
+  };
+
+  window.pkgMove = function (id, dir) {
+    const list = pkgList();
+    const i = list.findIndex(function (p) { return p.id === id; });
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    const all = pkgState.data.packages;
+    const a = all.indexOf(list[i]), b = all.indexOf(list[j]);
+    const tmp = all[a]; all[a] = all[b]; all[b] = tmp;
+    pkgRefreshView();
+    const ids = pkgList().map(function (p) { return p.id; });
+    adminCall('reorderPackages', pkgState.cat, ids).then(pkgRefreshPublic).catch(function (err) {
+      window.showToast('Gagal mengurutkan: ' + window.authMessage(err));
+      pkgLoad();
+    });
+  };
+
+  window.pkgMenu = function (id) {
+    const p = pkgFind(id);
+    if (!p) return;
+    pkgState.menuId = id;
+    const u = p.usage || { activeMembers: 0, logEntries: 0 };
+    const used = u.activeMembers > 0 || u.logEntries > 0;
+    $('pkg-menu-title').textContent = p.namaPaket;
+    const del = $('pkg-menu-delete');
+    del.disabled = used;
+    $('pkg-menu-delete-note').textContent = used ? 'Dipakai ' + u.activeMembers + ' klien / ' + u.logEntries + ' transaksi. Nonaktifkan saja.' : '';
+    openSheet('sheet-pkg-menu');
+  };
+  window.pkgMenuAction = function (action) {
+    const id = pkgState.menuId;
+    window.closeModal();
+    if (!id) return;
+    setTimeout(function () {
+      if (action === 'edit') window.pkgEdit(id);
+      else if (action === 'dup') window.pkgEdit(null, id);
+      else if (action === 'delete') window.pkgDelete(id);
+    }, 480);
+  };
+  window.pkgDelete = function (id) {
+    const p = pkgFind(id);
+    if (!p) return;
+    window.showConfirmModal('Paket <b>' + h(p.namaPaket) + '</b> dihapus permanen. Ini tidak bisa dibatalkan.', function () {
+      adminCall('deletePackage', id).then(function () { window.showToast('Paket dihapus.'); return pkgAfterChange(); })
+        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus paket?', confirmText: 'Hapus', variant: 'danger' });
+  };
+
+  // Editor paket (lembar bawah; penuh tinggi di HP)
+  function pkgFmtPrice(digits) {
+    const s = String(digits || '').replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+  window.pkgFormatPrice = function (el) { el.value = pkgFmtPrice(el.value); };
+  window.pkgFlexChange = function () {
+    const flex = $('pkg-flex').checked, s = $('pkg-sessions');
+    if (flex) s.value = '';
+    s.disabled = flex;
+  };
+  window.pkgClassChange = function () {
+    $('pkg-class-fields').classList.toggle('hide', !$('pkg-class').checked);
+  };
+  function pkgRenderBenefits() {
+    $('pkg-benefits').innerHTML = pkgState.benefits.map(function (b, i) {
+      return '<span class="chip">' + h(b) + '<button type="button" class="chip-x" aria-label="Hapus ' + h(b) + '" onclick="window.pkgRemoveBenefit(' + i + ')">' + icon('x') + '</button></span>';
+    }).join('');
+    paintIcons();
+  }
+  window.pkgAddBenefit = function () {
+    const inp = $('pkg-benefit-input');
+    const v = inp.value.trim();
+    if (!v) return;
+    if (v.indexOf(',') !== -1) { $('pkg-err-benefit').textContent = 'Benefit tidak boleh berisi koma.'; return; }
+    if (v.length > 60) { $('pkg-err-benefit').textContent = 'Setiap benefit maksimal 60 karakter.'; return; }
+    if (pkgState.benefits.length >= 10) { $('pkg-err-benefit').textContent = 'Benefit maksimal 10 butir.'; return; }
+    $('pkg-err-benefit').textContent = '';
+    pkgState.benefits.push(v);
+    inp.value = '';
+    pkgRenderBenefits();
+  };
+  window.pkgRemoveBenefit = function (i) { pkgState.benefits.splice(i, 1); pkgRenderBenefits(); };
+
+  window.pkgEdit = function (id, dupOf) {
+    const src = pkgFind(id || dupOf);
+    const editing = id ? src : null;
+    pkgState.editing = editing ? editing.id : null;
+    $('pkg-title').textContent = editing ? 'Ubah paket' : (dupOf ? 'Duplikat paket' : 'Paket baru');
+    $('pkg-cat').innerHTML = pkgState.data.categories.map(function (c) { return '<option value="' + h(c.id) + '">' + h(c.label) + '</option>'; }).join('');
+    if (src && !pkgState.data.categories.some(function (c) { return c.id === src.kategori; })) {
+      $('pkg-cat').innerHTML += '<option value="' + h(src.kategori) + '">' + h(src.kategori) + '</option>';
+    }
+    $('pkg-name').value = src ? src.namaPaket + (dupOf ? ' (salinan)' : '') : '';
+    $('pkg-cat').value = src ? src.kategori : (pkgState.cat !== '__all' ? pkgState.cat : 'regular');
+    $('pkg-price').value = src ? pkgFmtPrice(src.harga) : '';
+    $('pkg-flex').checked = !!src && src.jumlahSesi === '';
+    $('pkg-sessions').value = src && src.jumlahSesi !== '' ? src.jumlahSesi : '';
+    window.pkgFlexChange();
+    $('pkg-duration').value = src ? src.durasi : '';
+    $('pkg-desc').value = src ? src.deskripsi : '';
+    $('pkg-active').checked = editing ? !!editing.aktif : false;
+    $('pkg-class').checked = !!src && src.tipe === 'kelas';
+    $('pkg-cap').value = src && src.kapasitas ? src.kapasitas : '';
+    $('pkg-schedule').value = src && src.jadwal ? src.jadwal : '';
+    $('pkg-private').checked = !!src && !!src.privat;
+    window.pkgClassChange();
+    pkgState.benefits = src ? src.benefit.slice() : [];
+    $('pkg-benefit-input').value = '';
+    document.querySelectorAll('#form-package .err-msg').forEach(function (e) { e.textContent = ''; });
+    document.querySelectorAll('#form-package .field').forEach(function (f) { f.classList.remove('has-error'); });
+    pkgRenderBenefits();
+    openSheet('sheet-package');
+  };
+
+  function pkgFieldError(fieldId, msg) {
+    const f = $(fieldId);
+    if (!f) return;
+    f.classList.toggle('has-error', !!msg);
+    const m = f.querySelector('.err-msg'); if (m) m.textContent = msg || '';
+  }
+  window.pkgSave = function (e) {
+    e.preventDefault();
+    const pending = $('pkg-benefit-input').value.trim();
+    if (pending) window.pkgAddBenefit();
+    const name = $('pkg-name').value.trim();
+    const priceDigits = $('pkg-price').value.replace(/\D/g, '');
+    const flex = $('pkg-flex').checked;
+    const sess = $('pkg-sessions').value.trim();
+    let bad = false;
+    const fail = function (field, msg) { pkgFieldError(field, msg); bad = true; };
+    pkgFieldError('pkg-f-name', ''); pkgFieldError('pkg-f-price', ''); pkgFieldError('pkg-f-sessions', ''); pkgFieldError('pkg-f-cap', '');
+    const isClass = $('pkg-class').checked, cap = $('pkg-cap').value.trim();
+    if (isClass && (!/^\d+$/.test(cap) || Number(cap) < 2 || Number(cap) > 50)) fail('pkg-f-cap', 'Isi kapasitas 2–50 kursi.');
+    if (!name) fail('pkg-f-name', 'Nama paket wajib diisi.');
+    if (!priceDigits) fail('pkg-f-price', 'Isi harga dalam Rupiah.');
+    else if (Number(priceDigits) > 100000000) fail('pkg-f-price', 'Harga maksimal Rp 100.000.000.');
+    if (!flex && (!/^\d+$/.test(sess) || Number(sess) < 1 || Number(sess) > 200)) fail('pkg-f-sessions', 'Isi jumlah sesi 1–200, atau centang Fleksibel.');
+    if (bad) return;
+    const payload = {
+      id: pkgState.editing || undefined,
+      namaPaket: name,
+      kategori: $('pkg-cat').value,
+      harga: Number(priceDigits),
+      jumlahSesi: flex ? '' : Number(sess),
+      durasi: $('pkg-duration').value,
+      deskripsi: $('pkg-desc').value,
+      benefit: pkgState.benefits.slice(),
+      aktif: $('pkg-active').checked,
+      tipe: isClass ? 'kelas' : 'paket',
+      kapasitas: isClass ? Number(cap) : '',
+      jadwal: isClass ? $('pkg-schedule').value : '',
+      privat: isClass && $('pkg-private').checked
+    };
+    const done = busy($('pkg-save-btn'), 'Menyimpan…');
+    adminCall('savePackage', payload).then(function () {
+      done();
+      window.closeModal();
+      window.showToast('Paket disimpan.');
+      return pkgAfterChange();
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target && e.target.id === 'pkg-benefit-input') { e.preventDefault(); window.pkgAddBenefit(); }
+  });
+
+  window.renderSettings = function () {
+    const el = $('view-settings');
+    if (!el) return;
+    if (setState.built && el.firstChild) { refreshSettingsNav(); return; }   // jangan timpa isian yang sedang diedit
+    setState.built = true;
+    setState.dirty = false;
+    setHTML(el, '<div class="page-head"><div><h2 class="page-title">Pengaturan</h2><p class="page-sub">Atur notifikasi, pengingat, jam buka, dan keamanan.</p></div></div>' +
+      '<div class="settings-layout" id="settings-layout" data-open="0">' +
+      '<nav class="settings-nav" id="settings-nav" aria-label="Bagian pengaturan"><p class="li-sub" style="padding:12px">Memuat…</p></nav>' +
+      '<div class="settings-pane" id="settings-pane">' +
+      '<div class="pane-head"><button type="button" class="icon-btn plain only-mobile" onclick="window.settingsBack()" aria-label="Kembali ke daftar pengaturan">' + icon('chevron-left') + '</button><h3 class="pane-title" id="settings-pane-title"></h3></div>' +
+      '<div class="stack" id="settings-body"></div>' +
+      '</div></div>');
+    const body = $('settings-body');
+    body.addEventListener('input', onSettingsEdit);
+    body.addEventListener('change', onSettingsEdit);
+    const pre = setState.pre || settingsPrefetch();
+    setState.pre = null;
+    pre.settings.then(function (s) {
+      setState.data = s;
+      if (!isPhone() && !setState.open) setState.open = SET_SECTIONS[0][0];
+      refreshSettingsNav();
+      if (setState.open) renderSettingsSection(setState.open);
+      pre.status.then(applyRmdStatus).catch(function () {});
+      if (!pkgState.data) pre.pkg.then(function (d) { if (d) { pkgState.data = d; pkgRefreshView(); } });
+    }).catch(function (err) {
+      setState.built = false;
+      window.showToast('Gagal memuat Pengaturan: ' + window.authMessage(err));
+    });
+  };
+
+  // Tiga panggilan berjalan bersamaan, dan dimulai diam-diam setelah data panel siap,
+  // supaya Pengaturan sudah terisi saat dibuka.
+  function settingsPrefetch() {
+    const p = {
+      settings: adminCall('getAppSettings'),
+      status: adminCall('getReminderStatus'),
+      pkg: adminCall('getPriceListAdmin').catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); return null; })
+    };
+    p.settings.catch(function () {});   // kesalahan ditangani saat halaman dibuka
+    p.status.catch(function () {});
+    setState.pre = p;
+    return p;
+  }
+  window.settingsPrefetch = function () { if (!setState.built && !setState.pre) settingsPrefetch(); };
+  function applyRmdStatus(s) {
+    setState.status = s;
+    const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();
+    refreshSettingsNav();
+  }
+
+  function refreshSettingsNav() {
+    const nav = $('settings-nav');
+    if (nav && setState.data) { nav.innerHTML = settingsNavHtml(); paintIcons(); }
+  }
+  function loadRmdStatus() {
+    adminCall('getReminderStatus').then(function (s) {
+      setState.status = s;
+      const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();
+      refreshSettingsNav();
+    }).catch(function () {});
+  }
+  window.settingsLoadLog = function () {
+    const chk = $('rmd-log-failed');
+    setState.onlyFailed = !!(chk && chk.checked);
+    adminCall('getReminderLog', { onlyFailed: setState.onlyFailed, limit: 50 }).then(function (rows) {
+      setState.log = rows;
+      const el = $('rmd-log'); if (el) el.innerHTML = rmdLogHtml();
+    }).catch(function (err) { window.showToast('Gagal memuat riwayat: ' + window.authMessage(err)); });
+  };
+  window.settingsInstallTrigger = function (btn) {
+    const done = busy(btn, 'Memasang…');
+    adminCall('installReminderTrigger').then(function (s) {
+      done();
+      setState.status = s;
+      const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();
+      refreshSettingsNav();
+      window.showToast('Trigger pengingat terpasang.');
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+
+  function renderSettingsSection(id) {
+    const sec = SET_SECTIONS.filter(function (s) { return s[0] === id; })[0];
+    if (!sec || !setState.data) return;
+    setState.open = id;
+    $('settings-pane-title').textContent = sec[2];
+    $('settings-body').innerHTML = SET_RENDER[id]();
+    $('settings-layout').setAttribute('data-open', '1');
+    setState.snap = readSettingsForm();
+    setDirty(false);
+    paintIcons();
+    if (id === 'tampilan') renderThemeSeg();
+    if (id === 'paket') pkgLoad();
+    if (id === 'keuangan') finSettingsLoad();
+    if (id === 'latihan') exAliasLoad();
+    if (id === 'pengingat') { setState.log = null; window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); rmdPreviewAll(); }
+    refreshSettingsNav();
+    const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 });
+  }
+  function settingsShowList() {
+    setState.open = null;
+    setDirty(false);
+    const lay = $('settings-layout');
+    if (lay) lay.setAttribute('data-open', '0');
+    refreshSettingsNav();
+  }
+  function settingsConfirmDiscard(onYes) {
+    window.showConfirmModal('Perubahan yang belum disimpan akan dibuang.', onYes, { title: 'Buang perubahan?', confirmText: 'Buang', variant: 'danger' });
+  }
+
+  window.settingsOpen = function (id) {
+    if (id === setState.open) { if (isPhone()) $('settings-layout').setAttribute('data-open', '1'); return; }
+    const go = function () {
+      if (isPhone()) { try { history.pushState({ xnkSet: id }, ''); setState.pushed = true; } catch (e) { setState.pushed = false; } }
+      renderSettingsSection(id);
+    };
+    if (setState.dirty) settingsConfirmDiscard(function () { setState.dirty = false; go(); }); else go();
+  };
+  window.settingsBack = function () {
+    const back = function () {
+      if (setState.pushed) { setState.forcePop = true; try { history.back(); return; } catch (e) {} }
+      settingsShowList();
+    };
+    if (setState.dirty) settingsConfirmDiscard(function () { setState.dirty = false; back(); }); else back();
+  };
+  window.addEventListener('popstate', function (e) {
+    if (window.currentView !== 'settings') { setState.pushed = false; return; }
+    const id = e.state && e.state.xnkSet;
+    setState.subPop = !!setState.pushed && bkLevels() <= 1;   // entri yang terlepas milik sub-halaman, bukan lapisan umum
+    if (!id && setState.open && setState.dirty && !setState.forcePop) {
+      try { history.pushState({ xnkSet: setState.open }, ''); } catch (err) {}
+      settingsConfirmDiscard(function () { setState.dirty = false; setState.forcePop = true; try { history.back(); } catch (err) { settingsShowList(); } });
+      return;
+    }
+    setState.forcePop = false;
+    setState.pushed = !!id;
+    if (id) { if (id !== setState.open) renderSettingsSection(id); } else if (isPhone()) settingsShowList();
+  });
+  window.settingsCancel = function () {
+    if (setState.open) renderSettingsSection(setState.open);
+  };
+  window.settingsReset = function (key) {
+    const el = document.querySelector('#settings-body [data-k="' + key + '"]');
+    if (el) { el.value = ''; onSettingsEdit(); }
+  };
+  // Dipanggil navigate(): true = tahan perpindahan sampai pengguna memutuskan.
+  function settingsLeaveGuard(viewId, opts) {
+    if (window.currentView !== 'settings' || viewId === 'settings' || !setState.dirty || (opts && opts.force)) return false;
+    settingsConfirmDiscard(function () { setDirty(false); window.navigate(viewId, opts); });
+    return true;
+  }
+
+  function readSettingsForm() {
+    const out = {};
+    document.querySelectorAll('#settings-body [data-k]').forEach(function (el) {
+      out[el.getAttribute('data-k')] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+    return out;
+  }
+  function changedSettingsKeys(vals) {
+    return Object.keys(vals).filter(function (k) { return vals[k] !== setState.snap[k]; });
+  }
+  // Bar simpan ada di luar halaman (posisi tetap): hanya tampil saat Pengaturan aktif dan ada perubahan.
+  function syncSettingsBar() {
+    const bar = $('settings-savebar');
+    if (bar) bar.classList.toggle('hide', !(setState.dirty && window.currentView === 'settings'));
+  }
+  function setDirty(on) {
+    setState.dirty = !!on;
+    syncSettingsBar();
+    const pane = $('settings-pane');
+    if (pane) pane.classList.toggle('has-bar', !!on);
+  }
+  function setFieldError(key, msg) {
+    document.querySelectorAll('#settings-body [data-fk="' + key + '"]').forEach(function (f) {
+      f.classList.toggle('has-error', !!msg);
+      const m = f.querySelector('.err-msg'); if (m) m.textContent = msg || '';
+    });
+  }
+  // Aturan sama dengan server (SETTINGS_NUMERIC_BOUNDS, jam 0–23 / 0–24, email)
+  function validateSettings(vals) {
+    const errs = {};
+    Object.keys(SET_NUM).forEach(function (n) {
+      if (!(n in vals) || vals[n] === '') return;
+      const v = Number(vals[n]), f = SET_NUM[n];
+      if (!Number.isInteger(v) || v < f.min || v > f.max) errs[n] = 'Isi bilangan bulat ' + f.min + '–' + f.max + '.';
+    });
+    SET_RMD_JOBS.forEach(function (j) {
+      const k = 'job-' + j.id + '-hour';
+      if (!(k in vals) || vals[k] === '') return;
+      const v = Number(vals[k]);
+      if (!Number.isInteger(v) || v < 0 || v > 23) errs[k] = 'Jam harus bilangan bulat 0–23.';
+    });
+    for (let i = 0; i < 7; i++) {
+      if (!(('h' + i + 's') in vals)) break;
+      const s = Number(vals['h' + i + 's']), e = Number(vals['h' + i + 'e']);
+      if (vals['h' + i + 's'] === '' || vals['h' + i + 'e'] === '' || !Number.isInteger(s) || !Number.isInteger(e) || s < 0 || e > 24 || s >= e) errs['hours' + i] = 'Jam buka harus lebih kecil dari jam tutup (0–24).';
+    }
+    SET_RMD_JOBS.forEach(function (j) {
+      const k = 'job-' + j.id + '-tpl';
+      if (!(k in vals)) return;
+      const job = (setState.data.reminder && setState.data.reminder.jobs && setState.data.reminder.jobs[j.id]) || {};
+      const allowed = job.placeholders || [];
+      const t = vals[k].trim();
+      if (t.length > 600) { errs[k] = 'Pesan maksimal 600 karakter.'; return; }
+      let bad = null;
+      const rest = t.replace(/\{([a-z]*)\}/g, function (m, name) { if (allowed.indexOf(name) < 0 && bad === null) bad = m; return ''; });
+      if (bad) errs[k] = 'Placeholder ' + bad + ' tidak dikenal. Yang boleh: ' + allowed.map(function (n) { return '{' + n + '}'; }).join(' ') + '.';
+      else if (/[{}]/.test(rest)) errs[k] = 'Tanda { } hanya untuk placeholder, misalnya {nama}.';
+    });
+    if ('email' in vals && vals.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals.email.trim())) errs.email = 'Alamat email tidak valid.';
+    return errs;
+  }
+  function onSettingsEdit(ev) {
+    if (ev && ev.target) rmdSchedulePreview(ev.target);
+    const vals = readSettingsForm();
+    const changed = changedSettingsKeys(vals);
+    const errs = validateSettings(vals);
+    document.querySelectorAll('#settings-body [data-fk]').forEach(function (f) { setFieldError(f.getAttribute('data-fk'), errs[f.getAttribute('data-fk')]); });
+    setDirty(changed.length > 0);
+    const save = $('settings-save-btn');
+    if (save) save.disabled = Object.keys(errs).length > 0 || setState.saving;
+  }
+
+  // Hanya kolom yang berubah di bagian yang terbuka yang dikirim (simpan sebagian).
+  function settingsPayload(id, vals, changed) {
+    const has = function (k) { return changed.indexOf(k) !== -1; };
+    const p = {};
+    if (id === 'notifikasi') {
+      if (has('tgEnabled')) p.telegramEnabled = vals.tgEnabled;
+      if (has('tgToken') && vals.tgToken.trim()) p.telegramBotToken = vals.tgToken.trim();
+      if (has('tgChat')) p.telegramChatIds = vals.tgChat;
+      if (has('email')) p.notifEmail = vals.email;
+    } else if (id === 'jam') {
+      const hours = {};
+      for (let i = 0; i < 7; i++) hours[i] = [Number(vals['h' + i + 's']), Number(vals['h' + i + 'e'])];
+      p.businessHours = hours;
+    } else if (id === 'keamanan') {
+      Object.keys(SET_NUM).forEach(function (n) { if (has(n)) p[n] = vals[n]; });
+    } else if (id === 'pengingat') {
+      const r = {};
+      if (has('rmdEnabled')) r.enabled = vals.rmdEnabled;
+      if (has('tplSleep')) r.tplSleep = vals.tplSleep;
+      SET_RMD_JOBS.forEach(function (j) {
+        const job = {};
+        if (has('job-' + j.id + '-enabled')) job.enabled = vals['job-' + j.id + '-enabled'];
+        if (has('job-' + j.id + '-hour')) job.hour = vals['job-' + j.id + '-hour'];
+        if (has('job-' + j.id + '-tpl')) job.tpl = vals['job-' + j.id + '-tpl'];
+        if (Object.keys(job).length) { r.jobs = r.jobs || {}; r.jobs[j.id] = job; }
+      });
+      if (Object.keys(r).length) p.reminder = r;
+    }
+    return p;
+  }
+  window.settingsSave = function () {
+    const id = setState.open;
+    if (!id || setState.saving) return;
+    const vals = readSettingsForm();
+    const errs = validateSettings(vals);
+    if (Object.keys(errs).length) { onSettingsEdit(); return; }
+    const payload = settingsPayload(id, vals, changedSettingsKeys(vals));
+    if (!Object.keys(payload).length) { setDirty(false); return; }
+    setState.saving = true;
+    const done = busy($('settings-save-btn'), 'Menyimpan…');
+    adminCall('updateAppSettings', payload).then(function (s) {
+      setState.saving = false; done();
+      setState.data = s;
+      renderSettingsSection(id);
+      window.showToast('Pengaturan disimpan.');
+    }).catch(function (err) {
+      setState.saving = false; done();
+      window.showToast('Gagal: ' + window.authMessage(err));
+    });
+  };
+  window.settingsClearToken = function () {
+    window.showConfirmModal('Token bot Telegram yang tersimpan akan dihapus. Notifikasi Telegram berhenti sampai token baru diisi.', function () {
+      adminCall('updateAppSettings', { telegramBotToken: '' }).then(function (s) {
+        setState.data = s; renderSettingsSection('notifikasi'); window.showToast('Token dihapus.');
+      }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }, { title: 'Hapus token?', confirmText: 'Hapus', variant: 'danger' });
+  };
+
+  window.sendReminderTest = function (jenis, btn) {
+    const done = busy(btn, 'Mengirim…');
+    adminCall('sendReminderTest', jenis).then(function (res) {
+      done();
+      window.showToast(res.pesan);
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+
+  window.sendTelegramTest = function () {
+    const btn = $('btn-telegram-test');
+    const done = busy(btn, 'Mengirim…');
+    adminCall('sendTelegramTest', $('set-tgToken').value, $('set-tgChat').value).then(function (res) {
+      done();
+      window.showToast(res.sent + ' dari ' + res.total + ' Chat ID berhasil menerima pesan tes.');
+    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+  };
+

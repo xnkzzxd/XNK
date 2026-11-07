@@ -22,8 +22,8 @@ Instructions for any AI agent (Claude Code or another) or developer changing thi
 | `Reminder.gs` | Reminder engine: `runReminderTick`, jobs, ReminderLog, meal tips |
 | `Update No WA.gs` | Old one-off maintenance helper |
 | `Index.html` | Markup for panel and portal (views, sheets, forms) |
-| `App.html` | Panel and portal logic (`adminCall`, `memberCall`, `publicCall`, `h()` = escape HTML, `icon()`, `setHTML`) |
-| `Theme.html` | Design tokens and components (monochrome, light/dark) |
+| `App.html` | (generated from `parts/app/`) Panel and portal logic (`adminCall`, `memberCall`, `publicCall`, `h()` = escape HTML, `icon()`, `setHTML`) |
+| `Theme.html` | (generated from `parts/theme/`) Design tokens and components (monochrome, light/dark) |
 | `Landing.html`, `LandingStyle.html`, `LandingScript.html` | Marketing page |
 | `Scripts.html` | Helpers shared by Index and Landing |
 
@@ -33,7 +33,7 @@ Data lives in Google Sheets (MemberData, MembersLog, PriceList, schedules, Tasks
 
 ## 2. Rules you must not break
 
-1. **Edit Apps Script code only in `apps-script/pt-scheduler/src/`.** A merge to `main` runs `.github/workflows/pt-scheduler.yml`, which does `clasp push` and redeploys the same deployment. That overwrites the online editor completely.
+1. **Edit Apps Script code only in `apps-script/pt-scheduler/src/` — except `App.html` and `Theme.html`, which are generated.** Edit their parts in `apps-script/pt-scheduler/parts/app/*.part` and `parts/theme/*.part` (joined in file-name order, byte for byte), then run `node apps-script/pt-scheduler/tools/build-parts.js`; `tests/parts.test.js` fails when the generated file is stale or was edited by hand. To add a part, give it the next number (`15-….part`); to move code between parts, cut and paste whole lines.  A merge to `main` runs `.github/workflows/pt-scheduler.yml`, which does `clasp push` and redeploys the same deployment. That overwrites the online editor completely.
 2. **No secrets in code.** Tokens, PINs and passwords go in Script Properties only. The repo is public.
 3. **Every `.gs` function without a trailing `_` is callable from any browser.** So each new public function must start with exactly one of:
    - admin: `function x(token, …) { requireAdmin_(token); …`
