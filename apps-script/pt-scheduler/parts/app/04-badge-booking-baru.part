@@ -779,9 +779,10 @@
       s.completedAt = new Date().toISOString();
       if (m) m.usedSessions = (Number(m.usedSessions) || 0) + 1;
       window.updateUI();
+      setTimeout(function () { window.openSessionNote(s.id, true, null); }, 350);   // langsung, tanpa menunggu server
       optimistic({ call: function () { return adminCall('completeSession', s.id, s.memberId); }, ok: 'Sesi selesai. Kuota dipotong.', label: 'Sesi selesai',
-        // Catatan sesi + pesan pasca-sesi (memuat sisa sesi dari server) dibuka setelah jawaban datang.
-        then: function (result) { window.openSessionNote(s.id, true, result); },
+        // Tombol evaluasi paket (paket habis) muncul begitu jawaban server datang; lembar catatan sudah terbuka.
+        then: function (result) { if (window.sessionNoteResult) window.sessionNoteResult(s.id, result); },
         undo: function () { s.status = old.status; s.completedAt = old.completedAt; if (m) m.usedSessions = old.used; window.updateUI(); } });
     }, { title: 'Tandai sesi selesai?', confirmText: 'Ya, selesai', icon: 'check-circle-2' });
   };

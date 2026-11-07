@@ -19,6 +19,13 @@
       if (!$('sn-dilatih').value && !$('sn-fokus').value) { $('sn-dilatih').value = n.dilatih || ''; $('sn-fokus').value = n.fokus || ''; $('sn-rpe').value = n.rpe === '' ? '' : n.rpe; $('sn-pribadi').value = n.pribadi || ''; }
     }).catch(function () {});
   };
+  // Jawaban completeSession datang setelah lembar terbuka: pasang tombol evaluasi paket bila paket habis.
+  window.sessionNoteResult = function (scheduleId, result) {
+    if (!noteSched || String(noteSched.id) !== String(scheduleId) || !result || !result.packageDone) return;
+    const s = noteSched, pk = $('sn-pkg');
+    pk.classList.remove('hide');
+    pk.onclick = function () { window.sendToParentWA(s.phone, result.evalText); };
+  };
   window.sessionNoteSave = function (e, withWa) {
     if (e) e.preventDefault();
     if (!noteSched) return;
