@@ -474,6 +474,7 @@ function getAppSettings(token) {
     clientGuideEnabled: _guideEnabled_(),
     feedbackEnabled: _feedbackEnabled_(),
     shareEnabled: _shareEnabled_(),
+    warmEnabled: _warmEnabled_(),
     shareQrUrl: PropertiesService.getScriptProperties().getProperty('SHARE_QR_URL') || '',
     shareQrDefault: SHARE_QR_DEFAULT,
     nutritionEnabled: _nutEnabled_(),
@@ -527,6 +528,10 @@ function updateAppSettingsImpl_(token, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'shareEnabled')) setOrDelete('SHARE_ENABLED', payload.shareEnabled ? '' : 'false');
   if (qrUrl !== null) setOrDelete('SHARE_QR_URL', qrUrl);
+  if (Object.prototype.hasOwnProperty.call(payload, 'warmEnabled')) {   // Fase W6a: sakelar + pemicu sekaligus
+    setOrDelete('WARM_ENABLED', payload.warmEnabled ? 'true' : '');
+    if (payload.warmEnabled) _installWarmTrigger_(); else _removeWarmTrigger_();
+  }
   if (Object.prototype.hasOwnProperty.call(payload, 'feedbackEnabled')) setOrDelete('FEEDBACK_ENABLED', payload.feedbackEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'nutritionEnabled')) setOrDelete('NUTRITION_ENABLED', payload.nutritionEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'businessHours')) {
@@ -2294,7 +2299,7 @@ function getPortalMoreImpl_(row, tr) {
   if (ckey && !_anyPartFailed_(result)) {
     const copy = Object.assign({}, result);
     delete copy.ms;
-    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('PAYLOAD_CACHE_SECONDS', 300)))));
+    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('PAYLOAD_CACHE_SECONDS', 1800)))));
   }
   return result;
 }
@@ -2415,7 +2420,7 @@ function getAdminMore(token, month, year, fresh) {
   // Fase W: hasil jadi disimpan sebentar (TTL ADMIN_MORE_CACHE_SECONDS, bawaan 90, 15–600). Kunci memuat hari WIB, bulan, tahun,
   // versi admin (naik di setiap _bumpMember_ / _bustSlots_ / _bustShared_) dan versi bersama. fresh=true (tarik-untuk-segarkan) melewati
   // pembacaan cache tetapi tetap menyimpan hasil baru. memberVers selalu segar.
-  const ckey = _payloadCacheOn_() ? 'am:' + _todayWib_() + ':' + m + ':' + y + ':' + _admVer_() + ':' + _sharedVersion_() : '';
+  const ckey = _payloadCacheOn_() ? 'am:' + _todayWib_() + ':' + _wibParts_(new Date()).hour + ':' + m + ':' + y + ':' + _admVer_() + ':' + _sharedVersion_() : '';
   return _withMemberMemo_(function () {
     if (ckey && !fresh) {
       const hit = _payloadGet_(ckey);
@@ -2449,7 +2454,7 @@ function getAdminMore(token, month, year, fresh) {
     if (ckey && !_anyPartFailed_(result)) {
       const copy = Object.assign({}, result);
       delete copy.ms;
-      _payloadPut_(ckey, copy, Math.max(15, Math.min(600, Math.floor(_numProp_('ADMIN_MORE_CACHE_SECONDS', 90)))));
+      _payloadPut_(ckey, copy, Math.max(15, Math.min(1800, Math.floor(_numProp_('ADMIN_MORE_CACHE_SECONDS', 900)))));
     }
     return result;
   });
@@ -6466,7 +6471,7 @@ function getClientBundleImpl_(token, memberId, tr) {
   if (ckey && !_anyPartFailed_(result)) {
     const copy = Object.assign({}, result);
     delete copy.ms;
-    _payloadPut_(ckey, copy, Math.max(30, Math.min(300, Math.floor(_numProp_('CLIENT_BUNDLE_CACHE_SECONDS', 180)))));
+    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('CLIENT_BUNDLE_CACHE_SECONDS', 900)))));
   }
   return result;
 }
