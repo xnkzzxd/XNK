@@ -4,11 +4,11 @@
 
 | Workflow | When | Jobs |
 | --- | --- | --- |
-| `.github/workflows/checks.yml` | every pull request (any file, docs too), or by hand | **`checks`**: every Agent.md §5 check: syntax, `node --test`, browser check (Playwright, phone pass included), share-card check, `sync-offline.js --check` against `xnkzzxd/BookingPT-Client`, offline check (coach + client wrapper) |
+| `.github/workflows/checks.yml` | every pull request (any file, docs too), or by hand | Four jobs. **`checks`** is the one required name: it only collects the others and is green when all three passed. `fast checks`: syntax, `node --test`, site build, share-card check, demo check, `sync-offline.js --check` against `xnkzzxd/BookingPT-Client`, offline check (coach + client wrapper). `browser check (static build)` and `browser check (Apps Script fallback)`: `browser-check.js` (Playwright, phone pass included) against the static build (`PAGES=static`) and against the Apps Script templates (`RPC_MODE=gas`). The two browser jobs run in parallel (about 10 minutes each) instead of one after the other. |
 | `.github/workflows/pt-scheduler.yml` | push to `main` touching `apps-script/pt-scheduler/**` (deploy); PRs on the same paths (quick `check`) | `check`, then `deploy` (clasp push + redeploy). Unchanged by T-1404, so docs-only merges never deploy. |
 
 - BookingPT-Client is public, so CI checks it out without a token. It uses the BookingPT-Client branch with the same name as the PR branch when one exists (a change to the shared offline files is pushed to both repos on one branch name), otherwise `main`. If the checkout ever fails, the run shows a warning ("BookingPT-Client tidak terjangkau"), skips the sync check and the client half of the offline check, and still checks the coach wrapper.
-- Playwright is pinned in `checks.yml` (`PLAYWRIGHT_VERSION`) and installed outside the repo; the tools find it through `NODE_PATH`.
+- Playwright is pinned in `checks.yml` (`PLAYWRIGHT_VERSION`) and installed outside the repo by the composite action `.github/actions/setup-playwright`; the tools find it through `NODE_PATH`.
 - The full run takes about 10 minutes (the browser check alone is about 6).
 
 ## 👤 Owner: turn on auto-merge and the required check (once)
