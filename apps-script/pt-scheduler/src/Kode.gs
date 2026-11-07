@@ -2162,17 +2162,21 @@ function getPublicSchedules(memberToken) {
  * openSlots datang dari cache server bersama (versi dibaca SEBELUM Schedules dibaca).
  */
 function getPortalBootstrap(memberToken) {
+  return _withMemberMemo_(function() { return getPortalBootstrapImpl_(memberToken); });
+}
+function getPortalBootstrapImpl_(memberToken) {
+  const tr = _traceStart_();
   let found = null, authLost = '';
   if (memberToken) {
-    try { found = requireMember_(memberToken); } catch (e) { authLost = String(e.message || e); }
+    try { found = _tp_(tr, 'auth', function() { return requireMember_(memberToken); }); } catch (e) { authLost = String(e.message || e); }
   }
   const memberId = found ? String(found.row[0]).trim() : null;
   // Versi data klien (dibaca sebelum sheet lain): sama dengan salinan di perangkat = getPortalMore tidak perlu dipanggil.
-  const moreVer = memberId ? _memberVer_(memberId) : '';
+  const moreVer = memberId ? _tp_(tr, 'ver', function() { return _memberVer_(memberId); }) : '';
   const ver = _slotsVersion_();
   // Tanpa klien yang masuk, sheet Schedules hanya dibaca kalau cache jam kosong kosong (hemat kuota).
-  const all = memberId ? _getSchedulesAll_() : undefined;
-  const shared = memberId ? _sharedNotesFor_(memberId) : {};
+  const all = memberId ? _tp_(tr, 'schedules', _getSchedulesAll_) : undefined;
+  const shared = memberId ? _tp_(tr, 'notes', function() { return _sharedNotesFor_(memberId); }) : {};
   const mine = memberId ? all.filter(function(x) { return String(x.memberId).trim() === memberId; }).map(function(x) {
     const o = _ownScheduleOut_(x);
     if (shared[String(x.id)]) { o.dilatih = shared[String(x.id)].dilatih; o.fokus = shared[String(x.id)].fokus; }
@@ -2187,19 +2191,20 @@ function getPortalBootstrap(memberToken) {
     schedules: mine,
     feedbackEnabled: feedbackOn,
     shareEnabled: _shareEnabled_(),
-    pendingRating: found && feedbackOn ? _pendingRating_(memberId, all) : null,
-    packageEval: { eligible: !!(found && feedbackOn && _packageEvalEligible_(found.row, all)) },
-    info: { latestAt: found ? _contentLatestAt_() : '' },
-    openSlots: _openSlotsCached_({ days: horizon }, now, all, false, ver),
-    openSlotsByCoach: _openSlotsByCoach_(all, ver, horizon, now, false),
+    pendingRating: found && feedbackOn ? _tp_(tr, 'pendingRating', function() { return _pendingRating_(memberId, all); }) : null,
+    packageEval: { eligible: !!(found && feedbackOn && _tp_(tr, 'packageEval', function() { return _packageEvalEligible_(found.row, all); })) },
+    info: { latestAt: found ? _tp_(tr, 'content', _contentLatestAt_) : '' },
+    openSlots: _tp_(tr, 'openSlots', function() { return _openSlotsCached_({ days: horizon }, now, all, false, ver); }),
+    openSlotsByCoach: _tp_(tr, 'slotsByCoach', function() { return _openSlotsByCoach_(all, ver, horizon, now, false); }),
     horizonDays: horizon,
     rescheduleCutoffHours: _rescheduleCutoff_(),
-    coaches: getCoaches(),
-    priceList: getPriceList(),
+    coaches: _tp_(tr, 'coaches', getCoaches),
+    priceList: _tp_(tr, 'priceList', getPriceList),
     businessHours: _businessHours_(),
     moreVer: moreVer,
-    // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati).
-    coachStatus: found ? (function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } })() : null
+    // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati dan tidak membawanya lagi saat cache kena).
+    coachStatus: found ? _tp_(tr, 'coachStatus', function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } }) : null,
+    ms: _traceEnd_(tr, 'getPortalBootstrap')
   };
 }
 
@@ -2242,11 +2247,12 @@ function getPortalMoreImpl_(row, tr) {
   if (ckey) {
     const hit = _payloadGet_(ckey);
     if (hit) {
-      // Status coach bergantung pada jam dan jadwal klien lain, jadi tidak ikut cache.
-      const cid = String(row[10] || '').trim();
-      try { hit.coachStatus = { coachId: cid, status: getCoachStatus(cid) }; } catch (e) { hit.coachStatus = { error: String((e && e.message) || e) }; }
+      // Status coach bergantung pada jam dan jadwal klien lain: tidak ikut cache dan tidak dihitung ulang di sini (1,4–2 dtk);
+      // getPortalBootstrap selalu membawanya segar dan klien hanya memakai coachStatus dari More bila ada.
+      delete hit.coachStatus;
+      if (hit.ms) delete hit.ms;
       const ms = _traceEnd_(tr, 'getPortalMore:hit');
-      if (ms) { ms.hit = true; hit.ms = ms; }
+      if (ms) { ms.hit = true; ms.ver = ver; hit.ms = ms; }
       return hit;
     }
   }
@@ -2284,6 +2290,7 @@ function getPortalMoreImpl_(row, tr) {
       ms: _traceEnd_(tr, 'getPortalMore')
     };
   }));
+  if (result.ms) result.ms.ver = ver;   // versi data yang dipakai kunci cache: membantu menelusuri miss tak terduga
   if (ckey && !_anyPartFailed_(result)) {
     const copy = Object.assign({}, result);
     delete copy.ms;
