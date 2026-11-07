@@ -29,3 +29,17 @@ test('SPEED_TRACE=false removes the ms field and nothing else changes', () => {
   delete a.ms; delete a.at; delete b.at; delete a.ver; delete b.ver;
   assert.deepEqual(a, b);
 });
+
+test('doPost logs one "speed rpc <fn>" line with run and json times (W6b, T-1825)', () => {
+  const env = seededEnv();
+  const lines = [], orig = console.log;
+  console.log = (...a) => { lines.push(a.join(' ')); };
+  try {
+    env.call('doPost', { postData: { contents: JSON.stringify({ fn: 'getPriceListPublic', args: [] }) } });
+  } finally { console.log = orig; }
+  const line = lines.find(l => l.startsWith('speed rpc getPriceListPublic '));
+  assert.ok(line, 'trace line present');
+  const o = JSON.parse(line.slice('speed rpc getPriceListPublic '.length));
+  assert.equal(typeof o.parts.run, 'number');
+  assert.equal(typeof o.parts.json, 'number');
+});
