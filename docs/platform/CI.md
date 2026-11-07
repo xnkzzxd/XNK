@@ -9,6 +9,7 @@
 
 - BookingPT-Client is public, so CI checks it out without a token. It uses the BookingPT-Client branch with the same name as the PR branch when one exists (a change to the shared offline files is pushed to both repos on one branch name), otherwise `main`. If the checkout ever fails, the run shows a warning ("BookingPT-Client tidak terjangkau"), skips the sync check and the client half of the offline check, and still checks the coach wrapper.
 - Playwright is pinned in `checks.yml` (`PLAYWRIGHT_VERSION`) and installed outside the repo by the composite action `.github/actions/setup-playwright`; the tools find it through `NODE_PATH`.
+- Phase AAA: the same pages run in two modes, and both are required to stay green: `browser-check` against the static build (`PAGES=static`, calls go through `doPost`) and against the Apps Script pages (`RPC_MODE=gas`, the rollback path). `site-check` and `host-check` guard the assembled Pages site and the local host. Landing and portal repos pull their builds from xnk.my.id (see `docs/aaa/Rollback.md`).
 - The full run takes about 10 minutes (the browser check alone is about 6).
 
 ## 👤 Owner: turn on auto-merge and the required check (once)

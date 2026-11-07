@@ -61,13 +61,13 @@ Cutover (T-1722, T-1726, T-1731) dilakukan Claude sendiri sesuai instruksi pemil
 
 ## AAA6 — Portal (book.xnkbooking.my.id)
 - [x] T-1727 **Tarik, bukan dorong (perubahan desain 2026-11-07, agar tidak perlu secret dari pemilik).** `build-site.js` menerbitkan juga `client/` (`site=client`: tanpa query membuka portal) dan `landing-pub/` (`site=landing`) beserta `manifest.json` (daftar berkas dan hash) di `xnk.my.id`. Repo BookingPT-Client (dan BookingPT) punya workflow sendiri (`schedule` tiap jam + `workflow_dispatch`) yang mengunduh berkas dari `https://xnk.my.id/…` ke `main`-nya bila `manifest.json` berubah, memakai `GITHUB_TOKEN` repo itu sendiri (`contents: write`). Pilihan lama (XNK mendorong ke repo lain dengan secret) tetap bisa dipakai nanti bila pemilik membuat tokennya.
-- [ ] T-1728 Build `site=client` ke BookingPT-Client; `legacy.html`.
-- [ ] T-1729 `sync-offline.js --check`, `offline-check.js ../BookingPT-Client`.
-- [ ] T-1730 Cek ulang `android/`, `ios/` (UA `XNKAndroid`/`XNKiOS`), `app/`, Capacitor.
-- [ ] T-1731 Cutover portal (jam sepi).
+- [x] T-1728 Build `site=client` ditarik ke BookingPT-Client; pembungkus lama disimpan sebagai `legacy.html` (tetap memuat `offline-host.js`, jadi salinan persis untuk rollback).
+- [x] T-1729 `sync-offline.js --check` dan `offline-check.js ../BookingPT-Client` lolos terhadap pohon pascacutover; `offline-check.js` memakai `legacy.html` bila ada.
+- [x] T-1730 Cek ulang: shell native membuka `book.xnkbooking.my.id`; `html.app-shell` ditentukan di `App.html` dari UA (`XNKAndroid|XNKiOS`), bukan dari pembungkus, jadi tetap jalan di halaman statis. `app/` dan Capacitor tidak berubah (`app/sw.js` hanya menghapus cache miliknya).
+- [x] T-1731 Cutover portal (2026-11-07): BookingPT-Client PR #11 (`index.html` = portal statis, `legacy.html` = pembungkus lama, workflow tarik ke akar). Dicek hidup dengan Chromium headless: `site=client`, tanpa iframe, `sw-app.js`, galat login backend sungguhan, `/legacy.html` utuh, tanpa galat skrip. Dilakukan pukul ±14 WIB (hari Sabtu) atas keputusan pemilik (tanpa persetujuan waktu).
 
 ## AAA7 — Dokumen dan dua jalur
-- [ ] T-1732 Tes dua mode tetap di CI.
-- [ ] T-1733 Panduan rollback tertulis.
-- [ ] T-1734 Perbarui `docs/Agent.md` §1 dan §7, `README.md`, `apps-script/README.md`, `platform/CI.md`.
-- [ ] T-1735 Ukur muat awal sebelum vs sesudah; tulis di sini.
+- [x] T-1732 Tes dua mode tetap di CI: `checks.yml` menjalankan `browser-check` terhadap build statis (`PAGES=static`) dan terhadap halaman Apps Script (`RPC_MODE=gas`); `api-contract`, `rpc`, `build-static`, `build-site` dan `host-check`/`site-check` menjaga kedua jalur.
+- [x] T-1733 [Rollback.md](Rollback.md).
+- [x] T-1734 Diperbarui: `docs/Agent.md` §1 dan §7, `README.md`, `apps-script/README.md`, `platform/CI.md`.
+- [x] T-1735 Muat awal, diukur 2026-11-07 dari kotak pasir (Chromium headless lewat proxy, jaringan datar, median 3 kali, sampai layar login panel tampil): **panel statis `/` 840 ms kunjungan pertama, 178 ms kunjungan ulang** (halaman dan berkas berhash dari cache service worker / HTTP). Versi lama (`/legacy/`: pembungkus + iframe Apps Script) **tidak berhasil diukur dengan cara yang sama**: isi iframe lintas-origin tidak bisa dibaca dari luar, dan angka 21 detik yang keluar hanyalah batas waktu skrip ukur, bukan hasil. Pembanding yang ada: ukuran dari awal rencana (AAA0) menunjukkan halaman Apps Script dirender per permintaan dan tidak bisa di-cache; jadi tidak ada klaim "x kali lebih cepat" di sini. Pengukuran per panggilan `fetch` vs `google.script.run` (T-1705b) ada di bagian AAA1.

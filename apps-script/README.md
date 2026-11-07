@@ -314,6 +314,16 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 - Dari Layar Utama tidak ada tombol back Safari: **geser dari tepi kiri** untuk kembali satu langkah (menutup sheet, panel, atau halaman).
 - Warna bar status mengikuti tema terang/gelap aplikasi.
 
+## Tampilan statis di GitHub Pages (Fase AAA)
+
+Panel (xnk.my.id), landing (xnkbooking.my.id) dan portal klien (book.xnkbooking.my.id) sekarang berjalan sebagai **file statis** di GitHub Pages. Isinya tetap `src/Index.html`, `App.html`, `Landing.html` dan kawan-kawannya; yang berubah hanya cara memanggil server: browser memanggil `doPost` (alamat `/exec`) lewat `fetch`, bukan `google.script.run` di dalam iframe. Backend, Sheets, trigger dan deploy `clasp` tidak berubah.
+
+- Halaman Apps Script lama (`/exec`, `/exec?view=Landing`, `/exec?view=public`) tetap hidup dan ikut ter-deploy. Itu jalan kembali dan dipakai tes mode `gas` di CI.
+- Fungsi server baru harus masuk `tests/api-lists.js`, lalu jalankan `node apps-script/pt-scheduler/tools/build-api.js` (menghasilkan `src/Api.gs`, pintu `doPost`). Tes gagal bila lupa.
+- Landing dan portal menarik build-nya dari xnk.my.id tiap jam (workflow `pull-xnk.yml` di repo BookingPT dan BookingPT-Client; tanpa token atau secret). Perubahan tampilan sampai ke dua situs itu paling lama satu jam; percepat dengan menjalankan workflow itu secara manual (Actions → Run workflow).
+- Cara kembali ke versi lama, per situs: [docs/aaa/Rollback.md](../docs/aaa/Rollback.md).
+- Pindah ke versi statis membuat klien login ulang sekali (token tersimpan per alamat situs); antrean offline yang belum terkirim di versi lama tidak ikut.
+
 ## Rollback (kalau versi baru bermasalah)
 
 - **Cepat (tanpa kode):** Apps Script → **Deploy → Manage deployments** → ✏️ Edit →
