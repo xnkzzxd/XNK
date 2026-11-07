@@ -93,3 +93,14 @@ test('getAdminMore is cached; any client write, slot change or fresh=true recomp
   env.call('logMyWorkout', env.memberToken(KEY_A), '', [{ gerakan: 'Squat', sets: [{ berat: 40, rep: 8 }] }], { cid: 'wl-adm' });
   assert.ok(!j(env.call('getAdminMore', adm)).ms.hit, 'a client write bumps the admin version');
 });
+
+test('getPortalBootstrap reads Schedules and MemberData once (coach status and slots share the bundle memo)', () => {
+  const env = seededEnv();
+  const t = env.memberToken(KEY_A);
+  env.call('getPortalBootstrap', t);   // creates sheets, warms the cache
+  const sched = countReads(env, 'Schedules'), mem = countReads(env, 'MemberData');
+  const out = j(env.call('getPortalBootstrap', t));
+  assert.ok(out.profile && out.ms && typeof out.ms.total === 'number');
+  assert.ok(sched.n <= 1, 'Schedules reads: ' + sched.n);
+  assert.equal(mem.n, 1, 'MemberData reads');
+});

@@ -620,9 +620,10 @@ function _memberValues_() {
   return v;
 }
 function _withMemberMemo_(fn) {
-  const prev = _memberMemo_;
+  const prev = _memberMemo_, prevRead = _readMemo_;
   if (!prev) _memberMemo_ = {};
-  try { return fn(); } finally { _memberMemo_ = prev; }
+  if (!prevRead) _readMemo_ = {};   // bundle baca-saja: sheet lain (coach, aturan, jadwal) ikut dibaca sekali
+  try { return fn(); } finally { _memberMemo_ = prev; _readMemo_ = prevRead; }
 }
 function _findMemberRow_(predicate) {
   const mv = _memberValues_();
@@ -995,9 +996,8 @@ function _coachList_(v) {
 
 /** Semua coach (aktif & nonaktif), dibaca per nama header. Tidak pernah membuat sheet. Baris lama tanpa "Status Aktif" = aktif. */
 function _coachesAll_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  const data = sheet.getDataRange().getValues();
+  const data = _sheetFullMemo_('Coaches');
+  if (!data) return [];
   const idx = _coachSchema_(data[0]);
   if (!idx) return [];
   const cell = function(row, key) { return idx[key] === undefined ? '' : sanitizeValue(row[idx[key]]); };
@@ -2478,6 +2478,15 @@ function _sheetRowsMemo_(name) {
   if (_readMemo_) _readMemo_[name] = rows;
   return rows;
 }
+/** Seluruh nilai sheet termasuk header (baris 0), sekali per bundle; null bila sheet tidak ada atau kosong. */
+function _sheetFullMemo_(name) {
+  const k = 'full:' + name;
+  if (_readMemo_ && _readMemo_[k] !== undefined) return _readMemo_[k];
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  const data = sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues() : null;
+  if (_readMemo_) _readMemo_[k] = data;
+  return data;
+}
 function _withSchedulesMemo_(fn) {
   const prev = _schedMemo_, prevProg = _progMemo_, prevRead = _readMemo_;
   _schedMemo_ = _getSchedulesAll_();
@@ -2488,6 +2497,12 @@ function _withSchedulesMemo_(fn) {
 
 function _getSchedulesAll_() {
   if (_schedMemo_) return _schedMemo_;
+  if (_readMemo_ && _readMemo_.__sched) return _readMemo_.__sched;
+  const list = _readSchedulesAll_();
+  if (_readMemo_) _readMemo_.__sched = list;
+  return list;
+}
+function _readSchedulesAll_() {
   const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID", "Kelas ID"];
   const sheet = getOrCreateSheet_('Schedules', headers);
   const data = sheet.getDataRange().getValues();
@@ -5650,10 +5665,8 @@ function _hourCell_(v) {
 
 /** Aturan jam kerja dari sheet CoachAvailability (hanya baca; tidak membuat sheet). */
 function _coachRules_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachAvailability');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+  _sheetRowsMemo_('CoachAvailability').forEach(function(r) {
     if (String(r[0]).trim() === '') return;
     out.push({ coachId: String(r[0]).trim(), hari: String(r[1]).toLowerCase().trim(), startHour: _hourCell_(r[2]), endHour: _hourCell_(r[3]) });
   });
@@ -5668,10 +5681,8 @@ function _isoDateCell_(v) {
 
 /** Cuti dari sheet CoachTimeOff (hanya baca). adminView=true menyertakan catatan. */
 function _coachTimeOff_(adminView) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+  _sheetRowsMemo_('CoachTimeOff').forEach(function(r) {
     if (String(r[0]).trim() === '') return;
     const row = {
       id: String(r[0]), coachId: String(r[1]).trim(), from: _isoDateCell_(r[2]), to: _isoDateCell_(r[3]),
