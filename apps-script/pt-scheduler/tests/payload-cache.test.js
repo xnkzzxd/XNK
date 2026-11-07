@@ -67,3 +67,15 @@ test('MemberData is read once per getPortalMore miss', () => {
   env.call('getPortalMore', t);
   assert.equal(reads.n, 1);
 });
+
+test('MemberData is read once per getAdminMore and once per getClientBundle miss', () => {
+  const env = seededEnv();
+  const adm = env.adminToken();
+  const reads = countReads(env, 'MemberData');
+  env.call('getAdminMore', adm);
+  assert.equal(reads.n, 1, 'getAdminMore');
+  const id = j(env.call('getMembers', adm))[0].id;
+  reads.n = 0;
+  env.call('getClientBundle', adm, id);
+  assert.equal(reads.n, 1, 'getClientBundle');
+});

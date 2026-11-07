@@ -117,7 +117,7 @@ function _pgHubList_() {
       if (r[0] && String(r[1]).trim() && String(r[19] || '') !== PROGRAM_OWN && /^auto:/.test(String(r[21] || ''))) autoIds[String(r[1]).trim()] = true;
     });
     const names = {}, light = [];
-    _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+    _memberValues_().data.slice(1).forEach(function(row) {
       if (!row[0]) return;
       const id = String(row[0]).trim();
       names[id] = String(row[1] || '').trim().split(/\s+/)[0];

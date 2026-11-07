@@ -1629,8 +1629,7 @@ function getMembers(token) {
 }
 
 function _getMembersAll_() {
-  const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
+  const data = _memberValues_().data;
   if (data.length <= 1) return [];
   // Kunci sesi (kolom N) TIDAK ikut dikirim.
   const list = data.slice(1).filter(function(row) { return row[0]; }).map(_memberPublicProfile_);
@@ -3829,7 +3828,7 @@ function _truthyCell_(v) { return v === true || String(v).trim().toUpperCase() =
 /** Kursi terisi per paket: klien yang masih punya sisa sesi di paket itu (klien yang kuotanya habis melepas kursi). */
 function _packageSeats_() {
   const seats = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[6] || '').trim();
     if (!id || String(r[0]).trim() === '') return;
     if ((parseInt(r[9], 10) || 0) >= (parseInt(r[8], 10) || 0)) return;
@@ -3873,7 +3872,7 @@ function getPriceListPublicImpl_() {
 
 function _packageUsage_() {
   const members = {}, log = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[6] || '').trim();
     if (id) members[id] = (members[id] || 0) + 1;
   });
@@ -4597,7 +4596,7 @@ function getRenewalRequests(token, opts) {
   if (isNaN(limit) || limit < 1) limit = 50;
   if (limit > 200) limit = 200;
   const members = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
+  _memberValues_().data.slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
   const pkgNames = {};
   const ctx = _priceListSheetAndColumns_();
   _readPackages_(ctx.sheet, ctx.idx).forEach(function(p) { pkgNames[p.id] = p.namaPaket; });
@@ -8213,7 +8212,7 @@ function _careList_(now) {
     if (st === 'completed' && (!lastSession[k] || day > lastSession[k])) lastSession[k] = day;
   });
   const out = [];
-  md.getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[0] || '').trim();
     if (!id) return;
     const rem = (parseInt(r[8], 10) || 0) - (parseInt(r[9], 10) || 0);
@@ -8328,7 +8327,7 @@ function _memberClassContext_(row) {
 
 function _publicGroup_(g, memberId) {
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
+  _memberValues_().data.slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
   const pkg = _classPackage_(g.packageId);
   return {
     id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '',
@@ -8431,7 +8430,7 @@ function getMyClassGroup(memberToken) { return _classGroupFor_(requireMember_(me
 function getClassGroups(token) {
   requireAdmin_(token);
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
+  _memberValues_().data.slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
   return _classGroupSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[4]) === 'buka'; }).map(function(r) {
     const g = _classGroupFromRow_(r);
     const pkg = _classPackage_(g.packageId);
