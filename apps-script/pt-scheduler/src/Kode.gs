@@ -4630,7 +4630,7 @@ function getRenewalRequests(token, opts) {
   const ctx = _priceListSheetAndColumns_();
   _readPackages_(ctx.sheet, ctx.idx).forEach(function(p) { pkgNames[p.id] = p.namaPaket; });
   const list = [];
-  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _sheetRowsMemo_('RenewalRequests').forEach(function(r) {
     if (!r[0]) return;
     const q = _renewalFromRow_(r);
     if (want ? q.status !== want : q.status === 'dibatalkan') return;
@@ -5375,9 +5375,9 @@ function getTasksForMember(token, memberId) {
  */
 function getTaskSummary(token) {
   requireAdmin_(token);
-  const data = _tasksSheet_().getDataRange().getValues();
+  const data = _sheetRowsMemo_('Tasks');   // Fase W: sekali per bundle (getAdminMore juga memakainya untuk sinyal)
   const summary = {};
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
     if (!data[i][0]) continue;
     const t = _taskRowToObj_(data[i]);
     if (t.status !== 'todo' || !t.memberId) continue;
@@ -8221,12 +8221,9 @@ function _careList_(now) {
   const md = ss.getSheetByName('MemberData');
   if (!md) return [];
   const asmIds = {}, healthRows = {}, lastTest = {};
-  const asm = ss.getSheetByName('Assessments');
-  if (asm) asm.getDataRange().getValues().slice(1).forEach(function(r) { asmIds[String(r[1]).trim()] = true; });
-  const hs = ss.getSheetByName('HealthScreening');
-  if (hs) hs.getDataRange().getValues().slice(1).forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
-  const ft = ss.getSheetByName('FitnessTests');
-  if (ft) ft.getDataRange().getValues().slice(1).forEach(function(r) { const k = String(r[1]).trim(); const d = _isoDateCell_(r[2]); if (!lastTest[k] || d > lastTest[k]) lastTest[k] = d; });
+  _sheetRowsMemo_('Assessments').forEach(function(r) { asmIds[String(r[1]).trim()] = true; });
+  _sheetRowsMemo_('HealthScreening').forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
+  _sheetRowsMemo_('FitnessTests').forEach(function(r) { const k = String(r[1]).trim(); const d = _isoDateCell_(r[2]); if (!lastTest[k] || d > lastTest[k]) lastTest[k] = d; });
   const lastSession = {}, todaySession = {};
   _getSchedulesAll_().forEach(function(s) {
     const st = String(s.status || '').toLowerCase();

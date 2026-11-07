@@ -353,20 +353,20 @@ function _clientSignals_(now) {
   const today = _wibParts_(now || new Date()).date;
   const rows = _memberValues_().data.slice(1).filter(function(r) { return r[0]; });
   const weights = {};
-  _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _sheetRowsMemo_('Progress').forEach(function(r) {
     const v = r[3]; if (!r[0] || v === '' || v == null) return;
     (weights[String(r[1]).trim()] || (weights[String(r[1]).trim()] = [])).push({ t: _isoDateCell_(r[2]), v: Number(v) });
   });
   Object.keys(weights).forEach(function(k) { weights[k].sort(function(a, b) { return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; }); });
   const overdue = {};
-  const sum = _tasksSheet_().getDataRange().getValues();
-  for (let i = 1; i < sum.length; i++) {
+  const sum = _sheetRowsMemo_('Tasks');
+  for (let i = 0; i < sum.length; i++) {
     if (!sum[i][0]) continue;
     const t = _taskRowToObj_(sum[i]);
     if (t.status === 'todo' && t.memberId && t.overdue) overdue[t.memberId] = (overdue[t.memberId] || 0) + 1;
   }
   const renewal = {};
-  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (!r[0]) return; const q = _renewalFromRow_(r); if (q.status === 'menunggu') renewal[q.memberId] = true; });
+  _sheetRowsMemo_('RenewalRequests').forEach(function(r) { if (!r[0]) return; const q = _renewalFromRow_(r); if (q.status === 'menunggu') renewal[q.memberId] = true; });
   const lowRating = {};
   const cutoff = _addDaysIso_(today, -14);
   _readSheetRows_('SessionRatings', _ratingFromRow_, null).forEach(function(r) { if (r.bintang > 0 && r.bintang <= 3 && String(r.tanggal) >= cutoff) lowRating[r.memberId] = true; });
