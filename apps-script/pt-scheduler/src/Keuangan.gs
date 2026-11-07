@@ -158,7 +158,12 @@ function _finText_(v, max, label) {
 function _finLocked_(fn) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Sedang sibuk, coba lagi.');
-  try { return fn(); } finally { lock.releaseLock(); }
+  try {
+    const r = fn();
+    try { SpreadsheetApp.flush(); } catch (e) {}
+    _bumpAdmin_();   // Fase W: ringkasan keuangan di getAdminMore ikut segar
+    return r;
+  } finally { lock.releaseLock(); }
 }
 
 // ── Tagihan: dibuat dari transaksi, status dihitung dari pembayaran ─────────
@@ -207,7 +212,7 @@ function _finMigrate_() {
     const prices = _allPackagePrices_();
     const names = {};
     _getMembersAll_().forEach(function(m) { names[String(m.id)] = m.name; });
-    const log = _getMembersLogSheet_().getDataRange().getValues();
+    const log = _membersLogValues_();
     let created = 0, skipped = 0;
     for (let i = 1; i < log.length; i++) {
       const r = log[i], trxId = String(r[0] || '');

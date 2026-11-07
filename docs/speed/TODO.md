@@ -24,6 +24,10 @@ Temuan: (1) dinding − server ≈ 3 dtk (alihan Apps Script + jaringan), tak bi
 - [x] T-1803 `_withMemberMemo_` + `_memberValues_`: MemberData dibaca sekali per bundle (`getPortalMore`, `getAdminMore`, `getClientBundle`); penulis tidak memakai memo.
 - [-] T-1804 Ditunda: `getPriceList`/`getCoaches`/`_businessHours_` dibaca juga oleh penulis dan pemeriksa harga; tidak semua penulisnya lewat `_bustShared_`. Dikerjakan setelah baseline menunjukkan perlu. (WorkoutLog dll. sudah memo per bundle lewat `_sheetRowsMemo_`.)
 
+## W1b — Panel (hasil ukur 2026-11-07)
+- [x] T-1813 `getAdminMore` di-cache (TTL `ADMIN_MORE_CACHE_SECONDS`, bawaan 90, 15–600; kunci hari + bulan + tahun + versi admin + versi bersama). Versi admin naik di `_bumpMember_`, `_bustSlots_`, `_bustShared_` dan `_finLocked_` (penulis keuangan); `memberVers` selalu segar; tarik-untuk-segarkan mengirim `fresh=true`. Penulis yang tidak lewat salah satunya bisa terlihat basi sampai TTL habis (paling lama 90 dtk).
+- [x] T-1814 Baca sheet berulang di bundle jadi sekali: log `Members` (`_membersLogValues_`), `SessionNotes` (N+1 per sesi hari ini di hub), `SessionRatings`/`PackageEvaluations` (`_readSheetRows_`) lewat memo per bundle; `MemberData` dibaca sekali di hub, signals, renewals, gizi dan program otomatis. Hasil ukur setelah T-1803 (`getAdminMore` server): `memberVers` 480–570 → 40–76 ms; total 19–22 → 16–19 dtk. Pemecahan hub (warm): self 0,3, members 0,3, revenue 0,7–0,9, care 0,8–1,5, feedback 0,5–0,7, workouts 0,5–0,9, programAuto 0,7–0,9, nutrition 0,3–0,5 (4,0 dtk saat pemindaian saran gizi 10-menitan jalan).
+
 ## W2 — Hitung saat menulis (mulai dari satu sheet)
 - [ ] T-1805 Sheet `MemberStats` (1 baris/klien), `rebuildStats_` idempoten, pembaca memakai baris + fallback hitung lama. Ukur ulang; `RevenueMonthly`/`FinanceMonthly` hanya bila W0 menunjukkan masih mahal.
 
