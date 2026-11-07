@@ -2992,7 +2992,12 @@
   // FullCalendar (tab Minggu, admin desktop)
   window.initCalendar = function () {
     const el = $('calendar');
-    if (!el || typeof FullCalendar === 'undefined') return;
+    if (!el) return;
+    if (typeof FullCalendar === 'undefined') {
+      // FullCalendar dimuat defer (tidak menahan tampilan pertama); gambar kalender begitu pustakanya siap.
+      if (!window._calWait) { window._calWait = 1; window.addEventListener('load', function () { window._calWait = 0; if (typeof FullCalendar !== 'undefined') window.initCalendar(); }, { once: true }); }
+      return;
+    }
     if (window.calendarInstance) { try { window.calendarInstance.destroy(); } catch (e) {} }
     el.innerHTML = '';
     const events = filteredSchedules().map(function (s) {

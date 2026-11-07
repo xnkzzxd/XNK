@@ -431,7 +431,7 @@ function _nutHubList_() {
         const id = String(r[1]).trim();
         (w[id] = w[id] || []).push({ tanggal: _isoDateCell_(r[2]), berat: Number(v) });
       });
-      _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+      _memberValues_().data.slice(1).forEach(function(row) {
         if (!row[0]) return;
         const profile = _nutProfileFrom_(row), id = String(row[0]).trim();
         if (!profile.aktif || (profile.goal !== 'turun' && profile.goal !== 'naik') || !w[id]) return;
@@ -442,7 +442,7 @@ function _nutHubList_() {
     } catch (err) { Logger.log('Saran gizi dilewati: ' + err); }
   }
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (r[0]) names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
+  _memberValues_().data.slice(1).forEach(function(r) { if (r[0]) names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
   return _nutAdviceRows_().filter(function(r) { return r.status === 'menunggu'; }).map(function(r) {
     return { id: r.id, memberId: r.memberId, name: names[r.memberId] || '', delta: r.delta, alasan: r.alasan };
   });

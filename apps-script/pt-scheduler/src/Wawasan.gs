@@ -351,7 +351,7 @@ function _clientSignalsCalc_(ctx, today) {
 /** Kumpulkan data dari sheet lalu hitung sinyal semua klien (satu bacaan per sheet). */
 function _clientSignals_(now) {
   const today = _wibParts_(now || new Date()).date;
-  const rows = _getMemberDataSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0]; });
+  const rows = _memberValues_().data.slice(1).filter(function(r) { return r[0]; });
   const weights = {};
   _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     const v = r[3]; if (!r[0] || v === '' || v == null) return;

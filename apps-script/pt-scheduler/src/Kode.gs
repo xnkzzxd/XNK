@@ -609,9 +609,24 @@ function _issueMemberSession_(found) {
 }
 
 // Cari baris member (1-based) + datanya. Kembalikan null kalau tidak ada.
-function _findMemberRow_(predicate) {
+// Fase W1: MemberData dibaca sekali per bundle baca-saja (getPortalMore, getAdminMore, getClientBundle), bukan tiap panggilan.
+// Memo hanya hidup di dalam _withMemberMemo_; penulis tidak pernah memakainya.
+let _memberMemo_ = null;
+function _memberValues_() {
+  if (_memberMemo_ && _memberMemo_.data) return _memberMemo_;
   const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
+  const v = { sheet: sheet, data: sheet.getDataRange().getValues() };
+  if (_memberMemo_) { _memberMemo_.sheet = v.sheet; _memberMemo_.data = v.data; }
+  return v;
+}
+function _withMemberMemo_(fn) {
+  const prev = _memberMemo_;
+  if (!prev) _memberMemo_ = {};
+  try { return fn(); } finally { _memberMemo_ = prev; }
+}
+function _findMemberRow_(predicate) {
+  const mv = _memberValues_();
+  const sheet = mv.sheet, data = mv.data;
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] && predicate(data[i])) return { sheet: sheet, rowNum: i + 1, row: data[i] };
   }
@@ -1614,8 +1629,7 @@ function getMembers(token) {
 }
 
 function _getMembersAll_() {
-  const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
+  const data = _memberValues_().data;
   if (data.length <= 1) return [];
   // Kunci sesi (kolom N) TIDAK ikut dikirim.
   const list = data.slice(1).filter(function(row) { return row[0]; }).map(_memberPublicProfile_);
@@ -2208,11 +2222,29 @@ function _traceEnd_(tr, label) {
  */
 function getPortalMore(memberToken) {
   const tr = _traceStart_();
-  const row = _tp_(tr, 'auth', function() { return requireMember_(memberToken).row; });
+  return _withMemberMemo_(function() {
+    const row = _tp_(tr, 'auth', function() { return requireMember_(memberToken).row; });
+    return getPortalMoreImpl_(row, tr);
+  });
+}
+function getPortalMoreImpl_(row, tr) {
   const id = String(row[0]).trim();
   const ver = _memberVer_(id);   // sebelum sheet data dibaca
+  const day0 = _todayWib_();
+  const ckey = ver && _payloadCacheOn_() ? 'pm:' + id + ':' + day0 + ':' + ver : '';
+  if (ckey) {
+    const hit = _payloadGet_(ckey);
+    if (hit) {
+      // Status coach bergantung pada jam dan jadwal klien lain, jadi tidak ikut cache.
+      const cid = String(row[10] || '').trim();
+      try { hit.coachStatus = { coachId: cid, status: getCoachStatus(cid) }; } catch (e) { hit.coachStatus = { error: String((e && e.message) || e) }; }
+      const ms = _traceEnd_(tr, 'getPortalMore:hit');
+      if (ms) { ms.hit = true; hit.ms = ms; }
+      return hit;
+    }
+  }
   const part = function(name, fn) { try { return _tp_(tr, name, fn); } catch (e) { return { error: String((e && e.message) || e) }; } };
-  return _plainJson_(_withSchedulesMemo_(function() {
+  const result = _plainJson_(_withSchedulesMemo_(function() {
     const coachId = String(row[10] || '').trim();
     const spy = {};
     const progress = part('progress', function() { return _myPayload_(row); });
@@ -2245,6 +2277,17 @@ function getPortalMore(memberToken) {
       ms: _traceEnd_(tr, 'getPortalMore')
     };
   }));
+  if (ckey && !_anyPartFailed_(result)) {
+    const copy = Object.assign({}, result);
+    delete copy.ms;
+    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('PAYLOAD_CACHE_SECONDS', 300)))));
+  }
+  return result;
+}
+
+/** Bagian bundle yang gagal ({error}) tidak disimpan di cache supaya galat sementara tidak menempel. */
+function _anyPartFailed_(bundle) {
+  return Object.keys(bundle).some(function(k) { const v = bundle[k]; return v && typeof v === 'object' && !Array.isArray(v) && typeof v.error === 'string'; });
 }
 
 /**
@@ -2355,7 +2398,7 @@ function getAdminMore(token, month, year) {
   const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
   const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
   const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
-  return _withSchedulesMemo_(function () {
+  return _withMemberMemo_(function () { return _withSchedulesMemo_(function () {
     const finance = part('finSettings', _finSettingsRead_);
     const finOn = !!(finance && finance.enabled);
     return {
@@ -2368,12 +2411,12 @@ function getAdminMore(token, month, year) {
       shareEnabled: _shareEnabled_(),
       revenue: part('revenue', function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
       packageTrend: part('packageTrend', function () { return _packageTrendStats_(m, y); }),
-      hub: part('hub', function () { return _coachHub_(new Date()); }),
+      hub: part('hub', function () { return _coachHub_(new Date(), tr); }),
       signals: part('signals', function () { return _clientSignals_(new Date()); }),
       memberVers: part('memberVers', _memberVersAll_),
       ms: _traceEnd_(tr, 'getAdminMore')
     };
-  });
+  }); });
 }
 
 /** T-200: coach kosong = ID kosong + nama kosong. Baris lama yang menyimpan teks placeholder dibaca sebagai kosong. */
@@ -3785,7 +3828,7 @@ function _truthyCell_(v) { return v === true || String(v).trim().toUpperCase() =
 /** Kursi terisi per paket: klien yang masih punya sisa sesi di paket itu (klien yang kuotanya habis melepas kursi). */
 function _packageSeats_() {
   const seats = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[6] || '').trim();
     if (!id || String(r[0]).trim() === '') return;
     if ((parseInt(r[9], 10) || 0) >= (parseInt(r[8], 10) || 0)) return;
@@ -3829,7 +3872,7 @@ function getPriceListPublicImpl_() {
 
 function _packageUsage_() {
   const members = {}, log = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[6] || '').trim();
     if (id) members[id] = (members[id] || 0) + 1;
   });
@@ -4553,7 +4596,7 @@ function getRenewalRequests(token, opts) {
   if (isNaN(limit) || limit < 1) limit = 50;
   if (limit > 200) limit = 200;
   const members = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
+  _memberValues_().data.slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
   const pkgNames = {};
   const ctx = _priceListSheetAndColumns_();
   _readPackages_(ctx.sheet, ctx.idx).forEach(function(p) { pkgNames[p.id] = p.namaPaket; });
@@ -6119,8 +6162,8 @@ function _targetPace_(goal, actual, day, daysInMonth) {
 }
 
 /** Murni-ish: ringkasan Beranda Coach untuk tanggal `now`. */
-function _coachHub_(now) {
-  const self = _selfCoach_();
+function _coachHub_(now, tr) {
+  const self = _tp_(tr, 'hub.self', _selfCoach_);
   const wib = _wibParts_(now);
   const mine = function(s) { return !s.coachId || (self && s.coachId === self.id); };
   const all = _getSchedulesAll_().filter(mine);
@@ -6146,7 +6189,7 @@ function _coachHub_(now) {
   stats.weekHours = Math.round(stats.weekHours * 10) / 10;
   stats.monthHours = Math.round(stats.monthHours * 10) / 10;
   stats.streak = _streak_(weeks, wib.date);
-  const members = _getMembersAll_();
+  const members = _tp_(tr, 'hub.members', _getMembersAll_);
   stats.activeClients = members.filter(function(m) { return Number(m.totalSessions) > Number(m.usedSessions); }).length;
 
   const today = all.filter(function(s) {
@@ -6170,7 +6213,7 @@ function _coachHub_(now) {
     let actual = 0;
     if (k === 'sesi') actual = stats.monthSessions;
     else if (k === 'klienAktif') actual = stats.activeClients;
-    else if (k === 'pendapatan') actual = _revenueSummary_(p[1], p[0]).total;
+    else if (k === 'pendapatan') actual = _tp_(tr, 'hub.revenue', function() { return _revenueSummary_(p[1], p[0]).total; });
     else if (k === 'klienBaru') {
       _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
         if (String(r[3]) !== 'Baru') return;
@@ -6183,7 +6226,12 @@ function _coachHub_(now) {
   });
   return {
     selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
-    today: today, stats: stats, targets: targets, care: _careList_(now), feedback: _feedbackSummary_(now.getTime()), workouts: _workoutHubList_(), nutrition: _nutHubList_(), programAuto: _pgHubList_(),
+    today: today, stats: stats, targets: targets,
+    care: _tp_(tr, 'hub.care', function() { return _careList_(now); }),
+    feedback: _tp_(tr, 'hub.feedback', function() { return _feedbackSummary_(now.getTime()); }),
+    workouts: _tp_(tr, 'hub.workouts', _workoutHubList_),
+    nutrition: _tp_(tr, 'hub.nutrition', _nutHubList_),
+    programAuto: _tp_(tr, 'hub.programAuto', _pgHubList_),
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }
@@ -6314,11 +6362,24 @@ function _fitnessSummary_(byTest) {
  * Tiap bagian sama persis dengan fungsi lamanya; bagian yang gagal diberi {error}. Hanya admin.
  */
 function getClientBundle(token, memberId) {
+  requireAdmin_(token);
   const tr = _traceStart_();
-  _tp_(tr, 'auth', function() { requireAdmin_(token); });
+  return _withMemberMemo_(function() { return getClientBundleImpl_(token, memberId, tr); });
+}
+function getClientBundleImpl_(token, memberId, tr) {
   const ver = _memberVer_(memberId);   // sebelum sheet data dibaca
+  // Data perawatan ikut di sini: disimpan sebentar di CacheService server (izin pemilik), TTL pendek 30–300 dtk (bawaan 180).
+  const ckey = ver && _payloadCacheOn_() ? 'cb:' + String(memberId).trim() + ':' + _todayWib_() + ':' + ver : '';
+  if (ckey) {
+    const hit = _payloadGet_(ckey);
+    if (hit) {
+      const ms = _traceEnd_(tr, 'getClientBundle:hit');
+      if (ms) { ms.hit = true; hit.ms = ms; }
+      return hit;
+    }
+  }
   const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
-  return _plainJson_(_withSchedulesMemo_(function () {
+  const result = _plainJson_(_withSchedulesMemo_(function () {
     const progress = part('progress', function () { return getMemberProgress(token, memberId); });
     const workout = part('workout', function () { return getWorkoutLog(token, memberId); });
     const program = part('program', function () { return getMemberProgram(token, memberId); });
@@ -6346,6 +6407,12 @@ function getClientBundle(token, memberId) {
       ms: _traceEnd_(tr, 'getClientBundle')
     };
   }));
+  if (ckey && !_anyPartFailed_(result)) {
+    const copy = Object.assign({}, result);
+    delete copy.ms;
+    _payloadPut_(ckey, copy, Math.max(30, Math.min(300, Math.floor(_numProp_('CLIENT_BUNDLE_CACHE_SECONDS', 180)))));
+  }
+  return result;
 }
 
 /**
@@ -8145,7 +8212,7 @@ function _careList_(now) {
     if (st === 'completed' && (!lastSession[k] || day > lastSession[k])) lastSession[k] = day;
   });
   const out = [];
-  md.getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[0] || '').trim();
     if (!id) return;
     const rem = (parseInt(r[8], 10) || 0) - (parseInt(r[9], 10) || 0);
@@ -8260,7 +8327,7 @@ function _memberClassContext_(row) {
 
 function _publicGroup_(g, memberId) {
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
+  _memberValues_().data.slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
   const pkg = _classPackage_(g.packageId);
   return {
     id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '',
@@ -8363,7 +8430,7 @@ function getMyClassGroup(memberToken) { return _classGroupFor_(requireMember_(me
 function getClassGroups(token) {
   requireAdmin_(token);
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
+  _memberValues_().data.slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
   return _classGroupSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[4]) === 'buka'; }).map(function(r) {
     const g = _classGroupFromRow_(r);
     const pkg = _classPackage_(g.packageId);
@@ -8498,6 +8565,45 @@ function _bumpMember_(ids, flushed) {
 /** Naikkan versi lalu kembalikan hasil penulisan (bentuk jawaban tidak berubah). */
 function _bumpAfter_(ids, result) { _bumpMember_(ids); return result; }
 
+// ── Cache hasil jadi (Fase W1) ───────────────────────────────────────────────
+// Hasil akhir getPortalMore / getClientBundle disimpan di CacheService dengan kunci = klien + hari WIB + versi data klien.
+// Setiap penulis data klien menaikkan versi (lihat atas), jadi tulisan baru otomatis memakai kunci baru. Besar jawaban
+// dipecah per 30.000 karakter (batas 100 KB per nilai). PAYLOAD_CACHE=false mematikan; TTL dari Script Property.
+const PAYLOAD_CHUNK_ = 30000, PAYLOAD_MAX_CHUNKS_ = 12;
+function _payloadCacheOn_() {
+  return String(PropertiesService.getScriptProperties().getProperty('PAYLOAD_CACHE') || '').trim().toLowerCase() !== 'false';
+}
+function _payloadGet_(key) {
+  try {
+    const c = CacheService.getScriptCache();
+    const n = Number(c.get(key));
+    if (!(n >= 1 && n <= PAYLOAD_MAX_CHUNKS_)) return null;
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push(key + ':' + i);
+    const got = c.getAll ? c.getAll(keys) : {};
+    let str = '';
+    for (let i = 0; i < n; i++) {
+      const part = c.getAll ? got[keys[i]] : c.get(keys[i]);
+      if (typeof part !== 'string') return null;
+      str += part;
+    }
+    return JSON.parse(str);
+  } catch (e) { return null; }
+}
+function _payloadPut_(key, obj, ttl) {
+  try {
+    const str = JSON.stringify(obj);
+    const n = Math.ceil((str ? str.length : 0) / PAYLOAD_CHUNK_);
+    if (n < 1 || n > PAYLOAD_MAX_CHUNKS_) return;
+    const c = CacheService.getScriptCache();
+    const all = {};
+    for (let i = 0; i < n; i++) all[key + ':' + i] = str.slice(i * PAYLOAD_CHUNK_, (i + 1) * PAYLOAD_CHUNK_);
+    if (c.putAll) { all[key] = String(n); c.putAll(all, ttl); return; }
+    Object.keys(all).forEach(function(k) { c.put(k, all[k], ttl); });
+    c.put(key, String(n), ttl);
+  } catch (e) {}
+}
+
 /** Pemilik (Member ID) satu jadwal, '' kalau tidak ada. Untuk _bumpMember_ di penulis yang hanya tahu ID jadwal. */
 function _scheduleMemberId_(scheduleId) {
   const sid = String(scheduleId == null ? '' : scheduleId);
@@ -8507,7 +8613,7 @@ function _scheduleMemberId_(scheduleId) {
 
 /** Panel: versi data semua klien (untuk salinan halaman klien di perangkat coach). Nilai = sama dengan _memberVer_. */
 function _memberVersAll_() {
-  const ids = _getMemberDataSheet_().getDataRange().getValues().slice(1).map(function(r) { return String(r[0]).trim(); }).filter(Boolean);
+  const ids = _memberValues_().data.slice(1).map(function(r) { return String(r[0]).trim(); }).filter(Boolean);
   const v = _memberVers_(ids.concat(['*']));
   const shared = _sharedVersion_(), all = v['*'], out = {};
   if (!all) return out;

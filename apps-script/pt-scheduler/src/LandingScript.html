@@ -1522,8 +1522,17 @@
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
   // Data dimuat segera (tidak menunggu library animasi).
+  // Harga: kunjungan berikutnya langsung tampil dari salinan di perangkat, lalu disegarkan dari server (tampilan diganti hanya bila beda).
+  var priceCached = null;
+  try { priceCached = JSON.parse(localStorage.getItem('xnk_landing_prices') || 'null'); } catch (e) {}
+  var priceCachedStr = priceCached ? JSON.stringify(priceCached) : '';
+  if (priceCached) { try { initializePricingUI(priceCached); } catch (e) { priceCached = null; priceCachedStr = ''; } }
   call('getPriceListPublic').catch(function () { return call('getPriceList'); })   // server lama: tanpa getPriceListPublic
-    .then(initializePricingUI).catch(function () { initializePricingUI([]); });
+    .then(function (d) {
+      var str = JSON.stringify(d);
+      try { localStorage.setItem('xnk_landing_prices', str); } catch (e) {}
+      if (str !== priceCachedStr) initializePricingUI(d);
+    }).catch(function () { if (!priceCached) initializePricingUI([]); });
   call('getLandingStats').then(renderHeroStats).catch(function () { renderHeroStats({ totalClients: 0, completedSessions: 0, satisfactionPct: null, avgRating: null }); });
   call('getPublicTestimonials').then(renderTestimonials).catch(function () { renderTestimonials([]); });
   call('getCoaches').then(function (list) {

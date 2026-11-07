@@ -8,30 +8,32 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. 👤 = perlu pemilik.
 
 ## W0 — Ukur baseline
 - [x] T-1800 `ms` per bagian di `getPortalMore`, `getAdminMore`, `getClientBundle` (`_traceStart_` / `_tp_` / `_traceEnd_` di `Kode.gs`; angka saja, satu baris `console.log`, `SPEED_TRACE=false` mematikan; bawaan nyala, pengecualian sadar dari aturan 5 karena dipakai untuk mengukur). Tes: `tests/speed-trace.test.js`.
-- [ ] T-1801 👤 Setelah di-merge dan ter-deploy: buka portal dan panel di perangkat pemilik, ambil `ms` (tab Network di /next/: respons berisi `ms`; atau Executions di editor Apps Script: baris `speed getPortalMore …`), 5+ panggilan dingin dan hangat per fungsi. Tulis median per bagian di sini. Bagian < ~100 ms tidak disentuh.
+- [~] T-1801 Baseline langsung diukur 2026-11-07 dari pane browser pemilik (panel `/next/`, 57 klien, tanpa cache server). `getPortalMore` belum (butuh kunci klien). Tabel di bawah.
 
-Baseline (diisi T-1801):
-| Fungsi | Total | Bagian terbesar |
-| --- | --- | --- |
-| getPortalMore | ? | ? |
-| getAdminMore | ? | ? |
-| getClientBundle | ? | ? |
+Baseline (T-1801, waktu server dari field `ms`, jam dinding dari browser):
+| Fungsi | Dinding | Server | Bagian terbesar (ms) |
+| --- | --- | --- | --- |
+| getAdminMore (n=6 dinding, 2 dengan ms) | 19,8–33,6 dtk (median ~25) | 19,0–22,2 dtk | hub 8.600–10.000, signals 3.100–3.300, revenue 1.800–1.900, transactionLog 1.300–1.900, renewals 1.200–1.300, packageTrend 600, taskSummary 450–570, memberVers 480–570 |
+| getClientBundle (n=7 dinding, 3 dengan ms) | 13,0–17,5 dtk (median ~14) | 10,3–12,3 dtk | insight 1.600–2.200, nutrition 1.400–2.000, care 1.200–1.400, progress 1.000–1.200, workout 850–1.300, share 600–1.300, program 590–990, foodLog 700–900, programGen 470–740, tasks 400–450 |
+| getPortalMore | belum diukur | — | — |
+
+Temuan: (1) dinding − server ≈ 3 dtk (alihan Apps Script + jaringan), tak bisa dihindari. (2) Setiap bagian bundel ≈ 0,4–2 dtk, kira-kira satu baca sheet; jadi bundel mahal karena jumlah baca sheet, bukan satu fungsi lambat. (3) `getAdminMore` memakai ~20 dtk server dan itu jalan di latar saat panel dibuka; hub (~9 dtk) adalah target pertama. Hub dipecah per bagian (`hub.care`, `hub.nutrition`, …) di commit berikutnya untuk menemukan yang paling mahal.
 
 ## W1 — Cache hasil jadi di server
-- [ ] T-1802 Cache payload `getPortalMore` / `getClientBundle` / `getAdminMore` di CacheService, kunci `_memberVer_`; payload > ~90 KB dipecah per bagian. `getClientBundle` (data kesehatan/perawatan) boleh disimpan dengan TTL pendek 120–300 dtk (izin pemilik); tetap tidak ke Telegram, `xnk_admin_cache`, atau jawaban publik.
-- [ ] T-1803 Satu baca `MemberData` per request (`requireMember_` → `_memberRowOrThrow_` → `_memberVersAll_`).
-- [ ] T-1804 Perluas `_sharedCached_` ke `getCoaches`, `getPriceList`, `_businessHours_`. (WorkoutLog dll. sudah memo per bundle lewat `_sheetRowsMemo_`.)
+- [x] T-1802 Hasil jadi `getPortalMore` (kunci klien + hari WIB + versi) dan `getClientBundle` (TTL 30–300 dtk, bawaan 180; izin pemilik untuk data perawatan) di CacheService, dipecah 30.000 karakter per nilai; `coachStatus` selalu segar (tergantung jam); bundel yang ada bagian `{error}` tidak disimpan; `PAYLOAD_CACHE=false` mematikan, `PAYLOAD_CACHE_SECONDS` (bawaan 300, 30–1800). `getAdminMore` tidak di-cache: tidak ada versi yang menutup semua penulisnya (dikerjakan bersama W2). Tes: `tests/payload-cache.test.js`.
+- [x] T-1803 `_withMemberMemo_` + `_memberValues_`: MemberData dibaca sekali per bundle (`getPortalMore`, `getAdminMore`, `getClientBundle`); penulis tidak memakai memo.
+- [-] T-1804 Ditunda: `getPriceList`/`getCoaches`/`_businessHours_` dibaca juga oleh penulis dan pemeriksa harga; tidak semua penulisnya lewat `_bustShared_`. Dikerjakan setelah baseline menunjukkan perlu. (WorkoutLog dll. sudah memo per bundle lewat `_sheetRowsMemo_`.)
 
 ## W2 — Hitung saat menulis (mulai dari satu sheet)
 - [ ] T-1805 Sheet `MemberStats` (1 baris/klien), `rebuildStats_` idempoten, pembaca memakai baris + fallback hitung lama. Ukur ulang; `RevenueMonthly`/`FinanceMonthly` hanya bila W0 menunjukkan masih mahal.
 
 ## W4 — Kurangi panggilan
-- [ ] T-1806 Panel: gabung panggilan keuangan ke bootstrap/`getAdminMore`.
-- [ ] T-1807 Landing: JSON harga statis hanya untuk tampilan pertama, tetap segarkan dari server.
+- [x] T-1806 Sudah beres: buka panel = `getAdminBootstrap` + `getAdminMore` (keuangan/omzet sudah di dalam `getAdminMore`; `getFinanceOverview` hanya dipanggil saat tombol Keuangan dinyalakan).
+- [x] T-1807 Landing: harga tampil dari salinan di perangkat (`xnk_landing_prices`), disegarkan dari server dan diganti hanya bila beda. (Kunjungan pertama tetap menunggu server; berkas JSON statis belum dibuat.)
 - [ ] T-1808 Tes regresi: tidak ada `getPortalMore` bila `moreVer` sama; hitung panggilan per layar di `browser-check.js`.
 
 ## W5 — Frontend
-- [ ] T-1809 `defer` lucide; fullcalendar dan cropper lazy; preconnect font.
+- [~] T-1809 FullCalendar dan cropper `defer` (kalender menunggu `load` bila dipanggil lebih awal). Lucide sengaja tetap sinkron: tanpa itu ikon muncul belakangan dan layout bergeser. Belum terukur.
 - [ ] T-1810 `Bagikan.html` keluar dari inline (cek `build-static.js`, `share-check.js`, `build-demo.js` dulu).
 - [ ] T-1811 Skeleton konsisten; landing menunda SplitText/lenis.
 - [ ] T-1812 Pecah `App.html`/`Theme.html`: paling akhir, bersama AAA4 (alat build dan tes bergantung pada satu blok script/style per berkas include).
