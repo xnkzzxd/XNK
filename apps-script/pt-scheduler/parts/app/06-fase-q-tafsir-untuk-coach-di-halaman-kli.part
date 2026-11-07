@@ -425,10 +425,8 @@
     const f = window.taskForm;
     const title = $('task-title').value.trim();
     if (!title) { window.showToast('Isi judul dulu untuk dijadikan template.'); $('task-title').focus(); return; }
-    const done = busy($('task-save-tpl'), 'Menyimpan…');
-    adminCall('saveTaskTemplate', { title: title, description: $('task-desc').value.trim(), category: f.category, repeat: f.repeat })
-      .then(function (r) { done(); window.showToast(r && r.updated ? 'Template diperbarui.' : 'Template disimpan.'); return loadTaskTemplates(); })
-      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    optimistic({ q: { mode: 'admin', fn: 'saveTaskTemplate', args: [{ title: title, description: $('task-desc').value.trim(), category: f.category, repeat: f.repeat }] },
+      ok: 'Template disimpan.', label: 'Template PR', then: function () { loadTaskTemplates(); } });
   };
   window.deleteTaskTemplateItem = function (id) {
     const t = window.taskTemplates.find(x => String(x.id) === String(id));
@@ -448,14 +446,10 @@
     if (!title) { window.showToast('Judul wajib diisi.'); $('task-title').focus(); return; }
     if (f.repeat !== 'none' && !dueIso) { window.showToast('PR berulang wajib punya tenggat awal.'); $('task-due').focus(); return; }
     const data = { title: title, description: $('task-desc').value.trim(), category: f.category, dueDate: isoToDmy(dueIso), repeat: f.repeat };
-    const done = busy($('task-submit'), 'Menyimpan…');
-    const req = f.id ? adminCall('updateTask', Object.assign({ id: f.id }, data)) : adminCall('addTask', Object.assign({ memberId: f.memberId }, data));
-    req.then(function () {
-      done();
-      window.closeModal();
-      window.showToast(f.id ? 'PR diperbarui.' : 'PR ditambahkan.');
-      return afterTaskChange(f.memberId);
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Ubah = upsert (boleh masuk outbox); tambah baru tidak diantre supaya tidak dobel.
+    optimistic(Object.assign(f.id ? { q: { mode: 'admin', fn: 'updateTask', args: [Object.assign({ id: f.id }, data)] } }
+      : { call: function () { return adminCall('addTask', Object.assign({ memberId: f.memberId }, data)); } },
+      { sheet: true, ok: f.id ? 'PR diperbarui.' : 'PR ditambahkan.', label: 'PR', then: function () { afterTaskChange(f.memberId); } }));
   };
 
   window.openEditProfileModal = function () {
@@ -488,15 +482,12 @@
     const coach = window.coaches.find(c => String(c.id) === String(data.coachId));
     data.preferredCoachId = data.coachId;
     data.preferredCoachName = coach ? coach.name : '';
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('updateMemberProfile', data).then(function () {
-      done();
-      const m = window.members.find(x => String(x.id) === String(data.id));
-      if (m) Object.assign(m, data);
-      window.closeModal();
-      window.updateUI();
-      window.showToast('Data klien diperbarui.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    const m = window.members.find(x => String(x.id) === String(data.id));
+    const before = m ? Object.assign({}, m) : null;
+    optimistic({ q: { mode: 'admin', fn: 'updateMemberProfile', args: [data] }, sheet: true, ok: 'Data klien diperbarui.', label: 'Data klien',
+      undo: function () { if (m && before) { Object.keys(m).forEach(k => delete m[k]); Object.assign(m, before); window.updateUI(); } } });
+    if (m) Object.assign(m, data);
+    window.updateUI();
   };
 
   window.openDeleteConfirmModal = function () {
@@ -726,10 +717,8 @@
     renderHoursRows();
   };
   window.saveHours = function () {
-    const done = busy($('btn-save-hours'), 'Menyimpan…');
-    adminCall('saveCoachAvailability', hoursCoachId, hoursState).then(function () {
-      done(); window.closeModal(); window.showToast('Jam kerja disimpan.'); window.openHoursPage();
-    }).catch(function (err) { done(); window.showToast(err.message); });
+    optimistic({ q: { mode: 'admin', fn: 'saveCoachAvailability', args: [hoursCoachId, hoursState] }, sheet: true, ok: 'Jam kerja disimpan.', label: 'Jam kerja',
+      then: function () { window.openHoursPage(); } });
   };
 
   window.toggleOffHours = function () { $('off-hours').classList.toggle('hide', $('off-allday').checked); };

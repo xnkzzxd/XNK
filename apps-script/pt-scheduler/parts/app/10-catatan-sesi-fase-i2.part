@@ -26,12 +26,16 @@
     const rpe = $('sn-rpe').value.trim();
     if (rpe && !/^(10|[1-9])$/.test(rpe)) { $('sn-err').textContent = 'RPE harus bilangan bulat 1 sampai 10.'; return; }
     $('sn-err').textContent = '';
-    const done = busy($(withWa ? 'sn-wa-btn' : 'sn-save-btn'), 'Menyimpan…');
-    adminCall('saveSessionNote', s.id, { dilatih: $('sn-dilatih').value, fokus: $('sn-fokus').value, rpe: rpe, pribadi: $('sn-pribadi').value }).then(function (r) {
-      done(); window.closeModal();
-      window.showToast('Catatan sesi disimpan.');
-      if (withWa) setTimeout(function () { window.sendToParentWA(s.phone, r.text); }, 200);
-    }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
+    const note = { dilatih: $('sn-dilatih').value, fokus: $('sn-fokus').value, rpe: rpe, pribadi: $('sn-pribadi').value };
+    if (withWa) {   // teks WA dibuat server, jadi tombol WA tetap menunggu jawabannya
+      const done = busy($('sn-wa-btn'), 'Menyimpan…');
+      adminCall('saveSessionNote', s.id, note).then(function (r) {
+        done(); window.closeModal(); window.showToast('Catatan sesi disimpan.');
+        setTimeout(function () { window.sendToParentWA(s.phone, r.text); }, 200);
+      }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
+      return;
+    }
+    optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, errEl: 'sn-err', ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
   };
 
   // Daftar "Perlu perhatian" di Beranda Coach
@@ -92,10 +96,8 @@
     e.preventDefault();
     const n = (myCare.form.questions || []).length, q = [];
     for (let i = 0; i < n; i++) { const b = document.querySelector('#ph-questions button.active[data-q="' + i + '"]'); q.push(b ? b.getAttribute('data-v') : ''); }
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Mengirim…');
-    memberCall('submitMyHealthForm', { q: q, injuries: $('ph-injuries').value, medication: $('ph-med').value, other: $('ph-other').value, consent: $('ph-consent').checked ? 'ya' : '' })
-      .then(function () { done(); window.closeModal(); window.showToast('Terima kasih, coach akan membacanya.'); window.loadMyCare(); })
-      .catch(function (err) { done(); window.showToast(err.message); });
+    optimistic({ q: { mode: 'member', fn: 'submitMyHealthForm', args: [{ q: q, injuries: $('ph-injuries').value, medication: $('ph-med').value, other: $('ph-other').value, consent: $('ph-consent').checked ? 'ya' : '' }] },
+      sheet: true, ok: 'Terima kasih, coach akan membacanya.', label: 'Form kesehatan', then: function () { window.loadMyCare(); } });
   };
 
   window.assignUnassignedConfirm = function () {

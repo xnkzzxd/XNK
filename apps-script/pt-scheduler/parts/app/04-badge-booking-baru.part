@@ -680,11 +680,11 @@
       end: event.end ? event.end.toISOString() : new Date(event.start.getTime() + 3600000).toISOString(),
       notes: (s && s.notes) || ''
     };
-    adminCall('updateScheduleData', data).then(function () {
-      if (s) { s.start = data.start; s.end = data.end; }
-      window.showToast('Jadwal dipindah ke ' + fmtShort(event.start) + ' ' + fmtTime(event.start) + '.');
-      refreshDetail();
-    }).catch(function (err) { revert(); window.showToast('Gagal memindah jadwal: ' + err.message); });
+    const old = s ? { start: s.start, end: s.end } : null;
+    if (s) { s.start = data.start; s.end = data.end; }
+    optimistic({ call: function () { return adminCall('updateScheduleData', data); }, ok: 'Jadwal dipindah ke ' + fmtShort(event.start) + ' ' + fmtTime(event.start) + '.', label: 'Pindah jadwal',
+      then: function () { refreshDetail(); },
+      undo: function () { if (s && old) Object.assign(s, old); revert(); } });
   };
 
   // ── Detail sesi (admin) ─────────────────────────────────────────────────────
@@ -774,18 +774,15 @@
     const m = window.members.find(x => String(x.id) === String(s.memberId));
     if (m && Number(m.usedSessions) >= Number(m.totalSessions)) { window.showToast('Kuota sesi klien ini sudah habis.'); return; }
     window.showConfirmModal('Sesi <b>' + h(s.title) + '</b> ditandai selesai dan kuota klien berkurang 1.', function () {
-      const btn = $('btn-complete-session');
-      const done = busy(btn, 'Memproses…');
-      adminCall('completeSession', s.id, s.memberId).then(function (result) {
-        done();
-        s.status = 'completed';
-        s.completedAt = new Date().toISOString();
-        if (m) m.usedSessions = (Number(m.usedSessions) || 0) + 1;
-        window.updateUI();
-        window.showToast('Sesi selesai. Kuota dipotong.');
-        // Catatan sesi + pesan pasca-sesi (memuat sisa sesi) menggantikan konfirmasi "kirim info sisa sesi".
-        setTimeout(function () { window.openSessionNote(s.id, true, result); }, 350);
-      }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+      const old = { status: s.status, completedAt: s.completedAt, used: m ? m.usedSessions : null };
+      s.status = 'completed';
+      s.completedAt = new Date().toISOString();
+      if (m) m.usedSessions = (Number(m.usedSessions) || 0) + 1;
+      window.updateUI();
+      optimistic({ call: function () { return adminCall('completeSession', s.id, s.memberId); }, ok: 'Sesi selesai. Kuota dipotong.', label: 'Sesi selesai',
+        // Catatan sesi + pesan pasca-sesi (memuat sisa sesi dari server) dibuka setelah jawaban datang.
+        then: function (result) { window.openSessionNote(s.id, true, result); },
+        undo: function () { s.status = old.status; s.completedAt = old.completedAt; if (m) m.usedSessions = old.used; window.updateUI(); } });
     }, { title: 'Tandai sesi selesai?', confirmText: 'Ya, selesai', icon: 'check-circle-2' });
   };
 

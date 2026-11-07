@@ -79,9 +79,7 @@
     e.preventDefault();
     const data = {};
     ['sesi', 'klienAktif', 'pendapatan', 'klienBaru'].forEach(function (k) { data[k] = $('tg-' + k).value.trim(); });
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveCoachTargets', data).then(function () { done(); window.closeModal(); window.showToast('Target disimpan.'); loadHub(); })
-      .catch(function (err) { done(); window.showToast(err.message); });
+    optimistic({ q: { mode: 'admin', fn: 'saveCoachTargets', args: [data] }, sheet: true, ok: 'Target disimpan.', label: 'Target', then: function () { loadHub(); } });
   };
 
 
@@ -150,11 +148,11 @@
   window.contentSave = function (e) {
     if (e) e.preventDefault();
     $('cn-err').textContent = '';
-    const done = busy($('cn-save'), 'Menyimpan…');
-    adminCall('saveContent', { id: cnt.editId, tipe: cnt.tipe, judul: $('cn-judul').value, isi: $('cn-isi').value, url: $('cn-url').value.trim(), kategori: $('cn-kategori').value,
-      mulai: $('cn-mulai').value, sampai: $('cn-sampai').value, sematkan: $('cn-sematkan').checked, aktif: $('cn-aktif').checked })
-      .then(function () { done(); window.closeModal(); window.showToast('Konten disimpan.'); return window.loadContentAdmin(); })
-      .catch(function (err) { done(); $('cn-err').textContent = window.authMessage(err); });
+    if (!$('cn-judul').value.trim()) { $('cn-err').textContent = 'Judul wajib diisi.'; $('cn-judul').focus(); return; }   // cek di browser dulu (sama dengan server)
+    const data = { id: cnt.editId, tipe: cnt.tipe, judul: $('cn-judul').value, isi: $('cn-isi').value, url: $('cn-url').value.trim(), kategori: $('cn-kategori').value,
+      mulai: $('cn-mulai').value, sampai: $('cn-sampai').value, sematkan: $('cn-sematkan').checked, aktif: $('cn-aktif').checked };
+    optimistic(Object.assign(data.id ? { q: { mode: 'admin', fn: 'saveContent', args: [data] } } : { call: function () { return adminCall('saveContent', data); } },
+      { sheet: true, errEl: 'cn-err', ok: 'Konten disimpan.', label: 'Konten', then: function () { window.loadContentAdmin(); } }));
   };
   window.contentDelete = function () {
     const id = cnt.editId; if (!id) return;
