@@ -472,6 +472,7 @@
   }
   // Optimistic: sesi langsung masuk Jadwalku; ditolak server = sesi dihapus lagi, lembar dibuka dengan pesan/alternatif jam.
   function clientBookFast(form, data, member) {
+    clearSchNotice(form);   // panel bentrok/galat lama tidak boleh tertinggal di lembar yang ditutup
     const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
     const tmpId = 'tmp-' + Date.now();
     window.schedules.push(normalizeSchedules([{ id: tmpId, memberId: member.id, title: member.name, notes: data.notes, status: 'unread', start: data.start, end: data.end, coachId: data.coachId || '', pending: true }])[0]);
@@ -530,6 +531,7 @@
   function clientRescheduleFast(form, id, data, notes) {
     const s = window.schedules.find(x => String(x.id) === String(id));
     if (!s) return false;
+    clearSchNotice(form);   // panel bentrok/galat lama tidak boleh tertinggal di lembar yang ditutup
     const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
     const old = { start: s.start, end: s.end, notes: s.notes };
     s.start = data.start; s.end = data.end; s.notes = notes;
