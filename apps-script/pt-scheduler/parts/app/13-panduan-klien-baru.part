@@ -600,7 +600,7 @@
       const text = 'Halo Coach, saya ' + data.name + (res.status === 'exists' ? ' (sudah terdaftar) ingin perpanjang paket PT.' : ' ingin mendaftar PT.') +
         '\n\n*Detail pendaftaran:*\nKategori: ' + String(type).toUpperCase() + '\nPaket: ' + pkgName + ' (' + sessions + ' sesi)\nGoal: ' + data.goal +
         '\n\n*Total tagihan: ' + price + '*\n\nMohon info nomor rekening pembayarannya ya Coach. Terima kasih!';
-      window.showWaPrompt(window.waUrl(window.coachContactNumber(), text), 'Kirim detail pendaftaran ke Coach lewat WhatsApp.');
+      window.showWaPrompt(window.waUrl(window.coachPhoneById(data.coachId), text), 'Kirim detail pendaftaran ke Coach lewat WhatsApp.');
       if (res.status === 'exists') {
         window.showToast('Nomor ini sudah terdaftar. Coach akan memproses perpanjanganmu.', 'info');
         if (!window.publicLoggedMember) window.navigate('public-login');

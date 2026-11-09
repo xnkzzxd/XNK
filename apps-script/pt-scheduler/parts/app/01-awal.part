@@ -213,6 +213,11 @@
     clearTimeout(window._waPromptTimer);
     window._waPromptTimer = setTimeout(dismiss, 30000);
   };
+  // Nomor WA coach yang dipilih (id); kosong/tidak ketemu → nomor kontak umum (mode solo).
+  window.coachPhoneById = function (id) {
+    const c = id ? (window.coaches || []).find(function (x) { return x && String(x.id) === String(id) && x.phone; }) : null;
+    return c ? sanitizePhone(c.phone) : window.coachContactNumber();
+  };
   window.coachContactNumber = function () {
     const fixed = sanitizePhone(COACH_WA_NUMBER || '');
     if (fixed.length >= 10) return fixed;
