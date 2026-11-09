@@ -213,6 +213,11 @@
     clearTimeout(window._waPromptTimer);
     window._waPromptTimer = setTimeout(dismiss, 30000);
   };
+  // Nomor WA coach yang dipilih (id); kosong/tidak ketemu → nomor kontak umum (mode solo).
+  window.coachPhoneById = function (id) {
+    const c = id ? (window.coaches || []).find(function (x) { return x && String(x.id) === String(id) && x.phone; }) : null;
+    return c ? sanitizePhone(c.phone) : window.coachContactNumber();
+  };
   window.coachContactNumber = function () {
     const fixed = sanitizePhone(COACH_WA_NUMBER || '');
     if (fixed.length >= 10) return fixed;
@@ -8082,7 +8087,7 @@
     window.closeModal();
     renderRenewSlot();
     const coach = (window.coaches || []).find(c => String(c.id) === String(coachId));
-    window.showWaPrompt(window.waUrl(coach ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
+    window.showWaPrompt(window.waUrl(coach && coach.phone ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
     memberCall('requestRenewal', p.id, coachId).then(function (res) {
       window.myRenewal = res.request;
       renderRenewSlot();
@@ -8096,7 +8101,7 @@
   window.renewResend = function () {
     const r = window.myRenewal;
     if (!r) return;
-    window.showWaPrompt(window.waUrl(renewCoachPhone(), renewText(r.packageName || 'paket', r.harga)), 'Kirim pesan perpanjang ke coach lewat WhatsApp.');
+    window.showWaPrompt(window.waUrl(r.coachId ? window.coachPhoneById(r.coachId) : renewCoachPhone(), renewText(r.packageName || 'paket', r.harga)), 'Kirim pesan perpanjang ke coach lewat WhatsApp.');
   };
 
   // ── Minta perpanjang di panel (Fase D3) ─────────────────────────────────────
@@ -10192,7 +10197,7 @@
       const text = 'Halo Coach, saya ' + data.name + (res.status === 'exists' ? ' (sudah terdaftar) ingin perpanjang paket PT.' : ' ingin mendaftar PT.') +
         '\n\n*Detail pendaftaran:*\nKategori: ' + String(type).toUpperCase() + '\nPaket: ' + pkgName + ' (' + sessions + ' sesi)\nGoal: ' + data.goal +
         '\n\n*Total tagihan: ' + price + '*\n\nMohon info nomor rekening pembayarannya ya Coach. Terima kasih!';
-      window.showWaPrompt(window.waUrl(window.coachContactNumber(), text), 'Kirim detail pendaftaran ke Coach lewat WhatsApp.');
+      window.showWaPrompt(window.waUrl(window.coachPhoneById(data.coachId), text), 'Kirim detail pendaftaran ke Coach lewat WhatsApp.');
       if (res.status === 'exists') {
         window.showToast('Nomor ini sudah terdaftar. Coach akan memproses perpanjanganmu.', 'info');
         if (!window.publicLoggedMember) window.navigate('public-login');

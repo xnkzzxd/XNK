@@ -752,7 +752,7 @@
     window.closeModal();
     renderRenewSlot();
     const coach = (window.coaches || []).find(c => String(c.id) === String(coachId));
-    window.showWaPrompt(window.waUrl(coach ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
+    window.showWaPrompt(window.waUrl(coach && coach.phone ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
     memberCall('requestRenewal', p.id, coachId).then(function (res) {
       window.myRenewal = res.request;
       renderRenewSlot();
@@ -766,6 +766,6 @@
   window.renewResend = function () {
     const r = window.myRenewal;
     if (!r) return;
-    window.showWaPrompt(window.waUrl(renewCoachPhone(), renewText(r.packageName || 'paket', r.harga)), 'Kirim pesan perpanjang ke coach lewat WhatsApp.');
+    window.showWaPrompt(window.waUrl(r.coachId ? window.coachPhoneById(r.coachId) : renewCoachPhone(), renewText(r.packageName || 'paket', r.harga)), 'Kirim pesan perpanjang ke coach lewat WhatsApp.');
   };
 
