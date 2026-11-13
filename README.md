@@ -91,6 +91,15 @@ the numbers and the last 7 days of logs on the client page (tab Gizi) and approv
 rejects suggested calorie changes from the dashboard. Everything is estimates, not
 medical advice; on by default, switch under Pengaturan → Tampilan.
 
+Since November 2026 the daily menu is made of named **meal packages**: Javanese and
+Sundanese home cooking and everyday healthy dishes (garlic fried chicken, poached or
+grilled chicken with green sambal, soto, bakso, soups, pepes, pindang), 47 in total.
+Twenty home recipes get their numbers computed at build time from their ingredients
+(TKPI 2020 plus panganku.org, Kemenkes' online table). The planner keeps coconut-milk
+dishes to 1 a day and 3 a week, fried food to 1 a day, and never serves the same main
+dish twice in a week. A client can swap a whole meal for another package with the same
+calories and protein. See `docs/nutrition/Menu.md`.
+
 ## Common changes
 
 **Booking app URL.** It is written once, in the `src` of the `<iframe>` in

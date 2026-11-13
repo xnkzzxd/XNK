@@ -21,7 +21,7 @@ const NO_MEMBER_DATA = [
   'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'saveContent', 'deleteContent', 'updateAppSettings',
   // data panel saja (tidak di portal maupun halaman klien)
   'saveTaskTemplate', 'deleteTaskTemplate', 'setMemberReminderPrefs', 'markSchedulesAsRead', 'saveExpense', 'saveFinanceCategory',
-  'deleteFinanceCategory', 'uploadFinanceProof', 'swapMyMenuItem',
+  'deleteFinanceCategory', 'uploadFinanceProof', 'swapMyMenuItem', 'swapMyMenuMeal',
   // tanda badge sudah dirayakan: jawaban sudah lengkap, portal menambalnya sendiri
   'markBadgesSeen',
   // pengingat, trigger, perawatan pemilik

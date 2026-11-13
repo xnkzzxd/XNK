@@ -113,3 +113,88 @@ test('the embedded server data matches foods.min.json', () => {
   const slots = NUT_SLOTS;
   [].concat(slots.karbo.sarapan, slots.karbo.utama, slots.protein.sarapan, slots.protein.utama, slots.sayur, slots.buah).forEach(id => assert.ok(srv[id], id));
 });
+
+// Paket menu Jawa–Sunda dan batas harian/mingguan (docs/nutrition/Menu.md, Rules.md baris 14–17).
+const plan = (t, seed, from, n, extra) => j(vm.runInContext('_nutPlanDays_(' + JSON.stringify(t) + ', function(iso){ return Object.assign({ seed: ' + JSON.stringify(seed) + " + '|' + iso }, " + JSON.stringify(extra || {}) + '); }, ' + JSON.stringify(from) + ', ' + n + ')', env.context));
+const NUT_PAKET = inCtx('NUT_PAKET');
+
+test('package data: names, one karbo and one protein, never santan with goreng, utama has a vegetable', () => {
+  assert.ok(NUT_PAKET.length >= 40);
+  NUT_PAKET.forEach(pk => {
+    assert.ok(pk.n && pk.base, pk.id);
+    assert.equal(pk.items.filter(i => i[1] === 'karbo').length, 1, pk.id);
+    assert.equal(pk.items.filter(i => i[1] === 'protein').length, 1, pk.id);
+    assert.ok(!(pk.t.includes('santan') && pk.t.includes('goreng')), pk.id);
+    if (pk.w === 'utama') assert.ok(pk.items.some(i => i[1] === 'sayur'), pk.id + ' needs sayur');
+    pk.items.forEach(i => assert.ok(NUT_FOODS[i[0]], pk.id + ' ' + i[0]));
+  });
+});
+
+test('every meal is a named package and days stay on target', () => {
+  for (let s = 0; s < 20; s++) {
+    for (const t of [{ kal: 1600, protein: 95 }, { kal: 2200, protein: 130 }]) {
+      const m = call('_nutMenu_', t, { seed: 'pk' + s });
+      m.meals.forEach(x => { assert.ok(x.paket && x.paket.n, 'meal without package'); });
+      dayOk(m, t);
+    }
+  }
+});
+
+test('weekly plan: santan max 1 a day and 3 a week, goreng max 1 a day, no utama package twice in a week', () => {
+  for (let s = 0; s < 25; s++) {
+    for (const t of [{ kal: 1800, protein: 110 }, { kal: 2600, protein: 150, goal: 'naik' }]) {
+      const week = plan(t, 'w' + s, '2026-11-09', 7);   // Senin–Minggu
+      let santan = 0; const pk = {};
+      week.forEach(day => {
+        let ds = 0, dg = 0;
+        day.meals.forEach(m => {
+          if (m.paket.t.includes('santan')) { ds++; santan++; }
+          if (m.paket.t.includes('goreng')) dg++;
+          if (m.paket.w === 'utama') pk[m.paket.id] = (pk[m.paket.id] || 0) + 1;
+        });
+        assert.ok(ds <= 1 && dg <= 1, 'day santan ' + ds + ' goreng ' + dg);
+        const bases = day.meals.filter(m => m.paket.w === 'utama').map(m => m.paket.base);
+        assert.equal(new Set(bases).size, bases.length, 'same lauk twice in a day');
+        dayOk(day, t);
+      });
+      assert.ok(santan <= 3, 'santan ' + santan);
+      Object.entries(pk).forEach(([id, n]) => assert.ok(n <= 1, id + ' x' + n));
+    }
+  }
+});
+
+test('cutting or a chronic condition: santan max 2 a week', () => {
+  for (let s = 0; s < 25; s++) {
+    for (const t of [{ kal: 1700, protein: 120, goal: 'turun' }, { kal: 2000, protein: 110, warnings: ['penyakit'] }]) {
+      const santan = plan(t, 'r' + s, '2026-11-09', 7).flatMap(d => d.meals).filter(m => m.paket.t.includes('santan')).length;
+      assert.ok(santan <= 2, 'santan ' + santan);
+    }
+  }
+});
+
+test('the plan of a day does not change with the range asked (today alone = day in the week list)', () => {
+  const t = { kal: 2000, protein: 120 };
+  const wk = plan(t, 'PT-A', '2026-11-09', 7);
+  const thu = plan(t, 'PT-A', '2026-11-12', 1)[0];
+  assert.deepEqual(thu, wk[3]);
+});
+
+test('meal swap gives three other packages with the same calories and protein; pantangan and avoid apply', () => {
+  const t = { kal: 2000, protein: 120 }, menu = call('_nutMenu_', t, { seed: 'ms' });
+  const meal = menu.meals[1];
+  const alts = call('_nutMealSwap_', meal.key, meal.paket.id, meal.totals.kal, meal.totals.p, {}, 0);
+  assert.equal(alts.length, 3);
+  alts.forEach(a => {
+    assert.notEqual(a.paket.id, meal.paket.id);
+    assert.equal(a.paket.w, 'utama');
+    assert.ok(Math.abs(a.totals.kal - meal.totals.kal) <= meal.totals.kal * 0.08, a.paket.id + ' kcal');
+  });
+  const more = call('_nutMealSwap_', meal.key, meal.paket.id, meal.totals.kal, meal.totals.p, {}, 1);
+  assert.notDeepEqual(more.map(a => a.paket.id), alts.map(a => a.paket.id));
+  for (let o = 0; o < 6; o++) {
+    call('_nutMealSwap_', 'siang', '', 650, 40, { pantangan: ['seafood'], avoid: ['santan', 'goreng'] }, o).forEach(a => {
+      assert.ok(!a.paket.t.includes('santan') && !a.paket.t.includes('goreng'), a.paket.id);
+      a.items.forEach(i => assert.ok(!NUT_FOODS[i.id].a.includes('seafood'), a.paket.id + ' ' + i.id));
+    });
+  }
+});
