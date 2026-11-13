@@ -273,6 +273,9 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
 .meal-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 44px; }
 .meal-head b { min-width: 0; }
 .meal-head .li-sub { white-space: normal; }
+.meal-pack { flex-wrap: wrap; padding: 2px 0 6px; }
+.meal-pack p { line-height: 1.35; }
+.meal-pack .btn { min-height: 44px; }
 .meal-item { min-width: 0; }
 .meal-head .icon-chip { width: 32px; height: 32px; }
 .meal-head .icon-chip svg { width: 16px; height: 16px; }
