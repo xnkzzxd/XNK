@@ -402,7 +402,7 @@
       const now = new Date(), picks = [];
       Object.keys(coachSlots).sort().forEach(function (d) {
         Object.keys(coachSlots[d]).sort((a, b) => a - b).forEach(function (hh) {
-          if (picks.length >= 4 || coachSlots[d][hh] <= 0) return;
+          if (picks.length >= (window.deskIs && window.deskIs() ? 9 : 4) || coachSlots[d][hh] <= 0) return;
           const t = new Date(d + 'T' + pad(hh) + ':00:00');
           if (t > now) picks.push([d, hh, t]);
         });
@@ -435,7 +435,12 @@
     if (!el) return;
     if (window.isSoloCoach()) {
       setHTML(el, '<div class="page-head"><div><h2 class="page-title">Coach</h2></div></div><div id="coach-profile-page">' + '<p class="li-sub">Memuat profil…</p>' + '</div>');
-      const draw = function (p) { const box = $('coach-profile-page'); if (box) { box.innerHTML = window.renderCoachProfile(p); paintIcons(); } };
+      const draw = function (p) {
+        const box = $('coach-profile-page'); if (!box) return;
+        // Desktop: sesi sendiri (Mendatang, Selesai) di bawah profil supaya halaman tidak kosong; di HP disembunyikan (.desk-x).
+        box.innerHTML = window.renderCoachProfile(p) + (window.publicLoggedMember && window.mySessionListsHtml ? '<div class="desk-x dx-grid" id="coach-my-sess">' + window.mySessionListsHtml().replace(/id="pub-(upcoming-list|sched-history)"/g, '') + '</div>' : '');
+        paintIcons();
+      };
       if (_lsGet(MEMBER_TOKEN_KEY) && window.publicLoggedMember) {
         memberCall('getMyCoach').then(draw).catch(function () { draw({ coach: window.coaches[0], status: null, testimonials: [] }); });
       } else {

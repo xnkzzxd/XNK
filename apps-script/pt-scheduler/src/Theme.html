@@ -2945,4 +2945,49 @@ html.desk .bk-slot.off { background: transparent; border-color: transparent; col
 /* Pencatat latihan: kepala jadi bilah judul terang */
 html.desk .wl-top { min-height: 52px; padding-top: 6px; padding-bottom: 6px; background: color-mix(in srgb, var(--bg) 92%, transparent); color: var(--fg); border-bottom: 1px solid var(--border); }
 html.desk .wl-top .icon-btn { color: var(--fg); }
+/* ── T-2008…T-2011: halaman tingkat dua di desktop (tanpa ruang kosong besar) ── */
+.desk-x { display: none !important; }
+html.desk .px-2col > .desk-x { display: flex !important; flex-direction: column; align-self: stretch; min-width: 0; }
+html.desk .pk-mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+html.desk .desk-x.dx-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; margin-top: 16px; }
+html.desk #view-public-pack .px-tiles { display: none; }
+@container (min-width: 860px) {
+  html.desk #view-public-pack .px-2col > :nth-child(3) { grid-column: 1; grid-row: 1; }
+  html.desk #view-public-pack .px-2col > :nth-child(4) { grid-column: 1; grid-row: 3; }
+  html.desk #view-public-pack .px-2col > :nth-child(5) { grid-column: 1; grid-row: 2; }
+  html.desk #view-public-pack .px-2col > :nth-child(6) { grid-column: 2; grid-row: 1 / span 3; }
+  html.desk #view-public-pack .px-2col { grid-template-rows: auto 1fr auto; align-items: stretch; }
+}
+html.desk .pk-mini { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+html.desk .pk-mini-price { font-weight: 750; margin: 4px 0 8px; }
+html.desk .pk-mini .btn { margin-top: auto; }
+html.desk #pack-hero { min-height: 0; }
+html.desk .px-2col .px-tiles { align-content: stretch; }
+/* Progres: cerita perjalanan jadi strip ringkas, segmented control rapat */
+html.desk #pub-journey-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); column-gap: 24px; align-items: center; padding: 18px 22px; }
+html.desk #pub-journey-card > * { grid-column: 1; }
+html.desk #pub-journey-card > .ath-stats { grid-column: 2; grid-row: 1 / span 4; margin-top: 0 !important; align-self: center; }
+html.desk #pub-journey-card .px-hero-t { font-size: var(--fs-2xl) !important; }
+html.desk #pub-journey-card .nx-actions { margin-top: 12px; }
+html.desk #pub-journey-card .ath-stats > div { padding: 10px 4px; }
+html.desk .pg-seg { max-width: 520px; }
+@container (max-width: 700px) { html.desk #pub-journey-card { grid-template-columns: minmax(0, 1fr); } html.desk #pub-journey-card > .ath-stats { grid-column: 1; grid-row: auto; margin-top: 14px !important; } }
+/* Coach: profil dua kolom */
+html.desk #coach-profile-page > .stack { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+html.desk #coach-profile-page > .stack > * { grid-column: auto; margin: 0; }
+html.desk #coach-profile-page > .stack > .coach-hero, html.desk #coach-profile-page > .stack > .stack, html.desk #coach-profile-page > .stack > p, html.desk #coach-profile-page > .stack > a { grid-column: 1 / -1; }
+html.desk #coach-profile-page .coach-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+html.desk #view-public-coaches .page-head { display: none; }
+@container (max-width: 760px) { html.desk #coach-profile-page > .stack { grid-template-columns: minmax(0, 1fr); } }
+/* Rencana makan: menu lebar kiri; target, angka tubuh, aturan kanan */
+html.desk #pub-plan-pane > .stack { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+html.desk #pub-plan-pane > .stack > * { grid-column: 2; margin: 0; }
+html.desk #pub-plan-pane > .stack > #plan-menu { grid-column: 1; grid-row: 1 / span 6; }
+html.desk #plan-target .num { font-size: var(--fs-3xl) !important; }
+html.desk #pub-plan-pane .mtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+html.desk #view-public-info .page-intro { display: none; }
+@container (max-width: 860px) { html.desk #pub-plan-pane > .stack { grid-template-columns: minmax(0, 1fr); } html.desk #pub-plan-pane > .stack > * { grid-column: 1 !important; grid-row: auto !important; } }
+/* Info & Tips: kisi tiga kolom bila lebar */
+html.desk .cn-wrap { max-width: none; }
+@container (min-width: 1000px) { html.desk .cn-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>

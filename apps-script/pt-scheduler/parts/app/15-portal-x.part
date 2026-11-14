@@ -258,9 +258,22 @@
     }).join('') + '<p class="hint">Pembayaran dilakukan langsung ke coach.</p></div>';
     html += '<div class="px-tiles"><button type="button" class="px-tile" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + '<b>Jadwal</b><span>Sesi mendatang dan selesai</span></button>' +
       '<button type="button" class="px-tile" onclick="window.navigate(\'public-coaches\')">' + icon('dumbbell') + '<b>Coach</b><span>Profil, jam, chat</span></button></div></div>';
+    html += packDeskHtml(me);
     setHTML(el, '<div class="px-wrap px-stack px-2col">' + html + '</div>');
     paintIcons();
   };
+  // Desktop saja (disembunyikan di HP lewat .desk-x): paket lain sebagai kisi kecil + sesi terakhir, supaya halaman tidak kosong.
+  function packDeskHtml(me) {
+    const pk = (window.priceListData || []).filter(p => p.aktif !== false && String(p.namaPaket) !== String(me.packageName || '')).slice(0, 6);
+    const mine = (window.schedules || []).filter(s => String(s.memberId) === String(me.id));
+    const past = mine.filter(s => isDone(s) || new Date(s.end || s.start) <= new Date()).sort((a, b) => new Date(b.start) - new Date(a.start)).slice(0, 8);
+    return '<div class="px-col desk-x"><div class="card" id="pack-others"><div class="px-sec" style="margin-bottom:10px"><h3>Paket lain</h3><button type="button" class="link-btn" onclick="window.navigate(\'public-catalog\')">Lihat semua</button></div>' +
+      (pk.length ? '<div class="pk-mini-grid">' + pk.map(p => '<div class="pk-mini"><b class="truncate">' + h(p.namaPaket) + '</b><span class="li-sub">' + h(p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Sesi fleksibel') + '</span>' +
+        '<span class="num pk-mini-price">' + h(formatRp(p.harga)) + '</span><button type="button" class="btn btn-secondary btn-sm" data-pkg="' + h(String(p.id)) + '" onclick="window.pickCatalogPkg(this.getAttribute(\'data-pkg\'))">Pilih</button></div>').join('') + '</div>'
+        : '<p class="li-sub">Belum ada paket lain.</p>') + '</div></div>' +
+      '<div class="px-col desk-x"><div class="card" id="pack-recent"><div class="px-sec" style="margin-bottom:8px"><h3>Sesi terakhir</h3><span>' + mine.filter(s => isDone(s)).length + ' selesai</span></div>' +
+      (past.length ? '<div class="list">' + past.map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Riwayat sesi muncul di sini.</p>') + '</div></div>';
+  }
   // Warna aksen juga bisa diganti dari lembar Tampilan (tanpa membuka Ubah profil); langsung berlaku dan disimpan di akun.
   function accentSwatches(cur, fn) {
     return '<div class="sw-row" role="group" aria-label="Warna aksen">' + X().profile.options.aksen.map(a =>

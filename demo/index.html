@@ -3351,6 +3351,51 @@ html.desk .bk-slot.off { background: transparent; border-color: transparent; col
 /* Pencatat latihan: kepala jadi bilah judul terang */
 html.desk .wl-top { min-height: 52px; padding-top: 6px; padding-bottom: 6px; background: color-mix(in srgb, var(--bg) 92%, transparent); color: var(--fg); border-bottom: 1px solid var(--border); }
 html.desk .wl-top .icon-btn { color: var(--fg); }
+/* ── T-2008…T-2011: halaman tingkat dua di desktop (tanpa ruang kosong besar) ── */
+.desk-x { display: none !important; }
+html.desk .px-2col > .desk-x { display: flex !important; flex-direction: column; align-self: stretch; min-width: 0; }
+html.desk .pk-mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+html.desk .desk-x.dx-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; margin-top: 16px; }
+html.desk #view-public-pack .px-tiles { display: none; }
+@container (min-width: 860px) {
+  html.desk #view-public-pack .px-2col > :nth-child(3) { grid-column: 1; grid-row: 1; }
+  html.desk #view-public-pack .px-2col > :nth-child(4) { grid-column: 1; grid-row: 3; }
+  html.desk #view-public-pack .px-2col > :nth-child(5) { grid-column: 1; grid-row: 2; }
+  html.desk #view-public-pack .px-2col > :nth-child(6) { grid-column: 2; grid-row: 1 / span 3; }
+  html.desk #view-public-pack .px-2col { grid-template-rows: auto 1fr auto; align-items: stretch; }
+}
+html.desk .pk-mini { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+html.desk .pk-mini-price { font-weight: 750; margin: 4px 0 8px; }
+html.desk .pk-mini .btn { margin-top: auto; }
+html.desk #pack-hero { min-height: 0; }
+html.desk .px-2col .px-tiles { align-content: stretch; }
+/* Progres: cerita perjalanan jadi strip ringkas, segmented control rapat */
+html.desk #pub-journey-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); column-gap: 24px; align-items: center; padding: 18px 22px; }
+html.desk #pub-journey-card > * { grid-column: 1; }
+html.desk #pub-journey-card > .ath-stats { grid-column: 2; grid-row: 1 / span 4; margin-top: 0 !important; align-self: center; }
+html.desk #pub-journey-card .px-hero-t { font-size: var(--fs-2xl) !important; }
+html.desk #pub-journey-card .nx-actions { margin-top: 12px; }
+html.desk #pub-journey-card .ath-stats > div { padding: 10px 4px; }
+html.desk .pg-seg { max-width: 520px; }
+@container (max-width: 700px) { html.desk #pub-journey-card { grid-template-columns: minmax(0, 1fr); } html.desk #pub-journey-card > .ath-stats { grid-column: 1; grid-row: auto; margin-top: 14px !important; } }
+/* Coach: profil dua kolom */
+html.desk #coach-profile-page > .stack { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+html.desk #coach-profile-page > .stack > * { grid-column: auto; margin: 0; }
+html.desk #coach-profile-page > .stack > .coach-hero, html.desk #coach-profile-page > .stack > .stack, html.desk #coach-profile-page > .stack > p, html.desk #coach-profile-page > .stack > a { grid-column: 1 / -1; }
+html.desk #coach-profile-page .coach-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+html.desk #view-public-coaches .page-head { display: none; }
+@container (max-width: 760px) { html.desk #coach-profile-page > .stack { grid-template-columns: minmax(0, 1fr); } }
+/* Rencana makan: menu lebar kiri; target, angka tubuh, aturan kanan */
+html.desk #pub-plan-pane > .stack { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+html.desk #pub-plan-pane > .stack > * { grid-column: 2; margin: 0; }
+html.desk #pub-plan-pane > .stack > #plan-menu { grid-column: 1; grid-row: 1 / span 6; }
+html.desk #plan-target .num { font-size: var(--fs-3xl) !important; }
+html.desk #pub-plan-pane .mtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+html.desk #view-public-info .page-intro { display: none; }
+@container (max-width: 860px) { html.desk #pub-plan-pane > .stack { grid-template-columns: minmax(0, 1fr); } html.desk #pub-plan-pane > .stack > * { grid-column: 1 !important; grid-row: auto !important; } }
+/* Info & Tips: kisi tiga kolom bila lebar */
+html.desk .cn-wrap { max-width: none; }
+@container (min-width: 1000px) { html.desk .cn-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>
 
 </head>
@@ -13494,7 +13539,7 @@ html.desk .wl-top .icon-btn { color: var(--fg); }
     if (!isPlan && n.inputs && n.inputs.stale) html += '<div class="card"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
     if (isPlan && n.menu) {
       const MEAL_IC = { sarapan: 'sunrise', pagi: 'sunrise', siang: 'sun', malam: 'moon', camilan: 'cookie', sahur: 'moon-star', buka: 'sunset' };
-      html += '<div class="card stack" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
+      html += '<div class="card stack" id="plan-menu" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
       n.menu.meals.forEach(function (m, mi) {
         const pk = m.paket;
         html += '<div class="meal-blk"><div class="meal-head"><span class="icon-chip">' + icon(MEAL_IC[m.key] || 'utensils') + '</span><b class="grow">' + h(m.label) + '</b><span class="num li-sub">' + h(NUT_N(m.totals.kal)) + ' kkal · P ' + h(NUT_N(m.totals.p)) + ' g</span></div>' +
@@ -14437,7 +14482,7 @@ html.desk .wl-top .icon-btn { color: var(--fg); }
       const now = new Date(), picks = [];
       Object.keys(coachSlots).sort().forEach(function (d) {
         Object.keys(coachSlots[d]).sort((a, b) => a - b).forEach(function (hh) {
-          if (picks.length >= 4 || coachSlots[d][hh] <= 0) return;
+          if (picks.length >= (window.deskIs && window.deskIs() ? 9 : 4) || coachSlots[d][hh] <= 0) return;
           const t = new Date(d + 'T' + pad(hh) + ':00:00');
           if (t > now) picks.push([d, hh, t]);
         });
@@ -14470,7 +14515,12 @@ html.desk .wl-top .icon-btn { color: var(--fg); }
     if (!el) return;
     if (window.isSoloCoach()) {
       setHTML(el, '<div class="page-head"><div><h2 class="page-title">Coach</h2></div></div><div id="coach-profile-page">' + '<p class="li-sub">Memuat profil…</p>' + '</div>');
-      const draw = function (p) { const box = $('coach-profile-page'); if (box) { box.innerHTML = window.renderCoachProfile(p); paintIcons(); } };
+      const draw = function (p) {
+        const box = $('coach-profile-page'); if (!box) return;
+        // Desktop: sesi sendiri (Mendatang, Selesai) di bawah profil supaya halaman tidak kosong; di HP disembunyikan (.desk-x).
+        box.innerHTML = window.renderCoachProfile(p) + (window.publicLoggedMember && window.mySessionListsHtml ? '<div class="desk-x dx-grid" id="coach-my-sess">' + window.mySessionListsHtml().replace(/id="pub-(upcoming-list|sched-history)"/g, '') + '</div>' : '');
+        paintIcons();
+      };
       if (_lsGet(MEMBER_TOKEN_KEY) && window.publicLoggedMember) {
         memberCall('getMyCoach').then(draw).catch(function () { draw({ coach: window.coaches[0], status: null, testimonials: [] }); });
       } else {
@@ -15573,9 +15623,22 @@ html.desk .wl-top .icon-btn { color: var(--fg); }
     }).join('') + '<p class="hint">Pembayaran dilakukan langsung ke coach.</p></div>';
     html += '<div class="px-tiles"><button type="button" class="px-tile" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + '<b>Jadwal</b><span>Sesi mendatang dan selesai</span></button>' +
       '<button type="button" class="px-tile" onclick="window.navigate(\'public-coaches\')">' + icon('dumbbell') + '<b>Coach</b><span>Profil, jam, chat</span></button></div></div>';
+    html += packDeskHtml(me);
     setHTML(el, '<div class="px-wrap px-stack px-2col">' + html + '</div>');
     paintIcons();
   };
+  // Desktop saja (disembunyikan di HP lewat .desk-x): paket lain sebagai kisi kecil + sesi terakhir, supaya halaman tidak kosong.
+  function packDeskHtml(me) {
+    const pk = (window.priceListData || []).filter(p => p.aktif !== false && String(p.namaPaket) !== String(me.packageName || '')).slice(0, 6);
+    const mine = (window.schedules || []).filter(s => String(s.memberId) === String(me.id));
+    const past = mine.filter(s => isDone(s) || new Date(s.end || s.start) <= new Date()).sort((a, b) => new Date(b.start) - new Date(a.start)).slice(0, 8);
+    return '<div class="px-col desk-x"><div class="card" id="pack-others"><div class="px-sec" style="margin-bottom:10px"><h3>Paket lain</h3><button type="button" class="link-btn" onclick="window.navigate(\'public-catalog\')">Lihat semua</button></div>' +
+      (pk.length ? '<div class="pk-mini-grid">' + pk.map(p => '<div class="pk-mini"><b class="truncate">' + h(p.namaPaket) + '</b><span class="li-sub">' + h(p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Sesi fleksibel') + '</span>' +
+        '<span class="num pk-mini-price">' + h(formatRp(p.harga)) + '</span><button type="button" class="btn btn-secondary btn-sm" data-pkg="' + h(String(p.id)) + '" onclick="window.pickCatalogPkg(this.getAttribute(\'data-pkg\'))">Pilih</button></div>').join('') + '</div>'
+        : '<p class="li-sub">Belum ada paket lain.</p>') + '</div></div>' +
+      '<div class="px-col desk-x"><div class="card" id="pack-recent"><div class="px-sec" style="margin-bottom:8px"><h3>Sesi terakhir</h3><span>' + mine.filter(s => isDone(s)).length + ' selesai</span></div>' +
+      (past.length ? '<div class="list">' + past.map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Riwayat sesi muncul di sini.</p>') + '</div></div>';
+  }
   // Warna aksen juga bisa diganti dari lembar Tampilan (tanpa membuka Ubah profil); langsung berlaku dan disimpan di akun.
   function accentSwatches(cur, fn) {
     return '<div class="sw-row" role="group" aria-label="Warna aksen">' + X().profile.options.aksen.map(a =>

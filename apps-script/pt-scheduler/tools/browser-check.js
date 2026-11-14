@@ -2735,8 +2735,22 @@ async function contrastReport(page) {
       }
       await page.keyboard.press('Escape');
       await page.waitForTimeout(400);
+      // T-2008…T-2011: halaman tingkat dua di desktop berkolom, tanpa ruang kosong besar.
+      await page.evaluate(() => window.navigate('public-pack'));
+      await page.waitForTimeout(300);
+      check(await page.evaluate(() => { const o = document.getElementById('pack-others'), r = document.getElementById('pack-recent'), hero = document.getElementById('pack-hero'); if (!o || !r || !hero) return false; const a = r.getBoundingClientRect(), b = hero.getBoundingClientRect(); return a.width > 200 && a.left > b.right && o.getBoundingClientRect().top > b.bottom; }), 'desk: Paket saya shows other packages under the hero and recent sessions on the right');
+      await page.evaluate(() => window.navigate('public-progress'));
+      await page.waitForTimeout(300);
+      check(await page.evaluate(() => { const c = document.getElementById('pub-journey-card'), st = c && c.querySelector('.ath-stats'); if (!st) return true; const t = c.querySelector('.px-hero-t').getBoundingClientRect(), s2 = st.getBoundingClientRect(); return s2.left > t.left + 200 && c.getBoundingClientRect().height < 220; }), 'desk: the journey card is a compact strip with numbers beside the headline');
+      await page.evaluate(() => window.navigate('public-plan'));
+      await page.waitForTimeout(400);
+      check(await page.evaluate(() => { const m = document.getElementById('plan-menu'), t = document.getElementById('plan-target'); if (!m || !t) return true; return t.getBoundingClientRect().left > m.getBoundingClientRect().right; }), 'desk: Rencana makan puts the menu left and the target right');
+      await page.evaluate(() => window.navigate('public-coaches'));
+      await page.waitForTimeout(800);
+      check(await page.evaluate(() => { const g = document.querySelector('#coach-profile-page > .stack'); return !!g && getComputedStyle(g).display === 'grid' && getComputedStyle(g).gridTemplateColumns.split(' ').length === 2; }), 'desk: the coach page is two columns');
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(300);
+      check(await page.evaluate(() => !document.querySelector('.desk-x') || Array.from(document.querySelectorAll('.desk-x')).every(e => getComputedStyle(e).display === 'none')), 'desk: desktop-only blocks are hidden at phone width');
       check(await page.evaluate(() => !document.documentElement.classList.contains('desk') && getComputedStyle(document.getElementById('tabbar')).display !== 'none'), 'desk: narrowing the window to phone width switches back to the phone layout');
       await page.setViewportSize(DESKTOP);
       await page.waitForTimeout(300);
