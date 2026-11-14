@@ -8286,6 +8286,17 @@
   }
 
   // Lembar "Catat"
+  function pgLastWeight(mode, memberId) {
+    const d = mode === 'admin' ? pg.admin[memberId] : pg.data;
+    const b = d && d.summary && d.summary.berat;
+    return b && b.last ? b.last : null;
+  }
+  window.pgStep = function (by) {
+    const el = $('pg-berat'), lw = pgLastWeight(pg.mode, pg.memberId);
+    const cur = parseFloat(String(el.value).replace(',', '.'));
+    const base = isFinite(cur) ? cur : (lw ? Number(lw.nilai) : 60);
+    el.value = String(Math.max(20, Math.round((base + (isFinite(cur) || !lw ? by : 0)) * 10) / 10)).replace('.', ',');
+  };
   window.pgOpenEntry = function (mode, memberId) {
     pg.mode = mode; pg.memberId = memberId || null;
     PG_MEASURES.forEach(function (m) { $('pg-' + m[0]).value = ''; });
@@ -8294,6 +8305,10 @@
     $('pg-date-field').classList.toggle('hide', mode !== 'admin');
     $('pg-err').textContent = '';
     $('pg-entry-title').textContent = mode === 'admin' ? 'Catat progres klien' : 'Catat hari ini';
+    // Fase X: berat dulu. Tombol −/＋ mulai dari berat terakhir, jadi biasanya cukup beberapa ketukan.
+    const lw = pgLastWeight(mode, memberId);
+    $('pg-berat').placeholder = lw ? String(lw.nilai).replace('.', ',') : '72,4';
+    $('pg-last').textContent = lw ? 'Terakhir ' + String(lw.nilai).replace('.', ',') + ' kg · ' + pgLabel(lw.tanggal) : '';
     openSheet('sheet-progress');
   };
   window.pgSaveEntry = function (e) {
@@ -8700,10 +8715,10 @@
     // Empat bagian supaya halaman tidak memanjang: Ringkasan, Ukuran, Tes, Riwayat. Semua bagian tetap ada di DOM (diisi oleh render masing-masing).
     const pane = (k, l, r) => '<div class="pg-pane' + (pgSeg === k ? '' : ' hide') + '" data-pgpane="' + k + '">' + portalGrid(l, r) + '</div>';
     const segs = [['ringkasan', 'Ringkasan'], ['ukuran', 'Ukuran'], ['tes', 'Tes'], ['riwayat', 'Riwayat']];
-    let html = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.') +
-      '<div id="ph-progress">' + insProgressHero() + '</div>' +
+    // Fase X: cerita perjalanan di atas (kalimat utama + awal/sekarang/selisih), Momen di Ringkasan.
+    let html = '<div class="px-band gfx-kontur"></div><div id="pub-journey">' + journeyHeroHtml() + '</div>' +
       '<div class="seg pg-seg" id="pg-seg" role="tablist" aria-label="Bagian progres">' + segs.map(x => '<button type="button" role="tab" data-pgseg="' + x[0] + '" class="' + (pgSeg === x[0] ? 'active' : '') + '" aria-selected="' + (pgSeg === x[0]) + '" onclick="window.setPgSeg(\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '<span class="seg-thumb"></span></div>';
-    html += pane('ringkasan', '<div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
+    html += pane('ringkasan', '<div id="pub-moments">' + momentsCardHtml() + '</div><div id="ph-progress">' + insProgressHero() + '</div><div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
     html += pane('ukuran', '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>', '<div id="pub-ins-measures">' + insMeasuresCard() + '</div>');
     html += pane('tes', '<div id="pub-ins-fitness">' + (insFitnessCard() || '') + '</div><div id="pub-tests-wrap" class="stack" style="gap:16px">' + (myTestsInner() || emptyState('activity', 'Belum ada hasil tes', 'Hasil tes kebugaran dari coach muncul di sini.')) + '</div>', '');
     html += pane('riwayat', '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div><div class="card stack" style="gap:10px" id="pub-workout-wrap"></div>',
@@ -11175,7 +11190,31 @@
   window.openSettings = function () { setAccentDraw(); return openSettingsBase.apply(this, arguments); };
 
   // Gambar ulang bagian Fase X yang sedang tampil (dipanggil tiap data portal berubah).
+  // ── Progres: cerita perjalanan (journey) dan Momen (moments), keduanya dihitung server ──
+  function journeyHeroHtml() {
+    const j = X().journey;
+    if (!j) return '<section class="card-ink px-hang">' + skel(2, true) + '</section>';
+    let html = '<section class="card-ink gfx-tipo px-hang" id="pub-journey-card" aria-label="Perjalanan" data-tipo="' + h((j.tiles && j.tiles.length ? j.tiles[j.tiles.length - 1].v : '').split(' ')[0]) + '">' +
+      '<span class="ih-eyebrow">' + h(j.eyebrow || 'Perjalanan') + '</span><p class="px-hero-t" style="font-size:var(--fs-3xl)">' + h(j.headline) + '</p>' + (j.sub ? '<p class="li-sub" style="margin-top:8px">' + h(j.sub) + '</p>' : '');
+    if (j.tiles && j.tiles.length) html += '<div class="ath-stats" style="margin-top:16px">' + j.tiles.map(t => '<div class="ath-stat"><b class="num">' + h(t.v) + '</b><span>' + h(t.l) + '</span></div>').join('') + '</div>';
+    html += '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="journey-add" onclick="window.pgOpenEntry(\'member\')">' + icon('plus') + 'Catat ukuran</button>' +
+      (window.shareOn !== false && window.shareOpen && j.tiles && j.tiles.length ? '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Bagikan</button>' : '') + '</div></section>';
+    return html;
+  }
+  const MOMENT_IC = { pr: 'trophy', sesi: 'flag', ukur: 'ruler' };
+  function momentsCardHtml() {
+    const m = X().moments;
+    if (!m || !m.length) return '';
+    const show = momAll ? m : m.slice(0, 4);
+    return '<div class="card" id="pub-moments-card"><div class="px-sec" style="margin-bottom:10px"><h3>Momen</h3><span>' + m.length + ' terbaru</span></div><ol class="mom">' + show.map(x =>
+      '<li><span class="mom-ic">' + icon(MOMENT_IC[x.kind] || 'star') + '</span><span class="grow"><b>' + h(x.title) + '</b><span class="li-sub">' + h(pgLabel(x.tanggal)) + '</span></span></li>').join('') + '</ol>' +
+      (m.length > 4 ? '<button type="button" class="btn btn-ghost btn-block" style="margin-top:12px" id="mom-more" onclick="window.momToggle()">' + (momAll ? 'Ringkas' : 'Lihat semua (' + m.length + ')') + '</button>' : '') + '</div>';
+  }
+  let momAll = false;
+  window.momToggle = function () { momAll = !momAll; const mo = $('pub-moments'); if (mo) { setHTML(mo, momentsCardHtml()); paintIcons(); } };
   window.renderPortalX = function () {
+    const jr = $('pub-journey'); if (jr) setHTML(jr, journeyHeroHtml());
+    const mo = $('pub-moments'); if (mo) setHTML(mo, momentsCardHtml());
     const td = $('pub-todo'); if (td) setHTML(td, todoHtml());
     const wk = $('pub-weekx'); if (wk) setHTML(wk, weekStripHtml());
     if (window.currentView === 'public-more' && $('pub-athlete')) renderPublicMore();

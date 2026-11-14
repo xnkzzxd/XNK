@@ -3001,6 +3001,17 @@ html.kb-open .bk-foot { display: none; }
 .pc-badge { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 7rem; padding: 10px 6px; border-radius: var(--r-lg); border: 2px solid var(--border); background: var(--surface); color: var(--fg); font-size: var(--fs-xs); font-weight: 700; line-height: 1.2; }
 .pc-badge.on { border-color: var(--fg); }
 .pc-badge .shield.on text { fill: var(--surface); }
+/* Progres: linimasa Momen, isi berat dengan tombol −/＋ */
+.mom { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.mom li { display: flex; gap: 12px; align-items: flex-start; padding: 0 0 14px; position: relative; }
+.mom li:last-child { padding-bottom: 0; }
+.mom li:not(:last-child)::before { content: ''; position: absolute; left: 17px; top: 36px; bottom: 0; width: 2px; background: var(--border); }
+.mom-ic { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; }
+.mom-ic svg { width: 18px; height: 18px; }
+.mom b { display: block; font-size: var(--fs-md); line-height: 1.3; }
+.pg-step { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; align-items: stretch; }
+.pg-step .icon-btn { width: 100%; height: auto; min-height: 56px; border-radius: var(--r-md); }
+.pg-step .input { text-align: center; }
 </style>
 
 </head>
@@ -3792,10 +3803,10 @@ html.kb-open .bk-foot { display: none; }
       <div class="sheet-head"><h2 class="sheet-title" id="pg-entry-title">Catat hari ini</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <form class="sheet-body form-grid" id="form-progress" onsubmit="window.pgSaveEntry(event)" novalidate>
         <div class="field hide" id="pg-date-field"><label class="label" for="pg-tanggal">Tanggal</label><input class="input" type="date" id="pg-tanggal"></div>
-        <div class="field"><label class="label" for="pg-berat">Berat (kg)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-berat" autocomplete="off" placeholder="72,4"></div>
+        <div class="field"><label class="label" for="pg-berat">Berat (kg)</label><div class="pg-step"><button type="button" class="icon-btn" aria-label="Kurangi 0,1 kg" onclick="window.pgStep(-0.1)"><i data-lucide="minus"></i></button><input class="input num pg-big" type="text" inputmode="decimal" id="pg-berat" autocomplete="off" placeholder="72,4"><button type="button" class="icon-btn" aria-label="Tambah 0,1 kg" onclick="window.pgStep(0.1)"><i data-lucide="plus"></i></button></div><p class="hint" id="pg-last"></p></div>
         <div class="field"><label class="label" for="pg-pinggang">Lingkar pinggang (cm)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-pinggang" autocomplete="off" placeholder="80"></div>
         <details class="pg-more" id="pg-more"><summary>Lingkar badan lainnya</summary><div class="two"><div class="field"><label class="label" for="pg-lenganKanan">Lengan kanan (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-lenganKanan" autocomplete="off" placeholder="32"></div><div class="field"><label class="label" for="pg-lenganKiri">Lengan kiri (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-lenganKiri" autocomplete="off" placeholder="32"></div><div class="field"><label class="label" for="pg-perut">Perut (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-perut" autocomplete="off" placeholder="85"></div><div class="field"><label class="label" for="pg-pahaKanan">Paha kanan (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-pahaKanan" autocomplete="off" placeholder="55"></div><div class="field"><label class="label" for="pg-pahaKiri">Paha kiri (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-pahaKiri" autocomplete="off" placeholder="55"></div><div class="field"><label class="label" for="pg-dada">Dada (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-dada" autocomplete="off" placeholder="95"></div></div></details>
-        <p class="hint">Boleh isi salah satu. Catatan di hari yang sama diperbarui.</p>
+        <p class="hint">Cukup berat saja; ukuran lain boleh menyusul. Catatan di hari yang sama diperbarui.</p>
         <p class="hint err-msg" id="pg-err" role="alert" style="display:block"></p>
       </form>
       <div class="sheet-foot"><button type="submit" form="form-progress" class="btn btn-primary btn-lg btn-block" id="pg-save-btn">Simpan</button></div>
@@ -12294,6 +12305,17 @@ html.kb-open .bk-foot { display: none; }
   }
 
   // Lembar "Catat"
+  function pgLastWeight(mode, memberId) {
+    const d = mode === 'admin' ? pg.admin[memberId] : pg.data;
+    const b = d && d.summary && d.summary.berat;
+    return b && b.last ? b.last : null;
+  }
+  window.pgStep = function (by) {
+    const el = $('pg-berat'), lw = pgLastWeight(pg.mode, pg.memberId);
+    const cur = parseFloat(String(el.value).replace(',', '.'));
+    const base = isFinite(cur) ? cur : (lw ? Number(lw.nilai) : 60);
+    el.value = String(Math.max(20, Math.round((base + (isFinite(cur) || !lw ? by : 0)) * 10) / 10)).replace('.', ',');
+  };
   window.pgOpenEntry = function (mode, memberId) {
     pg.mode = mode; pg.memberId = memberId || null;
     PG_MEASURES.forEach(function (m) { $('pg-' + m[0]).value = ''; });
@@ -12302,6 +12324,10 @@ html.kb-open .bk-foot { display: none; }
     $('pg-date-field').classList.toggle('hide', mode !== 'admin');
     $('pg-err').textContent = '';
     $('pg-entry-title').textContent = mode === 'admin' ? 'Catat progres klien' : 'Catat hari ini';
+    // Fase X: berat dulu. Tombol −/＋ mulai dari berat terakhir, jadi biasanya cukup beberapa ketukan.
+    const lw = pgLastWeight(mode, memberId);
+    $('pg-berat').placeholder = lw ? String(lw.nilai).replace('.', ',') : '72,4';
+    $('pg-last').textContent = lw ? 'Terakhir ' + String(lw.nilai).replace('.', ',') + ' kg · ' + pgLabel(lw.tanggal) : '';
     openSheet('sheet-progress');
   };
   window.pgSaveEntry = function (e) {
@@ -12708,10 +12734,10 @@ html.kb-open .bk-foot { display: none; }
     // Empat bagian supaya halaman tidak memanjang: Ringkasan, Ukuran, Tes, Riwayat. Semua bagian tetap ada di DOM (diisi oleh render masing-masing).
     const pane = (k, l, r) => '<div class="pg-pane' + (pgSeg === k ? '' : ' hide') + '" data-pgpane="' + k + '">' + portalGrid(l, r) + '</div>';
     const segs = [['ringkasan', 'Ringkasan'], ['ukuran', 'Ukuran'], ['tes', 'Tes'], ['riwayat', 'Riwayat']];
-    let html = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.') +
-      '<div id="ph-progress">' + insProgressHero() + '</div>' +
+    // Fase X: cerita perjalanan di atas (kalimat utama + awal/sekarang/selisih), Momen di Ringkasan.
+    let html = '<div class="px-band gfx-kontur"></div><div id="pub-journey">' + journeyHeroHtml() + '</div>' +
       '<div class="seg pg-seg" id="pg-seg" role="tablist" aria-label="Bagian progres">' + segs.map(x => '<button type="button" role="tab" data-pgseg="' + x[0] + '" class="' + (pgSeg === x[0] ? 'active' : '') + '" aria-selected="' + (pgSeg === x[0]) + '" onclick="window.setPgSeg(\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '<span class="seg-thumb"></span></div>';
-    html += pane('ringkasan', '<div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
+    html += pane('ringkasan', '<div id="pub-moments">' + momentsCardHtml() + '</div><div id="ph-progress">' + insProgressHero() + '</div><div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
     html += pane('ukuran', '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>', '<div id="pub-ins-measures">' + insMeasuresCard() + '</div>');
     html += pane('tes', '<div id="pub-ins-fitness">' + (insFitnessCard() || '') + '</div><div id="pub-tests-wrap" class="stack" style="gap:16px">' + (myTestsInner() || emptyState('activity', 'Belum ada hasil tes', 'Hasil tes kebugaran dari coach muncul di sini.')) + '</div>', '');
     html += pane('riwayat', '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div><div class="card stack" style="gap:10px" id="pub-workout-wrap"></div>',
@@ -15183,7 +15209,31 @@ html.kb-open .bk-foot { display: none; }
   window.openSettings = function () { setAccentDraw(); return openSettingsBase.apply(this, arguments); };
 
   // Gambar ulang bagian Fase X yang sedang tampil (dipanggil tiap data portal berubah).
+  // ── Progres: cerita perjalanan (journey) dan Momen (moments), keduanya dihitung server ──
+  function journeyHeroHtml() {
+    const j = X().journey;
+    if (!j) return '<section class="card-ink px-hang">' + skel(2, true) + '</section>';
+    let html = '<section class="card-ink gfx-tipo px-hang" id="pub-journey-card" aria-label="Perjalanan" data-tipo="' + h((j.tiles && j.tiles.length ? j.tiles[j.tiles.length - 1].v : '').split(' ')[0]) + '">' +
+      '<span class="ih-eyebrow">' + h(j.eyebrow || 'Perjalanan') + '</span><p class="px-hero-t" style="font-size:var(--fs-3xl)">' + h(j.headline) + '</p>' + (j.sub ? '<p class="li-sub" style="margin-top:8px">' + h(j.sub) + '</p>' : '');
+    if (j.tiles && j.tiles.length) html += '<div class="ath-stats" style="margin-top:16px">' + j.tiles.map(t => '<div class="ath-stat"><b class="num">' + h(t.v) + '</b><span>' + h(t.l) + '</span></div>').join('') + '</div>';
+    html += '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="journey-add" onclick="window.pgOpenEntry(\'member\')">' + icon('plus') + 'Catat ukuran</button>' +
+      (window.shareOn !== false && window.shareOpen && j.tiles && j.tiles.length ? '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Bagikan</button>' : '') + '</div></section>';
+    return html;
+  }
+  const MOMENT_IC = { pr: 'trophy', sesi: 'flag', ukur: 'ruler' };
+  function momentsCardHtml() {
+    const m = X().moments;
+    if (!m || !m.length) return '';
+    const show = momAll ? m : m.slice(0, 4);
+    return '<div class="card" id="pub-moments-card"><div class="px-sec" style="margin-bottom:10px"><h3>Momen</h3><span>' + m.length + ' terbaru</span></div><ol class="mom">' + show.map(x =>
+      '<li><span class="mom-ic">' + icon(MOMENT_IC[x.kind] || 'star') + '</span><span class="grow"><b>' + h(x.title) + '</b><span class="li-sub">' + h(pgLabel(x.tanggal)) + '</span></span></li>').join('') + '</ol>' +
+      (m.length > 4 ? '<button type="button" class="btn btn-ghost btn-block" style="margin-top:12px" id="mom-more" onclick="window.momToggle()">' + (momAll ? 'Ringkas' : 'Lihat semua (' + m.length + ')') + '</button>' : '') + '</div>';
+  }
+  let momAll = false;
+  window.momToggle = function () { momAll = !momAll; const mo = $('pub-moments'); if (mo) { setHTML(mo, momentsCardHtml()); paintIcons(); } };
   window.renderPortalX = function () {
+    const jr = $('pub-journey'); if (jr) setHTML(jr, journeyHeroHtml());
+    const mo = $('pub-moments'); if (mo) setHTML(mo, momentsCardHtml());
     const td = $('pub-todo'); if (td) setHTML(td, todoHtml());
     const wk = $('pub-weekx'); if (wk) setHTML(wk, weekStripHtml());
     if (window.currentView === 'public-more' && $('pub-athlete')) renderPublicMore();

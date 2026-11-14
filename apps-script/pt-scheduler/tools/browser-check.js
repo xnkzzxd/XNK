@@ -1810,6 +1810,15 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: Progres opens from Saya and the Saya tab stays lit');
     check(await visible(page, '#topbar-back'), 'nav: a second-level page has a back button in the top bar');
+    check(await visible(page, '#pub-journey-card') && (await page.textContent('#pub-journey-card .px-hero-t')).trim().length > 0 && await visible(page, '#journey-add') && (await overflowX(page)) <= 0, 'progres: the page opens with the journey card (headline and Catat ukuran)');
+    await page.click('#journey-add');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-progress') && (await page.locator('#sheet-progress .pg-step button').count()) === 2, 'progres: the entry sheet asks for weight first, with minus and plus buttons');
+    await page.fill('#pg-berat', '70');
+    await page.click('#sheet-progress .pg-step button >> nth=1');
+    check((await page.inputValue('#pg-berat')) === '70,1', 'progres: plus adds 0,1 kg');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
     await page.click('#topbar-back');
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.currentView)) === 'public-more' && !(await visible(page, '#topbar-back')), 'nav: back returns to Saya');

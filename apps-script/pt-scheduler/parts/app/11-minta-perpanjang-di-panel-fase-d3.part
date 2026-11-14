@@ -152,6 +152,17 @@
   }
 
   // Lembar "Catat"
+  function pgLastWeight(mode, memberId) {
+    const d = mode === 'admin' ? pg.admin[memberId] : pg.data;
+    const b = d && d.summary && d.summary.berat;
+    return b && b.last ? b.last : null;
+  }
+  window.pgStep = function (by) {
+    const el = $('pg-berat'), lw = pgLastWeight(pg.mode, pg.memberId);
+    const cur = parseFloat(String(el.value).replace(',', '.'));
+    const base = isFinite(cur) ? cur : (lw ? Number(lw.nilai) : 60);
+    el.value = String(Math.max(20, Math.round((base + (isFinite(cur) || !lw ? by : 0)) * 10) / 10)).replace('.', ',');
+  };
   window.pgOpenEntry = function (mode, memberId) {
     pg.mode = mode; pg.memberId = memberId || null;
     PG_MEASURES.forEach(function (m) { $('pg-' + m[0]).value = ''; });
@@ -160,6 +171,10 @@
     $('pg-date-field').classList.toggle('hide', mode !== 'admin');
     $('pg-err').textContent = '';
     $('pg-entry-title').textContent = mode === 'admin' ? 'Catat progres klien' : 'Catat hari ini';
+    // Fase X: berat dulu. Tombol −/＋ mulai dari berat terakhir, jadi biasanya cukup beberapa ketukan.
+    const lw = pgLastWeight(mode, memberId);
+    $('pg-berat').placeholder = lw ? String(lw.nilai).replace('.', ',') : '72,4';
+    $('pg-last').textContent = lw ? 'Terakhir ' + String(lw.nilai).replace('.', ',') + ' kg · ' + pgLabel(lw.tanggal) : '';
     openSheet('sheet-progress');
   };
   window.pgSaveEntry = function (e) {
@@ -566,10 +581,10 @@
     // Empat bagian supaya halaman tidak memanjang: Ringkasan, Ukuran, Tes, Riwayat. Semua bagian tetap ada di DOM (diisi oleh render masing-masing).
     const pane = (k, l, r) => '<div class="pg-pane' + (pgSeg === k ? '' : ' hide') + '" data-pgpane="' + k + '">' + portalGrid(l, r) + '</div>';
     const segs = [['ringkasan', 'Ringkasan'], ['ukuran', 'Ukuran'], ['tes', 'Tes'], ['riwayat', 'Riwayat']];
-    let html = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.') +
-      '<div id="ph-progress">' + insProgressHero() + '</div>' +
+    // Fase X: cerita perjalanan di atas (kalimat utama + awal/sekarang/selisih), Momen di Ringkasan.
+    let html = '<div class="px-band gfx-kontur"></div><div id="pub-journey">' + journeyHeroHtml() + '</div>' +
       '<div class="seg pg-seg" id="pg-seg" role="tablist" aria-label="Bagian progres">' + segs.map(x => '<button type="button" role="tab" data-pgseg="' + x[0] + '" class="' + (pgSeg === x[0] ? 'active' : '') + '" aria-selected="' + (pgSeg === x[0]) + '" onclick="window.setPgSeg(\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '<span class="seg-thumb"></span></div>';
-    html += pane('ringkasan', '<div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
+    html += pane('ringkasan', '<div id="pub-moments">' + momentsCardHtml() + '</div><div id="ph-progress">' + insProgressHero() + '</div><div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
     html += pane('ukuran', '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>', '<div id="pub-ins-measures">' + insMeasuresCard() + '</div>');
     html += pane('tes', '<div id="pub-ins-fitness">' + (insFitnessCard() || '') + '</div><div id="pub-tests-wrap" class="stack" style="gap:16px">' + (myTestsInner() || emptyState('activity', 'Belum ada hasil tes', 'Hasil tes kebugaran dari coach muncul di sini.')) + '</div>', '');
     html += pane('riwayat', '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div><div class="card stack" style="gap:10px" id="pub-workout-wrap"></div>',

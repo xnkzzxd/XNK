@@ -11,7 +11,7 @@ Baca [PRD.md](PRD.md) dan [Design.md](Design.md) dulu.
 - [x] T-1906 Latihan: kartu hitam "Berikutnya" (`#pub-lat-hero`: Mulai / Latihan kosong) → daftar rutinitas dengan tombol Mulai → Buat rutinitas · Galeri (dulu Jelajahi) → program otomatis → tafsir minggu ini. Pencatat dan layar selesai tidak diubah (bagikan sudah ditawarkan setelah simpan; editor bagikan dirapikan di T-1911)
 - [x] T-1907 Makan: cincin + buku harian per waktu makan (saran menu bila kosong); layar tambah dengan saran menu "Catat semua" dan pilih banyak; Rencana makan (`public-plan`: target, menu, belanja, angka tubuh, aturan) di bawah Saya
 - [x] T-1908 Saya: kartu atlet + kisi; Ubah profil (`#sheet-profile-edit`, awalan `pc-`: aksen, gaya kartu, nama panggilan, motto, 3–4 statistik, ≤ 3 badge; pratinjau langsung, batal = kembali); Paket saya (`public-pack`: paket aktif, sisa, status perpanjangan, tagihan; Perpanjang memakai `#sheet-renew` yang ada, satu langkah); Coach = halaman `public-coaches` yang ada; Tampilan = lembar Pengaturan + warna aksen (`setAccent`)
-- [ ] T-1909 Progres: cerita perjalanan, isi ukuran "berat dulu", foto
+- [x] T-1909 Progres: kartu cerita perjalanan (`#pub-journey-card`: kalimat utama, Awal / Sekarang / Selisih, Catat ukuran, Bagikan), linimasa Momen (4 teratas + Lihat semua), isi ukuran berat dulu dengan tombol −/＋ (`pgStep`, mulai dari berat terakhir). Empat bagian (Ringkasan, Ukuran, Tes, Riwayat) dan foto tetap seperti sebelumnya
 - [~] T-1910 Tiga kartu sambutan (built, panduan lama dihapus); masuk satu kolom dan daftar lima langkah (belum)
 - [ ] T-1911 Bagikan: editor sederhana, kartu Atlet / Naik level / Sebelum–sesudah, perayaan
 - [ ] T-1912 Tes browser, demo, dok (Agent.md §7, README), tangkapan layar untuk pemilik
