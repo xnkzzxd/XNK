@@ -413,7 +413,7 @@
     setTimeout(function () { if (window.hostPostTheme) window.hostPostTheme(); }, 50);
   };
   function renderThemeSeg() {
-    ['theme-seg', 'theme-seg-2'].forEach(renderOneThemeSeg);
+    ['theme-seg', 'theme-seg-2', 'theme-seg-3'].forEach(renderOneThemeSeg);
   }
   function renderOneThemeSeg(segId) {
     const seg = $(segId);

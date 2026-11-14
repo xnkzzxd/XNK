@@ -2801,4 +2801,117 @@ html.desk .rt-card.desk-sel { outline-offset: 0; }
 .desk-kv span { color: var(--fg-muted); }
 .desk-kv b { font-weight: 600; text-align: right; }
 @media (hover: hover) { html.desk .list-item[data-ctx="sess"], html.desk .meal-row[data-ctx="food"], html.desk #pub-moments li[data-mom] { cursor: default; } }
+
+/* ── Tata letak halaman di desktop ── */
+@container (min-width: 860px) { html.desk .px-wrap.px-2col { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; } }
+html.desk .px-stack { gap: 16px; }
+html.desk .portal-grid { gap: 16px; }
+@media (min-width: 1024px) { html.desk .portal-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); } }
+html.desk .rt-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+/* Saya: kartu atlet melebar + tiga kolom */
+.ds-saya { display: flex; flex-direction: column; gap: 16px; }
+html.desk .athlete.ath-wide { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "head lvl stats" "head badges acts"; align-items: center; gap: 14px 28px; padding: 20px 24px; }
+html.desk .ath-wide > .ath-head { grid-area: head; }
+html.desk .ath-wide > div:has(.ath-lvl) { grid-area: lvl; }
+html.desk .ath-wide > .ath-stats { grid-area: stats; grid-template-columns: repeat(auto-fit, 96px); }
+html.desk .ath-wide > .ath-badges { grid-area: badges; }
+html.desk .ath-wide > .nx-actions { grid-area: acts; justify-self: end; }
+html.desk .ath-wide > .nx-actions .btn { flex: 0 0 auto; min-width: 110px; }
+.ds-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+@media (max-width: 1199px) { .ds-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ds-col:last-child { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; } html.desk .athlete.ath-wide { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "head stats" "lvl lvl" "badges acts"; } }
+.ds-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ds-gt { margin: 0 0 6px 4px; font-size: 0.8rem; font-weight: 600; color: var(--fg-muted); }
+.ds-list { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.ds-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 8px 14px; text-align: left; color: var(--fg); }
+.ds-row + .ds-row { border-top: 1px solid var(--border); }
+.ds-row b { display: block; font-size: 0.9rem; font-weight: 600; }
+.ds-row .grow > span { display: block; font-size: 0.8rem; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-row > svg { width: 16px; height: 16px; color: var(--fg-muted); flex: none; }
+.ds-ic { width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
+.ds-ic svg { width: 15px; height: 15px; }
+.ds-static .seg { width: auto; min-width: 230px; }
+.ds-static .sw-row { display: flex; gap: 8px; grid-template-columns: none; }
+.ds-static .sw { width: 22px; height: 22px; aspect-ratio: auto; }
+@media (hover: hover) { .ds-row:not(.ds-static):hover { background: color-mix(in srgb, var(--fg) 5%, transparent); } }
+.ds-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.ds-grow { flex: 1 1 auto; }
+.ds-badges { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.ds-badge { display: flex; justify-content: center; opacity: .35; }
+.ds-badge.on { opacity: 1; }
+.ds-badge .shield { width: 100%; max-width: 44px; height: auto; }
+.ds-pt { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) 2.5rem; align-items: center; gap: 10px; font-size: 0.85rem; }
+.ds-pt b { text-align: right; }
+.ds-out { margin-top: auto; align-self: flex-start; color: var(--danger); }
+
+/* Jadwal: kalender terang berkontras tinggi (komentar pemilik) */
+html.desk .month-cal { background: var(--surface); color: var(--fg); border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: none; border-radius: 14px; }
+html.desk .month-cal .mc-nav { color: var(--fg); width: 32px; height: 32px; border-radius: 8px; }
+@media (hover: hover) { html.desk .month-cal .mc-nav:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); } }
+html.desk .month-cal .mc-today { color: var(--fg); border-color: color-mix(in srgb, var(--fg) 25%, transparent); }
+html.desk .month-cal .mc-dow { color: color-mix(in srgb, var(--fg) 80%, transparent); font-size: 0.7rem; }
+html.desk .month-cal .mc-grid { gap: 4px; }
+html.desk .month-cal .mc-day { color: var(--fg); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent); border-radius: 9px; aspect-ratio: auto; min-height: 44px; font-weight: 700; }
+html.desk .month-cal .mc-day.past { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--fg) 42%, transparent); font-weight: 500; }
+html.desk .month-cal .mc-day.out { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--fg) 25%, transparent); font-weight: 500; }
+html.desk .month-cal .mc-day.today::before { background: var(--accent); }
+html.desk .month-cal .mc-day.selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); transform: none; }
+html.desk .month-cal .mc-day.selected::before { background: var(--on-accent); }
+html.desk .month-cal .mc-day .mc-dots i { background: var(--fg); }
+html.desk .month-cal .mc-day .mc-dots i.ring { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fg); }
+html.desk .month-cal .mc-day.selected .mc-dots i { background: var(--on-accent); }
+@media (hover: hover) { html.desk .month-cal .mc-day:not(.selected):not(.out):hover { background: color-mix(in srgb, var(--fg) 10%, transparent); } }
+html.desk .slot { background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent); color: var(--fg); border-radius: 9px; min-height: 40px; }
+html.desk .slot.taken { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--fg) 40%, transparent); }
+html.desk .slot.past { background: transparent; border-color: transparent; opacity: 1; color: color-mix(in srgb, var(--fg) 32%, transparent); }
+html.desk .slot.mine { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+@media (hover: hover) { html.desk .slot:not(:disabled):hover { border-color: var(--accent); } }
+@media (pointer: coarse) { html.desk .slot { min-height: 46px; } }
+
+/* Kolom sama tinggi di Hari ini dan Paket saya: kartu terakhir tiap kolom mengisi sisa tinggi (tanpa ujung bergerigi) */
+@container (min-width: 860px) {
+  html.desk .px-wrap.px-2col { align-items: stretch; }
+  html.desk .px-2col > .px-col > :last-child:not(.hide) { flex: 1 1 auto; }
+  html.desk #pub-todo { display: flex; flex-direction: column; }
+  html.desk #pub-todo > .card { flex: 1 1 auto; }
+}
+/* Segmented control terang ala Mac */
+html.desk .seg { background: color-mix(in srgb, var(--fg) 8%, transparent); border-radius: 9px; padding: 3px; }
+html.desk .seg button { color: var(--fg-muted); min-height: 30px; font-size: 0.85rem; font-weight: 600; border-radius: 7px; padding: 0 14px; }
+html.desk .seg button.active { color: var(--fg); }
+html.desk .seg .seg-thumb { background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 0 0 0.5px rgba(0,0,0,.06); top: 3px; bottom: 3px; border-radius: 7px; }
+@media (pointer: coarse) { html.desk .seg button { min-height: 44px; } }
+/* Saya: perbaikan */
+.ds-static .seg { flex: none; width: 260px; min-width: 0; }
+.ds-static > b { min-width: max-content; }
+html.desk .ath-wide > .ath-stats { grid-template-columns: repeat(3, 96px); }
+.ds-badge .shield.on text { fill: var(--surface); }
+html.desk .ath-wide .ath-ribbon { display: none; }   /* level sudah tertulis di kartu */
+.ds-static .seg button { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; }
+.ds-pt { grid-template-columns: 9rem minmax(0, 1fr) 2.5rem; }
+/* Jadwal: kalender dulu; kartu ringkasan hitam tidak perlu di desktop (bilah judul punya Booking) */
+html.desk #pub-sched-hero { display: none; }
+html.desk .month-cal .mc-legend { color: var(--fg-muted); }
+html.desk .month-cal .mc-legend i { background: var(--fg); }
+html.desk .month-cal .mc-legend i.ring { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fg); }
+/* Makan: buku harian lebar di kiri, peringatan + saran menu + rencana di kanan */
+html.desk #pub-makan-pane > .stack { display: grid; column-count: auto; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); grid-auto-flow: row dense; align-items: start; gap: 16px; }
+html.desk #pub-makan-pane > .stack > * { margin-bottom: 0; }
+html.desk #pub-makan-pane > .stack > .makan-hero { grid-column: 1 / -1; }
+html.desk #pub-makan-pane > .stack > #nut-log-card { grid-column: 1; grid-row: 2 / span 5; }
+html.desk #pub-makan-pane > .stack > :not(.makan-hero):not(#nut-log-card) { grid-column: 2; }
+@media (max-width: 1023px) { html.desk #pub-makan-pane > .stack { grid-template-columns: minmax(0, 1fr); } html.desk #pub-makan-pane > .stack > * { grid-column: 1 !important; grid-row: auto !important; } }
+.dk-menu { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; }
+.dk-menu > .row-between { margin-bottom: 4px; }
+.dk-meal { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+.dk-meal b { display: block; font-size: 0.875rem; font-weight: 600; line-height: 1.3; }
+/* Jadwal: kalender menempel di kiri; jam kosong lalu daftar Mendatang/Selesai di kanan */
+@media (min-width: 1024px) {
+  html.desk #view-calendar:has(#pub-sched-lists) { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); column-gap: 24px; align-items: start; }
+  html.desk #view-calendar:has(#pub-sched-lists) > * { grid-column: 1 / -1; }
+  html.desk #view-calendar:has(#pub-sched-lists) > .sched-layout { display: contents; }
+  html.desk #view-calendar:has(#pub-sched-lists) .sched-layout > :first-child { grid-column: 1; grid-row: span 2; position: sticky; top: 8px; }
+  html.desk #view-calendar:has(#pub-sched-lists) .sched-layout > #day-panel { grid-column: 2; }
+  html.desk #view-calendar:has(#pub-sched-lists) > #pub-sched-lists { grid-column: 2; }
+}
 </style>

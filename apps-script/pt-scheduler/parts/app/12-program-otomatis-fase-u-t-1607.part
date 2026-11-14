@@ -144,6 +144,11 @@
     left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
+    if (window.deskIs && window.deskIs()) {   // Fase Y: rutinitas di kiri, tafsir minggu ini dan PR di kanan (kolom seimbang)
+      const L = left.split('<div id="ph-latihan">');
+      right = '<div id="ph-latihan">' + L[1] + right;
+      left = L[0];
+    }
     setHTML(el, pxHead('Latihan', 'Rutinitas dari coach dan buatan sendiri') + '<div id="pub-latihan-pane">' + portalGrid(left, right) + '</div>');   // Fase X: Makan punya tab sendiri (public-food)
   }
 
@@ -232,7 +237,7 @@
       });
       html += '</div>';
     }
-    if (!isPlan) html += logCardHtml(n) + '<button type="button" class="btn btn-outline btn-block" id="makan-plan-link" onclick="window.navigate(\'public-plan\')">' + icon('clipboard-list') + 'Rencana makan: menu, belanja, aturan</button>';
+    if (!isPlan) html += logCardHtml(n) + '<button type="button" class="btn btn-outline btn-block" id="makan-plan-link" onclick="window.navigate(\'public-plan\')">' + icon('clipboard-list') + 'Rencana makan: menu, belanja, aturan</button>' + (window.deskIs && window.deskIs() ? window.deskMenuCard(n) : '');
     if (isPlan) html += '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Angka tubuh</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">' + icon('pencil') + 'Ubah data</button></div><div class="mtiles">' +
       mtileHtml('BMI', n.bmi ? NUT_N(n.bmi.value, 1) : '–', '') + mtileHtml('Pinggang / tinggi', n.whtr ? NUT_N(n.whtr.value, 2) : '–', '') +
       mtileHtml('BMR', NUT_N(t.bmr), 'kkal istirahat') + mtileHtml('TDEE', NUT_N(t.tdee), 'kkal dengan aktivitas') + '</div>' +

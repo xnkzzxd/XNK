@@ -3207,6 +3207,119 @@ html.desk .rt-card.desk-sel { outline-offset: 0; }
 .desk-kv span { color: var(--fg-muted); }
 .desk-kv b { font-weight: 600; text-align: right; }
 @media (hover: hover) { html.desk .list-item[data-ctx="sess"], html.desk .meal-row[data-ctx="food"], html.desk #pub-moments li[data-mom] { cursor: default; } }
+
+/* ── Tata letak halaman di desktop ── */
+@container (min-width: 860px) { html.desk .px-wrap.px-2col { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; } }
+html.desk .px-stack { gap: 16px; }
+html.desk .portal-grid { gap: 16px; }
+@media (min-width: 1024px) { html.desk .portal-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); } }
+html.desk .rt-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+/* Saya: kartu atlet melebar + tiga kolom */
+.ds-saya { display: flex; flex-direction: column; gap: 16px; }
+html.desk .athlete.ath-wide { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "head lvl stats" "head badges acts"; align-items: center; gap: 14px 28px; padding: 20px 24px; }
+html.desk .ath-wide > .ath-head { grid-area: head; }
+html.desk .ath-wide > div:has(.ath-lvl) { grid-area: lvl; }
+html.desk .ath-wide > .ath-stats { grid-area: stats; grid-template-columns: repeat(auto-fit, 96px); }
+html.desk .ath-wide > .ath-badges { grid-area: badges; }
+html.desk .ath-wide > .nx-actions { grid-area: acts; justify-self: end; }
+html.desk .ath-wide > .nx-actions .btn { flex: 0 0 auto; min-width: 110px; }
+.ds-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+@media (max-width: 1199px) { .ds-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ds-col:last-child { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; } html.desk .athlete.ath-wide { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "head stats" "lvl lvl" "badges acts"; } }
+.ds-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ds-gt { margin: 0 0 6px 4px; font-size: 0.8rem; font-weight: 600; color: var(--fg-muted); }
+.ds-list { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.ds-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 8px 14px; text-align: left; color: var(--fg); }
+.ds-row + .ds-row { border-top: 1px solid var(--border); }
+.ds-row b { display: block; font-size: 0.9rem; font-weight: 600; }
+.ds-row .grow > span { display: block; font-size: 0.8rem; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-row > svg { width: 16px; height: 16px; color: var(--fg-muted); flex: none; }
+.ds-ic { width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: none; }
+.ds-ic svg { width: 15px; height: 15px; }
+.ds-static .seg { width: auto; min-width: 230px; }
+.ds-static .sw-row { display: flex; gap: 8px; grid-template-columns: none; }
+.ds-static .sw { width: 22px; height: 22px; aspect-ratio: auto; }
+@media (hover: hover) { .ds-row:not(.ds-static):hover { background: color-mix(in srgb, var(--fg) 5%, transparent); } }
+.ds-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.ds-grow { flex: 1 1 auto; }
+.ds-badges { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.ds-badge { display: flex; justify-content: center; opacity: .35; }
+.ds-badge.on { opacity: 1; }
+.ds-badge .shield { width: 100%; max-width: 44px; height: auto; }
+.ds-pt { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) 2.5rem; align-items: center; gap: 10px; font-size: 0.85rem; }
+.ds-pt b { text-align: right; }
+.ds-out { margin-top: auto; align-self: flex-start; color: var(--danger); }
+
+/* Jadwal: kalender terang berkontras tinggi (komentar pemilik) */
+html.desk .month-cal { background: var(--surface); color: var(--fg); border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: none; border-radius: 14px; }
+html.desk .month-cal .mc-nav { color: var(--fg); width: 32px; height: 32px; border-radius: 8px; }
+@media (hover: hover) { html.desk .month-cal .mc-nav:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); } }
+html.desk .month-cal .mc-today { color: var(--fg); border-color: color-mix(in srgb, var(--fg) 25%, transparent); }
+html.desk .month-cal .mc-dow { color: color-mix(in srgb, var(--fg) 80%, transparent); font-size: 0.7rem; }
+html.desk .month-cal .mc-grid { gap: 4px; }
+html.desk .month-cal .mc-day { color: var(--fg); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent); border-radius: 9px; aspect-ratio: auto; min-height: 44px; font-weight: 700; }
+html.desk .month-cal .mc-day.past { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--fg) 42%, transparent); font-weight: 500; }
+html.desk .month-cal .mc-day.out { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--fg) 25%, transparent); font-weight: 500; }
+html.desk .month-cal .mc-day.today::before { background: var(--accent); }
+html.desk .month-cal .mc-day.selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); transform: none; }
+html.desk .month-cal .mc-day.selected::before { background: var(--on-accent); }
+html.desk .month-cal .mc-day .mc-dots i { background: var(--fg); }
+html.desk .month-cal .mc-day .mc-dots i.ring { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fg); }
+html.desk .month-cal .mc-day.selected .mc-dots i { background: var(--on-accent); }
+@media (hover: hover) { html.desk .month-cal .mc-day:not(.selected):not(.out):hover { background: color-mix(in srgb, var(--fg) 10%, transparent); } }
+html.desk .slot { background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent); color: var(--fg); border-radius: 9px; min-height: 40px; }
+html.desk .slot.taken { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--fg) 40%, transparent); }
+html.desk .slot.past { background: transparent; border-color: transparent; opacity: 1; color: color-mix(in srgb, var(--fg) 32%, transparent); }
+html.desk .slot.mine { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+@media (hover: hover) { html.desk .slot:not(:disabled):hover { border-color: var(--accent); } }
+@media (pointer: coarse) { html.desk .slot { min-height: 46px; } }
+
+/* Kolom sama tinggi di Hari ini dan Paket saya: kartu terakhir tiap kolom mengisi sisa tinggi (tanpa ujung bergerigi) */
+@container (min-width: 860px) {
+  html.desk .px-wrap.px-2col { align-items: stretch; }
+  html.desk .px-2col > .px-col > :last-child:not(.hide) { flex: 1 1 auto; }
+  html.desk #pub-todo { display: flex; flex-direction: column; }
+  html.desk #pub-todo > .card { flex: 1 1 auto; }
+}
+/* Segmented control terang ala Mac */
+html.desk .seg { background: color-mix(in srgb, var(--fg) 8%, transparent); border-radius: 9px; padding: 3px; }
+html.desk .seg button { color: var(--fg-muted); min-height: 30px; font-size: 0.85rem; font-weight: 600; border-radius: 7px; padding: 0 14px; }
+html.desk .seg button.active { color: var(--fg); }
+html.desk .seg .seg-thumb { background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 0 0 0.5px rgba(0,0,0,.06); top: 3px; bottom: 3px; border-radius: 7px; }
+@media (pointer: coarse) { html.desk .seg button { min-height: 44px; } }
+/* Saya: perbaikan */
+.ds-static .seg { flex: none; width: 260px; min-width: 0; }
+.ds-static > b { min-width: max-content; }
+html.desk .ath-wide > .ath-stats { grid-template-columns: repeat(3, 96px); }
+.ds-badge .shield.on text { fill: var(--surface); }
+html.desk .ath-wide .ath-ribbon { display: none; }   /* level sudah tertulis di kartu */
+.ds-static .seg button { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; }
+.ds-pt { grid-template-columns: 9rem minmax(0, 1fr) 2.5rem; }
+/* Jadwal: kalender dulu; kartu ringkasan hitam tidak perlu di desktop (bilah judul punya Booking) */
+html.desk #pub-sched-hero { display: none; }
+html.desk .month-cal .mc-legend { color: var(--fg-muted); }
+html.desk .month-cal .mc-legend i { background: var(--fg); }
+html.desk .month-cal .mc-legend i.ring { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fg); }
+/* Makan: buku harian lebar di kiri, peringatan + saran menu + rencana di kanan */
+html.desk #pub-makan-pane > .stack { display: grid; column-count: auto; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); grid-auto-flow: row dense; align-items: start; gap: 16px; }
+html.desk #pub-makan-pane > .stack > * { margin-bottom: 0; }
+html.desk #pub-makan-pane > .stack > .makan-hero { grid-column: 1 / -1; }
+html.desk #pub-makan-pane > .stack > #nut-log-card { grid-column: 1; grid-row: 2 / span 5; }
+html.desk #pub-makan-pane > .stack > :not(.makan-hero):not(#nut-log-card) { grid-column: 2; }
+@media (max-width: 1023px) { html.desk #pub-makan-pane > .stack { grid-template-columns: minmax(0, 1fr); } html.desk #pub-makan-pane > .stack > * { grid-column: 1 !important; grid-row: auto !important; } }
+.dk-menu { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; }
+.dk-menu > .row-between { margin-bottom: 4px; }
+.dk-meal { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+.dk-meal b { display: block; font-size: 0.875rem; font-weight: 600; line-height: 1.3; }
+/* Jadwal: kalender menempel di kiri; jam kosong lalu daftar Mendatang/Selesai di kanan */
+@media (min-width: 1024px) {
+  html.desk #view-calendar:has(#pub-sched-lists) { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); column-gap: 24px; align-items: start; }
+  html.desk #view-calendar:has(#pub-sched-lists) > * { grid-column: 1 / -1; }
+  html.desk #view-calendar:has(#pub-sched-lists) > .sched-layout { display: contents; }
+  html.desk #view-calendar:has(#pub-sched-lists) .sched-layout > :first-child { grid-column: 1; grid-row: span 2; position: sticky; top: 8px; }
+  html.desk #view-calendar:has(#pub-sched-lists) .sched-layout > #day-panel { grid-column: 2; }
+  html.desk #view-calendar:has(#pub-sched-lists) > #pub-sched-lists { grid-column: 2; }
+}
 </style>
 
 </head>
@@ -4633,7 +4746,7 @@ html.desk .rt-card.desk-sel { outline-offset: 0; }
     setTimeout(function () { if (window.hostPostTheme) window.hostPostTheme(); }, 50);
   };
   function renderThemeSeg() {
-    ['theme-seg', 'theme-seg-2'].forEach(renderOneThemeSeg);
+    ['theme-seg', 'theme-seg-2', 'theme-seg-3'].forEach(renderOneThemeSeg);
   }
   function renderOneThemeSeg(segId) {
     const seg = $(segId);
@@ -13271,6 +13384,11 @@ html.desk .rt-card.desk-sel { outline-offset: 0; }
     left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
+    if (window.deskIs && window.deskIs()) {   // Fase Y: rutinitas di kiri, tafsir minggu ini dan PR di kanan (kolom seimbang)
+      const L = left.split('<div id="ph-latihan">');
+      right = '<div id="ph-latihan">' + L[1] + right;
+      left = L[0];
+    }
     setHTML(el, pxHead('Latihan', 'Rutinitas dari coach dan buatan sendiri') + '<div id="pub-latihan-pane">' + portalGrid(left, right) + '</div>');   // Fase X: Makan punya tab sendiri (public-food)
   }
 
@@ -13359,7 +13477,7 @@ html.desk .rt-card.desk-sel { outline-offset: 0; }
       });
       html += '</div>';
     }
-    if (!isPlan) html += logCardHtml(n) + '<button type="button" class="btn btn-outline btn-block" id="makan-plan-link" onclick="window.navigate(\'public-plan\')">' + icon('clipboard-list') + 'Rencana makan: menu, belanja, aturan</button>';
+    if (!isPlan) html += logCardHtml(n) + '<button type="button" class="btn btn-outline btn-block" id="makan-plan-link" onclick="window.navigate(\'public-plan\')">' + icon('clipboard-list') + 'Rencana makan: menu, belanja, aturan</button>' + (window.deskIs && window.deskIs() ? window.deskMenuCard(n) : '');
     if (isPlan) html += '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Angka tubuh</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">' + icon('pencil') + 'Ubah data</button></div><div class="mtiles">' +
       mtileHtml('BMI', n.bmi ? NUT_N(n.bmi.value, 1) : '–', '') + mtileHtml('Pinggang / tinggi', n.whtr ? NUT_N(n.whtr.value, 2) : '–', '') +
       mtileHtml('BMR', NUT_N(t.bmr), 'kkal istirahat') + mtileHtml('TDEE', NUT_N(t.tdee), 'kkal dengan aktivitas') + '</div>' +
@@ -15255,9 +15373,12 @@ html.desk .rt-card.desk-sel { outline-offset: 0; }
         '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + 'Jadwal</button></div>';
     }
     html += '</section>';
-    html += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
+    // Desktop (Fase Y): kartu nilai sesi pindah ke kolom kanan supaya dua kolom sama tinggi (tanpa ruang kosong besar).
+    const fbSlot = '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>', deskNow = window.deskIs && window.deskIs();
+    if (!deskNow) html += fbSlot;
     html += '<div class="px-stack" style="gap:10px" id="pub-todo">' + todoHtml() + '</div></div><div class="px-col">';
     html += '<div class="card" id="pub-weekx">' + weekStripHtml() + '</div>';
+    if (deskNow) html += fbSlot;
     // Kartu paket: sisa sesi + status perpanjangan (peringatan sisa sedikit, menunggu konfirmasi, sudah diperpanjang) + tagihan.
     html += '<section class="card-ink gfx-kontur" id="pub-pack-card"><div class="ih-head"><span class="ih-eyebrow">' + h(me.packageName || 'Paket') + '</span>' +
       '<button type="button" class="link-btn" style="color:inherit" onclick="window.navigate(\'public-pack\')">Paket saya' + icon('chevron-right') + '</button></div>' +
@@ -15298,6 +15419,7 @@ html.desk .rt-card.desk-sel { outline-offset: 0; }
   function renderPublicMore() {
     const el = $('view-public-more'), me = window.publicLoggedMember;
     if (!el || !me) return;
+    if (window.deskIs && window.deskIs()) { setHTML(el, window.deskSayaHtml()); renderThemeSeg(); paintIcons(); return; }   // Fase Y: Saya ala Pengaturan Mac
     const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
     const w = pg.data && pg.data.summary && pg.data.summary.berat;
     const tile = (onclick, ic, title, sub, extra) => '<button type="button" class="px-tile" onclick="' + onclick + '">' + icon(ic) + '<b>' + h(title) + '</b>' + (sub ? '<span' + (extra === 'warn' ? ' class="warn"' : '') + '>' + h(sub) + '</span>' : '') + (extra && extra !== 'warn' ? extra : '') + '</button>';
@@ -16074,6 +16196,42 @@ html.desk .rt-card.desk-sel { outline-offset: 0; }
   window.rtOpen = function (src, hari) {
     rtOpenDesk(src, hari);
     if (deskIs()) { const card = Array.from(document.querySelectorAll('.rt-card[data-ctx="rt"]')).find(c => c.dataset.src === src && c.dataset.hari === hari); deskMark(card || null); }
+  };
+
+  // ── Makan di desktop: kolom kanan berisi saran menu hari ini (catat satu klik), bukan ruang kosong ──
+  window.deskMenuCard = function (n) {
+    const meals = (n && n.menu && n.menu.meals) || [];
+    if (!meals.length) return '';
+    return '<section class="card dk-menu" id="dk-menu"><div class="row-between"><b>Saran menu hari ini</b><button type="button" class="link-btn" onclick="window.navigate(\'public-plan\')">Semua' + icon('chevron-right') + '</button></div>' +
+      meals.map(function (m, mi) {
+        const kal = Math.round(m.items.reduce((a, it) => a + (Number(it.kal) || 0), 0));
+        return '<div class="dk-meal"><span class="grow"><span class="li-sub">' + h(NUT_MEAL_L[nutMealWaktu(m.key)] || '') + (kal ? ' · ' + kal + ' kkal' : '') + '</span><b>' + h(m.paket ? m.paket.n : m.items.map(i => i.n).join(', ')) + '</b></span>' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="window.nutLogMeal(' + mi + ')">' + icon('check') + 'Catat</button></div>';
+      }).join('') + '</section>';
+  };
+  // ── Saya di desktop: kartu atlet melebar + tiga kolom ala Pengaturan Mac (tanpa ruang kosong besar) ──
+  window.deskSayaHtml = function () {
+    const me = window.publicLoggedMember, total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    const go = v => "window.navigate('" + v + "')";
+    const row = (fn, ic, title, sub, dot) => '<button type="button" class="ds-row" onclick="' + fn + '"><span class="ds-ic">' + icon(ic) + '</span><span class="grow"><b>' + h(title) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + (dot ? '<span class="new-dot" aria-label="Baru"></span>' : '') + icon('chevron-right') + '</button>';
+    const group = (title, rows) => '<div class="ds-group"><p class="ds-gt">' + h(title) + '</p><div class="ds-list">' + rows + '</div></div>';
+    const next = (window.schedules || []).filter(s => String(s.memberId) === String(me.id) && !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart)[0];
+    const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId)) || (window.coaches || [])[0];
+    const w = pg.data && pg.data.summary && pg.data.summary.berat;
+    let c1 = group('Profil', row('window.openProfileEdit()', 'pencil', 'Ubah kartu atlet', 'Nama, motto, warna, statistik') + row('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto') + row(go('public-progress'), 'trending-up', 'Progres', w ? String(w.last.nilai).replace('.', ',') + ' kg' : 'Berat, ukuran, tes'));
+    c1 += group('Makan & berbagi', (nutTabOn() ? row(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh') : '') + (window.shareOn !== false ? row(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres') : '') + row(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', infoHasNew()));
+    let c2 = group('Paket & coach', row(go('public-pack'), 'package', 'Paket saya', total ? 'Sisa ' + rem + ' dari ' + total + ' sesi' : (me.packageName || 'Lihat paket')) + row(go('public-coaches'), 'dumbbell', 'Coach', coach ? coach.name : 'Profil, jam, chat') + row(go('calendar'), 'calendar-days', 'Jadwal', next ? fmtDate(new Date(next.start), { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtTime(new Date(next.start)) : 'Belum ada jadwal') + row('window.chatCoach()', 'message-circle', 'Chat coach', 'Lewat WhatsApp'));
+    const p = X().profile;
+    c2 += '<div class="ds-group"><p class="ds-gt">Tampilan</p><div class="ds-list"><div class="ds-row ds-static"><b class="grow">Tema</b><div class="seg" id="theme-seg-3" role="radiogroup" aria-label="Tema"></div></div>' +
+      (p ? '<div class="ds-row ds-static"><b class="grow">Warna aksen</b>' + accentSwatches(p.aksen, 'window.setAccent') + '</div>' : '') + '</div></div>';
+    const badges = (pg.data && pg.data.badges) || [], got = badges.filter(b => b.earned).length;
+    let c3 = '<section class="card ds-card"><div class="row-between"><b>Koleksi badge</b><span class="li-sub">' + got + ' dari ' + badges.length + '</span></div><div class="ds-badges">' +
+      badges.map(b => '<span class="ds-badge' + (b.earned ? ' on' : '') + '" title="' + h(b.label) + '">' + shieldSvg(b.id, b.label, !!b.earned) + '</span>').join('') + '</div></section>';
+    const lv = X().level, max = lv ? Math.max(1, ...lv.rinci.map(r => r.poin)) : 1;
+    c3 += '<section class="card ds-card ds-grow"><div class="row-between"><b>Asal poin</b><span class="li-sub">' + (lv ? lv.poin + ' poin' : '') + '</span></div>' +
+      (lv ? lv.rinci.map(r => '<div class="ds-pt"><span>' + h(r.label) + '</span><span class="px-bar"><i style="width:' + Math.round(r.poin / max * 100) + '%"></i></span><b class="num">' + r.poin + '</b></div>').join('') : skel(3)) +
+      '<button type="button" class="btn btn-secondary ds-out" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></section>';
+    return '<div class="ds-saya">' + athleteCardHtml().replace('class="card-ink athlete', 'class="card-ink athlete ath-wide') + '<div class="ds-cols"><div class="ds-col">' + c1 + '</div><div class="ds-col">' + c2 + '</div><div class="ds-col">' + c3 + '</div></div></div>';
   };
 })();
 </script>

@@ -218,5 +218,41 @@
     rtOpenDesk(src, hari);
     if (deskIs()) { const card = Array.from(document.querySelectorAll('.rt-card[data-ctx="rt"]')).find(c => c.dataset.src === src && c.dataset.hari === hari); deskMark(card || null); }
   };
+
+  // ── Makan di desktop: kolom kanan berisi saran menu hari ini (catat satu klik), bukan ruang kosong ──
+  window.deskMenuCard = function (n) {
+    const meals = (n && n.menu && n.menu.meals) || [];
+    if (!meals.length) return '';
+    return '<section class="card dk-menu" id="dk-menu"><div class="row-between"><b>Saran menu hari ini</b><button type="button" class="link-btn" onclick="window.navigate(\'public-plan\')">Semua' + icon('chevron-right') + '</button></div>' +
+      meals.map(function (m, mi) {
+        const kal = Math.round(m.items.reduce((a, it) => a + (Number(it.kal) || 0), 0));
+        return '<div class="dk-meal"><span class="grow"><span class="li-sub">' + h(NUT_MEAL_L[nutMealWaktu(m.key)] || '') + (kal ? ' · ' + kal + ' kkal' : '') + '</span><b>' + h(m.paket ? m.paket.n : m.items.map(i => i.n).join(', ')) + '</b></span>' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="window.nutLogMeal(' + mi + ')">' + icon('check') + 'Catat</button></div>';
+      }).join('') + '</section>';
+  };
+  // ── Saya di desktop: kartu atlet melebar + tiga kolom ala Pengaturan Mac (tanpa ruang kosong besar) ──
+  window.deskSayaHtml = function () {
+    const me = window.publicLoggedMember, total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    const go = v => "window.navigate('" + v + "')";
+    const row = (fn, ic, title, sub, dot) => '<button type="button" class="ds-row" onclick="' + fn + '"><span class="ds-ic">' + icon(ic) + '</span><span class="grow"><b>' + h(title) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + (dot ? '<span class="new-dot" aria-label="Baru"></span>' : '') + icon('chevron-right') + '</button>';
+    const group = (title, rows) => '<div class="ds-group"><p class="ds-gt">' + h(title) + '</p><div class="ds-list">' + rows + '</div></div>';
+    const next = (window.schedules || []).filter(s => String(s.memberId) === String(me.id) && !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart)[0];
+    const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId)) || (window.coaches || [])[0];
+    const w = pg.data && pg.data.summary && pg.data.summary.berat;
+    let c1 = group('Profil', row('window.openProfileEdit()', 'pencil', 'Ubah kartu atlet', 'Nama, motto, warna, statistik') + row('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto') + row(go('public-progress'), 'trending-up', 'Progres', w ? String(w.last.nilai).replace('.', ',') + ' kg' : 'Berat, ukuran, tes'));
+    c1 += group('Makan & berbagi', (nutTabOn() ? row(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh') : '') + (window.shareOn !== false ? row(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres') : '') + row(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', infoHasNew()));
+    let c2 = group('Paket & coach', row(go('public-pack'), 'package', 'Paket saya', total ? 'Sisa ' + rem + ' dari ' + total + ' sesi' : (me.packageName || 'Lihat paket')) + row(go('public-coaches'), 'dumbbell', 'Coach', coach ? coach.name : 'Profil, jam, chat') + row(go('calendar'), 'calendar-days', 'Jadwal', next ? fmtDate(new Date(next.start), { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtTime(new Date(next.start)) : 'Belum ada jadwal') + row('window.chatCoach()', 'message-circle', 'Chat coach', 'Lewat WhatsApp'));
+    const p = X().profile;
+    c2 += '<div class="ds-group"><p class="ds-gt">Tampilan</p><div class="ds-list"><div class="ds-row ds-static"><b class="grow">Tema</b><div class="seg" id="theme-seg-3" role="radiogroup" aria-label="Tema"></div></div>' +
+      (p ? '<div class="ds-row ds-static"><b class="grow">Warna aksen</b>' + accentSwatches(p.aksen, 'window.setAccent') + '</div>' : '') + '</div></div>';
+    const badges = (pg.data && pg.data.badges) || [], got = badges.filter(b => b.earned).length;
+    let c3 = '<section class="card ds-card"><div class="row-between"><b>Koleksi badge</b><span class="li-sub">' + got + ' dari ' + badges.length + '</span></div><div class="ds-badges">' +
+      badges.map(b => '<span class="ds-badge' + (b.earned ? ' on' : '') + '" title="' + h(b.label) + '">' + shieldSvg(b.id, b.label, !!b.earned) + '</span>').join('') + '</div></section>';
+    const lv = X().level, max = lv ? Math.max(1, ...lv.rinci.map(r => r.poin)) : 1;
+    c3 += '<section class="card ds-card ds-grow"><div class="row-between"><b>Asal poin</b><span class="li-sub">' + (lv ? lv.poin + ' poin' : '') + '</span></div>' +
+      (lv ? lv.rinci.map(r => '<div class="ds-pt"><span>' + h(r.label) + '</span><span class="px-bar"><i style="width:' + Math.round(r.poin / max * 100) + '%"></i></span><b class="num">' + r.poin + '</b></div>').join('') : skel(3)) +
+      '<button type="button" class="btn btn-secondary ds-out" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></section>';
+    return '<div class="ds-saya">' + athleteCardHtml().replace('class="card-ink athlete', 'class="card-ink athlete ath-wide') + '<div class="ds-cols"><div class="ds-col">' + c1 + '</div><div class="ds-col">' + c2 + '</div><div class="ds-col">' + c3 + '</div></div></div>';
+  };
 })();
 </script>

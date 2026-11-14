@@ -2749,7 +2749,7 @@ async function contrastReport(page) {
       await page.setViewportSize({ width: w, height: 900 });
       await page.evaluate(() => window.setLatSeg('makan'));
       await page.waitForTimeout(500);
-      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.querySelector(':scope > .stack') || p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
+      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.querySelector(':scope > .stack') || p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.display === 'grid' ? String(cs.gridTemplateColumns.split(' ').filter(Boolean).length) : cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
       check(mk.cols === '2' && mk.over <= 1 && mk.lefts === 2 && mk.ring && mk.bars === 3, scheme + ' ' + w + ': Makan flows in two columns without overflow ' + JSON.stringify(mk));
       if (w === 1440) await shot(page, 'portal-desktop-' + scheme + '-makan');
     }

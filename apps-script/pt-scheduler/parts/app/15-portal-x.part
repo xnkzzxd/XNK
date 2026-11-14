@@ -89,9 +89,12 @@
         '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + 'Jadwal</button></div>';
     }
     html += '</section>';
-    html += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
+    // Desktop (Fase Y): kartu nilai sesi pindah ke kolom kanan supaya dua kolom sama tinggi (tanpa ruang kosong besar).
+    const fbSlot = '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>', deskNow = window.deskIs && window.deskIs();
+    if (!deskNow) html += fbSlot;
     html += '<div class="px-stack" style="gap:10px" id="pub-todo">' + todoHtml() + '</div></div><div class="px-col">';
     html += '<div class="card" id="pub-weekx">' + weekStripHtml() + '</div>';
+    if (deskNow) html += fbSlot;
     // Kartu paket: sisa sesi + status perpanjangan (peringatan sisa sedikit, menunggu konfirmasi, sudah diperpanjang) + tagihan.
     html += '<section class="card-ink gfx-kontur" id="pub-pack-card"><div class="ih-head"><span class="ih-eyebrow">' + h(me.packageName || 'Paket') + '</span>' +
       '<button type="button" class="link-btn" style="color:inherit" onclick="window.navigate(\'public-pack\')">Paket saya' + icon('chevron-right') + '</button></div>' +
@@ -132,6 +135,7 @@
   function renderPublicMore() {
     const el = $('view-public-more'), me = window.publicLoggedMember;
     if (!el || !me) return;
+    if (window.deskIs && window.deskIs()) { setHTML(el, window.deskSayaHtml()); renderThemeSeg(); paintIcons(); return; }   // Fase Y: Saya ala Pengaturan Mac
     const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
     const w = pg.data && pg.data.summary && pg.data.summary.berat;
     const tile = (onclick, ic, title, sub, extra) => '<button type="button" class="px-tile" onclick="' + onclick + '">' + icon(ic) + '<b>' + h(title) + '</b>' + (sub ? '<span' + (extra === 'warn' ? ' class="warn"' : '') + '>' + h(sub) + '</span>' : '') + (extra && extra !== 'warn' ? extra : '') + '</button>';
