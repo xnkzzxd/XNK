@@ -1934,15 +1934,23 @@ async function contrastReport(page) {
       await page.click('#nut-onb-body .chip >> nth=0');
       await page.click('#nut-onb-next');
       await page.waitForTimeout(1200);
-      const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.meal-blk .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
-      check(mk.ring && mk.bars === 3 && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && mk.over <= 1, 'makan: ring, three macro bars, today\'s menu and the rules show, no sideways scroll ' + JSON.stringify({ bars: mk.bars, meals: mk.meals, over: mk.over }));
-      check(mk.small === 0, 'makan: tap targets are at least 44 px ' + mk.small);
+      const paneInfo = id => page.evaluate(i => { const w = document.getElementById(i); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.meal-blk .list-item').length, days: w.querySelectorAll('.meal-day').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; }, id);
+      const fd = await paneInfo('pub-makan-pane');
+      check(fd.ring && fd.bars === 3 && fd.days === 4 && /Buku harian/.test(fd.txt) && !/Menu hari ini/.test(fd.txt) && fd.over <= 1, 'makan: the tab shows the calorie ring, three macro bars and a diary with four meals, no sideways scroll ' + JSON.stringify({ bars: fd.bars, days: fd.days, over: fd.over }));
+      check(/Saran menu:/.test(fd.txt), 'makan: an empty meal shows the suggested menu');
+      check(fd.small === 0, 'makan: tap targets are at least 44 px ' + fd.small);
+      await page.click('#makan-plan-link');
+      await page.waitForTimeout(500);
+      const mk = await paneInfo('pub-plan-pane');
+      check((await page.evaluate(() => window.currentView)) === 'public-plan' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page' && await visible(page, '#topbar-back'), 'rencana makan: opens as a page under Saya with a back button');
+      check(await visible(page, '#plan-target') && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && /Angka tubuh/.test(mk.txt) && mk.over <= 1, 'rencana makan: target, today\'s menu, body numbers and the rules show ' + JSON.stringify({ meals: mk.meals, over: mk.over }));
+      check(mk.small === 0, 'rencana makan: tap targets are at least 44 px ' + mk.small);
       // The menu changes with the date, and a few foods (e.g. E47 or BR013 as karbo) have no allowed swap, which
       // shows "Tidak ada pengganti…". Try the next menu item then, so the check doesn't fail on some days only.
       let swapOk = false;
       for (let i = 0; i < Math.min(mk.meals, 6) && !swapOk; i++) {
         if (i) { await page.evaluate(() => window.closeModal()); await page.waitForTimeout(400); }
-        await page.click('#pub-makan-pane .meal-blk .list-item >> nth=' + i);
+        await page.click('#pub-plan-pane .meal-blk .list-item >> nth=' + i);
         await page.waitForTimeout(700);
         swapOk = await visible(page, '#modal-nut-swap') && (await page.locator('#nut-swap-list .list-item').count()) >= 1;
       }
@@ -1954,7 +1962,7 @@ async function contrastReport(page) {
       await page.waitForTimeout(300);
       check(await visible(page, '#modal-nut-info') && (await page.textContent('#nut-info-src')).includes('ISSN'), 'makan: the (i) button explains the number and names the source');
       await page.evaluate(() => window.closeModal());
-      await page.click('#pub-makan-pane .btn-sm:has-text("Belanja")');
+      await page.click('#pub-plan-pane .btn-sm:has-text("Belanja")');
       await page.waitForTimeout(900);
       check(await visible(page, '#modal-nut-shop') && (await page.locator('#nut-shop-list .eyebrow').count()) >= 3, 'makan: the shopping list shows groups');
       await shot(page, 'portal-mobile-makan');
@@ -1962,6 +1970,8 @@ async function contrastReport(page) {
       await page.route('https://xnk.my.id/foods/foods.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: require('fs').readFileSync(require('path').join(__dirname, '../../../foods/foods.min.json'), 'utf8') }));
       await page.evaluate(() => window.closeModal());
       await page.waitForTimeout(700);
+      await page.evaluate(() => window.navigate('public-food'));
+      await page.waitForTimeout(500);
       await page.click('#nut-log-card button:has-text("Tambah") >> nth=1');   // makan siang
       await page.waitForTimeout(700);
       check(await visible(page, '#modal-nut-add') && (await page.textContent('#nut-add-title')).includes('Makan siang'), 'catat: the add sheet opens for the chosen meal');
@@ -1979,9 +1989,13 @@ async function contrastReport(page) {
       await page.click('#nut-pick-save');
       await page.waitForTimeout(1200);
       check(!(await visible(page, '#modal-nut-add')) && (await page.textContent('#nut-log-card')).toLowerCase().includes('tempe') && /(Sisa|Lebih) [0-9]/.test(await page.textContent('#nut-eaten-line')), 'catat: the food is logged and the eaten line updates');
-      await page.click('#pub-makan-pane .icon-btn[aria-label^="Catat"] >> nth=0');
+      await page.evaluate(() => window.navigate('public-plan'));
+      await page.waitForTimeout(400);
+      await page.click('#pub-plan-pane .icon-btn[aria-label^="Catat"] >> nth=0');
       await page.waitForTimeout(1200);
-      check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: the check button logs a menu item in one tap');
+      await page.evaluate(() => window.navigate('public-food'));
+      await page.waitForTimeout(400);
+      check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: the check button on the plan logs a menu item in one tap');
       await page.click('#nut-log-card button:has-text("Tambah") >> nth=3');
       await page.waitForTimeout(600);
       await page.click('#modal-nut-add button:has-text("Buat makanan sendiri")');
@@ -1995,6 +2009,25 @@ async function contrastReport(page) {
       await page.click('#nut-log-card button[aria-label^="Hapus"] >> nth=0');
       await page.waitForTimeout(900);
       check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: deleting removes the row');
+      // Fase X: saran menu satu ketuk dan pilih banyak di layar tambah.
+      await page.click('#nut-log-card button:has-text("Tambah") >> nth=2');   // makan malam
+      await page.waitForTimeout(700);
+      check(await visible(page, '#nut-add-saran') && (await page.textContent('#nut-add-saran')).includes('Catat semua'), 'catat: the add sheet suggests today\'s menu for that meal');
+      const selN = await page.locator('#nut-add-body .nut-sel').count();
+      check(selN >= 2, 'catat: recent foods can be ticked (' + selN + ' boxes)');
+      await page.click('#nut-add-body .nut-sel >> nth=0');
+      await page.click('#nut-add-body .nut-sel >> nth=1');
+      check((await page.textContent('#nut-sel-save')).includes('Tambah 2 makanan'), 'catat: ticking two foods offers "Tambah 2 makanan"');
+      const logBefore = env.sheet('FoodLog').rows.length;
+      await page.click('#nut-sel-save');
+      await page.waitForTimeout(1500);
+      check(env.sheet('FoodLog').rows.length === logBefore + 2 && env.sheet('FoodLog').rows.slice(-2).every(r => r[3] === 'malam'), 'catat: both foods are saved to that meal in one go');
+      await page.click('#nut-log-card button:has-text("Tambah") >> nth=0');   // sarapan
+      await page.waitForTimeout(600);
+      const beforeMeal = env.sheet('FoodLog').rows.length;
+      await page.click('#nut-add-saran .btn');
+      await page.waitForTimeout(1800);
+      check(env.sheet('FoodLog').rows.length > beforeMeal && !(await visible(page, '#modal-nut-add')), 'catat: "Catat semua" logs the whole suggested meal (' + (env.sheet('FoodLog').rows.length - beforeMeal) + ' foods)');
       await shot(page, 'portal-mobile-catat');
       await page.evaluate(() => { window.closeModal(); window.setLatSeg('latihan'); });
       // The weight typed in the data sheet must not leak into the Progres checks that follow.

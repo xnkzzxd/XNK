@@ -217,7 +217,11 @@
     if (!el || !window.publicLoggedMember) return;
     setHTML(el, '<div id="pub-makan-pane">' + makanInner() + '</div>');
   };
-  window.renderPublicPlan = function () { window.navigate('public-food'); };
+  window.renderPublicPlan = function () {
+    const el = $('view-public-plan');
+    if (!el || !window.publicLoggedMember) return;
+    setHTML(el, '<div id="pub-plan-pane">' + makanInner('plan') + '</div>');
+  };
   window.renderPublicPack = function () { window.navigate('public-catalog'); };
 
   // Gambar ulang bagian Fase X yang sedang tampil (dipanggil tiap data portal berubah).

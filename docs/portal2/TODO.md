@@ -9,7 +9,7 @@ Baca [PRD.md](PRD.md) dan [Design.md](Design.md) dulu.
 - [x] T-1904 Hari ini (kartu sesi, tugas hari ini, strip minggu, kartu paket) + Jadwal (kalender bulan, jam kosong, daftar Mendatang dan Selesai)
 - [x] T-1905 Booking tiga langkah (`#bk-screen`: coach bila 2+ → hari → jam → periksa), ubah jadwal lewat layar yang sama; kirim dan bentrok tetap lewat form lama
 - [ ] T-1906 Latihan: daftar rutinitas, Galeri, pencatat dirapikan, layar selesai
-- [ ] T-1907 Makan: buku harian per waktu makan, tambah makanan, Rencana makan
+- [x] T-1907 Makan: cincin + buku harian per waktu makan (saran menu bila kosong); layar tambah dengan saran menu "Catat semua" dan pilih banyak; Rencana makan (`public-plan`: target, menu, belanja, angka tubuh, aturan) di bawah Saya
 - [~] T-1908 Saya: kartu atlet + kisi (built); ubah profil, badge, statistik, Paket saya, Coach, Tampilan (belum)
 - [ ] T-1909 Progres: cerita perjalanan, isi ukuran "berat dulu", foto
 - [~] T-1910 Tiga kartu sambutan (built, panduan lama dihapus); masuk satu kolom dan daftar lima langkah (belum)

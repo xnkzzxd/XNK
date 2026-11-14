@@ -9048,7 +9048,9 @@
     const pct = goal ? Math.min(100, Math.round(eaten / goal * 100)) : 0;
     return '<div class="stack" style="gap:4px"><div class="row-between"><span class="li-title">' + h(label) + nutInfoBtn(key) + '</span><span class="num" style="font-weight:800">' + h(NUT_N(eaten)) + ' / ' + h(NUT_N(goal)) + ' g</span></div><div class="meter" aria-label="' + h(label) + ' ' + pct + ' persen dari target"><i style="width:' + pct + '%"></i></div></div>';
   }
-  function makanInner() {
+  // part 'food' (bawaan, tab Makan): cincin + buku harian. part 'plan' (Saya → Rencana makan): target, menu hari ini, angka tubuh, aturan.
+  function makanInner(part) {
+    const isPlan = part === 'plan';
     const n = nutEff(window.myNutrition);
     if (!n) return '<div class="card-flat">' + skel(4, true) + '</div>';
     if (n.enabled === false) return '<div class="card-flat"><p class="li-sub">Fitur makan sedang tidak aktif.</p></div>';
@@ -9062,15 +9064,18 @@
     const eaten = (n.log && n.log.totals) || { kal: 0, p: 0, l: 0, k: 0 };
     const left = t.kal - eaten.kal, wk = window.myWeek && !window.myWeek.error ? window.myWeek : null;
     let html = '<div class="stack makan-stack" style="gap:var(--gap)">';
+    if (isPlan) html += '<section class="card-ink gfx-kontur" id="plan-target"><div class="ih-head"><span class="ih-eyebrow">Target harian</span><button type="button" class="link-btn" style="color:inherit" onclick="window.openNutOnb()">Ubah data' + icon('chevron-right') + '</button></div>' +
+      '<p class="num" style="font-size:var(--fs-4xl);font-weight:800;letter-spacing:-0.03em;line-height:1.1;margin-top:8px">' + h(NUT_N(t.kal)) + ' kkal</p>' +
+      '<p class="makan-meta">' + h(NUT_GOALS_L[t.goal] || '') + ' · protein ' + h(NUT_N(t.protein)) + ' g · karbo ' + h(NUT_N(t.karbo)) + ' g · lemak ' + h(NUT_N(t.lemak)) + ' g</p></section>';
     // Kartu hitam: cincin kalori + sisa + makro hari ini.
-    html += '<section class="card-ink makan-hero"><div class="makan-top"><div class="ring-wrap makan-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/><circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - Math.min(1, eaten.kal / (t.kal || 1)))).toFixed(1) + '"/></svg>' +
+    if (!isPlan) html += '<section class="card-ink gfx-kontur makan-hero"><div class="makan-top"><div class="ring-wrap makan-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/><circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - Math.min(1, eaten.kal / (t.kal || 1)))).toFixed(1) + '"/></svg>' +
       '<div class="ring-center"><span class="num makan-num">' + h(NUT_N(eaten.kal)) + '</span><span class="eyebrow">dari ' + h(NUT_N(t.kal)) + '</span></div></div>' +
       '<div class="makan-sum"><span class="ih-eyebrow">Makan hari ini</span><p class="makan-left" id="nut-eaten-line">' + (left >= 0 ? 'Sisa ' + h(NUT_N(left)) + ' kkal' : 'Lebih ' + h(NUT_N(-left)) + ' kkal') + '</p>' +
       '<p class="makan-meta">' + h(NUT_GOALS_L[t.goal] || '') + (t.adjust ? ' · penyesuaian coach ' + (t.adjust > 0 ? '+' : '−') + Math.abs(t.adjust) : '') + (wk && wk.foodDays != null ? ' · ' + wk.foodDays + '/7 hari tercatat' : '') + '</p></div></div>' +
       '<div class="makan-macros">' + macroBar('protein', 'Protein', t.protein, 4, eaten.p, 'p') + macroBar('karbo', 'Karbo', t.karbo, 4, eaten.k, 'k') + macroBar('lemak', 'Lemak', t.lemak, 9, eaten.l, 'l') + '</div></section>';
-    (t.warnings || []).forEach(function (w) { if (NUT_WARN[w]) html += '<div class="card nut-warn" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' ' + h(NUT_WARN[w]) + '</div>'; });
-    if (n.inputs && n.inputs.stale) html += '<div class="card"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
-    if (n.menu) {
+    if (!isPlan) (t.warnings || []).forEach(function (w) { if (NUT_WARN[w]) html += '<div class="card nut-warn" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' ' + h(NUT_WARN[w]) + '</div>'; });
+    if (!isPlan && n.inputs && n.inputs.stale) html += '<div class="card"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
+    if (isPlan && n.menu) {
       const MEAL_IC = { sarapan: 'sunrise', pagi: 'sunrise', siang: 'sun', malam: 'moon', camilan: 'cookie', sahur: 'moon-star', buka: 'sunset' };
       html += '<div class="card stack" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
       n.menu.meals.forEach(function (m, mi) {
@@ -9086,12 +9091,12 @@
       });
       html += '</div>';
     }
-    html += logCardHtml(n);
-    html += '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Tubuhmu</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">' + icon('pencil') + 'Ubah data</button></div><div class="mtiles">' +
+    if (!isPlan) html += logCardHtml(n) + '<button type="button" class="btn btn-outline btn-block" id="makan-plan-link" onclick="window.navigate(\'public-plan\')">' + icon('clipboard-list') + 'Rencana makan: menu, belanja, aturan</button>';
+    if (isPlan) html += '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Angka tubuh</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">' + icon('pencil') + 'Ubah data</button></div><div class="mtiles">' +
       mtileHtml('BMI', n.bmi ? NUT_N(n.bmi.value, 1) : '–', '') + mtileHtml('Pinggang / tinggi', n.whtr ? NUT_N(n.whtr.value, 2) : '–', '') +
       mtileHtml('BMR', NUT_N(t.bmr), 'kkal istirahat') + mtileHtml('TDEE', NUT_N(t.tdee), 'kkal dengan aktivitas') + '</div>' +
       '<p class="li-sub">Info tiap angka: ' + nutInfoBtn('bmi') + nutInfoBtn('whtr') + nutInfoBtn('tdee') + ' · Serat ≥ ' + h(NUT_N(t.serat)) + ' g ' + nutInfoBtn('serat') + '. Semua angka perkiraan, bukan pengganti ahli gizi.</p></div>';
-    html += foldHtml('Aturan makan', '6 kebiasaan', '<div class="stack" style="gap:8px">' +
+    if (isPlan) html += foldHtml('Aturan makan', '6 kebiasaan', '<div class="stack" style="gap:8px">' +
       '<p>' + icon('utensils', 'class="ic-inline"') + ' Isi Piringku: ½ piring sayur dan buah (sayur lebih banyak), ½ makanan pokok dan lauk (makanan pokok lebih banyak).</p>' +
       '<p>' + icon('scale', 'class="ic-inline"') + ' Batas harian: gula 50 g, garam 5 g, lemak 67 g (Pedoman Gizi Seimbang, PMK 41/2014).</p>' +
       '<p>' + icon('flame', 'class="ic-inline"') + ' Menu XNK: santan paling banyak 1× sehari dan 3× seminggu, gorengan 1× sehari, lauk yang sama tidak dua kali sehari.</p>' +
@@ -9101,7 +9106,11 @@
     html += '</div>';
     return html;
   }
-  function renderMakan() { const w = $('pub-makan-pane'); if (w) { setHTML(w, makanInner()); paintIcons(); } }
+  function renderMakan() {
+    const w = $('pub-makan-pane'); if (w) setHTML(w, makanInner());
+    const pl = $('pub-plan-pane'); if (pl) setHTML(pl, makanInner('plan'));
+    if (w || pl) paintIcons();
+  }
   window.nutInfo = function (key) {
     const d = NUT_INFO[key]; if (!d) return;
     $('nut-info-title').textContent = d[0]; $('nut-info-text').textContent = d[1]; $('nut-info-src').textContent = 'Sumber: ' + d[2];
@@ -9241,19 +9250,25 @@
   function logCardHtml(n) {
     const log = n.log || { items: [], totals: { kal: 0 } };
     const nPend = log.items.filter(x => x.pending).length;
-    let html = '<div class="card-flat stack" style="gap:8px" id="nut-log-card"><div class="row-between"><p class="eyebrow">Dimakan hari ini' + (nPend ? ' · <span class="pill soft">' + nPend + ' menunggu sinyal</span>' : '') + '</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button></div>';
+    const meals = (n.menu && n.menu.meals) || [];
+    let firstEmpty = true;
+    let html = '<div class="stack" style="gap:var(--gap)" id="nut-log-card"><div class="px-sec"><h3>Buku harian</h3>' + (nPend ? '<span class="pill soft">' + nPend + ' menunggu sinyal</span>' : '<button type="button" class="link-btn" id="nut-copy-btn" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button>') + '</div>';
     Object.keys(NUT_MEAL_L).forEach(function (k) {
       const its = log.items.filter(x => x.waktu === k), kal = its.reduce((a, x) => a + x.kal, 0);
-      html += '<div class="stack" style="gap:0"><div class="row-between" style="min-height:44px"><span class="li-title">' + h(NUT_MEAL_L[k]) + (its.length ? ' <span class="li-sub">' + h(NUT_N(kal)) + ' kkal</span>' : '') + '</span>' +
-        '<button type="button" class="btn btn-outline btn-sm" style="min-height:44px" onclick="window.openNutAdd(\'' + k + '\')">' + icon('plus') + 'Tambah</button></div>' +
-        its.map(function (x) {
-          return '<div class="row" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.pending ? ' <span class="pill soft">' + icon('cloud-off', 'style="width:12px;height:12px;vertical-align:-2px"') + ' belum terkirim</span>' : x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
+      const tip = !its.length ? meals.find(m => nutMealWaktu(m.key) === k) : null;
+      const primary = !its.length && firstEmpty && k !== 'camilan';
+      if (primary) firstEmpty = false;
+      html += '<div class="card meal-day"><div class="row-between" style="min-height:44px;gap:8px"><span class="li-title" style="font-size:var(--fs-lg)">' + h(NUT_MEAL_L[k]) + '</span><span class="row" style="gap:10px"><span class="li-sub num">' + h(NUT_N(kal)) + ' kkal</span>' +
+        '<button type="button" class="btn ' + (primary ? 'btn-primary' : 'btn-secondary') + ' btn-sm" style="min-height:44px" onclick="window.openNutAdd(\'' + k + '\')">' + icon('plus') + 'Tambah</button></span></div>' +
+        (its.length ? its.map(function (x) {
+          return '<div class="row meal-row" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.pending ? ' <span class="pill soft">' + icon('cloud-off', 'style="width:12px;height:12px;vertical-align:-2px"') + ' belum terkirim</span>' : x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
             '<span class="li-sub">' + h(x.porsi) + ' · ' + h(NUT_N(x.kal)) + ' kkal · P ' + h(NUT_N(x.p, 1)) + ' g</span></span>' +
             '<button type="button" class="icon-btn plain" style="width:44px;height:44px" aria-label="Hapus ' + h(x.nama) + '" onclick="window.nutDelLog(\'' + h(x.id) + '\',this)">' + icon('trash-2') + '</button></div>';
-        }).join('') + '</div>';
+        }).join('') : '<p class="li-sub">Belum ada catatan.' + (tip ? ' Saran menu: ' + h(tip.paket ? tip.paket.n : tip.items.map(i => i.n).join(', ')) + '.' : '') + '</p>') + '</div>';
     });
     return html + '</div>';
   }
+  const nutMealWaktu = key => ({ sarapan: 'sarapan', siang: 'siang', malam: 'malam', buka: 'malam', sahur: 'sarapan', camilan: 'camilan' })[key] || 'siang';
   function nutSetLog(day) {
     if (window.myNutrition && day) { window.myNutrition.log = day; window.patchPortalMore('nutrition', window.myNutrition); renderMakan(); }
   }
@@ -9356,7 +9371,7 @@
   };
   window.nutLogMenu = function (mi, ii, btn) {
     const m = window.myNutrition.menu.meals[mi], it = m.items[ii];
-    const waktu = ({ sarapan: 'sarapan', siang: 'siang', malam: 'malam', buka: 'malam', sahur: 'sarapan', camilan: 'camilan' })[m.key] || 'siang';
+    const waktu = nutMealWaktu(m.key);
     // Langsung dicatat dari angka menu (sudah dari server); daftar makanan tidak perlu ditunggu (sinyal lemah = macet).
     nutQueueAdd({ waktu: waktu, id: it.id, gram: it.gram }, { waktu: waktu, foodId: it.id, nama: it.n, gram: it.gram, porsi: NUT_N(it.porsi, 1) + ' ' + String(it.porsiNama || '').replace(/^1 /, ''), kal: it.kal, p: it.p, l: it.l, k: it.k, sumber: it.e ? 'perkiraan' : it.b ? 'resep' : 'tkpi' });
     foodEnsure().catch(function () {});
@@ -9376,7 +9391,7 @@
   const FOOD_URL = 'https://xnk.my.id/foods/foods.min.json', FOOD_KEY = 'xnk_foods_v3';
   try { localStorage.removeItem('xnk_foods_v2'); } catch (e) {}   // daftar lama (sebelum resep dan paket menu)
   let foodLib = null;
-  const add = { waktu: 'sarapan', q: '', g: '', pick: null, own: false };
+  const add = { waktu: 'sarapan', q: '', g: '', pick: null, own: false, sel: {} };
   function foodEnsure() {
     if (foodLib) return Promise.resolve(foodLib);
     try { const c = localStorage.getItem(FOOD_KEY); if (c) { foodLib = JSON.parse(c); return Promise.resolve(foodLib); } } catch (e) {}
@@ -9386,7 +9401,8 @@
     });
   }
   window.openNutAdd = function (waktu) {
-    add.waktu = waktu; add.q = ''; add.g = ''; add.pick = null; add.own = false;
+    add.waktu = waktu || add.waktu || 'siang'; add.q = ''; add.g = ''; add.pick = null; add.own = false; add.sel = {};
+    waktu = add.waktu;
     $('nut-add-title').textContent = 'Tambah · ' + NUT_MEAL_L[waktu];
     nutAddDraw(); openSheet('modal-nut-add');
     foodEnsure().then(function () { nutAddDraw(); }).catch(function () { $('nut-add-body').innerHTML = '<p class="li-sub">Daftar makanan gagal dimuat. Periksa koneksimu, lalu buka lagi.</p>'; });
@@ -9422,8 +9438,22 @@
     }
     let html = '<div class="field"><input class="input" id="nut-add-q" type="search" inputmode="search" placeholder="Cari makanan" value="' + h(add.q) + '" oninput="window.nutAddQ(this.value)" aria-label="Cari makanan"></div>';
     const log = n.log || {};
-    const pack = function (arr, kind) { return arr.map(function (x, i) { return nutPackRow(Object.assign({}, x, { sub: x.porsi + ' · ' + NUT_N(x.kal) + ' kkal' }), i, kind); }).join(''); };
+    // Favorit / terakhir: ketuk baris = atur porsi dulu; ketuk kotak di kanan = pilih beberapa lalu simpan sekali.
+    const pack = function (arr, kind) {
+      return arr.map(function (x, i) {
+        const key = kind + ':' + i, on = !!add.sel[key];
+        return '<div class="row" style="gap:4px">' + nutPackRow(Object.assign({}, x, { sub: x.porsi + ' · ' + NUT_N(x.kal) + ' kkal' }), i, kind).replace('class="list-item interactive"', 'class="list-item interactive grow"') +
+          '<button type="button" class="nut-sel' + (on ? ' on' : '') + '" aria-pressed="' + on + '" aria-label="Pilih ' + h(x.nama) + '" onclick="window.nutAddSel(\'' + key + '\')">' + icon('check') + '</button></div>';
+      }).join('');
+    };
     if (!add.q && !add.g) {
+      const meals = (n.menu && n.menu.meals) || [], mi = meals.findIndex(m => nutMealWaktu(m.key) === add.waktu);
+      if (mi !== -1) {
+        const m = meals[mi];
+        html += '<p class="eyebrow">Saran menu</p><div class="card-ink" id="nut-add-saran" style="padding:16px;border-radius:var(--r-lg)"><div class="row" style="gap:12px"><span class="grow" style="min-width:0"><b style="display:block">' + h(m.paket ? m.paket.n : m.items.map(i => i.n).join(', ')) + '</b>' +
+          '<span class="muted" style="font-size:var(--fs-sm)">' + h(NUT_N(m.totals.kal)) + ' kkal · protein ' + h(NUT_N(m.totals.p)) + ' g · ' + m.items.length + ' makanan</span></span>' +
+          '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.nutLogMeal(' + mi + ')">Catat semua</button></div></div>';
+      }
       if ((log.favorites || []).length) html += '<p class="eyebrow">Favorit</p><div class="stack" style="gap:0">' + pack(log.favorites, 'fav') + '</div>';
       if ((log.recent || []).length) html += '<p class="eyebrow">Terakhir dimakan</p><div class="stack" style="gap:0">' + pack(log.recent, 'rec') + '</div>';
     }
@@ -9437,6 +9467,8 @@
       }).join('') + '</div>' : '<p class="li-sub">Tidak ada yang cocok.</p>';
     }
     html += '<button type="button" class="btn btn-outline btn-lg btn-block" onclick="window.nutAddOwn(true)">' + icon('square-pen') + 'Buat makanan sendiri</button>';
+    const picked = nutSelItems();
+    if (picked.length) html += '<div class="nut-sel-bar"><button type="button" class="btn btn-primary btn-lg btn-block" id="nut-sel-save" onclick="window.nutSelSave()">Tambah ' + picked.length + ' makanan · ' + h(NUT_N(picked.reduce((a, x) => a + (Number(x.kal) || 0), 0))) + ' kkal</button></div>';
     el.innerHTML = html;
     paintIcons();
   }
@@ -9445,6 +9477,28 @@
     const q2 = $('nut-add-q'); if (q2) { q2.focus(); try { q2.setSelectionRange(pos, pos); } catch (e) {} }
   };
   window.nutAddG = function (g) { add.g = g; nutAddDraw(); };
+  // Pilih banyak (Fase X): beberapa makanan dari Favorit / Terakhir dicatat sekali simpan, dengan porsi terakhirnya.
+  function nutSelItems() {
+    const log = (window.myNutrition && window.myNutrition.log) || {};
+    return Object.keys(add.sel || {}).filter(k => add.sel[k]).map(function (k) { const p = k.split(':'); return ((p[0] === 'fav' ? log.favorites : log.recent) || [])[Number(p[1])]; }).filter(Boolean);
+  }
+  window.nutAddSel = function (key) { add.sel[key] = !add.sel[key]; nutAddDraw(); };
+  window.nutSelSave = function () {
+    const items = nutSelItems(), seen = {};
+    items.forEach(function (x) {
+      const id = x.foodId || '~' + x.nama; if (seen[id]) return; seen[id] = true;   // makanan yang sama di Favorit dan Terakhir: sekali saja
+      if (x.foodId) nutQueueAdd({ waktu: add.waktu, id: x.foodId, gram: x.gram }, { waktu: add.waktu, foodId: x.foodId, nama: x.nama, gram: x.gram, porsi: x.porsi, kal: x.kal, p: x.p, l: x.l, k: x.k, sumber: x.sumber });
+      else nutQueueAdd({ waktu: add.waktu, custom: { nama: x.nama, kal: x.kal, p: x.p, l: x.l, k: x.k }, jumlah: 1 });
+    });
+    add.sel = {};
+    window.closeModal();
+  };
+  // Saran menu: seluruh makanan satu waktu makan dicatat sekali ketuk.
+  window.nutLogMeal = function (mi) {
+    const m = window.myNutrition && window.myNutrition.menu && window.myNutrition.menu.meals[mi]; if (!m) return;
+    m.items.forEach(function (it, ii) { window.nutLogMenu(mi, ii); });
+    window.closeModal();
+  };
   window.nutAddOwn = function (on) { add.own = on; add.pick = null; nutAddDraw(); };
   window.nutAddBack = function () { add.pick = null; nutAddDraw(); };
   window.nutAddPick = function (kind, i) {
@@ -11057,7 +11111,11 @@
     if (!el || !window.publicLoggedMember) return;
     setHTML(el, '<div id="pub-makan-pane">' + makanInner() + '</div>');
   };
-  window.renderPublicPlan = function () { window.navigate('public-food'); };
+  window.renderPublicPlan = function () {
+    const el = $('view-public-plan');
+    if (!el || !window.publicLoggedMember) return;
+    setHTML(el, '<div id="pub-plan-pane">' + makanInner('plan') + '</div>');
+  };
   window.renderPublicPack = function () { window.navigate('public-catalog'); };
 
   // Gambar ulang bagian Fase X yang sedang tampil (dipanggil tiap data portal berubah).
