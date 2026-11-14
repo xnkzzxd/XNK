@@ -1,5 +1,5 @@
   // ── Navigasi ────────────────────────────────────────────────────────────────
-  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'content', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches', 'public-progress', 'public-program', 'public-info', 'public-more', 'public-share'];
+  const VIEWS = ['dashboard', 'calendar', 'clients', 'coaches', 'finance', 'settings', 'content', 'public-login', 'public-dashboard', 'public-catalog', 'public-coaches', 'public-progress', 'public-program', 'public-info', 'public-more', 'public-share', 'public-food', 'public-plan', 'public-pack'];
 
   window.navigate = function (viewId, opts) {
     opts = opts || {};
@@ -8,7 +8,8 @@
     if (viewId === 'coach-profile') viewId = 'coaches';
     const isPub = viewId.indexOf('public-') === 0 || (viewId === 'calendar' && window.isPublicView);
     if (viewId !== 'calendar') window.isPublicView = isPub;
-    if (['public-dashboard', 'public-progress', 'public-program', 'public-info', 'public-more', 'public-share'].indexOf(viewId) !== -1 && !window.publicLoggedMember) viewId = 'public-login';
+    if (['public-dashboard', 'public-progress', 'public-program', 'public-info', 'public-more', 'public-share', 'public-food', 'public-plan', 'public-pack'].indexOf(viewId) !== -1 && !window.publicLoggedMember) viewId = 'public-login';
+    if (viewId === 'public-food' && window.myNutrition && window.myNutrition.enabled === false) viewId = 'public-progress';
 
     const changed = window.currentView !== viewId;
     if (viewId === 'settings' && changed) { setState.built = false; setState.pushed = false; if (isPhone()) setState.open = null; }   // muat ulang pengaturan tiap masuk halaman; HP mulai dari daftar
@@ -19,6 +20,8 @@
     if (changed && !opts.keepDetail) window.closeDetail();
     document.title = (TITLES[viewId] ? TITLES[viewId] + ' · ' : '') + 'XNK Personal Training';
     $('page-title').textContent = TITLES[viewId] || 'XNK';
+    const par = window.isPublicView ? window.pubParent(viewId) : '', tbBack = $('topbar-back');   // halaman kedua portal: tombol kembali ke tab asal
+    if (tbBack) { tbBack.classList.toggle('hide', !par); tbBack.setAttribute('data-to', par); $('topbar').classList.toggle('has-back', !!par); }
 
     document.querySelectorAll('.nav-item[data-view], .tab[data-view]').forEach(function (b) {
       const group = (b.getAttribute('data-group') || '').split(' ');
@@ -62,6 +65,9 @@
         case 'public-program': renderPublicProgram(); break;
         case 'public-info': renderPublicInfo(); break;
         case 'public-more': renderPublicMore(); break;
+        case 'public-food': window.renderPublicFood(); break;
+        case 'public-plan': window.renderPublicPlan(); break;
+        case 'public-pack': window.renderPublicPack(); break;
         case 'public-share': renderPublicShare(); break;
       }
     } catch (e) {
@@ -242,7 +248,7 @@
     else if (ui.sheetOn) window.closeModal();
     else if (ui.wlOn) window.wlClose();
     else if (panel && panel.classList.contains('open')) window.closeDetail();
-    else if (!bkIsHome(window.currentView)) window.navigate(window.isPublicView ? 'public-dashboard' : 'dashboard');
+    else if (!bkIsHome(window.currentView)) window.navigate(window.isPublicView ? (window.pubParent(window.currentView) || 'public-dashboard') : 'dashboard');
     syncBack();
   });
 
@@ -659,7 +665,7 @@
     if (window.obForget) window.obForget('member');
     if (window.fqForget) window.fqForget();
     _lsSet(PORTAL_CACHE_KEY, null);
-    portalMoreRaw = null; portalMoreInflight = null; portalMoreAt = 0;
+    portalMoreRaw = null; portalMoreInflight = null; portalMoreAt = 0; window.myX = {};
     window.myTasks = undefined; window.myMeal = undefined; window.myRenewal = undefined; window.myGroup = undefined; window.myBills = undefined;
     window.myProgram = undefined; window.myInsight = undefined; window.myWeek = undefined; window.myNutrition = undefined; window.myProgramGen = undefined; window.myContent = undefined; window.myCoachStatus = undefined; pg.data = null; myCare.form = null; myCare.assess = null;
   };
@@ -709,13 +715,16 @@
     if (m.share && !moreBad(m.share)) window.myShare = m.share;
     if (m.insight) window.myInsight = m.insight;
     if (m.week) window.myWeek = m.week;
+    // Fase X: kartu atlet, level, momen, cerita, lonceng, tugas hari ini.
+    ['profile', 'level', 'moments', 'journey', 'notif', 'todo'].forEach(function (k) { if (m[k] && !moreBad(m[k])) window.myX[k] = m[k]; });
+    window.applyAccent();
     renderPortalParts();
     if (!fromCache && pg.data && !pg.data.error) pgCelebrate(pg.data);
   }
   // Gambar ulang kartu yang sedang ada di layar (elemen yang tidak tampil dilewati).
   function renderPortalParts() {
     renderMyTasksCard(); pgRenderCard(); renderRenewSlot(); renderBillSlot(); renderClassSlot(); renderMyMealCard(); renderProgramCard(); renderWorkoutCard(); renderTodayWorkout(); renderCoachStatusChip();
-    wlRenderResume(); window.wlFlush(); window.fqFlush(); renderMakan(); renderInsight();
+    wlRenderResume(); window.wlFlush(); window.fqFlush(); renderMakan(); renderInsight(); window.renderPortalX();
     const care = $('pub-care-wrap'); if (care) { care.innerHTML = myCareInner(); }
     const tests = $('pub-tests-wrap'); if (tests) { tests.innerHTML = myTestsInner(); }
     const info = $('pub-info-wrap'); if (info) { setHTML(info, infoInner()); if (window.currentView === 'public-info') markInfoSeen(); }

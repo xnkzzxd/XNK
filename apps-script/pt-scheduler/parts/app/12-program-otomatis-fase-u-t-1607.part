@@ -143,9 +143,7 @@
     left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
-    const showMakan = latSeg === 'makan' && nutOn();
-    setHTML(el, (nutOn() ? latSegHtml() : '') + '<div id="pub-latihan-pane"' + (showMakan ? ' class="hide"' : '') + '>' + portalGrid(left, right) + '</div>' +
-      (nutOn() ? '<div id="pub-makan-pane"' + (showMakan ? '' : ' class="hide"') + '>' + makanInner() + '</div>' : ''));
+    setHTML(el, '<div id="pub-latihan-pane">' + portalGrid(left, right) + '</div>');   // Fase X: Makan punya tab sendiri (public-food)
   }
 
 
@@ -158,17 +156,7 @@
       '<button type="button" role="tab" class="' + (latSeg === 'makan' ? 'active' : '') + '" aria-selected="' + (latSeg === 'makan') + '" onclick="window.setLatSeg(\'makan\')">Makan</button>' +
       '<span class="seg-thumb" style="width:calc(50% - 4px);transform:translateX(' + (latSeg === 'makan' ? '100%' : '0') + ')"></span></div></div>';
   }
-  window.setLatSeg = function (name) {
-    latSeg = name === 'makan' ? 'makan' : 'latihan';
-    const a = $('pub-latihan-pane'), b = $('pub-makan-pane'), sg = $('lat-seg');
-    if (a) a.classList.toggle('hide', latSeg === 'makan');
-    if (b) b.classList.toggle('hide', latSeg !== 'makan');
-    if (sg) {
-      sg.querySelectorAll('button').forEach(function (btn, i) { const on = (i === 1) === (latSeg === 'makan'); btn.classList.toggle('active', on); btn.setAttribute('aria-selected', on); });
-      const th = sg.querySelector('.seg-thumb'); if (th) th.style.transform = 'translateX(' + (latSeg === 'makan' ? '100%' : '0') + ')';
-    }
-    if (latSeg === 'makan') renderMakan();
-  };
+  window.setLatSeg = function (name) { latSeg = 'latihan'; window.navigate(name === 'makan' ? 'public-food' : 'public-program'); };   // Fase X: segmen diganti tab
   const NUT_N = (n, dp) => n == null || n === '' ? '-' : String(Math.round(n * Math.pow(10, dp || 0)) / Math.pow(10, dp || 0)).replace('.', ',');
   const NUT_GOALS_L = { turun: 'Turun lemak', naik: 'Naik otot', jaga: 'Jaga / sehat', recomp: 'Recomp' };
   const NUT_TAG_L = { santan: 'santan', goreng: 'gorengan', manis: 'manis', asin: 'asin' };
@@ -693,94 +681,6 @@
     if (!c || (c.state === 'ok' && latest && !c.list.some(x => x.dibuat >= latest))) window.loadMyContent(true);
     else if (c.state === 'ok') markInfoSeen();
   }
-
-  function renderPublicMore() {
-    const el = $('view-public-more'), me = window.publicLoggedMember;
-    if (!el || !me) return;
-    const row = (onclick, ic, title, sub) => '<button type="button" class="more-row" onclick="' + onclick + '"><span class="more-ic">' + icon(ic) + '</span><span class="more-txt"><b>' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + icon('chevron-right') + '</button>';
-    const go = v => 'window.navigate(\'' + v + '\')';
-    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:640px">' + pageIntro('Lainnya', 'Semua yang kamu butuhkan di satu tempat.') + moreHeroHtml() +
-      '<div class="more-list">' +
-      row(go('public-program'), 'activity', 'Latihan', 'Rutinitas, log latihan, PR, dan makan') +
-      row(go('public-info'), 'megaphone', 'Info & Tips', 'Pengumuman dan tips dari coach').replace('</button>', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span></button>') +
-      (window.shareOn !== false ? row(go('public-share'), 'share-2', 'Kartu saya', 'Bagikan latihan, progres, badge, dan gizi') : '') +
-      row(go('public-catalog'), 'package', 'Paket', 'Lihat dan perpanjang paketmu') +
-      row(go('public-coaches'), 'dumbbell', 'Coach', 'Profil dan kontak coach') +
-      row('window.openSettings()', 'sun-moon', 'Tampilan', 'Terang, gelap, atau ikut sistem') +
-      row('window.logoutCurrent()', 'log-out', 'Keluar', 'Keluar dari akun ini') + '</div></div>');
-  }
-
-  window.renderPublicDashboard = function () {
-    const el = $('view-public-dashboard');
-    const me = window.publicLoggedMember;
-    if (!el || !me) return;
-    const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0, rem = Math.max(0, total - used);
-    const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
-    const upcoming = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart);
-    const history = mine.filter(s => !(upcoming.indexOf(s) !== -1)).sort((a, b) => new Date(b.start) - new Date(a.start));
-    const next = upcoming[0];
-    const C = 2 * Math.PI * 52, pct = total ? rem / total : 0;
-
-    const completedMine = mine.filter(isDone);
-    const weeksP = weeklyBuckets(completedMine.slice().sort(byStart), me.joinDate);
-    let streakP = 0;
-    for (let i = weeksP.length - 1; i >= 0; i--) { if (weeksP[i].count > 0) streakP++; else if (i === weeksP.length - 1) continue; else break; }
-
-    let left = '';
-    left += '<div class="card-ink next-card" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
-      '<div class="ih-head"><span class="ih-eyebrow">Sesi berikutnya</span>' + (next ? statusInfo(next).pill : '') + '</div>' +
-      (next ? '<p id="pub-next-session-label" class="next-when">' + h(fmtDate(new Date(next.start))) + ' · ' + fmtTime(new Date(next.start)) + '</p>' +
-        '<p class="num" style="font-size:var(--fs-3xl);font-weight:800;letter-spacing:-0.03em;margin:8px 0" id="pub-next-countdown" data-countdown-long="' + new Date(next.start).getTime() + '">' + h(countdownText(new Date(next.start))) + '</p>' +
-        (window.isSoloCoach() ? '' : '<p class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(next.coachName || 'Menunggu coach') + '</p>') +
-        '<div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-on-ink-ghost" onclick="window.openRescheduleModal(\'' + h(next.id) + '\')">' + icon('calendar-clock') + 'Reschedule</button>' +
-        '<button type="button" class="btn btn-on-ink-ghost" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
-        '<button type="button" class="btn btn-on-ink-ghost" id="pub-next-cal" onclick="window.openAddToCalendar([\'' + h(next.id) + '\'])">' + icon('calendar-plus') + 'Kalender</button></div>'
-        : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
-      '</div>';
-
-    left += '<div class="card-ink portal-hero compact"><div class="row" style="gap:14px">' +
-      '<button type="button" class="avatar lg interactive" id="pub-avatar-btn" onclick="document.getElementById(\'pub-avatar-input\').click()" aria-label="Ganti foto profil" style="position:relative">' +
-        (me.photo ? '<img src="' + h(me.photo) + '" alt="" id="pub-avatar-img">' : h(initials(me.name))) +
-        '<span style="position:absolute;right:-2px;bottom:-2px;width:26px;height:26px;border-radius:50%;background:var(--on-ink);color:var(--ink);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--ink)">' + icon('camera', 'style="width:13px;height:13px"') + '</span></button>' +
-      '<div class="grow" style="min-width:0"><p class="eyebrow">' + greeting() + '</p><h2 class="profile-name">Halo, <span id="pub-dash-name">' + h(me.name) + '</span>!</h2>' +
-      '<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap"><span class="pill">' + h(me.packageName || 'Member XNK') + '</span>' + (me.joinDate ? '<span class="pill">sejak ' + h(me.joinDate) + '</span>' : '') + '</div></div>' +
-      '<button type="button" class="icon-btn" onclick="window.openMyProfile()" aria-label="Profil saya">' + icon('user-round') + '</button></div>' +
-      '<div class="row" style="gap:20px;margin-top:20px">' +
-      '<div class="ring-wrap"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
-      '<circle class="ring-fill" id="pub-quota-ring" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
-      '<div class="ring-center"><span class="num" style="font-size:var(--fs-4xl);font-weight:800;line-height:1" id="pub-dash-remaining">' + rem + '</span><span class="eyebrow">dari <span id="pub-dash-total">' + total + '</span></span></div></div>' +
-      '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p>' +
-      '<p class="muted">' + used + ' sesi sudah dipakai</p></div></div>' +
-      '<div id="pub-renew-slot">' + renewNoticeHtml(rem, total) + '</div>' +
-      '<div id="pub-bill-slot"></div>' +
-      '</div>';
-
-    left += '<div id="pub-week">' + weekCardHtml() + '</div>';
-    left += '<div class="portal-actions"><button type="button" class="btn btn-primary" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button>' +
-      '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket</button></div>';
-    left += '<details class="fold"><summary>Coach &amp; kelas' + icon('chevron-down') + '</summary><div class="fold-body stack" style="gap:12px">' + myCoachCardHtml(me) + '<div id="pub-class-wrap">' + classCardHtml() + '</div></div></details>';
-    left += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
-
-    left += '<div id="pub-care-wrap" class="stack" style="gap:16px">' + myCareInner() + '</div>';
-    left += '<div class="card hide" id="pub-today-wl"></div>';
-    left += '<div class="card hide" id="pub-teasers">' + teasersInner() + '</div>';
-
-    let right = '<div class="month-cal" id="month-cal"></div>';
-    right += '<div class="card"><div class="section-head"><h3 class="section-title">Jadwalku</h3><button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button></div>' +
-      (upcoming.length ? '<div class="list stagger">' + upcoming.map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
-
-    setHTML(el, '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + right + '</div></div>');
-    renderTodayWorkout();
-    renderMonthCal();
-    requestAnimationFrame(function () {
-      const ring = $('pub-quota-ring');
-      if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 150);
-      countUp($('pub-dash-remaining'), rem);
-    });
-    // Semua data sisa datang dari satu panggilan (refreshPortalMore); render hanya membaca state.
-    renderBillSlot(); renderCoachStatusChip();
-  };
 
   // Tanggal di beranda: pindah ke tab Jadwal pada tanggal itu.
   const _selectDate = window.selectDate;

@@ -1,0 +1,231 @@
+
+  // ── Fase X: portal klien baru (Hari ini, tab Saya, lonceng, tombol ＋) ───────
+  // window.myX = { profile, level, moments, journey, notif, todo } dari getPortalMore (dihitung di server, lihat Level.gs).
+  window.myX = {};
+  const X = () => window.myX || {};
+  // Warna aksen pilihan klien berlaku di seluruh portal; 'hitam' (bawaan) = tanpa atribut.
+  window.applyAccent = function () {
+    const a = ui.mode === 'public' && window.publicLoggedMember && X().profile ? X().profile.aksen : '';
+    if (a && a !== 'hitam') document.documentElement.setAttribute('data-accent', a); else document.documentElement.removeAttribute('data-accent');
+  };
+  const BADGE_CODE = { 'sesi-10': '10', 'sesi-25': '25', 'sesi-50': '50', 'sesi-100': '100', 'streak-4': '4W', 'streak-8': '8W', 'streak-12': '12W', 'catat-5': 'L5', 'catat-20': 'L20', 'pr-1': 'PR', 'pr-10': 'P10' };
+  function shieldSvg(id, label, on) {
+    return '<svg class="shield' + (on ? ' on' : '') + '" viewBox="0 0 48 52" role="img" aria-label="' + h(label || id) + '"><path d="M4 2h40v30L24 50 4 32z"/><text x="24" y="28" text-anchor="middle">' + h(BADGE_CODE[id] || '★') + '</text></svg>';
+  }
+  const localIso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+
+  // ── Tugas hari ini ──
+  function todoHtml() {
+    const t = X().todo;
+    if (!t) return '<div class="px-sec"><h3>Tugas hari ini</h3></div><div class="card">' + skel(3, true) + '</div>';
+    const done = t.filter(x => x.done).length;
+    let html = '<div class="px-sec"><h3>Tugas hari ini</h3>' + (t.length ? '<span>' + done + ' dari ' + t.length + ' selesai</span>' : '') + '</div>';
+    if (!t.length) return html + '<div class="card">' + emptyState('check-check', 'Semua beres', 'Tidak ada tugas untuk hari ini.') + '</div>';
+    html += '<div class="px-bar" aria-hidden="true"><i style="width:' + Math.round(done / t.length * 100) + '%"></i></div><div class="card todo">';
+    t.forEach(function (x) {
+      const txt = '<span class="todo-txt"><span class="todo-title">' + h(x.title) + '</span>' + (x.sub ? '<span class="todo-sub">' + h(x.sub) + '</span>' : '') + '</span>';
+      if (x.done) { html += '<div class="todo-row done"><span class="todo-check">' + icon('check') + '</span>' + txt + '</div>'; return; }
+      html += '<button type="button" class="todo-row' + (x.danger ? ' danger' : '') + '" data-id="' + h(x.id) + '" data-ref="' + h(x.ref || '') + '" onclick="window.todoGo(this.dataset.id,this.dataset.ref)">' +
+        '<span class="todo-check"></span>' + txt + (x.act ? '<span class="todo-act">' + h(x.act) + '</span>' : icon('chevron-right')) + '</button>';
+    });
+    return html + '</div>';
+  }
+  window.todoGo = function (id, ref) {
+    const kind = String(id).split(':')[0];
+    if (kind === 'latihan') window.workoutOpenClient(ref || undefined);
+    else if (kind === 'makan') window.navigate('public-food');
+    else if (kind === 'gizi-data') window.openNutOnb();
+    else if (kind === 'pr') window.openTaskDone(ref);
+    else if (kind === 'booking') window.handleFabClick();
+    else if (kind === 'nilai') { const el = $('pub-feedback-slot'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    else if (kind === 'evaluasi') window.openPackageEval();
+    else if (kind === 'perpanjang') window.openRenewSheet();
+    else if (kind === 'tagihan') window.navigate('public-pack');
+  };
+
+  // ── Strip minggu ini: sesi coach atau latihan tercatat = penuh, sesi terjadwal = setengah ──
+  function weekStripHtml() {
+    const me = window.publicLoggedMember, now = new Date(), today = localIso(now);
+    const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const lvl = {};
+    window.schedules.filter(s => String(s.memberId) === String(me.id)).forEach(function (s) { const k = localIso(new Date(s.start)); lvl[k] = Math.max(lvl[k] || 0, isDone(s) ? 2 : 1); });
+    const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
+    ((w && w.days) || []).forEach(function (d) { lvl[d.tanggal] = 2; });
+    const wk = window.myWeek && !window.myWeek.error ? window.myWeek : null;
+    const sum = wk ? wk.sessionsDone + ' sesi · ' + wk.workoutDays + ' latihan' + (wk.foodDays != null ? ' · makan ' + wk.foodDays + '/7' : '') : '';
+    let html = '<div class="px-sec"><h3>Minggu ini</h3><span>' + h(sum) + '</span></div><div class="week-x" style="margin-top:12px">';
+    ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].forEach(function (n, i) {
+      const k = localIso(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)), l = lvl[k] || 0;
+      html += '<div class="' + (l ? 'l' + l : '') + (k === today ? ' now' : '') + '"><i></i>' + n + '</div>';
+    });
+    return html + '</div>';
+  }
+
+  // ── Hari ini ──
+  window.renderPublicDashboard = function () {
+    const el = $('view-public-dashboard'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
+    const next = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart)[0];
+    let html = '<div class="px-band gfx-kontur"><p class="px-date">' + h(fmtDate(new Date())) + '</p></div>';
+    html += '<section class="card-ink gfx-geo next-x px-hang" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
+      '<div class="ih-head"><span class="ih-eyebrow">Sesi berikutnya</span>' + (next ? statusInfo(next).pill : '') + '</div>';
+    const calBtn = next ? '<button type="button" class="btn btn-on-ink-ghost" id="pub-next-cal" style="flex:0 0 auto" onclick="window.openAddToCalendar([\'' + h(next.id) + '\'])" aria-label="Tambah ke kalender">' + icon('calendar-plus') + '</button>' : '';
+    if (next) {
+      const d = new Date(next.start);
+      html += '<p class="nx-when" id="pub-next-session-label">' + h(fmtDate(d)) + ' · ' + fmtTime(d) + '</p>' +
+        '<p class="nx-count num" id="pub-next-countdown" data-countdown-long="' + d.getTime() + '">' + h(countdownText(d)) + '</p>' +
+        (window.isSoloCoach() ? '' : '<p class="li-sub" style="margin-top:6px">' + h(next.coachName || 'Menunggu coach') + '</p>') +
+        '<div class="nx-actions"><button type="button" class="btn btn-on-ink-ghost" onclick="window.openRescheduleModal(\'' + h(next.id) + '\')">' + icon('calendar-clock') + 'Ubah jadwal</button>' +
+        '<button type="button" class="btn btn-on-ink" id="pub-all-sched" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + 'Semua jadwal</button>' + calBtn + '</div>';
+    } else {
+      html += '<p class="nx-when">Belum ada jadwal</p><p class="li-sub" style="margin-top:6px;max-width:calc(100% - 96px)">' + (total && !rem ? 'Sesi paket ini sudah habis.' : 'Pilih hari dan jam untuk sesi berikutnya.') + '</p>' +
+        '<div class="nx-actions"><button type="button" class="btn btn-on-ink" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking sesi</button>' +
+        '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + 'Semua jadwal</button></div>';
+    }
+    html += '</section>';
+    html += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
+    html += '<div class="px-stack" style="gap:10px" id="pub-todo">' + todoHtml() + '</div>';
+    html += '<div class="card" id="pub-weekx">' + weekStripHtml() + '</div>';
+    // Kartu paket: sisa sesi + status perpanjangan (peringatan sisa sedikit, menunggu konfirmasi, sudah diperpanjang) + tagihan.
+    html += '<section class="card-ink gfx-kontur" id="pub-pack-card"><div class="ih-head"><span class="ih-eyebrow">' + h(me.packageName || 'Paket') + '</span>' +
+      '<button type="button" class="link-btn" style="color:inherit" onclick="window.navigate(\'public-pack\')">Paket saya' + icon('chevron-right') + '</button></div>' +
+      (total ? '<p style="font-size:var(--fs-2xl);font-weight:800;letter-spacing:-0.02em;margin-top:8px">Sisa <span id="pub-dash-remaining">' + rem + '</span> dari <span id="pub-dash-total">' + total + '</span> sesi</p>' : '') +
+      '<div id="pub-renew-slot">' + renewNoticeHtml(rem, total) + '</div><div id="pub-bill-slot"></div></section>';
+    html += '<div class="card hide" id="pub-today-wl"></div>';
+    setHTML(el, '<div class="px-wrap px-stack">' + html + '</div>');
+    renderTodayWorkout(); renderBillSlot();
+  };
+
+  // ── Tab Saya: kartu atlet + kisi ──
+  function athleteCardHtml(opts) {
+    const me = window.publicLoggedMember, p = X().profile, lv = X().level;
+    const nama = (p && p.nama) || String(me.name || '').split(' ')[0];
+    let html = '<section class="card-ink athlete gfx-tipo st-' + h((p && p.gaya) || 'polos') + (opts && opts.hang ? ' px-hang' : '') + '" id="pub-athlete" aria-label="Kartu atlet" data-tipo="' + (lv ? 'LV' + lv.level : 'XNK') + '">';
+    if (lv) html += '<span class="ath-ribbon" aria-hidden="true">' + h(lv.gelar) + '</span>';
+    html += '<div class="ath-head"><button type="button" class="ath-photo" id="pub-avatar-btn" onclick="document.getElementById(\'pub-avatar-input\').click()" aria-label="Ganti foto profil">' +
+      (me.photo ? '<img src="' + h(me.photo) + '" alt="" id="pub-avatar-img">' : h(initials(me.name))) + '</button>' +
+      '<div style="min-width:0"><p class="ath-name" id="pub-dash-name">' + h(nama) + '</p>' + (p && p.motto ? '<p class="ath-motto">“' + h(p.motto) + '”</p>' : '<p class="ath-motto">' + h(me.packageName || 'Member XNK') + '</p>') + '</div></div>';
+    if (lv) {
+      html += '<div><div class="ath-lvl"><b>Level ' + lv.level + ' · ' + h(lv.gelar) + '</b><span>' + (lv.sampai ? lv.poin + ' / ' + lv.sampai + ' poin' : lv.poin + ' poin') + '</span></div>' +
+        '<div class="px-bar" style="margin-top:8px" role="img" aria-label="' + lv.pct + ' persen menuju level berikutnya"><i style="width:' + lv.pct + '%"></i></div></div>';
+    } else html += skel(2);
+    if (p) {
+      const by = {}; p.statOptions.forEach(o => { by[o.k] = o; });
+      html += '<div class="ath-stats">' + p.stat.filter(k => by[k]).map(k => '<div><b class="num">' + h(by[k].v) + '</b><span>' + h(by[k].l) + '</span></div>').join('') + '</div>';
+      const badges = (pg.data && pg.data.badges) || [];
+      const pick = p.badge.length ? p.badge : badges.filter(b => b.earned).slice(-3).map(b => b.id);
+      if (pick.length) html += '<div class="ath-badges">' + pick.map(function (id) { const b = badges.find(x => x.id === id); return shieldSvg(id, b ? b.label : id, true); }).join('') + '</div>';
+    }
+    if (!opts || opts.actions !== false) {
+      html += '<div class="nx-actions" style="margin-top:0"><button type="button" class="btn btn-on-ink-ghost" id="pub-athlete-edit" onclick="(window.openProfileEdit || window.openMyProfile)()">' + icon('pencil') + 'Ubah</button>' +
+        (window.shareOn !== false ? '<button type="button" class="btn btn-on-ink" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Bagikan</button>' : '') + '</div>';
+    }
+    return html + '</section>';
+  }
+  function renderPublicMore() {
+    const el = $('view-public-more'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    const w = pg.data && pg.data.summary && pg.data.summary.berat;
+    const tile = (onclick, ic, title, sub, extra) => '<button type="button" class="px-tile" onclick="' + onclick + '">' + icon(ic) + '<b>' + h(title) + '</b>' + (sub ? '<span' + (extra === 'warn' ? ' class="warn"' : '') + '>' + h(sub) + '</span>' : '') + (extra && extra !== 'warn' ? extra : '') + '</button>';
+    const go = v => 'window.navigate(\'' + v + '\')';
+    const next = window.schedules.filter(s => String(s.memberId) === String(me.id) && !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart)[0];
+    let tiles = '';
+    if (nutTabOn()) tiles += tile(go('public-progress'), 'trending-up', 'Progres', w ? String(w.last.nilai).replace('.', ',') + ' kg' : 'Berat, ukuran, tes');
+    tiles += tile(go('public-pack'), 'package', 'Paket saya', total ? 'Sisa ' + rem + ' dari ' + total + ' sesi' : (me.packageName || 'Lihat paket'), total && rem <= 2 ? 'warn' : '');
+    tiles += tile(go('calendar'), 'calendar-days', 'Jadwal', next ? fmtDate(new Date(next.start), { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtTime(new Date(next.start)) : 'Belum ada jadwal');
+    tiles += tile(go('public-coaches'), 'dumbbell', 'Coach', 'Profil, jam, chat');
+    if (nutTabOn()) tiles += tile(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh');
+    if (window.shareOn !== false) tiles += tile(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres');
+    tiles += tile(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span>');
+    tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Terang, gelap');
+    tiles += tile('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto');
+    setHTML(el, '<div class="px-wrap px-stack"><div class="px-band gfx-kontur"></div>' + athleteCardHtml({ hang: true }) +
+      '<div class="px-tiles">' + tiles + '</div>' +
+      '<button type="button" class="btn btn-ghost btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></div>');
+  }
+
+  // ── Lonceng ──
+  const NOTIF_KIND = { info: 'Info dari coach', data: 'Ukur & isi data', paket: 'Paket & jadwal', capai: 'Pencapaian' };
+  window.notifCount = function () { return (X().notif && X().notif.count) || 0; };
+  function notifHtml() {
+    const n = X().notif;
+    if (!n) return skel(3, true);
+    if (!n.items.length) return emptyState('bell', 'Belum ada pemberitahuan', 'Info dari coach, pengingat, dan pencapaian muncul di sini.');
+    const row = function (x) {
+      return '<button type="button" class="notif-row' + (x.fresh ? ' fresh' : '') + '" data-id="' + h(x.id) + '" onclick="window.notifGo(this.dataset.id)">' + (x.fresh ? '<span class="nf-dot" aria-label="Baru"></span>' : '') +
+        '<span class="nf-txt"><span class="nf-kind">' + h(NOTIF_KIND[x.kind] || '') + '</span><b>' + h(x.title) + '</b>' + (x.sub ? '<span class="nf-sub">' + h(x.sub) + '</span>' : '') + '</span>' +
+        (x.fresh && x.act ? '<span class="nf-act">' + h(x.act) + '</span>' : '') + '</button>';
+    };
+    const fresh = n.items.filter(x => x.fresh), old = n.items.filter(x => !x.fresh);
+    return '<div class="notif-list">' + (fresh.length ? '<p class="px-eyebrow">Baru</p>' + fresh.map(row).join('') : '') +
+      (old.length ? '<p class="px-eyebrow"' + (fresh.length ? ' style="margin-top:8px"' : '') + '>Sebelumnya</p>' + old.map(row).join('') : '') + '</div>';
+  }
+  window.openNotif = function () {
+    setHTML('notif-body', notifHtml());
+    openSheet('sheet-notif');
+    const n = X().notif;
+    if (!n || !n.count) return;
+    n.count = 0; n.items.forEach(function (x) { x.fresh = false; });   // objek yang sama dengan salinan di perangkat: buka berikutnya tidak menghitung lagi
+    renderTopbarActions(); savePortalCache();
+    memberCall('markNotifSeen').catch(function () {});
+  };
+  window.notifGo = function (id) {
+    const kind = String(id).split(':')[0];
+    window.closeModal();
+    setTimeout(function () {
+      if (kind === 'info') window.navigate('public-info');
+      else if (kind === 'ukur') window.pgOpenEntry('member');
+      else if (kind === 'gizi-data') window.openNutOnb();
+      else if (kind === 'kesehatan') window.openPortalHealth();
+      else if (kind === 'paket' || kind === 'tagihan') window.navigate('public-pack');
+      else if (kind === 'capai') window.navigate('public-progress');
+    }, 320);
+  };
+
+  // ── Tombol ＋: empat aksi ──
+  window.clientPlus = function () {
+    if (!window.isPublicView || !window.publicLoggedMember) { window.handleFabClick(); return; }
+    const me = window.publicLoggedMember, total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
+    const n = window.myNutrition, t = n && n.target, eaten = n && n.log && n.log.totals ? n.log.totals.kal : 0;
+    const tile = (kind, ic, title, sub, ink) => '<button type="button" class="px-tile' + (ink ? ' ink' : '') + '" onclick="window.clientQuick(\'' + kind + '\')">' + icon(ic) + '<b>' + h(title) + '</b><span>' + h(sub) + '</span></button>';
+    setHTML('quick-client-body', '<div class="px-tiles">' +
+      tile('booking', 'calendar-plus', 'Booking sesi', total ? 'Sisa ' + rem + ' sesi' : 'Pilih hari dan jam', true) +
+      tile('workout', 'dumbbell', 'Mulai latihan', w && w.next ? 'Berikutnya: ' + w.next : 'Rutinitas atau kosong') +
+      (nutTabOn() ? tile('food', 'utensils', 'Catat makan', t && t.ok ? 'Sisa ' + Math.max(0, Math.round(t.kal - eaten)) + ' kkal' : 'Buku harian makan') : '') +
+      tile('measure', 'scale', 'Catat ukuran', 'Berat dan lingkar badan') + '</div>' +
+      '<button type="button" class="btn btn-ghost btn-block" style="margin-top:12px" onclick="window.clientQuick(\'past\')">' + icon('calendar-check') + 'Catat latihan yang lewat</button>');
+    openSheet('sheet-quick-client');
+  };
+  window.clientQuick = function (kind) {
+    window.closeModal();
+    setTimeout(function () {
+      if (kind === 'booking') window.handleFabClick();
+      else if (kind === 'past') window.workoutOpenClient(undefined, true);
+      else if (kind === 'food') { window.navigate('public-food'); if (window.myNutrition && window.myNutrition.target && window.myNutrition.target.ok) setTimeout(function () { window.openNutAdd(); }, 200); }
+      else if (kind === 'measure') window.pgOpenEntry('member');
+      else window.workoutOpenClient(undefined);
+    }, 120);
+  };
+
+  // ── Makan, Rencana makan, Paket saya (halaman sendiri) ──
+  window.renderPublicFood = function () {
+    const el = $('view-public-food');
+    if (!el || !window.publicLoggedMember) return;
+    setHTML(el, '<div id="pub-makan-pane">' + makanInner() + '</div>');
+  };
+  window.renderPublicPlan = function () { window.navigate('public-food'); };
+  window.renderPublicPack = function () { window.navigate('public-catalog'); };
+
+  // Gambar ulang bagian Fase X yang sedang tampil (dipanggil tiap data portal berubah).
+  window.renderPortalX = function () {
+    const td = $('pub-todo'); if (td) setHTML(td, todoHtml());
+    const wk = $('pub-weekx'); if (wk) setHTML(wk, weekStripHtml());
+    if (window.currentView === 'public-more' && $('pub-athlete')) renderPublicMore();
+    if (ui.mode === 'public') renderTopbarActions();
+  };
+})();
+</script>

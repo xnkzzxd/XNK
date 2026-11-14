@@ -99,7 +99,6 @@ details.fold[open] > summary { border-bottom: 1px solid var(--border); margin-bo
 .save-bar, .wl-rest-row, .wl-resume, .sheet-foot { flex-wrap: wrap; }
 .tab .tab-label, .tab span { overflow-wrap: anywhere; }
 .pkg-list { max-height: 40dvh; }
-.guide-tip { max-height: calc(100dvh - 2 * 12px - var(--tabbar-space)); overflow-y: auto; }
 html.big-text .tab span { display: none; }
 @media (max-width: 300px) { .tab span { display: none; } }
 @media (max-width: 359px) { :root { --page-pad: 12px; } .kv, .grid-2, .form-grid .two { grid-template-columns: minmax(0, 1fr); } }
@@ -427,4 +426,3 @@ html.big-text .sh-tool span { display: none; }
 @media (min-width: 768px) { .share-nudge { bottom: 24px; } }
 /* App Android / iOS: kembali lewat back sistem, bukan panah di layar */
 html.app-shell .nav-back { display: none; }
-</style>

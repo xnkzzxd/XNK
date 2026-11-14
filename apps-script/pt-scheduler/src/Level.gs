@@ -11,6 +11,7 @@ const LEVEL = {
 };
 const NOTIF_FRESH_DAYS = 14;      // info dan momen lebih tua dari ini tidak masuk lonceng
 const NOTIF_WEIGH_DAYS = 7;       // "waktunya timbang" setelah sekian hari tanpa catatan berat
+const NOTIF_MOMENTS_MAX = 3;      // pencapaian terbaru yang masuk lonceng
 const TODO_RENEW_AT = 2;          // tawarkan perpanjang saat sisa sesi ≤ ini
 const TODO_TASKS_MAX = 3;         // PR coach yang tampil di daftar tugas
 
@@ -98,7 +99,7 @@ function _journeyCalc_(ctx) {
 /**
  * Murni: daftar "Tugas hari ini".
  * ctx: { today, nextRoutine, workedToday, nutrition:{on, ok, eaten, target, missing[]}, tasks:[{id,title,dueDate(iso|''),status,overdue,completedAt}],
- *        hasUpcoming, quotaLeft (null = tak terbatas), total, renewalOpen, pendingRating:{scheduleId,start}, evalEligible, billsRemaining }
+ *        hasUpcoming, quotaLeft (null = tak terbatas; sisa yang belum dibooking), remaining (total − terpakai), total, renewalOpen, pendingRating:{scheduleId,start}, evalEligible, billsRemaining }
  * Hasil: [{ id, kind, title, sub, act, done, danger, ref }] — yang belum selesai dulu, urutan tetap.
  */
 function _todoCalc_(ctx) {
@@ -131,8 +132,9 @@ function _todoCalc_(ctx) {
   if (!ctx.hasUpcoming && (left == null || left > 0)) add({ id: 'booking', kind: 'booking', title: 'Booking sesi berikutnya', sub: 'Belum ada jadwal mendatang', act: 'Booking' });
   if (ctx.pendingRating) add({ id: 'nilai', kind: 'nilai', title: 'Nilai sesi terakhir', sub: 'Satu ketukan, 1 sampai 5 bintang', ref: String(ctx.pendingRating.scheduleId || '') });
   if (ctx.evalEligible) add({ id: 'evaluasi', kind: 'evaluasi', title: 'Evaluasi paket', sub: 'Lima pertanyaan singkat' });
-  if (Number(ctx.total) > 0 && left != null && left <= TODO_RENEW_AT && !ctx.renewalOpen) {
-    add({ id: 'perpanjang', kind: 'perpanjang', title: 'Perpanjang paket', sub: left <= 0 ? 'Sesi habis' : 'Sisa ' + left + ' sesi', danger: true });
+  const rem = ctx.remaining != null ? ctx.remaining : left;   // sisa yang dilihat klien (total − terpakai), bukan sisa yang belum dibooking
+  if (Number(ctx.total) > 0 && rem != null && rem <= TODO_RENEW_AT && !ctx.renewalOpen) {
+    add({ id: 'perpanjang', kind: 'perpanjang', title: 'Perpanjang paket', sub: rem <= 0 ? 'Sesi habis' : 'Sisa ' + rem + ' sesi', danger: true });
   }
   if (Number(ctx.billsRemaining) > 0) add({ id: 'tagihan', kind: 'tagihan', title: 'Tagihan belum lunas', sub: 'Sisa Rp ' + _lvThou_(ctx.billsRemaining), danger: true });
   return out.filter(function(x) { return !x.done; }).concat(out.filter(function(x) { return x.done; }));
@@ -162,7 +164,7 @@ function _notifCalc_(ctx) {
   if (r && r.status === 'menunggu') dated({ id: 'paket:' + r.createdAt, kind: 'paket', title: 'Perpanjangan menunggu konfirmasi', sub: r.packageName || '', act: 'Lihat', at: String(r.createdAt || '') });
   else if (r && (r.status === 'disetujui' || r.status === 'ditolak') && r.decidedAt) dated({ id: 'paket:' + r.decidedAt, kind: 'paket', title: r.status === 'disetujui' ? 'Perpanjangan disetujui' : 'Perpanjangan ditolak', sub: r.packageName || '', act: 'Lihat', at: String(r.decidedAt) });
   if (Number(ctx.billsRemaining) > 0) todo({ id: 'tagihan', kind: 'paket', title: 'Tagihan belum lunas', sub: 'Lihat rincian di Paket saya', act: 'Lihat' });
-  (ctx.moments || []).forEach(function(m) { dated({ id: 'capai:' + m.id, kind: 'capai', title: m.title, sub: 'Pencapaian', act: 'Bagikan', at: m.tanggal }); });
+  (ctx.moments || []).slice(0, NOTIF_MOMENTS_MAX).forEach(function(m) { dated({ id: 'capai:' + m.id, kind: 'capai', title: m.title, sub: 'Pencapaian', act: 'Bagikan', at: m.tanggal }); });
   items.sort(function(a, b) { return (a.fresh === b.fresh ? 0 : (a.fresh ? -1 : 1)) || (a.at < b.at ? 1 : (a.at > b.at ? -1 : 0)); });
   return { items: items.slice(0, 30), count: items.filter(function(x) { return x.fresh; }).length };
 }

@@ -774,5 +774,3 @@
   window.aqFlush = aqFlush;
   window.offlineImport = offlineImport;   // juga untuk browser-check
   window.addEventListener('online', aqFlush);
-})();
-</script>

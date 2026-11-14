@@ -156,6 +156,7 @@ function _portalXFor_(row, pre) {
     nutrition: nutOn ? { on: true, ok: !!(nutrition.target && nutrition.target.ok), eaten: log && log.totals ? log.totals.kal : 0, target: nutrition.target ? nutrition.target.kal : 0, missing: missing } : null,
     tasks: tasksRaw.map(function(t) { return { id: t.id, title: t.title, dueDate: isoDue(t.dueDate), status: t.status, overdue: !!t.overdue, completedAt: t.completedAt }; }),
     hasUpcoming: hasUpcoming, quotaLeft: _memberQuotaLeft_(row, all), total: parseInt(row[8], 10) || 0,
+    remaining: parseInt(row[8], 10) > 0 ? Math.max(0, parseInt(row[8], 10) - (parseInt(row[9], 10) || 0)) : null,
     renewalOpen: !!(renewal && renewal.status === 'menunggu'),
     pendingRating: fb ? _pendingRating_(id, all) : null,
     evalEligible: fb ? _packageEvalEligible_(row, all) : false,

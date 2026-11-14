@@ -31,6 +31,8 @@ const DESKTOP = { width: 1440, height: 900 };
 const DESKTOP_W = DESKTOP.width;
 let failures = 0;
 const check = (ok, msg) => { console.log((ok ? '  ✓ ' : '  ✗ ') + msg); if (!ok) failures++; };
+// One section throwing (a selector that never shows, a timeout) counts as a failure but does not hide the sections after it.
+const sectionCrash = e => { failures++; console.log('  ✗ section stopped: ' + String((e && e.stack) || e).split('\n').slice(0, 6).join('\n      ')); };
 
 function render(page) {
   const read = f => fs.readFileSync(path.join(SRC, f.endsWith('.html') ? f : f + '.html'), 'utf8');
@@ -298,7 +300,7 @@ async function contrastReport(page) {
 
   // ── Panel PT, HP ──────────────────────────────────────────────────────────
   console.log('Panel PT · HP');
-  {
+  await (async () => {
     const env = richEnv();
     env.memberRow('PT-B')[1] = '<img src=x onerror="window.__xss=1">Budi';
     const calls = [];
@@ -395,11 +397,11 @@ async function contrastReport(page) {
     check((await revoked.page.textContent('#admin-login-error')).includes('Sesi admin berakhir'), 'explains why the PIN is needed again');
     noErrors(errors.concat(reload.errors, revoked.errors));
     await context.close(); await reload.context.close(); await revoked.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Panel PT, HP: satu loading, tarik untuk muat ulang, tombol back ───────
   console.log('Panel PT · HP (login, tarik, back)');
-  {
+  await (async () => {
     const env = richEnv();
     const calls = [];
     const { page, context, errors } = await openPage(browser, env, '/Index', calls, undefined, { touch: true });
@@ -500,7 +502,7 @@ async function contrastReport(page) {
     check((await page.evaluate(() => history.length)) <= hist + 1, 'back: tab switches do not pile up history entries');
     check(errors.length === 0, 'no page errors: ' + errors.join(' | '));
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Panel PT, desktop (terang & gelap) ────────────────────────────────────
   for (const scheme of ['light', 'dark']) {
@@ -1278,7 +1280,7 @@ async function contrastReport(page) {
     await page.context().close();
   }
   console.log('Keuangan · desktop');
-  {
+  await (async () => {
     const env = richEnv();
     const token = env.adminToken();
     env.call('updateAppSettings', token, { finance: { enabled: true } });
@@ -1290,15 +1292,15 @@ async function contrastReport(page) {
     await shot(page, 'finance-desktop');
     check(errors.length === 0, 'desktop Keuangan: no page errors (' + errors.join(' | ') + ')');
     await page.context().close();
-  }
+  })().catch(sectionCrash);
   console.log('Keuangan mati: menu tersembunyi');
-  {
+  await (async () => {
     const env = richEnv();
     const { page } = await openPage(browser, env, '/Index', [], { xnk_admin_token: env.adminToken() }, { viewport: DESKTOP, wait: 1200 });
     check(!(await visible(page, '#side-nav .nav-item[data-view="finance"]')), 'off by default: no Keuangan in the sidebar');
     check(!(await page.evaluate(() => !!document.querySelector('.fin-tile:not(.hide)'))), 'off by default: no finance tiles in the + sheet');
     await page.context().close();
-  }
+  })().catch(sectionCrash);
 
   // ── Pengaturan · HP (touch, terang & gelap) ───────────────────────────────
   for (const scheme of ['light', 'dark']) {
@@ -1486,7 +1488,7 @@ async function contrastReport(page) {
 
   // ── Perpanjang paket (Fase D3): klien minta di HP, admin menyetujui di desktop ───
   console.log('Perpanjang paket · portal HP + panel desktop');
-  {
+  await (async () => {
     const env = richEnv();
     env.memberRow('PT-A')[9] = 9;                     // 1 session left
     const memberToken = env.memberToken(KEY_A);
@@ -1536,152 +1538,73 @@ async function contrastReport(page) {
     check(env.sheet('Members').rows.some(r => r[1] === 'PT-A' && r[3] === 'Perpanjang' && r[10] === 800000), 'renewal: the transaction is logged with the package price');
     noErrors(adm.errors);
     await adm.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Panduan klien baru (portal): layar gelap, satu tombol disorot ─────────
   console.log('Panduan klien baru · portal HP');
-  {
+  await (async () => {
     const env = richEnv();
     const reg = env.call('registerNewClient', { name: 'Nadia Baru', phone: '6289900000001', goal: 'Weight Loss', packageId: 'P1' });
     const guideCol = () => String(env.memberRow(reg.id)[22] || '');
     const tipTitle = page => page.textContent('#guide-title').catch(() => '');
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg.token }, { wait: 1500 });
-    await page.waitForTimeout(800);
-    check(await visible(page, '#guide-layer'), 'guide: a new client sees the guide on the home screen');
-    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: the first step points at the remaining sessions');
-    const geo = await page.evaluate(() => {
-      const spot = document.getElementById('guide-spot').getBoundingClientRect();
-      const tip = document.getElementById('guide-tip').getBoundingClientRect();
-      const ring = document.querySelector('.portal-hero .ring-wrap').getBoundingClientRect();
-      const btns = Array.from(document.querySelectorAll('#guide-tip .btn, #guide-tip .guide-x, #guide-tip .guide-off')).map(b => Math.round(b.getBoundingClientRect().height));
-      return { spotOk: spot.left <= ring.left && spot.right >= ring.right && spot.top <= ring.top && spot.bottom >= ring.bottom,
-        tipIn: tip.left >= 0 && tip.right <= innerWidth && tip.top >= 0 && tip.bottom <= innerHeight,
-        overlap: !(tip.bottom <= spot.top || tip.top >= spot.bottom), btns: btns,
-        dark: getComputedStyle(document.querySelector('#guide-hole')).fill.includes('0.85') };
+    await page.waitForTimeout(900);
+    check(await visible(page, '#guide-layer .welcome'), 'welcome: a new client sees the welcome cards on first open');
+    check((await tipTitle(page)) === 'Jadwal di genggaman' && (await page.textContent('#guide-layer')).includes('1 dari 3'), 'welcome: the first card is about the schedule');
+    const wgeo = await page.evaluate(() => {
+      const w = document.querySelector('#guide-layer .welcome').getBoundingClientRect();
+      const btns = Array.from(document.querySelectorAll('#guide-layer button')).map(b => Math.round(b.getBoundingClientRect().height));
+      const next = document.getElementById('welcome-next').getBoundingClientRect();
+      return { full: w.left <= 0 && w.top <= 0 && w.right >= innerWidth && w.bottom >= innerHeight, btns, nextIn: next.bottom <= innerHeight && next.top >= 0 };
     });
-    check(geo.spotOk, 'guide: the bright box surrounds the highlighted element');
-    check(geo.tipIn && !geo.overlap, 'guide: the text card fits the phone screen and does not cover the highlighted element');
-    check(geo.btns.every(x => x >= 44), 'guide: guide buttons are at least 44 px (' + geo.btns.join(', ') + ')');
-    check(geo.dark, 'guide: the rest of the screen is dark');
-    check((await brightness(page, 20, 470)) < 64, 'guide: the screen outside the highlight is really dark (light theme)');
-    check((await page.locator('#guide-tip .guide-dots i').count()) === 5 && (await page.textContent('#guide-tip .guide-count')) === '1/5', 'guide: progress dots show step 1 of 5');
-    check((await overflowX(page)) <= 0, 'guide: no sideways scroll');
-    await shot(page, 'guide-mobile-home');
-    // Tapping the dark area does nothing.
-    await page.mouse.click(10, 10);
-    await page.waitForTimeout(200);
-    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: tapping the dark area does nothing');
-    await page.click('#guide-next');
-    await page.waitForTimeout(600);
-    check((await tipTitle(page)) === 'Sesi berikutnya' && await visible(page, '#guide-tip .guide-prev'), 'guide: step 2 has a "Kembali" button');
-    await page.click('#guide-tip .guide-prev');
-    await page.waitForTimeout(600);
-    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: "Kembali" goes back one step');
-    let clash = [];
-    for (let i = 0; i < 6 && (await tipTitle(page)) !== 'Booking latihan'; i++) {
-      await page.click('#guide-next'); await page.waitForTimeout(700);
-      const bad = await page.evaluate(() => { const a = document.getElementById('guide-spot').getBoundingClientRect(), b = document.getElementById('guide-tip').getBoundingClientRect();
-        return (b.top < a.bottom - 2 && b.bottom > a.top + 2) || b.bottom > innerHeight || b.top < 0 ? document.getElementById('guide-title').textContent : ''; });
-      if (bad) clash.push(bad);
-    }
-    check(!clash.length, 'guide: on the phone the card never covers the highlighted part' + (clash.length ? ' (' + clash.join(', ') + ')' : ''));
-    check((await tipTitle(page)) === 'Booking latihan', 'guide: "Lanjut" steps through to the Booking button');
-    await shot(page, 'guide-mobile-booking-button');
-    const b = await page.evaluate(() => { const r = document.querySelector('.portal-actions .btn-primary').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-    await page.mouse.click(b.x, b.y);
-    await page.waitForTimeout(1600);
-    check(guideCol().split('|').includes('beranda'), 'guide: finishing the home guide is saved for this client');
-    check(await visible(page, '#modal-edit-schedule'), 'guide: tapping the highlighted Booking button opens the booking form');
-    check(await visible(page, '#guide-layer') && (await tipTitle(page)) === 'Pilih tanggal & jam', 'guide: the booking form gets its own guide');
-    await shot(page, 'guide-mobile-booking-form');
-    await page.click('#guide-tip .guide-x');
-    await page.waitForTimeout(400);
-    check(!(await visible(page, '#guide-layer')) && guideCol().split('|').includes('booking'), 'guide: the × button closes the guide and saves it');
-    await page.evaluate(() => window.closeModal());
-    await page.waitForTimeout(600);
-    await page.evaluate(() => window.navigate('public-catalog'));
-    await page.waitForTimeout(1400);
-    check(await visible(page, '#guide-layer'), 'guide: the Paket page shows its guide the first time');
-    await page.goBack();
-    await page.waitForTimeout(500);
-    check(!(await visible(page, '#guide-layer')) && guideCol().split('|').includes('paket'), 'guide: the phone back gesture closes the guide');
-    await page.evaluate(() => window.navigate('public-coaches'));
-    await page.waitForTimeout(1600);
-    check(await visible(page, '#guide-layer'), 'guide: the Coach page shows its guide');
-    await page.click('#guide-tip .guide-x');
-    await page.waitForTimeout(500);
-    // Tab baru (Fase J4): tiap tab punya panduannya sendiri, sekali saja.
-    for (const [view, page_, title] of [['public-progress', 'progres', 'Rapor tubuh'], ['public-program', 'program', 'Latihan'], ['public-info', 'info', 'Info & Tips']]) {
-      await page.evaluate(v => window.navigate(v), view);
-      await page.waitForTimeout(1700);
-      check(await visible(page, '#guide-layer') && (await tipTitle(page)) === title, 'guide: the ' + page_ + ' tab shows its own guide first (' + title + ')');
-      await page.click('#guide-tip .guide-x');
-      await page.waitForTimeout(500);
-      check(guideCol().split('|').includes(page_), 'guide: closing it saves "' + page_ + '"');
-    }
-    await page.evaluate(() => window.navigate('public-progress'));
-    await page.waitForTimeout(1500);
-    check(!(await visible(page, '#guide-layer')), 'guide: a tab guide is not shown twice');
-    await page.evaluate(() => window.navigate('calendar'));   // the one page not seen yet
-    await page.waitForTimeout(1600);
-    await page.click('#guide-tip .guide-off');
-    await page.waitForTimeout(500);
-    check(guideCol() === 'selesai', 'guide: "Jangan tampilkan panduan lagi" turns it off for good');
-    await page.reload();
-    await page.waitForTimeout(2200);
-    await page.evaluate(() => window.navigate('calendar'));
-    await page.waitForTimeout(1200);
-    check(!(await visible(page, '#guide-layer')), 'guide: after that, no page shows the guide');
-    // Replay from the profile sheet, without saving anything.
-    await page.evaluate(() => window.navigate('public-dashboard'));
-    await page.waitForTimeout(800);
-    await page.evaluate(() => window.openMyProfile());
-    await page.waitForTimeout(500);
-    await page.click('#sheet-my-profile button:has-text("Lihat panduan")');
-    await page.waitForTimeout(1400);
-    check(await visible(page, '#guide-layer') && (await tipTitle(page)) === 'Sisa sesimu', 'guide: "Lihat panduan" in the profile replays the guide');
-    check(!(await page.locator('#guide-tip .guide-off').count()), 'guide: a replay has no "Jangan tampilkan lagi" link');
-    await page.click('#guide-tip .guide-x');
-    await page.waitForTimeout(300);
-    check(guideCol() === 'selesai', 'guide: a replay does not change what is saved');
+    check(wgeo.full, 'welcome: the card covers the whole screen');
+    check(wgeo.btns.every(x => x >= 44) && wgeo.nextIn, 'welcome: buttons are big enough and on screen (' + wgeo.btns.join(', ') + ' px)');
+    check((await overflowX(page)) <= 0, 'welcome: no sideways scroll');
+    await shot(page, 'welcome-mobile-1');
+    await page.click('#welcome-next'); await page.waitForTimeout(250);
+    check((await tipTitle(page)) === 'Latihan dan makan tiap hari', 'welcome: Lanjut shows the second card');
+    await page.click('#welcome-next'); await page.waitForTimeout(250);
+    check((await tipTitle(page)) === 'Profil yang menunjukkan diri' && (await page.textContent('#welcome-next')).trim() === 'Mulai', 'welcome: the last card ends with "Mulai"');
+    check(guideCol() === 'baru', 'welcome: nothing is recorded until the cards are finished');
+    await page.click('#welcome-next'); await page.waitForTimeout(700);
+    check(!(await visible(page, '#guide-layer')), 'welcome: "Mulai" closes the cards');
+    check(guideCol() === 'selesai', 'welcome: finishing is recorded on the server (' + guideCol() + ')');
+    await page.evaluate(() => window.navigate('public-program')); await page.waitForTimeout(1100);
+    check(!(await visible(page, '#guide-layer')), 'welcome: it does not come back on another tab');
+    await page.reload(); await page.waitForTimeout(2200);
+    check(!(await visible(page, '#guide-layer')), 'welcome: it does not come back after a reload');
     noErrors(errors);
     await context.close();
 
-    // Dark theme: the guide still reads well.
-    const reg2 = env.call('registerNewClient', { name: 'Raka Baru', phone: '6289900000002', goal: 'x', packageId: 'P1' });
-    const dark = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500, colorScheme: 'dark' });
-    await dark.page.waitForTimeout(800);
-    check(await visible(dark.page, '#guide-layer'), 'guide: shows in the dark theme too');
-    check((await brightness(dark.page, 20, 470)) < 64, 'guide: the screen outside the highlight is really dark (dark theme)');
-    await shot(dark.page, 'guide-mobile-home-dark');
-    noErrors(dark.errors);
-    await dark.context.close();
+    // Lewati on the first card also records it; Esc, the arrow keys and Android back work.
+    const reg2 = env.call('registerNewClient', { name: 'Oka Baru', phone: '6289900000002', goal: 'Strength', packageId: 'P1' });
+    const sk = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500 });
+    await sk.page.waitForTimeout(900);
+    await sk.page.keyboard.press('ArrowRight'); await sk.page.waitForTimeout(250);
+    check((await tipTitle(sk.page)) === 'Latihan dan makan tiap hari', 'welcome: the right arrow key goes on');
+    await sk.page.keyboard.press('ArrowLeft'); await sk.page.waitForTimeout(250);
+    check((await tipTitle(sk.page)) === 'Jadwal di genggaman', 'welcome: the left arrow key goes back');
+    await sk.page.click('#welcome-skip'); await sk.page.waitForTimeout(700);
+    check(!(await visible(sk.page, '#guide-layer')) && String(env.memberRow(reg2.id)[22]) === 'selesai', 'welcome: "Lewati" closes and records it');
+    noErrors(sk.errors);
+    await sk.context.close();
+    env.memberRow(reg2.id)[22] = 'baru';   // reused below for the owner switch
 
-    // Desktop: floating card with an arrow, beside the sidebar for the menu step.
-    const reg3 = env.call('registerNewClient', { name: 'Dina Desktop', phone: '6289900000003', goal: 'x', packageId: 'P1' });
+    const reg3 = env.call('registerNewClient', { name: 'Putu Baru', phone: '6289900000003', goal: 'Strength', packageId: 'P1' });
     for (const scheme of ['light', 'dark']) {
-      const dk = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg3.token }, { viewport: DESKTOP, wait: 1500, colorScheme: scheme });
+      const dk = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg3.token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1500 });
       await dk.page.waitForTimeout(900);
-      check(await visible(dk.page, '#guide-layer'), 'guide desktop (' + scheme + '): the home guide shows');
-      check((await brightness(dk.page, 700, 880)) < 64, 'guide desktop (' + scheme + '): the screen outside the highlight is dark');
-      await shot(dk.page, 'guide-desktop-home-' + scheme);
-      const seen = [];
-      for (let i = 0; i < 6 && (await tipTitle(dk.page)) !== 'Booking latihan'; i++) {
-        await dk.page.keyboard.press('ArrowRight'); await dk.page.waitForTimeout(700);
-        seen.push(await dk.page.evaluate(() => { const a = document.getElementById('guide-spot').getBoundingClientRect(), b = document.getElementById('guide-tip').getBoundingClientRect();
-          return { t: document.getElementById('guide-title').textContent, side: document.getElementById('guide-tip').getAttribute('data-side') || '',
-            clash: b.left < a.right - 2 && b.right > a.left + 2 && b.top < a.bottom - 2 && b.bottom > a.top + 2,
-            inside: b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight }; }));
-        if (seen[seen.length - 1].t === 'Menu') await shot(dk.page, 'guide-desktop-menu-' + scheme);
-      }
-      const menu = seen.find(x => x.t === 'Menu');
-      check(!!menu && !!menu.side && !menu.clash && (await dk.page.evaluate(() => !!document.querySelector('#side-nav'))), 'guide desktop (' + scheme + '): the menu step highlights the side menu, with an arrowed card beside it (' + (menu && menu.side) + ')');
-      check(seen.every(x => !x.clash && x.inside), 'guide desktop (' + scheme + '): the card stays on screen and never covers the highlight');
-      check((await dk.page.textContent('#guide-tip')).includes('Atau klik'), 'guide desktop (' + scheme + '): desktop wording says "klik"');
-      await dk.page.keyboard.press('ArrowLeft'); await dk.page.waitForTimeout(500);
-      check((await tipTitle(dk.page)) !== 'Booking latihan', 'guide desktop (' + scheme + '): the left arrow key goes back');
-      await dk.page.keyboard.press('Escape'); await dk.page.waitForTimeout(400);
-      check(!(await visible(dk.page, '#guide-layer')), 'guide desktop (' + scheme + '): Esc closes the guide');
+      check(await visible(dk.page, '#guide-layer .welcome'), 'welcome desktop (' + scheme + '): the cards show');
+      const ratio = await dk.page.evaluate(() => {
+        const lum = c => { const m = c.match(/[\d.]+/g).map(Number); const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+        const w = document.querySelector('#guide-layer .welcome'), t = w.querySelector('h2');
+        const a = lum(getComputedStyle(t).color), b = lum(getComputedStyle(w).backgroundColor);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      });
+      check(ratio >= 4.5, 'welcome desktop (' + scheme + '): the title is readable (' + ratio.toFixed(1) + ':1)');
+      await shot(dk.page, 'welcome-desktop-' + scheme);
+      await dk.page.keyboard.press('Escape'); await dk.page.waitForTimeout(500);
+      check(!(await visible(dk.page, '#guide-layer')), 'welcome desktop (' + scheme + '): Esc closes the cards');
       noErrors(dk.errors);
       await dk.context.close();
       env.memberRow(reg3.id)[22] = 'baru';   // show it again for the other theme
@@ -1690,7 +1613,7 @@ async function contrastReport(page) {
     // An existing client logging in by WhatsApp never sees the guide.
     const old = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: env.memberToken(KEY_A) }, { wait: 1500 });
     await old.page.waitForTimeout(900);
-    check(!(await visible(old.page, '#guide-layer')), 'guide: an existing client does not see the guide');
+    check(!(await visible(old.page, '#guide-layer')), 'welcome: an existing client does not see the cards');
     noErrors(old.errors);
     await old.context.close();
 
@@ -1743,14 +1666,14 @@ async function contrastReport(page) {
     await adm.context.close();
     const off = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500 });
     await off.page.waitForTimeout(900);
-    check(!(await visible(off.page, '#guide-layer')), 'guide: with the switch off, new clients see no guide');
+    check(!(await visible(off.page, '#guide-layer')), 'welcome: with the switch off, new clients see no cards');
     noErrors(off.errors);
     await off.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Tema manual ───────────────────────────────────────────────────────────
   console.log('Tema manual');
-  {
+  await (async () => {
     const env = seededEnv();
     const token = env.adminToken();
     const { page, context } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { viewport: DESKTOP, colorScheme: 'dark' });
@@ -1761,11 +1684,11 @@ async function contrastReport(page) {
     const again = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_theme: 'light' }, { viewport: DESKTOP, colorScheme: 'dark', wait: 100 });
     check((await again.page.evaluate(() => document.documentElement.getAttribute('data-theme'))) === 'light', 'saved theme applied before the page draws');
     await again.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Portal klien ──────────────────────────────────────────────────────────
   console.log('Portal klien · HP');
-  {
+  await (async () => {
     const env = richEnv();
     const calls = [];
     const { page, context, errors, navigations } = await openPage(browser, env, '/Index?view=public', calls);
@@ -1789,8 +1712,12 @@ async function contrastReport(page) {
     await page.click('#login-submit-btn');
     await page.waitForTimeout(1400);
     check((await page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'registered WhatsApp number logs the client in');
-    check((await page.evaluate(() => window.currentView)) === 'public-dashboard', 'opens "Beranda"');
-    check((await page.textContent('#pub-dash-name')).includes('Ani'), 'shows the client\'s own name');
+    check((await page.evaluate(() => window.currentView)) === 'public-dashboard' && (await page.textContent('#page-title')).trim() === 'Hari ini', 'opens "Hari ini"');
+    await page.evaluate(() => window.navigate('public-more'));
+    await page.waitForTimeout(400);
+    check((await page.textContent('#pub-dash-name')).includes('Ani') && await visible(page, '#pub-athlete'), 'the Saya tab shows the client\'s own name on the athlete card');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
     check((await page.evaluate(() => window.members.length)) === 0, 'still no client list in the browser after login');
     const own = await page.evaluate(() => window.schedules.find(s => s.id === 'SCH-A1'));
     check(own && own.notes === 'Rahasia Ani', 'own bookings include their details');
@@ -1864,21 +1791,30 @@ async function contrastReport(page) {
     await page.evaluate(() => { try { localStorage.removeItem('xnk_info_seen'); } catch (e) {} });
     await page.evaluate(() => window.refreshPortalSchedules().then(() => window.updateUI()));
     await page.waitForTimeout(700);
-    check(await visible(page, '#tab-more-new'), 'info: the Lainnya tab shows a dot when there is new content');
-    check((await page.textContent('#pub-teasers')).includes('Ada info baru dari coach'), 'info: the Beranda teaser says there is new info');
-    // ── Tab klien (Fase J1): bar bawah Beranda · Jadwal · + · Progres · Lainnya ───────────────
-    check((await page.locator('#tabbar .tab').allTextContents()).map(t => t.trim()).join(',') === 'Beranda,Jadwal,Progres,Lainnya' && (await page.locator('#tabbar .tab-fab').count()) === 1, 'nav: the phone bar has Beranda, Jadwal, +, Progres, Lainnya');
-    check((await page.locator('#side-nav .nav-item').allTextContents()).map(t => t.trim()).join(',') === 'Beranda,Jadwal,Progres,Latihan,Info & Tips,Paket,Coach', 'nav: the sidebar lists every tab');
-    check(!(await page.locator('#view-public-dashboard #pub-progress-wrap, #view-public-dashboard #pub-tasks-wrap, #view-public-dashboard #pub-meal-slot').count()) && (await page.locator('#pub-teasers .teaser-row').count()) === 3, 'nav: Beranda is lighter, the moved cards leave teasers behind');
+    check(await visible(page, '#tab-more-new'), 'info: the Saya tab shows a dot when there is new content');
+    await page.evaluate(() => window.refreshPortalMore(true));
+    await page.waitForTimeout(700);
+    check(await visible(page, '#bell-count') && Number(await page.textContent('#bell-count')) >= 1 && (await page.evaluate(() => window.myX.notif.items.some(x => x.kind === 'info' && x.fresh))), 'info: the bell counts the new info from the coach');
+    // ── Tab klien (Fase X): bar bawah Hari ini · Latihan · + · Makan · Saya ───────────────
+    check((await page.locator('#tabbar .tab').allTextContents()).map(t => t.trim()).join(',') === 'Hari ini,Latihan,Makan,Saya' && (await page.locator('#tabbar .tab-fab').count()) === 1, 'nav: the phone bar is Hari ini · Latihan · + · Makan · Saya');
+    check((await page.locator('#side-nav .nav-item').allTextContents()).map(t => t.trim()).join(',') === 'Hari ini,Latihan,Makan,Jadwal,Progres,Saya', 'nav: the sidebar lists every page');
+    check(!(await page.locator('#view-public-dashboard #pub-progress-wrap, #view-public-dashboard #pub-tasks-wrap, #view-public-dashboard #pub-meal-slot').count()) && (await page.locator('#pub-todo .todo-row').count()) >= 2, 'nav: Hari ini is a short to-do list, the detail cards live on their own tabs');
     await page.click('#tabbar .tab[data-view="public-more"]');
     await page.waitForTimeout(500);
-    check((await page.evaluate(() => window.currentView)) === 'public-more' && (await page.locator('#view-public-more .more-row').count()) === 7, 'nav: Lainnya opens a list of seven rows (with Kartu saya)');
-    const moreBad = await page.locator('#view-public-more .more-row').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5 || r.right > window.innerWidth).length);
-    check(moreBad === 0 && (await overflowX(page)) <= 0, 'nav: Lainnya rows are at least 44 px and fit the phone');
-    check((await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: the Lainnya tab is lit on its own page');
-    await page.click('#view-public-more .more-row:nth-child(1)');
+    const tileN = await page.locator('#view-public-more .px-tile').count();
+    check((await page.evaluate(() => window.currentView)) === 'public-more' && tileN >= 8, 'nav: Saya opens the athlete card and a grid of ' + tileN + ' tiles');
+    const moreBad = await page.locator('#view-public-more .px-tile, #view-public-more .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5 || r.right > window.innerWidth + 1).length);
+    check(moreBad === 0 && (await overflowX(page)) <= 0, 'nav: Saya tiles and buttons are at least 44 px and fit the phone');
+    check((await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: the Saya tab is lit on its own page');
+    await page.click('#view-public-more .px-tile:has-text("Progres")');
     await page.waitForTimeout(600);
-    check((await page.evaluate(() => window.currentView)) === 'public-program' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: Latihan opens and Lainnya stays lit');
+    check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: Progres opens from Saya and the Saya tab stays lit');
+    check(await visible(page, '#topbar-back'), 'nav: a second-level page has a back button in the top bar');
+    await page.click('#topbar-back');
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.currentView)) === 'public-more' && !(await visible(page, '#topbar-back')), 'nav: back returns to Saya');
+    await page.click('#tabbar .tab[data-view="public-program"]');
+    await page.waitForTimeout(600);
     check(await visible(page, '#pub-tasks-wrap') && (await page.textContent('#view-public-program')).includes('PR'), 'nav: the Latihan tab holds the PR card');
     await page.evaluate(() => window.navigate('public-info'));
     await page.waitForTimeout(900);
@@ -1893,10 +1829,23 @@ async function contrastReport(page) {
     check(!(await visible(page, '#tab-more-new')), 'info: the dot is gone after reading');
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(400);
-    check(!(await page.textContent('#pub-teasers')).includes('Ada info baru'), 'info: the Beranda teaser no longer shouts');
-    await page.click('#tabbar .tab[data-view="public-progress"]');
+    await page.click('#tabbar .tab[data-view="public-food"]');
     await page.waitForTimeout(500);
-    check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-progress"]', 'aria-current')) === 'page' && !(await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')), 'nav: the Progres tab is lit alone');
+    check((await page.evaluate(() => window.currentView)) === 'public-food' && (await page.getAttribute('#tabbar .tab[data-view="public-food"]', 'aria-current')) === 'page' && !(await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')), 'nav: the Makan tab is lit alone');
+    // ＋ : empat aksi
+    await page.click('#client-booking-fab');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-quick-client') && (await page.locator('#quick-client-body .px-tile').allTextContents()).map(t => t.split(/Sisa|Berikutnya|Rutinitas|Buku|Berat|Pilih/)[0].trim()).join(',') === 'Booking sesi,Mulai latihan,Catat makan,Catat ukuran', 'plus: the sheet offers booking, workout, food and measurement');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
+    // Lonceng
+    await page.click('#nav-bell-btn');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-notif') && (await page.locator('#notif-body .notif-row').count()) >= 1, 'bell: opens a list of notices');
+    await page.waitForTimeout(600);
+    check(!(await visible(page, '#bell-count')) && String(env.memberRow('PT-A')[46] || '').length > 10, 'bell: opening it clears the count and records the time on the server');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
     await page.click('#tabbar .tab[data-view="public-dashboard"]');
     await page.waitForTimeout(500);
     // Program latihan di portal: kartu per hari, centang tersimpan.
@@ -1966,7 +1915,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     // Makan (Phase P): segmen di tab Latihan, isi data tiga langkah, target + menu.
     {
-      check(await visible(page, '#lat-seg'), 'makan: the Latihan | Makan switch is on top of the page');
+      check(await visible(page, '#tabbar .tab[data-view="public-food"]'), 'makan: Makan has its own tab');
       await page.evaluate(() => window.setLatSeg('makan'));
       await page.waitForTimeout(400);
       check(await visible(page, '#pub-makan-pane') && !(await visible(page, '#pub-latihan-pane')) && (await page.textContent('#pub-makan-pane')).includes('Lengkapi data'), 'makan: a new client is asked to complete the data first');
@@ -2243,7 +2192,7 @@ async function contrastReport(page) {
 
     // ── Tambah ke kalender (Fase I4) ───────────────────────────────────────────
     const calId = await page.evaluate(() => (window.schedules.filter(s => new Date(s.start) > new Date())[0] || {}).id);
-    check(!!calId && (await page.locator('#pub-next-cal').count()) === 1, 'calendar: the next-session card has a Kalender button');
+    check(!!calId && (await page.locator('#pub-next-cal').count()) === 1, 'calendar: the next-session card has a calendar button');
     await page.evaluate(id => window.openAddToCalendar([id]), calId);
     await page.waitForTimeout(500);
     check(await visible(page, '#modal-add-cal') && await visible(page, '#cal-google') && await visible(page, '#cal-ics'), 'calendar: the sheet offers Google Kalender and .ics');
@@ -2269,15 +2218,16 @@ async function contrastReport(page) {
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(600);
-    check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
-    check((await page.textContent('#view-public-dashboard .my-coach-card')).includes('Coach kamu'), 'portal home: a "Coach kamu" card shows the coach');
-    await page.evaluate(() => { const d = document.querySelector('#view-public-dashboard .my-coach-card').closest('details'); if (d) d.open = true; });   // Phase R: kartu coach di lipatan
-    await page.locator('#view-public-dashboard .my-coach-card').click();
-    await page.waitForTimeout(700);
-    check((await page.textContent('#coach-sheet-body')).includes('Rizky') && await visible(page, '#coach-sheet-body .coach-hero'), 'tapping "Coach kamu" opens the full coach profile in a sheet');
-    await page.evaluate(() => window.closeModal());
+    check(await page.evaluate(() => window.myX.notif.items.some(x => x.id === 'kesehatan')), 'portal: the bell asks for the health form until one is submitted');
+    await page.evaluate(() => window.navigate('public-more'));
     await page.waitForTimeout(400);
-    check(await visible(page, '#view-public-dashboard .portal-hero') && await visible(page, '#view-public-dashboard .next-card') && await visible(page, '#pub-week .stat-strip') && (await page.locator('#view-public-dashboard .portal-actions .btn').count()) === 3, 'portal home: next session on top, dark hero, "Minggu ini" strip and three quick actions');
+    await page.click('#view-public-more .px-tile:has-text("Coach")');
+    await page.waitForTimeout(700);
+    check((await page.evaluate(() => window.currentView)) === 'public-coaches' && (await page.textContent('#view-public-coaches')).includes('Rizky'), 'the Coach tile on Saya opens the coach page');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(500);
+    const homeOrder = await page.evaluate(() => ['pub-next-session-card', 'pub-todo', 'pub-weekx', 'pub-pack-card'].map(id => { const e = document.getElementById(id); return e ? Math.round(e.getBoundingClientRect().top + document.getElementById('main-scroll-area').scrollTop) : -1; }));
+    check(homeOrder.every((y, i) => y >= 0 && (i === 0 || y > homeOrder[i - 1])) && (await page.locator('#pub-weekx .week-x > div').count()) === 7, 'portal home: next session, to-do list, week strip, package card in that order ' + JSON.stringify(homeOrder));
     check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'portal home: no sideways page scroll');
     await shot(page, 'portal-mobile-home-premium');
     await page.evaluate(() => window.openMyProfile());
@@ -2418,9 +2368,9 @@ async function contrastReport(page) {
     check((await revoked.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'client is told to log in with the WhatsApp number');
     noErrors(errors.concat(again.errors, revoked.errors));
     await context.close(); await again.context.close(); await revoked.context.close();
-  }
+  })().catch(sectionCrash);
   console.log('Portal klien · cepat (Fase K): panggilan, salinan, kerangka');
-  {
+  await (async () => {
     const env = richEnv();
     const tokA = env.memberToken(KEY_A), tokB = env.memberToken(KEY_B);
     const TK = 'xnk_member_token', CK = 'xnk_portal_cache';
@@ -2435,7 +2385,7 @@ async function contrastReport(page) {
       await cold.page.waitForTimeout(350);
     }
     check(reads1().length === 2, 'fast: switching through all seven tabs reads nothing more from the server (' + calls1.join(',') + ')');
-    check((await cold.page.textContent('#pub-tasks-wrap, #pub-teasers')).length > 0 && (await cold.page.evaluate(() => !!window.myProgram && window.myProgram.state === 'ok' && !!window.myContent && !!window.myTasks)), 'fast: every tab already has its data from the one call');
+    check((await cold.page.textContent('#pub-tasks-wrap, #pub-todo')).length > 0 && (await cold.page.evaluate(() => !!window.myProgram && window.myProgram.state === 'ok' && !!window.myContent && !!window.myTasks)), 'fast: every tab already has its data from the one call');
     const store = await cold.page.evaluate(() => Object.assign({}, localStorage));
     check(!!store[CK] && store[CK].includes('Ani') && !store[CK].includes('openSlots'), 'fast: a copy is kept on the device (own data only, no free-hours grid)');
     await cold.context.close();
@@ -2443,8 +2393,10 @@ async function contrastReport(page) {
     const calls2 = [];
     const warm = await openPage(browser, env, '/Index?view=public', calls2, store, { delay: { getPortalBootstrap: 4000, getPortalMore: 4000 }, wait: 200, keepCelebration: true });
     await warm.page.waitForTimeout(700);
-    check((await warm.page.textContent('#pub-dash-name')).includes('Ani') && !(await visible(warm.page, '#global-loader')), 'fast: with a copy, Beranda shows the client\'s own name while the server is still answering');
-    check((await warm.page.locator('#view-public-dashboard .portal-hero').count()) === 1 && !(await warm.page.locator('#view-public-dashboard .skel').count()), 'fast: the home screen is filled from the copy, no skeletons');
+    check((await warm.page.locator('#pub-todo .todo-row').count()) >= 1 && !(await visible(warm.page, '#global-loader')), 'fast: with a copy, Hari ini shows the client\'s own to-do list while the server is still answering');
+    check((await warm.page.locator('#view-public-dashboard .next-x').count()) === 1 && !(await warm.page.locator('#view-public-dashboard .skel').count()), 'fast: the home screen is filled from the copy, no skeletons');
+    await warm.page.evaluate(() => window.navigate('public-more'));
+    check((await warm.page.textContent('#pub-dash-name')).includes('Ani'), 'fast: the athlete card shows the client\'s own name from the copy');
     await warm.page.evaluate(() => window.navigate('public-program'));
     await warm.page.waitForTimeout(300);
     check((await warm.page.textContent('#pub-program-wrap')).includes('Rutinitas') && !(await warm.page.locator('#pub-program-wrap .skel').count()), 'fast: other tabs also open filled while the server is slow');
@@ -2502,9 +2454,10 @@ async function contrastReport(page) {
     const calls3 = [];
     const other = await openPage(browser, env, '/Index?view=public', calls3, { [TK]: tokB, [CK]: store[CK] }, { delay: { getPortalBootstrap: 1500, getPortalMore: 1500 }, wait: 300, keepCelebration: true });
     await other.page.waitForTimeout(300);
-    const nm = await other.page.evaluate(() => (document.getElementById('pub-dash-name') || {}).textContent || '');
+    const nm = await other.page.evaluate(() => { if (window.publicLoggedMember) window.navigate('public-more'); return (document.getElementById('pub-dash-name') || {}).textContent || ''; });
     check(!nm.includes('Ani'), 'fast: a copy that belongs to another login is never shown');
     await other.page.waitForTimeout(3000);
+    await other.page.evaluate(() => window.navigate('public-more'));
     check((await other.page.textContent('#pub-dash-name')).includes('Budi'), 'fast: the right client appears once the server answers');
     await other.context.close();
     // 5) Tanpa salinan: kerangka abu muncul di tab selagi data menyusul.
@@ -2520,14 +2473,14 @@ async function contrastReport(page) {
     await skel.page.waitForTimeout(3500);
     check(!(await skel.page.locator('#pub-progress-wrap .skel').count()), 'fast: the skeletons are replaced when the data arrives');
     await skel.context.close();
-  }
+  })().catch(sectionCrash);
   console.log('Portal klien · desktop');
   for (const scheme of ['light', 'dark']) {
     const env = richEnv();
     const token = env.memberToken(KEY_A);
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1300 });
-    const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.portal-grid')).gridTemplateColumns.split(' ').length);
-    check(cols === 2, scheme + ': Beranda uses two columns on desktop');
+    const homeW = await page.evaluate(() => { const w = document.querySelector('#view-public-dashboard .px-wrap').getBoundingClientRect(); return [Math.round(w.width), document.documentElement.scrollWidth <= innerWidth + 1]; });
+    check(homeW[0] <= 660 && homeW[1], scheme + ': Hari ini stays one readable column on desktop ' + JSON.stringify(homeW));
     await shot(page, 'portal-desktop-' + scheme + '-home');
     // Makan on a wide screen (Phase P): two columns, nothing overflows, at 1440 and 1280.
     env.call('saveMyMeasurement', token, { berat: 70, pinggang: 80 });
@@ -2555,7 +2508,7 @@ async function contrastReport(page) {
   }
   // ── Portal: jam yang baru saja terisi → saran jam di dalam sheet (HP) ─────
   console.log('Portal klien · booking bentrok · HP');
-  {
+  await (async () => {
     const env = seededEnv();
     const calls = [];
     const token = env.memberToken(KEY_A);
@@ -2633,8 +2586,8 @@ async function contrastReport(page) {
     await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // Pindah jadwal ke jam yang terisi: tetap di sheet (tanpa "Lihat semua jam"), saran jam memindahkan sesi yang sama.
     const env = seededEnv();
     const token = env.memberToken(KEY_A);
@@ -2667,9 +2620,9 @@ async function contrastReport(page) {
     await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
-  {
+  await (async () => {
     const env = seededEnv();
     const old = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, []);
     check((await old.page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'an old ?k= link still logs in');
@@ -2677,7 +2630,7 @@ async function contrastReport(page) {
     check((await bad.page.evaluate(() => window.currentView)) === 'public-login', 'unknown link → login page');
     check((await bad.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'unknown link → asked to log in with the number');
     await old.context.close(); await bad.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── iPhone / Safari (Fase N): zona aman, tab bar menempel, keyboard, Layar Utama ──
   // Elements that stick out past the right edge make iOS stretch the iframe and
@@ -2698,7 +2651,7 @@ async function contrastReport(page) {
   });
   const IPHONE = { insets: { t: 47, r: 0, b: 34, l: 0 }, ios: true, standalone: false, kb: 0, v: 1, xnk: 'host' };
   console.log('iPhone / Safari · portal + panel');
-  {
+  await (async () => {
     const env = seededEnv();
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, [], null, { touch: true });
     for (const v of ['public-dashboard', 'calendar', 'public-progress', 'public-program', 'public-info', 'public-more']) {
@@ -2745,8 +2698,8 @@ async function contrastReport(page) {
     await again.page.evaluate(d => window.applyHostInfo(Object.assign({}, d, { standalone: true })), IPHONE);
     check(await again.page.evaluate(() => document.documentElement.classList.contains('standalone')), 'Home Screen mode is marked (edge swipe back on)');
     await again.context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     const env = seededEnv();
     const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: env.adminToken(), xnk_a2hs: 'ok' }, { touch: true });
     for (const v of ['dashboard', 'calendar', 'clients', 'settings']) {
@@ -2775,11 +2728,11 @@ async function contrastReport(page) {
     check(await visible(page, '#tabbar') && !(await page.evaluate(() => document.documentElement.classList.contains('kb-open'))), 'keyboard closed: everything comes back');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Pembungkus xnk.my.id: jembatan host (zona aman, keyboard, warna tema) ──
   console.log('Pembungkus xnk.my.id · host bridge');
-  {
+  await (async () => {
     const wrapper = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'index.html'), 'utf8');
     const APP = 'https://n-test-0lu-script.googleusercontent.com';
     const context = await browser.newContext({ viewport: MOBILE, hasTouch: true, isMobile: true });
@@ -2812,7 +2765,7 @@ async function contrastReport(page) {
     check(ifr && Math.round(ifr.width) === MOBILE.width && Math.round(ifr.height) === MOBILE.height, 'wrapper iframe fills the phone exactly');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Landing xnkbooking.my.id ─────────────────────────────────────────────
   const scrollLanding = async (page, y, wait) => {
@@ -2826,7 +2779,7 @@ async function contrastReport(page) {
   const LANDING_WAIT = ASSETS ? 3200 : 1200; // intro 00–100
 
   console.log('Landing · HP');
-  {
+  await (async () => {
     const env = seededEnv();
     const calls = [];
     const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', calls, null, { touch: true, wait: LANDING_WAIT });
@@ -2915,8 +2868,8 @@ async function contrastReport(page) {
     check((await portal.page.evaluate(() => localStorage.getItem('xnk_pending_slot'))) === null, 'picked hour is used once');
     noErrors(portal.errors);
     await portal.context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // No polling: the free hours load once; time passing alone sends no new request.
     const env = seededEnv();
     const calls = [];
@@ -2928,8 +2881,8 @@ async function contrastReport(page) {
     check(first === 1 && later === first, 'Landing: free hours load once, no getOpenSlots after 20 s (' + first + ' → ' + later + ')');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // The first load fails: "Coba lagi" in the box loads the hours (no polling otherwise).
     const env = seededEnv();
     let failOnce = true;
@@ -2944,8 +2897,8 @@ async function contrastReport(page) {
     check((await page.locator('#slot-hours .slot-h').count()) > 0, 'Landing: "Coba lagi" loads the free hours');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // Pick within 2 minutes: checked on screen, no call. After 2 minutes: one reload; a taken hour offers nearby free hours.
     const env = seededEnv();
     const calls = [];
@@ -2997,8 +2950,8 @@ async function contrastReport(page) {
     check(pick.date === day && pick.time === String(altH).padStart(2, '0') + ':00' && pick.at > 0, 'Landing: the picked alternative keeps its own day and hour (' + JSON.stringify(pick) + ')');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     const env = seededEnv();
     const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', [], null, { touch: true });
     await page.evaluate(() => openRegistration());
@@ -3029,8 +2982,8 @@ async function contrastReport(page) {
     check((await page.inputValue('#reg-goal')) === 'Muscle Building', 'program card preselects the training goal');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // HTML in the Price List is shown as text, never run.
     const env = seededEnv();
     env.sheet('PriceList').rows.push(['P9', '<img src=x onerror="window.__xss=1">', 'regular', 1, 1, '<b>x</b>', '<img src=x onerror="window.__xss=2">', 'a', true]);
@@ -3039,10 +2992,10 @@ async function contrastReport(page) {
     check((await page.locator('#pricing-track img').count()) === 0, 'no HTML injected into package cards');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   console.log('Landing · desktop');
-  {
+  await (async () => {
     const env = seededEnv();
     const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
     check(await visible(page, '#hero-desk'), 'desktop hero visible');
@@ -3128,10 +3081,10 @@ async function contrastReport(page) {
     check((await page.locator('#reg-packages input:checked').inputValue()) === '0', 'the clicked package is preselected');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   console.log('Landing · slot kosong (kapasitas per coach, bukan sekadar hitung kepala)');
-  {
+  await (async () => {
     const env = seededEnv();
     env.ss.seed('Coaches', [
       ['ID', 'Nama Coach', 'No WA', 'Spesialisasi', 'Foto URL', 'Bio', 'Pengalaman'],
@@ -3168,10 +3121,10 @@ async function contrastReport(page) {
     await shot(page, 'landing-desktop-slot-multicoach');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   console.log('Landing · slot kosong (jam kerja asli coach, CoachAvailability)');
-  {
+  await (async () => {
     const env = seededEnv();
     const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();
     const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
@@ -3188,8 +3141,8 @@ async function contrastReport(page) {
     await shot(page, 'landing-desktop-slot-envelope');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // Sheet CoachAvailability masih kosong (kondisi nyata saat ini, belum ada UI admin untuk isi) →
     // tidak boleh ada regresi: jendela jam tetap DAY_HOURS seperti sebelumnya.
     const env = seededEnv();
@@ -3202,9 +3155,9 @@ async function contrastReport(page) {
     check(hours.length === expected[1] - expected[0], 'no CoachAvailability rules → falls back to the default opening hours, no regression (' + hours.length + ' jam)');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
   console.log('Landing · jam operasional dari Pengaturan admin (BUSINESS_HOURS_JSON)');
-  {
+  await (async () => {
     const env = seededEnv();
     const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();   // WIB, like the server
     const hoursMap = { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] };
@@ -3218,7 +3171,7 @@ async function contrastReport(page) {
       'jam operasional yang diatur admin lewat Pengaturan (09–12) dipakai Landing, bukan jam buka default (' + hours.join(',') + ')');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
   // Hero text never overlaps the giant JIZDAN, also on short laptop screens.
   for (const vp of [DESKTOP, { width: 1366, height: 657 }, { width: 1280, height: 720 }, { width: 1024, height: 640 }]) {
     const env = seededEnv();
@@ -3236,7 +3189,7 @@ async function contrastReport(page) {
     noErrors(errors);
     await context.close();
   }
-  {
+  await (async () => {
     // Reduced motion: no intro, no scroll animations, static photo.
     const env = seededEnv();
     const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, reducedMotion: 'reduce' });
@@ -3245,7 +3198,7 @@ async function contrastReport(page) {
     check(!(await page.getAttribute('#figure-desk', 'data-gl')), 'reduced motion: static photo');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
   if (ASSETS) {
     // Animation libraries unreachable: page still works (static).
     const env = seededEnv();

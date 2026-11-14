@@ -89,6 +89,8 @@ test('todo: booking only when nothing is upcoming and quota allows; no renewal f
   assert.deepEqual(ids({ hasUpcoming: false, quotaLeft: null, total: 0 }), ['booking']);
   assert.deepEqual(ids({ hasUpcoming: false, quotaLeft: 0, total: 12 }), ['perpanjang']);
   assert.deepEqual(ids({ hasUpcoming: true, quotaLeft: 1, total: 12, renewalOpen: true }), []);
+  assert.deepEqual(ids({ hasUpcoming: true, quotaLeft: 0, remaining: 5, total: 12 }), [], 'booked ahead but 5 sessions still unused: no renewal yet');
+  assert.deepEqual(todo({ hasUpcoming: true, quotaLeft: 0, remaining: 2, total: 12 }).map(x => x.sub), ['Sisa 2 sesi']);
   assert.deepEqual(ids({ hasUpcoming: true, nutrition: { on: true, ok: false } }), ['gizi-data']);
   const done = todo({ hasUpcoming: true, workedToday: true, nextRoutine: 'Pull A', nutrition: { on: true, ok: true, eaten: 1800, target: 1900 } });
   assert.ok(done.every(x => x.done));

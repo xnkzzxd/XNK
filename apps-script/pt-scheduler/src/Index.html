@@ -60,6 +60,7 @@
         <div class="topbar-brand">
           <span class="avatar ink" style="border-radius:12px;width:36px;height:36px"><span class="logo-mark" style="width:18px;height:17px"></span></span>
         </div>
+        <button type="button" class="icon-btn plain tb-back hide" id="topbar-back" onclick="window.navigate(this.getAttribute('data-to') || 'public-dashboard')" aria-label="Kembali"><i data-lucide="arrow-left"></i></button>
         <h1 class="topbar-title" id="page-title">XNK</h1>
         <div class="topbar-actions" id="topbar-actions"></div>
       </header>
@@ -84,6 +85,9 @@
           <section class="view hide" id="view-public-info" aria-label="Info dan tips"></section>
           <section class="view hide" id="view-public-more" aria-label="Lainnya"></section>
           <section class="view hide" id="view-public-share" aria-label="Kartu saya"></section>
+          <section class="view hide" id="view-public-food" aria-label="Makan"></section>
+          <section class="view hide" id="view-public-plan" aria-label="Rencana makan"></section>
+          <section class="view hide" id="view-public-pack" aria-label="Paket saya"></section>
         </div>
       </main>
     </div>
@@ -141,12 +145,7 @@
   <div class="wl-resume hide" id="wl-resume" role="region" aria-label="Latihan berjalan"></div>
 
   <!-- Panduan klien baru (portal): layar gelap, satu tombol disorot -->
-  <div class="guide-layer hide" id="guide-layer" role="dialog" aria-modal="true" aria-labelledby="guide-title">
-    <svg class="guide-scrim" id="guide-scrim" aria-hidden="true" preserveAspectRatio="none"><path id="guide-hole" fill-rule="evenodd" d=""></path></svg>
-    <div class="guide-block" id="guide-block"></div>
-    <div class="guide-spot" id="guide-spot"></div>
-    <div class="guide-tip" id="guide-tip"></div>
-  </div>
+  <div class="guide-layer hide" id="guide-layer" role="dialog" aria-modal="true" aria-labelledby="guide-title"></div>
 
   <!-- Login PIN admin -->
   <div class="auth hide" id="admin-login" role="dialog" aria-modal="true" aria-labelledby="admin-login-title">
@@ -182,14 +181,13 @@
     <!-- Aksi cepat (+) admin -->
     <div class="sheet sm hide" id="sheet-quick-client" role="dialog" aria-modal="true" aria-labelledby="sheet-quick-client-title">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h2 class="sheet-title" id="sheet-quick-client-title">Mau apa?</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
-      <div class="sheet-body">
-        <div class="action-grid">
-          <button type="button" class="action-tile" onclick="window.clientQuick('booking')"><span class="at-icon"><i data-lucide="calendar-plus"></i></span>Booking</button>
-          <button type="button" class="action-tile" onclick="window.clientQuick('workout')"><span class="at-icon"><i data-lucide="dumbbell"></i></span>Mulai latihan</button>
-          <button type="button" class="action-tile" onclick="window.clientQuick('past')"><span class="at-icon"><i data-lucide="calendar-check"></i></span>Catat yang lewat</button>
-        </div>
-      </div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sheet-quick-client-title">Tambah</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body" id="quick-client-body" style="padding-top:16px"></div>
+    </div>
+    <div class="sheet hide" id="sheet-notif" role="dialog" aria-modal="true" aria-labelledby="sheet-notif-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sheet-notif-title">Pemberitahuan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body" id="notif-body" style="padding-top:16px"></div>
     </div>
     <div class="sheet sm hide" id="sheet-quick" role="dialog" aria-modal="true" aria-labelledby="sheet-quick-title">
       <div class="sheet-handle"></div>
