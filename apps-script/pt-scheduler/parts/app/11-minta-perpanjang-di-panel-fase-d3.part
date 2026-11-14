@@ -609,7 +609,7 @@
   const rtAttr = s => h(s).replace(/'/g, '&#39;');
   function rtCardHtml(d, src, next) {
     const names = d.items.map(it => it.gerakan).join(', ');
-    return '<article class="rt-card"><div class="rt-head"><button type="button" class="rt-open" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtOpen(this.dataset.src,this.dataset.hari)">' +
+    return '<article class="rt-card" data-ctx="rt" data-src="' + src + '" data-hari="' + h(d.hari) + '"><div class="rt-head"><button type="button" class="rt-open" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtOpen(this.dataset.src,this.dataset.hari)">' +
       '<span class="rt-name"><b class="truncate">' + h(d.hari) + '</b>' + (next ? '<span class="pill solid">Berikutnya</span>' : '') + '</span><span class="rt-sub">' + h(names) + '</span></button>' +
       '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(d.hari) + '" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtMenu(this.dataset.src,this.dataset.hari)">' + icon('more-horizontal') + '</button></div>' +
       '<button type="button" class="btn btn-primary btn-block rt-go" data-hari="' + h(d.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">' + icon('play') + 'Mulai</button></article>';

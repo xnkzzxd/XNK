@@ -2676,6 +2676,39 @@ async function contrastReport(page) {
     const homeW = await page.evaluate(() => { const w = document.querySelector('#view-public-dashboard .px-wrap'); return [Math.round(w.getBoundingClientRect().width), getComputedStyle(w).gridTemplateColumns.split(' ').length, document.documentElement.scrollWidth <= innerWidth + 1]; });
     check(homeW[0] <= 1240 && homeW[1] === 2 && homeW[2], scheme + ': Hari ini uses two columns, at most 1240 px wide, on desktop ' + JSON.stringify(homeW));
     if (scheme === 'light') {
+      // Fase Y: bingkai ala Mac — sidebar, bilah judul, menu ＋, popover lonceng, klik kanan, Esc.
+      check(await page.evaluate(() => document.documentElement.classList.contains('desk') && getComputedStyle(document.getElementById('sidebar')).display !== 'none' && getComputedStyle(document.getElementById('topbar')).height === '52px' && document.getElementById('page-title').textContent === 'Hari ini' && !!document.querySelector('#topbar-actions .desk-tb')), 'desk: Mac-style sidebar and a 52 px title bar with the page title and toolbar buttons');
+      await page.click('#nav-plus-btn');
+      await page.waitForTimeout(200);
+      check((await page.locator('.desk-menu .desk-mi').count()) >= 4 && !(await visible(page, '#sheet-quick-client')), 'desk: ＋ opens a pull-down menu instead of the phone sheet');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      check((await page.locator('.desk-menu').count()) === 0, 'desk: Esc closes the menu');
+      await page.click('#nav-bell-btn');
+      await page.waitForTimeout(250);
+      check(await visible(page, '#desk-notif-pop') && !(await visible(page, '#sheet-notif')), 'desk: the bell opens a popover under the title bar');
+      await page.click('#nav-bell-btn');
+      await page.waitForTimeout(200);
+      check((await page.locator('#desk-notif-pop').count()) === 0, 'desk: clicking the bell again closes the popover');
+      await page.evaluate(() => window.navigate('public-program'));
+      await page.waitForTimeout(400);
+      const rtBox = (await page.locator('#pub-program-wrap .rt-card').count()) ? await page.locator('#pub-program-wrap .rt-card').first().boundingBox() : null;
+      if (rtBox) {
+        await page.mouse.click(rtBox.x + 40, rtBox.y + 30, { button: 'right' });
+        await page.waitForTimeout(200);
+        const labels = (await page.locator('.desk-menu .desk-mi').allTextContents()).map(t => t.trim());
+        check(labels[0] === 'Mulai' && labels.indexOf('Lihat detail') !== -1, 'desk: right-clicking a routine opens its menu ' + JSON.stringify(labels));
+        await page.mouse.click(rtBox.x + rtBox.width + 400, 20);
+        await page.waitForTimeout(150);
+        check((await page.locator('.desk-menu').count()) === 0, 'desk: clicking outside closes the menu');
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(300);
+      check(await page.evaluate(() => !document.documentElement.classList.contains('desk') && getComputedStyle(document.getElementById('tabbar')).display !== 'none'), 'desk: narrowing the window to phone width switches back to the phone layout');
+      await page.setViewportSize(DESKTOP);
+      await page.waitForTimeout(300);
+      await page.evaluate(() => window.navigate('public-dashboard'));
+      await page.waitForTimeout(300);
       // Tablet, laptop, PC, layar sangat lebar: judul halaman, satu atau dua kolom sesuai lebar isi, tidak ada geser samping.
       for (const vp of [[768, 1024, 1], [1024, 768, 1], [1180, 820, 1], [1280, 720, 2], [1366, 768, 2], [1920, 1080, 2], [2560, 1080, 2]]) {
         await page.setViewportSize({ width: vp[0], height: vp[1] });

@@ -25,7 +25,7 @@
     t.forEach(function (x) {
       const txt = '<span class="todo-txt"><span class="todo-title">' + h(x.title) + '</span>' + (x.sub ? '<span class="todo-sub">' + h(x.sub) + '</span>' : '') + '</span>';
       if (x.done) { html += '<div class="todo-row done"><span class="todo-check">' + icon('check') + '</span>' + txt + '</div>'; return; }
-      html += '<button type="button" class="todo-row' + (x.danger ? ' danger' : '') + '" data-id="' + h(x.id) + '" data-ref="' + h(x.ref || '') + '" onclick="window.todoGo(this.dataset.id,this.dataset.ref)">' +
+      html += '<button type="button" class="todo-row' + (x.danger ? ' danger' : '') + '" data-ctx="todo" data-act="' + h(x.act || '') + '" data-id="' + h(x.id) + '" data-ref="' + h(x.ref || '') + '" onclick="window.todoGo(this.dataset.id,this.dataset.ref)">' +
         '<span class="todo-check"></span>' + txt + (x.act ? '<span class="todo-act">' + h(x.act) + '</span>' : icon('chevron-right')) + '</button>';
     });
     return html + '</div>';

@@ -3159,6 +3159,35 @@ html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.p
   html.desk .main .btn-lg { min-height: 40px; }
   html.desk .main .btn-sm { min-height: 30px; font-size: 0.85rem; }
 }
+
+/* Menu ala Mac (klik kanan, ＋) dan popover (lonceng) */
+.desk-menu, .desk-pop { position: fixed; z-index: 200; background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: saturate(1.8) blur(24px); -webkit-backdrop-filter: saturate(1.8) blur(24px); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.22), 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); font-size: 0.875rem; animation: deskIn .12s var(--ease-out); }
+@keyframes deskIn { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+.desk-menu { min-width: 220px; max-width: 320px; padding: 5px; display: flex; flex-direction: column; }
+.desk-mi { display: flex; align-items: center; gap: 9px; min-height: 30px; padding: 0 10px; border-radius: 6px; text-align: left; color: inherit; font: inherit; }
+.desk-mi svg, .desk-mi-ic { width: 15px; height: 15px; flex: none; color: var(--fg-muted); }
+.desk-mi small { color: var(--fg-muted); font-size: 0.75rem; }
+.desk-mi:hover, .desk-mi:focus-visible { background: var(--accent); color: var(--on-accent); outline: none; }
+.desk-mi:hover svg, .desk-mi:focus-visible svg, .desk-mi:hover small, .desk-mi:focus-visible small { color: inherit; }
+.desk-mi.danger { color: var(--danger); }
+.desk-mi.danger:hover, .desk-mi.danger:focus-visible { background: var(--danger); color: #fff; }
+.desk-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+@media (pointer: coarse) { .desk-mi { min-height: 44px; } }
+.desk-pop { width: min(380px, calc(100vw - 16px)); max-height: min(560px, calc(100vh - 80px)); display: flex; flex-direction: column; overflow: hidden; }
+.desk-pop-head { padding: 12px 14px 6px; font-size: 0.9rem; }
+.desk-pop-body { overflow: auto; padding: 0 8px 10px; }
+.desk-pop .notif-row { border: 0; border-radius: 8px; padding: 8px 10px; min-height: 0; background: transparent; }
+.desk-pop .notif-row + .notif-row { border-top: 1px solid var(--border); border-radius: 0; }
+.desk-pop .nf-act { min-height: 28px; padding: 0 10px; font-size: 0.8rem; border-radius: 7px; }
+.desk-pop .px-eyebrow { margin: 6px 10px 2px; }
+
+/* Sorot saat kursor di atas baris (mouse) */
+@media (hover: hover) {
+  html.desk .todo-row:not(.done):hover, html.desk .list-item:hover, html.desk .meal-row:hover, html.desk .notif-row:hover, html.desk .pc-row:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+  html.desk .rt-card { transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease); }
+  html.desk .rt-card:hover { border-color: color-mix(in srgb, var(--fg) 30%, transparent); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  html.desk .px-tile:hover { border-color: color-mix(in srgb, var(--fg) 30%, transparent); }
+}
 </style>
 
 </head>
@@ -11954,7 +11983,7 @@ html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.p
   function memberSessionRow(s) {
     const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000);
     const done = isDone(s), upcoming = !done && d >= new Date();
-    return '<div class="list-item">' +
+    return '<div class="list-item" data-ctx="sess" data-id="' + h(s.id) + '" data-up="' + (upcoming ? 1 : 0) + '">' +
       '<div style="width:52px;text-align:center;flex-shrink:0"><p class="eyebrow">' + DOW_SHORT[d.getDay()] + '</p><p class="num" style="font-size:var(--fs-2xl);font-weight:800;line-height:1.1">' + d.getDate() + '</p></div>' +
       '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' + (window.isSoloCoach() ? '' : '<p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p>') +
       (done && s.dilatih ? '<p class="li-sub" style="white-space:normal">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.dilatih) + '</p>' : '') +
@@ -12939,7 +12968,7 @@ html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.p
   const rtAttr = s => h(s).replace(/'/g, '&#39;');
   function rtCardHtml(d, src, next) {
     const names = d.items.map(it => it.gerakan).join(', ');
-    return '<article class="rt-card"><div class="rt-head"><button type="button" class="rt-open" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtOpen(this.dataset.src,this.dataset.hari)">' +
+    return '<article class="rt-card" data-ctx="rt" data-src="' + src + '" data-hari="' + h(d.hari) + '"><div class="rt-head"><button type="button" class="rt-open" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtOpen(this.dataset.src,this.dataset.hari)">' +
       '<span class="rt-name"><b class="truncate">' + h(d.hari) + '</b>' + (next ? '<span class="pill solid">Berikutnya</span>' : '') + '</span><span class="rt-sub">' + h(names) + '</span></button>' +
       '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(d.hari) + '" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtMenu(this.dataset.src,this.dataset.hari)">' + icon('more-horizontal') + '</button></div>' +
       '<button type="button" class="btn btn-primary btn-block rt-go" data-hari="' + h(d.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">' + icon('play') + 'Mulai</button></article>';
@@ -13479,7 +13508,7 @@ html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.p
       html += '<div class="card meal-day"><div class="row-between" style="min-height:44px;gap:8px"><span class="li-title" style="font-size:var(--fs-lg)">' + h(NUT_MEAL_L[k]) + '</span><span class="row" style="gap:10px"><span class="li-sub num">' + h(NUT_N(kal)) + ' kkal</span>' +
         '<button type="button" class="btn ' + (primary ? 'btn-primary' : 'btn-secondary') + ' btn-sm" style="min-height:44px" onclick="window.openNutAdd(\'' + k + '\')">' + icon('plus') + 'Tambah</button></span></div>' +
         (its.length ? its.map(function (x) {
-          return '<div class="row meal-row" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.pending ? ' <span class="pill soft">' + icon('cloud-off', 'style="width:12px;height:12px;vertical-align:-2px"') + ' belum terkirim</span>' : x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
+          return '<div class="row meal-row" data-ctx="food" data-id="' + h(x.id) + '" data-waktu="' + h(k) + '" data-nama="' + h(x.nama) + '" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.pending ? ' <span class="pill soft">' + icon('cloud-off', 'style="width:12px;height:12px;vertical-align:-2px"') + ' belum terkirim</span>' : x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
             '<span class="li-sub">' + h(x.porsi) + ' · ' + h(NUT_N(x.kal)) + ' kkal · P ' + h(NUT_N(x.p, 1)) + ' g</span></span>' +
             '<button type="button" class="icon-btn plain" style="width:44px;height:44px" aria-label="Hapus ' + h(x.nama) + '" onclick="window.nutDelLog(\'' + h(x.id) + '\',this)">' + icon('trash-2') + '</button></div>';
         }).join('') : '<p class="li-sub">Belum ada catatan.' + (tip ? ' Saran menu: ' + h(tip.paket ? tip.paket.n : tip.items.map(i => i.n).join(', ')) + '.' : '') + '</p>') + '</div>';
@@ -15141,7 +15170,7 @@ html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.p
     t.forEach(function (x) {
       const txt = '<span class="todo-txt"><span class="todo-title">' + h(x.title) + '</span>' + (x.sub ? '<span class="todo-sub">' + h(x.sub) + '</span>' : '') + '</span>';
       if (x.done) { html += '<div class="todo-row done"><span class="todo-check">' + icon('check') + '</span>' + txt + '</div>'; return; }
-      html += '<button type="button" class="todo-row' + (x.danger ? ' danger' : '') + '" data-id="' + h(x.id) + '" data-ref="' + h(x.ref || '') + '" onclick="window.todoGo(this.dataset.id,this.dataset.ref)">' +
+      html += '<button type="button" class="todo-row' + (x.danger ? ' danger' : '') + '" data-ctx="todo" data-act="' + h(x.act || '') + '" data-id="' + h(x.id) + '" data-ref="' + h(x.ref || '') + '" onclick="window.todoGo(this.dataset.id,this.dataset.ref)">' +
         '<span class="todo-check"></span>' + txt + (x.act ? '<span class="todo-act">' + h(x.act) + '</span>' : icon('chevron-right')) + '</button>';
     });
     return html + '</div>';
@@ -15854,6 +15883,128 @@ html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.p
   }
   const renderPortalXDesk = window.renderPortalX;
   window.renderPortalX = function () { renderPortalXDesk.apply(this, arguments); if (deskIs()) { const sub = $('page-sub'); if (sub) sub.textContent = deskSub(window.currentView); const lv = $('side-me-lv'), l = window.myX && window.myX.level; if (lv) lv.textContent = l ? 'Level ' + l.level + ' · ' + l.gelar : ''; } };
+
+  // ── Menu ala Mac (klik kanan, menu ＋) dan popover (lonceng). Satu yang terbuka sekaligus. ──
+  let deskLayer = null;
+  function deskClose() {
+    if (!deskLayer) return;
+    const el = deskLayer.el, back = deskLayer.back; deskLayer = null;
+    el.remove(); document.removeEventListener('keydown', deskKey, true);
+    if (back && back.focus) try { back.focus({ preventScroll: true }); } catch (e) {}
+  }
+  window.deskClose = deskClose;
+  function deskKey(e) {
+    if (!deskLayer) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); deskClose(); return; }
+    if (deskLayer.kind !== 'menu' || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+    e.preventDefault();
+    const btns = Array.from(deskLayer.el.querySelectorAll('button')), i = btns.indexOf(document.activeElement);
+    const n = e.key === 'ArrowDown' ? (i + 1) % btns.length : (i - 1 + btns.length) % btns.length;
+    if (btns[n]) btns[n].focus();
+  }
+  function deskPlace(el, x, y, alignRight) {
+    document.body.appendChild(el);
+    const r = el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
+    let left = alignRight ? x - r.width : x, top = y;
+    if (left + r.width > W - 8) left = W - 8 - r.width;
+    if (top + r.height > H - 8) top = Math.max(8, y - r.height);
+    el.style.left = Math.max(8, left) + 'px'; el.style.top = Math.max(8, top) + 'px';
+  }
+  function deskOpenLayer(el, kind, back) {
+    deskClose();
+    deskLayer = { el: el, kind: kind, back: back || document.activeElement };
+    document.addEventListener('keydown', deskKey, true);
+  }
+  // items: [{ l, ic, fn, danger, sep, hint }]
+  window.deskMenu = function (items, x, y, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'desk-menu'; el.setAttribute('role', 'menu'); if (opts.label) el.setAttribute('aria-label', opts.label);
+    const acts = [];
+    el.innerHTML = items.map(function (it) {
+      if (it.sep) return '<div class="desk-sep" role="separator"></div>';
+      acts.push(it.fn);
+      return '<button type="button" role="menuitem" class="desk-mi' + (it.danger ? ' danger' : '') + '" data-i="' + (acts.length - 1) + '">' + (it.ic ? icon(it.ic) : '<span class="desk-mi-ic"></span>') + '<span class="grow">' + h(it.l) + '</span>' + (it.hint ? '<small>' + h(it.hint) + '</small>' : '') + '</button>';
+    }).join('');
+    el.addEventListener('click', function (e) { const b = e.target.closest('button[data-i]'); if (!b) return; const fn = acts[Number(b.getAttribute('data-i'))]; deskClose(); if (fn) fn(); });
+    deskOpenLayer(el, 'menu', opts.back);
+    deskPlace(el, x, y, !!opts.alignRight);
+    paintIcons();
+    const first = el.querySelector('button'); if (first) try { first.focus({ preventScroll: true }); } catch (e) {}
+    return el;
+  };
+  window.deskPop = function (anchor, html, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'desk-pop'; el.setAttribute('role', 'dialog'); if (opts.label) el.setAttribute('aria-label', opts.label); if (opts.id) el.id = opts.id;
+    el.innerHTML = html;
+    deskOpenLayer(el, 'pop', anchor);
+    const r = anchor.getBoundingClientRect();
+    deskPlace(el, r.right, r.bottom + 8, true);
+    paintIcons();
+    return el;
+  };
+  let deskJust = null;   // tombol yang baru saja menutup lapisannya sendiri (klik kedua = tutup, bukan buka lagi)
+  document.addEventListener('mousedown', function (e) {
+    if (!deskLayer || deskLayer.el.contains(e.target)) return;
+    // Tombol pembuka bisa digambar ulang (lonceng setelah tanda baru dihapus): cocokkan juga lewat id-nya.
+    const b = deskLayer.back, keep = !!b && ((b.contains && b.contains(e.target)) || (b.id && !!e.target.closest('#' + b.id)));
+    deskClose(); deskJust = keep ? (b.id || b) : null; if (keep) e.preventDefault();
+  }, true);
+  function deskToggled(el) { const t = deskJust && (deskJust === el || deskJust === el.id); deskJust = null; return !!t; }
+  window.addEventListener('resize', deskClose);
+  document.addEventListener('scroll', function () { if (deskLayer && deskLayer.kind === 'menu') deskClose(); }, true);
+
+  // Tombol ＋ di bilah judul: menu tarik-turun empat aksi (HP tetap sheet).
+  const clientPlusBase = window.clientPlus;
+  window.clientPlus = function (el) {
+    if (!(deskIs() && el && el.getBoundingClientRect)) { clientPlusBase(); return; }
+    if (deskToggled(el)) return;
+    const r = el.getBoundingClientRect(), q = k => function () { window.clientQuick(k); };
+    const items = [{ l: 'Booking sesi', ic: 'calendar-plus', fn: q('booking') }, { l: 'Mulai latihan', ic: 'dumbbell', fn: q('workout') }];
+    if (nutTabOn()) items.push({ l: 'Catat makan', ic: 'utensils', fn: q('food') });
+    items.push({ l: 'Catat ukuran', ic: 'scale', fn: q('measure') }, { sep: true }, { l: 'Catat latihan yang lewat', ic: 'calendar-check', fn: q('past') });
+    window.deskMenu(items, r.right, r.bottom + 6, { alignRight: true, back: el, label: 'Tambah' });
+  };
+  // Lonceng: popover di bawah tombolnya (HP tetap sheet).
+  const openNotifBase = window.openNotif;
+  window.openNotif = function () {
+    const bell = $('nav-bell-btn');
+    if (!(deskIs() && bell)) { openNotifBase(); return; }
+    if (deskToggled(bell)) return;
+    window.deskPop(bell, '<div class="desk-pop-head"><b>Pemberitahuan</b></div><div class="desk-pop-body" id="desk-notif">' + notifHtml() + '</div>', { label: 'Pemberitahuan', id: 'desk-notif-pop' });
+    const n = X().notif;
+    if (!n || !n.count) return;
+    n.count = 0; n.items.forEach(function (x) { x.fresh = false; });
+    renderTopbarActions(); savePortalCache();
+    memberCall('markNotifSeen').catch(function () {});
+  };
+  const notifGoBase = window.notifGo;
+  window.notifGo = function (id) { deskClose(); notifGoBase(id); };
+
+  // Klik kanan pada rutinitas, tugas, sesi, makanan (mouse; layar sentuh tetap memakai tombol ⋯).
+  document.addEventListener('contextmenu', function (e) {
+    if (!deskIs()) return;
+    const el = e.target.closest('[data-ctx]');
+    if (!el || e.target.closest('input, textarea, select')) return;
+    const k = el.getAttribute('data-ctx'), d = el.dataset;
+    let items = [];
+    if (k === 'rt') {
+      items = [{ l: 'Mulai', ic: 'play', fn: function () { window.workoutOpenClient(d.hari); } }, { l: 'Lihat detail', ic: 'eye', fn: function () { window.rtOpen(d.src, d.hari); } }];
+      if (d.src === 'own') items.push({ l: 'Ubah', ic: 'pencil', fn: function () { window.rtEdit(d.hari); } }, { l: 'Duplikat', ic: 'copy', fn: function () { window.rtDup(d.hari); } }, { sep: true }, { l: 'Hapus', ic: 'trash-2', danger: true, fn: function () { window.rtDelete(d.hari); } });
+      else items.push({ l: 'Salin ke rutinitas saya', ic: 'copy', fn: function () { window.rtCopy('', d.hari); } });
+    } else if (k === 'todo') {
+      items = [{ l: d.act || 'Buka', ic: 'arrow-right', fn: function () { window.todoGo(d.id, d.ref); } }];
+    } else if (k === 'sess') {
+      if (d.up === '1') items = [{ l: 'Ubah jadwal', ic: 'calendar-clock', fn: function () { window.openRescheduleModal(d.id); } }, { l: 'Tambah ke kalender', ic: 'calendar-plus', fn: function () { window.openAddToCalendar([d.id]); } }];
+      items.push({ l: 'Buka jadwal', ic: 'calendar-days', fn: function () { window.navigate('calendar'); } });
+    } else if (k === 'food') {
+      items = [{ l: 'Tambah makanan di waktu ini', ic: 'plus', fn: function () { window.openNutAdd(d.waktu); } }, { sep: true }, { l: 'Hapus ' + (d.nama || ''), ic: 'trash-2', danger: true, fn: function () { window.nutDelLog(d.id); } }];
+    }
+    if (!items.length) return;
+    e.preventDefault();
+    window.deskMenu(items, e.clientX, e.clientY, { back: el, label: 'Menu' });
+  });
 })();
 </script>
   <script>

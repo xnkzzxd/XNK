@@ -395,7 +395,7 @@
   function memberSessionRow(s) {
     const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000);
     const done = isDone(s), upcoming = !done && d >= new Date();
-    return '<div class="list-item">' +
+    return '<div class="list-item" data-ctx="sess" data-id="' + h(s.id) + '" data-up="' + (upcoming ? 1 : 0) + '">' +
       '<div style="width:52px;text-align:center;flex-shrink:0"><p class="eyebrow">' + DOW_SHORT[d.getDay()] + '</p><p class="num" style="font-size:var(--fs-2xl);font-weight:800;line-height:1.1">' + d.getDate() + '</p></div>' +
       '<div class="grow"><p class="li-title num">' + fmtTime(d) + ' – ' + fmtTime(end) + '</p>' + (window.isSoloCoach() ? '' : '<p class="li-sub truncate">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Menunggu coach') + '</p>') +
       (done && s.dilatih ? '<p class="li-sub" style="white-space:normal">' + icon('dumbbell', 'style="width:12px;height:12px;vertical-align:-2px"') + ' ' + h(s.dilatih) + '</p>' : '') +

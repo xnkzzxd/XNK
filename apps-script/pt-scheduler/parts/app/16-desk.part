@@ -47,5 +47,127 @@
   }
   const renderPortalXDesk = window.renderPortalX;
   window.renderPortalX = function () { renderPortalXDesk.apply(this, arguments); if (deskIs()) { const sub = $('page-sub'); if (sub) sub.textContent = deskSub(window.currentView); const lv = $('side-me-lv'), l = window.myX && window.myX.level; if (lv) lv.textContent = l ? 'Level ' + l.level + ' · ' + l.gelar : ''; } };
+
+  // ── Menu ala Mac (klik kanan, menu ＋) dan popover (lonceng). Satu yang terbuka sekaligus. ──
+  let deskLayer = null;
+  function deskClose() {
+    if (!deskLayer) return;
+    const el = deskLayer.el, back = deskLayer.back; deskLayer = null;
+    el.remove(); document.removeEventListener('keydown', deskKey, true);
+    if (back && back.focus) try { back.focus({ preventScroll: true }); } catch (e) {}
+  }
+  window.deskClose = deskClose;
+  function deskKey(e) {
+    if (!deskLayer) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); deskClose(); return; }
+    if (deskLayer.kind !== 'menu' || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+    e.preventDefault();
+    const btns = Array.from(deskLayer.el.querySelectorAll('button')), i = btns.indexOf(document.activeElement);
+    const n = e.key === 'ArrowDown' ? (i + 1) % btns.length : (i - 1 + btns.length) % btns.length;
+    if (btns[n]) btns[n].focus();
+  }
+  function deskPlace(el, x, y, alignRight) {
+    document.body.appendChild(el);
+    const r = el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
+    let left = alignRight ? x - r.width : x, top = y;
+    if (left + r.width > W - 8) left = W - 8 - r.width;
+    if (top + r.height > H - 8) top = Math.max(8, y - r.height);
+    el.style.left = Math.max(8, left) + 'px'; el.style.top = Math.max(8, top) + 'px';
+  }
+  function deskOpenLayer(el, kind, back) {
+    deskClose();
+    deskLayer = { el: el, kind: kind, back: back || document.activeElement };
+    document.addEventListener('keydown', deskKey, true);
+  }
+  // items: [{ l, ic, fn, danger, sep, hint }]
+  window.deskMenu = function (items, x, y, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'desk-menu'; el.setAttribute('role', 'menu'); if (opts.label) el.setAttribute('aria-label', opts.label);
+    const acts = [];
+    el.innerHTML = items.map(function (it) {
+      if (it.sep) return '<div class="desk-sep" role="separator"></div>';
+      acts.push(it.fn);
+      return '<button type="button" role="menuitem" class="desk-mi' + (it.danger ? ' danger' : '') + '" data-i="' + (acts.length - 1) + '">' + (it.ic ? icon(it.ic) : '<span class="desk-mi-ic"></span>') + '<span class="grow">' + h(it.l) + '</span>' + (it.hint ? '<small>' + h(it.hint) + '</small>' : '') + '</button>';
+    }).join('');
+    el.addEventListener('click', function (e) { const b = e.target.closest('button[data-i]'); if (!b) return; const fn = acts[Number(b.getAttribute('data-i'))]; deskClose(); if (fn) fn(); });
+    deskOpenLayer(el, 'menu', opts.back);
+    deskPlace(el, x, y, !!opts.alignRight);
+    paintIcons();
+    const first = el.querySelector('button'); if (first) try { first.focus({ preventScroll: true }); } catch (e) {}
+    return el;
+  };
+  window.deskPop = function (anchor, html, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'desk-pop'; el.setAttribute('role', 'dialog'); if (opts.label) el.setAttribute('aria-label', opts.label); if (opts.id) el.id = opts.id;
+    el.innerHTML = html;
+    deskOpenLayer(el, 'pop', anchor);
+    const r = anchor.getBoundingClientRect();
+    deskPlace(el, r.right, r.bottom + 8, true);
+    paintIcons();
+    return el;
+  };
+  let deskJust = null;   // tombol yang baru saja menutup lapisannya sendiri (klik kedua = tutup, bukan buka lagi)
+  document.addEventListener('mousedown', function (e) {
+    if (!deskLayer || deskLayer.el.contains(e.target)) return;
+    // Tombol pembuka bisa digambar ulang (lonceng setelah tanda baru dihapus): cocokkan juga lewat id-nya.
+    const b = deskLayer.back, keep = !!b && ((b.contains && b.contains(e.target)) || (b.id && !!e.target.closest('#' + b.id)));
+    deskClose(); deskJust = keep ? (b.id || b) : null; if (keep) e.preventDefault();
+  }, true);
+  function deskToggled(el) { const t = deskJust && (deskJust === el || deskJust === el.id); deskJust = null; return !!t; }
+  window.addEventListener('resize', deskClose);
+  document.addEventListener('scroll', function () { if (deskLayer && deskLayer.kind === 'menu') deskClose(); }, true);
+
+  // Tombol ＋ di bilah judul: menu tarik-turun empat aksi (HP tetap sheet).
+  const clientPlusBase = window.clientPlus;
+  window.clientPlus = function (el) {
+    if (!(deskIs() && el && el.getBoundingClientRect)) { clientPlusBase(); return; }
+    if (deskToggled(el)) return;
+    const r = el.getBoundingClientRect(), q = k => function () { window.clientQuick(k); };
+    const items = [{ l: 'Booking sesi', ic: 'calendar-plus', fn: q('booking') }, { l: 'Mulai latihan', ic: 'dumbbell', fn: q('workout') }];
+    if (nutTabOn()) items.push({ l: 'Catat makan', ic: 'utensils', fn: q('food') });
+    items.push({ l: 'Catat ukuran', ic: 'scale', fn: q('measure') }, { sep: true }, { l: 'Catat latihan yang lewat', ic: 'calendar-check', fn: q('past') });
+    window.deskMenu(items, r.right, r.bottom + 6, { alignRight: true, back: el, label: 'Tambah' });
+  };
+  // Lonceng: popover di bawah tombolnya (HP tetap sheet).
+  const openNotifBase = window.openNotif;
+  window.openNotif = function () {
+    const bell = $('nav-bell-btn');
+    if (!(deskIs() && bell)) { openNotifBase(); return; }
+    if (deskToggled(bell)) return;
+    window.deskPop(bell, '<div class="desk-pop-head"><b>Pemberitahuan</b></div><div class="desk-pop-body" id="desk-notif">' + notifHtml() + '</div>', { label: 'Pemberitahuan', id: 'desk-notif-pop' });
+    const n = X().notif;
+    if (!n || !n.count) return;
+    n.count = 0; n.items.forEach(function (x) { x.fresh = false; });
+    renderTopbarActions(); savePortalCache();
+    memberCall('markNotifSeen').catch(function () {});
+  };
+  const notifGoBase = window.notifGo;
+  window.notifGo = function (id) { deskClose(); notifGoBase(id); };
+
+  // Klik kanan pada rutinitas, tugas, sesi, makanan (mouse; layar sentuh tetap memakai tombol ⋯).
+  document.addEventListener('contextmenu', function (e) {
+    if (!deskIs()) return;
+    const el = e.target.closest('[data-ctx]');
+    if (!el || e.target.closest('input, textarea, select')) return;
+    const k = el.getAttribute('data-ctx'), d = el.dataset;
+    let items = [];
+    if (k === 'rt') {
+      items = [{ l: 'Mulai', ic: 'play', fn: function () { window.workoutOpenClient(d.hari); } }, { l: 'Lihat detail', ic: 'eye', fn: function () { window.rtOpen(d.src, d.hari); } }];
+      if (d.src === 'own') items.push({ l: 'Ubah', ic: 'pencil', fn: function () { window.rtEdit(d.hari); } }, { l: 'Duplikat', ic: 'copy', fn: function () { window.rtDup(d.hari); } }, { sep: true }, { l: 'Hapus', ic: 'trash-2', danger: true, fn: function () { window.rtDelete(d.hari); } });
+      else items.push({ l: 'Salin ke rutinitas saya', ic: 'copy', fn: function () { window.rtCopy('', d.hari); } });
+    } else if (k === 'todo') {
+      items = [{ l: d.act || 'Buka', ic: 'arrow-right', fn: function () { window.todoGo(d.id, d.ref); } }];
+    } else if (k === 'sess') {
+      if (d.up === '1') items = [{ l: 'Ubah jadwal', ic: 'calendar-clock', fn: function () { window.openRescheduleModal(d.id); } }, { l: 'Tambah ke kalender', ic: 'calendar-plus', fn: function () { window.openAddToCalendar([d.id]); } }];
+      items.push({ l: 'Buka jadwal', ic: 'calendar-days', fn: function () { window.navigate('calendar'); } });
+    } else if (k === 'food') {
+      items = [{ l: 'Tambah makanan di waktu ini', ic: 'plus', fn: function () { window.openNutAdd(d.waktu); } }, { sep: true }, { l: 'Hapus ' + (d.nama || ''), ic: 'trash-2', danger: true, fn: function () { window.nutDelLog(d.id); } }];
+    }
+    if (!items.length) return;
+    e.preventDefault();
+    window.deskMenu(items, e.clientX, e.clientY, { back: el, label: 'Menu' });
+  });
 })();
 </script>

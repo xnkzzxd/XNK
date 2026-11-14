@@ -89,4 +89,33 @@ html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.p
   html.desk .main .btn-lg { min-height: 40px; }
   html.desk .main .btn-sm { min-height: 30px; font-size: 0.85rem; }
 }
+
+/* Menu ala Mac (klik kanan, ＋) dan popover (lonceng) */
+.desk-menu, .desk-pop { position: fixed; z-index: 200; background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: saturate(1.8) blur(24px); -webkit-backdrop-filter: saturate(1.8) blur(24px); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.22), 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); font-size: 0.875rem; animation: deskIn .12s var(--ease-out); }
+@keyframes deskIn { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+.desk-menu { min-width: 220px; max-width: 320px; padding: 5px; display: flex; flex-direction: column; }
+.desk-mi { display: flex; align-items: center; gap: 9px; min-height: 30px; padding: 0 10px; border-radius: 6px; text-align: left; color: inherit; font: inherit; }
+.desk-mi svg, .desk-mi-ic { width: 15px; height: 15px; flex: none; color: var(--fg-muted); }
+.desk-mi small { color: var(--fg-muted); font-size: 0.75rem; }
+.desk-mi:hover, .desk-mi:focus-visible { background: var(--accent); color: var(--on-accent); outline: none; }
+.desk-mi:hover svg, .desk-mi:focus-visible svg, .desk-mi:hover small, .desk-mi:focus-visible small { color: inherit; }
+.desk-mi.danger { color: var(--danger); }
+.desk-mi.danger:hover, .desk-mi.danger:focus-visible { background: var(--danger); color: #fff; }
+.desk-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+@media (pointer: coarse) { .desk-mi { min-height: 44px; } }
+.desk-pop { width: min(380px, calc(100vw - 16px)); max-height: min(560px, calc(100vh - 80px)); display: flex; flex-direction: column; overflow: hidden; }
+.desk-pop-head { padding: 12px 14px 6px; font-size: 0.9rem; }
+.desk-pop-body { overflow: auto; padding: 0 8px 10px; }
+.desk-pop .notif-row { border: 0; border-radius: 8px; padding: 8px 10px; min-height: 0; background: transparent; }
+.desk-pop .notif-row + .notif-row { border-top: 1px solid var(--border); border-radius: 0; }
+.desk-pop .nf-act { min-height: 28px; padding: 0 10px; font-size: 0.8rem; border-radius: 7px; }
+.desk-pop .px-eyebrow { margin: 6px 10px 2px; }
+
+/* Sorot saat kursor di atas baris (mouse) */
+@media (hover: hover) {
+  html.desk .todo-row:not(.done):hover, html.desk .list-item:hover, html.desk .meal-row:hover, html.desk .notif-row:hover, html.desk .pc-row:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+  html.desk .rt-card { transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease); }
+  html.desk .rt-card:hover { border-color: color-mix(in srgb, var(--fg) 30%, transparent); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  html.desk .px-tile:hover { border-color: color-mix(in srgb, var(--fg) 30%, transparent); }
+}
 </style>
