@@ -729,7 +729,7 @@
   function clientHeroHtml(counts) {
     const g = window.clientSignals, ok = g && !g.error, n = counts.perhatian;
     return insightHeroHtml({ slim: true, eyebrow: 'Ringkasan klien',
-      text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatianmu' : 'Semua klien aman hari ini',
+      text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatian' : 'Semua klien aman hari ini',
       stats: [{ v: String(counts.all), l: 'Klien' }, { v: ok ? String(g.totals.sesiMinggu) : '–', l: 'Sesi minggu ini' }, { v: ok ? g.totals.konsisten + '%' : '–', l: 'Aktif 14 hari' }],
       actions: ok && n ? '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.setClientFilter(\'perhatian\')">' + icon('eye') + 'Lihat siapa</button>' : '' });
   }
@@ -742,17 +742,14 @@
     loadClientPrefs();
     const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
     window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
-    const tiles = [['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian']];
     const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian'], ['archive', 'Riwayat paket']];
     const sorts = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
     const html = '<div class="page-head"><div><h2 class="page-title">Klien</h2><p class="page-sub">' + counts.all + ' klien · ' + (counts.active + counts.low) + ' punya sisa sesi</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button></div>' +
       '<div class="client-top" id="client-top"><div id="client-hero">' + clientHeroHtml(counts) + '</div>' +
-      '<div class="stat-strip client-tiles">' + tiles.map(function (k) {
-        return '<button type="button" class="stat-tile' + (ui.clientFilter === k[0] ? ' active' : '') + '" data-filter="' + k[0] + '" aria-pressed="' + (ui.clientFilter === k[0]) + '" onclick="window.setClientFilter(\'' + k[0] + '\')"><b class="num">' + counts[k[0]] + '</b><span>' + k[1] + '</span></button>';
-      }).join('') + '</div></div>' +
+      '</div>' +
       '<div class="stack" style="gap:12px;margin-bottom:8px">' +
-        '<div class="cl-tools"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari nama atau nomor…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
+        '<div class="cl-tools"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari klien…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
         '<select class="select" id="sort-client" aria-label="Urutkan klien" onchange="window.setClientSort(this.value)">' + sorts.map(o => '<option value="' + o[0] + '"' + (ui.clientSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>' +
         '<div class="seg only-desktop" id="client-view-seg" role="group" aria-label="Tampilan"><button type="button" data-v="card" class="' + (ui.clientView === 'card' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'card') + '" onclick="window.setClientView(\'card\')">Kartu</button><button type="button" data-v="list" class="' + (ui.clientView === 'list' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'list') + '" onclick="window.setClientView(\'list\')">Daftar</button></div></div>' +
         '<div class="chips" role="tablist" aria-label="Filter klien">' + chips.map(c => '<button type="button" role="tab" class="chip' + (ui.clientFilter === c[0] ? ' active' : '') + '" data-filter="' + c[0] + '" aria-selected="' + (ui.clientFilter === c[0]) + '" onclick="window.setClientFilter(\'' + c[0] + '\')">' + c[1] + ' <span class="chip-count num">' + counts[c[0]] + '</span></button>').join('') + '</div>' +

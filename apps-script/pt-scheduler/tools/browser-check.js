@@ -339,6 +339,14 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.__xss)) === undefined, 'client name with <img onerror> is not executed');
     check((await page.textContent('#client-list')).includes('<img src=x'), 'client name is shown as plain text');
+    // S7: tanpa empat ubin, ringkasan hitam satu baris, cari + urutkan satu baris, klien pertama di layar pertama.
+    const s7 = await page.evaluate(() => {
+      const hero = document.querySelector('#client-hero .insight-hero'), srch = document.querySelector('.cl-tools .input-search'), sort = document.getElementById('sort-client'), first = document.querySelector('#client-list .client-card');
+      const hb = hero.getBoundingClientRect(), a = srch.getBoundingClientRect(), b = sort.getBoundingClientRect(), f = first.getBoundingClientRect();
+      const bar = document.getElementById('tabbar').getBoundingClientRect();
+      return { tiles: document.querySelectorAll('#view-clients .stat-tile, #view-clients .client-tiles').length, heroH: Math.round(hb.height), oneRow: Math.abs(a.top - b.top) < 4, firstTop: Math.round(f.top), firstBottom: Math.round(f.bottom), barTop: Math.round(bar.top) };
+    });
+    check(s7.tiles === 0 && s7.heroH <= 80 && s7.oneRow && s7.firstBottom <= s7.barTop, 'Klien (phone): no summary tiles, one-line black summary, search and sort in one row, first client fully on the first screen ' + JSON.stringify(s7));
     const phoneList = await page.evaluate(() => {
       const l = document.querySelector('#client-list > .list'), c = document.querySelector('#client-list .client-card');
       return { list: getComputedStyle(l).display + '/' + getComputedStyle(l).flexDirection, card: getComputedStyle(c).display, meter: getComputedStyle(c.querySelector('.cc-meter')).maxWidth,
@@ -638,9 +646,9 @@ async function contrastReport(page) {
     await page.fill('#search-client', '');
     await page.evaluate(() => window.filterClients());
     await page.evaluate(() => window.setClientFilter('low'));
-    const kLow = await page.locator('#view-clients .stat-tile.active[data-filter="low"]').count();
+    const kLow = await page.locator('#view-clients .chip.active[data-filter="low"]').count();
     await page.evaluate(() => window.setClientFilter('all'));
-    check(kLow === 1 && (await page.locator('#view-clients .stat-tile.active').count()) === 0 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the summary tiles and chips follow the chosen filter');
+    check(kLow === 1 && (await page.locator('#view-clients .chip.active').count()) === 1 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the filter chips follow the chosen filter');
 
     // Closing returns to the grid; a profile opened from another page keeps the normal 420 px panel.
     await page.click('.detail-head .icon-btn[aria-label="Tutup detail"]');
@@ -966,7 +974,7 @@ async function contrastReport(page) {
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.waitForTimeout(400);
-    check((await page.locator('#view-clients .client-tiles .stat-tile').count()) === 4 && await visible(page, '#client-hero .insight-hero'), 'Klien list: black summary card and four tiles that also filter');
+    check((await page.locator('#view-clients .stat-tile').count()) === 0 && await visible(page, '#client-hero .insight-hero'), 'Klien list: one black summary card, no duplicate count tiles (S7)');
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
     await page.evaluate(() => { document.querySelectorAll('#detail-body details.fold').forEach(f => { f.open = true; }); });

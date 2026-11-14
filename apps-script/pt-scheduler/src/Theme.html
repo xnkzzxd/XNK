@@ -2011,9 +2011,19 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 .stat-tile span { display: block; overflow-wrap: anywhere; }
 .stat-tile.active { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
 @media (max-width: 420px) { .client-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.cl-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.cl-tools .input-search { flex: 1 1 220px; min-width: 0; }
-.cl-tools .select { width: auto; min-height: 44px; }
+.cl-tools { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+.cl-tools .input-search { flex: 1 1 0; min-width: 0; }
+.cl-tools .select { width: auto; min-height: 44px; flex: 0 1 auto; max-width: 42%; }
+.cl-tools .seg { flex: none; }
+/* S7: ringkasan klien satu baris di HP (angka di kalimat + tombol "Lihat siapa"); angka lengkap tetap di desktop. */
+@media (max-width: 767px) {
+  .client-top { margin-bottom: 12px; }
+  #client-hero .insight-hero.slim { flex-wrap: nowrap; gap: 12px; padding: 12px 12px 12px 16px; }
+  #client-hero .insight-hero.slim .ih-eyebrow, #client-hero .insight-hero.slim .ih-stats { display: none; }
+  #client-hero .insight-hero.slim .ih-main { flex: 1 1 auto; }
+  #client-hero .insight-hero.slim .ih-actions { flex: none; }
+  #client-hero .insight-hero.slim .ih-actions .btn { width: auto; }
+}
 .cc-extra { display: grid; gap: 6px; margin-top: 8px; }
 .cc-extra:empty { display: none; }
 .cc-flags { display: flex; flex-wrap: wrap; gap: 6px; }
