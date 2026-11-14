@@ -2702,6 +2702,16 @@ async function contrastReport(page) {
         await page.waitForTimeout(150);
         check((await page.locator('.desk-menu').count()) === 0, 'desk: clicking outside closes the menu');
       }
+      await page.evaluate(() => window.navigate('calendar'));
+      await page.waitForTimeout(500);
+      if (await page.locator('#pub-upcoming-list .list-item').count()) {
+        await page.click('#pub-upcoming-list .list-item .li-title');
+        await page.waitForTimeout(500);
+        check(await page.evaluate(() => document.getElementById('detail-panel').classList.contains('open') && document.getElementById('detail-title').textContent === 'Sesi latihan' && !!document.querySelector('#pub-upcoming-list .list-item.desk-sel')), 'desk: clicking a session opens it in the right-hand panel and marks the row');
+        await page.evaluate(() => window.closeDetail());
+        await page.waitForTimeout(500);
+        check(!(await page.locator('.desk-sel').count()), 'desk: closing the panel clears the selection');
+      }
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(300);
       check(await page.evaluate(() => !document.documentElement.classList.contains('desk') && getComputedStyle(document.getElementById('tabbar')).display !== 'none'), 'desk: narrowing the window to phone width switches back to the phone layout');

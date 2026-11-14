@@ -296,7 +296,7 @@
     if (!m || !m.length) return '';
     const show = momAll ? m : m.slice(0, 4);
     return '<div class="card" id="pub-moments-card"><div class="px-sec" style="margin-bottom:10px"><h3>Momen</h3><span>' + m.length + ' terbaru</span></div><ol class="mom">' + show.map(x =>
-      '<li><span class="mom-ic">' + icon(MOMENT_IC[x.kind] || 'star') + '</span><span class="grow"><b>' + h(x.title) + '</b><span class="li-sub">' + h(pgLabel(x.tanggal)) + '</span></span></li>').join('') + '</ol>' +
+      '<li data-mom="' + m.indexOf(x) + '"><span class="mom-ic">' + icon(MOMENT_IC[x.kind] || 'star') + '</span><span class="grow"><b>' + h(x.title) + '</b><span class="li-sub">' + h(pgLabel(x.tanggal)) + '</span></span></li>').join('') + '</ol>' +
       (m.length > 4 ? '<button type="button" class="btn btn-ghost btn-block" style="margin-top:12px" id="mom-more" onclick="window.momToggle()">' + (momAll ? 'Ringkas' : 'Lihat semua (' + m.length + ')') + '</button>' : '') + '</div>';
   }
   let momAll = false;

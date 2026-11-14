@@ -8842,8 +8842,10 @@
       '<div id="rt-chart-slot">' + rtChartHtml(hari) + '</div>' +
       '<div class="rt-sec"><h3 class="section-title">Gerakan</h3>' + (src === 'own' ? '<button type="button" class="btn btn-ghost btn-sm" data-hari="' + h(hari) + '" onclick="window.rtEdit(this.dataset.hari)">' + icon('pencil') + 'Edit rutinitas</button>' : '') + '</div>' +
       '<div class="stack" style="gap:12px">' + d.items.map(rtItemHtml).join('') + '</div>';
-    wlSheet(hari, body);
-    if (!exLib) exEnsure().then(function () { if (!$('modal-wl').classList.contains('hide') && $('wls-title').textContent === hari) window.rtOpen(src, hari); }).catch(function () {});
+    const dk = 'rt:' + src + ':' + hari;   // Fase Y: di desktop detail terbuka di panel kanan
+    if (window.deskIs && window.deskIs()) window.deskDetail(dk, hari, body, '<button type="button" class="icon-btn plain" aria-label="Menu rutinitas" data-src="' + src + '" data-hari="' + h(hari) + '" onclick="window.rtMenu(this.dataset.src,this.dataset.hari)">' + icon('more-horizontal') + '</button>');
+    else wlSheet(hari, body);
+    if (!exLib) exEnsure().then(function () { if ((!$('modal-wl').classList.contains('hide') && $('wls-title').textContent === hari) || ui.detail === dk) window.rtOpen(src, hari); }).catch(function () {});
   };
   window.rtMenu = function (src, hari) {
     const btn = (ic, label, sub, fn, extra) => '<button type="button" class="wl-menu-btn' + (extra || '') + '" data-src="' + src + '" data-hari="' + h(hari) + '" onclick="' + fn + '">' + icon(ic) + '<span><b>' + label + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span></button>';
@@ -11240,7 +11242,7 @@
     if (!m || !m.length) return '';
     const show = momAll ? m : m.slice(0, 4);
     return '<div class="card" id="pub-moments-card"><div class="px-sec" style="margin-bottom:10px"><h3>Momen</h3><span>' + m.length + ' terbaru</span></div><ol class="mom">' + show.map(x =>
-      '<li><span class="mom-ic">' + icon(MOMENT_IC[x.kind] || 'star') + '</span><span class="grow"><b>' + h(x.title) + '</b><span class="li-sub">' + h(pgLabel(x.tanggal)) + '</span></span></li>').join('') + '</ol>' +
+      '<li data-mom="' + m.indexOf(x) + '"><span class="mom-ic">' + icon(MOMENT_IC[x.kind] || 'star') + '</span><span class="grow"><b>' + h(x.title) + '</b><span class="li-sub">' + h(pgLabel(x.tanggal)) + '</span></span></li>').join('') + '</ol>' +
       (m.length > 4 ? '<button type="button" class="btn btn-ghost btn-block" style="margin-top:12px" id="mom-more" onclick="window.momToggle()">' + (momAll ? 'Ringkas' : 'Lihat semua (' + m.length + ')') + '</button>' : '') + '</div>';
   }
   let momAll = false;
@@ -11804,5 +11806,54 @@
     e.preventDefault();
     window.deskMenu(items, e.clientX, e.clientY, { back: el, label: 'Menu' });
   });
+
+  // ── Panel kanan (inspector): detail yang dipilih tanpa meninggalkan halaman. Memakai panel openDetail yang sudah ada. ──
+  let deskSelEl = null;
+  function deskMark(el) { if (deskSelEl) deskSelEl.classList.remove('desk-sel'); deskSelEl = el || null; if (el) el.classList.add('desk-sel'); }
+  window.deskDetail = function (key, title, body, actions, el) {
+    openDetail(key, title, actions || '', body);
+    if (el !== undefined) deskMark(el);
+    paintIcons();
+  };
+  const closeDetailDesk = window.closeDetail;
+  window.closeDetail = function () { deskMark(null); return closeDetailDesk.apply(this, arguments); };
+  const kv = (l, v) => '<div class="desk-kv"><span>' + h(l) + '</span><b>' + v + '</b></div>';
+  function deskSessOpen(id, el) {
+    const s = (window.schedules || []).find(x => String(x.id) === String(id)); if (!s) return;
+    const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000), done = isDone(s), up = !done && d >= new Date();
+    let body = '<div class="stack" style="gap:16px"><div><p class="desk-big">' + h(fmtDate(d)) + '</p><p class="li-title">' + fmtTime(d) + ' – ' + fmtTime(end) + (s.coachName ? ' · ' + h(s.coachName) : '') + '</p>' +
+      '<p class="li-sub">' + (done ? 'Selesai' : up ? 'Terjadwal · ' + h(countdownText(d)) : 'Terlewat') + '</p></div>';
+    if (up) body += '<div class="desk-2btn"><button type="button" class="btn btn-primary" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah jadwal</button><button type="button" class="btn btn-secondary" onclick="window.openAddToCalendar([\'' + h(s.id) + '\'])">' + icon('calendar-plus') + 'Kalender</button></div>';
+    if (s.dilatih || s.fokus) body += '<div class="desk-box">' + (s.dilatih ? kv('Dilatih', h(s.dilatih)) : '') + (s.fokus ? kv('Fokus berikutnya', h(s.fokus)) : '') + '</div>';
+    const me = window.publicLoggedMember, next = (window.schedules || []).filter(x => me && String(x.memberId) === String(me.id) && !isDone(x) && new Date(x.start) > new Date() && String(x.id) !== String(s.id)).sort(byStart).slice(0, 3);
+    if (next.length) body += '<div class="desk-box"><p class="px-eyebrow">Sesi lain</p>' + next.map(x => kv(fmtDate(new Date(x.start), { weekday: 'long', day: 'numeric', month: 'short' }), fmtTime(new Date(x.start)))).join('') + '</div>';
+    window.deskDetail('sess:' + s.id, 'Sesi latihan', body + '</div>', '', el);
+  }
+  function deskFoodOpen(id, el) {
+    const n = window.myNutrition, x = n && n.log && (n.log.items || []).find(i => String(i.id) === String(id)); if (!x) return;
+    const N = v => v == null || v === '' ? '-' : String(Math.round(v * 10) / 10).replace('.', ',');
+    const body = '<div class="stack" style="gap:16px"><div><p class="desk-big">' + h(x.nama) + '</p><p class="li-sub">' + h(x.porsi || '') + '</p></div>' +
+      '<div class="desk-box">' + kv('Kalori', N(x.kal) + ' kkal') + kv('Protein', N(x.p) + ' g') + kv('Karbohidrat', N(x.k) + ' g') + kv('Lemak', N(x.l) + ' g') + '</div>' +
+      '<div class="desk-2btn"><button type="button" class="btn btn-secondary" onclick="window.closeDetail();window.openNutAdd(\'' + h(x.waktu || '') + '\')">' + icon('plus') + 'Tambah lagi</button><button type="button" class="btn btn-danger" onclick="window.closeDetail();window.nutDelLog(\'' + h(x.id) + '\')">' + icon('trash-2') + 'Hapus</button></div></div>';
+    window.deskDetail('food:' + x.id, 'Makanan', body, '', el);
+  }
+  function deskMomOpen(i, el) {
+    const m = (X().moments || [])[Number(i)]; if (!m) return;
+    const what = { pr: 'Rekor baru dari catatan latihan.', sesi: 'Tonggak jumlah sesi bersama coach.', ukur: 'Perubahan ukuran tubuh sejak catatan pertama.' }[m.kind] || '';
+    const body = '<div class="stack" style="gap:16px"><div><p class="desk-big">' + h(m.title) + '</p><p class="li-sub">' + h(fmtDate(new Date(m.tanggal + 'T00:00:00'))) + '</p></div>' + (what ? '<p>' + h(what) + '</p>' : '') +
+      (window.shareOn !== false ? '<button type="button" class="btn btn-primary" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Buat kartu bagikan</button>' : '') + '</div>';
+    window.deskDetail('mom:' + i, 'Momen', body, '', el);
+  }
+  document.addEventListener('click', function (e) {
+    if (!deskIs() || e.target.closest('button, a, input, select, textarea')) return;
+    const ses = e.target.closest('.list-item[data-ctx="sess"]'); if (ses) { deskSessOpen(ses.dataset.id, ses); return; }
+    const fd = e.target.closest('.meal-row[data-ctx="food"]'); if (fd) { deskFoodOpen(fd.dataset.id, fd); return; }
+    const mo = e.target.closest('#pub-moments li[data-mom]'); if (mo) { deskMomOpen(mo.dataset.mom, mo); return; }
+  });
+  const rtOpenDesk = window.rtOpen;
+  window.rtOpen = function (src, hari) {
+    rtOpenDesk(src, hari);
+    if (deskIs()) { const card = Array.from(document.querySelectorAll('.rt-card[data-ctx="rt"]')).find(c => c.dataset.src === src && c.dataset.hari === hari); deskMark(card || null); }
+  };
 })();
 </script>

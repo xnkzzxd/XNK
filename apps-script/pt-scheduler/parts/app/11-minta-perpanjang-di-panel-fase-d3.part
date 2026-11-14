@@ -684,8 +684,10 @@
       '<div id="rt-chart-slot">' + rtChartHtml(hari) + '</div>' +
       '<div class="rt-sec"><h3 class="section-title">Gerakan</h3>' + (src === 'own' ? '<button type="button" class="btn btn-ghost btn-sm" data-hari="' + h(hari) + '" onclick="window.rtEdit(this.dataset.hari)">' + icon('pencil') + 'Edit rutinitas</button>' : '') + '</div>' +
       '<div class="stack" style="gap:12px">' + d.items.map(rtItemHtml).join('') + '</div>';
-    wlSheet(hari, body);
-    if (!exLib) exEnsure().then(function () { if (!$('modal-wl').classList.contains('hide') && $('wls-title').textContent === hari) window.rtOpen(src, hari); }).catch(function () {});
+    const dk = 'rt:' + src + ':' + hari;   // Fase Y: di desktop detail terbuka di panel kanan
+    if (window.deskIs && window.deskIs()) window.deskDetail(dk, hari, body, '<button type="button" class="icon-btn plain" aria-label="Menu rutinitas" data-src="' + src + '" data-hari="' + h(hari) + '" onclick="window.rtMenu(this.dataset.src,this.dataset.hari)">' + icon('more-horizontal') + '</button>');
+    else wlSheet(hari, body);
+    if (!exLib) exEnsure().then(function () { if ((!$('modal-wl').classList.contains('hide') && $('wls-title').textContent === hari) || ui.detail === dk) window.rtOpen(src, hari); }).catch(function () {});
   };
   window.rtMenu = function (src, hari) {
     const btn = (ic, label, sub, fn, extra) => '<button type="button" class="wl-menu-btn' + (extra || '') + '" data-src="' + src + '" data-hari="' + h(hari) + '" onclick="' + fn + '">' + icon(ic) + '<span><b>' + label + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span></button>';
