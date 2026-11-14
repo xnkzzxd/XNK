@@ -10,7 +10,7 @@ Baca [PRD.md](PRD.md) dan [Design.md](Design.md) dulu.
 - [x] T-1905 Booking tiga langkah (`#bk-screen`: coach bila 2+ → hari → jam → periksa), ubah jadwal lewat layar yang sama; kirim dan bentrok tetap lewat form lama
 - [ ] T-1906 Latihan: daftar rutinitas, Galeri, pencatat dirapikan, layar selesai
 - [x] T-1907 Makan: cincin + buku harian per waktu makan (saran menu bila kosong); layar tambah dengan saran menu "Catat semua" dan pilih banyak; Rencana makan (`public-plan`: target, menu, belanja, angka tubuh, aturan) di bawah Saya
-- [~] T-1908 Saya: kartu atlet + kisi (built); ubah profil, badge, statistik, Paket saya, Coach, Tampilan (belum)
+- [x] T-1908 Saya: kartu atlet + kisi; Ubah profil (`#sheet-profile-edit`, awalan `pc-`: aksen, gaya kartu, nama panggilan, motto, 3–4 statistik, ≤ 3 badge; pratinjau langsung, batal = kembali); Paket saya (`public-pack`: paket aktif, sisa, status perpanjangan, tagihan; Perpanjang memakai `#sheet-renew` yang ada, satu langkah); Coach = halaman `public-coaches` yang ada; Tampilan = lembar Pengaturan + warna aksen (`setAccent`)
 - [ ] T-1909 Progres: cerita perjalanan, isi ukuran "berat dulu", foto
 - [~] T-1910 Tiga kartu sambutan (built, panduan lama dihapus); masuk satu kolom dan daftar lima langkah (belum)
 - [ ] T-1911 Bagikan: editor sederhana, kartu Atlet / Naik level / Sebelum–sesudah, perayaan

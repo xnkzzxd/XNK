@@ -100,25 +100,26 @@
 
   // ── Tab Saya: kartu atlet + kisi ──
   function athleteCardHtml(opts) {
-    const me = window.publicLoggedMember, p = X().profile, lv = X().level;
-    const nama = (p && p.nama) || String(me.name || '').split(' ')[0];
-    let html = '<section class="card-ink athlete gfx-tipo st-' + h((p && p.gaya) || 'polos') + (opts && opts.hang ? ' px-hang' : '') + '" id="pub-athlete" aria-label="Kartu atlet" data-tipo="' + (lv ? 'LV' + lv.level : 'XNK') + '">';
+    const me = window.publicLoggedMember, pv = !!(opts && opts.profile), p = pv ? opts.profile : X().profile, lv = X().level;   // pv = pratinjau di lembar Ubah profil (tanpa id dan tombol)
+    const nama = (p && (pv ? p.panggilan : p.nama)) || String(me.name || '').split(' ')[0];
+    let html = '<section class="card-ink athlete gfx-tipo st-' + h((p && p.gaya) || 'polos') + (opts && opts.hang ? ' px-hang' : '') + '"' + (pv ? '' : ' id="pub-athlete"') + ' aria-label="Kartu atlet" data-tipo="' + (lv ? 'LV' + lv.level : 'XNK') + '">';
     if (lv) html += '<span class="ath-ribbon" aria-hidden="true">' + h(lv.gelar) + '</span>';
-    html += '<div class="ath-head"><button type="button" class="ath-photo" id="pub-avatar-btn" onclick="document.getElementById(\'pub-avatar-input\').click()" aria-label="Ganti foto profil">' +
-      (me.photo ? '<img src="' + h(me.photo) + '" alt="" id="pub-avatar-img">' : h(initials(me.name))) + '</button>' +
-      '<div style="min-width:0"><p class="ath-name" id="pub-dash-name">' + h(nama) + '</p>' + (p && p.motto ? '<p class="ath-motto">“' + h(p.motto) + '”</p>' : '<p class="ath-motto">' + h(me.packageName || 'Member XNK') + '</p>') + '</div></div>';
+    const face = me.photo ? '<img src="' + h(me.photo) + '" alt=""' + (pv ? '' : ' id="pub-avatar-img"') + '>' : h(initials(me.name));
+    html += '<div class="ath-head">' + (pv ? '<span class="ath-photo">' + face + '</span>'
+      : '<button type="button" class="ath-photo" id="pub-avatar-btn" onclick="document.getElementById(\'pub-avatar-input\').click()" aria-label="Ganti foto profil">' + face + '</button>') +
+      '<div style="min-width:0"><p class="ath-name"' + (pv ? '' : ' id="pub-dash-name"') + '>' + h(nama) + '</p>' + (p && p.motto ? '<p class="ath-motto">“' + h(p.motto) + '”</p>' : '<p class="ath-motto">' + h(me.packageName || 'Member XNK') + '</p>') + '</div></div>';
     if (lv) {
       html += '<div><div class="ath-lvl"><b>Level ' + lv.level + ' · ' + h(lv.gelar) + '</b><span>' + (lv.sampai ? lv.poin + ' / ' + lv.sampai + ' poin' : lv.poin + ' poin') + '</span></div>' +
         '<div class="px-bar" style="margin-top:8px" role="img" aria-label="' + lv.pct + ' persen menuju level berikutnya"><i style="width:' + lv.pct + '%"></i></div></div>';
     } else html += skel(2);
     if (p) {
-      const by = {}; p.statOptions.forEach(o => { by[o.k] = o; });
+      const by = {}; ((X().profile && X().profile.statOptions) || []).forEach(o => { by[o.k] = o; });
       html += '<div class="ath-stats">' + p.stat.filter(k => by[k]).map(k => '<div><b class="num">' + h(by[k].v) + '</b><span>' + h(by[k].l) + '</span></div>').join('') + '</div>';
       const badges = (pg.data && pg.data.badges) || [];
       const pick = p.badge.length ? p.badge : badges.filter(b => b.earned).slice(-3).map(b => b.id);
       if (pick.length) html += '<div class="ath-badges">' + pick.map(function (id) { const b = badges.find(x => x.id === id); return shieldSvg(id, b ? b.label : id, true); }).join('') + '</div>';
     }
-    if (!opts || opts.actions !== false) {
+    if (!pv) {
       html += '<div class="nx-actions" style="margin-top:0"><button type="button" class="btn btn-on-ink-ghost" id="pub-athlete-edit" onclick="(window.openProfileEdit || window.openMyProfile)()">' + icon('pencil') + 'Ubah</button>' +
         (window.shareOn !== false ? '<button type="button" class="btn btn-on-ink" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Bagikan</button>' : '') + '</div>';
     }
@@ -140,7 +141,7 @@
     if (nutTabOn()) tiles += tile(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh');
     if (window.shareOn !== false) tiles += tile(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres');
     tiles += tile(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span>');
-    tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Terang, gelap');
+    tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Tema dan warna aksen');
     tiles += tile('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto');
     setHTML(el, '<div class="px-wrap px-stack"><div class="px-band gfx-kontur"></div>' + athleteCardHtml({ hang: true }) +
       '<div class="px-tiles">' + tiles + '</div>' +
@@ -222,7 +223,55 @@
     if (!el || !window.publicLoggedMember) return;
     setHTML(el, '<div id="pub-plan-pane">' + makanInner('plan') + '</div>');
   };
-  window.renderPublicPack = function () { window.navigate('public-catalog'); };
+  // ── Paket saya: paket aktif, sisa sesi, status perpanjangan, tagihan ──
+  window.renderPublicPack = function () {
+    const el = $('view-public-pack'), me = window.publicLoggedMember;
+    if (!el || !me) return;
+    const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0, rem = Math.max(0, total - used);
+    const r = window.myRenewal, wait = r && r.status === 'menunggu';
+    const rp = n => 'Rp ' + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    let html = '<div class="px-band gfx-kontur"></div><section class="card-ink gfx-geo px-hang" id="pack-hero"><span class="ih-eyebrow">Paket aktif</span>' +
+      '<p style="font-size:var(--fs-2xl);font-weight:800;letter-spacing:-0.02em;margin-top:6px;max-width:calc(100% - 72px)">' + h(me.packageName || 'Belum ada paket') + '</p>';
+    if (total) html += '<p style="margin-top:14px;font-weight:700"><span class="num" style="font-size:var(--fs-3xl);font-weight:800">' + rem + '</span> dari ' + total + ' sesi tersisa</p>' +
+      '<div class="px-bar" style="margin-top:10px"><i style="display:block;height:100%;width:' + Math.round(used / total * 100) + '%"></i></div>' +
+      '<p class="li-sub" style="margin-top:8px">' + used + ' sesi sudah dijalani' + (rem <= 2 ? (rem ? ' · sisa sedikit' : ' · kuota habis') : '') + '</p>';
+    else if (me.packageName) html += '<p class="li-sub" style="margin-top:10px">Paket tanpa batas jumlah sesi.</p>';
+    html += '<div class="nx-actions">' + (wait ? '<button type="button" class="btn btn-on-ink" onclick="window.renewResend()">' + icon('message-circle') + 'Kirim ulang WA</button>'
+      : '<button type="button" class="btn btn-on-ink" id="pack-renew" onclick="window.openRenewSheet()">' + icon('repeat') + 'Perpanjang</button>') +
+      '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket lain</button></div></section>';
+    if (wait) html += '<div class="notice" id="pack-pending">' + icon('clock') + '<div class="grow"><p class="li-title">Menunggu konfirmasi</p><p class="li-sub">' + h(r.packageName || 'Paket') + ' sudah diminta. Coach mengaktifkannya setelah pembayaran diterima.</p></div></div>';
+    else if (r && r.status === 'disetujui' && r.decidedAt && Date.now() - new Date(r.decidedAt).getTime() < 3 * 86400000)
+      html += '<div class="notice" id="pack-done">' + icon('check-circle-2') + '<div class="grow"><p class="li-title">Paket sudah diperpanjang</p><p class="li-sub">' + h(r.packageName || '') + '</p></div></div>';
+    const bills = Array.isArray(window.myBills) ? window.myBills : [];
+    if (bills.length) html += '<div class="px-sec"><p class="px-eyebrow">Tagihan</p></div><div class="card stack" id="pack-bills">' + bills.slice(0, 6).map(function (b) {
+      return '<div class="row-between"><div style="min-width:0"><p class="li-title truncate">' + h(b.paket) + '</p><p class="li-sub">' + (b.lastPaid ? 'Terakhir bayar ' + h(b.lastPaid) : 'Belum ada pembayaran') + '</p></div>' +
+        '<div style="text-align:right"><b class="num">' + h(b.status === 'Lunas' ? 'Lunas' : rp(b.remaining)) + '</b>' + (b.status === 'Lunas' ? '' : '<p><span class="pill' + (b.status === 'DP' ? '' : ' dashed') + '">' + h(b.status) + '</span></p>') + '</div></div>';
+    }).join('') + '<p class="hint">Pembayaran dilakukan langsung ke coach.</p></div>';
+    html += '<div class="px-tiles"><button type="button" class="px-tile" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + '<b>Jadwal</b><span>Sesi mendatang dan selesai</span></button>' +
+      '<button type="button" class="px-tile" onclick="window.navigate(\'public-coaches\')">' + icon('dumbbell') + '<b>Coach</b><span>Profil, jam, chat</span></button></div>';
+    setHTML(el, '<div class="px-wrap px-stack">' + html + '</div>');
+    paintIcons();
+  };
+  // Warna aksen juga bisa diganti dari lembar Tampilan (tanpa membuka Ubah profil); langsung berlaku dan disimpan di akun.
+  function accentSwatches(cur, fn) {
+    return '<div class="sw-row" role="group" aria-label="Warna aksen">' + X().profile.options.aksen.map(a =>
+      '<button type="button" class="sw sw-' + a + (a === cur ? ' on' : '') + '" aria-pressed="' + (a === cur) + '" aria-label="' + ACCENT_L[a] + '" onclick="' + fn + '(\'' + a + '\')"></button>').join('') + '</div>';
+  }
+  function setAccentDraw() {
+    const wrap = $('set-accent-wrap'), p = X().profile, on = !!(p && window.publicLoggedMember && ui.mode === 'public');
+    if (!wrap) return;
+    wrap.classList.toggle('hide', !on);
+    if (on) setHTML('set-accent', accentSwatches(p.aksen, 'window.setAccent'));
+  }
+  window.setAccent = function (a) {
+    const p = X().profile;
+    if (!p || p.aksen === a) return;
+    const old = p.aksen, put = function (v) { p.aksen = v; window.applyAccent(); savePortalCache(); setAccentDraw(); window.renderPortalX(); if (window.currentView === 'public-more') renderPublicMore(); };
+    put(a);
+    optimistic({ q: { mode: 'member', fn: 'saveMyProfileCard', args: [{ panggilan: p.panggilan, motto: p.motto, aksen: a, gaya: p.gaya, stat: p.stat.slice(), badge: p.badge.slice() }] }, ok: 'Warna aksen disimpan.', label: 'Warna aksen', undo: function () { put(old); } });
+  };
+  const openSettingsBase = window.openSettings;
+  window.openSettings = function () { setAccentDraw(); return openSettingsBase.apply(this, arguments); };
 
   // Gambar ulang bagian Fase X yang sedang tampil (dipanggil tiap data portal berubah).
   window.renderPortalX = function () {
@@ -400,5 +449,86 @@
   const openRescheduleSheet = window.openRescheduleModal;
   window.openRescheduleModal = function (id, direct) { if (direct || !window.isPublicView) openRescheduleSheet(id); else window.bkOpen({ resched: id }); };
   document.addEventListener('keydown', function (e) { if (ui.bkOn && !ui.sheetOn && e.key === 'Escape') { e.preventDefault(); bkHide(); } });
+
+  // ── Ubah kartu atlet (Fase X): nama panggilan, motto, warna aksen, gaya kartu, statistik, badge unggulan ──
+  // Pilihan langsung terlihat di pratinjau dan di seluruh layar; ditutup tanpa menyimpan = kembali seperti semula.
+  const pcx = { on: false, d: null };
+  const ACCENT_L = { hitam: 'Hitam', biru: 'Biru', hijau: 'Hijau', toska: 'Toska', ungu: 'Ungu', pink: 'Pink', oranye: 'Oranye' };
+  const STYLE_L = { polos: 'Hitam polos', aksen: 'Warna aksen', garis: 'Garis' };
+  window.openProfileEdit = function () {
+    const p = X().profile;
+    if (!p) { window.showToast('Data profil belum termuat. Coba lagi sebentar.'); return; }
+    pcx.d = { panggilan: p.panggilan, motto: p.motto, aksen: p.aksen, gaya: p.gaya, stat: p.stat.slice(), badge: p.badge.slice() };
+    pcDraw();
+    openSheet('sheet-profile-edit');
+    pcx.on = true;
+  };
+  function pcRead() {
+    const a = $('pc-panggilan'), b = $('pc-motto');
+    if (a) pcx.d.panggilan = a.value.replace(/\s+/g, ' ').trim();
+    if (b) pcx.d.motto = b.value.replace(/\s+/g, ' ').trim();
+  }
+  function pcPreview() { const el = $('pc-preview'); if (el) { setHTML(el, athleteCardHtml({ profile: pcx.d })); paintIcons(); } }
+  window.pcType = function () { pcRead(); pcPreview(); };
+  function pcDraw() {
+    const d = pcx.d, p = X().profile, lim = p.options.limits;
+    const earned = ((pg.data && pg.data.badges) || []).filter(b => b.earned);
+    document.documentElement.setAttribute('data-accent', d.aksen);
+    if (d.aksen === 'hitam') document.documentElement.removeAttribute('data-accent');
+    const sec = (title, note, body) => '<div class="stack" style="gap:10px"><div class="px-sec"><p class="px-eyebrow">' + h(title) + '</p>' + (note ? '<span>' + h(note) + '</span>' : '') + '</div>' + body + '</div>';
+    let html = '<div id="pc-preview">' + athleteCardHtml({ profile: d }) + '</div>';
+    html += sec('Warna aksen', ACCENT_L[d.aksen], accentSwatches(d.aksen, 'window.pcAccent') +
+      '<p class="li-sub">Dipakai di tombol utama, cincin, batang kemajuan, tab aktif, dan kartu yang dibagikan.</p>');
+    html += sec('Gaya kartu', '', '<div class="pc-opts">' + p.options.gaya.map(g =>
+      '<button type="button" class="pc-opt' + (g === d.gaya ? ' on' : '') + '" aria-pressed="' + (g === d.gaya) + '" onclick="window.pcPick(\'gaya\',\'' + g + '\')">' + STYLE_L[g] + '</button>').join('') + '</div>');
+    html += '<div class="form-grid"><div class="field"><label class="label" for="pc-panggilan">Nama panggilan</label><input class="input" id="pc-panggilan" type="text" maxlength="' + lim.panggilan + '" autocomplete="nickname" value="' + h(d.panggilan) + '" placeholder="' + h(String(window.publicLoggedMember.name || '').split(' ')[0]) + '" oninput="window.pcType()"></div>' +
+      '<div class="field"><label class="label" for="pc-motto">Motto</label><input class="input" id="pc-motto" type="text" maxlength="' + lim.motto + '" value="' + h(d.motto) + '" placeholder="Satu kalimat penyemangat" oninput="window.pcType()"></div></div>';
+    html += sec('Statistik di kartu', d.stat.length + ' dari ' + lim.statMax, '<div class="pc-list">' + p.statOptions.map(function (o) {
+      const k = d.stat.indexOf(o.k), on = k !== -1;
+      return '<button type="button" class="pc-row' + (on ? ' on' : '') + '" aria-pressed="' + on + '" onclick="window.pcPick(\'stat\',\'' + o.k + '\')"><span class="pc-ord">' + (on ? k + 1 : '') + '</span><span class="grow">' + h(o.k === 'berat' ? 'Perubahan berat' : o.l) + '</span><b class="num">' + h(o.v) + '</b></button>';
+    }).join('') + '</div><p class="li-sub">Pilih ' + lim.statMin + ' atau ' + lim.statMax + '. Urutan mengikuti urutan memilih.</p>');
+    html += sec('Badge unggulan', d.badge.length + ' dari ' + lim.badgeMax, earned.length ? '<div class="pc-badges">' + earned.map(function (b) {
+      const on = d.badge.indexOf(b.id) !== -1;
+      return '<button type="button" class="pc-badge' + (on ? ' on' : '') + '" aria-pressed="' + on + '" onclick="window.pcPick(\'badge\',\'' + h(b.id) + '\')">' + shieldSvg(b.id, b.label, on) + '<span>' + h(b.label) + '</span></button>';
+    }).join('') + '</div>' : '<p class="li-sub">Belum ada badge. Badge pertama datang dari sesi dan latihan yang dicatat.</p>');
+    html += '<p class="err" id="pc-err" role="alert"></p><div class="nut-sel-bar"><button type="button" class="btn btn-primary btn-lg btn-block" id="pc-save" onclick="window.pcSave()">Simpan</button></div>';
+    setHTML('pc-body', html);
+    paintIcons();
+  }
+  window.pcAccent = function (a) { window.pcPick('aksen', a); };
+  window.pcPick = function (kind, v) {
+    pcRead();
+    const d = pcx.d, lim = X().profile.options.limits;
+    if (kind === 'aksen' || kind === 'gaya') d[kind] = v;
+    else {
+      const list = d[kind], i = list.indexOf(v), max = kind === 'stat' ? lim.statMax : lim.badgeMax;
+      if (i !== -1) list.splice(i, 1);
+      else if (list.length < max) list.push(v);
+      else { window.showToast(kind === 'stat' ? 'Paling banyak ' + max + ' statistik.' : 'Paling banyak ' + max + ' badge.'); return; }
+    }
+    const sc = $('pc-body'), top = sc ? sc.scrollTop : 0;
+    pcDraw();
+    if (sc) sc.scrollTop = top;
+  };
+  window.pcSave = function () {
+    pcRead();
+    const d = pcx.d, p = X().profile, me = window.publicLoggedMember, lim = p.options.limits;
+    const bad = t => /^[=+\-@]/.test(t);
+    if (d.stat.length < lim.statMin) { $('pc-err').textContent = 'Pilih ' + lim.statMin + ' atau ' + lim.statMax + ' statistik.'; return; }
+    if (bad(d.panggilan) || bad(d.motto)) { $('pc-err').textContent = 'Nama panggilan dan motto tidak boleh diawali tanda = + - atau @.'; return; }
+    const old = { panggilan: p.panggilan, motto: p.motto, aksen: p.aksen, gaya: p.gaya, stat: p.stat, badge: p.badge, nama: p.nama };
+    const put = function (v) { Object.assign(p, v); window.applyAccent(); savePortalCache(); window.renderPortalX(); if (window.currentView === 'public-more') renderPublicMore(); };
+    const send = { panggilan: d.panggilan, motto: d.motto, aksen: d.aksen, gaya: d.gaya, stat: d.stat.slice(), badge: d.badge.slice() };
+    pcx.on = false;
+    put(Object.assign({}, send, { nama: d.panggilan || String(me.name || '').split(' ')[0] }));
+    optimistic({ q: { mode: 'member', fn: 'saveMyProfileCard', args: [send] }, sheet: true, errEl: 'pc-err', ok: 'Profil disimpan.', label: 'Profil', undo: function () { put(old); pcx.on = true; } });
+  };
+  // Lembar ditutup tanpa menyimpan: warna aksen kembali ke yang tersimpan.
+  const closeModalBase = window.closeModal;
+  window.closeModal = function () {
+    const was = pcx.on;
+    closeModalBase.apply(this, arguments);
+    if (was && !ui.sheetOn) { pcx.on = false; window.applyAccent(); }
+  };
 })();
 </script>

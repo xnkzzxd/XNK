@@ -2580,7 +2580,24 @@ html.kb-open .bk-foot { display: none; }
 .nut-sel { flex: none; width: 44px; min-height: 44px; border-radius: 12px; border: 2px solid var(--border-strong); background: var(--surface); color: transparent; display: flex; align-items: center; justify-content: center; align-self: center; }
 .nut-sel svg.lucide { width: 18px; min-height: 18px; stroke-width: 3; }
 .nut-sel.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.nut-sel-bar { position: sticky; bottom: 0; padding: 10px 0 4px; background: linear-gradient(to bottom, transparent, var(--surface) 30%); }
+.nut-sel-bar { position: sticky; bottom: 0; z-index: 2; padding: 14px 0 6px; margin-bottom: -6px; background: linear-gradient(to bottom, transparent, var(--surface) 35%); }
+/* Ubah profil: contoh warna, gaya kartu, daftar statistik dan badge */
+.sw-row { display: grid; grid-template-columns: repeat(7, minmax(0, 44px)); gap: 8px; justify-content: space-between; }
+.sw { width: 100%; aspect-ratio: 1; border-radius: 50%; border: 3px solid var(--surface); box-shadow: 0 0 0 2px var(--border-strong); background: var(--ink); }
+.sw.on { box-shadow: 0 0 0 2.5px var(--fg); }
+.sw-biru { background: #1d4ed8; } .sw-hijau { background: #15803d; } .sw-toska { background: #0f766e; } .sw-ungu { background: #6d28d9; } .sw-pink { background: #be185d; } .sw-oranye { background: #c2410c; }
+.pc-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: 8px; }
+.pc-opt { min-height: 48px; padding: 6px 8px; border-radius: var(--r-md); border: 1.5px solid var(--border); background: var(--surface); color: var(--fg-2); font-size: var(--fs-md); font-weight: 700; }
+.pc-opt.on { border-color: var(--fg); color: var(--fg); font-weight: 800; }
+.pc-list { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); padding: 0 14px; }
+.pc-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 0; border-bottom: 1px solid var(--border); text-align: left; color: var(--fg); font-size: var(--fs-md); font-weight: 600; }
+.pc-row:last-child { border-bottom: 0; }
+.pc-ord { flex: none; width: 26px; min-height: 26px; border-radius: 8px; border: 2px solid var(--border-strong); display: flex; align-items: center; justify-content: center; font-size: var(--fs-sm); font-weight: 800; }
+.pc-row.on .pc-ord { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.pc-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: 8px; }
+.pc-badge { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 7rem; padding: 10px 6px; border-radius: var(--r-lg); border: 2px solid var(--border); background: var(--surface); color: var(--fg); font-size: var(--fs-xs); font-weight: 700; line-height: 1.2; }
+.pc-badge.on { border-color: var(--fg); }
+.pc-badge .shield.on text { fill: var(--surface); }
 </style>
 <style>html,body{height:100%;margin:0}.layer{position:fixed;inset:0}#share-toast{position:fixed;left:16px;right:16px;bottom:24px;background:#111;color:#fff;padding:12px;border-radius:10px;display:none;z-index:99;text-align:center}</style>
 </head><body>
