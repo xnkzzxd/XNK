@@ -1857,6 +1857,7 @@ async function contrastReport(page) {
     await page.click('#tabbar .tab[data-view="public-program"]');
     await page.waitForTimeout(600);
     check(await visible(page, '#pub-tasks-wrap') && (await page.textContent('#view-public-program')).includes('PR'), 'nav: the Latihan tab holds the PR card');
+    check(await visible(page, '#pub-lat-hero') && (await page.locator('#pub-lat-hero #lat-empty').count()) === 1 && (await page.evaluate(() => { const a = document.getElementById('pub-lat-hero'), b = document.getElementById('pub-program-wrap'), c = document.getElementById('ph-latihan'); return a.getBoundingClientRect().top < b.getBoundingClientRect().top && b.getBoundingClientRect().top < c.getBoundingClientRect().top; })), 'latihan: the next-routine card comes first, then the routines, then the weekly insight');
     await page.evaluate(() => window.navigate('public-info'));
     await page.waitForTimeout(900);
     check(await visible(page, '#view-public-info') && (await page.textContent('#view-public-info')).includes('Info & Tips'), 'nav: the Info & Tips tab opens');
@@ -1895,7 +1896,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     await page.evaluate(() => window.navigate('public-program'));
     await page.waitForTimeout(900);
-    check((await page.locator('#pub-program-wrap .rt-card').count()) === 2 && (await page.textContent('#pub-program-wrap .rt-card >> nth=0')).includes('Bench press, Push-up') && await visible(page, '#pub-program-wrap .rt-empty-btn'), 'latihan: one routine card per program day with its exercise names, plus "Mulai latihan kosong"');
+    check((await page.locator('#pub-program-wrap .rt-card').count()) === 2 && (await page.textContent('#pub-program-wrap .rt-card >> nth=0')).includes('Bench press, Push-up') && await visible(page, '#pub-lat-hero #lat-empty') && await visible(page, '#pub-lat-hero #lat-start'), 'latihan: one routine card per program day with its exercise names; the hero starts the next routine or an empty workout');
     const rtBad = await page.locator('#pub-program-wrap button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
     check(rtBad === 0 && (await overflowX(page)) <= 0, 'latihan: buttons are at least 44 px and nothing scrolls sideways');
     await shot(page, 'portal-mobile-latihan');
@@ -2087,7 +2088,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     check((await page.locator('#pub-tasks-wrap').count()) === 1 && (await page.locator('#pub-meal-slot').count()) === 1, 'latihan: PR and meal cards live in the same tab');
     // Rutinitas sendiri: buat dari lembar form (tanpa bagian khusus coach), lalu muncul di "Rutinitas saya".
-    await page.click('#pub-program-wrap .rt-act:has-text("Rutinitas baru")');
+    await page.click('#pub-program-wrap .rt-act:has-text("Buat rutinitas")');
     await page.waitForTimeout(500);
     check(await visible(page, '#modal-program') && (await page.textContent('#prg-title')) === 'Rutinitas baru' && !(await visible(page, '#prg-tpl')) && !(await visible(page, '#prg-who')), 'own routine: the form opens without the coach-only template parts');
     await page.fill('#pf-own-name', 'Cardio pagi');
@@ -2102,9 +2103,9 @@ async function contrastReport(page) {
     await page.click('#prg-save');
     await page.waitForTimeout(800);
     check(env.sheet('ProgramItems').rows.some(r => r[1] === 'PT-A' && r[3] === 'Cardio pagi' && r[19] === 'klien') && (await page.locator('#pub-program-wrap .rt-card').count()) === 3 && (await page.textContent('#pub-program-wrap')).includes('Rutinitas saya (1)'), 'own routine: saved as the client\'s own and shown under "Rutinitas saya"');
-    await page.click('#pub-program-wrap .rt-act:has-text("Jelajahi")');
+    await page.click('#pub-program-wrap .rt-act:has-text("Galeri")');
     await page.waitForTimeout(400);
-    check(await visible(page, '#modal-wl') && (await page.textContent('#wls-body')).includes('Belum ada program di Jelajahi'), 'Jelajahi: says so when the coach shares nothing');
+    check(await visible(page, '#modal-wl') && (await page.textContent('#wls-body')).includes('Galeri masih kosong'), 'Galeri: says so when the coach shares nothing');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
     // Mode latihan (Fase M → O), sisi klien di HP: mulai dari kartu rutinitas, centang set, istirahat, draf, selesai.

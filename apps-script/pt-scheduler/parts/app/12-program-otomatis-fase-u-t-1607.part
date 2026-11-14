@@ -136,10 +136,11 @@
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
     if (!el || !me) return;
-    let left = pageIntro('Latihan', 'Rutinitas dari coach dan buatanmu sendiri.');
-    left += '<div id="ph-latihan">' + insTrainingHero() + '</div>';
-    left += '<div id="pub-autoprog">' + autoProgCardHtml() + '</div>';
+    // Fase X: kartu hitam "Berikutnya" (mulai sekali ketuk) → rutinitas → program otomatis → tafsir minggu ini.
+    let left = '<div class="px-band gfx-kontur"></div><section class="card-ink gfx-geo px-hang" id="pub-lat-hero" aria-label="Latihan berikutnya">' + latHeroInner() + '</section>';
     left += '<div class="stack" style="gap:var(--gap)" id="pub-program-wrap">' + programInner() + '</div>';
+    left += '<div id="pub-autoprog">' + autoProgCardHtml() + '</div>';
+    left += '<div id="ph-latihan">' + insTrainingHero() + '</div>';
     left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
@@ -148,15 +149,22 @@
 
 
   // ── Makan (Phase P, T-1012): target, menu hari ini, tukar item, belanja. Data: window.myNutrition (getPortalMore.nutrition). ──
-  let latSeg = 'latihan';
   const nutOn = () => !window.myNutrition || window.myNutrition.enabled !== false;
-  function latSegHtml() {
-    return '<div class="lat-seg-wrap"><div class="seg" id="lat-seg" role="tablist" aria-label="Latihan atau Makan">' +
-      '<button type="button" role="tab" class="' + (latSeg === 'latihan' ? 'active' : '') + '" aria-selected="' + (latSeg === 'latihan') + '" onclick="window.setLatSeg(\'latihan\')">Latihan</button>' +
-      '<button type="button" role="tab" class="' + (latSeg === 'makan' ? 'active' : '') + '" aria-selected="' + (latSeg === 'makan') + '" onclick="window.setLatSeg(\'makan\')">Makan</button>' +
-      '<span class="seg-thumb" style="width:calc(50% - 4px);transform:translateX(' + (latSeg === 'makan' ? '100%' : '0') + ')"></span></div></div>';
+  window.setLatSeg = function (name) { window.navigate(name === 'makan' ? 'public-food' : 'public-program'); };   // Fase X: segmen diganti tab
+  // Kartu hitam di atas tab Latihan: rutinitas berikutnya (dari server, workout.next) dengan satu tombol Mulai, atau latihan kosong.
+  function latHeroInner() {
+    const c = window.myProgram, d = c && c.state === 'ok' ? c.data : null;
+    const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
+    if (!d) return '<span class="ih-eyebrow">Latihan</span><p class="px-hero-t">' + (c && c.state === 'error' ? 'Gagal memuat' : 'Memuat…') + '</p>';
+    const all = (d.days || []).concat(d.own || []), nx = (w && w.next && all.find(x => x.hari === w.next)) || all[0];
+    const done = w && (w.sessions || []).some(s => s.tanggal === wkToday());
+    const empty = '<button type="button" class="btn btn-on-ink-ghost" id="lat-empty" onclick="window.rtStartEmpty()">' + icon('plus') + 'Latihan kosong</button>';
+    if (!nx) return '<span class="ih-eyebrow">Latihan</span><p class="px-hero-t">Mulai latihan</p><p class="li-sub" style="margin-top:6px;max-width:calc(100% - 96px)">Belum ada rutinitas. Mulai kosong dan tambah gerakan sambil jalan.</p>' +
+      '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="lat-empty" onclick="window.rtStartEmpty()">' + icon('play') + 'Mulai latihan</button></div>';
+    return '<span class="ih-eyebrow">' + (done ? 'Hari ini sudah latihan · berikutnya' : 'Berikutnya') + '</span><p class="px-hero-t" id="lat-next">' + h(nx.hari) + '</p>' +
+      '<p class="li-sub" style="margin-top:6px;max-width:calc(100% - 96px)">' + nx.items.length + ' gerakan · ' + h(nx.items.slice(0, 3).map(it => exNm(it)).join(', ')) + (nx.items.length > 3 ? ', …' : '') + '</p>' +
+      '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="lat-start" data-hari="' + h(nx.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">' + icon('play') + 'Mulai</button>' + empty + '</div>';
   }
-  window.setLatSeg = function (name) { latSeg = 'latihan'; window.navigate(name === 'makan' ? 'public-food' : 'public-program'); };   // Fase X: segmen diganti tab
   const NUT_N = (n, dp) => n == null || n === '' ? '-' : String(Math.round(n * Math.pow(10, dp || 0)) / Math.pow(10, dp || 0)).replace('.', ',');
   const NUT_GOALS_L = { turun: 'Turun lemak', naik: 'Naik otot', jaga: 'Jaga / sehat', recomp: 'Recomp' };
   const NUT_TAG_L = { santan: 'santan', goreng: 'gorengan', manis: 'manis', asin: 'asin' };

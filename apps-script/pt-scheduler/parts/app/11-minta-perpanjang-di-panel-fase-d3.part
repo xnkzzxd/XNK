@@ -597,7 +597,7 @@
     return '<article class="rt-card"><div class="rt-head"><button type="button" class="rt-open" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtOpen(this.dataset.src,this.dataset.hari)">' +
       '<span class="rt-name"><b class="truncate">' + h(d.hari) + '</b>' + (next ? '<span class="pill solid">Berikutnya</span>' : '') + '</span><span class="rt-sub">' + h(names) + '</span></button>' +
       '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(d.hari) + '" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtMenu(this.dataset.src,this.dataset.hari)">' + icon('more-horizontal') + '</button></div>' +
-      '<button type="button" class="btn btn-primary btn-block rt-go" data-hari="' + h(d.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">Mulai rutinitas</button></article>';
+      '<button type="button" class="btn btn-primary btn-block rt-go" data-hari="' + h(d.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">' + icon('play') + 'Mulai</button></article>';
   }
   function rtGroupHtml(key, title, list, src, next) {
     const shut = !!rtFold()[key];
@@ -610,17 +610,16 @@
     if (c.state === 'error') return '<div class="section-head"><h3 class="section-title">Rutinitas</h3></div><p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgram(true)">Coba lagi</button>';
     const days = c.data.days || [], own = c.data.own || [];
     const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
-    let html = '<button type="button" class="rt-empty-btn" onclick="window.rtStartEmpty()">' + icon('plus') + '<span>Mulai latihan kosong</span></button>' +
-      '<div class="rt-sec"><h3 class="section-title">Rutinitas</h3><button type="button" class="icon-btn plain" aria-label="Pengaturan latihan" onclick="window.wlSettings()">' + icon('settings') + '</button>' +
-      '<button type="button" class="icon-btn plain" aria-label="Rutinitas baru" onclick="window.rtNew()">' + icon('folder-plus') + '</button></div>' +
-      '<div class="rt-actions"><button type="button" class="rt-act" onclick="window.rtNew()">' + icon('clipboard-list') + '<span>Rutinitas baru</span></button><button type="button" class="rt-act" onclick="window.rtExplore()">' + icon('search') + '<span>Jelajahi</span></button></div>';
+    // Fase X: daftar rutinitas langsung (tombol Mulai di tiap kartu), lalu Buat rutinitas dan Galeri. "Latihan kosong" ada di kartu hitam di atas.
+    let html = '<div class="rt-sec"><h3 class="section-title">Rutinitas</h3><button type="button" class="icon-btn plain" aria-label="Pengaturan latihan" onclick="window.wlSettings()">' + icon('settings') + '</button></div>';
     if (days.length) html += rtGroupHtml('coach', 'Dari coach', days, 'coach', w && w.next);
     if (own.length) html += rtGroupHtml('own', 'Rutinitas saya', own, 'own', '');
-    if (!days.length && !own.length) html += emptyState('clipboard-list', 'Belum ada rutinitas', 'Buat rutinitas sendiri, salin dari Jelajahi, atau tanya coach lewat Chat.', '<button type="button" class="btn btn-outline btn-sm" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>');
+    html += '<div class="rt-actions"><button type="button" class="rt-act" onclick="window.rtNew()">' + icon('plus') + '<span>Buat rutinitas</span></button><button type="button" class="rt-act" onclick="window.rtExplore()">' + icon('layout-grid') + '<span>Galeri</span></button></div>';
+    if (!days.length && !own.length) html += emptyState('clipboard-list', 'Belum ada rutinitas', 'Buat rutinitas sendiri, simpan dari Galeri, atau tanya coach lewat Chat.', '<button type="button" class="btn btn-outline btn-sm" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>');
     if (w) html += workoutSessionsHtml(w, 'me', '');
     return html;
   }
-  function renderProgramCard() { const w = $('pub-program-wrap'); if (w) { setHTML(w, programInner()); } }
+  function renderProgramCard() { const w = $('pub-program-wrap'); if (w) { setHTML(w, programInner()); } const hh = $('pub-lat-hero'); if (hh) { setHTML(hh, latHeroInner()); paintIcons(); } }
   window.loadMyProgram = function (force) {
     if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
     const c = window.myProgram;
@@ -721,13 +720,13 @@
   };
   window.rtExplore = function () {
     const list = (rtData() || {}).explore || [];
-    const body = list.length ? '<p class="li-sub">Program yang dibagikan coach. Simpan ke Rutinitas saya, lalu ubah sesukamu.</p><div class="stack" style="gap:10px">' + list.map(function (t) {
+    const body = list.length ? '<p class="li-sub">Program yang dibagikan coach. Simpan ke Rutinitas saya, lalu ubah sesuai kebutuhan.</p><div class="stack" style="gap:10px">' + list.map(function (t) {
       const n = t.days.reduce((s, d) => s + d.items.length, 0);
       return '<div class="rt-card"><div class="rt-name"><b class="truncate">' + h(t.name) + '</b></div><p class="li-sub">' + t.days.length + ' rutinitas · ' + n + ' gerakan</p>' +
         '<ul class="rt-xlist">' + t.days.map(d => '<li><b>' + h(d.hari) + '</b> · ' + h(d.items.map(it => it.gerakan).join(', ')) + '</li>').join('') + '</ul>' +
         '<button type="button" class="btn btn-primary btn-block" data-t="' + h(t.name) + '" onclick="window.rtCopy(this.dataset.t)">' + icon('plus') + 'Simpan ke rutinitas saya</button></div>';
     }).join('') + '</div>'
-      : emptyState('search', 'Belum ada program di Jelajahi', 'Coach bisa membagikan template program di sini. Sementara itu, buat rutinitas sendiri.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.closeModal();window.rtNew()">' + icon('plus') + 'Rutinitas baru</button>');
-    wlSheet('Jelajahi', body);
+      : emptyState('layout-grid', 'Galeri masih kosong', 'Coach bisa membagikan template program di sini. Sementara itu, buat rutinitas sendiri.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.closeModal();window.rtNew()">' + icon('plus') + 'Buat rutinitas</button>');
+    wlSheet('Galeri', body);
   };
 

@@ -71,6 +71,8 @@ html[data-accent] .chip.active { background: var(--accent); border-color: var(--
 .gfx-tipo > * { position: relative; z-index: 1; }
 
 /* Kartu sesi berikutnya (Hari ini) */
+.card-ink .ih-eyebrow { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--on-ink-muted); }
+.px-hero-t { font-size: var(--fs-2xl); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; margin-top: 8px; max-width: calc(100% - 72px); overflow-wrap: anywhere; }
 .next-x .nx-when { font-size: var(--fs-lg); font-weight: 700; margin-top: 12px; }
 .next-x .nx-count { font-size: var(--fs-4xl); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; margin-top: 6px; max-width: calc(100% - 96px); }
 .nx-actions { display: flex; gap: 8px; margin-top: 18px; }
