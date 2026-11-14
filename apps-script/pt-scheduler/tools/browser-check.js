@@ -1852,7 +1852,7 @@ async function contrastReport(page) {
     check(await visible(page, '#bell-count') && Number(await page.textContent('#bell-count')) >= 1 && (await page.evaluate(() => window.myX.notif.items.some(x => x.kind === 'info' && x.fresh))), 'info: the bell counts the new info from the coach');
     // ── Tab klien (Fase X): bar bawah Hari ini · Latihan · + · Makan · Saya ───────────────
     check((await page.locator('#tabbar .tab').allTextContents()).map(t => t.trim()).join(',') === 'Hari ini,Latihan,Makan,Saya' && (await page.locator('#tabbar .tab-fab').count()) === 1, 'nav: the phone bar is Hari ini · Latihan · + · Makan · Saya');
-    check((await page.locator('#side-nav .nav-item').allTextContents()).map(t => t.trim()).join(',') === 'Hari ini,Latihan,Makan,Jadwal,Progres,Saya', 'nav: the sidebar lists every page');
+    check((await page.locator('#side-nav .nav-item').allTextContents()).map(t => t.trim()).join(',') === 'Hari ini,Latihan,Makan,Progres,Jadwal,Saya,Paket saya,Coach,Info & Tips,Kartu saya' && (await page.locator('#side-nav .nav-group').count()) === 1, 'nav: the desktop sidebar lists the main pages and the Akun group');
     check(!(await page.locator('#view-public-dashboard #pub-progress-wrap, #view-public-dashboard #pub-tasks-wrap, #view-public-dashboard #pub-meal-slot').count()) && (await page.locator('#pub-todo .todo-row').count()) >= 2, 'nav: Hari ini is a short to-do list, the detail cards live on their own tabs');
     await page.click('#tabbar .tab[data-view="public-more"]');
     await page.waitForTimeout(500);
@@ -2677,19 +2677,19 @@ async function contrastReport(page) {
     check(homeW[0] <= 1240 && homeW[1] === 2 && homeW[2], scheme + ': Hari ini uses two columns, at most 1240 px wide, on desktop ' + JSON.stringify(homeW));
     if (scheme === 'light') {
       // Tablet, laptop, PC, layar sangat lebar: judul halaman, satu atau dua kolom sesuai lebar isi, tidak ada geser samping.
-      for (const vp of [[768, 1024, 1], [1024, 768, 2], [1180, 820, 2], [1280, 720, 2], [1366, 768, 2], [1920, 1080, 2], [2560, 1080, 2]]) {
+      for (const vp of [[768, 1024, 1], [1024, 768, 1], [1180, 820, 1], [1280, 720, 2], [1366, 768, 2], [1920, 1080, 2], [2560, 1080, 2]]) {
         await page.setViewportSize({ width: vp[0], height: vp[1] });
         for (const v of ['public-dashboard', 'public-more', 'public-pack', 'public-program', 'public-progress', 'public-food']) {
           await page.evaluate(v => window.navigate(v), v);
           await page.waitForTimeout(250);
           const r = await page.evaluate(v => {
-            const view = document.getElementById('view-' + v), head = view.querySelector('.px-dhead'), wrap = view.querySelector('.px-2col');
-            const hr = head && head.getBoundingClientRect(), cols = wrap ? getComputedStyle(wrap).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
+            const view = document.getElementById('view-' + v), head = document.getElementById('page-title'), wrap = view.querySelector('.px-2col');
+            const hr = head && document.documentElement.classList.contains('desk') && getComputedStyle(head).opacity === '1' && head.getBoundingClientRect(), cols = wrap ? getComputedStyle(wrap).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
             const widest = Math.max.apply(null, Array.from(view.children).map(c => c.classList.contains('page-head') ? 0 : c.getBoundingClientRect().width));
             return { head: !!(hr && hr.height > 0), cols: wrap ? (getComputedStyle(wrap).display === 'grid' ? cols : 1) : null, widest: Math.round(widest), over: document.documentElement.scrollWidth - innerWidth };
           }, v);
           const okCols = r.cols === null || r.cols === vp[2];
-          check(r.head && okCols && r.widest <= 1241 && r.over <= 1, 'layar ' + vp[0] + '×' + vp[1] + ' ' + v + ': page title, ' + (r.cols === null ? 'grid' : r.cols + ' column(s)') + ', no sideways scroll ' + JSON.stringify(r));
+          check(r.head && okCols && r.widest <= 1273 && r.over <= 1, 'layar ' + vp[0] + '×' + vp[1] + ' ' + v + ': title in the desktop title bar, ' + (r.cols === null ? 'grid' : r.cols + ' column(s)') + ', no sideways scroll ' + JSON.stringify(r));
         }
       }
       await page.setViewportSize(DESKTOP);

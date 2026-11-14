@@ -298,4 +298,3 @@ html.portal .card-ink .empty .empty-icon { background: color-mix(in srgb, var(--
   #pc-preview { position: sticky; top: 0; }
   #pc-body .pc-ctrl { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 }
-</style>

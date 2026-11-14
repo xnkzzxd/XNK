@@ -2662,4 +2662,95 @@ html.portal .card-ink .empty .empty-icon { background: color-mix(in srgb, var(--
   #pc-preview { position: sticky; top: 0; }
   #pc-body .pc-ctrl { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 }
+/* ═══ Fase Y (docs/desk): portal klien ala aplikasi Mac di tablet, laptop, PC ═══
+   Semua aturan di bawah html.desk (portal + layar ≥ 768 px, dipasang oleh parts/app/16-desk.part). HP tidak terpengaruh. */
+.topbar-sub, .nav-group, .nav-rule, .side-me { display: none; }
+html.desk { font-size: 93.75%; --page-pad: 24px; }
+html.desk .input, html.desk .select, html.desk textarea, html.desk input[type="text"], html.desk input[type="tel"], html.desk input[type="number"], html.desk input[type="search"] { font-size: 16px; }
+
+/* Sidebar terang tembus pandang */
+html.desk .sidebar { display: flex; width: 232px; padding: 12px 10px 10px; gap: 1px; background: color-mix(in srgb, var(--surface-2) 90%, transparent); backdrop-filter: saturate(1.6) blur(20px); -webkit-backdrop-filter: saturate(1.6) blur(20px); border-right: 1px solid var(--border); }
+html.desk .sidebar .brand { padding: 4px 8px 14px; gap: 10px; justify-content: flex-start; }
+html.desk .sidebar .brand .avatar { width: 28px !important; height: 28px !important; border-radius: 8px !important; }
+html.desk .sidebar .brand .logo-mark { width: 14px !important; height: 13px !important; }
+html.desk .sidebar .brand-text { display: initial; }
+html.desk .brand-name { font-size: 0.95rem; }
+html.desk .brand-sub { font-size: 0.75rem; text-transform: none; letter-spacing: 0; font-weight: 500; }
+html.desk .nav-list { gap: 1px; }
+html.desk .sidebar .nav-item { min-height: 32px; padding: 0 10px; gap: 10px; border-radius: 8px; font-size: 0.9rem; font-weight: 500; color: var(--fg); justify-content: flex-start; }
+html.desk .sidebar .nav-item svg { width: 17px; height: 17px; color: var(--fg-muted); }
+html.desk .sidebar .nav-label { display: initial; }
+html.desk .sidebar .nav-item.active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--fg); font-weight: 650; }
+html.desk .sidebar .nav-item.active svg { color: var(--accent); }
+html:not([data-accent]).desk .sidebar .nav-item.active svg { color: var(--fg); }
+@media (hover: hover) { html.desk .sidebar .nav-item:not(.active):hover { background: color-mix(in srgb, var(--fg) 6%, transparent); } }
+html.desk .nav-group { display: block; margin: 14px 10px 4px; font-size: 0.75rem; font-weight: 600; color: var(--fg-muted); }
+html.desk .sidebar-foot { border-top: 1px solid var(--border); padding-top: 8px; gap: 2px; }
+html.desk .side-me { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border-radius: 8px; text-align: left; color: var(--fg); }
+html.desk .side-me-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+html.desk .side-me-text b { font-size: 0.875rem; font-weight: 600; }
+html.desk .side-me-text span { font-size: 0.75rem; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (hover: hover) { html.desk .side-me:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); } }
+@media (pointer: coarse) { html.desk .sidebar .nav-item, html.desk .side-me { min-height: 44px; } }
+/* Tablet tegak / jendela sempit: rel ikon */
+@media (max-width: 1023px) {
+  html.desk .sidebar { width: 72px; align-items: stretch; }
+  html.desk .sidebar .brand { justify-content: center; padding: 4px 0 14px; }
+  html.desk .sidebar .brand-text, html.desk .sidebar .nav-label, html.desk .nav-group, html.desk .side-me-text { display: none; }
+  html.desk .nav-rule { display: block; height: 1px; background: var(--border); margin: 10px 8px; }
+  html.desk .sidebar .nav-item, html.desk .side-me { justify-content: center; padding: 0; }
+}
+
+/* Bilah judul terang */
+html.desk .topbar { height: 52px; min-height: 52px; padding: 0 16px 0 24px; gap: 10px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.6) blur(20px); -webkit-backdrop-filter: saturate(1.6) blur(20px); border-bottom: 1px solid var(--border); color: var(--fg); overflow: visible; box-shadow: none; }
+html.desk .topbar > .topbar-brand { display: none; }
+html.desk .topbar > .topbar-title { display: block; opacity: 1; transform: none; font-size: 1.1rem; font-weight: 650; letter-spacing: -0.01em; color: var(--fg); white-space: nowrap; }
+html.desk .topbar-sub { display: block; font-size: 0.85rem; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+html.desk .topbar.desk-noback .tb-back { display: none; }
+html.desk .topbar .tb-back { color: var(--fg); margin-left: -8px; }
+html.desk .topbar-actions { position: static; margin-left: auto; gap: 8px; flex: none; }
+html.desk .topbar .icon-btn, html.desk .topbar .icon-btn.on-band { width: 32px; height: 32px; min-width: 32px; border-radius: 8px; color: var(--fg); background: var(--surface); border: 1px solid var(--border); }
+html.desk .topbar .icon-btn svg { width: 16px; height: 16px; }
+html.desk .topbar .icon-btn.on-band .badge-dot { background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 2px var(--bg); }
+html.desk #nav-dashboard-btn { display: none; }
+html.desk #side-auth-btn { display: none; }   /* Keluar ada di halaman Saya */
+html.desk #view-calendar .page-head .btn-primary { display: none; }   /* Booking sudah ada di bilah judul */
+html.desk .desk-tb { min-height: 32px; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; gap: 6px; }
+html.desk .desk-tb svg { width: 15px; height: 15px; }
+html.desk .desk-tb.btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--fg); }
+@media (pointer: coarse) { html.desk .topbar { height: 60px; min-height: 60px; } html.desk .topbar .icon-btn, html.desk .topbar .icon-btn.on-band { width: 44px; height: 44px; min-width: 44px; } html.desk .desk-tb { height: 44px; min-height: 44px; } }
+@media (max-width: 1023px) { html.desk .desk-tb span { display: none; } html.desk .desk-tb { padding: 0 10px; } html.desk .topbar-sub { display: none; } }
+
+/* Kepala halaman: judul sudah di bilah judul; band hitam dan judul ganda disembunyikan */
+html.desk .px-dhead, html.desk .px-band { display: none !important; }
+html.desk .page-head { color: var(--fg); margin: 0 0 14px; padding: 0; min-height: 0; }
+html.desk .page-head::before { display: none; }
+html.desk .page-head .page-title { display: none; }
+html.desk .page-head .page-sub { color: var(--fg-muted); }
+html.desk .page-head .btn-primary { background: var(--accent); color: var(--on-accent); }
+html.desk .page-head .btn-outline, html.desk .page-head .btn-secondary, html.desk .page-head .btn-ghost { color: var(--fg); border-color: var(--border); }
+html.desk .page-head .icon-btn { color: var(--fg); background: var(--surface); border: 1px solid var(--border); }
+html.desk .page-head + .insight-hero, html.desk .page-head + .card-ink, html.desk .page-head + .stack .card-ink:first-child, html.desk .page-head + .portal-grid .card-ink:first-child { margin-top: 0; }
+html.desk .px-hang { margin-top: 0; }
+html.desk #main-scroll-area > .page { padding: 20px 24px 40px; max-width: 1320px; }
+html.desk .px-wrap, html.desk .px-wrap.px-2col { max-width: none; }
+
+/* Kartu rapat ala Mac */
+html.desk .card { border-radius: 12px; box-shadow: none; border: 1px solid var(--border); }
+html.desk .card-ink, html.desk .insight-hero { border-radius: 14px; }
+
+/* Jendela (sheet) dengan kepala terang */
+html.desk .sheet { border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,.28), 0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent); }
+html.desk .sheet .sheet-handle { display: none; }
+html.desk .sheet .sheet-head { position: relative; justify-content: center; min-height: 46px; padding: 8px 48px; background: var(--surface-2); color: var(--fg); border-bottom: 1px solid var(--border); background-image: none; }
+html.desk .sheet .sheet-title { font-size: 0.95rem; font-weight: 650; letter-spacing: 0; text-align: center; }
+html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.plain { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; min-width: 28px; border-radius: 6px; background: transparent; color: var(--fg-muted); }
+@media (pointer: coarse) { html.desk .sheet .sheet-head .icon-btn, html.desk .sheet .sheet-head .icon-btn.plain { width: 44px; height: 44px; } }
+
+/* Tombol ringkas di perangkat dengan mouse; layar sentuh tetap 44 px */
+@media (pointer: fine) {
+  html.desk .main .btn { min-height: 34px; border-radius: 8px; font-size: 0.9rem; }
+  html.desk .main .btn-lg { min-height: 40px; }
+  html.desk .main .btn-sm { min-height: 30px; font-size: 0.85rem; }
+}
 </style>

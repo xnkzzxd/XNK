@@ -1,0 +1,51 @@
+
+  // ═══ Fase Y (docs/desk): portal klien terasa seperti aplikasi Mac di tablet, laptop, PC ═══
+  // html.desk hanya di portal dan layar ≥ 768 px; HP tidak menjalankan apa pun di sini (semua CSS diawali html.desk).
+  const DESK_MQ = window.matchMedia ? window.matchMedia('(min-width: 768px)') : null;
+  function deskIs() { return ui.mode === 'public' && !!window.publicLoggedMember && !!(DESK_MQ && DESK_MQ.matches); }
+  window.deskIs = deskIs;
+  // Tombol bilah judul per halaman: [label, ikon, aksi, utama?]
+  const DESK_TOOLS = {
+    'public-dashboard': [['Booking', 'calendar-plus', 'window.handleFabClick()', 1]],
+    'public-program': [['Latihan kosong', 'plus', 'window.rtStartEmpty()'], ['Buat rutinitas', 'clipboard-list', 'window.rtNew()']],
+    'public-food': [['Rencana makan', 'book-open', "window.navigate('public-plan')"], ['Catat makan', 'plus', "window.clientQuick('food')", 1]],
+    'public-progress': [['Catat ukuran', 'ruler', "window.pgOpenEntry('member')", 1]],
+    'calendar': [['Booking', 'calendar-plus', 'window.handleFabClick()', 1]],
+    'public-more': [['Ubah kartu', 'pencil', 'window.openProfileEdit()'], ['Bagikan kartu', 'share-2', 'window.shareAthlete()', 1]],
+    'public-pack': [['Perpanjang', 'repeat', 'window.openRenewSheet()', 1]]
+  };
+  window.deskToolsHtml = function (v) {
+    return (DESK_TOOLS[v] || []).map(t => '<button type="button" class="btn btn-sm desk-tb ' + (t[3] ? 'btn-primary' : 'btn-secondary') + '" onclick="' + t[2] + '">' + icon(t[1]) + '<span>' + h(t[0]) + '</span></button>').join('');
+  };
+  function deskSub(v) {
+    const me = window.publicLoggedMember || {};
+    const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    if (v === 'public-dashboard' || v === 'public-food') return fmtDate(new Date());
+    if (v === 'public-pack') return total ? 'Sisa ' + rem + ' dari ' + total + ' sesi' : (me.packageName || '');
+    if (v === 'public-more') { const l = window.myX && window.myX.level; return l ? 'Level ' + l.level + ' · ' + l.gelar : ''; }
+    if (v === 'public-program') { const d = window.myProgram && window.myProgram.state === 'ok' ? window.myProgram.data : null; return d ? ((d.days || []).length + (d.own || []).length) + ' rutinitas' : ''; }
+    return '';
+  }
+  window.deskSync = function () {
+    const on = deskIs();
+    document.documentElement.classList.toggle('desk', on);
+    if (!on) return;
+    const v = window.currentView, sub = $('page-sub');
+    if (sub) sub.textContent = deskSub(v);
+    // Halaman yang ada di sidebar tidak butuh tombol kembali; halaman di luar sidebar (Rencana makan, katalog) tetap punya.
+    const inSide = window.PUB_SIDE().indexOf(v) !== -1;
+    const tb = $('topbar'); if (tb) tb.classList.toggle('desk-noback', inSide);
+    const lv = $('side-me-lv'), l = window.myX && window.myX.level;
+    if (lv) lv.textContent = l ? 'Level ' + l.level + ' · ' + l.gelar : '';
+    renderTopbarActions();
+  };
+  const navDesk = window.navigate;
+  window.navigate = function () { const r = navDesk.apply(this, arguments); window.deskSync(); return r; };
+  if (DESK_MQ) {
+    const onChange = function () { window.deskSync(); if (!deskIs()) renderTopbarActions(); };
+    if (DESK_MQ.addEventListener) DESK_MQ.addEventListener('change', onChange); else if (DESK_MQ.addListener) DESK_MQ.addListener(onChange);
+  }
+  const renderPortalXDesk = window.renderPortalX;
+  window.renderPortalX = function () { renderPortalXDesk.apply(this, arguments); if (deskIs()) { const sub = $('page-sub'); if (sub) sub.textContent = deskSub(window.currentView); const lv = $('side-me-lv'), l = window.myX && window.myX.level; if (lv) lv.textContent = l ? 'Level ' + l.level + ' · ' + l.gelar : ''; } };
+})();
+</script>

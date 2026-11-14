@@ -796,6 +796,9 @@
       ['public-more', 'user-round', 'Saya']
     ]
   };
+  const PUB_SIDE_MAIN = [['public-dashboard', 'house', 'Hari ini'], ['public-program', 'dumbbell', 'Latihan'], ['public-food', 'utensils', 'Makan'], ['public-progress', 'trending-up', 'Progres'], ['calendar', 'calendar-days', 'Jadwal']];
+  const PUB_SIDE_AKUN = [['public-more', 'user-round', 'Saya'], ['public-pack', 'package', 'Paket saya'], ['public-coaches', 'dumbbell', 'Coach'], ['public-info', 'megaphone', 'Info & Tips'], ['public-share', 'layout-grid', 'Kartu saya']];
+  window.PUB_SIDE = function () { return PUB_SIDE_MAIN.concat(PUB_SIDE_AKUN).map(n => n[0]); };
   const nutTabOn = () => !(window.myNutrition && window.myNutrition.enabled === false);
   function pubTabs() {
     return [
@@ -835,13 +838,22 @@
     ui.chromeNut = nutTabOn();
     const items = ui.chromeGuest ? GUEST_NAV : (ui.mode === 'public' && !ui.chromeNut ? NAV.public.filter(n => n[0] !== 'public-food') : NAV[ui.mode]);
     const sideItems = items.concat(ui.mode === 'admin' ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
-    setHTML('side-nav', sideItems.map(function (n) {
-      return '<button type="button" class="nav-item" data-view="' + n[0] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
+    const navBtn = function (n) {
+      return '<button type="button" class="nav-item" data-view="' + n[0] + '" title="' + n[2] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
         icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' +
         (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="nav-badge hide" id="nav-unread-badge"></span>' : '') + '</button>';
-    }).join(''));
+    };
+    // Fase Y: sidebar portal (tablet/laptop/PC) seperti aplikasi Mac — grup utama + grup Akun; HP tidak memakai sidebar.
+    const pubSide = ui.mode === 'public' && !ui.chromeGuest;
+    setHTML('side-nav', pubSide
+      ? PUB_SIDE_MAIN.filter(n => ui.chromeNut || n[0] !== 'public-food').map(navBtn).join('') + '<p class="nav-group">Akun</p><span class="nav-rule" aria-hidden="true"></span>' + PUB_SIDE_AKUN.filter(n => n[0] !== 'public-share' || window.shareOn !== false).map(navBtn).join('')
+      : sideItems.map(navBtn).join(''));
 
-    const foot = ui.mode === 'admin'
+    const foot = pubSide
+      ? '<button type="button" class="side-me" id="side-me" onclick="window.navigate(\'public-more\')" title="Saya">' + avatar(window.publicLoggedMember.photo, window.publicLoggedMember.name, 'sm') +
+        '<span class="side-me-text"><b>' + h(String(window.publicLoggedMember.name || '').split(' ')[0]) + '</b><span id="side-me-lv"></span></span></button>' +
+        '<button type="button" class="nav-item hide" id="side-auth-btn" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>'
+      : ui.mode === 'admin'
       ? '<button type="button" class="nav-item" data-view="settings" onclick="window.navigate(\'settings\')">' + icon('settings') + '<span class="nav-label">Pengaturan</span></button>'
       : '<button type="button" class="nav-item" onclick="window.openSettings()">' + icon('sun-moon') + '<span class="nav-label">Tampilan</span></button>' +
         '<button type="button" class="nav-item" id="side-auth-btn" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>';
@@ -878,6 +890,7 @@
         html += '<button type="button" class="btn btn-primary btn-sm" id="nav-login-btn" onclick="window.navigate(\'public-login\')">Masuk</button>';
       } else {
         const nc = window.notifCount ? window.notifCount() : 0;
+        if (window.deskIs && window.deskIs()) html += window.deskToolsHtml(window.currentView) + '<button type="button" class="icon-btn" id="nav-plus-btn" onclick="window.clientPlus(this)" aria-label="Tambah">' + icon('plus') + '</button>';
         html += '<button type="button" class="icon-btn on-band" id="nav-bell-btn" onclick="window.openNotif()" aria-label="Pemberitahuan' + (nc ? ', ' + nc + ' baru' : '') + '">' + icon('bell') + '<span class="badge-dot' + (nc ? '' : ' hide') + '" id="bell-count">' + nc + '</span></button>';
         html += '<button type="button" class="icon-btn" id="nav-dashboard-btn" onclick="window.navigate(\'public-more\')" aria-label="Saya">' + avatar(window.publicLoggedMember.photo, window.publicLoggedMember.name, 'sm') + '</button>';
       }

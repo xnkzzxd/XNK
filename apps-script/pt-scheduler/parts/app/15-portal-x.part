@@ -689,5 +689,3 @@
     if (regx.resume) window.regResumeSoon();
     else if (was && !ui.sheetOn) { regx.step = 0; if (was >= 3) setTimeout(regFinish, 350); }
   };
-})();
-</script>
