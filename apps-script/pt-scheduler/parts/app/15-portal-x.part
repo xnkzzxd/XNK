@@ -61,6 +61,10 @@
     return html + '</div>';
   }
 
+  // Judul halaman untuk layar lebar (tablet, laptop, PC). Di HP judul ada di top bar, jadi kepala ini disembunyikan.
+  function pxHead(title, sub) { return pageHead(title, sub).replace('class="page-head"', 'class="page-head px-dhead"'); }
+  window.pxHead = pxHead;
+
   // ── Hari ini ──
   window.renderPublicDashboard = function () {
     const el = $('view-public-dashboard'), me = window.publicLoggedMember;
@@ -68,7 +72,7 @@
     const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
     const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
     const next = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart)[0];
-    let html = '<div class="px-band gfx-kontur"><p class="px-date">' + h(fmtDate(new Date())) + '</p></div>';
+    let html = pxHead('Hari ini', fmtDate(new Date())) + '<div class="px-band gfx-kontur"><p class="px-date">' + h(fmtDate(new Date())) + '</p></div><div class="px-col">';
     html += '<section class="card-ink gfx-geo next-x px-hang" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
       '<div class="ih-head"><span class="ih-eyebrow">Sesi berikutnya</span>' + (next ? statusInfo(next).pill : '') + '</div>';
     const calBtn = next ? '<button type="button" class="btn btn-on-ink-ghost nx-ico" id="pub-next-cal" onclick="window.openAddToCalendar([\'' + h(next.id) + '\'])" aria-label="Tambah ke kalender">' + icon('calendar-plus') + '</button>' : '';
@@ -86,15 +90,15 @@
     }
     html += '</section>';
     html += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
-    html += '<div class="px-stack" style="gap:10px" id="pub-todo">' + todoHtml() + '</div>';
+    html += '<div class="px-stack" style="gap:10px" id="pub-todo">' + todoHtml() + '</div></div><div class="px-col">';
     html += '<div class="card" id="pub-weekx">' + weekStripHtml() + '</div>';
     // Kartu paket: sisa sesi + status perpanjangan (peringatan sisa sedikit, menunggu konfirmasi, sudah diperpanjang) + tagihan.
     html += '<section class="card-ink gfx-kontur" id="pub-pack-card"><div class="ih-head"><span class="ih-eyebrow">' + h(me.packageName || 'Paket') + '</span>' +
       '<button type="button" class="link-btn" style="color:inherit" onclick="window.navigate(\'public-pack\')">Paket saya' + icon('chevron-right') + '</button></div>' +
       (total ? '<p style="font-size:var(--fs-2xl);font-weight:800;letter-spacing:-0.02em;margin-top:8px">Sisa <span id="pub-dash-remaining">' + rem + '</span> dari <span id="pub-dash-total">' + total + '</span> sesi</p>' : '') +
       '<div id="pub-renew-slot">' + renewNoticeHtml(rem, total) + '</div><div id="pub-bill-slot"></div></section>';
-    html += '<div class="card hide" id="pub-today-wl"></div>';
-    setHTML(el, '<div class="px-wrap px-stack">' + html + '</div>');
+    html += '<div class="card hide" id="pub-today-wl"></div></div>';
+    setHTML(el, '<div class="px-wrap px-stack px-2col">' + html + '</div>');
     renderTodayWorkout(); renderBillSlot();
   };
 
@@ -143,9 +147,9 @@
     tiles += tile(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span>');
     tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Tema dan warna aksen');
     tiles += tile('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto');
-    setHTML(el, '<div class="px-wrap px-stack"><div class="px-band gfx-kontur"></div>' + athleteCardHtml({ hang: true }) +
-      '<div class="px-tiles">' + tiles + '</div>' +
-      '<button type="button" class="btn btn-ghost btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></div>');
+    setHTML(el, '<div class="px-wrap px-stack px-2col px-saya">' + pxHead('Saya', '') + '<div class="px-band gfx-kontur"></div><div class="px-col px-sticky">' + athleteCardHtml({ hang: true }) + '</div>' +
+      '<div class="px-col"><div class="px-tiles">' + tiles + '</div>' +
+      '<button type="button" class="btn btn-ghost btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></div></div>');
   }
 
   // ── Lonceng ──
@@ -216,12 +220,12 @@
   window.renderPublicFood = function () {
     const el = $('view-public-food');
     if (!el || !window.publicLoggedMember) return;
-    setHTML(el, '<div id="pub-makan-pane">' + makanInner() + '</div>');
+    setHTML(el, pxHead('Makan', fmtDate(new Date())) + '<div id="pub-makan-pane">' + makanInner() + '</div>');
   };
   window.renderPublicPlan = function () {
     const el = $('view-public-plan');
     if (!el || !window.publicLoggedMember) return;
-    setHTML(el, '<div id="pub-plan-pane">' + makanInner('plan') + '</div>');
+    setHTML(el, pxHead('Rencana makan', 'Target, menu, belanja, dan angka tubuh') + '<div id="pub-plan-pane">' + makanInner('plan') + '</div>');
   };
   // ── Paket saya: paket aktif, sisa sesi, status perpanjangan, tagihan ──
   window.renderPublicPack = function () {
@@ -230,7 +234,7 @@
     const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0, rem = Math.max(0, total - used);
     const r = window.myRenewal, wait = r && r.status === 'menunggu';
     const rp = n => 'Rp ' + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    let html = '<div class="px-band gfx-kontur"></div><section class="card-ink gfx-geo px-hang" id="pack-hero"><span class="ih-eyebrow">Paket aktif</span>' +
+    let html = pxHead('Paket saya', '') + '<div class="px-band gfx-kontur"></div><div class="px-col"><section class="card-ink gfx-geo px-hang" id="pack-hero"><span class="ih-eyebrow">Paket aktif</span>' +
       '<p style="font-size:var(--fs-2xl);font-weight:800;letter-spacing:-0.02em;margin-top:6px;max-width:calc(100% - 72px)">' + h(me.packageName || 'Belum ada paket') + '</p>';
     if (total) html += '<p style="margin-top:14px;font-weight:700"><span class="num" style="font-size:var(--fs-3xl);font-weight:800">' + rem + '</span> dari ' + total + ' sesi tersisa</p>' +
       '<div class="px-bar" style="margin-top:10px"><i style="display:block;height:100%;width:' + Math.round(used / total * 100) + '%"></i></div>' +
@@ -242,14 +246,15 @@
     if (wait) html += '<div class="notice" id="pack-pending">' + icon('clock') + '<div class="grow"><p class="li-title">Menunggu konfirmasi</p><p class="li-sub">' + h(r.packageName || 'Paket') + ' sudah diminta. Coach mengaktifkannya setelah pembayaran diterima.</p></div></div>';
     else if (r && r.status === 'disetujui' && r.decidedAt && Date.now() - new Date(r.decidedAt).getTime() < 3 * 86400000)
       html += '<div class="notice" id="pack-done">' + icon('check-circle-2') + '<div class="grow"><p class="li-title">Paket sudah diperpanjang</p><p class="li-sub">' + h(r.packageName || '') + '</p></div></div>';
+    html += '</div><div class="px-col">';
     const bills = Array.isArray(window.myBills) ? window.myBills : [];
     if (bills.length) html += '<div class="px-sec"><p class="px-eyebrow">Tagihan</p></div><div class="card stack" id="pack-bills">' + bills.slice(0, 6).map(function (b) {
       return '<div class="row-between"><div style="min-width:0"><p class="li-title truncate">' + h(b.paket) + '</p><p class="li-sub">' + (b.lastPaid ? 'Terakhir bayar ' + h(b.lastPaid) : 'Belum ada pembayaran') + '</p></div>' +
         '<div style="text-align:right"><b class="num">' + h(b.status === 'Lunas' ? 'Lunas' : rp(b.remaining)) + '</b>' + (b.status === 'Lunas' ? '' : '<p><span class="pill' + (b.status === 'DP' ? '' : ' dashed') + '">' + h(b.status) + '</span></p>') + '</div></div>';
     }).join('') + '<p class="hint">Pembayaran dilakukan langsung ke coach.</p></div>';
     html += '<div class="px-tiles"><button type="button" class="px-tile" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + '<b>Jadwal</b><span>Sesi mendatang dan selesai</span></button>' +
-      '<button type="button" class="px-tile" onclick="window.navigate(\'public-coaches\')">' + icon('dumbbell') + '<b>Coach</b><span>Profil, jam, chat</span></button></div>';
-    setHTML(el, '<div class="px-wrap px-stack">' + html + '</div>');
+      '<button type="button" class="px-tile" onclick="window.navigate(\'public-coaches\')">' + icon('dumbbell') + '<b>Coach</b><span>Profil, jam, chat</span></button></div></div>';
+    setHTML(el, '<div class="px-wrap px-stack px-2col">' + html + '</div>');
     paintIcons();
   };
   // Warna aksen juga bisa diganti dari lembar Tampilan (tanpa membuka Ubah profil); langsung berlaku dan disimpan di akun.
@@ -528,7 +533,7 @@
     document.documentElement.setAttribute('data-accent', d.aksen);
     if (d.aksen === 'hitam') document.documentElement.removeAttribute('data-accent');
     const sec = (title, note, body) => '<div class="stack" style="gap:10px"><div class="px-sec"><p class="px-eyebrow">' + h(title) + '</p>' + (note ? '<span>' + h(note) + '</span>' : '') + '</div>' + body + '</div>';
-    let html = '<div id="pc-preview">' + athleteCardHtml({ profile: d }) + '</div>';
+    let html = '<div id="pc-preview">' + athleteCardHtml({ profile: d }) + '</div><div class="pc-ctrl">';
     html += sec('Warna aksen', ACCENT_L[d.aksen], accentSwatches(d.aksen, 'window.pcAccent') +
       '<p class="li-sub">Dipakai di tombol utama, cincin, batang kemajuan, tab aktif, dan kartu yang dibagikan.</p>');
     html += sec('Gaya kartu', '', '<div class="pc-opts">' + p.options.gaya.map(g =>
@@ -544,7 +549,7 @@
       return '<button type="button" class="pc-badge' + (on ? ' on' : '') + '" aria-pressed="' + on + '" onclick="window.pcPick(\'badge\',\'' + h(b.id) + '\')">' + shieldSvg(b.id, b.label, on) + '<span>' + h(b.label) + '</span></button>';
     }).join('') + '</div>' : '<p class="li-sub">Belum ada badge. Badge pertama datang dari sesi dan latihan yang dicatat.</p>');
     html += '<p class="err" id="pc-err" role="alert"></p><div class="nut-sel-bar"><button type="button" class="btn btn-primary btn-lg btn-block" id="pc-save" onclick="window.pcSave()">Simpan</button></div>';
-    setHTML('pc-body', html);
+    setHTML('pc-body', html + '</div>');
     paintIcons();
   }
   window.pcAccent = function (a) { window.pcPick('aksen', a); };

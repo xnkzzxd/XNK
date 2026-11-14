@@ -2673,8 +2673,29 @@ async function contrastReport(page) {
     const env = richEnv();
     const token = env.memberToken(KEY_A);
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1300 });
-    const homeW = await page.evaluate(() => { const w = document.querySelector('#view-public-dashboard .px-wrap').getBoundingClientRect(); return [Math.round(w.width), document.documentElement.scrollWidth <= innerWidth + 1]; });
-    check(homeW[0] <= 700 && homeW[1], scheme + ': Hari ini stays one readable column on desktop ' + JSON.stringify(homeW));
+    const homeW = await page.evaluate(() => { const w = document.querySelector('#view-public-dashboard .px-wrap'); return [Math.round(w.getBoundingClientRect().width), getComputedStyle(w).gridTemplateColumns.split(' ').length, document.documentElement.scrollWidth <= innerWidth + 1]; });
+    check(homeW[0] <= 1240 && homeW[1] === 2 && homeW[2], scheme + ': Hari ini uses two columns, at most 1240 px wide, on desktop ' + JSON.stringify(homeW));
+    if (scheme === 'light') {
+      // Tablet, laptop, PC, layar sangat lebar: judul halaman, satu atau dua kolom sesuai lebar isi, tidak ada geser samping.
+      for (const vp of [[768, 1024, 1], [1024, 768, 2], [1180, 820, 2], [1280, 720, 2], [1366, 768, 2], [1920, 1080, 2], [2560, 1080, 2]]) {
+        await page.setViewportSize({ width: vp[0], height: vp[1] });
+        for (const v of ['public-dashboard', 'public-more', 'public-pack', 'public-program', 'public-progress', 'public-food']) {
+          await page.evaluate(v => window.navigate(v), v);
+          await page.waitForTimeout(250);
+          const r = await page.evaluate(v => {
+            const view = document.getElementById('view-' + v), head = view.querySelector('.px-dhead'), wrap = view.querySelector('.px-2col');
+            const hr = head && head.getBoundingClientRect(), cols = wrap ? getComputedStyle(wrap).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
+            const widest = Math.max.apply(null, Array.from(view.children).map(c => c.classList.contains('page-head') ? 0 : c.getBoundingClientRect().width));
+            return { head: !!(hr && hr.height > 0), cols: wrap ? (getComputedStyle(wrap).display === 'grid' ? cols : 1) : null, widest: Math.round(widest), over: document.documentElement.scrollWidth - innerWidth };
+          }, v);
+          const okCols = r.cols === null || r.cols === vp[2];
+          check(r.head && okCols && r.widest <= 1241 && r.over <= 1, 'layar ' + vp[0] + '×' + vp[1] + ' ' + v + ': page title, ' + (r.cols === null ? 'grid' : r.cols + ' column(s)') + ', no sideways scroll ' + JSON.stringify(r));
+        }
+      }
+      await page.setViewportSize(DESKTOP);
+      await page.evaluate(() => window.navigate('public-dashboard'));
+      await page.waitForTimeout(300);
+    }
     await shot(page, 'portal-desktop-' + scheme + '-home');
     // Makan on a wide screen (Phase P): two columns, nothing overflows, at 1440 and 1280.
     env.call('saveMyMeasurement', token, { berat: 70, pinggang: 80 });

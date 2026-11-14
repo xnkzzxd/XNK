@@ -2421,8 +2421,7 @@ html[data-accent] .chip.active { background: var(--accent); border-color: var(--
 .px-bar > i { display: block; height: 100%; border-radius: var(--r-full); background: var(--fg); }
 .card-ink .px-bar { background: color-mix(in srgb, var(--on-ink) 18%, transparent); }
 .card-ink .px-bar > i { background: var(--on-ink); }
-/* Desktop: band dan kartu menggantung khusus HP; di layar lebar isi berdiri di tengah tanpa band */
-@media (min-width: 768px) { .px-band { display: none; } .px-hang { margin-top: 0; } .px-wrap { max-width: 680px; margin-inline: auto; padding-top: 72px; } }
+/* Layar lebar: lihat bagian "Tablet, laptop, PC" di akhir berkas ini. */
 
 /* Grafis. B kontur: garis lengkung tipis di band dan kartu tenang. A geometri: lingkaran konsentris di kartu aksi.
    C tipografi raksasa: angka/kata besar dari data-tipo. Semua di belakang isi dan hanya di permukaan hitam. */
@@ -2628,6 +2627,46 @@ html.portal .card-ink .empty .empty-icon { background: color-mix(in srgb, var(--
 .auth-form.gfx-kontur > * { position: relative; z-index: 1; }
 .rt-card.card-ink .li-sub, .rt-card.card-ink .rt-xlist { color: var(--on-ink-muted); }
 .rt-card.card-ink { position: relative; overflow: hidden; }
+/* ── Tablet, laptop, PC (berbagai rasio) ──────────────────────────────────────
+   HP (< 768 px) tidak berubah: .px-col = display:contents, judul ada di top bar.
+   ≥ 768 px: band HP disembunyikan, tiap halaman punya judul (.px-dhead, band hitam Phase R).
+   Lebar kolom diatur dari lebar isi halaman (container query pada .view), bukan lebar layar,
+   jadi sidebar ramping (tablet) atau lebar (laptop) dan rasio apa pun ikut benar:
+   isi < 860 px → satu kolom (maks. 760 px, di tengah); ≥ 860 px → dua kolom (maks. 1240 px). */
+.px-col, .pc-ctrl { display: contents; }
+.px-dhead { display: none; }
+@media (min-width: 768px) {
+  html.portal .view[id^="view-public-"] { container-type: inline-size; }
+  .px-band { display: none; }
+  .px-hang { margin-top: 0; }
+  .px-dhead { display: flex; }
+  .px-wrap { max-width: 760px; margin-inline: auto; }
+  .px-wrap > .px-dhead { margin-bottom: 4px; }
+  html.portal .view[id^="view-public-"] > :not(.page-head):not(.px-wrap) { max-width: 1240px; margin-inline: auto; }
+}
+@container (min-width: 860px) {
+  .px-wrap.px-2col { max-width: 1240px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--gap) 24px; align-items: start; }
+  .px-2col > .px-dhead { grid-column: 1 / -1; }
+  .px-2col > .px-col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+  .px-wrap.px-saya { grid-template-columns: minmax(340px, 0.85fr) minmax(0, 1.15fr); }
+}
+@container (min-width: 1100px) { .px-saya .px-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Kartu atlet ikut terlihat saat kisi digulir, hanya bila layar cukup tinggi */
+@media (min-width: 768px) and (min-height: 760px) { .px-2col > .px-sticky { position: sticky; top: 16px; } }
+/* Laptop pendek (1280×720, 1366×768) dan tablet rebah: judul dan kartu hitam lebih ringkas */
+@media (min-width: 768px) and (max-height: 820px) {
+  .px-dhead { padding-top: 10px; padding-bottom: 14px; }
+  .px-dhead .page-title { font-size: var(--fs-2xl); }
+  .px-hero-t { font-size: var(--fs-xl); }
+  .next-x .nx-count { font-size: var(--fs-3xl); }
+}
+/* Ubah profil di layar lebar: pratinjau tetap di kiri, pilihan di kanan */
+@media (min-width: 1024px) {
+  #sheet-profile-edit { width: min(980px, calc(100vw - 48px)); }
+  #pc-body { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  #pc-preview { position: sticky; top: 0; }
+  #pc-body .pc-ctrl { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+}
 </style>
 <style>html,body{height:100%;margin:0}.layer{position:fixed;inset:0}#share-toast{position:fixed;left:16px;right:16px;bottom:24px;background:#111;color:#fff;padding:12px;border-radius:10px;display:none;z-index:99;text-align:center}</style>
 </head><body>

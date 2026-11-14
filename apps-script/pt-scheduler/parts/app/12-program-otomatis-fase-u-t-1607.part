@@ -144,7 +144,7 @@
     left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
-    setHTML(el, '<div id="pub-latihan-pane">' + portalGrid(left, right) + '</div>');   // Fase X: Makan punya tab sendiri (public-food)
+    setHTML(el, pxHead('Latihan', 'Rutinitas dari coach dan buatan sendiri') + '<div id="pub-latihan-pane">' + portalGrid(left, right) + '</div>');   // Fase X: Makan punya tab sendiri (public-food)
   }
 
 
