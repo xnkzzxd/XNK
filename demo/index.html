@@ -10797,6 +10797,7 @@ html.kb-open .bk-foot { display: none; }
         src.athlete = { level: xl.level, gelar: xl.gelar, stats: (xp.stat || []).map(k => by[k]).filter(Boolean).map(o => ({ l: o.k === 'berat' ? 'Berat' : o.l, v: o.v })) };
         if (xp.nama) src.first = xp.nama;
       }
+      if (window.myX && window.myX.journey) src.journey = window.myX.journey;
       src.photoLoader = function (pid) { return memberCall('getMyProgressPhoto', pid).then(r => r.dataUrl); };
     }
     if (src.workout && src.workout.error) src.workout = null;
@@ -15230,7 +15231,7 @@ html.kb-open .bk-foot { display: none; }
       '<span class="ih-eyebrow">' + h(j.eyebrow || 'Perjalanan') + '</span><p class="px-hero-t" style="font-size:var(--fs-3xl)">' + h(j.headline) + '</p>' + (j.sub ? '<p class="li-sub" style="margin-top:8px">' + h(j.sub) + '</p>' : '');
     if (j.tiles && j.tiles.length) html += '<div class="ath-stats" style="margin-top:16px">' + j.tiles.map(t => '<div class="ath-stat"><b class="num">' + h(t.v) + '</b><span>' + h(t.l) + '</span></div>').join('') + '</div>';
     html += '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="journey-add" onclick="window.pgOpenEntry(\'member\')">' + icon('plus') + 'Catat ukuran</button>' +
-      (window.shareOn !== false && window.shareOpen && j.tiles && j.tiles.length ? '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Bagikan</button>' : '') + '</div></section>';
+      (window.shareOn !== false && window.shareOpen && j.tiles && j.tiles.length ? '<button type="button" class="btn btn-on-ink-ghost" id="journey-share" onclick="window.shareJourney()">' + icon('share-2') + 'Bagikan</button>' : '') + '</div></section>';
     return html;
   }
   const MOMENT_IC = { pr: 'trophy', sesi: 'flag', ukur: 'ruler' };
@@ -15245,11 +15246,33 @@ html.kb-open .bk-foot { display: none; }
   let momAll = false;
   window.momToggle = function () { momAll = !momAll; const mo = $('pub-moments'); if (mo) { setHTML(mo, momentsCardHtml()); paintIcons(); } };
   // Bagikan kartu atlet: langsung buka editor di kartu "Atlet"; bila modul bagikan belum siap, ke galeri Kartu saya.
+  window.shareJourney = function () {
+    try { window.shareOpen('perjalanan', shareSrcFor('', {}), {}); } catch (e) { window.navigate('public-share'); }
+  };
   window.shareAthlete = function () {
     if (window.shareOpen && X().level) { try { window.shareOpen('atlet', shareSrcFor('', {}), {}); return; } catch (e) {} }
     window.navigate('public-share');
   };
+  // Perayaan naik level: level terakhir yang sudah dirayakan disimpan di perangkat; pertama kali hanya dicatat.
+  function levelCheck() {
+    const lv = X().level, me = window.publicLoggedMember;
+    if (!lv || !me || ui.mode !== 'public' || ui.sheetOn || ui.bkOn || ui.wlOn || ui.guideOn || (window.regBusy && window.regBusy())) return;
+    const key = 'xnk_lv_seen', id = String(me.id);
+    let seen = {}; try { seen = JSON.parse(_lsGet(key) || '{}') || {}; } catch (e) { seen = {}; }
+    const was = Number(seen[id]) || 0;
+    if (was === lv.level) return;
+    seen = {}; seen[id] = lv.level; _lsSet(key, JSON.stringify(seen));
+    if (!was || lv.level < was) return;
+    const body = '<section class="card-ink gfx-tipo athlete" id="lv-up" data-tipo="LV' + lv.level + '" style="text-align:center"><span class="ih-eyebrow">Naik level</span>' +
+      '<p class="px-hero-t" style="font-size:var(--fs-3xl);max-width:none">Level ' + lv.level + '</p><p style="font-weight:800;margin-top:4px">' + h(lv.gelar) + '</p>' +
+      '<p class="li-sub" style="margin-top:10px">' + lv.poin + ' poin' + (lv.next ? ' · ' + lv.sisa + ' poin lagi ke ' + h(lv.next.gelar) : '') + '</p></section>';
+    wlSheet('Naik level', body, '<div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" onclick="window.closeModal()">Tutup</button>' +
+      (window.shareOn !== false ? '<button type="button" class="btn btn-primary btn-lg" id="lv-share" onclick="window.closeModal();setTimeout(window.shareAthlete,350)">' + icon('share-2') + 'Bagikan</button>' : '') + '</div>');
+    $('wls-confetti').classList.remove('hide');
+    paintIcons();
+  }
   window.renderPortalX = function () {
+    setTimeout(levelCheck, 1200);
     const jr = $('pub-journey'); if (jr) setHTML(jr, journeyHeroHtml());
     const mo = $('pub-moments'); if (mo) setHTML(mo, momentsCardHtml());
     const td = $('pub-todo'); if (td) setHTML(td, todoHtml());
@@ -15625,7 +15648,7 @@ html.kb-open .bk-foot { display: none; }
   const PART_GROUP = { 'back': 'back', 'upper legs': 'legs', 'lower legs': 'legs', 'chest': 'chest', 'shoulders': 'shoulders', 'neck': 'shoulders', 'waist': 'core', 'upper arms': 'arms', 'lower arms': 'arms' };
   const GROUP_PARTS = { back: ['back'], legs: ['upper legs', 'lower legs'], chest: ['chest'], shoulders: ['shoulders', 'neck'], core: ['waist'], arms: ['upper arms', 'lower arms'] };
   const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri'];
-  const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'gizi', 'rekap', 'foto', 'badge'];
+  const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'perjalanan', 'gizi', 'rekap', 'foto', 'badge'];
   const PERIOD_KINDS = { latihan: 1, exercises: 1, gizi: 1, ukuran: 1 };
   const PERIODS = ['hari', 'minggu', 'bulan', '3bulan'];
 
@@ -15959,6 +15982,12 @@ html.kb-open .bk-foot { display: none; }
       graphs: { emblem: { type: 'emblem', label: a.gelar || ('Level ' + a.level), kind: 'sesi', need: 'L' + a.level } },
       stats: (a.stats || []).slice(0, 4).map((x, i) => stat('m:a' + i, x.l, x.v)) };
   }
+  // Sebelum–sesudah (Fase X): angka saja, dari cerita perjalanan (src.journey: headline + Awal / Sekarang / Selisih).
+  function buildPerjalanan(src) {
+    const j = src.journey; if (!j || !j.tiles || !j.tiles.length) return null;
+    return { kind: 'perjalanan', title: j.headline, date: j.eyebrow || fmtDate(src.today), fname: 'journey-' + iso(src.today),
+      stats: j.tiles.slice(0, 3).map((t, i) => stat('m:j' + i, t.l, t.v)) };
+  }
   function buildKonsistensi(src) {
     const p = src.progress || {}, sh = src.share || {}, a = sh.activity, mo = sh.month || {}, pm = sh.prevMonth || {};
     if (!a) return null;
@@ -15974,10 +16003,10 @@ html.kb-open .bk-foot { display: none; }
   }
   const BUILD = {
     latihan: (s, k, p) => buildLatihan(s, k, p, false), exercises: (s, k, p) => buildLatihan(s, k, p, true), record: buildRecord, progres: buildProgres,
-    ukuran: buildUkuran, gizi: buildGizi, rekap: buildRekap, badges: buildBadges, badge: buildBadge, konsistensi: buildKonsistensi, foto: buildFoto, atlet: buildAtlet
+    ukuran: buildUkuran, gizi: buildGizi, rekap: buildRekap, badges: buildBadges, badge: buildBadge, konsistensi: buildKonsistensi, foto: buildFoto, atlet: buildAtlet, perjalanan: buildPerjalanan
   };
-  const KIND_NAME = { atlet: 'Atlet', latihan: 'Latihan', exercises: 'Gerakan', record: 'Rekor', progres: 'Progres', ukuran: 'Ukuran tubuh', konsistensi: 'Konsistensi', badges: 'Koleksi badge', gizi: 'Gizi', rekap: 'Rekap bulan', foto: 'Foto progres', badge: 'Badge baru' };
-  const KIND_ICON = { atlet: 'shield', latihan: 'dumbbell', exercises: 'list', record: 'trophy', progres: 'trending-up', ukuran: 'ruler', konsistensi: 'calendar-check', badges: 'award', gizi: 'apple', rekap: 'calendar', foto: 'image', badge: 'medal' };
+  const KIND_NAME = { atlet: 'Atlet', perjalanan: 'Sebelum–sesudah', latihan: 'Latihan', exercises: 'Gerakan', record: 'Rekor', progres: 'Progres', ukuran: 'Ukuran tubuh', konsistensi: 'Konsistensi', badges: 'Koleksi badge', gizi: 'Gizi', rekap: 'Rekap bulan', foto: 'Foto progres', badge: 'Badge baru' };
+  const KIND_ICON = { atlet: 'shield', perjalanan: 'arrow-right-left', latihan: 'dumbbell', exercises: 'list', record: 'trophy', progres: 'trending-up', ukuran: 'ruler', konsistensi: 'calendar-check', badges: 'award', gizi: 'apple', rekap: 'calendar', foto: 'image', badge: 'medal' };
   const GRAPH_NAME = { radar: 'Radar', bodymap: 'Peta otot', partbars: 'Bagian tubuh', list: 'Daftar', line: '1RM', lifts: 'Top 3 gerakan', badges: 'Badge', bodyline: 'Grafik tubuh', lines: 'Grafik per ukuran', pairs: 'Sebelum–sesudah', macro: 'Cincin makro', kcalbars: 'Kalori harian', weekbars: 'Batang mingguan', heat: 'Kalender', emblem: 'Lambang', photos: 'Foto', none: 'Tanpa grafik' };
   const STAT_NAME = { duration: 'Durasi', volume: 'Volume', sets: 'Set', reps: 'Rep', records: 'Rekor', exercises: 'Jumlah gerakan', workouts: 'Hari latihan', sessions: 'Sesi', streak: 'Streak', month: 'Bulan ini', badges: 'Badge', best: 'Terbaik', earned: 'Badge diraih', kcal: 'Kalori', protein: 'Protein', carbs: 'Karbo', fat: 'Lemak', avg: 'Rata-rata kalori', logged: 'Hari dicatat', ontarget: 'Sesuai target', meals: 'Makan dicatat', e1rm: 'Estimasi 1RM', vsprev: 'vs sebelumnya', impr: 'Peningkatan' };
 

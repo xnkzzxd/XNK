@@ -282,7 +282,7 @@
       '<span class="ih-eyebrow">' + h(j.eyebrow || 'Perjalanan') + '</span><p class="px-hero-t" style="font-size:var(--fs-3xl)">' + h(j.headline) + '</p>' + (j.sub ? '<p class="li-sub" style="margin-top:8px">' + h(j.sub) + '</p>' : '');
     if (j.tiles && j.tiles.length) html += '<div class="ath-stats" style="margin-top:16px">' + j.tiles.map(t => '<div class="ath-stat"><b class="num">' + h(t.v) + '</b><span>' + h(t.l) + '</span></div>').join('') + '</div>';
     html += '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="journey-add" onclick="window.pgOpenEntry(\'member\')">' + icon('plus') + 'Catat ukuran</button>' +
-      (window.shareOn !== false && window.shareOpen && j.tiles && j.tiles.length ? '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Bagikan</button>' : '') + '</div></section>';
+      (window.shareOn !== false && window.shareOpen && j.tiles && j.tiles.length ? '<button type="button" class="btn btn-on-ink-ghost" id="journey-share" onclick="window.shareJourney()">' + icon('share-2') + 'Bagikan</button>' : '') + '</div></section>';
     return html;
   }
   const MOMENT_IC = { pr: 'trophy', sesi: 'flag', ukur: 'ruler' };
@@ -297,11 +297,33 @@
   let momAll = false;
   window.momToggle = function () { momAll = !momAll; const mo = $('pub-moments'); if (mo) { setHTML(mo, momentsCardHtml()); paintIcons(); } };
   // Bagikan kartu atlet: langsung buka editor di kartu "Atlet"; bila modul bagikan belum siap, ke galeri Kartu saya.
+  window.shareJourney = function () {
+    try { window.shareOpen('perjalanan', shareSrcFor('', {}), {}); } catch (e) { window.navigate('public-share'); }
+  };
   window.shareAthlete = function () {
     if (window.shareOpen && X().level) { try { window.shareOpen('atlet', shareSrcFor('', {}), {}); return; } catch (e) {} }
     window.navigate('public-share');
   };
+  // Perayaan naik level: level terakhir yang sudah dirayakan disimpan di perangkat; pertama kali hanya dicatat.
+  function levelCheck() {
+    const lv = X().level, me = window.publicLoggedMember;
+    if (!lv || !me || ui.mode !== 'public' || ui.sheetOn || ui.bkOn || ui.wlOn || ui.guideOn || (window.regBusy && window.regBusy())) return;
+    const key = 'xnk_lv_seen', id = String(me.id);
+    let seen = {}; try { seen = JSON.parse(_lsGet(key) || '{}') || {}; } catch (e) { seen = {}; }
+    const was = Number(seen[id]) || 0;
+    if (was === lv.level) return;
+    seen = {}; seen[id] = lv.level; _lsSet(key, JSON.stringify(seen));
+    if (!was || lv.level < was) return;
+    const body = '<section class="card-ink gfx-tipo athlete" id="lv-up" data-tipo="LV' + lv.level + '" style="text-align:center"><span class="ih-eyebrow">Naik level</span>' +
+      '<p class="px-hero-t" style="font-size:var(--fs-3xl);max-width:none">Level ' + lv.level + '</p><p style="font-weight:800;margin-top:4px">' + h(lv.gelar) + '</p>' +
+      '<p class="li-sub" style="margin-top:10px">' + lv.poin + ' poin' + (lv.next ? ' · ' + lv.sisa + ' poin lagi ke ' + h(lv.next.gelar) : '') + '</p></section>';
+    wlSheet('Naik level', body, '<div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" onclick="window.closeModal()">Tutup</button>' +
+      (window.shareOn !== false ? '<button type="button" class="btn btn-primary btn-lg" id="lv-share" onclick="window.closeModal();setTimeout(window.shareAthlete,350)">' + icon('share-2') + 'Bagikan</button>' : '') + '</div>');
+    $('wls-confetti').classList.remove('hide');
+    paintIcons();
+  }
   window.renderPortalX = function () {
+    setTimeout(levelCheck, 1200);
     const jr = $('pub-journey'); if (jr) setHTML(jr, journeyHeroHtml());
     const mo = $('pub-moments'); if (mo) setHTML(mo, momentsCardHtml());
     const td = $('pub-todo'); if (td) setHTML(td, todoHtml());

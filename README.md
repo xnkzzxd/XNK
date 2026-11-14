@@ -46,6 +46,13 @@ client portal (dark screen, one highlighted button per step, once per page). Exi
 clients, renewals and clients added by the PT don't. It is on by default; switch it off
 in **Pengaturan → Tampilan → Panduan klien baru**.
 
+**Client portal for phones (Phase X).** The portal's bottom bar is Hari ini · Latihan · ＋ · Makan · Saya.
+Hari ini shows the next session, a server-computed to-do list and the package; booking is a
+three-step full-screen flow; a bell collects coach info, reminders and achievements. Saya holds an
+athlete card the client customises (nickname, motto, app-wide accent colour, card style, stats,
+featured badges) with a level from activity points, stored in the account. An unknown WhatsApp
+number can register in five steps from the login screen. See `docs/portal2/`.
+
 **Booking slots.** The landing page and the client portal load the free hours when they
 are opened and reuse them for 2 minutes; nothing polls in the background, which keeps the
 Apps Script quota low. Every client booking is checked by the server under a lock in the

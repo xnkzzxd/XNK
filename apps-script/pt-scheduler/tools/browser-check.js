@@ -1888,6 +1888,17 @@ async function contrastReport(page) {
     const pfRow = env.sheet('MemberData').rows.find(r => String(r[43]) === 'Anoy');
     check(!!pfRow && String(pfRow[44]) === 'Pelan asal jalan' && /biru/.test(String(pfRow[45])) && /garis/.test(String(pfRow[45])), 'profil: nickname, motto, colour and card style are saved in the account');
     check((await page.getAttribute('html', 'data-accent')) === 'biru' && (await page.textContent('#pub-dash-name')).includes('Anoy') && (await page.locator('#pub-athlete.st-garis').count()) === 1 && !(await visible(page, '#sheet-profile-edit')), 'profil: the athlete card and the whole portal follow the saved choice');
+    const lvNow = await page.evaluate(() => (window.myX.level || {}).level || 0);
+    if (lvNow > 1) {
+      await page.evaluate(() => { const o = {}; o[String(window.publicLoggedMember.id)] = window.myX.level.level - 1; localStorage.setItem('xnk_lv_seen', JSON.stringify(o)); window.renderPortalX(); });
+      await page.waitForTimeout(1900);
+      check(await visible(page, '#lv-up') && (await page.textContent('#lv-up')).includes('Level ' + lvNow), 'level: reaching a new level shows the celebration once');
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(500);
+      await page.evaluate(() => window.renderPortalX());
+      await page.waitForTimeout(1600);
+      check(!(await visible(page, '#lv-up')), 'level: the celebration does not repeat');
+    }
     if (await page.locator('#ath-share').count()) {
       await page.click('#ath-share');
       await page.waitForTimeout(1200);

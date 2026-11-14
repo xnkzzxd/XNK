@@ -26,6 +26,7 @@ const OUT = process.env.SHOTS_DIR || '';
   const sum = {}; Object.keys(entries[0]).filter(k => k !== 'tanggal').forEach(k => { const f = entries[0], l = entries[3]; sum[k] = { count: 4, change: Math.round((l[k] - f[k]) * 10) / 10, first: { tanggal: f.tanggal, nilai: f[k] }, last: { tanggal: l.tanggal, nilai: l[k] } }; });
   const actDays = []; for (let i = 0; i < 60; i += 2) { const d = new Date(Date.UTC(2026, 9, 28) - i * 86400000).toISOString().slice(0, 10); actDays.unshift({ d, s: i % 4 === 0 ? 1 : 0, w: 1 }); }
   const src = {
+    journey: { eyebrow: '12 minggu bersama XNK', headline: 'Turun 4,2 kg', tiles: [{ l: 'Awal', v: '72,4' }, { l: 'Sekarang', v: '68,2' }, { l: 'Selisih', v: '−4,2 kg' }] },
     athlete: { level: 4, gelar: 'Konsisten', stats: [{ l: 'Sesi', v: '48' }, { l: 'Minggu beruntun', v: '5' }, { l: 'Berat', v: '−4,2' }] },
     today: '2026-10-28', date: '2026-10-28', first: 'Jenny',
     share: { coach: 'Erlan', qrUrl: 'https://xnkbooking.my.id', month: { label: '2026-10', sessions: 5, target: 8, workoutDays: 6, volume: 41200, prs: 4, foodDays: 12 }, prevMonth: { label: '2026-09', sessions: 4, workoutDays: 5, volume: 36000, prs: 2 },
@@ -52,8 +53,8 @@ const OUT = process.env.SHOTS_DIR || '';
     compare: { prev: { sessionsDone: 4, workout: { workoutDays: 7, volume: 20000, sets: 70, reps: 560, durasi: 21000, prs: 1 }, nutrition: { days: 15, avgKal: 2300, avgP: 120, onTarget: 6 } }, start: { sessionsDone: 42 }, target: { sessions: 8, kal: 2200, protein: 150 } } };
   await p.evaluate(per => { window.__per = per; }, per);
   const kinds = await p.evaluate(src => { const s = Object.assign({}, src, { loadPeriod: () => Promise.resolve(window.__per) }); window.__src = s; window.shareOpen('latihan', s, {}); return window.shareCheck.kinds(); }, src);
-  const want = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'gizi', 'rekap', 'foto', 'badge'];
-  check(want.every(k => kinds.includes(k)), 'all 12 cards are offered: ' + kinds.join(', '));
+  const want = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'perjalanan', 'gizi', 'rekap', 'foto', 'badge'];
+  check(want.every(k => kinds.includes(k)), 'all 13 cards are offered: ' + kinds.join(', '));
 
   // Photos for the photo card and photo style.
   await p.evaluate(async () => {

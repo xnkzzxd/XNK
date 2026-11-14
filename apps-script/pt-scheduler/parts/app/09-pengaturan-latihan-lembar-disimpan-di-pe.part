@@ -207,6 +207,7 @@
         src.athlete = { level: xl.level, gelar: xl.gelar, stats: (xp.stat || []).map(k => by[k]).filter(Boolean).map(o => ({ l: o.k === 'berat' ? 'Berat' : o.l, v: o.v })) };
         if (xp.nama) src.first = xp.nama;
       }
+      if (window.myX && window.myX.journey) src.journey = window.myX.journey;
       src.photoLoader = function (pid) { return memberCall('getMyProgressPhoto', pid).then(r => r.dataUrl); };
     }
     if (src.workout && src.workout.error) src.workout = null;
