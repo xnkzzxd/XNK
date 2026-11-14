@@ -2669,6 +2669,8 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
 .sh-tools::-webkit-scrollbar { display: none; }
 .sh-tool { flex: 1 0 auto; min-width: 58px; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 6px; border-radius: 12px; color: var(--fg-muted); font-size: var(--fs-2xs); font-weight: 700; background: transparent; }
 .sh-tool svg { width: 20px; height: 20px; }
+.sh-more { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.sh-more .sh-tool { min-width: 0; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
 .sh-tool.active { color: var(--fg); background: var(--surface-2); }
 .sh-body { max-height: 34dvh; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px; }
 .share-sheet.tool-open .sh-body { padding: 10px 12px 6px; border-bottom: 1px solid var(--border); }
@@ -2732,7 +2734,7 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
   .share-sheet .sh-arrow { display: inline-flex; align-items: center; justify-content: center; }
   /* Kolom kanan ramping: kisi alat 4×2 lalu panel alat aktif */
   .share-sheet .sh-side { flex: 0 0 340px; flex-direction: column; border-top: 0; border-left: 1px solid var(--border); }
-  .sh-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px; overflow: visible; border-bottom: 1px solid var(--border); }
+  .sh-tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 8px; overflow: visible; border-bottom: 1px solid var(--border); }
   .sh-tool { min-width: 0; min-height: 56px; }
   .sh-body, .share-sheet.tool-open .sh-body { flex: 1; max-height: none; padding: 12px; border-bottom: 0; }
   .sh-chips, .sh-kinds { flex-wrap: wrap; overflow: visible; }
@@ -2820,7 +2822,8 @@ html[data-accent] .chip.active { background: var(--accent); border-color: var(--
 .px-bar > i { display: block; height: 100%; border-radius: var(--r-full); background: var(--fg); }
 .card-ink .px-bar { background: color-mix(in srgb, var(--on-ink) 18%, transparent); }
 .card-ink .px-bar > i { background: var(--on-ink); }
-@media (min-width: 768px) { .px-band { margin-top: 0; border-radius: var(--r-xl); } .px-wrap { max-width: 640px; } }
+/* Desktop: band dan kartu menggantung khusus HP; di layar lebar isi berdiri di tengah tanpa band */
+@media (min-width: 768px) { .px-band { display: none; } .px-hang { margin-top: 0; } .px-wrap { max-width: 680px; margin-inline: auto; padding-top: 72px; } }
 
 /* Grafis. B kontur: garis lengkung tipis di band dan kartu tenang. A geometri: lingkaran konsentris di kartu aksi.
    C tipografi raksasa: angka/kata besar dari data-tipo. Semua di belakang isi dan hanya di permukaan hitam. */
@@ -3012,6 +3015,20 @@ html.kb-open .bk-foot { display: none; }
 .pg-step { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; align-items: stretch; }
 .pg-step .icon-btn { width: 100%; height: auto; min-height: 56px; border-radius: var(--r-md); }
 .pg-step .input { text-align: center; }
+/* Keadaan kosong di portal: ikon di tengah cincin geometri (warna dari token, ikut aksen) */
+html.portal .empty .empty-icon { position: relative; width: 64px; height: 64px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 12%, var(--surface-3)); color: var(--accent); }
+html.portal .empty .empty-icon::before, html.portal .empty .empty-icon::after { content: ''; position: absolute; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--accent) 28%, transparent); pointer-events: none; }
+html.portal .empty .empty-icon::before { inset: -10px; }
+html.portal .empty .empty-icon::after { inset: -20px; border-style: dashed; border-color: color-mix(in srgb, var(--fg) 14%, transparent); }
+html.portal .empty { padding-top: 40px; }
+html.portal .card-ink .empty .empty-icon { background: color-mix(in srgb, var(--on-ink) 12%, transparent); color: var(--on-ink); }
+/* Layar masuk di HP: kontur di belakang formulir (gambar besar hanya di desktop) */
+.auth-form.gfx-kontur { background-image: none; position: relative; }
+.auth-form.gfx-kontur::before { content: ''; position: absolute; right: 0; top: 0; width: min(100%, 390px); aspect-ratio: 3; background: var(--fg); opacity: .45; pointer-events: none; z-index: 0;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 130' fill='none' stroke='white' stroke-width='1.2'%3E%3Cpath d='M160 -10C220 30 300 -20 400 30' stroke-opacity='.22'/%3E%3Cpath d='M150 10C220 52 300 0 400 54' stroke-opacity='.18'/%3E%3Cpath d='M140 32C220 76 300 22 400 80' stroke-opacity='.14'/%3E%3Cpath d='M130 56C220 102 300 46 400 108' stroke-opacity='.1'/%3E%3Cpath d='M120 82C220 130 300 72 400 138' stroke-opacity='.07'/%3E%3C/svg%3E") no-repeat right top / 100% auto; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 130' fill='none' stroke='white' stroke-width='1.2'%3E%3Cpath d='M160 -10C220 30 300 -20 400 30' stroke-opacity='.22'/%3E%3Cpath d='M150 10C220 52 300 0 400 54' stroke-opacity='.18'/%3E%3Cpath d='M140 32C220 76 300 22 400 80' stroke-opacity='.14'/%3E%3Cpath d='M130 56C220 102 300 46 400 108' stroke-opacity='.1'/%3E%3Cpath d='M120 82C220 130 300 72 400 138' stroke-opacity='.07'/%3E%3C/svg%3E") no-repeat right top / 100% auto; }
+.auth-form.gfx-kontur > * { position: relative; z-index: 1; }
+.rt-card.card-ink .li-sub, .rt-card.card-ink .rt-xlist { color: var(--on-ink-muted); }
+.rt-card.card-ink { position: relative; overflow: hidden; }
 </style>
 
 </head>
@@ -3182,7 +3199,7 @@ html.kb-open .bk-foot { display: none; }
     </div>
     <div class="sheet hide" id="sheet-notif" role="dialog" aria-modal="true" aria-labelledby="sheet-notif-title">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h2 class="sheet-title" id="sheet-notif-title">Pemberitahuan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-head gfx-kontur"><h2 class="sheet-title" id="sheet-notif-title">Pemberitahuan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <div class="sheet-body" id="notif-body" style="padding-top:16px"></div>
     </div>
     <div class="sheet sm hide" id="sheet-quick" role="dialog" aria-modal="true" aria-labelledby="sheet-quick-title">
@@ -10798,6 +10815,9 @@ html.kb-open .bk-foot { display: none; }
         if (xp.nama) src.first = xp.nama;
       }
       if (window.myX && window.myX.journey) src.journey = window.myX.journey;
+      // Kartu ikut warna aksen dan gaya kartu atlet: warna dibaca dari token --accent halaman (tidak ada warna tetap di kode).
+      if (xp && xp.aksen && xp.aksen !== 'hitam') { const ac = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); if (ac) src.accent = ac; }
+      if (xp && xp.gaya) src.cardStyle = xp.gaya;
       src.photoLoader = function (pid) { return memberCall('getMyProgressPhoto', pid).then(r => r.dataUrl); };
     }
     if (src.workout && src.workout.error) src.workout = null;
@@ -11683,7 +11703,7 @@ html.kb-open .bk-foot { display: none; }
   function renderPublicLogin() {
     const el = $('view-public-login');
     if (el.querySelector('#login-phone')) return; // pertahankan isian & pesan
-    setHTML(el, '<div class="auth embedded"><form class="auth-form" onsubmit="window.handlePublicLogin(event)" novalidate style="padding-top:12px">' +
+    setHTML(el, '<div class="auth embedded"><form class="auth-form gfx-kontur" onsubmit="window.handlePublicLogin(event)" novalidate style="padding-top:12px">' +
       '<div class="auth-logo"><span class="logo-mark"></span></div>' +
       '<p class="eyebrow">XNK Personal Training</p><h2 class="auth-title">Masuk atau daftar</h2>' +
       '<p class="auth-sub">Cukup nomor WhatsApp. Nomor yang sudah terdaftar langsung masuk; nomor baru lanjut ke pendaftaran.</p>' +
@@ -12904,9 +12924,9 @@ html.kb-open .bk-foot { display: none; }
     const list = (rtData() || {}).explore || [];
     const body = list.length ? '<p class="li-sub">Program yang dibagikan coach. Simpan ke Rutinitas saya, lalu ubah sesuai kebutuhan.</p><div class="stack" style="gap:10px">' + list.map(function (t) {
       const n = t.days.reduce((s, d) => s + d.items.length, 0);
-      return '<div class="rt-card"><div class="rt-name"><b class="truncate">' + h(t.name) + '</b></div><p class="li-sub">' + t.days.length + ' rutinitas · ' + n + ' gerakan</p>' +
+      return '<div class="rt-card card-ink gfx-geo"><div class="rt-name"><b class="truncate" style="max-width:calc(100% - 72px)">' + h(t.name) + '</b></div><p class="li-sub">' + t.days.length + ' rutinitas · ' + n + ' gerakan</p>' +
         '<ul class="rt-xlist">' + t.days.map(d => '<li><b>' + h(d.hari) + '</b> · ' + h(d.items.map(it => it.gerakan).join(', ')) + '</li>').join('') + '</ul>' +
-        '<button type="button" class="btn btn-primary btn-block" data-t="' + h(t.name) + '" onclick="window.rtCopy(this.dataset.t)">' + icon('plus') + 'Simpan ke rutinitas saya</button></div>';
+        '<button type="button" class="btn btn-on-ink btn-block" data-t="' + h(t.name) + '" onclick="window.rtCopy(this.dataset.t)">' + icon('plus') + 'Simpan ke rutinitas saya</button></div>';
     }).join('') + '</div>'
       : emptyState('layout-grid', 'Galeri masih kosong', 'Coach bisa membagikan template program di sini. Sementara itu, buat rutinitas sendiri.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.closeModal();window.rtNew()">' + icon('plus') + 'Buat rutinitas</button>');
     wlSheet('Galeri', body);
@@ -13775,9 +13795,13 @@ html.kb-open .bk-foot { display: none; }
     const monthDone = mine.filter(x => isDone(x) && new Date(x.completedAt || x.start).getMonth() === now.getMonth() && new Date(x.completedAt || x.start).getFullYear() === now.getFullYear()).length;
     const todayFree = window.openSlotsByDate && window.openSlotsByDate[ymd(now)] ? Object.keys(window.openSlotsByDate[ymd(now)]).filter(hh => window.openSlotsByDate[ymd(now)][hh] > 0 && Number(hh) > now.getHours()).length : null;
     const next = mine.filter(x => !isDone(x) && new Date(x.end || x.start) > now).sort(byStart)[0];
-    const stats = [{ v: String(upcoming), l: 'Mendatang' }, { v: String(monthDone), l: 'Selesai bulan ini' }];
-    if (todayFree !== null) stats.push({ v: String(todayFree), l: 'Jam kosong hari ini' });
-    return '<div style="margin-bottom:16px">' + insightHeroHtml({ slim: true, eyebrow: 'Jadwalmu', stats: stats, text: next ? 'Sesi berikutnya ' + fmtDate(new Date(next.start)) + ' · ' + fmtTime(new Date(next.start)) + '.' : 'Belum ada sesi terjadwal. Pilih tanggal di bawah untuk booking.' }) + '</div>';
+    const stats = [{ v: String(upcoming), l: 'Mendatang' }, { v: String(monthDone), l: 'Selesai' }];
+    if (todayFree !== null) stats.push({ v: String(todayFree), l: 'Jam kosong' });
+    // Fase X: kartu hitam bergrafis geometri di atas kalender (sesi berikutnya + angka ringkas).
+    return '<section class="card-ink gfx-geo" id="pub-sched-hero" style="margin-bottom:16px"><span class="ih-eyebrow">' + (next ? 'Sesi berikutnya' : 'Jadwal') + '</span>' +
+      '<p class="px-hero-t">' + (next ? h(fmtDate(new Date(next.start))) + ' · ' + fmtTime(new Date(next.start)) : 'Belum ada sesi') + '</p>' +
+      (next ? '' : '<p class="li-sub" style="margin-top:6px;max-width:calc(100% - 72px)">Pilih tanggal di bawah untuk booking.</p>') +
+      '<div class="ath-stats" style="margin-top:16px">' + stats.map(x => '<div><b class="num">' + h(x.v) + '</b><span>' + h(x.l) + '</span></div>').join('') + '</div></section>';
   }
 
   window.chatCoach = function (kind) {
@@ -15711,6 +15735,7 @@ html.kb-open .bk-foot { display: none; }
     if (out.style === 'foto') out.style = 'grafik';
     return out;
   }
+  function hasPrefs() { try { return !!localStorage.getItem(PREF_KEY); } catch (e) { return false; } }
   function savePrefs() {
     try {
       const p = JSON.parse(JSON.stringify(P));
@@ -16485,7 +16510,7 @@ html.kb-open .bk-foot { display: none; }
   function opts() {
     const k = kp();
     const size = P.size, H = SIZES[size] || 1920;
-    return { style: P.style, size: size, H: H, ink: P.ink, align: P.align, pos: P.pos, s: P.scale === 'l' ? 1.18 : P.scale === 's' ? .86 : 1, corner: P.corner, frame: P.frame,
+    return { accent: st.src.accent || '', style: P.style === 'aksen' && !st.src.accent ? 'gelap' : P.style, size: size, H: H, ink: P.ink, align: P.align, pos: P.pos, s: P.scale === 'l' ? 1.18 : P.scale === 's' ? .86 : 1, corner: P.corner, frame: P.frame,
       foot: P.foot, name: String(P.name == null ? (st.src.first || '') : P.name).trim(), coach: (st.src.share && st.src.share.coach) || st.src.coach || '', cmp: PERIOD_KINDS[st.kind] || st.card.vsKey ? k.cmp : 'none', photo: st.photoBg, qrUrl: (st.src.share && st.src.share.qrUrl) || 'https://xnkbooking.my.id', avatars: st.avatars || {} };
   }
   function cmpText(stt, mode, vsKey) {
@@ -16515,7 +16540,7 @@ html.kb-open .bk-foot { display: none; }
   /** Kotak tiap blok di kanvas (untuk menggambar dan untuk tools/share-check.js). */
   function layout(card, o) {
     const cnv = document.createElement('canvas'), ctx = cnv.getContext('2d');
-    const boxed = o.style === 'gelap' || o.style === 'terang';
+    const boxed = o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen';
     const pad = 72, H = o.H, transparentStory = !boxed && o.size === 'story';
     const safeTop = transparentStory ? 170 : pad, safeBot = transparentStory ? 220 : pad;
     let s = o.s, m, gH, avail, total;
@@ -16634,11 +16659,11 @@ html.kb-open .bk-foot { display: none; }
   }
   function paint(ctx, card, o, img) {
     const H = o.H, k = o.t == null ? 1 : o.t;
-    const boxed = o.style === 'gelap' || o.style === 'terang';
-    let ink = o.style === 'gelap' ? '#FFFFFF' : o.style === 'terang' ? '#0B0B0B' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF');
+    const boxed = o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen';
+    let ink = o.style === 'gelap' || o.style === 'aksen' ? '#FFFFFF' : o.style === 'terang' ? '#0B0B0B' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF');
     const rad = o.corner === 'bulat' ? 72 : 0;
     if (o.video && !boxed && o.style !== 'foto') { ctx.fillStyle = ink === '#FFFFFF' ? '#0B0B0B' : '#FFFFFF'; ctx.fillRect(0, 0, W, H); }
-    if (boxed) { ctx.fillStyle = o.style === 'gelap' ? '#0B0B0B' : '#FFFFFF'; rrect(ctx, 0, 0, W, H, o.video ? 0 : rad); ctx.fill(); }
+    if (boxed) { ctx.fillStyle = o.style === 'aksen' ? (o.accent || '#0B0B0B') : o.style === 'gelap' ? '#0B0B0B' : '#FFFFFF'; rrect(ctx, 0, 0, W, H, o.video ? 0 : rad); ctx.fill(); }
     if (o.style === 'foto') {
       if (o.photo) {
         drawCover(ctx, o.photo, 0, 0, W, H);
@@ -16650,7 +16675,7 @@ html.kb-open .bk-foot { display: none; }
       } else { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, 0, W, H); Tx(ctx, T.pickPhoto, W / 2, H / 2, 54, 600, .5, 'center'); }
       if (rad && !o.video) { ctx.globalCompositeOperation = 'destination-in'; ctx.fillStyle = '#000'; rrect(ctx, 0, 0, W, H, rad); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
     }
-    if (o.frame) { ctx.save(); ctx.strokeStyle = ink; ctx.globalAlpha = .9; ctx.lineWidth = 6; rrect(ctx, 30, 30, W - 60, H - 60, Math.max(0, rad - 30)); ctx.stroke(); ctx.restore(); }
+    if (o.frame) { ctx.save(); ctx.strokeStyle = o.accent && o.style !== 'aksen' ? o.accent : ink; ctx.globalAlpha = .9; ctx.lineWidth = 6; rrect(ctx, 30, 30, W - 60, H - 60, Math.max(0, rad - 30)); ctx.stroke(); ctx.restore(); }
     ctx.fillStyle = ink; ctx.textBaseline = 'alphabetic';
     if (ink === '#FFFFFF' && !boxed && o.style !== 'foto' && !o.video) { ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 2; }
     const R = layout(card, o);
@@ -16701,8 +16726,10 @@ html.kb-open .bk-foot { display: none; }
     box.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.shareFull(); } });
   }
   // Alat: di HP bilah ikon di bawah pratinjau (panel terbuka hanya saat diketuk), di desktop kolom kanan yang ramping.
-  const TOOLS = [['kartu', 'Kartu', 'layers'], ['template', 'Template', 'sparkles'], ['gaya', 'Gaya', 'palette'], ['ukuran', 'Ukuran', 'ratio'],
-    ['tata', 'Tata letak', 'layout-template'], ['isi', 'Isi', 'list-checks'], ['teks', 'Teks', 'type'], ['ekspor', 'Ekspor', 'download']];
+  // Fase X: di HP hanya lima alat utama + "Lainnya"; desktop menampilkan semuanya.
+  const TOOLS_MAIN = [['kartu', 'Kartu', 'layers'], ['gaya', 'Gaya', 'palette'], ['ukuran', 'Ukuran', 'ratio'], ['isi', 'Isi', 'list-checks'], ['privasi', 'Privasi', 'eye-off']];
+  const TOOLS_MORE = [['template', 'Template', 'sparkles'], ['tata', 'Tata letak', 'layout-template'], ['teks', 'Teks', 'type'], ['ekspor', 'Ekspor', 'download']];
+  const TOOLS = TOOLS_MAIN.concat(TOOLS_MORE);
   const row = (label, inner) => '<div class="sh-row"><span class="sh-lbl">' + label + '</span><div class="sh-chips" role="radiogroup" aria-label="' + esc(label) + '">' + inner + '</div></div>';
   function paneKartu() {
     const k = kp(), cur = st.kind;
@@ -16729,8 +16756,8 @@ html.kb-open .bk-foot { display: none; }
     return row('Template', Object.keys(PRESETS).map(p => chip('preset', p, { minimal: 'Minimal', bold: 'Bold', strava: 'Strava', hevy: 'Hevy', polos: 'Polos' }[p], P.preset)).join('') + (P.preset === 'kustom' ? chip('preset', 'kustom', 'Kustom', 'kustom') : ''));
   }
   function paneGaya() {
-    const boxed = P.style === 'gelap' || P.style === 'terang';
-    let h = row('Gaya', [['teks', 'Transparan'], ['grafik', 'Transp. + grafik'], ['gelap', 'Gelap'], ['terang', 'Terang'], ['foto', 'Foto']].map(x => chip('style', x[0], x[1], P.style)).join(''));
+    const boxed = P.style === 'gelap' || P.style === 'terang' || P.style === 'aksen';
+    let h = row('Gaya', [['teks', 'Transparan'], ['grafik', 'Transp. + grafik'], ['gelap', 'Gelap'], ['terang', 'Terang']].concat(st.src.accent ? [['aksen', 'Warna aksen']] : [], [['foto', 'Foto']]).map(x => chip('style', x[0], x[1], P.style)).join(''));
     if (!boxed) h += row('Warna teks', chip('ink', 'putih', 'Putih', P.ink) + chip('ink', 'hitam', 'Hitam', P.ink));
     if (P.style === 'foto') h += row('Foto latar', '<button type="button" class="chip" onclick="window.sharePick(\'bg\')">' + ic('image') + (st.photoBg ? 'Ganti foto' : 'Pilih foto') + '</button>') + blurField();
     return h;
@@ -16739,7 +16766,7 @@ html.kb-open .bk-foot { display: none; }
     return row('Ukuran', [['story', 'Story 9:16'], ['portrait', 'Portrait 4:5'], ['kotak', 'Kotak 1:1']].map(x => chip('size', x[0], x[1], P.size)).join(''));
   }
   function paneTata() {
-    const boxed = P.style === 'gelap' || P.style === 'terang';
+    const boxed = P.style === 'gelap' || P.style === 'terang' || P.style === 'aksen';
     let h = row('Rata', chip('align', 'kiri', 'Kiri', P.align) + chip('align', 'tengah', 'Tengah', P.align));
     if (!boxed) h += row('Posisi', chip('pos', 'atas', 'Atas', P.pos) + chip('pos', 'tengah', 'Tengah', P.pos) + chip('pos', 'bawah', 'Bawah', P.pos));
     h += row('Teks', chip('scale', 's', 'Kecil', P.scale) + chip('scale', 'm', 'Sedang', P.scale) + chip('scale', 'l', 'Besar', P.scale));
@@ -16764,7 +16791,7 @@ html.kb-open .bk-foot { display: none; }
       const pick = (slot, cur) => '<div class="sh-photo-pick"><span class="label">' + (slot === 'a' ? 'Sebelum' : 'Sesudah') + '</span><div class="chips sh-chips">' +
         list.slice(0, 24).map(p => '<button type="button" class="chip' + (cur === p.id ? ' active' : '') + '" onclick="window.sharePhoto(\'' + slot + '\',\'' + esc(p.id) + '\')">' + esc(fmtShort(p.tanggal)) + ' · ' + esc(p.sisi) + '</button>').join('') +
         '<button type="button" class="chip" onclick="window.sharePick(\'' + slot + '\')">' + ic('smartphone') + 'Dari HP</button></div></div>';
-      h += '<div class="field sh-field">' + (list.length ? '' : '<p class="li-sub">Belum ada foto progres. Pilih dari HP.</p>') + pick('a', st.photoAId) + pick('b', st.photoBId) + '</div>' + blurField();
+      h += '<div class="field sh-field">' + (list.length ? '' : '<p class="li-sub">Belum ada foto progres. Pilih dari HP.</p>') + pick('a', st.photoAId) + pick('b', st.photoBId) + '</div>';
     }
     if (c && c.allStats.length) {
       h += '<div class="sh-stats" role="list" aria-label="Angka di kartu">' + c.allStats.map(function (s, i) {
@@ -16775,16 +16802,26 @@ html.kb-open .bk-foot { display: none; }
       }).join('') + '</div>';
     }
     if (c && c.gids.length && kind !== 'foto') h += row('Grafik', c.gids.concat(kind === 'badge' ? [] : ['none']).map(g => chip('graph', g, GRAPH_NAME[g] || g, c.gid)).join(''));
-    if (kind === 'progres' || kind === 'foto') h += '<div class="sh-toggles">' + toggle('body', 'Tampilkan data tubuh', k.body, 'body') + '</div>';
     if ((kind === 'progres' || kind === 'foto') && k.body || kind === 'ukuran') {
       const avail = measuresWithData(st.src);
       const sel = k.measures.length ? k.measures : (kind === 'ukuran' ? avail.slice(0, 4) : ['berat', 'pinggang']);
       h += '<div class="sh-row"><span class="sh-lbl">Ukuran</span><div class="sh-chips">' + avail.map(m => '<button type="button" class="chip' + (sel.indexOf(m) !== -1 ? ' active' : '') + '" role="checkbox" aria-checked="' + (sel.indexOf(m) !== -1) + '" onclick="window.shareMeasure(\'' + m + '\')">' + esc(L.id.m[m]) + '</button>').join('') + (avail.length ? '' : '<p class="li-sub">Belum ada ukuran tubuh.</p>') + '</div></div>';
-      h += row('Angka', chip('bodyVal', 'false', 'Perubahan', String(!!k.bodyVal)) + chip('bodyVal', 'true', 'Nilai', String(!!k.bodyVal)));
     }
-    if (['latihan', 'exercises', 'record', 'rekap'].indexOf(kind) !== -1) h += '<div class="sh-toggles">' + toggle('hideKg', 'Sembunyikan beban (kg)', k.hideKg, 'hideKg') + '</div>';
     h += '<div class="sh-row"><label class="sh-lbl" for="share-ttl">Judul</label><input class="input sh-input" id="share-ttl" maxlength="40" value="' + esc(k.title) + '" placeholder="' + esc(c ? (BUILD[kind](st.src, Object.assign({}, k, { title: '' }), st.per[periodKey()] || null) || {}).title || '' : '') + '" oninput="window.shareText(\'title\', this.value)" autocomplete="off"></div>';
     return h;
+  }
+  // Privasi: semua yang menyangkut tubuh, beban, dan wajah di satu tempat.
+  function panePrivasi() {
+    const k = kp(), kind = st.kind;
+    let h = '', any = false;
+    if (['latihan', 'exercises', 'record', 'rekap'].indexOf(kind) !== -1) { h += '<div class="sh-toggles">' + toggle('hideKg', 'Sembunyikan beban (kg)', k.hideKg, 'hideKg') + '</div>'; any = true; }
+    if (kind === 'progres' || kind === 'foto') { h += '<div class="sh-toggles">' + toggle('body', 'Tampilkan data tubuh', k.body, 'body') + '</div>'; any = true; }
+    if ((kind === 'progres' || kind === 'foto') && k.body || kind === 'ukuran') { h += row('Angka tubuh', chip('bodyVal', 'false', 'Perubahan', String(!!k.bodyVal)) + chip('bodyVal', 'true', 'Nilai', String(!!k.bodyVal))); any = true; }
+    if (kind === 'foto' || P.style === 'foto') { h += blurField(); any = true; }
+    return h + (any ? '' : '<p class="sh-note">Kartu ini tidak memuat data tubuh, beban, atau foto.</p>') + '<p class="sh-note">Kartu dibuat di HP ini dan tidak diunggah ke mana pun.</p>';
+  }
+  function paneLainnya() {
+    return '<div class="sh-more" role="list">' + TOOLS_MORE.map(t => '<button type="button" class="sh-tool" data-tool="' + t[0] + '" onclick="window.shareTab(\'' + t[0] + '\')">' + ic(t[2]) + '<span>' + t[1] + '</span></button>').join('') + '</div>';
   }
   function paneTeks() {
     const f = P.foot;
@@ -16795,11 +16832,13 @@ html.kb-open .bk-foot { display: none; }
     if (st.src.admin) h += '<p class="sh-note">Minta izin klien sebelum memposting kartu ini.</p>';
     return h;
   }
-  const PANES = { kartu: paneKartu, template: paneTemplate, gaya: paneGaya, ukuran: paneUkuran, tata: paneTata, isi: paneIsi, teks: paneTeks, ekspor: paneEkspor };
+  const PANES = { kartu: paneKartu, template: paneTemplate, gaya: paneGaya, ukuran: paneUkuran, tata: paneTata, isi: paneIsi, privasi: panePrivasi, lainnya: paneLainnya, teks: paneTeks, ekspor: paneEkspor };
   function renderControls() {
     const tabs = $('share-tabs'), body = $('share-body'), sh = $('sheet-share');
     if (isDesk() && !st.tab) st.tab = 'kartu';
-    tabs.innerHTML = TOOLS.map(t => '<button type="button" role="tab" class="sh-tool' + (st.tab === t[0] ? ' active' : '') + '" data-tool="' + t[0] + '" aria-selected="' + (st.tab === t[0]) + '" onclick="window.shareTab(\'' + t[0] + '\')">' + ic(t[2]) + '<span>' + t[1] + '</span></button>').join('');
+    const moreOn = st.tab === 'lainnya' || TOOLS_MORE.some(t => t[0] === st.tab);
+    const list = isDesk() ? TOOLS : TOOLS_MAIN.concat([['lainnya', 'Lainnya', 'more-horizontal']]);
+    tabs.innerHTML = list.map(t => { const on = st.tab === t[0] || (t[0] === 'lainnya' && moreOn); return '<button type="button" role="tab" class="sh-tool' + (on ? ' active' : '') + '" data-tool="' + t[0] + '" aria-selected="' + on + '" onclick="window.shareTab(\'' + t[0] + '\')">' + ic(t[2]) + '<span>' + t[1] + '</span></button>'; }).join('');
     const scroll = body.scrollTop;
     body.innerHTML = st.tab ? '<section class="sh-pane on" data-pane="' + st.tab + '">' + PANES[st.tab]() + '</section>' : '';
     body.scrollTop = scroll;
@@ -16867,8 +16906,8 @@ html.kb-open .bk-foot { display: none; }
       const box = $('share-box');
       st.ratio = o.H / 1080; fitBox();
       if (box) {
-        box.classList.toggle('ink-dark', !(o.style === 'gelap' || o.style === 'terang' || o.style === 'foto') && o.ink === 'hitam');
-        box.classList.toggle('solid', o.style === 'gelap' || o.style === 'terang' || o.style === 'foto');
+        box.classList.toggle('ink-dark', !(o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen' || o.style === 'foto') && o.ink === 'hitam');
+        box.classList.toggle('solid', o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen' || o.style === 'foto');
       }
     }, 50);
   }
@@ -16897,6 +16936,11 @@ html.kb-open .bk-foot { display: none; }
   window.shareOpen = function (kind, src, o) {
     src = src || {}; o = o || {};
     P = loadPrefs(); T = L[P.lang] || L.en;
+    if (src.cardStyle && !hasPrefs()) {   // Fase X: belum pernah mengatur editor → ikut gaya kartu atlet
+      if (src.cardStyle === 'aksen' && src.accent) P.style = 'aksen';
+      else if (src.cardStyle === 'garis') { P.style = 'gelap'; P.frame = true; }
+      else P.style = 'gelap';
+    }
     ensureShell();
     st.src = src; st.opts = o; st.per = {}; st.photoBg = null; st.blob = null; st.avatars = null; st.avImg = {}; st.full = false;
     st.prevName = P.name; if (src.admin) P.name = '';

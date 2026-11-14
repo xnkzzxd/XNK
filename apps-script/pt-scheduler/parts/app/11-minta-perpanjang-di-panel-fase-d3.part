@@ -737,9 +737,9 @@
     const list = (rtData() || {}).explore || [];
     const body = list.length ? '<p class="li-sub">Program yang dibagikan coach. Simpan ke Rutinitas saya, lalu ubah sesuai kebutuhan.</p><div class="stack" style="gap:10px">' + list.map(function (t) {
       const n = t.days.reduce((s, d) => s + d.items.length, 0);
-      return '<div class="rt-card"><div class="rt-name"><b class="truncate">' + h(t.name) + '</b></div><p class="li-sub">' + t.days.length + ' rutinitas · ' + n + ' gerakan</p>' +
+      return '<div class="rt-card card-ink gfx-geo"><div class="rt-name"><b class="truncate" style="max-width:calc(100% - 72px)">' + h(t.name) + '</b></div><p class="li-sub">' + t.days.length + ' rutinitas · ' + n + ' gerakan</p>' +
         '<ul class="rt-xlist">' + t.days.map(d => '<li><b>' + h(d.hari) + '</b> · ' + h(d.items.map(it => it.gerakan).join(', ')) + '</li>').join('') + '</ul>' +
-        '<button type="button" class="btn btn-primary btn-block" data-t="' + h(t.name) + '" onclick="window.rtCopy(this.dataset.t)">' + icon('plus') + 'Simpan ke rutinitas saya</button></div>';
+        '<button type="button" class="btn btn-on-ink btn-block" data-t="' + h(t.name) + '" onclick="window.rtCopy(this.dataset.t)">' + icon('plus') + 'Simpan ke rutinitas saya</button></div>';
     }).join('') + '</div>'
       : emptyState('layout-grid', 'Galeri masih kosong', 'Coach bisa membagikan template program di sini. Sementara itu, buat rutinitas sendiri.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.closeModal();window.rtNew()">' + icon('plus') + 'Buat rutinitas</button>');
     wlSheet('Galeri', body);

@@ -287,7 +287,7 @@
   function renderPublicLogin() {
     const el = $('view-public-login');
     if (el.querySelector('#login-phone')) return; // pertahankan isian & pesan
-    setHTML(el, '<div class="auth embedded"><form class="auth-form" onsubmit="window.handlePublicLogin(event)" novalidate style="padding-top:12px">' +
+    setHTML(el, '<div class="auth embedded"><form class="auth-form gfx-kontur" onsubmit="window.handlePublicLogin(event)" novalidate style="padding-top:12px">' +
       '<div class="auth-logo"><span class="logo-mark"></span></div>' +
       '<p class="eyebrow">XNK Personal Training</p><h2 class="auth-title">Masuk atau daftar</h2>' +
       '<p class="auth-sub">Cukup nomor WhatsApp. Nomor yang sudah terdaftar langsung masuk; nomor baru lanjut ke pendaftaran.</p>' +

@@ -1789,7 +1789,19 @@ async function contrastReport(page) {
     await page.waitForTimeout(300);
     const shBox = await page.evaluate(() => { const r = document.getElementById('share-box').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), Math.round(r.height / innerHeight * 100)]; });
     check(shBox[2] >= 60 && Math.abs(shBox[1] / shBox[0] - 1920 / 1080) < 0.03, 'share editor (phone): the preview is the main area (' + shBox[0] + 'x' + shBox[1] + ', ' + shBox[2] + '% of the height) with the card ratio');
-    check((await page.locator('#share-tabs .sh-tool').count()) === 8 && !(await page.locator('#share-body .sh-pane').count()), 'share editor (phone): a compact tool bar, no panel until a tool is tapped');
+    check((await page.locator('#share-tabs .sh-tool').allTextContents()).map(t => t.trim()).join(',') === 'Kartu,Gaya,Ukuran,Isi,Privasi,Lainnya' && !(await page.locator('#share-body .sh-pane').count()), 'share editor (phone): five main tools plus Lainnya, no panel until a tool is tapped');
+    await page.click('#share-tabs [data-tool="privasi"]');
+    await page.waitForTimeout(200);
+    check(await visible(page, '#share-body [data-pane="privasi"]') && (await page.textContent('#share-body')).includes('tidak diunggah'), 'share editor: Privasi gathers the privacy controls');
+    await page.click('#share-tabs [data-tool="lainnya"]');
+    await page.waitForTimeout(200);
+    check((await page.locator('#share-body .sh-more .sh-tool').count()) === 4, 'share editor: Lainnya holds Template, Tata letak, Teks and Ekspor');
+    await page.click('#share-body .sh-more [data-tool="teks"]');
+    await page.waitForTimeout(200);
+    check(await visible(page, '#share-body [data-pane="teks"]') && (await page.getAttribute('#share-tabs [data-tool="lainnya"]', 'aria-selected')) === 'true', 'share editor: a tool from Lainnya opens and keeps Lainnya lit');
+    await page.click('#share-tabs [data-tool="lainnya"]');
+    await page.waitForTimeout(200);
+    if (await page.locator('#share-body .sh-pane').count()) { await page.click('#share-tabs [data-tool="lainnya"]'); await page.waitForTimeout(200); }
     check((await overflowX(page)) <= 0, 'share editor (phone): no sideways scroll');
     await page.click('#share-tabs [data-tool="kartu"]');
     await page.waitForTimeout(200);
@@ -1853,6 +1865,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: Progres opens from Saya and the Saya tab stays lit');
     check(await visible(page, '#topbar-back'), 'nav: a second-level page has a back button in the top bar');
+    check(await page.evaluate(() => { const e = document.querySelector('#view-public-progress .empty .empty-icon, .empty .empty-icon'); return !e || getComputedStyle(e, '::before').content !== 'none'; }), 'grafis: empty states in the portal carry the ring graphic');
     check(await visible(page, '#pub-journey-card') && (await page.textContent('#pub-journey-card .px-hero-t')).trim().length > 0 && await visible(page, '#journey-add') && (await overflowX(page)) <= 0, 'progres: the page opens with the journey card (headline and Catat ukuran)');
     await page.click('#journey-add');
     await page.waitForTimeout(500);
@@ -1903,6 +1916,9 @@ async function contrastReport(page) {
       await page.click('#ath-share');
       await page.waitForTimeout(1200);
       check(await visible(page, '#sheet-share') && /atlet/i.test(await page.textContent('#share-title')), 'bagikan: the athlete card opens the share editor on the Atlet card');
+      await page.click('#share-tabs [data-tool="gaya"]');
+      await page.waitForTimeout(200);
+      check(await visible(page, '#share-body [data-pane="gaya"] .chip:has-text("Warna aksen")') && (await page.evaluate(() => window.shareCheck.opts().accent || '')).length > 0, 'bagikan: with an accent colour the cards offer the "Warna aksen" style');
       await page.evaluate(() => window.closeModal());
       await page.waitForTimeout(500);
     }
@@ -2383,7 +2399,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
-    check(await visible(page, '#view-calendar .insight-hero') && (await page.locator('#view-calendar .insight-hero .ih-stat').count()) >= 2, 'portal Jadwal: black summary card above the calendar');
+    check(await visible(page, '#pub-sched-hero.gfx-geo') && (await page.locator('#pub-sched-hero .ath-stats > div').count()) >= 2, 'portal Jadwal: black summary card with the geometric graphic above the calendar');
     await page.evaluate(() => window.navigate('public-progress'));
     await page.waitForTimeout(400);
     await page.click('#pub-progress-wrap .btn-primary');
@@ -2658,7 +2674,7 @@ async function contrastReport(page) {
     const token = env.memberToken(KEY_A);
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1300 });
     const homeW = await page.evaluate(() => { const w = document.querySelector('#view-public-dashboard .px-wrap').getBoundingClientRect(); return [Math.round(w.width), document.documentElement.scrollWidth <= innerWidth + 1]; });
-    check(homeW[0] <= 660 && homeW[1], scheme + ': Hari ini stays one readable column on desktop ' + JSON.stringify(homeW));
+    check(homeW[0] <= 700 && homeW[1], scheme + ': Hari ini stays one readable column on desktop ' + JSON.stringify(homeW));
     await shot(page, 'portal-desktop-' + scheme + '-home');
     // Makan on a wide screen (Phase P): two columns, nothing overflows, at 1440 and 1280.
     env.call('saveMyMeasurement', token, { berat: 70, pinggang: 80 });

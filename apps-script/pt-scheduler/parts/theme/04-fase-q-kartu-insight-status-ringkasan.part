@@ -329,6 +329,8 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
 .sh-tools::-webkit-scrollbar { display: none; }
 .sh-tool { flex: 1 0 auto; min-width: 58px; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 6px; border-radius: 12px; color: var(--fg-muted); font-size: var(--fs-2xs); font-weight: 700; background: transparent; }
 .sh-tool svg { width: 20px; height: 20px; }
+.sh-more { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.sh-more .sh-tool { min-width: 0; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
 .sh-tool.active { color: var(--fg); background: var(--surface-2); }
 .sh-body { max-height: 34dvh; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px; }
 .share-sheet.tool-open .sh-body { padding: 10px 12px 6px; border-bottom: 1px solid var(--border); }
@@ -392,7 +394,7 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
   .share-sheet .sh-arrow { display: inline-flex; align-items: center; justify-content: center; }
   /* Kolom kanan ramping: kisi alat 4×2 lalu panel alat aktif */
   .share-sheet .sh-side { flex: 0 0 340px; flex-direction: column; border-top: 0; border-left: 1px solid var(--border); }
-  .sh-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px; overflow: visible; border-bottom: 1px solid var(--border); }
+  .sh-tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 8px; overflow: visible; border-bottom: 1px solid var(--border); }
   .sh-tool { min-width: 0; min-height: 56px; }
   .sh-body, .share-sheet.tool-open .sh-body { flex: 1; max-height: none; padding: 12px; border-bottom: 0; }
   .sh-chips, .sh-kinds { flex-wrap: wrap; overflow: visible; }

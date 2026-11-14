@@ -26,6 +26,7 @@ const OUT = process.env.SHOTS_DIR || '';
   const sum = {}; Object.keys(entries[0]).filter(k => k !== 'tanggal').forEach(k => { const f = entries[0], l = entries[3]; sum[k] = { count: 4, change: Math.round((l[k] - f[k]) * 10) / 10, first: { tanggal: f.tanggal, nilai: f[k] }, last: { tanggal: l.tanggal, nilai: l[k] } }; });
   const actDays = []; for (let i = 0; i < 60; i += 2) { const d = new Date(Date.UTC(2026, 9, 28) - i * 86400000).toISOString().slice(0, 10); actDays.unshift({ d, s: i % 4 === 0 ? 1 : 0, w: 1 }); }
   const src = {
+    accent: 'rgb(29, 78, 216)', cardStyle: 'aksen',
     journey: { eyebrow: '12 minggu bersama XNK', headline: 'Turun 4,2 kg', tiles: [{ l: 'Awal', v: '72,4' }, { l: 'Sekarang', v: '68,2' }, { l: 'Selisih', v: '−4,2 kg' }] },
     athlete: { level: 4, gelar: 'Konsisten', stats: [{ l: 'Sesi', v: '48' }, { l: 'Minggu beruntun', v: '5' }, { l: 'Berat', v: '−4,2' }] },
     today: '2026-10-28', date: '2026-10-28', first: 'Jenny',
@@ -102,7 +103,7 @@ const OUT = process.env.SHOTS_DIR || '';
   const SIZES = { story: 1920, portrait: 1350, kotak: 1080 };
   const cases = [];
   for (const kind of want) {
-    for (const [style, size] of [['teks', 'story'], ['grafik', 'story'], ['grafik', 'kotak'], ['grafik', 'portrait'], ['gelap', 'kotak'], ['gelap', 'story'], ['terang', 'portrait'], ['foto', 'story']]) cases.push([kind, style, size, 'kiri', 'en', {}]);
+    for (const [style, size] of [['teks', 'story'], ['grafik', 'story'], ['grafik', 'kotak'], ['grafik', 'portrait'], ['gelap', 'kotak'], ['gelap', 'story'], ['terang', 'portrait'], ['aksen', 'story'], ['aksen', 'kotak'], ['foto', 'story']]) cases.push([kind, style, size, 'kiri', 'en', {}]);
     cases.push([kind, 'grafik', 'story', 'tengah', 'id', {}]);
     cases.push([kind, 'teks', 'kotak', 'tengah', 'en', {}]);
   }
@@ -118,7 +119,7 @@ const OUT = process.env.SHOTS_DIR || '';
     if (OUT) fs.writeFileSync(path.join(OUT, `${kind}-${style}-${size}-${align}-${lang}${extra.body ? '-body' : ''}${extra.period ? '-' + extra.period : ''}${extra.hideKg ? '-nokg' : ''}${extra.qr ? '-qr' : ''}.png`), Buffer.from(d.b64, 'base64'));
     const H = SIZES[size];
     check(d.w === 1080 && d.h === H, `${tag}: ${d.w}x${d.h}`);
-    const boxed = style === 'gelap' || style === 'terang', transparent = style === 'teks' || style === 'grafik';
+    const boxed = style === 'gelap' || style === 'terang' || style === 'aksen', transparent = style === 'teks' || style === 'grafik';
     check(transparent ? d.a0 === 0 : d.a1 === 255, `${tag}: background`);
     const inside = d.blocks.every(bk => bk.y >= 0 && bk.y + bk.h <= H + 1 && bk.x >= 0 && bk.x + bk.w <= 1080);
     check(inside, `${tag}: every block inside the canvas ${JSON.stringify(d.blocks.map(x => [x.k, Math.round(x.y), Math.round(x.h)]))}`);

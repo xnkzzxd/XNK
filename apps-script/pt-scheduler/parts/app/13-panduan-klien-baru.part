@@ -102,9 +102,13 @@
     const monthDone = mine.filter(x => isDone(x) && new Date(x.completedAt || x.start).getMonth() === now.getMonth() && new Date(x.completedAt || x.start).getFullYear() === now.getFullYear()).length;
     const todayFree = window.openSlotsByDate && window.openSlotsByDate[ymd(now)] ? Object.keys(window.openSlotsByDate[ymd(now)]).filter(hh => window.openSlotsByDate[ymd(now)][hh] > 0 && Number(hh) > now.getHours()).length : null;
     const next = mine.filter(x => !isDone(x) && new Date(x.end || x.start) > now).sort(byStart)[0];
-    const stats = [{ v: String(upcoming), l: 'Mendatang' }, { v: String(monthDone), l: 'Selesai bulan ini' }];
-    if (todayFree !== null) stats.push({ v: String(todayFree), l: 'Jam kosong hari ini' });
-    return '<div style="margin-bottom:16px">' + insightHeroHtml({ slim: true, eyebrow: 'Jadwalmu', stats: stats, text: next ? 'Sesi berikutnya ' + fmtDate(new Date(next.start)) + ' · ' + fmtTime(new Date(next.start)) + '.' : 'Belum ada sesi terjadwal. Pilih tanggal di bawah untuk booking.' }) + '</div>';
+    const stats = [{ v: String(upcoming), l: 'Mendatang' }, { v: String(monthDone), l: 'Selesai' }];
+    if (todayFree !== null) stats.push({ v: String(todayFree), l: 'Jam kosong' });
+    // Fase X: kartu hitam bergrafis geometri di atas kalender (sesi berikutnya + angka ringkas).
+    return '<section class="card-ink gfx-geo" id="pub-sched-hero" style="margin-bottom:16px"><span class="ih-eyebrow">' + (next ? 'Sesi berikutnya' : 'Jadwal') + '</span>' +
+      '<p class="px-hero-t">' + (next ? h(fmtDate(new Date(next.start))) + ' · ' + fmtTime(new Date(next.start)) : 'Belum ada sesi') + '</p>' +
+      (next ? '' : '<p class="li-sub" style="margin-top:6px;max-width:calc(100% - 72px)">Pilih tanggal di bawah untuk booking.</p>') +
+      '<div class="ath-stats" style="margin-top:16px">' + stats.map(x => '<div><b class="num">' + h(x.v) + '</b><span>' + h(x.l) + '</span></div>').join('') + '</div></section>';
   }
 
   window.chatCoach = function (kind) {

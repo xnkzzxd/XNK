@@ -208,6 +208,9 @@
         if (xp.nama) src.first = xp.nama;
       }
       if (window.myX && window.myX.journey) src.journey = window.myX.journey;
+      // Kartu ikut warna aksen dan gaya kartu atlet: warna dibaca dari token --accent halaman (tidak ada warna tetap di kode).
+      if (xp && xp.aksen && xp.aksen !== 'hitam') { const ac = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); if (ac) src.accent = ac; }
+      if (xp && xp.gaya) src.cardStyle = xp.gaya;
       src.photoLoader = function (pid) { return memberCall('getMyProgressPhoto', pid).then(r => r.dataUrl); };
     }
     if (src.workout && src.workout.error) src.workout = null;

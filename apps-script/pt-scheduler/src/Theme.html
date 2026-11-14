@@ -2263,6 +2263,8 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
 .sh-tools::-webkit-scrollbar { display: none; }
 .sh-tool { flex: 1 0 auto; min-width: 58px; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 6px; border-radius: 12px; color: var(--fg-muted); font-size: var(--fs-2xs); font-weight: 700; background: transparent; }
 .sh-tool svg { width: 20px; height: 20px; }
+.sh-more { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.sh-more .sh-tool { min-width: 0; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
 .sh-tool.active { color: var(--fg); background: var(--surface-2); }
 .sh-body { max-height: 34dvh; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px; }
 .share-sheet.tool-open .sh-body { padding: 10px 12px 6px; border-bottom: 1px solid var(--border); }
@@ -2326,7 +2328,7 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
   .share-sheet .sh-arrow { display: inline-flex; align-items: center; justify-content: center; }
   /* Kolom kanan ramping: kisi alat 4×2 lalu panel alat aktif */
   .share-sheet .sh-side { flex: 0 0 340px; flex-direction: column; border-top: 0; border-left: 1px solid var(--border); }
-  .sh-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px; overflow: visible; border-bottom: 1px solid var(--border); }
+  .sh-tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 8px; overflow: visible; border-bottom: 1px solid var(--border); }
   .sh-tool { min-width: 0; min-height: 56px; }
   .sh-body, .share-sheet.tool-open .sh-body { flex: 1; max-height: none; padding: 12px; border-bottom: 0; }
   .sh-chips, .sh-kinds { flex-wrap: wrap; overflow: visible; }
@@ -2414,7 +2416,8 @@ html[data-accent] .chip.active { background: var(--accent); border-color: var(--
 .px-bar > i { display: block; height: 100%; border-radius: var(--r-full); background: var(--fg); }
 .card-ink .px-bar { background: color-mix(in srgb, var(--on-ink) 18%, transparent); }
 .card-ink .px-bar > i { background: var(--on-ink); }
-@media (min-width: 768px) { .px-band { margin-top: 0; border-radius: var(--r-xl); } .px-wrap { max-width: 640px; } }
+/* Desktop: band dan kartu menggantung khusus HP; di layar lebar isi berdiri di tengah tanpa band */
+@media (min-width: 768px) { .px-band { display: none; } .px-hang { margin-top: 0; } .px-wrap { max-width: 680px; margin-inline: auto; padding-top: 72px; } }
 
 /* Grafis. B kontur: garis lengkung tipis di band dan kartu tenang. A geometri: lingkaran konsentris di kartu aksi.
    C tipografi raksasa: angka/kata besar dari data-tipo. Semua di belakang isi dan hanya di permukaan hitam. */
@@ -2606,4 +2609,18 @@ html.kb-open .bk-foot { display: none; }
 .pg-step { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; align-items: stretch; }
 .pg-step .icon-btn { width: 100%; height: auto; min-height: 56px; border-radius: var(--r-md); }
 .pg-step .input { text-align: center; }
+/* Keadaan kosong di portal: ikon di tengah cincin geometri (warna dari token, ikut aksen) */
+html.portal .empty .empty-icon { position: relative; width: 64px; height: 64px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 12%, var(--surface-3)); color: var(--accent); }
+html.portal .empty .empty-icon::before, html.portal .empty .empty-icon::after { content: ''; position: absolute; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--accent) 28%, transparent); pointer-events: none; }
+html.portal .empty .empty-icon::before { inset: -10px; }
+html.portal .empty .empty-icon::after { inset: -20px; border-style: dashed; border-color: color-mix(in srgb, var(--fg) 14%, transparent); }
+html.portal .empty { padding-top: 40px; }
+html.portal .card-ink .empty .empty-icon { background: color-mix(in srgb, var(--on-ink) 12%, transparent); color: var(--on-ink); }
+/* Layar masuk di HP: kontur di belakang formulir (gambar besar hanya di desktop) */
+.auth-form.gfx-kontur { background-image: none; position: relative; }
+.auth-form.gfx-kontur::before { content: ''; position: absolute; right: 0; top: 0; width: min(100%, 390px); aspect-ratio: 3; background: var(--fg); opacity: .45; pointer-events: none; z-index: 0;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 130' fill='none' stroke='white' stroke-width='1.2'%3E%3Cpath d='M160 -10C220 30 300 -20 400 30' stroke-opacity='.22'/%3E%3Cpath d='M150 10C220 52 300 0 400 54' stroke-opacity='.18'/%3E%3Cpath d='M140 32C220 76 300 22 400 80' stroke-opacity='.14'/%3E%3Cpath d='M130 56C220 102 300 46 400 108' stroke-opacity='.1'/%3E%3Cpath d='M120 82C220 130 300 72 400 138' stroke-opacity='.07'/%3E%3C/svg%3E") no-repeat right top / 100% auto; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 130' fill='none' stroke='white' stroke-width='1.2'%3E%3Cpath d='M160 -10C220 30 300 -20 400 30' stroke-opacity='.22'/%3E%3Cpath d='M150 10C220 52 300 0 400 54' stroke-opacity='.18'/%3E%3Cpath d='M140 32C220 76 300 22 400 80' stroke-opacity='.14'/%3E%3Cpath d='M130 56C220 102 300 46 400 108' stroke-opacity='.1'/%3E%3Cpath d='M120 82C220 130 300 72 400 138' stroke-opacity='.07'/%3E%3C/svg%3E") no-repeat right top / 100% auto; }
+.auth-form.gfx-kontur > * { position: relative; z-index: 1; }
+.rt-card.card-ink .li-sub, .rt-card.card-ink .rt-xlist { color: var(--on-ink-muted); }
+.rt-card.card-ink { position: relative; overflow: hidden; }
 </style>
