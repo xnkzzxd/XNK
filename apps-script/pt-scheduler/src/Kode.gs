@@ -2275,6 +2275,14 @@ function getPortalMoreImpl_(row, tr) {
     const workout = part('workout', function() { return _workoutFor_(row); });
     const nutrition = part('nutrition', function() { return _nutritionFor_(row); });
     const ins = part('insight', function() { return _insightFor_(row, 'client', { progress: progress, assessment: assessment, program: program, workout: workout, nutrition: nutrition, bodyFat: spy.bodyFat }); });
+    const tasks = part('tasks', function() { return _myTasksFor_(row); });
+    const healthForm = part('healthForm', function() { return _healthFormFor_(row); });
+    const renewal = part('renewal', function() { return _renewalFor_(row); });
+    const bills = part('bills', function() { return _billsFor_(row); });
+    const content = part('content', function() { return _contentForClient_(); });
+    // Fase X: kartu atlet, level, momen, cerita, lonceng, tugas hari ini — dari part di atas (satu galat = keenamnya {error}).
+    const px = part('portalX', function() { return _portalXFor_(row, { progress: progress, workout: workout, nutrition: nutrition, tasks: tasks, healthForm: healthForm, renewal: renewal, bills: bills, content: content }); });
+    const pxp = function(k) { return px.error ? px : px[k]; };
     return {
       at: new Date().toISOString(),
       ver: ver,
@@ -2282,18 +2290,19 @@ function getPortalMoreImpl_(row, tr) {
       week: ins.error ? ins : ins.week,
       insight: ins.error ? ins : { body: ins.body, fitness: ins.fitness, links: ins.links, training: ins.training, activity: ins.activity },
       progress: progress,
-      tasks: part('tasks', function() { return _myTasksFor_(row); }),
-      healthForm: part('healthForm', function() { return _healthFormFor_(row); }),
+      tasks: tasks,
+      healthForm: healthForm,
       assessment: assessment,
-      renewal: part('renewal', function() { return _renewalFor_(row); }),
-      bills: part('bills', function() { return _billsFor_(row); }),
+      renewal: renewal,
+      bills: bills,
       classGroup: part('classGroup', function() { return _classGroupFor_(row); }),
       meal: part('meal', function() { return _mealForMember_(row); }),
       program: program,
       workout: workout,
       nutrition: nutrition,
       programGen: part('programGen', function() { return _programGenFor_(row, false); }),
-      content: part('content', function() { return _contentForClient_(); }),
+      content: content,
+      profile: pxp('profile'), level: pxp('level'), moments: pxp('moments'), journey: pxp('journey'), notif: pxp('notif'), todo: pxp('todo'),
       coachStatus: part('coachStatus', function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
       share: part('share', function() { return _shareFor_(row, workout, progress); }),
       ms: _traceEnd_(tr, 'getPortalMore')
@@ -6469,6 +6478,8 @@ function getClientBundleImpl_(token, memberId, tr) {
       workout: workout,
       nutrition: part('nutrition', function () { return getClientNutrition(token, memberId); }),
       programGen: part('programGen', function () { return _programGenFor_(memberRow(), true); }),
+      // Fase X: kartu atlet dan level klien (baca saja) supaya coach melihat yang sama dengan klien.
+      athlete: part('athlete', function () { const x = _portalXFor_(memberRow(), { progress: progress, workout: workout }); return { profile: x.profile, level: x.level }; }),
       foodLog: part('foodLog', function () { return getClientFoodLog(token, memberId); }),
       share: part('share', function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
       insight: insight,
