@@ -2312,33 +2312,66 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     check((await page.locator('#day-panel .slot:not([disabled])').count()) > 0, 'free time slots listed for the chosen day');
     await shot(page, 'portal-mobile-calendar');
+    const mineRows = () => env.sheet('Schedules').rows.filter(r => r[1] === 'PT-A').length;
+    const rowsBefore = mineRows();
     await page.locator('#day-panel .slot:not([disabled])').first().click();
     await page.waitForTimeout(500);
-    check(await visible(page, '#modal-edit-schedule'), 'tapping a slot opens the booking sheet');
-    check((await page.inputValue('#edit-sch-date')) === day, 'booking sheet has the chosen date');
-    await page.fill('#edit-sch-notes', 'Leg day');
+    check(await visible(page, '#bk-screen') && (await page.textContent('#bk-title')).includes('Booking sesi') && (await page.textContent('#bk-screen .bk-count')).includes('3 dari 3'), 'tapping a slot opens the booking screen on its last step (day and hour already chosen)');
+    const dayLabel = new Date(day + 'T12:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
+    check((await page.textContent('#bk-summary')).includes(dayLabel), 'booking: the summary shows the chosen date (' + dayLabel + ')');
+    const bkBtns = await page.locator('#bk-screen button').evaluateAll(els => els.filter(e => e.offsetParent).map(e => Math.round(e.getBoundingClientRect().height)));
+    check(bkBtns.every(x => x >= 44) && (await overflowX(page)) <= 0, 'booking: buttons are at least 44 px and nothing scrolls sideways (' + bkBtns.join(', ') + ')');
     await shot(page, 'portal-mobile-booking');
     const callsBeforeBook = calls.length;
-    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.click('#bk-next');
     await page.waitForTimeout(700);
-    const booked = env.sheet('Schedules').rows.find(r => r[6] === 'Leg day');
-    check(!!booked && booked[1] === 'PT-A' && booked[7] === 'unread', 'booking is saved for the logged-in client');
+    check(mineRows() === rowsBefore + 1 && !(await visible(page, '#bk-screen')), 'booking is saved for the logged-in client and the booking screen closes');
+    const booked = env.sheet('Schedules').rows.filter(r => r[1] === 'PT-A').pop();
+    check(!!booked && booked[7] === 'unread' && new Date(booked[4]).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) === day, 'booking: the new row is on the chosen day and marked new for the coach');
     await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
-    const bookCalls = calls.slice(callsBeforeBook);
+    const bookCalls = calls.slice(callsBeforeBook).filter(c => c !== 'getOpenSlots');
     check(bookCalls.length === 1 && bookCalls[0] === 'clientBookSchedule', 'booking is one server call (no pre-check, no reload afterwards): ' + bookCalls.join(','));
     check(await page.evaluate(id => window.schedules.some(s => s.id === id && s.memberId === 'PT-A'), booked && booked[0]), 'the new booking is on screen straight from the answer');
     check((await page.textContent('#toast-msg')).includes('Booking terkirim'), 'booking: "Booking terkirim ke coach!"');
 
-    // FAB booking still works.
+    // "+" → Booking sesi walks the three steps: day, hour, check.
+    const day6 = inDays(6).slice(0, 10);
     await page.evaluate(() => window.handleFabClick());
-    await page.waitForTimeout(400);
-    await page.fill('#edit-sch-date', inDays(6).slice(0, 10));
-    await page.fill('#edit-sch-time', '10:00');
-    await page.fill('#edit-sch-notes', 'Fab booking');
-    await page.evaluate(() => document.querySelector('#form-edit-schedule button[type="submit"]').click());
+    await page.waitForTimeout(500);
+    check(await visible(page, '#bk-screen') && (await page.textContent('#bk-screen .bk-count')).includes('1 dari 3') && (await page.locator('#bk-screen .step-bar i.on').count()) === 1, 'booking: "+" opens step 1 of 3 (Pilih hari)');
+    await page.click('#bk-next');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#bk-screen .bk-count')).includes('1 dari 3') && (await page.textContent('#toast-msg')).includes('Pilih hari'), 'booking: Lanjut without a day asks for one');
+    check((await page.locator('#bk-screen .bk-day:not(.off)').count()) >= 5 && (await page.locator('#bk-screen .bk-day.off').count()) >= 1, 'booking: days with free hours can be tapped, past or full days cannot');
+    await page.evaluate(d => window.bkPick('hari', d), day6);
+    await page.waitForTimeout(200);
+    check((await page.textContent('#bk-day-note')).includes('jam kosong'), 'booking: the chosen day shows how many hours are free');
+    await shot(page, 'portal-mobile-booking-hari');
+    await page.click('#bk-next');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#bk-screen .bk-count')).includes('2 dari 3') && (await page.locator('#bk-screen .bk-slot:not(.off)').count()) >= 1, 'booking: step 2 lists the free hours of that day');
+    await shot(page, 'portal-mobile-booking-jam');
+    await page.click('#bk-screen .bk-slot:has-text("10.00")');
+    await page.click('#bk-next');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#bk-summary')).includes('10.00 – 11.00') && (await page.textContent('#bk-next')).trim() === 'Booking', 'booking: step 3 shows the day and hour to confirm');
+    await page.click('#bk-back');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#bk-screen .bk-count')).includes('2 dari 3'), 'booking: back returns to the previous step');
+    await page.click('#bk-next');
+    await page.waitForTimeout(300);
+    await page.click('#bk-next');
     await page.waitForTimeout(700);
-    check(!!env.sheet('Schedules').rows.find(r => r[6] === 'Fab booking' && r[1] === 'PT-A'), '"+" booking is saved too');
+    check(!!env.sheet('Schedules').rows.find(r => r[1] === 'PT-A' && String(r[4]).startsWith(day6 + 'T03:00')), '"+" booking is saved at the chosen day and hour');
     await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
+    // "Ubah" on an own session opens the same screen with the old time shown.
+    const upId = await page.evaluate(() => (window.schedules.filter(s => s.memberId === 'PT-A' && new Date(s.start) > new Date(Date.now() + 86400000 * 2))[0] || {}).id);
+    await page.evaluate(id => window.openRescheduleModal(id), upId);
+    await page.waitForTimeout(400);
+    check(await visible(page, '#bk-screen') && (await page.textContent('#bk-title')).includes('Ubah jadwal') && (await page.textContent('#bk-screen .bk-body')).includes('Jadwal lama'), 'reschedule: "Ubah" opens the same three steps and shows the old time');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+    check(!(await visible(page, '#bk-screen')), 'booking: Esc closes the screen');
 
     await page.evaluate(() => window.navigate('public-coaches'));
     await page.waitForTimeout(400);
@@ -2526,15 +2559,15 @@ async function contrastReport(page) {
     env.sheet('Schedules').rows.push(['SCH-X1', 'PT-B', 'Budi', '081222222222', slot.start, slot.end, '', 'unread', 'C-1', 'Rizky', '', '']);
     await hour10.click();
     await page.waitForTimeout(500);
-    check(await visible(page, '#modal-edit-schedule'), 'conflict: tapping the hour opens the booking sheet');
-    await page.fill('#edit-sch-time', '10:15');
-    check(((await page.textContent('#edit-sch-time-hint')) || '').includes('Dicatat mulai 10.00 (dihitung dari jam penuh).'), 'time field: 10:15 shows "Dicatat mulai 10.00 (dihitung dari jam penuh)."');
+    check(await visible(page, '#bk-screen') && (await page.textContent('#bk-summary')).includes('10.00 – 11.00'), 'conflict: tapping the hour opens the booking screen with that hour');
     const callsBefore = calls.length;
-    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.click('#bk-next');
     await page.waitForTimeout(900);
-    check(calls.slice(callsBefore).join(',') === 'clientBookSchedule', 'conflict: one server call, no pre-check: ' + calls.slice(callsBefore).join(','));
+    const conflictCalls = calls.slice(callsBefore).filter(c => c !== 'getOpenSlots');
+    check(conflictCalls.join(',') === 'clientBookSchedule', 'conflict: one server call, no pre-check: ' + conflictCalls.join(','));
+    check(!(await visible(page, '#bk-screen')), 'conflict: the booking screen makes way for the notice');
     check(await visible(page, '#modal-edit-schedule .conflict-panel'), 'conflict: the sheet stays open with a notice');
-    check(((await page.textContent('.conflict-panel .li-title')) || '').includes('Jam 10.00 baru saja terisi'), 'conflict: "Jam 10.00 baru saja terisi" (10:15 is counted from 10.00)');
+    check(((await page.textContent('.conflict-panel .li-title')) || '').includes('Jam 10.00 baru saja terisi'), 'conflict: "Jam 10.00 baru saja terisi"');
     check(!env.sheet('Schedules').rows.some(r => r[1] === 'PT-A' && new Date(r[4]).getTime() === new Date(slot.start).getTime()), 'conflict: nothing was saved for the taken hour');
     const chips = page.locator('.conflict-panel .slot');
     check((await chips.count()) >= 1 && (await chips.count()) <= 3, 'conflict: 1 to 3 other hours are offered (' + (await chips.count()) + ')');
@@ -2597,7 +2630,7 @@ async function contrastReport(page) {
     for (const k of Object.keys(env.cache)) if (k.indexOf('openslots') === 0) delete env.cache[k];
     const calls = [];
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public', calls, { xnk_member_token: token }, { timezoneId: 'Asia/Jakarta', wait: 1300 });
-    await page.evaluate(id => window.openRescheduleModal(id), mine.id);
+    await page.evaluate(id => window.openRescheduleModal(id, true), mine.id);   // the form behind the three steps
     await page.waitForTimeout(500);
     const takenDay = new Date(taken.start).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
     await page.fill('#edit-sch-date', takenDay);
@@ -2863,8 +2896,8 @@ async function contrastReport(page) {
 
     // The portal opens the booking form at the hour picked on the Landing.
     const portal = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: saved, xnk_pending_slot: JSON.stringify(pending) }, { wait: 1800 });
-    check(await visible(portal.page, '#modal-edit-schedule'), 'booking page opens the booking form for the picked hour');
-    check((await portal.page.inputValue('#edit-sch-date')) === pending.date && (await portal.page.inputValue('#edit-sch-time')) === pending.time, 'booking form has the picked date and hour');
+    check(await visible(portal.page, '#bk-screen') && (await portal.page.textContent('#bk-screen .bk-count')).includes('3 dari 3'), 'booking page opens the booking screen for the picked hour, ready to confirm');
+    check((await portal.page.textContent('#bk-summary')).includes(pending.time.replace(':', '.')), 'booking screen has the picked hour (' + pending.time + ')');
     check((await portal.page.evaluate(() => localStorage.getItem('xnk_pending_slot'))) === null, 'picked hour is used once');
     noErrors(portal.errors);
     await portal.context.close();

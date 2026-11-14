@@ -222,6 +222,7 @@
       + (panel && panel.classList.contains('open') ? 1 : 0)
       + (ui.sheetOn ? 1 : 0)
       + (ui.wlOn ? 1 : 0)
+      + (ui.bkOn ? 1 : 0)
       + (ui.guideOn ? 1 : 0);
   }
   function syncBack() {
@@ -246,6 +247,7 @@
     const panel = $('detail-panel');
     if (ui.guideOn) window.guideClose();
     else if (ui.sheetOn) window.closeModal();
+    else if (ui.bkOn) window.bkBack();
     else if (ui.wlOn) window.wlClose();
     else if (panel && panel.classList.contains('open')) window.closeDetail();
     else if (!bkIsHome(window.currentView)) window.navigate(window.isPublicView ? (window.pubParent(window.currentView) || 'public-dashboard') : 'dashboard');

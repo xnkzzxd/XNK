@@ -34,7 +34,7 @@
     return publicCall('getOpenSlots', { days: window.bookingHorizonDays || 14, coachId: coach }).then(function (rows) {
       const before = snap();
       if (coach) applyOpenSlotsForCoach(coach, rows); else applyOpenSlots(rows);
-      if (snap() !== before) window.updateUI();
+      if (snap() !== before) { window.updateUI(); if (window.bkRedraw) window.bkRedraw(); }
       else if (window.currentView === 'calendar') renderDayPanel();   // hanya "diperbarui HH.MM" yang berubah
     }).catch(function () {}).then(function () { slotsFetching = false; });
   };
@@ -103,7 +103,8 @@
       window.navigate('public-login');
       return;
     }
-    const ctx = !window.isPublicView && ui.detail && ui.detail.indexOf('client:') === 0 ? ui.detail.slice(7) : null;
+    if (window.isPublicView) { window.bkOpen({}); return; }   // Fase X: klien booking lewat tiga langkah
+    const ctx = ui.detail && ui.detail.indexOf('client:') === 0 ? ui.detail.slice(7) : null;
     window.openBookingSheet({ memberId: ctx });
   };
   window.openAddScheduleModal = window.handleFabClick;

@@ -435,6 +435,7 @@
       return;
     }
     html += '<div class="sched-layout"><div><div class="month-cal" id="month-cal"></div></div><div id="day-panel"></div></div>';
+    if (pub && window.publicLoggedMember) html += '<div id="pub-sched-lists" class="px-stack" style="margin-top:var(--gap)">' + window.mySessionListsHtml() + '</div>';
     setHTML(el, html);
     moveSegThumb($('sched-seg'));
     renderMonthCal();
@@ -623,10 +624,7 @@
   };
   window.bookSlot = function (date, time) {
     if (!window.publicLoggedMember) { window.showToast('Masuk dulu untuk booking.', 'lock'); window.navigate('public-login'); return; }
-    window.handleFabClick();
-    $('edit-sch-date').value = date;
-    $('edit-sch-time').value = time;
-    updateTimeHint();
+    window.bkOpen({ date: date, time: time });   // Fase X: hari dan jam sudah dipilih di kisi, langsung ke langkah periksa
   };
 
   // FullCalendar (tab Minggu, admin desktop)

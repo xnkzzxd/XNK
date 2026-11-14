@@ -6,8 +6,8 @@ Baca [PRD.md](PRD.md) dan [Design.md](Design.md) dulu.
 - [x] T-1901 Dokumen: PRD, Design, TODO, baris Fase X di CLAUDE.md
 - [x] T-1902 Server: `Profil.gs`, `Level.gs`, part `profile`/`level`/`moments`/`journey`/`notif`/`todo` di `getPortalMore`, tes
 - [x] T-1903 Tema: warna aksen, grafis `.gfx-*`, komponen baru; kerangka lima tab + lonceng + sheet ＋ empat aksi
-- [~] T-1904 Hari ini (built: kartu sesi, tugas hari ini, strip minggu, kartu paket) + Semua jadwal (belum)
-- [ ] T-1905 Booking tiga langkah, konflik + alternatif, ubah jadwal
+- [x] T-1904 Hari ini (kartu sesi, tugas hari ini, strip minggu, kartu paket) + Jadwal (kalender bulan, jam kosong, daftar Mendatang dan Selesai)
+- [x] T-1905 Booking tiga langkah (`#bk-screen`: coach bila 2+ → hari → jam → periksa), ubah jadwal lewat layar yang sama; kirim dan bentrok tetap lewat form lama
 - [ ] T-1906 Latihan: daftar rutinitas, Galeri, pencatat dirapikan, layar selesai
 - [ ] T-1907 Makan: buku harian per waktu makan, tambah makanan, Rencana makan
 - [~] T-1908 Saya: kartu atlet + kisi (built); ubah profil, badge, statistik, Paket saya, Coach, Tampilan (belum)

@@ -227,5 +227,174 @@
     if (window.currentView === 'public-more' && $('pub-athlete')) renderPublicMore();
     if (ui.mode === 'public') renderTopbarActions();
   };
+
+  // ── Semua jadwal: daftar sesi sendiri di bawah kalender (Mendatang, Selesai) ──
+  window.mySessionListsHtml = function () {
+    const me = window.publicLoggedMember; if (!me) return '';
+    const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
+    const up = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart);
+    const past = mine.filter(s => up.indexOf(s) === -1).sort((a, b) => new Date(b.start) - new Date(a.start));
+    return '<div class="card"><div class="px-sec" style="margin-bottom:8px"><h3>Mendatang</h3><span>' + up.length + ' sesi</span></div>' +
+      (up.length ? '<div class="list" id="pub-upcoming-list">' + up.map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>' +
+      '<div class="card"><div class="px-sec" style="margin-bottom:8px"><h3>Selesai</h3><span>' + past.length + ' sesi</span></div>' +
+      (past.length ? '<div class="list" id="pub-sched-history">' + past.slice(0, 8).map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Riwayat sesi muncul di sini.</p>') + '</div>';
+  };
+
+  // ── Booking tiga langkah (Fase X): Coach (hanya 2+ coach) → Hari → Jam → Periksa ──
+  // Layar ini hanya memilih; pengiriman tetap lewat form booking yang ada (optimistis, bentrok → saran jam, seri mingguan).
+  const bkx = { steps: [], i: 0, coach: '', date: '', time: '', month: '', repeat: false, resched: '' };
+  const bkMulti = () => !window.isSoloCoach() && window.coaches.length > 1;
+  function bkMap() { return (bkMulti() ? window.openSlotsByCoachMap[bkx.coach] : window.openSlotsByDate) || {}; }
+  function bkFreeHours(date) { const f = bkMap()[date] || {}; return Object.keys(f).map(Number).filter(hh => f[hh] > 0).sort((a, b) => a - b); }
+  const bkDayLabel = date => { const p = date.split('-').map(Number); return fmtDate(new Date(p[0], p[1] - 1, p[2])); };
+  window.bkOpen = function (opts) {
+    opts = opts || {};
+    const me = window.publicLoggedMember;
+    if (!me) { window.showToast('Masuk dulu untuk booking jadwal.', 'lock'); window.navigate('public-login'); return; }
+    let old = null;
+    if (opts.resched) {
+      old = window.schedules.find(x => String(x.id) === String(opts.resched));
+      if (!old || String(old.memberId) !== String(me.id)) { window.showToast('Jadwal tidak ditemukan.'); return; }
+      if (isDone(old)) { window.showToast('Sesi yang sudah selesai tidak bisa diubah.'); return; }
+      const cutoff = window.rescheduleCutoffHours != null ? Number(window.rescheduleCutoffHours) : 2;
+      if ((new Date(old.start) - new Date()) / 3600000 < cutoff) { window.showToast('Ubah jadwal paling lambat ' + cutoff + ' jam sebelum sesi. Hubungi coach lewat WhatsApp.', 'clock'); return; }
+    }
+    const multi = bkMulti();
+    Object.assign(bkx, { steps: (multi && !old ? ['coach'] : []).concat(['hari', 'jam', 'cek']), i: 0, repeat: false, resched: old ? String(old.id) : '',
+      coach: multi ? String((old && old.coachId) || ui.bookCoach || '') : '', date: opts.date || '', time: opts.time || '' });
+    if (bkx.date && bkx.time) bkx.i = bkx.steps.indexOf('cek');
+    else if (bkx.coach && bkx.steps[0] === 'coach') bkx.i = 1;
+    bkx.month = (bkx.date || wibParts(new Date()).date).slice(0, 7);
+    ui.bkOn = true;
+    const el = $('bk-screen');
+    el.classList.remove('hide');
+    requestAnimationFrame(function () { el.classList.add('open'); });
+    bkDraw();
+    syncBack();
+    if (window.refreshOpenSlots) window.refreshOpenSlots();
+  };
+  function bkHide(noSync) {
+    ui.bkOn = false;
+    const el = $('bk-screen');
+    el.classList.remove('open');
+    setTimeout(function () { if (!ui.bkOn) el.classList.add('hide'); }, 260);
+    if (!noSync) syncBack();
+  }
+  window.bkClose = function () { bkHide(); };
+  window.bkBack = function () { const first = bkx.date && bkx.time && bkx.steps[bkx.i] === 'cek' && !bkx.walked; if (bkx.i > 0 && !first) { bkx.i--; bkDraw(); } else bkHide(); };
+  window.bkNext = function () {
+    const st = bkx.steps[bkx.i];
+    if (st === 'coach' && !bkx.coach) { window.showToast('Pilih coach dulu.'); return; }
+    if (st === 'hari' && !bkx.date) { window.showToast('Pilih hari dulu.'); return; }
+    if (st === 'jam' && !bkx.time) { window.showToast('Pilih jam dulu.'); return; }
+    if (st === 'cek') { bkSubmit(); return; }
+    bkx.walked = true; bkx.i++; bkDraw();
+  };
+  window.bkPick = function (kind, v) {
+    if (kind === 'coach') { bkx.coach = String(v); bkx.date = ''; bkx.time = ''; ui.bookCoach = bkx.coach; if (window.refreshOpenSlots) window.refreshOpenSlots(); }
+    else if (kind === 'hari') { if (bkx.date !== v) bkx.time = ''; bkx.date = v; }
+    else if (kind === 'jam') bkx.time = v;
+    else if (kind === 'bulan') bkx.month = v;
+    else if (kind === 'ulang') bkx.repeat = !bkx.repeat;
+    bkDraw();
+  };
+  function bkCalHtml() {
+    const map = bkMap(), dates = Object.keys(map).sort();
+    if (!dates.length) return '<div class="card">' + skel(3, true) + '</div>';
+    const first = dates[0].slice(0, 7), last = dates[dates.length - 1].slice(0, 7);
+    if (bkx.month < first) bkx.month = first; if (bkx.month > last) bkx.month = last;
+    const y = Number(bkx.month.slice(0, 4)), m = Number(bkx.month.slice(5, 7));
+    const step = d => { const x = new Date(y, m - 1 + d, 1); return x.getFullYear() + '-' + pad(x.getMonth() + 1); };
+    const nav = (d, label, ic) => { const to = step(d), ok = to >= first && to <= last; return '<button type="button" class="icon-btn plain"' + (ok ? ' onclick="window.bkPick(\'bulan\',\'' + to + '\')"' : ' disabled') + ' aria-label="' + label + '">' + icon(ic) + '</button>'; };
+    let cells = '';
+    const lead = (new Date(y, m - 1, 1).getDay() + 6) % 7, days = new Date(y, m, 0).getDate(), today = wibParts(new Date()).date;
+    for (let i = 0; i < lead; i++) cells += '<span></span>';
+    for (let d = 1; d <= days; d++) {
+      const k = bkx.month + '-' + pad(d), free = bkFreeHours(k).length;
+      if (!free) cells += '<span class="bk-day off' + (k === today ? ' today' : '') + '">' + d + '</span>';
+      else cells += '<button type="button" class="bk-day' + (k === bkx.date ? ' on' : '') + (k === today ? ' today' : '') + '" aria-pressed="' + (k === bkx.date) + '" aria-label="' + h(bkDayLabel(k)) + ', ' + free + ' jam kosong" onclick="window.bkPick(\'hari\',\'' + k + '\')">' + d + '</button>';
+    }
+    return '<div class="card bk-cal"><div class="row-between">' + nav(-1, 'Bulan sebelumnya', 'chevron-left') + '<b>' + MONTHS[m - 1] + ' ' + y + '</b>' + nav(1, 'Bulan berikutnya', 'chevron-right') + '</div>' +
+      '<div class="bk-dow" aria-hidden="true"><span>Sen</span><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span>Sab</span><span>Min</span></div><div class="bk-grid">' + cells + '</div>' +
+      '<p class="li-sub" style="margin-top:10px">Angka abu-abu: sudah lewat, penuh, atau belum dibuka.</p></div>';
+  }
+  function bkHoursHtml() {
+    const f = bkMap()[bkx.date] || {}, hours = Object.keys(f).map(Number).sort((a, b) => a - b);
+    const groups = [['Pagi', 0, 11], ['Siang', 11, 15], ['Sore', 15, 18], ['Malam', 18, 24]];
+    let html = '';
+    groups.forEach(function (g) {
+      const hs = hours.filter(hh => hh >= g[1] && hh < g[2]);
+      if (!hs.length) return;
+      html += '<div><p class="px-eyebrow" style="margin-bottom:8px">' + g[0] + '</p><div class="bk-slots">' + hs.map(function (hh) {
+        const t = pad(hh) + ':00', label = pad(hh) + '.00';
+        return f[hh] > 0 ? '<button type="button" class="bk-slot' + (t === bkx.time ? ' on' : '') + '" aria-pressed="' + (t === bkx.time) + '" onclick="window.bkPick(\'jam\',\'' + t + '\')">' + label + '</button>'
+          : '<button type="button" class="bk-slot off" disabled aria-label="' + label + ' penuh">' + label + '</button>';
+      }).join('') + '</div></div>';
+    });
+    return html || emptyState('calendar-x', 'Tidak ada jam kosong', 'Pilih hari lain.');
+  }
+  function bkDraw() {
+    const me = window.publicLoggedMember, st = bkx.steps[bkx.i], n = bkx.steps.length;
+    const old = bkx.resched ? window.schedules.find(x => String(x.id) === bkx.resched) : null;
+    const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    let body = '', cta = 'Lanjut';
+    if (st === 'coach') {
+      body = '<h3 class="bk-q">Pilih coach</h3><div class="px-stack" style="gap:10px">' + window.coaches.map(function (c) {
+        const on = String(c.id) === bkx.coach;
+        return '<button type="button" class="bk-opt' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.bkPick(\'coach\',this.dataset.id)">' + avatar(c.photo, c.name, 'sm') + '<b class="grow">' + h(c.name) + '</b></button>';
+      }).join('') + '</div>';
+    } else if (st === 'hari') {
+      const free = bkx.date ? bkFreeHours(bkx.date).length : 0;
+      body = '<div><h3 class="bk-q">Pilih hari</h3><p class="li-sub">' + (old ? 'Jadwal lama: ' + h(fmtDate(new Date(old.start))) + ' · ' + fmtTime(new Date(old.start)) : (total ? 'Sisa ' + rem + ' sesi di paket ini.' : 'Pilih tanggal yang masih kosong.')) + '</p></div>' + bkCalHtml() +
+        (bkx.date ? '<div class="card-flat" id="bk-day-note"><b>' + h(bkDayLabel(bkx.date)) + '</b><span class="li-sub"> · ' + free + ' jam kosong</span></div>' : '');
+    } else if (st === 'jam') {
+      body = '<div><h3 class="bk-q">Pilih jam</h3><p class="li-sub">' + h(bkDayLabel(bkx.date)) + '</p></div>' + bkHoursHtml();
+    } else {
+      const hh = Number(bkx.time.slice(0, 2));
+      const coach = bkx.coach ? window.coaches.find(c => String(c.id) === bkx.coach) : null;
+      const kv = (k, v) => '<div class="bk-kv"><span>' + h(k) + '</span><b>' + h(v) + '</b></div>';
+      body = '<h3 class="bk-q">' + (old ? 'Periksa jadwal baru' : 'Periksa lalu booking') + '</h3>' +
+        '<section class="card-ink gfx-geo" id="bk-summary"><span class="ih-eyebrow">' + (old ? 'Jadwal baru' : 'Sesi latihan') + '</span>' +
+        '<p class="bk-big">' + h(bkDayLabel(bkx.date)) + '</p><p class="bk-big">' + pad(hh) + '.00 – ' + pad((hh + 1) % 24) + '.00</p></section>' +
+        '<div class="card" style="padding:4px 16px">' + (old ? kv('Jadwal lama', fmtDate(new Date(old.start), { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtTime(new Date(old.start))) : '') +
+        (coach ? kv('Coach', coach.name) : '') + kv('Paket', me.packageName || 'Member XNK') + (total && !old ? kv('Sisa sesi', rem + ' dari ' + total) : '') + '</div>' +
+        (old ? '' : '<label class="bk-check"><input type="checkbox" id="bk-repeat"' + (bkx.repeat ? ' checked' : '') + ' onchange="window.bkPick(\'ulang\')"><span>Ulangi tiap minggu di jam yang sama</span></label>') +
+        '<p class="li-sub">Bila jam ini baru saja terisi, jam terdekat yang masih kosong langsung ditawarkan.</p>';
+      cta = old ? 'Simpan jadwal baru' : (bkx.repeat ? 'Atur pengulangan' : 'Booking');
+    }
+    setHTML('bk-screen', '<header class="bk-head"><div class="row" style="gap:8px"><button type="button" class="icon-btn plain" id="bk-back" onclick="window.bkBack()" aria-label="' + (bkx.i ? 'Kembali' : 'Tutup') + '">' + icon(bkx.i ? 'arrow-left' : 'x') + '</button>' +
+      '<h2 class="grow" id="bk-title">' + (old ? 'Ubah jadwal' : 'Booking sesi') + '</h2><span class="bk-count">' + (bkx.i + 1) + ' dari ' + n + '</span></div>' +
+      '<div class="step-bar" style="grid-template-columns:repeat(' + n + ',minmax(0,1fr))" aria-hidden="true">' + bkx.steps.map((x, i) => '<i' + (i <= bkx.i ? ' class="on"' : '') + '></i>').join('') + '</div></header>' +
+      '<div class="bk-body">' + body + '</div><footer class="bk-foot"><button type="button" class="btn btn-primary btn-lg btn-block" id="bk-next" onclick="window.bkNext()">' + cta + '</button></footer>');
+    paintIcons();
+  }
+  window.bkRedraw = function () { if (ui.bkOn) bkDraw(); };
+  // Kirim lewat form yang ada: booking tunggal dan ubah jadwal langsung dikirim; seri mingguan dilanjutkan di form (pilih hari dan jumlah sesi).
+  function bkSubmit() {
+    const b = Object.assign({}, bkx);
+    bkHide(true);   // riwayat back: lapisan booking langsung digantikan sheet (satu syncBack di bawah), supaya tidak ada history.go yang tertunda
+    if (b.resched) { openRescheduleSheet(b.resched); if (!window.isRescheduleMode) { syncBack(); return; } }
+    else {
+      if (b.coach) ui.bookCoach = b.coach;
+      window.openBookingSheet({ date: b.date, time: b.time });
+    }
+    syncBack();
+    $('edit-sch-date').value = b.date;
+    $('edit-sch-time').value = b.time;
+    if (b.repeat) {
+      $('edit-sch-recurring-toggle').checked = true;
+      window.toggleRecurringOptions();
+      const p = b.date.split('-').map(Number), dow = new Date(p[0], p[1] - 1, p[2]).getDay();
+      const dayBtn = document.querySelector('.recurring-day-btn[data-day="' + dow + '"]');
+      if (dayBtn && !dayBtn.classList.contains('active')) window.toggleRecurringWeekday(dayBtn);
+      return;
+    }
+    const form = $('form-edit-schedule');
+    if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  }
+  // "Ubah" pada sesi sendiri membuka tiga langkah; form lama tetap dipakai untuk mengirim (dan oleh pemeriksaan otomatis).
+  const openRescheduleSheet = window.openRescheduleModal;
+  window.openRescheduleModal = function (id, direct) { if (direct || !window.isPublicView) openRescheduleSheet(id); else window.bkOpen({ resched: id }); };
+  document.addEventListener('keydown', function (e) { if (ui.bkOn && !ui.sheetOn && e.key === 'Escape') { e.preventDefault(); bkHide(); } });
 })();
 </script>
