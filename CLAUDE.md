@@ -20,6 +20,6 @@ Phase AAA (frontend statis di GitHub Pages, backend tetap Apps Script, domain te
 Phase V (migrasi ke Supabase + Cloudflare + domain baru, SaaS multi-coach, app Android, planned): docs/platform/ (PRD, Design, Risks, TODO; tasks T-1400+).
 Phase W (kecepatan: ukur, cache hasil jadi server, memo baca sheet, built; W2 MemberStats sengaja ditunda): docs/speed/ (TODO; tasks T-1800+).
 Phase X (portal klien baru untuk HP: lima tab Hari ini · Latihan · ＋ · Makan · Saya, kartu atlet, level, warna aksen, built): docs/portal2/ (PRD, Design, TODO; tasks T-1900+).
-Phase Y (portal klien ala aplikasi Mac di tablet, laptop, PC; HP tidak berubah, in progress): docs/desk/ (PRD, Design, TODO; tasks T-2000+).
+Phase Y (portal klien ala aplikasi Mac di tablet, laptop, PC; HP tidak berubah, built): docs/desk/ (PRD, Design, TODO; tasks T-2000+).
 
 @docs/Agent.md

@@ -447,7 +447,39 @@
     });
     return html || emptyState('calendar-x', 'Tidak ada jam kosong', 'Pilih hari lain.');
   }
+  // Fase Y: di desktop booking jadi satu jendela dua panel (kalender | jam), ringkasan dan tombol di kaki.
+  function bkDrawDesk() {
+    const me = window.publicLoggedMember, old = bkx.resched ? window.schedules.find(x => String(x.id) === bkx.resched) : null;
+    const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    const coaches = bkMulti() && !old ? '<div class="bk-coaches" role="radiogroup" aria-label="Coach">' + window.coaches.map(function (c) {
+      const on = String(c.id) === bkx.coach;
+      return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.bkPick(\'coach\',this.dataset.id)">' + h(c.name) + '</button>';
+    }).join('') + '</div>' : '';
+    const needCoach = bkMulti() && !old && !bkx.coach;
+    const left = coaches + (needCoach ? emptyState('user-round', 'Pilih coach dulu', 'Jam kosong tiap coach berbeda.') : bkCalHtml());
+    const right = '<div class="bk-rt-head"><b>' + (bkx.date ? 'Jam kosong · ' + h(bkDayLabel(bkx.date)) : 'Jam kosong') + '</b>' +
+      '<span class="li-sub">' + (old ? 'Jadwal lama ' + h(fmtDate(new Date(old.start), { weekday: 'short', day: 'numeric', month: 'short' })) + ' · ' + fmtTime(new Date(old.start)) : (total ? 'Sisa ' + rem + ' sesi di paket' : '')) + '</span></div>' +
+      (bkx.date ? bkHoursHtml() : emptyState('calendar-days', 'Pilih hari di kalender', 'Hari yang bisa dipilih berupa kotak abu.')) +
+      (old ? '' : '<label class="bk-check"><input type="checkbox" id="bk-repeat"' + (bkx.repeat ? ' checked' : '') + ' onchange="window.bkPick(\'ulang\')"><span>Ulangi tiap minggu di jam yang sama</span></label>');
+    const hh = bkx.time ? Number(bkx.time.slice(0, 2)) : null, coach = bkx.coach ? window.coaches.find(c => String(c.id) === bkx.coach) : null;
+    const sum = bkx.date && bkx.time ? h(bkDayLabel(bkx.date)) + ' · ' + pad(hh) + '.00 – ' + pad((hh + 1) % 24) + '.00' : (bkx.date ? 'Pilih jam' : 'Pilih hari dan jam');
+    const cta = old ? 'Simpan jadwal baru' : (bkx.repeat ? 'Atur pengulangan' : 'Booking');
+    setHTML('bk-screen', '<section class="bk-win" role="document"><header class="bk-whead"><h2 id="bk-title">' + (old ? 'Ubah jadwal' : 'Booking sesi') + '</h2>' +
+      '<button type="button" class="icon-btn plain" id="bk-back" onclick="window.bkClose()" aria-label="Tutup">' + icon('x') + '</button></header>' +
+      '<div class="bk-panes"><div class="bk-pane">' + left + '</div><div class="bk-pane">' + right + '</div></div>' +
+      '<footer class="bk-wfoot"><div class="grow"><b id="bk-sum">' + sum + '</b><span class="li-sub">' + h((coach ? coach.name + ' · ' : '') + '60 menit') + '</span></div>' +
+      '<button type="button" class="btn btn-secondary" onclick="window.bkClose()">Batal</button><button type="button" class="btn btn-primary" id="bk-next" onclick="window.bkDeskGo()"' + (bkx.date && bkx.time ? '' : ' disabled') + '>' + cta + '</button></footer></section>');
+    paintIcons();
+  }
+  window.bkDeskGo = function () {
+    if (bkMulti() && !bkx.resched && !bkx.coach) { window.showToast('Pilih coach dulu.'); return; }
+    if (!bkx.date) { window.showToast('Pilih hari dulu.'); return; }
+    if (!bkx.time) { window.showToast('Pilih jam dulu.'); return; }
+    bkSubmit();
+  };
   function bkDraw() {
+    if (window.deskIs && window.deskIs()) { $('bk-screen').classList.add('bk-desk'); bkDrawDesk(); return; }
+    $('bk-screen').classList.remove('bk-desk');
     const me = window.publicLoggedMember, st = bkx.steps[bkx.i], n = bkx.steps.length;
     const old = bkx.resched ? window.schedules.find(x => String(x.id) === bkx.resched) : null;
     const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));

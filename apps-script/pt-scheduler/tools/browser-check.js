@@ -2668,6 +2668,18 @@ async function contrastReport(page) {
     check(!(await skel.page.locator('#pub-progress-wrap .skel').count()), 'fast: the skeletons are replaced when the data arrives');
     await skel.context.close();
   })().catch(sectionCrash);
+  console.log('Portal klien · tablet sentuh (Fase Y)');
+  await (async () => {
+    const env = richEnv();
+    const token = env.memberToken(KEY_A);
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token }, { viewport: { width: 834, height: 1194 }, touch: true, wait: 1300 });
+    const t = await page.evaluate(() => ({ desk: document.documentElement.classList.contains('desk'), rail: Math.round(document.getElementById('sidebar').getBoundingClientRect().width), tab: getComputedStyle(document.getElementById('tabbar')).display, coarse: matchMedia('(pointer: coarse)').matches,
+      small: Array.from(document.querySelectorAll('#sidebar .nav-item, #topbar-actions .icon-btn, #topbar-actions .btn')).filter(e => e.offsetParent && e.getBoundingClientRect().height < 43.5).length, over: document.documentElement.scrollWidth - innerWidth }));
+    check(t.desk && t.rail <= 80 && t.tab === 'none' && t.small === 0 && t.over <= 1, 'tablet (touch, 834×1194): desktop frame with an icon rail, no phone tab bar, touch targets ≥ 44 px ' + JSON.stringify(t));
+    noErrors(errors);
+    await context.close();
+  })().catch(sectionCrash);
+
   console.log('Portal klien · desktop');
   for (const scheme of ['light', 'dark']) {
     const env = richEnv();
@@ -2712,6 +2724,17 @@ async function contrastReport(page) {
         await page.waitForTimeout(500);
         check(!(await page.locator('.desk-sel').count()), 'desk: closing the panel clears the selection');
       }
+      await page.evaluate(() => window.bkOpen({}));
+      await page.waitForTimeout(600);
+      check(await page.evaluate(() => { const w = document.querySelector('#bk-screen .bk-win'); const p = w && w.querySelectorAll('.bk-pane'); return !!w && p.length === 2 && document.getElementById('bk-next').disabled; }), 'desk: booking opens as one two-pane window (calendar | hours), Booking disabled until a day and hour are picked');
+      const bkDay = page.locator('#bk-screen .bk-day:not(.off)').first();
+      if (await bkDay.count()) {
+        await bkDay.click(); await page.waitForTimeout(250);
+        const bkSlot = page.locator('#bk-screen .bk-slot:not(.off)').first();
+        if (await bkSlot.count()) { await bkSlot.click(); await page.waitForTimeout(250); check(!(await page.evaluate(() => document.getElementById('bk-next').disabled)) && /–/.test(await page.textContent('#bk-sum')), 'desk: picking a day and an hour fills the summary and enables Booking'); }
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(300);
       check(await page.evaluate(() => !document.documentElement.classList.contains('desk') && getComputedStyle(document.getElementById('tabbar')).display !== 'none'), 'desk: narrowing the window to phone width switches back to the phone layout');

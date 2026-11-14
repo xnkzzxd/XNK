@@ -53,6 +53,11 @@ athlete card the client customises (nickname, motto, app-wide accent colour, car
 featured badges) with a level from activity points, stored in the account. An unknown WhatsApp
 number can register in five steps from the login screen. See `docs/portal2/`.
 
+**Client portal on tablet, laptop and PC (Phase Y).** From 768 px the portal behaves like a Mac
+app: light sidebar (icon rail on portrait tablets), thin title bar with per-page buttons, a ＋ pull-down
+menu, a bell popover, right-click menus on routines, sessions, foods and to-dos, details in a
+right-hand panel, and booking in one two-pane window. Phones are unchanged. See `docs/desk/`.
+
 **Booking slots.** The landing page and the client portal load the free hours when they
 are opened and reuse them for 2 minutes; nothing polls in the background, which keeps the
 Apps Script quota low. Every client booking is checked by the server under a lock in the
