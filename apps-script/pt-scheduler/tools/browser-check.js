@@ -1540,6 +1540,49 @@ async function contrastReport(page) {
     await adm.context.close();
   })().catch(sectionCrash);
 
+  // ── Daftar lima langkah (Fase X, T-1910): nomor baru → nama → paket (akun dibuat) → jadwal → tubuh → kesehatan ──
+  console.log('Daftar klien baru · lima langkah');
+  await (async () => {
+    const env = richEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], {}, { wait: 1500 });
+    await page.evaluate(() => window.navigate('public-login'));
+    await page.waitForTimeout(400);
+    await page.fill('#login-phone', '89911112222');
+    await page.click('#login-submit-btn');
+    await page.waitForTimeout(900);
+    check(await visible(page, '#modal-not-member') && await visible(page, '#nm-register'), 'daftar: an unknown number is offered registration with that number');
+    await page.click('#nm-register');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#sheet-reg') && (await page.textContent('#reg-x-title')).includes('Langkah 1 dari 5') && (await page.locator('#reg-x-bar i.on').count()) === 1, 'daftar: step 1 of 5 asks for the name');
+    await page.click('#reg-x-next');
+    check((await page.textContent('#reg-x-err')).includes('Nama wajib'), 'daftar: an empty name is refused');
+    await page.fill('#reg-x-name', 'Wulan Baru');
+    await page.fill('#reg-x-goal', 'Lebih bugar');
+    await page.click('#reg-x-next');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#reg-x-title')).includes('Langkah 2 dari 5') && (await page.locator('#reg-x-pkgs .bk-opt').count()) > 0, 'daftar: step 2 lists the packages');
+    await page.click('#reg-x-next');
+    check((await page.textContent('#reg-x-err')).includes('Pilih paket'), 'daftar: a package must be picked');
+    await page.click('#reg-x-pkgs .bk-opt >> nth=0');
+    if (await page.locator('#reg-x-coaches .bk-opt').count()) await page.click('#reg-x-coaches .bk-opt >> nth=0');
+    await page.click('#reg-x-next');
+    await page.waitForTimeout(1500);
+    const newRow = env.sheet('MemberData').rows.find(r => r.some(c => String(c) === 'Wulan Baru'));
+    check(!!newRow && (await page.textContent('#reg-x-title')).includes('Langkah 3 dari 5') && (await page.evaluate(() => !!window.publicLoggedMember)), 'daftar: the account is created at step 2 and the client is logged in');
+    check(!(await visible(page, '#guide-layer .welcome')), 'daftar: the welcome cards wait until registration is finished');
+    await page.click('#reg-later');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#reg-x-title')).includes('Langkah 4 dari 5'), 'daftar: "Nanti saja" skips the first schedule');
+    await page.click('#reg-later');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#reg-x-title')).includes('Langkah 5 dari 5') && (await page.locator('#reg-x-bar i.on').count()) === 5 && (await overflowX(page)) <= 0, 'daftar: step 5 is the health form');
+    await page.click('#reg-later');
+    await page.waitForTimeout(1600);
+    check(!(await visible(page, '#sheet-reg')) && (await page.evaluate(() => window.currentView)) === 'public-dashboard', 'daftar: skipping the last step lands on Hari ini');
+    check(errors.length === 0, 'daftar: no page errors' + (errors.length ? ' — ' + errors[0] : ''));
+    await context.close();
+  })().catch(sectionCrash);
+
   // ── Panduan klien baru (portal): layar gelap, satu tombol disorot ─────────
   console.log('Panduan klien baru · portal HP');
   await (async () => {

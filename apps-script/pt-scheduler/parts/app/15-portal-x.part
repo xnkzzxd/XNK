@@ -352,6 +352,7 @@
   };
   function bkHide(noSync) {
     ui.bkOn = false;
+    if (window.regResumeSoon) window.regResumeSoon();
     const el = $('bk-screen');
     el.classList.remove('open');
     setTimeout(function () { if (!ui.bkOn) el.classList.add('hide'); }, 260);
@@ -553,6 +554,108 @@
     const was = pcx.on;
     closeModalBase.apply(this, arguments);
     if (was && !ui.sheetOn) { pcx.on = false; window.applyAccent(); }
+  };
+
+  // ── Daftar lima langkah (Fase X, T-1910): nama → paket & coach (akun dibuat di sini) → jadwal pertama → tubuh & tujuan → form kesehatan.
+  // Langkah 3–5 memakai layar yang sudah ada dan boleh "Nanti saja" (yang dilewati muncul di lonceng dan Tugas hari ini).
+  const regx = { step: 0, phone: '', name: '', goal: '', pkg: '', coach: '', resume: 0 };
+  const REG_T = ['', 'Nama', 'Paket & coach', 'Jadwal pertama', 'Tubuh & tujuan', 'Form kesehatan'];
+  window.regOpen = function (phone) {
+    Object.assign(regx, { step: 1, phone: sanitizePhone(phone || window._pendingPhone || ''), name: '', goal: '', pkg: '', coach: '', resume: 0 });
+    if (!regx.phone) { window.navigate('public-login'); return; }
+    regDraw();
+    openSheet('sheet-reg');
+  };
+  window.regClose = function () { regx.resume = 0; window.closeModal(); };
+  function regPkgs() { return (window.priceListData || []).filter(p => p && p.aktif !== false && !classFull(p)); }
+  function regDraw() {
+    const st = regx.step, multi = !window.isSoloCoach() && window.coaches.length > 1;
+    $('reg-x-title').textContent = 'Langkah ' + st + ' dari 5 · ' + REG_T[st];
+    setHTML('reg-x-bar', [1, 2, 3, 4, 5].map(i => '<i' + (i <= st ? ' class="on"' : '') + '></i>').join(''));
+    const later = n => '<button type="button" class="btn btn-ghost btn-block" id="reg-later" onclick="window.regGo(' + n + ')">Nanti saja</button>';
+    let html = '';
+    if (st === 1) {
+      html = '<p class="li-sub">Nomor +' + h(regx.phone.replace(/^\+/, '')) + ' belum terdaftar. Butuh sekitar satu menit.</p>' +
+        '<div class="field"><label class="label" for="reg-x-name">Nama lengkap</label><input class="input" id="reg-x-name" type="text" autocomplete="name" maxlength="100" value="' + h(regx.name) + '"></div>' +
+        '<div class="field"><label class="label" for="reg-x-goal">Tujuan latihan</label><input class="input" id="reg-x-goal" type="text" maxlength="200" placeholder="Contoh: lebih bugar dan kuat" value="' + h(regx.goal) + '"></div>' +
+        '<p class="err" id="reg-x-err" role="alert"></p><button type="button" class="btn btn-primary btn-lg btn-block" id="reg-x-next" onclick="window.regNext()">Lanjut</button>';
+    } else if (st === 2) {
+      const list = regPkgs();
+      html = '<div class="stack" style="gap:8px" id="reg-x-pkgs">' + (list.length ? list.map(p =>
+        '<button type="button" class="bk-opt' + (String(p.id) === regx.pkg ? ' on' : '') + '" aria-pressed="' + (String(p.id) === regx.pkg) + '" data-id="' + h(String(p.id)) + '" onclick="window.regPick(\'pkg\',this.dataset.id)"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(p.namaPaket) + '</b>' +
+        '<span class="li-sub">' + h((p.jumlahSesi ? p.jumlahSesi + ' sesi' : 'Fleksibel') + (p.durasi ? ' · ' + p.durasi : '')) + '</span></span><b class="num">' + h(formatRp(p.harga)) + '</b></button>').join('') : '<p class="li-sub">Belum ada paket yang bisa dipilih.</p>') + '</div>';
+      if (multi) html += '<div class="px-sec"><p class="px-eyebrow">Coach</p></div><div class="stack" style="gap:8px" id="reg-x-coaches">' + window.coaches.map(c =>
+        '<button type="button" class="bk-opt' + (String(c.id) === regx.coach ? ' on' : '') + '" aria-pressed="' + (String(c.id) === regx.coach) + '" data-id="' + h(String(c.id)) + '" onclick="window.regPick(\'coach\',this.dataset.id)"><b class="grow">' + h(c.name) + '</b></button>').join('') + '</div>';
+      html += '<p class="hint">Pembayaran dikonfirmasi coach lewat WhatsApp. Akun dibuat di langkah ini.</p><p class="err" id="reg-x-err" role="alert"></p>' +
+        '<div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" onclick="window.regGo(1)">Kembali</button><button type="button" class="btn btn-primary btn-lg" id="reg-x-next" onclick="window.regNext()">Daftar</button></div>';
+    } else {
+      const card = (ic, title, text, btn, fn) => '<section class="card-ink gfx-geo"><span class="ih-eyebrow">' + h(REG_T[st]) + '</span><p class="px-hero-t">' + h(title) + '</p><p class="li-sub" style="margin-top:8px;max-width:calc(100% - 72px)">' + h(text) + '</p>' +
+        '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="reg-x-do" onclick="window.regDo(\'' + fn + '\')">' + icon(ic) + h(btn) + '</button></div></section>';
+      if (st === 3) html = card('calendar-plus', 'Pilih jadwal pertama', 'Akun sudah dibuat. Pilih hari dan jam sesi pertama, atau atur nanti dari Hari ini.', 'Pilih jadwal', 'jadwal') + later(4);
+      else if (st === 4) html = (nutTabOn() ? card('ruler', 'Tinggi, berat, tujuan', 'Dipakai untuk menghitung target kalori dan menyusun menu harian.', 'Isi sekarang', 'tubuh') : '<p class="li-sub">Tidak ada yang perlu diisi di langkah ini.</p>') + later(5);
+      else html = card('heart-pulse', 'Form kesehatan', 'Beberapa pertanyaan singkat supaya latihan aman. Hanya coach yang melihat jawabannya.', 'Isi form', 'kesehatan') +
+        '<button type="button" class="btn btn-ghost btn-block" id="reg-later" onclick="window.regClose()">Nanti saja</button>';
+    }
+    setHTML('reg-x-body', html);
+    paintIcons();
+  }
+  window.regGo = function (n) { const a = $('reg-x-name'); if (a) { regx.name = a.value; regx.goal = $('reg-x-goal').value; } regx.step = n; regDraw(); };
+  window.regPick = function (k, v) { regx[k] = String(v); regDraw(); };
+  window.regNext = function () {
+    const err = t => { $('reg-x-err').textContent = t; };
+    if (regx.step === 1) {
+      regx.name = $('reg-x-name').value.replace(/\s+/g, ' ').trim(); regx.goal = $('reg-x-goal').value.trim();
+      if (!regx.name) { err('Nama wajib diisi.'); $('reg-x-name').focus(); return; }
+      if (!regx.goal) { err('Tulis tujuan latihan, singkat saja.'); $('reg-x-goal').focus(); return; }
+      regx.step = 2; regDraw(); return;
+    }
+    const multi = !window.isSoloCoach() && window.coaches.length > 1;
+    const p = regPkgs().find(x => String(x.id) === regx.pkg);
+    if (!p) { err('Pilih paket dulu.'); return; }
+    if (multi && !regx.coach) { err('Pilih coach dulu.'); return; }
+    const data = { name: regx.name, phone: regx.phone, goal: regx.goal, packageId: regx.pkg };
+    if (multi) data.coachId = regx.coach;
+    const done = busy($('reg-x-next'), 'Memproses…');
+    publicCall('registerNewClient', data).then(function (res) {
+      done();
+      if (res.status === 'exists' || !res.token || !res.member) {
+        regx.step = 0; window.closeModal();
+        window.showToast('Nomor ini sudah terdaftar. Masuk dengan nomor yang sama.', 'info');
+        window.navigate('public-login'); return;
+      }
+      regx.wa = window.waUrl(window.coachPhoneById(data.coachId), 'Halo Coach, saya ' + data.name + ' ingin mendaftar PT.\n\n*Detail pendaftaran:*\nPaket: ' + p.namaPaket + (p.jumlahSesi ? ' (' + p.jumlahSesi + ' sesi)' : '') + '\nGoal: ' + data.goal + '\n\n*Total tagihan: ' + formatRp(p.harga) + '*\n\nMohon info nomor rekening pembayarannya ya Coach. Terima kasih!');
+      _lsSet(MEMBER_TOKEN_KEY, res.token);
+      window.setPublicMember(res.member);
+      window.loadPublicData();
+      regx.step = 3; regDraw();
+    }).catch(function (e) { done(); err('Gagal mendaftar: ' + window.authMessage(e)); });
+  };
+  // Langkah 3–5 membuka layar yang sudah ada; begitu layar itu ditutup, lembar daftar kembali di langkah berikutnya.
+  window.regDo = function (what) {
+    regx.resume = regx.step + 1;
+    regx.step = 0;
+    window.closeModal();
+    setTimeout(function () {
+      if (what === 'jadwal') window.bkOpen({});
+      else if (what === 'tubuh') window.openNutOnb();
+      else window.openPortalHealth();
+    }, 320);
+  };
+  function regResume() {
+    if (!regx.resume || ui.sheetOn || ui.bkOn) return;
+    const n = regx.resume; regx.resume = 0;
+    if (n > 5 || !window.publicLoggedMember) { regFinish(); return; }
+    regx.step = n; regDraw(); openSheet('sheet-reg');
+  }
+  window.regBusy = function () { return !!(regx.step || regx.resume); };
+  function regFinish() { if (window.guideCheck) window.guideCheck(); if (regx.wa) { window.showWaPrompt(regx.wa, 'Kirim detail pendaftaran ke Coach lewat WhatsApp.'); regx.wa = ''; } }
+  window.regResumeSoon = function () { if (regx.resume) setTimeout(regResume, 450); };
+  const closeModalReg = window.closeModal;
+  window.closeModal = function () {
+    const was = regx.step;
+    closeModalReg.apply(this, arguments);
+    if (regx.resume) window.regResumeSoon();
+    else if (was && !ui.sheetOn) { regx.step = 0; if (was >= 3) setTimeout(regFinish, 350); }
   };
 })();
 </script>

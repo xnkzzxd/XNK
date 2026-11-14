@@ -41,7 +41,7 @@
     clearTimeout(guide.timer);
     guide.timer = setTimeout(function () {
       const me = window.publicLoggedMember;
-      if (guide.on || !me || !me.guide || !window.isPublicView || ui.sheetOn) return;
+      if (guide.on || !me || !me.guide || !window.isPublicView || ui.sheetOn || ui.bkOn || (window.regBusy && window.regBusy())) return;   // sambutan menunggu pendaftaran selesai
       const splash = $('global-loader');
       if (splash && !splash.classList.contains('gone')) { window.guideCheck(); return; }
       welcomeStart(false);

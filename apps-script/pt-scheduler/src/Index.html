@@ -187,6 +187,11 @@
       <div class="sheet-head"><h2 class="sheet-title" id="sheet-quick-client-title">Tambah</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <div class="sheet-body" id="quick-client-body" style="padding-top:16px"></div>
     </div>
+    <div class="sheet tall hide" id="sheet-reg" role="dialog" aria-modal="true" aria-labelledby="reg-x-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head" style="flex-wrap:wrap"><h2 class="sheet-title" id="reg-x-title">Daftar</h2><button type="button" class="icon-btn plain" onclick="window.regClose()" aria-label="Tutup"><i data-lucide="x"></i></button><div class="step-bar" id="reg-x-bar" style="flex-basis:100%;grid-template-columns:repeat(5,minmax(0,1fr));margin:0 0 4px" aria-hidden="true"></div></div>
+      <div class="sheet-body stack" style="gap:16px;padding-top:16px" id="reg-x-body"></div>
+    </div>
     <div class="sheet hide" id="sheet-profile-edit" role="dialog" aria-modal="true" aria-labelledby="pc-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="pc-title">Ubah profil</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
@@ -641,7 +646,8 @@
       <div class="sheet-head"><h2 class="sheet-title" id="nm-title">Nomor belum terdaftar</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <div class="sheet-body stack" style="gap:10px">
         <p class="li-sub" id="nm-sum"></p>
-        <button type="button" class="btn btn-primary btn-lg btn-block" onclick="window.notMemberToPackages()"><i data-lucide="package"></i> Pilih paket &amp; daftar</button>
+        <button type="button" class="btn btn-primary btn-lg btn-block" id="nm-register" onclick="window.regOpen()"><i data-lucide="user-plus"></i> Daftar dengan nomor ini</button>
+        <button type="button" class="btn btn-outline btn-block" onclick="window.notMemberToPackages()"><i data-lucide="package"></i> Lihat paket dulu</button>
         <button type="button" class="btn btn-ghost btn-block" onclick="window.closeModal()">Coba nomor lain</button>
       </div>
     </div>
