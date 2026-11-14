@@ -2630,7 +2630,7 @@ html.kb-open .bk-foot { display: none; }
   const PART_GROUP = { 'back': 'back', 'upper legs': 'legs', 'lower legs': 'legs', 'chest': 'chest', 'shoulders': 'shoulders', 'neck': 'shoulders', 'waist': 'core', 'upper arms': 'arms', 'lower arms': 'arms' };
   const GROUP_PARTS = { back: ['back'], legs: ['upper legs', 'lower legs'], chest: ['chest'], shoulders: ['shoulders', 'neck'], core: ['waist'], arms: ['upper arms', 'lower arms'] };
   const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri'];
-  const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'gizi', 'rekap', 'foto', 'badge'];
+  const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'gizi', 'rekap', 'foto', 'badge'];
   const PERIOD_KINDS = { latihan: 1, exercises: 1, gizi: 1, ukuran: 1 };
   const PERIODS = ['hari', 'minggu', 'bulan', '3bulan'];
 
@@ -2957,6 +2957,13 @@ html.kb-open .bk-foot { display: none; }
     return { kind: 'badge', title: T.newBadge, date: fmtDate(src.today), fname: 'badge-' + b.id, graphs: { emblem: { type: 'emblem', label: badgeLabel(b), kind: b.kind, need: b.need } },
       stats: [stat('sessions', T.sessions, String(p.completed || 0)), stat('best', T.bestStreak, (p.bestStreak || 0) + ' ' + T.wk)] };
   }
+  // Kartu atlet (Fase X): level, gelar, dan statistik yang dipilih klien di kartu atletnya (src.athlete dari App.html).
+  function buildAtlet(src) {
+    const a = src.athlete; if (!a || !a.level) return null;
+    return { kind: 'atlet', title: 'Level ' + a.level + (a.gelar ? ' · ' + a.gelar : ''), date: fmtDate(src.today), fname: 'athlete-' + iso(src.today),
+      graphs: { emblem: { type: 'emblem', label: a.gelar || ('Level ' + a.level), kind: 'sesi', need: 'L' + a.level } },
+      stats: (a.stats || []).slice(0, 4).map((x, i) => stat('m:a' + i, x.l, x.v)) };
+  }
   function buildKonsistensi(src) {
     const p = src.progress || {}, sh = src.share || {}, a = sh.activity, mo = sh.month || {}, pm = sh.prevMonth || {};
     if (!a) return null;
@@ -2972,10 +2979,10 @@ html.kb-open .bk-foot { display: none; }
   }
   const BUILD = {
     latihan: (s, k, p) => buildLatihan(s, k, p, false), exercises: (s, k, p) => buildLatihan(s, k, p, true), record: buildRecord, progres: buildProgres,
-    ukuran: buildUkuran, gizi: buildGizi, rekap: buildRekap, badges: buildBadges, badge: buildBadge, konsistensi: buildKonsistensi, foto: buildFoto
+    ukuran: buildUkuran, gizi: buildGizi, rekap: buildRekap, badges: buildBadges, badge: buildBadge, konsistensi: buildKonsistensi, foto: buildFoto, atlet: buildAtlet
   };
-  const KIND_NAME = { latihan: 'Latihan', exercises: 'Gerakan', record: 'Rekor', progres: 'Progres', ukuran: 'Ukuran tubuh', konsistensi: 'Konsistensi', badges: 'Koleksi badge', gizi: 'Gizi', rekap: 'Rekap bulan', foto: 'Foto progres', badge: 'Badge baru' };
-  const KIND_ICON = { latihan: 'dumbbell', exercises: 'list', record: 'trophy', progres: 'trending-up', ukuran: 'ruler', konsistensi: 'calendar-check', badges: 'award', gizi: 'apple', rekap: 'calendar', foto: 'image', badge: 'medal' };
+  const KIND_NAME = { atlet: 'Atlet', latihan: 'Latihan', exercises: 'Gerakan', record: 'Rekor', progres: 'Progres', ukuran: 'Ukuran tubuh', konsistensi: 'Konsistensi', badges: 'Koleksi badge', gizi: 'Gizi', rekap: 'Rekap bulan', foto: 'Foto progres', badge: 'Badge baru' };
+  const KIND_ICON = { atlet: 'shield', latihan: 'dumbbell', exercises: 'list', record: 'trophy', progres: 'trending-up', ukuran: 'ruler', konsistensi: 'calendar-check', badges: 'award', gizi: 'apple', rekap: 'calendar', foto: 'image', badge: 'medal' };
   const GRAPH_NAME = { radar: 'Radar', bodymap: 'Peta otot', partbars: 'Bagian tubuh', list: 'Daftar', line: '1RM', lifts: 'Top 3 gerakan', badges: 'Badge', bodyline: 'Grafik tubuh', lines: 'Grafik per ukuran', pairs: 'Sebelum–sesudah', macro: 'Cincin makro', kcalbars: 'Kalori harian', weekbars: 'Batang mingguan', heat: 'Kalender', emblem: 'Lambang', photos: 'Foto', none: 'Tanpa grafik' };
   const STAT_NAME = { duration: 'Durasi', volume: 'Volume', sets: 'Set', reps: 'Rep', records: 'Rekor', exercises: 'Jumlah gerakan', workouts: 'Hari latihan', sessions: 'Sesi', streak: 'Streak', month: 'Bulan ini', badges: 'Badge', best: 'Terbaik', earned: 'Badge diraih', kcal: 'Kalori', protein: 'Protein', carbs: 'Karbo', fat: 'Lemak', avg: 'Rata-rata kalori', logged: 'Hari dicatat', ontarget: 'Sesuai target', meals: 'Makan dicatat', e1rm: 'Estimasi 1RM', vsprev: 'vs sebelumnya', impr: 'Peningkatan' };
 

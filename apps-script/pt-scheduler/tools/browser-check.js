@@ -1888,6 +1888,13 @@ async function contrastReport(page) {
     const pfRow = env.sheet('MemberData').rows.find(r => String(r[43]) === 'Anoy');
     check(!!pfRow && String(pfRow[44]) === 'Pelan asal jalan' && /biru/.test(String(pfRow[45])) && /garis/.test(String(pfRow[45])), 'profil: nickname, motto, colour and card style are saved in the account');
     check((await page.getAttribute('html', 'data-accent')) === 'biru' && (await page.textContent('#pub-dash-name')).includes('Anoy') && (await page.locator('#pub-athlete.st-garis').count()) === 1 && !(await visible(page, '#sheet-profile-edit')), 'profil: the athlete card and the whole portal follow the saved choice');
+    if (await page.locator('#ath-share').count()) {
+      await page.click('#ath-share');
+      await page.waitForTimeout(1200);
+      check(await visible(page, '#sheet-share') && /atlet/i.test(await page.textContent('#share-title')), 'bagikan: the athlete card opens the share editor on the Atlet card');
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(500);
+    }
     await page.click('#view-public-more .px-tile:has-text("Tampilan")');
     await page.waitForTimeout(500);
     check(await visible(page, '#set-accent .sw-biru.on'), 'tampilan: the settings sheet shows the accent colours with the saved one picked');

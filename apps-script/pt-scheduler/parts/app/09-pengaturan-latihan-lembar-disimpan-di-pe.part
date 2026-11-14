@@ -200,6 +200,13 @@
       src.workout = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null; src.progress = pg.data; src.share = window.myShare;
       src.nutrition = window.myNutrition; src.first = String(me.name || '').trim().split(/\s+/)[0] || '';
       src.photos = (pg.data && pg.data.photos) || [];
+      // Kartu atlet (Fase X): level dan statistik pilihan klien.
+      const xp = window.myX && window.myX.profile, xl = window.myX && window.myX.level;
+      if (xp && xl) {
+        const by = {}; (xp.statOptions || []).forEach(o => { by[o.k] = o; });
+        src.athlete = { level: xl.level, gelar: xl.gelar, stats: (xp.stat || []).map(k => by[k]).filter(Boolean).map(o => ({ l: o.k === 'berat' ? 'Berat' : o.l, v: o.v })) };
+        if (xp.nama) src.first = xp.nama;
+      }
       src.photoLoader = function (pid) { return memberCall('getMyProgressPhoto', pid).then(r => r.dataUrl); };
     }
     if (src.workout && src.workout.error) src.workout = null;

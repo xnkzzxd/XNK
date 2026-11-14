@@ -121,7 +121,7 @@
     }
     if (!pv) {
       html += '<div class="nx-actions" style="margin-top:0"><button type="button" class="btn btn-on-ink-ghost" id="pub-athlete-edit" onclick="(window.openProfileEdit || window.openMyProfile)()">' + icon('pencil') + 'Ubah</button>' +
-        (window.shareOn !== false ? '<button type="button" class="btn btn-on-ink" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Bagikan</button>' : '') + '</div>';
+        (window.shareOn !== false ? '<button type="button" class="btn btn-on-ink" id="ath-share" onclick="window.shareAthlete()">' + icon('share-2') + 'Bagikan</button>' : '') + '</div>';
     }
     return html + '</section>';
   }
@@ -296,6 +296,11 @@
   }
   let momAll = false;
   window.momToggle = function () { momAll = !momAll; const mo = $('pub-moments'); if (mo) { setHTML(mo, momentsCardHtml()); paintIcons(); } };
+  // Bagikan kartu atlet: langsung buka editor di kartu "Atlet"; bila modul bagikan belum siap, ke galeri Kartu saya.
+  window.shareAthlete = function () {
+    if (window.shareOpen && X().level) { try { window.shareOpen('atlet', shareSrcFor('', {}), {}); return; } catch (e) {} }
+    window.navigate('public-share');
+  };
   window.renderPortalX = function () {
     const jr = $('pub-journey'); if (jr) setHTML(jr, journeyHeroHtml());
     const mo = $('pub-moments'); if (mo) setHTML(mo, momentsCardHtml());

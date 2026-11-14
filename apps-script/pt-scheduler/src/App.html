@@ -6765,6 +6765,13 @@
       src.workout = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null; src.progress = pg.data; src.share = window.myShare;
       src.nutrition = window.myNutrition; src.first = String(me.name || '').trim().split(/\s+/)[0] || '';
       src.photos = (pg.data && pg.data.photos) || [];
+      // Kartu atlet (Fase X): level dan statistik pilihan klien.
+      const xp = window.myX && window.myX.profile, xl = window.myX && window.myX.level;
+      if (xp && xl) {
+        const by = {}; (xp.statOptions || []).forEach(o => { by[o.k] = o; });
+        src.athlete = { level: xl.level, gelar: xl.gelar, stats: (xp.stat || []).map(k => by[k]).filter(Boolean).map(o => ({ l: o.k === 'berat' ? 'Berat' : o.l, v: o.v })) };
+        if (xp.nama) src.first = xp.nama;
+      }
       src.photoLoader = function (pid) { return memberCall('getMyProgressPhoto', pid).then(r => r.dataUrl); };
     }
     if (src.workout && src.workout.error) src.workout = null;
@@ -11037,7 +11044,7 @@
     }
     if (!pv) {
       html += '<div class="nx-actions" style="margin-top:0"><button type="button" class="btn btn-on-ink-ghost" id="pub-athlete-edit" onclick="(window.openProfileEdit || window.openMyProfile)()">' + icon('pencil') + 'Ubah</button>' +
-        (window.shareOn !== false ? '<button type="button" class="btn btn-on-ink" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Bagikan</button>' : '') + '</div>';
+        (window.shareOn !== false ? '<button type="button" class="btn btn-on-ink" id="ath-share" onclick="window.shareAthlete()">' + icon('share-2') + 'Bagikan</button>' : '') + '</div>';
     }
     return html + '</section>';
   }
@@ -11212,6 +11219,11 @@
   }
   let momAll = false;
   window.momToggle = function () { momAll = !momAll; const mo = $('pub-moments'); if (mo) { setHTML(mo, momentsCardHtml()); paintIcons(); } };
+  // Bagikan kartu atlet: langsung buka editor di kartu "Atlet"; bila modul bagikan belum siap, ke galeri Kartu saya.
+  window.shareAthlete = function () {
+    if (window.shareOpen && X().level) { try { window.shareOpen('atlet', shareSrcFor('', {}), {}); return; } catch (e) {} }
+    window.navigate('public-share');
+  };
   window.renderPortalX = function () {
     const jr = $('pub-journey'); if (jr) setHTML(jr, journeyHeroHtml());
     const mo = $('pub-moments'); if (mo) setHTML(mo, momentsCardHtml());
