@@ -111,6 +111,10 @@ test('notif: dated items are fresh after the last open, reminders once a day, ol
   assert.equal(n.items[3].fresh, false);                              // momen bertanggal 12 Nov, lonceng dibuka 12 Nov 08.00 (tanggal saja ≤ waktu buka)
   const seenToday = notif(Object.assign({}, base, { seenAt: '2026-11-13T02:00:00.000Z' }));
   assert.equal(seenToday.count, 0);
+  const lateNight = notif(Object.assign({}, base, { today: '2026-11-14', seenAt: '2026-11-13T17:30:00.000Z', content: [], moments: [], renewal: null }));
+  assert.equal(lateNight.count, 0, 'opened at 00:30 WIB on the 14th: the daily reminders are already seen that day');
+  const lateBefore = notif(Object.assign({}, base, { today: '2026-11-14', seenAt: '2026-11-13T16:30:00.000Z', content: [], moments: [], renewal: null }));
+  assert.ok(lateBefore.count > 0, 'opened at 23:30 WIB on the 13th: the reminders are new again on the 14th');
   const never = notif(Object.assign({}, base, { seenAt: '', lastWeighDate: '' }));
   assert.equal(never.count, never.items.length);
   assert.equal(never.items.find(x => x.id === 'ukur').title, 'Catat berat pertama');

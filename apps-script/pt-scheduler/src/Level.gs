@@ -152,7 +152,9 @@ function _notifCalc_(ctx) {
   const freshFrom = today ? new Date(new Date(today + 'T00:00:00Z').getTime() - NOTIF_FRESH_DAYS * 86400000).toISOString().slice(0, 10) : '';
   const items = [];
   const dated = function(o) { if (String(o.at).slice(0, 10) < freshFrom) return; o.fresh = String(o.at) > seen; items.push(o); };
-  const todo = function(o) { o.at = ''; o.fresh = seen.slice(0, 10) < today; items.push(o); };   // pengingat: dianggap baru sekali sehari
+  // Hari terakhir dibuka dihitung dalam WIB (UTC+7, tanpa musim panas) karena `today` juga tanggal WIB; seenAt disimpan dalam UTC.
+  const seenT = seen ? Date.parse(seen) : NaN, seenDay = isFinite(seenT) ? new Date(seenT + 7 * 3600000).toISOString().slice(0, 10) : '';
+  const todo = function(o) { o.at = ''; o.fresh = seenDay < today; items.push(o); };   // pengingat: dianggap baru sekali sehari
   (ctx.content || []).forEach(function(c) {
     dated({ id: 'info:' + c.id, kind: 'info', title: c.judul, sub: c.tipe === 'pengumuman' ? 'Pengumuman' : (c.tipe === 'video' ? 'Video' : 'Tips'), act: 'Buka', at: String(c.dibuat || '') });
   });

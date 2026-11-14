@@ -1157,6 +1157,7 @@
     if (kind === 'progres' || kind === 'foto') { h += '<div class="sh-toggles">' + toggle('body', 'Tampilkan data tubuh', k.body, 'body') + '</div>'; any = true; }
     if ((kind === 'progres' || kind === 'foto') && k.body || kind === 'ukuran') { h += row('Angka tubuh', chip('bodyVal', 'false', 'Perubahan', String(!!k.bodyVal)) + chip('bodyVal', 'true', 'Nilai', String(!!k.bodyVal))); any = true; }
     if (kind === 'foto' || P.style === 'foto') { h += blurField(); any = true; }
+    if (kind === 'atlet' || kind === 'perjalanan') { h += '<p class="sh-note">Angka di kartu ini berasal dari ' + (kind === 'atlet' ? 'statistik pilihan di kartu atlet' : 'cerita perjalanan (termasuk berat)') + '. Matikan angka yang tidak ingin dibagikan di Isi.</p>'; any = true; }
     return h + (any ? '' : '<p class="sh-note">Kartu ini tidak memuat data tubuh, beban, atau foto.</p>') + '<p class="sh-note">Kartu dibuat di HP ini dan tidak diunggah ke mana pun.</p>';
   }
   function paneLainnya() {
