@@ -729,6 +729,9 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.textContent('#view-coaches')).includes('Hari ini'), 'coach hub shows Hari ini');
     check((await page.textContent('#view-coaches')).includes('Atur target'), 'coach hub offers to set targets');
+    // S14: angka ringkas di tile Keuangan.
+    const s14 = await page.evaluate(() => typeof window.finRpShort === 'function' ? [850, 2350000, -1250000, 12000000, 1500000000].map(window.finRpShort).join('|') : 'none');
+    check(s14 === 'Rp 850|Rp 2,4 jt|−Rp 1,3 jt|Rp 12 jt|Rp 1,5 M', 'finance tiles use short amounts (' + s14 + ')');
     // S13: "Perlu perhatian" satu baris per jenis; "Nanti" hanya di dalam daftar yang dibuka; tab hub bernama Hari ini | Profil.
     const s13 = await page.evaluate(() => { const g = Array.from(document.querySelectorAll('#view-coaches .care-group')), seg = Array.from(document.querySelectorAll('#coach-seg button')).map(b => b.textContent.trim()).join('|'); const nanti = g[0] ? Array.from(g[0].querySelectorAll('.btn')).filter(b => /Nanti/.test(b.textContent)) : []; const before = !!g[0] && g[0].open; const vis = e => { const r = e.getBoundingClientRect(); return r.height > 0 && getComputedStyle(e).visibility !== 'hidden' && e.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true }); }; const hiddenBefore = nanti.length > 0 && !vis(nanti[0]); if (g[0]) g[0].open = true; const after = nanti.length > 0 && vis(nanti[0]); return { groups: g.length, seg, before, hiddenBefore, after }; });
     check(s13.groups >= 1 && s13.seg === 'Hari ini|Profil' && !s13.before && s13.hiddenBefore && s13.after, 'coach hub: care list grouped per type, "Nanti" only inside an opened group, tabs Hari ini | Profil ' + JSON.stringify(s13));

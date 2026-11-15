@@ -1343,6 +1343,8 @@ kbd { font-family: var(--font); font-size: .6875rem; font-weight: 700; color: va
 .care-group > summary::-webkit-details-marker { display: none; }
 .care-group[open] > summary svg.lucide { transform: rotate(180deg); }
 .care-group[open] { padding-bottom: 6px; }
+
+.kpi .fin-val { white-space: nowrap; font-size: clamp(1.25rem, 6.2vw, var(--fs-3xl)); }
 /* ── Lapisan: sheet / modal, konfirmasi, toast ─────────────────────────── */
 .layer { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
 .layer.open { pointer-events: auto; }
