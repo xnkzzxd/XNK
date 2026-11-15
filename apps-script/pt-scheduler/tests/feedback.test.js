@@ -94,7 +94,7 @@ test('package evaluation opens only when the remaining sessions hit 0, and only 
   env.memberRow('PT-A')[9] = 9;
   const done = env.call('completeSession', t, 'SCH-A1', 'PT-A');
   assert.equal(done.packageDone, true);
-  assert.match(done.evalText, /semua sesi paketmu sudah selesai/);
+  assert.match(done.evalText, /semua sesi paket Kakak sudah selesai/);
   assert.match(done.evalWaLink, /^https:\/\/wa\.me\/6281111111111\?text=/);
   const mid = env.call('completeSession', t, 'SCH-A1', 'PT-A');
   assert.equal(mid.packageDone, false, 'a repeated tap is not a new completion');

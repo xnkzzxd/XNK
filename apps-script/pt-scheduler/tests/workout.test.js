@@ -184,7 +184,7 @@ test('summary message: admin only, fills the template, shows sets, record and vo
   assert.match(r.waLink, /^https:\/\/wa\.me\//);
   assert.equal(env.fetches.length, 0);
   assert.throws(() => env.call('getWorkoutSummaryMessage', env.memberToken(KEY_A), 'PT-A', dayOf(1)), /AUTH_REQUIRED/);
-  assert.match(env.call('previewReminderText', t, 'ringkasan-latihan', '').text, /ringkasan latihanmu/);
+  assert.match(env.call('previewReminderText', t, 'ringkasan-latihan', '').text, /ringkasan latihan Kakak/);
 });
 
 test('end to end L1-L4: library code in a program, client logs sets, tick, stats, record, badge, summary', () => {

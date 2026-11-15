@@ -55,6 +55,7 @@ test('the real meal digest adds the calorie line only for the client with a comp
   const env = seededEnv();
   ready(env);
   const kal = j(env.call('getClientNutrition', env.adminToken(), 'PT-A')).target.kal;
+  env.sheet('MemberData').rows.slice(1).forEach(r => { r[4] = '25/9/2026'; });   // new clients (≤ 14 days): makan pagi and sore
   assert.equal(env.callRaw('sendMakanPagiDigest_', ctx(env)), true);
   const bs = buttons(env);
   const ani = bs.find(b => b.text.startsWith('Ani')), budi = bs.find(b => b.text.startsWith('Budi'));
@@ -67,6 +68,7 @@ test('the real meal digest adds the calorie line only for the client with a comp
 test('switching Gizi off (globally or for the client) removes the line; the digest still goes out', () => {
   const env = seededEnv();
   ready(env);
+  env.sheet('MemberData').rows.slice(1).forEach(r => { r[4] = '25/9/2026'; });   // new clients (≤ 14 days): makan pagi and sore
   env.props.NUTRITION_ENABLED = 'false';
   assert.equal(env.callRaw('sendMakanPagiDigest_', ctx(env)), true);
   assert.ok(buttons(env).length >= 1 && buttons(env).every(b => !/Target hari ini/.test(waText(b))));

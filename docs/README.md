@@ -25,6 +25,7 @@ Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique
 | X | New client portal (phones) | [portal2/](portal2/) | T-1900+ | built |
 | Y | Client portal desktop shell | [desk/](desk/) | T-2000+ | built |
 | Z | Web Push | [push/](push/) | T-2100+ | built (T-2105 is the owner's install step) |
+| — | Reminder texts: tone rules and sources of the science tips | [reminder/Sumber.md](reminder/Sumber.md) | — | built (2026-11) |
 
 Notes
 - Folder names are historical (`portal2` = Phase X, `desk` = Phase Y, `push` = Phase Z, `aaa` = Phase AAA); they stay so that code comments and links keep working.

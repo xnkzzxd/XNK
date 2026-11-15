@@ -129,5 +129,5 @@ test('test results: the member sees a dated history for trends; the owner gets a
   assert.match(res.text, /Plank: 45 detik/);   // measured once: value only
   assert.match(res.waLink, /^https:\/\/wa\.me\/6281111111111\?text=/);
   assert.throws(() => env.call('getTestResultMessage', env.memberToken(KEY_A), 'PT-A'), /AUTH_REQUIRED/);
-  assert.match(env.call('previewReminderText', t, 'hasil-tes', '').text, /hasil tes kebugaranmu/);
+  assert.match(env.call('previewReminderText', t, 'hasil-tes', '').text, /hasil tes kebugaran Kakak/);
 });

@@ -227,7 +227,7 @@ function _buildClientPools_(members, schedules, now) {
     if (!phone) { allSkippedNames.push(String(row[1] || '').trim()); if (remaining > 0) { skipped++; skippedNames.push(String(row[1] || '').trim()); } return; }
     var id = String(row[0]).trim();
     var c = {
-      id: id, name: String(row[1] || '').trim(), phone: phone, mealOn: _mealOnFrom_(row[14]),
+      id: id, name: String(row[1] || '').trim(), phone: phone, mealOn: _mealOnFrom_(row[14]), join: _rmdJoinIso_(row[4]),
       remaining: remaining, upcoming: upcoming[id] || 0,
       slots: remaining - (upcoming[id] || 0),
       packageId: String(row[6] || ''), coachId: String(row[10] || ''),
@@ -487,7 +487,7 @@ function runReminderTick() {
       if (!isNaN(h) && h >= 0 && h <= 23) override[j.jenis] = h;
     });
     if (_rmdIsRamadan_(parts.date)) Object.keys(RMD_RAMADAN_HOURS).forEach(function(k) { if (override[k] == null) override[k] = RMD_RAMADAN_HOURS[k]; });
-    try { _rmdSeedVariasi_(); } catch (e) { Logger.log('PesanVariasi gagal dibuat: ' + e); }
+    try { _rmdSeedVariasi_(); _rmdUpgradeVariasi_(); } catch (e) { Logger.log('PesanVariasi gagal dibuat: ' + e); }
 
     _dueJobs_(parts, REMINDER_JOBS, override, REMINDER_TICK_TOLERANCE_HOURS).forEach(function(d) {
       if (!_rmdJobEnabled_(d.job.jenis)) return;                 // T-40: saklar per jenis
@@ -605,29 +605,29 @@ var RMD_CLIENT_TEXT_MAX = 900;    // batas keras teks yang masuk link wa.me
 var RMD_TPL_DEFAULT = {
   'sesi-besok': 'Kak {nama}, pengingat sesi besok jam {jam} {coach}.{tidur}\n\nSampai ketemu! 💪{personal}',
   'booking-minggu': 'Halo Kak {nama}, minggu ini masih ada slot latihan kosong:\n{slot}\nMau booking yang mana? 💪{personal}',
-  'pr': 'Halo Kak {nama}, pengingat PR kamu:\n{pr}\nSemangat, kamu pasti bisa! 💪{personal}',
-  'makan-pagi': 'Halo Kak {nama}, jangan lupa makan pagi ya.{tip}\n\nSemangat! 💪{personal}',
-  'makan-sore': 'Halo Kak {nama}, jangan lupa makan sore ya.{tip}\n\nSemangat! 💪{personal}',
-  'rekap-bulanan': 'Halo Kak {nama}, rekap latihan bulan {bulan}:\n💪 {sesi} sesi latihan{berat}{pinggang}{streak}\n\nLihat progresmu di {link}\nTerus semangat!',
-  'selamat-milestone': 'Selamat Kak {nama}! 🎉 Kamu baru meraih badge {badge}.\nBangga banget sama progresmu, terus semangat! 💪',
-  'waktunya-ukur': 'Halo Kak {nama}, waktunya catat progres! Timbang berat dan ukur lingkar pinggang ya.{terakhir}\nCatat di {link} (Beranda → Progres).',
-  'tes-ulang': 'Hai Kak {nama}, sudah sebulan sejak tes kebugaranmu ({terakhir}). Yuk tes ulang di sesi berikutnya, biar kelihatan kemajuanmu. 💪 {link}',
+  'pr': 'Halo Kak {nama}, pengingat PR Kakak:\n{pr}\nSemangat, saya yakin Kakak bisa. 💪{personal}',
+  'makan-pagi': 'Selamat pagi Kak {nama}, jangan lupa makan pagi ya.{tip}\n\nSemoga harinya lancar.{personal}',
+  'makan-sore': 'Selamat sore Kak {nama}, jangan lupa makan malam ya.{tip}\n\nSelamat beristirahat.{personal}',
+  'rekap-bulanan': 'Halo Kak {nama}, rekap latihan bulan {bulan}:\n💪 {sesi} sesi latihan{berat}{pinggang}{streak}\n\nProgres Kakak bisa dilihat di {link}\nTerima kasih sudah berusaha bulan ini.',
+  'selamat-milestone': 'Selamat Kak {nama}! 🎉 Kakak baru meraih badge {badge}.\nSaya bangga dengan kemajuan Kakak, terus semangat ya.',
+  'waktunya-ukur': 'Halo Kak {nama}, kalau sempat, minggu ini waktunya mencatat progres: berat badan dan lingkar pinggang.{terakhir}\nBisa dicatat di {link} (Beranda → Progres).',
+  'tes-ulang': 'Halo Kak {nama}, sudah sebulan sejak tes kebugaran Kakak ({terakhir}). Di sesi berikutnya kita tes ulang ya, supaya kemajuannya terlihat. 💪 {link}',
   'hidup-sehat': 'Selamat pagi Kak {nama}! ☀️ Yuk jalani hari ini dengan hidup sehat: makan bergizi, minum air putih yang cukup, dan jangan lupa cardio hari ini ya. 🏃 Semangat! 💪{personal}',
-  'ulang-tahun': 'Selamat ulang tahun Kak {nama}! 🎂 Semoga sehat selalu dan makin semangat latihannya. 💪',
-  'tagihan': 'Hai Kak {nama}, sisa pembayaran paket {paket} Rp{sisa}. Terima kasih 🙏',
+  'ulang-tahun': 'Selamat ulang tahun Kak {nama}! 🎂 Semoga sehat selalu, bahagia, dan dimudahkan semua urusannya.',
+  'tagihan': 'Halo Kak {nama}, mohon maaf mengingatkan, sisa pembayaran paket {paket} Rp{sisa}. Terima kasih banyak 🙏',
   'ringkasan-owner': '📊 Ringkasan {bulan}\nSesi selesai: {sesi} ({jam} jam)\nKlien baru: {klienbaru}\nPendapatan (estimasi): {pendapatan}{target}',
   // Pesan manual (bukan job terjadwal): dibuat saat pemilik menekan tombol. Template bisa diganti lewat Script Property RMD_TPL_<JENIS>.
-  'hasil-tes': 'Halo Kak {nama}, ini hasil tes kebugaranmu:\n{hasil}\n\nKemajuanmu keren, terus semangat! 💪 {link}',
-  'pasca-sesi': 'Halo Kak {nama}, terima kasih untuk sesi hari ini! 💪{dilatih}{fokus}\n\nSisa sesimu {sisa}. Sampai ketemu lagi!',
-  'ringkasan-latihan': 'Halo Kak {nama}, ringkasan latihanmu {tanggal}:\n{ringkas}{rekor}\n\nTotal volume {volume} kg. Terus semangat! 💪',
-  'evaluasi-paket': 'Halo Kak {nama}, selamat, semua sesi paketmu sudah selesai! 🎉 Boleh minta penilaianmu? Buka {link} (Beranda → Evaluasi paket). Terima kasih!'
+  'hasil-tes': 'Halo Kak {nama}, ini hasil tes kebugaran Kakak:\n{hasil}\n\nTerima kasih sudah berusaha, kemajuannya bagus. 💪 {link}',
+  'pasca-sesi': 'Halo Kak {nama}, terima kasih untuk sesi hari ini! 💪{dilatih}{fokus}\n\nSisa sesi Kakak {sisa}. Sampai bertemu lagi.',
+  'ringkasan-latihan': 'Halo Kak {nama}, ringkasan latihan Kakak {tanggal}:\n{ringkas}{rekor}\n\nTotal volume {volume} kg. Terima kasih untuk usahanya. 💪',
+  'evaluasi-paket': 'Halo Kak {nama}, selamat, semua sesi paket Kakak sudah selesai. 🎉 Kalau berkenan, boleh saya minta penilaiannya? Buka {link} (Beranda → Evaluasi paket). Terima kasih banyak.'
 };
 var RMD_PLACEHOLDERS = {
   'sesi-besok': ['nama', 'jam', 'coach', 'tidur', 'personal'],
   'booking-minggu': ['nama', 'slot', 'personal'],
   'pr': ['nama', 'pr', 'personal'],
-  'makan-pagi': ['nama', 'tip', 'personal'],
-  'makan-sore': ['nama', 'tip', 'personal'],
+  'makan-pagi': ['nama', 'tip', 'jam', 'personal'],
+  'makan-sore': ['nama', 'tip', 'jam', 'personal'],
   'rekap-bulanan': ['nama', 'bulan', 'sesi', 'berat', 'pinggang', 'streak', 'link'],
   'selamat-milestone': ['nama', 'badge'],
   'waktunya-ukur': ['nama', 'terakhir', 'link'],
@@ -755,7 +755,7 @@ function _rmdSampleVars_(jenis) {
   else if (jenis === 'ulang-tahun' || jenis === 'hidup-sehat') { /* hanya {nama} */ }
   else if (jenis === 'tagihan') { v.nama = 'Budi'; v.paket = 'Regular 8'; v.sisa = '300.000'; }
   else if (jenis === 'ringkasan-owner') { v.bulan = 'September'; v.sesi = '58'; v.jam = '58'; v.klienbaru = '3'; v.pendapatan = 'Rp 6.500.000'; v.target = '\nTarget sesi: 58 dari 80'; }
-  else if (jenis === 'waktunya-ukur') { v.terakhir = ' Terakhir kamu catat tanggal 12 Sep.'; v.link = RMD_PORTAL_URL; }
+  else if (jenis === 'waktunya-ukur') { v.terakhir = ' Terakhir Kakak mencatat tanggal 12 Sep.'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'hasil-tes') { v.hasil = '• Push-up: 20 → 28 kali / 1 menit (naik 8)\n• Plank: 45 → 70 detik (naik 25)'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'pasca-sesi') { v.dilatih = '\n🏋️ Hari ini: squat, lunges, plank'; v.fokus = '\n🎯 Berikutnya: perdalam teknik squat'; v.sisa = '5 dari 8'; }
   else if (jenis === 'ringkasan-latihan') { v.tanggal = '14 Okt'; v.ringkas = '• Bench press: 60 kg × 10, 65 kg × 8\n• Squat: 80 kg × 8 (3 set)'; v.rekor = '\n🏆 Rekor baru: Bench press (est. 1RM 82 kg)'; v.volume = '2.640'; }
@@ -1055,7 +1055,7 @@ function sendUkurDigest_(ctx) {
     var dm = last ? last.split('-') : null;
     items.push({
       name: c.name, phone: c.phone, fact: last ? days + ' hari' : 'baru',
-      text: _rmdFill_(tpl, { nama: c.name, link: RMD_PORTAL_URL, terakhir: last ? ' Terakhir kamu catat tanggal ' + parseInt(dm[2], 10) + ' ' + RMD_MONTHS[parseInt(dm[1], 10) - 1] + '.' : '' })
+      text: _rmdFill_(tpl, { nama: c.name, link: RMD_PORTAL_URL, terakhir: last ? ' Terakhir Kakak mencatat tanggal ' + parseInt(dm[2], 10) + ' ' + RMD_MONTHS[parseInt(dm[1], 10) - 1] + '.' : '' })
     });
   });
   return _rmdSendDigest_('Waktunya ukur', _rmdDateLabel_(today), items, pools.skippedNames);
@@ -1584,15 +1584,26 @@ function _sendMakanDigest_(waktu, ctx) {
   var now = (ctx && ctx.now) || new Date();
   var jenis = 'makan-' + waktu;
   var sel = _selectCoreClients_();
-  var clients = sel.clients.filter(function(c) { return c.mealOn !== false && !_rmdIsOff_(c, jenis); });   // T-73 (kolom O) + T-123 (kolom P)
-  if (!clients.length) { Logger.log('Makan ' + waktu + ': tidak ada klien dengan reminder makan aktif.'); return true; }
   var iso = _wibParts_(now).date;
+  // 2026-11: klien baru (RMD_NEW_DAYS hari) pagi + sore; lainnya satu pesan makan sehari (_rmdMakanTurn_).
+  var clients = sel.clients.filter(function(c) { return c.mealOn !== false && !_rmdIsOff_(c, jenis) && _rmdMakanTurn_(c, iso, waktu); });   // T-73 (kolom O) + T-123 (kolom P)
+  if (!clients.length) { Logger.log('Makan ' + waktu + ': tidak ada klien dengan reminder makan aktif.'); return true; }
   var tip = String(_pickTip_(waktu, iso) || '').trim();   // opsional: teks variasi sudah berisi saran makan
-  var pool = _rmdVariantPool_(), act = _rmdActivity_(_getSchedulesAll_());
-  var kalMap = {};
+  var schedules = _getSchedulesAll_();
+  var pool = _rmdVariantPool_(), act = _rmdActivity_(schedules), sesi = _rmdSesiCtx_(schedules, iso);
+  var kalMap = {}, gizi = {}, logged = {};
   try { kalMap = _nutBulkCalories_(); } catch (e) { Logger.log('Baris target kalori dilewati: ' + e); }
+  // Data gizi hanya memilih teks di server (tujuan, anggaran, pantangan, kemarin mencatat ya/tidak); tidak ada yang ikut terkirim.
+  try { gizi = _nutBulkProfile_(); logged = _nutBulkLogged_(_rmdIsoOf_(_rmdDayNum_(iso) - 1)); } catch (e) { Logger.log('Profil gizi dilewati: ' + e); }
+  var rabu = _rmdDow_(iso) === 2;
   var items = clients.map(function(c) {
-    return { name: c.name, phone: c.phone, fact: '', text: _rmdClientText_(pool, jenis, iso, c, { tip: tip ? '\n\n💡 ' + tip : '' }, act) + _nutReminderLine_(kalMap[String(c.id).trim()]) };
+    var id = String(c.id).trim(), s = sesi[id] || {}, g = gizi[id];
+    var opts = {
+      profil: g || {}, cek: rabu && waktu === 'sore', baruHari: _rmdNewDay_(c.join, iso),
+      sesi: s.today ? 'latihan' : (waktu === 'pagi' && s.doneYesterday ? 'pulih' : ''),
+      catat: g ? (logged[id] ? 'ya' : 'yuk') : ''
+    };
+    return { name: c.name, phone: c.phone, fact: '', text: _rmdClientText_(pool, jenis, iso, c, { tip: tip ? '\n\n💡 ' + tip : '', jam: s.today || '' }, act, opts) + _nutReminderLine_(kalMap[id]) };
   });
   return _rmdSendDigest_(waktu === 'pagi' ? 'Makan pagi' : 'Makan sore', _rmdDateLabel_(_wibParts_(now).date), items, sel.skippedNames);
 }
