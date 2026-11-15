@@ -195,25 +195,27 @@ test('ack: failures retry up to 4 times, 404/410 removes the device, a row older
   env.call('saveMyPush', ani, sub(1));
   const q = n => env.callRaw('_pushEnqueue_', [{ target: 'm:PT-A', kind: 'pr', slot: 'slot' + n, title: 't', body: 'b' }]);
   q(1);
-  const id = () => outRows(env)[0][0];
+  // The planner inside a pull also runs on the real clock (WIB meal hours), so find my rows by their key, never by position.
+  const rowBy = n => outRows(env).find(r => String(r[1]).indexOf('pr|slot' + n + '|') === 0);
+  const id = () => rowBy(1)[0];
   for (let i = 1; i <= 4; i++) {
     const got = env.call('pushRelayPull', SECRET).messages.find(x => x.id === id());
     assert.ok(got, 'try ' + i);
     env.call('pushRelayAck', SECRET, [{ id: id(), s: 'fail' }]);
   }
-  assert.equal(outRows(env)[0][8], 'gagal');
+  assert.equal(rowBy(1)[8], 'gagal');
   assert.equal(env.call('pushRelayPull', SECRET).messages.filter(x => x.id === id()).length, 0);
   assert.equal(env.sheet('PushSubs').rows[1][10], 4, 'device failure count kept');
   // gone
   q(2);
-  const row2 = outRows(env)[1];
+  const row2 = rowBy(2);
   env.call('pushRelayPull', SECRET);
   assert.deepEqual(env.call('pushRelayAck', SECRET, [{ id: row2[0], s: 'gone' }]), { ok: 1, removed: 1 });
   assert.equal(env.call('getMyPushStatus', ani, sub(1).endpoint).current.subscribed, false);
   // stale
   env.call('saveMyPush', ani, sub(1));
   q(3);
-  const row3 = outRows(env)[2];
+  const row3 = rowBy(3);
   row3[2] = Date.now() - 7 * 3600000;
   assert.equal(env.call('pushRelayPull', SECRET).messages.filter(x => x.id === row3[0]).length, 0);
   assert.equal(row3[8], 'gagal');
