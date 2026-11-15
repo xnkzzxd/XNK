@@ -2,25 +2,25 @@
 
 The full agent guide is docs/Agent.md, imported below. Plans for the current upgrade:
 docs/PRD.md (what), docs/Design.md (how), docs/Task.md (task list, T-100+).
-Phase E (coach hub, coach profile, client care): docs/coach/ (PRD, Design, Agent, TODO; tasks T-200+).
-Phase H (Keuangan / financial CRUD, built): docs/finance/ (PRD, Design, TODO; tasks T-400+).
-Phase I (coach–client loop: session notes, ratings, body measures, calendar): docs/loop/ (PRD, Design, TODO; tasks T-600+).
-Phase J (client tabs: Progres, Program, Info & Tips, Lainnya): docs/portal/ (PRD, Design, TODO; tasks T-700+).
-Phase L (exercise library, workout log, charts): docs/workout/ (TODO; tasks T-800+).
-Phase M (live workout logger, form program editor, built): docs/workout/ (PRD, Design, TODO; tasks T-840+).
-Phase N (iPhone / Safari: host bridge, safe area, docked tab bar, keyboard, Home Screen hint, built): docs/ios/TODO.md (tasks T-900+).
-Phase O (Latihan ala Hevy: routines, table logger, search, settings, built): docs/workout/ (PRD, Design §6, TODO; tasks T-860+).
-Phase P (Gizi: TKPI food library, BMI/WHtR/BMR/TDEE targets, menu, food log, built; meal packages Jawa–Sunda + weekly limits T-1040+, built): docs/nutrition/ (PRD, Design, Rules, Menu, TODO; tasks T-1000+).
-Phase R (teks besar, band hitam, data kiri-kanan, in progress): docs/ui/ (TODO; tasks T-1200+).
-Phase S (audit UI/UX panel admin, built; S10–S12 rejected and S15–S16 skipped by the owner, Dashboard and Jadwal stay as they were): docs/panel/ (PRD, TODO; tasks S1–S18).
-Phase T (kartu bagikan ala Strava/Hevy, PNG transparan, built): docs/share/ (TODO; tasks T-1300+).
-Phase Q (upgrade tampilan Klien + interpretasi data, in progress): docs/klien/ (PRD, TODO; tasks T-1100+).
-Phase U (program latihan otomatis berbasis bukti, katalog alat gym, nama gerakan ala Hevy, otot & animasi sendiri, planned): docs/program/ (PRD, TODO; tasks T-1600+).
-Phase AAA (frontend statis di GitHub Pages, backend tetap Apps Script, domain tetap, planned, di luar Phase V): docs/aaa/ (PRD, Design, TODO; tasks T-1700+).
-Phase V (migrasi ke Supabase + Cloudflare + domain baru, SaaS multi-coach, app Android, planned): docs/platform/ (PRD, Design, Risks, TODO; tasks T-1400+).
-Phase X (notifikasi Web Push untuk coach dan klien, dikirim GitHub Actions, built; dipasang pemilik lewat docs/push/Setup.md): docs/push/ (PRD, Design, Setup, TODO; tasks T-1900+).
-Phase W (kecepatan: ukur, cache hasil jadi server, memo baca sheet, built; W2 MemberStats sengaja ditunda): docs/speed/ (TODO; tasks T-1800+).
-Phase X (portal klien baru untuk HP: lima tab Hari ini · Latihan · ＋ · Makan · Saya, kartu atlet, level, warna aksen, built): docs/portal2/ (PRD, Design, TODO; tasks T-1900+).
-Phase Y (portal klien ala aplikasi Mac di tablet, laptop, PC; HP tidak berubah, built): docs/desk/ (PRD, Design, TODO; tasks T-2000+).
+Phase index with status and folders: docs/README.md. Status key: built · pending (owner paused) · redo (plan being rewritten in another session).
+Phases A–D, F, G (settings, price list, reminders, progress, landing, classes): docs/Task.md (T-100+; Phase D = PRD §10 / Design §10).
+Phase E (coach hub, coach profile, client care, built): docs/coach/ (PRD, Design, Agent, TODO; tasks T-200+).
+Phase H (Keuangan, built): docs/finance/ (PRD, Design, TODO; tasks T-400+).
+Phase I (coach–client loop: session notes, ratings, body measures, calendar, built): docs/loop/ (tasks T-600+).
+Phase J (client tabs: Progres, Program, Info & Tips, Lainnya, built): docs/portal/ (tasks T-700+).
+Phase L, M, O (exercise library, live logger, Latihan ala Hevy; built, **redo**: the logger plan is being rewritten in another session): docs/workout/ (tasks T-800+, T-840+, T-860+).
+Phase N (iPhone / Safari, built): docs/ios/TODO.md (tasks T-900+).
+Phase P (Gizi: TKPI, targets, menu, food log, Jawa–Sunda meal packages; built, **redo**: the meal plan is being rewritten in another session): docs/nutrition/ (tasks T-1000+).
+Phase Q (Klien view upgrade + data interpretation, built): docs/klien/ (tasks T-1100+).
+Phase R (big text, black bands, left–right data, built): docs/ui/ (tasks T-1200+).
+Phase S (admin panel UI/UX audit, built; S10–S12 rejected and S15–S16 skipped by the owner): docs/panel/ (tasks S1–S18).
+Phase T (share cards, built): docs/share/ (tasks T-1300+).
+Phase V (migration to Supabase + Cloudflare, multi-coach SaaS, Android app): **pending, paused by the owner 2026-11-16**; brand chosen = XNK Coach (D72): docs/platform/ (PRD, Design, Risks, TODO; tasks T-1400+).
+Phase U (automatic training program, gym catalogue, own muscle map, built): docs/program/ (tasks T-1600+).
+Phase AAA (static frontend on GitHub Pages, backend stays Apps Script, cut over 2026-11-07, built): docs/aaa/ (tasks T-1700+).
+Phase W (speed: measure, server result cache, sheet-read memo, built; W2 MemberStats deferred): docs/speed/ (tasks T-1800+).
+Phase X (new client portal for phones, built): docs/portal2/ (tasks T-1900+).
+Phase Y (client portal as a Mac-like app on tablet, laptop, PC, built): docs/desk/ (tasks T-2000+).
+Phase Z (Web Push for coach and clients, built; installed by the owner via docs/push/Setup.md; the code still labels it "Fase X"): docs/push/ (tasks T-2100+).
 
 @docs/Agent.md

@@ -1,5 +1,7 @@
 # Phase V status (newest first)
 
+> **Status 2026-11-16: DITUNDA (pending) atas keputusan pemilik.** Migrasi ke Supabase + Cloudflare tidak dikerjakan sekarang; tidak ada sesi atau jadwal otomatis yang boleh memulai task T-14xx. Merek sudah dipilih (XNK Coach, D72). Lanjutkan hanya bila pemilik mengaktifkan lagi.
+
 Every task session adds one entry at the top: date, task, PR, what is done, what is half-done, questions for the owner, and the next task.
 
 ## 2026-10-30 · Owner picked the brand: XNK Coach

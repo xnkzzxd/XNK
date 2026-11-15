@@ -1,8 +1,10 @@
 # Gizi — TODO (T-1000+)
 
+> **Status 2026-11-16: dirombak ulang.** Rencana gizi (makan) akan ditulis ulang di sesi lain (model Fable). Yang sudah dibangun tetap berjalan; jangan mulai task baru dari berkas ini sampai rencana baru terbit.
+
 Urutan: coach dulu → pustaka & menu → log klien → pengingat. Ambil nomor terendah yang belum selesai.
 
-- [ ] **T-1000** Setujui [Rules.md](Rules.md); verifikasi baris ⚠ ke sumber (AKG 2019, Gizi Seimbang, ISSN/ACSM).
+- [-] **T-1000** Setujui [Rules.md](Rules.md); verifikasi baris ⚠ ke sumber (AKG 2019, Gizi Seimbang, ISSN/ACSM).
 - [x] **T-1001** `tools/build-foods.js` + `foods/foods.min.json` + `tests/foods.test.js`. Memuat 1.046 dari 1.088 baris TKPI yang lolos cek energi; daftar 150–300 bahan umum (kurasi) menyusul di T-1010.
 - [x] **T-1002** `Nutrisi.gs`: `_nutBmi_`, `_nutWhtr_`, `_nutBmr_`, `_nutActivity_`, `_nutTarget_`, `_nutAge_`, kolom MemberData X–AC (`_ensureNutritionColumns_`) + `tests/nutrition.test.js`. Belum ada fungsi publik (T-1003).
 - [x] **T-1003** Admin `getClientNutrition`/`saveClientNutrition` (Nutrisi.gs), bagian `nutrition` di `getClientBundle`, tab Gizi di profil klien (ringkasan, target, input coach, sheet `modal-nut-edit`). Tab profil kini 6 (3 kolom di HP, 6 di PC). Tes: `tests/nutrition-admin.test.js`.
@@ -12,7 +14,7 @@ Urutan: coach dulu → pustaka & menu → log klien → pengingat. Ambil nomor t
 - [x] **T-1012** Portal: segmen `Latihan | Makan` di tab Latihan; server `getMyNutrition`, `saveMyNutritionProfile`, `getMyShopping`, `swapMyMenuItem` + bagian `nutrition` di `getPortalMore` (menu hari ini ikut, belanja sesuai permintaan). Tampilan: cincin kalori, tiga batang makro, tombol (i) dengan sumber, sheet isi data tiga langkah, tukar item, belanja, kartu Aturan makan. Tes: `tests/nutrition-portal.test.js` + pengecekan browser. Catatan: peringatan memakai kartu berbingkai tebal (tema monokrom), bukan warna kuning. Kondisi khusus coach tampil ke klien sebagai satu peringatan umum.
 - [x] **T-1020** Catat makan: sheet `FoodLog`, member `logMyFood`/`deleteMyFood`/`getMyFoodLog`/`copyMyFoodYesterday`, admin `getClientFoodLog` (7 hari, di tab Gizi coach). Portal: kartu "Dimakan hari ini" (empat waktu makan), sheet cari + filter kelompok, favorit dan terakhir, porsi rumah tangga dengan stepper dan gram, makanan buatan sendiri, salin kemarin, catat cepat dari menu. Cincin dan batang makro menunjukkan dimakan / target. Tes: `tests/foodlog.test.js` + pengecekan browser.
 - [x] **T-1030** Pengaturan → Tampilan: saklar "Gizi & catat makan" (`NUTRITION_ENABLED`, bawaan nyala). Pengingat makan pagi/sore menambah satu baris "Target hari ini N kkal." (hanya kalori, tidak ada protein, berat, BMI, atau kondisi) untuk klien yang Gizi-nya aktif dan datanya lengkap; `_nutBulkCalories_` membaca tiap sheet satu kali. Tes: `tests/nutrition-reminder.test.js` + pengecekan browser.
-- [~] **T-1031** Docs selesai (Agent.md §7, README, apps-script/README.md, Design.md). Sisa: pengecekan layar PC (1440 dan 1280) untuk tab Gizi dan segmen Makan, dan satu putaran akhir semua pengecekan.
+- [-] **T-1031** Docs selesai (Agent.md §7, README, apps-script/README.md, Design.md). Sisa: pengecekan layar PC (1440 dan 1280) untuk tab Gizi dan segmen Makan, dan satu putaran akhir semua pengecekan.
 - [x] **T-1032** Data makanan diperbarui dari TKPI 2017 ke **TKPI 2020** (`TKPI 2020.pdf`, Kemenkes/Persagi). Ke-120 kode kurasi masih ada; angka kalori dan makro sama, kecuali Jambu biji (ER031) 49 → 64 kkal. Parser memuat 1.050 dari 1.108 baris (yang lolos cek energi). Nama sumber (`src`) di JSON kadang acak urutan katanya karena teks PDF; nama tampilan (`n`) dari `foods-curated.json`.
 - [x] **T-1040** Riset menu rumahan Jawa–Sunda + menu sehat sehari-hari (laporan November 2026), aturan batas santan/gorengan/asin/pengulangan ([Rules.md](Rules.md) baris 14–17), rencana di [Menu.md](Menu.md).
 - [x] **T-1041** `tools/build-foods.js`: bagian `rujukan` (panganku), `resep` (gizi dihitung dari bahan saat build), `tag`, `koreksi`, `paket` (`NUT_PAKET` di `src/NutrisiData.gs`, divalidasi saat build). Data dibangun ulang dari teks PDF TKPI 2020 (angka kurasi lama tidak berubah).
@@ -20,4 +22,4 @@ Urutan: coach dulu → pustaka & menu → log klien → pengingat. Ambil nomor t
 - [x] **T-1043** 42 baris panganku, 20 resep, 47 paket (12 sarapan, 30 utama, 5 camilan); daftar pengganti (`menu`) ikut diperluas.
 - [x] **T-1044** Generator: `_nutMenu_` memilih paket (`_nutPickPack_`, `_nutPackMeal_`, `_nutPackOk_` 4 level), batas harian/mingguan (`NUT_LIMITS`), rencana Senin–Minggu `_nutPlanDays_` (menu hari ini dan belanja 7 hari), tukar makanan untuk `pelengkap` dan sayur rendah kalori. Tes: `tests/nutrition-menu.test.js`, `tests/foods.test.js`.
 - [x] **T-1045** Portal: nama paket + label santan/gorengan/manis/asin, tombol **Ganti menu** (member `swapMyMenuMeal`), label **resep** dan daftar bahan di sheet tukar, kartu Aturan makan diperbarui, kunci daftar makanan `xnk_foods_v3`.
-- [ ] **T-1046** Cek resep dan paket oleh ahli gizi; coach memilih/mengunci paket untuk klien (belum).
+- [-] **T-1046** Cek resep dan paket oleh ahli gizi; coach memilih/mengunci paket untuk klien (belum).

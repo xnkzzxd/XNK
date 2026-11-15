@@ -1,5 +1,7 @@
 # Phase L — exercise library, workout log, charts (T-800+)
 
+> **Status 2026-11-16: dirombak ulang.** Rencana aplikasi logger latihan (Fase L, M, O) akan ditulis ulang di sesi lain (model Fable). Yang sudah dibangun tetap berjalan; jangan mulai task baru dari berkas ini sampai rencana baru terbit.
+
 Plan: library picker → per-set workout log (coach + client) → stats/charts → PRs/badges. Decided with the owner: log weight×reps, duration/distance, RPE and a note per exercise; charts for per-exercise progress (weight, est. 1RM), weekly volume by muscle group, PRs/badges and session summary; logging extends the Program (items carry an exercise ID).
 
 ## L1 — Exercise library (built)

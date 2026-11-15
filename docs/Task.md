@@ -25,7 +25,7 @@ Built on branch `claude/wonderful-wozniak-it2gzt`. The list has 6 sections; "Pak
 | [x] | T-107 | `getReminderStatus(token)` and `installReminderTrigger(token)` (admin), with a status row and a Pasang button. Trigger runs hourly. | Reminder.gs, App.html, tests/security.test.js | T-106 | S | Owner installs the trigger from the phone; status shows the last tick. |
 | [x] | T-108 | `getReminderLog(token, opts)` (admin), with a history list in the section showing names, not phone numbers, and a "Hanya gagal" filter. | Reminder.gs, App.html, tests | T-106 | S | Last 50 rows visible; test proves no phone numbers in the response. |
 | [x] | T-108a | Phone pass in `tools/browser-check.js`: 390 × 844 touch viewport, both themes, checks overflow, 44 px targets, save bar overlap and back navigation for every Settings section. | tools/browser-check.js | T-103 | S | Script fails on any of those problems and passes on the finished phase A. |
-| [ ] | T-109 | Docs: update `apps-script/README.md` (Pengaturan section), root README, CLAUDE.md state. Tick the boxes above. | docs | T-100…T-108 | S | Docs match the shipped UI. |
+| [x] | T-109 | Docs: update `apps-script/README.md` (Pengaturan section), root README, CLAUDE.md state. Tick the boxes above. | docs | T-100…T-108 | S | Docs match the shipped UI. |
 
 ## Phase B — Pricelist CRUD (priority 2)
 
@@ -41,7 +41,7 @@ Built on branch `claude/wonderful-wozniak-it2gzt`. Deviations from the first pla
 | [x] | T-115 | Package editor (sheet on phone, pane on desktop): Rupiah input, fleksibel sessions, benefit chips, duplicate, delete-with-reason. Refresh `window.priceListData` after save. | Index.html, App.html | T-114 | M | New package shows up on landing and portal without a reload; on a phone the editor is a full-height sheet with a sticky Simpan and a numeric keypad for price and sessions. |
 | [x] | T-116 | Reorder: drag on desktop, "Urutkan" mode with 44 px ↑/↓ buttons on phone, saved via `reorderPackages`. | App.html | T-114 | S | Order is the same on landing, portal and panel; reorder works one-handed on a phone. |
 | [x] | T-116a | Extend the phone pass (T-108a) to Paket & Harga: list, action sheet, editor sheet, reorder mode. | tools/browser-check.js | T-108a, T-115 | S | Passes at 360 and 390 px. |
-| [ ] | T-117 | Docs and backup note (copy the spreadsheet before the first deploy of phase B). | docs, apps-script/README.md | T-110…T-116 | S | — |
+| [x] | T-117 | Docs and backup note (copy the spreadsheet before the first deploy of phase B). | docs, apps-script/README.md | T-110…T-116 | S | — |
 
 ## Phase C — Client-ready reminders over Telegram (priority 3)
 
@@ -55,7 +55,7 @@ Built on branch `claude/wonderful-wozniak-it2gzt`. Note: the default client text
 | [x] | T-123 | Per-client opt-out: MemberData column P, merged with column O for meals; `setMemberReminderPrefs` (admin); toggles on client detail in the panel. | Kode.gs, Reminder.gs, App.html, Index.html, tests, tests/security.test.js | — | M | Opted-out client gets no button (test); toggles are 44 px rows on a phone. |
 | [x] | T-124 | Templates `RMD_TPL_<JENIS>` with placeholder validation; template editor and WhatsApp-style preview in the Pengingat Klien section. | Reminder.gs, App.html, Index.html, tests | T-106, T-120 | M | Unknown placeholder rejected; preview at phone width matches the button's text. |
 | [x] | T-125 | "Kirim tes" for every type including `sesi-besok` and the meal types. | Reminder.gs, App.html | T-122 | S | Each card's test button delivers a 🧪 TES message. |
-| [ ] | T-126 | Docs for phase C and `apps-script/README.md` (how to use the buttons). | docs | T-120…T-125 | S | — |
+| [x] | T-126 | Docs for phase C and `apps-script/README.md` (how to use the buttons). | docs | T-120…T-125 | S | — |
 
 ## Phase D — Client progress & motivation (see PRD §10, Design §10)
 
@@ -115,7 +115,7 @@ Built. Notes: "every other Monday" counts weeks from Monday 5 Jan 2026 (so it ke
 | [x] | T-300 | Landing slots: server `past` flag (WIB), remove the browser fallback, refresh every 2 min and on tab focus, live indicator. | Kode.gs, LandingScript.html | — | M | Chips match WIB for any visitor time zone; tests + browser check pass. |
 | [x] | T-301 | `_nearestFreeSlots_` (booking-minggu) runs on `_freeSlots_`. | Reminder.gs, tests | T-300 | S | Digest slots equal the landing's. |
 | [x] | T-302 | `getPriceListPublic` (landing categories + active packages), landing tabs from it, price per session, `doGet?view=prices` JSON. | Kode.gs, LandingScript.html | — | M | `core` stays off the landing; old server still works. |
-| [ ] | T-310 | BookingPT: `/harga` and `/kelas` static pages, `data/paket.json` mirror + sync Action, JSON-LD, sitemap, robots, llms.txt. | BookingPT repo | T-302 | L | Separate PR in BookingPT. |
+| [~] | T-310 | BookingPT: `/harga` and `/kelas` static pages, `data/paket.json` mirror + sync Action, JSON-LD, sitemap, robots, llms.txt. | BookingPT repo | T-302 | L | Separate PR in BookingPT. |
 
 ## Phase G — Classes in the price list
 
@@ -137,7 +137,7 @@ Owner request: a step-by-step guide for new clients in the portal: dark screen, 
 | --- | --- | --- | --- | --- | --- | --- |
 | [x] | T-500 | MemberData column W `Panduan` set by `registerNewClient` (new numbers only); profile `guide`; `markGuideSeen`; `CLIENT_GUIDE_ENABLED` setting; portal spotlight guide for Beranda, Booking, Jadwal, Paket, Coach; replay from Profil saya; back gesture closes it. | Kode.gs, App.html, Index.html, Theme.html, tests/guide.test.js, tools/browser-check.js | — | M | Works at 390 px in light and dark; existing clients never see it. |
 
-## Later
+## Later (backlog, belum dibangun; tidak dijadwalkan)
 
 | | ID | Task | PRD |
 | --- | --- | --- | --- |

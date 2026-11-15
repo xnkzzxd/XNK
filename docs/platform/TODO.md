@@ -1,5 +1,7 @@
 # Platform migration & SaaS: TODO (Phase V, T-1400+)
 
+> **Status 2026-11-16: DITUNDA (pending) atas keputusan pemilik.** Migrasi ke Supabase + Cloudflare tidak dikerjakan sekarang; tidak ada sesi atau jadwal otomatis yang boleh memulai task T-14xx. Merek sudah dipilih (XNK Coach, D72). Lanjutkan hanya bila pemilik mengaktifkan lagi.
+
 Plan: [PRD.md](PRD.md) · [Design.md](Design.md) · [Risks.md](Risks.md) · [Roadmap.md](Roadmap.md). Mark a task `[~]` when you start it and `[x]` when it is done. Each task is one PR with tests and a rollback note. Screens stay pixel-identical until V9 (D1). **XNK keeps working at every step (D70, Design §0).**
 
 ## How sessions work (automatic)

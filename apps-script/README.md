@@ -31,7 +31,7 @@ PR di GitHub ──► cek otomatis (sintaks + tes) ──► merge ke main
 - `apps-script/pt-scheduler/src/` = isi proyek Apps Script, 1:1 dengan file di editor:
   - `Kode.gs` — server (data, login, keamanan, PR klien).
   - `Reminder.gs` — pengingat Telegram terjadwal (`runReminderTick`).
-  - `Push.gs` — notifikasi Web Push (Fase X): merencanakan pesan; GitHub Actions yang mengirim.
+  - `Push.gs` — notifikasi Web Push (Fase Z): merencanakan pesan; GitHub Actions yang mengirim.
   - `ReminderVariasi.gs`, `ReminderTeks.gs` — variasi pesan harian ke klien (sheet `PesanVariasi`).
   - `Index.html` + `Theme.html` + `App.html` — panel PT & portal klien (desain hitam-putih,
     terang/gelap otomatis, tata letak HP & desktop berbeda).
@@ -303,7 +303,7 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 - Aturan dan sumbernya: `docs/program/Rules.md`; otot per gerakan: `docs/program/Otot.md`.
 - **Animasi gerakan sendiri**: 8 gerakan pemula banget (Leg Press, Squat Machine, Hip Thrust Machine, Leg Extension, Lat Pulldown, Seated Cable Row, Chest Fly, Incline Push Up) tampil dengan figur kita sendiri, bukan GIF. Juga semua gerakan lain yang menyala di katalog (Push Up, Seated Leg Curl, Bicep Curl, Triceps Pushdown, Calf Raise, Goblet Squat, Seated Row, Bench Press / Shoulder Press / Bent Over Row / Romanian Deadlift dumbbell, Dead Bug); Lateral Raise dan Hip Abduction tampak depan. Gerakan pustaka lain tetap GIF. Ketuk nama gerakan di layar latihan untuk melihat figur bergerak. Sudut gerak dan sumbernya: `docs/program/Gerak.md`.
 
-## Notifikasi di HP dan komputer (Web Push, Fase X)
+## Notifikasi di HP dan komputer (Web Push, Fase Z)
 
 Coach dan klien bisa menerima notifikasi native lewat Chrome (Android dan komputer; iPhone dari Layar Utama). Tidak memakai WhatsApp maupun Telegram, dan **mati sampai Anda memasangnya** ([docs/push/Setup.md](../docs/push/Setup.md)): buat kunci dengan `node apps-script/pt-scheduler/tools/push-keys.js`, simpan hasilnya sebagai file `xnk-pt-config.json` di Google Drive (kunci masuk ke Script Properties otomatis), dan tambahkan satu secret `PUSH_RELAY_SECRET` di GitHub.
 
