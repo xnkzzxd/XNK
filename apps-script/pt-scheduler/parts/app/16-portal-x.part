@@ -152,7 +152,7 @@
     tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Tema dan warna aksen');
     tiles += tile('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto');
     setHTML(el, '<div class="px-wrap px-stack px-2col px-saya">' + pxHead('Saya', '') + '<div class="px-band gfx-kontur"></div><div class="px-col px-sticky">' + athleteCardHtml({ hang: true }) + '</div>' +
-      '<div class="px-col"><div class="px-tiles">' + tiles + '</div>' +
+      '<div class="px-col">' + (window.pushWrapHtml ? window.pushWrapHtml() : '') + '<div class="px-tiles">' + tiles + '</div>' +
       '<button type="button" class="btn btn-ghost btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></div></div>');
   }
 

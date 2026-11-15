@@ -31,6 +31,7 @@ PR di GitHub ──► cek otomatis (sintaks + tes) ──► merge ke main
 - `apps-script/pt-scheduler/src/` = isi proyek Apps Script, 1:1 dengan file di editor:
   - `Kode.gs` — server (data, login, keamanan, PR klien).
   - `Reminder.gs` — pengingat Telegram terjadwal (`runReminderTick`).
+  - `Push.gs` — notifikasi Web Push (Fase X): merencanakan pesan; GitHub Actions yang mengirim.
   - `ReminderVariasi.gs`, `ReminderTeks.gs` — variasi pesan harian ke klien (sheet `PesanVariasi`).
   - `Index.html` + `Theme.html` + `App.html` — panel PT & portal klien (desain hitam-putih,
     terang/gelap otomatis, tata letak HP & desktop berbeda).
@@ -301,6 +302,16 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 - Tinjauan blok tiap hari mulai 04:00 (ikut pemicu pengingat; Pengingat Klien harus aktif). Tidak mengirim pesan apa pun.
 - Aturan dan sumbernya: `docs/program/Rules.md`; otot per gerakan: `docs/program/Otot.md`.
 - **Animasi gerakan sendiri**: 8 gerakan pemula banget (Leg Press, Squat Machine, Hip Thrust Machine, Leg Extension, Lat Pulldown, Seated Cable Row, Chest Fly, Incline Push Up) tampil dengan figur kita sendiri, bukan GIF. Juga semua gerakan lain yang menyala di katalog (Push Up, Seated Leg Curl, Bicep Curl, Triceps Pushdown, Calf Raise, Goblet Squat, Seated Row, Bench Press / Shoulder Press / Bent Over Row / Romanian Deadlift dumbbell, Dead Bug); Lateral Raise dan Hip Abduction tampak depan. Gerakan pustaka lain tetap GIF. Ketuk nama gerakan di layar latihan untuk melihat figur bergerak. Sudut gerak dan sumbernya: `docs/program/Gerak.md`.
+
+## Notifikasi di HP dan komputer (Web Push, Fase X)
+
+Coach dan klien bisa menerima notifikasi native lewat Chrome (Android dan komputer; iPhone dari Layar Utama). Tidak memakai WhatsApp maupun Telegram, dan **mati sampai Anda memasangnya** ([docs/push/Setup.md](../docs/push/Setup.md)): buat kunci dengan `node apps-script/pt-scheduler/tools/push-keys.js`, simpan hasilnya sebagai file `xnk-pt-config.json` di Google Drive (kunci masuk ke Script Properties otomatis), dan tambahkan satu secret `PUSH_RELAY_SECRET` di GitHub.
+
+- **Klien** menerima: sesi besok (H-1 jam 19.00), sesi hari ini (pagi hari H jam 06.00, hanya bila sesi belum mulai), PR, dan waktu makan pagi dan sore. Sesi **hanya diingatkan dua kali**: H-1 dan pagi hari H.
+- **Coach** menerima: ringkasan sesi besok dan hari ini, dan klien yang minta perpanjang paket (seketika bila `PUSH_GH_TOKEN` dipasang, kalau tidak menunggu jadwal GitHub, paling lama sekitar 15 menit).
+- Isi pendek dan hanya nama depan. Pengingat WhatsApp yang Anda matikan untuk seorang klien (halaman klien → pengingat) juga mematikan notifikasi jenis itu.
+- Menyalakan: coach di Pengaturan → Notifikasi Admin, klien di tab Lainnya. Ketuk saklar **Notifikasi di perangkat ini** lalu **Izinkan**. "Atur jenis notifikasi" memilih jenisnya per perangkat. Keluar dari akun melepas perangkat itu.
+- Pengirimnya GitHub Actions (workflow *Push*, tiap 5 menit), bukan Apps Script, karena Apps Script tidak bisa menandatangani dan mengenkripsi push. Jam sesi bisa diubah dengan Script Properties `PUSH_HOUR_SESI_BESOK` dan `PUSH_HOUR_SESI_HARI_INI`; `PUSH_ENABLED=false` mematikan semuanya.
 
 ## Di HP: pasang dari Chrome, tarik untuk muat ulang, tombol back
 

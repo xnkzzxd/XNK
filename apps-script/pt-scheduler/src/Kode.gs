@@ -211,11 +211,14 @@ const REGISTER_MAX_PER_10MIN = 5;    // pendaftaran mandiri per 10 menit (dari s
 // Nilai null = hapus property. Hanya file MILIK akun pemilik yang dibaca (file
 // yang dibagikan orang lain diabaikan), dan hanya kunci di CONFIG_KEYS.
 const CONFIG_FILE_NAME = 'xnk-pt-config.json';
-const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS'];
+const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS', 'PUSH_VAPID_PUBLIC', 'PUSH_VAPID_PRIVATE', 'PUSH_RELAY_SECRET'];
 const CONFIG_CHECK_SECONDS = 300;
 
 function _configValueError_(key, value) {
   if (key === 'ADMIN_PIN' && value.length < 6) return 'minimal 6 karakter';
+  if (key === 'PUSH_VAPID_PUBLIC' && !/^[A-Za-z0-9_-]{80,100}$/.test(value)) return 'kunci publik VAPID tidak valid';
+  if (key === 'PUSH_VAPID_PRIVATE' && !/^[A-Za-z0-9_-]{40,50}$/.test(value)) return 'kunci privat VAPID tidak valid';
+  if (key === 'PUSH_RELAY_SECRET' && value.length < 24) return 'minimal 24 karakter';
   return null;
 }
 
@@ -2200,6 +2203,7 @@ function getPortalBootstrapImpl_(memberToken) {
     schedules: mine,
     feedbackEnabled: feedbackOn,
     shareEnabled: _shareEnabled_(),
+    pushKey: _pushPublicKey_(),   // Fase X: kosong = notifikasi mati (kartu tersembunyi)
     pendingRating: found && feedbackOn ? _tp_(tr, 'pendingRating', function() { return _pendingRating_(memberId, all); }) : null,
     packageEval: { eligible: !!(found && feedbackOn && _tp_(tr, 'packageEval', function() { return _packageEvalEligible_(found.row, all); })) },
     info: { latestAt: found ? _tp_(tr, 'content', _contentLatestAt_) : '' },
@@ -4637,6 +4641,8 @@ function requestRenewal(memberToken, packageId, coachId) {
     kirimNotifTelegram_('🔁 <b>MINTA PERPANJANG PAKET</b>\n\n👤 <b>Klien:</b> ' + escapeHtmlTelegram(name) + '\n📦 <b>Paket:</b> ' + escapeHtmlTelegram(pkg.namaPaket) +
       ' (' + _formatRupiah_(pkg.harga) + ')\n\nSetelah pembayaran diterima, setujui di panel: Dashboard → Minta perpanjang.');
   } catch (e) { Logger.log('Notif perpanjang gagal: ' + e); }
+  _pushEvent_({ target: 'admin', kind: 'perpanjangan', slot: id, title: 'Minta perpanjang paket',
+    body: _pushClip_((_pushFirst_(name) || 'Klien') + ' minta perpanjang: ' + pkg.namaPaket + '.', 140) });   // Fase X
   _bumpMember_(memberId);
   return {
     request: { id: id, status: 'menunggu', packageId: pkg.id, packageName: pkg.namaPaket, harga: pkg.harga },

@@ -248,6 +248,7 @@
     const badges = (pg.data && pg.data.badges) || [], got = badges.filter(b => b.earned).length;
     let c3 = '<section class="card ds-card"><div class="row-between"><b>Koleksi badge</b><span class="li-sub">' + got + ' dari ' + badges.length + '</span></div><div class="ds-badges">' +
       badges.map(b => '<span class="ds-badge' + (b.earned ? ' on' : '') + '" title="' + h(b.label) + '">' + shieldSvg(b.id, b.label, !!b.earned) + '</span>').join('') + '</div></section>';
+    if (window.pushWrapHtml) c3 += '<section class="card ds-card">' + window.pushWrapHtml() + '</section>';   // notifikasi (Web Push)
     const lv = X().level, max = lv ? Math.max(1, ...lv.rinci.map(r => r.poin)) : 1;
     c3 += '<section class="card ds-card ds-grow"><div class="row-between"><b>Asal poin</b><span class="li-sub">' + (lv ? lv.poin + ' poin' : '') + '</span></div>' +
       (lv ? lv.rinci.map(r => '<div class="ds-pt"><span>' + h(r.label) + '</span><span class="px-bar"><i style="width:' + Math.round(r.poin / max * 100) + '%"></i></span><b class="num">' + r.poin + '</b></div>').join('') : skel(3)) +

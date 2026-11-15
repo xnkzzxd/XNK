@@ -994,7 +994,7 @@
     },
     notifikasi: function () {
       const d = setState.data;
-      return '<div class="card-flat stack">' + setToggleCard('tgEnabled', 'Notifikasi Telegram', 'Kirim update booking & laporan ke Telegram', d.telegramEnabled) + '</div>' +
+      return (window.pushWrapHtml ? window.pushWrapHtml() : '') + '<div class="card-flat stack">' + setToggleCard('tgEnabled', 'Notifikasi Telegram', 'Kirim update booking & laporan ke Telegram', d.telegramEnabled) + '</div>' +
         '<div class="form-grid">' +
         setField('Token Bot Telegram', '<input class="input" type="password" id="set-tgToken" data-k="tgToken" autocomplete="off" placeholder="' + h(d.telegramBotTokenMask || 'Belum diisi') + '">' +
           (d.telegramBotTokenMask ? '<button type="button" class="link-btn" style="align-self:flex-start" onclick="window.settingsClearToken()">Hapus token tersimpan</button>' : ''),
@@ -2111,6 +2111,7 @@
     if (ui.mode === 'public') { window.closeModal(); window.logoutPublic(); return; }
     window.showConfirmModal('Kamu akan keluar dari panel di perangkat ini.', function () {
       window.closeModal();
+      if (window.pushForget) window.pushForget();   // Fase X
       _lsSet(ADMIN_TOKEN_KEY, null); clearAdminCache();
       window.members = []; window.schedules = []; window.memberArchive = []; window.taskSummary = {}; window.clientSignals = null;
       window.closeDetail();
@@ -2467,6 +2468,7 @@
     window.infoLatest = (b.info && b.info.latestAt) || '';
     renderInfoDots();
     window.shareOn = b.shareEnabled !== false;
+    if (window.pushOnBootstrap) window.pushOnBootstrap(b.pushKey);   // Fase X
     window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
     if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }
@@ -7785,6 +7787,7 @@
   };
 
   window.logoutPublic = function () {
+    if (window.pushForget) window.pushForget();   // Fase X: lepas perangkat dari akun ini
     window.clearPortalCache();
     window.publicLoggedMember = null;
     _lsSet(MEMBER_TOKEN_KEY, null);
@@ -10983,6 +10986,148 @@
   window.offlineImport = offlineImport;   // juga untuk browser-check
   window.addEventListener('online', aqFlush);
 
+  // ── Notifikasi (Web Push, Fase X, docs/push) ───────────────────────────────
+  // Chrome / Edge / Firefox di HP dan komputer, Safari iPhone dari Layar Utama. Hanya di halaman statis (butuh service worker
+  // sw-app.js, XNK_CONFIG.sw); di halaman Apps Script / pembungkus iframe kartunya tidak muncul. Server: Push.gs; pengirim: GitHub Actions.
+  // Kartu muncul hanya bila server sudah dipasangi kunci (portal: getPortalBootstrap.pushKey, panel: getAdminPushStatus).
+  const PUSH_KINDS = {
+    sesi: ['Sesi', 'Sesi besok dan pagi hari sesi'],
+    pr: ['PR', 'PR yang jatuh tempo atau terlambat'],
+    makan: ['Makan', 'Waktu makan pagi dan sore'],
+    perpanjangan: ['Perpanjangan', 'Klien minta perpanjang paket']
+  };
+  const px = { key: '', ep: '', sub: null, ready: false, initing: false, st: null, open: false, busy: false };
+
+  function pxApi(op, a, b) {
+    const adm = ui.mode === 'admin';
+    if (op === 'status') return adm ? adminCall('getAdminPushStatus', a) : memberCall('getMyPushStatus', a);
+    if (op === 'save') return adm ? adminCall('saveAdminPush', a, b) : memberCall('saveMyPush', a, b);
+    if (op === 'remove') return adm ? adminCall('removeAdminPush', a) : memberCall('removeMyPush', a);
+    return adm ? adminCall('setAdminPushPrefs', a, b) : memberCall('setMyPushPrefs', a, b);
+  }
+  function pxSupported() { return !!(window.XNK_CONFIG && window.XNK_CONFIG.sw && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window); }
+  function pxNeedsHome() { return !!(host.ios && !host.standalone); }
+  function pxB64(s) {
+    const b = (s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'), r = atob(b), o = new Uint8Array(r.length);
+    for (let i = 0; i < r.length; i++) o[i] = r.charCodeAt(i);
+    return o;
+  }
+  function pxLabel() {
+    const u = navigator.userAgent;
+    const b = /Edg\//.test(u) ? 'Edge' : /Firefox\//.test(u) ? 'Firefox' : /Chrome\//.test(u) ? 'Chrome' : /Safari\//.test(u) ? 'Safari' : 'Browser';
+    const o = /Android/.test(u) ? 'Android' : /iPhone|iPad/.test(u) ? 'iPhone' : /Windows/.test(u) ? 'Windows' : /Mac OS/.test(u) ? 'Mac' : /Linux/.test(u) ? 'Linux' : '';
+    return b + (o ? ' · ' + o : '');
+  }
+  function pxReg() {
+    return Promise.race([navigator.serviceWorker.ready, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('Service worker belum siap. Muat ulang halaman.')); }, 8000); })]);
+  }
+  function pxMsg(e) { return window.authMessage ? window.authMessage(e) : String((e && e.message) || e); }
+  function pxDesc(k) { return k === 'sesi' && ui.mode === 'admin' ? 'Ringkasan sesi besok dan sesi hari ini' : PUSH_KINDS[k][1]; }
+
+  function pxKindsHtml() {
+    if (!px.st) return '<div class="skeleton" style="height:44px"></div>';
+    const off = (px.st.current && px.st.current.off) || [];
+    return '<div class="stack" style="gap:12px">' + (px.st.kinds || []).map(function (k) {
+      return '<div class="row-between"><div><p class="li-title">' + h(PUSH_KINDS[k][0]) + '</p><p class="li-sub">' + h(pxDesc(k)) + '</p></div>' +
+        '<label class="toggle"><input type="checkbox" aria-label="' + h(PUSH_KINDS[k][0]) + '" onchange="window.pushPref(\'' + k + '\', this.checked)"' + (off.indexOf(k) === -1 ? ' checked' : '') + '><span></span></label></div>';
+    }).join('') + '</div>';
+  }
+  function pxInner() {
+    if (!pxSupported() || !px.key) return '';
+    const perm = Notification.permission, on = !!px.sub && perm === 'granted';
+    let sub, dis = false;
+    if (pxNeedsHome()) { sub = 'Di iPhone: ketuk Bagikan → Tambah ke Layar Utama, lalu buka lewat ikonnya.'; dis = true; }
+    else if (perm === 'denied') { sub = 'Diblokir di pengaturan browser. Izinkan notifikasi untuk situs ini, lalu muat ulang halaman.'; dis = true; }
+    else if (on) sub = 'Aktif di perangkat ini.';
+    else sub = ui.mode === 'admin' ? 'Ringkasan sesi besok dan hari ini, dan klien yang minta perpanjang paket.' : 'Pengingat sesi, PR, dan waktu makan.';
+    let out = '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Notifikasi di perangkat ini</p><p class="li-sub">' + h(sub) + '</p></div>' +
+      '<label class="toggle"><input type="checkbox" aria-label="Notifikasi di perangkat ini" onchange="window.pushToggle(this)"' + (on ? ' checked' : '') + (dis || px.busy || !px.ready ? ' disabled' : '') + '><span></span></label></div>';
+    if (on) {
+      out += '<button type="button" class="link-btn" style="align-self:flex-start" onclick="window.pushKinds()">' + (px.open ? 'Tutup' : 'Atur jenis notifikasi') + '</button>';
+      if (px.open) out += pxKindsHtml();
+    }
+    return out + '</div>';
+  }
+  function pxPaint() { document.querySelectorAll('.push-wrap').forEach(function (el) { setHTML(el, pxInner()); }); }
+
+  // Hanya memeriksa perangkat ini (tanpa jaringan), kecuali di panel: satu panggilan kecil untuk kunci dan pilihan.
+  function pxInit() {
+    if (px.ready || px.initing) return;
+    px.initing = true;
+    const finish = function () { px.ready = true; px.initing = false; pxPaint(); };
+    if (!pxSupported()) { finish(); return; }
+    pxReg().then(function (r) { return r.pushManager.getSubscription(); })
+      .then(function (sub) { px.sub = sub; px.ep = sub ? sub.endpoint : ''; })
+      .catch(function () {})
+      .then(function () {
+        if (ui.mode !== 'admin' || px.key) return null;
+        return pxApi('status', px.ep).then(function (st) { px.key = st && st.on ? st.key : ''; px.st = st; }).catch(function () {});
+      })
+      .then(finish);
+  }
+  window.pushWrapHtml = function () { pxInit(); return '<div class="push-wrap">' + pxInner() + '</div>'; };
+
+  function pxEnable() {
+    px.busy = true; pxPaint();
+    const fail = function (e) { px.busy = false; pxPaint(); window.showToast(typeof e === 'string' ? e : pxMsg(e)); };
+    // requestPermission() sebelum apa pun yang menunggu: Safari hanya mengizinkannya langsung dari ketukan.
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') { fail('Izin notifikasi tidak diberikan.'); return null; }
+      return pxReg().then(function (reg) {
+        return reg.pushManager.getSubscription().then(function (old) {
+          if (old && _lsGet('xnk_push_key') !== px.key) return old.unsubscribe().then(function () { return null; });   // kunci server berganti
+          return old;
+        }).then(function (sub) { return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pxB64(px.key) }); });
+      }).then(function (sub) {
+        px.sub = sub; px.ep = sub.endpoint; _lsSet('xnk_push_key', px.key);
+        return pxApi('save', sub.toJSON(), pxLabel());
+      }).then(function (st) { px.st = st; px.busy = false; pxPaint(); window.showToast('Notifikasi aktif.', 'bell'); });
+    }).catch(fail);
+  }
+  function pxDisable() {
+    const ep = px.ep;
+    px.busy = true; pxPaint();
+    (ep ? pxApi('remove', ep).catch(function () {}) : Promise.resolve())
+      .then(function () { return px.sub ? px.sub.unsubscribe() : null; }).catch(function () {})
+      .then(function () { px.sub = null; px.ep = ''; px.open = false; px.st = null; px.busy = false; pxPaint(); window.showToast('Notifikasi dimatikan.'); });
+  }
+  window.pushToggle = function (inp) { if (px.busy) return; if (inp.checked) pxEnable(); else pxDisable(); };
+  window.pushKinds = function () {
+    px.open = !px.open; pxPaint();
+    if (px.open && px.ep) pxApi('status', px.ep).then(function (st) { px.st = st; pxPaint(); }).catch(function (e) { px.open = false; pxPaint(); window.showToast(pxMsg(e)); });
+  };
+  window.pushPref = function (kind, checked) {
+    if (!px.st || !px.st.current) return;
+    const prev = px.st.current.off.slice(), off = prev.filter(function (k) { return k !== kind; });
+    if (!checked) off.push(kind);
+    px.st.current.off = off;
+    pxApi('prefs', px.ep, off).then(function (st) { px.st = st; }).catch(function (e) { px.st.current.off = prev; pxPaint(); window.showToast(pxMsg(e)); });
+  };
+
+  // Portal: kunci datang dengan bootstrap. Perangkat yang sudah berlangganan disambungkan lagi ke akun yang sedang masuk
+  // (akun lain di perangkat yang sama, atau alamat langganan berganti) paling sering tiap 3 hari.
+  window.pushOnBootstrap = function (key) {
+    px.key = String(key || '');
+    pxPaint();
+    const me = window.publicLoggedMember;
+    if (!px.key || !me || !pxSupported() || Notification.permission !== 'granted') return;
+    const stamp = String(_lsGet('xnk_push_sync') || '').split(':');
+    if (stamp[0] === String(me.id) && Date.now() - Number(stamp[1]) < 3 * 86400000) return;
+    pxReg().then(function (r) { return r.pushManager.getSubscription(); }).then(function (sub) {
+      if (!sub) return null;
+      if (_lsGet('xnk_push_key') !== px.key) return sub.unsubscribe();   // kunci server berganti: pasang ulang dari kartu
+      px.sub = sub; px.ep = sub.endpoint;
+      return pxApi('save', sub.toJSON(), pxLabel()).then(function (st) { px.st = st; _lsSet('xnk_push_sync', me.id + ':' + Date.now()); pxPaint(); });
+    }).catch(function () {});
+  };
+  // Keluar: lepas perangkat dari akun ini (panggilan server dikirim dulu, selagi token masih ada).
+  window.pushForget = function () {
+    if (px.ep) { try { pxApi('remove', px.ep).catch(function () {}); } catch (e) {} }
+    try { if (px.sub) px.sub.unsubscribe().catch(function () {}); } catch (e) {}
+    px.sub = null; px.ep = ''; px.key = ''; px.st = null; px.open = false; px.ready = false; px.initing = false;
+    _lsSet('xnk_push_sync', null);
+  };
+
   // ── Fase X: portal klien baru (Hari ini, tab Saya, lonceng, tombol ＋) ───────
   // window.myX = { profile, level, moments, journey, notif, todo } dari getPortalMore (dihitung di server, lihat Level.gs).
   window.myX = {};
@@ -11136,7 +11281,7 @@
     tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Tema dan warna aksen');
     tiles += tile('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto');
     setHTML(el, '<div class="px-wrap px-stack px-2col px-saya">' + pxHead('Saya', '') + '<div class="px-band gfx-kontur"></div><div class="px-col px-sticky">' + athleteCardHtml({ hang: true }) + '</div>' +
-      '<div class="px-col"><div class="px-tiles">' + tiles + '</div>' +
+      '<div class="px-col">' + (window.pushWrapHtml ? window.pushWrapHtml() : '') + '<div class="px-tiles">' + tiles + '</div>' +
       '<button type="button" class="btn btn-ghost btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></div></div>');
   }
 
@@ -11972,6 +12117,7 @@
     const badges = (pg.data && pg.data.badges) || [], got = badges.filter(b => b.earned).length;
     let c3 = '<section class="card ds-card"><div class="row-between"><b>Koleksi badge</b><span class="li-sub">' + got + ' dari ' + badges.length + '</span></div><div class="ds-badges">' +
       badges.map(b => '<span class="ds-badge' + (b.earned ? ' on' : '') + '" title="' + h(b.label) + '">' + shieldSvg(b.id, b.label, !!b.earned) + '</span>').join('') + '</div></section>';
+    if (window.pushWrapHtml) c3 += '<section class="card ds-card">' + window.pushWrapHtml() + '</section>';   // notifikasi (Web Push)
     const lv = X().level, max = lv ? Math.max(1, ...lv.rinci.map(r => r.poin)) : 1;
     c3 += '<section class="card ds-card ds-grow"><div class="row-between"><b>Asal poin</b><span class="li-sub">' + (lv ? lv.poin + ' poin' : '') + '</span></div>' +
       (lv ? lv.rinci.map(r => '<div class="ds-pt"><span>' + h(r.label) + '</span><span class="px-bar"><i style="width:' + Math.round(r.poin / max * 100) + '%"></i></span><b class="num">' + r.poin + '</b></div>').join('') : skel(3)) +

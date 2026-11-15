@@ -1,7 +1,7 @@
 # Design — Fase Y
 
 ## Mode desktop
-`html.portal.desk`, dipasang oleh `parts/app/16-desk.part` (`matchMedia('(min-width: 768px)')`, ikut berubah saat jendela diubah ukurannya). Semua gaya di `parts/theme/06-desk.part` diawali `html.desk`. HP tidak menjalankan aturan ini.
+`html.portal.desk`, dipasang oleh `parts/app/17-desk.part` (`matchMedia('(min-width: 768px)')`, ikut berubah saat jendela diubah ukurannya). Semua gaya di `parts/theme/06-desk.part` diawali `html.desk`. HP tidak menjalankan aturan ini.
 
 ## Bingkai
 - **Sidebar** (`#sidebar`): terang tembus pandang, 232 px berlabel di ≥ 1024 px, rel ikon 72 px di 768–1023 px. Grup utama (Hari ini, Latihan, Makan, Progres, Jadwal) dan grup Akun (Saya, Paket saya, Coach, Info & Tips, Kartu saya). Kaki: avatar + nama + level. Item aktif = pil warna aksen 14 %.
