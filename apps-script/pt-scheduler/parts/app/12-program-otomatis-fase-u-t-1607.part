@@ -699,7 +699,7 @@
     if (!el || !me) return;
     const row = (onclick, ic, title, sub) => '<button type="button" class="more-row" onclick="' + onclick + '"><span class="more-ic">' + icon(ic) + '</span><span class="more-txt"><b>' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + icon('chevron-right') + '</button>';
     const go = v => 'window.navigate(\'' + v + '\')';
-    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:640px">' + pageIntro('Lainnya', 'Semua yang kamu butuhkan di satu tempat.') + moreHeroHtml() +
+    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:640px">' + pageIntro('Lainnya', 'Semua yang kamu butuhkan di satu tempat.') + moreHeroHtml() + (window.pushWrapHtml ? window.pushWrapHtml() : '') +
       '<div class="more-list">' +
       row(go('public-program'), 'activity', 'Latihan', 'Rutinitas, log latihan, PR, dan makan') +
       row(go('public-info'), 'megaphone', 'Info & Tips', 'Pengumuman dan tips dari coach').replace('</button>', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span></button>') +

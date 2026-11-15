@@ -13,7 +13,7 @@
 
 const PUBLIC = [
   'doGet', 'doPost', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
-  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap',
+  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [
@@ -29,6 +29,7 @@ const ADMIN = [
   'addTask', 'updateTask', 'deleteTask', 'deleteTaskGroup', 'getTasksForMember', 'getTaskSummary',
   'getTaskTemplates', 'saveTaskTemplate', 'deleteTaskTemplate', 'setMemberMealReminder', 'sendReminderTest',
   'getReminderStatus', 'installReminderTrigger', 'getReminderLog',
+  'getAdminPushStatus', 'saveAdminPush', 'removeAdminPush', 'setAdminPushPrefs',
   'previewReminderText', 'setMemberReminderPrefs',
   'getRenewalRequests', 'decideRenewal',
   'getMemberProgress', 'saveMemberMeasurement', 'deleteMemberMeasurement', 'getMemberProgressPhoto', 'getMemberShareData',
@@ -36,7 +37,7 @@ const ADMIN = [
   'syncFinanceTransactions', 'getBills', 'getBillDetail', 'saveBillAdjust', 'savePayment', 'saveExpense', 'getExpenses', 'getFinanceCategories', 'saveFinanceCategory', 'deleteFinanceCategory', 'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'getFinanceOverview', 'uploadFinanceProof', 'getFinanceProof', 'exportFinanceCsv',
 ];
 const MEMBER = [
-  'getMemberProfile', 'getMemberSessions', 'clientBookSchedule', 'clientBookRecurring',
+  'getMemberProfile', 'getMemberSessions', 'getMyPushStatus', 'saveMyPush', 'removeMyPush', 'setMyPushPrefs', 'clientBookSchedule', 'clientBookRecurring',
   'clientRescheduleSchedule', 'uploadMemberPhoto', 'updateMemberPhoto',
   'getMyTasks', 'completeMyTask', 'getMyMealToday',
   'getMyCoach', 'getPortalMore', 'getMyNutrition', 'saveMyNutritionProfile', 'getMyShopping', 'swapMyMenuItem', 'swapMyMenuMeal', 'logMyFood', 'deleteMyFood', 'getMyFoodLog', 'copyMyFoodYesterday', 'getMyContent', 'getMyProgram', 'logMyProgramDay', 'getMyProgramProfile', 'saveMyProgramProfile', 'acceptAutoProgram', 'setMyProgramAuto', 'swapMyProgramExercise', 'saveMyRoutine', 'deleteMyRoutine', 'copyRoutineToMine', 'getMyWorkout', 'logMyWorkout', 'rateSession', 'getMyPackageEval', 'submitMyPackageEval', 'getMyHealthForm', 'submitMyHealthForm', 'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'requestRenewal', 'getMyRenewal', 'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'getMyProgressPhoto', 'deleteMyProgressPhoto', 'getMyShareData', 'createClassGroup', 'joinClassGroup', 'leaveClassGroup', 'getMyClassGroup', 'getMyBills', 'markGuideSeen',

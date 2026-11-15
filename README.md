@@ -36,6 +36,7 @@ so opening the `/exec` address directly does not get around it. Each phone stays
 logged in for 30 days; after 10 wrong PINs in 10 minutes, login locks for 10 minutes
 and Telegram gets an alert. These are defaults: the panel's **Pengaturan** page can change
 them, plus Telegram, reminders, notification email and business hours. Daily client reminders rotate through 62 texts each (sheet `PesanVariasi`) and greet clients as "Kak <first name>".
+Optional **Web Push** (Phase X, off until installed, [docs/push/Setup.md](docs/push/Setup.md)) sends native notifications to coach and clients: sessions the day before (19:00) and the morning of the day (06:00), PR, meals, and renewal requests. Apps Script plans them; a GitHub Actions workflow sends them.
 
 The PIN is the `ADMIN_PIN` Script Property of the Apps Script project. Changing it logs
 every phone out. How to change it (also without opening the editor) is in
