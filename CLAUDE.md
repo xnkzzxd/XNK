@@ -12,7 +12,7 @@ Phase N (iPhone / Safari: host bridge, safe area, docked tab bar, keyboard, Home
 Phase O (Latihan ala Hevy: routines, table logger, search, settings, built): docs/workout/ (PRD, Design §6, TODO; tasks T-860+).
 Phase P (Gizi: TKPI food library, BMI/WHtR/BMR/TDEE targets, menu, food log, built; meal packages Jawa–Sunda + weekly limits T-1040+, built): docs/nutrition/ (PRD, Design, Rules, Menu, TODO; tasks T-1000+).
 Phase R (teks besar, band hitam, data kiri-kanan, in progress): docs/ui/ (TODO; tasks T-1200+).
-Phase S (audit UI/UX panel admin, planned): docs/panel/ (PRD, TODO; tasks S1–S18).
+Phase S (audit UI/UX panel admin, built; S10–S12 rejected and S15–S16 skipped by the owner, Dashboard and Jadwal stay as they were): docs/panel/ (PRD, TODO; tasks S1–S18).
 Phase T (kartu bagikan ala Strava/Hevy, PNG transparan, built): docs/share/ (TODO; tasks T-1300+).
 Phase Q (upgrade tampilan Klien + interpretasi data, in progress): docs/klien/ (PRD, TODO; tasks T-1100+).
 Phase U (program latihan otomatis berbasis bukti, katalog alat gym, nama gerakan ala Hevy, otot & animasi sendiri, planned): docs/program/ (PRD, TODO; tasks T-1600+).

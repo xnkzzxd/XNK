@@ -39,7 +39,7 @@ Owner membuka panel untuk tiga hal: *apa jadwal hari ini*, *siapa klien yang per
 Portal klien, Landing, logika server, layar Gizi/Latihan, redesain navigasi.
 
 ## 5. Ukuran sukses
-- Layar pertama HP (390×844) memperlihatkan: Dashboard → ≥ 1 sesi hari ini; Klien → ≥ 1 baris klien.
-- `browser-check.js`: semua cek hijau, termasuk dua cek yang gagal sekarang; tidak ada overflow horizontal di 360/390/430 px dan 1280/1440 px, terang dan gelap.
-- Kontras teks dan tombol di kartu hitam ≥ 4.5:1 (diukur di tes browser).
+- Layar pertama HP (390×844) memperlihatkan: Dashboard → ≥ 1 sesi hari ini *(dibatalkan pemilik, Dashboard tetap seperti semula)*; Klien → ≥ 1 baris klien *(terpenuhi, S7)*.
+- `browser-check.js`: semua cek hijau, termasuk dua cek yang gagal sekarang; tidak ada overflow horizontal di 360/390/430 px dan 1280/1440 px, terang dan gelap *(terpenuhi, S17)*.
+- Kontras teks dan tombol di kartu hitam ≥ 4.5:1 (diukur di tes browser) *(terpenuhi, S5)*.
 - Tidak ada perubahan di `.gs`, sheet, atau `tests/security.test.js`.

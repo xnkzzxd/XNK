@@ -45,10 +45,14 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
   - Hasil (disetujui pemilik dari tangkapan sebelum/sesudah, 2026-11-15): tile Keuangan memakai angka ringkas (`finRpShort`: "Rp 850", "Rp 2,4 jt", "Rp 1,5 M"), angka penuh di `title` dan `aria-label`, tidak turun baris di 360 px. Grafik 6 bulan menyembunyikan bulan tanpa data; semua kosong = "Belum ada data.". Cek baru di `browser-check.js`.
 
 ## F — Konsistensi dan penutup
-- [ ] **S15** Titik tanpa label (sidebar, tab bar, "Booking baru") jadi angka atau teks berlabel + `aria-label`; ikon dekoratif di tile KPI dihapus atau dikecilkan agar angka punya ruang. Dep: S10. (P13)
-- [ ] **S16** Kurangi kartu hitam yang bersaing: tentukan tingkat (band > hero tunggal per layar > permukaan netral); kalender Jadwal dan tile KPI memakai permukaan netral. Dep: S5…S12. (P14)
-- [ ] **S17** Tes: tambah ke `browser-check.js` cek per layar admin di 360/390/430 dan 1280/1440 (terang + gelap): tanpa overflow horizontal, klien/sesi pertama di layar pertama, kontras hero. Dep: semua S1–S4.
-- [ ] **S18** Dokumen: ringkas hasil di Agent.md §7 (Fase S), jalankan ulang audit tangkapan layar, centang PRD §5. Dep: S17.
+- [-] **S15** Titik tanpa label (sidebar, tab bar, "Booking baru") jadi angka atau teks berlabel + `aria-label`; ikon dekoratif di tile KPI dihapus atau dikecilkan agar angka punya ruang. Dep: S10. (P13)
+  - Dilewati (2026-11-15): menyentuh Dashboard/tab bar yang pemilik minta tetap seperti semula; titik tanpa label belum diubah.
+- [-] **S16** Kurangi kartu hitam yang bersaing: tentukan tingkat (band > hero tunggal per layar > permukaan netral); kalender Jadwal dan tile KPI memakai permukaan netral. Dep: S5…S12. (P14)
+  - Dilewati (2026-11-15): mengubah warna kalender Jadwal dan kotak angka Dashboard, yang pemilik minta tetap seperti semula.
+- [x] **S17** Tes: tambah ke `browser-check.js` cek per layar admin di 360/390/430 dan 1280/1440 (terang + gelap): tanpa overflow horizontal, klien/sesi pertama di layar pertama, kontras hero. Dep: semua S1–S4.
+  - Hasil: section baru di `browser-check.js` ("Panel admin · S17"): Dashboard, Jadwal, Klien, Coach, Pengaturan di 360/390/430/1280/1440 px, terang dan gelap: halaman tidak bergeser ke samping, dan di HP kartu klien pertama utuh di atas bar tab. Audit awal tidak menemukan pelanggaran. Kontras hero sudah dicek di S5.
+- [x] **S18** Dokumen: ringkas hasil di Agent.md §7 (Fase S), jalankan ulang audit tangkapan layar, centang PRD §5. Dep: S17.
+  - Hasil: ringkasan di Agent.md §7 dan CLAUDE.md; PRD §5 diperbarui; tangkapan audit ulang dikirim ke pemilik.
 
 ## Urutan yang disarankan
 S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S10 → S11 → S9 → S12 → S13 → S14 → S15 → S16 → S17 → S18.

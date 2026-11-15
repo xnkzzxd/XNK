@@ -3053,6 +3053,31 @@ async function contrastReport(page) {
     await context.close();
   })().catch(sectionCrash);
 
+  // ── S17: layar admin di 5 ukuran × terang/gelap: halaman tidak pernah bergeser ke samping ──
+  console.log('Panel admin · S17 ukuran layar');
+  await (async () => {
+    const env = seededEnv(), token = env.adminToken();
+    for (const scheme of ['light', 'dark']) for (const vp of [{ width: 360, height: 780 }, { width: 390, height: 844 }, { width: 430, height: 932 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }]) {
+      const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { viewport: vp, colorScheme: scheme, wait: 1200 });
+      const bad = [];
+      for (const v of ['dashboard', 'calendar', 'clients', 'coaches', 'settings']) {
+        await page.evaluate(x => window.navigate(x), v);
+        await page.waitForTimeout(500);
+        const r = await page.evaluate(() => ({ over: document.scrollingElement.scrollWidth - innerWidth, app: document.getElementById('app').scrollLeft, main: document.getElementById('main-scroll-area').scrollLeft }));
+        if (r.over > 1 || r.app || r.main) bad.push(v + ' ' + JSON.stringify(r));
+      }
+      check(!bad.length, 'admin ' + vp.width + '×' + vp.height + ' ' + scheme + ': no sideways scroll on Dashboard, Jadwal, Klien, Coach, Pengaturan' + (bad.length ? ' ' + bad.join('; ') : ''));
+      if (vp.width < 768) {
+        await page.evaluate(() => window.navigate('clients'));
+        await page.waitForTimeout(500);
+        const fc = await page.evaluate(() => { const c = document.querySelector('#client-list .client-card'), b = document.getElementById('tabbar'); if (!c) return null; const r = c.getBoundingClientRect(); return { bottom: Math.round(r.bottom), bar: Math.round(b.getBoundingClientRect().top) }; });
+        check(!!fc && fc.bottom <= fc.bar, 'admin ' + vp.width + ' ' + scheme + ': first client card fully above the tab bar ' + JSON.stringify(fc));
+      }
+      noErrors(errors);
+      await context.close();
+    }
+  })().catch(sectionCrash);
+
   // ── Pembungkus xnk.my.id: jembatan host (zona aman, keyboard, warna tema) ──
   console.log('Pembungkus xnk.my.id · host bridge');
   await (async () => {
