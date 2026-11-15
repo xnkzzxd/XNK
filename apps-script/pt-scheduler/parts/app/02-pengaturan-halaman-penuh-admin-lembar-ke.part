@@ -511,11 +511,24 @@
     body.addEventListener('change', onSettingsEdit);
     const pre = setState.pre || settingsPrefetch();
     setState.pre = null;
+    // Salinan terakhir (perangkat ini saja) ditampilkan langsung; data baru menyusul di latar.
+    let shown = false;
+    try {
+      const c = JSON.parse(_lsGet('xnk_settings_cache') || 'null');
+      if (c && c.defaults) {
+        setState.data = c; shown = true;
+        if (!isPhone() && !setState.open) setState.open = SET_SECTIONS[0][0];
+        refreshSettingsNav();
+        if (setState.open) renderSettingsSection(setState.open);
+      }
+    } catch (e) {}
     pre.settings.then(function (s) {
+      try { _lsSet('xnk_settings_cache', JSON.stringify(s)); } catch (e) {}
+      const editing = shown && setState.dirty;
       setState.data = s;
       if (!isPhone() && !setState.open) setState.open = SET_SECTIONS[0][0];
       refreshSettingsNav();
-      if (setState.open) renderSettingsSection(setState.open);
+      if (setState.open && !editing) renderSettingsSection(setState.open);
       pre.status.then(applyRmdStatus).catch(function () {});
       if (!pkgState.data) pre.pkg.then(function (d) { if (d) { pkgState.data = d; pkgRefreshView(); } });
     }).catch(function (err) {

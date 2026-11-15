@@ -452,7 +452,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
+  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
