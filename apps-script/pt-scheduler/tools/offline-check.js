@@ -69,7 +69,8 @@ const bridge = (page, data) => page.evaluate(d => {
     check(await w.page.evaluate(() => !!navigator.serviceWorker.controller), 'service worker controls the page');
     const cached = await w.page.evaluate(async () => { const c = await caches.open('xnk-off-v2'); const keys = (await c.keys()).map(r => r.url); return ['figure.min.json', 'rig.min.json'].every(f => keys.some(k => k.endsWith('/figure/' + f))); });
     check(cached, 'the muscle map and exercise animations are in the offline cache (T-1614)');
-    const start = new Date(Date.now() + 3600000).toISOString();
+    // Now, not now + 1 h: after 23:00 WIB an hour ahead is tomorrow and the screen rightly hides it.
+    const start = new Date().toISOString();
     await bridge(w.page, { xnk: 'offline-snap', snap: { mode: 'coach', sig: 'S1', at: Date.now(), today: [{ id: 'SCH-1', memberId: 'PT-A', name: 'Ani', start: start }],
       clients: { 'PT-A': { name: 'Ani', routines: [{ hari: 'Hari A', items: [{ gerakan: 'Squat', exId: '' }] }], last: { 'nm:squat': { sets: [{ berat: 40, rep: 8 }] } }, measures: [{ tanggal: '2026-10-01', berat: 70 }] } } } });
     await w.context.setOffline(true);
