@@ -28,6 +28,8 @@ const NO_MEMBER_DATA = [
   'installReminderTrigger', 'runReminderTick', 'runWarmTick', 'sendReminderTest', 'sendTelegramTest', 'sendDailyReminderEmail', 'sendWeeklyReportEmail',
   'setupDailyTrigger', 'setupReminderTrigger', 'setupWeeklyReportTrigger', 'testDriveAccess', 'testNotif', 'migrateSplitMembersData',
   'pertahankanWABaru', 'pertahankanWABaruMemberData',
+  // Fase X: langganan push dan relay GitHub (tidak ada di getPortalMore / getClientBundle)
+  'saveMyPush', 'removeMyPush', 'setMyPushPrefs', 'saveAdminPush', 'removeAdminPush', 'setAdminPushPrefs', 'pushRelayPull', 'pushRelayAck',
 ];
 
 test('every public writer bumps the member version or is listed as not touching member data', () => {

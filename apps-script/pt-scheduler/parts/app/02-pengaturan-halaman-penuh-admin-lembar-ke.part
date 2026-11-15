@@ -90,7 +90,7 @@
     },
     notifikasi: function () {
       const d = setState.data;
-      return '<div class="card-flat stack">' + setToggleCard('tgEnabled', 'Notifikasi Telegram', 'Kirim update booking & laporan ke Telegram', d.telegramEnabled) + '</div>' +
+      return (window.pushWrapHtml ? window.pushWrapHtml() : '') + '<div class="card-flat stack">' + setToggleCard('tgEnabled', 'Notifikasi Telegram', 'Kirim update booking & laporan ke Telegram', d.telegramEnabled) + '</div>' +
         '<div class="form-grid">' +
         setField('Token Bot Telegram', '<input class="input" type="password" id="set-tgToken" data-k="tgToken" autocomplete="off" placeholder="' + h(d.telegramBotTokenMask || 'Belum diisi') + '">' +
           (d.telegramBotTokenMask ? '<button type="button" class="link-btn" style="align-self:flex-start" onclick="window.settingsClearToken()">Hapus token tersimpan</button>' : ''),

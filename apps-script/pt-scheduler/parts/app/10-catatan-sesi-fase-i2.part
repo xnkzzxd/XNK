@@ -380,6 +380,7 @@
   };
 
   window.logoutPublic = function () {
+    if (window.pushForget) window.pushForget();   // Fase X: lepas perangkat dari akun ini
     window.clearPortalCache();
     window.publicLoggedMember = null;
     _lsSet(MEMBER_TOKEN_KEY, null);

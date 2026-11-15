@@ -4,7 +4,7 @@
 // (requireOwner_) functions, trigger handlers, doGet/doPost/include and helpers are not in it.
 function _apiTable_() {
   return {
-    // public: no token (15)
+    // public: no token (17)
     adminLogin: adminLogin,
     memberLoginByPhone: memberLoginByPhone,
     memberLoginByKey: memberLoginByKey,
@@ -20,7 +20,9 @@ function _apiTable_() {
     getOpenSlots: getOpenSlots,
     getCoachStatus: getCoachStatus,
     getPortalBootstrap: getPortalBootstrap,
-    // admin: admin token (126)
+    pushRelayPull: pushRelayPull,
+    pushRelayAck: pushRelayAck,
+    // admin: admin token (130)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -115,6 +117,10 @@ function _apiTable_() {
     getReminderStatus: getReminderStatus,
     installReminderTrigger: installReminderTrigger,
     getReminderLog: getReminderLog,
+    getAdminPushStatus: getAdminPushStatus,
+    saveAdminPush: saveAdminPush,
+    removeAdminPush: removeAdminPush,
+    setAdminPushPrefs: setAdminPushPrefs,
     previewReminderText: previewReminderText,
     setMemberReminderPrefs: setMemberReminderPrefs,
     getRenewalRequests: getRenewalRequests,
@@ -147,9 +153,13 @@ function _apiTable_() {
     uploadFinanceProof: uploadFinanceProof,
     getFinanceProof: getFinanceProof,
     exportFinanceCsv: exportFinanceCsv,
-    // member: member token (56)
+    // member: member token (60)
     getMemberProfile: getMemberProfile,
     getMemberSessions: getMemberSessions,
+    getMyPushStatus: getMyPushStatus,
+    saveMyPush: saveMyPush,
+    removeMyPush: removeMyPush,
+    setMyPushPrefs: setMyPushPrefs,
     clientBookSchedule: clientBookSchedule,
     clientBookRecurring: clientBookRecurring,
     clientRescheduleSchedule: clientRescheduleSchedule,

@@ -57,3 +57,28 @@ self.addEventListener('fetch', function (e) {
   }
   if (LIBS.indexOf(page) !== -1) e.respondWith(swr(req));
 });
+
+// ── Web Push (Fase X, docs/push) ──────────────────────────────────────────────
+// Isi push dibuat server (Push.gs): judul dan isi pendek, hanya nama depan. Tidak ada data lain di dalamnya.
+self.addEventListener('push', function (e) {
+  var d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (x) { d = { body: e.data ? e.data.text() : '' }; }
+  var title = String(d.title || 'XNK').slice(0, 80);
+  var opts = { body: String(d.body || '').slice(0, 200), icon: '/icon-192.png', badge: '/icon-192.png', data: { url: String(d.url || '/') } };
+  if (d.tag) opts.tag = String(d.tag).slice(0, 40);
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var url = SCOPE;
+  try {
+    var u = new URL((e.notification.data && e.notification.data.url) || '/', SCOPE);
+    if (u.origin === self.location.origin) url = u.href;   // hanya alamat di situs ini
+  } catch (x) {}
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].url.indexOf(SCOPE) === 0 && 'focus' in list[i]) return list[i].focus();
+    }
+    return self.clients.openWindow(url);
+  }));
+});

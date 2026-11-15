@@ -2777,6 +2777,85 @@ async function contrastReport(page) {
     await context.close();
   }
 
+  // ── Notifikasi (Fase X): kartu di Lainnya (klien) dan Pengaturan → Notifikasi (coach) ──
+  // Browser tanpa service worker di tes ini: tumpukan push dipalsukan di halaman (YANG diuji: kartu, saklar, panggilan ke server).
+  const pushStubs = () => {
+    window.XNK_CONFIG.sw = 'sw-app.js';
+    const state = { sub: null, perm: 'default' };
+    const fake = { endpoint: 'https://fcm.googleapis.com/fcm/send/pagetest', toJSON() { return { endpoint: this.endpoint, keys: { p256dh: 'B' + 'A'.repeat(86), auth: 'A'.repeat(22) } }; }, unsubscribe() { state.sub = null; return Promise.resolve(true); } };
+    const reg = { pushManager: { getSubscription: () => Promise.resolve(state.sub), subscribe: () => { state.sub = fake; return Promise.resolve(fake); } } };
+    Object.defineProperty(navigator, 'serviceWorker', { value: { ready: Promise.resolve(reg) }, configurable: true });
+    Object.defineProperty(Notification, 'permission', { get: () => state.perm, configurable: true });
+    Notification.requestPermission = () => { state.perm = 'granted'; return Promise.resolve('granted'); };
+  };
+  const pushOn = env => { env.props.PUSH_VAPID_PUBLIC = 'P'.repeat(87); env.props.PUSH_RELAY_SECRET = 's'.repeat(32); return env; };
+  console.log('Notifikasi · klien (Lainnya) dan coach (Pengaturan)');
+  {
+    const env = seededEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, [], null, { touch: true });
+    await page.evaluate(pushStubs);
+    await page.evaluate(() => window.navigate('public-more'));
+    await page.waitForTimeout(500);
+    check(await page.locator('.push-wrap .toggle').count() === 0, 'client: no key on the server, no notification card');
+    await context.close();
+  }
+  {
+    const env = pushOn(seededEnv());
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, [], null, { touch: true });
+    await page.evaluate(pushStubs);
+    await page.evaluate(() => window.navigate('public-more'));
+    await page.waitForTimeout(600);
+    check(await visible(page, '.push-wrap .toggle'), 'client: Lainnya shows the notification card once the server has a key');
+    check(!(await page.locator('.push-wrap .toggle input').first().isChecked()), 'client: off until the client turns it on');
+    const box = await page.locator('.push-wrap .toggle').first().boundingBox();
+    check(box && box.height >= 24 && box.width >= 40, 'client: the switch is easy to hit');
+    await page.locator('.push-wrap .toggle').first().click();
+    await page.waitForTimeout(800);
+    check(await page.locator('.push-wrap .toggle input').first().isChecked(), 'client: turning it on subscribes this device');
+    const subs = env.sheet('PushSubs') ? env.sheet('PushSubs').rows.slice(1) : [];
+    check(subs.length === 1 && subs[0][1] === 'member' && subs[0][2] === 'PT-A' && /Chrome|Browser|Linux/.test(subs[0][6]), 'client: the server stored the device for the logged-in client (' + JSON.stringify(subs.map(r => [r[1], r[2], r[6]])) + ')');
+    await page.click('.push-wrap .link-btn');
+    await page.waitForTimeout(600);
+    const rowsTxt = await page.locator('.push-wrap').innerText();
+    check(/Sesi/.test(rowsTxt) && /PR/.test(rowsTxt) && /Makan/.test(rowsTxt) && !/Perpanjangan/.test(rowsTxt), 'client: the kinds are Sesi, PR and Makan');
+    await page.locator('.push-wrap .row-between', { hasText: 'Makan' }).locator('.toggle').click();
+    await page.waitForTimeout(600);
+    check(env.sheet('PushSubs').rows[1][9] === 'makan', 'client: switching a kind off is saved on the server');
+    const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(wide <= 0, 'client: the card does not widen the page');
+    await page.locator('.push-wrap .toggle').first().click();
+    await page.waitForTimeout(800);
+    check(env.sheet('PushSubs').rows.length === 1 && !(await page.locator('.push-wrap .toggle input').first().isChecked()), 'client: turning it off removes the device');
+    await page.evaluate(d => window.applyHostInfo(d), IPHONE);
+    await page.evaluate(() => window.navigate('public-dashboard')); await page.evaluate(() => window.navigate('public-more'));
+    await page.waitForTimeout(500);
+    check(/Layar Utama/.test(await page.locator('.push-wrap').innerText()) && await page.locator('.push-wrap .toggle input').first().isDisabled(), 'iPhone in Safari: the card asks for Home Screen first and the switch is off-limits');
+    noErrors(errors);
+    await context.close();
+  }
+  {
+    const env = pushOn(richEnv());
+    const token = env.adminToken();
+    const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { touch: true, wait: 1400 });
+    await page.evaluate(pushStubs);
+    await page.click('#topbar-actions .icon-btn[aria-label="Pengaturan"]');
+    await page.waitForTimeout(500);
+    await page.click('.settings-nav-item[data-section="notifikasi"]');
+    await page.waitForTimeout(900);
+    check(await visible(page, '.push-wrap .toggle'), 'coach: Pengaturan → Notifikasi Admin shows the notification card');
+    await page.locator('.push-wrap .toggle').first().click();
+    await page.waitForTimeout(900);
+    const subs = env.sheet('PushSubs') ? env.sheet('PushSubs').rows.slice(1) : [];
+    check(subs.length === 1 && subs[0][1] === 'admin' && subs[0][2] === 'admin', 'coach: the device is stored as a coach device');
+    await page.click('.push-wrap .link-btn');
+    await page.waitForTimeout(600);
+    const t = await page.locator('.push-wrap').innerText();
+    check(/Sesi/.test(t) && /Perpanjangan/.test(t) && !/Makan/.test(t), 'coach: the kinds are Sesi and Perpanjangan');
+    check(!(await page.evaluate(() => !!document.querySelector('#settings-save-btn') && !document.querySelector('#settings-save-btn').disabled)), 'coach: the card does not mark the settings form as changed');
+    noErrors(errors);
+    await context.close();
+  }
+
   // ── Pembungkus xnk.my.id: jembatan host (zona aman, keyboard, warna tema) ──
   console.log('Pembungkus xnk.my.id · host bridge');
   {

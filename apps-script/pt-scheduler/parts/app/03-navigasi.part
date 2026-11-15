@@ -405,6 +405,7 @@
     if (ui.mode === 'public') { window.closeModal(); window.logoutPublic(); return; }
     window.showConfirmModal('Kamu akan keluar dari panel di perangkat ini.', function () {
       window.closeModal();
+      if (window.pushForget) window.pushForget();   // Fase X
       _lsSet(ADMIN_TOKEN_KEY, null); clearAdminCache();
       window.members = []; window.schedules = []; window.memberArchive = []; window.taskSummary = {}; window.clientSignals = null;
       window.closeDetail();
@@ -758,6 +759,7 @@
     window.infoLatest = (b.info && b.info.latestAt) || '';
     renderInfoDots();
     window.shareOn = b.shareEnabled !== false;
+    if (window.pushOnBootstrap) window.pushOnBootstrap(b.pushKey);   // Fase X
     window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
     if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }

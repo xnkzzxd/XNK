@@ -2200,6 +2200,7 @@ function getPortalBootstrapImpl_(memberToken) {
     schedules: mine,
     feedbackEnabled: feedbackOn,
     shareEnabled: _shareEnabled_(),
+    pushKey: _pushPublicKey_(),   // Fase X: kosong = notifikasi mati (kartu tersembunyi)
     pendingRating: found && feedbackOn ? _tp_(tr, 'pendingRating', function() { return _pendingRating_(memberId, all); }) : null,
     packageEval: { eligible: !!(found && feedbackOn && _tp_(tr, 'packageEval', function() { return _packageEvalEligible_(found.row, all); })) },
     info: { latestAt: found ? _tp_(tr, 'content', _contentLatestAt_) : '' },
@@ -4628,6 +4629,8 @@ function requestRenewal(memberToken, packageId, coachId) {
     kirimNotifTelegram_('🔁 <b>MINTA PERPANJANG PAKET</b>\n\n👤 <b>Klien:</b> ' + escapeHtmlTelegram(name) + '\n📦 <b>Paket:</b> ' + escapeHtmlTelegram(pkg.namaPaket) +
       ' (' + _formatRupiah_(pkg.harga) + ')\n\nSetelah pembayaran diterima, setujui di panel: Dashboard → Minta perpanjang.');
   } catch (e) { Logger.log('Notif perpanjang gagal: ' + e); }
+  _pushEvent_({ target: 'admin', kind: 'perpanjangan', slot: id, title: 'Minta perpanjang paket',
+    body: _pushClip_((_pushFirst_(name) || 'Klien') + ' minta perpanjang: ' + pkg.namaPaket + '.', 140) });   // Fase X
   _bumpMember_(memberId);
   return {
     request: { id: id, status: 'menunggu', packageId: pkg.id, packageName: pkg.namaPaket, harga: pkg.harga },
