@@ -532,7 +532,7 @@ async function contrastReport(page) {
     const { page, context, errors } = await openPage(browser, env, '/Index', calls, { xnk_admin_token: token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1400 });
     check(await visible(page, '#sidebar'), 'sidebar visible on desktop');
     check(!(await visible(page, '#tabbar')), 'bottom bar hidden on desktop');
-    const s10d = await page.evaluate(() => { const r = q => document.querySelector('#view-dashboard ' + q).getBoundingClientRect(); const n = r('.dash-next'), k = r('.dash-kpis'), t = r('.dash-today'); return n.left < k.left && Math.abs(n.top - k.top) < 4 && t.top >= n.bottom; });
+    const s10d = await page.evaluate(() => { const r = q => document.querySelector('#view-dashboard ' + q).getBoundingClientRect(); const k = r('.dash-kpis'), t = r('.dash-today'); if (!document.querySelector('#view-dashboard .dash-next')) return t.top >= k.bottom; const n = r('.dash-next'); return n.left < k.left && Math.abs(n.top - k.top) < 4 && t.top >= n.bottom; });
     check(s10d, scheme + ': Dashboard on desktop keeps its layout (next session and tiles on top, Hari ini below)');
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     const dark = /rgb\((\d+), (\d+), (\d+)\)/.exec(bg);
@@ -569,7 +569,16 @@ async function contrastReport(page) {
     });
     check(!!sa && sa.prim && sa.tall && sa.contrast >= 4.5, 'session row: solid "Selesai" first, 44 px buttons, contrast ≥ 4.5:1 (' + (sa ? sa.contrast.toFixed(1) : 'none') + ')');
     check(!!sa && sa.right, 'session row buttons sit on the right on desktop');
-    check(!!hero, 'dashboard has the "Sesi berikutnya" card');
+    // S11: sesi berikutnya tampil sekali saja: kartu hitam bila tidak ada di agenda hari ini, kalau ada sorotan "Berikutnya" di barisnya.
+    const s11 = await page.evaluate(() => {
+      const v = document.getElementById('view-dashboard'), row = v.querySelector('.tl-item.now .tl-next');
+      const name = row ? row.closest('.tl-card').querySelector('.li-title').textContent.trim() : '';
+      const heroes = [...v.querySelectorAll('.card-ink')].filter(x => /Sesi berikutnya/.test(x.textContent));
+      const ok = v.querySelector('#att-ok');
+      return { row: !!row, cd: !!(row && row.querySelector('[data-countdown]')), heroes: heroes.length, twice: name ? heroes.some(x => x.textContent.indexOf(name) !== -1) : false,
+        att: ok ? Math.round(ok.getBoundingClientRect().height) : -1, attList: v.querySelectorAll('.dash-side .card:last-child .list-item').length };
+    });
+    check((s11.row ? s11.cd && s11.heroes === 0 && !s11.twice : s11.heroes === 1) && (s11.attList > 0 || (s11.att > 0 && s11.att <= 60)), scheme + ': Dashboard shows the next session once (black card or a "Berikutnya" row), empty "Perlu perhatian" is one line ' + JSON.stringify(s11));
     if (hero) {
       check(scheme === 'light' || hero.lift >= 1.1, 'next-session card is lighter than the page (' + hero.lift.toFixed(2) + ')');
       const low = hero.parts.filter(x => x.r < 4.5);

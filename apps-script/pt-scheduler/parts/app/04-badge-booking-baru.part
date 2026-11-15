@@ -77,6 +77,7 @@
         '<div class="row-between"><span class="li-title truncate">' + h(isAvailable(s) ? 'Slot tersedia' : opts.inProfile ? (s.notes || 'Sesi latihan') : s.title) + '</span>' + info.pill + '</div>' +
         '<span class="li-sub">' + (window.isSoloCoach() ? '' : icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(s.coachName || 'Belum ada coach')) +
           (opts.showDate ? (window.isSoloCoach() ? '' : ' · ') + h(fmtShort(d)) : '') + (live ? ' · Berlangsung' : '') + '</span>' +
+        (opts.next ? '<p class="tl-next">' + icon('clock') + 'Berikutnya · <span class="num" data-countdown="' + d.getTime() + '">' + h(timeUntil(d)) + '</span></p>' : '') +
         actions +
       '</div></div>';
   }
@@ -111,6 +112,8 @@
     const next = booked.filter(s => !isDone(s) && new Date(s.end || s.start) > now).sort(byStart)[0];
     const unread = unreadList();
     const attention = attentionList();
+    // S11: sesi berikutnya yang sudah ada di agenda hari ini tidak digandakan di kartu hitam; barisnya yang diberi sorotan.
+    const dup = !!next && todays.some(s => String(s.id) === String(next.id));
 
     let html = '<div class="page-head">' +
       '<div><p class="eyebrow" id="live-date">' + h(fmtDate(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</p>' +
@@ -122,10 +125,10 @@
     html += renewalsCardHtml();
 
     // Sesi berikutnya (kartu hitam)
-    html += '<div class="span-5 dash-next">' + nextSessionCard(next) + '</div>';
+    if (!dup) html += '<div class="span-5 dash-next">' + nextSessionCard(next) + '</div>';
 
     // KPI
-    html += '<div class="span-7 dash-kpis"><div class="kpi-grid five">' +
+    html += '<div class="' + (dup ? 'span-12 dash-kpis wide-kpis' : 'span-7 dash-kpis') + '"><div class="kpi-grid five">' +
       kpi('users', 'Klien aktif', 'kpi-clients', active, window.members.length + ' klien terdaftar') +
       kpi('calendar-check', 'Sesi hari ini', 'kpi-today', todays.filter(isBooked).length, todays.filter(isDone).length + ' sudah selesai') +
       kpi('calendar-range', 'Sesi minggu ini', 'kpi-week', weekCount, 'Senin – Minggu') +
@@ -136,7 +139,7 @@
     // Timeline hari ini
     html += '<div class="span-7 card dash-today" id="dash-today"><div class="section-head"><div><h3 class="section-title">Hari ini</h3><p class="li-sub">' + todays.length + ' sesi · ' + h(fmtDate(now, { day: 'numeric', month: 'long' })) + '</p></div>' +
       '<button type="button" class="link-btn" onclick="window.navigate(\'calendar\')">Kalender ' + icon('arrow-right', 'style="width:14px;height:14px"') + '</button></div>' +
-      (todays.length ? '<div class="timeline stagger">' + todays.map(s => sessionItem(s, { actions: true, highlight: next && s.id === next.id })).join('') + '</div>'
+      (todays.length ? '<div class="timeline stagger">' + todays.map(s => sessionItem(s, { actions: true, highlight: next && s.id === next.id, next: dup && s.id === next.id })).join('') + '</div>'
         : emptyState('coffee', 'Tidak ada sesi hari ini', 'Waktu yang pas untuk follow-up klien.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.quickAction(\'booking\')">' + icon('plus') + 'Buat booking</button>')) +
       '</div>';
 
@@ -157,7 +160,7 @@
         return '<div class="list-item interactive" role="button" tabindex="0" data-key="client:' + h(a.m.id) + '" onclick="window.openProfile(\'' + h(a.m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' + avatar(a.m.photo, a.m.name, 'sm') +
           '<span class="grow"><span class="li-title truncate" style="display:block">' + h(a.m.name) + '</span><span class="li-sub">' + h(a.reason) + '</span></span>' +
           '<button type="button" class="icon-btn" onclick="event.stopPropagation();window.attentionWa(\'' + h(a.m.id) + '\')" aria-label="Chat WhatsApp ' + h(a.m.name) + '">' + icon('message-circle') + '</button></div>';
-      }).join('') + '</div>' : emptyState('shield-check', 'Semua klien aman', 'Tidak ada kuota yang hampir habis.')) + '</div>';
+      }).join('') + '</div>' : '<p class="att-ok" id="att-ok">' + icon('shield-check') + '<span><b>Semua klien aman</b> · tidak ada kuota hampir habis</span></p>') + '</div>';
     html += '</div>';
 
     // Statistik
