@@ -140,5 +140,3 @@
     px.sub = null; px.ep = ''; px.key = ''; px.st = null; px.open = false; px.ready = false; px.initing = false;
     _lsSet('xnk_push_sync', null);
   };
-})();
-</script>

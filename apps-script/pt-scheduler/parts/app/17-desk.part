@@ -1,0 +1,259 @@
+
+  // ═══ Fase Y (docs/desk): portal klien terasa seperti aplikasi Mac di tablet, laptop, PC ═══
+  // html.desk hanya di portal dan layar ≥ 768 px; HP tidak menjalankan apa pun di sini (semua CSS diawali html.desk).
+  const DESK_MQ = window.matchMedia ? window.matchMedia('(min-width: 768px)') : null;
+  function deskIs() { return ui.mode === 'public' && !!window.publicLoggedMember && !!(DESK_MQ && DESK_MQ.matches); }
+  window.deskIs = deskIs;
+  // Tombol bilah judul per halaman: [label, ikon, aksi, utama?]
+  const DESK_TOOLS = {
+    'public-dashboard': [['Booking', 'calendar-plus', 'window.handleFabClick()', 1]],
+    'public-program': [['Latihan kosong', 'plus', 'window.rtStartEmpty()'], ['Buat rutinitas', 'clipboard-list', 'window.rtNew()']],
+    'public-food': [['Rencana makan', 'book-open', "window.navigate('public-plan')"], ['Catat makan', 'plus', "window.clientQuick('food')", 1]],
+    'public-progress': [['Catat ukuran', 'ruler', "window.pgOpenEntry('member')", 1]],
+    'calendar': [['Booking', 'calendar-plus', 'window.handleFabClick()', 1]],
+    'public-more': [['Ubah kartu', 'pencil', 'window.openProfileEdit()'], ['Bagikan kartu', 'share-2', 'window.shareAthlete()', 1]],
+    'public-pack': [['Perpanjang', 'repeat', 'window.openRenewSheet()', 1]]
+  };
+  window.deskToolsHtml = function (v) {
+    return (DESK_TOOLS[v] || []).map(t => '<button type="button" class="btn btn-sm desk-tb ' + (t[3] ? 'btn-primary' : 'btn-secondary') + '" onclick="' + t[2] + '">' + icon(t[1]) + '<span>' + h(t[0]) + '</span></button>').join('');
+  };
+  function deskSub(v) {
+    const me = window.publicLoggedMember || {};
+    const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    if (v === 'public-dashboard' || v === 'public-food') return fmtDate(new Date());
+    if (v === 'public-pack') return total ? 'Sisa ' + rem + ' dari ' + total + ' sesi' : (me.packageName || '');
+    if (v === 'public-more') { const l = window.myX && window.myX.level; return l ? 'Level ' + l.level + ' · ' + l.gelar : ''; }
+    if (v === 'public-program') { const d = window.myProgram && window.myProgram.state === 'ok' ? window.myProgram.data : null; return d ? ((d.days || []).length + (d.own || []).length) + ' rutinitas' : ''; }
+    return '';
+  }
+  window.deskSync = function () {
+    const on = deskIs();
+    document.documentElement.classList.toggle('desk', on);
+    if (!on) return;
+    const v = window.currentView, sub = $('page-sub');
+    if (sub) sub.textContent = deskSub(v);
+    // Halaman yang ada di sidebar tidak butuh tombol kembali; halaman di luar sidebar (Rencana makan, katalog) tetap punya.
+    const inSide = window.PUB_SIDE().indexOf(v) !== -1;
+    const tb = $('topbar'); if (tb) tb.classList.toggle('desk-noback', inSide);
+    const lv = $('side-me-lv'), l = window.myX && window.myX.level;
+    if (lv) lv.textContent = l ? 'Level ' + l.level + ' · ' + l.gelar : '';
+    renderTopbarActions();
+  };
+  const navDesk = window.navigate;
+  window.navigate = function () { const r = navDesk.apply(this, arguments); window.deskSync(); return r; };
+  if (DESK_MQ) {
+    const onChange = function () { window.deskSync(); if (!deskIs()) renderTopbarActions(); };
+    if (DESK_MQ.addEventListener) DESK_MQ.addEventListener('change', onChange); else if (DESK_MQ.addListener) DESK_MQ.addListener(onChange);
+  }
+  const renderPortalXDesk = window.renderPortalX;
+  window.renderPortalX = function () { renderPortalXDesk.apply(this, arguments); if (deskIs()) { const sub = $('page-sub'); if (sub) sub.textContent = deskSub(window.currentView); const lv = $('side-me-lv'), l = window.myX && window.myX.level; if (lv) lv.textContent = l ? 'Level ' + l.level + ' · ' + l.gelar : ''; } };
+
+  // ── Menu ala Mac (klik kanan, menu ＋) dan popover (lonceng). Satu yang terbuka sekaligus. ──
+  let deskLayer = null;
+  function deskClose() {
+    if (!deskLayer) return;
+    const el = deskLayer.el, back = deskLayer.back; deskLayer = null;
+    el.remove(); document.removeEventListener('keydown', deskKey, true);
+    if (back && back.focus) try { back.focus({ preventScroll: true }); } catch (e) {}
+  }
+  window.deskClose = deskClose;
+  function deskKey(e) {
+    if (!deskLayer) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); deskClose(); return; }
+    if (deskLayer.kind !== 'menu' || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+    e.preventDefault();
+    const btns = Array.from(deskLayer.el.querySelectorAll('button')), i = btns.indexOf(document.activeElement);
+    const n = e.key === 'ArrowDown' ? (i + 1) % btns.length : (i - 1 + btns.length) % btns.length;
+    if (btns[n]) btns[n].focus();
+  }
+  function deskPlace(el, x, y, alignRight) {
+    document.body.appendChild(el);
+    const r = el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
+    let left = alignRight ? x - r.width : x, top = y;
+    if (left + r.width > W - 8) left = W - 8 - r.width;
+    if (top + r.height > H - 8) top = Math.max(8, y - r.height);
+    el.style.left = Math.max(8, left) + 'px'; el.style.top = Math.max(8, top) + 'px';
+  }
+  function deskOpenLayer(el, kind, back) {
+    deskClose();
+    deskLayer = { el: el, kind: kind, back: back || document.activeElement };
+    document.addEventListener('keydown', deskKey, true);
+  }
+  // items: [{ l, ic, fn, danger, sep, hint }]
+  window.deskMenu = function (items, x, y, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'desk-menu'; el.setAttribute('role', 'menu'); if (opts.label) el.setAttribute('aria-label', opts.label);
+    const acts = [];
+    el.innerHTML = items.map(function (it) {
+      if (it.sep) return '<div class="desk-sep" role="separator"></div>';
+      acts.push(it.fn);
+      return '<button type="button" role="menuitem" class="desk-mi' + (it.danger ? ' danger' : '') + '" data-i="' + (acts.length - 1) + '">' + (it.ic ? icon(it.ic) : '<span class="desk-mi-ic"></span>') + '<span class="grow">' + h(it.l) + '</span>' + (it.hint ? '<small>' + h(it.hint) + '</small>' : '') + '</button>';
+    }).join('');
+    el.addEventListener('click', function (e) { const b = e.target.closest('button[data-i]'); if (!b) return; const fn = acts[Number(b.getAttribute('data-i'))]; deskClose(); if (fn) fn(); });
+    deskOpenLayer(el, 'menu', opts.back);
+    deskPlace(el, x, y, !!opts.alignRight);
+    paintIcons();
+    const first = el.querySelector('button'); if (first) try { first.focus({ preventScroll: true }); } catch (e) {}
+    return el;
+  };
+  window.deskPop = function (anchor, html, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'desk-pop'; el.setAttribute('role', 'dialog'); if (opts.label) el.setAttribute('aria-label', opts.label); if (opts.id) el.id = opts.id;
+    el.innerHTML = html;
+    deskOpenLayer(el, 'pop', anchor);
+    const r = anchor.getBoundingClientRect();
+    deskPlace(el, r.right, r.bottom + 8, true);
+    paintIcons();
+    return el;
+  };
+  let deskJust = null;   // tombol yang baru saja menutup lapisannya sendiri (klik kedua = tutup, bukan buka lagi)
+  document.addEventListener('mousedown', function (e) {
+    if (!deskLayer || deskLayer.el.contains(e.target)) return;
+    // Tombol pembuka bisa digambar ulang (lonceng setelah tanda baru dihapus): cocokkan juga lewat id-nya.
+    const b = deskLayer.back, keep = !!b && ((b.contains && b.contains(e.target)) || (b.id && !!e.target.closest('#' + b.id)));
+    deskClose(); deskJust = keep ? (b.id || b) : null; if (keep) e.preventDefault();
+  }, true);
+  function deskToggled(el) { const t = deskJust && (deskJust === el || deskJust === el.id); deskJust = null; return !!t; }
+  window.addEventListener('resize', deskClose);
+  document.addEventListener('scroll', function () { if (deskLayer && deskLayer.kind === 'menu') deskClose(); }, true);
+
+  // Tombol ＋ di bilah judul: menu tarik-turun empat aksi (HP tetap sheet).
+  const clientPlusBase = window.clientPlus;
+  window.clientPlus = function (el) {
+    if (!(deskIs() && el && el.getBoundingClientRect)) { clientPlusBase(); return; }
+    if (deskToggled(el)) return;
+    const r = el.getBoundingClientRect(), q = k => function () { window.clientQuick(k); };
+    const items = [{ l: 'Booking sesi', ic: 'calendar-plus', fn: q('booking') }, { l: 'Mulai latihan', ic: 'dumbbell', fn: q('workout') }];
+    if (nutTabOn()) items.push({ l: 'Catat makan', ic: 'utensils', fn: q('food') });
+    items.push({ l: 'Catat ukuran', ic: 'scale', fn: q('measure') }, { sep: true }, { l: 'Catat latihan yang lewat', ic: 'calendar-check', fn: q('past') });
+    window.deskMenu(items, r.right, r.bottom + 6, { alignRight: true, back: el, label: 'Tambah' });
+  };
+  // Lonceng: popover di bawah tombolnya (HP tetap sheet).
+  const openNotifBase = window.openNotif;
+  window.openNotif = function () {
+    const bell = $('nav-bell-btn');
+    if (!(deskIs() && bell)) { openNotifBase(); return; }
+    if (deskToggled(bell)) return;
+    window.deskPop(bell, '<div class="desk-pop-head"><b>Pemberitahuan</b></div><div class="desk-pop-body" id="desk-notif">' + notifHtml() + '</div>', { label: 'Pemberitahuan', id: 'desk-notif-pop' });
+    const n = X().notif;
+    if (!n || !n.count) return;
+    n.count = 0; n.items.forEach(function (x) { x.fresh = false; });
+    renderTopbarActions(); savePortalCache();
+    memberCall('markNotifSeen').catch(function () {});
+  };
+  const notifGoBase = window.notifGo;
+  window.notifGo = function (id) { deskClose(); notifGoBase(id); };
+
+  // Klik kanan pada rutinitas, tugas, sesi, makanan (mouse; layar sentuh tetap memakai tombol ⋯).
+  document.addEventListener('contextmenu', function (e) {
+    if (!deskIs()) return;
+    const el = e.target.closest('[data-ctx]');
+    if (!el || e.target.closest('input, textarea, select')) return;
+    const k = el.getAttribute('data-ctx'), d = el.dataset;
+    let items = [];
+    if (k === 'rt') {
+      items = [{ l: 'Mulai', ic: 'play', fn: function () { window.workoutOpenClient(d.hari); } }, { l: 'Lihat detail', ic: 'eye', fn: function () { window.rtOpen(d.src, d.hari); } }];
+      if (d.src === 'own') items.push({ l: 'Ubah', ic: 'pencil', fn: function () { window.rtEdit(d.hari); } }, { l: 'Duplikat', ic: 'copy', fn: function () { window.rtDup(d.hari); } }, { sep: true }, { l: 'Hapus', ic: 'trash-2', danger: true, fn: function () { window.rtDelete(d.hari); } });
+      else items.push({ l: 'Salin ke rutinitas saya', ic: 'copy', fn: function () { window.rtCopy('', d.hari); } });
+    } else if (k === 'todo') {
+      items = [{ l: d.act || 'Buka', ic: 'arrow-right', fn: function () { window.todoGo(d.id, d.ref); } }];
+    } else if (k === 'sess') {
+      if (d.up === '1') items = [{ l: 'Ubah jadwal', ic: 'calendar-clock', fn: function () { window.openRescheduleModal(d.id); } }, { l: 'Tambah ke kalender', ic: 'calendar-plus', fn: function () { window.openAddToCalendar([d.id]); } }];
+      items.push({ l: 'Buka jadwal', ic: 'calendar-days', fn: function () { window.navigate('calendar'); } });
+    } else if (k === 'food') {
+      items = [{ l: 'Tambah makanan di waktu ini', ic: 'plus', fn: function () { window.openNutAdd(d.waktu); } }, { sep: true }, { l: 'Hapus ' + (d.nama || ''), ic: 'trash-2', danger: true, fn: function () { window.nutDelLog(d.id); } }];
+    }
+    if (!items.length) return;
+    e.preventDefault();
+    window.deskMenu(items, e.clientX, e.clientY, { back: el, label: 'Menu' });
+  });
+
+  // ── Panel kanan (inspector): detail yang dipilih tanpa meninggalkan halaman. Memakai panel openDetail yang sudah ada. ──
+  let deskSelEl = null;
+  function deskMark(el) { if (deskSelEl) deskSelEl.classList.remove('desk-sel'); deskSelEl = el || null; if (el) el.classList.add('desk-sel'); }
+  window.deskDetail = function (key, title, body, actions, el) {
+    openDetail(key, title, actions || '', body);
+    if (el !== undefined) deskMark(el);
+    paintIcons();
+  };
+  const closeDetailDesk = window.closeDetail;
+  window.closeDetail = function () { deskMark(null); return closeDetailDesk.apply(this, arguments); };
+  const kv = (l, v) => '<div class="desk-kv"><span>' + h(l) + '</span><b>' + v + '</b></div>';
+  function deskSessOpen(id, el) {
+    const s = (window.schedules || []).find(x => String(x.id) === String(id)); if (!s) return;
+    const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000), done = isDone(s), up = !done && d >= new Date();
+    let body = '<div class="stack" style="gap:16px"><div><p class="desk-big">' + h(fmtDate(d)) + '</p><p class="li-title">' + fmtTime(d) + ' – ' + fmtTime(end) + (s.coachName ? ' · ' + h(s.coachName) : '') + '</p>' +
+      '<p class="li-sub">' + (done ? 'Selesai' : up ? 'Terjadwal · ' + h(countdownText(d)) : 'Terlewat') + '</p></div>';
+    if (up) body += '<div class="desk-2btn"><button type="button" class="btn btn-primary" onclick="window.openRescheduleModal(\'' + h(s.id) + '\')">' + icon('calendar-clock') + 'Ubah jadwal</button><button type="button" class="btn btn-secondary" onclick="window.openAddToCalendar([\'' + h(s.id) + '\'])">' + icon('calendar-plus') + 'Kalender</button></div>';
+    if (s.dilatih || s.fokus) body += '<div class="desk-box">' + (s.dilatih ? kv('Dilatih', h(s.dilatih)) : '') + (s.fokus ? kv('Fokus berikutnya', h(s.fokus)) : '') + '</div>';
+    const me = window.publicLoggedMember, next = (window.schedules || []).filter(x => me && String(x.memberId) === String(me.id) && !isDone(x) && new Date(x.start) > new Date() && String(x.id) !== String(s.id)).sort(byStart).slice(0, 3);
+    if (next.length) body += '<div class="desk-box"><p class="px-eyebrow">Sesi lain</p>' + next.map(x => kv(fmtDate(new Date(x.start), { weekday: 'long', day: 'numeric', month: 'short' }), fmtTime(new Date(x.start)))).join('') + '</div>';
+    window.deskDetail('sess:' + s.id, 'Sesi latihan', body + '</div>', '', el);
+  }
+  function deskFoodOpen(id, el) {
+    const n = window.myNutrition, x = n && n.log && (n.log.items || []).find(i => String(i.id) === String(id)); if (!x) return;
+    const N = v => v == null || v === '' ? '-' : String(Math.round(v * 10) / 10).replace('.', ',');
+    const body = '<div class="stack" style="gap:16px"><div><p class="desk-big">' + h(x.nama) + '</p><p class="li-sub">' + h(x.porsi || '') + '</p></div>' +
+      '<div class="desk-box">' + kv('Kalori', N(x.kal) + ' kkal') + kv('Protein', N(x.p) + ' g') + kv('Karbohidrat', N(x.k) + ' g') + kv('Lemak', N(x.l) + ' g') + '</div>' +
+      '<div class="desk-2btn"><button type="button" class="btn btn-secondary" onclick="window.closeDetail();window.openNutAdd(\'' + h(x.waktu || '') + '\')">' + icon('plus') + 'Tambah lagi</button><button type="button" class="btn btn-danger" onclick="window.closeDetail();window.nutDelLog(\'' + h(x.id) + '\')">' + icon('trash-2') + 'Hapus</button></div></div>';
+    window.deskDetail('food:' + x.id, 'Makanan', body, '', el);
+  }
+  function deskMomOpen(i, el) {
+    const m = (X().moments || [])[Number(i)]; if (!m) return;
+    const what = { pr: 'Rekor baru dari catatan latihan.', sesi: 'Tonggak jumlah sesi bersama coach.', ukur: 'Perubahan ukuran tubuh sejak catatan pertama.' }[m.kind] || '';
+    const body = '<div class="stack" style="gap:16px"><div><p class="desk-big">' + h(m.title) + '</p><p class="li-sub">' + h(fmtDate(new Date(m.tanggal + 'T00:00:00'))) + '</p></div>' + (what ? '<p>' + h(what) + '</p>' : '') +
+      (window.shareOn !== false ? '<button type="button" class="btn btn-primary" onclick="window.navigate(\'public-share\')">' + icon('share-2') + 'Buat kartu bagikan</button>' : '') + '</div>';
+    window.deskDetail('mom:' + i, 'Momen', body, '', el);
+  }
+  document.addEventListener('click', function (e) {
+    if (!deskIs() || e.target.closest('button, a, input, select, textarea')) return;
+    const ses = e.target.closest('.list-item[data-ctx="sess"]'); if (ses) { deskSessOpen(ses.dataset.id, ses); return; }
+    const fd = e.target.closest('.meal-row[data-ctx="food"]'); if (fd) { deskFoodOpen(fd.dataset.id, fd); return; }
+    const mo = e.target.closest('#pub-moments li[data-mom]'); if (mo) { deskMomOpen(mo.dataset.mom, mo); return; }
+  });
+  const rtOpenDesk = window.rtOpen;
+  window.rtOpen = function (src, hari) {
+    rtOpenDesk(src, hari);
+    if (deskIs()) { const card = Array.from(document.querySelectorAll('.rt-card[data-ctx="rt"]')).find(c => c.dataset.src === src && c.dataset.hari === hari); deskMark(card || null); }
+  };
+
+  // ── Makan di desktop: kolom kanan berisi saran menu hari ini (catat satu klik), bukan ruang kosong ──
+  window.deskMenuCard = function (n) {
+    const meals = (n && n.menu && n.menu.meals) || [];
+    if (!meals.length) return '';
+    return '<section class="card dk-menu" id="dk-menu"><div class="row-between"><b>Saran menu hari ini</b><button type="button" class="link-btn" onclick="window.navigate(\'public-plan\')">Semua' + icon('chevron-right') + '</button></div>' +
+      meals.map(function (m, mi) {
+        const kal = Math.round(m.items.reduce((a, it) => a + (Number(it.kal) || 0), 0));
+        return '<div class="dk-meal"><span class="grow"><span class="li-sub">' + h(NUT_MEAL_L[nutMealWaktu(m.key)] || '') + (kal ? ' · ' + kal + ' kkal' : '') + '</span><b>' + h(m.paket ? m.paket.n : m.items.map(i => i.n).join(', ')) + '</b></span>' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="window.nutLogMeal(' + mi + ')">' + icon('check') + 'Catat</button></div>';
+      }).join('') + '</section>';
+  };
+  // ── Saya di desktop: kartu atlet melebar + tiga kolom ala Pengaturan Mac (tanpa ruang kosong besar) ──
+  window.deskSayaHtml = function () {
+    const me = window.publicLoggedMember, total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
+    const go = v => "window.navigate('" + v + "')";
+    const row = (fn, ic, title, sub, dot) => '<button type="button" class="ds-row" onclick="' + fn + '"><span class="ds-ic">' + icon(ic) + '</span><span class="grow"><b>' + h(title) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + (dot ? '<span class="new-dot" aria-label="Baru"></span>' : '') + icon('chevron-right') + '</button>';
+    const group = (title, rows) => '<div class="ds-group"><p class="ds-gt">' + h(title) + '</p><div class="ds-list">' + rows + '</div></div>';
+    const next = (window.schedules || []).filter(s => String(s.memberId) === String(me.id) && !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart)[0];
+    const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId)) || (window.coaches || [])[0];
+    const w = pg.data && pg.data.summary && pg.data.summary.berat;
+    let c1 = group('Profil', row('window.openProfileEdit()', 'pencil', 'Ubah kartu atlet', 'Nama, motto, warna, statistik') + row('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto') + row(go('public-progress'), 'trending-up', 'Progres', w ? String(w.last.nilai).replace('.', ',') + ' kg' : 'Berat, ukuran, tes'));
+    c1 += group('Makan & berbagi', (nutTabOn() ? row(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh') : '') + (window.shareOn !== false ? row(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres') : '') + row(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', infoHasNew()));
+    let c2 = group('Paket & coach', row(go('public-pack'), 'package', 'Paket saya', total ? 'Sisa ' + rem + ' dari ' + total + ' sesi' : (me.packageName || 'Lihat paket')) + row(go('public-coaches'), 'dumbbell', 'Coach', coach ? coach.name : 'Profil, jam, chat') + row(go('calendar'), 'calendar-days', 'Jadwal', next ? fmtDate(new Date(next.start), { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtTime(new Date(next.start)) : 'Belum ada jadwal') + row('window.chatCoach()', 'message-circle', 'Chat coach', 'Lewat WhatsApp'));
+    const p = X().profile;
+    c2 += '<div class="ds-group"><p class="ds-gt">Tampilan</p><div class="ds-list"><div class="ds-row ds-static"><b class="grow">Tema</b><div class="seg" id="theme-seg-3" role="radiogroup" aria-label="Tema"></div></div>' +
+      (p ? '<div class="ds-row ds-static"><b class="grow">Warna aksen</b>' + accentSwatches(p.aksen, 'window.setAccent') + '</div>' : '') + '</div></div>';
+    const badges = (pg.data && pg.data.badges) || [], got = badges.filter(b => b.earned).length;
+    let c3 = '<section class="card ds-card"><div class="row-between"><b>Koleksi badge</b><span class="li-sub">' + got + ' dari ' + badges.length + '</span></div><div class="ds-badges">' +
+      badges.map(b => '<span class="ds-badge' + (b.earned ? ' on' : '') + '" title="' + h(b.label) + '">' + shieldSvg(b.id, b.label, !!b.earned) + '</span>').join('') + '</div></section>';
+    if (window.pushWrapHtml) c3 += '<section class="card ds-card">' + window.pushWrapHtml() + '</section>';   // notifikasi (Web Push)
+    const lv = X().level, max = lv ? Math.max(1, ...lv.rinci.map(r => r.poin)) : 1;
+    c3 += '<section class="card ds-card ds-grow"><div class="row-between"><b>Asal poin</b><span class="li-sub">' + (lv ? lv.poin + ' poin' : '') + '</span></div>' +
+      (lv ? lv.rinci.map(r => '<div class="ds-pt"><span>' + h(r.label) + '</span><span class="px-bar"><i style="width:' + Math.round(r.poin / max * 100) + '%"></i></span><b class="num">' + r.poin + '</b></div>').join('') : skel(3)) +
+      '<button type="button" class="btn btn-secondary ds-out" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></section>';
+    return '<div class="ds-saya">' + athleteCardHtml().replace('class="card-ink athlete', 'class="card-ink athlete ath-wide') + '<div class="ds-cols"><div class="ds-col">' + c1 + '</div><div class="ds-col">' + c2 + '</div><div class="ds-col">' + c3 + '</div></div></div>';
+  };
+})();
+</script>

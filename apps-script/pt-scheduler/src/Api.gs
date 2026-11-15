@@ -153,7 +153,7 @@ function _apiTable_() {
     uploadFinanceProof: uploadFinanceProof,
     getFinanceProof: getFinanceProof,
     exportFinanceCsv: exportFinanceCsv,
-    // member: member token (60)
+    // member: member token (62)
     getMemberProfile: getMemberProfile,
     getMemberSessions: getMemberSessions,
     getMyPushStatus: getMyPushStatus,
@@ -214,5 +214,7 @@ function _apiTable_() {
     getMyClassGroup: getMyClassGroup,
     getMyBills: getMyBills,
     markGuideSeen: markGuideSeen,
+    saveMyProfileCard: saveMyProfileCard,
+    markNotifSeen: markNotifSeen,
   };
 }

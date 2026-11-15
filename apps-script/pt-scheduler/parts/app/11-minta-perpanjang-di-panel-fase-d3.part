@@ -152,6 +152,17 @@
   }
 
   // Lembar "Catat"
+  function pgLastWeight(mode, memberId) {
+    const d = mode === 'admin' ? pg.admin[memberId] : pg.data;
+    const b = d && d.summary && d.summary.berat;
+    return b && b.last ? b.last : null;
+  }
+  window.pgStep = function (by) {
+    const el = $('pg-berat'), lw = pgLastWeight(pg.mode, pg.memberId);
+    const cur = parseFloat(String(el.value).replace(',', '.'));
+    const base = isFinite(cur) ? cur : (lw ? Number(lw.nilai) : 60);
+    el.value = String(Math.max(20, Math.round((base + (isFinite(cur) || !lw ? by : 0)) * 10) / 10)).replace('.', ',');
+  };
   window.pgOpenEntry = function (mode, memberId) {
     pg.mode = mode; pg.memberId = memberId || null;
     PG_MEASURES.forEach(function (m) { $('pg-' + m[0]).value = ''; });
@@ -160,6 +171,10 @@
     $('pg-date-field').classList.toggle('hide', mode !== 'admin');
     $('pg-err').textContent = '';
     $('pg-entry-title').textContent = mode === 'admin' ? 'Catat progres klien' : 'Catat hari ini';
+    // Fase X: berat dulu. Tombol −/＋ mulai dari berat terakhir, jadi biasanya cukup beberapa ketukan.
+    const lw = pgLastWeight(mode, memberId);
+    $('pg-berat').placeholder = lw ? String(lw.nilai).replace('.', ',') : '72,4';
+    $('pg-last').textContent = lw ? 'Terakhir ' + String(lw.nilai).replace('.', ',') + ' kg · ' + pgLabel(lw.tanggal) : '';
     openSheet('sheet-progress');
   };
   window.pgSaveEntry = function (e) {
@@ -566,10 +581,10 @@
     // Empat bagian supaya halaman tidak memanjang: Ringkasan, Ukuran, Tes, Riwayat. Semua bagian tetap ada di DOM (diisi oleh render masing-masing).
     const pane = (k, l, r) => '<div class="pg-pane' + (pgSeg === k ? '' : ' hide') + '" data-pgpane="' + k + '">' + portalGrid(l, r) + '</div>';
     const segs = [['ringkasan', 'Ringkasan'], ['ukuran', 'Ukuran'], ['tes', 'Tes'], ['riwayat', 'Riwayat']];
-    let html = pageIntro('Progres', 'Lihat seberapa jauh kamu sudah melangkah.') +
-      '<div id="ph-progress">' + insProgressHero() + '</div>' +
+    // Fase X: cerita perjalanan di atas (kalimat utama + awal/sekarang/selisih), Momen di Ringkasan.
+    let html = pxHead('Progres', '') + '<div class="px-band gfx-kontur"></div><div id="pub-journey">' + journeyHeroHtml() + '</div>' +
       '<div class="seg pg-seg" id="pg-seg" role="tablist" aria-label="Bagian progres">' + segs.map(x => '<button type="button" role="tab" data-pgseg="' + x[0] + '" class="' + (pgSeg === x[0] ? 'active' : '') + '" aria-selected="' + (pgSeg === x[0]) + '" onclick="window.setPgSeg(\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '<span class="seg-thumb"></span></div>';
-    html += pane('ringkasan', '<div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
+    html += pane('ringkasan', '<div id="pub-moments">' + momentsCardHtml() + '</div><div id="ph-progress">' + insProgressHero() + '</div><div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
     html += pane('ukuran', '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>', '<div id="pub-ins-measures">' + insMeasuresCard() + '</div>');
     html += pane('tes', '<div id="pub-ins-fitness">' + (insFitnessCard() || '') + '</div><div id="pub-tests-wrap" class="stack" style="gap:16px">' + (myTestsInner() || emptyState('activity', 'Belum ada hasil tes', 'Hasil tes kebugaran dari coach muncul di sini.')) + '</div>', '');
     html += pane('riwayat', '<div class="card' + (pgBadgesInner() ? '' : ' hide') + '" id="pub-badges-wrap">' + pgBadgesInner() + '</div><div class="card stack" style="gap:10px" id="pub-workout-wrap"></div>',
@@ -594,10 +609,10 @@
   const rtAttr = s => h(s).replace(/'/g, '&#39;');
   function rtCardHtml(d, src, next) {
     const names = d.items.map(it => it.gerakan).join(', ');
-    return '<article class="rt-card"><div class="rt-head"><button type="button" class="rt-open" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtOpen(this.dataset.src,this.dataset.hari)">' +
+    return '<article class="rt-card" data-ctx="rt" data-src="' + src + '" data-hari="' + h(d.hari) + '"><div class="rt-head"><button type="button" class="rt-open" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtOpen(this.dataset.src,this.dataset.hari)">' +
       '<span class="rt-name"><b class="truncate">' + h(d.hari) + '</b>' + (next ? '<span class="pill solid">Berikutnya</span>' : '') + '</span><span class="rt-sub">' + h(names) + '</span></button>' +
       '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(d.hari) + '" data-src="' + src + '" data-hari="' + h(d.hari) + '" onclick="window.rtMenu(this.dataset.src,this.dataset.hari)">' + icon('more-horizontal') + '</button></div>' +
-      '<button type="button" class="btn btn-primary btn-block rt-go" data-hari="' + h(d.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">Mulai rutinitas</button></article>';
+      '<button type="button" class="btn btn-primary btn-block rt-go" data-hari="' + h(d.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">' + icon('play') + 'Mulai</button></article>';
   }
   function rtGroupHtml(key, title, list, src, next) {
     const shut = !!rtFold()[key];
@@ -610,17 +625,16 @@
     if (c.state === 'error') return '<div class="section-head"><h3 class="section-title">Rutinitas</h3></div><p class="li-sub">Gagal memuat: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMyProgram(true)">Coba lagi</button>';
     const days = c.data.days || [], own = c.data.own || [];
     const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
-    let html = '<button type="button" class="rt-empty-btn" onclick="window.rtStartEmpty()">' + icon('plus') + '<span>Mulai latihan kosong</span></button>' +
-      '<div class="rt-sec"><h3 class="section-title">Rutinitas</h3><button type="button" class="icon-btn plain" aria-label="Pengaturan latihan" onclick="window.wlSettings()">' + icon('settings') + '</button>' +
-      '<button type="button" class="icon-btn plain" aria-label="Rutinitas baru" onclick="window.rtNew()">' + icon('folder-plus') + '</button></div>' +
-      '<div class="rt-actions"><button type="button" class="rt-act" onclick="window.rtNew()">' + icon('clipboard-list') + '<span>Rutinitas baru</span></button><button type="button" class="rt-act" onclick="window.rtExplore()">' + icon('search') + '<span>Jelajahi</span></button></div>';
+    // Fase X: daftar rutinitas langsung (tombol Mulai di tiap kartu), lalu Buat rutinitas dan Galeri. "Latihan kosong" ada di kartu hitam di atas.
+    let html = '<div class="rt-sec"><h3 class="section-title">Rutinitas</h3><button type="button" class="icon-btn plain" aria-label="Pengaturan latihan" onclick="window.wlSettings()">' + icon('settings') + '</button></div>';
     if (days.length) html += rtGroupHtml('coach', 'Dari coach', days, 'coach', w && w.next);
     if (own.length) html += rtGroupHtml('own', 'Rutinitas saya', own, 'own', '');
-    if (!days.length && !own.length) html += emptyState('clipboard-list', 'Belum ada rutinitas', 'Buat rutinitas sendiri, salin dari Jelajahi, atau tanya coach lewat Chat.', '<button type="button" class="btn btn-outline btn-sm" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>');
+    html += '<div class="rt-actions"><button type="button" class="rt-act" onclick="window.rtNew()">' + icon('plus') + '<span>Buat rutinitas</span></button><button type="button" class="rt-act" onclick="window.rtExplore()">' + icon('layout-grid') + '<span>Galeri</span></button></div>';
+    if (!days.length && !own.length) html += emptyState('clipboard-list', 'Belum ada rutinitas', 'Buat rutinitas sendiri, simpan dari Galeri, atau tanya coach lewat Chat.', '<button type="button" class="btn btn-outline btn-sm" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>');
     if (w) html += workoutSessionsHtml(w, 'me', '');
     return html;
   }
-  function renderProgramCard() { const w = $('pub-program-wrap'); if (w) { setHTML(w, programInner()); } }
+  function renderProgramCard() { const w = $('pub-program-wrap'); if (w) { setHTML(w, programInner()); } const hh = $('pub-lat-hero'); if (hh) { setHTML(hh, latHeroInner()); paintIcons(); } }
   window.loadMyProgram = function (force) {
     if (!_lsGet(MEMBER_TOKEN_KEY) || !window.publicLoggedMember) return Promise.resolve();
     const c = window.myProgram;
@@ -670,8 +684,10 @@
       '<div id="rt-chart-slot">' + rtChartHtml(hari) + '</div>' +
       '<div class="rt-sec"><h3 class="section-title">Gerakan</h3>' + (src === 'own' ? '<button type="button" class="btn btn-ghost btn-sm" data-hari="' + h(hari) + '" onclick="window.rtEdit(this.dataset.hari)">' + icon('pencil') + 'Edit rutinitas</button>' : '') + '</div>' +
       '<div class="stack" style="gap:12px">' + d.items.map(rtItemHtml).join('') + '</div>';
-    wlSheet(hari, body);
-    if (!exLib) exEnsure().then(function () { if (!$('modal-wl').classList.contains('hide') && $('wls-title').textContent === hari) window.rtOpen(src, hari); }).catch(function () {});
+    const dk = 'rt:' + src + ':' + hari;   // Fase Y: di desktop detail terbuka di panel kanan
+    if (window.deskIs && window.deskIs()) window.deskDetail(dk, hari, body, '<button type="button" class="icon-btn plain" aria-label="Menu rutinitas" data-src="' + src + '" data-hari="' + h(hari) + '" onclick="window.rtMenu(this.dataset.src,this.dataset.hari)">' + icon('more-horizontal') + '</button>');
+    else wlSheet(hari, body);
+    if (!exLib) exEnsure().then(function () { if ((!$('modal-wl').classList.contains('hide') && $('wls-title').textContent === hari) || ui.detail === dk) window.rtOpen(src, hari); }).catch(function () {});
   };
   window.rtMenu = function (src, hari) {
     const btn = (ic, label, sub, fn, extra) => '<button type="button" class="wl-menu-btn' + (extra || '') + '" data-src="' + src + '" data-hari="' + h(hari) + '" onclick="' + fn + '">' + icon(ic) + '<span><b>' + label + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span></button>';
@@ -721,13 +737,13 @@
   };
   window.rtExplore = function () {
     const list = (rtData() || {}).explore || [];
-    const body = list.length ? '<p class="li-sub">Program yang dibagikan coach. Simpan ke Rutinitas saya, lalu ubah sesukamu.</p><div class="stack" style="gap:10px">' + list.map(function (t) {
+    const body = list.length ? '<p class="li-sub">Program yang dibagikan coach. Simpan ke Rutinitas saya, lalu ubah sesuai kebutuhan.</p><div class="stack" style="gap:10px">' + list.map(function (t) {
       const n = t.days.reduce((s, d) => s + d.items.length, 0);
-      return '<div class="rt-card"><div class="rt-name"><b class="truncate">' + h(t.name) + '</b></div><p class="li-sub">' + t.days.length + ' rutinitas · ' + n + ' gerakan</p>' +
+      return '<div class="rt-card card-ink gfx-geo"><div class="rt-name"><b class="truncate" style="max-width:calc(100% - 72px)">' + h(t.name) + '</b></div><p class="li-sub">' + t.days.length + ' rutinitas · ' + n + ' gerakan</p>' +
         '<ul class="rt-xlist">' + t.days.map(d => '<li><b>' + h(d.hari) + '</b> · ' + h(d.items.map(it => it.gerakan).join(', ')) + '</li>').join('') + '</ul>' +
-        '<button type="button" class="btn btn-primary btn-block" data-t="' + h(t.name) + '" onclick="window.rtCopy(this.dataset.t)">' + icon('plus') + 'Simpan ke rutinitas saya</button></div>';
+        '<button type="button" class="btn btn-on-ink btn-block" data-t="' + h(t.name) + '" onclick="window.rtCopy(this.dataset.t)">' + icon('plus') + 'Simpan ke rutinitas saya</button></div>';
     }).join('') + '</div>'
-      : emptyState('search', 'Belum ada program di Jelajahi', 'Coach bisa membagikan template program di sini. Sementara itu, buat rutinitas sendiri.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.closeModal();window.rtNew()">' + icon('plus') + 'Rutinitas baru</button>');
-    wlSheet('Jelajahi', body);
+      : emptyState('layout-grid', 'Galeri masih kosong', 'Coach bisa membagikan template program di sini. Sementara itu, buat rutinitas sendiri.', '<button type="button" class="btn btn-primary btn-sm" onclick="window.closeModal();window.rtNew()">' + icon('plus') + 'Buat rutinitas</button>');
+    wlSheet('Galeri', body);
   };
 

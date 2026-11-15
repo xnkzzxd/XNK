@@ -24,24 +24,35 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
   - Hasil: komponen bersama `sessActions()` / `.sess-actions` (App.html, Theme.html) dipakai Dashboard, Jadwal dan hub coach: "Selesai" solid (`btn-primary`, selalu pertama), "Ubah" dan "WA" outline ikon + teks pendek, tinggi 44 px, rata kanan ≥ 768 px. Hub coach kini juga berteks "Selesai" (sebelumnya ikon centang saja). Cek baru di `browser-check.js`: Selesai solid pertama, semua tombol ≥ 44 px, kontras ≥ 4.5:1, rata kanan di desktop (terang dan gelap).
 
 ## C — Halaman Klien
-- [ ] **S7** Rampingkan layar atas Klien: hapus 4 tile (`.client-top`), ringkasan hitam satu baris di HP (angka + "Lihat siapa"), cari + sortir + Kartu/Daftar satu baris; klien pertama terlihat di 390×844. Perbarui cek browser yang menyebut `.client-top`. Dep: S4. (P3)
-- [ ] **S8** Label dasar pengelompokan klien ("Bergabung · Januari 2026", "Sisa sesi · Habis", dll.) mengikuti urutan terpilih; sembunyikan pembagi bila hanya satu grup. Dep: S7. (P4)
-- [ ] **S9** Profil klien HP: hero lebih pendek (cincin sisa sesi dan tombol satu baris), tab hitam lebih rendah; "Sorotan" muncul dalam layar pertama. Dep: S1. (P12)
+- [x] **S7** Rampingkan layar atas Klien: hapus 4 tile (`.client-top`), ringkasan hitam satu baris di HP (angka + "Lihat siapa"), cari + sortir + Kartu/Daftar satu baris; klien pertama terlihat di 390×844. Perbarui cek browser yang menyebut `.client-top`. Dep: S4. (P3)
+  - Hasil: empat ubin (Aktif, Hampir habis, Habis, Perlu perhatian) dihapus; chip filter sudah memuat hitungan yang sama. Di HP ringkasan hitam jadi satu baris ("1 klien perlu perhatian" + "Lihat siapa"; label dan angka minggu ini hanya di desktop). Cari + urutkan selalu satu baris (placeholder "Cari klien…"). Di 390×844 kartu klien pertama utuh di atas bar tab; cek baru di `browser-check.js`, cek ubin lama diganti cek chip.
+- [x] **S8** Label dasar pengelompokan klien ("Bergabung · Januari 2026", "Sisa sesi · Habis", dll.) mengikuti urutan terpilih; sembunyikan pembagi bila hanya satu grup. Dep: S7. (P4)
+  - Hasil: judul grup menyebut dasarnya dan mengikuti urutan: Terbaru → "Terakhir aktif · November 2026" (tanggalnya aktivitas terakhir, bukan tanggal bergabung, jadi contoh "Bergabung" di atas diganti), Sisa sesi → "Sisa sesi · Habis / Hampir habis / Masih ada", Perlu perhatian → "Perlu perhatian / Tanpa tanda perhatian", Nama → "Nama · A", Lama tidak latihan → "Terakhir latihan · Lebih dari 30 hari …", Riwayat paket → "Riwayat paket · bulan". Satu grup saja atau sedang mencari = tanpa pembagi. Cek baru di `browser-check.js`.
+- [x] **S9** Profil klien HP: hero lebih pendek (cincin sisa sesi dan tombol satu baris), tab hitam lebih rendah; "Sorotan" muncul dalam layar pertama. Dep: S1. (P12)
+  - Hasil (disetujui pemilik dari tangkapan sebelum/sesudah, 2026-11-15): di HP hero profil klien jadi ±180 px (dulu ±300): identitas di atas, lalu cincin sisa sesi 64 px + Chat WA + Booking satu baris; teks "N sesi lagi · terpakai · selesai" disembunyikan di HP (desktop tetap). Tab Ringkasan/Progres/Latihan/Gizi 44 px, ikon dan label sebaris. Sorotan dan data dasar terlihat tanpa menggulir. CSS saja (`parts/theme/01-awal.part`); cek baru di `browser-check.js`.
 
 ## D — Dashboard dan Jadwal
-- [ ] **S10** Dashboard HP: agenda "Hari ini" naik tepat di bawah salam; tile jadi satu baris yang bisa digeser (snap, tanpa scroll sideways pada halaman). Dep: S6. (P7)
-- [ ] **S11** Dashboard: hero "Sesi berikutnya" tidak menggandakan agenda (bila sama dengan sesi pertama agenda yang belum selesai, jadikan sorotan di baris itu); empty state "Perlu perhatian" jadi satu baris. Dep: S10. (P7, P9)
-- [ ] **S12** Jadwal HP: kalender bulan bisa dilipat ke strip minggu (bawaan strip, ketuk judul untuk bulan penuh); sesi hari terpilih terlihat di layar pertama. Desktop: kalender + daftar mengisi tinggi, tanpa ruang kosong besar. Dep: S6. (P11)
+- [-] **S10** Dashboard HP: agenda "Hari ini" naik tepat di bawah salam; tile jadi satu baris yang bisa digeser (snap, tanpa scroll sideways pada halaman). Dep: S6. (P7)
+- [-] **S11** Dashboard: hero "Sesi berikutnya" tidak menggandakan agenda (bila sama dengan sesi pertama agenda yang belum selesai, jadikan sorotan di baris itu); empty state "Perlu perhatian" jadi satu baris. Dep: S10. (P7, P9)
+  - **Dibatalkan oleh pemilik (2026-11-15).** S10 dan S11 sempat dibangun (urutan HP Hari ini dulu, strip tile geser, kartu Sesi berikutnya disembunyikan bila ada di agenda) lalu dikembalikan: "Perubahan ini jelek, bagus kaya sebelumnya." Dashboard tetap seperti semula (kartu Sesi berikutnya paling atas, tile 2 kolom di HP). Jangan ubah susunan Dashboard tanpa tangkapan layar/mockup yang disetujui pemilik dulu.
+- [-] **S12** Jadwal HP: kalender bulan bisa dilipat ke strip minggu (bawaan strip, ketuk judul untuk bulan penuh); sesi hari terpilih terlihat di layar pertama. Desktop: kalender + daftar mengisi tinggi, tanpa ruang kosong besar. Dep: S6. (P11)
+  - **Dibatalkan oleh pemilik (2026-11-15)** setelah melihat tangkapan sebelum/sesudah (usulan: strip satu minggu di HP, ketuk judul untuk bulan penuh): "Bagus yang sebelum." Kalender bulan penuh di HP tetap seperti semula; jangan ubah Jadwal tanpa persetujuan pemilik.
 
 ## E — Coach dan Keuangan
-- [ ] **S13** Hub coach: "Perlu perhatian" diringkas jadi satu baris per jenis ("3 klien belum punya assessment" + satu tombol), hapus tombol "Nanti" per baris dari tampilan awal (daftar bisa dibuka); tab "Klien | Coach" diganti nama yang tidak bentrok dengan sidebar ("Hari ini | Profil"). Dep: S1. (P9, P13)
-- [ ] **S14** Keuangan: tile memakai angka ringkas ("2,3 jt", penuh di detail/aria-label), tidak turun baris di 360 px; grafik 6 bulan menyembunyikan bulan tanpa data atau tampil "Belum ada data". Dep: S4. (P10)
+- [x] **S13** Hub coach: "Perlu perhatian" diringkas jadi satu baris per jenis ("3 klien belum punya assessment" + satu tombol), hapus tombol "Nanti" per baris dari tampilan awal (daftar bisa dibuka); tab "Klien | Coach" diganti nama yang tidak bentrok dengan sidebar ("Hari ini | Profil"). Dep: S1. (P9, P13)
+  - Hasil (disetujui pemilik dari tangkapan sebelum/sesudah, 2026-11-15): "Perlu perhatian" di hub dikelompokkan per jenis, satu baris `<details>` tiap jenis ("5 klien · Belum ada assessment"); nama klien dan tombol "Nanti" hanya di dalam grup yang dibuka. Semua alasan klien dihitung (dulu hanya dua). Tab hub "Klien | Coach" → "Hari ini | Profil". Cek baru di `browser-check.js`.
+- [x] **S14** Keuangan: tile memakai angka ringkas ("2,3 jt", penuh di detail/aria-label), tidak turun baris di 360 px; grafik 6 bulan menyembunyikan bulan tanpa data atau tampil "Belum ada data". Dep: S4. (P10)
+  - Hasil (disetujui pemilik dari tangkapan sebelum/sesudah, 2026-11-15): tile Keuangan memakai angka ringkas (`finRpShort`: "Rp 850", "Rp 2,4 jt", "Rp 1,5 M"), angka penuh di `title` dan `aria-label`, tidak turun baris di 360 px. Grafik 6 bulan menyembunyikan bulan tanpa data; semua kosong = "Belum ada data.". Cek baru di `browser-check.js`.
 
 ## F — Konsistensi dan penutup
-- [ ] **S15** Titik tanpa label (sidebar, tab bar, "Booking baru") jadi angka atau teks berlabel + `aria-label`; ikon dekoratif di tile KPI dihapus atau dikecilkan agar angka punya ruang. Dep: S10. (P13)
-- [ ] **S16** Kurangi kartu hitam yang bersaing: tentukan tingkat (band > hero tunggal per layar > permukaan netral); kalender Jadwal dan tile KPI memakai permukaan netral. Dep: S5…S12. (P14)
-- [ ] **S17** Tes: tambah ke `browser-check.js` cek per layar admin di 360/390/430 dan 1280/1440 (terang + gelap): tanpa overflow horizontal, klien/sesi pertama di layar pertama, kontras hero. Dep: semua S1–S4.
-- [ ] **S18** Dokumen: ringkas hasil di Agent.md §7 (Fase S), jalankan ulang audit tangkapan layar, centang PRD §5. Dep: S17.
+- [-] **S15** Titik tanpa label (sidebar, tab bar, "Booking baru") jadi angka atau teks berlabel + `aria-label`; ikon dekoratif di tile KPI dihapus atau dikecilkan agar angka punya ruang. Dep: S10. (P13)
+  - Dilewati (2026-11-15): menyentuh Dashboard/tab bar yang pemilik minta tetap seperti semula; titik tanpa label belum diubah.
+- [-] **S16** Kurangi kartu hitam yang bersaing: tentukan tingkat (band > hero tunggal per layar > permukaan netral); kalender Jadwal dan tile KPI memakai permukaan netral. Dep: S5…S12. (P14)
+  - Dilewati (2026-11-15): mengubah warna kalender Jadwal dan kotak angka Dashboard, yang pemilik minta tetap seperti semula.
+- [x] **S17** Tes: tambah ke `browser-check.js` cek per layar admin di 360/390/430 dan 1280/1440 (terang + gelap): tanpa overflow horizontal, klien/sesi pertama di layar pertama, kontras hero. Dep: semua S1–S4.
+  - Hasil: section baru di `browser-check.js` ("Panel admin · S17"): Dashboard, Jadwal, Klien, Coach, Pengaturan di 360/390/430/1280/1440 px, terang dan gelap: halaman tidak bergeser ke samping, dan di HP kartu klien pertama utuh di atas bar tab. Audit awal tidak menemukan pelanggaran. Kontras hero sudah dicek di S5.
+- [x] **S18** Dokumen: ringkas hasil di Agent.md §7 (Fase S), jalankan ulang audit tangkapan layar, centang PRD §5. Dep: S17.
+  - Hasil: ringkasan di Agent.md §7 dan CLAUDE.md; PRD §5 diperbarui; tangkapan audit ulang dikirim ke pemilik.
 
 ## Urutan yang disarankan
 S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S10 → S11 → S9 → S12 → S13 → S14 → S15 → S16 → S17 → S18.

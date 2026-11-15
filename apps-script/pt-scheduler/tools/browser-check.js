@@ -31,6 +31,8 @@ const DESKTOP = { width: 1440, height: 900 };
 const DESKTOP_W = DESKTOP.width;
 let failures = 0;
 const check = (ok, msg) => { console.log((ok ? '  ✓ ' : '  ✗ ') + msg); if (!ok) failures++; };
+// One section throwing (a selector that never shows, a timeout) counts as a failure but does not hide the sections after it.
+const sectionCrash = e => { failures++; console.log('  ✗ section stopped: ' + String((e && e.stack) || e).split('\n').slice(0, 6).join('\n      ')); };
 
 function render(page) {
   const read = f => fs.readFileSync(path.join(SRC, f.endsWith('.html') ? f : f + '.html'), 'utf8');
@@ -298,7 +300,7 @@ async function contrastReport(page) {
 
   // ── Panel PT, HP ──────────────────────────────────────────────────────────
   console.log('Panel PT · HP');
-  {
+  await (async () => {
     const env = richEnv();
     env.memberRow('PT-B')[1] = '<img src=x onerror="window.__xss=1">Budi';
     const calls = [];
@@ -337,6 +339,14 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.__xss)) === undefined, 'client name with <img onerror> is not executed');
     check((await page.textContent('#client-list')).includes('<img src=x'), 'client name is shown as plain text');
+    // S7: tanpa empat ubin, ringkasan hitam satu baris, cari + urutkan satu baris, klien pertama di layar pertama.
+    const s7 = await page.evaluate(() => {
+      const hero = document.querySelector('#client-hero .insight-hero'), srch = document.querySelector('.cl-tools .input-search'), sort = document.getElementById('sort-client'), first = document.querySelector('#client-list .client-card');
+      const hb = hero.getBoundingClientRect(), a = srch.getBoundingClientRect(), b = sort.getBoundingClientRect(), f = first.getBoundingClientRect();
+      const bar = document.getElementById('tabbar').getBoundingClientRect();
+      return { tiles: document.querySelectorAll('#view-clients .stat-tile, #view-clients .client-tiles').length, heroH: Math.round(hb.height), oneRow: Math.abs(a.top - b.top) < 4, firstTop: Math.round(f.top), firstBottom: Math.round(f.bottom), barTop: Math.round(bar.top) };
+    });
+    check(s7.tiles === 0 && s7.heroH <= 80 && s7.oneRow && s7.firstBottom <= s7.barTop, 'Klien (phone): no summary tiles, one-line black summary, search and sort in one row, first client fully on the first screen ' + JSON.stringify(s7));
     const phoneList = await page.evaluate(() => {
       const l = document.querySelector('#client-list > .list'), c = document.querySelector('#client-list .client-card');
       return { list: getComputedStyle(l).display + '/' + getComputedStyle(l).flexDirection, card: getComputedStyle(c).display, meter: getComputedStyle(c.querySelector('.cc-meter')).maxWidth,
@@ -354,6 +364,14 @@ async function contrastReport(page) {
     await page.waitForTimeout(700);
     const box = await page.locator('#detail-panel').boundingBox();
     check(!!box && box.width >= MOBILE.width - 1, 'client detail opens full-screen on phone');
+    // S9: hero profil klien di HP lebih pendek — cincin dan tombol satu baris, tab lebih rendah, Sorotan di layar pertama.
+    await page.waitForTimeout(400);
+    const s9 = await page.evaluate(() => {
+      const r = q => { const e = document.querySelector('#detail-body ' + q); return e ? e.getBoundingClientRect() : null; };
+      const hero = r('.client-hero'), ring = r('.client-ring'), act = r('.client-hero-actions'), tab = r('.cp-tabs .chip'), hl = r('#cp-highlight');
+      return hero && ring && act && tab && hl ? { hero: Math.round(hero.height), row: Math.abs((ring.top + ring.height / 2) - (act.top + act.height / 2)) < 20, tab: Math.round(tab.height), hl: Math.round(hl.top), over: document.scrollingElement.scrollWidth - innerWidth } : null;
+    });
+    check(!!s9 && s9.hero <= 200 && s9.row && s9.tab <= 48 && s9.hl < 844 && s9.over <= 1, 'client page (phone): short hero (ring and buttons in one row), low tabs, Sorotan on the first screen ' + JSON.stringify(s9));
     const phoneProf = await page.evaluate(() => ({
       tabs: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).gridTemplateColumns.split(' ').length,
       cols: Array.from(document.querySelectorAll('#detail-body .cp-col')).map(e => getComputedStyle(e).display),
@@ -395,11 +413,11 @@ async function contrastReport(page) {
     check((await revoked.page.textContent('#admin-login-error')).includes('Sesi admin berakhir'), 'explains why the PIN is needed again');
     noErrors(errors.concat(reload.errors, revoked.errors));
     await context.close(); await reload.context.close(); await revoked.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Panel PT, HP: satu loading, tarik untuk muat ulang, tombol back ───────
   console.log('Panel PT · HP (login, tarik, back)');
-  {
+  await (async () => {
     const env = richEnv();
     const calls = [];
     const { page, context, errors } = await openPage(browser, env, '/Index', calls, undefined, { touch: true });
@@ -500,7 +518,7 @@ async function contrastReport(page) {
     check((await page.evaluate(() => history.length)) <= hist + 1, 'back: tab switches do not pile up history entries');
     check(errors.length === 0, 'no page errors: ' + errors.join(' | '));
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Panel PT, desktop (terang & gelap) ────────────────────────────────────
   for (const scheme of ['light', 'dark']) {
@@ -636,9 +654,15 @@ async function contrastReport(page) {
     await page.fill('#search-client', '');
     await page.evaluate(() => window.filterClients());
     await page.evaluate(() => window.setClientFilter('low'));
-    const kLow = await page.locator('#view-clients .stat-tile.active[data-filter="low"]').count();
+    const kLow = await page.locator('#view-clients .chip.active[data-filter="low"]').count();
     await page.evaluate(() => window.setClientFilter('all'));
-    check(kLow === 1 && (await page.locator('#view-clients .stat-tile.active').count()) === 0 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the summary tiles and chips follow the chosen filter');
+    check(kLow === 1 && (await page.locator('#view-clients .chip.active').count()) === 1 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the filter chips follow the chosen filter');
+    // S8: judul grup mengikuti urutan dan menyebut dasar pengelompokan; tanpa pembagi bila hanya satu grup.
+    const grp = async sort => { await page.evaluate(v => window.setClientSort(v), sort); await page.waitForTimeout(200); return page.evaluate(() => Array.from(document.querySelectorAll('#client-list .month-divider span')).map(e => e.textContent)); };
+    const gSisa = await grp('sisa'), gNama = await grp('nama'), gNew = await grp('terbaru');
+    const gNewOk = gNew.length !== 1 && gNew.every(t => /^Terakhir aktif · /.test(t));
+    const sOrder = ['Sisa sesi · Habis', 'Sisa sesi · Hampir habis', 'Sisa sesi · Masih ada'], gSisaOk = gSisa.length !== 1 && gSisa.every((t, i) => sOrder.indexOf(t) !== -1 && (!i || sOrder.indexOf(t) > sOrder.indexOf(gSisa[i - 1])));
+    check(gSisaOk && gNama.length !== 1 && gNama.every(t => /^Nama · /.test(t)) && gNewOk, 'Klien: group labels name what they group by and follow the sort (one group = no divider) ' + JSON.stringify({ gSisa, gNama, gNew }));
 
     // Closing returns to the grid; a profile opened from another page keeps the normal 420 px panel.
     await page.click('.detail-head .icon-btn[aria-label="Tutup detail"]');
@@ -705,6 +729,12 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.textContent('#view-coaches')).includes('Hari ini'), 'coach hub shows Hari ini');
     check((await page.textContent('#view-coaches')).includes('Atur target'), 'coach hub offers to set targets');
+    // S14: angka ringkas di tile Keuangan.
+    const s14 = await page.evaluate(() => typeof window.finRpShort === 'function' ? [850, 2350000, -1250000, 12000000, 1500000000].map(window.finRpShort).join('|') : 'none');
+    check(s14 === 'Rp 850|Rp 2,4 jt|−Rp 1,3 jt|Rp 12 jt|Rp 1,5 M', 'finance tiles use short amounts (' + s14 + ')');
+    // S13: "Perlu perhatian" satu baris per jenis; "Nanti" hanya di dalam daftar yang dibuka; tab hub bernama Hari ini | Profil.
+    const s13 = await page.evaluate(() => { const g = Array.from(document.querySelectorAll('#view-coaches .care-group')), seg = Array.from(document.querySelectorAll('#coach-seg button')).map(b => b.textContent.trim()).join('|'); const nanti = g[0] ? Array.from(g[0].querySelectorAll('.btn')).filter(b => /Nanti/.test(b.textContent)) : []; const before = !!g[0] && g[0].open; const vis = e => { const r = e.getBoundingClientRect(); return r.height > 0 && getComputedStyle(e).visibility !== 'hidden' && e.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true }); }; const hiddenBefore = nanti.length > 0 && !vis(nanti[0]); if (g[0]) g[0].open = true; const after = nanti.length > 0 && vis(nanti[0]); return { groups: g.length, seg, before, hiddenBefore, after }; });
+    check(s13.groups >= 1 && s13.seg === 'Hari ini|Profil' && !s13.before && s13.hiddenBefore && s13.after, 'coach hub: care list grouped per type, "Nanti" only inside an opened group, tabs Hari ini | Profil ' + JSON.stringify(s13));
     // Program otomatis di hub (T-1607b): peristiwa terbaru, nama depan saja; dihapus lagi sesudahnya.
     env.props.PG_HUB_EVENTS = JSON.stringify([{ id: 'PT-A', jenis: 'baru', tanggal: env.call('_todayWib_'), level: 'pemula-banget' }]);
     await page.evaluate(() => { window._hubAt = 0; window.navigate('dashboard'); window.navigate('coaches'); });
@@ -964,7 +994,7 @@ async function contrastReport(page) {
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.waitForTimeout(400);
-    check((await page.locator('#view-clients .client-tiles .stat-tile').count()) === 4 && await visible(page, '#client-hero .insight-hero'), 'Klien list: black summary card and four tiles that also filter');
+    check((await page.locator('#view-clients .stat-tile').count()) === 0 && await visible(page, '#client-hero .insight-hero'), 'Klien list: one black summary card, no duplicate count tiles (S7)');
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
     await page.evaluate(() => { document.querySelectorAll('#detail-body details.fold').forEach(f => { f.open = true; }); });
@@ -1278,7 +1308,7 @@ async function contrastReport(page) {
     await page.context().close();
   }
   console.log('Keuangan · desktop');
-  {
+  await (async () => {
     const env = richEnv();
     const token = env.adminToken();
     env.call('updateAppSettings', token, { finance: { enabled: true } });
@@ -1290,15 +1320,15 @@ async function contrastReport(page) {
     await shot(page, 'finance-desktop');
     check(errors.length === 0, 'desktop Keuangan: no page errors (' + errors.join(' | ') + ')');
     await page.context().close();
-  }
+  })().catch(sectionCrash);
   console.log('Keuangan mati: menu tersembunyi');
-  {
+  await (async () => {
     const env = richEnv();
     const { page } = await openPage(browser, env, '/Index', [], { xnk_admin_token: env.adminToken() }, { viewport: DESKTOP, wait: 1200 });
     check(!(await visible(page, '#side-nav .nav-item[data-view="finance"]')), 'off by default: no Keuangan in the sidebar');
     check(!(await page.evaluate(() => !!document.querySelector('.fin-tile:not(.hide)'))), 'off by default: no finance tiles in the + sheet');
     await page.context().close();
-  }
+  })().catch(sectionCrash);
 
   // ── Pengaturan · HP (touch, terang & gelap) ───────────────────────────────
   for (const scheme of ['light', 'dark']) {
@@ -1486,7 +1516,7 @@ async function contrastReport(page) {
 
   // ── Perpanjang paket (Fase D3): klien minta di HP, admin menyetujui di desktop ───
   console.log('Perpanjang paket · portal HP + panel desktop');
-  {
+  await (async () => {
     const env = richEnv();
     env.memberRow('PT-A')[9] = 9;                     // 1 session left
     const memberToken = env.memberToken(KEY_A);
@@ -1536,152 +1566,116 @@ async function contrastReport(page) {
     check(env.sheet('Members').rows.some(r => r[1] === 'PT-A' && r[3] === 'Perpanjang' && r[10] === 800000), 'renewal: the transaction is logged with the package price');
     noErrors(adm.errors);
     await adm.context.close();
-  }
+  })().catch(sectionCrash);
+
+  // ── Daftar lima langkah (Fase X, T-1910): nomor baru → nama → paket (akun dibuat) → jadwal → tubuh → kesehatan ──
+  console.log('Daftar klien baru · lima langkah');
+  await (async () => {
+    const env = richEnv();
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], {}, { wait: 1500 });
+    await page.evaluate(() => window.navigate('public-login'));
+    await page.waitForTimeout(400);
+    await page.fill('#login-phone', '89911112222');
+    await page.click('#login-submit-btn');
+    await page.waitForTimeout(900);
+    check(await visible(page, '#modal-not-member') && await visible(page, '#nm-register'), 'daftar: an unknown number is offered registration with that number');
+    await page.click('#nm-register');
+    await page.waitForTimeout(600);
+    check(await visible(page, '#sheet-reg') && (await page.textContent('#reg-x-title')).includes('Langkah 1 dari 5') && (await page.locator('#reg-x-bar i.on').count()) === 1, 'daftar: step 1 of 5 asks for the name');
+    await page.click('#reg-x-next');
+    check((await page.textContent('#reg-x-err')).includes('Nama wajib'), 'daftar: an empty name is refused');
+    await page.fill('#reg-x-name', 'Wulan Baru');
+    await page.fill('#reg-x-goal', 'Lebih bugar');
+    await page.click('#reg-x-next');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#reg-x-title')).includes('Langkah 2 dari 5') && (await page.locator('#reg-x-pkgs .bk-opt').count()) > 0, 'daftar: step 2 lists the packages');
+    await page.click('#reg-x-next');
+    check((await page.textContent('#reg-x-err')).includes('Pilih paket'), 'daftar: a package must be picked');
+    await page.click('#reg-x-pkgs .bk-opt >> nth=0');
+    if (await page.locator('#reg-x-coaches .bk-opt').count()) await page.click('#reg-x-coaches .bk-opt >> nth=0');
+    await page.click('#reg-x-next');
+    await page.waitForTimeout(1500);
+    const newRow = env.sheet('MemberData').rows.find(r => r.some(c => String(c) === 'Wulan Baru'));
+    check(!!newRow && (await page.textContent('#reg-x-title')).includes('Langkah 3 dari 5') && (await page.evaluate(() => !!window.publicLoggedMember)), 'daftar: the account is created at step 2 and the client is logged in');
+    check(!(await visible(page, '#guide-layer .welcome')), 'daftar: the welcome cards wait until registration is finished');
+    await page.click('#reg-later');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#reg-x-title')).includes('Langkah 4 dari 5'), 'daftar: "Nanti saja" skips the first schedule');
+    await page.click('#reg-later');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#reg-x-title')).includes('Langkah 5 dari 5') && (await page.locator('#reg-x-bar i.on').count()) === 5 && (await overflowX(page)) <= 0, 'daftar: step 5 is the health form');
+    await page.click('#reg-later');
+    await page.waitForTimeout(1600);
+    check(!(await visible(page, '#sheet-reg')) && (await page.evaluate(() => window.currentView)) === 'public-dashboard', 'daftar: skipping the last step lands on Hari ini');
+    check(errors.length === 0, 'daftar: no page errors' + (errors.length ? ' — ' + errors[0] : ''));
+    await context.close();
+  })().catch(sectionCrash);
 
   // ── Panduan klien baru (portal): layar gelap, satu tombol disorot ─────────
   console.log('Panduan klien baru · portal HP');
-  {
+  await (async () => {
     const env = richEnv();
     const reg = env.call('registerNewClient', { name: 'Nadia Baru', phone: '6289900000001', goal: 'Weight Loss', packageId: 'P1' });
     const guideCol = () => String(env.memberRow(reg.id)[22] || '');
     const tipTitle = page => page.textContent('#guide-title').catch(() => '');
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg.token }, { wait: 1500 });
-    await page.waitForTimeout(800);
-    check(await visible(page, '#guide-layer'), 'guide: a new client sees the guide on the home screen');
-    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: the first step points at the remaining sessions');
-    const geo = await page.evaluate(() => {
-      const spot = document.getElementById('guide-spot').getBoundingClientRect();
-      const tip = document.getElementById('guide-tip').getBoundingClientRect();
-      const ring = document.querySelector('.portal-hero .ring-wrap').getBoundingClientRect();
-      const btns = Array.from(document.querySelectorAll('#guide-tip .btn, #guide-tip .guide-x, #guide-tip .guide-off')).map(b => Math.round(b.getBoundingClientRect().height));
-      return { spotOk: spot.left <= ring.left && spot.right >= ring.right && spot.top <= ring.top && spot.bottom >= ring.bottom,
-        tipIn: tip.left >= 0 && tip.right <= innerWidth && tip.top >= 0 && tip.bottom <= innerHeight,
-        overlap: !(tip.bottom <= spot.top || tip.top >= spot.bottom), btns: btns,
-        dark: getComputedStyle(document.querySelector('#guide-hole')).fill.includes('0.85') };
+    await page.waitForTimeout(900);
+    check(await visible(page, '#guide-layer .welcome'), 'welcome: a new client sees the welcome cards on first open');
+    check((await tipTitle(page)) === 'Jadwal di genggaman' && (await page.textContent('#guide-layer')).includes('1 dari 3'), 'welcome: the first card is about the schedule');
+    const wgeo = await page.evaluate(() => {
+      const w = document.querySelector('#guide-layer .welcome').getBoundingClientRect();
+      const btns = Array.from(document.querySelectorAll('#guide-layer button')).map(b => Math.round(b.getBoundingClientRect().height));
+      const next = document.getElementById('welcome-next').getBoundingClientRect();
+      return { full: w.left <= 0 && w.top <= 0 && w.right >= innerWidth && w.bottom >= innerHeight, btns, nextIn: next.bottom <= innerHeight && next.top >= 0 };
     });
-    check(geo.spotOk, 'guide: the bright box surrounds the highlighted element');
-    check(geo.tipIn && !geo.overlap, 'guide: the text card fits the phone screen and does not cover the highlighted element');
-    check(geo.btns.every(x => x >= 44), 'guide: guide buttons are at least 44 px (' + geo.btns.join(', ') + ')');
-    check(geo.dark, 'guide: the rest of the screen is dark');
-    check((await brightness(page, 20, 470)) < 64, 'guide: the screen outside the highlight is really dark (light theme)');
-    check((await page.locator('#guide-tip .guide-dots i').count()) === 5 && (await page.textContent('#guide-tip .guide-count')) === '1/5', 'guide: progress dots show step 1 of 5');
-    check((await overflowX(page)) <= 0, 'guide: no sideways scroll');
-    await shot(page, 'guide-mobile-home');
-    // Tapping the dark area does nothing.
-    await page.mouse.click(10, 10);
-    await page.waitForTimeout(200);
-    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: tapping the dark area does nothing');
-    await page.click('#guide-next');
-    await page.waitForTimeout(600);
-    check((await tipTitle(page)) === 'Sesi berikutnya' && await visible(page, '#guide-tip .guide-prev'), 'guide: step 2 has a "Kembali" button');
-    await page.click('#guide-tip .guide-prev');
-    await page.waitForTimeout(600);
-    check((await tipTitle(page)) === 'Sisa sesimu', 'guide: "Kembali" goes back one step');
-    let clash = [];
-    for (let i = 0; i < 6 && (await tipTitle(page)) !== 'Booking latihan'; i++) {
-      await page.click('#guide-next'); await page.waitForTimeout(700);
-      const bad = await page.evaluate(() => { const a = document.getElementById('guide-spot').getBoundingClientRect(), b = document.getElementById('guide-tip').getBoundingClientRect();
-        return (b.top < a.bottom - 2 && b.bottom > a.top + 2) || b.bottom > innerHeight || b.top < 0 ? document.getElementById('guide-title').textContent : ''; });
-      if (bad) clash.push(bad);
-    }
-    check(!clash.length, 'guide: on the phone the card never covers the highlighted part' + (clash.length ? ' (' + clash.join(', ') + ')' : ''));
-    check((await tipTitle(page)) === 'Booking latihan', 'guide: "Lanjut" steps through to the Booking button');
-    await shot(page, 'guide-mobile-booking-button');
-    const b = await page.evaluate(() => { const r = document.querySelector('.portal-actions .btn-primary').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-    await page.mouse.click(b.x, b.y);
-    await page.waitForTimeout(1600);
-    check(guideCol().split('|').includes('beranda'), 'guide: finishing the home guide is saved for this client');
-    check(await visible(page, '#modal-edit-schedule'), 'guide: tapping the highlighted Booking button opens the booking form');
-    check(await visible(page, '#guide-layer') && (await tipTitle(page)) === 'Pilih tanggal & jam', 'guide: the booking form gets its own guide');
-    await shot(page, 'guide-mobile-booking-form');
-    await page.click('#guide-tip .guide-x');
-    await page.waitForTimeout(400);
-    check(!(await visible(page, '#guide-layer')) && guideCol().split('|').includes('booking'), 'guide: the × button closes the guide and saves it');
-    await page.evaluate(() => window.closeModal());
-    await page.waitForTimeout(600);
-    await page.evaluate(() => window.navigate('public-catalog'));
-    await page.waitForTimeout(1400);
-    check(await visible(page, '#guide-layer'), 'guide: the Paket page shows its guide the first time');
-    await page.goBack();
-    await page.waitForTimeout(500);
-    check(!(await visible(page, '#guide-layer')) && guideCol().split('|').includes('paket'), 'guide: the phone back gesture closes the guide');
-    await page.evaluate(() => window.navigate('public-coaches'));
-    await page.waitForTimeout(1600);
-    check(await visible(page, '#guide-layer'), 'guide: the Coach page shows its guide');
-    await page.click('#guide-tip .guide-x');
-    await page.waitForTimeout(500);
-    // Tab baru (Fase J4): tiap tab punya panduannya sendiri, sekali saja.
-    for (const [view, page_, title] of [['public-progress', 'progres', 'Rapor tubuh'], ['public-program', 'program', 'Latihan'], ['public-info', 'info', 'Info & Tips']]) {
-      await page.evaluate(v => window.navigate(v), view);
-      await page.waitForTimeout(1700);
-      check(await visible(page, '#guide-layer') && (await tipTitle(page)) === title, 'guide: the ' + page_ + ' tab shows its own guide first (' + title + ')');
-      await page.click('#guide-tip .guide-x');
-      await page.waitForTimeout(500);
-      check(guideCol().split('|').includes(page_), 'guide: closing it saves "' + page_ + '"');
-    }
-    await page.evaluate(() => window.navigate('public-progress'));
-    await page.waitForTimeout(1500);
-    check(!(await visible(page, '#guide-layer')), 'guide: a tab guide is not shown twice');
-    await page.evaluate(() => window.navigate('calendar'));   // the one page not seen yet
-    await page.waitForTimeout(1600);
-    await page.click('#guide-tip .guide-off');
-    await page.waitForTimeout(500);
-    check(guideCol() === 'selesai', 'guide: "Jangan tampilkan panduan lagi" turns it off for good');
-    await page.reload();
-    await page.waitForTimeout(2200);
-    await page.evaluate(() => window.navigate('calendar'));
-    await page.waitForTimeout(1200);
-    check(!(await visible(page, '#guide-layer')), 'guide: after that, no page shows the guide');
-    // Replay from the profile sheet, without saving anything.
-    await page.evaluate(() => window.navigate('public-dashboard'));
-    await page.waitForTimeout(800);
-    await page.evaluate(() => window.openMyProfile());
-    await page.waitForTimeout(500);
-    await page.click('#sheet-my-profile button:has-text("Lihat panduan")');
-    await page.waitForTimeout(1400);
-    check(await visible(page, '#guide-layer') && (await tipTitle(page)) === 'Sisa sesimu', 'guide: "Lihat panduan" in the profile replays the guide');
-    check(!(await page.locator('#guide-tip .guide-off').count()), 'guide: a replay has no "Jangan tampilkan lagi" link');
-    await page.click('#guide-tip .guide-x');
-    await page.waitForTimeout(300);
-    check(guideCol() === 'selesai', 'guide: a replay does not change what is saved');
+    check(wgeo.full, 'welcome: the card covers the whole screen');
+    check(wgeo.btns.every(x => x >= 44) && wgeo.nextIn, 'welcome: buttons are big enough and on screen (' + wgeo.btns.join(', ') + ' px)');
+    check((await overflowX(page)) <= 0, 'welcome: no sideways scroll');
+    await shot(page, 'welcome-mobile-1');
+    await page.click('#welcome-next'); await page.waitForTimeout(250);
+    check((await tipTitle(page)) === 'Latihan dan makan tiap hari', 'welcome: Lanjut shows the second card');
+    await page.click('#welcome-next'); await page.waitForTimeout(250);
+    check((await tipTitle(page)) === 'Profil yang menunjukkan diri' && (await page.textContent('#welcome-next')).trim() === 'Mulai', 'welcome: the last card ends with "Mulai"');
+    check(guideCol() === 'baru', 'welcome: nothing is recorded until the cards are finished');
+    await page.click('#welcome-next'); await page.waitForTimeout(700);
+    check(!(await visible(page, '#guide-layer')), 'welcome: "Mulai" closes the cards');
+    check(guideCol() === 'selesai', 'welcome: finishing is recorded on the server (' + guideCol() + ')');
+    await page.evaluate(() => window.navigate('public-program')); await page.waitForTimeout(1100);
+    check(!(await visible(page, '#guide-layer')), 'welcome: it does not come back on another tab');
+    await page.reload(); await page.waitForTimeout(2200);
+    check(!(await visible(page, '#guide-layer')), 'welcome: it does not come back after a reload');
     noErrors(errors);
     await context.close();
 
-    // Dark theme: the guide still reads well.
-    const reg2 = env.call('registerNewClient', { name: 'Raka Baru', phone: '6289900000002', goal: 'x', packageId: 'P1' });
-    const dark = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500, colorScheme: 'dark' });
-    await dark.page.waitForTimeout(800);
-    check(await visible(dark.page, '#guide-layer'), 'guide: shows in the dark theme too');
-    check((await brightness(dark.page, 20, 470)) < 64, 'guide: the screen outside the highlight is really dark (dark theme)');
-    await shot(dark.page, 'guide-mobile-home-dark');
-    noErrors(dark.errors);
-    await dark.context.close();
+    // Lewati on the first card also records it; Esc, the arrow keys and Android back work.
+    const reg2 = env.call('registerNewClient', { name: 'Oka Baru', phone: '6289900000002', goal: 'Strength', packageId: 'P1' });
+    const sk = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500 });
+    await sk.page.waitForTimeout(900);
+    await sk.page.keyboard.press('ArrowRight'); await sk.page.waitForTimeout(250);
+    check((await tipTitle(sk.page)) === 'Latihan dan makan tiap hari', 'welcome: the right arrow key goes on');
+    await sk.page.keyboard.press('ArrowLeft'); await sk.page.waitForTimeout(250);
+    check((await tipTitle(sk.page)) === 'Jadwal di genggaman', 'welcome: the left arrow key goes back');
+    await sk.page.click('#welcome-skip'); await sk.page.waitForTimeout(700);
+    check(!(await visible(sk.page, '#guide-layer')) && String(env.memberRow(reg2.id)[22]) === 'selesai', 'welcome: "Lewati" closes and records it');
+    noErrors(sk.errors);
+    await sk.context.close();
+    env.memberRow(reg2.id)[22] = 'baru';   // reused below for the owner switch
 
-    // Desktop: floating card with an arrow, beside the sidebar for the menu step.
-    const reg3 = env.call('registerNewClient', { name: 'Dina Desktop', phone: '6289900000003', goal: 'x', packageId: 'P1' });
+    const reg3 = env.call('registerNewClient', { name: 'Putu Baru', phone: '6289900000003', goal: 'Strength', packageId: 'P1' });
     for (const scheme of ['light', 'dark']) {
-      const dk = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg3.token }, { viewport: DESKTOP, wait: 1500, colorScheme: scheme });
+      const dk = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg3.token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1500 });
       await dk.page.waitForTimeout(900);
-      check(await visible(dk.page, '#guide-layer'), 'guide desktop (' + scheme + '): the home guide shows');
-      check((await brightness(dk.page, 700, 880)) < 64, 'guide desktop (' + scheme + '): the screen outside the highlight is dark');
-      await shot(dk.page, 'guide-desktop-home-' + scheme);
-      const seen = [];
-      for (let i = 0; i < 6 && (await tipTitle(dk.page)) !== 'Booking latihan'; i++) {
-        await dk.page.keyboard.press('ArrowRight'); await dk.page.waitForTimeout(700);
-        seen.push(await dk.page.evaluate(() => { const a = document.getElementById('guide-spot').getBoundingClientRect(), b = document.getElementById('guide-tip').getBoundingClientRect();
-          return { t: document.getElementById('guide-title').textContent, side: document.getElementById('guide-tip').getAttribute('data-side') || '',
-            clash: b.left < a.right - 2 && b.right > a.left + 2 && b.top < a.bottom - 2 && b.bottom > a.top + 2,
-            inside: b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight }; }));
-        if (seen[seen.length - 1].t === 'Menu') await shot(dk.page, 'guide-desktop-menu-' + scheme);
-      }
-      const menu = seen.find(x => x.t === 'Menu');
-      check(!!menu && !!menu.side && !menu.clash && (await dk.page.evaluate(() => !!document.querySelector('#side-nav'))), 'guide desktop (' + scheme + '): the menu step highlights the side menu, with an arrowed card beside it (' + (menu && menu.side) + ')');
-      check(seen.every(x => !x.clash && x.inside), 'guide desktop (' + scheme + '): the card stays on screen and never covers the highlight');
-      check((await dk.page.textContent('#guide-tip')).includes('Atau klik'), 'guide desktop (' + scheme + '): desktop wording says "klik"');
-      await dk.page.keyboard.press('ArrowLeft'); await dk.page.waitForTimeout(500);
-      check((await tipTitle(dk.page)) !== 'Booking latihan', 'guide desktop (' + scheme + '): the left arrow key goes back');
-      await dk.page.keyboard.press('Escape'); await dk.page.waitForTimeout(400);
-      check(!(await visible(dk.page, '#guide-layer')), 'guide desktop (' + scheme + '): Esc closes the guide');
+      check(await visible(dk.page, '#guide-layer .welcome'), 'welcome desktop (' + scheme + '): the cards show');
+      const ratio = await dk.page.evaluate(() => {
+        const lum = c => { const m = c.match(/[\d.]+/g).map(Number); const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+        const w = document.querySelector('#guide-layer .welcome'), t = w.querySelector('h2');
+        const a = lum(getComputedStyle(t).color), b = lum(getComputedStyle(w).backgroundColor);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      });
+      check(ratio >= 4.5, 'welcome desktop (' + scheme + '): the title is readable (' + ratio.toFixed(1) + ':1)');
+      await shot(dk.page, 'welcome-desktop-' + scheme);
+      await dk.page.keyboard.press('Escape'); await dk.page.waitForTimeout(500);
+      check(!(await visible(dk.page, '#guide-layer')), 'welcome desktop (' + scheme + '): Esc closes the cards');
       noErrors(dk.errors);
       await dk.context.close();
       env.memberRow(reg3.id)[22] = 'baru';   // show it again for the other theme
@@ -1690,7 +1684,7 @@ async function contrastReport(page) {
     // An existing client logging in by WhatsApp never sees the guide.
     const old = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: env.memberToken(KEY_A) }, { wait: 1500 });
     await old.page.waitForTimeout(900);
-    check(!(await visible(old.page, '#guide-layer')), 'guide: an existing client does not see the guide');
+    check(!(await visible(old.page, '#guide-layer')), 'welcome: an existing client does not see the cards');
     noErrors(old.errors);
     await old.context.close();
 
@@ -1743,14 +1737,14 @@ async function contrastReport(page) {
     await adm.context.close();
     const off = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: reg2.token }, { wait: 1500 });
     await off.page.waitForTimeout(900);
-    check(!(await visible(off.page, '#guide-layer')), 'guide: with the switch off, new clients see no guide');
+    check(!(await visible(off.page, '#guide-layer')), 'welcome: with the switch off, new clients see no cards');
     noErrors(off.errors);
     await off.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Tema manual ───────────────────────────────────────────────────────────
   console.log('Tema manual');
-  {
+  await (async () => {
     const env = seededEnv();
     const token = env.adminToken();
     const { page, context } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { viewport: DESKTOP, colorScheme: 'dark' });
@@ -1761,11 +1755,11 @@ async function contrastReport(page) {
     const again = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_theme: 'light' }, { viewport: DESKTOP, colorScheme: 'dark', wait: 100 });
     check((await again.page.evaluate(() => document.documentElement.getAttribute('data-theme'))) === 'light', 'saved theme applied before the page draws');
     await again.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Portal klien ──────────────────────────────────────────────────────────
   console.log('Portal klien · HP');
-  {
+  await (async () => {
     const env = richEnv();
     const calls = [];
     const { page, context, errors, navigations } = await openPage(browser, env, '/Index?view=public', calls);
@@ -1789,8 +1783,12 @@ async function contrastReport(page) {
     await page.click('#login-submit-btn');
     await page.waitForTimeout(1400);
     check((await page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'registered WhatsApp number logs the client in');
-    check((await page.evaluate(() => window.currentView)) === 'public-dashboard', 'opens "Beranda"');
-    check((await page.textContent('#pub-dash-name')).includes('Ani'), 'shows the client\'s own name');
+    check((await page.evaluate(() => window.currentView)) === 'public-dashboard' && (await page.textContent('#page-title')).trim() === 'Hari ini', 'opens "Hari ini"');
+    await page.evaluate(() => window.navigate('public-more'));
+    await page.waitForTimeout(400);
+    check((await page.textContent('#pub-dash-name')).includes('Ani') && await visible(page, '#pub-athlete'), 'the Saya tab shows the client\'s own name on the athlete card');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
     check((await page.evaluate(() => window.members.length)) === 0, 'still no client list in the browser after login');
     const own = await page.evaluate(() => window.schedules.find(s => s.id === 'SCH-A1'));
     check(own && own.notes === 'Rahasia Ani', 'own bookings include their details');
@@ -1819,7 +1817,19 @@ async function contrastReport(page) {
     await page.waitForTimeout(300);
     const shBox = await page.evaluate(() => { const r = document.getElementById('share-box').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), Math.round(r.height / innerHeight * 100)]; });
     check(shBox[2] >= 60 && Math.abs(shBox[1] / shBox[0] - 1920 / 1080) < 0.03, 'share editor (phone): the preview is the main area (' + shBox[0] + 'x' + shBox[1] + ', ' + shBox[2] + '% of the height) with the card ratio');
-    check((await page.locator('#share-tabs .sh-tool').count()) === 8 && !(await page.locator('#share-body .sh-pane').count()), 'share editor (phone): a compact tool bar, no panel until a tool is tapped');
+    check((await page.locator('#share-tabs .sh-tool').allTextContents()).map(t => t.trim()).join(',') === 'Kartu,Gaya,Ukuran,Isi,Privasi,Lainnya' && !(await page.locator('#share-body .sh-pane').count()), 'share editor (phone): five main tools plus Lainnya, no panel until a tool is tapped');
+    await page.click('#share-tabs [data-tool="privasi"]');
+    await page.waitForTimeout(200);
+    check(await visible(page, '#share-body [data-pane="privasi"]') && (await page.textContent('#share-body')).includes('tidak diunggah'), 'share editor: Privasi gathers the privacy controls');
+    await page.click('#share-tabs [data-tool="lainnya"]');
+    await page.waitForTimeout(200);
+    check((await page.locator('#share-body .sh-more .sh-tool').count()) === 4, 'share editor: Lainnya holds Template, Tata letak, Teks and Ekspor');
+    await page.click('#share-body .sh-more [data-tool="teks"]');
+    await page.waitForTimeout(200);
+    check(await visible(page, '#share-body [data-pane="teks"]') && (await page.getAttribute('#share-tabs [data-tool="lainnya"]', 'aria-selected')) === 'true', 'share editor: a tool from Lainnya opens and keeps Lainnya lit');
+    await page.click('#share-tabs [data-tool="lainnya"]');
+    await page.waitForTimeout(200);
+    if (await page.locator('#share-body .sh-pane').count()) { await page.click('#share-tabs [data-tool="lainnya"]'); await page.waitForTimeout(200); }
     check((await overflowX(page)) <= 0, 'share editor (phone): no sideways scroll');
     await page.click('#share-tabs [data-tool="kartu"]');
     await page.waitForTimeout(200);
@@ -1864,22 +1874,104 @@ async function contrastReport(page) {
     await page.evaluate(() => { try { localStorage.removeItem('xnk_info_seen'); } catch (e) {} });
     await page.evaluate(() => window.refreshPortalSchedules().then(() => window.updateUI()));
     await page.waitForTimeout(700);
-    check(await visible(page, '#tab-more-new'), 'info: the Lainnya tab shows a dot when there is new content');
-    check((await page.textContent('#pub-teasers')).includes('Ada info baru dari coach'), 'info: the Beranda teaser says there is new info');
-    // ── Tab klien (Fase J1): bar bawah Beranda · Jadwal · + · Progres · Lainnya ───────────────
-    check((await page.locator('#tabbar .tab').allTextContents()).map(t => t.trim()).join(',') === 'Beranda,Jadwal,Progres,Lainnya' && (await page.locator('#tabbar .tab-fab').count()) === 1, 'nav: the phone bar has Beranda, Jadwal, +, Progres, Lainnya');
-    check((await page.locator('#side-nav .nav-item').allTextContents()).map(t => t.trim()).join(',') === 'Beranda,Jadwal,Progres,Latihan,Info & Tips,Paket,Coach', 'nav: the sidebar lists every tab');
-    check(!(await page.locator('#view-public-dashboard #pub-progress-wrap, #view-public-dashboard #pub-tasks-wrap, #view-public-dashboard #pub-meal-slot').count()) && (await page.locator('#pub-teasers .teaser-row').count()) === 3, 'nav: Beranda is lighter, the moved cards leave teasers behind');
+    check(await visible(page, '#tab-more-new'), 'info: the Saya tab shows a dot when there is new content');
+    await page.evaluate(() => window.refreshPortalMore(true));
+    await page.waitForTimeout(700);
+    check(await visible(page, '#bell-count') && Number(await page.textContent('#bell-count')) >= 1 && (await page.evaluate(() => window.myX.notif.items.some(x => x.kind === 'info' && x.fresh))), 'info: the bell counts the new info from the coach');
+    // ── Tab klien (Fase X): bar bawah Hari ini · Latihan · + · Makan · Saya ───────────────
+    check((await page.locator('#tabbar .tab').allTextContents()).map(t => t.trim()).join(',') === 'Hari ini,Latihan,Makan,Saya' && (await page.locator('#tabbar .tab-fab').count()) === 1, 'nav: the phone bar is Hari ini · Latihan · + · Makan · Saya');
+    check((await page.locator('#side-nav .nav-item').allTextContents()).map(t => t.trim()).join(',') === 'Hari ini,Latihan,Makan,Progres,Jadwal,Saya,Paket saya,Coach,Info & Tips,Kartu saya' && (await page.locator('#side-nav .nav-group').count()) === 1, 'nav: the desktop sidebar lists the main pages and the Akun group');
+    check(!(await page.locator('#view-public-dashboard #pub-progress-wrap, #view-public-dashboard #pub-tasks-wrap, #view-public-dashboard #pub-meal-slot').count()) && (await page.locator('#pub-todo .todo-row').count()) >= 2, 'nav: Hari ini is a short to-do list, the detail cards live on their own tabs');
     await page.click('#tabbar .tab[data-view="public-more"]');
     await page.waitForTimeout(500);
-    check((await page.evaluate(() => window.currentView)) === 'public-more' && (await page.locator('#view-public-more .more-row').count()) === 7, 'nav: Lainnya opens a list of seven rows (with Kartu saya)');
-    const moreBad = await page.locator('#view-public-more .more-row').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5 || r.right > window.innerWidth).length);
-    check(moreBad === 0 && (await overflowX(page)) <= 0, 'nav: Lainnya rows are at least 44 px and fit the phone');
-    check((await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: the Lainnya tab is lit on its own page');
-    await page.click('#view-public-more .more-row:nth-child(1)');
+    const tileN = await page.locator('#view-public-more .px-tile').count();
+    check((await page.evaluate(() => window.currentView)) === 'public-more' && tileN >= 8, 'nav: Saya opens the athlete card and a grid of ' + tileN + ' tiles');
+    const moreBad = await page.locator('#view-public-more .px-tile, #view-public-more .btn').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 43.5 || r.right > window.innerWidth + 1).length);
+    check(moreBad === 0 && (await overflowX(page)) <= 0, 'nav: Saya tiles and buttons are at least 44 px and fit the phone');
+    check((await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: the Saya tab is lit on its own page');
+    await page.click('#view-public-more .px-tile:has-text("Progres")');
     await page.waitForTimeout(600);
-    check((await page.evaluate(() => window.currentView)) === 'public-program' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: Latihan opens and Lainnya stays lit');
+    check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page', 'nav: Progres opens from Saya and the Saya tab stays lit');
+    check(await visible(page, '#topbar-back'), 'nav: a second-level page has a back button in the top bar');
+    check(await page.evaluate(() => { const e = document.querySelector('#view-public-progress .empty .empty-icon, .empty .empty-icon'); return !e || getComputedStyle(e, '::before').content !== 'none'; }), 'grafis: empty states in the portal carry the ring graphic');
+    check(await visible(page, '#pub-journey-card') && (await page.textContent('#pub-journey-card .px-hero-t')).trim().length > 0 && await visible(page, '#journey-add') && (await overflowX(page)) <= 0, 'progres: the page opens with the journey card (headline and Catat ukuran)');
+    await page.click('#journey-add');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-progress') && (await page.locator('#sheet-progress .pg-step button').count()) === 2, 'progres: the entry sheet asks for weight first, with minus and plus buttons');
+    await page.fill('#pg-berat', '70');
+    await page.click('#sheet-progress .pg-step button >> nth=1');
+    check((await page.inputValue('#pg-berat')) === '70,1', 'progres: plus adds 0,1 kg');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.click('#topbar-back');
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.currentView)) === 'public-more' && !(await visible(page, '#topbar-back')), 'nav: back returns to Saya');
+    // Ubah profil (T-1908): warna aksen, nama panggilan, statistik; batal = kembali, simpan = masuk MemberData kolom 46.
+    await page.click('#pub-athlete button:has-text("Ubah")');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-profile-edit') && (await page.locator('#pc-body .sw').count()) === 7 && (await page.locator('#pc-preview #pub-athlete').count()) === 0, 'profil: the editor opens with a preview card and seven accent colours');
+    await page.click('#pc-body .sw-biru');
+    await page.waitForTimeout(200);
+    check((await page.getAttribute('html', 'data-accent')) === 'biru', 'profil: picking a colour shows it at once');
+    const swBad = await page.locator('#pc-body .sw, #pc-body .pc-opt, #pc-body .pc-row').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height < 36 || r.right > window.innerWidth + 1).length);
+    check(swBad === 0, 'profil: the editor controls fit the phone');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
+    check(!(await page.getAttribute('html', 'data-accent')), 'profil: closing without saving puts the old colour back');
+    await page.click('#pub-athlete button:has-text("Ubah")');
+    await page.waitForTimeout(500);
+    await page.click('#pc-body .sw-biru');
+    await page.fill('#pc-panggilan', 'Anoy');
+    await page.fill('#pc-motto', 'Pelan asal jalan');
+    await page.click('#pc-body .pc-opt:has-text("Garis")');
+    await page.click('#pc-save');
+    await page.waitForTimeout(900);
+    const pfRow = env.sheet('MemberData').rows.find(r => String(r[43]) === 'Anoy');
+    check(!!pfRow && String(pfRow[44]) === 'Pelan asal jalan' && /biru/.test(String(pfRow[45])) && /garis/.test(String(pfRow[45])), 'profil: nickname, motto, colour and card style are saved in the account');
+    check((await page.getAttribute('html', 'data-accent')) === 'biru' && (await page.textContent('#pub-dash-name')).includes('Anoy') && (await page.locator('#pub-athlete.st-garis').count()) === 1 && !(await visible(page, '#sheet-profile-edit')), 'profil: the athlete card and the whole portal follow the saved choice');
+    const lvNow = await page.evaluate(() => (window.myX.level || {}).level || 0);
+    if (lvNow > 1) {
+      await page.evaluate(() => { const o = {}; o[String(window.publicLoggedMember.id)] = window.myX.level.level - 1; localStorage.setItem('xnk_lv_seen', JSON.stringify(o)); window.renderPortalX(); });
+      await page.waitForTimeout(1900);
+      check(await visible(page, '#lv-up') && (await page.textContent('#lv-up')).includes('Level ' + lvNow), 'level: reaching a new level shows the celebration once');
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(500);
+      await page.evaluate(() => window.renderPortalX());
+      await page.waitForTimeout(1600);
+      check(!(await visible(page, '#lv-up')), 'level: the celebration does not repeat');
+    }
+    if (await page.locator('#ath-share').count()) {
+      await page.click('#ath-share');
+      await page.waitForTimeout(1200);
+      check(await visible(page, '#sheet-share') && /atlet/i.test(await page.textContent('#share-title')), 'bagikan: the athlete card opens the share editor on the Atlet card');
+      await page.click('#share-tabs [data-tool="gaya"]');
+      await page.waitForTimeout(200);
+      check(await visible(page, '#share-body [data-pane="gaya"] .chip:has-text("Warna aksen")') && (await page.evaluate(() => window.shareCheck.opts().accent || '')).length > 0, 'bagikan: with an accent colour the cards offer the "Warna aksen" style');
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(500);
+    }
+    await page.click('#view-public-more .px-tile:has-text("Tampilan")');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#set-accent .sw-biru.on'), 'tampilan: the settings sheet shows the accent colours with the saved one picked');
+    await page.click('#set-accent .sw-hitam');
+    await page.waitForTimeout(900);
+    check(!(await page.getAttribute('html', 'data-accent')) && /hitam/.test(String(pfRow[45])) === false || /hitam/.test(String(env.sheet('MemberData').rows.find(r => String(r[43]) === 'Anoy')[45])), 'tampilan: the colour changes back to black from the settings sheet');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.click('#view-public-more .px-tile:has-text("Paket saya")');
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.currentView)) === 'public-pack' && await visible(page, '#pack-hero') && await visible(page, '#pack-renew') && (await overflowX(page)) <= 0, 'paket saya: the page shows the active package and a renew button');
+    await page.click('#pack-renew');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-renew'), 'paket saya: Perpanjang opens the renew sheet');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.click('#topbar-back');
+    await page.waitForTimeout(500);
+    await page.click('#tabbar .tab[data-view="public-program"]');
+    await page.waitForTimeout(600);
     check(await visible(page, '#pub-tasks-wrap') && (await page.textContent('#view-public-program')).includes('PR'), 'nav: the Latihan tab holds the PR card');
+    check(await visible(page, '#pub-lat-hero') && (await page.locator('#pub-lat-hero #lat-empty').count()) === 1 && (await page.evaluate(() => { const a = document.getElementById('pub-lat-hero'), b = document.getElementById('pub-program-wrap'), c = document.getElementById('ph-latihan'); return a.getBoundingClientRect().top < b.getBoundingClientRect().top && b.getBoundingClientRect().top < c.getBoundingClientRect().top; })), 'latihan: the next-routine card comes first, then the routines, then the weekly insight');
     await page.evaluate(() => window.navigate('public-info'));
     await page.waitForTimeout(900);
     check(await visible(page, '#view-public-info') && (await page.textContent('#view-public-info')).includes('Info & Tips'), 'nav: the Info & Tips tab opens');
@@ -1893,10 +1985,23 @@ async function contrastReport(page) {
     check(!(await visible(page, '#tab-more-new')), 'info: the dot is gone after reading');
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(400);
-    check(!(await page.textContent('#pub-teasers')).includes('Ada info baru'), 'info: the Beranda teaser no longer shouts');
-    await page.click('#tabbar .tab[data-view="public-progress"]');
+    await page.click('#tabbar .tab[data-view="public-food"]');
     await page.waitForTimeout(500);
-    check((await page.evaluate(() => window.currentView)) === 'public-progress' && (await page.getAttribute('#tabbar .tab[data-view="public-progress"]', 'aria-current')) === 'page' && !(await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')), 'nav: the Progres tab is lit alone');
+    check((await page.evaluate(() => window.currentView)) === 'public-food' && (await page.getAttribute('#tabbar .tab[data-view="public-food"]', 'aria-current')) === 'page' && !(await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')), 'nav: the Makan tab is lit alone');
+    // ＋ : empat aksi
+    await page.click('#client-booking-fab');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-quick-client') && (await page.locator('#quick-client-body .px-tile').allTextContents()).map(t => t.split(/Sisa|Berikutnya|Rutinitas|Buku|Berat|Pilih/)[0].trim()).join(',') === 'Booking sesi,Mulai latihan,Catat makan,Catat ukuran', 'plus: the sheet offers booking, workout, food and measurement');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
+    // Lonceng
+    await page.click('#nav-bell-btn');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-notif') && (await page.locator('#notif-body .notif-row').count()) >= 1, 'bell: opens a list of notices');
+    await page.waitForTimeout(600);
+    check(!(await visible(page, '#bell-count')) && String(env.memberRow('PT-A')[46] || '').length > 10, 'bell: opening it clears the count and records the time on the server');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
     await page.click('#tabbar .tab[data-view="public-dashboard"]');
     await page.waitForTimeout(500);
     // Program latihan di portal: kartu per hari, centang tersimpan.
@@ -1905,7 +2010,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     await page.evaluate(() => window.navigate('public-program'));
     await page.waitForTimeout(900);
-    check((await page.locator('#pub-program-wrap .rt-card').count()) === 2 && (await page.textContent('#pub-program-wrap .rt-card >> nth=0')).includes('Bench press, Push-up') && await visible(page, '#pub-program-wrap .rt-empty-btn'), 'latihan: one routine card per program day with its exercise names, plus "Mulai latihan kosong"');
+    check((await page.locator('#pub-program-wrap .rt-card').count()) === 2 && (await page.textContent('#pub-program-wrap .rt-card >> nth=0')).includes('Bench press, Push-up') && await visible(page, '#pub-lat-hero #lat-empty') && await visible(page, '#pub-lat-hero #lat-start'), 'latihan: one routine card per program day with its exercise names; the hero starts the next routine or an empty workout');
     const rtBad = await page.locator('#pub-program-wrap button:visible').evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width && r.height < 43.5).length);
     check(rtBad === 0 && (await overflowX(page)) <= 0, 'latihan: buttons are at least 44 px and nothing scrolls sideways');
     await shot(page, 'portal-mobile-latihan');
@@ -1966,7 +2071,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     // Makan (Phase P): segmen di tab Latihan, isi data tiga langkah, target + menu.
     {
-      check(await visible(page, '#lat-seg'), 'makan: the Latihan | Makan switch is on top of the page');
+      check(await visible(page, '#tabbar .tab[data-view="public-food"]'), 'makan: Makan has its own tab');
       await page.evaluate(() => window.setLatSeg('makan'));
       await page.waitForTimeout(400);
       check(await visible(page, '#pub-makan-pane') && !(await visible(page, '#pub-latihan-pane')) && (await page.textContent('#pub-makan-pane')).includes('Lengkapi data'), 'makan: a new client is asked to complete the data first');
@@ -1985,15 +2090,23 @@ async function contrastReport(page) {
       await page.click('#nut-onb-body .chip >> nth=0');
       await page.click('#nut-onb-next');
       await page.waitForTimeout(1200);
-      const mk = await page.evaluate(() => { const w = document.getElementById('pub-makan-pane'); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.meal-blk .list-item').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; });
-      check(mk.ring && mk.bars === 3 && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && mk.over <= 1, 'makan: ring, three macro bars, today\'s menu and the rules show, no sideways scroll ' + JSON.stringify({ bars: mk.bars, meals: mk.meals, over: mk.over }));
-      check(mk.small === 0, 'makan: tap targets are at least 44 px ' + mk.small);
+      const paneInfo = id => page.evaluate(i => { const w = document.getElementById(i); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.meal-blk .list-item').length, days: w.querySelectorAll('.meal-day').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; }, id);
+      const fd = await paneInfo('pub-makan-pane');
+      check(fd.ring && fd.bars === 3 && fd.days === 4 && /Buku harian/.test(fd.txt) && !/Menu hari ini/.test(fd.txt) && fd.over <= 1, 'makan: the tab shows the calorie ring, three macro bars and a diary with four meals, no sideways scroll ' + JSON.stringify({ bars: fd.bars, days: fd.days, over: fd.over }));
+      check(/Saran menu:/.test(fd.txt), 'makan: an empty meal shows the suggested menu');
+      check(fd.small === 0, 'makan: tap targets are at least 44 px ' + fd.small);
+      await page.click('#makan-plan-link');
+      await page.waitForTimeout(500);
+      const mk = await paneInfo('pub-plan-pane');
+      check((await page.evaluate(() => window.currentView)) === 'public-plan' && (await page.getAttribute('#tabbar .tab[data-view="public-more"]', 'aria-current')) === 'page' && await visible(page, '#topbar-back'), 'rencana makan: opens as a page under Saya with a back button');
+      check(await visible(page, '#plan-target') && mk.meals >= 6 && /Menu hari ini/.test(mk.txt) && /Aturan makan/.test(mk.txt) && /Angka tubuh/.test(mk.txt) && mk.over <= 1, 'rencana makan: target, today\'s menu, body numbers and the rules show ' + JSON.stringify({ meals: mk.meals, over: mk.over }));
+      check(mk.small === 0, 'rencana makan: tap targets are at least 44 px ' + mk.small);
       // The menu changes with the date, and a few foods (e.g. E47 or BR013 as karbo) have no allowed swap, which
       // shows "Tidak ada pengganti…". Try the next menu item then, so the check doesn't fail on some days only.
       let swapOk = false;
       for (let i = 0; i < Math.min(mk.meals, 6) && !swapOk; i++) {
         if (i) { await page.evaluate(() => window.closeModal()); await page.waitForTimeout(400); }
-        await page.click('#pub-makan-pane .meal-blk .list-item >> nth=' + i);
+        await page.click('#pub-plan-pane .meal-blk .list-item >> nth=' + i);
         await page.waitForTimeout(700);
         swapOk = await visible(page, '#modal-nut-swap') && (await page.locator('#nut-swap-list .list-item').count()) >= 1;
       }
@@ -2005,7 +2118,7 @@ async function contrastReport(page) {
       await page.waitForTimeout(300);
       check(await visible(page, '#modal-nut-info') && (await page.textContent('#nut-info-src')).includes('ISSN'), 'makan: the (i) button explains the number and names the source');
       await page.evaluate(() => window.closeModal());
-      await page.click('#pub-makan-pane .btn-sm:has-text("Belanja")');
+      await page.click('#pub-plan-pane .btn-sm:has-text("Belanja")');
       await page.waitForTimeout(900);
       check(await visible(page, '#modal-nut-shop') && (await page.locator('#nut-shop-list .eyebrow').count()) >= 3, 'makan: the shopping list shows groups');
       await shot(page, 'portal-mobile-makan');
@@ -2013,6 +2126,8 @@ async function contrastReport(page) {
       await page.route('https://xnk.my.id/foods/foods.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: require('fs').readFileSync(require('path').join(__dirname, '../../../foods/foods.min.json'), 'utf8') }));
       await page.evaluate(() => window.closeModal());
       await page.waitForTimeout(700);
+      await page.evaluate(() => window.navigate('public-food'));
+      await page.waitForTimeout(500);
       await page.click('#nut-log-card button:has-text("Tambah") >> nth=1');   // makan siang
       await page.waitForTimeout(700);
       check(await visible(page, '#modal-nut-add') && (await page.textContent('#nut-add-title')).includes('Makan siang'), 'catat: the add sheet opens for the chosen meal');
@@ -2030,9 +2145,13 @@ async function contrastReport(page) {
       await page.click('#nut-pick-save');
       await page.waitForTimeout(1200);
       check(!(await visible(page, '#modal-nut-add')) && (await page.textContent('#nut-log-card')).toLowerCase().includes('tempe') && /(Sisa|Lebih) [0-9]/.test(await page.textContent('#nut-eaten-line')), 'catat: the food is logged and the eaten line updates');
-      await page.click('#pub-makan-pane .icon-btn[aria-label^="Catat"] >> nth=0');
+      await page.evaluate(() => window.navigate('public-plan'));
+      await page.waitForTimeout(400);
+      await page.click('#pub-plan-pane .icon-btn[aria-label^="Catat"] >> nth=0');
       await page.waitForTimeout(1200);
-      check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: the check button logs a menu item in one tap');
+      await page.evaluate(() => window.navigate('public-food'));
+      await page.waitForTimeout(400);
+      check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: the check button on the plan logs a menu item in one tap');
       await page.click('#nut-log-card button:has-text("Tambah") >> nth=3');
       await page.waitForTimeout(600);
       await page.click('#modal-nut-add button:has-text("Buat makanan sendiri")');
@@ -2046,6 +2165,25 @@ async function contrastReport(page) {
       await page.click('#nut-log-card button[aria-label^="Hapus"] >> nth=0');
       await page.waitForTimeout(900);
       check((await page.locator('#nut-log-card button[aria-label^="Hapus"]').count()) === 2, 'catat: deleting removes the row');
+      // Fase X: saran menu satu ketuk dan pilih banyak di layar tambah.
+      await page.click('#nut-log-card button:has-text("Tambah") >> nth=2');   // makan malam
+      await page.waitForTimeout(700);
+      check(await visible(page, '#nut-add-saran') && (await page.textContent('#nut-add-saran')).includes('Catat semua'), 'catat: the add sheet suggests today\'s menu for that meal');
+      const selN = await page.locator('#nut-add-body .nut-sel').count();
+      check(selN >= 2, 'catat: recent foods can be ticked (' + selN + ' boxes)');
+      await page.click('#nut-add-body .nut-sel >> nth=0');
+      await page.click('#nut-add-body .nut-sel >> nth=1');
+      check((await page.textContent('#nut-sel-save')).includes('Tambah 2 makanan'), 'catat: ticking two foods offers "Tambah 2 makanan"');
+      const logBefore = env.sheet('FoodLog').rows.length;
+      await page.click('#nut-sel-save');
+      await page.waitForTimeout(1500);
+      check(env.sheet('FoodLog').rows.length === logBefore + 2 && env.sheet('FoodLog').rows.slice(-2).every(r => r[3] === 'malam'), 'catat: both foods are saved to that meal in one go');
+      await page.click('#nut-log-card button:has-text("Tambah") >> nth=0');   // sarapan
+      await page.waitForTimeout(600);
+      const beforeMeal = env.sheet('FoodLog').rows.length;
+      await page.click('#nut-add-saran .btn');
+      await page.waitForTimeout(1800);
+      check(env.sheet('FoodLog').rows.length > beforeMeal && !(await visible(page, '#modal-nut-add')), 'catat: "Catat semua" logs the whole suggested meal (' + (env.sheet('FoodLog').rows.length - beforeMeal) + ' foods)');
       await shot(page, 'portal-mobile-catat');
       await page.evaluate(() => { window.closeModal(); window.setLatSeg('latihan'); });
       // The weight typed in the data sheet must not leak into the Progres checks that follow.
@@ -2064,7 +2202,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     check((await page.locator('#pub-tasks-wrap').count()) === 1 && (await page.locator('#pub-meal-slot').count()) === 1, 'latihan: PR and meal cards live in the same tab');
     // Rutinitas sendiri: buat dari lembar form (tanpa bagian khusus coach), lalu muncul di "Rutinitas saya".
-    await page.click('#pub-program-wrap .rt-act:has-text("Rutinitas baru")');
+    await page.click('#pub-program-wrap .rt-act:has-text("Buat rutinitas")');
     await page.waitForTimeout(500);
     check(await visible(page, '#modal-program') && (await page.textContent('#prg-title')) === 'Rutinitas baru' && !(await visible(page, '#prg-tpl')) && !(await visible(page, '#prg-who')), 'own routine: the form opens without the coach-only template parts');
     await page.fill('#pf-own-name', 'Cardio pagi');
@@ -2079,9 +2217,9 @@ async function contrastReport(page) {
     await page.click('#prg-save');
     await page.waitForTimeout(800);
     check(env.sheet('ProgramItems').rows.some(r => r[1] === 'PT-A' && r[3] === 'Cardio pagi' && r[19] === 'klien') && (await page.locator('#pub-program-wrap .rt-card').count()) === 3 && (await page.textContent('#pub-program-wrap')).includes('Rutinitas saya (1)'), 'own routine: saved as the client\'s own and shown under "Rutinitas saya"');
-    await page.click('#pub-program-wrap .rt-act:has-text("Jelajahi")');
+    await page.click('#pub-program-wrap .rt-act:has-text("Galeri")');
     await page.waitForTimeout(400);
-    check(await visible(page, '#modal-wl') && (await page.textContent('#wls-body')).includes('Belum ada program di Jelajahi'), 'Jelajahi: says so when the coach shares nothing');
+    check(await visible(page, '#modal-wl') && (await page.textContent('#wls-body')).includes('Galeri masih kosong'), 'Galeri: says so when the coach shares nothing');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
     // Mode latihan (Fase M → O), sisi klien di HP: mulai dari kartu rutinitas, centang set, istirahat, draf, selesai.
@@ -2243,7 +2381,7 @@ async function contrastReport(page) {
 
     // ── Tambah ke kalender (Fase I4) ───────────────────────────────────────────
     const calId = await page.evaluate(() => (window.schedules.filter(s => new Date(s.start) > new Date())[0] || {}).id);
-    check(!!calId && (await page.locator('#pub-next-cal').count()) === 1, 'calendar: the next-session card has a Kalender button');
+    check(!!calId && (await page.locator('#pub-next-cal').count()) === 1, 'calendar: the next-session card has a calendar button');
     await page.evaluate(id => window.openAddToCalendar([id]), calId);
     await page.waitForTimeout(500);
     check(await visible(page, '#modal-add-cal') && await visible(page, '#cal-google') && await visible(page, '#cal-ics'), 'calendar: the sheet offers Google Kalender and .ics');
@@ -2269,15 +2407,16 @@ async function contrastReport(page) {
     check(await visible(page, '#pub-progress-wrap') && (await page.textContent('#pub-progress-wrap')).includes('Belum ada catatan'), 'portal: the Progres card starts with a friendly empty state');
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(600);
-    check((await page.textContent('#pub-care-wrap')).includes('Form kesehatan'), 'portal: the health form card asks until a form is submitted');
-    check((await page.textContent('#view-public-dashboard .my-coach-card')).includes('Coach kamu'), 'portal home: a "Coach kamu" card shows the coach');
-    await page.evaluate(() => { const d = document.querySelector('#view-public-dashboard .my-coach-card').closest('details'); if (d) d.open = true; });   // Phase R: kartu coach di lipatan
-    await page.locator('#view-public-dashboard .my-coach-card').click();
-    await page.waitForTimeout(700);
-    check((await page.textContent('#coach-sheet-body')).includes('Rizky') && await visible(page, '#coach-sheet-body .coach-hero'), 'tapping "Coach kamu" opens the full coach profile in a sheet');
-    await page.evaluate(() => window.closeModal());
+    check(await page.evaluate(() => window.myX.notif.items.some(x => x.id === 'kesehatan')), 'portal: the bell asks for the health form until one is submitted');
+    await page.evaluate(() => window.navigate('public-more'));
     await page.waitForTimeout(400);
-    check(await visible(page, '#view-public-dashboard .portal-hero') && await visible(page, '#view-public-dashboard .next-card') && await visible(page, '#pub-week .stat-strip') && (await page.locator('#view-public-dashboard .portal-actions .btn').count()) === 3, 'portal home: next session on top, dark hero, "Minggu ini" strip and three quick actions');
+    await page.click('#view-public-more .px-tile:has-text("Coach")');
+    await page.waitForTimeout(700);
+    check((await page.evaluate(() => window.currentView)) === 'public-coaches' && (await page.textContent('#view-public-coaches')).includes('Rizky'), 'the Coach tile on Saya opens the coach page');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(500);
+    const homeOrder = await page.evaluate(() => ['pub-next-session-card', 'pub-todo', 'pub-weekx', 'pub-pack-card'].map(id => { const e = document.getElementById(id); return e ? Math.round(e.getBoundingClientRect().top + document.getElementById('main-scroll-area').scrollTop) : -1; }));
+    check(homeOrder.every((y, i) => y >= 0 && (i === 0 || y > homeOrder[i - 1])) && (await page.locator('#pub-weekx .week-x > div').count()) === 7, 'portal home: next session, to-do list, week strip, package card in that order ' + JSON.stringify(homeOrder));
     check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'portal home: no sideways page scroll');
     await shot(page, 'portal-mobile-home-premium');
     await page.evaluate(() => window.openMyProfile());
@@ -2288,7 +2427,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     await page.evaluate(() => window.navigate('calendar'));
     await page.waitForTimeout(500);
-    check(await visible(page, '#view-calendar .insight-hero') && (await page.locator('#view-calendar .insight-hero .ih-stat').count()) >= 2, 'portal Jadwal: black summary card above the calendar');
+    check(await visible(page, '#pub-sched-hero.gfx-geo') && (await page.locator('#pub-sched-hero .ath-stats > div').count()) >= 2, 'portal Jadwal: black summary card with the geometric graphic above the calendar');
     await page.evaluate(() => window.navigate('public-progress'));
     await page.waitForTimeout(400);
     await page.click('#pub-progress-wrap .btn-primary');
@@ -2362,33 +2501,66 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     check((await page.locator('#day-panel .slot:not([disabled])').count()) > 0, 'free time slots listed for the chosen day');
     await shot(page, 'portal-mobile-calendar');
+    const mineRows = () => env.sheet('Schedules').rows.filter(r => r[1] === 'PT-A').length;
+    const rowsBefore = mineRows();
     await page.locator('#day-panel .slot:not([disabled])').first().click();
     await page.waitForTimeout(500);
-    check(await visible(page, '#modal-edit-schedule'), 'tapping a slot opens the booking sheet');
-    check((await page.inputValue('#edit-sch-date')) === day, 'booking sheet has the chosen date');
-    await page.fill('#edit-sch-notes', 'Leg day');
+    check(await visible(page, '#bk-screen') && (await page.textContent('#bk-title')).includes('Booking sesi') && (await page.textContent('#bk-screen .bk-count')).includes('3 dari 3'), 'tapping a slot opens the booking screen on its last step (day and hour already chosen)');
+    const dayLabel = new Date(day + 'T12:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
+    check((await page.textContent('#bk-summary')).includes(dayLabel), 'booking: the summary shows the chosen date (' + dayLabel + ')');
+    const bkBtns = await page.locator('#bk-screen button').evaluateAll(els => els.filter(e => e.offsetParent).map(e => Math.round(e.getBoundingClientRect().height)));
+    check(bkBtns.every(x => x >= 44) && (await overflowX(page)) <= 0, 'booking: buttons are at least 44 px and nothing scrolls sideways (' + bkBtns.join(', ') + ')');
     await shot(page, 'portal-mobile-booking');
     const callsBeforeBook = calls.length;
-    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.click('#bk-next');
     await page.waitForTimeout(700);
-    const booked = env.sheet('Schedules').rows.find(r => r[6] === 'Leg day');
-    check(!!booked && booked[1] === 'PT-A' && booked[7] === 'unread', 'booking is saved for the logged-in client');
+    check(mineRows() === rowsBefore + 1 && !(await visible(page, '#bk-screen')), 'booking is saved for the logged-in client and the booking screen closes');
+    const booked = env.sheet('Schedules').rows.filter(r => r[1] === 'PT-A').pop();
+    check(!!booked && booked[7] === 'unread' && new Date(booked[4]).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) === day, 'booking: the new row is on the chosen day and marked new for the coach');
     await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
-    const bookCalls = calls.slice(callsBeforeBook);
+    const bookCalls = calls.slice(callsBeforeBook).filter(c => c !== 'getOpenSlots');
     check(bookCalls.length === 1 && bookCalls[0] === 'clientBookSchedule', 'booking is one server call (no pre-check, no reload afterwards): ' + bookCalls.join(','));
     check(await page.evaluate(id => window.schedules.some(s => s.id === id && s.memberId === 'PT-A'), booked && booked[0]), 'the new booking is on screen straight from the answer');
     check((await page.textContent('#toast-msg')).includes('Booking terkirim'), 'booking: "Booking terkirim ke coach!"');
 
-    // FAB booking still works.
+    // "+" → Booking sesi walks the three steps: day, hour, check.
+    const day6 = inDays(6).slice(0, 10);
     await page.evaluate(() => window.handleFabClick());
-    await page.waitForTimeout(400);
-    await page.fill('#edit-sch-date', inDays(6).slice(0, 10));
-    await page.fill('#edit-sch-time', '10:00');
-    await page.fill('#edit-sch-notes', 'Fab booking');
-    await page.evaluate(() => document.querySelector('#form-edit-schedule button[type="submit"]').click());
+    await page.waitForTimeout(500);
+    check(await visible(page, '#bk-screen') && (await page.textContent('#bk-screen .bk-count')).includes('1 dari 3') && (await page.locator('#bk-screen .step-bar i.on').count()) === 1, 'booking: "+" opens step 1 of 3 (Pilih hari)');
+    await page.click('#bk-next');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#bk-screen .bk-count')).includes('1 dari 3') && (await page.textContent('#toast-msg')).includes('Pilih hari'), 'booking: Lanjut without a day asks for one');
+    check((await page.locator('#bk-screen .bk-day:not(.off)').count()) >= 5 && (await page.locator('#bk-screen .bk-day.off').count()) >= 1, 'booking: days with free hours can be tapped, past or full days cannot');
+    await page.evaluate(d => window.bkPick('hari', d), day6);
+    await page.waitForTimeout(200);
+    check((await page.textContent('#bk-day-note')).includes('jam kosong'), 'booking: the chosen day shows how many hours are free');
+    await shot(page, 'portal-mobile-booking-hari');
+    await page.click('#bk-next');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#bk-screen .bk-count')).includes('2 dari 3') && (await page.locator('#bk-screen .bk-slot:not(.off)').count()) >= 1, 'booking: step 2 lists the free hours of that day');
+    await shot(page, 'portal-mobile-booking-jam');
+    await page.click('#bk-screen .bk-slot:has-text("10.00")');
+    await page.click('#bk-next');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#bk-summary')).includes('10.00 – 11.00') && (await page.textContent('#bk-next')).trim() === 'Booking', 'booking: step 3 shows the day and hour to confirm');
+    await page.click('#bk-back');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#bk-screen .bk-count')).includes('2 dari 3'), 'booking: back returns to the previous step');
+    await page.click('#bk-next');
+    await page.waitForTimeout(300);
+    await page.click('#bk-next');
     await page.waitForTimeout(700);
-    check(!!env.sheet('Schedules').rows.find(r => r[6] === 'Fab booking' && r[1] === 'PT-A'), '"+" booking is saved too');
+    check(!!env.sheet('Schedules').rows.find(r => r[1] === 'PT-A' && String(r[4]).startsWith(day6 + 'T03:00')), '"+" booking is saved at the chosen day and hour');
     await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
+    // "Ubah" on an own session opens the same screen with the old time shown.
+    const upId = await page.evaluate(() => (window.schedules.filter(s => s.memberId === 'PT-A' && new Date(s.start) > new Date(Date.now() + 86400000 * 2))[0] || {}).id);
+    await page.evaluate(id => window.openRescheduleModal(id), upId);
+    await page.waitForTimeout(400);
+    check(await visible(page, '#bk-screen') && (await page.textContent('#bk-title')).includes('Ubah jadwal') && (await page.textContent('#bk-screen .bk-body')).includes('Jadwal lama'), 'reschedule: "Ubah" opens the same three steps and shows the old time');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+    check(!(await visible(page, '#bk-screen')), 'booking: Esc closes the screen');
 
     await page.evaluate(() => window.navigate('public-coaches'));
     await page.waitForTimeout(400);
@@ -2418,9 +2590,9 @@ async function contrastReport(page) {
     check((await revoked.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'client is told to log in with the WhatsApp number');
     noErrors(errors.concat(again.errors, revoked.errors));
     await context.close(); await again.context.close(); await revoked.context.close();
-  }
+  })().catch(sectionCrash);
   console.log('Portal klien · cepat (Fase K): panggilan, salinan, kerangka');
-  {
+  await (async () => {
     const env = richEnv();
     const tokA = env.memberToken(KEY_A), tokB = env.memberToken(KEY_B);
     const TK = 'xnk_member_token', CK = 'xnk_portal_cache';
@@ -2435,7 +2607,7 @@ async function contrastReport(page) {
       await cold.page.waitForTimeout(350);
     }
     check(reads1().length === 2, 'fast: switching through all seven tabs reads nothing more from the server (' + calls1.join(',') + ')');
-    check((await cold.page.textContent('#pub-tasks-wrap, #pub-teasers')).length > 0 && (await cold.page.evaluate(() => !!window.myProgram && window.myProgram.state === 'ok' && !!window.myContent && !!window.myTasks)), 'fast: every tab already has its data from the one call');
+    check((await cold.page.textContent('#pub-tasks-wrap, #pub-todo')).length > 0 && (await cold.page.evaluate(() => !!window.myProgram && window.myProgram.state === 'ok' && !!window.myContent && !!window.myTasks)), 'fast: every tab already has its data from the one call');
     const store = await cold.page.evaluate(() => Object.assign({}, localStorage));
     check(!!store[CK] && store[CK].includes('Ani') && !store[CK].includes('openSlots'), 'fast: a copy is kept on the device (own data only, no free-hours grid)');
     await cold.context.close();
@@ -2443,8 +2615,10 @@ async function contrastReport(page) {
     const calls2 = [];
     const warm = await openPage(browser, env, '/Index?view=public', calls2, store, { delay: { getPortalBootstrap: 4000, getPortalMore: 4000 }, wait: 200, keepCelebration: true });
     await warm.page.waitForTimeout(700);
-    check((await warm.page.textContent('#pub-dash-name')).includes('Ani') && !(await visible(warm.page, '#global-loader')), 'fast: with a copy, Beranda shows the client\'s own name while the server is still answering');
-    check((await warm.page.locator('#view-public-dashboard .portal-hero').count()) === 1 && !(await warm.page.locator('#view-public-dashboard .skel').count()), 'fast: the home screen is filled from the copy, no skeletons');
+    check((await warm.page.locator('#pub-todo .todo-row').count()) >= 1 && !(await visible(warm.page, '#global-loader')), 'fast: with a copy, Hari ini shows the client\'s own to-do list while the server is still answering');
+    check((await warm.page.locator('#view-public-dashboard .next-x').count()) === 1 && !(await warm.page.locator('#view-public-dashboard .skel').count()), 'fast: the home screen is filled from the copy, no skeletons');
+    await warm.page.evaluate(() => window.navigate('public-more'));
+    check((await warm.page.textContent('#pub-dash-name')).includes('Ani'), 'fast: the athlete card shows the client\'s own name from the copy');
     await warm.page.evaluate(() => window.navigate('public-program'));
     await warm.page.waitForTimeout(300);
     check((await warm.page.textContent('#pub-program-wrap')).includes('Rutinitas') && !(await warm.page.locator('#pub-program-wrap .skel').count()), 'fast: other tabs also open filled while the server is slow');
@@ -2502,9 +2676,10 @@ async function contrastReport(page) {
     const calls3 = [];
     const other = await openPage(browser, env, '/Index?view=public', calls3, { [TK]: tokB, [CK]: store[CK] }, { delay: { getPortalBootstrap: 1500, getPortalMore: 1500 }, wait: 300, keepCelebration: true });
     await other.page.waitForTimeout(300);
-    const nm = await other.page.evaluate(() => (document.getElementById('pub-dash-name') || {}).textContent || '');
+    const nm = await other.page.evaluate(() => { if (window.publicLoggedMember) window.navigate('public-more'); return (document.getElementById('pub-dash-name') || {}).textContent || ''; });
     check(!nm.includes('Ani'), 'fast: a copy that belongs to another login is never shown');
     await other.page.waitForTimeout(3000);
+    await other.page.evaluate(() => window.navigate('public-more'));
     check((await other.page.textContent('#pub-dash-name')).includes('Budi'), 'fast: the right client appears once the server answers');
     await other.context.close();
     // 5) Tanpa salinan: kerangka abu muncul di tab selagi data menyusul.
@@ -2520,14 +2695,115 @@ async function contrastReport(page) {
     await skel.page.waitForTimeout(3500);
     check(!(await skel.page.locator('#pub-progress-wrap .skel').count()), 'fast: the skeletons are replaced when the data arrives');
     await skel.context.close();
-  }
+  })().catch(sectionCrash);
+  console.log('Portal klien · tablet sentuh (Fase Y)');
+  await (async () => {
+    const env = richEnv();
+    const token = env.memberToken(KEY_A);
+    const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token }, { viewport: { width: 834, height: 1194 }, touch: true, wait: 1300 });
+    const t = await page.evaluate(() => ({ desk: document.documentElement.classList.contains('desk'), rail: Math.round(document.getElementById('sidebar').getBoundingClientRect().width), tab: getComputedStyle(document.getElementById('tabbar')).display, coarse: matchMedia('(pointer: coarse)').matches,
+      small: Array.from(document.querySelectorAll('#sidebar .nav-item, #topbar-actions .icon-btn, #topbar-actions .btn')).filter(e => e.offsetParent && e.getBoundingClientRect().height < 43.5).length, over: document.documentElement.scrollWidth - innerWidth }));
+    check(t.desk && t.rail <= 80 && t.tab === 'none' && t.small === 0 && t.over <= 1, 'tablet (touch, 834×1194): desktop frame with an icon rail, no phone tab bar, touch targets ≥ 44 px ' + JSON.stringify(t));
+    noErrors(errors);
+    await context.close();
+  })().catch(sectionCrash);
+
   console.log('Portal klien · desktop');
   for (const scheme of ['light', 'dark']) {
     const env = richEnv();
     const token = env.memberToken(KEY_A);
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1300 });
-    const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.portal-grid')).gridTemplateColumns.split(' ').length);
-    check(cols === 2, scheme + ': Beranda uses two columns on desktop');
+    const homeW = await page.evaluate(() => { const w = document.querySelector('#view-public-dashboard .px-wrap'); return [Math.round(w.getBoundingClientRect().width), getComputedStyle(w).gridTemplateColumns.split(' ').length, document.documentElement.scrollWidth <= innerWidth + 1]; });
+    check(homeW[0] <= 1240 && homeW[1] === 2 && homeW[2], scheme + ': Hari ini uses two columns, at most 1240 px wide, on desktop ' + JSON.stringify(homeW));
+    if (scheme === 'light') {
+      // Fase Y: bingkai ala Mac — sidebar, bilah judul, menu ＋, popover lonceng, klik kanan, Esc.
+      check(await page.evaluate(() => document.documentElement.classList.contains('desk') && getComputedStyle(document.getElementById('sidebar')).display !== 'none' && getComputedStyle(document.getElementById('topbar')).height === '52px' && document.getElementById('page-title').textContent === 'Hari ini' && !!document.querySelector('#topbar-actions .desk-tb')), 'desk: Mac-style sidebar and a 52 px title bar with the page title and toolbar buttons');
+      await page.click('#nav-plus-btn');
+      await page.waitForTimeout(200);
+      check((await page.locator('.desk-menu .desk-mi').count()) >= 4 && !(await visible(page, '#sheet-quick-client')), 'desk: ＋ opens a pull-down menu instead of the phone sheet');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      check((await page.locator('.desk-menu').count()) === 0, 'desk: Esc closes the menu');
+      await page.click('#nav-bell-btn');
+      await page.waitForTimeout(250);
+      check(await visible(page, '#desk-notif-pop') && !(await visible(page, '#sheet-notif')), 'desk: the bell opens a popover under the title bar');
+      await page.click('#nav-bell-btn');
+      await page.waitForTimeout(200);
+      check((await page.locator('#desk-notif-pop').count()) === 0, 'desk: clicking the bell again closes the popover');
+      await page.evaluate(() => window.navigate('public-program'));
+      await page.waitForTimeout(400);
+      const rtBox = (await page.locator('#pub-program-wrap .rt-card').count()) ? await page.locator('#pub-program-wrap .rt-card').first().boundingBox() : null;
+      if (rtBox) {
+        await page.mouse.click(rtBox.x + 40, rtBox.y + 30, { button: 'right' });
+        await page.waitForTimeout(200);
+        const labels = (await page.locator('.desk-menu .desk-mi').allTextContents()).map(t => t.trim());
+        check(labels[0] === 'Mulai' && labels.indexOf('Lihat detail') !== -1, 'desk: right-clicking a routine opens its menu ' + JSON.stringify(labels));
+        await page.mouse.click(rtBox.x + rtBox.width + 400, 20);
+        await page.waitForTimeout(150);
+        check((await page.locator('.desk-menu').count()) === 0, 'desk: clicking outside closes the menu');
+      }
+      await page.evaluate(() => window.navigate('calendar'));
+      await page.waitForTimeout(500);
+      if (await page.locator('#pub-upcoming-list .list-item').count()) {
+        await page.click('#pub-upcoming-list .list-item .li-title');
+        await page.waitForTimeout(500);
+        check(await page.evaluate(() => document.getElementById('detail-panel').classList.contains('open') && document.getElementById('detail-title').textContent === 'Sesi latihan' && !!document.querySelector('#pub-upcoming-list .list-item.desk-sel')), 'desk: clicking a session opens it in the right-hand panel and marks the row');
+        await page.evaluate(() => window.closeDetail());
+        await page.waitForTimeout(500);
+        check(!(await page.locator('.desk-sel').count()), 'desk: closing the panel clears the selection');
+      }
+      await page.evaluate(() => window.bkOpen({}));
+      await page.waitForTimeout(600);
+      check(await page.evaluate(() => { const w = document.querySelector('#bk-screen .bk-win'); const p = w && w.querySelectorAll('.bk-pane'); return !!w && p.length === 2 && document.getElementById('bk-next').disabled; }), 'desk: booking opens as one two-pane window (calendar | hours), Booking disabled until a day and hour are picked');
+      const bkDay = page.locator('#bk-screen .bk-day:not(.off)').first();
+      if (await bkDay.count()) {
+        await bkDay.click(); await page.waitForTimeout(250);
+        const bkSlot = page.locator('#bk-screen .bk-slot:not(.off)').first();
+        if (await bkSlot.count()) { await bkSlot.click(); await page.waitForTimeout(250); check(!(await page.evaluate(() => document.getElementById('bk-next').disabled)) && /–/.test(await page.textContent('#bk-sum')), 'desk: picking a day and an hour fills the summary and enables Booking'); }
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+      // T-2008…T-2011: halaman tingkat dua di desktop berkolom, tanpa ruang kosong besar.
+      await page.evaluate(() => window.navigate('public-pack'));
+      await page.waitForTimeout(300);
+      check(await page.evaluate(() => { const o = document.getElementById('pack-others'), r = document.getElementById('pack-recent'), hero = document.getElementById('pack-hero'); if (!o || !r || !hero) return false; const a = r.getBoundingClientRect(), b = hero.getBoundingClientRect(); return a.width > 200 && a.left > b.right && o.getBoundingClientRect().top > b.bottom; }), 'desk: Paket saya shows other packages under the hero and recent sessions on the right');
+      await page.evaluate(() => window.navigate('public-progress'));
+      await page.waitForTimeout(300);
+      check(await page.evaluate(() => { const c = document.getElementById('pub-journey-card'), st = c && c.querySelector('.ath-stats'); if (!st) return true; const t = c.querySelector('.px-hero-t').getBoundingClientRect(), s2 = st.getBoundingClientRect(); return s2.left > t.left + 200 && c.getBoundingClientRect().height < 220; }), 'desk: the journey card is a compact strip with numbers beside the headline');
+      await page.evaluate(() => window.navigate('public-plan'));
+      await page.waitForTimeout(400);
+      check(await page.evaluate(() => { const m = document.getElementById('plan-menu'), t = document.getElementById('plan-target'); if (!m || !t) return true; return t.getBoundingClientRect().left > m.getBoundingClientRect().right; }), 'desk: Rencana makan puts the menu left and the target right');
+      await page.evaluate(() => window.navigate('public-coaches'));
+      await page.waitForTimeout(800);
+      check(await page.evaluate(() => { const g = document.querySelector('#coach-profile-page > .stack'); return !!g && getComputedStyle(g).display === 'grid' && getComputedStyle(g).gridTemplateColumns.split(' ').length === 2; }), 'desk: the coach page is two columns');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(300);
+      check(await page.evaluate(() => !document.querySelector('.desk-x') || Array.from(document.querySelectorAll('.desk-x')).every(e => getComputedStyle(e).display === 'none')), 'desk: desktop-only blocks are hidden at phone width');
+      check(await page.evaluate(() => !document.documentElement.classList.contains('desk') && getComputedStyle(document.getElementById('tabbar')).display !== 'none'), 'desk: narrowing the window to phone width switches back to the phone layout');
+      await page.setViewportSize(DESKTOP);
+      await page.waitForTimeout(300);
+      await page.evaluate(() => window.navigate('public-dashboard'));
+      await page.waitForTimeout(300);
+      // Tablet, laptop, PC, layar sangat lebar: judul halaman, satu atau dua kolom sesuai lebar isi, tidak ada geser samping.
+      for (const vp of [[768, 1024, 1], [1024, 768, 1], [1180, 820, 1], [1280, 720, 2], [1366, 768, 2], [1920, 1080, 2], [2560, 1080, 2]]) {
+        await page.setViewportSize({ width: vp[0], height: vp[1] });
+        for (const v of ['public-dashboard', 'public-more', 'public-pack', 'public-program', 'public-progress', 'public-food']) {
+          await page.evaluate(v => window.navigate(v), v);
+          await page.waitForTimeout(250);
+          const r = await page.evaluate(v => {
+            const view = document.getElementById('view-' + v), head = document.getElementById('page-title'), wrap = view.querySelector('.px-2col');
+            const hr = head && document.documentElement.classList.contains('desk') && getComputedStyle(head).opacity === '1' && head.getBoundingClientRect(), cols = wrap ? getComputedStyle(wrap).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
+            const widest = Math.max.apply(null, Array.from(view.children).map(c => c.classList.contains('page-head') ? 0 : c.getBoundingClientRect().width));
+            return { head: !!(hr && hr.height > 0), cols: wrap ? (getComputedStyle(wrap).display === 'grid' ? cols : 1) : null, widest: Math.round(widest), over: document.documentElement.scrollWidth - innerWidth };
+          }, v);
+          const okCols = r.cols === null || r.cols === vp[2];
+          check(r.head && okCols && r.widest <= 1273 && r.over <= 1, 'layar ' + vp[0] + '×' + vp[1] + ' ' + v + ': title in the desktop title bar, ' + (r.cols === null ? 'grid' : r.cols + ' column(s)') + ', no sideways scroll ' + JSON.stringify(r));
+        }
+      }
+      await page.setViewportSize(DESKTOP);
+      await page.evaluate(() => window.navigate('public-dashboard'));
+      await page.waitForTimeout(300);
+    }
     await shot(page, 'portal-desktop-' + scheme + '-home');
     // Makan on a wide screen (Phase P): two columns, nothing overflows, at 1440 and 1280.
     env.call('saveMyMeasurement', token, { berat: 70, pinggang: 80 });
@@ -2538,7 +2814,7 @@ async function contrastReport(page) {
       await page.setViewportSize({ width: w, height: 900 });
       await page.evaluate(() => window.setLatSeg('makan'));
       await page.waitForTimeout(500);
-      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.querySelector(':scope > .stack') || p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
+      const mk = await page.evaluate(() => { const p = document.getElementById('pub-makan-pane'); const cs = getComputedStyle(p.querySelector(':scope > .stack') || p.firstElementChild); const cards = Array.from(p.querySelectorAll(':scope > .stack > *')).map(c => c.getBoundingClientRect()); return { cols: cs.display === 'grid' ? String(cs.gridTemplateColumns.split(' ').filter(Boolean).length) : cs.columnCount, over: p.scrollWidth - p.clientWidth, widest: Math.round(Math.max.apply(null, cards.map(r => r.width))), lefts: new Set(cards.map(r => Math.round(r.left))).size, ring: !!p.querySelector('.ring-wrap'), bars: p.querySelectorAll('.meter').length }; });
       check(mk.cols === '2' && mk.over <= 1 && mk.lefts === 2 && mk.ring && mk.bars === 3, scheme + ' ' + w + ': Makan flows in two columns without overflow ' + JSON.stringify(mk));
       if (w === 1440) await shot(page, 'portal-desktop-' + scheme + '-makan');
     }
@@ -2555,7 +2831,7 @@ async function contrastReport(page) {
   }
   // ── Portal: jam yang baru saja terisi → saran jam di dalam sheet (HP) ─────
   console.log('Portal klien · booking bentrok · HP');
-  {
+  await (async () => {
     const env = seededEnv();
     const calls = [];
     const token = env.memberToken(KEY_A);
@@ -2573,15 +2849,15 @@ async function contrastReport(page) {
     env.sheet('Schedules').rows.push(['SCH-X1', 'PT-B', 'Budi', '081222222222', slot.start, slot.end, '', 'unread', 'C-1', 'Rizky', '', '']);
     await hour10.click();
     await page.waitForTimeout(500);
-    check(await visible(page, '#modal-edit-schedule'), 'conflict: tapping the hour opens the booking sheet');
-    await page.fill('#edit-sch-time', '10:15');
-    check(((await page.textContent('#edit-sch-time-hint')) || '').includes('Dicatat mulai 10.00 (dihitung dari jam penuh).'), 'time field: 10:15 shows "Dicatat mulai 10.00 (dihitung dari jam penuh)."');
+    check(await visible(page, '#bk-screen') && (await page.textContent('#bk-summary')).includes('10.00 – 11.00'), 'conflict: tapping the hour opens the booking screen with that hour');
     const callsBefore = calls.length;
-    await page.click('#form-edit-schedule button[type="submit"]');
+    await page.click('#bk-next');
     await page.waitForTimeout(900);
-    check(calls.slice(callsBefore).join(',') === 'clientBookSchedule', 'conflict: one server call, no pre-check: ' + calls.slice(callsBefore).join(','));
+    const conflictCalls = calls.slice(callsBefore).filter(c => c !== 'getOpenSlots');
+    check(conflictCalls.join(',') === 'clientBookSchedule', 'conflict: one server call, no pre-check: ' + conflictCalls.join(','));
+    check(!(await visible(page, '#bk-screen')), 'conflict: the booking screen makes way for the notice');
     check(await visible(page, '#modal-edit-schedule .conflict-panel'), 'conflict: the sheet stays open with a notice');
-    check(((await page.textContent('.conflict-panel .li-title')) || '').includes('Jam 10.00 baru saja terisi'), 'conflict: "Jam 10.00 baru saja terisi" (10:15 is counted from 10.00)');
+    check(((await page.textContent('.conflict-panel .li-title')) || '').includes('Jam 10.00 baru saja terisi'), 'conflict: "Jam 10.00 baru saja terisi"');
     check(!env.sheet('Schedules').rows.some(r => r[1] === 'PT-A' && new Date(r[4]).getTime() === new Date(slot.start).getTime()), 'conflict: nothing was saved for the taken hour');
     const chips = page.locator('.conflict-panel .slot');
     check((await chips.count()) >= 1 && (await chips.count()) <= 3, 'conflict: 1 to 3 other hours are offered (' + (await chips.count()) + ')');
@@ -2633,8 +2909,8 @@ async function contrastReport(page) {
     await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // Pindah jadwal ke jam yang terisi: tetap di sheet (tanpa "Lihat semua jam"), saran jam memindahkan sesi yang sama.
     const env = seededEnv();
     const token = env.memberToken(KEY_A);
@@ -2644,7 +2920,7 @@ async function contrastReport(page) {
     for (const k of Object.keys(env.cache)) if (k.indexOf('openslots') === 0) delete env.cache[k];
     const calls = [];
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public', calls, { xnk_member_token: token }, { timezoneId: 'Asia/Jakarta', wait: 1300 });
-    await page.evaluate(id => window.openRescheduleModal(id), mine.id);
+    await page.evaluate(id => window.openRescheduleModal(id, true), mine.id);   // the form behind the three steps
     await page.waitForTimeout(500);
     const takenDay = new Date(taken.start).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
     await page.fill('#edit-sch-date', takenDay);
@@ -2667,9 +2943,9 @@ async function contrastReport(page) {
     await page.waitForTimeout(600); await page.evaluate(() => { const s = document.getElementById('modal-add-cal'); if (s && !s.classList.contains('hide')) window.closeModal(); }); await page.waitForTimeout(350);   // booking offers "Tambah ke kalender" (I4)
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
-  {
+  await (async () => {
     const env = seededEnv();
     const old = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, []);
     check((await old.page.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.id)) === 'PT-A', 'an old ?k= link still logs in');
@@ -2677,7 +2953,7 @@ async function contrastReport(page) {
     check((await bad.page.evaluate(() => window.currentView)) === 'public-login', 'unknown link → login page');
     check((await bad.page.textContent('#member-link-message')).includes('nomor WhatsApp'), 'unknown link → asked to log in with the number');
     await old.context.close(); await bad.context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── iPhone / Safari (Fase N): zona aman, tab bar menempel, keyboard, Layar Utama ──
   // Elements that stick out past the right edge make iOS stretch the iframe and
@@ -2698,7 +2974,7 @@ async function contrastReport(page) {
   });
   const IPHONE = { insets: { t: 47, r: 0, b: 34, l: 0 }, ios: true, standalone: false, kb: 0, v: 1, xnk: 'host' };
   console.log('iPhone / Safari · portal + panel');
-  {
+  await (async () => {
     const env = seededEnv();
     const { page, context, errors } = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, [], null, { touch: true });
     for (const v of ['public-dashboard', 'calendar', 'public-progress', 'public-program', 'public-info', 'public-more']) {
@@ -2745,8 +3021,8 @@ async function contrastReport(page) {
     await again.page.evaluate(d => window.applyHostInfo(Object.assign({}, d, { standalone: true })), IPHONE);
     check(await again.page.evaluate(() => document.documentElement.classList.contains('standalone')), 'Home Screen mode is marked (edge swipe back on)');
     await again.context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     const env = seededEnv();
     const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: env.adminToken(), xnk_a2hs: 'ok' }, { touch: true });
     for (const v of ['dashboard', 'calendar', 'clients', 'settings']) {
@@ -2775,7 +3051,32 @@ async function contrastReport(page) {
     check(await visible(page, '#tabbar') && !(await page.evaluate(() => document.documentElement.classList.contains('kb-open'))), 'keyboard closed: everything comes back');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
+
+  // ── S17: layar admin di 5 ukuran × terang/gelap: halaman tidak pernah bergeser ke samping ──
+  console.log('Panel admin · S17 ukuran layar');
+  await (async () => {
+    const env = seededEnv(), token = env.adminToken();
+    for (const scheme of ['light', 'dark']) for (const vp of [{ width: 360, height: 780 }, { width: 390, height: 844 }, { width: 430, height: 932 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }]) {
+      const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { viewport: vp, colorScheme: scheme, wait: 1200 });
+      const bad = [];
+      for (const v of ['dashboard', 'calendar', 'clients', 'coaches', 'settings']) {
+        await page.evaluate(x => window.navigate(x), v);
+        await page.waitForTimeout(500);
+        const r = await page.evaluate(() => ({ over: document.scrollingElement.scrollWidth - innerWidth, app: document.getElementById('app').scrollLeft, main: document.getElementById('main-scroll-area').scrollLeft }));
+        if (r.over > 1 || r.app || r.main) bad.push(v + ' ' + JSON.stringify(r));
+      }
+      check(!bad.length, 'admin ' + vp.width + '×' + vp.height + ' ' + scheme + ': no sideways scroll on Dashboard, Jadwal, Klien, Coach, Pengaturan' + (bad.length ? ' ' + bad.join('; ') : ''));
+      if (vp.width < 768) {
+        await page.evaluate(() => window.navigate('clients'));
+        await page.waitForTimeout(500);
+        const fc = await page.evaluate(() => { const c = document.querySelector('#client-list .client-card'), b = document.getElementById('tabbar'); if (!c) return null; const r = c.getBoundingClientRect(); return { bottom: Math.round(r.bottom), bar: Math.round(b.getBoundingClientRect().top) }; });
+        check(!!fc && fc.bottom <= fc.bar, 'admin ' + vp.width + ' ' + scheme + ': first client card fully above the tab bar ' + JSON.stringify(fc));
+      }
+      noErrors(errors);
+      await context.close();
+    }
+  })().catch(sectionCrash);
 
   // ── Notifikasi (Fase X): kartu di Lainnya (klien) dan Pengaturan → Notifikasi (coach) ──
   // Browser tanpa service worker di tes ini: tumpukan push dipalsukan di halaman (YANG diuji: kartu, saklar, panggilan ke server).
@@ -2859,7 +3160,7 @@ async function contrastReport(page) {
 
   // ── Pembungkus xnk.my.id: jembatan host (zona aman, keyboard, warna tema) ──
   console.log('Pembungkus xnk.my.id · host bridge');
-  {
+  await (async () => {
     const wrapper = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'index.html'), 'utf8');
     const APP = 'https://n-test-0lu-script.googleusercontent.com';
     const context = await browser.newContext({ viewport: MOBILE, hasTouch: true, isMobile: true });
@@ -2892,7 +3193,7 @@ async function contrastReport(page) {
     check(ifr && Math.round(ifr.width) === MOBILE.width && Math.round(ifr.height) === MOBILE.height, 'wrapper iframe fills the phone exactly');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   // ── Landing xnkbooking.my.id ─────────────────────────────────────────────
   const scrollLanding = async (page, y, wait) => {
@@ -2906,7 +3207,7 @@ async function contrastReport(page) {
   const LANDING_WAIT = ASSETS ? 3200 : 1200; // intro 00–100
 
   console.log('Landing · HP');
-  {
+  await (async () => {
     const env = seededEnv();
     const calls = [];
     const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', calls, null, { touch: true, wait: LANDING_WAIT });
@@ -2990,13 +3291,13 @@ async function contrastReport(page) {
 
     // The portal opens the booking form at the hour picked on the Landing.
     const portal = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: saved, xnk_pending_slot: JSON.stringify(pending) }, { wait: 1800 });
-    check(await visible(portal.page, '#modal-edit-schedule'), 'booking page opens the booking form for the picked hour');
-    check((await portal.page.inputValue('#edit-sch-date')) === pending.date && (await portal.page.inputValue('#edit-sch-time')) === pending.time, 'booking form has the picked date and hour');
+    check(await visible(portal.page, '#bk-screen') && (await portal.page.textContent('#bk-screen .bk-count')).includes('3 dari 3'), 'booking page opens the booking screen for the picked hour, ready to confirm');
+    check((await portal.page.textContent('#bk-summary')).includes(pending.time.replace(':', '.')), 'booking screen has the picked hour (' + pending.time + ')');
     check((await portal.page.evaluate(() => localStorage.getItem('xnk_pending_slot'))) === null, 'picked hour is used once');
     noErrors(portal.errors);
     await portal.context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // No polling: the free hours load once; time passing alone sends no new request.
     const env = seededEnv();
     const calls = [];
@@ -3008,8 +3309,8 @@ async function contrastReport(page) {
     check(first === 1 && later === first, 'Landing: free hours load once, no getOpenSlots after 20 s (' + first + ' → ' + later + ')');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // The first load fails: "Coba lagi" in the box loads the hours (no polling otherwise).
     const env = seededEnv();
     let failOnce = true;
@@ -3024,8 +3325,8 @@ async function contrastReport(page) {
     check((await page.locator('#slot-hours .slot-h').count()) > 0, 'Landing: "Coba lagi" loads the free hours');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // Pick within 2 minutes: checked on screen, no call. After 2 minutes: one reload; a taken hour offers nearby free hours.
     const env = seededEnv();
     const calls = [];
@@ -3077,8 +3378,8 @@ async function contrastReport(page) {
     check(pick.date === day && pick.time === String(altH).padStart(2, '0') + ':00' && pick.at > 0, 'Landing: the picked alternative keeps its own day and hour (' + JSON.stringify(pick) + ')');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     const env = seededEnv();
     const { page, context, errors, navigations } = await openPage(browser, env, '/Landing', [], null, { touch: true });
     await page.evaluate(() => openRegistration());
@@ -3109,8 +3410,8 @@ async function contrastReport(page) {
     check((await page.inputValue('#reg-goal')) === 'Muscle Building', 'program card preselects the training goal');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // HTML in the Price List is shown as text, never run.
     const env = seededEnv();
     env.sheet('PriceList').rows.push(['P9', '<img src=x onerror="window.__xss=1">', 'regular', 1, 1, '<b>x</b>', '<img src=x onerror="window.__xss=2">', 'a', true]);
@@ -3119,10 +3420,10 @@ async function contrastReport(page) {
     check((await page.locator('#pricing-track img').count()) === 0, 'no HTML injected into package cards');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   console.log('Landing · desktop');
-  {
+  await (async () => {
     const env = seededEnv();
     const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, wait: LANDING_WAIT });
     check(await visible(page, '#hero-desk'), 'desktop hero visible');
@@ -3208,10 +3509,10 @@ async function contrastReport(page) {
     check((await page.locator('#reg-packages input:checked').inputValue()) === '0', 'the clicked package is preselected');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   console.log('Landing · slot kosong (kapasitas per coach, bukan sekadar hitung kepala)');
-  {
+  await (async () => {
     const env = seededEnv();
     env.ss.seed('Coaches', [
       ['ID', 'Nama Coach', 'No WA', 'Spesialisasi', 'Foto URL', 'Bio', 'Pengalaman'],
@@ -3248,10 +3549,10 @@ async function contrastReport(page) {
     await shot(page, 'landing-desktop-slot-multicoach');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
 
   console.log('Landing · slot kosong (jam kerja asli coach, CoachAvailability)');
-  {
+  await (async () => {
     const env = seededEnv();
     const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();
     const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
@@ -3268,8 +3569,8 @@ async function contrastReport(page) {
     await shot(page, 'landing-desktop-slot-envelope');
     noErrors(errors);
     await context.close();
-  }
-  {
+  })().catch(sectionCrash);
+  await (async () => {
     // Sheet CoachAvailability masih kosong (kondisi nyata saat ini, belum ada UI admin untuk isi) →
     // tidak boleh ada regresi: jendela jam tetap DAY_HOURS seperti sebelumnya.
     const env = seededEnv();
@@ -3282,9 +3583,9 @@ async function contrastReport(page) {
     check(hours.length === expected[1] - expected[0], 'no CoachAvailability rules → falls back to the default opening hours, no regression (' + hours.length + ' jam)');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
   console.log('Landing · jam operasional dari Pengaturan admin (BUSINESS_HOURS_JSON)');
-  {
+  await (async () => {
     const env = seededEnv();
     const dow = new Date(new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) + 'T12:00:00+07:00').getUTCDay();   // WIB, like the server
     const hoursMap = { 0: [6, 12], 1: [6, 21], 2: [6, 21], 3: [6, 21], 4: [6, 21], 5: [6, 21], 6: [6, 21] };
@@ -3298,7 +3599,7 @@ async function contrastReport(page) {
       'jam operasional yang diatur admin lewat Pengaturan (09–12) dipakai Landing, bukan jam buka default (' + hours.join(',') + ')');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
   // Hero text never overlaps the giant JIZDAN, also on short laptop screens.
   for (const vp of [DESKTOP, { width: 1366, height: 657 }, { width: 1280, height: 720 }, { width: 1024, height: 640 }]) {
     const env = seededEnv();
@@ -3316,7 +3617,7 @@ async function contrastReport(page) {
     noErrors(errors);
     await context.close();
   }
-  {
+  await (async () => {
     // Reduced motion: no intro, no scroll animations, static photo.
     const env = seededEnv();
     const { page, context, errors } = await openPage(browser, env, '/Landing', [], null, { viewport: DESKTOP, reducedMotion: 'reduce' });
@@ -3325,7 +3626,7 @@ async function contrastReport(page) {
     check(!(await page.getAttribute('#figure-desk', 'data-gl')), 'reduced motion: static photo');
     noErrors(errors);
     await context.close();
-  }
+  })().catch(sectionCrash);
   if (ASSETS) {
     // Animation libraries unreachable: page still works (static).
     const env = seededEnv();

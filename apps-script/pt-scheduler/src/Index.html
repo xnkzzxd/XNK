@@ -60,7 +60,8 @@
         <div class="topbar-brand">
           <span class="avatar ink" style="border-radius:12px;width:36px;height:36px"><span class="logo-mark" style="width:18px;height:17px"></span></span>
         </div>
-        <h1 class="topbar-title" id="page-title">XNK</h1>
+        <button type="button" class="icon-btn plain tb-back hide" id="topbar-back" onclick="window.navigate(this.getAttribute('data-to') || 'public-dashboard')" aria-label="Kembali"><i data-lucide="arrow-left"></i></button>
+        <h1 class="topbar-title" id="page-title">XNK</h1><span class="topbar-sub" id="page-sub"></span>
         <div class="topbar-actions" id="topbar-actions"></div>
       </header>
 
@@ -84,6 +85,9 @@
           <section class="view hide" id="view-public-info" aria-label="Info dan tips"></section>
           <section class="view hide" id="view-public-more" aria-label="Lainnya"></section>
           <section class="view hide" id="view-public-share" aria-label="Kartu saya"></section>
+          <section class="view hide" id="view-public-food" aria-label="Makan"></section>
+          <section class="view hide" id="view-public-plan" aria-label="Rencana makan"></section>
+          <section class="view hide" id="view-public-pack" aria-label="Paket saya"></section>
         </div>
       </main>
     </div>
@@ -124,6 +128,9 @@
     </div>
   </div>
 
+  <!-- Booking tiga langkah (Fase X): layar penuh untuk klien -->
+  <div class="bk hide" id="bk-screen" role="dialog" aria-modal="true" aria-labelledby="bk-title"></div>
+
   <!-- Mode latihan (Fase M): layar penuh untuk coach dan klien -->
   <div class="wl hide" id="wl-screen" role="dialog" aria-modal="true" aria-labelledby="wl-title">
     <header class="wl-top">
@@ -141,12 +148,7 @@
   <div class="wl-resume hide" id="wl-resume" role="region" aria-label="Latihan berjalan"></div>
 
   <!-- Panduan klien baru (portal): layar gelap, satu tombol disorot -->
-  <div class="guide-layer hide" id="guide-layer" role="dialog" aria-modal="true" aria-labelledby="guide-title">
-    <svg class="guide-scrim" id="guide-scrim" aria-hidden="true" preserveAspectRatio="none"><path id="guide-hole" fill-rule="evenodd" d=""></path></svg>
-    <div class="guide-block" id="guide-block"></div>
-    <div class="guide-spot" id="guide-spot"></div>
-    <div class="guide-tip" id="guide-tip"></div>
-  </div>
+  <div class="guide-layer hide" id="guide-layer" role="dialog" aria-modal="true" aria-labelledby="guide-title"></div>
 
   <!-- Login PIN admin -->
   <div class="auth hide" id="admin-login" role="dialog" aria-modal="true" aria-labelledby="admin-login-title">
@@ -182,14 +184,23 @@
     <!-- Aksi cepat (+) admin -->
     <div class="sheet sm hide" id="sheet-quick-client" role="dialog" aria-modal="true" aria-labelledby="sheet-quick-client-title">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h2 class="sheet-title" id="sheet-quick-client-title">Mau apa?</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
-      <div class="sheet-body">
-        <div class="action-grid">
-          <button type="button" class="action-tile" onclick="window.clientQuick('booking')"><span class="at-icon"><i data-lucide="calendar-plus"></i></span>Booking</button>
-          <button type="button" class="action-tile" onclick="window.clientQuick('workout')"><span class="at-icon"><i data-lucide="dumbbell"></i></span>Mulai latihan</button>
-          <button type="button" class="action-tile" onclick="window.clientQuick('past')"><span class="at-icon"><i data-lucide="calendar-check"></i></span>Catat yang lewat</button>
-        </div>
-      </div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sheet-quick-client-title">Tambah</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body" id="quick-client-body" style="padding-top:16px"></div>
+    </div>
+    <div class="sheet tall hide" id="sheet-reg" role="dialog" aria-modal="true" aria-labelledby="reg-x-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head" style="flex-wrap:wrap"><h2 class="sheet-title" id="reg-x-title">Daftar</h2><button type="button" class="icon-btn plain" onclick="window.regClose()" aria-label="Tutup"><i data-lucide="x"></i></button><div class="step-bar" id="reg-x-bar" style="flex-basis:100%;grid-template-columns:repeat(5,minmax(0,1fr));margin:0 0 4px" aria-hidden="true"></div></div>
+      <div class="sheet-body stack" style="gap:16px;padding-top:16px" id="reg-x-body"></div>
+    </div>
+    <div class="sheet hide" id="sheet-profile-edit" role="dialog" aria-modal="true" aria-labelledby="pc-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pc-title">Ubah profil</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:18px;padding-top:16px" id="pc-body"></div>
+    </div>
+    <div class="sheet hide" id="sheet-notif" role="dialog" aria-modal="true" aria-labelledby="sheet-notif-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head gfx-kontur"><h2 class="sheet-title" id="sheet-notif-title">Pemberitahuan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body" id="notif-body" style="padding-top:16px"></div>
     </div>
     <div class="sheet sm hide" id="sheet-quick" role="dialog" aria-modal="true" aria-labelledby="sheet-quick-title">
       <div class="sheet-handle"></div>
@@ -214,6 +225,10 @@
         <div class="field">
           <span class="label">Tema tampilan</span>
           <div class="seg" id="theme-seg" role="radiogroup" aria-label="Tema"></div>
+        </div>
+        <div class="field hide" id="set-accent-wrap">
+          <span class="label">Warna aksen</span>
+          <div id="set-accent"></div>
         </div>
         <button type="button" class="btn btn-danger btn-block" id="settings-logout" onclick="window.logoutCurrent()"><i data-lucide="log-out"></i> Keluar</button>
       </div>
@@ -631,7 +646,8 @@
       <div class="sheet-head"><h2 class="sheet-title" id="nm-title">Nomor belum terdaftar</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <div class="sheet-body stack" style="gap:10px">
         <p class="li-sub" id="nm-sum"></p>
-        <button type="button" class="btn btn-primary btn-lg btn-block" onclick="window.notMemberToPackages()"><i data-lucide="package"></i> Pilih paket &amp; daftar</button>
+        <button type="button" class="btn btn-primary btn-lg btn-block" id="nm-register" onclick="window.regOpen()"><i data-lucide="user-plus"></i> Daftar dengan nomor ini</button>
+        <button type="button" class="btn btn-outline btn-block" onclick="window.notMemberToPackages()"><i data-lucide="package"></i> Lihat paket dulu</button>
         <button type="button" class="btn btn-ghost btn-block" onclick="window.closeModal()">Coba nomor lain</button>
       </div>
     </div>
@@ -810,10 +826,10 @@
       <div class="sheet-head"><h2 class="sheet-title" id="pg-entry-title">Catat hari ini</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <form class="sheet-body form-grid" id="form-progress" onsubmit="window.pgSaveEntry(event)" novalidate>
         <div class="field hide" id="pg-date-field"><label class="label" for="pg-tanggal">Tanggal</label><input class="input" type="date" id="pg-tanggal"></div>
-        <div class="field"><label class="label" for="pg-berat">Berat (kg)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-berat" autocomplete="off" placeholder="72,4"></div>
+        <div class="field"><label class="label" for="pg-berat">Berat (kg)</label><div class="pg-step"><button type="button" class="icon-btn" aria-label="Kurangi 0,1 kg" onclick="window.pgStep(-0.1)"><i data-lucide="minus"></i></button><input class="input num pg-big" type="text" inputmode="decimal" id="pg-berat" autocomplete="off" placeholder="72,4"><button type="button" class="icon-btn" aria-label="Tambah 0,1 kg" onclick="window.pgStep(0.1)"><i data-lucide="plus"></i></button></div><p class="hint" id="pg-last"></p></div>
         <div class="field"><label class="label" for="pg-pinggang">Lingkar pinggang (cm)</label><input class="input num pg-big" type="text" inputmode="decimal" id="pg-pinggang" autocomplete="off" placeholder="80"></div>
         <details class="pg-more" id="pg-more"><summary>Lingkar badan lainnya</summary><div class="two"><div class="field"><label class="label" for="pg-lenganKanan">Lengan kanan (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-lenganKanan" autocomplete="off" placeholder="32"></div><div class="field"><label class="label" for="pg-lenganKiri">Lengan kiri (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-lenganKiri" autocomplete="off" placeholder="32"></div><div class="field"><label class="label" for="pg-perut">Perut (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-perut" autocomplete="off" placeholder="85"></div><div class="field"><label class="label" for="pg-pahaKanan">Paha kanan (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-pahaKanan" autocomplete="off" placeholder="55"></div><div class="field"><label class="label" for="pg-pahaKiri">Paha kiri (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-pahaKiri" autocomplete="off" placeholder="55"></div><div class="field"><label class="label" for="pg-dada">Dada (cm)</label><input class="input num" type="text" inputmode="decimal" id="pg-dada" autocomplete="off" placeholder="95"></div></div></details>
-        <p class="hint">Boleh isi salah satu. Catatan di hari yang sama diperbarui.</p>
+        <p class="hint">Cukup berat saja; ukuran lain boleh menyusul. Catatan di hari yang sama diperbarui.</p>
         <p class="hint err-msg" id="pg-err" role="alert" style="display:block"></p>
       </form>
       <div class="sheet-foot"><button type="submit" form="form-progress" class="btn btn-primary btn-lg btn-block" id="pg-save-btn">Simpan</button></div>

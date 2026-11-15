@@ -136,39 +136,40 @@
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
     if (!el || !me) return;
-    let left = pageIntro('Latihan', 'Rutinitas dari coach dan buatanmu sendiri.');
-    left += '<div id="ph-latihan">' + insTrainingHero() + '</div>';
-    left += '<div id="pub-autoprog">' + autoProgCardHtml() + '</div>';
+    // Fase X: kartu hitam "Berikutnya" (mulai sekali ketuk) → rutinitas → program otomatis → tafsir minggu ini.
+    let left = '<div class="px-band gfx-kontur"></div><section class="card-ink gfx-geo px-hang" id="pub-lat-hero" aria-label="Latihan berikutnya">' + latHeroInner() + '</section>';
     left += '<div class="stack" style="gap:var(--gap)" id="pub-program-wrap">' + programInner() + '</div>';
+    left += '<div id="pub-autoprog">' + autoProgCardHtml() + '</div>';
+    left += '<div id="ph-latihan">' + insTrainingHero() + '</div>';
     left += '<div class="stack" style="gap:var(--gap)" id="pub-ins-latihan">' + insActivityCard() + insStrengthCard() + insBalanceCard() + '</div>';
     let right = '<div id="pub-meal-slot">' + myMealCardHtml() + '</div>';
     right += '<div class="card" id="pub-tasks-wrap">' + myTasksCardInner() + '</div>';
-    const showMakan = latSeg === 'makan' && nutOn();
-    setHTML(el, (nutOn() ? latSegHtml() : '') + '<div id="pub-latihan-pane"' + (showMakan ? ' class="hide"' : '') + '>' + portalGrid(left, right) + '</div>' +
-      (nutOn() ? '<div id="pub-makan-pane"' + (showMakan ? '' : ' class="hide"') + '>' + makanInner() + '</div>' : ''));
+    if (window.deskIs && window.deskIs()) {   // Fase Y: rutinitas di kiri, tafsir minggu ini dan PR di kanan (kolom seimbang)
+      const L = left.split('<div id="ph-latihan">');
+      right = '<div id="ph-latihan">' + L[1] + right;
+      left = L[0];
+    }
+    setHTML(el, pxHead('Latihan', 'Rutinitas dari coach dan buatan sendiri') + '<div id="pub-latihan-pane">' + portalGrid(left, right) + '</div>');   // Fase X: Makan punya tab sendiri (public-food)
   }
 
 
   // ── Makan (Phase P, T-1012): target, menu hari ini, tukar item, belanja. Data: window.myNutrition (getPortalMore.nutrition). ──
-  let latSeg = 'latihan';
   const nutOn = () => !window.myNutrition || window.myNutrition.enabled !== false;
-  function latSegHtml() {
-    return '<div class="lat-seg-wrap"><div class="seg" id="lat-seg" role="tablist" aria-label="Latihan atau Makan">' +
-      '<button type="button" role="tab" class="' + (latSeg === 'latihan' ? 'active' : '') + '" aria-selected="' + (latSeg === 'latihan') + '" onclick="window.setLatSeg(\'latihan\')">Latihan</button>' +
-      '<button type="button" role="tab" class="' + (latSeg === 'makan' ? 'active' : '') + '" aria-selected="' + (latSeg === 'makan') + '" onclick="window.setLatSeg(\'makan\')">Makan</button>' +
-      '<span class="seg-thumb" style="width:calc(50% - 4px);transform:translateX(' + (latSeg === 'makan' ? '100%' : '0') + ')"></span></div></div>';
+  window.setLatSeg = function (name) { window.navigate(name === 'makan' ? 'public-food' : 'public-program'); };   // Fase X: segmen diganti tab
+  // Kartu hitam di atas tab Latihan: rutinitas berikutnya (dari server, workout.next) dengan satu tombol Mulai, atau latihan kosong.
+  function latHeroInner() {
+    const c = window.myProgram, d = c && c.state === 'ok' ? c.data : null;
+    const w = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null;
+    if (!d) return '<span class="ih-eyebrow">Latihan</span><p class="px-hero-t">' + (c && c.state === 'error' ? 'Gagal memuat' : 'Memuat…') + '</p>';
+    const all = (d.days || []).concat(d.own || []), nx = (w && w.next && all.find(x => x.hari === w.next)) || all[0];
+    const done = w && (w.sessions || []).some(s => s.tanggal === wkToday());
+    const empty = '<button type="button" class="btn btn-on-ink-ghost" id="lat-empty" onclick="window.rtStartEmpty()">' + icon('plus') + 'Latihan kosong</button>';
+    if (!nx) return '<span class="ih-eyebrow">Latihan</span><p class="px-hero-t">Mulai latihan</p><p class="li-sub" style="margin-top:6px;max-width:calc(100% - 96px)">Belum ada rutinitas. Mulai kosong dan tambah gerakan sambil jalan.</p>' +
+      '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="lat-empty" onclick="window.rtStartEmpty()">' + icon('play') + 'Mulai latihan</button></div>';
+    return '<span class="ih-eyebrow">' + (done ? 'Hari ini sudah latihan · berikutnya' : 'Berikutnya') + '</span><p class="px-hero-t" id="lat-next">' + h(nx.hari) + '</p>' +
+      '<p class="li-sub" style="margin-top:6px;max-width:calc(100% - 96px)">' + nx.items.length + ' gerakan · ' + h(nx.items.slice(0, 3).map(it => exNm(it)).join(', ')) + (nx.items.length > 3 ? ', …' : '') + '</p>' +
+      '<div class="nx-actions"><button type="button" class="btn btn-on-ink" id="lat-start" data-hari="' + h(nx.hari) + '" onclick="window.workoutOpenClient(this.dataset.hari)">' + icon('play') + 'Mulai</button>' + empty + '</div>';
   }
-  window.setLatSeg = function (name) {
-    latSeg = name === 'makan' ? 'makan' : 'latihan';
-    const a = $('pub-latihan-pane'), b = $('pub-makan-pane'), sg = $('lat-seg');
-    if (a) a.classList.toggle('hide', latSeg === 'makan');
-    if (b) b.classList.toggle('hide', latSeg !== 'makan');
-    if (sg) {
-      sg.querySelectorAll('button').forEach(function (btn, i) { const on = (i === 1) === (latSeg === 'makan'); btn.classList.toggle('active', on); btn.setAttribute('aria-selected', on); });
-      const th = sg.querySelector('.seg-thumb'); if (th) th.style.transform = 'translateX(' + (latSeg === 'makan' ? '100%' : '0') + ')';
-    }
-    if (latSeg === 'makan') renderMakan();
-  };
   const NUT_N = (n, dp) => n == null || n === '' ? '-' : String(Math.round(n * Math.pow(10, dp || 0)) / Math.pow(10, dp || 0)).replace('.', ',');
   const NUT_GOALS_L = { turun: 'Turun lemak', naik: 'Naik otot', jaga: 'Jaga / sehat', recomp: 'Recomp' };
   const NUT_TAG_L = { santan: 'santan', goreng: 'gorengan', manis: 'manis', asin: 'asin' };
@@ -193,7 +194,9 @@
     const pct = goal ? Math.min(100, Math.round(eaten / goal * 100)) : 0;
     return '<div class="stack" style="gap:4px"><div class="row-between"><span class="li-title">' + h(label) + nutInfoBtn(key) + '</span><span class="num" style="font-weight:800">' + h(NUT_N(eaten)) + ' / ' + h(NUT_N(goal)) + ' g</span></div><div class="meter" aria-label="' + h(label) + ' ' + pct + ' persen dari target"><i style="width:' + pct + '%"></i></div></div>';
   }
-  function makanInner() {
+  // part 'food' (bawaan, tab Makan): cincin + buku harian. part 'plan' (Saya → Rencana makan): target, menu hari ini, angka tubuh, aturan.
+  function makanInner(part) {
+    const isPlan = part === 'plan';
     const n = nutEff(window.myNutrition);
     if (!n) return '<div class="card-flat">' + skel(4, true) + '</div>';
     if (n.enabled === false) return '<div class="card-flat"><p class="li-sub">Fitur makan sedang tidak aktif.</p></div>';
@@ -207,17 +210,20 @@
     const eaten = (n.log && n.log.totals) || { kal: 0, p: 0, l: 0, k: 0 };
     const left = t.kal - eaten.kal, wk = window.myWeek && !window.myWeek.error ? window.myWeek : null;
     let html = '<div class="stack makan-stack" style="gap:var(--gap)">';
+    if (isPlan) html += '<section class="card-ink gfx-kontur" id="plan-target"><div class="ih-head"><span class="ih-eyebrow">Target harian</span><button type="button" class="link-btn" style="color:inherit" onclick="window.openNutOnb()">Ubah data' + icon('chevron-right') + '</button></div>' +
+      '<p class="num" style="font-size:var(--fs-4xl);font-weight:800;letter-spacing:-0.03em;line-height:1.1;margin-top:8px">' + h(NUT_N(t.kal)) + ' kkal</p>' +
+      '<p class="makan-meta">' + h(NUT_GOALS_L[t.goal] || '') + ' · protein ' + h(NUT_N(t.protein)) + ' g · karbo ' + h(NUT_N(t.karbo)) + ' g · lemak ' + h(NUT_N(t.lemak)) + ' g</p></section>';
     // Kartu hitam: cincin kalori + sisa + makro hari ini.
-    html += '<section class="card-ink makan-hero"><div class="makan-top"><div class="ring-wrap makan-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/><circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - Math.min(1, eaten.kal / (t.kal || 1)))).toFixed(1) + '"/></svg>' +
+    if (!isPlan) html += '<section class="card-ink gfx-kontur makan-hero"><div class="makan-top"><div class="ring-wrap makan-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/><circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - Math.min(1, eaten.kal / (t.kal || 1)))).toFixed(1) + '"/></svg>' +
       '<div class="ring-center"><span class="num makan-num">' + h(NUT_N(eaten.kal)) + '</span><span class="eyebrow">dari ' + h(NUT_N(t.kal)) + '</span></div></div>' +
       '<div class="makan-sum"><span class="ih-eyebrow">Makan hari ini</span><p class="makan-left" id="nut-eaten-line">' + (left >= 0 ? 'Sisa ' + h(NUT_N(left)) + ' kkal' : 'Lebih ' + h(NUT_N(-left)) + ' kkal') + '</p>' +
       '<p class="makan-meta">' + h(NUT_GOALS_L[t.goal] || '') + (t.adjust ? ' · penyesuaian coach ' + (t.adjust > 0 ? '+' : '−') + Math.abs(t.adjust) : '') + (wk && wk.foodDays != null ? ' · ' + wk.foodDays + '/7 hari tercatat' : '') + '</p></div></div>' +
       '<div class="makan-macros">' + macroBar('protein', 'Protein', t.protein, 4, eaten.p, 'p') + macroBar('karbo', 'Karbo', t.karbo, 4, eaten.k, 'k') + macroBar('lemak', 'Lemak', t.lemak, 9, eaten.l, 'l') + '</div></section>';
-    (t.warnings || []).forEach(function (w) { if (NUT_WARN[w]) html += '<div class="card nut-warn" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' ' + h(NUT_WARN[w]) + '</div>'; });
-    if (n.inputs && n.inputs.stale) html += '<div class="card"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
-    if (n.menu) {
+    if (!isPlan) (t.warnings || []).forEach(function (w) { if (NUT_WARN[w]) html += '<div class="card nut-warn" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' ' + h(NUT_WARN[w]) + '</div>'; });
+    if (!isPlan && n.inputs && n.inputs.stale) html += '<div class="card"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
+    if (isPlan && n.menu) {
       const MEAL_IC = { sarapan: 'sunrise', pagi: 'sunrise', siang: 'sun', malam: 'moon', camilan: 'cookie', sahur: 'moon-star', buka: 'sunset' };
-      html += '<div class="card stack" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
+      html += '<div class="card stack" id="plan-menu" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
       n.menu.meals.forEach(function (m, mi) {
         const pk = m.paket;
         html += '<div class="meal-blk"><div class="meal-head"><span class="icon-chip">' + icon(MEAL_IC[m.key] || 'utensils') + '</span><b class="grow">' + h(m.label) + '</b><span class="num li-sub">' + h(NUT_N(m.totals.kal)) + ' kkal · P ' + h(NUT_N(m.totals.p)) + ' g</span></div>' +
@@ -231,12 +237,12 @@
       });
       html += '</div>';
     }
-    html += logCardHtml(n);
-    html += '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Tubuhmu</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">' + icon('pencil') + 'Ubah data</button></div><div class="mtiles">' +
+    if (!isPlan) html += logCardHtml(n) + '<button type="button" class="btn btn-outline btn-block" id="makan-plan-link" onclick="window.navigate(\'public-plan\')">' + icon('clipboard-list') + 'Rencana makan: menu, belanja, aturan</button>' + (window.deskIs && window.deskIs() ? window.deskMenuCard(n) : '');
+    if (isPlan) html += '<div class="card stack" style="gap:12px"><div class="section-head"><h3 class="section-title">Angka tubuh</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutOnb()">' + icon('pencil') + 'Ubah data</button></div><div class="mtiles">' +
       mtileHtml('BMI', n.bmi ? NUT_N(n.bmi.value, 1) : '–', '') + mtileHtml('Pinggang / tinggi', n.whtr ? NUT_N(n.whtr.value, 2) : '–', '') +
       mtileHtml('BMR', NUT_N(t.bmr), 'kkal istirahat') + mtileHtml('TDEE', NUT_N(t.tdee), 'kkal dengan aktivitas') + '</div>' +
       '<p class="li-sub">Info tiap angka: ' + nutInfoBtn('bmi') + nutInfoBtn('whtr') + nutInfoBtn('tdee') + ' · Serat ≥ ' + h(NUT_N(t.serat)) + ' g ' + nutInfoBtn('serat') + '. Semua angka perkiraan, bukan pengganti ahli gizi.</p></div>';
-    html += foldHtml('Aturan makan', '6 kebiasaan', '<div class="stack" style="gap:8px">' +
+    if (isPlan) html += foldHtml('Aturan makan', '6 kebiasaan', '<div class="stack" style="gap:8px">' +
       '<p>' + icon('utensils', 'class="ic-inline"') + ' Isi Piringku: ½ piring sayur dan buah (sayur lebih banyak), ½ makanan pokok dan lauk (makanan pokok lebih banyak).</p>' +
       '<p>' + icon('scale', 'class="ic-inline"') + ' Batas harian: gula 50 g, garam 5 g, lemak 67 g (Pedoman Gizi Seimbang, PMK 41/2014).</p>' +
       '<p>' + icon('flame', 'class="ic-inline"') + ' Menu XNK: santan paling banyak 1× sehari dan 3× seminggu, gorengan 1× sehari, lauk yang sama tidak dua kali sehari.</p>' +
@@ -246,7 +252,11 @@
     html += '</div>';
     return html;
   }
-  function renderMakan() { const w = $('pub-makan-pane'); if (w) { setHTML(w, makanInner()); paintIcons(); } }
+  function renderMakan() {
+    const w = $('pub-makan-pane'); if (w) setHTML(w, makanInner());
+    const pl = $('pub-plan-pane'); if (pl) setHTML(pl, makanInner('plan'));
+    if (w || pl) paintIcons();
+  }
   window.nutInfo = function (key) {
     const d = NUT_INFO[key]; if (!d) return;
     $('nut-info-title').textContent = d[0]; $('nut-info-text').textContent = d[1]; $('nut-info-src').textContent = 'Sumber: ' + d[2];
@@ -386,19 +396,25 @@
   function logCardHtml(n) {
     const log = n.log || { items: [], totals: { kal: 0 } };
     const nPend = log.items.filter(x => x.pending).length;
-    let html = '<div class="card-flat stack" style="gap:8px" id="nut-log-card"><div class="row-between"><p class="eyebrow">Dimakan hari ini' + (nPend ? ' · <span class="pill soft">' + nPend + ' menunggu sinyal</span>' : '') + '</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button></div>';
+    const meals = (n.menu && n.menu.meals) || [];
+    let firstEmpty = true;
+    let html = '<div class="stack" style="gap:var(--gap)" id="nut-log-card"><div class="px-sec"><h3>Buku harian</h3>' + (nPend ? '<span class="pill soft">' + nPend + ' menunggu sinyal</span>' : '<button type="button" class="link-btn" id="nut-copy-btn" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button>') + '</div>';
     Object.keys(NUT_MEAL_L).forEach(function (k) {
       const its = log.items.filter(x => x.waktu === k), kal = its.reduce((a, x) => a + x.kal, 0);
-      html += '<div class="stack" style="gap:0"><div class="row-between" style="min-height:44px"><span class="li-title">' + h(NUT_MEAL_L[k]) + (its.length ? ' <span class="li-sub">' + h(NUT_N(kal)) + ' kkal</span>' : '') + '</span>' +
-        '<button type="button" class="btn btn-outline btn-sm" style="min-height:44px" onclick="window.openNutAdd(\'' + k + '\')">' + icon('plus') + 'Tambah</button></div>' +
-        its.map(function (x) {
-          return '<div class="row" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.pending ? ' <span class="pill soft">' + icon('cloud-off', 'style="width:12px;height:12px;vertical-align:-2px"') + ' belum terkirim</span>' : x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
+      const tip = !its.length ? meals.find(m => nutMealWaktu(m.key) === k) : null;
+      const primary = !its.length && firstEmpty && k !== 'camilan';
+      if (primary) firstEmpty = false;
+      html += '<div class="card meal-day"><div class="row-between" style="min-height:44px;gap:8px"><span class="li-title" style="font-size:var(--fs-lg)">' + h(NUT_MEAL_L[k]) + '</span><span class="row" style="gap:10px"><span class="li-sub num">' + h(NUT_N(kal)) + ' kkal</span>' +
+        '<button type="button" class="btn ' + (primary ? 'btn-primary' : 'btn-secondary') + ' btn-sm" style="min-height:44px" onclick="window.openNutAdd(\'' + k + '\')">' + icon('plus') + 'Tambah</button></span></div>' +
+        (its.length ? its.map(function (x) {
+          return '<div class="row meal-row" data-ctx="food" data-id="' + h(x.id) + '" data-waktu="' + h(k) + '" data-nama="' + h(x.nama) + '" style="gap:4px;min-height:48px"><span class="grow" style="min-width:0"><span class="truncate" style="display:block">' + h(x.nama) + (x.pending ? ' <span class="pill soft">' + icon('cloud-off', 'style="width:12px;height:12px;vertical-align:-2px"') + ' belum terkirim</span>' : x.sumber === 'sendiri' ? ' <span class="pill soft">buatan sendiri</span>' : x.sumber === 'perkiraan' ? ' <span class="pill soft">perkiraan</span>' : '') + '</span>' +
             '<span class="li-sub">' + h(x.porsi) + ' · ' + h(NUT_N(x.kal)) + ' kkal · P ' + h(NUT_N(x.p, 1)) + ' g</span></span>' +
             '<button type="button" class="icon-btn plain" style="width:44px;height:44px" aria-label="Hapus ' + h(x.nama) + '" onclick="window.nutDelLog(\'' + h(x.id) + '\',this)">' + icon('trash-2') + '</button></div>';
-        }).join('') + '</div>';
+        }).join('') : '<p class="li-sub">Belum ada catatan.' + (tip ? ' Saran menu: ' + h(tip.paket ? tip.paket.n : tip.items.map(i => i.n).join(', ')) + '.' : '') + '</p>') + '</div>';
     });
     return html + '</div>';
   }
+  const nutMealWaktu = key => ({ sarapan: 'sarapan', siang: 'siang', malam: 'malam', buka: 'malam', sahur: 'sarapan', camilan: 'camilan' })[key] || 'siang';
   function nutSetLog(day) {
     if (window.myNutrition && day) { window.myNutrition.log = day; window.patchPortalMore('nutrition', window.myNutrition); renderMakan(); }
   }
@@ -501,7 +517,7 @@
   };
   window.nutLogMenu = function (mi, ii, btn) {
     const m = window.myNutrition.menu.meals[mi], it = m.items[ii];
-    const waktu = ({ sarapan: 'sarapan', siang: 'siang', malam: 'malam', buka: 'malam', sahur: 'sarapan', camilan: 'camilan' })[m.key] || 'siang';
+    const waktu = nutMealWaktu(m.key);
     // Langsung dicatat dari angka menu (sudah dari server); daftar makanan tidak perlu ditunggu (sinyal lemah = macet).
     nutQueueAdd({ waktu: waktu, id: it.id, gram: it.gram }, { waktu: waktu, foodId: it.id, nama: it.n, gram: it.gram, porsi: NUT_N(it.porsi, 1) + ' ' + String(it.porsiNama || '').replace(/^1 /, ''), kal: it.kal, p: it.p, l: it.l, k: it.k, sumber: it.e ? 'perkiraan' : it.b ? 'resep' : 'tkpi' });
     foodEnsure().catch(function () {});
@@ -521,7 +537,7 @@
   const FOOD_URL = 'https://xnk.my.id/foods/foods.min.json', FOOD_KEY = 'xnk_foods_v3';
   try { localStorage.removeItem('xnk_foods_v2'); } catch (e) {}   // daftar lama (sebelum resep dan paket menu)
   let foodLib = null;
-  const add = { waktu: 'sarapan', q: '', g: '', pick: null, own: false };
+  const add = { waktu: 'sarapan', q: '', g: '', pick: null, own: false, sel: {} };
   function foodEnsure() {
     if (foodLib) return Promise.resolve(foodLib);
     try { const c = localStorage.getItem(FOOD_KEY); if (c) { foodLib = JSON.parse(c); return Promise.resolve(foodLib); } } catch (e) {}
@@ -531,7 +547,8 @@
     });
   }
   window.openNutAdd = function (waktu) {
-    add.waktu = waktu; add.q = ''; add.g = ''; add.pick = null; add.own = false;
+    add.waktu = waktu || add.waktu || 'siang'; add.q = ''; add.g = ''; add.pick = null; add.own = false; add.sel = {};
+    waktu = add.waktu;
     $('nut-add-title').textContent = 'Tambah · ' + NUT_MEAL_L[waktu];
     nutAddDraw(); openSheet('modal-nut-add');
     foodEnsure().then(function () { nutAddDraw(); }).catch(function () { $('nut-add-body').innerHTML = '<p class="li-sub">Daftar makanan gagal dimuat. Periksa koneksimu, lalu buka lagi.</p>'; });
@@ -567,8 +584,22 @@
     }
     let html = '<div class="field"><input class="input" id="nut-add-q" type="search" inputmode="search" placeholder="Cari makanan" value="' + h(add.q) + '" oninput="window.nutAddQ(this.value)" aria-label="Cari makanan"></div>';
     const log = n.log || {};
-    const pack = function (arr, kind) { return arr.map(function (x, i) { return nutPackRow(Object.assign({}, x, { sub: x.porsi + ' · ' + NUT_N(x.kal) + ' kkal' }), i, kind); }).join(''); };
+    // Favorit / terakhir: ketuk baris = atur porsi dulu; ketuk kotak di kanan = pilih beberapa lalu simpan sekali.
+    const pack = function (arr, kind) {
+      return arr.map(function (x, i) {
+        const key = kind + ':' + i, on = !!add.sel[key];
+        return '<div class="row" style="gap:4px">' + nutPackRow(Object.assign({}, x, { sub: x.porsi + ' · ' + NUT_N(x.kal) + ' kkal' }), i, kind).replace('class="list-item interactive"', 'class="list-item interactive grow"') +
+          '<button type="button" class="nut-sel' + (on ? ' on' : '') + '" aria-pressed="' + on + '" aria-label="Pilih ' + h(x.nama) + '" onclick="window.nutAddSel(\'' + key + '\')">' + icon('check') + '</button></div>';
+      }).join('');
+    };
     if (!add.q && !add.g) {
+      const meals = (n.menu && n.menu.meals) || [], mi = meals.findIndex(m => nutMealWaktu(m.key) === add.waktu);
+      if (mi !== -1) {
+        const m = meals[mi];
+        html += '<p class="eyebrow">Saran menu</p><div class="card-ink" id="nut-add-saran" style="padding:16px;border-radius:var(--r-lg)"><div class="row" style="gap:12px"><span class="grow" style="min-width:0"><b style="display:block">' + h(m.paket ? m.paket.n : m.items.map(i => i.n).join(', ')) + '</b>' +
+          '<span class="muted" style="font-size:var(--fs-sm)">' + h(NUT_N(m.totals.kal)) + ' kkal · protein ' + h(NUT_N(m.totals.p)) + ' g · ' + m.items.length + ' makanan</span></span>' +
+          '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.nutLogMeal(' + mi + ')">Catat semua</button></div></div>';
+      }
       if ((log.favorites || []).length) html += '<p class="eyebrow">Favorit</p><div class="stack" style="gap:0">' + pack(log.favorites, 'fav') + '</div>';
       if ((log.recent || []).length) html += '<p class="eyebrow">Terakhir dimakan</p><div class="stack" style="gap:0">' + pack(log.recent, 'rec') + '</div>';
     }
@@ -582,6 +613,8 @@
       }).join('') + '</div>' : '<p class="li-sub">Tidak ada yang cocok.</p>';
     }
     html += '<button type="button" class="btn btn-outline btn-lg btn-block" onclick="window.nutAddOwn(true)">' + icon('square-pen') + 'Buat makanan sendiri</button>';
+    const picked = nutSelItems();
+    if (picked.length) html += '<div class="nut-sel-bar"><button type="button" class="btn btn-primary btn-lg btn-block" id="nut-sel-save" onclick="window.nutSelSave()">Tambah ' + picked.length + ' makanan · ' + h(NUT_N(picked.reduce((a, x) => a + (Number(x.kal) || 0), 0))) + ' kkal</button></div>';
     el.innerHTML = html;
     paintIcons();
   }
@@ -590,6 +623,28 @@
     const q2 = $('nut-add-q'); if (q2) { q2.focus(); try { q2.setSelectionRange(pos, pos); } catch (e) {} }
   };
   window.nutAddG = function (g) { add.g = g; nutAddDraw(); };
+  // Pilih banyak (Fase X): beberapa makanan dari Favorit / Terakhir dicatat sekali simpan, dengan porsi terakhirnya.
+  function nutSelItems() {
+    const log = (window.myNutrition && window.myNutrition.log) || {};
+    return Object.keys(add.sel || {}).filter(k => add.sel[k]).map(function (k) { const p = k.split(':'); return ((p[0] === 'fav' ? log.favorites : log.recent) || [])[Number(p[1])]; }).filter(Boolean);
+  }
+  window.nutAddSel = function (key) { add.sel[key] = !add.sel[key]; nutAddDraw(); };
+  window.nutSelSave = function () {
+    const items = nutSelItems(), seen = {};
+    items.forEach(function (x) {
+      const id = x.foodId || '~' + x.nama; if (seen[id]) return; seen[id] = true;   // makanan yang sama di Favorit dan Terakhir: sekali saja
+      if (x.foodId) nutQueueAdd({ waktu: add.waktu, id: x.foodId, gram: x.gram }, { waktu: add.waktu, foodId: x.foodId, nama: x.nama, gram: x.gram, porsi: x.porsi, kal: x.kal, p: x.p, l: x.l, k: x.k, sumber: x.sumber });
+      else nutQueueAdd({ waktu: add.waktu, custom: { nama: x.nama, kal: x.kal, p: x.p, l: x.l, k: x.k }, jumlah: 1 });
+    });
+    add.sel = {};
+    window.closeModal();
+  };
+  // Saran menu: seluruh makanan satu waktu makan dicatat sekali ketuk.
+  window.nutLogMeal = function (mi) {
+    const m = window.myNutrition && window.myNutrition.menu && window.myNutrition.menu.meals[mi]; if (!m) return;
+    m.items.forEach(function (it, ii) { window.nutLogMenu(mi, ii); });
+    window.closeModal();
+  };
   window.nutAddOwn = function (on) { add.own = on; add.pick = null; nutAddDraw(); };
   window.nutAddBack = function () { add.pick = null; nutAddDraw(); };
   window.nutAddPick = function (kind, i) {
@@ -693,94 +748,6 @@
     if (!c || (c.state === 'ok' && latest && !c.list.some(x => x.dibuat >= latest))) window.loadMyContent(true);
     else if (c.state === 'ok') markInfoSeen();
   }
-
-  function renderPublicMore() {
-    const el = $('view-public-more'), me = window.publicLoggedMember;
-    if (!el || !me) return;
-    const row = (onclick, ic, title, sub) => '<button type="button" class="more-row" onclick="' + onclick + '"><span class="more-ic">' + icon(ic) + '</span><span class="more-txt"><b>' + h(title) + '</b><span class="li-sub">' + h(sub) + '</span></span>' + icon('chevron-right') + '</button>';
-    const go = v => 'window.navigate(\'' + v + '\')';
-    setHTML(el, '<div class="stack" style="gap:var(--gap);max-width:640px">' + pageIntro('Lainnya', 'Semua yang kamu butuhkan di satu tempat.') + moreHeroHtml() + (window.pushWrapHtml ? window.pushWrapHtml() : '') +
-      '<div class="more-list">' +
-      row(go('public-program'), 'activity', 'Latihan', 'Rutinitas, log latihan, PR, dan makan') +
-      row(go('public-info'), 'megaphone', 'Info & Tips', 'Pengumuman dan tips dari coach').replace('</button>', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span></button>') +
-      (window.shareOn !== false ? row(go('public-share'), 'share-2', 'Kartu saya', 'Bagikan latihan, progres, badge, dan gizi') : '') +
-      row(go('public-catalog'), 'package', 'Paket', 'Lihat dan perpanjang paketmu') +
-      row(go('public-coaches'), 'dumbbell', 'Coach', 'Profil dan kontak coach') +
-      row('window.openSettings()', 'sun-moon', 'Tampilan', 'Terang, gelap, atau ikut sistem') +
-      row('window.logoutCurrent()', 'log-out', 'Keluar', 'Keluar dari akun ini') + '</div></div>');
-  }
-
-  window.renderPublicDashboard = function () {
-    const el = $('view-public-dashboard');
-    const me = window.publicLoggedMember;
-    if (!el || !me) return;
-    const total = Number(me.totalSessions) || 0, used = Number(me.usedSessions) || 0, rem = Math.max(0, total - used);
-    const mine = window.schedules.filter(s => String(s.memberId) === String(me.id));
-    const upcoming = mine.filter(s => !isDone(s) && new Date(s.end || s.start) > new Date()).sort(byStart);
-    const history = mine.filter(s => !(upcoming.indexOf(s) !== -1)).sort((a, b) => new Date(b.start) - new Date(a.start));
-    const next = upcoming[0];
-    const C = 2 * Math.PI * 52, pct = total ? rem / total : 0;
-
-    const completedMine = mine.filter(isDone);
-    const weeksP = weeklyBuckets(completedMine.slice().sort(byStart), me.joinDate);
-    let streakP = 0;
-    for (let i = weeksP.length - 1; i >= 0; i--) { if (weeksP[i].count > 0) streakP++; else if (i === weeksP.length - 1) continue; else break; }
-
-    let left = '';
-    left += '<div class="card-ink next-card" id="pub-next-session-card"' + (next ? ' data-start="' + h(next.start) + '"' : '') + '>' +
-      '<div class="ih-head"><span class="ih-eyebrow">Sesi berikutnya</span>' + (next ? statusInfo(next).pill : '') + '</div>' +
-      (next ? '<p id="pub-next-session-label" class="next-when">' + h(fmtDate(new Date(next.start))) + ' · ' + fmtTime(new Date(next.start)) + '</p>' +
-        '<p class="num" style="font-size:var(--fs-3xl);font-weight:800;letter-spacing:-0.03em;margin:8px 0" id="pub-next-countdown" data-countdown-long="' + new Date(next.start).getTime() + '">' + h(countdownText(new Date(next.start))) + '</p>' +
-        (window.isSoloCoach() ? '' : '<p class="li-sub">' + icon('dumbbell', 'style="width:13px;height:13px;vertical-align:-2px"') + ' ' + h(next.coachName || 'Menunggu coach') + '</p>') +
-        '<div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-on-ink-ghost" onclick="window.openRescheduleModal(\'' + h(next.id) + '\')">' + icon('calendar-clock') + 'Reschedule</button>' +
-        '<button type="button" class="btn btn-on-ink-ghost" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
-        '<button type="button" class="btn btn-on-ink-ghost" id="pub-next-cal" onclick="window.openAddToCalendar([\'' + h(next.id) + '\'])">' + icon('calendar-plus') + 'Kalender</button></div>'
-        : emptyState('calendar-plus', 'Belum ada jadwal', 'Booking sesi latihan berikutnya sekarang.', '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button>')) +
-      '</div>';
-
-    left += '<div class="card-ink portal-hero compact"><div class="row" style="gap:14px">' +
-      '<button type="button" class="avatar lg interactive" id="pub-avatar-btn" onclick="document.getElementById(\'pub-avatar-input\').click()" aria-label="Ganti foto profil" style="position:relative">' +
-        (me.photo ? '<img src="' + h(me.photo) + '" alt="" id="pub-avatar-img">' : h(initials(me.name))) +
-        '<span style="position:absolute;right:-2px;bottom:-2px;width:26px;height:26px;border-radius:50%;background:var(--on-ink);color:var(--ink);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--ink)">' + icon('camera', 'style="width:13px;height:13px"') + '</span></button>' +
-      '<div class="grow" style="min-width:0"><p class="eyebrow">' + greeting() + '</p><h2 class="profile-name">Halo, <span id="pub-dash-name">' + h(me.name) + '</span>!</h2>' +
-      '<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap"><span class="pill">' + h(me.packageName || 'Member XNK') + '</span>' + (me.joinDate ? '<span class="pill">sejak ' + h(me.joinDate) + '</span>' : '') + '</div></div>' +
-      '<button type="button" class="icon-btn" onclick="window.openMyProfile()" aria-label="Profil saya">' + icon('user-round') + '</button></div>' +
-      '<div class="row" style="gap:20px;margin-top:20px">' +
-      '<div class="ring-wrap"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
-      '<circle class="ring-fill" id="pub-quota-ring" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
-      '<div class="ring-center"><span class="num" style="font-size:var(--fs-4xl);font-weight:800;line-height:1" id="pub-dash-remaining">' + rem + '</span><span class="eyebrow">dari <span id="pub-dash-total">' + total + '</span></span></div></div>' +
-      '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p>' +
-      '<p class="muted">' + used + ' sesi sudah dipakai</p></div></div>' +
-      '<div id="pub-renew-slot">' + renewNoticeHtml(rem, total) + '</div>' +
-      '<div id="pub-bill-slot"></div>' +
-      '</div>';
-
-    left += '<div id="pub-week">' + weekCardHtml() + '</div>';
-    left += '<div class="portal-actions"><button type="button" class="btn btn-primary" onclick="window.handleFabClick()">' + icon('calendar-plus') + 'Booking</button>' +
-      '<button type="button" class="btn btn-secondary" onclick="window.chatCoach()">' + icon('message-circle') + 'Chat coach</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.navigate(\'public-catalog\')">' + icon('package') + 'Paket</button></div>';
-    left += '<details class="fold"><summary>Coach &amp; kelas' + icon('chevron-down') + '</summary><div class="fold-body stack" style="gap:12px">' + myCoachCardHtml(me) + '<div id="pub-class-wrap">' + classCardHtml() + '</div></div></details>';
-    left += '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>';
-
-    left += '<div id="pub-care-wrap" class="stack" style="gap:16px">' + myCareInner() + '</div>';
-    left += '<div class="card hide" id="pub-today-wl"></div>';
-    left += '<div class="card hide" id="pub-teasers">' + teasersInner() + '</div>';
-
-    let right = '<div class="month-cal" id="month-cal"></div>';
-    right += '<div class="card"><div class="section-head"><h3 class="section-title">Jadwalku</h3><button type="button" class="btn btn-primary btn-sm" onclick="window.handleFabClick()">' + icon('plus') + 'Booking</button></div>' +
-      (upcoming.length ? '<div class="list stagger">' + upcoming.map(memberSessionRow).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>') + '</div>';
-
-    setHTML(el, '<div class="portal-grid"><div class="stack stagger" style="gap:var(--gap)">' + left + '</div><div class="stack stagger" style="gap:var(--gap)">' + right + '</div></div>');
-    renderTodayWorkout();
-    renderMonthCal();
-    requestAnimationFrame(function () {
-      const ring = $('pub-quota-ring');
-      if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 150);
-      countUp($('pub-dash-remaining'), rem);
-    });
-    // Semua data sisa datang dari satu panggilan (refreshPortalMore); render hanya membaca state.
-    renderBillSlot(); renderCoachStatusChip();
-  };
 
   // Tanggal di beranda: pindah ke tab Jadwal pada tanggal itu.
   const _selectDate = window.selectDate;
