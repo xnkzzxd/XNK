@@ -452,7 +452,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
+  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -549,6 +549,7 @@
     const now = new Date();
     const mo = now.getMonth() + 1, yr = now.getFullYear();
     ui.revenue = null; window._trendCache = {};
+    if (window.settingsPrefetch) window.settingsPrefetch();   // Pengaturan sudah terisi saat dibuka
     window._morePending = adminCall('getAdminMore', mo, yr, freshMore).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY) || !b) return;
       const ok = v => v && !v.error;
