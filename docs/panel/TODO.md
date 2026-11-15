@@ -31,7 +31,8 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 - [ ] **S9** Profil klien HP: hero lebih pendek (cincin sisa sesi dan tombol satu baris), tab hitam lebih rendah; "Sorotan" muncul dalam layar pertama. Dep: S1. (P12)
 
 ## D — Dashboard dan Jadwal
-- [ ] **S10** Dashboard HP: agenda "Hari ini" naik tepat di bawah salam; tile jadi satu baris yang bisa digeser (snap, tanpa scroll sideways pada halaman). Dep: S6. (P7)
+- [x] **S10** Dashboard HP: agenda "Hari ini" naik tepat di bawah salam; tile jadi satu baris yang bisa digeser (snap, tanpa scroll sideways pada halaman). Dep: S6. (P7)
+  - Hasil: di HP (< 768 px) urutan kartu diatur lewat CSS `order` (DOM tetap, desktop tidak berubah): salam → Hari ini → Minta perpanjang (bila ada) → strip KPI → Sesi berikutnya → Booking baru + Perlu perhatian → Statistik. Lima tile KPI jadi satu baris yang digeser dengan snap, menggulir di barisnya sendiri (melebar sampai tepi layar), halaman tidak bergeser ke samping. Cek baru di `browser-check.js` (HP: Hari ini blok pertama, satu baris, snap, tanpa geser samping; desktop terang/gelap: tata letak tetap).
 - [ ] **S11** Dashboard: hero "Sesi berikutnya" tidak menggandakan agenda (bila sama dengan sesi pertama agenda yang belum selesai, jadikan sorotan di baris itu); empty state "Perlu perhatian" jadi satu baris. Dep: S10. (P7, P9)
 - [ ] **S12** Jadwal HP: kalender bulan bisa dilipat ke strip minggu (bawaan strip, ketuk judul untuk bulan penuh); sesi hari terpilih terlihat di layar pertama. Desktop: kalender + daftar mengisi tinggi, tanpa ruang kosong besar. Dep: S6. (P11)
 

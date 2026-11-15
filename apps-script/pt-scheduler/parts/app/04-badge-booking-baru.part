@@ -122,10 +122,10 @@
     html += renewalsCardHtml();
 
     // Sesi berikutnya (kartu hitam)
-    html += '<div class="span-5">' + nextSessionCard(next) + '</div>';
+    html += '<div class="span-5 dash-next">' + nextSessionCard(next) + '</div>';
 
     // KPI
-    html += '<div class="span-7"><div class="kpi-grid five">' +
+    html += '<div class="span-7 dash-kpis"><div class="kpi-grid five">' +
       kpi('users', 'Klien aktif', 'kpi-clients', active, window.members.length + ' klien terdaftar') +
       kpi('calendar-check', 'Sesi hari ini', 'kpi-today', todays.filter(isBooked).length, todays.filter(isDone).length + ' sudah selesai') +
       kpi('calendar-range', 'Sesi minggu ini', 'kpi-week', weekCount, 'Senin – Minggu') +
@@ -134,14 +134,14 @@
       '</div></div>';
 
     // Timeline hari ini
-    html += '<div class="span-7 card"><div class="section-head"><div><h3 class="section-title">Hari ini</h3><p class="li-sub">' + todays.length + ' sesi · ' + h(fmtDate(now, { day: 'numeric', month: 'long' })) + '</p></div>' +
+    html += '<div class="span-7 card dash-today" id="dash-today"><div class="section-head"><div><h3 class="section-title">Hari ini</h3><p class="li-sub">' + todays.length + ' sesi · ' + h(fmtDate(now, { day: 'numeric', month: 'long' })) + '</p></div>' +
       '<button type="button" class="link-btn" onclick="window.navigate(\'calendar\')">Kalender ' + icon('arrow-right', 'style="width:14px;height:14px"') + '</button></div>' +
       (todays.length ? '<div class="timeline stagger">' + todays.map(s => sessionItem(s, { actions: true, highlight: next && s.id === next.id })).join('') + '</div>'
         : emptyState('coffee', 'Tidak ada sesi hari ini', 'Waktu yang pas untuk follow-up klien.', '<button type="button" class="btn btn-secondary btn-sm" onclick="window.quickAction(\'booking\')">' + icon('plus') + 'Buat booking</button>')) +
       '</div>';
 
     // Booking baru + perlu perhatian
-    html += '<div class="span-5 stack" style="gap:var(--gap)">';
+    html += '<div class="span-5 stack dash-side" style="gap:var(--gap)">';
     html += '<div class="card"><div class="section-head"><div class="row"><h3 class="section-title">Booking baru</h3>' + (unread.length ? '<span class="pill solid num">' + unread.length + '</span>' : '') + '</div>' +
       (unread.length ? '<button type="button" class="link-btn" onclick="window.markNotificationsRead()">Tandai dibaca</button>' : '') + '</div>' +
       (unread.length ? '<div class="list stagger">' + unread.slice(0, 4).map(function (s) {
