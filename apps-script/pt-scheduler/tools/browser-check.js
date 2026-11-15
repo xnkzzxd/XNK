@@ -2851,7 +2851,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     const t = await page.locator('.push-wrap').innerText();
     check(/Sesi/.test(t) && /Perpanjangan/.test(t) && !/Makan/.test(t), 'coach: the kinds are Sesi and Perpanjangan');
-    check(!(await page.evaluate(() => !!document.querySelector('#settings-save-btn') && !document.querySelector('#settings-save-btn').disabled)), 'coach: the card does not mark the settings form as changed');
+    check(!(await page.evaluate(() => document.getElementById('settings-pane').classList.contains('has-bar'))), 'coach: the card does not mark the settings form as changed');
     noErrors(errors);
     await context.close();
   }
