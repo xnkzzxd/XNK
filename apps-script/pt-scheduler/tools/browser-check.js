@@ -2780,6 +2780,7 @@ async function contrastReport(page) {
   // ── Notifikasi (Fase X): kartu di Lainnya (klien) dan Pengaturan → Notifikasi (coach) ──
   // Browser tanpa service worker di tes ini: tumpukan push dipalsukan di halaman (YANG diuji: kartu, saklar, panggilan ke server).
   const pushStubs = () => {
+    window.XNK_CONFIG = window.XNK_CONFIG || {};   // Apps Script mode (RPC_MODE=gas) has no XNK_CONFIG
     window.XNK_CONFIG.sw = 'sw-app.js';
     const state = { sub: null, perm: 'default' };
     const fake = { endpoint: 'https://fcm.googleapis.com/fcm/send/pagetest', toJSON() { return { endpoint: this.endpoint, keys: { p256dh: 'B' + 'A'.repeat(86), auth: 'A'.repeat(22) } }; }, unsubscribe() { state.sub = null; return Promise.resolve(true); } };
