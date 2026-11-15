@@ -2694,6 +2694,9 @@ html.portal .card-ink .empty .empty-icon { background: color-mix(in srgb, var(--
   #pc-preview { position: sticky; top: 0; }
   #pc-body .pc-ctrl { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 }
+
+/* Profil saya: isi sheet adalah kolom flex yang menggulir; kartu tidak boleh diperas (kartu hitam .card-ink overflow:hidden terpotong). */
+#my-profile-body > * { flex-shrink: 0; }
 /* ═══ Fase Y (docs/desk): portal klien ala aplikasi Mac di tablet, laptop, PC ═══
    Semua aturan di bawah html.desk (portal + layar ≥ 768 px, dipasang oleh parts/app/17-desk.part). HP tidak terpengaruh. */
 .topbar-sub, .nav-group, .nav-rule, .side-me { display: none; }

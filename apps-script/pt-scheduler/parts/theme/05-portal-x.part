@@ -298,3 +298,6 @@ html.portal .card-ink .empty .empty-icon { background: color-mix(in srgb, var(--
   #pc-preview { position: sticky; top: 0; }
   #pc-body .pc-ctrl { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 }
+
+/* Profil saya: isi sheet adalah kolom flex yang menggulir; kartu tidak boleh diperas (kartu hitam .card-ink overflow:hidden terpotong). */
+#my-profile-body > * { flex-shrink: 0; }
