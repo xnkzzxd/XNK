@@ -662,20 +662,6 @@ html.kb-open .main-col::after { display: none; }
 
 /* ── KPI ─────────────────────────────────────────────────────────────────── */
 .kpi-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-/* S10: Dashboard HP — agenda "Hari ini" tepat di bawah salam, tile KPI satu baris yang digeser (snap) di dalam barisnya sendiri. Desktop tidak berubah. */
-@media (max-width: 767px) {
-  #view-dashboard .dash-today { order: 1; }
-  #view-dashboard #renewals-card { order: 2; }
-  #view-dashboard .dash-kpis { order: 3; min-width: 0; }
-  #view-dashboard .dash-next { order: 4; }
-  #view-dashboard .dash-side { order: 5; }
-  #view-dashboard #stats-collapse { order: 6; }
-  #view-dashboard .dash-kpis .kpi-grid { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: max(var(--page-pad), var(--sa-l)); scrollbar-width: none;
-    margin-inline: calc(-1 * max(var(--page-pad), var(--sa-l))); padding: 2px max(var(--page-pad), var(--sa-l)) 6px; }
-  #view-dashboard .dash-kpis .kpi-grid::-webkit-scrollbar { display: none; }
-  #view-dashboard .dash-kpis .kpi { flex: 0 0 auto; width: 9.75rem; scroll-snap-align: start; }
-  #view-dashboard .dash-kpis .kpi.wide { width: 12rem; }
-}
 @media (min-width: 1024px) { .kpi-grid.five { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .kpi {
   background: var(--surface);

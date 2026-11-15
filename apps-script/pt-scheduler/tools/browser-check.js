@@ -335,17 +335,6 @@ async function contrastReport(page) {
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
 
-    // S10: Dashboard HP — agenda "Hari ini" tepat di bawah salam, tile KPI satu baris yang digeser di dalam barisnya.
-    await page.evaluate(() => window.navigate('dashboard'));
-    await page.waitForTimeout(600);
-    const s10 = await page.evaluate(() => {
-      const grid = document.querySelector('#view-dashboard .dash-grid'), today = document.getElementById('dash-today'), strip = document.querySelector('#view-dashboard .dash-kpis .kpi-grid');
-      const kids = Array.from(grid.children).filter(e => e.getClientRects().length).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
-      const tops = new Set(Array.from(strip.querySelectorAll('.kpi')).map(k => Math.round(k.getBoundingClientRect().top)));
-      return { first: kids[0] === today, todayTop: Math.round(today.getBoundingClientRect().top), oneRow: tops.size === 1, scrolls: strip.scrollWidth > strip.clientWidth + 10,
-        snap: getComputedStyle(strip).scrollSnapType.indexOf('x') === 0, over: document.scrollingElement.scrollWidth - innerWidth, mainLeft: (strip.scrollLeft = 400, document.getElementById('main-scroll-area').scrollLeft), stripMoved: strip.scrollLeft > 0 };
-    });
-    check(s10.first && s10.todayTop < 400 && s10.oneRow && s10.scrolls && s10.snap && s10.over <= 1 && s10.mainLeft === 0 && s10.stripMoved, 'Dashboard (phone): Hari ini right under the greeting, KPI tiles in one swipeable row, no sideways page scroll ' + JSON.stringify(s10));
     await page.evaluate(() => window.navigate('clients'));
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.__xss)) === undefined, 'client name with <img onerror> is not executed');
@@ -532,8 +521,6 @@ async function contrastReport(page) {
     const { page, context, errors } = await openPage(browser, env, '/Index', calls, { xnk_admin_token: token }, { viewport: DESKTOP, colorScheme: scheme, wait: 1400 });
     check(await visible(page, '#sidebar'), 'sidebar visible on desktop');
     check(!(await visible(page, '#tabbar')), 'bottom bar hidden on desktop');
-    const s10d = await page.evaluate(() => { const r = q => document.querySelector('#view-dashboard ' + q).getBoundingClientRect(); const n = r('.dash-next'), k = r('.dash-kpis'), t = r('.dash-today'); return n.left < k.left && Math.abs(n.top - k.top) < 4 && t.top >= n.bottom; });
-    check(s10d, scheme + ': Dashboard on desktop keeps its layout (next session and tiles on top, Hari ini below)');
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     const dark = /rgb\((\d+), (\d+), (\d+)\)/.exec(bg);
     const luma = dark ? (Number(dark[1]) + Number(dark[2]) + Number(dark[3])) / 3 : 255;
