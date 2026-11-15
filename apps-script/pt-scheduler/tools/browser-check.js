@@ -2423,6 +2423,14 @@ async function contrastReport(page) {
     await page.waitForTimeout(600);
     check((await page.textContent('#sheet-my-profile')).includes('Keluar') && (await page.textContent('#sheet-my-profile')).includes('Sisa sesi'), 'portal: "Profil saya" sheet shows identity, numbers and logout');
     await shot(page, 'portal-mobile-my-profile');
+    // Kartu hitam tidak boleh diperas oleh kolom flex sheet (nama, paket, Ganti foto ikut terlihat).
+    const pfHero = await page.evaluate(() => {
+      const hero = document.querySelector('#my-profile-body .portal-hero'), last = hero && hero.lastElementChild;
+      if (!hero) return null;
+      const hr = hero.getBoundingClientRect(), lr = last.getBoundingClientRect();
+      return { fits: lr.bottom <= hr.bottom + 1, body: document.getElementById('my-profile-body').scrollWidth <= document.getElementById('my-profile-body').clientWidth + 1 };
+    });
+    check(pfHero && pfHero.fits && pfHero.body, 'portal: "Profil saya" hero card is not squeezed (button inside the card, no sideways scroll)');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(400);
     await page.evaluate(() => window.navigate('calendar'));
