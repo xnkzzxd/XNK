@@ -364,6 +364,14 @@ async function contrastReport(page) {
     await page.waitForTimeout(700);
     const box = await page.locator('#detail-panel').boundingBox();
     check(!!box && box.width >= MOBILE.width - 1, 'client detail opens full-screen on phone');
+    // S9: hero profil klien di HP lebih pendek — cincin dan tombol satu baris, tab lebih rendah, Sorotan di layar pertama.
+    await page.waitForTimeout(400);
+    const s9 = await page.evaluate(() => {
+      const r = q => { const e = document.querySelector('#detail-body ' + q); return e ? e.getBoundingClientRect() : null; };
+      const hero = r('.client-hero'), ring = r('.client-ring'), act = r('.client-hero-actions'), tab = r('.cp-tabs .chip'), hl = r('#cp-highlight');
+      return hero && ring && act && tab && hl ? { hero: Math.round(hero.height), row: Math.abs((ring.top + ring.height / 2) - (act.top + act.height / 2)) < 20, tab: Math.round(tab.height), hl: Math.round(hl.top), over: document.scrollingElement.scrollWidth - innerWidth } : null;
+    });
+    check(!!s9 && s9.hero <= 200 && s9.row && s9.tab <= 48 && s9.hl < 844 && s9.over <= 1, 'client page (phone): short hero (ring and buttons in one row), low tabs, Sorotan on the first screen ' + JSON.stringify(s9));
     const phoneProf = await page.evaluate(() => ({
       tabs: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).gridTemplateColumns.split(' ').length,
       cols: Array.from(document.querySelectorAll('#detail-body .cp-col')).map(e => getComputedStyle(e).display),

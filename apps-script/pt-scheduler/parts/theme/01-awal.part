@@ -612,6 +612,16 @@ html.kb-open .main-col::after { display: none; }
   .client-ring-row { gap: 14px; margin-top: 12px; }
   .client-hero-actions { margin-top: 12px; }
   .client-hero .profile-name { font-size: var(--fs-xl); }
+  /* S9: hero lebih pendek di HP — cincin sisa sesi dan dua tombol satu baris; tab lebih rendah */
+  .client-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; padding: 14px; }
+  .client-hero > .client-hero-id { grid-column: 1 / -1; }
+  .client-hero > .client-ring-row { margin-top: 12px; gap: 0; }
+  .client-hero > .client-ring-row > .grow { display: none; }
+  .client-hero .client-ring { width: 64px; height: 64px; }
+  .client-hero .client-ring .num { font-size: var(--fs-lg) !important; }
+  .client-hero > .client-hero-actions { margin-top: 12px; align-self: center; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .client-hero > .client-hero-actions .btn { width: 100%; min-width: 0; padding-inline: 8px; gap: 6px; white-space: nowrap; }
+  .chips.cp-tabs .chip { min-height: 44px; flex-direction: row; gap: 6px; }
 }
 .portal-hero .avatar { box-shadow: 0 0 0 3px color-mix(in srgb, var(--on-ink) 16%, transparent); }
 .portal-kpis { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
