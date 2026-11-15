@@ -677,13 +677,6 @@ html.kb-open .main-col::after { display: none; }
   #view-dashboard .dash-kpis .kpi.wide { width: 12rem; }
 }
 @media (min-width: 1024px) { .kpi-grid.five { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (min-width: 1024px) { .wide-kpis .kpi-grid.five { grid-template-columns: repeat(4, minmax(0, 1fr)) 1.4fr; } .wide-kpis .kpi.wide { grid-column: auto; } }
-/* S11: sorotan "Berikutnya" di baris agenda (pengganti kartu hitam ganda) dan "Perlu perhatian" kosong satu baris */
-.tl-next { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: var(--fs-xs); font-weight: 700; }
-.tl-next svg.lucide { width: 14px; height: 14px; }
-.att-ok { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border-radius: var(--r-md); background: var(--surface-2); color: var(--fg-muted); font-size: var(--fs-sm); }
-.att-ok b { color: var(--fg); }
-.att-ok svg.lucide { width: 18px; height: 18px; flex: none; color: var(--fg); }
 .kpi {
   background: var(--surface);
   border: 1px solid var(--border);
