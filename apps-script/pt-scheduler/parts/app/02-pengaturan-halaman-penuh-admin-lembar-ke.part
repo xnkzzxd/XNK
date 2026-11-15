@@ -501,12 +501,14 @@
     setState.dirty = false;
     setHTML(el, '<div class="page-head"><div><h2 class="page-title">Pengaturan</h2><p class="page-sub">Atur notifikasi, pengingat, jam buka, dan keamanan.</p></div></div>' +
       '<div class="settings-layout" id="settings-layout" data-open="0">' +
-      '<nav class="settings-nav" id="settings-nav" aria-label="Bagian pengaturan"><p class="li-sub" style="padding:12px">Memuat…</p></nav>' +
+      '<nav class="settings-nav" id="settings-nav" aria-label="Bagian pengaturan">' + settingsNavHtml() + '</nav>' +
       '<div class="settings-pane" id="settings-pane">' +
       '<div class="pane-head"><button type="button" class="icon-btn plain only-mobile" onclick="window.settingsBack()" aria-label="Kembali ke daftar pengaturan">' + icon('chevron-left') + '</button><h3 class="pane-title" id="settings-pane-title"></h3></div>' +
       '<div class="stack" id="settings-body"></div>' +
       '</div></div>');
+    paintIcons();
     const body = $('settings-body');
+    if (!setState.data && !isPhone()) { const f = SET_SECTIONS[0]; $('settings-pane-title').textContent = f[2]; $('settings-layout').setAttribute('data-open', '1'); body.innerHTML = '<div class="card-flat skel" style="min-height:96px"></div><div class="card-flat skel" style="min-height:96px"></div>'; }
     body.addEventListener('input', onSettingsEdit);
     body.addEventListener('change', onSettingsEdit);
     const pre = setState.pre || settingsPrefetch();

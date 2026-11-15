@@ -549,6 +549,7 @@
     const now = new Date();
     const mo = now.getMonth() + 1, yr = now.getFullYear();
     ui.revenue = null; window._trendCache = {};
+    if (window.settingsPrefetch) window.settingsPrefetch();   // Pengaturan sudah terisi saat dibuka
     window._morePending = adminCall('getAdminMore', mo, yr, freshMore).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY) || !b) return;
       const ok = v => v && !v.error;
