@@ -1333,6 +1333,11 @@ kbd { font-family: var(--font); font-size: .6875rem; font-weight: 700; color: va
 .collapse-body > div { overflow: hidden; min-height: 0; }
 .collapse.closed .collapse-body { grid-template-rows: 0fr; opacity: 0; }
 
+
+.care-group > summary { list-style: none; cursor: pointer; }
+.care-group > summary::-webkit-details-marker { display: none; }
+.care-group[open] > summary svg.lucide { transform: rotate(180deg); }
+.care-group[open] { padding-bottom: 6px; }
 /* ── Lapisan: sheet / modal, konfirmasi, toast ─────────────────────────── */
 .layer { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
 .layer.open { pointer-events: auto; }

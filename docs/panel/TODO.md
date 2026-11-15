@@ -39,7 +39,8 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
   - **Dibatalkan oleh pemilik (2026-11-15)** setelah melihat tangkapan sebelum/sesudah (usulan: strip satu minggu di HP, ketuk judul untuk bulan penuh): "Bagus yang sebelum." Kalender bulan penuh di HP tetap seperti semula; jangan ubah Jadwal tanpa persetujuan pemilik.
 
 ## E — Coach dan Keuangan
-- [ ] **S13** Hub coach: "Perlu perhatian" diringkas jadi satu baris per jenis ("3 klien belum punya assessment" + satu tombol), hapus tombol "Nanti" per baris dari tampilan awal (daftar bisa dibuka); tab "Klien | Coach" diganti nama yang tidak bentrok dengan sidebar ("Hari ini | Profil"). Dep: S1. (P9, P13)
+- [x] **S13** Hub coach: "Perlu perhatian" diringkas jadi satu baris per jenis ("3 klien belum punya assessment" + satu tombol), hapus tombol "Nanti" per baris dari tampilan awal (daftar bisa dibuka); tab "Klien | Coach" diganti nama yang tidak bentrok dengan sidebar ("Hari ini | Profil"). Dep: S1. (P9, P13)
+  - Hasil (disetujui pemilik dari tangkapan sebelum/sesudah, 2026-11-15): "Perlu perhatian" di hub dikelompokkan per jenis, satu baris `<details>` tiap jenis ("5 klien · Belum ada assessment"); nama klien dan tombol "Nanti" hanya di dalam grup yang dibuka. Semua alasan klien dihitung (dulu hanya dua). Tab hub "Klien | Coach" → "Hari ini | Profil". Cek baru di `browser-check.js`.
 - [ ] **S14** Keuangan: tile memakai angka ringkas ("2,3 jt", penuh di detail/aria-label), tidak turun baris di 360 px; grafik 6 bulan menyembunyikan bulan tanpa data atau tampil "Belum ada data". Dep: S4. (P10)
 
 ## F — Konsistensi dan penutup

@@ -729,6 +729,9 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.textContent('#view-coaches')).includes('Hari ini'), 'coach hub shows Hari ini');
     check((await page.textContent('#view-coaches')).includes('Atur target'), 'coach hub offers to set targets');
+    // S13: "Perlu perhatian" satu baris per jenis; "Nanti" hanya di dalam daftar yang dibuka; tab hub bernama Hari ini | Profil.
+    const s13 = await page.evaluate(() => { const g = Array.from(document.querySelectorAll('#view-coaches .care-group')), seg = Array.from(document.querySelectorAll('#coach-seg button')).map(b => b.textContent.trim()).join('|'); const nanti = g[0] ? Array.from(g[0].querySelectorAll('.btn')).filter(b => /Nanti/.test(b.textContent)) : []; const before = !!g[0] && g[0].open; const vis = e => { const r = e.getBoundingClientRect(); return r.height > 0 && getComputedStyle(e).visibility !== 'hidden' && e.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true }); }; const hiddenBefore = nanti.length > 0 && !vis(nanti[0]); if (g[0]) g[0].open = true; const after = nanti.length > 0 && vis(nanti[0]); return { groups: g.length, seg, before, hiddenBefore, after }; });
+    check(s13.groups >= 1 && s13.seg === 'Hari ini|Profil' && !s13.before && s13.hiddenBefore && s13.after, 'coach hub: care list grouped per type, "Nanti" only inside an opened group, tabs Hari ini | Profil ' + JSON.stringify(s13));
     // Program otomatis di hub (T-1607b): peristiwa terbaru, nama depan saja; dihapus lagi sesudahnya.
     env.props.PG_HUB_EVENTS = JSON.stringify([{ id: 'PT-A', jenis: 'baru', tanggal: env.call('_todayWib_'), level: 'pemula-banget' }]);
     await page.evaluate(() => { window._hubAt = 0; window.navigate('dashboard'); window.navigate('coaches'); });

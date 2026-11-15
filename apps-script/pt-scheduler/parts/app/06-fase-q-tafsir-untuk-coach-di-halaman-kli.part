@@ -629,7 +629,7 @@
     let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + (solo ? 'Profil dan jadwalmu' : window.coaches.length + ' coach aktif di tim') + '</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + (solo ? 'Tambah coach' : 'Coach baru') + '</button></div>';
     const ctab = window.ui && window.ui.coachTab === 'coach' ? 'coach' : 'klien';
-    html += '<div class="seg" id="coach-seg" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (ctab === 'klien' ? 'active' : '') + '" onclick="window.coachTab(\'klien\')">Klien</button><button type="button" class="' + (ctab === 'coach' ? 'active' : '') + '" onclick="window.coachTab(\'coach\')">Coach</button></div>';
+    html += '<div class="seg" id="coach-seg" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (ctab === 'klien' ? 'active' : '') + '" onclick="window.coachTab(\'klien\')">Hari ini</button><button type="button" class="' + (ctab === 'coach' ? 'active' : '') + '" onclick="window.coachTab(\'coach\')">Profil</button></div>';
     html += '<div id="ct-klien"' + (ctab === 'klien' ? '' : ' class="hide"') + '><div id="hub-wrap"></div></div><div id="ct-coach"' + (ctab === 'coach' ? '' : ' class="hide"') + '>';
     const unassigned = window.schedules.filter(function (s) { return !s.coachId && !isDone(s) && !isAvailable(s); }).length;
     if (unassigned && window.coaches.length) {

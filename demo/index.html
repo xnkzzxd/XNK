@@ -1739,6 +1739,11 @@ kbd { font-family: var(--font); font-size: .6875rem; font-weight: 700; color: va
 .collapse-body > div { overflow: hidden; min-height: 0; }
 .collapse.closed .collapse-body { grid-template-rows: 0fr; opacity: 0; }
 
+
+.care-group > summary { list-style: none; cursor: pointer; }
+.care-group > summary::-webkit-details-marker { display: none; }
+.care-group[open] > summary svg.lucide { transform: rotate(180deg); }
+.care-group[open] { padding-bottom: 6px; }
 /* ── Lapisan: sheet / modal, konfirmasi, toast ─────────────────────────── */
 .layer { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
 .layer.open { pointer-events: auto; }
@@ -9345,7 +9350,7 @@ html.desk .cn-wrap { max-width: none; }
     let html = '<div class="page-head"><div><h2 class="page-title">Coach</h2><p class="page-sub">' + (solo ? 'Profil dan jadwalmu' : window.coaches.length + ' coach aktif di tim') + '</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddCoachModal()">' + icon('plus') + (solo ? 'Tambah coach' : 'Coach baru') + '</button></div>';
     const ctab = window.ui && window.ui.coachTab === 'coach' ? 'coach' : 'klien';
-    html += '<div class="seg" id="coach-seg" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (ctab === 'klien' ? 'active' : '') + '" onclick="window.coachTab(\'klien\')">Klien</button><button type="button" class="' + (ctab === 'coach' ? 'active' : '') + '" onclick="window.coachTab(\'coach\')">Coach</button></div>';
+    html += '<div class="seg" id="coach-seg" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr"><button type="button" class="' + (ctab === 'klien' ? 'active' : '') + '" onclick="window.coachTab(\'klien\')">Hari ini</button><button type="button" class="' + (ctab === 'coach' ? 'active' : '') + '" onclick="window.coachTab(\'coach\')">Profil</button></div>';
     html += '<div id="ct-klien"' + (ctab === 'klien' ? '' : ' class="hide"') + '><div id="hub-wrap"></div></div><div id="ct-coach"' + (ctab === 'coach' ? '' : ' class="hide"') + '>';
     const unassigned = window.schedules.filter(function (s) { return !s.coachId && !isDone(s) && !isAvailable(s); }).length;
     if (unassigned && window.coaches.length) {
@@ -11876,11 +11881,18 @@ html.desk .cn-wrap { max-width: none; }
   const CARE_CHIPS = { 'flag-today': 'Perhatian hari ini', 'health-review': 'Form belum ditinjau', 'retest': 'Tes ulang', 'no-assessment': 'Belum ada assessment', 'no-health': 'Belum isi form', 'gap': '14 hari tanpa sesi' };
   function careListHtml(list) {
     if (!list || !list.length) return '<div class="card-flat"><p class="eyebrow">Perlu perhatian</p><p class="li-sub" style="min-height:44px;display:flex;align-items:center">Semua klien beres.</p></div>';
-    return '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + '</span></div>' + list.slice(0, 8).map(function (c) {
-      return '<div class="row" style="gap:6px;min-height:56px"><button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="grow" style="min-width:0"><span class="li-title truncate" style="display:block">' + h(c.name) + '</span>' +
-        '<span class="row" style="gap:4px;flex-wrap:wrap">' + c.reasons.slice(0, 2).map(r => '<span class="pill soft">' + h(CARE_CHIPS[r] || r) + '</span>').join('') + '</span></span>' + icon('chevron-right') + '</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
-    }).join('') + (list.length > 8 ? '<p class="li-sub">+' + (list.length - 8) + ' lainnya</p>' : '') + '</div>';
+    // S13: satu baris per jenis ("3 klien · Belum ada assessment"); ketuk untuk melihat nama, tombol "Nanti" hanya di dalam daftar.
+    const groups = {};
+    list.forEach(function (c) { (c.reasons || []).forEach(function (r) { (groups[r] = groups[r] || []).push(c); }); });
+    const keys = Object.keys(groups).sort((x, y) => groups[y].length - groups[x].length);
+    return '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + ' klien</span></div>' + keys.map(function (k) {
+      const g = groups[k];
+      return '<details class="care-group"><summary class="list-item interactive" style="min-height:52px"><span class="grow li-title">' + g.length + ' klien · ' + h(CARE_CHIPS[k] || k) + '</span>' + icon('chevron-down') + '</summary>' +
+        g.map(function (c) {
+          return '<div class="row" style="gap:6px;min-height:48px"><button type="button" class="list-item interactive grow" style="min-height:48px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="grow li-title truncate">' + h(c.name) + '</span>' + icon('chevron-right') + '</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
+        }).join('') + '</details>';
+    }).join('') + '</div>';
   }
   window.snoozeCareUI = function (id) {
     adminCall('snoozeCare', id, 7).then(function () { window.showToast('Disembunyikan 7 hari.'); loadHub(); }).catch(function (err) { window.showToast(err.message); });

@@ -49,11 +49,18 @@
   const CARE_CHIPS = { 'flag-today': 'Perhatian hari ini', 'health-review': 'Form belum ditinjau', 'retest': 'Tes ulang', 'no-assessment': 'Belum ada assessment', 'no-health': 'Belum isi form', 'gap': '14 hari tanpa sesi' };
   function careListHtml(list) {
     if (!list || !list.length) return '<div class="card-flat"><p class="eyebrow">Perlu perhatian</p><p class="li-sub" style="min-height:44px;display:flex;align-items:center">Semua klien beres.</p></div>';
-    return '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + '</span></div>' + list.slice(0, 8).map(function (c) {
-      return '<div class="row" style="gap:6px;min-height:56px"><button type="button" class="list-item interactive grow" style="min-height:56px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="grow" style="min-width:0"><span class="li-title truncate" style="display:block">' + h(c.name) + '</span>' +
-        '<span class="row" style="gap:4px;flex-wrap:wrap">' + c.reasons.slice(0, 2).map(r => '<span class="pill soft">' + h(CARE_CHIPS[r] || r) + '</span>').join('') + '</span></span>' + icon('chevron-right') + '</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
-    }).join('') + (list.length > 8 ? '<p class="li-sub">+' + (list.length - 8) + ' lainnya</p>' : '') + '</div>';
+    // S13: satu baris per jenis ("3 klien · Belum ada assessment"); ketuk untuk melihat nama, tombol "Nanti" hanya di dalam daftar.
+    const groups = {};
+    list.forEach(function (c) { (c.reasons || []).forEach(function (r) { (groups[r] = groups[r] || []).push(c); }); });
+    const keys = Object.keys(groups).sort((x, y) => groups[y].length - groups[x].length);
+    return '<div class="card-flat stack" style="gap:2px"><div class="row-between"><p class="eyebrow">Perlu perhatian</p><span class="li-sub">' + list.length + ' klien</span></div>' + keys.map(function (k) {
+      const g = groups[k];
+      return '<details class="care-group"><summary class="list-item interactive" style="min-height:52px"><span class="grow li-title">' + g.length + ' klien · ' + h(CARE_CHIPS[k] || k) + '</span>' + icon('chevron-down') + '</summary>' +
+        g.map(function (c) {
+          return '<div class="row" style="gap:6px;min-height:48px"><button type="button" class="list-item interactive grow" style="min-height:48px;text-align:left" onclick="window.openProfile(\'' + h(c.memberId) + '\')"><span class="grow li-title truncate">' + h(c.name) + '</span>' + icon('chevron-right') + '</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="window.snoozeCareUI(\'' + h(c.memberId) + '\')">Nanti</button></div>';
+        }).join('') + '</details>';
+    }).join('') + '</div>';
   }
   window.snoozeCareUI = function (id) {
     adminCall('snoozeCare', id, 7).then(function () { window.showToast('Disembunyikan 7 hari.'); loadHub(); }).catch(function (err) { window.showToast(err.message); });
