@@ -7,10 +7,11 @@
 //   1. Server ini MERENCANAKAN notifikasi dan menaruhnya di sheet PushOutbox (satu baris per perangkat).
 //   2. Workflow memanggil pushRelayPull(secret): server merencanakan yang jatuh tempo lalu meminjamkan baris siap kirim.
 //   3. Workflow mengirim (web-push) dan melapor lewat pushRelayAck(secret, hasil).
-// Kunci privat VAPID hanya ada di GitHub Secrets; di sini hanya kunci publik dan rahasia relay (Script Properties).
+// Semua kunci (publik, privat, rahasia relay) ada di Script Properties; GitHub hanya menyimpan rahasia relay.
 //
 // Properti Script:
 //   PUSH_VAPID_PUBLIC   kunci publik VAPID (base64url). Kosong = fitur mati (bawaan).
+//   PUSH_VAPID_PRIVATE  kunci privat VAPID; hanya dikirim ke pengirim lewat pushRelayPull (dijaga rahasia relay).
 //   PUSH_RELAY_SECRET   rahasia bersama dengan GitHub (>= 24 karakter). Kosong = fitur mati.
 //   PUSH_ENABLED        'false' mematikan walau dua properti di atas ada.
 //   PUSH_HOUR_SESI_BESOK / PUSH_HOUR_SESI_HARI_INI   jam WIB (bawaan 19 dan 6).
@@ -365,7 +366,7 @@ function _pushRelayAuth_(secret) {
   var ok = want.length >= 24 && got.length === want.length;
   var diff = 0;
   for (var i = 0; i < want.length && i < got.length; i++) diff |= want.charCodeAt(i) ^ got.charCodeAt(i);
-  if (!ok || diff !== 0 || !_pushOn_()) throw new Error('Permintaan tidak valid.');
+  if (!ok || diff !== 0) throw new Error('Permintaan tidak valid.');
 }
 
 /**
@@ -374,6 +375,8 @@ function _pushRelayAuth_(secret) {
  */
 function pushRelayPull(secret) {
   _pushRelayAuth_(secret);
+  // Dimatikan (PUSH_ENABLED=false) atau kunci publik belum ada: jawab kosong supaya workflow tetap hijau.
+  if (!_pushOn_()) return { messages: [], key: '', privateKey: '' };
   return _locked_(function() {
     var now = Date.now();
     if (_throttle_('push-plan', 60)) { try { _pushPlan_(new Date(now)); } catch (e) { Logger.log('Rencana push gagal: ' + e); } }
@@ -397,7 +400,8 @@ function pushRelayPull(secret) {
         payload: { title: String(r[5]), body: String(r[6]), url: String(r[7] || '/'), tag: String(r[4]), kind: String(r[4]) } });
     }
     try { if (_wibParts_(new Date(now)).hour === 3) _pushPrune_(now); } catch (e) { Logger.log('Prune push gagal: ' + e); }
-    return { messages: out, key: _pushPublicKey_() };
+    // Kunci privat VAPID hanya keluar lewat jawaban yang dijaga rahasia relay; pengirim memakainya di memori dan tidak menyimpannya.
+    return { messages: out, key: _pushPublicKey_(), privateKey: _pushProp_('PUSH_VAPID_PRIVATE') };
   });
 }
 

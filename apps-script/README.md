@@ -303,7 +303,7 @@ Tab **Latihan** klien punya dua bagian: **Latihan** dan **Makan**. Di Makan klie
 
 ## Notifikasi di HP dan komputer (Web Push, Fase X)
 
-Coach dan klien bisa menerima notifikasi native lewat Chrome (Android dan komputer; iPhone dari Layar Utama). Tidak memakai WhatsApp maupun Telegram, dan **mati sampai Anda memasangnya** ([docs/push/Setup.md](../docs/push/Setup.md)): buat kunci dengan `node apps-script/pt-scheduler/tools/push-keys.js`, pasang di GitHub (Secrets dan variabel `PUSH_ENABLED`) dan di Script Properties (`PUSH_VAPID_PUBLIC`, `PUSH_RELAY_SECRET`).
+Coach dan klien bisa menerima notifikasi native lewat Chrome (Android dan komputer; iPhone dari Layar Utama). Tidak memakai WhatsApp maupun Telegram, dan **mati sampai Anda memasangnya** ([docs/push/Setup.md](../docs/push/Setup.md)): buat kunci dengan `node apps-script/pt-scheduler/tools/push-keys.js`, simpan hasilnya sebagai file `xnk-pt-config.json` di Google Drive (kunci masuk ke Script Properties otomatis), dan tambahkan satu secret `PUSH_RELAY_SECRET` di GitHub.
 
 - **Klien** menerima: sesi besok (H-1 jam 19.00), sesi hari ini (pagi hari H jam 06.00, hanya bila sesi belum mulai), PR, dan waktu makan pagi dan sore. Sesi **hanya diingatkan dua kali**: H-1 dan pagi hari H.
 - **Coach** menerima: ringkasan sesi besok dan hari ini, dan klien yang minta perpanjang paket (seketika bila `PUSH_GH_TOKEN` dipasang, kalau tidak menunggu jadwal GitHub, paling lama sekitar 15 menit).

@@ -2,7 +2,8 @@ name: Push
 
 # Fase X (docs/push): mengirim Web Push. Apps Script merencanakan notifikasi (sheet PushOutbox), workflow ini mengambilnya
 # lewat doPost (pushRelayPull), mengirimnya dengan web-push (VAPID), lalu melapor hasilnya (pushRelayAck).
-# Mati sampai variabel repo PUSH_ENABLED = true dan tiga secret terpasang (node apps-script/pt-scheduler/tools/push-keys.js).
+# Satu-satunya rahasia di GitHub: PUSH_RELAY_SECRET (kunci VAPID diambil dari Apps Script lewat pushRelayPull). Tanpa secret itu
+# langkah kirim langsung selesai tanpa melakukan apa-apa.
 # Jadwal GitHub paling cepat 5 menit dan kadang telat; permintaan perpanjang paket dibangunkan seketika oleh Apps Script
 # lewat repository_dispatch bila Script Property PUSH_GH_TOKEN terpasang.
 on:
@@ -21,7 +22,6 @@ concurrency:
 
 jobs:
   send:
-    if: ${{ vars.PUSH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -36,6 +36,4 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/wp/node_modules
           PT_DEPLOYMENT_ID: ${{ vars.PT_DEPLOYMENT_ID }}
           PUSH_RELAY_SECRET: ${{ secrets.PUSH_RELAY_SECRET }}
-          PUSH_VAPID_PUBLIC: ${{ secrets.PUSH_VAPID_PUBLIC }}
-          PUSH_VAPID_PRIVATE: ${{ secrets.PUSH_VAPID_PRIVATE }}
         run: node apps-script/pt-scheduler/tools/push-send.js

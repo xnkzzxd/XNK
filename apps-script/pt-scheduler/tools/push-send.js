@@ -3,7 +3,8 @@
 // Fase X: pengirim Web Push. Dijalankan GitHub Actions (.github/workflows/push.yml), bukan di Apps Script,
 // karena Apps Script tidak bisa menandatangani VAPID (ECDSA P-256) dan tidak bisa mengenkripsi isi push.
 // Alur: pushRelayPull (server merencanakan + meminjamkan baris) -> kirim dengan web-push -> pushRelayAck (hasil).
-// Rahasia ada di environment: PUSH_RELAY_SECRET, PUSH_VAPID_PUBLIC, PUSH_VAPID_PRIVATE. Isi push dan alamat langganan tidak dicatat.
+// Satu-satunya rahasia di GitHub: PUSH_RELAY_SECRET. Kunci VAPID diambil dari server lewat pushRelayPull (PUSH_VAPID_PUBLIC / PUSH_VAPID_PRIVATE
+// di environment hanya bila ingin menimpa). Isi push dan alamat langganan tidak dicatat.
 const MAX_ROUNDS = 5;        // satu putaran = sampai 60 pesan; berhenti bila antrean habis
 const POOL = 5;              // pengiriman bersamaan
 const TTL_SECONDS = 4 * 3600;
@@ -39,14 +40,20 @@ async function pool(items, n, worker) {
  */
 async function run(o) {
   const log = o.log || (() => {});
-  if (!o.exec || !o.secret || !o.vapid || !o.vapid.publicKey || !o.vapid.privateKey) throw new Error('Pengaturan belum lengkap (exec, rahasia relay, kunci VAPID).');
-  o.webpush.setVapidDetails(o.vapid.subject, o.vapid.publicKey, o.vapid.privateKey);
+  if (!o.exec || !o.secret || !o.vapid) throw new Error('Pengaturan belum lengkap (alamat server atau rahasia relay).');
+  let armed = false;
   const total = { sent: 0, gone: 0, failed: 0, rounds: 0 };
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const pulled = await call(o.fetchImpl, o.exec, 'pushRelayPull', [o.secret]);
-    if (pulled.key && pulled.key !== o.vapid.publicKey) throw new Error('Kunci publik VAPID di server berbeda dengan di GitHub: pasang pasangan kunci yang sama.');
     const msgs = Array.isArray(pulled.messages) ? pulled.messages : [];
     if (!msgs.length) break;
+    if (!armed) {
+      // Kunci datang dari server (jawaban yang dijaga rahasia relay); variabel lingkungan hanya untuk menimpa.
+      const pub = o.vapid.publicKey || pulled.key, priv = o.vapid.privateKey || pulled.privateKey;
+      if (!pub || !priv) throw new Error('Kunci VAPID belum dipasang di server.');
+      o.webpush.setVapidDetails(o.vapid.subject, pub, priv);
+      armed = true;
+    }
     total.rounds++;
     const results = await pool(msgs, POOL, async (m) => {
       try {
@@ -66,11 +73,12 @@ module.exports = { run, classify, call };
 
 if (require.main === module) {
   const { defaultExec } = require('./build-static');
+  if (!process.env.PUSH_RELAY_SECRET) { console.log('push: PUSH_RELAY_SECRET belum dipasang di GitHub, dilewati.'); process.exit(0); }
   const webpush = require('web-push');
   run({
     exec: process.env.PUSH_EXEC || defaultExec(),
     secret: process.env.PUSH_RELAY_SECRET,
-    vapid: { subject: 'https://xnk.my.id', publicKey: process.env.PUSH_VAPID_PUBLIC, privateKey: process.env.PUSH_VAPID_PRIVATE },
+    vapid: { subject: 'https://xnk.my.id', publicKey: process.env.PUSH_VAPID_PUBLIC || '', privateKey: process.env.PUSH_VAPID_PRIVATE || '' },
     fetchImpl: fetch, webpush, log: console.log,
   }).then(t => console.log('push: terkirim ' + t.sent + ', perangkat hilang ' + t.gone + ', gagal ' + t.failed))
     .catch(e => { console.error('push gagal: ' + e.message); process.exit(1); });

@@ -26,7 +26,7 @@ Apps Script (Push.gs)                         GitHub Actions (push.yml)         
 - `getPortalBootstrap.pushKey` = kunci publik VAPID, kosong bila fitur mati. Kartu panel memanggil `getAdminPushStatus` saat Pengaturan → Notifikasi Admin dibuka.
 
 ## Pengirim (`tools/push-send.js`, `.github/workflows/push.yml`)
-`pushRelayPull` → kirim 5 sekaligus dengan `web-push` (TTL 4 jam, isi JSON) → `pushRelayAck`. Menolak jalan bila kunci publik server ≠ kunci GitHub. Tidak mencatat alamat langganan atau isi. Workflow mati sampai variabel repo `PUSH_ENABLED=true`. Kunci dibuat `tools/push-keys.js`.
+`pushRelayPull` → kirim 5 sekaligus dengan `web-push` (TTL 4 jam, isi JSON, kunci VAPID dari jawaban server) → `pushRelayAck`. Tanpa secret `PUSH_RELAY_SECRET` langkah kirim selesai tanpa melakukan apa-apa; `PUSH_ENABLED=false` di server menjawab kosong. Tidak mencatat alamat langganan atau isi. Kunci dibuat `tools/push-keys.js`.
 
 ## Klien (app)
 - `sw-app.js` (templat `tools/sw-app.template.js`): handler `push` (judul ≤ 80, isi ≤ 200, tag ≤ 40; tag yang sama menggantikan) dan `notificationclick` (fokus jendela aplikasi atau buka; hanya alamat di situs yang sama). Portal klien dan panel memakai build yang sama, jadi BookingPT-Client mendapatkannya lewat tarikan per jam, tanpa perubahan di repo itu.
@@ -34,4 +34,4 @@ Apps Script (Push.gs)                         GitHub Actions (push.yml)         
 - Tanpa panggilan baru saat membuka tab: kunci datang dengan bootstrap; pilihan jenis diambil hanya saat "Atur jenis notifikasi" dibuka.
 
 ## Keamanan
-Rahasia relay dan kunci publik di Script Properties, kunci privat hanya di GitHub Secrets (tidak di kode). Langganan (alamat push) bersifat rahasia: tidak pernah dikirim ke browser selain milik akunnya sendiri (status hanya memuat id, label, pilihan). Fungsi member mengambil member dari token. Data push tidak masuk `getPortalMore`/`getClientBundle`, jadi tidak ada versi cache yang perlu dinaikkan.
+Kunci publik, kunci privat, dan rahasia relay di Script Properties (diisi lewat file konfigurasi Drive, tidak di kode); GitHub hanya menyimpan rahasia relay. `pushRelayPull` mengembalikan kunci privat hanya bila rahasia benar; pengirim memakainya di memori. (Keputusan 2026-11: GitHub Secrets tidak bisa diisi dari sesi agen, dan satu secret lebih sederhana bagi pemilik.) Langganan (alamat push) bersifat rahasia: tidak pernah dikirim ke browser selain milik akunnya sendiri (status hanya memuat id, label, pilihan). Fungsi member mengambil member dari token. Data push tidak masuk `getPortalMore`/`getClientBundle`, jadi tidak ada versi cache yang perlu dinaikkan.

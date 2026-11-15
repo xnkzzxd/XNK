@@ -211,11 +211,14 @@ const REGISTER_MAX_PER_10MIN = 5;    // pendaftaran mandiri per 10 menit (dari s
 // Nilai null = hapus property. Hanya file MILIK akun pemilik yang dibaca (file
 // yang dibagikan orang lain diabaikan), dan hanya kunci di CONFIG_KEYS.
 const CONFIG_FILE_NAME = 'xnk-pt-config.json';
-const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS'];
+const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS', 'PUSH_VAPID_PUBLIC', 'PUSH_VAPID_PRIVATE', 'PUSH_RELAY_SECRET'];
 const CONFIG_CHECK_SECONDS = 300;
 
 function _configValueError_(key, value) {
   if (key === 'ADMIN_PIN' && value.length < 6) return 'minimal 6 karakter';
+  if (key === 'PUSH_VAPID_PUBLIC' && !/^[A-Za-z0-9_-]{80,100}$/.test(value)) return 'kunci publik VAPID tidak valid';
+  if (key === 'PUSH_VAPID_PRIVATE' && !/^[A-Za-z0-9_-]{40,50}$/.test(value)) return 'kunci privat VAPID tidak valid';
+  if (key === 'PUSH_RELAY_SECRET' && value.length < 24) return 'minimal 24 karakter';
   return null;
 }
 

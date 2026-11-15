@@ -21,7 +21,7 @@
 | --- | --- |
 | X1 | **Web Push** (Chrome / Edge / Firefox di Android dan komputer; Safari iPhone hanya dari Layar Utama, iOS 16.4+). FCM/APNs native menunggu Phase V. |
 | X2 | **Pengirim = GitHub Actions** (`.github/workflows/push.yml`, `tools/push-send.js`). Apps Script tidak punya ECDSA P-256 (VAPID) dan tidak bisa mengenkripsi isi push. |
-| X3 | **Mati sampai dipasang.** Kartu notifikasi baru muncul bila server punya `PUSH_VAPID_PUBLIC` + `PUSH_RELAY_SECRET` (aturan 5). Pengguna harus menyalakan sendiri per perangkat (izin browser). |
+| X3 | **Mati sampai dipasang.** Kartu notifikasi baru muncul bila server punya `PUSH_VAPID_PUBLIC` + `PUSH_RELAY_SECRET` (aturan 5; diisi lewat file konfigurasi Drive, satu secret di GitHub). Pengguna harus menyalakan sendiri per perangkat (izin browser). |
 | X4 | Tidak mengganti Telegram atau tombol WhatsApp; semuanya tetap jalan. Pengingat WhatsApp yang dimatikan klien (MemberData kolom P) juga mematikan push jenis itu. |
 | X5 | Isi push pendek, **nama depan saja**, tanpa nomor, tanpa data tubuh, kalori, atau catatan. Lewat layanan push browser (terenkripsi ujung ke ujung). |
 | X6 | Klien dan coach memilih jenis per perangkat: klien Sesi / PR / Makan, coach Sesi / Perpanjangan. |

@@ -7,5 +7,6 @@ Legenda: `[ ]` belum, `[~]` sedang, `[x]` selesai. 👤 = perlu pemilik. PRD: [P
 - [x] T-1902 Service worker: handler `push` dan `notificationclick` di `tools/sw-app.template.js` (`tests/push-sw.test.js`).
 - [x] T-1903 App: part `15-notifikasi-web-push-fase-x.part`, kartu di Lainnya (klien) dan Pengaturan → Notifikasi Admin (coach), pemeriksaan di `tools/browser-check.js`.
 - [x] T-1904 Dokumen: PRD, Design, Setup, README Indonesia, Agent.md.
-- [ ] T-1905 👤 Pasang kunci dan variabel ([Setup.md](Setup.md)), jalankan workflow sekali, nyalakan di HP coach dan satu HP klien, cek sesi besok dan perpanjangan.
+- [x] T-1904b Kunci VAPID dan rahasia relay diisi lewat file konfigurasi Drive (`CONFIG_KEYS`), pengirim mengambil kunci dari `pushRelayPull`; GitHub hanya butuh secret `PUSH_RELAY_SECRET`.
+- [ ] T-1905 👤 Merge, buat file konfigurasi di Drive, pasang secret GitHub ([Setup.md](Setup.md)), jalankan workflow sekali, nyalakan di HP coach dan satu HP klien, cek sesi besok dan perpanjangan.
 - [ ] T-1906 Setelah dipakai seminggu: bila telat cron terasa, pindahkan pengirim ke Cloudflare Worker (Phase V); alur dan format `pushRelayPull` / `Ack` tetap sama.

@@ -26,7 +26,7 @@ function fakes(pulls) {
   };
   return { calls, sent, fetchImpl, webpush };
 }
-const opts = f => ({ exec: 'https://script.google.com/macros/s/X/exec', secret: 'S'.repeat(32), vapid: { subject: 'https://xnk.my.id', publicKey: keys.publicKey, privateKey: keys.privateKey }, fetchImpl: f.fetchImpl, webpush: f.webpush });
+const opts = f => ({ exec: 'https://script.google.com/macros/s/X/exec', secret: 'S'.repeat(32), vapid: { subject: 'https://xnk.my.id' }, fetchImpl: f.fetchImpl, webpush: f.webpush });
 
 test('generated keys have the lengths web-push expects, and the relay secret is long enough for the server', () => {
   assert.equal(keys.publicKey.length, 87);
@@ -44,7 +44,7 @@ test('classify: 404 and 410 mean the device is gone, anything else is retried', 
 });
 
 test('pull, send each message with the payload as JSON, then report every result', async () => {
-  const f = fakes([{ messages: [msg('1'), msg('gone', { id: '2', endpoint: 'https://x/gone' }), msg('3', { endpoint: 'https://x/boom' })], key: keys.publicKey }]);
+  const f = fakes([{ messages: [msg('1'), msg('gone', { id: '2', endpoint: 'https://x/gone' }), msg('3', { endpoint: 'https://x/boom' })], key: keys.publicKey, privateKey: keys.privateKey }]);
   const t = await run(opts(f));
   assert.deepEqual(t, { sent: 1, gone: 1, failed: 1, rounds: 1 });
   assert.equal(f.calls[0].fn, 'pushRelayPull'); assert.deepEqual(f.calls[0].args, ['S'.repeat(32)]);
@@ -53,7 +53,7 @@ test('pull, send each message with the payload as JSON, then report every result
   assert.equal(JSON.parse(f.sent[0].payload).title, 'T');
   assert.equal(f.sent[0].opts.TTL, 4 * 3600);
   assert.deepEqual(f.sent[0].sub, { endpoint: 'https://fcm.googleapis.com/fcm/send/1', keys: { p256dh: 'p', auth: 'a' } });
-  assert.equal(f.webpush.vapid[0], 'https://xnk.my.id');
+  assert.deepEqual(f.webpush.vapid, ['https://xnk.my.id', keys.publicKey, keys.privateKey], 'the keys come from the server answer');
 });
 
 test('an empty queue sends nothing and acknowledges nothing', async () => {
@@ -65,15 +65,23 @@ test('an empty queue sends nothing and acknowledges nothing', async () => {
 
 test('a full batch is followed by another pull', async () => {
   const full = Array.from({ length: 60 }, (_, i) => msg('m' + i));
-  const f = fakes([{ messages: full, key: keys.publicKey }, { messages: [msg('last')], key: keys.publicKey }]);
+  const f = fakes([{ messages: full, key: keys.publicKey, privateKey: keys.privateKey }, { messages: [msg('last')], key: keys.publicKey, privateKey: keys.privateKey }]);
   const t = await run(opts(f));
   assert.equal(t.sent, 61); assert.equal(t.rounds, 2);
 });
 
-test('refuses to run with a different public key than the server, a rejected secret or a missing setting', async () => {
-  const f = fakes([{ messages: [msg('1')], key: makeKeys().publicKey }]);
-  await assert.rejects(run(opts(f)), /pasangan kunci yang sama/);
+test('environment keys override the server keys; no keys anywhere means no sending', async () => {
+  const other = makeKeys();
+  let f = fakes([{ messages: [msg('1')], key: keys.publicKey, privateKey: keys.privateKey }]);
+  await run(Object.assign(opts(f), { vapid: { subject: 's', publicKey: other.publicKey, privateKey: other.privateKey } }));
+  assert.equal(f.webpush.vapid[1], other.publicKey);
+  f = fakes([{ messages: [msg('1')], key: '', privateKey: '' }]);
+  await assert.rejects(run(opts(f)), /Kunci VAPID belum dipasang/);
   assert.equal(f.sent.length, 0);
+});
+
+test('a rejected secret, a bad answer or a missing setting stop the run', async () => {
+  const f = fakes([]);
   const bad = { fetchImpl: async () => ({ status: 200, text: async () => JSON.stringify({ ok: false, error: 'Permintaan tidak valid.' }) }), webpush: { setVapidDetails() {} } };
   await assert.rejects(run(Object.assign(opts(f), bad)), /pushRelayPull: Permintaan tidak valid/);
   await assert.rejects(run(Object.assign(opts(f), { secret: '' })), /belum lengkap/);

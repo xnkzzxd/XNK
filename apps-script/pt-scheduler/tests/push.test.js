@@ -8,7 +8,7 @@ const SECRET = 's'.repeat(32);
 const P256 = 'B' + 'A'.repeat(86);
 const AUTH = 'A'.repeat(22);
 const sub = (n, host) => ({ endpoint: 'https://' + (host || 'fcm.googleapis.com') + '/fcm/send/' + n, keys: { p256dh: P256, auth: AUTH } });
-const on = env => { env.props.PUSH_VAPID_PUBLIC = 'P'.repeat(87); env.props.PUSH_RELAY_SECRET = SECRET; return env; };
+const on = env => { env.props.PUSH_VAPID_PUBLIC = 'P'.repeat(87); env.props.PUSH_VAPID_PRIVATE = 'K'.repeat(43); env.props.PUSH_RELAY_SECRET = SECRET; return env; };
 const setup = () => { const env = on(seededEnv()); return { env, ani: env.memberToken(KEY_A), budi: env.memberToken(KEY_B), admin: env.adminToken() }; };
 const sched = (id, mid, name, start, status, coach) => [id, mid, name, '6281', start, start, '', status || 'read', 'C-1', coach || '', '', ''];
 const withSchedules = rows => {
@@ -170,9 +170,14 @@ test('the relay needs the secret; pull plans, leases and returns what the sender
   assert.throws(() => env.call('pushRelayPull', ''), /tidak valid/);
   assert.throws(() => env.call('pushRelayPull', 'x'.repeat(32)), /tidak valid/);
   assert.throws(() => env.call('pushRelayAck', 'x', []), /tidak valid/);
+  env.props.PUSH_ENABLED = 'false';
+  assert.deepEqual(env.call('pushRelayPull', SECRET), { messages: [], key: '', privateKey: '' }, 'switched off: an empty answer, no error, no keys');
+  assert.throws(() => env.call('pushRelayPull', 'x'.repeat(32)), /tidak valid/, 'still guarded when off');
+  delete env.props.PUSH_ENABLED;
   env.callRaw('_pushEnqueue_', [{ target: 'admin', kind: 'perpanjangan', slot: 'REN-1', title: 'Minta perpanjang paket', body: 'Ani minta perpanjang: Regular 8.' }]);
   const a = env.call('pushRelayPull', SECRET);
   assert.equal(a.key, 'P'.repeat(87));
+  assert.equal(a.privateKey, 'K'.repeat(43), 'the sender gets the private key only through the secret-guarded answer');
   const m = a.messages.find(x => x.payload.kind === 'perpanjangan');
   assert.ok(m);
   assert.equal(m.endpoint, sub(3).endpoint); assert.equal(m.p256dh, P256); assert.equal(m.auth, AUTH);
@@ -236,4 +241,22 @@ test('with push off, a renewal request works as before and queues nothing', () =
   const env = seededEnv();
   env.call('requestRenewal', env.memberToken(KEY_A), 'P1');
   assert.equal(env.sheet('PushOutbox'), null);
+});
+
+test('the keys are installed from the Drive config file; a bad value is skipped and does not stop the others', () => {
+  const { createEnv } = require('./harness');
+  const env = createEnv();
+  const file = { name: 'xnk-pt-config.json', owner: 'owner@example.com', trashed: false,
+    content: JSON.stringify({ PUSH_VAPID_PUBLIC: 'P'.repeat(87), PUSH_VAPID_PRIVATE: 'K'.repeat(43), PUSH_RELAY_SECRET: 'short' }) };
+  env.driveFiles.push(file);
+  env.call('doGet', { parameter: {} });
+  assert.equal(env.props.PUSH_VAPID_PUBLIC, 'P'.repeat(87));
+  assert.equal(env.props.PUSH_VAPID_PRIVATE, 'K'.repeat(43));
+  assert.equal(env.props.PUSH_RELAY_SECRET, undefined, 'a too short secret is skipped');
+  assert.equal(file.trashed, true);
+  assert.ok(!env.logs.some(l => l.includes('K'.repeat(43))), 'the log names keys, never values');
+  const other = { name: 'xnk-pt-config.json', owner: 'owner@example.com', trashed: false, content: JSON.stringify({ PUSH_VAPID_PUBLIC: 'bad' }) };
+  env.driveFiles.push(other);
+  env.call('getPortalBootstrap', '');
+  assert.equal(env.props.PUSH_VAPID_PUBLIC, 'P'.repeat(87), 'a bad public key does not replace the good one');
 });
