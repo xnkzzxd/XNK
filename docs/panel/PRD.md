@@ -28,7 +28,7 @@ Owner membuka panel untuk tiga hal: *apa jadwal hari ini*, *siapa klien yang per
 ## 3. Keputusan desain
 - **Agenda dulu.** Di HP, urutan Dashboard: salam, *Hari ini* (agenda), baris tile yang bisa digeser, kartu lain. Kartu "Sesi berikutnya" tetap ada hanya bila sesi berikutnya *bukan* sesi pertama di agenda hari ini; kalau sama, hero diganti sorotan di baris pertama agenda.
 - **Satu ringkasan per halaman.** Halaman Klien: hapus 4 tile (chip filter sudah memuat hitungan). Ringkasan hitam jadi satu baris di HP. Cari dan sortir satu baris.
-- **Grup klien diberi label** dasarnya (urut Terbaru → "Bergabung", Sisa sesi → "Sisa sesi", dst.), bukan sekadar nama bulan.
+- **Grup klien diberi label** dasarnya (urut Terbaru → "Terakhir aktif" (tanggal yang dipakai urutan ini adalah aktivitas terakhir), Sisa sesi → "Sisa sesi", dst.), bukan sekadar nama bulan.
 - **Satu aksi utama per baris sesi**: "Selesai" solid; "Ubah" dan "WA" ikon/teks sekunder. Kontras diperiksa di kartu hitam dan mode gelap (≥ 4.5:1 untuk teks).
 - **Mode gelap**: kartu penting memakai permukaan lebih terang dari latar (bukan lebih gelap); tombol sekunder di atasnya punya batas terlihat.
 - **Empty state** satu baris (ikon kecil + teks) bila ruangnya sempit atau data kosong; ilustrasi besar hanya di halaman yang kosong seluruhnya.

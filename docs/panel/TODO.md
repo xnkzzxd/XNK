@@ -26,7 +26,8 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 ## C — Halaman Klien
 - [x] **S7** Rampingkan layar atas Klien: hapus 4 tile (`.client-top`), ringkasan hitam satu baris di HP (angka + "Lihat siapa"), cari + sortir + Kartu/Daftar satu baris; klien pertama terlihat di 390×844. Perbarui cek browser yang menyebut `.client-top`. Dep: S4. (P3)
   - Hasil: empat ubin (Aktif, Hampir habis, Habis, Perlu perhatian) dihapus; chip filter sudah memuat hitungan yang sama. Di HP ringkasan hitam jadi satu baris ("1 klien perlu perhatian" + "Lihat siapa"; label dan angka minggu ini hanya di desktop). Cari + urutkan selalu satu baris (placeholder "Cari klien…"). Di 390×844 kartu klien pertama utuh di atas bar tab; cek baru di `browser-check.js`, cek ubin lama diganti cek chip.
-- [ ] **S8** Label dasar pengelompokan klien ("Bergabung · Januari 2026", "Sisa sesi · Habis", dll.) mengikuti urutan terpilih; sembunyikan pembagi bila hanya satu grup. Dep: S7. (P4)
+- [x] **S8** Label dasar pengelompokan klien ("Bergabung · Januari 2026", "Sisa sesi · Habis", dll.) mengikuti urutan terpilih; sembunyikan pembagi bila hanya satu grup. Dep: S7. (P4)
+  - Hasil: judul grup menyebut dasarnya dan mengikuti urutan: Terbaru → "Terakhir aktif · November 2026" (tanggalnya aktivitas terakhir, bukan tanggal bergabung, jadi contoh "Bergabung" di atas diganti), Sisa sesi → "Sisa sesi · Habis / Hampir habis / Masih ada", Perlu perhatian → "Perlu perhatian / Tanpa tanda perhatian", Nama → "Nama · A", Lama tidak latihan → "Terakhir latihan · Lebih dari 30 hari …", Riwayat paket → "Riwayat paket · bulan". Satu grup saja atau sedang mencari = tanpa pembagi. Cek baru di `browser-check.js`.
 - [ ] **S9** Profil klien HP: hero lebih pendek (cincin sisa sesi dan tombol satu baris), tab hitam lebih rendah; "Sorotan" muncul dalam layar pertama. Dep: S1. (P12)
 
 ## D — Dashboard dan Jadwal

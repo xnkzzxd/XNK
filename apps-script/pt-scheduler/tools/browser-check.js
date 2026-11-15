@@ -649,6 +649,12 @@ async function contrastReport(page) {
     const kLow = await page.locator('#view-clients .chip.active[data-filter="low"]').count();
     await page.evaluate(() => window.setClientFilter('all'));
     check(kLow === 1 && (await page.locator('#view-clients .chip.active').count()) === 1 && (await page.locator('#view-clients .chip.active[data-filter="all"]').count()) === 1, 'Klien: the filter chips follow the chosen filter');
+    // S8: judul grup mengikuti urutan dan menyebut dasar pengelompokan; tanpa pembagi bila hanya satu grup.
+    const grp = async sort => { await page.evaluate(v => window.setClientSort(v), sort); await page.waitForTimeout(200); return page.evaluate(() => Array.from(document.querySelectorAll('#client-list .month-divider span')).map(e => e.textContent)); };
+    const gSisa = await grp('sisa'), gNama = await grp('nama'), gNew = await grp('terbaru');
+    const gNewOk = gNew.length !== 1 && gNew.every(t => /^Terakhir aktif · /.test(t));
+    const sOrder = ['Sisa sesi · Habis', 'Sisa sesi · Hampir habis', 'Sisa sesi · Masih ada'], gSisaOk = gSisa.length !== 1 && gSisa.every((t, i) => sOrder.indexOf(t) !== -1 && (!i || sOrder.indexOf(t) > sOrder.indexOf(gSisa[i - 1])));
+    check(gSisaOk && gNama.length !== 1 && gNama.every(t => /^Nama · /.test(t)) && gNewOk, 'Klien: group labels name what they group by and follow the sort (one group = no divider) ' + JSON.stringify({ gSisa, gNama, gNew }));
 
     // Closing returns to the grid; a profile opened from another page keeps the normal 420 px panel.
     await page.click('.detail-head .icon-btn[aria-label="Tutup detail"]');
