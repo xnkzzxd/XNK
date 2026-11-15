@@ -33,7 +33,7 @@ test('the post-session message fills the template, shows what was trained and th
   assert.match(r.text, /^Halo Kak Ani, terima kasih untuk sesi hari ini!/);
   assert.match(r.text, /🏋️ Hari ini: Squat, lunges/);
   assert.match(r.text, /🎯 Berikutnya: Teknik squat/);
-  assert.match(r.text, /Sisa sesimu 5 dari 10\./);
+  assert.match(r.text, /Sisa sesi Kakak 5 dari 10\./);
   assert.match(r.waLink, /^https:\/\/wa\.me\/6281111111111\?text=/);
   const bare = env.call('saveSessionNote', t, 'SCH-A1', { rpe: 6 });
   assert.ok(!/Hari ini:|Berikutnya:/.test(bare.text), 'no empty headings when nothing was written');

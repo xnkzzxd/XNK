@@ -1161,6 +1161,30 @@ function _nutReminderLine_(kal) {
   return '\n\nTarget hari ini ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' kkal.';
 }
 
+/**
+ * Untuk memilih teks pengingat makan (ReminderVariasi.gs): profil klien yang Gizi-nya aktif,
+ * { memberId: { goal, hemat, pantang: [], hatiHati } }. Hanya dipakai di server; tidak ada isinya yang dikirim.
+ */
+function _nutBulkProfile_() {
+  const out = {};
+  if (!_nutEnabled_()) return out;
+  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+    if (!row[0]) return;
+    const p = _nutProfileFrom_(row);
+    if (!p.aktif) return;
+    out[String(row[0]).trim()] = { goal: p.goal, hemat: p.anggaran === 'hemat', pantang: p.pantangan, hatiHati: p.kondisi.length > 0 };
+  });
+  return out;
+}
+
+/** Klien yang mencatat makan pada tanggal itu: { memberId: true }. Hanya ya/tidak, tanpa isi catatan. */
+function _nutBulkLogged_(iso) {
+  const out = {};
+  if (!_nutEnabled_()) return out;
+  _sheetRowsMemo_('FoodLog').forEach(function(r) { if (r[0] && _isoDateCell_(r[2]) === iso) out[String(r[1]).trim()] = true; });
+  return out;
+}
+
 /** Kalori target semua klien yang Gizi-nya aktif dan datanya lengkap: { memberId: kkal }. Membaca tiap sheet satu kali. */
 function _nutBulkCalories_() {
   const out = {};

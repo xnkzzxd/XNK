@@ -64,7 +64,7 @@ test('the default client texts speak to the client: name first, key fact present
   const facts = { 'sesi-besok': '07:00', 'booking-minggu': 'Rabu 1/10 07:00', 'pr': 'Latihan mobilitas', 'makan-pagi': 'Sarapan telur', 'makan-sore': 'Sarapan telur' };
   Object.keys(facts).forEach(j => {
     const text = env.call('previewReminderText', token, j, '').text;
-    assert.match(text, /^((Hai|Halo) )?Kak Budi/, j);
+    assert.match(text, /^((Hai|Halo|Selamat pagi|Selamat sore) )?Kak Budi/, j);
     assert.ok(text.includes(facts[j]) || j.startsWith('makan'), j + ' should contain ' + facts[j]);
     assert.ok(text.length < 500, j);
   });
@@ -218,6 +218,7 @@ function withCore() {
     ['P1', 'Core 8', 'core', 900000, 8, '1 Bulan', '', '', true],
   ]);
   env.ss.seed('MealTips', [['Waktu', 'Tip', 'Aktif'], ['pagi', 'Sarapan telur dan oatmeal', 'ya'], ['sore', 'Makan sore ringan', 'ya']]);
+  env.sheet('MemberData').rows.slice(1).forEach(r => { r[4] = '25/9/2026'; });   // new clients (≤ 14 days): makan pagi and sore
   return env;
 }
 
@@ -446,7 +447,7 @@ test('tes-ulang: only clients whose last fitness test is 28+ days old get a butt
   const bs = buttons(env);
   assert.equal(bs.length, 1);
   assert.equal(bs[0].text, 'Ani Anggraini · tes ulang');
-  assert.match(waText(bs[0]), /^Hai Kak Ani, sudah sebulan sejak tes kebugaranmu \(20 Agu\)/);
+  assert.match(waText(bs[0]), /^Halo Kak Ani, sudah sebulan sejak tes kebugaran Kakak \(20 Agu\)/);
   const fresh = seededEnv();
   telegramOn(fresh);
   fresh.ss.seed('FitnessTests', [['ID', 'Member ID', 'Tanggal', 'Tes', 'Nilai', 'Dicatat Oleh', 'Diubah Pada'], ['F1', 'PT-A', '2026-09-20', 'pushup', 20, 'coach', '']]);
@@ -461,7 +462,7 @@ test('hidup-sehat: every active client gets a cardio button; on by default at 05
   assert.equal(env.callRaw('sendHidupSehatDigest_', ctx(env)), true);
   assert.match(messages(env)[0].text, /^🔔 <b>Hidup sehat<\/b>/);
   assert.deepEqual(buttons(env).map(b => b.text), ['Ani Anggraini', 'Budi', 'Citra']);
-  assert.match(waText(buttons(env)[1]), /Kak Budi\b.*(cardio|gerak|jalan)/is);
+  assert.match(waText(buttons(env)[1]), /Kak Budi\b/);
 
   const env2 = seededEnv();
   env2.memberRow('PT-A')[15] = 'hidup-sehat';

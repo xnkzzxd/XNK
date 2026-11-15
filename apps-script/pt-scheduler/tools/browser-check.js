@@ -923,9 +923,9 @@ async function contrastReport(page) {
     await page.evaluate(() => document.querySelectorAll('.rmd-acc').forEach(d => { d.open = true; }));
     check(await page.locator('[data-k="job-sesi-besok-enabled"]').count() === 1, 'Pengingat has a "Sesi besok" card');
     check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 13, 'every reminder type has an editable client message');
-    check((await page.textContent('#pv-pr')).startsWith('Halo Kak Budi, pengingat PR kamu'), 'the preview shows the default client message with sample data');
+    check((await page.textContent('#pv-pr')).startsWith('Halo Kak Budi, pengingat PR Kakak'), 'the preview shows the default client message with sample data');
     check((await page.locator('[data-k="job-rekap-bulanan-enabled"]:not(:checked), [data-k="job-selamat-milestone-enabled"]:not(:checked), [data-k="job-waktunya-ukur-enabled"]:not(:checked)').count()) === 3, 'the three new message types (rekap, milestone, ukur) start switched off');
-    check((await page.textContent('#pv-rekap-bulanan')).includes('rekap latihan bulan September') && (await page.textContent('#pv-selamat-milestone')).includes('badge 25 sesi') && (await page.textContent('#pv-waktunya-ukur')).includes('waktunya catat progres'), 'the new types show a preview of their client message');
+    check((await page.textContent('#pv-rekap-bulanan')).includes('rekap latihan bulan September') && (await page.textContent('#pv-selamat-milestone')).includes('badge 25 sesi') && (await page.textContent('#pv-waktunya-ukur')).includes('waktunya mencatat progres'), 'the new types show a preview of their client message');
     await page.click('[data-k="job-waktunya-ukur-enabled"]');
     await page.click('#settings-save-btn');
     await page.waitForTimeout(700);

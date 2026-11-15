@@ -83,14 +83,33 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
   dan tombol tes, kalimat tidur, tombol **Pasang** trigger (tanpa membuka editor), dan riwayat
   pengingat (nama klien, bukan nomor).
 - **Variasi pesan harian**: Hidup sehat, Makan pagi/sore, Sesi besok, PR dan Booking Minggu
-  memakai 62 teks berbeda (44 hari kerja + 18 akhir pekan) yang berganti tiap hari, dan tiap
-  klien dapat teks yang berbeda. Teksnya ada di sheet **PesanVariasi** (dibuat otomatis saat
-  pengingat pertama jalan): kolom `Jenis`, `Hari` (`weekday`, `weekend`, `semua`, atau nama hari
-  libur), `Teks`, `Aktif` (`tidak` = tidak dipakai). Boleh diubah atau ditambah; baris yang salah
-  dilewati. Kunci khusus: `sesi-besok-banyak` / `pr-banyak` (2+ sesi atau PR), `booking-habis`
-  (paket habis → ajakan perpanjang), `ramadan-…`, `libur`, dan `personal-kangen` / `personal-sisa`
-  / `personal-streak` (satu baris tambahan bila klien lama tidak latihan, sisa sesi ≤ 2, atau
-  streak ≥ 3 minggu). Isi pesan di Pengaturan tidak dipakai untuk jenis ini.
+  memakai banyak teks berbeda yang berganti tiap hari, dan tiap klien dapat teks yang berbeda.
+  Teksnya ada di sheet **PesanVariasi** (dibuat otomatis saat pengingat pertama jalan): kolom
+  `Jenis`, `Hari`, `Teks`, `Aktif` (`tidak` = tidak dipakai), `Tag`, `Sumber`. Boleh diubah atau
+  ditambah; baris yang salah dilewati. Isi pesan di Pengaturan tidak dipakai untuk jenis ini.
+  - **Hari**: `senin`, `jumat`, `sabtu`, `minggu` (teks khusus hari itu), `weekday` (Selasa–Kamis,
+    dan Senin/Jumat bila tidak ada teks khususnya), `weekend` (tanggal merah / cuti bersama, dan
+    Sabtu/Minggu bila tidak ada teks khususnya), `semua`, atau nama hari libur.
+  - **Kunci khusus**: `sesi-besok-banyak` / `pr-banyak` (2+ sesi atau PR), `booking-habis` (paket
+    habis → ajakan perpanjang), `ramadan-…`, `libur`, `personal-kangen` / `personal-sisa` /
+    `personal-streak` (satu baris tambahan bila klien lama tidak latihan, sisa sesi ≤ 2, atau
+    streak ≥ 3 minggu).
+  - **Makan mengikuti klien** (2026-11): `makan-pagi-latihan` / `makan-sore-latihan` (ada sesi hari
+    itu; `{jam}` = jam sesi), `makan-pagi-pulih` (sesi selesai kemarin), `makan-pagi-baru` /
+    `makan-sore-baru` (14 hari pertama klien, baris ke-1 = hari ke-1 dan seterusnya), `makan-cek`
+    (Rabu sore: hanya menanyakan kabar, tanpa saran), `personal-catat` (terima kasih bila kemarin
+    mencatat makan) dan `personal-catat-yuk` (ajakan halus, hanya Senin dan Kamis).
+  - **Tag** (dipisah koma) menyaring teks per klien dari data Gizi: `turun` / `naik` / `jaga` /
+    `recomp` = hanya untuk klien dengan tujuan itu; `telur`, `seafood`, `kacang`, `susu` = tidak
+    dikirim ke klien yang berpantang; `mahal` = tidak untuk anggaran hemat; `porsi` = tidak untuk
+    klien bertanda hamil / gangguan-makan. Kosong = untuk semua. Data gizinya hanya dipakai untuk
+    memilih teks; tujuan, angka dan nama makanan klien tidak pernah ikut terkirim.
+  - **Sumber**: nomor di `docs/reminder/Sumber.md` untuk tips yang berdasar pedoman atau jurnal.
+  - **Irama makan**: klien baru (14 hari sejak tanggal gabung) dapat makan pagi **dan** sore; klien
+    lama **satu** pesan makan sehari (pagi dan sore bergantian), dan tiap Rabu sapaan sore.
+  - **Nada**: coach menyebut diri "saya", bahasa Indonesia, mengajak (bukan menyuruh), 3–4 baris
+    pendek, paling banyak satu emoji. Saat versi ini pertama jalan, baris bawaan lama di sheet
+    diganti otomatis **sekali**; baris yang pernah Anda ubah atau tambah tidak disentuh.
 - Semua pesan menyapa klien **"Kak <nama depan>"**.
 - Hidup sehat, makan dan Booking Minggu dikirim ke **semua klien** bernomor, termasuk yang paketnya
   habis. Makan pagi/sore **aktif bawaan** dan tetap jalan walau MealTips kosong (tip ditambahkan
