@@ -539,8 +539,8 @@
     });
   };
 
-  // Tiga panggilan berjalan bersamaan, dan dimulai diam-diam setelah data panel siap,
-  // supaya Pengaturan sudah terisi saat dibuka.
+  // Tiga panggilan berjalan bersamaan, dan dimulai diam-diam setelah getAdminMore selesai (loadAdminExtras),
+  // supaya Pengaturan sudah terisi saat dibuka tanpa memperlambat layar pertama.
   function settingsPrefetch() {
     const p = {
       settings: adminCall('getAppSettings'),
