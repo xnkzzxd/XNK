@@ -19,7 +19,7 @@ Owner membuka panel untuk tiga hal: *apa jadwal hari ini*, *siapa klien yang per
 | P8 | Aksi sesi (Selesai/Ubah/WA) bobot sama; "Selesai" kontras rendah di kartu hitam; tombol menumpuk kiri | Dashboard, Jadwal | Sedang |
 | P9 | Empty state besar ("Semua klien aman"); daftar "Perlu perhatian" Coach 3 baris identik + "Nanti" | Dashboard, Coach | Sedang |
 | P10 | Keuangan HP: angka penuh turun 2 baris di tile; grafik 6 bulan hampir kosong | Keuangan | Sedang |
-| P11 | Jadwal: kalender memakan layar HP; desktop punya ruang kosong besar di bawah | Jadwal | Sedang |
+| P11 | Jadwal: kalender memakan layar HP; desktop punya ruang kosong besar di bawah | Jadwal | Sedang (ditunda oleh pemilik 2026-11-15: Jadwal tetap seperti semula) |
 | P12 | Profil klien HP: hero + tab hitam ±40 % layar sebelum "Sorotan" | Profil klien | Sedang |
 | P13 | Titik kecil tanpa label (sidebar/tab/Booking baru); ikon dekoratif di tile; label "Coach" ganda (sidebar + tab) | Lintas layar | Rendah |
 | P14 | Gaya tombol "Selesai" tidak seragam; kartu hitam terlalu banyak | Lintas layar | Rendah |
