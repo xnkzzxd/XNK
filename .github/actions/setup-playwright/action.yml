@@ -1,0 +1,18 @@
+name: Set up Playwright
+description: >
+  Installs Playwright and Chromium outside the repo (there is no package.json here) and exports NODE_PATH,
+  which is how tools/*.js find it. Used by every job in checks.yml that drives a browser.
+inputs:
+  version:
+    description: Playwright version
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+        npm init -y > /dev/null
+        npm install --no-audit --no-fund "playwright@${{ inputs.version }}"
+        npx playwright install --with-deps chromium
+        echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"

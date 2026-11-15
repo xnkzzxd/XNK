@@ -52,6 +52,7 @@ test('curated list has 150-300 items with portions, price and allergen tags', fu
 
 test('every item passes the energy check; micronutrients are null or in range', function () {
   data.items.forEach(function (i) {
+    if (i.id === 'NR0077') { assert.ok(i.kal === 0 && i.na > 30000, 'garam'); return; }   // garam: tanpa energi
     assert.ok(sane({ kal: i.kal, protein: i.p, lemak: i.l, karbo: i.k, serat: 0, air: 50 }), i.id + ' ' + i.n + ' energy');
     if (i.fe != null) assert.ok(microOk({ fe: i.fe, ca: i.ca, na: i.na, s: i.s, k: i.k }), i.id + ' micro');
   });
@@ -61,7 +62,33 @@ test('estimates are flagged and not TKPI; TKPI items are not', function () {
   const est = data.items.filter(function (i) { return i.e; });
   assert.ok(est.length >= 40 && est.length <= 60);
   est.forEach(function (i) { assert.ok(/^E\d+$/.test(i.id), i.id); assert.strictEqual(i.fe, null); });
-  data.items.filter(function (i) { return !i.e; }).forEach(function (i) { assert.ok(/^[A-Z]{2}\d{3}$/.test(i.id), i.id); });
+  data.items.filter(function (i) { return !i.e && !i.pk && !i.r; }).forEach(function (i) { assert.ok(/^[A-Z]{2}\d{3}$/.test(i.id), i.id); });
+  data.items.filter(function (i) { return i.pk; }).forEach(function (i) { assert.ok(/^[A-Z]{2}\d{4}$/.test(i.id), i.id); assert.ok(i.src, i.id); });
+  data.items.filter(function (i) { return i.r; }).forEach(function (i) { assert.ok(/^R\d{2}$/.test(i.id), i.id); assert.ok(i.b.length >= 2, i.id); });
+});
+
+test('recipes are the sum of their ingredients (TKPI 2020 or panganku), per 100 g of the cooked portion', function () {
+  const list = JSON.parse(fs.readFileSync(path.join(__dirname, '../tools/foods-curated.json'), 'utf8'));
+  const ruj = {};
+  list.rujukan.forEach(function (r) { ruj[r[0]] = r[6]; });
+  // Bahan dari panganku dihitung ulang di sini; bahan TKPI cukup dicek lewat contoh R14 (tempe 50 g + kecap 5 g + minyak 2 g = 55 g).
+  const r14 = byId.R14;
+  const kal = (201 * 50 + 71 * 5 + 884 * 2) / 100;
+  assert.strictEqual(r14.kal, Math.round(kal / 55 * 100));
+  assert.strictEqual(r14.p, Math.round((20.8 * 50 + 5.7 * 5) / 100 / 55 * 1000) / 10);
+  const r03 = byId.R03, a = ruj.FP0120, b = ruj.NP0177;   // dada bakar 80 g + sambal hijau 20 g = 100 g
+  assert.strictEqual(r03.kal, Math.round((a[0] * 80 + b[0] * 20) / 100));
+  assert.strictEqual(r03.na, Math.round((a[5] * 80 + b[5] * 20) / 100));
+  list.resep.forEach(function (r) { assert.ok(byId[r[0]] && byId[r[0]].r, r[0]); });
+});
+
+test('shifted TKPI cells are corrected and tags are known', function () {
+  assert.strictEqual(byId.HP001.na, null);            // telur dadar: natrium kosong di TKPI 2020 (bukan 36 dari kolom retinol)
+  assert.strictEqual(byId.CP011.na, null);
+  assert.ok(!byId.E50 && !byId.E37, 'estimates replaced by panganku rows');
+  assert.strictEqual(byId.CP0211.kal, 101);           // tahu bacem panganku
+  data.items.forEach(function (i) { (i.t || []).forEach(function (t) { assert.ok(['santan', 'goreng', 'manis', 'asin'].includes(t), i.id + ' ' + t); }); });
+  assert.ok(byId.FP0456.t.includes('santan') && byId.R01.t.includes('goreng'));
 });
 
 test('allergen and lactose tags', function () {

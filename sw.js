@@ -1,11 +1,12 @@
 /*
- * XNK — service worker halaman pembungkus. Hanya menyimpan halaman ini, layar "Catat offline", ikon, dan dua pustaka
- * statis (gerakan, makanan) supaya halaman bisa dibuka tanpa sinyal. Aplikasi Apps Script di iframe tidak disentuh.
+ * XNK — service worker halaman pembungkus. Hanya menyimpan halaman ini, layar "Catat offline", ikon, dan pustaka
+ * statis (gerakan, makanan, peta otot, animasi gerakan) supaya halaman bisa dibuka tanpa sinyal. Aplikasi Apps Script di iframe tidak disentuh.
  * Satu sumber di XNK; salinan di BookingPT-Client dibuat oleh tools/sync-offline.js.
  */
-var CACHE = 'xnk-off-v1';
+var CACHE = 'xnk-off-v2';
 var SHELL = ['/', '/index.html', '/offline.js', '/offline-host.js', '/offline.css', '/manifest.webmanifest', '/favicon.ico', '/icon-192.png', '/apple-touch-icon.png'];
-var LIBS = ['https://xnk.my.id/exercises/exercises.min.json', 'https://xnk.my.id/foods/foods.min.json'];
+var LIBS = ['https://xnk.my.id/exercises/exercises.min.json', 'https://xnk.my.id/foods/foods.min.json',
+  'https://xnk.my.id/figure/figure.min.json', 'https://xnk.my.id/figure/rig.min.json'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {

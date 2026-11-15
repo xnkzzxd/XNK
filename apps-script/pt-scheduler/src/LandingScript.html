@@ -11,7 +11,6 @@
   var IMG_BASE = 'https://xnkbooking.my.id/img/';
   var BOOKING_URL = 'https://book.xnkbooking.my.id';
   var DESK_Q = '(min-width: 1024px)';
-  var isGas = typeof google !== 'undefined' && google.script && google.script.run;
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   var root = document.documentElement;
@@ -68,13 +67,12 @@
   function call(name) {
     var args = Array.prototype.slice.call(arguments, 1);
     return new Promise(function (resolve, reject) {
-      if (!isGas) {
+      if (!hasServer()) {
         if (MOCK[name] !== undefined) setTimeout(function () { resolve(MOCK[name]); }, 350);
         else reject(new Error('Mode pratinjau: fitur ini hanya jalan di aplikasi.'));
         return;
       }
-      var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-      r[name].apply(r, args);
+      rpc(name, args).then(resolve, reject);   // rpc ada di Scripts.html
     });
   }
 
@@ -404,7 +402,7 @@
     if (multiCoach() && !coachId) { fail('Pilih coach dulu.'); return; }
     if (errEl) errEl.classList.add('hide');
     if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
-    call('registerNewClient', { name: data.name, phone: data.phone, goal: data.goal, packageId: pkg.id, coachId: coachId }).then(function (res) {
+    call('registerNewClient', { name: data.name, phone: data.phone, goal: data.goal, packageId: pkg.id, coachId: coachId, experience: data.experience || '' }).then(function (res) {
       if (btn) { btn.disabled = false; btn.textContent = 'Konfirmasi & Daftar'; }
       res = res || {};
       if (res.status === 'exists') {
@@ -1524,8 +1522,17 @@
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
   // Data dimuat segera (tidak menunggu library animasi).
+  // Harga: kunjungan berikutnya langsung tampil dari salinan di perangkat, lalu disegarkan dari server (tampilan diganti hanya bila beda).
+  var priceCached = null;
+  try { priceCached = JSON.parse(localStorage.getItem('xnk_landing_prices') || 'null'); } catch (e) {}
+  var priceCachedStr = priceCached ? JSON.stringify(priceCached) : '';
+  if (priceCached) { try { initializePricingUI(priceCached); } catch (e) { priceCached = null; priceCachedStr = ''; } }
   call('getPriceListPublic').catch(function () { return call('getPriceList'); })   // server lama: tanpa getPriceListPublic
-    .then(initializePricingUI).catch(function () { initializePricingUI([]); });
+    .then(function (d) {
+      var str = JSON.stringify(d);
+      try { localStorage.setItem('xnk_landing_prices', str); } catch (e) {}
+      if (str !== priceCachedStr) initializePricingUI(d);
+    }).catch(function () { if (!priceCached) initializePricingUI([]); });
   call('getLandingStats').then(renderHeroStats).catch(function () { renderHeroStats({ totalClients: 0, completedSessions: 0, satisfactionPct: null, avgRating: null }); });
   call('getPublicTestimonials').then(renderTestimonials).catch(function () { renderTestimonials([]); });
   call('getCoaches').then(function (list) {

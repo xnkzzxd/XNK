@@ -49,7 +49,8 @@ test('text round trip: save, read back as the same text', () => {
   const t = env.adminToken();
   env.call('saveMemberProgram', t, 'PT-A', TEXT);
   const p = j(env.call('getMemberProgram', t, 'PT-A'));
-  assert.equal(p.text, TEXT);
+  // Fase U: a manual name identical to a library exercise ("Push-up") is read back with that Exercise ID.
+  assert.equal(p.text, TEXT.replace('Push-up | 3x12', 'Push-up | 3x12 | ex:0662'));
   assert.deepEqual(p.days[0].items.map(i => i.n), [1, 2, 3]);
   assert.deepEqual(p.days[1].items.map(i => i.n), [4]);
   assert.equal(env.sheet('ProgramItems').rows.length, 5);

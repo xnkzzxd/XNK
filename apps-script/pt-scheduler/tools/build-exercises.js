@@ -5,6 +5,7 @@
 // `base + gif` for admin previews only.
 const fs = require('fs');
 const path = require('path');
+const { applyNames } = require('./exercise-names');
 
 const MEDIA_BASE = 'https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/';
 
@@ -22,7 +23,8 @@ function slim(list) {
 }
 
 function build(list) {
-  return { v: 1, base: MEDIA_BASE + 'videos/', credit: 'Exercises Dataset (MIT) · media © Gym visual', items: slim(list) };
+  // Fase U: `n` = nama tampilan ala Hevy, `r` = nama mentah dataset (untuk pencarian).
+  return { v: 2, base: MEDIA_BASE + 'videos/', credit: 'Exercises Dataset (MIT) · media © Gym visual', items: applyNames(slim(list)) };
 }
 
 if (require.main === module) {

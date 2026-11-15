@@ -110,34 +110,42 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-// Pintu JSON untuk aplikasi klien mandiri (PWA offline). Hanya fungsi klien di
-// daftar putih ini; setiap fungsi tetap menjaga dirinya lewat requireMember_
-// (token di argumen pertama), jadi tidak ada jalan masuk baru ke data admin.
-const APP_API_MAX_BYTES = 200000;
-const APP_API_PHOTO_BYTES = 1600000;   // foto sudah diperkecil di browser (~1280 px)
-function _appApi_() {
-  return { memberLoginByPhone: memberLoginByPhone, getPortalBootstrap: getPortalBootstrap, getPortalMore: getPortalMore,
-    getMyWorkout: getMyWorkout, logMyWorkout: logMyWorkout, getMyNutrition: getMyNutrition, getMyFoodLog: getMyFoodLog,
-    logMyFood: logMyFood, deleteMyFood: deleteMyFood, saveMyMeasurement: saveMyMeasurement,
-    deleteMyMeasurement: deleteMyMeasurement, getMyProgress: getMyProgress,
-    uploadMyProgressPhoto: uploadMyProgressPhoto, getMyProgressPhoto: getMyProgressPhoto, deleteMyProgressPhoto: deleteMyProgressPhoto, getMyShareData: getMyShareData };
-}
+// Pintu JSON (Phase AAA): halaman statis di GitHub Pages dan app klien mandiri memanggil fungsi server
+// lewat fetch. Daftar fungsi yang boleh dipanggil ada di Api.gs (_apiTable_, dibuat dari
+// tests/api-lists.js: fungsi publik, admin dan member; tidak pernah owner, trigger, doGet/doPost/include).
+// Tiap fungsi tetap menjaga dirinya (requireAdmin_ / requireMember_ sebagai pernyataan pertama), jadi
+// pintu ini tidak memberi izin baru. doPost anonim, jadi requireOwner_ selalu menolak.
+const API_VERSION = 1;                   // naik bila bentuk jawaban doPost berubah tidak kompatibel
+const APP_API_MAX_BYTES = 200000;        // batas isi permintaan biasa
+const APP_API_PHOTO_BYTES = 1600000;     // foto progres sudah diperkecil di browser (~1280 px)
+const APP_API_UPLOAD_BYTES = 7200000;    // unggahan foto/bukti lain; fungsinya sendiri membatasi base64 7.000.000
+const API_BODY_LIMITS = { uploadMyProgressPhoto: APP_API_PHOTO_BYTES, uploadMemberPhoto: APP_API_UPLOAD_BYTES,
+  uploadCoachPhoto: APP_API_UPLOAD_BYTES, uploadFinanceProof: APP_API_UPLOAD_BYTES };
+function _appApi_() { return _apiTable_(); }
 function _appApiReply_(obj) {
+  obj.v = API_VERSION;
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
-/** Body: {fn, args:[...]} sebagai teks biasa (text/plain, tanpa preflight CORS). Jawaban: {ok, data} atau {ok:false, error, auth}. */
+/** Body: {fn, args:[...]} sebagai teks biasa (text/plain, tanpa preflight CORS). Jawaban: {ok, data, v} atau {ok:false, error, auth, v}. */
 function doPost(e) {
   try {
     const raw = e && e.postData && e.postData.contents ? String(e.postData.contents) : '';
-    if (!raw || raw.length > APP_API_PHOTO_BYTES) throw new Error('Permintaan tidak valid.');
+    if (!raw || raw.length > APP_API_UPLOAD_BYTES) throw new Error('Permintaan tidak valid.');
     const req = JSON.parse(raw);
     const fn = req && req.fn;
-    if (raw.length > APP_API_MAX_BYTES && fn !== 'uploadMyProgressPhoto') throw new Error('Permintaan tidak valid.');
     const api = _appApi_();
     if (typeof fn !== 'string' || !Object.prototype.hasOwnProperty.call(api, fn)) throw new Error('Permintaan tidak valid.');
+    const limit = Object.prototype.hasOwnProperty.call(API_BODY_LIMITS, fn) ? API_BODY_LIMITS[fn] : APP_API_MAX_BYTES;
+    if (raw.length > limit) throw new Error('Permintaan tidak valid.');
+    // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
+    try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
     const args = Array.isArray(req.args) ? req.args : [];
-    const data = api[fn].apply(null, args);
-    return _appApiReply_({ ok: true, data: _plainJson_(data === undefined ? null : data) });
+    // Fase W6b (T-1825): satu baris "speed rpc <fn>" per panggilan (run = kerja fungsi, json = salin jawaban). SPEED_TRACE=false mematikan.
+    const tr = _traceStart_();
+    const data = _tp_(tr, 'run', function () { return api[fn].apply(null, args); });
+    const out = _tp_(tr, 'json', function () { return _plainJson_(data === undefined ? null : data); });
+    _traceEnd_(tr, 'rpc ' + fn);
+    return _appApiReply_({ ok: true, data: out });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
     return _appApiReply_({ ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 });
@@ -203,11 +211,14 @@ const REGISTER_MAX_PER_10MIN = 5;    // pendaftaran mandiri per 10 menit (dari s
 // Nilai null = hapus property. Hanya file MILIK akun pemilik yang dibaca (file
 // yang dibagikan orang lain diabaikan), dan hanya kunci di CONFIG_KEYS.
 const CONFIG_FILE_NAME = 'xnk-pt-config.json';
-const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS'];
+const CONFIG_KEYS = ['ADMIN_PIN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_IDS', 'PUSH_VAPID_PUBLIC', 'PUSH_VAPID_PRIVATE', 'PUSH_RELAY_SECRET'];
 const CONFIG_CHECK_SECONDS = 300;
 
 function _configValueError_(key, value) {
   if (key === 'ADMIN_PIN' && value.length < 6) return 'minimal 6 karakter';
+  if (key === 'PUSH_VAPID_PUBLIC' && !/^[A-Za-z0-9_-]{80,100}$/.test(value)) return 'kunci publik VAPID tidak valid';
+  if (key === 'PUSH_VAPID_PRIVATE' && !/^[A-Za-z0-9_-]{40,50}$/.test(value)) return 'kunci privat VAPID tidak valid';
+  if (key === 'PUSH_RELAY_SECRET' && value.length < 24) return 'minimal 24 karakter';
   return null;
 }
 
@@ -470,6 +481,7 @@ function getAppSettings(token) {
     clientGuideEnabled: _guideEnabled_(),
     feedbackEnabled: _feedbackEnabled_(),
     shareEnabled: _shareEnabled_(),
+    warmEnabled: _warmEnabled_(),
     shareQrUrl: PropertiesService.getScriptProperties().getProperty('SHARE_QR_URL') || '',
     shareQrDefault: SHARE_QR_DEFAULT,
     nutritionEnabled: _nutEnabled_(),
@@ -523,6 +535,10 @@ function updateAppSettingsImpl_(token, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'shareEnabled')) setOrDelete('SHARE_ENABLED', payload.shareEnabled ? '' : 'false');
   if (qrUrl !== null) setOrDelete('SHARE_QR_URL', qrUrl);
+  if (Object.prototype.hasOwnProperty.call(payload, 'warmEnabled')) {   // Fase W6a: sakelar + pemicu sekaligus
+    setOrDelete('WARM_ENABLED', payload.warmEnabled ? 'true' : '');
+    if (payload.warmEnabled) _installWarmTrigger_(); else _removeWarmTrigger_();
+  }
   if (Object.prototype.hasOwnProperty.call(payload, 'feedbackEnabled')) setOrDelete('FEEDBACK_ENABLED', payload.feedbackEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'nutritionEnabled')) setOrDelete('NUTRITION_ENABLED', payload.nutritionEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'businessHours')) {
@@ -605,9 +621,25 @@ function _issueMemberSession_(found) {
 }
 
 // Cari baris member (1-based) + datanya. Kembalikan null kalau tidak ada.
-function _findMemberRow_(predicate) {
+// Fase W1: MemberData dibaca sekali per bundle baca-saja (getPortalMore, getAdminMore, getClientBundle), bukan tiap panggilan.
+// Memo hanya hidup di dalam _withMemberMemo_; penulis tidak pernah memakainya.
+let _memberMemo_ = null;
+function _memberValues_() {
+  if (_memberMemo_ && _memberMemo_.data) return _memberMemo_;
   const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
+  const v = { sheet: sheet, data: sheet.getDataRange().getValues() };
+  if (_memberMemo_) { _memberMemo_.sheet = v.sheet; _memberMemo_.data = v.data; }
+  return v;
+}
+function _withMemberMemo_(fn) {
+  const prev = _memberMemo_, prevRead = _readMemo_;
+  if (!prev) _memberMemo_ = {};
+  if (!prevRead) _readMemo_ = {};   // bundle baca-saja: sheet lain (coach, aturan, jadwal) ikut dibaca sekali
+  try { return fn(); } finally { _memberMemo_ = prev; _readMemo_ = prevRead; }
+}
+function _findMemberRow_(predicate) {
+  const mv = _memberValues_();
+  const sheet = mv.sheet, data = mv.data;
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] && predicate(data[i])) return { sheet: sheet, rowNum: i + 1, row: data[i] };
   }
@@ -814,6 +846,25 @@ function _assertBookingHorizon_(start) {
 // #############################################################################
 
 /**
+ * appendRow, lalu pastikan teks tanggal ('2026-11-03', '2026-11-03T05:56:05.123Z') tetap teks.
+ * Sheets kadang mengubahnya jadi tanggal sungguhan walau kolomnya '@' (FoodLog, FitnessTests, … sejak 2026-10);
+ * pembaca yang memakai String(sel) lalu tidak pernah cocok lagi ("data tidak berubah"). Sel itu ditulis ulang sebagai teks.
+ */
+const SHEET_ISO_TEXT_RE_ = /^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/;
+function _appendRow_(sheet, row) {
+  sheet.appendRow(row);
+  const fix = [];
+  row.forEach(function(v, i) { if (typeof v === 'string' && SHEET_ISO_TEXT_RE_.test(v)) fix.push(i); });
+  if (!fix.length) return;
+  let n = sheet.getLastRow();
+  const key = String(row[0]);
+  for (let k = 0; k < 5 && n > 1 && String(sheet.getRange(n, 1).getValue()) !== key; k++) n--;
+  if (n < 1 || String(sheet.getRange(n, 1).getValue()) !== key) return;
+  const got = sheet.getRange(n, 1, 1, row.length).getValues()[0];
+  fix.forEach(function(i) { if (got[i] !== row[i]) sheet.getRange(n, i + 1).setNumberFormat('@').setValue(row[i]); });
+}
+
+/**
  * Fungsi pembantu untuk membuat Sheet baru jika belum ada,
  * atau memastikan baris header sudah tertulis dengan benar.
  */
@@ -899,12 +950,12 @@ function logToSheet_(pesan, status = "INFO") {
     // Jika sheet "Logs" belum ada, buat otomatis
     if (!sheet) {
       sheet = ss.insertSheet("Logs");
-      sheet.appendRow(["Timestamp", "Status", "Pesan"]);
+      _appendRow_(sheet, ["Timestamp", "Status", "Pesan"]);
       sheet.getRange("A1:C1").setFontWeight("bold"); // Bold header
     }
     
     const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-    sheet.appendRow([timestamp, status, pesan]);
+    _appendRow_(sheet, [timestamp, status, pesan]);
   } catch (e) {
     Logger.log("Gagal menulis log ke sheet: " + e.message);
   }
@@ -957,9 +1008,8 @@ function _coachList_(v) {
 
 /** Semua coach (aktif & nonaktif), dibaca per nama header. Tidak pernah membuat sheet. Baris lama tanpa "Status Aktif" = aktif. */
 function _coachesAll_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Coaches');
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  const data = sheet.getDataRange().getValues();
+  const data = _sheetFullMemo_('Coaches');
+  if (!data) return [];
   const idx = _coachSchema_(data[0]);
   if (!idx) return [];
   const cell = function(row, key) { return idx[key] === undefined ? '' : sanitizeValue(row[idx[key]]); };
@@ -1087,7 +1137,7 @@ function saveCoachImpl_(token, data) {
       row[idx.id] = id;
       row[idx.aktif] = true;
       Object.keys(values).forEach(function(k) { row[idx[k]] = values[k]; });
-      sheet.appendRow(row);
+      _appendRow_(sheet, row);
       _bustSlots_();   // sesudah menulis: coach baru menambah kursi
       return { status: 'success', id: id };
     }
@@ -1366,6 +1416,13 @@ function _memberKeyColumnReady_(sheet) {
  * mencegah Sheets auto-convert "D/M/YYYY" jadi tipe Date yang kacaukan parsing.
  */
 const MEMBERS_LOG_PRICE_COL = 11;   // K "Harga": harga paket saat transaksi (untuk laporan pendapatan)
+// Fase W: isi sheet Members (log transaksi) dengan header di baris 0; sekali per bundle baca-saja (omzet, tren, hub, log memakai data yang sama).
+function _membersLogValues_() {
+  if (_readMemo_ && _readMemo_.__membersLog) return _readMemo_.__membersLog;
+  const v = _getMembersLogSheet_().getDataRange().getValues();
+  if (_readMemo_) _readMemo_.__membersLog = v;
+  return v;
+}
 function _getMembersLogSheet_() {
   const sheet = getOrCreateSheet_('Members', MEMBERS_LOG_HEADERS);
   sheet.getRange('C:C').setNumberFormat('@');
@@ -1384,7 +1441,7 @@ function _tulisLogTransaksiMember_(memberId, jenis, paketId, namaPaket, jumlahSe
   const now = new Date();
   const dateStr = now.getDate() + '/' + (now.getMonth() + 1) + '/' + now.getFullYear();
   const price = (typeof harga === 'number' && isFinite(harga)) ? harga : '';   // harga saat transaksi; '' = tidak diketahui
-  sheet.appendRow([trxId, memberId, dateStr, jenis, paketId || '', namaPaket || '', jumlahSesi || 0, coachId || '', namaCoach || '', catatan || '', price]);
+  _appendRow_(sheet, [trxId, memberId, dateStr, jenis, paketId || '', namaPaket || '', jumlahSesi || 0, coachId || '', namaCoach || '', catatan || '', price]);
   _finBillFromTransaction_({ trxId: trxId, memberId: memberId, paketId: paketId, namaPaket: namaPaket, coachId: coachId, dateStr: dateStr, price: price });   // Fase H: tagihan (hanya bila aktif)
   return trxId;
 }
@@ -1591,8 +1648,7 @@ function getMembers(token) {
 }
 
 function _getMembersAll_() {
-  const sheet = _getMemberDataSheet_();
-  const data = sheet.getDataRange().getValues();
+  const data = _memberValues_().data;
   if (data.length <= 1) return [];
   // Kunci sesi (kolom N) TIDAK ikut dikirim.
   const list = data.slice(1).filter(function(row) { return row[0]; }).map(_memberPublicProfile_);
@@ -1728,7 +1784,7 @@ function _addMemberInternal_(memberData, options) {
         memberKey = _newMemberKey_();
         newRow.push(memberKey);
       }
-      sheet.appendRow(newRow);
+      _appendRow_(sheet, newRow);
 
       _tulisLogTransaksiMember_(id, 'Baru', paketId, paketNama, totalSessions, coachId, coachNama, 'Klien baru', paketHarga);
     }
@@ -1927,6 +1983,9 @@ function registerNewClient(data) {
     _ensureGuideColumn_(found.sheet);
     found.sheet.getRange(found.rowNum, MEMBER_GUIDE_COL).setValue('baru');
     found.row[MEMBER_GUIDE_COL - 1] = 'baru';
+    // Fase U: pengalaman latihan dari form daftar menjadi level awal program otomatis (dibulatkan ke bawah).
+    const lvl = _pgLevelFromExperience_(data.experience);
+    if (lvl) _pgWrite_(found, { level: lvl });
   } finally {
     lock.releaseLock();
   }
@@ -2115,17 +2174,21 @@ function getPublicSchedules(memberToken) {
  * openSlots datang dari cache server bersama (versi dibaca SEBELUM Schedules dibaca).
  */
 function getPortalBootstrap(memberToken) {
+  return _withMemberMemo_(function() { return getPortalBootstrapImpl_(memberToken); });
+}
+function getPortalBootstrapImpl_(memberToken) {
+  const tr = _traceStart_();
   let found = null, authLost = '';
   if (memberToken) {
-    try { found = requireMember_(memberToken); } catch (e) { authLost = String(e.message || e); }
+    try { found = _tp_(tr, 'auth', function() { return requireMember_(memberToken); }); } catch (e) { authLost = String(e.message || e); }
   }
   const memberId = found ? String(found.row[0]).trim() : null;
   // Versi data klien (dibaca sebelum sheet lain): sama dengan salinan di perangkat = getPortalMore tidak perlu dipanggil.
-  const moreVer = memberId ? _memberVer_(memberId) : '';
+  const moreVer = memberId ? _tp_(tr, 'ver', function() { return _memberVer_(memberId); }) : '';
   const ver = _slotsVersion_();
   // Tanpa klien yang masuk, sheet Schedules hanya dibaca kalau cache jam kosong kosong (hemat kuota).
-  const all = memberId ? _getSchedulesAll_() : undefined;
-  const shared = memberId ? _sharedNotesFor_(memberId) : {};
+  const all = memberId ? _tp_(tr, 'schedules', _getSchedulesAll_) : undefined;
+  const shared = memberId ? _tp_(tr, 'notes', function() { return _sharedNotesFor_(memberId); }) : {};
   const mine = memberId ? all.filter(function(x) { return String(x.memberId).trim() === memberId; }).map(function(x) {
     const o = _ownScheduleOut_(x);
     if (shared[String(x.id)]) { o.dilatih = shared[String(x.id)].dilatih; o.fokus = shared[String(x.id)].fokus; }
@@ -2140,20 +2203,40 @@ function getPortalBootstrap(memberToken) {
     schedules: mine,
     feedbackEnabled: feedbackOn,
     shareEnabled: _shareEnabled_(),
-    pendingRating: found && feedbackOn ? _pendingRating_(memberId, all) : null,
-    packageEval: { eligible: !!(found && feedbackOn && _packageEvalEligible_(found.row, all)) },
-    info: { latestAt: found ? _contentLatestAt_() : '' },
-    openSlots: _openSlotsCached_({ days: horizon }, now, all, false, ver),
-    openSlotsByCoach: _openSlotsByCoach_(all, ver, horizon, now, false),
+    pushKey: _pushPublicKey_(),   // Fase X: kosong = notifikasi mati (kartu tersembunyi)
+    pendingRating: found && feedbackOn ? _tp_(tr, 'pendingRating', function() { return _pendingRating_(memberId, all); }) : null,
+    packageEval: { eligible: !!(found && feedbackOn && _tp_(tr, 'packageEval', function() { return _packageEvalEligible_(found.row, all); })) },
+    info: { latestAt: found ? _tp_(tr, 'content', _contentLatestAt_) : '' },
+    openSlots: _tp_(tr, 'openSlots', function() { return _openSlotsCached_({ days: horizon }, now, all, false, ver); }),
+    openSlotsByCoach: _tp_(tr, 'slotsByCoach', function() { return _openSlotsByCoach_(all, ver, horizon, now, false); }),
     horizonDays: horizon,
     rescheduleCutoffHours: _rescheduleCutoff_(),
-    coaches: getCoaches(),
-    priceList: getPriceList(),
+    coaches: _tp_(tr, 'coaches', getCoaches),
+    priceList: _tp_(tr, 'priceList', getPriceList),
     businessHours: _businessHours_(),
     moreVer: moreVer,
-    // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati).
-    coachStatus: found ? (function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } })() : null
+    // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati dan tidak membawanya lagi saat cache kena).
+    coachStatus: found ? _tp_(tr, 'coachStatus', function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } }) : null,
+    ms: _traceEnd_(tr, 'getPortalBootstrap')
   };
+}
+
+// Fase W0: waktu server per bagian. Hanya angka milidetik (tanpa data klien) di field `ms` balasan + satu baris log.
+// SPEED_TRACE=false (Script Property) mematikannya; bawaan nyala karena dipakai untuk mengukur sebelum mengoptimalkan.
+function _traceStart_() {
+  if (String(PropertiesService.getScriptProperties().getProperty('SPEED_TRACE') || '').trim().toLowerCase() === 'false') return null;
+  return { t0: Date.now(), parts: {} };
+}
+function _tp_(tr, name, fn) {
+  if (!tr) return fn();
+  const t = Date.now();
+  try { return fn(); } finally { tr.parts[name] = Date.now() - t; }
+}
+function _traceEnd_(tr, label) {
+  if (!tr) return undefined;
+  const out = { total: Date.now() - tr.t0, parts: tr.parts };
+  try { console.log('speed ' + label + ' ' + JSON.stringify(out)); } catch (e) {}
+  return out;
 }
 
 /**
@@ -2163,19 +2246,47 @@ function getPortalBootstrap(memberToken) {
  * { error } dan tidak merusak bagian lain. Hanya data klien itu sendiri.
  */
 function getPortalMore(memberToken) {
-  const row = requireMember_(memberToken).row;
+  const tr = _traceStart_();
+  return _withMemberMemo_(function() {
+    const row = _tp_(tr, 'auth', function() { return requireMember_(memberToken).row; });
+    return getPortalMoreImpl_(row, tr);
+  });
+}
+function getPortalMoreImpl_(row, tr) {
   const id = String(row[0]).trim();
   const ver = _memberVer_(id);   // sebelum sheet data dibaca
-  const part = function(fn) { try { return fn(); } catch (e) { return { error: String((e && e.message) || e) }; } };
-  return _plainJson_(_withSchedulesMemo_(function() {
+  const day0 = _todayWib_();
+  const ckey = ver && _payloadCacheOn_() ? 'pm:' + id + ':' + day0 + ':' + ver : '';
+  if (ckey) {
+    const hit = _payloadGet_(ckey);
+    if (hit) {
+      // Status coach bergantung pada jam dan jadwal klien lain: tidak ikut cache dan tidak dihitung ulang di sini (1,4–2 dtk);
+      // getPortalBootstrap selalu membawanya segar dan klien hanya memakai coachStatus dari More bila ada.
+      delete hit.coachStatus;
+      if (hit.ms) delete hit.ms;
+      const ms = _traceEnd_(tr, 'getPortalMore:hit');
+      if (ms) { ms.hit = true; ms.ver = ver; hit.ms = ms; }
+      return hit;
+    }
+  }
+  const part = function(name, fn) { try { return _tp_(tr, name, fn); } catch (e) { return { error: String((e && e.message) || e) }; } };
+  const result = _plainJson_(_withSchedulesMemo_(function() {
     const coachId = String(row[10] || '').trim();
     const spy = {};
-    const progress = part(function() { return _myPayload_(row); });
-    const assessment = part(function() { return _assessmentFor_(row, spy); });
-    const program = part(function() { return _programFor_(row); });
-    const workout = part(function() { return _workoutFor_(row); });
-    const nutrition = part(function() { return _nutritionFor_(row); });
-    const ins = part(function() { return _insightFor_(row, 'client', { progress: progress, assessment: assessment, program: program, workout: workout, nutrition: nutrition, bodyFat: spy.bodyFat }); });
+    const progress = part('progress', function() { return _myPayload_(row); });
+    const assessment = part('assessment', function() { return _assessmentFor_(row, spy); });
+    const program = part('program', function() { return _programFor_(row); });
+    const workout = part('workout', function() { return _workoutFor_(row); });
+    const nutrition = part('nutrition', function() { return _nutritionFor_(row); });
+    const ins = part('insight', function() { return _insightFor_(row, 'client', { progress: progress, assessment: assessment, program: program, workout: workout, nutrition: nutrition, bodyFat: spy.bodyFat }); });
+    const tasks = part('tasks', function() { return _myTasksFor_(row); });
+    const healthForm = part('healthForm', function() { return _healthFormFor_(row); });
+    const renewal = part('renewal', function() { return _renewalFor_(row); });
+    const bills = part('bills', function() { return _billsFor_(row); });
+    const content = part('content', function() { return _contentForClient_(); });
+    // Fase X: kartu atlet, level, momen, cerita, lonceng, tugas hari ini — dari part di atas (satu galat = keenamnya {error}).
+    const px = part('portalX', function() { return _portalXFor_(row, { progress: progress, workout: workout, nutrition: nutrition, tasks: tasks, healthForm: healthForm, renewal: renewal, bills: bills, content: content }); });
+    const pxp = function(k) { return px.error ? px : px[k]; };
     return {
       at: new Date().toISOString(),
       ver: ver,
@@ -2183,21 +2294,36 @@ function getPortalMore(memberToken) {
       week: ins.error ? ins : ins.week,
       insight: ins.error ? ins : { body: ins.body, fitness: ins.fitness, links: ins.links, training: ins.training, activity: ins.activity },
       progress: progress,
-      tasks: part(function() { return _myTasksFor_(row); }),
-      healthForm: part(function() { return _healthFormFor_(row); }),
+      tasks: tasks,
+      healthForm: healthForm,
       assessment: assessment,
-      renewal: part(function() { return _renewalFor_(row); }),
-      bills: part(function() { return _billsFor_(row); }),
-      classGroup: part(function() { return _classGroupFor_(row); }),
-      meal: part(function() { return _mealForMember_(row); }),
+      renewal: renewal,
+      bills: bills,
+      classGroup: part('classGroup', function() { return _classGroupFor_(row); }),
+      meal: part('meal', function() { return _mealForMember_(row); }),
       program: program,
       workout: workout,
       nutrition: nutrition,
-      content: part(function() { return _contentForClient_(); }),
-      coachStatus: part(function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
-      share: part(function() { return _shareFor_(row, workout, progress); })
+      programGen: part('programGen', function() { return _programGenFor_(row, false); }),
+      content: content,
+      profile: pxp('profile'), level: pxp('level'), moments: pxp('moments'), journey: pxp('journey'), notif: pxp('notif'), todo: pxp('todo'),
+      coachStatus: part('coachStatus', function() { return { coachId: coachId, status: getCoachStatus(coachId) }; }),
+      share: part('share', function() { return _shareFor_(row, workout, progress); }),
+      ms: _traceEnd_(tr, 'getPortalMore')
     };
   }));
+  if (result.ms) result.ms.ver = ver;   // versi data yang dipakai kunci cache: membantu menelusuri miss tak terduga
+  if (ckey && !_anyPartFailed_(result)) {
+    const copy = Object.assign({}, result);
+    delete copy.ms;
+    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('PAYLOAD_CACHE_SECONDS', 1800)))));
+  }
+  return result;
+}
+
+/** Bagian bundle yang gagal ({error}) tidak disimpan di cache supaya galat sementara tidak menempel. */
+function _anyPartFailed_(bundle) {
+  return Object.keys(bundle).some(function(k) { const v = bundle[k]; return v && typeof v === 'object' && !Array.isArray(v) && typeof v.error === 'string'; });
 }
 
 /**
@@ -2263,29 +2389,91 @@ function getAdminExtras(token) {
  * + omzet/keuangan + tren paket + coach hub. Tiap bagian berbentuk sama dengan fungsi lamanya; bagian yang gagal
  * mengembalikan {error}. Detail Pengaturan (status pengingat, paket admin) dimuat saat halamannya dibuka.
  */
-function getAdminMore(token, month, year) {
-  requireAdmin_(token);
+// Sel "Tanggal" yang terlanjur diubah Sheets jadi tanggal sungguhan (lihat _appendRow_) dikembalikan jadi teks 'YYYY-MM-DD'.
+// Berjalan sendiri dari getAdminMore paling sering 6 jam sekali; pemilik juga bisa menjalankan repairDateCells dari editor.
+const DATE_TEXT_SHEETS_ = ['FoodLog', 'WorkoutLog', 'WorkoutSessions', 'Progress', 'ProgressPhotos', 'FitnessTests', 'SessionRatings', 'SessionNotes',
+  'NutritionAdvice', 'Assessments', 'HealthScreening', 'ProgramLog', 'Tagihan', 'Pembayaran', 'Pengeluaran', 'PackageEvaluations'];
+function _repairDateCells_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let fixed = 0;
+  DATE_TEXT_SHEETS_.forEach(function(name) {
+    const sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return;
+    sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].forEach(function(h, c) {
+      if (String(h).trim() !== 'Tanggal') return;
+      sh.getRange(2, c + 1, sh.getLastRow() - 1, 1).getValues().forEach(function(v, i) {
+        if (Object.prototype.toString.call(v[0]) !== '[object Date]' || isNaN(v[0].getTime())) return;
+        sh.getRange(i + 2, c + 1).setNumberFormat('@').setValue(_isoDateCell_(v[0]));
+        fixed++;
+      });
+    });
+  });
+  if (fixed) _bumpMember_('*');
+  return fixed;
+}
+function _repairDateCellsSoon_() {
+  try {
+    const c = CacheService.getScriptCache();
+    if (c.get('datefix')) return;
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(3000)) return;
+    try { _repairDateCells_(); c.put('datefix', '1', 21600); } finally { lock.releaseLock(); }
+  } catch (e) {}
+}
+/** Editor saja: perbaiki semua sel Tanggal sekarang. Mengembalikan jumlah sel yang diperbaiki. */
+function repairDateCells() {
+  requireOwner_();
+  return _bumpAfter_('*', _locked_(_repairDateCells_));
+}
+
+function getAdminMore(token, month, year, fresh) {
+  const tr = _traceStart_();
+  _tp_(tr, 'auth', function() { requireAdmin_(token); });
+  _tp_(tr, 'repairDates', _repairDateCellsSoon_);
   const ymd = _wibParts_(new Date()).date.split('-').map(Number);
   const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
   const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
-  const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
-  return _withSchedulesMemo_(function () {
-    const finance = part(_finSettingsRead_);
+  const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
+  // Fase W: hasil jadi disimpan sebentar (TTL ADMIN_MORE_CACHE_SECONDS, bawaan 90, 15–600). Kunci memuat hari WIB, bulan, tahun,
+  // versi admin (naik di setiap _bumpMember_ / _bustSlots_ / _bustShared_) dan versi bersama. fresh=true (tarik-untuk-segarkan) melewati
+  // pembacaan cache tetapi tetap menyimpan hasil baru. memberVers selalu segar.
+  const ckey = _payloadCacheOn_() ? 'am:' + _todayWib_() + ':' + _wibParts_(new Date()).hour + ':' + m + ':' + y + ':' + _admVer_() + ':' + _sharedVersion_() : '';
+  return _withMemberMemo_(function () {
+    if (ckey && !fresh) {
+      const hit = _payloadGet_(ckey);
+      if (hit) {
+        hit.at = Date.now();
+        hit.memberVers = part('memberVers', _memberVersAll_);
+        const ms = _traceEnd_(tr, 'getAdminMore:hit');
+        if (ms) { ms.hit = true; hit.ms = ms; }
+        return hit;
+      }
+    }
+    const result = _withSchedulesMemo_(function() {
+    const finance = part('finSettings', _finSettingsRead_);
     const finOn = !!(finance && finance.enabled);
     return {
       at: Date.now(),
       month: m, year: y,
-      transactionLog: part(function () { return getMemberTransactionLog(token); }),
-      taskSummary: part(function () { return getTaskSummary(token); }),
-      renewals: part(function () { return getRenewalRequests(token); }),
+      transactionLog: part('transactionLog', function () { return getMemberTransactionLog(token); }),
+      taskSummary: part('taskSummary', function () { return getTaskSummary(token); }),
+      renewals: part('renewals', function () { return getRenewalRequests(token); }),
       finance: finance,
       shareEnabled: _shareEnabled_(),
-      revenue: part(function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
-      packageTrend: part(function () { return _packageTrendStats_(m, y); }),
-      hub: part(function () { return _coachHub_(new Date()); }),
-      signals: part(function () { return _clientSignals_(new Date()); }),
-      memberVers: part(_memberVersAll_)
+      revenue: part('revenue', function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
+      packageTrend: part('packageTrend', function () { return _packageTrendStats_(m, y); }),
+      hub: part('hub', function () { return _coachHub_(new Date(), tr); }),
+      signals: part('signals', function () { return _clientSignals_(new Date()); }),
+      memberVers: part('memberVers', _memberVersAll_),
+      ms: _traceEnd_(tr, 'getAdminMore')
     };
+    });
+    if (ckey && !_anyPartFailed_(result)) {
+      const copy = Object.assign({}, result);
+      delete copy.ms;
+      _payloadPut_(ckey, copy, Math.max(15, Math.min(1800, Math.floor(_numProp_('ADMIN_MORE_CACHE_SECONDS', 900)))));
+    }
+    return result;
   });
 }
 
@@ -2303,15 +2491,40 @@ function _ensureScheduleClassHeader_(sheet) {
 
 // Memo per eksekusi untuk bundle baca-saja (getPortalMore, dst.): Schedules dibaca sekali. Hanya diisi oleh _withSchedulesMemo_.
 let _schedMemo_ = null;
+let _readMemo_ = null;
+/** Nilai sheet (tanpa header) — sekali per bundle bila di dalam _withSchedulesMemo_, selain itu baca langsung. */
+function _sheetRowsMemo_(name) {
+  if (_readMemo_ && _readMemo_[name]) return _readMemo_[name];
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  const rows = sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : [];
+  if (_readMemo_) _readMemo_[name] = rows;
+  return rows;
+}
+/** Seluruh nilai sheet termasuk header (baris 0), sekali per bundle; null bila sheet tidak ada atau kosong. */
+function _sheetFullMemo_(name) {
+  const k = 'full:' + name;
+  if (_readMemo_ && _readMemo_[k] !== undefined) return _readMemo_[k];
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  const data = sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues() : null;
+  if (_readMemo_) _readMemo_[k] = data;
+  return data;
+}
 function _withSchedulesMemo_(fn) {
-  const prev = _schedMemo_, prevProg = _progMemo_;
+  const prev = _schedMemo_, prevProg = _progMemo_, prevRead = _readMemo_;
   _schedMemo_ = _getSchedulesAll_();
   _progMemo_ = { rows: null };
-  try { return fn(); } finally { _schedMemo_ = prev; _progMemo_ = prevProg; }
+  _readMemo_ = {};   // Fase U: WorkoutLog, GymExercises dan HealthScreening dibaca sekali per bundle
+  try { return fn(); } finally { _schedMemo_ = prev; _progMemo_ = prevProg; _readMemo_ = prevRead; }
 }
 
 function _getSchedulesAll_() {
   if (_schedMemo_) return _schedMemo_;
+  if (_readMemo_ && _readMemo_.__sched) return _readMemo_.__sched;
+  const list = _readSchedulesAll_();
+  if (_readMemo_) _readMemo_.__sched = list;
+  return list;
+}
+function _readSchedulesAll_() {
   const headers = ["ID", "Member ID", "Nama Member", "No WA", "Waktu Mulai", "Waktu Selesai", "Catatan", "Status", "Coach ID", "Nama Coach", "Completed At", "Recurring Group ID", "Kelas ID"];
   const sheet = getOrCreateSheet_('Schedules', headers);
   const data = sheet.getDataRange().getValues();
@@ -2388,7 +2601,7 @@ function _addScheduleInternal_(scheduleData, statusParam, silentNotif, deferBust
       if (!coachId && allActive.length === 1 && actives.length === 1) { coachId = actives[0].id; coachName = actives[0].name; }
     }
 
-    sheet.appendRow([
+    _appendRow_(sheet, [
       id, scheduleData.memberId, scheduleData.memberName, scheduleData.phone.toString(),
       scheduleData.start, scheduleData.end, scheduleData.notes, status,
       coachId, coachName || "", "", scheduleData.recurringGroupId || "", scheduleData.classId || ""
@@ -3688,7 +3901,7 @@ function _truthyCell_(v) { return v === true || String(v).trim().toUpperCase() =
 /** Kursi terisi per paket: klien yang masih punya sisa sesi di paket itu (klien yang kuotanya habis melepas kursi). */
 function _packageSeats_() {
   const seats = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[6] || '').trim();
     if (!id || String(r[0]).trim() === '') return;
     if ((parseInt(r[9], 10) || 0) >= (parseInt(r[8], 10) || 0)) return;
@@ -3732,11 +3945,11 @@ function getPriceListPublicImpl_() {
 
 function _packageUsage_() {
   const members = {}, log = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[6] || '').trim();
     if (id) members[id] = (members[id] || 0) + 1;
   });
-  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _membersLogValues_().slice(1).forEach(function(r) {
     const id = String(r[4] || '').trim();
     if (id) log[id] = (log[id] || 0) + 1;
   });
@@ -3853,7 +4066,7 @@ function savePackageImpl_(token, data) {
       const row = [];
       for (let c = 0; c < width; c++) row.push('');
       row[ctx.idx.id] = savedId;
-      ctx.sheet.appendRow(row);
+      _appendRow_(ctx.sheet, row);
       v.aktif = data.aktif === true;
       v.urutan = _nextPackageOrder_(list, v.kategori);
       _writePackageRow_(ctx.sheet, ctx.idx, ctx.sheet.getLastRow(), v);
@@ -4008,7 +4221,7 @@ function _readProgress_(memberId) {
   const out = [];
   _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== id || !r[0]) return;
-    const e = { id: String(r[0]), tanggal: String(r[2]), oleh: String(r[5] || 'klien') };
+    const e = { id: String(r[0]), tanggal: _isoDateCell_(r[2]), oleh: String(r[5] || 'klien') };
     PROGRESS_MEASURES.forEach(function(m) { const v = r[m.col - 1]; e[m.key] = (v === '' || v == null) ? '' : Number(v); });
     out.push(e);
   });
@@ -4021,7 +4234,7 @@ function _readProgressPhotos_(memberId) {
   const out = [];
   _progressPhotosSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== id || !r[0]) return;
-    out.push({ id: String(r[0]), tanggal: String(r[2]), sisi: String(r[3]), oleh: String(r[5] || 'klien') });
+    out.push({ id: String(r[0]), tanggal: _isoDateCell_(r[2]), sisi: String(r[3]), oleh: String(r[5] || 'klien') });
   });
   out.sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });   // terbaru dulu
   return out;
@@ -4060,7 +4273,7 @@ function _saveMeasurement_(memberId, tanggal, vals, oleh) {
     const data = sheet.getDataRange().getValues();
     const now = new Date().toISOString();
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][1]).trim() === String(memberId).trim() && String(data[i][2]) === tanggal) {
+      if (String(data[i][1]).trim() === String(memberId).trim() && _isoDateCell_(data[i][2]) === tanggal) {
         PROGRESS_MEASURES.forEach(function(m) { if (vals[m.key] !== '' && vals[m.key] != null) sheet.getRange(i + 1, m.col).setValue(vals[m.key]); });
         sheet.getRange(i + 1, 6).setValue(oleh);
         sheet.getRange(i + 1, 7).setValue(now);
@@ -4070,7 +4283,7 @@ function _saveMeasurement_(memberId, tanggal, vals, oleh) {
     const id = 'PRG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const row = [id, String(memberId).trim(), tanggal, '', '', oleh, now, '', '', '', '', '', ''];
     PROGRESS_MEASURES.forEach(function(m) { if (vals[m.key] != null) row[m.col - 1] = vals[m.key]; });
-    sheet.appendRow(row);
+    _appendRow_(sheet, row);
     return { id: id, tanggal: tanggal, updated: false };
   } finally {
     lock.releaseLock();
@@ -4249,8 +4462,11 @@ function saveMyMeasurement(memberToken, data) {
   data = data || {};
   const today = _todayWib_();
   const tanggal = _validProgressDate_(data.tanggal, today, data.cid ? OFFLINE_BACK_DAYS : PROGRESS_LIMITS.backDaysClient);
-  _saveMeasurement_(memberId, tanggal, _parseMeasures_(data), 'klien');
-  return _bumpAfter_(memberId, _myPayloadFor_(memberId));
+  const tr = _traceStart_();   // W6b: tulis vs menyusun jawaban
+  _tp_(tr, 'write', function () { _saveMeasurement_(memberId, tanggal, _parseMeasures_(data), 'klien'); });
+  const out = _tp_(tr, 'reply', function () { return _myPayloadFor_(memberId); });
+  _traceEnd_(tr, 'saveMyMeasurement');
+  return _bumpAfter_(memberId, out);
 }
 
 function deleteMyMeasurement(memberToken, id) {
@@ -4288,7 +4504,7 @@ function uploadMyProgressPhoto(memberToken, base64Data, mimeType, sisi) {
     const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, 'PRG_' + memberId + '_' + tanggal + '_' + side + '.' + ext);
     const file = _progressFolder_().createFile(blob);     // sengaja tanpa setSharing: berkas tetap privat
     const id = 'PHT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    _progressPhotosSheet_().appendRow([id, memberId, tanggal, side, file.getId(), 'klien']);
+    _appendRow_(_progressPhotosSheet_(), [id, memberId, tanggal, side, file.getId(), 'klien']);
   } finally {
     lock.releaseLock();
   }
@@ -4416,7 +4632,7 @@ function requestRenewal(memberToken, packageId, coachId) {
       }
     }
     id = 'REN-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([id, memberId, pkg.id, 'menunggu', now, '', pkg.harga, pickedCoachId]);
+    _appendRow_(sheet, [id, memberId, pkg.id, 'menunggu', now, '', pkg.harga, pickedCoachId]);
   } finally {
     lock.releaseLock();
   }
@@ -4425,6 +4641,8 @@ function requestRenewal(memberToken, packageId, coachId) {
     kirimNotifTelegram_('🔁 <b>MINTA PERPANJANG PAKET</b>\n\n👤 <b>Klien:</b> ' + escapeHtmlTelegram(name) + '\n📦 <b>Paket:</b> ' + escapeHtmlTelegram(pkg.namaPaket) +
       ' (' + _formatRupiah_(pkg.harga) + ')\n\nSetelah pembayaran diterima, setujui di panel: Dashboard → Minta perpanjang.');
   } catch (e) { Logger.log('Notif perpanjang gagal: ' + e); }
+  _pushEvent_({ target: 'admin', kind: 'perpanjangan', slot: id, title: 'Minta perpanjang paket',
+    body: _pushClip_((_pushFirst_(name) || 'Klien') + ' minta perpanjang: ' + pkg.namaPaket + '.', 140) });   // Fase X
   _bumpMember_(memberId);
   return {
     request: { id: id, status: 'menunggu', packageId: pkg.id, packageName: pkg.namaPaket, harga: pkg.harga },
@@ -4456,12 +4674,12 @@ function getRenewalRequests(token, opts) {
   if (isNaN(limit) || limit < 1) limit = 50;
   if (limit > 200) limit = 200;
   const members = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
+  _memberValues_().data.slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
   const pkgNames = {};
   const ctx = _priceListSheetAndColumns_();
   _readPackages_(ctx.sheet, ctx.idx).forEach(function(p) { pkgNames[p.id] = p.namaPaket; });
   const list = [];
-  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _sheetRowsMemo_('RenewalRequests').forEach(function(r) {
     if (!r[0]) return;
     const q = _renewalFromRow_(r);
     if (want ? q.status !== want : q.status === 'dibatalkan') return;
@@ -4818,7 +5036,7 @@ function _allPackagePrices_() {
 
 function _revenueSummary_(month, year) {
   const result = { total: 0, grossTotal: 0, share: REVENUE_SHARE, count: 0, byPackage: [] };
-  const log = _getMembersLogSheet_().getDataRange().getValues();
+  const log = _membersLogValues_();
   if (log.length <= 1) return result;
   const prices = _allPackagePrices_();
   const map = {};
@@ -5070,7 +5288,7 @@ function addTask(token, data) {
     const sheet = _tasksSheet_();
     const id = 'TSK-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const groupId = repeat === 'none' ? '' : _newTaskGroupId_();
-    sheet.appendRow([id, memberId, title, description, category, dueDate, 'todo', repeat, 'coach', new Date().toISOString(), '', '', groupId]);
+    _appendRow_(sheet, [id, memberId, title, description, category, dueDate, 'todo', repeat, 'coach', new Date().toISOString(), '', '', groupId]);
     return _bumpAfter_(memberId, { status: 'success', id: id });
   });
 }
@@ -5206,9 +5424,9 @@ function getTasksForMember(token, memberId) {
  */
 function getTaskSummary(token) {
   requireAdmin_(token);
-  const data = _tasksSheet_().getDataRange().getValues();
+  const data = _sheetRowsMemo_('Tasks');   // Fase W: sekali per bundle (getAdminMore juga memakainya untuk sinyal)
   const summary = {};
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
     if (!data[i][0]) continue;
     const t = _taskRowToObj_(data[i]);
     if (t.status !== 'todo' || !t.memberId) continue;
@@ -5326,7 +5544,7 @@ function _spawnNextTaskInstance_(sheet, row) {
     if (String(data[i][12]).trim() === groupId && String(data[i][6]) === 'todo') return null;
   }
   const id = 'TSK-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-  sheet.appendRow([id, row[1], row[2], row[3], row[4], next, 'todo', repeat, row[8], new Date().toISOString(), '', '', groupId]);
+  _appendRow_(sheet, [id, row[1], row[2], row[3], row[4], next, 'todo', repeat, row[8], new Date().toISOString(), '', '', groupId]);
   return id;
 }
 
@@ -5434,7 +5652,7 @@ function saveTaskTemplate(token, data) {
       throw new Error('Template sudah mencapai batas ' + TASK_TEMPLATE_LIMIT + '. Hapus yang tidak terpakai dulu.');
     }
     const id = 'TPL-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([id, title, description, category, repeat, new Date().toISOString()]);
+    _appendRow_(sheet, [id, title, description, category, repeat, new Date().toISOString()]);
     return { status: 'success', id: id, updated: false };
   });
 }
@@ -5474,10 +5692,8 @@ function _hourCell_(v) {
 
 /** Aturan jam kerja dari sheet CoachAvailability (hanya baca; tidak membuat sheet). */
 function _coachRules_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachAvailability');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+  _sheetRowsMemo_('CoachAvailability').forEach(function(r) {
     if (String(r[0]).trim() === '') return;
     out.push({ coachId: String(r[0]).trim(), hari: String(r[1]).toLowerCase().trim(), startHour: _hourCell_(r[2]), endHour: _hourCell_(r[3]) });
   });
@@ -5492,10 +5708,8 @@ function _isoDateCell_(v) {
 
 /** Cuti dari sheet CoachTimeOff (hanya baca). adminView=true menyertakan catatan. */
 function _coachTimeOff_(adminView) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CoachTimeOff');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) {
+  _sheetRowsMemo_('CoachTimeOff').forEach(function(r) {
     if (String(r[0]).trim() === '') return;
     const row = {
       id: String(r[0]), coachId: String(r[1]).trim(), from: _isoDateCell_(r[2]), to: _isoDateCell_(r[3]),
@@ -5661,6 +5875,7 @@ function _bustSlots_() {
   try { SpreadsheetApp.flush(); } catch (e) {}
   const ver = String(Date.now()) + '.' + Math.floor(Math.random() * 1000000);
   try { CacheService.getScriptCache().put('openslots:ver', ver, 21600); } catch (e) {}
+  _bumpAdmin_();
   return ver;
 }
 
@@ -5905,7 +6120,7 @@ function saveCoachAvailabilityImpl_(token, coachId, week) {
     sheet.getRange('C:D').setNumberFormat('@');
     const data = sheet.getDataRange().getValues();
     for (let i = data.length - 1; i >= 1; i--) if (String(data[i][0]).trim() === coachId) sheet.deleteRow(i + 1);
-    rows.forEach(function(r) { sheet.appendRow(r); });
+    rows.forEach(function(r) { _appendRow_(sheet, r); });
     _bustSlots_();   // sesudah menulis: buang cache jam kosong
     return { status: 'success', count: rows.length };
   } finally {
@@ -5954,7 +6169,7 @@ function addCoachTimeOff(token, data) {
     const sheet = getOrCreateSheet_('CoachTimeOff', COACH_TIMEOFF_HEADERS);
     sheet.getRange('C:F').setNumberFormat('@');
     const id = 'OFF-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([id, coachId, from, to, hourFrom === null ? '' : ('0' + hourFrom).slice(-2) + ':00', hourTo === null ? '' : ('0' + hourTo).slice(-2) + ':00', note, new Date().toISOString()]);
+    _appendRow_(sheet, [id, coachId, from, to, hourFrom === null ? '' : ('0' + hourFrom).slice(-2) + ':00', hourTo === null ? '' : ('0' + hourTo).slice(-2) + ':00', note, new Date().toISOString()]);
     _bustSlots_();   // sesudah menulis: buang cache jam kosong
     return { status: 'success', id: id, clashes: _timeOffClashes_(coachId, { from: from, to: to, hourFrom: hourFrom, hourTo: hourTo }) };
   } finally {
@@ -6022,15 +6237,23 @@ function _targetPace_(goal, actual, day, daysInMonth) {
 }
 
 /** Murni-ish: ringkasan Beranda Coach untuk tanggal `now`. */
-function _coachHub_(now) {
-  const self = _selfCoach_();
+/**
+ * Fase W: tanggal 'yyyy-MM-dd' di WIB (UTC+7, Asia/Jakarta tanpa DST) lewat hitungan, tanpa Utilities.formatDate.
+ * Dipakai di loop atas ribuan sesi (hub, sinyal, perawatan); formatDate adalah panggilan layanan dan lambat jika diulang. '' bila tanggal tak terbaca.
+ */
+function _wibDate_(d) {
+  const t = d instanceof Date ? d.getTime() : new Date(d).getTime();
+  return isNaN(t) ? '' : new Date(t + 25200000).toISOString().slice(0, 10);
+}
+function _coachHub_(now, tr) {
+  const self = _tp_(tr, 'hub.self', _selfCoach_);
   const wib = _wibParts_(now);
   const mine = function(s) { return !s.coachId || (self && s.coachId === self.id); };
   const all = _getSchedulesAll_().filter(mine);
   const done = all.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; });
   const dateOf = function(s) {
     const d = new Date(s.completedAt || s.start);
-    return isNaN(d.getTime()) ? null : Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd');
+    return isNaN(d.getTime()) ? null : _wibDate_(d);
   };
   const hoursOf = function(s) {
     const a = new Date(s.start), b = new Date(s.end || s.start);
@@ -6049,14 +6272,14 @@ function _coachHub_(now) {
   stats.weekHours = Math.round(stats.weekHours * 10) / 10;
   stats.monthHours = Math.round(stats.monthHours * 10) / 10;
   stats.streak = _streak_(weeks, wib.date);
-  const members = _getMembersAll_();
+  const members = _tp_(tr, 'hub.members', _getMembersAll_);
   stats.activeClients = members.filter(function(m) { return Number(m.totalSessions) > Number(m.usedSessions); }).length;
 
   const today = all.filter(function(s) {
     const st = String(s.status || '').toLowerCase();
     if (st === 'cancelled' || st === 'available') return false;
     const d = new Date(s.start);
-    return !isNaN(d.getTime()) && Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd') === wib.date;
+    return !isNaN(d.getTime()) && _wibDate_(d) === wib.date;
   }).sort(function(a, b) { return new Date(a.start) - new Date(b.start); }).map(function(s) {
     // "Fokus" = fokus berikutnya dari catatan sesi sebelumnya klien ini (bukan sesi hari ini).
     const prev = s.memberId ? _notesForMember_(s.memberId).filter(function(n) { return n.scheduleId !== String(s.id) && n.fokus; })[0] : null;
@@ -6073,9 +6296,9 @@ function _coachHub_(now) {
     let actual = 0;
     if (k === 'sesi') actual = stats.monthSessions;
     else if (k === 'klienAktif') actual = stats.activeClients;
-    else if (k === 'pendapatan') actual = _revenueSummary_(p[1], p[0]).total;
+    else if (k === 'pendapatan') actual = _tp_(tr, 'hub.revenue', function() { return _revenueSummary_(p[1], p[0]).total; });
     else if (k === 'klienBaru') {
-      _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+      _membersLogValues_().slice(1).forEach(function(r) {
         if (String(r[3]) !== 'Baru') return;
         const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
         if (t.length === 3 && parseInt(t[1], 10) === p[1] && parseInt(t[2], 10) === p[0]) actual++;
@@ -6086,7 +6309,12 @@ function _coachHub_(now) {
   });
   return {
     selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
-    today: today, stats: stats, targets: targets, care: _careList_(now), feedback: _feedbackSummary_(now.getTime()), workouts: _workoutHubList_(), nutrition: _nutHubList_(),
+    today: today, stats: stats, targets: targets,
+    care: _tp_(tr, 'hub.care', function() { return _careList_(now); }),
+    feedback: _tp_(tr, 'hub.feedback', function() { return _feedbackSummary_(now.getTime()); }),
+    workouts: _tp_(tr, 'hub.workouts', _workoutHubList_),
+    nutrition: _tp_(tr, 'hub.nutrition', _nutHubList_),
+    programAuto: _tp_(tr, 'hub.programAuto', _pgHubList_),
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }
@@ -6100,12 +6328,12 @@ function _monthSummary_(y, m) {
     if (String(s.status || '').toLowerCase() !== 'completed') return;
     if (s.coachId && self && s.coachId !== self.id) return;
     const d = new Date(s.completedAt || s.start);
-    if (isNaN(d.getTime()) || Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM') !== key) return;
+    if (isNaN(d.getTime()) || _wibDate_(d).slice(0, 7) !== key) return;
     sessions++;
     const a = new Date(s.start), b = new Date(s.end || s.start);
     if (!isNaN(a.getTime()) && !isNaN(b.getTime())) hours += Math.max(0, (b - a) / 3600000);
   });
-  _getMembersLogSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _membersLogValues_().slice(1).forEach(function(r) {
     if (String(r[3]) !== 'Baru') return;
     const t = r[2] instanceof Date ? [0, r[2].getMonth() + 1, r[2].getFullYear()] : String(r[2] || '').trim().split('/');
     if (t.length === 3 && parseInt(t[1], 10) === m && parseInt(t[2], 10) === y) newClients++;
@@ -6195,7 +6423,7 @@ function _fitnessByMember_(memberId) {
   if (!sheet) return out;
   sheet.getDataRange().getValues().slice(1).forEach(function(r) {
     if (String(r[1]).trim() !== memberId || !out[String(r[3])]) return;
-    out[String(r[3])].push({ id: String(r[0]), tanggal: String(r[2]), nilai: Number(r[4]) });
+    out[String(r[3])].push({ id: String(r[0]), tanggal: _isoDateCell_(r[2]), nilai: Number(r[4]) });
   });
   Object.keys(out).forEach(function(k) { out[k].sort(function(a, b) { return a.tanggal < b.tanggal ? -1 : (a.tanggal > b.tanggal ? 1 : 0); }); });
   return out;
@@ -6218,32 +6446,58 @@ function _fitnessSummary_(byTest) {
  */
 function getClientBundle(token, memberId) {
   requireAdmin_(token);
+  const tr = _traceStart_();
+  return _withMemberMemo_(function() { return getClientBundleImpl_(token, memberId, tr); });
+}
+function getClientBundleImpl_(token, memberId, tr) {
   const ver = _memberVer_(memberId);   // sebelum sheet data dibaca
-  const part = function (fn) { try { return fn(); } catch (err) { return { error: String(err && err.message || err) }; } };
-  return _plainJson_(_withSchedulesMemo_(function () {
-    const progress = part(function () { return getMemberProgress(token, memberId); });
-    const workout = part(function () { return getWorkoutLog(token, memberId); });
-    const program = part(function () { return getMemberProgram(token, memberId); });
-    const care = part(function () { return getClientCare(token, memberId); });
-    const insight = part(function () {
-      const row = _memberRowOrThrow_(memberId).row;
+  // Data perawatan ikut di sini: disimpan sebentar di CacheService server (izin pemilik), TTL pendek 30–300 dtk (bawaan 180).
+  const ckey = ver && _payloadCacheOn_() ? 'cb:' + String(memberId).trim() + ':' + _todayWib_() + ':' + ver : '';
+  if (ckey) {
+    const hit = _payloadGet_(ckey);
+    if (hit) {
+      const ms = _traceEnd_(tr, 'getClientBundle:hit');
+      if (ms) { ms.hit = true; hit.ms = ms; }
+      return hit;
+    }
+  }
+  const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
+  const result = _plainJson_(_withSchedulesMemo_(function () {
+    const progress = part('progress', function () { return getMemberProgress(token, memberId); });
+    const workout = part('workout', function () { return getWorkoutLog(token, memberId); });
+    const program = part('program', function () { return getMemberProgram(token, memberId); });
+    const care = part('care', function () { return getClientCare(token, memberId); });
+    let mrow = null;
+    const memberRow = function() { return mrow || (mrow = _memberRowOrThrow_(memberId).row); };
+    const insight = part('insight', function () {
+      const row = memberRow();
       const bodyFat = care && care.assessment && care.assessment.bodyFat !== '' && care.assessment.bodyFat != null ? Number(care.assessment.bodyFat) : null;
       return _insightFor_(row, 'coach', { progress: progress, workout: workout, bodyFat: bodyFat });
     });
     return {
       ver: ver,
       day: _todayWib_(),
-      tasks: part(function () { return getTasksForMember(token, memberId); }),
+      tasks: part('tasks', function () { return getTasksForMember(token, memberId); }),
       progress: progress,
       care: care,
       program: program,
       workout: workout,
-      nutrition: part(function () { return getClientNutrition(token, memberId); }),
-      foodLog: part(function () { return getClientFoodLog(token, memberId); }),
-      share: part(function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
-      insight: insight
+      nutrition: part('nutrition', function () { return getClientNutrition(token, memberId); }),
+      programGen: part('programGen', function () { return _programGenFor_(memberRow(), true); }),
+      // Fase X: kartu atlet dan level klien (baca saja) supaya coach melihat yang sama dengan klien.
+      athlete: part('athlete', function () { const x = _portalXFor_(memberRow(), { progress: progress, workout: workout }); return { profile: x.profile, level: x.level }; }),
+      foodLog: part('foodLog', function () { return getClientFoodLog(token, memberId); }),
+      share: part('share', function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
+      insight: insight,
+      ms: _traceEnd_(tr, 'getClientBundle')
     };
   }));
+  if (ckey && !_anyPartFailed_(result)) {
+    const copy = Object.assign({}, result);
+    delete copy.ms;
+    _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('CLIENT_BUNDLE_CACHE_SECONDS', 900)))));
+  }
+  return result;
 }
 
 /**
@@ -6357,7 +6611,7 @@ function saveAssessment(token, memberId, data) {
   try {
     const sheet = _careSheet_('Assessments', ASSESSMENT_HEADERS);
     sheet.getRange('C:C').setNumberFormat('@');
-    sheet.appendRow(row);
+    _appendRow_(sheet, row);
   } finally {
     lock.releaseLock();
   }
@@ -6388,10 +6642,10 @@ function saveFitnessTests(token, memberId, data) {
     Object.keys(values).forEach(function(tid) {
       let found = 0;
       for (let i = 1; i < rows.length; i++) {
-        if (String(rows[i][1]).trim() === id && String(rows[i][2]) === tanggal && String(rows[i][3]) === tid) { found = i + 1; break; }
+        if (String(rows[i][1]).trim() === id && _isoDateCell_(rows[i][2]) === tanggal && String(rows[i][3]) === tid) { found = i + 1; break; }
       }
       if (found) { sheet.getRange(found, 5).setValue(values[tid]); sheet.getRange(found, 7).setValue(now); }
-      else sheet.appendRow(['FIT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, tanggal, tid, values[tid], 'coach', now]);
+      else _appendRow_(sheet, ['FIT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, tanggal, tid, values[tid], 'coach', now]);
     });
   } finally {
     lock.releaseLock();
@@ -6521,7 +6775,7 @@ function saveContentImpl_(token, data) {
     }
     if (rows.length - 1 >= L.items) throw new Error('Konten sudah mencapai batas ' + L.items + '. Hapus yang tidak terpakai dulu.');
     const nid = 'CNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    sheet.appendRow([nid, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif, new Date().toISOString()]);
+    _appendRow_(sheet, [nid, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif, new Date().toISOString()]);
     return { status: 'success', id: nid, updated: false };
   } finally {
     lock.releaseLock();
@@ -6561,7 +6815,7 @@ function _contentForClientImpl_() {
 // Sheet ProgramItems menyimpan program klien (Member ID terisi) dan template (Member ID kosong, Template terisi).
 // ProgramLog mencatat gerakan yang dicentang klien per hari.
 
-const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada", "Exercise ID", "Rep Min", "Rep Max", "Target Kg", "Istirahat", "Superset", "Jenis", "Skema", "Pemilik", "Jelajahi"];
+const PROGRAM_HEADERS = ["ID", "Member ID", "Template", "Hari", "Urutan", "Gerakan", "Set", "Rep", "Catatan", "Video URL", "Diubah Pada", "Exercise ID", "Rep Min", "Rep Max", "Target Kg", "Istirahat", "Superset", "Jenis", "Skema", "Pemilik", "Jelajahi", "Sumber"];
 // Fase M: jenis gerakan menentukan arti angka rep (beban/badan = rep, waktu = detik, jarak = meter).
 const PROGRAM_KINDS = ['beban', 'badan', 'waktu', 'jarak'];
 const PROGRAM_REP_MAX = { beban: 999, badan: 999, waktu: 7200, jarak: 100000 };
@@ -6569,6 +6823,7 @@ const PROGRAM_LOG_HEADERS = ["ID", "Member ID", "Tanggal", "Hari", "Selesai", "D
 const PROGRAM_LIMITS = { days: 7, items: 12, name: 60, hari: 40, gerakan: 80, rep: 16, note: 200, url: 300, templates: 30, own: 10 };
 // Fase O: kolom T "Pemilik" = 'klien' untuk rutinitas buatan klien sendiri ('' = program coach / template);
 // kolom U "Jelajahi" = 1 pada baris template yang boleh dilihat dan disalin klien (mati bawaan).
+// Fase U: kolom V "Sumber" = 'auto:<versi aturan>' bila program klien dibuat generator; kosong = buatan coach (tidak pernah ditimpa generator).
 const PROGRAM_OWN = 'klien';
 
 function _programSheet_() {
@@ -6766,6 +7021,8 @@ function _parseProgramDays_(input) {
 /** Murni: baris ProgramItems → item; baris lama (tanpa kolom M–S) mendapat target dari teks rep. */
 function _programItemFromRow_(r) {
   const it = { n: Number(r[4]), gerakan: String(r[5]), set: Number(r[6]) || 0, rep: String(r[7]), catatan: String(r[8] || ''), video: String(r[9] || ''), exId: String(r[11] || '') };
+  // Fase U: nama manual yang persis sama dengan pustaka (atau alias coach) memakai Exercise ID itu.
+  if (!it.exId && it.gerakan) it.exId = _exResolve_('', it.gerakan, '', '').exId;
   const num = function(v) { return v === '' || v == null || isNaN(Number(v)) ? '' : Number(v); };
   let skema = [];
   try { const p = r[18] ? JSON.parse(String(r[18])) : []; if (Array.isArray(p)) skema = p.map(function(x) { return { rep: num(x.rep), kg: num(x.kg), w: x.w ? 1 : 0 }; }); } catch (e) { skema = []; }
@@ -6802,7 +7059,7 @@ function _programRowMine_(r, memberId, templateName, own) {
  */
 function _programDays_(memberId, templateName, own) {
   const days = [], by = {};
-  let updatedAt = '', jelajahi = false;
+  let updatedAt = '', jelajahi = false, sumber = '';
   const rows = _programRows_().filter(function(r) {
     return r[0] && _programRowMine_(r, memberId, templateName, own);
   }).sort(function(a, b) { return Number(a[4]) - Number(b[4]); });
@@ -6812,8 +7069,9 @@ function _programDays_(memberId, templateName, own) {
     by[hari].items.push(_programItemFromRow_(r));
     if (String(r[10]) > updatedAt) updatedAt = String(r[10]);
     if (String(r[20] || '') === '1' || r[20] === 1 || r[20] === true) jelajahi = true;
+    if (String(r[21] || '')) sumber = String(r[21]);
   });
-  return { days: days, updatedAt: updatedAt, jelajahi: jelajahi };
+  return { days: days, updatedAt: updatedAt, jelajahi: jelajahi, sumber: sumber };
 }
 
 /** Tulis ulang seluruh program satu klien / template (di dalam lock). days kosong = hapus. opts: { own, jelajahi }. */
@@ -6835,9 +7093,9 @@ function _programWrite_(memberId, templateName, days, opts) {
       d.items.forEach(function(it) {
         n++;
         const has = function(v) { return v === undefined || v === null ? '' : v; };
-        sheet.appendRow(['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now, it.exId || '',
+        _appendRow_(sheet, ['PRG-' + new Date().getTime() + '-' + n, memberId != null ? String(memberId).trim() : '', memberId != null ? '' : templateName, d.hari, n, it.gerakan, it.set, it.rep, it.catatan, it.video, now, it.exId || '',
           has(it.repMin), has(it.repMax), has(it.kg), has(it.rest), it.ss || '', it.jenis || '', it.skema && it.skema.length ? JSON.stringify(it.skema) : '',
-          memberId != null && opts.own ? PROGRAM_OWN : '', memberId == null && opts.jelajahi ? 1 : '']);
+          memberId != null && opts.own ? PROGRAM_OWN : '', memberId == null && opts.jelajahi ? 1 : '', memberId != null && !opts.own && opts.sumber ? String(opts.sumber) : '']);
       });
     });
     return n;
@@ -7108,7 +7366,7 @@ function logMyProgramDay(memberToken, hari, selesai) {
       if (picked.length) sheet.getRange(found, 5).setValue(picked.join(','));
       else sheet.deleteRow(found);
     } else if (picked.length) {
-      sheet.appendRow(['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, today, day.hari, picked.join(','), new Date().toISOString()]);
+      _appendRow_(sheet, ['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, today, day.hari, picked.join(','), new Date().toISOString()]);
     }
   } finally {
     lock.releaseLock();
@@ -7124,7 +7382,9 @@ function logMyProgramDay(memberToken, hari, selesai) {
 // Satu baris per set di sheet WorkoutLog. Coach (panel) dan klien (portal) sama-sama menulis; kolom "Oleh" membedakan.
 // Data privat: tidak ke Telegram, respons publik, atau cache panel. Klien dibaca dari token, tidak pernah dari argumen.
 
-const WORKOUT_HEADERS = ["ID", "Member ID", "Tanggal", "Schedule ID", "Hari", "Program N", "Exercise ID", "Gerakan", "Body Part", "Target", "Set", "Berat", "Rep", "Durasi", "Jarak", "RPE", "Catatan", "Oleh", "Dibuat Pada", "Jenis Set"];
+const WORKOUT_HEADERS = ["ID", "Member ID", "Tanggal", "Schedule ID", "Hari", "Program N", "Exercise ID", "Gerakan", "Body Part", "Target", "Set", "Berat", "Rep", "Durasi", "Jarak", "RPE", "Catatan", "Oleh", "Dibuat Pada", "Jenis Set", "Form"];
+// Fase U: kolom U "Form" = jawaban klien "Form terasa rapi?" per gerakan per sesi (ok | ragu | kosong), di baris set pertama.
+const WORKOUT_FORM_VALUES = ['', 'ok', 'ragu'];
 // Fase M: jenis set ('' biasa, w pemanasan, drop, gagal). Pemanasan tidak dihitung volume, 1RM, maupun rekor.
 const WORKOUT_SET_KINDS = ['', 'w', 'drop', 'gagal'];
 // Satu baris per klien per tanggal: kapan mulai/selesai, rasa (1-5), catatan latihan. CID = id latihan dari browser (kirim ulang menimpa).
@@ -7137,8 +7397,10 @@ const WORKOUT_BODY_PARTS = ['waist', 'upper legs', 'back', 'lower legs', 'chest'
 
 function _workoutSheet_() {
   const sheet = getOrCreateSheet_('WorkoutLog', WORKOUT_HEADERS);
-  const cell = sheet.getRange(1, WORKOUT_HEADERS.length);
-  if (cell.getValue() === '') { cell.setValue(WORKOUT_HEADERS[WORKOUT_HEADERS.length - 1]); cell.setFontWeight('bold'); }
+  for (let c = 20; c <= WORKOUT_HEADERS.length; c++) {
+    const cell = sheet.getRange(1, c);
+    if (cell.getValue() === '') { cell.setValue(WORKOUT_HEADERS[c - 1]); cell.setFontWeight('bold'); }
+  }
   sheet.getRange('C:C').setNumberFormat('@');
   return sheet;
 }
@@ -7182,8 +7444,10 @@ function _parseWorkoutEntries_(entries) {
     const hari = _careStr_(e.hari, L.hari, 'Nama hari');
     const bodyPart = WORKOUT_BODY_PARTS.indexOf(String(e.bodyPart || '')) === -1 ? '' : String(e.bodyPart);
     const catatan = _careStr_(e.catatan, L.note, gerakan + ': catatan');
+    const form = String(e.form == null ? '' : e.form);
+    if (WORKOUT_FORM_VALUES.indexOf(form) === -1) throw new Error(gerakan + ': jawaban form tidak dikenal.');
     return {
-      key: key, n: n, hari: hari, exId: exId, gerakan: gerakan, bodyPart: bodyPart, target: _careStr_(e.target, L.target, 'Otot target'), catatan: catatan,
+      key: key, n: n, hari: hari, exId: exId, gerakan: gerakan, bodyPart: bodyPart, target: _careStr_(e.target, L.target, 'Otot target'), catatan: catatan, form: form,
       sets: sets.map(function(s, i) {
         s = s || {};
         const lbl = gerakan + ' set ' + (i + 1) + ': ';
@@ -7212,7 +7476,7 @@ function _parseWorkoutEntries_(entries) {
 function _workoutEvents_(rows) {
   const dates = {}, byKey = {};
   rows.forEach(function(r) {
-    const tgl = String(r[2]), key = _workoutKey_(r[6], r[7]);
+    const tgl = _isoDateCell_(r[2]), key = _workoutKey_(r[6], r[7]);
     dates[tgl] = true;
     if (_isWarmup_(r[19])) return;
     const e = _e1rm_(r[11], r[12]);
@@ -7235,10 +7499,9 @@ function _workoutEvents_(rows) {
 }
 
 function _workoutRowsOf_(memberId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
-  return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; });
+  // Fase U: gerakan manual diisi Exercise ID / otot saat baca (_exResolveRow_, LatihanAlias.gs).
+  return _sheetRowsMemo_('WorkoutLog').filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_);
 }
 
 /** Hitungan untuk badge: hari latihan yang dicatat dan jumlah rekor pribadi. Dihitung, tidak disimpan. */
@@ -7288,7 +7551,7 @@ function _workoutSessionUpsert_(memberId, tanggal, scheduleId, ses, oleh) {
       return;
     }
   }
-  sheet.appendRow(['WKS-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, tanggal, scheduleId || '', ses.hari, ses.mulai, ses.selesai, ses.durasi, ses.rasa, ses.catatan, oleh, now, ses.cid]);
+  _appendRow_(sheet, ['WKS-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, tanggal, scheduleId || '', ses.hari, ses.mulai, ses.selesai, ses.durasi, ses.rasa, ses.catatan, oleh, now, ses.cid]);
 }
 
 /** Baris WorkoutSessions satu klien (atau semua bila memberId null), terbaru dulu. */
@@ -7298,7 +7561,7 @@ function _workoutSessionsOf_(memberId) {
   const id = memberId == null ? null : String(memberId).trim();
   const num = function(v) { return v === '' || v == null ? '' : Number(v); };
   return sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && (id == null || String(r[1]).trim() === id); })
-    .map(function(r) { return { memberId: String(r[1]).trim(), tanggal: String(r[2]), hari: String(r[4] || ''), durasi: num(r[7]), rasa: num(r[8]), catatan: String(r[9] || ''), oleh: String(r[10] || ''), diubah: String(r[11] || '') }; })
+    .map(function(r) { return { memberId: String(r[1]).trim(), tanggal: _isoDateCell_(r[2]), hari: String(r[4] || ''), durasi: num(r[7]), rasa: num(r[8]), catatan: String(r[9] || ''), oleh: String(r[10] || ''), diubah: String(r[11] || '') }; })
     .sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });
 }
 
@@ -7311,15 +7574,15 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh, session) {
     entries.forEach(function(e) { keys[e.key] = true; });
     const rows = sheet.getDataRange().getValues();
     const beforeKeys = {};
-    _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; })).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
+    _workoutEvents_(rows.slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === memberId; }).map(_exResolveRow_)).prs.forEach(function(p) { beforeKeys[p.key + '|' + p.tanggal] = true; });
     for (let i = rows.length - 1; i >= 1; i--) {
       const r = rows[i];
-      if (String(r[1]).trim() === memberId && String(r[2]) === tanggal && keys[_workoutKey_(r[6], r[7])] && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
+      if (String(r[1]).trim() === memberId && _isoDateCell_(r[2]) === tanggal && (keys[_workoutKey_(r[6], r[7])] || keys[_exKeyOf_(r[6], r[7])]) && (oleh === 'admin' || String(r[17]) === 'klien')) sheet.deleteRow(i + 1);
     }
     const now = new Date().toISOString(), stamp = new Date().getTime(), out = [];
     entries.forEach(function(e, ei) {
       e.sets.forEach(function(s, si) {
-        out.push(['WKL-' + stamp + '-' + ei + '-' + si, memberId, tanggal, scheduleId || '', e.hari, e.n, e.exId, e.gerakan, e.bodyPart, e.target, si + 1, s.berat, s.rep, s.durasi, s.jarak, s.rpe, si === 0 ? e.catatan : '', oleh, now, s.jenis || '']);
+        out.push(['WKL-' + stamp + '-' + ei + '-' + si, memberId, tanggal, scheduleId || '', e.hari, e.n, e.exId, e.gerakan, e.bodyPart, e.target, si + 1, s.berat, s.rep, s.durasi, s.jarak, s.rpe, si === 0 ? e.catatan : '', oleh, now, s.jenis || '', si === 0 ? (e.form || '') : '']);
       });
     });
     if (out.length) sheet.getRange(sheet.getLastRow() + 1, 1, out.length, WORKOUT_HEADERS.length).setValues(out);
@@ -7334,14 +7597,15 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh, session) {
 function _workoutGroup_(rows) {
   const byDate = {};
   rows.forEach(function(r) {
-    const tgl = String(r[2]), key = _workoutKey_(r[6], r[7]);
+    const tgl = _isoDateCell_(r[2]), key = _workoutKey_(r[6], r[7]);
     const day = byDate[tgl] || (byDate[tgl] = { tanggal: tgl, items: [], idx: {} });
     let it = day.idx[key];
     if (!it) {
-      it = { key: key, n: r[5] === '' ? '' : Number(r[5]), hari: String(r[4] || ''), exId: String(r[6] || ''), gerakan: String(r[7]), bodyPart: String(r[8] || ''), target: String(r[9] || ''), scheduleId: String(r[3] || ''), oleh: String(r[17] || 'klien'), catatan: '', sets: [] };
+      it = { key: key, n: r[5] === '' ? '' : Number(r[5]), hari: String(r[4] || ''), exId: String(r[6] || ''), gerakan: String(r[7]), bodyPart: String(r[8] || ''), target: String(r[9] || ''), scheduleId: String(r[3] || ''), oleh: String(r[17] || 'klien'), catatan: '', form: '', sets: [] };
       day.idx[key] = it; day.items.push(it);
     }
     if (String(r[16] || '') && !it.catatan) it.catatan = String(r[16]);
+    if (String(r[20] || '') && !it.form) it.form = String(r[20]);
     const num = function(v) { return v === '' || v == null ? '' : Number(v); };
     it.sets.push({ set: Number(r[10]) || it.sets.length + 1, berat: num(r[11]), rep: num(r[12]), durasi: num(r[13]), jarak: num(r[14]), rpe: num(r[15]), jenis: String(r[19] || '') });
   });
@@ -7498,9 +7762,8 @@ function _workoutRoutineHist_(days, sessions) {
 function _workoutFor_(row) {
   const id = String(row[0]).trim();
   const today = _todayWib_(), since = _addDaysIso_(today, -WORKOUT_LIMITS.readDays);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkoutLog');
-  const all = sheet && sheet.getLastRow() >= 2 ? sheet.getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[1]).trim() === id; }) : [];
-  const g = _workoutGroup_(all.filter(function(r) { return String(r[2]) >= since; }));
+  const all = _sheetRowsMemo_('WorkoutLog').filter(function(r) { return r[0] && String(r[1]).trim() === id; }).map(_exResolveRow_);
+  const g = _workoutGroup_(all.filter(function(r) { return _isoDateCell_(r[2]) >= since; }));
   const prsByDate = {};
   _workoutEvents_(all).prs.forEach(function(p) { prsByDate[p.tanggal] = (prsByDate[p.tanggal] || 0) + 1; });
   g.stats = _workoutStats_(g.days, today, prsByDate);
@@ -7517,7 +7780,7 @@ function _workoutFor_(row) {
   const suggest = {};
   program.concat(_programDays_(id, null, true).days).forEach(function(d) {
     d.items.forEach(function(it) {
-      const key = _workoutKey_(it.exId, it.gerakan), last = g.last[key];
+      const key = _exKeyOf_(it.exId, it.gerakan), last = g.last[key];
       if (!last || suggest[key]) return;
       const day = g.days.find(function(x) { return x.tanggal === last.tanggal; });
       const logged = day && day.items.find(function(x) { return x.key === key; });
@@ -7525,6 +7788,14 @@ function _workoutFor_(row) {
       if (sug) suggest[key] = sug;
     });
   });
+  // Fase U: program otomatis memakai progresi rep → set → beban dengan gerbang form (aturan 9a); program coach tetap seperti dulu.
+  if (/^auto:/.test(_programDays_(id).sumber || '')) {
+    try {
+      const prog = _pgProgressFor_(row, program, g);
+      g.progress = prog;
+      Object.keys(prog).forEach(function(k) { if (prog[k].step === 'beban') suggest[k] = { kg: prog[k].kg, why: prog[k].why }; else delete suggest[k]; });
+    } catch (e) { g.progress = {}; }
+  }
   g.suggest = suggest;
   return g;
 }
@@ -7568,14 +7839,16 @@ function logMyWorkout(memberToken, date, entries, session) {
   const today = _todayWib_();
   const tanggal = _validProgressDate_(date, today, ses && ses.cid ? OFFLINE_BACK_DAYS : WORKOUT_LIMITS.backClient);
   const clean = _parseWorkoutEntries_(entries);
-  const saved = _workoutSave_(id, tanggal, '', clean, 'klien', ses);
-  if (tanggal === today) _workoutTickProgram_(id, clean);
+  const tr = _traceStart_();   // W6b: tulis vs menyusun jawaban
+  const saved = _tp_(tr, 'write', function () { return _workoutSave_(id, tanggal, '', clean, 'klien', ses); });
+  if (tanggal === today) _tp_(tr, 'tick', function () { _workoutTickProgram_(id, clean); });
   _bumpMember_(id);
-  const out = _workoutFor_(row);
+  const out = _tp_(tr, 'reply', function () { return _workoutFor_(row); });
   out.prs = saved.prs;
   // Rutinitas ikut dikirim (centang hari ini berubah), supaya portal tidak perlu memanggil getMyProgram lagi.
-  try { out.program = _programFor_(row); } catch (e) {}
+  _tp_(tr, 'program', function () { try { out.program = _programFor_(row); } catch (e) {} });
   _workoutNotifyPrs_(row, saved.prs);
+  _traceEnd_(tr, 'logMyWorkout');
   return out;
 }
 
@@ -7597,7 +7870,7 @@ function getWorkoutSummaryMessage(token, memberId, date) {
   const id = String(m.row[0]).trim();
   const tanggal = _validProgressDate_(date, _todayWib_(), WORKOUT_LIMITS.backAdmin);
   const rows = _workoutRowsOf_(id);
-  const day = _workoutGroup_(rows.filter(function(r) { return String(r[2]) === tanggal; })).days[0];
+  const day = _workoutGroup_(rows.filter(function(r) { return _isoDateCell_(r[2]) === tanggal; })).days[0];
   if (!day) throw new Error('Belum ada latihan yang dicatat di tanggal itu.');
   const fmt = function(n) { return String(n).replace('.', ','); };
   let volume = 0;
@@ -7641,7 +7914,7 @@ function _workoutTickProgram_(memberId, entries) {
       add[hari].forEach(function(n) { if (cur.indexOf(n) === -1) cur.push(n); });
       cur.sort(function(a, b) { return a - b; });
       if (found) sheet.getRange(found, 5).setValue(cur.join(','));
-      else sheet.appendRow(['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, today, hari, cur.join(','), new Date().toISOString()]);
+      else _appendRow_(sheet, ['PLG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, today, hari, cur.join(','), new Date().toISOString()]);
     });
   });
 }
@@ -7666,20 +7939,18 @@ function _evalSheet_() { const s = getOrCreateSheet_('PackageEvaluations', EVAL_
 
 /** Murni: baris penilaian → objek. */
 function _ratingFromRow_(r) {
-  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: String(r[3]), bintang: Number(r[4]) || 0, komentar: String(r[5] || ''), izin: String(r[6] || '') === 'ya', dibuat: String(r[7] || '') };
+  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: _isoDateCell_(r[3]), bintang: Number(r[4]) || 0, komentar: String(r[5] || ''), izin: String(r[6] || '') === 'ya', dibuat: String(r[7] || '') };
 }
 function _evalFromRow_(r) {
-  const o = { id: String(r[0]), memberId: String(r[1]).trim(), paket: String(r[2] || ''), tanggal: String(r[3]), komentar: String(r[9] || ''), izin: String(r[10] || '') === 'ya', dibuat: String(r[11] || '') };
+  const o = { id: String(r[0]), memberId: String(r[1]).trim(), paket: String(r[2] || ''), tanggal: _isoDateCell_(r[3]), komentar: String(r[9] || ''), izin: String(r[10] || '') === 'ya', dibuat: String(r[11] || '') };
   EVAL_ASPECTS.forEach(function(a, i) { o[a[0]] = Number(r[4 + i]) || 0; });
   return o;
 }
 
 function _readSheetRows_(name, fn, memberId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const out = [];
   const id = memberId == null ? null : String(memberId).trim();
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) { if (r[0] && (id === null || String(r[2 - (name === 'PackageEvaluations' ? 1 : 0)]).trim() === id)) out.push(fn(r)); });
+  _sheetRowsMemo_(name).forEach(function(r) { if (r[0] && (id === null || String(r[2 - (name === 'PackageEvaluations' ? 1 : 0)]).trim() === id)) out.push(fn(r)); });
   return out;
 }
 function _ratingsFor_(memberId) { return _readSheetRows_('SessionRatings', _ratingFromRow_, memberId); }
@@ -7726,7 +7997,7 @@ function rateSession(memberToken, scheduleId, stars, comment, consent) {
     let found = 0;
     for (let i = 1; i < rows.length; i++) if (String(rows[i][1]) === String(sched.id)) { found = i + 1; break; }
     if (found) { sheet.getRange(found, 5, 1, 3).setValues([vals]); sheet.getRange(found, 8).setValue(now); }
-    else sheet.appendRow(['RTG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), memberId, Utilities.formatDate(new Date(sched.start), REMINDER_TZ, 'yyyy-MM-dd'), n, text, consent ? 'ya' : '', now]);
+    else _appendRow_(sheet, ['RTG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), memberId, Utilities.formatDate(new Date(sched.start), REMINDER_TZ, 'yyyy-MM-dd'), n, text, consent ? 'ya' : '', now]);
   } finally {
     lock.releaseLock();
   }
@@ -7796,7 +8067,7 @@ function submitMyPackageEval(memberToken, data) {
   try {
     if (!_packageEvalEligible_(row)) throw new Error('Evaluasi paket belum tersedia atau sudah diisi.');
     const now = new Date().toISOString();
-    _evalSheet_().appendRow(['EVL-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, String(row[7] || ''), _todayWib_()].concat(vals, [komentar, data.consent ? 'ya' : '', now]));
+    _appendRow_(_evalSheet_(), ['EVL-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), memberId, String(row[7] || ''), _todayWib_()].concat(vals, [komentar, data.consent ? 'ya' : '', now]));
   } finally {
     lock.releaseLock();
   }
@@ -7846,17 +8117,15 @@ function _sessionNotesSheet_() {
 
 /** Murni: baris sheet → objek catatan. */
 function _noteFromRow_(r) {
-  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: String(r[3]), dilatih: String(r[4] || ''), fokus: String(r[5] || ''),
+  return { id: String(r[0]), scheduleId: String(r[1]), memberId: String(r[2]).trim(), tanggal: _isoDateCell_(r[3]), dilatih: String(r[4] || ''), fokus: String(r[5] || ''),
     rpe: r[6] === '' || r[6] == null ? '' : Number(r[6]), pribadi: String(r[7] || '') };
 }
 
 /** Semua catatan satu klien, terbaru dulu. Sheet belum ada = []. */
 function _notesForMember_(memberId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SessionNotes');
-  if (!sheet || sheet.getLastRow() < 2) return [];
   const id = String(memberId).trim();
   const out = [];
-  sheet.getDataRange().getValues().slice(1).forEach(function(r) { if (r[0] && String(r[2]).trim() === id) out.push(_noteFromRow_(r)); });
+  _sheetRowsMemo_('SessionNotes').forEach(function(r) { if (r[0] && String(r[2]).trim() === id) out.push(_noteFromRow_(r)); });
   out.sort(function(a, b) { return a.tanggal < b.tanggal ? 1 : (a.tanggal > b.tanggal ? -1 : 0); });
   return out;
 }
@@ -7914,7 +8183,7 @@ function saveSessionNote(token, scheduleId, data) {
     } else if (found) {
       sheet.getRange(found, 5, 1, 5).setValues([[dilatih, fokus, rpe, pribadi, now]]);
     } else {
-      sheet.appendRow(['SNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), String(sched.memberId).trim(), tanggal, dilatih, fokus, rpe, pribadi, now]);
+      _appendRow_(sheet, ['SNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), String(sched.id), String(sched.memberId).trim(), tanggal, dilatih, fokus, rpe, pribadi, now]);
     }
   } finally {
     lock.releaseLock();
@@ -7974,7 +8243,7 @@ function submitMyHealthForm(memberToken, answers) {
     const sheet = _careSheet_('HealthScreening', HEALTH_HEADERS);
     sheet.getRange('C:C').setNumberFormat('@');
     const now = new Date().toISOString();
-    sheet.appendRow(['KES-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, _todayWib_()].concat(q, [inj, med, oth, 'ya', '', '', now]));
+    _appendRow_(sheet, ['KES-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), id, _todayWib_()].concat(q, [inj, med, oth, 'ya', '', '', now]));
   } finally {
     lock.releaseLock();
   }
@@ -8009,24 +8278,21 @@ function _careList_(now) {
   const md = ss.getSheetByName('MemberData');
   if (!md) return [];
   const asmIds = {}, healthRows = {}, lastTest = {};
-  const asm = ss.getSheetByName('Assessments');
-  if (asm) asm.getDataRange().getValues().slice(1).forEach(function(r) { asmIds[String(r[1]).trim()] = true; });
-  const hs = ss.getSheetByName('HealthScreening');
-  if (hs) hs.getDataRange().getValues().slice(1).forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
-  const ft = ss.getSheetByName('FitnessTests');
-  if (ft) ft.getDataRange().getValues().slice(1).forEach(function(r) { const k = String(r[1]).trim(); if (!lastTest[k] || String(r[2]) > lastTest[k]) lastTest[k] = String(r[2]); });
+  _sheetRowsMemo_('Assessments').forEach(function(r) { asmIds[String(r[1]).trim()] = true; });
+  _sheetRowsMemo_('HealthScreening').forEach(function(r) { healthRows[String(r[1]).trim()] = r; });
+  _sheetRowsMemo_('FitnessTests').forEach(function(r) { const k = String(r[1]).trim(); const d = _isoDateCell_(r[2]); if (!lastTest[k] || d > lastTest[k]) lastTest[k] = d; });
   const lastSession = {}, todaySession = {};
   _getSchedulesAll_().forEach(function(s) {
     const st = String(s.status || '').toLowerCase();
     if (st === 'cancelled' || st === 'available') return;
     const d = new Date(s.start);
     if (isNaN(d.getTime())) return;
-    const day = Utilities.formatDate(d, REMINDER_TZ, 'yyyy-MM-dd'), k = String(s.memberId).trim();
+    const day = _wibDate_(d), k = String(s.memberId).trim();
     if (day === today) todaySession[k] = true;
     if (st === 'completed' && (!lastSession[k] || day > lastSession[k])) lastSession[k] = day;
   });
   const out = [];
-  md.getDataRange().getValues().slice(1).forEach(function(r) {
+  _memberValues_().data.slice(1).forEach(function(r) {
     const id = String(r[0] || '').trim();
     if (!id) return;
     const rem = (parseInt(r[8], 10) || 0) - (parseInt(r[9], 10) || 0);
@@ -8141,7 +8407,7 @@ function _memberClassContext_(row) {
 
 function _publicGroup_(g, memberId) {
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
+  _memberValues_().data.slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim().split(/\s+/)[0]; });
   const pkg = _classPackage_(g.packageId);
   return {
     id: g.id, code: g.code, packageId: g.packageId, packageName: pkg ? pkg.namaPaket : '', capacity: pkg ? pkg.kapasitas : '',
@@ -8169,7 +8435,7 @@ function createClassGroup(memberToken) {
     const taken = {};
     data.slice(1).forEach(function(r) { taken[String(r[1])] = true; });
     g = { id: 'GRP-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), code: _newClassCode_(taken), packageId: pkg.id, creatorId: memberId, status: 'buka', createdAt: new Date().toISOString(), members: [memberId] };
-    sheet.appendRow([g.id, g.code, g.packageId, g.creatorId, g.status, g.createdAt, g.members.join(',')]);
+    _appendRow_(sheet, [g.id, g.code, g.packageId, g.creatorId, g.status, g.createdAt, g.members.join(',')]);
   } finally {
     lock.releaseLock();
   }
@@ -8244,7 +8510,7 @@ function getMyClassGroup(memberToken) { return _classGroupFor_(requireMember_(me
 function getClassGroups(token) {
   requireAdmin_(token);
   const names = {};
-  _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
+  _memberValues_().data.slice(1).forEach(function(r) { names[String(r[0]).trim()] = String(r[1] || '').trim(); });
   return _classGroupSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0] && String(r[4]) === 'buka'; }).map(function(r) {
     const g = _classGroupFromRow_(r);
     const pkg = _classPackage_(g.packageId);
@@ -8261,6 +8527,7 @@ function _sharedVersion_() {
 function _bustShared_() {
   try { SpreadsheetApp.flush(); } catch (e) {}
   try { CacheService.getScriptCache().put('shared:ver', String(Date.now()) + '.' + Math.floor(Math.random() * 1000000), 21600); } catch (e) {}
+  _bumpAdmin_();
 }
 function _sharedCached_(name, fn) {
   const ttl = Math.max(30, Math.min(600, Math.floor(_numProp_('SHARED_CACHE_SECONDS', 180))));
@@ -8375,9 +8642,57 @@ function _bumpMember_(ids, flushed) {
     const c = CacheService.getScriptCache();
     list.forEach(function(id) { c.put('mv:' + id, _newVer_(), MEMBER_VER_TTL); });
   } catch (e) {}
+  _bumpAdmin_();
 }
 /** Naikkan versi lalu kembalikan hasil penulisan (bentuk jawaban tidak berubah). */
 function _bumpAfter_(ids, result) { _bumpMember_(ids); return result; }
+
+// Versi data panel (Fase W): naik di setiap penulisan data klien, jadwal atau data bersama; dipakai kunci cache getAdminMore.
+function _admVer_() {
+  try { return CacheService.getScriptCache().get('adm:ver') || '0'; } catch (e) { return '0'; }
+}
+function _bumpAdmin_() {
+  try { CacheService.getScriptCache().put('adm:ver', _newVer_(), MEMBER_VER_TTL); } catch (e) {}
+}
+
+// ── Cache hasil jadi (Fase W1) ───────────────────────────────────────────────
+// Hasil akhir getPortalMore / getClientBundle disimpan di CacheService dengan kunci = klien + hari WIB + versi data klien.
+// Setiap penulis data klien menaikkan versi (lihat atas), jadi tulisan baru otomatis memakai kunci baru. Besar jawaban
+// dipecah per 30.000 karakter (batas 100 KB per nilai). PAYLOAD_CACHE=false mematikan; TTL dari Script Property.
+const PAYLOAD_CHUNK_ = 30000, PAYLOAD_MAX_CHUNKS_ = 12;
+function _payloadCacheOn_() {
+  return String(PropertiesService.getScriptProperties().getProperty('PAYLOAD_CACHE') || '').trim().toLowerCase() !== 'false';
+}
+function _payloadGet_(key) {
+  try {
+    const c = CacheService.getScriptCache();
+    const n = Number(c.get(key));
+    if (!(n >= 1 && n <= PAYLOAD_MAX_CHUNKS_)) return null;
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push(key + ':' + i);
+    const got = c.getAll ? c.getAll(keys) : {};
+    let str = '';
+    for (let i = 0; i < n; i++) {
+      const part = c.getAll ? got[keys[i]] : c.get(keys[i]);
+      if (typeof part !== 'string') return null;
+      str += part;
+    }
+    return JSON.parse(str);
+  } catch (e) { return null; }
+}
+function _payloadPut_(key, obj, ttl) {
+  try {
+    const str = JSON.stringify(obj);
+    const n = Math.ceil((str ? str.length : 0) / PAYLOAD_CHUNK_);
+    if (n < 1 || n > PAYLOAD_MAX_CHUNKS_) return;
+    const c = CacheService.getScriptCache();
+    const all = {};
+    for (let i = 0; i < n; i++) all[key + ':' + i] = str.slice(i * PAYLOAD_CHUNK_, (i + 1) * PAYLOAD_CHUNK_);
+    if (c.putAll) { all[key] = String(n); c.putAll(all, ttl); return; }
+    Object.keys(all).forEach(function(k) { c.put(k, all[k], ttl); });
+    c.put(key, String(n), ttl);
+  } catch (e) {}
+}
 
 /** Pemilik (Member ID) satu jadwal, '' kalau tidak ada. Untuk _bumpMember_ di penulis yang hanya tahu ID jadwal. */
 function _scheduleMemberId_(scheduleId) {
@@ -8388,7 +8703,7 @@ function _scheduleMemberId_(scheduleId) {
 
 /** Panel: versi data semua klien (untuk salinan halaman klien di perangkat coach). Nilai = sama dengan _memberVer_. */
 function _memberVersAll_() {
-  const ids = _getMemberDataSheet_().getDataRange().getValues().slice(1).map(function(r) { return String(r[0]).trim(); }).filter(Boolean);
+  const ids = _memberValues_().data.slice(1).map(function(r) { return String(r[0]).trim(); }).filter(Boolean);
   const v = _memberVers_(ids.concat(['*']));
   const shared = _sharedVersion_(), all = v['*'], out = {};
   if (!all) return out;

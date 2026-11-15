@@ -11,7 +11,7 @@
   const PART_GROUP = { 'back': 'back', 'upper legs': 'legs', 'lower legs': 'legs', 'chest': 'chest', 'shoulders': 'shoulders', 'neck': 'shoulders', 'waist': 'core', 'upper arms': 'arms', 'lower arms': 'arms' };
   const GROUP_PARTS = { back: ['back'], legs: ['upper legs', 'lower legs'], chest: ['chest'], shoulders: ['shoulders', 'neck'], core: ['waist'], arms: ['upper arms', 'lower arms'] };
   const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri'];
-  const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'gizi', 'rekap', 'foto', 'badge'];
+  const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'perjalanan', 'gizi', 'rekap', 'foto', 'badge'];
   const PERIOD_KINDS = { latihan: 1, exercises: 1, gizi: 1, ukuran: 1 };
   const PERIODS = ['hari', 'minggu', 'bulan', '3bulan'];
 
@@ -74,6 +74,7 @@
     if (out.style === 'foto') out.style = 'grafik';
     return out;
   }
+  function hasPrefs() { try { return !!localStorage.getItem(PREF_KEY); } catch (e) { return false; } }
   function savePrefs() {
     try {
       const p = JSON.parse(JSON.stringify(P));
@@ -338,6 +339,19 @@
     return { kind: 'badge', title: T.newBadge, date: fmtDate(src.today), fname: 'badge-' + b.id, graphs: { emblem: { type: 'emblem', label: badgeLabel(b), kind: b.kind, need: b.need } },
       stats: [stat('sessions', T.sessions, String(p.completed || 0)), stat('best', T.bestStreak, (p.bestStreak || 0) + ' ' + T.wk)] };
   }
+  // Kartu atlet (Fase X): level, gelar, dan statistik yang dipilih klien di kartu atletnya (src.athlete dari App.html).
+  function buildAtlet(src) {
+    const a = src.athlete; if (!a || !a.level) return null;
+    return { kind: 'atlet', title: 'Level ' + a.level + (a.gelar ? ' · ' + a.gelar : ''), date: fmtDate(src.today), fname: 'athlete-' + iso(src.today),
+      graphs: { emblem: { type: 'emblem', label: a.gelar || ('Level ' + a.level), kind: 'sesi', need: 'L' + a.level } },
+      stats: (a.stats || []).slice(0, 4).map((x, i) => stat('m:a' + i, x.l, x.v)) };
+  }
+  // Sebelum–sesudah (Fase X): angka saja, dari cerita perjalanan (src.journey: headline + Awal / Sekarang / Selisih).
+  function buildPerjalanan(src) {
+    const j = src.journey; if (!j || !j.tiles || !j.tiles.length) return null;
+    return { kind: 'perjalanan', title: j.headline, date: j.eyebrow || fmtDate(src.today), fname: 'journey-' + iso(src.today),
+      stats: j.tiles.slice(0, 3).map((t, i) => stat('m:j' + i, t.l, t.v)) };
+  }
   function buildKonsistensi(src) {
     const p = src.progress || {}, sh = src.share || {}, a = sh.activity, mo = sh.month || {}, pm = sh.prevMonth || {};
     if (!a) return null;
@@ -353,10 +367,10 @@
   }
   const BUILD = {
     latihan: (s, k, p) => buildLatihan(s, k, p, false), exercises: (s, k, p) => buildLatihan(s, k, p, true), record: buildRecord, progres: buildProgres,
-    ukuran: buildUkuran, gizi: buildGizi, rekap: buildRekap, badges: buildBadges, badge: buildBadge, konsistensi: buildKonsistensi, foto: buildFoto
+    ukuran: buildUkuran, gizi: buildGizi, rekap: buildRekap, badges: buildBadges, badge: buildBadge, konsistensi: buildKonsistensi, foto: buildFoto, atlet: buildAtlet, perjalanan: buildPerjalanan
   };
-  const KIND_NAME = { latihan: 'Latihan', exercises: 'Gerakan', record: 'Rekor', progres: 'Progres', ukuran: 'Ukuran tubuh', konsistensi: 'Konsistensi', badges: 'Koleksi badge', gizi: 'Gizi', rekap: 'Rekap bulan', foto: 'Foto progres', badge: 'Badge baru' };
-  const KIND_ICON = { latihan: 'dumbbell', exercises: 'list', record: 'trophy', progres: 'trending-up', ukuran: 'ruler', konsistensi: 'calendar-check', badges: 'award', gizi: 'apple', rekap: 'calendar', foto: 'image', badge: 'medal' };
+  const KIND_NAME = { atlet: 'Atlet', perjalanan: 'Sebelum–sesudah', latihan: 'Latihan', exercises: 'Gerakan', record: 'Rekor', progres: 'Progres', ukuran: 'Ukuran tubuh', konsistensi: 'Konsistensi', badges: 'Koleksi badge', gizi: 'Gizi', rekap: 'Rekap bulan', foto: 'Foto progres', badge: 'Badge baru' };
+  const KIND_ICON = { atlet: 'shield', perjalanan: 'arrow-right-left', latihan: 'dumbbell', exercises: 'list', record: 'trophy', progres: 'trending-up', ukuran: 'ruler', konsistensi: 'calendar-check', badges: 'award', gizi: 'apple', rekap: 'calendar', foto: 'image', badge: 'medal' };
   const GRAPH_NAME = { radar: 'Radar', bodymap: 'Peta otot', partbars: 'Bagian tubuh', list: 'Daftar', line: '1RM', lifts: 'Top 3 gerakan', badges: 'Badge', bodyline: 'Grafik tubuh', lines: 'Grafik per ukuran', pairs: 'Sebelum–sesudah', macro: 'Cincin makro', kcalbars: 'Kalori harian', weekbars: 'Batang mingguan', heat: 'Kalender', emblem: 'Lambang', photos: 'Foto', none: 'Tanpa grafik' };
   const STAT_NAME = { duration: 'Durasi', volume: 'Volume', sets: 'Set', reps: 'Rep', records: 'Rekor', exercises: 'Jumlah gerakan', workouts: 'Hari latihan', sessions: 'Sesi', streak: 'Streak', month: 'Bulan ini', badges: 'Badge', best: 'Terbaik', earned: 'Badge diraih', kcal: 'Kalori', protein: 'Protein', carbs: 'Karbo', fat: 'Lemak', avg: 'Rata-rata kalori', logged: 'Hari dicatat', ontarget: 'Sesuai target', meals: 'Makan dicatat', e1rm: 'Estimasi 1RM', vsprev: 'vs sebelumnya', impr: 'Peningkatan' };
 
@@ -474,7 +488,44 @@
     mmShapes = { front: [{ part: '', p: head }].concat(conv(src.front)), back: [{ part: '', p: head }].concat(conv(src.back)) };
     return mmShapes;
   }
+  // Fase U (T-1610): peta otot sendiri (figure.min.json) bila sudah ada di perangkat; nilai per kelompok (PART_GROUP).
+  const FIG_PART = { pectorals: 'chest', lats: 'back', 'upper back': 'back', traps: 'back', spine: 'back', delts: 'shoulders', biceps: 'upper arms', triceps: 'upper arms',
+    forearms: 'lower arms', abs: 'waist', quads: 'upper legs', hamstrings: 'upper legs', glutes: 'upper legs', adductors: 'upper legs', abductors: 'upper legs', calves: 'lower legs' };
+  let figP2 = null;
+  function figPaths(sex) {
+    const f = window.figSync ? window.figSync() : null;
+    if (!f || !f.views) return null;
+    const v = f.views[sex] || f.views.m;
+    if (figP2 && figP2.v === v) return figP2;
+    const conv = function (side) {
+      const vb = side.vb.split(' ').map(Number), mk = function (d) { return new Path2D(d); };
+      return { vb: vb, outline: mk(side.outline), base: side.base.map(mk), parts: Object.keys(side.parts).map(function (t) { return { t: t, p: side.parts[t].map(mk) }; }) };
+    };
+    figP2 = { v: v, front: conv(v.front), back: conv(v.back) };
+    return figP2;
+  }
+  function bodymapFig(ctx, b, parts, ink, k, s, fp) {
+    const mx = Math.max.apply(null, AXES.map(a => Number(parts[a]) || 0)) || 1;
+    const lab = 32 * s, availH = b.h - lab * 2.2, sc = Math.min(availH / 1448, (b.w * .92) / (724 * 2)), w = 724 * 2 * sc, x0 = b.x + (b.w - w) / 2, y0 = b.y + (b.h - 1448 * sc - lab * 1.6) / 2;
+    [['front', 0], ['back', 724]].forEach(function (f) {
+      const sd = fp[f[0]];
+      ctx.save(); ctx.translate(x0 + f[1] * sc, y0); ctx.scale(sc * 1448 / sd.vb[3], sc * 1448 / sd.vb[3]); ctx.translate(-sd.vb[0], -sd.vb[1]);
+      ctx.fillStyle = ink; ctx.globalAlpha = .07; ctx.fill(sd.outline);
+      ctx.globalAlpha = .12; sd.base.forEach(function (p) { ctx.fill(p); });
+      sd.parts.forEach(function (x) {
+        const g = PART_GROUP[FIG_PART[x.t]], v = g ? (Number(parts[g]) || 0) / mx : 0;
+        ctx.globalAlpha = v > 0 ? (.35 + .65 * v) * k + .14 * (1 - k) : .16;
+        x.p.forEach(function (p) { ctx.fill(p); });
+      });
+      ctx.restore();
+    });
+    ctx.globalAlpha = 1; ctx.fillStyle = ink;
+    const ty = y0 + 1448 * sc + lab * 1.4;
+    Tx(ctx, P.lang === 'id' ? 'Depan' : 'Front', x0 + 362 * sc, ty, lab, 600, .6, 'center'); Tx(ctx, P.lang === 'id' ? 'Belakang' : 'Back', x0 + 1086 * sc, ty, lab, 600, .6, 'center');
+  }
   function bodymap(ctx, b, parts, ink, k, s) {
+    const fp = figPaths(window.shareFigSex || 'm');
+    if (fp) { bodymapFig(ctx, b, parts, ink, k, s, fp); return; }
     const sh = mmPaths();
     const mx = Math.max.apply(null, AXES.map(a => Number(parts[a]) || 0)) || 1;
     if (!sh) { radar(ctx, b, AXES.map(a => Number(parts[a]) || 0), ink, k, s); return; }
@@ -798,7 +849,7 @@
   function opts() {
     const k = kp();
     const size = P.size, H = SIZES[size] || 1920;
-    return { style: P.style, size: size, H: H, ink: P.ink, align: P.align, pos: P.pos, s: P.scale === 'l' ? 1.18 : P.scale === 's' ? .86 : 1, corner: P.corner, frame: P.frame,
+    return { accent: st.src.accent || '', style: P.style === 'aksen' && !st.src.accent ? 'gelap' : P.style, size: size, H: H, ink: P.ink, align: P.align, pos: P.pos, s: P.scale === 'l' ? 1.18 : P.scale === 's' ? .86 : 1, corner: P.corner, frame: P.frame,
       foot: P.foot, name: String(P.name == null ? (st.src.first || '') : P.name).trim(), coach: (st.src.share && st.src.share.coach) || st.src.coach || '', cmp: PERIOD_KINDS[st.kind] || st.card.vsKey ? k.cmp : 'none', photo: st.photoBg, qrUrl: (st.src.share && st.src.share.qrUrl) || 'https://xnkbooking.my.id', avatars: st.avatars || {} };
   }
   function cmpText(stt, mode, vsKey) {
@@ -828,7 +879,7 @@
   /** Kotak tiap blok di kanvas (untuk menggambar dan untuk tools/share-check.js). */
   function layout(card, o) {
     const cnv = document.createElement('canvas'), ctx = cnv.getContext('2d');
-    const boxed = o.style === 'gelap' || o.style === 'terang';
+    const boxed = o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen';
     const pad = 72, H = o.H, transparentStory = !boxed && o.size === 'story';
     const safeTop = transparentStory ? 170 : pad, safeBot = transparentStory ? 220 : pad;
     let s = o.s, m, gH, avail, total;
@@ -947,11 +998,11 @@
   }
   function paint(ctx, card, o, img) {
     const H = o.H, k = o.t == null ? 1 : o.t;
-    const boxed = o.style === 'gelap' || o.style === 'terang';
-    let ink = o.style === 'gelap' ? '#FFFFFF' : o.style === 'terang' ? '#0B0B0B' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF');
+    const boxed = o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen';
+    let ink = o.style === 'gelap' || o.style === 'aksen' ? '#FFFFFF' : o.style === 'terang' ? '#0B0B0B' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF');
     const rad = o.corner === 'bulat' ? 72 : 0;
     if (o.video && !boxed && o.style !== 'foto') { ctx.fillStyle = ink === '#FFFFFF' ? '#0B0B0B' : '#FFFFFF'; ctx.fillRect(0, 0, W, H); }
-    if (boxed) { ctx.fillStyle = o.style === 'gelap' ? '#0B0B0B' : '#FFFFFF'; rrect(ctx, 0, 0, W, H, o.video ? 0 : rad); ctx.fill(); }
+    if (boxed) { ctx.fillStyle = o.style === 'aksen' ? (o.accent || '#0B0B0B') : o.style === 'gelap' ? '#0B0B0B' : '#FFFFFF'; rrect(ctx, 0, 0, W, H, o.video ? 0 : rad); ctx.fill(); }
     if (o.style === 'foto') {
       if (o.photo) {
         drawCover(ctx, o.photo, 0, 0, W, H);
@@ -963,7 +1014,7 @@
       } else { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, 0, W, H); Tx(ctx, T.pickPhoto, W / 2, H / 2, 54, 600, .5, 'center'); }
       if (rad && !o.video) { ctx.globalCompositeOperation = 'destination-in'; ctx.fillStyle = '#000'; rrect(ctx, 0, 0, W, H, rad); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
     }
-    if (o.frame) { ctx.save(); ctx.strokeStyle = ink; ctx.globalAlpha = .9; ctx.lineWidth = 6; rrect(ctx, 30, 30, W - 60, H - 60, Math.max(0, rad - 30)); ctx.stroke(); ctx.restore(); }
+    if (o.frame) { ctx.save(); ctx.strokeStyle = o.accent && o.style !== 'aksen' ? o.accent : ink; ctx.globalAlpha = .9; ctx.lineWidth = 6; rrect(ctx, 30, 30, W - 60, H - 60, Math.max(0, rad - 30)); ctx.stroke(); ctx.restore(); }
     ctx.fillStyle = ink; ctx.textBaseline = 'alphabetic';
     if (ink === '#FFFFFF' && !boxed && o.style !== 'foto' && !o.video) { ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 2; }
     const R = layout(card, o);
@@ -1014,8 +1065,10 @@
     box.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.shareFull(); } });
   }
   // Alat: di HP bilah ikon di bawah pratinjau (panel terbuka hanya saat diketuk), di desktop kolom kanan yang ramping.
-  const TOOLS = [['kartu', 'Kartu', 'layers'], ['template', 'Template', 'sparkles'], ['gaya', 'Gaya', 'palette'], ['ukuran', 'Ukuran', 'ratio'],
-    ['tata', 'Tata letak', 'layout-template'], ['isi', 'Isi', 'list-checks'], ['teks', 'Teks', 'type'], ['ekspor', 'Ekspor', 'download']];
+  // Fase X: di HP hanya lima alat utama + "Lainnya"; desktop menampilkan semuanya.
+  const TOOLS_MAIN = [['kartu', 'Kartu', 'layers'], ['gaya', 'Gaya', 'palette'], ['ukuran', 'Ukuran', 'ratio'], ['isi', 'Isi', 'list-checks'], ['privasi', 'Privasi', 'eye-off']];
+  const TOOLS_MORE = [['template', 'Template', 'sparkles'], ['tata', 'Tata letak', 'layout-template'], ['teks', 'Teks', 'type'], ['ekspor', 'Ekspor', 'download']];
+  const TOOLS = TOOLS_MAIN.concat(TOOLS_MORE);
   const row = (label, inner) => '<div class="sh-row"><span class="sh-lbl">' + label + '</span><div class="sh-chips" role="radiogroup" aria-label="' + esc(label) + '">' + inner + '</div></div>';
   function paneKartu() {
     const k = kp(), cur = st.kind;
@@ -1042,8 +1095,8 @@
     return row('Template', Object.keys(PRESETS).map(p => chip('preset', p, { minimal: 'Minimal', bold: 'Bold', strava: 'Strava', hevy: 'Hevy', polos: 'Polos' }[p], P.preset)).join('') + (P.preset === 'kustom' ? chip('preset', 'kustom', 'Kustom', 'kustom') : ''));
   }
   function paneGaya() {
-    const boxed = P.style === 'gelap' || P.style === 'terang';
-    let h = row('Gaya', [['teks', 'Transparan'], ['grafik', 'Transp. + grafik'], ['gelap', 'Gelap'], ['terang', 'Terang'], ['foto', 'Foto']].map(x => chip('style', x[0], x[1], P.style)).join(''));
+    const boxed = P.style === 'gelap' || P.style === 'terang' || P.style === 'aksen';
+    let h = row('Gaya', [['teks', 'Transparan'], ['grafik', 'Transp. + grafik'], ['gelap', 'Gelap'], ['terang', 'Terang']].concat(st.src.accent ? [['aksen', 'Warna aksen']] : [], [['foto', 'Foto']]).map(x => chip('style', x[0], x[1], P.style)).join(''));
     if (!boxed) h += row('Warna teks', chip('ink', 'putih', 'Putih', P.ink) + chip('ink', 'hitam', 'Hitam', P.ink));
     if (P.style === 'foto') h += row('Foto latar', '<button type="button" class="chip" onclick="window.sharePick(\'bg\')">' + ic('image') + (st.photoBg ? 'Ganti foto' : 'Pilih foto') + '</button>') + blurField();
     return h;
@@ -1052,7 +1105,7 @@
     return row('Ukuran', [['story', 'Story 9:16'], ['portrait', 'Portrait 4:5'], ['kotak', 'Kotak 1:1']].map(x => chip('size', x[0], x[1], P.size)).join(''));
   }
   function paneTata() {
-    const boxed = P.style === 'gelap' || P.style === 'terang';
+    const boxed = P.style === 'gelap' || P.style === 'terang' || P.style === 'aksen';
     let h = row('Rata', chip('align', 'kiri', 'Kiri', P.align) + chip('align', 'tengah', 'Tengah', P.align));
     if (!boxed) h += row('Posisi', chip('pos', 'atas', 'Atas', P.pos) + chip('pos', 'tengah', 'Tengah', P.pos) + chip('pos', 'bawah', 'Bawah', P.pos));
     h += row('Teks', chip('scale', 's', 'Kecil', P.scale) + chip('scale', 'm', 'Sedang', P.scale) + chip('scale', 'l', 'Besar', P.scale));
@@ -1077,7 +1130,7 @@
       const pick = (slot, cur) => '<div class="sh-photo-pick"><span class="label">' + (slot === 'a' ? 'Sebelum' : 'Sesudah') + '</span><div class="chips sh-chips">' +
         list.slice(0, 24).map(p => '<button type="button" class="chip' + (cur === p.id ? ' active' : '') + '" onclick="window.sharePhoto(\'' + slot + '\',\'' + esc(p.id) + '\')">' + esc(fmtShort(p.tanggal)) + ' · ' + esc(p.sisi) + '</button>').join('') +
         '<button type="button" class="chip" onclick="window.sharePick(\'' + slot + '\')">' + ic('smartphone') + 'Dari HP</button></div></div>';
-      h += '<div class="field sh-field">' + (list.length ? '' : '<p class="li-sub">Belum ada foto progres. Pilih dari HP.</p>') + pick('a', st.photoAId) + pick('b', st.photoBId) + '</div>' + blurField();
+      h += '<div class="field sh-field">' + (list.length ? '' : '<p class="li-sub">Belum ada foto progres. Pilih dari HP.</p>') + pick('a', st.photoAId) + pick('b', st.photoBId) + '</div>';
     }
     if (c && c.allStats.length) {
       h += '<div class="sh-stats" role="list" aria-label="Angka di kartu">' + c.allStats.map(function (s, i) {
@@ -1088,16 +1141,27 @@
       }).join('') + '</div>';
     }
     if (c && c.gids.length && kind !== 'foto') h += row('Grafik', c.gids.concat(kind === 'badge' ? [] : ['none']).map(g => chip('graph', g, GRAPH_NAME[g] || g, c.gid)).join(''));
-    if (kind === 'progres' || kind === 'foto') h += '<div class="sh-toggles">' + toggle('body', 'Tampilkan data tubuh', k.body, 'body') + '</div>';
     if ((kind === 'progres' || kind === 'foto') && k.body || kind === 'ukuran') {
       const avail = measuresWithData(st.src);
       const sel = k.measures.length ? k.measures : (kind === 'ukuran' ? avail.slice(0, 4) : ['berat', 'pinggang']);
       h += '<div class="sh-row"><span class="sh-lbl">Ukuran</span><div class="sh-chips">' + avail.map(m => '<button type="button" class="chip' + (sel.indexOf(m) !== -1 ? ' active' : '') + '" role="checkbox" aria-checked="' + (sel.indexOf(m) !== -1) + '" onclick="window.shareMeasure(\'' + m + '\')">' + esc(L.id.m[m]) + '</button>').join('') + (avail.length ? '' : '<p class="li-sub">Belum ada ukuran tubuh.</p>') + '</div></div>';
-      h += row('Angka', chip('bodyVal', 'false', 'Perubahan', String(!!k.bodyVal)) + chip('bodyVal', 'true', 'Nilai', String(!!k.bodyVal)));
     }
-    if (['latihan', 'exercises', 'record', 'rekap'].indexOf(kind) !== -1) h += '<div class="sh-toggles">' + toggle('hideKg', 'Sembunyikan beban (kg)', k.hideKg, 'hideKg') + '</div>';
     h += '<div class="sh-row"><label class="sh-lbl" for="share-ttl">Judul</label><input class="input sh-input" id="share-ttl" maxlength="40" value="' + esc(k.title) + '" placeholder="' + esc(c ? (BUILD[kind](st.src, Object.assign({}, k, { title: '' }), st.per[periodKey()] || null) || {}).title || '' : '') + '" oninput="window.shareText(\'title\', this.value)" autocomplete="off"></div>';
     return h;
+  }
+  // Privasi: semua yang menyangkut tubuh, beban, dan wajah di satu tempat.
+  function panePrivasi() {
+    const k = kp(), kind = st.kind;
+    let h = '', any = false;
+    if (['latihan', 'exercises', 'record', 'rekap'].indexOf(kind) !== -1) { h += '<div class="sh-toggles">' + toggle('hideKg', 'Sembunyikan beban (kg)', k.hideKg, 'hideKg') + '</div>'; any = true; }
+    if (kind === 'progres' || kind === 'foto') { h += '<div class="sh-toggles">' + toggle('body', 'Tampilkan data tubuh', k.body, 'body') + '</div>'; any = true; }
+    if ((kind === 'progres' || kind === 'foto') && k.body || kind === 'ukuran') { h += row('Angka tubuh', chip('bodyVal', 'false', 'Perubahan', String(!!k.bodyVal)) + chip('bodyVal', 'true', 'Nilai', String(!!k.bodyVal))); any = true; }
+    if (kind === 'foto' || P.style === 'foto') { h += blurField(); any = true; }
+    if (kind === 'atlet' || kind === 'perjalanan') { h += '<p class="sh-note">Angka di kartu ini berasal dari ' + (kind === 'atlet' ? 'statistik pilihan di kartu atlet' : 'cerita perjalanan (termasuk berat)') + '. Matikan angka yang tidak ingin dibagikan di Isi.</p>'; any = true; }
+    return h + (any ? '' : '<p class="sh-note">Kartu ini tidak memuat data tubuh, beban, atau foto.</p>') + '<p class="sh-note">Kartu dibuat di HP ini dan tidak diunggah ke mana pun.</p>';
+  }
+  function paneLainnya() {
+    return '<div class="sh-more" role="list">' + TOOLS_MORE.map(t => '<button type="button" class="sh-tool" data-tool="' + t[0] + '" onclick="window.shareTab(\'' + t[0] + '\')">' + ic(t[2]) + '<span>' + t[1] + '</span></button>').join('') + '</div>';
   }
   function paneTeks() {
     const f = P.foot;
@@ -1108,11 +1172,13 @@
     if (st.src.admin) h += '<p class="sh-note">Minta izin klien sebelum memposting kartu ini.</p>';
     return h;
   }
-  const PANES = { kartu: paneKartu, template: paneTemplate, gaya: paneGaya, ukuran: paneUkuran, tata: paneTata, isi: paneIsi, teks: paneTeks, ekspor: paneEkspor };
+  const PANES = { kartu: paneKartu, template: paneTemplate, gaya: paneGaya, ukuran: paneUkuran, tata: paneTata, isi: paneIsi, privasi: panePrivasi, lainnya: paneLainnya, teks: paneTeks, ekspor: paneEkspor };
   function renderControls() {
     const tabs = $('share-tabs'), body = $('share-body'), sh = $('sheet-share');
     if (isDesk() && !st.tab) st.tab = 'kartu';
-    tabs.innerHTML = TOOLS.map(t => '<button type="button" role="tab" class="sh-tool' + (st.tab === t[0] ? ' active' : '') + '" data-tool="' + t[0] + '" aria-selected="' + (st.tab === t[0]) + '" onclick="window.shareTab(\'' + t[0] + '\')">' + ic(t[2]) + '<span>' + t[1] + '</span></button>').join('');
+    const moreOn = st.tab === 'lainnya' || TOOLS_MORE.some(t => t[0] === st.tab);
+    const list = isDesk() ? TOOLS : TOOLS_MAIN.concat([['lainnya', 'Lainnya', 'more-horizontal']]);
+    tabs.innerHTML = list.map(t => { const on = st.tab === t[0] || (t[0] === 'lainnya' && moreOn); return '<button type="button" role="tab" class="sh-tool' + (on ? ' active' : '') + '" data-tool="' + t[0] + '" aria-selected="' + on + '" onclick="window.shareTab(\'' + t[0] + '\')">' + ic(t[2]) + '<span>' + t[1] + '</span></button>'; }).join('');
     const scroll = body.scrollTop;
     body.innerHTML = st.tab ? '<section class="sh-pane on" data-pane="' + st.tab + '">' + PANES[st.tab]() + '</section>' : '';
     body.scrollTop = scroll;
@@ -1180,8 +1246,8 @@
       const box = $('share-box');
       st.ratio = o.H / 1080; fitBox();
       if (box) {
-        box.classList.toggle('ink-dark', !(o.style === 'gelap' || o.style === 'terang' || o.style === 'foto') && o.ink === 'hitam');
-        box.classList.toggle('solid', o.style === 'gelap' || o.style === 'terang' || o.style === 'foto');
+        box.classList.toggle('ink-dark', !(o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen' || o.style === 'foto') && o.ink === 'hitam');
+        box.classList.toggle('solid', o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen' || o.style === 'foto');
       }
     }, 50);
   }
@@ -1210,6 +1276,11 @@
   window.shareOpen = function (kind, src, o) {
     src = src || {}; o = o || {};
     P = loadPrefs(); T = L[P.lang] || L.en;
+    if (src.cardStyle && !hasPrefs()) {   // Fase X: belum pernah mengatur editor → ikut gaya kartu atlet
+      if (src.cardStyle === 'aksen' && src.accent) P.style = 'aksen';
+      else if (src.cardStyle === 'garis') { P.style = 'gelap'; P.frame = true; }
+      else P.style = 'gelap';
+    }
     ensureShell();
     st.src = src; st.opts = o; st.per = {}; st.photoBg = null; st.blob = null; st.avatars = null; st.avImg = {}; st.full = false;
     st.prevName = P.name; if (src.admin) P.name = '';

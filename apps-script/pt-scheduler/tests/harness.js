@@ -207,7 +207,7 @@ function createEnv(opts = {}) {
 
   const triggerBuilder = handler => {
     const b = {
-      timeBased: () => b, everyDays: () => b, atHour: () => b, onWeekDay: () => b, everyHours: () => b, inTimezone: () => b,
+      timeBased: () => b, everyDays: () => b, atHour: () => b, onWeekDay: () => b, everyHours: () => b, everyMinutes: () => b, inTimezone: () => b,
       create: () => { const t = { getHandlerFunction: () => handler }; env.triggers.push(t); return t; },
     };
     return b;

@@ -89,7 +89,7 @@ function _finEnsure_() {
   });
   const cat = _finSheet_('KategoriKeuangan', true);
   if (cat.getLastRow() <= 1) {
-    FIN_DEFAULT_CATS.forEach(function(c, i) { cat.appendRow(['KAT-' + (i + 1), c[0], c[1], i + 1, true]); });
+    FIN_DEFAULT_CATS.forEach(function(c, i) { _appendRow_(cat, ['KAT-' + (i + 1), c[0], c[1], i + 1, true]); });
   }
 }
 
@@ -121,7 +121,7 @@ function _finRead_(name) {
 function _finAppend_(name, obj) {
   const sheet = _finSheet_(name, true);
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-  sheet.appendRow(header.map(function(h) { return obj[h] === undefined ? '' : obj[h]; }));
+  _appendRow_(sheet, header.map(function(h) { return obj[h] === undefined ? '' : obj[h]; }));
 }
 
 function _finUpdate_(name, rowNum, obj) {
@@ -158,7 +158,12 @@ function _finText_(v, max, label) {
 function _finLocked_(fn) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Sedang sibuk, coba lagi.');
-  try { return fn(); } finally { lock.releaseLock(); }
+  try {
+    const r = fn();
+    try { SpreadsheetApp.flush(); } catch (e) {}
+    _bumpAdmin_();   // Fase W: ringkasan keuangan di getAdminMore ikut segar
+    return r;
+  } finally { lock.releaseLock(); }
 }
 
 // ── Tagihan: dibuat dari transaksi, status dihitung dari pembayaran ─────────
@@ -207,7 +212,7 @@ function _finMigrate_() {
     const prices = _allPackagePrices_();
     const names = {};
     _getMembersAll_().forEach(function(m) { names[String(m.id)] = m.name; });
-    const log = _getMembersLogSheet_().getDataRange().getValues();
+    const log = _membersLogValues_();
     let created = 0, skipped = 0;
     for (let i = 1; i < log.length; i++) {
       const r = log[i], trxId = String(r[0] || '');

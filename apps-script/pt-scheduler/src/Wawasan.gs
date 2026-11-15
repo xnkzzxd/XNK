@@ -254,7 +254,7 @@ function _insightFor_(row, audience, pre) {
   const assessment = ok(pre.assessment) || _assessmentFor_(row, spy);
   const bodyFat = pre.bodyFat !== undefined ? pre.bodyFat : (spy.bodyFat == null ? null : spy.bodyFat);
   const sessions = _getSchedulesAll_().filter(function(s) { return String(s.memberId).trim() === id; });
-  const sessDates = sessions.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; }).map(function(s) { return _wibParts_(new Date(s.start)).date; });
+  const sessDates = sessions.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; }).map(function(s) { return _wibDate_(s.start); });
   const nutOn = _nutEnabled_() && prof.aktif;
   const foodRows = nutOn ? _foodLogRows_(id) : [];
   const foodDates = foodRows.map(function(r) { return r.tanggal; }).filter(function(d, i, a) { return a.indexOf(d) === i; });
@@ -286,7 +286,7 @@ function _insightFor_(row, audience, pre) {
     activity: _insightActivity_({ sessionDates: sessDates, workoutDates: workout.days.map(function(d) { return d.tanggal; }), foodDates: foodDates, workoutDays: workout.days, programNames: program.map(function(d) { return d.hari; }) }, today)
   };
   out.week = _portalWeek_({
-    sessions: sessions.map(function(s) { return { date: _wibParts_(new Date(s.start)).date, done: String(s.status || '').toLowerCase() === 'completed' }; }),
+    sessions: sessions.map(function(s) { return { date: _wibDate_(s.start), done: String(s.status || '').toLowerCase() === 'completed' }; }),
     workoutDates: workout.days.map(function(d) { return d.tanggal; }),
     foodDates: nutOn ? foodDates : null,
     kcal: nutOn && kcalTarget ? { today: Math.round(kcalByDay[today] || 0), target: kcalTarget } : null,
@@ -351,28 +351,28 @@ function _clientSignalsCalc_(ctx, today) {
 /** Kumpulkan data dari sheet lalu hitung sinyal semua klien (satu bacaan per sheet). */
 function _clientSignals_(now) {
   const today = _wibParts_(now || new Date()).date;
-  const rows = _getMemberDataSheet_().getDataRange().getValues().slice(1).filter(function(r) { return r[0]; });
+  const rows = _memberValues_().data.slice(1).filter(function(r) { return r[0]; });
   const weights = {};
-  _progressSheet_().getDataRange().getValues().slice(1).forEach(function(r) {
+  _sheetRowsMemo_('Progress').forEach(function(r) {
     const v = r[3]; if (!r[0] || v === '' || v == null) return;
-    (weights[String(r[1]).trim()] || (weights[String(r[1]).trim()] = [])).push({ t: String(r[2]), v: Number(v) });
+    (weights[String(r[1]).trim()] || (weights[String(r[1]).trim()] = [])).push({ t: _isoDateCell_(r[2]), v: Number(v) });
   });
   Object.keys(weights).forEach(function(k) { weights[k].sort(function(a, b) { return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; }); });
   const overdue = {};
-  const sum = _tasksSheet_().getDataRange().getValues();
-  for (let i = 1; i < sum.length; i++) {
+  const sum = _sheetRowsMemo_('Tasks');
+  for (let i = 0; i < sum.length; i++) {
     if (!sum[i][0]) continue;
     const t = _taskRowToObj_(sum[i]);
     if (t.status === 'todo' && t.memberId && t.overdue) overdue[t.memberId] = (overdue[t.memberId] || 0) + 1;
   }
   const renewal = {};
-  _renewalSheet_().getDataRange().getValues().slice(1).forEach(function(r) { if (!r[0]) return; const q = _renewalFromRow_(r); if (q.status === 'menunggu') renewal[q.memberId] = true; });
+  _sheetRowsMemo_('RenewalRequests').forEach(function(r) { if (!r[0]) return; const q = _renewalFromRow_(r); if (q.status === 'menunggu') renewal[q.memberId] = true; });
   const lowRating = {};
   const cutoff = _addDaysIso_(today, -14);
   _readSheetRows_('SessionRatings', _ratingFromRow_, null).forEach(function(r) { if (r.bintang > 0 && r.bintang <= 3 && String(r.tanggal) >= cutoff) lowRating[r.memberId] = true; });
   return _clientSignalsCalc_({
     members: rows.map(function(r) { return { id: String(r[0]).trim(), total: parseInt(sanitizeValue(r[8])) || 10, used: parseInt(sanitizeValue(r[9])) || 0, joined: _insIsoFromDmy_(sanitizeValue(r[4])) }; }),
-    sessions: _getSchedulesAll_().map(function(s) { return { memberId: String(s.memberId).trim(), date: _wibParts_(new Date(s.start)).date, done: String(s.status || '').toLowerCase() === 'completed' }; }),
+    sessions: _getSchedulesAll_().map(function(s) { return { memberId: String(s.memberId).trim(), date: _wibDate_(s.start), done: String(s.status || '').toLowerCase() === 'completed' }; }),
     weights: weights, overdue: overdue, renewal: renewal, lowRating: lowRating, inactiveDays: _inactiveDays_()
   }, today);
 }

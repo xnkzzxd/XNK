@@ -40,7 +40,6 @@ Angka di bawah **perkiraan Claude, bukan dari TKPI**. Cek tiap baris (per porsi)
 | E34 | Roti isi telur (sandwich) | 1 buah (120 g) | 280 | 12 | 12 | 30 | 2 | telur |
 | E35 | Oatmeal dimasak dengan air | 1 mangkuk (200 g) | 150 | 5 | 3 | 27 | 2 | - |
 | E36 | Dada ayam tanpa kulit rebus | 100 g (100 g) | 165 | 31 | 4 | 0 | 2 | - |
-| E37 | Telur rebus | 1 butir (55 g) | 78 | 6 | 5 | 1 | 1 | telur |
 | E38 | Nasi merah matang | 1 centong (100 g) | 111 | 3 | 1 | 23 | 2 | - |
 | E39 | Tuna kaleng dalam air | 1 kaleng (100 g) | 116 | 26 | 1 | 0 | 2 | seafood |
 | E40 | Salmon panggang | 1 potong (100 g) | 206 | 22 | 12 | 0 | 3 | seafood |
@@ -53,6 +52,7 @@ Angka di bawah **perkiraan Claude, bukan dari TKPI**. Cek tiap baris (per porsi)
 | E47 | Ubi jalar rebus | 1 buah sedang (150 g) | 131 | 2 | 0 | 30 | 1 | - |
 | E48 | Nasi putih tambah (1 piring penuh) | 1 piring penuh (300 g) | 390 | 6.9 | 0.9 | 86.1 | 1 | - |
 | E49 | Telur mata sapi | 1 butir (60 g) | 110 | 7 | 9 | 0 | 1 | telur |
-| E50 | Tahu bacem | 1 buah (50 g) | 100 | 6 | 5 | 8 | 1 | - |
 
 Catatan: serat, kalsium, zat besi, dan natrium tidak diisi untuk menu estimasi. Nilai mikro bahan TKPI yang tampak bergeser di PDF sengaja dikosongkan (8 dari 120 bahan).
+
+Dihapus November 2026: E37 Telur rebus dan E50 Tahu bacem, diganti baris terukur panganku HP0022 (telur ayam ras rebus, 138 kkal/100 g) dan CP0211 (tahu bacem, 101 kkal/100 g; perkiraan lama 200 kkal/100 g hanya cocok untuk tahu bacem yang digoreng). Lihat [Menu.md](Menu.md).

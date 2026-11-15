@@ -21,13 +21,15 @@ const NO_MEMBER_DATA = [
   'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'saveContent', 'deleteContent', 'updateAppSettings',
   // data panel saja (tidak di portal maupun halaman klien)
   'saveTaskTemplate', 'deleteTaskTemplate', 'setMemberReminderPrefs', 'markSchedulesAsRead', 'saveExpense', 'saveFinanceCategory',
-  'deleteFinanceCategory', 'uploadFinanceProof', 'swapMyMenuItem',
+  'deleteFinanceCategory', 'uploadFinanceProof', 'swapMyMenuItem', 'swapMyMenuMeal',
   // tanda badge sudah dirayakan: jawaban sudah lengkap, portal menambalnya sendiri
   'markBadgesSeen',
   // pengingat, trigger, perawatan pemilik
-  'installReminderTrigger', 'runReminderTick', 'sendReminderTest', 'sendTelegramTest', 'sendDailyReminderEmail', 'sendWeeklyReportEmail',
+  'installReminderTrigger', 'runReminderTick', 'runWarmTick', 'sendReminderTest', 'sendTelegramTest', 'sendDailyReminderEmail', 'sendWeeklyReportEmail',
   'setupDailyTrigger', 'setupReminderTrigger', 'setupWeeklyReportTrigger', 'testDriveAccess', 'testNotif', 'migrateSplitMembersData',
   'pertahankanWABaru', 'pertahankanWABaruMemberData',
+  // Fase X: langganan push dan relay GitHub (tidak ada di getPortalMore / getClientBundle)
+  'saveMyPush', 'removeMyPush', 'setMyPushPrefs', 'saveAdminPush', 'removeAdminPush', 'setAdminPushPrefs', 'pushRelayPull', 'pushRelayAck',
 ];
 
 test('every public writer bumps the member version or is listed as not touching member data', () => {

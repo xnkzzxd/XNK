@@ -2,3 +2,5 @@
 .clasprc.json
 node_modules/
 .DS_Store
+# Built site (tools/build-site.js), published by .github/workflows/pages.yml
+dist/

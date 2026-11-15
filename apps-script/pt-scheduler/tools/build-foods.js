@@ -54,10 +54,18 @@ function tagsOf(flags) {
 }
 
 /**
- * Curated list: { tkpi: [[id, nama, kelompok, [[porsi, gram]], harga, flags]], estimasi: [[id, nama, kelompok, porsi, gram, kal, p, l, k, harga, flags]] }.
+ * Curated list: { tkpi: [[id, nama, kelompok, [[porsi, gram]], harga, flags]], estimasi: [[id, nama, kelompok, porsi, gram, kal, p, l, k, harga, flags]],
+ *   rujukan: [[id, nama, kelompok, [[porsi, gram]], harga, flags, [kal, p, l, k, serat, natrium], sumber]],
+ *   resep: [[id, nama, kelompok, [[porsi, gram]], harga, flags, [[bahanId, gram], ...]]], tag: { id: [tag] }, koreksi: { id: { field: value|null, alasan } } }.
  * TKPI entries take their numbers from the parsed table (must exist and pass the energy check); estimasi entries
  * carry per-portion values written by hand, are stored per 100 g and marked e:true (not from TKPI).
+ * rujukan = rows from panganku.org (Kemenkes' online TKPI, 4-digit codes) that the 2020 PDF lacks, per 100 g, marked pk:true.
+ * resep = home recipes whose numbers are COMPUTED here from their ingredients (any TKPI row of the PDF, or a rujukan row):
+ *   the sum of the ingredients is one portion (the first porsi's gram = cooked weight); marked r:true with the ingredient list in `b`.
+ * tag = santan | goreng | manis | asin (menu limits, docs/nutrition/Rules.md); koreksi = fixes for PDF cells that the parser shifted.
  */
+const TAGS = ['santan', 'goreng', 'manis', 'asin'];
+const r1 = function (x) { return Math.round(x * 10) / 10; };
 function curate(rows, list) {
   const byId = {};
   rows.forEach(function (r) { byId[r.id] = r; });
@@ -75,13 +83,84 @@ function curate(rows, list) {
     const f = 100 / c[4], r1 = function (x) { return Math.round(x * f * 10) / 10; };
     items.push(Object.assign({ id: c[0], n: c[1], g: c[2], kal: Math.round(c[5] * f), p: r1(c[6]), l: r1(c[7]), k: r1(c[8]), s: null, ca: null, fe: null, na: null, por: [[c[3], c[4]]], h: c[9], e: true }, tagsOf(c[10])));
   });
+  const pk = {};
+  (list.rujukan || []).forEach(function (c) {
+    if (!/^[A-Z]{2}\d{4}$/.test(c[0])) throw new Error('rujukan id must be a panganku code: ' + c[0]);
+    const v = c[6];
+    const o = { kal: v[0], protein: v[1], lemak: v[2], karbo: v[3], serat: v[4], air: 50 };
+    const zero = o.kal === 0 && !o.protein && !o.lemak && !o.karbo;   // garam: no energy at all
+    if (!zero && !sane(o)) throw new Error('rujukan row failed the energy check: ' + c[0]);
+    pk[c[0]] = { nama: c[7] || c[1], kal: v[0], protein: v[1], lemak: v[2], karbo: v[3], serat: v[4], natrium: v[5] };
+    items.push(Object.assign({ id: c[0], n: c[1], g: c[2], kal: v[0], p: v[1], l: v[2], k: v[3], s: v[4], ca: null, fe: null, na: v[5], por: c[3], h: c[4], pk: true }, tagsOf(c[5]), { src: c[7] || c[1] }));
+  });
+  const shown = {};
+  items.forEach(function (i) { shown[i.id] = i.n; });
+  (list.resep || []).forEach(function (c) {
+    if (!/^R\d{2,3}$/.test(c[0])) throw new Error('resep id must be R + number: ' + c[0]);
+    const cooked = c[3][0][1];
+    const t = { kal: 0, p: 0, l: 0, k: 0, s: 0, na: 0 }, bahan = [];
+    let sOk = true, naOk = true;
+    c[6].forEach(function (b) {
+      const r = byId[b[0]] && sane(byId[b[0]]) ? byId[b[0]] : pk[b[0]];
+      if (!r) throw new Error('resep ' + c[0] + ': ingredient not found or not sane: ' + b[0]);
+      const x = b[1] / 100;
+      t.kal += r.kal * x; t.p += r.protein * x; t.l += r.lemak * x; t.k += r.karbo * x;
+      if (r.serat == null) sOk = false; else t.s += r.serat * x;
+      if (r.natrium == null) naOk = false; else t.na += r.natrium * x;
+      bahan.push([shown[b[0]] || String(r.nama).split(',')[0], b[1]]);
+    });
+    const f = 100 / cooked;
+    items.push(Object.assign({ id: c[0], n: c[1], g: c[2], kal: Math.round(t.kal * f), p: r1(t.p * f), l: r1(t.l * f), k: r1(t.k * f), s: sOk ? r1(t.s * f) : null, ca: null, fe: null, na: naOk ? Math.round(t.na * f) : null, por: c[3], h: c[4], r: true }, tagsOf(c[5]), { b: bahan }));
+  });
+  const byItem = {};
+  items.forEach(function (i) { byItem[i.id] = i; });
+  Object.keys(list.koreksi || {}).forEach(function (id) {
+    const it = byItem[id];
+    if (!it) throw new Error('koreksi for unknown id: ' + id);
+    const fix = list.koreksi[id];
+    Object.keys(fix).forEach(function (k) { if (k !== 'alasan') it[k] = fix[k]; });
+  });
+  Object.keys(list.tag || {}).forEach(function (id) {
+    if (!byItem[id]) throw new Error('tag for unknown id: ' + id);
+    list.tag[id].forEach(function (t) { if (TAGS.indexOf(t) === -1) throw new Error('unknown tag ' + t + ' on ' + id); });
+    byItem[id].t = list.tag[id].slice();
+  });
+  items.forEach(function (i) { if (!i.t) i.t = []; });
   return items;
+}
+
+/**
+ * Menu packages (paket): [id, nama, waktu, base, [[foodId, slot, gram]]]. waktu = sarapan | utama | camilan; slot = karbo | protein | sayur | buah | pelengkap.
+ * Exactly one karbo and one protein (the planner scales those two); santan and goreng never in the same package.
+ * The tags of a package are the union of its foods' tags.
+ */
+const PAKET_WAKTU = ['sarapan', 'utama', 'camilan'], PAKET_SLOTS = ['karbo', 'protein', 'sayur', 'buah', 'pelengkap'];
+function paketOf(list, foods) {
+  const ids = {};
+  return (list.paket || []).map(function (c) {
+    const id = c[0];
+    if (!/^[SUC]\d{2}$/.test(id) || ids[id]) throw new Error('bad or duplicate paket id: ' + id);
+    ids[id] = true;
+    if (PAKET_WAKTU.indexOf(c[2]) === -1) throw new Error(id + ': waktu ' + c[2]);
+    if (!c[3]) throw new Error(id + ': base missing');
+    const tags = [];
+    c[4].forEach(function (it) {
+      if (!foods[it[0]]) throw new Error(id + ': food not in list: ' + it[0]);
+      if (PAKET_SLOTS.indexOf(it[1]) === -1) throw new Error(id + ': slot ' + it[1]);
+      if (!(it[2] > 0)) throw new Error(id + ': gram');
+      (foods[it[0]].t || []).forEach(function (t) { if (tags.indexOf(t) === -1) tags.push(t); });
+    });
+    const count = function (s) { return c[4].filter(function (it) { return it[1] === s; }).length; };
+    if (count('karbo') !== 1 || count('protein') !== 1) throw new Error(id + ': needs exactly one karbo and one protein');
+    if (tags.indexOf('santan') !== -1 && tags.indexOf('goreng') !== -1) throw new Error(id + ': santan and goreng in one package');
+    return { id: id, n: c[1], w: c[2], base: c[3], t: tags.sort(), items: c[4] };
+  });
 }
 
 function build(text, list) {
   const rows = parseRows(text);
   const ok = rows.filter(sane);
-  if (list) return { v: 2, source: 'TKPI 2020, Kemenkes RI (per 100 g BDD); item e:true = perkiraan, bukan TKPI', total: rows.length, items: curate(rows, list) };
+  if (list) return { v: 3, source: 'TKPI 2020, Kemenkes RI (per 100 g BDD); pk:true = panganku.org; r:true = resep dihitung dari bahan; e:true = perkiraan, bukan TKPI', total: rows.length, items: curate(rows, list) };
   return { v: 1, source: 'TKPI 2020, Kemenkes RI (per 100 g BDD)', total: rows.length, kept: ok.length, items: ok.map(slim) };
 }
 
@@ -89,7 +168,8 @@ function build(text, list) {
 function serverData(out, list) {
   const foods = {};
   out.items.forEach(function (i) {
-    foods[i.id] = { n: i.n, g: i.g, kal: i.kal, p: i.p, l: i.l, k: i.k, por: i.por, h: i.h, a: i.a, lak: i.lak, e: !!i.e };
+    foods[i.id] = { n: i.n, g: i.g, kal: i.kal, p: i.p, l: i.l, k: i.k, por: i.por, h: i.h, a: i.a, lak: i.lak, e: !!i.e, t: i.t || [] };
+    if (i.r) foods[i.id].b = i.b.map(function (b) { return b[0] + ' ' + b[1] + ' g'; }).join(', ');
   });
   const ids = Object.keys(foods);
   const slots = list.menu || {};
@@ -99,7 +179,9 @@ function serverData(out, list) {
   return '// GENERATED by tools/build-foods.js from tools/foods-curated.json + the TKPI 2020 table. Do not edit by hand.\n' +
     '// ' + ids.length + ' foods per 100 g; e:true = estimate, not TKPI. Slots = ids the menu planner may pick.\n' +
     'const NUT_FOODS = ' + JSON.stringify(foods) + ';\n' +
-    'const NUT_SLOTS = ' + JSON.stringify(slots) + ';\n';
+    'const NUT_SLOTS = ' + JSON.stringify(slots) + ';\n' +
+    '// Menu packages (docs/nutrition/Menu.md): base = main protein for the repeat limits, t = tags from the foods.\n' +
+    'const NUT_PAKET = ' + JSON.stringify(paketOf(list, foods)) + ';\n';
 }
 function writeServerData(out, list) {
   const dest = require('path').join(__dirname, '..', 'src', 'NutrisiData.gs');
@@ -119,4 +201,4 @@ if (require.main === module) {
   fs.writeFileSync(dest, JSON.stringify(out));
   console.log('parsed ' + out.total + ', wrote ' + out.items.length + ' → ' + dest);
 }
-module.exports = { parseRows, sane, microOk, build, curate, serverData };
+module.exports = { parseRows, sane, microOk, build, curate, serverData, paketOf };

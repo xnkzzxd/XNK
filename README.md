@@ -11,7 +11,7 @@ Pushing to `main` publishes the site. The custom domain comes from `CNAME`.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | The page: loading screen and the booking app in an iframe. |
+| `index.html` | The old page wrapper (booking app in an iframe). Published at `/legacy/` (and at `/` again with the rollback variable `ROOT_LEGACY=true`); the live `/` is the static app built by `tools/build-static.js` (Phase AAA, see `docs/aaa/`). |
 | `404.html` | Shown for unknown addresses; sends visitors back to the home page. |
 | `manifest.webmanifest` | Name, colors and icons used when the site is installed on a phone. |
 | `logo.png` | Original logo (white mark on transparent). Source for all icons. |
@@ -36,6 +36,7 @@ so opening the `/exec` address directly does not get around it. Each phone stays
 logged in for 30 days; after 10 wrong PINs in 10 minutes, login locks for 10 minutes
 and Telegram gets an alert. These are defaults: the panel's **Pengaturan** page can change
 them, plus Telegram, reminders, notification email and business hours. Daily client reminders rotate through 62 texts each (sheet `PesanVariasi`) and greet clients as "Kak <first name>".
+Optional **Web Push** (Phase X, off until installed, [docs/push/Setup.md](docs/push/Setup.md)) sends native notifications to coach and clients: sessions the day before (19:00) and the morning of the day (06:00), PR, meals, and renewal requests. Apps Script plans them; a GitHub Actions workflow sends them.
 
 The PIN is the `ADMIN_PIN` Script Property of the Apps Script project. Changing it logs
 every phone out. How to change it (also without opening the editor) is in
@@ -45,6 +46,18 @@ every phone out. How to change it (also without opening the editor) is in
 client portal (dark screen, one highlighted button per step, once per page). Existing
 clients, renewals and clients added by the PT don't. It is on by default; switch it off
 in **Pengaturan → Tampilan → Panduan klien baru**.
+
+**Client portal for phones (Phase X).** The portal's bottom bar is Hari ini · Latihan · ＋ · Makan · Saya.
+Hari ini shows the next session, a server-computed to-do list and the package; booking is a
+three-step full-screen flow; a bell collects coach info, reminders and achievements. Saya holds an
+athlete card the client customises (nickname, motto, app-wide accent colour, card style, stats,
+featured badges) with a level from activity points, stored in the account. An unknown WhatsApp
+number can register in five steps from the login screen. See `docs/portal2/`.
+
+**Client portal on tablet, laptop and PC (Phase Y).** From 768 px the portal behaves like a Mac
+app: light sidebar (icon rail on portrait tablets), thin title bar with per-page buttons, a ＋ pull-down
+menu, a bell popover, right-click menus on routines, sessions, foods and to-dos, details in a
+right-hand panel, and booking in one two-pane window. Phones are unchanged. See `docs/desk/`.
 
 **Booking slots.** The landing page and the client portal load the free hours when they
 are opened and reuse them for 2 minutes; nothing polls in the background, which keeps the
@@ -91,6 +104,15 @@ the numbers and the last 7 days of logs on the client page (tab Gizi) and approv
 rejects suggested calorie changes from the dashboard. Everything is estimates, not
 medical advice; on by default, switch under Pengaturan → Tampilan.
 
+Since November 2026 the daily menu is made of named **meal packages**: Javanese and
+Sundanese home cooking and everyday healthy dishes (garlic fried chicken, poached or
+grilled chicken with green sambal, soto, bakso, soups, pepes, pindang), 47 in total.
+Twenty home recipes get their numbers computed at build time from their ingredients
+(TKPI 2020 plus panganku.org, Kemenkes' online table). The planner keeps coconut-milk
+dishes to 1 a day and 3 a week, fried food to 1 a day, and never serves the same main
+dish twice in a week. A client can swap a whole meal for another package with the same
+calories and protein. See `docs/nutrition/Menu.md`.
+
 ## Common changes
 
 **Booking app URL.** It is written once, in the `src` of the `<iframe>` in
@@ -118,6 +140,10 @@ switches `http://` visits to `https://` itself, since the app sends the login PI
 ### Client view upgrade (Phase Q)
 
 Every portal tab and every tab of the client page in the panel opens with a black summary card, and the Klien page gained an "attention" filter, sorting and a card/list switch. `Wawasan.gs` interprets progress, fitness tests, the workout log and the food log (body report, strength and stalls, muscle balance, activity calendar) for three ranges at once, in a client tone and a coach tone. No new sheets or public functions. See `docs/klien/`.
+
+## Automatic training programs (Phase U)
+
+Evidence-based automatic programs built from the gym's own equipment list (Pengaturan → Latihan & Alat), Hevy-style English exercise names, muscles for manually typed lifts, and our own muscle map. On by default; `PROGRAM_AUTO_ENABLED=false` turns it off. Coach programs are never overwritten. Rules and sources: [docs/program/Rules.md](docs/program/Rules.md); plan: [docs/program/PRD.md](docs/program/PRD.md). The 8 beginner gym lifts are drawn with our own animated figure (`figure/rig.min.json`, built by `tools/build-rig.js`, joint angles sourced in [docs/program/Gerak.md](docs/program/Gerak.md)) instead of third-party GIFs.
 
 ## Share cards (Phase T)
 

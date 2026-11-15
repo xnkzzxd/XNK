@@ -10,11 +10,17 @@ Phase L (exercise library, workout log, charts): docs/workout/ (TODO; tasks T-80
 Phase M (live workout logger, form program editor, built): docs/workout/ (PRD, Design, TODO; tasks T-840+).
 Phase N (iPhone / Safari: host bridge, safe area, docked tab bar, keyboard, Home Screen hint, built): docs/ios/TODO.md (tasks T-900+).
 Phase O (Latihan ala Hevy: routines, table logger, search, settings, built): docs/workout/ (PRD, Design §6, TODO; tasks T-860+).
-Phase P (Gizi: TKPI food library, BMI/WHtR/BMR/TDEE targets, menu, food log, planned): docs/nutrition/ (PRD, Design, Rules, TODO; tasks T-1000+).
+Phase P (Gizi: TKPI food library, BMI/WHtR/BMR/TDEE targets, menu, food log, built; meal packages Jawa–Sunda + weekly limits T-1040+, built): docs/nutrition/ (PRD, Design, Rules, Menu, TODO; tasks T-1000+).
 Phase R (teks besar, band hitam, data kiri-kanan, in progress): docs/ui/ (TODO; tasks T-1200+).
-Phase S (audit UI/UX panel admin, planned): docs/panel/ (PRD, TODO; tasks S1–S18).
+Phase S (audit UI/UX panel admin, built; S10–S12 rejected and S15–S16 skipped by the owner, Dashboard and Jadwal stay as they were): docs/panel/ (PRD, TODO; tasks S1–S18).
 Phase T (kartu bagikan ala Strava/Hevy, PNG transparan, built): docs/share/ (TODO; tasks T-1300+).
 Phase Q (upgrade tampilan Klien + interpretasi data, in progress): docs/klien/ (PRD, TODO; tasks T-1100+).
+Phase U (program latihan otomatis berbasis bukti, katalog alat gym, nama gerakan ala Hevy, otot & animasi sendiri, planned): docs/program/ (PRD, TODO; tasks T-1600+).
+Phase AAA (frontend statis di GitHub Pages, backend tetap Apps Script, domain tetap, planned, di luar Phase V): docs/aaa/ (PRD, Design, TODO; tasks T-1700+).
 Phase V (migrasi ke Supabase + Cloudflare + domain baru, SaaS multi-coach, app Android, planned): docs/platform/ (PRD, Design, Risks, TODO; tasks T-1400+).
+Phase X (notifikasi Web Push untuk coach dan klien, dikirim GitHub Actions, built; dipasang pemilik lewat docs/push/Setup.md): docs/push/ (PRD, Design, Setup, TODO; tasks T-1900+).
+Phase W (kecepatan: ukur, cache hasil jadi server, memo baca sheet, built; W2 MemberStats sengaja ditunda): docs/speed/ (TODO; tasks T-1800+).
+Phase X (portal klien baru untuk HP: lima tab Hari ini · Latihan · ＋ · Makan · Saya, kartu atlet, level, warna aksen, built): docs/portal2/ (PRD, Design, TODO; tasks T-1900+).
+Phase Y (portal klien ala aplikasi Mac di tablet, laptop, PC; HP tidak berubah, built): docs/desk/ (PRD, Design, TODO; tasks T-2000+).
 
 @docs/Agent.md
