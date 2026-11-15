@@ -92,25 +92,25 @@ Not in this phase (PRD §10). Pick one up only after E1–E5 are stable and its 
 | [ ] | T-261 | Buffer between sessions and recurring break blocks (lunch, Friday prayer) in the slot engine. |
 | [ ] | T-262 | Workout templates attached to a session; the client sees them in the portal. |
 | [ ] | T-263 | Client goal date with pace; off-pace clients in the care list. |
-| [ ] | T-264 | Exercise log and personal bests, with "PR baru" celebrations. |
-| [ ] | T-265 | Payment log (amount, method, "belum bayar") at renewal. |
-| [ ] | T-266 | Client risk list (few sessions left, no booking, long gap). |
+| [x] | T-264 | Exercise log and personal bests, with "PR baru" celebrations. — dibangun di Fase L (rekor pribadi, `_workoutEvents_`, lencana PR). |
+| [x] | T-265 | Payment log (amount, method, "belum bayar") at renewal. — dibangun di Fase H (Keuangan: pembayaran, tagihan). |
+| [x] | T-266 | Client risk list (few sessions left, no booking, long gap). — dibangun di Fase Q (`_clientSignalsCalc_`), daftar perhatian di hub coach. |
 | [ ] | T-267 | Backup button: daily spreadsheet copy to Drive and "Cadangkan sekarang". |
 | [ ] | T-268 | Referral codes. |
 | [ ] | T-269 | Waiting list for full slots. |
 | [ ] | T-270 | Trial follow-up message 24 h after a trial session. |
-| [ ] | T-271 | Session notes ("apa yang dilatih", "fokus berikutnya") shown to the client and used in sesi-besok. |
+| [x] | T-271 | Session notes ("apa yang dilatih", "fokus berikutnya") shown to the client and used in sesi-besok. — dibangun di Fase I2 (`SessionNotes`, `pasca-sesi`, `sesi-besok`). |
 | [ ] | T-272 | Substitute finder when a day off clashes with booked sessions. |
 | [ ] | T-273 | Per-coach Telegram schedule (needed only with a team). |
 | [ ] | T-274 | Workload view and smart auto-assign (team only). |
 | [ ] | T-275 | Certificate expiry dates and a reminder 30 days before. |
 | [ ] | T-276 | Read-only calendar link per coach (revocable; needs a security review). |
-| [ ] | T-277 | Session feedback rating (private; public average only with 5+ ratings and owner opt-in). |
+| [~] | T-277 | Session feedback rating (private; public average only with 5+ ratings and owner opt-in). — rating privat dibangun di Fase I3; rata-rata publik (≥ 5 rating, opt-in pemilik) belum. |
 | [ ] | T-278 | Coach match quiz on the landing page or sign-up. |
 | [ ] | T-279 | Change-coach request from the portal (team only). |
 | [ ] | T-280 | "Coba trial dengan Coach X" booking button. |
 | [ ] | T-281 | Intro video link on the profile (loads on tap). |
 | [ ] | T-282 | Coach level badge (Head / Senior / Coach). |
-| [ ] | T-283 | Performance and pay summary per coach (the `Members` log already stores coach columns). |
+| [x] | T-283 | Performance and pay summary per coach (the `Members` log already stores coach columns). — dibangun di Fase H (porsi coach di Keuangan). |
 | [ ] | T-284 | Landing coach section built from the profile (decision D-13 says no for now). |
 | [ ] | T-285 | Coach logins (decision D-11 says no; revisit only if the team grows). |
