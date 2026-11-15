@@ -15,7 +15,7 @@ Owner membuka panel untuk tiga hal: *apa jadwal hari ini*, *siapa klien yang per
 | P4 | Judul grup bulan ("JANUARI 2026") tanpa penjelasan dasar pengelompokan | Klien | Tinggi |
 | P5 | Bar tab bawah menutup konten, tidak ada padding bawah/bayangan yang cukup | Semua layar HP | Tinggi |
 | P6 | Pengaturan HP tampak bergeser (band hitam ±60 px, kartu terpotong) | Pengaturan HP | Tinggi (verifikasi dulu) |
-| P7 | Dashboard: "Sesi berikutnya" mengulang agenda "Hari ini"; agenda di bawah lipatan; 4 tile + hero memakan layar pertama | Dashboard | Sedang |
+| P7 | Dashboard: "Sesi berikutnya" mengulang agenda "Hari ini"; agenda di bawah lipatan; 4 tile + hero memakan layar pertama | Dashboard | Sedang (ditunda oleh pemilik 2026-11-15: Dashboard tetap seperti semula) |
 | P8 | Aksi sesi (Selesai/Ubah/WA) bobot sama; "Selesai" kontras rendah di kartu hitam; tombol menumpuk kiri | Dashboard, Jadwal | Sedang |
 | P9 | Empty state besar ("Semua klien aman"); daftar "Perlu perhatian" Coach 3 baris identik + "Nanti" | Dashboard, Coach | Sedang |
 | P10 | Keuangan HP: angka penuh turun 2 baris di tile; grafik 6 bulan hampir kosong | Keuangan | Sedang |

@@ -31,8 +31,9 @@ NODE_PATH=$(npm root -g) SHOTS_DIR=/tmp/s node apps-script/pt-scheduler/tools/br
 - [ ] **S9** Profil klien HP: hero lebih pendek (cincin sisa sesi dan tombol satu baris), tab hitam lebih rendah; "Sorotan" muncul dalam layar pertama. Dep: S1. (P12)
 
 ## D — Dashboard dan Jadwal
-- [ ] **S10** Dashboard HP: agenda "Hari ini" naik tepat di bawah salam; tile jadi satu baris yang bisa digeser (snap, tanpa scroll sideways pada halaman). Dep: S6. (P7)
-- [ ] **S11** Dashboard: hero "Sesi berikutnya" tidak menggandakan agenda (bila sama dengan sesi pertama agenda yang belum selesai, jadikan sorotan di baris itu); empty state "Perlu perhatian" jadi satu baris. Dep: S10. (P7, P9)
+- [-] **S10** Dashboard HP: agenda "Hari ini" naik tepat di bawah salam; tile jadi satu baris yang bisa digeser (snap, tanpa scroll sideways pada halaman). Dep: S6. (P7)
+- [-] **S11** Dashboard: hero "Sesi berikutnya" tidak menggandakan agenda (bila sama dengan sesi pertama agenda yang belum selesai, jadikan sorotan di baris itu); empty state "Perlu perhatian" jadi satu baris. Dep: S10. (P7, P9)
+  - **Dibatalkan oleh pemilik (2026-11-15).** S10 dan S11 sempat dibangun (urutan HP Hari ini dulu, strip tile geser, kartu Sesi berikutnya disembunyikan bila ada di agenda) lalu dikembalikan: "Perubahan ini jelek, bagus kaya sebelumnya." Dashboard tetap seperti semula (kartu Sesi berikutnya paling atas, tile 2 kolom di HP). Jangan ubah susunan Dashboard tanpa tangkapan layar/mockup yang disetujui pemilik dulu.
 - [ ] **S12** Jadwal HP: kalender bulan bisa dilipat ke strip minggu (bawaan strip, ketuk judul untuk bulan penuh); sesi hari terpilih terlihat di layar pertama. Desktop: kalender + daftar mengisi tinggi, tanpa ruang kosong besar. Dep: S6. (P11)
 
 ## E — Coach dan Keuangan
