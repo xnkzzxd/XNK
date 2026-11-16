@@ -30,5 +30,15 @@ Rencana lengkap: [PRD.md](PRD.md). Urutan rilis (keputusan owner): **Rilis 1** n
 - [x] T-1621 Portal → Latihan → Program otomatis: kartu hitam *Berikutnya / gerakan / durasi* + **Mulai latihan**, batang minggu 1–4, lipatan *Semua hari* dan *Kenapa program ini?*, wizard 4 langkah (batang progres, layar ringkasan, tombol menempel di bawah).
 - [x] T-1622 Pengaturan → Latihan & Alat: ubin ringkasan, katalog per level sebagai lipatan dengan figur, cari + filter pola, gerakan manual dengan segmen *Perlu dipastikan | Semua* dan tombol *Terima tebakan*.
 
+## Rilis 5 — figur gerakan 3D (2026-11-16, permintaan owner)
+Owner: figur kapsul tidak mirip manusia, otot dan alat tidak jelas; mau seperti ilustrasi manekin anatomi 3D. Keputusan owner: render 3D jadi gambar, model anatomi terbuka (CC BY-SA) yang di-stylize, otot ikut warna aksen klien, animasi berulang. Figur kapsul tetap cadangan, GIF tetap untuk gerakan tanpa pola (T-1613). Alat: [tools/fig3d/](../../apps-script/pt-scheduler/tools/fig3d/README.md).
+- [~] T-1630 Spike satu gerakan (Seated Cable Row): Blender (`bpy`), model Z-Anatomy (CC BY-SA 4.0, turunan BodyParts3D; lisensi diperiksa), kepala polos, skinning sendiri, pose dari frame `build-rig.js`, alat 3D prosedural, render dasar + topeng otot, lembar kontak terang / gelap × 3 aksen. **Menunggu persetujuan owner atas tampilan** sebelum lanjut.
+- [ ] T-1631 Pipeline: kit alat 3D, `poses3d()` di `build-rig.js`, `render.py` / `pack.js`, `figure/fig3d.min.json`, anggaran ukuran; betulkan lutut pola `seated-cable-row` di rig 2D.
+- [ ] T-1632 Aplikasi: `fig3dHtml` (gambar dasar + topeng berwarna `--fig-muscle`), cadangan ke `rigSvg`, offline (`sw.js`). Screenshot HP + desktop ke owner.
+- [ ] T-1633 8 pola pemula banget. Lembar kontak ke owner.
+- [ ] T-1634 13 pola sisanya (termasuk 2 tampak depan). Lembar kontak ke owner.
+- [ ] T-1635 Test (`tests/fig3d.test.js`), browser-check, offline-check, kredit CC BY-SA di `figure/CREDITS.md` dan di aplikasi, docs.
+- [ ] T-1636 (opsional, keputusan owner) Varian wanita.
+
 ## Rencana berikutnya (bukan fase ini)
 - Migrasi frontend ke GitHub Pages: API admin lewat `doPost` (daftar putih, token di body, batas laju). Catatan CORS di PRD §2d.
