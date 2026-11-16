@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { displayName, applyNames, DUPES } = require('../tools/exercise-names');
+const { displayName, applyNames, shorten, DUPES } = require('../tools/exercise-names');
 
 const FILE = path.join(__dirname, '..', '..', '..', 'exercises', 'exercises.min.json');
 
@@ -39,6 +39,18 @@ test('common lifts have a plain name; a mismatched dataset GIF is replaced', () 
   const by = new Map(d.items.map(x => [x.id, x]));
   assert.equal(by.get('2330').g, by.get('0198').g); assert.equal(by.get('0198').h, '2330');       // seated pulldown GIF
   assert.equal(by.get('0603').g, by.get('0869').g); assert.equal(by.get('0869').h, '0603');
+});
+
+test('T-1637: long names start with the movement, details follow', () => {
+  assert.deepEqual(shorten('Seated Reverse Grip One Arm Overhead Triceps Extension (Dumbbell)'),
+    { n: 'Overhead Triceps Extension - Seated, Reverse Grip, One Arm (Dumbbell)', short: '' });
+  assert.equal(shorten('Standing One Arm Reverse Curl (Dumbbell)').short, 'Reverse Curl - One Arm (Dumbbell)');
+  assert.equal(shorten('Incline Close Grip Bench Press (Barbell)').n, 'Bench Press - Incline, Close Grip (Barbell)');
+  assert.equal(shorten('Reverse Grip Incline Bench One Arm Row (Dumbbell)').n, 'Incline Bench One Arm Row - Reverse Grip (Dumbbell)');
+  assert.equal(shorten('Incline Bench Press (Barbell)'), null);            // short names are left alone
+  assert.equal(shorten('Hanging Straight Leg Hip Raise'), null);           // no leading detail word
+  const d = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  d.items.forEach(x => assert.ok(!/^(to|behind|on|with) /.test(x.n), x.n));
 });
 
 test('overrides win for the gym list', () => {
