@@ -1443,8 +1443,8 @@
     });
   };
 
-  // Tiga panggilan berjalan bersamaan, dan dimulai diam-diam setelah data panel siap,
-  // supaya Pengaturan sudah terisi saat dibuka.
+  // Tiga panggilan berjalan bersamaan, dan dimulai diam-diam setelah getAdminMore selesai (loadAdminExtras),
+  // supaya Pengaturan sudah terisi saat dibuka tanpa memperlambat layar pertama.
   function settingsPrefetch() {
     const p = {
       settings: adminCall('getAppSettings'),
@@ -2262,7 +2262,6 @@
     const now = new Date();
     const mo = now.getMonth() + 1, yr = now.getFullYear();
     ui.revenue = null; window._trendCache = {};
-    if (window.settingsPrefetch) window.settingsPrefetch();   // Pengaturan sudah terisi saat dibuka
     window._morePending = adminCall('getAdminMore', mo, yr, freshMore).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY) || !b) return;
       const ok = v => v && !v.error;
@@ -2279,7 +2278,9 @@
       renderRevenueKpi();
       window.updateUI();
       saveAdminCache();
-    }).catch(function (err) { if (!window.isAuthError(err)) console.warn(err); ui.revenue = { error: true }; renderRevenueKpi(); });
+    }).catch(function (err) { if (!window.isAuthError(err)) console.warn(err); ui.revenue = { error: true }; renderRevenueKpi(); })
+      // Pengaturan diisi diam-diam SETELAH data panel datang, supaya layar pertama tetap dua panggilan saja.
+      .then(function () { if (_lsGet(ADMIN_TOKEN_KEY) && window.settingsPrefetch) window.settingsPrefetch(); });
   }
 
   // Muat ulang ringkasan PR (pill di daftar klien). Dipanggil setelah PR berubah.

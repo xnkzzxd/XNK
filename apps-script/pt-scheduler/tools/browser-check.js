@@ -433,10 +433,14 @@ async function contrastReport(page) {
     check(!(await page.evaluate(() => window.__splashShown)), 'login: only the button loads, the full-screen splash never shows');
     check(!(await visible(page, '#admin-login')) && (await page.evaluate(() => window.members.length)) === 3, 'login: dashboard is ready when the login box closes');
     check(calls.filter(c => c === 'getAdminBootstrap').length === 1 && calls.includes('getAdminMore'), 'login: one call for the first screen, one for the secondary data');
-    check(calls.filter(c => /^get/.test(c)).length === 2 || calls.filter(c => /^get/.test(c)).join() === 'getAdminBootstrap,getAdminMore', 'fast: the panel opens with exactly two server calls (' + calls.join(',') + ')');
+    // Pengaturan diisi di latar setelah getAdminMore selesai (#149): tiga panggilan itu bukan bagian dari layar pertama.
+    const PREFETCH = ['getAppSettings', 'getReminderStatus', 'getPriceListAdmin'];
+    const gets = () => calls.filter(c => /^get/.test(c));
+    check(gets().slice(0, 2).join() === 'getAdminBootstrap,getAdminMore' && gets().slice(2).every(c => PREFETCH.includes(c)), 'fast: the panel opens with exactly two server calls, settings are fetched only after them (' + calls.join(',') + ')');
+    const getsBefore = gets().length;
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(700);
-    const prof = calls.filter(c => /^get/.test(c)).slice(2);
+    const prof = gets().slice(getsBefore).filter(c => !PREFETCH.includes(c));
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(300);
     check(prof.length === 1 && prof[0] === 'getClientBundle', 'fast: opening a client page makes one call (' + prof.join(',') + ')');
