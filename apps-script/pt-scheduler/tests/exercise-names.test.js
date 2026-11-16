@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { displayName, applyNames } = require('../tools/exercise-names');
+const { displayName, applyNames, DUPES } = require('../tools/exercise-names');
 
 const FILE = path.join(__dirname, '..', '..', '..', 'exercises', 'exercises.min.json');
 
@@ -44,6 +44,9 @@ test('overrides win for the gym list', () => {
 test('applyNames: keeps raw name in r, idempotent, numbers duplicates', () => {
   const once = applyNames([{ id: '1', n: 'lever chest press', q: 'leverage machine' }, { id: '2', n: 'lever chest press', q: 'leverage machine' }]);
   assert.deepEqual(once.map(x => x.n), ['Chest Press (Machine)', 'Chest Press 2 (Machine)']);
+  // a lone 'v. 2' loses its number; with a first version it keeps it
+  assert.deepEqual(applyNames([{ id: '1', n: 'barbell split squat v. 2', q: 'barbell' }]).map(x => x.n), ['Split Squat (Barbell)']);
+  assert.deepEqual(applyNames([{ id: '1', n: 'jump rope', q: 'rope' }, { id: '2', n: 'jump rope v. 2', q: 'rope' }]).map(x => x.n), ['Jump Rope', 'Jump Rope 2']);
   assert.equal(once[0].r, 'lever chest press');
   assert.deepEqual(applyNames(once).map(x => x.n), once.map(x => x.n));
 });
@@ -51,7 +54,13 @@ test('applyNames: keeps raw name in r, idempotent, numbers duplicates', () => {
 test('shipped library: v2, every item named, unique names, raw kept, ≤ 80 chars, no mojibake', () => {
   const d = JSON.parse(fs.readFileSync(FILE, 'utf8'));
   assert.equal(d.v, 2);
-  assert.equal(new Set(d.items.map(x => x.n.toLowerCase())).size, d.items.length);
+  const shown = d.items.filter(x => !x.h), byId = new Map(d.items.map(x => [x.id, x]));
+  assert.equal(new Set(shown.map(x => x.n.toLowerCase())).size, shown.length);
+  // T-1635: no numbered leftovers (the three names where the number belongs to the exercise are allowed)
+  assert.deepEqual(shown.filter(x => / \d+( \(| - |$)/.test(x.n)).map(x => x.n).sort(), ['Figure 8 (Kettlebell)', 'Landmine 180 (Barbell)', 'Swing 360']);
+  // hidden duplicates point at a shown exercise and carry its name
+  d.items.filter(x => x.h).forEach(x => { const m = byId.get(x.h); assert.ok(m && !m.h, x.id); assert.equal(x.n, m.n, x.id); });
+  assert.deepEqual(d.items.filter(x => x.h).map(x => x.id).sort(), Object.keys(DUPES).sort());
   d.items.forEach(x => {
     assert.ok(x.r && x.n && x.n.length <= 80, x.id);
     assert.ok(!/в/.test(x.n), x.id);

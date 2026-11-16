@@ -39,6 +39,7 @@ function _exLibIdx_() {
   const byKey = {}, meta = {};
   (typeof EX_LIB_ === 'undefined' ? [] : EX_LIB_).forEach(function(x) {
     meta[x[0]] = { n: x[1], b: x[3], t: x[4] };
+    if (x[5]) return;   // T-1635: duplikat tersembunyi memakai nama gerakan utamanya; nama itu tetap milik gerakan utama
     [x[1], x[2]].forEach(function(nm) {
       const k = _exNorm_(nm);
       if (!k) return;

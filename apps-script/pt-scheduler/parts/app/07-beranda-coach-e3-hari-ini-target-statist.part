@@ -456,7 +456,7 @@
   // Data statis dari GitHub Pages (exercises/exercises.min.json), dimuat malas saat dicari, bukan lewat Apps Script.
   // Satu lembar cari untuk editor program / rutinitas (kembali ke lembar program) dan mode latihan. GIF di-hotlink (bukan disimpan)
   // untuk coach dan klien (keputusan pemilik, Fase O); kredit pustaka selalu tampil.
-  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v2', EX_SHOW = 20, EX_RECENT = 'xnk_ex_recent';
+  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v3', EX_SHOW = 20, EX_RECENT = 'xnk_ex_recent';
   let exLib = null;
   const exs = { onPick: null, ret: '', limit: EX_SHOW, extra: [], sel: [], hist: '', data: null, creating: false };
   const WK_EQUIP = { 'body weight': 'Berat badan', 'dumbbell': 'Dumbbell', 'cable': 'Kabel', 'barbell': 'Barbell', 'leverage machine': 'Mesin', 'band': 'Band', 'smith machine': 'Smith machine', 'kettlebell': 'Kettlebell',
@@ -466,7 +466,7 @@
   // gerakan yang punya Exercise ID tampil dengan nama pustaka saat pustaka sudah ada di perangkat.
   let exById = null;
   function exLibSync() {
-    if (!exLib) { try { localStorage.removeItem('xnk_ex_lib_v1'); const c = localStorage.getItem(EX_KEY); if (c) exLib = JSON.parse(c); } catch (e) {} }
+    if (!exLib) { try { localStorage.removeItem('xnk_ex_lib_v1'); localStorage.removeItem('xnk_ex_lib_v2'); const c = localStorage.getItem(EX_KEY); if (c) exLib = JSON.parse(c); } catch (e) {} }
     return exLib;
   }
   function exNm(o) {
@@ -548,7 +548,7 @@
       if (recent.length) html += '<p class="label exs-lbl">Gerakan terakhir</p>' + recent.map(function (r) { const x = r.id && exLib ? exLib.items.find(i => i.id === r.id) : null; return x ? exsRowLib(x) : exsRow(r.id || '', r.n, 'Gerakan sendiri', null); }).join('');
     }
     if (!exLib) { setHTML(box, html + '<p class="li-sub" style="padding:12px 0">Memuat pustaka gerakan…</p>'); return; }
-    if (!exs.sorted) exs.sorted = exLib.items.slice().sort((a, b) => a.n.localeCompare(b.n));
+    if (!exs.sorted) exs.sorted = exLib.items.filter(x => !x.h).sort((a, b) => a.n.localeCompare(b.n));
     let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!q || (x.n + ' ' + (x.r || '') + ' ' + x.t + ' ' + x.q).toLowerCase().indexOf(q) !== -1));
     // Cari: nama yang diawali kata itu dulu, lalu yang memuatnya di nama, lalu sisanya (otot/alat); nama pendek dulu.
     if (q) { const rank = x => { const nl = x.n.toLowerCase(); return nl.indexOf(q) === 0 ? 0 : (nl.indexOf(q) !== -1 || String(x.r || '').indexOf(q) !== -1 ? 1 : 2); }; hits = hits.map(x => [rank(x), x]).sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length).map(p => p[1]); }
