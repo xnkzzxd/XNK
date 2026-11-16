@@ -26,7 +26,11 @@ const UPPER = { ez: 'EZ', rdl: 'RDL', jm: 'JM', ii: 'II', pov: 'POV' };
 const FIX = [
   [/в°/g, '°'], [/\bv\.\s*(\d)/g, '$1'], [/\bpush-up\b/g, 'push up'], [/\bpush-ups\b/g, 'push ups'], [/\bsit-up\b/g, 'sit up'],
   [/\bsit-ups\b/g, 'sit ups'], [/\bpull-up\b/g, 'pull up'], [/\bchin-up\b/g, 'chin up'], [/\blateral pulldown\b/g, 'lat pulldown'],
-  [/\bt bar\b/g, 't-bar'], [/\. /g, ' - '], [/\bexercise ball\b/g, 'stability ball'], [/\bv bar\b/g, 'v-bar'], [/\s+/g, ' '],
+  [/\bt bar\b/g, 't-bar'], [/\. /g, ' - '], [/\bexercise ball\b/g, 'stability ball'], [/\bv bar\b/g, 'v-bar'],
+  // T-1634: salah ketik dataset dan ejaan yang diseragamkan (Bicep Curl, Triceps, bentuk tunggal).
+  [/\brevers\b/g, 'reverse'], [/\bsitted\b/g, 'seated'], [/\bside bent\b/g, 'side bend'], [/\bbiceps curl\b/g, 'bicep curl'], [/\btricep\b/g, 'triceps'],
+  [/\bsz-bar\b/g, 'ez bar'], [/\bkickbacks\b/g, 'kickback'], [/\btwists\b/g, 'twist'], [/\bsquats\b/g, 'squat'], [/\bthrusts\b/g, 'thrust'], [/\bfarmers\b/g, "farmer's"],
+  [/\bskull crusher\b/g, 'skullcrusher'], [/\brope attachment\b/g, 'rope'], [/\bglute-ham\b/g, 'glute ham'], [/\s+/g, ' '],
 ];
 
 function titleWord(w, i) {
@@ -51,6 +55,16 @@ function displayName(item) {
   // Isi kurung jadi " - keterangan" (gaya "Lat Pulldown - Close Grip (Cable)").
   const extra = [];
   s = s.replace(/\s*\(([^)]*)\)/g, function (_, x) { if (x.trim()) extra.push(x.trim()); return ''; }).trim();
+  // T-1634: keterangan di ekor nama ("… with rope", "… on stability ball") ikut jadi " - keterangan", tanpa kata "with" / "on"
+  // (kecuali posisi tubuh: "On Knees", "On Hip", "On Toes").
+  if (/(^| )lying on floor /.test(s)) s = 'floor ' + s.replace(' on floor ', ' ');      // "rope lying on floor triceps extension"
+  const tail = /^(.+?) (with|on) (.+)$/.exec(s);
+  if (tail && !/^(and|to)$/.test(tail[1].split(' ').pop())) { s = tail[1]; extra.unshift((tail[2] === 'on' ? 'on ' : '') + tail[3]); }
+  else if (/^.+ floor$/.test(s)) s = 'floor ' + s.replace(/ floor$/, '');       // "crunch floor" → "Floor Crunch"
+  for (let i = 0; i < extra.length; i++) {
+    extra[i] = extra[i].replace(/^with /, '').replace(/^(?:a|an|the) /, '');
+    if (!/^on (knees?|hips?|toes|heels)\b/.test(extra[i])) extra[i] = extra[i].replace(/^on /, '').replace(/^(?:a|an|the) /, '');
+  }
   // Sudut di depan pindah ke kurung: "45° leg press" → "Leg Press (45°)".
   const ang = /^(\d+°)\s+(.*)$/.exec(s);
   if (ang) s = ang[2];

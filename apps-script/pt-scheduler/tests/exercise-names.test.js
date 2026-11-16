@@ -18,8 +18,18 @@ test('pattern: movement first, equipment in brackets, no equipment for body weig
 test('fixes broken degree sign, drops camera/model notes, brackets become " - "', () => {
   assert.equal(displayName({ id: 'x5', r: 'sled 45в° calf press', q: 'sled machine' }), 'Calf Press (45°)');
   assert.equal(displayName({ id: 'x6', r: 'arms apart circular toe touch (male)', q: 'body weight' }), 'Arms Apart Circular Toe Touch');
-  assert.equal(displayName({ id: 'x7', r: 'cable curl (with rope)', q: 'cable' }), 'Curl - With Rope (Cable)');
-  assert.equal(displayName({ id: 'x8', r: 'weighted crunch (on stability ball)', q: 'weighted' }), 'Crunch - On Stability Ball (Weighted)');
+  assert.equal(displayName({ id: 'x7', r: 'cable curl (with rope)', q: 'cable' }), 'Curl - Rope (Cable)');
+  assert.equal(displayName({ id: 'x8', r: 'weighted crunch (on stability ball)', q: 'weighted' }), 'Crunch - Stability Ball (Weighted)');
+});
+
+test('T-1634: typos fixed, tail notes become " - note", body positions keep "On"', () => {
+  assert.equal(displayName({ id: 'y1', r: 'barbell revers wrist curl v. 2', q: 'barbell' }), 'Reverse Wrist Curl 2 (Barbell)');
+  assert.equal(displayName({ id: 'y2', r: 'dumbbell kickbacks on exercise ball', q: 'dumbbell' }), 'Kickback - Stability Ball (Dumbbell)');
+  assert.equal(displayName({ id: 'y3', r: 'cable pushdown (with rope attachment)', q: 'cable' }), 'Pushdown - Rope (Cable)');
+  assert.equal(displayName({ id: 'y4', r: 'crunch floor', q: 'body weight' }), 'Floor Crunch');
+  assert.equal(displayName({ id: 'y5', r: 'close-grip push-up (on knees)', q: 'body weight' }), 'Close-Grip Push Up - On Knees');
+  assert.equal(displayName({ id: 'y6', r: 'dumbbell tricep kickback with stork stance', q: 'dumbbell' }), 'Triceps Kickback - Stork Stance (Dumbbell)');
+  assert.equal(displayName({ id: '0031', r: 'barbell curl', q: 'barbell' }), 'Bicep Curl (Barbell)');
 });
 
 test('overrides win for the gym list', () => {
