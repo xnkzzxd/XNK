@@ -437,10 +437,10 @@ async function contrastReport(page) {
     const PREFETCH = ['getAppSettings', 'getReminderStatus', 'getPriceListAdmin'];
     const gets = () => calls.filter(c => /^get/.test(c));
     check(gets().slice(0, 2).join() === 'getAdminBootstrap,getAdminMore' && gets().slice(2).every(c => PREFETCH.includes(c)), 'fast: the panel opens with exactly two server calls, settings are fetched only after them (' + calls.join(',') + ')');
-    const before = gets().length;
+    const getsBefore = gets().length;
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(700);
-    const prof = gets().slice(before).filter(c => !PREFETCH.includes(c));
+    const prof = gets().slice(getsBefore).filter(c => !PREFETCH.includes(c));
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(300);
     check(prof.length === 1 && prof[0] === 'getClientBundle', 'fast: opening a client page makes one call (' + prof.join(',') + ')');
