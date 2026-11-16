@@ -32,6 +32,15 @@ test('T-1634: typos fixed, tail notes become " - note", body positions keep "On"
   assert.equal(displayName({ id: '0031', r: 'barbell curl', q: 'barbell' }), 'Bicep Curl (Barbell)');
 });
 
+test('common lifts have a plain name; a mismatched dataset GIF is replaced', () => {
+  const d = JSON.parse(fs.readFileSync(FILE, 'utf8')), shown = d.items.filter(x => !x.h), names = new Set(shown.map(x => x.n));
+  ['Lat Pulldown (Cable)', 'Lat Pulldown (Machine)', 'Shoulder Press (Dumbbell)', 'Shoulder Press (Machine)', 'Bench Press (Barbell)', 'Squat (Barbell)', 'Deadlift (Barbell)',
+    'Bicep Curl (Dumbbell)', 'Triceps Pushdown (Cable)', 'Chest Fly (Cable)', 'Crunch', 'Calf Raise', 'Kettlebell Swing', 'Push Up', 'Pull Up'].forEach(n => assert.ok(names.has(n), n));
+  const by = new Map(d.items.map(x => [x.id, x]));
+  assert.equal(by.get('2330').g, by.get('0198').g); assert.equal(by.get('0198').h, '2330');       // seated pulldown GIF
+  assert.equal(by.get('0603').g, by.get('0869').g); assert.equal(by.get('0869').h, '0603');
+});
+
 test('overrides win for the gym list', () => {
   assert.equal(displayName({ id: '0861', r: 'cable seated row', q: 'cable' }), 'Seated Cable Row');
   assert.equal(displayName({ id: '2330', r: 'cable lat pulldown full range of motion', q: 'cable' }), 'Lat Pulldown (Cable)');

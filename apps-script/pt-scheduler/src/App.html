@@ -5610,7 +5610,8 @@
     }
     if (!exLib) { setHTML(box, html + '<p class="li-sub" style="padding:12px 0">Memuat pustaka gerakan…</p>'); return; }
     if (!exs.sorted) exs.sorted = exLib.items.filter(x => !x.h).sort((a, b) => a.n.localeCompare(b.n));
-    let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!q || (x.n + ' ' + (x.r || '') + ' ' + x.t + ' ' + x.q).toLowerCase().indexOf(q) !== -1));
+    const qw = q ? q.replace(/-/g, ' ').split(/\s+/).filter(Boolean) : [];   // tiap kata harus ada, urutan bebas ("pulldown cable")
+    let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!qw.length || (function (hay) { return qw.every(function (w) { return hay.indexOf(w) !== -1; }); })((x.n + ' ' + (x.r || '') + ' ' + x.t + ' ' + x.q).toLowerCase().replace(/-/g, ' '))));
     // Cari: nama yang diawali kata itu dulu, lalu yang memuatnya di nama, lalu sisanya (otot/alat); nama pendek dulu.
     if (q) { const rank = x => { const nl = x.n.toLowerCase(); return nl.indexOf(q) === 0 ? 0 : (nl.indexOf(q) !== -1 || String(x.r || '').indexOf(q) !== -1 ? 1 : 2); }; hits = hits.map(x => [rank(x), x]).sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length).map(p => p[1]); }
     html += '<p class="label exs-lbl">' + (q || part || eq ? hits.length + ' gerakan' : 'Semua gerakan (A–Z)') + '</p>' + (hits.slice(0, exs.limit).map(exsRowLib).join('') || '<p class="li-sub" style="padding:8px 0">Tidak ada gerakan yang cocok. Ketuk Buat untuk gerakan sendiri.</p>');

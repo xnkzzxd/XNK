@@ -11,6 +11,8 @@ const OVERRIDES = require('./exercise-names-override.json');
 // T-1635: GIF kedua untuk gerakan yang sama (sudut kamera / model / mesin lain) → id gerakan utamanya. Item itu diberi field `h`,
 // memakai nama gerakan utama dan disembunyikan dari pencarian; ID-nya tetap ada supaya program dan riwayat lama tetap tampil.
 const DUPES = require('./exercise-dupes.json');
+// GIF dataset yang tidak cocok dengan gerakannya: id → id gerakan yang GIF-nya dipakai (mis. Lat Pulldown memakai GIF pulldown duduk).
+const MEDIA = require('./exercise-media.json');
 
 // Label alat di akhir nama. Alat tanpa label (berat badan, kardio, dll.) tidak diberi kurung.
 const EQUIP_LABEL = {
@@ -33,7 +35,7 @@ const FIX = [
   // T-1634: salah ketik dataset dan ejaan yang diseragamkan (Bicep Curl, Triceps, bentuk tunggal).
   [/\brevers\b/g, 'reverse'], [/\bsitted\b/g, 'seated'], [/\bside bent\b/g, 'side bend'], [/\bbiceps curl\b/g, 'bicep curl'], [/\btricep\b/g, 'triceps'],
   [/\bsz-bar\b/g, 'ez bar'], [/\bkickbacks\b/g, 'kickback'], [/\btwists\b/g, 'twist'], [/\bsquats\b/g, 'squat'], [/\bthrusts\b/g, 'thrust'], [/\bfarmers\b/g, "farmer's"],
-  [/\bskull crusher\b/g, 'skullcrusher'], [/\brope attachment\b/g, 'rope'], [/\bglute-ham\b/g, 'glute ham'], [/\s+/g, ' '],
+  [/\bskull crusher\b/g, 'skullcrusher'], [/\brope attachment\b/g, 'rope'], [/\bglute-ham\b/g, 'glute ham'], [/\bstep-up\b/g, 'step up'], [/\s+/g, ' '],
 ];
 
 function titleWord(w, i) {
@@ -100,6 +102,14 @@ function applyNames(items) {
     const base = x.n.replace(NUM, '');
     if (!c[base.toLowerCase()]) { c[x.n.toLowerCase()]--; x.n = base; c[base.toLowerCase()] = 1; }
   });
+  // "Bodyweight …" di depan nama dibuang bila nama pendeknya bebas (alat berat badan memang tanpa kurung).
+  shown.forEach(function (x) {
+    if (OVERRIDES[x.id] || !/^Bodyweight /.test(x.n)) return;
+    const base = x.n.replace(/^Bodyweight /, '');
+    if (!c[base.toLowerCase()]) { c[x.n.toLowerCase()]--; x.n = base; c[base.toLowerCase()] = 1; }
+  });
+  const srcG = {}; items.forEach(function (x) { srcG[x.id] = x.g; });
+  Object.keys(MEDIA).forEach(function (id) { if (byId[id] && srcG[MEDIA[id]]) byId[id].g = srcG[MEDIA[id]]; });
   const seen = {};
   shown.slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; }).forEach(function (x) {
     const k = x.n.toLowerCase();
@@ -129,4 +139,4 @@ function serverData(items) {
     'const EX_LIB_ = ' + JSON.stringify(rows) + ';\n';
 }
 
-module.exports = { displayName, applyNames, serverData, EQUIP_LABEL, DUPES };
+module.exports = { displayName, applyNames, serverData, EQUIP_LABEL, DUPES, MEDIA };
