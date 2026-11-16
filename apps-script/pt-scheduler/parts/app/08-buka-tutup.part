@@ -379,12 +379,53 @@
       (style ? '<style>' + style + '</style>' : '') + eq + order.map(seg).join('') + '</svg>';
   }
   window.rigSync = rigSync; window.rigEnsure = rigEnsure; window.rigPatOf = rigPatOf; window.rigSvg = rigSvg;
-  /** Gambar kecil gerakan: animasi sendiri (diam) bila ada pola, lalu GIF pustaka, lalu ikon. */
+  /** Gambar kecil gerakan: GIF pustaka dulu (keputusan owner 2026-11-16), lalu figur sendiri (tanpa GIF / gagal dimuat), lalu ikon. */
+  function exGifUrl(x) { return x && x.g && exLib ? exLib.base + x.g : ''; }
   function exThumb(o, cls, x) {
-    const p = rigPatOf(o);
+    const p = rigPatOf(o), u = exGifUrl(x);
+    if (u) return '<img class="' + cls + ' ex-gif ex-load" loading="lazy" decoding="async" alt="" src="' + h(u) + '" data-cls="' + h(cls) + '" data-pat="' + h(p) + '" onload="this.classList.remove(\'ex-load\')" onerror="window.exImgFail(this)">';
     if (p) return '<span class="' + cls + ' rig-th" aria-hidden="true">' + rigSvg(p, { sex: o.sex }) + '</span>';
-    return x && exLib ? '<img class="' + cls + '" loading="lazy" decoding="async" alt="" src="' + h(exLib.base + x.g) + '">' : '<span class="' + cls + ' ph" aria-hidden="true">' + icon('dumbbell') + '</span>';
+    return '<span class="' + cls + ' ph" aria-hidden="true">' + icon('dumbbell') + '</span>';
   }
+  // GIF gagal dimuat (tanpa sinyal dan belum tersimpan): figur sendiri bila ada pola, kalau tidak ikon / hilang.
+  window.exImgFail = function (el) {
+    const cls = el.getAttribute('data-cls') || '', p = el.getAttribute('data-pat') || '', big = el.hasAttribute('data-big');
+    const fig = p && rigSync() ? rigSvg(p, { anim: big }) : '';
+    if (big) { if (fig) el.outerHTML = fig; else if (el.parentNode) el.parentNode.remove(); return; }
+    el.outerHTML = fig ? '<span class="' + cls + ' rig-th" aria-hidden="true">' + fig + '</span>' : '<span class="' + cls + ' ph" aria-hidden="true">' + icon('dumbbell') + '</span>';
+  };
+  /** Contoh gerakan ukuran besar (GIF bergerak; figur sendiri sebagai cadangan). '' bila tidak ada keduanya. */
+  function exBigHtml(o, x, sex) {
+    const p = rigPatOf(o), u = exGifUrl(x), label = exNm(o) + ': contoh gerakan';
+    if (u) return '<div class="rig-big ex-big"><img class="ex-load" decoding="async" alt="' + h(label) + '" src="' + h(u) + '" data-big data-pat="' + h(p) + '" onload="this.classList.remove(\'ex-load\')" onerror="window.exImgFail(this)"></div>';
+    return p ? '<div class="rig-big">' + rigSvg(p, { anim: true, sex: sex, label: label }) + '</div>' : '';
+  }
+  /** Gambar kecil yang bisa diketuk untuk membuka contoh gerakan besar (hanya di tempat yang bukan di dalam tombol lain). */
+  function exThumbBtn(o, cls, x) {
+    if (!o || !o.exId || !x) return exThumb(o, cls, x);
+    return '<button type="button" class="ex-th-btn" onclick="window.exView(\'' + h(o.exId) + '\')" aria-label="' + h(exNm(o)) + ': lihat contoh gerakan">' + exThumb(o, cls, x) + '</button>';
+  }
+  const EX_MUSCLE = { pectorals: 'Chest', delts: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps', forearms: 'Forearms', abs: 'Abs', lats: 'Lats', 'upper back': 'Upper Back', traps: 'Traps',
+    spine: 'Lower Back', glutes: 'Glutes', abductors: 'Abductors', adductors: 'Adductors', quads: 'Quads', hamstrings: 'Hamstrings', calves: 'Calves', 'serratus anterior': 'Serratus', 'levator scapulae': 'Neck',
+    'cardiovascular system': 'Cardio' };
+  window.exView = function (exId) {
+    const x = wkInfo(exId);
+    if (!x) { if (!exLib) exEnsure().then(function (d) { if (d && wkInfo(exId)) window.exView(exId); }); return; }
+    const o = { exId: exId, n: x.n }, lv = mmLevels([{ exId: exId, target: x.t, bodyPart: x.b }]);
+    const nm = function (k) { return EX_MUSCLE[k] || k; };
+    const prim = Object.keys(lv).filter(function (k) { return lv[k] === 2; }), sec = Object.keys(lv).filter(function (k) { return lv[k] === 1; });
+    const fig = mmFigSvg(lv, 'Otot yang bekerja', 'm', 'ex-mm');
+    $('sheet-gerak-title').textContent = exNm(o);
+    setHTML('gerak-body', exBigHtml(o, x) +
+      '<div class="kv ex-kv"><div><span class="label">Otot utama</span><b>' + h((prim.length ? prim : [x.t]).map(nm).join(', ')) + '</b></div>' +
+      (sec.length ? '<div><span class="label">Otot pendukung</span><b>' + h(sec.map(nm).join(', ')) + '</b></div>' : '') +
+      (x.q ? '<div><span class="label">Alat</span><b>' + h(String(x.q).replace(/^./, function (c) { return c.toUpperCase(); })) + '</b></div>' : '') + '</div>' +
+      (fig ? '<div class="ex-mm-wrap">' + fig + '</div>' : '') +
+      (exLib && exLib.credit ? '<p class="li-sub ex-credit">' + h(exLib.credit) + '</p>' : ''));
+    if (!figSync()) figEnsure();
+    openSheet('sheet-gerak');
+  };
+  window.exThumbBtn = exThumbBtn;
   function wlMuscleSvg(parts, label, lv, sex) {
     const nf = lv ? mmFigSvg(lv, label, sex) : null;
     if (nf) return nf;
@@ -716,8 +757,7 @@
   };
   window.wlHistory = function (i) {
     const e = wl.entries[i]; if (!e) return;
-    const pat = rigPatOf(e);
-    wlSheet('Riwayat · ' + exNm(e), (pat ? '<div class="rig-big">' + rigSvg(pat, { anim: true, sex: figSexOf(wl.mode, wl.memberId), label: exNm(e) + ': contoh gerakan' }) + '</div>' : '') + wlHistoryHtml(i));
+    wlSheet('Riwayat · ' + exNm(e), exBigHtml(e, wkInfo(e.exId), figSexOf(wl.mode, wl.memberId)) + wlHistoryHtml(i));
     if (!wlRt.data) { wlEnsureData(); }
   };
   // Ganti hari program / tanggal: susunan dibangun ulang. Ada set yang sudah dicentang (belum disimpan) → tanya dulu.

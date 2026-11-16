@@ -82,6 +82,19 @@ html.wl-on, html.wl-on body { overflow: hidden; }
 .rig .rg-cab.thick { stroke-width: 5; }
 .rig-big { display: grid; place-items: center; margin: 0 0 12px; border-radius: var(--r-lg, 16px); background: var(--surface-2); border: 1px solid var(--border); }
 .rig-big .rig { width: min(100%, 280px); height: auto; aspect-ratio: 1; }
+/* GIF pustaka (milik Gym visual, ditautkan): bingkai seragam, denyut halus saat memuat, GIF besar di lembar contoh gerakan. */
+.ex-gif.ex-load, .ex-big img.ex-load { animation: exLoad 0.9s ease-in-out infinite alternate; }
+@keyframes exLoad { from { opacity: .35; } to { opacity: .8; } }
+.ex-big { overflow: hidden; background: var(--surface-3); }
+.ex-big img { display: block; width: min(100%, 300px); height: auto; aspect-ratio: 1; object-fit: contain; border-radius: inherit; }
+.ex-th-btn { flex: none; display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; }
+.ex-th-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.ex-kv { margin: 0 0 12px; }
+.ex-kv .label { display: block; margin-bottom: 2px; }
+.ex-mm-wrap { display: grid; place-items: center; margin: 0 0 8px; }
+.ex-mm-wrap .ex-mm { width: min(100%, 220px); height: auto; }
+.ex-credit { text-align: center; }
+@media (prefers-reduced-motion: reduce) { .ex-gif.ex-load, .ex-big img.ex-load { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .rig.anim g { animation: none !important; } }
 .wl-ex-sub { margin: 0 0 0 10px; font-size: var(--fs-sm); color: var(--fg-muted); }
 .wl-ex-sub b { color: var(--fg); }

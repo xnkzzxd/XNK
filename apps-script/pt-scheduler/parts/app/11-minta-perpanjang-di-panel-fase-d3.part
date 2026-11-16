@@ -669,7 +669,7 @@
     const unit = it.jenis === 'waktu' ? 'DETIK' : (it.jenis === 'jarak' ? 'METER' : 'REP'), kg = it.jenis === 'beban';
     const rows = it.skema && it.skema.length ? it.skema.map(s => ({ w: s.w, rep: s.rep, kg: s.kg })) : Array.from({ length: it.set || 1 }, () => ({ w: 0, rep: it.repMax !== '' && it.repMax != null ? it.repMin + '–' + it.repMax : it.repMin, kg: it.kg }));
     let n = 0;
-    return '<div class="rt-ex"><div class="rt-ex-head">' + exThumb(it, 'wl-thumb', x) +
+    return '<div class="rt-ex"><div class="rt-ex-head">' + exThumbBtn(it, 'wl-thumb', x) +
       '<b>' + h(exNm(it)) + '</b></div>' + (it.catatan ? '<p class="li-sub">' + h(it.catatan) + '</p>' : '') +
       (it.rest !== '' && it.rest != null ? '<p class="rt-rest">' + icon('timer') + 'Istirahat ' + h(wlRestText(it.rest)) + '</p>' : '') +
       '<div class="rt-tbl' + (kg ? ' kg' : '') + '"><div class="rt-tr rt-th"><span>SET</span>' + (kg ? '<span>KG</span>' : '') + '<span>' + unit + '</span></div>' +

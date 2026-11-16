@@ -188,7 +188,7 @@
     if (g && (g.gaps || []).length) html += '<p class="li-sub" role="note">Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.</p>';
     if (n) {
       html += '<div class="prg-days">' + d.days.map(day => '<div class="prg-day stack" style="gap:4px"><p class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></p>' +
-        day.items.map(it => '<div class="prg-ex">' + exThumb(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('') + '</div>').join('') + '</div>';
+        day.items.map(it => '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('') + '</div>').join('') + '</div>';
       if (d.last) html += '<p class="li-sub">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
     } else html += '<p class="li-sub">Belum ada program. Buat sendiri, atau nyalakan program otomatis.</p>';
     if (hasLog) html += '<p class="li-sub">Terakhir dicatat: ' + h(pgLabel(wd.days[0].tanggal)) + ' · ' + wd.days[0].items.length + ' gerakan</p>';
