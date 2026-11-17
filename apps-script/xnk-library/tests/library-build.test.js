@@ -84,3 +84,20 @@ test('checkout Windows (akhiran CRLF) menghasilkan Library yang sama persis', ()
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+test('tidak ada teks "XNK" yang tampil ke coach atau klien di kode Library (nama usaha dipakai)', () => {
+  const { files } = lib.build();
+  const own = new Set(fs.readdirSync(path.join(__dirname, '..', 'lib-extra')).concat(['LibTabel.gs', 'LibVersi.gs']));
+  // Sengaja tetap: pengenal teknis, PRODID kalender, nama folder Drive di akun coach sendiri.
+  const KEEP = /PRODID:-\/\/XNK\/\/|createFolder\('XNK |XNK_[A-Z]|XNKOffline|XNKHostLocal|XNKAndroid|XNKiOS|xnk_|^\s*XNK Personal Training —|<title>XNK Personal Training<\/title>/;
+  const bad = [];
+  for (const [f, t] of Object.entries(files)) {
+    if (own.has(f) || !/\.(gs|html)$/.test(f)) continue;
+    t.split('\n').forEach((line, i) => {
+      if (/^\s*(\/\/|\*|\/\*|<!--)/.test(line)) return;
+      const code = line.replace(KEEP, '');
+      if (/\bXNK\b/.test(code)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 110)}`);
+    });
+  }
+  assert.deepEqual(bad, [], 'tambahkan TEXT_SWAPS di build-lib.js (browser: window.brandName(), server: _brandName_())');
+});

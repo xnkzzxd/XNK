@@ -129,6 +129,8 @@ async function panelLogin(page, pin) {
       check((await a.title()) === 'Claudia Fit', '/claudia/ berjudul nama usahanya');
       await panelLogin(a, '222222');
       check(((await a.textContent('#admin-login-error')) || '').includes('PIN salah'), 'PIN coach lain ditolak di /claudia/');
+      const atitle = await a.title();
+      check(atitle.includes('Claudia Fit') && !/XNK/.test(atitle) && !/XNK/.test(await a.evaluate(() => document.body.innerText)), 'layar PIN panel: judul dan teks memakai nama usaha, tanpa "XNK"');
       await panelLogin(a, '111111');
       check(!(await a.isVisible('#admin-login')), 'PIN claudia masuk di /claudia/');
       check(JSON.stringify(await a.evaluate(() => (window.members || []).map(m => m.name))) === '["Ani"]', 'panel claudia hanya menampilkan klien claudia');
@@ -171,6 +173,10 @@ async function panelLogin(page, pin) {
       await p.click('#login-submit-btn');
       await p.waitForTimeout(1800);
       check((await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name)) === 'Ani', 'klien claudia masuk');
+      const title = await p.title();
+      check(title.includes('Claudia Fit') && !/XNK/.test(title), 'judul halaman memakai nama usaha, bukan "XNK": ' + title);
+      const body = await p.evaluate(() => document.body.innerText);
+      check(!/XNK/.test(body), 'tidak ada tulisan "XNK" di layar portal klien');
 
       await p.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 10000 }).catch(() => {});
       check(await p.evaluate(() => !!(navigator.serviceWorker && navigator.serviceWorker.controller)), 'service worker portal aktif');

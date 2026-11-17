@@ -22,6 +22,8 @@ const EXPECTED = {
   'rekap-bulanan: one button per client who trained or logged last month, with a personal message': 'link portal per spreadsheet',
   'rekap-bulanan: measurements alone qualify, missing data leaves lines out, opt-outs and no-number clients are handled': 'link portal per spreadsheet',
   'waktunya-ukur: clients whose last entry is 14+ days old (or missing) get a button; recent ones do not': 'link portal per spreadsheet',
+  // Teks "minggu bersama XNK" menjadi "minggu bersama kami" (nama merek tidak dibawa ke coach lain).
+  'journey: headline from the biggest fact, tiles from weight, a nudge when there is nothing yet': 'merek di teks perjalanan',
   // Alamat QR bawaan kartu = alamat situs spreadsheet itu.
   "getAppSettings returns today's defaults until the admin changes something": 'alamat QR per spreadsheet',
   'updateAppSettings saves every field, and getAppSettings reflects it back': 'alamat QR per spreadsheet',

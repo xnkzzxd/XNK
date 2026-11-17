@@ -35,3 +35,6 @@ Template is re-pinned by `xnk-library.yml` after each `clasp version`. `healthCh
 - A new production per-execution memo (`let _xMemo_ = null`) must be added to `MEMOS` (build-lib) and `_resetLibMemos_`.
 - A new hardcoded owner URL or ID in `src` must get a `TEXT_SWAPS` entry, or `check-compat` / `library-build` flags it.
 - A new API function needs nothing extra: `LibTabel.gs` and the bridge wrappers are generated from `tests/api-lists.js`.
+
+## Merek di teks (2026-11-17)
+Teks yang tampil ke coach atau klien memakai nama usaha coach itu. Browser: `window.brandName()` (dibuat di awal `App.html` Library dari `XNK_CONFIG.brand`, atau judul halaman yang diisi server); elemen statis memakai `data-brand`. Server: `_brandName_()` (Script Property `BRAND_NAME`). Yang sengaja tetap: pengenal teknis (`XNK_CONFIG`, `xnk_*`), `PRODID` kalender, nama folder Drive di akun coach sendiri. Teks "XNK" baru di `src` harus diberi `TEXT_SWAPS`; `library-build.test.js` gagal bila ada yang tersisa.
