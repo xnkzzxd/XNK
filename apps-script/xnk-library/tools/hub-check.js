@@ -111,9 +111,10 @@ async function panelLogin(page, pin) {
       // Berbagai rasio layar: HP tegak/mendatar, tablet, laptop, ultrawide, monitor tegak.
       for (const [w, h] of [[320, 568], [390, 844], [844, 390], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1080], [1080, 1920], [3440, 1440]]) {
         await page.setViewportSize({ width: w, height: h });
-        const r = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, ph: document.querySelector('.phones').getBoundingClientRect().top + scrollY }));
+        const r = await page.evaluate(() => { const hb = document.querySelector('.hero').getBoundingClientRect().bottom; return { sw: document.documentElement.scrollWidth, ph: document.querySelector('.phones').getBoundingClientRect().top + scrollY, pad: Math.min(hb - document.querySelector('.facts').getBoundingClientRect().bottom, hb - document.querySelector('.phones').getBoundingClientRect().bottom) }; });
         check(r.sw <= w, `landing ${w}×${h}: tanpa scroll ke samping`);
         if (w > h) check(r.ph < h, `landing ${w}×${h}: mockup HP terlihat di layar pertama`);
+        if (w > h) check(r.pad >= 32, `landing ${w}×${h}: pita hitam hero turun di bawah teks dan HP (${Math.round(r.pad)} px)`);
       }
       await page.setViewportSize({ width: 390, height: 844 });
       await page.fill('#slug', 'a b!');
