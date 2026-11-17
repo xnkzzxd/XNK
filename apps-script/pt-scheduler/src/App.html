@@ -3124,9 +3124,9 @@
     html += '<div class="row-between" style="margin:6px 0 10px;gap:10px"><p class="eyebrow">Pilih jam</p><span class="li-sub num" id="slots-meta">' + free + ' jam kosong' + fresh + '</span></div>' +
       '<div class="slot-grid stagger">' + slots + '</div>' +
       '<div class="row" style="gap:16px;margin-top:14px;flex-wrap:wrap" aria-hidden="true">' +
-        '<span class="li-sub row" style="gap:6px"><span class="slot" style="width:22px;height:16px;border-radius:6px"></span>Kosong</span>' +
-        '<span class="li-sub row" style="gap:6px"><span class="slot taken" style="width:22px;height:16px;border-radius:6px"></span>Penuh</span>' +
-        '<span class="li-sub row" style="gap:6px"><span class="slot mine" style="width:22px;height:16px;border-radius:6px"></span>Jadwalku</span></div>';
+        '<span class="li-sub row" style="gap:6px"><span class="slot swatch"></span>Kosong</span>' +
+        '<span class="li-sub row" style="gap:6px"><span class="slot taken swatch"></span>Penuh</span>' +
+        '<span class="li-sub row" style="gap:6px"><span class="slot mine swatch"></span>Jadwalku</span></div>';
     if (!me) html += '<div class="notice" style="margin-top:16px">' + icon('lock') + '<div class="grow"><p class="li-title">Masuk untuk booking</p><p class="li-sub">Pakai nomor WhatsApp yang terdaftar di coach.</p></div><button type="button" class="btn btn-primary btn-sm" onclick="window.navigate(\'public-login\')">Masuk</button></div>';
     return html;
   }

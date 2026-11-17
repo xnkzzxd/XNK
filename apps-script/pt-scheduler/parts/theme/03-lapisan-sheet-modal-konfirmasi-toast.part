@@ -361,7 +361,7 @@ button.avatar { border: 0; cursor: pointer; }
 .star.on svg { fill: currentColor; }
 .pg-trophy { width: 72px; height: 72px; border-radius: 24px; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; animation: popIn var(--t-slow) var(--spring) both; }
 .pg-trophy svg.lucide { width: 36px; height: 36px; }
-.pg-badge-list { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.pg-badge-list { list-style: none; padding: 0; margin: 0; width: 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .pg-badge-list li { padding: 8px 16px; border-radius: var(--r-full); background: var(--surface-3); font-weight: 800; }
 #sheet-badge { overflow: hidden; }
 .confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }

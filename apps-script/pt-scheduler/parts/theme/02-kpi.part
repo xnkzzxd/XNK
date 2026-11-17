@@ -627,12 +627,14 @@ kbd { font-family: var(--font); font-size: .6875rem; font-weight: 700; color: va
 
 /* Slot waktu (portal) */
 .slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
-.slot { min-height: 46px; border-radius: 14px; border: 1.5px dashed var(--border-strong); background: transparent; font-weight: 800; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all var(--t-fast) var(--ease); }
+/* Warna jam ditulis langsung (bukan warisan induk), jadi jam kosong tetap terbaca di terang dan gelap. */
+.slot { min-height: 46px; border-radius: 14px; border: 1.5px solid color-mix(in srgb, var(--fg) 28%, transparent); background: var(--surface); color: var(--fg); font-weight: 800; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all var(--t-fast) var(--ease); }
 @media (hover: hover) { .slot:hover:not(:disabled) { border-style: solid; border-color: var(--fg); transform: translateY(-1px); } }
 .slot:active:not(:disabled) { transform: scale(0.96); }
-.slot.taken { border-style: solid; border-color: var(--border); background: var(--surface-3); color: var(--fg-muted); cursor: not-allowed; text-decoration: line-through; }
+.slot.taken { border-style: dashed; border-color: var(--border-strong); background: transparent; color: color-mix(in srgb, var(--fg) 50%, transparent); cursor: not-allowed; text-decoration: line-through; }
 .slot.mine { background: var(--ink); color: var(--on-ink); border: 1.5px solid var(--ink); cursor: default; }
-.slot.past { opacity: 0.4; cursor: not-allowed; }
+.slot.past { border-color: transparent; background: transparent; color: color-mix(in srgb, var(--fg) 45%, transparent); cursor: not-allowed; }
+.slot.swatch { min-height: 0; width: 22px; height: 16px; border-radius: 6px; flex: none; }
 .slot.active { border-style: solid; border-color: var(--ink); background: var(--ink); color: var(--on-ink); }
 /* Bentrok booking di sheet (portal): notice + saran jam + tombol, semua ≥ 44 px dan boleh turun baris */
 .conflict-panel { flex-direction: column; align-items: stretch; gap: 12px; }
