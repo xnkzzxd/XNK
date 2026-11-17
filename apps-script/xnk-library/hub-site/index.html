@@ -16,6 +16,9 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0b0b0b">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/img/icon-192.png">
+<meta name="apple-mobile-web-app-title" content="XNK">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0b0b'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-family='system-ui,Arial,sans-serif' font-size='34' font-weight='700' fill='%23fff'%3EX%3C/text%3E%3C/svg%3E">
 <style>
   :root {
@@ -159,6 +162,23 @@
   .faq details[open] summary::after { content: "–"; }
   .faq details p { margin: 0 0 1rem; color: var(--mut); }
 
+  /* Pasang aplikasi */
+  .apps { display: grid; gap: 1rem; }
+  @media (min-width: 900px) { .apps { grid-template-columns: 1.1fr 1fr; } }
+  .dl { display: grid; gap: .6rem; margin-top: 1.1rem; }
+  .dl a { display: grid; grid-template-columns: 2.5rem 1fr auto; gap: .8rem; align-items: center; min-height: 3.6rem; padding: .7rem .9rem;
+    border: 1px solid var(--line); border-radius: .9rem; text-decoration: none; background: var(--bg); }
+  .dl a:hover { border-color: var(--fg); }
+  .dl b { display: block; line-height: 1.25; }
+  .dl small { color: var(--mut); font-size: .82rem; }
+  .dl .arr { width: 1.2rem; height: 1.2rem; color: var(--mut); }
+  .note { font-size: .85rem; color: var(--mut); margin: 1rem 0 0; }
+  .card.ink .note { color: var(--band-mut); }
+  .card.ink .btn { background: var(--on-band); color: var(--band); border-color: var(--on-band); }
+  #inst-ios, #inst-done, #inst-menu, #inst-btn[hidden] { display: none; }
+  .resume { display: none; background: var(--soft); border-bottom: 1px solid var(--line); }
+  .resume .wrap { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; justify-content: space-between; padding-top: .7rem; padding-bottom: .7rem; }
+  .resume span { overflow-wrap: anywhere; }
   footer { padding: 2.5rem 0 max(2.5rem, env(safe-area-inset-bottom)); font-size: .9rem; color: var(--band-mut); }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; justify-content: space-between; }
   footer .brand { color: var(--on-band); }
@@ -187,6 +207,9 @@
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
   <symbol id="i-wifioff" viewBox="0 0 24 24"><path d="M12 20h.01M8.5 16.43a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76M2 2l20 20"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 15V3M7 10l5 5 5-5M5 21h14"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></symbol>
 </svg>
 
@@ -194,11 +217,14 @@
   <div class="wrap">
     <a class="brand" href="#"><span class="logo" aria-hidden="true">X</span>XNK</a>
     <nav class="nav" aria-label="Menu">
-      <a href="#fitur">Fitur</a><a href="#cara-kerja">Cara kerja</a><a href="#coach">Coach</a><a href="#tanya">Tanya jawab</a>
+      <a href="#fitur">Fitur</a><a href="#aplikasi">Aplikasi</a><a href="#cara-kerja">Cara kerja</a><a href="#coach">Coach</a><a href="#tanya">Tanya jawab</a>
     </nav>
     <a class="btn" href="#masuk">Masuk</a>
   </div>
 </header>
+<div class="resume" id="resume" role="region" aria-label="Lanjutkan">
+  <div class="wrap"><span>Terakhir dibuka: <b id="resume-name"></b></span><a class="btn" id="resume-go" href="/">Lanjutkan</a></div>
+</div>
 
 <main>
   <section class="band hero">
@@ -263,6 +289,36 @@
         <figure><img src="img/klien-hari-ini.jpg" alt="Halaman Hari ini klien: sesi berikutnya dan tugas hari ini" width="390" height="844" loading="lazy"><figcaption><b>Hari ini</b><span>Sesi dan tugas klien</span></figcaption></figure>
         <figure><img src="img/coach-jadwal.jpg" alt="Jadwal coach: kalender bulan dan sesi hari ini" width="390" height="844" loading="lazy"><figcaption><b>Jadwal</b><span>Kalender coach</span></figcaption></figure>
         <figure><img src="img/coach-dashboard.jpg" alt="Dashboard coach: sesi berikutnya dan ringkasan klien" width="390" height="844" loading="lazy"><figcaption><b>Dashboard</b><span>Ringkasan coach</span></figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="aplikasi" style="padding-top:1rem">
+    <div class="wrap">
+      <p class="kicker">Aplikasi</p>
+      <h2>Pasang di HP atau komputer.</h2>
+      <p class="intro">Buka XNK seperti aplikasi biasa, langsung dari layar utama atau desktop.</p>
+      <div class="apps">
+        <div class="card ink">
+          <h3>Pasang dari browser</h3>
+          <p class="mut" style="margin:0">Cara tercepat: ringan, selalu versi terbaru, tanpa unduh berkas.</p>
+          <div class="btns" style="margin-top:1.1rem">
+            <button class="btn" type="button" id="inst-btn" hidden><svg class="i" aria-hidden="true"><use href="#i-down"/></svg>Pasang aplikasi XNK</button>
+          </div>
+          <p class="note" id="inst-menu">Di Chrome atau Edge: buka menu <b>⋮</b> lalu pilih <b>Instal aplikasi</b> atau <b>Tambahkan ke layar utama</b>.</p>
+          <p class="note" id="inst-ios">Di iPhone atau iPad (Safari): ketuk tombol <b>Bagikan</b> lalu <b>Tambah ke Layar Utama</b>.</p>
+          <p class="note" id="inst-done">XNK sudah terpasang di perangkat ini.</p>
+        </div>
+        <div class="card">
+          <h3>Unduh aplikasi</h3>
+          <p class="mut" style="margin:0">Untuk yang lebih suka memasang berkas aplikasi.</p>
+          <div class="dl">
+            <a href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-Android.apk" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-phone"/></svg></span><span><b>Android</b><small>APK · Android 7 ke atas</small></span><svg class="i arr" aria-hidden="true"><use href="#i-down"/></svg></a>
+            <a href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-Windows.msi" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><span><b>Windows</b><small>Penginstal .msi · Windows 10 dan 11</small></span><svg class="i arr" aria-hidden="true"><use href="#i-down"/></svg></a>
+            <a href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-macOS.dmg" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><span><b>macOS</b><small>.dmg · Mac dengan Apple silicon</small></span><svg class="i arr" aria-hidden="true"><use href="#i-down"/></svg></a>
+          </div>
+          <p class="note">Belum ada di Play Store atau App Store. Android akan meminta izin memasang dari sumber ini; Windows bisa menampilkan peringatan SmartScreen (pilih <b>Info selengkapnya</b> lalu <b>Tetap jalankan</b>); di Mac, klik kanan aplikasinya lalu <b>Buka</b>.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -348,7 +404,7 @@
 <footer class="band">
   <div class="wrap">
     <a class="brand" href="#"><span class="logo" aria-hidden="true">X</span>XNK</a>
-    <nav class="links" aria-label="Tautan bawah"><a href="#fitur">Fitur</a><a href="#cara-kerja">Cara kerja</a><a href="#coach">Coach</a><a href="#masuk">Masuk</a><a href="#tanya">Tanya jawab</a></nav>
+    <nav class="links" aria-label="Tautan bawah"><a href="#fitur">Fitur</a><a href="#aplikasi">Aplikasi</a><a href="#cara-kerja">Cara kerja</a><a href="#coach">Coach</a><a href="#masuk">Masuk</a><a href="#tanya">Tanya jawab</a></nav>
     <span>© XNK</span>
   </div>
 </footer>
@@ -362,8 +418,39 @@
     var s = slug.value.trim().toLowerCase().replace(/^xnk\.web\.id\//, '').replace(/^\/+|\/+$/g, '').replace(/\s+/g, '-');
     if (!RE.test(s) || /--/.test(s)) { err.textContent = 'Nama coach tidak valid. Pakai huruf kecil, angka, dan tanda hubung (3 sampai 30 karakter).'; slug.focus(); return; }
     err.textContent = '';
-    location.href = '/' + s + '/' + (dest === 'klien' ? 'klien/' : '');
+    go(s, dest);
   });
+  function go(s, d) { remember(s, d); location.href = '/' + s + '/' + (d === 'klien' ? 'klien/' : ''); }
+  // Coach terakhir (perangkat ini saja), supaya aplikasi yang dipasang langsung menawarkan "Lanjutkan".
+  function remember(s, d) { try { localStorage.setItem('xnk_hub_last', JSON.stringify({ s: s, d: d })); } catch (e) {} }
+  Array.prototype.forEach.call(document.querySelectorAll('a.coach'), function (a) {
+    a.addEventListener('click', function () { var m = a.getAttribute('href').match(/^\/([a-z0-9-]+)\//); if (m) remember(m[1], 'klien'); });
+  });
+  try {
+    var last = JSON.parse(localStorage.getItem('xnk_hub_last') || 'null');
+    if (last && RE.test(last.s)) {
+      var k = last.d === 'klien';
+      document.getElementById('resume-name').textContent = 'xnk.web.id/' + last.s + (k ? '/klien' : '') + (k ? ' (klien)' : ' (coach)');
+      document.getElementById('resume-go').href = '/' + last.s + '/' + (k ? 'klien/' : '');
+      document.getElementById('resume').style.display = 'block';
+    }
+  } catch (e) {}
+
+  // Pasang aplikasi (PWA). Tombol muncul hanya bila browser menawarkan pemasangan (Chrome, Edge, Android).
+  var btn = document.getElementById('inst-btn'), deferred = null;
+  function show(id) { ['inst-menu', 'inst-ios', 'inst-done'].forEach(function (x) { document.getElementById(x).style.display = x === id ? 'block' : 'none'; }); }
+  var installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || /XNKAndroid|XNKiOS|Pake/.test(navigator.userAgent);
+  var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  show(installed ? 'inst-done' : ios ? 'inst-ios' : 'inst-menu');
+  addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; btn.hidden = false; show(''); });
+  addEventListener('appinstalled', function () { deferred = null; btn.hidden = true; show('inst-done'); });
+  btn.addEventListener('click', function () {
+    if (!deferred) return;
+    var d = deferred; deferred = null;
+    d.prompt();
+    d.userChoice.then(function (c) { btn.hidden = true; show(c.outcome === 'accepted' ? 'inst-done' : 'inst-menu'); });
+  });
+  if ('serviceWorker' in navigator) addEventListener('load', function () { navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {}); });
 })();
 </script>
 </body>
