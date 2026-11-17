@@ -96,8 +96,8 @@ function build(cfg) {
     : '';
   if (!landing.includes('<!--CONTACT-->')) throw new Error('build-hub: <!--CONTACT--> tidak ada di hub-site/index.html');
   landing = landing.split('<!--CONTACT-->').join(contact);
-  // Daftar coach: kosong = seluruh bagian "Coach di XNK" (dan tautannya) hilang.
-  const sec = /\r?\n  <section class="sec" id="coach" data-coaches>[\s\S]*?<\/section>(?=\r?\n)/;
+  // Daftar coach (di bagian Masuk): kosong = daftar itu dan tautan "Coach" di menu hilang.
+  const sec = /\r?\n *<div class="coach-list" id="coach" data-coaches>[\s\S]*?<\/div><!--\/coaches-->/;
   if (!sec.test(landing) || !landing.includes('<!--COACHES-->')) throw new Error('build-hub: bagian data-coaches / <!--COACHES--> tidak ada di hub-site/index.html');
   if (hub.coaches.length) {
     landing = landing.replace('<!--COACHES-->', hub.coaches.map(c =>

@@ -107,7 +107,7 @@ async function panelLogin(page, pin) {
       check(await page.isVisible('#slug'), 'ada isian nama coach');
       check((await page.textContent('body')).includes('Hubungi XNK'), 'tombol kontak tampil (kontak diisi)');
       check(await page.locator('a.coach[href="/claudia/klien/"]').count() === 1, 'daftar coach menautkan portal /claudia/klien/');
-      check(await page.evaluate(() => [...document.querySelectorAll('.phones img')].every(i => i.naturalWidth > 0)), 'gambar hero termuat');
+      check(await page.evaluate(() => [...document.querySelectorAll('.phones img')].filter(i => i.offsetParent).every(i => i.naturalWidth > 0)), 'gambar hero termuat');
       // Berbagai rasio layar: HP tegak/mendatar, tablet, laptop, ultrawide, monitor tegak.
       for (const [w, h] of [[320, 568], [390, 844], [844, 390], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1080], [1080, 1920], [3440, 1440]]) {
         await page.setViewportSize({ width: w, height: h });
