@@ -198,3 +198,33 @@ test('meal swap gives three other packages with the same calories and protein; p
     });
   }
 });
+
+test('menu style: jawa / sunda use only their own or general packages, tkpi uses no package', () => {
+  const asal = inCtx('NUT_PAKET_ASAL');
+  for (const gaya of ['jawa', 'sunda', 'tkpi']) {
+    for (let s = 0; s < 25; s++) {
+      const t = targetOf(2000), menu = call('_nutMenu_', t, { gaya, seed: 'g' + gaya + s });
+      dayOk(menu, t);
+      menu.meals.forEach(m => {
+        if (gaya === 'tkpi') assert.equal(m.paket, null);
+        else if (m.paket) assert.ok(!asal[m.paket.id] || asal[m.paket.id] === gaya, gaya + ' got ' + m.paket.n);
+      });
+    }
+  }
+  // Without a style (or campur) packages come back.
+  assert.ok(call('_nutMenu_', targetOf(2000), { seed: 'plain' }).meals.some(m => m.paket));
+  assert.deepEqual(call('_nutMealSwap_', 'siang', '', 600, 40, { gaya: 'tkpi' }, 0), []);
+});
+
+test('setMyMenuStyle saves the style, rejects unknown ones and changes the daily menu', () => {
+  const { env: e2, ani } = (() => { const e = seededEnv(); return { env: e, ani: e.memberToken(require('./fixtures').KEY_A) }; })();
+  e2.call('saveMyMeasurement', ani, { berat: 70, pinggang: 80 });
+  e2.call('saveMyNutritionProfile', ani, { tinggi: '170', jk: 'P', goal: 'jaga', birthDate: '1996-03-10' });
+  assert.equal(j(e2.call('getMyNutrition', ani)).profile.gaya, 'campur');
+  const r = j(e2.call('setMyMenuStyle', ani, 'tkpi'));
+  assert.equal(r.profile.gaya, 'tkpi');
+  assert.ok(r.menu.meals.every(m => m.paket === null));
+  assert.throws(() => e2.call('setMyMenuStyle', ani, 'bali'), /Gaya menu tidak dikenal/);
+  assert.throws(() => e2.call('setMyMenuStyle', 'bad', 'jawa'));
+  assert.equal(j(e2.call('setMyMenuStyle', ani, 'sunda')).profile.gaya, 'sunda');
+});

@@ -9117,6 +9117,7 @@
   }
   const NUT_N = (n, dp) => n == null || n === '' ? '-' : String(Math.round(n * Math.pow(10, dp || 0)) / Math.pow(10, dp || 0)).replace('.', ',');
   const NUT_GOALS_L = { turun: 'Turun lemak', naik: 'Naik otot', jaga: 'Jaga / sehat', recomp: 'Recomp' };
+  const NUT_GAYA_L = { campur: 'Campur', jawa: 'Jawa', sunda: 'Sunda', tkpi: 'TKPI polos' };
   const NUT_TAG_L = { santan: 'santan', goreng: 'gorengan', manis: 'manis', asin: 'asin' };
   const NUT_TAGS_L = { telur: 'Telur', seafood: 'Seafood', kacang: 'Kacang', susu: 'Susu', laktosa: 'Laktosa' };
   const NUT_BUD_L = { hemat: 'Hemat', standar: 'Standar', bebas: 'Bebas' };
@@ -9168,7 +9169,12 @@
     if (!isPlan && n.inputs && n.inputs.stale) html += '<div class="card"><p class="li-sub">Berat terakhir sudah lebih dari 4 minggu. Timbang lagi di tab Progres supaya targetnya akurat.</p></div>';
     if (isPlan && n.menu) {
       const MEAL_IC = { sarapan: 'sunrise', pagi: 'sunrise', siang: 'sun', malam: 'moon', camilan: 'cookie', sahur: 'moon-star', buka: 'sunset' };
-      html += '<div class="card stack" id="plan-menu" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>';
+      html += '<div class="card stack" id="plan-menu" style="gap:10px"><div class="section-head"><h3 class="section-title">Menu hari ini</h3><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutShop()">' + icon('shopping-basket') + 'Belanja</button></div>' +
+        '<div class="seg" role="group" aria-label="Gaya menu" style="display:grid;grid-template-columns:repeat(4,1fr)">' + ['campur', 'jawa', 'sunda', 'tkpi'].map(function (g) {
+          const on = ((n.profile && n.profile.gaya) || 'campur') === g;
+          return '<button type="button" class="' + (on ? 'active' : '') + '" aria-pressed="' + on + '" onclick="window.nutSetGaya(\'' + g + '\')">' + h(NUT_GAYA_L[g]) + '</button>';
+        }).join('') + '</div>' +
+        (((n.profile && n.profile.gaya) || 'campur') === 'tkpi' ? '<p class="li-sub">Bahan makanan TKPI saja, tanpa nama masakan. Ketuk satu bahan untuk menggantinya.</p>' : '');
       n.menu.meals.forEach(function (m, mi) {
         const pk = m.paket;
         html += '<div class="meal-blk"><div class="meal-head"><span class="icon-chip">' + icon(MEAL_IC[m.key] || 'utensils') + '</span><b class="grow">' + h(m.label) + '</b><span class="num li-sub">' + h(NUT_N(m.totals.kal)) + ' kkal · P ' + h(NUT_N(m.totals.p)) + ' g</span></div>' +
@@ -9197,6 +9203,14 @@
     html += '</div>';
     return html;
   }
+  // Pilih gaya menu (Campur / Jawa / Sunda / TKPI polos); server menghitung ulang menu hari ini.
+  window.nutSetGaya = function (g) {
+    const n = window.myNutrition; if (!n || (n.profile && (n.profile.gaya || 'campur') === g)) return;
+    const prev = n.profile && n.profile.gaya;
+    if (n.profile) n.profile.gaya = g; renderMakan();
+    memberCall('setMyMenuStyle', g).then(function (r) { window.myNutrition = r; window.patchPortalMore('nutrition', r); renderMakan(); })
+      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(window.authMessage(err)); });
+  };
   function renderMakan() {
     const w = $('pub-makan-pane'); if (w) setHTML(w, makanInner());
     const pl = $('pub-plan-pane'); if (pl) setHTML(pl, makanInner('plan'));

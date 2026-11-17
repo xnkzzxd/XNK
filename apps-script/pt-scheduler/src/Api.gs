@@ -153,7 +153,7 @@ function _apiTable_() {
     uploadFinanceProof: uploadFinanceProof,
     getFinanceProof: getFinanceProof,
     exportFinanceCsv: exportFinanceCsv,
-    // member: member token (62)
+    // member: member token (63)
     getMemberProfile: getMemberProfile,
     getMemberSessions: getMemberSessions,
     getMyPushStatus: getMyPushStatus,
@@ -172,6 +172,7 @@ function _apiTable_() {
     getPortalMore: getPortalMore,
     getMyNutrition: getMyNutrition,
     saveMyNutritionProfile: saveMyNutritionProfile,
+    setMyMenuStyle: setMyMenuStyle,
     getMyShopping: getMyShopping,
     swapMyMenuItem: swapMyMenuItem,
     swapMyMenuMeal: swapMyMenuMeal,
