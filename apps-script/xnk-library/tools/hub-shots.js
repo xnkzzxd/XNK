@@ -21,6 +21,8 @@ const SHOTS = [
   ['klien-progres', '/demo/?klien', 'public-progress'],
   ['coach-dashboard', '/demo/', ''],
   ['coach-jadwal', '/demo/', 'calendar'],
+  // Tampilan desktop (portal klien ala Mac app) untuk gambar laptop di bagian Aplikasi.
+  ['klien-desktop', '/demo/?klien', '', 1280, 800],
 ];
 
 (async () => {
@@ -32,8 +34,10 @@ const SHOTS = [
   const base = 'http://127.0.0.1:' + server.address().port;
   const browser = await pw.chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   fs.mkdirSync(OUT, { recursive: true });
-  for (const [name, url, view] of SHOTS) {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'light' });
+  for (const [name, url, view, w, h] of SHOTS) {
+    const desk = !!w;
+    const ctx = await browser.newContext(desk ? { viewport: { width: w, height: h }, deviceScaleFactor: 1.5, colorScheme: 'light' }
+      : { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'light' });
     const page = await ctx.newPage();
     await page.goto(base + url);
     await page.waitForTimeout(4000);

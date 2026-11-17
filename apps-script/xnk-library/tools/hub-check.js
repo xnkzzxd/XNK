@@ -172,7 +172,7 @@ async function panelLogin(page, pin) {
       const seen = [], errors = [];
       const context = await newContext(browser, be, seen);
       const p = await open(context, O + '/claudia/klien/', errors);
-      check(await p.isVisible('#login-phone'), 'portal /claudia/klien/ meminta nomor WhatsApp');
+      check(await p.waitForSelector('#login-phone', { state: 'visible', timeout: 8000 }).then(() => true, () => false), 'portal /claudia/klien/ meminta nomor WhatsApp');
       await p.fill('#login-phone', '82222222222');
       await p.click('#login-submit-btn');
       await p.waitForTimeout(900);

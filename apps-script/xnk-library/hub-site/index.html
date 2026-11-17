@@ -189,7 +189,24 @@
   /* Pasang aplikasi: empat kartu sejajar di layar lebar, dua di tablet, satu kolom di HP. */
   .apps { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 560px) { .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (min-width: 1100px) { .apps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  /* Gambar perangkat (laptop + HP) di samping kartu: tanpa bidang kosong. */
+  .apps-wrap { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); align-items: center; }
+  @media (min-width: 1100px) { .apps-wrap { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
+  .devices { position: relative; padding: 0 9% 1.5rem 0; max-width: 46rem; width: 100%; margin: 0 auto; }
+  .laptop .scr { border: .55rem solid #1f1f1e; border-bottom-width: .8rem; border-radius: 1rem 1rem 0 0; aspect-ratio: 16 / 10; overflow: hidden; background: #fafaf9; }
+  .laptop .scr img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+  .laptop .base { height: .85rem; margin: 0 -7%; border-radius: 0 0 1.2rem 1.2rem; background: linear-gradient(#e2e2de, #b4b4af); box-shadow: 0 18px 30px -18px rgba(0,0,0,.45); }
+  @media (prefers-color-scheme: dark) { .laptop .base { background: linear-gradient(#3a3a38, #222221); } }
+  .phone-s { position: absolute; right: 0; bottom: 0; width: 23%; padding: .3rem; border-radius: 1.3rem; background: #1f1f1e; border: 1px solid #333331; box-shadow: 0 20px 40px -16px rgba(0,0,0,.55); }
+  .phone-s img { border-radius: 1.05rem; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; width: 100%; }
+  .tile { min-height: 11rem !important; }
+  @media (max-width: 559px) {
+    .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    .apps .ink, .apps a.tile:last-child { grid-column: 1 / -1; }
+    .tile { min-height: 0 !important; padding: 1rem; }
+    .tile .ic { margin-bottom: .2rem; }
+    .tile .get { padding-top: .6rem; }
+  }
   .tile { display: flex; flex-direction: column; gap: .35rem; text-decoration: none; min-height: 13rem; }
   .tile .ic { margin-bottom: .6rem; }
   .tile > b { font-size: 1.15rem; }
@@ -327,6 +344,11 @@
       <p class="kicker">Aplikasi</p>
       <h2>Pasang di HP atau komputer.</h2>
       <p class="intro">Buka XNK seperti aplikasi biasa, langsung dari layar utama atau desktop.</p>
+      <div class="apps-wrap">
+      <div class="devices" aria-hidden="true">
+        <div class="laptop"><div class="scr"><img src="img/klien-desktop.jpg" alt="" width="1920" height="1200" loading="lazy"></div><div class="base"></div></div>
+        <div class="phone-s"><img src="img/klien-latihan.jpg" alt="" width="390" height="844" loading="lazy"></div>
+      </div>
       <div class="apps">
         <div class="card ink tile">
           <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg></span>
@@ -340,6 +362,7 @@
         <a class="card tile" href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-Android.apk" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-phone"/></svg></span><b>Android</b><small>APK · Android 7 ke atas</small><span class="get"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg>Unduh</span></a>
         <a class="card tile" href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-Windows.msi" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><b>Windows</b><small>Penginstal .msi · Windows 10 dan 11</small><span class="get"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg>Unduh</span></a>
         <a class="card tile" href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-macOS.dmg" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><b>macOS</b><small>.dmg · Mac Apple silicon</small><span class="get"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg>Unduh</span></a>
+      </div>
       </div>
       <p class="note" style="max-width:60rem">Belum ada di Play Store atau App Store. Android akan meminta izin memasang dari sumber ini; Windows bisa menampilkan peringatan SmartScreen (pilih <b>Info selengkapnya</b> lalu <b>Tetap jalankan</b>); di Mac, klik kanan aplikasinya lalu <b>Buka</b>.</p>
     </div>
