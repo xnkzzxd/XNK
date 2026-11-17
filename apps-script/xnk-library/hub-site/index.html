@@ -35,8 +35,12 @@
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 1rem/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
   img { max-width: 100%; height: auto; display: block; }
+  /* Layar lebar dan besar: semua ukuran (rem) ikut membesar, jadi isi tidak mengecil di tengah layar. */
+  @media (min-width: 1700px) { html { font-size: 112.5%; } }
+  @media (min-width: 2200px) { html { font-size: 131.25%; } }
+  @media (min-width: 3000px) { html { font-size: 162.5%; } }
   a { color: inherit; }
-  .wrap { max-width: 70rem; margin: 0 auto; padding: 0 max(1rem, env(safe-area-inset-left)) 0 max(1rem, env(safe-area-inset-right)); }
+  .wrap { max-width: 72rem; margin: 0 auto; padding: 0 max(1rem, env(safe-area-inset-left)) 0 max(1rem, env(safe-area-inset-right)); }
   .mut { color: var(--mut); }
 
   /* Top bar */
@@ -63,24 +67,32 @@
   .band { background: var(--band); color: var(--on-band); }
   .hero { padding: 2.5rem 0 0; overflow: hidden; }
   .hero .wrap { display: grid; gap: 2.5rem; }
-  .eyebrow { display: inline-block; font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--band-mut);
+  .eyebrow { display: inline-block; max-width: 100%; font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--band-mut);
     border: 1px solid var(--band-line); border-radius: 999px; padding: .3rem .8rem; }
-  .hero h1 { font-size: clamp(2.3rem, 9vw, 4.2rem); line-height: 1.02; letter-spacing: -.035em; margin: 1rem 0 1rem; }
+  .hero h1 { font-size: clamp(2rem, min(9vw, 11vh), 4.2rem); line-height: 1.02; letter-spacing: -.035em; margin: 1rem 0 1rem; }
   .hero p.lead { font-size: 1.12rem; color: var(--band-mut); margin: 0 0 1.6rem; max-width: 32rem; }
   .hero .cta { display: flex; flex-wrap: wrap; gap: .7rem; }
   .facts { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin: 1.8rem 0 0; padding: 0; list-style: none; font-size: .9rem; color: var(--band-mut); }
   .facts li::before { content: "✓"; color: var(--on-band); font-weight: 800; margin-right: .45rem; }
   .phones { position: relative; display: flex; justify-content: center; align-items: flex-end; gap: 1rem; min-height: 22rem; }
-  .phone { width: min(15.5rem, 42vw); border-radius: 2rem; padding: .45rem; background: #1f1f1e; border: 1px solid #333331;
+  .phone { width: min(15.5rem, 42vw, 34vh); border-radius: 2rem; padding: .45rem; background: #1f1f1e; border: 1px solid #333331;
     box-shadow: 0 30px 60px -20px rgba(0,0,0,.6); flex: none; }
   .phone img { border-radius: 1.6rem; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; width: 100%; background: #fafaf9; }
   .phones .phone:first-child { transform: translateY(1.5rem); }
   .phones .phone:last-child { margin-bottom: -4rem; }
   .cap { text-align: center; font-size: .8rem; color: var(--band-mut); margin-top: .55rem; }
-  @media (min-width: 900px) {
-    .hero { padding-top: 4.5rem; }
-    .hero .wrap { grid-template-columns: 1.05fr 1fr; align-items: center; }
-    .phone { width: 15.5rem; }
+  /* Dua kolom di layar lebar, dan di layar mendatar (HP/tablet landscape) supaya mockup tidak jatuh jauh di bawah. */
+  @media (min-width: 900px), (min-width: 560px) and (orientation: landscape) {
+    .hero .wrap { grid-template-columns: 1.05fr 1fr; align-items: center; gap: 2rem; }
+    .phones { min-height: 0; padding-bottom: 2rem; }
+    .phones .phone:last-child { margin-bottom: 0; }
+    .phone { width: min(15.5rem, 20vw, 36vh); }
+  }
+  @media (min-width: 900px) { .hero { padding-top: 4.5rem; } }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .hero { padding-top: 1.5rem; }
+    .hero p.lead { font-size: 1rem; margin-bottom: 1rem; }
+    .facts { margin-top: 1rem; }
   }
 
   /* Sections */
@@ -88,8 +100,8 @@
   .kicker { font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mut); margin: 0 0 .5rem; }
   h2 { font-size: clamp(1.7rem, 5.5vw, 2.6rem); line-height: 1.1; letter-spacing: -.025em; margin: 0 0 .8rem; }
   .sec > .wrap > p.intro { max-width: 38rem; color: var(--mut); margin: 0 0 2rem; font-size: 1.05rem; }
-  .grid2 { display: grid; gap: 1rem; }
-  @media (min-width: 768px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  @media (min-width: 768px) { .grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 1.4rem; }
   .card.ink { background: var(--band); color: var(--on-band); border-color: var(--band); }
   .card.ink .mut { color: var(--band-mut); }
@@ -143,8 +155,8 @@
   .coach:hover { border-color: var(--fg); }
 
   /* Masuk */
-  .login { display: grid; gap: 1.5rem; align-items: start; }
-  @media (min-width: 900px) { .login { grid-template-columns: 1fr 1fr; gap: 3rem; } }
+  .login { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+  @media (min-width: 900px) { .login { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3rem; } }
   label { display: block; font-weight: 600; font-size: .9rem; margin: .9rem 0 .35rem; }
   .row { display: flex; align-items: center; border: 1px solid var(--line); border-radius: .7rem; background: var(--bg); overflow: hidden; }
   .row span { padding: 0 .1rem 0 .8rem; color: var(--mut); white-space: nowrap; font-size: .95rem; }
