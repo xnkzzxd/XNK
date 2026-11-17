@@ -145,7 +145,8 @@ function saveSetup(ctx, data) {
     data = data || {};
     var brand = String(data.brand || '').trim();
     var pin = String(data.pin == null ? '' : data.pin).trim();
-    var site = String(data.siteUrl || '').trim().replace(/\/+$/, '');
+    // Alamat utama situs coach; '/klien' di ujung dibuang (portal klien = alamat utama + /klien/).
+    var site = String(data.siteUrl || '').trim().replace(/\/+$/, '').replace(/\/klien$/i, '');
     var props = _props_();
     if (!brand) throw new Error('Nama usaha wajib diisi.');
     if (brand.length > 60) throw new Error('Nama usaha maksimal 60 huruf.');

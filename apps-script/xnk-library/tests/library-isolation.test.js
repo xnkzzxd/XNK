@@ -133,6 +133,8 @@ test('saveSetup memvalidasi dulu, baru menulis', () => {
   assert.deepEqual(A.store.props, {});
   env.lib('saveSetup', A.ctx, { brand: 'X', pin: '123456', siteUrl: 'https://andi.github.io/gym/' });
   assert.equal(A.store.props.SITE_URL, 'https://andi.github.io/gym');
+  env.lib('saveSetup', A.ctx, { brand: 'X', pin: '', siteUrl: 'https://andi.github.io/gym/klien/' });
+  assert.equal(A.store.props.SITE_URL, 'https://andi.github.io/gym', 'alamat portal yang ditempel jadi alamat utama');
   env.lib('saveSetup', A.ctx, { brand: 'Y', pin: '' });
   assert.equal(A.store.props.ADMIN_PIN, '123456', 'PIN kosong = PIN lama tetap');
   assert.equal(A.store.props.SITE_URL, undefined);
@@ -152,10 +154,10 @@ test('doPost dan doGet lewat Library memakai spreadsheet pemanggil', () => {
   libraryUntouched(env);
 });
 
-test('link portal di pesan WhatsApp memakai alamat spreadsheet itu, bukan xnk', () => {
+test('link portal di pesan WhatsApp = portal klien coach itu (/klien/), bukan xnk dan bukan panel', () => {
   const { env, A, B } = setupTwo();
   A.store.props.SITE_URL = 'https://gym-andi.github.io';
-  assert.equal(env.lib('run', A.ctx, 'getAppSettings', [env.run(A.ctx, 'adminLogin', '111111').token]).shareQrDefault, 'https://gym-andi.github.io');
+  assert.equal(env.lib('run', A.ctx, 'getAppSettings', [env.run(A.ctx, 'adminLogin', '111111').token]).shareQrDefault, 'https://gym-andi.github.io/klien/');
   const tokB = env.run(B.ctx, 'adminLogin', '222222').token;
   assert.equal(env.lib('run', B.ctx, 'getAppSettings', [tokB]).shareQrDefault, 'https://script.google.com/macros/s/DEPLOY_SS_B/exec?view=public');
 });

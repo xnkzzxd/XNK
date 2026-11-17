@@ -43,7 +43,8 @@ menyematkan XNK Template ke versi itu.
 - Actions → **Setup situs** → Run workflow → tempel link `/exec` dan nama usaha.
 
 **3. Buka situsnya**: `https://<akun>.github.io/<repo>/` (panel, PIN) dan `/klien/` (untuk klien).
-Lalu, di spreadsheet, isi alamat situs di **Mulai setup → langkah 4**.
+Lalu, di spreadsheet, isi alamat utama situs di **Mulai setup → langkah 4**: link portal di pesan WhatsApp ke
+klien otomatis menjadi alamat itu + `/klien/`.
 
 ## C. Memperbarui
 

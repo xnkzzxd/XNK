@@ -19,8 +19,9 @@ link aplikasi `/exec`.
 
    Klik **Run workflow**, tunggu ±1 menit sampai centang hijau.
 4. Situs Anda: `https://<nama-akun>.github.io/<nama-repo>/`. Buka, lalu masuk dengan PIN.
-5. (Disarankan) Di spreadsheet: **XNK → Mulai setup → langkah 4**, isi alamat situs ini. Link di pesan
-   WhatsApp ke klien akan memakai alamat ini, dan *Cek kesehatan* bisa memberi tahu bila ada versi baru.
+5. (Disarankan) Di spreadsheet: **XNK → Mulai setup → langkah 4**, isi alamat utama situs ini (tanpa `/klien/`).
+   Link di pesan WhatsApp ke klien otomatis menuju `<alamat>/klien/`, dan *Cek kesehatan* bisa memberi tahu bila
+   ada versi baru.
 
 ## Mengubah situs
 

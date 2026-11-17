@@ -72,10 +72,13 @@ function _brandName_() {
   return String(_props_().getProperty('BRAND_NAME') || '').trim() || 'Personal Training';
 }
 
-/** Alamat portal klien untuk link di pesan WhatsApp: SITE_URL, atau halaman /exec spreadsheet ini. */
+/**
+ * Alamat PORTAL KLIEN untuk link di pesan WhatsApp dan kode QR kartu: situs coach (SITE_URL) + '/klien/'
+ * (akar situs adalah panel coach dengan PIN), atau halaman /exec spreadsheet ini dengan ?view=public.
+ */
 function _siteUrl_() {
   var u = String(_props_().getProperty('SITE_URL') || '').trim();
-  if (u) return u.replace(/\/+$/, '');
+  if (u) return u.replace(/\/+$/, '') + '/klien/';
   try { return _scriptApp_().getService().getUrl() + '?view=public'; } catch (e) { return ''; }
 }
 
