@@ -32,6 +32,8 @@ const EXPECTED = {
   'the page title is XNK Personal Training': 'nama usaha per spreadsheet',
   'doGet serves only real pages; unknown views fall back to Index': 'landing pemilik tidak ikut',
   'doGet sets the tab icon per site, and the landing draws the real X mark (no chevron)': 'ikon per spreadsheet',
+  // getServerInfo di Library membawa sidik build (lib.commit) untuk hub; produksi lib = null (T-2220).
+  'doPost gateway: an unknown function says so (code unknown_fn) without revealing more; getServerInfo is public and data-free (T-2220)': 'sidik build Library',
 };
 
 function main() {

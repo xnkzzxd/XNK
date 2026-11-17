@@ -110,8 +110,9 @@ function count(text, needle) { let n = 0, i = 0; while ((i = text.indexOf(needle
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 
 function commitOf() {
-  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
-  try { return execSync('git rev-parse --short HEAD', { cwd: HERE, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { return 'lokal'; }
+  // Commit penuh (40 huruf): build-hub.js mengambil commit ini dari GitHub untuk membangun halaman yang cocok (T-2220).
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
+  try { return execSync('git rev-parse HEAD', { cwd: HERE, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { return 'lokal'; }
 }
 
 function libTable() {

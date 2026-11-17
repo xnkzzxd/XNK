@@ -82,6 +82,8 @@
         if (!j || typeof j !== 'object' || typeof j.v !== 'number' || j.v < XNK_API_MIN) {
           throw new Error('Versi aplikasi belum cocok. Muat ulang halaman.');
         }
+        // Halaman lebih baru dari server coach ini (hub xnk.web.id): pesan jelas, bukan "Permintaan tidak valid".
+        if (!j.ok && j.code === 'unknown_fn') throw new Error('Server sedang diperbarui ke versi halaman ini. Coba lagi beberapa saat lagi.');
         if (!j.ok) throw new Error((j.auth ? 'AUTH_REQUIRED: ' : '') + (j.error || 'Terjadi kesalahan.'));
         return j.data;
       }, function (e) { if (timer) clearTimeout(timer); throw e; });

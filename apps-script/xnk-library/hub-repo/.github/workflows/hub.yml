@@ -5,7 +5,8 @@ name: Hub XNK
 #    Isian diperiksa penuh; bila ada yang salah, workflow berhenti dengan pesan Indonesia dan situs lama tetap tayang.
 #  - Run workflow → aksi "bangun": bangun ulang tanpa mengubah daftar.
 #  - Mengubah hub.json langsung di GitHub juga membangun ulang.
-#  - Setiap hari jam 03:17 WIB: dibangun dari kode XNK terbaru (perbaikan tampilan ikut masuk otomatis).
+#  - Setiap hari jam 03:17 WIB: dibangun ulang. Halaman tiap coach mengikuti versi Library di spreadsheet coach itu
+#    (tools/hub-versions.js); coach yang sudah diperbarui mendapat halaman terbaru.
 # Halaman dibangun dari repo XNK yang publik (tanpa token). Data klien tidak pernah ada di sini: hanya daftar coach.
 on:
   workflow_dispatch:
@@ -70,8 +71,13 @@ jobs:
           git commit -m "Hub: $IN_AKSI $IN_SLUG"
           git push
 
+      # Halaman tiap coach dibangun dari commit XNK yang sama dengan Library di spreadsheet coach itu, supaya halaman
+      # tidak memanggil fungsi yang belum ada di servernya. Coach yang tidak menjawab memakai commit build sebelumnya.
+      - name: Versi server tiap coach
+        run: node _xnk/apps-script/xnk-library/tools/hub-versions.js hub.json _xnk versions.json --previous https://xnk.web.id/_hub/versions.json
+
       - name: Bangun situs
-        run: node _xnk/apps-script/xnk-library/tools/build-hub.js _site --config hub.json
+        run: node _xnk/apps-script/xnk-library/tools/build-hub.js _site --config hub.json --versions versions.json
 
       - name: Siapkan GitHub Pages
         id: pages

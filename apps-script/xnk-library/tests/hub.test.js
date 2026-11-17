@@ -57,7 +57,7 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
   assert.ok(!files['index.html'].includes('<!--CONTACT-->'));
   // Tanpa coach pun situs jadi (hanya landing).
   const empty = hub.build({ coaches: [] }).files;
-  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', 'index.html', 'manifest.webmanifest', 'sw.js']);
+  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'index.html', 'manifest.webmanifest', 'sw.js']);
   assert.ok(Buffer.isBuffer(empty['img/og.jpg']) && empty['img/og.jpg'].length > 1000, 'gambar landing ikut dibangun');
 });
 
@@ -212,4 +212,50 @@ test('hub-edit: tambah, ubah, hapus; diperiksa penuh dan masukan tidak berubah',
   assert.throws(() => edit(two.cfg, 'simpan', { slug: 'ani', brand: 'Ani', exec: EXEC(1) }), /\/exec yang sama/, 'dua coach tidak boleh berbagi spreadsheet');
   assert.throws(() => edit(empty, 'hapus', { slug: 'nobody' }), /tidak ada di daftar/);
   assert.throws(() => edit(empty, 'ubah', { slug: 'claudia' }), /Aksi harus/);
+});
+
+test('versi per coach (T-2220): halaman coach dibangun dari checkout commit Library-nya; lib-latest dan versions.json ditulis', () => {
+  const os = require('os');
+  const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-old-'));
+  const tools = path.join(fake, 'apps-script', 'xnk-library', 'tools');
+  fs.mkdirSync(tools, { recursive: true });
+  // "Commit lama": build-tenant yang sama, ditandai supaya kelihatan halaman mana yang memakainya.
+  fs.writeFileSync(path.join(tools, 'build-tenant.js'), `const real = require(${JSON.stringify(require.resolve('../tools/build-tenant'))});
+module.exports = Object.assign({}, real, { build(c, o) { const r = real.build(c, o); r.files['lama.txt'] = 'lama'; r.hash = 'oldhash00000'; return r; } });`);
+  const sha = 'a'.repeat(40);
+  const { files } = hub.build(CFG, { versions: { claudia: { commit: sha, dir: fake } } });
+  assert.equal(files['claudia/lama.txt'], 'lama');
+  assert.ok(!('claudia-2/lama.txt' in files), 'coach lain memakai kode terbaru');
+  const v = JSON.parse(files['_hub/versions.json']);
+  assert.deepEqual(v.claudia, { commit: sha, hash: 'oldhash00000' });
+  assert.equal(v['claudia-2'].commit, 'terbaru');
+  // Cek kesehatan di spreadsheet coach membaca SITE_URL/lib-latest.json = sidik kode TERBARU, bukan versi coach itu.
+  for (const s of ['claudia', 'claudia-2']) assert.equal(JSON.parse(files[s + '/lib-latest.json']).library.hash, v['claudia-2'].hash);
+  assert.throws(() => hub.build(CFG, { versions: { claudia: { commit: sha, dir: path.join(fake, 'tidak-ada') } } }), /build-tenant\.js tidak ada/);
+  fs.rmSync(fake, { recursive: true, force: true });
+});
+
+test('hub-versions: commit dari server, lalu build sebelumnya, lalu kode terbaru; isian aneh diabaikan', async () => {
+  const hv = require('../tools/hub-versions');
+  const { execSync } = require('child_process');
+  const repo = path.join(__dirname, '..', '..', '..');
+  const head = execSync('git rev-parse HEAD', { cwd: repo }).toString().trim();
+  const reply = obj => ({ text: async () => JSON.stringify(obj) });
+  const answers = {
+    [EXEC(1)]: reply({ ok: true, v: 1, data: { api: 1, lib: { hash: 'x', commit: head } } }),
+    [EXEC(2)]: reply({ ok: false, v: 1, error: 'Permintaan tidak valid.', code: 'unknown_fn' }),
+  };
+  const fetchImpl = async url => { if (answers[url]) return answers[url]; throw new Error('offline'); };
+  assert.equal(await hv.askServer(EXEC(1), fetchImpl), head);
+  assert.equal(await hv.askServer(EXEC(2), fetchImpl), '');
+  assert.equal(await hv.askServer(EXEC(9), fetchImpl), '');
+  assert.equal(await hv.askServer(EXEC(1), async () => reply({ ok: true, data: { lib: { commit: '../../etc' } } })), '', 'bukan sha 40 huruf');
+  const prevFile = path.join(require('os').tmpdir(), 'xnk-prev-' + process.pid + '.json');
+  fs.writeFileSync(prevFile, JSON.stringify({ 'claudia-2': { commit: head }, claudia: { commit: 'jelek' } }));
+  const r = await hv.resolve(CFG, repo, { fetch: fetchImpl, previous: prevFile });
+  assert.deepEqual(r.versions.claudia, { commit: head, source: 'server' }, 'commit = checkout ini: tanpa worktree');
+  assert.deepEqual(r.versions['claudia-2'], { commit: head, source: 'sebelumnya' });
+  const none = await hv.resolve(CFG, repo, { fetch: fetchImpl });
+  assert.ok(!none.versions['claudia-2'] && none.notes.some(n => /claudia-2.*kode terbaru/.test(n)));
+  fs.rmSync(prevFile, { force: true });
 });

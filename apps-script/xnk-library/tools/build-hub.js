@@ -18,7 +18,7 @@ const HERE = path.join(__dirname, '..');
 const SITE = path.join(HERE, 'hub-site');
 
 // Kata yang dipakai sistem atau mudah menipu; dan nama berkas di akar situs.
-const RESERVED = ['admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
+const RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
   'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 const sha = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 10);
@@ -75,12 +75,23 @@ function isolate(files, dir, slug, kind) {
   files[swf] = sw;
 }
 
-/** Kembalikan { files, coaches } untuk seluruh hub. */
-function build(cfg) {
+/**
+ * Kembalikan { files, coaches } untuk seluruh hub.
+ * opts.versions (T-2220, dari tools/hub-versions.js): { <slug>: { commit, dir } } — halaman coach itu dibangun dengan
+ * build-tenant.js dari checkout XNK di `dir` (commit yang sama dengan Library di spreadsheet coach itu), supaya
+ * halaman tidak memanggil fungsi yang belum ada di servernya. Tanpa entri = kode XNK yang menjalankan build ini.
+ */
+function build(cfg, opts) {
+  opts = opts || {};
+  const versions = opts.versions || {};
   const hub = readHub(cfg);
   const files = {};
+  const built = {};
+  let latest = null;   // sidik Library dari kode terbaru (dibaca "Cek kesehatan" di spreadsheet coach)
   for (const c of hub.coaches) {
-    const t = tenant.build({ exec: c.exec, brand: c.brand });
+    const v = versions[c.slug];
+    const t = tenantFor(v).build({ exec: c.exec, brand: c.brand });
+    if (!v || !v.dir) latest = t.hash;
     const sub = {};
     for (const [n, body] of Object.entries(t.files)) {
       if (n === 'lib-latest.json' || n === '.nojekyll') continue;
@@ -89,7 +100,15 @@ function build(cfg) {
     isolate(sub, c.slug + '/', c.slug, 'panel');
     isolate(sub, c.slug + '/klien/', c.slug, 'klien');
     Object.assign(files, sub);
+    built[c.slug] = { commit: v && v.commit || 'terbaru', hash: t.hash };
   }
+  if (hub.coaches.length) {
+    if (!latest) latest = require('./build-lib').build().hash;
+    // SITE_URL coach = xnk.web.id/<slug>; healthCheck membaca SITE_URL/lib-latest.json untuk tahu ada versi baru.
+    for (const c of hub.coaches) files[c.slug + '/lib-latest.json'] = JSON.stringify({ library: { hash: latest } }) + '\n';
+  }
+  // Commit tiap coach yang terakhir dibangun: build berikutnya memakainya bila server coach tidak menjawab.
+  files['_hub/versions.json'] = JSON.stringify(built, null, 1) + '\n';
   let landing = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
   const contact = hub.contact
     ? `<a class="btn ghost" href="${esc(hub.contact)}" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg>Hubungi XNK</a>`
@@ -118,6 +137,14 @@ function build(cfg) {
   return { files, coaches: hub.coaches };
 }
 
+/** build-tenant.js dari checkout XNK lain (commit coach itu), atau milik build ini. */
+function tenantFor(v) {
+  if (!v || !v.dir) return tenant;
+  const file = path.join(path.resolve(v.dir), 'apps-script', 'xnk-library', 'tools', 'build-tenant.js');
+  if (!fs.existsSync(file)) throw new Error('build-hub: ' + file + ' tidak ada (commit ' + v.commit + ').');
+  return require(file);
+}
+
 function write(outDir, files) {
   fs.rmSync(outDir, { recursive: true, force: true });
   for (const [n, t] of Object.entries(files)) {
@@ -131,12 +158,14 @@ module.exports = { build, write, readHub, slugError, RESERVED, SLUG_RE };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const i = args.indexOf('--config');
-  const cfgFile = i >= 0 ? args.splice(i, 2)[1] : null;
+  const flag = k => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : null; };
+  const cfgFile = flag('--config');
+  const verFile = flag('--versions');
   const out = args[0];
-  if (!out || !cfgFile) { console.error('pakai: build-hub.js <outDir> --config hub.json'); process.exit(1); }
+  if (!out || !cfgFile) { console.error('pakai: build-hub.js <outDir> --config hub.json [--versions versions.json]'); process.exit(1); }
   try {
-    const r = build(JSON.parse(fs.readFileSync(cfgFile, 'utf8')));
+    const versions = verFile ? JSON.parse(fs.readFileSync(verFile, 'utf8')) : {};
+    const r = build(JSON.parse(fs.readFileSync(cfgFile, 'utf8')), { versions });
     write(path.resolve(out), r.files);
     console.log(`Hub XNK: ${r.coaches.length} coach (${r.coaches.map(c => c.slug).join(', ') || '-'}), ${Object.keys(r.files).length} berkas → ${out}`);
   } catch (e) {
