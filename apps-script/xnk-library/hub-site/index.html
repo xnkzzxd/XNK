@@ -19,7 +19,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/img/icon-192.png">
 <meta name="apple-mobile-web-app-title" content="XNK">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0b0b'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-family='system-ui,Arial,sans-serif' font-size='34' font-weight='700' fill='%23fff'%3EX%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="/img/icon-192.png">
 <style>
   :root {
     --bg:#fafaf9; --fg:#0b0b0b; --mut:#5f5f5b; --line:#e2e2de; --card:#fff; --soft:#f0f0ed;
@@ -35,8 +35,13 @@
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 1rem/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
   img { max-width: 100%; height: auto; display: block; }
+  /* Layar lebar dan besar: semua ukuran (rem) ikut membesar, jadi isi tidak mengecil di tengah layar. */
+  @media (min-width: 1700px) { html { font-size: 112.5%; } }
+  @media (min-width: 2200px) { html { font-size: 131.25%; } }
+  @media (min-width: 3000px) { html { font-size: 162.5%; } }
   a { color: inherit; }
-  .wrap { max-width: 70rem; margin: 0 auto; padding: 0 max(1rem, env(safe-area-inset-left)) 0 max(1rem, env(safe-area-inset-right)); }
+  /* Lebar isi ikut layar (tanpa pita kosong besar di kiri-kanan); batas hanya di layar sangat lebar. */
+  .wrap { max-width: 112rem; margin: 0 auto; padding: 0 max(clamp(1rem, 4vw, 4.5rem), env(safe-area-inset-right)) 0 max(clamp(1rem, 4vw, 4.5rem), env(safe-area-inset-left)); }
   .mut { color: var(--mut); }
 
   /* Top bar */
@@ -44,7 +49,7 @@
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding-top: env(safe-area-inset-top); }
   .top .wrap { display: flex; align-items: center; gap: 1rem; min-height: 3.75rem; }
   .brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; font-size: 1.15rem; text-decoration: none; letter-spacing: .02em; }
-  .logo { width: 2.2rem; height: 2.2rem; border-radius: .65rem; background: var(--on-band); color: var(--band); display: grid; place-items: center; font-weight: 800; font-size: 1.2rem; }
+  .logo { width: 2.2rem; height: 2.2rem; border-radius: .65rem; background: #0b0b0b; box-shadow: inset 0 0 0 1px var(--band-line); }
   .nav { display: none; gap: 1.5rem; margin-left: auto; font-size: .95rem; }
   .nav a { text-decoration: none; color: var(--band-mut); }
   .nav a:hover { color: var(--on-band); }
@@ -63,33 +68,51 @@
   .band { background: var(--band); color: var(--on-band); }
   .hero { padding: 2.5rem 0 0; overflow: hidden; }
   .hero .wrap { display: grid; gap: 2.5rem; }
-  .eyebrow { display: inline-block; font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--band-mut);
+  .eyebrow { display: inline-block; max-width: 100%; font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--band-mut);
     border: 1px solid var(--band-line); border-radius: 999px; padding: .3rem .8rem; }
-  .hero h1 { font-size: clamp(2.3rem, 9vw, 4.2rem); line-height: 1.02; letter-spacing: -.035em; margin: 1rem 0 1rem; }
-  .hero p.lead { font-size: 1.12rem; color: var(--band-mut); margin: 0 0 1.6rem; max-width: 32rem; }
+  .hero h1 { font-size: clamp(2rem, min(9vw, 11vh, 4.6vw + 1rem), 5rem); line-height: 1.02; letter-spacing: -.035em; margin: 1rem 0 1rem; }
+  .hero p.lead { font-size: 1.12rem; color: var(--band-mut); margin: 0 0 1.6rem; max-width: 36rem; }
   .hero .cta { display: flex; flex-wrap: wrap; gap: .7rem; }
   .facts { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin: 1.8rem 0 0; padding: 0; list-style: none; font-size: .9rem; color: var(--band-mut); }
   .facts li::before { content: "✓"; color: var(--on-band); font-weight: 800; margin-right: .45rem; }
   .phones { position: relative; display: flex; justify-content: center; align-items: flex-end; gap: 1rem; min-height: 22rem; }
-  .phone { width: min(15.5rem, 42vw); border-radius: 2rem; padding: .45rem; background: #1f1f1e; border: 1px solid #333331;
+  .phone { width: min(15.5rem, 42vw, 34vh); border-radius: 2rem; padding: .45rem; background: #1f1f1e; border: 1px solid #333331;
     box-shadow: 0 30px 60px -20px rgba(0,0,0,.6); flex: none; }
   .phone img { border-radius: 1.6rem; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; width: 100%; background: #fafaf9; }
   .phones .phone:first-child { transform: translateY(1.5rem); }
   .phones .phone:last-child { margin-bottom: -4rem; }
+  .phones .px3 { display: none; }
   .cap { text-align: center; font-size: .8rem; color: var(--band-mut); margin-top: .55rem; }
-  @media (min-width: 900px) {
-    .hero { padding-top: 4.5rem; }
-    .hero .wrap { grid-template-columns: 1.05fr 1fr; align-items: center; }
-    .phone { width: 15.5rem; }
+  /* Dua kolom di layar lebar, dan di layar mendatar (HP/tablet landscape) supaya mockup tidak jatuh jauh di bawah. */
+  @media (min-width: 900px), (min-width: 560px) and (orientation: landscape) {
+    .hero .wrap { grid-template-columns: 1.05fr 1fr; align-items: center; gap: 2rem; }
+    .phones { min-height: 0; padding-bottom: 2rem; }
+    .phones .phone:last-child { margin-bottom: 0; }
+    .phone { width: min(15.5rem, 20vw, 36vh); }
+  }
+  @media (min-width: 900px) { .hero { padding-top: 4.5rem; } }
+  /* Layar lebar: tiga layar app, ukurannya mengikuti lebar dan tinggi layar. */
+  @media (min-width: 1200px) and (orientation: landscape) {
+    .hero .wrap { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 3rem; }
+    .phones .px3 { display: block; }
+    .phones { gap: 1.25rem; }
+    .phone { width: min(18rem, 12.5vw, 44vh); }
+    .phones .phone { transform: none; margin-bottom: 0 !important; }
+    .phones > div:nth-child(2) { transform: translateY(-1.5rem); }
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .hero { padding-top: 1.5rem; }
+    .hero p.lead { font-size: 1rem; margin-bottom: 1rem; }
+    .facts { margin-top: 1rem; }
   }
 
   /* Sections */
   section.sec { padding: 4.5rem 0; }
   .kicker { font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mut); margin: 0 0 .5rem; }
   h2 { font-size: clamp(1.7rem, 5.5vw, 2.6rem); line-height: 1.1; letter-spacing: -.025em; margin: 0 0 .8rem; }
-  .sec > .wrap > p.intro { max-width: 38rem; color: var(--mut); margin: 0 0 2rem; font-size: 1.05rem; }
-  .grid2 { display: grid; gap: 1rem; }
-  @media (min-width: 768px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+  .sec > .wrap > p.intro { max-width: 44rem; color: var(--mut); margin: 0 0 2rem; font-size: 1.05rem; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  @media (min-width: 768px) { .grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 1.4rem; }
   .card.ink { background: var(--band); color: var(--on-band); border-color: var(--band); }
   .card.ink .mut { color: var(--band-mut); }
@@ -123,7 +146,7 @@
     background: var(--ink); color: var(--on-ink); font-weight: 800; margin-bottom: 1rem; }
   .steps h3 { font-size: 1.1rem; margin: 0 0 .35rem; }
   .steps p { margin: 0; color: var(--mut); font-size: .95rem; }
-  code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--soft); padding: .1rem .35rem; border-radius: .35rem; word-break: break-all; }
+  code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--soft); padding: .1rem .35rem; border-radius: .35rem; overflow-wrap: anywhere; }
 
   /* Privacy band */
   .priv { display: grid; gap: 1rem; margin-top: 2rem; }
@@ -134,7 +157,7 @@
   .band .kicker, .band p.intro { color: var(--band-mut); }
 
   /* Coaches */
-  .coaches { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); }
+  .coaches { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); }
   .coach { display: flex; align-items: center; gap: .9rem; text-decoration: none; padding: 1rem 1.1rem; }
   .coach .av { width: 3rem; height: 3rem; border-radius: 50%; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; font-weight: 800; flex: none; }
   .coach b { display: block; font-size: 1.05rem; line-height: 1.25; overflow-wrap: anywhere; }
@@ -143,8 +166,8 @@
   .coach:hover { border-color: var(--fg); }
 
   /* Masuk */
-  .login { display: grid; gap: 1.5rem; align-items: start; }
-  @media (min-width: 900px) { .login { grid-template-columns: 1fr 1fr; gap: 3rem; } }
+  .login { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+  @media (min-width: 900px) { .login { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3rem; } }
   label { display: block; font-weight: 600; font-size: .9rem; margin: .9rem 0 .35rem; }
   .row { display: flex; align-items: center; border: 1px solid var(--line); border-radius: .7rem; background: var(--bg); overflow: hidden; }
   .row span { padding: 0 .1rem 0 .8rem; color: var(--mut); white-space: nowrap; font-size: .95rem; }
@@ -154,7 +177,8 @@
   .err { color: var(--bad); font-size: .9rem; min-height: 1.3rem; margin: .6rem 0 0; }
 
   /* FAQ */
-  .faq { display: grid; gap: .6rem; max-width: 46rem; }
+  .faq { display: grid; gap: .6rem; align-items: start; }
+  @media (min-width: 1000px) { .faq { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .faq details { background: var(--card); border: 1px solid var(--line); border-radius: .9rem; padding: 0 1.1rem; }
   .faq summary { cursor: pointer; font-weight: 650; padding: 1rem 0; min-height: 2.75rem; list-style: none; display: flex; justify-content: space-between; gap: 1rem; }
   .faq summary::-webkit-details-marker { display: none; }
@@ -162,16 +186,37 @@
   .faq details[open] summary::after { content: "–"; }
   .faq details p { margin: 0 0 1rem; color: var(--mut); }
 
-  /* Pasang aplikasi */
-  .apps { display: grid; gap: 1rem; }
-  @media (min-width: 900px) { .apps { grid-template-columns: 1.1fr 1fr; } }
-  .dl { display: grid; gap: .6rem; margin-top: 1.1rem; }
-  .dl a { display: grid; grid-template-columns: 2.5rem 1fr auto; gap: .8rem; align-items: center; min-height: 3.6rem; padding: .7rem .9rem;
-    border: 1px solid var(--line); border-radius: .9rem; text-decoration: none; background: var(--bg); }
-  .dl a:hover { border-color: var(--fg); }
-  .dl b { display: block; line-height: 1.25; }
-  .dl small { color: var(--mut); font-size: .82rem; }
-  .dl .arr { width: 1.2rem; height: 1.2rem; color: var(--mut); }
+  /* Pasang aplikasi: empat kartu sejajar di layar lebar, dua di tablet, satu kolom di HP. */
+  .apps { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 560px) { .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* Gambar perangkat (laptop + HP) di samping kartu: tanpa bidang kosong. */
+  .apps-wrap { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); align-items: center; }
+  @media (min-width: 1100px) { .apps-wrap { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
+  .devices { position: relative; padding: 0 9% 1.5rem 0; max-width: 46rem; width: 100%; margin: 0 auto; }
+  .laptop .scr { border: .55rem solid #1f1f1e; border-bottom-width: .8rem; border-radius: 1rem 1rem 0 0; aspect-ratio: 16 / 10; overflow: hidden; background: #fafaf9; }
+  .laptop .scr img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+  .laptop .base { height: .85rem; margin: 0 -7%; border-radius: 0 0 1.2rem 1.2rem; background: linear-gradient(#e2e2de, #b4b4af); box-shadow: 0 18px 30px -18px rgba(0,0,0,.45); }
+  @media (prefers-color-scheme: dark) { .laptop .base { background: linear-gradient(#3a3a38, #222221); } }
+  .phone-s { position: absolute; right: 0; bottom: 0; width: 23%; padding: .3rem; border-radius: 1.3rem; background: #1f1f1e; border: 1px solid #333331; box-shadow: 0 20px 40px -16px rgba(0,0,0,.55); }
+  .phone-s img { border-radius: 1.05rem; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; width: 100%; }
+  .tile { min-height: 11rem !important; }
+  @media (max-width: 559px) {
+    .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    .apps .ink, .apps a.tile:last-child { grid-column: 1 / -1; }
+    .tile { min-height: 0 !important; padding: 1rem; }
+    .tile .ic { margin-bottom: .2rem; }
+    .tile .get { padding-top: .6rem; }
+  }
+  .tile { display: flex; flex-direction: column; gap: .35rem; text-decoration: none; min-height: 13rem; }
+  .tile .ic { margin-bottom: .6rem; }
+  .tile > b { font-size: 1.15rem; }
+  .tile small { color: var(--mut); font-size: .9rem; }
+  .card.ink.tile small { color: var(--band-mut); }
+  .tile .get, .tile .btn { margin-top: auto; }
+  .tile .get { display: inline-flex; align-items: center; gap: .45rem; font-weight: 650; padding-top: 1rem; }
+  .tile .get svg { width: 1.1rem; height: 1.1rem; }
+  a.tile:hover { border-color: var(--fg); }
+  .tile .note { margin-top: auto; padding-top: 1rem; }
   .note { font-size: .85rem; color: var(--mut); margin: 1rem 0 0; }
   .card.ink .note { color: var(--band-mut); }
   .card.ink .btn { background: var(--on-band); color: var(--band); border-color: var(--on-band); }
@@ -215,7 +260,7 @@
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#"><span class="logo" aria-hidden="true">X</span>XNK</a>
+    <a class="brand" href="#"><img class="logo" src="img/logo-64.png" alt="" width="64" height="64">XNK</a>
     <nav class="nav" aria-label="Menu">
       <a href="#fitur">Fitur</a><a href="#aplikasi">Aplikasi</a><a href="#cara-kerja">Cara kerja</a><a href="#coach">Coach</a><a href="#tanya">Tanya jawab</a>
     </nav>
@@ -245,6 +290,7 @@
       </div>
       <div class="phones" aria-hidden="true">
         <div><div class="phone"><img src="img/klien-hari-ini.jpg" alt="" width="390" height="844" fetchpriority="high"></div><p class="cap">Portal klien</p></div>
+        <div class="px3"><div class="phone"><img src="img/klien-latihan.jpg" alt="" width="390" height="844" loading="lazy"></div><p class="cap">Latihan klien</p></div>
         <div><div class="phone"><img src="img/coach-dashboard.jpg" alt="" width="390" height="844"></div><p class="cap">Panel coach</p></div>
       </div>
     </div>
@@ -298,28 +344,27 @@
       <p class="kicker">Aplikasi</p>
       <h2>Pasang di HP atau komputer.</h2>
       <p class="intro">Buka XNK seperti aplikasi biasa, langsung dari layar utama atau desktop.</p>
+      <div class="apps-wrap">
+      <div class="devices" aria-hidden="true">
+        <div class="laptop"><div class="scr"><img src="img/klien-desktop.jpg" alt="" width="1920" height="1200" loading="lazy"></div><div class="base"></div></div>
+        <div class="phone-s"><img src="img/klien-latihan.jpg" alt="" width="390" height="844" loading="lazy"></div>
+      </div>
       <div class="apps">
-        <div class="card ink">
-          <h3>Pasang dari browser</h3>
-          <p class="mut" style="margin:0">Cara tercepat: ringan, selalu versi terbaru, tanpa unduh berkas.</p>
-          <div class="btns" style="margin-top:1.1rem">
-            <button class="btn" type="button" id="inst-btn" hidden><svg class="i" aria-hidden="true"><use href="#i-down"/></svg>Pasang aplikasi XNK</button>
-          </div>
-          <p class="note" id="inst-menu">Di Chrome atau Edge: buka menu <b>⋮</b> lalu pilih <b>Instal aplikasi</b> atau <b>Tambahkan ke layar utama</b>.</p>
-          <p class="note" id="inst-ios">Di iPhone atau iPad (Safari): ketuk tombol <b>Bagikan</b> lalu <b>Tambah ke Layar Utama</b>.</p>
+        <div class="card ink tile">
+          <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg></span>
+          <b>Pasang dari browser</b>
+          <small>Paling ringan, selalu versi terbaru. Chrome, Edge, Safari.</small>
+          <button class="btn" type="button" id="inst-btn" hidden>Pasang aplikasi XNK</button>
+          <p class="note" id="inst-menu">Buka menu <b>⋮</b> lalu pilih <b>Instal aplikasi</b> atau <b>Tambahkan ke layar utama</b>.</p>
+          <p class="note" id="inst-ios">Ketuk <b>Bagikan</b> lalu <b>Tambah ke Layar Utama</b>.</p>
           <p class="note" id="inst-done">XNK sudah terpasang di perangkat ini.</p>
         </div>
-        <div class="card">
-          <h3>Unduh aplikasi</h3>
-          <p class="mut" style="margin:0">Untuk yang lebih suka memasang berkas aplikasi.</p>
-          <div class="dl">
-            <a href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-Android.apk" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-phone"/></svg></span><span><b>Android</b><small>APK · Android 7 ke atas</small></span><svg class="i arr" aria-hidden="true"><use href="#i-down"/></svg></a>
-            <a href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-Windows.msi" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><span><b>Windows</b><small>Penginstal .msi · Windows 10 dan 11</small></span><svg class="i arr" aria-hidden="true"><use href="#i-down"/></svg></a>
-            <a href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-macOS.dmg" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><span><b>macOS</b><small>.dmg · Mac dengan Apple silicon</small></span><svg class="i arr" aria-hidden="true"><use href="#i-down"/></svg></a>
-          </div>
-          <p class="note">Belum ada di Play Store atau App Store. Android akan meminta izin memasang dari sumber ini; Windows bisa menampilkan peringatan SmartScreen (pilih <b>Info selengkapnya</b> lalu <b>Tetap jalankan</b>); di Mac, klik kanan aplikasinya lalu <b>Buka</b>.</p>
-        </div>
+        <a class="card tile" href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-Android.apk" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-phone"/></svg></span><b>Android</b><small>APK · Android 7 ke atas</small><span class="get"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg>Unduh</span></a>
+        <a class="card tile" href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-Windows.msi" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><b>Windows</b><small>Penginstal .msi · Windows 10 dan 11</small><span class="get"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg>Unduh</span></a>
+        <a class="card tile" href="https://github.com/xnkzzxd/XNK/releases/download/app-latest/XNK-macOS.dmg" rel="noopener"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><b>macOS</b><small>.dmg · Mac Apple silicon</small><span class="get"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg>Unduh</span></a>
       </div>
+      </div>
+      <p class="note" style="max-width:60rem">Belum ada di Play Store atau App Store. Android akan meminta izin memasang dari sumber ini; Windows bisa menampilkan peringatan SmartScreen (pilih <b>Info selengkapnya</b> lalu <b>Tetap jalankan</b>); di Mac, klik kanan aplikasinya lalu <b>Buka</b>.</p>
     </div>
   </section>
 
@@ -348,21 +393,16 @@
     </div>
   </section>
 
-  <section class="sec" id="coach" data-coaches>
-    <div class="wrap">
-      <p class="kicker">Coach di XNK</p>
-      <h2>Cari coach Anda.</h2>
-      <p class="intro">Klien coach di bawah ini bisa langsung membuka portalnya.</p>
-      <div class="coaches"><!--COACHES--></div>
-    </div>
-  </section>
-
-  <section class="sec" id="masuk" style="padding-top:1rem">
+  <section class="sec" id="masuk">
     <div class="wrap login">
       <div>
         <p class="kicker">Masuk</p>
         <h2 id="masuk-judul">Sudah punya coach di XNK?</h2>
-        <p class="mut" style="margin:0">Ketik nama coach Anda. Nama ini ada di link yang diberikan coach, misalnya <code>xnk.web.id/namacoach</code>.</p>
+        <p class="mut" style="margin:0">Pilih coach Anda di bawah, atau ketik namanya. Nama ini ada di link dari coach, misalnya <code>xnk.web.id/namacoach</code>.</p>
+        <div class="coach-list" id="coach" data-coaches>
+          <p class="kicker" style="margin-top:1.6rem">Coach di XNK</p>
+          <div class="coaches"><!--COACHES--></div>
+        </div><!--/coaches-->
       </div>
       <div class="card">
         <form id="f" novalidate aria-labelledby="masuk-judul">
@@ -403,7 +443,7 @@
 
 <footer class="band">
   <div class="wrap">
-    <a class="brand" href="#"><span class="logo" aria-hidden="true">X</span>XNK</a>
+    <a class="brand" href="#"><img class="logo" src="img/logo-64.png" alt="" width="64" height="64">XNK</a>
     <nav class="links" aria-label="Tautan bawah"><a href="#fitur">Fitur</a><a href="#aplikasi">Aplikasi</a><a href="#cara-kerja">Cara kerja</a><a href="#coach">Coach</a><a href="#masuk">Masuk</a><a href="#tanya">Tanya jawab</a></nav>
     <span>© XNK</span>
   </div>

@@ -21,6 +21,8 @@ const SHOTS = [
   ['klien-progres', '/demo/?klien', 'public-progress'],
   ['coach-dashboard', '/demo/', ''],
   ['coach-jadwal', '/demo/', 'calendar'],
+  // Tampilan desktop (portal klien ala Mac app) untuk gambar laptop di bagian Aplikasi.
+  ['klien-desktop', '/demo/?klien', '', 1280, 800],
 ];
 
 (async () => {
@@ -32,8 +34,10 @@ const SHOTS = [
   const base = 'http://127.0.0.1:' + server.address().port;
   const browser = await pw.chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   fs.mkdirSync(OUT, { recursive: true });
-  for (const [name, url, view] of SHOTS) {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'light' });
+  for (const [name, url, view, w, h] of SHOTS) {
+    const desk = !!w;
+    const ctx = await browser.newContext(desk ? { viewport: { width: w, height: h }, deviceScaleFactor: 1.5, colorScheme: 'light' }
+      : { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'light' });
     const page = await ctx.newPage();
     await page.goto(base + url);
     await page.waitForTimeout(4000);
@@ -50,22 +54,15 @@ const SHOTS = [
     console.log('  ' + name);
     await ctx.close();
   }
-  // Ikon aplikasi (PWA, desktop): X putih di kotak hitam; area aman 80 % supaya cocok untuk "maskable".
-  for (const px of [192, 512]) {
-    const c = await browser.newContext({ viewport: { width: px, height: px } });
-    const pg = await c.newPage();
-    await pg.setContent(`<body style="margin:0;width:${px}px;height:${px}px;background:#0b0b0b;display:grid;place-items:center;font-family:system-ui,'Segoe UI',Arial,sans-serif">
-      <b style="color:#fff;font-size:${Math.round(px * 0.52)}px;line-height:1;font-weight:800">X</b></body>`);
-    fs.writeFileSync(path.join(OUT, `icon-${px}.png`), await pg.screenshot({ type: 'png' }));
-    await c.close();
-  }
-  console.log('  ikon');
+  // Ikon aplikasi (PWA, favicon, header, desktop) dibuat dari logo.png di akar repo, di atas latar hitam:
+  //   magick logo.png -background "#0b0b0b" -flatten -resize 512x512 hub-site/img/icon-512.png   (juga 192, logo-64)
+  //   magick logo.png -background "#0b0b0b" -flatten -define icon:auto-resize=256,128,64,48,32,16 hub-site/desktop.ico
   // og.jpg 1200×630 untuk pratinjau link (WhatsApp, Facebook): dua layar di atas latar hitam.
   const ctx = await browser.newContext({ viewport: { width: 1200, height: 630 } });
   const page = await ctx.newPage();
   const img = n => 'data:image/jpeg;base64,' + fs.readFileSync(path.join(OUT, n + '.jpg')).toString('base64');
   await page.setContent(`<body style="margin:0;width:1200px;height:630px;background:#0b0b0b;color:#f5f5f3;font-family:system-ui,'Segoe UI',sans-serif;display:flex;align-items:center;overflow:hidden">
-    <div style="padding:0 0 0 80px;width:620px"><div style="width:72px;height:72px;border-radius:20px;background:#f5f5f3;color:#0b0b0b;display:grid;place-items:center;font-weight:800;font-size:40px">X</div>
+    <div style="padding:0 0 0 80px;width:620px"><img src="data:image/png;base64,${fs.readFileSync(path.join(OUT, 'icon-192.png')).toString('base64')}" style="width:88px;height:88px;border-radius:22px;box-shadow:inset 0 0 0 1px #2e2e2c">
     <h1 style="font-size:64px;line-height:1.02;letter-spacing:-2px;margin:36px 0 20px">Latihan, makan, dan jadwal PT di satu aplikasi.</h1>
     <p style="font-size:26px;color:#a3a39e;margin:0">xnk.web.id</p></div>
     <div style="display:flex;gap:24px;align-items:flex-start;margin-top:120px">${['klien-hari-ini', 'klien-latihan'].map((n, i) =>
