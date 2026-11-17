@@ -86,7 +86,8 @@
   /* Dua kolom di layar lebar, dan di layar mendatar (HP/tablet landscape) supaya mockup tidak jatuh jauh di bawah. */
   @media (min-width: 900px), (min-width: 560px) and (orientation: landscape) {
     .hero .wrap { grid-template-columns: 1.05fr 1fr; align-items: center; gap: 2rem; }
-    .phones { min-height: 0; padding-bottom: 2rem; }
+    .hero { padding-bottom: clamp(3rem, 9vh, 6rem); }
+    .phones { min-height: 0; padding-bottom: 0; }
     .phones .phone:last-child { margin-bottom: 0; }
     .phone { width: min(15.5rem, 20vw, 36vh); }
   }
