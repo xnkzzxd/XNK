@@ -63,6 +63,10 @@ const TEXT_SWAPS = [
 // Pengenal yang diganti di semua .gs (bukan deklarasinya, itu sudah dihapus di atas).
 const IDENT_SWAPS = [[/\bRMD_PORTAL_URL\b/g, '_siteUrl_()'], [/\bSHARE_QR_DEFAULT\b/g, '_siteUrl_()']];
 
+// Checkout Windows (core.autocrlf) memberi akhiran CRLF: dinormalkan ke LF supaya pola, pemeriksaan komentar dan
+// sidik build sama persis dengan CI (Linux). Apps Script sendiri menerima keduanya.
+const lf = s => String(s).replace(/\r\n?/g, '\n');
+
 function count(text, needle) { let n = 0, i = 0; while ((i = text.indexOf(needle, i)) !== -1) { n++; i += needle.length; } return n; }
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -99,7 +103,7 @@ function build() {
   for (const f of fs.readdirSync(SRC).sort()) {
     if (DROP_FILES.includes(f)) continue;
     if (!/\.(gs|html|json)$/.test(f)) continue;
-    files[f] = fs.readFileSync(path.join(SRC, f), 'utf8');
+    files[f] = lf(fs.readFileSync(path.join(SRC, f), 'utf8'));
   }
   for (const [f, find, repl, n] of TEXT_SWAPS) {
     if (!files[f]) throw new Error(`build-lib: ${f} tidak ada`);
@@ -131,7 +135,7 @@ function build() {
 
   for (const f of fs.readdirSync(EXTRA).sort()) {
     if (files[f]) throw new Error(`build-lib: ${f} bentrok dengan berkas produksi.`);
-    files[f] = fs.readFileSync(path.join(EXTRA, f), 'utf8');
+    files[f] = lf(fs.readFileSync(path.join(EXTRA, f), 'utf8'));
   }
   const tbl = libTable();
   files['LibTabel.gs'] = tbl.text;
@@ -159,7 +163,7 @@ function write(outDir, files) {
   for (const [f, t] of Object.entries(files)) fs.writeFileSync(path.join(outDir, f), t);
 }
 
-module.exports = { build, write, DEFAULT_OUT, TEXT_SWAPS, DROP_FILES };
+module.exports = { build, write, lf, DEFAULT_OUT, TEXT_SWAPS, DROP_FILES };
 
 if (require.main === module) {
   const out = process.argv[2] ? path.resolve(process.argv[2]) : DEFAULT_OUT;

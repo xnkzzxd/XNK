@@ -44,3 +44,27 @@ test('build tidak mengubah kode produksi', () => {
   const after = fs.readdirSync(SRC).map(f => f + ':' + fs.statSync(path.join(SRC, f)).mtimeMs).join('|');
   assert.equal(after, before);
 });
+
+test('checkout Windows (akhiran CRLF) menghasilkan Library yang sama persis', () => {
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-crlf-'));
+  const APPS = path.join(__dirname, '..', '..');
+  const copy = (rel, crlf) => {
+    const from = path.join(APPS, rel), to = path.join(tmp, rel);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    if (fs.statSync(from).isDirectory()) { for (const f of fs.readdirSync(from)) copy(path.join(rel, f), crlf); return; }
+    const t = fs.readFileSync(from, 'utf8');
+    fs.writeFileSync(to, crlf && /\.(gs|html|json)$/.test(from) ? t.replace(/\r?\n/g, '\r\n') : t);
+  };
+  try {
+    copy('pt-scheduler/src', true);
+    copy('pt-scheduler/tests/api-lists.js', false);
+    copy('xnk-library/lib-extra', true);
+    copy('xnk-library/tools/build-lib.js', false);
+    const winLib = require(path.join(tmp, 'xnk-library', 'tools', 'build-lib.js'));
+    assert.equal(winLib.build().hash, lib.build().hash);
+    assert.equal(lib.lf('a\r\nb\rc\n'), 'a\nb\nc\n');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
