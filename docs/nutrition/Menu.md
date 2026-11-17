@@ -16,6 +16,10 @@ Status: **dibangun** (T-1040…T-1046). Menu harian klien sekarang tersusun dari
 4. **Aturan longgar bertahap** (`_nutPackOk_`): level 0 semua aturan → 1 tanpa batas lauk mingguan → 2 tanpa anggaran dan batas mingguan paket/santan/goreng → 3 boleh lauk/asin yang sudah ada hari ini. Pantangan, paket yang sama di hari yang sama, dan santan/goreng maks 1 per hari **tidak pernah** dilonggarkan.
 5. **Portal**: tiap waktu makan menampilkan nama paket + label (santan, gorengan, manis, asin) dan tombol **Ganti menu** (`swapMyMenuMeal`: tiga paket lain dengan kalori dan protein yang sama; santan/gorengan dihindari bila waktu makan lain hari itu sudah memakainya). Ketuk satu makanan = tukar makanan itu saja (resep menampilkan bahannya). Pengganti hanya di layar; besok menu dihitung ulang dari server.
 
+## Gaya menu (pilihan klien)
+
+Klien memilih di kartu **Menu hari ini** (Rencana makan): **Campur** (bawaan, semua paket), **Jawa**, **Sunda** (paket khas daerah itu + paket umum seperti oatmeal, bakso, sop, bakar), atau **TKPI polos** (bahan TKPI saja tanpa nama masakan, susunan cadangan `_nutLooseMeal_`; "Ganti menu" tidak ada, tukar per bahan tetap bisa). Disimpan di MemberData kolom 48 `Gaya Menu` lewat member `setMyMenuStyle`; kosong = campur. Asal tiap paket ada di `NUT_PAKET_ASAL` (`Nutrisi.gs`); filter `_nutGayaOk_` di `_nutPackOk_` tidak pernah dilonggarkan, bila tak ada paket yang cocok dipakai susunan cadangan.
+
 ## Resep (dihitung dari bahan)
 
 Angka per satu porsi resep. P = protein, L = lemak, KH = karbohidrat (g). Sumber bahan: TKPI 2020 (kode 3 digit) dan panganku (kode 4 digit).

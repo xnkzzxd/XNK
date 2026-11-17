@@ -6,9 +6,22 @@
 // ============================================================
 
 // Kolom MemberData baru (kanan dari "Panduan" kolom W). Tanggal lahir = MEMBER_BIRTH_COL.
-const NUT_COLS = { tinggi: 24, jk: 25, goal: 26, pantangan: 27, anggaran: 28, aktif: 29, adjust: 30, umur: 31, umurTgl: 32 };
-const NUT_HEADERS = { 24: 'Tinggi (cm)', 25: 'Jenis Kelamin', 26: 'Goal Gizi', 27: 'Pantangan Makanan', 28: 'Anggaran Makan', 29: 'Gizi Aktif', 30: 'Penyesuaian Kalori', 31: 'Umur (tahun)', 32: 'Umur Dicatat' };
+const NUT_COLS = { tinggi: 24, jk: 25, goal: 26, pantangan: 27, anggaran: 28, aktif: 29, adjust: 30, umur: 31, umurTgl: 32, gaya: 48 };
+const NUT_HEADERS = { 24: 'Tinggi (cm)', 25: 'Jenis Kelamin', 26: 'Goal Gizi', 27: 'Pantangan Makanan', 28: 'Anggaran Makan', 29: 'Gizi Aktif', 30: 'Penyesuaian Kalori', 31: 'Umur (tahun)', 32: 'Umur Dicatat', 48: 'Gaya Menu' };
 const NUT_GOALS = ['turun', 'naik', 'jaga', 'recomp'];
+/**
+ * Gaya menu yang dipilih klien (kolom 48, kosong = campur, perilaku lama):
+ * campur = semua paket; jawa / sunda = paket khas daerah itu + paket umum; tkpi = bahan TKPI polos tanpa nama menu.
+ */
+const NUT_GAYA = ['campur', 'jawa', 'sunda', 'tkpi'];
+/** Asal paket yang khas satu daerah; paket yang tidak tercantum dianggap umum (masuk ke jawa maupun sunda). */
+const NUT_PAKET_ASAL = { S01: 'jawa', S08: 'jawa', S11: 'jawa', U02: 'jawa', U06: 'jawa', U13: 'jawa', U15: 'jawa', U18: 'jawa', U19: 'jawa', U20: 'jawa', U21: 'jawa', U29: 'jawa',
+  S03: 'sunda', S09: 'sunda', S12: 'sunda', U01: 'sunda', U05: 'sunda', U10: 'sunda', U14: 'sunda', U16: 'sunda', U22: 'sunda', U23: 'sunda', U25: 'sunda', U26: 'sunda', U28: 'sunda' };
+/** Murni: apakah paket boleh untuk gaya ini. */
+function _nutGayaOk_(pk, gaya) {
+  if (gaya === 'jawa' || gaya === 'sunda') { const a = NUT_PAKET_ASAL[pk.id]; return !a || a === gaya; }
+  return gaya !== 'tkpi';
+}
 
 /** Konstanta aturan (Rules.md). Ubah di sini dan di dokumen sekaligus. */
 const NUT = {
@@ -207,7 +220,8 @@ function _nutProfileFrom_(row) {
     adjust: Number(c('adjust')) || 0,
     birthDate: String(row[MEMBER_BIRTH_COL - 1] || ''),
     umur: c('umur') === '' || c('umur') == null ? '' : Number(c('umur')),
-    umurTgl: String(c('umurTgl') || '')
+    umurTgl: String(c('umurTgl') || ''),
+    gaya: NUT_GAYA.indexOf(String(c('gaya'))) !== -1 ? String(c('gaya')) : 'campur'
   };
 }
 
@@ -562,6 +576,7 @@ function _nutPackOk_(pk, day, week, opts, level) {
   const foods = pk.items.map(function(it) { return NUT_FOODS[it[0]]; });
   if (foods.some(function(f) { return !f || f.a.some(function(a) { return ban.indexOf(a) !== -1; }) || (ban.indexOf('laktosa') !== -1 && f.lak); })) return false;
   if (day.packs[pk.id]) return false;
+  if (!_nutGayaOk_(pk, opts.gaya)) return false;
   const has = function(t) { return pk.t.indexOf(t) !== -1; };
   if (has('santan') && day.santan >= NUT_LIMITS.santanDay) return false;
   if (has('goreng') && day.goreng >= NUT_LIMITS.gorengDay) return false;
@@ -608,6 +623,7 @@ function _nutPaketInfo_(pk) { return { id: pk.id, n: pk.n, w: pk.w, base: pk.bas
  * Bila di satu level tidak ada paket yang cocok, aturan dilonggarkan (_nutPackOk_ level 0 → 2).
  */
 function _nutPickPack_(key, kcal, prot, day, week, opts) {
+  if (opts.gaya === 'tkpi') return null;   // TKPI polos: tanpa paket, _nutMenu_ memakai susunan bahan
   const waktu = NUT_MEAL_WAKTU[key] || 'utama';
   const pool = (typeof NUT_PAKET === 'undefined' ? [] : NUT_PAKET).filter(function(pk) { return pk.w === waktu; })
     .map(function(pk) { return { pk: pk, h: _nutMix_(opts.seed + '|' + key + '|' + pk.id) }; })
@@ -802,6 +818,7 @@ function _nutSwap_(item, mealKey, opts, offset) {
  */
 function _nutMealSwap_(mealKey, currentId, kcal, prot, opts, offset) {
   opts = opts || {};
+  if (opts.gaya === 'tkpi') return [];
   const waktu = NUT_MEAL_WAKTU[mealKey] || 'utama', avoid = opts.avoid || [];
   const day = { santan: avoid.indexOf('santan') !== -1 ? NUT_LIMITS.santanDay : 0, goreng: avoid.indexOf('goreng') !== -1 ? NUT_LIMITS.gorengDay : 0, asin: 0, bases: {}, packs: {} };
   if (currentId) day.packs[currentId] = true;
@@ -858,7 +875,7 @@ function _nutMenuOptsFor_(c) {
   let hour;
   return function(iso) {
     if (iso === c.today && hour === undefined) hour = _nutSessionHour_(c.id, c.today);
-    return { pantangan: c.profile.pantangan, anggaran: c.profile.anggaran, seed: c.id + '|' + iso, ramadan: _rmdIsRamadan_(iso),
+    return { pantangan: c.profile.pantangan, anggaran: c.profile.anggaran, gaya: c.profile.gaya, seed: c.id + '|' + iso, ramadan: _rmdIsRamadan_(iso),
       sessionHour: iso === c.today ? hour : null };
   };
 }
@@ -871,11 +888,11 @@ function _nutritionFor_(row) {
   const p = c.profile;
   const out = {
     enabled: true, today: c.today,
-    profile: { tinggi: p.tinggi, jk: p.jk, goal: p.goal, pantangan: p.pantangan, anggaran: p.anggaran, birthDate: p.birthDate, umur: p.umur },
+    profile: { tinggi: p.tinggi, jk: p.jk, goal: p.goal, pantangan: p.pantangan, anggaran: p.anggaran, gaya: p.gaya, birthDate: p.birthDate, umur: p.umur },
     age: _nutAgeOf_(p, c.today),
     inputs: { kg: c.inputs.kg, kgDate: c.inputs.kgDate, stale: c.inputs.stale, waist: c.inputs.waist, sessionsPerWeek: c.inputs.sessionsPerWeek },
     bmi: c.bmi, whtr: c.whtr, target: _nutClientWarnings_(c.target), menu: null, log: _foodLogDay_(c.id, c.today),
-    options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD }
+    options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD, gaya: NUT_GAYA }
   };
   if (c.target.ok) out.menu = _nutPlanDays_(c.target, _nutMenuOptsFor_(c), c.today, 1)[0];
   return out;
@@ -918,6 +935,20 @@ function saveMyNutritionProfile(memberToken, data) {
   });
 }
 
+/** Klien memilih gaya menu: campur, jawa, sunda, atau tkpi (bahan TKPI polos tanpa nama menu). Hanya mengubah kolom gaya. */
+function setMyMenuStyle(memberToken, gaya) {
+  const found = requireMember_(memberToken);
+  if (!_nutEnabled_()) throw new Error('Fitur gizi sedang dimatikan.');
+  gaya = String(gaya == null ? '' : gaya).trim();
+  if (NUT_GAYA.indexOf(gaya) === -1) throw new Error('Gaya menu tidak dikenal.');
+  return _locked_(function() {
+    const m = _memberRowOrThrow_(found.row[0]);
+    _ensureNutritionColumns_(m.sheet);
+    m.sheet.getRange(m.rowNum, NUT_COLS.gaya).setNumberFormat('@').setValue(gaya);
+    return _bumpAfter_(m.row[0], _nutritionFor_(_memberRowOrThrow_(found.row[0]).row));
+  });
+}
+
 /** Daftar belanja 7 hari ke depan (dihitung hanya saat diminta). */
 function getMyShopping(memberToken) {
   const row = requireMember_(memberToken).row;
@@ -952,7 +983,7 @@ function swapMyMenuMeal(memberToken, mealKey, paketId, kal, protein, avoid, offs
   if (!(k >= 50 && k <= 3000) || !(p >= 0 && p <= 300)) throw new Error('Porsi tidak valid.');
   const pr = _nutProfileFrom_(row);
   const av = (Array.isArray(avoid) ? avoid : []).filter(function(t) { return t === 'santan' || t === 'goreng'; });
-  return _nutMealSwap_(mealKey, String(paketId || ''), k, p, { pantangan: pr.pantangan, anggaran: pr.anggaran, avoid: av }, Math.max(0, Math.min(50, Math.floor(Number(offset) || 0))));
+  return _nutMealSwap_(mealKey, String(paketId || ''), k, p, { pantangan: pr.pantangan, anggaran: pr.anggaran, gaya: pr.gaya, avoid: av }, Math.max(0, Math.min(50, Math.floor(Number(offset) || 0))));
 }
 
 // ------------------------------------------------------------
