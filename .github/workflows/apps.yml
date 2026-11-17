@@ -92,7 +92,7 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then ICON=apps-script/xnk-library/hub-site/desktop.ico; else ICON=xnk.icns; fi
           npx -y pake-cli@3.17.2 "$APP_URL" --name XNK --icon "$ICON" --width 1280 --height 840
-          f=$(find . -maxdepth 1 ( -name "XNK*.msi" -o -name "XNK*.dmg" ) | head -1)
+          f=$(find . -maxdepth 1 -name 'XNK*.msi' -o -maxdepth 1 -name 'XNK*.dmg' | head -1)
           [ -n "$f" ] || { echo "::error::Pake tidak menghasilkan berkas"; ls -la; exit 1; }
           mv "$f" "${{ matrix.out }}"
       - uses: actions/upload-artifact@v4
