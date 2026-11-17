@@ -5584,7 +5584,7 @@
     }
     $('exs-credit').textContent = exLib.credit || '';
   }
-  const exsKey = (id, n) => (id ? 'ex:' + id : 'nm:' + String(n || '').trim().toLowerCase());
+  const exsKey = (id, n) => (id ? 'ex:' + exCanon(id) : 'nm:' + String(n || '').trim().toLowerCase());
   function exsHasHist(key) { return !!(exs.data && (exs.data.days || []).some(d => d.items.some(it => it.key === key))); }
   function exsRow(id, n, sub, x) {
     const key = exsKey(id, n), on = exs.sel.some(s => exsKey(s.id, s.n) === key), hist = exsHasHist(key);
@@ -5675,7 +5675,9 @@
   // perubahan, satu simpan ke server saat Selesai, antrean kirim ulang bila sinyal hilang. Server memvalidasi semuanya.
   const wkAdmin = {};   // memberId → bagian workout (dari getClientBundle / simpan)
   window.wkSetAdmin = function (memberId, d) { wkAdmin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { workout: d }); if (progAdmin[memberId]) renderProgramAdmin(memberId); };
-  function wkKeyOf(e) { return e.exId ? 'ex:' + e.exId : 'nm:' + String(e.gerakan).trim().toLowerCase(); }
+  // T-1638: duplikat tersembunyi (item pustaka ber-`h`) memakai kunci riwayat gerakan utamanya, sama dengan server (_exResolve_).
+  function exCanon(id) { const x = id && exLib ? exLib.items.find(i => i.id === id) : null; return x && x.h ? x.h : id; }
+  function wkKeyOf(e) { return e.exId ? 'ex:' + exCanon(e.exId) : 'nm:' + String(e.gerakan).trim().toLowerCase(); }
   function wkInfo(id) { return exLib && id ? exLib.items.find(x => x.id === id) : null; }
   function wkIsoOf(iso) { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(iso)); } catch (e) { return pgToday(); } }
   function wkToday() { return wkIsoOf(Date.now()); }
