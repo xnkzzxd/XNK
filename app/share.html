@@ -2586,13 +2586,14 @@ html.kb-open .bk-foot { display: none; }
 .bk-dow, .bk-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
 .bk-dow { font-size: var(--fs-2xs); font-weight: 700; color: var(--fg-muted); margin: 8px 0 6px; }
 .bk-day { min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 50%; aspect-ratio: 1; margin: 0 auto; width: min(100%, 44px); font-size: var(--fs-md); font-weight: 700; color: var(--fg); border: 1.5px solid var(--border-strong); background: var(--surface); }
-.bk-day.off { border-color: transparent; background: transparent; color: var(--border-strong); font-weight: 500; }
+/* Hari/jam penuh atau lewat: pudar tapi tetap terbaca di terang dan gelap (dulu --border-strong: abu gelap di atas hitam). */
+.bk-day.off { border-color: transparent; background: transparent; color: color-mix(in srgb, var(--fg) 50%, transparent); font-weight: 500; }
 .bk-day.today { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--fg-muted); }
 .bk-day.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 800; }
 .bk-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .bk-slot { min-height: 52px; border-radius: var(--r-md); border: 1.5px solid var(--border-strong); background: var(--surface); color: var(--fg); font-size: var(--fs-lg); font-weight: 700; }
 .bk-slot.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 800; }
-.bk-slot.off { border-style: dashed; border-color: var(--border); background: transparent; color: var(--border-strong); text-decoration: line-through; }
+.bk-slot.off { border-style: dashed; border-color: var(--border-strong); background: transparent; color: color-mix(in srgb, var(--fg) 50%, transparent); font-weight: 600; text-decoration: line-through; }
 .bk-opt { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px; border-radius: var(--r-lg); border: 2px solid var(--border); background: var(--surface); color: var(--fg); text-align: left; width: 100%; }
 .bk-opt.on { border-color: var(--accent); }
 .bk-big { font-size: var(--fs-3xl); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; max-width: calc(100% - 70px); }
