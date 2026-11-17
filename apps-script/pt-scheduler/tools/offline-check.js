@@ -72,7 +72,7 @@ const bridge = (page, data) => page.evaluate(d => {
     // Now, not now + 1 h: after 23:00 WIB an hour ahead is tomorrow and the screen rightly hides it.
     const start = new Date().toISOString();
     await bridge(w.page, { xnk: 'offline-snap', snap: { mode: 'coach', sig: 'S1', at: Date.now(), today: [{ id: 'SCH-1', memberId: 'PT-A', name: 'Ani', start: start }],
-      clients: { 'PT-A': { name: 'Ani', routines: [{ hari: 'Hari A', items: [{ gerakan: 'Squat', exId: '' }] }], last: { 'nm:squat': { sets: [{ berat: 40, rep: 8 }] } }, measures: [{ tanggal: '2026-10-01', berat: 70 }] } } } });
+      clients: { 'PT-A': { name: 'Ani', routines: [{ hari: 'Hari A', items: [{ gerakan: 'Squat', exId: '' }, { gerakan: 'Leg Press 2 (45°)', exId: '1463' }] }], last: { 'nm:squat': { sets: [{ berat: 40, rep: 8 }] }, 'ex:0739': { sets: [{ berat: 90, rep: 10 }] } }, measures: [{ tanggal: '2026-10-01', berat: 70 }] } } } });
     await w.context.setOffline(true);
     await w.page.reload({ waitUntil: 'domcontentloaded' });
     await w.page.waitForTimeout(800);
@@ -81,6 +81,8 @@ const bridge = (page, data) => page.evaluate(d => {
     await w.page.click('#xoff [data-act="client"][data-id="PT-A"]');
     await w.page.click('#xoff [data-act="wl-start"][data-r="0"]');
     check((await w.page.inputValue('#xoff [data-set="0:0:berat"]')) === '40', 'workout: sets start from last time');
+    await w.page.waitForTimeout(600);
+    check((await w.page.inputValue('#xoff [data-set="1:0:berat"]')) === '90', 'workout: a hidden duplicate ID finds the last sets of its main exercise (T-1639)');
     await w.page.check('#xoff [data-set="0:0:done"]');
     await w.page.click('#xoff [data-act="wl-finish"]');
     await w.page.click('#xoff [data-tab="ukuran"]');
