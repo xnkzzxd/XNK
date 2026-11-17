@@ -73,6 +73,28 @@ test('saving a day again replaces merged manual rows instead of doubling them', 
   assert.equal(env.sheet('WorkoutLog').rows.length, 2, 'header + one set');
 });
 
+test('T-1638: a hidden duplicate ID shares history, records and day rewrites with its main exercise', () => {
+  const env = seededEnv();
+  const t = env.adminToken();
+  // 1463 = second GIF of Leg Press (45°), main ID 0739 (tools/exercise-dupes.json)
+  assert.equal(j(env.call('_exResolve_', '1463', 'Leg Press 2 (45°)', '', '')).exId, '0739');
+  assert.equal(env.call('_exKeyOf_', '1463', 'x'), env.call('_exKeyOf_', '0739', 'x'));
+  assert.equal(j(env.call('_exResolve_', '0739', 'Leg Press (45°)', '', '')).exId, '0739', 'a main ID is untouched');
+  assert.equal(j(env.call('_exResolve_', '0861', 'Seated Cable Row', '', '')).exId, '0861');
+  env.call('saveWorkoutLog', t, 'PT-A', '2026-10-01', '', [{ exId: '1463', gerakan: 'Leg Press 2 (45°)', bodyPart: 'upper legs', target: 'glutes', sets: [set(80, 10)] }]);
+  env.call('saveWorkoutLog', t, 'PT-A', '2026-10-04', '', [{ exId: '0739', gerakan: 'Leg Press (45°)', sets: [set(90, 10)] }]);
+  const r = j(env.call('getWorkoutLog', t, 'PT-A'));
+  const items = r.days.flatMap(d => d.items);
+  assert.equal(items.filter(i => i.key === 'ex:0739').length, 2, 'both days are one exercise');
+  assert.ok(!items.some(i => i.key === 'ex:1463'));
+  assert.equal(r.last['ex:0739'].sets[0].berat, 90);
+  assert.equal(String(env.sheet('WorkoutLog').rows[1][6]), '1463', 'the sheet keeps the original ID');
+  // saving the first day again with the main ID replaces the duplicate-ID row
+  const before = env.sheet('WorkoutLog').rows.length;
+  env.call('saveWorkoutLog', t, 'PT-A', '2026-10-01', '', [{ exId: '0739', gerakan: 'Leg Press (45°)', sets: [set(82.5, 10)] }]);
+  assert.equal(env.sheet('WorkoutLog').rows.length, before, 'no doubled rows');
+});
+
 test('aliases: coach maps a manual name to a library exercise or a muscle; delete removes it; validation', () => {
   const env = seededEnv();
   const t = env.adminToken();

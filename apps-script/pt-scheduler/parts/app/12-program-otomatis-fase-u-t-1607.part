@@ -15,7 +15,7 @@
   function pgDaysHtml(days) {
     return days.map(function (day) {
       return '<div class="prg-day stack" style="gap:4px"><p class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></p>' +
-        day.items.map(function (it) { return '<div class="prg-ex">' + exThumb(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + h(it.set) + '×' + h(it.rep) + '</span></span></div>'; }).join('') + '</div>';
+        day.items.map(function (it) { return '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + h(it.set) + '×' + h(it.rep) + '</span></span></div>'; }).join('') + '</div>';
     }).join('');
   }
   function autoProgCardHtml() {

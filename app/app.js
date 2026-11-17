@@ -173,7 +173,15 @@ const ST = () => W().stats || {};
 const PG = () => (more && more.program && !more.program.error ? more.program : {});
 const PR = () => (more && more.progress && !more.progress.error ? more.progress : null);
 const NUT = () => (more && more.nutrition && more.nutrition.enabled ? more.nutrition : null);
-const keyOf = it => it.exId ? 'ex:' + it.exId : 'nm:' + String(it.gerakan || '').trim().toLowerCase();
+// T-1639: duplikat tersembunyi di pustaka (item ber-`h`) memakai kunci riwayat gerakan utamanya, sama dengan server (_exResolve_).
+// Pustaka dimuat diam-diam sekali (service worker menyimpannya); sebelum itu kunci memakai ID apa adanya.
+let exCanonLoading = false;
+function exCanon(id) {
+  if (!lib.ex && !exCanonLoading) { exCanonLoading = true; fetch('../exercises/exercises.min.json').then(r => r.json()).then(d => { if (!lib.ex) { lib.ex = d.items; render(); } }).catch(() => {}); }
+  const x = (lib.ex || []).find(e => e.id === id);
+  return x && x.h ? x.h : id;
+}
+const keyOf = it => it.exId ? 'ex:' + exCanon(it.exId) : 'nm:' + String(it.gerakan || '').trim().toLowerCase();
 const e1rm = (w, r) => { w = num(w); r = num(r); return w > 0 && r >= 1 && r <= 12 ? Math.round(w * (1 + r / 30) * 10) / 10 : 0; };   // sama dengan _e1rm_ di server
 const isWarm = j => j === 'w';
 const firstName = () => String(kv('x_name', '')).trim().split(/\s+/)[0] || '';

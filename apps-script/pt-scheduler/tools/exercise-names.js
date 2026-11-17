@@ -8,6 +8,11 @@ const fs = require('fs');
 const path = require('path');
 
 const OVERRIDES = require('./exercise-names-override.json');
+// T-1635: GIF kedua untuk gerakan yang sama (sudut kamera / model / mesin lain) → id gerakan utamanya. Item itu diberi field `h`,
+// memakai nama gerakan utama dan disembunyikan dari pencarian; ID-nya tetap ada supaya program dan riwayat lama tetap tampil.
+const DUPES = require('./exercise-dupes.json');
+// GIF dataset yang tidak cocok dengan gerakannya: id → id gerakan yang GIF-nya dipakai (mis. Lat Pulldown memakai GIF pulldown duduk).
+const MEDIA = require('./exercise-media.json');
 
 // Label alat di akhir nama. Alat tanpa label (berat badan, kardio, dll.) tidak diberi kurung.
 const EQUIP_LABEL = {
@@ -26,7 +31,11 @@ const UPPER = { ez: 'EZ', rdl: 'RDL', jm: 'JM', ii: 'II', pov: 'POV' };
 const FIX = [
   [/в°/g, '°'], [/\bv\.\s*(\d)/g, '$1'], [/\bpush-up\b/g, 'push up'], [/\bpush-ups\b/g, 'push ups'], [/\bsit-up\b/g, 'sit up'],
   [/\bsit-ups\b/g, 'sit ups'], [/\bpull-up\b/g, 'pull up'], [/\bchin-up\b/g, 'chin up'], [/\blateral pulldown\b/g, 'lat pulldown'],
-  [/\bt bar\b/g, 't-bar'], [/\. /g, ' - '], [/\bexercise ball\b/g, 'stability ball'], [/\bv bar\b/g, 'v-bar'], [/\s+/g, ' '],
+  [/\bt bar\b/g, 't-bar'], [/\. /g, ' - '], [/\bexercise ball\b/g, 'stability ball'], [/\bv bar\b/g, 'v-bar'],
+  // T-1634: salah ketik dataset dan ejaan yang diseragamkan (Bicep Curl, Triceps, bentuk tunggal).
+  [/\brevers\b/g, 'reverse'], [/\bsitted\b/g, 'seated'], [/\bside bent\b/g, 'side bend'], [/\bbiceps curl\b/g, 'bicep curl'], [/\btricep\b/g, 'triceps'],
+  [/\bsz-bar\b/g, 'ez bar'], [/\bkickbacks\b/g, 'kickback'], [/\btwists\b/g, 'twist'], [/\bsquats\b/g, 'squat'], [/\bthrusts\b/g, 'thrust'], [/\bfarmers\b/g, "farmer's"],
+  [/\bskull crusher\b/g, 'skullcrusher'], [/\brope attachment\b/g, 'rope'], [/\bglute-ham\b/g, 'glute ham'], [/\bstep-up\b/g, 'step up'], [/\s+/g, ' '],
 ];
 
 function titleWord(w, i) {
@@ -51,6 +60,16 @@ function displayName(item) {
   // Isi kurung jadi " - keterangan" (gaya "Lat Pulldown - Close Grip (Cable)").
   const extra = [];
   s = s.replace(/\s*\(([^)]*)\)/g, function (_, x) { if (x.trim()) extra.push(x.trim()); return ''; }).trim();
+  // T-1634: keterangan di ekor nama ("… with rope", "… on stability ball") ikut jadi " - keterangan", tanpa kata "with" / "on"
+  // (kecuali posisi tubuh: "On Knees", "On Hip", "On Toes").
+  if (/(^| )lying on floor /.test(s)) s = 'floor ' + s.replace(' on floor ', ' ');      // "rope lying on floor triceps extension"
+  const tail = /^(.+?) (with|on) (.+)$/.exec(s);
+  if (tail && !/^(and|to)$/.test(tail[1].split(' ').pop())) { s = tail[1]; extra.unshift((tail[2] === 'on' ? 'on ' : '') + tail[3]); }
+  else if (/^.+ floor$/.test(s)) s = 'floor ' + s.replace(/ floor$/, '');       // "crunch floor" → "Floor Crunch"
+  for (let i = 0; i < extra.length; i++) {
+    extra[i] = extra[i].replace(/^with /, '').replace(/^(?:a|an|the) /, '');
+    if (!/^on (knees?|hips?|toes|heels)\b/.test(extra[i])) extra[i] = extra[i].replace(/^on /, '').replace(/^(?:a|an|the) /, '');
+  }
   // Sudut di depan pindah ke kurung: "45° leg press" → "Leg Press (45°)".
   const ang = /^(\d+°)\s+(.*)$/.exec(s);
   if (ang) s = ang[2];
@@ -63,18 +82,80 @@ function displayName(item) {
   return out.slice(0, 80);
 }
 
-/** Murni: beri nama semua item; nama kembar dibedakan dengan angka (2, 3, …) sesuai urutan id. */
+// T-1637 (aturan owner: nama polos dulu, rincian belakangan): nama dengan lima kata atau lebih dipendekkan. Kata posisi / sisi /
+// pegangan di depan pindah ke belakang sebagai " - rincian", jadi nama dimulai dengan gerakannya:
+// "Seated Reverse Grip One Arm Overhead Triceps Extension" → "Overhead Triceps Extension - Seated, Reverse Grip, One Arm".
+const MODS = ['side lying', 'reverse grip', 'reverse-grip', 'close grip', 'close-grip', 'wide grip', 'wide-grip', 'hammer grip', 'neutral grip', 'parallel grip',
+  'straight back', 'palms down', 'palms up', 'over bench', 'one arm', 'single arm', 'one leg', 'single leg', 'two arm', 'two arms', 'standing', 'seated', 'lying',
+  'kneeling', 'prone', 'supine', 'incline', 'decline', 'alternate', 'alternating', 'underhand', 'overhand', 'twisting', 'rope', 'bodyweight', 'floor'];
+const LONG_WORDS = 5;
+/** Murni: nama panjang → { n, dropStanding } (nama baru, dan versi tanpa "Standing" untuk dicoba bila bebas); null bila tidak berubah. */
+function shorten(name) {
+  const eq = (/ \([^)]*\)$/.exec(name) || [''])[0], body = name.slice(0, name.length - eq.length), parts = body.split(' - ');
+  let words = parts[0].split(' ');
+  if (words.length < LONG_WORDS) return null;
+  const mods = [];
+  for (;;) {
+    const low = words.join(' ').toLowerCase();
+    const m = MODS.find(function (k) { return low.indexOf(k + ' ') === 0; });
+    if (!m || words.length - m.split(' ').length < 2) break;
+    const n = m.split(' ').length;
+    // "Incline Bench Row" adalah nama gerakannya; hanya "Incline Bench Press" yang boleh jadi "Bench Press - Incline".
+    if (/^(incline|decline)$/.test(m) && /^bench$/i.test(words[n] || '') && !/^press$/i.test(words[n + 1] || '')) break;
+    mods.push(words.slice(0, n).join(' ')); words = words.slice(n);
+  }
+  if (!mods.length) return null;
+  if (/^to$/i.test(words[0]) && words.length > 2) words = words.slice(1);
+  const head = words.join(' ').replace(/^./, function (ch) { return ch.toUpperCase(); });
+  const make = function (list) { const tail = list.concat(parts.slice(1)); return head + (tail.length ? ' - ' + tail.join(', ') : '') + eq; };
+  // "Standing" dan "Bodyweight" tidak menambah arti bila namanya tetap unik tanpa keduanya.
+  const rest = mods.filter(function (x) { return !/^(standing|bodyweight)$/i.test(x); });
+  return { n: make(mods), short: rest.length < mods.length ? make(rest) : '' };
+}
+
+/** Murni: beri nama semua item. Duplikat (DUPES) memakai nama gerakan utama + field `h`; "… 2" tanpa versi pertama kehilangan
+ *  angkanya; nama kembar yang tersisa dibedakan dengan angka (2, 3, …) sesuai urutan id. */
 function applyNames(items) {
+  const NUM = / (\d+)(?=( \(| - |$))/;
   const out = items.map(function (x) {
-    const r = x.r || x.n;
-    return Object.assign({}, x, { r: r, n: displayName(Object.assign({}, x, { r: r })) });
+    const r = x.r || x.n, y = Object.assign({}, x, { r: r, n: displayName(Object.assign({}, x, { r: r })) });
+    delete y.h;
+    return y;
   });
+  const byId = {}; out.forEach(function (x) { byId[x.id] = x; });
+  const hidden = {}; Object.keys(DUPES).forEach(function (id) { if (byId[id] && byId[DUPES[id]] && !DUPES[DUPES[id]]) hidden[id] = DUPES[id]; });
+  const shown = out.filter(function (x) { return !hidden[x.id]; });
+  const count = function () { const c = {}; shown.forEach(function (x) { const k = x.n.toLowerCase(); c[k] = (c[k] || 0) + 1; }); return c; };
+  // "v. 2" di dataset tanpa versi pertama (atau versi pertamanya duplikat tersembunyi): angka dibuang bila namanya bebas.
+  let c = count();
+  shown.forEach(function (x) {
+    if (OVERRIDES[x.id] || !/\bv\. ?\d/.test(x.r) || !NUM.test(x.n)) return;
+    const base = x.n.replace(NUM, '');
+    if (!c[base.toLowerCase()]) { c[x.n.toLowerCase()]--; x.n = base; c[base.toLowerCase()] = 1; }
+  });
+  // Nama panjang (T-1637): pakai bentuk pendek bila namanya bebas; "Standing" dibuang bila itu pun bebas.
+  shown.forEach(function (x) {
+    if (OVERRIDES[x.id]) return;
+    const sh = shorten(x.n);
+    if (!sh) return;
+    const pick = sh.short && !c[sh.short.toLowerCase()] ? sh.short : (!c[sh.n.toLowerCase()] ? sh.n : '');
+    if (pick) { c[x.n.toLowerCase()]--; x.n = pick.slice(0, 80); c[x.n.toLowerCase()] = 1; }
+  });
+  // "Bodyweight …" di depan nama dibuang bila nama pendeknya bebas (alat berat badan memang tanpa kurung).
+  shown.forEach(function (x) {
+    if (OVERRIDES[x.id] || !/^Bodyweight /.test(x.n)) return;
+    const base = x.n.replace(/^Bodyweight /, '');
+    if (!c[base.toLowerCase()]) { c[x.n.toLowerCase()]--; x.n = base; c[base.toLowerCase()] = 1; }
+  });
+  const srcG = {}; items.forEach(function (x) { srcG[x.id] = x.g; });
+  Object.keys(MEDIA).forEach(function (id) { if (byId[id] && srcG[MEDIA[id]]) byId[id].g = srcG[MEDIA[id]]; });
   const seen = {};
-  out.slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; }).forEach(function (x) {
+  shown.slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; }).forEach(function (x) {
     const k = x.n.toLowerCase();
     seen[k] = (seen[k] || 0) + 1;
     if (seen[k] > 1) x.n = (x.n.replace(/ \(([^)]*)\)$/, '') + ' ' + seen[k] + (/ \(([^)]*)\)$/.test(x.n) ? x.n.match(/ \([^)]*\)$/)[0] : '')).slice(0, 80);
   });
+  Object.keys(hidden).forEach(function (id) { byId[id].h = hidden[id]; byId[id].n = byId[hidden[id]].n; });
   return out;
 }
 
@@ -91,10 +172,10 @@ if (require.main === module) {
 }
 /** Isi src/LatihanData.gs: daftar ringkas pustaka untuk server (cocokkan nama gerakan manual, otot). */
 function serverData(items) {
-  const rows = items.map(function (x) { return [x.id, x.n, x.r, x.b, x.t]; });
+  const rows = items.map(function (x) { return x.h ? [x.id, x.n, x.r, x.b, x.t, x.h] : [x.id, x.n, x.r, x.b, x.t]; });
   return '// GENERATED by tools/exercise-names.js from exercises/exercises.min.json. Do not edit by hand.\n' +
-    '// [id, nama tampilan, nama mentah, bagian tubuh, otot target] per gerakan pustaka (Fase U, T-1603).\n' +
+    '// [id, nama tampilan, nama mentah, bagian tubuh, otot target, (id gerakan utama bila duplikat)] per gerakan pustaka (Fase U, T-1603).\n' +
     'const EX_LIB_ = ' + JSON.stringify(rows) + ';\n';
 }
 
-module.exports = { displayName, applyNames, serverData, EQUIP_LABEL };
+module.exports = { displayName, applyNames, shorten, serverData, EQUIP_LABEL, DUPES, MEDIA };

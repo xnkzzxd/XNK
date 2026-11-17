@@ -38,7 +38,8 @@ function _exLibIdx_() {
   if (_exLibIndex_) return _exLibIndex_;
   const byKey = {}, meta = {};
   (typeof EX_LIB_ === 'undefined' ? [] : EX_LIB_).forEach(function(x) {
-    meta[x[0]] = { n: x[1], b: x[3], t: x[4] };
+    meta[x[0]] = { n: x[1], b: x[3], t: x[4], h: x[5] || '' };
+    if (x[5]) return;   // T-1635: duplikat tersembunyi memakai nama gerakan utamanya; nama itu tetap milik gerakan utama
     [x[1], x[2]].forEach(function(nm) {
       const k = _exNorm_(nm);
       if (!k) return;
@@ -115,6 +116,9 @@ function _exResolve_(exId, gerakan, bodyPart, target) {
       src = 'alias';
     }
   }
+  // T-1638: GIF kedua untuk gerakan yang sama (duplikat tersembunyi) memakai Exercise ID gerakan utamanya, jadi riwayat,
+  // rekor dan saran beban menyatu. Hanya saat baca; baris sheet tetap menyimpan ID aslinya.
+  if (id && idx.meta[id] && idx.meta[id].h && idx.meta[idx.meta[id].h]) id = idx.meta[id].h;
   const m = id ? idx.meta[id] : null;
   if (m) { if (!bp) bp = m.b; if (!tg) tg = m.t; }
   if (!bp || !tg) {
@@ -129,7 +133,8 @@ function _exKeyOf_(exId, gerakan) { return _workoutKey_(_exResolve_(exId, geraka
 
 /** Salinan baris WorkoutLog dengan Exercise ID / Body Part / Target terisi (G, I, J). Baris sheet tidak diubah. */
 function _exResolveRow_(r) {
-  if (String(r[6] || '').trim() && String(r[8] || '') && String(r[9] || '')) return r;
+  const rid = String(r[6] || '').trim();
+  if (rid && String(r[8] || '') && String(r[9] || '') && !((_exLibIdx_().meta[rid] || {}).h)) return r;
   const res = _exResolve_(r[6], r[7], r[8], r[9]);
   const c = r.slice();
   c[6] = res.exId; c[8] = res.bodyPart; c[9] = res.target;
