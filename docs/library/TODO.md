@@ -16,3 +16,4 @@
 - [x] T-2213 Wizard step 4: pick the address name, save `SITE_URL = hub + slug`, copy the data to send to the owner; `wizard-check.js`.
 - [ ] T-2214 Owner: put `hub-repo/` into `xnk-template-site` (Claude), Pages + DNS + custom domain `xnk.web.id`, `contactUrl`.
 - [ ] T-2215 First coach `claudia` end to end on `xnk.web.id`.
+- [x] T-2216 Brand: visible "XNK" text (page title, login screen, WhatsApp "ini Coach XNK", calendar title, share-card watermark, "Member XNK", weekly report) now uses the coach's business name in the Library build (`window.brandName()` in the browser, `_brandName_()` on the server); `library-build.test.js` and `hub-check.js` fail on a leftover. Found by opening the live `xnk.web.id/claudia/klien/`: its title became "XNK Personal Training".

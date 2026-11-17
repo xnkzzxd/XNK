@@ -58,6 +58,40 @@ const TEXT_SWAPS = [
   ['App.html', "'Dibooking lewat book.xnkbooking.my.id. Ubah jadwal lewat portal.'", "'Dibooking lewat portal klien. Ubah jadwal lewat portal.'", 1],
   ['App.html', "'Dibooking lewat book.xnkbooking.my.id'", "'Dibooking lewat portal klien'", 1],
   ['App.html', "'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.'", "'portal klien (Beranda → Form kesehatan) sebelum sesi ya.'", 1],
+  // Merek: setiap teks yang tampil ke coach atau klien memakai nama usaha coach itu, bukan "XNK".
+  // Browser: window.brandName() (config.js "brand", atau judul halaman yang diisi server) dibuat di awal App.html.
+  ['App.html', "(function () {\n  'use strict';\n", `(function () {
+  'use strict';
+  // Library: nama usaha coach, dari config.js ("brand") atau judul halaman yang diisi server; menggantikan "XNK" di semua teks.
+  window.XNK_BRAND = String((window.XNK_CONFIG && window.XNK_CONFIG.brand) || document.title || '').trim() || 'Personal Training';
+  window.brandName = function () { return window.XNK_BRAND; };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-brand]'), function (el) { el.textContent = window.XNK_BRAND; });
+`, 1],
+  ['App.html', "+ 'XNK Personal Training';", "+ window.brandName();", 1],
+  ['App.html', "TITLES[viewId] || 'XNK';", "TITLES[viewId] || window.brandName();", 1],
+  ['App.html', "', ini Coach XNK. Mengingatkan", "', ini Coach ' + window.brandName() + '. Mengingatkan", 1],
+  ['App.html', "', ini Coach XNK. ';", "', ini Coach ' + window.brandName() + '. ';", 1],
+  ['App.html', '<p class="eyebrow">XNK Personal Training</p>', `<p class="eyebrow">' + h(window.brandName()) + '</p>`, 1],
+  ['App.html', '<b>XNK Personal Training</b>', `<b>' + h(window.brandName()) + '</b>`, 1],
+  ['App.html', "'Sesi latihan XNK' +", "'Sesi latihan ' + window.brandName() +", 1],
+  ['App.html', "' di XNK Personal Training! 💪'", "' di ' + window.brandName() + '! 💪'", 1],
+  ['App.html', "'Member XNK'", "'Member'", 5],
+  ['App.html', ' Menu XNK: santan', ' Menu: santan', 1],
+  ['App.html', "' (member XNK).'", "' (member ' + window.brandName() + ').'", 1],
+  ['App.html', ": 'XNK') + '\">';", ": window.brandName().toUpperCase().slice(0, 12)) + '\">';", 1],
+  ['Index.html', '    <p>XNK Personal Training</p>', '    <p data-brand>Personal Training</p>', 1],
+  ['Index.html', '<span class="brand-name">XNK</span>', '<span class="brand-name" data-brand>Personal Training</span>', 1],
+  ['Index.html', 'id="page-title">XNK</h1>', 'id="page-title" data-brand>Personal Training</h1>', 1],
+  ['Index.html', 'Pasang XNK di Layar Utama', 'Pasang aplikasi ini di Layar Utama', 1],
+  ['Index.html', '<b>XNK Personal Training</b>', '<b data-brand>Personal Training</b>', 1],
+  ['Bagikan.html', "ctx.measureText('XNK')", "ctx.measureText(window.brandName().slice(0, 16))", 1],
+  ['Bagikan.html', "Tx(ctx, 'XNK', x0", "Tx(ctx, window.brandName().slice(0, 16), x0", 1],
+  ['Bagikan.html', "'Logo XNK'", "'Logo'", 1],
+  ['Kode.gs', "di XNK untuk paket '", "di ' + _brandName_() + ' untuk paket '", 1],
+  ['Kode.gs', '<h3>📊 Laporan Mingguan XNK Gym OS</h3>', '<h3>📊 Laporan Mingguan ${_brandName_()}</h3>', 1],
+  ['Kode.gs', '"📊 Laporan Mingguan XNK Gym OS - "', '"📊 Laporan Mingguan " + _brandName_() + " - "', 1],
+  ['Kode.gs', "'Klien XNK'", "'Klien'", 2],
+  ['Level.gs', "' minggu bersama XNK'", "' minggu bersama kami'", 1],
   // Cadangan alamat QR kartu bila server tidak mengirim alamat: kosong (QR tidak digambar), bukan situs XNK.
   ['App.html', "setState.data.shareQrDefault || 'https://xnkbooking.my.id'", "setState.data.shareQrDefault || ''", 2],
   ['Bagikan.html', "(st.src.share && st.src.share.qrUrl) || 'https://xnkbooking.my.id'", "(st.src.share && st.src.share.qrUrl) || ''", 1],
