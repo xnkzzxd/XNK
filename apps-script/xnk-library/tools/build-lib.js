@@ -57,6 +57,11 @@ const TEXT_SWAPS = [
   // Teks di halaman (App.html)
   ['App.html', "'Dibooking lewat book.xnkbooking.my.id. Ubah jadwal lewat portal.'", "'Dibooking lewat portal klien. Ubah jadwal lewat portal.'", 1],
   ['App.html', "'Dibooking lewat book.xnkbooking.my.id'", "'Dibooking lewat portal klien'", 1],
+  ['App.html', "'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.'", "'portal klien (Beranda → Form kesehatan) sebelum sesi ya.'", 1],
+  // Cadangan alamat QR kartu bila server tidak mengirim alamat: kosong (QR tidak digambar), bukan situs XNK.
+  ['App.html', "setState.data.shareQrDefault || 'https://xnkbooking.my.id'", "setState.data.shareQrDefault || ''", 2],
+  ['Bagikan.html', "(st.src.share && st.src.share.qrUrl) || 'https://xnkbooking.my.id'", "(st.src.share && st.src.share.qrUrl) || ''", 1],
+  ['Bagikan.html', 'if (qr) drawQr(ctx, o.qrUrl,', 'if (qr && o.qrUrl) drawQr(ctx, o.qrUrl,', 1],
   ['App.html', 'Gabung grup kelas privatku di XNK (', 'Gabung grup kelas privatku (', 1],
   ['App.html', 'Ambil paketnya di https://book.xnkbooking.my.id lalu', 'Ambil paketnya di portal klien lalu', 1],
 ];

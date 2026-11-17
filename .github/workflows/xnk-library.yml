@@ -58,6 +58,10 @@ jobs:
           version: '1.63.0'
       - name: Situs coach di browser
         run: node apps-script/xnk-library/tools/tenant-check.js
+      - name: Situs hub (dua coach, satu domain) di browser
+        run: node apps-script/xnk-library/tools/hub-check.js
+      - name: Wizard setup di spreadsheet (browser)
+        run: node apps-script/xnk-library/tools/wizard-check.js
 
   create:
     needs: check

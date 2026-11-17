@@ -39,6 +39,8 @@ test('penghubung tidak berisi logika aplikasi', () => {
   }
   assert.throws(() => bridge.build({ libId: 'a b' }), /lib-id/);
   assert.throws(() => bridge.build({ libId: 'abc', libVersion: 'x' }), /angka/);
+  assert.throws(() => bridge.build({ libId: 'abc', hubUrl: 'http://xnk.web.id' }), /alamat hub/);
+  assert.throws(() => bridge.build({ libId: 'abc', hubUrl: 'https://x.y/z' }), /alamat hub/);
 });
 
 /** Satu spreadsheet dengan kode penghubung di vm sendiri; XNK = fungsi publik Library (tanpa akhiran _). */
@@ -93,7 +95,7 @@ test('dua spreadsheet dengan penghubung, satu Library: setup, login, halaman web
   const h = A.call('validateConfiguration');
   assert.equal(h.setup.brand, 'Gym Andi');
   assert.equal(h.triggers.runReminderTick, 1);
-  assert.equal(A.call('setupGetState').templateSite, 'https://github.com/xnkzzxd/xnk-template-site');
+  assert.equal(A.call('setupGetState').hubUrl, 'https://xnk.web.id');
   assert.deepEqual(env.props, {}, 'laci Library tetap kosong');
   assert.deepEqual(env.cache, {});
 });

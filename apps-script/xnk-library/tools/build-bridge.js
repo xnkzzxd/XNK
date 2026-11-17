@@ -11,7 +11,7 @@ const HERE = path.join(__dirname, '..');
 const PROD = path.join(HERE, '..', 'pt-scheduler');
 const BRIDGE_SRC = path.join(HERE, 'bridge-src');
 const DEFAULT_OUT = path.join(HERE, 'dist', 'bridge');
-const DEFAULT_TEMPLATE_SITE = 'https://github.com/xnkzzxd/xnk-template-site';
+const DEFAULT_HUB_URL = 'https://xnk.web.id';
 
 function apiNames() {
   const L = require(path.join(PROD, 'tests', 'api-lists.js'));
@@ -34,8 +34,8 @@ function build(opts) {
   const libVersion = String(opts.libVersion || '1');
   if (!/^[\w-]+$/.test(libId)) throw new Error('build-bridge: --lib-id tidak valid');
   if (!/^\d+$/.test(libVersion)) throw new Error('build-bridge: --lib-version harus angka');
-  const site = opts.templateSite || process.env.XNK_TEMPLATE_SITE || DEFAULT_TEMPLATE_SITE;
-  if (!/^https:\/\/[^\s'"\\]+$/.test(site)) throw new Error('build-bridge: alamat template situs tidak valid');
+  const hubUrl = (opts.hubUrl || process.env.XNK_HUB_URL || DEFAULT_HUB_URL).replace(/\/+$/, '');
+  if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}$/.test(hubUrl)) throw new Error('build-bridge: alamat hub tidak valid (contoh: https://xnk.web.id)');
 
   const files = {};
   for (const f of fs.readdirSync(BRIDGE_SRC).sort()) files[f] = fs.readFileSync(path.join(BRIDGE_SRC, f), 'utf8');
@@ -49,7 +49,7 @@ function build(opts) {
 // Satu pembungkus per fungsi server: halaman web (google.script.run) dan trigger memanggil Library dengan
 // layanan milik spreadsheet ini (ctx_). Tidak ada logika aplikasi di sini; setiap fungsi tetap menjaga
 // dirinya sendiri di Library (token admin/klien, pemilik).
-var XNK_TEMPLATE_SITE = ${JSON.stringify(site)};
+var XNK_HUB_URL = ${JSON.stringify(hubUrl)};
 var XNK_LIB_VERSION_PINNED = ${JSON.stringify(libVersion)};
 ${names.map(n => `function ${n}() { return XNK.run(ctx_(), ${JSON.stringify(n)}, Array.prototype.slice.call(arguments)); }`).join('\n')}
 `;

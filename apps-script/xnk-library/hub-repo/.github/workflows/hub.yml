@@ -1,0 +1,99 @@
+name: Hub XNK
+
+# Satu workflow untuk seluruh situs xnk.web.id:
+#  - Run workflow → aksi "simpan" (tambah atau ubah coach: slug, nama usaha, link /exec) atau "hapus" (slug saja).
+#    Isian diperiksa penuh; bila ada yang salah, workflow berhenti dengan pesan Indonesia dan situs lama tetap tayang.
+#  - Run workflow → aksi "bangun": bangun ulang tanpa mengubah daftar.
+#  - Mengubah hub.json langsung di GitHub juga membangun ulang.
+#  - Setiap hari jam 03:17 WIB: dibangun dari kode XNK terbaru (perbaikan tampilan ikut masuk otomatis).
+# Halaman dibangun dari repo XNK yang publik (tanpa token). Data klien tidak pernah ada di sini: hanya daftar coach.
+on:
+  workflow_dispatch:
+    inputs:
+      aksi:
+        description: 'simpan = tambah/ubah coach · hapus = hapus coach · bangun = bangun ulang saja'
+        type: choice
+        options: [bangun, simpan, hapus]
+        default: bangun
+      slug:
+        description: 'Nama di alamat (mis. claudia): huruf kecil, angka, tanda hubung, 3-30 karakter'
+        required: false
+      brand:
+        description: 'Nama usaha (mis. Claudia Fit), hanya untuk "simpan"'
+        required: false
+      exec:
+        description: 'Link /exec dari spreadsheet coach itu, hanya untuk "simpan"'
+        required: false
+  push:
+    branches: [main]
+    paths: ['hub.json', '.github/workflows/hub.yml']
+  schedule:
+    - cron: '17 20 * * *'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: hub
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Ambil kode XNK terbaru
+        uses: actions/checkout@v4
+        with:
+          repository: xnkzzxd/XNK
+          path: _xnk
+
+      - name: Ubah daftar coach
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.aksi != 'bangun' }}
+        env:
+          IN_AKSI: ${{ inputs.aksi }}
+          IN_SLUG: ${{ inputs.slug }}
+          IN_BRAND: ${{ inputs.brand }}
+          IN_EXEC: ${{ inputs.exec }}
+        run: |
+          node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json "$IN_AKSI" "$IN_SLUG" "$IN_BRAND" "$IN_EXEC"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add hub.json
+          git commit -m "Hub: $IN_AKSI $IN_SLUG"
+          git push
+
+      - name: Bangun situs
+        run: node _xnk/apps-script/xnk-library/tools/build-hub.js _site --config hub.json
+
+      - name: Siapkan GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+
+      - name: Pages belum dinyalakan?
+        if: ${{ steps.pages.outcome == 'failure' }}
+        run: |
+          echo "::error title=GitHub Pages belum dinyalakan::Buka Settings → Pages → Source, pilih 'GitHub Actions', lalu jalankan workflow ini lagi."
+          exit 1
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
