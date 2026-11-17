@@ -3,7 +3,7 @@
 //   node apps-script/xnk-library/tools/build-hub.js <outDir> --config hub.json
 // hub.json: { "contactUrl": "https://wa.me/…" (opsional), "coaches": [ { "slug": "claudia", "brand": "Claudia Fit", "exec": "https://script.google.com/macros/s/…/exec" } ] }
 // Hasil:
-//   /index.html, /404.html           landing XNK (hub-site/)
+//   /index.html, /404.html, /img/    landing XNK (hub-site/; gambar dari tools/hub-shots.js)
 //   /<slug>/                         panel coach (PIN)
 //   /<slug>/klien/                   portal klien
 // Setiap coach memakai halaman yang sama dengan xnk.my.id (build-tenant.js → build-static.js produksi), memanggil
@@ -19,9 +19,10 @@ const SITE = path.join(HERE, 'hub-site');
 
 // Kata yang dipakai sistem atau mudah menipu; dan nama berkas di akar situs.
 const RESERVED = ['admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
-  'index', '404', 'cname', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
+  'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 const sha = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 10);
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** Pesan galat (Indonesia) untuk satu slug, atau '' bila boleh dipakai. */
 function slugError(slug) {
@@ -91,10 +92,22 @@ function build(cfg) {
   }
   let landing = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
   const contact = hub.contact
-    ? `<a class="btn ghost" href="${hub.contact.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" rel="noopener">Hubungi XNK</a>`
+    ? `<a class="btn ghost" href="${esc(hub.contact)}" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg>Hubungi XNK</a>`
     : '';
   if (!landing.includes('<!--CONTACT-->')) throw new Error('build-hub: <!--CONTACT--> tidak ada di hub-site/index.html');
-  files['index.html'] = landing.replace('<!--CONTACT-->', contact);
+  landing = landing.split('<!--CONTACT-->').join(contact);
+  // Daftar coach: kosong = seluruh bagian "Coach di XNK" (dan tautannya) hilang.
+  const sec = /\r?\n  <section class="sec" id="coach" data-coaches>[\s\S]*?<\/section>(?=\r?\n)/;
+  if (!sec.test(landing) || !landing.includes('<!--COACHES-->')) throw new Error('build-hub: bagian data-coaches / <!--COACHES--> tidak ada di hub-site/index.html');
+  if (hub.coaches.length) {
+    landing = landing.replace('<!--COACHES-->', hub.coaches.map(c =>
+      `<a class="card coach" href="/${c.slug}/klien/"><span class="av" aria-hidden="true">${esc(c.brand.trim().charAt(0).toUpperCase() || '?')}</span>` +
+      `<div><b>${esc(c.brand)}</b><span>xnk.web.id/${c.slug}</span></div><svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a>`).join(''));
+  } else {
+    landing = landing.replace(sec, '').split('<a href="#coach">Coach</a>').join('').replace('Bisa juga dicari di daftar coach di atas, atau tanyakan', 'Bisa juga ditanyakan');
+  }
+  files['index.html'] = landing;
+  for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
   files['404.html'] = fs.readFileSync(path.join(SITE, '404.html'), 'utf8');
   files['.nojekyll'] = '';
   return { files, coaches: hub.coaches };

@@ -36,7 +36,7 @@ function backend() {
 
 // Seperti GitHub Pages: /nama diarahkan ke /nama/, alamat yang tidak ada menjawab 404.html.
 function serve(files) {
-  const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+  const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg' };
   const server = http.createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\//, '');
     if (p !== '' && !p.endsWith('/') && !path.extname(p) && files[p + '/index.html'] != null) { res.writeHead(301, { Location: '/' + p + '/' }); return res.end(); }
@@ -106,6 +106,13 @@ async function panelLogin(page, pin) {
       check((await page.title()) === 'XNK', 'judul landing = XNK');
       check(await page.isVisible('#slug'), 'ada isian nama coach');
       check((await page.textContent('body')).includes('Hubungi XNK'), 'tombol kontak tampil (kontak diisi)');
+      check(await page.locator('a.coach[href="/claudia/klien/"]').count() === 1, 'daftar coach menautkan portal /claudia/klien/');
+      check(await page.evaluate(() => [...document.querySelectorAll('.phones img')].every(i => i.naturalWidth > 0)), 'gambar hero termuat');
+      for (const w of [390, 1440]) {
+        await page.setViewportSize({ width: w, height: 844 });
+        check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `landing tanpa scroll ke samping di ${w} px`);
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
       await page.fill('#slug', 'a b!');
       await page.click('button[data-to="klien"]');
       check(((await page.textContent('#err')) || '').includes('tidak valid'), 'nama tidak valid → pesan, tidak pindah halaman');

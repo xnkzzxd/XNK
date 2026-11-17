@@ -56,7 +56,26 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
   assert.ok(!hub.build({ coaches: [] }).files['index.html'].includes('Hubungi XNK'), 'tanpa kontak, tombolnya tidak ada');
   assert.ok(!files['index.html'].includes('<!--CONTACT-->'));
   // Tanpa coach pun situs jadi (hanya landing).
-  assert.deepEqual(Object.keys(hub.build({ coaches: [] }).files).sort(), ['.nojekyll', '404.html', 'index.html']);
+  const empty = hub.build({ coaches: [] }).files;
+  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', 'index.html']);
+  assert.ok(Buffer.isBuffer(empty['img/og.jpg']) && empty['img/og.jpg'].length > 1000, 'gambar landing ikut dibangun');
+});
+
+test('landing: daftar coach dari hub.json, nama di-escape, gambar yang dirujuk ada', () => {
+  const { files } = hub.build(CFG);
+  const html = files['index.html'];
+  assert.match(html, /href="\/claudia\/klien\/"[\s\S]*Claudia Fit/);
+  assert.match(html, /href="\/claudia-2\/klien\/"/);
+  assert.ok(!html.includes('<!--COACHES-->') && !html.includes('<!--CONTACT-->'));
+  assert.equal(html.split('Hubungi XNK').length - 1, 2, 'kontak di hero dan di penutup');
+  for (const m of html.matchAll(/(?:src|content)="(?:https:\/\/xnk\.web\.id\/)?(img\/[^"]+)"/g)) assert.ok(m[1] in files, m[1]);
+  // Form masuk tetap sama (hub-check dan link lama bergantung padanya).
+  for (const id of ['id="f"', 'id="slug"', 'id="err"', 'data-to="klien"', 'data-to="panel"', '<title>XNK</title>']) assert.ok(html.includes(id), id);
+  const evil = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['index.html'];
+  assert.ok(!evil.includes('<img src=x') && evil.includes('&lt;img src=x'), 'nama usaha di-escape');
+  const none = hub.build({ coaches: [] }).files['index.html'];
+  assert.ok(!none.includes('data-coaches') && !none.includes('href="#coach"'), 'tanpa coach, bagian dan tautannya hilang');
+  assert.match(hub.slugError('img'), /dipakai sistem/);
 });
 
 test('build: penyimpanan per slug dipasang inline sebelum skrip apa pun, service worker punya awalan dan hash unik', () => {
