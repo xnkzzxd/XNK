@@ -2096,8 +2096,13 @@ async function contrastReport(page) {
       await page.waitForTimeout(1200);
       const paneInfo = id => page.evaluate(i => { const w = document.getElementById(i); return { txt: w.textContent, ring: !!w.querySelector('.ring-wrap'), bars: w.querySelectorAll('.meter').length, meals: w.querySelectorAll('.meal-blk .list-item').length, days: w.querySelectorAll('.meal-day').length, over: w.scrollWidth - w.clientWidth, small: Array.from(w.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !b.classList.contains('btn-sm'); }).length }; }, id);
       const fd = await paneInfo('pub-makan-pane');
-      check(fd.ring && fd.bars === 3 && fd.days === 4 && /Buku harian/.test(fd.txt) && !/Menu hari ini/.test(fd.txt) && fd.over <= 1, 'makan: the tab shows the calorie ring, three macro bars and a diary with four meals, no sideways scroll ' + JSON.stringify({ bars: fd.bars, days: fd.days, over: fd.over }));
+      check(fd.ring && fd.bars === 3 && fd.days === 4 && /Buku harian/.test(fd.txt) && /Menu hari ini/.test(fd.txt) && fd.over <= 1, 'makan: the tab shows the calorie ring, three macro bars, today\'s recommended menu and a diary with four meals, no sideways scroll ' + JSON.stringify({ bars: fd.bars, days: fd.days, over: fd.over }));
       check(/Saran menu:/.test(fd.txt), 'makan: an empty meal shows the suggested menu');
+      await page.click('#pub-makan-pane [aria-label="Pengaturan menu"]');
+      await page.waitForTimeout(400);
+      check(await visible(page, '#modal-nut-gaya') && (await page.locator('#nut-gaya-list .list-item').count()) === 4, 'makan: the menu settings sheet offers four menu styles');
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(400);
       check(fd.small === 0, 'makan: tap targets are at least 44 px ' + fd.small);
       await page.click('#makan-plan-link');
       await page.waitForTimeout(500);
