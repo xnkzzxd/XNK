@@ -108,6 +108,11 @@ function build(cfg) {
   }
   files['index.html'] = landing;
   for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
+  // Bisa dipasang (PWA): manifest + service worker yang hanya melayani halaman depan; nama cache ikut isi landing.
+  files['manifest.webmanifest'] = fs.readFileSync(path.join(SITE, 'manifest.webmanifest'), 'utf8');
+  const sw = fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8');
+  if (!sw.includes('__HASH__')) throw new Error('build-hub: __HASH__ tidak ada di hub-site/sw.js');
+  files['sw.js'] = sw.replace('__HASH__', sha(landing + files['manifest.webmanifest']));
   files['404.html'] = fs.readFileSync(path.join(SITE, '404.html'), 'utf8');
   files['.nojekyll'] = '';
   return { files, coaches: hub.coaches };

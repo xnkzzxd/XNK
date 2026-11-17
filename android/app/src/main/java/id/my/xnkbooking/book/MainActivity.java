@@ -12,9 +12,9 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
-// Thin shell around book.xnkbooking.my.id (the wrapper page that hosts the Apps Script portal).
+// Thin shell around a web address (BuildConfig.HOME): book.xnkbooking.my.id or the xnk.web.id hub (see app/build.gradle).
 public class MainActivity extends Activity {
-    private static final String HOME = "https://book.xnkbooking.my.id/";
+    private static final String HOME = BuildConfig.HOME;
     private static final int PICK_FILE = 1;
 
     private WebView web;
@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     private static boolean isOurs(Uri uri) {
         String scheme = uri.getScheme(), host = uri.getHost();
         if (host == null || !("https".equals(scheme) || "http".equals(scheme))) return false;
-        return host.endsWith("xnkbooking.my.id") || host.endsWith("xnk.my.id")
+        return host.endsWith("xnkbooking.my.id") || host.endsWith("xnk.my.id") || host.equals("xnk.web.id")
             || host.endsWith("google.com") || host.endsWith("googleusercontent.com");
     }
 

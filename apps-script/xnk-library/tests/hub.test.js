@@ -57,7 +57,7 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
   assert.ok(!files['index.html'].includes('<!--CONTACT-->'));
   // Tanpa coach pun situs jadi (hanya landing).
   const empty = hub.build({ coaches: [] }).files;
-  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', 'index.html']);
+  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', 'index.html', 'manifest.webmanifest', 'sw.js']);
   assert.ok(Buffer.isBuffer(empty['img/og.jpg']) && empty['img/og.jpg'].length > 1000, 'gambar landing ikut dibangun');
 });
 
@@ -76,6 +76,23 @@ test('landing: daftar coach dari hub.json, nama di-escape, gambar yang dirujuk a
   const none = hub.build({ coaches: [] }).files['index.html'];
   assert.ok(!none.includes('data-coaches') && !none.includes('href="#coach"'), 'tanpa coach, bagian dan tautannya hilang');
   assert.match(hub.slugError('img'), /dipakai sistem/);
+});
+
+test('landing bisa dipasang: manifest, ikon, service worker hanya untuk halaman depan, link unduhan aplikasi', () => {
+  const { files } = hub.build(CFG);
+  const m = JSON.parse(files['manifest.webmanifest']);
+  assert.equal(m.display, 'standalone');
+  for (const i of m.icons) assert.ok(i.src.slice(1) in files, i.src);
+  assert.ok(m.icons.some(i => i.sizes === '512x512') && m.icons.some(i => i.sizes === '192x192'));
+  assert.ok(files['index.html'].includes('<link rel="manifest" href="/manifest.webmanifest">'));
+  const sw = files['sw.js'];
+  assert.ok(!sw.includes('__HASH__'));
+  const own = new Function(sw.match(/var OWN = .*;/)[0] + ' return OWN;')();
+  for (const ok of ['/', '/index.html', '/img/og.jpg', '/manifest.webmanifest']) assert.ok(own.test(ok), ok);
+  for (const no of ['/claudia/', '/claudia/klien/', '/claudia/sw-app.js', '/claudia/klien/index.html', '/404.html']) assert.ok(!own.test(no), no);
+  assert.ok(sw.includes("k.indexOf('xnk-hub-') === 0 && k !== CACHE"), 'hanya menghapus cache miliknya sendiri');
+  assert.notEqual(hub.build({ coaches: [] }).files['sw.js'], sw, 'nama cache ikut isi landing');
+  for (const f of ['XNK-Android.apk', 'XNK-Windows.msi', 'XNK-macOS.dmg']) assert.ok(files['index.html'].includes('/releases/download/app-latest/' + f), f);
 });
 
 test('build: penyimpanan per slug dipasang inline sebelum skrip apa pun, service worker punya awalan dan hash unik', () => {

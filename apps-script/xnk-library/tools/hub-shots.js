@@ -50,6 +50,16 @@ const SHOTS = [
     console.log('  ' + name);
     await ctx.close();
   }
+  // Ikon aplikasi (PWA, desktop): X putih di kotak hitam; area aman 80 % supaya cocok untuk "maskable".
+  for (const px of [192, 512]) {
+    const c = await browser.newContext({ viewport: { width: px, height: px } });
+    const pg = await c.newPage();
+    await pg.setContent(`<body style="margin:0;width:${px}px;height:${px}px;background:#0b0b0b;display:grid;place-items:center;font-family:system-ui,'Segoe UI',Arial,sans-serif">
+      <b style="color:#fff;font-size:${Math.round(px * 0.52)}px;line-height:1;font-weight:800">X</b></body>`);
+    fs.writeFileSync(path.join(OUT, `icon-${px}.png`), await pg.screenshot({ type: 'png' }));
+    await c.close();
+  }
+  console.log('  ikon');
   // og.jpg 1200×630 untuk pratinjau link (WhatsApp, Facebook): dua layar di atas latar hitam.
   const ctx = await browser.newContext({ viewport: { width: 1200, height: 630 } });
   const page = await ctx.newPage();
