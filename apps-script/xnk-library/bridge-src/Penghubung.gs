@@ -97,7 +97,7 @@ function validateConfiguration() {
 function setupGetState() {
   checkLibraryConnection();
   const s = XNK.setupState(ctx_());
-  s.templateSite = XNK_TEMPLATE_SITE;
+  s.hubUrl = XNK_HUB_URL;
   return s;
 }
 

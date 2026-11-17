@@ -31,6 +31,8 @@
   .msg.ok { color: var(--ok); }
   ul.check { list-style: none; padding: 0; margin: 0; }
   ul.check li { padding: 4px 0; }
+  .url .pre { align-self: center; color: var(--mut); font-size: 14px; white-space: nowrap; }
+  textarea { width: 100%; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 9px 10px; border: 1px solid #ccc; border-radius: 8px; resize: none; }
   .hide { display: none; }
 </style>
 </head>
@@ -88,23 +90,31 @@
     </div>
   </section>
 
-  <!-- 4. Situs dan selesai -->
+  <!-- 4. Alamat untuk klien dan selesai -->
   <section id="p4" class="hide">
     <div class="card">
-      <h2>4. Situs untuk klien</h2>
-      <p>Buat situs (GitHub Pages) dari template, lalu tempel link /exec di atas saat menjalankan <b>Setup situs</b>.</p>
-      <a class="btn ghost" id="tplLink" target="_blank" rel="noopener">Buka template situs</a>
-      <label for="site">Alamat situs (opsional, isi setelah situs jadi)</label>
-      <input id="site" type="url" inputmode="url" placeholder="https://namaanda.github.io/situs">
-      <p class="mut" style="margin-top:6px">Alamat utama situs (tanpa /klien/). Link di pesan WhatsApp ke klien otomatis menuju portal klien: alamat ini + <b>/klien/</b>. Kosong = memakai link /exec.</p>
+      <h2>4. Alamat untuk klien</h2>
+      <p>Pilih nama untuk alamat Anda: huruf kecil, angka, dan tanda hubung (3 sampai 30 karakter).</p>
+      <label for="slug">Nama di alamat</label>
+      <div class="url"><span class="pre" id="hubPre">xnk.web.id/</span><input id="slug" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="namaanda" oninput="slugChanged()"></div>
+      <p class="mut" id="slugOut" style="margin-top:8px"></p>
       <button class="btn" id="b4" onclick="step4()">Simpan dan cek semuanya</button>
       <div class="msg" id="m4"></div>
       <ul class="check" id="checks"></ul>
     </div>
+    <div class="card hide" id="sendBox">
+      <h2>Kirim ke pengelola XNK</h2>
+      <p>Supaya alamat Anda aktif, kirim data ini ke pengelola XNK (mis. lewat WhatsApp).</p>
+      <textarea id="sendText" readonly rows="4" onclick="this.select()"></textarea>
+      <button class="btn ghost" onclick="copyText('sendText', 'm5')">Salin data</button>
+      <div class="msg" id="m5"></div>
+      <p class="mut" style="margin-top:10px">Sesudah diaktifkan, bagikan link portal klien Anda ke klien.</p>
+    </div>
   </section>
 
 <script>
-  var state = null;
+  var state = null, hubUrl = 'https://xnk.web.id';
+  var SLUG_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
   function $(id) { return document.getElementById(id); }
   function show(n) {
     for (var i = 1; i <= 4; i++) { $('p' + i).classList.toggle('hide', i !== n); $('s' + i).classList.toggle('on', i <= n); }
@@ -119,10 +129,12 @@
   function fill(s) {
     state = s;
     $('brand').value = s.brand || '';
-    $('site').value = s.siteUrl || '';
+    hubUrl = (s.hubUrl || 'https://xnk.web.id').replace(/\/+$/, '');
+    $('hubPre').textContent = hubUrl.replace(/^https:\/\//, '') + '/';
+    if (s.siteUrl && s.siteUrl.indexOf(hubUrl + '/') === 0) $('slug').value = s.siteUrl.slice(hubUrl.length + 1).replace(/\/.*$/, '');
+    slugChanged();
     $('pinNote').textContent = s.pin ? 'PIN sudah ada. Kosongkan bila tidak ingin mengganti.' : '';
     if (s.execUrl) { $('exec').value = s.execUrl; $('execBox').classList.remove('hide'); }
-    $('tplLink').href = s.templateSite || '#';
   }
   function step1() {
     call('setupInit', null, function (r) {
@@ -148,14 +160,28 @@
     var el = $('exec'); el.select();
     try { document.execCommand('copy'); say('m3', 'Link disalin.', 'ok'); } catch (e) { say('m3', 'Salin manual: tekan Ctrl+C.', ''); }
   }
+  function slugValue() { return $('slug').value.trim().toLowerCase(); }
+  function slugOk(v) { return SLUG_RE.test(v) && v.indexOf('--') === -1; }
+  function slugChanged() {
+    var v = slugValue();
+    $('slugOut').textContent = slugOk(v) ? 'Portal klien Anda: ' + hubUrl + '/' + v + '/klien/' : '';
+  }
+  function copyText(id, msg) {
+    var el = $(id); el.select();
+    try { document.execCommand('copy'); say(msg, 'Disalin.', 'ok'); } catch (e) { say(msg, 'Salin manual: tekan Ctrl+C.', ''); }
+  }
   function step4() {
-    call('setupSave', { brand: $('brand').value || (state && state.brand), pin: '', siteUrl: $('site').value }, function () {
+    var v = slugValue();
+    if (!slugOk(v)) return say('m4', 'Nama di alamat tidak valid. Pakai huruf kecil, angka, dan tanda hubung (3 sampai 30 karakter).', 'bad');
+    call('setupSave', { brand: $('brand').value || (state && state.brand), pin: '', siteUrl: hubUrl + '/' + v }, function () {
       call('setupCheck', null, function (r) {
         var html = '';
-        if (r.ok) html += '<li>✅ Semua beres. Buka situs Anda dan masuk dengan PIN.</li>';
+        if (r.ok) html += '<li>✅ Semua beres di spreadsheet ini.</li>';
         r.problems.forEach(function (p) { html += '<li>⚠️ ' + esc(p) + '</li>'; });
         html += '<li class="mut">Versi Library ' + esc(r.version.hash) + '</li>';
         $('checks').innerHTML = html;
+        $('sendText').value = 'Nama di alamat: ' + v + '\nNama usaha: ' + ($('brand').value || (state && state.brand) || '') + '\nLink aplikasi: ' + (r.setup.execUrl || '');
+        $('sendBox').classList.remove('hide');
       }, 'b4', 'm4');
     }, 'b4', 'm4');
   }

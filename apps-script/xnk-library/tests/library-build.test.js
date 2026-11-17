@@ -30,6 +30,22 @@ test('identitas XNK diganti pengaturan per spreadsheet; landing pemilik tidak ik
   assert.match(files['LibVersi.gs'], /var LIB_BUILD = \{"hash":"[0-9a-f]{12}"/);
 });
 
+test('halaman (HTML) Library tidak lagi mengirim klien coach lain ke portal XNK', () => {
+  const { files } = lib.build();
+  // Yang sengaja tetap: daftar origin pembungkus lama, pustaka statis (gerakan, makanan, peta otot) dari xnk.my.id,
+  // dan domain di UID kalender (tidak terlihat). Komentar diabaikan.
+  const KEEP = /HOST_ORIGINS|EX_URL|FIG_URL|RIG_URL|FOOD_URL|@xnk\.my\.id/;
+  const bad = [];
+  for (const [f, t] of Object.entries(files)) {
+    if (!f.endsWith('.html')) continue;
+    t.split('\n').forEach((line, i) => {
+      if (/^\s*(\/\/|\*|\/\*)/.test(line) || KEEP.test(line)) return;
+      if (/xnkbooking\.my\.id|xnk\.my\.id/.test(line)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
+    });
+  }
+  assert.deepEqual(bad, []);
+});
+
 test('setiap berkas .gs Library bisa diurai, nama berkas unik, dan build stabil', () => {
   const a = lib.build(), b = lib.build();
   assert.equal(a.hash, b.hash);

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XNK</title>
+<meta name="description" content="XNK: aplikasi untuk personal trainer dan kliennya. Jadwal, latihan, makan, dan progres di satu tempat.">
+<meta name="theme-color" content="#0b0b0b">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0b0b'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-family='system-ui,Arial,sans-serif' font-size='34' font-weight='700' fill='%23fff'%3EX%3C/text%3E%3C/svg%3E">
+<style>
+  :root { --bg:#fafaf9; --fg:#0b0b0b; --mut:#5f5f5b; --line:#e2e2de; --card:#fff; --ink:#0b0b0b; --on-ink:#fff; --bad:#c5221f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b0b0b; --fg:#f5f5f3; --mut:#a3a39e; --line:#2a2a28; --card:#151514; --ink:#f5f5f3; --on-ink:#0b0b0b; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 34rem; margin: 0 auto; padding: max(2.5rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom)); }
+  .logo { width: 2.75rem; height: 2.75rem; border-radius: .8rem; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; font-weight: 800; font-size: 1.5rem; }
+  h1 { font-size: clamp(1.9rem, 7vw, 2.6rem); line-height: 1.1; margin: 1.25rem 0 .75rem; letter-spacing: -.02em; }
+  p { margin: 0 0 1rem; }
+  .mut { color: var(--mut); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 1rem; padding: 1.1rem; margin-top: 1.75rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 .25rem; }
+  label { display: block; font-weight: 600; font-size: .9rem; margin: .9rem 0 .35rem; }
+  .row { display: flex; align-items: center; border: 1px solid var(--line); border-radius: .7rem; background: var(--bg); overflow: hidden; }
+  .row span { padding: 0 .1rem 0 .8rem; color: var(--mut); white-space: nowrap; font-size: .95rem; }
+  .row input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 1rem; padding: .8rem .8rem .8rem 0; outline: 0; }
+  .row:focus-within { border-color: var(--fg); }
+  .btns { display: grid; gap: .6rem; margin-top: 1rem; }
+  .btn { display: flex; align-items: center; justify-content: center; min-height: 2.9rem; padding: .6rem 1rem; border-radius: .8rem; border: 1px solid var(--ink); background: var(--ink); color: var(--on-ink); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+  .err { color: var(--bad); font-size: .9rem; min-height: 1.3rem; margin: .6rem 0 0; }
+  ul { padding-left: 1.1rem; margin: .5rem 0 0; }
+  li { margin-bottom: .35rem; }
+  footer { margin-top: 2rem; font-size: .85rem; color: var(--mut); }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo" aria-hidden="true">X</div>
+  <h1>XNK</h1>
+  <p class="mut">Aplikasi untuk personal trainer dan kliennya. Jadwal, latihan, makan, dan progres di satu tempat, bisa dibuka tanpa sinyal.</p>
+
+  <section class="card" aria-labelledby="masuk-judul">
+    <h2 id="masuk-judul">Masuk</h2>
+    <p class="mut" style="margin:0">Ketik nama coach Anda. Nama ini ada di link yang diberikan coach.</p>
+    <form id="f" novalidate>
+      <label for="slug">Nama coach</label>
+      <div class="row"><span>xnk.web.id/</span><input id="slug" name="slug" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="url" placeholder="namacoach"></div>
+      <p class="err" id="err" role="alert"></p>
+      <div class="btns">
+        <button class="btn" type="submit" data-to="klien">Masuk sebagai klien</button>
+        <button class="btn ghost" type="submit" data-to="panel">Masuk sebagai coach</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Untuk coach</h2>
+    <ul>
+      <li>Kelola jadwal, klien, paket, dan keuangan dari HP.</li>
+      <li>Klien booking sendiri, mencatat latihan dan makan, dan melihat progresnya.</li>
+      <li>Data tiap coach tersimpan di spreadsheet milik coach itu sendiri.</li>
+    </ul>
+    <div class="btns"><!--CONTACT--></div>
+  </section>
+
+  <footer>XNK</footer>
+</main>
+<script>
+(function () {
+  var f = document.getElementById('f'), slug = document.getElementById('slug'), err = document.getElementById('err'), dest = 'klien';
+  var RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+  Array.prototype.forEach.call(f.querySelectorAll('button'), function (b) { b.addEventListener('click', function () { dest = b.getAttribute('data-to'); }); });
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var s = slug.value.trim().toLowerCase().replace(/^xnk\.web\.id\//, '').replace(/^\/+|\/+$/g, '').replace(/\s+/g, '-');
+    if (!RE.test(s) || /--/.test(s)) { err.textContent = 'Nama coach tidak valid. Pakai huruf kecil, angka, dan tanda hubung (3 sampai 30 karakter).'; slug.focus(); return; }
+    err.textContent = '';
+    location.href = '/' + s + '/' + (dest === 'klien' ? 'klien/' : '');
+  });
+})();
+</script>
+</body>
+</html>

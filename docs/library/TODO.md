@@ -9,5 +9,10 @@
 - [x] T-2206 Workflow `xnk-library.yml`: checks, one-time "buat", "perbarui" on every main change.
 - [x] T-2207 Docs: Panduan (Indonesian), PRD, Design, index.
 - [~] T-2208 Owner: create both spreadsheets (done 2026-11-17 from the laptop with clasp, Library version 1 = build 8d15e1860f86), save `XNK_LIB_SCRIPT_ID` / `XNK_TEMPLATE_SCRIPT_ID`, share both spreadsheets (viewer).
-- [ ] T-2209 Owner: create the `xnk-template-site` repo; fill it from `site-template/`; mark it Template repository.
+- [-] T-2209 Per-coach site repo from `site-template/`: replaced by the hub (T-2211); kept as an optional route for a coach with their own domain.
 - [ ] T-2210 First real copy end to end (wizard, deploy, site, login, booking), including one second Google account.
+- [x] T-2211 Hub xnk.web.id ([Hub.md](Hub.md)): `build-hub.js`, `hub-edit.js`, landing + 404, per-slug storage prefix, service worker prefix fix, `hub-repo/` (form workflow), `hub-check.js` (two coaches, one origin), tests.
+- [x] T-2212 Library: the health-form WhatsApp text and the QR fallbacks no longer point clients of other coaches to the XNK portal; `library-build.test.js` scans the HTML too.
+- [x] T-2213 Wizard step 4: pick the address name, save `SITE_URL = hub + slug`, copy the data to send to the owner; `wizard-check.js`.
+- [ ] T-2214 Owner: put `hub-repo/` into `xnk-template-site` (Claude), Pages + DNS + custom domain `xnk.web.id`, `contactUrl`.
+- [ ] T-2215 First coach `claudia` end to end on `xnk.web.id`.
