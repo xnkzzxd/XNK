@@ -2,7 +2,7 @@
 
 One line per phase: letter, topic, folder, task range, status. Status: **built** · **pending** (paused by the owner) · **redo** (plan being rewritten in another session) · **backlog** (not built, not scheduled).
 Task status in every `TODO.md`: `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` deferred or dropped by the owner.
-Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique; never reuse one. The next free letter is **AB**; the next free range is **T-2200**.
+Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique; never reuse one. The next free letter is **AC**; the next free range is **T-2300**.
 
 | Phase | Topic | Folder | Tasks | Status |
 | --- | --- | --- | --- | --- |
@@ -25,6 +25,7 @@ Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique
 | X | New client portal (phones) | [portal2/](portal2/) | T-1900+ | built |
 | Y | Client portal desktop shell | [desk/](desk/) | T-2000+ | built |
 | Z | Web Push | [push/](push/) | T-2100+ | built (T-2105 is the owner's install step) |
+| AB | XNK Library + Template (multi-coach on Apps Script, production untouched) | [library/](library/) | T-2200+ | built (T-2208…T-2210 are the owner's install steps) |
 | — | Reminder texts: tone rules and sources of the science tips | [reminder/Sumber.md](reminder/Sumber.md) | — | built (2026-11) |
 
 Notes

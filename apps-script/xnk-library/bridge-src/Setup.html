@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --fg:#111; --mut:#666; --line:#e4e4e4; --bg:#fff; --ok:#137333; --bad:#c5221f; --soft:#f5f5f4; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); margin: 0; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  p { margin: 0 0 10px; }
+  .mut { color: var(--mut); font-size: 13px; }
+  .steps { display: flex; gap: 6px; margin: 12px 0 16px; }
+  .steps span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+  .steps span.on { background: var(--fg); }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  label { display: block; font-weight: 600; font-size: 13px; margin: 10px 0 4px; }
+  input { width: 100%; font-size: 16px; padding: 9px 10px; border: 1px solid #ccc; border-radius: 8px; }
+  .btn { display: inline-block; width: 100%; min-height: 44px; margin-top: 12px; padding: 10px 14px; font-size: 15px; font-weight: 600; border: 0; border-radius: 10px; background: var(--fg); color: #fff; cursor: pointer; text-align: center; text-decoration: none; }
+  .btn.ghost { background: var(--soft); color: var(--fg); }
+  .btn[disabled] { opacity: .5; cursor: wait; }
+  ol { padding-left: 20px; margin: 0 0 8px; }
+  ol li { margin-bottom: 6px; }
+  b.k { background: var(--soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-weight: 600; }
+  .url { display: flex; gap: 6px; margin-top: 6px; }
+  .url input { font-size: 13px; }
+  .url button { min-width: 64px; border: 1px solid #ccc; border-radius: 8px; background: var(--soft); cursor: pointer; }
+  .msg { font-size: 13px; margin-top: 10px; }
+  .msg.bad { color: var(--bad); }
+  .msg.ok { color: var(--ok); }
+  ul.check { list-style: none; padding: 0; margin: 0; }
+  ul.check li { padding: 4px 0; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+  <h1>Setup XNK</h1>
+  <p class="mut">Empat langkah. Bisa dibuka ulang kapan saja dari menu <b>XNK → Mulai setup</b>.</p>
+  <div class="steps"><span id="s1"></span><span id="s2"></span><span id="s3"></span><span id="s4"></span></div>
+
+  <!-- 1. Siapkan -->
+  <section id="p1">
+    <div class="card">
+      <h2>1. Siapkan spreadsheet</h2>
+      <p>Membuat sheet yang dibutuhkan, kunci keamanan, dan pengingat otomatis. Google akan meminta izin sekali: pilih akun Anda, lalu <b>Izinkan</b>.</p>
+      <p class="mut">Kalau ini salinan dari spreadsheet lain, semua pengaturan lama (PIN, Telegram, dll.) dihapus supaya tidak terbawa.</p>
+      <button class="btn" id="b1" onclick="step1()">Siapkan sekarang</button>
+      <div class="msg" id="m1"></div>
+    </div>
+  </section>
+
+  <!-- 2. Identitas dan PIN -->
+  <section id="p2" class="hide">
+    <div class="card">
+      <h2>2. Nama usaha dan PIN</h2>
+      <label for="brand">Nama usaha</label>
+      <input id="brand" maxlength="60" placeholder="mis. Gym Andi">
+      <label for="pin">PIN admin (minimal 6)</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="new-password">
+      <label for="pin2">Ulangi PIN</label>
+      <input id="pin2" type="password" inputmode="numeric" autocomplete="new-password">
+      <p class="mut" id="pinNote" style="margin-top:6px"></p>
+      <button class="btn" id="b2" onclick="step2()">Simpan</button>
+      <div class="msg" id="m2"></div>
+    </div>
+  </section>
+
+  <!-- 3. Deploy -->
+  <section id="p3" class="hide">
+    <div class="card">
+      <h2>3. Terbitkan aplikasi</h2>
+      <p>Langkah ini harus diklik sendiri (aturan Google):</p>
+      <ol>
+        <li>Menu <b class="k">Ekstensi</b> → <b class="k">Apps Script</b>.</li>
+        <li>Di kanan atas, klik <b class="k">Terapkan</b> (Deploy) → <b class="k">Deployment baru</b>.</li>
+        <li>Ikon roda gigi → pilih <b class="k">Aplikasi web</b>.</li>
+        <li><b>Jalankan sebagai:</b> <b class="k">Saya</b>. <b>Yang memiliki akses:</b> <b class="k">Siapa saja</b>.</li>
+        <li>Klik <b class="k">Terapkan</b>, beri izin bila diminta.</li>
+      </ol>
+      <p class="mut">Sudah? Klik tombol di bawah.</p>
+      <button class="btn" id="b3" onclick="step3()">Cek link aplikasi</button>
+      <div class="msg" id="m3"></div>
+      <div id="execBox" class="hide">
+        <label>Link aplikasi (/exec)</label>
+        <div class="url"><input id="exec" readonly onclick="this.select()"><button onclick="copyExec()">Salin</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Situs dan selesai -->
+  <section id="p4" class="hide">
+    <div class="card">
+      <h2>4. Situs untuk klien</h2>
+      <p>Buat situs (GitHub Pages) dari template, lalu tempel link /exec di atas saat menjalankan <b>Setup situs</b>.</p>
+      <a class="btn ghost" id="tplLink" target="_blank" rel="noopener">Buka template situs</a>
+      <label for="site">Alamat situs (opsional, isi setelah situs jadi)</label>
+      <input id="site" type="url" inputmode="url" placeholder="https://namaanda.github.io/situs">
+      <p class="mut" style="margin-top:6px">Alamat utama situs (tanpa /klien/). Link di pesan WhatsApp ke klien otomatis menuju portal klien: alamat ini + <b>/klien/</b>. Kosong = memakai link /exec.</p>
+      <button class="btn" id="b4" onclick="step4()">Simpan dan cek semuanya</button>
+      <div class="msg" id="m4"></div>
+      <ul class="check" id="checks"></ul>
+    </div>
+  </section>
+
+<script>
+  var state = null;
+  function $(id) { return document.getElementById(id); }
+  function show(n) {
+    for (var i = 1; i <= 4; i++) { $('p' + i).classList.toggle('hide', i !== n); $('s' + i).classList.toggle('on', i <= n); }
+  }
+  function busy(id, on) { $(id).disabled = !!on; }
+  function say(id, text, kind) { var el = $(id); el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+  function call(fn, arg, ok, btn, msg) {
+    busy(btn, true); say(msg, 'Sebentar…');
+    google.script.run.withSuccessHandler(function (r) { busy(btn, false); say(msg, ''); ok(r); })
+      .withFailureHandler(function (e) { busy(btn, false); say(msg, (e && e.message) || String(e), 'bad'); })[fn](arg);
+  }
+  function fill(s) {
+    state = s;
+    $('brand').value = s.brand || '';
+    $('site').value = s.siteUrl || '';
+    $('pinNote').textContent = s.pin ? 'PIN sudah ada. Kosongkan bila tidak ingin mengganti.' : '';
+    if (s.execUrl) { $('exec').value = s.execUrl; $('execBox').classList.remove('hide'); }
+    $('tplLink').href = s.templateSite || '#';
+  }
+  function step1() {
+    call('setupInit', null, function (r) {
+      google.script.run.withSuccessHandler(function (s) { fill(s); show(2); say('m2', r.init.copied ? 'Pengaturan dari spreadsheet asal sudah dihapus.' : 'Spreadsheet siap.', 'ok'); }).setupGetState();
+    }, 'b1', 'm1');
+  }
+  function step2() {
+    var pin = $('pin').value.trim(), pin2 = $('pin2').value.trim();
+    if (pin !== pin2) return say('m2', 'PIN dan ulangan PIN tidak sama.', 'bad');
+    call('setupSave', { brand: $('brand').value, pin: pin, siteUrl: (state && state.siteUrl) || '' }, function () {
+      $('pin').value = ''; $('pin2').value = ''; show(3);
+    }, 'b2', 'm2');
+  }
+  function step3() {
+    call('setupGetState', null, function (s) {
+      fill(s);
+      if (!s.execUrl) return say('m3', 'Belum ada deployment aplikasi web. Ikuti langkah di atas dulu.', 'bad');
+      say('m3', 'Aplikasi sudah terbit.', 'ok');
+      setTimeout(function () { show(4); }, 600);
+    }, 'b3', 'm3');
+  }
+  function copyExec() {
+    var el = $('exec'); el.select();
+    try { document.execCommand('copy'); say('m3', 'Link disalin.', 'ok'); } catch (e) { say('m3', 'Salin manual: tekan Ctrl+C.', ''); }
+  }
+  function step4() {
+    call('setupSave', { brand: $('brand').value || (state && state.brand), pin: '', siteUrl: $('site').value }, function () {
+      call('setupCheck', null, function (r) {
+        var html = '';
+        if (r.ok) html += '<li>✅ Semua beres. Buka situs Anda dan masuk dengan PIN.</li>';
+        r.problems.forEach(function (p) { html += '<li>⚠️ ' + esc(p) + '</li>'; });
+        html += '<li class="mut">Versi Library ' + esc(r.version.hash) + '</li>';
+        $('checks').innerHTML = html;
+      }, 'b4', 'm4');
+    }, 'b4', 'm4');
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  // Buka di langkah yang belum selesai.
+  google.script.run.withSuccessHandler(function (s) {
+    fill(s);
+    show(!s.initialized ? 1 : (!s.brand || !s.pin) ? 2 : !s.execUrl ? 3 : 4);
+  }).withFailureHandler(function (e) { show(1); say('m1', (e && e.message) || String(e), 'bad'); }).setupGetState();
+</script>
+</body>
+</html>

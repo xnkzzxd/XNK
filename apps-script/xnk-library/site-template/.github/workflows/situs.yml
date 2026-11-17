@@ -1,0 +1,113 @@
+name: Setup situs
+
+# Satu workflow untuk semuanya:
+#  - Jalankan manual (Actions → Setup situs → Run workflow), isi link /exec dan nama usaha → config.json disimpan,
+#    halaman dibangun dan diterbitkan ke GitHub Pages.
+#  - Setiap perubahan di main (config.json, folder custom/) → dibangun ulang.
+#  - Setiap hari jam 03:17 WIB → dibangun dari kode XNK terbaru (perbaikan ikut masuk otomatis).
+# Halaman dibangun dari repo XNK yang publik (tanpa token). config.json dan custom/ milik Anda tidak pernah ditimpa.
+on:
+  workflow_dispatch:
+    inputs:
+      exec:
+        description: 'Link aplikasi /exec dari spreadsheet Anda (kosongkan bila tidak berubah)'
+        required: false
+      brand:
+        description: 'Nama usaha (kosongkan bila tidak berubah)'
+        required: false
+  push:
+    branches: [main]
+    paths: ['config.json', 'custom/**', '.github/workflows/situs.yml']
+  schedule:
+    - cron: '17 20 * * *'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: situs
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      ready: ${{ steps.ready.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Simpan isian (bila diisi)
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.exec != '' || inputs.brand != '') }}
+        env:
+          IN_EXEC: ${{ inputs.exec }}
+          IN_BRAND: ${{ inputs.brand }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const c = fs.existsSync("config.json") ? JSON.parse(fs.readFileSync("config.json", "utf8")) : {};
+            if (process.env.IN_EXEC.trim()) c.exec = process.env.IN_EXEC.trim();
+            if (process.env.IN_BRAND.trim()) c.brand = process.env.IN_BRAND.trim();
+            fs.writeFileSync("config.json", JSON.stringify(c, null, 2) + "\n");
+          '
+          if ! git diff --quiet config.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add config.json
+            git commit -m "Setup situs: perbarui config.json"
+            git push
+          fi
+
+      - name: Sudah di-setup?
+        id: ready
+        run: |
+          if node -e 'const c=require("./config.json"); process.exit(c.exec && c.brand ? 0 : 1)'; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Belum di-setup::Jalankan Actions → Setup situs → Run workflow, isi link /exec dan nama usaha."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ambil kode XNK terbaru
+        if: steps.ready.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: xnkzzxd/XNK
+          path: _xnk
+
+      - name: Bangun halaman
+        if: steps.ready.outputs.ok == 'true'
+        run: node _xnk/apps-script/xnk-library/tools/build-tenant.js _site --config config.json --custom custom
+
+      - name: Siapkan GitHub Pages
+        if: steps.ready.outputs.ok == 'true'
+        id: pages
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+
+      - name: Pages belum dinyalakan?
+        if: ${{ steps.ready.outputs.ok == 'true' && steps.pages.outcome == 'failure' }}
+        run: |
+          echo "::error title=GitHub Pages belum dinyalakan::Buka Settings → Pages → Source, pilih 'GitHub Actions', lalu jalankan workflow ini lagi."
+          exit 1
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -22,5 +22,6 @@ Phase W (speed: measure, server result cache, sheet-read memo, built; W2 MemberS
 Phase X (new client portal for phones, built): docs/portal2/ (tasks T-1900+).
 Phase Y (client portal as a Mac-like app on tablet, laptop, PC, built): docs/desk/ (tasks T-2000+).
 Phase Z (Web Push for coach and clients, built; installed by the owner via docs/push/Setup.md; the code still labels it "Fase X"): docs/push/ (tasks T-2100+).
+Phase AB (XNK Library + XNK Template + coach site template; production untouched, built): docs/library/ (tasks T-2200+); code in apps-script/xnk-library/.
 
 @docs/Agent.md
