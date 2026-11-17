@@ -14,6 +14,7 @@ var CACHE = PREFIX + HASH;
 var ASSETS = __ASSETS__;   // alamat relatif terhadap berkas ini
 var LIBS = ['https://xnk.my.id/exercises/exercises.min.json', 'https://xnk.my.id/foods/foods.min.json',
   'https://xnk.my.id/figure/figure.min.json', 'https://xnk.my.id/figure/rig.min.json'];
+var GIF_BASE = 'https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/', GIF_CACHE = 'xnk-gif-v1', GIF_MAX = 150;
 var SCOPE = self.registration.scope;                       // mis. https://xnk.my.id/next/
 function abs(u) { return new URL(u, SCOPE).href; }
 var ASSET_URLS = ASSETS.map(abs);
@@ -55,7 +56,23 @@ self.addEventListener('fetch', function (e) {
     e.respondWith(caches.match(req, { ignoreSearch: true }).then(function (hit) { return hit || fetch(req); }));
     return;
   }
-  if (LIBS.indexOf(page) !== -1) e.respondWith(swr(req));
+  if (LIBS.indexOf(page) !== -1) { e.respondWith(swr(req)); return; }
+  // GIF contoh gerakan (ditautkan dari dataset pustaka): disimpan saat pertama dilihat supaya tampil tanpa sinyal.
+  // Cache sendiri ('xnk-gif-v1', tidak ikut terhapus saat versi halaman berganti), paling banyak GIF_MAX berkas.
+  if (req.url.indexOf(GIF_BASE) === 0) {
+    e.respondWith(caches.open(GIF_CACHE).then(function (c) {
+      return c.match(req.url).then(function (hit) {
+        return hit || fetch(req).then(function (res) {
+          if (res.ok || res.type === 'opaque') {
+            c.put(req.url, res.clone()).then(function () { return c.keys(); }).then(function (keys) {
+              if (keys.length > GIF_MAX) return Promise.all(keys.slice(0, keys.length - GIF_MAX).map(function (k) { return c.delete(k); }));
+            }).catch(function () {});
+          }
+          return res;
+        });
+      });
+    }));
+  }
 });
 
 // ── Web Push (Fase X, docs/push) ──────────────────────────────────────────────

@@ -229,12 +229,26 @@
   // Logger latihan (klien dan coach) ─────────────────────────────────────────
   function startWorkout(routine, memberId) {
     var s = snap(), last = (memberId ? (s.clients[memberId] || {}).last : s && s.last) || {};
-    var key = function (it) { return it.exId ? 'ex:' + it.exId : 'nm:' + String(it.gerakan).trim().toLowerCase(); };
+    // T-1639: duplikat tersembunyi di pustaka (item ber-`h`) memakai kunci riwayat gerakan utamanya, sama dengan server.
+    var canon = function (id) { var x = lib.ex ? lib.ex.items.filter(function (y) { return y.id === id; })[0] : null; return x && x.h ? x.h : id; };
+    var key = function (it) { return it.exId ? 'ex:' + canon(it.exId) : 'nm:' + String(it.gerakan).trim().toLowerCase(); };
+    var lastSets = function (it) {
+      var l = last[key(it)];
+      return l && l.sets && l.sets.length ? l.sets.filter(function (x) { return x.jenis !== 'w'; }).map(function (x) { return { berat: x.berat, rep: x.rep, done: false }; }) : [];
+    };
     state.wl = { memberId: memberId || '', hari: routine ? routine.hari : '', start: Date.now(), entries: (routine ? routine.items : []).map(function (it, i) {
-      var l = last[key(it)], sets = l && l.sets && l.sets.length ? l.sets.filter(function (x) { return x.jenis !== 'w'; }).map(function (x) { return { berat: x.berat, rep: x.rep, done: false }; }) : [{ berat: '', rep: '', done: false }];
+      var sets = lastSets(it);
       return { n: i + 1, hari: routine.hari, exId: it.exId || '', gerakan: it.gerakan, bodyPart: it.bodyPart || '', target: it.target || '', sets: sets.length ? sets : [{ berat: '', rep: '', done: false }] };
     }), q: '' };
-    loadLib('ex', EX_URL).then(function () { if (state.wl) render(); });
+    loadLib('ex', EX_URL).then(function () {
+      if (!state.wl) return;
+      // Pustaka baru masuk: isi set terakhir untuk gerakan duplikat yang tadi belum ketemu (hanya entri yang belum diisi).
+      state.wl.entries.forEach(function (e) {
+        var blank = e.sets.every(function (x) { return !x.done && x.berat === '' && x.rep === ''; });
+        if (blank && e.exId) { var s2 = lastSets(e); if (s2.length) e.sets = s2; }
+      });
+      render();
+    });
     render();
   }
   function loggerHtml() {

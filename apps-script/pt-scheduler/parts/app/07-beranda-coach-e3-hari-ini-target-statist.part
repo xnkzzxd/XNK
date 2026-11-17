@@ -188,7 +188,7 @@
     if (g && (g.gaps || []).length) html += '<p class="li-sub" role="note">Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.</p>';
     if (n) {
       html += '<div class="prg-days">' + d.days.map(day => '<div class="prg-day stack" style="gap:4px"><p class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></p>' +
-        day.items.map(it => '<div class="prg-ex">' + exThumb(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('') + '</div>').join('') + '</div>';
+        day.items.map(it => '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('') + '</div>').join('') + '</div>';
       if (d.last) html += '<p class="li-sub">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
     } else html += '<p class="li-sub">Belum ada program. Buat sendiri, atau nyalakan program otomatis.</p>';
     if (hasLog) html += '<p class="li-sub">Terakhir dicatat: ' + h(pgLabel(wd.days[0].tanggal)) + ' · ' + wd.days[0].items.length + ' gerakan</p>';
@@ -456,7 +456,7 @@
   // Data statis dari GitHub Pages (exercises/exercises.min.json), dimuat malas saat dicari, bukan lewat Apps Script.
   // Satu lembar cari untuk editor program / rutinitas (kembali ke lembar program) dan mode latihan. GIF di-hotlink (bukan disimpan)
   // untuk coach dan klien (keputusan pemilik, Fase O); kredit pustaka selalu tampil.
-  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v2', EX_SHOW = 20, EX_RECENT = 'xnk_ex_recent';
+  const EX_URL = 'https://xnk.my.id/exercises/exercises.min.json', EX_KEY = 'xnk_ex_lib_v3', EX_SHOW = 20, EX_RECENT = 'xnk_ex_recent';
   let exLib = null;
   const exs = { onPick: null, ret: '', limit: EX_SHOW, extra: [], sel: [], hist: '', data: null, creating: false };
   const WK_EQUIP = { 'body weight': 'Berat badan', 'dumbbell': 'Dumbbell', 'cable': 'Kabel', 'barbell': 'Barbell', 'leverage machine': 'Mesin', 'band': 'Band', 'smith machine': 'Smith machine', 'kettlebell': 'Kettlebell',
@@ -466,7 +466,7 @@
   // gerakan yang punya Exercise ID tampil dengan nama pustaka saat pustaka sudah ada di perangkat.
   let exById = null;
   function exLibSync() {
-    if (!exLib) { try { localStorage.removeItem('xnk_ex_lib_v1'); const c = localStorage.getItem(EX_KEY); if (c) exLib = JSON.parse(c); } catch (e) {} }
+    if (!exLib) { try { localStorage.removeItem('xnk_ex_lib_v1'); localStorage.removeItem('xnk_ex_lib_v2'); const c = localStorage.getItem(EX_KEY); if (c) exLib = JSON.parse(c); } catch (e) {} }
     return exLib;
   }
   function exNm(o) {
@@ -523,7 +523,7 @@
     }
     $('exs-credit').textContent = exLib.credit || '';
   }
-  const exsKey = (id, n) => (id ? 'ex:' + id : 'nm:' + String(n || '').trim().toLowerCase());
+  const exsKey = (id, n) => (id ? 'ex:' + exCanon(id) : 'nm:' + String(n || '').trim().toLowerCase());
   function exsHasHist(key) { return !!(exs.data && (exs.data.days || []).some(d => d.items.some(it => it.key === key))); }
   function exsRow(id, n, sub, x) {
     const key = exsKey(id, n), on = exs.sel.some(s => exsKey(s.id, s.n) === key), hist = exsHasHist(key);
@@ -548,8 +548,9 @@
       if (recent.length) html += '<p class="label exs-lbl">Gerakan terakhir</p>' + recent.map(function (r) { const x = r.id && exLib ? exLib.items.find(i => i.id === r.id) : null; return x ? exsRowLib(x) : exsRow(r.id || '', r.n, 'Gerakan sendiri', null); }).join('');
     }
     if (!exLib) { setHTML(box, html + '<p class="li-sub" style="padding:12px 0">Memuat pustaka gerakan…</p>'); return; }
-    if (!exs.sorted) exs.sorted = exLib.items.slice().sort((a, b) => a.n.localeCompare(b.n));
-    let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!q || (x.n + ' ' + (x.r || '') + ' ' + x.t + ' ' + x.q).toLowerCase().indexOf(q) !== -1));
+    if (!exs.sorted) exs.sorted = exLib.items.filter(x => !x.h).sort((a, b) => a.n.localeCompare(b.n));
+    const qw = q ? q.replace(/-/g, ' ').split(/\s+/).filter(Boolean) : [];   // tiap kata harus ada, urutan bebas ("pulldown cable")
+    let hits = exs.sorted.filter(x => (!part || x.b === part) && (!eq || x.q === eq) && (!qw.length || (function (hay) { return qw.every(function (w) { return hay.indexOf(w) !== -1; }); })((x.n + ' ' + (x.r || '') + ' ' + x.t + ' ' + x.q).toLowerCase().replace(/-/g, ' '))));
     // Cari: nama yang diawali kata itu dulu, lalu yang memuatnya di nama, lalu sisanya (otot/alat); nama pendek dulu.
     if (q) { const rank = x => { const nl = x.n.toLowerCase(); return nl.indexOf(q) === 0 ? 0 : (nl.indexOf(q) !== -1 || String(x.r || '').indexOf(q) !== -1 ? 1 : 2); }; hits = hits.map(x => [rank(x), x]).sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length).map(p => p[1]); }
     html += '<p class="label exs-lbl">' + (q || part || eq ? hits.length + ' gerakan' : 'Semua gerakan (A–Z)') + '</p>' + (hits.slice(0, exs.limit).map(exsRowLib).join('') || '<p class="li-sub" style="padding:8px 0">Tidak ada gerakan yang cocok. Ketuk Buat untuk gerakan sendiri.</p>');
@@ -613,7 +614,9 @@
   // perubahan, satu simpan ke server saat Selesai, antrean kirim ulang bila sinyal hilang. Server memvalidasi semuanya.
   const wkAdmin = {};   // memberId → bagian workout (dari getClientBundle / simpan)
   window.wkSetAdmin = function (memberId, d) { wkAdmin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { workout: d }); if (progAdmin[memberId]) renderProgramAdmin(memberId); };
-  function wkKeyOf(e) { return e.exId ? 'ex:' + e.exId : 'nm:' + String(e.gerakan).trim().toLowerCase(); }
+  // T-1638: duplikat tersembunyi (item pustaka ber-`h`) memakai kunci riwayat gerakan utamanya, sama dengan server (_exResolve_).
+  function exCanon(id) { const x = id && exLib ? exLib.items.find(i => i.id === id) : null; return x && x.h ? x.h : id; }
+  function wkKeyOf(e) { return e.exId ? 'ex:' + exCanon(e.exId) : 'nm:' + String(e.gerakan).trim().toLowerCase(); }
   function wkInfo(id) { return exLib && id ? exLib.items.find(x => x.id === id) : null; }
   function wkIsoOf(iso) { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(iso)); } catch (e) { return pgToday(); } }
   function wkToday() { return wkIsoOf(Date.now()); }
