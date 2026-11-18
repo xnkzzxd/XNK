@@ -40,11 +40,14 @@ on:
       aksi:
         description: 'buat = buat dua spreadsheet baru (sekali saja); perbarui = terbitkan versi Library baru; buat-pusat = buat proyek XNK Pusat (sekali saja)'
         type: choice
-        options: [perbarui, buat, buat-pusat, info-pusat]
-      pusat_script:
-        description: 'info-pusat: scriptId XNK Pusat (kosong = repo variable XNK_PUSAT_SCRIPT_ID)'
-        required: false
+        options: [perbarui, buat, buat-pusat, info-pusat, perbarui-pusat]
         default: perbarui
+      pusat_script:
+        description: 'info-pusat / perbarui-pusat: scriptId XNK Pusat (kosong = repo variable XNK_PUSAT_SCRIPT_ID)'
+        required: false
+      pusat_deployment:
+        description: 'perbarui-pusat: ID deployment XNK Pusat (kosong = repo variable XNK_PUSAT_DEPLOYMENT_ID)'
+        required: false
 
 permissions:
   contents: read
@@ -267,12 +270,12 @@ jobs:
     needs: check
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.aksi == 'buat-pusat' || inputs.aksi == 'info-pusat'))
+      (github.event_name == 'workflow_dispatch' && (inputs.aksi == 'buat-pusat' || inputs.aksi == 'info-pusat' || inputs.aksi == 'perbarui-pusat'))
     runs-on: ubuntu-latest
     env:
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       PUSAT_ID: ${{ inputs.pusat_script || vars.XNK_PUSAT_SCRIPT_ID }}
-      PUSAT_DEP: ${{ vars.XNK_PUSAT_DEPLOYMENT_ID }}
+      PUSAT_DEP: ${{ inputs.pusat_deployment || vars.XNK_PUSAT_DEPLOYMENT_ID }}
       AKSI: ${{ github.event_name == 'workflow_dispatch' && inputs.aksi || 'push' }}
     steps:
       - name: Cek pengaturan

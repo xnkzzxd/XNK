@@ -179,7 +179,15 @@ test('registerPusat (T-2233): rahasia baru dikirim ke XNK Pusat; disimpan hanya 
   const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSAT000000000000000000/exec';
   const sent = [];
   let answer = { ok: false, error: 'Kode daftar XNK Pusat salah.' };
-  env.context.UrlFetchApp.fetch = (url, o) => { sent.push({ url, body: JSON.parse(o.payload) }); return { getResponseCode: () => 200, getContentText: () => JSON.stringify(answer) }; };
+  // Seperti Apps Script sungguhan: POST /exec → 302 ke echo; mengikuti 302 sebagai POST → halaman HTML Google.
+  const ECHO = 'https://script.googleusercontent.com/macros/echo?k=1';
+  env.context.UrlFetchApp.fetch = (url, o) => {
+    o = o || {};
+    if (url === ECHO && !o.method) return { getResponseCode: () => 200, getContentText: () => JSON.stringify(answer) };
+    sent.push({ url, body: JSON.parse(o.payload) });
+    if (o.followRedirects !== false) return { getResponseCode: () => 200, getContentText: () => '<!DOCTYPE html><html>Google</html>' };
+    return { getResponseCode: () => 302, getHeaders: () => ({ Location: ECHO }), getContentText: () => '' };
+  };
   assert.throws(() => env.lib('registerPusat', A.ctx, { pusatUrl: '', code: 'x', slug: 'gym-andi' }), /belum diatur/);
   assert.throws(() => env.lib('registerPusat', A.ctx, { pusatUrl: PUSAT, code: 'salah', slug: 'gym-andi' }), /Kode daftar/);
   assert.equal(A.store.props.HUB_SECRET, undefined, 'ditolak = tidak ada rahasia tersimpan');

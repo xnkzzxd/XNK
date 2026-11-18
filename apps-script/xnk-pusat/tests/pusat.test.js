@@ -15,7 +15,7 @@ const SHA_NEW = 'c'.repeat(40), SHA_OLD = 'd'.repeat(40);
 function env(opts) {
   opts = opts || {};
   const props = Object.assign({ PUSAT_PIN: 'pin-rahasia-1', PUSAT_ENROLL_CODE: 'kode-daftar-9' }, opts.props || {});
-  const cache = {}, mails = [], fetches = [], triggers = [];
+  const cache = {}, mails = [], fetches = [], triggers = [], echoes = {};
   const servers = opts.servers || {};
   const reply = (code, body) => ({ getResponseCode: () => code, getContentText: () => (typeof body === 'string' ? body : JSON.stringify(body)) });
   const ctx = {
@@ -41,7 +41,14 @@ function env(opts) {
         if (url.includes('/matching-refs/tags/lib-v')) return reply(200, [{ ref: 'refs/tags/lib-v3', object: { type: 'tag', sha: 't3' } }, { ref: 'refs/tags/lib-v11', object: { type: 'tag', sha: 't11' } }]);
         if (url.endsWith('/git/tags/t11')) return reply(200, { object: { sha: SHA_NEW } });
         if (url.includes('/dispatches')) return reply(opts.dispatch || 204, '');
-        if (servers[url]) return reply(200, servers[url](JSON.parse(o.payload)));
+        // Seperti Apps Script sungguhan: POST /exec → 302 ke echo; mengikuti 302 sebagai POST → halaman HTML Google.
+        if (servers[url]) {
+          if (o.followRedirects !== false) return reply(200, '<!DOCTYPE html><html>Google</html>');
+          const out = servers[url](JSON.parse(o.payload)), key = 'https://script.googleusercontent.com/macros/echo?k=' + fetches.length;
+          echoes[key] = out;
+          return Object.assign(reply(302, ''), { getHeaders: () => ({ Location: key }) });
+        }
+        if (echoes[url] && !o.method) return reply(200, echoes[url]);
         throw new Error('Address unavailable');
       },
     },
