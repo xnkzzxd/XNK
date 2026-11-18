@@ -1,11 +1,12 @@
 'use strict';
 // Gelombang 2 (T-2230…T-2232): pemilik mengelola spreadsheet semua coach dari GitHub Actions (repo hub), lewat clasp.
 //   node apps-script/xnk-library/tools/coach-ops.js baru      <hub.json> <slug> <nama usaha>
-//   node apps-script/xnk-library/tools/coach-ops.js hubungkan <hub.json> <slug>
+//   node apps-script/xnk-library/tools/coach-ops.js hubungkan <hub.json> <slug> [scriptId]
 //   node apps-script/xnk-library/tools/coach-ops.js perbarui  <hub.json> <slug|semua> [--paksa]
 // Kredensial: setiap akun Google coach punya secret repo hub CLASP_<SLUG> (isi ~/.clasprc.json dari `clasp login`;
-// huruf besar, "-" jadi "_"). Workflow meneruskan semua secret sebagai JSON di env SECRETS_JSON; alat ini hanya
-// mengambil secret coach yang sedang dikerjakan, menulisnya ke HOME sementara (izin 600) dan menghapusnya lagi.
+// huruf besar, "-" jadi "_"). Workflow meneruskan HANYA secret coach yang sedang dikerjakan lewat env CLASP_RC (satu job
+// per coach; tidak pernah semua secret sekaligus — GitHub menandai pola itu sebagai berbahaya). Alat ini menulisnya ke
+// HOME sementara (izin 600) dan menghapusnya lagi. SECRETS_JSON ({CLASP_<SLUG>: …}) tetap diterima untuk tes.
 // Versi Library terbaru dibaca dari tag "lib-v<N>" repo XNK (dipasang workflow XNK Library; pesan tag = scriptId
 // Library, tag menunjuk commit yang membangunnya).
 //   baru      buat spreadsheet + script di akun coach, pasang penghubung (Library terbaru), terbitkan web app,
@@ -29,11 +30,15 @@ const CLASP_ERR = /GaxiosError|errors: \[|code: [45][0-9][0-9]|User has not enab
 
 function secretName(slug) { return 'CLASP_' + String(slug).toUpperCase().replace(/-/g, '_'); }
 
-/** Isi .clasprc.json akun coach dari SECRETS_JSON; galat Indonesia bila tidak ada. */
+/** Isi .clasprc.json akun coach dari CLASP_RC (atau SECRETS_JSON untuk tes); galat Indonesia bila tidak ada. */
 function credFor(slug, env) {
-  let all = {};
-  try { all = JSON.parse((env || process.env).SECRETS_JSON || '{}'); } catch (e) { all = {}; }
-  const v = all[secretName(slug)];
+  env = env || process.env;
+  let v = env.CLASP_RC;
+  if (!v) {
+    let all = {};
+    try { all = JSON.parse(env.SECRETS_JSON || '{}'); } catch (e) { all = {}; }
+    v = all[secretName(slug)];
+  }
   if (!v || typeof v !== 'string') throw new Error(`Secret ${secretName(slug)} belum ada di repo hub (Settings → Secrets and variables → Actions). Isinya: berkas .clasprc.json dari "clasp login" akun Google coach itu.`);
   try { JSON.parse(v); } catch (e) { throw new Error(`Secret ${secretName(slug)} bukan isi .clasprc.json yang utuh (harus JSON).`); }
   return v;
@@ -44,7 +49,7 @@ function makeClasp(slug, opts) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-clasp-'));
   fs.writeFileSync(path.join(home, '.clasprc.json'), credFor(slug, opts.env), { mode: 0o600 });
   const runner = opts.runner || ((args, o) => {
-    const r = spawnSync(opts.claspBin || process.env.CLASP_BIN || 'clasp', args, { cwd: o.cwd, env: Object.assign({}, process.env, { HOME: o.home, SECRETS_JSON: '' }), encoding: 'utf8' });
+    const r = spawnSync(opts.claspBin || process.env.CLASP_BIN || 'clasp', args, { cwd: o.cwd, env: Object.assign({}, process.env, { HOME: o.home, SECRETS_JSON: '', CLASP_RC: '' }), encoding: 'utf8' });
     return { code: r.status, out: String(r.stdout || '') + String(r.stderr || '') };
   });
   const run = (args, cwd) => {
@@ -116,14 +121,19 @@ function baru(file, slug, brand, lib, opts) {
 
 /** Coach lama: temukan scriptId dari deployment link /exec-nya. */
 function hubungkan(file, slug, opts) {
+  opts = opts || {};
   const cfg = readCfg(file);
   const c = readHub(cfg).coaches.find(x => x.slug === slug);
   if (!c) throw new Error(`Coach "${slug}" tidak ada di hub.json.`);
   const deploymentId = (c.exec.match(/\/s\/([\w-]+)\/exec$/) || [])[1];
+  const given = String(opts.scriptId || '').trim();
+  if (given && !/^[\w-]{20,120}$/.test(given)) throw new Error('Script ID tidak valid (salin dari Apps Script → Project Settings → Script ID).');
   const clasp = makeClasp(slug, opts);
   try {
-    const ids = [...new Set((clasp.run(['list'], clasp.home).match(/\/d\/([\w-]{20,})\/edit/g) || []).map(s => s.slice(3, -5)))];
-    if (!ids.length) throw new Error(`Akun untuk "${slug}" tidak punya proyek Apps Script. Apakah secret ${secretName(slug)} milik akun yang benar?`);
+    // Proyek coach menempel di spreadsheet-nya (salinan XNK Template); `clasp list` hanya menampilkan proyek yang berdiri
+    // sendiri, jadi Script ID dari pemilik dipakai bila ada. Tetap diperiksa: proyek itu harus punya deployment link /exec.
+    const ids = given ? [given] : [...new Set((clasp.run(['list'], clasp.home).match(/\/d\/([\w-]{20,})\/edit/g) || []).map(s => s.slice(3, -5)))];
+    if (!ids.length) throw new Error(`Proyek Apps Script "${slug}" tidak terlihat oleh clasp (proyek yang menempel di spreadsheet memang tidak terdaftar). Jalankan lagi dengan Script ID: spreadsheet → Extensions → Apps Script → Project Settings → Script ID.`);
     for (const scriptId of ids) {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-find-'));
       fs.writeFileSync(path.join(dir, '.clasp.json'), JSON.stringify({ scriptId, rootDir: '.' }));
@@ -135,7 +145,9 @@ function hubungkan(file, slug, opts) {
         return { slug, scriptId, deploymentId };
       }
     }
-    throw new Error(`Tidak ada proyek di akun ini yang memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}").`);
+    throw new Error(given
+      ? `Proyek ${given.slice(0, 12)}… tidak bisa dibaca dengan secret ${secretName(slug)} atau tidak memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}"). Periksa Script ID dan akun secret itu.`
+      : `Tidak ada proyek di akun ini yang memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}").`);
   } finally { clasp.done(); }
 }
 
@@ -186,9 +198,12 @@ module.exports = { baru, hubungkan, perbarui, latestLib, secretName, credFor, ve
 if (require.main === module) {
   const args = process.argv.slice(2);
   const force = args.includes('--paksa');
+  // --kenari (workflow: job pertama di matrix): "diperbarui tetapi server belum menjawab versi baru" = gagal, supaya
+  // job coach lain (max-parallel 1, fail-fast) tidak dijalankan.
+  const canary = args.includes('--kenari');
   const repoI = args.indexOf('--xnk');
   const repo = repoI >= 0 ? args.splice(repoI, 2)[1] : path.join(__dirname, '..', '..', '..');
-  const [aksi, file, slug, ...rest] = args.filter(a => a !== '--paksa');
+  const [aksi, file, slug, ...rest] = args.filter(a => a !== '--paksa' && a !== '--kenari');
   // Langkah "Daftarkan ke XNK Pusat" di wizard coach: alamat Pusat dari hub.json bila env tidak mengisinya.
   try { const c = JSON.parse(fs.readFileSync(file, 'utf8')); if (!process.env.XNK_PUSAT_URL && c.pusatUrl) process.env.XNK_PUSAT_URL = c.pusatUrl; } catch (e) { /* hub.json diperiksa di bawah */ }
   const summary = lines => { if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n'); };
@@ -198,7 +213,7 @@ if (require.main === module) {
       console.log(`Coach ${r.slug} dibuat: ${r.exec}`);
       summary([`## Coach "${r.slug}" dibuat`, '', `- Buka proyek: ${r.sheet} → spreadsheet-nya → menu **XNK → Mulai setup** (izin Google + PIN).`, `- Link /exec: ${r.exec}`, `- Alamat: https://xnk.web.id/${r.slug}/ dan /${r.slug}/klien/ (aktif setelah build hub).`]);
     } else if (aksi === 'hubungkan') {
-      const r = hubungkan(file, slug, {});
+      const r = hubungkan(file, slug, { scriptId: rest[0] || process.env.SCRIPT_ID || '' });
       console.log(`Coach ${r.slug} terhubung: scriptId ${r.scriptId}`);
       summary([`## Coach "${r.slug}" terhubung`, '', 'scriptId dan deploymentId tersimpan di hub.json; "perbarui" sekarang bisa dipakai.']);
     } else if (aksi === 'perbarui') {
@@ -206,7 +221,7 @@ if (require.main === module) {
       const r = await perbarui(file, slug || 'semua', lib, { force });
       for (const x of r) console.log(`${x.slug}: ${x.status}${x.version ? ' (versi ' + x.version + ')' : ''}${x.error ? '\n  ' + x.error.replace(/\n/g, '\n  ') : ''}`);
       summary([`## Perbarui coach → Library v${lib.version}`, '', '| Coach | Hasil |', '| --- | --- |', ...r.map(x => `| ${x.slug} | ${x.status}${x.error ? ': ' + x.error.split('\n')[0] : ''} |`)]);
-      if (r.some(x => x.status === 'gagal' || /^berhenti/.test(x.status))) process.exit(1);
+      if (r.some(x => x.status === 'gagal' || /^berhenti/.test(x.status) || (canary && /belum terbaca/.test(x.status)))) process.exit(1);
     } else {
       console.error('pakai: coach-ops.js baru|hubungkan|perbarui <hub.json> <slug|semua> [nama usaha] [--paksa] [--xnk <checkout XNK>]');
       process.exit(1);

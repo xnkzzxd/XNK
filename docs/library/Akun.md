@@ -16,19 +16,23 @@ workflow **Coach XNK**). GitHub tidak pernah menyimpan kata sandi: yang disimpan
    ```
    Browser terbuka → pilih akun coach → Izinkan. Token tersimpan di `C:\Users\<nama>\.clasprc.json`
    (macOS/Linux: `~/.clasprc.json`).
-4. Buka berkas itu dengan Notepad, salin **seluruh isinya**.
-5. Repo hub `xnk-template-site` → **Settings → Secrets and variables → Actions → New repository secret**:
+4. (Cek akun) `npx @google/clasp@2.4.2 list` boleh menjawab "No script files found": proyek yang menempel di
+   spreadsheet memang tidak tampil. Yang penting **bukan** proyek Anda sendiri (XNK Pusat, XNK Library) yang muncul.
+   Salin link login dari **terminal** (bukan dari address bar) bila memakai jendela Incognito; halaman izin yang
+   disalin dari browser menghasilkan "400. That's an error".
+5. Buka berkas itu dengan Notepad, salin **seluruh isinya**.
+6. Repo hub `xnk-template-site` → **Settings → Secrets and variables → Actions → New repository secret**:
    - Name: `CLASP_<SLUG>` dengan huruf besar dan `-` diganti `_` (contoh: `claudia` → `CLASP_CLAUDIA`,
      `gym-andi` → `CLASP_GYM_ANDI`).
    - Secret: tempel isi berkas tadi → **Add secret**.
-6. Hapus berkas `.clasprc.json` dari laptop (atau jalankan `npx @google/clasp@2.4.2 logout`) sebelum login akun
+7. Hapus berkas `.clasprc.json` dari laptop (atau jalankan `npx @google/clasp@2.4.2 logout`) sebelum login akun
    coach berikutnya, supaya token akun tidak tertukar.
 
 ## Lalu, di repo hub → Actions → Coach XNK → Run workflow
 
 | Keadaan | Aksi | Isian |
 | --- | --- | --- |
-| Coach yang sudah ada dari XNK Template (mis. `claudia`) | `hubungkan` | slug |
+| Coach yang sudah ada dari XNK Template (mis. `claudia`) | `hubungkan` | slug + **Script ID** (spreadsheet coach → Extensions → Apps Script → ⚙ Project Settings → Script ID; proyek yang menempel di spreadsheet tidak muncul di `clasp list`) |
 | Coach baru | `baru` | slug + nama usaha |
 | Pasang Library terbaru (otomatis tiap hari 02:37 WIB) | `perbarui` | slug, atau kosong = semua |
 

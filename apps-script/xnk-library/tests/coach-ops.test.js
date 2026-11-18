@@ -41,6 +41,8 @@ test('nama secret per coach: CLASP_<SLUG>, huruf besar, "-" jadi "_"; kredensial
   assert.throws(() => ops.credFor('claudia', { SECRETS_JSON: '{}' }), /Secret CLASP_CLAUDIA belum ada/);
   assert.throws(() => ops.credFor('claudia', { SECRETS_JSON: JSON.stringify({ CLASP_CLAUDIA: 'bukan json' }) }), /bukan isi \.clasprc\.json/);
   assert.equal(ops.credFor('claudia', env(['claudia'])), RC);
+  assert.equal(ops.credFor('claudia', { CLASP_RC: RC }), RC, 'workflow: satu secret lewat CLASP_RC');
+  assert.throws(() => ops.credFor('claudia', { CLASP_RC: '' }), /Secret CLASP_CLAUDIA belum ada/);
   assert.equal(ops.versionOf('Created version 12.'), '12');
   assert.equal(ops.deploymentOf(`Created version 3.\n- ${DEP(1)} @3.`), DEP(1));
 });
@@ -157,4 +159,21 @@ test('hub.json: scriptId/deploymentId diperiksa; link /exec baru membuang ID lam
   const base = { coaches: [{ slug: 'claudia', brand: 'C', exec: EXEC(1), scriptId: '1S' + 'Q'.repeat(30), deploymentId: DEP(1) }] };
   assert.equal(edit(base, 'simpan', { slug: 'claudia', brand: 'Baru', exec: EXEC(1) }).cfg.coaches[0].scriptId, '1S' + 'Q'.repeat(30), 'nama berubah, ID tetap');
   assert.ok(!('scriptId' in edit(base, 'simpan', { slug: 'claudia', brand: 'C', exec: EXEC(4) }).cfg.coaches[0]), 'link lain = ID lama dibuang');
+});
+
+test('hubungkan dengan Script ID (proyek menempel di spreadsheet, tidak muncul di clasp list): diperiksa lewat deployment', () => {
+  const file = tmpHub({ coaches: [{ slug: 'claudia', brand: 'Claudia', exec: EXEC(1) }] });
+  const B = '1BoundScript' + 'B'.repeat(40);
+  const f = fakeClasp((args, o, conf) => {
+    if (args[0] === 'list') return 'No script files found.';
+    if (args[0] === 'deployments') return conf.scriptId === B ? `- ${DEP(1)} @3 - web` : `- ${DEP(8)} @HEAD`;
+    return '';
+  });
+  assert.throws(() => ops.hubungkan(file, 'claudia', { env: env(['claudia']), runner: f.runner }), /Script ID/);
+  assert.throws(() => ops.hubungkan(file, 'claudia', { env: env(['claudia']), runner: f.runner, scriptId: 'a b' }), /Script ID tidak valid/);
+  assert.throws(() => ops.hubungkan(file, 'claudia', { env: env(['claudia']), runner: f.runner, scriptId: '1Other' + 'C'.repeat(40) }), /Periksa Script ID/);
+  const r = ops.hubungkan(file, 'claudia', { env: env(['claudia']), runner: f.runner, scriptId: B });
+  assert.equal(r.scriptId, B);
+  assert.ok(!f.calls.slice(-1)[0].args.includes('list'));
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).coaches[0].deploymentId, DEP(1));
 });
