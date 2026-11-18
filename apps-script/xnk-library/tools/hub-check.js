@@ -203,6 +203,35 @@ async function panelLogin(page, pin) {
       await a.waitForTimeout(1500);
       check(!(await a.isVisible('#admin-login')), 'logout di claudia-2 tidak mengeluarkan claudia');
 
+      // Sudah masuk: xnk.web.id langsung membuka panel coach; #masuk dan ?hub tetap menampilkan landing.
+      await a.goto(O + '/', { waitUntil: 'domcontentloaded' });
+      await a.waitForTimeout(300);
+      check(a.url() === O + '/claudia/', 'coach sudah masuk: xnk.web.id langsung ke /claudia/ (' + a.url() + ')');
+      await a.goto(O + '/#masuk', { waitUntil: 'domcontentloaded' });
+      check(a.url() === O + '/#masuk' && await a.isVisible('#slug'), 'xnk.web.id/#masuk tetap menampilkan landing');
+      await a.goto(O + '/?hub', { waitUntil: 'domcontentloaded' });
+      check(a.url() === O + '/?hub', 'xnk.web.id/?hub tetap menampilkan landing');
+
+      // Tombol kembali di HP: browser melompati dua entri sekaligus (Chrome Android) -> aplikasi tidak boleh keluar ke landing.
+      await a.setViewportSize({ width: 390, height: 844 });
+      await a.goto(O + '/claudia/', { waitUntil: 'domcontentloaded' });
+      await a.waitForFunction(() => Array.isArray(window.members) && window.members.length > 0, null, { timeout: 10000 }).catch(() => {});
+      await a.evaluate(() => window.navigate('clients'));
+      await a.waitForTimeout(300);
+      await a.click('#client-list [data-key^="client:"]').catch(() => {});
+      await a.waitForTimeout(500);
+      const opened = await a.evaluate(() => document.getElementById('detail-panel').classList.contains('open'));
+      await a.evaluate(() => history.go(-2));
+      await a.waitForTimeout(700);
+      const st = await a.evaluate(() => ({ open: document.getElementById('detail-panel').classList.contains('open'), view: window.currentView }));
+      check(opened && !st.open && st.view === 'dashboard', 'back melompati 2 entri: panel detail dan halaman Klien ikut tertutup (' + JSON.stringify(st) + ')');
+      await a.evaluate(() => window.navigate('clients'));
+      await a.waitForTimeout(300);
+      await a.evaluate(() => window.navigate('dashboard'));
+      await a.waitForTimeout(900);
+      check(a.url() === O + '/claudia/', 'sesudahnya kembali ke Dashboard tetap di /claudia/, tidak keluar ke landing (' + a.url() + ')');
+      await a.setViewportSize({ width: 1280, height: 800 });
+
       const keys = await a.evaluate(() => Object.keys(localStorage));
       check(keys.length > 0 && keys.every(k => k.startsWith('claudia:') || k.startsWith('claudia-2:')), 'semua kunci localStorage berawalan slug: ' + keys.slice(0, 4).join(', ') + (keys.length > 4 ? '…' : ''));
       check(seen.every(u => u.startsWith(EXEC_A) || u.startsWith(EXEC_B)), 'semua panggilan server hanya ke dua /exec coach');
@@ -229,6 +258,10 @@ async function panelLogin(page, pin) {
       await p.click('#login-submit-btn');
       await p.waitForTimeout(1800);
       check((await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name)) === 'Ani', 'klien claudia masuk');
+      const home = await open(context, O + '/', errors);
+      await home.waitForTimeout(300);
+      check(home.url() === O + '/claudia/klien/', 'klien sudah masuk: xnk.web.id langsung ke /claudia/klien/ (' + home.url() + ')');
+      await home.close();
       const title = await p.title();
       check(title.includes('Claudia Fit') && !/XNK/.test(title), 'judul halaman memakai nama usaha, bukan "XNK": ' + title);
       const body = await p.evaluate(() => document.body.innerText);
