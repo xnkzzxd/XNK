@@ -41,6 +41,15 @@ class Range {
     return out;
   }
   getValue() { return this.getValues()[0][0]; }
+  // Like Sheets: every cell as the text shown on screen (no Date objects).
+  getDisplayValues() {
+    const pad = n => String(n).padStart(2, '0');
+    return this.getValues().map(line => line.map(v => {
+      if (v instanceof Date) return v.getFullYear() + '-' + pad(v.getMonth() + 1) + '-' + pad(v.getDate()) + ' ' + pad(v.getHours()) + ':' + pad(v.getMinutes()) + ':' + pad(v.getSeconds());
+      if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+      return String(v);
+    }));
+  }
   setValues(values) {
     values.forEach((line, r) => line.forEach((v, c) => this.sheet._set(this.row + r, this.col + c, v)));
     return this;
