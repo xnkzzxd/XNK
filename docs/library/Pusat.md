@@ -16,7 +16,8 @@ WA atau data kesehatan klien yang pernah sampai ke XNK Pusat.
 
 1. Repo XNK → **Actions → XNK Library → Run workflow → `buat-pusat`**. Ringkasan run berisi tiga nilai; simpan
    sebagai *repo variable* (Settings → Secrets and variables → Actions → Variables): `XNK_PUSAT_SCRIPT_ID`,
-   `XNK_PUSAT_DEPLOYMENT_ID`, `XNK_PUSAT_URL`.
+   `XNK_PUSAT_DEPLOYMENT_ID`, `XNK_PUSAT_URL`. Lupa nilainya? Jalankan aksi `info-pusat` (isi `pusat_script`
+   dengan scriptId): log run mencetak ID deployment dan link /exec, tanpa mengubah apa pun.
 2. Buka proyeknya (link di ringkasan) → **Project Settings → Script Properties**:
    - `PUSAT_PIN` — PIN dasbor, minimal 8 karakter.
    - `PUSAT_ENROLL_CODE` — kode daftar yang Anda ketik di wizard coach, minimal 8 karakter.
