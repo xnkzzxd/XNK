@@ -80,3 +80,18 @@ test('the portal bootstrap carries only the newest on-air time, and nothing for 
   const wire = JSON.stringify(env.call('getPortalBootstrap', A(env)));
   assert.ok(!wire.includes('Minum 2 liter'), 'bootstrap has no content text, only the timestamp');
 });
+
+test('new content ids stay unique even when saved in the same millisecond', () => {
+  const vm = require('vm');
+  const env = seededEnv();
+  const t = env.adminToken();
+  // Same millisecond and the same Math.random for every save: the old "time-0..999" id collided here.
+  vm.runInContext('var __gt = Date.prototype.getTime, __mr = Math.random; Date.prototype.getTime = function () { return 1790000000000; }; Math.random = function () { return 0.5; };', env.context);
+  try {
+    const ids = new Set();
+    for (let i = 0; i < 20; i++) ids.add(env.call('saveContent', t, Object.assign({}, TIPS, { judul: 'Tip ' + i })).id);
+    assert.equal(ids.size, 20);
+  } finally {
+    vm.runInContext('Date.prototype.getTime = __gt; Math.random = __mr;', env.context);
+  }
+});
