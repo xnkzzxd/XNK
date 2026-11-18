@@ -64,8 +64,9 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
 test('landing: daftar coach dari hub.json, nama di-escape, gambar yang dirujuk ada', () => {
   const { files } = hub.build(CFG);
   const html = files['index.html'];
-  assert.match(html, /href="\/claudia\/klien\/"[\s\S]*Claudia Fit/);
-  assert.match(html, /href="\/claudia-2\/klien\/"/);
+  // T-2241: kartu coach membuka halaman info coach itu.
+  assert.match(html, /href="\/claudia\/info\/"[\s\S]*Claudia Fit/);
+  assert.match(html, /href="\/claudia-2\/info\/"/);
   assert.ok(!html.includes('<!--COACHES-->') && !html.includes('<!--CONTACT-->'));
   assert.equal(html.split('Hubungi XNK').length - 1, 2, 'kontak di hero dan di penutup');
   for (const m of html.matchAll(/(?:src|content)="(?:https:\/\/xnk\.web\.id\/)?(img\/[^"]+)"/g)) assert.ok(m[1] in files, m[1]);
@@ -73,6 +74,8 @@ test('landing: daftar coach dari hub.json, nama di-escape, gambar yang dirujuk a
   for (const id of ['id="f"', 'id="slug"', 'id="err"', 'data-to="klien"', 'data-to="panel"', '<title>XNK</title>']) assert.ok(html.includes(id), id);
   const evil = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['index.html'];
   assert.ok(!evil.includes('<img src=x') && evil.includes('&lt;img src=x'), 'nama usaha di-escape');
+  const evilInfo = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['evil/info/index.html'];
+  assert.ok(!evilInfo.includes('<img src=x') && evilInfo.includes('&lt;img src=x'), 'nama usaha di-escape di halaman info');
   const none = hub.build({ coaches: [] }).files['index.html'];
   assert.ok(!none.includes('data-coaches') && !none.includes('href="#coach"'), 'tanpa coach, bagian dan tautannya hilang');
   assert.match(hub.slugError('img'), /dipakai sistem/);

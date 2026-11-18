@@ -64,8 +64,8 @@ Gelombang 2 — pemilik mengelola semua coach
 
 Gelombang 3 — fitur
 - [ ] T-2240 Web Push di hub (relay per coach lewat XNK Pusat).
-- [ ] T-2241 Halaman publik coach `/<slug>/info/` (profil, paket, jam kosong, daftar).
-- [ ] T-2242 Logo + warna aksen per coach di `hub.json`.
+- [x] T-2241 Halaman publik coach `/<slug>/info/` (profil, paket, jam kosong, daftar).
+- [x] T-2242 Logo + warna aksen per coach di `hub.json`.
 - [ ] T-2243 Alias slug lama (redirect); `runWarmTick` opsional.
 
 Gelombang 4 — operasional

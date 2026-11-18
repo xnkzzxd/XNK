@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="id"__ACCENT_ATTR__>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+/* Tema terang/gelap yang dipilih di aplikasi coach ini (kunci "<slug>:xnk_theme"), sebelum halaman digambar. Hanya dibaca. */
+(function () { try { var t = localStorage.getItem(__THEME_KEY__); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+</script>
+<title>__TITLE__</title>
+<meta name="description" content="__DESC__">
+<link rel="canonical" href="__URL__">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="__BRAND__">
+<meta property="og:title" content="__TITLE__">
+<meta property="og:description" content="__DESC__">
+<meta property="og:url" content="__URL__">
+<!--OGIMAGE-->
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b0b0b">
+<!--ICON-->
+<style>
+  :root {
+    --bg:#fafaf9; --fg:#0b0b0b; --mut:#5f5f5b; --line:#e2e2de; --card:#fff; --soft:#f0f0ed;
+    --ink:#0b0b0b; --on-ink:#fff; --band:#0b0b0b; --band-card:#1a1a19; --on-band:#f5f5f3; --band-mut:#a3a39e; --band-line:#2e2e2c;
+    --accent: var(--ink); --on-accent: var(--on-ink); --accent-on-ink: var(--on-band); --r: 1.1rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#0b0b0b; --fg:#f5f5f3; --mut:#a3a39e; --line:#2a2a28; --card:#151514; --soft:#1d1d1c;
+      --ink:#f5f5f3; --on-ink:#0b0b0b; --band:#000; --band-card:#151514; --band-line:#262624; }
+  }
+  :root[data-theme="dark"] { --bg:#0b0b0b; --fg:#f5f5f3; --mut:#a3a39e; --line:#2a2a28; --card:#151514; --soft:#1d1d1c;
+    --ink:#f5f5f3; --on-ink:#0b0b0b; --band:#000; --band-card:#151514; --band-line:#262624; }
+  /*ACCENTS*/
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 1rem/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden;
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+  a { color: inherit; }
+  img { display: block; max-width: 100%; }
+  .wrap { max-width: 72rem; margin: 0 auto; padding: 0 max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left)); }
+  .mut { color: var(--mut); }
+  h2 { font-size: 1.25rem; letter-spacing: -.01em; margin: 0 0 .8rem; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 2.9rem; padding: .6rem 1.2rem; border-radius: .8rem;
+    border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+  .btn svg { width: 1.15rem; height: 1.15rem; flex: none; }
+  svg.i { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Pita atas: logo, nama usaha, satu kalimat dari coach */
+  .hero { background: var(--band); color: var(--on-band); padding: calc(1.6rem + env(safe-area-inset-top)) 0 2rem; }
+  .hero .wrap { display: grid; gap: 1.2rem; }
+  .id { display: flex; align-items: center; gap: .9rem; min-width: 0; }
+  .mark { width: 3.5rem; height: 3.5rem; border-radius: 1rem; flex: none; display: grid; place-items: center; overflow: hidden;
+    background: var(--accent-on-ink); color: var(--band); font-weight: 800; font-size: 1.5rem; }
+  .mark img { width: 100%; height: 100%; object-fit: cover; }
+  .hero h1 { font-size: clamp(1.7rem, 7vw, 2.6rem); line-height: 1.08; letter-spacing: -.03em; margin: 0; overflow-wrap: anywhere; }
+  .hero .lead { color: var(--band-mut); margin: 0; font-size: 1.05rem; max-width: 40rem; }
+  .hero .cta { display: none; gap: .7rem; flex-wrap: wrap; }
+  .hero .btn { background: var(--accent-on-ink); border-color: var(--accent-on-ink); color: var(--band); }
+  .hero .btn.ghost { background: transparent; color: var(--on-band); border-color: var(--band-line); }
+
+  main.wrap { display: grid; gap: 1.6rem; padding-top: 1.4rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 1.1rem; min-width: 0; }
+  section { min-width: 0; }
+
+  /* Coach */
+  .coach { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: .9rem; align-items: start; }
+  .coach + .coach { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .ph { width: 4.5rem; height: 4.5rem; border-radius: 50%; object-fit: cover; background: var(--soft); display: grid; place-items: center; font-weight: 800; font-size: 1.4rem; }
+  .coach h3 { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
+  .coach .sub { font-size: .92rem; color: var(--mut); margin: .1rem 0 0; }
+  .coach .bio { grid-column: 1 / -1; margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+  .chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; padding: 0; list-style: none; }
+  .chips li { font-size: .85rem; padding: .25rem .65rem; border-radius: 999px; background: var(--soft); overflow-wrap: anywhere; }
+  .kv { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: .6rem; margin: 0; }
+  .kv div { min-width: 0; }
+  .kv dt { font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); }
+  .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .6rem; }
+
+  /* Paket */
+  .pk-cat { font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mut); margin: 1rem 0 .5rem; }
+  .pk-cat:first-child { margin-top: 0; }
+  .pks { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); }
+  .pk { display: flex; flex-direction: column; gap: .35rem; }
+  .pk b { font-size: 1.05rem; overflow-wrap: anywhere; }
+  .pk .price { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .pk .meta { font-size: .88rem; color: var(--mut); }
+  .pk p { margin: 0; font-size: .93rem; overflow-wrap: anywhere; }
+  .pk ul { margin: .2rem 0 0; padding-left: 1.1rem; font-size: .9rem; color: var(--mut); }
+
+  /* Jam kosong */
+  .days { display: grid; gap: .2rem; }
+  .day { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: .6rem; align-items: start; padding: .55rem 0; border-top: 1px solid var(--line); }
+  .day:first-child { border-top: 0; padding-top: 0; }
+  .day .dl { font-weight: 700; padding-top: .6rem; font-size: .95rem; }
+  .day .dl span { display: block; font-weight: 400; font-size: .82rem; color: var(--mut); }
+  .hours { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .hr { display: inline-flex; align-items: center; justify-content: center; min-width: 4.2rem; min-height: 2.75rem; padding: 0 .7rem; border-radius: .7rem;
+    background: var(--soft); border: 1px solid var(--line); font-weight: 650; text-decoration: none; font-variant-numeric: tabular-nums; }
+  .hr:hover { border-color: var(--accent); }
+  .none { color: var(--mut); padding-top: .6rem; font-size: .93rem; }
+
+  .skel { display: block; height: 1rem; border-radius: .4rem; background: var(--soft); margin: .5rem 0; }
+  .skel.w60 { width: 60%; } .skel.w40 { width: 40%; } .skel.tall { height: 4.5rem; }
+  @media (prefers-reduced-motion: no-preference) { .skel { animation: pulse 1.2s ease-in-out infinite; } }
+  @keyframes pulse { 50% { opacity: .5; } }
+  .err { display: grid; gap: .7rem; justify-items: start; }
+
+  /* Tombol bawah (HP) */
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 94%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--line);
+    padding: .7rem max(1rem, env(safe-area-inset-right)) calc(.7rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }
+  .bar .wrap { display: flex; gap: .6rem; padding: 0; }
+  .bar .btn { flex: 1 1 0; }
+  footer { padding: 2rem 0 1rem; font-size: .85rem; }
+
+  @media (min-width: 900px) {
+    body { padding-bottom: 0; }
+    .bar { display: none; }
+    .hero { padding: 3rem 0 2.6rem; }
+    .hero .wrap { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+    .hero .cta { display: flex; }
+    .mark { width: 4.5rem; height: 4.5rem; font-size: 1.9rem; }
+    main.wrap { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; padding-top: 2rem; }
+    main > .side { position: sticky; top: 1rem; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="stack">
+      <div class="id"><!--MARK--><h1>__BRAND__</h1></div>
+      <p class="lead" id="lead" style="margin-top:.8rem">Personal trainer. Lihat paket, harga, dan jam kosong, lalu daftar online.</p>
+    </div>
+    <div class="cta">
+      <a class="btn" href="__KLIEN__"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>Daftar / Booking</a>
+      <a class="btn ghost wa" href="#" rel="noopener" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5z"/></svg>WhatsApp</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="stack" style="display:grid;gap:1.6rem;min-width:0">
+    <section aria-labelledby="h-coach">
+      <h2 id="h-coach">Coach</h2>
+      <div class="card" id="coaches"><span class="skel tall"></span><span class="skel w60"></span><span class="skel w40"></span></div>
+    </section>
+    <section aria-labelledby="h-paket">
+      <h2 id="h-paket">Paket dan harga</h2>
+      <div id="packages"><div class="card"><span class="skel w60"></span><span class="skel w40"></span><span class="skel"></span></div></div>
+    </section>
+  </div>
+  <section class="side" aria-labelledby="h-jam">
+    <h2 id="h-jam">Jam kosong 7 hari ke depan</h2>
+    <div class="card" id="slots"><span class="skel"></span><span class="skel"></span><span class="skel"></span><span class="skel w60"></span></div>
+    <p class="mut" style="font-size:.88rem;margin:.6rem 0 0">Pilih jam untuk masuk atau daftar, lalu booking di portal klien.</p>
+  </section>
+</main>
+
+<footer class="wrap mut">© __BRAND__</footer>
+
+<nav class="bar" aria-label="Daftar">
+  <div class="wrap">
+    <a class="btn" href="__KLIEN__">Daftar / Booking</a>
+    <a class="btn ghost wa" href="#" rel="noopener" hidden>WhatsApp</a>
+  </div>
+</nav>
+
+<script>
+(function () {
+  var CFG = /*__CFG__*/null;
+  var DOW = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function list(v) { return (Array.isArray(v) ? v : String(v == null ? '' : v).split(/[,\n]/)).map(function (x) { return String(x).trim(); }).filter(Boolean); }
+  function rp(n) { var x = Math.round(Number(n) || 0); return x > 0 ? 'Rp ' + x.toLocaleString('id-ID') : 'Hubungi coach'; }
+  function okPhoto(u) { return /^https:\/\/(drive\.google\.com|[a-z0-9-]+\.googleusercontent\.com)\/[^\s"'<>]*$/.test(String(u || '')); }
+  function call(fn, args) {
+    return fetch(CFG.exec, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ fn: fn, args: args || [] }), credentials: 'omit', redirect: 'follow' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (!j || !j.ok) throw new Error(j && j.code === 'unknown_fn' ? 'Server coach sedang diperbarui.' : (j && j.error) || 'Belum bisa memuat.'); return j.data; });
+  }
+  function fail(id, again) {
+    $(id).innerHTML = '<div class="card err"><p style="margin:0">Belum bisa memuat. Periksa sinyal, lalu coba lagi.</p><button type="button" class="btn ghost">Coba lagi</button></div>';
+    $(id).querySelector('button').addEventListener('click', again);
+  }
+
+  function coaches() {
+    call('getCoaches').then(function (cs) {
+      cs = Array.isArray(cs) ? cs : [];
+      if (!cs.length) { $('coaches').innerHTML = '<p class="mut" style="margin:0">Profil coach belum diisi.</p>'; return; }
+      var first = cs[0];
+      if (first.headline) $('lead').textContent = first.headline;
+      var wa = cs.map(function (c) { return String(c.phone || '').replace(/\D/g, ''); }).filter(function (p) { return p.length >= 10 && p.length <= 15; })[0];
+      if (wa) {
+        var href = 'https://wa.me/' + wa + '?text=' + encodeURIComponent('Halo, saya melihat halaman ' + CFG.brand + ' dan ingin bertanya tentang paket latihan.');
+        Array.prototype.forEach.call(document.querySelectorAll('a.wa'), function (a) { a.href = href; a.hidden = false; });
+      }
+      $('coaches').innerHTML = cs.map(function (c) {
+        var ini = esc((String(c.name || '?').match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase());
+        var ph = okPhoto(c.photo) ? '<img class="ph" src="' + esc(c.photo) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="ph" aria-hidden="true">' + ini + '</span>';
+        var spec = list(c.specialty), cert = list(c.certifications), ach = list(c.achievements);
+        var ig = String(c.instagram || '').trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/\/.*$/, '');
+        var kv = [];
+        if (c.experience) kv.push(['Pengalaman', c.experience]);
+        if (c.location) kv.push(['Lokasi', c.location]);
+        if (cert.length) kv.push(['Sertifikasi', cert.join(', ')]);
+        if (ach.length) kv.push(['Prestasi', ach.join(', ')]);
+        return '<article class="coach">' + ph + '<div style="min-width:0"><h3>' + esc(c.name) + '</h3>' + (c.headline ? '<p class="sub">' + esc(c.headline) + '</p>' : '') + '</div>' +
+          (c.bio ? '<p class="bio">' + esc(c.bio) + '</p>' : '') +
+          (spec.length ? '<ul class="chips" aria-label="Keahlian">' + spec.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>' : '') +
+          (kv.length ? '<dl class="kv">' + kv.map(function (x) { return '<div><dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd></div>'; }).join('') + '</dl>' : '') +
+          (/^[A-Za-z0-9._]{1,30}$/.test(ig) ? '<div class="links"><a class="btn ghost" href="https://instagram.com/' + esc(ig) + '" rel="noopener">@' + esc(ig) + '</a></div>' : '') +
+          '</article>';
+      }).join('');
+    }).catch(function () { fail('coaches', coaches); });
+  }
+
+  function packages() {
+    call('getPriceListPublic').then(function (d) {
+      var cats = (d && d.categories) || [], pk = (d && d.packages) || [];
+      var groups = cats.map(function (c) { return { label: c.label, items: pk.filter(function (p) { return p.kategori === c.id; }) }; }).filter(function (g) { return g.items.length; });
+      if (!groups.length) { $('packages').innerHTML = '<div class="card mut">Paket belum diisi. Tanyakan langsung ke coach.</div>'; return; }
+      $('packages').innerHTML = groups.map(function (g) {
+        return (groups.length > 1 ? '<p class="pk-cat">' + esc(g.label) + '</p>' : '') + '<div class="pks">' + g.items.map(function (p) {
+          var meta = [p.jumlahSesi ? p.jumlahSesi + ' sesi' : '', p.durasi || ''].filter(Boolean).join(' · ');
+          var ben = list(p.benefit);
+          return '<div class="card pk"><b>' + esc(p.namaPaket) + '</b><span class="price">' + esc(rp(p.harga)) + '</span>' + (meta ? '<span class="meta">' + esc(meta) + '</span>' : '') +
+            (p.deskripsi ? '<p>' + esc(p.deskripsi) + '</p>' : '') + (ben.length ? '<ul>' + ben.map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
+        }).join('') + '</div>';
+      }).join('');
+    }).catch(function () { fail('packages', packages); });
+  }
+
+  function slots() {
+    call('getOpenSlots', [{ days: 7 }]).then(function (days) {
+      days = Array.isArray(days) ? days : [];
+      var any = false;
+      var html = days.map(function (d) {
+        var p = String(d.date || '').split('-'), dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+        var free = (d.hours || []).filter(function (x) { return x.free > 0 && !x.past && !x.off; });
+        if (free.length) any = true;
+        var label = '<div class="dl">' + DOW[dt.getUTCDay()] + '<span>' + dt.getUTCDate() + ' ' + MON[dt.getUTCMonth()] + '</span></div>';
+        var body = free.length ? '<div class="hours">' + free.map(function (x) { var hh = ('0' + x.hour).slice(-2) + '.00'; return '<a class="hr" href="' + esc(CFG.klien) + '" aria-label="' + esc(DOW[dt.getUTCDay()] + ' ' + dt.getUTCDate() + ' ' + MON[dt.getUTCMonth()] + ' jam ' + hh) + '">' + hh + '</a>'; }).join('') + '</div>'
+          : '<div class="none">' + (d.closed ? 'Tutup' : 'Penuh') + '</div>';
+        return '<div class="day">' + label + body + '</div>';
+      }).join('');
+      $('slots').innerHTML = days.length ? '<div class="days">' + html + '</div>' + (any ? '' : '<p class="mut" style="margin:.8rem 0 0">Belum ada jam kosong minggu ini. Tanyakan jadwal lain lewat WhatsApp.</p>') : '<p class="mut" style="margin:0">Jadwal belum diatur.</p>';
+    }).catch(function () { fail('slots', slots); });
+  }
+
+  coaches(); packages(); slots();
+})();
+</script>
+</body>
+</html>

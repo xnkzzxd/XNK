@@ -244,7 +244,7 @@
     let c2 = group('Paket & coach', row(go('public-pack'), 'package', 'Paket saya', total ? 'Sisa ' + rem + ' dari ' + total + ' sesi' : (me.packageName || 'Lihat paket')) + row(go('public-coaches'), 'dumbbell', 'Coach', coach ? coach.name : 'Profil, jam, chat') + row(go('calendar'), 'calendar-days', 'Jadwal', next ? fmtDate(new Date(next.start), { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtTime(new Date(next.start)) : 'Belum ada jadwal') + row('window.chatCoach()', 'message-circle', 'Chat coach', 'Lewat WhatsApp'));
     const p = X().profile;
     c2 += '<div class="ds-group"><p class="ds-gt">Tampilan</p><div class="ds-list"><div class="ds-row ds-static"><b class="grow">Tema</b><div class="seg" id="theme-seg-3" role="radiogroup" aria-label="Tema"></div></div>' +
-      (p ? '<div class="ds-row ds-static"><b class="grow">Warna aksen</b>' + accentSwatches(p.aksen, 'window.setAccent') + '</div>' : '') + '</div></div>';
+      (p ? '<div class="ds-row ds-static"><b class="grow">Warna aksen</b>' + accentSwatches(window.effAccent(p), 'window.setAccent') + '</div>' : '') + '</div></div>';
     const badges = (pg.data && pg.data.badges) || [], got = badges.filter(b => b.earned).length;
     let c3 = '<section class="card ds-card"><div class="row-between"><b>Koleksi badge</b><span class="li-sub">' + got + ' dari ' + badges.length + '</span></div><div class="ds-badges">' +
       badges.map(b => '<span class="ds-badge' + (b.earned ? ' on' : '') + '" title="' + h(b.label) + '">' + shieldSvg(b.id, b.label, !!b.earned) + '</span>').join('') + '</div></section>';

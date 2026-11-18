@@ -22,15 +22,15 @@ function walk(dir, base, out) {
 }
 
 /** Daftar masalah (Indonesia); kosong = boleh tayang. */
-function verifySite(dir, cfg) {
-  const hub = readHub(cfg);
+function verifySite(dir, cfg, opts) {
+  const hub = readHub(cfg, opts);
   const problems = [];
   const has = rel => fs.existsSync(path.join(dir, rel));
   const read = rel => fs.readFileSync(path.join(dir, rel), 'utf8');
   for (const f of ['index.html', '404.html', '_hub/versions.json']) if (!has(f)) problems.push(`${f} tidak ada.`);
   if (!problems.length) {
     const landing = read('index.html');
-    for (const c of hub.coaches) if (!landing.includes(`href="/${c.slug}/klien/"`)) problems.push(`Halaman depan tidak menautkan /${c.slug}/klien/.`);
+    for (const c of hub.coaches) if (!landing.includes(`href="/${c.slug}/info/"`)) problems.push(`Halaman depan tidak menautkan /${c.slug}/info/.`);
     try { JSON.parse(read('_hub/versions.json')); } catch (e) { problems.push('_hub/versions.json bukan JSON.'); }
     for (const f of ['index.html', '404.html']) if (!read(f).includes('http-equiv="Content-Security-Policy"')) problems.push(`${f}: Content-Security-Policy tidak terpasang.`);
   }
@@ -63,6 +63,15 @@ function verifySite(dir, cfg) {
       else if (html.lastIndexOf('<script', shim) !== firstScript) problems.push(`${c.slug} (${kind}): awalan penyimpanan bukan skrip pertama.`);
       if (!read(d + 'sw-app.js').includes(`var PREFIX = "xnk-page-${c.slug}~${kind}~";`)) problems.push(`${c.slug} (${kind}): awalan cache service worker salah.`);
     }
+    // T-2241/T-2242: halaman info dengan CSP ketat; logo coach ada bila diisi di hub.json.
+    const info = c.slug + '/info/index.html';
+    if (!has(info)) problems.push(`${c.slug}: halaman info (/${c.slug}/info/) tidak ada.`);
+    else {
+      const t = read(info);
+      if (!t.includes('http-equiv="Content-Security-Policy"') || /script-src[^;]*unsafe-inline/.test(t)) problems.push(`${c.slug}: halaman info tanpa CSP ketat.`);
+      if (!t.includes(JSON.stringify(c.exec).slice(1, -1))) problems.push(`${c.slug}: halaman info tidak memanggil /exec coach ini.`);
+    }
+    if (c.logoFile && !has(`${c.slug}/logo.${c.logoFile.ext}`)) problems.push(`${c.slug}: logo.${c.logoFile.ext} tidak ada.`);
     try {
       const l = JSON.parse(read(c.slug + '/lib-latest.json'));
       if (!/^[0-9a-f]{12}$/.test(l && l.library && l.library.hash || '')) problems.push(`${c.slug}: lib-latest.json tanpa sidik Library.`);
@@ -85,7 +94,7 @@ if (require.main === module) {
   const cfgFile = i >= 0 ? args.splice(i, 2)[1] : null;
   const dir = args[0];
   if (!dir || !cfgFile) { console.error('pakai: hub-verify.js <siteDir> --config hub.json'); process.exit(1); }
-  const problems = verifySite(path.resolve(dir), JSON.parse(fs.readFileSync(cfgFile, 'utf8')));
+  const problems = verifySite(path.resolve(dir), JSON.parse(fs.readFileSync(cfgFile, 'utf8')), { baseDir: path.dirname(path.resolve(cfgFile)) });
   if (problems.length) {
     for (const p of problems) console.log('::error::' + p);
     console.log(`Hasil build hub tidak lolos pemeriksaan (${problems.length} masalah); situs lama tetap tayang.`);

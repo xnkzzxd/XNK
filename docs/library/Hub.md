@@ -16,7 +16,8 @@ Keputusan pemilik (2026-11-17): satu situs untuk semua coach, `xnk.web.id/<slug>
 | `tools/hub-edit.js` | Tambah, ubah, hapus satu coach di `hub.json` dengan pemeriksaan penuh (dipakai form Actions). |
 | `hub-site/` | `index.html` (landing profil brand XNK: hero, fitur klien/coach, tangkapan layar, cara kerja, privasi, daftar coach dari `hub.json` di `<!--COACHES-->` (bagian hilang bila kosong), kotak masuk, tanya jawab, tombol kontak dari `contactUrl` di `<!--CONTACT-->`), `img/` (tangkapan layar demo + `og.jpg`, dibuat oleh `tools/hub-shots.js`; jalankan ulang bila tampilan app berubah banyak), `404.html`, `storage-prefix.js`, `manifest.webmanifest` + `sw.js` (landing bisa dipasang dari Chrome/Edge; service worker hanya melayani `/`, `/manifest.webmanifest`, `/img/*`, tidak pernah halaman coach atau cache coach), `desktop.ico`. Ikon (`img/icon-192.png`, `img/icon-512.png`, `img/logo-64.png`, `desktop.ico`) dibuat dari `logo.png` di akar repo di atas latar hitam; perintahnya ada di `tools/hub-shots.js`. Bagian "Aplikasi" menautkan `github.com/xnkzzxd/XNK/releases/download/app-latest/` (`XNK-Android.apk`, `XNK-Windows.msi`, `XNK-macOS.dmg`), dibangun oleh workflow `apps.yml` di repo XNK. Slug `img` dipakai sistem. |
 | `hub-repo/` | Isi repo hub `xnk-template-site`: `hub.json`, workflow `hub.yml` (form simpan/hapus/bangun, harian 03:17 WIB), README (DNS, cara menambah coach). |
-| `tools/hub-check.js`, `tests/hub.test.js` | Cek browser dan tes. |
+| `hub-site/info.html` | Halaman info publik per coach `/<slug>/info/` (T-2241). |
+| `tools/hub-check.js`, `tests/hub.test.js`, `tests/hub-brand.test.js` | Cek browser dan tes. |
 | `bridge-src/Setup.html` | Langkah 4 wizard: pilih slug, simpan `SITE_URL = https://xnk.web.id/<slug>`, salin data untuk pengelola. |
 
 ## Kenapa awalan penyimpanan
@@ -65,6 +66,59 @@ dikirim ke Apps Script dan GitHub raw (`connect-src`, `img-src` terbatas), tanpa
 Halaman depan dan 404 memakai CSP ketat dengan sidik sha256 skrip inline. **Host baru** (CDN, gambar, API) harus
 ditambahkan ke `CSP_APP`, atau `hub-check.js` gagal dengan "tanpa penolakan Content-Security-Policy". Perlindungan
 penuh (tanpa `'unsafe-inline'`) menunggu T-2224. Google Analytics milik xnk.my.id tidak ikut ke halaman coach.
+
+## Warna aksen dan logo per coach (T-2242)
+
+`hub.json` boleh memberi tiap coach dua isian tambahan:
+
+```json
+{ "slug": "claudia", "brand": "Claudia Fit", "exec": "https://script.google.com/macros/s/…/exec",
+  "accent": "biru", "logo": "logo/claudia.png" }
+```
+
+- `accent`: salah satu warna portal Fase X: `hitam` (= tanpa warna, sama dengan kosong), `biru`, `hijau`, `toska`,
+  `ungu`, `pink`, `oranye`. Nilainya ditulis `build-hub.js` sebagai `<html data-accent="…" data-brand-accent="…">`
+  di panel dan portal coach itu, dan dipakai halaman info serta kartu di halaman depan. Di aplikasi
+  (`applyAccent`, `parts/app/16-portal-x.part`) warna coach adalah **bawaan**: panel, layar masuk, dan klien yang
+  belum pernah memilih warna (`profile.aksenSet === false`, dari `_pfFrom_` di `Profil.gs`). Warna yang dipilih
+  klien sendiri, termasuk hitam, selalu menang. Menyimpan kartu atlet tanpa mengganti warna tidak lagi menyimpan
+  "hitam" sebagai pilihan. Nilai warna disalin di `ACCENTS` (`build-hub.js`); `tests/hub-brand.test.js`
+  membandingkannya dengan `parts/theme/05-portal-x.part` dan `PF_ACCENTS`, jadi ubah ketiganya bersama.
+- `logo`: jalur berkas **di repo hub** (mis. `logo/claudia.png`). Diperiksa saat build: PNG, JPEG atau WebP
+  (isi berkas harus cocok dengan namanya), maksimal 200 KB, tanpa `..`; **SVG ditolak** karena bisa berisi skrip.
+  Logo disalin ke `/<slug>/logo.<ext>` dan menggantikan huruf/tanda XNK di favicon, apple-touch-icon, manifest
+  (`/<slug>/manifest.webmanifest` dan `/<slug>/klien/manifest.webmanifest`, dibuat untuk setiap coach), kartu
+  halaman depan, layar masuk, sidebar dan bar atas (lewat satu `<style>` yang mengganti `.logo-mark`), dan ikut
+  salinan offline service worker (`ASSETS`). Sebaiknya persegi, 192–512 px.
+
+**Menambah logo:** di repo hub, **Add file → Upload files**, taruh gambar di folder `logo/`, Commit. Lalu
+**Actions → Hub XNK → Run workflow**: aksi `simpan`, slug, isian *logo* = `logo/<nama berkas>` (dan/atau *warna*).
+Nama usaha dan link /exec boleh dikosongkan untuk coach yang sudah ada. *warna* `tetap` = tidak diubah,
+`hitam` = hapus warna; *logo* kosong = tidak diubah, `-` = hapus logo.
+
+**Halaman dari commit lama.** Semua ini dikerjakan `build-hub.js` setelah `build-tenant.js` (antarmuka
+`build({exec, brand})` tidak berubah). Penanda yang tidak ada di halaman dari commit Library lama dilewati. Halaman
+lama memakai `applyAccent` lama, yang menghapus warna coach setelah pindah halaman, sampai coach itu memperbarui
+Library-nya. Logo tetap tampil karena hanya lewat CSS.
+
+## Halaman info coach `/<slug>/info/` (T-2241)
+
+Halaman publik untuk dibagikan coach (Instagram, WhatsApp): profil, foto dan bio coach, paket dan harga, jam
+kosong 7 hari, tombol **Daftar / Booking** ke `/<slug>/klien/`, dan tombol **WhatsApp** bila profil coach punya
+nomor. Kartu coach di halaman depan sekarang menautkan halaman ini; kotak "Masuk" tetap ke `/klien/`.
+
+- Sumber: `hub-site/info.html` (template), diisi `infoPage()` di `build-hub.js` (nama usaha, `/exec`, warna, logo,
+  deskripsi, canonical, Open Graph; `og:image` = logo bila ada). Data dibaca langsung dari `/exec` coach lewat
+  `doPost`: `getCoaches`, `getPriceListPublic`, `getOpenSlots({days: 7})`, ketiganya publik dan tanpa data klien.
+- Bukan `Landing.html` produksi: landing itu memakai `onclick="…"`, SEO/JSON-LD, Analytics dan iframe BookingPT
+  milik xnk.my.id, sedangkan halaman ini memakai CSP ketat. Halaman baru yang ramping lebih aman dan lebih mudah dijaga.
+- CSP: skrip inline hanya dengan sidik sha256, `connect-src 'self' https://script.google.com
+  https://script.googleusercontent.com`, gambar dari situs sendiri dan foto Drive (`drive.google.com`,
+  `*.googleusercontent.com`). Tanpa `onclick`, tanpa skrip luar, tanpa tulisan "XNK".
+- HP dulu (360–430 px, tombol bawah dengan `safe-area`, tombol ≥ 44 px), dua kolom mulai 900 px, terang/gelap
+  mengikuti sistem atau pilihan tema di aplikasi coach itu (`<slug>:xnk_theme`, hanya dibaca).
+- Service worker panel `/<slug>/` hanya menjawab navigasi ke alamat scope-nya sendiri, jadi `/<slug>/info/` selalu
+  dari jaringan (dicek `hub-check.js` dengan worker panel aktif).
 
 ## Slug
 

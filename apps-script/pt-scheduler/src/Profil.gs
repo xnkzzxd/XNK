@@ -36,6 +36,8 @@ function _pfFrom_(row) {
   return {
     panggilan: c('panggilan').trim(), motto: c('motto').trim(),
     aksen: PF_ACCENTS.indexOf(j.a) !== -1 ? j.a : PF_ACCENTS[0],
+    // T-2242: false = klien belum pernah memilih warna; halaman hub memakai warna coach (data-brand-accent) sebagai bawaan.
+    aksenSet: PF_ACCENTS.indexOf(j.a) !== -1,
     gaya: PF_STYLES.indexOf(j.g) !== -1 ? j.g : PF_STYLES[0],
     stat: stat.length >= PF_LIMITS.statMin ? stat : PF_STATS_DEFAULT.slice(),
     badge: list(j.b, null, PF_LIMITS.badgeMax),
@@ -74,7 +76,8 @@ function _pfWrite_(m, cur, v) {
   const put = function(k, val) { m.sheet.getRange(m.rowNum, PF_COLS[k]).setNumberFormat('@').setValue(val); };
   if (v.panggilan !== undefined) put('panggilan', v.panggilan);
   if (v.motto !== undefined) put('motto', v.motto);
-  const n = Object.assign({ aksen: cur.aksen, gaya: cur.gaya, stat: cur.stat, badge: cur.badge, foto: cur.foto }, v);
+  const n = Object.assign({ aksen: cur.aksenSet === false ? undefined : cur.aksen, gaya: cur.gaya, stat: cur.stat, badge: cur.badge, foto: cur.foto }, v);
+  // Warna yang belum pernah dipilih tetap kosong (JSON.stringify membuang undefined), supaya warna coach tetap bawaan.
   put('kartu', JSON.stringify({ a: n.aksen, g: n.gaya, s: n.stat, b: n.badge, f: n.foto === true }));
 }
 
@@ -132,7 +135,7 @@ function _portalXFor_(row, pre) {
     level: { l: 'Level', v: String(level.level) }
   };
   const profile = {
-    nama: _pfDisplayName_(row, pf), panggilan: pf.panggilan, motto: pf.motto, aksen: pf.aksen, gaya: pf.gaya, foto: pf.foto,
+    nama: _pfDisplayName_(row, pf), panggilan: pf.panggilan, motto: pf.motto, aksen: pf.aksen, aksenSet: pf.aksenSet, gaya: pf.gaya, foto: pf.foto,
     stat: pf.stat, badge: pf.badge.filter(function(b) { return earned.some(function(e) { return e.id === b; }); }),
     statOptions: PF_STATS.map(function(k) { return { k: k, l: statVal[k].l, v: statVal[k].v }; }),
     options: { aksen: PF_ACCENTS, gaya: PF_STYLES, limits: PF_LIMITS }

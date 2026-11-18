@@ -4,7 +4,8 @@
 //   NODE_PATH=$(npm root -g) node apps-script/xnk-library/tools/hub-check.js
 // Dicek: landing (isian nama coach, kontak), 404, alamat tanpa garis miring, login panel bergantian di satu browser
 // tanpa saling logout, kunci penyimpanan berawalan slug, portal klien hanya mengenal klien coach itu, cache service worker
-// panel dan portal tidak saling menghapus, dan portal terbuka tanpa sinyal.
+// panel dan portal tidak saling menghapus, dan portal terbuka tanpa sinyal. T-2241/T-2242: warna aksen dan logo per coach,
+// halaman info /<slug>/info/ (HP dan desktop, CSP ketat, tetap dari jaringan walau service worker panel aktif).
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -36,7 +37,7 @@ function backend() {
 
 // Seperti GitHub Pages: /nama diarahkan ke /nama/, alamat yang tidak ada menjawab 404.html.
 function serve(files) {
-  const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg' };
+  const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.webmanifest': 'application/manifest+json' };
   const server = http.createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\//, '');
     if (p !== '' && !p.endsWith('/') && !path.extname(p) && files[p + '/index.html'] != null) { res.writeHead(301, { Location: '/' + p + '/' }); return res.end(); }
@@ -100,18 +101,34 @@ async function panelLogin(page, pin) {
   await page.waitForTimeout(1500);
 }
 
+/** Logo uji (PNG dan WebP asli, digambar di Chromium) di folder "repo hub" sementara. */
+async function makeLogos(browser) {
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'xnk-hubcheck-'));
+  fs.mkdirSync(path.join(dir, 'logo'));
+  const page = await browser.newPage();
+  for (const [file, type, color, txt] of [['claudia.png', 'image/png', '#1d4ed8', 'CF'], ['dua.webp', 'image/webp', '#15803d', 'CD']]) {
+    const b64 = await page.evaluate(([type, color, txt]) => { const c = document.createElement('canvas'); c.width = c.height = 192; const x = c.getContext('2d');
+      x.fillStyle = color; x.fillRect(0, 0, 192, 192); x.fillStyle = '#fff'; x.font = 'bold 90px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, 96, 100);
+      return c.toDataURL(type, 0.9).split(',')[1]; }, [type, color, txt]);
+    fs.writeFileSync(path.join(dir, 'logo', file), Buffer.from(b64, 'base64'));
+  }
+  await page.close();
+  return dir;
+}
+
 (async () => {
   const be = backend();
   const cfg = { contactUrl: 'https://wa.me/6281234567890', pusatUrl: PUSAT, coaches: [
-    { slug: 'claudia', brand: 'Claudia Fit', exec: EXEC_A },
-    { slug: 'claudia-2', brand: 'Claudia Dua', exec: EXEC_B },
+    { slug: 'claudia', brand: 'Claudia Fit', exec: EXEC_A, accent: 'biru', logo: 'logo/claudia.png' },
+    { slug: 'claudia-2', brand: 'Claudia Dua', exec: EXEC_B, accent: 'hijau', logo: 'logo/dua.webp' },
   ] };
-  const site = hub.build(cfg);
+  const browser = await chromium.launch();
+  const logoDir = await makeLogos(browser);
+  const site = hub.build(cfg, { baseDir: logoDir });
   // Uji-diri: HUB_CHECK_NOSHIM=1 mencopot penyimpanan per slug; cek isolasi di bawah HARUS gagal (membuktikan tesnya tidak kosong).
   if (process.env.HUB_CHECK_NOSHIM) for (const n of Object.keys(site.files)) if (n.endsWith('index.html')) site.files[n] = site.files[n].replace(/<script>\(function \(\) \{\n  var P = [\s\S]*?<\/script>\n/, '');
   const server = await serve(site.files);
   const O = 'http://127.0.0.1:' + server.address().port;
-  const browser = await chromium.launch();
   try {
     console.log('Hub · landing dan alamat');
     {
@@ -121,7 +138,8 @@ async function panelLogin(page, pin) {
       check((await page.title()) === 'XNK', 'judul landing = XNK');
       check(await page.isVisible('#slug'), 'ada isian nama coach');
       check((await page.textContent('body')).includes('Hubungi XNK'), 'tombol kontak tampil (kontak diisi)');
-      check(await page.locator('a.coach[href="/claudia/klien/"]').count() === 1, 'daftar coach menautkan portal /claudia/klien/');
+      check(await page.locator('a.coach[href="/claudia/info/"]').count() === 1 && await page.locator('a.coach[href="/claudia-2/info/"]').count() === 1, 'daftar coach menautkan halaman info /<slug>/info/');
+      check(await page.evaluate(() => [...document.querySelectorAll('a.coach .av img')].map(i => i.naturalWidth > 0 && i.getAttribute('src')).join(',')) === '/claudia/logo.png,/claudia-2/logo.webp', 'kartu coach memuat logo PNG dan WebP');
       check(await page.evaluate(() => [...document.querySelectorAll('.phones img')].filter(i => i.offsetParent).every(i => i.naturalWidth > 0)), 'gambar hero termuat');
       // Berbagai rasio layar: HP tegak/mendatar, tablet, laptop, ultrawide, monitor tegak.
       for (const [w, h] of [[320, 568], [390, 844], [844, 390], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1080], [1080, 1920], [3440, 1440]]) {
@@ -190,11 +208,18 @@ async function panelLogin(page, pin) {
       check(((await a.textContent('#admin-login-error')) || '').includes('PIN salah'), 'PIN coach lain ditolak di /claudia/');
       const atitle = await a.title();
       check(atitle.includes('Claudia Fit') && !/XNK/.test(atitle) && !/XNK/.test(await a.evaluate(() => document.body.innerText)), 'layar PIN panel: judul dan teks memakai nama usaha, tanpa "XNK"');
+      const look = pg => pg.evaluate(() => ({ acc: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+        logo: getComputedStyle(document.querySelector('#admin-login .auth-logo .logo-mark')).backgroundImage, icon: document.querySelector('link[rel="icon"]').getAttribute('href') }));
+      const la = await look(a);
+      check(la.acc === '#1d4ed8' && /\/claudia\/logo\.png/.test(la.logo) && la.icon === '/claudia/logo.png', 'layar PIN claudia: aksen biru, logo coach, favicon logo (' + JSON.stringify(la) + ')');
       await panelLogin(a, '111111');
       check(!(await a.isVisible('#admin-login')), 'PIN claudia masuk di /claudia/');
+      check(await a.evaluate(() => document.documentElement.getAttribute('data-accent')) === 'biru', 'panel claudia tetap biru setelah masuk dan pindah halaman');
       check(JSON.stringify(await a.evaluate(() => (window.members || []).map(m => m.name))) === '["Ani"]', 'panel claudia hanya menampilkan klien claudia');
 
       const b = await open(context, O + '/claudia-2/', errors);
+      const lb = await look(b);
+      check(lb.acc === '#15803d' && /\/claudia-2\/logo\.webp/.test(lb.logo), 'layar PIN claudia-2: aksen hijau, logo WebP sendiri (' + JSON.stringify(lb) + ')');
       check(await b.isVisible('#admin-login'), '/claudia-2/ di browser yang sama TIDAK ikut login (token tidak bocor antar coach)');
       await panelLogin(b, '222222');
       check(!(await b.isVisible('#admin-login')), 'PIN claudia-2 masuk di /claudia-2/');
@@ -248,6 +273,43 @@ async function panelLogin(page, pin) {
       await context.close();
     }
 
+    console.log('Hub · halaman info /<slug>/info/');
+    {
+      const seen = [], errors = [];
+      const context = await newContext(browser, be, seen);
+      // Service worker panel aktif dulu: halaman info di dalam scope-nya tetap harus datang dari jaringan.
+      const panel = await open(context, O + '/claudia/', errors);
+      await panel.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 10000 }).catch(() => {});
+      await panel.close();
+      for (const [slug, acc] of [['claudia', '#1d4ed8'], ['claudia-2', '#15803d']]) {
+        const page = await open(context, O + '/' + slug + '/info', errors);
+        check(page.url() === O + '/' + slug + '/info/', `/${slug}/info diarahkan ke /${slug}/info/`);
+        await page.waitForSelector('#packages .pk', { timeout: 8000 }).catch(() => {});
+        await page.waitForSelector('#slots .day, #slots p', { timeout: 8000 }).catch(() => {});
+        const t = await page.title();
+        check(t.includes(slug === 'claudia' ? 'Claudia Fit' : 'Claudia Dua') && !/XNK/.test(t), slug + ': judul halaman info = nama usaha: ' + t);
+        const r = await page.evaluate(() => ({ pk: [...document.querySelectorAll('#packages .pk b')].map(b => b.textContent), days: document.querySelectorAll('#slots .day').length,
+          err: !!document.querySelector('.err'), acc: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+          mark: (document.querySelector('.mark img') || {}).naturalWidth || 0, daftar: document.querySelector('.bar a.btn').getAttribute('href'),
+          xnk: /XNK/.test(document.body.innerText), og: (document.querySelector('meta[property="og:title"]') || {}).content }));
+        check(r.pk.includes('Regular 8') && r.days === 7 && !r.err, `${slug}: paket dan 7 hari jam kosong dari /exec coach itu (${JSON.stringify({ pk: r.pk, days: r.days, err: r.err })})`);
+        check(r.acc === acc && r.mark > 0, `${slug}: warna aksen coach dan logo di halaman info`);
+        check(r.daftar === '/' + slug + '/klien/' && !r.xnk, `${slug}: Daftar / Booking → /${slug}/klien/, tanpa tulisan "XNK"`);
+        for (const [w, h] of [[360, 740], [390, 844], [430, 932], [1280, 800], [1920, 1080]]) {
+          await page.setViewportSize({ width: w, height: h });
+          await page.waitForTimeout(150);
+          const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth,
+            small: [...document.querySelectorAll('a.btn, button, a.hr')].filter(e => e.offsetParent && e.getBoundingClientRect().height < 43.5).length,
+            bar: getComputedStyle(document.querySelector('.bar')).display }));
+          check(m.sw <= w && m.small === 0 && (w < 900 ? m.bar !== 'none' : m.bar === 'none'), `${slug} info ${w}×${h}: tanpa scroll ke samping, tombol ≥ 44 px, tombol bawah ${w < 900 ? 'tampil' : 'diganti tombol atas'} (${JSON.stringify(m)})`);
+        }
+        await page.close();
+      }
+      check(seen.every(u => u.startsWith(EXEC_A) || u.startsWith(EXEC_B)), 'halaman info hanya memanggil /exec coach');
+      check(errors.length === 0, 'halaman info: tanpa error JavaScript / CSP' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
+      await context.close();
+    }
+
     console.log('Hub · portal klien, cache, dan tanpa sinyal');
     {
       const seen = [], errors = [];
@@ -264,6 +326,8 @@ async function panelLogin(page, pin) {
       await p.click('#login-submit-btn');
       await p.waitForTimeout(1800);
       check((await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name)) === 'Ani', 'klien claudia masuk');
+      await p.waitForFunction(() => window.myX && window.myX.profile, null, { timeout: 8000 }).catch(() => {});
+      check(await p.evaluate(() => document.documentElement.getAttribute('data-accent')) === 'biru', 'klien yang belum memilih warna memakai warna coach (biru)');
       const home = await open(context, O + '/', errors);
       await home.waitForTimeout(300);
       check(home.url() === O + '/claudia/klien/', 'klien sudah masuk: xnk.web.id langsung ke /claudia/klien/ (' + home.url() + ')');
@@ -298,6 +362,7 @@ async function panelLogin(page, pin) {
   } finally {
     await browser.close();
     server.close();
+    fs.rmSync(logoDir, { recursive: true, force: true });
   }
   console.log(fails ? `\n${fails} cek gagal.` : '\nSemua cek hub lolos.');
   process.exit(fails ? 1 : 0);
