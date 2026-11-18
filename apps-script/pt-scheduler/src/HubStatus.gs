@@ -58,3 +58,45 @@ function hubStatus(secret) {
     quota: _quotaToday_(),   // T-2253: email, fetch, menit trigger hari ini (WIB)
   };
 }
+
+// ── Backup mingguan (T-2250) ────────────────────────────────────────────────────────────────────────────────
+// XNK Pusat menyalin seluruh spreadsheet ini ke Drive pemilik seminggu sekali. Beda dengan hubStatus, jawaban ini
+// berisi data penuh (nilai tampilan sel), tetap hanya untuk pemegang HUB_SECRET. Script Properties tidak pernah
+// diekspor; foto progres tetap di Drive coach (ProgressPhotos hanya menyimpan ID).
+var HUB_EXPORT_ROWS = 2000;        // baris per panggilan
+var HUB_EXPORT_BYTES = 4000000;    // perkiraan ukuran JSON per panggilan
+
+/**
+ * Ekspor spreadsheet ini untuk backup XNK Pusat.
+ * Tanpa req: daftar sheet. Dengan {sheet, from}: baris mulai `from` (1 = baris judul), maks HUB_EXPORT_ROWS baris dan
+ * ±HUB_EXPORT_BYTES; next = baris berikutnya, 0 bila selesai. Nilai = getDisplayValues() (teks, tanpa objek Date).
+ * @param {string} secret HUB_SECRET spreadsheet ini
+ * @param {?{sheet: string, from: number}} req
+ */
+function hubExport(secret, req) {
+  _hubAuth_(secret);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!req || req.sheet == null || req.sheet === '') {
+    return {
+      at: new Date().toISOString(),
+      sheets: ss.getSheets().map(function(s) { return { name: s.getName(), rows: s.getLastRow(), cols: s.getLastColumn() }; }),
+    };
+  }
+  var from = req.from == null ? 1 : Number(req.from);
+  if (typeof req.sheet !== 'string' || !isFinite(from) || from < 1 || Math.floor(from) !== from) throw new Error('Permintaan tidak valid.');
+  var sh = ss.getSheetByName(req.sheet);
+  if (!sh) throw new Error('Sheet tidak ditemukan.');
+  var last = sh.getLastRow(), cols = sh.getLastColumn();
+  if (from > last || cols < 1) return { rows: [], cols: cols, next: 0 };
+  var n = Math.min(HUB_EXPORT_ROWS, last - from + 1);
+  var vals = sh.getRange(from, 1, n, cols).getDisplayValues();
+  var out = [], size = 0;
+  for (var i = 0; i < vals.length; i++) {
+    var len = JSON.stringify(vals[i]).length + 1;
+    if (out.length && size + len > HUB_EXPORT_BYTES) break;
+    out.push(vals[i]);
+    size += len;
+  }
+  var next = from + out.length;
+  return { rows: out, cols: cols, next: next > last ? 0 : next };
+}

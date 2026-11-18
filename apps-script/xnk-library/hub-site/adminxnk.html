@@ -37,6 +37,8 @@
   .links a { color: inherit; }
   .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .acts .btn { min-height: 40px; font-size: .9rem; }
+  .bk { margin-top: 10px; font-size: .95rem; }
+  .bk a { color: inherit; }
   .hide { display: none !important; }
 </style>
 </head>
@@ -121,7 +123,14 @@
       }
       html += '<div class="links" style="margin-top:10px"><a href="' + esc(c.panel) + '" target="_blank" rel="noopener">Panel</a><a href="' + esc(c.klien) + '" target="_blank" rel="noopener">Portal klien</a>' +
         (c.registeredAt ? '<span class="mut">terdaftar ' + esc(when(c.registeredAt)) + '</span>' : '') + '</div>';
-      html += '<div class="acts">' + (c.missing ? '' : '<button class="btn ghost" type="button" data-act="cek" data-slug="' + esc(s) + '">Cek ulang</button>') +
+      if (!c.missing) {
+        var bk = c.backup || {};
+        html += '<div class="bk mut">' + (bk.okAt ? 'Backup terakhir ' + esc(when(bk.okAt)) + (bk.fileUrl ? ' · <a href="' + esc(bk.fileUrl) + '" target="_blank" rel="noopener">Buka</a>' : '') : 'Belum ada backup') +
+          (bk.running ? ' · sedang berjalan' : bk.queued ? ' · menunggu giliran' : '') + '</div>';
+        if (bk.fails) html += '<div class="bk bad">Backup gagal: ' + esc(bk.error || '-') + '</div>';
+      }
+      html += '<div class="acts">' + (c.missing ? '' : '<button class="btn ghost" type="button" data-act="cek" data-slug="' + esc(s) + '">Cek ulang</button>' +
+        '<button class="btn ghost" type="button" data-act="backup" data-slug="' + esc(s) + '">Backup sekarang</button>') +
         '<button class="btn ghost" type="button" data-act="perbarui" data-slug="' + esc(s) + '">Perbarui</button>' +
         '<button class="btn ghost" type="button" data-act="hubungkan" data-slug="' + esc(s) + '">Hubungkan</button></div></article>';
     });
@@ -146,6 +155,13 @@
     if (!b || b.disabled) return;
     var act = b.getAttribute('data-act'), slug = b.getAttribute('data-slug') || '';
     if (act === 'cek') return load('pusatCheck', [tok(), slug], 'Memeriksa ' + (slug || 'semua coach') + '…');
+    if (act === 'backup') {
+      if (!window.confirm('Backup ' + slug + ' sekarang? Salinan masuk ke Drive akun XNK Pusat.')) return;
+      say('dm', 'Mengirim…');
+      return rpc('pusatAction', [tok(), 'backup', slug]).then(function () {
+        return load('pusatOverview', [tok()]).then(function () { say('dm', 'Backup ' + slug + ' dimulai sekitar 1 menit lagi. Tekan "Cek ulang" beberapa menit lagi untuk melihat tanggalnya.', 'ok'); });
+      }, function (e) { say('dm', e.message, 'bad'); });
+    }
     var label = act === 'bangun' ? 'membangun ulang situs' : act + ' ' + (slug || 'semua coach');
     if (!window.confirm('Jalankan ' + label + ' sekarang?')) return;
     say('dm', 'Mengirim…');

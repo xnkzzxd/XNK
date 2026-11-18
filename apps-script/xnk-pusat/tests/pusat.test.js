@@ -16,6 +16,7 @@ function env(opts) {
   opts = opts || {};
   const props = Object.assign({ PUSAT_PIN: 'pin-rahasia-1', PUSAT_ENROLL_CODE: 'kode-daftar-9' }, opts.props || {});
   const cache = {}, mails = [], fetches = [], triggers = [], echoes = {};
+  const drive = { files: {}, books: {}, n: 0 };
   const servers = opts.servers || {};
   const reply = (code, body) => ({ getResponseCode: () => code, getContentText: () => (typeof body === 'string' ? body : JSON.stringify(body)) });
   const ctx = {
@@ -32,8 +33,10 @@ function env(opts) {
     Session: { getEffectiveUser: () => ({ getEmail: () => 'pemilik@contoh.id' }) },
     ScriptApp: {
       getProjectTriggers: () => triggers.map(h => ({ getHandlerFunction: () => h })), deleteTrigger: t => triggers.splice(triggers.indexOf(t.getHandlerFunction()), 1),
-      newTrigger: h => { const b = { timeBased: () => b, atHour: () => b, everyDays: () => b, inTimezone: () => b, create: () => triggers.push(h) }; return b; },
+      newTrigger: h => { const b = { timeBased: () => b, atHour: () => b, everyDays: () => b, everyHours: () => b, after: () => b, inTimezone: () => b, create: () => triggers.push(h) }; return b; },
+      getOAuthToken: () => 'tok-pusat',
     },
+    SpreadsheetApp: { openById: id => { if (!drive.books[id]) throw new Error('Spreadsheet tidak ada'); return drive.books[id]; } },
     UrlFetchApp: {
       fetch: (url, o) => {
         o = o || {};
@@ -41,6 +44,7 @@ function env(opts) {
         if (url.includes('/matching-refs/tags/lib-v')) return reply(200, [{ ref: 'refs/tags/lib-v3', object: { type: 'tag', sha: 't3' } }, { ref: 'refs/tags/lib-v11', object: { type: 'tag', sha: 't11' } }]);
         if (url.endsWith('/git/tags/t11')) return reply(200, { object: { sha: SHA_NEW } });
         if (url.includes('/dispatches')) return reply(opts.dispatch || 204, '');
+        if (url.startsWith(DRIVE)) return driveFetch(drive, url, o, reply, opts);
         if (url.startsWith('https://raw.githubusercontent.com/')) return opts.hub ? reply(200, opts.hub) : reply(404, 'Not Found');
         if (opts.login && opts.login.includes(url)) return Object.assign(reply(302, ''), { getHeaders: () => ({ Location: 'https://accounts.google.com/ServiceLogin?x=' + fetches.length }) });
         if (url.startsWith('https://accounts.google.com/')) return reply(200, '<!DOCTYPE html><html><head><title>Sign in - Google Accounts</title></head></html>');
@@ -60,17 +64,88 @@ function env(opts) {
   vm.runInContext(SRC, ctx);
   const call = (fn, ...args) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify({ fn, args }) } }).content);
   ctx.setupPusat();
-  return { ctx, props, mails, fetches, triggers, call };
+  return { ctx, props, mails, fetches, triggers, call, drive };
+}
+
+// ── Drive REST v3 dan Sheets palsu (backup, T-2250) ──────────────────────────────────────────────────────────
+const DRIVE = 'https://www.googleapis.com/drive/v3/files';
+class FakeSheet {
+  constructor(name) { this.name = name; this.cells = []; this.maxR = 1000; this.maxC = 26; this.formats = []; }
+  getName() { return this.name; }
+  setName(n) { this.name = n; return this; }
+  getMaxRows() { return this.maxR; }
+  getMaxColumns() { return this.maxC; }
+  insertRowsAfter(after, n) { assert.equal(after, this.maxR); this.maxR += n; }
+  insertColumnsAfter(after, n) { assert.equal(after, this.maxC); this.maxC += n; }
+  getRange(r, c, n, m) {
+    if (r + n - 1 > this.maxR || c + m - 1 > this.maxC) throw new Error('Rentang di luar batas sheet');
+    const sh = this, rg = {
+      setNumberFormat(f) { sh.formats.push([r, n, f]); return rg; },
+      setValues(v) {
+        assert.equal(v.length, n); v.forEach(line => assert.equal(line.length, m));
+        v.forEach((line, i) => { sh.cells[r - 1 + i] = JSON.parse(JSON.stringify(line)); });
+        return rg;
+      },
+    };
+    return rg;
+  }
+}
+class FakeBook {
+  constructor() { this.sheets = [new FakeSheet('Sheet1')]; }
+  getSheets() { return this.sheets.slice(); }
+  getSheetByName(n) { return this.sheets.find(s => s.name === n) || null; }
+  insertSheet(n) { assert.ok(!this.getSheetByName(n), 'nama sheet dobel'); const s = new FakeSheet(n); this.sheets.push(s); return s; }
+}
+function driveFetch(drive, url, o, reply, opts) {
+  assert.equal(o.headers.Authorization, 'Bearer tok-pusat');
+  if (opts.driveDown) return reply(403, '{}');
+  const [p, qs] = url.slice(DRIVE.length).split('?');
+  const q = new URLSearchParams(qs || '');
+  const method = String(o.method || 'get').toLowerCase();
+  if (method === 'post') {
+    const b = JSON.parse(o.payload), id = 'f' + (++drive.n);
+    drive.files[id] = { id, name: b.name, mimeType: b.mimeType, parents: b.parents || [], trashed: false, createdTime: new Date(Date.UTC(2026, 0, 1) + drive.n * 1000).toISOString() };
+    if (b.mimeType === 'application/vnd.google-apps.spreadsheet') drive.books[id] = new FakeBook();
+    return reply(200, { id, webViewLink: 'https://docs.google.com/spreadsheets/d/' + id + '/edit' });
+  }
+  const id = decodeURIComponent(p.slice(1));
+  if (id) {
+    const f = drive.files[id];
+    if (!f) return reply(404, '{}');
+    if (method === 'patch') Object.assign(f, JSON.parse(o.payload));
+    return reply(200, { id: f.id, trashed: f.trashed });
+  }
+  const parent = (q.get('q').match(/'([^']+)' in parents/) || [])[1];
+  return reply(200, { files: Object.values(drive.files).filter(f => f.parents.includes(parent) && !f.trashed && f.mimeType === 'application/vnd.google-apps.spreadsheet').map(f => ({ id: f.id, name: f.name, createdTime: f.createdTime })) });
+}
+
+/** Coach palsu dengan hubStatus + hubExport; `chunk` baris per potong. */
+function coach(secret, sheets, chunk) {
+  const calls = [];
+  const fn = req => {
+    calls.push(req);
+    if (req.args[0] !== secret) return { ok: false, error: 'Permintaan tidak valid.' };
+    if (req.fn === 'hubStatus') return { ok: true, data: status(SHA_NEW) };
+    if (req.fn !== 'hubExport') return { ok: false, error: 'Permintaan tidak valid.', code: 'unknown_fn' };
+    const r = req.args[1];
+    if (!r) return { ok: true, data: { at: 'x', sheets: Object.keys(sheets).map(name => ({ name, rows: sheets[name].length, cols: (sheets[name][0] || []).length })) } };
+    const all = sheets[r.sheet];
+    if (!all) return { ok: false, error: 'Sheet tidak ditemukan.' };
+    const rows = all.slice(r.from - 1, r.from - 1 + chunk), next = r.from + rows.length;
+    return { ok: true, data: { rows, cols: (all[0] || []).length, next: next > all.length ? 0 : next } };
+  };
+  fn.calls = calls;
+  return fn;
 }
 
 const status = (commit, extra) => Object.assign({ at: 'x', lib: { hash: 'h', commit }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: false, lastTickAt: '' }, clients: { total: 12, active30d: 7 }, sessions: { done7d: 9, next7d: 5 } }, extra || {});
 const server = (secret, data) => req => (req.fn === 'hubStatus' && req.args[0] === secret ? { ok: true, data } : { ok: false, error: 'Permintaan tidak valid.' });
 
-test('setupPusat: kunci sesi dan satu trigger harian; diulang tetap satu', () => {
+test('setupPusat: kunci sesi, satu trigger harian dan satu trigger backup tiap jam; diulang tetap satu', () => {
   const e = env();
   e.ctx.setupPusat();
   assert.ok(e.props.SESSION_SECRET.length >= 32);
-  assert.deepEqual(e.triggers, ['runPusatDaily']);
+  assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup']);
 });
 
 test('login: PIN benar = token 12 jam; salah = ditolak, dibatasi 5 kali; token palsu ditolak', () => {
@@ -195,4 +270,179 @@ test('kuota: angka ≥ 70 % dari batas (bawaan 100 / 20.000 / 90, bisa ditimpa) 
   e.props.QUOTA_MAIL = '1000';
   e.ctx.runPusatDaily();
   assert.ok(!/Kuota email/.test(e.mails[1].body), 'batas ditimpa: 70 dari 1000 aman');
+});
+
+// ── Backup mingguan (T-2250) ────────────────────────────────────────────────────────────────────────────────
+const plain = x => JSON.parse(JSON.stringify(x));
+const DATA = {
+  MemberData: [['ID', 'Nama', 'No WA'], ['M1', 'Ani', '08123'], ['M2', 'Budi', '08124'], ['M3', '=HACK()', '08125'], ['M4', 'Dewi', '08126']],
+  Kosong: [],
+  Schedules: [['ID', 'Mulai'], ['S1', '2026-11-03 09:00:00']],
+};
+const bkEnv = (sheetsBy, opts) => {
+  const servers = {}, coaches = {};
+  Object.keys(sheetsBy).forEach((slug, i) => { servers[EXEC(i + 1)] = coaches[slug] = coach(SECRET(i + 1), sheetsBy[slug], (opts && opts.chunk) || 2); });
+  const e = env(Object.assign({ servers }, opts || {}));
+  Object.keys(sheetsBy).forEach((slug, i) => assert.equal(e.call('pusatRegister', 'kode-daftar-9', slug, EXEC(i + 1), SECRET(i + 1)).ok, true));
+  e.coaches = coaches; e.servers = servers;
+  e.tok = () => e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  return e;
+};
+const bkst = (e, slug) => JSON.parse(e.props['BKST_' + slug] || 'null');
+const live = (e, parent) => Object.values(e.drive.files).filter(f => f.parents.includes(parent) && !f.trashed);
+
+test('backup: satu coach disalin utuh ke XNK Backup/<slug>/<slug> YYYY-MM-DD, dilanjutkan lintas jalan lewat kursor', () => {
+  const e = bkEnv({ claudia: DATA });
+  e.ctx.PUSAT_BK_BUDGET_MS = 0;   // satu potong per jalan
+  let r, runs = 0;
+  do { r = e.ctx.runPusatBackup(); runs++; } while (r.running && runs < 20);
+  assert.equal(r.done, true);
+  assert.equal(r.rows, 7);
+  assert.ok(runs >= 4, 'dilanjutkan beberapa jalan (MemberData 3 potong + Schedules 1)');
+  assert.equal(e.props.BK_CUR, undefined, 'kursor dibersihkan');
+  assert.equal(e.props.BK_RUN, undefined, 'tanda jalan dilepas');
+  const dirs = JSON.parse(e.props.BK_DIRS);
+  assert.equal(e.drive.files[dirs.root].name, 'XNK Backup');
+  assert.equal(e.drive.files[dirs.claudia].name, 'claudia');
+  assert.deepEqual(e.drive.files[dirs.claudia].parents, [dirs.root]);
+  const [file] = live(e, dirs.claudia);
+  const wib = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  assert.equal(file.name, 'claudia ' + wib);
+  const book = e.drive.books[file.id];
+  assert.deepEqual(book.getSheets().map(s => s.name), ['MemberData', 'Kosong', 'Schedules'], 'urutan dan nama sheet sama; sheet bawaan diganti nama');
+  const md = book.getSheetByName('MemberData');
+  assert.deepEqual(md.cells, DATA.MemberData.map(r => r.map(v => (v === '=HACK()' ? "'=HACK()" : v))), 'isi sama; sel "=" tidak jadi rumus');
+  assert.ok(md.formats.every(f => f[2] === '@'), 'format teks: 08… tetap utuh');
+  assert.deepEqual(book.getSheetByName('Schedules').cells, DATA.Schedules);
+  const st = bkst(e, 'claudia');
+  assert.deepEqual([st.rows, st.error, st.fails, st.fileUrl], [7, '', 0, 'https://docs.google.com/spreadsheets/d/' + file.id + '/edit']);
+  assert.equal(st.at, st.okAt);
+  assert.ok(e.coaches.claudia.calls.filter(c => c.fn === 'hubExport').every(c => c.args[0] === SECRET(1)), 'rahasia hanya ke coach itu');
+  assert.deepEqual(plain(e.ctx.runPusatBackup()), { idle: true }, 'baru dibackup: tidak jatuh tempo');
+});
+
+test('backup: anggaran waktu normal = selesai dalam satu jalan; baris/kolom sheet ditambah bila kurang', () => {
+  const wide = [Array.from({ length: 30 }, (_, i) => 'k' + i)];
+  for (let i = 0; i < 1200; i++) wide.push(Array.from({ length: 30 }, (_, j) => String(i * j)));
+  const e = bkEnv({ claudia: { Lebar: wide } }, { chunk: 500 });
+  const r = e.ctx.runPusatBackup();
+  assert.equal(r.done, true);
+  assert.equal(r.rows, 1201);
+  const book = e.drive.books[live(e, JSON.parse(e.props.BK_DIRS).claudia)[0].id];
+  const sh = book.getSheetByName('Lebar');
+  assert.ok(sh.maxR >= 1201 && sh.maxC >= 30);
+  assert.deepEqual(sh.cells[1200], wide[1200]);
+});
+
+test('backup: satu coach per jalan; jatuh tempo setelah 7 hari, yang tertua dulu', () => {
+  const e = bkEnv({ claudia: DATA, dina: DATA, eko: DATA });
+  const day = 864e5, iso = ms => new Date(Date.now() - ms).toISOString();
+  e.props.BKST_claudia = JSON.stringify({ at: iso(1 * day), okAt: iso(1 * day), fileUrl: 'x', rows: 1, error: '', fails: 0 });
+  e.props.BKST_dina = JSON.stringify({ at: iso(9 * day), okAt: iso(9 * day), fileUrl: 'x', rows: 1, error: '', fails: 0 });
+  e.props.BKST_eko = JSON.stringify({ at: iso(8 * day), okAt: iso(8 * day), fileUrl: 'x', rows: 1, error: '', fails: 0 });
+  assert.equal(e.ctx.runPusatBackup().slug, 'dina', 'backup tertua dulu');
+  assert.ok(!e.coaches.eko.calls.some(c => c.fn === 'hubExport'), 'hanya satu coach per jalan');
+  assert.equal(e.ctx.runPusatBackup().slug, 'eko');
+  assert.deepEqual(plain(e.ctx.runPusatBackup()), { idle: true }, 'claudia baru 1 hari');
+  // Jalan lain masih bekerja (BK_RUN baru) = tidak ada apa-apa.
+  e.props.BK_RUN = String(Date.now());
+  e.call('pusatAction', e.tok(), 'backup', 'claudia');
+  assert.deepEqual(plain(e.ctx.runPusatBackup()), { busy: true });
+  e.props.BK_RUN = String(Date.now() - 8 * 60e3);
+  assert.equal(e.ctx.runPusatBackup().slug, 'claudia', 'tanda jalan lama (mati di tengah) diabaikan');
+});
+
+test('Backup sekarang: tanpa token GitHub, mendahului antrean, satu trigger sekali jalan; coach tak dikenal ditolak', () => {
+  const e = bkEnv({ claudia: DATA, dina: DATA });
+  const tok = e.tok();
+  e.props.BKST_claudia = JSON.stringify({ at: new Date().toISOString(), okAt: new Date().toISOString(), fileUrl: 'x', rows: 1, error: '', fails: 0 });
+  const r = e.call('pusatAction', tok, 'backup', 'claudia');
+  assert.deepEqual(r.data, { started: 'backup', slug: 'claudia', queued: true });
+  e.call('pusatAction', tok, 'backup', 'claudia');
+  assert.deepEqual(e.triggers.filter(t => t === 'runPusatBackupSoon'), ['runPusatBackupSoon'], 'satu trigger saja');
+  assert.ok(!e.fetches.some(f => f.url.includes('api.github.com') && f.url.includes('dispatches')), 'tanpa GitHub');
+  let ov = e.call('pusatOverview', tok).data.coaches.find(c => c.slug === 'claudia');
+  assert.equal(ov.backup.queued, true);
+  const done = e.ctx.runPusatBackupSoon();
+  assert.equal(done.slug, 'claudia', 'claudia baru dibackup tetapi ditandai: dikerjakan dulu, sebelum dina yang jatuh tempo');
+  assert.equal(e.triggers.includes('runPusatBackupSoon'), false, 'trigger sekali jalan menghapus dirinya');
+  assert.equal(e.props.BKNOW_claudia, undefined);
+  ov = e.call('pusatOverview', tok).data.coaches.find(c => c.slug === 'claudia');
+  assert.deepEqual([ov.backup.queued, ov.backup.running, ov.backup.rows, ov.backup.fails], [false, false, 7, 0]);
+  assert.match(ov.backup.fileUrl, /^https:\/\/docs\.google\.com\/spreadsheets\/d\//);
+  assert.match(e.call('pusatAction', tok, 'backup', 'zaki').error, /Coach tidak terdaftar/);
+  assert.match(e.call('pusatAction', tok, 'backup', '../x').error, /Coach tidak terdaftar/);
+  assert.equal(e.call('pusatAction', 'palsu', 'backup', 'claudia').auth, true);
+  const json = JSON.stringify(e.call('pusatOverview', tok).data);
+  assert.ok(!json.includes(SECRET(1)) && !json.includes('08123') && !json.includes('Ani'), 'dasbor: tanpa rahasia dan tanpa isi data');
+});
+
+test('backup: simpan 8 terbaru per coach, sisanya ke sampah', () => {
+  const e = bkEnv({ claudia: DATA });
+  e.ctx.runPusatBackup();
+  const dir = JSON.parse(e.props.BK_DIRS).claudia;
+  for (let i = 0; i < 9; i++) { e.props.BKNOW_claudia = '1'; assert.equal(e.ctx.runPusatBackup().done, true); }
+  const files = Object.values(e.drive.files).filter(f => f.parents.includes(dir));
+  assert.equal(files.length, 10);
+  const kept = files.filter(f => !f.trashed).map(f => f.id), gone = files.filter(f => f.trashed).map(f => f.id);
+  assert.equal(kept.length, 8);
+  const order = files.map(f => f.id);
+  assert.deepEqual(gone, order.slice(0, 2), 'yang tertua dibuang');
+  assert.ok(kept.includes(bkst(e, 'claudia').fileUrl.split('/d/')[1].split('/')[0]), 'salinan terbaru tetap');
+});
+
+test('backup gagal: salinan setengah jadi ke sampah, gagal dihitung; 2 kali berturut-turut = email harian; berhasil = nol lagi', () => {
+  const e = bkEnv({ claudia: DATA });
+  e.ctx.PUSAT_BK_BUDGET_MS = 0;
+  assert.equal(e.ctx.runPusatBackup().running, true);
+  const partial = JSON.parse(e.props.BK_CUR).fileId;
+  const srv = e.servers[EXEC(1)];
+  delete e.servers[EXEC(1)];   // coach diam di tengah jalan
+  const r = e.ctx.runPusatBackup();
+  assert.match(r.error, /Address unavailable/);
+  assert.equal(e.drive.files[partial].trashed, true);
+  assert.equal(e.props.BK_CUR, undefined);
+  let st = bkst(e, 'claudia');
+  assert.deepEqual([st.fails, st.okAt, st.fileUrl], [1, '', '']);
+  assert.deepEqual(plain(e.ctx.runPusatBackup()), { idle: true }, 'baru gagal: tunggu 6 jam, tidak menahan coach lain');
+  e.ctx.runPusatDaily();
+  assert.ok(!e.mails.some(m => /Backup gagal/.test(m.body)), 'sekali gagal belum diemail');
+  e.call('pusatAction', e.tok(), 'backup', 'claudia');
+  e.ctx.runPusatBackup();
+  st = bkst(e, 'claudia');
+  assert.equal(st.fails, 2);
+  e.servers[EXEC(1)] = srv;
+  const d = e.ctx.runPusatDaily();
+  assert.equal(d.problems, 1, 'status coach beres, tetapi backup gagal 2 kali');
+  assert.match(e.mails[e.mails.length - 1].body, /claudia: Backup gagal 2 kali berturut-turut \(.*Address unavailable.*\)\./);
+  e.call('pusatAction', e.tok(), 'backup', 'claudia');
+  e.ctx.PUSAT_BK_BUDGET_MS = 60e3;
+  assert.equal(e.ctx.runPusatBackup().done, true);
+  st = bkst(e, 'claudia');
+  assert.deepEqual([st.fails, st.error], [0, '']);
+});
+
+test('backup: Library lama tanpa hubExport = pesan "perbarui coach"; Drive menolak = pesan izin', () => {
+  const e = env({ servers: { [EXEC(1)]: req => (req.fn === 'hubExport' ? { ok: false, error: 'Permintaan tidak valid.', code: 'unknown_fn' } : { ok: true, data: {} }) } });
+  e.call('pusatRegister', 'kode-daftar-9', 'claudia', EXEC(1), SECRET(1));
+  assert.match(e.ctx.runPusatBackup().error, /Library coach belum punya hubExport; perbarui coach/);
+  const d = bkEnv({ claudia: DATA }, { driveDown: true });
+  assert.match(d.ctx.runPusatBackup().error, /Drive menolak \(403\)\. Jalankan setupPusat/);
+  assert.equal(bkst(d, 'claudia').fails, 1);
+});
+
+test('backup: coach dihapus dari daftar di tengah jalan = salinan dibuang tanpa status; folder hilang dibuat lagi', () => {
+  const e = bkEnv({ claudia: DATA, dina: DATA });
+  e.ctx.PUSAT_BK_BUDGET_MS = 0;
+  assert.equal(e.ctx.runPusatBackup().slug, 'claudia');
+  const partial = JSON.parse(e.props.BK_CUR).fileId;
+  const all = JSON.parse(e.props.COACHES); delete all.claudia; e.props.COACHES = JSON.stringify(all);
+  const dirs = JSON.parse(e.props.BK_DIRS);
+  e.drive.files[dirs.root].trashed = true;   // pemilik membuang folder XNK Backup
+  assert.equal(e.ctx.runPusatBackup().slug, 'dina');
+  assert.equal(e.drive.files[partial].trashed, true);
+  assert.equal(bkst(e, 'claudia'), null);
+  const nd = JSON.parse(e.props.BK_DIRS);
+  assert.notEqual(nd.root, dirs.root, 'folder XNK Backup dibuat lagi');
+  assert.equal(e.drive.files[nd.dina].parents[0], nd.root);
 });
