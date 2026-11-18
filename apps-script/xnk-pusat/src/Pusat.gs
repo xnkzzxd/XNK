@@ -88,6 +88,12 @@ function pusatRegister(code, slug, exec, secret) {
   if (!PUSAT_SLUG_RE.test(slug) || /--/.test(slug)) throw new Error('Nama di alamat tidak valid.');
   if (!PUSAT_EXEC_RE.test(exec)) throw new Error('Link /exec tidak valid.');
   if (secret.length < 32 || !/^[A-Za-z0-9_-]+$/.test(secret)) throw new Error('Rahasia tidak valid.');
+  // Link dari hub.json menang: getService().getUrl() di spreadsheet coach bisa memberi link uji (HEAD) yang minta login.
+  exec = hubExec_(slug) || exec;
+  // Pastikan link itu bisa dibuka tanpa login sebelum disimpan (jawaban JSON apa pun = aplikasi web terbuka).
+  try { askApps_(exec, { fn: 'getServerInfo', args: [] }); } catch (e) {
+    throw new Error('Link /exec coach tidak bisa dibuka tanpa login (' + String(e && e.message ? e.message : e).slice(0, 120) + '). Pakai link dari Deploy → Kelola deployment (bukan link uji), akses "Siapa saja".');
+  }
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -141,27 +147,58 @@ function gh_() {
  * Google ("Unexpected token '<'"). Jadi: POST tanpa mengikuti, lalu GET ke alamat Location. doPost tujuan sudah
  * berjalan pada permintaan pertama.
  */
-function postApps_(url, body) {
+function postAppsRaw_(url, body) {
   var res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', payload: JSON.stringify(body), muteHttpExceptions: true, followRedirects: false });
-  var code = res.getResponseCode();
+  var code = res.getResponseCode(), at = url;
   if (code >= 300 && code < 400) {
-    var h = res.getHeaders() || {};
+    var h = (res.getHeaders && res.getHeaders()) || {};
     var loc = h.Location || h.location;
-    if (!loc) throw new Error('pengalihan tanpa alamat');
+    if (!loc) throw new Error('HTTP ' + code + ' tanpa alamat pengalihan');
+    at = loc;
     res = UrlFetchApp.fetch(loc, { muteHttpExceptions: true, followRedirects: true });
+    code = res.getResponseCode();
   }
-  return res.getContentText();
+  return { code: code, url: at, text: res.getContentText() };
+}
+
+/**
+ * POST lalu baca JSON. Bukan JSON = galat yang bisa dibaca: kode HTTP, host, dan judul halaman HTML (mis. "Sign in"),
+ * bukan "Unexpected token '<'".
+ */
+function askApps_(url, body) {
+  var r = postAppsRaw_(url, body), text = r.text;
+  try { var j = JSON.parse(text); if (j && typeof j === 'object') return j; } catch (e) { /* di bawah */ }
+  var t = String(text || '').match(/<title[^>]*>([^<]{0,80})/i);
+  var host = String(r.url || '').replace(/^https?:\/\/([^\/?#]+).*$/, '$1');
+  throw new Error('HTTP ' + r.code + ' dari ' + host + (t ? ', halaman "' + t[1].trim() + '"' : text ? ', bukan JSON' : ', kosong'));
+}
+
+/** Link /exec coach di hub.json publik repo hub (disimpan 10 menit); kosong bila tidak ada atau gagal dibaca. */
+function hubExec_(slug) {
+  var c = CacheService.getScriptCache(), raw = c.get('hubjson');
+  if (raw == null) {
+    raw = '';
+    try {
+      var res = UrlFetchApp.fetch('https://raw.githubusercontent.com/' + prop_('HUB_REPO', 'xnkzzxd/xnk-template-site') + '/main/hub.json', { muteHttpExceptions: true });
+      if (res.getResponseCode() === 200) raw = res.getContentText();
+    } catch (e) { raw = ''; }
+    try { c.put('hubjson', raw, 600); } catch (e) { /* cache penuh: baca lagi lain kali */ }
+  }
+  try {
+    var hit = (JSON.parse(raw).coaches || []).filter(function (x) { return x && x.slug === slug; })[0];
+    return hit && PUSAT_EXEC_RE.test(String(hit.exec || '')) ? String(hit.exec) : '';
+  } catch (e) { return ''; }
 }
 
 /** Tanya satu coach; kembalikan status {at, ok, problems[], data}. */
 function checkOne_(slug, c, latest) {
   var st = { at: new Date().toISOString(), ok: false, problems: [], data: null };
   try {
-    var j = JSON.parse(postApps_(c.exec, { fn: 'hubStatus', args: [c.secret] }));
+    var j = askApps_(hubExec_(slug) || c.exec, { fn: 'hubStatus', args: [c.secret] });
     if (!j || !j.ok) throw new Error(j && j.error ? j.error : 'tanpa jawaban');
     st.data = j.data;
   } catch (e) {
-    st.problems.push('Server tidak menjawab (' + String(e && e.message ? e.message : e).slice(0, 80) + ').');
+    st.problems.push('Server tidak menjawab (' + String(e && e.message ? e.message : e).slice(0, 160) + ').');
     return st;
   }
   var d = st.data;

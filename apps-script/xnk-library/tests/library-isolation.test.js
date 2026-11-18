@@ -200,5 +200,12 @@ test('registerPusat (T-2233): rahasia baru dikirim ke XNK Pusat; disimpan hanya 
   assert.match(last.body.args[2], /\/exec$/);
   assert.equal(A.store.props.HUB_SECRET, last.body.args[3]);
   assert.ok(A.store.props.HUB_SECRET.length >= 32);
+  // Link yang ditempel pemilik (deployment "Siapa saja") dikirim apa adanya; bentuk lain ditolak sebelum dikirim.
+  const DEP = 'https://script.google.com/macros/s/AKfycbDEPLOY0000000000000000/exec';
+  env.lib('registerPusat', A.ctx, { pusatUrl: PUSAT, code: 'benar', slug: 'gym-andi', exec: ' ' + DEP + ' ' });
+  assert.equal(sent[sent.length - 1].body.args[2], DEP);
+  const n = sent.length;
+  assert.throws(() => env.lib('registerPusat', A.ctx, { pusatUrl: PUSAT, code: 'benar', slug: 'gym-andi', exec: DEP.replace('/exec', '/dev') }), /Link aplikasi harus/);
+  assert.equal(sent.length, n);
   libraryUntouched(env);
 });

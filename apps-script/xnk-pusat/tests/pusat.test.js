@@ -41,6 +41,9 @@ function env(opts) {
         if (url.includes('/matching-refs/tags/lib-v')) return reply(200, [{ ref: 'refs/tags/lib-v3', object: { type: 'tag', sha: 't3' } }, { ref: 'refs/tags/lib-v11', object: { type: 'tag', sha: 't11' } }]);
         if (url.endsWith('/git/tags/t11')) return reply(200, { object: { sha: SHA_NEW } });
         if (url.includes('/dispatches')) return reply(opts.dispatch || 204, '');
+        if (url.startsWith('https://raw.githubusercontent.com/')) return opts.hub ? reply(200, opts.hub) : reply(404, 'Not Found');
+        if (opts.login && opts.login.includes(url)) return Object.assign(reply(302, ''), { getHeaders: () => ({ Location: 'https://accounts.google.com/ServiceLogin?x=' + fetches.length }) });
+        if (url.startsWith('https://accounts.google.com/')) return reply(200, '<!DOCTYPE html><html><head><title>Sign in - Google Accounts</title></head></html>');
         // Seperti Apps Script sungguhan: POST /exec → 302 ke echo; mengikuti 302 sebagai POST → halaman HTML Google.
         if (servers[url]) {
           if (o.followRedirects !== false) return reply(200, '<!DOCTYPE html><html>Google</html>');
@@ -87,7 +90,7 @@ test('login: PIN benar = token 12 jam; salah = ditolak, dibatasi 5 kali; token p
 });
 
 test('daftar: kode benar; isian diperiksa; link /exec tidak boleh dobel; rahasia tidak pernah keluar lagi', () => {
-  const e = env();
+  const e = env({ servers: { [EXEC(1)]: server('x', {}) } });
   assert.match(e.call('pusatRegister', 'salah', 'claudia', EXEC(1), SECRET(1)).error, /Kode daftar/);
   assert.match(e.call('pusatRegister', 'kode-daftar-9', 'Claudia', EXEC(1), SECRET(1)).error, /Nama di alamat/);
   assert.match(e.call('pusatRegister', 'kode-daftar-9', 'claudia', 'https://x.id/exec', SECRET(1)).error, /exec/);
@@ -108,8 +111,10 @@ test('pemeriksaan harian: Library tertinggal, trigger hilang, pengingat macet, s
     [EXEC(2)]: server(SECRET(2), status(SHA_OLD, { triggers: { runReminderTick: 0 } })),
     [EXEC(3)]: server(SECRET(3), status(SHA_NEW, { reminders: { enabled: true, lastTickAt: new Date(Date.now() - 6 * 3600e3).toISOString() } })),
   };
+  servers[EXEC(4)] = server(SECRET(4), status(SHA_NEW));
   const e = env({ servers });
   [['claudia', 1], ['dina', 2], ['eko', 3], ['fani', 4]].forEach(([s, n]) => assert.equal(e.call('pusatRegister', 'kode-daftar-9', s, EXEC(n), SECRET(n)).ok, true));
+  delete servers[EXEC(4)];   // fani diam setelah terdaftar
   const r = e.ctx.runPusatDaily();
   assert.equal(r.problems, 3);
   assert.equal(e.mails.length, 1);
@@ -121,11 +126,36 @@ test('pemeriksaan harian: Library tertinggal, trigger hilang, pengingat macet, s
   const st = JSON.parse(e.props.ST_claudia);
   assert.equal(st.ok, true);
   assert.equal(st.data.clients.active30d, 7);
-  assert.ok(e.fetches.filter(f => f.url === EXEC(1)).every(f => JSON.parse(f.o.payload).args[0] === SECRET(1)), 'rahasia dikirim hanya ke /exec coach itu');
+  assert.ok(e.fetches.filter(f => f.url === EXEC(1) && JSON.parse(f.o.payload).fn === 'hubStatus').every(f => JSON.parse(f.o.payload).args[0] === SECRET(1)), 'rahasia dikirim hanya ke /exec coach itu');
   const e2 = env({ servers: { [EXEC(1)]: server(SECRET(1), status(SHA_NEW)) }, props: { PUSAT_EMAIL: 'saya@contoh.id' } });
   e2.call('pusatRegister', 'kode-daftar-9', 'claudia', EXEC(1), SECRET(1));
   assert.equal(e2.ctx.runPusatDaily().problems, 0);
   assert.equal(e2.mails.length, 0);
+});
+
+test('daftar: link yang minta login Google (link uji/HEAD) ditolak dengan pesan jelas; link hub.json menang', () => {
+  const e = env({ login: [EXEC(7)] });
+  const r = e.call('pusatRegister', 'kode-daftar-9', 'vinna', EXEC(7), SECRET(7));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /tidak bisa dibuka tanpa login \(HTTP 200 dari accounts\.google\.com, halaman "Sign in - Google Accounts"\)/);
+  assert.match(r.error, /Kelola deployment/);
+  assert.equal(e.props.COACHES, undefined, 'tidak disimpan');
+  // claudia mengirim link uji, tetapi hub.json punya link deployment yang benar: itu yang disimpan dan diperiksa.
+  const hub = JSON.stringify({ coaches: [{ slug: 'claudia', exec: EXEC(1) }] });
+  const h = env({ login: [EXEC(7)], hub, servers: { [EXEC(1)]: server(SECRET(1), status(SHA_NEW)) } });
+  assert.equal(h.call('pusatRegister', 'kode-daftar-9', 'claudia', EXEC(7), SECRET(1)).ok, true);
+  assert.equal(JSON.parse(h.props.COACHES).claudia.exec, EXEC(1));
+  assert.equal(h.ctx.runPusatDaily().problems, 0);
+});
+
+test('pemeriksaan: coach yang sudah tersimpan dengan link uji tetap terbaca lewat hub.json; tanpa hub.json pesannya menyebut halaman', () => {
+  const hub = JSON.stringify({ coaches: [{ slug: 'claudia', exec: EXEC(1) }] });
+  const old = JSON.stringify({ claudia: { exec: EXEC(7), secret: SECRET(1), at: 'x' } });
+  const a = env({ login: [EXEC(7)], hub, props: { COACHES: old }, servers: { [EXEC(1)]: server(SECRET(1), status(SHA_NEW)) } });
+  assert.equal(a.ctx.runPusatDaily().problems, 0);
+  const b = env({ login: [EXEC(7)], props: { COACHES: old } });
+  b.ctx.runPusatDaily();
+  assert.match(b.mails[0].body, /claudia: Server tidak menjawab \(HTTP 200 dari accounts\.google\.com, halaman "Sign in - Google Accounts"\)/);
 });
 
 test('aksi: perbarui/hubungkan/bangun menjalankan workflow repo hub; tanpa token GitHub = pesan jelas', () => {
