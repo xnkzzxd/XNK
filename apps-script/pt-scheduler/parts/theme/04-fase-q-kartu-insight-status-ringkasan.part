@@ -438,3 +438,9 @@ html.big-text .sh-tool span { display: none; }
 @media (min-width: 768px) { .share-nudge { bottom: 24px; } }
 /* App Android / iOS: kembali lewat back sistem, bukan panah di layar */
 html.app-shell .nav-back { display: none; }
+
+.fin-pays { display: flex; flex-direction: column; gap: 10px; }
+.fin-pay { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
+.fin-pay-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.fin-pay-top b { font-size: var(--fs-lg); white-space: nowrap; }
+.fin-pay .btn-row { margin-top: 4px; }

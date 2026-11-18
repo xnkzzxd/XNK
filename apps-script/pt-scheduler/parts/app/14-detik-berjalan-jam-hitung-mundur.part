@@ -184,28 +184,37 @@
 
   // Detail tagihan
   window.finOpenBill = function (id) {
+    // Buka panel seketika dari data daftar, lalu isi pembayaran setelah server menjawab.
+    const row = (fin.bills || []).filter(function (x) { return x.id === id; })[0];
+    if (row) finBillPanel(id, row, null);
     adminCall('getBillDetail', id).then(function (r) {
-      const b = r.bill;
-      fin.billId = id;
-      const pays = r.payments.map(function (p) {
-        return '<div class="tl-item"><div class="tl-card"><div class="row-between"><b>' + h(finRp(p.amount)) + '</b><span class="li-sub">' + h(p.date) + '</span></div>' +
-          '<p class="li-sub">' + h(p.method) + (p.note ? ' · ' + h(p.note) : '') + (p.hasProof ? ' · 📎' : '') + (p.archived ? ' · diarsipkan' : '') + '</p>' +
-          '<div class="btn-row">' + (p.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.finRestore(\'payment\',\'' + h(p.id) + '\')">Pulihkan</button>' : '<button type="button" class="btn btn-outline btn-sm" onclick="window.finOpenPayment(\'' + h(p.id) + '\')">Ubah</button>') + '</div></div></div>';
-      }).join('');
-      const wa = b.phone ? '<button type="button" class="btn btn-secondary" onclick="window.finBill_wa(\'' + h(id) + '\')">' + icon('message-circle') + 'WA tagih</button>' : '';
-      fin.detail = r;
-      openDetail('bill:' + id, b.name || 'Tagihan',
-        '<button type="button" class="icon-btn" onclick="window.finBillMenu(\'' + h(id) + '\')" aria-label="Menu tagihan">' + icon('more-horizontal') + '</button>',
-        '<div class="stack"><p class="li-sub">' + h(b.packageName) + ' · ' + h(b.date) + '</p>' +
-        '<div class="kv"><div><p class="k">Total</p><p class="v num">' + h(finRp(b.total)) + '</p></div><div><p class="k">Diskon</p><p class="v num">' + h(finRp(b.discount)) + '</p></div>' +
-        '<div><p class="k">Dibayar</p><p class="v num">' + h(finRp(b.paid)) + '</p></div><div><p class="k">Sisa</p><p class="v num">' + h(finRp(b.remaining)) + ' <span class="' + FIN_STATUS_PILL[b.status] + '">' + h(b.status) + '</span></p></div></div>' +
-        (b.note ? '<p class="li-sub">' + h(b.note) + '</p>' : '') +
-        '<div class="group-label"><span>Pembayaran</span></div>' + (pays ? '<div class="timeline">' + pays + '</div>' : '<p class="li-sub">Belum ada pembayaran.</p>') +
-        '<div class="btn-row" style="position:sticky;bottom:0;background:var(--bg);padding:8px 0">' + wa +
-        (b.remaining ? '<button type="button" class="btn btn-outline" onclick="window.finOpenPayment(null,\'' + h(id) + '\',' + b.remaining + ')">Lunasi</button>' : '') +
-        '<button type="button" class="btn btn-primary" onclick="window.finOpenPayment(null,\'' + h(id) + '\')">' + icon('plus') + 'Bayar</button></div></div>');
+      fin.billId = id; fin.detail = r;
+      finBillPanel(id, r.bill, r.payments);
     }).catch(finErr);
   };
+  function finBillPanel(id, b, payments) {
+    const money = function (v) { return v == null ? '…' : h(finRp(v)); };
+    const pays = payments === null
+      ? '<div class="skel-wrap" aria-hidden="true"><div class="skel skel-line" style="width:60%"></div><div class="skel skel-line" style="width:85%"></div></div>'
+      : payments.map(function (p) {
+        return '<div class="card-flat fin-pay"><div class="fin-pay-top"><b class="num">' + h(finRp(p.amount)) + '</b><span class="li-sub">' + h(p.date) + '</span></div>' +
+          '<p class="li-sub">' + h(p.method) + (p.note ? ' · ' + h(p.note) : '') + (p.hasProof ? ' · 📎' : '') + (p.archived ? ' · diarsipkan' : '') + '</p>' +
+          '<div class="btn-row">' + (p.archived ? '<button type="button" class="btn btn-outline btn-sm" onclick="window.finRestore(\'payment\',\'' + h(p.id) + '\')">Pulihkan</button>' : '<button type="button" class="btn btn-outline btn-sm" onclick="window.finOpenPayment(\'' + h(p.id) + '\')">Ubah</button>') + '</div></div>';
+      }).join('');
+    const ready = payments !== null;
+    const wa = ready && b.phone ? '<button type="button" class="btn btn-secondary" onclick="window.finBill_wa(\'' + h(id) + '\')">' + icon('message-circle') + 'WA tagih</button>' : '';
+    const pill = b.status ? ' <span class="' + FIN_STATUS_PILL[b.status] + '">' + h(b.status) + '</span>' : '';
+    openDetail('bill:' + id, b.name || 'Tagihan',
+      ready ? '<button type="button" class="icon-btn" onclick="window.finBillMenu(\'' + h(id) + '\')" aria-label="Menu tagihan">' + icon('more-horizontal') + '</button>' : '',
+      '<div class="stack"><p class="li-sub">' + h(b.packageName || '') + ' · ' + h(b.date || '') + '</p>' +
+      '<div class="kv"><div><p class="k">Total</p><p class="v num">' + money(b.total) + '</p></div><div><p class="k">Diskon</p><p class="v num">' + money(b.discount) + '</p></div>' +
+      '<div><p class="k">Dibayar</p><p class="v num">' + money(b.paid) + '</p></div><div><p class="k">Sisa</p><p class="v num">' + money(b.remaining) + pill + '</p></div></div>' +
+      (b.note ? '<p class="li-sub">' + h(b.note) + '</p>' : '') +
+      '<div class="group-label"><span>Pembayaran</span></div>' + (payments === null || pays ? '<div class="fin-pays">' + pays + '</div>' : '<p class="li-sub">Belum ada pembayaran.</p>') +
+      (ready ? '<div class="btn-row" style="position:sticky;bottom:0;background:var(--bg);padding:8px 0">' + wa +
+      (b.remaining ? '<button type="button" class="btn btn-outline" onclick="window.finOpenPayment(null,\'' + h(id) + '\',' + b.remaining + ')">Lunasi</button>' : '') +
+      '<button type="button" class="btn btn-primary" onclick="window.finOpenPayment(null,\'' + h(id) + '\')">' + icon('plus') + 'Bayar</button></div>' : '') + '</div>');
+  }
   window.finBill_wa = function (id) {
     const b = fin.detail && fin.detail.bill;
     if (!b || !b.phone) return;
