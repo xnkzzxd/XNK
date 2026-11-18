@@ -282,3 +282,14 @@ test('hub-verify (T-2221): build asli lolos; berkas yang rusak atau salah sambun
   assert.match(verifySite(dir, CFG).join('\n'), /index\.html tidak ada/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('pustaka sendiri (T-2222): gerakan, makanan, peta otot di /_lib/; halaman coach tidak memuatnya dari xnk.my.id', () => {
+  const { files } = hub.build(CFG);
+  for (const f of ['_lib/exercises/exercises.min.json', '_lib/foods/foods.min.json', '_lib/figure/figure.min.json', '_lib/figure/rig.min.json', '_lib/figure/CREDITS.md']) assert.ok(f in files, f);
+  const coach = Object.keys(files).filter(n => /^claudia(-2)?\//.test(n) && typeof files[n] === 'string');
+  assert.ok(coach.every(n => !/https:\/\/xnk\.my\.id\/(exercises|foods|figure)\//.test(files[n])), 'tidak ada pustaka dari xnk.my.id');
+  assert.ok(coach.some(n => files[n].includes('/_lib/exercises/exercises.min.json')), 'halaman memakai /_lib/');
+  assert.match(files['claudia/sw-app.js'], /var LIBS = \[self\.location\.origin \+ '\/_lib\/exercises\/exercises\.min\.json'/, 'worker tetap mencocokkan alamat lengkap');
+  new Function('self', files['claudia/sw-app.js'].match(/var LIBS = [\s\S]*?\];/)[0] + 'return LIBS;');   // tetap JavaScript yang sah
+  assert.ok(!('_lib/exercises/exercises.min.json' in hub.build({ coaches: [] }).files), 'tanpa coach tidak perlu pustaka');
+});

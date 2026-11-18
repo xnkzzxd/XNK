@@ -3,7 +3,8 @@
 //   node apps-script/xnk-library/tools/hub-verify.js <siteDir> --config hub.json
 // Memeriksa berkas yang benar-benar akan diunggah, untuk setiap coach di hub.json: panel dan portal ada, config.js
 // memanggil /exec coach itu saja, awalan penyimpanan per slug terpasang sebelum skrip lain, awalan cache service
-// worker unik, lib-latest.json terbaca, tidak ada alamat aplikasi xnk.my.id atau /exec coach lain. Satu masalah =
+// worker unik, lib-latest.json terbaca, pustaka dari /_lib/ (T-2222), tidak ada alamat aplikasi xnk.my.id atau /exec
+// coach lain. Satu masalah =
 // keluar dengan kode 1, dan workflow berhenti sebelum mengunggah (situs lama tetap tayang).
 const fs = require('fs');
 const path = require('path');
@@ -34,7 +35,15 @@ function verifySite(dir, cfg) {
   }
   const files = walk(dir, '', []);
   for (const rel of files.filter(f => /\.(html|js|json)$/.test(f))) {
-    if (read(rel).includes(PROD_DEPLOYMENT)) problems.push(`${rel} memuat alamat aplikasi xnk.my.id.`);
+    const t = read(rel);
+    if (t.includes(PROD_DEPLOYMENT)) problems.push(`${rel} memuat alamat aplikasi xnk.my.id.`);
+    if (/https:\/\/xnk\.my\.id\/(exercises|foods|figure)\//.test(t)) problems.push(`${rel} masih memuat pustaka dari xnk.my.id (harus /_lib/).`);
+  }
+  if (hub.coaches.length) {
+    for (const f of ['_lib/exercises/exercises.min.json', '_lib/foods/foods.min.json', '_lib/figure/figure.min.json', '_lib/figure/rig.min.json']) {
+      if (!has(f)) { problems.push(`${f} tidak ada.`); continue; }
+      try { JSON.parse(read(f)); } catch (e) { problems.push(`${f} bukan JSON.`); }
+    }
   }
   for (const c of hub.coaches) {
     for (const [sub, kind] of [['', 'panel'], ['klien/', 'klien']]) {

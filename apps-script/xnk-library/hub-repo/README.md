@@ -56,5 +56,5 @@ Isi `contactUrl` di `hub.json` dengan link `https://` (mis. link WhatsApp bisnis
 
 - Semua coach berbagi satu domain, jadi tiap halaman coach diberi awalan penyimpanan per slug di browser (login, salinan offline, antrean catatan). Karena itu **coach tidak boleh memasang JavaScript sendiri** di situs ini. Tampilan hanya bisa diubah lewat nama usaha.
 - Situs dibangun ulang setiap hari dari kode XNK terbaru, dan setiap kali `hub.json` berubah.
-- Pustaka gerakan dan makanan masih dimuat dari `xnk.my.id`; bila situs itu mati, pencarian gerakan dan makanan di semua coach ikut terganggu.
+- Pustaka gerakan, makanan dan peta otot disajikan dari situs ini sendiri (`/_lib/`), tidak bergantung pada xnk.my.id.
 - Notifikasi push ke HP belum tersedia di situs coach.

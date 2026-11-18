@@ -63,7 +63,7 @@ situs lama tetap tayang.
 ## Batas dan keputusan terbuka
 
 - Satu `/exec` hanya boleh milik satu coach (build menolak link ganda).
-- Pustaka gerakan/makanan/peta otot masih dimuat dari `xnk.my.id`; bila mati, pencarian gerakan dan makanan semua coach terganggu.
+- Pustaka gerakan/makanan/peta otot disajikan dari `xnk.web.id/_lib/` sejak T-2222 (tidak lagi bergantung pada xnk.my.id). GIF gerakan tetap dari GitHub (dataset asli).
 - Setiap coach membawa salinan halaman sendiri (±1 MB); ratusan coach masih jauh di bawah batas GitHub Pages. Bila perlu, berkas berhash yang sama bisa dipakai bersama.
 - Push ke HP belum ada di hub.
 - Direktori "cari coach" ditunda (butuh persetujuan tiap coach dan moderasi).

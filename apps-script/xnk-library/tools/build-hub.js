@@ -54,6 +54,34 @@ function readHub(cfg) {
   return { contact, coaches };
 }
 
+// T-2222: pustaka gerakan, makanan dan peta otot disajikan dari hub sendiri (/_lib/), bukan dari xnk.my.id, supaya
+// situs coach tetap jalan bila xnk.my.id mati atau berubah. Diambil dari checkout XNK yang menjalankan build ini.
+const REPO = path.join(HERE, '..', '..');
+const LIB_DIRS = ['exercises', 'foods', 'figure'];
+const LIB_FROM = /https:\/\/xnk\.my\.id\/(exercises|foods|figure)\//g;
+const LIB_MARK = 'lib1';   // ikut sidik service worker: berkas yang ditulis ulang dimuat ulang di HP
+
+/** Tulis ulang alamat pustaka xnk.my.id → /_lib/ di halaman satu coach. */
+function localLibs(files, prefix) {
+  for (const n of Object.keys(files)) {
+    if (!n.startsWith(prefix) || !/\.(html|js|json)$/.test(n) || typeof files[n] !== 'string') continue;
+    // Service worker membandingkan alamat lengkap (origin + path) dengan daftar LIBS-nya: tetap alamat penuh.
+    if (/(^|\/)sw-app\.js$/.test(n)) files[n] = files[n].replace(/'https:\/\/xnk\.my\.id\/(exercises|foods|figure)\//g, "self.location.origin + '/_lib/$1/");
+    files[n] = files[n].replace(LIB_FROM, '/_lib/$1/');
+  }
+}
+
+/** Berkas pustaka untuk /_lib/ (json + kredit/lisensi). */
+function libFiles() {
+  const out = {};
+  for (const d of LIB_DIRS) {
+    const dir = path.join(REPO, d);
+    if (!fs.existsSync(dir)) throw new Error('build-hub: folder pustaka ' + d + '/ tidak ada di checkout XNK.');
+    for (const f of fs.readdirSync(dir)) if (/\.(json|md|txt)$/.test(f)) out['_lib/' + d + '/' + f] = fs.readFileSync(path.join(dir, f));
+  }
+  return out;
+}
+
 /** Sisipkan penyimpanan per slug di awal <head> dan kunci service worker supaya hash dan awalan cache unik. */
 function isolate(files, dir, slug, kind) {
   const shim = fs.readFileSync(path.join(SITE, 'storage-prefix.js'), 'utf8').split('__SLUG__').join(slug);
@@ -70,7 +98,7 @@ function isolate(files, dir, slug, kind) {
   sw = sw.replace(/^var PREFIX = .*$/m, () => { n++; return `var PREFIX = ${JSON.stringify('xnk-page-' + slug + '~' + kind + '~')};`; });
   if (n !== 1) throw new Error('build-hub: baris PREFIX di sw-app.js tidak ditemukan; sesuaikan build-hub.js dengan tools/sw-app.template.js.');
   n = 0;
-  sw = sw.replace(/^var HASH = "([0-9a-f]+)";$/m, (m, h) => { n++; return `var HASH = "${sha(h + shim)}";`; });
+  sw = sw.replace(/^var HASH = "([0-9a-f]+)";$/m, (m, h) => { n++; return `var HASH = "${sha(h + shim + LIB_MARK)}";`; });
   if (n !== 1) throw new Error('build-hub: baris HASH di sw-app.js tidak ditemukan.');
   files[swf] = sw;
 }
@@ -97,12 +125,14 @@ function build(cfg, opts) {
       if (n === 'lib-latest.json' || n === '.nojekyll') continue;
       sub[c.slug + '/' + n] = body;
     }
+    localLibs(sub, c.slug + '/');
     isolate(sub, c.slug + '/', c.slug, 'panel');
     isolate(sub, c.slug + '/klien/', c.slug, 'klien');
     Object.assign(files, sub);
     built[c.slug] = { commit: v && v.commit || 'terbaru', hash: t.hash };
   }
   if (hub.coaches.length) {
+    Object.assign(files, libFiles());
     if (!latest) latest = require('./build-lib').build().hash;
     // SITE_URL coach = xnk.web.id/<slug>; healthCheck membaca SITE_URL/lib-latest.json untuk tahu ada versi baru.
     for (const c of hub.coaches) files[c.slug + '/lib-latest.json'] = JSON.stringify({ library: { hash: latest } }) + '\n';
