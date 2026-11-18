@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Draws every share card (Phase T + T2) in headless Chromium and checks size, transparency, layout bounds,
-// the QR code, HQ export and the 6-second video.
+// Draws every share card (Phase T + T2 + T3) in headless Chromium and checks size, transparency, layout bounds,
+// the QR code, HQ export, the effect pass (grain + soft light) and the motion-graphics video
+// (Minimal and Kinetic × 6/10/15 s on every card; the last frame must equal the still card).
 //   NODE_PATH=$(npm root -g) node apps-script/pt-scheduler/tools/share-check.js   (SHOTS_DIR=dir saves the PNGs)
 'use strict';
 const { chromium } = require('playwright');
@@ -14,7 +15,7 @@ const OUT = process.env.SHOTS_DIR || '';
   const mask = /--logo-mask:[^\n]+/.exec(theme)[0];
   const mm = app.slice(app.indexOf('const WL_MM_FRONT = ['), app.indexOf('window.WL_MM = '));
   const share = fs.readFileSync(path.join(SRC, 'Bagikan.html'), 'utf8');
-  const html = `<!doctype html><html><head><style>:root{${mask}}</style></head><body><div class="sheet hide" id="sheet-share"></div><div id="share-nudge" class="hide"><p id="share-nudge-msg"></p></div>
+  const html = `<!doctype html><html><head><link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><style>:root{${mask}}</style></head><body><div class="sheet hide" id="sheet-share"></div><div id="share-nudge" class="hide"><p id="share-nudge-msg"></p></div>
   <script>${mm} window.WL_MM = { front: WL_MM_FRONT, back: WL_MM_BACK };</script>${share}
   <script>window.openSheet=function(id){document.getElementById(id).classList.remove('hide')};window.showToast=function(m){console.log('toast',m)};window.icon=function(){return ''};</script></body></html>`;
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
@@ -64,6 +65,7 @@ const OUT = process.env.SHOTS_DIR || '';
   });
 
   const run = (args) => p.evaluate(async ([kind, style, size, align, lang, extra]) => {
+    document.getElementById('share-img').removeAttribute('src');
     window.shareSet('kind', kind);
     window.shareSet('lang', lang); window.shareSet('size', size); window.shareSet('align', align);
     if (style === 'foto') { window.shareSet('style', 'grafik'); } else window.shareSet('style', style);
@@ -82,6 +84,7 @@ const OUT = process.env.SHOTS_DIR || '';
     }
     await new Promise(r => setTimeout(r, 200));
     const img = document.getElementById('share-img');
+    for (let i = 0; i < 100 && !img.getAttribute('src'); i++) await new Promise(r => setTimeout(r, 50));
     const bl = await fetch(img.src).then(r => r.blob());
     const im = await createImageBitmap(bl); const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0);
     const card = window.shareCheck.card(), L = window.shareCheck.layout();
@@ -143,6 +146,44 @@ const OUT = process.env.SHOTS_DIR || '';
   check(hq[0] === 2160 && hq[1] === 3840, `HQ export is 2160×3840 (${hq})`);
   const vid = await p.evaluate(async () => { const o = await window.shareCheck.video(1500); return o ? { type: o.blob.type, size: o.blob.size, name: o.name } : null; });
   check(vid && /^video\//.test(vid.type) && vid.size > 10000, `video export works ${JSON.stringify(vid)}`);
+
+  // T3 effects: on by default for boxed / photo cards, never on transparent cards, never outside the rounded card.
+  const fx = await p.evaluate(async () => {
+    const px = async () => { document.getElementById('share-img').removeAttribute('src'); await new Promise(r => setTimeout(r, 30)); const img = document.getElementById('share-img'); for (let i = 0; i < 100 && !img.getAttribute('src'); i++) await new Promise(r => setTimeout(r, 50)); const im = await createImageBitmap(await fetch(img.src).then(r => r.blob())); const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); return x.getImageData(0, 0, c.width, c.height).data; };
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 3] !== b[i + 3]) n++; return n; };
+    const out = { def: window.shareCheck.opts().fx };
+    window.shareSet('kind', 'latihan'); window.shareSet('size', 'story');
+    for (const style of ['gelap', 'terang', 'aksen', 'grafik']) {
+      window.shareSet('style', style); window.shareSet('fx', 'halus'); const on = await px();
+      window.shareSet('fx', 'polos'); const off = await px();
+      out[style] = { changed: diff(on, off), corner: on[3] };
+    }
+    window.shareSet('fx', 'halus');
+    return out;
+  });
+  check(fx.def === 'halus', 'effects (grain + soft light) are on by default');
+  ['gelap', 'terang', 'aksen'].forEach(st => check(fx[st].changed > 100000 && fx[st].corner === 0, `${st}: effect pass changes the card (${fx[st].changed} px) and stays inside the rounded corner`));
+  check(fx.grafik.changed === 0, 'transparent card stays clean (no grain, no light)');
+
+  // T3 motion graphics: both styles × 6/10/15 s on every card, dark and accent; last frame = still card.
+  for (const kind of want) {
+    for (const style of ['gelap', 'aksen', 'grafik']) for (const anim of ['minimal', 'kinetic']) for (const dur of [6, 10, 15]) {
+      if (style !== 'gelap' && dur !== 10) continue;
+      const r = await p.evaluate(async ([kind, style, anim, dur]) => {
+        window.shareSet('kind', kind); window.shareSet('style', style); window.shareSet('size', 'story');
+        if (kind === 'foto') window.shareCheck.setPhotos(window.__a, window.__b);
+        await new Promise(res => setTimeout(res, 80));
+        const ts = [0, dur * .15, dur * .35, dur * .55, dur * .75, dur];
+        return await window.shareCheck.anim(anim, dur, ts, false);
+      }, [kind, style, anim, dur]);
+      check(r.endIsStill, `${kind} ${style} ${anim} ${dur}s: frames render and the last frame equals the still card (${r.diff} px differ)`);
+      if (anim === 'kinetic') check(r.scenes.length === (dur >= 15 ? 7 : dur >= 10 ? 5 : 3) || r.scenes.length >= 2, `${kind} kinetic ${dur}s: ${r.scenes.join(' → ')}`);
+    }
+  }
+  const vid2 = await p.evaluate(async () => { window.shareSet('kind', 'record'); window.shareSet('style', 'gelap'); window.shareSet('anim', 'kinetic'); const o = await window.shareCheck.video(1200); window.shareSet('anim', 'minimal'); return o ? { type: o.blob.type, size: o.blob.size } : null; });
+  check(vid2 && /^video\//.test(vid2.type) && vid2.size > 10000, `kinetic video export works ${JSON.stringify(vid2)}`);
+  const anton = await p.evaluate(() => document.fonts.check('400 60px Anton'));
+  console.log('  · Anton loaded in the check page: ' + anton + (anton ? '' : ' (no network: cards fall back to Impact / sans-serif)'));
 
   await b.close(); console.log(failures ? failures + ' failed' : 'all share cards OK (' + cases.length + ' cases)'); process.exit(failures ? 1 : 0);
 })();

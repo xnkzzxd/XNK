@@ -1855,6 +1855,34 @@ async function contrastReport(page) {
     check(smallTargets === 0, 'share editor (phone): chips, tools and buttons are touch-sized');
     await page.click('#share-body [data-pane="gaya"] .chip:has-text("Gelap")');
     await page.waitForTimeout(300);
+    // Fase T3: Efek in Gaya; Animasi, Durasi and "Putar pratinjau" in Ekspor (under Lainnya on phones, no new top-level tool).
+    check((await page.locator('#share-body [data-pane="gaya"] .chip:has-text("Grain + cahaya")').count()) === 1, 'share editor: dark card offers the grain + light effect');
+    check((await page.locator('#share-tabs .sh-tool').count()) === 6, 'share editor (phone): still five main tools + Lainnya');
+    await page.click('#share-tabs [data-tool="lainnya"]');
+    await page.waitForTimeout(200);
+    await page.click('#share-body .sh-more [data-tool="ekspor"]');
+    await page.waitForTimeout(200);
+    check(!(await page.locator('#share-body .chip:has-text("Kinetic")').count()), 'share editor: animation options stay hidden for images');
+    if (await page.locator('#share-body .sh-seg button:has-text("Video")').count()) {
+      await page.click('#share-body .sh-seg button:has-text("Video")');
+      await page.waitForTimeout(200);
+      check((await page.locator('#share-body .chip:has-text("Kinetic")').count()) === 1 && (await page.locator('#share-body .chip:has-text("15 dtk")').count()) === 1, 'share editor (video): Animasi Minimal/Kinetic and Durasi 6/10/15 dtk');
+      await page.click('#share-body .chip:has-text("Kinetic")');
+      await page.waitForTimeout(200);
+      await shot(page, 'portal-mobile-share-ekspor');
+      check((await overflowX(page)) <= 0, 'share editor (phone, Ekspor): no sideways scroll');
+      await page.click('#share-play');
+      await page.waitForTimeout(700);
+      check((await page.locator('#share-box canvas.sh-anim').count()) === 1, 'share editor (video): "Putar pratinjau" plays the animation in the preview');
+      await page.click('#share-play');
+      await page.waitForTimeout(200);
+      check(!(await page.locator('#share-box canvas.sh-anim').count()), 'share editor (video): a second tap stops it');
+      await page.click('#share-body .chip:has-text("Minimal")');
+      await page.click('#share-body .sh-seg button:has-text("Gambar")');
+      await page.waitForTimeout(200);
+    }
+    await page.click('#share-tabs [data-tool="gaya"]');
+    await page.waitForTimeout(300);
     await page.click('#share-foot .sh-add:visible');
     await page.waitForTimeout(400);
     check((await page.locator('#share-foot .sh-thumb').count()) === 1, 'share editor: "+ Set" adds the card to the multi-card tray');
