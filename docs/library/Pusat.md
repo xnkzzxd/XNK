@@ -25,7 +25,8 @@ WA atau data kesehatan klien yang pernah sampai ke XNK Pusat.
    - `PUSAT_EMAIL` — opsional; bawaan = akun ini.
    - `GITHUB_TOKEN` — opsional, untuk tombol aksi: *fine-grained token* hanya untuk repo `xnk-template-site`,
      izin **Actions: Read and write**.
-3. Di editor, pilih fungsi **setupPusat** → Run → beri izin. (Kunci sesi + trigger harian 06:00 WIB.)
+3. Di editor, pilih fungsi **setupPusat** → Run → beri izin. (Kunci sesi + trigger harian 06:00 WIB.) Sesudah itu,
+   izin atau trigger yang kurang bisa disiapkan dari `/adminxnk` → **Siapkan XNK Pusat** (lihat di bawah).
 4. Repo hub → `hub.json`: tambahkan `"pusatUrl": "<XNK_PUSAT_URL>"`. Situs dibangun ulang dan
    `xnk.web.id/adminxnk/` aktif.
 5. Setiap coach: spreadsheet → **XNK → Mulai setup → langkah 4 → Daftarkan ke XNK Pusat** (isi kode daftar).
@@ -77,8 +78,17 @@ sampah Drive (masih bisa dipulihkan 30 hari dari sampah).
   memasang trigger sekali jalan ±1 menit lagi (`runPusatBackupSoon`). Tanpa GitHub. Coach dengan Library lama
   menjawab "Library coach belum punya hubExport; perbarui coach." — jalankan **Perbarui** dulu.
 - **Izin.** XNK Pusat memakai izin `spreadsheets` dan `drive.file` (hanya file yang dibuatnya sendiri; Drive lewat REST
-  API karena DriveApp meminta akses Drive penuh). Setelah versi ini terpasang, **jalankan `setupPusat` sekali lagi**
-  di editor XNK Pusat untuk memberi izin baru dan memasang trigger backup tiap jam.
+  API karena DriveApp meminta akses Drive penuh). Setelah versi ini terpasang, buka `/adminxnk` → **Siapkan XNK Pusat**
+  (atau jalankan `setupPusat` di editor) untuk memberi izin baru dan memasang trigger backup tiap jam.
+
+## Siapkan XNK Pusat dari /adminxnk
+`pusatOverview.setup` = `{auth, daily, backup, ok}` (izin Google lewat `ScriptApp.getAuthorizationInfo`, dua trigger).
+Bila ada yang kurang, `/adminxnk` menampilkan pita "XNK Pusat perlu disiapkan" (tombol yang sama juga ada di bilah atas).
+Tombol membuka tab baru (dibuka saat diklik, supaya tidak diblokir) ke `<pusatUrl>?setup=<tanda siap>`: tanda sekali
+pakai `setup.<exp>.<hmac>` dari `pusatAction(token, 'setup')`, berlaku 10 menit, bukan token sesi. `doGet` memeriksanya
+lalu menjalankan `setupPusat_()` (sama dengan `setupPusat` di editor). Karena web app berjalan sebagai pemilik, Google
+menampilkan layar izin kepada pemilik bila ada izin baru. Bila browser login beberapa akun Google dan Google menolak,
+buka tab itu di jendela Incognito dengan akun pemilik saja, atau jalankan `setupPusat` di editor.
 
 ## Memulihkan dari backup
 

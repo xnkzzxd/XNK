@@ -35,6 +35,8 @@ function env(opts) {
       getProjectTriggers: () => triggers.map(h => ({ getHandlerFunction: () => h })), deleteTrigger: t => triggers.splice(triggers.indexOf(t.getHandlerFunction()), 1),
       newTrigger: h => { const b = { timeBased: () => b, atHour: () => b, everyDays: () => b, everyHours: () => b, after: () => b, inTimezone: () => b, create: () => triggers.push(h) }; return b; },
       getOAuthToken: () => 'tok-pusat',
+      AuthMode: { FULL: 'FULL' }, AuthorizationStatus: { REQUIRED: 'REQUIRED', NOT_REQUIRED: 'NOT_REQUIRED' },
+      getAuthorizationInfo: () => ({ getAuthorizationStatus: () => (opts.needAuth ? 'REQUIRED' : 'NOT_REQUIRED') }),
     },
     SpreadsheetApp: { openById: id => { if (!drive.books[id]) throw new Error('Spreadsheet tidak ada'); return drive.books[id]; } },
     UrlFetchApp: {
@@ -146,6 +148,30 @@ test('setupPusat: kunci sesi, satu trigger harian dan satu trigger backup tiap j
   e.ctx.setupPusat();
   assert.ok(e.props.SESSION_SECRET.length >= 32);
   assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup']);
+});
+
+test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet; tanda palsu/kedaluwarsa tidak; overview melapor', () => {
+  const e = env({ needAuth: true });
+  e.triggers.length = 0;
+  const tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  const ov = e.call('pusatOverview', tok).data.setup;
+  assert.deepEqual([ov.ok, ov.auth, ov.daily, ov.backup], [false, false, false, false]);
+  assert.equal(e.call('pusatAction', 'palsu', 'setup').auth, true, 'butuh login PIN');
+  const t = e.call('pusatAction', tok, 'setup').data.ticket;
+  assert.match(t, /^setup\.\d+\.[\w-]+$/);
+  assert.ok(!t.includes(tok.split('.')[1]), 'bukan token sesi');
+  assert.equal(e.ctx.doGet({ parameter: {} }).content, 'XNK Pusat');
+  assert.match(e.ctx.doGet({ parameter: { setup: t.replace(/.$/, 'x') } }).content, /tidak berlaku/);
+  assert.match(e.ctx.doGet({ parameter: { setup: tok } }).content, /tidak berlaku/, 'token sesi bukan tanda siap');
+  assert.deepEqual(e.triggers, []);
+  assert.match(e.ctx.doGet({ parameter: { setup: t } }).content, /XNK Pusat siap/);
+  e.ctx.doGet({ parameter: { setup: t } });
+  assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup'], 'diulang tetap satu');
+  const D = vm.runInContext('Date', e.ctx), real = D.now;
+  D.now = () => real.call(D) + 11 * 60 * 1000;
+  try { assert.match(e.ctx.doGet({ parameter: { setup: t } }).content, /tidak berlaku/, 'lewat 10 menit'); } finally { D.now = real; }
+  const ok = env().call('pusatOverview', env().call('pusatLogin', 'pin-rahasia-1').data.token);
+  assert.equal(typeof ok.ok, 'boolean');
 });
 
 test('login: PIN benar = token 12 jam; salah = ditolak, dibatasi 5 kali; token palsu ditolak', () => {
