@@ -170,6 +170,15 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
 - **Notifikasi Admin**: Telegram (saklar, token, chat ID, tombol tes) dan email notifikasi
   (`NOTIF_EMAIL`, kosong = email pemilik akun). Token yang tersimpan hanya tampil sebagai
   `••••1234`; dikosongkan berarti token lama tetap dipakai.
+  **Kirim ringkasan ke email** (`NOTIF_EMAIL_REMINDERS`, T-2254): *Mati* (bawaan xnk.my.id), *Otomatis* (email
+  hanya bila Telegram belum diatur; dipasang wizard untuk coach hub) atau *Selalu*. Ringkasan pengingat (sesi besok,
+  PR, makan, …) dikirim satu email per jenis ke Email Notifikasi, isinya sama dengan pesan Telegram: satu tombol
+  WhatsApp per klien. Tiap saluran dicatat sendiri di ReminderLog (`jenis|slot|telegram`, `jenis|slot|email`),
+  jadi pengulangan tick tidak pernah mengirim dua kali.
+- **Kuota Google** (T-2253): pemakaian harian (email, UrlFetch, menit trigger) dicatat per hari WIB di Script
+  Property `QUOTA_<yyyymmdd>` (7 hari). Sebelum mengirim email dicek sisa kuota Google; bila di bawah
+  `MAIL_RESERVE` (bawaan 10) email dilewati (ringkasan tetap lewat Telegram bila ada). Angkanya tampil di
+  XNK Pusat (`/adminxnk`); di produksi hanya tercatat.
 - **Paket & Harga**: tambah, ubah, gandakan, urutkan, tampil/sembunyikan, dan hapus paket tanpa membuka
   spreadsheet. Paket hanya bisa dihapus kalau tidak ada klien atau transaksi yang memakainya;
   kalau tidak, **nonaktifkan** saja (klien lama tidak terpengaruh). Kategori tetap: student, college,

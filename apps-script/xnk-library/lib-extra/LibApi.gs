@@ -78,6 +78,7 @@ function healthCheck(ctx, opts) {
       brand: props.getProperty('BRAND_NAME') || '',
       pin: !!props.getProperty('ADMIN_PIN'),
       siteUrl: props.getProperty('SITE_URL') || '',
+      notifEmail: props.getProperty('NOTIF_EMAIL') || '',
       execUrl: _execUrl_(),
     };
     if (!setup.initialized) problems.push(setup.copiedNotInitialized ? 'Ini salinan baru: jalankan Mulai setup.' : 'Belum diinisialisasi: jalankan Mulai setup.');
@@ -136,7 +137,7 @@ function initInstance(ctx) {
  * Simpan isian wizard setup: nama usaha, PIN admin, alamat situs (opsional). Validasi dulu, baru tulis.
  * Hanya pemilik spreadsheet.
  * @param {Object} ctx layanan milik spreadsheet pemanggil
- * @param {{brand: string, pin: string, siteUrl: string}} data pin kosong = PIN lama tetap
+ * @param {{brand: string, pin: string, siteUrl: string, notifEmail?: string}} data pin kosong = PIN lama tetap; notifEmail tidak dikirim = tetap
  * @return {{brand: string, pin: boolean, siteUrl: string}}
  */
 function saveSetup(ctx, data) {
@@ -154,10 +155,16 @@ function saveSetup(ctx, data) {
     if (pin && (pin.length < 6 || pin.length > 32)) throw new Error('PIN minimal 6 dan maksimal 32 karakter.');
     if (pin && /\s/.test(pin)) throw new Error('PIN tidak boleh berisi spasi.');
     if (site && !/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s]*)?$/i.test(site)) throw new Error('Alamat situs harus diawali https:// dan tanpa spasi.');
+    // T-2254: email coach opsional (tidak dikirim = tetap); ringkasan pengingat ke email 'auto' bila belum pernah diatur.
+    var hasMail = Object.prototype.hasOwnProperty.call(data, 'notifEmail') && data.notifEmail != null;
+    var mail = hasMail ? String(data.notifEmail).trim() : '';
+    if (mail && (mail.length > 200 || !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(mail))) throw new Error('Alamat email tidak valid.');
     return _locked_(function () {
       props.setProperty('BRAND_NAME', brand);
       if (pin) props.setProperty('ADMIN_PIN', pin);
       if (site) props.setProperty('SITE_URL', site); else props.deleteProperty('SITE_URL');
+      if (hasMail) { if (mail) props.setProperty('NOTIF_EMAIL', mail); else props.deleteProperty('NOTIF_EMAIL'); }
+      if (!props.getProperty('NOTIF_EMAIL_REMINDERS')) props.setProperty('NOTIF_EMAIL_REMINDERS', 'auto');
       _bustShared_();
       return { brand: brand, pin: !!props.getProperty('ADMIN_PIN'), siteUrl: site };
     });
@@ -241,6 +248,7 @@ function setupState(ctx) {
       brand: props.getProperty('BRAND_NAME') || '',
       pin: !!props.getProperty('ADMIN_PIN'),
       siteUrl: props.getProperty('SITE_URL') || '',
+      notifEmail: props.getProperty('NOTIF_EMAIL') || '',
       execUrl: _execUrl_(),
       triggers: LIB_TRIGGERS.every(function (n) { return handlers.indexOf(n) !== -1; }),
       version: getLibraryVersion(),

@@ -212,7 +212,7 @@
       getScriptTimeZone: function () { return 'Asia/Jakarta'; }
     },
     // Nothing leaves the browser: no mail, Telegram or WhatsApp in the demo.
-    MailApp: { sendEmail: function () {} },
+    MailApp: { sendEmail: function () {}, getRemainingDailyQuota: function () { return 100; } },
     UrlFetchApp: { fetch: function () { return { getResponseCode: function () { return 200; }, getContentText: function () { return '{}'; } }; } },
     DriveApp: {
       Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' },
