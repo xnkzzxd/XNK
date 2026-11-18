@@ -2,13 +2,14 @@ name: Coach XNK
 
 # Mengelola spreadsheet dan Apps Script setiap coach lewat clasp (Gelombang 2, T-2230…T-2232), tanpa membuka laptop:
 #  - perbarui  (otomatis setiap hari 02:37 WIB, atau manual): pasang versi Library terbaru di penghubung coach dan
-#              terbitkan ulang deployment yang SAMA (link /exec tidak berubah). slug kosong = semua coach; coach
-#              pertama di daftar adalah kenari: bila ia gagal, coach lain tidak disentuh.
+#              terbitkan ulang deployment yang SAMA (link /exec tidak berubah). slug kosong = semua coach, satu job per
+#              coach berurutan; coach pertama di daftar adalah kenari: bila ia gagal, coach lain tidak dikerjakan.
 #  - baru      buat spreadsheet + Apps Script di akun Google coach, pasang penghubung, terbitkan web app, simpan ke
 #              hub.json. Setelah itu pemilik membuka spreadsheet → menu XNK → Mulai setup (izin Google + PIN).
 #  - hubungkan coach yang dibuat dulu dari XNK Template (mis. claudia): cari proyek script-nya di akun itu dan simpan
 #              scriptId/deploymentId supaya bisa ikut "perbarui".
 # Kredensial: secret CLASP_<SLUG> (huruf besar, "-" jadi "_") berisi .clasprc.json dari `clasp login` akun coach.
+# Setiap job hanya menerima SATU secret (milik coach yang dikerjakan) lewat env CLASP_RC; tidak pernah semua secret.
 # Akun itu harus menyalakan Google Apps Script API (script.google.com/home/usersettings). Lihat README repo ini.
 on:
   workflow_dispatch:
@@ -32,32 +33,64 @@ on:
     - cron: '37 19 * * *'
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: coach
   cancel-in-progress: false
 
 jobs:
-  coach:
+  # Daftar pekerjaan dari hub.json: satu baris per coach {slug, secret, kenari}. Tanpa secret apa pun.
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    outputs:
+      aksi: ${{ steps.p.outputs.aksi }}
+      matrix: ${{ steps.p.outputs.matrix }}
+      tag: ${{ steps.p.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Versi Library terbaru
-        id: lib
+      - name: Rencana
+        id: p
+        env:
+          IN_AKSI: ${{ github.event_name == 'schedule' && 'perbarui' || inputs.aksi }}
+          IN_SLUG: ${{ inputs.slug }}
         run: |
           tag=$(git ls-remote --tags https://github.com/xnkzzxd/XNK.git 'lib-v*' | grep -oE 'lib-v[0-9]+$' | sort -t v -k 2 -n | tail -1)
           if [ -z "$tag" ]; then echo "::error::Repo XNK belum punya tag lib-v<N> (workflow XNK Library belum menerbitkan versi bertag)."; exit 1; fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "aksi=$IN_AKSI" >> "$GITHUB_OUTPUT"
+          node -e '
+            const fs = require("fs");
+            const aksi = process.env.IN_AKSI, one = (process.env.IN_SLUG || "").trim();
+            const cfg = JSON.parse(fs.readFileSync("hub.json", "utf8"));
+            const re = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
+            if (one && !re.test(one)) { console.log("::error::Slug tidak valid: " + one); process.exit(1); }
+            if (aksi !== "perbarui" && !one) { console.log("::error::Aksi " + aksi + " butuh slug."); process.exit(1); }
+            const slugs = one ? [one] : (cfg.coaches || []).map(c => c.slug);
+            const rows = slugs.map((s, i) => ({ slug: s, secret: "CLASP_" + s.toUpperCase().replace(/-/g, "_"), kenari: !one && i === 0 && slugs.length > 1 }));
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, "matrix=" + JSON.stringify({ include: rows }) + "\n");
+            console.log(rows.map(r => r.slug + " (" + r.secret + ")").join(", ") || "tidak ada coach");
+          '
+
+  coach:
+    needs: plan
+    if: ${{ needs.plan.outputs.matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    strategy:
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+      max-parallel: 1        # berurutan: kenari dulu
+      fail-fast: true        # kenari gagal = coach lain tidak dikerjakan
+    steps:
+      - uses: actions/checkout@v4
 
       # Kode penghubung dibangun dari commit yang sama dengan versi Library itu.
       - uses: actions/checkout@v4
         with:
           repository: xnkzzxd/XNK
-          ref: ${{ steps.lib.outputs.tag }}
+          ref: ${{ needs.plan.outputs.tag }}
           path: _xnk
 
       - uses: actions/setup-node@v4
@@ -66,36 +99,42 @@ jobs:
 
       - run: npm install -g @google/clasp@2.4.2
 
-      - name: Jalankan
+      - name: Jalankan (${{ matrix.slug }})
         env:
-          SECRETS_JSON: ${{ toJSON(secrets) }}
-          IN_AKSI: ${{ github.event_name == 'schedule' && 'perbarui' || inputs.aksi }}
-          IN_SLUG: ${{ inputs.slug }}
+          CLASP_RC: ${{ secrets[matrix.secret] }}     # hanya secret coach ini
+          AKSI: ${{ needs.plan.outputs.aksi }}
+          SLUG: ${{ matrix.slug }}
           IN_BRAND: ${{ inputs.brand }}
-          IN_PAKSA: ${{ inputs.paksa && '--paksa' || '' }}
+          FLAGS: ${{ inputs.paksa && '--paksa' || '' }} ${{ matrix.kenari && '--kenari' || '' }}
         run: |
           set -e
           T=_xnk/apps-script/xnk-library/tools/coach-ops.js
-          case "$IN_AKSI" in
-            perbarui) node "$T" perbarui hub.json "${IN_SLUG:-semua}" $IN_PAKSA --xnk _xnk ;;
-            baru)     node "$T" baru hub.json "$IN_SLUG" "$IN_BRAND" --xnk _xnk ;;
-            hubungkan) node "$T" hubungkan hub.json "$IN_SLUG" --xnk _xnk ;;
-            *) echo "::error::Aksi tidak dikenal: $IN_AKSI"; exit 1 ;;
+          case "$AKSI" in
+            perbarui)  node "$T" perbarui hub.json "$SLUG" $FLAGS --xnk _xnk ;;
+            baru)      node "$T" baru hub.json "$SLUG" "$IN_BRAND" --xnk _xnk ;;
+            hubungkan) node "$T" hubungkan hub.json "$SLUG" --xnk _xnk ;;
+            *) echo "::error::Aksi tidak dikenal: $AKSI"; exit 1 ;;
           esac
 
       - name: Simpan hub.json
-        if: always()
         run: |
           if git diff --quiet -- hub.json; then echo "hub.json tidak berubah."; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add hub.json
-          git commit -m "Coach: ${{ github.event_name == 'schedule' && 'perbarui' || inputs.aksi }} ${{ inputs.slug }}"
+          git commit -m "Coach: ${{ needs.plan.outputs.aksi }} ${{ matrix.slug }}"
+          git pull --rebase --quiet origin main
           git push
 
-      # Push dari workflow tidak memicu workflow lain; situs dibangun ulang supaya halaman mengikuti versi baru.
+  # Push dari workflow tidak memicu workflow lain; situs dibangun ulang supaya halaman mengikuti versi baru.
+  rebuild:
+    needs: [plan, coach]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
       - name: Bangun ulang situs hub
-        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run hub.yml -f aksi=bangun -R "$GITHUB_REPOSITORY"

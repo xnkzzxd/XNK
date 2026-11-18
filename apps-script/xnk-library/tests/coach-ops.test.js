@@ -41,6 +41,8 @@ test('nama secret per coach: CLASP_<SLUG>, huruf besar, "-" jadi "_"; kredensial
   assert.throws(() => ops.credFor('claudia', { SECRETS_JSON: '{}' }), /Secret CLASP_CLAUDIA belum ada/);
   assert.throws(() => ops.credFor('claudia', { SECRETS_JSON: JSON.stringify({ CLASP_CLAUDIA: 'bukan json' }) }), /bukan isi \.clasprc\.json/);
   assert.equal(ops.credFor('claudia', env(['claudia'])), RC);
+  assert.equal(ops.credFor('claudia', { CLASP_RC: RC }), RC, 'workflow: satu secret lewat CLASP_RC');
+  assert.throws(() => ops.credFor('claudia', { CLASP_RC: '' }), /Secret CLASP_CLAUDIA belum ada/);
   assert.equal(ops.versionOf('Created version 12.'), '12');
   assert.equal(ops.deploymentOf(`Created version 3.\n- ${DEP(1)} @3.`), DEP(1));
 });

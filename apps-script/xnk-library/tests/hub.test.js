@@ -334,3 +334,14 @@ test('adminxnk (T-2234): halaman statis tanpa data, alamat XNK Pusat dari hub.js
   assert.match(html, /noindex/);
   assert.ok(hub.build(CFG).files['adminxnk/index.html'].includes('var PUSAT = "";'), 'tanpa pusatUrl: halaman memberi tahu, tidak memanggil apa pun');
 });
+
+test('workflow Coach XNK: satu secret per job (secrets[matrix.secret]), tidak pernah toJSON(secrets)', () => {
+  const root = path.join(__dirname, '..', '..', '..');
+  const files = [path.join(__dirname, '..', 'hub-repo', '.github', 'workflows', 'coach.yml')]
+    .concat(fs.readdirSync(path.join(root, '.github', 'workflows')).map(f => path.join(root, '.github', 'workflows', f)));
+  for (const f of files) assert.ok(!/toJSON\(\s*secrets\s*\)/.test(fs.readFileSync(f, 'utf8')), f + ': GitHub menandai pengiriman semua secret sebagai berbahaya');
+  const y = fs.readFileSync(files[0], 'utf8');
+  assert.match(y, /CLASP_RC: \$\{\{ secrets\[matrix\.secret\] \}\}/);
+  assert.match(y, /max-parallel: 1/);
+  assert.match(y, /fail-fast: true/);
+});
