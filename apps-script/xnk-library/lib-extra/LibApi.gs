@@ -181,12 +181,8 @@ function registerPusat(ctx, data) {
     var exec = _execUrl_();
     if (!exec) throw new Error('Terbitkan aplikasi web dulu (langkah 3).');
     var secret = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
-    var res = UrlFetchApp.fetch(url, {
-      method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
-      payload: JSON.stringify({ fn: 'pusatRegister', args: [String(data.code || ''), String(data.slug || ''), exec, secret] }),
-    });
     var j = null;
-    try { j = JSON.parse(res.getContentText()); } catch (e) { j = null; }
+    try { j = JSON.parse(_postApps_(url, { fn: 'pusatRegister', args: [String(data.code || ''), String(data.slug || ''), exec, secret] })); } catch (e) { j = null; }
     if (!j) throw new Error('XNK Pusat tidak menjawab. Coba lagi sebentar lagi.');
     if (!j.ok) throw new Error(j.error || 'Pendaftaran ditolak XNK Pusat.');
     _props_().setProperty('HUB_SECRET', secret);
@@ -249,6 +245,23 @@ function setupState(ctx) {
 }
 
 // ── pembantu ────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST JSON ke /exec Apps Script lain (XNK Pusat) lalu ambil jawabannya. Apps Script menjawab POST dengan 302 ke
+ * script.googleusercontent.com/macros/echo; UrlFetchApp mengikuti 302 tetap sebagai POST dan mendapat halaman HTML
+ * Google. Jadi: POST tanpa mengikuti, lalu GET ke alamat Location.
+ */
+function _postApps_(url, body) {
+  var res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', payload: JSON.stringify(body), muteHttpExceptions: true, followRedirects: false });
+  var code = res.getResponseCode();
+  if (code >= 300 && code < 400) {
+    var h = (res.getHeaders && res.getHeaders()) || {};
+    var loc = h.Location || h.location;
+    if (!loc) throw new Error('XNK Pusat tidak menjawab.');
+    res = UrlFetchApp.fetch(loc, { muteHttpExceptions: true, followRedirects: true });
+  }
+  return res.getContentText();
+}
 
 /** Link /exec deployment web app spreadsheet ini; kosong bila belum di-deploy. */
 function _execUrl_() {

@@ -135,12 +135,29 @@ function gh_() {
   return h;
 }
 
+/**
+ * POST JSON ke /exec Apps Script lalu ambil jawabannya. Apps Script menjawab POST dengan 302 ke
+ * script.googleusercontent.com/macros/echo; UrlFetchApp mengikuti 302 tetap sebagai POST dan mendapat halaman HTML
+ * Google ("Unexpected token '<'"). Jadi: POST tanpa mengikuti, lalu GET ke alamat Location. doPost tujuan sudah
+ * berjalan pada permintaan pertama.
+ */
+function postApps_(url, body) {
+  var res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', payload: JSON.stringify(body), muteHttpExceptions: true, followRedirects: false });
+  var code = res.getResponseCode();
+  if (code >= 300 && code < 400) {
+    var h = res.getHeaders() || {};
+    var loc = h.Location || h.location;
+    if (!loc) throw new Error('pengalihan tanpa alamat');
+    res = UrlFetchApp.fetch(loc, { muteHttpExceptions: true, followRedirects: true });
+  }
+  return res.getContentText();
+}
+
 /** Tanya satu coach; kembalikan status {at, ok, problems[], data}. */
 function checkOne_(slug, c, latest) {
   var st = { at: new Date().toISOString(), ok: false, problems: [], data: null };
   try {
-    var res = UrlFetchApp.fetch(c.exec, { method: 'post', contentType: 'text/plain', payload: JSON.stringify({ fn: 'hubStatus', args: [c.secret] }), muteHttpExceptions: true, followRedirects: true });
-    var j = JSON.parse(res.getContentText());
+    var j = JSON.parse(postApps_(c.exec, { fn: 'hubStatus', args: [c.secret] }));
     if (!j || !j.ok) throw new Error(j && j.error ? j.error : 'tanpa jawaban');
     st.data = j.data;
   } catch (e) {
