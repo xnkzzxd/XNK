@@ -41,6 +41,9 @@ function build(opts) {
   const brand = String(opts.brand || '').trim();
   if (slug && !/^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/.test(slug)) throw new Error('build-bridge: --slug tidak valid');
   if (brand.length > 60) throw new Error('build-bridge: --brand maksimal 60 huruf');
+  // T-2233: link /exec XNK Pusat (bukan rahasia; kode daftar tetap diminta di wizard). Kosong = langkah daftar disembunyikan.
+  const pusatUrl = String(opts.pusatUrl != null ? opts.pusatUrl : process.env.XNK_PUSAT_URL || '').trim();
+  if (pusatUrl && !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(pusatUrl)) throw new Error('build-bridge: --pusat-url harus link /exec Apps Script');
 
   const files = {};
   for (const f of fs.readdirSync(BRIDGE_SRC).sort()) files[f] = fs.readFileSync(path.join(BRIDGE_SRC, f), 'utf8');
@@ -58,6 +61,7 @@ var XNK_HUB_URL = ${JSON.stringify(hubUrl)};
 var XNK_LIB_VERSION_PINNED = ${JSON.stringify(libVersion)};
 var XNK_DEFAULT_SLUG = ${JSON.stringify(slug)};
 var XNK_DEFAULT_BRAND = ${JSON.stringify(brand)};
+var XNK_PUSAT_URL = ${JSON.stringify(pusatUrl)};
 ${names.map(n => `function ${n}() { return XNK.run(ctx_(), ${JSON.stringify(n)}, Array.prototype.slice.call(arguments)); }`).join('\n')}
 `;
 
@@ -89,8 +93,9 @@ if (require.main === module) {
   const libVersion = flag('--lib-version') || process.env.XNK_LIB_VERSION;
   const slug = flag('--slug');
   const brand = flag('--brand');
+  const pusatUrl = flag('--pusat-url');
   const out = args[0] ? path.resolve(args[0]) : DEFAULT_OUT;
-  const r = build({ libId, libVersion, slug, brand });
+  const r = build({ libId, libVersion, slug, brand, pusatUrl });
   write(out, r.files);
   console.log(`Kode penghubung: ${r.names.length} pembungkus + ${r.local.length} fungsi lokal → ${path.relative(process.cwd(), out)}`);
 }

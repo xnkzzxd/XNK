@@ -13,7 +13,7 @@ const LOCAL_OK = {
   showSetup: 'butuh UI spreadsheet', initializeTemplate: 'Library: requireOwner_', checkLibraryConnection: 'hanya versi',
   getLibraryVersion: 'hanya versi', setupTriggers: 'Library: requireOwner_', validateConfiguration: 'Library: requireOwner_',
   setupGetState: 'Library: requireOwner_', setupInit: 'Library: requireOwner_', setupSave: 'Library: requireOwner_',
-  setupCheck: 'Library: requireOwner_',
+  setupCheck: 'Library: requireOwner_', setupRegisterPusat: 'Library: requireOwner_ (registerPusat)',
 };
 
 test('setiap fungsi API dan trigger punya pembungkus; fungsi lokal hanya yang dikenal', () => {

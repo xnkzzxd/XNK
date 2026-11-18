@@ -37,6 +37,9 @@ function readHub(cfg) {
   if (!cfg || typeof cfg !== 'object' || !Array.isArray(cfg.coaches)) throw new Error('hub.json: "coaches" harus berupa daftar.');
   const contact = String(cfg.contactUrl || '').trim();
   if (contact && !/^https:\/\/[^\s'"<>\\]+$/.test(contact)) throw new Error('hub.json: "contactUrl" harus link https:// tanpa spasi.');
+  // T-2234: link /exec XNK Pusat untuk xnk.web.id/adminxnk (bukan rahasia; login tetap PIN pemilik).
+  const pusat = String(cfg.pusatUrl || '').trim();
+  if (pusat && !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(pusat)) throw new Error('hub.json: "pusatUrl" harus link /exec Apps Script XNK Pusat.');
   const seen = new Set();
   const coaches = cfg.coaches.map((c, i) => {
     const slug = String(c && c.slug || '').trim();
@@ -59,7 +62,8 @@ function readHub(cfg) {
   const execs = coaches.map(c => c.exec);
   const dup = execs.find((e, i) => execs.indexOf(e) !== i);
   if (dup) throw new Error('hub.json: dua coach memakai link /exec yang sama; setiap coach harus punya spreadsheet sendiri.');
-  return { contact, coaches };
+  if (pusat && execs.includes(pusat)) throw new Error('hub.json: "pusatUrl" tidak boleh sama dengan /exec coach.');
+  return { contact, coaches, pusat };
 }
 
 // T-2222: pustaka gerakan, makanan dan peta otot disajikan dari hub sendiri (/_lib/), bukan dari xnk.my.id, supaya
@@ -111,14 +115,14 @@ const CSP_APP = [
 
 function cspMeta(policy) { return `<meta http-equiv="Content-Security-Policy" content="${policy}">`; }
 
-/** CSP ketat untuk halaman statis hub: hanya skrip inline yang sidiknya cocok. */
-function cspStatic(html) {
+/** CSP ketat untuk halaman statis hub: hanya skrip inline yang sidiknya cocok. extraConnect: host tambahan (adminxnk → Apps Script). */
+function cspStatic(html, extraConnect) {
   const hashes = [];
   html.replace(/<script>([\s\S]*?)<\/script>/g, (m, body) => { hashes.push(`'sha256-${crypto.createHash('sha256').update(body).digest('base64')}'`); return m; });
   if (/<script\s+[^>]*src=/i.test(html.replace(/<script\s+src="\/sw\.js"/g, ''))) throw new Error('build-hub: halaman hub memuat skrip luar; perbarui CSP di build-hub.js.');
   if (/\son[a-z]+="/i.test(html)) throw new Error('build-hub: halaman hub memakai onclick="…"; CSP ketatnya menolak itu.');
   const policy = ["default-src 'self'", `script-src 'self' ${hashes.join(' ')}`.trim(), "style-src 'self' 'unsafe-inline'", "img-src 'self' data:",
-    "connect-src 'self'", "manifest-src 'self'", "worker-src 'self'", "frame-src 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'self'"].join('; ');
+    `connect-src 'self'${extraConnect ? ' ' + extraConnect : ''}`, "manifest-src 'self'", "worker-src 'self'", "frame-src 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'self'"].join('; ');
   if (!/<head>\n/.test(html)) throw new Error('build-hub: <head> tidak ditemukan di halaman hub.');
   return html.replace('<head>\n', '<head>\n' + cspMeta(policy) + '\n');
 }
@@ -203,6 +207,12 @@ function build(cfg, opts) {
   const sw = fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8');
   if (!sw.includes('__HASH__')) throw new Error('build-hub: __HASH__ tidak ada di hub-site/sw.js');
   files['sw.js'] = sw.replace('__HASH__', sha(landing + files['manifest.webmanifest']));
+  // Dasbor pemilik: halaman statis tanpa data; datanya dari XNK Pusat setelah login PIN.
+  const adm = fs.readFileSync(path.join(SITE, 'adminxnk.html'), 'utf8')
+    .split("'__PUSAT_URL__'").join(JSON.stringify(hub.pusat))
+    .split('__HUB_COACHES__').join(JSON.stringify(Object.fromEntries(hub.coaches.map(c => [c.slug, c.brand]))).replace(/</g, '\\u003c'));
+  if (adm.includes('__PUSAT_URL__') || adm.includes('__HUB_COACHES__')) throw new Error('build-hub: penanda adminxnk.html tersisa.');
+  files['adminxnk/index.html'] = cspStatic(adm, 'https://script.google.com https://script.googleusercontent.com');
   files['404.html'] = cspStatic(fs.readFileSync(path.join(SITE, '404.html'), 'utf8'));
   files['.nojekyll'] = '';
   return { files, coaches: hub.coaches };

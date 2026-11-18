@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>XNK Pusat</title>
+<link rel="icon" href="/img/logo-64.png">
+<style>
+  :root { --bg: #fafaf9; --fg: #0b0b0b; --mut: #6b6b6b; --line: #e6e6e3; --card: #fff; --bad: #b42318; --ok: #1f7a3a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0b0b0b; --fg: #f4f4f2; --mut: #a0a09c; --line: #262624; --card: #141413; --bad: #ff8a80; --ok: #7bd88f; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  header { background: #0b0b0b; color: #fff; padding: 18px 16px; }
+  header .in, main { max-width: 1100px; margin: 0 auto; }
+  header .in { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 1.15rem; margin: 0; flex: 1; }
+  main { padding: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+  .btn { min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--fg); background: var(--fg); color: var(--bg); font: inherit; font-weight: 600; cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--fg); }
+  header .btn { border-color: #fff; background: transparent; color: #fff; min-height: 38px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  input { width: 100%; min-height: 44px; font-size: 16px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); margin: 6px 0 12px; }
+  .mut { color: var(--mut); font-size: .9rem; }
+  .msg { min-height: 1.4em; margin-top: 8px; font-size: .95rem; }
+  .bad { color: var(--bad); } .ok { color: var(--ok); }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+  .coach h2 { margin: 0 0 2px; font-size: 1.05rem; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: 8px; margin: 12px 0; }
+  .kv div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .kv b { display: block; font-size: 1.1rem; }
+  .kv span { color: var(--mut); font-size: .8rem; }
+  ul.p { margin: 8px 0 0; padding-left: 18px; }
+  .links { display: flex; gap: 12px; flex-wrap: wrap; font-size: .95rem; }
+  .links a { color: inherit; }
+  .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .acts .btn { min-height: 40px; font-size: .9rem; }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+<header><div class="in"><h1>XNK Pusat</h1><button class="btn hide" id="out" type="button">Keluar</button></div></header>
+<main>
+  <section id="login" class="card" style="max-width:420px">
+    <h2 style="margin-top:0">Masuk</h2>
+    <p class="mut">Khusus pengelola XNK. PIN diatur di Script Properties XNK Pusat.</p>
+    <form id="f">
+      <label for="pin">PIN</label>
+      <input id="pin" type="password" autocomplete="current-password" required>
+      <button class="btn" id="go" type="submit">Masuk</button>
+      <div class="msg" id="lm"></div>
+    </form>
+  </section>
+  <section id="dash" class="hide">
+    <div class="bar">
+      <button class="btn" type="button" data-act="cek">Cek semua sekarang</button>
+      <button class="btn ghost" type="button" data-act="perbarui">Perbarui semua coach</button>
+      <button class="btn ghost" type="button" data-act="bangun">Bangun ulang situs</button>
+      <span class="mut" id="sum"></span>
+    </div>
+    <div class="msg" id="dm"></div>
+    <div class="grid" id="list"></div>
+  </section>
+</main>
+<script>
+(function () {
+  var PUSAT = '__PUSAT_URL__';
+  var HUB = __HUB_COACHES__;          // slug → nama usaha, dari hub.json (publik)
+  var KEY = 'adminxnk:token';         // sessionStorage: hilang saat tab ditutup
+  var data = null;
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function say(id, t, k) { var el = $(id); el.textContent = t || ''; el.className = 'msg' + (k ? ' ' + k : ''); }
+  function tok() { try { return sessionStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+  function setTok(v) { try { v ? sessionStorage.setItem(KEY, v) : sessionStorage.removeItem(KEY); } catch (e) {} }
+  function rpc(fn, args) {
+    return fetch(PUSAT, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ fn: fn, args: args || [] }), credentials: 'omit', redirect: 'follow' })
+      .then(function (r) { return r.json(); }, function () { throw new Error('Tidak tersambung ke XNK Pusat.'); })
+      .then(function (j) {
+        if (j && j.ok) return j.data;
+        if (j && j.auth) { setTok(''); view(); }
+        throw new Error((j && j.error) || 'Terjadi kesalahan.');
+      });
+  }
+  function view() {
+    var on = !!tok();
+    $('login').classList.toggle('hide', on); $('dash').classList.toggle('hide', !on); $('out').classList.toggle('hide', !on);
+  }
+  function when(iso) { if (!iso) return '-'; var d = new Date(iso); return isNaN(d) ? '-' : d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }); }
+  function render() {
+    var d = data, rows = {}, html = '';
+    d.coaches.forEach(function (c) { rows[c.slug] = c; });
+    Object.keys(HUB).forEach(function (s) { if (!rows[s]) rows[s] = { slug: s, missing: true, panel: d.hub + '/' + s + '/', klien: d.hub + '/' + s + '/klien/' }; });
+    var slugs = Object.keys(rows).sort(), bad = 0;
+    slugs.forEach(function (s) {
+      var c = rows[s], st = c.status, x = st && st.data;
+      var probs = c.missing ? ['Belum terdaftar di XNK Pusat (wizard setup → Daftarkan ke XNK Pusat).'] : !st ? ['Belum pernah dicek.'] : st.problems;
+      if (probs.length) bad++;
+      html += '<article class="card coach"><h2>' + esc(HUB[s] || s) + '</h2><div class="mut">' + esc(s) + (st ? ' · dicek ' + esc(when(st.at)) : '') + '</div>';
+      html += '<div class="' + (probs.length ? 'bad' : 'ok') + '" style="margin-top:8px;font-weight:600">' + (probs.length ? 'Perlu dicek' : 'Semua beres') + '</div>';
+      if (probs.length) html += '<ul class="p">' + probs.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>';
+      if (x) {
+        html += '<div class="kv">' +
+          '<div><b>' + esc(x.clients.active30d) + '</b><span>klien aktif 30 hari</span></div>' +
+          '<div><b>' + esc(x.clients.total) + '</b><span>total klien</span></div>' +
+          '<div><b>' + esc(x.sessions.done7d) + '</b><span>sesi selesai 7 hari</span></div>' +
+          '<div><b>' + esc(x.sessions.next7d) + '</b><span>sesi 7 hari ke depan</span></div></div>';
+        html += '<div class="mut">Library ' + esc(x.lib ? String(x.lib.commit).slice(0, 7) : '-') + ' · pengingat ' + (x.reminders.enabled ? 'menyala, terakhir ' + esc(when(x.reminders.lastTickAt)) : 'mati') + '</div>';
+      }
+      html += '<div class="links" style="margin-top:10px"><a href="' + esc(c.panel) + '" target="_blank" rel="noopener">Panel</a><a href="' + esc(c.klien) + '" target="_blank" rel="noopener">Portal klien</a>' +
+        (c.registeredAt ? '<span class="mut">terdaftar ' + esc(when(c.registeredAt)) + '</span>' : '') + '</div>';
+      html += '<div class="acts">' + (c.missing ? '' : '<button class="btn ghost" type="button" data-act="cek" data-slug="' + esc(s) + '">Cek ulang</button>') +
+        '<button class="btn ghost" type="button" data-act="perbarui" data-slug="' + esc(s) + '">Perbarui</button>' +
+        '<button class="btn ghost" type="button" data-act="hubungkan" data-slug="' + esc(s) + '">Hubungkan</button></div></article>';
+    });
+    $('list').innerHTML = html || '<p class="mut">Belum ada coach.</p>';
+    $('sum').textContent = slugs.length + ' coach · ' + bad + ' perlu dicek' + (d.latest ? ' · Library terbaru v' + d.latest.version : '');
+    document.querySelectorAll('[data-act="perbarui"],[data-act="hubungkan"],[data-act="bangun"]').forEach(function (b) { b.disabled = !d.canAct; b.title = d.canAct ? '' : 'Isi GITHUB_TOKEN di XNK Pusat dulu'; });
+  }
+  function load(fn, args, note) {
+    say('dm', note || 'Memuat…');
+    return rpc(fn, args).then(function (d) { data = d; render(); say('dm', ''); }, function (e) { say('dm', e.message, 'bad'); });
+  }
+  $('f').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    $('go').disabled = true; say('lm', 'Sebentar…');
+    rpc('pusatLogin', [$('pin').value]).then(function (r) {
+      setTok(r.token); $('pin').value = ''; say('lm', ''); view(); load('pusatOverview', [r.token]);
+    }, function (e) { say('lm', e.message, 'bad'); }).then(function () { $('go').disabled = false; });
+  });
+  $('out').addEventListener('click', function () { setTok(''); data = null; $('list').innerHTML = ''; view(); });
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-act]');
+    if (!b || b.disabled) return;
+    var act = b.getAttribute('data-act'), slug = b.getAttribute('data-slug') || '';
+    if (act === 'cek') return load('pusatCheck', [tok(), slug], 'Memeriksa ' + (slug || 'semua coach') + '…');
+    var label = act === 'bangun' ? 'membangun ulang situs' : act + ' ' + (slug || 'semua coach');
+    if (!window.confirm('Jalankan ' + label + ' sekarang?')) return;
+    say('dm', 'Mengirim…');
+    rpc('pusatAction', [tok(), act, slug]).then(function () { say('dm', 'Dijalankan di GitHub Actions. Hasilnya muncul di sini setelah "Cek ulang" beberapa menit lagi.', 'ok'); },
+      function (e) { say('dm', e.message, 'bad'); });
+  });
+  view();
+  if (!PUSAT) { $('go').disabled = true; say('lm', 'XNK Pusat belum diatur: isi "pusatUrl" di hub.json.', 'bad'); }
+  else if (tok()) load('pusatOverview', [tok()]);
+})();
+</script>
+</body>
+</html>

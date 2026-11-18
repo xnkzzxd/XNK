@@ -59,8 +59,8 @@ Gelombang 2 — pemilik mengelola semua coach
 - [x] T-2230 Secret `CLASP_<SLUG>` per akun ([Akun.md](Akun.md)); `hub.json` boleh berisi `scriptId`, `deploymentId` (diperiksa `readHub`, dipertahankan `hub-edit`, dibuang bila link /exec berubah).
 - [x] T-2231 Workflow **Coach XNK** aksi `baru` (`tools/coach-ops.js`: clasp create → penghubung dengan Library terbaru dan isian awal wizard `XNK_DEFAULT_SLUG`/`XNK_DEFAULT_BRAND` → versi → deploy web app → hub.json → build hub) dan `hubungkan` (coach lama: cari proyek dari deployment link /exec).
 - [x] T-2232 Aksi `perbarui` (harian 02:37 WIB + manual): deployment yang sama (`clasp deploy -i`), kenari dulu (berhenti bila server kenari tidak menjawab commit terbaru), coach yang sudah terbaru dilewati. Versi terbaru dari tag `lib-v<N>` yang dipasang job deploy `xnk-library.yml` (pesan tag = scriptId Library).
-- [ ] T-2233 XNK Pusat (Apps Script di akun pemilik): pendaftaran coach, `hubStatus(secret)`, cek harian, email bila bermasalah, aksi ke Actions.
-- [ ] T-2234 Dasbor `xnk.web.id/adminxnk` (login PIN ke XNK Pusat).
+- [x] T-2233 XNK Pusat ([Pusat.md](Pusat.md)): `apps-script/xnk-pusat` (login PIN, `pusatRegister` dengan kode daftar, cek harian 06:00 + email hanya bila ada masalah, aksi `perbarui`/`hubungkan`/`bangun` ke workflow repo hub), `hubStatus(secret)` di produksi (`HubStatus.gs`, angka saja), `XNK.registerPusat` + langkah wizard, job `pusat` + aksi `buat-pusat` di `xnk-library.yml`.
+- [x] T-2234 Dasbor `xnk.web.id/adminxnk` (`hub-site/adminxnk.html`, `pusatUrl` di hub.json): status, angka, link, coach yang belum mendaftar, tombol cek/perbarui/hubungkan/bangun; CSP ketat; dicek `hub-check.js`.
 
 Gelombang 3 — fitur
 - [ ] T-2240 Web Push di hub (relay per coach lewat XNK Pusat).

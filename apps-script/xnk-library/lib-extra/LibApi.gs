@@ -165,6 +165,36 @@ function saveSetup(ctx, data) {
 }
 
 /**
+ * Daftarkan spreadsheet pemanggil ke XNK Pusat (T-2233): rahasia acak baru dikirim bersama nama di alamat dan link
+ * /exec, dengan kode daftar dari pemilik XNK. HUB_SECRET disimpan hanya bila XNK Pusat menerima, jadi kode yang
+ * salah tidak memutus pendaftaran lama. Hanya pemilik spreadsheet.
+ * @param {Object} ctx layanan milik spreadsheet pemanggil
+ * @param {{pusatUrl: string, code: string, slug: string}} data
+ * @return {{registered: boolean}}
+ */
+function registerPusat(ctx, data) {
+  return _withCtx_(ctx, function () {
+    requireOwner_();
+    data = data || {};
+    var url = String(data.pusatUrl || '');
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(url)) throw new Error('Alamat XNK Pusat belum diatur di kode penghubung ini.');
+    var exec = _execUrl_();
+    if (!exec) throw new Error('Terbitkan aplikasi web dulu (langkah 3).');
+    var secret = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+    var res = UrlFetchApp.fetch(url, {
+      method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
+      payload: JSON.stringify({ fn: 'pusatRegister', args: [String(data.code || ''), String(data.slug || ''), exec, secret] }),
+    });
+    var j = null;
+    try { j = JSON.parse(res.getContentText()); } catch (e) { j = null; }
+    if (!j) throw new Error('XNK Pusat tidak menjawab. Coba lagi sebentar lagi.');
+    if (!j.ok) throw new Error(j.error || 'Pendaftaran ditolak XNK Pusat.');
+    _props_().setProperty('HUB_SECRET', secret);
+    return { registered: true };
+  });
+}
+
+/**
  * Pasang trigger spreadsheet pemanggil (tanpa duplikat). Fungsi trigger harus ada di kode penghubung.
  * Hanya pemilik spreadsheet.
  * @param {Object} ctx layanan milik spreadsheet pemanggil

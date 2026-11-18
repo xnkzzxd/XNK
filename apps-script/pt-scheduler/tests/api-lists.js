@@ -13,7 +13,7 @@
 
 const PUBLIC = [
   'doGet', 'doPost', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
-  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo',
+  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo', 'hubStatus',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [

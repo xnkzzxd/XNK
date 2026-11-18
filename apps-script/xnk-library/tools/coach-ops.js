@@ -80,7 +80,7 @@ function latestLib(repo, opts) {
 /** Folder penghubung siap clasp push. */
 function bridgeDir(scriptId, lib, c) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-bridge-'));
-  bridge.write(dir, bridge.build({ libId: lib.libId, libVersion: lib.version, slug: c.slug, brand: c.brand }).files);
+  bridge.write(dir, bridge.build({ libId: lib.libId, libVersion: lib.version, slug: c.slug, brand: c.brand, pusatUrl: process.env.XNK_PUSAT_URL || '' }).files);
   fs.writeFileSync(path.join(dir, '.clasp.json'), JSON.stringify({ scriptId, rootDir: '.' }));
   fs.writeFileSync(path.join(dir, '.claspignore'), '**/**\n!*.gs\n!*.html\n!appsscript.json\n');
   return dir;
@@ -189,6 +189,8 @@ if (require.main === module) {
   const repoI = args.indexOf('--xnk');
   const repo = repoI >= 0 ? args.splice(repoI, 2)[1] : path.join(__dirname, '..', '..', '..');
   const [aksi, file, slug, ...rest] = args.filter(a => a !== '--paksa');
+  // Langkah "Daftarkan ke XNK Pusat" di wizard coach: alamat Pusat dari hub.json bila env tidak mengisinya.
+  try { const c = JSON.parse(fs.readFileSync(file, 'utf8')); if (!process.env.XNK_PUSAT_URL && c.pusatUrl) process.env.XNK_PUSAT_URL = c.pusatUrl; } catch (e) { /* hub.json diperiksa di bawah */ }
   const summary = lines => { if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n'); };
   (async () => {
     if (aksi === 'baru') {

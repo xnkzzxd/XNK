@@ -57,7 +57,7 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
   assert.ok(!files['index.html'].includes('<!--CONTACT-->'));
   // Tanpa coach pun situs jadi (hanya landing).
   const empty = hub.build({ coaches: [] }).files;
-  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'index.html', 'manifest.webmanifest', 'sw.js']);
+  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'index.html', 'manifest.webmanifest', 'sw.js']);
   assert.ok(Buffer.isBuffer(empty['img/og.jpg']) && empty['img/og.jpg'].length > 1000, 'gambar landing ikut dibangun');
 });
 
@@ -315,4 +315,22 @@ test('CSP (T-2223): halaman coach terkunci sumber skrip dan tujuan data; halaman
       assert.ok(m[1].includes(`'sha256-${crypto.createHash('sha256').update(body).digest('base64')}'`), f + ': sidik skrip inline cocok');
     }
   }
+});
+
+test('adminxnk (T-2234): halaman statis tanpa data, alamat XNK Pusat dari hub.json, CSP ketat + Apps Script, nama di-escape', () => {
+  const crypto = require('crypto');
+  const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSAT0000000000000000000/exec';
+  assert.throws(() => hub.readHub({ pusatUrl: 'https://contoh.id/exec', coaches: [] }), /pusatUrl/);
+  assert.throws(() => hub.readHub({ pusatUrl: EXEC(1), coaches: [{ slug: 'claudia', brand: 'C', exec: EXEC(1) }] }), /tidak boleh sama/);
+  const cfg = Object.assign({}, CFG, { pusatUrl: PUSAT, coaches: [CFG.coaches[0], { slug: 'evil', brand: '</script><img src=x onerror=alert(1)>', exec: EXEC(3) }] });
+  const html = hub.build(cfg).files['adminxnk/index.html'];
+  assert.ok(html.includes(`var PUSAT = ${JSON.stringify(PUSAT)};`));
+  assert.ok(!html.includes('</script><img'), 'nama usaha tidak bisa menutup <script>');
+  assert.ok(!/\son[a-z]+="/.test(html), 'tanpa onclick');
+  const csp = html.match(/content="([^"]+)"/)[1];
+  assert.match(csp, /connect-src 'self' https:\/\/script\.google\.com https:\/\/script\.googleusercontent\.com/);
+  assert.ok(!/script-src[^;]*unsafe-inline/.test(csp));
+  for (const [, body] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) assert.ok(csp.includes(crypto.createHash('sha256').update(body).digest('base64')));
+  assert.match(html, /noindex/);
+  assert.ok(hub.build(CFG).files['adminxnk/index.html'].includes('var PUSAT = "";'), 'tanpa pusatUrl: halaman memberi tahu, tidak memanggil apa pun');
 });
