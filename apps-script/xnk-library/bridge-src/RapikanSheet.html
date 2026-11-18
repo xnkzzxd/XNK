@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --fg:#111; --mut:#666; --line:#e4e4e4; --bg:#fff; --ok:#137333; --bad:#c5221f; --soft:#f5f5f4; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); margin: 0; padding: 4px 2px; }
+  p { margin: 0 0 10px; }
+  .mut { color: var(--mut); font-size: 13px; }
+  .big { font-size: 22px; font-weight: 700; margin: 2px 0; }
+  .bar { height: 8px; border-radius: 4px; background: var(--soft); overflow: hidden; margin: 6px 0 2px; }
+  .bar span { display: block; height: 100%; background: var(--fg); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--mut); font-weight: 600; }
+  td.n { text-align: right; white-space: nowrap; }
+  .btn { display: inline-block; width: 100%; min-height: 44px; margin-top: 12px; padding: 10px 14px; font-size: 15px; font-weight: 600; border: 0; border-radius: 10px; background: var(--fg); color: #fff; cursor: pointer; }
+  .btn.ghost { background: var(--soft); color: var(--fg); }
+  .btn[disabled] { opacity: .5; cursor: wait; }
+  .msg { font-size: 13px; margin-top: 10px; }
+  .msg.bad { color: var(--bad); }
+  .msg.ok { color: var(--ok); }
+  .note { background: var(--soft); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-top: 8px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+  <div id="load"><p class="mut">Memeriksa semua sheet…</p></div>
+  <div id="plan" class="hide">
+    <p class="mut">Jumlah sel sekarang</p>
+    <div class="big" id="cells"></div>
+    <div class="bar"><span id="barNow"></span></div>
+    <p class="mut" id="pct"></p>
+    <div id="list"></div>
+    <div id="empty" class="note hide"></div>
+    <p class="mut" id="safe">Hanya baris dan kolom kosong di luar data yang dihapus. Data, judul kolom, dan sheet tidak disentuh. Disisakan 50 baris dan 2 kolom kosong untuk data baru.</p>
+    <button class="btn" id="go">Rapikan sekarang</button>
+    <button class="btn ghost" id="close1" onclick="google.script.host.close()">Tutup</button>
+  </div>
+  <div id="done" class="hide">
+    <p class="msg ok" id="doneHead"></p>
+    <div id="doneList"></div>
+    <p class="note">Tutup spreadsheet ini lalu buka lagi supaya Chrome memuat ukuran yang baru.</p>
+    <button class="btn" onclick="google.script.host.close()">Tutup</button>
+  </div>
+  <p class="msg bad" id="err"></p>
+
+<script>
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function num(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  function show(id) { ['load', 'plan', 'done'].forEach(function (k) { $(k).classList.toggle('hide', k !== id); }); }
+  function fail(e) { $('err').textContent = 'Gagal: ' + (e && e.message ? e.message : e); $('go').disabled = false; }
+
+  function bits(p) {
+    var b = [];
+    if (p.delRows) b.push(num(p.delRows) + ' baris kosong');
+    if (p.delCols) b.push(num(p.delCols) + ' kolom kosong');
+    if (p.cfTrim) b.push(p.cfTrim + ' format bersyarat');
+    if (p.clearCells) b.push(num(p.clearCells) + ' sel berformat');
+    if (p.rowNotes) b.push(p.rowNotes + ' catatan');
+    if (p.dvFar) b.push('validasi sampai baris ' + num(p.maxRows));
+    return b.join(', ');
+  }
+
+  function renderPlan(r) {
+    $('cells').textContent = num(r.cellsBefore) + ' → ' + num(r.cellsAfter);
+    $('barNow').style.width = Math.min(100, r.pctBefore) + '%';
+    $('pct').textContent = r.pctBefore + '% dari batas Google (10 juta sel) → ' + r.pctAfter + '% setelah dirapikan.';
+    var todo = r.sheets.filter(function (p) { return p.todo; });
+    if (!todo.length) {
+      $('list').innerHTML = '<p class="msg ok">Semua sheet sudah rapi. Tidak ada yang perlu dirapikan.</p>';
+      $('go').classList.add('hide'); $('safe').classList.add('hide');
+    } else {
+      $('list').innerHTML = '<table><tr><th>Sheet</th><th>Data</th><th>Yang dibuang</th></tr>' + todo.map(function (p) {
+        return '<tr><td>' + esc(p.name) + (p.hidden ? ' <span class="mut">(tersembunyi)</span>' : '') + '</td><td class="n">' +
+          num(p.lastRow) + ' × ' + p.lastCol + '</td><td>' + esc(bits(p)) + '</td></tr>';
+      }).join('') + '</table>';
+    }
+    if (r.emptyUnknown.length) {
+      $('empty').classList.remove('hide');
+      $('empty').textContent = 'Sheet kosong yang tidak dipakai aplikasi: ' + r.emptyUnknown.join(', ') + '. Tidak diubah. Hapus sendiri bila memang tidak perlu.';
+    }
+    show('plan');
+  }
+
+  function renderDone(r) {
+    var a = r.after, b = r.before;
+    $('doneHead').textContent = r.done.length ? 'Selesai. Sel: ' + num(b.cellsBefore) + ' → ' + num(a.cellsBefore) + ' (' + b.pctBefore + '% → ' + a.pctBefore + '%).' : 'Tidak ada yang perlu dirapikan.';
+    $('doneList').innerHTML = r.done.length ? '<table><tr><th>Sheet</th><th>Dirapikan</th></tr>' + r.done.map(function (d) {
+      var x = [];
+      if (d.delRows) x.push(num(d.delRows) + ' baris');
+      if (d.delCols) x.push(num(d.delCols) + ' kolom');
+      if (d.cfRemoved || d.cfTrimmed) x.push((d.cfRemoved + d.cfTrimmed) + ' format bersyarat');
+      if (d.cleared) x.push(num(d.cleared) + ' sel berformat');
+      if (d.notes) x.push(d.notes + ' catatan');
+      return '<tr><td>' + esc(d.name) + '</td><td>' + esc(x.join(', ')) + '</td></tr>';
+    }).join('') + '</table>' : '';
+    show('done');
+  }
+
+  $('go').onclick = function () {
+    $('go').disabled = true; $('go').textContent = 'Merapikan…'; $('err').textContent = '';
+    google.script.run.withSuccessHandler(renderDone).withFailureHandler(function (e) { $('go').textContent = 'Rapikan sekarang'; fail(e); }).tidySheetsApply();
+  };
+  google.script.run.withSuccessHandler(renderPlan).withFailureHandler(function (e) { show('plan'); $('go').classList.add('hide'); fail(e); }).tidySheetsPlan();
+</script>
+</body>
+</html>

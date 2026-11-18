@@ -44,7 +44,7 @@ const MEMBER = [
 ];
 const OWNER = [
   'testDriveAccess', 'migrateSplitMembersData', 'pertahankanWABaruMemberData', 'pertahankanWABaru',
-  'setupDailyTrigger', 'setupWeeklyReportTrigger', 'testNotif', 'setupReminderTrigger', 'repairDateCells',
+  'setupDailyTrigger', 'setupWeeklyReportTrigger', 'testNotif', 'setupReminderTrigger', 'repairDateCells', 'rapikanSheet', 'rapikanSheetSekarang',
 ];
 const TRIGGER = ['sendDailyReminderEmail', 'sendWeeklyReportEmail', 'runReminderTick', 'runWarmTick'];
 

@@ -92,6 +92,40 @@ const stub = () => {
     await again.setContent(html);
     await again.waitForTimeout(400);
     check(await again.isVisible('#p4') && (await again.inputValue('#slug')) === 'claudia', 'dibuka ulang saat semua selesai → langsung langkah 4, nama tersimpan terisi');
+
+    // Dialog "XNK → Rapikan sheet" (bridge-src/RapikanSheet.html): laporan, tombol, hasil.
+    const tidy = bridge.build({ libId: 'abc', libVersion: '1' }).files['RapikanSheet.html'];
+    const dlg = await browser.newPage({ viewport: { width: 560, height: 560 } });
+    const derr = [];
+    dlg.on('pageerror', e => derr.push(e.message));
+    await dlg.addInitScript(() => {
+      const sheet = { name: 'Schedules <b>', hidden: false, lastRow: 120, lastCol: 13, maxRows: 50000, delRows: 49830, delCols: 0, cfTrim: 2, clearCells: 3, rowNotes: 0, dvFar: true, todo: true };
+      const plan = { sheets: [sheet, { name: 'Progress', todo: false }], cellsBefore: 1300000, cellsAfter: 4420, pctBefore: 13, pctAfter: 0, emptyUnknown: ['Sheet5'], todo: 1 };
+      const api = {
+        tidySheetsPlan: () => plan,
+        tidySheetsApply: () => ({ applied: true, before: plan, after: Object.assign({}, plan, { cellsBefore: 4420, pctBefore: 0, todo: 0 }), done: [{ name: 'Schedules <b>', delRows: 49830, delCols: 0, cfRemoved: 1, cfTrimmed: 1, cleared: 3, notes: 0 }] }),
+      };
+      window.__tidyCalls = [];
+      const runner = (ok, fail) => new Proxy({}, { get(_, name) {
+        if (name === 'withSuccessHandler') return f => runner(f, fail);
+        if (name === 'withFailureHandler') return f => runner(ok, f);
+        return () => setTimeout(() => { window.__tidyCalls.push(name); try { ok && ok(api[name]()); } catch (e) { fail && fail(e); } }, 5);
+      } });
+      window.google = { script: { run: runner(null, null), host: { close() {} } } };
+    });
+    await dlg.goto('about:blank');
+    await dlg.setContent(tidy);
+    await dlg.waitForTimeout(300);
+    const tx = (await dlg.textContent('#plan')) || '';
+    check(await dlg.isVisible('#plan') && tx.includes('1.300.000 → 4.420') && tx.includes('13% dari batas Google'), 'Rapikan sheet: laporan jumlah sel dan persen batas Google');
+    check(tx.includes('49.830 baris kosong') && tx.includes('validasi sampai baris 50.000') && tx.includes('Sheet5'), '… rincian per sheet dan sheet kosong tak dikenal');
+    check(!(await dlg.innerHTML('#list')).includes('<b>'), '… nama sheet di-escape');
+    check(!tx.includes('Progress'), '… sheet yang sudah rapi tidak dicantumkan');
+    await dlg.click('#go');
+    await dlg.waitForTimeout(300);
+    check(await dlg.isVisible('#done') && ((await dlg.textContent('#done')) || '').includes('buka lagi'), 'Rapikan sekarang → hasil + pesan tutup dan buka lagi spreadsheet');
+    check(JSON.stringify(await dlg.evaluate(() => window.__tidyCalls)) === '["tidySheetsPlan","tidySheetsApply"]', '… laporan dulu, rapikan hanya setelah tombol');
+    check(derr.length === 0, 'dialog tanpa error JavaScript' + (derr.length ? ': ' + derr.join(' | ') : ''));
   } finally {
     await browser.close();
   }

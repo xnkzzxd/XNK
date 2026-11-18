@@ -216,6 +216,23 @@ function installTriggers(ctx) {
 }
 
 /**
+ * Rapikan sheet (pt-scheduler/src/Rapikan.gs): laporan grid kosong, format bersyarat dan validasi di luar data,
+ * atau ({apply:true}) hapus grid kosong di luar data + cadangan di bawah script lock spreadsheet pemanggil.
+ * Tidak pernah menyentuh sel berisi, header, atau menghapus sheet. Hanya pemilik spreadsheet.
+ * @param {Object} ctx layanan milik spreadsheet pemanggil
+ * @param {{apply?: boolean}=} opts tanpa apply = hanya laporan
+ * @return {Object} laporan (_tidyPlan_) atau {applied, done[], before, after}; text = ringkasan berbahasa Indonesia
+ */
+function tidySheets(ctx, opts) {
+  return _withCtx_(ctx, function () {
+    requireOwner_();
+    var r = _tidyRun_({ apply: !!(opts && opts.apply) });
+    r.text = _tidyText_(r);
+    return r;
+  });
+}
+
+/**
  * Lepas semua trigger milik XNK di spreadsheet pemanggil.
  * Hanya pemilik spreadsheet.
  * @param {Object} ctx layanan milik spreadsheet pemanggil

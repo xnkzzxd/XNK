@@ -368,6 +368,16 @@ Panel (xnk.my.id), landing (xnkbooking.my.id) dan portal klien (book.xnkbooking.
 - Cara kembali ke versi lama, per situs: [docs/aaa/Rollback.md](../docs/aaa/Rollback.md).
 - Pindah ke versi statis membuat klien login ulang sekali (token tersimpan per alamat situs); antrean offline yang belum terkirim di versi lama tidak ikut.
 
+## Spreadsheet berat: rapikan sheet
+
+Kalau Chrome tersendat saat membuka spreadsheet, penyebabnya biasanya grid kosong yang sangat besar (ribuan baris/kolom kosong, format sisa, validasi dan format bersyarat yang menyebar ke area kosong).
+
+1. Editor Apps Script → pilih fungsi **`rapikanSheet`** → Jalankan. Hasilnya di **Log eksekusi**: jumlah sel sekarang → sesudah (dan persen dari batas Google 10 juta sel), lalu per sheet apa yang akan dibuang. Belum ada yang diubah.
+2. Bila laporannya masuk akal, jalankan **`rapikanSheetSekarang`**.
+3. Tutup spreadsheet lalu buka lagi.
+
+Yang dihapus hanya baris/kolom kosong **di luar** data terakhir, dengan cadangan 50 baris dan 2 kolom (kolom tidak kurang dari 26; MemberData tidak kurang dari 60). Sel berisi, baris judul, dan sheet tidak pernah dihapus; sheet kosong yang tidak dipakai aplikasi hanya disebut di laporan. Dijalankan lagi = tidak ada yang dikerjakan. Spreadsheet coach (XNK Template) memakai menu **XNK → Rapikan sheet** dengan laporan dan tombol **Rapikan sekarang** ([docs/library/Panduan.md](../docs/library/Panduan.md)).
+
 ## Rollback (kalau versi baru bermasalah)
 
 - **Cepat (tanpa kode):** Apps Script → **Deploy → Manage deployments** → ✏️ Edit →

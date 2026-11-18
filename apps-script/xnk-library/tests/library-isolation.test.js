@@ -116,7 +116,7 @@ test('fungsi setup hanya untuk pemilik spreadsheet (bukan pengunjung web)', () =
   const env = createLibEnv();
   const A = makeCtx('SS_A');
   env.activeUserEmail = '';
-  for (const fn of ['initInstance', 'installTriggers', 'removeTriggers', 'healthCheck', 'setupState']) {
+  for (const fn of ['initInstance', 'installTriggers', 'removeTriggers', 'healthCheck', 'setupState', 'tidySheets']) {
     assert.throws(() => env.lib(fn, A.ctx), /hanya bisa dijalankan pemilik/, fn);
   }
   assert.throws(() => env.lib('saveSetup', A.ctx, { brand: 'X', pin: '123456' }), /hanya bisa dijalankan pemilik/);

@@ -27,6 +27,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('XNK')
     .addItem('Mulai setup', 'showSetup')
     .addItem('Cek kesehatan', 'menuHealth_')
+    .addItem('Rapikan sheet', 'menuTidy_')
     .addSeparator()
     .addItem('Pasang ulang trigger', 'menuTriggers_')
     .addItem('Versi Library', 'menuVersion_')
@@ -46,6 +47,15 @@ function menuHealth_() {
     lines.push('', 'Versi Library: ' + r.version.hash + ' (' + r.version.builtAt + ')');
     if (r.setup.execUrl) lines.push('Link aplikasi: ' + r.setup.execUrl);
     SpreadsheetApp.getUi().alert('Cek kesehatan XNK', lines.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
+  });
+}
+
+/** Rapikan sheet: laporan dulu di dialog, lalu tombol "Rapikan sekarang". Logikanya di Library (tidySheets). */
+function menuTidy_() {
+  safely_('Rapikan sheet', function () {
+    checkLibraryConnection();
+    const html = HtmlService.createHtmlOutputFromFile('RapikanSheet').setWidth(560).setHeight(560);
+    SpreadsheetApp.getUi().showModalDialog(html, 'Rapikan sheet');
   });
 }
 
@@ -122,6 +132,17 @@ function setupRegisterPusat(data) {
   checkLibraryConnection();
   data = data || {};
   return XNK.registerPusat(ctx_(), { pusatUrl: typeof XNK_PUSAT_URL === 'string' ? XNK_PUSAT_URL : '', code: data.code, slug: data.slug, exec: data.exec });
+}
+
+/** Dipanggil dialog Rapikan sheet. Library: requireOwner_. */
+function tidySheetsPlan() {
+  checkLibraryConnection();
+  return XNK.tidySheets(ctx_(), { apply: false });
+}
+
+function tidySheetsApply() {
+  checkLibraryConnection();
+  return XNK.tidySheets(ctx_(), { apply: true });
 }
 
 // ── pembantu ────────────────────────────────────────────────────────────────────────────────────────────

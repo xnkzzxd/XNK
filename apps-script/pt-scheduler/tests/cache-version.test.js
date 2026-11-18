@@ -27,7 +27,7 @@ const NO_MEMBER_DATA = [
   // pengingat, trigger, perawatan pemilik
   'installReminderTrigger', 'runReminderTick', 'runWarmTick', 'sendReminderTest', 'sendTelegramTest', 'sendDailyReminderEmail', 'sendWeeklyReportEmail',
   'setupDailyTrigger', 'setupReminderTrigger', 'setupWeeklyReportTrigger', 'testDriveAccess', 'testNotif', 'migrateSplitMembersData',
-  'pertahankanWABaru', 'pertahankanWABaruMemberData',
+  'pertahankanWABaru', 'pertahankanWABaruMemberData', 'rapikanSheet', 'rapikanSheetSekarang' /* hanya grid kosong, tidak ada isi sel */,
   // Fase X: langganan push dan relay GitHub (tidak ada di getPortalMore / getClientBundle)
   'saveMyPush', 'removeMyPush', 'setMyPushPrefs', 'saveAdminPush', 'removeAdminPush', 'setAdminPushPrefs', 'pushRelayPull', 'pushRelayAck', 'hubStatus', 'hubExport' /* hanya membaca */,
 ];
