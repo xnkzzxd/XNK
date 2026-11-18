@@ -40,7 +40,10 @@ on:
       aksi:
         description: 'buat = buat dua spreadsheet baru (sekali saja); perbarui = terbitkan versi Library baru; buat-pusat = buat proyek XNK Pusat (sekali saja)'
         type: choice
-        options: [perbarui, buat, buat-pusat]
+        options: [perbarui, buat, buat-pusat, info-pusat]
+      pusat_script:
+        description: 'info-pusat: scriptId XNK Pusat (kosong = repo variable XNK_PUSAT_SCRIPT_ID)'
+        required: false
         default: perbarui
 
 permissions:
@@ -264,11 +267,11 @@ jobs:
     needs: check
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.aksi == 'buat-pusat')
+      (github.event_name == 'workflow_dispatch' && (inputs.aksi == 'buat-pusat' || inputs.aksi == 'info-pusat'))
     runs-on: ubuntu-latest
     env:
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
-      PUSAT_ID: ${{ vars.XNK_PUSAT_SCRIPT_ID }}
+      PUSAT_ID: ${{ inputs.pusat_script || vars.XNK_PUSAT_SCRIPT_ID }}
       PUSAT_DEP: ${{ vars.XNK_PUSAT_DEPLOYMENT_ID }}
       AKSI: ${{ github.event_name == 'workflow_dispatch' && inputs.aksi || 'push' }}
     steps:
@@ -278,6 +281,9 @@ jobs:
           if [ -z "$CLASPRC_JSON" ]; then echo "::notice::Secret CLASPRC_JSON belum diatur."; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "$AKSI" = "buat-pusat" ]; then
             if [ -n "$PUSAT_ID" ]; then echo "::error::XNK Pusat sudah dibuat (XNK_PUSAT_SCRIPT_ID terisi)."; exit 1; fi
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          elif [ "$AKSI" = "info-pusat" ]; then
+            if [ -z "$PUSAT_ID" ]; then echo "::error::Isi pusat_script atau repo variable XNK_PUSAT_SCRIPT_ID."; exit 1; fi
             echo "go=true" >> "$GITHUB_OUTPUT"
           elif [ -n "$PUSAT_ID" ] && [ -n "$PUSAT_DEP" ]; then echo "go=true" >> "$GITHUB_OUTPUT"
           else echo "::notice::XNK Pusat belum dibuat (Run workflow → buat-pusat)."; echo "go=false" >> "$GITHUB_OUTPUT"; fi
@@ -299,6 +305,16 @@ jobs:
         run: |
           set -o pipefail
           cp -r apps-script/xnk-pusat/src "$RUNNER_TEMP/pusat" && cd "$RUNNER_TEMP/pusat"
+          # info-pusat: hanya membaca deployment yang ada (tidak mengubah apa pun). ID deployment bukan rahasia.
+          if [ "$AKSI" = "info-pusat" ]; then
+            printf '{"scriptId":"%s","rootDir":"."}' "$PUSAT_ID" > .clasp.json
+            clasp deployments 2>&1 | tee dep.log
+            for d in $(grep -oE 'AKfyc[A-Za-z0-9_-]+' dep.log | sort -u); do
+              echo "XNK_PUSAT_DEPLOYMENT_ID=$d  XNK_PUSAT_URL=https://script.google.com/macros/s/$d/exec"
+              echo "- $d → https://script.google.com/macros/s/$d/exec" >> "$GITHUB_STEP_SUMMARY"
+            done
+            exit 0
+          fi
           if [ "$AKSI" = "buat-pusat" ]; then
             mkdir -p "$RUNNER_TEMP/new-pusat" && (cd "$RUNNER_TEMP/new-pusat" && clasp create --type standalone --title "XNK Pusat")
             PUSAT_ID=$(node -e 'console.log(require(process.argv[1]).scriptId)' "$RUNNER_TEMP/new-pusat/.clasp.json")
@@ -310,7 +326,9 @@ jobs:
           ver=$(clasp version "GitHub $(cd "$GITHUB_WORKSPACE" && git rev-parse --short HEAD)" | grep -oE 'Created version [0-9]+' | grep -oE '[0-9]+$')
           [ -n "$ver" ] || { echo "::error::Versi XNK Pusat tidak terbaca"; exit 1; }
           if [ "$AKSI" = "buat-pusat" ]; then
-            dep=$(clasp deploy -V "$ver" -d "XNK Pusat" | grep -oE 'AKfyc[A-Za-z0-9_-]+' | head -1)
+            clasp deploy -V "$ver" -d "XNK Pusat" | tee deploy.log
+            dep=$(grep -oE 'AKfyc[A-Za-z0-9_-]+' deploy.log | head -1)
+            echo "XNK_PUSAT_SCRIPT_ID=$PUSAT_ID  XNK_PUSAT_DEPLOYMENT_ID=$dep"
             {
               echo "## XNK Pusat dibuat"
               echo ""
