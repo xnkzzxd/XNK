@@ -293,3 +293,26 @@ test('pustaka sendiri (T-2222): gerakan, makanan, peta otot di /_lib/; halaman c
   new Function('self', files['claudia/sw-app.js'].match(/var LIBS = [\s\S]*?\];/)[0] + 'return LIBS;');   // tetap JavaScript yang sah
   assert.ok(!('_lib/exercises/exercises.min.json' in hub.build({ coaches: [] }).files), 'tanpa coach tidak perlu pustaka');
 });
+
+test('CSP (T-2223): halaman coach terkunci sumber skrip dan tujuan data; halaman depan dan 404 hanya skrip bersidik; tanpa Analytics XNK', () => {
+  const crypto = require('crypto');
+  const { files } = hub.build(CFG);
+  for (const d of ['claudia/', 'claudia/klien/', 'claudia-2/']) {
+    const html = files[d + 'index.html'];
+    const head = html.slice(html.indexOf('<head>'));
+    assert.ok(head.startsWith('<head>\n<meta http-equiv="Content-Security-Policy"'), d + ': CSP paling awal');
+    assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf('<script'), d + ': CSP sebelum skrip apa pun');
+    assert.ok(!/googletagmanager|G-93SRTYH3SG/.test(html), d + ': tanpa Google Analytics xnk.my.id');
+  }
+  for (const want of ["object-src 'none'", "base-uri 'none'", "frame-src 'none'", 'connect-src \'self\' data: blob: https://script.google.com']) assert.ok(hub.CSP_APP.includes(want), want);
+  assert.ok(!/connect-src[^;]*(\*|https:)(;|\s|$)/.test(hub.CSP_APP), 'connect-src tanpa wildcard: data tidak bisa dikirim ke sembarang host');
+  for (const f of ['index.html', '404.html']) {
+    const html = files[f];
+    const m = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/);
+    assert.ok(m, f);
+    assert.ok(!m[1].includes('unsafe-inline') || !/script-src[^;]*unsafe-inline/.test(m[1]), f + ': skrip tanpa unsafe-inline');
+    for (const [, body] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+      assert.ok(m[1].includes(`'sha256-${crypto.createHash('sha256').update(body).digest('base64')}'`), f + ': sidik skrip inline cocok');
+    }
+  }
+});

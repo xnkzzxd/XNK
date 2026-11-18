@@ -54,6 +54,16 @@ tidak pernah mundur. `hub.yml` membangun dari tag itu (worktree commit coach dar
 lalu `tools/hub-verify.js` memeriksa berkas yang akan diunggah. Satu masalah = workflow berhenti sebelum unggah,
 situs lama tetap tayang.
 
+## Content-Security-Policy (T-2223)
+
+Setiap halaman coach mendapat `<meta http-equiv="Content-Security-Policy">` sebagai baris pertama `<head>`
+(`CSP_APP` di `build-hub.js`). Aplikasi masih memakai ±550 `onclick="…"` yang dibuat di JavaScript, jadi
+`script-src` tetap `'unsafe-inline'`; yang dikunci: skrip hanya dari situs sendiri dan tiga CDN, data hanya boleh
+dikirim ke Apps Script dan GitHub raw (`connect-src`, `img-src` terbatas), tanpa `<object>`, `<base>` dan iframe.
+Halaman depan dan 404 memakai CSP ketat dengan sidik sha256 skrip inline. **Host baru** (CDN, gambar, API) harus
+ditambahkan ke `CSP_APP`, atau `hub-check.js` gagal dengan "tanpa penolakan Content-Security-Policy". Perlindungan
+penuh (tanpa `'unsafe-inline'`) menunggu T-2224. Google Analytics milik xnk.my.id tidak ikut ke halaman coach.
+
 ## Slug
 
 `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`, tanpa `--`; kata sistem dicadangkan (`admin`, `api`, `app`, `klien`, `demo`,

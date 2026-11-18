@@ -101,3 +101,8 @@ test('tidak ada teks "XNK" yang tampil ke coach atau klien di kode Library (nama
   }
   assert.deepEqual(bad, [], 'tambahkan TEXT_SWAPS di build-lib.js (browser: window.brandName(), server: _brandName_())');
 });
+
+test('Google Analytics milik xnk.my.id tidak ikut ke Library (T-2223)', () => {
+  const { files } = require('../tools/build-lib').build();
+  for (const [f, t] of Object.entries(files)) assert.ok(!/G-93SRTYH3SG|googletagmanager\.com/.test(t), f);
+});

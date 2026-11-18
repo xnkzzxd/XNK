@@ -50,7 +50,7 @@ function serve(files) {
   return new Promise(ok => server.listen(0, '127.0.0.1', () => ok(server)));
 }
 
-const XNK_HITS = [], LIB_HITS = [];
+const XNK_HITS = [], LIB_HITS = [], CSP_HITS = [];
 
 async function newContext(browser, be, seen) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -72,6 +72,8 @@ async function newContext(browser, be, seen) {
 async function open(context, url, errors) {
   const page = await context.newPage();
   page.on('pageerror', e => errors.push(e.message));
+  // T-2223: setiap penolakan CSP dihitung sebagai error (kecuali permintaan ke xnk.my.id yang memang diblokir tes ini).
+  page.on('console', m => { const t = m.text(); if (/Content Security Policy/i.test(t)) { CSP_HITS.push(t); errors.push('CSP: ' + t.slice(0, 160)); } });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
   return page;
@@ -164,6 +166,7 @@ async function panelLogin(page, pin) {
       check(seen.every(u => u.startsWith(EXEC_A) || u.startsWith(EXEC_B)), 'semua panggilan server hanya ke dua /exec coach');
       check(XNK_HITS.length === 0, 'tidak ada permintaan ke xnk.my.id' + (XNK_HITS.length ? ': ' + XNK_HITS.slice(0, 2).join(', ') : ''));
       check(LIB_HITS.some(p => p.startsWith('_lib/exercises/')), 'pustaka gerakan dimuat dari /_lib/ hub sendiri');
+      check(CSP_HITS.length === 0, 'tanpa penolakan Content-Security-Policy' + (CSP_HITS.length ? ': ' + CSP_HITS[0].slice(0, 160) : ''));
       check(errors.length === 0, 'tanpa error JavaScript' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close();
     }

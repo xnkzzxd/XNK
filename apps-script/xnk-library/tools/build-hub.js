@@ -82,13 +82,46 @@ function libFiles() {
   return out;
 }
 
+// T-2223: Content-Security-Policy. Semua coach berbagi satu domain, jadi skrip asing di satu halaman bisa membaca
+// login coach lain. Halaman aplikasi memakai ratusan onclick="…" yang dibuat di JavaScript, jadi 'unsafe-inline'
+// tetap perlu di sana; yang dikunci: dari mana skrip dimuat, ke mana data boleh dikirim (connect/img/form) dan
+// tanpa <object>/<base>. Halaman depan dan 404 tidak memakai onclick: skripnya dikunci dengan sidik sha256.
+const CSP_APP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https://raw.githubusercontent.com https://drive.google.com https://*.googleusercontent.com",
+  "media-src 'self' data: blob: https://raw.githubusercontent.com",
+  "connect-src 'self' data: blob: https://script.google.com https://script.googleusercontent.com https://raw.githubusercontent.com",
+  "worker-src 'self'",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+].join('; ');
+
+function cspMeta(policy) { return `<meta http-equiv="Content-Security-Policy" content="${policy}">`; }
+
+/** CSP ketat untuk halaman statis hub: hanya skrip inline yang sidiknya cocok. */
+function cspStatic(html) {
+  const hashes = [];
+  html.replace(/<script>([\s\S]*?)<\/script>/g, (m, body) => { hashes.push(`'sha256-${crypto.createHash('sha256').update(body).digest('base64')}'`); return m; });
+  if (/<script\s+[^>]*src=/i.test(html.replace(/<script\s+src="\/sw\.js"/g, ''))) throw new Error('build-hub: halaman hub memuat skrip luar; perbarui CSP di build-hub.js.');
+  if (/\son[a-z]+="/i.test(html)) throw new Error('build-hub: halaman hub memakai onclick="…"; CSP ketatnya menolak itu.');
+  const policy = ["default-src 'self'", `script-src 'self' ${hashes.join(' ')}`.trim(), "style-src 'self' 'unsafe-inline'", "img-src 'self' data:",
+    "connect-src 'self'", "manifest-src 'self'", "worker-src 'self'", "frame-src 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'self'"].join('; ');
+  if (!/<head>\n/.test(html)) throw new Error('build-hub: <head> tidak ditemukan di halaman hub.');
+  return html.replace('<head>\n', '<head>\n' + cspMeta(policy) + '\n');
+}
+
 /** Sisipkan penyimpanan per slug di awal <head> dan kunci service worker supaya hash dan awalan cache unik. */
 function isolate(files, dir, slug, kind) {
   const shim = fs.readFileSync(path.join(SITE, 'storage-prefix.js'), 'utf8').split('__SLUG__').join(slug);
   if (shim.includes('__SLUG__')) throw new Error('build-hub: __SLUG__ tersisa');
   const idx = dir + 'index.html';
   if (!/<head>\n/.test(files[idx])) throw new Error('build-hub: <head> tidak ditemukan di ' + idx);
-  files[idx] = files[idx].replace('<head>\n', '<head>\n<script>' + shim.replace(/\/\*[\s\S]*?\*\//, '').trim() + '</script>\n');
+  files[idx] = files[idx].replace('<head>\n', '<head>\n' + cspMeta(CSP_APP) + '\n<script>' + shim.replace(/\/\*[\s\S]*?\*\//, '').trim() + '</script>\n');
   const swf = dir + 'sw-app.js';
   let sw = files[swf];
   if (typeof sw !== 'string') throw new Error('build-hub: sw-app.js tidak ada di ' + dir);
@@ -155,14 +188,14 @@ function build(cfg, opts) {
   } else {
     landing = landing.replace(sec, '').split('<a href="#coach">Coach</a>').join('').replace('Bisa juga dicari di daftar coach di atas, atau tanyakan', 'Bisa juga ditanyakan');
   }
-  files['index.html'] = landing;
+  files['index.html'] = cspStatic(landing);
   for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
   // Bisa dipasang (PWA): manifest + service worker yang hanya melayani halaman depan; nama cache ikut isi landing.
   files['manifest.webmanifest'] = fs.readFileSync(path.join(SITE, 'manifest.webmanifest'), 'utf8');
   const sw = fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8');
   if (!sw.includes('__HASH__')) throw new Error('build-hub: __HASH__ tidak ada di hub-site/sw.js');
   files['sw.js'] = sw.replace('__HASH__', sha(landing + files['manifest.webmanifest']));
-  files['404.html'] = fs.readFileSync(path.join(SITE, '404.html'), 'utf8');
+  files['404.html'] = cspStatic(fs.readFileSync(path.join(SITE, '404.html'), 'utf8'));
   files['.nojekyll'] = '';
   return { files, coaches: hub.coaches };
 }
@@ -184,7 +217,7 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, slugError, RESERVED, SLUG_RE };
+module.exports = { build, write, readHub, slugError, RESERVED, SLUG_RE, CSP_APP };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

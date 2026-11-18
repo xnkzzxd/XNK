@@ -40,6 +40,17 @@ const NEEDED = ['_ensureCoachSchema_', '_getMemberDataSheet_', '_getMembersLogSh
 
 // [berkas, cari (teks persis), ganti, jumlah yang diharapkan]
 const TEXT_SWAPS = [
+  // Google Analytics milik xnk.my.id tidak ikut ke coach lain (data kunjungan klien coach bukan milik XNK; T-2223).
+  ['Index.html', `
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93SRTYH3SG"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-93SRTYH3SG');
+  </script>
+`, '\n', 1],
   // Identitas usaha
   ['Kode.gs', "const faviconUrl = page === 'Landing' ? 'https://xnkbooking.my.id/favicon.ico' : 'https://xnk.my.id/favicon.ico';",
     "const faviconUrl = _faviconUrl_() || 'https://www.gstatic.com/images/branding/product/1x/apps_script_48dp.png';", 1],

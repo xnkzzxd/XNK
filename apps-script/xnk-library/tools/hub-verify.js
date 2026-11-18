@@ -32,6 +32,7 @@ function verifySite(dir, cfg) {
     const landing = read('index.html');
     for (const c of hub.coaches) if (!landing.includes(`href="/${c.slug}/klien/"`)) problems.push(`Halaman depan tidak menautkan /${c.slug}/klien/.`);
     try { JSON.parse(read('_hub/versions.json')); } catch (e) { problems.push('_hub/versions.json bukan JSON.'); }
+    for (const f of ['index.html', '404.html']) if (!read(f).includes('http-equiv="Content-Security-Policy"')) problems.push(`${f}: Content-Security-Policy tidak terpasang.`);
   }
   const files = walk(dir, '', []);
   for (const rel of files.filter(f => /\.(html|js|json)$/.test(f))) {
@@ -54,6 +55,8 @@ function verifySite(dir, cfg) {
       const conf = read(d + 'config.js');
       if (!conf.includes(JSON.stringify(c.exec).slice(1, -1))) problems.push(`${c.slug} (${kind}): config.js tidak memanggil /exec coach ini.`);
       const html = read(d + 'index.html');
+      if (!html.includes('http-equiv="Content-Security-Policy"')) problems.push(`${c.slug} (${kind}): Content-Security-Policy tidak terpasang.`);
+      if (/googletagmanager\.com|G-93SRTYH3SG/.test(html)) problems.push(`${c.slug} (${kind}): masih memuat Google Analytics milik xnk.my.id.`);
       const shim = html.indexOf(`'${c.slug}:'`);
       const firstScript = html.indexOf('<script');
       if (shim < 0) problems.push(`${c.slug} (${kind}): awalan penyimpanan "${c.slug}:" tidak terpasang.`);
