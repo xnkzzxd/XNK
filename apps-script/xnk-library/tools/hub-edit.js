@@ -1,6 +1,6 @@
 'use strict';
 // Menambah, mengubah, atau menghapus satu coach di hub.json, dengan pemeriksaan penuh sebelum menulis:
-//   node apps-script/xnk-library/tools/hub-edit.js <hub.json> simpan <slug> <nama usaha> <link /exec>
+//   node apps-script/xnk-library/tools/hub-edit.js <hub.json> simpan <slug> <nama usaha> <link /exec> [scriptId] [deploymentId]
 //   node apps-script/xnk-library/tools/hub-edit.js <hub.json> hapus  <slug>
 // Dipakai workflow "Hub XNK" (form Actions) supaya pemilik tidak mengedit JSON dengan tangan.
 const fs = require('fs');
@@ -19,8 +19,13 @@ function edit(cfg, aksi, a) {
     if (!brand) throw new Error('Nama usaha wajib diisi.');
     if (!exec) throw new Error('Link /exec wajib diisi.');
     const i = coaches.findIndex(c => c.slug === slug);
-    if (i >= 0) { coaches[i] = { slug, brand, exec }; message = `Coach "${slug}" diperbarui.`; }
-    else { coaches.push({ slug, brand, exec }); message = `Coach "${slug}" ditambahkan.`; }
+    const extra = {};
+    for (const k of ['scriptId', 'deploymentId']) if (a[k]) extra[k] = String(a[k]).trim();
+    // Link /exec berubah = deployment lain: ID lama dibuang supaya tidak salah sambung.
+    const keep = i >= 0 && coaches[i].exec === exec ? coaches[i] : {};
+    const row = Object.assign({}, keep, { slug, brand, exec }, extra);
+    if (i >= 0) { coaches[i] = row; message = `Coach "${slug}" diperbarui.`; }
+    else { coaches.push(row); message = `Coach "${slug}" ditambahkan.`; }
   } else if (aksi === 'hapus') {
     const i = coaches.findIndex(c => c.slug === slug);
     if (i < 0) throw new Error(`Coach "${slug}" tidak ada di daftar.`);
@@ -38,11 +43,11 @@ function edit(cfg, aksi, a) {
 module.exports = { edit };
 
 if (require.main === module) {
-  const [file, aksi, slug, brand, exec] = process.argv.slice(2);
+  const [file, aksi, slug, brand, exec, scriptId, deploymentId] = process.argv.slice(2);
   if (!file || !aksi) { console.error('pakai: hub-edit.js <hub.json> simpan|hapus <slug> [nama usaha] [link /exec]'); process.exit(1); }
   try {
     const cur = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { coaches: [] };
-    const r = edit(cur, aksi, { slug, brand, exec });
+    const r = edit(cur, aksi, { slug, brand, exec, scriptId, deploymentId });
     fs.writeFileSync(file, JSON.stringify(r.cfg, null, 2) + '\n');
     console.log(r.message);
   } catch (e) {

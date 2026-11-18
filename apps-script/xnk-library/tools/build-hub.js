@@ -46,7 +46,15 @@ function readHub(cfg) {
     seen.add(slug);
     let conf;
     try { conf = tenant.readConfig({ exec: c.exec, brand: c.brand }); } catch (e) { throw new Error(`hub.json, "${slug}": ${e.message.replace(/^config\.json: /, '')}`); }
-    return { slug, brand: conf.brand, exec: conf.exec };
+    // T-2230: ID proyek Apps Script dan deployment coach (bukan rahasia) untuk workflow "Coach XNK" (coach-ops.js).
+    const out = { slug, brand: conf.brand, exec: conf.exec };
+    for (const k of ['scriptId', 'deploymentId']) {
+      if (c[k] == null || c[k] === '') continue;
+      if (!/^[A-Za-z0-9_-]{20,120}$/.test(String(c[k]))) throw new Error(`hub.json, "${slug}": ${k} tidak valid.`);
+      out[k] = String(c[k]);
+    }
+    if (out.deploymentId && !conf.exec.includes('/s/' + out.deploymentId + '/exec')) throw new Error(`hub.json, "${slug}": deploymentId tidak cocok dengan link /exec.`);
+    return out;
   });
   const execs = coaches.map(c => c.exec);
   const dup = execs.find((e, i) => execs.indexOf(e) !== i);

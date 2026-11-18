@@ -1,6 +1,6 @@
 'use strict';
 // Membangun kode penghubung untuk spreadsheet XNK Template:
-//   node apps-script/xnk-library/tools/build-bridge.js [outDir] --lib-id <scriptId Library> --lib-version <N>
+//   node apps-script/xnk-library/tools/build-bridge.js [outDir] --lib-id <scriptId Library> --lib-version <N> [--slug <slug>] [--brand <nama>]
 // Isi: bridge-src/* (kode lokal + wizard), PenghubungApi.gs (pembungkus satu baris untuk setiap fungsi di
 // tests/api-lists.js, supaya halaman web dan trigger memanggil Library dengan konteks spreadsheet ini) dan
 // appsscript.json (Library XNK dengan versi tersemat; web app dan izin sama dengan produksi + menu/sidebar).
@@ -36,6 +36,11 @@ function build(opts) {
   if (!/^\d+$/.test(libVersion)) throw new Error('build-bridge: --lib-version harus angka');
   const hubUrl = (opts.hubUrl || process.env.XNK_HUB_URL || DEFAULT_HUB_URL).replace(/\/+$/, '');
   if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}$/.test(hubUrl)) throw new Error('build-bridge: alamat hub tidak valid (contoh: https://xnk.web.id)');
+  // T-2231: isian awal wizard untuk spreadsheet yang dibuat workflow "Coach XNK" (bukan rahasia).
+  const slug = String(opts.slug || '');
+  const brand = String(opts.brand || '').trim();
+  if (slug && !/^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/.test(slug)) throw new Error('build-bridge: --slug tidak valid');
+  if (brand.length > 60) throw new Error('build-bridge: --brand maksimal 60 huruf');
 
   const files = {};
   for (const f of fs.readdirSync(BRIDGE_SRC).sort()) files[f] = fs.readFileSync(path.join(BRIDGE_SRC, f), 'utf8');
@@ -51,6 +56,8 @@ function build(opts) {
 // dirinya sendiri di Library (token admin/klien, pemilik).
 var XNK_HUB_URL = ${JSON.stringify(hubUrl)};
 var XNK_LIB_VERSION_PINNED = ${JSON.stringify(libVersion)};
+var XNK_DEFAULT_SLUG = ${JSON.stringify(slug)};
+var XNK_DEFAULT_BRAND = ${JSON.stringify(brand)};
 ${names.map(n => `function ${n}() { return XNK.run(ctx_(), ${JSON.stringify(n)}, Array.prototype.slice.call(arguments)); }`).join('\n')}
 `;
 
@@ -80,8 +87,10 @@ if (require.main === module) {
   const flag = k => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : undefined; };
   const libId = flag('--lib-id') || process.env.XNK_LIB_SCRIPT_ID;
   const libVersion = flag('--lib-version') || process.env.XNK_LIB_VERSION;
+  const slug = flag('--slug');
+  const brand = flag('--brand');
   const out = args[0] ? path.resolve(args[0]) : DEFAULT_OUT;
-  const r = build({ libId, libVersion });
+  const r = build({ libId, libVersion, slug, brand });
   write(out, r.files);
   console.log(`Kode penghubung: ${r.names.length} pembungkus + ${r.local.length} fungsi lokal → ${path.relative(process.cwd(), out)}`);
 }

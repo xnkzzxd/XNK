@@ -27,6 +27,19 @@ Bila isian salah (slug dipakai sistem, link bukan `/exec`, dua coach memakai lin
 - **Menghapus**: aksi `hapus` dan slug. Alamat itu langsung tidak aktif, jadi klien coach itu tidak bisa membukanya.
 - **Jangan mengganti slug** coach yang sudah dipakai: link yang sudah dibagikan ke klien akan putus. Bila terpaksa, tambahkan slug baru dan hapus yang lama setelah klien diberi tahu.
 
+## Coach XNK: buat, hubungkan, perbarui spreadsheet coach (otomatis)
+
+Workflow **Coach XNK** mengelola spreadsheet setiap coach lewat clasp. Syaratnya satu secret per akun Google coach:
+`CLASP_<SLUG>` (huruf besar, `-` jadi `_`) berisi `.clasprc.json` dari `npx @google/clasp@2.4.2 login` akun itu,
+dan **Google Apps Script API** menyala di akun itu. Langkah lengkap: `docs/library/Akun.md` di repo XNK.
+**Jangan pernah menyimpan atau mengirim kata sandi akun.**
+
+| Aksi | Kapan |
+| --- | --- |
+| `hubungkan` + slug | Coach lama yang dibuat dari XNK Template (sekali) |
+| `baru` + slug + nama usaha | Coach baru: spreadsheet, web app dan alamat dibuat otomatis; lalu buka spreadsheet → XNK → Mulai setup |
+| `perbarui` (slug kosong = semua) | Otomatis setiap hari 02:37 WIB; link /exec tidak berubah |
+
 ## Pasang domain (sekali)
 
 1. **Settings → Pages → Source**: pilih **GitHub Actions**. Lalu jalankan **Hub XNK** sekali (aksi `bangun`).

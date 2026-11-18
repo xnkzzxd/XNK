@@ -128,10 +128,11 @@
   }
   function fill(s) {
     state = s;
-    $('brand').value = s.brand || '';
+    $('brand').value = s.brand || s.defaultBrand || '';
     hubUrl = (s.hubUrl || 'https://xnk.web.id').replace(/\/+$/, '');
     $('hubPre').textContent = hubUrl.replace(/^https:\/\//, '') + '/';
     if (s.siteUrl && s.siteUrl.indexOf(hubUrl + '/') === 0) $('slug').value = s.siteUrl.slice(hubUrl.length + 1).replace(/\/.*$/, '');
+    else if (s.defaultSlug) $('slug').value = s.defaultSlug;
     slugChanged();
     $('pinNote').textContent = s.pin ? 'PIN sudah ada. Kosongkan bila tidak ingin mengganti.' : '';
     if (s.execUrl) { $('exec').value = s.execUrl; $('execBox').classList.remove('hide'); }

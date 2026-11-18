@@ -98,6 +98,9 @@ function setupGetState() {
   checkLibraryConnection();
   const s = XNK.setupState(ctx_());
   s.hubUrl = XNK_HUB_URL;
+  // Isian awal dari workflow "Coach XNK" (spreadsheet dibuat otomatis); kosong pada salinan XNK Template.
+  s.defaultSlug = typeof XNK_DEFAULT_SLUG === 'string' ? XNK_DEFAULT_SLUG : '';
+  s.defaultBrand = typeof XNK_DEFAULT_BRAND === 'string' ? XNK_DEFAULT_BRAND : '';
   return s;
 }
 

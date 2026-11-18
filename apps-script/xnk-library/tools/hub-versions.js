@@ -16,21 +16,27 @@ const { readHub } = require('./build-hub');
 const SHA_RE = /^[0-9a-f]{40}$/;
 const TIMEOUT_MS = 20000;
 
-/** lib.commit dari server coach, atau '' (tidak menjawab, Library lama, isian aneh). */
-async function askServer(exec, fetchImpl) {
+/** Jawaban getServerInfo server coach ({api, lib}), atau null (tidak menjawab, Library lama). */
+async function askServerInfo(exec, fetchImpl) {
   const f = fetchImpl || fetch;
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
     const r = await f(exec, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ fn: 'getServerInfo', args: [] }), redirect: 'follow', signal: ctl.signal });
     const j = JSON.parse(await r.text());
-    const c = j && j.ok && j.data && j.data.lib && j.data.lib.commit;
-    return typeof c === 'string' && SHA_RE.test(c) ? c : '';
+    return j && j.ok && j.data && typeof j.data === 'object' ? j.data : null;
   } catch (e) {
-    return '';
+    return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** lib.commit dari server coach, atau '' (tidak menjawab, Library lama, isian aneh). */
+async function askServer(exec, fetchImpl) {
+  const d = await askServerInfo(exec, fetchImpl);
+  const c = d && d.lib && d.lib.commit;
+  return typeof c === 'string' && SHA_RE.test(c) ? c : '';
 }
 
 /** versions.json build sebelumnya (URL atau berkas); {} bila tidak ada. */
@@ -83,7 +89,7 @@ async function resolve(cfg, repo, opts) {
   return { versions: out, notes };
 }
 
-module.exports = { resolve, askServer, readPrevious, SHA_RE };
+module.exports = { resolve, askServer, askServerInfo, readPrevious, SHA_RE };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

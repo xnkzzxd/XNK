@@ -12,7 +12,7 @@ name: XNK Library
 #          di halaman coach (T-2221).
 # deploy — push ke main (atau manual, aksi "perbarui") setelah dua variable ada: bangun Library dari kode produksi
 #          terbaru → clasp push → versi baru → kode penghubung XNK Template disematkan ke versi itu → clasp push.
-#          Salinan coach yang sudah ada TIDAK ikut berubah (versi tersemat); lihat docs/library/Panduan.md.
+#          Salinan coach yang sudah ada diperbarui oleh workflow "Coach XNK" di repo hub (tag lib-v<N>, T-2232).
 on:
   pull_request:
     paths:
@@ -159,6 +159,8 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.aksi == 'perbarui')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # tag lib-v<N> (T-2232)
     env:
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       LIB_ID: ${{ vars.XNK_LIB_SCRIPT_ID }}
@@ -203,6 +205,15 @@ jobs:
           ver=$(grep -oE 'Created version [0-9]+' version.log | grep -oE '[0-9]+$')
           [ -n "$ver" ] || { echo "::error::Versi Library tidak terbaca"; exit 1; }
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
+      # Workflow "Coach XNK" di repo hub membaca versi Library terbaru dari tag ini: nomor versi di nama tag,
+      # scriptId Library di pesan tag, tag menunjuk commit yang membangun versi itu (T-2232).
+      - name: Tandai versi Library (tag lib-v<N>)
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f -a "lib-v${{ steps.lib.outputs.ver }}" -m "$LIB_ID" HEAD
+          git push --force origin "refs/tags/lib-v${{ steps.lib.outputs.ver }}"
       - name: Perbarui kode penghubung XNK Template
         if: steps.cfg.outputs.ready == 'true'
         run: |

@@ -28,6 +28,8 @@ menyematkan XNK Template ke versi itu.
 
 ## B. Coach baru
 
+**Cara cepat (Gelombang 2):** simpan token clasp akun coach ([Akun.md](Akun.md)), lalu repo hub → Actions → **Coach XNK** → `baru` (slug + nama usaha). Spreadsheet, penghubung, web app dan alamat hub dibuat otomatis; Anda tinggal membuka spreadsheet → XNK → Mulai setup. Cara manual di bawah tetap bisa dipakai.
+
 **Coach (±5 menit)**
 - Buka XNK Template → **File → Buat salinan**.
 - Di salinan: menu **XNK → Mulai setup** (tunggu beberapa detik sampai menu muncul).
@@ -46,7 +48,7 @@ Bila isian salah, workflow berhenti dengan pesan yang jelas dan situs lama tidak
 | Bagian | Otomatis? | Caranya |
 | --- | --- | --- |
 | Library (kode server) | Ya, untuk XNK Template | Merge ke `main` → workflow XNK Library |
-| Salinan coach yang sudah ada | **Tidak** (versi tersemat, aturan Google) | Di salinan: Ekstensi → Apps Script → Library → XNK → pilih versi terbaru → Simpan. Lalu Terapkan → Kelola deployment → edit → Versi: Baru → Terapkan. |
+| Salinan coach yang sudah ada | **Ya**, setiap hari 02:37 WIB, bila token clasp akun coach tersimpan ([Akun.md](Akun.md)) | Repo hub → Actions → **Coach XNK** → `perbarui` (manual kapan saja). Tanpa token: Ekstensi → Apps Script → Library → XNK → versi terbaru → Simpan, lalu Terapkan → Kelola deployment → edit → Versi: Baru. |
 | Situs hub (halaman semua coach) | Ya, setiap hari | Atau Actions → Hub XNK → Run workflow (aksi `bangun`). Halaman tiap coach mengikuti versi Library di spreadsheet coach itu, jadi coach yang belum diperbarui tetap aman; setelah Library dan deployment-nya dinaikkan, build berikutnya memberi halaman terbaru. |
 
 Bila alamat sudah diisi di wizard, **XNK → Cek kesehatan** di spreadsheet coach memberi tahu bila ada versi Library baru.

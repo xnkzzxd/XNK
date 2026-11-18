@@ -56,9 +56,9 @@ Gelombang 1 — stabil dan aman
 - [ ] T-2224 (baru, dari T-2223) Ganti `onclick="…"` yang dibuat di JavaScript dengan event delegation, supaya halaman coach bisa memakai `script-src` tanpa `'unsafe-inline'` (perlindungan penuh terhadap XSS di satu domain). Besar: ±550 handler di produksi; perlu keputusan pemilik.
 
 Gelombang 2 — pemilik mengelola semua coach
-- [ ] T-2230 Secret `CLASP_<SLUG>` per akun; `hub.json` + `scriptId`, `deploymentId`.
-- [ ] T-2231 Workflow "Coach baru" (clasp create, push penghubung, deploy web app, hub.json, build).
-- [ ] T-2232 Workflow "Perbarui semua coach" (kenari dulu, `/exec` tetap sama).
+- [x] T-2230 Secret `CLASP_<SLUG>` per akun ([Akun.md](Akun.md)); `hub.json` boleh berisi `scriptId`, `deploymentId` (diperiksa `readHub`, dipertahankan `hub-edit`, dibuang bila link /exec berubah).
+- [x] T-2231 Workflow **Coach XNK** aksi `baru` (`tools/coach-ops.js`: clasp create → penghubung dengan Library terbaru dan isian awal wizard `XNK_DEFAULT_SLUG`/`XNK_DEFAULT_BRAND` → versi → deploy web app → hub.json → build hub) dan `hubungkan` (coach lama: cari proyek dari deployment link /exec).
+- [x] T-2232 Aksi `perbarui` (harian 02:37 WIB + manual): deployment yang sama (`clasp deploy -i`), kenari dulu (berhenti bila server kenari tidak menjawab commit terbaru), coach yang sudah terbaru dilewati. Versi terbaru dari tag `lib-v<N>` yang dipasang job deploy `xnk-library.yml` (pesan tag = scriptId Library).
 - [ ] T-2233 XNK Pusat (Apps Script di akun pemilik): pendaftaran coach, `hubStatus(secret)`, cek harian, email bila bermasalah, aksi ke Actions.
 - [ ] T-2234 Dasbor `xnk.web.id/adminxnk` (login PIN ke XNK Pusat).
 
@@ -75,6 +75,6 @@ Gelombang 4 — operasional
 - [ ] T-2253 Kuota Gmail (menit trigger, fetch, email) dilaporkan; email di 70 %.
 - [ ] T-2254 Notifikasi coach lewat Web Push + email ke email coach (Telegram opsional).
 - [ ] T-2255 "Unduh data saya" (Excel) di Pengaturan panel coach.
-- [ ] T-2256 Daftar periksa akun Gmail per coach (`Akun.md`) + pemakaian token bulanan.
+- [x] T-2256 Daftar periksa akun Gmail per coach ([Akun.md](Akun.md)); token dipakai harian oleh `perbarui`, jadi token mati langsung terlihat.
 - [ ] T-2257 "Didukung XNK" kecil di login dan kartu bagikan coach.
 - Keputusan terbuka: UU PDP (kebijakan privasi, perjanjian pemroses data) ditunda oleh pemilik.
