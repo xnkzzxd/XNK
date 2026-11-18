@@ -64,7 +64,37 @@ class Range {
   // Formatting has no effect on stored values here.
   setNumberFormat() { return this; }
   setFontWeight() { return this; }
-  setBackground() { return this; }
+  setBackground(c) { return this._mark('bg', c && c !== '#ffffff' ? c : null); }
+  // Grid extras (Rapikan sheet): per-cell validations, notes and backgrounds live in sheet maps keyed "row,col".
+  getRow() { return this.row; }
+  getColumn() { return this.col; }
+  getNumRows() { return this.numRows; }
+  getNumColumns() { return this.numCols; }
+  getA1Notation() { return this.sheet._a1(this.row, this.col) + ':' + this.sheet._a1(this.row + this.numRows - 1, this.col + this.numCols - 1); }
+  _grid(kind, empty) {
+    const m = this.sheet.marks[kind], out = [];
+    for (let r = 0; r < this.numRows; r++) {
+      const line = [];
+      for (let c = 0; c < this.numCols; c++) { const v = m[(this.row + r) + ',' + (this.col + c)]; line.push(v == null ? empty : v); }
+      out.push(line);
+    }
+    return out;
+  }
+  _mark(kind, v) {
+    for (let r = 0; r < this.numRows; r++) for (let c = 0; c < this.numCols; c++) {
+      const k = (this.row + r) + ',' + (this.col + c);
+      if (v == null) delete this.sheet.marks[kind][k]; else this.sheet.marks[kind][k] = v;
+    }
+    return this;
+  }
+  getDataValidations() { return this._grid('dv', null); }
+  getNotes() { return this._grid('note', ''); }
+  getBackgrounds() { return this._grid('bg', '#ffffff'); }
+  setDataValidation(v) { return this._mark('dv', v); }
+  setNote(v) { return this._mark('note', v || null); }
+  clearDataValidations() { return this._mark('dv', null); }
+  clearNote() { return this._mark('note', null); }
+  clearFormat() { return this._mark('bg', null); }
 }
 
 Range.resetReads();
@@ -73,6 +103,8 @@ class Sheet {
   constructor(name, rows) {
     this.name = name;
     this.rows = (rows || []).map(r => r.slice());
+    this.marks = { dv: {}, note: {}, bg: {} };
+    this.cfRules = [];
   }
   getName() { return this.name; }
   getLastRow() {
@@ -103,6 +135,9 @@ class Sheet {
       const r2 = m[4] ? parseInt(m[4], 10) : (m[2] ? r1 : Math.max(1, this.getLastRow()));
       return new Range(this, r1, c1, r2 - r1 + 1, c2 - c1 + 1);
     }
+    if (this.strictGrid && (a + (c || 1) - 1 > this.getMaxRows() || b + (d || 1) - 1 > this.getMaxColumns())) {
+      throw new Error('The coordinates of the range are outside the dimensions of the sheet.');
+    }
     return new Range(this, a, b, c || 1, d || 1);
   }
   appendRow(values) {
@@ -113,7 +148,43 @@ class Sheet {
   insertColumnAfter(col) { this.rows.forEach(r => { while (r.length < col) r.push(''); r.splice(col, 0, ''); }); }
   insertColumnBefore(col) { this.rows.forEach(r => { while (r.length < col) r.push(''); r.splice(col - 1, 0, ''); }); }
   insertRowBefore(row) { this.rows.splice(row - 1, 0, []); }
-  setFrozenRows() {}
+  setFrozenRows(n) { this.frozenRows = n; }
+  // Grid (rows/columns that exist even when empty). Defaults like a new Google sheet: 1000 × 26, growing with data.
+  getMaxRows() { return Math.max(this.maxRows == null ? 1000 : this.maxRows, this.rows.length); }
+  getMaxColumns() { return Math.max(this.maxCols == null ? 26 : this.maxCols, this.getLastColumn()); }
+  getFrozenRows() { return this.frozenRows || 0; }
+  getFrozenColumns() { return this.frozenCols || 0; }
+  isSheetHidden() { return !!this.hidden; }
+  getConditionalFormatRules() { return this.cfRules.slice(); }
+  setConditionalFormatRules(rules) { this.cfRules = rules.slice(); this.cfWrites = (this.cfWrites || 0) + 1; }
+  _a1(r, c) { let s = ''; for (let n = c; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s + r; }
+  _shift(fn) {
+    for (const kind of Object.keys(this.marks)) {
+      const next = {};
+      for (const k of Object.keys(this.marks[kind])) { const [r, c] = k.split(',').map(Number); const to = fn(r, c); if (to) next[to[0] + ',' + to[1]] = this.marks[kind][k]; }
+      this.marks[kind] = next;
+    }
+  }
+  insertRowsAfter(after, n) {
+    const max = this.getMaxRows();
+    if (after < this.rows.length) this.rows.splice(after, 0, ...Array.from({ length: n }, () => []));
+    this.maxRows = max + n;
+  }
+  // Like Sheets: deleting rows/columns removes whatever is in them, data included (tests check nothing is lost).
+  deleteRows(start, n) {
+    const max = this.getMaxRows();
+    if (start < 1 || start + n - 1 > max) throw new Error('deleteRows out of range');
+    this.rows.splice(start - 1, n);
+    this.maxRows = max - n;
+    this._shift((r, c) => (r < start ? [r, c] : r >= start + n ? [r - n, c] : null));
+  }
+  deleteColumns(start, n) {
+    const max = this.getMaxColumns();
+    if (start < 1 || start + n - 1 > max) throw new Error('deleteColumns out of range');
+    this.rows.forEach(r => r.splice(start - 1, n));
+    this.maxCols = max - n;
+    this._shift((r, c) => (c < start ? [r, c] : c >= start + n ? [r, c - n] : null));
+  }
 }
 
 class Spreadsheet {

@@ -14,6 +14,7 @@ const LOCAL_OK = {
   getLibraryVersion: 'hanya versi', setupTriggers: 'Library: requireOwner_', validateConfiguration: 'Library: requireOwner_',
   setupGetState: 'Library: requireOwner_', setupInit: 'Library: requireOwner_', setupSave: 'Library: requireOwner_',
   setupCheck: 'Library: requireOwner_', setupRegisterPusat: 'Library: requireOwner_ (registerPusat)',
+  tidySheetsPlan: 'Library: requireOwner_ (tidySheets)', tidySheetsApply: 'Library: requireOwner_ (tidySheets)',
 };
 
 test('setiap fungsi API dan trigger punya pembungkus; fungsi lokal hanya yang dikenal', () => {
@@ -49,7 +50,7 @@ function loadBridge(env, id) {
   const r = bridge.build({ libId: 'abc', libVersion: '1' });
   const XNK = {};
   for (const k of ['run', 'handleGet', 'handlePost', 'getLibraryVersion', 'healthCheck', 'initInstance', 'saveSetup',
-    'installTriggers', 'removeTriggers', 'setupState']) XNK[k] = env.context[k];
+    'installTriggers', 'removeTriggers', 'setupState', 'tidySheets']) XNK[k] = env.context[k];
   const sandbox = {
     XNK, console,
     PropertiesService: { getScriptProperties: () => ctx.props },
@@ -104,7 +105,7 @@ test('pengunjung web tidak bisa menjalankan setup lewat penghubung', () => {
   const env = createLibEnv();
   const A = loadBridge(env, 'SS_A');
   env.activeUserEmail = '';
-  for (const fn of ['initializeTemplate', 'setupInit', 'setupGetState', 'setupCheck', 'validateConfiguration', 'setupTriggers']) {
+  for (const fn of ['initializeTemplate', 'setupInit', 'setupGetState', 'setupCheck', 'validateConfiguration', 'setupTriggers', 'tidySheetsPlan', 'tidySheetsApply']) {
     assert.throws(() => A.call(fn), /hanya bisa dijalankan pemilik/, fn);
   }
   assert.throws(() => A.call('setupSave', { brand: 'X', pin: '999999' }), /hanya bisa dijalankan pemilik/);
@@ -123,4 +124,33 @@ test('isian awal wizard dari workflow Coach XNK (T-2231): slug dan nama usaha di
   const setup = require('fs').readFileSync(require('path').join(__dirname, '..', 'bridge-src', 'Setup.html'), 'utf8');
   assert.match(setup, /s\.defaultSlug/);
   assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'bridge-src', 'Penghubung.gs'), 'utf8'), /s\.defaultSlug = typeof XNK_DEFAULT_SLUG/);
+});
+
+test('XNK → Rapikan sheet: laporan dulu, rapikan di bawah lock spreadsheet itu saja, diulang = tidak ada yang dikerjakan', () => {
+  const env = createLibEnv();
+  const A = loadBridge(env, 'SS_A'), B = loadBridge(env, 'SS_B');
+  A.call('initializeTemplate');
+  B.call('initializeTemplate');
+  for (const X of [A, B]) {
+    const sh = X.ss.getSheetByName('Schedules');
+    sh.maxRows = 20000; sh.maxCols = 40;
+    X.ss.seed('Lama', []).maxRows = 1000;
+  }
+  const head = A.ss.getSheetByName('Schedules').rows.map(r => r.slice());
+  const plan = A.call('tidySheetsPlan');
+  assert.equal(A.ss.getSheetByName('Schedules').getMaxRows(), 20000, 'laporan tidak mengubah apa pun');
+  const sc = plan.sheets.find(p => p.name === 'Schedules');
+  assert.equal(sc.delRows, 20000 - 50 - sc.lastRow);
+  assert.equal(sc.delCols, 40 - 26);
+  assert.deepEqual(plan.emptyUnknown, ['Lama']);
+  assert.match(plan.text, /Lama/);
+  const locks = A.store.locks;
+  const done = A.call('tidySheetsApply');
+  assert.ok(A.store.locks > locks, 'di bawah script lock spreadsheet itu');
+  assert.equal(done.after.todo, 0);
+  assert.equal(A.ss.getSheetByName('Schedules').getMaxRows(), 50 + sc.lastRow);
+  assert.deepEqual(A.ss.getSheetByName('Schedules').rows, head, 'header dan data tetap');
+  assert.equal(A.ss.getSheetByName('Lama').getMaxRows(), 1000, 'sheet kosong tak dikenal tidak diubah');
+  assert.equal(B.ss.getSheetByName('Schedules').getMaxRows(), 20000, 'spreadsheet lain tidak tersentuh');
+  assert.equal(A.call('tidySheetsApply').done.length, 0);
 });

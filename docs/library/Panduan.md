@@ -53,6 +53,17 @@ Bila isian salah, workflow berhenti dengan pesan yang jelas dan situs lama tidak
 
 Bila alamat sudah diisi di wizard, **XNK → Cek kesehatan** di spreadsheet coach memberi tahu bila ada versi Library baru.
 
+## C2. Spreadsheet berat dibuka di Chrome: XNK → Rapikan sheet
+
+Spreadsheet yang lama dipakai sering membawa ribuan baris dan kolom kosong, format sisa, validasi data dan format bersyarat yang menyebar ke area kosong. Semua itu ikut dimuat Chrome walau tidak berisi apa pun.
+
+1. Buka spreadsheet coach → menu **XNK → Rapikan sheet** (menu muncul setelah salinan diperbarui, lihat C).
+2. Dialog menampilkan laporan, tanpa mengubah apa pun: jumlah sel sekarang → sesudah dirapikan, persen dari batas Google (10 juta sel per spreadsheet), dan per sheet: data yang terisi (baris × kolom) serta baris/kolom kosong, format bersyarat, sel berformat dan catatan yang akan dibuang.
+3. Tekan **Rapikan sekarang**. Hasilnya tampil di dialog yang sama.
+4. **Tutup spreadsheet lalu buka lagi** supaya Chrome memuat ukuran baru.
+
+Yang dijaga: sel berisi, baris judul kolom, dan sheet tidak pernah dihapus. Disisakan 50 baris dan 2 kolom kosong di luar data (kolom tidak dikecilkan di bawah 26, MemberData di bawah 60, karena aplikasi menulis judul kolom di nomor kolom tetap). Format dan validasi per kolom di 50 baris cadangan dibiarkan supaya baris baru mewarisinya. Sheet kosong yang tidak dipakai aplikasi hanya disebut di laporan; hapus sendiri bila memang tidak perlu. Dijalankan lagi = "Tidak ada yang perlu dirapikan". Hanya pemilik spreadsheet. Di produksi (xnk.my.id): editor Apps Script → jalankan `rapikanSheet` (laporan di Log), lalu `rapikanSheetSekarang`.
+
 ## D. Yang tetap manual (aturan Google / GitHub)
 
 - Izin pertama dan **Deploy → Aplikasi web** di setiap salinan.

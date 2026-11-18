@@ -137,7 +137,11 @@
     insertColumnAfter: function (col) { this.rows.forEach(function (r) { while (r.length < col) r.push(''); r.splice(col, 0, ''); }); },
     insertColumnBefore: function (col) { this.rows.forEach(function (r) { while (r.length < col) r.push(''); r.splice(col - 1, 0, ''); }); },
     insertRowBefore: function (row) { this.rows.splice(row - 1, 0, []); },
-    setFrozenRows: function () {}
+    setFrozenRows: function () {},
+    // Grid: rows/columns that exist on screen (Sheets keeps empty ones too); only _ensureRoomRows_ needs it here.
+    getMaxRows: function () { return Math.max(this.maxRows || 1000, this.rows.length); },
+    getMaxColumns: function () { return Math.max(26, this.getLastColumn()); },
+    insertRowsAfter: function (after, n) { this.maxRows = this.getMaxRows() + n; }
   };
   function Spreadsheet(id) { this.id = id; this.sheets = []; }
   Spreadsheet.prototype = {

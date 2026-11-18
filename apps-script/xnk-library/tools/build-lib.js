@@ -36,7 +36,7 @@ const MEMOS = ['_memberMemo_', '_schedMemo_', '_readMemo_', '_progMemo_', '_exAl
 // Fungsi produksi yang dipakai LibApi.gs.
 const NEEDED = ['_ensureCoachSchema_', '_getMemberDataSheet_', '_getMembersLogSheet_', '_readSchedulesAll_',
   '_priceListSheetAndColumns_', '_sessionSecret_', '_locked_', '_bustShared_', '_bustSlots_', '_installReminderTrigger_',
-  'requireOwner_', 'doGet', 'doPost'];
+  'requireOwner_', 'doGet', 'doPost', '_tidyRun_', '_tidyText_'];
 
 // [berkas, cari (teks persis), ganti, jumlah yang diharapkan]
 const TEXT_SWAPS = [

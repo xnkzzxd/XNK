@@ -321,6 +321,7 @@ function _pushEnqueue_(msgs, subs) {
     });
   });
   if (!rows.length) return 0;
+  _ensureRoomRows_(sheet, rows.length);
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, PUSH_OUT_HEADERS.length).setValues(rows);
   return rows.length;
 }

@@ -7609,7 +7609,7 @@ function _workoutSave_(memberId, tanggal, scheduleId, entries, oleh, session) {
         out.push(['WKL-' + stamp + '-' + ei + '-' + si, memberId, tanggal, scheduleId || '', e.hari, e.n, e.exId, e.gerakan, e.bodyPart, e.target, si + 1, s.berat, s.rep, s.durasi, s.jarak, s.rpe, si === 0 ? e.catatan : '', oleh, now, s.jenis || '', si === 0 ? (e.form || '') : '']);
       });
     });
-    if (out.length) sheet.getRange(sheet.getLastRow() + 1, 1, out.length, WORKOUT_HEADERS.length).setValues(out);
+    if (out.length) { _ensureRoomRows_(sheet, out.length); sheet.getRange(sheet.getLastRow() + 1, 1, out.length, WORKOUT_HEADERS.length).setValues(out); }
     // Rekor baru = rekor tanggal ini yang belum ada sebelum simpan (rekor yang sudah ada tidak dihitung ulang).
     const after = _workoutEvents_(_workoutRowsOf_(memberId)).prs;
     const prs = after.filter(function(p) { return p.tanggal === tanggal && keys[p.key] && !beforeKeys[p.key + '|' + p.tanggal]; });
