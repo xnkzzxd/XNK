@@ -6,8 +6,9 @@ name: Coach XNK
 #              coach berurutan; coach pertama di daftar adalah kenari: bila ia gagal, coach lain tidak dikerjakan.
 #  - baru      buat spreadsheet + Apps Script di akun Google coach, pasang penghubung, terbitkan web app, simpan ke
 #              hub.json. Setelah itu pemilik membuka spreadsheet → menu XNK → Mulai setup (izin Google + PIN).
-#  - hubungkan coach yang dibuat dulu dari XNK Template (mis. claudia): cari proyek script-nya di akun itu dan simpan
-#              scriptId/deploymentId supaya bisa ikut "perbarui".
+#  - hubungkan coach yang dibuat dulu dari XNK Template (mis. claudia): isi Script ID proyeknya (proyek yang menempel di
+#              spreadsheet tidak terlihat oleh `clasp list`); dicocokkan dengan deployment link /exec, lalu
+#              scriptId/deploymentId disimpan supaya bisa ikut "perbarui".
 # Kredensial: secret CLASP_<SLUG> (huruf besar, "-" jadi "_") berisi .clasprc.json dari `clasp login` akun coach.
 # Setiap job hanya menerima SATU secret (milik coach yang dikerjakan) lewat env CLASP_RC; tidak pernah semua secret.
 # Akun itu harus menyalakan Google Apps Script API (script.google.com/home/usersettings). Lihat README repo ini.
@@ -24,6 +25,9 @@ on:
         required: false
       brand:
         description: 'Nama usaha, hanya untuk "baru"'
+        required: false
+      script_id:
+        description: 'hubungkan: Script ID proyek coach (spreadsheet → Extensions → Apps Script → Project Settings)'
         required: false
       paksa:
         description: 'perbarui: kerjakan juga coach yang sudah terbaru'
@@ -105,6 +109,7 @@ jobs:
           AKSI: ${{ needs.plan.outputs.aksi }}
           SLUG: ${{ matrix.slug }}
           IN_BRAND: ${{ inputs.brand }}
+          SCRIPT_ID: ${{ inputs.script_id }}
           FLAGS: ${{ inputs.paksa && '--paksa' || '' }} ${{ matrix.kenari && '--kenari' || '' }}
         run: |
           set -e

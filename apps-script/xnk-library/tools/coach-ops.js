@@ -1,7 +1,7 @@
 'use strict';
 // Gelombang 2 (T-2230…T-2232): pemilik mengelola spreadsheet semua coach dari GitHub Actions (repo hub), lewat clasp.
 //   node apps-script/xnk-library/tools/coach-ops.js baru      <hub.json> <slug> <nama usaha>
-//   node apps-script/xnk-library/tools/coach-ops.js hubungkan <hub.json> <slug>
+//   node apps-script/xnk-library/tools/coach-ops.js hubungkan <hub.json> <slug> [scriptId]
 //   node apps-script/xnk-library/tools/coach-ops.js perbarui  <hub.json> <slug|semua> [--paksa]
 // Kredensial: setiap akun Google coach punya secret repo hub CLASP_<SLUG> (isi ~/.clasprc.json dari `clasp login`;
 // huruf besar, "-" jadi "_"). Workflow meneruskan HANYA secret coach yang sedang dikerjakan lewat env CLASP_RC (satu job
@@ -121,14 +121,19 @@ function baru(file, slug, brand, lib, opts) {
 
 /** Coach lama: temukan scriptId dari deployment link /exec-nya. */
 function hubungkan(file, slug, opts) {
+  opts = opts || {};
   const cfg = readCfg(file);
   const c = readHub(cfg).coaches.find(x => x.slug === slug);
   if (!c) throw new Error(`Coach "${slug}" tidak ada di hub.json.`);
   const deploymentId = (c.exec.match(/\/s\/([\w-]+)\/exec$/) || [])[1];
+  const given = String(opts.scriptId || '').trim();
+  if (given && !/^[\w-]{20,120}$/.test(given)) throw new Error('Script ID tidak valid (salin dari Apps Script → Project Settings → Script ID).');
   const clasp = makeClasp(slug, opts);
   try {
-    const ids = [...new Set((clasp.run(['list'], clasp.home).match(/\/d\/([\w-]{20,})\/edit/g) || []).map(s => s.slice(3, -5)))];
-    if (!ids.length) throw new Error(`Akun untuk "${slug}" tidak punya proyek Apps Script. Apakah secret ${secretName(slug)} milik akun yang benar?`);
+    // Proyek coach menempel di spreadsheet-nya (salinan XNK Template); `clasp list` hanya menampilkan proyek yang berdiri
+    // sendiri, jadi Script ID dari pemilik dipakai bila ada. Tetap diperiksa: proyek itu harus punya deployment link /exec.
+    const ids = given ? [given] : [...new Set((clasp.run(['list'], clasp.home).match(/\/d\/([\w-]{20,})\/edit/g) || []).map(s => s.slice(3, -5)))];
+    if (!ids.length) throw new Error(`Proyek Apps Script "${slug}" tidak terlihat oleh clasp (proyek yang menempel di spreadsheet memang tidak terdaftar). Jalankan lagi dengan Script ID: spreadsheet → Extensions → Apps Script → Project Settings → Script ID.`);
     for (const scriptId of ids) {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-find-'));
       fs.writeFileSync(path.join(dir, '.clasp.json'), JSON.stringify({ scriptId, rootDir: '.' }));
@@ -140,7 +145,9 @@ function hubungkan(file, slug, opts) {
         return { slug, scriptId, deploymentId };
       }
     }
-    throw new Error(`Tidak ada proyek di akun ini yang memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}").`);
+    throw new Error(given
+      ? `Proyek ${given.slice(0, 12)}… tidak bisa dibaca dengan secret ${secretName(slug)} atau tidak memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}"). Periksa Script ID dan akun secret itu.`
+      : `Tidak ada proyek di akun ini yang memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}").`);
   } finally { clasp.done(); }
 }
 
@@ -206,7 +213,7 @@ if (require.main === module) {
       console.log(`Coach ${r.slug} dibuat: ${r.exec}`);
       summary([`## Coach "${r.slug}" dibuat`, '', `- Buka proyek: ${r.sheet} → spreadsheet-nya → menu **XNK → Mulai setup** (izin Google + PIN).`, `- Link /exec: ${r.exec}`, `- Alamat: https://xnk.web.id/${r.slug}/ dan /${r.slug}/klien/ (aktif setelah build hub).`]);
     } else if (aksi === 'hubungkan') {
-      const r = hubungkan(file, slug, {});
+      const r = hubungkan(file, slug, { scriptId: rest[0] || process.env.SCRIPT_ID || '' });
       console.log(`Coach ${r.slug} terhubung: scriptId ${r.scriptId}`);
       summary([`## Coach "${r.slug}" terhubung`, '', 'scriptId dan deploymentId tersimpan di hub.json; "perbarui" sekarang bisa dipakai.']);
     } else if (aksi === 'perbarui') {
