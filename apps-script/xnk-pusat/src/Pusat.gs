@@ -62,7 +62,9 @@ function doGet(e) {
   if (!t) return ContentService.createTextOutput('XNK Pusat');
   try { requireSetupTicket_(t); } catch (err) { return ContentService.createTextOutput('Link siapkan XNK Pusat sudah tidak berlaku. Buka lagi dari xnk.web.id/adminxnk.'); }
   setupPusat_();
-  return ContentService.createTextOutput('XNK Pusat siap: izin Google diberikan, cek harian 06:00 WIB dan backup tiap jam terpasang. Tutup tab ini dan kembali ke xnk.web.id/adminxnk.');
+  // Izin baru (Drive/Spreadsheet) TIDAK bisa diberikan lewat link web: Google hanya menampilkan layar izin di editor.
+  if (!setupState_().auth) return ContentService.createTextOutput('Trigger XNK Pusat sudah terpasang (cek harian 06:00 WIB, backup tiap jam), tetapi izin Google baru (Drive/Spreadsheet untuk backup) belum diberikan. Izin itu hanya bisa diberikan dari editor: buka ' + editorUrl_() + ' , pilih fungsi setupPusat, tekan Run, lalu Izinkan.');
+  return ContentService.createTextOutput('XNK Pusat siap: izin Google lengkap, cek harian 06:00 WIB dan backup tiap jam terpasang. Tutup tab ini dan kembali ke xnk.web.id/adminxnk.');
 }
 
 var PUSAT_SETUP_MS = 10 * 60 * 1000;
@@ -74,16 +76,20 @@ function requireSetupTicket_(t) {
   if (p.length !== 3 || p[0] !== 'setup' || !exp || exp < Date.now() || !eq_(p[2], sign_('setup.' + p[1]))) throw new Error('Tanda siap tidak berlaku.');
 }
 
+/** Link editor Apps Script XNK Pusat (tempat pemilik memberi izin baru). */
+function editorUrl_() { try { return 'https://script.google.com/d/' + ScriptApp.getScriptId() + '/edit'; } catch (e) { return 'https://script.google.com/home'; } }
+
 /** Izin Google + trigger yang dibutuhkan XNK Pusat; untuk pita peringatan di /adminxnk. */
 function setupState_() {
   var h = {};
   try { ScriptApp.getProjectTriggers().forEach(function (t) { h[t.getHandlerFunction()] = 1; }); } catch (e) { /* tanpa izin trigger */ }
-  var auth = true;
-  try {
-    var info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
-    auth = info.getAuthorizationStatus() !== ScriptApp.AuthorizationStatus.REQUIRED;
-  } catch (e) { auth = true; }
-  var st = { auth: auth, daily: !!h.runPusatDaily, backup: !!h.runPusatBackup };
+  // Dicoba langsung ke Drive dengan token skrip ini: getAuthorizationInfo dari web app "Siapa saja" memeriksa
+  // pengunjung anonim, jadi selalu "perlu izin" walau pemilik sudah memberi izin di editor. Hasil baik disimpan 10 menit.
+  var c = CacheService.getScriptCache(), auth = c.get('auth-ok') === '1';
+  if (!auth) {
+    try { drive_('get', '?pageSize=1&fields=files(id)'); auth = true; c.put('auth-ok', '1', 600); } catch (e) { auth = false; }
+  }
+  var st = { auth: auth, daily: !!h.runPusatDaily, backup: !!h.runPusatBackup, editor: editorUrl_() };
   st.ok = st.auth && st.daily && st.backup;
   return st;
 }

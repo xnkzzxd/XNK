@@ -82,13 +82,15 @@ sampah Drive (masih bisa dipulihkan 30 hari dari sampah).
   (atau jalankan `setupPusat` di editor) untuk memberi izin baru dan memasang trigger backup tiap jam.
 
 ## Siapkan XNK Pusat dari /adminxnk
-`pusatOverview.setup` = `{auth, daily, backup, ok}` (izin Google lewat `ScriptApp.getAuthorizationInfo`, dua trigger).
+`pusatOverview.setup` = `{auth, daily, backup, ok, editor}`. `auth` diuji langsung: satu permintaan kecil ke Drive dengan token skrip (berhasil = disimpan 10 menit). **Jangan pakai `ScriptApp.getAuthorizationInfo`** di sini: dari web app "Siapa saja" ia memeriksa pengunjung anonim, jadi selalu "perlu izin" walau pemilik sudah memberi izin.
 Bila ada yang kurang, `/adminxnk` menampilkan pita "XNK Pusat perlu disiapkan" (tombol yang sama juga ada di bilah atas).
 Tombol membuka tab baru (dibuka saat diklik, supaya tidak diblokir) ke `<pusatUrl>?setup=<tanda siap>`: tanda sekali
 pakai `setup.<exp>.<hmac>` dari `pusatAction(token, 'setup')`, berlaku 10 menit, bukan token sesi. `doGet` memeriksanya
-lalu menjalankan `setupPusat_()` (sama dengan `setupPusat` di editor). Karena web app berjalan sebagai pemilik, Google
-menampilkan layar izin kepada pemilik bila ada izin baru. Bila browser login beberapa akun Google dan Google menolak,
-buka tab itu di jendela Incognito dengan akun pemilik saja, atau jalankan `setupPusat` di editor.
+lalu menjalankan `setupPusat_()` (sama dengan `setupPusat` di editor): **trigger** terpasang dari sini. **Izin Google baru
+(Drive/Spreadsheet) tidak bisa diberikan lewat link web** — Google hanya menampilkan layar izin di editor (dicoba
+2026-11-18). Karena itu, bila `setup.auth` false, pita menampilkan langkah editor dan tombol **Buka editor XNK Pusat**
+(`setup.editor` = `https://script.google.com/d/<scriptId>/edit`): pilih `setupPusat` → Run → Izinkan, sekali saja.
+Tab `?setup` juga mengatakan hal yang sama bila izin masih kurang (tidak lagi "izin Google diberikan").
 
 ## Memulihkan dari backup
 
