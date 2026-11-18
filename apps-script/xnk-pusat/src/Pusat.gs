@@ -52,7 +52,41 @@ function doPost(e) {
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function doGet() { return ContentService.createTextOutput('XNK Pusat'); }
+/**
+ * GET /exec. Dengan ?setup=<tanda siap> (dibuat pusatAction 'setup', berlaku 10 menit): jalankan setupPusat_ lalu
+ * tampilkan teks singkat. Web app berjalan sebagai pemilik, jadi bila ada izin Google baru, Google menampilkan layar
+ * izin kepada pemilik yang membuka link ini. Tanpa/ tanda salah = teks "XNK Pusat" saja.
+ */
+function doGet(e) {
+  var t = e && e.parameter && e.parameter.setup;
+  if (!t) return ContentService.createTextOutput('XNK Pusat');
+  try { requireSetupTicket_(t); } catch (err) { return ContentService.createTextOutput('Link siapkan XNK Pusat sudah tidak berlaku. Buka lagi dari xnk.web.id/adminxnk.'); }
+  setupPusat_();
+  return ContentService.createTextOutput('XNK Pusat siap: izin Google diberikan, cek harian 06:00 WIB dan backup tiap jam terpasang. Tutup tab ini dan kembali ke xnk.web.id/adminxnk.');
+}
+
+var PUSAT_SETUP_MS = 10 * 60 * 1000;
+/** Tanda siap sekali pakai dari /adminxnk: "setup.<exp>.<hmac>", 10 menit. Bukan token sesi (tidak masuk riwayat). */
+function setupTicket_() { var exp = String(Date.now() + PUSAT_SETUP_MS); return 'setup.' + exp + '.' + sign_('setup.' + exp); }
+function requireSetupTicket_(t) {
+  var p = String(t || '').split('.');
+  var exp = Number(p[1]);
+  if (p.length !== 3 || p[0] !== 'setup' || !exp || exp < Date.now() || !eq_(p[2], sign_('setup.' + p[1]))) throw new Error('Tanda siap tidak berlaku.');
+}
+
+/** Izin Google + trigger yang dibutuhkan XNK Pusat; untuk pita peringatan di /adminxnk. */
+function setupState_() {
+  var h = {};
+  try { ScriptApp.getProjectTriggers().forEach(function (t) { h[t.getHandlerFunction()] = 1; }); } catch (e) { /* tanpa izin trigger */ }
+  var auth = true;
+  try {
+    var info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+    auth = info.getAuthorizationStatus() !== ScriptApp.AuthorizationStatus.REQUIRED;
+  } catch (e) { auth = true; }
+  var st = { auth: auth, daily: !!h.runPusatDaily, backup: !!h.runPusatBackup };
+  st.ok = st.auth && st.daily && st.backup;
+  return st;
+}
 
 // ── Login pemilik ────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -274,6 +308,7 @@ function pusatOverview(token) {
     coaches: Object.keys(all).sort().map(function (slug) {
       return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), backup: backupView_(slug) };
     }),
+    setup: setupState_(),
   };
 }
 
@@ -289,6 +324,7 @@ function pusatCheck(token, slug) {
 function pusatAction(token, action, slug) {
   requireOwnerToken_(token);
   if (action === 'backup') return backupNow_(String(slug || ''));
+  if (action === 'setup') return { ticket: setupTicket_() };   // /adminxnk membuka <pusatUrl>?setup=<ticket> di tab baru
   var t = prop_('GITHUB_TOKEN');
   if (!t) throw new Error('Token GitHub belum diatur di XNK Pusat (Script Property GITHUB_TOKEN).');
   slug = String(slug || '');
@@ -496,8 +532,10 @@ function backupNow_(slug) {
 
 // ── Pemasangan (dijalankan pemilik dari editor) ─────────────────────────────────────────────────────────────
 
-/** Sekali (dan lagi setelah izin baru): kunci sesi + trigger harian 06:00 WIB + trigger backup tiap jam. Aman diulang. */
-function setupPusat() {
+/** Sekali (dan lagi setelah izin baru): kunci sesi + trigger harian 06:00 WIB + trigger backup tiap jam. Aman diulang.
+ *  Dari editor, atau dari /adminxnk → "Siapkan XNK Pusat" (doGet ?setup). */
+function setupPusat() { return setupPusat_(); }
+function setupPusat_() {
   if (prop_('SESSION_SECRET').length < 32) props_().setProperty('SESSION_SECRET', Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''));
   ScriptApp.getProjectTriggers().forEach(function (t) { var h = t.getHandlerFunction(); if (h === 'runPusatDaily' || h === 'runPusatBackup') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('runPusatDaily').timeBased().atHour(6).everyDays(1).inTimezone('Asia/Jakarta').create();

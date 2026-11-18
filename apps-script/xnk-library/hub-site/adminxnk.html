@@ -56,10 +56,17 @@
     </form>
   </section>
   <section id="dash" class="hide">
+    <div class="card hide" id="setup">
+      <b class="bad">XNK Pusat perlu disiapkan</b>
+      <p class="mut" id="setupWhy" style="margin:6px 0 10px"></p>
+      <button class="btn" type="button" data-act="setup">Siapkan XNK Pusat</button>
+      <p class="mut" style="margin:10px 0 0">Tab baru terbuka. Bila Google meminta izin, pilih akun pemilik XNK Pusat lalu Izinkan. Setelah muncul "XNK Pusat siap", tutup tab itu dan tekan "Cek semua sekarang".</p>
+    </div>
     <div class="bar">
       <button class="btn" type="button" data-act="cek">Cek semua sekarang</button>
       <button class="btn ghost" type="button" data-act="perbarui">Perbarui semua coach</button>
       <button class="btn ghost" type="button" data-act="bangun">Bangun ulang situs</button>
+      <button class="btn ghost" type="button" data-act="setup">Siapkan XNK Pusat</button>
       <span class="mut" id="sum"></span>
     </div>
     <div class="msg" id="dm"></div>
@@ -134,6 +141,9 @@
         '<button class="btn ghost" type="button" data-act="perbarui" data-slug="' + esc(s) + '">Perbarui</button>' +
         '<button class="btn ghost" type="button" data-act="hubungkan" data-slug="' + esc(s) + '">Hubungkan</button></div></article>';
     });
+    var su = d.setup;
+    $('setup').classList.toggle('hide', !su || su.ok);
+    if (su && !su.ok) $('setupWhy').textContent = [!su.auth ? 'Izin Google baru belum diberikan (Drive/Spreadsheet untuk backup).' : '', !su.daily ? 'Cek harian belum terpasang.' : '', !su.backup ? 'Backup tiap jam belum terpasang.' : ''].filter(Boolean).join(' ');
     $('list').innerHTML = html || '<p class="mut">Belum ada coach.</p>';
     $('sum').textContent = slugs.length + ' coach · ' + bad + ' perlu dicek' + (d.latest ? ' · Library terbaru v' + d.latest.version : '');
     document.querySelectorAll('[data-act="perbarui"],[data-act="hubungkan"],[data-act="bangun"]').forEach(function (b) { b.disabled = !d.canAct; b.title = d.canAct ? '' : 'Isi GITHUB_TOKEN di XNK Pusat dulu'; });
@@ -155,6 +165,16 @@
     if (!b || b.disabled) return;
     var act = b.getAttribute('data-act'), slug = b.getAttribute('data-slug') || '';
     if (act === 'cek') return load('pusatCheck', [tok(), slug], 'Memeriksa ' + (slug || 'semua coach') + '…');
+    if (act === 'setup') {
+      // Tab dibuka langsung saat diklik (bukan setelah menunggu jawaban) supaya tidak diblokir browser.
+      var w = window.open('', '_blank');
+      say('dm', 'Membuka XNK Pusat…');
+      return rpc('pusatAction', [tok(), 'setup']).then(function (r) {
+        var url = PUSAT + '?setup=' + encodeURIComponent(r.ticket);
+        if (w) { w.opener = null; w.location.href = url; say('dm', 'Selesaikan di tab baru, lalu tekan "Cek semua sekarang".', 'ok'); }
+        else { say('dm', 'Browser memblokir tab baru. Izinkan pop-up untuk xnk.web.id lalu tekan lagi.', 'bad'); }
+      }, function (e) { if (w) w.close(); say('dm', e.message, 'bad'); });
+    }
     if (act === 'backup') {
       if (!window.confirm('Backup ' + slug + ' sekarang? Salinan masuk ke Drive akun XNK Pusat.')) return;
       say('dm', 'Mengirim…');

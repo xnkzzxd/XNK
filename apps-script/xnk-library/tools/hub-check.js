@@ -59,9 +59,10 @@ function fakePusat(req) {
   PUSAT_CALLS.push(req.fn);
   if (req.fn === 'pusatLogin') return req.args[0] === 'pin-pusat-1' ? { ok: true, data: { token: 'T1', exp: Date.now() + 3600e3 } } : { ok: false, error: 'PIN salah.' };
   if (req.args[0] !== 'T1') return { ok: false, auth: true, error: 'Sesi berakhir. Masuk lagi.' };
+  if (req.fn === 'pusatAction' && req.args[1] === 'setup') return { ok: true, data: { ticket: 'setup.1.sig' } };
   if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
   const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 } } });
-  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, coaches: [
+  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, setup: { ok: false, auth: false, daily: true, backup: true }, coaches: [
     { slug: 'claudia', exec: EXEC_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
       backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false } },
   ] } };
@@ -71,6 +72,7 @@ async function newContext(browser, be, seen) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await context.route(/^https:\/\/script\.google(usercontent)?\.com\//, route => {
     const u = route.request().url();
+    if (u.startsWith(PUSAT + '?setup=')) return route.fulfill({ status: 200, contentType: 'text/plain', body: 'XNK Pusat siap (palsu)' });
     if (u === PUSAT) return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(fakePusat(JSON.parse(route.request().postData() || '{}'))) });
     if (route.request().method() !== 'POST') return route.fulfill({ status: 404, body: '' });
     seen.push(u);
@@ -191,6 +193,11 @@ async function makeLogos(browser) {
       await page.click('[data-act="backup"][data-slug="claudia"]');
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('1 menit'), null, { timeout: 5000 }).catch(() => {});
       check(((await page.textContent('#dm')) || '').includes('1 menit') && ((await page.textContent('#list')) || '').includes('menunggu giliran'), 'Backup sekarang (tanpa onclick, lolos CSP): pesan + "menunggu giliran"');
+      check(await page.isVisible('#setup') && ((await page.textContent('#setupWhy')) || '').includes('Izin Google'), 'pita "XNK Pusat perlu disiapkan" saat izin belum diberikan');
+      const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('#setup [data-act="setup"]')]);
+      if (tab) await tab.waitForURL(/[?]setup=/, { timeout: 5000 }).catch(() => {});
+      check(!!tab && tab.url() === PUSAT + '?setup=setup.1.sig', 'Siapkan XNK Pusat: tab baru ke XNK Pusat dengan tanda siap (bukan token sesi)');
+      if (tab) await tab.close();
       check(await page.evaluate(() => Object.keys(sessionStorage).every(k => k.startsWith('adminxnk:'))), 'token pemilik di sessionStorage berawalan adminxnk:');
       await page.click('#out');
       check(await page.isVisible('#pin') && (await page.textContent('#list')) === '', 'keluar: data dihapus dari layar');
