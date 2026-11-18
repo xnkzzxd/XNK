@@ -492,6 +492,7 @@ function getAppSettings(token) {
     telegramBotTokenMask: _maskSecret_(props.getProperty('TELEGRAM_BOT_TOKEN')),
     telegramChatIds: props.getProperty('TELEGRAM_CHAT_IDS') || '',
     notifEmail: props.getProperty('NOTIF_EMAIL') || '',
+    notifEmailReminders: _notifEmailMode_(),   // T-2254: off | on | auto
     clientGuideEnabled: _guideEnabled_(),
     feedbackEnabled: _feedbackEnabled_(),
     shareEnabled: _shareEnabled_(),
@@ -533,6 +534,11 @@ function updateAppSettingsImpl_(token, payload) {
   });
 
   const qrUrl = Object.prototype.hasOwnProperty.call(payload, 'shareQrUrl') ? _shareQrValidate_(payload.shareQrUrl) : null;
+  const hasKey = function (k) { return Object.prototype.hasOwnProperty.call(payload, k); };
+  const notifEmail = hasKey('notifEmail') ? String(payload.notifEmail == null ? '' : payload.notifEmail).trim() : null;
+  if (notifEmail && (notifEmail.length > 200 || !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(notifEmail))) throw new Error('Alamat email tidak valid.');
+  const emailMode = hasKey('notifEmailReminders') ? String(payload.notifEmailReminders == null ? '' : payload.notifEmailReminders).trim().toLowerCase() : null;
+  if (emailMode && NOTIF_EMAIL_MODES.indexOf(emailMode) < 0) throw new Error('Pilihan email ringkasan tidak dikenal.');
   const rmdMap = _rmdValidate_(payload.reminder);   // T-40: validasi dulu, tulis belakangan
   const finMap = _finValidate_(payload.finance);    // Fase H
 
@@ -545,7 +551,8 @@ function updateAppSettingsImpl_(token, payload) {
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'telegramBotToken')) setOrDelete('TELEGRAM_BOT_TOKEN', String(payload.telegramBotToken || '').trim());
   if (Object.prototype.hasOwnProperty.call(payload, 'telegramChatIds')) setOrDelete('TELEGRAM_CHAT_IDS', String(payload.telegramChatIds || '').trim());
-  if (Object.prototype.hasOwnProperty.call(payload, 'notifEmail')) setOrDelete('NOTIF_EMAIL', String(payload.notifEmail || '').trim());
+  if (notifEmail !== null) setOrDelete('NOTIF_EMAIL', notifEmail);
+  if (emailMode !== null) setOrDelete('NOTIF_EMAIL_REMINDERS', emailMode);
   if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'shareEnabled')) setOrDelete('SHARE_ENABLED', payload.shareEnabled ? '' : 'false');
   if (qrUrl !== null) setOrDelete('SHARE_QR_URL', qrUrl);
@@ -578,6 +585,7 @@ function sendTelegramTest(token, botToken, chatIds) {
   const url = 'https://api.telegram.org/bot' + botToken + '/sendMessage';
   const results = ids.map(function (id) {
     try {
+      _quotaFetch_();
       const res = UrlFetchApp.fetch(url, {
         method: 'post', contentType: 'application/json',
         payload: JSON.stringify({ chat_id: id, text: '✅ Tes notifikasi dari xnk.my.id — kalau pesan ini sampai, token & Chat ID sudah benar.' }),
@@ -1975,7 +1983,7 @@ function registerNewClient(data) {
   `;
 
   try {
-    MailApp.sendEmail({ to: _notifEmailRecipient_(), subject: (isExisting ? '🔁 Permintaan Perpanjang: ' : '💰 Pendaftaran PT Baru: ') + name, htmlBody: body });
+    _mailSend_({ to: _notifEmailRecipient_(), subject: (isExisting ? '🔁 Permintaan Perpanjang: ' : '💰 Pendaftaran PT Baru: ') + name, htmlBody: body });
   } catch (e) { Logger.log('Email pendaftaran gagal: ' + e); }
 
   try {
@@ -3281,7 +3289,7 @@ function clientBookSchedule(memberToken, scheduleData, opts) {
   `;
 
   // 1. Email ke pemilik akun (getEffectiveUser — getActiveUser kosong untuk pengunjung anonim)
-  try { MailApp.sendEmail({ to: _notifEmailRecipient_(), subject: subject, htmlBody: body }); } catch(e) { Logger.log('Email booking gagal: ' + e); }
+  try { _mailSend_({ to: _notifEmailRecipient_(), subject: subject, htmlBody: body }); } catch(e) { Logger.log('Email booking gagal: ' + e); }
 
   // 2. Notifikasi Telegram
   const pesanTelegram = "📅 <b>BOOKING SESI BARU!</b> 🎉\n\n" +
@@ -3578,7 +3586,7 @@ function sendDailyReminderEmail() {
 
     // 5. EKSEKUSI PENGIRIMAN EMAIL
     logToSheet_(`Mencoba mengirim email ke ${emailTujuan}`, "INFO");
-    MailApp.sendEmail({
+    _mailSend_({
       to: emailTujuan,
       subject: "🔔 Pengingat Jadwal PT Besok",
       htmlBody: emailBody
@@ -3689,7 +3697,7 @@ function sendWeeklyReportEmail() {
 
     // 5. Kirim email
     logToSheet_(`Mencoba mengirim laporan mingguan ke ${emailTujuan}`, "INFO");
-    MailApp.sendEmail({ to: emailTujuan, subject: "📊 Laporan Mingguan XNK Gym OS - " + periodeLabel, htmlBody: emailBody });
+    _mailSend_({ to: emailTujuan, subject: "📊 Laporan Mingguan XNK Gym OS - " + periodeLabel, htmlBody: emailBody });
     logToSheet_("Laporan mingguan email berhasil terkirim", "SUCCESS");
 
     // 6. Kirim juga ke Telegram (dual-channel, konsisten sama pola reminder harian)
@@ -3746,6 +3754,7 @@ function kirimNotifTelegram_(pesan) {
     };
     
     try {
+      _quotaFetch_();
       UrlFetchApp.fetch(url, options);
     } catch(e) {
       Logger.log("Gagal kirim notif ke ID " + id + ": " + e);

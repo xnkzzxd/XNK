@@ -91,6 +91,15 @@
     $('login').classList.toggle('hide', on); $('dash').classList.toggle('hide', !on); $('out').classList.toggle('hide', !on);
   }
   function when(iso) { if (!iso) return '-'; var d = new Date(iso); return isNaN(d) ? '-' : d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }); }
+  // T-2253: kuota Gmail hari ini (WIB) per coach; ≥ 70 % merah.
+  function quotaTiles(q, lim) {
+    var n = function (v) { return Number(v) || 0; };
+    var tile = function (v, max, label) {
+      var hot = n(v) >= n(max) * 0.7;
+      return '<div' + (hot ? ' class="bad"' : '') + '><b>' + esc(n(v).toLocaleString('id-ID')) + '<small class="mut"> / ' + esc(n(max).toLocaleString('id-ID')) + '</small></b><span>' + esc(label) + '</span></div>';
+    };
+    return '<div class="kv">' + tile(q.mail, lim.mail, 'email hari ini') + tile(q.fetch, lim.fetch, 'UrlFetch hari ini') + tile(q.triggerMin, lim.triggerMin, 'menit trigger hari ini') + '</div>';
+  }
   function render() {
     var d = data, rows = {}, html = '';
     d.coaches.forEach(function (c) { rows[c.slug] = c; });
@@ -109,6 +118,7 @@
           '<div><b>' + esc(x.clients.total) + '</b><span>total klien</span></div>' +
           '<div><b>' + esc(x.sessions.done7d) + '</b><span>sesi selesai 7 hari</span></div>' +
           '<div><b>' + esc(x.sessions.next7d) + '</b><span>sesi 7 hari ke depan</span></div></div>';
+        if (x.quota) html += quotaTiles(x.quota, d.quotaLimits || { mail: 100, fetch: 20000, triggerMin: 90 });
         html += '<div class="mut">Library ' + esc(x.lib ? String(x.lib.commit).slice(0, 7) : '-') + ' · pengingat ' + (x.reminders.enabled ? 'menyala, terakhir ' + esc(when(x.reminders.lastTickAt)) : 'mati') + '</div>';
       }
       html += '<div class="links" style="margin-top:10px"><a href="' + esc(c.panel) + '" target="_blank" rel="noopener">Panel</a><a href="' + esc(c.klien) + '" target="_blank" rel="noopener">Portal klien</a>' +

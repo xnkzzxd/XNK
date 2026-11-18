@@ -40,8 +40,21 @@ WA atau data kesehatan klien yang pernah sampai ke XNK Pusat.
 ## Yang dicek setiap pagi
 
 Server menjawab; versi Library = versi terbaru (tag `lib-v<N>`); trigger `runReminderTick` terpasang tepat satu;
-bila pengingat menyala, tick terakhir < 3 jam. Ada masalah = **satu email** ke pemilik dengan daftar coach dan
+bila pengingat menyala, tick terakhir < 3 jam; **kuota Google hari ini** (T-2253) di bawah 70 % untuk email
+(batas `QUOTA_MAIL`, bawaan 100), UrlFetch (`QUOTA_FETCH`, 20.000) dan menit trigger (`QUOTA_TRIGGER_MIN`, 90) —
+batas bisa ditimpa di Script Properties XNK Pusat. Ada masalah = **satu email** ke pemilik dengan daftar coach dan
 link dasbor. Tanpa masalah = tanpa email. Backup yang gagal **2 kali berturut-turut** ikut masuk email itu.
+
+Angka kuota datang dari `hubStatus().quota = {date, mail, fetch, triggerMin, mailRemaining, mailSkipped}` (hari WIB,
+angka saja). Di `/adminxnk` tiap kartu coach punya tiga ubin kecil: *email hari ini*, *UrlFetch hari ini*, *menit
+trigger hari ini* (angka / batas; merah ≥ 70 %). Coach dengan Library lama tanpa kuota tidak dicek dan tanpa ubin.
+
+## Email ringkasan coach (T-2254)
+
+Wizard setup punya isian **Email coach (opsional)** (disimpan `NOTIF_EMAIL`) dan memasang
+`NOTIF_EMAIL_REMINDERS=auto` bila belum pernah diatur: tanpa Telegram, ringkasan pengingat dikirim ke email itu
+(kosong = email akun Google coach). Coach bisa mengubahnya di Pengaturan → Notifikasi Admin (*Mati / Otomatis /
+Selalu*); wizard tidak menimpa pilihan itu.
 
 ## Backup mingguan (T-2250)
 

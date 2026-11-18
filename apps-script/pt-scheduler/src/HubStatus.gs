@@ -25,7 +25,7 @@ function _hubMs_(v) {
 /**
  * Status spreadsheet ini untuk XNK Pusat. Hanya angka.
  * @param {string} secret HUB_SECRET spreadsheet ini
- * @return {{at: string, lib: ?Object, api: number, triggers: Object, reminders: Object, clients: Object, sessions: Object}}
+ * @return {{at: string, lib: ?Object, api: number, triggers: Object, reminders: Object, clients: Object, sessions: Object, quota: Object}}
  */
 function hubStatus(secret) {
   _hubAuth_(secret);
@@ -55,6 +55,7 @@ function hubStatus(secret) {
     reminders: { enabled: props.getProperty('RMD_ENABLED') === 'true', lastTickAt: isNaN(last) ? '' : new Date(last).toISOString() },
     clients: { total: Math.max(0, md.getLastRow() - 1), active30d: Object.keys(active).length },
     sessions: { done7d: done7, next7d: next7 },
+    quota: _quotaToday_(),   // T-2253: email, fetch, menit trigger hari ini (WIB)
   };
 }
 

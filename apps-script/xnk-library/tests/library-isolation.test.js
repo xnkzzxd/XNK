@@ -140,6 +140,23 @@ test('saveSetup memvalidasi dulu, baru menulis', () => {
   assert.equal(A.store.props.SITE_URL, undefined);
 });
 
+test('saveSetup (T-2254): email coach opsional, ringkasan email otomatis sekali, pilihan coach dipertahankan', () => {
+  const env = createLibEnv();
+  const A = makeCtx('SS_A');
+  assert.throws(() => env.lib('saveSetup', A.ctx, { brand: 'X', pin: '123456', notifEmail: 'bukan email' }), /Alamat email tidak valid/);
+  assert.deepEqual(A.store.props, {});
+  env.lib('saveSetup', A.ctx, { brand: 'X', pin: '123456', notifEmail: ' coach@gym.id ' });
+  assert.equal(A.store.props.NOTIF_EMAIL, 'coach@gym.id');
+  assert.equal(A.store.props.NOTIF_EMAIL_REMINDERS, 'auto');
+  assert.equal(env.lib('setupState', A.ctx).notifEmail, 'coach@gym.id');
+  A.store.props.NOTIF_EMAIL_REMINDERS = 'off';   // coach mematikannya di Pengaturan
+  env.lib('saveSetup', A.ctx, { brand: 'X', pin: '' });
+  assert.equal(A.store.props.NOTIF_EMAIL_REMINDERS, 'off', 'wizard tidak menimpa pilihan coach');
+  assert.equal(A.store.props.NOTIF_EMAIL, 'coach@gym.id', 'tanpa isian email = tetap');
+  env.lib('saveSetup', A.ctx, { brand: 'X', pin: '', notifEmail: '' });
+  assert.equal(A.store.props.NOTIF_EMAIL, undefined, 'dikosongkan = kembali ke email akun');
+});
+
 test('doPost dan doGet lewat Library memakai spreadsheet pemanggil', () => {
   const { env, A, B } = setupTwo();
   const post = (ctx, fn, args) => JSON.parse(env.lib('handlePost', ctx, { postData: { contents: JSON.stringify({ fn, args }) } }).content);

@@ -98,6 +98,10 @@
         setField('Chat ID Telegram', '<input class="input" type="text" id="set-tgChat" data-k="tgChat" autocomplete="off" inputmode="numeric" placeholder="111111, 222222" value="' + h(d.telegramChatIds) + '">', 'tgChat', 'Pisahkan dengan koma kalau lebih dari satu.') +
         '<button type="button" class="btn btn-outline btn-block" id="btn-telegram-test" onclick="window.sendTelegramTest()">' + icon('send') + ' Kirim pesan tes</button>' +
         setField('Email Notifikasi', '<input class="input" type="email" id="set-email" data-k="email" autocomplete="off" placeholder="Kosongkan = email pemilik akun" value="' + h(d.notifEmail) + '">', 'email', '') +
+        setField('Kirim ringkasan ke email', '<select class="select" id="set-emailRmd" data-k="emailRmd">' +
+          [['off', 'Mati'], ['auto', 'Otomatis (bila Telegram belum diatur)'], ['on', 'Selalu']].map(function (o) {
+            return '<option value="' + o[0] + '"' + ((d.notifEmailReminders || 'off') === o[0] ? ' selected' : '') + '>' + h(o[1]) + '</option>';
+          }).join('') + '</select>', 'emailRmd', 'Ringkasan pengingat (sesi besok, PR, makan, …) dengan tombol WhatsApp per klien, ke Email Notifikasi.') +
         '</div>';
     },
     jam: function () {
@@ -741,6 +745,7 @@
       if (has('tgToken') && vals.tgToken.trim()) p.telegramBotToken = vals.tgToken.trim();
       if (has('tgChat')) p.telegramChatIds = vals.tgChat;
       if (has('email')) p.notifEmail = vals.email;
+      if (has('emailRmd')) p.notifEmailReminders = vals.emailRmd;
     } else if (id === 'jam') {
       const hours = {};
       for (let i = 0; i < 7; i++) hours[i] = [Number(vals['h' + i + 's']), Number(vals['h' + i + 'e'])];

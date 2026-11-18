@@ -24,6 +24,9 @@ function _resetLibMemos_() {
   _progMemo_ = null;
   _exAliasMemo_ = null;
   _lockDepth_ = 0;
+  _quotaAcc_ = null;
+  _quotaHold_ = 0;
+  _rmdCurJob_ = null;
 }
 
 function _ctxCheck_(ctx) {

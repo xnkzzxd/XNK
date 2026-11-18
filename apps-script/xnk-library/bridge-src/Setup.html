@@ -63,6 +63,9 @@
       <label for="pin2">Ulangi PIN</label>
       <input id="pin2" type="password" inputmode="numeric" autocomplete="new-password">
       <p class="mut" id="pinNote" style="margin-top:6px"></p>
+      <label for="coachEmail">Email coach (opsional)</label>
+      <input id="coachEmail" type="email" autocomplete="email" maxlength="200" placeholder="Kosongkan = email akun Google ini">
+      <p class="mut" style="margin-top:6px">Ringkasan pengingat (dengan tombol WhatsApp per klien) dikirim ke email ini bila Telegram belum diatur.</p>
       <button class="btn" id="b2" onclick="step2()">Simpan</button>
       <div class="msg" id="m2"></div>
     </div>
@@ -145,6 +148,7 @@
     if (s.siteUrl && s.siteUrl.indexOf(hubUrl + '/') === 0) $('slug').value = s.siteUrl.slice(hubUrl.length + 1).replace(/\/.*$/, '');
     else if (s.defaultSlug) $('slug').value = s.defaultSlug;
     slugChanged();
+    if (!$('coachEmail').value) $('coachEmail').value = s.notifEmail || '';
     $('pinNote').textContent = s.pin ? 'PIN sudah ada. Kosongkan bila tidak ingin mengganti.' : '';
     if (s.execUrl && !$('pusatExec').value) $('pusatExec').value = s.execUrl;
     if (s.execUrl) { $('exec').value = s.execUrl; $('execBox').classList.remove('hide'); }
@@ -157,7 +161,9 @@
   function step2() {
     var pin = $('pin').value.trim(), pin2 = $('pin2').value.trim();
     if (pin !== pin2) return say('m2', 'PIN dan ulangan PIN tidak sama.', 'bad');
-    call('setupSave', { brand: $('brand').value, pin: pin, siteUrl: (state && state.siteUrl) || '' }, function () {
+    var mail = $('coachEmail').value.trim();
+    if (mail && !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(mail)) return say('m2', 'Alamat email tidak valid.', 'bad');
+    call('setupSave', { brand: $('brand').value, pin: pin, siteUrl: (state && state.siteUrl) || '', notifEmail: mail }, function () {
       $('pin').value = ''; $('pin2').value = ''; show(3);
     }, 'b2', 'm2');
   }

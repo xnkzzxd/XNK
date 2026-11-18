@@ -38,6 +38,12 @@ function _warmPick_(schedules, nowMs, max) {
 
 /** Pemicu waktu (TRIGGER). Bisa dipanggil dari browser seperti semua fungsi publik, jadi dijaga sakelar, jam, kunci dan jeda. */
 function runWarmTick() {
+  const t0 = Date.now();
+  _quotaHoldStart_();   // T-2253: lama berjalan + fetch dihitung, ditulis sekali
+  try { return _warmTickRun_(); } finally { _quotaHoldEnd_(t0); }
+}
+
+function _warmTickRun_() {
   const res = { skipped: '', admin: '', clients: 0, ms: 0 };
   if (!_warmEnabled_()) { res.skipped = 'nonaktif'; return res; }
   const hour = _wibParts_(new Date()).hour;
