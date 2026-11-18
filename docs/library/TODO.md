@@ -69,7 +69,7 @@ Gelombang 3 — fitur
 - [ ] T-2243 Alias slug lama (redirect); `runWarmTick` opsional.
 
 Gelombang 4 — operasional
-- [ ] T-2250 Backup mingguan tiap coach ke Drive akun pemilik (lewat XNK Pusat), 8 minggu.
+- [x] T-2250 Backup mingguan tiap coach ke Drive akun pemilik (lewat XNK Pusat), 8 minggu.
 - [ ] T-2251 Langganan bulanan: jatuh tempo, pengingat, masa tenggang, mode baca saja (situs tidak dihapus).
 - [ ] T-2252 Coach keluar: ekspor untuk coach, nonaktifkan situs, hapus akun H+30.
 - [ ] T-2253 Kuota Gmail (menit trigger, fetch, email) dilaporkan; email di 70 %.
