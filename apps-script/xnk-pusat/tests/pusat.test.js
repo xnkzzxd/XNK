@@ -34,7 +34,7 @@ function env(opts) {
     ScriptApp: {
       getProjectTriggers: () => triggers.map(h => ({ getHandlerFunction: () => h })), deleteTrigger: t => triggers.splice(triggers.indexOf(t.getHandlerFunction()), 1),
       newTrigger: h => { const b = { timeBased: () => b, atHour: () => b, everyDays: () => b, everyHours: () => b, after: () => b, inTimezone: () => b, create: () => triggers.push(h) }; return b; },
-      getOAuthToken: () => 'tok-pusat',
+      getOAuthToken: () => 'tok-pusat', getScriptId: () => 'SCRIPTPUSAT',
       AuthMode: { FULL: 'FULL' }, AuthorizationStatus: { REQUIRED: 'REQUIRED', NOT_REQUIRED: 'NOT_REQUIRED' },
       getAuthorizationInfo: () => ({ getAuthorizationStatus: () => (opts.needAuth ? 'REQUIRED' : 'NOT_REQUIRED') }),
     },
@@ -164,7 +164,12 @@ test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet
   assert.match(e.ctx.doGet({ parameter: { setup: t.replace(/.$/, 'x') } }).content, /tidak berlaku/);
   assert.match(e.ctx.doGet({ parameter: { setup: tok } }).content, /tidak berlaku/, 'token sesi bukan tanda siap');
   assert.deepEqual(e.triggers, []);
-  assert.match(e.ctx.doGet({ parameter: { setup: t } }).content, /XNK Pusat siap/);
+  const msg = e.ctx.doGet({ parameter: { setup: t } }).content;
+  assert.match(msg, /izin Google baru .* belum diberikan/, 'jujur: izin baru tidak bisa lewat link web');
+  assert.match(msg, /https:\/\/script\.google\.com\/d\/SCRIPTPUSAT\/edit/);
+  assert.equal(e.call('pusatOverview', tok).data.setup.editor, 'https://script.google.com/d/SCRIPTPUSAT/edit');
+  const g = env(), gt = g.call('pusatAction', g.call('pusatLogin', 'pin-rahasia-1').data.token, 'setup').data.ticket;
+  assert.match(g.ctx.doGet({ parameter: { setup: gt } }).content, /XNK Pusat siap: izin Google lengkap/);
   e.ctx.doGet({ parameter: { setup: t } });
   assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup'], 'diulang tetap satu');
   const D = vm.runInContext('Date', e.ctx), real = D.now;
