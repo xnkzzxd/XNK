@@ -621,7 +621,7 @@
   window.settingsOpen = function (id) {
     if (id === setState.open) { if (isPhone()) $('settings-layout').setAttribute('data-open', '1'); return; }
     const go = function () {
-      if (isPhone()) { try { history.pushState({ xnkSet: id }, ''); setState.pushed = true; } catch (e) { setState.pushed = false; } }
+      if (isPhone()) { try { history.pushState(window.bkState({ xnkSet: id }), ''); setState.pushed = true; } catch (e) { setState.pushed = false; } }
       renderSettingsSection(id);
     };
     if (setState.dirty) settingsConfirmDiscard(function () { setState.dirty = false; go(); }); else go();
@@ -638,7 +638,7 @@
     const id = e.state && e.state.xnkSet;
     setState.subPop = !!setState.pushed && bkLevels() <= 1;   // entri yang terlepas milik sub-halaman, bukan lapisan umum
     if (!id && setState.open && setState.dirty && !setState.forcePop) {
-      try { history.pushState({ xnkSet: setState.open }, ''); } catch (err) {}
+      try { history.pushState(window.bkState({ xnkSet: setState.open }), ''); } catch (err) {}
       settingsConfirmDiscard(function () { setState.dirty = false; setState.forcePop = true; try { history.back(); } catch (err) { settingsShowList(); } });
       return;
     }

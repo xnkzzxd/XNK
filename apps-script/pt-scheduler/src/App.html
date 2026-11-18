@@ -1525,7 +1525,7 @@
   window.settingsOpen = function (id) {
     if (id === setState.open) { if (isPhone()) $('settings-layout').setAttribute('data-open', '1'); return; }
     const go = function () {
-      if (isPhone()) { try { history.pushState({ xnkSet: id }, ''); setState.pushed = true; } catch (e) { setState.pushed = false; } }
+      if (isPhone()) { try { history.pushState(window.bkState({ xnkSet: id }), ''); setState.pushed = true; } catch (e) { setState.pushed = false; } }
       renderSettingsSection(id);
     };
     if (setState.dirty) settingsConfirmDiscard(function () { setState.dirty = false; go(); }); else go();
@@ -1542,7 +1542,7 @@
     const id = e.state && e.state.xnkSet;
     setState.subPop = !!setState.pushed && bkLevels() <= 1;   // entri yang terlepas milik sub-halaman, bukan lapisan umum
     if (!id && setState.open && setState.dirty && !setState.forcePop) {
-      try { history.pushState({ xnkSet: setState.open }, ''); } catch (err) {}
+      try { history.pushState(window.bkState({ xnkSet: setState.open }), ''); } catch (err) {}
       settingsConfirmDiscard(function () { setState.dirty = false; setState.forcePop = true; try { history.back(); } catch (err) { settingsShowList(); } });
       return;
     }
@@ -1927,7 +1927,14 @@
   // Tiap lapisan yang terbuka (halaman selain beranda, panel detail, sheet)
   // memegang satu entri riwayat. Back menutup lapisan paling atas; di beranda
   // tanpa lapisan, back keluar dari aplikasi seperti biasa.
-  const bk = { n: 0, silent: false };
+  // bk.n = jumlah entri milik halaman ini di atas entri dasar. Tiap entri membawa nomornya (xnkBk) dan id muatan
+  // (xnkId), supaya posisi sebenarnya selalu bisa dibaca dari history.state. Chrome Android melompati entri yang
+  // dibuat tanpa ketukan saat tombol back sistem ditekan (satu popstate, beberapa entri hilang); tanpa nomor ini
+  // bk.n jadi lebih besar dari kenyataan dan tombol kembali di aplikasi keluar ke halaman sebelumnya (xnk.web.id).
+  const BK_ID = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const bk = { n: 0, silent: false, pend: 0, hold: false };
+  function bkPos(st) { return st && st.xnkId === BK_ID && typeof st.xnkBk === 'number' ? st.xnkBk : 0; }
+  window.bkState = function (extra) { return Object.assign({ xnkBk: bk.n, xnkId: BK_ID }, extra || {}); };
   function bkIsHome(v) { return v === 'dashboard' || v === 'public-dashboard' || v === 'public-login' || !v; }
   function bkLevels() {
     const panel = $('detail-panel');
@@ -1939,24 +1946,24 @@
       + (ui.guideOn ? 1 : 0);
   }
   function syncBack() {
-    if (!isPhone() || !window.history || !history.pushState) return;
+    if (bk.hold || !isPhone() || !window.history || !history.pushState) return;
     const want = bkLevels();
     try {
-      while (bk.n < want) { history.pushState({ xnkBk: bk.n + 1 }, ''); bk.n++; }
+      while (bk.n < want) { history.pushState({ xnkBk: bk.n + 1, xnkId: BK_ID }, ''); bk.n++; }
       if (bk.n > want) {
-        const k = bk.n - want;
-        bk.n = want; bk.silent = true;
-        setTimeout(function () { bk.silent = false; }, 600);
-        history.go(-k);
+        // Jangan pernah mundur melewati entri dasar halaman ini: posisi nyata dibaca dari history.state.
+        const k = Math.min(bk.n - want, Math.max(0, bkPos(history.state) - bk.pend));
+        bk.n = want;
+        if (k > 0) {
+          bk.silent = true; bk.pend += k;
+          setTimeout(function () { bk.silent = false; bk.pend = 0; }, 600);
+          history.go(-k);
+        }
       }
     } catch (e) {}
   }
   window.syncBack = syncBack;
-  window.addEventListener('popstate', function () {
-    if (bk.silent) { bk.silent = false; return; }
-    if (setState.subPop) { setState.subPop = false; return; }
-    if (!isPhone() || bk.n === 0) return;
-    bk.n--;
+  function bkCloseTop() {
     const panel = $('detail-panel');
     if (ui.guideOn) window.guideClose();
     else if (ui.sheetOn) window.closeModal();
@@ -1964,6 +1971,22 @@
     else if (ui.wlOn) window.wlClose();
     else if (panel && panel.classList.contains('open')) window.closeDetail();
     else if (!bkIsHome(window.currentView)) window.navigate(window.isPublicView ? (window.pubParent(window.currentView) || 'public-dashboard') : 'dashboard');
+  }
+  window.addEventListener('popstate', function (e) {
+    if (bk.silent) { bk.silent = false; bk.pend = 0; return; }
+    if (setState.subPop) { setState.subPop = false; return; }
+    if (!isPhone() || bk.n === 0) return;
+    // Tutup lapisan sampai sesuai posisi entri yang sekarang (biasanya satu; lebih bila browser melompati entri).
+    const pos = Math.min(bkPos(e.state), bk.n);   // entri sama dengan bk.n = popstate susulan, tidak ada yang ditutup
+    bk.n = pos;
+    bk.hold = true;
+    try {
+      for (let g = 0; g < 8 && bkLevels() > pos; g++) {
+        const before = bkLevels();
+        bkCloseTop();
+        if (bkLevels() >= before) break;   // lapisan ini minta konfirmasi dulu
+      }
+    } catch (err) {} finally { bk.hold = false; }
     syncBack();
   });
 
