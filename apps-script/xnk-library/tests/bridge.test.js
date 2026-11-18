@@ -13,7 +13,7 @@ const LOCAL_OK = {
   showSetup: 'butuh UI spreadsheet', initializeTemplate: 'Library: requireOwner_', checkLibraryConnection: 'hanya versi',
   getLibraryVersion: 'hanya versi', setupTriggers: 'Library: requireOwner_', validateConfiguration: 'Library: requireOwner_',
   setupGetState: 'Library: requireOwner_', setupInit: 'Library: requireOwner_', setupSave: 'Library: requireOwner_',
-  setupCheck: 'Library: requireOwner_',
+  setupCheck: 'Library: requireOwner_', setupRegisterPusat: 'Library: requireOwner_ (registerPusat)',
 };
 
 test('setiap fungsi API dan trigger punya pembungkus; fungsi lokal hanya yang dikenal', () => {
@@ -110,4 +110,17 @@ test('pengunjung web tidak bisa menjalankan setup lewat penghubung', () => {
   assert.throws(() => A.call('setupSave', { brand: 'X', pin: '999999' }), /hanya bisa dijalankan pemilik/);
   assert.deepEqual(A.store.props, {});
   assert.equal(A.call('getLibraryVersion').api, 1);
+});
+
+test('isian awal wizard dari workflow Coach XNK (T-2231): slug dan nama usaha di penghubung, diperiksa dulu', () => {
+  const b = require('../tools/build-bridge');
+  const api = b.build({ libId: 'abcdefghijklmnopqrstuvwxyz', libVersion: '3', slug: 'gym-andi', brand: 'Gym "Andi"' }).files['PenghubungApi.gs'];
+  assert.match(api, /var XNK_DEFAULT_SLUG = "gym-andi";/);
+  assert.match(api, /var XNK_DEFAULT_BRAND = "Gym \\"Andi\\"";/);
+  assert.match(b.build({ libId: 'abcdefghijklmnopqrstuvwxyz' }).files['PenghubungApi.gs'], /var XNK_DEFAULT_SLUG = "";/, 'XNK Template: kosong');
+  assert.throws(() => b.build({ slug: 'Gym Andi' }), /--slug tidak valid/);
+  assert.throws(() => b.build({ brand: 'x'.repeat(61) }), /--brand/);
+  const setup = require('fs').readFileSync(require('path').join(__dirname, '..', 'bridge-src', 'Setup.html'), 'utf8');
+  assert.match(setup, /s\.defaultSlug/);
+  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'bridge-src', 'Penghubung.gs'), 'utf8'), /s\.defaultSlug = typeof XNK_DEFAULT_SLUG/);
 });

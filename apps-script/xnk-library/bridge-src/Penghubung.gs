@@ -98,6 +98,10 @@ function setupGetState() {
   checkLibraryConnection();
   const s = XNK.setupState(ctx_());
   s.hubUrl = XNK_HUB_URL;
+  // Isian awal dari workflow "Coach XNK" (spreadsheet dibuat otomatis); kosong pada salinan XNK Template.
+  s.defaultSlug = typeof XNK_DEFAULT_SLUG === 'string' ? XNK_DEFAULT_SLUG : '';
+  s.defaultBrand = typeof XNK_DEFAULT_BRAND === 'string' ? XNK_DEFAULT_BRAND : '';
+  s.pusat = typeof XNK_PUSAT_URL === 'string' && !!XNK_PUSAT_URL;
   return s;
 }
 
@@ -111,6 +115,13 @@ function setupSave(data) {
 
 function setupCheck() {
   return validateConfiguration();
+}
+
+/** Daftarkan spreadsheet ini ke XNK Pusat (dasbor pemilik /adminxnk, T-2233). Logikanya di Library. */
+function setupRegisterPusat(data) {
+  checkLibraryConnection();
+  data = data || {};
+  return XNK.registerPusat(ctx_(), { pusatUrl: typeof XNK_PUSAT_URL === 'string' ? XNK_PUSAT_URL : '', code: data.code, slug: data.slug });
 }
 
 // ── pembantu ────────────────────────────────────────────────────────────────────────────────────────────

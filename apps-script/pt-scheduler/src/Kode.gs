@@ -6788,7 +6788,8 @@ function saveContentImpl_(token, data) {
       throw new Error('Konten tidak ditemukan.');
     }
     if (rows.length - 1 >= L.items) throw new Error('Konten sudah mencapai batas ' + L.items + '. Hapus yang tidak terpakai dulu.');
-    const nid = 'CNT-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+    // Akhiran acak 8 huruf hex (dulu 0–999: dua konten di milidetik yang sama bisa ber-ID sama, lalu hapus salah sasaran).
+    const nid = 'CNT-' + new Date().getTime() + '-' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
     _appendRow_(sheet, [nid, tipe, judul, isi, url, kategori, sematkan, mulai, sampai, aktif, new Date().toISOString()]);
     return { status: 'success', id: nid, updated: false };
   } finally {

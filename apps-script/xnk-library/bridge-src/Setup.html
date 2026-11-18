@@ -102,6 +102,14 @@
       <div class="msg" id="m4"></div>
       <ul class="check" id="checks"></ul>
     </div>
+    <div class="card hide" id="pusatBox">
+      <h2>Daftarkan ke XNK Pusat</h2>
+      <p>Supaya pengelola XNK bisa memantau kesehatan aplikasi ini (versi, pengingat, jumlah klien &mdash; tanpa nama atau nomor klien). Minta kodenya ke pengelola XNK.</p>
+      <label for="pusatCode">Kode daftar</label>
+      <input id="pusatCode" type="password" autocomplete="off">
+      <button class="btn" id="b6" onclick="registerPusat()">Daftarkan</button>
+      <div class="msg" id="m6"></div>
+    </div>
     <div class="card hide" id="sendBox">
       <h2>Kirim ke pengelola XNK</h2>
       <p>Supaya alamat Anda aktif, kirim data ini ke pengelola XNK (mis. lewat WhatsApp).</p>
@@ -128,10 +136,11 @@
   }
   function fill(s) {
     state = s;
-    $('brand').value = s.brand || '';
+    $('brand').value = s.brand || s.defaultBrand || '';
     hubUrl = (s.hubUrl || 'https://xnk.web.id').replace(/\/+$/, '');
     $('hubPre').textContent = hubUrl.replace(/^https:\/\//, '') + '/';
     if (s.siteUrl && s.siteUrl.indexOf(hubUrl + '/') === 0) $('slug').value = s.siteUrl.slice(hubUrl.length + 1).replace(/\/.*$/, '');
+    else if (s.defaultSlug) $('slug').value = s.defaultSlug;
     slugChanged();
     $('pinNote').textContent = s.pin ? 'PIN sudah ada. Kosongkan bila tidak ingin mengganti.' : '';
     if (s.execUrl) { $('exec').value = s.execUrl; $('execBox').classList.remove('hide'); }
@@ -182,8 +191,14 @@
         $('checks').innerHTML = html;
         $('sendText').value = 'Nama di alamat: ' + v + '\nNama usaha: ' + ($('brand').value || (state && state.brand) || '') + '\nLink aplikasi: ' + (r.setup.execUrl || '');
         $('sendBox').classList.remove('hide');
+        if (state && state.pusat) $('pusatBox').classList.remove('hide');
       }, 'b4', 'm4');
     }, 'b4', 'm4');
+  }
+  function registerPusat() {
+    var v = slugValue();
+    if (!slugOk(v)) return say('m6', 'Isi nama di alamat dulu.', 'bad');
+    call('setupRegisterPusat', { code: $('pusatCode').value, slug: v }, function () { $('pusatCode').value = ''; say('m6', 'Terdaftar di XNK Pusat.', 'ok'); }, 'b6', 'm6');
   }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 

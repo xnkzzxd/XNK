@@ -1,0 +1,101 @@
+name: Coach XNK
+
+# Mengelola spreadsheet dan Apps Script setiap coach lewat clasp (Gelombang 2, T-2230…T-2232), tanpa membuka laptop:
+#  - perbarui  (otomatis setiap hari 02:37 WIB, atau manual): pasang versi Library terbaru di penghubung coach dan
+#              terbitkan ulang deployment yang SAMA (link /exec tidak berubah). slug kosong = semua coach; coach
+#              pertama di daftar adalah kenari: bila ia gagal, coach lain tidak disentuh.
+#  - baru      buat spreadsheet + Apps Script di akun Google coach, pasang penghubung, terbitkan web app, simpan ke
+#              hub.json. Setelah itu pemilik membuka spreadsheet → menu XNK → Mulai setup (izin Google + PIN).
+#  - hubungkan coach yang dibuat dulu dari XNK Template (mis. claudia): cari proyek script-nya di akun itu dan simpan
+#              scriptId/deploymentId supaya bisa ikut "perbarui".
+# Kredensial: secret CLASP_<SLUG> (huruf besar, "-" jadi "_") berisi .clasprc.json dari `clasp login` akun coach.
+# Akun itu harus menyalakan Google Apps Script API (script.google.com/home/usersettings). Lihat README repo ini.
+on:
+  workflow_dispatch:
+    inputs:
+      aksi:
+        description: 'perbarui = pasang Library terbaru · baru = coach baru · hubungkan = coach lama (dari XNK Template)'
+        type: choice
+        options: [perbarui, baru, hubungkan]
+        default: perbarui
+      slug:
+        description: 'Nama di alamat (mis. claudia). Untuk "perbarui": kosong = semua coach'
+        required: false
+      brand:
+        description: 'Nama usaha, hanya untuk "baru"'
+        required: false
+      paksa:
+        description: 'perbarui: kerjakan juga coach yang sudah terbaru'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '37 19 * * *'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: coach
+  cancel-in-progress: false
+
+jobs:
+  coach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versi Library terbaru
+        id: lib
+        run: |
+          tag=$(git ls-remote --tags https://github.com/xnkzzxd/XNK.git 'lib-v*' | grep -oE 'lib-v[0-9]+$' | sort -t v -k 2 -n | tail -1)
+          if [ -z "$tag" ]; then echo "::error::Repo XNK belum punya tag lib-v<N> (workflow XNK Library belum menerbitkan versi bertag)."; exit 1; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # Kode penghubung dibangun dari commit yang sama dengan versi Library itu.
+      - uses: actions/checkout@v4
+        with:
+          repository: xnkzzxd/XNK
+          ref: ${{ steps.lib.outputs.tag }}
+          path: _xnk
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install -g @google/clasp@2.4.2
+
+      - name: Jalankan
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          IN_AKSI: ${{ github.event_name == 'schedule' && 'perbarui' || inputs.aksi }}
+          IN_SLUG: ${{ inputs.slug }}
+          IN_BRAND: ${{ inputs.brand }}
+          IN_PAKSA: ${{ inputs.paksa && '--paksa' || '' }}
+        run: |
+          set -e
+          T=_xnk/apps-script/xnk-library/tools/coach-ops.js
+          case "$IN_AKSI" in
+            perbarui) node "$T" perbarui hub.json "${IN_SLUG:-semua}" $IN_PAKSA --xnk _xnk ;;
+            baru)     node "$T" baru hub.json "$IN_SLUG" "$IN_BRAND" --xnk _xnk ;;
+            hubungkan) node "$T" hubungkan hub.json "$IN_SLUG" --xnk _xnk ;;
+            *) echo "::error::Aksi tidak dikenal: $IN_AKSI"; exit 1 ;;
+          esac
+
+      - name: Simpan hub.json
+        if: always()
+        run: |
+          if git diff --quiet -- hub.json; then echo "hub.json tidak berubah."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add hub.json
+          git commit -m "Coach: ${{ github.event_name == 'schedule' && 'perbarui' || inputs.aksi }} ${{ inputs.slug }}"
+          git push
+
+      # Push dari workflow tidak memicu workflow lain; situs dibangun ulang supaya halaman mengikuti versi baru.
+      - name: Bangun ulang situs hub
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run hub.yml -f aksi=bangun -R "$GITHUB_REPOSITORY"

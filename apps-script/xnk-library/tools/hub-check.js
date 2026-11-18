@@ -51,11 +51,25 @@ function serve(files) {
 }
 
 const XNK_HITS = [], LIB_HITS = [], CSP_HITS = [];
+// XNK Pusat palsu untuk /adminxnk (T-2234): jawaban berbentuk sama dengan apps-script/xnk-pusat/src/Pusat.gs.
+const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSATHUBCHECK00000000000/exec';
+const PUSAT_CALLS = [];
+function fakePusat(req) {
+  PUSAT_CALLS.push(req.fn);
+  if (req.fn === 'pusatLogin') return req.args[0] === 'pin-pusat-1' ? { ok: true, data: { token: 'T1', exp: Date.now() + 3600e3 } } : { ok: false, error: 'PIN salah.' };
+  if (req.args[0] !== 'T1') return { ok: false, auth: true, error: 'Sesi berakhir. Masuk lagi.' };
+  if (req.fn === 'pusatAction') return { ok: true, data: { started: req.args[1], slug: req.args[2] } };
+  const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 } } });
+  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, coaches: [
+    { slug: 'claudia', exec: EXEC_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []) },
+  ] } };
+}
 
 async function newContext(browser, be, seen) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await context.route(/^https:\/\/script\.google(usercontent)?\.com\//, route => {
     const u = route.request().url();
+    if (u === PUSAT) return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(fakePusat(JSON.parse(route.request().postData() || '{}'))) });
     if (route.request().method() !== 'POST') return route.fulfill({ status: 404, body: '' });
     seen.push(u);
     const ctx = u.startsWith(EXEC_A) ? be.A.ctx : u.startsWith(EXEC_B) ? be.B.ctx : null;
@@ -87,7 +101,7 @@ async function panelLogin(page, pin) {
 
 (async () => {
   const be = backend();
-  const cfg = { contactUrl: 'https://wa.me/6281234567890', coaches: [
+  const cfg = { contactUrl: 'https://wa.me/6281234567890', pusatUrl: PUSAT, coaches: [
     { slug: 'claudia', brand: 'Claudia Fit', exec: EXEC_A },
     { slug: 'claudia-2', brand: 'Claudia Dua', exec: EXEC_B },
   ] };
@@ -129,6 +143,34 @@ async function panelLogin(page, pin) {
       const r = await page.goto(O + '/tidak-ada/', { waitUntil: 'domcontentloaded' });
       check(r.status() === 404 && (await page.textContent('h1')).includes('tidak ditemukan'), 'coach yang tidak ada → halaman 404 yang ramah');
       check(errors.length === 0, 'tanpa error JavaScript' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
+      await context.close();
+    }
+
+    console.log('Hub · /adminxnk (XNK Pusat)');
+    {
+      const seen = [], errors = [];
+      const context = await newContext(browser, be, seen);
+      const page = await open(context, O + '/adminxnk/', errors);
+      check(await page.isVisible('#pin') && !(await page.isVisible('#dash')), 'awal: hanya form PIN, tanpa data');
+      await page.fill('#pin', 'salah');
+      await page.click('#go');
+      await page.waitForFunction(() => document.getElementById('lm').textContent.includes('PIN salah'), null, { timeout: 5000 }).catch(() => {});
+      check(((await page.textContent('#lm')) || '').includes('PIN salah'), 'PIN salah → pesan');
+      await page.fill('#pin', 'pin-pusat-1');
+      await page.click('#go');
+      await page.waitForSelector('#list article', { timeout: 5000 }).catch(() => {});
+      const text = await page.textContent('#list');
+      check(text.includes('Claudia Fit') && text.includes('Semua beres') && text.includes('13'), 'kartu coach: nama usaha dari hub.json, status, angka klien');
+      check(text.includes('Claudia Dua') && text.includes('Belum terdaftar di XNK Pusat'), 'coach di hub.json yang belum mendaftar ditandai');
+      check(((await page.textContent('#sum')) || '').includes('Library terbaru v11'), 'ringkasan: versi Library terbaru');
+      page.once('dialog', d => d.accept());
+      await page.click('[data-act="perbarui"][data-slug="claudia"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('GitHub Actions'), null, { timeout: 5000 }).catch(() => {});
+      check(PUSAT_CALLS.includes('pusatAction'), 'tombol Perbarui menjalankan aksi lewat XNK Pusat');
+      check(await page.evaluate(() => Object.keys(sessionStorage).every(k => k.startsWith('adminxnk:'))), 'token pemilik di sessionStorage berawalan adminxnk:');
+      await page.click('#out');
+      check(await page.isVisible('#pin') && (await page.textContent('#list')) === '', 'keluar: data dihapus dari layar');
+      check(errors.length === 0, 'tanpa error JavaScript / CSP' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close();
     }
 

@@ -173,3 +173,24 @@ test('getServerInfo lewat doPost: versi API dan sidik build Library (commit penu
   const u = JSON.parse(env.lib('handlePost', A.ctx, { postData: { contents: JSON.stringify({ fn: 'fungsiBaru', args: [] }) } }).content);
   assert.equal(u.code, 'unknown_fn');
 });
+
+test('registerPusat (T-2233): rahasia baru dikirim ke XNK Pusat; disimpan hanya bila diterima; hanya pemilik', () => {
+  const { env, A } = setupTwo();
+  const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSAT000000000000000000/exec';
+  const sent = [];
+  let answer = { ok: false, error: 'Kode daftar XNK Pusat salah.' };
+  env.context.UrlFetchApp.fetch = (url, o) => { sent.push({ url, body: JSON.parse(o.payload) }); return { getResponseCode: () => 200, getContentText: () => JSON.stringify(answer) }; };
+  assert.throws(() => env.lib('registerPusat', A.ctx, { pusatUrl: '', code: 'x', slug: 'gym-andi' }), /belum diatur/);
+  assert.throws(() => env.lib('registerPusat', A.ctx, { pusatUrl: PUSAT, code: 'salah', slug: 'gym-andi' }), /Kode daftar/);
+  assert.equal(A.store.props.HUB_SECRET, undefined, 'ditolak = tidak ada rahasia tersimpan');
+  answer = { ok: true, data: { registered: true } };
+  assert.equal(env.lib('registerPusat', A.ctx, { pusatUrl: PUSAT, code: 'benar', slug: 'gym-andi' }).registered, true);
+  const last = sent[sent.length - 1];
+  assert.equal(last.url, PUSAT);
+  assert.equal(last.body.fn, 'pusatRegister');
+  assert.deepEqual(last.body.args.slice(0, 2), ['benar', 'gym-andi']);
+  assert.match(last.body.args[2], /\/exec$/);
+  assert.equal(A.store.props.HUB_SECRET, last.body.args[3]);
+  assert.ok(A.store.props.HUB_SECRET.length >= 32);
+  libraryUntouched(env);
+});
