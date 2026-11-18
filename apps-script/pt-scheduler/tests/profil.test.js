@@ -52,6 +52,25 @@ test('a partial save keeps the other choices', () => {
   assert.equal(out.motto, 'Pelan asal jalan');
 });
 
+test('T-2242: a client who never picked a colour stays unset (the coach accent is the default); a pick sets it', () => {
+  const env = seededEnv();
+  const tok = env.memberToken(KEY_A);
+  assert.equal(more(env, KEY_A).profile.aksenSet, false);
+  env.call('saveMyProfileCard', tok, { motto: 'Pelan asal jalan', gaya: 'garis' });
+  assert.equal(JSON.parse(cell(env, 'PT-A', 46)).a, undefined, 'saving other fields does not store a colour');
+  let m = more(env, KEY_A);
+  assert.equal(m.profile.aksenSet, false);
+  assert.equal(m.profile.aksen, 'hitam');
+  assert.equal(m.profile.gaya, 'garis');
+  env.now = Date.now() + 3000;
+  env.call('saveMyProfileCard', tok, { aksen: 'hitam' });
+  m = more(env, KEY_A);
+  assert.equal(m.profile.aksenSet, true, 'black chosen on purpose wins over the coach accent');
+  env.now = Date.now() + 6000;
+  env.call('saveMyProfileCard', tok, { motto: 'Lagi' });
+  assert.equal(JSON.parse(cell(env, 'PT-A', 46)).a, 'hitam', 'a chosen colour is kept by later saves');
+});
+
 test('validation: unknown values, long text, formula-looking text, wrong stat count and unearned badges are refused', () => {
   const env = seededEnv();
   const tok = env.memberToken(KEY_A);

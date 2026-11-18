@@ -7,6 +7,7 @@ Satu situs untuk semua coach:
 | `xnk.web.id/` | Halaman depan XNK: kotak "nama coach" untuk masuk |
 | `xnk.web.id/<slug>/` | Panel coach (masuk dengan PIN) |
 | `xnk.web.id/<slug>/klien/` | Portal klien (masuk dengan nomor WhatsApp). Link ini yang dibagikan ke klien |
+| `xnk.web.id/<slug>/info/` | Halaman publik coach: profil, paket dan harga, jam kosong, tombol Daftar / Booking dan WhatsApp. Cocok untuk bio Instagram |
 
 `<slug>` = nama coach di alamat, mis. `claudia`: huruf kecil, angka, tanda hubung, 3 sampai 30 karakter.
 
@@ -26,6 +27,20 @@ Bila isian salah (slug dipakai sistem, link bukan `/exec`, dua coach memakai lin
 - **Mengubah** nama usaha atau link: jalankan lagi dengan aksi `simpan` dan slug yang sama.
 - **Menghapus**: aksi `hapus` dan slug. Alamat itu langsung tidak aktif, jadi klien coach itu tidak bisa membukanya.
 - **Jangan mengganti slug** coach yang sudah dipakai: link yang sudah dibagikan ke klien akan putus. Bila terpaksa, tambahkan slug baru dan hapus yang lama setelah klien diberi tahu.
+
+## Warna dan logo coach
+
+Setiap coach boleh punya **warna aksen** dan **logo** sendiri. Keduanya tampil di panel, portal klien, halaman info,
+ikon di Layar Utama HP, dan kartu coach di halaman depan. Warna yang dipilih klien sendiri di portal tetap menang.
+
+1. **Logo (opsional):** repo ini → **Add file → Upload files**, taruh gambar di folder `logo/` (mis. `logo/claudia.png`), lalu **Commit changes**.
+   Syarat: PNG, JPEG atau WebP, maksimal 200 KB, sebaiknya persegi (192–512 px). **SVG tidak diterima.**
+2. **Actions → Hub XNK → Run workflow**: *aksi* = `simpan`, *slug* = `claudia`, *warna* = mis. `biru`,
+   *logo* = `logo/claudia.png`. Nama usaha dan link /exec boleh dikosongkan (tetap seperti sebelumnya).
+3. Tunggu centang hijau. Bila logo salah (tidak ada, terlalu besar, bukan gambar), workflow berhenti dengan pesan dan situs lama tetap tayang.
+
+- *warna* `tetap` = tidak diubah, `hitam` = kembali tanpa warna.
+- *logo* kosong = tidak diubah, `-` = hapus logo (kembali ke huruf pertama).
 
 ## Coach XNK: buat, hubungkan, perbarui spreadsheet coach (otomatis)
 

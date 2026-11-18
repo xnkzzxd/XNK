@@ -21,6 +21,20 @@ const SITE = path.join(HERE, 'hub-site');
 const RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
   'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
+const HUB_ORIGIN = 'https://xnk.web.id';
+// T-2242: warna aksen coach = tujuh pilihan portal Fase X (pt-scheduler/parts/theme/05-portal-x.part; 'hitam' = tanpa).
+// Nilai disalin dari sana (dicek tests/hub.test.js): [terang --accent, --on-accent, gelap --accent, --on-accent, --accent-on-ink].
+const ACCENTS = {
+  biru: ['#1d4ed8', '#ffffff', '#60a5fa', '#0b0b0b', '#60a5fa'],
+  hijau: ['#15803d', '#ffffff', '#4ade80', '#0b0b0b', '#4ade80'],
+  toska: ['#0f766e', '#ffffff', '#2dd4bf', '#0b0b0b', '#2dd4bf'],
+  ungu: ['#6d28d9', '#ffffff', '#a78bfa', '#0b0b0b', '#a78bfa'],
+  pink: ['#be185d', '#ffffff', '#f472b6', '#0b0b0b', '#f472b6'],
+  oranye: ['#c2410c', '#ffffff', '#fb923c', '#0b0b0b', '#fb923c'],
+};
+const ACCENT_NAMES = ['hitam'].concat(Object.keys(ACCENTS));
+const LOGO_MAX = 200 * 1024;
+const LOGO_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
 const sha = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 10);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -32,8 +46,61 @@ function slugError(slug) {
   return '';
 }
 
-/** Periksa hub.json; lempar galat Indonesia pertama yang ditemukan. */
-function readHub(cfg) {
+/** Jenis gambar dari isi berkas (bukan dari nama): 'png' | 'jpeg' | 'webp' | ''. */
+function imageKind(b) {
+  if (b.length >= 8 && b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpeg';
+  if (b.length >= 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  return '';
+}
+
+/** Lebar × tinggi dari kepala berkas (untuk "sizes" di manifest); null bila tidak terbaca. */
+function imageSize(b, kind) {
+  try {
+    if (kind === 'png') return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    if (kind === 'webp') {
+      const f = b.toString('latin1', 12, 16);
+      if (f === 'VP8 ') return [b.readUInt16LE(26) & 0x3fff, b.readUInt16LE(28) & 0x3fff];
+      if (f === 'VP8L') { const v = b.readUInt32LE(21); return [(v & 0x3fff) + 1, ((v >> 14) & 0x3fff) + 1]; }
+      if (f === 'VP8X') return [1 + b.readUIntLE(24, 3), 1 + b.readUIntLE(27, 3)];
+    }
+    if (kind === 'jpeg') {
+      for (let i = 2; i + 9 < b.length;) {
+        if (b[i] !== 0xff) return null;
+        const m = b[i + 1];
+        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
+        i += 2 + b.readUInt16BE(i + 2);
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+/** T-2242: periksa logo coach (berkas di repo hub). Kembalikan { ext, type, body, size, sig }. */
+function readLogo(rel, baseDir, slug) {
+  const where = `hub.json, "${slug}": logo "${rel}"`;
+  if (!/^[A-Za-z0-9._\/-]{1,120}$/.test(rel) || /\\/.test(rel) || rel.startsWith('/') || rel.split('/').some(x => x === '..' || x === '.' || x === ''))
+    throw new Error(`${where} tidak valid: tulis jalur berkas di repo hub, mis. logo/${slug}.png (huruf, angka, titik, tanda hubung, garis miring; tanpa "..").`);
+  const ext = (rel.match(/\.([a-z]+)$/i) || ['', ''])[1].toLowerCase();
+  if (ext === 'svg') throw new Error(`${where}: SVG tidak boleh dipakai (bisa berisi skrip). Pakai PNG, JPEG atau WebP.`);
+  if (!LOGO_TYPES[ext]) throw new Error(`${where}: jenis berkas harus .png, .jpg, .jpeg atau .webp.`);
+  const file = path.join(baseDir, rel);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error(`${where} tidak ditemukan di repo hub. Unggah dulu berkasnya (Add file → Upload files), lalu jalankan lagi.`);
+  const body = fs.readFileSync(file);
+  if (body.length > LOGO_MAX) throw new Error(`${where} terlalu besar (${Math.ceil(body.length / 1024)} KB); maksimal 200 KB. Perkecil gambarnya dulu.`);
+  const kind = imageKind(body);
+  if (/^\s*</.test(body.toString('latin1', 0, 64))) throw new Error(`${where} berisi teks/SVG, bukan gambar. Pakai PNG, JPEG atau WebP.`);
+  if (!kind) throw new Error(`${where} bukan gambar PNG, JPEG atau WebP yang utuh.`);
+  if (LOGO_TYPES[ext] !== LOGO_TYPES[kind === 'jpeg' ? 'jpg' : kind]) throw new Error(`${where}: isi berkas ${kind.toUpperCase()}, tetapi namanya .${ext}. Samakan nama dengan jenisnya.`);
+  return { ext: kind === 'jpeg' ? 'jpg' : kind, type: LOGO_TYPES[ext], body, size: imageSize(body, kind), sig: crypto.createHash('sha256').update(body).digest('hex').slice(0, 10) };
+}
+
+/**
+ * Periksa hub.json; lempar galat Indonesia pertama yang ditemukan.
+ * opts.baseDir = folder repo hub (tempat hub.json), untuk berkas logo; bawaan = folder kerja.
+ */
+function readHub(cfg, opts) {
+  const baseDir = (opts && opts.baseDir) || process.cwd();
   if (!cfg || typeof cfg !== 'object' || !Array.isArray(cfg.coaches)) throw new Error('hub.json: "coaches" harus berupa daftar.');
   const contact = String(cfg.contactUrl || '').trim();
   if (contact && !/^https:\/\/[^\s'"<>\\]+$/.test(contact)) throw new Error('hub.json: "contactUrl" harus link https:// tanpa spasi.');
@@ -57,6 +124,12 @@ function readHub(cfg) {
       out[k] = String(c[k]);
     }
     if (out.deploymentId && !conf.exec.includes('/s/' + out.deploymentId + '/exec')) throw new Error(`hub.json, "${slug}": deploymentId tidak cocok dengan link /exec.`);
+    // T-2242: warna aksen dan logo (keduanya boleh kosong).
+    const accent = String(c.accent == null ? '' : c.accent).trim().toLowerCase();
+    if (accent && !ACCENT_NAMES.includes(accent)) throw new Error(`hub.json, "${slug}": warna "${accent}" tidak dikenal; pilih ${ACCENT_NAMES.slice(0, -1).join(', ')}, atau ${ACCENT_NAMES[ACCENT_NAMES.length - 1]}.`);
+    if (accent && accent !== 'hitam') out.accent = accent;
+    const logo = String(c.logo == null ? '' : c.logo).trim();
+    if (logo) { out.logo = logo; out.logoFile = readLogo(logo, baseDir, slug); }
     return out;
   });
   const execs = coaches.map(c => c.exec);
@@ -115,20 +188,25 @@ const CSP_APP = [
 
 function cspMeta(policy) { return `<meta http-equiv="Content-Security-Policy" content="${policy}">`; }
 
-/** CSP ketat untuk halaman statis hub: hanya skrip inline yang sidiknya cocok. extraConnect: host tambahan (adminxnk → Apps Script). */
-function cspStatic(html, extraConnect) {
+/**
+ * CSP ketat untuk halaman statis hub: hanya skrip inline yang sidiknya cocok.
+ * extra: string = host connect tambahan (adminxnk → Apps Script), atau { connect, img } (halaman info coach).
+ */
+function cspStatic(html, extra) {
+  const ex = typeof extra === 'string' ? { connect: extra } : (extra || {});
+  const extraConnect = ex.connect;
   const hashes = [];
   html.replace(/<script>([\s\S]*?)<\/script>/g, (m, body) => { hashes.push(`'sha256-${crypto.createHash('sha256').update(body).digest('base64')}'`); return m; });
   if (/<script\s+[^>]*src=/i.test(html.replace(/<script\s+src="\/sw\.js"/g, ''))) throw new Error('build-hub: halaman hub memuat skrip luar; perbarui CSP di build-hub.js.');
   if (/\son[a-z]+="/i.test(html)) throw new Error('build-hub: halaman hub memakai onclick="…"; CSP ketatnya menolak itu.');
-  const policy = ["default-src 'self'", `script-src 'self' ${hashes.join(' ')}`.trim(), "style-src 'self' 'unsafe-inline'", "img-src 'self' data:",
+  const policy = ["default-src 'self'", `script-src 'self' ${hashes.join(' ')}`.trim(), "style-src 'self' 'unsafe-inline'", `img-src 'self' data:${ex.img ? ' ' + ex.img : ''}`,
     `connect-src 'self'${extraConnect ? ' ' + extraConnect : ''}`, "manifest-src 'self'", "worker-src 'self'", "frame-src 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'self'"].join('; ');
   if (!/<head>\n/.test(html)) throw new Error('build-hub: <head> tidak ditemukan di halaman hub.');
   return html.replace('<head>\n', '<head>\n' + cspMeta(policy) + '\n');
 }
 
 /** Sisipkan penyimpanan per slug di awal <head> dan kunci service worker supaya hash dan awalan cache unik. */
-function isolate(files, dir, slug, kind) {
+function isolate(files, dir, slug, kind, extraSig) {
   const shim = fs.readFileSync(path.join(SITE, 'storage-prefix.js'), 'utf8').split('__SLUG__').join(slug);
   if (shim.includes('__SLUG__')) throw new Error('build-hub: __SLUG__ tersisa');
   const idx = dir + 'index.html';
@@ -143,9 +221,83 @@ function isolate(files, dir, slug, kind) {
   sw = sw.replace(/^var PREFIX = .*$/m, () => { n++; return `var PREFIX = ${JSON.stringify('xnk-page-' + slug + '~' + kind + '~')};`; });
   if (n !== 1) throw new Error('build-hub: baris PREFIX di sw-app.js tidak ditemukan; sesuaikan build-hub.js dengan tools/sw-app.template.js.');
   n = 0;
-  sw = sw.replace(/^var HASH = "([0-9a-f]+)";$/m, (m, h) => { n++; return `var HASH = "${sha(h + shim + LIB_MARK)}";`; });
+  sw = sw.replace(/^var HASH = "([0-9a-f]+)";$/m, (m, h) => { n++; return `var HASH = "${sha(h + shim + LIB_MARK + (extraSig || ''))}";`; });
   if (n !== 1) throw new Error('build-hub: baris HASH di sw-app.js tidak ditemukan.');
   files[swf] = sw;
+}
+
+/** CSS aksen untuk halaman hub (terang, gelap sistem, gelap pilihan), sama dengan Theme.html. */
+function accentCss() {
+  return Object.entries(ACCENTS).map(([k, v]) =>
+    `html[data-accent="${k}"] { --accent: ${v[0]}; --on-accent: ${v[1]}; --accent-on-ink: ${v[4]}; }\n` +
+    `  @media (prefers-color-scheme: dark) { html:not([data-theme="light"])[data-accent="${k}"] { --accent: ${v[2]}; --on-accent: ${v[3]}; } }\n` +
+    `  html[data-theme="dark"][data-accent="${k}"] { --accent: ${v[2]}; --on-accent: ${v[3]}; }`).join('\n  ');
+}
+
+/** Sidik warna + logo: ikut HASH service worker, supaya HP memuat ulang halaman bila tampilannya berubah. */
+function brandSig(c) { return (c.accent || '') + '|' + (c.logoFile ? c.logoFile.sig : ''); }
+
+function manifestFor(c, start, kind) {
+  const icons = c.logoFile
+    ? [{ src: `/${c.slug}/logo.${c.logoFile.ext}`, type: c.logoFile.type, sizes: c.logoFile.size ? c.logoFile.size.join('x') : 'any', purpose: 'any' }]
+    : [{ src: `/${c.slug}/icon.svg`, type: 'image/svg+xml', sizes: 'any', purpose: 'any' }];
+  return JSON.stringify({ name: c.brand + (kind === 'panel' ? ' · Coach' : ''), short_name: c.brand.slice(0, 12), start_url: start, scope: start, display: 'standalone',
+    background_color: '#fafaf9', theme_color: c.accent ? ACCENTS[c.accent][0] : '#0b0b0b', icons }, null, 1) + '\n';
+}
+
+/**
+ * T-2242: warna aksen dan logo coach di halaman panel/portal yang sudah dibangun (versi kode mana pun). Penanda yang
+ * tidak ada di halaman lama dilewati diam-diam: halaman tetap jalan, hanya tanpa tambahan itu.
+ */
+function brandPage(files, dir, c, kind) {
+  const idx = dir + 'index.html';
+  let html = files[idx];
+  if (c.accent) html = html.replace(/<html lang="id">/, `<html lang="id" data-accent="${c.accent}" data-brand-accent="${c.accent}">`);
+  const icon = c.logoFile ? `/${c.slug}/logo.${c.logoFile.ext}` : `/${c.slug}/icon.svg`;
+  const head = [`<link rel="manifest" href="/${c.slug}/${dir.endsWith('klien/') ? 'klien/' : ''}manifest.webmanifest">`];
+  if (c.logoFile) {
+    html = html.replace(/<link rel="icon" href="(\.\.\/)?icon\.svg" type="image\/svg\+xml">/, `<link rel="icon" href="${icon}" type="${c.logoFile.type}">`);
+    head.push(`<link rel="apple-touch-icon" href="${icon}">`);
+    // Logo menggantikan tanda XNK (.logo-mark: layar masuk, sidebar, bar atas, layar pembuka, gambar layar masuk klien).
+    head.push(`<style>.logo-mark{background:url("${icon}") center/cover no-repeat!important;-webkit-mask:none!important;mask:none!important;border-radius:22%}` +
+      `.auth-logo:has(.logo-mark),.avatar:has(>.logo-mark){background:transparent!important;box-shadow:none!important}` +
+      `.auth-logo>.logo-mark,.avatar>.logo-mark{width:100%!important;height:100%!important;border-radius:inherit}</style>`);
+  }
+  if (/<\/head>/.test(html)) html = html.replace('</head>', head.join('\n') + '\n</head>');
+  files[idx] = html;
+  files[dir + 'manifest.webmanifest'] = manifestFor(c, dir.endsWith('klien/') ? `/${c.slug}/klien/` : `/${c.slug}/`, kind);
+  // Logo ikut salinan offline service worker (baris ASSETS ada sejak Fase AAA; tidak ketemu = dilewati).
+  if (c.logoFile && typeof files[dir + 'sw-app.js'] === 'string') {
+    files[dir + 'sw-app.js'] = files[dir + 'sw-app.js'].replace(/^var ASSETS = \[(.*)\];/m, (m, inner) => `var ASSETS = [${inner}${inner.trim() ? ', ' : ''}${JSON.stringify(icon)}];`);
+  }
+}
+
+/** T-2241: halaman publik /<slug>/info/ (profil, paket, jam kosong, daftar), CSP ketat. */
+function infoPage(c) {
+  let t = fs.readFileSync(path.join(SITE, 'info.html'), 'utf8');
+  const url = `${HUB_ORIGIN}/${c.slug}/info/`;
+  const desc = `${c.brand}: personal trainer. Lihat paket, harga, dan jam kosong, lalu daftar online.`;
+  const logo = c.logoFile ? `/${c.slug}/logo.${c.logoFile.ext}` : '';
+  const ini = esc((c.brand.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase());
+  const cfg = { exec: c.exec, slug: c.slug, brand: c.brand, klien: `/${c.slug}/klien/` };
+  const swaps = {
+    '__ACCENT_ATTR__': c.accent ? ` data-accent="${c.accent}"` : '',
+    '__THEME_KEY__': JSON.stringify(c.slug + ':xnk_theme'),
+    '__TITLE__': esc(c.brand + ' · Personal trainer'),
+    '__DESC__': esc(desc), '__URL__': esc(url), '__BRAND__': esc(c.brand), '__KLIEN__': esc(cfg.klien),
+    '<!--OGIMAGE-->': logo ? `<meta property="og:image" content="${esc(HUB_ORIGIN + logo)}">` : '',
+    '<!--ICON-->': `<link rel="icon" href="${logo || `/${c.slug}/icon.svg`}" type="${logo ? c.logoFile.type : 'image/svg+xml'}">`,
+    '<!--MARK-->': `<span class="mark" aria-hidden="true">${logo ? `<img src="${logo}" alt="">` : ini}</span>`,
+    '/*ACCENTS*/': accentCss(),
+    '/*__CFG__*/null': JSON.stringify(cfg).replace(/</g, '\\u003c'),
+  };
+  for (const [k, v] of Object.entries(swaps)) {
+    if (!t.includes(k)) throw new Error('build-hub: penanda ' + k + ' tidak ada di hub-site/info.html');
+    t = t.split(k).join(v);
+  }
+  if (/__[A-Z_]+__/.test(t)) throw new Error('build-hub: penanda tersisa di halaman info ' + c.slug);
+  // Foto coach dari Drive (lh3.googleusercontent.com / drive.google.com); data hanya ke Apps Script coach.
+  return cspStatic(t, { connect: 'https://script.google.com https://script.googleusercontent.com', img: 'https://drive.google.com https://*.googleusercontent.com' });
 }
 
 /**
@@ -157,7 +309,7 @@ function isolate(files, dir, slug, kind) {
 function build(cfg, opts) {
   opts = opts || {};
   const versions = opts.versions || {};
-  const hub = readHub(cfg);
+  const hub = readHub(cfg, { baseDir: opts.baseDir });
   const files = {};
   const built = {};
   let latest = null;   // sidik Library dari kode terbaru (dibaca "Cek kesehatan" di spreadsheet coach)
@@ -171,8 +323,12 @@ function build(cfg, opts) {
       sub[c.slug + '/' + n] = body;
     }
     localLibs(sub, c.slug + '/');
-    isolate(sub, c.slug + '/', c.slug, 'panel');
-    isolate(sub, c.slug + '/klien/', c.slug, 'klien');
+    isolate(sub, c.slug + '/', c.slug, 'panel', brandSig(c));
+    isolate(sub, c.slug + '/klien/', c.slug, 'klien', brandSig(c));
+    brandPage(sub, c.slug + '/', c, 'panel');
+    brandPage(sub, c.slug + '/klien/', c, 'klien');
+    if (c.logoFile) sub[`${c.slug}/logo.${c.logoFile.ext}`] = c.logoFile.body;
+    sub[c.slug + '/info/index.html'] = infoPage(c);
     Object.assign(files, sub);
     built[c.slug] = { commit: v && v.commit || 'terbaru', hash: t.hash };
   }
@@ -194,12 +350,17 @@ function build(cfg, opts) {
   const sec = /\r?\n *<div class="coach-list" id="coach" data-coaches>[\s\S]*?<\/div><!--\/coaches-->/;
   if (!sec.test(landing) || !landing.includes('<!--COACHES-->')) throw new Error('build-hub: bagian data-coaches / <!--COACHES--> tidak ada di hub-site/index.html');
   if (hub.coaches.length) {
+    // T-2241/T-2242: kartu coach membuka halaman info; logo (bila ada) atau huruf pertama di atas warna aksen coach.
     landing = landing.replace('<!--COACHES-->', hub.coaches.map(c =>
-      `<a class="card coach" href="/${c.slug}/klien/"><span class="av" aria-hidden="true">${esc(c.brand.trim().charAt(0).toUpperCase() || '?')}</span>` +
+      `<a class="card coach" href="/${c.slug}/info/"><span class="av${c.accent ? ' acc-' + c.accent : ''}${c.logoFile ? ' logo' : ''}" aria-hidden="true">` +
+      (c.logoFile ? `<img src="/${c.slug}/logo.${c.logoFile.ext}" alt="" width="48" height="48">` : esc(c.brand.trim().charAt(0).toUpperCase() || '?')) + '</span>' +
       `<div><b>${esc(c.brand)}</b><span>xnk.web.id/${c.slug}</span></div><svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a>`).join(''));
   } else {
     landing = landing.replace(sec, '').split('<a href="#coach">Coach</a>').join('').replace('Bisa juga dicari di daftar coach di atas, atau tanyakan', 'Bisa juga ditanyakan');
   }
+  if (!landing.includes('/*ACCENTS*/')) throw new Error('build-hub: /*ACCENTS*/ tidak ada di hub-site/index.html');
+  landing = landing.replace('/*ACCENTS*/', Object.entries(ACCENTS).map(([k, v]) =>
+    `.coach .av.acc-${k} { background: ${v[0]}; color: ${v[1]}; } @media (prefers-color-scheme: dark) { .coach .av.acc-${k} { background: ${v[2]}; color: ${v[3]}; } }`).join('\n  '));
   files['index.html'] = cspStatic(landing);
   for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
   // Bisa dipasang (PWA): manifest + service worker yang hanya melayani halaman depan; nama cache ikut isi landing.
@@ -235,7 +396,7 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, slugError, RESERVED, SLUG_RE, CSP_APP };
+module.exports = { build, write, readHub, slugError, readLogo, imageKind, imageSize, RESERVED, SLUG_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
@@ -246,7 +407,7 @@ if (require.main === module) {
   if (!out || !cfgFile) { console.error('pakai: build-hub.js <outDir> --config hub.json [--versions versions.json]'); process.exit(1); }
   try {
     const versions = verFile ? JSON.parse(fs.readFileSync(verFile, 'utf8')) : {};
-    const r = build(JSON.parse(fs.readFileSync(cfgFile, 'utf8')), { versions });
+    const r = build(JSON.parse(fs.readFileSync(cfgFile, 'utf8')), { versions, baseDir: path.dirname(path.resolve(cfgFile)) });
     write(path.resolve(out), r.files);
     console.log(`Hub XNK: ${r.coaches.length} coach (${r.coaches.map(c => c.slug).join(', ') || '-'}), ${Object.keys(r.files).length} berkas → ${out}`);
   } catch (e) {

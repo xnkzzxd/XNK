@@ -4,8 +4,12 @@
   window.myX = {};
   const X = () => window.myX || {};
   // Warna aksen pilihan klien berlaku di seluruh portal; 'hitam' (bawaan) = tanpa atribut.
+  // T-2242: di hub xnk.web.id halaman coach membawa warna coach di <html data-brand-accent>; itu bawaan panel, layar masuk
+  // dan klien yang belum pernah memilih (profile.aksenSet === false). Pilihan klien sendiri (termasuk hitam) menang.
+  const brandAccent = () => document.documentElement.getAttribute('data-brand-accent') || '';
+  window.effAccent = function (p) { return p && p.aksenSet === false ? (brandAccent() || 'hitam') : (p && p.aksen) || 'hitam'; };
   window.applyAccent = function () {
-    const a = ui.mode === 'public' && window.publicLoggedMember && X().profile ? X().profile.aksen : '';
+    const a = ui.mode === 'public' && window.publicLoggedMember && X().profile ? window.effAccent(X().profile) : brandAccent();
     if (a && a !== 'hitam') document.documentElement.setAttribute('data-accent', a); else document.documentElement.removeAttribute('data-accent');
   };
   const BADGE_CODE = { 'sesi-10': '10', 'sesi-25': '25', 'sesi-50': '50', 'sesi-100': '100', 'streak-4': '4W', 'streak-8': '8W', 'streak-12': '12W', 'catat-5': 'L5', 'catat-20': 'L20', 'pr-1': 'PR', 'pr-10': 'P10' };
@@ -283,13 +287,13 @@
     const wrap = $('set-accent-wrap'), p = X().profile, on = !!(p && window.publicLoggedMember && ui.mode === 'public');
     if (!wrap) return;
     wrap.classList.toggle('hide', !on);
-    if (on) setHTML('set-accent', accentSwatches(p.aksen, 'window.setAccent'));
+    if (on) setHTML('set-accent', accentSwatches(window.effAccent(p), 'window.setAccent'));
   }
   window.setAccent = function (a) {
     const p = X().profile;
-    if (!p || p.aksen === a) return;
-    const old = p.aksen, put = function (v) { p.aksen = v; window.applyAccent(); savePortalCache(); setAccentDraw(); window.renderPortalX(); if (window.currentView === 'public-more') renderPublicMore(); };
-    put(a);
+    if (!p || (p.aksenSet !== false && p.aksen === a)) return;
+    const old = { aksen: p.aksen, aksenSet: p.aksenSet }, put = function (v) { Object.assign(p, v); window.applyAccent(); savePortalCache(); setAccentDraw(); window.renderPortalX(); if (window.currentView === 'public-more') renderPublicMore(); };
+    put({ aksen: a, aksenSet: true });
     optimistic({ q: { mode: 'member', fn: 'saveMyProfileCard', args: [{ panggilan: p.panggilan, motto: p.motto, aksen: a, gaya: p.gaya, stat: p.stat.slice(), badge: p.badge.slice() }] }, ok: 'Warna aksen disimpan.', label: 'Warna aksen', undo: function () { put(old); } });
   };
   const openSettingsBase = window.openSettings;
@@ -564,7 +568,8 @@
   window.openProfileEdit = function () {
     const p = X().profile;
     if (!p) { window.showToast('Data profil belum termuat. Coba lagi sebentar.'); return; }
-    pcx.d = { panggilan: p.panggilan, motto: p.motto, aksen: p.aksen, gaya: p.gaya, stat: p.stat.slice(), badge: p.badge.slice() };
+    pcx.d = { panggilan: p.panggilan, motto: p.motto, aksen: window.effAccent(p), gaya: p.gaya, stat: p.stat.slice(), badge: p.badge.slice() };
+    pcx.a0 = pcx.d.aksen;
     pcDraw();
     openSheet('sheet-profile-edit');
     pcx.on = true;
@@ -622,11 +627,13 @@
     const bad = t => /^[=+\-@]/.test(t);
     if (d.stat.length < lim.statMin) { $('pc-err').textContent = 'Pilih ' + lim.statMin + ' atau ' + lim.statMax + ' statistik.'; return; }
     if (bad(d.panggilan) || bad(d.motto)) { $('pc-err').textContent = 'Nama panggilan dan motto tidak boleh diawali tanda = + - atau @.'; return; }
-    const old = { panggilan: p.panggilan, motto: p.motto, aksen: p.aksen, gaya: p.gaya, stat: p.stat, badge: p.badge, nama: p.nama };
+    const old = { panggilan: p.panggilan, motto: p.motto, aksen: p.aksen, aksenSet: p.aksenSet, gaya: p.gaya, stat: p.stat, badge: p.badge, nama: p.nama };
     const put = function (v) { Object.assign(p, v); window.applyAccent(); savePortalCache(); window.renderPortalX(); if (window.currentView === 'public-more') renderPublicMore(); };
     const send = { panggilan: d.panggilan, motto: d.motto, aksen: d.aksen, gaya: d.gaya, stat: d.stat.slice(), badge: d.badge.slice() };
+    // Warna coach yang hanya ditampilkan (belum pernah dipilih) tidak disimpan sebagai pilihan klien.
+    if (p.aksenSet === false && d.aksen === pcx.a0) delete send.aksen;
     pcx.on = false;
-    put(Object.assign({}, send, { nama: d.panggilan || String(me.name || '').split(' ')[0] }));
+    put(Object.assign({}, send, { nama: d.panggilan || String(me.name || '').split(' ')[0] }, send.aksen ? { aksenSet: true } : {}));
     optimistic({ q: { mode: 'member', fn: 'saveMyProfileCard', args: [send] }, sheet: true, errEl: 'pc-err', ok: 'Profil disimpan.', label: 'Profil', undo: function () { put(old); pcx.on = true; } });
   };
   // Lembar ditutup tanpa menyimpan: warna aksen kembali ke yang tersimpan.
