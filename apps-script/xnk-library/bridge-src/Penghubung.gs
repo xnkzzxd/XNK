@@ -121,7 +121,7 @@ function setupCheck() {
 function setupRegisterPusat(data) {
   checkLibraryConnection();
   data = data || {};
-  return XNK.registerPusat(ctx_(), { pusatUrl: typeof XNK_PUSAT_URL === 'string' ? XNK_PUSAT_URL : '', code: data.code, slug: data.slug });
+  return XNK.registerPusat(ctx_(), { pusatUrl: typeof XNK_PUSAT_URL === 'string' ? XNK_PUSAT_URL : '', code: data.code, slug: data.slug, exec: data.exec });
 }
 
 // ── pembantu ────────────────────────────────────────────────────────────────────────────────────────────

@@ -169,7 +169,7 @@ function saveSetup(ctx, data) {
  * /exec, dengan kode daftar dari pemilik XNK. HUB_SECRET disimpan hanya bila XNK Pusat menerima, jadi kode yang
  * salah tidak memutus pendaftaran lama. Hanya pemilik spreadsheet.
  * @param {Object} ctx layanan milik spreadsheet pemanggil
- * @param {{pusatUrl: string, code: string, slug: string}} data
+ * @param {{pusatUrl: string, code: string, slug: string, exec?: string}} data
  * @return {{registered: boolean}}
  */
 function registerPusat(ctx, data) {
@@ -178,7 +178,11 @@ function registerPusat(ctx, data) {
     data = data || {};
     var url = String(data.pusatUrl || '');
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(url)) throw new Error('Alamat XNK Pusat belum diatur di kode penghubung ini.');
-    var exec = _execUrl_();
+    // Link yang ditempel pemilik (Deploy → Kelola deployment) menang: getService().getUrl() dari editor bisa memberi
+    // link uji (HEAD) yang minta login Google.
+    var pasted = String(data.exec || '').trim();
+    if (pasted && !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(pasted)) throw new Error('Link aplikasi harus berbentuk https://script.google.com/macros/s/…/exec.');
+    var exec = pasted || _execUrl_();
     if (!exec) throw new Error('Terbitkan aplikasi web dulu (langkah 3).');
     var secret = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
     var j = null;

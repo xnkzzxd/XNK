@@ -28,6 +28,11 @@ WA atau data kesehatan klien yang pernah sampai ke XNK Pusat.
 4. Repo hub → `hub.json`: tambahkan `"pusatUrl": "<XNK_PUSAT_URL>"`. Situs dibangun ulang dan
    `xnk.web.id/adminxnk/` aktif.
 5. Setiap coach: spreadsheet → **XNK → Mulai setup → langkah 4 → Daftarkan ke XNK Pusat** (isi kode daftar).
+   Kotak **Link aplikasi (/exec)** terisi otomatis; bila XNK Pusat menolak dengan "tidak bisa dibuka tanpa login", tempel
+   link dari **Deploy → Kelola deployment** (akses "Siapa saja"), bukan link uji. XNK Pusat mencoba link itu dulu
+   (`getServerInfo`) sebelum menyimpan, dan untuk coach yang ada di `hub.json` selalu memakai link dari `hub.json`
+   (`hubExec_`, dibaca dari repo hub, disimpan 10 menit) — link dari `ScriptApp.getService().getUrl()` di editor bisa
+   berupa link uji yang meminta login Google. Galat pemeriksaan menyebut kode HTTP, host, dan judul halaman.
    Coach yang dibuat workflow **Coach XNK** setelah langkah 4 di atas sudah membawa alamat Pusat; XNK Template
    membawanya setelah versi Library berikutnya terbit.
 
