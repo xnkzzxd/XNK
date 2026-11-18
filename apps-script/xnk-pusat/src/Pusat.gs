@@ -13,12 +13,19 @@
 
 var PUSAT_SESSION_MS = 12 * 3600 * 1000;
 var PUSAT_TICK_LATE_MS = 3 * 3600 * 1000;      // pengingat menyala tapi tick terakhir lebih lama dari ini = masalah
+// T-2253: batas harian akun Gmail biasa; ≥ 70 % dari salah satunya = masalah. Bisa ditimpa Script Properties.
+var PUSAT_QUOTA_WARN = 0.7;
+var PUSAT_QUOTA_DEFAULTS = { mail: 100, fetch: 20000, triggerMin: 90 };
 var PUSAT_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 var PUSAT_EXEC_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/;
 
 function props_() { return PropertiesService.getScriptProperties(); }
 function prop_(k, d) { var v = props_().getProperty(k); return v == null || v === '' ? (d == null ? '' : d) : String(v); }
 function json_(k, d) { try { var v = props_().getProperty(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+function quotaLimits_() {
+  var n = function (k, d) { var v = Number(prop_(k, '')); return isFinite(v) && v > 0 ? v : d; };
+  return { mail: n('QUOTA_MAIL', PUSAT_QUOTA_DEFAULTS.mail), fetch: n('QUOTA_FETCH', PUSAT_QUOTA_DEFAULTS.fetch), triggerMin: n('QUOTA_TRIGGER_MIN', PUSAT_QUOTA_DEFAULTS.triggerMin) };
+}
 function hubUrl_() { return prop_('HUB_URL', 'https://xnk.web.id').replace(/\/+$/, ''); }
 
 // ── Pintu JSON untuk /adminxnk dan wizard coach ──────────────────────────────────────────────────────────────
@@ -208,6 +215,13 @@ function checkOne_(slug, c, latest) {
     var last = new Date(d.reminders.lastTickAt || 0).getTime();
     if (!last || Date.now() - last > PUSAT_TICK_LATE_MS) st.problems.push('Pengingat menyala tetapi tidak berjalan sejak ' + (last ? new Date(last).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'awal') + '.');
   }
+  if (d.quota && typeof d.quota === 'object') {   // Library lama tanpa kuota = tidak dicek
+    var lim = quotaLimits_(), names = { mail: 'Kuota email', fetch: 'Kuota UrlFetch', triggerMin: 'Menit trigger' };
+    Object.keys(names).forEach(function (k) {
+      var v = Number(d.quota[k]) || 0;
+      if (v >= lim[k] * PUSAT_QUOTA_WARN) st.problems.push(names[k] + ' hari ini ' + v + ' dari ' + lim[k] + ' (≥ 70 %).');
+    });
+  }
   st.ok = st.problems.length === 0;
   return st;
 }
@@ -243,6 +257,7 @@ function pusatOverview(token) {
     hub: hub,
     latest: latestLib_(),
     canAct: !!prop_('GITHUB_TOKEN'),
+    quotaLimits: quotaLimits_(),
     coaches: Object.keys(all).sort().map(function (slug) {
       return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null) };
     }),

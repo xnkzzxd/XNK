@@ -75,6 +75,7 @@ function kirimTelegramTombol_(teks, buttons) {
       var payload = { chat_id: id, text: text, parse_mode: 'HTML' };
       if (chunk.length) payload.reply_markup = { inline_keyboard: chunk.map(function(b) { return [b]; }) };
       try {
+        _quotaFetch_();
         var res = UrlFetchApp.fetch(url, {
           method: 'post', contentType: 'application/json',
           payload: JSON.stringify(payload), muteHttpExceptions: true
@@ -387,6 +388,7 @@ function _rmdWrite_(map) {
 // =============================================================================
 
 var REMINDER_TZ = 'Asia/Jakarta';
+let _rmdCurJob_ = null;   // T-2254: {jenis, slot} job yang sedang jalan di runReminderTick
 var REMINDER_TICK_TOLERANCE_HOURS = 1;     // jam terlambat yang masih diterima
 var REMINDER_TICK_MIN_GAP_MS = 5 * 60000;  // throttle: tick tidak diproses < 5 menit dari sebelumnya
 
@@ -472,6 +474,12 @@ function _wibParts_(now) {
  * @returns {{ran:Array, skipped:string}}
  */
 function runReminderTick() {
+  var t0 = Date.now();
+  _quotaHoldStart_();   // T-2253: hitungan kuota ditulis sekali di akhir tick
+  try { return _reminderTickRun_(); } finally { _quotaHoldEnd_(t0); }
+}
+
+function _reminderTickRun_() {
   var props = PropertiesService.getScriptProperties();
   var res = { ran: [], skipped: '' };
   if (props.getProperty('RMD_ENABLED') !== 'true') { res.skipped = 'nonaktif'; return res; }
@@ -495,8 +503,10 @@ function runReminderTick() {
       if (typeof fn !== 'function') { Logger.log('Handler ' + d.job.handler + ' belum ada, dilewati.'); return; }
       if (_alreadySent_(d.job.jenis, d.slot, '*')) return;
       var ok = false;
+      _rmdCurJob_ = { jenis: d.job.jenis, slot: d.slot };   // T-2254: kunci per saluran di _rmdSendDigest_
       try { ok = fn({ slot: d.slot, now: now }) === true; }
       catch (e) { Logger.log('Reminder ' + d.job.jenis + ' error: ' + e); }
+      finally { _rmdCurJob_ = null; }
       _logReminder_(d.job.jenis, d.slot, '*', ok ? 'ok' : 'gagal');
       res.ran.push(d.job.jenis + '|' + d.slot + '|' + (ok ? 'ok' : 'gagal'));
     });
@@ -728,13 +738,119 @@ function _rmdDigestMessage_(title, dateLabel, items, noPhoneNames) {
   return { text: text, buttons: buttons };
 }
 
-/** Kirim digest. Tanpa penerima = tidak ada pesan, dianggap selesai. @returns {boolean} true = selesai. */
+/**
+ * Kirim digest. Tanpa penerima = tidak ada pesan, dianggap selesai. @returns {boolean} true = selesai.
+ * T-2254: bila ringkasan email diminta (_emailDigestWanted_), digest juga dikirim ke email coach. Saat itu tiap
+ * saluran punya baris ReminderLog sendiri (`jenis|slot|telegram`, `jenis|slot|email`), jadi tick ulang hanya mengirim
+ * saluran yang belum 'ok' (tidak pernah dobel). Email mati = jalur lama persis (tanpa baris tambahan).
+ */
 function _rmdSendDigest_(title, dateLabel, items, noPhoneNames) {
   if (!items.length) { Logger.log(title + ': tidak ada penerima, tidak ada yang dikirim.'); return true; }
   var m = _rmdDigestMessage_(title, dateLabel, items, noPhoneNames);
-  var r = kirimTelegramTombol_(m.text, m.buttons);
-  Logger.log(title + ': ' + JSON.stringify(r));
-  return !r.skipped && r.sent > 0 && r.failed === 0;
+  var tgReady = _telegramReady_();
+  if (!_emailDigestWanted_(tgReady)) {
+    var r = kirimTelegramTombol_(m.text, m.buttons);
+    Logger.log(title + ': ' + JSON.stringify(r));
+    return !r.skipped && r.sent > 0 && r.failed === 0;
+  }
+  var job = _rmdCurJob_;
+  var done = function (target) { return !!job && _alreadySent_(job.jenis, job.slot, target); };
+  var mark = function (target, ok) { if (job) _logReminder_(job.jenis, job.slot, target, ok ? 'ok' : 'gagal'); };
+  var tgOk = true, mailOk = true;
+  if (tgReady && !done('telegram')) {
+    var t = kirimTelegramTombol_(m.text, m.buttons);
+    Logger.log(title + ' (Telegram): ' + JSON.stringify(t));
+    tgOk = !t.skipped && t.sent > 0 && t.failed === 0;
+    mark('telegram', tgOk);
+  }
+  if (!done('email')) {
+    var e = kirimEmailTombol_(m.text, m.buttons, title, items.length);
+    Logger.log(title + ' (email): ' + JSON.stringify(e));
+    mailOk = e.sent > 0;
+    // Kuota email hampir habis dan Telegram siap: Telegram sudah membawa ringkasannya, email tidak dicoba lagi.
+    if (!mailOk && e.skipped === 'kuota' && tgReady && tgOk) mailOk = true;
+    mark('email', e.sent > 0);
+  }
+  return tgOk && mailOk;
+}
+
+/** Telegram siap kirim (guard sama dengan kirimTelegramTombol_). */
+function _telegramReady_() {
+  var props = PropertiesService.getScriptProperties();
+  var ids = String(props.getProperty('TELEGRAM_CHAT_IDS') || '').split(',').map(function(id) { return id.trim(); }).filter(String);
+  return props.getProperty('TELEGRAM_ENABLED') !== 'false' && !!props.getProperty('TELEGRAM_BOT_TOKEN') && ids.length > 0;
+}
+
+var NOTIF_EMAIL_MODES = ['off', 'on', 'auto'];
+
+/** T-2254: NOTIF_EMAIL_REMINDERS = off (bawaan) | on | auto (email hanya bila Telegram belum diatur). */
+function _notifEmailMode_() {
+  var v = String(PropertiesService.getScriptProperties().getProperty('NOTIF_EMAIL_REMINDERS') || '').trim().toLowerCase();
+  return NOTIF_EMAIL_MODES.indexOf(v) >= 0 ? v : 'off';
+}
+
+function _emailDigestWanted_(tgReady) {
+  var mode = _notifEmailMode_();
+  if (mode === 'on') return true;
+  if (mode === 'auto') return !(tgReady == null ? _telegramReady_() : tgReady);
+  return false;
+}
+
+/** Murni: HTML Telegram (<b>, <i>, teks sudah di-escape) → HTML email aman. Tag lain dibuang. */
+function _rmdTgToEmailHtml_(teks) {
+  return String(teks == null ? '' : teks)
+    .replace(/<(\/?)(b|i)>/g, '\u0001$1$2\u0002')
+    .replace(/<[^>]*>/g, '')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\u0001(\/?)b\u0002/g, '<$1strong>')
+    .replace(/\u0001(\/?)i\u0002/g, '<$1em>')
+    .replace(/\r?\n/g, '<br>');
+}
+
+/** Murni: atribut HTML aman. */
+function _rmdAttr_(v) {
+  return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
+}
+
+/**
+ * Murni: email ringkasan dari digest Telegram. Subjek tanpa nomor; nomor WA hanya ada di dalam href wa.me.
+ * Hanya tombol https://wa.me/… yang dipakai (sama dengan yang dibawa Telegram).
+ * @returns {{subject: string, html: string}}
+ */
+function _rmdEmailFromDigest_(teks, buttons, title, count) {
+  var t = String(title == null ? '' : title).replace(/[\r\n]+/g, ' ').replace(/\d{6,}/g, '').trim();
+  var subject = 'Pengingat: ' + t.toLowerCase() + ' (' + (Number(count) || 0) + ' klien)';
+  var btns = _cleanButtons_(buttons).filter(function(b) { return /^https:\/\/wa\.me\//i.test(b.url); });
+  var html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111">' +
+    '<p style="margin:0 0 12px">' + _rmdTgToEmailHtml_(teks).replace(/Tekan nama/, 'Klik nama') + '</p>' +
+    btns.map(function(b) {
+      return '<p style="margin:0 0 8px"><a href="' + _rmdAttr_(b.url) + '" style="display:inline-block;padding:10px 16px;' +
+        'background:#111;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">' +
+        _escHtml_(String(b.text).replace(/\d{6,}/g, '')) + '</a></p>';
+    }).join('') +
+    '<p style="margin:16px 0 0;font-size:12px;color:#666">Ringkasan pengingat otomatis. Atur di Pengaturan → Notifikasi Admin.</p></div>';
+  return { subject: subject, html: html };
+}
+
+/**
+ * T-2254: kirim ringkasan pengingat ke email coach (_notifEmailRecipient_), satu email per jenis per tick.
+ * Kuota email di bawah cadangan = dilewati ({skipped:'kuota'}).
+ * @returns {{sent: number, skipped: string}}
+ */
+function kirimEmailTombol_(teks, buttons, jenis, count) {
+  var res = { sent: 0, skipped: '' };
+  var to = '';
+  try { to = String(_notifEmailRecipient_() || '').trim(); } catch (e) { to = ''; }
+  if (!to) { res.skipped = 'tanpa-email'; return res; }
+  var mail = _rmdEmailFromDigest_(teks, buttons, jenis, count == null ? _cleanButtons_(buttons).length : count);
+  try {
+    if (_mailSend_({ to: to, subject: mail.subject, htmlBody: mail.html })) res.sent = 1;
+    else res.skipped = 'kuota';
+  } catch (e) {
+    Logger.log('Email ringkasan gagal: ' + e);
+    res.skipped = 'gagal';
+  }
+  return res;
 }
 
 /** Job aktif sekarang? (saklar utama + saklar jenis). */

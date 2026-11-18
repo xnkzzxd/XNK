@@ -285,11 +285,15 @@ function createEnv(opts = {}) {
       getEffectiveUser: () => ({ getEmail: () => env.effectiveUserEmail }),
       getScriptTimeZone: () => 'Asia/Jakarta',
     },
-    MailApp: { sendEmail: msg => env.mails.push(msg) },
+    MailApp: {
+      sendEmail: msg => { if (env.mailError) throw new Error(env.mailError); env.mails.push(msg); },
+      getRemainingDailyQuota: () => (env.mailQuota == null ? 100 : env.mailQuota),
+    },
     UrlFetchApp: {
       fetch: (url, options) => {
         env.fetches.push({ url, options });
-        return { getResponseCode: () => 200, getContentText: () => '{}' };
+        const code = env.fetchCode == null ? 200 : env.fetchCode;   // set env.fetchCode to make every fetch answer that status
+        return { getResponseCode: () => code, getContentText: () => '{}' };
       },
     },
     DriveApp: {

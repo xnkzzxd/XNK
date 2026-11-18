@@ -176,3 +176,23 @@ test('aksi: perbarui/hubungkan/bangun menjalankan workflow repo hub; tanpa token
   const f = env({ props: { GITHUB_TOKEN: 'x' }, dispatch: 403 });
   assert.match(f.call('pusatAction', f.call('pusatLogin', 'pin-rahasia-1').data.token, 'bangun').error, /GitHub menolak \(403\)/);
 });
+
+test('kuota: angka ≥ 70 % dari batas (bawaan 100 / 20.000 / 90, bisa ditimpa) = masalah; tanpa kuota = tidak dicek', () => {
+  const q = (mail, fetch, triggerMin) => ({ quota: { date: '2026-11-18', mail, fetch, triggerMin, mailRemaining: 100 - mail } });
+  const servers = {
+    [EXEC(1)]: server(SECRET(1), status(SHA_NEW, q(69, 13999, 62.9))),
+    [EXEC(2)]: server(SECRET(2), status(SHA_NEW, q(70, 14000, 63))),
+    [EXEC(3)]: server(SECRET(3), status(SHA_NEW)),
+  };
+  const e = env({ servers });
+  [['claudia', 1], ['dina', 2], ['eko', 3]].forEach(([s, n]) => assert.equal(e.call('pusatRegister', 'kode-daftar-9', s, EXEC(n), SECRET(n)).ok, true));
+  e.ctx.runPusatDaily();
+  assert.equal(e.mails.length, 1);
+  assert.match(e.mails[0].body, /dina: Kuota email hari ini 70 dari 100 \(≥ 70 %\)\. Kuota UrlFetch hari ini 14000 dari 20000 \(≥ 70 %\)\. Menit trigger hari ini 63 dari 90 \(≥ 70 %\)\./);
+  assert.ok(!/claudia|eko/.test(e.mails[0].body));
+  const tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  assert.deepEqual(e.call('pusatOverview', tok).data.quotaLimits, { mail: 100, fetch: 20000, triggerMin: 90 });
+  e.props.QUOTA_MAIL = '1000';
+  e.ctx.runPusatDaily();
+  assert.ok(!/Kuota email/.test(e.mails[1].body), 'batas ditimpa: 70 dari 1000 aman');
+});

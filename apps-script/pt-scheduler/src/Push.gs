@@ -350,6 +350,7 @@ function _pushKick_() {
   var repo = _pushProp_('PUSH_GH_REPO') || 'xnkzzxd/xnk';
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo)) return false;
   try {
+    _quotaFetch_();
     UrlFetchApp.fetch('https://api.github.com/repos/' + repo + '/dispatches', {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
       headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
