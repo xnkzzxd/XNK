@@ -25,7 +25,7 @@ Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique
 | X | New client portal (phones) | [portal2/](portal2/) | T-1900+ | built |
 | Y | Client portal desktop shell | [desk/](desk/) | T-2000+ | built |
 | Z | Web Push | [push/](push/) | T-2100+ | built (T-2105 is the owner's install step) |
-| AB | XNK Library + Template + hub xnk.web.id (multi-coach on Apps Script, production untouched) | [library/](library/) | T-2200+ | built (T-2208, T-2210, T-2214, T-2215 are the owner's install steps); hub upgrade T-2220+ in progress (T-2220 built) |
+| AB | XNK Library + Template + hub xnk.web.id (multi-coach on Apps Script, production untouched) | [library/](library/) | T-2200+ | built (T-2208, T-2210, T-2214, T-2215 are the owner's install steps); hub upgrade T-2220+ in progress (T-2220, T-2221 built) |
 | — | Reminder texts: tone rules and sources of the science tips | [reminder/Sumber.md](reminder/Sumber.md) | — | built (2026-11) |
 
 Notes

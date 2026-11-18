@@ -7,7 +7,7 @@ name: Hub XNK
 #  - Mengubah hub.json langsung di GitHub juga membangun ulang.
 #  - Setiap hari jam 03:17 WIB: dibangun ulang. Halaman tiap coach mengikuti versi Library di spreadsheet coach itu
 #    (tools/hub-versions.js); coach yang sudah diperbarui mendapat halaman terbaru.
-# Halaman dibangun dari repo XNK yang publik (tanpa token). Data klien tidak pernah ada di sini: hanya daftar coach.
+# Halaman dibangun dari repo XNK yang publik (tanpa token), dari tag hub-stable (kode yang lulus pemeriksaan). Data klien tidak pernah ada di sini: hanya daftar coach.
 on:
   workflow_dispatch:
     inputs:
@@ -50,10 +50,23 @@ jobs:
         with:
           node-version: 20
 
-      - name: Ambil kode XNK terbaru
+      # Hanya kode XNK yang sudah lulus pemeriksaan di main (tag hub-stable, dipindah workflow "XNK Library" di repo
+      # XNK). Belum ada tag = main, dengan peringatan.
+      - name: Pilih versi kode XNK
+        id: xnk
+        run: |
+          if git ls-remote --exit-code --tags https://github.com/xnkzzxd/XNK.git refs/tags/hub-stable >/dev/null; then
+            echo "ref=hub-stable" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Tag hub-stable belum ada di repo XNK; memakai main."
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ambil kode XNK
         uses: actions/checkout@v4
         with:
           repository: xnkzzxd/XNK
+          ref: ${{ steps.xnk.outputs.ref }}
           path: _xnk
 
       - name: Ubah daftar coach
@@ -78,6 +91,10 @@ jobs:
 
       - name: Bangun situs
         run: node _xnk/apps-script/xnk-library/tools/build-hub.js _site --config hub.json --versions versions.json
+
+      # Gagal di sini = tidak ada yang diunggah; situs lama tetap tayang.
+      - name: Periksa hasil build
+        run: node _xnk/apps-script/xnk-library/tools/hub-verify.js _site --config hub.json
 
       - name: Siapkan GitHub Pages
         id: pages

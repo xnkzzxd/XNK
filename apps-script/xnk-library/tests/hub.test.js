@@ -259,3 +259,26 @@ test('hub-versions: commit dari server, lalu build sebelumnya, lalu kode terbaru
   assert.ok(!none.versions['claudia-2'] && none.notes.some(n => /claudia-2.*kode terbaru/.test(n)));
   fs.rmSync(prevFile, { force: true });
 });
+
+test('hub-verify (T-2221): build asli lolos; berkas yang rusak atau salah sambung ditolak sebelum tayang', () => {
+  const { verifySite } = require('../tools/hub-verify');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-site-'));
+  hub.write(dir, hub.build(CFG).files);
+  assert.deepEqual(verifySite(dir, CFG), []);
+  const edit = (rel, fn) => fs.writeFileSync(path.join(dir, rel), fn(fs.readFileSync(path.join(dir, rel), 'utf8')));
+  // /exec coach lain di config claudia, awalan penyimpanan hilang di portal, cache worker tertukar.
+  edit('claudia/config.js', t => t.split(EXEC(1)).join(EXEC(2)));
+  edit('claudia-2/klien/index.html', t => t.replace("'claudia-2:'", "'x:'"));
+  edit('claudia/sw-app.js', t => t.replace('xnk-page-claudia~panel~', 'xnk-page-claudia-'));
+  fs.rmSync(path.join(dir, 'claudia-2', 'lib-latest.json'));
+  const p = verifySite(dir, CFG).join('\n');
+  assert.match(p, /claudia \(panel\): config\.js tidak memanggil/);
+  assert.match(p, /claudia\/config\.js memuat \/exec coach lain/);
+  assert.match(p, /claudia-2 \(klien\): awalan penyimpanan/);
+  assert.match(p, /claudia \(panel\): awalan cache/);
+  assert.match(p, /claudia-2: lib-latest\.json/);
+  fs.rmSync(path.join(dir, 'index.html'));
+  assert.match(verifySite(dir, CFG).join('\n'), /index\.html tidak ada/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

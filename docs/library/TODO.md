@@ -50,7 +50,7 @@ Gelombang 1 — stabil dan aman
   diperbarui"), `tools/hub-versions.js` (server → build sebelumnya `/_hub/versions.json` → kode terbaru),
   `build-hub.js --versions`, `<slug>/lib-latest.json` dari kode terbaru (dulu hilang di hub, jadi "Cek kesehatan"
   tidak pernah tahu ada versi baru).
-- [ ] T-2221 Hub hanya membangun dari commit yang lulus CI (tag `hub-stable`) dan menjalankan `hub-check.js` sebelum deploy.
+- [x] T-2221 Hub hanya membangun dari commit yang lulus pemeriksaan: job `stable` di `xnk-library.yml` memindah tag `hub-stable` setelah `check` hijau di main (tidak pernah mundur); `hub.yml` mengambil tag itu (belum ada = main + peringatan) dan menjalankan `tools/hub-verify.js` pada hasil build sebelum mengunggah (panel/portal ada, /exec coach sendiri saja, awalan penyimpanan skrip pertama, awalan cache worker, `lib-latest.json`, tanpa alamat xnk.my.id).
 - [ ] T-2222 Pustaka gerakan/makanan/peta otot di `xnk.web.id/_lib/`, berkas app yang sama dipakai bersama `/_app/<hash>/`.
 - [ ] T-2223 Content-Security-Policy di semua halaman hub; `hub-check.js` gagal pada pelanggaran.
 

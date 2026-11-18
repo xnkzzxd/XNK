@@ -10,6 +10,7 @@ Keputusan pemilik (2026-11-17): satu situs untuk semua coach, `xnk.web.id/<slug>
 | --- | --- |
 | `tools/build-hub.js` | Membangun seluruh situs dari `hub.json`: untuk setiap coach `build-tenant.js` (halaman xnk.my.id → `/exec` coach itu), awalan penyimpanan, awalan cache service worker; landing dan 404. Memeriksa slug dan daftar sebelum membangun. |
 | `tools/hub-versions.js` | Menentukan commit XNK tiap coach dari server coach (T-2220); hasilnya untuk `build-hub.js --versions`. |
+| `tools/hub-verify.js` | Memeriksa hasil build hub sebelum diunggah (T-2221). |
 | `tools/hub-edit.js` | Tambah, ubah, hapus satu coach di `hub.json` dengan pemeriksaan penuh (dipakai form Actions). |
 | `hub-site/` | `index.html` (landing profil brand XNK: hero, fitur klien/coach, tangkapan layar, cara kerja, privasi, daftar coach dari `hub.json` di `<!--COACHES-->` (bagian hilang bila kosong), kotak masuk, tanya jawab, tombol kontak dari `contactUrl` di `<!--CONTACT-->`), `img/` (tangkapan layar demo + `og.jpg`, dibuat oleh `tools/hub-shots.js`; jalankan ulang bila tampilan app berubah banyak), `404.html`, `storage-prefix.js`, `manifest.webmanifest` + `sw.js` (landing bisa dipasang dari Chrome/Edge; service worker hanya melayani `/`, `/manifest.webmanifest`, `/img/*`, tidak pernah halaman coach atau cache coach), `desktop.ico`. Ikon (`img/icon-192.png`, `img/icon-512.png`, `img/logo-64.png`, `desktop.ico`) dibuat dari `logo.png` di akar repo di atas latar hitam; perintahnya ada di `tools/hub-shots.js`. Bagian "Aplikasi" menautkan `github.com/xnkzzxd/XNK/releases/download/app-latest/` (`XNK-Android.apk`, `XNK-Windows.msi`, `XNK-macOS.dmg`), dibangun oleh workflow `apps.yml` di repo XNK. Slug `img` dipakai sistem. |
 | `hub-repo/` | Isi repo hub `xnk-template-site`: `hub.json`, workflow `hub.yml` (form simpan/hapus/bangun, harian 03:17 WIB), README (DNS, cara menambah coach). |
@@ -44,6 +45,14 @@ GitHub dan dibuka sebagai worktree `_xnk-<sha>`, lalu `build-hub.js --versions` 
 checkout itu. `<slug>/lib-latest.json` selalu berisi sidik kode **terbaru**, jadi **XNK → Cek kesehatan** di
 spreadsheet coach tahu bila ada versi baru. Bila halaman tetap bertemu fungsi yang tidak dikenal, doPost menjawab
 `code: 'unknown_fn'` dan halaman menulis "Server sedang diperbarui…", bukan "Permintaan tidak valid".
+
+## Build aman (T-2221)
+
+Hub tidak lagi mengambil `main` mentah. Job `stable` di workflow **XNK Library** (repo XNK) memindah tag
+`hub-stable` ke commit main setelah pemeriksaan Library, kompatibilitas produksi dan cek browser hub lulus; tag
+tidak pernah mundur. `hub.yml` membangun dari tag itu (worktree commit coach dari T-2220 tetap commit persisnya),
+lalu `tools/hub-verify.js` memeriksa berkas yang akan diunggah. Satu masalah = workflow berhenti sebelum unggah,
+situs lama tetap tayang.
 
 ## Slug
 
