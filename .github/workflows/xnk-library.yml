@@ -7,6 +7,9 @@ name: XNK Library
 #          (akun di secret CLASPRC_JSON yang sudah ada): "XNK Library" (script = kode Library) dan
 #          "XNK Template" (script = kode penghubung). Mencetak dua scriptId; simpan sebagai repo variable
 #          XNK_LIB_SCRIPT_ID dan XNK_TEMPLATE_SCRIPT_ID.
+# stable — push ke main setelah check hijau: tag bergerak "hub-stable" dipindah ke commit ini. Hub xnk.web.id
+#          (repo xnk-template-site) hanya membangun dari tag ini, jadi commit main yang rusak tidak pernah tayang
+#          di halaman coach (T-2221).
 # deploy — push ke main (atau manual, aksi "perbarui") setelah dua variable ada: bangun Library dari kode produksi
 #          terbaru → clasp push → versi baru → kode penghubung XNK Template disematkan ke versi itu → clasp push.
 #          Salinan coach yang sudah ada TIDAK ikut berubah (versi tersemat); lihat docs/library/Panduan.md.
@@ -23,6 +26,8 @@ on:
     paths:
       - 'apps-script/pt-scheduler/src/**'
       - 'apps-script/pt-scheduler/tests/api-lists.js'
+      - 'apps-script/pt-scheduler/tools/build-static.js'
+      - 'apps-script/pt-scheduler/tools/sw-app.template.js'
       - 'apps-script/xnk-library/**'
       - '.github/workflows/xnk-library.yml'
   workflow_dispatch:
@@ -49,6 +54,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Sintaks kode produksi
+        run: node apps-script/pt-scheduler/tools/check-syntax.js
       - name: Tes Library dan kode penghubung
         run: node --test apps-script/xnk-library/tests/*.test.js
       - name: Tes produksi pada kode Library (perilaku sama)
@@ -210,3 +217,26 @@ jobs:
       - name: Hapus kredensial
         if: always()
         run: rm -f "$HOME/.clasprc.json"
+
+  stable:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pindahkan tag hub-stable ke commit ini
+        run: |
+          set -e
+          git fetch --quiet --force origin 'refs/tags/hub-stable:refs/tags/hub-stable' 2>/dev/null || true
+          # Run lama yang selesai belakangan tidak boleh memundurkan tag.
+          if git rev-parse -q --verify refs/tags/hub-stable >/dev/null && ! git merge-base --is-ancestor refs/tags/hub-stable "$GITHUB_SHA"; then
+            echo "::notice::hub-stable sudah di commit yang lebih baru; dibiarkan."
+            exit 0
+          fi
+          git tag -f hub-stable "$GITHUB_SHA"
+          git push --force origin refs/tags/hub-stable
+          echo "hub-stable → $(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_STEP_SUMMARY"

@@ -134,7 +134,10 @@ function doPost(e) {
     const req = JSON.parse(raw);
     const fn = req && req.fn;
     const api = _appApi_();
-    if (typeof fn !== 'string' || !Object.prototype.hasOwnProperty.call(api, fn)) throw new Error('Permintaan tidak valid.');
+    if (typeof fn !== 'string' || !Object.prototype.hasOwnProperty.call(api, fn)) {
+      // code 'unknown_fn': halaman lebih baru dari server ini (hub xnk.web.id, salinan coach belum diperbarui).
+      return _appApiReply_({ ok: false, error: 'Permintaan tidak valid.', auth: false, code: typeof fn === 'string' ? 'unknown_fn' : 'bad_request' });
+    }
     const limit = Object.prototype.hasOwnProperty.call(API_BODY_LIMITS, fn) ? API_BODY_LIMITS[fn] : APP_API_MAX_BYTES;
     if (raw.length > limit) throw new Error('Permintaan tidak valid.');
     // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
@@ -150,6 +153,17 @@ function doPost(e) {
     const msg = String(err && err.message ? err.message : err);
     return _appApiReply_({ ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 });
   }
+}
+
+/**
+ * Versi server untuk pembangun hub xnk.web.id (T-2220): halaman tiap coach dibangun dari commit yang sama dengan
+ * Library yang dipakai spreadsheet coach itu. Publik dan tanpa data: hanya versi API dan sidik build Library
+ * (produksi: lib = null).
+ * @return {{api: number, lib: ?{hash: string, commit: string}}}
+ */
+function getServerInfo() {
+  const b = typeof LIB_BUILD !== 'undefined' ? LIB_BUILD : null;
+  return { api: API_VERSION, lib: b ? { hash: String(b.hash || ''), commit: String(b.commit || '') } : null };
 }
 
 /**

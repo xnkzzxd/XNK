@@ -47,7 +47,7 @@ Bila isian salah, workflow berhenti dengan pesan yang jelas dan situs lama tidak
 | --- | --- | --- |
 | Library (kode server) | Ya, untuk XNK Template | Merge ke `main` → workflow XNK Library |
 | Salinan coach yang sudah ada | **Tidak** (versi tersemat, aturan Google) | Di salinan: Ekstensi → Apps Script → Library → XNK → pilih versi terbaru → Simpan. Lalu Terapkan → Kelola deployment → edit → Versi: Baru → Terapkan. |
-| Situs hub (halaman semua coach) | Ya, setiap hari | Atau Actions → Hub XNK → Run workflow (aksi `bangun`) |
+| Situs hub (halaman semua coach) | Ya, setiap hari | Atau Actions → Hub XNK → Run workflow (aksi `bangun`). Halaman tiap coach mengikuti versi Library di spreadsheet coach itu, jadi coach yang belum diperbarui tetap aman; setelah Library dan deployment-nya dinaikkan, build berikutnya memberi halaman terbaru. |
 
 Bila alamat sudah diisi di wizard, **XNK → Cek kesehatan** di spreadsheet coach memberi tahu bila ada versi Library baru.
 
@@ -62,6 +62,6 @@ Bila alamat sudah diisi di wizard, **XNK → Cek kesehatan** di spreadsheet coac
 
 - Notifikasi push ke HP belum ada di situs coach. Halaman depan `xnk.web.id` baru berisi pengenalan singkat dan kotak masuk.
 - Coach tidak boleh memasang JavaScript sendiri di hub (syarat isolasi penyimpanan); tampilan hanya nama usaha.
-- Pustaka gerakan dan makanan masih dimuat dari `xnk.my.id`.
+- Pustaka gerakan dan makanan di hub disajikan dari `xnk.web.id/_lib/`.
 - Testimoni dari Google Form evaluasi: isi Script Property `EVAL_SHEET_ID` di salinan bila dipakai (kosong = tidak ada).
 - Library sedikit lebih lambat dari kode yang berdiri sendiri (catatan Google untuk semua Library).

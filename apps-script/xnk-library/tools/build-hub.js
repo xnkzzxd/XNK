@@ -18,7 +18,7 @@ const HERE = path.join(__dirname, '..');
 const SITE = path.join(HERE, 'hub-site');
 
 // Kata yang dipakai sistem atau mudah menipu; dan nama berkas di akar situs.
-const RESERVED = ['admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
+const RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
   'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 const sha = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 10);
@@ -54,13 +54,74 @@ function readHub(cfg) {
   return { contact, coaches };
 }
 
+// T-2222: pustaka gerakan, makanan dan peta otot disajikan dari hub sendiri (/_lib/), bukan dari xnk.my.id, supaya
+// situs coach tetap jalan bila xnk.my.id mati atau berubah. Diambil dari checkout XNK yang menjalankan build ini.
+const REPO = path.join(HERE, '..', '..');
+const LIB_DIRS = ['exercises', 'foods', 'figure'];
+const LIB_FROM = /https:\/\/xnk\.my\.id\/(exercises|foods|figure)\//g;
+const LIB_MARK = 'lib1';   // ikut sidik service worker: berkas yang ditulis ulang dimuat ulang di HP
+
+/** Tulis ulang alamat pustaka xnk.my.id → /_lib/ di halaman satu coach. */
+function localLibs(files, prefix) {
+  for (const n of Object.keys(files)) {
+    if (!n.startsWith(prefix) || !/\.(html|js|json)$/.test(n) || typeof files[n] !== 'string') continue;
+    // Service worker membandingkan alamat lengkap (origin + path) dengan daftar LIBS-nya: tetap alamat penuh.
+    if (/(^|\/)sw-app\.js$/.test(n)) files[n] = files[n].replace(/'https:\/\/xnk\.my\.id\/(exercises|foods|figure)\//g, "self.location.origin + '/_lib/$1/");
+    files[n] = files[n].replace(LIB_FROM, '/_lib/$1/');
+  }
+}
+
+/** Berkas pustaka untuk /_lib/ (json + kredit/lisensi). */
+function libFiles() {
+  const out = {};
+  for (const d of LIB_DIRS) {
+    const dir = path.join(REPO, d);
+    if (!fs.existsSync(dir)) throw new Error('build-hub: folder pustaka ' + d + '/ tidak ada di checkout XNK.');
+    for (const f of fs.readdirSync(dir)) if (/\.(json|md|txt)$/.test(f)) out['_lib/' + d + '/' + f] = fs.readFileSync(path.join(dir, f));
+  }
+  return out;
+}
+
+// T-2223: Content-Security-Policy. Semua coach berbagi satu domain, jadi skrip asing di satu halaman bisa membaca
+// login coach lain. Halaman aplikasi memakai ratusan onclick="…" yang dibuat di JavaScript, jadi 'unsafe-inline'
+// tetap perlu di sana; yang dikunci: dari mana skrip dimuat, ke mana data boleh dikirim (connect/img/form) dan
+// tanpa <object>/<base>. Halaman depan dan 404 tidak memakai onclick: skripnya dikunci dengan sidik sha256.
+const CSP_APP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https://raw.githubusercontent.com https://drive.google.com https://*.googleusercontent.com",
+  "media-src 'self' data: blob: https://raw.githubusercontent.com",
+  "connect-src 'self' data: blob: https://script.google.com https://script.googleusercontent.com https://raw.githubusercontent.com",
+  "worker-src 'self'",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+].join('; ');
+
+function cspMeta(policy) { return `<meta http-equiv="Content-Security-Policy" content="${policy}">`; }
+
+/** CSP ketat untuk halaman statis hub: hanya skrip inline yang sidiknya cocok. */
+function cspStatic(html) {
+  const hashes = [];
+  html.replace(/<script>([\s\S]*?)<\/script>/g, (m, body) => { hashes.push(`'sha256-${crypto.createHash('sha256').update(body).digest('base64')}'`); return m; });
+  if (/<script\s+[^>]*src=/i.test(html.replace(/<script\s+src="\/sw\.js"/g, ''))) throw new Error('build-hub: halaman hub memuat skrip luar; perbarui CSP di build-hub.js.');
+  if (/\son[a-z]+="/i.test(html)) throw new Error('build-hub: halaman hub memakai onclick="…"; CSP ketatnya menolak itu.');
+  const policy = ["default-src 'self'", `script-src 'self' ${hashes.join(' ')}`.trim(), "style-src 'self' 'unsafe-inline'", "img-src 'self' data:",
+    "connect-src 'self'", "manifest-src 'self'", "worker-src 'self'", "frame-src 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'self'"].join('; ');
+  if (!/<head>\n/.test(html)) throw new Error('build-hub: <head> tidak ditemukan di halaman hub.');
+  return html.replace('<head>\n', '<head>\n' + cspMeta(policy) + '\n');
+}
+
 /** Sisipkan penyimpanan per slug di awal <head> dan kunci service worker supaya hash dan awalan cache unik. */
 function isolate(files, dir, slug, kind) {
   const shim = fs.readFileSync(path.join(SITE, 'storage-prefix.js'), 'utf8').split('__SLUG__').join(slug);
   if (shim.includes('__SLUG__')) throw new Error('build-hub: __SLUG__ tersisa');
   const idx = dir + 'index.html';
   if (!/<head>\n/.test(files[idx])) throw new Error('build-hub: <head> tidak ditemukan di ' + idx);
-  files[idx] = files[idx].replace('<head>\n', '<head>\n<script>' + shim.replace(/\/\*[\s\S]*?\*\//, '').trim() + '</script>\n');
+  files[idx] = files[idx].replace('<head>\n', '<head>\n' + cspMeta(CSP_APP) + '\n<script>' + shim.replace(/\/\*[\s\S]*?\*\//, '').trim() + '</script>\n');
   const swf = dir + 'sw-app.js';
   let sw = files[swf];
   if (typeof sw !== 'string') throw new Error('build-hub: sw-app.js tidak ada di ' + dir);
@@ -70,26 +131,47 @@ function isolate(files, dir, slug, kind) {
   sw = sw.replace(/^var PREFIX = .*$/m, () => { n++; return `var PREFIX = ${JSON.stringify('xnk-page-' + slug + '~' + kind + '~')};`; });
   if (n !== 1) throw new Error('build-hub: baris PREFIX di sw-app.js tidak ditemukan; sesuaikan build-hub.js dengan tools/sw-app.template.js.');
   n = 0;
-  sw = sw.replace(/^var HASH = "([0-9a-f]+)";$/m, (m, h) => { n++; return `var HASH = "${sha(h + shim)}";`; });
+  sw = sw.replace(/^var HASH = "([0-9a-f]+)";$/m, (m, h) => { n++; return `var HASH = "${sha(h + shim + LIB_MARK)}";`; });
   if (n !== 1) throw new Error('build-hub: baris HASH di sw-app.js tidak ditemukan.');
   files[swf] = sw;
 }
 
-/** Kembalikan { files, coaches } untuk seluruh hub. */
-function build(cfg) {
+/**
+ * Kembalikan { files, coaches } untuk seluruh hub.
+ * opts.versions (T-2220, dari tools/hub-versions.js): { <slug>: { commit, dir } } — halaman coach itu dibangun dengan
+ * build-tenant.js dari checkout XNK di `dir` (commit yang sama dengan Library di spreadsheet coach itu), supaya
+ * halaman tidak memanggil fungsi yang belum ada di servernya. Tanpa entri = kode XNK yang menjalankan build ini.
+ */
+function build(cfg, opts) {
+  opts = opts || {};
+  const versions = opts.versions || {};
   const hub = readHub(cfg);
   const files = {};
+  const built = {};
+  let latest = null;   // sidik Library dari kode terbaru (dibaca "Cek kesehatan" di spreadsheet coach)
   for (const c of hub.coaches) {
-    const t = tenant.build({ exec: c.exec, brand: c.brand });
+    const v = versions[c.slug];
+    const t = tenantFor(v).build({ exec: c.exec, brand: c.brand });
+    if (!v || !v.dir) latest = t.hash;
     const sub = {};
     for (const [n, body] of Object.entries(t.files)) {
       if (n === 'lib-latest.json' || n === '.nojekyll') continue;
       sub[c.slug + '/' + n] = body;
     }
+    localLibs(sub, c.slug + '/');
     isolate(sub, c.slug + '/', c.slug, 'panel');
     isolate(sub, c.slug + '/klien/', c.slug, 'klien');
     Object.assign(files, sub);
+    built[c.slug] = { commit: v && v.commit || 'terbaru', hash: t.hash };
   }
+  if (hub.coaches.length) {
+    Object.assign(files, libFiles());
+    if (!latest) latest = require('./build-lib').build().hash;
+    // SITE_URL coach = xnk.web.id/<slug>; healthCheck membaca SITE_URL/lib-latest.json untuk tahu ada versi baru.
+    for (const c of hub.coaches) files[c.slug + '/lib-latest.json'] = JSON.stringify({ library: { hash: latest } }) + '\n';
+  }
+  // Commit tiap coach yang terakhir dibangun: build berikutnya memakainya bila server coach tidak menjawab.
+  files['_hub/versions.json'] = JSON.stringify(built, null, 1) + '\n';
   let landing = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
   const contact = hub.contact
     ? `<a class="btn ghost" href="${esc(hub.contact)}" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg>Hubungi XNK</a>`
@@ -106,16 +188,24 @@ function build(cfg) {
   } else {
     landing = landing.replace(sec, '').split('<a href="#coach">Coach</a>').join('').replace('Bisa juga dicari di daftar coach di atas, atau tanyakan', 'Bisa juga ditanyakan');
   }
-  files['index.html'] = landing;
+  files['index.html'] = cspStatic(landing);
   for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
   // Bisa dipasang (PWA): manifest + service worker yang hanya melayani halaman depan; nama cache ikut isi landing.
   files['manifest.webmanifest'] = fs.readFileSync(path.join(SITE, 'manifest.webmanifest'), 'utf8');
   const sw = fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8');
   if (!sw.includes('__HASH__')) throw new Error('build-hub: __HASH__ tidak ada di hub-site/sw.js');
   files['sw.js'] = sw.replace('__HASH__', sha(landing + files['manifest.webmanifest']));
-  files['404.html'] = fs.readFileSync(path.join(SITE, '404.html'), 'utf8');
+  files['404.html'] = cspStatic(fs.readFileSync(path.join(SITE, '404.html'), 'utf8'));
   files['.nojekyll'] = '';
   return { files, coaches: hub.coaches };
+}
+
+/** build-tenant.js dari checkout XNK lain (commit coach itu), atau milik build ini. */
+function tenantFor(v) {
+  if (!v || !v.dir) return tenant;
+  const file = path.join(path.resolve(v.dir), 'apps-script', 'xnk-library', 'tools', 'build-tenant.js');
+  if (!fs.existsSync(file)) throw new Error('build-hub: ' + file + ' tidak ada (commit ' + v.commit + ').');
+  return require(file);
 }
 
 function write(outDir, files) {
@@ -127,16 +217,18 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, slugError, RESERVED, SLUG_RE };
+module.exports = { build, write, readHub, slugError, RESERVED, SLUG_RE, CSP_APP };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const i = args.indexOf('--config');
-  const cfgFile = i >= 0 ? args.splice(i, 2)[1] : null;
+  const flag = k => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : null; };
+  const cfgFile = flag('--config');
+  const verFile = flag('--versions');
   const out = args[0];
-  if (!out || !cfgFile) { console.error('pakai: build-hub.js <outDir> --config hub.json'); process.exit(1); }
+  if (!out || !cfgFile) { console.error('pakai: build-hub.js <outDir> --config hub.json [--versions versions.json]'); process.exit(1); }
   try {
-    const r = build(JSON.parse(fs.readFileSync(cfgFile, 'utf8')));
+    const versions = verFile ? JSON.parse(fs.readFileSync(verFile, 'utf8')) : {};
+    const r = build(JSON.parse(fs.readFileSync(cfgFile, 'utf8')), { versions });
     write(path.resolve(out), r.files);
     console.log(`Hub XNK: ${r.coaches.length} coach (${r.coaches.map(c => c.slug).join(', ') || '-'}), ${Object.keys(r.files).length} berkas → ${out}`);
   } catch (e) {

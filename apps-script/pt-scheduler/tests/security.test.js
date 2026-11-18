@@ -321,6 +321,17 @@ test('doPost gateway: owner, trigger, entry points and helpers are not reachable
   }
 });
 
+test('doPost gateway: an unknown function says so (code unknown_fn) without revealing more; getServerInfo is public and data-free (T-2220)', () => {
+  const env = seededEnv();
+  const post = body => JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify(body) } }).content);
+  const r = post({ fn: 'fungsiDariVersiBaru', args: [] });
+  assert.deepEqual([r.ok, r.error, r.code, r.auth], [false, 'Permintaan tidak valid.', 'unknown_fn', false]);
+  assert.equal(post({ fn: 42 }).code, 'bad_request');
+  const info = post({ fn: 'getServerInfo', args: [] });
+  assert.equal(info.ok, true);
+  assert.deepEqual(info.data, { api: info.v, lib: null }, 'production has no Library build stamp');
+});
+
 test('doPost gateway: public functions work without a token; admin login round trip; replies carry the API version', () => {
   const env = seededEnv();
   const raw = body => JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify(body) } }).content);

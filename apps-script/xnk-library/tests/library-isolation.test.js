@@ -161,3 +161,15 @@ test('link portal di pesan WhatsApp = portal klien coach itu (/klien/), bukan xn
   const tokB = env.run(B.ctx, 'adminLogin', '222222').token;
   assert.equal(env.lib('run', B.ctx, 'getAppSettings', [tokB]).shareQrDefault, 'https://script.google.com/macros/s/DEPLOY_SS_B/exec?view=public');
 });
+
+test('getServerInfo lewat doPost: versi API dan sidik build Library (commit penuh) untuk hub, tanpa data (T-2220)', () => {
+  const { env, A } = setupTwo();
+  const r = JSON.parse(env.lib('handlePost', A.ctx, { postData: { contents: JSON.stringify({ fn: 'getServerInfo', args: [] }) } }).content);
+  assert.equal(r.ok, true);
+  assert.deepEqual(Object.keys(r.data).sort(), ['api', 'lib']);
+  assert.deepEqual(Object.keys(r.data.lib).sort(), ['commit', 'hash']);
+  assert.match(r.data.lib.hash, /^[0-9a-f]{12}$/);
+  assert.ok(/^[0-9a-f]{40}$/.test(r.data.lib.commit) || r.data.lib.commit === 'lokal', r.data.lib.commit);
+  const u = JSON.parse(env.lib('handlePost', A.ctx, { postData: { contents: JSON.stringify({ fn: 'fungsiBaru', args: [] }) } }).content);
+  assert.equal(u.code, 'unknown_fn');
+});

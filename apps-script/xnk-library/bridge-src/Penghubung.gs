@@ -59,7 +59,7 @@ function menuTriggers_() {
 function menuVersion_() {
   safely_('Versi Library', function () {
     const v = getLibraryVersion();
-    SpreadsheetApp.getUi().alert('XNK Library', 'Versi ' + v.hash + '\nDibuat ' + v.builtAt + ' (commit ' + v.commit + ')', SpreadsheetApp.getUi().ButtonSet.OK);
+    SpreadsheetApp.getUi().alert('XNK Library', 'Versi ' + v.hash + '\nDibuat ' + v.builtAt + ' (commit ' + String(v.commit).slice(0, 7) + ')', SpreadsheetApp.getUi().ButtonSet.OK);
   });
 }
 

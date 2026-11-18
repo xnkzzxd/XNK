@@ -41,6 +41,7 @@ function serve(files) {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\//, '');
     if (p !== '' && !p.endsWith('/') && !path.extname(p) && files[p + '/index.html'] != null) { res.writeHead(301, { Location: '/' + p + '/' }); return res.end(); }
     if (p === '' || p.endsWith('/')) p += 'index.html';
+    if (p.startsWith('_lib/')) LIB_HITS.push(p);
     const body = files[p];
     if (body == null) { res.writeHead(404, { 'Content-Type': types['.html'] }); return res.end(files['404.html']); }
     res.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
@@ -49,9 +50,10 @@ function serve(files) {
   return new Promise(ok => server.listen(0, '127.0.0.1', () => ok(server)));
 }
 
+const XNK_HITS = [], LIB_HITS = [], CSP_HITS = [];
+
 async function newContext(browser, be, seen) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const libJson = { 'exercises.min.json': { v: 2, base: '', credit: 't', items: [] }, 'foods.min.json': { v: 1, items: [] } };
   await context.route(/^https:\/\/script\.google(usercontent)?\.com\//, route => {
     const u = route.request().url();
     if (route.request().method() !== 'POST') return route.fulfill({ status: 404, body: '' });
@@ -61,12 +63,8 @@ async function newContext(browser, be, seen) {
     const out = be.env.lib('handlePost', ctx, { postData: { contents: route.request().postData() || '' } });
     return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: out.content });
   });
-  await context.route(/^https:\/\/xnk\.my\.id\//, route => {
-    const name = route.request().url().split('/').pop();
-    const fig = path.join(ROOT, 'figure', name);
-    const body = libJson[name] ? JSON.stringify(libJson[name]) : fs.existsSync(fig) ? fs.readFileSync(fig, 'utf8') : '{}';
-    return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body });
-  });
+  // T-2222: pustaka dari /_lib/ di hub sendiri; permintaan ke xnk.my.id dicatat dan dianggap gagal.
+  await context.route(/^https:\/\/xnk\.my\.id\//, route => { XNK_HITS.push(route.request().url()); return route.abort('failed'); });
   await context.route(/^https:\/\/(cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com|fonts\.(googleapis|gstatic)\.com)\//, r => r.fulfill({ status: 200, body: '' }));
   return context;
 }
@@ -74,6 +72,8 @@ async function newContext(browser, be, seen) {
 async function open(context, url, errors) {
   const page = await context.newPage();
   page.on('pageerror', e => errors.push(e.message));
+  // T-2223: setiap penolakan CSP dihitung sebagai error (kecuali permintaan ke xnk.my.id yang memang diblokir tes ini).
+  page.on('console', m => { const t = m.text(); if (/Content Security Policy/i.test(t)) { CSP_HITS.push(t); errors.push('CSP: ' + t.slice(0, 160)); } });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
   return page;
@@ -164,6 +164,9 @@ async function panelLogin(page, pin) {
       const keys = await a.evaluate(() => Object.keys(localStorage));
       check(keys.length > 0 && keys.every(k => k.startsWith('claudia:') || k.startsWith('claudia-2:')), 'semua kunci localStorage berawalan slug: ' + keys.slice(0, 4).join(', ') + (keys.length > 4 ? '…' : ''));
       check(seen.every(u => u.startsWith(EXEC_A) || u.startsWith(EXEC_B)), 'semua panggilan server hanya ke dua /exec coach');
+      check(XNK_HITS.length === 0, 'tidak ada permintaan ke xnk.my.id' + (XNK_HITS.length ? ': ' + XNK_HITS.slice(0, 2).join(', ') : ''));
+      check(LIB_HITS.some(p => p.startsWith('_lib/exercises/')), 'pustaka gerakan dimuat dari /_lib/ hub sendiri');
+      check(CSP_HITS.length === 0, 'tanpa penolakan Content-Security-Policy' + (CSP_HITS.length ? ': ' + CSP_HITS[0].slice(0, 160) : ''));
       check(errors.length === 0, 'tanpa error JavaScript' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close();
     }

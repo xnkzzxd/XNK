@@ -40,6 +40,17 @@ const NEEDED = ['_ensureCoachSchema_', '_getMemberDataSheet_', '_getMembersLogSh
 
 // [berkas, cari (teks persis), ganti, jumlah yang diharapkan]
 const TEXT_SWAPS = [
+  // Google Analytics milik xnk.my.id tidak ikut ke coach lain (data kunjungan klien coach bukan milik XNK; T-2223).
+  ['Index.html', `
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93SRTYH3SG"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-93SRTYH3SG');
+  </script>
+`, '\n', 1],
   // Identitas usaha
   ['Kode.gs', "const faviconUrl = page === 'Landing' ? 'https://xnkbooking.my.id/favicon.ico' : 'https://xnk.my.id/favicon.ico';",
     "const faviconUrl = _faviconUrl_() || 'https://www.gstatic.com/images/branding/product/1x/apps_script_48dp.png';", 1],
@@ -110,8 +121,9 @@ function count(text, needle) { let n = 0, i = 0; while ((i = text.indexOf(needle
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 
 function commitOf() {
-  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
-  try { return execSync('git rev-parse --short HEAD', { cwd: HERE, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { return 'lokal'; }
+  // Commit penuh (40 huruf): build-hub.js mengambil commit ini dari GitHub untuk membangun halaman yang cocok (T-2220).
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
+  try { return execSync('git rev-parse HEAD', { cwd: HERE, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { return 'lokal'; }
 }
 
 function libTable() {
