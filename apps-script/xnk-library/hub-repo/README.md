@@ -40,6 +40,12 @@ dan **Google Apps Script API** menyala di akun itu. Langkah lengkap: `docs/libra
 | `baru` + slug + nama usaha | Coach baru: spreadsheet, web app dan alamat dibuat otomatis; lalu buka spreadsheet → XNK → Mulai setup |
 | `perbarui` (slug kosong = semua) | Otomatis setiap hari 02:37 WIB; link /exec tidak berubah |
 
+## Dasbor pemilik: xnk.web.id/adminxnk
+
+Isi `"pusatUrl"` di `hub.json` dengan link /exec XNK Pusat (repo XNK: `docs/library/Pusat.md`). Halaman
+`xnk.web.id/adminxnk/` menampilkan status semua coach setelah login PIN pemilik; tanpa `pusatUrl` halaman itu hanya
+memberi tahu bahwa XNK Pusat belum diatur.
+
 ## Pasang domain (sekali)
 
 1. **Settings → Pages → Source**: pilih **GitHub Actions**. Lalu jalankan **Hub XNK** sekali (aksi `bangun`).
