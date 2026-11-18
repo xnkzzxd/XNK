@@ -82,7 +82,7 @@ sampah Drive (masih bisa dipulihkan 30 hari dari sampah).
   (atau jalankan `setupPusat` di editor) untuk memberi izin baru dan memasang trigger backup tiap jam.
 
 ## Siapkan XNK Pusat dari /adminxnk
-`pusatOverview.setup` = `{auth, daily, backup, ok}` (izin Google lewat `ScriptApp.getAuthorizationInfo`, dua trigger).
+`pusatOverview.setup` = `{auth, daily, backup, ok, editor}`. `auth` diuji langsung: satu permintaan kecil ke Drive dengan token skrip (berhasil = disimpan 10 menit). **Jangan pakai `ScriptApp.getAuthorizationInfo`** di sini: dari web app "Siapa saja" ia memeriksa pengunjung anonim, jadi selalu "perlu izin" walau pemilik sudah memberi izin.
 Bila ada yang kurang, `/adminxnk` menampilkan pita "XNK Pusat perlu disiapkan" (tombol yang sama juga ada di bilah atas).
 Tombol membuka tab baru (dibuka saat diklik, supaya tidak diblokir) ke `<pusatUrl>?setup=<tanda siap>`: tanda sekali
 pakai `setup.<exp>.<hmac>` dari `pusatAction(token, 'setup')`, berlaku 10 menit, bukan token sesi. `doGet` memeriksanya

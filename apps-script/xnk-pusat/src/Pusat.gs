@@ -83,11 +83,12 @@ function editorUrl_() { try { return 'https://script.google.com/d/' + ScriptApp.
 function setupState_() {
   var h = {};
   try { ScriptApp.getProjectTriggers().forEach(function (t) { h[t.getHandlerFunction()] = 1; }); } catch (e) { /* tanpa izin trigger */ }
-  var auth = true;
-  try {
-    var info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
-    auth = info.getAuthorizationStatus() !== ScriptApp.AuthorizationStatus.REQUIRED;
-  } catch (e) { auth = true; }
+  // Dicoba langsung ke Drive dengan token skrip ini: getAuthorizationInfo dari web app "Siapa saja" memeriksa
+  // pengunjung anonim, jadi selalu "perlu izin" walau pemilik sudah memberi izin di editor. Hasil baik disimpan 10 menit.
+  var c = CacheService.getScriptCache(), auth = c.get('auth-ok') === '1';
+  if (!auth) {
+    try { drive_('get', '?pageSize=1&fields=files(id)'); auth = true; c.put('auth-ok', '1', 600); } catch (e) { auth = false; }
+  }
   var st = { auth: auth, daily: !!h.runPusatDaily, backup: !!h.runPusatBackup, editor: editorUrl_() };
   st.ok = st.auth && st.daily && st.backup;
   return st;

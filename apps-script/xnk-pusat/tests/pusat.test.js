@@ -35,8 +35,9 @@ function env(opts) {
       getProjectTriggers: () => triggers.map(h => ({ getHandlerFunction: () => h })), deleteTrigger: t => triggers.splice(triggers.indexOf(t.getHandlerFunction()), 1),
       newTrigger: h => { const b = { timeBased: () => b, atHour: () => b, everyDays: () => b, everyHours: () => b, after: () => b, inTimezone: () => b, create: () => triggers.push(h) }; return b; },
       getOAuthToken: () => 'tok-pusat', getScriptId: () => 'SCRIPTPUSAT',
+      // Seperti web app "Siapa saja": getAuthorizationInfo memeriksa pengunjung anonim, jadi selalu REQUIRED.
       AuthMode: { FULL: 'FULL' }, AuthorizationStatus: { REQUIRED: 'REQUIRED', NOT_REQUIRED: 'NOT_REQUIRED' },
-      getAuthorizationInfo: () => ({ getAuthorizationStatus: () => (opts.needAuth ? 'REQUIRED' : 'NOT_REQUIRED') }),
+      getAuthorizationInfo: () => ({ getAuthorizationStatus: () => 'REQUIRED' }),
     },
     SpreadsheetApp: { openById: id => { if (!drive.books[id]) throw new Error('Spreadsheet tidak ada'); return drive.books[id]; } },
     UrlFetchApp: {
@@ -117,6 +118,7 @@ function driveFetch(drive, url, o, reply, opts) {
     if (method === 'patch') Object.assign(f, JSON.parse(o.payload));
     return reply(200, { id: f.id, trashed: f.trashed });
   }
+  if (!q.get('q')) return reply(200, { files: [] });   // cek izin (setupState_)
   const parent = (q.get('q').match(/'([^']+)' in parents/) || [])[1];
   return reply(200, { files: Object.values(drive.files).filter(f => f.parents.includes(parent) && !f.trashed && f.mimeType === 'application/vnd.google-apps.spreadsheet').map(f => ({ id: f.id, name: f.name, createdTime: f.createdTime })) });
 }
@@ -151,7 +153,7 @@ test('setupPusat: kunci sesi, satu trigger harian dan satu trigger backup tiap j
 });
 
 test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet; tanda palsu/kedaluwarsa tidak; overview melapor', () => {
-  const e = env({ needAuth: true });
+  const e = env({ driveDown: true });
   e.triggers.length = 0;
   const tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
   const ov = e.call('pusatOverview', tok).data.setup;
