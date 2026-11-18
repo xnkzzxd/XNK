@@ -3113,7 +3113,7 @@ html.desk .cn-wrap { max-width: none; }
     hevy: { style: 'gelap', align: 'kiri', scale: 'm', corner: 'bulat', frame: false },
     polos: { style: 'terang', align: 'kiri', scale: 'm', corner: 'kotak', frame: true }
   };
-  const DEF = { v: 2, preset: 'strava', style: 'grafik', size: 'story', ink: 'putih', align: 'kiri', pos: 'bawah', scale: 'm', corner: 'bulat', frame: false, lang: 'en', name: null, fmt: 'png', anim: 'minimal', dur: 6, fx: 'halus',
+  const DEF = { v: 2, preset: 'strava', style: 'grafik', size: 'story', ink: 'putih', align: 'kiri', pos: 'bawah', scale: 'm', corner: 'bulat', frame: false, lang: 'en', name: null, fmt: 'png', anim: 'minimal', dur: 6, fx: 'polos',
     foot: { date: true, logo: true, me: false, coach: true, coachPic: false, qr: false }, k: {} };
   const KDEF = { order: [], off: [], graph: '', period: 'hari', cmp: 'prev', body: false, measures: [], bodyVal: false, hideKg: false, title: '', blur: 'none', blurH: 24 };
   let P = null;
@@ -3917,7 +3917,7 @@ html.desk .cn-wrap { max-width: none; }
   function opts() {
     const k = kp();
     const size = P.size, H = SIZES[size] || 1920;
-    return { anim: P.anim === 'kinetic' ? 'kinetic' : 'minimal', dur: [6, 10, 15].indexOf(Number(P.dur)) !== -1 ? Number(P.dur) : 6, fx: P.fx === 'polos' ? 'polos' : 'halus',
+    return { anim: P.anim === 'kinetic' ? 'kinetic' : 'minimal', dur: [6, 10, 15].indexOf(Number(P.dur)) !== -1 ? Number(P.dur) : 6, fx: P.fx === 'halus' ? 'halus' : 'polos',
       accent: st.src.accent || '', style: P.style === 'aksen' && !st.src.accent ? 'gelap' : P.style, size: size, H: H, ink: P.ink, align: P.align, pos: P.pos, s: P.scale === 'l' ? 1.18 : P.scale === 's' ? .86 : 1, corner: P.corner, frame: P.frame,
       foot: P.foot, name: String(P.name == null ? (st.src.first || '') : P.name).trim(), coach: (st.src.share && st.src.share.coach) || st.src.coach || '', cmp: PERIOD_KINDS[st.kind] || st.card.vsKey ? k.cmp : 'none', photo: st.photoBg, qrUrl: (st.src.share && st.src.share.qrUrl) || 'https://xnkbooking.my.id', avatars: st.avatars || {} };
   }
@@ -4072,7 +4072,7 @@ html.desk .cn-wrap { max-width: none; }
   }
   const isBoxed = o => o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen';
   const inkOf = o => (o.style === 'gelap' || o.style === 'aksen' ? '#FFFFFF' : o.style === 'terang' ? '#0B0B0B' : (o.ink === 'hitam' ? '#0B0B0B' : '#FFFFFF'));
-  // Fase T3: efek (cahaya lembut, vinyet, kilau, butir film) hanya di kartu berlatar; transparan tetap bersih.
+  // Fase T3: efek (cahaya lembut, vinyet, kilau, butir film) hanya di kartu berlatar, mati bawaan (pemilik 2026-11-18: warna lama lebih bagus).
   const fxOn = o => o.fx !== 'polos' && (isBoxed(o) || o.style === 'foto' || o.video);
   let grainTile = null;
   /** Butir film: satu ubin 256 px dengan derau tetap (seed), dibuat sekali. */
@@ -4137,7 +4137,7 @@ html.desk .cn-wrap { max-width: none; }
   }
   /** Teks putih di atas transparan: cahaya lembut agar terbaca di foto apa pun. */
   function textShadow(ctx, o, ink) {
-    if (ink === '#FFFFFF' && !isBoxed(o) && o.style !== 'foto' && !o.video) { ctx.shadowColor = 'rgba(0,0,0,.42)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 1; }
+    if (ink === '#FFFFFF' && !isBoxed(o) && o.style !== 'foto' && !o.video) { ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 2; }
   }
   /** Butir film di atas semuanya, hanya di dalam kartu; bergeser per bingkai video. */
   function paintGrain(ctx, o, frame) {
@@ -4334,7 +4334,7 @@ html.desk .cn-wrap { max-width: none; }
     const boxed = P.style === 'gelap' || P.style === 'terang' || P.style === 'aksen';
     let h = row('Gaya', [['teks', 'Transparan'], ['grafik', 'Transp. + grafik'], ['gelap', 'Gelap'], ['terang', 'Terang']].concat(st.src.accent ? [['aksen', 'Warna aksen']] : [], [['foto', 'Foto']]).map(x => chip('style', x[0], x[1], P.style)).join(''));
     if (!boxed) h += row('Warna teks', chip('ink', 'putih', 'Putih', P.ink) + chip('ink', 'hitam', 'Hitam', P.ink));
-    if (boxed || P.style === 'foto') h += row('Efek', chip('fx', 'halus', 'Grain + cahaya', P.fx || 'halus') + chip('fx', 'polos', 'Polos', P.fx || 'halus'));
+    if (boxed || P.style === 'foto') h += row('Efek', chip('fx', 'polos', 'Polos', P.fx || 'polos') + chip('fx', 'halus', 'Grain + cahaya', P.fx || 'polos'));
     if (P.style === 'foto') h += row('Foto latar', '<button type="button" class="chip" onclick="window.sharePick(\'bg\')">' + ic('image') + (st.photoBg ? 'Ganti foto' : 'Pilih foto') + '</button>') + blurField();
     return h;
   }

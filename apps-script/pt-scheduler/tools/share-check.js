@@ -158,10 +158,10 @@ const OUT = process.env.SHOTS_DIR || '';
       window.shareSet('fx', 'polos'); const off = await px();
       out[style] = { changed: diff(on, off), corner: on[3] };
     }
-    window.shareSet('fx', 'halus');
+    window.shareSet('fx', 'polos');
     return out;
   });
-  check(fx.def === 'halus', 'effects (grain + soft light) are on by default');
+  check(fx.def === 'polos', 'effects (grain + soft light) are off by default: the colours stay as before (owner, 2026-11-18)');
   ['gelap', 'terang', 'aksen'].forEach(st => check(fx[st].changed > 100000 && fx[st].corner === 0, `${st}: effect pass changes the card (${fx[st].changed} px) and stays inside the rounded corner`));
   check(fx.grafik.changed === 0, 'transparent card stays clean (no grain, no light)');
 
