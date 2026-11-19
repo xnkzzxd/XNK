@@ -27,7 +27,7 @@ function _apiTable_() {
     hubExport: hubExport,
     hubPushKey: hubPushKey,
     hubSiteUrl: hubSiteUrl,
-    // admin: admin token (130)
+    // admin: admin token (131)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -41,6 +41,7 @@ function _apiTable_() {
     getMembers: getMembers,
     getMemberTransactionLog: getMemberTransactionLog,
     getSchedules: getSchedules,
+    exportMyData: exportMyData,
     addCoach: addCoach,
     updateCoach: updateCoach,
     deleteCoach: deleteCoach,
