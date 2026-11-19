@@ -112,7 +112,9 @@ test('runWarmTick (T-2243): sakelar "Siapkan data di latar" memasang trigger di 
   env.lib('installTriggers', A.ctx);
   assert.deepEqual(A.store.triggers.map(t => t.getHandlerFunction()).sort(), ['runReminderTick', 'runWarmTick']);
   assert.equal(env.lib('healthCheck', A.ctx).ok, true);
-  assert.ok(env.run(A.ctx, 'runWarmTick').admin, 'tick berjalan dengan data spreadsheet A');
+  // Di luar 05:00–22:00 WIB tick sengaja tidak bekerja (sama dengan pt-scheduler/tests/warm.test.js).
+  const wt = env.run(A.ctx, 'runWarmTick');
+  assert.ok(wt.admin || wt.skipped === 'malam', 'tick berjalan dengan data spreadsheet A: ' + JSON.stringify(wt));
   env.run(A.ctx, 'updateAppSettings', tok, { warmEnabled: false });
   assert.deepEqual(A.store.triggers.map(t => t.getHandlerFunction()), ['runReminderTick'], 'dimatikan = trigger dilepas');
   A.store.triggers.push({ getHandlerFunction: () => 'runWarmTick' });

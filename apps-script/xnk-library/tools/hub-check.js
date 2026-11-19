@@ -359,7 +359,9 @@ async function makeLogos(browser) {
         check(q.where === place.join(' · ') && q.sec && q.maps === 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(place.join(', ')),
           `${slug}: tempat di pita atas dan bagian Tempat dengan link Maps (${JSON.stringify([q.where, q.maps])})`);
         check(q.facts === 'per,jam' && q.best === 'Regular 16' && q.per === 'Rp 90.000 / sesi', `${slug}: ringkasan (harga per sesi, jam kosong) dan "Paling hemat" (${JSON.stringify(q)})`);
-        check(q.nav === 'Profil,Tempat,Paket,Jadwal', `${slug}: menu bagian Profil · Tempat · Paket · Jadwal`);
+        check(q.nav === 'Profil,Tempat,Jadwal,Paket', `${slug}: menu bagian Profil · Tempat · Jadwal · Paket`);
+        check(await page.evaluate(() => { const y = id => document.getElementById(id).getBoundingClientRect().top; return y('profil') < y('tempat') && y('tempat') < y('jadwal') && y('jadwal') < y('paket'); }),
+          `${slug}: di HP Jadwal tampil sebelum Paket`);
         const strip = await page.evaluate(() => { const b = [...document.querySelectorAll('#slots .day')]; const on = b.findIndex(x => x.getAttribute('aria-pressed') === 'true');
           const other = b.findIndex((x, i) => i !== on); return { on, other, n: b.length, hours: document.querySelectorAll('#pick .hr').length }; });
         await page.click(`#slots .day[data-i="${strip.other}"]`);
@@ -377,6 +379,16 @@ async function makeLogos(browser) {
             small: [...document.querySelectorAll('a.btn, button, a.hr')].filter(e => e.offsetParent && e.getBoundingClientRect().height < 43.5).length,
             bar: getComputedStyle(document.querySelector('.bar')).display }));
           check(m.sw <= w && m.small === 0 && (w < 900 ? m.bar !== 'none' : m.bar === 'none'), `${slug} info ${w}×${h}: tanpa scroll ke samping, tombol ≥ 44 px, tombol bawah ${w < 900 ? 'tampil' : 'diganti tombol atas'} (${JSON.stringify(m)})`);
+          if (w >= 900) {
+            // Pita atas tanpa bidang kosong di kanan (kotak jam kosong terdekat), Jadwal di kolom kanan sejajar Profil.
+            await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+            await page.waitForTimeout(100);
+            const d = await page.evaluate(() => { const hs = document.getElementById('hero-side'), r = hs.getBoundingClientRect(), wr = document.querySelector('.hero .wrap').getBoundingClientRect();
+              const j = document.getElementById('jadwal').getBoundingClientRect(), p = document.getElementById('profil').getBoundingClientRect();
+              return { side: getComputedStyle(hs).display !== 'none' && r.width > 150, right: Math.round(wr.right - r.right), next: document.getElementById('hs-next').textContent,
+                col: j.left > p.right && Math.abs(j.top - p.top) < 4 }; });
+            check(d.side && d.right < 40 && /\d\d\.00|Belum ada/.test(d.next) && d.col, `${slug} info ${w}×${h}: kotak kanan pita atas (jam terdekat), Jadwal di kolom kanan (${JSON.stringify(d)})`);
+          }
         }
         await page.close();
       }
