@@ -197,6 +197,12 @@ function _rmdNormalizePhone_(phone) {
 }
 
 /** Link wa.me, dengan teks opsional. null kalau nomor tidak valid. */
+/** "Vinna" → "Coach Vinna"; nama yang sudah diawali "Coach" dibiarkan (tidak pernah "Coach Coach"). */
+function _coachLabel_(name) {
+  var n = String(name == null ? '' : name).trim();
+  return /^coach\b/i.test(n) ? n : 'Coach ' + n;
+}
+
 function _waLink_(phone, text) {
   var n = _rmdNormalizePhone_(phone);
   if (!n) return null;
@@ -977,7 +983,7 @@ function sendSesiBesokDigest_(ctx) {
     items.push({
       name: name, phone: phone, fact: g.times[0].label,
       text: _rmdClientText_(pool, 'sesi-besok', tomorrow, { id: g.key, name: name, phone: phone, remaining: m ? m.remaining : 0 },
-        { jam: jam, coach: g.coach ? 'dengan Coach ' + g.coach : '', tidur: sleep ? '\n\n😴 ' + sleep : '' }, act, { banyak: g.times.length > 1, noKangen: true })
+        { jam: jam, coach: g.coach ? 'dengan ' + _coachLabel_(g.coach) : '', tidur: sleep ? '\n\n😴 ' + sleep : '' }, act, { banyak: g.times.length > 1, noKangen: true })
     });
   });
   return _rmdSendDigest_('Sesi besok', _rmdDateLabel_(tomorrow), items, noPhone);

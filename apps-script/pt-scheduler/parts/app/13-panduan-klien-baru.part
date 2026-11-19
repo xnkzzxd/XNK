@@ -504,6 +504,6 @@
     const c = window.coaches.find(x => String(x.id) === String(id));
     if (!c) return;
     const me = window.publicLoggedMember;
-    window.sendToParentWA(c.phone, 'Halo Coach ' + c.name + ', saya ' + (me ? me.name : '') + ' ingin tanya program latihan' + (c.specialty ? ' ' + c.specialty : '') + '.');
+    window.sendToParentWA(c.phone, 'Halo ' + window.coachLabel(c.name) + ', saya ' + (me ? me.name : '') + ' ingin tanya program latihan' + (c.specialty ? ' ' + c.specialty : '') + '.');
   };
 
