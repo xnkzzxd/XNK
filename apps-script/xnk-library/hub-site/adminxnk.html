@@ -21,7 +21,7 @@
   .btn.ghost { background: transparent; color: var(--fg); }
   header .btn { border-color: #fff; background: transparent; color: #fff; min-height: 38px; }
   .btn:disabled { opacity: .5; cursor: default; }
-  input { width: 100%; min-height: 44px; font-size: 16px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); margin: 6px 0 12px; }
+  input, select { width: 100%; min-height: 44px; font-size: 16px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); margin: 6px 0 12px; }
   .mut { color: var(--mut); font-size: .9rem; }
   .msg { min-height: 1.4em; margin-top: 8px; font-size: .95rem; }
   .bad { color: var(--bad); } .ok { color: var(--ok); }
@@ -39,6 +39,11 @@
   .acts .btn { min-height: 40px; font-size: .9rem; }
   .bk { margin-top: 10px; font-size: .95rem; }
   .bk a { color: inherit; }
+  .sub { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .sub summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
+  .sub form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 0 10px; margin-top: 6px; }
+  .sub label { font-size: .85rem; color: var(--mut); }
+  .sub .full { grid-column: 1 / -1; }
   .hide { display: none !important; }
   .pl { margin-top: 10px; font-size: .95rem; overflow-wrap: anywhere; }
   .pl-form { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
@@ -123,6 +128,43 @@
     };
     return '<div class="kv">' + tile(q.mail, lim.mail, 'email hari ini') + tile(q.fetch, lim.fetch, 'UrlFetch hari ini') + tile(q.triggerMin, lim.triggerMin, 'menit trigger hari ini') + '</div>';
   }
+  // T-2251: langganan bulanan per coach. Bawaan = gratis (tidak pernah baca saja).
+  function rp(n) { return 'Rp ' + (Number(n) || 0).toLocaleString('id-ID'); }
+  function subLine(v) {
+    var t, bad = false;
+    if (v.plan !== 'bulanan') t = 'Gratis / tanpa langganan';
+    else {
+      t = 'Bulanan ' + rp(v.price);
+      if (v.state === 'aktif') t += ' · aktif s.d. ' + (v.due || '-');
+      else if (v.state === 'segera') t += ' · jatuh tempo ' + v.due + (v.days === 0 ? ' (hari ini)' : ' (' + v.days + ' hari lagi)');
+      else if (v.state === 'tenggang') { t += ' · lewat jatuh tempo ' + v.due + ', tenggang ' + v.graceLeft + ' hari lagi'; bad = true; }
+      else if (v.state === 'lewat') { t += ' · lewat masa tenggang (jatuh tempo ' + v.due + ')'; bad = true; }
+    }
+    return '<div class="' + (bad ? 'bad' : '') + '" style="font-weight:600">Langganan: ' + esc(t) + '</div>';
+  }
+  function subHtml(s, v) {
+    var ro = v.readonly ? 'Baca saja <b>menyala</b>' + (v.ro === 'on' ? ' (dinyalakan tangan)' : '') : 'Baca saja mati' + (v.ro === 'off' ? ' (dimatikan tangan)' : '');
+    var h = '<div class="sub">' + subLine(v) + '<div class="bk ' + (v.readonly ? 'bad' : 'mut') + '">' + ro + '</div>';
+    if (v.pushed && v.pushed.error) h += '<div class="bk bad">Coach belum menerima: ' + esc(v.pushed.error) + '</div>';
+    if (v.history && v.history.length) {
+      var last = v.history[v.history.length - 1];
+      h += '<div class="bk mut">Lunas terakhir ' + esc(when(last.at)) + ' (untuk ' + esc(last.due) + ', ' + esc(rp(last.price)) + ')</div>';
+    }
+    h += '<div class="acts">' + (v.plan === 'bulanan' ? '<button class="btn" type="button" data-act="sub-paid" data-slug="' + esc(s) + '">Tandai lunas</button>' : '') +
+      (v.ro !== 'on' ? '<button class="btn ghost" type="button" data-act="sub-ro-on" data-slug="' + esc(s) + '">Baca saja: nyalakan</button>' : '') +
+      (v.ro !== 'off' ? '<button class="btn ghost" type="button" data-act="sub-ro-off" data-slug="' + esc(s) + '">Baca saja: matikan</button>' : '') +
+      (v.ro !== 'auto' ? '<button class="btn ghost" type="button" data-act="sub-ro-auto" data-slug="' + esc(s) + '">Baca saja: otomatis</button>' : '') + '</div>';
+    var id = 'sb-' + esc(s);
+    h += '<details><summary>Atur langganan</summary><form data-sub="' + esc(s) + '">' +
+      '<label class="full" for="' + id + '-p">Paket</label><select class="full" id="' + id + '-p" data-f="plan">' +
+      '<option value="gratis"' + (v.plan !== 'bulanan' ? ' selected' : '') + '>Gratis / tanpa langganan</option>' +
+      '<option value="bulanan"' + (v.plan === 'bulanan' ? ' selected' : '') + '>Bulanan</option></select>' +
+      '<div><label for="' + id + '-h">Harga (Rp)</label><input id="' + id + '-h" data-f="price" inputmode="numeric" value="' + esc(v.price || '') + '"></div>' +
+      '<div><label for="' + id + '-d">Jatuh tempo</label><input id="' + id + '-d" data-f="due" type="date" value="' + esc(v.due || '') + '"></div>' +
+      '<div class="full"><label for="' + id + '-e">Email coach (kosong = email pemilik)</label><input id="' + id + '-e" data-f="email" type="email" autocomplete="off" value="' + esc(v.email || '') + '"></div>' +
+      '<div class="full"><button class="btn" type="button" data-act="sub-save" data-slug="' + esc(s) + '">Simpan langganan</button></div></form></details></div>';
+    return h;
+  }
   function render() {
     var d = data, rows = {}, html = '';
     d.coaches.forEach(function (c) { rows[c.slug] = c; });
@@ -168,6 +210,7 @@
           (pu.at ? ' · ' + esc(when(pu.at)) : '') + '</div>';
         if (pu.error) html += '<div class="bk bad">Push: ' + esc(pu.error) + '</div>';
       }
+      if (!c.missing) html += subHtml(s, c.sub || {});
       html += '<div class="acts">' + (HUB[s] && openPlace !== s ? '<button class="btn ghost" type="button" data-act="tempat" data-slug="' + esc(s) + '">Tempat</button>' : '') +
         (c.missing ? '' : '<button class="btn ghost" type="button" data-act="cek" data-slug="' + esc(s) + '">Cek ulang</button>' +
         '<button class="btn ghost" type="button" data-act="backup" data-slug="' + esc(s) + '">Backup sekarang</button>' +
@@ -254,6 +297,20 @@
     if (act === 'push-on' || act === 'push-off') {
       if (!window.confirm((act === 'push-on' ? 'Nyalakan' : 'Matikan') + ' notifikasi push untuk ' + slug + '?')) return;
       return load('pusatAction', [tok(), act, slug], 'Mengirim ke ' + slug + '…');
+    }
+    if (act === 'sub-save') {
+      var form = b.closest('form'), val = function (f) { var el = form.querySelector('[data-f="' + f + '"]'); return el ? el.value : ''; };
+      say('dm', 'Menyimpan langganan ' + slug + '…');
+      return rpc('pusatSubSave', [tok(), slug, { plan: val('plan'), price: val('price'), due: val('due'), email: val('email') }])
+        .then(function (d) { data = d; render(); say('dm', 'Langganan ' + slug + ' disimpan.', 'ok'); }, function (e) { say('dm', e.message, 'bad'); });
+    }
+    if (/^sub-/.test(act)) {
+      var q = { 'sub-paid': 'Tandai langganan ' + slug + ' lunas? Jatuh tempo maju satu bulan dan baca saja kembali otomatis.',
+        'sub-ro-on': 'Nyalakan mode baca saja untuk ' + slug + '? Coach dan klien tetap bisa melihat data, tetapi tidak bisa mengubahnya.',
+        'sub-ro-off': 'Matikan mode baca saja untuk ' + slug + ' (menimpa hitungan otomatis)?', 'sub-ro-auto': 'Kembalikan baca saja ' + slug + ' ke hitungan otomatis?' }[act];
+      if (!q || !window.confirm(q)) return;
+      say('dm', 'Mengirim ke ' + slug + '…');
+      return rpc('pusatAction', [tok(), act, slug]).then(function (d) { data = d; render(); say('dm', d.notice || 'Selesai.', d.notice ? 'bad' : 'ok'); }, function (e) { say('dm', e.message, 'bad'); });
     }
     if (act === 'ganti-slug') {
       // T-2243: alamat lama tetap mengarah ke yang baru; klien dan coach tetap masuk (docs/library/Hub.md).

@@ -415,6 +415,36 @@ async function contrastReport(page) {
     await context.close(); await reload.context.close(); await revoked.context.close();
   })().catch(sectionCrash);
 
+  // ── T-2251: mode baca saja (langganan coach di hub) — pita tenang di panel dan portal ───────
+  console.log('Mode baca saja (pita panel + portal)');
+  await (async () => {
+    const env = richEnv();
+    const adminTok = env.adminToken(), memberTok = env.memberToken(KEY_A);
+    const off = await openPage(browser, env, '/Index', [], { xnk_admin_token: adminTok }, { wait: 1500 });
+    check(!(await visible(off.page, '#ro-band')), 'read-only off (default): no banner on the panel');
+    await off.context.close();
+    env.props.HUB_SECRET = 'h'.repeat(40);
+    env.call('hubReadonly', 'h'.repeat(40), true, 'Langganan lewat jatuh tempo 2026-11-01.');
+    for (const [vp, label] of [[MOBILE, 'phone'], [DESKTOP, 'desktop']]) {
+      const adm = await openPage(browser, env, '/Index', [], { xnk_admin_token: adminTok }, { viewport: vp, wait: 1500 });
+      const t = (await adm.page.textContent('#ro-band').catch(() => '')) || '';
+      check(await visible(adm.page, '#ro-band') && t.includes('Mode baca saja') && t.includes('jatuh tempo 2026-11-01'), 'panel ' + label + ': read-only banner with the owner note');
+      check(await adm.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'panel ' + label + ': banner causes no sideways scroll');
+      noErrors(adm.errors);
+      await adm.context.close();
+      const pub = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: memberTok }, { viewport: vp, wait: 1500 });
+      const p = (await pub.page.textContent('#ro-band').catch(() => '')) || '';
+      check(await visible(pub.page, '#ro-band') && p.includes('hanya bisa dilihat') && !p.includes('jatuh tempo') && !p.includes('Langganan'), 'portal ' + label + ': calm banner, no subscription story for clients');
+      noErrors(pub.errors);
+      await pub.context.close();
+    }
+    env.call('hubReadonly', 'h'.repeat(40), false);
+    const back = await openPage(browser, env, '/Index', [], { xnk_admin_token: adminTok }, { wait: 1500 });
+    check(!(await visible(back.page, '#ro-band')), 'read-only switched off: banner gone');
+    noErrors(back.errors);
+    await back.context.close();
+  })().catch(sectionCrash);
+
   // ── Panel PT, HP: satu loading, tarik untuk muat ulang, tombol back ───────
   console.log('Panel PT · HP (login, tarik, back)');
   await (async () => {

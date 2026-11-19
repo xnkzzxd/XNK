@@ -22,7 +22,7 @@ test('hubStatus: angka saja (klien, sesi, trigger, pengingat), tanpa nama atau n
   env.props.HUB_SECRET = SECRET;
   env.props.RMD_ENABLED = 'true';
   const r = env.call('hubStatus', SECRET);
-  assert.deepEqual(Object.keys(r).sort(), ['api', 'at', 'clients', 'lib', 'quota', 'reminders', 'sessions', 'triggers']);
+  assert.deepEqual(Object.keys(r).sort(), ['api', 'at', 'clients', 'lib', 'quota', 'readonly', 'reminders', 'sessions', 'triggers']);
   assert.ok(r.lib === null || (/^[0-9a-f]{12}$/.test(r.lib.hash) && typeof r.lib.commit === 'string'), 'produksi: null; Library: sidik build');
   assert.equal(r.reminders.enabled, true);
   for (const k of ['total', 'active30d']) assert.equal(typeof r.clients[k], 'number', k);
