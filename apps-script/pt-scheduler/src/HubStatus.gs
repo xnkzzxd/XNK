@@ -56,6 +56,7 @@ function hubStatus(secret) {
     clients: { total: Math.max(0, md.getLastRow() - 1), active30d: Object.keys(active).length },
     sessions: { done7d: done7, next7d: next7 },
     quota: _quotaToday_(),   // T-2253: email, fetch, menit trigger hari ini (WIB)
+    readonly: _readonlyOn_(),   // T-2251: mode baca saja (langganan)
   };
 }
 

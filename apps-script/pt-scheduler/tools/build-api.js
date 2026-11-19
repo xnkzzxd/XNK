@@ -25,6 +25,13 @@ ${group('admin: admin token', L.ADMIN)}
 ${group('member: member token', L.MEMBER)}
   };
 }
+
+// T-2251: fungsi tulis (tests/api-lists.js WRITE). Ditolak _readonlyGate_ saat mode baca saja menyala.
+function _apiWrites_() {
+  return {
+${L.WRITE.map(n => `    ${n}: 1,`).join('\n')}
+  };
+}
 `;
 }
 

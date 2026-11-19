@@ -2261,6 +2261,7 @@
       if (r[2]) applyCoachesAdmin(r[2]);
       if (r[3]) window.priceListData = r[3];
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
+      if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (r[0] && r[1]) saveAdminCache();
@@ -2341,6 +2342,7 @@
     return boot.then(function (b) {
       b = b || {};
       applyPortalBootstrap(b);
+      if (b.profile || b.openSlots) window.setReadonly(b.readonly ? { on: true } : null, 'portal');   // T-2251 (jawaban gagal = biarkan)
       if (token && haveMore && !b.authLost) { if (!moreUpToDate(b)) window.refreshPortalMore(true); else window.wlFlush(); }
       window.coaches = b.coaches || [];
       window.priceListData = b.priceList || [];
@@ -12249,6 +12251,24 @@
       (lv ? lv.rinci.map(r => '<div class="ds-pt"><span>' + h(r.label) + '</span><span class="px-bar"><i style="width:' + Math.round(r.poin / max * 100) + '%"></i></span><b class="num">' + r.poin + '</b></div>').join('') : skel(3)) +
       '<button type="button" class="btn btn-secondary ds-out" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></section>';
     return '<div class="ds-saya">' + athleteCardHtml().replace('class="card-ink athlete', 'class="card-ink athlete ath-wide') + '<div class="ds-cols"><div class="ds-col">' + c1 + '</div><div class="ds-col">' + c2 + '</div><div class="ds-col">' + c3 + '</div></div></div>';
+  };
+
+  // ═══ T-2251: mode baca saja (langganan coach di hub xnk.web.id) ═══
+  // Server menolak semua fungsi tulis (gerbang di doPost); di sini hanya pita tenang di atas halaman. Panel coach melihat
+  // alasan dan catatan pengelola; klien hanya "data hanya bisa dilihat" (tanpa cerita langganan).
+  window.setReadonly = function (ro, mode) {
+    window.isReadonly = !!(ro && ro.on);
+    const el = document.getElementById('ro-band');
+    if (!el) return;
+    if (!window.isReadonly) { el.classList.add('hide'); el.innerHTML = ''; return; }
+    const admin = mode === 'admin';
+    const txt = admin
+      ? 'Langganan aplikasi perlu diperpanjang. Semua data aman dan tetap bisa dilihat, tetapi belum bisa diubah.'
+      : 'Untuk sementara data hanya bisa dilihat. Booking dan catatan baru belum bisa disimpan.';
+    const note = admin && ro.note ? '<span class="ro-note">' + h(ro.note) + '</span>' : '';
+    el.innerHTML = '<span class="ro-ic" aria-hidden="true">' + icon('lock') + '</span><div class="ro-tx"><b>Mode baca saja</b><span>' + h(txt) + '</span>' + note + '</div>';
+    el.classList.remove('hide');
+    paintIcons();
   };
 })();
 </script>

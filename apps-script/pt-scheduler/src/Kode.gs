@@ -140,6 +140,7 @@ function doPost(e) {
     }
     const limit = Object.prototype.hasOwnProperty.call(API_BODY_LIMITS, fn) ? API_BODY_LIMITS[fn] : APP_API_MAX_BYTES;
     if (raw.length > limit) throw new Error('Permintaan tidak valid.');
+    _readonlyGate_(fn);   // T-2251: mode baca saja (langganan coach di hub) menolak fungsi tulis di sini saja
     // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
     try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
     const args = Array.isArray(req.args) ? req.args : [];
@@ -151,7 +152,9 @@ function doPost(e) {
     return _appApiReply_({ ok: true, data: out });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
-    return _appApiReply_({ ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 });
+    const bad = { ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 };
+    if (err && err.code === 'readonly') bad.code = 'readonly';
+    return _appApiReply_(bad);
   }
 }
 
@@ -2238,6 +2241,7 @@ function getPortalBootstrapImpl_(memberToken) {
     businessHours: _businessHours_(),
     moreVer: moreVer,
     // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati dan tidak membawanya lagi saat cache kena).
+    readonly: _readonlyOn_(),   // T-2251: pita "hanya bisa dilihat" (tanpa catatan pemilik untuk klien)
     coachStatus: found ? _tp_(tr, 'coachStatus', function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } }) : null,
     ms: _traceEnd_(tr, 'getPortalBootstrap')
   };
@@ -2392,7 +2396,8 @@ function getAdminBootstrap(token) {
     schedules: _getSchedulesAll_(),
     coaches: getCoachesAdmin(token),
     priceList: getPriceList(),
-    businessHours: _businessHours_()
+    businessHours: _businessHours_(),
+    readonly: _readonlyInfo_()   // T-2251: null = biasa; {on, note} = mode baca saja
   };
 }
 

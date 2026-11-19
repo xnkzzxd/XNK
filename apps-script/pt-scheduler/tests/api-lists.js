@@ -13,7 +13,7 @@
 
 const PUBLIC = [
   'doGet', 'doPost', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
-  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo', 'hubStatus', 'hubExport', 'hubPushKey', 'hubSiteUrl',
+  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo', 'hubStatus', 'hubExport', 'hubPushKey', 'hubSiteUrl', 'hubReadonly',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [
@@ -54,4 +54,52 @@ const PUBLIC_API = PUBLIC.filter(n => !NOT_API.includes(n));
 // What doPost may dispatch: public API + admin + member. Never OWNER / TRIGGER.
 const API_FUNCTIONS = [...PUBLIC_API, ...ADMIN, ...MEMBER];
 
-module.exports = { PUBLIC, ADMIN, MEMBER, OWNER, TRIGGER, NOT_API, PUBLIC_API, API_FUNCTIONS };
+// T-2251: mode baca saja (langganan coach di hub). Every API function is in exactly one of these two lists
+// (tests/readonly.test.js). WRITE is refused while read-only is on (_readonlyGate_ via _apiWrites_ in Api.gs);
+// READ_OK keeps working: reads, login, PIN change, device push settings, "seen" markers, tests sends, Pusat/relay calls.
+const WRITE = [
+  // public
+  'registerNewClient',
+  // admin
+  'saveClientNutrition', 'decideNutritionAdvice', 'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto', 'saveCoach',
+  'saveClientNotes', 'saveWorkoutLog', 'snoozeCare', 'saveAssessment', 'saveFitnessTests', 'deleteFitnessTest', 'markHealthReviewed',
+  'saveContent', 'deleteContent', 'saveMemberProgram', 'saveExerciseAlias', 'saveGymExercise', 'setGymExerciseActive',
+  'regenerateProgram', 'setClientProgramAuto', 'setFormOk', 'saveProgramTemplate', 'deleteProgramTemplate', 'applyProgramTemplate',
+  'setTemplateExplore', 'saveSessionNote', 'saveCoachTargets', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff',
+  'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf', 'addMember', 'updateMemberProfile', 'deleteMember',
+  'addSchedule', 'addRecurringSchedule', 'deleteRecurringGroup', 'updateScheduleData', 'updateScheduleCoach', 'completeSession', 'deleteSchedule',
+  'updateAppSettings', 'addTask', 'updateTask', 'deleteTask', 'deleteTaskGroup', 'saveTaskTemplate', 'deleteTaskTemplate',
+  'setMemberMealReminder', 'setMemberReminderPrefs', 'decideRenewal', 'saveMemberMeasurement', 'deleteMemberMeasurement',
+  'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages',
+  'syncFinanceTransactions', 'saveBillAdjust', 'savePayment', 'saveExpense', 'saveFinanceCategory', 'deleteFinanceCategory',
+  'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'uploadFinanceProof',
+  // member
+  'clientBookSchedule', 'clientBookRecurring', 'clientRescheduleSchedule', 'uploadMemberPhoto', 'updateMemberPhoto', 'completeMyTask',
+  'saveMyNutritionProfile', 'setMyMenuStyle', 'swapMyMenuItem', 'swapMyMenuMeal', 'logMyFood', 'deleteMyFood', 'copyMyFoodYesterday',
+  'logMyProgramDay', 'saveMyProgramProfile', 'acceptAutoProgram', 'setMyProgramAuto', 'swapMyProgramExercise', 'saveMyRoutine',
+  'deleteMyRoutine', 'copyRoutineToMine', 'logMyWorkout', 'rateSession', 'submitMyPackageEval', 'submitMyHealthForm', 'requestRenewal',
+  'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'deleteMyProgressPhoto', 'createClassGroup', 'joinClassGroup',
+  'leaveClassGroup', 'saveMyProfileCard',
+];
+const READ_OK = [
+  'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'getPublicSchedules', 'getPriceList', 'getPriceListPublic',
+  'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots',
+  'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo', 'hubStatus', 'hubExport',
+  'hubPushKey', 'hubSiteUrl', 'hubReadonly', 'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras',
+  'getAdminMore', 'getClientBundle', 'getClientNutrition', 'getClientFoodLog', 'getMembers', 'getMemberTransactionLog',
+  'getSchedules', 'previewCoachProfile', 'getClientCare', 'getWorkoutLog', 'getWorkoutSummaryMessage', 'getTestResultMessage',
+  'getSessionBriefing', 'getContentAdmin', 'getMemberProgram', 'getManualExercises', 'getGymCatalog', 'getProgramGenPreview',
+  'getProgramTemplates', 'getSessionNote', 'getCoachHub', 'getCoachAvailability', 'getCoachesAdmin', 'markSchedulesAsRead',
+  'getPeakHourData', 'getCoachMonthlyStats', 'getPackageTrendStats', 'getRevenueSummary', 'getAppSettings', 'sendTelegramTest',
+  'getTasksForMember', 'getTaskSummary', 'getTaskTemplates', 'sendReminderTest', 'getReminderStatus', 'installReminderTrigger',
+  'getReminderLog', 'getAdminPushStatus', 'saveAdminPush', 'removeAdminPush', 'setAdminPushPrefs', 'previewReminderText',
+  'getRenewalRequests', 'getMemberProgress', 'getMemberProgressPhoto', 'getMemberShareData', 'getPriceListAdmin',
+  'getClassGroups', 'getBills', 'getBillDetail', 'getExpenses', 'getFinanceCategories', 'getFinanceOverview', 'getFinanceProof',
+  'exportFinanceCsv', 'getMemberProfile', 'getMemberSessions', 'getMyPushStatus', 'saveMyPush', 'removeMyPush', 'setMyPushPrefs',
+  'getMyTasks', 'getMyMealToday', 'getMyCoach', 'getPortalMore', 'getMyNutrition', 'getMyShopping', 'getMyFoodLog',
+  'getMyContent', 'getMyProgram', 'getMyProgramProfile', 'getMyWorkout', 'getMyPackageEval', 'getMyHealthForm',
+  'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'getMyRenewal', 'getMyProgressPhoto', 'getMyShareData',
+  'getMyClassGroup', 'getMyBills', 'markGuideSeen', 'markNotifSeen',
+];
+
+module.exports = { WRITE, READ_OK, PUBLIC, ADMIN, MEMBER, OWNER, TRIGGER, NOT_API, PUBLIC_API, API_FUNCTIONS };

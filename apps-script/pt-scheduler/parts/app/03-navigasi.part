@@ -543,6 +543,7 @@
       if (r[2]) applyCoachesAdmin(r[2]);
       if (r[3]) window.priceListData = r[3];
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
+      if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (r[0] && r[1]) saveAdminCache();
@@ -623,6 +624,7 @@
     return boot.then(function (b) {
       b = b || {};
       applyPortalBootstrap(b);
+      if (b.profile || b.openSlots) window.setReadonly(b.readonly ? { on: true } : null, 'portal');   // T-2251 (jawaban gagal = biarkan)
       if (token && haveMore && !b.authLost) { if (!moreUpToDate(b)) window.refreshPortalMore(true); else window.wlFlush(); }
       window.coaches = b.coaches || [];
       window.priceListData = b.priceList || [];

@@ -649,3 +649,150 @@ test('ganti slug: nama dicek sama dengan tools/build-hub.js (RESERVED, pola slug
   assert.deepEqual(Array.from(e.ctx.PUSAT_RESERVED), hub.RESERVED);
   assert.equal(String(e.ctx.PUSAT_SLUG_RE), String(hub.SLUG_RE));
 });
+
+// ── Langganan bulanan (T-2251) ──────────────────────────────────────────────────────────────────────────────
+const wib = (d) => new Date(Date.now() + 7 * 3600 * 1000 + (d || 0) * 864e5).toISOString().slice(0, 10);
+/** Coach palsu dengan hubStatus + hubReadonly; `old` = Library lama tanpa hubReadonly. */
+function roCoach(secret, old) {
+  const st = { on: false, calls: [] };
+  const fn = req => {
+    if (req.args[0] !== secret) return { ok: false, error: 'Permintaan tidak valid.' };
+    if (req.fn === 'hubStatus') return { ok: true, data: status(SHA_NEW) };
+    if (req.fn === 'hubReadonly' && !old) { st.calls.push(req.args.slice(1)); st.on = req.args[1] === true; return { ok: true, data: { on: st.on, note: req.args[2] || '', changed: true } }; }
+    return { ok: false, error: 'Permintaan tidak valid.', code: 'unknown_fn' };
+  };
+  fn.st = st;
+  return fn;
+}
+function subEnv(opts) {
+  opts = opts || {};
+  const a = roCoach(SECRET(1), opts.oldA), b = roCoach(SECRET(2));
+  const coaches = { claudia: { exec: EXEC(1), secret: SECRET(1), at: 'x' }, vinna: { exec: EXEC(2), secret: SECRET(2), at: 'x' } };
+  const e = env({ hub: JSON.stringify({ coaches: [{ slug: 'claudia', name: 'Claudia Fit' }] }), props: Object.assign({ COACHES: JSON.stringify(coaches) }, opts.props || {}), servers: { [EXEC(1)]: a, [EXEC(2)]: b } });
+  e.tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  return { e, a, b };
+}
+const subOf = (r, slug) => r.data.coaches.find(c => c.slug === slug).sub;
+
+test('langganan: bawaan semua coach = gratis; tanpa baris tidak pernah baca saja dan tidak dihubungi', () => {
+  const { e, a, b } = subEnv();
+  const r = e.call('pusatOverview', e.tok);
+  for (const s of ['claudia', 'vinna']) {
+    const v = subOf(r, s);
+    assert.equal(v.plan, 'gratis'); assert.equal(v.state, 'gratis'); assert.equal(v.readonly, false); assert.equal(v.ro, 'auto');
+  }
+  e.ctx.runPusatDaily();
+  assert.equal(a.st.calls.length + b.st.calls.length, 0, 'free coaches are never sent hubReadonly');
+  assert.equal(e.mails.length, 0);
+  assert.equal(e.ctx.subStatus_(e.ctx.subState_('tidakada'), wib()).readonly, false);
+});
+
+test('langganan: hitungan status — aktif, segera (≤ 7 hari), tenggang 7 hari, lalu baca saja; sakelar tangan menang', () => {
+  const { e } = subEnv();
+  const S = (due, ro, plan) => e.ctx.subStatus_({ plan: plan || 'bulanan', due, ro: ro || 'auto' }, '2026-11-19');
+  assert.equal(S('2026-12-19').state, 'aktif');
+  assert.equal(S('2026-11-26').state, 'segera');
+  assert.equal(S('2026-11-19').state, 'segera');
+  assert.deepEqual([S('2026-11-18').state, S('2026-11-18').graceLeft, S('2026-11-18').readonly], ['tenggang', 6, false]);
+  assert.deepEqual([S('2026-11-12').state, S('2026-11-12').readonly], ['tenggang', false], 'day 7 of grace is still grace');
+  assert.deepEqual([S('2026-11-11').state, S('2026-11-11').readonly], ['lewat', true]);
+  assert.equal(S('2026-11-01', 'off').readonly, false, 'manual off wins');
+  assert.equal(S('2026-12-19', 'on').readonly, true, 'manual on wins');
+  assert.equal(S('', 'on', 'gratis').readonly, true, 'owner can switch a free coach to read-only by hand');
+  assert.equal(S('', 'auto', 'bulanan').readonly, false, 'monthly without a due date is never read-only');
+  assert.equal(e.ctx.addMonth_('2026-01-31'), '2026-02-28');
+  assert.equal(e.ctx.addMonth_('2028-01-31'), '2028-02-29');
+  assert.equal(e.ctx.addMonth_('2026-12-15'), '2027-01-15');
+});
+
+test('langganan: simpan dari /adminxnk diperiksa; hanya pemilik; coach tak dikenal ditolak', () => {
+  const { e } = subEnv();
+  assert.equal(e.call('pusatSubSave', 'palsu', 'claudia', { plan: 'bulanan', due: wib(30) }).ok, false);
+  assert.equal(e.call('pusatSubSave', e.tok, 'tidakada', { plan: 'bulanan', due: wib(30) }).ok, false);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan' }).error, /jatuh tempo/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: '2026-02-30' }).error, /tidak valid/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(30), price: '12,5' }).error, /bilangan bulat/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(30), email: 'bukan email' }).error, /Email/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'x' }).error, /Pilih paket/);
+  const r = e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(30), price: '150.000', email: 'coach@contoh.id' });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual([subOf(r, 'claudia').price, subOf(r, 'claudia').state, subOf(r, 'claudia').email], [150000, 'aktif', 'coach@contoh.id']);
+  assert.ok(!JSON.stringify(r.data).includes(SECRET(1)));
+});
+
+test('langganan: lewat tenggang = hubReadonly(true) ke coach itu saja; Tandai lunas = +1 bulan, riwayat, mati lagi', () => {
+  const { e, a, b } = subEnv();
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(-8), price: 100000 });
+  assert.deepEqual(a.st.calls.at(-1), [true, 'Langganan lewat jatuh tempo ' + wib(-8) + '.'], 'pushed at once on save');
+  assert.equal(a.st.on, true);
+  assert.equal(b.st.calls.length, 0);
+  let r = e.call('pusatOverview', e.tok);
+  assert.deepEqual([subOf(r, 'claudia').state, subOf(r, 'claudia').readonly, subOf(r, 'claudia').pushed.on], ['lewat', true, true]);
+  r = e.call('pusatAction', e.tok, 'sub-paid', 'claudia');
+  assert.equal(r.ok, true, r.error);
+  const v = subOf(r, 'claudia');
+  assert.equal(v.due, e.ctx.addMonth_(wib(-8)));
+  assert.equal(v.history.length, 1);
+  assert.equal(v.history[0].due, wib(-8));
+  assert.equal(v.readonly, false);
+  assert.deepEqual(a.st.calls.at(-1), [false, '']);
+  assert.equal(a.st.on, false);
+  assert.match(e.call('pusatAction', e.tok, 'sub-paid', 'vinna').error, /paket bulanan/, 'free coach cannot be marked paid');
+});
+
+test('langganan: baca saja tangan nyala/mati/otomatis kapan saja; dikirim hanya saat berubah; cek harian menyamakan', () => {
+  const { e, a } = subEnv();
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(20) });
+  assert.equal(a.st.calls.length, 0, 'nothing to send while active and never pushed');
+  let r = e.call('pusatAction', e.tok, 'sub-ro-on', 'claudia');
+  assert.equal(subOf(r, 'claudia').readonly, true);
+  assert.deepEqual(a.st.calls.at(-1), [true, 'Dinyalakan oleh pengelola XNK.']);
+  const n = a.st.calls.length;
+  e.call('pusatOverview', e.tok);
+  assert.equal(a.st.calls.length, n, 'overview never contacts coaches');
+  r = e.call('pusatAction', e.tok, 'sub-ro-off', 'claudia');
+  assert.deepEqual([subOf(r, 'claudia').readonly, a.st.on], [false, false]);
+  e.call('pusatAction', e.tok, 'sub-ro-auto', 'claudia');
+  // Coach mengubah sendiri (mis. Library diperbarui): cek harian mengirim lagi keadaan yang benar.
+  e.call('pusatAction', e.tok, 'sub-ro-on', 'claudia');
+  a.st.on = false;
+  const s = JSON.parse(e.props.SUB_claudia); s.pushed.error = 'x'; e.props.SUB_claudia = JSON.stringify(s);
+  e.ctx.runPusatDaily();
+  assert.equal(a.st.on, true);
+  assert.equal(e.call('pusatAction', e.tok, 'sub-zzz', 'claudia').ok, false);
+});
+
+test('langganan: email H-7 dan H-1 ke email coach (kosong = pemilik), sekali per jatuh tempo; tenggang masuk email pemilik', () => {
+  const { e } = subEnv({ props: { PUSAT_EMAIL: 'owner@xnk.id' } });
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(7), price: 150000, email: 'claudia@contoh.id' });
+  e.call('pusatSubSave', e.tok, 'vinna', { plan: 'bulanan', due: wib(1) });
+  e.ctx.runPusatDaily();
+  const toC = e.mails.filter(m => m.to === 'claudia@contoh.id');
+  assert.equal(toC.length, 1);
+  assert.match(toC[0].subject, /Claudia Fit.*7 hari lagi/);
+  assert.match(toC[0].body, /Rp 150\.000/);
+  assert.match(toC[0].body, /tidak pernah dihapus/);
+  const toV = e.mails.filter(m => m.to === 'owner@xnk.id' && /besok/.test(m.subject));
+  assert.equal(toV.length, 1, 'no coach email = owner email');
+  const before = e.mails.length;
+  e.ctx.runPusatDaily();
+  assert.equal(e.mails.length, before, 'each reminder once per due date');
+  // Masa tenggang: masuk email masalah pemilik; belum baca saja.
+  e.call('pusatSubSave', e.tok, 'vinna', { plan: 'bulanan', due: wib(-2) });
+  e.ctx.runPusatDaily();
+  const daily = e.mails.at(-1);
+  assert.match(daily.subject, /perlu dicek/);
+  assert.match(daily.body, /vinna: .*masa tenggang 5 hari lagi/);
+});
+
+test('langganan: Library lama tanpa hubReadonly = pesan "perbarui coach", tersimpan, masuk email; ganti slug ikut memindahkan', () => {
+  const { e } = subEnv({ oldA: true });
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(20) });
+  const r = e.call('pusatAction', e.tok, 'sub-ro-on', 'claudia');
+  assert.equal(r.ok, true);
+  assert.match(r.data.notice, /belum punya hubReadonly; perbarui coach/);
+  assert.match(subOf(r, 'claudia').pushed.error, /perbarui coach/);
+  e.ctx.runPusatDaily();
+  assert.match(e.mails.at(-1).body, /claudia: .*Mode baca saja belum diterima coach/);
+  assert.ok(e.ctx.PUSAT_SLUG_KEYS.includes('SUB_'));
+});
