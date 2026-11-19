@@ -97,3 +97,30 @@ test('baca saja: hubReadonly dijaga rahasia; menyala = tulis ditolak sopan lewat
   assert.notEqual(post(env, 'addTask', [tok, {}]).code, 'readonly');
   assert.equal(env.call('getAdminBootstrap', tok).readonly, null);
 });
+
+test('coach keluar (T-2252): hubReadonly(…, left) menandai keluar hanya bersama baca saja; runWarmTick dilewati; produksi tidak pernah', () => {
+  const env = seededEnv();
+  env.props.HUB_SECRET = SECRET;
+  env.props.WARM_ENABLED = 'true';
+  const r = env.call('hubReadonly', SECRET, true, 'Coach ini sudah tidak aktif di XNK.', true);
+  assert.deepEqual([r.on, r.left, r.changed], [true, true, true]);
+  assert.equal(env.props.XNK_LEFT, 'true');
+  assert.equal(env.call('hubStatus', SECRET).left, true);
+  assert.equal(env.call('runWarmTick').skipped, 'keluar');
+  assert.equal(post(env, 'addTask', [env.adminToken(), {}]).code, 'readonly', 'still read-only');
+  assert.equal(env.call('hubReadonly', SECRET, true, 'Coach ini sudah tidak aktif di XNK.', true).changed, false);
+  // Tanpa tanda keluar (mis. cek harian Library lama / langganan biasa) = tanda keluar hilang, baca saja tetap.
+  const s = env.call('hubReadonly', SECRET, true, 'Coach ini sudah tidak aktif di XNK.');
+  assert.deepEqual([s.on, s.left, s.changed], [true, false, true]);
+  // left tanpa baca saja tidak berlaku.
+  const off = env.call('hubReadonly', SECRET, false, '', true);
+  assert.deepEqual([off.on, off.left], [false, false]);
+  assert.equal(env.props.XNK_LEFT, undefined);
+  assert.notEqual(env.call('runWarmTick').skipped, 'keluar');
+  // Produksi (tanpa HUB_SECRET): XNK_LEFT yang diisi tangan tidak berlaku.
+  const prod = seededEnv();
+  prod.props.XNK_LEFT = 'true';
+  prod.props.WARM_ENABLED = 'true';
+  assert.equal(prod.call('_hubLeft_'), false);
+  assert.notEqual(prod.call('runWarmTick').skipped, 'keluar');
+});

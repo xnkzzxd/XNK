@@ -15,6 +15,7 @@
 //   hubungkan untuk coach lama (dibuat dari XNK Template): cari proyek script di akun itu yang memiliki deployment
 //             dari link /exec-nya, lalu simpan scriptId dan deploymentId ke hub.json.
 //   perbarui  pasang Library terbaru di penghubung coach, versi baru, deployment yang SAMA (link /exec tetap).
+//             Coach "inactive" (T-2252, coach keluar) dilewati dan tidak pernah menjadi kenari.
 //             "semua": coach pertama (kenari) dulu; bila servernya tidak menjawab dengan commit terbaru, sisanya
 //             tidak dikerjakan. Coach yang sudah terbaru dilewati kecuali --paksa.
 const fs = require('fs');
@@ -107,7 +108,8 @@ function planRows(cfg, aksi, one) {
   for (const c of list) bySlug[c.slug] = c;
   // Slug lama (aliases) = coach yang sekarang memakainya.
   const hit = one ? list.find(c => c.slug === one || (c.aliases || []).includes(one)) : null;
-  const slugs = one ? [hit ? hit.slug : one] : list.map(c => c.slug);
+  // T-2252: perbarui semua = tanpa coach yang tidak aktif (kenari = coach aktif pertama).
+  const slugs = one ? [hit ? hit.slug : one] : list.filter(c => !(aksi === 'perbarui' && c.inactive === true)).map(c => c.slug);
   return slugs.map((s, i) => ({ slug: s, secret: secretOf(bySlug[s] || { slug: s }), kenari: !one && i === 0 && slugs.length > 1 }));
 }
 
@@ -186,11 +188,13 @@ function perbaruiSatu(c, lib, opts) {
 
 async function perbarui(file, target, lib, opts) {
   opts = opts || {};
-  const all = readHub(readCfg(file)).coaches;
-  const list = target === 'semua' ? all : all.filter(c => c.slug === target || (c.aliases || []).includes(target));
-  if (!list.length) throw new Error(target === 'semua' ? 'hub.json belum berisi coach.' : `Coach "${target}" tidak ada di hub.json.`);
+  const every = readHub(readCfg(file)).coaches;
+  const pick = every.filter(c => target === 'semua' || c.slug === target || (c.aliases || []).includes(target));
+  if (!pick.length) throw new Error(target === 'semua' ? 'hub.json belum berisi coach.' : `Coach "${target}" tidak ada di hub.json.`);
+  // T-2252: coach yang tidak aktif lagi tidak diperbarui (dan tidak pernah jadi kenari).
+  const out = pick.filter(c => c.inactive).map(c => ({ slug: c.slug, status: 'dilewati: coach tidak aktif' }));
+  const list = pick.filter(c => !c.inactive);
   const ask = opts.ask || (exec => askServerInfo(exec, opts.fetch));
-  const out = [];
   for (let i = 0; i < list.length; i++) {
     const c = list[i];
     const before = await ask(c.exec);

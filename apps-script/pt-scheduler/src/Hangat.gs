@@ -46,6 +46,7 @@ function runWarmTick() {
 function _warmTickRun_() {
   const res = { skipped: '', admin: '', clients: 0, ms: 0 };
   if (!_warmEnabled_()) { res.skipped = 'nonaktif'; return res; }
+  if (_hubLeft_()) { res.skipped = 'keluar'; return res; }   // T-2252: coach keluar dari hub, situsnya tidak aktif
   const hour = _wibParts_(new Date()).hour;
   if (hour < 5 || hour >= 22) { res.skipped = 'malam'; return res; }
   const props = PropertiesService.getScriptProperties();

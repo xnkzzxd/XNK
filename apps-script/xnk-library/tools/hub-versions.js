@@ -73,6 +73,7 @@ async function resolve(cfg, repo, opts) {
   const prev = await readPrevious(opts.previous, opts.fetch);
   const out = {}, cache = {}, notes = [];
   for (const c of hub.coaches) {
+    if (c.inactive) continue;   // T-2252: situs tidak aktif dibangun tanpa aplikasi; server coach tidak ditanya
     let commit = await askServer(c.exec, opts.fetch), source = 'server';
     if (!commit) {
       const p = prev[c.slug] && prev[c.slug].commit;
