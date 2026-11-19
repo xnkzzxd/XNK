@@ -178,6 +178,24 @@
   window.sendToParentWA = function (phone, text) {
     window.open(window.waUrl(phone, text), '_blank');
   };
+  // Nomor WA klien sebuah sesi: dari profil klien (MemberData) yang sekarang; kolom "No WA" di jadwal hanya
+  // salinan saat booking dan bisa basi (nomor lama / nomor uji), jadi dipakai hanya bila klien tidak ketemu.
+  window.clientPhone = function (s) {
+    if (!s) return '';
+    const m = s.memberId ? (window.members || []).find(function (x) { return x && String(x.id).trim() === String(s.memberId).trim(); }) : null;
+    return String((m && m.phone) || s.phone || '').trim();
+  };
+  // WA ke klien sesi; nomor kosong = beri tahu, jangan buka wa.me tanpa nomor (pemilih kontak / pesan ke diri sendiri).
+  window.waToClient = function (s, text) {
+    const p = sanitizePhone(window.clientPhone(s));
+    if (p.length < 8) { window.showToast('Nomor WA klien belum diisi.'); return; }
+    window.sendToParentWA(p, text);
+  };
+  // "Coach Vinna" tetap "Coach Vinna"; "Vinna" jadi "Coach Vinna" (tidak pernah "Coach Coach").
+  window.coachLabel = function (name) {
+    const n = String(name == null ? '' : name).trim();
+    return /^coach\b/i.test(n) ? n : 'Coach ' + n;
+  };
   // Tampilkan tombol "Buka WhatsApp" setelah aksi berhasil. Pengguna membukanya
   // dengan ketukan sendiri (link biasa), jadi tidak ada tab kosong yang dibuka
   // lebih dulu dan tidak diblokir popup blocker.
@@ -2619,7 +2637,7 @@
     const mins = Math.round((end - d) / 60000);
     let actions = '';
     if (opts.actions && !isAvailable(s)) {
-      actions = sessActions(s.id, { done: isDone(s), phone: s.phone });
+      actions = sessActions(s.id, { done: isDone(s), phone: window.clientPhone(s) });
     }
     return '<div class="' + cls + '" data-key="session:' + h(s.id) + '">' +
       '<div class="tl-time">' + fmtTime(d) + '<small>' + mins + ' mnt</small></div>' +
@@ -2636,7 +2654,7 @@
     const s = window.schedules.find(x => String(x.id) === String(id));
     if (!s) return;
     const d = new Date(s.start);
-    window.sendToParentWA(s.phone, 'Halo ' + s.title + ', ini Coach XNK. Mengingatkan jadwal latihan kita ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB. Sampai ketemu!');
+    window.waToClient(s, 'Halo ' + s.title + ', ini Coach XNK. Mengingatkan jadwal latihan kita ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB. Sampai ketemu!');
   };
   window.quickEdit = function (id) { window.selectedScheduleDetailId = id; window.openEditScheduleDetailModal(); };
   window.quickComplete = function (id) { window.selectedScheduleDetailId = id; window.markSessionCompleted(); };
@@ -3258,7 +3276,7 @@
         '<div' + (member ? ' role="button" tabindex="0" style="cursor:pointer" onclick="window.openProfile(\'' + h(member.id) + '\')"' : '') + '><p class="k">Klien</p><p class="v">' + h(s.title) + '</p></div>' +
         '<div><p class="k">Sisa sesi</p><p class="v">' + (member ? remainingOf(member) + ' sesi' : '—') + '</p></div>' +
         '<div><p class="k">Status</p><p class="v">' + h(info.label) + '</p></div>' +
-        (s.phone ? '<div><p class="k">WhatsApp</p><p class="v">+' + h(s.phone) + '</p></div>' : '') +
+        (window.clientPhone(s) ? '<div><p class="k">WhatsApp</p><p class="v">+' + h(sanitizePhone(window.clientPhone(s))) + '</p></div>' : '') +
         '<div class="wide"><p class="k">Catatan</p><p class="v">' + (s.notes ? h(s.notes) : '<span class="muted" style="font-weight:500">Tidak ada catatan</span>') + '</p></div></div>';
     } else {
       body += '<div class="kv"><div class="wide"><p class="k">Catatan</p><p class="v">' + (s.notes ? h(s.notes) : '<span class="muted" style="font-weight:500">Tidak ada catatan</span>') + '</p></div></div>';
@@ -3272,7 +3290,7 @@
     if (!isDone(s) && !isAvailable(s)) body += '<button type="button" class="btn btn-primary btn-lg btn-block" id="btn-complete-session" onclick="window.markSessionCompleted()">' + icon('check-circle-2') + 'Tandai selesai & potong 1 sesi</button>';
     body += '<div class="btn-row">' +
       (!isDone(s) ? '<button type="button" class="btn btn-outline" onclick="window.openEditScheduleDetailModal()">' + icon('calendar-clock') + 'Ubah jadwal</button>' : '') +
-      (s.phone ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailMember()">' + icon('message-circle') + 'Chat klien</button>' : '') +
+      (window.clientPhone(s) ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailMember()">' + icon('message-circle') + 'Chat klien</button>' : '') +
       (s.coachId && !window.isSoloCoach() ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailCoach()">' + icon('dumbbell') + 'Chat coach</button>' : '') +
       '</div>';
     body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-schedule" onclick="window.deleteScheduleFromDetail()">' + icon('trash-2') + 'Hapus sesi ini</button>';
@@ -3302,7 +3320,7 @@
       const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
       if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
       done();
-      window.showToast(coach ? 'Coach ' + coach.name + ' ditugaskan.' : 'Coach dikosongkan.');
+      window.showToast(coach ? window.coachLabel(coach.name) + ' ditugaskan.' : 'Coach dikosongkan.');
       window.updateUI();
     }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
   };
@@ -3314,7 +3332,7 @@
     const c = window.coaches.find(x => String(x.id) === String(s.coachId));
     if (!c) return;
     const d = new Date(s.start);
-    window.sendToParentWA(c.phone, 'Halo Coach ' + c.name + ', kamu ditugaskan untuk sesi bersama ' + s.title + ' pada ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB.');
+    window.sendToParentWA(c.phone, 'Halo ' + window.coachLabel(c.name) + ', kamu ditugaskan untuk sesi bersama ' + s.title + ' pada ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB.');
   };
 
   window.markSessionCompleted = function () {
@@ -7500,7 +7518,7 @@
     // Paket habis: tawarkan ajakan evaluasi lewat WhatsApp (tombol, tidak dikirim otomatis).
     const pk = $('sn-pkg');
     pk.classList.toggle('hide', !(result && result.packageDone));
-    pk.onclick = result && result.packageDone ? function () { window.sendToParentWA(s.phone, result.evalText); } : null;
+    pk.onclick = result && result.packageDone ? function () { window.waToClient(s, result.evalText); } : null;
     openSheet('modal-session-note');
     adminCall('getSessionNote', s.id).then(function (n) {
       if (noteSched !== s) return;
@@ -7512,7 +7530,7 @@
     if (!noteSched || String(noteSched.id) !== String(scheduleId) || !result || !result.packageDone) return;
     const s = noteSched, pk = $('sn-pkg');
     pk.classList.remove('hide');
-    pk.onclick = function () { window.sendToParentWA(s.phone, result.evalText); };
+    pk.onclick = function () { window.waToClient(s, result.evalText); };
   };
   window.sessionNoteSave = function (e, withWa) {
     if (e) e.preventDefault();
@@ -7526,7 +7544,11 @@
       const done = busy($('sn-wa-btn'), 'Menyimpan…');
       adminCall('saveSessionNote', s.id, note).then(function (r) {
         done(); window.closeModal(); window.showToast('Catatan sesi disimpan.');
-        setTimeout(function () { window.sendToParentWA(s.phone, r.text); }, 200);
+        // waLink dibuat server dari nomor profil klien yang sekarang (bukan salinan di jadwal).
+        setTimeout(function () {
+          const mm = /^https:\/\/wa\.me\/(\d{8,})/.exec(String((r && r.waLink) || ''));
+          if (mm) window.sendToParentWA(mm[1], r.text); else window.waToClient(s, r && r.text);
+        }, 200);
       }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
       return;
     }
@@ -10306,7 +10328,7 @@
     const c = window.coaches.find(x => String(x.id) === String(id));
     if (!c) return;
     const me = window.publicLoggedMember;
-    window.sendToParentWA(c.phone, 'Halo Coach ' + c.name + ', saya ' + (me ? me.name : '') + ' ingin tanya program latihan' + (c.specialty ? ' ' + c.specialty : '') + '.');
+    window.sendToParentWA(c.phone, 'Halo ' + window.coachLabel(c.name) + ', saya ' + (me ? me.name : '') + ' ingin tanya program latihan' + (c.specialty ? ' ' + c.specialty : '') + '.');
   };
 
   // ── Detik berjalan: jam & hitung mundur ────────────────────────────────────

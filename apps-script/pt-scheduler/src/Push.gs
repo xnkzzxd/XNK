@@ -231,7 +231,7 @@ function _pushSesiMessages_(schedules, members, mode, parts, now, slotHour) {
     if (!m || (m.off || []).indexOf('sesi-besok') !== -1) return;    // klien mematikan pengingat sesi
     var when = (mode === 'besok' ? 'besok' : 'hari ini') + ' jam ' + _pushJoinTimes_(labels);
     out.push({ target: 'm:' + g.id, kind: kind, slot: slot, title: mode === 'besok' ? 'Sesi besok' : 'Sesi hari ini',
-      body: _pushClip_('Kak ' + name + ', ' + when + (g.coach ? ' bersama Coach ' + _pushFirst_(g.coach) : '') + '.', 140) });
+      body: _pushClip_('Kak ' + name + ', ' + when + (g.coach ? ' bersama Coach ' + _pushFirst_(String(g.coach).replace(/^\s*coach\b\s*/i, '')) : '') + '.', 140) });
   });
   if (all.length) {
     all.sort(function(a, b) { return a.t - b.t; });

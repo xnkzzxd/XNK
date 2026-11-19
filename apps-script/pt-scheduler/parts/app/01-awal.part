@@ -178,6 +178,24 @@
   window.sendToParentWA = function (phone, text) {
     window.open(window.waUrl(phone, text), '_blank');
   };
+  // Nomor WA klien sebuah sesi: dari profil klien (MemberData) yang sekarang; kolom "No WA" di jadwal hanya
+  // salinan saat booking dan bisa basi (nomor lama / nomor uji), jadi dipakai hanya bila klien tidak ketemu.
+  window.clientPhone = function (s) {
+    if (!s) return '';
+    const m = s.memberId ? (window.members || []).find(function (x) { return x && String(x.id).trim() === String(s.memberId).trim(); }) : null;
+    return String((m && m.phone) || s.phone || '').trim();
+  };
+  // WA ke klien sesi; nomor kosong = beri tahu, jangan buka wa.me tanpa nomor (pemilih kontak / pesan ke diri sendiri).
+  window.waToClient = function (s, text) {
+    const p = sanitizePhone(window.clientPhone(s));
+    if (p.length < 8) { window.showToast('Nomor WA klien belum diisi.'); return; }
+    window.sendToParentWA(p, text);
+  };
+  // "Coach Vinna" tetap "Coach Vinna"; "Vinna" jadi "Coach Vinna" (tidak pernah "Coach Coach").
+  window.coachLabel = function (name) {
+    const n = String(name == null ? '' : name).trim();
+    return /^coach\b/i.test(n) ? n : 'Coach ' + n;
+  };
   // Tampilkan tombol "Buka WhatsApp" setelah aksi berhasil. Pengguna membukanya
   // dengan ketukan sendiri (link biasa), jadi tidak ada tab kosong yang dibuka
   // lebih dulu dan tidak diblokir popup blocker.
