@@ -1,5 +1,5 @@
 'use strict';
-// T-2241 (halaman info /<slug>/info/) dan T-2242 (warna aksen + logo per coach di hub.json).
+// T-2241 (halaman info /<slug>/info/), T-2242 (warna aksen + logo per coach di hub.json) dan T-2258…T-2260 (tempat latihan).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -106,8 +106,8 @@ test('warna + logo di panel, portal, manifest, favicon, service worker; coach ta
   assert.equal(JSON.parse(files['polos/manifest.webmanifest']).icons[0].src, '/polos/icon.svg');
   // Kartu di halaman depan: logo, atau huruf di atas warna aksen; tautan ke halaman info.
   const land = files['index.html'];
-  assert.match(land, /<a class="card coach" href="\/claudia\/info\/"><span class="av acc-biru logo" aria-hidden="true"><img src="\/claudia\/logo\.png"/);
-  assert.match(land, /<a class="card coach" href="\/polos\/info\/"><span class="av" aria-hidden="true">G<\/span>/);
+  assert.match(land, /<a class="card coach" href="\/claudia\/info\/"[^>]*><span class="av acc-biru logo" aria-hidden="true"><img src="\/claudia\/logo\.png"/);
+  assert.match(land, /<a class="card coach" href="\/polos\/info\/"[^>]*><span class="av" aria-hidden="true">G<\/span>/);
   assert.ok(land.includes('.coach .av.acc-biru {') && !land.includes('/*ACCENTS*/'));
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -194,3 +194,104 @@ test('hub-edit: warna dan logo; kosong = tetap, hitam = hapus warna, "-" = hapus
   assert.throws(() => hubEdit.edit(cfg, 'simpan', { slug: 'baru', accent: 'biru' }, o), /Nama usaha wajib/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// ── T-2258…T-2260: tempat latihan coach ─────────────────────────────────────────────────────────────────────
+const PLACE_CFG = () => ({ coaches: [
+  { slug: 'claudia', brand: 'Claudia Fit', exec: EXEC(1), place: { name: "Gold's  Gym Kemang", city: 'Jakarta Selatan' } },
+  { slug: 'budi', brand: 'Budi Coach', exec: EXEC(2), place: { name: 'Studio & Co', city: 'jakarta selatan' } },
+  { slug: 'sari', brand: 'Sari', exec: EXEC(3), place: { name: 'Sari Gym', city: 'Bandung' } },
+  { slug: 'polos', brand: 'Gym Polos', exec: EXEC(4) },
+] });
+
+test('tempat: hub.json diperiksa (nama + kota, panjang, tanda < >), spasi dirapatkan; kosong = tanpa tempat', () => {
+  const bad = (place, re) => assert.throws(() => hub.readHub({ coaches: [{ slug: 'claudia', brand: 'C', exec: EXEC(1), place }] }), re);
+  bad({ name: 'Gym' }, /hub\.json, "claudia": Isi nama tempat dan kota/);
+  bad({ city: 'Bandung' }, /Isi nama tempat dan kota/);
+  bad({ name: 'x'.repeat(61), city: 'B' }, /Nama tempat paling panjang 60/);
+  bad({ name: 'Gym', city: 'y'.repeat(41) }, /Kota paling panjang 40/);
+  bad({ name: '<b>Gym</b>', city: 'B' }, /tidak boleh berisi tanda < >/);
+  bad({ name: 'Gym', city: 'Ban\u0007dung' }, /karakter kontrol/);
+  bad('Gym Bandung', /place harus berisi/);
+  const r = hub.readHub(PLACE_CFG());
+  assert.deepEqual(r.coaches[0].place, { name: "Gold's Gym Kemang", city: 'Jakarta Selatan' });
+  assert.equal(r.coaches[3].place, undefined);
+  assert.equal(hub.readHub({ coaches: [{ slug: 'x-y', brand: 'C', exec: EXEC(1), place: { name: ' ', city: '' } }] }).coaches[0].place, undefined);
+});
+
+test('tempat: sama persis dengan cleanPlace_ di XNK Pusat', () => {
+  const vm = require('vm');
+  const src = fs.readFileSync(path.join(ROOT, 'apps-script', 'xnk-pusat', 'src', 'Pusat.gs'), 'utf8');
+  const ctx = {}; vm.createContext(ctx); vm.runInContext(src, ctx);
+  assert.deepEqual(Object.assign({}, ctx.PUSAT_PLACE_MAX), hub.PLACE_MAX);
+  for (const p of [null, '', { name: 'Gym', city: '' }, { name: ' A  b ', city: ' C ' }, { name: '<', city: 'x' }, { name: 'x'.repeat(61), city: 'y' }, { name: 'a', city: 'y'.repeat(41) }, [], 'x'])
+    assert.deepEqual(JSON.parse(JSON.stringify(ctx.cleanPlace_(p))), hub.cleanPlace(p), JSON.stringify(p));
+});
+
+test('tempat di halaman info: pita atas, bagian Tempat dengan link Maps, deskripsi; tanpa tempat = bagian tersembunyi', () => {
+  const { files } = hub.build(PLACE_CFG());
+  const t = files['claudia/info/index.html'];
+  assert.match(t, /<p class="where" id="where"><svg[^>]*>.*<\/svg><span>Gold's Gym Kemang · Jakarta Selatan<\/span><\/p>/);
+  assert.match(t, /<section id="tempat" aria-labelledby="h-tempat">/);
+  assert.ok(t.includes('href="https://www.google.com/maps/search/?api=1&amp;query=Gold\'s%20Gym%20Kemang%2C%20Jakarta%20Selatan" target="_blank" rel="noopener"'));
+  assert.ok(t.includes('<meta name="description" content="Claudia Fit: personal trainer di Gold\'s Gym Kemang, Jakarta Selatan.'));
+  assert.ok(t.includes('"place":{"name":"Gold\'s Gym Kemang","city":"Jakarta Selatan"}'), 'tempat juga di CFG halaman');
+  assert.ok(files['budi/info/index.html'].includes('<b>Studio &amp; Co</b>'), 'nama tempat di-escape');
+  const p = files['polos/info/index.html'];
+  assert.match(p, /<section id="tempat" aria-labelledby="h-tempat" hidden>/);
+  assert.match(p, /<p class="where" id="where" hidden>/);
+  assert.match(p, /data-sec="tempat" hidden>Tempat<\/a>/);
+  assert.ok(p.includes('<meta name="description" content="Gym Polos: personal trainer. Lihat'));
+  for (const f of ['claudia', 'polos']) assert.ok(!/<!--PLACE(SEC|NAV)?-->/.test(files[f + '/info/index.html']), 'penanda tempat terisi');
+  // Halaman info baru: deret 7 hari, menu bagian, tombol Pilih paket, ringkasan di pita atas.
+  for (const k of ['class="strip"', 'class="sec-nav"', 'Pilih paket', 'Paling hemat', 'id="facts"', 'Baca selengkapnya']) assert.ok(t.includes(k), k);
+});
+
+test('tempat di halaman depan hub: baris tempat di kartu, kotak cari, kota digabung tanpa beda huruf, Semua = jumlah coach', () => {
+  const land = hub.build(PLACE_CFG()).files['index.html'];
+  assert.match(land, /<a class="card coach" href="\/claudia\/info\/" data-city="jakarta selatan" data-q="claudia fit claudia gold's gym kemang jakarta selatan">/);
+  assert.match(land, /<span class="pl"><svg[^>]*>.*?<\/svg><span>Gold's Gym Kemang <em>· Jakarta Selatan<\/em><\/span><\/span>/);
+  assert.ok(land.includes('<span>Studio &amp; Co <em>'), 'nama tempat di-escape');
+  assert.match(land, /<a class="card coach" href="\/polos\/info\/" data-city="" data-q="gym polos polos">/);
+  assert.ok(land.includes('<input id="coach-q" type="search"'));
+  const chips = land.match(/<div class="cities"[\s\S]*?<\/div>/)[0];
+  assert.deepEqual([...chips.matchAll(/data-city="([^"]*)" aria-pressed="(true|false)">([^<]+)<span>(\d+)/g)].map(m => [m[1], m[2], m[3], +m[4]]),
+    [['', 'true', 'Semua', 4], ['jakarta selatan', 'false', 'Jakarta Selatan', 2], ['bandung', 'false', 'Bandung', 1]]);
+  assert.ok(!land.includes('<!--FIND-->'));
+  // Satu coach: tanpa kotak cari dan pilihan kota. Satu coach bertempat: kotak cari ada, pilihan kota tidak.
+  const one = hub.build({ coaches: [PLACE_CFG().coaches[0]] }).files['index.html'];
+  assert.ok(!one.includes('id="coach-q"') && !one.includes('class="cities"') && !one.includes('<!--FIND-->'));
+  const c = PLACE_CFG().coaches; delete c[1].place; delete c[2].place;
+  const two = hub.build({ coaches: c }).files['index.html'];
+  assert.ok(two.includes('id="coach-q"') && !two.includes('class="cities"'));
+  // Tanpa coach: seluruh daftar hilang.
+  assert.ok(!hub.build({ coaches: [] }).files['index.html'].includes('id="coach-q"'));
+});
+
+test('hub-edit: --tempat/--kota isi, tetap, "-" hapus; tetap ikut walau link /exec diganti; isian salah ditolak', () => {
+  const base = { coaches: [{ slug: 'claudia', brand: 'Claudia Fit', exec: EXEC(1) }] };
+  let r = hubEdit.edit(base, 'simpan', { slug: 'claudia', placeName: 'Gold Gym', placeCity: 'Bandung' });
+  assert.deepEqual(r.cfg.coaches[0].place, { name: 'Gold Gym', city: 'Bandung' });
+  assert.equal(base.coaches[0].place, undefined, 'masukan tidak berubah');
+  r = hubEdit.edit(r.cfg, 'simpan', { slug: 'claudia', accent: 'biru' });
+  assert.deepEqual(r.cfg.coaches[0].place, { name: 'Gold Gym', city: 'Bandung' }, 'kosong = tetap');
+  r = hubEdit.edit(r.cfg, 'simpan', { slug: 'claudia', exec: EXEC(9) });
+  assert.deepEqual(r.cfg.coaches[0].place, { name: 'Gold Gym', city: 'Bandung' }, 'link /exec baru: tempat tetap');
+  r = hubEdit.edit(r.cfg, 'simpan', { slug: 'claudia', placeCity: 'Cimahi' });
+  assert.deepEqual(r.cfg.coaches[0].place, { name: 'Gold Gym', city: 'Cimahi' }, 'hanya kota = nama tetap');
+  r = hubEdit.edit(r.cfg, 'simpan', { slug: 'claudia', placeName: '-' });
+  assert.equal(r.cfg.coaches[0].place, undefined, '"-" = hapus');
+  assert.throws(() => hubEdit.edit(base, 'simpan', { slug: 'claudia', placeName: 'Gym <x>', placeCity: 'B' }), /tidak boleh berisi tanda < >/);
+  assert.throws(() => hubEdit.edit(base, 'simpan', { slug: 'claudia', placeName: 'Gym' }), /Isi nama tempat dan kota/);
+});
+
+test('workflow Hub XNK: isian tempat dan kota diteruskan ke hub-edit.js', () => {
+  const wf = fs.readFileSync(path.join(__dirname, '..', 'hub-repo', '.github', 'workflows', 'hub.yml'), 'utf8');
+  assert.match(wf, /\n      tempat:\n/);
+  assert.match(wf, /\n      kota:\n/);
+  assert.ok(wf.includes('IN_TEMPAT: ${{ inputs.tempat }}') && wf.includes('IN_KOTA: ${{ inputs.kota }}'));
+  assert.ok(wf.includes('--tempat "$IN_TEMPAT" --kota "$IN_KOTA"'));
+  // GitHub menerima paling banyak 25 isian workflow_dispatch.
+  const inputs = wf.split('workflow_dispatch:')[1].split(/\n  push:/)[0].match(/^ {6}[a-z_]+:$/gm);
+  assert.ok(inputs.length <= 25, inputs.length);
+});
+

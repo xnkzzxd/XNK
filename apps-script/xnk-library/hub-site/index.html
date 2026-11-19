@@ -199,6 +199,23 @@
   .coach:hover { border-color: var(--fg); }
   .coach .av.logo { background: var(--soft); overflow: hidden; }
   .coach .av img { width: 100%; height: 100%; object-fit: cover; }
+  .coach > div { min-width: 0; }
+  .coach .pl { display: flex; align-items: flex-start; gap: .3rem; margin-top: .2rem; color: var(--fg); font-size: .88rem; line-height: 1.35; }
+  .coach .pl svg { width: .95rem; height: .95rem; flex: none; margin-top: .1rem; color: var(--mut); }
+  .coach .pl em { font-style: normal; color: var(--mut); }
+  /* T-2260: cari coach dan saring per kota (hanya bila ada ≥ 2 coach). */
+  .find { display: grid; gap: .7rem; margin: 0 0 1rem; }
+  .find .row svg { width: 1.1rem; height: 1.1rem; margin-left: .8rem; color: var(--mut); flex: none; }
+  .find .row input { padding-left: .6rem; }
+  .cities { display: flex; gap: .4rem; overflow-x: auto; scrollbar-width: none; padding: .1rem; margin: 0 -.1rem; }
+  .cities::-webkit-scrollbar { display: none; }
+  .cities button { flex: none; min-height: 2.75rem; padding: 0 .95rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg);
+    font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .cities button span { color: var(--mut); font-weight: 400; margin-left: .3rem; }
+  .cities button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+  .cities button[aria-pressed="true"] span { color: inherit; opacity: .75; }
+  .coach[hidden] { display: none; }
+  .no-hit { margin: .4rem 0 0; color: var(--mut); }
   /*ACCENTS*/
 
   /* Masuk */
@@ -292,6 +309,8 @@
   <symbol id="i-phone" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
   <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
 </svg>
 
 <header class="top">
@@ -434,10 +453,12 @@
       <div>
         <p class="kicker">Masuk</p>
         <h2 id="masuk-judul">Sudah punya coach di XNK?</h2>
-        <p class="mut" style="margin:0">Pilih coach Anda di bawah, atau ketik namanya. Nama ini ada di link dari coach, misalnya <code>xnk.web.id/namacoach</code>.</p>
+        <p class="mut" style="margin:0">Pilih coach Anda di bawah (cari nama, tempat, atau kota), atau ketik namanya. Nama ini ada di link dari coach, misalnya <code>xnk.web.id/namacoach</code>.</p>
         <div class="coach-list" id="coach" data-coaches>
           <p class="kicker" style="margin-top:1.6rem">Coach di XNK</p>
-          <div class="coaches"><!--COACHES--></div>
+          <!--FIND-->
+          <div class="coaches" id="coaches"><!--COACHES--></div>
+          <p class="no-hit" id="no-hit" hidden>Tidak ada coach yang cocok. Coba nama lain atau pilih <b>Semua</b>.</p>
         </div><!--/coaches-->
       </div>
       <div class="card">
@@ -511,6 +532,27 @@
       document.getElementById('resume').style.display = 'block';
     }
   } catch (e) {}
+
+  // T-2260: cari coach (nama, alamat, tempat, kota) dan saring per kota. Tidak ada yang disimpan.
+  var q = document.getElementById('coach-q'), cities = document.getElementById('cities'), city = '';
+  function filter() {
+    var words = (q ? q.value : '').toLowerCase().split(/\s+/).filter(Boolean), shown = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('#coaches .coach'), function (a) {
+      var hay = a.getAttribute('data-q') || '';
+      var ok = (!city || a.getAttribute('data-city') === city) && words.every(function (w) { return hay.indexOf(w) !== -1; });
+      a.hidden = !ok;
+      if (ok) shown++;
+    });
+    document.getElementById('no-hit').hidden = shown > 0;
+  }
+  if (q) q.addEventListener('input', filter);
+  if (cities) cities.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button[data-city]');
+    if (!b) return;
+    city = b.getAttribute('data-city');
+    Array.prototype.forEach.call(cities.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    filter();
+  });
 
   // Pasang aplikasi (PWA). Tombol muncul hanya bila browser menawarkan pemasangan (Chrome, Edge, Android).
   var btn = document.getElementById('inst-btn'), deferred = null;

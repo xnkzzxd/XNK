@@ -48,7 +48,7 @@ function hubUrl_() { return prop_('HUB_URL', 'https://xnk.web.id').replace(/\/+$
 
 // ── Pintu JSON untuk /adminxnk dan wizard coach ──────────────────────────────────────────────────────────────
 
-var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename };
+var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSetPlace: pusatSetPlace };
 
 function doPost(e) {
   var out;
@@ -338,7 +338,7 @@ function runPusatDaily() {
 /** Daftar coach + status terakhir (tanpa rahasia). */
 function pusatOverview(token) {
   requireOwnerToken_(token);
-  var all = json_('COACHES', {}), hub = hubUrl_();
+  var all = json_('COACHES', {}), hub = hubUrl_(), hubCoaches = hubJson_().coaches || [];
   return {
     hub: hub,
     latest: latestLib_(),
@@ -346,6 +346,8 @@ function pusatOverview(token) {
     quotaLimits: quotaLimits_(),
     fetchToday: fetchToday_(),
     push: { secret: prop_('PUSAT_PUSH_SECRET').length >= 32 },
+    // T-2258: tempat latihan tiap coach di hub.json (juga yang belum terdaftar di sini), slug → {name, city} | null.
+    places: hubCoaches.reduce(function (m, x) { if (x && PUSAT_SLUG_RE.test(String(x.slug))) m[x.slug] = hubPlace_(x.slug, hubCoaches); return m; }, {}),
     coaches: Object.keys(all).sort().map(function (slug) {
       return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), backup: backupView_(slug), push: pushView_(slug) };
     }),
@@ -751,15 +753,70 @@ function pusatRename(token, oldSlug, newSlug) {
   else if (!prop_('GITHUB_TOKEN')) out.hub = 'Jalankan sendiri: repo hub → Actions → Hub XNK → aksi ganti-slug, slug ' + from + ', slug_baru ' + to + '.';
   else {
     try {
-      var res = fetch_('https://api.github.com/repos/' + prop_('HUB_REPO', 'xnkzzxd/xnk-template-site') + '/actions/workflows/hub.yml/dispatches', {
-        method: 'post', contentType: 'application/json', headers: gh_(), muteHttpExceptions: true,
-        payload: JSON.stringify({ ref: 'main', inputs: { aksi: 'ganti-slug', slug: from, slug_baru: to } }),
-      });
-      if (res.getResponseCode() !== 204) throw new Error('GitHub menolak (' + res.getResponseCode() + ')');
-      try { CacheService.getScriptCache().remove('hubjson'); } catch (e) { /* hub.json dibaca lagi paling lambat 10 menit */ }
+      hubDispatch_({ aksi: 'ganti-slug', slug: from, slug_baru: to });
     } catch (e) {
       out.hub = String(e && e.message ? e.message : e).slice(0, 100) + '. Jalankan sendiri: Hub XNK → aksi ganti-slug, slug ' + from + ', slug_baru ' + to + '.';
     }
   }
+  return out;
+}
+
+/** Jalankan workflow Hub XNK (hub.yml) dengan isian itu; hub.json di cache dibuang. Melempar bila GitHub menolak. */
+function hubDispatch_(inputs) {
+  var res = fetch_('https://api.github.com/repos/' + prop_('HUB_REPO', 'xnkzzxd/xnk-template-site') + '/actions/workflows/hub.yml/dispatches', {
+    method: 'post', contentType: 'application/json', headers: gh_(), muteHttpExceptions: true,
+    payload: JSON.stringify({ ref: 'main', inputs: inputs }),
+  });
+  if (res.getResponseCode() !== 204) throw new Error('GitHub menolak (' + res.getResponseCode() + ')');
+  try { CacheService.getScriptCache().remove('hubjson'); } catch (e) { /* hub.json dibaca lagi paling lambat 10 menit */ }
+}
+
+// ── Tempat latihan coach (T-2258) ───────────────────────────────────────────────────────────────────────────
+// Satu tempat per coach (nama + kota), publik: disimpan di hub.json lewat workflow Hub XNK (aksi simpan, isian
+// tempat/kota), tampil di daftar coach xnk.web.id (dengan saringan kota) dan di halaman /<slug>/info/.
+
+var PUSAT_PLACE_MAX = { name: 60, city: 40 };
+
+/** Sama dengan cleanPlace di xnk-library/tools/build-hub.js: { place } (null = tanpa tempat) atau { error }. */
+function cleanPlace_(p) {
+  if (p == null || p === '') return { place: null };
+  if (typeof p !== 'object' || Array.isArray(p)) return { error: 'place harus berisi { "name": nama tempat, "city": kota }.' };
+  var t = function (v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); };
+  var name = t(p.name), city = t(p.city);
+  if (!name && !city) return { place: null };
+  var parts = [['name', name, 'Nama tempat'], ['city', city, 'Kota']];
+  for (var i = 0; i < parts.length; i++) {
+    if (/[\u0000-\u001f\u007f<>]/.test(parts[i][1])) return { error: parts[i][2] + ' tidak boleh berisi tanda < > atau karakter kontrol.' };
+    if (parts[i][1].length > PUSAT_PLACE_MAX[parts[i][0]]) return { error: parts[i][2] + ' paling panjang ' + PUSAT_PLACE_MAX[parts[i][0]] + ' karakter.' };
+  }
+  if (!name || !city) return { error: 'Isi nama tempat dan kota (mis. Gold\'s Gym Kemang, Jakarta Selatan).' };
+  return { place: { name: name, city: city } };
+}
+
+/** Tempat coach di hub.json; null bila belum diisi. */
+function hubPlace_(slug, hubCoaches) {
+  var hit = (hubCoaches || hubJson_().coaches || []).filter(function (x) { return x && x.slug === slug; })[0];
+  var r = hit ? cleanPlace_(hit.place) : { place: null };
+  return r.place || null;
+}
+
+/**
+ * Isi, ganti, atau hapus (nama dan kota kosong) tempat latihan coach. Hanya pemilik (token /adminxnk).
+ * @return {{slug: string, place: ?{name: string, city: string}, hub: string}} hub = 'ok' | langkah manual
+ */
+function pusatSetPlace(token, slug, name, city) {
+  requireOwnerToken_(token);
+  slug = String(slug == null ? '' : slug).trim();
+  if (!PUSAT_SLUG_RE.test(slug)) throw new Error('Nama di alamat tidak valid.');
+  var r = cleanPlace_({ name: name, city: city });
+  if (r.error) throw new Error(r.error);
+  if (!(hubJson_().coaches || []).some(function (x) { return x && x.slug === slug; })) throw new Error('Coach "' + slug + '" belum ada di hub.json. Tambahkan dulu lewat Hub XNK (aksi simpan).');
+  var p = r.place;
+  // Tanpa tempat = "-" (hapus tempat di hub.json); isian kosong di workflow berarti "tetap".
+  var inputs = { aksi: 'simpan', slug: slug, warna: 'tetap', tempat: p ? p.name : '-', kota: p ? p.city : '' };
+  var manual = 'Jalankan sendiri: repo hub → Actions → Hub XNK → aksi simpan, slug ' + slug + ', tempat ' + inputs.tempat + (inputs.kota ? ', kota ' + inputs.kota : '') + '.';
+  var out = { slug: slug, place: p, hub: 'ok' };
+  if (!prop_('GITHUB_TOKEN')) { out.hub = manual; return out; }
+  try { hubDispatch_(inputs); } catch (e) { out.hub = String(e && e.message ? e.message : e).slice(0, 100) + '. ' + manual; }
   return out;
 }

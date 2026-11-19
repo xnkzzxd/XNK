@@ -6,6 +6,8 @@
 // tanpa saling logout, kunci penyimpanan berawalan slug, portal klien hanya mengenal klien coach itu, cache service worker
 // panel dan portal tidak saling menghapus, dan portal terbuka tanpa sinyal. T-2241/T-2242: warna aksen dan logo per coach,
 // halaman info /<slug>/info/ (HP dan desktop, CSP ketat, tetap dari jaringan walau service worker panel aktif).
+// T-2258…T-2260: tempat latihan di halaman info (deret hari, menu bagian, Maps) dan cari/saring kota di halaman depan,
+// tombol Tempat di /adminxnk.
 // T-2243: ganti slug di situs yang sedang tayang: link lama (?query#hash) mendarat di alamat baru, login dan salinan
 // offline dari sebelum ganti tetap terbaca, link lama tanpa sinyal tetap terbuka, tombol Ganti slug di /adminxnk.
 const http = require('http');
@@ -20,7 +22,8 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const EXEC_A = 'https://script.google.com/macros/s/AKfycbHUBclaudiaTestDeployment00000001/exec';
 const EXEC_B = 'https://script.google.com/macros/s/AKfycbHUBclaudia2TestDeployment0000002/exec';
 const PRICE = [['ID', 'Nama Paket', 'Kategori', 'Harga', 'Jumlah Sesi', 'Durasi', 'Deskripsi', 'Benefit', 'Status Aktif'],
-  ['P1', 'Regular 8', 'regular', 800000, 8, '1 Bulan', 'desc', 'a,b', true]];
+  ['P1', 'Regular 8', 'regular', 800000, 8, '1 Bulan', 'desc', 'a,b', true],
+  ['P2', 'Regular 16', 'regular', 1440000, 16, '2 Bulan', '', 'a,b,c', true]];
 
 let fails = 0;
 function check(ok, label) { console.log((ok ? '  ✓ ' : '  ✗ ') + label); if (!ok) fails++; }
@@ -63,11 +66,13 @@ function fakePusat(req) {
   PUSAT_CALLS.push(req.fn);
   if (req.fn === 'pusatLogin') return req.args[0] === 'pin-pusat-1' ? { ok: true, data: { token: 'T1', exp: Date.now() + 3600e3 } } : { ok: false, error: 'PIN salah.' };
   if (req.args[0] !== 'T1') return { ok: false, auth: true, error: 'Sesi berakhir. Masuk lagi.' };
+  if (req.fn === 'pusatSetPlace') { PUSAT_CALLS.place = req.args.slice(1); return { ok: true, data: { slug: req.args[1], place: req.args[2] ? { name: req.args[2], city: req.args[3] } : null, hub: 'ok' } }; }
   if (req.fn === 'pusatRename') { PUSAT_CALLS.rename = req.args.slice(1); return { ok: true, data: { slug: req.args[2], from: req.args[1], site: 'ok', folder: 'ok', hub: 'ok' } }; }
   if (req.fn === 'pusatAction' && req.args[1] === 'setup') return { ok: true, data: { ticket: 'setup.1.sig' } };
   if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
   const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 } } });
-  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' }, coaches: [
+  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
+    places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
     { slug: 'claudia', exec: EXEC_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
       backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false } },
   ] } };
@@ -126,8 +131,8 @@ async function makeLogos(browser) {
 (async () => {
   const be = backend();
   const cfg = { contactUrl: 'https://wa.me/6281234567890', pusatUrl: PUSAT, coaches: [
-    { slug: 'claudia', brand: 'Claudia Fit', exec: EXEC_A, accent: 'biru', logo: 'logo/claudia.png' },
-    { slug: 'claudia-2', brand: 'Claudia Dua', exec: EXEC_B, accent: 'hijau', logo: 'logo/dua.webp' },
+    { slug: 'claudia', brand: 'Claudia Fit', exec: EXEC_A, accent: 'biru', logo: 'logo/claudia.png', place: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' } },
+    { slug: 'claudia-2', brand: 'Claudia Dua', exec: EXEC_B, accent: 'hijau', logo: 'logo/dua.webp', place: { name: 'Studio Dua', city: 'Bandung' } },
   ] };
   const browser = await chromium.launch();
   const logoDir = await makeLogos(browser);
@@ -148,6 +153,19 @@ async function makeLogos(browser) {
       check((await page.textContent('body')).includes('Hubungi XNK'), 'tombol kontak tampil (kontak diisi)');
       check(await page.locator('a.coach[href="/claudia/info/"]').count() === 1 && await page.locator('a.coach[href="/claudia-2/info/"]').count() === 1, 'daftar coach menautkan halaman info /<slug>/info/');
       check(await page.evaluate(() => [...document.querySelectorAll('a.coach .av img')].map(i => i.naturalWidth > 0 && i.getAttribute('src')).join(',')) === '/claudia/logo.png,/claudia-2/logo.webp', 'kartu coach memuat logo PNG dan WebP');
+      // T-2260: tempat di kartu, cari dan saring kota.
+      check(((await page.textContent('a.coach[href="/claudia/info/"] .pl')) || '').includes('Gold Gym Kemang') , 'kartu coach: tempat latihan di bawah nama');
+      const vis = () => page.evaluate(() => [...document.querySelectorAll('#coaches .coach')].filter(a => !a.hidden && a.offsetParent).map(a => a.getAttribute('href')).join(','));
+      await page.click('#cities button[data-city="bandung"]');
+      check(await vis() === '/claudia-2/info/' && await page.getAttribute('#cities button[data-city="bandung"]', 'aria-pressed') === 'true', 'pilih kota Bandung → hanya coach di Bandung');
+      await page.click('#cities button[data-city=""]');
+      await page.fill('#coach-q', 'kemang');
+      check(await vis() === '/claudia/info/', 'cari "kemang" → coach dengan tempat itu');
+      await page.fill('#coach-q', 'tidak ada');
+      check(await vis() === '' && await page.isVisible('#no-hit'), 'tidak cocok → pesan "Tidak ada coach yang cocok"');
+      await page.fill('#coach-q', '');
+      check(await vis() === '/claudia/info/,/claudia-2/info/' && !(await page.isVisible('#no-hit')), 'kosongkan cari → semua coach lagi');
+      check(await page.evaluate(() => [...document.querySelectorAll('#cities button')].every(b => b.getBoundingClientRect().height >= 43.5)), 'pilihan kota ≥ 44 px');
       check(await page.evaluate(() => [...document.querySelectorAll('.phones img')].filter(i => i.offsetParent).every(i => i.naturalWidth > 0)), 'gambar hero termuat');
       // Berbagai rasio layar: HP tegak/mendatar, tablet, laptop, ultrawide, monitor tegak.
       for (const [w, h] of [[320, 568], [390, 844], [844, 390], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1080], [1080, 1920], [3440, 1440]]) {
@@ -199,6 +217,21 @@ async function makeLogos(browser) {
       await page.click('[data-act="backup"][data-slug="claudia"]');
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('1 menit'), null, { timeout: 5000 }).catch(() => {});
       check(((await page.textContent('#dm')) || '').includes('1 menit') && ((await page.textContent('#list')) || '').includes('menunggu giliran'), 'Backup sekarang (tanpa onclick, lolos CSP): pesan + "menunggu giliran"');
+      // T-2258: tempat latihan lewat form kecil di kartu (bukan prompt).
+      check(((await page.textContent('#list')) || '').includes('Tempat: Gold Gym Kemang · Jakarta Selatan') && ((await page.textContent('#list')) || '').includes('Tempat belum diisi'), 'kartu coach: tempat dari hub.json / "Tempat belum diisi"');
+      await page.click('[data-act="tempat"][data-slug="claudia-2"]');
+      check(await page.evaluate(() => document.activeElement && document.activeElement.id === 'pl-n-claudia-2'), 'Tempat: form terbuka, kursor di nama tempat');
+      await page.fill('#pl-n-claudia-2', '  Studio   Dua ');
+      await page.fill('#pl-c-claudia-2', 'Bandung');
+      await page.click('.pl-form[data-slug="claudia-2"] button[type="submit"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('disimpan'), null, { timeout: 5000 }).catch(() => {});
+      check(JSON.stringify(PUSAT_CALLS.place) === '["claudia-2","Studio Dua","Bandung"]' && !(await page.isVisible('.pl-form')) && ((await page.textContent('#list')) || '').includes('Tempat: Studio Dua · Bandung'),
+        'Tempat: simpan → pusatSetPlace (spasi dirapikan), form tertutup, kartu diperbarui (' + JSON.stringify(PUSAT_CALLS.place) + ')');
+      await page.click('[data-act="tempat"][data-slug="claudia"]');
+      page.once('dialog', d => d.accept());
+      await page.click('[data-act="tempat-hapus"][data-slug="claudia"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('disimpan'), null, { timeout: 5000 }).catch(() => {});
+      check(JSON.stringify(PUSAT_CALLS.place) === '["claudia","",""]', 'Hapus tempat → pusatSetPlace dengan isian kosong');
       // T-2243: Ganti slug (prompt nama baru + konfirmasi), tanpa onclick.
       const answers = ['Claudia-Baru', null];
       const onDialog = d => { const a = answers.shift(); return d.type() === 'prompt' ? d.accept(a) : d.accept(); };
@@ -317,6 +350,28 @@ async function makeLogos(browser) {
         check(r.pk.includes('Regular 8') && r.days === 7 && !r.err, `${slug}: paket dan 7 hari jam kosong dari /exec coach itu (${JSON.stringify({ pk: r.pk, days: r.days, err: r.err })})`);
         check(r.acc === acc && r.mark > 0, `${slug}: warna aksen coach dan logo di halaman info`);
         check(r.daftar === '/' + slug + '/klien/' && !r.xnk, `${slug}: Daftar / Booking → /${slug}/klien/, tanpa tulisan "XNK"`);
+        // T-2259: tempat, ringkasan, paket termurah per sesi, deret hari, menu bagian.
+        const place = slug === 'claudia' ? ['Gold Gym Kemang', 'Jakarta Selatan'] : ['Studio Dua', 'Bandung'];
+        const q = await page.evaluate(() => ({ where: (document.getElementById('where') || {}).textContent, sec: !document.getElementById('tempat').hidden,
+          maps: (document.querySelector('#tempat a.btn') || {}).href, facts: [...document.querySelectorAll('#facts li')].map(l => l.getAttribute('data-k')).join(','),
+          best: [...document.querySelectorAll('.pk.best b')].map(b => b.textContent).join(','), per: (document.querySelector('.pk.best .per') || {}).textContent,
+          nav: [...document.querySelectorAll('.sec-nav a')].filter(a => !a.hidden).map(a => a.textContent).join(',') }));
+        check(q.where === place.join(' · ') && q.sec && q.maps === 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(place.join(', ')),
+          `${slug}: tempat di pita atas dan bagian Tempat dengan link Maps (${JSON.stringify([q.where, q.maps])})`);
+        check(q.facts === 'per,jam' && q.best === 'Regular 16' && q.per === 'Rp 90.000 / sesi', `${slug}: ringkasan (harga per sesi, jam kosong) dan "Paling hemat" (${JSON.stringify(q)})`);
+        check(q.nav === 'Profil,Tempat,Jadwal,Paket', `${slug}: menu bagian Profil · Tempat · Jadwal · Paket`);
+        check(await page.evaluate(() => { const y = id => document.getElementById(id).getBoundingClientRect().top; return y('profil') < y('tempat') && y('tempat') < y('jadwal') && y('jadwal') < y('paket'); }),
+          `${slug}: di HP Jadwal tampil sebelum Paket`);
+        const strip = await page.evaluate(() => { const b = [...document.querySelectorAll('#slots .day')]; const on = b.findIndex(x => x.getAttribute('aria-pressed') === 'true');
+          const other = b.findIndex((x, i) => i !== on); return { on, other, n: b.length, hours: document.querySelectorAll('#pick .hr').length }; });
+        await page.click(`#slots .day[data-i="${strip.other}"]`);
+        const after = await page.evaluate(() => ({ on: [...document.querySelectorAll('#slots .day')].findIndex(x => x.getAttribute('aria-pressed') === 'true'), head: document.querySelector('#pick .dh').textContent,
+          link: (document.querySelector('#pick .hr') || { getAttribute: () => '' }).getAttribute('href') }));
+        check(strip.n === 7 && strip.on >= 0 && after.on === strip.other && !!after.head, `${slug}: deret 7 hari, ketuk hari lain → jam hari itu (${JSON.stringify([strip, after])})`);
+        check(after.link === '' || after.link === '/' + slug + '/klien/', `${slug}: jam kosong → portal klien`);
+        await page.click('.sec-nav a[data-sec="paket"]');
+        await page.waitForTimeout(700);
+        check(await page.evaluate(() => { const r = document.getElementById('paket').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight / 2; }), `${slug}: menu bagian Paket menggulir ke paket`);
         for (const [w, h] of [[360, 740], [390, 844], [430, 932], [1280, 800], [1920, 1080]]) {
           await page.setViewportSize({ width: w, height: h });
           await page.waitForTimeout(150);
@@ -324,6 +379,16 @@ async function makeLogos(browser) {
             small: [...document.querySelectorAll('a.btn, button, a.hr')].filter(e => e.offsetParent && e.getBoundingClientRect().height < 43.5).length,
             bar: getComputedStyle(document.querySelector('.bar')).display }));
           check(m.sw <= w && m.small === 0 && (w < 900 ? m.bar !== 'none' : m.bar === 'none'), `${slug} info ${w}×${h}: tanpa scroll ke samping, tombol ≥ 44 px, tombol bawah ${w < 900 ? 'tampil' : 'diganti tombol atas'} (${JSON.stringify(m)})`);
+          if (w >= 900) {
+            // Pita atas tanpa bidang kosong di kanan (kotak jam kosong terdekat), Jadwal di kolom kanan sejajar Profil.
+            await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+            await page.waitForTimeout(100);
+            const d = await page.evaluate(() => { const hs = document.getElementById('hero-side'), r = hs.getBoundingClientRect(), wr = document.querySelector('.hero .wrap').getBoundingClientRect();
+              const j = document.getElementById('jadwal').getBoundingClientRect(), p = document.getElementById('profil').getBoundingClientRect();
+              return { side: getComputedStyle(hs).display !== 'none' && r.width > 150, right: Math.round(wr.right - r.right), next: document.getElementById('hs-next').textContent,
+                col: j.left > p.right && Math.abs(j.top - p.top) < 4 }; });
+            check(d.side && d.right < 40 && /\d\d\.00|Belum ada/.test(d.next) && d.col, `${slug} info ${w}×${h}: kotak kanan pita atas (jam terdekat), Jadwal di kolom kanan (${JSON.stringify(d)})`);
+          }
         }
         await page.close();
       }
