@@ -255,5 +255,3 @@
       '<button type="button" class="btn btn-secondary ds-out" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></section>';
     return '<div class="ds-saya">' + athleteCardHtml().replace('class="card-ink athlete', 'class="card-ink athlete ath-wide') + '<div class="ds-cols"><div class="ds-col">' + c1 + '</div><div class="ds-col">' + c2 + '</div><div class="ds-col">' + c3 + '</div></div></div>';
   };
-})();
-</script>

@@ -74,7 +74,7 @@ Gelombang 4 — operasional
 - [ ] T-2252 Coach keluar: ekspor untuk coach, nonaktifkan situs, hapus akun H+30.
 - [x] T-2253 Kuota Gmail (menit trigger, fetch, email) dilaporkan; email di 70 %. `src/Kuota.gs` (`QUOTA_<yyyymmdd>`, `MAIL_RESERVE`), `hubStatus().quota`, cek 70 % di XNK Pusat, ubin di `/adminxnk` ([Pusat.md](Pusat.md)).
 - [x] T-2254 Notifikasi coach lewat Web Push + email ke email coach (Telegram opsional). Web Push coach sudah ada (Fase Z); email: `NOTIF_EMAIL_REMINDERS` off/on/auto (Pengaturan → Notifikasi Admin, wizard = auto), `kirimEmailTombol_`, ReminderLog per saluran.
-- [ ] T-2255 "Unduh data saya" (Excel) di Pengaturan panel coach.
+- [x] T-2255 "Unduh data saya" (Excel) di Pengaturan panel coach: Pengaturan → Akun, admin `exportMyData` di `src/Unduh.gs` (per halaman, teks tampilan, tanpa ProgressPhotos / PushSubs / PushOutbox / Script Properties), .xlsx dirakit di browser tanpa pustaka luar (part `18-unduh-data-saya.part`).
 - [x] T-2256 Daftar periksa akun Gmail per coach ([Akun.md](Akun.md)); token dipakai harian oleh `perbarui`, jadi token mati langsung terlihat.
 - [ ] T-2257 "Didukung XNK" kecil di login dan kartu bagikan coach.
 - Keputusan terbuka: UU PDP (kebijakan privasi, perjanjian pemroses data) ditunda oleh pemilik.
