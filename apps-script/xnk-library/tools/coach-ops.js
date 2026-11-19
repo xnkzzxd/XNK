@@ -29,25 +29,28 @@ const { askServerInfo } = require('./hub-versions');
 const CLASP_ERR = /GaxiosError|errors: \[|code: [45][0-9][0-9]|User has not enabled the Apps Script API|already exists in the current project|Could not read API credentials|invalid_grant/;
 
 function secretName(slug) { return 'CLASP_' + String(slug).toUpperCase().replace(/-/g, '_'); }
+/** T-2243: secret coach di hub.json (dicatat saat slug diganti), atau CLASP_<SLUG>. Sama dengan job plan coach.yml. */
+function secretOf(c) { return (c && c.secret) || secretName(c && c.slug); }
 
 /** Isi .clasprc.json akun coach dari CLASP_RC (atau SECRETS_JSON untuk tes); galat Indonesia bila tidak ada. */
-function credFor(slug, env) {
+function credFor(slug, env, secret) {
   env = env || process.env;
+  const name = secret || secretName(slug);
   let v = env.CLASP_RC;
   if (!v) {
     let all = {};
     try { all = JSON.parse(env.SECRETS_JSON || '{}'); } catch (e) { all = {}; }
-    v = all[secretName(slug)];
+    v = all[name];
   }
-  if (!v || typeof v !== 'string') throw new Error(`Secret ${secretName(slug)} belum ada di repo hub (Settings → Secrets and variables → Actions). Isinya: berkas .clasprc.json dari "clasp login" akun Google coach itu.`);
-  try { JSON.parse(v); } catch (e) { throw new Error(`Secret ${secretName(slug)} bukan isi .clasprc.json yang utuh (harus JSON).`); }
+  if (!v || typeof v !== 'string') throw new Error(`Secret ${name} belum ada di repo hub (Settings → Secrets and variables → Actions). Isinya: berkas .clasprc.json dari "clasp login" akun Google coach itu.`);
+  try { JSON.parse(v); } catch (e) { throw new Error(`Secret ${name} bukan isi .clasprc.json yang utuh (harus JSON).`); }
   return v;
 }
 
 /** Jalankan clasp dengan HOME sementara milik akun coach. runner(args, {cwd, home}) → {code, out}. */
-function makeClasp(slug, opts) {
+function makeClasp(slug, opts, secret) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'xnk-clasp-'));
-  fs.writeFileSync(path.join(home, '.clasprc.json'), credFor(slug, opts.env), { mode: 0o600 });
+  fs.writeFileSync(path.join(home, '.clasprc.json'), credFor(slug, opts.env, secret), { mode: 0o600 });
   const runner = opts.runner || ((args, o) => {
     const r = spawnSync(opts.claspBin || process.env.CLASP_BIN || 'clasp', args, { cwd: o.cwd, env: Object.assign({}, process.env, { HOME: o.home, SECRETS_JSON: '', CLASP_RC: '' }), encoding: 'utf8' });
     return { code: r.status, out: String(r.stdout || '') + String(r.stderr || '') };
@@ -58,7 +61,7 @@ function makeClasp(slug, opts) {
     if (r.code !== 0 || CLASP_ERR.test(out)) {
       let hint = '';
       if (/Apps Script API/.test(out)) hint = ' Nyalakan "Google Apps Script API" untuk akun ini di https://script.google.com/home/usersettings.';
-      else if (/invalid_grant|credentials/i.test(out)) hint = ` Token akun tidak berlaku lagi: jalankan "clasp login" ulang dan perbarui secret ${secretName(slug)}.`;
+      else if (/invalid_grant|credentials/i.test(out)) hint = ` Token akun tidak berlaku lagi: jalankan "clasp login" ulang dan perbarui secret ${secret || secretName(slug)}.`;
       throw new Error(`clasp ${args[0]} gagal untuk "${slug}".${hint}\n${out.split('\n').slice(-6).join('\n')}`);
     }
     return out;
@@ -89,6 +92,23 @@ function bridgeDir(scriptId, lib, c) {
   fs.writeFileSync(path.join(dir, '.clasp.json'), JSON.stringify({ scriptId, rootDir: '.' }));
   fs.writeFileSync(path.join(dir, '.claspignore'), '**/**\n!*.gs\n!*.html\n!appsscript.json\n');
   return dir;
+}
+
+/**
+ * Baris rencana workflow Coach XNK (job plan coach.yml memanggil ini): satu per coach {slug, secret, kenari}.
+ * secret = isian "secret" di hub.json (coach yang ganti slug tetap memakai secret lamanya) atau CLASP_<SLUG>.
+ */
+function planRows(cfg, aksi, one) {
+  one = String(one || '').trim();
+  if (one && !/^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/.test(one)) throw new Error('Slug tidak valid: ' + one);
+  if (aksi !== 'perbarui' && !one) throw new Error('Aksi ' + aksi + ' butuh slug.');
+  const list = (cfg && cfg.coaches) || [];
+  const bySlug = {};
+  for (const c of list) bySlug[c.slug] = c;
+  // Slug lama (aliases) = coach yang sekarang memakainya.
+  const hit = one ? list.find(c => c.slug === one || (c.aliases || []).includes(one)) : null;
+  const slugs = one ? [hit ? hit.slug : one] : list.map(c => c.slug);
+  return slugs.map((s, i) => ({ slug: s, secret: secretOf(bySlug[s] || { slug: s }), kenari: !one && i === 0 && slugs.length > 1 }));
 }
 
 const execOf = id => `https://script.google.com/macros/s/${id}/exec`;
@@ -128,7 +148,7 @@ function hubungkan(file, slug, opts) {
   const deploymentId = (c.exec.match(/\/s\/([\w-]+)\/exec$/) || [])[1];
   const given = String(opts.scriptId || '').trim();
   if (given && !/^[\w-]{20,120}$/.test(given)) throw new Error('Script ID tidak valid (salin dari Apps Script → Project Settings → Script ID).');
-  const clasp = makeClasp(slug, opts);
+  const clasp = makeClasp(slug, opts, secretOf(c));
   try {
     // Proyek coach menempel di spreadsheet-nya (salinan XNK Template); `clasp list` hanya menampilkan proyek yang berdiri
     // sendiri, jadi Script ID dari pemilik dipakai bila ada. Tetap diperiksa: proyek itu harus punya deployment link /exec.
@@ -146,7 +166,7 @@ function hubungkan(file, slug, opts) {
       }
     }
     throw new Error(given
-      ? `Proyek ${given.slice(0, 12)}… tidak bisa dibaca dengan secret ${secretName(slug)} atau tidak memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}"). Periksa Script ID dan akun secret itu.`
+      ? `Proyek ${given.slice(0, 12)}… tidak bisa dibaca dengan secret ${secretOf(c)} atau tidak memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}"). Periksa Script ID dan akun secret itu.`
       : `Tidak ada proyek di akun ini yang memiliki deployment ${deploymentId.slice(0, 12)}… (link /exec "${slug}").`);
   } finally { clasp.done(); }
 }
@@ -154,7 +174,7 @@ function hubungkan(file, slug, opts) {
 /** Pasang Library terbaru di satu coach, deployment yang sama. */
 function perbaruiSatu(c, lib, opts) {
   if (!c.scriptId || !c.deploymentId) throw new Error(`"${c.slug}" belum dihubungkan (scriptId/deploymentId kosong): jalankan aksi "hubungkan" dulu.`);
-  const clasp = makeClasp(c.slug, opts);
+  const clasp = makeClasp(c.slug, opts, secretOf(c));
   try {
     const dir = bridgeDir(c.scriptId, lib, c);
     clasp.run(['push', '--force'], dir);
@@ -167,7 +187,7 @@ function perbaruiSatu(c, lib, opts) {
 async function perbarui(file, target, lib, opts) {
   opts = opts || {};
   const all = readHub(readCfg(file)).coaches;
-  const list = target === 'semua' ? all : all.filter(c => c.slug === target);
+  const list = target === 'semua' ? all : all.filter(c => c.slug === target || (c.aliases || []).includes(target));
   if (!list.length) throw new Error(target === 'semua' ? 'hub.json belum berisi coach.' : `Coach "${target}" tidak ada di hub.json.`);
   const ask = opts.ask || (exec => askServerInfo(exec, opts.fetch));
   const out = [];
@@ -193,7 +213,7 @@ async function perbarui(file, target, lib, opts) {
   return out;
 }
 
-module.exports = { baru, hubungkan, perbarui, latestLib, secretName, credFor, versionOf, deploymentOf };
+module.exports = { baru, hubungkan, perbarui, latestLib, secretName, secretOf, planRows, credFor, versionOf, deploymentOf };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

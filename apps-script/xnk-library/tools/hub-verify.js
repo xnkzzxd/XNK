@@ -57,11 +57,13 @@ function verifySite(dir, cfg, opts) {
       const html = read(d + 'index.html');
       if (!html.includes('http-equiv="Content-Security-Policy"')) problems.push(`${c.slug} (${kind}): Content-Security-Policy tidak terpasang.`);
       if (/googletagmanager\.com|G-93SRTYH3SG/.test(html)) problems.push(`${c.slug} (${kind}): masih memuat Google Analytics milik xnk.my.id.`);
-      const shim = html.indexOf(`'${c.slug}:'`);
+      // T-2243: awalan = storageSlug (slug pertama coach; tetap walau slug diganti).
+      const st = c.storageSlug || c.slug;
+      const shim = html.indexOf(`'${st}:'`);
       const firstScript = html.indexOf('<script');
-      if (shim < 0) problems.push(`${c.slug} (${kind}): awalan penyimpanan "${c.slug}:" tidak terpasang.`);
+      if (shim < 0) problems.push(`${c.slug} (${kind}): awalan penyimpanan "${st}:" tidak terpasang.`);
       else if (html.lastIndexOf('<script', shim) !== firstScript) problems.push(`${c.slug} (${kind}): awalan penyimpanan bukan skrip pertama.`);
-      if (!read(d + 'sw-app.js').includes(`var PREFIX = "xnk-page-${c.slug}~${kind}~";`)) problems.push(`${c.slug} (${kind}): awalan cache service worker salah.`);
+      if (!read(d + 'sw-app.js').includes(`var PREFIX = "xnk-page-${st}~${kind}~";`)) problems.push(`${c.slug} (${kind}): awalan cache service worker salah.`);
     }
     // T-2241/T-2242: halaman info dengan CSP ketat; logo coach ada bila diisi di hub.json.
     const info = c.slug + '/info/index.html';
@@ -76,6 +78,17 @@ function verifySite(dir, cfg, opts) {
       const l = JSON.parse(read(c.slug + '/lib-latest.json'));
       if (!/^[0-9a-f]{12}$/.test(l && l.library && l.library.hash || '')) problems.push(`${c.slug}: lib-latest.json tanpa sidik Library.`);
     } catch (e) { problems.push(`${c.slug}: lib-latest.json tidak ada atau rusak.`); }
+    // T-2243: alamat lama mengalihkan ke slug sekarang (halaman + worker pengganti).
+    for (const a of c.aliases || []) {
+      for (const sub of ['', 'klien/', 'info/']) {
+        const f = `${a}/${sub}index.html`;
+        if (!has(f)) { problems.push(`${a}: halaman pengalih /${a}/${sub} tidak ada.`); continue; }
+        const t = read(f);
+        if (!t.includes(`location.replace(${JSON.stringify('/' + c.slug + '/' + sub)} + location.search + location.hash)`)) problems.push(`${f} tidak mengalihkan ke /${c.slug}/${sub}.`);
+        if (!t.includes('http-equiv="Content-Security-Policy"') || !t.includes('name="robots" content="noindex"')) problems.push(`${f}: tanpa CSP ketat atau noindex.`);
+      }
+      for (const sub of ['', 'klien/']) if (!has(`${a}/${sub}sw-app.js`) || !read(`${a}/${sub}sw-app.js`).includes(`var TO = ${JSON.stringify('/' + c.slug + '/' + sub)};`)) problems.push(`${a}: worker pengganti /${a}/${sub}sw-app.js tidak ada atau salah tujuan.`);
+    }
     // /exec coach lain tidak boleh ada di berkas coach ini (situs satu domain: salah sambung = data coach lain).
     const others = hub.coaches.filter(o => o.slug !== c.slug).map(o => o.exec);
     for (const rel of files.filter(f => f.startsWith(c.slug + '/') && /\.(html|js|json)$/.test(f))) {

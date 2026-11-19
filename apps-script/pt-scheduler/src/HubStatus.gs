@@ -136,3 +136,28 @@ function hubPushKey(secret, publicKey, on) {
   try { subs = _pushSubsAll_().length; } catch (e) { subs = 0; }
   return { on: _pushOn_(), relay: relay, subs: subs };
 }
+
+// ── Ganti slug di hub (T-2243) ──────────────────────────────────────────────────────────────────────────────
+// Pemilik mengganti nama di alamat coach (xnk.web.id/<lama> → /<baru>) lewat XNK Pusat. Alamat lama tetap mengarah ke
+// yang baru (halaman pengalih di hub), tetapi link baru di pesan WhatsApp, kode QR kartu dan "Cek kesehatan" memakai
+// SITE_URL. XNK Pusat mengirim alamat baru lewat fungsi ini, dijaga HUB_SECRET seperti hubStatus.
+
+/**
+ * Simpan alamat situs coach yang baru (SITE_URL).
+ * @param {string} secret HUB_SECRET spreadsheet ini
+ * @param {string} url alamat utama situs coach, mis. https://xnk.web.id/baru ('/klien' di ujung dibuang)
+ * @return {{siteUrl: string, changed: boolean}}
+ */
+function hubSiteUrl(secret, url) {
+  _hubAuth_(secret);
+  var site = String(url == null ? '' : url).trim().replace(/\/+$/, '').replace(/\/klien$/i, '');
+  if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[A-Za-z0-9._~-]+)*$/i.test(site) || site.length > 200) throw new Error('Alamat situs tidak valid.');
+  var props = PropertiesService.getScriptProperties();
+  var changed = props.getProperty('SITE_URL') !== site;
+  props.setProperty('SITE_URL', site);
+  if (changed) {
+    // Alamat portal ada di jawaban yang disimpan (link WhatsApp, kode QR kartu): semuanya dibangun ulang.
+    try { _bustShared_(); _bumpMember_('*'); } catch (e) { /* cache mati: jawaban lama habis sendiri */ }
+  }
+  return { siteUrl: site, changed: changed };
+}

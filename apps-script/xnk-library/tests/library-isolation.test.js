@@ -93,6 +93,34 @@ test('inisialisasi dan pasang trigger aman diulang (tanpa duplikat)', () => {
   libraryUntouched(env);
 });
 
+test('runWarmTick (T-2243): sakelar "Siapkan data di latar" memasang trigger di spreadsheet pemanggil; pasang ulang dan cek kesehatan mengikutinya', () => {
+  const env = createLibEnv();
+  const A = makeCtx('SS_A'), B = makeCtx('SS_B');
+  for (const X of [A, B]) { env.lib('initInstance', X.ctx); env.lib('saveSetup', X.ctx, { brand: 'X', pin: '111111' }); }
+  env.lib('installTriggers', A.ctx);
+  assert.deepEqual(A.store.triggers.map(t => t.getHandlerFunction()), ['runReminderTick'], 'mati bawaan: tanpa runWarmTick');
+  assert.equal(env.lib('healthCheck', A.ctx).triggers.runWarmTick, 0);
+  assert.ok(!env.lib('healthCheck', A.ctx).problems.some(p => /runWarmTick/.test(p)), 'mati = bukan masalah');
+  const tok = env.run(A.ctx, 'adminLogin', '111111').token;
+  assert.equal(env.run(A.ctx, 'updateAppSettings', tok, { warmEnabled: true }).warmEnabled, true);
+  assert.deepEqual(A.store.triggers.map(t => t.getHandlerFunction()).sort(), ['runReminderTick', 'runWarmTick']);
+  assert.deepEqual(B.store.triggers, [], 'spreadsheet lain tidak tersentuh');
+  // Trigger hilang (mis. dihapus di editor): cek kesehatan melapor, pasang ulang mengembalikannya tanpa duplikat.
+  A.store.triggers = A.store.triggers.filter(t => t.getHandlerFunction() !== 'runWarmTick');
+  assert.ok(env.lib('healthCheck', A.ctx).problems.some(p => /runWarmTick belum terpasang/.test(p)));
+  assert.deepEqual([...env.lib('installTriggers', A.ctx).installed], ['runReminderTick', 'runWarmTick']);
+  env.lib('installTriggers', A.ctx);
+  assert.deepEqual(A.store.triggers.map(t => t.getHandlerFunction()).sort(), ['runReminderTick', 'runWarmTick']);
+  assert.equal(env.lib('healthCheck', A.ctx).ok, true);
+  assert.ok(env.run(A.ctx, 'runWarmTick').admin, 'tick berjalan dengan data spreadsheet A');
+  env.run(A.ctx, 'updateAppSettings', tok, { warmEnabled: false });
+  assert.deepEqual(A.store.triggers.map(t => t.getHandlerFunction()), ['runReminderTick'], 'dimatikan = trigger dilepas');
+  A.store.triggers.push({ getHandlerFunction: () => 'runWarmTick' });
+  env.lib('installTriggers', A.ctx);
+  assert.deepEqual(A.store.triggers.map(t => t.getHandlerFunction()), ['runReminderTick'], 'pasang ulang melepas trigger sisa saat sakelar mati');
+  libraryUntouched(env);
+});
+
 test('salinan baru: semua pengaturan dari spreadsheet asal dihapus saat inisialisasi', () => {
   const { env, A } = setupTwo();
   A.store.props.TELEGRAM_BOT_TOKEN = '1:x';

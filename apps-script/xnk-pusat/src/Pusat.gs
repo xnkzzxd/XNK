@@ -15,7 +15,8 @@
 //   PUSAT_PUSH_SECRET (opsional, min 32; sama dengan secret repo hub, untuk workflow Push XNK, T-2240).
 // Disimpan sendiri: SESSION_SECRET, COACHES (JSON slug → {exec, secret, at}), ST_<slug> (status terakhir), LATEST_LIB,
 //   BKST_<slug> (backup terakhir), BKNOW_<slug> (backup sekarang), BK_CUR (backup yang sedang berjalan), BK_DIRS (ID
-//   folder Drive), BK_RUN (tanda backup sedang berjalan), PUSH_<slug> (push coach: menyala?, rahasia relay, T-2240).
+//   folder Drive), BK_RUN (tanda backup sedang berjalan), PUSH_<slug> (push coach: menyala?, rahasia relay, T-2240),
+//   SITEQ_<slug> (alamat situs baru yang belum diterima coach setelah ganti slug, dicoba lagi tiap pagi, T-2243).
 
 var PUSAT_SESSION_MS = 12 * 3600 * 1000;
 var PUSAT_TICK_LATE_MS = 3 * 3600 * 1000;      // pengingat menyala tapi tick terakhir lebih lama dari ini = masalah
@@ -47,7 +48,7 @@ function hubUrl_() { return prop_('HUB_URL', 'https://xnk.web.id').replace(/\/+$
 
 // ── Pintu JSON untuk /adminxnk dan wizard coach ──────────────────────────────────────────────────────────────
 
-var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets };
+var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename };
 
 function doPost(e) {
   var out;
@@ -300,6 +301,16 @@ function checkAll_(only) {
 function runPusatDaily() {
   var res = checkAll_();
   var all = json_('COACHES', {});
+  // T-2243: alamat situs baru yang belum diterima coach (coach tidak menjawab saat ganti slug) dikirim lagi.
+  Object.keys(all).forEach(function (s) {
+    if (!prop_('SITEQ_' + s)) return;
+    var r = siteSync_(s, all[s]);
+    if (r.error) {
+      if (!res[s]) res[s] = { ok: true, problems: [] };
+      res[s].problems.push('Alamat baru belum diterima coach: ' + r.error);
+      res[s].ok = false;
+    }
+  });
   var push = pushSyncAll_();
   Object.keys(push).forEach(function (s) {
     if (!push[s].error) return;
@@ -661,4 +672,94 @@ function pusatPushTargets(pushSecret) {
       return p.on && p.active && p.relay && PUSAT_EXEC_RE.test(String(p.exec || '')) ? { slug: slug, exec: p.exec, relay: p.relay } : null;
     }).filter(Boolean),
   };
+}
+
+// ── Ganti slug coach (T-2243) ───────────────────────────────────────────────────────────────────────────────
+// /adminxnk → Ganti slug: XNK Pusat memindahkan semua yang memakai slug sebagai kunci (pendaftaran, status, backup, push),
+// mengganti nama folder backup, mengirim alamat situs baru ke coach (hubSiteUrl, dijaga HUB_SECRET), lalu menjalankan
+// workflow Hub XNK aksi ganti-slug (hub.json: slug lama jadi alamat pengalih, awalan penyimpanan dan secret clasp tetap).
+// Pemeriksaan nama sama dengan tools/build-hub.js (RESERVED dicek sama oleh tests/pusat.test.js).
+
+var PUSAT_RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
+  'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
+var PUSAT_SLUG_KEYS = ['ST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_'];
+
+/** Kirim SITEQ_<slug> (alamat situs baru) ke coach; berhasil = antrean dihapus. {ok} atau {error}. */
+function siteSync_(slug, c) {
+  var url = prop_('SITEQ_' + slug);
+  if (!url) return { ok: true };
+  try {
+    var j = askApps_(hubExec_(slug) || c.exec, { fn: 'hubSiteUrl', args: [c.secret, url] });
+    if (j && j.code === 'unknown_fn') throw new Error('Library coach belum punya hubSiteUrl; perbarui coach (dicoba lagi besok pagi).');
+    if (!j || !j.ok) throw new Error(j && j.error ? j.error : 'tanpa jawaban');
+    props_().deleteProperty('SITEQ_' + slug);
+    return { ok: true, siteUrl: url };
+  } catch (e) {
+    return { error: String(e && e.message ? e.message : e).slice(0, 160) };
+  }
+}
+
+/**
+ * Ganti slug coach. Hanya pemilik (token /adminxnk).
+ * @return {{slug: string, from: string, site: string, folder: string, hub: string}} site/folder/hub = 'ok' | pesan
+ */
+function pusatRename(token, oldSlug, newSlug) {
+  requireOwnerToken_(token);
+  var from = String(oldSlug == null ? '' : oldSlug).trim(), to = String(newSlug == null ? '' : newSlug).trim().toLowerCase();
+  if (!PUSAT_SLUG_RE.test(to) || /--/.test(to)) throw new Error('Nama baru tidak valid: huruf kecil, angka dan tanda hubung, 3 sampai 30 karakter.');
+  if (PUSAT_RESERVED.indexOf(to) !== -1) throw new Error('Nama "' + to + '" dipakai sistem; pilih nama lain.');
+  if (to === from) throw new Error('Nama baru sama dengan nama sekarang.');
+  // Nama yang sudah dipakai coach lain di hub.json (slug atau alamat lama) ditolak. Kembali ke alamat lama sendiri boleh.
+  var hubCoaches = hubJson_().coaches || [];
+  var mine = hubCoaches.filter(function (x) { return x && (x.slug === from || x.slug === to && (x.aliases || []).indexOf(from) !== -1); })[0];
+  hubCoaches.forEach(function (x) {
+    if (!x || x === mine) return;
+    if (x.slug === to || (x.aliases || []).indexOf(to) !== -1) throw new Error('Nama "' + to + '" sudah dipakai coach "' + x.slug + '" di hub.');
+  });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  var c;
+  try {
+    var all = json_('COACHES', {});
+    if (!PUSAT_SLUG_RE.test(from) || !all[from]) throw new Error('Coach tidak terdaftar.');
+    if (all[to]) throw new Error('Nama "' + to + '" sudah terdaftar di XNK Pusat.');
+    c = all[from];
+    all[to] = c;
+    delete all[from];
+    props_().setProperty('COACHES', JSON.stringify(all));
+    PUSAT_SLUG_KEYS.forEach(function (k) {
+      var v = props_().getProperty(k + from);
+      if (v != null) props_().setProperty(k + to, v);
+      props_().deleteProperty(k + from);
+    });
+    var cur = json_('BK_CUR', null);
+    if (cur && cur.slug === from) { cur.slug = to; bkSave_(cur); }   // backup yang sedang berjalan lanjut dengan nama baru
+    var dirs = json_('BK_DIRS', null);
+    if (dirs && dirs[from]) { dirs[to] = dirs[from]; delete dirs[from]; props_().setProperty('BK_DIRS', JSON.stringify(dirs)); }
+    props_().setProperty('SITEQ_' + to, hubUrl_() + '/' + to);
+  } finally { lock.releaseLock(); }
+
+  var out = { slug: to, from: from, site: 'ok', folder: 'ok', hub: 'ok' };
+  // Folder backup ikut berganti nama (ID tetap, salinan lama tetap di dalamnya). Gagal = folder lama tetap dipakai.
+  var dirId = (json_('BK_DIRS', {}) || {})[to];
+  if (!dirId) out.folder = 'Belum ada folder backup.';
+  else { try { drive_('patch', '/' + encodeURIComponent(dirId) + '?fields=id', { name: to }); } catch (e) { out.folder = 'Nama folder tetap "' + from + '" (' + String(e && e.message ? e.message : e).slice(0, 100) + '); backup tetap masuk ke sana.'; } }
+  var r = siteSync_(to, c);
+  if (r.error) out.site = r.error + ' Dicoba lagi tiap pagi.';
+  // hub.json: lewat workflow Hub XNK, kecuali sudah diganti di sana (pemilik menjalankan workflow itu lebih dulu).
+  if (mine && mine.slug === to) out.hub = 'hub.json sudah memakai nama baru.';
+  else if (!prop_('GITHUB_TOKEN')) out.hub = 'Jalankan sendiri: repo hub → Actions → Hub XNK → aksi ganti-slug, slug ' + from + ', slug_baru ' + to + '.';
+  else {
+    try {
+      var res = fetch_('https://api.github.com/repos/' + prop_('HUB_REPO', 'xnkzzxd/xnk-template-site') + '/actions/workflows/hub.yml/dispatches', {
+        method: 'post', contentType: 'application/json', headers: gh_(), muteHttpExceptions: true,
+        payload: JSON.stringify({ ref: 'main', inputs: { aksi: 'ganti-slug', slug: from, slug_baru: to } }),
+      });
+      if (res.getResponseCode() !== 204) throw new Error('GitHub menolak (' + res.getResponseCode() + ')');
+      try { CacheService.getScriptCache().remove('hubjson'); } catch (e) { /* hub.json dibaca lagi paling lambat 10 menit */ }
+    } catch (e) {
+      out.hub = String(e && e.message ? e.message : e).slice(0, 100) + '. Jalankan sendiri: Hub XNK → aksi ganti-slug, slug ' + from + ', slug_baru ' + to + '.';
+    }
+  }
+  return out;
 }

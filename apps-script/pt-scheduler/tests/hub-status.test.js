@@ -28,7 +28,8 @@ test('hubStatus: angka saja (klien, sesi, trigger, pengingat), tanpa nama atau n
   for (const k of ['total', 'active30d']) assert.equal(typeof r.clients[k], 'number', k);
   for (const k of ['done7d', 'next7d']) assert.equal(typeof r.sessions[k], 'number', k);
   assert.ok(r.clients.total > 0);
-  const text = JSON.stringify(r);
+  // lib = sidik build (heksadesimal, mis. commit CI "…08123456…"): bukan data klien, jadi tidak ikut diperiksa.
+  const text = JSON.stringify(Object.assign({}, r, { lib: null }));
   assert.ok(!/08\d{6,}|62\d{8,}/.test(text), 'tidak ada nomor WA');
   assert.ok(!/[A-Z][a-z]+ [A-Z][a-z]+/.test(text.replace(/"at":"[^"]+"/, '')), 'tidak ada nama');
   // Lewat doPost (pintu halaman statis / XNK Pusat).

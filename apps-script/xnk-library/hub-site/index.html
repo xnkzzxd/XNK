@@ -14,6 +14,8 @@
       var nav = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
       var ref = document.referrer || '';
       if (!fromCache && ref.indexOf(location.origin + '/') === 0 && !(nav && nav.type === 'back_forward')) return;
+      // T-2243: awalan penyimpanan / slug lama coach yang ganti nama → slug sekarang (diisi tools/build-hub.js).
+      var MAP = /*SLUGMAP*/{};
       var RE = /^([a-z0-9][a-z0-9-]{1,28}[a-z0-9]):xnk_(admin|member)_token$/, ls = localStorage, found = {}, order = [];
       for (var i = 0; i < ls.length; i++) {
         var m = RE.exec(ls.key(i) || '');
@@ -26,7 +28,7 @@
       var s = last && found[last.s] ? last.s : order[0];
       if (!s) return;
       var f = found[s], klien = !f.admin || (f.member && last && last.s === s && last.d === 'klien');
-      location.replace('/' + s + '/' + (klien ? 'klien/' : ''));
+      location.replace('/' + (MAP[s] || s) + '/' + (klien ? 'klien/' : ''));
     } catch (e) {}
   }
   run(false);

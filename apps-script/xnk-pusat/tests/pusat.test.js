@@ -559,3 +559,93 @@ test('push: kunci hub belum ada / Library lama = pesan jelas dan masuk email har
   assert.equal(old.mails.length, 1);
   assert.match(old.mails[0].body, /Notifikasi push: Library coach belum punya hubPushKey/);
 });
+
+// ── Ganti slug (T-2243) ──────────────────────────────────────────────────────────────────────────────────────
+function renameEnv(extra) {
+  extra = extra || {};
+  const coaches = { lama: { exec: EXEC(1), secret: SECRET(1), at: 'x' }, vinna: { exec: EXEC(2), secret: SECRET(2), at: 'x' } };
+  const calls = [];
+  const a = req => {
+    calls.push(req);
+    if (req.args[0] !== SECRET(1)) return { ok: false, error: 'Permintaan tidak valid.' };
+    if (req.fn === 'hubSiteUrl' && !extra.oldLib) return { ok: true, data: { siteUrl: req.args[1], changed: true } };
+    if (req.fn === 'hubPushKey') return { ok: true, data: { on: true, relay: 'r'.repeat(64), subs: 2 } };
+    return { ok: false, error: 'Fungsi tidak dikenal.', code: 'unknown_fn' };
+  };
+  const hub = { vapidPublic: VAPID, coaches: [{ slug: 'lama', exec: EXEC(1) }, { slug: 'vinna', exec: EXEC(2), aliases: ['vina'] }] };
+  const props = Object.assign({ COACHES: JSON.stringify(coaches), PUSAT_PUSH_SECRET: PUSH_SECRET,
+    ST_lama: JSON.stringify({ at: 'x', ok: true, problems: [] }), BKST_lama: JSON.stringify({ okAt: '2026-11-15T00:00:00Z', fileUrl: 'u', fails: 0 }),
+    PUSH_lama: JSON.stringify({ on: true, active: true, relay: 'r'.repeat(64), exec: EXEC(1), subs: 2 }), BK_DIRS: JSON.stringify({ root: 'f1', lama: 'f2', vinna: 'f3' }) }, extra.props || {});
+  const e = env({ hub: JSON.stringify(hub), props, servers: { [EXEC(1)]: a, [EXEC(2)]: () => ({ ok: false }) } });
+  e.drive.files.f1 = { id: 'f1', name: 'XNK Backup', parents: [], trashed: false };
+  e.drive.files.f2 = { id: 'f2', name: 'lama', parents: ['f1'], trashed: false };
+  e.tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  return { e, calls };
+}
+
+test('ganti slug: pendaftaran, status, backup, push dan folder pindah; coach menerima SITE_URL baru; workflow Hub XNK dijalankan', () => {
+  const { e, calls } = renameEnv({ props: { GITHUB_TOKEN: 'github_pat_x' } });
+  const r = e.call('pusatRename', e.tok, 'lama', 'Baru');
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(r.data, { slug: 'baru', from: 'lama', site: 'ok', folder: 'ok', hub: 'ok' });
+  const all = JSON.parse(e.props.COACHES);
+  assert.deepEqual(Object.keys(all).sort(), ['baru', 'vinna']);
+  assert.deepEqual(all.baru, { exec: EXEC(1), secret: SECRET(1), at: 'x' }, 'rahasia dan link /exec tetap');
+  for (const k of ['ST_', 'BKST_', 'PUSH_']) { assert.ok(e.props[k + 'baru'], k + ' pindah'); assert.equal(e.props[k + 'lama'], undefined, k + ' lama dihapus'); }
+  assert.deepEqual(JSON.parse(e.props.BK_DIRS), { root: 'f1', baru: 'f2', vinna: 'f3' });
+  assert.equal(e.drive.files.f2.name, 'baru', 'folder XNK Backup/lama → XNK Backup/baru (ID sama, salinan lama tetap)');
+  assert.deepEqual(calls.filter(c => c.fn === 'hubSiteUrl').map(c => c.args), [[SECRET(1), 'https://xnk.web.id/baru']]);
+  assert.equal(e.props.SITEQ_baru, undefined, 'diterima = antrean kosong');
+  const d = e.fetches.filter(f => f.url.includes('/dispatches'));
+  assert.equal(d.length, 1);
+  assert.match(d[0].url, /\/actions\/workflows\/hub\.yml\/dispatches$/);
+  assert.deepEqual(JSON.parse(d[0].o.payload), { ref: 'main', inputs: { aksi: 'ganti-slug', slug: 'lama', slug_baru: 'baru' } });
+  // Push tetap ke /exec coach yang sama, sekarang dengan nama baru.
+  assert.deepEqual(e.call('pusatPushTargets', PUSH_SECRET).data, { coaches: [{ slug: 'baru', exec: EXEC(1), relay: 'r'.repeat(64) }] });
+  const ov = e.call('pusatOverview', e.tok).data.coaches.find(c => c.slug === 'baru');
+  assert.equal(ov.backup.fileUrl, 'u');
+  assert.equal(ov.panel, 'https://xnk.web.id/baru/');
+  assert.ok(!JSON.stringify(r.data).includes(SECRET(1)));
+});
+
+test('ganti slug: penjaga dan penolakan (token, nama sistem, nama dipakai coach lain atau alamat lamanya, tidak terdaftar)', () => {
+  const { e } = renameEnv();
+  assert.equal(e.call('pusatRename', 'palsu', 'lama', 'baru').auth, true);
+  for (const [from, to, re] of [['lama', 'admin', /dipakai sistem/], ['lama', 'a b', /tidak valid/], ['lama', 'lama', /sama dengan nama sekarang/],
+    ['lama', 'vinna', /sudah dipakai coach "vinna"/], ['lama', 'vina', /sudah dipakai coach "vinna"/], ['tidakada', 'baru', /tidak terdaftar/]]) {
+    const r = e.call('pusatRename', e.tok, from, to);
+    assert.equal(r.ok, false, from + '→' + to);
+    assert.match(r.error, re);
+  }
+  assert.deepEqual(Object.keys(JSON.parse(e.props.COACHES)).sort(), ['lama', 'vinna'], 'tidak ada yang berubah');
+  assert.ok(e.props.ST_lama);
+});
+
+test('ganti slug: tanpa token GitHub = langkah manual; coach lama tanpa hubSiteUrl = dicoba lagi tiap pagi sampai diterima', () => {
+  const opt = { oldLib: true };
+  const { e, calls } = renameEnv(opt);
+  const r = e.call('pusatRename', e.tok, 'lama', 'baru').data;
+  assert.match(r.hub, /Hub XNK → aksi ganti-slug, slug lama, slug_baru baru/);
+  assert.match(r.site, /belum punya hubSiteUrl/);
+  assert.equal(e.props.SITEQ_baru, 'https://xnk.web.id/baru');
+  assert.equal(e.fetches.filter(f => f.url.includes('/dispatches')).length, 0);
+  e.ctx.runPusatDaily();
+  assert.ok(e.mails.some(m => /baru: .*Alamat baru belum diterima coach/.test(m.body)), 'masuk email harian');
+  assert.equal(e.props.SITEQ_baru, 'https://xnk.web.id/baru', 'tetap di antrean');
+  // Coach diperbarui: pagi berikutnya alamat diterima dan antrean kosong.
+  opt.oldLib = false;
+  calls.length = 0;
+  e.ctx.runPusatDaily();
+  assert.deepEqual(calls.filter(c => c.fn === 'hubSiteUrl').map(c => c.args[1]), ['https://xnk.web.id/baru']);
+  assert.equal(e.props.SITEQ_baru, undefined);
+  calls.length = 0;
+  e.ctx.runPusatDaily();
+  assert.equal(calls.filter(c => c.fn === 'hubSiteUrl').length, 0, 'sudah diterima = tidak dikirim lagi');
+});
+
+test('ganti slug: nama dicek sama dengan tools/build-hub.js (RESERVED, pola slug)', () => {
+  const hub = require('../../xnk-library/tools/build-hub');
+  const { e } = renameEnv();
+  assert.deepEqual(Array.from(e.ctx.PUSAT_RESERVED), hub.RESERVED);
+  assert.equal(String(e.ctx.PUSAT_SLUG_RE), String(hub.SLUG_RE));
+});

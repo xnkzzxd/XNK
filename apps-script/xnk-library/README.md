@@ -15,6 +15,7 @@ node apps-script/xnk-library/tools/build-bridge.js --lib-id <id> --lib-version <
 node apps-script/xnk-library/tools/build-tenant.js <out> --config config.json        # situs satu coach (domain sendiri)
 node apps-script/xnk-library/tools/build-hub.js <out> --config hub.json              # situs hub xnk.web.id (semua coach)
 node apps-script/xnk-library/tools/hub-edit.js hub.json simpan <slug> <nama> <link /exec>
+node apps-script/xnk-library/tools/hub-edit.js hub.json ganti-slug <lama> <baru>     # T-2243: link lama tetap jalan
 node --test apps-script/xnk-library/tests/*.test.js            # tes Library + penghubung
 node apps-script/xnk-library/tools/check-compat.js              # seluruh tes produksi pada kode Library
 NODE_PATH=$(npm root -g) node apps-script/xnk-library/tools/tenant-check.js          # situs coach di browser

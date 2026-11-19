@@ -110,3 +110,16 @@ Tab `?setup` juga mengatakan hal yang sama bila izin masih kurang (tidak lagi "i
 XNK Pusat membagikan kunci publik VAPID hub (dari `hub.json` → `vapidPublic`) ke coach lewat `hubPushKey(rahasia, kunci, menyala)`: setiap pagi untuk coach yang menyala (atau masih aktif dan perlu dimatikan) dan saat tombol **Nyalakan/Matikan push** di `/adminxnk` ditekan (`pusatAction` `push-on` / `push-off`). Coach yang tidak pernah dinyalakan tidak dihubungi. Jawabannya (rahasia relay coach, jumlah perangkat) disimpan di `PUSH_<slug>`; `/adminxnk` hanya melihat menyala/aktif, jumlah perangkat, waktu dan galat.
 
 `pusatPushTargets(PUSAT_PUSH_SECRET)` (perbandingan waktu-konstan, min 32 karakter) memberi workflow Push XNK daftar `{slug, exec, relay}` coach yang menyala, tanpa UrlFetch. Workflow lalu memanggil coach langsung. Galat push masuk email harian. Semua UrlFetch XNK Pusat dihitung per hari WIB (`fetch_`, tampil sebagai `fetchToday` di `pusatOverview`). Langkah pasang: [push/Setup.md](../push/Setup.md#hub-xnkwebid-notifikasi-untuk-semua-coach-t-2240).
+
+## Ganti slug coach (T-2243)
+
+`/adminxnk` → **Ganti slug** memanggil `pusatRename(token, lama, baru)` (hanya pemilik). Nama baru diperiksa sama dengan
+`build-hub.js` (pola slug, `PUSAT_RESERVED` = `RESERVED`, tidak dipakai slug atau alamat lama coach lain di `hub.json`).
+Di bawah script lock: `COACHES[lama]` → `COACHES[baru]` (link /exec dan rahasia tetap), `ST_`, `BKST_`, `BKNOW_`,
+`PUSH_`, `SITEQ_` pindah, `BK_DIRS` dan `BK_CUR` (backup yang sedang berjalan lanjut) ikut. Sesudahnya: folder Drive
+backup diganti namanya (ID sama; gagal = folder lama tetap dipakai dan disebut di pesan), alamat
+`<HUB_URL>/<baru>` dikirim ke coach lewat `hubSiteUrl(HUB_SECRET, url)` (antrean `SITEQ_<baru>`, dicoba lagi di
+`runPusatDaily` dan masuk email bila belum diterima), lalu workflow `hub.yml` dijalankan dengan
+`{aksi: 'ganti-slug', slug, slug_baru}` (tanpa `GITHUB_TOKEN` = pesan langkah manual; sudah diganti di hub.json =
+dilewati). Jawabannya `{slug, from, site, folder, hub}`, masing-masing `'ok'` atau pesan. Langkah untuk pemilik:
+[Hub.md](Hub.md#ganti-slug-coach-t-2243).
