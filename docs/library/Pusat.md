@@ -104,3 +104,9 @@ Tab `?setup` juga mengatakan hal yang sama bila izin masih kurang (tidak lagi "i
    pengaturan, HUB_SECRET) terisi lagi — pengaturan tidak ikut backup — lalu daftarkan ulang ke XNK Pusat.
 5. Buka panel coach dan periksa jadwal, klien dan paket. Kolom tanggal kembali sebagai teks; aplikasi membacanya lewat
    `_isoDateCell_` / teks ISO seperti biasa.
+
+## Notifikasi push coach (T-2240)
+
+XNK Pusat membagikan kunci publik VAPID hub (dari `hub.json` → `vapidPublic`) ke coach lewat `hubPushKey(rahasia, kunci, menyala)`: setiap pagi untuk coach yang menyala (atau masih aktif dan perlu dimatikan) dan saat tombol **Nyalakan/Matikan push** di `/adminxnk` ditekan (`pusatAction` `push-on` / `push-off`). Coach yang tidak pernah dinyalakan tidak dihubungi. Jawabannya (rahasia relay coach, jumlah perangkat) disimpan di `PUSH_<slug>`; `/adminxnk` hanya melihat menyala/aktif, jumlah perangkat, waktu dan galat.
+
+`pusatPushTargets(PUSAT_PUSH_SECRET)` (perbandingan waktu-konstan, min 32 karakter) memberi workflow Push XNK daftar `{slug, exec, relay}` coach yang menyala, tanpa UrlFetch. Workflow lalu memanggil coach langsung. Galat push masuk email harian. Semua UrlFetch XNK Pusat dihitung per hari WIB (`fetch_`, tampil sebagai `fetchToday` di `pusatOverview`). Langkah pasang: [push/Setup.md](../push/Setup.md#hub-xnkwebid-notifikasi-untuk-semua-coach-t-2240).

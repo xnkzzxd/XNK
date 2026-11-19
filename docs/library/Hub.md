@@ -120,6 +120,10 @@ nomor. Kartu coach di halaman depan sekarang menautkan halaman ini; kotak "Masuk
 - Service worker panel `/<slug>/` hanya menjawab navigasi ke alamat scope-nya sendiri, jadi `/<slug>/info/` selalu
   dari jaringan (dicek `hub-check.js` dengan worker panel aktif).
 
+## Web Push (T-2240)
+
+Satu kunci VAPID untuk seluruh hub (satu origin): `hub.json` `vapidPublic` (diperiksa `readHub`, diterbitkan di `/_hub/push.json`), kunci privat hanya di secret repo hub `HUB_VAPID_PRIVATE`. Kartu notifikasi di panel dan portal muncul begitu coach menerima kunci dari XNK Pusat (`hubPushKey`, `PUSH_ENABLED=true`); tidak ada host baru di CSP (berlangganan push tidak memakai `connect-src`). `pushPage` di `build-hub.js` membetulkan worker versi coach mana pun: url `/` dari Push.gs membuka cakupan worker (`/<slug>/` atau `/<slug>/klien/`, bukan halaman depan hub), worker panel tidak mengambil alih jendela `/<slug>/klien/`, ikon = logo coach atau `/img/icon-192.png`. Workflow **Push XNK** (`push.yml`) mengirim; lihat [push/Setup.md](../push/Setup.md).
+
 ## Slug
 
 `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`, tanpa `--`; kata sistem dicadangkan (`admin`, `api`, `app`, `klien`, `demo`,

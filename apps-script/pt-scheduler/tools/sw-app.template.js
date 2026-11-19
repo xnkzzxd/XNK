@@ -89,12 +89,15 @@ self.addEventListener('notificationclick', function (e) {
   e.notification.close();
   var url = SCOPE;
   try {
-    var u = new URL((e.notification.data && e.notification.data.url) || '/', SCOPE);
+    // '/' = halaman cakupan ini (di hub xnk.web.id: /<slug>/ atau /<slug>/klien/, bukan halaman depan hub).
+    var raw = (e.notification.data && e.notification.data.url) || '/';
+    var u = new URL(raw === '/' ? SCOPE : raw, SCOPE);
     if (u.origin === self.location.origin) url = u.href;   // hanya alamat di situs ini
   } catch (x) {}
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
     for (var i = 0; i < list.length; i++) {
-      if (list[i].url.indexOf(SCOPE) === 0 && 'focus' in list[i]) return list[i].focus();
+      // Jendela portal (<cakupan>/klien/) bukan milik worker panel di atasnya.
+      if (list[i].url.indexOf(SCOPE) === 0 && list[i].url.indexOf(SCOPE + 'klien/') !== 0 && 'focus' in list[i]) return list[i].focus();
     }
     return self.clients.openWindow(url);
   }));

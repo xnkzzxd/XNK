@@ -100,3 +100,39 @@ function hubExport(secret, req) {
   var next = from + out.length;
   return { rows: out, cols: cols, next: next > last ? 0 : next };
 }
+
+// ── Web Push di hub (T-2240) ────────────────────────────────────────────────────────────────────────────────
+// Semua coach di xnk.web.id berbagi satu origin, jadi satu pasang kunci VAPID untuk seluruh hub. Kunci privat hanya ada
+// di secret repo hub (HUB_VAPID_PRIVATE); spreadsheet coach hanya menyimpan kunci publik. XNK Pusat memanggil
+// hubPushKey setiap pagi (dan saat pemilik menyalakan/mematikan push coach di /adminxnk). Jawabannya membawa rahasia
+// relay lokal (PUSH_RELAY_SECRET): workflow push repo hub mengambilnya dari XNK Pusat lalu memanggil pushRelayPull /
+// pushRelayAck spreadsheet ini langsung, jadi HUB_SECRET tidak pernah keluar dari XNK Pusat dan XNK Pusat tidak memakai
+// kuota UrlFetch untuk setiap putaran kirim.
+
+/**
+ * Pasang kunci publik hub dan nyalakan/matikan push coach ini.
+ * @param {string} secret HUB_SECRET spreadsheet ini
+ * @param {string} publicKey kunci publik VAPID hub (base64url, 65 bita)
+ * @param {boolean} on true = push menyala (pilihan pemilik di /adminxnk); selain true = mati (aturan 5)
+ * @return {{on: boolean, relay: string, subs: number}}
+ */
+function hubPushKey(secret, publicKey, on) {
+  _hubAuth_(secret);
+  var key = String(publicKey == null ? '' : publicKey).trim();
+  if (!/^B[A-Za-z0-9_-]{86}$/.test(key)) throw new Error('Kunci publik tidak valid.');
+  var props = PropertiesService.getScriptProperties();
+  var relay = String(props.getProperty('PUSH_RELAY_SECRET') || '');
+  if (relay.length < 24) {
+    relay = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    props.setProperty('PUSH_RELAY_SECRET', relay);
+  }
+  var changed = props.getProperty('PUSH_VAPID_PUBLIC') !== key || (props.getProperty('PUSH_ENABLED') === 'true') !== (on === true);
+  props.setProperty('PUSH_VAPID_PUBLIC', key);
+  props.setProperty('PUSH_ENABLED', on === true ? 'true' : 'false');
+  props.deleteProperty('PUSH_VAPID_PRIVATE');   // coach hub tidak pernah memegang kunci privat
+  // Kunci publik ada di getPortalBootstrap (kartu notifikasi): jawaban tersimpan dibuang supaya kartu muncul/hilang.
+  if (changed) { try { _bumpMember_('*'); } catch (e) { /* cache mati: jawaban lama habis sendiri */ } }
+  var subs = 0;
+  try { subs = _pushSubsAll_().length; } catch (e) { subs = 0; }
+  return { on: _pushOn_(), relay: relay, subs: subs };
+}

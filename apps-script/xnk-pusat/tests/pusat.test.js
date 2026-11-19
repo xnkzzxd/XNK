@@ -479,3 +479,83 @@ test('backup: coach dihapus dari daftar di tengah jalan = salinan dibuang tanpa 
   assert.notEqual(nd.root, dirs.root, 'folder XNK Backup dibuat lagi');
   assert.equal(e.drive.files[nd.dina].parents[0], nd.root);
 });
+
+// ── Web Push di hub (T-2240) ─────────────────────────────────────────────────────────────────────────────────
+const VAPID = 'B' + 'v'.repeat(86), PUSH_SECRET = 'p'.repeat(40);
+function pushServer(secret, relay) {
+  const calls = [];
+  const fn = req => {
+    calls.push(req);
+    if (req.args[0] !== secret) return { ok: false, error: 'Permintaan tidak valid.' };
+    if (req.fn === 'hubStatus') return { ok: true, data: status(SHA_NEW) };
+    if (req.fn === 'hubPushKey') return { ok: true, data: { on: req.args[2] === true, relay, subs: 3 } };
+    return { ok: false, error: 'x', code: 'unknown_fn' };
+  };
+  fn.calls = calls;
+  return fn;
+}
+function pushEnv(extra) {
+  const coaches = { claudia: { exec: EXEC(1), secret: SECRET(1), at: 'x' }, vinna: { exec: EXEC(2), secret: SECRET(2), at: 'x' } };
+  const a = pushServer(SECRET(1), 'r'.repeat(64)), b = pushServer(SECRET(2), 's'.repeat(64));
+  const e = env(Object.assign({ hub: JSON.stringify({ vapidPublic: VAPID, coaches: [] }), props: { COACHES: JSON.stringify(coaches), PUSAT_PUSH_SECRET: PUSH_SECRET }, servers: { [EXEC(1)]: a, [EXEC(2)]: b } }, extra || {}));
+  e.tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  return { e, a, b };
+}
+const fetchCount = e => e.fetches.filter(f => f.url.startsWith('https://script.google.com/') || f.url.startsWith('https://script.googleusercontent.com/')).length;
+
+test('push: mati sampai pemilik menyalakan; nyalakan = kunci hub + true ke coach itu saja; matikan = false', () => {
+  const { e, a, b } = pushEnv();
+  assert.deepEqual(e.call('pusatPushTargets', PUSH_SECRET).data, { coaches: [] }, 'off by default');
+  e.ctx.runPusatDaily();
+  assert.equal(a.calls.filter(c => c.fn === 'hubPushKey').length, 0, 'a coach never switched on is never contacted');
+  const r = e.call('pusatAction', e.tok, 'push-on', 'claudia');
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(a.calls.at(-1), { fn: 'hubPushKey', args: [SECRET(1), VAPID, true] });
+  assert.equal(b.calls.filter(c => c.fn === 'hubPushKey').length, 0);
+  const view = r.data.coaches.find(c => c.slug === 'claudia').push;
+  assert.deepEqual(view, { on: true, active: true, subs: 3, at: view.at, error: '' });
+  assert.ok(!JSON.stringify(r.data).includes('r'.repeat(64)), 'relay secret never sent to the dashboard');
+  assert.ok(!JSON.stringify(r.data).includes(SECRET(1)));
+  assert.deepEqual(e.call('pusatPushTargets', PUSH_SECRET).data, { coaches: [{ slug: 'claudia', exec: EXEC(1), relay: 'r'.repeat(64) }] });
+  e.call('pusatAction', e.tok, 'push-off', 'claudia');
+  assert.deepEqual(a.calls.at(-1).args[2], false);
+  assert.deepEqual(e.call('pusatPushTargets', PUSH_SECRET).data, { coaches: [] });
+  assert.equal(e.call('pusatAction', e.tok, 'push-on', 'tidakada').ok, false);
+  assert.equal(e.call('pusatAction', 'palsu', 'push-on', 'claudia').ok, false);
+});
+
+test('push: pusatPushTargets dijaga PUSAT_PUSH_SECRET; tanpa secret terpasang selalu menolak', () => {
+  const { e } = pushEnv();
+  assert.equal(e.call('pusatPushTargets', 'p'.repeat(39)).ok, false);
+  assert.equal(e.call('pusatPushTargets', '').ok, false);
+  assert.equal(e.call('pusatPushTargets', SECRET(1)).ok, false, 'a coach secret is not the push secret');
+  const n = env({ props: { PUSAT_PUSH_SECRET: 'pendek' } });
+  assert.equal(n.call('pusatPushTargets', 'pendek').ok, false, 'a secret under 32 chars never works');
+});
+
+test('push: kuota — putaran kirim tanpa UrlFetch; harian 2 fetch per coach menyala; dihitung per hari', () => {
+  const { e } = pushEnv();
+  e.call('pusatAction', e.tok, 'push-on', 'claudia');
+  e.call('pusatAction', e.tok, 'push-on', 'vinna');
+  const before = e.fetches.length;
+  for (let i = 0; i < 12 * 24; i++) e.call('pusatPushTargets', PUSH_SECRET);   // satu hari putaran workflow
+  assert.equal(e.fetches.length, before, 'zero UrlFetch per send round');
+  const s0 = fetchCount(e);
+  e.ctx.pushSyncAll_();
+  assert.equal(fetchCount(e) - s0, 4, '2 fetches (POST + echo GET) per switched-on coach');
+  const today = e.call('pusatOverview', e.tok).data.fetchToday;
+  assert.equal(today, e.fetches.length, 'every UrlFetch counted');
+});
+
+test('push: kunci hub belum ada / Library lama = pesan jelas dan masuk email harian', () => {
+  const { e } = pushEnv({ hub: JSON.stringify({ coaches: [] }) });
+  const r = e.call('pusatAction', e.tok, 'push-on', 'claudia');
+  assert.match(r.error, /Kunci publik hub belum ada/);
+  const old = env({ hub: JSON.stringify({ vapidPublic: VAPID, coaches: [] }), props: { COACHES: JSON.stringify({ claudia: { exec: EXEC(1), secret: SECRET(1), at: 'x' } }) },
+    servers: { [EXEC(1)]: req => (req.fn === 'hubStatus' ? { ok: true, data: status(SHA_NEW) } : { ok: false, error: 'x', code: 'unknown_fn' }) } });
+  const t = old.call('pusatLogin', 'pin-rahasia-1').data.token;
+  assert.match(old.call('pusatAction', t, 'push-on', 'claudia').error, /perbarui coach/);
+  old.ctx.runPusatDaily();
+  assert.equal(old.mails.length, 1);
+  assert.match(old.mails[0].body, /Notifikasi push: Library coach belum punya hubPushKey/);
+});
