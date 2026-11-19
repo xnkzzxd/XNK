@@ -42,6 +42,13 @@ ikon di Layar Utama HP, dan kartu coach di halaman depan. Warna yang dipilih kli
 - *warna* `tetap` = tidak diubah, `hitam` = kembali tanpa warna.
 - *logo* kosong = tidak diubah, `-` = hapus logo (kembali ke huruf pertama).
 
+## Tempat latihan coach
+
+Satu tempat per coach (nama + kota), tampil di daftar coach xnk.web.id (dengan pilihan kota) dan di halaman info coach.
+Paling mudah lewat **xnk.web.id/adminxnk → Tempat**. Atau **Actions → Hub XNK → Run workflow**: *aksi* = `simpan`,
+*slug*, *tempat* (mis. `Gold's Gym Kemang`) dan *kota* (mis. `Jakarta Selatan`). *tempat* kosong = tidak diubah,
+`-` = hapus tempat.
+
 ## Coach XNK: buat, hubungkan, perbarui spreadsheet coach (otomatis)
 
 Workflow **Coach XNK** mengelola spreadsheet setiap coach lewat clasp. Syaratnya satu secret per akun Google coach:

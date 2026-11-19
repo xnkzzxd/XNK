@@ -262,3 +262,9 @@ test('the keys are installed from the Drive config file; a bad value is skipped 
   env.call('getPortalBootstrap', '');
   assert.equal(env.props.PUSH_VAPID_PUBLIC, 'P'.repeat(87), 'a bad public key does not replace the good one');
 });
+
+test('sesi besok: a coach already named "Coach Vinna" is not doubled', () => {
+  const env = withSchedules([sched('S1', 'PT-A', 'Ani Anggraini', '2026-09-30T23:00:00Z', 'read', 'Coach Vinna')]);
+  const msgs = env.callRaw('_pushPlanMessages_', new Date('2026-09-30T12:00:00Z')).filter(m => m.kind === 'sesi-besok' && m.target === 'm:PT-A');
+  assert.equal(msgs[0].body, 'Kak Ani, besok jam 06:00 bersama Coach Vinna.');
+});

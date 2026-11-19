@@ -1,7 +1,9 @@
 'use strict';
 // Menambah, mengubah, atau menghapus satu coach di hub.json, dengan pemeriksaan penuh sebelum menulis:
 //   node apps-script/xnk-library/tools/hub-edit.js <hub.json> simpan <slug> <nama usaha> <link /exec> [scriptId] [deploymentId] [--warna biru] [--logo logo/x.png]
-//   (coach yang sudah ada: nama usaha dan link boleh kosong = tetap; --warna tetap|hitam|biru|…; --logo - = hapus logo)
+//        [--tempat "Gold's Gym Kemang"] [--kota "Jakarta Selatan"]
+//   (coach yang sudah ada: nama usaha dan link boleh kosong = tetap; --warna tetap|hitam|biru|…; --logo - = hapus logo;
+//    T-2258: --tempat/--kota kosong = tempat tetap, --tempat - = hapus tempat)
 //   node apps-script/xnk-library/tools/hub-edit.js <hub.json> hapus  <slug>
 //   node apps-script/xnk-library/tools/hub-edit.js <hub.json> ganti-slug <slug lama> <slug baru>
 //   (T-2243: slug lama jadi alamat pengalih, awalan penyimpanan dan secret clasp tetap; lihat docs/library/Hub.md)
@@ -35,13 +37,22 @@ function edit(cfg, aksi, a, opts) {
     const keep = i >= 0 && coaches[i].exec === exec ? coaches[i] : {};
     const row = Object.assign({}, keep, { slug, brand, exec }, extra);
     // T-2242: warna (kosong/"tetap" = tetap, "hitam" = tanpa warna) dan logo (kosong = tetap, "-" = hapus).
-    if (i >= 0 && keep !== coaches[i]) for (const k of ['accent', 'logo']) if (coaches[i][k]) row[k] = coaches[i][k];
+    if (i >= 0 && keep !== coaches[i]) for (const k of ['accent', 'logo', 'place']) if (coaches[i][k]) row[k] = coaches[i][k];
     // T-2243: alamat lama, awalan penyimpanan dan secret clasp milik coach, bukan milik deployment: selalu ikut.
     if (i >= 0) for (const k of IDENTITY) if (coaches[i][k] != null) row[k] = coaches[i][k];
     const w = String(a.accent || '').trim().toLowerCase();
     if (w === 'hitam') delete row.accent; else if (w && w !== 'tetap') row.accent = w;
     const logo = String(a.logo || '').trim();
     if (logo === '-') delete row.logo; else if (logo) row.logo = logo;
+    // T-2258: tempat latihan (nama + kota). Keduanya kosong = tetap; "-" = hapus; satu diisi = ganti (yang lain tetap).
+    const tName = String(a.placeName == null ? '' : a.placeName).trim(), tCity = String(a.placeCity == null ? '' : a.placeCity).trim();
+    if (tName === '-') delete row.place;
+    else if (tName || tCity) {
+      const old = row.place || {};
+      const r = hub.cleanPlace({ name: tName || old.name || '', city: tCity || old.city || '' });
+      if (r.error) throw new Error(r.error);
+      if (r.place) row.place = r.place; else delete row.place;
+    }
     if (i >= 0) { coaches[i] = row; message = `Coach "${slug}" diperbarui.`; }
     else { coaches.push(row); message = `Coach "${slug}" ditambahkan.`; }
   } else if (aksi === 'hapus') {
@@ -79,13 +90,13 @@ module.exports = { edit, coachSecret };
 if (require.main === module) {
   const args = process.argv.slice(2);
   const flag = k => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : ''; };
-  const accent = flag('--warna'), logo = flag('--logo');
+  const accent = flag('--warna'), logo = flag('--logo'), placeName = flag('--tempat'), placeCity = flag('--kota');
   const [file, aksi, slug, brand, exec, scriptId, deploymentId] = args;
   if (!file || !aksi) { console.error('pakai: hub-edit.js <hub.json> simpan|hapus <slug> [nama usaha] [link /exec] | ganti-slug <lama> <baru>'); process.exit(1); }
   try {
     const cur = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { coaches: [] };
     // ganti-slug: argumen ke-2 setelah slug = slug baru (posisi "nama usaha" pada simpan).
-    const r = edit(cur, aksi, { slug, brand, exec, scriptId, deploymentId, accent, logo, newSlug: aksi === 'ganti-slug' ? brand : '' }, { baseDir: require('path').dirname(require('path').resolve(file)) });
+    const r = edit(cur, aksi, { slug, brand, exec, scriptId, deploymentId, accent, logo, placeName, placeCity, newSlug: aksi === 'ganti-slug' ? brand : '' }, { baseDir: require('path').dirname(require('path').resolve(file)) });
     fs.writeFileSync(file, JSON.stringify(r.cfg, null, 2) + '\n');
     console.log(r.message);
   } catch (e) {

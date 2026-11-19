@@ -45,6 +45,10 @@
   .sub label { font-size: .85rem; color: var(--mut); }
   .sub .full { grid-column: 1 / -1; }
   .hide { display: none !important; }
+  .pl { margin-top: 10px; font-size: .95rem; overflow-wrap: anywhere; }
+  .pl-form { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+  .pl-form label { display: block; font-size: .9rem; font-weight: 600; }
+  .pl-form input { margin: 4px 0 10px; }
 </style>
 </head>
 <body>
@@ -182,6 +186,17 @@
         if (x.quota) html += quotaTiles(x.quota, d.quotaLimits || { mail: 100, fetch: 20000, triggerMin: 90 });
         html += '<div class="mut">Library ' + esc(x.lib ? String(x.lib.commit).slice(0, 7) : '-') + ' · pengingat ' + (x.reminders.enabled ? 'menyala, terakhir ' + esc(when(x.reminders.lastTickAt)) : 'mati') + '</div>';
       }
+      // T-2258: tempat latihan (publik, hub.json): tampil di daftar coach xnk.web.id dan halaman info coach.
+      var pl = (d.places || {})[s];
+      html += '<div class="pl">' + (pl ? 'Tempat: <b>' + esc(pl.name) + '</b> · ' + esc(pl.city) : '<span class="mut">Tempat belum diisi</span>') + '</div>';
+      if (openPlace === s) {
+        html += '<form class="pl-form" data-slug="' + esc(s) + '" novalidate>' +
+          '<label for="pl-n-' + esc(s) + '">Nama tempat</label><input id="pl-n-' + esc(s) + '" name="n" maxlength="60" autocomplete="off" placeholder="mis. Gold\'s Gym Kemang" value="' + esc(pl ? pl.name : '') + '">' +
+          '<label for="pl-c-' + esc(s) + '">Kota</label><input id="pl-c-' + esc(s) + '" name="c" maxlength="40" autocomplete="off" placeholder="mis. Jakarta Selatan" value="' + esc(pl ? pl.city : '') + '">' +
+          '<div class="acts" style="margin-top:0"><button class="btn" type="submit">Simpan</button>' +
+          (pl ? '<button class="btn ghost" type="button" data-act="tempat-hapus" data-slug="' + esc(s) + '">Hapus tempat</button>' : '') +
+          '<button class="btn ghost" type="button" data-act="tempat-batal">Batal</button></div></form>';
+      }
       html += '<div class="links" style="margin-top:10px"><a href="' + esc(c.panel) + '" target="_blank" rel="noopener">Panel</a><a href="' + esc(c.klien) + '" target="_blank" rel="noopener">Portal klien</a>' +
         (c.registeredAt ? '<span class="mut">terdaftar ' + esc(when(c.registeredAt)) + '</span>' : '') + '</div>';
       if (!c.missing) {
@@ -196,7 +211,8 @@
         if (pu.error) html += '<div class="bk bad">Push: ' + esc(pu.error) + '</div>';
       }
       if (!c.missing) html += subHtml(s, c.sub || {});
-      html += '<div class="acts">' + (c.missing ? '' : '<button class="btn ghost" type="button" data-act="cek" data-slug="' + esc(s) + '">Cek ulang</button>' +
+      html += '<div class="acts">' + (HUB[s] && openPlace !== s ? '<button class="btn ghost" type="button" data-act="tempat" data-slug="' + esc(s) + '">Tempat</button>' : '') +
+        (c.missing ? '' : '<button class="btn ghost" type="button" data-act="cek" data-slug="' + esc(s) + '">Cek ulang</button>' +
         '<button class="btn ghost" type="button" data-act="backup" data-slug="' + esc(s) + '">Backup sekarang</button>' +
         '<button class="btn ghost" type="button" data-act="' + ((c.push || {}).on ? 'push-off' : 'push-on') + '" data-slug="' + esc(s) + '">' + ((c.push || {}).on ? 'Matikan push' : 'Nyalakan push') + '</button>' +
         '<button class="btn ghost" type="button" data-act="ganti-slug" data-slug="' + esc(s) + '">Ganti slug</button>') +
@@ -226,12 +242,41 @@
       setTok(r.token); $('pin').value = ''; say('lm', ''); view(); load('pusatOverview', [r.token]);
     }, function (e) { say('lm', e.message, 'bad'); }).then(function () { $('go').disabled = false; });
   });
+  // T-2258: simpan tempat latihan lewat XNK Pusat → workflow Hub XNK (hub.json), situs dibangun ulang.
+  var openPlace = '';
+  function savePlace(slug, name, city) {
+    say('dm', name ? 'Menyimpan tempat ' + slug + '…' : 'Menghapus tempat ' + slug + '…');
+    return rpc('pusatSetPlace', [tok(), slug, name, city]).then(function (r) {
+      openPlace = '';
+      if (data) { data.places = data.places || {}; data.places[slug] = r.place; render(); }
+      say('dm', r.hub === 'ok' ? 'Tempat ' + slug + ' disimpan. Situs dibangun ulang di GitHub Actions (±2 menit).' : 'Tempat belum tersimpan di situs. ' + r.hub, r.hub === 'ok' ? 'ok' : 'bad');
+    }, function (e) { say('dm', e.message, 'bad'); });
+  }
+  document.addEventListener('submit', function (ev) {
+    var f = ev.target.closest && ev.target.closest('.pl-form');
+    if (!f) return;
+    ev.preventDefault();
+    var n = f.elements.n.value.replace(/\s+/g, ' ').trim(), c = f.elements.c.value.replace(/\s+/g, ' ').trim();
+    if (!n || !c) return say('dm', 'Isi nama tempat dan kota.', 'bad');
+    savePlace(f.getAttribute('data-slug'), n, c);
+  });
   $('out').addEventListener('click', function () { setTok(''); data = null; $('list').innerHTML = ''; view(); });
   document.addEventListener('click', function (ev) {
     var b = ev.target.closest && ev.target.closest('[data-act]');
     if (!b || b.disabled) return;
     var act = b.getAttribute('data-act'), slug = b.getAttribute('data-slug') || '';
     if (act === 'cek') return load('pusatCheck', [tok(), slug], 'Memeriksa ' + (slug || 'semua coach') + '…');
+    if (act === 'tempat' || act === 'tempat-batal') {
+      openPlace = act === 'tempat' ? slug : '';
+      render();
+      var inp = openPlace && document.getElementById('pl-n-' + openPlace);
+      if (inp) inp.focus();
+      return;
+    }
+    if (act === 'tempat-hapus') {
+      if (!window.confirm('Hapus tempat latihan ' + slug + ' dari xnk.web.id?')) return;
+      return savePlace(slug, '', '');
+    }
     if (act === 'setup') {
       // Tab dibuka langsung saat diklik (bukan setelah menunggu jawaban) supaya tidak diblokir browser.
       var w = window.open('', '_blank');

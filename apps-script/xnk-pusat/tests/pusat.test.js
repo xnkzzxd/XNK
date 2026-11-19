@@ -796,3 +796,50 @@ test('langganan: Library lama tanpa hubReadonly = pesan "perbarui coach", tersim
   assert.match(e.mails.at(-1).body, /claudia: .*Mode baca saja belum diterima coach/);
   assert.ok(e.ctx.PUSAT_SLUG_KEYS.includes('SUB_'));
 });
+
+// ── Tempat latihan (T-2258) ──────────────────────────────────────────────────────────────────────────────────
+function placeEnv(props) {
+  const hub = { coaches: [{ slug: 'lama', exec: EXEC(1), place: { name: 'Gold Gym', city: 'Bandung' } }, { slug: 'vinna', exec: EXEC(2) }, { slug: 'baru', exec: EXEC(3) }] };
+  const e = env({ hub: JSON.stringify(hub), props: Object.assign({ COACHES: JSON.stringify({ lama: { exec: EXEC(1), secret: SECRET(1), at: 'x' }, vinna: { exec: EXEC(2), secret: SECRET(2), at: 'x' } }) }, props || {}) });
+  e.tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  return e;
+}
+
+test('tempat: overview membawa tempat tiap coach di hub.json (juga yang belum terdaftar)', () => {
+  const e = placeEnv();
+  assert.deepEqual(JSON.parse(JSON.stringify(e.call('pusatOverview', e.tok).data.places)), { lama: { name: 'Gold Gym', city: 'Bandung' }, vinna: null, baru: null });
+});
+
+test('tempat: simpan dan hapus menjalankan Hub XNK aksi simpan (warna tetap); tanpa token GitHub = langkah manual', () => {
+  const e = placeEnv({ GITHUB_TOKEN: 'github_pat_x' });
+  let r = e.call('pusatSetPlace', e.tok, 'vinna', "  Gold's   Gym ", 'Jakarta Selatan');
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(r.data, { slug: 'vinna', place: { name: "Gold's Gym", city: 'Jakarta Selatan' }, hub: 'ok' });
+  r = e.call('pusatSetPlace', e.tok, 'lama', '', '');
+  assert.deepEqual(r.data, { slug: 'lama', place: null, hub: 'ok' });
+  const d = e.fetches.filter(f => f.url.includes('/dispatches'));
+  assert.equal(d.length, 2);
+  assert.match(d[0].url, /\/repos\/xnkzzxd\/xnk-template-site\/actions\/workflows\/hub\.yml\/dispatches$/);
+  assert.deepEqual(JSON.parse(d[0].o.payload), { ref: 'main', inputs: { aksi: 'simpan', slug: 'vinna', warna: 'tetap', tempat: "Gold's Gym", kota: 'Jakarta Selatan' } });
+  assert.deepEqual(JSON.parse(d[1].o.payload).inputs, { aksi: 'simpan', slug: 'lama', warna: 'tetap', tempat: '-', kota: '' });
+  const m = placeEnv();
+  r = m.call('pusatSetPlace', m.tok, 'vinna', 'Gym', 'Bogor').data;
+  assert.match(r.hub, /Hub XNK → aksi simpan, slug vinna, tempat Gym, kota Bogor/);
+  assert.equal(m.fetches.filter(f => f.url.includes('/dispatches')).length, 0);
+});
+
+test('tempat: penjaga (token, slug, coach tidak di hub.json, isian salah); GitHub menolak = pesan + langkah manual', () => {
+  const e = placeEnv({ GITHUB_TOKEN: 'github_pat_x' });
+  assert.equal(e.call('pusatSetPlace', 'palsu', 'lama', 'Gym', 'B').auth, true);
+  for (const [slug, n, c, re] of [['a b', 'Gym', 'B', /tidak valid/], ['siapa', 'Gym', 'B', /belum ada di hub\.json/], ['lama', 'Gym', '', /Isi nama tempat dan kota/],
+    ['lama', '<i>', 'B', /tidak boleh berisi tanda < >/], ['lama', 'x'.repeat(61), 'B', /paling panjang 60/]]) {
+    const r = e.call('pusatSetPlace', e.tok, slug, n, c);
+    assert.equal(r.ok, false, slug + n);
+    assert.match(r.error, re);
+  }
+  assert.equal(e.fetches.filter(f => f.url.includes('/dispatches')).length, 0, 'tidak ada yang dikirim');
+  const x = env({ dispatch: 422, hub: JSON.stringify({ coaches: [{ slug: 'lama', exec: EXEC(1) }] }), props: { GITHUB_TOKEN: 'x' } });
+  x.tok = x.call('pusatLogin', 'pin-rahasia-1').data.token;
+  const r = x.call('pusatSetPlace', x.tok, 'lama', 'Gym', 'Bogor').data;
+  assert.match(r.hub, /^GitHub menolak \(422\)\. Jalankan sendiri: repo hub → Actions → Hub XNK/);
+});

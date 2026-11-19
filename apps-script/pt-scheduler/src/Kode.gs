@@ -3282,7 +3282,7 @@ function clientBookSchedule(memberToken, scheduleData, opts) {
     <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9fafb; color: #111827;">
       <div style="background-color: white; padding: 30px; border-radius: 12px; max-width: 500px; margin: 0 auto; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
         <h2 style="margin-top:0; color: #000000;">Ada Booking Sesi Baru! 🎉</h2>
-        <p>Klien Anda <b>${_escHtml_(memberName)}</b> baru saja mem-booking jadwal latihan secara mandiri. ${assignedCoachName ? 'Sesi ini otomatis ter-assign ke Coach ' + _escHtml_(assignedCoachName) + '.' : 'Segera buka aplikasi untuk Assign Coach!'}</p>
+        <p>Klien Anda <b>${_escHtml_(memberName)}</b> baru saja mem-booking jadwal latihan secara mandiri. ${assignedCoachName ? 'Sesi ini otomatis ter-assign ke ' + _escHtml_(_coachLabel_(assignedCoachName)) + '.' : 'Segera buka aplikasi untuk Assign Coach!'}</p>
         <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #000000;">
           <p style="margin:0 0 8px 0;"><b>Jadwal:</b> ${formattedTime}</p>
           <p style="margin:0 0 8px 0;"><b>Durasi:</b> ${duration} Menit</p>

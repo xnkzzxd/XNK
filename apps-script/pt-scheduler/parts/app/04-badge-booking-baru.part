@@ -68,7 +68,7 @@
     const mins = Math.round((end - d) / 60000);
     let actions = '';
     if (opts.actions && !isAvailable(s)) {
-      actions = sessActions(s.id, { done: isDone(s), phone: s.phone });
+      actions = sessActions(s.id, { done: isDone(s), phone: window.clientPhone(s) });
     }
     return '<div class="' + cls + '" data-key="session:' + h(s.id) + '">' +
       '<div class="tl-time">' + fmtTime(d) + '<small>' + mins + ' mnt</small></div>' +
@@ -85,7 +85,7 @@
     const s = window.schedules.find(x => String(x.id) === String(id));
     if (!s) return;
     const d = new Date(s.start);
-    window.sendToParentWA(s.phone, 'Halo ' + s.title + ', ini Coach XNK. Mengingatkan jadwal latihan kita ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB. Sampai ketemu!');
+    window.waToClient(s, 'Halo ' + s.title + ', ini Coach XNK. Mengingatkan jadwal latihan kita ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB. Sampai ketemu!');
   };
   window.quickEdit = function (id) { window.selectedScheduleDetailId = id; window.openEditScheduleDetailModal(); };
   window.quickComplete = function (id) { window.selectedScheduleDetailId = id; window.markSessionCompleted(); };
@@ -707,7 +707,7 @@
         '<div' + (member ? ' role="button" tabindex="0" style="cursor:pointer" onclick="window.openProfile(\'' + h(member.id) + '\')"' : '') + '><p class="k">Klien</p><p class="v">' + h(s.title) + '</p></div>' +
         '<div><p class="k">Sisa sesi</p><p class="v">' + (member ? remainingOf(member) + ' sesi' : '—') + '</p></div>' +
         '<div><p class="k">Status</p><p class="v">' + h(info.label) + '</p></div>' +
-        (s.phone ? '<div><p class="k">WhatsApp</p><p class="v">+' + h(s.phone) + '</p></div>' : '') +
+        (window.clientPhone(s) ? '<div><p class="k">WhatsApp</p><p class="v">+' + h(sanitizePhone(window.clientPhone(s))) + '</p></div>' : '') +
         '<div class="wide"><p class="k">Catatan</p><p class="v">' + (s.notes ? h(s.notes) : '<span class="muted" style="font-weight:500">Tidak ada catatan</span>') + '</p></div></div>';
     } else {
       body += '<div class="kv"><div class="wide"><p class="k">Catatan</p><p class="v">' + (s.notes ? h(s.notes) : '<span class="muted" style="font-weight:500">Tidak ada catatan</span>') + '</p></div></div>';
@@ -721,7 +721,7 @@
     if (!isDone(s) && !isAvailable(s)) body += '<button type="button" class="btn btn-primary btn-lg btn-block" id="btn-complete-session" onclick="window.markSessionCompleted()">' + icon('check-circle-2') + 'Tandai selesai & potong 1 sesi</button>';
     body += '<div class="btn-row">' +
       (!isDone(s) ? '<button type="button" class="btn btn-outline" onclick="window.openEditScheduleDetailModal()">' + icon('calendar-clock') + 'Ubah jadwal</button>' : '') +
-      (s.phone ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailMember()">' + icon('message-circle') + 'Chat klien</button>' : '') +
+      (window.clientPhone(s) ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailMember()">' + icon('message-circle') + 'Chat klien</button>' : '') +
       (s.coachId && !window.isSoloCoach() ? '<button type="button" class="btn btn-outline" onclick="window.contactDetailCoach()">' + icon('dumbbell') + 'Chat coach</button>' : '') +
       '</div>';
     body += '<button type="button" class="btn btn-ghost btn-block" id="btn-delete-schedule" onclick="window.deleteScheduleFromDetail()">' + icon('trash-2') + 'Hapus sesi ini</button>';
@@ -751,7 +751,7 @@
       const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
       if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
       done();
-      window.showToast(coach ? 'Coach ' + coach.name + ' ditugaskan.' : 'Coach dikosongkan.');
+      window.showToast(coach ? window.coachLabel(coach.name) + ' ditugaskan.' : 'Coach dikosongkan.');
       window.updateUI();
     }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
   };
@@ -763,7 +763,7 @@
     const c = window.coaches.find(x => String(x.id) === String(s.coachId));
     if (!c) return;
     const d = new Date(s.start);
-    window.sendToParentWA(c.phone, 'Halo Coach ' + c.name + ', kamu ditugaskan untuk sesi bersama ' + s.title + ' pada ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB.');
+    window.sendToParentWA(c.phone, 'Halo ' + window.coachLabel(c.name) + ', kamu ditugaskan untuk sesi bersama ' + s.title + ' pada ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB.');
   };
 
   window.markSessionCompleted = function () {
