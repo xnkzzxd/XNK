@@ -80,3 +80,23 @@ test('notes never reach Telegram, and a session note save sends nothing', () => 
   const texts = env.fetches.slice(before).map(f => JSON.stringify(f));
   assert.ok(texts.every(x => !x.includes('RAHASIA')), 'private notes stay out of Telegram');
 });
+
+test('the post-session WhatsApp link uses the client profile number, not the stale copy on the schedule row', () => {
+  const env = seededEnv();
+  const t = env.adminToken();
+  const sch = env.sheet('Schedules').rows.find(r => r[0] === 'SCH-A1');
+  const mem = env.sheet('MemberData').rows.find(r => String(r[0]).trim() === 'PT-A');
+  sch[3] = '6288200000001';   // old / test number copied at booking time
+  const r = env.call('saveSessionNote', t, 'SCH-A1', { dilatih: 'Squat', fokus: '' });
+  const want = String(mem[2]).replace(/\D/g, '').replace(/^0/, '62');
+  assert.ok(r.waLink.startsWith('https://wa.me/' + want + '?'), r.waLink);
+  assert.ok(!r.waLink.includes('6288200000001'));
+});
+
+test('coach labels never read "Coach Coach"', () => {
+  const env = seededEnv();
+  assert.equal(env.call('_coachLabel_', 'Vinna'), 'Coach Vinna');
+  assert.equal(env.call('_coachLabel_', 'Coach Vinna'), 'Coach Vinna');
+  assert.equal(env.call('_coachLabel_', 'coach vinna'), 'coach vinna');
+  assert.equal(env.call('_coachLabel_', 'Coaching Hub'), 'Coach Coaching Hub');
+});

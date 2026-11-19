@@ -12,7 +12,7 @@
     // Paket habis: tawarkan ajakan evaluasi lewat WhatsApp (tombol, tidak dikirim otomatis).
     const pk = $('sn-pkg');
     pk.classList.toggle('hide', !(result && result.packageDone));
-    pk.onclick = result && result.packageDone ? function () { window.sendToParentWA(s.phone, result.evalText); } : null;
+    pk.onclick = result && result.packageDone ? function () { window.waToClient(s, result.evalText); } : null;
     openSheet('modal-session-note');
     adminCall('getSessionNote', s.id).then(function (n) {
       if (noteSched !== s) return;
@@ -24,7 +24,7 @@
     if (!noteSched || String(noteSched.id) !== String(scheduleId) || !result || !result.packageDone) return;
     const s = noteSched, pk = $('sn-pkg');
     pk.classList.remove('hide');
-    pk.onclick = function () { window.sendToParentWA(s.phone, result.evalText); };
+    pk.onclick = function () { window.waToClient(s, result.evalText); };
   };
   window.sessionNoteSave = function (e, withWa) {
     if (e) e.preventDefault();
@@ -38,7 +38,11 @@
       const done = busy($('sn-wa-btn'), 'Menyimpan…');
       adminCall('saveSessionNote', s.id, note).then(function (r) {
         done(); window.closeModal(); window.showToast('Catatan sesi disimpan.');
-        setTimeout(function () { window.sendToParentWA(s.phone, r.text); }, 200);
+        // waLink dibuat server dari nomor profil klien yang sekarang (bukan salinan di jadwal).
+        setTimeout(function () {
+          const mm = /^https:\/\/wa\.me\/(\d{8,})/.exec(String((r && r.waLink) || ''));
+          if (mm) window.sendToParentWA(mm[1], r.text); else window.waToClient(s, r && r.text);
+        }, 200);
       }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
       return;
     }

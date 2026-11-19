@@ -1,7 +1,7 @@
 name: Hub XNK
 
 # Satu workflow untuk seluruh situs xnk.web.id:
-#  - Run workflow → aksi "simpan" (tambah atau ubah coach: slug, nama usaha, link /exec, warna, logo) atau "hapus" (slug saja).
+#  - Run workflow → aksi "simpan" (tambah atau ubah coach: slug, nama usaha, link /exec, warna, logo, tempat + kota) atau "hapus" (slug saja).
 #    Coach yang sudah ada: nama usaha dan link boleh kosong (tetap), jadi mengganti warna/logo cukup slug + isian itu.
 #    Isian diperiksa penuh; bila ada yang salah, workflow berhenti dengan pesan Indonesia dan situs lama tetap tayang.
 #  - Run workflow → aksi "ganti-slug": slug = nama sekarang, slug_baru = nama baru (T-2243). Alamat lama tetap mengarah
@@ -38,6 +38,12 @@ on:
         default: tetap
       logo:
         description: 'Logo coach: jalur berkas di repo ini, mis. logo/claudia.png (PNG/JPEG/WebP, maks 200 KB; kosong = tetap, - = hapus)'
+        required: false
+      tempat:
+        description: 'Tempat latihan coach, hanya untuk "simpan", mis. Gold''s Gym Kemang (kosong = tetap, - = hapus tempat)'
+        required: false
+      kota:
+        description: 'Kota tempat latihan, hanya untuk "simpan", mis. Jakarta Selatan (kosong = tetap)'
         required: false
   push:
     branches: [main]
@@ -93,11 +99,13 @@ jobs:
           IN_WARNA: ${{ inputs.warna }}
           IN_LOGO: ${{ inputs.logo }}
           IN_SLUG_BARU: ${{ inputs.slug_baru }}
+          IN_TEMPAT: ${{ inputs.tempat }}
+          IN_KOTA: ${{ inputs.kota }}
         run: |
           if [ "$IN_AKSI" = "ganti-slug" ]; then
             node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json ganti-slug "$IN_SLUG" "$IN_SLUG_BARU"
           else
-            node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json "$IN_AKSI" "$IN_SLUG" "$IN_BRAND" "$IN_EXEC" --warna "$IN_WARNA" --logo "$IN_LOGO"
+            node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json "$IN_AKSI" "$IN_SLUG" "$IN_BRAND" "$IN_EXEC" --warna "$IN_WARNA" --logo "$IN_LOGO" --tempat "$IN_TEMPAT" --kota "$IN_KOTA"
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
