@@ -31,6 +31,20 @@ Bergaya aplikasi Mac, satu file `hub-site/adminxnk.html` (CSP ketat: tanpa skrip
   390 px; `HUB_SHOTS=<folder>` menyimpan tangkapan layar).
 - Proyek Apps Script yang sudah ada masih bernama "XNK Pusat" di editor; ganti namanya di editor bila ingin (tidak wajib).
 
+### Grafik dan riwayat (T-2262)
+
+Kontras tinggi: bilah samping, pita judul dan kepala inspektur hitam; teks abu minimal 7:1. Hanya merah (masalah) dan
+titik hijau kecil (beres) yang berwarna. Ringkasan di atas: **Kesehatan** (cincin beres / ada masalah / belum
+terdaftar + daftar masalah, klik = buka coach) dan **Pertumbuhan · 30 hari** (klien aktif semua coach, sesi selesai dan
+akan datang), lalu **Perbandingan coach** (batang, Klien aktif | Sesi 7 hari, 8 teratas). Tabel coach memakai garis
+kecil, batang sesi, meteran kuota dan batang umur backup; inspektur punya empat ubin dengan garis 30 hari, tiga
+meteran kuota dan batang backup. Semua grafik punya tooltip (arahkan / fokus) dan tabel tersembunyi untuk pembaca layar.
+
+Riwayatnya: setiap cek (`checkAll_`, termasuk Cek ulang) menulis satu baris per hari WIB ke Script Property
+`HIST_<slug>`: `[tanggal, klien aktif 30 hari, total klien, sesi selesai 7 hari, sesi 7 hari ke depan, email, UrlFetch,
+menit trigger, beres 1|0]`, 30 hari terakhir, angka saja. Ganti slug ikut memindahkannya (`PUSAT_SLUG_KEYS`). Grafik
+terisi hari demi hari sejak versi ini terpasang.
+
 ## Pasang sekali (pemilik)
 
 1. Repo XNK → **Actions → XNK Library → Run workflow → `buat-pusat`**. Ringkasan run berisi tiga nilai; simpan

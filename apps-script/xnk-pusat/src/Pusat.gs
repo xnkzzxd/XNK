@@ -293,8 +293,27 @@ function checkAll_(only) {
     if (only && slug !== only) return;
     out[slug] = checkOne_(slug, all[slug], latest);
     props_().setProperty('ST_' + slug, JSON.stringify(out[slug]));
+    histPush_(slug, out[slug]);
   });
   return out;
+}
+
+// T-2262: riwayat harian untuk grafik /adminxnk. Hanya angka (tanpa data klien), satu baris per hari WIB, 30 hari.
+// Baris: [yyyy-mm-dd, klien aktif 30 hari, total klien, sesi selesai 7 hari, sesi 7 hari ke depan, email, UrlFetch,
+// menit trigger, beres 1|0]. Cek ulang di hari yang sama menimpa baris hari itu. Gagal = angka null.
+var PUSAT_HIST_DAYS = 30;
+function histPush_(slug, st) {
+  var d = st && st.data, day = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+  var n = function (v) { var x = Number(v); return v == null || !isFinite(x) ? null : x; };
+  var q = d && d.quota && typeof d.quota === 'object' ? d.quota : {};
+  var row = [day, n(d && d.clients && d.clients.active30d), n(d && d.clients && d.clients.total), n(d && d.sessions && d.sessions.done7d),
+    n(d && d.sessions && d.sessions.next7d), n(q.mail), n(q.fetch), n(q.triggerMin), st && st.ok ? 1 : 0];
+  var h = json_('HIST_' + slug, []);
+  if (!Array.isArray(h)) h = [];
+  h = h.filter(function (r) { return Array.isArray(r) && r[0] !== day; });
+  h.push(row);
+  h.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+  props_().setProperty('HIST_' + slug, JSON.stringify(h.slice(-PUSAT_HIST_DAYS)));
 }
 
 /** Trigger harian: periksa semua, email pemilik hanya bila ada masalah. */
@@ -349,7 +368,7 @@ function pusatOverview(token) {
     // T-2258: tempat latihan tiap coach di hub.json (juga yang belum terdaftar di sini), slug → {name, city} | null.
     places: hubCoaches.reduce(function (m, x) { if (x && PUSAT_SLUG_RE.test(String(x.slug))) m[x.slug] = hubPlace_(x.slug, hubCoaches); return m; }, {}),
     coaches: Object.keys(all).sort().map(function (slug) {
-      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), backup: backupView_(slug), push: pushView_(slug) };
+      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), hist: json_('HIST_' + slug, []), backup: backupView_(slug), push: pushView_(slug) };
     }),
     setup: setupState_(),
   };
@@ -684,7 +703,7 @@ function pusatPushTargets(pushSecret) {
 
 var PUSAT_RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
   'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
-var PUSAT_SLUG_KEYS = ['ST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_'];
+var PUSAT_SLUG_KEYS = ['ST_', 'HIST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_'];
 
 /** Kirim SITEQ_<slug> (alamat situs baru) ke coach; berhasil = antrean dihapus. {ok} atau {error}. */
 function siteSync_(slug, c) {

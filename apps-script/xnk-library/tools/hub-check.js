@@ -62,6 +62,8 @@ const XNK_HITS = [], LIB_HITS = [], CSP_HITS = [];
 // XNK HQ palsu untuk /adminxnk (T-2234): jawaban berbentuk sama dengan apps-script/xnk-pusat/src/Pusat.gs.
 const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSATHUBCHECK00000000000/exec';
 const PUSAT_CALLS = [];
+// T-2262: 30 hari riwayat palsu untuk grafik (angka saja).
+const HIST_A = Array.from({ length: 30 }, (_, i) => [new Date(Date.now() + 7 * 3600e3 - (29 - i) * 86400e3).toISOString().slice(0, 10), 6 + Math.round(i / 4), 15 + Math.round(i / 5), 8 + (i % 5) + Math.round(i / 6), 5 + (i % 4), 3, 9000 + i * 200, 12, 1]);
 function fakePusat(req) {
   PUSAT_CALLS.push(req.fn);
   if (req.fn === 'pusatLogin') return req.args[0] === 'pin-pusat-1' ? { ok: true, data: { token: 'T1', exp: Date.now() + 3600e3 } } : { ok: false, error: 'PIN salah.' };
@@ -73,7 +75,7 @@ function fakePusat(req) {
   const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 }, quota: { date: '2026-11-19', mail: 12, fetch: 15200, triggerMin: 20 } } });
   return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, fetchToday: 34, quotaLimits: { mail: 100, fetch: 20000, triggerMin: 90 }, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
     places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
-    { slug: 'claudia', exec: EXEC_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
+    { slug: 'claudia', exec: EXEC_A, hist: HIST_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
       backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, push: { on: true, active: true, subs: 3, at: new Date().toISOString(), error: '' } },
   ] } };
 }
@@ -213,20 +215,37 @@ async function makeLogos(browser) {
       check((await page.$$eval('#list .row', rs => rs.map(r => r.dataset.sel))).join() === 'claudia-2,claudia', 'coach bermasalah di atas: ' + (await page.$$eval('#list .row', rs => rs.map(r => r.dataset.sel))).join());
       check(((await page.textContent('#insp')) || '').includes('Belum terdaftar di XNK HQ'), 'inspektur terbuka di coach pertama: belum terdaftar ditandai');
       check(((await page.textContent('#sum')) || '').includes('Library terbaru v11') && ((await page.textContent('#sum')) || '').includes('2 coach'), 'ringkasan: jumlah coach + versi Library terbaru');
-      check(((await page.textContent('#fleet')) || '').includes('UrlFetch HQ hari ini') && ((await page.textContent('#fleet')) || '').includes('34'), 'ringkasan armada: UrlFetch XNK HQ hari ini');
+      check(((await page.textContent('#ov')) || '').includes('UrlFetch HQ hari ini') && ((await page.textContent('#ov')) || '').includes('34'), 'ringkasan: UrlFetch HQ hari ini');
+      // T-2262: grafik
+      check(await page.$('#ov svg.ring circle.seg-grey') !== null && ((await page.textContent('#ov')) || '').includes('1 belum terdaftar') && ((await page.textContent('#ov')) || '').includes('1 beres'), 'cincin kesehatan: beres + belum terdaftar, legenda');
+      check((await page.$$('#ov svg.line')).length === 2 && (await page.$$('#ov svg.line rect.hit')).length === 60 && ((await page.textContent('#ov')) || '').includes('▲'), 'pertumbuhan: dua grafik garis 30 hari, naik ▲');
+      check((await page.$$('#cmp .hb')).length === 1 && (await page.$$('#list .row > span:nth-child(2) svg.spark path.ln')).length === 1, 'perbandingan: satu batang per coach terdaftar; garis kecil di tabel');
+      await page.hover('#cmp .hb');
+      check(await page.isVisible('#tip') && ((await page.textContent('#tip')) || '').includes('Klien aktif 30 hari: 13'), 'tooltip pada batang');
+      await page.click('#cmp [data-cmp="sesi"]');
+      check(((await page.textContent('#cmp .hb .val')) || '') === '26' && (await page.$$('#cmp .hb .htrack i')).length === 2, 'perbandingan sesi: selesai + akan datang (17 + 9)');
+      await page.click('#cmp [data-cmp="klien"]');
+      const contrast = await page.evaluate(() => {
+        const lum = c => { const m = c.match(/\d+/g).map(Number).slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+        const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+        const tile = document.querySelector('.card .kpis small'), card = document.querySelector('.card');
+        return { mut: ratio(getComputedStyle(tile).color, getComputedStyle(card).backgroundColor), side: getComputedStyle(document.querySelector('.side')).backgroundColor };
+      });
+      check(contrast.mut >= 7 && contrast.side === 'rgb(10, 10, 10)', 'kontras: teks abu >= 7:1, bilah samping hitam (' + contrast.mut.toFixed(1) + ', ' + contrast.side + ')');
       check(((await page.textContent('#nav [data-filter="bad"]')) || '').includes('1') && ((await page.textContent('#nav [data-filter="push"]')) || '').includes('1'), 'navigasi samping: jumlah per saringan');
       await page.click('#nav [data-filter="bad"]');
       check((await page.$$('#list .row')).length === 1 && ((await page.textContent('#ttl')) || '') === 'Perlu dicek', 'saringan "Perlu dicek": hanya coach bermasalah');
       await page.click('#nav [data-filter="all"]');
-      check(((await page.textContent('#issues')) || '').includes('Semua masalah') && ((await page.textContent('#issues')) || '').includes('Belum terdaftar di XNK HQ'), 'daftar "Semua masalah" di bawah tabel');
+      check(((await page.textContent('#issues')) || '').includes('1 coach perlu dicek') && ((await page.textContent('#issues')) || '').includes('Belum terdaftar di XNK HQ'), 'daftar masalah di kartu Kesehatan');
       await page.keyboard.press('Escape');
       await page.focus('#list .row[data-sel="claudia-2"]');
       await page.keyboard.press('ArrowDown');
       check(await page.evaluate(() => document.querySelector('#list .row.sel') && document.querySelector('#list .row.sel').dataset.sel === 'claudia'), 'papan ketik: ↓ memilih coach berikutnya');
       const insp = (await page.textContent('#insp')) || '';
-      check(insp.includes('Semua beres') && insp.includes('UrlFetch') && insp.includes('15.200 / 20.000') && (await page.$('#insp .kv.q .bad')) !== null, 'inspektur: status, kuota (≥ 70 % merah)');
-      check(insp.includes('Backup mingguan') && insp.includes('15 Nov 2026') && (await page.getAttribute('#insp .bk a', 'href')) === 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', 'inspektur: tanggal backup terakhir + link Buka');
-      check(insp.includes('menyala · 3 perangkat'), 'inspektur: notifikasi push');
+      check(insp.includes('Semua beres') && insp.includes('UrlFetch') && insp.includes('15.200 / 20.000') && (await page.$('#insp .g.bad')) !== null && (await page.$$('#insp .g')).length === 3, 'inspektur: status, tiga meteran kuota (>= 70 % merah)');
+      check((await page.$$('#insp .tile svg.spark')).length === 4 && insp.includes('/ 30 hr'), 'inspektur: empat ubin dengan garis 30 hari');
+      check(insp.includes('15 Nov 2026') && (await page.$('#insp .bk .mtrack')) !== null && (await page.getAttribute('#insp .bk a', 'href')) === 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', 'inspektur: tanggal backup terakhir + link Buka');
+      check(insp.includes('perangkat · menyala') && ((await page.textContent('#insp .stat:not(.bk) .v')) || '') === '3', 'inspektur: notifikasi push (3 perangkat)');
       await page.click('#more');
       await page.click('#menu [data-act="perbarui"]');
       await dlgOk();
