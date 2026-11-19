@@ -63,7 +63,7 @@ Gelombang 2 — pemilik mengelola semua coach
 - [x] T-2234 Dasbor `xnk.web.id/adminxnk` (`hub-site/adminxnk.html`, `pusatUrl` di hub.json): status, angka, link, coach yang belum mendaftar, tombol cek/perbarui/hubungkan/bangun; CSP ketat; dicek `hub-check.js`.
 
 Gelombang 3 — fitur
-- [ ] T-2240 Web Push di hub (relay per coach lewat XNK Pusat).
+- [x] T-2240 Web Push di hub: satu kunci VAPID (secret repo hub), XNK Pusat membagikan kunci publik + daftar coach menyala (`hubPushKey`, `pusatPushTargets`), workflow Push XNK mengirim langsung ke tiap coach.
 - [x] T-2241 Halaman publik coach `/<slug>/info/` (profil, paket, jam kosong, daftar).
 - [x] T-2242 Logo + warna aksen per coach di `hub.json`.
 - [ ] T-2243 Alias slug lama (redirect); `runWarmTick` opsional.

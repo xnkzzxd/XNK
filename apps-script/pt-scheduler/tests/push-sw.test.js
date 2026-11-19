@@ -75,5 +75,19 @@ test('the worker in a sub-folder opens that folder', async () => {
   const w = load('https://xnk.my.id/next/');
   const e = clickEvent('/');
   w.handlers.notificationclick(e); await Promise.all(e.waits);
-  assert.equal(w.opened[0], 'https://xnk.my.id/');
+  assert.equal(w.opened[0], 'https://xnk.my.id/next/', 'url "/" = this worker\'s scope (T-2240: on the hub, /<slug>/ not the hub landing)');
+});
+
+test('hub (T-2240): the panel worker opens /<slug>/ and does not take over a client portal window', async () => {
+  const w = load('https://xnk.web.id/claudia/');
+  let focused = 0;
+  w.setClients([{ url: 'https://xnk.web.id/claudia/klien/', focus: () => { focused++; } }]);
+  const e = clickEvent('/');
+  w.handlers.notificationclick(e); await Promise.all(e.waits);
+  assert.equal(focused, 0);
+  assert.equal(w.opened[0], 'https://xnk.web.id/claudia/');
+  const k = load('https://xnk.web.id/claudia/klien/');
+  const e2 = clickEvent('/');
+  k.handlers.notificationclick(e2); await Promise.all(e2.waits);
+  assert.equal(k.opened[0], 'https://xnk.web.id/claudia/klien/');
 });

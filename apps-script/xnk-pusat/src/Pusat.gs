@@ -11,10 +11,11 @@
 //     Drive pemilik; /adminxnk hanya melihat tanggal dan link.
 // Script Properties (diisi di editor: Project Settings → Script Properties, lalu jalankan setupPusat sekali):
 //   PUSAT_PIN (min 8), PUSAT_ENROLL_CODE (min 8), PUSAT_EMAIL (opsional; bawaan = akun ini), GITHUB_TOKEN (opsional),
-//   HUB_URL (bawaan https://xnk.web.id), HUB_REPO (bawaan xnkzzxd/xnk-template-site), XNK_REPO (bawaan xnkzzxd/XNK).
+//   HUB_URL (bawaan https://xnk.web.id), HUB_REPO (bawaan xnkzzxd/xnk-template-site), XNK_REPO (bawaan xnkzzxd/XNK),
+//   PUSAT_PUSH_SECRET (opsional, min 32; sama dengan secret repo hub, untuk workflow Push XNK, T-2240).
 // Disimpan sendiri: SESSION_SECRET, COACHES (JSON slug → {exec, secret, at}), ST_<slug> (status terakhir), LATEST_LIB,
 //   BKST_<slug> (backup terakhir), BKNOW_<slug> (backup sekarang), BK_CUR (backup yang sedang berjalan), BK_DIRS (ID
-//   folder Drive), BK_RUN (tanda backup sedang berjalan).
+//   folder Drive), BK_RUN (tanda backup sedang berjalan), PUSH_<slug> (push coach: menyala?, rahasia relay, T-2240).
 
 var PUSAT_SESSION_MS = 12 * 3600 * 1000;
 var PUSAT_TICK_LATE_MS = 3 * 3600 * 1000;      // pengingat menyala tapi tick terakhir lebih lama dari ini = masalah
@@ -31,11 +32,22 @@ function quotaLimits_() {
   var n = function (k, d) { var v = Number(prop_(k, '')); return isFinite(v) && v > 0 ? v : d; };
   return { mail: n('QUOTA_MAIL', PUSAT_QUOTA_DEFAULTS.mail), fetch: n('QUOTA_FETCH', PUSAT_QUOTA_DEFAULTS.fetch), triggerMin: n('QUOTA_TRIGGER_MIN', PUSAT_QUOTA_DEFAULTS.triggerMin) };
 }
+/** Semua UrlFetch XNK Pusat lewat sini: dihitung per hari WIB (CacheService fq:<tanggal>, tampil di /adminxnk). */
+function fetch_(url, o) {
+  try {
+    var c = CacheService.getScriptCache(), k = 'fq:' + new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+    c.put(k, String(Number(c.get(k) || 0) + 1), 2 * 86400);
+  } catch (e) { /* hitungan tidak boleh menggagalkan permintaan */ }
+  return UrlFetchApp.fetch(url, o);
+}
+function fetchToday_() {
+  try { return Number(CacheService.getScriptCache().get('fq:' + new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10)) || 0); } catch (e) { return 0; }
+}
 function hubUrl_() { return prop_('HUB_URL', 'https://xnk.web.id').replace(/\/+$/, ''); }
 
 // ── Pintu JSON untuk /adminxnk dan wizard coach ──────────────────────────────────────────────────────────────
 
-var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister };
+var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets };
 
 function doPost(e) {
   var out;
@@ -165,7 +177,7 @@ function latestLib_() {
   if (c && Date.now() - c.at < 3600 * 1000) return c;
   try {
     var repo = prop_('XNK_REPO', 'xnkzzxd/XNK');
-    var res = UrlFetchApp.fetch('https://api.github.com/repos/' + repo + '/git/matching-refs/tags/lib-v', { muteHttpExceptions: true, headers: gh_() });
+    var res = fetch_('https://api.github.com/repos/' + repo + '/git/matching-refs/tags/lib-v', { muteHttpExceptions: true, headers: gh_() });
     if (res.getResponseCode() !== 200) return c;
     var best = null;
     JSON.parse(res.getContentText()).forEach(function (r) {
@@ -175,7 +187,7 @@ function latestLib_() {
     if (!best) return c;
     var commit = best.obj.sha;
     if (best.obj.type === 'tag') {
-      var t = UrlFetchApp.fetch('https://api.github.com/repos/' + repo + '/git/tags/' + best.obj.sha, { muteHttpExceptions: true, headers: gh_() });
+      var t = fetch_('https://api.github.com/repos/' + repo + '/git/tags/' + best.obj.sha, { muteHttpExceptions: true, headers: gh_() });
       if (t.getResponseCode() === 200) commit = JSON.parse(t.getContentText()).object.sha;
     }
     var out = { version: best.version, commit: commit, at: Date.now() };
@@ -200,14 +212,14 @@ function gh_() {
  * berjalan pada permintaan pertama.
  */
 function postAppsRaw_(url, body) {
-  var res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', payload: JSON.stringify(body), muteHttpExceptions: true, followRedirects: false });
+  var res = fetch_(url, { method: 'post', contentType: 'text/plain', payload: JSON.stringify(body), muteHttpExceptions: true, followRedirects: false });
   var code = res.getResponseCode(), at = url;
   if (code >= 300 && code < 400) {
     var h = (res.getHeaders && res.getHeaders()) || {};
     var loc = h.Location || h.location;
     if (!loc) throw new Error('HTTP ' + code + ' tanpa alamat pengalihan');
     at = loc;
-    res = UrlFetchApp.fetch(loc, { muteHttpExceptions: true, followRedirects: true });
+    res = fetch_(loc, { muteHttpExceptions: true, followRedirects: true });
     code = res.getResponseCode();
   }
   return { code: code, url: at, text: res.getContentText() };
@@ -225,21 +237,24 @@ function askApps_(url, body) {
   throw new Error('HTTP ' + r.code + ' dari ' + host + (t ? ', halaman "' + t[1].trim() + '"' : text ? ', bukan JSON' : ', kosong'));
 }
 
-/** Link /exec coach di hub.json publik repo hub (disimpan 10 menit); kosong bila tidak ada atau gagal dibaca. */
-function hubExec_(slug) {
+/** hub.json publik repo hub (disimpan 10 menit); {} bila tidak ada atau gagal dibaca. */
+function hubJson_() {
   var c = CacheService.getScriptCache(), raw = c.get('hubjson');
   if (raw == null) {
     raw = '';
     try {
-      var res = UrlFetchApp.fetch('https://raw.githubusercontent.com/' + prop_('HUB_REPO', 'xnkzzxd/xnk-template-site') + '/main/hub.json', { muteHttpExceptions: true });
+      var res = fetch_('https://raw.githubusercontent.com/' + prop_('HUB_REPO', 'xnkzzxd/xnk-template-site') + '/main/hub.json', { muteHttpExceptions: true });
       if (res.getResponseCode() === 200) raw = res.getContentText();
     } catch (e) { raw = ''; }
     try { c.put('hubjson', raw, 600); } catch (e) { /* cache penuh: baca lagi lain kali */ }
   }
-  try {
-    var hit = (JSON.parse(raw).coaches || []).filter(function (x) { return x && x.slug === slug; })[0];
-    return hit && PUSAT_EXEC_RE.test(String(hit.exec || '')) ? String(hit.exec) : '';
-  } catch (e) { return ''; }
+  try { var j = JSON.parse(raw); return j && typeof j === 'object' ? j : {}; } catch (e) { return {}; }
+}
+
+/** Link /exec coach di hub.json; kosong bila tidak ada. */
+function hubExec_(slug) {
+  var hit = (hubJson_().coaches || []).filter(function (x) { return x && x.slug === slug; })[0];
+  return hit && PUSAT_EXEC_RE.test(String(hit.exec || '')) ? String(hit.exec) : '';
 }
 
 /** Tanya satu coach; kembalikan status {at, ok, problems[], data}. */
@@ -285,6 +300,13 @@ function checkAll_(only) {
 function runPusatDaily() {
   var res = checkAll_();
   var all = json_('COACHES', {});
+  var push = pushSyncAll_();
+  Object.keys(push).forEach(function (s) {
+    if (!push[s].error) return;
+    if (!res[s]) res[s] = { ok: true, problems: [] };
+    res[s].problems.push('Notifikasi push: ' + push[s].error);
+    res[s].ok = false;
+  });
   Object.keys(all).forEach(function (s) {
     var b = json_('BKST_' + s, null);
     if (!b || !(b.fails >= 2)) return;
@@ -311,8 +333,10 @@ function pusatOverview(token) {
     latest: latestLib_(),
     canAct: !!prop_('GITHUB_TOKEN'),
     quotaLimits: quotaLimits_(),
+    fetchToday: fetchToday_(),
+    push: { secret: prop_('PUSAT_PUSH_SECRET').length >= 32 },
     coaches: Object.keys(all).sort().map(function (slug) {
-      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), backup: backupView_(slug) };
+      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), backup: backupView_(slug), push: pushView_(slug) };
     }),
     setup: setupState_(),
   };
@@ -331,6 +355,7 @@ function pusatAction(token, action, slug) {
   requireOwnerToken_(token);
   if (action === 'backup') return backupNow_(String(slug || ''));
   if (action === 'setup') return { ticket: setupTicket_() };   // /adminxnk membuka <pusatUrl>?setup=<ticket> di tab baru
+  if (action === 'push-on' || action === 'push-off') { pushSet_(String(slug || ''), action === 'push-on'); return pusatOverview(token); }
   var t = prop_('GITHUB_TOKEN');
   if (!t) throw new Error('Token GitHub belum diatur di XNK Pusat (Script Property GITHUB_TOKEN).');
   slug = String(slug || '');
@@ -342,7 +367,7 @@ function pusatAction(token, action, slug) {
     wf = 'coach.yml'; inputs = { aksi: action, slug: slug };
   } else throw new Error('Aksi tidak dikenal.');
   var repo = prop_('HUB_REPO', 'xnkzzxd/xnk-template-site');
-  var res = UrlFetchApp.fetch('https://api.github.com/repos/' + repo + '/actions/workflows/' + wf + '/dispatches', {
+  var res = fetch_('https://api.github.com/repos/' + repo + '/actions/workflows/' + wf + '/dispatches', {
     method: 'post', contentType: 'application/json', headers: gh_(), muteHttpExceptions: true, payload: JSON.stringify({ ref: 'main', inputs: inputs }),
   });
   if (res.getResponseCode() !== 204) throw new Error('GitHub menolak (' + res.getResponseCode() + '). Periksa token GitHub di XNK Pusat.');
@@ -369,7 +394,7 @@ var MIME_SHEET = 'application/vnd.google-apps.spreadsheet', MIME_DIR = 'applicat
 function drive_(method, path, body) {
   var o = { method: method, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } };
   if (body) { o.contentType = 'application/json'; o.payload = JSON.stringify(body); }
-  var res = UrlFetchApp.fetch(DRIVE_API + path, o), code = res.getResponseCode();
+  var res = fetch_(DRIVE_API + path, o), code = res.getResponseCode();
   if (code === 404) return null;
   if (code < 200 || code >= 300) throw new Error('Drive menolak (' + code + '). Jalankan setupPusat sekali lagi untuk memberi izin.');
   var t = res.getContentText();
@@ -547,4 +572,93 @@ function setupPusat_() {
   ScriptApp.newTrigger('runPusatDaily').timeBased().atHour(6).everyDays(1).inTimezone('Asia/Jakarta').create();
   ScriptApp.newTrigger('runPusatBackup').timeBased().everyHours(1).create();
   return 'XNK Pusat siap (cek harian 06:00 WIB, backup tiap jam). Isi PUSAT_PIN dan PUSAT_ENROLL_CODE di Script Properties bila belum, lalu terbitkan sebagai aplikasi web.';
+}
+
+// ── Web Push di hub (T-2240) ────────────────────────────────────────────────────────────────────────────────
+// Satu pasang kunci VAPID untuk seluruh xnk.web.id: kunci publik di hub.json (vapidPublic), kunci privat hanya di secret
+// repo hub (HUB_VAPID_PRIVATE). XNK Pusat membagikan kunci publik ke coach lewat hubPushKey(rahasia hub, kunci, menyala)
+// setiap pagi dan saat pemilik menekan "Nyalakan/Matikan push" di /adminxnk; jawabannya membawa rahasia relay coach.
+// Workflow Push XNK (repo hub, tiap 5 menit) memanggil pusatPushTargets(PUSAT_PUSH_SECRET) sekali per putaran: daftar
+// {slug, exec, relay} coach yang menyala, lalu memanggil pushRelayPull/pushRelayAck tiap coach langsung. Jadi:
+//   - XNK Pusat tidak memakai UrlFetch per putaran kirim (20 coach × 12 putaran/jam tetap 0 fetch); hanya 2 fetch per
+//     coach menyala per hari (dan per tombol), plus hub.json yang disimpan 10 menit.
+//   - HUB_SECRET (yang membuka hubExport = data penuh) tidak pernah keluar dari sini; rahasia relay hanya membuka antrean push.
+// Coach mati dan belum pernah menyala tidak pernah dihubungi.
+
+/** Status push coach yang tersimpan: {on, active, relay, exec, subs, at, error}. */
+function pushState_(slug) { return json_('PUSH_' + slug, null) || {}; }
+function pushView_(slug) {
+  var p = pushState_(slug);
+  return { on: !!p.on, active: !!p.active, subs: Number(p.subs) || 0, at: p.at || '', error: p.error || '' };
+}
+
+/** Kunci publik VAPID hub dari hub.json; kosong bila belum dibuat (workflow Push XNK aksi "kunci"). */
+function hubVapid_() {
+  var k = String(hubJson_().vapidPublic || '');
+  return /^B[A-Za-z0-9_-]{86}$/.test(k) ? k : '';
+}
+
+/** Kirim kunci + pilihan menyala ke satu coach (2 fetch), simpan hasilnya. */
+function pushSync_(slug, c, key) {
+  var p = pushState_(slug), exec = hubExec_(slug) || c.exec;
+  p.at = new Date().toISOString();
+  try {
+    if (!key) throw new Error('Kunci publik hub belum ada (jalankan workflow Push XNK aksi "kunci").');
+    var j = askApps_(exec, { fn: 'hubPushKey', args: [c.secret, key, !!p.on] });
+    if (j && j.code === 'unknown_fn') throw new Error('Library coach belum punya hubPushKey; perbarui coach.');
+    if (!j || !j.ok) throw new Error(j && j.error ? j.error : 'tanpa jawaban');
+    var d = j.data || {};
+    if (p.on && (typeof d.relay !== 'string' || d.relay.length < 24)) throw new Error('Jawaban coach tanpa rahasia relay.');
+    p.active = !!d.on;
+    if (typeof d.relay === 'string' && d.relay.length >= 24) p.relay = d.relay;
+    p.exec = exec;
+    p.subs = Number(d.subs) || 0;
+    p.error = '';
+  } catch (e) {
+    p.error = String(e && e.message ? e.message : e).slice(0, 160);
+  }
+  props_().setProperty('PUSH_' + slug, JSON.stringify(p));
+  return p;
+}
+
+/** Semua coach yang menyala (atau masih aktif dan perlu dimatikan). Coach yang tidak pernah menyala dilewati. */
+function pushSyncAll_() {
+  var all = json_('COACHES', {}), out = {}, key = null;
+  Object.keys(all).sort().forEach(function (slug) {
+    var p = pushState_(slug);
+    if (!p.on && !p.active) return;
+    if (key === null) key = hubVapid_();
+    out[slug] = pushSync_(slug, all[slug], key);
+  });
+  return out;
+}
+
+/** Tombol /adminxnk: nyalakan/matikan push satu coach, langsung dikirim ke coach itu. */
+function pushSet_(slug, on) {
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  var key = hubVapid_();
+  if (on && !key) throw new Error('Kunci publik hub belum ada. Jalankan workflow Push XNK di repo hub dengan aksi "kunci" dulu.');
+  var p = pushState_(slug);
+  p.on = !!on;
+  props_().setProperty('PUSH_' + slug, JSON.stringify(p));
+  var r = pushSync_(slug, all[slug], key);
+  if (r.error) throw new Error('Pilihan disimpan, tetapi coach belum menerimanya: ' + r.error);
+  return pushView_(slug);
+}
+
+/**
+ * Untuk workflow Push XNK (repo hub). Dijaga PUSAT_PUSH_SECRET (min 32, perbandingan waktu-konstan). Tanpa UrlFetch.
+ * @return {{coaches: Array<{slug: string, exec: string, relay: string}>}}
+ */
+function pusatPushTargets(pushSecret) {
+  var want = prop_('PUSAT_PUSH_SECRET');
+  if (want.length < 32 || !eq_(String(pushSecret == null ? '' : pushSecret), want)) throw new Error('Permintaan tidak valid.');
+  var all = json_('COACHES', {});
+  return {
+    coaches: Object.keys(all).sort().map(function (slug) {
+      var p = pushState_(slug);
+      return p.on && p.active && p.relay && PUSAT_EXEC_RE.test(String(p.exec || '')) ? { slug: slug, exec: p.exec, relay: p.relay } : null;
+    }).filter(Boolean),
+  };
 }

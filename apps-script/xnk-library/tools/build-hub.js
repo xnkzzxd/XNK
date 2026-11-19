@@ -107,6 +107,9 @@ function readHub(cfg, opts) {
   // T-2234: link /exec XNK Pusat untuk xnk.web.id/adminxnk (bukan rahasia; login tetap PIN pemilik).
   const pusat = String(cfg.pusatUrl || '').trim();
   if (pusat && !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(pusat)) throw new Error('hub.json: "pusatUrl" harus link /exec Apps Script XNK Pusat.');
+  // T-2240: kunci publik VAPID seluruh hub (satu origin = satu pasang kunci); kunci privat hanya di secret repo hub.
+  const vapid = String(cfg.vapidPublic == null ? '' : cfg.vapidPublic).trim();
+  if (vapid && !VAPID_RE.test(vapid)) throw new Error('hub.json: "vapidPublic" harus kunci publik VAPID (base64url, 87 karakter, diawali B). Jalankan workflow Push XNK aksi "kunci".');
   const seen = new Set();
   const coaches = cfg.coaches.map((c, i) => {
     const slug = String(c && c.slug || '').trim();
@@ -136,7 +139,26 @@ function readHub(cfg, opts) {
   const dup = execs.find((e, i) => execs.indexOf(e) !== i);
   if (dup) throw new Error('hub.json: dua coach memakai link /exec yang sama; setiap coach harus punya spreadsheet sendiri.');
   if (pusat && execs.includes(pusat)) throw new Error('hub.json: "pusatUrl" tidak boleh sama dengan /exec coach.');
-  return { contact, coaches, pusat };
+  return { contact, coaches, pusat, vapid };
+}
+
+const VAPID_RE = /^B[A-Za-z0-9_-]{86}$/;
+
+/**
+ * T-2240: Web Push di halaman coach (kode versi mana pun). Push.gs mengirim url '/', yang di hub berarti halaman depan
+ * xnk.web.id: worker lama diarahkan ke cakupannya sendiri (/<slug>/ atau /<slug>/klien/), dan ikon notifikasi memakai
+ * logo coach (PNG/JPEG/WebP) atau ikon hub, karena /icon-192.png tidak ada di xnk.web.id. Penanda yang tidak ada dilewati.
+ */
+function pushPage(files, dir, c) {
+  const f = dir + 'sw-app.js';
+  if (typeof files[f] !== 'string') return;
+  const icon = c.logoFile ? `/${c.slug}/logo.${c.logoFile.ext}` : '/img/icon-192.png';
+  files[f] = files[f]
+    .replace("icon: '/icon-192.png', badge: '/icon-192.png'", `icon: ${JSON.stringify(icon)}, badge: '/img/icon-192.png'`)
+    .replace("var u = new URL((e.notification.data && e.notification.data.url) || '/', SCOPE);",
+      "var raw = (e.notification.data && e.notification.data.url) || '/'; var u = new URL(raw === '/' ? SCOPE : raw, SCOPE);")
+    .replace("if (list[i].url.indexOf(SCOPE) === 0 && 'focus' in list[i]) return list[i].focus();",
+      "if (list[i].url.indexOf(SCOPE) === 0 && list[i].url.indexOf(SCOPE + 'klien/') !== 0 && 'focus' in list[i]) return list[i].focus();");
 }
 
 // T-2222: pustaka gerakan, makanan dan peta otot disajikan dari hub sendiri (/_lib/), bukan dari xnk.my.id, supaya
@@ -327,6 +349,8 @@ function build(cfg, opts) {
     isolate(sub, c.slug + '/klien/', c.slug, 'klien', brandSig(c));
     brandPage(sub, c.slug + '/', c, 'panel');
     brandPage(sub, c.slug + '/klien/', c, 'klien');
+    pushPage(sub, c.slug + '/', c);
+    pushPage(sub, c.slug + '/klien/', c);
     if (c.logoFile) sub[`${c.slug}/logo.${c.logoFile.ext}`] = c.logoFile.body;
     sub[c.slug + '/info/index.html'] = infoPage(c);
     Object.assign(files, sub);
@@ -340,6 +364,8 @@ function build(cfg, opts) {
   }
   // Commit tiap coach yang terakhir dibangun: build berikutnya memakainya bila server coach tidak menjawab.
   files['_hub/versions.json'] = JSON.stringify(built, null, 1) + '\n';
+  // T-2240: kunci publik push (bukan rahasia) untuk pemeriksaan; coach menerimanya dari XNK Pusat (hubPushKey).
+  if (hub.vapid) files['_hub/push.json'] = JSON.stringify({ vapidPublic: hub.vapid }) + '\n';
   let landing = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
   const contact = hub.contact
     ? `<a class="btn ghost" href="${esc(hub.contact)}" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg>Hubungi XNK</a>`
@@ -396,7 +422,7 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, slugError, readLogo, imageKind, imageSize, RESERVED, SLUG_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX };
+module.exports = { build, write, readHub, slugError, readLogo, imageKind, imageSize, RESERVED, SLUG_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

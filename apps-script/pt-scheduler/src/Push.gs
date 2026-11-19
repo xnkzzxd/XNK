@@ -403,7 +403,8 @@ function pushRelayPull(secret) {
     }
     try { if (_wibParts_(new Date(now)).hour === 3) _pushPrune_(now); } catch (e) { Logger.log('Prune push gagal: ' + e); }
     // Kunci privat VAPID hanya keluar lewat jawaban yang dijaga rahasia relay; pengirim memakainya di memori dan tidak menyimpannya.
-    return { messages: out, key: _pushPublicKey_(), privateKey: _pushProp_('PUSH_VAPID_PRIVATE') };
+    // Coach di hub (HUB_SECRET ada, T-2240): kunci privat hanya di secret repo hub, tidak pernah dari sini.
+    return { messages: out, key: _pushPublicKey_(), privateKey: _pushProp_('HUB_SECRET') ? '' : _pushProp_('PUSH_VAPID_PRIVATE') };
   });
 }
 
