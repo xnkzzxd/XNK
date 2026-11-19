@@ -106,3 +106,9 @@ test('Google Analytics milik xnk.my.id tidak ikut ke Library (T-2223)', () => {
   const { files } = require('../tools/build-lib').build();
   for (const [f, t] of Object.entries(files)) assert.ok(!/G-93SRTYH3SG|googletagmanager\.com/.test(t), f);
 });
+
+test('nomor WA pemilik XNK tidak ikut ke Library: tombol WA klien memakai No WA profil coach', () => {
+  const { files } = require('../tools/build-lib').build();
+  for (const [f, t] of Object.entries(files)) assert.ok(!/6288221254305/.test(t), f + ' masih memuat nomor WA pemilik');
+  assert.match(files['App.html'], /const COACH_WA_NUMBER = '';/);
+});

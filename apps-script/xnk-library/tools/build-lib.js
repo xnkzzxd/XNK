@@ -68,6 +68,8 @@ const TEXT_SWAPS = [
   // Teks di halaman (App.html)
   ['App.html', "'Dibooking lewat book.xnkbooking.my.id. Ubah jadwal lewat portal.'", "'Dibooking lewat portal klien. Ubah jadwal lewat portal.'", 1],
   ['App.html', "'Dibooking lewat book.xnkbooking.my.id'", "'Dibooking lewat portal klien'", 1],
+  // Nomor WA pemilik XNK tidak ikut ke coach lain: kosong = tombol WA klien memakai No WA di profil coach (panel → Coach).
+  ['App.html', "const COACH_WA_NUMBER = '6288221254305';", "const COACH_WA_NUMBER = '';", 1],
   ['App.html', "'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.'", "'portal klien (Beranda → Form kesehatan) sebelum sesi ya.'", 1],
   // Merek: setiap teks yang tampil ke coach atau klien memakai nama usaha coach itu, bukan "XNK".
   // Browser: window.brandName() (config.js "brand", atau judul halaman yang diisi server) dibuat di awal App.html.
