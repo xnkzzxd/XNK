@@ -38,6 +38,10 @@ const NEEDED = ['_ensureCoachSchema_', '_getMemberDataSheet_', '_getMembersLogSh
   '_priceListSheetAndColumns_', '_sessionSecret_', '_locked_', '_bustShared_', '_bustSlots_', '_installReminderTrigger_',
   'requireOwner_', 'doGet', 'doPost', '_tidyRun_', '_tidyText_'];
 
+// Tautan tanda "Didukung XNK" (T-2257). xnk.web.id = origin hub sendiri, jadi tidak ada host baru di CSP; ?hub = landing
+// selalu tampil (tidak membuka ulang halaman coach dari token di perangkat ini).
+const XNK_BY_LINK = '<a href="https://xnk.web.id/?hub" target="_blank" rel="noopener" style="color:inherit;font-weight:700;text-decoration:none">XNK</a>';
+
 // [berkas, cari (teks persis), ganti, jumlah yang diharapkan]
 const TEXT_SWAPS = [
   // Google Analytics milik xnk.my.id tidak ikut ke coach lain (data kunjungan klien coach bukan milik XNK; T-2223).
@@ -111,6 +115,19 @@ const TEXT_SWAPS = [
   ['Bagikan.html', 'if (qr) drawQr(ctx, o.qrUrl,', 'if (qr && o.qrUrl) drawQr(ctx, o.qrUrl,', 1],
   ['App.html', 'Gabung grup kelas privatku di XNK (', 'Gabung grup kelas privatku (', 1],
   ['App.html', 'Ambil paketnya di https://book.xnkbooking.my.id lalu', 'Ambil paketnya di portal klien lalu', 1],
+  // "Didukung XNK" (T-2257): tanda kecil di layar masuk panel dan portal, dan di pojok kartu bagikan. Hanya di Library
+  // (situs coach / hub); xnk.my.id tidak berubah. Nama dan logo coach tetap yang utama.
+  ['Index.html', '<p class="hint" style="margin-top:18px;text-align:center">Tetap masuk di perangkat ini selama 30 hari.</p>\n',
+    '<p class="hint" style="margin-top:18px;text-align:center">Tetap masuk di perangkat ini selama 30 hari.</p>\n' +
+    '      <p class="hint xnk-by" style="margin-top:8px;text-align:center;font-size:.75rem;opacity:.75">Didukung ' + XNK_BY_LINK + '</p>\n', 1],
+  ['App.html', `'<p class="hint" style="margin-top:14px;text-align:center">HP ini mengingat akun selama 90 hari.</p>' +\n`,
+    `'<p class="hint" style="margin-top:14px;text-align:center">HP ini mengingat akun selama 90 hari.</p>' +\n` +
+    `      '<p class="hint xnk-by" style="margin-top:8px;text-align:center;font-size:.75rem;opacity:.75">Didukung ${XNK_BY_LINK}</p>' +\n`, 1],
+  ['Bagikan.html', "coachedBy: 'Coached by',", "coachedBy: 'Coached by', poweredBy: 'Powered by XNK',", 1],
+  ['Bagikan.html', "coachedBy: 'Dilatih oleh',", "coachedBy: 'Dilatih oleh', poweredBy: 'Didukung XNK',", 1],
+  // Satu baris kecil di pinggir bawah kartu (di bawah blok foot, di dalam pinggir 72 px), warna tinta kartu: terbaca di semua gaya.
+  ['Bagikan.html', '    ctx.globalAlpha = 1;\n  }\n  let fontsP = null;',
+    "    Tx(ctx, T.poweredBy, W - 72, R.H - 30, 24, 600, .6 * k, 'right');\n    ctx.globalAlpha = 1;\n  }\n  let fontsP = null;", 1],
 ];
 // Pengenal yang diganti di semua .gs (bukan deklarasinya, itu sudah dihapus di atas).
 const IDENT_SWAPS = [[/\bRMD_PORTAL_URL\b/g, '_siteUrl_()'], [/\bSHARE_QR_DEFAULT\b/g, '_siteUrl_()']];

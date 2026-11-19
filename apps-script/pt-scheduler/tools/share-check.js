@@ -3,11 +3,13 @@
 // the QR code, HQ export, the effect pass (grain + soft light) and the motion-graphics video
 // (Minimal and Kinetic × 6/10/15 s on every card; the last frame must equal the still card).
 //   NODE_PATH=$(npm root -g) node apps-script/pt-scheduler/tools/share-check.js   (SHOTS_DIR=dir saves the PNGs)
+// SHARE_SRC=dir runs it on another build of the pages (e.g. the XNK Library in apps-script/xnk-library/dist/lib):
+// there the cards carry the small "Didukung XNK" line (T-2257), which must sit below every block.
 'use strict';
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
 let failures = 0; const check = (ok, msg) => { if (!ok || process.env.VERBOSE) console.log((ok ? '  ✓ ' : '  ✗ ') + msg); if (!ok) failures++; };
-const SRC = path.join(__dirname, '..', 'src');
+const SRC = process.env.SHARE_SRC ? path.resolve(process.env.SHARE_SRC) : path.join(__dirname, '..', 'src');
 const OUT = process.env.SHOTS_DIR || '';
 (async () => {
   const theme = fs.readFileSync(path.join(SRC, 'Theme.html'), 'utf8');
@@ -15,8 +17,9 @@ const OUT = process.env.SHOTS_DIR || '';
   const mask = /--logo-mask:[^\n]+/.exec(theme)[0];
   const mm = app.slice(app.indexOf('const WL_MM_FRONT = ['), app.indexOf('window.WL_MM = '));
   const share = fs.readFileSync(path.join(SRC, 'Bagikan.html'), 'utf8');
+  const LIB = /T\.poweredBy/.test(share);
   const html = `<!doctype html><html><head><link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><style>:root{${mask}}</style></head><body><div class="sheet hide" id="sheet-share"></div><div id="share-nudge" class="hide"><p id="share-nudge-msg"></p></div>
-  <script>${mm} window.WL_MM = { front: WL_MM_FRONT, back: WL_MM_BACK };</script>${share}
+  <script>window.brandName = window.brandName || function () { return 'Gym Andi'; }; ${mm} window.WL_MM = { front: WL_MM_FRONT, back: WL_MM_BACK };</script>${share}
   <script>window.openSheet=function(id){document.getElementById(id).classList.remove('hide')};window.showToast=function(m){console.log('toast',m)};window.icon=function(){return ''};</script></body></html>`;
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   p.on('pageerror', e => { console.log('ERR', e.message); failures++; });
@@ -57,6 +60,7 @@ const OUT = process.env.SHOTS_DIR || '';
   const kinds = await p.evaluate(src => { const s = Object.assign({}, src, { loadPeriod: () => Promise.resolve(window.__per) }); window.__src = s; window.shareOpen('latihan', s, {}); return window.shareCheck.kinds(); }, src);
   const want = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'perjalanan', 'gizi', 'rekap', 'foto', 'badge'];
   check(want.every(k => kinds.includes(k)), 'all 13 cards are offered: ' + kinds.join(', '));
+  console.log(LIB ? '(Library build: "Didukung XNK" line checked)' : '(production build)');
 
   // Photos for the photo card and photo style.
   await p.evaluate(async () => {
@@ -95,11 +99,13 @@ const OUT = process.env.SHOTS_DIR || '';
     // horizontal centre of the drawn head + stats (for centred cards)
     let mid = null;
     if (L.head && L.stats) { const y0 = Math.round(L.head.y), hh = Math.round(L.stats.y + L.stats.h - L.head.y); const d = x.getImageData(0, y0, c.width, hh).data; let mn = c.width, mx = 0; for (let yy = 0; yy < hh; yy += 3) for (let xx = 0; xx < c.width; xx += 2) if (d[(yy * c.width + xx) * 4 + 3] > 200) { if (xx < mn) mn = xx; if (xx > mx) mx = xx; } if (mx > mn) mid = (mn + mx) / 2; }
+    // T-2257 (Library only): ink in the bottom-right strip where "Didukung XNK" is drawn (transparent cards only).
+    let mark = 0; { const d = x.getImageData(1080 - 72 - 300, L.H - 52, 300, 30).data; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) mark++; }
     let b64 = ''; if (window.__save) { const u = new Uint8Array(await bl.arrayBuffer()); let s = ''; u.forEach(v => s += String.fromCharCode(v)); b64 = btoa(s); }
     // reset per-card options so the next case starts clean
     if (extra.body) window.shareSet('body', false); if (extra.hideKg) window.shareSet('hideKg', false); if (extra.qr) window.shareSet('f:qr', false); if (extra.period) window.shareSet('period', 'hari');
     return { w: im.width, h: im.height, a0: x.getImageData(2, 2, 1, 1).data[3], a1: x.getImageData(im.width / 2, im.height / 2, 1, 1).data[3],
-      blocks, H: L.H, gtype: card.g && card.g.type, ink, stats: card.stats.map(s => s.v), b64, mid };
+      blocks, mark, H: L.H, gtype: card.g && card.g.type, ink, stats: card.stats.map(s => s.v), b64, mid };
   }, args);
   await p.evaluate(save => { window.__save = save; }, !!OUT);
 
@@ -128,6 +134,10 @@ const OUT = process.env.SHOTS_DIR || '';
     check(inside, `${tag}: every block inside the canvas ${JSON.stringify(d.blocks.map(x => [x.k, Math.round(x.y), Math.round(x.h)]))}`);
     const sorted = d.blocks.slice().sort((a, b2) => a.y - b2.y);
     check(sorted.every((bk, i) => !i || sorted[i - 1].y + sorted[i - 1].h <= bk.y + 1), `${tag}: blocks do not overlap`);
+    // T-2257: the corner strip of the "Didukung XNK" line (Library only) must be free of everything else. Transparent
+    // cards: no ink there in the production build, ink there in the Library build. Boxed cards: no block reaches it.
+    if (transparent) check(LIB ? d.mark > 40 : d.mark === 0, `${tag}: corner strip ${LIB ? 'has the "Didukung XNK" line' : 'is free'} (${d.mark})`);
+    else if (boxed) check(d.blocks.every(bk => bk.y + bk.h <= H - 54), `${tag}: no block reaches the "Didukung XNK" strip`);
     if (align === 'tengah' && style === 'teks' && d.mid != null) check(Math.abs(d.mid - 540) < 40, `${tag}: centred text is centred (middle at ${Math.round(d.mid)})`);
     if (d.gtype && d.gtype !== 'photos') check(d.ink > 20, `${tag}: graph ${d.gtype} drawn (${d.ink})`);
     if ((kind === 'badges' || (kind === 'progres' && !extra.body)) && style !== 'teks') check(d.gtype === 'badges', `${tag}: badge grid shown`);

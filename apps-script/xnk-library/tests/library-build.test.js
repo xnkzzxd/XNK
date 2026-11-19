@@ -89,7 +89,7 @@ test('tidak ada teks "XNK" yang tampil ke coach atau klien di kode Library (nama
   const { files } = lib.build();
   const own = new Set(fs.readdirSync(path.join(__dirname, '..', 'lib-extra')).concat(['LibTabel.gs', 'LibVersi.gs']));
   // Sengaja tetap: pengenal teknis, PRODID kalender, nama folder Drive di akun coach sendiri.
-  const KEEP = /PRODID:-\/\/XNK\/\/|createFolder\('XNK |XNK_[A-Z]|XNKOffline|XNKHostLocal|XNKAndroid|XNKiOS|xnk_|^\s*XNK Personal Training —|<title>XNK Personal Training<\/title>/;
+  const KEEP = /PRODID:-\/\/XNK\/\/|createFolder\('XNK |XNK_[A-Z]|XNKOffline|XNKHostLocal|XNKAndroid|XNKiOS|xnk_|^\s*XNK Personal Training —|<title>XNK Personal Training<\/title>|>XNK<\/a>|poweredBy: '(Powered by|Didukung) XNK'/;
   const bad = [];
   for (const [f, t] of Object.entries(files)) {
     if (own.has(f) || !/\.(gs|html)$/.test(f)) continue;
@@ -100,6 +100,15 @@ test('tidak ada teks "XNK" yang tampil ke coach atau klien di kode Library (nama
     });
   }
   assert.deepEqual(bad, [], 'tambahkan TEXT_SWAPS di build-lib.js (browser: window.brandName(), server: _brandName_())');
+});
+
+test('tanda "Didukung XNK" hanya di Library: layar masuk panel + portal dan kartu bagikan (T-2257)', () => {
+  const { files } = lib.build();
+  assert.match(files['Index.html'], /class="hint xnk-by"[^\n]*Didukung <a href="https:\/\/xnk\.web\.id\/\?hub"/);
+  assert.match(files['App.html'], /class="hint xnk-by"[^\n]*Didukung <a href="https:\/\/xnk\.web\.id\/\?hub"/);
+  assert.match(files['Bagikan.html'], /Tx\(ctx, T\.poweredBy, W - 72, R\.H - 30/);
+  // Produksi (xnk.my.id) tidak berubah.
+  for (const f of ['Index.html', 'App.html', 'Bagikan.html']) assert.ok(!/xnk-by|poweredBy/.test(fs.readFileSync(path.join(SRC, f), 'utf8')), f);
 });
 
 test('Google Analytics milik xnk.my.id tidak ikut ke Library (T-2223)', () => {

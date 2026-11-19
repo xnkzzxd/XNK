@@ -76,5 +76,5 @@ Gelombang 4 — operasional
 - [x] T-2254 Notifikasi coach lewat Web Push + email ke email coach (Telegram opsional). Web Push coach sudah ada (Fase Z); email: `NOTIF_EMAIL_REMINDERS` off/on/auto (Pengaturan → Notifikasi Admin, wizard = auto), `kirimEmailTombol_`, ReminderLog per saluran.
 - [ ] T-2255 "Unduh data saya" (Excel) di Pengaturan panel coach.
 - [x] T-2256 Daftar periksa akun Gmail per coach ([Akun.md](Akun.md)); token dipakai harian oleh `perbarui`, jadi token mati langsung terlihat.
-- [ ] T-2257 "Didukung XNK" kecil di login dan kartu bagikan coach.
+- [x] T-2257 "Didukung XNK" kecil di login dan kartu bagikan coach. Lewat `TEXT_SWAPS` di `build-lib.js` (hanya Library / hub, xnk.my.id tidak berubah): baris `.xnk-by` di bawah petunjuk layar PIN panel dan layar masuk portal, tautan ke `https://xnk.web.id/?hub`; kartu bagikan: satu baris "Didukung XNK" / "Powered by XNK" (24 px, tinta kartu, 60 %) di pojok kanan bawah, di dalam pinggir 72 px. Dicek `share-check.js` (`SHARE_SRC=apps-script/xnk-library/dist/lib`), `tenant-check.js`, `library-build.test.js`.
 - Keputusan terbuka: UU PDP (kebijakan privasi, perjanjian pemroses data) ditunda oleh pemilik.
