@@ -1,4 +1,3 @@
-
   // ═══ T-2251: mode baca saja (langganan coach di hub xnk.web.id) ═══
   // Server menolak semua fungsi tulis (gerbang di doPost); di sini hanya pita tenang di atas halaman. Panel coach melihat
   // alasan dan catatan pengelola; klien hanya "data hanya bisa dilihat" (tanpa cerita langganan).

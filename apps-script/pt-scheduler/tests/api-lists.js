@@ -18,7 +18,7 @@ const PUBLIC = [
 ];
 const ADMIN = [
   'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras', 'getAdminMore', 'getClientBundle', 'getClientNutrition', 'saveClientNutrition', 'decideNutritionAdvice', 'getClientFoodLog',
-  'getMembers', 'getMemberTransactionLog', 'getSchedules',
+  'getMembers', 'getMemberTransactionLog', 'getSchedules', 'exportMyData',
   'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto',
   'saveCoach', 'previewCoachProfile', 'getClientCare', 'saveClientNotes', 'getWorkoutLog', 'saveWorkoutLog', 'getWorkoutSummaryMessage', 'snoozeCare', 'saveAssessment', 'saveFitnessTests', 'deleteFitnessTest', 'getTestResultMessage', 'markHealthReviewed', 'getSessionBriefing', 'getContentAdmin', 'saveContent', 'deleteContent', 'getMemberProgram', 'saveMemberProgram', 'getManualExercises', 'saveExerciseAlias', 'getGymCatalog', 'saveGymExercise', 'setGymExerciseActive', 'getProgramGenPreview', 'regenerateProgram', 'setClientProgramAuto', 'setFormOk', 'getProgramTemplates', 'saveProgramTemplate', 'deleteProgramTemplate', 'applyProgramTemplate', 'setTemplateExplore', 'saveSessionNote', 'getSessionNote', 'getCoachHub', 'saveCoachTargets', 'getCoachAvailability', 'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'getCoachesAdmin', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',
   'addMember', 'updateMemberProfile', 'deleteMember',
@@ -82,6 +82,7 @@ const WRITE = [
   'leaveClassGroup', 'saveMyProfileCard',
 ];
 const READ_OK = [
+  'exportMyData',   // T-2255: read-only export, allowed in read-only mode
   'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'getPublicSchedules', 'getPriceList', 'getPriceListPublic',
   'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots',
   'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo', 'hubStatus', 'hubExport',
