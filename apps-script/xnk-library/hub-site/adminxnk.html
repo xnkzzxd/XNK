@@ -49,6 +49,9 @@
   .pl-form { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
   .pl-form label { display: block; font-size: .9rem; font-weight: 600; }
   .pl-form input { margin: 4px 0 10px; }
+  .out { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--bad); border-radius: 10px; font-size: .95rem; overflow-wrap: anywhere; }
+  .out a { color: inherit; font-weight: 600; }
+  .btn.danger { background: transparent; color: var(--bad); border-color: var(--bad); }
 </style>
 </head>
 <body>
@@ -165,6 +168,27 @@
       '<div class="full"><button class="btn" type="button" data-act="sub-save" data-slug="' + esc(s) + '">Simpan langganan</button></div></form></details></div>';
     return h;
   }
+  // T-2252: coach keluar — tanggal, jadwal hapus akun Google (manual), backup akhir + Excel, situs tidak aktif.
+  function day(d) { if (!d) return '-'; var x = new Date(d + 'T00:00:00'); return isNaN(x) ? d : x.toLocaleDateString('id-ID', { dateStyle: 'medium' }); }
+  function outHtml(s, o) {
+    var left = o.daysLeft, f = o.final || {};
+    var h = '<div class="out"><div class="bad" style="font-weight:600">Coach keluar ' + esc(day(o.day)) + '</div>';
+    if (o.done) h += '<div>Akun Google coach sudah dihapus (' + esc(day(o.done)) + ').</div>';
+    else h += '<div>Hapus akun Google coach: <b>' + esc(day(o.deleteOn)) + '</b> (' + (left > 0 ? left + ' hari lagi' : left === 0 ? 'hari ini' : 'lewat ' + (-left) + ' hari') + '; manual oleh Anda).</div>';
+    h += '<div class="mut">Mode baca saja permanen · push mati · tanpa backup mingguan dan perbarui.</div>';
+    var links = [];
+    if (f.xlsxUrl) links.push('<a href="' + esc(f.xlsxUrl) + '" target="_blank" rel="noopener">Excel untuk coach</a>');
+    if (f.fileUrl) links.push('<a href="' + esc(f.fileUrl) + '" target="_blank" rel="noopener">Spreadsheet</a>');
+    if (f.dirUrl) links.push('<a href="' + esc(f.dirUrl) + '" target="_blank" rel="noopener">Folder Akhir</a>');
+    var st = f.state === 'selesai' ? 'Backup akhir siap ' + esc(when(f.at)) : f.state === 'gagal' ? 'Backup akhir gagal: ' + esc(f.error || '-') + ' (dicoba lagi otomatis)' : 'Backup akhir sedang dibuat…';
+    h += '<div class="bk' + (f.state === 'gagal' ? ' bad' : '') + '">' + st + (links.length ? ' · ' + links.join(' · ') : '') + '</div>';
+    if (f.xlsxError) h += '<div class="bk bad">Excel belum bisa dibuat: ' + esc(f.xlsxError) + ' Unduh dari Spreadsheet (File → Download → Excel).</div>';
+    if (!o.hubInactive) h += '<div class="bk bad">Situs masih aktif di hub' + (o.hub && o.hub !== 'ok' ? ': ' + esc(o.hub) : ' (menunggu workflow Hub XNK, ±2 menit; tekan Cek ulang)') + '</div>';
+    else h += '<div class="bk mut">Situs xnk.web.id/' + esc(s) + '/ = halaman "tidak aktif lagi".</div>';
+    h += '<div class="acts">' + (o.canUndo ? '<button class="btn ghost" type="button" data-act="leave-undo" data-slug="' + esc(s) + '">Aktifkan lagi</button>' : '') +
+      (o.done ? '' : '<button class="btn ghost" type="button" data-act="leave-done" data-slug="' + esc(s) + '">Akun sudah dihapus</button>') + '</div></div>';
+    return h;
+  }
   function render() {
     var d = data, rows = {}, html = '';
     d.coaches.forEach(function (c) { rows[c.slug] = c; });
@@ -210,14 +234,18 @@
           (pu.at ? ' · ' + esc(when(pu.at)) : '') + '</div>';
         if (pu.error) html += '<div class="bk bad">Push: ' + esc(pu.error) + '</div>';
       }
-      if (!c.missing) html += subHtml(s, c.sub || {});
-      html += '<div class="acts">' + (HUB[s] && openPlace !== s ? '<button class="btn ghost" type="button" data-act="tempat" data-slug="' + esc(s) + '">Tempat</button>' : '') +
+      var out = c.out && c.out.at ? c.out : null;
+      if (out) html += outHtml(s, out);
+      else if (!c.missing) html += subHtml(s, c.sub || {});
+      if (!out && c.out && c.out.hubInactive) html += '<div class="bk bad">hub.json menandai coach ini tidak aktif, tetapi XNK Pusat tidak mencatatnya keluar.</div>';
+      html += '<div class="acts">' + (HUB[s] && openPlace !== s && !out ? '<button class="btn ghost" type="button" data-act="tempat" data-slug="' + esc(s) + '">Tempat</button>' : '') +
         (c.missing ? '' : '<button class="btn ghost" type="button" data-act="cek" data-slug="' + esc(s) + '">Cek ulang</button>' +
         '<button class="btn ghost" type="button" data-act="backup" data-slug="' + esc(s) + '">Backup sekarang</button>' +
-        '<button class="btn ghost" type="button" data-act="' + ((c.push || {}).on ? 'push-off' : 'push-on') + '" data-slug="' + esc(s) + '">' + ((c.push || {}).on ? 'Matikan push' : 'Nyalakan push') + '</button>' +
-        '<button class="btn ghost" type="button" data-act="ganti-slug" data-slug="' + esc(s) + '">Ganti slug</button>') +
-        '<button class="btn ghost" type="button" data-act="perbarui" data-slug="' + esc(s) + '">Perbarui</button>' +
-        '<button class="btn ghost" type="button" data-act="hubungkan" data-slug="' + esc(s) + '">Hubungkan</button></div></article>';
+        (out ? '' : '<button class="btn ghost" type="button" data-act="' + ((c.push || {}).on ? 'push-off' : 'push-on') + '" data-slug="' + esc(s) + '">' + ((c.push || {}).on ? 'Matikan push' : 'Nyalakan push') + '</button>' +
+        '<button class="btn ghost" type="button" data-act="ganti-slug" data-slug="' + esc(s) + '">Ganti slug</button>')) +
+        (out ? '' : '<button class="btn ghost" type="button" data-act="perbarui" data-slug="' + esc(s) + '">Perbarui</button>' +
+        '<button class="btn ghost" type="button" data-act="hubungkan" data-slug="' + esc(s) + '">Hubungkan</button>') +
+        (c.missing || out ? '' : '<button class="btn danger" type="button" data-act="leave" data-slug="' + esc(s) + '">Coach keluar…</button>') + '</div></article>';
     });
     var su = d.setup;
     $('setup').classList.toggle('hide', !su || su.ok);
@@ -311,6 +339,38 @@
       if (!q || !window.confirm(q)) return;
       say('dm', 'Mengirim ke ' + slug + '…');
       return rpc('pusatAction', [tok(), act, slug]).then(function (d) { data = d; render(); say('dm', d.notice || 'Selesai.', d.notice ? 'bad' : 'ok'); }, function (e) { say('dm', e.message, 'bad'); });
+    }
+    if (act === 'leave') {
+      // T-2252: konfirmasi = ketik slug persis. Lihat docs/library/Pusat.md (Coach keluar).
+      var typed = window.prompt('Coach keluar: ' + (HUB[slug] || slug) + ' (xnk.web.id/' + slug + '/)\n\n' +
+        '• Situs coach jadi halaman "tidak aktif lagi"; coach dan klien tidak bisa membuka aplikasinya.\n' +
+        '• Data hanya bisa dilihat (baca saja), push mati.\n' +
+        '• Backup akhir + salinan Excel dibuat di Drive Anda (XNK Backup/' + slug + '/Akhir) untuk dikirim ke coach.\n' +
+        '• Anda diingatkan menghapus akun Google coach 30 hari lagi (manual). Data klien tidak dihapus oleh XNK.\n' +
+        '• Bisa dibatalkan ("Aktifkan lagi") sebelum 30 hari.\n\nKetik ' + slug + ' untuk melanjutkan:', '');
+      if (typed == null) return;
+      if (String(typed).trim() !== slug) return say('dm', 'Slug tidak cocok; tidak ada yang diubah.', 'bad');
+      say('dm', 'Memproses ' + slug + '…');
+      return rpc('pusatLeave', [tok(), slug, String(typed).trim()]).then(function (r) {
+        var notes = [];
+        if (r.readonly !== 'ok') notes.push('Baca saja: ' + r.readonly);
+        if (r.push !== 'ok') notes.push('Push: ' + r.push);
+        if (r.backup !== 'ok') notes.push('Backup: ' + r.backup);
+        if (r.hub !== 'ok') notes.push('Situs: ' + r.hub);
+        return load('pusatOverview', [tok()]).then(function () {
+          say('dm', 'Coach ' + r.slug + ' keluar. Hapus akun Google coach pada ' + day(r.deleteOn) + '. Backup akhir sedang dibuat; link Excel muncul di kartu dan dikirim ke email Anda setelah selesai. ' + notes.join(' '), notes.length ? 'bad' : 'ok');
+        });
+      }, function (e) { say('dm', e.message, 'bad'); });
+    }
+    if (act === 'leave-undo' || act === 'leave-done') {
+      var lq = act === 'leave-undo' ? 'Aktifkan lagi ' + slug + '? Situs kembali ke aplikasi, mode baca saja kembali ke langganan, tanda keluar dihapus. Push tetap mati sampai Anda nyalakan.'
+        : 'Akun Google coach ' + slug + ' sudah Anda hapus? Pengingat berhenti dan coach tidak bisa diaktifkan lagi dari sini.';
+      if (!window.confirm(lq)) return;
+      say('dm', 'Mengirim…');
+      return rpc('pusatAction', [tok(), act, slug]).then(function (d) {
+        data = d; render();
+        say('dm', d.notice || (act === 'leave-undo' ? 'Coach ' + slug + ' aktif lagi. Situs dibangun ulang di GitHub Actions (±2 menit).' : 'Dicatat: akun Google coach ' + slug + ' sudah dihapus.'), d.notice ? 'bad' : 'ok');
+      }, function (e) { say('dm', e.message, 'bad'); });
     }
     if (act === 'ganti-slug') {
       // T-2243: alamat lama tetap mengarah ke yang baru; klien dan coach tetap masuk (docs/library/Hub.md).

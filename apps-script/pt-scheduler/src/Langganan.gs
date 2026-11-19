@@ -5,6 +5,8 @@
 // di Api.gs (dibuat tools/build-api.js). Situs dan data tidak pernah dihapus.
 // Produksi xnk.my.id tidak punya HUB_SECRET: hubReadonly selalu menolak dan _readonlyOn_ selalu false, walau Script
 // Property XNK_READONLY terisi tangan.
+// T-2252 (coach keluar): argumen ke-4 `left` = coach sudah berhenti memakai XNK (XNK_LEFT). Baca saja tetap sama; yang
+// berbeda hanya pekerjaan latar yang tidak perlu lagi (runWarmTick dilewati). Data tidak pernah dihapus.
 
 var READONLY_MSG = 'Mode baca saja: data bisa dilihat, tetapi belum bisa diubah untuk sementara.';
 
@@ -12,6 +14,13 @@ var READONLY_MSG = 'Mode baca saja: data bisa dilihat, tetapi belum bisa diubah 
 function _readonlyOn_() {
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty('XNK_READONLY') !== 'true') return false;
+  return String(props.getProperty('HUB_SECRET') || '').length >= 32;
+}
+
+/** T-2252: true bila XNK Pusat menandai coach ini keluar (hanya spreadsheet hub, sama seperti baca saja). */
+function _hubLeft_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('XNK_LEFT') !== 'true') return false;
   return String(props.getProperty('HUB_SECRET') || '').length >= 32;
 }
 
@@ -35,9 +44,10 @@ function _readonlyGate_(fn) {
  * @param {string} secret HUB_SECRET spreadsheet ini
  * @param {boolean} on true = baca saja; selain true = mati
  * @param {string=} note catatan singkat untuk pita di panel coach (maks 200 huruf)
- * @return {{on: boolean, note: string, changed: boolean}}
+ * @param {boolean=} left T-2252: true = coach keluar (hanya bersama on = true); selain itu tanda keluar dihapus
+ * @return {{on: boolean, note: string, changed: boolean, left: boolean}}
  */
-function hubReadonly(secret, on, note) {
+function hubReadonly(secret, on, note, left) {
   _hubAuth_(secret);
   var props = PropertiesService.getScriptProperties();
   var want = on === true;
@@ -46,7 +56,10 @@ function hubReadonly(secret, on, note) {
   var wasNote = String(props.getProperty('XNK_READONLY_NOTE') || '');
   if (want) props.setProperty('XNK_READONLY', 'true'); else props.deleteProperty('XNK_READONLY');
   if (n) props.setProperty('XNK_READONLY_NOTE', n); else props.deleteProperty('XNK_READONLY_NOTE');
-  var changed = was !== want || wasNote !== n;
+  var wantLeft = want && left === true;
+  var wasLeft = props.getProperty('XNK_LEFT') === 'true';
+  if (wantLeft) props.setProperty('XNK_LEFT', 'true'); else props.deleteProperty('XNK_LEFT');
+  var changed = was !== want || wasNote !== n || wasLeft !== wantLeft;
   if (changed) props.setProperty('XNK_READONLY_AT', new Date().toISOString());
-  return { on: _readonlyOn_(), note: n, changed: changed };
+  return { on: _readonlyOn_(), note: n, changed: changed, left: _hubLeft_() };
 }

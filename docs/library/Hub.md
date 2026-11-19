@@ -201,6 +201,29 @@ sebagai alamat lama.
 - `hub-verify.js` memeriksa halaman pengalih, worker pengganti dan awalan `storageSlug` sebelum tayang;
   `hub-check.js` menguji ganti slug di situs yang sedang tayang (link lama `?x=1#y`, login lama, tanpa sinyal).
 
+## Coach tidak aktif (T-2252)
+
+Coach yang keluar (`/adminxnk` → **Coach keluar…**, [Pusat.md](Pusat.md#coach-keluar-t-2252)) mendapat
+`"inactive": true` di `hub.json` lewat workflow **Hub XNK** aksi `nonaktif` (`hub-edit.js nonaktif <slug>`; slug lama
+juga diterima). Aksi `aktifkan` menghapusnya lagi. `simpan` dan `ganti-slug` mempertahankan tanda itu.
+
+- `build-hub.js`: coach tidak aktif **tidak dibangun sebagai aplikasi** (tanpa `build-tenant`, tanpa `config.js`, tanpa
+  `/exec` coach). `/<slug>/`, `/<slug>/klien/` dan `/<slug>/info/` = satu halaman kecil "Situs coach ini tidak aktif
+  lagi" (CSP ketat bersidik, `noindex`, tombol **Hubungi pengelola XNK** dari `contactUrl` dan halaman depan `/?hub`).
+  Skrip inline-nya melepas service worker di cakupan `/<slug>/` dan menghapus cache `xnk-page-<storageSlug>~…`.
+- **Worker pembersih** (`hub-site/inactive-sw.js`) di `/<slug>/sw-app.js` dan `/<slug>/klien/sw-app.js`: HP yang masih
+  punya worker aplikasi lama memasangnya pada pemeriksaan berikutnya; ia menghapus cache halaman coach itu, melepas
+  dirinya dan memuat ulang jendelanya, jadi salinan aplikasi lama tidak tampil lagi. Tanpa pengendali fetch.
+  `localStorage` tidak disentuh.
+- Halaman depan: kartu coach tidak aktif hilang, dan login tersimpan coach itu (`OFF`, awalan `storageSlug` dan slug
+  lama) tidak membuka situsnya otomatis. Alamat lama (`aliases`) tetap mengalihkan ke `/<slug>/` (halaman tidak aktif).
+- Dilewati untuk coach tidak aktif: `hub-versions.js` (server tidak ditanya, tidak ada di `_hub/versions.json`),
+  **Coach XNK** `perbarui` (`coach-ops.js` "dilewati: coach tidak aktif"; rencana `coach.yml` tidak memasukkannya, jadi
+  tidak pernah jadi kenari), **Push XNK** (`hub-push.js`, juga XNK Pusat). `lib-latest.json` tetap dibuat.
+- `hub-verify.js` memeriksa halaman tidak aktif (CSP ketat, noindex, tanpa `/exec`, tanpa `config.js`), awalan worker
+  pembersih, dan bahwa halaman depan tidak menautkannya. Coach lain dibangun **byte demi byte sama**
+  (`tests/hub-leave.test.js`); `hub-check.js` menguji coach aktif yang menjadi tidak aktif di browser sungguhan.
+
 ## Batas dan keputusan terbuka
 
 - Satu `/exec` hanya boleh milik satu coach (build menolak link ganda).

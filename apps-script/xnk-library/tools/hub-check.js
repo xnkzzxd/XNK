@@ -10,6 +10,10 @@
 // tombol Tempat di /adminxnk.
 // T-2243: ganti slug di situs yang sedang tayang: link lama (?query#hash) mendarat di alamat baru, login dan salinan
 // offline dari sebelum ganti tetap terbaca, link lama tanpa sinyal tetap terbuka, tombol Ganti slug di /adminxnk.
+// T-2252: coach keluar — tombol "Coach keluar…" (ketik slug) dan "Aktifkan lagi" di /adminxnk; coach yang tadinya aktif
+// (klien masuk, service worker terpasang) menjadi tidak aktif: worker lama tidak menyajikan aplikasi lagi, cache-nya
+// hilang, panel/portal/info = halaman "tidak aktif lagi" tanpa penolakan CSP, halaman depan tidak membukanya otomatis,
+// coach lain tetap jalan.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -62,6 +66,7 @@ const XNK_HITS = [], LIB_HITS = [], CSP_HITS = [];
 // XNK Pusat palsu untuk /adminxnk (T-2234): jawaban berbentuk sama dengan apps-script/xnk-pusat/src/Pusat.gs.
 const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSATHUBCHECK00000000000/exec';
 const PUSAT_CALLS = [];
+let PUSAT_OUT = null;   // T-2252: keadaan coach keluar claudia di XNK Pusat palsu
 const PUSAT_SUB = { plan: 'gratis', price: 0, due: '', email: '', ro: 'auto', state: 'gratis', days: null, graceLeft: null, readonly: false, history: [], pushed: null };
 function fakePusat(req) {
   PUSAT_CALLS.push(req.fn);
@@ -70,15 +75,22 @@ function fakePusat(req) {
   if (req.fn === 'pusatSetPlace') { PUSAT_CALLS.place = req.args.slice(1); return { ok: true, data: { slug: req.args[1], place: req.args[2] ? { name: req.args[2], city: req.args[3] } : null, hub: 'ok' } }; }
   if (req.fn === 'pusatRename') { PUSAT_CALLS.rename = req.args.slice(1); return { ok: true, data: { slug: req.args[2], from: req.args[1], site: 'ok', folder: 'ok', hub: 'ok' } }; }
   if (req.fn === 'pusatAction' && req.args[1] === 'setup') return { ok: true, data: { ticket: 'setup.1.sig' } };
+  if (req.fn === 'pusatLeave') {
+    PUSAT_CALLS.leave = req.args.slice(1);
+    PUSAT_OUT = { at: new Date().toISOString(), day: '2026-11-19', deleteOn: '2026-12-19', daysLeft: 30, done: '', hub: 'ok', hubInactive: false, canUndo: true,
+      final: { state: 'jalan', dirUrl: 'https://drive.google.com/drive/folders/AKHIRHUBCHECK', fileUrl: '', xlsxUrl: '', xlsxError: '', error: '', at: '' } };
+    return { ok: true, data: { slug: req.args[1], day: PUSAT_OUT.day, deleteOn: PUSAT_OUT.deleteOn, dirUrl: PUSAT_OUT.final.dirUrl, readonly: 'ok', push: 'ok', backup: 'ok', hub: 'ok' } };
+  }
   // T-2251: langganan (bawaan gratis); simpan dan aksi menjawab overview baru.
   if (req.fn === 'pusatSubSave') { PUSAT_CALLS.sub = req.args.slice(1); Object.assign(PUSAT_SUB, req.args[2], { price: Number(String(req.args[2].price).replace(/\D/g, '')) || 0, state: 'aktif', days: 30 }); }
   else if (req.fn === 'pusatAction' && /^sub-/.test(req.args[1])) { PUSAT_CALLS.subAct = req.args[1]; if (req.args[1] === 'sub-ro-on') Object.assign(PUSAT_SUB, { ro: 'on', readonly: true }); }
+  else if (req.fn === 'pusatAction' && req.args[1] === 'leave-undo') { PUSAT_CALLS.undo = req.args[2]; PUSAT_OUT = null; }
   else if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
   const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 } } });
   return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
     places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
     { slug: 'claudia', exec: EXEC_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
-      backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, sub: Object.assign({}, PUSAT_SUB) },
+      backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, sub: Object.assign({}, PUSAT_SUB), out: PUSAT_OUT },
   ] } };
 }
 
@@ -259,6 +271,27 @@ async function makeLogos(browser) {
       await page.click('[data-act="sub-ro-on"]');
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('Selesai'), null, { timeout: 5000 }).catch(() => {});
       check(PUSAT_CALLS.subAct === 'sub-ro-on' && ((await page.textContent('#list')) || '').includes('dinyalakan tangan') && await page.isVisible('[data-act="sub-paid"]'), 'langganan: Baca saja nyala lewat pusatAction, tombol Tandai lunas ada');
+      // T-2252: Coach keluar — slug salah = tidak terjadi apa-apa; slug benar = pusatLeave, kartu menampilkan keadaan keluar.
+      const typed = ['Claudia'];
+      const onLeave = d => (d.type() === 'prompt' ? d.accept(typed.shift()) : d.accept());
+      page.on('dialog', onLeave);
+      await page.click('[data-act="leave"][data-slug="claudia"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('tidak cocok'), null, { timeout: 5000 }).catch(() => {});
+      check(!PUSAT_CALLS.leave && ((await page.textContent('#dm')) || '').includes('tidak cocok'), 'Coach keluar: slug salah diketik → tidak ada yang diubah');
+      typed.push('claudia');
+      await page.click('[data-act="leave"][data-slug="claudia"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('keluar.'), null, { timeout: 5000 }).catch(() => {});
+      page.off('dialog', onLeave);
+      const card = await page.textContent('#list article:first-child');
+      check(JSON.stringify(PUSAT_CALLS.leave) === '["claudia","claudia"]' && card.includes('Coach keluar') && card.includes('Hapus akun Google coach') && card.includes('Backup akhir sedang dibuat'),
+        'Coach keluar: ketik slug → pusatLeave, kartu: tanggal hapus akun, backup akhir (' + JSON.stringify(PUSAT_CALLS.leave) + ')');
+      check((await page.getAttribute('#list article:first-child .out a', 'href')) === 'https://drive.google.com/drive/folders/AKHIRHUBCHECK', 'Coach keluar: link Folder Akhir di kartu');
+      check(!(await page.isVisible('[data-act="leave"][data-slug="claudia"]')) && !(await page.isVisible('[data-act="push-on"][data-slug="claudia"]')) && !(await page.isVisible('[data-act="perbarui"][data-slug="claudia"]')) && await page.isVisible('[data-act="leave-undo"][data-slug="claudia"]'),
+        'Coach keluar: tombol push/perbarui/keluar hilang, "Aktifkan lagi" ada');
+      page.once('dialog', d => d.accept());
+      await page.click('[data-act="leave-undo"][data-slug="claudia"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('aktif lagi'), null, { timeout: 5000 }).catch(() => {});
+      check(PUSAT_CALLS.undo === 'claudia' && await page.isVisible('[data-act="leave"][data-slug="claudia"]') && !(await page.isVisible('#list article:first-child .out')), 'Aktifkan lagi → pusatAction leave-undo, kartu normal lagi');
       check(await page.isVisible('#setup') && ((await page.textContent('#setupWhy')) || '').includes('Izin Google'), 'pita "XNK Pusat perlu disiapkan" saat izin belum diberikan');
       check(await page.isVisible('#setupEditor') && (await page.getAttribute('#setupEditor', 'href')) === 'https://script.google.com/d/SCRIPTPUSAT/edit', 'izin belum ada: langkah editor + link editor XNK Pusat');
       const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('.bar [data-act="setup"]')]);
@@ -512,6 +545,56 @@ async function makeLogos(browser) {
       await p.waitForTimeout(2500);
       check(p.url().startsWith(O + '/dua/klien/') && (await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name).catch(() => '')) === 'Bima', 'tanpa sinyal: link lama dialihkan worker pengganti, portal terbuka dari salinan (' + p.url() + ')');
       await context.setOffline(false);
+      check(errors.length === 0, 'tanpa error JavaScript / CSP' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
+      await context.close();
+    }
+
+    console.log('Hub · coach keluar (T-2252)');
+    {
+      const seen = [], errors = [];
+      const context = await newContext(browser, be, seen);
+      // Situs sebelum coach keluar (setelah ganti slug di atas): claudia aktif, klien masuk, worker portal terpasang.
+      const before = hubEdit(cfg, 'ganti-slug', { slug: 'claudia-2', newSlug: 'dua' }, { baseDir: logoDir }).cfg;
+      state.files = hub.build(before, { baseDir: logoDir }).files;
+      const p = await open(context, O + '/claudia/klien/', errors);
+      await p.waitForSelector('#login-phone', { state: 'visible', timeout: 8000 }).catch(() => {});
+      await p.fill('#login-phone', '81111111111');
+      await p.click('#login-submit-btn');
+      await p.waitForTimeout(1800);
+      await p.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 10000 }).catch(() => {});
+      const panel = await open(context, O + '/claudia/', errors);
+      await panel.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 10000 }).catch(() => {});
+      await panel.close();
+      const pre = await p.evaluate(() => caches.keys());
+      check((await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name)) === 'Ani' && pre.some(n => n.startsWith('xnk-page-claudia~klien~')) && pre.some(n => n.startsWith('xnk-page-claudia~panel~')),
+        'sebelum keluar: klien claudia masuk, cache panel + portal claudia ada');
+      // Pemilik: Coach keluar → Hub XNK aksi nonaktif → situs baru tayang.
+      const off = hubEdit(before, 'nonaktif', { slug: 'claudia' }, { baseDir: logoDir }).cfg;
+      state.files = hub.build(off, { baseDir: logoDir }).files;
+      await p.goto(O + '/claudia/klien/', { waitUntil: 'domcontentloaded' });
+      await p.evaluate(() => navigator.serviceWorker.getRegistration('/claudia/klien/').then(r => r && r.update()).catch(() => {}));
+      await p.waitForFunction(() => /Situs coach ini tidak aktif lagi/.test(document.body ? document.body.innerText : ''), null, { timeout: 15000 }).catch(() => {});
+      check(/Situs coach ini tidak aktif lagi/.test(await p.evaluate(() => document.body.innerText)), 'worker portal lama tidak menyajikan aplikasi lagi: /claudia/klien/ = halaman "tidak aktif lagi"');
+      await p.waitForTimeout(1500);
+      for (const sub of ['', 'info/']) {
+        const q = await open(context, O + '/claudia/' + sub, errors);
+        await q.waitForFunction(() => /Situs coach ini tidak aktif lagi/.test(document.body ? document.body.innerText : ''), null, { timeout: 15000 }).catch(() => {});
+        check(/Situs coach ini tidak aktif lagi/.test(await q.evaluate(() => document.body.innerText)) && await q.isVisible('a[href="https://wa.me/6281234567890"]'), '/claudia/' + sub + ' = halaman "tidak aktif lagi" dengan kontak pengelola');
+        check(await q.evaluate(() => !window.adminCall && !document.querySelector('#admin-pin, #login-phone')), '/claudia/' + sub + ': tanpa aplikasi');
+        await q.close();
+      }
+      await p.waitForTimeout(1500);
+      const left = await p.evaluate(() => caches.keys());
+      check(!left.some(n => /^xnk-page-claudia~(klien|panel)~/.test(n)), 'cache halaman panel + portal claudia dihapus worker pembersih: ' + (left.filter(n => n.startsWith('xnk-page')).join(', ') || 'kosong'));
+      const regs = await p.evaluate(() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => new URL(r.scope).pathname)));
+      check(!regs.some(s => s.startsWith('/claudia/')), 'service worker di /claudia/ dilepas: ' + regs.join(', '));
+      const home = await open(context, O + '/', errors);
+      await home.waitForTimeout(800);
+      check(home.url() === O + '/' && await home.locator('a.coach[href="/claudia/info/"]').count() === 0, 'halaman depan: login klien claudia tidak membuka situs tidak aktif, kartu claudia hilang (' + home.url() + ')');
+      await home.close();
+      const other = await open(context, O + '/dua/klien/', errors);
+      check(await other.waitForSelector('#login-phone', { state: 'visible', timeout: 8000 }).then(() => true, () => false), 'coach lain (/dua/klien/) tetap jalan');
+      await other.close();
       check(errors.length === 0, 'tanpa error JavaScript / CSP' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close();
     }

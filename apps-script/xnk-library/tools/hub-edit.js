@@ -7,12 +7,14 @@
 //   node apps-script/xnk-library/tools/hub-edit.js <hub.json> hapus  <slug>
 //   node apps-script/xnk-library/tools/hub-edit.js <hub.json> ganti-slug <slug lama> <slug baru>
 //   (T-2243: slug lama jadi alamat pengalih, awalan penyimpanan dan secret clasp tetap; lihat docs/library/Hub.md)
+//   node apps-script/xnk-library/tools/hub-edit.js <hub.json> nonaktif|aktifkan <slug>
+//   (T-2252: coach keluar = "inactive": true, situsnya jadi halaman "tidak aktif lagi"; aktifkan = dihapus lagi)
 // Dipakai workflow "Hub XNK" (form Actions) supaya pemilik tidak mengedit JSON dengan tangan.
 const fs = require('fs');
 const hub = require('./build-hub');
 
 // T-2243: isian yang melekat pada coach (bukan pada link /exec-nya).
-const IDENTITY = ['aliases', 'storageSlug', 'secret'];
+const IDENTITY = ['aliases', 'storageSlug', 'secret', 'inactive'];
 /** Nama secret clasp bawaan untuk slug itu (sama dengan coach-ops.js / coach.yml). */
 function coachSecret(slug) { return 'CLASP_' + String(slug).toUpperCase().replace(/-/g, '_'); }
 
@@ -76,8 +78,20 @@ function edit(cfg, aksi, a, opts) {
     if (c.secret === coachSecret(to)) delete c.secret;
     c.slug = to;
     message = `Coach "${slug}" sekarang "${to}". Alamat lama xnk.web.id/${slug}/ tetap mengarah ke xnk.web.id/${to}/; klien dan coach tetap masuk.`;
+  } else if (aksi === 'nonaktif' || aksi === 'aktifkan') {
+    // T-2252: coach keluar. Hanya tanda di hub.json; data coach tidak disentuh (spreadsheet tetap di akun coach).
+    const i = coaches.findIndex(c => c.slug === slug || (c.aliases || []).includes(slug));
+    if (i < 0) throw new Error(`Coach "${slug}" tidak ada di daftar.`);
+    const c = coaches[i];
+    if (aksi === 'nonaktif') {
+      c.inactive = true;
+      message = `Coach "${c.slug}" tidak aktif lagi. xnk.web.id/${c.slug}/ (panel, portal, info) sekarang halaman "Situs coach ini tidak aktif lagi"; data coach tidak dihapus.`;
+    } else {
+      delete c.inactive;
+      message = `Coach "${c.slug}" aktif lagi. xnk.web.id/${c.slug}/ kembali ke aplikasi setelah situs dibangun ulang.`;
+    }
   } else {
-    throw new Error('Aksi harus "simpan", "hapus", atau "ganti-slug".');
+    throw new Error('Aksi harus "simpan", "hapus", "ganti-slug", "nonaktif", atau "aktifkan".');
   }
   coaches.sort((x, y) => (x.slug < y.slug ? -1 : x.slug > y.slug ? 1 : 0));
   const next = Object.assign({}, base, { coaches });
@@ -92,7 +106,7 @@ if (require.main === module) {
   const flag = k => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : ''; };
   const accent = flag('--warna'), logo = flag('--logo'), placeName = flag('--tempat'), placeCity = flag('--kota');
   const [file, aksi, slug, brand, exec, scriptId, deploymentId] = args;
-  if (!file || !aksi) { console.error('pakai: hub-edit.js <hub.json> simpan|hapus <slug> [nama usaha] [link /exec] | ganti-slug <lama> <baru>'); process.exit(1); }
+  if (!file || !aksi) { console.error('pakai: hub-edit.js <hub.json> simpan|hapus|nonaktif|aktifkan <slug> [nama usaha] [link /exec] | ganti-slug <lama> <baru>'); process.exit(1); }
   try {
     const cur = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { coaches: [] };
     // ganti-slug: argumen ke-2 setelah slug = slug baru (posisi "nama usaha" pada simpan).
