@@ -229,7 +229,10 @@ async function makeLogos(browser) {
       await panelLogin(a, '222222');
       check(((await a.textContent('#admin-login-error')) || '').includes('PIN salah'), 'PIN coach lain ditolak di /claudia/');
       const atitle = await a.title();
-      check(atitle.includes('Claudia Fit') && !/XNK/.test(atitle) && !/XNK/.test(await a.evaluate(() => document.body.innerText)), 'layar PIN panel: judul dan teks memakai nama usaha, tanpa "XNK"');
+      // T-2257: satu-satunya "XNK" yang boleh tampil adalah tanda kecil "Didukung XNK" (.xnk-by).
+      const pinText = await a.evaluate(() => { const c = document.body.cloneNode(true); c.querySelectorAll('.xnk-by').forEach(e => e.remove()); return c.innerText; });
+      check(atitle.includes('Claudia Fit') && !/XNK/.test(atitle) && !/XNK/.test(pinText), 'layar PIN panel: judul dan teks memakai nama usaha, tanpa "XNK" (selain tanda "Didukung XNK")');
+      check(await a.isVisible('#admin-login .xnk-by') && /^Didukung XNK$/.test((await a.textContent('#admin-login .xnk-by')).trim()), 'layar PIN panel: tanda kecil "Didukung XNK" tampil (T-2257)');
       const look = pg => pg.evaluate(() => ({ acc: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
         logo: getComputedStyle(document.querySelector('#admin-login .auth-logo .logo-mark')).backgroundImage, icon: document.querySelector('link[rel="icon"]').getAttribute('href') }));
       const la = await look(a);
@@ -338,6 +341,7 @@ async function makeLogos(browser) {
       const context = await newContext(browser, be, seen);
       const p = await open(context, O + '/claudia/klien/', errors);
       check(await p.waitForSelector('#login-phone', { state: 'visible', timeout: 8000 }).then(() => true, () => false), 'portal /claudia/klien/ meminta nomor WhatsApp');
+      check(await p.isVisible('#view-public-login .xnk-by'), 'layar masuk portal: tanda kecil "Didukung XNK" tampil (T-2257)');
       await p.fill('#login-phone', '82222222222');
       await p.click('#login-submit-btn');
       await p.waitForTimeout(900);
