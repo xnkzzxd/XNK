@@ -6,11 +6,14 @@
 // tanpa saling logout, kunci penyimpanan berawalan slug, portal klien hanya mengenal klien coach itu, cache service worker
 // panel dan portal tidak saling menghapus, dan portal terbuka tanpa sinyal. T-2241/T-2242: warna aksen dan logo per coach,
 // halaman info /<slug>/info/ (HP dan desktop, CSP ketat, tetap dari jaringan walau service worker panel aktif).
+// T-2243: ganti slug di situs yang sedang tayang: link lama (?query#hash) mendarat di alamat baru, login dan salinan
+// offline dari sebelum ganti tetap terbaca, link lama tanpa sinyal tetap terbuka, tombol Ganti slug di /adminxnk.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 const hub = require('./build-hub');
+const { edit: hubEdit } = require('./hub-edit');
 const { makeCtx, createLibEnv } = require('../tests/lib-harness');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -36,9 +39,10 @@ function backend() {
 }
 
 // Seperti GitHub Pages: /nama diarahkan ke /nama/, alamat yang tidak ada menjawab 404.html.
-function serve(files) {
+function serve(state) {
   const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.webmanifest': 'application/manifest+json' };
   const server = http.createServer((req, res) => {
+    const files = state.files;   // T-2243: situs bisa diganti di tengah tes (ganti slug), seperti build hub baru yang tayang
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\//, '');
     if (p !== '' && !p.endsWith('/') && !path.extname(p) && files[p + '/index.html'] != null) { res.writeHead(301, { Location: '/' + p + '/' }); return res.end(); }
     if (p === '' || p.endsWith('/')) p += 'index.html';
@@ -59,6 +63,7 @@ function fakePusat(req) {
   PUSAT_CALLS.push(req.fn);
   if (req.fn === 'pusatLogin') return req.args[0] === 'pin-pusat-1' ? { ok: true, data: { token: 'T1', exp: Date.now() + 3600e3 } } : { ok: false, error: 'PIN salah.' };
   if (req.args[0] !== 'T1') return { ok: false, auth: true, error: 'Sesi berakhir. Masuk lagi.' };
+  if (req.fn === 'pusatRename') { PUSAT_CALLS.rename = req.args.slice(1); return { ok: true, data: { slug: req.args[2], from: req.args[1], site: 'ok', folder: 'ok', hub: 'ok' } }; }
   if (req.fn === 'pusatAction' && req.args[1] === 'setup') return { ok: true, data: { ticket: 'setup.1.sig' } };
   if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
   const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 } } });
@@ -129,7 +134,8 @@ async function makeLogos(browser) {
   const site = hub.build(cfg, { baseDir: logoDir });
   // Uji-diri: HUB_CHECK_NOSHIM=1 mencopot penyimpanan per slug; cek isolasi di bawah HARUS gagal (membuktikan tesnya tidak kosong).
   if (process.env.HUB_CHECK_NOSHIM) for (const n of Object.keys(site.files)) if (n.endsWith('index.html')) site.files[n] = site.files[n].replace(/<script>\(function \(\) \{\n  var P = [\s\S]*?<\/script>\n/, '');
-  const server = await serve(site.files);
+  const state = { files: site.files };
+  const server = await serve(state);
   const O = 'http://127.0.0.1:' + server.address().port;
   try {
     console.log('Hub · landing dan alamat');
@@ -193,6 +199,14 @@ async function makeLogos(browser) {
       await page.click('[data-act="backup"][data-slug="claudia"]');
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('1 menit'), null, { timeout: 5000 }).catch(() => {});
       check(((await page.textContent('#dm')) || '').includes('1 menit') && ((await page.textContent('#list')) || '').includes('menunggu giliran'), 'Backup sekarang (tanpa onclick, lolos CSP): pesan + "menunggu giliran"');
+      // T-2243: Ganti slug (prompt nama baru + konfirmasi), tanpa onclick.
+      const answers = ['Claudia-Baru', null];
+      const onDialog = d => { const a = answers.shift(); return d.type() === 'prompt' ? d.accept(a) : d.accept(); };
+      page.on('dialog', onDialog);
+      await page.click('[data-act="ganti-slug"][data-slug="claudia"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('Selesai di XNK Pusat'), null, { timeout: 5000 }).catch(() => {});
+      page.off('dialog', onDialog);
+      check(JSON.stringify(PUSAT_CALLS.rename) === '["claudia","claudia-baru"]' && ((await page.textContent('#dm')) || '').includes('claudia → claudia-baru'), 'Ganti slug: nama baru (huruf kecil) ke pusatRename, pesan hasil (' + JSON.stringify(PUSAT_CALLS.rename) + ')');
       check(await page.isVisible('#setup') && ((await page.textContent('#setupWhy')) || '').includes('Izin Google'), 'pita "XNK Pusat perlu disiapkan" saat izin belum diberikan');
       check(await page.isVisible('#setupEditor') && (await page.getAttribute('#setupEditor', 'href')) === 'https://script.google.com/d/SCRIPTPUSAT/edit', 'izin belum ada: langkah editor + link editor XNK Pusat');
       const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('.bar [data-act="setup"]')]);
@@ -365,6 +379,52 @@ async function makeLogos(browser) {
       await p.waitForTimeout(2500);
       check((await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name)) === 'Ani', 'tanpa sinyal: portal terbuka dari salinan, klien tetap masuk');
       check(errors.length === 0, 'tanpa error JavaScript' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
+      await context.close();
+    }
+
+    console.log('Hub · ganti slug (T-2243)');
+    {
+      const seen = [], errors = [];
+      const context = await newContext(browser, be, seen);
+      const p = await open(context, O + '/claudia-2/klien/', errors);
+      await p.waitForSelector('#login-phone', { state: 'visible', timeout: 8000 }).catch(() => {});
+      await p.fill('#login-phone', '82222222222');
+      await p.click('#login-submit-btn');
+      await p.waitForTimeout(1800);
+      check((await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name)) === 'Bima', 'sebelum ganti slug: klien claudia-2 masuk di /claudia-2/klien/');
+      await p.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 10000 }).catch(() => {});
+      // Pemilik mengganti slug (Hub XNK aksi ganti-slug) dan situs baru tayang.
+      const renamed = hubEdit(cfg, 'ganti-slug', { slug: 'claudia-2', newSlug: 'dua' }, { baseDir: logoDir }).cfg;
+      state.files = hub.build(renamed, { baseDir: logoDir }).files;
+      await p.goto(O + '/claudia-2/klien/?x=1#y', { waitUntil: 'domcontentloaded' });
+      await p.waitForURL('**/dua/klien/**', { timeout: 8000 }).catch(() => {});
+      check(p.url() === O + '/dua/klien/?x=1#y', 'link lama /claudia-2/klien/?x=1#y mendarat di /dua/klien/?x=1#y (' + p.url() + ')');
+      await p.waitForFunction(() => window.publicLoggedMember && window.publicLoggedMember.name, null, { timeout: 10000 }).catch(() => {});
+      check((await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name)) === 'Bima', 'token yang disimpan sebelum ganti slug tetap terbaca: klien tetap masuk');
+      const keys = await p.evaluate(() => Object.keys(localStorage));
+      check(keys.length > 0 && keys.every(k => k.startsWith('claudia-2:')), 'kunci penyimpanan tetap berawalan claudia-2: ' + keys.slice(0, 3).join(', '));
+      check((await p.title()).includes('Claudia Dua'), 'alamat baru tetap halaman coach yang sama');
+      await p.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL.includes('/dua/klien/'), null, { timeout: 10000 }).catch(() => {});
+      // Worker lama di /claudia-2/klien/ diperbarui jadi worker pengganti.
+      await p.evaluate(() => navigator.serviceWorker.getRegistration('/claudia-2/klien/').then(r => r && r.update()).catch(() => {}));
+      await p.waitForTimeout(1500);
+      for (const [from, to] of [['/claudia-2/', '/dua/'], ['/claudia-2/info/', '/dua/info/']]) {
+        const q = await open(context, O + from, errors);
+        await q.waitForURL('**' + to, { timeout: 8000 }).catch(() => {});
+        check(q.url() === O + to, from + ' → ' + to + ' (' + q.url() + ')');
+        await q.close();
+      }
+      const home = await open(context, O + '/', errors);
+      await home.waitForURL('**/dua/klien/', { timeout: 5000 }).catch(() => {});
+      check(home.url() === O + '/dua/klien/', 'xnk.web.id dengan login berawalan lama langsung ke /dua/klien/ (' + home.url() + ')');
+      await home.close();
+      context.__down = true;
+      await context.setOffline(true);
+      await p.goto(O + '/claudia-2/klien/', { waitUntil: 'domcontentloaded' }).catch(() => {});
+      await p.waitForTimeout(2500);
+      check(p.url().startsWith(O + '/dua/klien/') && (await p.evaluate(() => window.publicLoggedMember && window.publicLoggedMember.name).catch(() => '')) === 'Bima', 'tanpa sinyal: link lama dialihkan worker pengganti, portal terbuka dari salinan (' + p.url() + ')');
+      await context.setOffline(false);
+      check(errors.length === 0, 'tanpa error JavaScript / CSP' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close();
     }
   } finally {

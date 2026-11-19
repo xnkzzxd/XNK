@@ -6,6 +6,7 @@
 //   /index.html, /404.html, /img/    landing XNK (hub-site/; gambar dari tools/hub-shots.js)
 //   /<slug>/                         panel coach (PIN)
 //   /<slug>/klien/                   portal klien
+//   /<alias>/, /<alias>/klien/, /<alias>/info/   T-2243: slug lama coach yang ganti nama → halaman pengalih ke slug baru
 // Setiap coach memakai halaman yang sama dengan xnk.my.id (build-tenant.js → build-static.js produksi), memanggil
 // /exec miliknya sendiri. Karena semua coach satu domain, setiap halaman diberi awalan penyimpanan per slug
 // (hub-site/storage-prefix.js, inline) dan service worker diberi awalan cache yang tidak bisa saling menghapus.
@@ -21,6 +22,8 @@ const SITE = path.join(HERE, 'hub-site');
 const RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
   'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
+// T-2243: nama secret clasp coach (CLASP_<SLUG>); disimpan di hub.json saat slug diganti supaya secret lama tetap dipakai.
+const SECRET_RE = /^CLASP_[A-Z0-9_]{3,40}$/;
 const HUB_ORIGIN = 'https://xnk.web.id';
 // T-2242: warna aksen coach = tujuh pilihan portal Fase X (pt-scheduler/parts/theme/05-portal-x.part; 'hitam' = tanpa).
 // Nilai disalin dari sana (dicek tests/hub.test.js): [terang --accent, --on-accent, gelap --accent, --on-accent, --accent-on-ink].
@@ -133,8 +136,38 @@ function readHub(cfg, opts) {
     if (accent && accent !== 'hitam') out.accent = accent;
     const logo = String(c.logo == null ? '' : c.logo).trim();
     if (logo) { out.logo = logo; out.logoFile = readLogo(logo, baseDir, slug); }
+    // T-2243: slug lama (alamat yang masih dialihkan), awalan penyimpanan (tetap saat slug diganti) dan secret clasp.
+    if (c.aliases != null && !Array.isArray(c.aliases)) throw new Error(`hub.json, "${slug}": aliases harus berupa daftar slug lama.`);
+    const aliases = (c.aliases || []).map(a => String(a == null ? '' : a).trim());
+    for (const a of aliases) {
+      const e = slugError(a);
+      if (e) throw new Error(`hub.json, "${slug}": alamat lama ${e.charAt(0).toLowerCase() + e.slice(1)}`);
+      if (a === slug) throw new Error(`hub.json, "${slug}": alamat lama tidak boleh sama dengan slug-nya sendiri.`);
+    }
+    if (aliases.length) out.aliases = aliases;
+    const store = c.storageSlug == null || c.storageSlug === '' ? slug : String(c.storageSlug).trim();
+    if (!SLUG_RE.test(store) || /--/.test(store)) throw new Error(`hub.json, "${slug}": storageSlug "${store}" tidak valid.`);
+    out.storageSlug = store;
+    if (c.secret != null && c.secret !== '') {
+      if (!SECRET_RE.test(String(c.secret))) throw new Error(`hub.json, "${slug}": secret harus nama secret repo hub berbentuk CLASP_NAMA (huruf besar, angka, garis bawah).`);
+      out.secret = String(c.secret);
+    }
     return out;
   });
+  // Satu nama di alamat hanya untuk satu tujuan: slug dan alamat lama semua coach tidak boleh bertabrakan.
+  const owner = {};
+  for (const c of coaches) {
+    for (const n of [c.slug].concat(c.aliases || [])) {
+      if (owner[n] != null) throw new Error(`hub.json: "${n}" dipakai dua kali (${owner[n] === c.slug ? 'coach "' + c.slug + '"' : 'coach "' + owner[n] + '" dan "' + c.slug + '"'}); slug dan alamat lama harus unik.`);
+      owner[n] = c.slug;
+    }
+  }
+  // Awalan penyimpanan dua coach tidak boleh sama: login dan salinan offline mereka akan bercampur.
+  const stores = {};
+  for (const c of coaches) {
+    if (stores[c.storageSlug]) throw new Error(`hub.json: storageSlug "${c.storageSlug}" dipakai "${stores[c.storageSlug]}" dan "${c.slug}"; login klien kedua coach akan bercampur.`);
+    stores[c.storageSlug] = c.slug;
+  }
   const execs = coaches.map(c => c.exec);
   const dup = execs.find((e, i) => execs.indexOf(e) !== i);
   if (dup) throw new Error('hub.json: dua coach memakai link /exec yang sama; setiap coach harus punya spreadsheet sendiri.');
@@ -143,6 +176,34 @@ function readHub(cfg, opts) {
 }
 
 const VAPID_RE = /^B[A-Za-z0-9_-]{86}$/;
+
+/**
+ * T-2243: berkas untuk alamat lama coach yang ganti slug. Untuk setiap alias: halaman pengalih (CSP ketat, noindex,
+ * location.replace dengan ?query dan #hash, cadangan <meta refresh>) di /<alias>/, /<alias>/klien/ dan /<alias>/info/,
+ * worker pengganti (hub-site/alias-sw.js) di alamat worker lama, dan lib-latest.json (SITE_URL lama tetap terbaca).
+ */
+function aliasFiles(c, latestJson) {
+  const out = {};
+  const tpl = fs.readFileSync(path.join(SITE, 'alias-sw.js'), 'utf8');
+  const icon = c.logoFile ? `/${c.slug}/logo.${c.logoFile.ext}` : '/img/icon-192.png';
+  for (const a of c.aliases || []) {
+    for (const sub of ['', 'klien/', 'info/']) {
+      const to = `/${c.slug}/${sub}`;
+      out[`${a}/${sub}index.html`] = cspStatic(['<!doctype html>', '<html lang="id">', '<head>',
+        '<meta charset="utf-8">', '<meta name="viewport" content="width=device-width, initial-scale=1">', '<meta name="robots" content="noindex">',
+        `<meta http-equiv="refresh" content="1; url=${esc(to)}">`, `<link rel="canonical" href="${esc(HUB_ORIGIN + to)}">`, `<title>${esc(c.brand)}</title>`,
+        `<script>location.replace(${JSON.stringify(to)} + location.search + location.hash);</script>`,
+        '<style>body{font:16px/1.5 system-ui,sans-serif;margin:0;padding:48px 16px;text-align:center;color:#0b0b0b;background:#fafaf9}a{color:inherit}@media (prefers-color-scheme:dark){body{color:#f5f5f4;background:#0b0b0b}}</style>',
+        '</head>', '<body>', `<p>Alamat ini sudah pindah ke <a href="${esc(to)}">xnk.web.id${esc(to)}</a>.</p>`, '</body>', '</html>', ''].join('\n'));
+      if (sub === 'info/') continue;
+      const sw = tpl.split('__TO__').join(JSON.stringify(to)).split('__ICON__').join(JSON.stringify(icon));
+      if (/__[A-Z]+__/.test(sw.replace(/\/\*[\s\S]*?\*\//, ''))) throw new Error('build-hub: penanda tersisa di alias-sw.js');
+      out[`${a}/${sub}sw-app.js`] = sw;
+    }
+    if (latestJson) out[`${a}/lib-latest.json`] = latestJson;
+  }
+  return out;
+}
 
 /**
  * T-2240: Web Push di halaman coach (kode versi mana pun). Push.gs mengirim url '/', yang di hub berarti halaman depan
@@ -304,7 +365,7 @@ function infoPage(c) {
   const cfg = { exec: c.exec, slug: c.slug, brand: c.brand, klien: `/${c.slug}/klien/` };
   const swaps = {
     '__ACCENT_ATTR__': c.accent ? ` data-accent="${c.accent}"` : '',
-    '__THEME_KEY__': JSON.stringify(c.slug + ':xnk_theme'),
+    '__THEME_KEY__': JSON.stringify(c.storageSlug + ':xnk_theme'),
     '__TITLE__': esc(c.brand + ' · Personal trainer'),
     '__DESC__': esc(desc), '__URL__': esc(url), '__BRAND__': esc(c.brand), '__KLIEN__': esc(cfg.klien),
     '<!--OGIMAGE-->': logo ? `<meta property="og:image" content="${esc(HUB_ORIGIN + logo)}">` : '',
@@ -345,8 +406,9 @@ function build(cfg, opts) {
       sub[c.slug + '/' + n] = body;
     }
     localLibs(sub, c.slug + '/');
-    isolate(sub, c.slug + '/', c.slug, 'panel', brandSig(c));
-    isolate(sub, c.slug + '/klien/', c.slug, 'klien', brandSig(c));
+    // T-2243: awalan penyimpanan dan cache = storageSlug (slug pertama coach), supaya ganti slug tidak mengeluarkan siapa pun.
+    isolate(sub, c.slug + '/', c.storageSlug, 'panel', brandSig(c));
+    isolate(sub, c.slug + '/klien/', c.storageSlug, 'klien', brandSig(c));
     brandPage(sub, c.slug + '/', c, 'panel');
     brandPage(sub, c.slug + '/klien/', c, 'klien');
     pushPage(sub, c.slug + '/', c);
@@ -360,7 +422,11 @@ function build(cfg, opts) {
     Object.assign(files, libFiles());
     if (!latest) latest = require('./build-lib').build().hash;
     // SITE_URL coach = xnk.web.id/<slug>; healthCheck membaca SITE_URL/lib-latest.json untuk tahu ada versi baru.
-    for (const c of hub.coaches) files[c.slug + '/lib-latest.json'] = JSON.stringify({ library: { hash: latest } }) + '\n';
+    const latestJson = JSON.stringify({ library: { hash: latest } }) + '\n';
+    for (const c of hub.coaches) {
+      files[c.slug + '/lib-latest.json'] = latestJson;
+      Object.assign(files, aliasFiles(c, latestJson));
+    }
   }
   // Commit tiap coach yang terakhir dibangun: build berikutnya memakainya bila server coach tidak menjawab.
   files['_hub/versions.json'] = JSON.stringify(built, null, 1) + '\n';
@@ -384,6 +450,14 @@ function build(cfg, opts) {
   } else {
     landing = landing.replace(sec, '').split('<a href="#coach">Coach</a>').join('').replace('Bisa juga dicari di daftar coach di atas, atau tanyakan', 'Bisa juga ditanyakan');
   }
+  // T-2243: login yang tersimpan di awalan lama (storageSlug) membuka slug baru langsung, tanpa lewat halaman pengalih.
+  if (!landing.includes('/*SLUGMAP*/{}')) throw new Error('build-hub: /*SLUGMAP*/{} tidak ada di hub-site/index.html');
+  const slugMap = {};
+  for (const c of hub.coaches) {
+    if (c.storageSlug !== c.slug) slugMap[c.storageSlug] = c.slug;
+    for (const a of c.aliases || []) if (!slugMap[a]) slugMap[a] = c.slug;
+  }
+  landing = landing.split('/*SLUGMAP*/{}').join(JSON.stringify(slugMap));
   if (!landing.includes('/*ACCENTS*/')) throw new Error('build-hub: /*ACCENTS*/ tidak ada di hub-site/index.html');
   landing = landing.replace('/*ACCENTS*/', Object.entries(ACCENTS).map(([k, v]) =>
     `.coach .av.acc-${k} { background: ${v[0]}; color: ${v[1]}; } @media (prefers-color-scheme: dark) { .coach .av.acc-${k} { background: ${v[2]}; color: ${v[3]}; } }`).join('\n  '));
@@ -422,7 +496,7 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, slugError, readLogo, imageKind, imageSize, RESERVED, SLUG_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage };
+module.exports = { build, write, readHub, slugError, readLogo, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

@@ -9,6 +9,12 @@
 var LIB_BASE_SHEETS = ['Coaches', 'MemberData', 'Members', 'Schedules', 'PriceList'];
 /** Trigger yang dipasang setup. runReminderTick tidak mengirim apa pun sampai pengingat dinyalakan di Pengaturan. */
 var LIB_TRIGGERS = ['runReminderTick'];
+/**
+ * T-2243: trigger yang hanya dipasang selama fiturnya dinyalakan pemilik (Script Property = 'true'; mati bawaan, aturan 5).
+ * runWarmTick: Pengaturan → Tampilan → "Siapkan data di latar" (updateAppSettings memasang/melepasnya); "Pasang ulang
+ * trigger" dan "Cek kesehatan" mengikuti sakelar itu.
+ */
+var LIB_TRIGGERS_OPT = { runWarmTick: 'WARM_ENABLED' };
 // Situs coach (GitHub Pages, dibangun dari kode XNK terbaru) menerbitkan lib-latest.json berisi sidik Library terbaru.
 var LIB_LATEST_FILE = 'lib-latest.json';
 
@@ -89,6 +95,13 @@ function healthCheck(ctx, opts) {
       var c = handlers.filter(function (h) { return h === n; }).length;
       triggers[n] = c;
       if (c === 0) problems.push('Trigger ' + n + ' belum terpasang.');
+      if (c > 1) problems.push('Trigger ' + n + ' terpasang ' + c + ' kali.');
+    });
+    Object.keys(LIB_TRIGGERS_OPT).forEach(function (n) {
+      var c = handlers.filter(function (h) { return h === n; }).length;
+      triggers[n] = c;
+      if (!_libOptOn_(n)) return;
+      if (c === 0) problems.push('Trigger ' + n + ' belum terpasang padahal fiturnya menyala. Jalankan Pasang ulang trigger.');
       if (c > 1) problems.push('Trigger ' + n + ' terpasang ' + c + ' kali.');
     });
     var update = null;
@@ -210,8 +223,11 @@ function registerPusat(ctx, data) {
 function installTriggers(ctx) {
   return _withCtx_(ctx, function () {
     requireOwner_();
-    var removed = _installReminderTrigger_();
-    return { installed: LIB_TRIGGERS.slice(), removedDuplicates: removed };
+    var removed = _installReminderTrigger_(), installed = LIB_TRIGGERS.slice();
+    // Trigger opsional: dipasang ulang (tanpa duplikat) bila sakelarnya menyala, dilepas bila mati.
+    if (_libOptOn_('runWarmTick')) { removed += _installWarmTrigger_(); installed.push('runWarmTick'); }
+    else _removeWarmTrigger_();
+    return { installed: installed, removedDuplicates: removed };
   });
 }
 
@@ -271,6 +287,11 @@ function setupState(ctx) {
       version: getLibraryVersion(),
     };
   });
+}
+
+/** Sakelar trigger opsional (LIB_TRIGGERS_OPT) menyala di spreadsheet pemanggil? */
+function _libOptOn_(name) {
+  return String(_props_().getProperty(LIB_TRIGGERS_OPT[name]) || '').trim().toLowerCase() === 'true';
 }
 
 // ── pembantu ────────────────────────────────────────────────────────────────────────────────────────────

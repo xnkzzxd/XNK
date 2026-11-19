@@ -66,7 +66,7 @@ Gelombang 3 — fitur
 - [x] T-2240 Web Push di hub: satu kunci VAPID (secret repo hub), XNK Pusat membagikan kunci publik + daftar coach menyala (`hubPushKey`, `pusatPushTargets`), workflow Push XNK mengirim langsung ke tiap coach.
 - [x] T-2241 Halaman publik coach `/<slug>/info/` (profil, paket, jam kosong, daftar).
 - [x] T-2242 Logo + warna aksen per coach di `hub.json`.
-- [ ] T-2243 Alias slug lama (redirect); `runWarmTick` opsional.
+- [x] T-2243 Alias slug lama (redirect); `runWarmTick` opsional. Ganti slug lewat `/adminxnk` (`pusatRename`) atau Hub XNK aksi `ganti-slug`: `aliases` (halaman pengalih + worker pengganti `hub-site/alias-sw.js` yang meneruskan push), `storageSlug` (login dan offline tetap), `secret` (secret clasp lama), `hubSiteUrl` di coach ([Hub.md](Hub.md#ganti-slug-coach-t-2243)). Library: "Pasang ulang trigger" dan Cek kesehatan mengikuti sakelar "Siapkan data di latar" (`LIB_TRIGGERS_OPT`).
 
 Gelombang 4 — operasional
 - [x] T-2250 Backup mingguan tiap coach ke Drive akun pemilik (lewat XNK Pusat), 8 minggu.

@@ -155,7 +155,8 @@
       }
       html += '<div class="acts">' + (c.missing ? '' : '<button class="btn ghost" type="button" data-act="cek" data-slug="' + esc(s) + '">Cek ulang</button>' +
         '<button class="btn ghost" type="button" data-act="backup" data-slug="' + esc(s) + '">Backup sekarang</button>' +
-        '<button class="btn ghost" type="button" data-act="' + ((c.push || {}).on ? 'push-off' : 'push-on') + '" data-slug="' + esc(s) + '">' + ((c.push || {}).on ? 'Matikan push' : 'Nyalakan push') + '</button>') +
+        '<button class="btn ghost" type="button" data-act="' + ((c.push || {}).on ? 'push-off' : 'push-on') + '" data-slug="' + esc(s) + '">' + ((c.push || {}).on ? 'Matikan push' : 'Nyalakan push') + '</button>' +
+        '<button class="btn ghost" type="button" data-act="ganti-slug" data-slug="' + esc(s) + '">Ganti slug</button>') +
         '<button class="btn ghost" type="button" data-act="perbarui" data-slug="' + esc(s) + '">Perbarui</button>' +
         '<button class="btn ghost" type="button" data-act="hubungkan" data-slug="' + esc(s) + '">Hubungkan</button></div></article>';
     });
@@ -208,6 +209,24 @@
     if (act === 'push-on' || act === 'push-off') {
       if (!window.confirm((act === 'push-on' ? 'Nyalakan' : 'Matikan') + ' notifikasi push untuk ' + slug + '?')) return;
       return load('pusatAction', [tok(), act, slug], 'Mengirim ke ' + slug + '…');
+    }
+    if (act === 'ganti-slug') {
+      // T-2243: alamat lama tetap mengarah ke yang baru; klien dan coach tetap masuk (docs/library/Hub.md).
+      var to = window.prompt('Nama baru di alamat untuk ' + slug + ' (xnk.web.id/…). Huruf kecil, angka, tanda hubung. Alamat lama tetap mengarah ke yang baru.', '');
+      if (to == null) return;
+      to = String(to).trim().toLowerCase().replace(/^xnk\.web\.id\//, '').replace(/^\/+|\/+$/g, '');
+      if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(to) || to.indexOf('--') !== -1) return say('dm', 'Nama baru tidak valid: huruf kecil, angka dan tanda hubung, 3 sampai 30 karakter.', 'bad');
+      if (!window.confirm('Ganti xnk.web.id/' + slug + '/ menjadi xnk.web.id/' + to + '/?\n\nLink lama tetap jalan dan mengarah ke alamat baru. Klien dan coach tidak perlu masuk ulang.')) return;
+      say('dm', 'Mengganti ' + slug + ' → ' + to + '…');
+      return rpc('pusatRename', [tok(), slug, to]).then(function (r) {
+        var notes = [];
+        if (r.site !== 'ok') notes.push('Alamat situs coach: ' + r.site);
+        if (r.folder !== 'ok') notes.push('Folder backup: ' + r.folder);
+        if (r.hub !== 'ok') notes.push('Situs: ' + r.hub);
+        return load('pusatOverview', [tok()]).then(function () {
+          say('dm', 'Selesai di XNK Pusat: ' + r.from + ' → ' + r.slug + '. ' + (r.hub === 'ok' ? 'Situs dibangun ulang di GitHub Actions (±2 menit); sampai itu selesai kartu "' + r.from + '" tampil belum terdaftar. ' : '') + notes.join(' '), notes.length ? 'bad' : 'ok');
+        });
+      }, function (e) { say('dm', e.message, 'bad'); });
     }
     var label = act === 'bangun' ? 'membangun ulang situs' : act + ' ' + (slug || 'semua coach');
     if (!window.confirm('Jalankan ' + label + ' sekarang?')) return;

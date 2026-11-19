@@ -4,6 +4,8 @@ name: Hub XNK
 #  - Run workflow → aksi "simpan" (tambah atau ubah coach: slug, nama usaha, link /exec, warna, logo) atau "hapus" (slug saja).
 #    Coach yang sudah ada: nama usaha dan link boleh kosong (tetap), jadi mengganti warna/logo cukup slug + isian itu.
 #    Isian diperiksa penuh; bila ada yang salah, workflow berhenti dengan pesan Indonesia dan situs lama tetap tayang.
+#  - Run workflow → aksi "ganti-slug": slug = nama sekarang, slug_baru = nama baru (T-2243). Alamat lama tetap mengarah
+#    ke yang baru; klien dan coach tetap masuk. Lebih mudah lewat xnk.web.id/adminxnk → Ganti slug (sekalian XNK Pusat).
 #  - Run workflow → aksi "bangun": bangun ulang tanpa mengubah daftar.
 #  - Mengubah hub.json langsung di GitHub juga membangun ulang.
 #  - Setiap hari jam 03:17 WIB: dibangun ulang. Halaman tiap coach mengikuti versi Library di spreadsheet coach itu
@@ -13,12 +15,15 @@ on:
   workflow_dispatch:
     inputs:
       aksi:
-        description: 'simpan = tambah/ubah coach · hapus = hapus coach · bangun = bangun ulang saja'
+        description: 'simpan = tambah/ubah coach · hapus = hapus coach · ganti-slug = ganti nama di alamat · bangun = bangun ulang saja'
         type: choice
-        options: [bangun, simpan, hapus]
+        options: [bangun, simpan, hapus, ganti-slug]
         default: bangun
       slug:
         description: 'Nama di alamat (mis. claudia): huruf kecil, angka, tanda hubung, 3-30 karakter'
+        required: false
+      slug_baru:
+        description: 'Nama baru di alamat, hanya untuk "ganti-slug" (alamat lama tetap mengarah ke sini)'
         required: false
       brand:
         description: 'Nama usaha (mis. Claudia Fit), hanya untuk "simpan"'
@@ -87,12 +92,17 @@ jobs:
           IN_EXEC: ${{ inputs.exec }}
           IN_WARNA: ${{ inputs.warna }}
           IN_LOGO: ${{ inputs.logo }}
+          IN_SLUG_BARU: ${{ inputs.slug_baru }}
         run: |
-          node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json "$IN_AKSI" "$IN_SLUG" "$IN_BRAND" "$IN_EXEC" --warna "$IN_WARNA" --logo "$IN_LOGO"
+          if [ "$IN_AKSI" = "ganti-slug" ]; then
+            node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json ganti-slug "$IN_SLUG" "$IN_SLUG_BARU"
+          else
+            node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json "$IN_AKSI" "$IN_SLUG" "$IN_BRAND" "$IN_EXEC" --warna "$IN_WARNA" --logo "$IN_LOGO"
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add hub.json
-          git commit -m "Hub: $IN_AKSI $IN_SLUG"
+          git commit -m "Hub: $IN_AKSI $IN_SLUG${IN_SLUG_BARU:+ → $IN_SLUG_BARU}"
           git push
 
       # Halaman tiap coach dibangun dari commit XNK yang sama dengan Library di spreadsheet coach itu, supaya halaman

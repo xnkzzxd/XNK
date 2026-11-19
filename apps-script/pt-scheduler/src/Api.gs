@@ -4,7 +4,7 @@
 // (requireOwner_) functions, trigger handlers, doGet/doPost/include and helpers are not in it.
 function _apiTable_() {
   return {
-    // public: no token (21)
+    // public: no token (22)
     adminLogin: adminLogin,
     memberLoginByPhone: memberLoginByPhone,
     memberLoginByKey: memberLoginByKey,
@@ -26,6 +26,7 @@ function _apiTable_() {
     hubStatus: hubStatus,
     hubExport: hubExport,
     hubPushKey: hubPushKey,
+    hubSiteUrl: hubSiteUrl,
     // admin: admin token (130)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,

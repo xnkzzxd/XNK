@@ -128,12 +128,64 @@ Satu kunci VAPID untuk seluruh hub (satu origin): `hub.json` `vapidPublic` (dipe
 
 `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`, tanpa `--`; kata sistem dicadangkan (`admin`, `api`, `app`, `klien`, `demo`,
 `l`, `login`, `daftar`, `masuk`, `assets`, `static`, `www`, `xnk`, `hub`, `index`, `404`, `coach`, …, daftar di
-`build-hub.js` `RESERVED`). Slug tidak diganti setelah dipakai (link klien putus).
+`build-hub.js` `RESERVED`). Slug boleh diganti tanpa memutus link lama: lihat bagian berikut (T-2243).
+
+## Ganti slug coach (T-2243)
+
+Link `xnk.web.id/<lama>/…` yang sudah dibagikan ke klien (WhatsApp, kode QR, bio Instagram) **tetap jalan** dan
+mengarah ke alamat baru. Klien dan coach **tidak perlu masuk ulang**, catatan offline dan antrean di HP tetap ada.
+Coach lain tidak terpengaruh.
+
+### Langkah untuk pemilik (paling mudah)
+
+1. Buka `xnk.web.id/adminxnk` dan masuk dengan PIN.
+2. Di kartu coach itu tekan **Ganti slug**, ketik nama baru (huruf kecil, angka, tanda hubung, 3 sampai 30 karakter),
+   lalu **OK** dan konfirmasi.
+3. XNK Pusat mengerjakan semuanya: pendaftaran, status, backup dan push pindah ke nama baru; folder Drive
+   `XNK Backup/<lama>` berganti nama jadi `XNK Backup/<baru>` (salinan lama tetap di dalamnya); coach menerima alamat
+   situs baru (`SITE_URL`, dipakai link WhatsApp, kode QR kartu dan Cek kesehatan); workflow **Hub XNK** dijalankan
+   dengan aksi `ganti-slug`.
+4. Tunggu ±2 menit sampai situs dibangun ulang. Selama itu kartu nama lama di `/adminxnk` tampil "belum terdaftar";
+   tekan **Cek ulang** sesudahnya.
+5. Beri tahu coach alamat barunya. Coach yang memasang panel di Layar Utama HP sebaiknya memasang ulang dari alamat baru
+   (yang lama tetap terbuka, hanya dengan bilah alamat).
+
+Bila XNK Pusat tidak punya `GITHUB_TOKEN`, langkah 3 berhenti sebelum workflow; pesannya menyuruh menjalankan
+**repo hub → Actions → Hub XNK → Run workflow**, aksi `ganti-slug`, *slug* = nama lama, *slug_baru* = nama baru.
+Bila coach memakai Library lama (tanpa `hubSiteUrl`), alamat baru dikirim lagi setiap pagi sampai diterima (perbarui
+coach dulu: **Coach XNK → perbarui**). Workflow itu juga bisa dijalankan sendiri lebih dulu; XNK Pusat lalu tidak
+menjalankannya dua kali.
+
+Kembali ke nama lama boleh (Ganti slug lagi ke nama itu). Nama lama tidak bisa dipakai coach lain selama tercatat
+sebagai alamat lama.
+
+### Cara kerjanya
+
+- `hub.json` coach mendapat tiga isian, ditulis `tools/hub-edit.js ganti-slug <lama> <baru>`:
+  `"aliases": ["<lama>"]` (alamat yang dialihkan), `"storageSlug": "<lama>"` (awalan penyimpanan, selalu slug
+  pertama coach), `"secret": "CLASP_<LAMA>"` (secret clasp yang sudah ada; job *plan* `coach.yml` dan `coach-ops.js`
+  memakainya, jadi secret tidak perlu dibuat ulang). `readHub` menolak alias yang tidak valid, kata sistem, atau nama
+  yang sudah dipakai slug/alias coach mana pun, dan dua coach dengan `storageSlug` sama. `simpan` (warna, logo, link
+  /exec baru) tidak membuang isian itu.
+- `build-hub.js` (pasca-proses; `build-tenant.js` dan build versi lama tidak berubah): awalan `localStorage` dan cache
+  service worker memakai `storageSlug`, halaman tetap di `/<baru>/`. Untuk setiap alias:
+  `/<lama>/`, `/<lama>/klien/`, `/<lama>/info/` = halaman pengalih kecil (CSP ketat bersidik, `noindex`,
+  `location.replace` ke alamat baru dengan `?query` dan `#hash`, `<meta refresh>` sebagai cadangan), dan
+  `/<lama>/lib-latest.json`.
+- **Worker pengganti** (`hub-site/alias-sw.js`) di `/<lama>/sw-app.js` dan `/<lama>/klien/sw-app.js`: HP yang pernah
+  membuka alamat lama memeriksa berkas itu dan memasangnya. Ia membuka halaman dari jaringan (halaman pengalih), tanpa
+  sinyal langsung mengalihkan ke alamat baru (yang punya salinan offline sendiri), dan **meneruskan notifikasi push**:
+  langganan push terikat ke cakupan lama, jadi push yang masih dikirim ke langganan itu tampil di sini dan ketukannya
+  membuka alamat baru. Push memakai tag = jenis, jadi bila HP juga berlangganan di alamat baru, notifikasi yang sama
+  menggantikan yang lain (tidak dobel). Cache tidak disentuh.
+- Halaman depan: login yang tersimpan dengan awalan lama (`<lama>:xnk_admin_token`) langsung membuka `/<baru>/`
+  (peta `MAP` disisipkan saat build).
+- `hub-verify.js` memeriksa halaman pengalih, worker pengganti dan awalan `storageSlug` sebelum tayang;
+  `hub-check.js` menguji ganti slug di situs yang sedang tayang (link lama `?x=1#y`, login lama, tanpa sinyal).
 
 ## Batas dan keputusan terbuka
 
 - Satu `/exec` hanya boleh milik satu coach (build menolak link ganda).
 - Pustaka gerakan/makanan/peta otot disajikan dari `xnk.web.id/_lib/` sejak T-2222 (tidak lagi bergantung pada xnk.my.id). GIF gerakan tetap dari GitHub (dataset asli).
 - Setiap coach membawa salinan halaman sendiri (±1 MB); ratusan coach masih jauh di bawah batas GitHub Pages. Bila perlu, berkas berhash yang sama bisa dipakai bersama.
-- Push ke HP belum ada di hub.
 - Direktori "cari coach" ditunda (butuh persetujuan tiap coach dan moderasi).
