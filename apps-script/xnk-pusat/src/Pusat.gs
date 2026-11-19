@@ -16,7 +16,8 @@
 // Disimpan sendiri: SESSION_SECRET, COACHES (JSON slug → {exec, secret, at}), ST_<slug> (status terakhir), LATEST_LIB,
 //   BKST_<slug> (backup terakhir), BKNOW_<slug> (backup sekarang), BK_CUR (backup yang sedang berjalan), BK_DIRS (ID
 //   folder Drive), BK_RUN (tanda backup sedang berjalan), PUSH_<slug> (push coach: menyala?, rahasia relay, T-2240),
-//   SITEQ_<slug> (alamat situs baru yang belum diterima coach setelah ganti slug, dicoba lagi tiap pagi, T-2243).
+//   SITEQ_<slug> (alamat situs baru yang belum diterima coach setelah ganti slug, dicoba lagi tiap pagi, T-2243),
+//   SUB_<slug> (langganan: paket, harga, jatuh tempo, email coach, baca saja, riwayat bayar; tanpa = gratis, T-2251).
 
 var PUSAT_SESSION_MS = 12 * 3600 * 1000;
 var PUSAT_TICK_LATE_MS = 3 * 3600 * 1000;      // pengingat menyala tapi tick terakhir lebih lama dari ini = masalah
@@ -48,7 +49,7 @@ function hubUrl_() { return prop_('HUB_URL', 'https://xnk.web.id').replace(/\/+$
 
 // ── Pintu JSON untuk /adminxnk dan wizard coach ──────────────────────────────────────────────────────────────
 
-var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSetPlace: pusatSetPlace };
+var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSubSave: pusatSubSave, pusatSetPlace: pusatSetPlace };
 
 function doPost(e) {
   var out;
@@ -318,6 +319,13 @@ function runPusatDaily() {
     res[s].problems.push('Notifikasi push: ' + push[s].error);
     res[s].ok = false;
   });
+  // T-2251: pengingat langganan, keadaan baca saja ke coach, masa tenggang / baca saja masuk email pemilik.
+  var sub = subDaily_();
+  Object.keys(sub).forEach(function (s) {
+    if (!res[s]) res[s] = { ok: true, problems: [] };
+    res[s].problems = res[s].problems.concat(sub[s]);
+    res[s].ok = false;
+  });
   Object.keys(all).forEach(function (s) {
     var b = json_('BKST_' + s, null);
     if (!b || !(b.fails >= 2)) return;
@@ -349,7 +357,7 @@ function pusatOverview(token) {
     // T-2258: tempat latihan tiap coach di hub.json (juga yang belum terdaftar di sini), slug → {name, city} | null.
     places: hubCoaches.reduce(function (m, x) { if (x && PUSAT_SLUG_RE.test(String(x.slug))) m[x.slug] = hubPlace_(x.slug, hubCoaches); return m; }, {}),
     coaches: Object.keys(all).sort().map(function (slug) {
-      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), backup: backupView_(slug), push: pushView_(slug) };
+      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), backup: backupView_(slug), push: pushView_(slug), sub: subView_(slug) };
     }),
     setup: setupState_(),
   };
@@ -369,6 +377,12 @@ function pusatAction(token, action, slug) {
   if (action === 'backup') return backupNow_(String(slug || ''));
   if (action === 'setup') return { ticket: setupTicket_() };   // /adminxnk membuka <pusatUrl>?setup=<ticket> di tab baru
   if (action === 'push-on' || action === 'push-off') { pushSet_(String(slug || ''), action === 'push-on'); return pusatOverview(token); }
+  if (/^sub-/.test(String(action))) {   // T-2251: langganan (tanpa GitHub)
+    var subErr = subAction_(String(action), String(slug || ''));
+    var ov = pusatOverview(token);
+    if (subErr) ov.notice = subErr;
+    return ov;
+  }
   var t = prop_('GITHUB_TOKEN');
   if (!t) throw new Error('Token GitHub belum diatur di XNK Pusat (Script Property GITHUB_TOKEN).');
   slug = String(slug || '');
@@ -684,7 +698,7 @@ function pusatPushTargets(pushSecret) {
 
 var PUSAT_RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
   'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
-var PUSAT_SLUG_KEYS = ['ST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_'];
+var PUSAT_SLUG_KEYS = ['ST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_', 'SUB_'];
 
 /** Kirim SITEQ_<slug> (alamat situs baru) ke coach; berhasil = antrean dihapus. {ok} atau {error}. */
 function siteSync_(slug, c) {
@@ -759,6 +773,196 @@ function pusatRename(token, oldSlug, newSlug) {
     }
   }
   return out;
+}
+
+// ── Langganan bulanan (T-2251) ──────────────────────────────────────────────────────────────────────────────
+// Per coach: paket (gratis | bulanan), harga Rp, jatuh tempo (YYYY-MM-DD, WIB), email coach, riwayat bayar, dan sakelar
+// baca saja (auto | on | off). Disimpan di SUB_<slug>. Coach TANPA baris = gratis = tidak pernah baca saja (bawaan untuk
+// semua coach lama). Bulanan: H-7 dan H-1 email pengingat ke coach (kosong = email pemilik); 7 hari tenggang setelah jatuh
+// tempo, lalu baca saja (situs tidak pernah dihapus). Pemilik bisa menyalakan/mematikan baca saja kapan saja (on/off
+// menimpa hitungan otomatis; "Tandai lunas" memajukan jatuh tempo satu bulan dan kembali ke otomatis).
+// Keadaan dikirim ke coach lewat hubReadonly(HUB_SECRET, menyala, catatan) saat berubah dan di cek harian.
+
+var PUSAT_SUB_GRACE_DAYS = 7;
+var PUSAT_SUB_REMIND = [7, 1];          // email pengingat H-7 dan H-1
+var PUSAT_SUB_HISTORY = 24;             // riwayat bayar yang disimpan
+var PUSAT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Tanggal hari ini (WIB) sebagai YYYY-MM-DD. */
+function todayWib_() { return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10); }
+/** Selisih hari b − a (keduanya YYYY-MM-DD). */
+function dayDiff_(a, b) { return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5); }
+/** Tanggal yang sama bulan berikutnya; 31 Jan → 28/29 Feb. */
+function addMonth_(d) {
+  var y = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)), day = Number(d.slice(8, 10));
+  m += 1; if (m > 12) { m = 1; y += 1; }
+  var last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + Math.min(day, last)).slice(-2);
+}
+function validDate_(d) { return PUSAT_DATE_RE.test(String(d || '')) && !isNaN(Date.parse(d + 'T00:00:00Z')) && new Date(d + 'T00:00:00Z').toISOString().slice(0, 10) === d; }
+
+/** Data langganan tersimpan; tanpa baris = gratis. */
+function subState_(slug) {
+  var s = json_('SUB_' + slug, null);
+  if (!s || typeof s !== 'object') s = {};
+  return {
+    plan: s.plan === 'bulanan' ? 'bulanan' : 'gratis',
+    price: Math.max(0, Math.floor(Number(s.price) || 0)),
+    due: validDate_(s.due) ? s.due : '',
+    email: String(s.email || ''),
+    ro: s.ro === 'on' || s.ro === 'off' ? s.ro : 'auto',
+    history: Array.isArray(s.history) ? s.history : [],
+    sent: s.sent && typeof s.sent === 'object' ? s.sent : {},
+    pushed: s.pushed && typeof s.pushed === 'object' ? s.pushed : null,
+  };
+}
+function subSave_(slug, s) { props_().setProperty('SUB_' + slug, JSON.stringify(s)); }
+
+/**
+ * Hitung status (murni). gratis/tanpa jatuh tempo = tidak pernah baca saja kecuali pemilik menyalakannya sendiri.
+ * @return {{state: string, days: ?number, graceLeft: ?number, readonly: boolean, manual: string}}
+ *   state: gratis | aktif | segera (≤ 7 hari) | tenggang (lewat, ≤ 7 hari) | lewat (baca saja otomatis)
+ */
+function subStatus_(s, today) {
+  var out = { state: 'gratis', days: null, graceLeft: null, readonly: false, manual: s.ro };
+  if (s.plan === 'bulanan' && s.due) {
+    var days = dayDiff_(today, s.due);
+    out.days = days;
+    if (days > PUSAT_SUB_REMIND[0]) out.state = 'aktif';
+    else if (days >= 0) out.state = 'segera';
+    else if (-days <= PUSAT_SUB_GRACE_DAYS) { out.state = 'tenggang'; out.graceLeft = PUSAT_SUB_GRACE_DAYS + days; }
+    else { out.state = 'lewat'; out.readonly = true; }
+  } else if (s.plan === 'bulanan') out.state = 'aktif';
+  if (s.ro === 'on') out.readonly = true;
+  if (s.ro === 'off') out.readonly = false;
+  return out;
+}
+
+/** Catatan singkat untuk pita coach (tanpa angka uang). */
+function subNote_(s, st) {
+  if (!st.readonly) return '';
+  if (s.ro === 'on') return 'Dinyalakan oleh pengelola XNK.';
+  return 'Langganan lewat jatuh tempo ' + s.due + '.';
+}
+
+/** Untuk /adminxnk: tanpa rahasia. */
+function subView_(slug) {
+  var s = subState_(slug), st = subStatus_(s, todayWib_());
+  return {
+    plan: s.plan, price: s.price, due: s.due, email: s.email, ro: s.ro,
+    state: st.state, days: st.days, graceLeft: st.graceLeft, readonly: st.readonly,
+    history: s.history.slice(-6),
+    pushed: s.pushed ? { on: !!s.pushed.on, at: s.pushed.at || '', error: s.pushed.error || '' } : null,
+  };
+}
+
+/**
+ * Kirim keadaan baca saja ke coach bila perlu: berubah, galat sebelumnya, atau `force` (cek harian, coach bulanan).
+ * Coach gratis yang belum pernah dikirimi apa pun tidak dihubungi. Mengembalikan state pushed (atau null bila dilewati).
+ */
+function subSync_(slug, c, force) {
+  var s = subState_(slug), st = subStatus_(s, todayWib_()), note = subNote_(s, st), p = s.pushed;
+  var need = !p ? st.readonly : (!!p.on !== st.readonly || (p.note || '') !== note || !!p.error || (force && (s.plan === 'bulanan' || p.on)));
+  if (!need) return null;
+  var out = { on: st.readonly, note: note, at: new Date().toISOString(), error: '' };
+  try {
+    var j = askApps_(hubExec_(slug) || c.exec, { fn: 'hubReadonly', args: [c.secret, st.readonly, note] });
+    if (j && j.code === 'unknown_fn') throw new Error('Library coach belum punya hubReadonly; perbarui coach.');
+    if (!j || !j.ok) throw new Error(j && j.error ? j.error : 'tanpa jawaban');
+    if (!!(j.data && j.data.on) !== st.readonly) throw new Error('Coach menjawab keadaan lain.');
+  } catch (e) {
+    out.error = String(e && e.message ? e.message : e).slice(0, 160);
+  }
+  s = subState_(slug);   // baca lagi: hanya pushed yang diganti
+  s.pushed = out;
+  subSave_(slug, s);
+  return out;
+}
+
+/** Email pengingat H-7 / H-1 (sekali per jatuh tempo per jenis). */
+function subRemind_(slug) {
+  var s = subState_(slug), st = subStatus_(s, todayWib_());
+  if (s.plan !== 'bulanan' || !s.due || st.days == null || st.days < 0) return '';
+  var kind = st.days <= PUSAT_SUB_REMIND[1] ? PUSAT_SUB_REMIND[1] : st.days <= PUSAT_SUB_REMIND[0] ? PUSAT_SUB_REMIND[0] : 0;
+  if (!kind) return '';
+  var key = s.due + '|' + kind;
+  if (s.sent[key]) return '';
+  // H-1 sudah terkirim = H-7 tidak dikirim lagi (mis. jatuh tempo diubah mendadak).
+  if (kind === PUSAT_SUB_REMIND[0] && s.sent[s.due + '|' + PUSAT_SUB_REMIND[1]]) return '';
+  var to = s.email || prop_('PUSAT_EMAIL') || Session.getEffectiveUser().getEmail();
+  var name = String(((hubJson_().coaches || []).filter(function (x) { return x && x.slug === slug; })[0] || {}).name || slug);
+  var when = st.days === 0 ? 'hari ini' : st.days === 1 ? 'besok' : st.days + ' hari lagi';
+  var body = 'Halo ' + name + ',\n\nLangganan XNK Coach untuk ' + hubUrl_() + '/' + slug + '/ jatuh tempo ' + when + ' (' + s.due + ')' +
+    (s.price ? ', sebesar Rp ' + s.price.toLocaleString('id-ID') : '') + '.\n\n' +
+    'Setelah jatuh tempo ada masa tenggang ' + PUSAT_SUB_GRACE_DAYS + ' hari. Bila belum diperpanjang, aplikasi masuk mode baca saja: ' +
+    'semua data tetap aman dan bisa dilihat, tetapi belum bisa diubah. Situs tidak pernah dihapus.\n\nTerima kasih.\nXNK';
+  MailApp.sendEmail(to, 'XNK: langganan ' + name + ' jatuh tempo ' + when, body);
+  s.sent[key] = new Date().toISOString();
+  Object.keys(s.sent).forEach(function (k) { if (!validDate_(k.slice(0, 10)) || dayDiff_(k.slice(0, 10), todayWib_()) > 60) delete s.sent[k]; });
+  subSave_(slug, s);
+  return to;
+}
+
+/** Bagian cek harian: pengingat, kirim keadaan, masalah untuk email pemilik. {slug: [masalah]} */
+function subDaily_() {
+  var all = json_('COACHES', {}), out = {};
+  Object.keys(all).sort().forEach(function (slug) {
+    var probs = [];
+    try { subRemind_(slug); } catch (e) { probs.push('Email pengingat langganan gagal (' + String(e && e.message ? e.message : e).slice(0, 100) + ').'); }
+    var r = subSync_(slug, all[slug], true);
+    if (r && r.error) probs.push('Mode baca saja belum diterima coach: ' + r.error);
+    var st = subStatus_(subState_(slug), todayWib_());
+    if (st.state === 'tenggang') probs.push('Langganan lewat jatuh tempo; masa tenggang ' + st.graceLeft + ' hari lagi.');
+    if (probs.length) out[slug] = probs;
+  });
+  return out;
+}
+
+/**
+ * Simpan pengaturan langganan dari /adminxnk. data: {plan, price, due, email}. Hanya pemilik.
+ * @return {Object} pusatOverview
+ */
+function pusatSubSave(token, slug, data) {
+  requireOwnerToken_(token);
+  slug = String(slug || '');
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  data = data && typeof data === 'object' ? data : {};
+  var plan = data.plan === 'bulanan' ? 'bulanan' : data.plan === 'gratis' ? 'gratis' : null;
+  if (!plan) throw new Error('Pilih paket: gratis atau bulanan.');
+  var price = Number(String(data.price == null ? '' : data.price).replace(/[.\s]/g, '') || 0);
+  if (!isFinite(price) || price < 0 || Math.floor(price) !== price || price > 100000000) throw new Error('Harga harus bilangan bulat Rp.');
+  var due = String(data.due || '').trim();
+  if (due && !validDate_(due)) throw new Error('Tanggal jatuh tempo tidak valid.');
+  if (plan === 'bulanan' && !due) throw new Error('Isi tanggal jatuh tempo untuk paket bulanan.');
+  var email = String(data.email || '').trim();
+  if (email && (email.length > 120 || !/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(email))) throw new Error('Email coach tidak valid.');
+  var s = subState_(slug);
+  s.plan = plan; s.price = price; s.due = due; s.email = email;
+  subSave_(slug, s);
+  subSync_(slug, all[slug], false);
+  return pusatOverview(token);
+}
+
+/** Aksi langganan: sub-paid (lunas = jatuh tempo +1 bulan, kembali otomatis), sub-ro-on / sub-ro-off / sub-ro-auto. */
+function subAction_(action, slug) {
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  var s = subState_(slug);
+  if (action === 'sub-paid') {
+    if (s.plan !== 'bulanan' || !s.due) throw new Error('Atur paket bulanan dan jatuh tempo dulu.');
+    var next = addMonth_(s.due);
+    s.history.push({ at: new Date().toISOString(), due: s.due, next: next, price: s.price });
+    s.history = s.history.slice(-PUSAT_SUB_HISTORY);
+    s.due = next;
+    s.ro = 'auto';
+  } else if (action === 'sub-ro-on') s.ro = 'on';
+  else if (action === 'sub-ro-off') s.ro = 'off';
+  else if (action === 'sub-ro-auto') s.ro = 'auto';
+  else throw new Error('Aksi tidak dikenal.');
+  subSave_(slug, s);
+  var r = subSync_(slug, all[slug], false);
+  return r && r.error ? 'Pilihan disimpan, tetapi coach belum menerimanya: ' + r.error + ' (dicoba lagi besok pagi).' : '';
 }
 
 /** Jalankan workflow Hub XNK (hub.yml) dengan isian itu; hub.json di cache dibuang. Melempar bila GitHub menolak. */

@@ -32,7 +32,8 @@ function run(ctx, name, args) {
   if (typeof name !== 'string' || !Object.prototype.hasOwnProperty.call(table, name)) {
     throw new Error('Fungsi tidak dikenal: ' + name);
   }
-  return _withCtx_(ctx, function () { return table[name].apply(null, args || []); });
+  // T-2251: gerbang baca saja yang sama dengan doPost (halaman google.script.run lewat penghubung).
+  return _withCtx_(ctx, function () { _readonlyGate_(name); return table[name].apply(null, args || []); });
 }
 
 /**

@@ -62,6 +62,7 @@ const XNK_HITS = [], LIB_HITS = [], CSP_HITS = [];
 // XNK Pusat palsu untuk /adminxnk (T-2234): jawaban berbentuk sama dengan apps-script/xnk-pusat/src/Pusat.gs.
 const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSATHUBCHECK00000000000/exec';
 const PUSAT_CALLS = [];
+const PUSAT_SUB = { plan: 'gratis', price: 0, due: '', email: '', ro: 'auto', state: 'gratis', days: null, graceLeft: null, readonly: false, history: [], pushed: null };
 function fakePusat(req) {
   PUSAT_CALLS.push(req.fn);
   if (req.fn === 'pusatLogin') return req.args[0] === 'pin-pusat-1' ? { ok: true, data: { token: 'T1', exp: Date.now() + 3600e3 } } : { ok: false, error: 'PIN salah.' };
@@ -69,12 +70,15 @@ function fakePusat(req) {
   if (req.fn === 'pusatSetPlace') { PUSAT_CALLS.place = req.args.slice(1); return { ok: true, data: { slug: req.args[1], place: req.args[2] ? { name: req.args[2], city: req.args[3] } : null, hub: 'ok' } }; }
   if (req.fn === 'pusatRename') { PUSAT_CALLS.rename = req.args.slice(1); return { ok: true, data: { slug: req.args[2], from: req.args[1], site: 'ok', folder: 'ok', hub: 'ok' } }; }
   if (req.fn === 'pusatAction' && req.args[1] === 'setup') return { ok: true, data: { ticket: 'setup.1.sig' } };
-  if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
+  // T-2251: langganan (bawaan gratis); simpan dan aksi menjawab overview baru.
+  if (req.fn === 'pusatSubSave') { PUSAT_CALLS.sub = req.args.slice(1); Object.assign(PUSAT_SUB, req.args[2], { price: Number(String(req.args[2].price).replace(/\D/g, '')) || 0, state: 'aktif', days: 30 }); }
+  else if (req.fn === 'pusatAction' && /^sub-/.test(req.args[1])) { PUSAT_CALLS.subAct = req.args[1]; if (req.args[1] === 'sub-ro-on') Object.assign(PUSAT_SUB, { ro: 'on', readonly: true }); }
+  else if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
   const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 } } });
   return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
     places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
     { slug: 'claudia', exec: EXEC_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
-      backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false } },
+      backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, sub: Object.assign({}, PUSAT_SUB) },
   ] } };
 }
 
@@ -240,6 +244,21 @@ async function makeLogos(browser) {
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('Selesai di XNK Pusat'), null, { timeout: 5000 }).catch(() => {});
       page.off('dialog', onDialog);
       check(JSON.stringify(PUSAT_CALLS.rename) === '["claudia","claudia-baru"]' && ((await page.textContent('#dm')) || '').includes('claudia → claudia-baru'), 'Ganti slug: nama baru (huruf kecil) ke pusatRename, pesan hasil (' + JSON.stringify(PUSAT_CALLS.rename) + ')');
+      // T-2251: langganan — bawaan gratis; simpan bulanan lewat form; baca saja nyala (data-act, tanpa onclick).
+      check(((await page.textContent('#list')) || '').includes('Langganan: Gratis / tanpa langganan'), 'langganan: bawaan gratis, baca saja mati');
+      await page.click('.sub summary');
+      await page.selectOption('[data-sub] [data-f="plan"]', 'bulanan');
+      await page.fill('[data-sub] [data-f="price"]', '150.000');
+      await page.fill('[data-sub] [data-f="due"]', '2026-12-19');
+      await page.fill('[data-sub] [data-f="email"]', 'coach@contoh.id');
+      await page.click('[data-act="sub-save"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('disimpan'), null, { timeout: 5000 }).catch(() => {});
+      check(JSON.stringify(PUSAT_CALLS.sub) === JSON.stringify([PUSAT_CALLS.sub && PUSAT_CALLS.sub[0], { plan: 'bulanan', price: '150.000', due: '2026-12-19', email: 'coach@contoh.id' }]) &&
+        ((await page.textContent('#list')) || '').includes('Bulanan Rp 150.000'), 'langganan: form → pusatSubSave, kartu menampilkan paket bulanan (' + JSON.stringify(PUSAT_CALLS.sub) + ')');
+      page.once('dialog', d => d.accept());
+      await page.click('[data-act="sub-ro-on"]');
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('Selesai'), null, { timeout: 5000 }).catch(() => {});
+      check(PUSAT_CALLS.subAct === 'sub-ro-on' && ((await page.textContent('#list')) || '').includes('dinyalakan tangan') && await page.isVisible('[data-act="sub-paid"]'), 'langganan: Baca saja nyala lewat pusatAction, tombol Tandai lunas ada');
       check(await page.isVisible('#setup') && ((await page.textContent('#setupWhy')) || '').includes('Izin Google'), 'pita "XNK Pusat perlu disiapkan" saat izin belum diberikan');
       check(await page.isVisible('#setupEditor') && (await page.getAttribute('#setupEditor', 'href')) === 'https://script.google.com/d/SCRIPTPUSAT/edit', 'izin belum ada: langkah editor + link editor XNK Pusat');
       const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('.bar [data-act="setup"]')]);

@@ -70,7 +70,7 @@ Gelombang 3 — fitur
 
 Gelombang 4 — operasional
 - [x] T-2250 Backup mingguan tiap coach ke Drive akun pemilik (lewat XNK Pusat), 8 minggu.
-- [ ] T-2251 Langganan bulanan: jatuh tempo, pengingat, masa tenggang, mode baca saja (situs tidak dihapus).
+- [x] T-2251 Langganan bulanan: jatuh tempo, pengingat, masa tenggang, mode baca saja (situs tidak dihapus). XNK Pusat `SUB_<slug>` (bawaan gratis), `pusatSubSave` + aksi `sub-paid` / `sub-ro-on|off|auto`, email H-7/H-1, 7 hari tenggang; coach `src/Langganan.gs` `hubReadonly` + gerbang tulis `_readonlyGate_` (doPost + `XNK.run`, daftar `WRITE` / `READ_OK` di `tests/api-lists.js`), pita di panel/portal ([Pusat.md](Pusat.md#langganan-bulanan-t-2251)).
 - [ ] T-2252 Coach keluar: ekspor untuk coach, nonaktifkan situs, hapus akun H+30.
 - [x] T-2253 Kuota Gmail (menit trigger, fetch, email) dilaporkan; email di 70 %. `src/Kuota.gs` (`QUOTA_<yyyymmdd>`, `MAIL_RESERVE`), `hubStatus().quota`, cek 70 % di XNK Pusat, ubin di `/adminxnk` ([Pusat.md](Pusat.md)).
 - [x] T-2254 Notifikasi coach lewat Web Push + email ke email coach (Telegram opsional). Web Push coach sudah ada (Fase Z); email: `NOTIF_EMAIL_REMINDERS` off/on/auto (Pengaturan → Notifikasi Admin, wizard = auto), `kirimEmailTombol_`, ReminderLog per saluran.

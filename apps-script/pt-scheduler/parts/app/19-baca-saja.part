@@ -1,0 +1,19 @@
+  // ═══ T-2251: mode baca saja (langganan coach di hub xnk.web.id) ═══
+  // Server menolak semua fungsi tulis (gerbang di doPost); di sini hanya pita tenang di atas halaman. Panel coach melihat
+  // alasan dan catatan pengelola; klien hanya "data hanya bisa dilihat" (tanpa cerita langganan).
+  window.setReadonly = function (ro, mode) {
+    window.isReadonly = !!(ro && ro.on);
+    const el = document.getElementById('ro-band');
+    if (!el) return;
+    if (!window.isReadonly) { el.classList.add('hide'); el.innerHTML = ''; return; }
+    const admin = mode === 'admin';
+    const txt = admin
+      ? 'Langganan aplikasi perlu diperpanjang. Semua data aman dan tetap bisa dilihat, tetapi belum bisa diubah.'
+      : 'Untuk sementara data hanya bisa dilihat. Booking dan catatan baru belum bisa disimpan.';
+    const note = admin && ro.note ? '<span class="ro-note">' + h(ro.note) + '</span>' : '';
+    el.innerHTML = '<span class="ro-ic" aria-hidden="true">' + icon('lock') + '</span><div class="ro-tx"><b>Mode baca saja</b><span>' + h(txt) + '</span>' + note + '</div>';
+    el.classList.remove('hide');
+    paintIcons();
+  };
+})();
+</script>

@@ -197,5 +197,3 @@
   }
   async function xlsxBlob(list) { return zipBlob(xlsxFiles(list)); }
   window.xlsxBlob = xlsxBlob;   // dipakai tools/browser-check.js untuk memeriksa berkasnya
-})();
-</script>

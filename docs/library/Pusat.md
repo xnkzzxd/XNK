@@ -9,6 +9,7 @@ WA atau data kesehatan klien yang pernah sampai ke XNK Pusat.
 | XNK Pusat (doPost, cek harian, email, aksi GitHub) | `apps-script/xnk-pusat/src/Pusat.gs`, tes `apps-script/xnk-pusat/tests/` |
 | Laporan tiap coach | `hubStatus(secret)` di `pt-scheduler/src/HubStatus.gs` (publik, dijaga `HUB_SECRET`; produksi selalu menolak) |
 | Pendaftaran coach | wizard langkah 4 → `XNK.registerPusat` (`lib-extra/LibApi.gs`): rahasia baru disimpan hanya bila Pusat menerima |
+| Langganan bulanan (T-2251) | `SUB_<slug>` + `pusatSubSave` di `Pusat.gs` → `hubReadonly(secret, on, note)` di `pt-scheduler/src/Langganan.gs` (coach) |
 | Backup mingguan (T-2250) | `hubExport(secret, req)` di `HubStatus.gs` (coach) → `runPusatBackup` di `Pusat.gs` (pemilik) |
 | Dasbor | `hub-site/adminxnk.html` → `xnk.web.id/adminxnk/` (CSP ketat, token di `sessionStorage` `adminxnk:`) |
 | Pasang / perbarui | workflow **XNK Library**: aksi `buat-pusat` sekali, lalu job `pusat` di setiap push ke main |
@@ -132,3 +133,35 @@ backup diganti namanya (ID sama; gagal = folder lama tetap dipakai dan disebut d
 `{aksi: 'ganti-slug', slug, slug_baru}` (tanpa `GITHUB_TOKEN` = pesan langkah manual; sudah diganti di hub.json =
 dilewati). Jawabannya `{slug, from, site, folder, hub}`, masing-masing `'ok'` atau pesan. Langkah untuk pemilik:
 [Hub.md](Hub.md#ganti-slug-coach-t-2243).
+
+## Langganan bulanan (T-2251)
+
+Setiap coach punya data langganan di Script Property XNK Pusat `SUB_<slug>`: paket (**gratis** atau **bulanan**), harga
+(Rp), jatuh tempo (tanggal WIB), email coach, sakelar *baca saja* (`auto` / `on` / `off`) dan riwayat bayar (24 terakhir).
+**Coach tanpa data = gratis = tidak pernah baca saja.** Itu bawaan untuk semua coach yang sudah ada (claudia, vinna):
+tidak ada yang berubah sampai pemilik sendiri mengubah paketnya, dan coach gratis tidak pernah dihubungi untuk ini.
+
+- **Status** (`subStatus_`, murni): `aktif` → `segera` (≤ 7 hari ke jatuh tempo) → `tenggang` (sudah lewat, 7 hari) →
+  `lewat` = baca saja otomatis. Sakelar tangan menang: `on` menyalakan baca saja kapan saja (juga untuk coach gratis),
+  `off` mematikannya walau lewat. Bulanan tanpa jatuh tempo tidak pernah baca saja.
+- **Tandai lunas** (`pusatAction(token, 'sub-paid', slug)`): jatuh tempo maju satu bulan (31 Jan → 28/29 Feb), satu baris
+  riwayat, sakelar kembali `auto`. Tombol **Baca saja: nyalakan / matikan / otomatis** = `sub-ro-on` / `sub-ro-off` /
+  `sub-ro-auto`. Form **Atur langganan** = `pusatSubSave(token, slug, {plan, price, due, email})` (diperiksa: bulanan butuh
+  jatuh tempo, harga bilangan bulat, email valid).
+- **Email pengingat** ke coach pada **H-7** dan **H-1** (cek harian 06:00 WIB), sekali per jatuh tempo per jenis, ke email
+  coach yang diisi di Pusat; kosong = `PUSAT_EMAIL` / akun pemilik. Isinya: tanggal, harga, masa tenggang 7 hari, dan
+  bahwa situs tidak pernah dihapus. Masa tenggang dan galat kirim masuk email masalah harian pemilik.
+- **Ke coach**: XNK Pusat memanggil `hubReadonly(HUB_SECRET, menyala, catatan)` saat keadaan berubah (simpan / tombol) dan
+  di cek harian untuk coach bulanan atau yang pernah dikirimi baca saja. Jawabannya disimpan di `pushed`
+  (`{on, note, at, error}`); `/adminxnk` menampilkan galat "Coach belum menerima". Coach dengan Library lama menjawab
+  `unknown_fn` → "perbarui coach".
+- **Di coach** (`src/Langganan.gs`, Script Properties `XNK_READONLY`, `XNK_READONLY_NOTE`, `XNK_READONLY_AT`): saat
+  menyala, satu gerbang (`_readonlyGate_`, di `doPost` dan `XNK.run`) menolak semua fungsi **tulis** dengan
+  "Mode baca saja: data bisa dilihat, tetapi belum bisa diubah untuk sementara." (`code: 'readonly'`). Baca, login, ganti
+  PIN, sakelar push perangkat, tanda "sudah dilihat" dan trigger pengingat tetap jalan. Daftar ada di
+  `pt-scheduler/tests/api-lists.js` (`WRITE` / `READ_OK`; `tests/readonly.test.js` gagal bila ada fungsi API yang belum
+  diklasifikasi) dan `_apiWrites_()` di `Api.gs` (dibuat `tools/build-api.js`). Panel menampilkan pita "Mode baca saja"
+  dengan catatan pengelola (`getAdminBootstrap.readonly`); portal klien hanya "data hanya bisa dilihat"
+  (`getPortalBootstrap.readonly`, tanpa cerita langganan). **Produksi xnk.my.id tidak punya `HUB_SECRET`**:
+  `hubReadonly` selalu menolak dan `XNK_READONLY` yang diisi tangan tidak berlaku.
+- **Izin**: tidak ada izin Google baru (MailApp dan UrlFetch sudah dipakai XNK Pusat).
