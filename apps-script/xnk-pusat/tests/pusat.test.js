@@ -1,5 +1,5 @@
 'use strict';
-// XNK Pusat (T-2233): login PIN, pendaftaran coach, pemeriksaan harian + email, aksi ke GitHub. Layanan Google palsu.
+// XNK HQ (T-2233): login PIN, pendaftaran coach, pemeriksaan harian + email, aksi ke GitHub. Layanan Google palsu.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -162,7 +162,7 @@ test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet
   const t = e.call('pusatAction', tok, 'setup').data.ticket;
   assert.match(t, /^setup\.\d+\.[\w-]+$/);
   assert.ok(!t.includes(tok.split('.')[1]), 'bukan token sesi');
-  assert.equal(e.ctx.doGet({ parameter: {} }).content, 'XNK Pusat');
+  assert.equal(e.ctx.doGet({ parameter: {} }).content, 'XNK HQ');
   assert.match(e.ctx.doGet({ parameter: { setup: t.replace(/.$/, 'x') } }).content, /tidak berlaku/);
   assert.match(e.ctx.doGet({ parameter: { setup: tok } }).content, /tidak berlaku/, 'token sesi bukan tanda siap');
   assert.deepEqual(e.triggers, []);
@@ -171,7 +171,7 @@ test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet
   assert.match(msg, /https:\/\/script\.google\.com\/d\/SCRIPTPUSAT\/edit/);
   assert.equal(e.call('pusatOverview', tok).data.setup.editor, 'https://script.google.com/d/SCRIPTPUSAT/edit');
   const g = env(), gt = g.call('pusatAction', g.call('pusatLogin', 'pin-rahasia-1').data.token, 'setup').data.ticket;
-  assert.match(g.ctx.doGet({ parameter: { setup: gt } }).content, /XNK Pusat siap: izin Google lengkap/);
+  assert.match(g.ctx.doGet({ parameter: { setup: gt } }).content, /XNK HQ siap: izin Google lengkap/);
   e.ctx.doGet({ parameter: { setup: t } });
   assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup'], 'diulang tetap satu');
   const D = vm.runInContext('Date', e.ctx), real = D.now;

@@ -5,7 +5,7 @@ name: Hub XNK
 #    Coach yang sudah ada: nama usaha dan link boleh kosong (tetap), jadi mengganti warna/logo cukup slug + isian itu.
 #    Isian diperiksa penuh; bila ada yang salah, workflow berhenti dengan pesan Indonesia dan situs lama tetap tayang.
 #  - Run workflow → aksi "ganti-slug": slug = nama sekarang, slug_baru = nama baru (T-2243). Alamat lama tetap mengarah
-#    ke yang baru; klien dan coach tetap masuk. Lebih mudah lewat xnk.web.id/adminxnk → Ganti slug (sekalian XNK Pusat).
+#    ke yang baru; klien dan coach tetap masuk. Lebih mudah lewat xnk.web.id/adminxnk → Ganti slug (sekalian XNK HQ).
 #  - Run workflow → aksi "bangun": bangun ulang tanpa mengubah daftar.
 #  - Mengubah hub.json langsung di GitHub juga membangun ulang.
 #  - Setiap hari jam 03:17 WIB: dibangun ulang. Halaman tiap coach mengikuti versi Library di spreadsheet coach itu

@@ -22,7 +22,7 @@
 
 - [-] T-2209 Per-coach site repo from `site-template/`: replaced by the hub (T-2211); kept as an optional route for a coach with their own domain.
 
-- [x] T-2210 First real copy end to end (wizard, deploy, site, login, booking), including one second Google account. (2026-11-18: claudia with live bookings, vinna on a second Google account; both on Library v21, registered in XNK Pusat and backed up.)
+- [x] T-2210 First real copy end to end (wizard, deploy, site, login, booking), including one second Google account. (2026-11-18: claudia with live bookings, vinna on a second Google account; both on Library v21, registered in XNK HQ and backed up.)
 
 - [x] T-2211 Hub xnk.web.id ([Hub.md](Hub.md)): `build-hub.js`, `hub-edit.js`, landing + 404, per-slug storage prefix, service worker prefix fix, `hub-repo/` (form workflow), `hub-check.js` (two coaches, one origin), tests.
 
@@ -32,7 +32,7 @@
 
 - [x] T-2214 Owner: put `hub-repo/` into `xnk-template-site` (Claude), Pages + DNS + custom domain `xnk.web.id`, `contactUrl`.
 
-- [x] T-2215 First coach `claudia` end to end on `xnk.web.id`. (2026-11-18: panel, portal, /info/, XNK Pusat "Semua beres", weekly backup.)
+- [x] T-2215 First coach `claudia` end to end on `xnk.web.id`. (2026-11-18: panel, portal, /info/, XNK HQ "Semua beres", weekly backup.)
 
 - [x] T-2216 Brand: visible "XNK" text (page title, login screen, WhatsApp "ini Coach XNK", calendar title, share-card watermark, "Member XNK", weekly report) now uses the coach's business name in the Library build (`window.brandName()` in the browser, `_brandName_()` on the server); `library-build.test.js` and `hub-check.js` fail on a leftover. Found by opening the live `xnk.web.id/claudia/klien/`: its title became "XNK Personal Training".
 - [x] T-2217 Landing xnk.web.id as a proper XNK brand page: hero with app screens, client/coach features, screenshot strip, how it works, privacy, coach list from `hub.json`, the same login form, FAQ, OG image. Screens come from the demo (sample data) via `tools/hub-shots.js`; `hub.test.js` and `hub-check.js` cover the coach list, escaping, images and no sideways scroll.
@@ -59,25 +59,26 @@ Gelombang 2 — pemilik mengelola semua coach
 - [x] T-2230 Secret `CLASP_<SLUG>` per akun ([Akun.md](Akun.md)); `hub.json` boleh berisi `scriptId`, `deploymentId` (diperiksa `readHub`, dipertahankan `hub-edit`, dibuang bila link /exec berubah).
 - [x] T-2231 Workflow **Coach XNK** aksi `baru` (`tools/coach-ops.js`: clasp create → penghubung dengan Library terbaru dan isian awal wizard `XNK_DEFAULT_SLUG`/`XNK_DEFAULT_BRAND` → versi → deploy web app → hub.json → build hub) dan `hubungkan` (coach lama: cari proyek dari deployment link /exec).
 - [x] T-2232 Aksi `perbarui` (harian 02:37 WIB + manual): deployment yang sama (`clasp deploy -i`), kenari dulu (berhenti bila server kenari tidak menjawab commit terbaru), coach yang sudah terbaru dilewati. Versi terbaru dari tag `lib-v<N>` yang dipasang job deploy `xnk-library.yml` (pesan tag = scriptId Library).
-- [x] T-2233 XNK Pusat ([Pusat.md](Pusat.md)): `apps-script/xnk-pusat` (login PIN, `pusatRegister` dengan kode daftar, cek harian 06:00 + email hanya bila ada masalah, aksi `perbarui`/`hubungkan`/`bangun` ke workflow repo hub), `hubStatus(secret)` di produksi (`HubStatus.gs`, angka saja), `XNK.registerPusat` + langkah wizard, job `pusat` + aksi `buat-pusat` di `xnk-library.yml`.
+- [x] T-2233 XNK HQ ([Pusat.md](Pusat.md)): `apps-script/xnk-pusat` (login PIN, `pusatRegister` dengan kode daftar, cek harian 06:00 + email hanya bila ada masalah, aksi `perbarui`/`hubungkan`/`bangun` ke workflow repo hub), `hubStatus(secret)` di produksi (`HubStatus.gs`, angka saja), `XNK.registerPusat` + langkah wizard, job `pusat` + aksi `buat-pusat` di `xnk-library.yml`.
 - [x] T-2234 Dasbor `xnk.web.id/adminxnk` (`hub-site/adminxnk.html`, `pusatUrl` di hub.json): status, angka, link, coach yang belum mendaftar, tombol cek/perbarui/hubungkan/bangun; CSP ketat; dicek `hub-check.js`.
 
 Gelombang 3 — fitur
-- [x] T-2240 Web Push di hub: satu kunci VAPID (secret repo hub), XNK Pusat membagikan kunci publik + daftar coach menyala (`hubPushKey`, `pusatPushTargets`), workflow Push XNK mengirim langsung ke tiap coach.
+- [x] T-2240 Web Push di hub: satu kunci VAPID (secret repo hub), XNK HQ membagikan kunci publik + daftar coach menyala (`hubPushKey`, `pusatPushTargets`), workflow Push XNK mengirim langsung ke tiap coach.
 - [x] T-2241 Halaman publik coach `/<slug>/info/` (profil, paket, jam kosong, daftar).
 - [x] T-2242 Logo + warna aksen per coach di `hub.json`.
 - [x] T-2243 Alias slug lama (redirect); `runWarmTick` opsional. Ganti slug lewat `/adminxnk` (`pusatRename`) atau Hub XNK aksi `ganti-slug`: `aliases` (halaman pengalih + worker pengganti `hub-site/alias-sw.js` yang meneruskan push), `storageSlug` (login dan offline tetap), `secret` (secret clasp lama), `hubSiteUrl` di coach ([Hub.md](Hub.md#ganti-slug-coach-t-2243)). Library: "Pasang ulang trigger" dan Cek kesehatan mengikuti sakelar "Siapkan data di latar" (`LIB_TRIGGERS_OPT`).
 
 Gelombang 4 — operasional
-- [x] T-2250 Backup mingguan tiap coach ke Drive akun pemilik (lewat XNK Pusat), 8 minggu.
+- [x] T-2250 Backup mingguan tiap coach ke Drive akun pemilik (lewat XNK HQ), 8 minggu.
 - [ ] T-2251 Langganan bulanan: jatuh tempo, pengingat, masa tenggang, mode baca saja (situs tidak dihapus).
 - [ ] T-2252 Coach keluar: ekspor untuk coach, nonaktifkan situs, hapus akun H+30.
-- [x] T-2253 Kuota Gmail (menit trigger, fetch, email) dilaporkan; email di 70 %. `src/Kuota.gs` (`QUOTA_<yyyymmdd>`, `MAIL_RESERVE`), `hubStatus().quota`, cek 70 % di XNK Pusat, ubin di `/adminxnk` ([Pusat.md](Pusat.md)).
+- [x] T-2253 Kuota Gmail (menit trigger, fetch, email) dilaporkan; email di 70 %. `src/Kuota.gs` (`QUOTA_<yyyymmdd>`, `MAIL_RESERVE`), `hubStatus().quota`, cek 70 % di XNK HQ, ubin di `/adminxnk` ([Pusat.md](Pusat.md)).
 - [x] T-2254 Notifikasi coach lewat Web Push + email ke email coach (Telegram opsional). Web Push coach sudah ada (Fase Z); email: `NOTIF_EMAIL_REMINDERS` off/on/auto (Pengaturan → Notifikasi Admin, wizard = auto), `kirimEmailTombol_`, ReminderLog per saluran.
 - [x] T-2255 "Unduh data saya" (Excel) di Pengaturan panel coach: Pengaturan → Akun, admin `exportMyData` di `src/Unduh.gs` (per halaman, teks tampilan, tanpa ProgressPhotos / PushSubs / PushOutbox / Script Properties), .xlsx dirakit di browser tanpa pustaka luar (part `18-unduh-data-saya.part`).
 - [x] T-2256 Daftar periksa akun Gmail per coach ([Akun.md](Akun.md)); token dipakai harian oleh `perbarui`, jadi token mati langsung terlihat.
 - [ ] T-2257 "Didukung XNK" kecil di login dan kartu bagikan coach.
 - [x] T-2258 Tempat latihan coach (satu tempat: nama + kota) di `hub.json` (`place`, `cleanPlace` di `build-hub.js` = `cleanPlace_` di Pusat), diisi dari `/adminxnk` → **Tempat** (`pusatSetPlace` → workflow Hub XNK aksi `simpan`, isian `tempat` / `kota`; `hub-edit.js --tempat/--kota`, `-` = hapus).
 - [x] T-2259 Halaman info coach baru: pita atas dengan tempat dan ringkasan (pengalaman, harga per sesi termurah, jam kosong), menu bagian di HP, profil dengan bio terpotong + "Baca selengkapnya", bagian Tempat dengan **Buka di Maps**, paket dengan harga per sesi, **Paling hemat** dan **Pilih paket**, jam kosong sebagai deret 7 hari.
+- [x] T-2261 XNK Pusat berganti nama menjadi **XNK HQ** (hanya teks yang dibaca orang; nama kode `pusat*`, folder `xnk-pusat/`, Script Properties `PUSAT_*`, aksi `buat-pusat` dan repo variable `XNK_PUSAT_*` tetap) dan `/adminxnk` dirombak bergaya aplikasi Mac: bilah samping dengan saringan, bilah judul, ringkasan, tabel coach, daftar "Semua masalah", inspektur di kanan (lembar penuh di HP), menu ⋯ dan dialog sendiri pengganti `confirm` / `prompt`.
 - [x] T-2260 Daftar coach di xnk.web.id: tempat di tiap kartu, kotak cari (nama, alamat, tempat, kota) dan pilihan kota (≥ 2 coach bertempat).
 - Keputusan terbuka: UU PDP (kebijakan privasi, perjanjian pemroses data) ditunda oleh pemilik.

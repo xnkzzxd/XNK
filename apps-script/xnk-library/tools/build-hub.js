@@ -127,9 +127,9 @@ function readHub(cfg, opts) {
   if (!cfg || typeof cfg !== 'object' || !Array.isArray(cfg.coaches)) throw new Error('hub.json: "coaches" harus berupa daftar.');
   const contact = String(cfg.contactUrl || '').trim();
   if (contact && !/^https:\/\/[^\s'"<>\\]+$/.test(contact)) throw new Error('hub.json: "contactUrl" harus link https:// tanpa spasi.');
-  // T-2234: link /exec XNK Pusat untuk xnk.web.id/adminxnk (bukan rahasia; login tetap PIN pemilik).
+  // T-2234: link /exec XNK HQ untuk xnk.web.id/adminxnk (bukan rahasia; login tetap PIN pemilik).
   const pusat = String(cfg.pusatUrl || '').trim();
-  if (pusat && !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(pusat)) throw new Error('hub.json: "pusatUrl" harus link /exec Apps Script XNK Pusat.');
+  if (pusat && !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(pusat)) throw new Error('hub.json: "pusatUrl" harus link /exec Apps Script XNK HQ.');
   // T-2240: kunci publik VAPID seluruh hub (satu origin = satu pasang kunci); kunci privat hanya di secret repo hub.
   const vapid = String(cfg.vapidPublic == null ? '' : cfg.vapidPublic).trim();
   if (vapid && !VAPID_RE.test(vapid)) throw new Error('hub.json: "vapidPublic" harus kunci publik VAPID (base64url, 87 karakter, diawali B). Jalankan workflow Push XNK aksi "kunci".');
@@ -462,7 +462,7 @@ function build(cfg, opts) {
   }
   // Commit tiap coach yang terakhir dibangun: build berikutnya memakainya bila server coach tidak menjawab.
   files['_hub/versions.json'] = JSON.stringify(built, null, 1) + '\n';
-  // T-2240: kunci publik push (bukan rahasia) untuk pemeriksaan; coach menerimanya dari XNK Pusat (hubPushKey).
+  // T-2240: kunci publik push (bukan rahasia) untuk pemeriksaan; coach menerimanya dari XNK HQ (hubPushKey).
   if (hub.vapid) files['_hub/push.json'] = JSON.stringify({ vapidPublic: hub.vapid }) + '\n';
   let landing = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
   const contact = hub.contact
@@ -520,7 +520,7 @@ function build(cfg, opts) {
   const sw = fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8');
   if (!sw.includes('__HASH__')) throw new Error('build-hub: __HASH__ tidak ada di hub-site/sw.js');
   files['sw.js'] = sw.replace('__HASH__', sha(landing + files['manifest.webmanifest']));
-  // Dasbor pemilik: halaman statis tanpa data; datanya dari XNK Pusat setelah login PIN.
+  // Dasbor pemilik: halaman statis tanpa data; datanya dari XNK HQ setelah login PIN.
   const adm = fs.readFileSync(path.join(SITE, 'adminxnk.html'), 'utf8')
     .split("'__PUSAT_URL__'").join(JSON.stringify(hub.pusat))
     .split('__HUB_COACHES__').join(JSON.stringify(Object.fromEntries(hub.coaches.map(c => [c.slug, c.brand]))).replace(/</g, '\\u003c'));

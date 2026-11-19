@@ -221,11 +221,11 @@ test('getServerInfo lewat doPost: versi API dan sidik build Library (commit penu
   assert.equal(u.code, 'unknown_fn');
 });
 
-test('registerPusat (T-2233): rahasia baru dikirim ke XNK Pusat; disimpan hanya bila diterima; hanya pemilik', () => {
+test('registerPusat (T-2233): rahasia baru dikirim ke XNK HQ; disimpan hanya bila diterima; hanya pemilik', () => {
   const { env, A } = setupTwo();
   const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSAT000000000000000000/exec';
   const sent = [];
-  let answer = { ok: false, error: 'Kode daftar XNK Pusat salah.' };
+  let answer = { ok: false, error: 'Kode daftar XNK HQ salah.' };
   // Seperti Apps Script sungguhan: POST /exec → 302 ke echo; mengikuti 302 sebagai POST → halaman HTML Google.
   const ECHO = 'https://script.googleusercontent.com/macros/echo?k=1';
   env.context.UrlFetchApp.fetch = (url, o) => {

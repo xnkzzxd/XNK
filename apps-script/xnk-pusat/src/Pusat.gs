@@ -1,4 +1,4 @@
-// XNK Pusat (Gelombang 2, T-2233): satu Apps Script di akun Google pemilik yang mengawasi semua coach di hub
+// XNK HQ (Gelombang 2, T-2233): satu Apps Script di akun Google pemilik yang mengawasi semua coach di hub
 // xnk.web.id. Dibaca halaman xnk.web.id/adminxnk lewat doPost (login PIN pemilik).
 //   - Pendaftaran: wizard setup di spreadsheet coach membuat rahasia acak (HUB_SECRET di spreadsheet coach) dan
 //     mengirimnya ke sini bersama slug dan link /exec, dengan kode daftar pemilik (PUSAT_ENROLL_CODE).
@@ -33,7 +33,7 @@ function quotaLimits_() {
   var n = function (k, d) { var v = Number(prop_(k, '')); return isFinite(v) && v > 0 ? v : d; };
   return { mail: n('QUOTA_MAIL', PUSAT_QUOTA_DEFAULTS.mail), fetch: n('QUOTA_FETCH', PUSAT_QUOTA_DEFAULTS.fetch), triggerMin: n('QUOTA_TRIGGER_MIN', PUSAT_QUOTA_DEFAULTS.triggerMin) };
 }
-/** Semua UrlFetch XNK Pusat lewat sini: dihitung per hari WIB (CacheService fq:<tanggal>, tampil di /adminxnk). */
+/** Semua UrlFetch XNK HQ lewat sini: dihitung per hari WIB (CacheService fq:<tanggal>, tampil di /adminxnk). */
 function fetch_(url, o) {
   try {
     var c = CacheService.getScriptCache(), k = 'fq:' + new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
@@ -68,16 +68,16 @@ function doPost(e) {
 /**
  * GET /exec. Dengan ?setup=<tanda siap> (dibuat pusatAction 'setup', berlaku 10 menit): jalankan setupPusat_ lalu
  * tampilkan teks singkat. Web app berjalan sebagai pemilik, jadi bila ada izin Google baru, Google menampilkan layar
- * izin kepada pemilik yang membuka link ini. Tanpa/ tanda salah = teks "XNK Pusat" saja.
+ * izin kepada pemilik yang membuka link ini. Tanpa/ tanda salah = teks "XNK HQ" saja.
  */
 function doGet(e) {
   var t = e && e.parameter && e.parameter.setup;
-  if (!t) return ContentService.createTextOutput('XNK Pusat');
-  try { requireSetupTicket_(t); } catch (err) { return ContentService.createTextOutput('Link siapkan XNK Pusat sudah tidak berlaku. Buka lagi dari xnk.web.id/adminxnk.'); }
+  if (!t) return ContentService.createTextOutput('XNK HQ');
+  try { requireSetupTicket_(t); } catch (err) { return ContentService.createTextOutput('Link siapkan XNK HQ sudah tidak berlaku. Buka lagi dari xnk.web.id/adminxnk.'); }
   setupPusat_();
   // Izin baru (Drive/Spreadsheet) TIDAK bisa diberikan lewat link web: Google hanya menampilkan layar izin di editor.
-  if (!setupState_().auth) return ContentService.createTextOutput('Trigger XNK Pusat sudah terpasang (cek harian 06:00 WIB, backup tiap jam), tetapi izin Google baru (Drive/Spreadsheet untuk backup) belum diberikan. Izin itu hanya bisa diberikan dari editor: buka ' + editorUrl_() + ' , pilih fungsi setupPusat, tekan Run, lalu Izinkan.');
-  return ContentService.createTextOutput('XNK Pusat siap: izin Google lengkap, cek harian 06:00 WIB dan backup tiap jam terpasang. Tutup tab ini dan kembali ke xnk.web.id/adminxnk.');
+  if (!setupState_().auth) return ContentService.createTextOutput('Trigger XNK HQ sudah terpasang (cek harian 06:00 WIB, backup tiap jam), tetapi izin Google baru (Drive/Spreadsheet untuk backup) belum diberikan. Izin itu hanya bisa diberikan dari editor: buka ' + editorUrl_() + ' , pilih fungsi setupPusat, tekan Run, lalu Izinkan.');
+  return ContentService.createTextOutput('XNK HQ siap: izin Google lengkap, cek harian 06:00 WIB dan backup tiap jam terpasang. Tutup tab ini dan kembali ke xnk.web.id/adminxnk.');
 }
 
 var PUSAT_SETUP_MS = 10 * 60 * 1000;
@@ -89,10 +89,10 @@ function requireSetupTicket_(t) {
   if (p.length !== 3 || p[0] !== 'setup' || !exp || exp < Date.now() || !eq_(p[2], sign_('setup.' + p[1]))) throw new Error('Tanda siap tidak berlaku.');
 }
 
-/** Link editor Apps Script XNK Pusat (tempat pemilik memberi izin baru). */
+/** Link editor Apps Script XNK HQ (tempat pemilik memberi izin baru). */
 function editorUrl_() { try { return 'https://script.google.com/d/' + ScriptApp.getScriptId() + '/edit'; } catch (e) { return 'https://script.google.com/home'; } }
 
-/** Izin Google + trigger yang dibutuhkan XNK Pusat; untuk pita peringatan di /adminxnk. */
+/** Izin Google + trigger yang dibutuhkan XNK HQ; untuk pita peringatan di /adminxnk. */
 function setupState_() {
   var h = {};
   try { ScriptApp.getProjectTriggers().forEach(function (t) { h[t.getHandlerFunction()] = 1; }); } catch (e) { /* tanpa izin trigger */ }
@@ -111,7 +111,7 @@ function setupState_() {
 
 function sign_(s) {
   var key = prop_('SESSION_SECRET');
-  if (key.length < 32) throw new Error('XNK Pusat belum disiapkan: jalankan setupPusat di editor.');
+  if (key.length < 32) throw new Error('XNK HQ belum disiapkan: jalankan setupPusat di editor.');
   return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(s, key)).replace(/=+$/, '');
 }
 function eq_(a, b) {
@@ -136,7 +136,7 @@ function guard_(key) {
 function pusatLogin(pin) {
   var fail = guard_('pin');
   var want = prop_('PUSAT_PIN');
-  if (want.length < 8) throw new Error('PIN XNK Pusat belum diatur (Script Property PUSAT_PIN, minimal 8 karakter).');
+  if (want.length < 8) throw new Error('PIN XNK HQ belum diatur (Script Property PUSAT_PIN, minimal 8 karakter).');
   if (!eq_(String(pin || ''), want)) { fail(); throw new Error('PIN salah.'); }
   var exp = String(Date.now() + PUSAT_SESSION_MS);
   return { token: exp + '.' + sign_(exp), exp: Number(exp) };
@@ -148,7 +148,7 @@ function pusatLogin(pin) {
 function pusatRegister(code, slug, exec, secret) {
   var fail = guard_('enroll');
   var want = prop_('PUSAT_ENROLL_CODE');
-  if (want.length < 8 || !eq_(String(code || ''), want)) { fail(); throw new Error('Kode daftar XNK Pusat salah.'); }
+  if (want.length < 8 || !eq_(String(code || ''), want)) { fail(); throw new Error('Kode daftar XNK HQ salah.'); }
   slug = String(slug || '').trim(); exec = String(exec || '').trim(); secret = String(secret || '');
   if (!PUSAT_SLUG_RE.test(slug) || /--/.test(slug)) throw new Error('Nama di alamat tidak valid.');
   if (!PUSAT_EXEC_RE.test(exec)) throw new Error('Link /exec tidak valid.');
@@ -329,7 +329,7 @@ function runPusatDaily() {
   if (!bad.length) return { problems: 0 };
   var to = prop_('PUSAT_EMAIL') || Session.getEffectiveUser().getEmail();
   var lines = bad.map(function (s) { return '• ' + s + ': ' + res[s].problems.join(' '); });
-  MailApp.sendEmail(to, 'XNK Pusat: ' + bad.length + ' coach perlu dicek', lines.join('\n') + '\n\nDasbor: ' + hubUrl_() + '/adminxnk/');
+  MailApp.sendEmail(to, 'XNK HQ: ' + bad.length + ' coach perlu dicek', lines.join('\n') + '\n\nDasbor: ' + hubUrl_() + '/adminxnk/');
   return { problems: bad.length };
 }
 
@@ -370,7 +370,7 @@ function pusatAction(token, action, slug) {
   if (action === 'setup') return { ticket: setupTicket_() };   // /adminxnk membuka <pusatUrl>?setup=<ticket> di tab baru
   if (action === 'push-on' || action === 'push-off') { pushSet_(String(slug || ''), action === 'push-on'); return pusatOverview(token); }
   var t = prop_('GITHUB_TOKEN');
-  if (!t) throw new Error('Token GitHub belum diatur di XNK Pusat (Script Property GITHUB_TOKEN).');
+  if (!t) throw new Error('Token GitHub belum diatur di XNK HQ (Script Property GITHUB_TOKEN).');
   slug = String(slug || '');
   var wf, inputs;
   if (action === 'bangun') { wf = 'hub.yml'; inputs = { aksi: 'bangun' }; }
@@ -383,7 +383,7 @@ function pusatAction(token, action, slug) {
   var res = fetch_('https://api.github.com/repos/' + repo + '/actions/workflows/' + wf + '/dispatches', {
     method: 'post', contentType: 'application/json', headers: gh_(), muteHttpExceptions: true, payload: JSON.stringify({ ref: 'main', inputs: inputs }),
   });
-  if (res.getResponseCode() !== 204) throw new Error('GitHub menolak (' + res.getResponseCode() + '). Periksa token GitHub di XNK Pusat.');
+  if (res.getResponseCode() !== 204) throw new Error('GitHub menolak (' + res.getResponseCode() + '). Periksa token GitHub di XNK HQ.');
   return { started: action, slug: slug };
 }
 
@@ -577,23 +577,23 @@ function backupNow_(slug) {
 // ── Pemasangan (dijalankan pemilik dari editor) ─────────────────────────────────────────────────────────────
 
 /** Sekali (dan lagi setelah izin baru): kunci sesi + trigger harian 06:00 WIB + trigger backup tiap jam. Aman diulang.
- *  Dari editor, atau dari /adminxnk → "Siapkan XNK Pusat" (doGet ?setup). */
+ *  Dari editor, atau dari /adminxnk → "Siapkan XNK HQ" (doGet ?setup). */
 function setupPusat() { return setupPusat_(); }
 function setupPusat_() {
   if (prop_('SESSION_SECRET').length < 32) props_().setProperty('SESSION_SECRET', Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''));
   ScriptApp.getProjectTriggers().forEach(function (t) { var h = t.getHandlerFunction(); if (h === 'runPusatDaily' || h === 'runPusatBackup') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('runPusatDaily').timeBased().atHour(6).everyDays(1).inTimezone('Asia/Jakarta').create();
   ScriptApp.newTrigger('runPusatBackup').timeBased().everyHours(1).create();
-  return 'XNK Pusat siap (cek harian 06:00 WIB, backup tiap jam). Isi PUSAT_PIN dan PUSAT_ENROLL_CODE di Script Properties bila belum, lalu terbitkan sebagai aplikasi web.';
+  return 'XNK HQ siap (cek harian 06:00 WIB, backup tiap jam). Isi PUSAT_PIN dan PUSAT_ENROLL_CODE di Script Properties bila belum, lalu terbitkan sebagai aplikasi web.';
 }
 
 // ── Web Push di hub (T-2240) ────────────────────────────────────────────────────────────────────────────────
 // Satu pasang kunci VAPID untuk seluruh xnk.web.id: kunci publik di hub.json (vapidPublic), kunci privat hanya di secret
-// repo hub (HUB_VAPID_PRIVATE). XNK Pusat membagikan kunci publik ke coach lewat hubPushKey(rahasia hub, kunci, menyala)
+// repo hub (HUB_VAPID_PRIVATE). XNK HQ membagikan kunci publik ke coach lewat hubPushKey(rahasia hub, kunci, menyala)
 // setiap pagi dan saat pemilik menekan "Nyalakan/Matikan push" di /adminxnk; jawabannya membawa rahasia relay coach.
 // Workflow Push XNK (repo hub, tiap 5 menit) memanggil pusatPushTargets(PUSAT_PUSH_SECRET) sekali per putaran: daftar
 // {slug, exec, relay} coach yang menyala, lalu memanggil pushRelayPull/pushRelayAck tiap coach langsung. Jadi:
-//   - XNK Pusat tidak memakai UrlFetch per putaran kirim (20 coach × 12 putaran/jam tetap 0 fetch); hanya 2 fetch per
+//   - XNK HQ tidak memakai UrlFetch per putaran kirim (20 coach × 12 putaran/jam tetap 0 fetch); hanya 2 fetch per
 //     coach menyala per hari (dan per tombol), plus hub.json yang disimpan 10 menit.
 //   - HUB_SECRET (yang membuka hubExport = data penuh) tidak pernah keluar dari sini; rahasia relay hanya membuka antrean push.
 // Coach mati dan belum pernah menyala tidak pernah dihubungi.
@@ -677,7 +677,7 @@ function pusatPushTargets(pushSecret) {
 }
 
 // ── Ganti slug coach (T-2243) ───────────────────────────────────────────────────────────────────────────────
-// /adminxnk → Ganti slug: XNK Pusat memindahkan semua yang memakai slug sebagai kunci (pendaftaran, status, backup, push),
+// /adminxnk → Ganti slug: XNK HQ memindahkan semua yang memakai slug sebagai kunci (pendaftaran, status, backup, push),
 // mengganti nama folder backup, mengirim alamat situs baru ke coach (hubSiteUrl, dijaga HUB_SECRET), lalu menjalankan
 // workflow Hub XNK aksi ganti-slug (hub.json: slug lama jadi alamat pengalih, awalan penyimpanan dan secret clasp tetap).
 // Pemeriksaan nama sama dengan tools/build-hub.js (RESERVED dicek sama oleh tests/pusat.test.js).
@@ -724,7 +724,7 @@ function pusatRename(token, oldSlug, newSlug) {
   try {
     var all = json_('COACHES', {});
     if (!PUSAT_SLUG_RE.test(from) || !all[from]) throw new Error('Coach tidak terdaftar.');
-    if (all[to]) throw new Error('Nama "' + to + '" sudah terdaftar di XNK Pusat.');
+    if (all[to]) throw new Error('Nama "' + to + '" sudah terdaftar di XNK HQ.');
     c = all[from];
     all[to] = c;
     delete all[from];

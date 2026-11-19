@@ -1,6 +1,6 @@
 'use strict';
 // T-2240: Web Push di hub — kunci VAPID satu untuk hub, build menyisipkan kunci dan membetulkan klik notifikasi,
-// hub-push.js membagi kiriman per coach lewat XNK Pusat (web-push dan fetch palsu).
+// hub-push.js membagi kiriman per coach lewat XNK HQ (web-push dan fetch palsu).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');

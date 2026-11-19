@@ -1,17 +1,35 @@
-# XNK Pusat dan /adminxnk (Gelombang 2, T-2233…T-2234)
+# XNK HQ dan /adminxnk (Gelombang 2, T-2233…T-2234)
 
-**XNK Pusat** adalah satu Apps Script di akun Google **pemilik** yang mengawasi semua coach di hub.
+**XNK HQ** (dulu *XNK Pusat*; nama kode, folder `xnk-pusat/` dan Script Properties `PUSAT_*` tidak berubah) adalah satu Apps Script di akun Google **pemilik** yang mengawasi semua coach di hub.
 **xnk.web.id/adminxnk** adalah dasbornya (login PIN pemilik). Isinya hanya angka dan status: tidak ada nama, nomor
-WA atau data kesehatan klien yang pernah sampai ke XNK Pusat.
+WA atau data kesehatan klien yang pernah sampai ke XNK HQ.
 
 | Bagian | Kode |
 | --- | --- |
-| XNK Pusat (doPost, cek harian, email, aksi GitHub) | `apps-script/xnk-pusat/src/Pusat.gs`, tes `apps-script/xnk-pusat/tests/` |
+| XNK HQ (doPost, cek harian, email, aksi GitHub) | `apps-script/xnk-pusat/src/Pusat.gs`, tes `apps-script/xnk-pusat/tests/` |
 | Laporan tiap coach | `hubStatus(secret)` di `pt-scheduler/src/HubStatus.gs` (publik, dijaga `HUB_SECRET`; produksi selalu menolak) |
 | Pendaftaran coach | wizard langkah 4 → `XNK.registerPusat` (`lib-extra/LibApi.gs`): rahasia baru disimpan hanya bila Pusat menerima |
 | Backup mingguan (T-2250) | `hubExport(secret, req)` di `HubStatus.gs` (coach) → `runPusatBackup` di `Pusat.gs` (pemilik) |
 | Dasbor | `hub-site/adminxnk.html` → `xnk.web.id/adminxnk/` (CSP ketat, token di `sessionStorage` `adminxnk:`) |
 | Pasang / perbarui | workflow **XNK Library**: aksi `buat-pusat` sekali, lalu job `pusat` di setiap push ke main |
+
+## Dasbor /adminxnk (T-2261)
+
+Bergaya aplikasi Mac, satu file `hub-site/adminxnk.html` (CSP ketat: tanpa skrip luar, tanpa `onclick`, ikon SVG di dalam file).
+
+- **Layar lebar (≥ 900 px):** bilah samping dengan saringan (Semua coach, Perlu dicek, Belum terdaftar, Backup terlambat,
+  Push menyala; angka merah = ada masalah), **Siapkan XNK HQ** (titik merah bila kurang) dan **Keluar**; bilah judul
+  dengan ringkasan, kotak cari (`/`), **Cek semua** dan menu ⋯ (Perbarui semua coach, Bangun ulang situs, Siapkan,
+  Keluar); ringkasan angka; tabel coach (masalah di atas, ↑/↓ memilih); daftar **Semua masalah**; inspektur di kanan:
+  status, Panel / Portal klien, angka klien dan sesi, kuota hari ini, backup, push, tempat, sistem, lalu **Cek ulang**,
+  **Backup sekarang** dan menu ⋯ coach (push, tempat, Perbarui, Hubungkan, Ganti slug). 900–1180 px: bilah samping
+  hanya ikon.
+- **HP:** chip saringan, daftar coach, ringkasan di bawahnya; ketuk coach = lembar detail penuh, tombol kembali HP
+  menutupnya.
+- Konfirmasi memakai dialog sendiri (bukan `window.confirm`), Ganti slug dan Tempat memakai form kecil di inspektur.
+  Pilihan coach dan saringan disimpan di `sessionStorage` `adminxnk:ui`. Diperiksa `tools/hub-check.js` (1440 px dan
+  390 px; `HUB_SHOTS=<folder>` menyimpan tangkapan layar).
+- Proyek Apps Script yang sudah ada masih bernama "XNK Pusat" di editor; ganti namanya di editor bila ingin (tidak wajib).
 
 ## Pasang sekali (pemilik)
 
@@ -26,12 +44,12 @@ WA atau data kesehatan klien yang pernah sampai ke XNK Pusat.
    - `GITHUB_TOKEN` — opsional, untuk tombol aksi: *fine-grained token* hanya untuk repo `xnk-template-site`,
      izin **Actions: Read and write**.
 3. Di editor, pilih fungsi **setupPusat** → Run → beri izin. (Kunci sesi + trigger harian 06:00 WIB.) Sesudah itu,
-   izin atau trigger yang kurang bisa disiapkan dari `/adminxnk` → **Siapkan XNK Pusat** (lihat di bawah).
+   izin atau trigger yang kurang bisa disiapkan dari `/adminxnk` → **Siapkan XNK HQ** (lihat di bawah).
 4. Repo hub → `hub.json`: tambahkan `"pusatUrl": "<XNK_PUSAT_URL>"`. Situs dibangun ulang dan
    `xnk.web.id/adminxnk/` aktif.
-5. Setiap coach: spreadsheet → **XNK → Mulai setup → langkah 4 → Daftarkan ke XNK Pusat** (isi kode daftar).
-   Kotak **Link aplikasi (/exec)** terisi otomatis; bila XNK Pusat menolak dengan "tidak bisa dibuka tanpa login", tempel
-   link dari **Deploy → Kelola deployment** (akses "Siapa saja"), bukan link uji. XNK Pusat mencoba link itu dulu
+5. Setiap coach: spreadsheet → **XNK → Mulai setup → langkah 4 → Daftarkan ke XNK HQ** (isi kode daftar).
+   Kotak **Link aplikasi (/exec)** terisi otomatis; bila XNK HQ menolak dengan "tidak bisa dibuka tanpa login", tempel
+   link dari **Deploy → Kelola deployment** (akses "Siapa saja"), bukan link uji. XNK HQ mencoba link itu dulu
    (`getServerInfo`) sebelum menyimpan, dan untuk coach yang ada di `hub.json` selalu memakai link dari `hub.json`
    (`hubExec_`, dibaca dari repo hub, disimpan 10 menit) — link dari `ScriptApp.getService().getUrl()` di editor bisa
    berupa link uji yang meminta login Google. Galat pemeriksaan menyebut kode HTTP, host, dan judul halaman.
@@ -43,7 +61,7 @@ WA atau data kesehatan klien yang pernah sampai ke XNK Pusat.
 Server menjawab; versi Library = versi terbaru (tag `lib-v<N>`); trigger `runReminderTick` terpasang tepat satu;
 bila pengingat menyala, tick terakhir < 3 jam; **kuota Google hari ini** (T-2253) di bawah 70 % untuk email
 (batas `QUOTA_MAIL`, bawaan 100), UrlFetch (`QUOTA_FETCH`, 20.000) dan menit trigger (`QUOTA_TRIGGER_MIN`, 90) —
-batas bisa ditimpa di Script Properties XNK Pusat. Ada masalah = **satu email** ke pemilik dengan daftar coach dan
+batas bisa ditimpa di Script Properties XNK HQ. Ada masalah = **satu email** ke pemilik dengan daftar coach dan
 link dasbor. Tanpa masalah = tanpa email. Backup yang gagal **2 kali berturut-turut** ikut masuk email itu.
 
 Angka kuota datang dari `hubStatus().quota = {date, mail, fetch, triggerMin, mailRemaining, mailSkipped}` (hari WIB,
@@ -59,7 +77,7 @@ Selalu*); wizard tidak menimpa pilihan itu.
 
 ## Backup mingguan (T-2250)
 
-Setiap coach disalin seminggu sekali ke **Drive akun XNK Pusat** (akun pemilik), folder `XNK Backup/<slug>`, sebagai
+Setiap coach disalin seminggu sekali ke **Drive akun XNK HQ** (akun pemilik), folder `XNK Backup/<slug>`, sebagai
 spreadsheet baru bernama `<slug> YYYY-MM-DD` (tanggal WIB). **8 salinan terbaru** disimpan; yang lebih tua dipindah ke
 sampah Drive (masih bisa dipulihkan 30 hari dari sampah).
 
@@ -77,18 +95,18 @@ sampah Drive (masih bisa dipulihkan 30 hari dari sampah).
 - **Backup sekarang.** Tombol per coach di /adminxnk (`pusatAction(token, 'backup', slug)`): menandai coach dan
   memasang trigger sekali jalan ±1 menit lagi (`runPusatBackupSoon`). Tanpa GitHub. Coach dengan Library lama
   menjawab "Library coach belum punya hubExport; perbarui coach." — jalankan **Perbarui** dulu.
-- **Izin.** XNK Pusat memakai izin `spreadsheets` dan `drive.file` (hanya file yang dibuatnya sendiri; Drive lewat REST
-  API karena DriveApp meminta akses Drive penuh). Setelah versi ini terpasang, buka `/adminxnk` → **Siapkan XNK Pusat**
+- **Izin.** XNK HQ memakai izin `spreadsheets` dan `drive.file` (hanya file yang dibuatnya sendiri; Drive lewat REST
+  API karena DriveApp meminta akses Drive penuh). Setelah versi ini terpasang, buka `/adminxnk` → **Siapkan XNK HQ**
   (atau jalankan `setupPusat` di editor) untuk memberi izin baru dan memasang trigger backup tiap jam.
 
-## Siapkan XNK Pusat dari /adminxnk
+## Siapkan XNK HQ dari /adminxnk
 `pusatOverview.setup` = `{auth, daily, backup, ok, editor}`. `auth` diuji langsung: satu permintaan kecil ke Drive dengan token skrip (berhasil = disimpan 10 menit). **Jangan pakai `ScriptApp.getAuthorizationInfo`** di sini: dari web app "Siapa saja" ia memeriksa pengunjung anonim, jadi selalu "perlu izin" walau pemilik sudah memberi izin.
-Bila ada yang kurang, `/adminxnk` menampilkan pita "XNK Pusat perlu disiapkan" (tombol yang sama juga ada di bilah atas).
+Bila ada yang kurang, `/adminxnk` menampilkan pita "XNK HQ perlu disiapkan" (tombol yang sama juga ada di bilah atas).
 Tombol membuka tab baru (dibuka saat diklik, supaya tidak diblokir) ke `<pusatUrl>?setup=<tanda siap>`: tanda sekali
 pakai `setup.<exp>.<hmac>` dari `pusatAction(token, 'setup')`, berlaku 10 menit, bukan token sesi. `doGet` memeriksanya
 lalu menjalankan `setupPusat_()` (sama dengan `setupPusat` di editor): **trigger** terpasang dari sini. **Izin Google baru
 (Drive/Spreadsheet) tidak bisa diberikan lewat link web** — Google hanya menampilkan layar izin di editor (dicoba
-2026-11-18). Karena itu, bila `setup.auth` false, pita menampilkan langkah editor dan tombol **Buka editor XNK Pusat**
+2026-11-18). Karena itu, bila `setup.auth` false, pita menampilkan langkah editor dan tombol **Buka editor XNK HQ**
 (`setup.editor` = `https://script.google.com/d/<scriptId>/edit`): pilih `setupPusat` → Run → Izinkan, sekali saja.
 Tab `?setup` juga mengatakan hal yang sama bila izin masih kurang (tidak lagi "izin Google diberikan").
 
@@ -101,21 +119,21 @@ Tab `?setup` juga mengatakan hal yang sama bila izin masih kurang (tidak lagi "i
    Hapus sheet lama dengan nama yang sama di tujuan, lalu ganti nama "Salinan dari …" ke nama aslinya (nama sheet
    harus persis sama).
 4. Bila spreadsheet tujuan baru: jalankan wizard setup coach (XNK → Mulai setup) agar Script Properties (PIN,
-   pengaturan, HUB_SECRET) terisi lagi — pengaturan tidak ikut backup — lalu daftarkan ulang ke XNK Pusat.
+   pengaturan, HUB_SECRET) terisi lagi — pengaturan tidak ikut backup — lalu daftarkan ulang ke XNK HQ.
 5. Buka panel coach dan periksa jadwal, klien dan paket. Kolom tanggal kembali sebagai teks; aplikasi membacanya lewat
    `_isoDateCell_` / teks ISO seperti biasa.
 
 ## Notifikasi push coach (T-2240)
 
-XNK Pusat membagikan kunci publik VAPID hub (dari `hub.json` → `vapidPublic`) ke coach lewat `hubPushKey(rahasia, kunci, menyala)`: setiap pagi untuk coach yang menyala (atau masih aktif dan perlu dimatikan) dan saat tombol **Nyalakan/Matikan push** di `/adminxnk` ditekan (`pusatAction` `push-on` / `push-off`). Coach yang tidak pernah dinyalakan tidak dihubungi. Jawabannya (rahasia relay coach, jumlah perangkat) disimpan di `PUSH_<slug>`; `/adminxnk` hanya melihat menyala/aktif, jumlah perangkat, waktu dan galat.
+XNK HQ membagikan kunci publik VAPID hub (dari `hub.json` → `vapidPublic`) ke coach lewat `hubPushKey(rahasia, kunci, menyala)`: setiap pagi untuk coach yang menyala (atau masih aktif dan perlu dimatikan) dan saat tombol **Nyalakan/Matikan push** di `/adminxnk` ditekan (`pusatAction` `push-on` / `push-off`). Coach yang tidak pernah dinyalakan tidak dihubungi. Jawabannya (rahasia relay coach, jumlah perangkat) disimpan di `PUSH_<slug>`; `/adminxnk` hanya melihat menyala/aktif, jumlah perangkat, waktu dan galat.
 
-`pusatPushTargets(PUSAT_PUSH_SECRET)` (perbandingan waktu-konstan, min 32 karakter) memberi workflow Push XNK daftar `{slug, exec, relay}` coach yang menyala, tanpa UrlFetch. Workflow lalu memanggil coach langsung. Galat push masuk email harian. Semua UrlFetch XNK Pusat dihitung per hari WIB (`fetch_`, tampil sebagai `fetchToday` di `pusatOverview`). Langkah pasang: [push/Setup.md](../push/Setup.md#hub-xnkwebid-notifikasi-untuk-semua-coach-t-2240).
+`pusatPushTargets(PUSAT_PUSH_SECRET)` (perbandingan waktu-konstan, min 32 karakter) memberi workflow Push XNK daftar `{slug, exec, relay}` coach yang menyala, tanpa UrlFetch. Workflow lalu memanggil coach langsung. Galat push masuk email harian. Semua UrlFetch XNK HQ dihitung per hari WIB (`fetch_`, tampil sebagai `fetchToday` di `pusatOverview`). Langkah pasang: [push/Setup.md](../push/Setup.md#hub-xnkwebid-notifikasi-untuk-semua-coach-t-2240).
 
 ## Tempat latihan coach (T-2258)
 
 `/adminxnk` → **Tempat** (form kecil di kartu coach: nama tempat + kota, Simpan / Hapus tempat) memanggil
 `pusatSetPlace(token, slug, nama, kota)` (hanya pemilik; coach harus ada di `hub.json`; isian diperiksa sama dengan
-`build-hub.js`). XNK Pusat menjalankan `hub.yml` dengan `{aksi: 'simpan', slug, warna: 'tetap', tempat, kota}`
+`build-hub.js`). XNK HQ menjalankan `hub.yml` dengan `{aksi: 'simpan', slug, warna: 'tetap', tempat, kota}`
 (hapus = `tempat: '-'`); tanpa `GITHUB_TOKEN` atau bila GitHub menolak, jawabannya berisi langkah manual.
 `pusatOverview.places` = tempat tiap coach di `hub.json` (slug → `{name, city}` atau `null`). Langkah untuk pemilik:
 [Hub.md](Hub.md#tempat-latihan-coach-t-2258t-2260).

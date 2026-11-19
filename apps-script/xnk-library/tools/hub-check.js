@@ -59,7 +59,7 @@ function serve(state) {
 }
 
 const XNK_HITS = [], LIB_HITS = [], CSP_HITS = [];
-// XNK Pusat palsu untuk /adminxnk (T-2234): jawaban berbentuk sama dengan apps-script/xnk-pusat/src/Pusat.gs.
+// XNK HQ palsu untuk /adminxnk (T-2234): jawaban berbentuk sama dengan apps-script/xnk-pusat/src/Pusat.gs.
 const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSATHUBCHECK00000000000/exec';
 const PUSAT_CALLS = [];
 function fakePusat(req) {
@@ -70,11 +70,11 @@ function fakePusat(req) {
   if (req.fn === 'pusatRename') { PUSAT_CALLS.rename = req.args.slice(1); return { ok: true, data: { slug: req.args[2], from: req.args[1], site: 'ok', folder: 'ok', hub: 'ok' } }; }
   if (req.fn === 'pusatAction' && req.args[1] === 'setup') return { ok: true, data: { ticket: 'setup.1.sig' } };
   if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
-  const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 } } });
-  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
+  const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 }, quota: { date: '2026-11-19', mail: 12, fetch: 15200, triggerMin: 20 } } });
+  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, fetchToday: 34, quotaLimits: { mail: 100, fetch: 20000, triggerMin: 90 }, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
     places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
     { slug: 'claudia', exec: EXEC_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
-      backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false } },
+      backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, push: { on: true, active: true, subs: 3, at: new Date().toISOString(), error: '' } },
   ] } };
 }
 
@@ -82,7 +82,7 @@ async function newContext(browser, be, seen) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await context.route(/^https:\/\/script\.google(usercontent)?\.com\//, route => {
     const u = route.request().url();
-    if (u.startsWith(PUSAT + '?setup=')) return route.fulfill({ status: 200, contentType: 'text/plain', body: 'XNK Pusat siap (palsu)' });
+    if (u.startsWith(PUSAT + '?setup=')) return route.fulfill({ status: 200, contentType: 'text/plain', body: 'XNK HQ siap (palsu)' });
     if (u === PUSAT) return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(fakePusat(JSON.parse(route.request().postData() || '{}'))) });
     if (route.request().method() !== 'POST') return route.fulfill({ status: 404, body: '' });
     seen.push(u);
@@ -191,64 +191,114 @@ async function makeLogos(browser) {
       await context.close();
     }
 
-    console.log('Hub · /adminxnk (XNK Pusat)');
+    console.log('Hub · /adminxnk (XNK HQ)');
     {
       const seen = [], errors = [];
       const context = await newContext(browser, be, seen);
       const page = await open(context, O + '/adminxnk/', errors);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const dlgOk = async () => { await page.waitForSelector('#dlg[open]', { timeout: 5000 }).catch(() => {}); await page.click('#dlgOk'); };
+      const dm = async () => (await page.textContent('#dm')) || '';
       check(await page.isVisible('#pin') && !(await page.isVisible('#dash')), 'awal: hanya form PIN, tanpa data');
+      check((await page.title()) === 'XNK HQ' && ((await page.textContent('#login')) || '').includes('Masuk ke XNK HQ'), 'nama baru: XNK HQ');
       await page.fill('#pin', 'salah');
       await page.click('#go');
       await page.waitForFunction(() => document.getElementById('lm').textContent.includes('PIN salah'), null, { timeout: 5000 }).catch(() => {});
       check(((await page.textContent('#lm')) || '').includes('PIN salah'), 'PIN salah → pesan');
       await page.fill('#pin', 'pin-pusat-1');
       await page.click('#go');
-      await page.waitForSelector('#list article', { timeout: 5000 }).catch(() => {});
+      await page.waitForSelector('#list .row', { timeout: 5000 }).catch(() => {});
       const text = await page.textContent('#list');
-      check(text.includes('Claudia Fit') && text.includes('Semua beres') && text.includes('13'), 'kartu coach: nama usaha dari hub.json, status, angka klien');
-      check(text.includes('Claudia Dua') && text.includes('Belum terdaftar di XNK Pusat'), 'coach di hub.json yang belum mendaftar ditandai');
-      check(((await page.textContent('#sum')) || '').includes('Library terbaru v11'), 'ringkasan: versi Library terbaru');
-      page.once('dialog', d => d.accept());
-      await page.click('[data-act="perbarui"][data-slug="claudia"]');
+      check(text.includes('Claudia Fit') && text.includes('Claudia Dua') && text.includes('13'), 'tabel coach: nama usaha dari hub.json, angka klien');
+      check((await page.$$eval('#list .row', rs => rs.map(r => r.dataset.sel))).join() === 'claudia-2,claudia', 'coach bermasalah di atas: ' + (await page.$$eval('#list .row', rs => rs.map(r => r.dataset.sel))).join());
+      check(((await page.textContent('#insp')) || '').includes('Belum terdaftar di XNK HQ'), 'inspektur terbuka di coach pertama: belum terdaftar ditandai');
+      check(((await page.textContent('#sum')) || '').includes('Library terbaru v11') && ((await page.textContent('#sum')) || '').includes('2 coach'), 'ringkasan: jumlah coach + versi Library terbaru');
+      check(((await page.textContent('#fleet')) || '').includes('UrlFetch HQ hari ini') && ((await page.textContent('#fleet')) || '').includes('34'), 'ringkasan armada: UrlFetch XNK HQ hari ini');
+      check(((await page.textContent('#nav [data-filter="bad"]')) || '').includes('1') && ((await page.textContent('#nav [data-filter="push"]')) || '').includes('1'), 'navigasi samping: jumlah per saringan');
+      await page.click('#nav [data-filter="bad"]');
+      check((await page.$$('#list .row')).length === 1 && ((await page.textContent('#ttl')) || '') === 'Perlu dicek', 'saringan "Perlu dicek": hanya coach bermasalah');
+      await page.click('#nav [data-filter="all"]');
+      check(((await page.textContent('#issues')) || '').includes('Semua masalah') && ((await page.textContent('#issues')) || '').includes('Belum terdaftar di XNK HQ'), 'daftar "Semua masalah" di bawah tabel');
+      await page.keyboard.press('Escape');
+      await page.focus('#list .row[data-sel="claudia-2"]');
+      await page.keyboard.press('ArrowDown');
+      check(await page.evaluate(() => document.querySelector('#list .row.sel') && document.querySelector('#list .row.sel').dataset.sel === 'claudia'), 'papan ketik: ↓ memilih coach berikutnya');
+      const insp = (await page.textContent('#insp')) || '';
+      check(insp.includes('Semua beres') && insp.includes('UrlFetch') && insp.includes('15.200 / 20.000') && (await page.$('#insp .kv.q .bad')) !== null, 'inspektur: status, kuota (≥ 70 % merah)');
+      check(insp.includes('Backup mingguan') && insp.includes('15 Nov 2026') && (await page.getAttribute('#insp .bk a', 'href')) === 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', 'inspektur: tanggal backup terakhir + link Buka');
+      check(insp.includes('menyala · 3 perangkat'), 'inspektur: notifikasi push');
+      await page.click('#more');
+      await page.click('#menu [data-act="perbarui"]');
+      await dlgOk();
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('GitHub Actions'), null, { timeout: 5000 }).catch(() => {});
-      check(PUSAT_CALLS.includes('pusatAction'), 'tombol Perbarui menjalankan aksi lewat XNK Pusat');
-      check(((await page.textContent('#list')) || '').includes('Backup terakhir') && (await page.getAttribute('#list .bk a', 'href')) === 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', 'kartu coach: tanggal backup terakhir + link Buka');
-      page.once('dialog', d => d.accept());
-      await page.click('[data-act="backup"][data-slug="claudia"]');
+      check(PUSAT_CALLS.includes('pusatAction') && (await dm()).includes('GitHub Actions'), 'menu ⋯ → Perbarui semua: dialog sendiri (bukan confirm), aksi lewat XNK HQ');
+      await page.click('#insp [data-act="backup"][data-slug="claudia"]');
+      await dlgOk();
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('1 menit'), null, { timeout: 5000 }).catch(() => {});
-      check(((await page.textContent('#dm')) || '').includes('1 menit') && ((await page.textContent('#list')) || '').includes('menunggu giliran'), 'Backup sekarang (tanpa onclick, lolos CSP): pesan + "menunggu giliran"');
-      // T-2258: tempat latihan lewat form kecil di kartu (bukan prompt).
-      check(((await page.textContent('#list')) || '').includes('Tempat: Gold Gym Kemang · Jakarta Selatan') && ((await page.textContent('#list')) || '').includes('Tempat belum diisi'), 'kartu coach: tempat dari hub.json / "Tempat belum diisi"');
-      await page.click('[data-act="tempat"][data-slug="claudia-2"]');
+      check((await dm()).includes('1 menit') && ((await page.textContent('#insp')) || '').includes('menunggu giliran'), 'Backup sekarang (tanpa onclick, lolos CSP): pesan + "menunggu giliran"');
+      // T-2258: tempat latihan lewat form kecil di inspektur (bukan prompt).
+      check(((await page.textContent('#insp')) || '').includes('Tempat: Gold Gym Kemang · Jakarta Selatan'), 'inspektur: tempat dari hub.json');
+      await page.click('#list .row[data-sel="claudia-2"]');
+      check(((await page.textContent('#insp')) || '').includes('Tempat belum diisi'), 'coach tanpa tempat: "Tempat belum diisi"');
+      await page.click('#insp [data-act="tempat"][data-slug="claudia-2"]');
       check(await page.evaluate(() => document.activeElement && document.activeElement.id === 'pl-n-claudia-2'), 'Tempat: form terbuka, kursor di nama tempat');
       await page.fill('#pl-n-claudia-2', '  Studio   Dua ');
       await page.fill('#pl-c-claudia-2', 'Bandung');
       await page.click('.pl-form[data-slug="claudia-2"] button[type="submit"]');
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('disimpan'), null, { timeout: 5000 }).catch(() => {});
-      check(JSON.stringify(PUSAT_CALLS.place) === '["claudia-2","Studio Dua","Bandung"]' && !(await page.isVisible('.pl-form')) && ((await page.textContent('#list')) || '').includes('Tempat: Studio Dua · Bandung'),
-        'Tempat: simpan → pusatSetPlace (spasi dirapikan), form tertutup, kartu diperbarui (' + JSON.stringify(PUSAT_CALLS.place) + ')');
-      await page.click('[data-act="tempat"][data-slug="claudia"]');
-      page.once('dialog', d => d.accept());
+      check(JSON.stringify(PUSAT_CALLS.place) === '["claudia-2","Studio Dua","Bandung"]' && !(await page.isVisible('.pl-form')) && ((await page.textContent('#insp')) || '').includes('Tempat: Studio Dua · Bandung'),
+        'Tempat: simpan → pusatSetPlace (spasi dirapikan), form tertutup, inspektur diperbarui (' + JSON.stringify(PUSAT_CALLS.place) + ')');
+      await page.click('#list .row[data-sel="claudia"]');
+      await page.click('#insp [data-act="tempat"][data-slug="claudia"]');
       await page.click('[data-act="tempat-hapus"][data-slug="claudia"]');
+      await page.evaluate(() => { document.getElementById('dm').textContent = ''; });
+      await dlgOk();
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('disimpan'), null, { timeout: 5000 }).catch(() => {});
       check(JSON.stringify(PUSAT_CALLS.place) === '["claudia","",""]', 'Hapus tempat → pusatSetPlace dengan isian kosong');
-      // T-2243: Ganti slug (prompt nama baru + konfirmasi), tanpa onclick.
-      const answers = ['Claudia-Baru', null];
-      const onDialog = d => { const a = answers.shift(); return d.type() === 'prompt' ? d.accept(a) : d.accept(); };
-      page.on('dialog', onDialog);
-      await page.click('[data-act="ganti-slug"][data-slug="claudia"]');
-      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('Selesai di XNK Pusat'), null, { timeout: 5000 }).catch(() => {});
-      page.off('dialog', onDialog);
-      check(JSON.stringify(PUSAT_CALLS.rename) === '["claudia","claudia-baru"]' && ((await page.textContent('#dm')) || '').includes('claudia → claudia-baru'), 'Ganti slug: nama baru (huruf kecil) ke pusatRename, pesan hasil (' + JSON.stringify(PUSAT_CALLS.rename) + ')');
-      check(await page.isVisible('#setup') && ((await page.textContent('#setupWhy')) || '').includes('Izin Google'), 'pita "XNK Pusat perlu disiapkan" saat izin belum diberikan');
-      check(await page.isVisible('#setupEditor') && (await page.getAttribute('#setupEditor', 'href')) === 'https://script.google.com/d/SCRIPTPUSAT/edit', 'izin belum ada: langkah editor + link editor XNK Pusat');
-      const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('.bar [data-act="setup"]')]);
+      // T-2243: Ganti slug lewat menu ⋯ coach → form + dialog, tanpa prompt.
+      await page.click('#insp [data-menu="coach"]');
+      await page.click('#menu [data-act="ganti-slug"]');
+      await page.fill('#rn-claudia', 'Claudia Baru');
+      await page.click('.rn-form button[type="submit"]');
+      check(!(await page.isVisible('#dlg')) && (await dm()).includes('tidak valid'), 'Ganti slug: nama tidak valid ditolak sebelum dialog');
+      await page.fill('#rn-claudia', 'Claudia-Baru');
+      await page.click('.rn-form button[type="submit"]');
+      await dlgOk();
+      await page.waitForFunction(() => document.getElementById('dm').textContent.includes('Selesai di XNK HQ'), null, { timeout: 5000 }).catch(() => {});
+      check(JSON.stringify(PUSAT_CALLS.rename) === '["claudia","claudia-baru"]' && (await dm()).includes('claudia → claudia-baru'), 'Ganti slug: nama baru (huruf kecil) ke pusatRename, pesan hasil (' + JSON.stringify(PUSAT_CALLS.rename) + ')');
+      check(await page.isVisible('#setup') && ((await page.textContent('#setupWhy')) || '').includes('Izin Google'), 'pita "XNK HQ perlu disiapkan" saat izin belum diberikan');
+      check(await page.isVisible('#setupEditor') && (await page.getAttribute('#setupEditor', 'href')) === 'https://script.google.com/d/SCRIPTPUSAT/edit', 'izin belum ada: langkah editor + link editor XNK HQ');
+      const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('#sideSetup')]);
       if (tab) await tab.waitForURL(/[?]setup=/, { timeout: 5000 }).catch(() => {});
-      check(!!tab && tab.url() === PUSAT + '?setup=setup.1.sig', 'Siapkan XNK Pusat: tab baru ke XNK Pusat dengan tanda siap (bukan token sesi)');
+      check(!!tab && tab.url() === PUSAT + '?setup=setup.1.sig', 'Siapkan XNK HQ: tab baru ke XNK HQ dengan tanda siap (bukan token sesi)');
       if (tab) await tab.close();
-      check(await page.evaluate(() => Object.keys(sessionStorage).every(k => k.startsWith('adminxnk:'))), 'token pemilik di sessionStorage berawalan adminxnk:');
-      await page.click('#out');
+      check(await page.evaluate(() => Object.keys(sessionStorage).every(k => k.startsWith('adminxnk:'))), 'token pemilik dan pilihan tampilan di sessionStorage berawalan adminxnk:');
+      check(await page.evaluate(() => !/window\.(confirm|prompt)\(/.test(document.documentElement.innerHTML)), 'tanpa window.confirm / window.prompt');
+      if (process.env.HUB_SHOTS) {
+        await page.click('#list .row[data-sel="claudia"]');
+        await page.screenshot({ path: path.join(process.env.HUB_SHOTS, 'hq-1440-light.png') });
+        await page.emulateMedia({ colorScheme: 'dark' });
+        await page.screenshot({ path: path.join(process.env.HUB_SHOTS, 'hq-1440-dark.png') });
+        await page.emulateMedia({ colorScheme: 'light' });
+        await page.setViewportSize({ width: 1024, height: 768 });
+        await page.screenshot({ path: path.join(process.env.HUB_SHOTS, 'hq-1024.png') });
+      }
+      // HP 390 × 844: daftar, lembar detail, tombol kembali.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(200);
+      check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth) && await page.isVisible('#chips') && !(await page.isVisible('.side')), 'HP: tanpa geser ke samping, chip saringan, tanpa bilah samping');
+      if (process.env.HUB_SHOTS) await page.screenshot({ path: path.join(process.env.HUB_SHOTS, 'hq-390-list.png') });
+      await page.click('#list .row[data-sel="claudia"]');
+      await page.waitForTimeout(350);
+      check(await page.evaluate(() => document.getElementById('dash').classList.contains('insp-open')) && await page.isVisible('#insp .back'), 'HP: ketuk coach → lembar detail penuh dengan tombol kembali');
+      if (process.env.HUB_SHOTS) await page.screenshot({ path: path.join(process.env.HUB_SHOTS, 'hq-390-detail.png') });
+      await page.goBack();
+      await page.waitForTimeout(350);
+      check(await page.evaluate(() => !document.getElementById('dash').classList.contains('insp-open')) && page.url().endsWith('/adminxnk/'), 'HP: tombol kembali menutup lembar, tetap di /adminxnk');
+      await page.click('#more');
+      await page.click('#menu [data-act="keluar"]');
       check(await page.isVisible('#pin') && (await page.textContent('#list')) === '', 'keluar: data dihapus dari layar');
+      if (process.env.HUB_SHOTS) await page.screenshot({ path: path.join(process.env.HUB_SHOTS, 'hq-390-login.png') });
       check(errors.length === 0, 'tanpa error JavaScript / CSP' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close();
     }
