@@ -91,6 +91,7 @@ async function open(browser, url, be, seen) {
       const { context, page, errors } = await open(browser, origin + BASE, be, seen);
       check((await page.title()) === 'Gym Andi', 'judul halaman = nama usaha');
       check(await page.isVisible('#admin-login'), 'layar PIN tampil');
+      check(await page.isVisible('#admin-login .xnk-by'), 'tanda "Didukung XNK" di layar PIN (T-2257)');
       await page.fill('#admin-pin', '222222');
       await page.click('#admin-login-btn');
       await page.waitForTimeout(800);
@@ -111,6 +112,7 @@ async function open(browser, url, be, seen) {
       const seen = [];
       const { context, page, errors } = await open(browser, origin + BASE + 'klien/', be, seen);
       check(await page.isVisible('#login-phone'), 'portal meminta nomor WhatsApp');
+      check(await page.isVisible('#view-public-login .xnk-by'), 'tanda "Didukung XNK" di layar masuk portal (T-2257)');
       await page.fill('#login-phone', '82222222222');
       await page.click('#login-submit-btn');
       await page.waitForTimeout(900);
