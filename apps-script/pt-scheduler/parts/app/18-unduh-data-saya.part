@@ -1,0 +1,201 @@
+  // ── Unduh data saya (T-2255): Pengaturan → Akun ─────────────────────────────
+  // Ambil semua sheet per halaman lewat exportMyData (Unduh.gs, hanya membaca), rakit .xlsx di browser tanpa pustaka
+  // luar (zip sendiri; deflate lewat CompressionStream bila ada, kalau tidak disimpan apa adanya) lalu unduh.
+  const unduh = { run: false, pct: 0, text: '', err: '' };
+
+  function unduhProgHtml() {
+    if (unduh.err) return '<p class="hint err-msg">' + h(unduh.err) + '</p>';
+    if (!unduh.run && !unduh.text) return '';
+    return '<div class="meter" aria-hidden="true"><i style="width:' + Math.round(unduh.pct) + '%;transition:none"></i></div><p class="hint">' + h(unduh.text) + '</p>';
+  }
+  function unduhPaint() {
+    const el = $('unduh-prog');
+    if (el) el.innerHTML = unduhProgHtml();
+    const b = $('unduh-btn');
+    if (b) {
+      b.disabled = unduh.run;
+      b.innerHTML = unduh.run ? '<span class="spin" aria-hidden="true"></span> Mengunduh…' : icon('download') + ' Unduh data saya';
+      if (!unduh.run) paintIcons();
+    }
+  }
+  window.unduhCardHtml = function () {
+    return '<div class="card-flat stack"><div><p class="li-title">Unduh data saya</p>' +
+      '<p class="li-sub">Semua data (klien, jadwal, latihan, gizi, keuangan, …) dalam satu berkas Excel. Foto progres, kunci perangkat, dan pengaturan rahasia tidak ikut.</p></div>' +
+      '<button type="button" class="btn btn-outline btn-block" id="unduh-btn" onclick="window.unduhData()"' + (unduh.run ? ' disabled>' + '<span class="spin" aria-hidden="true"></span> Mengunduh…' : '>' + icon('download') + ' Unduh data saya') + '</button>' +
+      '<div class="stack" id="unduh-prog" role="status" aria-live="polite">' + unduhProgHtml() + '</div></div>';
+  };
+
+  // Satu halaman; gangguan jaringan dicoba lagi sampai 3 kali.
+  function unduhPage(req, tries) {
+    return adminCall('exportMyData', req).catch(function (err) {
+      if ((tries || 0) >= 2 || /tidak valid|tidak ditemukan|sesi|login|pin/i.test(String(err && err.message || err))) throw err;
+      return new Promise(function (ok) { setTimeout(ok, 1500); }).then(function () { return unduhPage(req, (tries || 0) + 1); });
+    });
+  }
+
+  window.unduhData = async function () {
+    if (unduh.run) return;
+    unduh.run = true; unduh.pct = 0; unduh.err = ''; unduh.text = 'Menyiapkan daftar sheet…';
+    unduhPaint();
+    try {
+      const list = await unduhPage(null);
+      const sheets = (list && list.sheets) || [];
+      const total = sheets.reduce(function (n, s) { return n + Math.max(1, s.rows || 0); }, 0) || 1;
+      let done = 0;
+      const got = [];
+      for (let i = 0; i < sheets.length; i++) {
+        const s = sheets[i], rows = [];
+        let from = 1;
+        unduh.text = 'Sheet ' + (i + 1) + ' dari ' + sheets.length + ': ' + s.name;
+        unduhPaint();
+        while (from > 0) {
+          const r = await unduhPage({ sheet: s.name, from: from });
+          const part = (r && r.rows) || [];
+          for (let j = 0; j < part.length; j++) rows.push(part[j]);
+          done += part.length;
+          unduh.pct = Math.min(95, done / total * 95);
+          unduhPaint();
+          const next = Number(r && r.next) || 0;
+          from = next > from ? next : 0;
+        }
+        if (!s.rows) { done += 1; unduh.pct = Math.min(95, done / total * 95); }
+        got.push({ name: s.name, rows: rows });
+      }
+      unduh.text = 'Membuat berkas Excel…';
+      unduhPaint();
+      const blob = await xlsxBlob(got);
+      const d = new Date(), p2 = function (n) { return ('0' + n).slice(-2); };
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'data-saya-' + d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + '.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+      unduh.run = false; unduh.pct = 100;
+      unduh.text = 'Selesai: ' + got.length + ' sheet, ' + Math.max(1, Math.round(blob.size / 1024)) + ' KB.';
+      unduhPaint();
+      window.showToast('Data diunduh.');
+    } catch (err) {
+      unduh.run = false; unduh.text = '';
+      unduh.err = window.authMessage(err) + ' Coba lagi.';
+      unduhPaint();
+    }
+  };
+
+  // ── Penulis .xlsx kecil (inline string, baris judul tebal dan dibekukan) ──
+  const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const NS_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const NS_PKG = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  function xmlEsc(v) {
+    let s = String(v == null ? '' : v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '');
+    if (s.length > 32767) s = s.slice(0, 32767);
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function xlCol(n) { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; }
+  function xlSheetNames(list) {
+    const used = {};
+    return list.map(function (it, i) {
+      let base = String(it.name || '').replace(/[\[\]:*?\/\\]/g, ' ').replace(/^'+|'+$/g, '').trim().slice(0, 31) || ('Sheet' + (i + 1));
+      let nm = base, k = 2;
+      while (used[nm.toLowerCase()]) { const suf = ' (' + (k++) + ')'; nm = base.slice(0, 31 - suf.length) + suf; }
+      used[nm.toLowerCase()] = 1;
+      return nm;
+    });
+  }
+  function xlSheetXml(rows) {
+    const out = [XML_HEAD, '<worksheet xmlns="', NS_MAIN, '">'];
+    if (rows.length > 1) out.push('<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>');
+    out.push('<sheetData>');
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r] || [];
+      out.push('<row r="', r + 1, '">');
+      for (let c = 0; c < row.length; c++) {
+        const v = row[c] == null ? '' : String(row[c]);
+        if (v === '') continue;
+        const ref = xlCol(c) + (r + 1), st = r === 0 ? ' s="1"' : '';
+        // Hanya bilangan bulat pendek jadi angka: "1.500" (format Indonesia) dan nomor WA tetap teks.
+        if (/^-?(0|[1-9]\d{0,8})$/.test(v)) out.push('<c r="', ref, '"', st, '><v>', v, '</v></c>');
+        else out.push('<c r="', ref, '"', st, ' t="inlineStr"><is><t xml:space="preserve">', xmlEsc(v), '</t></is></c>');
+      }
+      out.push('</row>');
+    }
+    out.push('</sheetData></worksheet>');
+    return out.join('');
+  }
+  const XL_STYLES = XML_HEAD + '<styleSheet xmlns="' + NS_MAIN + '"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  function xlsxFiles(list) {
+    if (!list.length) list = [{ name: 'Kosong', rows: [] }];
+    const names = xlSheetNames(list);
+    const files = [];
+    let ct = XML_HEAD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
+    let wb = XML_HEAD + '<workbook xmlns="' + NS_MAIN + '" xmlns:r="' + NS_REL + '"><sheets>';
+    let rels = XML_HEAD + '<Relationships xmlns="' + NS_PKG + '">';
+    list.forEach(function (it, i) {
+      const n = i + 1;
+      ct += '<Override PartName="/xl/worksheets/sheet' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+      wb += '<sheet name="' + xmlEsc(names[i]) + '" sheetId="' + n + '" r:id="rId' + n + '"/>';
+      rels += '<Relationship Id="rId' + n + '" Type="' + NS_REL + '/worksheet" Target="worksheets/sheet' + n + '.xml"/>';
+      files.push(['xl/worksheets/sheet' + n + '.xml', xlSheetXml(it.rows || [])]);
+    });
+    rels += '<Relationship Id="rId' + (list.length + 1) + '" Type="' + NS_REL + '/styles" Target="styles.xml"/></Relationships>';
+    files.unshift(
+      ['[Content_Types].xml', ct + '</Types>'],
+      ['_rels/.rels', XML_HEAD + '<Relationships xmlns="' + NS_PKG + '"><Relationship Id="rId1" Type="' + NS_REL + '/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+      ['xl/workbook.xml', wb + '</sheets></workbook>'],
+      ['xl/_rels/workbook.xml.rels', rels],
+      ['xl/styles.xml', XL_STYLES]);
+    return files;
+  }
+
+  // ── Zip (PKZIP 2.0, tanpa zip64; berkas Excel jauh di bawah 4 GB) ──
+  let crcTab = null;
+  function crc32(b) {
+    if (!crcTab) { crcTab = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; crcTab[n] = c >>> 0; } }
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < b.length; i++) c = crcTab[(c ^ b[i]) & 255] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  async function deflateRaw(b) {
+    if (typeof CompressionStream !== 'function') return null;
+    try {
+      const cs = new CompressionStream('deflate-raw');
+      const out = await new Response(new Blob([b]).stream().pipeThrough(cs)).arrayBuffer();
+      return new Uint8Array(out);
+    } catch (e) { return null; }   // browser lama tanpa deflate-raw: simpan apa adanya
+  }
+  async function zipBlob(files) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    const now = new Date();
+    const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+    let off = 0;
+    for (let i = 0; i < files.length; i++) {
+      const name = enc.encode(files[i][0]), raw = enc.encode(files[i][1]), crc = crc32(raw);
+      const z = await deflateRaw(raw), useZ = !!z && z.length < raw.length, data = useZ ? z : raw;
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, useZ ? 8 : 0, true);
+      lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+      lh.setUint32(18, data.length, true); lh.setUint32(22, raw.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(lh.buffer, name, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, useZ ? 8 : 0, true);
+      ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+      ch.setUint32(20, data.length, true); ch.setUint32(24, raw.length, true); ch.setUint16(28, name.length, true);
+      ch.setUint32(42, off, true);
+      central.push(ch.buffer, name);
+      off += 30 + name.length + data.length;
+    }
+    const cdSize = central.reduce(function (n, x) { return n + x.byteLength; }, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, off, true);
+    return new Blob(parts.concat(central, [end.buffer]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+  async function xlsxBlob(list) { return zipBlob(xlsxFiles(list)); }
+  window.xlsxBlob = xlsxBlob;   // dipakai tools/browser-check.js untuk memeriksa berkasnya
+})();
+</script>

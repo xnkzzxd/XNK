@@ -1732,6 +1732,20 @@ async function contrastReport(page) {
     await adm.page.click('#gym-cat button[type="submit"]');
     await adm.page.waitForTimeout(800);
     check(env.sheet('GymExercises').rows.some(r => r[1] === 'Leg Curl (Machine)' && r[5] === 'hamstrings') && (await adm.page.textContent('#gym-cat')).includes('Leg Curl (Machine)'), 'latihan & alat: a new gym exercise is saved and listed');
+    // T-2255: Pengaturan → Akun → "Unduh data saya" builds an .xlsx in the browser (read-only on the server).
+    await adm.page.evaluate(() => window.settingsOpen('akun'));
+    await adm.page.waitForTimeout(500);
+    const unduhH = await adm.page.locator('#unduh-btn').evaluate(e => Math.round(e.getBoundingClientRect().height));
+    check(unduhH >= 44, 'unduh: the button is at least 44 px tall (' + unduhH + ')');
+    const mdBefore = JSON.stringify(env.sheet('MemberData').rows);
+    const [dl] = await Promise.all([adm.page.waitForEvent('download', { timeout: 30000 }), adm.page.click('#unduh-btn')]);
+    const dlPath = await dl.path();
+    const dlBuf = require('fs').readFileSync(dlPath);
+    check(/^data-saya-\d{4}-\d{2}-\d{2}\.xlsx$/.test(dl.suggestedFilename()) && dlBuf.readUInt32LE(0) === 0x04034b50, 'unduh: an .xlsx (zip) is downloaded ' + dl.suggestedFilename());
+    await adm.page.waitForTimeout(300);
+    const unduhTxt = await adm.page.textContent('#unduh-prog');
+    check(/Selesai: \d+ sheet/.test(unduhTxt) && !(await adm.page.isDisabled('#unduh-btn')), 'unduh: progress ends with "Selesai" and the button is usable again (' + unduhTxt + ')');
+    check(JSON.stringify(env.sheet('MemberData').rows) === mdBefore, 'unduh: the download changes nothing in the sheets');
     await adm.page.evaluate(() => window.settingsOpen('tampilan'));
     await adm.page.waitForTimeout(600);
     await adm.page.click('#set-nutrition');
