@@ -79,6 +79,26 @@ function imageSize(b, kind) {
   return null;
 }
 
+// T-2258: tempat latihan coach (publik): satu nama tempat + kota, tampil di halaman depan hub dan halaman info.
+const PLACE_MAX = { name: 60, city: 40 };
+/**
+ * Rapikan { name, city } (spasi dirapatkan). Kembalikan { place } (null = tanpa tempat) atau { error } (pesan Indonesia).
+ * Sama dengan cleanPlace_ di xnk-pusat/src/Pusat.gs (dicek tests).
+ */
+function cleanPlace(p) {
+  if (p == null || p === '') return { place: null };
+  if (typeof p !== 'object' || Array.isArray(p)) return { error: 'place harus berisi { "name": nama tempat, "city": kota }.' };
+  const t = v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  const name = t(p.name), city = t(p.city);
+  if (!name && !city) return { place: null };
+  for (const [k, v, label] of [['name', name, 'Nama tempat'], ['city', city, 'Kota']]) {
+    if (/[\u0000-\u001f\u007f<>]/.test(v)) return { error: `${label} tidak boleh berisi tanda < > atau karakter kontrol.` };
+    if (v.length > PLACE_MAX[k]) return { error: `${label} paling panjang ${PLACE_MAX[k]} karakter.` };
+  }
+  if (!name || !city) return { error: "Isi nama tempat dan kota (mis. Gold's Gym Kemang, Jakarta Selatan)." };
+  return { place: { name, city } };
+}
+
 /** T-2242: periksa logo coach (berkas di repo hub). Kembalikan { ext, type, body, size, sig }. */
 function readLogo(rel, baseDir, slug) {
   const where = `hub.json, "${slug}": logo "${rel}"`;
@@ -136,6 +156,9 @@ function readHub(cfg, opts) {
     if (accent && accent !== 'hitam') out.accent = accent;
     const logo = String(c.logo == null ? '' : c.logo).trim();
     if (logo) { out.logo = logo; out.logoFile = readLogo(logo, baseDir, slug); }
+    const pl = cleanPlace(c.place);
+    if (pl.error) throw new Error(`hub.json, "${slug}": ${pl.error}`);
+    if (pl.place) out.place = pl.place;
     // T-2243: slug lama (alamat yang masih dialihkan), awalan penyimpanan (tetap saat slug diganti) dan secret clasp.
     if (c.aliases != null && !Array.isArray(c.aliases)) throw new Error(`hub.json, "${slug}": aliases harus berupa daftar slug lama.`);
     const aliases = (c.aliases || []).map(a => String(a == null ? '' : a).trim());
@@ -355,14 +378,22 @@ function brandPage(files, dir, c, kind) {
   }
 }
 
-/** T-2241: halaman publik /<slug>/info/ (profil, paket, jam kosong, daftar), CSP ketat. */
+/** T-2241/T-2259: halaman publik /<slug>/info/ (profil, tempat, paket, jam kosong, daftar), CSP ketat. */
 function infoPage(c) {
   let t = fs.readFileSync(path.join(SITE, 'info.html'), 'utf8');
   const url = `${HUB_ORIGIN}/${c.slug}/info/`;
-  const desc = `${c.brand}: personal trainer. Lihat paket, harga, dan jam kosong, lalu daftar online.`;
+  const pl = c.place || null;
+  const desc = `${c.brand}: personal trainer${pl ? ` di ${pl.name}, ${pl.city}` : ''}. Lihat paket, harga, dan jam kosong, lalu daftar online.`;
+  // T-2258: tempat latihan dari hub.json langsung di HTML (tampil sebelum data coach dimuat). Tanpa tempat = bagian
+  // tersembunyi yang diisi skrip dari kolom Lokasi profil coach, bila ada.
+  const maps = pl ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(pl.name + ', ' + pl.city) : '#';
+  const where = `<p class="where" id="where"${pl ? '' : ' hidden'}><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span>${pl ? esc(pl.name + ' · ' + pl.city) : ''}</span></p>`;
+  const placeSec = `<section id="tempat" aria-labelledby="h-tempat"${pl ? '' : ' hidden'}>\n      <p class="kicker">Tempat</p>\n      <h2 id="h-tempat">Tempat latihan</h2>\n` +
+    `      <div class="card place"><span class="pin" aria-hidden="true"><svg class="i"><use href="#i-pin"/></svg></span><div style="min-width:0"><b>${pl ? esc(pl.name) : ''}</b><span>${pl ? esc(pl.city) : ''}</span></div>` +
+    `<a class="btn ghost" href="${esc(maps)}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-map"/></svg>Buka di Maps</a></div>\n    </section>`;
   const logo = c.logoFile ? `/${c.slug}/logo.${c.logoFile.ext}` : '';
   const ini = esc((c.brand.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase());
-  const cfg = { exec: c.exec, slug: c.slug, brand: c.brand, klien: `/${c.slug}/klien/` };
+  const cfg = { exec: c.exec, slug: c.slug, brand: c.brand, klien: `/${c.slug}/klien/`, place: pl };
   const swaps = {
     '__ACCENT_ATTR__': c.accent ? ` data-accent="${c.accent}"` : '',
     '__THEME_KEY__': JSON.stringify(c.storageSlug + ':xnk_theme'),
@@ -372,6 +403,7 @@ function infoPage(c) {
     '<!--ICON-->': `<link rel="icon" href="${logo || `/${c.slug}/icon.svg`}" type="${logo ? c.logoFile.type : 'image/svg+xml'}">`,
     '<!--MARK-->': `<span class="mark" aria-hidden="true">${logo ? `<img src="${logo}" alt="">` : ini}</span>`,
     '/*ACCENTS*/': accentCss(),
+    '<!--PLACE-->': where, '<!--PLACESEC-->': placeSec, '<!--PLACENAV-->': pl ? '' : ' hidden',
     '/*__CFG__*/null': JSON.stringify(cfg).replace(/</g, '\\u003c'),
   };
   for (const [k, v] of Object.entries(swaps)) {
@@ -443,10 +475,30 @@ function build(cfg, opts) {
   if (!sec.test(landing) || !landing.includes('<!--COACHES-->')) throw new Error('build-hub: bagian data-coaches / <!--COACHES--> tidak ada di hub-site/index.html');
   if (hub.coaches.length) {
     // T-2241/T-2242: kartu coach membuka halaman info; logo (bila ada) atau huruf pertama di atas warna aksen coach.
+    // T-2260: tempat latihan (nama · kota) di bawah nama; data-city / data-q untuk cari dan saring kota di halaman.
+    const low = s => s.toLowerCase();
     landing = landing.replace('<!--COACHES-->', hub.coaches.map(c =>
-      `<a class="card coach" href="/${c.slug}/info/"><span class="av${c.accent ? ' acc-' + c.accent : ''}${c.logoFile ? ' logo' : ''}" aria-hidden="true">` +
+      `<a class="card coach" href="/${c.slug}/info/" data-city="${c.place ? esc(low(c.place.city)) : ''}" data-q="${esc(low([c.brand, c.slug].concat(c.aliases || [], c.place ? [c.place.name, c.place.city] : []).join(' ')))}">` +
+      `<span class="av${c.accent ? ' acc-' + c.accent : ''}${c.logoFile ? ' logo' : ''}" aria-hidden="true">` +
       (c.logoFile ? `<img src="/${c.slug}/logo.${c.logoFile.ext}" alt="" width="48" height="48">` : esc(c.brand.trim().charAt(0).toUpperCase() || '?')) + '</span>' +
-      `<div><b>${esc(c.brand)}</b><span>xnk.web.id/${c.slug}</span></div><svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a>`).join(''));
+      `<div><b>${esc(c.brand)}</b>` +
+      (c.place ? `<span class="pl"><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span>${esc(c.place.name)} <em>· ${esc(c.place.city)}</em></span></span>` : '') +
+      `<span>xnk.web.id/${c.slug}</span></div><svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a>`).join(''));
+    // Kotak cari (≥ 2 coach) dan pilihan kota (≥ 2 coach yang punya tempat). Kota sama tanpa beda huruf besar/kecil.
+    const byCity = new Map();
+    for (const c of hub.coaches) if (c.place) {
+      const k = low(c.place.city);
+      if (!byCity.has(k)) byCity.set(k, { label: c.place.city, n: 0 });
+      byCity.get(k).n++;
+    }
+    const withPlace = hub.coaches.filter(c => c.place).length;
+    const chips = withPlace >= 2 ? `<div class="cities" id="cities" role="group" aria-label="Saring per kota"><button type="button" data-city="" aria-pressed="true">Semua<span>${hub.coaches.length}</span></button>` +
+      [...byCity.entries()].sort((a, b) => b[1].n - a[1].n || a[1].label.localeCompare(b[1].label, 'id')).map(([k, v]) =>
+        `<button type="button" data-city="${esc(k)}" aria-pressed="false">${esc(v.label)}<span>${v.n}</span></button>`).join('') + '</div>' : '';
+    const find = hub.coaches.length >= 2 ? '<div class="find"><label class="row" for="coach-q" style="margin:0;font-weight:400"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>' +
+      '<input id="coach-q" type="search" autocomplete="off" placeholder="Cari nama coach, tempat, atau kota" aria-label="Cari coach"></label>' + chips + '</div>' : '';
+    if (!landing.includes('<!--FIND-->')) throw new Error('build-hub: <!--FIND--> tidak ada di hub-site/index.html');
+    landing = landing.replace('<!--FIND-->', find);
   } else {
     landing = landing.replace(sec, '').split('<a href="#coach">Coach</a>').join('').replace('Bisa juga dicari di daftar coach di atas, atau tanyakan', 'Bisa juga ditanyakan');
   }
@@ -496,7 +548,7 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, slugError, readLogo, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles };
+module.exports = { build, write, readHub, slugError, readLogo, cleanPlace, PLACE_MAX, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

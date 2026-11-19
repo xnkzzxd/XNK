@@ -117,8 +117,26 @@ nomor. Kartu coach di halaman depan sekarang menautkan halaman ini; kotak "Masuk
   `*.googleusercontent.com`). Tanpa `onclick`, tanpa skrip luar, tanpa tulisan "XNK".
 - HP dulu (360–430 px, tombol bawah dengan `safe-area`, tombol ≥ 44 px), dua kolom mulai 900 px, terang/gelap
   mengikuti sistem atau pilihan tema di aplikasi coach itu (`<slug>:xnk_theme`, hanya dibaca).
+- T-2259: pita atas dengan tempat dan ringkasan (pengalaman, harga per sesi termurah, jumlah jam kosong), menu bagian
+  *Profil · Tempat · Paket · Jadwal* yang menempel di atas (HP), bio terpotong 5 baris dengan "Baca selengkapnya",
+  paket dengan harga per sesi, **Paling hemat** (harga per sesi terendah per kategori) dan **Pilih paket**, jam kosong
+  sebagai deret 7 hari (ketuk hari → jamnya). Foto coach di pita atas desktop bila hanya ada satu coach.
 - Service worker panel `/<slug>/` hanya menjawab navigasi ke alamat scope-nya sendiri, jadi `/<slug>/info/` selalu
   dari jaringan (dicek `hub-check.js` dengan worker panel aktif).
+
+## Tempat latihan coach (T-2258…T-2260)
+
+Satu tempat per coach di `hub.json` (publik): `"place": { "name": "Gold's Gym Kemang", "city": "Jakarta Selatan" }`.
+Nama ≤ 60 dan kota ≤ 40 karakter, keduanya wajib bila salah satu diisi, tanpa `< >` dan karakter kontrol; spasi
+dirapatkan (`cleanPlace` di `build-hub.js`, sama dengan `cleanPlace_` di XNK Pusat, dicek tes). Diisi dari
+`/adminxnk` → **Tempat** (XNK Pusat menjalankan Hub XNK aksi `simpan` dengan isian `tempat` dan `kota`), atau langsung
+lewat form Actions (*tempat* kosong = tetap, `-` = hapus). Tempat ikut terbawa saat link /exec coach diganti.
+
+- Halaman info: tempat dirender saat build (`<!--PLACE-->`, `<!--PLACESEC-->`, `<!--PLACENAV-->`) di pita atas, bagian
+  **Tempat latihan** dengan **Buka di Maps** (link pencarian Google Maps, bukan peta tertanam, jadi CSP tidak berubah)
+  dan deskripsi halaman. Tanpa tempat di `hub.json`, kolom *Lokasi* profil coach (`getCoaches`) dipakai bila ada.
+- Halaman depan: tiap kartu coach menampilkan tempat; `data-city` / `data-q` dipakai kotak cari (≥ 2 coach) dan
+  pilihan kota (≥ 2 coach bertempat, kota digabung tanpa beda huruf besar/kecil). Tidak ada yang disimpan di perangkat.
 
 ## Web Push (T-2240)
 

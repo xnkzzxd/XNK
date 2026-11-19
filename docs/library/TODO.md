@@ -77,4 +77,7 @@ Gelombang 4 — operasional
 - [x] T-2255 "Unduh data saya" (Excel) di Pengaturan panel coach: Pengaturan → Akun, admin `exportMyData` di `src/Unduh.gs` (per halaman, teks tampilan, tanpa ProgressPhotos / PushSubs / PushOutbox / Script Properties), .xlsx dirakit di browser tanpa pustaka luar (part `18-unduh-data-saya.part`).
 - [x] T-2256 Daftar periksa akun Gmail per coach ([Akun.md](Akun.md)); token dipakai harian oleh `perbarui`, jadi token mati langsung terlihat.
 - [ ] T-2257 "Didukung XNK" kecil di login dan kartu bagikan coach.
+- [x] T-2258 Tempat latihan coach (satu tempat: nama + kota) di `hub.json` (`place`, `cleanPlace` di `build-hub.js` = `cleanPlace_` di Pusat), diisi dari `/adminxnk` → **Tempat** (`pusatSetPlace` → workflow Hub XNK aksi `simpan`, isian `tempat` / `kota`; `hub-edit.js --tempat/--kota`, `-` = hapus).
+- [x] T-2259 Halaman info coach baru: pita atas dengan tempat dan ringkasan (pengalaman, harga per sesi termurah, jam kosong), menu bagian di HP, profil dengan bio terpotong + "Baca selengkapnya", bagian Tempat dengan **Buka di Maps**, paket dengan harga per sesi, **Paling hemat** dan **Pilih paket**, jam kosong sebagai deret 7 hari.
+- [x] T-2260 Daftar coach di xnk.web.id: tempat di tiap kartu, kotak cari (nama, alamat, tempat, kota) dan pilihan kota (≥ 2 coach bertempat).
 - Keputusan terbuka: UU PDP (kebijakan privasi, perjanjian pemroses data) ditunda oleh pemilik.

@@ -111,6 +111,15 @@ XNK Pusat membagikan kunci publik VAPID hub (dari `hub.json` → `vapidPublic`) 
 
 `pusatPushTargets(PUSAT_PUSH_SECRET)` (perbandingan waktu-konstan, min 32 karakter) memberi workflow Push XNK daftar `{slug, exec, relay}` coach yang menyala, tanpa UrlFetch. Workflow lalu memanggil coach langsung. Galat push masuk email harian. Semua UrlFetch XNK Pusat dihitung per hari WIB (`fetch_`, tampil sebagai `fetchToday` di `pusatOverview`). Langkah pasang: [push/Setup.md](../push/Setup.md#hub-xnkwebid-notifikasi-untuk-semua-coach-t-2240).
 
+## Tempat latihan coach (T-2258)
+
+`/adminxnk` → **Tempat** (form kecil di kartu coach: nama tempat + kota, Simpan / Hapus tempat) memanggil
+`pusatSetPlace(token, slug, nama, kota)` (hanya pemilik; coach harus ada di `hub.json`; isian diperiksa sama dengan
+`build-hub.js`). XNK Pusat menjalankan `hub.yml` dengan `{aksi: 'simpan', slug, warna: 'tetap', tempat, kota}`
+(hapus = `tempat: '-'`); tanpa `GITHUB_TOKEN` atau bila GitHub menolak, jawabannya berisi langkah manual.
+`pusatOverview.places` = tempat tiap coach di `hub.json` (slug → `{name, city}` atau `null`). Langkah untuk pemilik:
+[Hub.md](Hub.md#tempat-latihan-coach-t-2258t-2260).
+
 ## Ganti slug coach (T-2243)
 
 `/adminxnk` → **Ganti slug** memanggil `pusatRename(token, lama, baru)` (hanya pemilik). Nama baru diperiksa sama dengan
