@@ -1071,3 +1071,65 @@ test('coach keluar: ganti slug ikut memindahkan tanda keluar', () => {
   assert.equal(outOf(e, 'claudia'), null);
   assert.equal(outOf(e, 'claudia-fit').deleteOn, wib(30));
 });
+
+// ── T-2264: paket proposal, cara bayar, catat pembayaran, ringkasan uang ──
+test('paket (T-2264): data lama {plan, price, history} tetap terbaca; paket ditebak dari harga', () => {
+  const { e } = subEnv({ props: {
+    SUB_claudia: JSON.stringify({ plan: 'bulanan', price: 249000, due: wib(10), history: [{ at: '2026-10-19T03:00:00.000Z', due: '2026-10-19', next: '2026-11-19', price: 249000 }] }),
+    SUB_vinna: JSON.stringify({ plan: 'bulanan', price: 99000, due: wib(3) }),
+  } });
+  const r = e.call('pusatOverview', e.tok);
+  const c = subOf(r, 'claudia'), v = subOf(r, 'vinna');
+  assert.deepEqual([c.tier, c.tierName, c.cycle, c.plan, c.state], ['pro', 'Pro', 'bulanan', 'bulanan', 'aktif']);
+  assert.deepEqual(c.pay.map(p => [p.kind, p.amount, p.date]), [['langganan', 249000, '2026-10-19']]);
+  assert.equal(c.history[0].price, 249000, 'history view kept for old readers');
+  assert.deepEqual([v.tier, v.state], ['lain', 'segera']);
+});
+
+test('paket (T-2264): harga bawaan dari proposal, tahunan +12 bulan, lifetime/beli putus tidak pernah baca saja karena tanggal', () => {
+  const { e } = subEnv();
+  let r = e.call('pusatSubSave', e.tok, 'claudia', { tier: 'pro', cycle: 'tahunan', due: wib(-1), setupKind: 'standar' });
+  assert.equal(r.ok, true, r.error);
+  let c = subOf(r, 'claudia');
+  assert.deepEqual([c.price, c.plan, c.state, c.setup.kind, c.setup.price, c.setup.paidAt], [2490000, 'bulanan', 'tenggang', 'standar', 400000, '']);
+  assert.deepEqual(r.data.money.setupUnpaid, ['claudia']);
+  assert.equal(r.data.money.mrr, Math.round(2490000 / 12), 'yearly counts as price / 12 per month');
+  r = e.call('pusatSubPay', e.tok, 'claudia', { kind: 'langganan' });
+  assert.equal(r.ok, true, r.error);
+  c = subOf(r, 'claudia');
+  assert.equal(c.due, e.ctx.addMonths_(wib(-1), 12));
+  assert.equal(c.state, 'aktif');
+  assert.equal(c.pay.at(-1).amount, 2490000);
+  r = e.call('pusatSubPay', e.tok, 'claudia', { kind: 'setup', amount: '400.000', date: wib(), note: 'transfer' });
+  assert.equal(subOf(r, 'claudia').setup.paidAt, wib());
+  assert.deepEqual(r.data.money.setupUnpaid, []);
+  assert.equal(r.data.money.monthIn, 2490000 + 400000);
+  assert.equal(r.data.money.payments[0].note, 'transfer');
+  // lifetime: belum → lunas, tanpa jatuh tempo, tidak masuk MRR
+  r = e.call('pusatSubSave', e.tok, 'vinna', { tier: 'starter', cycle: 'lifetime' });
+  let v = subOf(r, 'vinna');
+  assert.deepEqual([v.price, v.plan, v.state, v.due, v.readonly], [3900000, 'sekali', 'belum', '', false]);
+  assert.match(e.call('pusatSubPay', e.tok, 'vinna', { kind: 'langganan' }).error, /bulanan atau tahunan/);
+  assert.match(e.call('pusatSubPay', e.tok, 'vinna', { kind: 'putus' }).error, /bukan beli putus/);
+  r = e.call('pusatSubPay', e.tok, 'vinna', { kind: 'lifetime' });
+  assert.equal(subOf(r, 'vinna').state, 'lunas');
+  assert.equal(r.data.money.mrr, Math.round(2490000 / 12));
+  assert.deepEqual(r.data.money.upcoming.map(u => u.slug), ['claudia']);
+  assert.equal(r.data.money.months.length, 6);
+  assert.equal(r.data.money.months.at(-1).amount, 2490000 + 400000 + 3900000);
+  assert.equal(e.ctx.addMonths_('2026-01-31', 13), '2027-02-28');
+  assert.equal(e.ctx.addMonths_('2026-03-15', -3), '2025-12-15');
+});
+
+test('catat pembayaran (T-2264): hanya pemilik; jumlah, tanggal dan jenis diperiksa', () => {
+  const { e } = subEnv();
+  e.call('pusatSubSave', e.tok, 'claudia', { tier: 'starter', cycle: 'bulanan', due: wib(5) });
+  assert.equal(e.call('pusatSubPay', 'palsu', 'claudia', { kind: 'langganan' }).ok, false);
+  assert.match(e.call('pusatSubPay', e.tok, 'claudia', { kind: 'aneh' }).error, /Jenis/);
+  assert.match(e.call('pusatSubPay', e.tok, 'claudia', { kind: 'langganan', amount: '0' }).error, /Jumlah/);
+  assert.match(e.call('pusatSubPay', e.tok, 'claudia', { kind: 'langganan', date: wib(5) }).error, /Tanggal/);
+  assert.match(e.call('pusatSubPay', e.tok, 'claudia', { kind: 'setup' }).error, /setup/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { tier: 'emas' }).error, /Pilih paket/);
+  const r = e.call('pusatAction', e.tok, 'sub-paid', 'claudia');
+  assert.equal(subOf(r, 'claudia').pay.at(-1).amount, 149000, 'sub-paid = catat pembayaran langganan sebesar harga');
+});
