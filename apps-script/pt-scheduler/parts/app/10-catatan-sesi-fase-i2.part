@@ -67,7 +67,7 @@
     }).join('') + '</div>';
   }
   window.snoozeCareUI = function (id) {
-    adminCall('snoozeCare', id, 7).then(function () { window.showToast('Disembunyikan 7 hari.'); loadHub(); }).catch(function (err) { window.showToast(err.message); });
+    optimistic({ q: { mode: 'admin', fn: 'snoozeCare', args: [id, 7] }, ok: 'Disembunyikan 7 hari.', label: 'Sembunyikan pengingat', then: function () { loadHub(); } });
   };
 
   // Portal: form kesehatan + tes kebugaran

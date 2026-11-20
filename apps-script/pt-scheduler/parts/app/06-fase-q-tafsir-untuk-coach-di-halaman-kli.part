@@ -92,30 +92,21 @@
     const known = REMIND_TYPES.map(function (t) { return t[0]; });
     const off = (m.reminderOff || []).filter(function (k) { return known.indexOf(k) === -1; });   // jenis lain (mis. makan) tetap
     document.querySelectorAll('#profile-remind-prefs input[data-remind]').forEach(function (el) { if (!el.checked) off.push(el.getAttribute('data-remind')); });
-    const boxes = document.querySelectorAll('#profile-remind-prefs input[data-remind]');
-    boxes.forEach(function (el) { el.disabled = true; });
-    adminCall('setMemberReminderPrefs', memberId, { off: off }).then(function (res) {
-      m.reminderOff = (res && res.reminderOff) || off;
-      boxes.forEach(function (el) { el.disabled = false; });
-      window.showToast('Pengingat klien disimpan.');
-    }).catch(function (err) {
-      input.checked = !input.checked;
-      boxes.forEach(function (el) { el.disabled = false; });
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    // Antrean simpan: tombol langsung berubah; ditolak = kembali ke posisi lama.
+    const was = m.reminderOff;
+    m.reminderOff = off;
+    optimistic({ q: { mode: 'admin', fn: 'setMemberReminderPrefs', args: [memberId, { off: off }] }, ok: 'Pengingat klien disimpan.', label: 'Pengingat klien',
+      then: function (res) { if (res && res.reminderOff) m.reminderOff = res.reminderOff; },
+      undo: function () { m.reminderOff = was; if (input && input.isConnected) input.checked = !input.checked; } });
   };
   window.toggleMealReminder = function (memberId, input) {
     const m = window.members.find(x => String(x.id) === String(memberId));
     const want = !!input.checked;
-    input.disabled = true;
-    adminCall('setMemberMealReminder', memberId, want).then(function (res) {
-      if (m) m.mealReminder = !!(res && res.mealReminder);
-      input.disabled = false;
-      window.showToast(want ? 'Reminder makan dinyalakan.' : 'Reminder makan dimatikan.');
-    }).catch(function (err) {
-      input.checked = !want; input.disabled = false;
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    const was = m ? m.mealReminder : null;
+    if (m) m.mealReminder = want;
+    optimistic({ q: { mode: 'admin', fn: 'setMemberMealReminder', args: [memberId, want] }, ok: want ? 'Reminder makan dinyalakan.' : 'Reminder makan dimatikan.', label: 'Reminder makan',
+      then: function (res) { if (m && res) m.mealReminder = !!res.mealReminder; },
+      undo: function () { if (m) m.mealReminder = was; if (input && input.isConnected) input.checked = !want; } });
   };
 
   // ── PR (Task) di profil klien (T-21) ────────────────────────────────────────
@@ -317,10 +308,14 @@
     const c = window.memberTasks[String(memberId)];
     const t = c && c.list.find(x => String(x.id) === String(taskId));
     if (!t) return;
-    if (btn) btn.disabled = true;
-    adminCall('updateTask', { id: taskId, status: t.status === 'done' ? 'todo' : 'done' })
-      .then(function () { return afterTaskChange(memberId); })
-      .catch(function (err) { if (btn) btn.disabled = false; window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Antrean simpan: centang langsung berubah; server menyusul (daftar dimuat ulang setelahnya), ditolak = kembali.
+    const was = t.status, want = was === 'done' ? 'todo' : 'done';
+    const paint = function () { renderTaskSection(String(memberId)); ccPatch(String(memberId), { tasks: c.list }); };
+    t.status = want;
+    paint();
+    optimistic({ q: { mode: 'admin', fn: 'updateTask', args: [{ id: taskId, status: want }] }, ok: false, label: 'PR',
+      then: function () { afterTaskChange(memberId); },
+      undo: function () { t.status = was; paint(); } });
   };
 
   window.deleteTaskItem = function (taskId, memberId) {
@@ -330,9 +325,13 @@
     const rec = t.repeat && t.repeat !== 'none' && t.groupId;
     const msg = '<b>' + h(t.title) + '</b> akan dihapus permanen.' + (rec ? ' Ini PR berulang: hanya PR ini yang dihapus, ulangannya berhenti.' : '');
     window.showConfirmModal(msg, function () {
-      adminCall('deleteTask', taskId)
-        .then(function () { window.showToast('PR dihapus.'); return afterTaskChange(memberId); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const at = c.list.indexOf(t);
+      const paint = function () { renderTaskSection(String(memberId)); ccPatch(String(memberId), { tasks: c.list }); };
+      c.list.splice(at, 1);
+      paint();
+      optimistic({ q: { mode: 'admin', fn: 'deleteTask', args: [taskId] }, ok: 'PR dihapus.', label: 'Hapus PR',
+        then: function () { afterTaskChange(memberId); },
+        undo: function () { c.list.splice(Math.min(at, c.list.length), 0, t); paint(); } });
     }, { title: 'Hapus PR?', confirmText: 'Hapus PR', variant: 'danger' });
   };
 
@@ -432,9 +431,11 @@
     const t = window.taskTemplates.find(x => String(x.id) === String(id));
     if (!t) return;
     window.showConfirmModal('Template <b>' + h(t.title) + '</b> akan dihapus. PR yang sudah dibuat darinya tidak terpengaruh.', function () {
-      adminCall('deleteTaskTemplate', id)
-        .then(function () { window.showToast('Template dihapus.'); return loadTaskTemplates(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const before = window.taskTemplates.slice();
+      window.taskTemplates = window.taskTemplates.filter(x => x !== t);
+      renderTaskTemplates();
+      optimistic({ q: { mode: 'admin', fn: 'deleteTaskTemplate', args: [id] }, ok: 'Template dihapus.', label: 'Hapus template PR',
+        undo: function () { window.taskTemplates = before; renderTaskTemplates(); } });
     }, { title: 'Hapus template?', confirmText: 'Hapus', variant: 'danger' });
   };
 

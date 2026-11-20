@@ -1920,6 +1920,62 @@ async function contrastReport(page) {
       await re2.context.close();
     })().catch(sectionCrash);
 
+    // Gelombang 2: simpanan panel coach yang dulu menunggu (spinner) sekarang langsung; server lambat 2 dtk membuktikannya.
+    console.log('Antrean simpan · panel coach langsung (hapus sesi, PR, pengingat, ditolak)');
+    await (async () => {
+      const env = seededEnv();
+      const token = env.adminToken();
+      const task = env.call('addTask', token, { memberId: 'PT-A', title: 'Jalan pagi', category: 'aktivitas' });
+      const taskId = task.id || (task.task && task.task.id);
+      const slow = { deleteSchedule: 2000, updateTask: 2000, setMemberMealReminder: 2000, deleteTask: 2000 };
+      const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { touch: true, delay: slow });
+      const popup = () => page.locator('#modal-confirm').isVisible();
+      const onServer = id => env.call('getSchedules', token).some(s => String(s.id) === id);
+
+      // Hapus sesi: hilang dari layar seketika, server menyusul.
+      await page.evaluate(() => window.openScheduleDetail('SCH-A1'));
+      await page.waitForTimeout(400);
+      await page.evaluate(() => window.deleteScheduleFromDetail());
+      await page.click('#btn-confirm-modal-yes');
+      await page.waitForTimeout(300);
+      check(!(await page.evaluate(() => window.schedules.some(s => s.id === 'SCH-A1'))), 'delete session: gone from the screen at once');
+      check(onServer('SCH-A1'), 'delete session: server not reached yet (slow server)');
+      await page.waitForTimeout(2600);
+      check(!onServer('SCH-A1'), 'delete session: removed on the server');
+      check(!(await popup()), 'delete session: no pop-up');
+
+      // PR selesai di halaman klien: centang langsung, tersimpan sesudahnya.
+      await page.evaluate(() => window.openProfile('PT-A'));
+      await page.waitForTimeout(1500);
+      await page.evaluate(() => window.loadMemberTasks('PT-A', true));
+      await page.waitForTimeout(600);
+      await page.evaluate(id => window.toggleTaskDone(id, 'PT-A'), taskId);
+      await page.waitForTimeout(200);
+      check((await page.evaluate(id => { const c = window.memberTasks['PT-A']; const t = c && c.list.find(x => String(x.id) === String(id)); return t && t.status; }, taskId)) === 'done', 'task done: ticked at once');
+      await page.waitForTimeout(2600);
+      check(env.call('getTasksForMember', token, 'PT-A').some(t => String(t.id) === String(taskId) && t.status === 'done'), 'task done: saved on the server');
+
+      // Pengingat makan: tombol langsung berubah.
+      await page.evaluate(() => window.toggleMealReminder('PT-A', { checked: false, isConnected: false }));
+      check((await page.evaluate(() => window.members.find(m => m.id === 'PT-A').mealReminder)) === false, 'meal reminder: switched at once');
+      await page.waitForTimeout(2600);
+      check(env.call('getMembers', token).find(m => m.id === 'PT-A').mealReminder === false, 'meal reminder: saved on the server');
+
+      // Ditolak server: PR kembali, lencana, tanpa pop-up.
+      env.__serverFault = fn => { if (fn === 'deleteTask') throw new Error('PR ini sedang dipakai.'); };
+      await page.evaluate(id => window.deleteTaskItem(id, 'PT-A'), taskId);
+      await page.click('#btn-confirm-modal-yes');
+      await page.waitForTimeout(300);
+      check(!(await page.evaluate(id => window.memberTasks['PT-A'].list.some(x => String(x.id) === String(id)), taskId)), 'delete task: gone at once');
+      await page.waitForTimeout(2600);
+      check(await page.evaluate(id => window.memberTasks['PT-A'].list.some(x => String(x.id) === String(id)), taskId), 'delete task refused: task comes back');
+      check(await page.isVisible('#sync-badge') && /Belum tersimpan/.test(await page.textContent('#sync-badge')), 'delete task refused: badge, not a pop-up');
+      check(!(await popup()), 'delete task refused: no pop-up');
+      env.__serverFault = null;
+      noErrors(errors);
+      await context.close();
+    })().catch(sectionCrash);
+
     // 6. Portal: memuat gagal (Google kehabisan kuota) dengan salinan di perangkat → jadwal tetap tampil, salinan tidak dikosongkan.
     console.log('Antrean simpan · portal tidak mengosongkan salinan saat gagal memuat');
     await (async () => {

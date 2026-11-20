@@ -95,3 +95,18 @@ test('sheet Idem dirapikan: baris lebih tua dari 14 hari dibuang', () => {
   assert.equal(env.callRaw('_idemPrune_', sh), 2);
   assert.equal(sh.getLastRow(), 2);
 });
+
+test('gelombang 2: putuskan perpanjangan dikirim ulang setelah cache hilang → diputar ulang, bukan "sudah diputuskan"', () => {
+  const env = seededEnv(), tok = env.adminToken();
+  const req = env.call('requestRenewal', env.memberToken(KEY_A), 'P1');
+  const id = req.id || (req.request && req.request.id);
+  assert.ok(id, 'requestRenewal returns the request id');
+  const a = post(env, 'decideRenewal', [tok, id, false], { cid: 'c-renew-001' });
+  assert.equal(a.ok, true);
+  Object.keys(env.cache).forEach(k => { if (k.indexOf('idem:') === 0) delete env.cache[k]; });
+  const b = post(env, 'decideRenewal', [tok, id, false], { cid: 'c-renew-001', re: 1 });
+  assert.equal(b.ok, true, b.error);
+  assert.equal(b.dup, true);
+  const c = post(env, 'decideRenewal', [tok, id, false], { cid: 'c-renew-002' });   // nomor lain = keputusan baru: tetap ditolak
+  assert.equal(c.ok, false);
+});

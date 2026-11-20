@@ -142,8 +142,12 @@
   };
   window.pgDeleteAdminEntry = function (memberId, id) {
     window.showConfirmModal('Catatan ini dihapus permanen.', function () {
-      adminCall('deleteMemberMeasurement', id).then(function (d) { window.pgSetAdmin(memberId, d); window.showToast('Catatan dihapus.'); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: catatan hilang sekarang; ringkasan progres dari server menyusul. Ditolak = kembali.
+      const old = pg.admin[memberId];
+      if (old && !old.error) window.pgSetAdmin(memberId, Object.assign({}, old, { entries: (old.entries || []).filter(x => String(x.id) !== String(id)) }));
+      optimistic({ q: { mode: 'admin', fn: 'deleteMemberMeasurement', args: [id] }, ok: 'Catatan dihapus.', label: 'Hapus ukuran tubuh',
+        then: function (d) { if (d && !d.error) window.pgSetAdmin(memberId, d); else window.pgLoadAdmin(memberId); },
+        undo: function () { if (old) window.pgSetAdmin(memberId, old); } });
     }, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
   };
   function pgStore(d) {

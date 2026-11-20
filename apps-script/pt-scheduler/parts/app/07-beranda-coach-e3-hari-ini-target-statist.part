@@ -714,10 +714,13 @@
   window.wlFormOk = function (i, on) {
     const e = wl && wl.entries[i]; if (!e) return;
     const id = wl.memberId, key = wkKeyOf(e);
-    adminCall('setFormOk', id, key, !!on).then(function (r) {
-      if (pgAdminGen[id]) { pgAdminGen[id].formOk = r.formOk; window.ccPatch(id, { programGen: pgAdminGen[id] }); }
-      wlRender(); showToast(on ? 'Form ditandai OK.' : 'Tanda form dihapus.');
-    }).catch(function (err) { showToast(err.message || 'Gagal.'); });
+    // Antrean simpan: tanda langsung berubah; ditolak = tanda lama kembali.
+    const g = pgAdminGen[id], old = g ? g.formOk : null;
+    const apply = function (v) { if (!pgAdminGen[id]) return; pgAdminGen[id].formOk = v; window.ccPatch(id, { programGen: pgAdminGen[id] }); wlRender(); };
+    if (g) { const nx = Object.assign({}, old || {}); if (on) nx[key] = true; else delete nx[key]; apply(nx); }
+    optimistic({ q: { mode: 'admin', fn: 'setFormOk', args: [id, key, !!on] }, ok: on ? 'Form ditandai OK.' : 'Tanda form dihapus.', label: 'Form OK',
+      then: function (r) { if (r && r.formOk) apply(r.formOk); },
+      undo: function () { apply(old); } });
   };
   function wlFromLog(l, data, date) {
     const info = wkInfo(l.exId), last = (data.last || {})[l.key];

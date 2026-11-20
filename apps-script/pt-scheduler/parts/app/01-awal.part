@@ -349,6 +349,13 @@
     return !m || TRANSIENT_RE.test(m) ? 'transient' : 'rejected';
   }
   window.errKind = errKind;
+  // Alur yang sengaja menunggu jawaban (tambah klien, paket baru, unggah…): gangguan sementara diberi kalimat tenang,
+  // bukan teks mentah Google. prefix (mis. 'Gagal: ') hanya untuk penolakan sungguhan.
+  function waitErr(err, prefix) {
+    if (errKind(err) === 'transient') return 'Belum tersambung. Coba lagi sebentar.';
+    return (prefix || '') + window.authMessage(err);
+  }
+  window.waitErr = waitErr;
   function laneIdle() {
     if (wlane.pending()) return;   // antrean simpan masih punya pesanan: tunggu sampai kosong
     const fns = wlane.idle; wlane.idle = {};

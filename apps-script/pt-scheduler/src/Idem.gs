@@ -21,7 +21,10 @@ var IDEM_SHEET = 'Idem';
 var IDEM_KEEP_DAYS = 14;
 var IDEM_PRUNE_ROWS = 400;     // sheet dirapikan sesekali setelah sebanyak ini baris
 var IDEM_DURABLE = { addSchedule: 1, addRecurringSchedule: 1, addTask: 1, addMember: 1, savePayment: 1, saveExpense: 1,
-  saveContent: 1, addCoachTimeOff: 1, submitMyHealthForm: 1, submitMyPackageEval: 1, saveMyRoutine: 1, savePackage: 1, saveCoach: 1 };
+  saveContent: 1, addCoachTimeOff: 1, submitMyHealthForm: 1, submitMyPackageEval: 1, saveMyRoutine: 1, savePackage: 1, saveCoach: 1,
+  // Gelombang 2 (panel coach): kiriman ulang setelah cache hilang tidak boleh menjawab "sudah diputuskan" / "sudah ada"
+  // (dianggap ditolak dan layar dibatalkan) atau menulis assessment kedua.
+  decideRenewal: 1, decideNutritionAdvice: 1, saveAssessment: 1, saveFinanceCategory: 1 };
 
 function _idemCidOk_(cid) { return typeof cid === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(cid); }
 

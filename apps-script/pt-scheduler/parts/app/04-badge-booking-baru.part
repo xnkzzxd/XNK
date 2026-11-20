@@ -28,12 +28,13 @@
   window.markNotificationsRead = function (ids) {
     ids = ids || unreadList().map(s => s.id);
     if (!ids.length) { window.closeModal(); return; }
-    adminCall('markSchedulesAsRead', ids).then(function () {
-      window.schedules.forEach(function (s) { if (ids.indexOf(s.id) !== -1) s.status = 'read'; });
-      window.closeModal();
-      window.updateUI();
-      window.showToast(ids.length + ' booking ditandai dibaca.');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: langsung dibaca di layar; ditolak = status lama kembali (lencana di bilah atas).
+    const old = window.schedules.filter(s => ids.indexOf(s.id) !== -1).map(s => [s, s.status]);
+    old.forEach(p => { p[0].status = 'read'; });
+    window.closeModal();
+    window.updateUI();
+    optimistic({ q: { mode: 'admin', fn: 'markSchedulesAsRead', args: [ids] }, ok: ids.length + ' booking ditandai dibaca.', label: 'Tandai dibaca',
+      undo: function () { old.forEach(p => { p[0].status = p[1]; }); window.updateUI(); } });
   };
   window.closeNotificationModal = window.closeModal;
 
@@ -734,11 +735,12 @@
   window.openScheduleDetailModal = function (event) { window.openScheduleDetail(event && event.id); };
 
   window.markNotificationsReadSilently = function (ids) {
-    adminCall('markSchedulesAsRead', ids).then(function () {
-      window.schedules.forEach(function (s) { if (ids.indexOf(s.id) !== -1) s.status = 'read'; });
-      updateBadges();
-      if (window.currentView === 'dashboard' || window.currentView === 'calendar') renderView(window.currentView, { animate: false });
-    }).catch(function () {});
+    const paint = function () { updateBadges(); if (window.currentView === 'dashboard' || window.currentView === 'calendar') renderView(window.currentView, { animate: false }); };
+    const old = window.schedules.filter(s => ids.indexOf(s.id) !== -1).map(s => [s, s.status]);
+    old.forEach(p => { p[0].status = 'read'; });
+    paint();
+    optimistic({ q: { mode: 'admin', fn: 'markSchedulesAsRead', args: [ids] }, ok: false, label: 'Tandai dibaca',
+      undo: function () { old.forEach(p => { p[0].status = p[1]; }); paint(); } });
   };
 
   window.saveCoachAssignment = function () {
@@ -746,14 +748,13 @@
     const coachId = sel ? sel.value : '';
     const coach = window.coaches.find(c => String(c.id) === String(coachId));
     const coachName = coach ? coach.name : '';
-    const done = busy($('btn-save-coach'), '…');
-    adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId).then(function () {
-      const s = schedById(window.selectedScheduleDetailId);
-      if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
-      done();
-      window.showToast(coach ? window.coachLabel(coach.name) + ' ditugaskan.' : 'Coach dikosongkan.');
-      window.updateUI();
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    const s = schedById(window.selectedScheduleDetailId);
+    const old = s ? { coachId: s.coachId, coachName: s.coachName } : null;
+    if (s) { s.coachId = coachId; s.coachName = coachName; }
+    window.updateUI();
+    optimistic({ q: { mode: 'admin', fn: 'updateScheduleCoach', args: [window.selectedScheduleDetailId, coachId] },
+      ok: coach ? window.coachLabel(coach.name) + ' ditugaskan.' : 'Coach dikosongkan.', label: 'Coach sesi',
+      undo: function () { if (s && old) { Object.assign(s, old); window.updateUI(); } } });
   };
 
   window.contactDetailMember = function () { window.quickWa(window.selectedScheduleDetailId); };
@@ -789,13 +790,16 @@
     const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     window.showConfirmModal('Sesi <b>' + h(s.title) + '</b> pada ' + h(fmtShort(new Date(s.start))) + ' akan dihapus.' + (isDone(s) ? ' Kuota klien dikembalikan 1.' : ''), function () {
-      adminCall('deleteSchedule', s.id).then(function () {
-        window.schedules = window.schedules.filter(x => x !== s && String(x.id) !== String(s.id));
-        if (isDone(s)) { const m = window.members.find(x => String(x.id) === String(s.memberId)); if (m) m.usedSessions = Math.max(0, (Number(m.usedSessions) || 0) - 1); }
-        window.closeDetail();
-        window.updateUI();
-        window.showToast('Sesi dihapus.');
-      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      // Antrean simpan: hilang dari layar sekarang; ditolak = sesi & kuota kembali (lencana di bilah atas).
+      const at = window.schedules.indexOf(s);
+      const m = isDone(s) ? window.members.find(x => String(x.id) === String(s.memberId)) : null;
+      const used = m ? m.usedSessions : null;
+      window.schedules = window.schedules.filter(x => x !== s && String(x.id) !== String(s.id));
+      if (m) m.usedSessions = Math.max(0, (Number(m.usedSessions) || 0) - 1);
+      window.closeDetail();
+      window.updateUI();
+      optimistic({ q: { mode: 'admin', fn: 'deleteSchedule', args: [s.id] }, ok: 'Sesi dihapus.', label: 'Hapus sesi',
+        undo: function () { window.schedules.splice(Math.max(0, Math.min(at, window.schedules.length)), 0, s); if (m) m.usedSessions = used; window.updateUI(); } });
     }, { title: 'Hapus sesi?', confirmText: 'Hapus', variant: 'danger' });
   };
   window.confirmDeleteSchedule = window.deleteScheduleFromDetail;
@@ -805,15 +809,18 @@
     if (!s || !s.recurringGroupId) return;
     const groupId = s.recurringGroupId;
     window.showConfirmModal('<b>Semua sesi</b> dalam seri berulang ini akan dihapus, termasuk yang sudah lewat. Kuota dari sesi yang sudah selesai dikembalikan.', function () {
-      adminCall('deleteRecurringGroup', groupId).then(function (res) {
-        window.schedules = window.schedules.filter(x => String(x.recurringGroupId) !== String(groupId));
-        return adminCall('getMembers').then(function (fresh) {
-          window.members = fresh || window.members;
-          window.closeDetail();
-          window.updateUI();
-          window.showToast((res && res.deletedCount) + ' sesi berulang dihapus.');
-        });
-      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      // Antrean simpan: seri hilang sekarang, kuota sesi yang sudah selesai dikembalikan di layar; kuota pasti dari server menyusul.
+      const gone = window.schedules.filter(x => String(x.recurringGroupId) === String(groupId));
+      const back = {};
+      gone.forEach(x => { if (isDone(x)) back[x.memberId] = (back[x.memberId] || 0) + 1; });
+      const usedOld = window.members.filter(mm => back[mm.id]).map(mm => [mm, mm.usedSessions]);
+      usedOld.forEach(p => { p[0].usedSessions = Math.max(0, (Number(p[0].usedSessions) || 0) - back[p[0].id]); });
+      window.schedules = window.schedules.filter(x => String(x.recurringGroupId) !== String(groupId));
+      window.closeDetail();
+      window.updateUI();
+      optimistic({ q: { mode: 'admin', fn: 'deleteRecurringGroup', args: [groupId] }, ok: gone.length + ' sesi berulang dihapus.', label: 'Hapus seri berulang',
+        then: function () { adminCall('getMembers').then(function (fresh) { if (Array.isArray(fresh)) { window.members = fresh; window.updateUI(); } }).catch(function () {}); },
+        undo: function () { window.schedules = window.schedules.concat(gone); usedOld.forEach(p => { p[0].usedSessions = p[1]; }); window.updateUI(); } });
     }, { title: 'Hapus seluruh seri?', confirmText: 'Hapus semua', variant: 'danger' });
   };
 
