@@ -34,7 +34,7 @@
     const me = window.publicLoggedMember;
     if (guide.replay || !me || !me.guide) return;
     me.guide = null;
-    memberCall('markGuideSeen', 'semua').catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markGuideSeen', args: ['semua'] }, ok: false, label: 'Panduan dilihat' });
   }
   // Dipanggil setelah pindah halaman: klien baru melihat sambutan sekali, di halaman portal mana pun.
   window.guideCheck = function () {
@@ -263,7 +263,11 @@
     const g = window.myGroup;
     if (!g) return;
     window.showConfirmModal(g.isOwner ? 'Tutup grup ini? Anggota lain tidak bisa lagi memakai kodenya. Sesi yang sudah dibooking tetap berlaku.' : 'Keluar dari grup ini? Sesi yang sudah dibooking tetap berlaku.', function () {
-      memberCall('leaveClassGroup').then(function () { window.myGroup = null; renderClassSlot(); }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
+      // Antrean simpan: grup hilang sekarang (juga di salinan perangkat); ditolak = grup kembali.
+      window.myGroup = null; renderClassSlot();
+      if (window.patchPortalMore) window.patchPortalMore('classGroup', null, false, true);
+      optimistic({ q: { mode: 'member', fn: 'leaveClassGroup', args: [] }, ok: g.isOwner ? 'Grup ditutup.' : 'Keluar dari grup.', label: 'Grup kelas',
+        undo: function () { window.myGroup = g; renderClassSlot(); if (window.patchPortalMore) window.patchPortalMore('classGroup', g); } });
     }, { title: g.isOwner ? 'Tutup grup?' : 'Keluar grup?', confirmText: g.isOwner ? 'Ya, tutup' : 'Ya, keluar' });
   };
   window.classShareGroup = function () {
@@ -362,7 +366,7 @@
       window.showToast('Pendaftaran berhasil! Berikutnya masuk dengan nomor WhatsApp-mu.', 'party-popper');
       if (res.token && res.member) { _lsSet(MEMBER_TOKEN_KEY, res.token); window.setPublicMember(res.member); window.loadPublicData(); }
       else window.navigate('public-login');
-    }).catch(function (err) { done(); window.showToast('Gagal mendaftar: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal mendaftar: ')); });
   };
 
   // Halaman profil coach: dipakai portal klien dan pratinjau panel ("Lihat seperti klien").

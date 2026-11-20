@@ -70,7 +70,8 @@
     window.shareBadge = (d.badges || []).filter(function (b) { return ids.indexOf(b.id) !== -1; }).pop() || null;
     $('pg-badge-share').setAttribute('data-text', 'Aku baru meraih badge ' + labels.join(' dan ') + ' di XNK Personal Training! 💪');
     openSheet('sheet-badge');
-    memberCall('markBadgesSeen', ids).then(function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r, true); } }).catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markBadgesSeen', args: [ids] }, ok: false, label: 'Badge dilihat',
+      then: function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r, true); } } });
   }
   window.pgShareBadge = function () {
     if (window.shareOn !== false && window.shareBadge && window.shareOpen) { window.shareCard('badge', '', { badge: window.shareBadge }); return; }
@@ -267,8 +268,13 @@
   window.pgDeletePhoto = function () {
     const id = pg.viewId;
     window.showConfirmModal('Foto ini dihapus permanen dari Drive.', function () {
-      memberCall('deleteMyProgressPhoto', id).then(function (d) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); window.pgOpenPhotos('member'); window.showToast('Foto dihapus.'); })
-        .catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
+      // Antrean simpan: foto hilang sekarang; ditolak = kembali.
+      const old = pg.data;
+      if (old && Array.isArray(old.photos)) { pg.data = Object.assign({}, old, { photos: old.photos.filter(x => String(x.id) !== String(id)) }); window.patchPortalMore('progress', pg.data); }
+      pgRenderCard(); window.pgOpenPhotos('member');
+      optimistic({ q: { mode: 'member', fn: 'deleteMyProgressPhoto', args: [id] }, ok: 'Foto dihapus.', label: 'Hapus foto progres',
+        then: function (d) { if (d && !d.error) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); } },
+        undo: function () { pg.data = old; window.patchPortalMore('progress', old); pgRenderCard(); } });
     }, { title: 'Hapus foto?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -324,8 +330,12 @@
     const id = window.taskDoneId;
     if (!id) return;
     window.taskDoneId = null;
+    // Antrean simpan: PR langsung tercentang (juga di salinan perangkat); ditolak = kembali.
+    const c = window.myTasks, t = c && c.state === 'ok' ? c.list.find(x => String(x.id) === String(id)) : null, was = t ? t.status : null;
+    const paint = function () { if (c && c.state === 'ok') window.patchPortalMore('tasks', c.list); renderMyTasksCard(); };
+    if (t) { t.status = 'done'; paint(); }
     optimistic({ q: { mode: 'member', fn: 'completeMyTask', args: [id, $('task-done-note').value.trim()] }, sheet: true, ok: 'PR selesai. Kerja bagus!', label: 'PR',
-      then: function () { window.loadMyTasks(true); }, undo: function () { window.taskDoneId = id; } });
+      then: function () { window.loadMyTasks(true); }, undo: function () { window.taskDoneId = id; if (t) { t.status = was; paint(); } } });
   };
 
   // ── Tab klien: Progres, Program, Info & Tips, Lainnya (Fase J) ───────────────
@@ -720,7 +730,11 @@
   window.rtDelete = function (hari) {
     if (!hari) return;
     window.showConfirmModal('Rutinitas <b>' + h(hari) + '</b> dihapus. Catatan latihannya tetap tersimpan.', function () {
-      memberCall('deleteMyRoutine', hari).then(function (d) { rtSaved(d, 'Rutinitas dihapus.'); }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
+      // Antrean simpan: rutinitas hilang sekarang (juga di salinan perangkat); ditolak = kembali.
+      const old = rtData();
+      if (old) rtSaved(Object.assign({}, old, { own: (old.own || []).filter(x => x.hari !== hari) }));
+      optimistic({ q: { mode: 'member', fn: 'deleteMyRoutine', args: [hari] }, ok: 'Rutinitas dihapus.', label: 'Hapus rutinitas',
+        then: function (d) { if (d && !d.error) rtSaved(d); }, undo: function () { if (old) rtSaved(old); } });
     }, { title: 'Hapus rutinitas?', confirmText: 'Hapus', variant: 'danger' });
   };
   window.rtDup = function (hari) {
@@ -729,7 +743,10 @@
     let n = 2, name;
     do { name = hari.slice(0, 36) + ' (' + n + ')'; n++; } while (taken.indexOf(name.toLowerCase()) !== -1);
     window.closeModal();
-    memberCall('saveMyRoutine', '', { hari: name, items: d.items }).then(function (r) { rtSaved(r, 'Disalin jadi "' + name + '".'); }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
+    // Antrean simpan (nomor pesanan + catatan Idem): salinan tampil sekarang; versi rapi dari server menyusul.
+    rtSaved(Object.assign({}, data, { own: (data.own || []).concat([{ hari: name, items: d.items }]) }));
+    optimistic({ q: { mode: 'member', fn: 'saveMyRoutine', args: ['', { hari: name, items: d.items }] }, ok: 'Disalin jadi "' + name + '".', label: 'Salin rutinitas',
+      then: function (r) { if (r && !r.error) rtSaved(r); }, undo: function () { rtSaved(data); } });
   };
   // Salin hari program coach (template kosong) atau template Jelajahi ke rutinitas sendiri.
   window.rtCopy = function (template, hari) {

@@ -102,6 +102,7 @@
     return p.then(function (r) {
       wlRt.flushing = false;
       wlQueueSet(wlQueue().filter(x => x.id !== it.id));
+      if (window.syncPaint) window.syncPaint();
       wlSaved(it, r);
       return window.wlFlush(false);
     }).catch(function (err) {
@@ -109,10 +110,18 @@
       const all = wlQueue(), cur = all.find(x => x.id === it.id);
       if (cur) { cur.tries = (cur.tries || 0) + 1; cur.err = window.authMessage(err); cur.retry = wlRetryable(err); wlQueueSet(all); }
       wlRenderResume();
-      if (cur && (manual || cur.tries === 1)) window.showToast(cur.retry ? 'Belum terkirim. Dikirim ulang otomatis saat sinyal kembali.' : 'Gagal menyimpan: ' + cur.err);
+      if (window.syncPaint) window.syncPaint();   // lencana bilah atas menghitung latihan yang ditolak
+      if (cur && (manual || cur.tries === 1)) window.showToast(cur.retry ? 'Belum terkirim. Dikirim ulang otomatis saat sinyal kembali.' : 'Latihan belum tersimpan. Ketuk tanda di atas.');
       if (cur && cur.retry) wlRt.retry = setTimeout(function () { window.wlFlush(false); }, Math.min(300000, 20000 * Math.pow(2, Math.min(4, cur.tries - 1))));
     });
   };
+  // Antrean simpan (lencana #sync-badge): catatan latihan akun ini yang ditolak server (retry === false). Hanya membaca antrean;
+  // cara latihan disimpan tidak berubah. Ubah = wlReopen (draf), Coba lagi = kirim ulang, Buang = hapus dari antrean.
+  window.wlFailedItems = function () {
+    return wlQueue().filter(it => wlCanSend(it) && it.retry === false).map(it => ({ kind: 'wl', id: it.id, label: 'Catatan latihan ' + (it.hari ? it.hari + ' · ' : '') + it.date, err: it.err || '', at: it.at || Date.now() }));
+  };
+  window.wlRetryOne = function (id) { const all = wlQueue(), it = all.find(x => x.id === id); if (!it) return; it.retry = true; wlQueueSet(all); window.wlFlush(true, id); };
+  window.wlDrop = function (id) { wlQueueSet(wlQueue().filter(x => x.id !== id)); wlRenderResume(); if (window.syncPaint) window.syncPaint(); };
   window.wlRetryAll = function () { const all = wlQueue(); all.forEach(x => { x.retry = true; }); wlQueueSet(all); window.wlFlush(true); };
   // Antrean yang gagal validasi dibuka lagi sebagai draf supaya angkanya bisa diperbaiki.
   window.wlReopen = function (id) {

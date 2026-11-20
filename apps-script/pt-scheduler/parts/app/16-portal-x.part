@@ -183,7 +183,7 @@
     if (!n || !n.count) return;
     n.count = 0; n.items.forEach(function (x) { x.fresh = false; });   // objek yang sama dengan salinan di perangkat: buka berikutnya tidak menghitung lagi
     renderTopbarActions(); savePortalCache();
-    memberCall('markNotifSeen').catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markNotifSeen', args: [] }, ok: false, label: 'Pemberitahuan dilihat' });
   };
   window.notifGo = function (id) {
     const kind = String(id).split(':')[0];

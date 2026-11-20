@@ -480,12 +480,12 @@
       utama: picked('gym-ut'), pendukung: picked('gym-pe'), hindari: picked('gym-hi'), repMin: $('gym-r1').value.trim(), repMax: $('gym-r2').value.trim(), exId: $('gym-ex').value.trim() });
     gymSt.busy = true;
     adminCall('saveGymExercise', it).then(function (d) { gymSt.data = d; gymSt.edit = null; gymSt.q = ''; gymSt.pola = ''; gymRender(); showToast('Tersimpan'); })
-      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = e.message || 'Gagal menyimpan.'; })
+      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = waitErr(e); })
       .then(function () { gymSt.busy = false; });
   };
   window.gymActive = function (id, on) {
     adminCall('setGymExerciseActive', id, on).then(function (d) { gymSt.data = d; gymRender(); })
-      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); gymRender(); });
+      .catch(function (e) { showToast(waitErr(e)); gymRender(); });
   };
   function exAliasLoad() {
     exEnsure().catch(function () {}).then(function () { gymLoad(); return adminCall('getManualExercises'); })
@@ -522,7 +522,7 @@
     exAl.busy[it.kunci] = true;
     adminCall('saveExerciseAlias', [Object.assign({ nama: it.nama }, v)])
       .then(function (d) { exAl.data = d; exAliasRender(); gymSumRender(); showToast('Tersimpan'); })
-      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); exAliasRender(); })
+      .catch(function (e) { showToast(waitErr(e)); exAliasRender(); })
       .then(function () { delete exAl.busy[it.kunci]; });
   };
   window.exAliasPick = function (i) {

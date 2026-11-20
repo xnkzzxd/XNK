@@ -281,7 +281,7 @@
         window.updateUI();
         window.showToast('Foto profil diperbarui.');
       });
-    }).catch(function (err) { done(); window.showToast('Gagal mengunggah foto: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal mengunggah foto: ')); });
   };
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'pub-avatar-input') {
@@ -609,18 +609,17 @@
   window.fbStar = function (n) {
     const f = window.myFeedback; if (!f || !f.pending) return;
     f.stars = n; f.scheduleId = f.pending.scheduleId; fbRender();
-    memberCall('rateSession', f.pending.scheduleId, n, '', false).catch(function (err) { window.showToast(window.authMessage ? window.authMessage(err) : err.message); });
+    optimistic({ q: { mode: 'member', fn: 'rateSession', args: [f.pending.scheduleId, n, '', false] }, ok: false, label: 'Penilaian sesi' });
   };
   window.fbSendComment = function () {
     const f = window.myFeedback; if (!f || !f.pending) return;
     const c = $('fb-comment').value.trim(), consent = !!($('fb-consent') && $('fb-consent').checked);
     if (!c && !consent) { window.fbDone(); return; }
-    const done = busy($('fb-send'), 'Mengirim…');
-    // Tunggu sedikit: simpan bintang dan komentar tidak boleh berebut (jeda 3 detik di server).
-    setTimeout(function () {
-      memberCall('rateSession', f.pending.scheduleId, f.stars, c, consent).then(function () { done(); window.showToast('Terima kasih!'); window.fbDone(); })
-        .catch(function (err) { done(); window.showToast(waitErr(err)); });
-    }, 0);
+    // Antrean simpan: kartu selesai sekarang. Bintang dan komentar dikirim berurutan; jeda 3 detik di server
+    // ("Tunggu sebentar") dicoba lagi sendiri.
+    const sid = f.pending.scheduleId, stars = f.stars;
+    window.fbDone();
+    optimistic({ q: { mode: 'member', fn: 'rateSession', args: [sid, stars, c, consent] }, ok: 'Terima kasih!', label: 'Komentar sesi' });
   };
   window.fbDone = function () { const f = window.myFeedback; if (f) { f.pending = null; f.stars = 0; } fbRender(); };
 
@@ -645,7 +644,7 @@
       $('pe-body').innerHTML = html;
       $('pe-foot').classList.remove('hide');
       paintIcons();
-    }).catch(function (err) { $('pe-body').innerHTML = '<p class="li-sub">Gagal memuat: ' + h(err.message) + '</p>'; });
+    }).catch(function (err) { $('pe-body').innerHTML = '<p class="li-sub">' + h(waitErr(err, 'Gagal memuat: ')) + '</p>'; });
   };
   window.peStar = function (key, n) {
     pe.vals[key] = n;
@@ -656,10 +655,12 @@
     const missing = pe.data.aspects.find(a => !pe.vals[a.key]);
     if (missing) { $('pe-err').textContent = 'Beri bintang untuk ' + missing.label.toLowerCase() + '.'; return; }
     $('pe-err').textContent = '';
-    const done = busy($('pe-send'), 'Mengirim…');
-    memberCall('submitMyPackageEval', Object.assign({}, pe.vals, { komentar: $('pe-comment').value, consent: $('pe-consent').checked }))
-      .then(function () { done(); window.closeModal(); window.showToast('Terima kasih atas evaluasinya!'); if (window.myFeedback) window.myFeedback.pkgEval = false; fbRender(); })
-      .catch(function (err) { done(); $('pe-err').textContent = err.message; });
+    // Antrean simpan (nomor pesanan + catatan Idem): lembar tertutup sekarang; ditolak = ajakan evaluasi muncul lagi.
+    if (window.myFeedback) window.myFeedback.pkgEval = false;
+    fbRender();
+    optimistic({ q: { mode: 'member', fn: 'submitMyPackageEval', args: [Object.assign({}, pe.vals, { komentar: $('pe-comment').value, consent: $('pe-consent').checked })] },
+      sheet: true, errEl: 'pe-err', ok: 'Terima kasih atas evaluasinya!', label: 'Evaluasi paket',
+      undo: function () { if (window.myFeedback) window.myFeedback.pkgEval = true; fbRender(); } });
   };
   window.peRenew = function () { window.closeModal(); setTimeout(function () { if (window.openRenewSheet) window.openRenewSheet(); }, 300); };
 
@@ -765,15 +766,17 @@
     renderRenewSlot();
     const coach = (window.coaches || []).find(c => String(c.id) === String(coachId));
     window.showWaPrompt(window.waUrl(coach && coach.phone ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
-    memberCall('requestRenewal', p.id, coachId).then(function (res) {
-      window.myRenewal = res.request;
-      renderRenewSlot();
-    }).catch(function (err) {
-      window.myRenewal = prev;
-      renderRenewSlot();
-      const w = document.getElementById('wa-prompt'); if (w) w.remove();
-      window.showToast(waitErr(err, 'Gagal: '));
-    });
+    // Antrean simpan (nomor pesanan + catatan Idem: kiriman ulang tidak membuat permintaan kedua). Salinan di perangkat
+    // langsung ikut, jadi "Menunggu konfirmasi" tetap tampil saat aplikasi dibuka lagi.
+    if (window.patchPortalMore) window.patchPortalMore('renewal', window.myRenewal);
+    optimistic({ q: { mode: 'member', fn: 'requestRenewal', args: [p.id, coachId] }, ok: false, label: 'Perpanjang paket',
+      then: function (res) { if (res && res.request) { window.myRenewal = res.request; renderRenewSlot(); if (window.patchPortalMore) window.patchPortalMore('renewal', res.request); } },
+      undo: function () {
+        window.myRenewal = prev;
+        renderRenewSlot();
+        if (window.patchPortalMore) window.patchPortalMore('renewal', prev || null, false, true);
+        const w = document.getElementById('wa-prompt'); if (w) w.remove();
+      } });
   };
   window.renewResend = function () {
     const r = window.myRenewal;

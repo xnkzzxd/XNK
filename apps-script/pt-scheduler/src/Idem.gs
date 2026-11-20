@@ -24,7 +24,10 @@ var IDEM_DURABLE = { addSchedule: 1, addRecurringSchedule: 1, addTask: 1, addMem
   saveContent: 1, addCoachTimeOff: 1, submitMyHealthForm: 1, submitMyPackageEval: 1, saveMyRoutine: 1, savePackage: 1, saveCoach: 1,
   // Gelombang 2 (panel coach): kiriman ulang setelah cache hilang tidak boleh menjawab "sudah diputuskan" / "sudah ada"
   // (dianggap ditolak dan layar dibatalkan) atau menulis assessment kedua.
-  decideRenewal: 1, decideNutritionAdvice: 1, saveAssessment: 1, saveFinanceCategory: 1 };
+  decideRenewal: 1, decideNutritionAdvice: 1, saveAssessment: 1, saveFinanceCategory: 1,
+  // Gelombang 3 (portal klien): kiriman ulang menambah baris kedua (perpanjangan + Telegram/push, salinan rutinitas "(2)",
+  // grup kelas) atau memaksa blok program baru.
+  requestRenewal: 1, copyRoutineToMine: 1, createClassGroup: 1, acceptAutoProgram: 1 };
 
 function _idemCidOk_(cid) { return typeof cid === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(cid); }
 

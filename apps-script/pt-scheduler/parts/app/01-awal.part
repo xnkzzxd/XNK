@@ -337,9 +337,9 @@
   // ── Satu penilai galat (dipakai lane, antrean simpan, workout, makan, booking) ──
   // 'auth' = sesi habis · 'transient' = belum tersambung / Google sedang ramai (simpan nanti, jangan batalkan layar)
   // · 'rejected' = server menolak dengan alasan (tampil di lencana) · 'done' = hapus barang yang sudah tidak ada.
-  const TRANSIENT_RE = /network|jaringan|koneksi|failure|failed to fetch|load failed|timed? ?out|HTTP \d|offline|sibuk|Tunggu sebentar|\bquota\b|internal error|too many times|server error occurred|we're sorry|exceeded maximum execution|service unavailable|Versi aplikasi belum cocok|Server sedang diperbarui|masih disimpan/i;
+  const TRANSIENT_RE = /network|jaringan|koneksi|failure|failed to fetch|load failed|timed? ?out|HTTP \d|offline|sibuk|Tunggu sebentar|\bquota\b|internal error|too many times|server error occurred|we're sorry|exceeded maximum execution|service unavailable|Versi aplikasi belum cocok|Server sedang diperbarui|masih disimpan|terlalu cepat/i;
   // Pasti belum tersimpan (server menolak sebelum menulis): boleh dicoba lagi langsung di jalur.
-  const QUICK_RETRY_RE = /sibuk|too many times|Tunggu sebentar|masih disimpan/i;
+  const QUICK_RETRY_RE = /sibuk|too many times|Tunggu sebentar|masih disimpan|terlalu cepat/i;
   function errKind(err, fn) {
     if (window.isAuthError(err)) return 'auth';
     if (err && err.code === 'readonly') return 'rejected';
@@ -396,9 +396,11 @@
     const go = function () { return lane(function () { return sendRetry(runner, name, args, 0, meta); }); };
     return wait.length ? Promise.all(wait.map(waitTmp)).then(go) : go();
   }
+  // Terdaftar sebagai tulis (api-lists WRITE) tetapi hanya membaca (mengembalikan pilihan pengganti menu): jangan antre di belakang simpanan.
+  const LANE_SKIP = { swapMyMenuMeal: 1, swapMyMenuItem: 1 };
   function call(runner, name) {
     const args = Array.prototype.slice.call(arguments, 2);
-    if (READ_FN_RE.test(name) && !hasTmp(args, -1)) return rawCall(runner, name, args);
+    if ((READ_FN_RE.test(name) || LANE_SKIP[name]) && !hasTmp(args, -1)) return rawCall(runner, name, args);
     return laneSend(runner, name, args);
   }
   // Pembuat baris baru dengan id sementara `tmp`: begitu jawaban datang (masih di dalam jalur, jadi
@@ -651,7 +653,7 @@
     const el = document.getElementById('sync-badge');
     if (!el) return;
     const items = window.sqItems ? window.sqItems() : [];
-    const extra = typeof window.syncExtraFailed === 'function' ? (window.syncExtraFailed() || 0) : 0;
+    const extra = syncExtraItems().length;
     const failed = items.filter(x => x.state === 'failed').length + extra;
     const pend = items.filter(x => x.state !== 'failed');
     const now = Date.now(), oldest = pend.reduce((m, x) => Math.min(m, x.at), now);
@@ -675,7 +677,7 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncPaint); else setTimeout(syncPaint, 0);
   window.openSyncSheet = function () {
     const items = window.sqItems();
-    if (!items.length && !(window.syncExtraFailed && window.syncExtraFailed()) && ui.staleAt) { if (window.refreshAll) window.refreshAll(true); return; }
+    if (!items.length && !syncExtraItems().length && ui.staleAt) { if (window.refreshAll) window.refreshAll(true); return; }
     syncList();
     openSheet('sheet-sync');
     window.currentSheetId = 'sheet-sync';
@@ -696,14 +698,32 @@
         (acts ? '<div class="btn-row">' + acts + '</div>' : '') + '</div>';
     };
     const failed = items.filter(x => x.state === 'failed'), pend = items.filter(x => x.state !== 'failed');
-    const extra = window.syncExtraFailed ? window.syncExtraFailed() : 0;
+    // Antrean latihan (xnk_wl_queue) dan makan (xnk_food_failed) punya penyimpanan sendiri; di sini hanya ditampilkan.
+    const extraRow = function (it) {
+      const t = new Date(it.at), b = (fn, ic, txt, c) => '<button type="button" class="btn ' + (c || 'btn-outline') + ' btn-sm" onclick="window.' + fn + '(\'' + h(it.id) + '\')">' + icon(ic) + h(txt) + '</button>';
+      const acts = it.kind === 'wl'
+        ? b('syncWlRetry', 'rotate-cw', 'Coba lagi', 'btn-secondary') + b('syncWlEdit', 'pencil', 'Ubah') + b('syncWlDrop', 'trash-2', 'Buang', 'btn-ghost')
+        : b('syncFqOpen', 'utensils', 'Buka Makan') + b('syncFqDrop', 'x', 'Tutup', 'btn-ghost');
+      return '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="li-title">' + h(it.label) + '</p><span class="li-sub num">' + h(fmtShort(t) + ' ' + fmtTime(t)) + '</span></div>' +
+        '<p class="li-sub" style="color:var(--danger)">' + h(it.err || 'Ditolak server.') + '</p><div class="btn-row">' + acts + '</div></div>';
+    };
+    const extra = syncExtraItems();
     let html = '';
     if (failed.length) html += '<p class="group-label">Belum tersimpan</p>' + failed.map(row).join('');
+    if (extra.length) html += '<p class="group-label">Latihan &amp; makan belum tersimpan</p>' + extra.map(extraRow).join('');
     if (pend.length) html += '<p class="group-label">Menunggu dikirim</p>' + pend.map(row).join('');
-    if (extra) html += '<p class="li-sub">' + extra + ' catatan latihan / makan belum terkirim. Buka Latihan atau Makan untuk melihatnya.</p>';
     if (!html) html = '<p class="li-sub" style="min-height:44px;display:flex;align-items:center">Semua perubahan sudah tersimpan.</p>';
     setHTML(box, html);
   }
+  function syncExtraItems() {
+    try { return [].concat(window.wlFailedItems ? window.wlFailedItems() : [], window.fqFailedItems ? window.fqFailedItems() : []); } catch (e) { return []; }
+  }
+  const syncAfter = function () { syncPaint(); if (!window.sqItems().length && !syncExtraItems().length) window.closeModal(); };
+  window.syncWlRetry = function (id) { if (window.wlRetryOne) window.wlRetryOne(id); setTimeout(syncAfter, 300); };
+  window.syncWlEdit = function (id) { window.closeModal(); setTimeout(function () { if (window.wlReopen) window.wlReopen(id); syncPaint(); }, 300); };
+  window.syncWlDrop = function (id) { if (window.wlDrop) window.wlDrop(id); syncAfter(); };
+  window.syncFqOpen = function (id) { if (window.fqFailedDrop) window.fqFailedDrop(id); window.closeModal(); setTimeout(function () { window.navigate('public-food'); }, 300); };
+  window.syncFqDrop = function (id) { if (window.fqFailedDrop) window.fqFailedDrop(id); syncAfter(); };
   window.syncRetry = function (id) { sqUpdate(id, x => { x.state = 'pending'; x.err = ''; x.nextAt = 0; x.tries = Math.max(1, x.tries || 0); x.at = Date.now(); }); sq.refresh = true; syncPaint(); sqFlush(); };
   window.syncDrop = function (id) {
     const hk = sq.hooks[id];

@@ -33,3 +33,22 @@ test('simpanan panel coach yang dijadikan langsung tidak kembali ke adminCall ya
   }
   assert.deepStrictEqual(left, [], 'These went back to a waiting adminCall: ' + left.join(', '));
 });
+
+test('gelombang 3: tidak ada teks galat mentah (e.message / err.message) di toast atau kotak galat', () => {
+  const bad = [];
+  const re = /(?:showToast\(\s*(?:e|err)\.message\b|textContent\s*=\s*(?:e|err)\.message\b)/g;
+  for (const { f, t } of parts) for (const m of t.matchAll(re)) bad.push(f + ': ' + m[0]);
+  assert.deepStrictEqual(bad, [], 'Use waitErr(err[, prefix]):\n' + bad.join('\n'));
+});
+
+test('gelombang 3: simpanan portal klien yang dijadikan langsung tetap lewat antrean', () => {
+  const instant = { rateSession: '10', submitMyPackageEval: '10', requestRenewal: '10', completeMyTask: '11', deleteMyProgressPhoto: '11',
+    markBadgesSeen: '11', deleteMyRoutine: '11', leaveClassGroup: '13', markGuideSeen: '13', markNotifSeen: '16' };
+  const left = [];
+  for (const [fn, pre] of Object.entries(instant)) {
+    const p = parts.find(x => x.f.startsWith(pre + '-'));
+    if (new RegExp("memberCall\\(\\s*'" + fn + "'").test(p.t)) left.push(fn + ' (' + p.f + ')');
+    assert.ok(new RegExp("mode: 'member', fn:\\s*'" + fn + "'").test(p.t), fn + ' should be queued in ' + p.f);
+  }
+  assert.deepStrictEqual(left, [], 'Back to a waiting memberCall: ' + left.join(', '));
+});

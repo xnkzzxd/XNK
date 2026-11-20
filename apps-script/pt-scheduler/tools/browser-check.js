@@ -2006,6 +2006,60 @@ async function contrastReport(page) {
       await context.close();
     })().catch(sectionCrash);
 
+    // Gelombang 3: portal klien.
+    console.log('Antrean simpan · portal klien langsung (perpanjang, PR, latihan & makan di lencana)');
+    await (async () => {
+      const env = seededEnv();
+      const admin = env.adminToken();
+      const task = env.call('addTask', admin, { memberId: 'PT-A', title: 'Minum air 2 liter', category: 'lain' });
+      const taskId = task.id || (task.task && task.task.id);
+      const { page, context, errors } = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, [], null, { wait: 1500, delay: { requestRenewal: 2000, completeMyTask: 2000 } });
+      const renewRows = () => { const sh = env.sheet('RenewalRequests'); return sh ? sh.getLastRow() - 1 : 0; };
+
+      // Minta perpanjang: "Menunggu konfirmasi" sekarang, satu baris di server, salinan perangkat ikut.
+      const r0 = renewRows();
+      await page.evaluate(() => { window.openRenewSheet(); });
+      await page.waitForTimeout(500);
+      await page.evaluate(() => window.renewGo());
+      await page.waitForTimeout(300);
+      check((await page.evaluate(() => window.myRenewal && window.myRenewal.status)) === 'menunggu', 'renewal: waiting state at once');
+      check(renewRows() === r0, 'renewal: server not reached yet (slow server)');
+      check((await page.evaluate(() => { try { return JSON.parse(localStorage.getItem('xnk_portal_cache')).more.renewal.status; } catch (e) { return ''; } })) === 'menunggu', 'renewal: device copy updated at once');
+      await page.waitForTimeout(2600);
+      check(renewRows() === r0 + 1, 'renewal: exactly one request on the server');
+
+      // PR selesai: tercentang sekarang, tersimpan sesudahnya.
+      await page.evaluate(() => window.loadMyTasks(true));
+      await page.waitForTimeout(800);
+      await page.evaluate(id => { window.taskDoneId = id; const n = document.getElementById('task-done-note'); if (n) n.value = ''; window.submitTaskDone({ preventDefault() {} }); }, taskId);
+      await page.waitForTimeout(200);
+      check((await page.evaluate(id => { const t = window.myTasks.list.find(x => String(x.id) === String(id)); return t && t.status; }, taskId)) === 'done', 'task done: ticked at once');
+      await page.waitForTimeout(2600);
+      check(env.call('getTasksForMember', admin, 'PT-A').some(t => String(t.id) === String(taskId) && t.status === 'done'), 'task done: saved on the server');
+
+      // Latihan dan makan yang ditolak server muncul di lencana yang sama (antreannya sendiri tidak diubah).
+      await page.evaluate(() => {
+        const t = localStorage.getItem('xnk_member_token') || '';
+        let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0;
+        const sc = 'm:' + String(x);
+        localStorage.setItem('xnk_wl_queue', JSON.stringify([{ id: 'wq-test-1', scope: sc, mode: 'client', date: '2026-11-19', hari: 'Hari A', entries: [], at: Date.now(), tries: 1, err: 'Tanggal latihan tidak valid.', retry: false }]));
+        localStorage.setItem('xnk_food_failed', JSON.stringify([{ kind: 'fq', id: 'fq-test-1', scope: sc, label: 'Nasi putih · 2026-11-19', err: 'Porsi tidak valid.', at: Date.now() }]));
+        window.syncPaint();
+      });
+      check(await page.isVisible('#sync-badge') && /Belum tersimpan/.test(await page.textContent('#sync-badge')), 'refused workout / food: badge shows');
+      await page.click('#sync-badge');
+      await page.waitForTimeout(500);
+      const list = await page.textContent('#sync-list');
+      check(/Hari A/.test(list) && /Tanggal latihan tidak valid/.test(list), 'badge list: refused workout with its reason');
+      check(/Nasi putih/.test(list) && /Porsi tidak valid/.test(list), 'badge list: refused food entry with its reason');
+      await page.evaluate(() => { window.syncWlDrop('wq-test-1'); window.syncFqDrop('fq-test-1'); });
+      await page.waitForTimeout(300);
+      check(!(await page.isVisible('#sync-badge')), 'Buang / Tutup clears the badge');
+      check(!(await page.locator('#modal-confirm').isVisible()), 'no pop-up');
+      noErrors(errors);
+      await context.close();
+    })().catch(sectionCrash);
+
     // 6. Portal: memuat gagal (Google kehabisan kuota) dengan salinan di perangkat → jadwal tetap tampil, salinan tidak dikosongkan.
     console.log('Antrean simpan · portal tidak mengosongkan salinan saat gagal memuat');
     await (async () => {

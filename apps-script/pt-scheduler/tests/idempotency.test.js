@@ -110,3 +110,16 @@ test('gelombang 2: putuskan perpanjangan dikirim ulang setelah cache hilang → 
   const c = post(env, 'decideRenewal', [tok, id, false], { cid: 'c-renew-002' });   // nomor lain = keputusan baru: tetap ditolak
   assert.equal(c.ok, false);
 });
+
+test('gelombang 3: minta perpanjang dikirim ulang dengan nomor yang sama → satu permintaan, bukan dua', () => {
+  const env = seededEnv(), mtok = env.memberToken(KEY_A);
+  const rows = () => { const sh = env.sheet('RenewalRequests'); return sh ? sh.getLastRow() - 1 : 0; };
+  const a = post(env, 'requestRenewal', [mtok, 'P1'], { cid: 'c-renew-req-01' });
+  assert.equal(a.ok, true, a.error);
+  const n = rows();
+  Object.keys(env.cache).forEach(k => { if (k.indexOf('idem:') === 0) delete env.cache[k]; });   // cache hilang: catatan Idem dipakai
+  const b = post(env, 'requestRenewal', [mtok, 'P1'], { cid: 'c-renew-req-01', re: 1 });
+  assert.equal(b.ok, true, b.error);
+  assert.equal(b.dup, true);
+  assert.equal(rows(), n);
+});

@@ -231,3 +231,13 @@ test('data dari server yang tiba selama ada pesanan baru dianggap basi', async (
   tab.t.sqAdd({ mode: 'admin', fn: 'addTask', args: [{}] }, { label: 'PR' });
   assert.strictEqual(tab.window.wqStale(snap), true);
 });
+
+test('gelombang 3: "Terlalu cepat" (jeda server) = sementara; tukar menu tidak menunggu di belakang simpanan', async () => {
+  const { t } = makeTab(store0(), {});
+  assert.strictEqual(t.errKind(new Error('Terlalu cepat. Coba lagi sebentar.')), 'transient');
+  const tab = makeTab(store0(), { saveMyRoutine: () => ({ ms: 80, ok: {} }), swapMyMenuMeal: () => ({ ms: 1, ok: { opts: [] } }) });
+  tab.t.adminCall('saveMyRoutine', 'x', {});   // simpanan lambat (80 ms) di jalur tulis
+  const t0 = Date.now();
+  await tab.t.adminCall('swapMyMenuMeal', 'pagi');
+  assert.ok(Date.now() - t0 < 60, 'swap answered while the save was still running (took ' + (Date.now() - t0) + ' ms)');
+});

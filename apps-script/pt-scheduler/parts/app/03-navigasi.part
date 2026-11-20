@@ -687,8 +687,9 @@
   }
   // Tulis-terus: hasil simpan langsung masuk salinan di perangkat (buka lagi = langsung tampil, tanpa memuat).
   // Versi dikosongkan supaya ringkasan (insight, minggu ini) dihitung ulang sekali di belakang layar saat buka berikutnya.
-  function patchMore(part, value, keepVer) {
-    if (!portalMoreRaw || value == null) return;
+  // clear = true: simpan null dengan sengaja (keluar grup kelas, permintaan perpanjang dibatalkan).
+  function patchMore(part, value, keepVer, clear) {
+    if (!portalMoreRaw || (value == null && !clear)) return;
     portalMoreRaw[part] = value;
     if (!keepVer) portalMoreRaw.ver = '';
     savePortalCache();
