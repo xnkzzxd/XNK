@@ -429,7 +429,7 @@
       $('pin-old').value = ''; $('pin-new').value = '';
       window.closeModal();
       window.showToast('PIN diganti. Perangkat lain perlu login ulang.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.logoutCurrent = function () {

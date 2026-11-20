@@ -123,23 +123,23 @@
       if (!r.sessions && !r.clients) { window.showToast('Semua jadwal sudah punya coach.'); return; }
       window.showConfirmModal('<b>' + r.sessions + '</b> jadwal dan <b>' + r.clients + '</b> klien tanpa coach akan ditetapkan ke <b>' + h(r.coachName) + '</b>. Sesi yang sudah selesai tidak berubah.', function () {
         adminCall('assignUnassignedToSelf', {}).then(function () { window.showToast('Selesai ditetapkan.'); return window.loadAllData(); })
-          .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+          .catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
       }, { title: 'Tetapkan ke saya?', confirmText: 'Tetapkan' });
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function reloadCoaches() {
     return adminCall('getCoachesAdmin').then(function (res) { applyCoachesAdmin(res); saveAdminCache(); window.updateUI(); });
   }
   window.setCoachActiveUI = function (id, aktif) {
-    adminCall('setCoachActive', id, aktif).then(function () { window.closeDetail(); return reloadCoaches(); })
-      .then(function () { window.showToast(aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.'); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: daftar coach (dan mode solo) dimuat ulang dari server setelah tersimpan.
+    window.closeDetail();
+    optimistic({ q: { mode: 'admin', fn: 'setCoachActive', args: [id, aktif] }, ok: aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.', label: 'Status coach',
+      then: function () { reloadCoaches(); } });
   };
   window.setSelfCoachUI = function (id) {
-    adminCall('setSelfCoach', id).then(function () { return reloadCoaches(); })
-      .then(function () { window.showToast('Ditandai sebagai "Ini saya".'); window.openCoachProfile(id); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    optimistic({ q: { mode: 'admin', fn: 'setSelfCoach', args: [id] }, ok: 'Ditandai sebagai "Ini saya".', label: 'Ini saya',
+      then: function () { Promise.resolve(reloadCoaches()).then(function () { if (ui.detail === 'coach:' + id) window.openCoachProfile(id); }).catch(function () {}); } });
   };
   window.updateCoachUI = function () { if (window.currentView === 'coaches') renderView('coaches', { animate: false }); };
 
@@ -174,7 +174,7 @@
       adminCall('deleteCoach', id).then(function () {
         window.closeDetail();
         return reloadCoaches().then(function () { window.showToast('Coach dihapus.'); });
-      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: 'Hapus coach?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -236,7 +236,7 @@
       done();
       window.closeModal();
       window.showToast(editId ? 'Coach diperbarui.' : 'Coach ditambahkan.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── Potong foto (coach & klien) ────────────────────────────────────────────
@@ -619,7 +619,7 @@
     // Tunggu sedikit: simpan bintang dan komentar tidak boleh berebut (jeda 3 detik di server).
     setTimeout(function () {
       memberCall('rateSession', f.pending.scheduleId, f.stars, c, consent).then(function () { done(); window.showToast('Terima kasih!'); window.fbDone(); })
-        .catch(function (err) { done(); window.showToast(err.message); });
+        .catch(function (err) { done(); window.showToast(waitErr(err)); });
     }, 0);
   };
   window.fbDone = function () { const f = window.myFeedback; if (f) { f.pending = null; f.stars = 0; } fbRender(); };
@@ -772,7 +772,7 @@
       window.myRenewal = prev;
       renderRenewSlot();
       const w = document.getElementById('wa-prompt'); if (w) w.remove();
-      window.showToast('Gagal: ' + window.authMessage(err));
+      window.showToast(waitErr(err, 'Gagal: '));
     });
   };
   window.renewResend = function () {

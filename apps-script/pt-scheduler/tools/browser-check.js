@@ -1976,6 +1976,36 @@ async function contrastReport(page) {
       await context.close();
     })().catch(sectionCrash);
 
+    console.log('Antrean simpan · panel coach langsung (perpanjangan, saklar Pengaturan, kalimat tenang)');
+    await (async () => {
+      const env = seededEnv();
+      const token = env.adminToken();
+      const req = env.call('requestRenewal', env.memberToken(KEY_A), 'P1');
+      const rid = req.id || (req.request && req.request.id);
+      const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { touch: true, wait: 2500, delay: { decideRenewal: 2000, updateAppSettings: 2000 } });
+      const status = () => { const sh = env.sheet('RenewalRequests'); return sh ? sh.getDataRange().getValues().filter(r => String(r[0]) === String(rid)).map(r => r.join('|')).join('') : ''; };
+      check(await page.evaluate(id => (window.renewals || []).some(r => r.id === id), rid), 'renewal card on the dashboard');
+      await page.evaluate(id => window.renewalDecide(id, false), rid);
+      await page.click('#btn-confirm-modal-yes');
+      await page.waitForTimeout(300);
+      check(!(await page.evaluate(id => (window.renewals || []).some(r => r.id === id), rid)), 'renewal decided: card gone at once');
+      check(!/ditolak/.test(status()), 'renewal decided: server not reached yet (slow server)');
+      await page.waitForTimeout(2800);
+      check(/ditolak/.test(status()), 'renewal decided: saved on the server');
+
+      await page.evaluate(() => window.setFeedback({ checked: false, isConnected: false }));
+      check(env.props.FEEDBACK_ENABLED !== 'false', 'settings switch: server not reached yet');
+      await page.waitForTimeout(2600);
+      check(env.props.FEEDBACK_ENABLED === 'false', 'settings switch: saved on the server');
+      check(!(await page.locator('#modal-confirm').isVisible()), 'no pop-up');
+
+      const calm = await page.evaluate(() => [window.waitErr(new Error("We're sorry, a server error occurred."), 'Gagal: '), window.waitErr(new Error('Nomor sudah terdaftar.'), 'Gagal: ')]);
+      check(calm[0] === 'Belum tersambung. Coba lagi sebentar.', 'waiting saves: Google hiccup gets the calm sentence');
+      check(calm[1] === 'Gagal: Nomor sudah terdaftar.', 'waiting saves: a real refusal keeps its reason');
+      noErrors(errors);
+      await context.close();
+    })().catch(sectionCrash);
+
     // 6. Portal: memuat gagal (Google kehabisan kuota) dengan salinan di perangkat → jadwal tetap tampil, salinan tidak dikosongkan.
     console.log('Antrean simpan · portal tidak mengosongkan salinan saat gagal memuat');
     await (async () => {

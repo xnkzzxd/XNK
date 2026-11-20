@@ -157,8 +157,9 @@
   window.contentDelete = function () {
     const id = cnt.editId; if (!id) return;
     window.showConfirmModal('Konten ini dihapus permanen dan hilang dari portal klien.', function () {
-      adminCall('deleteContent', id).then(function () { window.closeModal(); window.showToast('Konten dihapus.'); return window.loadContentAdmin(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      window.closeModal();
+      optimistic({ q: { mode: 'admin', fn: 'deleteContent', args: [id] }, ok: 'Konten dihapus.', label: 'Hapus konten',
+        then: function () { window.loadContentAdmin(); } });
     }, { title: 'Hapus konten?', confirmText: 'Hapus', variant: 'danger' });
   };
 

@@ -442,7 +442,7 @@
       const isLive = live();
       if (window.isAuthError(err)) { if (isLive) { finish(); hideChecking(form); window.closeModal(); } return; }
       if (isLive) { finish(); showFormNotice(form, err); }
-      else window.showToast('Gagal: ' + window.authMessage(err));
+      else window.showToast(waitErr(err, 'Gagal: '));
     });
   }
 
@@ -680,7 +680,7 @@
             window.updateUI();
             window.showToast((res && res.count) + ' sesi berulang dibuat.');
           });
-        }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+        }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
       return;
     }
 

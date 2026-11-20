@@ -324,14 +324,12 @@
 
   window.pkgToggle = function (id, el) {
     const want = !!el.checked;
-    el.disabled = true;
-    adminCall('setPackageActive', id, want).then(function () {
-      window.showToast(want ? 'Paket ditampilkan.' : 'Paket disembunyikan.');
-      return pkgAfterChange();
-    }).catch(function (err) {
-      el.checked = !want; el.disabled = false;
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    // Antrean simpan: saklar langsung berubah; ditolak = kembali.
+    const p = pkgFind(id), was = p ? p.aktif : !want;
+    if (p) { p.aktif = want; pkgRefreshView(); }
+    optimistic({ q: { mode: 'admin', fn: 'setPackageActive', args: [id, want] }, ok: want ? 'Paket ditampilkan.' : 'Paket disembunyikan.', label: 'Paket aktif',
+      then: function () { pkgAfterChange(); },
+      undo: function () { if (p) { p.aktif = was; pkgRefreshView(); } else if (el.isConnected) el.checked = !want; } });
   };
 
   window.pkgMove = function (id, dir) {
@@ -344,10 +342,8 @@
     const tmp = all[a]; all[a] = all[b]; all[b] = tmp;
     pkgRefreshView();
     const ids = pkgList().map(function (p) { return p.id; });
-    adminCall('reorderPackages', pkgState.cat, ids).then(pkgRefreshPublic).catch(function (err) {
-      window.showToast('Gagal mengurutkan: ' + window.authMessage(err));
-      pkgLoad();
-    });
+    optimistic({ q: { mode: 'admin', fn: 'reorderPackages', args: [pkgState.cat, ids] }, ok: false, label: 'Urutan paket',
+      then: function () { pkgRefreshPublic(); }, undo: function () { pkgLoad(); } });
   };
 
   window.pkgMenu = function (id) {
@@ -376,8 +372,11 @@
     const p = pkgFind(id);
     if (!p) return;
     window.showConfirmModal('Paket <b>' + h(p.namaPaket) + '</b> dihapus permanen. Ini tidak bisa dibatalkan.', function () {
-      adminCall('deletePackage', id).then(function () { window.showToast('Paket dihapus.'); return pkgAfterChange(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const all = pkgState.data.packages, at = all.indexOf(p);
+      if (at >= 0) { all.splice(at, 1); pkgRefreshView(); }
+      optimistic({ q: { mode: 'admin', fn: 'deletePackage', args: [id] }, ok: 'Paket dihapus.', label: 'Hapus paket',
+        then: function () { pkgAfterChange(); },
+        undo: function () { if (at >= 0) { pkgState.data.packages.splice(Math.min(at, pkgState.data.packages.length), 0, p); pkgRefreshView(); } } });
     }, { title: 'Hapus paket?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -485,13 +484,10 @@
       jadwal: isClass ? $('pkg-schedule').value : '',
       privat: isClass && $('pkg-private').checked
     };
-    const done = busy($('pkg-save-btn'), 'Menyimpan…');
-    adminCall('savePackage', payload).then(function () {
-      done();
-      window.closeModal();
-      window.showToast('Paket disimpan.');
-      return pkgAfterChange();
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Antrean simpan (paket baru dijaga nomor pesanan + catatan Idem): daftar dimuat ulang setelah server selesai.
+    // Ditolak = lencana; "Ubah" membuka editor ini lagi dengan isian yang sama.
+    optimistic({ q: { mode: 'admin', fn: 'savePackage', args: [payload] }, sheet: true, ok: 'Paket disimpan.', label: 'Paket',
+      then: function () { pkgAfterChange(); } });
   };
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && e.target && e.target.id === 'pkg-benefit-input') { e.preventDefault(); window.pkgAddBenefit(); }
@@ -590,7 +586,7 @@
       const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();
       refreshSettingsNav();
       window.showToast('Trigger pengingat terpasang.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function renderSettingsSection(id) {
@@ -784,14 +780,14 @@
       window.showToast('Pengaturan disimpan.');
     }).catch(function (err) {
       setState.saving = false; done();
-      window.showToast('Gagal: ' + window.authMessage(err));
+      window.showToast(waitErr(err, 'Gagal: '));
     });
   };
   window.settingsClearToken = function () {
     window.showConfirmModal('Token bot Telegram yang tersimpan akan dihapus. Notifikasi Telegram berhenti sampai token baru diisi.', function () {
       adminCall('updateAppSettings', { telegramBotToken: '' }).then(function (s) {
         setState.data = s; renderSettingsSection('notifikasi'); window.showToast('Token dihapus.');
-      }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: 'Hapus token?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -800,7 +796,7 @@
     adminCall('sendReminderTest', jenis).then(function (res) {
       done();
       window.showToast(res.pesan);
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.sendTelegramTest = function () {
@@ -809,6 +805,6 @@
     adminCall('sendTelegramTest', $('set-tgToken').value, $('set-tgChat').value).then(function (res) {
       done();
       window.showToast(res.sent + ' dari ' + res.total + ' Chat ID berhasil menerima pesan tes.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 

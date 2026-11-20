@@ -249,7 +249,7 @@
   window.classCreateGroup = function () {
     const done = busy($('class-create-btn'), 'Membuat…');
     memberCall('createClassGroup').then(function (g) { done(); window.myGroup = g; renderClassSlot(); window.showToast('Grup dibuat. Bagikan kodenya ke temanmu.'); })
-      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.classOpenJoin = function () { $('class-join-code').value = ''; openSheet('sheet-class-join'); };
   window.classJoinSubmit = function (e) {
@@ -257,13 +257,13 @@
     const done = busy($('class-join-btn'), 'Menggabung…');
     memberCall('joinClassGroup', $('class-join-code').value.trim().toUpperCase()).then(function (g) {
       done(); window.myGroup = g; window.closeModal(); renderClassSlot(); window.showToast('Kamu sudah masuk grup.');
-    }).catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   window.classLeaveGroup = function () {
     const g = window.myGroup;
     if (!g) return;
     window.showConfirmModal(g.isOwner ? 'Tutup grup ini? Anggota lain tidak bisa lagi memakai kodenya. Sesi yang sudah dibooking tetap berlaku.' : 'Keluar dari grup ini? Sesi yang sudah dibooking tetap berlaku.', function () {
-      memberCall('leaveClassGroup').then(function () { window.myGroup = null; renderClassSlot(); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      memberCall('leaveClassGroup').then(function () { window.myGroup = null; renderClassSlot(); }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: g.isOwner ? 'Tutup grup?' : 'Keluar grup?', confirmText: g.isOwner ? 'Ya, tutup' : 'Ya, keluar' });
   };
   window.classShareGroup = function () {
@@ -427,7 +427,7 @@
     adminCall('previewCoachProfile').then(function (p) {
       $('coach-preview-body').innerHTML = window.renderCoachProfile(p, { preview: true });
       openSheet('modal-coach-preview');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.renderPublicCoaches = function () {

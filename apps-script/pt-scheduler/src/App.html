@@ -1596,14 +1596,12 @@
 
   window.pkgToggle = function (id, el) {
     const want = !!el.checked;
-    el.disabled = true;
-    adminCall('setPackageActive', id, want).then(function () {
-      window.showToast(want ? 'Paket ditampilkan.' : 'Paket disembunyikan.');
-      return pkgAfterChange();
-    }).catch(function (err) {
-      el.checked = !want; el.disabled = false;
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    // Antrean simpan: saklar langsung berubah; ditolak = kembali.
+    const p = pkgFind(id), was = p ? p.aktif : !want;
+    if (p) { p.aktif = want; pkgRefreshView(); }
+    optimistic({ q: { mode: 'admin', fn: 'setPackageActive', args: [id, want] }, ok: want ? 'Paket ditampilkan.' : 'Paket disembunyikan.', label: 'Paket aktif',
+      then: function () { pkgAfterChange(); },
+      undo: function () { if (p) { p.aktif = was; pkgRefreshView(); } else if (el.isConnected) el.checked = !want; } });
   };
 
   window.pkgMove = function (id, dir) {
@@ -1616,10 +1614,8 @@
     const tmp = all[a]; all[a] = all[b]; all[b] = tmp;
     pkgRefreshView();
     const ids = pkgList().map(function (p) { return p.id; });
-    adminCall('reorderPackages', pkgState.cat, ids).then(pkgRefreshPublic).catch(function (err) {
-      window.showToast('Gagal mengurutkan: ' + window.authMessage(err));
-      pkgLoad();
-    });
+    optimistic({ q: { mode: 'admin', fn: 'reorderPackages', args: [pkgState.cat, ids] }, ok: false, label: 'Urutan paket',
+      then: function () { pkgRefreshPublic(); }, undo: function () { pkgLoad(); } });
   };
 
   window.pkgMenu = function (id) {
@@ -1648,8 +1644,11 @@
     const p = pkgFind(id);
     if (!p) return;
     window.showConfirmModal('Paket <b>' + h(p.namaPaket) + '</b> dihapus permanen. Ini tidak bisa dibatalkan.', function () {
-      adminCall('deletePackage', id).then(function () { window.showToast('Paket dihapus.'); return pkgAfterChange(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const all = pkgState.data.packages, at = all.indexOf(p);
+      if (at >= 0) { all.splice(at, 1); pkgRefreshView(); }
+      optimistic({ q: { mode: 'admin', fn: 'deletePackage', args: [id] }, ok: 'Paket dihapus.', label: 'Hapus paket',
+        then: function () { pkgAfterChange(); },
+        undo: function () { if (at >= 0) { pkgState.data.packages.splice(Math.min(at, pkgState.data.packages.length), 0, p); pkgRefreshView(); } } });
     }, { title: 'Hapus paket?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -1757,13 +1756,10 @@
       jadwal: isClass ? $('pkg-schedule').value : '',
       privat: isClass && $('pkg-private').checked
     };
-    const done = busy($('pkg-save-btn'), 'Menyimpan…');
-    adminCall('savePackage', payload).then(function () {
-      done();
-      window.closeModal();
-      window.showToast('Paket disimpan.');
-      return pkgAfterChange();
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Antrean simpan (paket baru dijaga nomor pesanan + catatan Idem): daftar dimuat ulang setelah server selesai.
+    // Ditolak = lencana; "Ubah" membuka editor ini lagi dengan isian yang sama.
+    optimistic({ q: { mode: 'admin', fn: 'savePackage', args: [payload] }, sheet: true, ok: 'Paket disimpan.', label: 'Paket',
+      then: function () { pkgAfterChange(); } });
   };
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && e.target && e.target.id === 'pkg-benefit-input') { e.preventDefault(); window.pkgAddBenefit(); }
@@ -1862,7 +1858,7 @@
       const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();
       refreshSettingsNav();
       window.showToast('Trigger pengingat terpasang.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function renderSettingsSection(id) {
@@ -2056,14 +2052,14 @@
       window.showToast('Pengaturan disimpan.');
     }).catch(function (err) {
       setState.saving = false; done();
-      window.showToast('Gagal: ' + window.authMessage(err));
+      window.showToast(waitErr(err, 'Gagal: '));
     });
   };
   window.settingsClearToken = function () {
     window.showConfirmModal('Token bot Telegram yang tersimpan akan dihapus. Notifikasi Telegram berhenti sampai token baru diisi.', function () {
       adminCall('updateAppSettings', { telegramBotToken: '' }).then(function (s) {
         setState.data = s; renderSettingsSection('notifikasi'); window.showToast('Token dihapus.');
-      }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: 'Hapus token?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -2072,7 +2068,7 @@
     adminCall('sendReminderTest', jenis).then(function (res) {
       done();
       window.showToast(res.pesan);
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.sendTelegramTest = function () {
@@ -2081,7 +2077,7 @@
     adminCall('sendTelegramTest', $('set-tgToken').value, $('set-tgChat').value).then(function (res) {
       done();
       window.showToast(res.sent + ' dari ' + res.total + ' Chat ID berhasil menerima pesan tes.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── Navigasi ────────────────────────────────────────────────────────────────
@@ -2515,7 +2511,7 @@
       $('pin-old').value = ''; $('pin-new').value = '';
       window.closeModal();
       window.showToast('PIN diganti. Perangkat lain perlu login ulang.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.logoutCurrent = function () {
@@ -4212,7 +4208,7 @@
       const isLive = live();
       if (window.isAuthError(err)) { if (isLive) { finish(); hideChecking(form); window.closeModal(); } return; }
       if (isLive) { finish(); showFormNotice(form, err); }
-      else window.showToast('Gagal: ' + window.authMessage(err));
+      else window.showToast(waitErr(err, 'Gagal: '));
     });
   }
 
@@ -4450,7 +4446,7 @@
             window.updateUI();
             window.showToast((res && res.count) + ' sesi berulang dibuat.');
           });
-        }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+        }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
       return;
     }
 
@@ -5236,13 +5232,17 @@
   };
   window.confirmDeleteMember = function () {
     const id = window.selectedMemberId;
-    adminCall('deleteMember', id).then(function () {
-      window.members = window.members.filter(m => String(m.id) !== String(id));
-      window.schedules = window.schedules.filter(s => String(s.memberId) !== String(id));
-      window.closeDetail();
-      window.updateUI();
-      window.showToast('Klien dihapus.');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: klien & jadwalnya hilang sekarang; ditolak = semuanya kembali.
+    const members = window.members, schedules = window.schedules;
+    window.members = members.filter(m => String(m.id) !== String(id));
+    window.schedules = schedules.filter(s => String(s.memberId) !== String(id));
+    window.closeDetail();
+    window.updateUI();
+    optimistic({ q: { mode: 'admin', fn: 'deleteMember', args: [id] }, ok: 'Klien dihapus.', label: 'Hapus klien',
+      undo: function () {
+        const back = members.filter(m => String(m.id) === String(id)), backS = schedules.filter(s => String(s.memberId) === String(id));
+        window.members = window.members.concat(back); window.schedules = window.schedules.concat(backS); window.updateUI();
+      } });
   };
 
   // Pemilih paket (dengan pencarian)
@@ -5345,7 +5345,7 @@
       window.showToast(res.renewed ? 'Paket klien diperpanjang.' : 'Klien ditambahkan.');
       if (res.waLink) window.showWaPrompt(res.waLink, res.renewed ? 'Kabari klien soal perpanjangan paketnya.' : 'Kirim info booking ke klien baru.');
       if (window.currentView === 'clients') window.openProfile(res.id);
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── COACH ──────────────────────────────────────────────────────────────────
@@ -5417,12 +5417,12 @@
       const off = a.timeOff.length ? a.timeOff.map(function (o) {
         const when = o.from === o.to ? o.from : o.from + ' → ' + o.to;
         return '<div class="row-between" style="min-height:48px;gap:8px"><div class="grow"><p class="li-title">' + h(when) + '</p><p class="li-sub">' + (o.hourFrom === null ? 'Seharian' : p2(o.hourFrom) + '–' + p2(o.hourTo)) + (o.note ? ' · ' + h(o.note) : '') + '</p></div>' +
-          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\')">' + icon('trash-2') + '</button></div>';
+          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\', this)">' + icon('trash-2') + '</button></div>';
       }).join('') : '<p class="li-sub">Belum ada cuti.</p>';
       const body = '<div class="stack" style="gap:16px"><div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Jam kerja</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openHoursEditor()">Ubah</button></div>' + rows + '</div>' +
         '<div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Cuti</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTimeOffSheet()">' + icon('plus') + 'Tambah</button></div>' + off + '</div></div>';
       openDetail('hours', 'Jam kerja & cuti', '', body);
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function renderHoursRows() {
@@ -5483,11 +5483,13 @@
           '<button type="button" class="btn btn-secondary btn-sm" data-wa="' + h(c.phone) + '" data-text="' + h(text) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">WA klien</button>' +
           '<button type="button" class="btn btn-outline btn-sm" onclick="window.closeModal();window.navigate(\'calendar\');window.openScheduleDetail(\'' + h(c.scheduleId) + '\')">Buka jadwal</button></div>';
       }).join('');
-    }).catch(function (err) { done(); window.showToast(err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
-  window.deleteTimeOff = function (id) {
-    adminCall('deleteCoachTimeOff', id).then(function () { window.showToast('Cuti dihapus.'); window.openHoursPage(); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  window.deleteTimeOff = function (id, btn) {
+    const row = btn && btn.closest ? btn.closest('.row-between') : null;
+    if (row) row.classList.add('hide');
+    optimistic({ q: { mode: 'admin', fn: 'deleteCoachTimeOff', args: [id] }, ok: 'Cuti dihapus.', label: 'Hapus cuti',
+      then: function () { window.openHoursPage(); }, undo: function () { if (row) row.classList.remove('hide'); } });
   };
 
 
@@ -5650,8 +5652,9 @@
   window.contentDelete = function () {
     const id = cnt.editId; if (!id) return;
     window.showConfirmModal('Konten ini dihapus permanen dan hilang dari portal klien.', function () {
-      adminCall('deleteContent', id).then(function () { window.closeModal(); window.showToast('Konten dihapus.'); return window.loadContentAdmin(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      window.closeModal();
+      optimistic({ q: { mode: 'admin', fn: 'deleteContent', args: [id] }, ok: 'Konten dihapus.', label: 'Hapus konten',
+        then: function () { window.loadContentAdmin(); } });
     }, { title: 'Hapus konten?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -8045,23 +8048,23 @@
       if (!r.sessions && !r.clients) { window.showToast('Semua jadwal sudah punya coach.'); return; }
       window.showConfirmModal('<b>' + r.sessions + '</b> jadwal dan <b>' + r.clients + '</b> klien tanpa coach akan ditetapkan ke <b>' + h(r.coachName) + '</b>. Sesi yang sudah selesai tidak berubah.', function () {
         adminCall('assignUnassignedToSelf', {}).then(function () { window.showToast('Selesai ditetapkan.'); return window.loadAllData(); })
-          .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+          .catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
       }, { title: 'Tetapkan ke saya?', confirmText: 'Tetapkan' });
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function reloadCoaches() {
     return adminCall('getCoachesAdmin').then(function (res) { applyCoachesAdmin(res); saveAdminCache(); window.updateUI(); });
   }
   window.setCoachActiveUI = function (id, aktif) {
-    adminCall('setCoachActive', id, aktif).then(function () { window.closeDetail(); return reloadCoaches(); })
-      .then(function () { window.showToast(aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.'); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: daftar coach (dan mode solo) dimuat ulang dari server setelah tersimpan.
+    window.closeDetail();
+    optimistic({ q: { mode: 'admin', fn: 'setCoachActive', args: [id, aktif] }, ok: aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.', label: 'Status coach',
+      then: function () { reloadCoaches(); } });
   };
   window.setSelfCoachUI = function (id) {
-    adminCall('setSelfCoach', id).then(function () { return reloadCoaches(); })
-      .then(function () { window.showToast('Ditandai sebagai "Ini saya".'); window.openCoachProfile(id); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    optimistic({ q: { mode: 'admin', fn: 'setSelfCoach', args: [id] }, ok: 'Ditandai sebagai "Ini saya".', label: 'Ini saya',
+      then: function () { Promise.resolve(reloadCoaches()).then(function () { if (ui.detail === 'coach:' + id) window.openCoachProfile(id); }).catch(function () {}); } });
   };
   window.updateCoachUI = function () { if (window.currentView === 'coaches') renderView('coaches', { animate: false }); };
 
@@ -8096,7 +8099,7 @@
       adminCall('deleteCoach', id).then(function () {
         window.closeDetail();
         return reloadCoaches().then(function () { window.showToast('Coach dihapus.'); });
-      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: 'Hapus coach?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -8158,7 +8161,7 @@
       done();
       window.closeModal();
       window.showToast(editId ? 'Coach diperbarui.' : 'Coach ditambahkan.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── Potong foto (coach & klien) ────────────────────────────────────────────
@@ -8541,7 +8544,7 @@
     // Tunggu sedikit: simpan bintang dan komentar tidak boleh berebut (jeda 3 detik di server).
     setTimeout(function () {
       memberCall('rateSession', f.pending.scheduleId, f.stars, c, consent).then(function () { done(); window.showToast('Terima kasih!'); window.fbDone(); })
-        .catch(function (err) { done(); window.showToast(err.message); });
+        .catch(function (err) { done(); window.showToast(waitErr(err)); });
     }, 0);
   };
   window.fbDone = function () { const f = window.myFeedback; if (f) { f.pending = null; f.stars = 0; } fbRender(); };
@@ -8694,7 +8697,7 @@
       window.myRenewal = prev;
       renderRenewSlot();
       const w = document.getElementById('wa-prompt'); if (w) w.remove();
-      window.showToast('Gagal: ' + window.authMessage(err));
+      window.showToast(waitErr(err, 'Gagal: '));
     });
   };
   window.renewResend = function () {
@@ -8726,13 +8729,12 @@
       ? 'Setujui perpanjangan <b>' + h(r.name) + '</b> (' + h(r.packageName) + ')? Sesi klien direset ke paket baru dan transaksi dicatat. Pastikan pembayaran sudah diterima.'
       : 'Tolak permintaan perpanjang <b>' + h(r.name) + '</b>? Data klien tidak berubah.';
     window.showConfirmModal(msg, function () {
+      // Antrean simpan (nomor pesanan + catatan Idem): kartu hilang sekarang; sesi & transaksi baru dimuat setelah server selesai.
       window.renewals = (window.renewals || []).filter(x => x.id !== id);
       window.renderDashboard();
-      window.showToast(approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.');
-      adminCall('decideRenewal', id, approve).then(function () {
-        return approve ? window.loadAllData() : null;
-      }).then(function () { return window.loadRenewals(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); window.loadRenewals(); });
+      optimistic({ q: { mode: 'admin', fn: 'decideRenewal', args: [id, approve] }, ok: approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.', label: approve ? 'Setujui perpanjangan' : 'Tolak perpanjangan',
+        then: function () { Promise.resolve(approve ? window.loadAllData() : null).then(function () { return window.loadRenewals(); }).catch(function () {}); },
+        undo: function () { window.renewals = (window.renewals || []).concat([r]); window.renderDashboard(); } });
     }, approve ? { title: 'Setujui perpanjangan?', confirmText: 'Setujui' } : { title: 'Tolak permintaan?', confirmText: 'Tolak', variant: 'danger' });
   };
 
@@ -8954,7 +8956,7 @@
       if (b64.length > 6900000) throw new Error('Foto terlalu besar. Coba foto lain.');
       return memberCall('uploadMyProgressPhoto', b64, 'image/jpeg', pg.side);
     }).then(function (d) { done(); pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); pgRenderPhotoList(); window.showToast('Foto tersimpan.'); })
-      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.pgViewPhoto = function (id) {
     pg.viewId = id;
@@ -8974,7 +8976,7 @@
     const id = pg.viewId;
     window.showConfirmModal('Foto ini dihapus permanen dari Drive.', function () {
       memberCall('deleteMyProgressPhoto', id).then(function (d) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); window.pgOpenPhotos('member'); window.showToast('Foto dihapus.'); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+        .catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: 'Hapus foto?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -9426,7 +9428,7 @@
   window.rtDelete = function (hari) {
     if (!hari) return;
     window.showConfirmModal('Rutinitas <b>' + h(hari) + '</b> dihapus. Catatan latihannya tetap tersimpan.', function () {
-      memberCall('deleteMyRoutine', hari).then(function (d) { rtSaved(d, 'Rutinitas dihapus.'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      memberCall('deleteMyRoutine', hari).then(function (d) { rtSaved(d, 'Rutinitas dihapus.'); }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: 'Hapus rutinitas?', confirmText: 'Hapus', variant: 'danger' });
   };
   window.rtDup = function (hari) {
@@ -9435,14 +9437,14 @@
     let n = 2, name;
     do { name = hari.slice(0, 36) + ' (' + n + ')'; n++; } while (taken.indexOf(name.toLowerCase()) !== -1);
     window.closeModal();
-    memberCall('saveMyRoutine', '', { hari: name, items: d.items }).then(function (r) { rtSaved(r, 'Disalin jadi "' + name + '".'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    memberCall('saveMyRoutine', '', { hari: name, items: d.items }).then(function (r) { rtSaved(r, 'Disalin jadi "' + name + '".'); }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
   // Salin hari program coach (template kosong) atau template Jelajahi ke rutinitas sendiri.
   window.rtCopy = function (template, hari) {
     window.closeModal();
     memberCall('copyRoutineToMine', template ? { template: template } : { hari: hari }).then(function (r) {
       rtSaved(r, (r.added || []).length ? 'Ditambahkan ke Rutinitas saya: ' + r.added.join(', ') : 'Disalin.');
-    }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.rtExplore = function () {
     const list = (rtData() || {}).explore || [];
@@ -9730,7 +9732,7 @@
     if (n.profile) n.profile.gaya = g;
     window.closeModal(); renderMakan();
     memberCall('setMyMenuStyle', g).then(function (r) { window.myNutrition = r; window.patchPortalMore('nutrition', r); renderMakan(); window.showToast('Menu ' + NUT_GAYA_L[g] + '.'); })
-      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(window.authMessage(err)); });
+      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(waitErr(err)); });
   };
   function renderMakan() {
     const w = $('pub-makan-pane'); if (w) setHTML(w, makanInner());
@@ -9865,7 +9867,7 @@
       const weigh = o.needKg ? memberCall('saveMyMeasurement', { berat: String(o.berat).replace(',', '.') }) : Promise.resolve();
       weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth, umur: o.hadBirth ? '' : String(o.umur).trim() }); })
         .then(function (r) { done(); window.myNutrition = r; window.patchPortalMore('nutrition', r); window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
-        .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+        .catch(function (err) { done(); window.showToast(waitErr(err)); });
       return;
     }
     o.step = Math.max(1, Math.min(3, o.step + d)); nutOnbDraw();
@@ -10011,7 +10013,7 @@
     if (navigator.onLine === false) { window.showToast('Butuh sinyal untuk menyalin catatan kemarin.'); return; }
     const done = busy(btn, '…');
     memberCall('copyMyFoodYesterday').then(function (d) { done(); nutSetLog(d); window.showToast('Catatan kemarin disalin.'); })
-      .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   // Lembar tambah: cari di daftar (GitHub Pages, dimuat malas), terakhir/favorit, atau buat sendiri.
   const FOOD_URL = 'https://xnk.my.id/foods/foods.min.json', FOOD_KEY = 'xnk_foods_v3';
@@ -10493,7 +10495,7 @@
   window.classCreateGroup = function () {
     const done = busy($('class-create-btn'), 'Membuat…');
     memberCall('createClassGroup').then(function (g) { done(); window.myGroup = g; renderClassSlot(); window.showToast('Grup dibuat. Bagikan kodenya ke temanmu.'); })
-      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.classOpenJoin = function () { $('class-join-code').value = ''; openSheet('sheet-class-join'); };
   window.classJoinSubmit = function (e) {
@@ -10501,13 +10503,13 @@
     const done = busy($('class-join-btn'), 'Menggabung…');
     memberCall('joinClassGroup', $('class-join-code').value.trim().toUpperCase()).then(function (g) {
       done(); window.myGroup = g; window.closeModal(); renderClassSlot(); window.showToast('Kamu sudah masuk grup.');
-    }).catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   window.classLeaveGroup = function () {
     const g = window.myGroup;
     if (!g) return;
     window.showConfirmModal(g.isOwner ? 'Tutup grup ini? Anggota lain tidak bisa lagi memakai kodenya. Sesi yang sudah dibooking tetap berlaku.' : 'Keluar dari grup ini? Sesi yang sudah dibooking tetap berlaku.', function () {
-      memberCall('leaveClassGroup').then(function () { window.myGroup = null; renderClassSlot(); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      memberCall('leaveClassGroup').then(function () { window.myGroup = null; renderClassSlot(); }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: g.isOwner ? 'Tutup grup?' : 'Keluar grup?', confirmText: g.isOwner ? 'Ya, tutup' : 'Ya, keluar' });
   };
   window.classShareGroup = function () {
@@ -10671,7 +10673,7 @@
     adminCall('previewCoachProfile').then(function (p) {
       $('coach-preview-body').innerHTML = window.renderCoachProfile(p, { preview: true });
       openSheet('modal-coach-preview');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.renderPublicCoaches = function () {
@@ -10783,7 +10785,7 @@
     finTiles();
   }
   function finTiles() { document.querySelectorAll('.fin-tile').forEach(function (t) { t.classList.toggle('hide', !(ui.mode === 'admin' && finOn())); }); }
-  function finErr(err) { window.showToast('Gagal: ' + window.authMessage(err)); }
+  function finErr(err) { window.showToast(waitErr(err, 'Gagal: ')); }   // gangguan sementara: kalimat tenang
   function finMonthLabel() { return MONTHS[fin.month - 1] + ' ' + fin.year; }
   function finToday() { return ymd(new Date()); }
 
@@ -10932,7 +10934,7 @@
     }).catch(function (err) { done(); finErr(err); });
   };
   window.finRestore = function (kind, id) {
-    adminCall('restoreFinanceItem', kind, id).then(function () { window.showToast('Dipulihkan.'); finLoad(); }).catch(finErr);
+    optimistic({ q: { mode: 'admin', fn: 'restoreFinanceItem', args: [kind, id] }, ok: 'Dipulihkan.', label: 'Pulihkan', then: function () { finLoad(); } });
   };
 
   // Detail tagihan
@@ -10988,14 +10990,15 @@
   };
   window.finBillSave = function (e) {
     e.preventDefault();
-    const b = fin.detail.bill, btn = $('fin-bill-save'), done = busy(btn, 'Menyimpan…');
-    adminCall('saveBillAdjust', b.id, { diskon: finNum($('fin-bill-discount').value), total: finNum($('fin-bill-total').value), alasan: $('fin-bill-reason').value, catatan: $('fin-bill-note').value }).then(function () {
-      done(); window.closeModal(); window.showToast('Tagihan disimpan.'); window.finOpenBill(b.id); finLoad();
-    }).catch(function (err) { done(); $('fin-bill-err').textContent = window.authMessage(err); });
+    const b = fin.detail.bill;
+    // Antrean simpan: sisa & status tagihan dihitung server, dimuat ulang setelahnya. Ditolak = lencana (Ubah membuka lembar ini).
+    optimistic({ q: { mode: 'admin', fn: 'saveBillAdjust', args: [b.id, { diskon: finNum($('fin-bill-discount').value), total: finNum($('fin-bill-total').value), alasan: $('fin-bill-reason').value, catatan: $('fin-bill-note').value }] },
+      sheet: true, errEl: 'fin-bill-err', ok: 'Tagihan disimpan.', label: 'Tagihan', then: function () { window.finOpenBill(b.id); finLoad(); } });
   };
   window.finBillArchive = function () {
     const id = fin.detail.bill.id;
-    adminCall('archiveFinanceItem', 'bill', id).then(function () { window.closeModal(); window.closeDetail(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+    window.closeModal(); window.closeDetail();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['bill', id] }, ok: 'Diarsipkan. Pulihkan lewat filter Arsip.', label: 'Arsipkan tagihan', then: function () { finLoad(); } });
   };
 
   // Sheet pembayaran / pengeluaran
@@ -11072,15 +11075,24 @@
   };
   window.finPaySave = function (e) {
     e.preventDefault();
-    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
     const billId = fin.payPick || $('fin-pay-bill').value;
     const p = { id: fin.payId || undefined, billId: billId || undefined, amount: finNum($('fin-pay-amount').value), date: $('fin-pay-date').value, method: finPicked('fin-pay-method'), note: $('fin-pay-note').value, category: finPicked('fin-pay-cat') };
+    // Tanpa foto bukti: antrean simpan (nomor pesanan mencegah pembayaran dobel). Dengan foto: menunggu id dari server untuk unggahan.
+    if (!fin.proof) {
+      const bill = fin.billId;
+      optimistic({ q: { mode: 'admin', fn: 'savePayment', args: [p] }, sheet: true, errEl: 'fin-pay-err', ok: 'Pembayaran tersimpan.', label: 'Pembayaran',
+        then: function () { finLoad(); if (bill && ui.detail === 'bill:' + bill) window.finOpenBill(bill); } });
+      return;
+    }
+    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
     adminCall('savePayment', p).then(function (r) { return finUploadProof('payment', r.id); }).then(function () {
       done(); window.closeModal(); window.showToast('Pembayaran tersimpan.'); finLoad(); if (fin.billId && ui.detail === 'bill:' + fin.billId) window.finOpenBill(fin.billId);
-    }).catch(function (err) { done(); $('fin-pay-err').textContent = window.authMessage(err); });
+    }).catch(function (err) { done(); $('fin-pay-err').textContent = waitErr(err); });
   };
   window.finPayArchive = function () {
-    adminCall('archiveFinanceItem', 'payment', fin.payId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat tagihannya.'); finLoad(); if (fin.billId) window.finOpenBill(fin.billId); }).catch(finErr);
+    const bill = fin.billId;
+    window.closeModal();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['payment', fin.payId] }, ok: 'Diarsipkan. Pulihkan lewat tagihannya.', label: 'Arsipkan pembayaran', then: function () { finLoad(); if (bill) window.finOpenBill(bill); } });
   };
 
   window.finOpenExpense = function (id) {
@@ -11104,13 +11116,19 @@
   };
   window.finExpSave = function (e) {
     e.preventDefault();
+    const x = { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value };
+    if (!fin.proof) {   // tanpa foto bukti: antrean simpan (nomor pesanan mencegah dobel)
+      optimistic({ q: { mode: 'admin', fn: 'saveExpense', args: [x] }, sheet: true, errEl: 'fin-exp-err', ok: 'Pengeluaran tersimpan.', label: 'Pengeluaran', then: function () { finLoad(); } });
+      return;
+    }
     const btn = $('fin-exp-save'), done = busy(btn, 'Menyimpan…');
-    adminCall('saveExpense', { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value })
+    adminCall('saveExpense', x)
       .then(function (r) { return finUploadProof('expense', r.id); }).then(function () { done(); window.closeModal(); window.showToast('Pengeluaran tersimpan.'); finLoad(); })
-      .catch(function (err) { done(); $('fin-exp-err').textContent = window.authMessage(err); });
+      .catch(function (err) { done(); $('fin-exp-err').textContent = waitErr(err); });
   };
   window.finExpArchive = function () {
-    adminCall('archiveFinanceItem', 'expense', fin.expId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+    window.closeModal();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['expense', fin.expId] }, ok: 'Diarsipkan. Pulihkan lewat filter Arsip.', label: 'Arsipkan pengeluaran', then: function () { finLoad(); } });
   };
   window.finQuick = function (kind) {
     window.closeModal();
@@ -11312,55 +11330,29 @@
         '<button type="button" class="btn btn-outline btn-sm" onclick="window.finShareSave(\'' + h(c.id) + '\',this)">Simpan</button></div>';
     }).join('') || '<span class="li-sub">Belum ada coach.</span>';
   }
-  window.setNutrition = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { nutritionEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.nutritionEnabled = s.nutritionEnabled;
-      window.showToast(s.nutritionEnabled ? 'Gizi untuk klien aktif.' : 'Gizi untuk klien dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setFeedback = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { feedbackEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.feedbackEnabled = s.feedbackEnabled;
-      window.showToast(s.feedbackEnabled ? 'Penilaian klien aktif.' : 'Penilaian klien dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
+  // Saklar Pengaturan (antrean simpan): saklar & setState langsung berubah; ditolak = saklar kembali (lencana di bilah atas).
+  function setToggle(el, key, okOn, okOff, label, apply) {
+    const v = !!el.checked, was = setState.data ? setState.data[key] : !v;
+    if (setState.data) setState.data[key] = v;
+    if (apply) apply(v);
+    const patch = {}; patch[key] = v;
+    optimistic({ q: { mode: 'admin', fn: 'updateAppSettings', args: [patch] }, ok: v ? okOn : okOff, label: label,
+      then: function (s) { if (s && s[key] !== undefined && setState.data) setState.data[key] = s[key]; },
+      undo: function () { if (setState.data) setState.data[key] = was; if (apply) apply(was); if (el.isConnected) el.checked = !v; } });
+  }
+  window.setNutrition = function (el) { setToggle(el, 'nutritionEnabled', 'Gizi untuk klien aktif.', 'Gizi untuk klien dimatikan.', 'Gizi untuk klien'); };
+  window.setFeedback = function (el) { setToggle(el, 'feedbackEnabled', 'Penilaian klien aktif.', 'Penilaian klien dimatikan.', 'Penilaian klien'); };
   window.setShareQr = function (btn) {
     const v = String($('set-share-qr').value || '').trim();
     const done = busy(btn, 'Menyimpan…');
     adminCall('updateAppSettings', { shareQrUrl: v }).then(function (s) {
       done(); if (setState.data) { setState.data.shareQrUrl = s.shareQrUrl; }
       window.showToast(v ? 'Alamat QR tersimpan.' : 'Kembali ke alamat bawaan.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
-  window.setShare = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { shareEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.shareEnabled = s.shareEnabled;
-      window.shareOn = s.shareEnabled !== false;
-      window.showToast(s.shareEnabled ? 'Kartu bagikan aktif.' : 'Kartu bagikan dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setWarm = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { warmEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.warmEnabled = s.warmEnabled;
-      window.showToast(s.warmEnabled ? 'Data disiapkan di latar tiap 15 menit.' : 'Penyiapan data di latar dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setClientGuide = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { clientGuideEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.clientGuideEnabled = s.clientGuideEnabled;
-      window.showToast(s.clientGuideEnabled ? 'Panduan klien baru aktif.' : 'Panduan klien baru dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
+  window.setShare = function (el) { setToggle(el, 'shareEnabled', 'Kartu bagikan aktif.', 'Kartu bagikan dimatikan.', 'Kartu bagikan', function (v) { window.shareOn = v !== false; }); };
+  window.setWarm = function (el) { setToggle(el, 'warmEnabled', 'Data disiapkan di latar tiap 15 menit.', 'Penyiapan data di latar dimatikan.', 'Siapkan data di latar'); };
+  window.setClientGuide = function (el) { setToggle(el, 'clientGuideEnabled', 'Panduan klien baru aktif.', 'Panduan klien baru dimatikan.', 'Panduan klien baru'); };
 
   function finSaveSettings(patch, then) {
     return adminCall('updateAppSettings', { finance: patch }).then(function (s) {
@@ -11392,14 +11384,20 @@
   window.finCatActive = function (id, on) {
     const c = (fin.cats || []).filter(function (x) { return x.id === id; })[0];
     if (!c) return;
-    adminCall('saveFinanceCategory', { id: id, name: c.name, active: on }).then(function () { c.active = on; }).catch(finErr);
+    const was = c.active;
+    c.active = on;
+    optimistic({ q: { mode: 'admin', fn: 'saveFinanceCategory', args: [{ id: id, name: c.name, active: on }] }, ok: false, label: 'Kategori keuangan',
+      undo: function () { c.active = was; finCatsRender(); } });
   };
   window.finCatDel = function (id) {
-    adminCall('deleteFinanceCategory', id).then(function () { fin.cats = (fin.cats || []).filter(function (c) { return c.id !== id; }); finCatsRender(); }).catch(finErr);
+    const before = fin.cats;
+    fin.cats = (fin.cats || []).filter(function (c) { return c.id !== id; });
+    finCatsRender();
+    optimistic({ q: { mode: 'admin', fn: 'deleteFinanceCategory', args: [id] }, ok: 'Kategori dihapus.', label: 'Hapus kategori',
+      undo: function () { fin.cats = before; finCatsRender(); } });
   };
   window.finShareSave = function (id, btn) {
-    const done = busy(btn, 'Menyimpan…');
-    adminCall('saveCoachShare', id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)).then(function () { done(); window.showToast('Bagi hasil tersimpan.'); }).catch(function (err) { done(); finErr(err); });
+    optimistic({ q: { mode: 'admin', fn: 'saveCoachShare', args: [id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)] }, ok: 'Bagi hasil tersimpan.', label: 'Bagi hasil coach' });
   };
   window.finSync = function (btn) {
     const done = busy(btn, 'Menyinkronkan…');

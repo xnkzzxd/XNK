@@ -499,13 +499,17 @@
   };
   window.confirmDeleteMember = function () {
     const id = window.selectedMemberId;
-    adminCall('deleteMember', id).then(function () {
-      window.members = window.members.filter(m => String(m.id) !== String(id));
-      window.schedules = window.schedules.filter(s => String(s.memberId) !== String(id));
-      window.closeDetail();
-      window.updateUI();
-      window.showToast('Klien dihapus.');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: klien & jadwalnya hilang sekarang; ditolak = semuanya kembali.
+    const members = window.members, schedules = window.schedules;
+    window.members = members.filter(m => String(m.id) !== String(id));
+    window.schedules = schedules.filter(s => String(s.memberId) !== String(id));
+    window.closeDetail();
+    window.updateUI();
+    optimistic({ q: { mode: 'admin', fn: 'deleteMember', args: [id] }, ok: 'Klien dihapus.', label: 'Hapus klien',
+      undo: function () {
+        const back = members.filter(m => String(m.id) === String(id)), backS = schedules.filter(s => String(s.memberId) === String(id));
+        window.members = window.members.concat(back); window.schedules = window.schedules.concat(backS); window.updateUI();
+      } });
   };
 
   // Pemilih paket (dengan pencarian)
@@ -608,7 +612,7 @@
       window.showToast(res.renewed ? 'Paket klien diperpanjang.' : 'Klien ditambahkan.');
       if (res.waLink) window.showWaPrompt(res.waLink, res.renewed ? 'Kabari klien soal perpanjangan paketnya.' : 'Kirim info booking ke klien baru.');
       if (window.currentView === 'clients') window.openProfile(res.id);
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── COACH ──────────────────────────────────────────────────────────────────
@@ -680,12 +684,12 @@
       const off = a.timeOff.length ? a.timeOff.map(function (o) {
         const when = o.from === o.to ? o.from : o.from + ' → ' + o.to;
         return '<div class="row-between" style="min-height:48px;gap:8px"><div class="grow"><p class="li-title">' + h(when) + '</p><p class="li-sub">' + (o.hourFrom === null ? 'Seharian' : p2(o.hourFrom) + '–' + p2(o.hourTo)) + (o.note ? ' · ' + h(o.note) : '') + '</p></div>' +
-          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\')">' + icon('trash-2') + '</button></div>';
+          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\', this)">' + icon('trash-2') + '</button></div>';
       }).join('') : '<p class="li-sub">Belum ada cuti.</p>';
       const body = '<div class="stack" style="gap:16px"><div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Jam kerja</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openHoursEditor()">Ubah</button></div>' + rows + '</div>' +
         '<div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Cuti</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTimeOffSheet()">' + icon('plus') + 'Tambah</button></div>' + off + '</div></div>';
       openDetail('hours', 'Jam kerja & cuti', '', body);
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function renderHoursRows() {
@@ -746,11 +750,13 @@
           '<button type="button" class="btn btn-secondary btn-sm" data-wa="' + h(c.phone) + '" data-text="' + h(text) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">WA klien</button>' +
           '<button type="button" class="btn btn-outline btn-sm" onclick="window.closeModal();window.navigate(\'calendar\');window.openScheduleDetail(\'' + h(c.scheduleId) + '\')">Buka jadwal</button></div>';
       }).join('');
-    }).catch(function (err) { done(); window.showToast(err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
-  window.deleteTimeOff = function (id) {
-    adminCall('deleteCoachTimeOff', id).then(function () { window.showToast('Cuti dihapus.'); window.openHoursPage(); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  window.deleteTimeOff = function (id, btn) {
+    const row = btn && btn.closest ? btn.closest('.row-between') : null;
+    if (row) row.classList.add('hide');
+    optimistic({ q: { mode: 'admin', fn: 'deleteCoachTimeOff', args: [id] }, ok: 'Cuti dihapus.', label: 'Hapus cuti',
+      then: function () { window.openHoursPage(); }, undo: function () { if (row) row.classList.remove('hide'); } });
   };
 
 

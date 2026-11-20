@@ -272,7 +272,7 @@
     if (n.profile) n.profile.gaya = g;
     window.closeModal(); renderMakan();
     memberCall('setMyMenuStyle', g).then(function (r) { window.myNutrition = r; window.patchPortalMore('nutrition', r); renderMakan(); window.showToast('Menu ' + NUT_GAYA_L[g] + '.'); })
-      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(window.authMessage(err)); });
+      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(waitErr(err)); });
   };
   function renderMakan() {
     const w = $('pub-makan-pane'); if (w) setHTML(w, makanInner());
@@ -407,7 +407,7 @@
       const weigh = o.needKg ? memberCall('saveMyMeasurement', { berat: String(o.berat).replace(',', '.') }) : Promise.resolve();
       weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth, umur: o.hadBirth ? '' : String(o.umur).trim() }); })
         .then(function (r) { done(); window.myNutrition = r; window.patchPortalMore('nutrition', r); window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
-        .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+        .catch(function (err) { done(); window.showToast(waitErr(err)); });
       return;
     }
     o.step = Math.max(1, Math.min(3, o.step + d)); nutOnbDraw();
@@ -553,7 +553,7 @@
     if (navigator.onLine === false) { window.showToast('Butuh sinyal untuk menyalin catatan kemarin.'); return; }
     const done = busy(btn, '…');
     memberCall('copyMyFoodYesterday').then(function (d) { done(); nutSetLog(d); window.showToast('Catatan kemarin disalin.'); })
-      .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   // Lembar tambah: cari di daftar (GitHub Pages, dimuat malas), terakhir/favorit, atau buat sendiri.
   const FOOD_URL = 'https://xnk.my.id/foods/foods.min.json', FOOD_KEY = 'xnk_foods_v3';
