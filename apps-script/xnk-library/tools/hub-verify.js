@@ -30,7 +30,10 @@ function verifySite(dir, cfg, opts) {
   for (const f of ['index.html', '404.html', '_hub/versions.json']) if (!has(f)) problems.push(`${f} tidak ada.`);
   if (!problems.length) {
     const landing = read('index.html');
-    for (const c of hub.coaches) if (!landing.includes(`href="/${c.slug}/info/"`)) problems.push(`Halaman depan tidak menautkan /${c.slug}/info/.`);
+    for (const c of hub.coaches) {
+      if (c.inactive && landing.includes(`href="/${c.slug}/info/"`)) problems.push(`Halaman depan masih menautkan coach tidak aktif /${c.slug}/info/.`);
+      if (!c.inactive && !landing.includes(`href="/${c.slug}/info/"`)) problems.push(`Halaman depan tidak menautkan /${c.slug}/info/.`);
+    }
     try { JSON.parse(read('_hub/versions.json')); } catch (e) { problems.push('_hub/versions.json bukan JSON.'); }
     for (const f of ['index.html', '404.html']) if (!read(f).includes('http-equiv="Content-Security-Policy"')) problems.push(`${f}: Content-Security-Policy tidak terpasang.`);
   }
@@ -47,6 +50,24 @@ function verifySite(dir, cfg, opts) {
     }
   }
   for (const c of hub.coaches) {
+    // T-2252: coach tidak aktif = halaman pemberitahuan (CSP ketat, noindex) dan worker pembersih; tidak ada aplikasi.
+    if (c.inactive) {
+      const st = c.storageSlug || c.slug;
+      for (const sub of ['', 'klien/', 'info/']) {
+        const f = `${c.slug}/${sub}index.html`;
+        if (!has(f)) { problems.push(`${c.slug} (tidak aktif): /${c.slug}/${sub} tidak ada.`); continue; }
+        const t = read(f);
+        if (!t.includes('Situs coach ini tidak aktif lagi')) problems.push(`${f}: bukan halaman "tidak aktif".`);
+        if (!t.includes('http-equiv="Content-Security-Policy"') || /script-src[^;]*unsafe-inline/.test(t) || !t.includes('name="robots" content="noindex"')) problems.push(`${f}: tanpa CSP ketat atau noindex.`);
+        if (t.includes(c.exec)) problems.push(`${f}: masih memuat /exec coach.`);
+      }
+      for (const [sub, kind] of [['', 'panel'], ['klien/', 'klien']]) {
+        const f = `${c.slug}/${sub}sw-app.js`;
+        if (!has(f) || !read(f).includes(`var PREFIX = ${JSON.stringify('xnk-page-' + st + '~' + kind + '~')};`) || !read(f).includes('registration.unregister()')) problems.push(`${c.slug} (tidak aktif): worker pembersih /${f} tidak ada atau salah awalan.`);
+        if (has(`${c.slug}/${sub}config.js`)) problems.push(`${c.slug} (tidak aktif): aplikasi masih ikut (${c.slug}/${sub}config.js).`);
+      }
+      continue;
+    }
     for (const [sub, kind] of [['', 'panel'], ['klien/', 'klien']]) {
       const d = c.slug + '/' + sub;
       const need = [d + 'index.html', d + 'config.js', d + 'sw-app.js'];

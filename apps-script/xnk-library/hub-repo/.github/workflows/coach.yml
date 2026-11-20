@@ -4,6 +4,7 @@ name: Coach XNK
 #  - perbarui  (otomatis setiap hari 02:37 WIB, atau manual): pasang versi Library terbaru di penghubung coach dan
 #              terbitkan ulang deployment yang SAMA (link /exec tidak berubah). slug kosong = semua coach, satu job per
 #              coach berurutan; coach pertama di daftar adalah kenari: bila ia gagal, coach lain tidak dikerjakan.
+#              Coach yang tidak aktif lagi ("inactive": true di hub.json, coach keluar) dilewati.
 #  - baru      buat spreadsheet + Apps Script di akun Google coach, pasang penghubung, terbitkan web app, simpan ke
 #              hub.json. Setelah itu pemilik membuka spreadsheet → menu XNK → Mulai setup (izin Google + PIN).
 #  - hubungkan coach yang dibuat dulu dari XNK Template (mis. claudia): isi Script ID proyeknya (proyek yang menempel di
@@ -74,7 +75,8 @@ jobs:
             // T-2243: slug lama (aliases) = coach yang sekarang; secret dari hub.json (dicatat saat slug diganti) atau CLASP_<SLUG>.
             const list = cfg.coaches || [];
             const hit = one ? list.find(c => c.slug === one || (c.aliases || []).includes(one)) : null;
-            const slugs = one ? [hit ? hit.slug : one] : list.map(c => c.slug);
+            // T-2252: perbarui semua = tanpa coach yang tidak aktif (kenari = coach aktif pertama).
+            const slugs = one ? [hit ? hit.slug : one] : list.filter(c => !(aksi === "perbarui" && c.inactive === true)).map(c => c.slug);
             const sec = s => { const c = list.find(x => x.slug === s); return c && c.secret ? c.secret : "CLASP_" + s.toUpperCase().replace(/-/g, "_"); };
             const rows = slugs.map((s, i) => ({ slug: s, secret: sec(s), kenari: !one && i === 0 && slugs.length > 1 }));
             const badSecret = rows.find(r => !/^CLASP_[A-Z0-9_]{3,40}$/.test(r.secret));

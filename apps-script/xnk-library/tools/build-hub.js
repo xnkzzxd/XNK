@@ -7,6 +7,8 @@
 //   /<slug>/                         panel coach (PIN)
 //   /<slug>/klien/                   portal klien
 //   /<alias>/, /<alias>/klien/, /<alias>/info/   T-2243: slug lama coach yang ganti nama → halaman pengalih ke slug baru
+//   coach dengan "inactive": true (T-2252, coach keluar): /<slug>/, /<slug>/klien/, /<slug>/info/ = halaman kecil
+//   "Situs coach ini tidak aktif lagi" (CSP ketat, noindex, tanpa aplikasi) + worker pembersih di alamat worker lama
 // Setiap coach memakai halaman yang sama dengan xnk.my.id (build-tenant.js → build-static.js produksi), memanggil
 // /exec miliknya sendiri. Karena semua coach satu domain, setiap halaman diberi awalan penyimpanan per slug
 // (hub-site/storage-prefix.js, inline) dan service worker diberi awalan cache yang tidak bisa saling menghapus.
@@ -175,6 +177,9 @@ function readHub(cfg, opts) {
       if (!SECRET_RE.test(String(c.secret))) throw new Error(`hub.json, "${slug}": secret harus nama secret repo hub berbentuk CLASP_NAMA (huruf besar, angka, garis bawah).`);
       out.secret = String(c.secret);
     }
+    // T-2252: coach keluar = situs tidak aktif (halaman pemberitahuan saja, tanpa aplikasi). Hanya true/false.
+    if (c.inactive != null && c.inactive !== true && c.inactive !== false) throw new Error(`hub.json, "${slug}": inactive harus true atau false.`);
+    if (c.inactive === true) out.inactive = true;
     return out;
   });
   // Satu nama di alamat hanya untuk satu tujuan: slug dan alamat lama semua coach tidak boleh bertabrakan.
@@ -199,6 +204,47 @@ function readHub(cfg, opts) {
 }
 
 const VAPID_RE = /^B[A-Za-z0-9_-]{86}$/;
+
+/**
+ * T-2252: berkas coach yang tidak aktif lagi (coach keluar). /<slug>/, /<slug>/klien/ dan /<slug>/info/ = halaman kecil
+ * "Situs coach ini tidak aktif lagi" (CSP ketat bersidik, noindex, tanpa aplikasi dan tanpa /exec coach), dengan tombol
+ * kontak pengelola (contactUrl) dan halaman depan. Skrip inline satu-satunya melepas service worker lama di cakupan coach
+ * ini. /<slug>/sw-app.js dan /<slug>/klien/sw-app.js = worker pembersih (hub-site/inactive-sw.js): HP yang masih punya
+ * worker aplikasi lama menggantinya, cache halaman coach dihapus, worker dilepas, jendela dimuat ulang.
+ */
+function inactiveFiles(c, contact) {
+  const out = {};
+  const tpl = fs.readFileSync(path.join(SITE, 'inactive-sw.js'), 'utf8');
+  const btn = contact ? `<a class="btn" href="${esc(contact)}" rel="noopener">Hubungi pengelola XNK</a>` : '';
+  // Lepas worker lama di cakupan /<slug>/ dan hapus cache halaman coach ini (awalan xnk-page-<storageSlug>~; "~" tidak ada
+  // di slug, jadi cache coach lain yang namanya berawalan sama tidak ikut).
+  const unreg = `try{navigator.serviceWorker&&navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){if(r.scope.indexOf(location.origin+${JSON.stringify('/' + c.slug + '/')})===0)r.unregister();});});}catch(e){}` +
+    `try{window.caches&&caches.keys().then(function(ks){ks.forEach(function(k){if(k.indexOf(${JSON.stringify('xnk-page-' + c.storageSlug + '~')})===0)caches.delete(k);});});}catch(e){}`;
+  const page = ['<!doctype html>', '<html lang="id">', '<head>',
+    '<meta charset="utf-8">', '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">', '<meta name="robots" content="noindex">',
+    `<title>${esc(c.brand)} · tidak aktif</title>`, '<link rel="icon" href="/img/logo-64.png">',
+    '<style>:root{--bg:#fafaf9;--fg:#0b0b0b;--mut:#5f5f5b;--ink:#0b0b0b;--on-ink:#fff;--line:#e6e6e3}@media (prefers-color-scheme:dark){:root{--bg:#0b0b0b;--fg:#f5f5f3;--mut:#a3a39e;--ink:#f5f5f3;--on-ink:#0b0b0b;--line:#2a2a28}}' +
+    'body{margin:0;background:var(--bg);color:var(--fg);font:1rem/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}main{max-width:30rem;margin:0 auto;padding:4rem 1rem calc(2rem + env(safe-area-inset-bottom))}' +
+    'h1{font-size:1.6rem;line-height:1.25;margin:0 0 .75rem}p{color:var(--mut);margin:0 0 1.25rem}.who{color:var(--fg);font-weight:600;margin-bottom:.4rem;overflow-wrap:anywhere}' +
+    '.acts{display:flex;flex-wrap:wrap;gap:.6rem}.btn{display:inline-flex;align-items:center;min-height:2.9rem;padding:.6rem 1.1rem;border-radius:.8rem;background:var(--ink);color:var(--on-ink);font-weight:600;text-decoration:none}' +
+    '.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}</style>',
+    `<script>${unreg}</script>`,
+    '</head>', '<body>', '<main>',
+    `<p class="who">${esc(c.brand)} · xnk.web.id/${esc(c.slug)}</p>`,
+    '<h1>Situs coach ini tidak aktif lagi</h1>',
+    '<p>Coach ini sudah tidak memakai XNK, jadi aplikasi booking, latihan dan progres di alamat ini tidak bisa dibuka lagi. Untuk pertanyaan tentang sesi atau data Anda, hubungi coach Anda langsung atau pengelola XNK.</p>',
+    `<div class="acts">${btn}<a class="btn${btn ? ' ghost' : ''}" href="/?hub">Ke halaman depan XNK</a></div>`,
+    '</main>', '</body>', '</html>', ''].join('\n');
+  const html = cspStatic(page);
+  for (const sub of ['', 'klien/', 'info/']) out[`${c.slug}/${sub}index.html`] = html;
+  for (const [sub, kind] of [['', 'panel'], ['klien/', 'klien']]) {
+    if (tpl.split('var PREFIX = __PREFIX__;').length !== 2) throw new Error('build-hub: baris "var PREFIX = __PREFIX__;" harus ada tepat sekali di inactive-sw.js');
+    const sw = tpl.replace('var PREFIX = __PREFIX__;', 'var PREFIX = ' + JSON.stringify('xnk-page-' + c.storageSlug + '~' + kind + '~') + ';');
+    if (/__[A-Z]+__/.test(sw)) throw new Error('build-hub: penanda tersisa di inactive-sw.js');
+    out[`${c.slug}/${sub}sw-app.js`] = sw;
+  }
+  return out;
+}
 
 /**
  * T-2243: berkas untuk alamat lama coach yang ganti slug. Untuk setiap alias: halaman pengalih (CSP ketat, noindex,
@@ -429,6 +475,8 @@ function build(cfg, opts) {
   const built = {};
   let latest = null;   // sidik Library dari kode terbaru (dibaca "Cek kesehatan" di spreadsheet coach)
   for (const c of hub.coaches) {
+    // T-2252: coach keluar = halaman pemberitahuan + worker pembersih; tidak ada aplikasi, tidak ada versi server.
+    if (c.inactive) { Object.assign(files, inactiveFiles(c, hub.contact)); continue; }
     const v = versions[c.slug];
     const t = tenantFor(v).build({ exec: c.exec, brand: c.brand });
     if (!v || !v.dir) latest = t.hash;
@@ -473,11 +521,13 @@ function build(cfg, opts) {
   // Daftar coach (di bagian Masuk): kosong = daftar itu dan tautan "Coach" di menu hilang.
   const sec = /\r?\n *<div class="coach-list" id="coach" data-coaches>[\s\S]*?<\/div><!--\/coaches-->/;
   if (!sec.test(landing) || !landing.includes('<!--COACHES-->')) throw new Error('build-hub: bagian data-coaches / <!--COACHES--> tidak ada di hub-site/index.html');
-  if (hub.coaches.length) {
+  // T-2252: coach yang tidak aktif lagi tidak tampil di halaman depan.
+  const listed = hub.coaches.filter(c => !c.inactive);
+  if (listed.length) {
     // T-2241/T-2242: kartu coach membuka halaman info; logo (bila ada) atau huruf pertama di atas warna aksen coach.
     // T-2260: tempat latihan (nama · kota) di bawah nama; data-city / data-q untuk cari dan saring kota di halaman.
     const low = s => s.toLowerCase();
-    landing = landing.replace('<!--COACHES-->', hub.coaches.map(c =>
+    landing = landing.replace('<!--COACHES-->', listed.map(c =>
       `<a class="card coach" href="/${c.slug}/info/" data-city="${c.place ? esc(low(c.place.city)) : ''}" data-q="${esc(low([c.brand, c.slug].concat(c.aliases || [], c.place ? [c.place.name, c.place.city] : []).join(' ')))}">` +
       `<span class="av${c.accent ? ' acc-' + c.accent : ''}${c.logoFile ? ' logo' : ''}" aria-hidden="true">` +
       (c.logoFile ? `<img src="/${c.slug}/logo.${c.logoFile.ext}" alt="" width="48" height="48">` : esc(c.brand.trim().charAt(0).toUpperCase() || '?')) + '</span>' +
@@ -486,16 +536,16 @@ function build(cfg, opts) {
       `<span>xnk.web.id/${c.slug}</span></div><svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a>`).join(''));
     // Kotak cari (≥ 2 coach) dan pilihan kota (≥ 2 coach yang punya tempat). Kota sama tanpa beda huruf besar/kecil.
     const byCity = new Map();
-    for (const c of hub.coaches) if (c.place) {
+    for (const c of listed) if (c.place) {
       const k = low(c.place.city);
       if (!byCity.has(k)) byCity.set(k, { label: c.place.city, n: 0 });
       byCity.get(k).n++;
     }
-    const withPlace = hub.coaches.filter(c => c.place).length;
-    const chips = withPlace >= 2 ? `<div class="cities" id="cities" role="group" aria-label="Saring per kota"><button type="button" data-city="" aria-pressed="true">Semua<span>${hub.coaches.length}</span></button>` +
+    const withPlace = listed.filter(c => c.place).length;
+    const chips = withPlace >= 2 ? `<div class="cities" id="cities" role="group" aria-label="Saring per kota"><button type="button" data-city="" aria-pressed="true">Semua<span>${listed.length}</span></button>` +
       [...byCity.entries()].sort((a, b) => b[1].n - a[1].n || a[1].label.localeCompare(b[1].label, 'id')).map(([k, v]) =>
         `<button type="button" data-city="${esc(k)}" aria-pressed="false">${esc(v.label)}<span>${v.n}</span></button>`).join('') + '</div>' : '';
-    const find = hub.coaches.length >= 2 ? '<div class="find"><label class="row" for="coach-q" style="margin:0;font-weight:400"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>' +
+    const find = listed.length >= 2 ? '<div class="find"><label class="row" for="coach-q" style="margin:0;font-weight:400"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>' +
       '<input id="coach-q" type="search" autocomplete="off" placeholder="Cari nama coach, tempat, atau kota" aria-label="Cari coach"></label>' + chips + '</div>' : '';
     if (!landing.includes('<!--FIND-->')) throw new Error('build-hub: <!--FIND--> tidak ada di hub-site/index.html');
     landing = landing.replace('<!--FIND-->', find);
@@ -510,6 +560,11 @@ function build(cfg, opts) {
     for (const a of c.aliases || []) if (!slugMap[a]) slugMap[a] = c.slug;
   }
   landing = landing.split('/*SLUGMAP*/{}').join(JSON.stringify(slugMap));
+  // T-2252: awalan penyimpanan dan slug lama coach yang tidak aktif: login tersimpan tidak membuka situsnya otomatis.
+  if (!landing.includes('/*SLUGOFF*/[]')) throw new Error('build-hub: /*SLUGOFF*/[] tidak ada di hub-site/index.html');
+  const off = [];
+  for (const c of hub.coaches) if (c.inactive) for (const n of [c.storageSlug].concat(c.aliases || [])) if (!off.includes(n)) off.push(n);
+  landing = landing.split('/*SLUGOFF*/[]').join(JSON.stringify(off));
   if (!landing.includes('/*ACCENTS*/')) throw new Error('build-hub: /*ACCENTS*/ tidak ada di hub-site/index.html');
   landing = landing.replace('/*ACCENTS*/', Object.entries(ACCENTS).map(([k, v]) =>
     `.coach .av.acc-${k} { background: ${v[0]}; color: ${v[1]}; } @media (prefers-color-scheme: dark) { .coach .av.acc-${k} { background: ${v[2]}; color: ${v[3]}; } }`).join('\n  '));
@@ -548,7 +603,7 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, slugError, readLogo, cleanPlace, PLACE_MAX, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles };
+module.exports = { build, write, readHub, slugError, readLogo, cleanPlace, PLACE_MAX, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles, inactiveFiles };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

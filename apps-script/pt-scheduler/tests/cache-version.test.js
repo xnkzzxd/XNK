@@ -13,6 +13,8 @@ const boot = (env, key) => j(env.call('getPortalBootstrap', env.memberToken(key)
 const NO_MEMBER_DATA = [
   // login, sesi, pengaturan akun
   'adminLogin', 'memberLoginByKey', 'memberLoginByPhone', 'registerNewClient', 'changeAdminPin', 'markGuideSeen', 'doPost' /* hanya meneruskan ke fungsi klien yang menaikkan versinya sendiri */,
+  // T-2251: mode baca saja ada di getAdminBootstrap / getPortalBootstrap (selalu segar), bukan di getPortalMore
+  'hubReadonly',
   // profil & foto profil ikut getPortalBootstrap (selalu segar)
   'uploadMemberPhoto', 'updateMemberPhoto', 'deleteMember',
   // coach, paket, konten, pengaturan: cache bersama (_bustShared_ masuk versi) atau bootstrap

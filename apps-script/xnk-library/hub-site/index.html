@@ -16,10 +16,12 @@
       if (!fromCache && ref.indexOf(location.origin + '/') === 0 && !(nav && nav.type === 'back_forward')) return;
       // T-2243: awalan penyimpanan / slug lama coach yang ganti nama → slug sekarang (diisi tools/build-hub.js).
       var MAP = /*SLUGMAP*/{};
+      // T-2252: coach yang tidak aktif lagi (awalan penyimpanan) tidak dibuka otomatis.
+      var OFF = /*SLUGOFF*/[];
       var RE = /^([a-z0-9][a-z0-9-]{1,28}[a-z0-9]):xnk_(admin|member)_token$/, ls = localStorage, found = {}, order = [];
       for (var i = 0; i < ls.length; i++) {
         var m = RE.exec(ls.key(i) || '');
-        if (!m || !ls.getItem(m[0])) continue;
+        if (!m || !ls.getItem(m[0]) || OFF.indexOf(m[1]) !== -1) continue;
         if (!found[m[1]]) { found[m[1]] = {}; order.push(m[1]); }
         found[m[1]][m[2]] = 1;
       }

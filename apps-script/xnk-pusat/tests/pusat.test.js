@@ -18,7 +18,7 @@ function env(opts) {
   const cache = {}, mails = [], fetches = [], triggers = [], echoes = {};
   const drive = { files: {}, books: {}, n: 0 };
   const servers = opts.servers || {};
-  const reply = (code, body) => ({ getResponseCode: () => code, getContentText: () => (typeof body === 'string' ? body : JSON.stringify(body)) });
+  const reply = (code, body) => ({ getResponseCode: () => code, getContentText: () => (typeof body === 'string' ? body : JSON.stringify(body)), getContent: () => [...Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))] });
   const ctx = {
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
     CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = v; } }) },
@@ -27,6 +27,7 @@ function env(opts) {
       computeHmacSha256Signature: (s, k) => [...crypto.createHmac('sha256', k).update(s).digest()],
       base64EncodeWebSafe: b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
       getUuid: () => crypto.randomUUID(),
+      newBlob: t => ({ getBytes: () => [...Buffer.from(String(t))] }),
     },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: t => ({ content: t, setMimeType() { return this; } }) },
     MailApp: { sendEmail: (to, subject, body) => mails.push({ to, subject, body }) },
@@ -48,6 +49,7 @@ function env(opts) {
         if (url.endsWith('/git/tags/t11')) return reply(200, { object: { sha: SHA_NEW } });
         if (url.includes('/dispatches')) return reply(opts.dispatch || 204, '');
         if (url.startsWith(DRIVE)) return driveFetch(drive, url, o, reply, opts);
+        if (url.startsWith(UPLOAD)) return driveUpload(drive, url, o, reply, opts);
         if (url.startsWith('https://raw.githubusercontent.com/')) return opts.hub ? reply(200, opts.hub) : reply(404, 'Not Found');
         if (opts.login && opts.login.includes(url)) return Object.assign(reply(302, ''), { getHeaders: () => ({ Location: 'https://accounts.google.com/ServiceLogin?x=' + fetches.length }) });
         if (url.startsWith('https://accounts.google.com/')) return reply(200, '<!DOCTYPE html><html><head><title>Sign in - Google Accounts</title></head></html>');
@@ -72,6 +74,21 @@ function env(opts) {
 
 // ── Drive REST v3 dan Sheets palsu (backup, T-2250) ──────────────────────────────────────────────────────────
 const DRIVE = 'https://www.googleapis.com/drive/v3/files';
+const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
+/** Unggah multipart (salinan .xlsx coach keluar, T-2252): metadata JSON di bagian pertama, isi di bagian kedua. */
+function driveUpload(drive, url, o, reply, opts) {
+  assert.equal(o.headers.Authorization, 'Bearer tok-pusat');
+  assert.match(url, /uploadType=multipart/);
+  if (opts.uploadDown) return reply(500, '{}');
+  const b = (String(o.contentType).match(/boundary=(\S+)/) || [])[1];
+  assert.ok(b, 'boundary');
+  const text = Buffer.from(o.payload.map(x => x & 255)).toString('latin1');
+  const meta = JSON.parse(text.split('--' + b)[1].split('\r\n\r\n')[1].trim());
+  const body = text.split('--' + b)[2].split('\r\n\r\n').slice(1).join('\r\n\r\n').replace(/\r\n$/, '');
+  const id = 'f' + (++drive.n);
+  drive.files[id] = { id, name: meta.name, mimeType: meta.mimeType, parents: meta.parents || [], trashed: false, body, createdTime: new Date(Date.UTC(2026, 0, 1) + drive.n * 1000).toISOString() };
+  return reply(200, { id, webViewLink: 'https://drive.google.com/file/d/' + id + '/view' });
+}
 class FakeSheet {
   constructor(name) { this.name = name; this.cells = []; this.maxR = 1000; this.maxC = 26; this.formats = []; }
   getName() { return this.name; }
@@ -111,11 +128,20 @@ function driveFetch(drive, url, o, reply, opts) {
     if (b.mimeType === 'application/vnd.google-apps.spreadsheet') drive.books[id] = new FakeBook();
     return reply(200, { id, webViewLink: 'https://docs.google.com/spreadsheets/d/' + id + '/edit' });
   }
+  if (/\/export$/.test(p)) {   // T-2252: ekspor .xlsx
+    const f = drive.files[decodeURIComponent(p.slice(1, -7))];
+    if (!f || opts.xlsxDown) return reply(403, '{}');
+    assert.equal(q.get('mimeType'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return reply(200, 'PK-XLSX-' + f.id);
+  }
   const id = decodeURIComponent(p.slice(1));
   if (id) {
     const f = drive.files[id];
     if (!f) return reply(404, '{}');
-    if (method === 'patch') Object.assign(f, JSON.parse(o.payload));
+    if (method === 'patch') {
+      Object.assign(f, JSON.parse(o.payload));
+      if (q.get('addParents')) f.parents = f.parents.filter(x => x !== q.get('removeParents')).concat([q.get('addParents')]);
+    }
     return reply(200, { id: f.id, trashed: f.trashed });
   }
   if (!q.get('q')) return reply(200, { files: [] });   // cek izin (setupState_)
@@ -669,6 +695,153 @@ test('ganti slug: nama dicek sama dengan tools/build-hub.js (RESERVED, pola slug
   assert.equal(String(e.ctx.PUSAT_SLUG_RE), String(hub.SLUG_RE));
 });
 
+// ── Langganan bulanan (T-2251) ──────────────────────────────────────────────────────────────────────────────
+const wib = (d) => new Date(Date.now() + 7 * 3600 * 1000 + (d || 0) * 864e5).toISOString().slice(0, 10);
+/** Coach palsu dengan hubStatus + hubReadonly; `old` = Library lama tanpa hubReadonly. */
+function roCoach(secret, old) {
+  const st = { on: false, calls: [] };
+  const fn = req => {
+    if (req.args[0] !== secret) return { ok: false, error: 'Permintaan tidak valid.' };
+    if (req.fn === 'hubStatus') return { ok: true, data: status(SHA_NEW) };
+    if (req.fn === 'hubReadonly' && !old) { st.calls.push(req.args.slice(1)); st.on = req.args[1] === true; return { ok: true, data: { on: st.on, note: req.args[2] || '', changed: true } }; }
+    return { ok: false, error: 'Permintaan tidak valid.', code: 'unknown_fn' };
+  };
+  fn.st = st;
+  return fn;
+}
+function subEnv(opts) {
+  opts = opts || {};
+  const a = roCoach(SECRET(1), opts.oldA), b = roCoach(SECRET(2));
+  const coaches = { claudia: { exec: EXEC(1), secret: SECRET(1), at: 'x' }, vinna: { exec: EXEC(2), secret: SECRET(2), at: 'x' } };
+  const e = env({ hub: JSON.stringify({ coaches: [{ slug: 'claudia', name: 'Claudia Fit' }] }), props: Object.assign({ COACHES: JSON.stringify(coaches) }, opts.props || {}), servers: { [EXEC(1)]: a, [EXEC(2)]: b } });
+  e.tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  return { e, a, b };
+}
+const subOf = (r, slug) => r.data.coaches.find(c => c.slug === slug).sub;
+
+test('langganan: bawaan semua coach = gratis; tanpa baris tidak pernah baca saja dan tidak dihubungi', () => {
+  const { e, a, b } = subEnv();
+  const r = e.call('pusatOverview', e.tok);
+  for (const s of ['claudia', 'vinna']) {
+    const v = subOf(r, s);
+    assert.equal(v.plan, 'gratis'); assert.equal(v.state, 'gratis'); assert.equal(v.readonly, false); assert.equal(v.ro, 'auto');
+  }
+  e.ctx.runPusatDaily();
+  assert.equal(a.st.calls.length + b.st.calls.length, 0, 'free coaches are never sent hubReadonly');
+  assert.equal(e.mails.length, 0);
+  assert.equal(e.ctx.subStatus_(e.ctx.subState_('tidakada'), wib()).readonly, false);
+});
+
+test('langganan: hitungan status — aktif, segera (≤ 7 hari), tenggang 7 hari, lalu baca saja; sakelar tangan menang', () => {
+  const { e } = subEnv();
+  const S = (due, ro, plan) => e.ctx.subStatus_({ plan: plan || 'bulanan', due, ro: ro || 'auto' }, '2026-11-19');
+  assert.equal(S('2026-12-19').state, 'aktif');
+  assert.equal(S('2026-11-26').state, 'segera');
+  assert.equal(S('2026-11-19').state, 'segera');
+  assert.deepEqual([S('2026-11-18').state, S('2026-11-18').graceLeft, S('2026-11-18').readonly], ['tenggang', 6, false]);
+  assert.deepEqual([S('2026-11-12').state, S('2026-11-12').readonly], ['tenggang', false], 'day 7 of grace is still grace');
+  assert.deepEqual([S('2026-11-11').state, S('2026-11-11').readonly], ['lewat', true]);
+  assert.equal(S('2026-11-01', 'off').readonly, false, 'manual off wins');
+  assert.equal(S('2026-12-19', 'on').readonly, true, 'manual on wins');
+  assert.equal(S('', 'on', 'gratis').readonly, true, 'owner can switch a free coach to read-only by hand');
+  assert.equal(S('', 'auto', 'bulanan').readonly, false, 'monthly without a due date is never read-only');
+  assert.equal(e.ctx.addMonth_('2026-01-31'), '2026-02-28');
+  assert.equal(e.ctx.addMonth_('2028-01-31'), '2028-02-29');
+  assert.equal(e.ctx.addMonth_('2026-12-15'), '2027-01-15');
+});
+
+test('langganan: simpan dari /adminxnk diperiksa; hanya pemilik; coach tak dikenal ditolak', () => {
+  const { e } = subEnv();
+  assert.equal(e.call('pusatSubSave', 'palsu', 'claudia', { plan: 'bulanan', due: wib(30) }).ok, false);
+  assert.equal(e.call('pusatSubSave', e.tok, 'tidakada', { plan: 'bulanan', due: wib(30) }).ok, false);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan' }).error, /jatuh tempo/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: '2026-02-30' }).error, /tidak valid/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(30), price: '12,5' }).error, /bilangan bulat/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(30), email: 'bukan email' }).error, /Email/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'x' }).error, /Pilih paket/);
+  const r = e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(30), price: '150.000', email: 'coach@contoh.id' });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual([subOf(r, 'claudia').price, subOf(r, 'claudia').state, subOf(r, 'claudia').email], [150000, 'aktif', 'coach@contoh.id']);
+  assert.ok(!JSON.stringify(r.data).includes(SECRET(1)));
+});
+
+test('langganan: lewat tenggang = hubReadonly(true) ke coach itu saja; Tandai lunas = +1 bulan, riwayat, mati lagi', () => {
+  const { e, a, b } = subEnv();
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(-8), price: 100000 });
+  assert.deepEqual(a.st.calls.at(-1), [true, 'Langganan lewat jatuh tempo ' + wib(-8) + '.'], 'pushed at once on save');
+  assert.equal(a.st.on, true);
+  assert.equal(b.st.calls.length, 0);
+  let r = e.call('pusatOverview', e.tok);
+  assert.deepEqual([subOf(r, 'claudia').state, subOf(r, 'claudia').readonly, subOf(r, 'claudia').pushed.on], ['lewat', true, true]);
+  r = e.call('pusatAction', e.tok, 'sub-paid', 'claudia');
+  assert.equal(r.ok, true, r.error);
+  const v = subOf(r, 'claudia');
+  assert.equal(v.due, e.ctx.addMonth_(wib(-8)));
+  assert.equal(v.history.length, 1);
+  assert.equal(v.history[0].due, wib(-8));
+  assert.equal(v.readonly, false);
+  assert.deepEqual(a.st.calls.at(-1), [false, '']);
+  assert.equal(a.st.on, false);
+  assert.match(e.call('pusatAction', e.tok, 'sub-paid', 'vinna').error, /paket bulanan/, 'free coach cannot be marked paid');
+});
+
+test('langganan: baca saja tangan nyala/mati/otomatis kapan saja; dikirim hanya saat berubah; cek harian menyamakan', () => {
+  const { e, a } = subEnv();
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(20) });
+  assert.equal(a.st.calls.length, 0, 'nothing to send while active and never pushed');
+  let r = e.call('pusatAction', e.tok, 'sub-ro-on', 'claudia');
+  assert.equal(subOf(r, 'claudia').readonly, true);
+  assert.deepEqual(a.st.calls.at(-1), [true, 'Dinyalakan oleh pengelola XNK.']);
+  const n = a.st.calls.length;
+  e.call('pusatOverview', e.tok);
+  assert.equal(a.st.calls.length, n, 'overview never contacts coaches');
+  r = e.call('pusatAction', e.tok, 'sub-ro-off', 'claudia');
+  assert.deepEqual([subOf(r, 'claudia').readonly, a.st.on], [false, false]);
+  e.call('pusatAction', e.tok, 'sub-ro-auto', 'claudia');
+  // Coach mengubah sendiri (mis. Library diperbarui): cek harian mengirim lagi keadaan yang benar.
+  e.call('pusatAction', e.tok, 'sub-ro-on', 'claudia');
+  a.st.on = false;
+  const s = JSON.parse(e.props.SUB_claudia); s.pushed.error = 'x'; e.props.SUB_claudia = JSON.stringify(s);
+  e.ctx.runPusatDaily();
+  assert.equal(a.st.on, true);
+  assert.equal(e.call('pusatAction', e.tok, 'sub-zzz', 'claudia').ok, false);
+});
+
+test('langganan: email H-7 dan H-1 ke email coach (kosong = pemilik), sekali per jatuh tempo; tenggang masuk email pemilik', () => {
+  const { e } = subEnv({ props: { PUSAT_EMAIL: 'owner@xnk.id' } });
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(7), price: 150000, email: 'claudia@contoh.id' });
+  e.call('pusatSubSave', e.tok, 'vinna', { plan: 'bulanan', due: wib(1) });
+  e.ctx.runPusatDaily();
+  const toC = e.mails.filter(m => m.to === 'claudia@contoh.id');
+  assert.equal(toC.length, 1);
+  assert.match(toC[0].subject, /Claudia Fit.*7 hari lagi/);
+  assert.match(toC[0].body, /Rp 150\.000/);
+  assert.match(toC[0].body, /tidak pernah dihapus/);
+  const toV = e.mails.filter(m => m.to === 'owner@xnk.id' && /besok/.test(m.subject));
+  assert.equal(toV.length, 1, 'no coach email = owner email');
+  const before = e.mails.length;
+  e.ctx.runPusatDaily();
+  assert.equal(e.mails.length, before, 'each reminder once per due date');
+  // Masa tenggang: masuk email masalah pemilik; belum baca saja.
+  e.call('pusatSubSave', e.tok, 'vinna', { plan: 'bulanan', due: wib(-2) });
+  e.ctx.runPusatDaily();
+  const daily = e.mails.at(-1);
+  assert.match(daily.subject, /perlu dicek/);
+  assert.match(daily.body, /vinna: .*masa tenggang 5 hari lagi/);
+});
+
+test('langganan: Library lama tanpa hubReadonly = pesan "perbarui coach", tersimpan, masuk email; ganti slug ikut memindahkan', () => {
+  const { e } = subEnv({ oldA: true });
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(20) });
+  const r = e.call('pusatAction', e.tok, 'sub-ro-on', 'claudia');
+  assert.equal(r.ok, true);
+  assert.match(r.data.notice, /belum punya hubReadonly; perbarui coach/);
+  assert.match(subOf(r, 'claudia').pushed.error, /perbarui coach/);
+  e.ctx.runPusatDaily();
+  assert.match(e.mails.at(-1).body, /claudia: .*Mode baca saja belum diterima coach/);
+  assert.ok(e.ctx.PUSAT_SLUG_KEYS.includes('SUB_'));
+});
+
 // ── Tempat latihan (T-2258) ──────────────────────────────────────────────────────────────────────────────────
 function placeEnv(props) {
   const hub = { coaches: [{ slug: 'lama', exec: EXEC(1), place: { name: 'Gold Gym', city: 'Bandung' } }, { slug: 'vinna', exec: EXEC(2) }, { slug: 'baru', exec: EXEC(3) }] };
@@ -714,4 +887,187 @@ test('tempat: penjaga (token, slug, coach tidak di hub.json, isian salah); GitHu
   x.tok = x.call('pusatLogin', 'pin-rahasia-1').data.token;
   const r = x.call('pusatSetPlace', x.tok, 'lama', 'Gym', 'Bogor').data;
   assert.match(r.hub, /^GitHub menolak \(422\)\. Jalankan sendiri: repo hub → Actions → Hub XNK/);
+});
+
+// ── Coach keluar (T-2252) ───────────────────────────────────────────────────────────────────────────────────
+/** Coach palsu lengkap: hubStatus (readonly ikut keadaan), hubExport, hubReadonly (dengan tanda keluar), hubPushKey. */
+const OUT_VAPID = 'B' + 'q'.repeat(86);
+function outCoach(secret, sheets) {
+  const st = { on: false, left: false, ro: [], push: [], calls: [] };
+  const ex = coach(secret, sheets, 3);
+  const fn = req => {
+    st.calls.push(req.fn);
+    if (req.args[0] !== secret) return { ok: false, error: 'Permintaan tidak valid.' };
+    if (req.fn === 'hubStatus') return { ok: true, data: status('e'.repeat(40), { readonly: st.on, left: st.left }) };
+    if (req.fn === 'hubReadonly') { st.ro.push(req.args.slice(1)); st.on = req.args[1] === true; st.left = st.on && req.args[3] === true; return { ok: true, data: { on: st.on, left: st.left, note: req.args[2] || '', changed: true } }; }
+    if (req.fn === 'hubPushKey') { st.push.push(req.args[2]); return { ok: true, data: { on: req.args[2] === true, relay: 'r'.repeat(40), subs: 2 } }; }
+    return ex(req);
+  };
+  fn.st = st;
+  return fn;
+}
+function outEnv(opts) {
+  opts = opts || {};
+  const a = outCoach(SECRET(1), DATA), b = outCoach(SECRET(2), DATA);
+  const hub = { vapidPublic: OUT_VAPID, coaches: [{ slug: 'claudia', brand: 'Claudia', exec: EXEC(1), inactive: !!opts.hubInactive }, { slug: 'vinna', brand: 'Coach Vinna', exec: EXEC(2) }] };
+  const coaches = { claudia: { exec: EXEC(1), secret: SECRET(1), at: 'x' }, vinna: { exec: EXEC(2), secret: SECRET(2), at: 'x' } };
+  const push = { on: true, active: true, relay: 'r'.repeat(40), exec: EXEC(1), subs: 2 };
+  const props = Object.assign({ COACHES: JSON.stringify(coaches), PUSAT_PUSH_SECRET: 'p'.repeat(40), PUSH_claudia: JSON.stringify(push), PUSH_vinna: JSON.stringify(Object.assign({}, push, { exec: EXEC(2) })) }, opts.github === false ? {} : { GITHUB_TOKEN: 'ghp' }, opts.props || {});
+  const e = env(Object.assign({}, opts, { hub: JSON.stringify(hub), props, servers: { [EXEC(1)]: a, [EXEC(2)]: b } }));
+  e.tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  return { e, a, b };
+}
+const outOf = (e, slug) => JSON.parse(e.props['OUT_' + slug] || 'null');
+const dispatches = e => e.fetches.filter(f => f.url.includes('/hub.yml/dispatches')).map(f => JSON.parse(f.o.payload).inputs);
+
+test('coach keluar: konfirmasi slug; baca saja permanen + tanda keluar, push mati, folder Akhir, backup akhir + Excel, hub nonaktif; coach lain tidak tersentuh', () => {
+  const { e, a, b } = outEnv();
+  assert.equal(e.call('pusatLeave', 'palsu', 'claudia', 'claudia').auth, true);
+  assert.match(e.call('pusatLeave', e.tok, 'claudia', 'Claudia').error, /Ketik "claudia" persis/);
+  assert.match(e.call('pusatLeave', e.tok, 'claudia', '').error, /Ketik "claudia" persis/);
+  assert.match(e.call('pusatLeave', e.tok, 'zaki', 'zaki').error, /Coach tidak terdaftar/);
+  assert.equal(outOf(e, 'claudia'), null, 'nothing written when refused');
+
+  const r = e.call('pusatLeave', e.tok, 'claudia', ' claudia ');
+  assert.equal(r.ok, true, r.error);
+  const d = r.data;
+  assert.deepEqual([d.slug, d.day, d.deleteOn, d.readonly, d.push, d.backup, d.hub], ['claudia', wib(), wib(30), 'ok', 'ok', 'ok', 'ok']);
+  assert.match(d.dirUrl, /^https:\/\/drive\.google\.com\/drive\/folders\/f\d+$/);
+  assert.deepEqual(a.st.ro.at(-1), [true, e.ctx.PUSAT_OUT_NOTE, true], 'read-only with the leave flag');
+  assert.equal(a.st.left, true);
+  assert.deepEqual(a.st.push, [false], 'push switched off at the coach');
+  assert.deepEqual(dispatches(e), [{ aksi: 'nonaktif', slug: 'claudia' }]);
+  assert.ok(e.props.BKNOW_claudia, 'final backup queued');
+  assert.ok(e.triggers.includes('runPusatBackupSoon'));
+  assert.match(e.call('pusatLeave', e.tok, 'claudia', 'claudia').error, /sudah ditandai keluar/);
+
+  // Coach lain: tidak dihubungi, push tetap, tidak ada tanda keluar.
+  assert.deepEqual([b.st.ro.length, b.st.push.length], [0, 0]);
+  const targets = e.call('pusatPushTargets', 'p'.repeat(40)).data.coaches.map(c => c.slug);
+  assert.deepEqual(targets, ['vinna'], 'coach keluar never receives push');
+
+  // Backup akhir berjalan sampai selesai: spreadsheet + .xlsx di folder Akhir, link dicatat, email ke pemilik.
+  const done = e.ctx.runPusatBackupSoon();
+  assert.equal(done.slug, 'claudia');
+  assert.equal(done.done, true);
+  const o = outOf(e, 'claudia');
+  assert.equal(o.final.state, 'selesai');
+  const dir = o.final.dir, sheet = e.drive.files[o.final.fileUrl.match(/\/d\/(f\d+)\//)[1]];
+  assert.deepEqual(sheet.parents, [dir], 'final spreadsheet moved into Akhir');
+  const xlsx = Object.values(e.drive.files).find(f => f.mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.deepEqual([xlsx.name, xlsx.parents, xlsx.body], ['claudia ' + wib() + '.xlsx', [dir], 'PK-XLSX-' + sheet.id]);
+  assert.equal(e.drive.files[dir].name, 'Akhir');
+  assert.equal(o.final.xlsxUrl, 'https://drive.google.com/file/d/' + xlsx.id + '/view');
+  const mail = e.mails.find(m => /backup akhir claudia siap/.test(m.subject));
+  assert.ok(mail && mail.body.includes(o.final.xlsxUrl) && mail.body.includes(wib(30)));
+  assert.equal(e.triggers.includes('runPusatBackupSoon'), false, 'chain stops when the final backup is done');
+  const ov = e.call('pusatOverview', e.tok).data;
+  const oc = ov.coaches.find(c => c.slug === 'claudia').out;
+  assert.deepEqual([oc.deleteOn, oc.daysLeft, oc.canUndo, oc.final.state, oc.final.xlsxUrl], [wib(30), 30, true, 'selesai', o.final.xlsxUrl]);
+  assert.equal(ov.coaches.find(c => c.slug === 'vinna').out, null);
+  assert.ok(!JSON.stringify(ov).includes(SECRET(1)) && !JSON.stringify(ov).includes('08123'), 'dashboard: no secrets, no client data');
+  // Folder Akhir tidak ikut dipangkas: 8 backup lain di folder coach tidak menyentuh salinan akhir.
+  assert.equal(e.drive.files[sheet.id].trashed, false);
+});
+
+test('coach keluar: cek harian tidak membatalkan baca saja; tanpa tagihan; tanpa backup mingguan; push/langganan diblokir', () => {
+  const { e, a, b } = outEnv({ hubInactive: true });
+  e.props.SUB_claudia = JSON.stringify({ plan: 'bulanan', price: 100000, due: wib(1), ro: 'off' });
+  e.call('pusatLeave', e.tok, 'claudia', 'claudia');
+  e.ctx.runPusatBackupSoon();
+  const n = a.st.ro.length;
+  e.mails.length = 0;
+  e.ctx.runPusatDaily();
+  assert.deepEqual(a.st.ro.at(-1), [true, e.ctx.PUSAT_OUT_NOTE, true], 'daily check re-sends read-only + leave (switch "off" and the subscription lose)');
+  assert.equal(a.st.ro.length, n + 1);
+  assert.ok(!e.mails.some(m => /langganan/i.test(m.subject)), 'no billing email for a coach who left');
+  assert.ok(!e.mails.some(m => /Hapus akun Google/.test(m.body)), 'no reminder before H-3');
+  assert.equal(b.st.ro.length, 0, 'other coach untouched');
+  // Backup mingguan tidak lagi untuk coach keluar yang backup akhirnya sudah jadi.
+  e.props.BKST_vinna = JSON.stringify({ at: new Date().toISOString(), okAt: new Date().toISOString(), fileUrl: 'x', rows: 1, error: '', fails: 0 });
+  const old = new Date(Date.now() - 9 * 864e5).toISOString();
+  e.props.BKST_claudia = JSON.stringify({ at: old, okAt: old, fileUrl: 'x', rows: 1, error: '', fails: 0 });
+  assert.deepEqual(plain(e.ctx.runPusatBackup()), { idle: true });
+  assert.match(e.call('pusatAction', e.tok, 'push-on', 'claudia').error, /sudah keluar/);
+  assert.match(e.call('pusatAction', e.tok, 'sub-ro-off', 'claudia').error, /sudah keluar/);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { plan: 'gratis' }).error, /sudah keluar/);
+  // Status: Library lama tidak jadi masalah; yang dicek hanya baca saja.
+  const st = e.call('pusatCheck', e.tok, 'claudia').data.coaches.find(c => c.slug === 'claudia').status;
+  assert.deepEqual(st.problems, []);
+  a.st.on = false;
+  assert.match(e.call('pusatCheck', e.tok, 'claudia').data.coaches.find(c => c.slug === 'claudia').status.problems.join(' '), /baca saja belum menyala/);
+});
+
+test('coach keluar: pengingat "hapus akun Google coach" mulai H-3 di email harian sampai "Akun sudah dihapus"', () => {
+  const { e } = outEnv({ hubInactive: true });
+  e.call('pusatLeave', e.tok, 'claudia', 'claudia');
+  e.ctx.runPusatBackupSoon();
+  const at = d => { const o = outOf(e, 'claudia'); o.deleteOn = wib(d); e.props.OUT_claudia = JSON.stringify(o); };
+  at(4); e.mails.length = 0; e.ctx.runPusatDaily();
+  assert.ok(!e.mails.some(m => /Hapus akun Google coach claudia/.test(m.body)), 'H-4: not yet');
+  for (const d of [3, 0, -2]) {
+    at(d); e.mails.length = 0; e.ctx.runPusatDaily();
+    const m = e.mails.find(x => /Hapus akun Google coach claudia/.test(x.body));
+    assert.ok(m, 'reminder at H' + (d >= 0 ? '-' : '+') + Math.abs(d));
+    assert.match(m.body, new RegExp(wib(d)));
+    assert.match(m.body, /Akun sudah dihapus/);
+  }
+  const r = e.call('pusatAction', e.tok, 'leave-done', 'claudia');
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.coaches.find(c => c.slug === 'claudia').out.done, wib());
+  e.mails.length = 0; e.fetches.length = 0;
+  e.ctx.runPusatDaily();
+  assert.ok(!e.mails.some(m => /claudia/.test(m.body)), 'reminders stop');
+  assert.ok(!e.fetches.some(f => f.url === EXEC(1)), 'deleted account is no longer contacted');
+  assert.match(e.call('pusatAction', e.tok, 'leave-undo', 'claudia').error, /sudah ditandai dihapus/);
+});
+
+test('coach keluar: Aktifkan lagi sebelum H+30 = baca saja kembali ke langganan, tanda keluar hilang, hub aktifkan; setelah H+30 ditolak', () => {
+  const { e, a } = outEnv();
+  e.call('pusatLeave', e.tok, 'claudia', 'claudia');
+  e.ctx.runPusatBackupSoon();
+  const r = e.call('pusatAction', e.tok, 'leave-undo', 'claudia');
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.notice, undefined);
+  assert.equal(outOf(e, 'claudia'), null);
+  assert.deepEqual(a.st.ro.at(-1), [false, ''], 'free coach: read-only off, no leave flag');
+  assert.deepEqual([a.st.on, a.st.left], [false, false]);
+  assert.deepEqual(dispatches(e).at(-1), { aksi: 'aktifkan', slug: 'claudia' });
+  assert.equal(r.data.coaches.find(c => c.slug === 'claudia').out, null);
+  assert.match(e.call('pusatAction', e.tok, 'leave-undo', 'claudia').error, /tidak sedang keluar/);
+  // Lewat H+30.
+  e.call('pusatLeave', e.tok, 'claudia', 'claudia');
+  const o = outOf(e, 'claudia'); o.deleteOn = wib(0); e.props.OUT_claudia = JSON.stringify(o);
+  assert.match(e.call('pusatAction', e.tok, 'leave-undo', 'claudia').error, /Lewat 30 hari/);
+  assert.equal(e.call('pusatOverview', e.tok).data.coaches.find(c => c.slug === 'claudia').out.canUndo, false);
+});
+
+test('coach keluar: tanpa token GitHub = langkah manual; backup akhir dilanjutkan sampai selesai; Excel gagal tidak menggagalkan; hub.json belum nonaktif masuk email', () => {
+  const { e } = outEnv({ github: false, xlsxDown: true });
+  const r = e.call('pusatLeave', e.tok, 'claudia', 'claudia').data;
+  assert.match(r.hub, /Hub XNK → aksi nonaktif, slug claudia/);
+  assert.equal(dispatches(e).length, 0);
+  // Anggaran waktu 0 = satu potong per jalan: rantai trigger sekali jalan berlanjut sampai selesai.
+  e.ctx.PUSAT_BK_BUDGET_MS = 0;
+  let steps = 0, res;
+  do { res = e.ctx.runPusatBackupSoon(); steps++; } while (res.running && steps < 20);
+  assert.ok(steps > 2, 'took several runs');
+  assert.equal(res.done, true);
+  const o = outOf(e, 'claudia');
+  assert.deepEqual([o.final.state, o.final.xlsxUrl], ['selesai', '']);
+  assert.match(o.final.xlsxError, /Ekspor Excel ditolak/);
+  assert.ok(e.mails.some(m => /backup akhir claudia siap/.test(m.subject) && /File → Download/.test(m.body)));
+  // Sehari kemudian hub.json masih aktif = masalah di email harian.
+  o.day = wib(-1); e.props.OUT_claudia = JSON.stringify(o);
+  e.mails.length = 0;
+  e.ctx.runPusatDaily();
+  assert.ok(e.mails.some(m => /masih aktif di hub\.json/.test(m.body)));
+});
+
+test('coach keluar: ganti slug ikut memindahkan tanda keluar', () => {
+  const { e } = outEnv();
+  e.call('pusatLeave', e.tok, 'claudia', 'claudia');
+  e.call('pusatRename', e.tok, 'claudia', 'claudia-fit');
+  assert.equal(outOf(e, 'claudia'), null);
+  assert.equal(outOf(e, 'claudia-fit').deleteOn, wib(30));
 });

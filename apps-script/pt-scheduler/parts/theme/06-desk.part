@@ -326,4 +326,3 @@ html.desk #view-public-info .page-intro { display: none; }
 /* Info & Tips: kisi tiga kolom bila lebar */
 html.desk .cn-wrap { max-width: none; }
 @container (min-width: 1000px) { html.desk .cn-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-</style>

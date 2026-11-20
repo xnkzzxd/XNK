@@ -16,7 +16,9 @@
 // Disimpan sendiri: SESSION_SECRET, COACHES (JSON slug → {exec, secret, at}), ST_<slug> (status terakhir), LATEST_LIB,
 //   BKST_<slug> (backup terakhir), BKNOW_<slug> (backup sekarang), BK_CUR (backup yang sedang berjalan), BK_DIRS (ID
 //   folder Drive), BK_RUN (tanda backup sedang berjalan), PUSH_<slug> (push coach: menyala?, rahasia relay, T-2240),
-//   SITEQ_<slug> (alamat situs baru yang belum diterima coach setelah ganti slug, dicoba lagi tiap pagi, T-2243).
+//   SITEQ_<slug> (alamat situs baru yang belum diterima coach setelah ganti slug, dicoba lagi tiap pagi, T-2243),
+//   SUB_<slug> (langganan: paket, harga, jatuh tempo, email coach, baca saja, riwayat bayar; tanpa = gratis, T-2251),
+//   OUT_<slug> (coach keluar: tanggal, jadwal hapus akun H+30, backup akhir + Excel, tanda hub; tanpa = aktif, T-2252).
 
 var PUSAT_SESSION_MS = 12 * 3600 * 1000;
 var PUSAT_TICK_LATE_MS = 3 * 3600 * 1000;      // pengingat menyala tapi tick terakhir lebih lama dari ini = masalah
@@ -48,7 +50,7 @@ function hubUrl_() { return prop_('HUB_URL', 'https://xnk.web.id').replace(/\/+$
 
 // ── Pintu JSON untuk /adminxnk dan wizard coach ──────────────────────────────────────────────────────────────
 
-var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSetPlace: pusatSetPlace };
+var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSubSave: pusatSubSave, pusatSetPlace: pusatSetPlace, pusatLeave: pusatLeave };
 
 function doPost(e) {
   var out;
@@ -270,6 +272,12 @@ function checkOne_(slug, c, latest) {
     return st;
   }
   var d = st.data;
+  // T-2252: coach keluar tidak diperbarui lagi; yang dicek hanya baca saja yang harus tetap menyala.
+  if (outState_(slug)) {
+    if (d.readonly !== true) st.problems.push('Coach keluar, tetapi mode baca saja belum menyala.');
+    st.ok = st.problems.length === 0;
+    return st;
+  }
   if (latest && d.lib && d.lib.commit && d.lib.commit !== latest.commit) st.problems.push('Library tertinggal (terbaru v' + latest.version + ').');
   if (!d.triggers || d.triggers.runReminderTick !== 1) st.problems.push('Trigger pengingat ' + (d.triggers && d.triggers.runReminderTick ? 'terpasang ' + d.triggers.runReminderTick + ' kali' : 'tidak terpasang') + '.');
   if (d.reminders && d.reminders.enabled) {
@@ -291,6 +299,8 @@ function checkAll_(only) {
   var all = json_('COACHES', {}), latest = latestLib_(), out = {};
   Object.keys(all).sort().forEach(function (slug) {
     if (only && slug !== only) return;
+    var o = outState_(slug);
+    if (o && o.done) return;   // T-2252: akun coach sudah dihapus pemilik; tidak ditanya lagi
     out[slug] = checkOne_(slug, all[slug], latest);
     props_().setProperty('ST_' + slug, JSON.stringify(out[slug]));
     histPush_(slug, out[slug]);
@@ -337,6 +347,20 @@ function runPusatDaily() {
     res[s].problems.push('Notifikasi push: ' + push[s].error);
     res[s].ok = false;
   });
+  // T-2251: pengingat langganan, keadaan baca saja ke coach, masa tenggang / baca saja masuk email pemilik.
+  var sub = subDaily_();
+  Object.keys(sub).forEach(function (s) {
+    if (!res[s]) res[s] = { ok: true, problems: [] };
+    res[s].problems = res[s].problems.concat(sub[s]);
+    res[s].ok = false;
+  });
+  // T-2252: coach keluar — pengingat hapus akun mulai H-3, backup akhir gagal, hub.json belum menandai tidak aktif.
+  var outP = outDaily_();
+  Object.keys(outP).forEach(function (s) {
+    if (!res[s]) res[s] = { ok: true, problems: [] };
+    res[s].problems = res[s].problems.concat(outP[s]);
+    res[s].ok = false;
+  });
   Object.keys(all).forEach(function (s) {
     var b = json_('BKST_' + s, null);
     if (!b || !(b.fails >= 2)) return;
@@ -368,7 +392,7 @@ function pusatOverview(token) {
     // T-2258: tempat latihan tiap coach di hub.json (juga yang belum terdaftar di sini), slug → {name, city} | null.
     places: hubCoaches.reduce(function (m, x) { if (x && PUSAT_SLUG_RE.test(String(x.slug))) m[x.slug] = hubPlace_(x.slug, hubCoaches); return m; }, {}),
     coaches: Object.keys(all).sort().map(function (slug) {
-      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), hist: json_('HIST_' + slug, []), backup: backupView_(slug), push: pushView_(slug) };
+      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), hist: json_('HIST_' + slug, []), backup: backupView_(slug), push: pushView_(slug), sub: subView_(slug), out: outView_(slug, hubCoaches) };
     }),
     setup: setupState_(),
   };
@@ -388,6 +412,18 @@ function pusatAction(token, action, slug) {
   if (action === 'backup') return backupNow_(String(slug || ''));
   if (action === 'setup') return { ticket: setupTicket_() };   // /adminxnk membuka <pusatUrl>?setup=<ticket> di tab baru
   if (action === 'push-on' || action === 'push-off') { pushSet_(String(slug || ''), action === 'push-on'); return pusatOverview(token); }
+  if (action === 'leave-undo' || action === 'leave-done') {   // T-2252: aktifkan lagi / akun coach sudah dihapus
+    var leaveNote = action === 'leave-undo' ? leaveUndo_(String(slug || '')) : leaveDone_(String(slug || ''));
+    var lov = pusatOverview(token);
+    if (leaveNote) lov.notice = leaveNote;
+    return lov;
+  }
+  if (/^sub-/.test(String(action))) {   // T-2251: langganan (tanpa GitHub)
+    var subErr = subAction_(String(action), String(slug || ''));
+    var ov = pusatOverview(token);
+    if (subErr) ov.notice = subErr;
+    return ov;
+  }
   var t = prop_('GITHUB_TOKEN');
   if (!t) throw new Error('Token GitHub belum diatur di XNK HQ (Script Property GITHUB_TOKEN).');
   slug = String(slug || '');
@@ -462,6 +498,10 @@ function bkPick_(all) {
   slugs.forEach(function (s) {
     var b = json_('BKST_' + s, null) || {};
     var ok = Date.parse(b.okAt || '') || 0, at = Date.parse(b.at || '') || 0;
+    // T-2252: coach keluar tidak dibackup mingguan lagi; hanya backup akhir yang belum jadi (dicoba lagi setelah gagal).
+    var o = outState_(s);
+    if (o && (o.done || !o.final || o.final.state === 'selesai')) return;
+    if (o) ok = 0;
     if (ok && now - ok < PUSAT_BK_DAYS) return;
     if (b.error && at && now - at < PUSAT_BK_RETRY_MS) return;
     if (ok < bestOk) { best = s; bestOk = ok; }
@@ -502,6 +542,7 @@ function bkFail_(cur, e) {
   props_().deleteProperty('BK_CUR');
   var prev = json_('BKST_' + cur.slug, null) || {};
   props_().setProperty('BKST_' + cur.slug, JSON.stringify({ at: new Date().toISOString(), okAt: prev.okAt || '', fileUrl: prev.fileUrl || '', rows: prev.rows || 0, error: msg, fails: (prev.fails || 0) + 1 }));
+  outFinalMark_(cur.slug, 'gagal', msg);
   return { slug: cur.slug, error: msg };
 }
 
@@ -516,10 +557,21 @@ function bkPrune_(dir) {
 
 /** Trigger tiap jam: lanjutkan atau mulai backup satu coach. */
 function runPusatBackup() {
-  var run = Number(prop_('BK_RUN') || 0);
-  if (run && Date.now() - run < PUSAT_BK_LOCK_MS) return { busy: true };
-  props_().setProperty('BK_RUN', String(Date.now()));
-  try { return backupStep_(); } finally { props_().deleteProperty('BK_RUN'); }
+  var run = Number(prop_('BK_RUN') || 0), r;
+  if (run && Date.now() - run < PUSAT_BK_LOCK_MS) r = { busy: true };
+  else {
+    props_().setProperty('BK_RUN', String(Date.now()));
+    try { r = backupStep_(); } finally { props_().deleteProperty('BK_RUN'); }
+  }
+  // T-2252: backup akhir coach keluar dijalankan terus (trigger sekali jalan ±1 menit) sampai selesai, tidak menunggu jam.
+  if (!r.idle && !r.error && outPending_()) soonTrigger_();
+  return r;
+}
+
+/** Trigger sekali jalan runPusatBackupSoon ±1 menit lagi (tidak dobel). */
+function soonTrigger_() {
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'runPusatBackupSoon'; });
+  if (!has) ScriptApp.newTrigger('runPusatBackupSoon').timeBased().after(60 * 1000).create();
 }
 
 /** Trigger sekali dari tombol "Backup sekarang": hapus dirinya lalu jalan seperti biasa. */
@@ -541,6 +593,7 @@ function backupStep_() {
     if (!slug) return { idle: true };
     props_().deleteProperty('BKNOW_' + slug);
     cur = { slug: slug, started: t0, dir: '', fileId: '', fileUrl: '', sheets: [], i: 0, from: 1, rows: 0 };
+    outFinalMark_(slug, 'jalan', '');   // T-2252: backup akhir coach keluar sedang dibuat
     try {
       var list = bkAsk_(slug, all[slug], null);
       cur.sheets = (list.sheets || []).map(function (x) { return { name: String(x.name), rows: Number(x.rows) || 0 }; });
@@ -573,9 +626,13 @@ function backupStep_() {
   props_().deleteProperty('BK_CUR');
   var at = new Date().toISOString();
   props_().setProperty('BKST_' + cur.slug, JSON.stringify({ at: at, okAt: at, fileUrl: cur.fileUrl, rows: cur.rows, error: '', fails: 0 }));
+  // T-2252: backup akhir coach keluar → folder Akhir + salinan Excel (sebelum pangkas, supaya tidak ikut dibuang).
+  var fin = outFinalize_(cur);
   var pruned = 0;
   try { pruned = bkPrune_(cur.dir); } catch (e) { /* salinan lama dicoba lagi minggu depan */ }
-  return { slug: cur.slug, done: true, rows: cur.rows, pruned: pruned };
+  var done = { slug: cur.slug, done: true, rows: cur.rows, pruned: pruned };
+  if (fin) done.final = fin;
+  return done;
 }
 
 /** Status backup untuk /adminxnk: tanggal, link, jumlah baris, galat. Tanpa isi data. */
@@ -588,8 +645,7 @@ function backupView_(slug) {
 function backupNow_(slug) {
   if (!PUSAT_SLUG_RE.test(slug) || !json_('COACHES', {})[slug]) throw new Error('Coach tidak terdaftar.');
   props_().setProperty('BKNOW_' + slug, String(Date.now()));
-  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'runPusatBackupSoon'; });
-  if (!has) ScriptApp.newTrigger('runPusatBackupSoon').timeBased().after(60 * 1000).create();
+  soonTrigger_();
   return { started: 'backup', slug: slug, queued: true };
 }
 
@@ -669,6 +725,7 @@ function pushSyncAll_() {
 function pushSet_(slug, on) {
   var all = json_('COACHES', {});
   if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  if (on && outState_(slug)) throw new Error('Coach ini sudah keluar. Tekan "Aktifkan lagi" dulu.');
   var key = hubVapid_();
   if (on && !key) throw new Error('Kunci publik hub belum ada. Jalankan workflow Push XNK di repo hub dengan aksi "kunci" dulu.');
   var p = pushState_(slug);
@@ -690,6 +747,7 @@ function pusatPushTargets(pushSecret) {
   return {
     coaches: Object.keys(all).sort().map(function (slug) {
       var p = pushState_(slug);
+      if (outState_(slug)) return null;   // T-2252: coach keluar tidak pernah dikirimi push
       return p.on && p.active && p.relay && PUSAT_EXEC_RE.test(String(p.exec || '')) ? { slug: slug, exec: p.exec, relay: p.relay } : null;
     }).filter(Boolean),
   };
@@ -703,7 +761,7 @@ function pusatPushTargets(pushSecret) {
 
 var PUSAT_RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
   'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
-var PUSAT_SLUG_KEYS = ['ST_', 'HIST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_'];
+var PUSAT_SLUG_KEYS = ['ST_', 'HIST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_', 'SUB_', 'OUT_'];
 
 /** Kirim SITEQ_<slug> (alamat situs baru) ke coach; berhasil = antrean dihapus. {ok} atau {error}. */
 function siteSync_(slug, c) {
@@ -780,6 +838,211 @@ function pusatRename(token, oldSlug, newSlug) {
   return out;
 }
 
+// ── Langganan bulanan (T-2251) ──────────────────────────────────────────────────────────────────────────────
+// Per coach: paket (gratis | bulanan), harga Rp, jatuh tempo (YYYY-MM-DD, WIB), email coach, riwayat bayar, dan sakelar
+// baca saja (auto | on | off). Disimpan di SUB_<slug>. Coach TANPA baris = gratis = tidak pernah baca saja (bawaan untuk
+// semua coach lama). Bulanan: H-7 dan H-1 email pengingat ke coach (kosong = email pemilik); 7 hari tenggang setelah jatuh
+// tempo, lalu baca saja (situs tidak pernah dihapus). Pemilik bisa menyalakan/mematikan baca saja kapan saja (on/off
+// menimpa hitungan otomatis; "Tandai lunas" memajukan jatuh tempo satu bulan dan kembali ke otomatis).
+// Keadaan dikirim ke coach lewat hubReadonly(HUB_SECRET, menyala, catatan) saat berubah dan di cek harian.
+
+var PUSAT_SUB_GRACE_DAYS = 7;
+var PUSAT_SUB_REMIND = [7, 1];          // email pengingat H-7 dan H-1
+var PUSAT_SUB_HISTORY = 24;             // riwayat bayar yang disimpan
+var PUSAT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Tanggal hari ini (WIB) sebagai YYYY-MM-DD. */
+function todayWib_() { return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10); }
+/** Selisih hari b − a (keduanya YYYY-MM-DD). */
+function dayDiff_(a, b) { return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5); }
+/** Tanggal yang sama bulan berikutnya; 31 Jan → 28/29 Feb. */
+function addMonth_(d) {
+  var y = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)), day = Number(d.slice(8, 10));
+  m += 1; if (m > 12) { m = 1; y += 1; }
+  var last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + Math.min(day, last)).slice(-2);
+}
+function validDate_(d) { return PUSAT_DATE_RE.test(String(d || '')) && !isNaN(Date.parse(d + 'T00:00:00Z')) && new Date(d + 'T00:00:00Z').toISOString().slice(0, 10) === d; }
+
+/** Data langganan tersimpan; tanpa baris = gratis. */
+function subState_(slug) {
+  var s = json_('SUB_' + slug, null);
+  if (!s || typeof s !== 'object') s = {};
+  return {
+    plan: s.plan === 'bulanan' ? 'bulanan' : 'gratis',
+    price: Math.max(0, Math.floor(Number(s.price) || 0)),
+    due: validDate_(s.due) ? s.due : '',
+    email: String(s.email || ''),
+    ro: s.ro === 'on' || s.ro === 'off' ? s.ro : 'auto',
+    history: Array.isArray(s.history) ? s.history : [],
+    sent: s.sent && typeof s.sent === 'object' ? s.sent : {},
+    pushed: s.pushed && typeof s.pushed === 'object' ? s.pushed : null,
+  };
+}
+function subSave_(slug, s) { props_().setProperty('SUB_' + slug, JSON.stringify(s)); }
+
+/**
+ * Hitung status (murni). gratis/tanpa jatuh tempo = tidak pernah baca saja kecuali pemilik menyalakannya sendiri.
+ * @return {{state: string, days: ?number, graceLeft: ?number, readonly: boolean, manual: string}}
+ *   state: gratis | aktif | segera (≤ 7 hari) | tenggang (lewat, ≤ 7 hari) | lewat (baca saja otomatis)
+ */
+function subStatus_(s, today) {
+  var out = { state: 'gratis', days: null, graceLeft: null, readonly: false, manual: s.ro };
+  if (s.plan === 'bulanan' && s.due) {
+    var days = dayDiff_(today, s.due);
+    out.days = days;
+    if (days > PUSAT_SUB_REMIND[0]) out.state = 'aktif';
+    else if (days >= 0) out.state = 'segera';
+    else if (-days <= PUSAT_SUB_GRACE_DAYS) { out.state = 'tenggang'; out.graceLeft = PUSAT_SUB_GRACE_DAYS + days; }
+    else { out.state = 'lewat'; out.readonly = true; }
+  } else if (s.plan === 'bulanan') out.state = 'aktif';
+  if (s.ro === 'on') out.readonly = true;
+  if (s.ro === 'off') out.readonly = false;
+  return out;
+}
+
+/** Catatan singkat untuk pita coach (tanpa angka uang). */
+function subNote_(s, st) {
+  if (!st.readonly) return '';
+  if (s.ro === 'on') return 'Dinyalakan oleh pengelola XNK.';
+  return 'Langganan lewat jatuh tempo ' + s.due + '.';
+}
+
+/** Untuk /adminxnk: tanpa rahasia. */
+function subView_(slug) {
+  var s = subState_(slug), st = subStatus_(s, todayWib_());
+  return {
+    plan: s.plan, price: s.price, due: s.due, email: s.email, ro: s.ro,
+    state: st.state, days: st.days, graceLeft: st.graceLeft, readonly: st.readonly,
+    history: s.history.slice(-6),
+    pushed: s.pushed ? { on: !!s.pushed.on, at: s.pushed.at || '', error: s.pushed.error || '' } : null,
+  };
+}
+
+/**
+ * Kirim keadaan baca saja ke coach bila perlu: berubah, galat sebelumnya, atau `force` (cek harian, coach bulanan).
+ * Coach gratis yang belum pernah dikirimi apa pun tidak dihubungi. Mengembalikan state pushed (atau null bila dilewati).
+ */
+function subSync_(slug, c, force) {
+  var s = subState_(slug), w = roWant_(slug, s), p = s.pushed;
+  var need = !p ? w.on : (!!p.on !== w.on || (p.note || '') !== w.note || !!p.left !== w.left || !!p.error || (force && (s.plan === 'bulanan' || p.on)));
+  if (!need) return null;
+  var out = { on: w.on, note: w.note, left: w.left, at: new Date().toISOString(), error: '' };
+  try {
+    var j = askApps_(hubExec_(slug) || c.exec, { fn: 'hubReadonly', args: w.left ? [c.secret, w.on, w.note, true] : [c.secret, w.on, w.note] });
+    if (j && j.code === 'unknown_fn') throw new Error('Library coach belum punya hubReadonly; perbarui coach.');
+    if (!j || !j.ok) throw new Error(j && j.error ? j.error : 'tanpa jawaban');
+    if (!!(j.data && j.data.on) !== w.on) throw new Error('Coach menjawab keadaan lain.');
+  } catch (e) {
+    out.error = String(e && e.message ? e.message : e).slice(0, 160);
+  }
+  s = subState_(slug);   // baca lagi: hanya pushed yang diganti
+  s.pushed = out;
+  subSave_(slug, s);
+  return out;
+}
+
+/**
+ * Keadaan baca saja yang harus ada di coach: coach keluar (T-2252) selalu menyala dengan tanda keluar, menimpa langganan
+ * dan sakelar tangan; selain itu hitungan langganan (T-2251).
+ */
+function roWant_(slug, s) {
+  var o = outState_(slug);
+  if (o) return { on: true, note: PUSAT_OUT_NOTE, left: true };
+  var st = subStatus_(s || subState_(slug), todayWib_());
+  return { on: st.readonly, note: subNote_(s || subState_(slug), st), left: false };
+}
+
+/** Email pengingat H-7 / H-1 (sekali per jatuh tempo per jenis). */
+function subRemind_(slug) {
+  if (outState_(slug)) return '';   // T-2252: coach keluar tidak ditagih
+  var s = subState_(slug), st = subStatus_(s, todayWib_());
+  if (s.plan !== 'bulanan' || !s.due || st.days == null || st.days < 0) return '';
+  var kind = st.days <= PUSAT_SUB_REMIND[1] ? PUSAT_SUB_REMIND[1] : st.days <= PUSAT_SUB_REMIND[0] ? PUSAT_SUB_REMIND[0] : 0;
+  if (!kind) return '';
+  var key = s.due + '|' + kind;
+  if (s.sent[key]) return '';
+  // H-1 sudah terkirim = H-7 tidak dikirim lagi (mis. jatuh tempo diubah mendadak).
+  if (kind === PUSAT_SUB_REMIND[0] && s.sent[s.due + '|' + PUSAT_SUB_REMIND[1]]) return '';
+  var to = s.email || prop_('PUSAT_EMAIL') || Session.getEffectiveUser().getEmail();
+  var name = String(((hubJson_().coaches || []).filter(function (x) { return x && x.slug === slug; })[0] || {}).name || slug);
+  var when = st.days === 0 ? 'hari ini' : st.days === 1 ? 'besok' : st.days + ' hari lagi';
+  var body = 'Halo ' + name + ',\n\nLangganan XNK Coach untuk ' + hubUrl_() + '/' + slug + '/ jatuh tempo ' + when + ' (' + s.due + ')' +
+    (s.price ? ', sebesar Rp ' + s.price.toLocaleString('id-ID') : '') + '.\n\n' +
+    'Setelah jatuh tempo ada masa tenggang ' + PUSAT_SUB_GRACE_DAYS + ' hari. Bila belum diperpanjang, aplikasi masuk mode baca saja: ' +
+    'semua data tetap aman dan bisa dilihat, tetapi belum bisa diubah. Situs tidak pernah dihapus.\n\nTerima kasih.\nXNK';
+  MailApp.sendEmail(to, 'XNK: langganan ' + name + ' jatuh tempo ' + when, body);
+  s.sent[key] = new Date().toISOString();
+  Object.keys(s.sent).forEach(function (k) { if (!validDate_(k.slice(0, 10)) || dayDiff_(k.slice(0, 10), todayWib_()) > 60) delete s.sent[k]; });
+  subSave_(slug, s);
+  return to;
+}
+
+/** Bagian cek harian: pengingat, kirim keadaan, masalah untuk email pemilik. {slug: [masalah]} */
+function subDaily_() {
+  var all = json_('COACHES', {}), out = {};
+  Object.keys(all).sort().forEach(function (slug) {
+    var probs = [], o = outState_(slug);
+    if (o && o.done) return;   // T-2252: akun coach sudah dihapus
+    try { subRemind_(slug); } catch (e) { probs.push('Email pengingat langganan gagal (' + String(e && e.message ? e.message : e).slice(0, 100) + ').'); }
+    var r = subSync_(slug, all[slug], true);
+    if (r && r.error) probs.push('Mode baca saja belum diterima coach: ' + r.error);
+    var st = subStatus_(subState_(slug), todayWib_());
+    if (!o && st.state === 'tenggang') probs.push('Langganan lewat jatuh tempo; masa tenggang ' + st.graceLeft + ' hari lagi.');
+    if (probs.length) out[slug] = probs;
+  });
+  return out;
+}
+
+/**
+ * Simpan pengaturan langganan dari /adminxnk. data: {plan, price, due, email}. Hanya pemilik.
+ * @return {Object} pusatOverview
+ */
+function pusatSubSave(token, slug, data) {
+  requireOwnerToken_(token);
+  slug = String(slug || '');
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  if (outState_(slug)) throw new Error('Coach ini sudah keluar; langganan tidak bisa diubah. Tekan "Aktifkan lagi" dulu.');
+  data = data && typeof data === 'object' ? data : {};
+  var plan = data.plan === 'bulanan' ? 'bulanan' : data.plan === 'gratis' ? 'gratis' : null;
+  if (!plan) throw new Error('Pilih paket: gratis atau bulanan.');
+  var price = Number(String(data.price == null ? '' : data.price).replace(/[.\s]/g, '') || 0);
+  if (!isFinite(price) || price < 0 || Math.floor(price) !== price || price > 100000000) throw new Error('Harga harus bilangan bulat Rp.');
+  var due = String(data.due || '').trim();
+  if (due && !validDate_(due)) throw new Error('Tanggal jatuh tempo tidak valid.');
+  if (plan === 'bulanan' && !due) throw new Error('Isi tanggal jatuh tempo untuk paket bulanan.');
+  var email = String(data.email || '').trim();
+  if (email && (email.length > 120 || !/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(email))) throw new Error('Email coach tidak valid.');
+  var s = subState_(slug);
+  s.plan = plan; s.price = price; s.due = due; s.email = email;
+  subSave_(slug, s);
+  subSync_(slug, all[slug], false);
+  return pusatOverview(token);
+}
+
+/** Aksi langganan: sub-paid (lunas = jatuh tempo +1 bulan, kembali otomatis), sub-ro-on / sub-ro-off / sub-ro-auto. */
+function subAction_(action, slug) {
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  if (outState_(slug)) throw new Error('Coach ini sudah keluar; langganan tidak bisa diubah. Tekan "Aktifkan lagi" dulu.');
+  var s = subState_(slug);
+  if (action === 'sub-paid') {
+    if (s.plan !== 'bulanan' || !s.due) throw new Error('Atur paket bulanan dan jatuh tempo dulu.');
+    var next = addMonth_(s.due);
+    s.history.push({ at: new Date().toISOString(), due: s.due, next: next, price: s.price });
+    s.history = s.history.slice(-PUSAT_SUB_HISTORY);
+    s.due = next;
+    s.ro = 'auto';
+  } else if (action === 'sub-ro-on') s.ro = 'on';
+  else if (action === 'sub-ro-off') s.ro = 'off';
+  else if (action === 'sub-ro-auto') s.ro = 'auto';
+  else throw new Error('Aksi tidak dikenal.');
+  subSave_(slug, s);
+  var r = subSync_(slug, all[slug], false);
+  return r && r.error ? 'Pilihan disimpan, tetapi coach belum menerimanya: ' + r.error + ' (dicoba lagi besok pagi).' : '';
+}
+
 /** Jalankan workflow Hub XNK (hub.yml) dengan isian itu; hub.json di cache dibuang. Melempar bila GitHub menolak. */
 function hubDispatch_(inputs) {
   var res = fetch_('https://api.github.com/repos/' + prop_('HUB_REPO', 'xnkzzxd/xnk-template-site') + '/actions/workflows/hub.yml/dispatches', {
@@ -837,5 +1100,212 @@ function pusatSetPlace(token, slug, name, city) {
   var out = { slug: slug, place: p, hub: 'ok' };
   if (!prop_('GITHUB_TOKEN')) { out.hub = manual; return out; }
   try { hubDispatch_(inputs); } catch (e) { out.hub = String(e && e.message ? e.message : e).slice(0, 100) + '. ' + manual; }
+  return out;
+}
+
+// ── Coach keluar (T-2252) ───────────────────────────────────────────────────────────────────────────────────
+// /adminxnk → "Coach keluar…" (konfirmasi: ketik slug) → pusatLeave:
+//   1. OUT_<slug> dicatat: tanggal keluar dan jadwal hapus akun Google coach H+30 (DIHAPUS PEMILIK SENDIRI; XNK HQ
+//      tidak pernah menghapus akun Google, spreadsheet, atau data klien).
+//   2. Baca saja permanen ke coach lewat hubReadonly(rahasia, true, catatan, left=true); cek harian selalu mengirim
+//      keadaan yang sama (roWant_), jadi langganan atau sakelar tangan tidak bisa mematikannya.
+//   3. Push coach dimatikan dan coach tidak pernah masuk pusatPushTargets lagi.
+//   4. Backup akhir: folder XNK Backup/<slug>/Akhir dibuat sekarang (linknya langsung dikembalikan), backup ditandai
+//      "sekarang" dan dijalankan terus lewat trigger sekali jalan sampai selesai; hasilnya (spreadsheet + salinan .xlsx)
+//      dipindah ke folder Akhir (tidak ikut dipangkas) dan pemilik mendapat email berisi link-nya untuk dikirim ke coach.
+//   5. Workflow Hub XNK aksi "nonaktif" (hub.json "inactive": true): situs coach jadi halaman "tidak aktif lagi".
+// Email harian pemilik memuat "hapus akun Google coach <slug>" mulai H-3 sampai pemilik menekan "Akun sudah dihapus".
+// "Aktifkan lagi" (sebelum H+30, akun belum dihapus) membatalkan 2, 5 dan tanda keluar; push tetap mati sampai dinyalakan.
+
+var PUSAT_OUT_DAYS = 30;                  // hapus akun Google coach H+30 (manual)
+var PUSAT_OUT_WARN = 3;                   // pengingat di email harian mulai H-3
+var PUSAT_OUT_NOTE = 'Coach ini sudah tidak aktif di XNK. Data bisa dilihat, tetapi tidak bisa diubah lagi.';
+var MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+var DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
+
+/** OUT_<slug>: null = coach aktif. */
+function outState_(slug) { var o = json_('OUT_' + slug, null); return o && typeof o === 'object' ? o : null; }
+function outSave_(slug, o) { props_().setProperty('OUT_' + slug, JSON.stringify(o)); }
+/** Tanggal + n hari (YYYY-MM-DD). */
+function addDays_(d, n) { return new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10); }
+function folderUrl_(id) { return 'https://drive.google.com/drive/folders/' + id; }
+
+/** Untuk /adminxnk (tanpa rahasia). hubInactive = hub.json sudah menandai coach ini tidak aktif. */
+function outView_(slug, hubCoaches) {
+  var hit = (hubCoaches || []).filter(function (x) { return x && x.slug === slug; })[0];
+  var o = outState_(slug), inactive = !!(hit && hit.inactive === true);
+  if (!o) return inactive ? { hubInactive: true } : null;
+  var left = dayDiff_(todayWib_(), o.deleteOn), f = o.final || {};
+  return {
+    at: o.at, day: o.day, deleteOn: o.deleteOn, daysLeft: left, done: o.done || '', hub: o.hub || '', hubInactive: inactive,
+    canUndo: !o.done && left > 0,
+    final: { state: f.state || '', dirUrl: f.dirUrl || '', fileUrl: f.fileUrl || '', xlsxUrl: f.xlsxUrl || '', xlsxError: f.xlsxError || '', error: f.error || '', at: f.at || '' },
+  };
+}
+
+/** Ada backup akhir yang belum selesai? (rantai trigger sekali jalan di runPusatBackup) */
+function outPending_() {
+  return Object.keys(json_('COACHES', {})).some(function (s) {
+    var o = outState_(s);
+    return !!(o && !o.done && o.final && (o.final.state === 'antre' || o.final.state === 'jalan'));
+  });
+}
+
+/** Tandai keadaan backup akhir (hanya untuk coach keluar yang backup akhirnya belum selesai). */
+function outFinalMark_(slug, state, err) {
+  var o = outState_(slug);
+  if (!o || o.done || !o.final || o.final.state === 'selesai') return;
+  o.final.state = state;
+  o.final.error = err ? String(err).slice(0, 160) : '';
+  outSave_(slug, o);
+}
+
+/**
+ * Coach keluar. Hanya pemilik; `confirm` harus sama persis dengan slug (diketik di /adminxnk).
+ * @return {{slug, day, deleteOn, dirUrl, readonly, push, backup, hub}} readonly/push/backup/hub = 'ok' | pesan
+ */
+function pusatLeave(token, slug, confirm) {
+  requireOwnerToken_(token);
+  slug = String(slug == null ? '' : slug).trim();
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  if (String(confirm == null ? '' : confirm).trim() !== slug) throw new Error('Ketik "' + slug + '" persis untuk memastikan coach ini keluar.');
+  var day = todayWib_(), o;
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (outState_(slug)) throw new Error('Coach "' + slug + '" sudah ditandai keluar.');
+    o = { at: new Date().toISOString(), day: day, deleteOn: addDays_(day, PUSAT_OUT_DAYS), done: '', hub: '', final: { state: 'antre', dir: '', dirUrl: '', fileUrl: '', xlsxUrl: '', error: '' } };
+    outSave_(slug, o);
+  } finally { lock.releaseLock(); }
+  var c = all[slug];
+  var res = { slug: slug, day: o.day, deleteOn: o.deleteOn, dirUrl: '', readonly: 'ok', push: 'ok', backup: 'ok', hub: 'ok' };
+
+  var r = subSync_(slug, c, true);   // baca saja permanen + tanda keluar
+  if (r && r.error) res.readonly = r.error + ' Dicoba lagi tiap pagi.';
+
+  var p = pushState_(slug);
+  if (p.on || p.active) {
+    p.on = false;
+    props_().setProperty('PUSH_' + slug, JSON.stringify(p));
+    var pr = pushSync_(slug, c, hubVapid_());
+    if (pr.error) res.push = pr.error + ' Dicoba lagi tiap pagi.';
+  }
+
+  // Folder Akhir dibuat sekarang supaya linknya bisa langsung dipakai; berkasnya masuk setelah backup selesai.
+  try {
+    var dir = driveMkdir_('Akhir', bkDir_(slug));
+    o = outState_(slug);
+    o.final.dir = dir; o.final.dirUrl = folderUrl_(dir);
+    outSave_(slug, o);
+    res.dirUrl = o.final.dirUrl;
+  } catch (e) {
+    res.backup = 'Folder Drive belum bisa dibuat (' + String(e && e.message ? e.message : e).slice(0, 100) + '); backup akhir tetap dicoba.';
+  }
+  backupNow_(slug);
+
+  res.hub = hubSet_(slug, 'nonaktif');
+  o = outState_(slug); o.hub = res.hub; outSave_(slug, o);
+  return res;
+}
+
+/** Workflow Hub XNK aksi nonaktif / aktifkan; 'ok' atau pesan dengan langkah manual. */
+function hubSet_(slug, aksi) {
+  var manual = 'Jalankan sendiri: repo hub → Actions → Hub XNK → aksi ' + aksi + ', slug ' + slug + '.';
+  if (!prop_('GITHUB_TOKEN')) return manual;
+  try { hubDispatch_({ aksi: aksi, slug: slug }); return 'ok'; } catch (e) { return String(e && e.message ? e.message : e).slice(0, 100) + '. ' + manual; }
+}
+
+/**
+ * Backup selesai: bila coach keluar dan backup akhirnya belum jadi, pindahkan spreadsheet ke folder Akhir, buat salinan
+ * .xlsx di sana, catat link-nya, email pemilik. Mengembalikan {fileUrl, xlsxUrl, dirUrl} atau null (bukan backup akhir).
+ * Galat Excel tidak menggagalkan backup: spreadsheet akhir tetap ada.
+ */
+function outFinalize_(cur) {
+  var o = outState_(cur.slug);
+  if (!o || o.done || !o.final || o.final.state === 'selesai') return null;
+  // Backup yang dimulai sebelum coach keluar (data masih bisa berubah saat itu) bukan backup akhir: BKNOW masih menunggu.
+  if (cur.started < Date.parse(o.at)) { props_().setProperty('BKNOW_' + cur.slug, String(Date.now())); return null; }
+  var f = o.final;
+  try {
+    if (!f.dir) { f.dir = driveMkdir_('Akhir', cur.dir); f.dirUrl = folderUrl_(f.dir); }
+    drive_('patch', '/' + encodeURIComponent(cur.fileId) + '?addParents=' + encodeURIComponent(f.dir) + '&removeParents=' + encodeURIComponent(cur.dir) + '&fields=id', {});
+  } catch (e) { /* tetap di folder coach; link spreadsheet tetap benar */ }
+  f.fileUrl = cur.fileUrl;
+  f.xlsxUrl = ''; f.xlsxError = '';
+  try { f.xlsxUrl = xlsxCopy_(cur.fileId, cur.slug + ' ' + new Date(cur.started + 7 * 3600 * 1000).toISOString().slice(0, 10) + '.xlsx', f.dir || cur.dir); }
+  catch (e) { f.xlsxError = String(e && e.message ? e.message : e).slice(0, 160); }
+  f.state = 'selesai'; f.error = ''; f.at = new Date().toISOString();
+  o.final = f;
+  outSave_(cur.slug, o);
+  try {
+    var to = prop_('PUSAT_EMAIL') || Session.getEffectiveUser().getEmail();
+    MailApp.sendEmail(to, 'XNK HQ: backup akhir ' + cur.slug + ' siap',
+      'Backup akhir coach ' + cur.slug + ' (keluar ' + o.day + ') sudah jadi.\n\n' +
+      (f.xlsxUrl ? 'Excel (untuk dikirim ke coach): ' + f.xlsxUrl + '\n' : 'Excel belum bisa dibuat (' + f.xlsxError + '); spreadsheet di bawah bisa diunduh sebagai .xlsx (File → Download).\n') +
+      'Spreadsheet: ' + f.fileUrl + '\nFolder: ' + (f.dirUrl || '-') + '\n\n' +
+      'Cara mengirim: buka link Excel → titik tiga → Bagikan (masukkan email coach) atau Download lalu kirim lewat email/WhatsApp.\n' +
+      'Jadwal hapus akun Google coach: ' + o.deleteOn + ' (manual; XNK HQ mengingatkan mulai H-' + PUSAT_OUT_WARN + ').\n\nDasbor: ' + hubUrl_() + '/adminxnk/');
+  } catch (e) { /* email gagal: link tetap tampil di /adminxnk */ }
+  return { fileUrl: f.fileUrl, xlsxUrl: f.xlsxUrl, dirUrl: f.dirUrl };
+}
+
+/** Ekspor spreadsheet (buatan skrip ini) ke .xlsx dan unggah ke folder; link berkas .xlsx. Batas ekspor Drive 10 MB. */
+function xlsxCopy_(fileId, name, dir) {
+  var auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+  var ex = fetch_(DRIVE_API + '/' + encodeURIComponent(fileId) + '/export?mimeType=' + encodeURIComponent(MIME_XLSX), { muteHttpExceptions: true, headers: auth });
+  if (ex.getResponseCode() !== 200) throw new Error('Ekspor Excel ditolak Drive (' + ex.getResponseCode() + ')' + (ex.getResponseCode() === 403 ? '; berkas mungkin lebih dari 10 MB' : '') + '.');
+  var bytes = ex.getContent();
+  var b = 'xnk' + Utilities.getUuid().replace(/-/g, '');
+  var head = Utilities.newBlob('--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: name, parents: [dir], mimeType: MIME_XLSX }) + '\r\n--' + b + '\r\nContent-Type: ' + MIME_XLSX + '\r\n\r\n').getBytes();
+  var tail = Utilities.newBlob('\r\n--' + b + '--').getBytes();
+  var up = fetch_(DRIVE_UPLOAD + '?uploadType=multipart&fields=id,webViewLink', { method: 'post', contentType: 'multipart/related; boundary=' + b, payload: head.concat(bytes).concat(tail), muteHttpExceptions: true, headers: auth });
+  if (up.getResponseCode() < 200 || up.getResponseCode() >= 300) throw new Error('Unggah Excel ditolak Drive (' + up.getResponseCode() + ').');
+  var j = JSON.parse(up.getContentText());
+  return j.webViewLink || 'https://drive.google.com/file/d/' + j.id + '/view';
+}
+
+/** "Aktifkan lagi": sebelum H+30 dan akun belum dihapus. Pesan untuk /adminxnk ('' = semua beres). */
+function leaveUndo_(slug) {
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  var o = outState_(slug);
+  if (!o) throw new Error('Coach ini tidak sedang keluar.');
+  if (o.done) throw new Error('Akun Google coach ini sudah ditandai dihapus; tidak bisa diaktifkan lagi.');
+  if (dayDiff_(todayWib_(), o.deleteOn) <= 0) throw new Error('Lewat ' + PUSAT_OUT_DAYS + ' hari (jadwal hapus akun ' + o.deleteOn + '); tidak bisa diaktifkan lagi dari sini.');
+  props_().deleteProperty('OUT_' + slug);
+  var notes = [];
+  var r = subSync_(slug, all[slug], true);   // baca saja kembali ke hitungan langganan (gratis = mati), tanda keluar hilang
+  if (r && r.error) notes.push('Baca saja belum dimatikan di coach: ' + r.error + ' (dicoba lagi tiap pagi).');
+  var h = hubSet_(slug, 'aktifkan');
+  if (h !== 'ok') notes.push('Situs: ' + h);
+  return notes.join(' ');
+}
+
+/** "Akun sudah dihapus": pengingat berhenti, coach tidak ditanya lagi. Pesan untuk /adminxnk. */
+function leaveDone_(slug) {
+  var o = outState_(slug);
+  if (!PUSAT_SLUG_RE.test(slug) || !o) throw new Error('Coach ini tidak sedang keluar.');
+  if (!o.done) { o.done = todayWib_(); outSave_(slug, o); }
+  return '';
+}
+
+/** Bagian cek harian: {slug: [masalah]} untuk coach keluar. */
+function outDaily_() {
+  var all = json_('COACHES', {}), hubCoaches = null, out = {}, today = todayWib_();
+  Object.keys(all).sort().forEach(function (slug) {
+    var o = outState_(slug);
+    if (!o || o.done) return;
+    var probs = [], left = dayDiff_(today, o.deleteOn);
+    if (left <= PUSAT_OUT_WARN) {
+      probs.push('Hapus akun Google coach ' + slug + ' (' + (left > 0 ? 'jadwal ' + o.deleteOn + ', ' + left + ' hari lagi' : left === 0 ? 'jadwal hari ini, ' + o.deleteOn : 'lewat jadwal ' + o.deleteOn) +
+        '). Manual oleh pemilik: masuk ke akun Google coach → myaccount.google.com → Data & privasi → Hapus akun Google. Lalu tekan "Akun sudah dihapus" di /adminxnk.');
+    }
+    if (o.final && o.final.state === 'gagal') probs.push('Backup akhir gagal (' + (o.final.error || '-') + '); dicoba lagi otomatis.');
+    if (hubCoaches === null) hubCoaches = hubJson_().coaches || [];
+    var hit = hubCoaches.filter(function (x) { return x && x.slug === slug; })[0];
+    if (hit && hit.inactive !== true && dayDiff_(o.day, today) >= 1) probs.push('Situs coach masih aktif di hub.json. Jalankan Hub XNK aksi nonaktif, slug ' + slug + '.');
+    if (probs.length) out[slug] = probs;
+  });
   return out;
 }

@@ -9,7 +9,9 @@ WA atau data kesehatan klien yang pernah sampai ke XNK HQ.
 | XNK HQ (doPost, cek harian, email, aksi GitHub) | `apps-script/xnk-pusat/src/Pusat.gs`, tes `apps-script/xnk-pusat/tests/` |
 | Laporan tiap coach | `hubStatus(secret)` di `pt-scheduler/src/HubStatus.gs` (publik, dijaga `HUB_SECRET`; produksi selalu menolak) |
 | Pendaftaran coach | wizard langkah 4 → `XNK.registerPusat` (`lib-extra/LibApi.gs`): rahasia baru disimpan hanya bila Pusat menerima |
+| Langganan bulanan (T-2251) | `SUB_<slug>` + `pusatSubSave` di `Pusat.gs` → `hubReadonly(secret, on, note)` di `pt-scheduler/src/Langganan.gs` (coach) |
 | Backup mingguan (T-2250) | `hubExport(secret, req)` di `HubStatus.gs` (coach) → `runPusatBackup` di `Pusat.gs` (pemilik) |
+| Coach keluar (T-2252) | `pusatLeave` + `OUT_<slug>` di `Pusat.gs` → `hubReadonly(…, left)` (coach) + Hub XNK aksi `nonaktif` (`hub.json` `inactive`) |
 | Dasbor | `hub-site/adminxnk.html` → `xnk.web.id/adminxnk/` (CSP ketat, token di `sessionStorage` `adminxnk:`) |
 | Pasang / perbarui | workflow **XNK Library**: aksi `buat-pusat` sekali, lalu job `pusat` di setiap push ke main |
 
@@ -29,7 +31,7 @@ Bergaya aplikasi Mac, satu file `hub-site/adminxnk.html` (CSP ketat: tanpa skrip
 - Konfirmasi memakai dialog sendiri (bukan `window.confirm`), Ganti slug dan Tempat memakai form kecil di inspektur.
   Pilihan coach dan saringan disimpan di `sessionStorage` `adminxnk:ui`. Diperiksa `tools/hub-check.js` (1440 px dan
   390 px; `HUB_SHOTS=<folder>` menyimpan tangkapan layar).
-- Proyek Apps Script yang sudah ada masih bernama "XNK Pusat" di editor; ganti namanya di editor bila ingin (tidak wajib).
+- Proyek Apps Script yang sudah ada masih bernama "XNK HQ" di editor; ganti namanya di editor bila ingin (tidak wajib).
 
 ### Grafik dan riwayat (T-2262)
 
@@ -164,3 +166,90 @@ backup diganti namanya (ID sama; gagal = folder lama tetap dipakai dan disebut d
 `{aksi: 'ganti-slug', slug, slug_baru}` (tanpa `GITHUB_TOKEN` = pesan langkah manual; sudah diganti di hub.json =
 dilewati). Jawabannya `{slug, from, site, folder, hub}`, masing-masing `'ok'` atau pesan. Langkah untuk pemilik:
 [Hub.md](Hub.md#ganti-slug-coach-t-2243).
+
+## Langganan bulanan (T-2251)
+
+Setiap coach punya data langganan di Script Property XNK HQ `SUB_<slug>`: paket (**gratis** atau **bulanan**), harga
+(Rp), jatuh tempo (tanggal WIB), email coach, sakelar *baca saja* (`auto` / `on` / `off`) dan riwayat bayar (24 terakhir).
+**Coach tanpa data = gratis = tidak pernah baca saja.** Itu bawaan untuk semua coach yang sudah ada (claudia, vinna):
+tidak ada yang berubah sampai pemilik sendiri mengubah paketnya, dan coach gratis tidak pernah dihubungi untuk ini.
+
+- **Status** (`subStatus_`, murni): `aktif` → `segera` (≤ 7 hari ke jatuh tempo) → `tenggang` (sudah lewat, 7 hari) →
+  `lewat` = baca saja otomatis. Sakelar tangan menang: `on` menyalakan baca saja kapan saja (juga untuk coach gratis),
+  `off` mematikannya walau lewat. Bulanan tanpa jatuh tempo tidak pernah baca saja.
+- **Tandai lunas** (`pusatAction(token, 'sub-paid', slug)`): jatuh tempo maju satu bulan (31 Jan → 28/29 Feb), satu baris
+  riwayat, sakelar kembali `auto`. Tombol **Baca saja: nyalakan / matikan / otomatis** = `sub-ro-on` / `sub-ro-off` /
+  `sub-ro-auto`. Form **Atur langganan** = `pusatSubSave(token, slug, {plan, price, due, email})` (diperiksa: bulanan butuh
+  jatuh tempo, harga bilangan bulat, email valid).
+- **Email pengingat** ke coach pada **H-7** dan **H-1** (cek harian 06:00 WIB), sekali per jatuh tempo per jenis, ke email
+  coach yang diisi di Pusat; kosong = `PUSAT_EMAIL` / akun pemilik. Isinya: tanggal, harga, masa tenggang 7 hari, dan
+  bahwa situs tidak pernah dihapus. Masa tenggang dan galat kirim masuk email masalah harian pemilik.
+- **Ke coach**: XNK HQ memanggil `hubReadonly(HUB_SECRET, menyala, catatan)` saat keadaan berubah (simpan / tombol) dan
+  di cek harian untuk coach bulanan atau yang pernah dikirimi baca saja. Jawabannya disimpan di `pushed`
+  (`{on, note, at, error}`); `/adminxnk` menampilkan galat "Coach belum menerima". Coach dengan Library lama menjawab
+  `unknown_fn` → "perbarui coach".
+- **Di coach** (`src/Langganan.gs`, Script Properties `XNK_READONLY`, `XNK_READONLY_NOTE`, `XNK_READONLY_AT`): saat
+  menyala, satu gerbang (`_readonlyGate_`, di `doPost` dan `XNK.run`) menolak semua fungsi **tulis** dengan
+  "Mode baca saja: data bisa dilihat, tetapi belum bisa diubah untuk sementara." (`code: 'readonly'`). Baca, login, ganti
+  PIN, sakelar push perangkat, tanda "sudah dilihat" dan trigger pengingat tetap jalan. Daftar ada di
+  `pt-scheduler/tests/api-lists.js` (`WRITE` / `READ_OK`; `tests/readonly.test.js` gagal bila ada fungsi API yang belum
+  diklasifikasi) dan `_apiWrites_()` di `Api.gs` (dibuat `tools/build-api.js`). Panel menampilkan pita "Mode baca saja"
+  dengan catatan pengelola (`getAdminBootstrap.readonly`); portal klien hanya "data hanya bisa dilihat"
+  (`getPortalBootstrap.readonly`, tanpa cerita langganan). **Produksi xnk.my.id tidak punya `HUB_SECRET`**:
+  `hubReadonly` selalu menolak dan `XNK_READONLY` yang diisi tangan tidak berlaku.
+- **Izin**: tidak ada izin Google baru (MailApp dan UrlFetch sudah dipakai XNK HQ).
+
+## Coach keluar (T-2252)
+
+Untuk coach yang berhenti memakai XNK. Situs ditutup dengan rapi, coach mendapat semua datanya dalam Excel, dan
+akun Google coach dihapus **oleh pemilik sendiri** 30 hari kemudian. **Kode tidak pernah menghapus data klien,
+spreadsheet, atau akun Google.** Coach lain tidak terpengaruh.
+
+### Langkah untuk pemilik
+
+1. Buka `xnk.web.id/adminxnk`, masuk dengan PIN.
+2. Di kartu coach itu tekan **Coach keluar…** (tombol merah). Baca ringkasannya, lalu **ketik slug coach persis**
+   (mis. `claudia`) dan OK. Slug salah = tidak ada yang berubah.
+3. XNK HQ langsung:
+   - menyalakan **mode baca saja permanen** di coach (coach dan klien masih bisa melihat data, tidak bisa mengubahnya);
+   - mematikan **notifikasi push** coach itu;
+   - membuat folder Drive **`XNK Backup/<slug>/Akhir`** dan memulai **backup akhir** (berjalan terus tiap ±1 menit
+     sampai selesai, biasanya beberapa menit);
+   - menjalankan workflow **Hub XNK** aksi `nonaktif`: ±2 menit kemudian `xnk.web.id/<slug>/`, `/klien/` dan `/info/`
+     menjadi halaman **"Situs coach ini tidak aktif lagi"** dengan tombol kontak Anda (`contactUrl`).
+4. Setelah backup akhir selesai Anda mendapat email **"backup akhir <slug> siap"** dan kartu coach menampilkan link
+   **Excel untuk coach**, **Spreadsheet** dan **Folder Akhir**. Kirim Excel ke coach: buka link → titik tiga →
+   **Bagikan** (email coach), atau **Download** lalu kirim lewat email/WhatsApp.
+5. Kartu menampilkan **jadwal hapus akun Google coach** (H+30). Mulai **H-3** email harian XNK HQ berisi
+   "Hapus akun Google coach <slug>". Hapus akunnya sendiri (masuk ke akun coach → myaccount.google.com →
+   **Data & privasi** → **Hapus akun Google**), lalu tekan **Akun sudah dihapus** di kartu: pengingat berhenti dan
+   coach tidak ditanya lagi. Spreadsheet coach (dan data klien di dalamnya) ikut terhapus bersama akun itu; salinan
+   akhir tetap ada di Drive Anda.
+6. **Batal?** Tekan **Aktifkan lagi** sebelum H+30 (dan sebelum akun dihapus): situs kembali ke aplikasi, baca saja
+   kembali ke hitungan langganan (gratis = mati), tanda keluar hilang. Push tetap mati sampai Anda menyalakannya lagi.
+
+Tanpa `GITHUB_TOKEN` di XNK HQ, langkah situs berhenti dengan pesan: jalankan sendiri **repo hub → Actions → Hub XNK
+→ Run workflow**, aksi `nonaktif` (atau `aktifkan`), slug coach. Selama `hub.json` belum menandai coach tidak aktif,
+kartu menampilkan "Situs masih aktif di hub" dan mulai hari berikutnya hal itu masuk email harian.
+
+### Cara kerjanya
+
+- **XNK HQ** (`pusatLeave(token, slug, konfirmasi)`, hanya pemilik; konfirmasi harus sama dengan slug): Script
+  Property `OUT_<slug>` = `{at, day, deleteOn (H+30), done, hub, final: {state antre|jalan|selesai|gagal, dir, dirUrl,
+  fileUrl, xlsxUrl, xlsxError, error, at}}`. `roWant_` membuat keadaan baca saja coach keluar selalu `{on: true,
+  catatan, left: true}`, menimpa langganan dan sakelar tangan, dan cek harian mengirimnya ulang setiap pagi
+  (`subSync_` dengan `force`). Coach keluar: tidak ada email tagihan, tidak ada backup mingguan, tidak ada di
+  `pusatPushTargets`, `push-on` / langganan ditolak, status hanya memeriksa bahwa baca saja menyala. `OUT_` ikut
+  pindah saat ganti slug. Aksi `pusatAction` `leave-undo` (sebelum `deleteOn`, `done` kosong) dan `leave-done`.
+- **Backup akhir**: `BKNOW_<slug>` + trigger sekali jalan; `runPusatBackup` memasang trigger sekali jalan berikutnya
+  selama ada backup akhir yang belum selesai (`outPending_`), jadi tidak menunggu jam. Backup yang dimulai sebelum
+  coach keluar tidak dihitung sebagai backup akhir. Selesai (`outFinalize_`): spreadsheet dipindah ke folder `Akhir`
+  (tidak ikut dipangkas 8 salinan), Drive mengekspor .xlsx (batas ekspor Drive 10 MB) yang diunggah ke folder yang
+  sama, lalu email ke pemilik. Excel gagal = spreadsheet akhir tetap ada (unduh lewat File → Download). Gagal
+  backup = dicoba lagi otomatis (6 jam) dan masuk email harian.
+- **Coach** (`src/Langganan.gs`): `hubReadonly(secret, true, catatan, true)` menulis `XNK_LEFT=true` (hanya bersama
+  baca saja; panggilan tanpa argumen ke-4 menghapusnya). `_hubLeft_()` (hanya dengan `HUB_SECRET`, produksi tidak
+  pernah) membuat `runWarmTick` berhenti; `hubStatus().left` melapor. Push sudah mati lewat `hubPushKey(…, false)`.
+- **Hub** ([Hub.md](Hub.md#coach-tidak-aktif-t-2252)): `hub.json` `"inactive": true` (aksi `nonaktif` / `aktifkan`).
+- **Izin**: tidak ada izin Google baru (`drive.file` sudah dipakai backup; ekspor dan unggah hanya untuk berkas buatan
+  XNK HQ sendiri).
