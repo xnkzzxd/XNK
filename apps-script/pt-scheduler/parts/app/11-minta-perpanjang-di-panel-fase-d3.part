@@ -21,13 +21,12 @@
       ? 'Setujui perpanjangan <b>' + h(r.name) + '</b> (' + h(r.packageName) + ')? Sesi klien direset ke paket baru dan transaksi dicatat. Pastikan pembayaran sudah diterima.'
       : 'Tolak permintaan perpanjang <b>' + h(r.name) + '</b>? Data klien tidak berubah.';
     window.showConfirmModal(msg, function () {
+      // Antrean simpan (nomor pesanan + catatan Idem): kartu hilang sekarang; sesi & transaksi baru dimuat setelah server selesai.
       window.renewals = (window.renewals || []).filter(x => x.id !== id);
       window.renderDashboard();
-      window.showToast(approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.');
-      adminCall('decideRenewal', id, approve).then(function () {
-        return approve ? window.loadAllData() : null;
-      }).then(function () { return window.loadRenewals(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); window.loadRenewals(); });
+      optimistic({ q: { mode: 'admin', fn: 'decideRenewal', args: [id, approve] }, ok: approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.', label: approve ? 'Setujui perpanjangan' : 'Tolak perpanjangan',
+        then: function () { Promise.resolve(approve ? window.loadAllData() : null).then(function () { return window.loadRenewals(); }).catch(function () {}); },
+        undo: function () { window.renewals = (window.renewals || []).concat([r]); window.renderDashboard(); } });
     }, approve ? { title: 'Setujui perpanjangan?', confirmText: 'Setujui' } : { title: 'Tolak permintaan?', confirmText: 'Tolak', variant: 'danger' });
   };
 
@@ -71,7 +70,8 @@
     window.shareBadge = (d.badges || []).filter(function (b) { return ids.indexOf(b.id) !== -1; }).pop() || null;
     $('pg-badge-share').setAttribute('data-text', 'Aku baru meraih badge ' + labels.join(' dan ') + ' di XNK Personal Training! 💪');
     openSheet('sheet-badge');
-    memberCall('markBadgesSeen', ids).then(function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r, true); } }).catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markBadgesSeen', args: [ids] }, ok: false, label: 'Badge dilihat',
+      then: function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r, true); } } });
   }
   window.pgShareBadge = function () {
     if (window.shareOn !== false && window.shareBadge && window.shareOpen) { window.shareCard('badge', '', { badge: window.shareBadge }); return; }
@@ -142,8 +142,12 @@
   };
   window.pgDeleteAdminEntry = function (memberId, id) {
     window.showConfirmModal('Catatan ini dihapus permanen.', function () {
-      adminCall('deleteMemberMeasurement', id).then(function (d) { window.pgSetAdmin(memberId, d); window.showToast('Catatan dihapus.'); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: catatan hilang sekarang; ringkasan progres dari server menyusul. Ditolak = kembali.
+      const old = pg.admin[memberId];
+      if (old && !old.error) window.pgSetAdmin(memberId, Object.assign({}, old, { entries: (old.entries || []).filter(x => String(x.id) !== String(id)) }));
+      optimistic({ q: { mode: 'admin', fn: 'deleteMemberMeasurement', args: [id] }, ok: 'Catatan dihapus.', label: 'Hapus ukuran tubuh',
+        then: function (d) { if (d && !d.error) window.pgSetAdmin(memberId, d); else window.pgLoadAdmin(memberId); },
+        undo: function () { if (old) window.pgSetAdmin(memberId, old); } });
     }, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
   };
   function pgStore(d) {
@@ -194,7 +198,7 @@
     fail('');
     const mode = pg.mode, mid = pg.memberId, tgl = $('pg-tanggal').value;
     optimistic({ sheet: true, errEl: 'pg-err', ok: 'Tersimpan.', label: 'Ukuran tubuh',
-      call: function () { return mode === 'admin' ? adminCall('saveMemberMeasurement', mid, Object.assign({ tanggal: tgl }, data)) : memberCall('saveMyMeasurement', data); },
+      q: mode === 'admin' ? { mode: 'admin', fn: 'saveMemberMeasurement', args: [mid, Object.assign({ tanggal: tgl }, data)] } : { mode: 'member', fn: 'saveMyMeasurement', args: [data] },
       then: function (d) {
         pgStore(d);
         if (mode !== 'admin' && window.shareMoment && d && d.entries && d.entries.length >= 2) window.shareMoment('ukuran', 'Ukuran tersimpan. Bagikan perubahanmu?');
@@ -245,7 +249,7 @@
       if (b64.length > 6900000) throw new Error('Foto terlalu besar. Coba foto lain.');
       return memberCall('uploadMyProgressPhoto', b64, 'image/jpeg', pg.side);
     }).then(function (d) { done(); pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); pgRenderPhotoList(); window.showToast('Foto tersimpan.'); })
-      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.pgViewPhoto = function (id) {
     pg.viewId = id;
@@ -264,8 +268,13 @@
   window.pgDeletePhoto = function () {
     const id = pg.viewId;
     window.showConfirmModal('Foto ini dihapus permanen dari Drive.', function () {
-      memberCall('deleteMyProgressPhoto', id).then(function (d) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); window.pgOpenPhotos('member'); window.showToast('Foto dihapus.'); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: foto hilang sekarang; ditolak = kembali.
+      const old = pg.data;
+      if (old && Array.isArray(old.photos)) { pg.data = Object.assign({}, old, { photos: old.photos.filter(x => String(x.id) !== String(id)) }); window.patchPortalMore('progress', pg.data); }
+      pgRenderCard(); window.pgOpenPhotos('member');
+      optimistic({ q: { mode: 'member', fn: 'deleteMyProgressPhoto', args: [id] }, ok: 'Foto dihapus.', label: 'Hapus foto progres',
+        then: function (d) { if (d && !d.error) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); } },
+        undo: function () { pg.data = old; window.patchPortalMore('progress', old); pgRenderCard(); } });
     }, { title: 'Hapus foto?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -321,8 +330,12 @@
     const id = window.taskDoneId;
     if (!id) return;
     window.taskDoneId = null;
+    // Antrean simpan: PR langsung tercentang (juga di salinan perangkat); ditolak = kembali.
+    const c = window.myTasks, t = c && c.state === 'ok' ? c.list.find(x => String(x.id) === String(id)) : null, was = t ? t.status : null;
+    const paint = function () { if (c && c.state === 'ok') window.patchPortalMore('tasks', c.list); renderMyTasksCard(); };
+    if (t) { t.status = 'done'; paint(); }
     optimistic({ q: { mode: 'member', fn: 'completeMyTask', args: [id, $('task-done-note').value.trim()] }, sheet: true, ok: 'PR selesai. Kerja bagus!', label: 'PR',
-      then: function () { window.loadMyTasks(true); }, undo: function () { window.taskDoneId = id; } });
+      then: function () { window.loadMyTasks(true); }, undo: function () { window.taskDoneId = id; if (t) { t.status = was; paint(); } } });
   };
 
   // ── Tab klien: Progres, Program, Info & Tips, Lainnya (Fase J) ───────────────
@@ -717,7 +730,11 @@
   window.rtDelete = function (hari) {
     if (!hari) return;
     window.showConfirmModal('Rutinitas <b>' + h(hari) + '</b> dihapus. Catatan latihannya tetap tersimpan.', function () {
-      memberCall('deleteMyRoutine', hari).then(function (d) { rtSaved(d, 'Rutinitas dihapus.'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: rutinitas hilang sekarang (juga di salinan perangkat); ditolak = kembali.
+      const old = rtData();
+      if (old) rtSaved(Object.assign({}, old, { own: (old.own || []).filter(x => x.hari !== hari) }));
+      optimistic({ q: { mode: 'member', fn: 'deleteMyRoutine', args: [hari] }, ok: 'Rutinitas dihapus.', label: 'Hapus rutinitas',
+        then: function (d) { if (d && !d.error) rtSaved(d); }, undo: function () { if (old) rtSaved(old); } });
     }, { title: 'Hapus rutinitas?', confirmText: 'Hapus', variant: 'danger' });
   };
   window.rtDup = function (hari) {
@@ -726,14 +743,17 @@
     let n = 2, name;
     do { name = hari.slice(0, 36) + ' (' + n + ')'; n++; } while (taken.indexOf(name.toLowerCase()) !== -1);
     window.closeModal();
-    memberCall('saveMyRoutine', '', { hari: name, items: d.items }).then(function (r) { rtSaved(r, 'Disalin jadi "' + name + '".'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Antrean simpan (nomor pesanan + catatan Idem): salinan tampil sekarang; versi rapi dari server menyusul.
+    rtSaved(Object.assign({}, data, { own: (data.own || []).concat([{ hari: name, items: d.items }]) }));
+    optimistic({ q: { mode: 'member', fn: 'saveMyRoutine', args: ['', { hari: name, items: d.items }] }, ok: 'Disalin jadi "' + name + '".', label: 'Salin rutinitas',
+      then: function (r) { if (r && !r.error) rtSaved(r); }, undo: function () { rtSaved(data); } });
   };
   // Salin hari program coach (template kosong) atau template Jelajahi ke rutinitas sendiri.
   window.rtCopy = function (template, hari) {
     window.closeModal();
     memberCall('copyRoutineToMine', template ? { template: template } : { hari: hari }).then(function (r) {
       rtSaved(r, (r.added || []).length ? 'Ditambahkan ke Rutinitas saya: ' + r.added.join(', ') : 'Disalin.');
-    }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.rtExplore = function () {
     const list = (rtData() || {}).explore || [];

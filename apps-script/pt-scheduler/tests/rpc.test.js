@@ -98,3 +98,26 @@ test('Scripts.html still declares the shared helpers both pages need', () => {
   const { ctx } = load();
   for (const n of ['formatRp', 'sanitizePhone', 'escapeHtml', '_lsGet', '_lsSet', 'rpc', 'hasServer']) assert.equal(typeof ctx[n], 'function', n);
 });
+
+// Nomor pesanan + tanda galat (antrean simpan, 2026-11-20).
+test('rpc over fetch: meta.cid / re go into the body; without meta the body is unchanged', async () => {
+  let body;
+  const f = (url, opt) => { body = JSON.parse(opt.body); return answer({ ok: true, data: 1, v: 1, dup: true })(); };
+  const { ctx } = load({ __globals: { fetch: f }, XNK_CONFIG: { exec: 'https://x/exec' } });
+  await ctx.rpc('addTask', ['t', {}], { cid: 'c-abc-123', re: true });
+  assert.deepEqual(body, { fn: 'addTask', args: ['t', {}], cid: 'c-abc-123', re: 1 });
+  await ctx.rpc('addTask', ['t', {}]);
+  assert.deepEqual(body, { fn: 'addTask', args: ['t', {}] });
+});
+
+test('rpc over fetch: errors carry flags (net / nonJson / server + code)', async () => {
+  const cfg = { exec: 'https://x/exec' };
+  const dead = load({ __globals: { fetch: () => Promise.reject(new TypeError('Load failed')) }, XNK_CONFIG: cfg });
+  await assert.rejects(dead.ctx.rpc('addTask', []), e => e.net === true && !e.server);
+  const html = load({ __globals: { fetch: () => Promise.resolve({ status: 0, json: () => Promise.reject(new SyntaxError('x')) }) }, XNK_CONFIG: cfg });
+  await assert.rejects(html.ctx.rpc('addTask', []), e => e.nonJson === 0 || e.nonJson === true || 'nonJson' in e);
+  const ro = load({ __globals: { fetch: answer({ ok: false, error: 'Baca saja.', code: 'readonly', v: 1 }) }, XNK_CONFIG: cfg });
+  await assert.rejects(ro.ctx.rpc('addTask', []), e => e.server === true && e.code === 'readonly');
+  const busy = load({ __globals: { fetch: answer({ ok: false, error: 'Perubahan ini masih disimpan.', code: 'inflight', v: 1 }) }, XNK_CONFIG: cfg });
+  await assert.rejects(busy.ctx.rpc('addTask', []), e => e.code === 'inflight');
+});

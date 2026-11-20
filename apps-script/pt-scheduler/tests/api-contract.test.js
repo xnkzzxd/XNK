@@ -22,16 +22,26 @@ function names(re, text) {
 const all = files.map(f => ({ f, t: read(f) }));
 const scan = re => { const o = []; for (const { f, t } of all) for (const n of names(re, t).keys()) o.push([n, f]); return o; };
 
+// Simpanan lewat antrean (optimistic({ q: { mode: 'admin'|'member', fn: '…' } })) memanggil server dengan token yang sama
+// seperti adminCall / memberCall, jadi dihitung bersama.
+const queued = mode => scan(new RegExp("\\bmode:\\s*'" + mode + "',\\s*fn:\\s*'([A-Za-z0-9_]+)'", 'g'));
+
 test('contract: adminCall names are admin functions', () => {
-  const found = scan(/\badminCall\(\s*'([A-Za-z0-9_]+)'/g);
-  assert.ok(found.length > 80, 'expected many adminCall sites, found ' + found.length);
-  for (const [n, f] of found) assert.ok(L.ADMIN.includes(n), `${f}: adminCall('${n}') is not in ADMIN`);
+  const found = scan(/\badminCall\(\s*'([A-Za-z0-9_]+)'/g).concat(queued('admin'));
+  assert.ok(found.length > 80, 'expected many adminCall / queued admin sites, found ' + found.length);
+  for (const [n, f] of found) assert.ok(L.ADMIN.includes(n), `${f}: adminCall / queued admin '${n}' is not in ADMIN`);
 });
 
 test('contract: memberCall names are member functions (or public functions that take an optional token)', () => {
-  const found = scan(/\bmemberCall\(\s*'([A-Za-z0-9_]+)'/g);
+  const found = scan(/\bmemberCall\(\s*'([A-Za-z0-9_]+)'/g).concat(queued('member'));
   assert.ok(found.length > 20, 'expected many memberCall sites, found ' + found.length);
-  for (const [n, f] of found) assert.ok(L.MEMBER.includes(n) || L.PUBLIC_API.includes(n), `${f}: memberCall('${n}') is not in MEMBER/PUBLIC`);
+  for (const [n, f] of found) assert.ok(L.MEMBER.includes(n) || L.PUBLIC_API.includes(n), `${f}: memberCall / queued member '${n}' is not in MEMBER/PUBLIC`);
+});
+
+test('contract: queued saves are write functions (reads never go through the save queue)', () => {
+  // Tanda "sudah dibaca" sengaja tetap boleh di mode baca saja (READ_OK); menulisnya dua kali tidak mengubah apa-apa.
+  const markSeen = ['markSchedulesAsRead', 'markBadgesSeen', 'markGuideSeen', 'markNotifSeen'];
+  for (const [n, f] of queued('admin').concat(queued('member'))) assert.ok(L.WRITE.includes(n) || markSeen.includes(n), `${f}: queued '${n}' is not in WRITE`);
 });
 
 test('contract: publicCall names are public functions', () => {

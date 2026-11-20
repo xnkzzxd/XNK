@@ -86,10 +86,10 @@
     if (it.mode === 'admin') return ui.mode === 'admin' && !!_lsGet(ADMIN_TOKEN_KEY);
     const t = _lsGet(MEMBER_TOKEN_KEY); return !!t && it.scope === 'm:' + tokenSig(t);
   }
+  // Satu penilai galat untuk semua antrean (errKind di 01-awal): Google ramai / sinyal = coba lagi, bukan ditolak.
   function wlRetryable(err) {
     if (window.isAuthError(err)) return false;
-    const m = String((err && err.message) || err || '');
-    return !m || /network|jaringan|koneksi|failure|failed|timeout|timed out|HTTP 0|fetch|offline|sibuk|Tunggu sebentar|pratinjau|quota|internal/i.test(m);
+    return errKind(err) === 'transient' || /pratinjau/i.test(String((err && err.message) || err || ''));
   }
   window.wlFlush = function (manual, focusId) {
     if (wlRt.flushing) return Promise.resolve();
@@ -102,6 +102,7 @@
     return p.then(function (r) {
       wlRt.flushing = false;
       wlQueueSet(wlQueue().filter(x => x.id !== it.id));
+      if (window.syncPaint) window.syncPaint();
       wlSaved(it, r);
       return window.wlFlush(false);
     }).catch(function (err) {
@@ -109,10 +110,18 @@
       const all = wlQueue(), cur = all.find(x => x.id === it.id);
       if (cur) { cur.tries = (cur.tries || 0) + 1; cur.err = window.authMessage(err); cur.retry = wlRetryable(err); wlQueueSet(all); }
       wlRenderResume();
-      if (cur && (manual || cur.tries === 1)) window.showToast(cur.retry ? 'Belum terkirim. Dikirim ulang otomatis saat sinyal kembali.' : 'Gagal menyimpan: ' + cur.err);
+      if (window.syncPaint) window.syncPaint();   // lencana bilah atas menghitung latihan yang ditolak
+      if (cur && (manual || cur.tries === 1)) window.showToast(cur.retry ? 'Belum terkirim. Dikirim ulang otomatis saat sinyal kembali.' : 'Latihan belum tersimpan. Ketuk tanda di atas.');
       if (cur && cur.retry) wlRt.retry = setTimeout(function () { window.wlFlush(false); }, Math.min(300000, 20000 * Math.pow(2, Math.min(4, cur.tries - 1))));
     });
   };
+  // Antrean simpan (lencana #sync-badge): catatan latihan akun ini yang ditolak server (retry === false). Hanya membaca antrean;
+  // cara latihan disimpan tidak berubah. Ubah = wlReopen (draf), Coba lagi = kirim ulang, Buang = hapus dari antrean.
+  window.wlFailedItems = function () {
+    return wlQueue().filter(it => wlCanSend(it) && it.retry === false).map(it => ({ kind: 'wl', id: it.id, label: 'Catatan latihan ' + (it.hari ? it.hari + ' · ' : '') + it.date, err: it.err || '', at: it.at || Date.now() }));
+  };
+  window.wlRetryOne = function (id) { const all = wlQueue(), it = all.find(x => x.id === id); if (!it) return; it.retry = true; wlQueueSet(all); window.wlFlush(true, id); };
+  window.wlDrop = function (id) { wlQueueSet(wlQueue().filter(x => x.id !== id)); wlRenderResume(); if (window.syncPaint) window.syncPaint(); };
   window.wlRetryAll = function () { const all = wlQueue(); all.forEach(x => { x.retry = true; }); wlQueueSet(all); window.wlFlush(true); };
   // Antrean yang gagal validasi dibuka lagi sebagai draf supaya angkanya bisa diperbaiki.
   window.wlReopen = function (id) {
@@ -395,7 +404,7 @@
     adminCall('getWorkoutSummaryMessage', memberId, date || wd.days[0].tanggal).then(function (r) {
       const m = window.members.find(x => String(x.id) === String(memberId)) || {};
       window.sendToParentWA(m.phone, r.text);
-    }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.wkChartPick = function (scope, key) { wkPick[scope] = key; const w = $('profile-program-wrap'); if (scope === 'me') renderWorkoutCard(); else if (w) renderProgramAdmin(w.getAttribute('data-member')); };
   function renderWorkoutCard() { const el = $('pub-workout-wrap'); if (el) { const d = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null; setHTML(el, d ? workoutStatsHtml(d, 'me') : '<div class="section-head"><h3 class="section-title">Grafik latihan</h3></div>' + skel(2, true)); } }
@@ -410,7 +419,8 @@
     }
     apply();
   };
-  function programDone(d, msg) { progAdmin[progMember] = d; renderProgramAdmin(progMember); window.closeModal(); window.showToast(msg); }
+  // programSetAdmin juga menulis ke salinan halaman klien (xnk_client_cache); dulu hanya progAdmin, jadi salinan basi.
+  function programDone(d, msg) { window.programSetAdmin(progMember, d); window.closeModal(); window.showToast(msg); }
   window.programSave = function (e) {
     if (e) e.preventDefault();
     $('prg-err').textContent = '';
@@ -419,16 +429,23 @@
       const r = pfCollect()[0] || { hari: '', items: [] };
       if (!r.hari) { done(); $('prg-err').textContent = 'Beri nama rutinitas dulu.'; return; }
       memberCall('saveMyRoutine', pf.oldName, r).then(function (d) { done(); rtSaved(d, 'Rutinitas "' + r.hari + '" disimpan.'); window.closeModal(); })
-        .catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+        .catch(function (err) { done(); $('prg-err').textContent = waitErr(err); });
       return;
     }
+    // Menunggu jawaban dengan sengaja: server merapikan hari & gerakan (tebakan rep, Exercise ID) sebelum program bisa digambar.
     adminCall('saveMemberProgram', progMember, pfCollect()).then(function (d) { done(); programDone(d, d.days.length ? 'Program disimpan.' : 'Program dihapus.'); })
-      .catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+      .catch(function (err) { done(); $('prg-err').textContent = waitErr(err); });
   };
   window.programClear = function () {
     if (pf.mode === 'own') { window.closeModal(); window.rtDelete(pf.oldName); return; }
     window.showConfirmModal('Program latihan klien ini dihapus. Centang klien tetap tersimpan.', function () {
-      adminCall('saveMemberProgram', progMember, []).then(function (d) { programDone(d, 'Program dihapus.'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: program kosong langsung tampil; ditolak = program lama kembali.
+      const id = progMember, old = progAdmin[id];
+      window.closeModal();
+      window.programSetAdmin(id, Object.assign({}, old && !old.error ? old : {}, { days: [], text: '' }));
+      optimistic({ q: { mode: 'admin', fn: 'saveMemberProgram', args: [id, []] }, ok: 'Program dihapus.', label: 'Hapus program',
+        then: function (d) { if (d && !d.error) window.programSetAdmin(id, d); },
+        undo: function () { window.programSetAdmin(id, old); } });
     }, { title: 'Hapus program?', confirmText: 'Hapus', variant: 'danger' });
   };
   window.programSaveTemplate = function () {
@@ -441,15 +458,20 @@
         $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '"' + (t.name === r.name ? ' selected' : '') + '>' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
         $('prg-tpl-del').classList.remove('hide');
       });
-    }).catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+    }).catch(function (err) { done(); $('prg-err').textContent = waitErr(err); });   // menunggu: nama & jumlah hari dari server
   };
   window.programDeleteTemplate = function () {
     const name = $('prg-tpl').value; if (!name) return;
-    adminCall('deleteProgramTemplate', name).then(function () {
-      progTemplates = progTemplates.filter(t => t.name !== name);
-      $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
-      $('prg-tpl-del').classList.add('hide'); window.showToast('Template dihapus.');
-    }).catch(function (err) { $('prg-err').textContent = window.authMessage(err); });
+    const before = progTemplates.slice();
+    const paint = function () {
+      const sel = $('prg-tpl'); if (!sel) return;
+      sel.innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+      $('prg-tpl-del').classList.add('hide');
+    };
+    progTemplates = progTemplates.filter(t => t.name !== name);
+    paint();
+    optimistic({ q: { mode: 'admin', fn: 'deleteProgramTemplate', args: [name] }, ok: 'Template dihapus.', label: 'Hapus template program',
+      undo: function () { progTemplates = before; paint(); } });
   };
 
   // ── Perawatan klien (E4): catatan privat, kesehatan, assessment, tes ─────────
@@ -473,7 +495,7 @@
     adminCall('getTestResultMessage', memberId).then(function (r) {
       const m = window.members.find(x => String(x.id) === String(memberId)) || {};
       window.sendToParentWA(m.phone || '', r.text);
-    }).catch(function (err) { window.showToast(err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err)); });
   };
   const starsText = n => '★'.repeat(n) + '☆'.repeat(5 - n);
   function feedbackAdminHtml(f) {
@@ -616,11 +638,12 @@
       '<button type="button" class="btn btn-secondary" style="min-height:44px" onclick="window.decideNut(\'' + h(a.memberId) + '\',\'' + h(a.id) + '\',\'tolak\',this)">Tolak</button></div></div>';
   }
   window.decideNut = function (memberId, adviceId, decision, btn) {
-    const done = busy(btn, '…');
-    adminCall('decideNutritionAdvice', memberId, adviceId, decision).then(function () {
-      done(); window.showToast(decision === 'setuju' ? 'Target disesuaikan.' : 'Saran ditolak.');
-      window._hubAt = 0; loadHub(); return window.loadClientNutrition(memberId);
-    }).catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: saran hilang dari layar sekarang; target baru dihitung server lalu dimuat ulang.
+    const row = btn && btn.closest('.stack');
+    if (row) row.classList.add('hide');
+    optimistic({ q: { mode: 'admin', fn: 'decideNutritionAdvice', args: [memberId, adviceId, decision] }, ok: decision === 'setuju' ? 'Target disesuaikan.' : 'Saran ditolak.', label: 'Saran gizi',
+      then: function () { window._hubAt = 0; loadHub(); window.loadClientNutrition(memberId); },
+      undo: function () { if (row) row.classList.remove('hide'); } });
   };
   window.nutSet = function (memberId, d) {
     nut[memberId] = d;
@@ -650,11 +673,11 @@
   };
   window.submitNutEdit = function (e) {
     e.preventDefault();
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveClientNutrition', nutMember, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), umur: $('nut-umur').value.trim(), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
-      pantangan: nutPicked('nut-tags'), kondisi: nutPicked('nut-kondisi'), aktif: $('nut-aktif').checked })
-      .then(function () { done(); window.closeModal(); window.showToast('Data gizi disimpan.'); return window.loadClientNutrition(nutMember); })
-      .catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: lembar tertutup sekarang; target kalori & makro dihitung server lalu dimuat ulang. Ditolak = lencana (Ubah membuka lembar ini lagi).
+    const id = nutMember;
+    optimistic({ q: { mode: 'admin', fn: 'saveClientNutrition', args: [id, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), umur: $('nut-umur').value.trim(), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
+      pantangan: nutPicked('nut-tags'), kondisi: nutPicked('nut-kondisi'), aktif: $('nut-aktif').checked }] },
+      sheet: true, ok: 'Data gizi disimpan.', label: 'Data gizi', then: function () { window.loadClientNutrition(id); } });
   };
   function careDone(memberId, msg) { window.closeModal(); window.showToast(msg); return window.loadClientCare(memberId); }
   let careMember = '';
@@ -665,9 +688,13 @@
   };
   window.submitCareNotes = function (e) {
     e.preventDefault();
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveClientNotes', careMember, { flag: $('care-flag').value, notes: $('care-notes').value, birthDate: $('care-birth').value })
-      .then(function () { done(); return careDone(careMember, 'Catatan disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: catatan tampil sekarang; ditolak = catatan lama kembali.
+    const id = careMember, data = { flag: $('care-flag').value, notes: $('care-notes').value, birthDate: $('care-birth').value };
+    const old = care[id];
+    if (old && !old.error) window.careSet(id, Object.assign({}, old, data));
+    optimistic({ q: { mode: 'admin', fn: 'saveClientNotes', args: [id, data] }, sheet: true, ok: 'Catatan disimpan.', label: 'Catatan klien',
+      then: function () { window.loadClientCare(id); },
+      undo: function () { if (old) window.careSet(id, old); } });
   };
   window.openAssessment = function (id) {
     careMember = id; const a = (care[id] || {}).assessment || {};
@@ -679,14 +706,21 @@
   window.submitAssessment = function (e) {
     e.preventDefault();
     const v = k => $(k).value.trim().replace(',', '.');
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveAssessment', careMember, { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), hip: v('as-hip'),
-      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada') })
-      .then(function () {
-        done(); if (window.pgLoadAdmin) window.pgLoadAdmin(careMember);
-        const first = !((care[careMember] || {}).tests || []).length, id = careMember;
-        return careDone(careMember, 'Assessment disimpan.').then(function () { if (first) setTimeout(function () { window.openCareTests(id); }, 250); });
-      }).catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: isian assessment tampil sekarang; ukuran & ringkasan progres dari server menyusul.
+    const id = careMember, at = Date.now();
+    const data = { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), hip: v('as-hip'),
+      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada') };
+    const old = care[id];
+    const first = !((old || {}).tests || []).length;
+    if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.hip }) }));
+    optimistic({ q: { mode: 'admin', fn: 'saveAssessment', args: [id, data] }, sheet: true, ok: 'Assessment disimpan.', label: 'Assessment',
+      then: function () {
+        if (window.pgLoadAdmin) window.pgLoadAdmin(id);
+        window.loadClientCare(id);
+        // Assessment pertama: lembar tes dibuka, kecuali jawabannya baru datang lama kemudian (mis. setelah sinyal kembali).
+        if (first && Date.now() - at < 20000 && !ui.sheetOn) setTimeout(function () { window.openCareTests(id); }, 250);
+      },
+      undo: function () { if (old) window.careSet(id, old); } });
   };
   // ── Timer tes kebugaran: hitung mundur 1 menit (push-up, squat) atau stopwatch (plank) ──
   // Waktu dihitung dari jam sistem, bukan dari jumlah tick, jadi tetap benar kalau layar sempat redup.
@@ -772,8 +806,9 @@
     const values = {};
     document.querySelectorAll('#ft-fields [data-test]').forEach(function (el) { values[el.getAttribute('data-test')] = el.value.trim().replace(',', '.'); });
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    // Menunggu jawaban dengan sengaja: ringkasan & tren tes dihitung server.
     adminCall('saveFitnessTests', careMember, { tanggal: $('ft-date').value, values: values })
-      .then(function () { done(); return careDone(careMember, 'Hasil tes disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+      .then(function () { done(); return careDone(careMember, 'Hasil tes disimpan.'); }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   window.openCareHealth = function (id) {
     careMember = id; const d = care[id]; if (!d || !d.health) return;
@@ -786,9 +821,10 @@
     openSheet('modal-care-health');
   };
   window.markReviewed = function () {
-    const done = busy($('btn-review'), 'Menyimpan…');
-    adminCall('markHealthReviewed', careMember, $('care-review-note').value).then(function () { done(); return careDone(careMember, 'Ditandai sudah ditinjau.'); })
-      .catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: lembar tertutup sekarang, status tinjauan dimuat ulang dari server sesudahnya.
+    const id = careMember;
+    optimistic({ q: { mode: 'admin', fn: 'markHealthReviewed', args: [id, $('care-review-note').value] }, sheet: true, ok: 'Ditandai sudah ditinjau.', label: 'Tinjau form kesehatan',
+      then: function () { window.loadClientCare(id); } });
   };
 
   // Briefing di atas detail sesi
