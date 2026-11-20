@@ -62,6 +62,8 @@
         </div>
         <button type="button" class="icon-btn plain tb-back hide" id="topbar-back" onclick="window.navigate(this.getAttribute('data-to') || 'public-dashboard')" aria-label="Kembali"><i data-lucide="arrow-left"></i></button>
         <h1 class="topbar-title" id="page-title">XNK</h1><span class="topbar-sub" id="page-sub"></span>
+        <!-- Antrean simpan (01-awal syncPaint): di luar #topbar-actions karena isi itu ditulis ulang tiap halaman -->
+        <button type="button" class="sync-chip hide" id="sync-badge" aria-live="polite" aria-label="Semua tersimpan" onclick="window.openSyncSheet()"></button>
         <div class="topbar-actions" id="topbar-actions"></div>
       </header>
 
@@ -649,6 +651,16 @@
         <a class="btn btn-primary btn-lg btn-block" id="cal-google" href="#" target="_blank" rel="noopener"><i data-lucide="calendar-plus"></i> Google Kalender</a>
         <button type="button" class="btn btn-outline btn-lg btn-block" id="cal-ics" onclick="window.downloadIcs()"><i data-lucide="download"></i> Apple / Outlook (.ics)</button>
         <button type="button" class="btn btn-ghost btn-block" onclick="window.closeModal()">Nanti saja</button>
+      </div>
+    </div>
+
+    <!-- Antrean simpan: perubahan yang belum sampai ke server (lencana #sync-badge) -->
+    <div class="sheet sm hide" id="sheet-sync" role="dialog" aria-modal="true" aria-labelledby="sync-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="sync-title">Status simpan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:10px">
+        <p class="li-sub">Perubahan dicatat di perangkat ini dulu, lalu dikirim sendiri saat tersambung.</p>
+        <div class="stack" style="gap:10px" id="sync-list"></div>
       </div>
     </div>
 

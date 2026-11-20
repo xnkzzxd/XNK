@@ -86,10 +86,10 @@
     if (it.mode === 'admin') return ui.mode === 'admin' && !!_lsGet(ADMIN_TOKEN_KEY);
     const t = _lsGet(MEMBER_TOKEN_KEY); return !!t && it.scope === 'm:' + tokenSig(t);
   }
+  // Satu penilai galat untuk semua antrean (errKind di 01-awal): Google ramai / sinyal = coba lagi, bukan ditolak.
   function wlRetryable(err) {
     if (window.isAuthError(err)) return false;
-    const m = String((err && err.message) || err || '');
-    return !m || /network|jaringan|koneksi|failure|failed|timeout|timed out|HTTP 0|fetch|offline|sibuk|Tunggu sebentar|pratinjau|quota|internal/i.test(m);
+    return errKind(err) === 'transient' || /pratinjau/i.test(String((err && err.message) || err || ''));
   }
   window.wlFlush = function (manual, focusId) {
     if (wlRt.flushing) return Promise.resolve();

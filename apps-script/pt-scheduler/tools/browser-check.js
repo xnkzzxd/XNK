@@ -177,6 +177,8 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
           catch (e) { return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ ok: false, error: e.message, auth: false, v: 1 }) }); }
         }
         const out = env.call('doPost', { postData: { contents: raw } });   // the real gateway, allow-list and all
+        // A test can make the server save and then lose the answer (signal gone, 60 s timeout): the page sees a network error.
+        if (env.__serverLate && env.__serverLate(fn)) return route.abort('failed');
         return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: out.content });
       })();
     }
@@ -1831,6 +1833,113 @@ async function contrastReport(page) {
     noErrors(errors);
     await context.close();
   })().catch(sectionCrash);
+
+  // ── Antrean simpan "buku catatan" (2026-11-20): pengguna web tidak melihat galat untuk gangguan sementara ──
+  // Nomor pesanan (cid) hanya lewat jalur fetch → doPost, jadi bagian ini hanya untuk RPC_MODE=fetch.
+  if (RPC_MODE === 'fetch') {
+    console.log('Antrean simpan · Google ramai, jawaban hilang, ditolak, tanpa sinyal, muat ulang');
+    await (async () => {
+      const env = seededEnv();
+      const token = env.adminToken();
+      const nSched = () => env.call('getSchedules', token).filter(s => s.memberId === 'PT-A').length;
+      const tRows = () => (env.sheet('Tasks') ? Math.max(0, env.sheet('Tasks').getLastRow() - 1) : 0);   // data rows (the sheet appears with its header on the first task)
+      const book = (page, time) => page.evaluate(t => {
+        const d = new Date(Date.now() + 2 * 86400000);
+        const ymd = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        window.openBookingSheet({ date: ymd, time: t });
+        const sel = document.getElementById('sch-member'); if (sel) sel.value = 'PT-A';
+        document.getElementById('edit-sch-date').value = ymd; document.getElementById('edit-sch-time').value = t;
+        document.getElementById('edit-sch-date').form.requestSubmit();
+      }, time);
+      const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { touch: true });
+      const popup = () => page.locator('#modal-confirm').isVisible();
+
+      // 1. Google ramai sekali ("We're sorry…"): tanpa pop-up, booking tetap tampil, tersimpan sekali setelah dicoba lagi.
+      let n = 0;
+      env.__serverFault = fn => { if (fn === 'addSchedule' && ++n === 1) throw new Error("We're sorry, a server error occurred. Please wait a bit and try again."); };
+      const s0 = nSched();
+      await book(page, '10:00');
+      await page.waitForTimeout(1500);
+      check(!(await popup()), 'Google busy: no "Gagal menyimpan" pop-up');
+      check(await page.evaluate(() => window.schedules.some(s => s.pending)), 'Google busy: the booking stays on screen');
+      await page.waitForTimeout(6500);
+      check(nSched() === s0 + 1, 'Google busy: saved once after the quiet retry');
+      env.__serverFault = null;
+
+      // 2. Server menyimpan lalu jawabannya hilang: kirim ulang dengan nomor yang sama → tetap satu baris.
+      let late = 0;
+      env.__serverLate = fn => fn === 'addSchedule' && ++late === 1;
+      await book(page, '12:00');
+      await page.waitForTimeout(7500);
+      check(nSched() === s0 + 2, 'answer lost after the save: resend with the same number, still one new row');
+      check(!(await page.evaluate(() => window.schedules.some(s => /^tmp-/.test(s.id)))), 'answer lost: temporary id replaced by the real one');
+      check(!(await popup()), 'answer lost: no pop-up');
+      env.__serverLate = null;
+
+      // 3. Ditolak server: lencana, bukan pop-up; daftar menunjukkan alasannya; Buang membersihkan.
+      env.__serverFault = fn => { if (fn === 'addTask') throw new Error('Judul terlalu panjang.'); };
+      await page.evaluate(() => window.optimistic({ q: { mode: 'admin', fn: 'addTask', args: [{ memberId: 'PT-A', title: 'X', category: 'aktivitas' }] }, label: 'PR', ok: false }));
+      await page.waitForTimeout(1200);
+      check(!(await popup()), 'rejected: no pop-up');
+      check(await page.isVisible('#sync-badge') && /Belum tersimpan/.test(await page.textContent('#sync-badge')), 'rejected: badge says "Belum tersimpan"');
+      const chip = await page.locator('#sync-badge').boundingBox();
+      check(!!chip && chip.height >= 44, 'badge is a 44 px touch target');
+      check((await overflowX(page)) <= 0, 'phone: no sideways scroll with the badge');
+      await page.click('#sync-badge');
+      await page.waitForTimeout(500);
+      check(await page.isVisible('#sheet-sync'), 'badge opens the list');
+      check((await page.textContent('#sync-list')).includes('Judul terlalu panjang'), 'list shows the server reason');
+      await page.locator('#sync-list button', { hasText: 'Buang' }).first().click();
+      await page.waitForTimeout(500);
+      check(!(await page.isVisible('#sync-badge')), 'Buang clears the badge');
+      env.__serverFault = null;
+
+      // 4. Tanpa sinyal: tetap di perangkat, terkirim sekali saat sinyal kembali.
+      const t0 = tRows();
+      await context.setOffline(true);
+      await page.evaluate(() => { window.optimistic({ q: { mode: 'admin', fn: 'addTask', args: [{ memberId: 'PT-A', title: 'Jalan kaki 20 menit', category: 'aktivitas' }] }, label: 'PR', ok: false }); });   // tidak ditunggu: tanpa sinyal janji ini belum selesai
+      await page.waitForTimeout(800);
+      check(await page.isVisible('#sync-badge'), 'offline: badge shows the change waiting on this device');
+      check(tRows() === t0, 'offline: nothing sent yet');
+      await context.setOffline(false);
+      await page.waitForTimeout(2500);
+      check(tRows() === t0 + 1, 'back online: saved once');
+      check(!(await page.isVisible('#sync-badge')), 'back online: badge hidden again');
+      noErrors(errors);
+      await context.close();
+
+      // 5. Pesanan yang tertinggal (tab ditutup sebelum terkirim) dikirim saat aplikasi dibuka lagi.
+      const sig = t => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
+      const item = { id: 'creload-0001', mode: 'admin', fn: 'addTask', args: [{ memberId: 'PT-A', title: 'Dari antrean', category: 'aktivitas' }], sig: sig(token), label: 'PR', at: Date.now(), tries: 0, nextAt: 0, state: 'pending', err: '' };
+      const t1 = tRows();
+      const re = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_sync: JSON.stringify([item]) }, { touch: true, wait: 3500 });
+      check(tRows() === t1 + 1, 'reopen: a change left in the device queue is sent');
+      await re.context.close();
+      const re2 = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_sync: JSON.stringify([Object.assign({}, item, { tries: 1 })]) }, { touch: true, wait: 3500 });
+      check(tRows() === t1 + 1, 'reopen again with the same number: server replays, no second task');
+      await re2.context.close();
+    })().catch(sectionCrash);
+
+    // 6. Portal: memuat gagal (Google kehabisan kuota) dengan salinan di perangkat → jadwal tetap tampil, salinan tidak dikosongkan.
+    console.log('Antrean simpan · portal tidak mengosongkan salinan saat gagal memuat');
+    await (async () => {
+      const env = seededEnv();
+      const first = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, []);
+      await first.page.waitForTimeout(1500);
+      const st = await first.page.evaluate(() => ({ t: localStorage.getItem('xnk_member_token'), c: localStorage.getItem('xnk_portal_cache') }));
+      await first.context.close();
+      const nBefore = JSON.parse(st.c || '{}').schedules ? JSON.parse(st.c).schedules.length : 0;
+      check(nBefore > 0, 'portal copy holds own sessions');
+      env.__serverFault = fn => { if (fn === 'getPortalBootstrap') throw new Error('Service invoked too many times for one day: urlfetch.'); };
+      const p = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: st.t, xnk_portal_cache: st.c }, { wait: 2000 });
+      check((await p.page.evaluate(() => window.schedules.length)) === nBefore, 'failed load: sessions still on screen');
+      const after = await p.page.evaluate(() => { try { return JSON.parse(localStorage.getItem('xnk_portal_cache')).schedules.length; } catch (e) { return -1; } });
+      check(after === nBefore, 'failed load: device copy not emptied');
+      check(await p.page.isVisible('#sync-badge') && /Data/.test(await p.page.textContent('#sync-badge')), 'failed load: badge shows the copy time');
+      noErrors(p.errors);
+      await p.context.close();
+    })().catch(sectionCrash);
+  }
 
   // ── Tema manual ───────────────────────────────────────────────────────────
   console.log('Tema manual');

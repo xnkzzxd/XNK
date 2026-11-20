@@ -446,9 +446,9 @@
     if (!title) { window.showToast('Judul wajib diisi.'); $('task-title').focus(); return; }
     if (f.repeat !== 'none' && !dueIso) { window.showToast('PR berulang wajib punya tenggat awal.'); $('task-due').focus(); return; }
     const data = { title: title, description: $('task-desc').value.trim(), category: f.category, dueDate: isoToDmy(dueIso), repeat: f.repeat };
-    // Ubah = upsert (boleh masuk outbox); tambah baru tidak diantre supaya tidak dobel.
+    // Keduanya lewat antrean simpan: ubah = upsert, tambah baru dijaga nomor pesanan (Idem.gs), jadi kiriman ulang tidak dobel.
     optimistic(Object.assign(f.id ? { q: { mode: 'admin', fn: 'updateTask', args: [Object.assign({ id: f.id }, data)] } }
-      : { call: function () { return adminCall('addTask', Object.assign({ memberId: f.memberId }, data)); } },
+      : { q: { mode: 'admin', fn: 'addTask', args: [Object.assign({ memberId: f.memberId }, data)] } },
       { sheet: true, ok: f.id ? 'PR diperbarui.' : 'PR ditambahkan.', label: 'PR', then: function () { afterTaskChange(f.memberId); } }));
   };
 

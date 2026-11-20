@@ -374,7 +374,7 @@
   }
 
   // Error yang tetap dilempar server (kuota, batas hari, sibuk, koneksi) tampil di dalam sheet, bukan toast.
-  const isNetworkError = msg => !msg || /network|failed to fetch|HTTP \d|timed? ?out|connection|koneksi|server error|sorry|exceeded/i.test(msg);
+  const isNetworkError = msg => !msg || /connection/i.test(msg) || errKind(new Error(msg)) === 'transient';   // satu penilai (01-awal)
   function showFormNotice(form, err) {
     if (form.getAttribute('aria-busy')) hideChecking(form);
     clearSchNotice(form);
@@ -642,7 +642,7 @@
       data.id = window.selectedScheduleDetailId;
       const s = schedById(data.id);
       const old = s ? { start: s.start, end: s.end, notes: s.notes } : null;
-      optimistic({ call: function () { return adminCall('updateScheduleData', data); }, sheet: true, ok: 'Jadwal diperbarui.', label: 'Jadwal',
+      optimistic({ q: { mode: 'admin', fn: 'updateScheduleData', args: [data] }, sheet: true, ok: 'Jadwal diperbarui.', label: 'Jadwal',
         undo: function () { if (s && old) { Object.assign(s, old); window.updateUI(); } window.isEditScheduleMode = true; } });
       if (s) { s.start = data.start; s.end = data.end; s.notes = notes; }
       window.updateUI();
@@ -687,10 +687,10 @@
     if (isClient) { clientBookSingle(form, btn, data, member); return; }
 
     // Optimistic: sesi langsung di kalender dengan id sementara; ditolak = dihapus lagi + pop-up, lembar dibuka.
-    // adminCreate: "Selesai", ubah, geser, hapus, catatan pada sesi ini menunggu di jalur tulis lalu memakai id asli.
+    // Antrean simpan + tmp: "Selesai", ubah, geser, hapus, catatan pada sesi ini menunggu pembuatnya lalu memakai id asli.
     const tmp = window.tmpId();
     const row = Object.assign({}, data, { id: tmp, title: member.name, status: 'read', coachId: '', coachName: '', pending: true });
-    optimistic({ call: function () { return adminCreate(tmp, 'addSchedule', data); }, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
+    optimistic({ q: { mode: 'admin', fn: 'addSchedule', args: [data] }, tmp: tmp, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
       then: function (res) { row.id = res.id; delete row.pending; row.coachId = res.coachId || ''; row.coachName = res.coachName || ''; window.updateUI(); },
       undo: function () { window.schedules = window.schedules.filter(x => x !== row); window.updateUI(); } });
     window.schedules.push(row);

@@ -35,6 +35,7 @@ function makeEnv(handlers) {
   function runner() {
     let ok, fail;
     const p = new Proxy({}, { get: (_, prop) => {
+      if (prop === 'withMeta') return m => { p.__meta = m; return p; };
       if (prop === 'withSuccessHandler') return f => { ok = f; return p; };
       if (prop === 'withFailureHandler') return f => { fail = f; return p; };
       return function () {

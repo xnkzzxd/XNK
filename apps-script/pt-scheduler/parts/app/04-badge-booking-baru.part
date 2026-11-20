@@ -680,7 +680,7 @@
     };
     const old = s ? { start: s.start, end: s.end } : null;
     if (s) { s.start = data.start; s.end = data.end; }
-    optimistic({ call: function () { return adminCall('updateScheduleData', data); }, ok: 'Jadwal dipindah ke ' + fmtShort(event.start) + ' ' + fmtTime(event.start) + '.', label: 'Pindah jadwal',
+    optimistic({ q: { mode: 'admin', fn: 'updateScheduleData', args: [data] }, ok: 'Jadwal dipindah ke ' + fmtShort(event.start) + ' ' + fmtTime(event.start) + '.', label: 'Pindah jadwal',
       then: function () { refreshDetail(); },
       undo: function () { if (s && old) Object.assign(s, old); revert(); } });
   };
@@ -778,7 +778,7 @@
       if (m) m.usedSessions = (Number(m.usedSessions) || 0) + 1;
       window.updateUI();
       setTimeout(function () { window.openSessionNote(s.id, true, null); }, 350);   // langsung, tanpa menunggu server
-      optimistic({ call: function () { return adminCall('completeSession', s.id, s.memberId); }, ok: 'Sesi selesai. Kuota dipotong.', label: 'Sesi selesai',
+      optimistic({ q: { mode: 'admin', fn: 'completeSession', args: [s.id, s.memberId] }, ok: 'Sesi selesai. Kuota dipotong.', label: 'Sesi selesai',
         // Tombol evaluasi paket (paket habis) muncul begitu jawaban server datang; lembar catatan sudah terbuka.
         then: function (result) { if (window.sessionNoteResult) window.sessionNoteResult(s.id, result); },
         undo: function () { s.status = old.status; s.completedAt = old.completedAt; if (m) m.usedSessions = old.used; window.updateUI(); } });
