@@ -301,10 +301,67 @@ async function makeLogos(browser) {
       await dlgOk();
       await page.waitForFunction(() => document.getElementById('dm').textContent.includes('Selesai di XNK HQ'), null, { timeout: 5000 }).catch(() => {});
       check(JSON.stringify(PUSAT_CALLS.rename) === '["claudia","claudia-baru"]' && (await dm()).includes('claudia → claudia-baru'), 'Ganti slug: nama baru (huruf kecil) ke pusatRename, pesan hasil (' + JSON.stringify(PUSAT_CALLS.rename) + ')');
+      // T-2251: langganan di inspektur — bawaan gratis; form → pusatSubSave; baca saja lewat menu ⋯ + dialog sendiri.
+      const clearDm = () => page.evaluate(() => { document.getElementById('dm').textContent = ''; });
+      const waitDm = t => page.waitForFunction(x => document.getElementById('dm').textContent.includes(x), t, { timeout: 5000 }).catch(() => {});
+      const rowText = async sl => (await page.textContent('#list .row[data-sel="' + sl + '"]')) || '';
+      await page.click('#list .row[data-sel="claudia"]');
+      check(((await page.textContent('#insp')) || '').includes('Gratis / tanpa langganan') && (await rowText('claudia')).includes('Gratis'), 'langganan: bawaan gratis (inspektur + kolom tabel)');
+      await page.click('#insp [data-act="sub-edit"]');
+      await page.selectOption('#insp [data-sub] [data-f="plan"]', 'bulanan');
+      await page.fill('#insp [data-sub] [data-f="price"]', '150.000');
+      await page.fill('#insp [data-sub] [data-f="due"]', '2026-12-19');
+      await page.fill('#insp [data-sub] [data-f="email"]', 'coach@contoh.id');
+      await clearDm();
+      await page.click('#insp [data-sub] button[type="submit"]');
+      await waitDm('disimpan');
+      check(JSON.stringify(PUSAT_CALLS.sub) === JSON.stringify(['claudia', { plan: 'bulanan', price: '150.000', due: '2026-12-19', email: 'coach@contoh.id' }]) &&
+        ((await page.textContent('#insp')) || '').includes('Bulanan Rp 150.000') && !(await page.$('#insp [data-sub]')),
+        'langganan: form → pusatSubSave, inspektur menampilkan paket bulanan, form tertutup (' + JSON.stringify(PUSAT_CALLS.sub) + ')');
+      check(((await page.textContent('#subsum')) || '').includes('Rp 150.000') && ((await page.textContent('#subsum')) || '').includes('Jatuh tempo terdekat') && (await rowText('claudia')).includes('30 hr lagi') && (await page.$('#list .row[data-sel="claudia"] .mtrack')) !== null,
+        'kartu Langganan (per bulan, jatuh tempo terdekat) dan batang jatuh tempo di tabel');
+      await page.click('#insp [data-menu="coach"]');
+      await page.click('#menu [data-act="sub-ro-on"]');
+      await clearDm();
+      await dlgOk();
+      await waitDm('Selesai');
+      check(PUSAT_CALLS.subAct === 'sub-ro-on' && ((await page.textContent('#insp')) || '').includes('dinyalakan tangan') && (await rowText('claudia')).includes('Baca saja') &&
+        ((await page.textContent('#nav [data-filter="ro"]')) || '').includes('1') && await page.isVisible('#insp [data-act="sub-paid"]'),
+        'langganan: Baca saja nyala lewat menu + dialog (bukan confirm), tanda di tabel, saringan Baca saja = 1');
+      // T-2252: Coach keluar — ketik slug persis di form; salah = tombol mati, tidak ada panggilan.
+      await page.click('#insp [data-menu="coach"]');
+      await page.click('#menu [data-act="leave"]');
+      await page.fill('#lv-claudia', 'Claudia');
+      check(await page.isDisabled('#lv-go') && !PUSAT_CALLS.leave, 'Coach keluar: slug salah → tombol mati, tidak ada yang diubah');
+      await page.fill('#lv-claudia', 'claudia');
+      await clearDm();
+      await page.click('#lv-go');
+      await waitDm('keluar.');
+      const inspOut = (await page.textContent('#insp')) || '';
+      check(JSON.stringify(PUSAT_CALLS.leave) === '["claudia","claudia"]' && inspOut.includes('Coach keluar') && inspOut.includes('Hapus akun Google coach') && inspOut.includes('Backup akhir sedang dibuat'),
+        'Coach keluar: ketik slug → pusatLeave, inspektur: tanggal hapus akun, backup akhir (' + JSON.stringify(PUSAT_CALLS.leave) + ')');
+      check((await page.getAttribute('#insp .outbox a', 'href')) === 'https://drive.google.com/drive/folders/AKHIRHUBCHECK', 'Coach keluar: link Folder Akhir di inspektur');
+      check(!(await page.$('#insp [data-act="backup"]')) && ((await page.textContent('#nav [data-filter="out"]')) || '').includes('1') &&
+        await page.evaluate(() => document.querySelector('#list .row[data-sel="claudia"]').classList.contains('left')) && (await rowText('claudia')).includes('Keluar'),
+        'Coach keluar: tanpa Backup sekarang, saringan Keluar = 1, baris abu-abu dengan tanda Keluar');
+      await page.click('#insp [data-menu="coach"]');
+      const outMenu = await page.$$eval('#menu [data-act]', bs => bs.map(b => b.dataset.act));
+      check(outMenu.includes('leave-undo') && !outMenu.includes('push-on') && !outMenu.includes('perbarui') && !outMenu.includes('leave'), 'Coach keluar: menu hanya Aktifkan lagi / Akun sudah dihapus (' + outMenu.join(',') + ')');
+      await page.keyboard.press('Escape');
+      if (process.env.HUB_SHOTS) {
+        await page.screenshot({ path: path.join(process.env.HUB_SHOTS, 'hq-1440-keluar.png') });
+        await page.emulateMedia({ colorScheme: 'dark' });
+        await page.screenshot({ path: path.join(process.env.HUB_SHOTS, 'hq-1440-keluar-dark.png') });
+        await page.emulateMedia({ colorScheme: 'light' });
+      }
+      await clearDm();
+      await page.click('#insp [data-act="leave-undo"]');
+      await dlgOk();
+      await waitDm('aktif lagi');
+      check(PUSAT_CALLS.undo === 'claudia' && !(await page.$('#insp .outbox')) && ((await page.textContent('#insp')) || '').includes('Bulanan Rp 150.000'), 'Aktifkan lagi → pusatAction leave-undo, kotak keluar hilang, langganan tampil lagi');
       check(await page.isVisible('#setup') && ((await page.textContent('#setupWhy')) || '').includes('Izin Google'), 'pita "XNK HQ perlu disiapkan" saat izin belum diberikan');
       check(await page.isVisible('#setupEditor') && (await page.getAttribute('#setupEditor', 'href')) === 'https://script.google.com/d/SCRIPTPUSAT/edit', 'izin belum ada: langkah editor + link editor XNK HQ');
       const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('#sideSetup')]);
-      // @@SUBLEAVE@@
       if (tab) await tab.waitForURL(/[?]setup=/, { timeout: 5000 }).catch(() => {});
       check(!!tab && tab.url() === PUSAT + '?setup=setup.1.sig', 'Siapkan XNK HQ: tab baru ke XNK HQ dengan tanda siap (bukan token sesi)');
       if (tab) await tab.close();

@@ -168,7 +168,7 @@
   /* Tabel coach */
   .tbl { padding: 6px 6px 8px; }
   .tbl > h2 { padding: 10px 10px 0; }
-  .thead, .row { display: grid; grid-template-columns: minmax(170px, 2fr) minmax(110px, 1.3fr) minmax(90px, 1fr) minmax(80px, .9fr) minmax(96px, 1fr) minmax(56px, .6fr) minmax(76px, .8fr) 0; align-items: center; column-gap: 14px; padding: 0 10px; }
+  .thead, .row { display: grid; grid-template-columns: minmax(160px, 2fr) minmax(104px, 1.2fr) minmax(84px, 1fr) minmax(70px, .8fr) minmax(90px, 1fr) minmax(48px, .5fr) minmax(92px, 1fr) minmax(70px, .7fr) 0; align-items: center; column-gap: 14px; padding: 0 10px; }
   .thead { color: var(--fg); font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; min-height: 34px; border-bottom: 1.5px solid var(--fg); margin-bottom: 4px; }
   .row { width: 100%; min-height: 58px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; cursor: pointer; font-size: .9rem; border-radius: 0; }
   .row:last-child { border-bottom: 0; }
@@ -199,12 +199,45 @@
   .skel { height: 58px; border-radius: 10px; margin: 6px 0; background: linear-gradient(90deg, var(--sunk), var(--track), var(--sunk)); background-size: 200% 100%; animation: sk 1.2s linear infinite; }
   @keyframes sk { to { background-position: -200% 0; } }
   @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
-  @container (max-width: 820px) { .thead > :nth-child(7), .row > :nth-child(7) { display: none; } .thead, .row { grid-template-columns: minmax(150px, 2fr) minmax(104px, 1.3fr) minmax(84px, 1fr) minmax(76px, .9fr) minmax(90px, 1fr) minmax(50px, .6fr) 0; } }
+  @container (max-width: 980px) { .thead > :nth-child(8), .row > :nth-child(8) { display: none; } .thead, .row { grid-template-columns: minmax(150px, 2fr) minmax(100px, 1.2fr) minmax(80px, 1fr) minmax(64px, .8fr) minmax(86px, 1fr) minmax(46px, .5fr) minmax(88px, 1fr) 0; } }
+  @container (max-width: 820px) { .row2 { grid-template-columns: minmax(0, 1fr); } .thead > :nth-child(6), .row > :nth-child(6) { display: none; } .thead, .row { grid-template-columns: minmax(140px, 2fr) minmax(100px, 1.2fr) minmax(80px, 1fr) minmax(64px, .8fr) minmax(86px, 1fr) minmax(88px, 1fr) 0; } }
   @container (max-width: 700px) {
-    .ov { grid-template-columns: minmax(0, 1fr); }
-    .thead > :nth-child(6), .row > :nth-child(6), .thead > :nth-child(4), .row > :nth-child(4) { display: none; }
-    .thead, .row { grid-template-columns: minmax(140px, 2fr) minmax(100px, 1.3fr) minmax(80px, 1fr) minmax(86px, 1fr) 0; }
+    .ov, .row2 { grid-template-columns: minmax(0, 1fr); }
+    .thead > :nth-child(4), .row > :nth-child(4) { display: none; }
+    .thead, .row { grid-template-columns: minmax(130px, 2fr) minmax(96px, 1.2fr) minmax(76px, 1fr) minmax(80px, 1fr) minmax(84px, 1fr) 0; }
   }
+
+  /* T-2251 / T-2252: langganan, coach keluar */
+  .row.left { opacity: .62; }
+  .row.left.sel { opacity: 1; }
+  .tag { display: inline-block; font-size: .66rem; font-weight: 800; padding: 0 5px; border-radius: 5px; border: 1.5px solid currentColor; margin-left: 6px; vertical-align: 1px; letter-spacing: .02em; }
+  .tag.bad { color: var(--bad); }
+  .stack { display: flex; gap: 2px; height: 18px; border-radius: 4px; overflow: hidden; background: var(--track); margin: 10px 0 6px; }
+  .stack i { display: block; height: 100%; }
+  .stack i.ink { background: var(--fg); } .stack i.grey { background: var(--grey); } .stack i.red { background: var(--bad); } .stack i.mutd { background: var(--line2); }
+  .sw.mutd { background: var(--line2); }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+  .row2 .cmp { margin-bottom: 0; }
+  .duelist { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+  .duelist h3 { margin: 0 0 4px; font-size: .78rem; font-weight: 800; }
+  .due { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 4px 6px; border: 0; border-radius: 8px; background: none; cursor: pointer; text-align: left; font-size: .86rem; }
+  .due b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .due span { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (hover: hover) { .due:hover { background: var(--hover); } }
+  .outbox { background: var(--bad); color: #fff; border-radius: var(--r); padding: 12px; margin-bottom: 12px; font-size: .88rem; font-weight: 600; }
+  .outbox b.h { display: block; font-size: 1.02rem; font-weight: 800; margin-bottom: 4px; }
+  .outbox a { color: #fff; font-weight: 800; }
+  .outbox .mtrack { background: rgba(255,255,255,.35); margin: 8px 0 4px; }
+  .outbox .mtrack > i { background: #fff; }
+  .outbox .line { margin-top: 6px; }
+  .outbox .btn { background: #fff; color: #0a0a0a; border-color: #fff; }
+  .outbox .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .outbox :focus-visible { outline-color: #fff; }
+  .form select { width: 100%; min-height: 44px; font-size: 16px; padding: 0 10px; border-radius: 9px; border: 1.5px solid var(--fg); background: var(--card); color: var(--fg); margin: 0 0 10px; }
+  .form .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+  .form ul { margin: 0 0 12px; padding-left: 18px; font-size: .86rem; }
+  .form ul li { margin-bottom: 3px; }
+  .kv.acts2 > span:last-child { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
   /* Inspektur */
   .insp { background: var(--page); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
@@ -315,7 +348,7 @@
     .chips button { flex: none; min-height: 38px; padding: 0 14px; border-radius: 19px; border: 1.5px solid var(--fg); background: var(--card); font-size: .86rem; font-weight: 700; cursor: pointer; }
     .chips button.on { background: var(--sel); color: var(--on-sel); }
     .chips .n { margin-left: 5px; }
-    .ov { grid-template-columns: minmax(0, 1fr); }
+    .ov, .row2 { grid-template-columns: minmax(0, 1fr); }
     .health { grid-template-columns: 112px minmax(0, 1fr); gap: 14px; }
     .hb { grid-template-columns: minmax(80px, 110px) minmax(0, 1fr) 44px; gap: 8px; }
     .thead { display: none; }
@@ -390,7 +423,7 @@
       </div>
       <div class="chips" id="chips" aria-label="Saring coach"></div>
       <section class="ov" id="ov" aria-label="Ringkasan"></section>
-      <section class="card cmp" id="cmp" aria-label="Perbandingan coach"></section>
+      <div class="row2"><section class="card cmp" id="cmp" aria-label="Perbandingan coach"></section><section class="card" id="subsum" aria-label="Langganan"></section></div>
       <section class="card tbl" aria-label="Daftar coach"><h2 id="listTitle">Coach</h2><div id="list"></div></section>
     </div>
   </div>
@@ -417,7 +450,7 @@
   var UIKEY = 'adminxnk:ui';          // coach terpilih, saringan, ukuran perbandingan (tab ini saja)
   var SLUG_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
   var DAY = 86400000;
-  var data = null, openPlace = '', openRename = '', menuFor = null;
+  var data = null, openPlace = '', openRename = '', openSub = '', openLeave = '', menuFor = null;
   var ui = (function () { try { return JSON.parse(sessionStorage.getItem(UIKEY) || '{}') || {}; } catch (e) { return {}; } })();
   ui.f = ui.f || 'all'; ui.cmp = ui.cmp === 'sesi' ? 'sesi' : 'klien'; ui.q = '';
 
@@ -435,7 +468,10 @@
     eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     eyeoff: '<path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a10 10 0 0 0 5.4-1.6"/>',
     ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
-    refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/>'
+    refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/>',
+    card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+    lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    door: '<path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01"/><path d="M13 4.6v16.2a1 1 0 0 1-1.2 1L5 20V5.6a2 2 0 0 1 1.6-2l4-.8A2 2 0 0 1 13 4.6z"/>'
   };
   function ic(n) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + (P[n] || '') + '</svg>'; }
 
@@ -466,7 +502,7 @@
   function view() {
     var on = !!tok();
     $('login').classList.toggle('hide', on); $('dash').classList.toggle('hide', !on);
-    if (!on) { $('list').innerHTML = ''; $('ov').innerHTML = ''; $('cmp').innerHTML = ''; $('insp').innerHTML = ''; closeSheet(true); }
+    if (!on) { $('list').innerHTML = ''; $('ov').innerHTML = ''; $('cmp').innerHTML = ''; $('subsum').innerHTML = ''; $('insp').innerHTML = ''; closeSheet(true); }
   }
 
   // ── Waktu ──
@@ -483,6 +519,8 @@
   function wib(t) { return new Date(t + 7 * 3600 * 1000).toISOString().slice(0, 10); }
   function dShort(ymd) { var p = String(ymd).split('-'); return p.length === 3 ? Number(p[2]) + ' ' + BLN[Number(p[1]) - 1] : ymd; }
   function axis30() { var out = [], now = Date.now(); for (var i = 29; i >= 0; i--) out.push(wib(now - i * DAY)); return out; }
+  function day(d) { if (!d) return '-'; var x = new Date(d + 'T00:00:00'); return isNaN(x) ? d : x.toLocaleDateString('id-ID', { dateStyle: 'medium' }); }
+  function rp(n) { return 'Rp ' + (Number(n) || 0).toLocaleString('id-ID'); }
   function ageDays(iso) { var t = new Date(iso).getTime(); return isNaN(t) ? null : Math.max(0, (Date.now() - t) / DAY); }
 
   // ── Riwayat (T-2262): [tgl, aktif, total, selesai7, depan7, email, fetch, menitTrigger, beres] ──
@@ -601,16 +639,25 @@
       if (q) qs = [['Email', q.mail, lim.mail], ['UrlFetch', q.fetch, lim.fetch], ['Trigger', q.triggerMin, lim.triggerMin]];
       var qmax = qs.reduce(function (m, a) { return Math.max(m, (Number(a[1]) || 0) / (Number(a[2]) || 1)); }, 0);
       var age = bk.okAt ? ageDays(bk.okAt) : null;
-      var bkLate = !c.missing && (age == null || age > 8 || !!bk.fails);
-      return { s: s, c: c, name: HUB[s] || s, st: st, x: x, bk: bk, age: age, pu: pu, probs: probs, qs: qs, qmax: qs.length ? qmax : null, bkLate: bkLate, pl: (d.places || {})[s] || null };
-    }).sort(function (a, b) { return (b.probs.length > 0) - (a.probs.length > 0) || a.name.localeCompare(b.name, 'id'); });
+      var out = c.out && c.out.at ? c.out : null, sub = c.sub || {};
+      if (!out && c.out && c.out.hubInactive) probs = probs.concat(['hub.json menandai coach ini tidak aktif, tetapi XNK HQ tidak mencatatnya keluar.']);
+      var bkLate = !c.missing && !out && (age == null || age > 8 || !!bk.fails);
+      // T-2251: langganan bulanan; T-2252: coach keluar (abu-abu, di bawah).
+      var bul = !c.missing && !out && sub.plan === 'bulanan';
+      return { s: s, c: c, name: HUB[s] || s, st: st, x: x, bk: bk, age: age, pu: pu, probs: probs, qs: qs, qmax: qs.length ? qmax : null, bkLate: bkLate, pl: (d.places || {})[s] || null,
+        sub: sub, out: out, ro: !c.missing && !out && (!!sub.readonly || !!(x && x.readonly)),
+        subDue: bul && /^(segera|tenggang|lewat)$/.test(sub.state || ''), subBad: bul && /^(tenggang|lewat)$/.test(sub.state || '') };
+    }).sort(function (a, b) { return (!!a.out - !!b.out) || (b.probs.length > 0) - (a.probs.length > 0) || a.name.localeCompare(b.name, 'id'); });
   }
   var FILTERS = [
     ['all', 'Semua coach', 'users', function () { return true; }],
     ['bad', 'Perlu dicek', 'alert', function (r) { return r.probs.length > 0; }],
     ['missing', 'Belum terdaftar', 'plus', function (r) { return !!r.c.missing; }],
     ['backup', 'Backup terlambat', 'db', function (r) { return r.bkLate; }],
-    ['push', 'Push menyala', 'bell', function (r) { return !!r.pu.on; }]
+    ['due', 'Jatuh tempo', 'card', function (r) { return r.subDue; }],
+    ['ro', 'Baca saja', 'lock', function (r) { return r.ro; }],
+    ['push', 'Push menyala', 'bell', function (r) { return !!r.pu.on; }],
+    ['out', 'Keluar', 'door', function (r) { return !!r.out; }]
   ];
   function filterOf(k) { for (var i = 0; i < FILTERS.length; i++) if (FILTERS[i][0] === k) return FILTERS[i]; return FILTERS[0]; }
   function visible(rows) {
@@ -626,7 +673,7 @@
     saveUi();
     var nav = '', chips = '';
     FILTERS.forEach(function (f) {
-      var n = rows.filter(f[3]).length, on = ui.f === f[0], hot = f[0] === 'bad' || f[0] === 'missing' || f[0] === 'backup';
+      var n = rows.filter(f[3]).length, on = ui.f === f[0], hot = f[0] === 'bad' || f[0] === 'missing' || f[0] === 'backup' || f[0] === 'due';
       nav += '<button type="button" data-filter="' + f[0] + '" class="' + (on ? 'on' : '') + '" title="' + esc(f[1]) + '" aria-pressed="' + on + '">' + ic(f[2]) + '<span class="lbl">' + esc(f[1]) + '</span><span class="n' + (hot && n ? ' bad' : '') + '">' + n + '</span></button>';
       if (f[0] === 'all' || n || on) chips += '<button type="button" aria-pressed="' + on + '" data-filter="' + f[0] + '" class="' + (on ? 'on' : '') + '">' + esc(f[1]) + '<span class="n">' + n + '</span></button>';
     });
@@ -635,6 +682,7 @@
     $('sum').textContent = rows.length + ' coach · ' + bad + ' perlu dicek' + (data.latest ? ' · Library terbaru v' + data.latest.version : '');
     renderOverview(rows, bad);
     renderCompare(rows);
+    renderSubsum(rows);
     renderList(vis, rows);
     renderInsp(rows);
     // Pita "XNK HQ perlu disiapkan": satu baris; langkahnya dilipat.
@@ -653,13 +701,16 @@
 
   function renderOverview(rows, bad) {
     var ax = axis30(), missing = rows.filter(function (r) { return r.c.missing; }).length;
-    var parts = [{ label: 'Beres', v: rows.length - bad, color: 'var(--fg)', sw: 'ink' }, { label: 'Ada masalah', v: bad - missing, color: 'var(--bad)', sw: 'red' }, { label: 'Belum terdaftar', v: missing, color: 'var(--grey)', sw: 'grey' }];
+    var cat = { beres: 0, masalah: 0, belum: 0, keluar: 0 };
+    rows.forEach(function (r) { cat[r.out ? 'keluar' : r.c.missing ? 'belum' : r.probs.length ? 'masalah' : 'beres']++; });
+    var parts = [{ label: 'Beres', v: cat.beres, color: 'var(--fg)', sw: 'ink' }, { label: 'Ada masalah', v: cat.masalah, color: 'var(--bad)', sw: 'red' },
+      { label: 'Belum terdaftar', v: cat.belum, color: 'var(--grey)', sw: 'grey' }, { label: 'Keluar', v: cat.keluar, color: 'var(--line2)', sw: 'mutd' }];
     var iss = '';
     rows.forEach(function (r) { r.probs.forEach(function (p) { iss += '<button type="button" class="issue" data-sel-issue="' + esc(r.s) + '"><span class="dot ' + (r.c.missing ? 'off' : 'bad') + '"></span><span class="t"><b>' + esc(r.name) + '</b><span>' + esc(p) + '</span></span></button>'; }); });
     var health = '<div class="card"><h2>Kesehatan</h2><div class="health">' + ring(parts, rows.length) +
       '<div class="legend">' + parts.filter(function (p) { return p.v; }).map(function (p) { return '<span><i class="sw ' + p.sw + '"></i><b>' + p.v + '</b> ' + esc(p.label.toLowerCase()) + '</span>'; }).join('') + '</div></div>' +
       '<div class="issues" id="issues"><h3>' + (bad ? bad + ' coach perlu dicek' : 'Semua masalah') + '</h3>' + (iss || '<div class="allok"><span class="dot"></span>Semua coach beres.</div>') + '</div></div>';
-    var reg = rows.filter(function (r) { return !r.c.missing; });
+    var reg = rows.filter(function (r) { return !r.c.missing && !r.out; });
     var act = sumVals(reg, H.active, ax), done = sumVals(reg, H.done, ax), next = sumVals(reg, H.next, ax);
     var tot = function (fn) { return reg.reduce(function (m, r) { return m + (r.x ? Number(fn(r.x)) || 0 : 0); }, 0); };
     var dl = deltaTxt(act);
@@ -675,7 +726,7 @@
 
   function renderCompare(rows) {
     var sesi = ui.cmp === 'sesi';
-    var items = rows.filter(function (r) { return r.x; }).map(function (r) {
+    var items = rows.filter(function (r) { return r.x && !r.out; }).map(function (r) {
       return { s: r.s, name: r.name, a: Number(sesi ? r.x.sessions.done7d : r.x.clients.active30d) || 0, b: sesi ? Number(r.x.sessions.next7d) || 0 : 0 };
     }).sort(function (p, q) { return (q.a + q.b) - (p.a + p.b); });
     if (items.length > 8) {
@@ -695,20 +746,62 @@
     $('cmp').innerHTML = h;
   }
 
+  // T-2251: ringkasan langganan semua coach aktif.
+  function renderSubsum(rows) {
+    var act = rows.filter(function (r) { return !r.c.missing && !r.out; });
+    var g = { gratis: 0, aktif: 0, segera: 0, telat: 0 }, perBulan = 0, nBul = 0, due = [];
+    act.forEach(function (r) {
+      var v = r.sub;
+      if (v.plan !== 'bulanan') { g.gratis++; return; }
+      nBul++; perBulan += Number(v.price) || 0;
+      g[v.state === 'segera' ? 'segera' : /^(tenggang|lewat)$/.test(v.state || '') ? 'telat' : 'aktif']++;
+      if (v.due) due.push(r);
+    });
+    due.sort(function (a, b) { return String(a.sub.due).localeCompare(String(b.sub.due)); });
+    var tot = act.length || 1, segs = [['aktif', 'ink', 'Aktif'], ['segera', 'grey', 'Segera jatuh tempo'], ['telat', 'red', 'Tenggang / lewat'], ['gratis', 'mutd', 'Gratis']];
+    var h = '<h2>Langganan</h2><div class="kpis"><div><small>Per bulan</small><span class="big">' + esc(rp(perBulan)) + '</span></div><div><small>Coach bulanan</small><span class="k2">' + nBul + '</span></div></div>' +
+      '<div class="stack" role="img" aria-label="' + esc(segs.map(function (x) { return x[2] + ' ' + g[x[0]]; }).join(', ')) + '">' +
+      segs.map(function (x) { return g[x[0]] ? '<i class="' + x[1] + '" style="width:' + (g[x[0]] / tot * 100).toFixed(1) + '%" data-tip="' + esc(x[2] + ': ' + g[x[0]]) + '"></i>' : ''; }).join('') + '</div>' +
+      '<div class="legend" style="margin-top:0">' + segs.filter(function (x) { return g[x[0]]; }).map(function (x) { return '<span><i class="sw ' + x[1] + '"></i><b>' + g[x[0]] + '</b> ' + esc(x[2].toLowerCase()) + '</span>'; }).join('') + '</div>';
+    if (due.length) h += '<div class="duelist"><h3>Jatuh tempo terdekat</h3>' + due.slice(0, 3).map(function (r) {
+      var v = r.sub, t = v.state === 'lewat' ? 'lewat tenggang' : v.state === 'tenggang' ? 'tenggang ' + v.graceLeft + ' hr' : v.days === 0 ? 'hari ini' : (v.days == null ? '' : v.days + ' hr lagi');
+      return '<button type="button" class="due" data-sel="' + esc(r.s) + '"><span class="dot ' + (r.subBad ? 'bad' : r.subDue ? 'off' : '') + '"></span><b>' + esc(r.name) + '</b><span' + (r.subBad ? ' class="bad"' : '') + '>' + esc(day(v.due)) + ' · ' + esc(t) + '</span></button>';
+    }).join('') + '</div>';
+    $('subsum').innerHTML = h;
+  }
+  /** Sisa waktu ke jatuh tempo (penuh = 30 hari lagi); tenggang/lewat merah. */
+  function dueTrack(v) {
+    var p, hot = false;
+    if (v.state === 'lewat') { p = 1; hot = true; }
+    else if (v.state === 'tenggang') { p = 1 - Math.max(0, Math.min(7, Number(v.graceLeft) || 0)) / 7; hot = true; }
+    else p = Math.max(0, Math.min(1, (Number(v.days) || 0) / 30));
+    return '<div class="mtrack"><i class="' + (hot ? 'hot' : '') + '" style="width:' + Math.max(4, Math.round(p * 100)) + '%"></i></div>';
+  }
+  function subCell(r, dash) {
+    if (r.c.missing) return dash;
+    if (r.out) return '<span class="cell2"><small class="bad">keluar</small><small class="mut">hapus akun ' + esc(day(r.out.deleteOn)) + '</small></span>';
+    var v = r.sub;
+    if (v.plan !== 'bulanan') return '<span class="cell2"><small class="mut">Gratis</small></span>';
+    var t = v.state === 'lewat' ? 'lewat tenggang' : v.state === 'tenggang' ? 'tenggang ' + v.graceLeft + ' hr' : v.days === 0 ? 'hari ini' : (v.days == null ? day(v.due) : v.days + ' hr lagi');
+    return '<span class="cell2" title="' + esc('Jatuh tempo ' + day(v.due) + ' · ' + rp(v.price)) + '"><small' + (r.subBad ? ' class="bad"' : '') + '>' + esc(t) + '</small>' + dueTrack(v) + '</span>';
+  }
+
   function renderList(vis, rows) {
     var ax = axis30(), dash = '<span class="mut">–</span>';
-    var html = '<div class="thead" aria-hidden="true"><span>Coach</span><span>Klien aktif</span><span>Sesi 7 hr</span><span>Kuota</span><span>Backup</span><span>Push</span><span>Dicek</span><span></span></div>';
+    var html = '<div class="thead" aria-hidden="true"><span>Coach</span><span>Klien aktif</span><span>Sesi 7 hr</span><span>Kuota</span><span>Backup</span><span>Push</span><span>Langganan</span><span>Dicek</span><span></span></div>';
     vis.forEach(function (r) {
       var x = r.x, sp = x ? spark(histVals(r.c.hist, H.active, ax)) : '';
       var done = x ? Number(x.sessions.done7d) || 0 : 0, next = x ? Number(x.sessions.next7d) || 0 : 0, smax = Math.max(1, done + next);
       var bkTxt = r.bk.fails ? 'gagal' : r.bk.running ? 'berjalan' : r.bk.queued ? 'menunggu' : r.age == null ? 'belum ada' : Math.floor(r.age) + ' hr lalu';
-      html += '<button type="button" class="row' + (r.s === ui.sel ? ' sel' : '') + '" data-sel="' + esc(r.s) + '" aria-current="' + (r.s === ui.sel) + '">' +
-        '<span class="c-name"><span class="dot ' + (r.c.missing ? 'off' : r.probs.length ? 'bad' : '') + '"></span><span class="t"><b>' + esc(r.name) + '</b><small>' + esc(r.s) + '</small></span></span>' +
+      var tags = (r.out ? '<span class="tag bad">Keluar</span>' : '') + (r.ro ? '<span class="tag">Baca saja</span>' : '');
+      html += '<button type="button" class="row' + (r.s === ui.sel ? ' sel' : '') + (r.out ? ' left' : '') + '" data-sel="' + esc(r.s) + '" aria-current="' + (r.s === ui.sel) + '">' +
+        '<span class="c-name"><span class="dot ' + (r.c.missing || r.out ? 'off' : r.probs.length ? 'bad' : '') + '"></span><span class="t"><b>' + esc(r.name) + tags + '</b><small>' + esc(r.s) + '</small></span></span>' +
         '<span class="c-spark">' + (x ? '<b>' + num(x.clients.active30d) + '</b>' + sp : dash) + '</span>' +
         '<span>' + (x ? '<span class="cell2" data-tip="' + esc('Selesai 7 hr: ' + done + '\nAkan datang: ' + next) + '"><small>' + done + ' + ' + next + '</small><span class="htrack" style="height:8px">' + (done ? '<i style="width:' + (done / smax * 100).toFixed(1) + '%"></i>' : '') + (next ? '<i class="up" style="width:' + (next / smax * 100).toFixed(1) + '%"></i>' : '') + '</span></span>' : dash) + '</span>' +
         '<span>' + (r.qmax == null ? dash : '<span class="cell2"><small' + (r.qmax >= 0.7 ? ' class="bad"' : '') + '>' + Math.round(r.qmax * 100) + '%</small>' + meter(r.qmax) + '</span>') + '</span>' +
         '<span>' + (r.c.missing ? dash : '<span class="cell2" title="' + esc(r.bk.okAt ? when(r.bk.okAt) : 'Belum ada backup') + '"><small' + (r.bkLate ? ' class="bad"' : '') + '>' + esc(bkTxt) + '</small>' + ageTrack(r.age, !!r.bk.fails) + '</span>') + '</span>' +
         '<span>' + (r.c.missing || !r.pu.on ? dash : '<span class="c-spark" title="Push menyala">' + ic('bell') + '<b>' + (r.pu.active ? num(r.pu.subs) : '…') + '</b></span>') + '</span>' +
+        '<span>' + subCell(r, dash) + '</span>' +
         '<span class="mut">' + (r.st ? timeHtml(r.st.at) : '–') + '</span>' +
         '<span class="c-mob c-spark">' + (x ? '<b>' + num(x.clients.active30d) + '</b>' + sp : '') + '</span>' +
         '<span class="c-go">' + ic('next') + '</span></button>';
@@ -732,6 +825,65 @@
       (dl ? '<div class="d' + (dl.d < 0 ? ' bad' : '') + '">' + esc(dl.t) + ' / 30 hr</div>' + spark(vals, 140, 28) : '<div class="chart-empty">Grafik mulai hari ini</div>') + '</div>';
   }
 
+  // T-2251: langganan satu coach.
+  function subGroup(s, v) {
+    var bul = v.plan === 'bulanan', bad = bul && /^(tenggang|lewat)$/.test(v.state || '');
+    var big = !bul ? 'Gratis' : { aktif: 'Aktif', segera: 'Segera', tenggang: 'Tenggang', lewat: 'Lewat' }[v.state] || 'Bulanan';
+    var line = !bul ? 'Gratis / tanpa langganan' : 'Bulanan ' + rp(v.price) + ' · jatuh tempo ' + day(v.due) +
+      (v.state === 'segera' ? ' (' + (v.days === 0 ? 'hari ini' : v.days + ' hari lagi') + ')' : v.state === 'tenggang' ? ' · tenggang ' + v.graceLeft + ' hari lagi' : v.state === 'lewat' ? ' · lewat masa tenggang' : '');
+    var ro = v.readonly ? 'menyala' + (v.ro === 'on' ? ' (dinyalakan tangan)' : '') : 'mati' + (v.ro === 'off' ? ' (dimatikan tangan)' : '');
+    var h = '<div class="stat"><span class="v' + (bad ? ' bad' : '') + '">' + esc(big) + '</span><span class="s">' + esc(line) + '</span>' +
+      (bul ? '<div class="w">' + dueTrack(v) + '<div class="scale"><span>jatuh tempo</span><span>30 hari</span></div></div>' : '') + '</div>';
+    h += kv('Baca saja', '<span' + (v.readonly ? ' class="bad"' : '') + '>' + esc(ro) + '</span>');
+    var hist = v.history || [];
+    if (hist.length) { var last = hist[hist.length - 1]; h += kv('Lunas', esc(when(last.at)) + ' · ' + esc(rp(last.price))); }
+    if (v.pushed && v.pushed.error) h += kv('Coach', '<span class="bad">Belum menerima: ' + esc(v.pushed.error) + '</span>');
+    if (openSub === s) {
+      var id = 'sb-' + esc(s);
+      h += '<form class="sub-form form" data-sub="' + esc(s) + '" novalidate style="border-top:1px solid var(--line)">' +
+        '<label for="' + id + '-p">Paket</label><select id="' + id + '-p" data-f="plan"><option value="gratis"' + (bul ? '' : ' selected') + '>Gratis / tanpa langganan</option><option value="bulanan"' + (bul ? ' selected' : '') + '>Bulanan</option></select>' +
+        '<div class="two"><div><label for="' + id + '-h">Harga (Rp)</label><input id="' + id + '-h" data-f="price" inputmode="numeric" autocomplete="off" value="' + esc(v.price || '') + '"></div>' +
+        '<div><label for="' + id + '-d">Jatuh tempo</label><input id="' + id + '-d" data-f="due" type="date" value="' + esc(v.due || '') + '"></div></div>' +
+        '<label for="' + id + '-e">Email coach (kosong = email pemilik)</label><input id="' + id + '-e" data-f="email" type="email" autocomplete="off" value="' + esc(v.email || '') + '">' +
+        '<div class="acts"><button class="btn primary" type="submit" data-act="sub-save" data-slug="' + esc(s) + '">Simpan langganan</button><button class="btn" type="button" data-act="sub-batal">Batal</button></div></form>';
+    } else {
+      h += '<div class="kv acts2"><span></span><span>' + (bul ? '<button class="btn primary" type="button" data-act="sub-paid" data-slug="' + esc(s) + '">Tandai lunas</button>' : '') +
+        '<button class="btn" type="button" data-act="sub-edit" data-slug="' + esc(s) + '">Atur langganan</button></span></div>';
+    }
+    return h;
+  }
+  // T-2252: coach keluar — tanggal, hapus akun Google (manual), backup akhir + Excel, situs tidak aktif.
+  function outBox(s, o) {
+    var left = Number(o.daysLeft), f = o.final || {};
+    var h = '<div class="outbox out"><b class="h">Coach keluar ' + esc(day(o.day)) + '</b>';
+    if (o.done) h += '<div>Akun Google coach sudah dihapus (' + esc(day(o.done)) + ').</div>';
+    else h += '<div>Hapus akun Google coach: <b>' + esc(day(o.deleteOn)) + '</b> (' + (left > 0 ? left + ' hari lagi' : left === 0 ? 'hari ini' : 'lewat ' + (-left) + ' hari') + '; manual oleh Anda).</div>' +
+      '<div class="mtrack"><i style="width:' + Math.max(4, Math.min(100, Math.round((30 - Math.max(0, left)) / 30 * 100))) + '%"></i></div>';
+    h += '<div class="line">Baca saja permanen · push mati · tanpa backup mingguan dan perbarui.</div>';
+    var links = [];
+    if (f.xlsxUrl) links.push('<a href="' + esc(f.xlsxUrl) + '" target="_blank" rel="noopener">Excel untuk coach</a>');
+    if (f.fileUrl) links.push('<a href="' + esc(f.fileUrl) + '" target="_blank" rel="noopener">Spreadsheet</a>');
+    if (f.dirUrl) links.push('<a href="' + esc(f.dirUrl) + '" target="_blank" rel="noopener">Folder Akhir</a>');
+    var st = f.state === 'selesai' ? 'Backup akhir siap ' + esc(when(f.at)) : f.state === 'gagal' ? 'Backup akhir gagal: ' + esc(f.error || '-') + ' (dicoba lagi otomatis)' : 'Backup akhir sedang dibuat…';
+    h += '<div class="line">' + st + (links.length ? ' · ' + links.join(' · ') : '') + '</div>';
+    if (f.xlsxError) h += '<div class="line">Excel belum bisa dibuat: ' + esc(f.xlsxError) + ' Unduh dari Spreadsheet (File → Download → Excel).</div>';
+    h += '<div class="line">' + (o.hubInactive ? 'Situs xnk.web.id/' + esc(s) + '/ = halaman "tidak aktif lagi".' : 'Situs masih aktif di hub' + (o.hub && o.hub !== 'ok' ? ': ' + esc(o.hub) : ' (menunggu workflow Hub XNK, ±2 menit; tekan Cek ulang)')) + '</div>';
+    h += '<div class="acts">' + (o.canUndo ? '<button class="btn" type="button" data-act="leave-undo" data-slug="' + esc(s) + '">Aktifkan lagi</button>' : '') +
+      (o.done ? '' : '<button class="btn" type="button" data-act="leave-done" data-slug="' + esc(s) + '">Akun sudah dihapus</button>') + '</div></div>';
+    return h;
+  }
+  /** Konfirmasi coach keluar: ketik slug persis (pengganti window.prompt). */
+  function leaveForm(s) {
+    return grp('Coach keluar', '<form class="lv-form form" data-slug="' + esc(s) + '" novalidate><ul>' +
+      '<li>Situs coach jadi halaman "tidak aktif lagi"; coach dan klien tidak bisa membuka aplikasinya.</li>' +
+      '<li>Data hanya bisa dilihat (baca saja), push mati.</li>' +
+      '<li>Backup akhir + salinan Excel dibuat di Drive Anda (XNK Backup/' + esc(s) + '/Akhir) untuk dikirim ke coach.</li>' +
+      '<li>Anda diingatkan menghapus akun Google coach 30 hari lagi (manual). Data klien tidak dihapus oleh XNK.</li>' +
+      '<li>Bisa dibatalkan ("Aktifkan lagi") sebelum 30 hari.</li></ul>' +
+      '<label for="lv-' + esc(s) + '">Ketik <b>' + esc(s) + '</b> untuk melanjutkan</label><input id="lv-' + esc(s) + '" name="t" autocomplete="off" autocapitalize="off" spellcheck="false">' +
+      '<div class="acts"><button class="btn primary danger" type="submit" id="lv-go" disabled>Keluarkan coach</button><button class="btn" type="button" data-act="leave-batal">Batal</button></div></form>');
+  }
+
   function renderInsp(rows) {
     var r = null; rows.forEach(function (x) { if (x.s === ui.sel) r = x; });
     var el = $('insp');
@@ -739,10 +891,13 @@
     var s = r.s, c = r.c, x = r.x, ax = axis30(), h = '';
     h += '<div class="ih"><button class="btn icon back" type="button" data-act="tutup" aria-label="Kembali">' + ic('back') + '</button>' +
       '<div class="t"><h2>' + esc(r.name) + '</h2><small>xnk.web.id/' + esc(s) + '</small></div>' +
-      '<span class="pill' + (r.probs.length ? ' bad' : '') + '"><span class="dot' + (r.probs.length ? ' bad' : '') + '"></span>' + (r.probs.length ? 'Perlu dicek' : 'Beres') + '</span></div>';
+      (r.out ? '<span class="pill bad"><span class="dot"></span>Keluar</span></div>' :
+      '<span class="pill' + (r.probs.length ? ' bad' : '') + '"><span class="dot' + (r.probs.length ? ' bad' : '') + '"></span>' + (r.probs.length ? 'Perlu dicek' : 'Beres') + '</span></div>');
     h += '<div class="ibody" id="ibody">';
     if (r.probs.length) h += '<div class="probs"><b>Perlu dicek</b><ul>' + r.probs.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul></div>';
-    else h += '<div class="okbox"><span class="dot"></span>Semua beres</div>';
+    else if (!r.out) h += '<div class="okbox"><span class="dot"></span>Semua beres</div>';
+    if (r.out) h += outBox(s, r.out);
+    if (openLeave === s && !r.out) h += leaveForm(s);
     h += '<div class="links"><a class="btn" href="' + esc(c.panel) + '" target="_blank" rel="noopener">' + ic('ext') + 'Panel</a><a class="btn" href="' + esc(c.klien) + '" target="_blank" rel="noopener">' + ic('ext') + 'Portal klien</a></div>';
     if (x) {
       h += '<div class="tiles">' + tileHtml('Klien aktif', x.clients.active30d, histVals(c.hist, H.active, ax)) + tileHtml('Total klien', x.clients.total, histVals(c.hist, H.total, ax)) +
@@ -759,6 +914,7 @@
       // T-2240: notifikasi push per coach (mati sampai pemilik menyalakannya).
       h += grp('Notifikasi push', '<div class="stat"><span class="v">' + (pu.on ? esc(num(pu.subs)) : '–') + '</span><span class="s">' + (pu.on ? (pu.active ? 'perangkat · menyala' : 'menunggu coach menjawab') : 'mati') + (pu.at ? ' · ' + esc(rel(pu.at)) : '') + '</span>' +
         (pu.error ? '<div class="w bad" style="font-weight:700;font-size:.84rem">' + esc(pu.error) + '</div>' : '') + '</div>');
+      if (!r.out) h += grp('Langganan', subGroup(s, r.sub));
     }
     // T-2258: tempat latihan (publik, hub.json): tampil di daftar coach xnk.web.id dan halaman info coach.
     var info = '';
@@ -786,7 +942,7 @@
     if (info) h += grp('Info', info);
     h += '</div><div class="ifoot">';
     if (!c.missing) h += '<button class="btn primary" type="button" data-act="cek" data-slug="' + esc(s) + '">' + ic('refresh') + 'Cek ulang</button>' +
-      '<button class="btn" type="button" data-act="backup" data-slug="' + esc(s) + '">Backup sekarang</button>';
+      (r.out ? '' : '<button class="btn" type="button" data-act="backup" data-slug="' + esc(s) + '">Backup sekarang</button>');
     else h += '<button class="btn primary" type="button" data-act="perbarui" data-slug="' + esc(s) + '"' + (data.canAct ? '' : ' disabled title="Isi GITHUB_TOKEN di XNK HQ dulu"') + '>Perbarui</button>';
     h += '<button class="btn icon" type="button" data-menu="coach" data-slug="' + esc(s) + '" aria-haspopup="menu" aria-label="Aksi lain">' + ic('more') + '</button></div>';
     el.innerHTML = h;
@@ -831,10 +987,23 @@
     if (!r) return [];
     var it = [];
     if (!r.c.missing) it.push({ act: r.pu.on ? 'push-off' : 'push-on', slug: s, label: r.pu.on ? 'Matikan push' : 'Nyalakan push' });
+    if (r.out) {   // T-2252: coach keluar — hanya aktifkan lagi / akun sudah dihapus
+      it = [];
+      if (r.out.canUndo) it.push({ act: 'leave-undo', slug: s, label: 'Aktifkan lagi' });
+      if (!r.out.done) it.push({ act: 'leave-done', slug: s, label: 'Akun sudah dihapus' });
+      return it.length ? it : [{ act: 'cek', slug: s, label: 'Cek ulang' }];
+    }
+    var ro = (r.sub || {}).ro || 'auto';
+    if (!r.c.missing) {
+      if (ro !== 'on') it.push({ act: 'sub-ro-on', slug: s, label: 'Baca saja: nyalakan' });
+      if (ro !== 'off') it.push({ act: 'sub-ro-off', slug: s, label: 'Baca saja: matikan' });
+      if (ro !== 'auto') it.push({ act: 'sub-ro-auto', slug: s, label: 'Baca saja: otomatis' });
+      it.push('-');
+    }
     if (HUB[s]) it.push({ act: 'tempat', slug: s, label: r.pl ? 'Ubah tempat latihan' : 'Isi tempat latihan' });
-    if (it.length) it.push('-');
+    if (it.length && it[it.length - 1] !== '-') it.push('-');
     it.push({ act: 'perbarui', slug: s, label: 'Perbarui', gh: true }, { act: 'hubungkan', slug: s, label: 'Hubungkan', gh: true });
-    if (!r.c.missing) it.push('-', { act: 'ganti-slug', slug: s, label: 'Ganti slug…', danger: true });
+    if (!r.c.missing) it.push('-', { act: 'ganti-slug', slug: s, label: 'Ganti slug…', danger: true }, { act: 'leave', slug: s, label: 'Coach keluar…', danger: true });
     return it;
   }
 
@@ -867,7 +1036,7 @@
   window.addEventListener('popstate', function () { closeSheet(true); });
 
   function select(s, open) {
-    if (ui.sel !== s) { openPlace = ''; openRename = ''; }
+    if (ui.sel !== s) { openPlace = ''; openRename = ''; openSub = ''; openLeave = ''; }
     ui.sel = s; render(); if (open) openSheet();
     var row = document.querySelector('.row[data-sel="' + s + '"]');
     if (row && !isPhone()) { row.focus({ preventScroll: true }); row.scrollIntoView({ block: 'nearest' }); }
@@ -921,10 +1090,32 @@
     }, function (e) { toast(e.message, 'bad'); });
   }
   document.addEventListener('submit', function (ev) {
-    var f = ev.target.closest && ev.target.closest('.pl-form, .rn-form');
+    var f = ev.target.closest && ev.target.closest('.pl-form, .rn-form, .sub-form, .lv-form');
     if (!f) return;
     ev.preventDefault();
-    var slug = f.getAttribute('data-slug');
+    var slug = f.getAttribute('data-slug') || f.getAttribute('data-sub');
+    if (f.classList.contains('sub-form')) {
+      var val = function (k) { var el = f.querySelector('[data-f="' + k + '"]'); return el ? el.value : ''; };
+      toast('Menyimpan langganan ' + slug + '…');
+      return rpc('pusatSubSave', [tok(), slug, { plan: val('plan'), price: val('price'), due: val('due'), email: val('email') }])
+        .then(function (d) { data = d; openSub = ''; render(); toast('Langganan ' + slug + ' disimpan.', 'ok'); }, function (e) { toast(e.message, 'bad'); });
+    }
+    if (f.classList.contains('lv-form')) {
+      var typed = String(f.elements.t.value).trim();
+      if (typed !== slug) return toast('Slug tidak cocok; tidak ada yang diubah.', 'bad');
+      toast('Memproses ' + slug + '…');
+      return rpc('pusatLeave', [tok(), slug, typed]).then(function (r) {
+        var notes = [];
+        if (r.readonly !== 'ok') notes.push('Baca saja: ' + r.readonly);
+        if (r.push !== 'ok') notes.push('Push: ' + r.push);
+        if (r.backup !== 'ok') notes.push('Backup: ' + r.backup);
+        if (r.hub !== 'ok') notes.push('Situs: ' + r.hub);
+        openLeave = '';
+        return load('pusatOverview', [tok()]).then(function () {
+          toast('Coach ' + r.slug + ' keluar. Hapus akun Google coach pada ' + day(r.deleteOn) + '. Backup akhir sedang dibuat; link Excel muncul di detail coach dan dikirim ke email Anda setelah selesai. ' + notes.join(' '), notes.length ? 'bad' : 'ok');
+        });
+      }, function (e) { toast(e.message, 'bad'); });
+    }
     if (f.classList.contains('pl-form')) {
       var n = f.elements.n.value.replace(/\s+/g, ' ').trim(), c = f.elements.c.value.replace(/\s+/g, ' ').trim();
       if (!n || !c) return toast('Isi nama tempat dan kota.', 'bad');
@@ -938,6 +1129,8 @@
   });
   document.addEventListener('input', function (ev) {
     if (ev.target.id === 'q') { ui.q = ev.target.value; render(); return; }
+    var lf = ev.target.closest && ev.target.closest('.lv-form');
+    if (lf) { var go = lf.querySelector('#lv-go'); if (go) go.disabled = ev.target.value.trim() !== lf.getAttribute('data-slug'); return; }
     if (ev.target.closest && ev.target.closest('.rn-form')) {
       var v = ev.target.value.trim().toLowerCase().replace(/^xnk\.web\.id\//, '').replace(/^\/+|\/+$/g, '');
       $('rn-hint').className = 'hint ' + (!v || (SLUG_RE.test(v) && v.indexOf('--') === -1) ? 'mut' : 'bad');
@@ -978,6 +1171,38 @@
     }
     if (a === 'tempat-hapus') {
       return ask('Hapus tempat latihan?', 'Tempat latihan ' + slug + ' dihapus dari xnk.web.id.', 'Hapus', true).then(function (y) { if (y) savePlace(slug, '', ''); });
+    }
+    if (a === 'sub-edit' || a === 'sub-batal') { openSub = a === 'sub-edit' ? slug : ''; render(); var sp = openSub && $('sb-' + openSub + '-p'); if (sp) { sp.focus(); sp.scrollIntoView({ block: 'nearest' }); } return; }
+    if (a === 'leave' || a === 'leave-batal') {
+      openLeave = a === 'leave' ? slug : ''; if (slug) ui.sel = slug;
+      render(); if (slug) openSheet();
+      var li = openLeave && $('lv-' + openLeave);
+      if (li) { li.focus(); li.scrollIntoView({ block: 'nearest' }); }
+      return;
+    }
+    if (/^sub-(paid|ro-on|ro-off|ro-auto)$/.test(a)) {
+      var q = { 'sub-paid': ['Tandai lunas?', 'Langganan ' + slug + ' lunas. Jatuh tempo maju satu bulan dan baca saja kembali otomatis.', 'Tandai lunas'],
+        'sub-ro-on': ['Nyalakan baca saja?', 'Untuk ' + slug + '. Coach dan klien tetap bisa melihat data, tetapi tidak bisa mengubahnya.', 'Nyalakan'],
+        'sub-ro-off': ['Matikan baca saja?', 'Untuk ' + slug + ' (menimpa hitungan otomatis).', 'Matikan'],
+        'sub-ro-auto': ['Baca saja otomatis?', 'Kembalikan baca saja ' + slug + ' ke hitungan otomatis dari langganan.', 'Otomatis'] }[a];
+      return ask(q[0], q[1], q[2], a === 'sub-ro-on').then(function (y) {
+        if (!y) return;
+        toast('Mengirim ke ' + slug + '…');
+        return rpc('pusatAction', [tok(), a, slug]).then(function (d) { data = d; render(); toast(d.notice || 'Selesai.', d.notice ? 'bad' : 'ok'); }, function (e) { toast(e.message, 'bad'); });
+      });
+    }
+    if (a === 'leave-undo' || a === 'leave-done') {
+      var undo = a === 'leave-undo';
+      return ask(undo ? 'Aktifkan lagi ' + slug + '?' : 'Akun Google coach sudah dihapus?',
+        undo ? 'Situs kembali ke aplikasi, mode baca saja kembali ke langganan, tanda keluar dihapus. Push tetap mati sampai Anda nyalakan.'
+          : 'Akun Google coach ' + slug + ' sudah Anda hapus? Pengingat berhenti dan coach tidak bisa diaktifkan lagi dari sini.', undo ? 'Aktifkan lagi' : 'Ya, sudah dihapus', !undo).then(function (y) {
+        if (!y) return;
+        toast('Mengirim…');
+        return rpc('pusatAction', [tok(), a, slug]).then(function (d) {
+          data = d; render();
+          toast(d.notice || (undo ? 'Coach ' + slug + ' aktif lagi. Situs dibangun ulang di GitHub Actions (±2 menit).' : 'Dicatat: akun Google coach ' + slug + ' sudah dihapus.'), d.notice ? 'bad' : 'ok');
+        }, function (e) { toast(e.message, 'bad'); });
+      });
     }
     if (a === 'ganti-slug' || a === 'rename-batal') {
       openRename = a === 'ganti-slug' ? slug : ''; render();
@@ -1033,7 +1258,7 @@
     if (ev.key === 'Escape') {
       hideTip();
       if (typing && ev.target.id === 'q' && ev.target.value) { ev.target.value = ''; ui.q = ''; render(); return; }
-      if (openRename || openPlace) { openRename = openPlace = ''; render(); return; }
+      if (openRename || openPlace || openSub || openLeave) { openRename = openPlace = openSub = openLeave = ''; render(); return; }
       return closeSheet();
     }
     if (typing || !data || !tok()) return;

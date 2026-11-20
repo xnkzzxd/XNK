@@ -81,7 +81,7 @@ batas bisa ditimpa di Script Properties XNK HQ. Ada masalah = **satu email** ke 
 link dasbor. Tanpa masalah = tanpa email. Backup yang gagal **2 kali berturut-turut** ikut masuk email itu.
 
 Angka kuota datang dari `hubStatus().quota = {date, mail, fetch, triggerMin, mailRemaining, mailSkipped}` (hari WIB,
-angka saja). Di `/adminxnk` tiap kartu coach punya tiga ubin kecil: *email hari ini*, *UrlFetch hari ini*, *menit
+angka saja). Di `/adminxnk` detail tiap coach punya tiga meteran: *email hari ini*, *UrlFetch hari ini*, *menit
 trigger hari ini* (angka / batas; merah ≥ 70 %). Coach dengan Library lama tanpa kuota tidak dicek dan tanpa ubin.
 
 ## Email ringkasan coach (T-2254)
@@ -147,7 +147,7 @@ XNK HQ membagikan kunci publik VAPID hub (dari `hub.json` → `vapidPublic`) ke 
 
 ## Tempat latihan coach (T-2258)
 
-`/adminxnk` → **Tempat** (form kecil di kartu coach: nama tempat + kota, Simpan / Hapus tempat) memanggil
+`/adminxnk` → **Tempat** (form kecil di detail coach: nama tempat + kota, Simpan / Hapus tempat) memanggil
 `pusatSetPlace(token, slug, nama, kota)` (hanya pemilik; coach harus ada di `hub.json`; isian diperiksa sama dengan
 `build-hub.js`). XNK HQ menjalankan `hub.yml` dengan `{aksi: 'simpan', slug, warna: 'tetap', tempat, kota}`
 (hapus = `tempat: '-'`); tanpa `GITHUB_TOKEN` atau bila GitHub menolak, jawabannya berisi langkah manual.
@@ -173,6 +173,12 @@ Setiap coach punya data langganan di Script Property XNK HQ `SUB_<slug>`: paket 
 (Rp), jatuh tempo (tanggal WIB), email coach, sakelar *baca saja* (`auto` / `on` / `off`) dan riwayat bayar (24 terakhir).
 **Coach tanpa data = gratis = tidak pernah baca saja.** Itu bawaan untuk semua coach yang sudah ada (claudia, vinna):
 tidak ada yang berubah sampai pemilik sendiri mengubah paketnya, dan coach gratis tidak pernah dihubungi untuk ini.
+
+Di `/adminxnk` (T-2263): grup **Langganan** di detail coach (status besar, jatuh tempo dan batang sisa hari, baca saja,
+lunas terakhir, **Tandai lunas** dan **Atur langganan** sebagai form kecil), kolom **Langganan** di tabel, kartu
+**Langganan** di ringkasan (pendapatan per bulan, sebaran status, jatuh tempo terdekat), saringan **Jatuh tempo** dan
+**Baca saja** di bilah samping. *Baca saja: nyalakan / matikan / otomatis* ada di menu ⋯ coach. Semua konfirmasi memakai
+dialog halaman, bukan `confirm`.
 
 - **Status** (`subStatus_`, murni): `aktif` → `segera` (≤ 7 hari ke jatuh tempo) → `tenggang` (sudah lewat, 7 hari) →
   `lewat` = baca saja otomatis. Sakelar tangan menang: `on` menyalakan baca saja kapan saja (juga untuk coach gratis),
@@ -208,7 +214,7 @@ spreadsheet, atau akun Google.** Coach lain tidak terpengaruh.
 ### Langkah untuk pemilik
 
 1. Buka `xnk.web.id/adminxnk`, masuk dengan PIN.
-2. Di kartu coach itu tekan **Coach keluar…** (tombol merah). Baca ringkasannya, lalu **ketik slug coach persis**
+2. Pilih coach itu, buka menu ⋯ di bawah detailnya → **Coach keluar…** (merah). Baca ringkasannya, lalu **ketik slug coach persis**
    (mis. `claudia`) dan OK. Slug salah = tidak ada yang berubah.
 3. XNK HQ langsung:
    - menyalakan **mode baca saja permanen** di coach (coach dan klien masih bisa melihat data, tidak bisa mengubahnya);
@@ -217,12 +223,12 @@ spreadsheet, atau akun Google.** Coach lain tidak terpengaruh.
      sampai selesai, biasanya beberapa menit);
    - menjalankan workflow **Hub XNK** aksi `nonaktif`: ±2 menit kemudian `xnk.web.id/<slug>/`, `/klien/` dan `/info/`
      menjadi halaman **"Situs coach ini tidak aktif lagi"** dengan tombol kontak Anda (`contactUrl`).
-4. Setelah backup akhir selesai Anda mendapat email **"backup akhir <slug> siap"** dan kartu coach menampilkan link
+4. Setelah backup akhir selesai Anda mendapat email **"backup akhir <slug> siap"** dan detail coach menampilkan link
    **Excel untuk coach**, **Spreadsheet** dan **Folder Akhir**. Kirim Excel ke coach: buka link → titik tiga →
    **Bagikan** (email coach), atau **Download** lalu kirim lewat email/WhatsApp.
 5. Kartu menampilkan **jadwal hapus akun Google coach** (H+30). Mulai **H-3** email harian XNK HQ berisi
    "Hapus akun Google coach <slug>". Hapus akunnya sendiri (masuk ke akun coach → myaccount.google.com →
-   **Data & privasi** → **Hapus akun Google**), lalu tekan **Akun sudah dihapus** di kartu: pengingat berhenti dan
+   **Data & privasi** → **Hapus akun Google**), lalu tekan **Akun sudah dihapus** di detail coach: pengingat berhenti dan
    coach tidak ditanya lagi. Spreadsheet coach (dan data klien di dalamnya) ikut terhapus bersama akun itu; salinan
    akhir tetap ada di Drive Anda.
 6. **Batal?** Tekan **Aktifkan lagi** sebelum H+30 (dan sebelum akun dihapus): situs kembali ke aplikasi, baca saja
@@ -230,7 +236,7 @@ spreadsheet, atau akun Google.** Coach lain tidak terpengaruh.
 
 Tanpa `GITHUB_TOKEN` di XNK HQ, langkah situs berhenti dengan pesan: jalankan sendiri **repo hub → Actions → Hub XNK
 → Run workflow**, aksi `nonaktif` (atau `aktifkan`), slug coach. Selama `hub.json` belum menandai coach tidak aktif,
-kartu menampilkan "Situs masih aktif di hub" dan mulai hari berikutnya hal itu masuk email harian.
+detail coach menampilkan "Situs masih aktif di hub" dan mulai hari berikutnya hal itu masuk email harian.
 
 ### Cara kerjanya
 
