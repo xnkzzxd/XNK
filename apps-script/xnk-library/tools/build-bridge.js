@@ -41,7 +41,7 @@ function build(opts) {
   const brand = String(opts.brand || '').trim();
   if (slug && !/^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/.test(slug)) throw new Error('build-bridge: --slug tidak valid');
   if (brand.length > 60) throw new Error('build-bridge: --brand maksimal 60 huruf');
-  // T-2233: link /exec XNK Pusat (bukan rahasia; kode daftar tetap diminta di wizard). Kosong = langkah daftar disembunyikan.
+  // T-2233: link /exec XNK HQ (bukan rahasia; kode daftar tetap diminta di wizard). Kosong = langkah daftar disembunyikan.
   const pusatUrl = String(opts.pusatUrl != null ? opts.pusatUrl : process.env.XNK_PUSAT_URL || '').trim();
   if (pusatUrl && !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(pusatUrl)) throw new Error('build-bridge: --pusat-url harus link /exec Apps Script');
 

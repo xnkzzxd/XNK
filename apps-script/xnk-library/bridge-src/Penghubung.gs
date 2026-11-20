@@ -127,7 +127,7 @@ function setupCheck() {
   return validateConfiguration();
 }
 
-/** Daftarkan spreadsheet ini ke XNK Pusat (dasbor pemilik /adminxnk, T-2233). Logikanya di Library. */
+/** Daftarkan spreadsheet ini ke XNK HQ (dasbor pemilik /adminxnk, T-2233). Logikanya di Library. */
 function setupRegisterPusat(data) {
   checkLibraryConnection();
   data = data || {};

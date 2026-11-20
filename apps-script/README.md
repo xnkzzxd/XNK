@@ -179,7 +179,7 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
 - **Kuota Google** (T-2253): pemakaian harian (email, UrlFetch, menit trigger) dicatat per hari WIB di Script
   Property `QUOTA_<yyyymmdd>` (7 hari). Sebelum mengirim email dicek sisa kuota Google; bila di bawah
   `MAIL_RESERVE` (bawaan 10) email dilewati (ringkasan tetap lewat Telegram bila ada). Angkanya tampil di
-  XNK Pusat (`/adminxnk`); di produksi hanya tercatat.
+  XNK HQ (`/adminxnk`); di produksi hanya tercatat.
 - **Paket & Harga**: tambah, ubah, gandakan, urutkan, tampil/sembunyikan, dan hapus paket tanpa membuka
   spreadsheet. Paket hanya bisa dihapus kalau tidak ada klien atau transaksi yang memakainya;
   kalau tidak, **nonaktifkan** saja (klien lama tidak terpengaruh). Kategori tetap: student, college,

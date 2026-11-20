@@ -26,8 +26,8 @@ Bila isian salah (slug dipakai sistem, link bukan `/exec`, dua coach memakai lin
 
 - **Mengubah** nama usaha atau link: jalankan lagi dengan aksi `simpan` dan slug yang sama.
 - **Menghapus**: aksi `hapus` dan slug. Alamat itu langsung tidak aktif, jadi klien coach itu tidak bisa membukanya.
-- **Coach keluar** (T-2252): paling mudah dari `xnk.web.id/adminxnk` → **Coach keluar…** (sekalian baca saja, backup akhir + Excel untuk coach, pengingat hapus akun H+30). Tanpa XNK Pusat: aksi `nonaktif` dan slug; `xnk.web.id/<slug>/` (panel, portal, info) menjadi halaman "Situs coach ini tidak aktif lagi", tanpa aplikasi, data coach tidak disentuh. Aksi `aktifkan` = kembali seperti semula. Lengkapnya: `docs/library/Pusat.md` di repo XNK.
-- **Mengganti slug** (mis. `claudia` → `claudiafit`): paling mudah dari `xnk.web.id/adminxnk` → **Ganti slug**. Tanpa XNK Pusat: aksi `ganti-slug`, *slug* = nama sekarang, *slug_baru* = nama baru. Link lama tetap jalan dan mengarah ke alamat baru; klien dan coach tetap masuk; secret `CLASP_<NAMA LAMA>` tetap dipakai (dicatat di `hub.json` sebagai `secret`). Nama lama tersimpan di `aliases` dan tidak bisa dipakai coach lain. Lengkapnya: `docs/library/Hub.md` di repo XNK.
+- **Coach keluar** (T-2252): paling mudah dari `xnk.web.id/adminxnk` → **Coach keluar…** (sekalian baca saja, backup akhir + Excel untuk coach, pengingat hapus akun H+30). Tanpa XNK HQ: aksi `nonaktif` dan slug; `xnk.web.id/<slug>/` (panel, portal, info) menjadi halaman "Situs coach ini tidak aktif lagi", tanpa aplikasi, data coach tidak disentuh. Aksi `aktifkan` = kembali seperti semula. Lengkapnya: `docs/library/Pusat.md` di repo XNK.
+- **Mengganti slug** (mis. `claudia` → `claudiafit`): paling mudah dari `xnk.web.id/adminxnk` → **Ganti slug**. Tanpa XNK HQ: aksi `ganti-slug`, *slug* = nama sekarang, *slug_baru* = nama baru. Link lama tetap jalan dan mengarah ke alamat baru; klien dan coach tetap masuk; secret `CLASP_<NAMA LAMA>` tetap dipakai (dicatat di `hub.json` sebagai `secret`). Nama lama tersimpan di `aliases` dan tidak bisa dipakai coach lain. Lengkapnya: `docs/library/Hub.md` di repo XNK.
 
 ## Warna dan logo coach
 
@@ -65,9 +65,9 @@ dan **Google Apps Script API** menyala di akun itu. Langkah lengkap: `docs/libra
 
 ## Dasbor pemilik: xnk.web.id/adminxnk
 
-Isi `"pusatUrl"` di `hub.json` dengan link /exec XNK Pusat (repo XNK: `docs/library/Pusat.md`). Halaman
+Isi `"pusatUrl"` di `hub.json` dengan link /exec XNK HQ (repo XNK: `docs/library/Pusat.md`). Halaman
 `xnk.web.id/adminxnk/` menampilkan status semua coach setelah login PIN pemilik; tanpa `pusatUrl` halaman itu hanya
-memberi tahu bahwa XNK Pusat belum diatur.
+memberi tahu bahwa XNK HQ belum diatur.
 
 ## Pasang domain (sekali)
 

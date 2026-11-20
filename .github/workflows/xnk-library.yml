@@ -7,7 +7,7 @@ name: XNK Library
 #          (akun di secret CLASPRC_JSON yang sudah ada): "XNK Library" (script = kode Library) dan
 #          "XNK Template" (script = kode penghubung). Mencetak dua scriptId; simpan sebagai repo variable
 #          XNK_LIB_SCRIPT_ID dan XNK_TEMPLATE_SCRIPT_ID.
-# pusat  — XNK Pusat (apps-script/xnk-pusat, akun pemilik): "buat-pusat" sekali (manual) membuat proyeknya dan
+# pusat  — XNK HQ (apps-script/xnk-pusat, akun pemilik): "buat-pusat" sekali (manual) membuat proyeknya dan
 #          menerbitkan web app; setiap push ke main memperbarui kodenya di deployment yang sama bila repo variable
 #          XNK_PUSAT_SCRIPT_ID dan XNK_PUSAT_DEPLOYMENT_ID terisi (T-2233).
 # stable — push ke main setelah check hijau: tag bergerak "hub-stable" dipindah ke commit ini. Hub xnk.web.id
@@ -38,15 +38,15 @@ on:
   workflow_dispatch:
     inputs:
       aksi:
-        description: 'buat = buat dua spreadsheet baru (sekali saja); perbarui = terbitkan versi Library baru; buat-pusat = buat proyek XNK Pusat (sekali saja)'
+        description: 'buat = buat dua spreadsheet baru (sekali saja); perbarui = terbitkan versi Library baru; buat-pusat = buat proyek XNK HQ (sekali saja)'
         type: choice
         options: [perbarui, buat, buat-pusat, info-pusat, perbarui-pusat]
         default: perbarui
       pusat_script:
-        description: 'info-pusat / perbarui-pusat: scriptId XNK Pusat (kosong = repo variable XNK_PUSAT_SCRIPT_ID)'
+        description: 'info-pusat / perbarui-pusat: scriptId XNK HQ (kosong = repo variable XNK_PUSAT_SCRIPT_ID)'
         required: false
       pusat_deployment:
-        description: 'perbarui-pusat: ID deployment XNK Pusat (kosong = repo variable XNK_PUSAT_DEPLOYMENT_ID)'
+        description: 'perbarui-pusat: ID deployment XNK HQ (kosong = repo variable XNK_PUSAT_DEPLOYMENT_ID)'
         required: false
 
 permissions:
@@ -69,7 +69,7 @@ jobs:
         run: node apps-script/pt-scheduler/tools/check-syntax.js
       - name: Tes Library dan kode penghubung
         run: node --test apps-script/xnk-library/tests/*.test.js
-      - name: Tes XNK Pusat
+      - name: Tes XNK HQ
         run: node --test apps-script/xnk-pusat/tests/*.test.js
       - name: Tes produksi pada kode Library (perilaku sama)
         run: node apps-script/xnk-library/tools/check-compat.js
@@ -178,7 +178,7 @@ jobs:
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       LIB_ID: ${{ vars.XNK_LIB_SCRIPT_ID }}
       TPL_ID: ${{ vars.XNK_TEMPLATE_SCRIPT_ID }}
-      XNK_PUSAT_URL: ${{ vars.XNK_PUSAT_URL }}   # langkah "Daftarkan ke XNK Pusat" di wizard XNK Template
+      XNK_PUSAT_URL: ${{ vars.XNK_PUSAT_URL }}   # langkah "Daftarkan ke XNK HQ" di wizard XNK Template
     steps:
       - name: Cek pengaturan
         id: cfg
@@ -283,13 +283,13 @@ jobs:
         run: |
           if [ -z "$CLASPRC_JSON" ]; then echo "::notice::Secret CLASPRC_JSON belum diatur."; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "$AKSI" = "buat-pusat" ]; then
-            if [ -n "$PUSAT_ID" ]; then echo "::error::XNK Pusat sudah dibuat (XNK_PUSAT_SCRIPT_ID terisi)."; exit 1; fi
+            if [ -n "$PUSAT_ID" ]; then echo "::error::XNK HQ sudah dibuat (XNK_PUSAT_SCRIPT_ID terisi)."; exit 1; fi
             echo "go=true" >> "$GITHUB_OUTPUT"
           elif [ "$AKSI" = "info-pusat" ]; then
             if [ -z "$PUSAT_ID" ]; then echo "::error::Isi pusat_script atau repo variable XNK_PUSAT_SCRIPT_ID."; exit 1; fi
             echo "go=true" >> "$GITHUB_OUTPUT"
           elif [ -n "$PUSAT_ID" ] && [ -n "$PUSAT_DEP" ]; then echo "go=true" >> "$GITHUB_OUTPUT"
-          else echo "::notice::XNK Pusat belum dibuat (Run workflow → buat-pusat)."; echo "go=false" >> "$GITHUB_OUTPUT"; fi
+          else echo "::notice::XNK HQ belum dibuat (Run workflow → buat-pusat)."; echo "go=false" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
         if: steps.cfg.outputs.go == 'true'
       - uses: actions/setup-node@v4
@@ -303,7 +303,7 @@ jobs:
         run: |
           umask 077
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-      - name: Buat atau perbarui XNK Pusat
+      - name: Buat atau perbarui XNK HQ
         if: steps.cfg.outputs.go == 'true'
         run: |
           set -o pipefail
@@ -319,21 +319,21 @@ jobs:
             exit 0
           fi
           if [ "$AKSI" = "buat-pusat" ]; then
-            mkdir -p "$RUNNER_TEMP/new-pusat" && (cd "$RUNNER_TEMP/new-pusat" && clasp create --type standalone --title "XNK Pusat")
+            mkdir -p "$RUNNER_TEMP/new-pusat" && (cd "$RUNNER_TEMP/new-pusat" && clasp create --type standalone --title "XNK HQ")
             PUSAT_ID=$(node -e 'console.log(require(process.argv[1]).scriptId)' "$RUNNER_TEMP/new-pusat/.clasp.json")
           fi
           printf '{"scriptId":"%s","rootDir":"."}' "$PUSAT_ID" > .clasp.json
           printf '**/**\n!*.gs\n!appsscript.json\n' > .claspignore
           clasp push --force 2>&1 | tee push.log
-          if grep -qE "GaxiosError|errors: \[|code: [45][0-9][0-9]" push.log; then echo "::error::clasp push XNK Pusat gagal"; exit 1; fi
+          if grep -qE "GaxiosError|errors: \[|code: [45][0-9][0-9]" push.log; then echo "::error::clasp push XNK HQ gagal"; exit 1; fi
           ver=$(clasp version "GitHub $(cd "$GITHUB_WORKSPACE" && git rev-parse --short HEAD)" | grep -oE 'Created version [0-9]+' | grep -oE '[0-9]+$')
-          [ -n "$ver" ] || { echo "::error::Versi XNK Pusat tidak terbaca"; exit 1; }
+          [ -n "$ver" ] || { echo "::error::Versi XNK HQ tidak terbaca"; exit 1; }
           if [ "$AKSI" = "buat-pusat" ]; then
-            clasp deploy -V "$ver" -d "XNK Pusat" | tee deploy.log
+            clasp deploy -V "$ver" -d "XNK HQ" | tee deploy.log
             dep=$(grep -oE 'AKfyc[A-Za-z0-9_-]+' deploy.log | head -1)
             echo "XNK_PUSAT_SCRIPT_ID=$PUSAT_ID  XNK_PUSAT_DEPLOYMENT_ID=$dep"
             {
-              echo "## XNK Pusat dibuat"
+              echo "## XNK HQ dibuat"
               echo ""
               echo "Simpan sebagai repo variable (Settings → Secrets and variables → Actions → Variables):"
               echo ""
@@ -347,7 +347,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           else
             clasp deploy -i "$PUSAT_DEP" -V "$ver" -d "GitHub" | tee deploy.log
-            echo "XNK Pusat diperbarui ke versi $ver." >> "$GITHUB_STEP_SUMMARY"
+            echo "XNK HQ diperbarui ke versi $ver." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Hapus kredensial
         if: always()

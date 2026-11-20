@@ -17,7 +17,7 @@ workflow **Coach XNK**). GitHub tidak pernah menyimpan kata sandi: yang disimpan
    Browser terbuka → pilih akun coach → Izinkan. Token tersimpan di `C:\Users\<nama>\.clasprc.json`
    (macOS/Linux: `~/.clasprc.json`).
 4. (Cek akun) `npx @google/clasp@2.4.2 list` boleh menjawab "No script files found": proyek yang menempel di
-   spreadsheet memang tidak tampil. Yang penting **bukan** proyek Anda sendiri (XNK Pusat, XNK Library) yang muncul.
+   spreadsheet memang tidak tampil. Yang penting **bukan** proyek Anda sendiri (XNK HQ, XNK Library) yang muncul.
    Salin link login dari **terminal** (bukan dari address bar) bila memakai jendela Incognito; halaman izin yang
    disalin dari browser menghasilkan "400. That's an error".
 5. Buka berkas itu dengan Notepad, salin **seluruh isinya**.

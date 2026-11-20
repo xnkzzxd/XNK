@@ -218,7 +218,7 @@ test('tempat: hub.json diperiksa (nama + kota, panjang, tanda < >), spasi dirapa
   assert.equal(hub.readHub({ coaches: [{ slug: 'x-y', brand: 'C', exec: EXEC(1), place: { name: ' ', city: '' } }] }).coaches[0].place, undefined);
 });
 
-test('tempat: sama persis dengan cleanPlace_ di XNK Pusat', () => {
+test('tempat: sama persis dengan cleanPlace_ di XNK HQ', () => {
   const vm = require('vm');
   const src = fs.readFileSync(path.join(ROOT, 'apps-script', 'xnk-pusat', 'src', 'Pusat.gs'), 'utf8');
   const ctx = {}; vm.createContext(ctx); vm.runInContext(src, ctx);

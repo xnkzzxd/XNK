@@ -1,5 +1,5 @@
 'use strict';
-// T-2233: hubStatus — laporan angka untuk XNK Pusat, dijaga HUB_SECRET; tanpa rahasia (produksi) selalu menolak.
+// T-2233: hubStatus — laporan angka untuk XNK HQ, dijaga HUB_SECRET; tanpa rahasia (produksi) selalu menolak.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { seededEnv } = require('./fixtures');
@@ -32,13 +32,13 @@ test('hubStatus: angka saja (klien, sesi, trigger, pengingat), tanpa nama atau n
   const text = JSON.stringify(Object.assign({}, r, { lib: null }));
   assert.ok(!/08\d{6,}|62\d{8,}/.test(text), 'tidak ada nomor WA');
   assert.ok(!/[A-Z][a-z]+ [A-Z][a-z]+/.test(text.replace(/"at":"[^"]+"/, '')), 'tidak ada nama');
-  // Lewat doPost (pintu halaman statis / XNK Pusat).
+  // Lewat doPost (pintu halaman statis / XNK HQ).
   const post = JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify({ fn: 'hubStatus', args: [SECRET] }) } }).content);
   assert.equal(post.ok, true);
   assert.equal(JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify({ fn: 'hubStatus', args: ['salah'] }) } }).content).ok, false);
 });
 
-// T-2250: hubExport — salinan penuh untuk backup mingguan XNK Pusat, dijaga HUB_SECRET yang sama.
+// T-2250: hubExport — salinan penuh untuk backup mingguan XNK HQ, dijaga HUB_SECRET yang sama.
 const post = (env, args) => JSON.parse(env.call('doPost', { postData: { contents: JSON.stringify({ fn: 'hubExport', args }) } }).content);
 
 test('hubExport: tanpa HUB_SECRET atau rahasia salah = ditolak', () => {

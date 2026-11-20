@@ -11,7 +11,7 @@ Keputusan pemilik (2026-11-17): satu situs untuk semua coach, `xnk.web.id/<slug>
 | `tools/build-hub.js` | Membangun seluruh situs dari `hub.json`: untuk setiap coach `build-tenant.js` (halaman xnk.my.id → `/exec` coach itu), awalan penyimpanan, awalan cache service worker; landing dan 404. Memeriksa slug dan daftar sebelum membangun. |
 | `tools/hub-versions.js` | Menentukan commit XNK tiap coach dari server coach (T-2220); hasilnya untuk `build-hub.js --versions`. |
 | `tools/hub-verify.js` | Memeriksa hasil build hub sebelum diunggah (T-2221). |
-| `hub-site/adminxnk.html` | Dasbor pemilik `xnk.web.id/adminxnk/` (data dari XNK Pusat, [Pusat.md](Pusat.md)). |
+| `hub-site/adminxnk.html` | Dasbor pemilik `xnk.web.id/adminxnk/` (data dari XNK HQ, [Pusat.md](Pusat.md)). |
 | `tools/coach-ops.js` | Workflow **Coach XNK**: coach baru, hubungkan, perbarui ([Akun.md](Akun.md)). |
 | `tools/hub-edit.js` | Tambah, ubah, hapus satu coach di `hub.json` dengan pemeriksaan penuh (dipakai form Actions). |
 | `hub-site/` | `index.html` (landing profil brand XNK: hero, fitur klien/coach, tangkapan layar, cara kerja, privasi, daftar coach dari `hub.json` di `<!--COACHES-->` (bagian hilang bila kosong), kotak masuk, tanya jawab, tombol kontak dari `contactUrl` di `<!--CONTACT-->`), `img/` (tangkapan layar demo + `og.jpg`, dibuat oleh `tools/hub-shots.js`; jalankan ulang bila tampilan app berubah banyak), `404.html`, `storage-prefix.js`, `manifest.webmanifest` + `sw.js` (landing bisa dipasang dari Chrome/Edge; service worker hanya melayani `/`, `/manifest.webmanifest`, `/img/*`, tidak pernah halaman coach atau cache coach), `desktop.ico`. Ikon (`img/icon-192.png`, `img/icon-512.png`, `img/logo-64.png`, `desktop.ico`) dibuat dari `logo.png` di akar repo di atas latar hitam; perintahnya ada di `tools/hub-shots.js`. Bagian "Aplikasi" menautkan `github.com/xnkzzxd/XNK/releases/download/app-latest/` (`XNK-Android.apk`, `XNK-Windows.msi`, `XNK-macOS.dmg`), dibangun oleh workflow `apps.yml` di repo XNK. Slug `img` dipakai sistem. |
@@ -128,8 +128,8 @@ nomor. Kartu coach di halaman depan sekarang menautkan halaman ini; kotak "Masuk
 
 Satu tempat per coach di `hub.json` (publik): `"place": { "name": "Gold's Gym Kemang", "city": "Jakarta Selatan" }`.
 Nama ≤ 60 dan kota ≤ 40 karakter, keduanya wajib bila salah satu diisi, tanpa `< >` dan karakter kontrol; spasi
-dirapatkan (`cleanPlace` di `build-hub.js`, sama dengan `cleanPlace_` di XNK Pusat, dicek tes). Diisi dari
-`/adminxnk` → **Tempat** (XNK Pusat menjalankan Hub XNK aksi `simpan` dengan isian `tempat` dan `kota`), atau langsung
+dirapatkan (`cleanPlace` di `build-hub.js`, sama dengan `cleanPlace_` di XNK HQ, dicek tes). Diisi dari
+`/adminxnk` → **Tempat** (XNK HQ menjalankan Hub XNK aksi `simpan` dengan isian `tempat` dan `kota`), atau langsung
 lewat form Actions (*tempat* kosong = tetap, `-` = hapus). Tempat ikut terbawa saat link /exec coach diganti.
 
 - Halaman info: tempat dirender saat build (`<!--PLACE-->`, `<!--PLACESEC-->`, `<!--PLACENAV-->`) di pita atas, bagian
@@ -140,7 +140,7 @@ lewat form Actions (*tempat* kosong = tetap, `-` = hapus). Tempat ikut terbawa s
 
 ## Web Push (T-2240)
 
-Satu kunci VAPID untuk seluruh hub (satu origin): `hub.json` `vapidPublic` (diperiksa `readHub`, diterbitkan di `/_hub/push.json`), kunci privat hanya di secret repo hub `HUB_VAPID_PRIVATE`. Kartu notifikasi di panel dan portal muncul begitu coach menerima kunci dari XNK Pusat (`hubPushKey`, `PUSH_ENABLED=true`); tidak ada host baru di CSP (berlangganan push tidak memakai `connect-src`). `pushPage` di `build-hub.js` membetulkan worker versi coach mana pun: url `/` dari Push.gs membuka cakupan worker (`/<slug>/` atau `/<slug>/klien/`, bukan halaman depan hub), worker panel tidak mengambil alih jendela `/<slug>/klien/`, ikon = logo coach atau `/img/icon-192.png`. Workflow **Push XNK** (`push.yml`) mengirim; lihat [push/Setup.md](../push/Setup.md).
+Satu kunci VAPID untuk seluruh hub (satu origin): `hub.json` `vapidPublic` (diperiksa `readHub`, diterbitkan di `/_hub/push.json`), kunci privat hanya di secret repo hub `HUB_VAPID_PRIVATE`. Kartu notifikasi di panel dan portal muncul begitu coach menerima kunci dari XNK HQ (`hubPushKey`, `PUSH_ENABLED=true`); tidak ada host baru di CSP (berlangganan push tidak memakai `connect-src`). `pushPage` di `build-hub.js` membetulkan worker versi coach mana pun: url `/` dari Push.gs membuka cakupan worker (`/<slug>/` atau `/<slug>/klien/`, bukan halaman depan hub), worker panel tidak mengambil alih jendela `/<slug>/klien/`, ikon = logo coach atau `/img/icon-192.png`. Workflow **Push XNK** (`push.yml`) mengirim; lihat [push/Setup.md](../push/Setup.md).
 
 ## Slug
 
@@ -159,7 +159,7 @@ Coach lain tidak terpengaruh.
 1. Buka `xnk.web.id/adminxnk` dan masuk dengan PIN.
 2. Di kartu coach itu tekan **Ganti slug**, ketik nama baru (huruf kecil, angka, tanda hubung, 3 sampai 30 karakter),
    lalu **OK** dan konfirmasi.
-3. XNK Pusat mengerjakan semuanya: pendaftaran, status, backup dan push pindah ke nama baru; folder Drive
+3. XNK HQ mengerjakan semuanya: pendaftaran, status, backup dan push pindah ke nama baru; folder Drive
    `XNK Backup/<lama>` berganti nama jadi `XNK Backup/<baru>` (salinan lama tetap di dalamnya); coach menerima alamat
    situs baru (`SITE_URL`, dipakai link WhatsApp, kode QR kartu dan Cek kesehatan); workflow **Hub XNK** dijalankan
    dengan aksi `ganti-slug`.
@@ -168,10 +168,10 @@ Coach lain tidak terpengaruh.
 5. Beri tahu coach alamat barunya. Coach yang memasang panel di Layar Utama HP sebaiknya memasang ulang dari alamat baru
    (yang lama tetap terbuka, hanya dengan bilah alamat).
 
-Bila XNK Pusat tidak punya `GITHUB_TOKEN`, langkah 3 berhenti sebelum workflow; pesannya menyuruh menjalankan
+Bila XNK HQ tidak punya `GITHUB_TOKEN`, langkah 3 berhenti sebelum workflow; pesannya menyuruh menjalankan
 **repo hub → Actions → Hub XNK → Run workflow**, aksi `ganti-slug`, *slug* = nama lama, *slug_baru* = nama baru.
 Bila coach memakai Library lama (tanpa `hubSiteUrl`), alamat baru dikirim lagi setiap pagi sampai diterima (perbarui
-coach dulu: **Coach XNK → perbarui**). Workflow itu juga bisa dijalankan sendiri lebih dulu; XNK Pusat lalu tidak
+coach dulu: **Coach XNK → perbarui**). Workflow itu juga bisa dijalankan sendiri lebih dulu; XNK HQ lalu tidak
 menjalankannya dua kali.
 
 Kembali ke nama lama boleh (Ganti slug lagi ke nama itu). Nama lama tidak bisa dipakai coach lain selama tercatat
@@ -219,7 +219,7 @@ juga diterima). Aksi `aktifkan` menghapusnya lagi. `simpan` dan `ganti-slug` mem
   lama) tidak membuka situsnya otomatis. Alamat lama (`aliases`) tetap mengalihkan ke `/<slug>/` (halaman tidak aktif).
 - Dilewati untuk coach tidak aktif: `hub-versions.js` (server tidak ditanya, tidak ada di `_hub/versions.json`),
   **Coach XNK** `perbarui` (`coach-ops.js` "dilewati: coach tidak aktif"; rencana `coach.yml` tidak memasukkannya, jadi
-  tidak pernah jadi kenari), **Push XNK** (`hub-push.js`, juga XNK Pusat). `lib-latest.json` tetap dibuat.
+  tidak pernah jadi kenari), **Push XNK** (`hub-push.js`, juga XNK HQ). `lib-latest.json` tetap dibuat.
 - `hub-verify.js` memeriksa halaman tidak aktif (CSP ketat, noindex, tanpa `/exec`, tanpa `config.js`), awalan worker
   pembersih, dan bahwa halaman depan tidak menautkannya. Coach lain dibangun **byte demi byte sama**
   (`tests/hub-leave.test.js`); `hub-check.js` menguji coach aktif yang menjadi tidak aktif di browser sungguhan.

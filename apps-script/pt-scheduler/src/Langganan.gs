@@ -1,5 +1,5 @@
 // Langganan coach di hub xnk.web.id (T-2251): mode baca saja.
-// XNK Pusat (akun pemilik) menghitung langganan tiap coach dan mengirim keadaannya lewat hubReadonly(HUB_SECRET, …).
+// XNK HQ (akun pemilik) menghitung langganan tiap coach dan mengirim keadaannya lewat hubReadonly(HUB_SECRET, …).
 // Saat menyala, SATU gerbang menolak setiap fungsi tulis (_readonlyGate_, dipanggil dari doPost dan dari XNK.run di
 // Library); baca, login dan melihat data tetap jalan. Daftar fungsi tulis = tests/api-lists.js WRITE → _apiWrites_()
 // di Api.gs (dibuat tools/build-api.js). Situs dan data tidak pernah dihapus.
@@ -17,7 +17,7 @@ function _readonlyOn_() {
   return String(props.getProperty('HUB_SECRET') || '').length >= 32;
 }
 
-/** T-2252: true bila XNK Pusat menandai coach ini keluar (hanya spreadsheet hub, sama seperti baca saja). */
+/** T-2252: true bila XNK HQ menandai coach ini keluar (hanya spreadsheet hub, sama seperti baca saja). */
 function _hubLeft_() {
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty('XNK_LEFT') !== 'true') return false;
@@ -40,7 +40,7 @@ function _readonlyGate_(fn) {
 }
 
 /**
- * Nyalakan/matikan mode baca saja (dipanggil XNK Pusat).
+ * Nyalakan/matikan mode baca saja (dipanggil XNK HQ).
  * @param {string} secret HUB_SECRET spreadsheet ini
  * @param {boolean} on true = baca saja; selain true = mati
  * @param {string=} note catatan singkat untuk pita di panel coach (maks 200 huruf)
