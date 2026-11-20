@@ -1790,6 +1790,48 @@ async function contrastReport(page) {
     await off.context.close();
   })().catch(sectionCrash);
 
+  // ── Jalur tulis: booking lalu langsung Selesai + catatan sesi (keluhan coach 2026-11-20) ──
+  // Server lambat (2,5 s untuk addSchedule). Sebelumnya "Selesai" mengirim id sementara (tmp-…) → "Jadwal tidak ditemukan"
+  // dan semuanya dibatalkan. Sekarang aksi menunggu di jalur tulis dan memakai id asli.
+  console.log('Jalur tulis · booking lalu langsung Selesai');
+  await (async () => {
+    const env = seededEnv();
+    const token = env.adminToken();
+    const calls = [];
+    const usedBefore = env.call('getMembers', token).find(m => m.id === 'PT-A').usedSessions;
+    const { page, context, errors } = await openPage(browser, env, '/Index', calls, { xnk_admin_token: token }, { delay: { addSchedule: 2500 } });
+    const tmp = await page.evaluate(() => {
+      const d = new Date(Date.now() + 86400000);
+      const ymd = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      window.openBookingSheet({ date: ymd, time: '10:00' });
+      const sel = document.getElementById('sch-member'); if (sel) sel.value = 'PT-A';
+      document.getElementById('edit-sch-date').value = ymd; document.getElementById('edit-sch-time').value = '10:00';
+      document.getElementById('edit-sch-date').form.requestSubmit();
+      const row = window.schedules.find(s => s.pending);
+      return row ? row.id : '';
+    });
+    check(/^tmp-/.test(tmp), 'booking shows at once with a temporary id');
+    await page.evaluate(id => window.openScheduleDetail(id), tmp);   // detail terbuka selagi booking disimpan
+    await page.evaluate(() => window.markSessionCompleted());
+    await page.click('#btn-confirm-modal-yes');
+    await page.waitForTimeout(600);   // lembar catatan sesi terbuka sendiri, booking masih di server
+    check(calls.indexOf('completeSession') === -1, 'Selesai waits in line while the booking is still saving');
+    await page.fill('#sn-dilatih', 'Squat, bench');
+    await page.evaluate(() => window.sessionNoteSave(null, false));
+    await page.waitForTimeout(4500);
+    const real = await page.evaluate(() => window.schedules.filter(s => s.memberId === 'PT-A' && s.status === 'completed' && !/^tmp-/.test(s.id)).map(s => String(s.id)));
+    const server = env.call('getSchedules', token).find(s => real.indexOf(String(s.id)) !== -1);
+    check(!!server && String(server.status).toLowerCase() === 'completed', 'server: the new session is completed');
+    check(env.call('getMembers', token).find(m => m.id === 'PT-A').usedSessions === usedBefore + 1, 'server: one session taken from the quota');
+    check(!!server && env.call('getSessionNote', token, server.id).dilatih === 'Squat, bench', 'server: the session note is saved on the real id');
+    check(calls.indexOf('addSchedule') < calls.indexOf('completeSession') && calls.indexOf('completeSession') < calls.indexOf('saveSessionNote'), 'server got booking → selesai → catatan in tap order');
+    check(!(await page.evaluate(() => window.schedules.some(s => /^tmp-/.test(s.id)))), 'no temporary id left on screen');
+    check((await page.evaluate(() => window.selectedScheduleDetailId)) === (server && server.id), 'open session detail follows the real id');
+    check(!(await page.locator('#modal-confirm, .confirm-modal').filter({ hasText: 'Gagal menyimpan' }).first().isVisible().catch(() => false)), 'no "Gagal menyimpan" pop-up');
+    noErrors(errors);
+    await context.close();
+  })().catch(sectionCrash);
+
   // ── Tema manual ───────────────────────────────────────────────────────────
   console.log('Tema manual');
   await (async () => {

@@ -275,16 +275,115 @@
   window.adminApi = function () { return tokenRunner(function () { return _lsGet(ADMIN_TOKEN_KEY); }, function (err) { window.onAdminAuthLost(err); }); };
   window.memberApi = function () { return tokenRunner(function () { return _lsGet(MEMBER_TOKEN_KEY); }, function (err) { window.onMemberAuthLost(err); }); };
 
-  function call(runner, name) {
-    const args = Array.prototype.slice.call(arguments, 2);
+  function rawCall(runner, name, args) {
     return new Promise(function (resolve, reject) {
       if (!hasServer()) { reject(new Error('Mode pratinjau: server tidak tersedia.')); return; }
       const r = runner.withSuccessHandler(resolve).withFailureHandler(reject);
       r[name].apply(r, args);
     });
   }
+
+  // ── Satu jalur tulis (write lane) ───────────────────────────────────────────
+  // Layar optimistic berubah seketika, server menyusul. Tanpa jalur ini aksi cepat beruntun gagal:
+  // "Selesai" tepat setelah booking mengirim id sementara (tmp-…) yang belum dikenal server, panggilan
+  // bersamaan berebut kunci skrip ("Server sedang sibuk"), dan dua ubahan bisa tiba terbalik.
+  // Aturan: setiap fungsi tulis (bukan READ_FN_RE) dan setiap panggilan yang membawa id sementara
+  // berjalan SATU PER SATU sesuai urutan ketukan; id sementara diganti id asli saat dikirim; kunci
+  // sibuk dicoba lagi sendiri (server menolak sebelum menulis, jadi aman). tests/write-lane.test.js
+  // memastikan tidak ada nama di WRITE (tests/api-lists.js) yang cocok dengan READ_FN_RE.
+  const READ_FN_RE = /^(get|list|check|export|preview|search|find|count|verify|ping)/;
+  const TMP_RE = /^tmp-\d+(-\d+)?$/;
+  const LANE_MAX_MS = 45000;          // panggilan macet: jalur dilepas, jawaban tetap ditunggu
+  const BUSY_RETRY_MS = [1500, 4000]; // kunci skrip sibuk: dua kali coba lagi
+  const wlane = { tail: Promise.resolve(), inflight: 0, gen: 0, alias: {}, dead: {}, idle: {} };
+  let tmpN = 0;
+  window.tmpId = function () { return 'tmp-' + Date.now() + '-' + (++tmpN); };
+  window.isTmpId = function (id) { return TMP_RE.test(String(id == null ? '' : id)); };
+  // id sementara → id asli (bila sudah ada); id lain apa adanya.
+  function realId(id) {
+    let k = String(id == null ? '' : id), n = 0;
+    while (wlane.alias[k] && n++ < 5) k = wlane.alias[k];
+    return k === String(id) ? id : k;
+  }
+  window.realId = realId;
+  // Jadwal menurut id, juga bila id yang dipegang layar masih id sementara.
+  function schedById(id) {
+    if (id == null || id === '') return null;
+    const a = String(id), b = String(realId(id));
+    return (window.schedules || []).find(x => String(x.id) === a || String(x.id) === b) || null;
+  }
+  window.schedById = schedById;
+  function hasTmp(v, d) {
+    if (typeof v === 'string') return TMP_RE.test(v);
+    if (!v || typeof v !== 'object' || d > 1) return false;
+    return Object.keys(v).some(k => hasTmp(v[k], d + 1));
+  }
+  function resolveVal(v, d) {
+    if (typeof v === 'string' && TMP_RE.test(v)) {
+      const r = realId(v);
+      if (r !== v) return r;
+      throw new Error(wlane.dead[v] ? 'Booking ini tidak jadi tersimpan, jadi perubahan dibatalkan.' : 'Jadwal ini masih disimpan. Coba lagi sebentar.');
+    }
+    if (!v || typeof v !== 'object' || d > 1) return v;
+    if (Array.isArray(v)) return v.map(x => resolveVal(x, d + 1));
+    if (Object.getPrototypeOf(v) !== Object.prototype) return v;
+    const o = {};
+    Object.keys(v).forEach(k => { o[k] = resolveVal(v[k], d + 1); });
+    return o;
+  }
+  function resolveArgs(args) { return hasTmp(args, -1) ? args.map(a => resolveVal(a, 0)) : args; }
+  window.resolveTmpArgs = function (args) { try { return resolveArgs(args); } catch (e) { return args; } };
+  function laneIdle() {
+    const fns = wlane.idle; wlane.idle = {};
+    Object.keys(fns).forEach(k => setTimeout(function () { try { fns[k](); } catch (e) { console.error(e); } }, 0));
+  }
+  function lane(job) {
+    wlane.inflight++; wlane.gen++;
+    const p = wlane.tail.then(job);
+    wlane.tail = new Promise(function (res) { p.then(res, res); setTimeout(res, LANE_MAX_MS); });
+    const done = function () { wlane.inflight = Math.max(0, wlane.inflight - 1); if (!wlane.inflight) laneIdle(); };
+    p.then(done, done);
+    return p;
+  }
+  function sendRetry(runner, name, args, n) {
+    let a;
+    try { a = resolveArgs(args); } catch (e) { return Promise.reject(e); }
+    return rawCall(runner, name, a).catch(function (err) {
+      const m = String((err && err.message) || err || '');
+      if (n >= BUSY_RETRY_MS.length || window.isAuthError(err) || !/sibuk/i.test(m)) throw err;
+      return new Promise(r => setTimeout(r, BUSY_RETRY_MS[n])).then(() => sendRetry(runner, name, args, n + 1));
+    });
+  }
+  function call(runner, name) {
+    const args = Array.prototype.slice.call(arguments, 2);
+    if (READ_FN_RE.test(name) && !hasTmp(args, -1)) return rawCall(runner, name, args);
+    return lane(function () { return sendRetry(runner, name, args, 0); });
+  }
+  // Pembuat baris baru dengan id sementara `tmp`: begitu jawaban datang (masih di dalam jalur, jadi
+  // aksi berikutnya pada baris itu sudah memakai id asli) id dipetakan, baris di layar diganti namanya.
+  function bindTmp(tmp, res) {
+    const id = res && res.status !== 'conflict' ? (res.id || (res.schedule && res.schedule.id) || '') : '';
+    if (!id) { wlane.dead[tmp] = true; return; }
+    wlane.alias[tmp] = String(id);
+    (window.schedules || []).forEach(function (s) { if (String(s.id) === tmp) { s.id = id; delete s.pending; } });
+    if (String(window.selectedScheduleDetailId) === tmp) window.selectedScheduleDetailId = id;
+    if (String(window.rescheduleScheduleId) === tmp) window.rescheduleScheduleId = id;
+  }
+  function callCreate(runner, tmp, name, args) {
+    return lane(function () {
+      return sendRetry(runner, name, args, 0).then(function (res) { bindTmp(tmp, res); return res; }, function (err) { wlane.dead[tmp] = true; throw err; });
+    });
+  }
+  // Data dari server yang diminta sebelum / selama penulisan bisa basi: jangan timpa layar optimistic.
+  window.wqSnap = function () { return wlane.gen; };
+  window.wqStale = function (snap) { return wlane.inflight > 0 || wlane.gen !== snap; };
+  window.wqBusy = function () { return wlane.inflight > 0; };
+  window.wqOnIdle = function (key, fn) { if (!wlane.inflight) setTimeout(fn, 0); else wlane.idle[key] = fn; };
+
   const adminCall = function (name) { return call.apply(null, [window.adminApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
   const memberCall = function (name) { return call.apply(null, [window.memberApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
+  const adminCreate = function (tmp, name) { return callCreate(window.adminApi(), tmp, name, Array.prototype.slice.call(arguments, 2)); };
+  const memberCreate = function (tmp, name) { return callCreate(window.memberApi(), tmp, name, Array.prototype.slice.call(arguments, 2)); };
   const publicCall = function (name) { return rpc(name, Array.prototype.slice.call(arguments, 1)); };
 
   // ── Tombol sibuk ────────────────────────────────────────────────────────────
@@ -353,7 +452,7 @@
   window.obForget = function (mode) { obWrite(obRead().filter(it => it.mode !== mode)); };
   function obAdd(q, label) {
     const a = obRead();
-    a.push({ mode: q.mode, fn: q.fn, args: q.args || [], sig: obSig(q.mode), label: label || '', at: Date.now() });
+    a.push({ mode: q.mode, fn: q.fn, args: window.resolveTmpArgs(q.args || []), sig: obSig(q.mode), label: label || '', at: Date.now() });
     obWrite(a);
     window.showToast('Tersimpan di perangkat. Dikirim saat ada sinyal.', 'cloud-off');
     obLater();
@@ -729,7 +828,7 @@
     } else if (kind === 'coach') {
       if (window.coaches.some(c => String(c.id) === id)) window.openCoachProfile(id); else window.closeDetail();
     } else if (kind === 'session') {
-      if (window.schedules.some(s => String(s.id) === id)) window.openScheduleDetail(id); else window.closeDetail();
+      if (schedById(id)) window.openScheduleDetail(id); else window.closeDetail();
     }
   }
   function highlightSelection() {
@@ -2192,7 +2291,7 @@
   function saveAdminCache() {
     try {
       _lsSet(ADMIN_CACHE_KEY, JSON.stringify({
-        members: window.members, schedules: window.schedules, coaches: window.coaches,
+        members: window.members, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
         priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || []
       }));
     } catch (e) {}
@@ -2270,9 +2369,13 @@
     setTimeout(function () { if (window.obFlush) window.obFlush(); }, 1500);
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
+    const snap = window.wqSnap();
     return safe(adminCall('getAdminBootstrap')).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
       const r = b ? [b.members, b.schedules, b.coaches, b.priceList, b.businessHours] : [];
+      // Ada simpanan yang berjalan sejak permintaan ini dikirim: klien & jadwal di layar (optimistic) lebih baru
+      // dari jawaban ini. Pertahankan, lalu ambil lagi setelah semua simpanan selesai.
+      if (window.wqStale(snap) && (r[0] || r[1])) { r[0] = r[1] = null; window.wqOnIdle('admin-boot', function () { window.loadAllData(); }); }
       // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
       if (r[0]) window.members = r[0];
       if (r[1]) window.schedules = normalizeSchedules(r[1]);
@@ -2282,7 +2385,7 @@
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
       ui.dataReady = true;
       window.hideGlobalLoader();
-      if (r[0] && r[1]) saveAdminCache();
+      if (r[0] && r[1]) saveAdminCache();   // dilewati bila basi (r dikosongkan di atas)
       window.offlineSync();
       loadAdminExtras();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
@@ -2354,12 +2457,13 @@
     }
     // Panggilan 1: profil, jadwalku, jam kosong, coach, paket (cepat). Panggilan 2 (getPortalMore, data sisanya): tanpa salinan
     // langsung bersamaan; dengan salinan hanya bila versi data di bootstrap berbeda (moreUpToDate).
+    const snap = window.wqSnap();
     const boot = publicCall('getPortalBootstrap', token).catch(function () { return null; });
     const haveMore = cached && !!portalMoreRaw;
     if (token && !haveMore) setTimeout(function () { window.refreshPortalMore(true); }, 0);
     return boot.then(function (b) {
       b = b || {};
-      applyPortalBootstrap(b);
+      applyPortalBootstrap(b, snap);
       if (b.profile || b.openSlots) window.setReadonly(b.readonly ? { on: true } : null, 'portal');   // T-2251 (jawaban gagal = biarkan)
       if (token && haveMore && !b.authLost) { if (!moreUpToDate(b)) window.refreshPortalMore(true); else window.wlFlush(); }
       window.coaches = b.coaches || [];
@@ -2417,7 +2521,7 @@
     if (!token || !window.publicLoggedMember) return;
     try {
       _lsSet(PORTAL_CACHE_KEY, JSON.stringify({
-        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules, coaches: window.coaches,
+        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
         priceList: window.priceListData, hours: DAY_HOURS, horizon: window.bookingHorizonDays, cutoff: window.rescheduleCutoffHours,
         infoLatest: window.infoLatest || '', feedback: window.myFeedback ? { enabled: window.myFeedback.enabled, pending: window.myFeedback.pending, pkgEval: window.myFeedback.pkgEval } : null,
         more: portalMoreRaw, moreAt: portalMoreAt
@@ -2524,8 +2628,10 @@
   });
 
   // Jadwalku + jam kosong dari getPortalBootstrap (jadwal klien lain tidak pernah dikirim ke browser).
-  function applyPortalBootstrap(b) {
-    window.schedules = normalizeSchedules(b.schedules);
+  // snap (window.wqSnap() saat diminta): booking / reschedule berjalan sejak itu = jadwalku di layar lebih baru; pertahankan dan ambil lagi nanti.
+  function applyPortalBootstrap(b, snap) {
+    if (snap != null && window.wqStale(snap) && Array.isArray(b.schedules)) window.wqOnIdle('portal-boot', function () { window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {}); });
+    else window.schedules = normalizeSchedules(b.schedules);
     if (b.horizonDays) window.bookingHorizonDays = b.horizonDays;
     if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
     if (b.openSlots) applyOpenSlots(b.openSlots);
@@ -2538,7 +2644,8 @@
     if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }
   window.refreshPortalSchedules = function () {
-    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b); savePortalCache(); return b; });
+    const snap = window.wqSnap();
+    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b, snap); savePortalCache(); return b; });
   };
 
   // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form
@@ -2653,7 +2760,7 @@
   }
 
   window.quickWa = function (id) {
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return;
     const d = new Date(s.start);
     window.waToClient(s, 'Halo ' + s.title + ', ini Coach XNK. Mengingatkan jadwal latihan kita ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB. Sampai ketemu!');
@@ -3242,7 +3349,7 @@
 
   window.updateDraggedEvent = function (event, revert) {
     if (window.isPublicView) { revert(); return; }
-    const s = window.schedules.find(x => String(x.id) === String(event.id));
+    const s = schedById(event.id);
     const data = {
       id: event.id,
       start: event.start.toISOString(),
@@ -3259,7 +3366,7 @@
   // ── Detail sesi (admin) ─────────────────────────────────────────────────────
   window.openScheduleDetail = function (id) {
     if (window.isPublicView) return;
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return;
     window.selectedScheduleDetailId = s.id;
     const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000);
@@ -3319,7 +3426,7 @@
     const coachName = coach ? coach.name : '';
     const done = busy($('btn-save-coach'), '…');
     adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId).then(function () {
-      const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+      const s = schedById(window.selectedScheduleDetailId);
       if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
       done();
       window.showToast(coach ? window.coachLabel(coach.name) + ' ditugaskan.' : 'Coach dikosongkan.');
@@ -3329,7 +3436,7 @@
 
   window.contactDetailMember = function () { window.quickWa(window.selectedScheduleDetailId); };
   window.contactDetailCoach = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s || !s.coachId) { window.showToast('Pilih coach dulu.'); return; }
     const c = window.coaches.find(x => String(x.id) === String(s.coachId));
     if (!c) return;
@@ -3338,7 +3445,7 @@
   };
 
   window.markSessionCompleted = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     const m = window.members.find(x => String(x.id) === String(s.memberId));
     if (m && Number(m.usedSessions) >= Number(m.totalSessions)) { window.showToast('Kuota sesi klien ini sudah habis.'); return; }
@@ -3357,11 +3464,11 @@
   };
 
   window.deleteScheduleFromDetail = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     window.showConfirmModal('Sesi <b>' + h(s.title) + '</b> pada ' + h(fmtShort(new Date(s.start))) + ' akan dihapus.' + (isDone(s) ? ' Kuota klien dikembalikan 1.' : ''), function () {
       adminCall('deleteSchedule', s.id).then(function () {
-        window.schedules = window.schedules.filter(x => String(x.id) !== String(s.id));
+        window.schedules = window.schedules.filter(x => x !== s && String(x.id) !== String(s.id));
         if (isDone(s)) { const m = window.members.find(x => String(x.id) === String(s.memberId)); if (m) m.usedSessions = Math.max(0, (Number(m.usedSessions) || 0) - 1); }
         window.closeDetail();
         window.updateUI();
@@ -3372,7 +3479,7 @@
   window.confirmDeleteSchedule = window.deleteScheduleFromDetail;
 
   window.deleteRecurringGroupFromDetail = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s || !s.recurringGroupId) return;
     const groupId = s.recurringGroupId;
     window.showConfirmModal('<b>Semua sesi</b> dalam seri berulang ini akan dihapus, termasuk yang sudah lewat. Kuota dari sesi yang sudah selesai dikembalikan.', function () {
@@ -3542,7 +3649,7 @@
   window.openRescheduleModal = function (id) {
     const me = window.publicLoggedMember;
     if (!me) { window.showToast('Masuk dulu ya.'); return; }
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) { window.showToast('Jadwal tidak ditemukan.'); return; }
     if (String(s.memberId) !== String(me.id)) { window.showToast('Jadwal ini bukan milikmu.'); return; }
     if (isDone(s)) { window.showToast('Sesi yang sudah selesai tidak bisa diubah.'); return; }
@@ -3563,7 +3670,7 @@
   };
 
   window.openEditScheduleDetailModal = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     window.isEditScheduleMode = true;
     window.isRescheduleMode = false;
@@ -3664,7 +3771,7 @@
     const sub = !alts.length ? 'Belum ada jam kosong yang cocok.' : res.code === 'duration' ? 'Ikut kelasnya dengan durasi yang sama?' : 'Pilih jam lain, durasi ' + reqMins + ' menit tetap sama.';
     let old = '';
     if (resched) {
-      const s = window.schedules.find(x => String(x.id) === String(window.rescheduleScheduleId));
+      const s = schedById(window.rescheduleScheduleId);
       if (s) old = 'Jadwal lama (' + whenLabel(s.start) + ') tetap aman.';
     }
     const el = document.createElement('div');
@@ -3842,8 +3949,8 @@
       res.schedule || { id: res.id, start: data.start, end: data.end });
     if (!row.id) return null;
     row.memberId = member.id;
-    const have = window.schedules.find(x => String(x.id) === String(row.id));
-    if (have) return have;
+    const have = schedById(row.id);
+    if (have) { const fresh = normalizeSchedules([row])[0]; ['start', 'end', 'coachId', 'coachName', 'status'].forEach(k => { if (fresh[k] != null && fresh[k] !== '') have[k] = fresh[k]; }); delete have.pending; return have; }   // baris sementara yang sudah diganti id-nya oleh jalur tulis
     window.schedules.push(normalizeSchedules([row])[0]);
     return row;
   }
@@ -3865,7 +3972,7 @@
   function clientBookFast(form, data, member) {
     clearSchNotice(form);   // panel bentrok/galat lama tidak boleh tertinggal di lembar yang ditutup
     const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
-    const tmpId = 'tmp-' + Date.now();
+    const tmpId = window.tmpId();
     window.schedules.push(normalizeSchedules([{ id: tmpId, memberId: member.id, title: member.name, notes: data.notes, status: 'unread', start: data.start, end: data.end, coachId: data.coachId || '', pending: true }])[0]);
     const d = new Date(data.start);
     ui.selectedDate = new Date(d); ui.selectedDate.setHours(0, 0, 0, 0);
@@ -3876,7 +3983,8 @@
     window.showToast('Booking terkirim ke coach!');
     const drop = function () { window.schedules = window.schedules.filter(x => String(x.id) !== tmpId); };
     const reopen = function (show) { drop(); window.updateUI(); if (sheetId) { openSheet(sheetId); show(); } };
-    memberCall('clientBookSchedule', data, { soft: true }).then(function (res) {
+    // memberCreate: aksi lain pada sesi ini (reschedule, dll.) menunggu di jalur tulis lalu memakai id asli.
+    memberCreate(tmpId, 'clientBookSchedule', data, { soft: true }).then(function (res) {
       res = res || {};
       if (res.openSlots) applyOpenSlots(res.openSlots);
       if (res.openSlotsByCoach) applyOpenSlotsByCoach(res.openSlotsByCoach);
@@ -3920,7 +4028,7 @@
   }
 
   function clientRescheduleFast(form, id, data, notes) {
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return false;
     clearSchNotice(form);   // panel bentrok/galat lama tidak boleh tertinggal di lembar yang ditutup
     const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
@@ -3951,13 +4059,13 @@
   }
 
   function clientReschedule(form, btn, id, data, notes) {
-    const own = window.schedules.find(x => String(x.id) === String(id));
+    const own = schedById(id);
     if (navigator.onLine !== false && localSlotFree(data.start, data.end, own && own.coachId && window.openSlotsByCoachMap[own.coachId] ? String(own.coachId) : '') &&
         clientRescheduleFast(form, id, data, notes)) return;
     const label = hourLabel(data.start);
     const apply = function (res) {
       const ns = res.newStart || data.start, ne = res.newEnd || data.end;
-      const s = window.schedules.find(x => String(x.id) === String(id));
+      const s = schedById(id);
       if (s) { s.start = ns; s.end = ne; s.notes = notes; }
       return 'Jadwal dipindah ke ' + whenLabel(ns) + '.';
     };
@@ -4029,7 +4137,7 @@
 
     if (window.isEditScheduleMode) {
       data.id = window.selectedScheduleDetailId;
-      const s = window.schedules.find(x => String(x.id) === String(data.id));
+      const s = schedById(data.id);
       const old = s ? { start: s.start, end: s.end, notes: s.notes } : null;
       optimistic({ call: function () { return adminCall('updateScheduleData', data); }, sheet: true, ok: 'Jadwal diperbarui.', label: 'Jadwal',
         undo: function () { if (s && old) { Object.assign(s, old); window.updateUI(); } window.isEditScheduleMode = true; } });
@@ -4076,9 +4184,11 @@
     if (isClient) { clientBookSingle(form, btn, data, member); return; }
 
     // Optimistic: sesi langsung di kalender dengan id sementara; ditolak = dihapus lagi + pop-up, lembar dibuka.
-    const row = Object.assign({}, data, { id: 'tmp-' + Date.now(), title: member.name, status: 'read', coachId: '', coachName: '', pending: true });
-    optimistic({ call: function () { return adminCall('addSchedule', data); }, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
-      then: function (res) { row.id = res.id; row.coachId = res.coachId || ''; row.coachName = res.coachName || ''; delete row.pending; window.updateUI(); },
+    // adminCreate: "Selesai", ubah, geser, hapus, catatan pada sesi ini menunggu di jalur tulis lalu memakai id asli.
+    const tmp = window.tmpId();
+    const row = Object.assign({}, data, { id: tmp, title: member.name, status: 'read', coachId: '', coachName: '', pending: true });
+    optimistic({ call: function () { return adminCreate(tmp, 'addSchedule', data); }, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
+      then: function (res) { row.id = res.id; delete row.pending; row.coachId = res.coachId || ''; row.coachName = res.coachName || ''; window.updateUI(); },
       undo: function () { window.schedules = window.schedules.filter(x => x !== row); window.updateUI(); } });
     window.schedules.push(row);
     ui.selectedDate = new Date(start); ui.selectedDate.setHours(0, 0, 0, 0);
@@ -7510,7 +7620,7 @@
   // Dibuka otomatis setelah "Selesai" (afterDone = true) dan dari detail sesi yang sudah selesai.
   let noteSched = null;
   window.openSessionNote = function (scheduleId, afterDone, result) {
-    const s = window.schedules.find(x => String(x.id) === String(scheduleId));
+    const s = schedById(scheduleId);
     if (!s) return;
     noteSched = s;
     ['sn-dilatih', 'sn-fokus', 'sn-rpe', 'sn-pribadi'].forEach(k => { $(k).value = ''; });
@@ -8064,7 +8174,7 @@
   }
   let calItems = [];
   window.openAddToCalendar = function (ids, headline) {
-    calItems = (ids || []).map(id => window.schedules.find(x => String(x.id) === String(id))).filter(Boolean)
+    calItems = (ids || []).map(id => schedById(id)).filter(Boolean)
       .filter(s => new Date(s.start) > new Date()).sort((x, y) => new Date(x.start) - new Date(y.start));
     if (!calItems.length) { window.showToast('Tidak ada sesi mendatang untuk disimpan.'); return; }
     $('cal-title').textContent = headline || 'Tambah ke kalender';
@@ -11655,7 +11765,7 @@
     if (!me) { window.showToast('Masuk dulu untuk booking jadwal.', 'lock'); window.navigate('public-login'); return; }
     let old = null;
     if (opts.resched) {
-      old = window.schedules.find(x => String(x.id) === String(opts.resched));
+      old = schedById(opts.resched);
       if (!old || String(old.memberId) !== String(me.id)) { window.showToast('Jadwal tidak ditemukan.'); return; }
       if (isDone(old)) { window.showToast('Sesi yang sudah selesai tidak bisa diubah.'); return; }
       const cutoff = window.rescheduleCutoffHours != null ? Number(window.rescheduleCutoffHours) : 2;
@@ -11738,7 +11848,7 @@
   }
   // Fase Y: di desktop booking jadi satu jendela dua panel (kalender | jam), ringkasan dan tombol di kaki.
   function bkDrawDesk() {
-    const me = window.publicLoggedMember, old = bkx.resched ? window.schedules.find(x => String(x.id) === bkx.resched) : null;
+    const me = window.publicLoggedMember, old = bkx.resched ? schedById(bkx.resched) : null;
     const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
     const coaches = bkMulti() && !old ? '<div class="bk-coaches" role="radiogroup" aria-label="Coach">' + window.coaches.map(function (c) {
       const on = String(c.id) === bkx.coach;
@@ -11770,7 +11880,7 @@
     if (window.deskIs && window.deskIs()) { $('bk-screen').classList.add('bk-desk'); bkDrawDesk(); return; }
     $('bk-screen').classList.remove('bk-desk');
     const me = window.publicLoggedMember, st = bkx.steps[bkx.i], n = bkx.steps.length;
-    const old = bkx.resched ? window.schedules.find(x => String(x.id) === bkx.resched) : null;
+    const old = bkx.resched ? schedById(bkx.resched) : null;
     const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
     let body = '', cta = 'Lanjut';
     if (st === 'coach') {

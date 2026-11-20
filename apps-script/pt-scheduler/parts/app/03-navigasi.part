@@ -456,7 +456,7 @@
   function saveAdminCache() {
     try {
       _lsSet(ADMIN_CACHE_KEY, JSON.stringify({
-        members: window.members, schedules: window.schedules, coaches: window.coaches,
+        members: window.members, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
         priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || []
       }));
     } catch (e) {}
@@ -534,9 +534,13 @@
     setTimeout(function () { if (window.obFlush) window.obFlush(); }, 1500);
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
+    const snap = window.wqSnap();
     return safe(adminCall('getAdminBootstrap')).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
       const r = b ? [b.members, b.schedules, b.coaches, b.priceList, b.businessHours] : [];
+      // Ada simpanan yang berjalan sejak permintaan ini dikirim: klien & jadwal di layar (optimistic) lebih baru
+      // dari jawaban ini. Pertahankan, lalu ambil lagi setelah semua simpanan selesai.
+      if (window.wqStale(snap) && (r[0] || r[1])) { r[0] = r[1] = null; window.wqOnIdle('admin-boot', function () { window.loadAllData(); }); }
       // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
       if (r[0]) window.members = r[0];
       if (r[1]) window.schedules = normalizeSchedules(r[1]);
@@ -546,7 +550,7 @@
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
       ui.dataReady = true;
       window.hideGlobalLoader();
-      if (r[0] && r[1]) saveAdminCache();
+      if (r[0] && r[1]) saveAdminCache();   // dilewati bila basi (r dikosongkan di atas)
       window.offlineSync();
       loadAdminExtras();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
@@ -618,12 +622,13 @@
     }
     // Panggilan 1: profil, jadwalku, jam kosong, coach, paket (cepat). Panggilan 2 (getPortalMore, data sisanya): tanpa salinan
     // langsung bersamaan; dengan salinan hanya bila versi data di bootstrap berbeda (moreUpToDate).
+    const snap = window.wqSnap();
     const boot = publicCall('getPortalBootstrap', token).catch(function () { return null; });
     const haveMore = cached && !!portalMoreRaw;
     if (token && !haveMore) setTimeout(function () { window.refreshPortalMore(true); }, 0);
     return boot.then(function (b) {
       b = b || {};
-      applyPortalBootstrap(b);
+      applyPortalBootstrap(b, snap);
       if (b.profile || b.openSlots) window.setReadonly(b.readonly ? { on: true } : null, 'portal');   // T-2251 (jawaban gagal = biarkan)
       if (token && haveMore && !b.authLost) { if (!moreUpToDate(b)) window.refreshPortalMore(true); else window.wlFlush(); }
       window.coaches = b.coaches || [];
@@ -681,7 +686,7 @@
     if (!token || !window.publicLoggedMember) return;
     try {
       _lsSet(PORTAL_CACHE_KEY, JSON.stringify({
-        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules, coaches: window.coaches,
+        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
         priceList: window.priceListData, hours: DAY_HOURS, horizon: window.bookingHorizonDays, cutoff: window.rescheduleCutoffHours,
         infoLatest: window.infoLatest || '', feedback: window.myFeedback ? { enabled: window.myFeedback.enabled, pending: window.myFeedback.pending, pkgEval: window.myFeedback.pkgEval } : null,
         more: portalMoreRaw, moreAt: portalMoreAt
@@ -788,8 +793,10 @@
   });
 
   // Jadwalku + jam kosong dari getPortalBootstrap (jadwal klien lain tidak pernah dikirim ke browser).
-  function applyPortalBootstrap(b) {
-    window.schedules = normalizeSchedules(b.schedules);
+  // snap (window.wqSnap() saat diminta): booking / reschedule berjalan sejak itu = jadwalku di layar lebih baru; pertahankan dan ambil lagi nanti.
+  function applyPortalBootstrap(b, snap) {
+    if (snap != null && window.wqStale(snap) && Array.isArray(b.schedules)) window.wqOnIdle('portal-boot', function () { window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {}); });
+    else window.schedules = normalizeSchedules(b.schedules);
     if (b.horizonDays) window.bookingHorizonDays = b.horizonDays;
     if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
     if (b.openSlots) applyOpenSlots(b.openSlots);
@@ -802,7 +809,8 @@
     if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }
   window.refreshPortalSchedules = function () {
-    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b); savePortalCache(); return b; });
+    const snap = window.wqSnap();
+    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b, snap); savePortalCache(); return b; });
   };
 
   // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form

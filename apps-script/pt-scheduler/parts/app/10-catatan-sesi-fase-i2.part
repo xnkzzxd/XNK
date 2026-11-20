@@ -2,7 +2,7 @@
   // Dibuka otomatis setelah "Selesai" (afterDone = true) dan dari detail sesi yang sudah selesai.
   let noteSched = null;
   window.openSessionNote = function (scheduleId, afterDone, result) {
-    const s = window.schedules.find(x => String(x.id) === String(scheduleId));
+    const s = schedById(scheduleId);
     if (!s) return;
     noteSched = s;
     ['sn-dilatih', 'sn-fokus', 'sn-rpe', 'sn-pribadi'].forEach(k => { $(k).value = ''; });
@@ -556,7 +556,7 @@
   }
   let calItems = [];
   window.openAddToCalendar = function (ids, headline) {
-    calItems = (ids || []).map(id => window.schedules.find(x => String(x.id) === String(id))).filter(Boolean)
+    calItems = (ids || []).map(id => schedById(id)).filter(Boolean)
       .filter(s => new Date(s.start) > new Date()).sort((x, y) => new Date(x.start) - new Date(y.start));
     if (!calItems.length) { window.showToast('Tidak ada sesi mendatang untuk disimpan.'); return; }
     $('cal-title').textContent = headline || 'Tambah ke kalender';

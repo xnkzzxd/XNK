@@ -275,16 +275,115 @@
   window.adminApi = function () { return tokenRunner(function () { return _lsGet(ADMIN_TOKEN_KEY); }, function (err) { window.onAdminAuthLost(err); }); };
   window.memberApi = function () { return tokenRunner(function () { return _lsGet(MEMBER_TOKEN_KEY); }, function (err) { window.onMemberAuthLost(err); }); };
 
-  function call(runner, name) {
-    const args = Array.prototype.slice.call(arguments, 2);
+  function rawCall(runner, name, args) {
     return new Promise(function (resolve, reject) {
       if (!hasServer()) { reject(new Error('Mode pratinjau: server tidak tersedia.')); return; }
       const r = runner.withSuccessHandler(resolve).withFailureHandler(reject);
       r[name].apply(r, args);
     });
   }
+
+  // ── Satu jalur tulis (write lane) ───────────────────────────────────────────
+  // Layar optimistic berubah seketika, server menyusul. Tanpa jalur ini aksi cepat beruntun gagal:
+  // "Selesai" tepat setelah booking mengirim id sementara (tmp-…) yang belum dikenal server, panggilan
+  // bersamaan berebut kunci skrip ("Server sedang sibuk"), dan dua ubahan bisa tiba terbalik.
+  // Aturan: setiap fungsi tulis (bukan READ_FN_RE) dan setiap panggilan yang membawa id sementara
+  // berjalan SATU PER SATU sesuai urutan ketukan; id sementara diganti id asli saat dikirim; kunci
+  // sibuk dicoba lagi sendiri (server menolak sebelum menulis, jadi aman). tests/write-lane.test.js
+  // memastikan tidak ada nama di WRITE (tests/api-lists.js) yang cocok dengan READ_FN_RE.
+  const READ_FN_RE = /^(get|list|check|export|preview|search|find|count|verify|ping)/;
+  const TMP_RE = /^tmp-\d+(-\d+)?$/;
+  const LANE_MAX_MS = 45000;          // panggilan macet: jalur dilepas, jawaban tetap ditunggu
+  const BUSY_RETRY_MS = [1500, 4000]; // kunci skrip sibuk: dua kali coba lagi
+  const wlane = { tail: Promise.resolve(), inflight: 0, gen: 0, alias: {}, dead: {}, idle: {} };
+  let tmpN = 0;
+  window.tmpId = function () { return 'tmp-' + Date.now() + '-' + (++tmpN); };
+  window.isTmpId = function (id) { return TMP_RE.test(String(id == null ? '' : id)); };
+  // id sementara → id asli (bila sudah ada); id lain apa adanya.
+  function realId(id) {
+    let k = String(id == null ? '' : id), n = 0;
+    while (wlane.alias[k] && n++ < 5) k = wlane.alias[k];
+    return k === String(id) ? id : k;
+  }
+  window.realId = realId;
+  // Jadwal menurut id, juga bila id yang dipegang layar masih id sementara.
+  function schedById(id) {
+    if (id == null || id === '') return null;
+    const a = String(id), b = String(realId(id));
+    return (window.schedules || []).find(x => String(x.id) === a || String(x.id) === b) || null;
+  }
+  window.schedById = schedById;
+  function hasTmp(v, d) {
+    if (typeof v === 'string') return TMP_RE.test(v);
+    if (!v || typeof v !== 'object' || d > 1) return false;
+    return Object.keys(v).some(k => hasTmp(v[k], d + 1));
+  }
+  function resolveVal(v, d) {
+    if (typeof v === 'string' && TMP_RE.test(v)) {
+      const r = realId(v);
+      if (r !== v) return r;
+      throw new Error(wlane.dead[v] ? 'Booking ini tidak jadi tersimpan, jadi perubahan dibatalkan.' : 'Jadwal ini masih disimpan. Coba lagi sebentar.');
+    }
+    if (!v || typeof v !== 'object' || d > 1) return v;
+    if (Array.isArray(v)) return v.map(x => resolveVal(x, d + 1));
+    if (Object.getPrototypeOf(v) !== Object.prototype) return v;
+    const o = {};
+    Object.keys(v).forEach(k => { o[k] = resolveVal(v[k], d + 1); });
+    return o;
+  }
+  function resolveArgs(args) { return hasTmp(args, -1) ? args.map(a => resolveVal(a, 0)) : args; }
+  window.resolveTmpArgs = function (args) { try { return resolveArgs(args); } catch (e) { return args; } };
+  function laneIdle() {
+    const fns = wlane.idle; wlane.idle = {};
+    Object.keys(fns).forEach(k => setTimeout(function () { try { fns[k](); } catch (e) { console.error(e); } }, 0));
+  }
+  function lane(job) {
+    wlane.inflight++; wlane.gen++;
+    const p = wlane.tail.then(job);
+    wlane.tail = new Promise(function (res) { p.then(res, res); setTimeout(res, LANE_MAX_MS); });
+    const done = function () { wlane.inflight = Math.max(0, wlane.inflight - 1); if (!wlane.inflight) laneIdle(); };
+    p.then(done, done);
+    return p;
+  }
+  function sendRetry(runner, name, args, n) {
+    let a;
+    try { a = resolveArgs(args); } catch (e) { return Promise.reject(e); }
+    return rawCall(runner, name, a).catch(function (err) {
+      const m = String((err && err.message) || err || '');
+      if (n >= BUSY_RETRY_MS.length || window.isAuthError(err) || !/sibuk/i.test(m)) throw err;
+      return new Promise(r => setTimeout(r, BUSY_RETRY_MS[n])).then(() => sendRetry(runner, name, args, n + 1));
+    });
+  }
+  function call(runner, name) {
+    const args = Array.prototype.slice.call(arguments, 2);
+    if (READ_FN_RE.test(name) && !hasTmp(args, -1)) return rawCall(runner, name, args);
+    return lane(function () { return sendRetry(runner, name, args, 0); });
+  }
+  // Pembuat baris baru dengan id sementara `tmp`: begitu jawaban datang (masih di dalam jalur, jadi
+  // aksi berikutnya pada baris itu sudah memakai id asli) id dipetakan, baris di layar diganti namanya.
+  function bindTmp(tmp, res) {
+    const id = res && res.status !== 'conflict' ? (res.id || (res.schedule && res.schedule.id) || '') : '';
+    if (!id) { wlane.dead[tmp] = true; return; }
+    wlane.alias[tmp] = String(id);
+    (window.schedules || []).forEach(function (s) { if (String(s.id) === tmp) { s.id = id; delete s.pending; } });
+    if (String(window.selectedScheduleDetailId) === tmp) window.selectedScheduleDetailId = id;
+    if (String(window.rescheduleScheduleId) === tmp) window.rescheduleScheduleId = id;
+  }
+  function callCreate(runner, tmp, name, args) {
+    return lane(function () {
+      return sendRetry(runner, name, args, 0).then(function (res) { bindTmp(tmp, res); return res; }, function (err) { wlane.dead[tmp] = true; throw err; });
+    });
+  }
+  // Data dari server yang diminta sebelum / selama penulisan bisa basi: jangan timpa layar optimistic.
+  window.wqSnap = function () { return wlane.gen; };
+  window.wqStale = function (snap) { return wlane.inflight > 0 || wlane.gen !== snap; };
+  window.wqBusy = function () { return wlane.inflight > 0; };
+  window.wqOnIdle = function (key, fn) { if (!wlane.inflight) setTimeout(fn, 0); else wlane.idle[key] = fn; };
+
   const adminCall = function (name) { return call.apply(null, [window.adminApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
   const memberCall = function (name) { return call.apply(null, [window.memberApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
+  const adminCreate = function (tmp, name) { return callCreate(window.adminApi(), tmp, name, Array.prototype.slice.call(arguments, 2)); };
+  const memberCreate = function (tmp, name) { return callCreate(window.memberApi(), tmp, name, Array.prototype.slice.call(arguments, 2)); };
   const publicCall = function (name) { return rpc(name, Array.prototype.slice.call(arguments, 1)); };
 
   // ── Tombol sibuk ────────────────────────────────────────────────────────────
@@ -353,7 +452,7 @@
   window.obForget = function (mode) { obWrite(obRead().filter(it => it.mode !== mode)); };
   function obAdd(q, label) {
     const a = obRead();
-    a.push({ mode: q.mode, fn: q.fn, args: q.args || [], sig: obSig(q.mode), label: label || '', at: Date.now() });
+    a.push({ mode: q.mode, fn: q.fn, args: window.resolveTmpArgs(q.args || []), sig: obSig(q.mode), label: label || '', at: Date.now() });
     obWrite(a);
     window.showToast('Tersimpan di perangkat. Dikirim saat ada sinyal.', 'cloud-off');
     obLater();
@@ -729,7 +828,7 @@
     } else if (kind === 'coach') {
       if (window.coaches.some(c => String(c.id) === id)) window.openCoachProfile(id); else window.closeDetail();
     } else if (kind === 'session') {
-      if (window.schedules.some(s => String(s.id) === id)) window.openScheduleDetail(id); else window.closeDetail();
+      if (schedById(id)) window.openScheduleDetail(id); else window.closeDetail();
     }
   }
   function highlightSelection() {

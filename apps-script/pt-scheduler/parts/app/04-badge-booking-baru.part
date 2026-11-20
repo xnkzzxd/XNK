@@ -82,7 +82,7 @@
   }
 
   window.quickWa = function (id) {
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return;
     const d = new Date(s.start);
     window.waToClient(s, 'Halo ' + s.title + ', ini Coach XNK. Mengingatkan jadwal latihan kita ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB. Sampai ketemu!');
@@ -671,7 +671,7 @@
 
   window.updateDraggedEvent = function (event, revert) {
     if (window.isPublicView) { revert(); return; }
-    const s = window.schedules.find(x => String(x.id) === String(event.id));
+    const s = schedById(event.id);
     const data = {
       id: event.id,
       start: event.start.toISOString(),
@@ -688,7 +688,7 @@
   // ── Detail sesi (admin) ─────────────────────────────────────────────────────
   window.openScheduleDetail = function (id) {
     if (window.isPublicView) return;
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return;
     window.selectedScheduleDetailId = s.id;
     const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000);
@@ -748,7 +748,7 @@
     const coachName = coach ? coach.name : '';
     const done = busy($('btn-save-coach'), '…');
     adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId).then(function () {
-      const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+      const s = schedById(window.selectedScheduleDetailId);
       if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
       done();
       window.showToast(coach ? window.coachLabel(coach.name) + ' ditugaskan.' : 'Coach dikosongkan.');
@@ -758,7 +758,7 @@
 
   window.contactDetailMember = function () { window.quickWa(window.selectedScheduleDetailId); };
   window.contactDetailCoach = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s || !s.coachId) { window.showToast('Pilih coach dulu.'); return; }
     const c = window.coaches.find(x => String(x.id) === String(s.coachId));
     if (!c) return;
@@ -767,7 +767,7 @@
   };
 
   window.markSessionCompleted = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     const m = window.members.find(x => String(x.id) === String(s.memberId));
     if (m && Number(m.usedSessions) >= Number(m.totalSessions)) { window.showToast('Kuota sesi klien ini sudah habis.'); return; }
@@ -786,11 +786,11 @@
   };
 
   window.deleteScheduleFromDetail = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     window.showConfirmModal('Sesi <b>' + h(s.title) + '</b> pada ' + h(fmtShort(new Date(s.start))) + ' akan dihapus.' + (isDone(s) ? ' Kuota klien dikembalikan 1.' : ''), function () {
       adminCall('deleteSchedule', s.id).then(function () {
-        window.schedules = window.schedules.filter(x => String(x.id) !== String(s.id));
+        window.schedules = window.schedules.filter(x => x !== s && String(x.id) !== String(s.id));
         if (isDone(s)) { const m = window.members.find(x => String(x.id) === String(s.memberId)); if (m) m.usedSessions = Math.max(0, (Number(m.usedSessions) || 0) - 1); }
         window.closeDetail();
         window.updateUI();
@@ -801,7 +801,7 @@
   window.confirmDeleteSchedule = window.deleteScheduleFromDetail;
 
   window.deleteRecurringGroupFromDetail = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s || !s.recurringGroupId) return;
     const groupId = s.recurringGroupId;
     window.showConfirmModal('<b>Semua sesi</b> dalam seri berulang ini akan dihapus, termasuk yang sudah lewat. Kuota dari sesi yang sudah selesai dikembalikan.', function () {
