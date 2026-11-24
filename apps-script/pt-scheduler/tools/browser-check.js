@@ -41,7 +41,26 @@ function render(page) {
 
 const STUBS = {
   'cdn.tailwindcss.com': 'window.tailwind = window.tailwind || {};',
-  'unpkg.com/lucide': 'window.lucide = { createIcons: function() {} };',
+  // Like lucide 1.x: createIcons swaps EVERY [data-lucide] element (also svgs drawn before, they keep data-lucide) for a
+  // new <svg>; createElement / icons draw one icon. An empty stub hid the endless redraw loop that heated phones (2026-11-20).
+  'unpkg.com/lucide': `(function () {
+    var NS = 'http://www.w3.org/2000/svg';
+    function el(node, attrs) {
+      var s = document.createElementNS(NS, 'svg');
+      Object.keys(attrs || {}).forEach(function (k) { s.setAttribute(k, attrs[k]); });
+      (node || []).forEach(function (c) { var e = document.createElementNS(NS, c[0]); Object.keys(c[1] || {}).forEach(function (k) { e.setAttribute(k, c[1][k]); }); s.appendChild(e); });
+      window.__iconDraws = (window.__iconDraws || 0) + 1;
+      return s;
+    }
+    var icons = new Proxy({}, { get: function (t, k) { return typeof k === 'string' ? [['circle', { cx: 12, cy: 12, r: 10 }]] : undefined; } });
+    window.lucide = { icons: icons, createElement: el, createIcons: function () {
+      document.querySelectorAll('[data-lucide]').forEach(function (n) {
+        var a = {}; for (var i = 0; i < n.attributes.length; i++) a[n.attributes[i].name] = n.attributes[i].value;
+        a['class'] = 'lucide lucide-' + a['data-lucide'] + (n.getAttribute('class') ? ' ' + n.getAttribute('class') : '');
+        if (n.parentNode) n.parentNode.replaceChild(el(icons.X, a), n);
+      });
+    } };
+  })();`,
   'fullcalendar': `window.FullCalendar = { Calendar: function(el, opts) {
       window.__calendarOpts = opts; this.render = function() { el.setAttribute('data-fc', 'stub'); }; this.destroy = function() {}; } };`,
   'cropper.min.js': 'window.Cropper = function() { return { destroy: function() {}, getCroppedCanvas: function() { return document.createElement("canvas"); } }; };',
@@ -248,6 +267,24 @@ async function shot(page, name) {
   await page.waitForTimeout(700); // let entrance animations finish
   await page.screenshot({ path: path.join(SHOTS, name + '.png') });
 }
+// A screen nobody touches must stop working: no icon redraws and no new elements over and over (the icon loop of
+// 2026-11-20 redrew every icon ~46 times a second and heated phones). 12 slices of 250 ms; a render or two is fine.
+async function idleCheck(page, label) {
+  await page.waitForTimeout(1500);
+  const r = await page.evaluate(() => new Promise(res => {
+    let added = 0, busy = 0, last = [window.__iconDraws || 0, 0], n = 0;
+    const mo = new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(x => { if (x.nodeType === 1) added++; })));
+    mo.observe(document.body, { childList: true, subtree: true });
+    const t = setInterval(() => {
+      const now = [window.__iconDraws || 0, added];
+      if (now[0] !== last[0] || now[1] !== last[1]) busy++;
+      last = now;
+      if (++n === 12) { clearInterval(t); mo.disconnect(); res({ busy: busy, added: added, undrawn: document.querySelectorAll('i[data-lucide]').length }); }
+    }, 250);
+  }));
+  check(r.busy <= 3, label + ': an untouched screen stops working (busy in ' + r.busy + ' of 12 slices, ' + r.added + ' new elements)');
+  check(r.undrawn === 0, label + ': every icon is drawn (' + r.undrawn + ' left as <i>)');
+}
 async function shownUrls(page, navigations) {
   const opened = await page.evaluate(() => window.__opened.map(w => w.location.href));
   return opened.concat(navigations).map(u => { try { return decodeURIComponent(u); } catch (e) { return u; } });
@@ -327,6 +364,7 @@ async function contrastReport(page) {
     const revenueText = await page.evaluate(() => document.querySelector('#kpi-revenue-tile').textContent);
     check(revenueText.includes('Rp'), 'revenue KPI loaded');
     check(revenueText.includes('65% dari harga paket'), 'revenue KPI says it is 65% of the package price');
+    await idleCheck(page, 'panel');
     check(await page.evaluate(() => !document.getElementById('unread-badge').classList.contains('hide')), 'new-booking badge shown');
     await shot(page, 'admin-mobile-dashboard');
 
@@ -2138,6 +2176,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(400);
     await shot(page, 'portal-mobile-home');
+    await idleCheck(page, 'portal');
 
 
     // ── Streak, badge dan perayaan (Fase D2) ───────────────────────────────────

@@ -673,11 +673,15 @@
   });
 
   // Ikon untuk elemen statis saat halaman pertama dibuka.
-  // (Hanya elemen baru; teks jam/hitung mundur yang berubah tiap detik diabaikan.)
+  // Hanya elemen baru yang membawa <i data-lucide> yang belum digambar; svg ikon yang baru digambar, teks jam/hitung mundur
+  // yang berubah tiap detik, dan elemen tanpa ikon diabaikan (kalau tidak: putaran gambar-ulang tanpa henti, HP panas).
   new MutationObserver(function (list) {
     for (let i = 0; i < list.length; i++) {
       const added = list[i].addedNodes;
-      for (let j = 0; j < added.length; j++) { if (added[j].nodeType === 1) { paintIcons(); return; } }
+      for (let j = 0; j < added.length; j++) {
+        const n = added[j];
+        if (n.nodeType === 1 && ((n.matches && n.matches('i[data-lucide]')) || (n.querySelector && n.querySelector('i[data-lucide]')))) { paintIcons(); return; }
+      }
     }
   }).observe(document.body, { childList: true, subtree: true });
 
