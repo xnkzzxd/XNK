@@ -429,7 +429,7 @@
       $('pin-old').value = ''; $('pin-new').value = '';
       window.closeModal();
       window.showToast('PIN diganti. Perangkat lain perlu login ulang.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.logoutCurrent = function () {
@@ -453,11 +453,12 @@
   // Salinan terakhir data panel (hanya di perangkat admin) supaya panel langsung
   // terisi saat dibuka; data segar menyusul di belakang layar.
   const ADMIN_CACHE_KEY = 'xnk_admin_cache';
+  let adminCopyAt = 0;   // kapan salinan panel di perangkat dibuat (lencana "Data 10:42" bila server tidak terjangkau)
   function saveAdminCache() {
     try {
       _lsSet(ADMIN_CACHE_KEY, JSON.stringify({
-        members: window.members, schedules: window.schedules, coaches: window.coaches,
-        priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || []
+        members: window.members, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
+        priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || [], at: Date.now()
       }));
     } catch (e) {}
     window.offlineSnapSoon();
@@ -472,6 +473,7 @@
       window.priceListData = c.priceList || [];
       window.taskSummary = c.taskSummary || {};
       window.renewals = c.renewals || [];
+      adminCopyAt = Number(c.at) || 0;
       return true;
     } catch (e) { return false; }
   }
@@ -534,10 +536,18 @@
     setTimeout(function () { if (window.obFlush) window.obFlush(); }, 1500);
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
+    const snap = window.wqSnap();
     return safe(adminCall('getAdminBootstrap')).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
       const r = b ? [b.members, b.schedules, b.coaches, b.priceList, b.businessHours] : [];
-      // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
+      // Ada simpanan yang berjalan sejak permintaan ini dikirim: klien & jadwal di layar (optimistic) lebih baru
+      // dari jawaban ini. Pertahankan, lalu ambil lagi setelah semua simpanan selesai.
+      if (window.wqStale(snap) && (r[0] || r[1])) { r[0] = r[1] = null; window.wqOnIdle('admin-boot', function () { window.loadAllData(); }); }
+      // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan; lencana menunjukkan umurnya, coba lagi diam-diam.
+      if (!b && (window.members || []).length) {
+        window.setStaleAt(adminCopyAt || Date.now());
+        setTimeout(function () { if (ui.staleAt && _lsGet(ADMIN_TOKEN_KEY)) window.loadAllData(); }, 60000);
+      } else if (b) window.setStaleAt(0);
       if (r[0]) window.members = r[0];
       if (r[1]) window.schedules = normalizeSchedules(r[1]);
       if (r[2]) applyCoachesAdmin(r[2]);
@@ -546,7 +556,7 @@
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
       ui.dataReady = true;
       window.hideGlobalLoader();
-      if (r[0] && r[1]) saveAdminCache();
+      if (r[0] && r[1]) saveAdminCache();   // dilewati bila basi (r dikosongkan di atas)
       window.offlineSync();
       loadAdminExtras();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
@@ -618,16 +628,25 @@
     }
     // Panggilan 1: profil, jadwalku, jam kosong, coach, paket (cepat). Panggilan 2 (getPortalMore, data sisanya): tanpa salinan
     // langsung bersamaan; dengan salinan hanya bila versi data di bootstrap berbeda (moreUpToDate).
+    const snap = window.wqSnap();
     const boot = publicCall('getPortalBootstrap', token).catch(function () { return null; });
     const haveMore = cached && !!portalMoreRaw;
     if (token && !haveMore) setTimeout(function () { window.refreshPortalMore(true); }, 0);
     return boot.then(function (b) {
+      // Gagal tersambung (null): salinan di perangkat TIDAK dikosongkan dan tidak ditimpa; lencana menampilkan jamnya.
+      const lost = !b;
       b = b || {};
-      applyPortalBootstrap(b);
+      if (lost && cached) {
+        window.setStaleAt(portalCopyAt || Date.now()); ui.dataReady = true; window.hideGlobalLoader(); window.updateUI();
+        setTimeout(function () { if (ui.staleAt && window.publicLoggedMember) window.loadPublicData(); }, 60000);   // coba lagi diam-diam
+        return;
+      }
+      if (!lost) window.setStaleAt(0);
+      applyPortalBootstrap(b, snap);
       if (b.profile || b.openSlots) window.setReadonly(b.readonly ? { on: true } : null, 'portal');   // T-2251 (jawaban gagal = biarkan)
       if (token && haveMore && !b.authLost) { if (!moreUpToDate(b)) window.refreshPortalMore(true); else window.wlFlush(); }
-      window.coaches = b.coaches || [];
-      window.priceListData = b.priceList || [];
+      if (Array.isArray(b.coaches)) window.coaches = b.coaches;
+      if (Array.isArray(b.priceList)) window.priceListData = b.priceList;
       if (b.businessHours) Object.assign(DAY_HOURS, b.businessHours);
       if (token && b.authLost) window.onMemberAuthLost(new Error(b.authLost));
       else if (token && b.profile) window.setPublicMember(b.profile);
@@ -645,7 +664,7 @@
       } else {
         window.updateUI();
       }
-      savePortalCache();
+      if (!lost) savePortalCache();
       window.offlineSync();
       openPendingSlot();
       // Pustaka gerakan & makanan disimpan di perangkat lebih awal, supaya cari & catat tetap jalan tanpa sinyal.
@@ -658,7 +677,7 @@
   // pernah melihat salinan ini. Jam kosong tidak disimpan (selalu dari server).
   const PORTAL_CACHE_KEY = 'xnk_portal_cache';
   const tokenSig = t => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
-  let portalMoreRaw = null, portalMoreInflight = null, portalMoreAt = 0;
+  let portalMoreRaw = null, portalMoreInflight = null, portalMoreAt = 0, portalCopyAt = 0;
   const MORE_MAX_AGE = 6 * 3600000;   // batas aman: salinan lebih tua dari 6 jam selalu disegarkan
   // Salinan "more" masih sama dengan server: versi sama, hari (WIB) sama, belum 6 jam, dan tidak ada tulisan sendiri sejak itu.
   function moreUpToDate(b) {
@@ -668,8 +687,9 @@
   }
   // Tulis-terus: hasil simpan langsung masuk salinan di perangkat (buka lagi = langsung tampil, tanpa memuat).
   // Versi dikosongkan supaya ringkasan (insight, minggu ini) dihitung ulang sekali di belakang layar saat buka berikutnya.
-  function patchMore(part, value, keepVer) {
-    if (!portalMoreRaw || value == null) return;
+  // clear = true: simpan null dengan sengaja (keluar grup kelas, permintaan perpanjang dibatalkan).
+  function patchMore(part, value, keepVer, clear) {
+    if (!portalMoreRaw || (value == null && !clear)) return;
     portalMoreRaw[part] = value;
     if (!keepVer) portalMoreRaw.ver = '';
     savePortalCache();
@@ -681,7 +701,7 @@
     if (!token || !window.publicLoggedMember) return;
     try {
       _lsSet(PORTAL_CACHE_KEY, JSON.stringify({
-        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules, coaches: window.coaches,
+        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
         priceList: window.priceListData, hours: DAY_HOURS, horizon: window.bookingHorizonDays, cutoff: window.rescheduleCutoffHours,
         infoLatest: window.infoLatest || '', feedback: window.myFeedback ? { enabled: window.myFeedback.enabled, pending: window.myFeedback.pending, pkgEval: window.myFeedback.pkgEval } : null,
         more: portalMoreRaw, moreAt: portalMoreAt
@@ -713,6 +733,7 @@
       window.infoLatest = c.infoLatest || '';
       window.myFeedback = Object.assign({ enabled: true, pending: null, pkgEval: false }, c.feedback || {}, { stars: 0, scheduleId: '' });
       if (c.more) { applyPortalMore(c.more, true); portalMoreAt = Number(c.moreAt) || 0; }
+      portalCopyAt = Number(c.at) || 0;
       renderTopbarActions();
       return true;
     } catch (e) { return false; }
@@ -788,8 +809,10 @@
   });
 
   // Jadwalku + jam kosong dari getPortalBootstrap (jadwal klien lain tidak pernah dikirim ke browser).
-  function applyPortalBootstrap(b) {
-    window.schedules = normalizeSchedules(b.schedules);
+  // snap (window.wqSnap() saat diminta): booking / reschedule berjalan sejak itu = jadwalku di layar lebih baru; pertahankan dan ambil lagi nanti.
+  function applyPortalBootstrap(b, snap) {
+    if (snap != null && window.wqStale(snap) && Array.isArray(b.schedules)) window.wqOnIdle('portal-boot', function () { window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {}); });
+    else if (Array.isArray(b.schedules)) window.schedules = normalizeSchedules(b.schedules);   // jawaban tanpa jadwal tidak mengosongkan jadwalku
     if (b.horizonDays) window.bookingHorizonDays = b.horizonDays;
     if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
     if (b.openSlots) applyOpenSlots(b.openSlots);
@@ -802,7 +825,8 @@
     if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }
   window.refreshPortalSchedules = function () {
-    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b); savePortalCache(); return b; });
+    const snap = window.wqSnap();
+    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b, snap); savePortalCache(); return b; });
   };
 
   // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form

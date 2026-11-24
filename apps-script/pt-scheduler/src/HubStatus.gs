@@ -1,5 +1,5 @@
-// Laporan angka untuk XNK Pusat (hub xnk.web.id, T-2233). Spreadsheet coach di hub mendaftar ke XNK Pusat dengan
-// rahasia acak (Script Property HUB_SECRET, ditulis wizard setup lewat Library); XNK Pusat memanggil hubStatus setiap
+// Laporan angka untuk XNK HQ (hub xnk.web.id, T-2233). Spreadsheet coach di hub mendaftar ke XNK HQ dengan
+// rahasia acak (Script Property HUB_SECRET, ditulis wizard setup lewat Library); XNK HQ memanggil hubStatus setiap
 // pagi untuk dasbor /adminxnk dan email peringatan pemilik.
 // Publik tanpa token admin/klien; satu-satunya penjaga adalah HUB_SECRET (perbandingan waktu-konstan, seperti relay
 // push). Tanpa HUB_SECRET (produksi xnk.my.id) selalu menolak. Isi jawaban hanya angka dan status: tidak ada nama,
@@ -23,7 +23,7 @@ function _hubMs_(v) {
 }
 
 /**
- * Status spreadsheet ini untuk XNK Pusat. Hanya angka.
+ * Status spreadsheet ini untuk XNK HQ. Hanya angka.
  * @param {string} secret HUB_SECRET spreadsheet ini
  * @return {{at: string, lib: ?Object, api: number, triggers: Object, reminders: Object, clients: Object, sessions: Object, quota: Object}}
  */
@@ -62,14 +62,14 @@ function hubStatus(secret) {
 }
 
 // ── Backup mingguan (T-2250) ────────────────────────────────────────────────────────────────────────────────
-// XNK Pusat menyalin seluruh spreadsheet ini ke Drive pemilik seminggu sekali. Beda dengan hubStatus, jawaban ini
+// XNK HQ menyalin seluruh spreadsheet ini ke Drive pemilik seminggu sekali. Beda dengan hubStatus, jawaban ini
 // berisi data penuh (nilai tampilan sel), tetap hanya untuk pemegang HUB_SECRET. Script Properties tidak pernah
 // diekspor; foto progres tetap di Drive coach (ProgressPhotos hanya menyimpan ID).
 var HUB_EXPORT_ROWS = 2000;        // baris per panggilan
 var HUB_EXPORT_BYTES = 4000000;    // perkiraan ukuran JSON per panggilan
 
 /**
- * Ekspor spreadsheet ini untuk backup XNK Pusat.
+ * Ekspor spreadsheet ini untuk backup XNK HQ.
  * Tanpa req: daftar sheet. Dengan {sheet, from}: baris mulai `from` (1 = baris judul), maks HUB_EXPORT_ROWS baris dan
  * ±HUB_EXPORT_BYTES; next = baris berikutnya, 0 bila selesai. Nilai = getDisplayValues() (teks, tanpa objek Date).
  * @param {string} secret HUB_SECRET spreadsheet ini
@@ -105,10 +105,10 @@ function hubExport(secret, req) {
 
 // ── Web Push di hub (T-2240) ────────────────────────────────────────────────────────────────────────────────
 // Semua coach di xnk.web.id berbagi satu origin, jadi satu pasang kunci VAPID untuk seluruh hub. Kunci privat hanya ada
-// di secret repo hub (HUB_VAPID_PRIVATE); spreadsheet coach hanya menyimpan kunci publik. XNK Pusat memanggil
+// di secret repo hub (HUB_VAPID_PRIVATE); spreadsheet coach hanya menyimpan kunci publik. XNK HQ memanggil
 // hubPushKey setiap pagi (dan saat pemilik menyalakan/mematikan push coach di /adminxnk). Jawabannya membawa rahasia
-// relay lokal (PUSH_RELAY_SECRET): workflow push repo hub mengambilnya dari XNK Pusat lalu memanggil pushRelayPull /
-// pushRelayAck spreadsheet ini langsung, jadi HUB_SECRET tidak pernah keluar dari XNK Pusat dan XNK Pusat tidak memakai
+// relay lokal (PUSH_RELAY_SECRET): workflow push repo hub mengambilnya dari XNK HQ lalu memanggil pushRelayPull /
+// pushRelayAck spreadsheet ini langsung, jadi HUB_SECRET tidak pernah keluar dari XNK HQ dan XNK HQ tidak memakai
 // kuota UrlFetch untuk setiap putaran kirim.
 
 /**
@@ -140,9 +140,9 @@ function hubPushKey(secret, publicKey, on) {
 }
 
 // ── Ganti slug di hub (T-2243) ──────────────────────────────────────────────────────────────────────────────
-// Pemilik mengganti nama di alamat coach (xnk.web.id/<lama> → /<baru>) lewat XNK Pusat. Alamat lama tetap mengarah ke
+// Pemilik mengganti nama di alamat coach (xnk.web.id/<lama> → /<baru>) lewat XNK HQ. Alamat lama tetap mengarah ke
 // yang baru (halaman pengalih di hub), tetapi link baru di pesan WhatsApp, kode QR kartu dan "Cek kesehatan" memakai
-// SITE_URL. XNK Pusat mengirim alamat baru lewat fungsi ini, dijaga HUB_SECRET seperti hubStatus.
+// SITE_URL. XNK HQ mengirim alamat baru lewat fungsi ini, dijaga HUB_SECRET seperti hubStatus.
 
 /**
  * Simpan alamat situs coach yang baru (SITE_URL).

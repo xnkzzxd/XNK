@@ -7,4 +7,3 @@
 .ro-band b { font-weight: 700; }
 .ro-band span { color: var(--fg-2); overflow-wrap: anywhere; }
 .ro-band .ro-note { color: var(--fg-muted); }
-</style>

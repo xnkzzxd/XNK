@@ -1,5 +1,5 @@
 'use strict';
-// XNK Pusat (T-2233): login PIN, pendaftaran coach, pemeriksaan harian + email, aksi ke GitHub. Layanan Google palsu.
+// XNK HQ (T-2233): login PIN, pendaftaran coach, pemeriksaan harian + email, aksi ke GitHub. Layanan Google palsu.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -188,7 +188,7 @@ test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet
   const t = e.call('pusatAction', tok, 'setup').data.ticket;
   assert.match(t, /^setup\.\d+\.[\w-]+$/);
   assert.ok(!t.includes(tok.split('.')[1]), 'bukan token sesi');
-  assert.equal(e.ctx.doGet({ parameter: {} }).content, 'XNK Pusat');
+  assert.equal(e.ctx.doGet({ parameter: {} }).content, 'XNK HQ');
   assert.match(e.ctx.doGet({ parameter: { setup: t.replace(/.$/, 'x') } }).content, /tidak berlaku/);
   assert.match(e.ctx.doGet({ parameter: { setup: tok } }).content, /tidak berlaku/, 'token sesi bukan tanda siap');
   assert.deepEqual(e.triggers, []);
@@ -197,7 +197,7 @@ test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet
   assert.match(msg, /https:\/\/script\.google\.com\/d\/SCRIPTPUSAT\/edit/);
   assert.equal(e.call('pusatOverview', tok).data.setup.editor, 'https://script.google.com/d/SCRIPTPUSAT/edit');
   const g = env(), gt = g.call('pusatAction', g.call('pusatLogin', 'pin-rahasia-1').data.token, 'setup').data.ticket;
-  assert.match(g.ctx.doGet({ parameter: { setup: gt } }).content, /XNK Pusat siap: izin Google lengkap/);
+  assert.match(g.ctx.doGet({ parameter: { setup: gt } }).content, /XNK HQ siap: izin Google lengkap/);
   e.ctx.doGet({ parameter: { setup: t } });
   assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup'], 'diulang tetap satu');
   const D = vm.runInContext('Date', e.ctx), real = D.now;
@@ -260,6 +260,25 @@ test('pemeriksaan harian: Library tertinggal, trigger hilang, pengingat macet, s
   const st = JSON.parse(e.props.ST_claudia);
   assert.equal(st.ok, true);
   assert.equal(st.data.clients.active30d, 7);
+  // T-2262: riwayat harian (angka saja), satu baris per hari WIB; gagal = null + 0.
+  const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  const hc = JSON.parse(e.props.HIST_claudia);
+  assert.equal(hc.length, 1);
+  assert.equal(hc[0][0], today);
+  assert.equal(hc[0][1], 7);
+  assert.equal(hc[0][8], 1);
+  assert.deepEqual(JSON.parse(e.props.HIST_fani)[0].slice(1), [null, null, null, null, null, null, null, 0]);
+  e.ctx.runPusatDaily();
+  assert.equal(JSON.parse(e.props.HIST_claudia).length, 1, 'cek kedua di hari yang sama menimpa baris hari itu');
+  const old = []; for (let i = 40; i >= 1; i--) old.push([new Date(Date.now() + 7 * 3600e3 - i * 86400e3).toISOString().slice(0, 10), i, 0, 0, 0, 0, 0, 0, 1]);
+  e.props.HIST_claudia = JSON.stringify(old);
+  e.ctx.runPusatDaily();
+  const h2 = JSON.parse(e.props.HIST_claudia);
+  assert.equal(h2.length, 30, 'hanya 30 hari');
+  assert.equal(h2[29][0], today);
+  assert.ok(!/0812|nama|name/i.test(e.props.HIST_claudia), 'tanpa data klien');
+  const tokh = e.call('pusatLogin', 'pin-rahasia-1').data.token;
+  assert.equal(e.call('pusatOverview', tokh).data.coaches.find(c => c.slug === 'claudia').hist.length, 30, 'overview membawa riwayat');
   assert.ok(e.fetches.filter(f => f.url === EXEC(1) && JSON.parse(f.o.payload).fn === 'hubStatus').every(f => JSON.parse(f.o.payload).args[0] === SECRET(1)), 'rahasia dikirim hanya ke /exec coach itu');
   const e2 = env({ servers: { [EXEC(1)]: server(SECRET(1), status(SHA_NEW)) }, props: { PUSAT_EMAIL: 'saya@contoh.id' } });
   e2.call('pusatRegister', 'kode-daftar-9', 'claudia', EXEC(1), SECRET(1));
@@ -600,7 +619,7 @@ function renameEnv(extra) {
   };
   const hub = { vapidPublic: VAPID, coaches: [{ slug: 'lama', exec: EXEC(1) }, { slug: 'vinna', exec: EXEC(2), aliases: ['vina'] }] };
   const props = Object.assign({ COACHES: JSON.stringify(coaches), PUSAT_PUSH_SECRET: PUSH_SECRET,
-    ST_lama: JSON.stringify({ at: 'x', ok: true, problems: [] }), BKST_lama: JSON.stringify({ okAt: '2026-11-15T00:00:00Z', fileUrl: 'u', fails: 0 }),
+    ST_lama: JSON.stringify({ at: 'x', ok: true, problems: [] }), HIST_lama: JSON.stringify([['2026-11-18', 3, 5, 1, 2, 0, 0, 0, 1]]), BKST_lama: JSON.stringify({ okAt: '2026-11-15T00:00:00Z', fileUrl: 'u', fails: 0 }),
     PUSH_lama: JSON.stringify({ on: true, active: true, relay: 'r'.repeat(64), exec: EXEC(1), subs: 2 }), BK_DIRS: JSON.stringify({ root: 'f1', lama: 'f2', vinna: 'f3' }) }, extra.props || {});
   const e = env({ hub: JSON.stringify(hub), props, servers: { [EXEC(1)]: a, [EXEC(2)]: () => ({ ok: false }) } });
   e.drive.files.f1 = { id: 'f1', name: 'XNK Backup', parents: [], trashed: false };
@@ -617,7 +636,7 @@ test('ganti slug: pendaftaran, status, backup, push dan folder pindah; coach men
   const all = JSON.parse(e.props.COACHES);
   assert.deepEqual(Object.keys(all).sort(), ['baru', 'vinna']);
   assert.deepEqual(all.baru, { exec: EXEC(1), secret: SECRET(1), at: 'x' }, 'rahasia dan link /exec tetap');
-  for (const k of ['ST_', 'BKST_', 'PUSH_']) { assert.ok(e.props[k + 'baru'], k + ' pindah'); assert.equal(e.props[k + 'lama'], undefined, k + ' lama dihapus'); }
+  for (const k of ['ST_', 'HIST_', 'BKST_', 'PUSH_']) { assert.ok(e.props[k + 'baru'], k + ' pindah'); assert.equal(e.props[k + 'lama'], undefined, k + ' lama dihapus'); }
   assert.deepEqual(JSON.parse(e.props.BK_DIRS), { root: 'f1', baru: 'f2', vinna: 'f3' });
   assert.equal(e.drive.files.f2.name, 'baru', 'folder XNK Backup/lama → XNK Backup/baru (ID sama, salinan lama tetap)');
   assert.deepEqual(calls.filter(c => c.fn === 'hubSiteUrl').map(c => c.args), [[SECRET(1), 'https://xnk.web.id/baru']]);

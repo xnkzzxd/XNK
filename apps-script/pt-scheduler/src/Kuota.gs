@@ -3,7 +3,7 @@
 // Murah: selama tick (runReminderTick, runWarmTick) hitungan ditampung di memori dan ditulis SEKALI di akhir; di luar
 // tick setiap penambahan langsung ditulis. Penghitungan tidak pernah menggagalkan pengiriman (semua dibungkus try).
 // Titik kirim baru: email lewat _mailSend_(msg), UrlFetch diikuti _quotaFetch_().
-// Hanya angka; dibaca hubStatus (XNK Pusat) lewat _quotaToday_().
+// Hanya angka; dibaca hubStatus (XNK HQ) lewat _quotaToday_().
 
 var QUOTA_KEEP_DAYS = 7;
 var MAIL_RESERVE_DEFAULT = 10;

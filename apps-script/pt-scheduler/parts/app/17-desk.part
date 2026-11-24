@@ -141,7 +141,7 @@
     if (!n || !n.count) return;
     n.count = 0; n.items.forEach(function (x) { x.fresh = false; });
     renderTopbarActions(); savePortalCache();
-    memberCall('markNotifSeen').catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markNotifSeen', args: [] }, ok: false, label: 'Pemberitahuan dilihat' });
   };
   const notifGoBase = window.notifGo;
   window.notifGo = function (id) { deskClose(); notifGoBase(id); };

@@ -152,7 +152,7 @@
   window.openRescheduleModal = function (id) {
     const me = window.publicLoggedMember;
     if (!me) { window.showToast('Masuk dulu ya.'); return; }
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) { window.showToast('Jadwal tidak ditemukan.'); return; }
     if (String(s.memberId) !== String(me.id)) { window.showToast('Jadwal ini bukan milikmu.'); return; }
     if (isDone(s)) { window.showToast('Sesi yang sudah selesai tidak bisa diubah.'); return; }
@@ -173,7 +173,7 @@
   };
 
   window.openEditScheduleDetailModal = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     window.isEditScheduleMode = true;
     window.isRescheduleMode = false;
@@ -274,7 +274,7 @@
     const sub = !alts.length ? 'Belum ada jam kosong yang cocok.' : res.code === 'duration' ? 'Ikut kelasnya dengan durasi yang sama?' : 'Pilih jam lain, durasi ' + reqMins + ' menit tetap sama.';
     let old = '';
     if (resched) {
-      const s = window.schedules.find(x => String(x.id) === String(window.rescheduleScheduleId));
+      const s = schedById(window.rescheduleScheduleId);
       if (s) old = 'Jadwal lama (' + whenLabel(s.start) + ') tetap aman.';
     }
     const el = document.createElement('div');
@@ -374,7 +374,7 @@
   }
 
   // Error yang tetap dilempar server (kuota, batas hari, sibuk, koneksi) tampil di dalam sheet, bukan toast.
-  const isNetworkError = msg => !msg || /network|failed to fetch|HTTP \d|timed? ?out|connection|koneksi|server error|sorry|exceeded/i.test(msg);
+  const isNetworkError = msg => !msg || /connection/i.test(msg) || errKind(new Error(msg)) === 'transient';   // satu penilai (01-awal)
   function showFormNotice(form, err) {
     if (form.getAttribute('aria-busy')) hideChecking(form);
     clearSchNotice(form);
@@ -442,7 +442,7 @@
       const isLive = live();
       if (window.isAuthError(err)) { if (isLive) { finish(); hideChecking(form); window.closeModal(); } return; }
       if (isLive) { finish(); showFormNotice(form, err); }
-      else window.showToast('Gagal: ' + window.authMessage(err));
+      else window.showToast(waitErr(err, 'Gagal: '));
     });
   }
 
@@ -452,8 +452,8 @@
       res.schedule || { id: res.id, start: data.start, end: data.end });
     if (!row.id) return null;
     row.memberId = member.id;
-    const have = window.schedules.find(x => String(x.id) === String(row.id));
-    if (have) return have;
+    const have = schedById(row.id);
+    if (have) { const fresh = normalizeSchedules([row])[0]; ['start', 'end', 'coachId', 'coachName', 'status'].forEach(k => { if (fresh[k] != null && fresh[k] !== '') have[k] = fresh[k]; }); delete have.pending; return have; }   // baris sementara yang sudah diganti id-nya oleh jalur tulis
     window.schedules.push(normalizeSchedules([row])[0]);
     return row;
   }
@@ -475,7 +475,7 @@
   function clientBookFast(form, data, member) {
     clearSchNotice(form);   // panel bentrok/galat lama tidak boleh tertinggal di lembar yang ditutup
     const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
-    const tmpId = 'tmp-' + Date.now();
+    const tmpId = window.tmpId();
     window.schedules.push(normalizeSchedules([{ id: tmpId, memberId: member.id, title: member.name, notes: data.notes, status: 'unread', start: data.start, end: data.end, coachId: data.coachId || '', pending: true }])[0]);
     const d = new Date(data.start);
     ui.selectedDate = new Date(d); ui.selectedDate.setHours(0, 0, 0, 0);
@@ -486,7 +486,8 @@
     window.showToast('Booking terkirim ke coach!');
     const drop = function () { window.schedules = window.schedules.filter(x => String(x.id) !== tmpId); };
     const reopen = function (show) { drop(); window.updateUI(); if (sheetId) { openSheet(sheetId); show(); } };
-    memberCall('clientBookSchedule', data, { soft: true }).then(function (res) {
+    // memberCreate: aksi lain pada sesi ini (reschedule, dll.) menunggu di jalur tulis lalu memakai id asli.
+    memberCreate(tmpId, 'clientBookSchedule', data, { soft: true }).then(function (res) {
       res = res || {};
       if (res.openSlots) applyOpenSlots(res.openSlots);
       if (res.openSlotsByCoach) applyOpenSlotsByCoach(res.openSlotsByCoach);
@@ -530,7 +531,7 @@
   }
 
   function clientRescheduleFast(form, id, data, notes) {
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return false;
     clearSchNotice(form);   // panel bentrok/galat lama tidak boleh tertinggal di lembar yang ditutup
     const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
@@ -561,13 +562,13 @@
   }
 
   function clientReschedule(form, btn, id, data, notes) {
-    const own = window.schedules.find(x => String(x.id) === String(id));
+    const own = schedById(id);
     if (navigator.onLine !== false && localSlotFree(data.start, data.end, own && own.coachId && window.openSlotsByCoachMap[own.coachId] ? String(own.coachId) : '') &&
         clientRescheduleFast(form, id, data, notes)) return;
     const label = hourLabel(data.start);
     const apply = function (res) {
       const ns = res.newStart || data.start, ne = res.newEnd || data.end;
-      const s = window.schedules.find(x => String(x.id) === String(id));
+      const s = schedById(id);
       if (s) { s.start = ns; s.end = ne; s.notes = notes; }
       return 'Jadwal dipindah ke ' + whenLabel(ns) + '.';
     };
@@ -639,9 +640,9 @@
 
     if (window.isEditScheduleMode) {
       data.id = window.selectedScheduleDetailId;
-      const s = window.schedules.find(x => String(x.id) === String(data.id));
+      const s = schedById(data.id);
       const old = s ? { start: s.start, end: s.end, notes: s.notes } : null;
-      optimistic({ call: function () { return adminCall('updateScheduleData', data); }, sheet: true, ok: 'Jadwal diperbarui.', label: 'Jadwal',
+      optimistic({ q: { mode: 'admin', fn: 'updateScheduleData', args: [data] }, sheet: true, ok: 'Jadwal diperbarui.', label: 'Jadwal',
         undo: function () { if (s && old) { Object.assign(s, old); window.updateUI(); } window.isEditScheduleMode = true; } });
       if (s) { s.start = data.start; s.end = data.end; s.notes = notes; }
       window.updateUI();
@@ -679,16 +680,18 @@
             window.updateUI();
             window.showToast((res && res.count) + ' sesi berulang dibuat.');
           });
-        }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+        }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
       return;
     }
 
     if (isClient) { clientBookSingle(form, btn, data, member); return; }
 
     // Optimistic: sesi langsung di kalender dengan id sementara; ditolak = dihapus lagi + pop-up, lembar dibuka.
-    const row = Object.assign({}, data, { id: 'tmp-' + Date.now(), title: member.name, status: 'read', coachId: '', coachName: '', pending: true });
-    optimistic({ call: function () { return adminCall('addSchedule', data); }, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
-      then: function (res) { row.id = res.id; row.coachId = res.coachId || ''; row.coachName = res.coachName || ''; delete row.pending; window.updateUI(); },
+    // Antrean simpan + tmp: "Selesai", ubah, geser, hapus, catatan pada sesi ini menunggu pembuatnya lalu memakai id asli.
+    const tmp = window.tmpId();
+    const row = Object.assign({}, data, { id: tmp, title: member.name, status: 'read', coachId: '', coachName: '', pending: true });
+    optimistic({ q: { mode: 'admin', fn: 'addSchedule', args: [data] }, tmp: tmp, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
+      then: function (res) { row.id = res.id; delete row.pending; row.coachId = res.coachId || ''; row.coachName = res.coachName || ''; window.updateUI(); },
       undo: function () { window.schedules = window.schedules.filter(x => x !== row); window.updateUI(); } });
     window.schedules.push(row);
     ui.selectedDate = new Date(start); ui.selectedDate.setHours(0, 0, 0, 0);

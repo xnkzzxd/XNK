@@ -8,8 +8,8 @@
 // Satu pasang kunci VAPID untuk seluruh hub (satu origin). Secret repo hub:
 //   HUB_VAPID_PRIVATE  kunci privat: kunci web-push (base64url 43 karakter) ATAU kata sandi acak ≥ 32 karakter yang
 //                      diturunkan jadi kunci P-256 (SHA-256, deterministik). Tidak pernah dicetak.
-//   PUSAT_PUSH_SECRET  sama dengan Script Property PUSAT_PUSH_SECRET di XNK Pusat.
-// Alur kirim: pusatPushTargets(PUSAT_PUSH_SECRET) di XNK Pusat → [{slug, exec, relay}] → untuk tiap coach:
+//   PUSAT_PUSH_SECRET  sama dengan Script Property PUSAT_PUSH_SECRET di XNK HQ.
+// Alur kirim: pusatPushTargets(PUSAT_PUSH_SECRET) di XNK HQ → [{slug, exec, relay}] → untuk tiap coach:
 // pushRelayPull(relay) → web-push → pushRelayAck(relay, hasil) langsung ke /exec coach (tools/push-send.js). Isi push dan
 // alamat langganan tidak dicatat; log hanya slug dan angka.
 const fs = require('fs');
@@ -58,11 +58,11 @@ async function send(o) {
   const keys = deriveKeys(o.vapidSecret);
   const pub = String(o.hub.vapidPublic || '');
   if (pub !== keys.publicKey) throw new Error('Kunci publik di hub.json tidak cocok dengan HUB_VAPID_PRIVATE. Jalankan workflow Push XNK aksi "kunci".');
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(String(o.hub.pusatUrl || ''))) throw new Error('hub.json tanpa "pusatUrl" (link /exec XNK Pusat).');
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(String(o.hub.pusatUrl || ''))) throw new Error('hub.json tanpa "pusatUrl" (link /exec XNK HQ).');
   const targets = await pushSend.call(o.fetchImpl, o.hub.pusatUrl, 'pusatPushTargets', [o.pushSecret]);
   const list = Array.isArray(targets && targets.coaches) ? targets.coaches : [];
   const out = { coaches: {}, failed: 0 };
-  // T-2252: coach yang tidak aktif lagi di hub.json tidak dikirimi (XNK Pusat juga sudah membuangnya dari daftar).
+  // T-2252: coach yang tidak aktif lagi di hub.json tidak dikirimi (XNK HQ juga sudah membuangnya dari daftar).
   const off = new Set((o.hub.coaches || []).filter(c => c && c.inactive === true).map(c => String(c.slug)));
   for (const c of list) {
     if (!c || !/^[a-z0-9-]{3,30}$/.test(String(c.slug)) || !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(String(c.exec))) continue;

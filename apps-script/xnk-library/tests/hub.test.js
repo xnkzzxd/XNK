@@ -320,7 +320,7 @@ test('CSP (T-2223): halaman coach terkunci sumber skrip dan tujuan data; halaman
   }
 });
 
-test('adminxnk (T-2234): halaman statis tanpa data, alamat XNK Pusat dari hub.json, CSP ketat + Apps Script, nama di-escape', () => {
+test('adminxnk (T-2234): halaman statis tanpa data, alamat XNK HQ dari hub.json, CSP ketat + Apps Script, nama di-escape', () => {
   const crypto = require('crypto');
   const PUSAT = 'https://script.google.com/macros/s/AKfycbPUSAT0000000000000000000/exec';
   assert.throws(() => hub.readHub({ pusatUrl: 'https://contoh.id/exec', coaches: [] }), /pusatUrl/);
@@ -335,6 +335,8 @@ test('adminxnk (T-2234): halaman statis tanpa data, alamat XNK Pusat dari hub.js
   assert.ok(!/script-src[^;]*unsafe-inline/.test(csp));
   for (const [, body] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) assert.ok(csp.includes(crypto.createHash('sha256').update(body).digest('base64')));
   assert.match(html, /noindex/);
+  assert.match(html, /<title>XNK HQ<\/title>/);
+  assert.ok(!/window\.(confirm|prompt)\(/.test(html), 'dialog sendiri, bukan window.confirm / prompt');
   assert.ok(hub.build(CFG).files['adminxnk/index.html'].includes('var PUSAT = "";'), 'tanpa pusatUrl: halaman memberi tahu, tidak memanggil apa pun');
 });
 
