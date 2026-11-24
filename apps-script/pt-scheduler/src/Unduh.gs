@@ -6,7 +6,7 @@
 // dinaikkan versinya.
 var UNDUH_ROWS = 2000;          // baris per panggilan
 var UNDUH_BYTES = 3000000;      // perkiraan ukuran JSON per panggilan
-var UNDUH_SKIP = ['ProgressPhotos', 'PushSubs', 'PushOutbox'];
+var UNDUH_SKIP = ['ProgressPhotos', 'PushSubs', 'PushOutbox', 'Idem'];   // Idem: catatan teknis kiriman ulang (Idem.gs)
 
 /** true bila sheet ini boleh ikut unduhan. */
 function _unduhOk_(name) {

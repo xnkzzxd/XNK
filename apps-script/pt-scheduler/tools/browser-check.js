@@ -177,6 +177,8 @@ async function openPage(browser, env, pagePath, calls, storage, opts) {
           catch (e) { return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ ok: false, error: e.message, auth: false, v: 1 }) }); }
         }
         const out = env.call('doPost', { postData: { contents: raw } });   // the real gateway, allow-list and all
+        // A test can make the server save and then lose the answer (signal gone, 60 s timeout): the page sees a network error.
+        if (env.__serverLate && env.__serverLate(fn)) return route.abort('failed');
         return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: out.content });
       })();
     }
@@ -1789,6 +1791,295 @@ async function contrastReport(page) {
     noErrors(off.errors);
     await off.context.close();
   })().catch(sectionCrash);
+
+  // ── Jalur tulis: booking lalu langsung Selesai + catatan sesi (keluhan coach 2026-11-20) ──
+  // Server lambat (2,5 s untuk addSchedule). Sebelumnya "Selesai" mengirim id sementara (tmp-…) → "Jadwal tidak ditemukan"
+  // dan semuanya dibatalkan. Sekarang aksi menunggu di jalur tulis dan memakai id asli.
+  console.log('Jalur tulis · booking lalu langsung Selesai');
+  await (async () => {
+    const env = seededEnv();
+    const token = env.adminToken();
+    const calls = [];
+    const usedBefore = env.call('getMembers', token).find(m => m.id === 'PT-A').usedSessions;
+    const { page, context, errors } = await openPage(browser, env, '/Index', calls, { xnk_admin_token: token }, { delay: { addSchedule: 2500 } });
+    const tmp = await page.evaluate(() => {
+      const d = new Date(Date.now() + 86400000);
+      const ymd = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      window.openBookingSheet({ date: ymd, time: '10:00' });
+      const sel = document.getElementById('sch-member'); if (sel) sel.value = 'PT-A';
+      document.getElementById('edit-sch-date').value = ymd; document.getElementById('edit-sch-time').value = '10:00';
+      document.getElementById('edit-sch-date').form.requestSubmit();
+      const row = window.schedules.find(s => s.pending);
+      return row ? row.id : '';
+    });
+    check(/^tmp-/.test(tmp), 'booking shows at once with a temporary id');
+    await page.evaluate(id => window.openScheduleDetail(id), tmp);   // detail terbuka selagi booking disimpan
+    await page.evaluate(() => window.markSessionCompleted());
+    await page.click('#btn-confirm-modal-yes');
+    await page.waitForTimeout(600);   // lembar catatan sesi terbuka sendiri, booking masih di server
+    check(calls.indexOf('completeSession') === -1, 'Selesai waits in line while the booking is still saving');
+    await page.fill('#sn-dilatih', 'Squat, bench');
+    await page.evaluate(() => window.sessionNoteSave(null, false));
+    await page.waitForTimeout(4500);
+    const real = await page.evaluate(() => window.schedules.filter(s => s.memberId === 'PT-A' && s.status === 'completed' && !/^tmp-/.test(s.id)).map(s => String(s.id)));
+    const server = env.call('getSchedules', token).find(s => real.indexOf(String(s.id)) !== -1);
+    check(!!server && String(server.status).toLowerCase() === 'completed', 'server: the new session is completed');
+    check(env.call('getMembers', token).find(m => m.id === 'PT-A').usedSessions === usedBefore + 1, 'server: one session taken from the quota');
+    check(!!server && env.call('getSessionNote', token, server.id).dilatih === 'Squat, bench', 'server: the session note is saved on the real id');
+    check(calls.indexOf('addSchedule') < calls.indexOf('completeSession') && calls.indexOf('completeSession') < calls.indexOf('saveSessionNote'), 'server got booking → selesai → catatan in tap order');
+    check(!(await page.evaluate(() => window.schedules.some(s => /^tmp-/.test(s.id)))), 'no temporary id left on screen');
+    check((await page.evaluate(() => window.selectedScheduleDetailId)) === (server && server.id), 'open session detail follows the real id');
+    check(!(await page.locator('#modal-confirm, .confirm-modal').filter({ hasText: 'Gagal menyimpan' }).first().isVisible().catch(() => false)), 'no "Gagal menyimpan" pop-up');
+    noErrors(errors);
+    await context.close();
+  })().catch(sectionCrash);
+
+  // ── Antrean simpan "buku catatan" (2026-11-20): pengguna web tidak melihat galat untuk gangguan sementara ──
+  // Nomor pesanan (cid) hanya lewat jalur fetch → doPost, jadi bagian ini hanya untuk RPC_MODE=fetch.
+  if (RPC_MODE === 'fetch') {
+    console.log('Antrean simpan · Google ramai, jawaban hilang, ditolak, tanpa sinyal, muat ulang');
+    await (async () => {
+      const env = seededEnv();
+      const token = env.adminToken();
+      const nSched = () => env.call('getSchedules', token).filter(s => s.memberId === 'PT-A').length;
+      const tRows = () => (env.sheet('Tasks') ? Math.max(0, env.sheet('Tasks').getLastRow() - 1) : 0);   // data rows (the sheet appears with its header on the first task)
+      const book = (page, time) => page.evaluate(t => {
+        const d = new Date(Date.now() + 2 * 86400000);
+        const ymd = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        window.openBookingSheet({ date: ymd, time: t });
+        const sel = document.getElementById('sch-member'); if (sel) sel.value = 'PT-A';
+        document.getElementById('edit-sch-date').value = ymd; document.getElementById('edit-sch-time').value = t;
+        document.getElementById('edit-sch-date').form.requestSubmit();
+      }, time);
+      const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { touch: true });
+      const popup = () => page.locator('#modal-confirm').isVisible();
+
+      // 1. Google ramai sekali ("We're sorry…"): tanpa pop-up, booking tetap tampil, tersimpan sekali setelah dicoba lagi.
+      let n = 0;
+      env.__serverFault = fn => { if (fn === 'addSchedule' && ++n === 1) throw new Error("We're sorry, a server error occurred. Please wait a bit and try again."); };
+      const s0 = nSched();
+      await book(page, '10:00');
+      await page.waitForTimeout(1500);
+      check(!(await popup()), 'Google busy: no "Gagal menyimpan" pop-up');
+      check(await page.evaluate(() => window.schedules.some(s => s.pending)), 'Google busy: the booking stays on screen');
+      await page.waitForTimeout(6500);
+      check(nSched() === s0 + 1, 'Google busy: saved once after the quiet retry');
+      env.__serverFault = null;
+
+      // 2. Server menyimpan lalu jawabannya hilang: kirim ulang dengan nomor yang sama → tetap satu baris.
+      let late = 0;
+      env.__serverLate = fn => fn === 'addSchedule' && ++late === 1;
+      await book(page, '12:00');
+      await page.waitForTimeout(7500);
+      check(nSched() === s0 + 2, 'answer lost after the save: resend with the same number, still one new row');
+      check(!(await page.evaluate(() => window.schedules.some(s => /^tmp-/.test(s.id)))), 'answer lost: temporary id replaced by the real one');
+      check(!(await popup()), 'answer lost: no pop-up');
+      env.__serverLate = null;
+
+      // 3. Ditolak server: lencana, bukan pop-up; daftar menunjukkan alasannya; Buang membersihkan.
+      env.__serverFault = fn => { if (fn === 'addTask') throw new Error('Judul terlalu panjang.'); };
+      await page.evaluate(() => window.optimistic({ q: { mode: 'admin', fn: 'addTask', args: [{ memberId: 'PT-A', title: 'X', category: 'aktivitas' }] }, label: 'PR', ok: false }));
+      await page.waitForTimeout(1200);
+      check(!(await popup()), 'rejected: no pop-up');
+      check(await page.isVisible('#sync-badge') && /Belum tersimpan/.test(await page.textContent('#sync-badge')), 'rejected: badge says "Belum tersimpan"');
+      const chip = await page.locator('#sync-badge').boundingBox();
+      check(!!chip && chip.height >= 44, 'badge is a 44 px touch target');
+      check((await overflowX(page)) <= 0, 'phone: no sideways scroll with the badge');
+      await page.click('#sync-badge');
+      await page.waitForTimeout(500);
+      check(await page.isVisible('#sheet-sync'), 'badge opens the list');
+      check((await page.textContent('#sync-list')).includes('Judul terlalu panjang'), 'list shows the server reason');
+      await page.locator('#sync-list button', { hasText: 'Buang' }).first().click();
+      await page.waitForTimeout(500);
+      check(!(await page.isVisible('#sync-badge')), 'Buang clears the badge');
+      env.__serverFault = null;
+
+      // 4. Tanpa sinyal: tetap di perangkat, terkirim sekali saat sinyal kembali.
+      const t0 = tRows();
+      await context.setOffline(true);
+      await page.evaluate(() => { window.optimistic({ q: { mode: 'admin', fn: 'addTask', args: [{ memberId: 'PT-A', title: 'Jalan kaki 20 menit', category: 'aktivitas' }] }, label: 'PR', ok: false }); });   // tidak ditunggu: tanpa sinyal janji ini belum selesai
+      await page.waitForTimeout(800);
+      check(await page.isVisible('#sync-badge'), 'offline: badge shows the change waiting on this device');
+      check(tRows() === t0, 'offline: nothing sent yet');
+      await context.setOffline(false);
+      await page.waitForTimeout(2500);
+      check(tRows() === t0 + 1, 'back online: saved once');
+      check(!(await page.isVisible('#sync-badge')), 'back online: badge hidden again');
+      noErrors(errors);
+      await context.close();
+
+      // 5. Pesanan yang tertinggal (tab ditutup sebelum terkirim) dikirim saat aplikasi dibuka lagi.
+      const sig = t => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
+      const item = { id: 'creload-0001', mode: 'admin', fn: 'addTask', args: [{ memberId: 'PT-A', title: 'Dari antrean', category: 'aktivitas' }], sig: sig(token), label: 'PR', at: Date.now(), tries: 0, nextAt: 0, state: 'pending', err: '' };
+      const t1 = tRows();
+      const re = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_sync: JSON.stringify([item]) }, { touch: true, wait: 3500 });
+      check(tRows() === t1 + 1, 'reopen: a change left in the device queue is sent');
+      await re.context.close();
+      const re2 = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_sync: JSON.stringify([Object.assign({}, item, { tries: 1 })]) }, { touch: true, wait: 3500 });
+      check(tRows() === t1 + 1, 'reopen again with the same number: server replays, no second task');
+      await re2.context.close();
+    })().catch(sectionCrash);
+
+    // Gelombang 2: simpanan panel coach yang dulu menunggu (spinner) sekarang langsung; server lambat 2 dtk membuktikannya.
+    console.log('Antrean simpan · panel coach langsung (hapus sesi, PR, pengingat, ditolak)');
+    await (async () => {
+      const env = seededEnv();
+      const token = env.adminToken();
+      const task = env.call('addTask', token, { memberId: 'PT-A', title: 'Jalan pagi', category: 'aktivitas' });
+      const taskId = task.id || (task.task && task.task.id);
+      const slow = { deleteSchedule: 2000, updateTask: 2000, setMemberMealReminder: 2000, deleteTask: 2000 };
+      const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { touch: true, delay: slow });
+      const popup = () => page.locator('#modal-confirm').isVisible();
+      const onServer = id => env.call('getSchedules', token).some(s => String(s.id) === id);
+
+      // Hapus sesi: hilang dari layar seketika, server menyusul.
+      await page.evaluate(() => window.openScheduleDetail('SCH-A1'));
+      await page.waitForTimeout(400);
+      await page.evaluate(() => window.deleteScheduleFromDetail());
+      await page.click('#btn-confirm-modal-yes');
+      await page.waitForTimeout(300);
+      check(!(await page.evaluate(() => window.schedules.some(s => s.id === 'SCH-A1'))), 'delete session: gone from the screen at once');
+      check(onServer('SCH-A1'), 'delete session: server not reached yet (slow server)');
+      await page.waitForTimeout(2600);
+      check(!onServer('SCH-A1'), 'delete session: removed on the server');
+      check(!(await popup()), 'delete session: no pop-up');
+
+      // PR selesai di halaman klien: centang langsung, tersimpan sesudahnya.
+      await page.evaluate(() => window.openProfile('PT-A'));
+      await page.waitForTimeout(1500);
+      await page.evaluate(() => window.loadMemberTasks('PT-A', true));
+      await page.waitForTimeout(600);
+      await page.evaluate(id => window.toggleTaskDone(id, 'PT-A'), taskId);
+      await page.waitForTimeout(200);
+      check((await page.evaluate(id => { const c = window.memberTasks['PT-A']; const t = c && c.list.find(x => String(x.id) === String(id)); return t && t.status; }, taskId)) === 'done', 'task done: ticked at once');
+      await page.waitForTimeout(2600);
+      check(env.call('getTasksForMember', token, 'PT-A').some(t => String(t.id) === String(taskId) && t.status === 'done'), 'task done: saved on the server');
+
+      // Pengingat makan: tombol langsung berubah.
+      await page.evaluate(() => window.toggleMealReminder('PT-A', { checked: false, isConnected: false }));
+      check((await page.evaluate(() => window.members.find(m => m.id === 'PT-A').mealReminder)) === false, 'meal reminder: switched at once');
+      await page.waitForTimeout(2600);
+      check(env.call('getMembers', token).find(m => m.id === 'PT-A').mealReminder === false, 'meal reminder: saved on the server');
+
+      // Ditolak server: PR kembali, lencana, tanpa pop-up.
+      env.__serverFault = fn => { if (fn === 'deleteTask') throw new Error('PR ini sedang dipakai.'); };
+      await page.evaluate(id => window.deleteTaskItem(id, 'PT-A'), taskId);
+      await page.click('#btn-confirm-modal-yes');
+      await page.waitForTimeout(300);
+      check(!(await page.evaluate(id => window.memberTasks['PT-A'].list.some(x => String(x.id) === String(id)), taskId)), 'delete task: gone at once');
+      await page.waitForTimeout(2600);
+      check(await page.evaluate(id => window.memberTasks['PT-A'].list.some(x => String(x.id) === String(id)), taskId), 'delete task refused: task comes back');
+      check(await page.isVisible('#sync-badge') && /Belum tersimpan/.test(await page.textContent('#sync-badge')), 'delete task refused: badge, not a pop-up');
+      check(!(await popup()), 'delete task refused: no pop-up');
+      env.__serverFault = null;
+      noErrors(errors);
+      await context.close();
+    })().catch(sectionCrash);
+
+    console.log('Antrean simpan · panel coach langsung (perpanjangan, saklar Pengaturan, kalimat tenang)');
+    await (async () => {
+      const env = seededEnv();
+      const token = env.adminToken();
+      const req = env.call('requestRenewal', env.memberToken(KEY_A), 'P1');
+      const rid = req.id || (req.request && req.request.id);
+      const { page, context, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token }, { touch: true, wait: 2500, delay: { decideRenewal: 2000, updateAppSettings: 2000 } });
+      const status = () => { const sh = env.sheet('RenewalRequests'); return sh ? sh.getDataRange().getValues().filter(r => String(r[0]) === String(rid)).map(r => r.join('|')).join('') : ''; };
+      check(await page.evaluate(id => (window.renewals || []).some(r => r.id === id), rid), 'renewal card on the dashboard');
+      await page.evaluate(id => window.renewalDecide(id, false), rid);
+      await page.click('#btn-confirm-modal-yes');
+      await page.waitForTimeout(300);
+      check(!(await page.evaluate(id => (window.renewals || []).some(r => r.id === id), rid)), 'renewal decided: card gone at once');
+      check(!/ditolak/.test(status()), 'renewal decided: server not reached yet (slow server)');
+      await page.waitForTimeout(2800);
+      check(/ditolak/.test(status()), 'renewal decided: saved on the server');
+
+      await page.evaluate(() => window.setFeedback({ checked: false, isConnected: false }));
+      check(env.props.FEEDBACK_ENABLED !== 'false', 'settings switch: server not reached yet');
+      await page.waitForTimeout(2600);
+      check(env.props.FEEDBACK_ENABLED === 'false', 'settings switch: saved on the server');
+      check(!(await page.locator('#modal-confirm').isVisible()), 'no pop-up');
+
+      const calm = await page.evaluate(() => [window.waitErr(new Error("We're sorry, a server error occurred."), 'Gagal: '), window.waitErr(new Error('Nomor sudah terdaftar.'), 'Gagal: ')]);
+      check(calm[0] === 'Belum tersambung. Coba lagi sebentar.', 'waiting saves: Google hiccup gets the calm sentence');
+      check(calm[1] === 'Gagal: Nomor sudah terdaftar.', 'waiting saves: a real refusal keeps its reason');
+      noErrors(errors);
+      await context.close();
+    })().catch(sectionCrash);
+
+    // Gelombang 3: portal klien.
+    console.log('Antrean simpan · portal klien langsung (perpanjang, PR, latihan & makan di lencana)');
+    await (async () => {
+      const env = seededEnv();
+      const admin = env.adminToken();
+      const task = env.call('addTask', admin, { memberId: 'PT-A', title: 'Minum air 2 liter', category: 'lain' });
+      const taskId = task.id || (task.task && task.task.id);
+      const { page, context, errors } = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, [], null, { wait: 1500, delay: { requestRenewal: 2000, completeMyTask: 2000 } });
+      const renewRows = () => { const sh = env.sheet('RenewalRequests'); return sh ? sh.getLastRow() - 1 : 0; };
+
+      // Minta perpanjang: "Menunggu konfirmasi" sekarang, satu baris di server, salinan perangkat ikut.
+      const r0 = renewRows();
+      await page.evaluate(() => { window.openRenewSheet(); });
+      await page.waitForTimeout(500);
+      await page.evaluate(() => window.renewGo());
+      await page.waitForTimeout(300);
+      check((await page.evaluate(() => window.myRenewal && window.myRenewal.status)) === 'menunggu', 'renewal: waiting state at once');
+      check(renewRows() === r0, 'renewal: server not reached yet (slow server)');
+      check((await page.evaluate(() => { try { return JSON.parse(localStorage.getItem('xnk_portal_cache')).more.renewal.status; } catch (e) { return ''; } })) === 'menunggu', 'renewal: device copy updated at once');
+      await page.waitForTimeout(2600);
+      check(renewRows() === r0 + 1, 'renewal: exactly one request on the server');
+
+      // PR selesai: tercentang sekarang, tersimpan sesudahnya.
+      await page.evaluate(() => window.loadMyTasks(true));
+      await page.waitForTimeout(800);
+      await page.evaluate(id => { window.taskDoneId = id; const n = document.getElementById('task-done-note'); if (n) n.value = ''; window.submitTaskDone({ preventDefault() {} }); }, taskId);
+      await page.waitForTimeout(200);
+      check((await page.evaluate(id => { const t = window.myTasks.list.find(x => String(x.id) === String(id)); return t && t.status; }, taskId)) === 'done', 'task done: ticked at once');
+      await page.waitForTimeout(2600);
+      check(env.call('getTasksForMember', admin, 'PT-A').some(t => String(t.id) === String(taskId) && t.status === 'done'), 'task done: saved on the server');
+
+      // Latihan dan makan yang ditolak server muncul di lencana yang sama (antreannya sendiri tidak diubah).
+      await page.evaluate(() => {
+        const t = localStorage.getItem('xnk_member_token') || '';
+        let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0;
+        const sc = 'm:' + String(x);
+        localStorage.setItem('xnk_wl_queue', JSON.stringify([{ id: 'wq-test-1', scope: sc, mode: 'client', date: '2026-11-19', hari: 'Hari A', entries: [], at: Date.now(), tries: 1, err: 'Tanggal latihan tidak valid.', retry: false }]));
+        localStorage.setItem('xnk_food_failed', JSON.stringify([{ kind: 'fq', id: 'fq-test-1', scope: sc, label: 'Nasi putih · 2026-11-19', err: 'Porsi tidak valid.', at: Date.now() }]));
+        window.syncPaint();
+      });
+      check(await page.isVisible('#sync-badge') && /Belum tersimpan/.test(await page.textContent('#sync-badge')), 'refused workout / food: badge shows');
+      await page.click('#sync-badge');
+      await page.waitForTimeout(500);
+      const list = await page.textContent('#sync-list');
+      check(/Hari A/.test(list) && /Tanggal latihan tidak valid/.test(list), 'badge list: refused workout with its reason');
+      check(/Nasi putih/.test(list) && /Porsi tidak valid/.test(list), 'badge list: refused food entry with its reason');
+      await page.evaluate(() => { window.syncWlDrop('wq-test-1'); window.syncFqDrop('fq-test-1'); });
+      await page.waitForTimeout(300);
+      check(!(await page.isVisible('#sync-badge')), 'Buang / Tutup clears the badge');
+      check(!(await page.locator('#modal-confirm').isVisible()), 'no pop-up');
+      noErrors(errors);
+      await context.close();
+    })().catch(sectionCrash);
+
+    // 6. Portal: memuat gagal (Google kehabisan kuota) dengan salinan di perangkat → jadwal tetap tampil, salinan tidak dikosongkan.
+    console.log('Antrean simpan · portal tidak mengosongkan salinan saat gagal memuat');
+    await (async () => {
+      const env = seededEnv();
+      const first = await openPage(browser, env, '/Index?view=public&k=' + KEY_A, []);
+      await first.page.waitForTimeout(1500);
+      const st = await first.page.evaluate(() => ({ t: localStorage.getItem('xnk_member_token'), c: localStorage.getItem('xnk_portal_cache') }));
+      await first.context.close();
+      const nBefore = JSON.parse(st.c || '{}').schedules ? JSON.parse(st.c).schedules.length : 0;
+      check(nBefore > 0, 'portal copy holds own sessions');
+      env.__serverFault = fn => { if (fn === 'getPortalBootstrap') throw new Error('Service invoked too many times for one day: urlfetch.'); };
+      const p = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: st.t, xnk_portal_cache: st.c }, { wait: 2000 });
+      check((await p.page.evaluate(() => window.schedules.length)) === nBefore, 'failed load: sessions still on screen');
+      const after = await p.page.evaluate(() => { try { return JSON.parse(localStorage.getItem('xnk_portal_cache')).schedules.length; } catch (e) { return -1; } });
+      check(after === nBefore, 'failed load: device copy not emptied');
+      check(await p.page.isVisible('#sync-badge') && /Data/.test(await p.page.textContent('#sync-badge')), 'failed load: badge shows the copy time');
+      noErrors(p.errors);
+      await p.context.close();
+    })().catch(sectionCrash);
+  }
 
   // ── Tema manual ───────────────────────────────────────────────────────────
   console.log('Tema manual');

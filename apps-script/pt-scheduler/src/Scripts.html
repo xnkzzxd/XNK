@@ -47,7 +47,10 @@
       if (typeof google !== 'undefined' && google.script && google.script.run) return true;
       return !!(window.XNK_CONFIG && window.XNK_CONFIG.exec);
     }
-    function rpc(fn, args) {
+    // meta (opsional): {cid, re} = nomor pesanan simpanan (Idem.gs); hanya jalur fetch yang membawanya.
+    // Galat jalur fetch membawa tanda: e.net (tidak ada jawaban: mungkin sudah tersimpan), e.nonJson (jawaban bukan JSON),
+    // e.server + e.code (jawaban pasti dari server).
+    function rpc(fn, args, meta) {
       args = args || [];
       if (typeof window.XNK_TRANSPORT === 'function') {
         return new Promise(function (resolve) { resolve(window.XNK_TRANSPORT(fn, args)); });
@@ -58,10 +61,11 @@
           r[fn].apply(r, args);
         });
       }
-      if (window.XNK_CONFIG && window.XNK_CONFIG.exec) return _rpcFetch(fn, args);
+      if (window.XNK_CONFIG && window.XNK_CONFIG.exec) return _rpcFetch(fn, args, meta);
       return Promise.reject(new Error('Mode pratinjau: server tidak tersedia.'));
     }
-    function _rpcFetch(fn, args) {
+    function _rpcErr(msg, flags) { const e = new Error(msg); Object.keys(flags || {}).forEach(function (k) { e[k] = flags[k]; }); return e; }
+    function _rpcFetch(fn, args, meta) {
       const ctl = typeof AbortController === 'function' ? new AbortController() : null;
       const ms = window.XNK_RPC_TIMEOUT || 60000;
       let timedOut = false;
@@ -69,22 +73,22 @@
       return fetch(window.XNK_CONFIG.exec, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },   // tanpa preflight CORS
-        body: JSON.stringify({ fn: fn, args: args }),
+        body: JSON.stringify(meta && meta.cid ? { fn: fn, args: args, cid: meta.cid, re: meta.re ? 1 : 0 } : { fn: fn, args: args }),
         credentials: 'omit',
         redirect: 'follow',
         signal: ctl ? ctl.signal : undefined,
       }).then(function (r) {
-        return r.json().then(null, function () { throw new Error('Koneksi ke server terputus (HTTP ' + r.status + ').'); });
+        return r.json().then(null, function () { throw _rpcErr('Koneksi ke server terputus (HTTP ' + r.status + ').', { nonJson: r.status || 0 }); });
       }, function (e) {
-        throw new Error('NetworkError: ' + (timedOut ? 'timed out' : String((e && e.message) || e)));
+        throw _rpcErr('NetworkError: ' + (timedOut ? 'timed out' : String((e && e.message) || e)), { net: true, timedOut: timedOut });
       }).then(function (j) {
         if (timer) clearTimeout(timer);
         if (!j || typeof j !== 'object' || typeof j.v !== 'number' || j.v < XNK_API_MIN) {
-          throw new Error('Versi aplikasi belum cocok. Muat ulang halaman.');
+          throw _rpcErr('Versi aplikasi belum cocok. Muat ulang halaman.', { nonJson: 200 });
         }
         // Halaman lebih baru dari server coach ini (hub xnk.web.id): pesan jelas, bukan "Permintaan tidak valid".
-        if (!j.ok && j.code === 'unknown_fn') throw new Error('Server sedang diperbarui ke versi halaman ini. Coba lagi beberapa saat lagi.');
-        if (!j.ok) throw new Error((j.auth ? 'AUTH_REQUIRED: ' : '') + (j.error || 'Terjadi kesalahan.'));
+        if (!j.ok && j.code === 'unknown_fn') throw _rpcErr('Server sedang diperbarui ke versi halaman ini. Coba lagi beberapa saat lagi.', { server: true, code: 'unknown_fn' });
+        if (!j.ok) throw _rpcErr((j.auth ? 'AUTH_REQUIRED: ' : '') + (j.error || 'Terjadi kesalahan.'), { server: true, code: j.code || '' });
         return j.data;
       }, function (e) { if (timer) clearTimeout(timer); throw e; });
     }

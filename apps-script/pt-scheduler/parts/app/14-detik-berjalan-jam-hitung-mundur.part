@@ -30,7 +30,7 @@
     finTiles();
   }
   function finTiles() { document.querySelectorAll('.fin-tile').forEach(function (t) { t.classList.toggle('hide', !(ui.mode === 'admin' && finOn())); }); }
-  function finErr(err) { window.showToast('Gagal: ' + window.authMessage(err)); }
+  function finErr(err) { window.showToast(waitErr(err, 'Gagal: ')); }   // gangguan sementara: kalimat tenang
   function finMonthLabel() { return MONTHS[fin.month - 1] + ' ' + fin.year; }
   function finToday() { return ymd(new Date()); }
 
@@ -179,7 +179,7 @@
     }).catch(function (err) { done(); finErr(err); });
   };
   window.finRestore = function (kind, id) {
-    adminCall('restoreFinanceItem', kind, id).then(function () { window.showToast('Dipulihkan.'); finLoad(); }).catch(finErr);
+    optimistic({ q: { mode: 'admin', fn: 'restoreFinanceItem', args: [kind, id] }, ok: 'Dipulihkan.', label: 'Pulihkan', then: function () { finLoad(); } });
   };
 
   // Detail tagihan
@@ -235,14 +235,15 @@
   };
   window.finBillSave = function (e) {
     e.preventDefault();
-    const b = fin.detail.bill, btn = $('fin-bill-save'), done = busy(btn, 'Menyimpan…');
-    adminCall('saveBillAdjust', b.id, { diskon: finNum($('fin-bill-discount').value), total: finNum($('fin-bill-total').value), alasan: $('fin-bill-reason').value, catatan: $('fin-bill-note').value }).then(function () {
-      done(); window.closeModal(); window.showToast('Tagihan disimpan.'); window.finOpenBill(b.id); finLoad();
-    }).catch(function (err) { done(); $('fin-bill-err').textContent = window.authMessage(err); });
+    const b = fin.detail.bill;
+    // Antrean simpan: sisa & status tagihan dihitung server, dimuat ulang setelahnya. Ditolak = lencana (Ubah membuka lembar ini).
+    optimistic({ q: { mode: 'admin', fn: 'saveBillAdjust', args: [b.id, { diskon: finNum($('fin-bill-discount').value), total: finNum($('fin-bill-total').value), alasan: $('fin-bill-reason').value, catatan: $('fin-bill-note').value }] },
+      sheet: true, errEl: 'fin-bill-err', ok: 'Tagihan disimpan.', label: 'Tagihan', then: function () { window.finOpenBill(b.id); finLoad(); } });
   };
   window.finBillArchive = function () {
     const id = fin.detail.bill.id;
-    adminCall('archiveFinanceItem', 'bill', id).then(function () { window.closeModal(); window.closeDetail(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+    window.closeModal(); window.closeDetail();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['bill', id] }, ok: 'Diarsipkan. Pulihkan lewat filter Arsip.', label: 'Arsipkan tagihan', then: function () { finLoad(); } });
   };
 
   // Sheet pembayaran / pengeluaran
@@ -319,15 +320,24 @@
   };
   window.finPaySave = function (e) {
     e.preventDefault();
-    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
     const billId = fin.payPick || $('fin-pay-bill').value;
     const p = { id: fin.payId || undefined, billId: billId || undefined, amount: finNum($('fin-pay-amount').value), date: $('fin-pay-date').value, method: finPicked('fin-pay-method'), note: $('fin-pay-note').value, category: finPicked('fin-pay-cat') };
+    // Tanpa foto bukti: antrean simpan (nomor pesanan mencegah pembayaran dobel). Dengan foto: menunggu id dari server untuk unggahan.
+    if (!fin.proof) {
+      const bill = fin.billId;
+      optimistic({ q: { mode: 'admin', fn: 'savePayment', args: [p] }, sheet: true, errEl: 'fin-pay-err', ok: 'Pembayaran tersimpan.', label: 'Pembayaran',
+        then: function () { finLoad(); if (bill && ui.detail === 'bill:' + bill) window.finOpenBill(bill); } });
+      return;
+    }
+    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
     adminCall('savePayment', p).then(function (r) { return finUploadProof('payment', r.id); }).then(function () {
       done(); window.closeModal(); window.showToast('Pembayaran tersimpan.'); finLoad(); if (fin.billId && ui.detail === 'bill:' + fin.billId) window.finOpenBill(fin.billId);
-    }).catch(function (err) { done(); $('fin-pay-err').textContent = window.authMessage(err); });
+    }).catch(function (err) { done(); $('fin-pay-err').textContent = waitErr(err); });
   };
   window.finPayArchive = function () {
-    adminCall('archiveFinanceItem', 'payment', fin.payId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat tagihannya.'); finLoad(); if (fin.billId) window.finOpenBill(fin.billId); }).catch(finErr);
+    const bill = fin.billId;
+    window.closeModal();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['payment', fin.payId] }, ok: 'Diarsipkan. Pulihkan lewat tagihannya.', label: 'Arsipkan pembayaran', then: function () { finLoad(); if (bill) window.finOpenBill(bill); } });
   };
 
   window.finOpenExpense = function (id) {
@@ -351,13 +361,19 @@
   };
   window.finExpSave = function (e) {
     e.preventDefault();
+    const x = { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value };
+    if (!fin.proof) {   // tanpa foto bukti: antrean simpan (nomor pesanan mencegah dobel)
+      optimistic({ q: { mode: 'admin', fn: 'saveExpense', args: [x] }, sheet: true, errEl: 'fin-exp-err', ok: 'Pengeluaran tersimpan.', label: 'Pengeluaran', then: function () { finLoad(); } });
+      return;
+    }
     const btn = $('fin-exp-save'), done = busy(btn, 'Menyimpan…');
-    adminCall('saveExpense', { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value })
+    adminCall('saveExpense', x)
       .then(function (r) { return finUploadProof('expense', r.id); }).then(function () { done(); window.closeModal(); window.showToast('Pengeluaran tersimpan.'); finLoad(); })
-      .catch(function (err) { done(); $('fin-exp-err').textContent = window.authMessage(err); });
+      .catch(function (err) { done(); $('fin-exp-err').textContent = waitErr(err); });
   };
   window.finExpArchive = function () {
-    adminCall('archiveFinanceItem', 'expense', fin.expId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+    window.closeModal();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['expense', fin.expId] }, ok: 'Diarsipkan. Pulihkan lewat filter Arsip.', label: 'Arsipkan pengeluaran', then: function () { finLoad(); } });
   };
   window.finQuick = function (kind) {
     window.closeModal();
@@ -464,12 +480,12 @@
       utama: picked('gym-ut'), pendukung: picked('gym-pe'), hindari: picked('gym-hi'), repMin: $('gym-r1').value.trim(), repMax: $('gym-r2').value.trim(), exId: $('gym-ex').value.trim() });
     gymSt.busy = true;
     adminCall('saveGymExercise', it).then(function (d) { gymSt.data = d; gymSt.edit = null; gymSt.q = ''; gymSt.pola = ''; gymRender(); showToast('Tersimpan'); })
-      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = e.message || 'Gagal menyimpan.'; })
+      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = waitErr(e); })
       .then(function () { gymSt.busy = false; });
   };
   window.gymActive = function (id, on) {
     adminCall('setGymExerciseActive', id, on).then(function (d) { gymSt.data = d; gymRender(); })
-      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); gymRender(); });
+      .catch(function (e) { showToast(waitErr(e)); gymRender(); });
   };
   function exAliasLoad() {
     exEnsure().catch(function () {}).then(function () { gymLoad(); return adminCall('getManualExercises'); })
@@ -506,7 +522,7 @@
     exAl.busy[it.kunci] = true;
     adminCall('saveExerciseAlias', [Object.assign({ nama: it.nama }, v)])
       .then(function (d) { exAl.data = d; exAliasRender(); gymSumRender(); showToast('Tersimpan'); })
-      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); exAliasRender(); })
+      .catch(function (e) { showToast(waitErr(e)); exAliasRender(); })
       .then(function () { delete exAl.busy[it.kunci]; });
   };
   window.exAliasPick = function (i) {
@@ -559,55 +575,29 @@
         '<button type="button" class="btn btn-outline btn-sm" onclick="window.finShareSave(\'' + h(c.id) + '\',this)">Simpan</button></div>';
     }).join('') || '<span class="li-sub">Belum ada coach.</span>';
   }
-  window.setNutrition = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { nutritionEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.nutritionEnabled = s.nutritionEnabled;
-      window.showToast(s.nutritionEnabled ? 'Gizi untuk klien aktif.' : 'Gizi untuk klien dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setFeedback = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { feedbackEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.feedbackEnabled = s.feedbackEnabled;
-      window.showToast(s.feedbackEnabled ? 'Penilaian klien aktif.' : 'Penilaian klien dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
+  // Saklar Pengaturan (antrean simpan): saklar & setState langsung berubah; ditolak = saklar kembali (lencana di bilah atas).
+  function setToggle(el, key, okOn, okOff, label, apply) {
+    const v = !!el.checked, was = setState.data ? setState.data[key] : !v;
+    if (setState.data) setState.data[key] = v;
+    if (apply) apply(v);
+    const patch = {}; patch[key] = v;
+    optimistic({ q: { mode: 'admin', fn: 'updateAppSettings', args: [patch] }, ok: v ? okOn : okOff, label: label,
+      then: function (s) { if (s && s[key] !== undefined && setState.data) setState.data[key] = s[key]; },
+      undo: function () { if (setState.data) setState.data[key] = was; if (apply) apply(was); if (el.isConnected) el.checked = !v; } });
+  }
+  window.setNutrition = function (el) { setToggle(el, 'nutritionEnabled', 'Gizi untuk klien aktif.', 'Gizi untuk klien dimatikan.', 'Gizi untuk klien'); };
+  window.setFeedback = function (el) { setToggle(el, 'feedbackEnabled', 'Penilaian klien aktif.', 'Penilaian klien dimatikan.', 'Penilaian klien'); };
   window.setShareQr = function (btn) {
     const v = String($('set-share-qr').value || '').trim();
     const done = busy(btn, 'Menyimpan…');
     adminCall('updateAppSettings', { shareQrUrl: v }).then(function (s) {
       done(); if (setState.data) { setState.data.shareQrUrl = s.shareQrUrl; }
       window.showToast(v ? 'Alamat QR tersimpan.' : 'Kembali ke alamat bawaan.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
-  window.setShare = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { shareEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.shareEnabled = s.shareEnabled;
-      window.shareOn = s.shareEnabled !== false;
-      window.showToast(s.shareEnabled ? 'Kartu bagikan aktif.' : 'Kartu bagikan dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setWarm = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { warmEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.warmEnabled = s.warmEnabled;
-      window.showToast(s.warmEnabled ? 'Data disiapkan di latar tiap 15 menit.' : 'Penyiapan data di latar dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setClientGuide = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { clientGuideEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.clientGuideEnabled = s.clientGuideEnabled;
-      window.showToast(s.clientGuideEnabled ? 'Panduan klien baru aktif.' : 'Panduan klien baru dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
+  window.setShare = function (el) { setToggle(el, 'shareEnabled', 'Kartu bagikan aktif.', 'Kartu bagikan dimatikan.', 'Kartu bagikan', function (v) { window.shareOn = v !== false; }); };
+  window.setWarm = function (el) { setToggle(el, 'warmEnabled', 'Data disiapkan di latar tiap 15 menit.', 'Penyiapan data di latar dimatikan.', 'Siapkan data di latar'); };
+  window.setClientGuide = function (el) { setToggle(el, 'clientGuideEnabled', 'Panduan klien baru aktif.', 'Panduan klien baru dimatikan.', 'Panduan klien baru'); };
 
   function finSaveSettings(patch, then) {
     return adminCall('updateAppSettings', { finance: patch }).then(function (s) {
@@ -639,14 +629,20 @@
   window.finCatActive = function (id, on) {
     const c = (fin.cats || []).filter(function (x) { return x.id === id; })[0];
     if (!c) return;
-    adminCall('saveFinanceCategory', { id: id, name: c.name, active: on }).then(function () { c.active = on; }).catch(finErr);
+    const was = c.active;
+    c.active = on;
+    optimistic({ q: { mode: 'admin', fn: 'saveFinanceCategory', args: [{ id: id, name: c.name, active: on }] }, ok: false, label: 'Kategori keuangan',
+      undo: function () { c.active = was; finCatsRender(); } });
   };
   window.finCatDel = function (id) {
-    adminCall('deleteFinanceCategory', id).then(function () { fin.cats = (fin.cats || []).filter(function (c) { return c.id !== id; }); finCatsRender(); }).catch(finErr);
+    const before = fin.cats;
+    fin.cats = (fin.cats || []).filter(function (c) { return c.id !== id; });
+    finCatsRender();
+    optimistic({ q: { mode: 'admin', fn: 'deleteFinanceCategory', args: [id] }, ok: 'Kategori dihapus.', label: 'Hapus kategori',
+      undo: function () { fin.cats = before; finCatsRender(); } });
   };
   window.finShareSave = function (id, btn) {
-    const done = busy(btn, 'Menyimpan…');
-    adminCall('saveCoachShare', id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)).then(function () { done(); window.showToast('Bagi hasil tersimpan.'); }).catch(function (err) { done(); finErr(err); });
+    optimistic({ q: { mode: 'admin', fn: 'saveCoachShare', args: [id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)] }, ok: 'Bagi hasil tersimpan.', label: 'Bagi hasil coach' });
   };
   window.finSync = function (btn) {
     const done = busy(btn, 'Menyinkronkan…');
