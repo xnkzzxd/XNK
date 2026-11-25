@@ -172,6 +172,8 @@
     el.innerHTML = html;
     paintIcons();
   }
+  // Teks yang ditulis timer: hanya bila berubah (tiap tulis = hitung ulang gaya/tata letak; HP cepat panas).
+  function textIf(el, s) { if (el && el.textContent !== s) el.textContent = s; }
 
   function staggerIndex(root) {
     (root || document).querySelectorAll('.stagger').forEach(function (list) {

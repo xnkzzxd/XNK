@@ -724,7 +724,8 @@ html.wl-on, html.wl-on body { overflow: hidden; }
 .mm-fig .mmf-base { fill: color-mix(in srgb, var(--fg) 10%, transparent); }
 .mm-fig .mmf { fill: color-mix(in srgb, var(--fg) 16%, transparent); transition: fill var(--t-base) var(--ease); }
 .mm-fig .mmf.half { fill: color-mix(in srgb, var(--fg) 45%, transparent); }
-.mm-fig .mmf.on { fill: var(--fg); animation: mmf-pulse 2.4s ease-in-out infinite; }
+/* Tiga denyut lalu diam: animasi SVG digambar ulang tiap frame di Safari (HP panas bila terus selama latihan). */
+.mm-fig .mmf.on { fill: var(--fg); animation: mmf-pulse 2.4s ease-in-out 3; }
 @keyframes mmf-pulse { 50% { opacity: .78; } }
 /* Kartu gerakan + tabel set ala Hevy (Fase O) */
 .wl-list { display: flex; flex-direction: column; gap: 10px; }
@@ -1716,6 +1717,8 @@ button.avatar { border: 0; cursor: pointer; }
 .skel-block { height: 96px; border-radius: 14px; }
 @keyframes skelMove { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .skel::after { animation: none; } }
+/* Galeri Kartu saya: kotak abu-abu diam sampai kartunya digambar (yang di luar layar tidak ikut berkilau terus). */
+.sh-gal-img.skel::after { animation: none; }
 .stars { display: flex; gap: 2px; }
 .star { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; color: var(--fg-muted); border-radius: 50%; cursor: pointer; }
 .star svg { width: 28px; height: 28px; }
@@ -1932,6 +1935,8 @@ html, body { overflow-x: hidden; }
   html.ios .tab { min-height: 0; height: var(--tabbar-h); }
 }
 @keyframes tabbarUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
+/* iPhone/iPad: latar sheet cukup diredupkan. Blur selayar penuh dihitung ulang Safari tiap ada yang berubah di bawahnya. */
+html.ios .layer .backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
 
 /* Kolom tanggal/jam iOS: rata kiri, tidak melebar */
 .input[type="date"], .input[type="time"] { display: block; min-width: 0; max-width: 100%; text-align: left; line-height: 22px; }

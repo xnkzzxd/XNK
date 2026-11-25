@@ -172,6 +172,8 @@
     el.innerHTML = html;
     paintIcons();
   }
+  // Teks yang ditulis timer: hanya bila berubah (tiap tulis = hitung ulang gaya/tata letak; HP cepat panas).
+  function textIf(el, s) { if (el && el.textContent !== s) el.textContent = s; }
 
   function staggerIndex(root) {
     (root || document).querySelectorAll('.stagger').forEach(function (list) {
@@ -6770,8 +6772,8 @@
     if (list) dragSort(list, '.wl-ex', function (from, to) { wlMoveTo(from, to); });
     wlRenderRest();
   }
-  // Teks yang dipanggil timer 4× per detik: tulis hanya bila berubah (tiap tulis = tata letak ulang; HP cepat panas).
-  function wlSetText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
+  // Teks yang dipanggil timer 4× per detik: tulis hanya bila berubah (textIf, bagian 01).
+  function wlSetText(el, s) { textIf(el, s); }
   function wlRenderSub() {
     if (!wl) return;
     const sub = $('wl-sub'), st = wl.loading || wl.live ? '' : 'Catat ' + (wl.date === wkToday() ? 'hari ini' : pgLabel(wl.date));
@@ -10855,12 +10857,17 @@
   };
 
   // ── Detik berjalan: jam & hitung mundur ────────────────────────────────────
-  setInterval(function () {
+  // Tidak bekerja saat halaman tersembunyi, melewati elemen yang tidak tampil (tab lain), dan menulis hanya teks yang berubah.
+  function tickClocks() {
+    if (document.hidden) return;
+    const shown = function (n) { return n.getClientRects().length > 0; };
     const clock = $('live-clock');
-    if (clock) clock.textContent = fmtTime(new Date());
-    document.querySelectorAll('[data-countdown]').forEach(function (n) { n.textContent = timeUntil(new Date(Number(n.getAttribute('data-countdown')))); });
-    document.querySelectorAll('[data-countdown-long]').forEach(function (n) { n.textContent = countdownText(new Date(Number(n.getAttribute('data-countdown-long')))); });
-  }, 1000);
+    if (clock && shown(clock)) textIf(clock, fmtTime(new Date()));
+    document.querySelectorAll('[data-countdown]').forEach(function (n) { if (shown(n)) textIf(n, timeUntil(new Date(Number(n.getAttribute('data-countdown'))))); });
+    document.querySelectorAll('[data-countdown-long]').forEach(function (n) { if (shown(n)) textIf(n, countdownText(new Date(Number(n.getAttribute('data-countdown-long'))))); });
+  }
+  setInterval(tickClocks, 1000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) tickClocks(); });
 
   // ── Keuangan (Fase H): tagihan, pembayaran, pengeluaran, laporan ─────────────
   const FIN_STATUS_PILL = { 'Lunas': 'pill solid', 'DP': 'pill', 'Belum bayar': 'pill dashed' };
