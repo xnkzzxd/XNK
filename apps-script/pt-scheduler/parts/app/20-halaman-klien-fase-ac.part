@@ -32,10 +32,13 @@
     const st = clientState(m);
     const act = (cls, ic, label, js, extra) => '<button type="button" class="btn cp-act' + (cls ? ' ' + cls : '') + '" onclick="' + js + '"' + (extra || '') + '>' + icon(ic) + '<span>' + label + '</span></button>';
     return '<section class="card-ink client-hero cp-card gfx-kontur" aria-label="' + h(m.name) + '">' +
-      '<div class="client-hero-id cp-id">' + avatar(m.photo, m.name, 'lg') + '<div class="grow"><div class="cp-tags">' + statePillHtml(m) + (m.packageName ? '<span class="pill">' + h(m.packageName) + '</span>' : '') + '</div>' +
+      '<div class="client-hero-id cp-id">' + avatar(m.photo, m.name, 'lg') + '<div class="grow"><div class="cp-tags">' + statePillHtml(m) + '</div>' +
         (goal ? '<p class="cp-goal">' + h(goal) + '</p>' : '') + '<p class="cp-phone" id="profile-phone">+' + h(m.phone) + '</p></div></div>' +
-      '<div class="cp-left">' + (total ? '<p class="cp-left-t"><b class="num" id="profile-remaining">' + rem + '</b><span> dari <span id="profile-total">' + total + '</span> sesi</span><span class="cp-left-n"> · ' + done + ' selesai</span></p>'
-          : '<p class="cp-left-t"><b>Tanpa batas sesi</b><span class="cp-left-n"> · ' + done + ' selesai</span><span class="hide" id="profile-remaining">' + rem + '</span><span class="hide" id="profile-total">0</span></p>') +
+      // Paket + Perpanjang (keputusan pemilik 2026-11-25: perpanjang milik paket; lembar Klien baru terisi → addMember memperpanjang)
+      '<div class="cp-left client-pkg"><div class="cp-pkg-row"><div class="grow" style="min-width:0"><p class="cp-pkg-name truncate">' + icon('package') + '<span>' + h(m.packageName || 'Paket custom') + '</span></p>' +
+        (total ? '<p class="cp-left-t"><b class="num" id="profile-remaining">' + rem + '</b><span> dari <span id="profile-total">' + total + '</span> sesi</span><span class="cp-left-n"> · ' + done + ' selesai</span></p>'
+          : '<p class="cp-left-t"><b>Tanpa batas sesi</b><span class="cp-left-n"> · ' + done + ' selesai</span><span class="hide" id="profile-remaining">' + rem + '</span><span class="hide" id="profile-total">0</span></p>') + '</div>' +
+        '<button type="button" class="btn btn-sm cp-renew ' + (total && rem === 0 ? 'btn-inverse' : 'btn-ghost-ink') + '" id="profile-renew" onclick="window.openRenewMember(\'' + id + '\')">' + icon('repeat') + 'Perpanjang</button></div>' +
         '<div class="meter cp-meter' + (st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
         (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') + '</div>' +
       '<div class="client-hero-actions cp-acts">' +

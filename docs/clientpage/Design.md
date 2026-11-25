@@ -77,7 +77,7 @@ PHONE                                        PC (panel ±790 px at 1440)
  Ringkasan Progres Latihan Gizi Data   ← sticky, light, 48 px
 ```
 - Head title = the client's name; ⋯ opens `#sheet-cp-more`.
-- Client card: black, hangs over the band, `.gfx-kontur`; avatar, state + package pills, goal, phone, sessions meter (`#profile-remaining`, `#profile-total`, fills by sessions left), next session, the four actions. The tabs stick under the head while scrolling; the card scrolls away.
+- Client card: black, hangs over the band, `.gfx-kontur`; avatar, state pill, goal, phone, package row (package name, sessions left, **Perpanjang** `#profile-renew` → `openRenewMember`, white when the quota is used up; owner's choice from PR #200), sessions meter (`#profile-remaining`, `#profile-total`, fills by sessions left), next session, the four actions. The tabs stick under the head while scrolling; the card scrolls away.
 - Five light text tabs, sticky inside `#detail-body`, arrow keys switch. Legacy names: `perawatan → data`, `program → latihan`, `riwayat → ringkasan`.
 
 ### Ringkasan

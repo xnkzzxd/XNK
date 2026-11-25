@@ -3132,6 +3132,14 @@ html.desk .cn-wrap { max-width: none; }
 .cp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .cp-goal { margin-top: 6px; font-weight: 700; overflow-wrap: anywhere; }
 .cp-phone { margin-top: 2px; font-size: var(--fs-sm); color: var(--on-ink-muted); }
+/* Paket + Perpanjang: satu baris (nama paket, sisa sesi | tombol), meter di bawahnya */
+.cp-pkg-row { display: flex; align-items: center; gap: 12px; }
+.cp-pkg-name { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .02em; color: var(--on-ink-muted); }
+.cp-pkg-name svg.lucide { width: 14px; min-height: 14px; flex: none; }
+.cp-pkg-name span { overflow: hidden; text-overflow: ellipsis; }
+.cp-renew { flex: none; min-height: 44px; white-space: nowrap; }
+.cp-card .btn-inverse { background: var(--on-ink); color: var(--ink); }
+.cp-card .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
 .cp-left-t { line-height: 1.2; }
 .cp-left-t b { font-size: var(--fs-2xl); font-weight: 800; letter-spacing: -0.02em; }
 .cp-left-t span { color: var(--on-ink-muted); font-weight: 600; }
@@ -3250,5 +3258,5 @@ html.desk .cn-wrap { max-width: none; }
 }
 html.big-text .cp-acts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* HP: kartu tetap pendek — nomor ada di Data › Profil dan jadwal berikutnya tepat di bawah kartu. */
-@media (max-width: 767px) { .cp-card .cp-phone, .cp-card .cp-left-next { display: none; } .cp-card { padding: 16px; gap: 12px; } }
+@media (max-width: 767px) { .cp-card .cp-phone, .cp-card .cp-left-next { display: none; } .cp-card { padding: 14px 16px; gap: 10px; } .cp-act { min-height: 54px; padding: 6px 4px; } .cp-meter { margin-top: 6px; } }
 </style>

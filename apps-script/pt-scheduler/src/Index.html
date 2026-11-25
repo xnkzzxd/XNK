@@ -349,7 +349,7 @@
         <div class="field"><label class="label" for="member-name">Nama lengkap</label><input class="input" type="text" id="member-name" required autocomplete="off"></div>
         <div class="field"><label class="label" for="member-phone">Nomor WhatsApp</label>
           <div class="input-affix"><span class="affix">+62</span><input class="input" type="tel" inputmode="numeric" id="member-phone" required placeholder="81234567890"></div>
-          <span class="hint">Nomor yang sudah terdaftar akan diperpanjang paketnya.</span>
+          <span class="hint" id="member-phone-hint">Nomor yang sudah terdaftar akan diperpanjang paketnya.</span>
         </div>
         <div class="field"><label class="label" for="member-goal">Tujuan latihan</label><input class="input" type="text" id="member-goal" placeholder="Contoh: turun berat badan"></div>
         <div class="field"><span class="label">Paket</span>
@@ -367,7 +367,7 @@
           <div class="field"><label class="label" for="member-total-sessions">Total sesi</label><input class="input num" type="number" id="member-total-sessions" required value="10" min="1"></div>
           <div class="field"><label class="label" for="member-used-sessions">Sesi terpakai</label><input class="input num" type="number" id="member-used-sessions" required value="0" min="0"></div>
         </div>
-        <button type="submit" class="btn btn-primary btn-lg btn-block">Simpan klien</button>
+        <button type="submit" class="btn btn-primary btn-lg btn-block" id="member-submit">Simpan klien</button>
       </form>
     </div>
 

@@ -433,6 +433,7 @@ async function contrastReport(page) {
     const box = await page.locator('#detail-panel').boundingBox();
     check(!!box && box.width >= MOBILE.width - 1, 'client detail opens full-screen on phone');
     // S9 / Fase AC: kepala = nama klien; satu kartu hitam pendek dengan empat aksi sebaris; tab terang rendah; kartu pertama Ringkasan di layar pertama.
+    // Batas kartu 250 px (2026-11-25, pemilik): baris Paket + Perpanjang ikut di kartu.
     await page.waitForTimeout(400);
     const s9 = await page.evaluate(() => {
       const r = q => { const e = document.querySelector('#detail-body ' + q); return e ? e.getBoundingClientRect() : null; };
@@ -440,10 +441,11 @@ async function contrastReport(page) {
       const acts = Array.from(document.querySelectorAll('#detail-body .cp-acts .btn')).map(b => b.getBoundingClientRect());
       return card && tabs && first ? { card: Math.round(card.height), acts: acts.length, actsRow: new Set(acts.map(a => Math.round(a.top))).size === 1, actsTall: acts.every(a => a.height >= 44 && a.width >= 44),
         tab: Math.round(tabs.height), first: Math.round(first.top), over: document.scrollingElement.scrollWidth - innerWidth,
+        renew: !!document.querySelector('#detail-body .cp-card #profile-renew'),
         name: document.getElementById('detail-title').textContent === (window.members.find(m => m.id === 'PT-C') || {}).name } : null;
     });
-    check(!!s9 && s9.card <= 240 && s9.acts === 4 && s9.actsRow && s9.actsTall && s9.tab <= 52 && s9.first < 700 && s9.over <= 1 && s9.name,
-      'client page (phone): head shows the name, one short black card with the four actions in one row (≥ 44 px), low light tabs, "Sesi berikutnya" on the first screen ' + JSON.stringify(s9));
+    check(!!s9 && s9.card <= 250 && s9.acts === 4 && s9.actsRow && s9.actsTall && s9.renew && s9.tab <= 52 && s9.first < 700 && s9.over <= 1 && s9.name,
+      'client page (phone): head shows the name, one short black card with the four actions in one row (≥ 44 px) and the package row with Perpanjang, low light tabs, "Sesi berikutnya" on the first screen ' + JSON.stringify(s9));
     const phoneProf = await page.evaluate(() => ({
       tabs: document.querySelectorAll('#detail-body [data-cptab]').length,
       tabRows: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size,
@@ -556,6 +558,16 @@ async function contrastReport(page) {
     const ccStore = await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_client_cache') || 'null'));
     const admCache = await page.evaluate(() => localStorage.getItem('xnk_admin_cache') || '');
     check(!!ccStore && !!ccStore.items['PT-A'] && ccStore.order[0] === 'PT-A' && !admCache.includes('foodLog'), 'cache: the client page is kept in xnk_client_cache, not in the admin cache');
+    // Tombol Perpanjang di halaman klien: lembar Klien baru terisi, nomor terkunci (addMember = perpanjang).
+    await page.click('#profile-renew');
+    await page.waitForTimeout(400);
+    const rn = await page.evaluate(() => { const m = window.members.find(x => x.id === 'PT-A'); return { open: !document.getElementById('modal-add-member').classList.contains('hide'), title: document.getElementById('add-member-title').textContent, ro: document.getElementById('member-phone').readOnly, phoneOk: sanitizePhone(document.getElementById('member-phone').value) === sanitizePhone(m.phone), name: document.getElementById('member-name').value === m.name, pkg: document.getElementById('member-package').value === String(m.packageId || ''), used: document.getElementById('member-used-sessions').value }; });
+    check(rn.open && rn.title === 'Perpanjang paket' && rn.ro && rn.phoneOk && rn.name && rn.pkg && rn.used === '0', 'renew: the client page button opens a prefilled renew sheet with the number locked (' + JSON.stringify(rn) + ')');
+    await page.evaluate(() => { window.closeModal(); window.openAddMemberModal(); });
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => document.getElementById('add-member-title').textContent === 'Klien baru' && !document.getElementById('member-phone').readOnly && !document.getElementById('member-phone').value), 'renew: "Klien baru" afterwards opens an empty sheet again');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(300);
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(300);
 
