@@ -1,5 +1,7 @@
   // ── Fase Q: tafsir untuk coach di halaman klien ──────────────────────────────
   window.clientInsight = {};   // { memberId: getClientBundle.insight }; hanya di memori
+  window.clientTodo = {};      // { memberId: getClientBundle.todo } — tugas coach (Fase AC)
+  window.clientNotes = {};     // { memberId: getClientBundle.notes } — 10 catatan sesi terakhir (Fase AC)
   function cpInsHtml(id, kind) {
     const raw = window.clientInsight[String(id)];
     if (raw === undefined) {
@@ -39,33 +41,43 @@
     const id = window.selectedMemberId;
     if (!id || !$('cp-ph-progress')) return;
     [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards'], ['cp-ph-gizi', 'giziHero']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
-    const hl = $('cp-highlight'); if (hl) { const m = window.members.find(x => String(x.id) === String(id)); if (m) hl.innerHTML = cpHighlightHtml(m); }
+    cpRenderOverview(id);
     paintIcons();
   }
-  // Sorotan di Ringkasan: sesi terakhir/berikutnya, tren berat, latihan minggu ini, dan tanda perhatian.
-  function cpHighlightHtml(m, sessions, upcoming) {
-    sessions = sessions || window.schedules.filter(s => String(s.memberId) === String(m.id) && !isAvailable(s)).sort((a, b) => new Date(b.start) - new Date(a.start));
-    upcoming = upcoming || sessions.filter(s => new Date(s.start) >= new Date() && !isDone(s)).sort(byStart);
-    const lastDone = sessions.filter(isDone)[0], nx = upcoming[0], g = sigOf(m);
-    const raw = window.clientInsight[String(m.id)], tr = raw && !raw.error ? raw.training : null;
-    const rows = [
-      insRow('Sesi terakhir', lastDone ? fmtShort(new Date(lastDone.start)) : '-', ''),
-      insRow('Sesi berikutnya', nx ? fmtShort(new Date(nx.start)) + ' · ' + fmtTime(new Date(nx.start)) : 'Belum ada', '')
-    ];
-    if (g && g.weightDelta != null) rows.push(insRow('Berat 30 hari', insSigned(g.weightDelta, 'kg'), ''));
-    if (tr) rows.push(insRow('Latihan mandiri minggu ini', tr.week.days.now + ' hari', tr.week.baseline ? 'rata-rata ' + tr.week.days.avg + ' hari' : ''));
-    const flags = (g ? g.flags : []).filter(f => FLAG_TEXT[f]).map(f => flagHtml(FLAG_TEXT[f](m, g))).join('');
-    return '<div class="card-flat stack" style="gap:10px"><h4 class="section-title">Sorotan</h4><div class="ins-list">' + rows.join('') + '</div>' + (flags ? '<div class="cc-flags">' + flags + '</div>' : '') + '</div>';
+  // Ringkasan: "Sesi berikutnya" + "Tugas coach" (kolom kiri) dan "Minggu ini" (kanan) ikut data bundle yang baru datang.
+  function cpRenderOverview(id) {
+    const m = window.members.find(x => String(x.id) === String(id));
+    if (!m || String(window.selectedMemberId) !== String(id)) return;
+    const hl = $('cp-highlight'); if (hl) setHTML(hl, cpHighlightHtml(m));
+    const wk = $('cp-week'); if (wk) setHTML(wk, cpWeekHtml(m));
+    const ss = $('cp-sess'); if (ss) setHTML(ss, cpSessHtml(m));
   }
+  window.cpRenderOverview = cpRenderOverview;
 
-  // Nama tab lama (sebelum 4 tab) dipetakan ke yang baru.
-  const CP_LEGACY = { program: 'latihan', perawatan: 'progres', riwayat: 'ringkasan' };
+  // Fase AC: lima tab. Nama tab lama dipetakan ke yang baru.
+  const CP_TABS = [['ringkasan', 'Ringkasan'], ['progres', 'Progres'], ['latihan', 'Latihan'], ['gizi', 'Gizi'], ['data', 'Data']];
+  const CP_LEGACY = { program: 'latihan', perawatan: 'data', riwayat: 'ringkasan' };
   function cpTabName(n) { return CP_LEGACY[n] || n; }
-  window.cpTab = function (name) {
+  window.cpTab = function (name, focus) {
     name = cpTabName(name);
     ui.cpTab = { id: String(window.selectedMemberId), name: name };
-    document.querySelectorAll('#detail-body [data-cptab]').forEach(function (b) { const on = b.getAttribute('data-cptab') === name; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('#detail-body [data-cptab]').forEach(function (b) { const on = b.getAttribute('data-cptab') === name; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
     document.querySelectorAll('#detail-body [data-cppane]').forEach(function (p) { p.classList.toggle('hide', p.getAttribute('data-cppane') !== name); });
+    // Tab di bawah kartu: setelah ganti tab, isi tab mulai tepat di bawah bar tab (bukan di tengah isi tab sebelumnya).
+    const bar = document.querySelector('#detail-body .cp-tabs'), card = $('cp-card-wrap'), body = $('detail-body');
+    if (bar && card && body) {
+      const b = body.getBoundingClientRect().top, natural = card.getBoundingClientRect().bottom - b + body.scrollTop;
+      if (body.scrollTop > natural) body.scrollTop = natural;
+    }
+  };
+  // Panah kiri/kanan, Home, End berpindah tab (pola tablist).
+  window.cpTabKey = function (e) {
+    const keys = { ArrowRight: 1, ArrowLeft: -1, Home: 'first', End: 'last' };
+    if (!(e.key in keys)) return;
+    e.preventDefault(); e.stopPropagation();
+    const names = CP_TABS.map(t => t[0]), cur = names.indexOf(cpTabName((ui.cpTab || {}).name || 'ringkasan'));
+    const k = keys[e.key], next = k === 'first' ? 0 : k === 'last' ? names.length - 1 : (cur + k + names.length) % names.length;
+    window.cpTab(names[next], true);
   };
 
   // ── Reminder makan di profil klien (T-73) — semua klien ──────────
@@ -134,23 +146,23 @@
       '<button type="button" class="icon-btn plain" onclick="window.deleteTaskItem(\'' + tid + '\',\'' + mid + '\')" aria-label="Hapus PR">' + icon('trash-2') + '</button></div></div>';
   }
 
+  // Fase AC: kepala bagian ala portal (judul + jumlah + satu tautan "+ PR" di kanan); kosong = satu baris, bukan kotak besar.
   function taskSectionHtml(memberId) {
     const c = window.memberTasks[String(memberId)];
-    const addBtn = '<button type="button" class="btn btn-secondary btn-sm" onclick="window.addTaskFor(\'' + h(memberId) + '\')">' + icon('plus') + 'Tambah</button>';
+    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : 0;
+    const head = '<div class="px-sec cp-sec"><h3>PR</h3><span id="cp-pr-n">' + (nOpen ? nOpen + ' terbuka' : '') + '</span><button type="button" class="cp-link" onclick="window.addTaskFor(\'' + h(memberId) + '\')">' + icon('plus') + 'PR</button></div>';
     let inner;
-    if (!c || c.state === 'loading') inner = skel(3);
-    else if (c.state === 'error') inner = '<p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMemberTasks(\'' + h(memberId) + '\',true)">Coba lagi</button>';
-    else if (!c.list.length) inner = emptyState('inbox', 'Belum ada PR', 'Beri klien tugas di luar gym, misalnya nutrisi atau tidur.');
+    if (!c || c.state === 'loading') inner = '<div class="card cp-card-pad">' + skel(2) + '</div>';
+    else if (c.state === 'error') inner = '<div class="card cp-card-pad"><p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMemberTasks(\'' + h(memberId) + '\',true)">Coba lagi</button></div>';
+    else if (!c.list.length) inner = '<p class="cp-empty">Belum ada PR. Beri tugas di luar gym, misalnya tidur atau jalan kaki.</p>';
     else {
       const openL = c.list.filter(t => t.status === 'todo');
       const closedL = c.list.filter(t => t.status !== 'todo');
-      inner = '<div class="list">' + openL.map(t => taskItemHtml(t, memberId)).join('') + '</div>';
-      if (!openL.length) inner = '<p class="li-sub" style="margin-bottom:8px">Semua PR sudah selesai.</p>' + inner;
-      if (closedL.length) inner += '<div class="group-label"><span>Selesai / dilewati (' + closedL.length + ')</span></div><div class="list">' + closedL.slice(0, 5).map(t => taskItemHtml(t, memberId)).join('') + '</div>' +
-        (closedL.length > 5 ? '<p class="li-sub" style="margin-top:8px">+' + (closedL.length - 5) + ' PR lama lainnya</p>' : '');
+      inner = openL.length ? '<div class="list cp-list">' + openL.map(t => taskItemHtml(t, memberId)).join('') + '</div>' : '<p class="cp-empty">Semua PR sudah selesai.</p>';
+      if (closedL.length) inner += foldHtml('Selesai / dilewati', String(closedL.length), '<div class="list">' + closedL.slice(0, 5).map(t => taskItemHtml(t, memberId)).join('') + '</div>' +
+        (closedL.length > 5 ? '<p class="li-sub" style="margin-top:8px">+' + (closedL.length - 5) + ' PR lama lainnya</p>' : ''), false);
     }
-    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : 0;
-    return '<div class="section-head"><h4 class="section-title">PR (Task)</h4>' + (nOpen ? '<span class="li-sub">' + nOpen + ' terbuka</span>' : '') + addBtn + '</div>' + inner;
+    return head + inner;
   }
 
   function renderTaskSection(memberId) {
@@ -159,6 +171,7 @@
     if (wrap) setHTML(wrap, taskSectionHtml(memberId));
     const meta = $('fold-pr-meta'), c = window.memberTasks[String(memberId)];
     if (meta) { const n = c && c.list ? c.list.filter(t => t.status === 'todo').length : 0; meta.textContent = n ? n + ' terbuka' : ''; }
+    paintIcons();
   }
 
   // Fase K2: satu panggilan mengisi PR, progres, perawatan, dan program halaman klien; bagian yang gagal diberi pesan di kartunya.
@@ -215,6 +228,35 @@
     ccWrite(c);
   }
   window.ccPatch = ccPatch;
+  // Fase AC: data klien di memori yang masih sama dengan versi server (briefing sesi, isi awal catatan sesi) — tanpa panggilan.
+  // Hanya bila salinan di memori segar (ccFresh: versi sama dengan getAdminMore.memberVers); kalau tidak, pemanggil bertanya ke server.
+  window.ccBundleOf = function (memberId) {
+    const key = String(memberId);
+    if (!ccFresh(key) || !Array.isArray(window.clientNotes[key])) return null;
+    const c = window.careOf ? window.careOf(key) : null;
+    return { care: c, notes: window.clientNotes[key] };
+  };
+  // Catatan sesi baru/ubah: masuk ke daftar catatan klien (maks 10, terbaru dulu) dan salinan perangkat.
+  window.cpNotePut = function (memberId, note) {
+    const key = String(memberId), list = (window.clientNotes[key] || []).filter(n => n.scheduleId !== note.scheduleId);
+    list.push(note);
+    list.sort((a, b) => a.tanggal < b.tanggal ? 1 : a.tanggal > b.tanggal ? -1 : 0);
+    window.clientNotes[key] = list.slice(0, 10);
+    const keep = cc.at[key] ? cc.at[key].ver : '';
+    ccPatch(key, { notes: window.clientNotes[key] });
+    if (cc.at[key]) cc.at[key].ver = keep;   // tulisan sendiri: memori tetap segar untuk catatan ini
+    cpRenderOverview(key);
+  };
+  // Tugas coach yang sudah dikerjakan hilang dari daftar sekarang juga (server menghitung ulang saat bundle berikutnya).
+  function cpTodoDrop(memberId, kind, cond) {
+    if (cond === false) return;
+    const key = String(memberId), t = window.clientTodo[key];
+    if (!Array.isArray(t) || !t.some(r => r.kind === kind)) return;
+    window.clientTodo[key] = t.filter(r => r.kind !== kind);
+    ccPatch(key, { todo: window.clientTodo[key] });
+    cpRenderOverview(key);
+  }
+  window.cpTodoDrop = cpTodoDrop;
   window.clearClientCache = function () { try { localStorage.removeItem(CC_KEY); } catch (e) {} cc.at = {}; cc.inflight = {}; cc.sync = {}; };
   // Paket utuh = semua bagian inti ada dan tanpa error. Salinan yang tidak utuh (mis. dari jawaban null sebelum perbaikan) tidak dipakai dan tidak disimpan.
   function bundleOk(b) {
@@ -236,6 +278,9 @@
       window.nutSet(key, bad(b.nutrition) ? Object.assign({ error: msg(b.nutrition) }) : Object.assign({}, b.nutrition, { foodLog: bad(b.foodLog) ? null : b.foodLog }));
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
       shareAdmin[key] = bad(b.share) ? null : b.share;
+      // Fase AC: tugas coach dan catatan sesi terakhir (bagian baru; salinan lama tanpa keduanya tetap dipakai).
+      window.clientTodo[key] = Array.isArray(b.todo) ? b.todo : null;
+      window.clientNotes[key] = Array.isArray(b.notes) ? b.notes : null;
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();
     } finally { cc.applying = false; }
@@ -272,6 +317,10 @@
     }).catch(function (err) {
       if (had) { ccSyncPaint(key, { error: window.authMessage(err) }); return; }   // salinan tetap tampil, dengan tanda dan tombol Coba lagi
       const m = window.authMessage(err);
+      // Tanpa bundle: "Tugas coach" tidak menunggu selamanya (disembunyikan sampai berhasil dimuat).
+      if (window.clientTodo[key] === undefined) window.clientTodo[key] = null;
+      if (window.clientNotes[key] === undefined) window.clientNotes[key] = null;
+      cpRenderOverview(key);
       window.memberTasks[key] = { list: [], state: 'error', error: m };
       renderTaskSection(key);
       window.pgSetAdmin(key, { error: m, entries: [], photos: [] });
@@ -297,11 +346,23 @@
     });
   };
 
-  // Setelah PR berubah: muat ulang daftar klien ini + pill di daftar klien.
-  function afterTaskChange(memberId) {
-    const p = window.loadMemberTasks(memberId, true);
-    if (window.refreshTaskSummary) window.refreshTaskSummary().then(function () { if (window.currentView === 'clients') renderClientList(); }).catch(function () {});
-    return p;
+  // Setelah PR berubah. Fase AC: jawaban penulis (addTask/updateTask/deleteTask) sudah membawa daftar PR klien ini dan
+  // hitungannya, jadi tidak ada getTasksForMember + getTaskSummary lagi. Jawaban lama (tanpa tasks) = cara lama.
+  function afterTaskChange(memberId, res) {
+    if (!(res && Array.isArray(res.tasks))) {
+      const p = window.loadMemberTasks(memberId, true);
+      if (window.refreshTaskSummary) window.refreshTaskSummary().then(function () { if (window.currentView === 'clients') renderClientList(); }).catch(function () {});
+      return p;
+    }
+    const key = String(res.memberId || memberId);
+    window.memberTasks[key] = { list: res.tasks, state: 'ok' };
+    ccPatch(key, { tasks: res.tasks });
+    const ts = window.taskSummary || (window.taskSummary = {});
+    if (res.taskSummary && res.taskSummary.open) ts[key] = res.taskSummary; else delete ts[key];
+    renderTaskSection(key);
+    cpTodoDrop(key, 'pr', !(res.taskSummary && res.taskSummary.overdue));
+    if (window.currentView === 'clients') renderClientList();
+    return Promise.resolve();
   }
 
   window.toggleTaskDone = function (taskId, memberId, btn) {
@@ -314,7 +375,7 @@
     t.status = want;
     paint();
     optimistic({ q: { mode: 'admin', fn: 'updateTask', args: [{ id: taskId, status: want }] }, ok: false, label: 'PR',
-      then: function () { afterTaskChange(memberId); },
+      then: function (res) { afterTaskChange(memberId, res); },
       undo: function () { t.status = was; paint(); } });
   };
 
@@ -330,7 +391,7 @@
       c.list.splice(at, 1);
       paint();
       optimistic({ q: { mode: 'admin', fn: 'deleteTask', args: [taskId] }, ok: 'PR dihapus.', label: 'Hapus PR',
-        then: function () { afterTaskChange(memberId); },
+        then: function (res) { afterTaskChange(memberId, res); },
         undo: function () { c.list.splice(Math.min(at, c.list.length), 0, t); paint(); } });
     }, { title: 'Hapus PR?', confirmText: 'Hapus PR', variant: 'danger' });
   };
@@ -405,9 +466,13 @@
         '<button type="button" class="icon-btn plain" onclick="window.deleteTaskTemplateItem(\'' + id + '\')" aria-label="Hapus template ' + h(t.title) + '">' + icon('x') + '</button></span>';
     }).join(''));
   }
-  function loadTaskTemplates() {
+  // Fase AC: template dimuat sekali per sesi (dulu tiap lembar PR baru dibuka); disimpan/dihapus = daftar diperbarui di tempat.
+  let taskTplLoaded = false;
+  function loadTaskTemplates(force) {
+    if (taskTplLoaded && !force) { renderTaskTemplates(); return Promise.resolve(); }
     return adminCall('getTaskTemplates').then(function (list) {
       window.taskTemplates = Array.isArray(list) ? list : [];
+      taskTplLoaded = true;
       renderTaskTemplates();
     }).catch(function () { /* form tetap bisa dipakai tanpa template */ });
   }
@@ -425,7 +490,7 @@
     const title = $('task-title').value.trim();
     if (!title) { window.showToast('Isi judul dulu untuk dijadikan template.'); $('task-title').focus(); return; }
     optimistic({ q: { mode: 'admin', fn: 'saveTaskTemplate', args: [{ title: title, description: $('task-desc').value.trim(), category: f.category, repeat: f.repeat }] },
-      ok: 'Template disimpan.', label: 'Template PR', then: function () { loadTaskTemplates(); } });
+      ok: 'Template disimpan.', label: 'Template PR', then: function () { loadTaskTemplates(true); } });
   };
   window.deleteTaskTemplateItem = function (id) {
     const t = window.taskTemplates.find(x => String(x.id) === String(id));
@@ -450,7 +515,7 @@
     // Keduanya lewat antrean simpan: ubah = upsert, tambah baru dijaga nomor pesanan (Idem.gs), jadi kiriman ulang tidak dobel.
     optimistic(Object.assign(f.id ? { q: { mode: 'admin', fn: 'updateTask', args: [Object.assign({ id: f.id }, data)] } }
       : { q: { mode: 'admin', fn: 'addTask', args: [Object.assign({ memberId: f.memberId }, data)] } },
-      { sheet: true, ok: f.id ? 'PR diperbarui.' : 'PR ditambahkan.', label: 'PR', then: function () { afterTaskChange(f.memberId); } }));
+      { sheet: true, ok: f.id ? 'PR diperbarui.' : 'PR ditambahkan.', label: 'PR', then: function (res) { afterTaskChange(f.memberId, res); } }));
   };
 
   window.openEditProfileModal = function () {

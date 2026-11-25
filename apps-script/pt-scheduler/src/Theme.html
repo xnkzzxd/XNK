@@ -592,37 +592,11 @@ html.kb-open .main-col::after { display: none; }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 
 /* ── Halaman klien (panel) & beranda klien (portal): gaya dashboard ─────────── */
-.client-hero .profile-name { font-size: var(--fs-2xl); letter-spacing: -0.03em; }
-.client-hero .btn-inverse, .portal-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
-.client-hero .btn-ghost-ink, .portal-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
-.chips.cp-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; overflow: visible; padding: 0; margin: 0; }
-.chips.cp-tabs .chip { min-height: 56px; width: 100%; min-width: 0; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: var(--fs-2xs); line-height: 1.1; border-radius: 14px; }
-.chips.cp-tabs .chip svg { width: 16px; height: 16px; }
+/* Panel: lihat parts/theme/09-klien-ac.part (Fase AC). */
+.portal-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
+.portal-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
 .cp-pane.hide { display: none; }
-.client-ring { width: 118px; height: 118px; }
-.client-ring-row { gap: 18px; margin-top: 18px; }
-.client-hero-actions { margin-top: 18px; }
-.chips.cp-tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 6px 0; }
 .detail-body { padding-bottom: calc(var(--tabbar-space) + 26px); }
-@media (max-width: 767px) {
-  .client-hero { padding: 16px; }
-  .client-ring { width: 88px; height: 88px; }
-  .client-ring .num { font-size: var(--fs-xl) !important; }
-  .client-ring .eyebrow { font-size: .5625rem; }
-  .client-ring-row { gap: 14px; margin-top: 12px; }
-  .client-hero-actions { margin-top: 12px; }
-  .client-hero .profile-name { font-size: var(--fs-xl); }
-  /* S9: hero lebih pendek di HP — cincin sisa sesi dan dua tombol satu baris; tab lebih rendah */
-  .client-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; padding: 14px; }
-  .client-hero > .client-hero-id { grid-column: 1 / -1; }
-  .client-hero > .client-ring-row { margin-top: 12px; gap: 0; }
-  .client-hero > .client-ring-row > .grow { display: none; }
-  .client-hero .client-ring { width: 64px; height: 64px; }
-  .client-hero .client-ring .num { font-size: var(--fs-lg) !important; }
-  .client-hero > .client-hero-actions { margin-top: 12px; align-self: center; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .client-hero > .client-hero-actions .btn { width: 100%; min-width: 0; padding-inline: 8px; gap: 6px; white-space: nowrap; }
-  .chips.cp-tabs .chip { min-height: 44px; flex-direction: row; gap: 6px; }
-}
 .portal-hero .avatar { box-shadow: 0 0 0 3px color-mix(in srgb, var(--on-ink) 16%, transparent); }
 .portal-kpis { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .portal-kpis .kpi { min-height: 92px; padding: 12px 10px; align-items: center; text-align: center; }
@@ -1763,11 +1737,7 @@ button.avatar { border: 0; cursor: pointer; }
 /* ── Sambutan klien baru (Fase X): lapisan layar penuh; isi di 05-portal-x ─── */
 .guide-layer { position: fixed; inset: 0; z-index: 100; }
 
-/* ── Klien di PC (2026-10): satu DOM, ditata ulang oleh CSS ───────────────────
-   HP (< 768 px) sama persis seperti sebelumnya. >= 768: daftar jadi grid kartu.
-   >= 1200 di halaman Klien dengan panel terbuka (#app.detail-wide): panel lebar, daftar jadi nama ringkas,
-   isi profil dua kolom. */
-.client-card .cc-meter { margin-top: 8px; max-width: 220px; }
+/* ── Klien di PC: satu DOM, ditata ulang oleh CSS. Daftar & halaman klien: parts/theme/09-klien-ac.part (Fase AC). ── */
 .cc-meta { display: none; }
 .cp-col, .prg-days { display: contents; }
 .gym-tools { display: flex; gap: 8px; align-items: center; }
@@ -1796,60 +1766,13 @@ button.avatar { border: 0; cursor: pointer; }
 .cc-renew { align-self: flex-start; }
 
 @media (min-width: 768px) {
-  /* Panel detail (tablet & PC): 5 tab satu baris, latar tab = latar panel, tanpa ruang tab bar di bawah */
-  .chips.cp-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: var(--surface); }
-  .chips.cp-tabs .chip { padding: 6px 0; }
   .detail-body { padding-bottom: 40px; }
-
-  /* Daftar klien → grid kartu */
-  #client-list > .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: stretch; }
-  #client-list > .list > .group-label { grid-column: 1 / -1; margin: 14px 2px 0; }
-  #client-list > .list > .group-label:first-child { margin-top: 2px; }
-  #client-list .client-card {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
-    grid-template-areas: "av title" "av sub" "pills pills" "trail trail" "meter meter" "extra extra" "meta meta";
-    column-gap: 12px; row-gap: 0;
-    align-items: center; align-content: start;
-    padding: 16px; border-radius: var(--r-lg);
-  }
-  #client-list .client-card > .grow { display: contents; }
-  #client-list .client-card > .avatar { grid-area: av; }
-  #client-list .client-card .li-title { grid-area: title; min-width: 0; align-self: end; }
-  #client-list .client-card .grow > .li-sub { grid-area: sub; min-width: 0; align-self: start; margin-top: 2px; }
-  #client-list .client-card .cc-pills { grid-area: pills; margin-top: 10px !important; }
-  #client-list .client-card > .li-trail { grid-area: trail; margin: 14px 0 0; justify-content: space-between; min-width: 0; }
-  #client-list .client-card .cc-count { display: flex; align-items: baseline; gap: 6px; }
-  #client-list .client-card .cc-meter { grid-area: meter; max-width: none; margin-top: 8px; }
-  #client-list .client-card .cc-extra { grid-area: extra; }
-  .cc-next-m { display: none; }
-  #client-list > .list.cl-view-list { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  #client-list .cl-view-list .client-card .cc-meta { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
-  #client-list .client-card .cc-meta { grid-area: meta; display: flex; flex-direction: column; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); min-width: 0; }
-  /* translate (bukan transform): animasi masuk .stagger menahan transform */
-  @media (hover: hover) { #client-list .client-card.interactive:hover { translate: 0 -2px; box-shadow: var(--shadow-2); } }
-  #client-list .client-card.muted-item { grid-template-areas: "av title" "av sub" "trail trail"; }
-  #client-list .client-card.muted-item > .li-trail { justify-content: flex-start; }
 }
 
 @media (min-width: 1200px) {
   .detail-head { min-height: 76px; }   /* sejajar dengan topbar */
 
   #app.detail-wide { --detail-w: clamp(420px, min((100vw - var(--sidebar-w)) * 0.62, 100vw - var(--sidebar-w) - 420px), 1080px); }
-
-  /* Daftar → nama ringkas (foto, nama, sisa sesi) */
-  #app.detail-wide #view-clients .client-kpis, #app.detail-wide #view-clients .client-top { display: none; }
-  #app.detail-wide #client-list > .list { display: flex; flex-direction: column; gap: 6px; }
-  #app.detail-wide #client-list > .list > .group-label { margin: 12px 2px 2px; }
-  #app.detail-wide #client-list .client-card { display: flex; gap: 10px; padding: 8px 12px; min-height: 52px; border-radius: var(--r-md); }
-  @media (hover: hover) { #app.detail-wide #client-list .client-card.interactive:hover { translate: none; } }
-  #app.detail-wide #client-list .client-card > .grow { display: block; }
-  #app.detail-wide #client-list .client-card > .li-trail { margin: 0 0 0 auto; }
-  #app.detail-wide #client-list .client-card > .avatar { width: 36px; height: 36px; font-size: var(--fs-xs); }
-  #app.detail-wide #client-list .client-card .grow > :not(.li-title),
-  #app.detail-wide #client-list .client-card .cc-state,
-  #app.detail-wide #client-list .client-card .cc-count > .li-sub { display: none; }
-  #app.detail-wide #client-list .client-card.selected { background: var(--surface-2); }
 
   /* Panel lebar. Tata letak dua kolom mengikuti lebar panel yang sebenarnya (container query), jadi layar
      1200–1365 px yang panelnya lebih sempit tetap satu kolom yang rapi. */
@@ -1859,8 +1782,6 @@ button.avatar { border: 0; cursor: pointer; }
   #app.detail-wide .detail-body .pg-chart { max-width: 420px; }
   #app.detail-wide .prg-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px 24px; margin: 6px 0; }
   @container (min-width: 540px) {
-    #app.detail-wide .chips.cp-tabs { gap: 8px; padding: 10px 0; }
-    #app.detail-wide .chips.cp-tabs .chip { flex-direction: row; min-height: 44px; gap: 6px; padding: 0 6px; font-size: var(--fs-sm); border-radius: var(--r-full); }
     #app.detail-wide .pg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px !important; align-items: start; }
     #app.detail-wide .pg-grid > .pg-more { grid-column: 1 / -1; }
     #app.detail-wide .pg-grid > .pg-more > .stack { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); column-gap: 28px !important; }
@@ -1870,15 +1791,6 @@ button.avatar { border: 0; cursor: pointer; }
     #app.detail-wide #profile-care-wrap > .cp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
     #app.detail-wide #profile-nut-wrap { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); column-gap: 20px !important; align-items: start; }
     #app.detail-wide #profile-nut-wrap > .cp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  }
-  @container (min-width: 620px) {
-    #app.detail-wide .client-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "id ring" "acts ring"; column-gap: 32px; row-gap: 18px; align-items: center; }
-    #app.detail-wide .client-hero > .client-hero-id { grid-area: id; }
-    #app.detail-wide .client-hero > .client-ring-row { grid-area: ring; margin-top: 0; }
-    #app.detail-wide .client-hero > .client-hero-actions { grid-area: acts; margin-top: 0; }
-    #app.detail-wide .client-hero .ring-wrap.client-ring { width: 112px; height: 112px; }
-    #app.detail-wide .cp-pane[data-cppane="ringkasan"] { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); column-gap: 28px !important; align-items: start; }
-    #app.detail-wide .cp-pane[data-cppane="ringkasan"] > .cp-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   }
   @container (min-width: 760px) {
     #app.detail-wide .pg-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2011,7 +1923,8 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 @media (prefers-reduced-motion: reduce) { details.fold .fold-chev { transition: none; } }
 .icon-chip { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-sm); background: var(--surface-3); color: var(--fg); flex: none; }
 .meter.low > i { background-image: repeating-linear-gradient(135deg, var(--ink) 0 4px, transparent 4px 8px); }
-.meter.empty > i { background: var(--danger); }
+.meter.m-empty { background: var(--danger-soft); }
+.meter.m-empty > i { background: var(--danger); }
 .heat-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); grid-auto-columns: 13px; gap: 3px; width: max-content; }
 .heat-grid i { width: 13px; height: 13px; border-radius: 3px; background: var(--heat-0); }
 .heat-grid i[data-l="1"] { background: var(--heat-1); } .heat-grid i[data-l="2"] { background: var(--heat-2); }
@@ -2046,27 +1959,9 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 .ins-chal { margin-top: 12px; display: grid; gap: 6px; }
 .ins-chal .meter { height: 8px; }
 
-.client-top { display: grid; gap: 12px; margin-bottom: 14px; }
-.client-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .stat-tile { cursor: pointer; min-width: 0; }
 .stat-tile span { display: block; overflow-wrap: anywhere; }
 .stat-tile.active { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
-@media (max-width: 420px) { .client-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.cl-tools { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
-.cl-tools .input-search { flex: 1 1 0; min-width: 0; }
-.cl-tools .select { width: auto; min-height: 44px; flex: 0 1 auto; max-width: 42%; }
-.cl-tools .seg { flex: none; }
-/* S7: ringkasan klien satu baris di HP (angka di kalimat + tombol "Lihat siapa"); angka lengkap tetap di desktop. */
-@media (max-width: 767px) {
-  .client-top { margin-bottom: 12px; }
-  #client-hero .insight-hero.slim { flex-wrap: nowrap; gap: 12px; padding: 12px 12px 12px 16px; }
-  #client-hero .insight-hero.slim .ih-eyebrow, #client-hero .insight-hero.slim .ih-stats { display: none; }
-  #client-hero .insight-hero.slim .ih-main { flex: 1 1 auto; }
-  #client-hero .insight-hero.slim .ih-actions { flex: none; }
-  #client-hero .insight-hero.slim .ih-actions .btn { width: auto; }
-}
-.cc-extra { display: grid; gap: 6px; margin-top: 8px; }
-.cc-extra:empty { display: none; }
 .cc-flags { display: flex; flex-wrap: wrap; gap: 6px; }
 .cc-trend { display: flex; align-items: center; gap: 10px; }
 .cc-bars { display: inline-flex; align-items: flex-end; gap: 3px; height: 18px; }
@@ -2139,11 +2034,7 @@ html.big-text .wl-tbl.k-waktu .wl-tr { grid-template-columns: 40px minmax(0, 1fr
 .sheet-handle { background: var(--band); border-radius: 0; }
 .sheet-handle::before { background: color-mix(in srgb, var(--on-band) 35%, transparent); }
 
-/* ── Fase R4: tab klien hitam, hero menggantung, Pengaturan daftar berkelompok ─ */
-.chips.cp-tabs { background: var(--ink); border-radius: var(--r-md); padding: 4px; gap: 4px; }
-.chips.cp-tabs .chip { background: transparent; border-color: transparent; color: var(--on-ink-muted); }
-.chips.cp-tabs .chip.active { background: var(--on-ink); color: var(--ink); }
-html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* ── Fase R4: hero menggantung, Pengaturan daftar berkelompok (tab klien: 09-klien-ac.part) ─ */
 .page-head { margin-bottom: 36px; }
 .page-head + .stack .card-ink:first-child, .page-head + .portal-grid .card-ink:first-child { margin-top: -56px; position: relative; }
 @media (max-width: 767px) {
@@ -2155,7 +2046,6 @@ html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr));
 
 *:has(> .cr) > :not(.cr) { grid-column: 1 / -1; }
 
-@media (max-width: 767px) { .client-card .cc-phone, .client-card .cc-trend { display: none; } .client-card .cc-extra { margin-top: 4px; } }
 
 .fin-bill { flex-direction: column; align-items: stretch; gap: 4px; }
 .fin-bill-top, .fin-bill-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
@@ -2172,22 +2062,16 @@ html.big-text .chips.cp-tabs { grid-template-columns: repeat(2, minmax(0, 1fr));
 .form-grid .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 html.big-text .form-grid .two { grid-template-columns: minmax(0, 1fr); }
 .seg:not(:has(.seg-thumb)) button.active { background: var(--on-ink); }
-.chips.cp-tabs { border-radius: 16px; }
-.chips.cp-tabs .chip { border-radius: 12px; }
 #fin-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
 #fin-head .kpi { min-height: 0; gap: 6px; padding: 12px 14px; }
 #fin-head .card-flat { padding: 12px 14px; }
 #fin-head .bars { height: 5.5rem; }
-.chips.cp-tabs, .chips.cp-tabs .chip, .chips.cp-tabs .chip.active { border-radius: 14px; }
-.chips.cp-tabs .chip { border-radius: 11px; }
 
 .fin-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
 .fin-bar .chip { min-height: 38px; padding: 0 12px; }
 .fin-bar #fin-filters .chips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
 .page-head { margin-bottom: 16px; }
 .page-head:has(+ .stack .card-ink:first-child), .page-head:has(+ .portal-grid .card-ink:first-child), .page-head:has(+ .insight-hero), .page-head:has(+ .card-ink) { margin-bottom: 36px; }
-.chips.cp-tabs .chip, .chips.cp-tabs .chip.active, .chips.cp-tabs button.chip.active { border-radius: 11px !important; }
-.chips.cp-tabs { border-radius: 15px !important; }
 /* Tanpa scrollbar yang terlihat (merusak band di HP); scroll tetap jalan */
 html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar, ::-webkit-scrollbar { display: none; width: 0; height: 0; background: transparent; }
@@ -3138,4 +3022,233 @@ html.desk .cn-wrap { max-width: none; }
 @media (max-width: 399px) { .sync-chip .lbl { display: none; } .sync-chip.bad .num::before, .sync-chip.bad .num::after { content: ''; } }
 @media (min-width: 768px) { html:not(.desk) .sync-chip { position: absolute; top: 26px; right: var(--sync-r, max(var(--page-pad), var(--sa-r))); z-index: 21; } }
 @media (prefers-reduced-motion: reduce) { .sync-chip .spin { animation-duration: 2.4s; } }
+/* ═══ Fase AC: daftar Klien + halaman klien di panel coach (docs/clientpage/Design.md) ═══
+   Satu zona hitam per layar (band + kartu klien); semua di bawahnya terang. Komponen portal dipinjam: .px-sec, .todo,
+   .week-x, .px-tiles. Lebar 768 px: grid kartu. Lebar 1200 px dengan klien terbuka (#app.detail-wide): daftar ringkas. */
+
+/* ── Daftar Klien ─────────────────────────────────────────────────────────── */
+.cl-head { flex-wrap: wrap; gap: 12px 16px; }
+.cl-head-t { flex: 1 1 10rem; min-width: 0; }
+.cl-new { flex: none; }
+.cl-stats { display: none; }
+.cl-bar { position: sticky; top: 0; z-index: 6; display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; margin: -8px 0 0; padding: 8px 0; background: var(--bg); }
+.cl-bar .input-search { flex: 1 1 0; min-width: 0; }
+.cl-bar .select { width: auto; min-height: 44px; flex: 0 1 auto; max-width: 46%; }
+.cl-bar .seg { flex: none; }
+.cl-filter { display: none; }
+.cl-chips { margin: 4px 0 12px; }
+.cl-chips .chip { min-height: 44px; }
+.cl-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-right: 6px; flex: none; }
+
+.client-card { align-items: center; gap: 12px; }
+.client-card > .grow { min-width: 0; }
+/* Paket boleh terpotong, jadwal berikutnya tidak (yang paling dicari coach). */
+.cc-sub { display: flex; align-items: baseline; min-width: 0; margin-top: 2px; font-size: var(--fs-sm); color: var(--fg-muted); white-space: nowrap; }
+.cc-pkg { flex: 0 1 auto; min-width: 2.5rem; overflow: hidden; text-overflow: ellipsis; }
+.cc-sep { flex: none; white-space: pre; }
+.cc-next { flex: none; color: var(--fg); font-weight: 600; }
+.cc-next.none { color: var(--fg-muted); font-weight: 500; }
+.client-card .cc-flags { margin-top: 6px; }
+.cc-trail { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; min-width: 4.5rem; text-align: right; }
+.cc-count { line-height: 1; white-space: nowrap; }
+.cc-count b { font-size: var(--fs-xl); font-weight: 800; letter-spacing: -0.02em; }
+.cc-count span { font-size: var(--fs-sm); color: var(--fg-muted); font-weight: 600; }
+.cc-meter { width: 4.5rem; height: 5px; }
+.cc-st { font-size: var(--fs-2xs); font-weight: 700; color: var(--fg-muted); white-space: nowrap; }
+.cc-st.low { color: var(--fg); }
+.cc-st.warn { color: var(--danger); }
+.client-card.muted-item .cc-trail { min-width: 0; }
+
+@media (min-width: 768px) {
+  .cl-head { flex-wrap: nowrap; }
+  .cl-stats { display: flex; gap: 24px; margin-left: auto; text-align: right; }
+  .cl-stats > div { display: flex; flex-direction: column; }
+  .cl-stats b { font-size: var(--fs-xl); font-weight: 800; color: var(--on-band); }
+  .cl-stats span { font-size: var(--fs-2xs); color: var(--on-band-muted); font-weight: 600; }
+  /* Grid kartu */
+  #client-list > .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: stretch; }
+  #client-list > .list > .group-label { grid-column: 1 / -1; margin: 14px 2px 0; }
+  #client-list > .list > .group-label:first-child { margin-top: 2px; }
+  /* Kartu: nama + jadwal di kiri, sisa di kanan; tanda perhatian dan meta selebar kartu */
+  #client-list .client-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "av title trail" "av sub trail" "flags flags flags" "meta meta meta";
+    column-gap: 12px; row-gap: 0; align-items: center; align-content: start; padding: 16px; border-radius: var(--r-lg); }
+  #client-list .client-card > .grow { display: contents; }
+  #client-list .client-card > .avatar { grid-area: av; }
+  #client-list .client-card .li-title { grid-area: title; min-width: 0; align-self: end; }
+  #client-list .client-card .cc-sub { grid-area: sub; align-self: start; }
+  #client-list .client-card .cc-flags { grid-area: flags; margin-top: 10px; }
+  #client-list .client-card > .cc-trail { grid-area: trail; align-self: start; }
+  #client-list .client-card .cc-meta { grid-area: meta; display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); min-width: 0; }
+  #client-list .client-card.muted-item { grid-template-areas: "av title trail" "av sub trail"; }
+  #client-list > .list.cl-view-list { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  #client-list .cl-view-list .client-card { grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1.4fr) auto; grid-template-areas: "av title meta trail" "av sub meta trail" "flags flags flags flags"; }
+  #client-list .cl-view-list .client-card .cc-meta { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0; padding: 0; border-top: 0; }
+  /* translate (bukan transform): animasi masuk .stagger menahan transform */
+  @media (hover: hover) { #client-list .client-card.interactive:hover { translate: 0 -2px; box-shadow: var(--shadow-2); } }
+}
+
+/* ── Daftar di samping profil (PC, panel terbuka) ─────────────────────────── */
+@media (min-width: 1200px) {
+  #app.detail-wide { --detail-w: clamp(420px, min((100vw - var(--sidebar-w)) * 0.66, 100vw - var(--sidebar-w) - 400px), 1080px); }
+  #app.detail-wide .cl-head { flex-wrap: nowrap; }
+  #app.detail-wide .cl-stats, #app.detail-wide .cl-new-t, #app.detail-wide #view-clients .cl-chips, #app.detail-wide #client-view-seg { display: none; }
+  #app.detail-wide .cl-new { width: 44px; min-width: 44px; padding: 0; justify-content: center; }
+  #app.detail-wide .cl-bar { flex-wrap: wrap; }
+  #app.detail-wide .cl-bar .input-search { flex: 1 1 100%; }
+  #app.detail-wide .cl-filter { display: block; }
+  #app.detail-wide .cl-bar .select { flex: 1 1 0; max-width: none; min-width: 0; }
+  #app.detail-wide #client-list > .list { display: flex; flex-direction: column; gap: 6px; }
+  #app.detail-wide #client-list > .list > .group-label { margin: 12px 2px 2px; }
+  #app.detail-wide #client-list .client-card { display: flex; align-items: center; gap: 10px; padding: 8px 12px; min-height: 56px; border-radius: var(--r-md); }
+  #app.detail-wide #client-list .client-card > .grow { display: block; }
+  @media (hover: hover) { #app.detail-wide #client-list .client-card.interactive:hover { translate: none; } }
+  #app.detail-wide #client-list .client-card > .avatar { width: 36px; height: 36px; font-size: var(--fs-xs); }
+  #app.detail-wide #client-list .client-card .cc-meta,
+  #app.detail-wide #client-list .client-card .cc-pkg,
+  #app.detail-wide #client-list .client-card .cc-sep,
+  #app.detail-wide #client-list .client-card .cc-meter,
+  #app.detail-wide #client-list .client-card .cc-pr,
+  #app.detail-wide #client-list .client-card .cc-st:not(.warn) { display: none; }
+  #app.detail-wide #client-list .client-card .cc-sub { font-size: var(--fs-xs); }
+  #app.detail-wide #client-list .client-card .cc-flags { margin-top: 2px; flex-wrap: nowrap; overflow: hidden; }
+  #app.detail-wide #client-list .client-card:has(.cc-flags .flag) .cc-sub { display: none; }
+  #app.detail-wide #client-list .client-card .cc-trail { min-width: 0; gap: 2px; }
+  #app.detail-wide #client-list .client-card .cc-count b { font-size: var(--fs-md); }
+  #app.detail-wide #client-list .client-card.selected { background: var(--surface-2); border-color: var(--fg); }
+}
+
+/* ── Halaman klien ───────────────────────────────────────────────────────── */
+.detail[data-kind="client"] .detail-title { font-size: var(--fs-xl); letter-spacing: -0.02em; }
+.cp { display: flex; flex-direction: column; gap: 16px; }
+.cp-stack, .cp-pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.cp-pane.hide { display: none; }
+.cp > #cc-sync:empty { display: none; }
+
+/* Kartu klien: menggantung di tepi band (pola kartu atlet portal) */
+.cp-top { margin: -4px -16px 0; padding: 4px 16px 0; background: linear-gradient(to bottom, var(--band) 0, var(--band) 56px, transparent 56px); }
+.cp-card { display: grid; gap: 14px; padding: 18px; border-radius: var(--r-xl); }
+.cp-id { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.cp-id .avatar { flex: none; }
+.cp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-goal { margin-top: 6px; font-weight: 700; overflow-wrap: anywhere; }
+.cp-phone { margin-top: 2px; font-size: var(--fs-sm); color: var(--on-ink-muted); }
+.cp-left-t { line-height: 1.2; }
+.cp-left-t b { font-size: var(--fs-2xl); font-weight: 800; letter-spacing: -0.02em; }
+.cp-left-t span { color: var(--on-ink-muted); font-weight: 600; }
+.cp-meter { margin-top: 8px; height: 6px; }
+.cp-meter.m-empty { background: color-mix(in srgb, var(--danger) 35%, transparent); }
+.cp-left-next { margin-top: 8px; font-size: var(--fs-sm); color: var(--on-ink-muted); }
+.cp-acts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.cp-act { flex-direction: column; justify-content: center; min-height: 60px; min-width: 0; padding: 8px 4px; gap: 4px; border-radius: var(--r-md);
+  font-size: var(--fs-xs); font-weight: 700; line-height: 1.15; white-space: normal; text-align: center;
+  background: color-mix(in srgb, var(--on-ink) 10%, transparent); color: var(--on-ink); border: 1px solid color-mix(in srgb, var(--on-ink) 16%, transparent); }
+.cp-act svg.lucide { width: 20px; min-height: 20px; }
+@media (hover: hover) { .cp-act:hover { background: color-mix(in srgb, var(--on-ink) 18%, transparent); } }
+
+/* Tab terang yang menempel di atas isi */
+.cp-tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 2px; margin: 0 -16px; padding: 0 10px; overflow-x: auto; scrollbar-width: none; background: var(--bg); border-bottom: 1px solid var(--border); }
+.cp-tabs::-webkit-scrollbar { display: none; }
+.cp-tab { flex: 1 0 auto; min-height: 48px; padding: 0 10px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--fg-muted); font-size: var(--fs-sm); font-weight: 700; white-space: nowrap; }
+.cp-tab.active { color: var(--fg); border-bottom-color: var(--fg); }
+.cp-tab:focus-visible { outline: 2px solid var(--fg); outline-offset: -4px; border-radius: 8px; }
+@media (min-width: 768px) { .cp-tabs { background: var(--surface); } }   /* panel (tablet & PC) berlatar --surface */
+
+/* Bagian: kepala ala portal, satu tautan di kanan */
+.cp-sec { align-items: center; margin-top: 4px; }
+.cp-sec > span { margin-left: auto; }
+.cp-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px; background: none; border: 0; color: var(--fg); font-size: var(--fs-sm); font-weight: 800; }
+.cp-link svg.lucide { width: 16px; min-height: 16px; }
+.cp-card-pad { padding: 16px; }
+.cp-empty { display: flex; align-items: center; gap: 8px; padding: 2px; font-size: var(--fs-sm); color: var(--fg-muted); }
+.cp-empty svg.lucide { width: 18px; min-height: 18px; flex: none; }
+
+/* Sesi berikutnya */
+.cp-next { display: grid; gap: 4px; cursor: pointer; }
+.cp-next.none { cursor: default; }
+.cp-next-when { font-size: var(--fs-lg); font-weight: 800; letter-spacing: -0.01em; }
+.cp-next-cd { color: var(--fg-muted); font-weight: 600; font-size: var(--fs-sm); }
+.cp-next-info { display: grid; gap: 6px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+.cp-next-info p { display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.cp-next-info svg.lucide { width: 16px; min-height: 16px; flex: none; margin-top: 2px; }
+.cp-next .sess-actions { margin-top: 10px; }
+@media (hover: hover) { .cp-next:not(.none):hover { border-color: var(--border-strong); } }
+
+/* Tugas coach (pola "Tugas hari ini" portal, dengan ikon jenis tugas) */
+.cp-todo .todo-row { background: none; border-left: 0; border-right: 0; border-top: 0; }
+.cp-todo-ic { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--surface-3); color: var(--fg); }
+.cp-todo-ic svg.lucide { width: 18px; min-height: 18px; }
+.cp-todo .todo-row.danger .cp-todo-ic { background: var(--danger-soft); color: var(--danger); }
+.cp-todo .todo-row > svg.lucide { width: 18px; min-height: 18px; color: var(--fg-muted); flex: none; }
+
+/* Minggu ini */
+.cp-week-foot { margin-top: 12px; font-size: var(--fs-sm); color: var(--fg-muted); }
+.cp-week-foot b { color: var(--fg); }
+
+/* Sesi: segmen terang + baris ringkas */
+.cp-seg { margin-left: auto; background: var(--surface-3); }
+.cp-seg button { min-height: 40px; padding: 0 12px; color: var(--fg-muted); }
+.cp-seg button.active { background: var(--surface); color: var(--fg); box-shadow: var(--shadow-1); }
+.cp-seg button .num { font-weight: 600; color: var(--fg-muted); margin-left: 2px; }
+.cp-list-card { padding: 0; overflow: hidden; }
+.cp-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 16px; background: none; border: 0; border-top: 1px solid var(--border); color: inherit; text-align: left; }
+.cp-row:first-child { border-top: 0; }
+.cp-row > svg.lucide { width: 18px; min-height: 18px; color: var(--fg-muted); flex: none; }
+.cp-row-d { display: flex; flex-direction: column; flex: none; min-width: 5.25rem; }
+.cp-row-d b { font-size: var(--fs-sm); }
+.cp-row-d span { font-size: var(--fs-xs); color: var(--fg-muted); }
+.cp-row-t { min-width: 0; font-size: var(--fs-sm); color: var(--fg-muted); }
+.cp-row-st { flex: none; }
+.cp-row-st.warn { color: var(--danger); border-color: var(--danger); }
+.cp-row-more { justify-content: center; font-weight: 700; font-size: var(--fs-sm); }
+.cp-list-card > .cp-empty { padding: 16px; }
+@media (hover: hover) { .cp-row:hover { background: var(--surface-2); } }
+
+/* Data: hub ala "Saya" */
+.cp-tiles .px-tile { min-height: 7rem; }
+.cp-tiles .px-tile span { overflow-wrap: anywhere; }
+
+/* Menu ⋯ */
+.cpm-group + .cpm-group { margin-top: 16px; }
+.cpm-h { margin: 0 4px 6px; font-size: var(--fs-2xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-muted); }
+.cpm-list { overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.cpm-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 14px; background: none; border: 0; border-top: 1px solid var(--border); color: var(--fg); text-align: left; }
+.cpm-row:first-child { border-top: 0; }
+.cpm-row b { display: block; font-weight: 700; }
+.cpm-row .grow > span { display: block; font-size: var(--fs-xs); color: var(--fg-muted); }
+.cpm-row svg.lucide { width: 20px; min-height: 20px; flex: none; }
+.cpm-row svg.lucide:last-child { width: 18px; min-height: 18px; color: var(--fg-muted); }
+.cpm-row.danger, .cpm-row.danger svg.lucide { color: var(--danger); }
+@media (hover: hover) { .cpm-row:hover { background: var(--surface-2); } }
+
+/* Tab Progres/Latihan/Gizi: kartu ringkasan jadi terang (zona hitam hanya kepala + kartu klien). */
+.detail[data-kind="client"] .cp-pane .insight-hero, .detail[data-kind="client"] .cp-pane .card-ink {
+  --ink: var(--surface); --on-ink: var(--fg); --on-ink-muted: var(--fg-muted);
+  background: var(--surface); color: var(--fg); border: 1px solid var(--border); box-shadow: var(--shadow-1); border-radius: var(--r-lg); }
+.detail[data-kind="client"] .cp-pane .card-ink::before, .detail[data-kind="client"] .cp-pane .insight-hero::before { display: none; }
+.detail[data-kind="client"] .cp-pane .insight-hero .btn-on-ink { background: var(--surface-2); color: var(--fg); border: 1px solid var(--border); }
+.detail[data-kind="client"] .cp-pane .ih-range { background: var(--surface-3); }
+
+/* Panel lebar (PC): kartu dua kolom dan aksi sebaris; Ringkasan dua kolom bila panel cukup lebar */
+@media (min-width: 1200px) {
+  #app.detail-wide .cp-top { margin: -4px -28px 0; padding: 4px 28px 0; }
+  #app.detail-wide .cp-tabs { margin: 0 -28px; padding: 0 20px; }
+  #app.detail-wide .cp-tab { flex: 0 0 auto; padding: 0 16px; }
+  @container (min-width: 620px) {
+    #app.detail-wide .cp-card { grid-template-columns: minmax(0, 1fr) minmax(14rem, 20rem); grid-template-areas: "id left" "acts acts"; column-gap: 28px; padding: 22px 24px; }
+    #app.detail-wide .cp-id { grid-area: id; }
+    #app.detail-wide .cp-left { grid-area: left; align-self: center; }
+    #app.detail-wide .cp-acts { grid-area: acts; display: flex; flex-wrap: wrap; gap: 8px; }
+    #app.detail-wide .cp-act { flex: 0 0 auto; flex-direction: row; min-height: 44px; padding: 0 14px; gap: 8px; font-size: var(--fs-sm); }
+    #app.detail-wide .cp-act svg.lucide { width: 18px; min-height: 18px; }
+    #app.detail-wide .cp-act-main { background: var(--on-ink); color: var(--ink); border-color: transparent; }
+    #app.detail-wide .cp-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @container (min-width: 700px) {
+    #app.detail-wide .cp-pane[data-cppane="ringkasan"] { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+    #app.detail-wide .cp-pane[data-cppane="ringkasan"] > .cp-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  }
+}
+html.big-text .cp-acts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* HP: kartu tetap pendek — nomor ada di Data › Profil dan jadwal berikutnya tepat di bawah kartu. */
+@media (max-width: 767px) { .cp-card .cp-phone, .cp-card .cp-left-next { display: none; } .cp-card { padding: 16px; gap: 12px; } }
 </style>

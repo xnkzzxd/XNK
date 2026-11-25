@@ -20,8 +20,11 @@ test('save then read: derived numbers use the latest Progress entry', () => {
   const admin = env.adminToken(), ani = env.memberToken(KEY_A);
   env.call('saveMyMeasurement', ani, { berat: 70, pinggang: 80 });
   env.call('saveClientNotes', admin, 'PT-A', { flag: '', notes: '', birthDate: '1996-03-10' });
-  assert.deepEqual(env.call('saveClientNutrition', admin, 'PT-A', { tinggi: '170', jk: 'p', goal: 'turun', pantangan: ['telur'], kondisi: [], anggaran: 'hemat' }), { status: 'success' });
+  const saved = env.call('saveClientNutrition', admin, 'PT-A', { tinggi: '170', jk: 'p', goal: 'turun', pantangan: ['telur'], kondisi: [], anggaran: 'hemat' });
+  assert.equal(saved.status, 'success');
   const r = env.call('getClientNutrition', admin, 'PT-A');
+  // Fase AC: jawaban penulis membawa data gizi segar, sama dengan bacaan sesudahnya (panel tidak memanggil getClientNutrition lagi).
+  assert.deepEqual(JSON.parse(JSON.stringify(saved.nutrition)), JSON.parse(JSON.stringify(r)));
   assert.equal(r.profile.tinggi, 170);
   assert.equal(r.profile.jk, 'P');
   assert.deepEqual(Array.from(r.profile.pantangan), ['telur']);

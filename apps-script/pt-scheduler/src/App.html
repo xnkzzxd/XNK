@@ -1873,13 +1873,15 @@
     });
   };
 
-  // Tiga panggilan berjalan bersamaan, dan dimulai diam-diam setelah getAdminMore selesai (loadAdminExtras),
-  // supaya Pengaturan sudah terisi saat dibuka tanpa memperlambat layar pertama.
+  // Fase AC: SATU panggilan (getSettingsBundle; dulu tiga), dimulai diam-diam setelah getAdminMore selesai (loadAdminExtras),
+  // supaya Pengaturan sudah terisi saat dibuka tanpa memperlambat layar pertama. Bagian yang gagal = {error} dari server.
   function settingsPrefetch() {
+    const all = adminCall('getSettingsBundle');
+    const pick = function (k) { return all.then(function (r) { const v = r && r[k]; if (!v || v.error) throw new Error((v && v.error) || 'Tidak ada jawaban.'); return v; }); };
     const p = {
-      settings: adminCall('getAppSettings'),
-      status: adminCall('getReminderStatus'),
-      pkg: adminCall('getPriceListAdmin').catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); return null; })
+      settings: pick('settings'),
+      status: pick('status'),
+      pkg: pick('packages').catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); return null; })
     };
     p.settings.catch(function () {});   // kesalahan ditangani saat halaman dibuka
     p.status.catch(function () {});
@@ -4534,6 +4536,8 @@
   };
 
   // ── KLIEN (admin) ──────────────────────────────────────────────────────────
+  // Fase AC (T-2302): daftar klien tanpa kartu hitam ringkasan (angkanya di band), "Perlu perhatian" chip kedua,
+  // baris: nama sebaris sendiri, sisa + meter + status di kanan, tanda perhatian hanya bila ada.
   function clientState(m) {
     const total = Number(m.totalSessions) || 0, rem = remainingOf(m);
     if (total > 0 && rem === 0) return 'empty';
@@ -4563,12 +4567,21 @@
   }
   window.setClientSort = function (v) { ui.clientSort = v; _lsSet('xnk_client_sort', v); renderClientList(); };
   window.setClientView = function (v) { ui.clientView = v; _lsSet('xnk_client_view', v); document.querySelectorAll('#client-view-seg button').forEach(b => { const on = b.getAttribute('data-v') === v; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); }); renderClientList(); };
-  function clientHeroHtml(counts) {
-    const g = window.clientSignals, ok = g && !g.error, n = counts.perhatian;
-    return insightHeroHtml({ slim: true, eyebrow: 'Ringkasan klien',
-      text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatian' : 'Semua klien aman hari ini',
-      stats: [{ v: String(counts.all), l: 'Klien' }, { v: ok ? String(g.totals.sesiMinggu) : '–', l: 'Sesi minggu ini' }, { v: ok ? g.totals.konsisten + '%' : '–', l: 'Aktif 14 hari' }],
-      actions: ok && n ? '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.setClientFilter(\'perhatian\')">' + icon('eye') + 'Lihat siapa</button>' : '' });
+  const CL_FILTERS = [['all', 'Semua'], ['perhatian', 'Perlu perhatian'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['active', 'Aktif'], ['archive', 'Riwayat paket']];
+  const CL_SORTS = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
+  function clientCounts() {
+    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
+    window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
+    return counts;
+  }
+  // Ringkasan di band: satu kalimat di HP, dua angka kecil di PC (dulu kartu hitam tersendiri).
+  function clientHeadSub(counts) {
+    return counts.all + ' klien' + (counts.perhatian ? ' · ' + counts.perhatian + ' perlu perhatian' : ' · semua aman');
+  }
+  function clientHeadStats() {
+    const g = window.clientSignals;
+    if (!g || g.error || !g.totals) return '';
+    return '<div class="cl-stats" aria-label="Ringkasan klien"><div><b class="num">' + h(g.totals.sesiMinggu) + '</b><span>Sesi minggu ini</span></div><div><b class="num">' + h(g.totals.konsisten) + '%</b><span>Aktif 14 hari</span></div></div>';
   }
 
   function renderClients() {
@@ -4577,20 +4590,17 @@
     const caret = ae && ae.id === 'search-client' ? [ae.selectionStart, ae.selectionEnd] : null;
     const fKey = focusedRowKey();
     loadClientPrefs();
-    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
-    window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
-    const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian'], ['archive', 'Riwayat paket']];
-    const sorts = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
-    const html = '<div class="page-head"><div><h2 class="page-title">Klien</h2><p class="page-sub">' + counts.all + ' klien · ' + (counts.active + counts.low) + ' punya sisa sesi</p></div>' +
-      '<button type="button" class="btn btn-primary" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button></div>' +
-      '<div class="client-top" id="client-top"><div id="client-hero">' + clientHeroHtml(counts) + '</div>' +
-      '</div>' +
-      '<div class="stack" style="gap:12px;margin-bottom:8px">' +
-        '<div class="cl-tools"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari klien…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
-        '<select class="select" id="sort-client" aria-label="Urutkan klien" onchange="window.setClientSort(this.value)">' + sorts.map(o => '<option value="' + o[0] + '"' + (ui.clientSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>' +
-        '<div class="seg only-desktop" id="client-view-seg" role="group" aria-label="Tampilan"><button type="button" data-v="card" class="' + (ui.clientView === 'card' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'card') + '" onclick="window.setClientView(\'card\')">Kartu</button><button type="button" data-v="list" class="' + (ui.clientView === 'list' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'list') + '" onclick="window.setClientView(\'list\')">Daftar</button></div></div>' +
-        '<div class="chips" role="tablist" aria-label="Filter klien">' + chips.map(c => '<button type="button" role="tab" class="chip' + (ui.clientFilter === c[0] ? ' active' : '') + '" data-filter="' + c[0] + '" aria-selected="' + (ui.clientFilter === c[0]) + '" onclick="window.setClientFilter(\'' + c[0] + '\')">' + c[1] + ' <span class="chip-count num">' + counts[c[0]] + '</span></button>').join('') + '</div>' +
-      '</div><div id="client-list"></div>';
+    const counts = clientCounts();
+    const opt = (o, cur, n) => '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + (n != null ? ' (' + n + ')' : '') + '</option>';
+    const html = '<div class="page-head cl-head"><div class="cl-head-t"><h2 class="page-title">Klien</h2><p class="page-sub" id="cl-sub">' + h(clientHeadSub(counts)) + '</p></div>' + clientHeadStats() +
+      '<button type="button" class="btn btn-primary cl-new" onclick="window.openAddMemberModal()" aria-label="Klien baru">' + icon('user-plus') + '<span class="cl-new-t">Klien baru</span></button></div>' +
+      '<div class="cl-bar" id="cl-bar"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari klien…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
+        '<select class="select cl-filter" id="filter-client" aria-label="Filter klien" onchange="window.setClientFilter(this.value)">' + CL_FILTERS.map(o => opt(o, ui.clientFilter, counts[o[0]])).join('') + '</select>' +
+        '<select class="select cl-sort" id="sort-client" aria-label="Urutkan klien" onchange="window.setClientSort(this.value)">' + CL_SORTS.map(o => opt(o, ui.clientSort)).join('') + '</select>' +
+        '<div class="seg only-desktop cl-view" id="client-view-seg" role="group" aria-label="Tampilan"><button type="button" data-v="card" class="' + (ui.clientView === 'card' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'card') + '" onclick="window.setClientView(\'card\')">Kartu</button><button type="button" data-v="list" class="' + (ui.clientView === 'list' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'list') + '" onclick="window.setClientView(\'list\')">Daftar</button></div></div>' +
+      '<div class="chips cl-chips" role="tablist" aria-label="Filter klien">' + CL_FILTERS.map(c => '<button type="button" role="tab" class="chip' + (ui.clientFilter === c[0] ? ' active' : '') + '" data-filter="' + c[0] + '" aria-selected="' + (ui.clientFilter === c[0]) + '" onclick="window.setClientFilter(\'' + c[0] + '\')">' +
+        (c[0] === 'perhatian' && counts.perhatian ? '<span class="cl-dot" aria-hidden="true"></span>' : '') + c[1] + ' <span class="chip-count num">' + counts[c[0]] + '</span></button>').join('') + '</div>' +
+      '<div id="client-list"></div>';
     setHTML(el, html);
     renderClientList();
     if (caret) {
@@ -4610,10 +4620,10 @@
     if (!el) return;
     const fKey = focusedRowKey();
     document.querySelectorAll('#view-clients [data-filter]').forEach(function (c) {
-      const f = c.getAttribute('data-filter'), on = f === ui.clientFilter;
-      if (c.classList.contains('stat-tile')) { c.classList.toggle('active', on); c.setAttribute('aria-pressed', on); }
-      else { c.classList.toggle('active', on); c.setAttribute('aria-selected', on); }
+      const on = c.getAttribute('data-filter') === ui.clientFilter;
+      c.classList.toggle('active', on); c.setAttribute('aria-selected', on);
     });
+    const fs = $('filter-client'); if (fs && fs.value !== ui.clientFilter) fs.value = ui.clientFilter;
     const q = ui.clientQuery.trim().toLowerCase();
     const match = x => !q || String(x.name || '').toLowerCase().indexOf(q) !== -1 || String(x.phone || '').indexOf(q.replace(/\D/g, '') || '\u0000') !== -1;
     let entries = [];
@@ -4637,7 +4647,7 @@
         q ? '' : '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button>'));
       return;
     }
-    // Info kartu PC (tidak dibuat di HP): sesi berikutnya dan permintaan perpanjang, satu kali lewat data.
+    // Sesi berikutnya dan permintaan perpanjang, satu kali lewat data.
     const desk = !isPhone(), now = Date.now(), nextBy = {}, renewBy = {}, solo = window.isSoloCoach();
     window.schedules.forEach(function (s) {
       if (!s.memberId || isAvailable(s) || isDone(s)) return;
@@ -4671,136 +4681,102 @@
     refocusRow(fKey);
   }
 
-  function clientRow(m, x) {
-    x = x || {};
-    const total = Number(m.totalSessions) || 0, used = Number(m.usedSessions) || 0, rem = remainingOf(m);
-    const st = clientState(m);
-    const pill = st === 'active' ? '' : '<span class="cc-state">' + statePillHtml(m) + '</span>';
-    const ts = (window.taskSummary || {})[String(m.id)] || {};
-    const tOpen = Number(ts.open) || 0, tLate = Number(ts.overdue) || 0;
-    const taskPills = (tOpen || tLate)
-      ? '<div class="row cc-pills" style="gap:6px;margin-top:6px;flex-wrap:wrap">' +
-          (tOpen ? '<span class="pill soft num">PR ' + tOpen + '</span>' : '') +
-          (tLate ? '<span class="pill solid num">Telat ' + tLate + '</span>' : '') + '</div>'
-      : '';
-    return '<div class="list-item interactive client-card" role="button" tabindex="0" data-key="client:' + h(m.id) + '" onclick="window.openProfile(\'' + h(m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
-      avatar(m.photo, m.name) +
-      '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4><p class="li-sub truncate"><span class="cc-phone">+' + h(m.phone) + (m.packageName ? ' · ' : '') + '</span>' + (m.packageName ? h(m.packageName) : '') + '</p>' + taskPills +
-      '<div class="meter cc-meter' + (st === 'low' ? ' low' : st === 'empty' ? ' empty' : '') + '"><i style="width:' + (total ? Math.min(100, Math.round(used / total * 100)) : 0) + '%"></i></div>' + clientExtra(m, x) + (x.desk ? clientMeta(m, x) : '') + '</div>' +
-      '<div class="li-trail"><div class="cc-count" style="text-align:right"><p class="num" style="font-weight:800;font-size:var(--fs-lg)">' + rem + '<span class="li-sub">/' + total + '</span></p><p class="li-sub">sisa sesi</p></div>' + pill + '</div></div>';
-  }
-  // Tanda perhatian, sesi berikutnya (HP) dan tren 4 minggu. Bagian dari baris klien di semua lebar.
+  // Tanda perhatian (teks) dan PR terbuka/telat: satu baris kecil, hanya bila ada.
   const FLAG_TEXT = { inaktif: (m, g) => (g && g.lastDone ? Math.max(1, Math.round((Date.now() - new Date(g.lastDone + 'T00:00:00+07:00')) / 86400000)) + ' hari tidak latihan' : 'Belum pernah latihan'), 'pr-telat': (m) => 'PR telat ' + (((window.taskSummary || {})[String(m.id)] || {}).overdue || ''), perpanjang: () => 'Minta perpanjang', 'rating-rendah': () => 'Rating rendah' };
-  function clientExtra(m, x) {
+  function clientFlagsHtml(m, x) {
     const g = sigOf(m);
     const fl = (g ? g.flags : []).slice();
     if (x.renew && fl.indexOf('perpanjang') === -1) fl.push('perpanjang');   // permintaan terbaru lebih cepat dari sinyal server
-    const flags = fl.filter(f => FLAG_TEXT[f]).map(f => flagHtml(FLAG_TEXT[f](m, g))).join('');
-    const nx = x.next ? new Date(x.next) : null;
-    const mx = g ? Math.max.apply(null, g.weeks.concat([1])) : 1;
-    const trend = g ? '<div class="cc-trend" title="Sesi 4 minggu terakhir"><span class="cc-bars" aria-hidden="true">' + g.weeks.map(n => '<i style="height:' + Math.max(12, Math.round(n / mx * 100)) + '%"' + (n ? '' : ' class="z"') + '></i>').join('') + '</span>' +
-      (g.weightDelta != null && g.weightDelta !== 0 ? '<span class="cc-wd num">' + (g.weightDelta < 0 ? '↓' : '↑') + ' ' + String(Math.abs(g.weightDelta)).replace('.', ',') + ' kg</span>' : '') + '</div>' : '';
-    return '<div class="cc-extra">' + (flags ? '<div class="cc-flags">' + flags + '</div>' : '') +
-      '<p class="cc-line cc-next-m">' + icon('calendar-clock') + '<span class="truncate">' + (nx ? h(fmtShort(nx)) + ' · ' + fmtTime(nx) : 'Belum ada jadwal') + '</span></p>' + trend + '</div>';
+    let out = fl.filter(f => FLAG_TEXT[f]).map(f => flagHtml(FLAG_TEXT[f](m, g))).join('');
+    const ts = (window.taskSummary || {})[String(m.id)] || {}, tOpen = Number(ts.open) || 0;
+    if (tOpen && fl.indexOf('pr-telat') === -1) out += '<span class="pill soft num cc-pr">PR ' + tOpen + '</span>';
+    return out ? '<div class="cc-flags">' + out + '</div>' : '';
   }
-  // Kartu PC: jadwal berikutnya, coach (kalau lebih dari satu), terakhir aktif, minta perpanjang. Disembunyikan di HP lewat CSS.
+  // Batang 4 minggu + perubahan berat (kartu PC).
+  function clientTrendHtml(m) {
+    const g = sigOf(m);
+    if (!g) return '';
+    const mx = Math.max.apply(null, g.weeks.concat([1]));
+    return '<div class="cc-trend" title="Sesi 4 minggu terakhir"><span class="cc-bars" aria-hidden="true">' + g.weeks.map(n => '<i style="height:' + Math.max(12, Math.round(n / mx * 100)) + '%"' + (n ? '' : ' class="z"') + '></i>').join('') + '</span>' +
+      (g.weightDelta != null && g.weightDelta !== 0 ? '<span class="cc-wd num">' + (g.weightDelta < 0 ? '↓' : '↑') + ' ' + String(Math.abs(g.weightDelta)).replace('.', ',') + ' kg</span>' : '') + '</div>';
+  }
+  // Kartu PC: coach (kalau lebih dari satu) dan terakhir aktif. Disembunyikan di HP dan di daftar ringkas.
   let lastFmt = null;
   function clientMeta(m, x) {
-    const nx = x.next ? new Date(x.next) : null;
     if (!lastFmt) lastFmt = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
     const last = x.date && x.date.getTime() > 0 ? lastFmt.format(x.date) : '-';
-    return '<div class="cc-meta">' +
-      '<p class="cc-line cc-next">' + icon('calendar-clock') + '<span class="truncate">' + (nx ? h(fmtShort(nx)) + ' · ' + fmtTime(nx) : 'Belum ada jadwal') + '</span></p>' +
+    return '<div class="cc-meta">' + clientTrendHtml(m) +
       (x.solo ? '' : '<p class="cc-line cc-coach">' + icon('dumbbell') + '<span class="truncate">' + h(m.preferredCoachName || 'Belum ada coach') + '</span></p>') +
-      '<p class="cc-line cc-last">' + icon('history') + '<span class="truncate">Aktif terakhir ' + h(last) + '</span></p>' +
-      '</div>';
+      '<p class="cc-line cc-last">' + icon('history') + '<span class="truncate">Aktif terakhir ' + h(last) + '</span></p></div>';
+  }
+  function clientRow(m, x) {
+    x = x || {};
+    const total = Number(m.totalSessions) || 0, rem = remainingOf(m), st = clientState(m);
+    const nx = x.next ? new Date(x.next) : null;
+    const nextTxt = nx ? fmtShort(nx) + ' · ' + fmtTime(nx) : 'Belum ada jadwal';
+    const stTxt = st === 'empty' ? 'Habis' : st === 'low' ? 'Hampir habis' : '';
+    return '<div class="list-item interactive client-card" role="button" tabindex="0" data-key="client:' + h(m.id) + '" onclick="window.openProfile(\'' + h(m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
+      avatar(m.photo, m.name) +
+      '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4>' +
+      '<p class="cc-sub"><span class="cc-next' + (nx ? '' : ' none') + '">' + h(nextTxt) + '</span>' + (m.packageName ? '<span class="cc-sep" aria-hidden="true"> · </span><span class="cc-pkg">' + h(m.packageName) + '</span>' : '') + '</p>' +
+      clientFlagsHtml(m, x) + (x.desk ? clientMeta(m, x) : '') + '</div>' +
+      '<div class="li-trail cc-trail"><p class="cc-count num"><b>' + rem + '</b><span>/' + total + '</span></p>' +
+      '<div class="meter cc-meter' + (st === 'low' ? ' low' : st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + (total ? Math.min(100, Math.round(rem / total * 100)) : 0) + '%"></i></div>' +
+      (stTxt ? '<p class="cc-st' + (st === 'empty' ? ' warn' : ' low') + '">' + stTxt + '</p>' : '') + '</div></div>';
   }
 
   function archiveRow(a) {
     return '<div class="list-item interactive muted-item client-card" role="button" tabindex="0" data-key="client:' + h(a.id) + '" onclick="window.openProfile(\'' + h(a.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
-      avatar(a.photo, a.name) + '<div class="grow"><h4 class="li-title truncate">' + h(a.name) + '</h4><p class="li-sub truncate">' + h(a.packageName || 'Paket') + ' · ' + (a.totalSessions || 0) + ' sesi · ' + h(a.date) + '</p></div>' +
+      avatar(a.photo, a.name) + '<div class="grow"><h4 class="li-title truncate">' + h(a.name) + '</h4><p class="cc-sub truncate">' + h(a.packageName || 'Paket') + ' · ' + (a.totalSessions || 0) + ' sesi · ' + h(a.date) + '</p></div>' +
       '<div class="li-trail"><span class="pill soft cc-state">' + icon(a.jenis === 'Baru' ? 'user-plus' : 'history') + h(a.jenis || 'Riwayat') + '</span></div></div>';
   }
   window.updateMemberUI = function () { if (window.currentView === 'clients') renderClientList(); };
 
+  // ── Halaman klien (Fase AC, T-2303) ─────────────────────────────────────────
+  // Kepala = nama klien + ⋯; satu kartu hitam (identitas, sisa sesi, empat aksi); lima tab terang yang menempel.
+  // Isi tiap tab digambar oleh fungsi di part 20 (Ringkasan, Data) dan part lama (Progres, Latihan, Gizi).
   window.openProfile = function (id) {
     if (window.isPublicView) return;
     const m = window.members.find(x => String(x.id) === String(id));
     if (!m) { window.showToast('Data klien tidak ditemukan.'); return; }
     window.selectedMemberId = m.id;
-    const total = Number(m.totalSessions) || 0, used = Number(m.usedSessions) || 0, rem = remainingOf(m);
-    const st = clientState(m);
-    const goal = String(m.goal || '');
-    const goalMain = goal.split('|')[0].trim(), goalTag = goal.indexOf('|') !== -1 ? goal.split('|')[1].trim() : '';
-    const sessions = window.schedules.filter(s => String(s.memberId) === String(m.id) && !isAvailable(s)).sort((a, b) => new Date(b.start) - new Date(a.start));
-    const upcoming = sessions.filter(s => new Date(s.start) >= new Date() && !isDone(s)).sort(byStart);
-    const past = sessions.filter(s => !(new Date(s.start) >= new Date() && !isDone(s)));
-    const C = 2 * Math.PI * 52, pct = total ? rem / total : 0;
-
-    const doneCount = sessions.filter(isDone).length;
-    const stPill = statePillHtml(m);
-    let body = '<div class="stack" style="gap:16px">' + '<div id="cc-sync" data-member="' + h(m.id) + '">' + window.ccSyncHtml(m.id) + '</div>';
-    // Hero (kartu ink seperti dashboard): identitas, sisa sesi, tiga angka, aksi cepat
-    body += '<div class="card-ink client-hero"><div class="row client-hero-id" style="gap:14px">' + avatar(m.photo, m.name, 'lg') +
-      '<div class="grow" style="min-width:0"><h3 class="profile-name truncate">' + h(m.name) + '</h3><p class="muted" id="profile-phone">+' + h(m.phone) + '</p>' +
-      '<div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap">' + stPill + (m.packageName ? '<span class="pill">' + h(m.packageName) + '</span>' : '') + '</div></div></div>' +
-      '<div class="row client-ring-row"><div class="ring-wrap client-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
-      '<circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
-      '<div class="ring-center"><span class="num" style="font-size:var(--fs-3xl);font-weight:800" id="profile-remaining">' + rem + '</span><span class="eyebrow">dari <span id="profile-total">' + total + '</span></span></div></div>' +
-      '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p><p class="muted">' + used + ' terpakai · ' + doneCount + ' selesai</p></div></div>' +
-      '<div class="btn-row client-hero-actions"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
-      '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div></div>';
-    // Tab bagian halaman
-    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['latihan', 'Latihan', 'dumbbell'], ['gizi', 'Gizi', 'apple']];
+    const tabs = CP_TABS;
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
     const tab0 = (ui.detail === 'client:' + m.id && ui.cpTab && ui.cpTab.id === String(m.id) && tabs.some(t => t[0] === cpTabName(ui.cpTab.name))) ? cpTabName(ui.cpTab.name) : 'ringkasan';
     const hid = n => n === tab0 ? '' : ' hide';
     ui.cpTab = { id: String(m.id), name: tab0 };   // ingat tab yang benar-benar tampil (bukan tab kunjungan lama)
-    body += '<div class="chips cp-tabs" role="tablist" aria-label="Bagian profil klien">' + tabs.map(t => '<button type="button" role="tab" class="chip' + (t[0] === tab0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (t[0] === tab0) + '" onclick="window.cpTab(\'' + t[0] + '\')">' + icon(t[2]) + t[1] + '</button>').join('') + '</div>';
-    // Ringkasan (dua kolom di panel lebar PC; .cp-col = display:contents di HP)
-    body += '<div class="cp-pane stack' + hid('ringkasan') + '" data-cppane="ringkasan" style="gap:16px"><div class="cp-col cp-col-main">';
-    body += '<div id="cp-highlight">' + cpHighlightHtml(m, sessions, upcoming) + '</div>';
-    body += '<div class="kv">' +
-      '<div><p class="k">Bergabung</p><p class="v">' + h(m.joinDate || '-') + '</p></div>' +
-      '<div><p class="k">Coach</p><p class="v">' + h(m.preferredCoachName || 'Belum ditentukan') + '</p></div>' +
-      '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
-    body += '<div class="btn-row cp-edit-row"><button type="button" class="btn btn-ghost btn-sm" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" onclick="window.openDeleteConfirmModal()">' + icon('trash-2') + 'Hapus klien</button></div>';
-    body += '</div><div class="cp-col cp-col-side">';
-    // Bagian yang panjang dilipat (accordion) supaya kolom kanan terisi rapi, bukan kosong atau memanjang.
-    const nOpenTask = ((window.memberTasks[String(m.id)] || {}).list || []).filter(t => t.status === 'todo').length;
-    body += foldHtml('PR (Task)', nOpenTask ? nOpenTask + ' terbuka' : '', '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>', true, 'fold-pr-meta');
-    body += foldHtml('Jadwal mendatang', upcoming.length + ' sesi', upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>', upcoming.length > 0);
-    body += foldHtml('Riwayat', past.length + ' sesi', past.length ? '<div class="timeline" id="profile-history">' + past.slice(0, 12).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub" id="profile-history">Belum ada riwayat latihan.</p>', false);
-    const remOn = REMIND_TYPES.filter(t => (m.reminderOff || []).indexOf(t[0]) === -1).length + (m.mealReminder !== false ? 1 : 0);
-    body += foldHtml('Pengingat WhatsApp', remOn + ' aktif', '<div class="stack" style="gap:12px">' + mealToggleHtml(m) + reminderPrefsHtml(m) + '</div>', false);
-    body += '</div></div>';
-    // Progres: kartu hitam rapor + tafsir, lalu catatan progres dan perawatan (tes, form kesehatan)
-    // Urutan: rapor → indikator → grafik → rincian dalam lipatan (lingkar, catatan, kesehatan, asesmen, tes).
-    body += '<div class="cp-pane stack' + hid('progres') + '" data-cppane="progres" style="gap:16px"><div id="cp-ph-progress">' + cpInsHtml(m.id, 'progresHero') + '</div>' +
+    let body = '<div class="cp" data-member="' + h(m.id) + '">';
+    body += '<div class="cp-top" id="cp-card-wrap">' + cpCardHtml(m) + '</div>';
+    body += '<div id="cc-sync" data-member="' + h(m.id) + '">' + window.ccSyncHtml(m.id) + '</div>';
+    body += '<div class="cp-tabs" role="tablist" aria-label="Bagian profil klien" onkeydown="window.cpTabKey(event)">' + tabs.map(t => '<button type="button" role="tab" class="cp-tab' + (t[0] === tab0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (t[0] === tab0) + '" tabindex="' + (t[0] === tab0 ? '0' : '-1') + '" onclick="window.cpTab(\'' + t[0] + '\')">' + t[1] + '</button>').join('') + '</div>';
+    // Ringkasan (dua kolom bila panel cukup lebar; .cp-col = display:contents di HP)
+    body += '<div class="cp-pane' + hid('ringkasan') + '" data-cppane="ringkasan"><div class="cp-col cp-col-main"><div id="cp-highlight" class="cp-stack">' + cpHighlightHtml(m) + '</div></div>' +
+      '<div class="cp-col cp-col-side"><div id="cp-week">' + cpWeekHtml(m) + '</div><div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div><div id="cp-sess">' + cpSessHtml(m) + '</div></div></div>';
+    // Progres: rapor + tafsir, catatan progres, tes kebugaran (Wave 2 merombak tab ini)
+    body += '<div class="cp-pane cp-stack' + hid('progres') + '" data-cppane="progres"><div id="cp-ph-progress">' + cpInsHtml(m.id, 'progresHero') + '</div>' +
       '<div id="cp-ins-progress">' + cpInsHtml(m.id, 'progresCards') + '</div>' +
       '<div id="profile-progress-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>' +
       '<div id="cp-ins-folds" class="stack" style="gap:10px">' + cpInsHtml(m.id, 'progresFolds') + '</div>' +
-      '<div id="profile-care-wrap" class="stack" style="gap:10px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
-    // Latihan: kartu hitam minggu ini + tafsir, lalu program dan log (Fase J2/M)
-    body += '<div class="cp-pane stack' + hid('latihan') + '" data-cppane="latihan" style="gap:16px"><div id="cp-ph-latihan">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
+      '<div id="profile-tests-wrap" class="stack" style="gap:10px" data-member="' + h(m.id) + '">' + testsInner(m.id) + '</div></div>';
+    // Latihan: minggu ini + tafsir, lalu program dan log (Wave 3 merombak tab ini)
+    body += '<div class="cp-pane cp-stack' + hid('latihan') + '" data-cppane="latihan"><div id="cp-ph-latihan">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
       '<div id="profile-program-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + programAdminInner(m.id) + '</div>' +
       '<div class="stack" style="gap:12px" id="cp-ins-latihan">' + cpInsHtml(m.id, 'latihanCards') + '</div></div>';
-    // Gizi
-    body += '<div class="cp-pane stack' + hid('gizi') + '" data-cppane="gizi" style="gap:16px"><div id="cp-ph-gizi">' + cpInsHtml(m.id, 'giziHero') + '</div><div id="profile-nut-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
+    // Gizi (Wave 4 merombak tab ini)
+    body += '<div class="cp-pane cp-stack' + hid('gizi') + '" data-cppane="gizi"><div id="cp-ph-gizi">' + cpInsHtml(m.id, 'giziHero') + '</div><div id="profile-nut-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
+    // Data: hub ala "Saya" di portal
+    body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     body += '</div>';
-    const actions = '<button type="button" class="icon-btn plain" onclick="window.openEditProfileModal()" aria-label="Ubah data klien">' + icon('pencil') + '</button>';
-    openDetail('client:' + m.id, 'Profil klien', actions, body);
+    const actions = '<button type="button" class="icon-btn plain cp-more-btn" onclick="window.cpMore(\'' + h(m.id) + '\')" aria-label="Menu klien" aria-haspopup="dialog">' + icon('ellipsis') + '</button>';
+    openDetail('client:' + m.id, m.name || 'Profil klien', actions, body);
     window.loadClientBundle(m.id);
-    requestAnimationFrame(function () {
-      const ring = document.querySelector('#detail-body .ring-fill');
-      if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
-    });
   };
 
   // Tab di halaman klien (panel): satu bagian tampil sekali, supaya halaman tidak panjang di HP.
   // ── Fase Q: tafsir untuk coach di halaman klien ──────────────────────────────
   window.clientInsight = {};   // { memberId: getClientBundle.insight }; hanya di memori
+  window.clientTodo = {};      // { memberId: getClientBundle.todo } — tugas coach (Fase AC)
+  window.clientNotes = {};     // { memberId: getClientBundle.notes } — 10 catatan sesi terakhir (Fase AC)
   function cpInsHtml(id, kind) {
     const raw = window.clientInsight[String(id)];
     if (raw === undefined) {
@@ -4840,33 +4816,43 @@
     const id = window.selectedMemberId;
     if (!id || !$('cp-ph-progress')) return;
     [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards'], ['cp-ph-gizi', 'giziHero']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
-    const hl = $('cp-highlight'); if (hl) { const m = window.members.find(x => String(x.id) === String(id)); if (m) hl.innerHTML = cpHighlightHtml(m); }
+    cpRenderOverview(id);
     paintIcons();
   }
-  // Sorotan di Ringkasan: sesi terakhir/berikutnya, tren berat, latihan minggu ini, dan tanda perhatian.
-  function cpHighlightHtml(m, sessions, upcoming) {
-    sessions = sessions || window.schedules.filter(s => String(s.memberId) === String(m.id) && !isAvailable(s)).sort((a, b) => new Date(b.start) - new Date(a.start));
-    upcoming = upcoming || sessions.filter(s => new Date(s.start) >= new Date() && !isDone(s)).sort(byStart);
-    const lastDone = sessions.filter(isDone)[0], nx = upcoming[0], g = sigOf(m);
-    const raw = window.clientInsight[String(m.id)], tr = raw && !raw.error ? raw.training : null;
-    const rows = [
-      insRow('Sesi terakhir', lastDone ? fmtShort(new Date(lastDone.start)) : '-', ''),
-      insRow('Sesi berikutnya', nx ? fmtShort(new Date(nx.start)) + ' · ' + fmtTime(new Date(nx.start)) : 'Belum ada', '')
-    ];
-    if (g && g.weightDelta != null) rows.push(insRow('Berat 30 hari', insSigned(g.weightDelta, 'kg'), ''));
-    if (tr) rows.push(insRow('Latihan mandiri minggu ini', tr.week.days.now + ' hari', tr.week.baseline ? 'rata-rata ' + tr.week.days.avg + ' hari' : ''));
-    const flags = (g ? g.flags : []).filter(f => FLAG_TEXT[f]).map(f => flagHtml(FLAG_TEXT[f](m, g))).join('');
-    return '<div class="card-flat stack" style="gap:10px"><h4 class="section-title">Sorotan</h4><div class="ins-list">' + rows.join('') + '</div>' + (flags ? '<div class="cc-flags">' + flags + '</div>' : '') + '</div>';
+  // Ringkasan: "Sesi berikutnya" + "Tugas coach" (kolom kiri) dan "Minggu ini" (kanan) ikut data bundle yang baru datang.
+  function cpRenderOverview(id) {
+    const m = window.members.find(x => String(x.id) === String(id));
+    if (!m || String(window.selectedMemberId) !== String(id)) return;
+    const hl = $('cp-highlight'); if (hl) setHTML(hl, cpHighlightHtml(m));
+    const wk = $('cp-week'); if (wk) setHTML(wk, cpWeekHtml(m));
+    const ss = $('cp-sess'); if (ss) setHTML(ss, cpSessHtml(m));
   }
+  window.cpRenderOverview = cpRenderOverview;
 
-  // Nama tab lama (sebelum 4 tab) dipetakan ke yang baru.
-  const CP_LEGACY = { program: 'latihan', perawatan: 'progres', riwayat: 'ringkasan' };
+  // Fase AC: lima tab. Nama tab lama dipetakan ke yang baru.
+  const CP_TABS = [['ringkasan', 'Ringkasan'], ['progres', 'Progres'], ['latihan', 'Latihan'], ['gizi', 'Gizi'], ['data', 'Data']];
+  const CP_LEGACY = { program: 'latihan', perawatan: 'data', riwayat: 'ringkasan' };
   function cpTabName(n) { return CP_LEGACY[n] || n; }
-  window.cpTab = function (name) {
+  window.cpTab = function (name, focus) {
     name = cpTabName(name);
     ui.cpTab = { id: String(window.selectedMemberId), name: name };
-    document.querySelectorAll('#detail-body [data-cptab]').forEach(function (b) { const on = b.getAttribute('data-cptab') === name; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('#detail-body [data-cptab]').forEach(function (b) { const on = b.getAttribute('data-cptab') === name; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
     document.querySelectorAll('#detail-body [data-cppane]').forEach(function (p) { p.classList.toggle('hide', p.getAttribute('data-cppane') !== name); });
+    // Tab di bawah kartu: setelah ganti tab, isi tab mulai tepat di bawah bar tab (bukan di tengah isi tab sebelumnya).
+    const bar = document.querySelector('#detail-body .cp-tabs'), card = $('cp-card-wrap'), body = $('detail-body');
+    if (bar && card && body) {
+      const b = body.getBoundingClientRect().top, natural = card.getBoundingClientRect().bottom - b + body.scrollTop;
+      if (body.scrollTop > natural) body.scrollTop = natural;
+    }
+  };
+  // Panah kiri/kanan, Home, End berpindah tab (pola tablist).
+  window.cpTabKey = function (e) {
+    const keys = { ArrowRight: 1, ArrowLeft: -1, Home: 'first', End: 'last' };
+    if (!(e.key in keys)) return;
+    e.preventDefault(); e.stopPropagation();
+    const names = CP_TABS.map(t => t[0]), cur = names.indexOf(cpTabName((ui.cpTab || {}).name || 'ringkasan'));
+    const k = keys[e.key], next = k === 'first' ? 0 : k === 'last' ? names.length - 1 : (cur + k + names.length) % names.length;
+    window.cpTab(names[next], true);
   };
 
   // ── Reminder makan di profil klien (T-73) — semua klien ──────────
@@ -4935,23 +4921,23 @@
       '<button type="button" class="icon-btn plain" onclick="window.deleteTaskItem(\'' + tid + '\',\'' + mid + '\')" aria-label="Hapus PR">' + icon('trash-2') + '</button></div></div>';
   }
 
+  // Fase AC: kepala bagian ala portal (judul + jumlah + satu tautan "+ PR" di kanan); kosong = satu baris, bukan kotak besar.
   function taskSectionHtml(memberId) {
     const c = window.memberTasks[String(memberId)];
-    const addBtn = '<button type="button" class="btn btn-secondary btn-sm" onclick="window.addTaskFor(\'' + h(memberId) + '\')">' + icon('plus') + 'Tambah</button>';
+    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : 0;
+    const head = '<div class="px-sec cp-sec"><h3>PR</h3><span id="cp-pr-n">' + (nOpen ? nOpen + ' terbuka' : '') + '</span><button type="button" class="cp-link" onclick="window.addTaskFor(\'' + h(memberId) + '\')">' + icon('plus') + 'PR</button></div>';
     let inner;
-    if (!c || c.state === 'loading') inner = skel(3);
-    else if (c.state === 'error') inner = '<p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMemberTasks(\'' + h(memberId) + '\',true)">Coba lagi</button>';
-    else if (!c.list.length) inner = emptyState('inbox', 'Belum ada PR', 'Beri klien tugas di luar gym, misalnya nutrisi atau tidur.');
+    if (!c || c.state === 'loading') inner = '<div class="card cp-card-pad">' + skel(2) + '</div>';
+    else if (c.state === 'error') inner = '<div class="card cp-card-pad"><p class="li-sub">Gagal memuat PR: ' + h(c.error) + '</p><button type="button" class="btn btn-ghost btn-sm" onclick="window.loadMemberTasks(\'' + h(memberId) + '\',true)">Coba lagi</button></div>';
+    else if (!c.list.length) inner = '<p class="cp-empty">Belum ada PR. Beri tugas di luar gym, misalnya tidur atau jalan kaki.</p>';
     else {
       const openL = c.list.filter(t => t.status === 'todo');
       const closedL = c.list.filter(t => t.status !== 'todo');
-      inner = '<div class="list">' + openL.map(t => taskItemHtml(t, memberId)).join('') + '</div>';
-      if (!openL.length) inner = '<p class="li-sub" style="margin-bottom:8px">Semua PR sudah selesai.</p>' + inner;
-      if (closedL.length) inner += '<div class="group-label"><span>Selesai / dilewati (' + closedL.length + ')</span></div><div class="list">' + closedL.slice(0, 5).map(t => taskItemHtml(t, memberId)).join('') + '</div>' +
-        (closedL.length > 5 ? '<p class="li-sub" style="margin-top:8px">+' + (closedL.length - 5) + ' PR lama lainnya</p>' : '');
+      inner = openL.length ? '<div class="list cp-list">' + openL.map(t => taskItemHtml(t, memberId)).join('') + '</div>' : '<p class="cp-empty">Semua PR sudah selesai.</p>';
+      if (closedL.length) inner += foldHtml('Selesai / dilewati', String(closedL.length), '<div class="list">' + closedL.slice(0, 5).map(t => taskItemHtml(t, memberId)).join('') + '</div>' +
+        (closedL.length > 5 ? '<p class="li-sub" style="margin-top:8px">+' + (closedL.length - 5) + ' PR lama lainnya</p>' : ''), false);
     }
-    const nOpen = c && c.state === 'ok' ? c.list.filter(t => t.status === 'todo').length : 0;
-    return '<div class="section-head"><h4 class="section-title">PR (Task)</h4>' + (nOpen ? '<span class="li-sub">' + nOpen + ' terbuka</span>' : '') + addBtn + '</div>' + inner;
+    return head + inner;
   }
 
   function renderTaskSection(memberId) {
@@ -4960,6 +4946,7 @@
     if (wrap) setHTML(wrap, taskSectionHtml(memberId));
     const meta = $('fold-pr-meta'), c = window.memberTasks[String(memberId)];
     if (meta) { const n = c && c.list ? c.list.filter(t => t.status === 'todo').length : 0; meta.textContent = n ? n + ' terbuka' : ''; }
+    paintIcons();
   }
 
   // Fase K2: satu panggilan mengisi PR, progres, perawatan, dan program halaman klien; bagian yang gagal diberi pesan di kartunya.
@@ -5016,6 +5003,35 @@
     ccWrite(c);
   }
   window.ccPatch = ccPatch;
+  // Fase AC: data klien di memori yang masih sama dengan versi server (briefing sesi, isi awal catatan sesi) — tanpa panggilan.
+  // Hanya bila salinan di memori segar (ccFresh: versi sama dengan getAdminMore.memberVers); kalau tidak, pemanggil bertanya ke server.
+  window.ccBundleOf = function (memberId) {
+    const key = String(memberId);
+    if (!ccFresh(key) || !Array.isArray(window.clientNotes[key])) return null;
+    const c = window.careOf ? window.careOf(key) : null;
+    return { care: c, notes: window.clientNotes[key] };
+  };
+  // Catatan sesi baru/ubah: masuk ke daftar catatan klien (maks 10, terbaru dulu) dan salinan perangkat.
+  window.cpNotePut = function (memberId, note) {
+    const key = String(memberId), list = (window.clientNotes[key] || []).filter(n => n.scheduleId !== note.scheduleId);
+    list.push(note);
+    list.sort((a, b) => a.tanggal < b.tanggal ? 1 : a.tanggal > b.tanggal ? -1 : 0);
+    window.clientNotes[key] = list.slice(0, 10);
+    const keep = cc.at[key] ? cc.at[key].ver : '';
+    ccPatch(key, { notes: window.clientNotes[key] });
+    if (cc.at[key]) cc.at[key].ver = keep;   // tulisan sendiri: memori tetap segar untuk catatan ini
+    cpRenderOverview(key);
+  };
+  // Tugas coach yang sudah dikerjakan hilang dari daftar sekarang juga (server menghitung ulang saat bundle berikutnya).
+  function cpTodoDrop(memberId, kind, cond) {
+    if (cond === false) return;
+    const key = String(memberId), t = window.clientTodo[key];
+    if (!Array.isArray(t) || !t.some(r => r.kind === kind)) return;
+    window.clientTodo[key] = t.filter(r => r.kind !== kind);
+    ccPatch(key, { todo: window.clientTodo[key] });
+    cpRenderOverview(key);
+  }
+  window.cpTodoDrop = cpTodoDrop;
   window.clearClientCache = function () { try { localStorage.removeItem(CC_KEY); } catch (e) {} cc.at = {}; cc.inflight = {}; cc.sync = {}; };
   // Paket utuh = semua bagian inti ada dan tanpa error. Salinan yang tidak utuh (mis. dari jawaban null sebelum perbaikan) tidak dipakai dan tidak disimpan.
   function bundleOk(b) {
@@ -5037,6 +5053,9 @@
       window.nutSet(key, bad(b.nutrition) ? Object.assign({ error: msg(b.nutrition) }) : Object.assign({}, b.nutrition, { foodLog: bad(b.foodLog) ? null : b.foodLog }));
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
       shareAdmin[key] = bad(b.share) ? null : b.share;
+      // Fase AC: tugas coach dan catatan sesi terakhir (bagian baru; salinan lama tanpa keduanya tetap dipakai).
+      window.clientTodo[key] = Array.isArray(b.todo) ? b.todo : null;
+      window.clientNotes[key] = Array.isArray(b.notes) ? b.notes : null;
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();
     } finally { cc.applying = false; }
@@ -5073,6 +5092,10 @@
     }).catch(function (err) {
       if (had) { ccSyncPaint(key, { error: window.authMessage(err) }); return; }   // salinan tetap tampil, dengan tanda dan tombol Coba lagi
       const m = window.authMessage(err);
+      // Tanpa bundle: "Tugas coach" tidak menunggu selamanya (disembunyikan sampai berhasil dimuat).
+      if (window.clientTodo[key] === undefined) window.clientTodo[key] = null;
+      if (window.clientNotes[key] === undefined) window.clientNotes[key] = null;
+      cpRenderOverview(key);
       window.memberTasks[key] = { list: [], state: 'error', error: m };
       renderTaskSection(key);
       window.pgSetAdmin(key, { error: m, entries: [], photos: [] });
@@ -5098,11 +5121,23 @@
     });
   };
 
-  // Setelah PR berubah: muat ulang daftar klien ini + pill di daftar klien.
-  function afterTaskChange(memberId) {
-    const p = window.loadMemberTasks(memberId, true);
-    if (window.refreshTaskSummary) window.refreshTaskSummary().then(function () { if (window.currentView === 'clients') renderClientList(); }).catch(function () {});
-    return p;
+  // Setelah PR berubah. Fase AC: jawaban penulis (addTask/updateTask/deleteTask) sudah membawa daftar PR klien ini dan
+  // hitungannya, jadi tidak ada getTasksForMember + getTaskSummary lagi. Jawaban lama (tanpa tasks) = cara lama.
+  function afterTaskChange(memberId, res) {
+    if (!(res && Array.isArray(res.tasks))) {
+      const p = window.loadMemberTasks(memberId, true);
+      if (window.refreshTaskSummary) window.refreshTaskSummary().then(function () { if (window.currentView === 'clients') renderClientList(); }).catch(function () {});
+      return p;
+    }
+    const key = String(res.memberId || memberId);
+    window.memberTasks[key] = { list: res.tasks, state: 'ok' };
+    ccPatch(key, { tasks: res.tasks });
+    const ts = window.taskSummary || (window.taskSummary = {});
+    if (res.taskSummary && res.taskSummary.open) ts[key] = res.taskSummary; else delete ts[key];
+    renderTaskSection(key);
+    cpTodoDrop(key, 'pr', !(res.taskSummary && res.taskSummary.overdue));
+    if (window.currentView === 'clients') renderClientList();
+    return Promise.resolve();
   }
 
   window.toggleTaskDone = function (taskId, memberId, btn) {
@@ -5115,7 +5150,7 @@
     t.status = want;
     paint();
     optimistic({ q: { mode: 'admin', fn: 'updateTask', args: [{ id: taskId, status: want }] }, ok: false, label: 'PR',
-      then: function () { afterTaskChange(memberId); },
+      then: function (res) { afterTaskChange(memberId, res); },
       undo: function () { t.status = was; paint(); } });
   };
 
@@ -5131,7 +5166,7 @@
       c.list.splice(at, 1);
       paint();
       optimistic({ q: { mode: 'admin', fn: 'deleteTask', args: [taskId] }, ok: 'PR dihapus.', label: 'Hapus PR',
-        then: function () { afterTaskChange(memberId); },
+        then: function (res) { afterTaskChange(memberId, res); },
         undo: function () { c.list.splice(Math.min(at, c.list.length), 0, t); paint(); } });
     }, { title: 'Hapus PR?', confirmText: 'Hapus PR', variant: 'danger' });
   };
@@ -5206,9 +5241,13 @@
         '<button type="button" class="icon-btn plain" onclick="window.deleteTaskTemplateItem(\'' + id + '\')" aria-label="Hapus template ' + h(t.title) + '">' + icon('x') + '</button></span>';
     }).join(''));
   }
-  function loadTaskTemplates() {
+  // Fase AC: template dimuat sekali per sesi (dulu tiap lembar PR baru dibuka); disimpan/dihapus = daftar diperbarui di tempat.
+  let taskTplLoaded = false;
+  function loadTaskTemplates(force) {
+    if (taskTplLoaded && !force) { renderTaskTemplates(); return Promise.resolve(); }
     return adminCall('getTaskTemplates').then(function (list) {
       window.taskTemplates = Array.isArray(list) ? list : [];
+      taskTplLoaded = true;
       renderTaskTemplates();
     }).catch(function () { /* form tetap bisa dipakai tanpa template */ });
   }
@@ -5226,7 +5265,7 @@
     const title = $('task-title').value.trim();
     if (!title) { window.showToast('Isi judul dulu untuk dijadikan template.'); $('task-title').focus(); return; }
     optimistic({ q: { mode: 'admin', fn: 'saveTaskTemplate', args: [{ title: title, description: $('task-desc').value.trim(), category: f.category, repeat: f.repeat }] },
-      ok: 'Template disimpan.', label: 'Template PR', then: function () { loadTaskTemplates(); } });
+      ok: 'Template disimpan.', label: 'Template PR', then: function () { loadTaskTemplates(true); } });
   };
   window.deleteTaskTemplateItem = function (id) {
     const t = window.taskTemplates.find(x => String(x.id) === String(id));
@@ -5251,7 +5290,7 @@
     // Keduanya lewat antrean simpan: ubah = upsert, tambah baru dijaga nomor pesanan (Idem.gs), jadi kiriman ulang tidak dobel.
     optimistic(Object.assign(f.id ? { q: { mode: 'admin', fn: 'updateTask', args: [Object.assign({ id: f.id }, data)] } }
       : { q: { mode: 'admin', fn: 'addTask', args: [Object.assign({ memberId: f.memberId }, data)] } },
-      { sheet: true, ok: f.id ? 'PR diperbarui.' : 'PR ditambahkan.', label: 'PR', then: function () { afterTaskChange(f.memberId); } }));
+      { sheet: true, ok: f.id ? 'PR diperbarui.' : 'PR ditambahkan.', label: 'PR', then: function (res) { afterTaskChange(f.memberId, res); } }));
   };
 
   window.openEditProfileModal = function () {
@@ -6227,9 +6266,15 @@
       return Promise.all([w || memberCall('getMyWorkout').then(function (r) { window.myWorkout = { state: 'ok', data: r }; return r; }),
         p || memberCall('getMyProgram').then(function (r) { window.myProgram = { state: 'ok', data: r }; return r; })]);
     }
-    const w = wkAdmin[memberId], p = progAdmin[memberId] && progAdmin[memberId].days ? progAdmin[memberId] : null;
-    return Promise.all([w || adminCall('getWorkoutLog', memberId).then(function (r) { wkAdmin[memberId] = r; return r; }),
-      p || adminCall('getMemberProgram', memberId).then(function (r) { progAdmin[memberId] = r; return r; })]);
+    const have = function () { return [wkAdmin[memberId], progAdmin[memberId] && progAdmin[memberId].days ? progAdmin[memberId] : null]; };
+    const direct = function (x) {
+      return Promise.all([x[0] || adminCall('getWorkoutLog', memberId).then(function (r) { wkAdmin[memberId] = r; return r; }),
+        x[1] || adminCall('getMemberProgram', memberId).then(function (r) { progAdmin[memberId] = r; return r; })]);
+    };
+    const x0 = have();
+    if (x0[0] && x0[1]) return Promise.resolve(x0);
+    // Fase AC: dibuka dari Beranda/Jadwal sebelum halaman klien = satu panggilan bundle (bersalinan) alih-alih dua panggilan terpisah.
+    return window.loadClientBundle(memberId).catch(function () {}).then(function () { return direct(have()); });
   }
   function wlKindGuess(info, sets) {
     if (sets && sets.length) {
@@ -7665,53 +7710,71 @@
           '<p class="li-sub">Motivasi ' + e.motivasi + ' · Keselamatan ' + e.keselamatan + ' · Kepuasan ' + e.kepuasan + ' · Komunikasi ' + e.komunikasi + ' · Profesional ' + e.profesionalisme + '</p>' + (e.komentar ? '<p>' + h(e.komentar) + '</p>' : '') + '</div>'; }).join('') +
       f.ratings.slice(0, 6).map(r => '<div class="row-between" style="gap:8px;align-items:flex-start"><span style="min-width:0"><span class="li-sub">' + h(r.tanggal) + '</span>' + (r.komentar ? '<span style="display:block">' + h(r.komentar) + '</span>' : '') + '</span><span class="num" aria-label="' + r.bintang + ' bintang">' + starsText(r.bintang) + '</span></div>').join('') + '</div>';
   }
-  // Bagian perawatan klien sebagai lipatan: judul + ringkasan satu baris, isi dibuka dengan ketukan.
-  function careOpen(title, summary) {
-    return '<details class="fold"><summary><span>' + h(title) + '<span class="li-sub" style="display:block;font-weight:500">' + h(summary) + '</span></span>' + icon('chevron-down') + '</summary><div class="fold-body stack" style="gap:6px">';
-  }
+  // Fase AC: tab Data = hub ala "Saya" di portal. Tiap ubin menunjukkan statusnya dan membuka lembarnya sendiri.
   function careInner(memberId) {
     const d = care[memberId];
-    if (!d) return '<p class="li-sub">Memuat catatan klien…</p>';
-    if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    if (!d) return '<div class="px-tiles cp-tiles">' + '<div class="px-tile skel" style="min-height:6.5rem"></div>'.repeat(4) + '</div>';
+    if (d.error) return '<div class="card cp-card-pad">' + errorState(d.error, "window.loadClientBundle('" + h(memberId) + "', { force: true })") + '</div>';
     const m = window.members.find(x => String(x.id) === String(memberId)) || {};
-    // Dua kolom di panel lebar PC (.cp-col = display:contents di HP, jadi urutan & tampilan sama).
-    let html = '<div class="cp-col">' + careOpen('Catatan privat', d.flag ? 'Perlu perhatian' : (d.notes ? 'Ada catatan' : 'Belum ada catatan')) + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareNotes(\'' + h(memberId) + '\')">Ubah</button></div>' +
-      (d.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(d.flag) + '</p>' : '') +
-      (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') + '</div></details>';
-    html += feedbackAdminHtml(d.feedback);
-    html += careOpen('Kesehatan', !d.health ? 'Belum mengisi form' : (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau'));
-    if (!d.health) {
-      html += '<p class="li-sub">Belum mengisi form.</p><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">Kirim pengingat</button>';
-    } else {
-      const yes = d.health.answers.filter(a => a === 'ya').length, extra = d.health.injuries || d.health.medication || d.health.other;
-      html += '<p>' + (yes || extra ? '<b>Ada hal yang perlu dibaca</b>' : 'Tidak ada catatan') + ' <span class="li-sub">· ' + h(d.health.tanggal) + '</span></p>' +
-        '<p class="li-sub">' + (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau') + '</p>' +
-        '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareHealth(\'' + h(memberId) + '\')">Lihat jawaban</button>';
-    }
-    html += '</div></details></div><div class="cp-col">';
-    html += careOpen('Assessment', d.assessment ? 'Sudah diisi' : 'Belum diisi') + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openAssessment(\'' + h(memberId) + '\')">' + (d.assessment ? 'Ubah' : 'Isi') + '</button></div>';
-    if (d.assessment) {
-      const a = d.assessment;
-      html += (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
-      const ex = [['Lemak', a.bodyFat, '%'], ['Pinggul', a.hip, ' cm'], ['Dada (lama)', a.chest, ' cm'], ['Lengan (lama)', a.arm, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
-      if (ex.length) html += careRow('Ukuran', h(ex.join(' · ')));
-    } else html += '<p class="li-sub">Belum diisi.</p>';
-    html += '</div></details>';
-    html += careOpen('Tes kebugaran', d.tests.length ? d.tests.length + ' tes' : 'Belum ada hasil') + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareTests(\'' + h(memberId) + '\')">' + icon('plus') + 'Tes</button></div>' +
-      (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') +
-        '<button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="window.sendTestResult(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim hasil via WA</button>' : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div></details>';
-    return html + '</div>';
+    const id = h(memberId);
+    const goal = String(m.goal || '').split('|')[0].trim();
+    const tile = (onclick, ic, title, sub, warn) => '<button type="button" class="px-tile cp-tile" onclick="' + onclick + '">' + icon(ic) + '<b>' + h(title) + '</b>' + (sub ? '<span' + (warn ? ' class="warn"' : '') + '>' + h(sub) + '</span>' : '') + '</button>';
+    const hl = d.health;
+    const healthSub = !hl ? 'Belum mengisi form' : hl.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau';
+    const f = d.feedback || { ratings: [], evals: [] };
+    const avg = f.ratings.length ? f.ratings.reduce((a, r) => a + (Number(r.bintang) || 0), 0) / f.ratings.length : 0;
+    const remOn = REMIND_TYPES.filter(t => (m.reminderOff || []).indexOf(t[0]) === -1).length + (m.mealReminder !== false ? 1 : 0);
+    let tiles = tile('window.openEditProfileModal()', 'user-round', 'Profil', [m.joinDate ? 'Sejak ' + m.joinDate : '', d.birthDate ? 'lahir ' + d.birthDate : ''].filter(String).join(' · ') || 'Nama, nomor, tujuan');
+    tiles += tile(hl ? "window.openCareHealth('" + id + "')" : "window.cpHealthRemind('" + id + "')", 'heart-pulse', 'Kesehatan', hl ? healthSub : 'Belum mengisi · ketuk untuk mengingatkan', !!hl && !hl.reviewedAt);
+    tiles += tile("window.openAssessment('" + id + "')", 'clipboard-list', 'Assessment', d.assessment ? 'Diisi ' + (d.assessment.tanggal || '') : 'Belum diisi');
+    tiles += tile("window.openCareNotes('" + id + "')", 'notebook-pen', 'Catatan privat', d.flag ? d.flag : (d.notes ? 'Ada catatan' : 'Belum ada catatan'), !!d.flag);
+    tiles += tile("window.cpFeedback('" + id + "')", 'star', 'Masukan klien', f.ratings.length ? '★ ' + String(Math.round(avg * 10) / 10).replace('.', ',') + ' · ' + f.ratings.length + ' rating' : (f.evals.length ? f.evals.length + ' evaluasi' : 'Belum ada'));
+    tiles += tile("window.cpRemind('" + id + "')", 'bell-ring', 'Pengingat WhatsApp', remOn + ' aktif');
+    return '<div class="px-sec cp-sec"><h3>Data klien</h3><span>' + (goal ? h(goal) : '') + '</span></div><div class="px-tiles cp-tiles">' + tiles + '</div>';
+  }
+  // Tes kebugaran: di tab Progres (Fase AC; dulu lipatan di bagian perawatan). Tambah tes dan kirim hasil ada di menu ⋯.
+  function testsInner(memberId) {
+    const d = care[memberId];
+    if (!d || d.error) return '';
+    const tests = d.tests || [];
+    return '<div class="px-sec cp-sec"><h3>Tes kebugaran</h3><span>' + (tests.length ? tests.length + ' tes' : '') + '</span></div>' +
+      (tests.length ? '<div class="card cp-card-pad stack" style="gap:6px">' + tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') + '</div>'
+        : '<p class="cp-empty">Belum ada hasil tes. Tambah lewat menu ⋯.</p>');
+  }
+  window.cpTestsInner = testsInner;
+  window.cpFeedback = function (memberId) {
+    const d = care[memberId] || {};
+    setHTML('cp-feedback-body', feedbackAdminHtml(d.feedback) || '<p class="li-sub">Belum ada rating atau evaluasi dari klien ini.</p>');
+    openSheet('sheet-cp-feedback');
+  };
+  window.cpRemind = function (memberId) {
+    const m = window.members.find(x => String(x.id) === String(memberId));
+    if (!m) return;
+    setHTML('cp-remind-body', '<div class="stack" style="gap:12px">' + mealToggleHtml(m) + reminderPrefsHtml(m) + '</div>');
+    openSheet('sheet-cp-remind');
+  };
+  // Ingatkan mengisi form kesehatan (wa.me; teks yang sama seperti dulu di lipatan perawatan).
+  window.cpHealthRemind = function (memberId) {
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    window.sendToParentWA(m.phone || '', 'Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.');
+  };
+  function careRender(memberId) {
+    const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId);
+    const t = $('profile-tests-wrap'); if (t && t.getAttribute('data-member') === String(memberId)) t.innerHTML = testsInner(memberId);
+    paintIcons();
   }
   window.careSet = function (memberId, d) {
     care[memberId] = d;
     if (d && !d.error) window.ccPatch(memberId, { care: d });
-    const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId);
-    paintIcons();
+    careRender(memberId);
   };
+  window.careOf = function (memberId) { return care[String(memberId)] || null; };
   window.loadClientCare = function (memberId) {
     return adminCall('getClientCare', memberId).then(function (d) { care[memberId] = d; window.ccPatch(memberId, { care: d }); }).catch(function (err) { care[memberId] = { error: err.message }; })
-      .then(function () { const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId); paintIcons(); });
+      .then(function () { careRender(memberId); });
   };
+  // Fase AC: penulis perawatan menjawab dengan data perawatan segar; tanpa itu (versi server lama) dimuat seperti dulu.
+  function careFromWrite(memberId, res) { if (res && res.care && !res.care.error) window.careSet(memberId, res.care); else window.loadClientCare(memberId); }
   window.clearCareCache = function () { Object.keys(care).forEach(k => delete care[k]); };
 
   // ── Gizi (Phase P, T-1003): angka dan input gizi satu klien. Privat: hanya panel admin. ──
@@ -7801,9 +7864,20 @@
     const row = btn && btn.closest('.stack');
     if (row) row.classList.add('hide');
     optimistic({ q: { mode: 'admin', fn: 'decideNutritionAdvice', args: [memberId, adviceId, decision] }, ok: decision === 'setuju' ? 'Target disesuaikan.' : 'Saran ditolak.', label: 'Saran gizi',
-      then: function () { window._hubAt = 0; loadHub(); window.loadClientNutrition(memberId); },
+      then: function (res) {
+        nutFromWrite(memberId, res);
+        // Beranda Coach: dimuat ulang hanya bila sedang dibuka; kalau tidak, ditandai basi dan dimuat saat dibuka.
+        window._hubAt = 0;
+        if (window.currentView === 'coaches') loadHub();
+      },
       undo: function () { if (row) row.classList.remove('hide'); } });
   };
+  // Fase AC: penulis gizi menjawab dengan data gizi segar; catatan makan tetap dari salinan yang ada.
+  function nutFromWrite(memberId, res) {
+    if (res && res.nutrition && !res.nutrition.error) window.nutSet(memberId, Object.assign({}, res.nutrition, { foodLog: (nut[memberId] && nut[memberId].foodLog) || null }));
+    else window.loadClientNutrition(memberId);
+    cpTodoDrop(memberId, 'gizi', !(res && res.nutrition && res.nutrition.advice && res.nutrition.advice.pending));
+  }
   window.nutSet = function (memberId, d) {
     nut[memberId] = d;
     if (d && !d.error) { const x = Object.assign({}, d); delete x.foodLog; window.ccPatch(memberId, { nutrition: x, foodLog: d.foodLog || null }); }
@@ -7836,7 +7910,7 @@
     const id = nutMember;
     optimistic({ q: { mode: 'admin', fn: 'saveClientNutrition', args: [id, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), umur: $('nut-umur').value.trim(), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
       pantangan: nutPicked('nut-tags'), kondisi: nutPicked('nut-kondisi'), aktif: $('nut-aktif').checked }] },
-      sheet: true, ok: 'Data gizi disimpan.', label: 'Data gizi', then: function () { window.loadClientNutrition(id); } });
+      sheet: true, ok: 'Data gizi disimpan.', label: 'Data gizi', then: function (res) { nutFromWrite(id, res); } });
   };
   function careDone(memberId, msg) { window.closeModal(); window.showToast(msg); return window.loadClientCare(memberId); }
   let careMember = '';
@@ -7852,7 +7926,7 @@
     const old = care[id];
     if (old && !old.error) window.careSet(id, Object.assign({}, old, data));
     optimistic({ q: { mode: 'admin', fn: 'saveClientNotes', args: [id, data] }, sheet: true, ok: 'Catatan disimpan.', label: 'Catatan klien',
-      then: function () { window.loadClientCare(id); },
+      then: function (res) { careFromWrite(id, res); },
       undo: function () { if (old) window.careSet(id, old); } });
   };
   window.openAssessment = function (id) {
@@ -7873,9 +7947,11 @@
     const first = !((old || {}).tests || []).length;
     if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.hip }) }));
     optimistic({ q: { mode: 'admin', fn: 'saveAssessment', args: [id, data] }, sheet: true, ok: 'Assessment disimpan.', label: 'Assessment',
-      then: function () {
-        if (window.pgLoadAdmin) window.pgLoadAdmin(id);
-        window.loadClientCare(id);
+      then: function (res) {
+        // Ukuran badan di assessment masuk ke Progres: hanya saat ada ukuran yang diisi, progres dimuat ulang.
+        if (window.pgLoadAdmin && ['weight', 'waist', 'lenganKanan', 'lenganKiri', 'perut', 'pahaKanan', 'pahaKiri', 'dada'].some(k => data[k] !== '')) window.pgLoadAdmin(id);
+        careFromWrite(id, res);
+        cpTodoDrop(id, 'assessment');
         // Assessment pertama: lembar tes dibuka, kecuali jawabannya baru datang lama kemudian (mis. setelah sinyal kembali).
         if (first && Date.now() - at < 20000 && !ui.sheetOn) setTimeout(function () { window.openCareTests(id); }, 250);
       },
@@ -7982,13 +8058,29 @@
   window.markReviewed = function () {
     // Antrean simpan: lembar tertutup sekarang, status tinjauan dimuat ulang dari server sesudahnya.
     const id = careMember;
+    cpTodoDrop(id, 'kesehatan');
     optimistic({ q: { mode: 'admin', fn: 'markHealthReviewed', args: [id, $('care-review-note').value] }, sheet: true, ok: 'Ditandai sudah ditinjau.', label: 'Tinjau form kesehatan',
-      then: function () { window.loadClientCare(id); } });
+      then: function (res) { careFromWrite(id, res); } });
   };
 
   // Briefing di atas detail sesi
+  // Fase AC: dari data klien yang sudah ada di perangkat (perawatan + catatan sesi di bundle), tanpa panggilan; bila klien belum
+  // pernah dibuka di perangkat ini, getSessionBriefing seperti dulu.
+  function briefingLocal(scheduleId) {
+    const s = schedById(scheduleId);
+    if (!s || !s.memberId) return null;
+    const b = window.ccBundleOf ? window.ccBundleOf(s.memberId) : null;
+    if (!b || !b.care || b.care.error || !Array.isArray(b.notes)) return null;
+    const c = b.care;
+    let lastTest = null;
+    (c.tests || []).forEach(function (t) { if (t.latest && (!lastTest || t.latest.tanggal > lastTest.tanggal)) lastTest = { label: t.label, unit: t.unit, nilai: t.latest.nilai, tanggal: t.latest.tanggal }; });
+    const prev = b.notes.filter(n => n.scheduleId !== String(s.id) && (n.dilatih || n.fokus))[0];
+    return { flag: c.flag || '', notes: c.notes || '', goal: c.assessment ? c.assessment.goal || '' : '', lastTest: lastTest, healthPending: !!c.health && !c.health.reviewedAt,
+      lastNote: prev ? { tanggal: prev.tanggal, dilatih: prev.dilatih, fokus: prev.fokus, rpe: prev.rpe } : null };
+  }
   window.loadSessionBriefing = function (scheduleId) {
-    adminCall('getSessionBriefing', scheduleId).then(function (b) {
+    const local = briefingLocal(scheduleId);
+    (local ? Promise.resolve(local) : adminCall('getSessionBriefing', scheduleId)).then(function (b) {
       const el = $('detail-briefing');
       if (!el || !(b.flag || b.notes || b.goal || b.lastTest || b.healthPending || b.lastNote)) return;
       el.innerHTML = '<div class="card-flat stack" style="gap:4px"><p class="eyebrow">Briefing</p>' +
@@ -8018,11 +8110,20 @@
     pk.classList.toggle('hide', !(result && result.packageDone));
     pk.onclick = result && result.packageDone ? function () { window.waToClient(s, result.evalText); } : null;
     openSheet('modal-session-note');
-    adminCall('getSessionNote', s.id).then(function (n) {
+    // Fase AC: catatan dari bundle klien di perangkat (10 terakhir) bila ada; sesi lama / klien belum dibuka = getSessionNote.
+    const b = window.ccBundleOf ? window.ccBundleOf(s.memberId) : null;
+    const local = b && Array.isArray(b.notes) ? b.notes.find(n => n.scheduleId === String(s.id)) : undefined;
+    const newest = b && Array.isArray(b.notes) && b.notes.length < 10;   // daftar lengkap: tidak ada catatan = memang belum ada
+    (local || newest ? Promise.resolve(local || {}) : adminCall('getSessionNote', s.id)).then(function (n) {
       if (noteSched !== s) return;
-      if (!$('sn-dilatih').value && !$('sn-fokus').value) { $('sn-dilatih').value = n.dilatih || ''; $('sn-fokus').value = n.fokus || ''; $('sn-rpe').value = n.rpe === '' ? '' : n.rpe; $('sn-pribadi').value = n.pribadi || ''; }
+      if (!$('sn-dilatih').value && !$('sn-fokus').value) { $('sn-dilatih').value = n.dilatih || ''; $('sn-fokus').value = n.fokus || ''; $('sn-rpe').value = n.rpe === '' || n.rpe == null ? '' : n.rpe; $('sn-pribadi').value = n.pribadi || ''; }
     }).catch(function () {});
   };
+  // Catatan yang baru disimpan langsung masuk ke catatan klien di memori dan salinan perangkat (briefing, "Fokus terakhir").
+  function noteRemember(s, note) {
+    if (!s || !s.memberId || !window.cpNotePut) return;
+    window.cpNotePut(s.memberId, { scheduleId: String(s.id), memberId: String(s.memberId), tanggal: ymd(new Date(s.start)), dilatih: note.dilatih, fokus: note.fokus, rpe: note.rpe === '' ? '' : Number(note.rpe), pribadi: note.pribadi });
+  }
   // Jawaban completeSession datang setelah lembar terbuka: pasang tombol evaluasi paket bila paket habis.
   window.sessionNoteResult = function (scheduleId, result) {
     if (!noteSched || String(noteSched.id) !== String(scheduleId) || !result || !result.packageDone) return;
@@ -8042,6 +8143,7 @@
       const done = busy($('sn-wa-btn'), 'Menyimpan…');
       adminCall('saveSessionNote', s.id, note).then(function (r) {
         done(); window.closeModal(); window.showToast('Catatan sesi disimpan.');
+        noteRemember(s, note);
         // waLink dibuat server dari nomor profil klien yang sekarang (bukan salinan di jadwal).
         setTimeout(function () {
           const mm = /^https:\/\/wa\.me\/(\d{8,})/.exec(String((r && r.waLink) || ''));
@@ -8050,6 +8152,7 @@
       }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
       return;
     }
+    noteRemember(s, note);
     optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, errEl: 'sn-err', ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
   };
 
@@ -8815,7 +8918,18 @@
       window.renewals = (window.renewals || []).filter(x => x.id !== id);
       window.renderDashboard();
       optimistic({ q: { mode: 'admin', fn: 'decideRenewal', args: [id, approve] }, ok: approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.', label: approve ? 'Setujui perpanjangan' : 'Tolak perpanjangan',
-        then: function () { Promise.resolve(approve ? window.loadAllData() : null).then(function () { return window.loadRenewals(); }).catch(function () {}); },
+        // Fase AC: setuju = jawaban membawa klien yang sudah diperbarui (paket baru langsung tampil); data panel (transaksi,
+        // pendapatan, daftar permintaan) dimuat ulang sekali di latar. Tolak = tidak ada yang perlu dimuat ulang.
+        then: function (res) {
+          window.cpTodoDrop(r.memberId, 'perpanjang');
+          if (!approve) return;
+          if (res && res.member) {
+            const i = window.members.findIndex(x => String(x.id) === String(res.member.id));
+            if (i !== -1) window.members[i] = Object.assign({}, window.members[i], res.member);
+            window.updateUI();
+          }
+          window.loadAllData().catch(function () {});
+        },
         undo: function () { window.renewals = (window.renewals || []).concat([r]); window.renderDashboard(); } });
     }, approve ? { title: 'Setujui perpanjangan?', confirmText: 'Setujui' } : { title: 'Tolak permintaan?', confirmText: 'Tolak', variant: 'danger' });
   };
@@ -9688,17 +9802,24 @@
   // Panel coach: kartu di tab Latihan klien.
   // Kartu coach untuk program otomatis kini bagian dari kartu Program (programAdminInner0).
   function pgAdminApply(id, g) { pgAdminGen[id] = g; window.ccPatch(id, { programGen: g }); renderProgramAdmin(id); }
+  // Fase AC: jawaban setClientProgramAuto / regenerateProgram membawa program tersimpan (r.program); tanpa itu = getMemberProgram seperti dulu.
+  function pgAdminFromWrite(id, r) {
+    const p = r && r.program;
+    if (r) delete r.program;
+    pgAdminApply(id, r);
+    return p && !p.error ? Promise.resolve(p) : adminCall('getMemberProgram', id);
+  }
   window.pgAdminRegen = function (id) {
     const g = pgAdminGen[id];
-    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
+    const go = function () { adminCall('regenerateProgram', id).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
     if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
   };
-  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(waitErr(e)); }); };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); }); };
   window.pgAdminTag = function (id, t) {
     const g = pgAdminGen[id]; if (!g) return;
     const list = (g.pantangan || []).slice(), i = list.indexOf(t);
     if (i !== -1) list.splice(i, 1); else list.push(t);
-    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); });
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); });
   };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
@@ -13506,6 +13627,186 @@
     el.innerHTML = '<span class="ro-ic" aria-hidden="true">' + icon('lock') + '</span><div class="ro-tx"><b>Mode baca saja</b><span>' + h(txt) + '</span>' + note + '</div>';
     el.classList.remove('hide');
     paintIcons();
+  };
+  // ═══ Fase AC (T-2303): halaman klien di panel coach ═══
+  // Satu kartu hitam (identitas, sisa sesi, empat aksi) di bawah kepala ber-nama klien; Ringkasan ala "Hari ini" portal:
+  // Sesi berikutnya, Tugas coach (dihitung server, bundle `todo`), Minggu ini, PR, Sesi. Semua yang jarang dipakai ada di ⋯.
+  // Hanya panel coach; portal tidak memakai fungsi di sini (kelas CSS-nya dipinjam dari portal: .px-sec, .todo, .week-x, .px-tiles).
+
+  function cpSessionsOf(memberId) {
+    return window.schedules.filter(s => String(s.memberId) === String(memberId) && !isAvailable(s));
+  }
+  function cpUpcoming(memberId) {
+    const now = Date.now();
+    return cpSessionsOf(memberId).filter(s => !isDone(s) && new Date(s.end || s.start).getTime() >= now).sort(byStart);
+  }
+  // "1 hari lagi", "3 jam lagi", "Sedang berlangsung" — hitungan mundur ala kartu sesi portal.
+  function cpCountdown(s) {
+    const st = new Date(s.start).getTime(), en = new Date(s.end || s.start).getTime(), now = Date.now();
+    if (now >= st && now < en) return 'Sedang berlangsung';
+    const d = st - now;
+    if (d < 0) return 'Belum ditandai selesai';
+    const mins = Math.round(d / 60000), hrs = Math.floor(mins / 60), days = Math.floor(hrs / 24);
+    if (days >= 1) return days + ' hari ' + (hrs % 24 ? (hrs % 24) + ' jam ' : '') + 'lagi';
+    if (hrs >= 1) return hrs + ' jam ' + (mins % 60 ? (mins % 60) + ' menit ' : '') + 'lagi';
+    return Math.max(1, mins) + ' menit lagi';
+  }
+
+  // ── Kartu klien: satu-satunya kartu hitam; aksi utama selalu di sini (HP: empat ubin; PC: satu baris) ──
+  function cpCardHtml(m) {
+    const id = h(m.id), total = Number(m.totalSessions) || 0, rem = remainingOf(m);
+    const done = cpSessionsOf(m.id).filter(isDone).length;
+    const goal = String(m.goal || '').split('|')[0].trim();
+    const nx = cpUpcoming(m.id)[0];
+    const pct = total ? Math.min(100, Math.round(rem / total * 100)) : 100;
+    const st = clientState(m);
+    const act = (cls, ic, label, js, extra) => '<button type="button" class="btn cp-act' + (cls ? ' ' + cls : '') + '" onclick="' + js + '"' + (extra || '') + '>' + icon(ic) + '<span>' + label + '</span></button>';
+    return '<section class="card-ink client-hero cp-card gfx-kontur" aria-label="' + h(m.name) + '">' +
+      '<div class="client-hero-id cp-id">' + avatar(m.photo, m.name, 'lg') + '<div class="grow"><div class="cp-tags">' + statePillHtml(m) + (m.packageName ? '<span class="pill">' + h(m.packageName) + '</span>' : '') + '</div>' +
+        (goal ? '<p class="cp-goal">' + h(goal) + '</p>' : '') + '<p class="cp-phone" id="profile-phone">+' + h(m.phone) + '</p></div></div>' +
+      '<div class="cp-left">' + (total ? '<p class="cp-left-t"><b class="num" id="profile-remaining">' + rem + '</b><span> dari <span id="profile-total">' + total + '</span> sesi</span><span class="cp-left-n"> · ' + done + ' selesai</span></p>'
+          : '<p class="cp-left-t"><b>Tanpa batas sesi</b><span class="cp-left-n"> · ' + done + ' selesai</span><span class="hide" id="profile-remaining">' + rem + '</span><span class="hide" id="profile-total">0</span></p>') +
+        '<div class="meter cp-meter' + (st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
+        (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') + '</div>' +
+      '<div class="client-hero-actions cp-acts">' +
+        act('', 'message-circle', 'Chat WA', "window.sendToParentWA(this.getAttribute('data-wa'),'')", ' data-wa="' + h(m.phone) + '"') +
+        act('', 'calendar-plus', 'Booking', "window.openBookingSheet({memberId:'" + id + "'})") +
+        act('cp-act-main', 'play', 'Mulai latihan', "window.workoutOpenAdmin('" + id + "')") +
+        act('', 'scale', 'Catat ukuran', "window.pgOpenEntry('admin','" + id + "')") +
+      '</div></section>';
+  }
+
+  // ── Ringkasan kiri: Sesi berikutnya + Tugas coach ──
+  function cpHighlightHtml(m) { return cpNextHtml(m) + cpTodoHtml(m); }
+  function cpNextHtml(m) {
+    const id = String(m.id), up = cpUpcoming(id), nx = up[0];
+    const head = '<div class="px-sec cp-sec"><h3>Sesi berikutnya</h3><span>' + (up.length > 1 ? up.length + ' terjadwal' : '') + '</span></div>';
+    if (!nx) return head + '<div class="card cp-card-pad cp-next none"><p class="cp-next-when">Belum ada jadwal</p><p class="li-sub">Booking sesi berikutnya supaya klien tetap rutin.</p></div>';
+    const d = new Date(nx.start), today = ymd(d) === ymd(new Date());
+    const wd = wkAdmin[id], plan = wd && wd.next ? wd.next : '';
+    const notes = window.clientNotes[id] || [];
+    const prev = notes.filter(n => n.scheduleId !== String(nx.id) && (n.fokus || n.dilatih))[0];
+    const q = h(nx.id);
+    const btns = today ? sessActions(nx.id, { phone: m.phone }) :
+      '<div class="sess-actions" onclick="event.stopPropagation()"><button type="button" class="btn btn-outline" onclick="window.quickEdit(\'' + q + '\')">' + icon('calendar-clock') + 'Ubah</button>' +
+      (m.phone ? '<button type="button" class="btn btn-outline" onclick="window.quickWa(\'' + q + '\')" aria-label="Chat WhatsApp klien">' + icon('message-circle') + 'WA</button>' : '') + '</div>';
+    return head + '<div class="card cp-card-pad cp-next" role="button" tabindex="0" onclick="window.openScheduleDetail(\'' + q + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
+      '<p class="cp-next-when">' + h(fmtDate(d)) + ' · ' + fmtTime(d) + '</p><p class="cp-next-cd">' + h(cpCountdown(nx)) + '</p>' +
+      ((plan || prev) ? '<div class="cp-next-info">' + (plan ? '<p>' + icon('dumbbell') + '<span><b>Rencana:</b> ' + h(plan) + '</span></p>' : '') +
+        (prev ? '<p>' + icon('target') + '<span><b>Fokus terakhir:</b> ' + h(prev.fokus || prev.dilatih) + ' <span class="li-sub">(' + h(pgLabel(prev.tanggal)) + ')</span></span></p>' : '') + '</div>' : '') +
+      btns + '</div>';
+  }
+  const CP_TODO_ICON = { perpanjang: 'refresh-cw', paket: 'package', catatan: 'alert-triangle', kesehatan: 'heart-pulse', pr: 'list-checks', gizi: 'utensils', inaktif: 'message-circle',
+    booking: 'calendar-plus', rating: 'star', timbang: 'scale', program: 'dumbbell', tes: 'timer', assessment: 'clipboard-list', 'form-kesehatan': 'heart-pulse' };
+  function cpTodoHtml(m) {
+    const t = window.clientTodo[String(m.id)];
+    if (t === null) return '';   // salinan lama tanpa bagian ini: tidak ditampilkan sampai bundle berikutnya
+    const head = '<div class="px-sec cp-sec"><h3>Tugas coach</h3><span>' + (t && t.length ? t.length + ' hal' : '') + '</span></div>';
+    if (t === undefined) return head + '<div class="card cp-card-pad">' + skel(2) + '</div>';
+    if (!t.length) return head + '<p class="cp-empty">' + icon('check-check') + ' Semua beres untuk klien ini.</p>';
+    const id = h(m.id);
+    return head + '<div class="card todo cp-todo">' + t.map(function (x) {
+      return '<button type="button" class="todo-row' + (x.danger ? ' danger' : '') + '" data-kind="' + h(x.kind) + '" onclick="window.cpTodoGo(\'' + id + '\',\'' + h(x.kind) + '\',\'' + h(x.ref || '') + '\')">' +
+        '<span class="cp-todo-ic" aria-hidden="true">' + icon(CP_TODO_ICON[x.kind] || 'circle') + '</span><span class="todo-txt"><span class="todo-title">' + h(x.title) + '</span>' + (x.sub ? '<span class="todo-sub">' + h(x.sub) + '</span>' : '') + '</span>' +
+        (x.act ? '<span class="todo-act">' + h(x.act) + '</span>' : icon('chevron-right')) + '</button>';
+    }).join('') + '</div>';
+  }
+  window.cpTodoGo = function (memberId, kind, ref) {
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    const wa = () => window.sendToParentWA(m.phone || '', '');
+    const go = {
+      perpanjang: () => cpRenewSheet(memberId, ref), paket: wa, inaktif: wa, timbang: wa,
+      catatan: () => window.openCareNotes(memberId), kesehatan: () => window.openCareHealth(memberId), 'form-kesehatan': () => window.cpHealthRemind(memberId),
+      pr: () => { window.cpTab('ringkasan'); const el = $('profile-tasks-wrap'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+      gizi: () => window.cpTab('gizi'), booking: () => window.openBookingSheet({ memberId: memberId }), rating: () => window.cpFeedback(memberId),
+      program: () => window.openProgramEditor(memberId), tes: () => window.openCareTests(memberId), assessment: () => window.openAssessment(memberId)
+    }[kind];
+    if (go) go();
+  };
+  // "Minta perpanjang": keputusan lewat alur yang sama dengan kartu Beranda (renewalDecide, antrean simpan).
+  function cpRenewSheet(memberId, ref) {
+    const r = (window.renewals || []).find(x => String(x.id) === String(ref)) || (window.renewals || []).find(x => String(x.memberId) === String(memberId) && x.status === 'menunggu');
+    if (!r) { window.showToast('Permintaan ini sudah diputuskan.'); window.cpTodoDrop(memberId, 'perpanjang'); return; }
+    $('cpm-title').textContent = 'Minta perpanjang';
+    setHTML('cpm-body', '<div class="stack" style="gap:14px"><div class="card-flat stack" style="gap:2px"><p class="li-title">' + h(r.packageName || 'Paket') + '</p><p class="li-sub">' + h(formatRp(r.harga)) + ' · diminta ' + h(fmtShort(new Date(r.createdAt))) + '</p></div>' +
+      '<p class="hint">Setujui setelah pembayaran diterima: sesi klien direset sesuai paket dan transaksi dicatat.</p>' +
+      '<div class="btn-row"><button type="button" class="btn btn-outline" onclick="window.cpRenewGo(\'' + h(r.id) + '\', false)">Tolak</button><button type="button" class="btn btn-primary" onclick="window.cpRenewGo(\'' + h(r.id) + '\', true)">' + icon('check') + 'Setujui</button></div></div>');
+    openSheet('sheet-cp-more');
+  }
+  window.cpRenewGo = function (id, approve) { window.closeModal(); setTimeout(function () { window.renewalDecide(id, approve); }, 120); };
+
+  // ── Minggu ini: strip 7 hari ala portal (sesi coach / latihan tercatat = penuh, sesi terjadwal = setengah) ──
+  function cpWeekHtml(m) {
+    const id = String(m.id), now = new Date(), today = ymd(now);
+    const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const lvl = {};
+    cpSessionsOf(id).forEach(function (s) { const k = ymd(new Date(s.start)); lvl[k] = Math.max(lvl[k] || 0, isDone(s) ? 2 : 1); });
+    const wd = wkAdmin[id];
+    ((wd && wd.days) || []).forEach(function (d) { lvl[d.tanggal] = 2; });
+    const ins = window.clientInsight[id], wk = ins && !ins.error ? ins.week : null;
+    const sum = wk ? wk.sessionsDone + ' sesi · ' + wk.workoutDays + ' latihan' + (wk.foodDays != null ? ' · makan ' + wk.foodDays + '/7' : '') : '';
+    let strip = '<div class="week-x">';
+    ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].forEach(function (n, i) {
+      const k = ymd(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)), l = lvl[k] || 0;
+      strip += '<div class="' + (l ? 'l' + l : '') + (k === today ? ' now' : '') + '"><i></i>' + n + '</div>';
+    });
+    strip += '</div>';
+    const g = sigOf(m), bits = [];
+    if (g && g.weightDelta != null) bits.push('Berat 30 hari <b class="num">' + h((g.weightDelta > 0 ? '+' : g.weightDelta < 0 ? '−' : '') + String(Math.abs(g.weightDelta)).replace('.', ',')) + ' kg</b>');
+    if (g && g.lastDone) bits.push('Terakhir latihan <b>' + h(fmtShort(new Date(g.lastDone + 'T12:00:00+07:00'))) + '</b>');
+    return '<div class="px-sec cp-sec"><h3>Minggu ini</h3><span>' + h(sum) + '</span></div><div class="card cp-card-pad">' + strip +
+      (bits.length ? '<p class="cp-week-foot">' + bits.join('<span aria-hidden="true"> · </span>') + '</p>' : '') + '</div>';
+  }
+
+  // ── Sesi: Mendatang | Riwayat, baris ringkas (ketuk = detail sesi) ──
+  const cps = { seg: 'up', all: false, member: '' };
+  function cpSessHtml(m) {
+    if (cps.member !== String(m.id)) { cps.member = String(m.id); cps.seg = 'up'; cps.all = false; }   // klien lain: mulai dari Mendatang
+    const ss = cpSessionsOf(m.id), now = Date.now();
+    const up = ss.filter(s => !isDone(s) && new Date(s.end || s.start).getTime() >= now).sort(byStart);
+    const past = ss.filter(s => !(!isDone(s) && new Date(s.end || s.start).getTime() >= now)).sort((a, b) => new Date(b.start) - new Date(a.start));
+    const seg = cps.seg === 'past' ? 'past' : 'up', list = seg === 'past' ? past : up, max = cps.all ? list.length : 8;
+    const btn = (k, label, n) => '<button type="button" class="' + (seg === k ? 'active' : '') + '" aria-pressed="' + (seg === k) + '" onclick="window.cpSessSeg(\'' + k + '\')">' + label + ' <span class="num">' + n + '</span></button>';
+    const stOf = s => isDone(s) ? ['Selesai', ''] : new Date(s.end || s.start).getTime() < now ? ['Belum selesai', ' warn'] : String(s.status) === 'unread' ? ['Baru', ' solid'] : ['Terjadwal', ''];
+    const rows = list.slice(0, max).map(function (s) {
+      const d = new Date(s.start), st = stOf(s);
+      return '<button type="button" class="cp-row" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')"><span class="cp-row-d"><b>' + h(fmtShort(d)) + '</b><span class="num">' + fmtTime(d) + '</span></span>' +
+        '<span class="grow cp-row-t truncate">' + h(s.notes || 'Sesi latihan') + '</span><span class="pill cp-row-st' + st[1] + '">' + st[0] + '</span>' + icon('chevron-right') + '</button>';
+    }).join('');
+    return '<div class="px-sec cp-sec"><h3>Sesi</h3><div class="seg cp-seg" role="group" aria-label="Sesi">' + btn('up', 'Mendatang', up.length) + btn('past', 'Riwayat', past.length) + '</div></div>' +
+      '<div class="card cp-list-card"' + (seg === 'past' ? ' id="profile-history"' : '') + '>' + (rows || '<p class="cp-empty">' + (seg === 'past' ? 'Belum ada riwayat latihan.' : 'Belum ada jadwal mendatang.') + '</p>') +
+      (list.length > max ? '<button type="button" class="cp-row cp-row-more" onclick="window.cpSessAll()">Tampilkan semua (' + list.length + ')</button>' : '') + '</div>';
+  }
+  function cpSessPaint() { const el = $('cp-sess'), m = window.members.find(x => String(x.id) === String(window.selectedMemberId)); if (el && m) { setHTML(el, cpSessHtml(m)); paintIcons(); } }
+  window.cpSessSeg = function (k) { cps.seg = k; cps.all = false; cpSessPaint(); };
+  window.cpSessAll = function () { cps.all = true; cpSessPaint(); };
+
+  // ── Menu ⋯: semua aksi yang jarang dipakai, dikelompokkan, di satu tempat yang sama di setiap tab ──
+  let cpmMember = '';
+  window.cpMore = function (memberId) {
+    cpmMember = String(memberId);
+    const c = window.careOf ? window.careOf(memberId) : null, wd = wkAdmin[cpmMember];
+    const row = (k, ic, label, sub, danger) => '<button type="button" class="cpm-row' + (danger ? ' danger' : '') + '" onclick="window.cpMoreGo(\'' + k + '\')">' + icon(ic) + '<span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + icon('chevron-right') + '</button>';
+    const group = (title, rows) => rows ? '<div class="cpm-group"><p class="cpm-h">' + h(title) + '</p><div class="cpm-list">' + rows + '</div></div>' : '';
+    const send = (wd && wd.days && wd.days.length ? row('wa-latihan', 'message-circle', 'Ringkasan latihan', 'Latihan terakhir yang dicatat') : '') +
+      (c && !c.error && (c.tests || []).length ? row('wa-tes', 'message-circle', 'Hasil tes', 'Hasil tes kebugaran terakhir') : '') +
+      (c && !c.error && !c.health ? row('wa-form', 'message-circle', 'Pengingat form kesehatan', 'Minta klien mengisi form') : '');
+    $('cpm-title').textContent = 'Menu klien';
+    setHTML('cpm-body', group('Tambah', row('pr', 'list-plus', 'PR baru', '') + row('tes', 'timer', 'Tes kebugaran', '') + row('foto', 'camera', 'Foto progres', '') + row('lewat', 'calendar-check', 'Latihan yang lewat', 'Catat latihan hari sebelumnya') + row('catatan', 'notebook-pen', 'Catatan privat', '')) +
+      group('Kirim lewat WhatsApp', send) +
+      (window.shareOn !== false ? group('Bagikan', row('bagikan', 'share-2', 'Bagikan kartu', 'Latihan, progres, rekap, badge')) : '') +
+      group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('hapus', 'trash-2', 'Hapus klien', '', true)));
+    openSheet('sheet-cp-more');
+  };
+  window.cpMoreGo = function (k) {
+    const id = cpmMember;
+    const go = {
+      pr: () => window.addTaskFor(id), tes: () => window.openCareTests(id), foto: () => window.pgOpenPhotos('admin', id), lewat: () => window.workoutOpenAdmin(id, '', '', true), catatan: () => window.openCareNotes(id),
+      'wa-latihan': () => window.workoutSummaryWA(id), 'wa-tes': () => window.sendTestResult(id), 'wa-form': () => window.cpHealthRemind(id),
+      bagikan: () => window.shareCard('latihan', id), ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal()
+    }[k];
+    window.closeModal();
+    if (go) setTimeout(go, 120);
   };
 })();
 </script>

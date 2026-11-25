@@ -506,53 +506,71 @@
           '<p class="li-sub">Motivasi ' + e.motivasi + ' · Keselamatan ' + e.keselamatan + ' · Kepuasan ' + e.kepuasan + ' · Komunikasi ' + e.komunikasi + ' · Profesional ' + e.profesionalisme + '</p>' + (e.komentar ? '<p>' + h(e.komentar) + '</p>' : '') + '</div>'; }).join('') +
       f.ratings.slice(0, 6).map(r => '<div class="row-between" style="gap:8px;align-items:flex-start"><span style="min-width:0"><span class="li-sub">' + h(r.tanggal) + '</span>' + (r.komentar ? '<span style="display:block">' + h(r.komentar) + '</span>' : '') + '</span><span class="num" aria-label="' + r.bintang + ' bintang">' + starsText(r.bintang) + '</span></div>').join('') + '</div>';
   }
-  // Bagian perawatan klien sebagai lipatan: judul + ringkasan satu baris, isi dibuka dengan ketukan.
-  function careOpen(title, summary) {
-    return '<details class="fold"><summary><span>' + h(title) + '<span class="li-sub" style="display:block;font-weight:500">' + h(summary) + '</span></span>' + icon('chevron-down') + '</summary><div class="fold-body stack" style="gap:6px">';
-  }
+  // Fase AC: tab Data = hub ala "Saya" di portal. Tiap ubin menunjukkan statusnya dan membuka lembarnya sendiri.
   function careInner(memberId) {
     const d = care[memberId];
-    if (!d) return '<p class="li-sub">Memuat catatan klien…</p>';
-    if (d.error) return '<p class="li-sub">Gagal memuat: ' + h(d.error) + '</p>';
+    if (!d) return '<div class="px-tiles cp-tiles">' + '<div class="px-tile skel" style="min-height:6.5rem"></div>'.repeat(4) + '</div>';
+    if (d.error) return '<div class="card cp-card-pad">' + errorState(d.error, "window.loadClientBundle('" + h(memberId) + "', { force: true })") + '</div>';
     const m = window.members.find(x => String(x.id) === String(memberId)) || {};
-    // Dua kolom di panel lebar PC (.cp-col = display:contents di HP, jadi urutan & tampilan sama).
-    let html = '<div class="cp-col">' + careOpen('Catatan privat', d.flag ? 'Perlu perhatian' : (d.notes ? 'Ada catatan' : 'Belum ada catatan')) + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareNotes(\'' + h(memberId) + '\')">Ubah</button></div>' +
-      (d.flag ? '<p style="font-weight:700">' + icon('alert-triangle', 'style="width:15px;height:15px;vertical-align:-2px"') + ' ' + h(d.flag) + '</p>' : '') +
-      (d.notes ? '<p>' + h(d.notes) + '</p>' : (d.flag ? '' : '<p class="li-sub">Belum ada catatan.</p>')) + (d.birthDate ? '<p class="li-sub">Lahir ' + h(d.birthDate) + '</p>' : '') + '</div></details>';
-    html += feedbackAdminHtml(d.feedback);
-    html += careOpen('Kesehatan', !d.health ? 'Belum mengisi form' : (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau'));
-    if (!d.health) {
-      html += '<p class="li-sub">Belum mengisi form.</p><button type="button" class="btn btn-outline btn-sm" data-wa="' + h(m.phone || '') + '" data-text="' + h('Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.') + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">Kirim pengingat</button>';
-    } else {
-      const yes = d.health.answers.filter(a => a === 'ya').length, extra = d.health.injuries || d.health.medication || d.health.other;
-      html += '<p>' + (yes || extra ? '<b>Ada hal yang perlu dibaca</b>' : 'Tidak ada catatan') + ' <span class="li-sub">· ' + h(d.health.tanggal) + '</span></p>' +
-        '<p class="li-sub">' + (d.health.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau') + '</p>' +
-        '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareHealth(\'' + h(memberId) + '\')">Lihat jawaban</button>';
-    }
-    html += '</div></details></div><div class="cp-col">';
-    html += careOpen('Assessment', d.assessment ? 'Sudah diisi' : 'Belum diisi') + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openAssessment(\'' + h(memberId) + '\')">' + (d.assessment ? 'Ubah' : 'Isi') + '</button></div>';
-    if (d.assessment) {
-      const a = d.assessment;
-      html += (a.goal ? careRow('Tujuan', h(a.goal)) : '') + (a.history ? careRow('Riwayat', h(a.history)) : '') + (a.schedulePref ? careRow('Jadwal', h(a.schedulePref)) : '') + (a.motivation ? careRow('Motivasi', h(a.motivation)) : '') + (a.coachNotes ? careRow('Catatan coach', h(a.coachNotes)) : '');
-      const ex = [['Lemak', a.bodyFat, '%'], ['Pinggul', a.hip, ' cm'], ['Dada (lama)', a.chest, ' cm'], ['Lengan (lama)', a.arm, ' cm']].filter(x => x[1] !== '' && x[1] != null).map(x => x[0] + ' ' + x[1] + x[2]);
-      if (ex.length) html += careRow('Ukuran', h(ex.join(' · ')));
-    } else html += '<p class="li-sub">Belum diisi.</p>';
-    html += '</div></details>';
-    html += careOpen('Tes kebugaran', d.tests.length ? d.tests.length + ' tes' : 'Belum ada hasil') + '<div class="row-between"><span></span><button type="button" class="btn btn-secondary btn-sm" onclick="window.openCareTests(\'' + h(memberId) + '\')">' + icon('plus') + 'Tes</button></div>' +
-      (d.tests.length ? d.tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') +
-        '<button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="window.sendTestResult(\'' + h(memberId) + '\')">' + icon('message-circle') + 'Kirim hasil via WA</button>' : '<p class="li-sub">Belum ada hasil tes.</p>') + '</div></details>';
-    return html + '</div>';
+    const id = h(memberId);
+    const goal = String(m.goal || '').split('|')[0].trim();
+    const tile = (onclick, ic, title, sub, warn) => '<button type="button" class="px-tile cp-tile" onclick="' + onclick + '">' + icon(ic) + '<b>' + h(title) + '</b>' + (sub ? '<span' + (warn ? ' class="warn"' : '') + '>' + h(sub) + '</span>' : '') + '</button>';
+    const hl = d.health;
+    const healthSub = !hl ? 'Belum mengisi form' : hl.reviewedAt ? 'Sudah ditinjau' : 'Belum ditinjau';
+    const f = d.feedback || { ratings: [], evals: [] };
+    const avg = f.ratings.length ? f.ratings.reduce((a, r) => a + (Number(r.bintang) || 0), 0) / f.ratings.length : 0;
+    const remOn = REMIND_TYPES.filter(t => (m.reminderOff || []).indexOf(t[0]) === -1).length + (m.mealReminder !== false ? 1 : 0);
+    let tiles = tile('window.openEditProfileModal()', 'user-round', 'Profil', [m.joinDate ? 'Sejak ' + m.joinDate : '', d.birthDate ? 'lahir ' + d.birthDate : ''].filter(String).join(' · ') || 'Nama, nomor, tujuan');
+    tiles += tile(hl ? "window.openCareHealth('" + id + "')" : "window.cpHealthRemind('" + id + "')", 'heart-pulse', 'Kesehatan', hl ? healthSub : 'Belum mengisi · ketuk untuk mengingatkan', !!hl && !hl.reviewedAt);
+    tiles += tile("window.openAssessment('" + id + "')", 'clipboard-list', 'Assessment', d.assessment ? 'Diisi ' + (d.assessment.tanggal || '') : 'Belum diisi');
+    tiles += tile("window.openCareNotes('" + id + "')", 'notebook-pen', 'Catatan privat', d.flag ? d.flag : (d.notes ? 'Ada catatan' : 'Belum ada catatan'), !!d.flag);
+    tiles += tile("window.cpFeedback('" + id + "')", 'star', 'Masukan klien', f.ratings.length ? '★ ' + String(Math.round(avg * 10) / 10).replace('.', ',') + ' · ' + f.ratings.length + ' rating' : (f.evals.length ? f.evals.length + ' evaluasi' : 'Belum ada'));
+    tiles += tile("window.cpRemind('" + id + "')", 'bell-ring', 'Pengingat WhatsApp', remOn + ' aktif');
+    return '<div class="px-sec cp-sec"><h3>Data klien</h3><span>' + (goal ? h(goal) : '') + '</span></div><div class="px-tiles cp-tiles">' + tiles + '</div>';
+  }
+  // Tes kebugaran: di tab Progres (Fase AC; dulu lipatan di bagian perawatan). Tambah tes dan kirim hasil ada di menu ⋯.
+  function testsInner(memberId) {
+    const d = care[memberId];
+    if (!d || d.error) return '';
+    const tests = d.tests || [];
+    return '<div class="px-sec cp-sec"><h3>Tes kebugaran</h3><span>' + (tests.length ? tests.length + ' tes' : '') + '</span></div>' +
+      (tests.length ? '<div class="card cp-card-pad stack" style="gap:6px">' + tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') + '</div>'
+        : '<p class="cp-empty">Belum ada hasil tes. Tambah lewat menu ⋯.</p>');
+  }
+  window.cpTestsInner = testsInner;
+  window.cpFeedback = function (memberId) {
+    const d = care[memberId] || {};
+    setHTML('cp-feedback-body', feedbackAdminHtml(d.feedback) || '<p class="li-sub">Belum ada rating atau evaluasi dari klien ini.</p>');
+    openSheet('sheet-cp-feedback');
+  };
+  window.cpRemind = function (memberId) {
+    const m = window.members.find(x => String(x.id) === String(memberId));
+    if (!m) return;
+    setHTML('cp-remind-body', '<div class="stack" style="gap:12px">' + mealToggleHtml(m) + reminderPrefsHtml(m) + '</div>');
+    openSheet('sheet-cp-remind');
+  };
+  // Ingatkan mengisi form kesehatan (wa.me; teks yang sama seperti dulu di lipatan perawatan).
+  window.cpHealthRemind = function (memberId) {
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    window.sendToParentWA(m.phone || '', 'Hai ' + (m.name || '') + ', tolong isi form kesehatan singkat di ' + 'https://book.xnkbooking.my.id (Beranda → Form kesehatan) sebelum sesi ya.');
+  };
+  function careRender(memberId) {
+    const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId);
+    const t = $('profile-tests-wrap'); if (t && t.getAttribute('data-member') === String(memberId)) t.innerHTML = testsInner(memberId);
+    paintIcons();
   }
   window.careSet = function (memberId, d) {
     care[memberId] = d;
     if (d && !d.error) window.ccPatch(memberId, { care: d });
-    const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId);
-    paintIcons();
+    careRender(memberId);
   };
+  window.careOf = function (memberId) { return care[String(memberId)] || null; };
   window.loadClientCare = function (memberId) {
     return adminCall('getClientCare', memberId).then(function (d) { care[memberId] = d; window.ccPatch(memberId, { care: d }); }).catch(function (err) { care[memberId] = { error: err.message }; })
-      .then(function () { const w = $('profile-care-wrap'); if (w && w.getAttribute('data-member') === String(memberId)) w.innerHTML = careInner(memberId); paintIcons(); });
+      .then(function () { careRender(memberId); });
   };
+  // Fase AC: penulis perawatan menjawab dengan data perawatan segar; tanpa itu (versi server lama) dimuat seperti dulu.
+  function careFromWrite(memberId, res) { if (res && res.care && !res.care.error) window.careSet(memberId, res.care); else window.loadClientCare(memberId); }
   window.clearCareCache = function () { Object.keys(care).forEach(k => delete care[k]); };
 
   // ── Gizi (Phase P, T-1003): angka dan input gizi satu klien. Privat: hanya panel admin. ──
@@ -642,9 +660,20 @@
     const row = btn && btn.closest('.stack');
     if (row) row.classList.add('hide');
     optimistic({ q: { mode: 'admin', fn: 'decideNutritionAdvice', args: [memberId, adviceId, decision] }, ok: decision === 'setuju' ? 'Target disesuaikan.' : 'Saran ditolak.', label: 'Saran gizi',
-      then: function () { window._hubAt = 0; loadHub(); window.loadClientNutrition(memberId); },
+      then: function (res) {
+        nutFromWrite(memberId, res);
+        // Beranda Coach: dimuat ulang hanya bila sedang dibuka; kalau tidak, ditandai basi dan dimuat saat dibuka.
+        window._hubAt = 0;
+        if (window.currentView === 'coaches') loadHub();
+      },
       undo: function () { if (row) row.classList.remove('hide'); } });
   };
+  // Fase AC: penulis gizi menjawab dengan data gizi segar; catatan makan tetap dari salinan yang ada.
+  function nutFromWrite(memberId, res) {
+    if (res && res.nutrition && !res.nutrition.error) window.nutSet(memberId, Object.assign({}, res.nutrition, { foodLog: (nut[memberId] && nut[memberId].foodLog) || null }));
+    else window.loadClientNutrition(memberId);
+    cpTodoDrop(memberId, 'gizi', !(res && res.nutrition && res.nutrition.advice && res.nutrition.advice.pending));
+  }
   window.nutSet = function (memberId, d) {
     nut[memberId] = d;
     if (d && !d.error) { const x = Object.assign({}, d); delete x.foodLog; window.ccPatch(memberId, { nutrition: x, foodLog: d.foodLog || null }); }
@@ -677,7 +706,7 @@
     const id = nutMember;
     optimistic({ q: { mode: 'admin', fn: 'saveClientNutrition', args: [id, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), umur: $('nut-umur').value.trim(), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
       pantangan: nutPicked('nut-tags'), kondisi: nutPicked('nut-kondisi'), aktif: $('nut-aktif').checked }] },
-      sheet: true, ok: 'Data gizi disimpan.', label: 'Data gizi', then: function () { window.loadClientNutrition(id); } });
+      sheet: true, ok: 'Data gizi disimpan.', label: 'Data gizi', then: function (res) { nutFromWrite(id, res); } });
   };
   function careDone(memberId, msg) { window.closeModal(); window.showToast(msg); return window.loadClientCare(memberId); }
   let careMember = '';
@@ -693,7 +722,7 @@
     const old = care[id];
     if (old && !old.error) window.careSet(id, Object.assign({}, old, data));
     optimistic({ q: { mode: 'admin', fn: 'saveClientNotes', args: [id, data] }, sheet: true, ok: 'Catatan disimpan.', label: 'Catatan klien',
-      then: function () { window.loadClientCare(id); },
+      then: function (res) { careFromWrite(id, res); },
       undo: function () { if (old) window.careSet(id, old); } });
   };
   window.openAssessment = function (id) {
@@ -714,9 +743,11 @@
     const first = !((old || {}).tests || []).length;
     if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.hip }) }));
     optimistic({ q: { mode: 'admin', fn: 'saveAssessment', args: [id, data] }, sheet: true, ok: 'Assessment disimpan.', label: 'Assessment',
-      then: function () {
-        if (window.pgLoadAdmin) window.pgLoadAdmin(id);
-        window.loadClientCare(id);
+      then: function (res) {
+        // Ukuran badan di assessment masuk ke Progres: hanya saat ada ukuran yang diisi, progres dimuat ulang.
+        if (window.pgLoadAdmin && ['weight', 'waist', 'lenganKanan', 'lenganKiri', 'perut', 'pahaKanan', 'pahaKiri', 'dada'].some(k => data[k] !== '')) window.pgLoadAdmin(id);
+        careFromWrite(id, res);
+        cpTodoDrop(id, 'assessment');
         // Assessment pertama: lembar tes dibuka, kecuali jawabannya baru datang lama kemudian (mis. setelah sinyal kembali).
         if (first && Date.now() - at < 20000 && !ui.sheetOn) setTimeout(function () { window.openCareTests(id); }, 250);
       },
@@ -823,13 +854,29 @@
   window.markReviewed = function () {
     // Antrean simpan: lembar tertutup sekarang, status tinjauan dimuat ulang dari server sesudahnya.
     const id = careMember;
+    cpTodoDrop(id, 'kesehatan');
     optimistic({ q: { mode: 'admin', fn: 'markHealthReviewed', args: [id, $('care-review-note').value] }, sheet: true, ok: 'Ditandai sudah ditinjau.', label: 'Tinjau form kesehatan',
-      then: function () { window.loadClientCare(id); } });
+      then: function (res) { careFromWrite(id, res); } });
   };
 
   // Briefing di atas detail sesi
+  // Fase AC: dari data klien yang sudah ada di perangkat (perawatan + catatan sesi di bundle), tanpa panggilan; bila klien belum
+  // pernah dibuka di perangkat ini, getSessionBriefing seperti dulu.
+  function briefingLocal(scheduleId) {
+    const s = schedById(scheduleId);
+    if (!s || !s.memberId) return null;
+    const b = window.ccBundleOf ? window.ccBundleOf(s.memberId) : null;
+    if (!b || !b.care || b.care.error || !Array.isArray(b.notes)) return null;
+    const c = b.care;
+    let lastTest = null;
+    (c.tests || []).forEach(function (t) { if (t.latest && (!lastTest || t.latest.tanggal > lastTest.tanggal)) lastTest = { label: t.label, unit: t.unit, nilai: t.latest.nilai, tanggal: t.latest.tanggal }; });
+    const prev = b.notes.filter(n => n.scheduleId !== String(s.id) && (n.dilatih || n.fokus))[0];
+    return { flag: c.flag || '', notes: c.notes || '', goal: c.assessment ? c.assessment.goal || '' : '', lastTest: lastTest, healthPending: !!c.health && !c.health.reviewedAt,
+      lastNote: prev ? { tanggal: prev.tanggal, dilatih: prev.dilatih, fokus: prev.fokus, rpe: prev.rpe } : null };
+  }
   window.loadSessionBriefing = function (scheduleId) {
-    adminCall('getSessionBriefing', scheduleId).then(function (b) {
+    const local = briefingLocal(scheduleId);
+    (local ? Promise.resolve(local) : adminCall('getSessionBriefing', scheduleId)).then(function (b) {
       const el = $('detail-briefing');
       if (!el || !(b.flag || b.notes || b.goal || b.lastTest || b.healthPending || b.lastNote)) return;
       el.innerHTML = '<div class="card-flat stack" style="gap:4px"><p class="eyebrow">Briefing</p>' +

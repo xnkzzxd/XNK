@@ -25,7 +25,18 @@
       window.renewals = (window.renewals || []).filter(x => x.id !== id);
       window.renderDashboard();
       optimistic({ q: { mode: 'admin', fn: 'decideRenewal', args: [id, approve] }, ok: approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.', label: approve ? 'Setujui perpanjangan' : 'Tolak perpanjangan',
-        then: function () { Promise.resolve(approve ? window.loadAllData() : null).then(function () { return window.loadRenewals(); }).catch(function () {}); },
+        // Fase AC: setuju = jawaban membawa klien yang sudah diperbarui (paket baru langsung tampil); data panel (transaksi,
+        // pendapatan, daftar permintaan) dimuat ulang sekali di latar. Tolak = tidak ada yang perlu dimuat ulang.
+        then: function (res) {
+          window.cpTodoDrop(r.memberId, 'perpanjang');
+          if (!approve) return;
+          if (res && res.member) {
+            const i = window.members.findIndex(x => String(x.id) === String(res.member.id));
+            if (i !== -1) window.members[i] = Object.assign({}, window.members[i], res.member);
+            window.updateUI();
+          }
+          window.loadAllData().catch(function () {});
+        },
         undo: function () { window.renewals = (window.renewals || []).concat([r]); window.renderDashboard(); } });
     }, approve ? { title: 'Setujui perpanjangan?', confirmText: 'Setujui' } : { title: 'Tolak permintaan?', confirmText: 'Tolak', variant: 'danger' });
   };

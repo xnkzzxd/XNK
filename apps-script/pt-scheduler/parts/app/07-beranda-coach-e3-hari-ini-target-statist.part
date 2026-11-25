@@ -664,9 +664,15 @@
       return Promise.all([w || memberCall('getMyWorkout').then(function (r) { window.myWorkout = { state: 'ok', data: r }; return r; }),
         p || memberCall('getMyProgram').then(function (r) { window.myProgram = { state: 'ok', data: r }; return r; })]);
     }
-    const w = wkAdmin[memberId], p = progAdmin[memberId] && progAdmin[memberId].days ? progAdmin[memberId] : null;
-    return Promise.all([w || adminCall('getWorkoutLog', memberId).then(function (r) { wkAdmin[memberId] = r; return r; }),
-      p || adminCall('getMemberProgram', memberId).then(function (r) { progAdmin[memberId] = r; return r; })]);
+    const have = function () { return [wkAdmin[memberId], progAdmin[memberId] && progAdmin[memberId].days ? progAdmin[memberId] : null]; };
+    const direct = function (x) {
+      return Promise.all([x[0] || adminCall('getWorkoutLog', memberId).then(function (r) { wkAdmin[memberId] = r; return r; }),
+        x[1] || adminCall('getMemberProgram', memberId).then(function (r) { progAdmin[memberId] = r; return r; })]);
+    };
+    const x0 = have();
+    if (x0[0] && x0[1]) return Promise.resolve(x0);
+    // Fase AC: dibuka dari Beranda/Jadwal sebelum halaman klien = satu panggilan bundle (bersalinan) alih-alih dua panggilan terpisah.
+    return window.loadClientBundle(memberId).catch(function () {}).then(function () { return direct(have()); });
   }
   function wlKindGuess(info, sets) {
     if (sets && sets.length) {

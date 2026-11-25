@@ -1,0 +1,182 @@
+  // ═══ Fase AC (T-2303): halaman klien di panel coach ═══
+  // Satu kartu hitam (identitas, sisa sesi, empat aksi) di bawah kepala ber-nama klien; Ringkasan ala "Hari ini" portal:
+  // Sesi berikutnya, Tugas coach (dihitung server, bundle `todo`), Minggu ini, PR, Sesi. Semua yang jarang dipakai ada di ⋯.
+  // Hanya panel coach; portal tidak memakai fungsi di sini (kelas CSS-nya dipinjam dari portal: .px-sec, .todo, .week-x, .px-tiles).
+
+  function cpSessionsOf(memberId) {
+    return window.schedules.filter(s => String(s.memberId) === String(memberId) && !isAvailable(s));
+  }
+  function cpUpcoming(memberId) {
+    const now = Date.now();
+    return cpSessionsOf(memberId).filter(s => !isDone(s) && new Date(s.end || s.start).getTime() >= now).sort(byStart);
+  }
+  // "1 hari lagi", "3 jam lagi", "Sedang berlangsung" — hitungan mundur ala kartu sesi portal.
+  function cpCountdown(s) {
+    const st = new Date(s.start).getTime(), en = new Date(s.end || s.start).getTime(), now = Date.now();
+    if (now >= st && now < en) return 'Sedang berlangsung';
+    const d = st - now;
+    if (d < 0) return 'Belum ditandai selesai';
+    const mins = Math.round(d / 60000), hrs = Math.floor(mins / 60), days = Math.floor(hrs / 24);
+    if (days >= 1) return days + ' hari ' + (hrs % 24 ? (hrs % 24) + ' jam ' : '') + 'lagi';
+    if (hrs >= 1) return hrs + ' jam ' + (mins % 60 ? (mins % 60) + ' menit ' : '') + 'lagi';
+    return Math.max(1, mins) + ' menit lagi';
+  }
+
+  // ── Kartu klien: satu-satunya kartu hitam; aksi utama selalu di sini (HP: empat ubin; PC: satu baris) ──
+  function cpCardHtml(m) {
+    const id = h(m.id), total = Number(m.totalSessions) || 0, rem = remainingOf(m);
+    const done = cpSessionsOf(m.id).filter(isDone).length;
+    const goal = String(m.goal || '').split('|')[0].trim();
+    const nx = cpUpcoming(m.id)[0];
+    const pct = total ? Math.min(100, Math.round(rem / total * 100)) : 100;
+    const st = clientState(m);
+    const act = (cls, ic, label, js, extra) => '<button type="button" class="btn cp-act' + (cls ? ' ' + cls : '') + '" onclick="' + js + '"' + (extra || '') + '>' + icon(ic) + '<span>' + label + '</span></button>';
+    return '<section class="card-ink client-hero cp-card gfx-kontur" aria-label="' + h(m.name) + '">' +
+      '<div class="client-hero-id cp-id">' + avatar(m.photo, m.name, 'lg') + '<div class="grow"><div class="cp-tags">' + statePillHtml(m) + (m.packageName ? '<span class="pill">' + h(m.packageName) + '</span>' : '') + '</div>' +
+        (goal ? '<p class="cp-goal">' + h(goal) + '</p>' : '') + '<p class="cp-phone" id="profile-phone">+' + h(m.phone) + '</p></div></div>' +
+      '<div class="cp-left">' + (total ? '<p class="cp-left-t"><b class="num" id="profile-remaining">' + rem + '</b><span> dari <span id="profile-total">' + total + '</span> sesi</span><span class="cp-left-n"> · ' + done + ' selesai</span></p>'
+          : '<p class="cp-left-t"><b>Tanpa batas sesi</b><span class="cp-left-n"> · ' + done + ' selesai</span><span class="hide" id="profile-remaining">' + rem + '</span><span class="hide" id="profile-total">0</span></p>') +
+        '<div class="meter cp-meter' + (st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
+        (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') + '</div>' +
+      '<div class="client-hero-actions cp-acts">' +
+        act('', 'message-circle', 'Chat WA', "window.sendToParentWA(this.getAttribute('data-wa'),'')", ' data-wa="' + h(m.phone) + '"') +
+        act('', 'calendar-plus', 'Booking', "window.openBookingSheet({memberId:'" + id + "'})") +
+        act('cp-act-main', 'play', 'Mulai latihan', "window.workoutOpenAdmin('" + id + "')") +
+        act('', 'scale', 'Catat ukuran', "window.pgOpenEntry('admin','" + id + "')") +
+      '</div></section>';
+  }
+
+  // ── Ringkasan kiri: Sesi berikutnya + Tugas coach ──
+  function cpHighlightHtml(m) { return cpNextHtml(m) + cpTodoHtml(m); }
+  function cpNextHtml(m) {
+    const id = String(m.id), up = cpUpcoming(id), nx = up[0];
+    const head = '<div class="px-sec cp-sec"><h3>Sesi berikutnya</h3><span>' + (up.length > 1 ? up.length + ' terjadwal' : '') + '</span></div>';
+    if (!nx) return head + '<div class="card cp-card-pad cp-next none"><p class="cp-next-when">Belum ada jadwal</p><p class="li-sub">Booking sesi berikutnya supaya klien tetap rutin.</p></div>';
+    const d = new Date(nx.start), today = ymd(d) === ymd(new Date());
+    const wd = wkAdmin[id], plan = wd && wd.next ? wd.next : '';
+    const notes = window.clientNotes[id] || [];
+    const prev = notes.filter(n => n.scheduleId !== String(nx.id) && (n.fokus || n.dilatih))[0];
+    const q = h(nx.id);
+    const btns = today ? sessActions(nx.id, { phone: m.phone }) :
+      '<div class="sess-actions" onclick="event.stopPropagation()"><button type="button" class="btn btn-outline" onclick="window.quickEdit(\'' + q + '\')">' + icon('calendar-clock') + 'Ubah</button>' +
+      (m.phone ? '<button type="button" class="btn btn-outline" onclick="window.quickWa(\'' + q + '\')" aria-label="Chat WhatsApp klien">' + icon('message-circle') + 'WA</button>' : '') + '</div>';
+    return head + '<div class="card cp-card-pad cp-next" role="button" tabindex="0" onclick="window.openScheduleDetail(\'' + q + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
+      '<p class="cp-next-when">' + h(fmtDate(d)) + ' · ' + fmtTime(d) + '</p><p class="cp-next-cd">' + h(cpCountdown(nx)) + '</p>' +
+      ((plan || prev) ? '<div class="cp-next-info">' + (plan ? '<p>' + icon('dumbbell') + '<span><b>Rencana:</b> ' + h(plan) + '</span></p>' : '') +
+        (prev ? '<p>' + icon('target') + '<span><b>Fokus terakhir:</b> ' + h(prev.fokus || prev.dilatih) + ' <span class="li-sub">(' + h(pgLabel(prev.tanggal)) + ')</span></span></p>' : '') + '</div>' : '') +
+      btns + '</div>';
+  }
+  const CP_TODO_ICON = { perpanjang: 'refresh-cw', paket: 'package', catatan: 'alert-triangle', kesehatan: 'heart-pulse', pr: 'list-checks', gizi: 'utensils', inaktif: 'message-circle',
+    booking: 'calendar-plus', rating: 'star', timbang: 'scale', program: 'dumbbell', tes: 'timer', assessment: 'clipboard-list', 'form-kesehatan': 'heart-pulse' };
+  function cpTodoHtml(m) {
+    const t = window.clientTodo[String(m.id)];
+    if (t === null) return '';   // salinan lama tanpa bagian ini: tidak ditampilkan sampai bundle berikutnya
+    const head = '<div class="px-sec cp-sec"><h3>Tugas coach</h3><span>' + (t && t.length ? t.length + ' hal' : '') + '</span></div>';
+    if (t === undefined) return head + '<div class="card cp-card-pad">' + skel(2) + '</div>';
+    if (!t.length) return head + '<p class="cp-empty">' + icon('check-check') + ' Semua beres untuk klien ini.</p>';
+    const id = h(m.id);
+    return head + '<div class="card todo cp-todo">' + t.map(function (x) {
+      return '<button type="button" class="todo-row' + (x.danger ? ' danger' : '') + '" data-kind="' + h(x.kind) + '" onclick="window.cpTodoGo(\'' + id + '\',\'' + h(x.kind) + '\',\'' + h(x.ref || '') + '\')">' +
+        '<span class="cp-todo-ic" aria-hidden="true">' + icon(CP_TODO_ICON[x.kind] || 'circle') + '</span><span class="todo-txt"><span class="todo-title">' + h(x.title) + '</span>' + (x.sub ? '<span class="todo-sub">' + h(x.sub) + '</span>' : '') + '</span>' +
+        (x.act ? '<span class="todo-act">' + h(x.act) + '</span>' : icon('chevron-right')) + '</button>';
+    }).join('') + '</div>';
+  }
+  window.cpTodoGo = function (memberId, kind, ref) {
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    const wa = () => window.sendToParentWA(m.phone || '', '');
+    const go = {
+      perpanjang: () => cpRenewSheet(memberId, ref), paket: wa, inaktif: wa, timbang: wa,
+      catatan: () => window.openCareNotes(memberId), kesehatan: () => window.openCareHealth(memberId), 'form-kesehatan': () => window.cpHealthRemind(memberId),
+      pr: () => { window.cpTab('ringkasan'); const el = $('profile-tasks-wrap'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+      gizi: () => window.cpTab('gizi'), booking: () => window.openBookingSheet({ memberId: memberId }), rating: () => window.cpFeedback(memberId),
+      program: () => window.openProgramEditor(memberId), tes: () => window.openCareTests(memberId), assessment: () => window.openAssessment(memberId)
+    }[kind];
+    if (go) go();
+  };
+  // "Minta perpanjang": keputusan lewat alur yang sama dengan kartu Beranda (renewalDecide, antrean simpan).
+  function cpRenewSheet(memberId, ref) {
+    const r = (window.renewals || []).find(x => String(x.id) === String(ref)) || (window.renewals || []).find(x => String(x.memberId) === String(memberId) && x.status === 'menunggu');
+    if (!r) { window.showToast('Permintaan ini sudah diputuskan.'); window.cpTodoDrop(memberId, 'perpanjang'); return; }
+    $('cpm-title').textContent = 'Minta perpanjang';
+    setHTML('cpm-body', '<div class="stack" style="gap:14px"><div class="card-flat stack" style="gap:2px"><p class="li-title">' + h(r.packageName || 'Paket') + '</p><p class="li-sub">' + h(formatRp(r.harga)) + ' · diminta ' + h(fmtShort(new Date(r.createdAt))) + '</p></div>' +
+      '<p class="hint">Setujui setelah pembayaran diterima: sesi klien direset sesuai paket dan transaksi dicatat.</p>' +
+      '<div class="btn-row"><button type="button" class="btn btn-outline" onclick="window.cpRenewGo(\'' + h(r.id) + '\', false)">Tolak</button><button type="button" class="btn btn-primary" onclick="window.cpRenewGo(\'' + h(r.id) + '\', true)">' + icon('check') + 'Setujui</button></div></div>');
+    openSheet('sheet-cp-more');
+  }
+  window.cpRenewGo = function (id, approve) { window.closeModal(); setTimeout(function () { window.renewalDecide(id, approve); }, 120); };
+
+  // ── Minggu ini: strip 7 hari ala portal (sesi coach / latihan tercatat = penuh, sesi terjadwal = setengah) ──
+  function cpWeekHtml(m) {
+    const id = String(m.id), now = new Date(), today = ymd(now);
+    const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const lvl = {};
+    cpSessionsOf(id).forEach(function (s) { const k = ymd(new Date(s.start)); lvl[k] = Math.max(lvl[k] || 0, isDone(s) ? 2 : 1); });
+    const wd = wkAdmin[id];
+    ((wd && wd.days) || []).forEach(function (d) { lvl[d.tanggal] = 2; });
+    const ins = window.clientInsight[id], wk = ins && !ins.error ? ins.week : null;
+    const sum = wk ? wk.sessionsDone + ' sesi · ' + wk.workoutDays + ' latihan' + (wk.foodDays != null ? ' · makan ' + wk.foodDays + '/7' : '') : '';
+    let strip = '<div class="week-x">';
+    ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].forEach(function (n, i) {
+      const k = ymd(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)), l = lvl[k] || 0;
+      strip += '<div class="' + (l ? 'l' + l : '') + (k === today ? ' now' : '') + '"><i></i>' + n + '</div>';
+    });
+    strip += '</div>';
+    const g = sigOf(m), bits = [];
+    if (g && g.weightDelta != null) bits.push('Berat 30 hari <b class="num">' + h((g.weightDelta > 0 ? '+' : g.weightDelta < 0 ? '−' : '') + String(Math.abs(g.weightDelta)).replace('.', ',')) + ' kg</b>');
+    if (g && g.lastDone) bits.push('Terakhir latihan <b>' + h(fmtShort(new Date(g.lastDone + 'T12:00:00+07:00'))) + '</b>');
+    return '<div class="px-sec cp-sec"><h3>Minggu ini</h3><span>' + h(sum) + '</span></div><div class="card cp-card-pad">' + strip +
+      (bits.length ? '<p class="cp-week-foot">' + bits.join('<span aria-hidden="true"> · </span>') + '</p>' : '') + '</div>';
+  }
+
+  // ── Sesi: Mendatang | Riwayat, baris ringkas (ketuk = detail sesi) ──
+  const cps = { seg: 'up', all: false, member: '' };
+  function cpSessHtml(m) {
+    if (cps.member !== String(m.id)) { cps.member = String(m.id); cps.seg = 'up'; cps.all = false; }   // klien lain: mulai dari Mendatang
+    const ss = cpSessionsOf(m.id), now = Date.now();
+    const up = ss.filter(s => !isDone(s) && new Date(s.end || s.start).getTime() >= now).sort(byStart);
+    const past = ss.filter(s => !(!isDone(s) && new Date(s.end || s.start).getTime() >= now)).sort((a, b) => new Date(b.start) - new Date(a.start));
+    const seg = cps.seg === 'past' ? 'past' : 'up', list = seg === 'past' ? past : up, max = cps.all ? list.length : 8;
+    const btn = (k, label, n) => '<button type="button" class="' + (seg === k ? 'active' : '') + '" aria-pressed="' + (seg === k) + '" onclick="window.cpSessSeg(\'' + k + '\')">' + label + ' <span class="num">' + n + '</span></button>';
+    const stOf = s => isDone(s) ? ['Selesai', ''] : new Date(s.end || s.start).getTime() < now ? ['Belum selesai', ' warn'] : String(s.status) === 'unread' ? ['Baru', ' solid'] : ['Terjadwal', ''];
+    const rows = list.slice(0, max).map(function (s) {
+      const d = new Date(s.start), st = stOf(s);
+      return '<button type="button" class="cp-row" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')"><span class="cp-row-d"><b>' + h(fmtShort(d)) + '</b><span class="num">' + fmtTime(d) + '</span></span>' +
+        '<span class="grow cp-row-t truncate">' + h(s.notes || 'Sesi latihan') + '</span><span class="pill cp-row-st' + st[1] + '">' + st[0] + '</span>' + icon('chevron-right') + '</button>';
+    }).join('');
+    return '<div class="px-sec cp-sec"><h3>Sesi</h3><div class="seg cp-seg" role="group" aria-label="Sesi">' + btn('up', 'Mendatang', up.length) + btn('past', 'Riwayat', past.length) + '</div></div>' +
+      '<div class="card cp-list-card"' + (seg === 'past' ? ' id="profile-history"' : '') + '>' + (rows || '<p class="cp-empty">' + (seg === 'past' ? 'Belum ada riwayat latihan.' : 'Belum ada jadwal mendatang.') + '</p>') +
+      (list.length > max ? '<button type="button" class="cp-row cp-row-more" onclick="window.cpSessAll()">Tampilkan semua (' + list.length + ')</button>' : '') + '</div>';
+  }
+  function cpSessPaint() { const el = $('cp-sess'), m = window.members.find(x => String(x.id) === String(window.selectedMemberId)); if (el && m) { setHTML(el, cpSessHtml(m)); paintIcons(); } }
+  window.cpSessSeg = function (k) { cps.seg = k; cps.all = false; cpSessPaint(); };
+  window.cpSessAll = function () { cps.all = true; cpSessPaint(); };
+
+  // ── Menu ⋯: semua aksi yang jarang dipakai, dikelompokkan, di satu tempat yang sama di setiap tab ──
+  let cpmMember = '';
+  window.cpMore = function (memberId) {
+    cpmMember = String(memberId);
+    const c = window.careOf ? window.careOf(memberId) : null, wd = wkAdmin[cpmMember];
+    const row = (k, ic, label, sub, danger) => '<button type="button" class="cpm-row' + (danger ? ' danger' : '') + '" onclick="window.cpMoreGo(\'' + k + '\')">' + icon(ic) + '<span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + icon('chevron-right') + '</button>';
+    const group = (title, rows) => rows ? '<div class="cpm-group"><p class="cpm-h">' + h(title) + '</p><div class="cpm-list">' + rows + '</div></div>' : '';
+    const send = (wd && wd.days && wd.days.length ? row('wa-latihan', 'message-circle', 'Ringkasan latihan', 'Latihan terakhir yang dicatat') : '') +
+      (c && !c.error && (c.tests || []).length ? row('wa-tes', 'message-circle', 'Hasil tes', 'Hasil tes kebugaran terakhir') : '') +
+      (c && !c.error && !c.health ? row('wa-form', 'message-circle', 'Pengingat form kesehatan', 'Minta klien mengisi form') : '');
+    $('cpm-title').textContent = 'Menu klien';
+    setHTML('cpm-body', group('Tambah', row('pr', 'list-plus', 'PR baru', '') + row('tes', 'timer', 'Tes kebugaran', '') + row('foto', 'camera', 'Foto progres', '') + row('lewat', 'calendar-check', 'Latihan yang lewat', 'Catat latihan hari sebelumnya') + row('catatan', 'notebook-pen', 'Catatan privat', '')) +
+      group('Kirim lewat WhatsApp', send) +
+      (window.shareOn !== false ? group('Bagikan', row('bagikan', 'share-2', 'Bagikan kartu', 'Latihan, progres, rekap, badge')) : '') +
+      group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('hapus', 'trash-2', 'Hapus klien', '', true)));
+    openSheet('sheet-cp-more');
+  };
+  window.cpMoreGo = function (k) {
+    const id = cpmMember;
+    const go = {
+      pr: () => window.addTaskFor(id), tes: () => window.openCareTests(id), foto: () => window.pgOpenPhotos('admin', id), lewat: () => window.workoutOpenAdmin(id, '', '', true), catatan: () => window.openCareNotes(id),
+      'wa-latihan': () => window.workoutSummaryWA(id), 'wa-tes': () => window.sendTestResult(id), 'wa-form': () => window.cpHealthRemind(id),
+      bagikan: () => window.shareCard('latihan', id), ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal()
+    }[k];
+    window.closeModal();
+    if (go) setTimeout(go, 120);
+  };
+})();
+</script>

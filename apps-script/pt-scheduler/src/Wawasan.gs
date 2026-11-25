@@ -384,3 +384,44 @@ function _insIsoFromDmy_(v) {
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   return m ? m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2) : '';
 }
+
+// ── Tugas coach per klien (Fase AC, T-2301) ────────────────────────────────────
+// Satu daftar "yang perlu dikerjakan coach untuk klien ini" di Ringkasan halaman klien (pola "Tugas hari ini" portal).
+// Aturan perawatan sama dengan _careList_ (Beranda Coach) supaya keduanya tidak berbeda.
+const COACH_TODO = { renewAt: 2, careAfterDays: 3, retestDays: 28, lowRatingDays: 14, maxRows: 8 };
+
+/**
+ * Murni. ctx = { today, total, remaining, joinedDays, lastDone ('yyyy-MM-dd'|''), hasUpcoming, sessionToday, inactiveDays,
+ *   renewal: {id, packageName}|null, overdueTasks, lowRating, health: 'none'|'review'|'ok', assessment, lastTest ('yyyy-MM-dd'|''),
+ *   flag, snoozed, nutrition: {advice, stale}|null, hasProgram }.
+ * Hasil: [{ id, kind, title, sub, act, danger, ref }], yang paling penting dulu, maks COACH_TODO.maxRows.
+ */
+function _coachTodoCalc_(ctx) {
+  ctx = ctx || {};
+  const out = [];
+  const add = function(o) { out.push(Object.assign({ sub: '', act: '', danger: false, ref: '' }, o, { id: o.kind + (o.ref ? ':' + o.ref : '') })); };
+  const total = Number(ctx.total) || 0, rem = Number(ctx.remaining) || 0;
+  const live = total === 0 || rem > 0;   // masih punya sisa sesi (atau paket tanpa batas)
+  const today = String(ctx.today || '');
+  if (ctx.renewal) add({ kind: 'perpanjang', title: 'Minta perpanjang paket', sub: ctx.renewal.packageName || '', act: 'Tinjau', ref: String(ctx.renewal.id || '') });
+  else if (total > 0 && rem <= 0) add({ kind: 'paket', title: 'Paket habis', sub: 'Tawarkan perpanjang', act: 'WA', danger: true });
+  else if (total > 0 && rem <= COACH_TODO.renewAt && !ctx.hasUpcoming) add({ kind: 'paket', title: 'Sisa ' + rem + ' sesi', sub: 'Tawarkan perpanjang', act: 'WA' });
+  if (ctx.flag && ctx.sessionToday) add({ kind: 'catatan', title: String(ctx.flag), sub: 'Ada sesi hari ini', act: 'Lihat', danger: true });
+  if (ctx.health === 'review') add({ kind: 'kesehatan', title: 'Tinjau form kesehatan', sub: 'Klien sudah mengisi', act: 'Tinjau' });
+  if (ctx.overdueTasks > 0) add({ kind: 'pr', title: ctx.overdueTasks + ' PR lewat tenggat', act: 'Lihat', danger: true });
+  if (ctx.nutrition && ctx.nutrition.advice) add({ kind: 'gizi', title: 'Saran kalori menunggu', sub: 'Setujui atau tolak', act: 'Tinjau' });
+  const days = ctx.lastDone && today ? _insDays_(ctx.lastDone, today) : null;
+  const idle = live && !ctx.hasUpcoming && (days != null ? days >= ctx.inactiveDays : (Number(ctx.joinedDays) || 0) >= ctx.inactiveDays);
+  if (idle) add({ kind: 'inaktif', title: days != null ? days + ' hari tidak latihan' : 'Belum pernah latihan', sub: 'Ajak latihan lagi', act: 'WA' });
+  else if (live && !ctx.hasUpcoming) add({ kind: 'booking', title: 'Belum ada jadwal berikutnya', act: 'Booking' });
+  if (ctx.lowRating) add({ kind: 'rating', title: 'Rating rendah', sub: COACH_TODO.lowRatingDays + ' hari terakhir', act: 'Lihat' });
+  if (ctx.nutrition && ctx.nutrition.stale) add({ kind: 'timbang', title: 'Minta timbang ulang', sub: 'Berat terakhir lebih dari 4 minggu', act: 'WA' });
+  if (live && rem > 0 && !ctx.hasProgram) add({ kind: 'program', title: 'Belum ada program latihan', act: 'Buat' });
+  if (live && rem > 0 && !ctx.snoozed && (Number(ctx.joinedDays) || 0) >= COACH_TODO.careAfterDays) {
+    const testDays = ctx.lastTest && today ? _insDays_(ctx.lastTest, today) : null;
+    if (testDays != null && testDays >= COACH_TODO.retestDays) add({ kind: 'tes', title: 'Waktunya tes ulang', sub: 'Tes terakhir ' + testDays + ' hari lalu', act: 'Tes' });
+    if (!ctx.assessment) add({ kind: 'assessment', title: 'Belum ada assessment', act: 'Isi' });
+    if (ctx.health === 'none') add({ kind: 'form-kesehatan', title: 'Form kesehatan belum diisi', act: 'Ingatkan' });
+  }
+  return out.slice(0, COACH_TODO.maxRows);
+}
