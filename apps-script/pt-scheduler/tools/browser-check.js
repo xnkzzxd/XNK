@@ -1241,6 +1241,15 @@ async function contrastReport(page) {
     check(cardTops.length === 2 && cardTops[0] === cardTops[1], 'live workout (PC): cards sit side by side in a grid ' + JSON.stringify(cardTops));
     check((await page.textContent('#wl-title')).startsWith('Hari A') && (await page.locator('#wl-screen .wl-ex >> nth=0 >> .wl-tr:not(.wl-th)').count()) === 3 && (await page.textContent('#wl-screen .wl-ex >> nth=0 >> .wl-th')).includes('SEBELUMNYA'), 'live workout: the first exercise shows its three planned sets as table rows (SET | SEBELUMNYA | KG | REP | ✓)');
     check(await visible(page, '#wl-stats') && (await page.textContent('#wl-stats')).includes('Volume') && (await page.locator('#wl-stats svg.wl-mm').count()) === 1, 'live workout: duration, volume, sets and the muscle map sit under the top bar');
+    // The 250 ms timer must only touch text that changed (each write = a layout; phones ran hot during a workout).
+    const wlWrites = await page.evaluate(() => new Promise(res => {
+      const n = { sub: 0, dur: 0 }, sub = document.getElementById('wl-sub'), dur = document.getElementById('wl-st-dur');
+      const mo = new MutationObserver(list => list.forEach(m => { const t = m.target.nodeType === 3 ? m.target.parentNode : m.target; if (t === sub) n.sub++; else if (t === dur) n.dur++; }));
+      if (sub) mo.observe(sub, { childList: true, characterData: true, subtree: true });
+      if (dur) mo.observe(dur, { childList: true, characterData: true, subtree: true });
+      setTimeout(() => { mo.disconnect(); res(Object.assign(n, { live: !!dur })); }, 2100);
+    }));
+    check(wlWrites.live && wlWrites.sub === 0 && wlWrites.dur <= 3, 'live workout: the timer writes the clock only when it changes (≤ 3 in 2 s, header untouched) ' + JSON.stringify(wlWrites));
     await shot(page, 'admin-live-workout');
     const kg0 = '#wl-screen .wl-in[data-i="0"][data-j="0"][data-f="berat"]';
     check((await page.textContent('#wl-screen .wl-ex >> nth=0')).includes('Goblet Squat (Dumbbell)') && (await page.getAttribute(kg0, 'placeholder')) === '20' && (await page.inputValue(kg0)) === '', 'live workout: rows start grey from the coach\'s target weight');

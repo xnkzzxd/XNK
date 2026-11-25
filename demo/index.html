@@ -11289,12 +11289,14 @@ html.desk .cn-wrap { max-width: none; }
     if (list) dragSort(list, '.wl-ex', function (from, to) { wlMoveTo(from, to); });
     wlRenderRest();
   }
+  // Teks yang dipanggil timer 4× per detik: tulis hanya bila berubah (tiap tulis = tata letak ulang; HP cepat panas).
+  function wlSetText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
   function wlRenderSub() {
     if (!wl) return;
-    const sub = $('wl-sub');
-    sub.textContent = wl.loading || wl.live ? '' : 'Catat ' + (wl.date === wkToday() ? 'hari ini' : pgLabel(wl.date));
-    sub.classList.toggle('hide', !sub.textContent);
-    const d = $('wl-st-dur'); if (d && wl.live && wl.startedAt) d.textContent = wlClock((Date.now() - wl.startedAt) / 1000);
+    const sub = $('wl-sub'), st = wl.loading || wl.live ? '' : 'Catat ' + (wl.date === wkToday() ? 'hari ini' : pgLabel(wl.date));
+    wlSetText(sub, st);
+    sub.classList.toggle('hide', !st);
+    const d = $('wl-st-dur'); if (d && wl.live && wl.startedAt) wlSetText(d, wlClock((Date.now() - wl.startedAt) / 1000));
   }
   function wlScrollToOpen() {
     setTimeout(function () {
@@ -11478,7 +11480,7 @@ html.desk .cn-wrap { max-width: none; }
   function wlRestTick() {
     if (!wl || !wl.restUntil) return;
     const left = (wl.restUntil - Date.now()) / 1000, t = $('wl-rest-t'), f = $('wl-rest-fill');
-    if (t) t.textContent = left > 0 ? wlClock(Math.ceil(left)) : '0:00';
+    wlSetText(t, left > 0 ? wlClock(Math.ceil(left)) : '0:00');
     if (f) f.style.transform = 'scaleX(' + Math.max(0, Math.min(1, left / (wl.restTotal || 1))).toFixed(3) + ')';
     if (left <= 0 && !wlRt.restEnded) {
       wlRt.restEnded = true;
@@ -11492,7 +11494,7 @@ html.desk .cn-wrap { max-width: none; }
     wlRt.timer = setInterval(function () {
       if (!wl || !ui.wlOn) { clearInterval(wlRt.timer); wlRt.timer = null; return; }
       wlRenderSub(); wlRestTick();
-      if (wl.watch) { const el = $('wl-dur-' + wl.watch.i + '-' + wl.watch.j); if (el) el.textContent = wlClock((Date.now() - wl.watch.at) / 1000); }
+      if (wl.watch) wlSetText($('wl-dur-' + wl.watch.i + '-' + wl.watch.j), wlClock((Date.now() - wl.watch.at) / 1000));
     }, 250);
   }
   function wlAudioPrime() { try { const C = window.AudioContext || window.webkitAudioContext; if (!C) return; if (!wlRt.audio) wlRt.audio = new C(); if (wlRt.audio.state === 'suspended') wlRt.audio.resume(); } catch (e) {} }
