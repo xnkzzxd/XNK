@@ -189,11 +189,17 @@ Di `/adminxnk`: halaman **Uang** (empat angka, uang masuk 6 bulan, pembayaran te
 
 ## Tampilan /adminxnk (T-2264)
 
-Terang lembut dan monokrom (tanpa blok hitam; merah hanya untuk masalah). Bilah samping tipis: **Coach** (daftar ringkas
-kiri; kanan = ringkasan semua coach — kesehatan, uang, pertumbuhan 30 hari, perbandingan — atau detail coach dengan
-**← Ringkasan**), **Uang**, **Sistem** (siapkan XNK HQ, cek/perbarui/bangun ulang, versi Library, kuota per coach,
-keluar). Saringan di atas daftar hanya muncul bila berisi. Di HP bilah samping menjadi bilah bawah, ringkasan di atas
-daftar, dan detail coach terbuka sebagai lembar penuh.
+Terang lembut dan monokrom (tanpa blok hitam; merah hanya untuk masalah). Bilah samping tipis: **Coach** (baris kartu
+coach di atas; di bawahnya selebar layar = ringkasan semua coach — kesehatan, uang, pertumbuhan 30 hari, perbandingan —
+atau detail coach dengan **← Ringkasan**), **Uang** (angka, uang masuk 6 bulan, pembayaran terakhir + tagihan
+berikutnya, tabel per coach), **Sistem** (siapkan XNK HQ, tindakan, versi & pemakaian, kuota per coach). Saringan di
+atas kartu hanya muncul bila berisi. Di HP bilah samping menjadi bilah bawah, kartu coach satu kolom di atas ringkasan,
+dan detail coach terbuka sebagai lembar penuh.
+
+Aturan pemilik (putaran 5): **tanpa ruang kosong**. Kartu yang bersebelahan sama tinggi (tombol di kaki kartu), kartu
+ganjil terakhir melebar, dan halaman yang lebih pendek dari layar ditutup kaki halaman `#hqfoot` (XNK HQ · host, waktu
+cek terakhir, jumlah coach, versi Library, Cek semua, Situs hub). `tools/hub-check.js` memeriksa lebar baris kartu,
+tinggi pasangan kartu dan posisi kaki halaman.
 
 ## Langganan bulanan (T-2251)
 

@@ -256,10 +256,10 @@ async function makeLogos(browser) {
       check((await txt('#lm')).includes('PIN salah'), 'PIN salah → pesan');
       await page.fill('#pin', 'pin-pusat-1');
       await page.click('#go');
-      await page.waitForSelector('#list .crow', { timeout: 5000 }).catch(() => {});
+      await page.waitForSelector('#list .ccard', { timeout: 5000 }).catch(() => {});
       // T-2264: dibuka = ringkasan semua coach di kanan, tanpa panel kosong.
       check(await page.isVisible('#sumbox') && !(await page.isVisible('#insp')), 'dibuka: ringkasan semua coach di kanan, bukan panel kosong');
-      check((await page.$$eval('#list .crow', rs => rs.map(r => r.dataset.sel))).join() === 'claudia-2,claudia' && (await txt('#list')).includes('Claudia Fit'), 'daftar ringkas: nama dari hub.json, masalah di atas');
+      check((await page.$$eval('#list .ccard', rs => rs.map(r => r.dataset.sel))).join() === 'claudia-2,claudia' && (await txt('#list')).includes('Claudia Fit'), 'daftar ringkas: nama dari hub.json, masalah di atas');
       check((await txt('#issues')).includes('Belum terdaftar di XNK HQ') && await page.$('#sumbox svg.ring') !== null, 'Kesehatan: cincin + daftar masalah');
       check((await txt('#moneySum')).includes('Rutin / bulan') && (await txt('#sum')).includes('Library v11'), 'ringkasan Uang + versi Library');
       check((await page.$$('#growth svg.line')).length === 2, 'Pertumbuhan: dua grafik garis 30 hari');
@@ -267,20 +267,28 @@ async function makeLogos(browser) {
       const chips = await page.$$eval('#chips [data-filter]', bs => bs.map(b => b.dataset.filter));
       check(chips.join() === 'all,bad', 'saringan: hanya yang berisi (Semua, Perlu dicek), tanpa saringan kosong (' + chips.join() + ')');
       await page.click('#chips [data-filter="bad"]');
-      check((await page.$$('#list .crow')).length === 1, 'saringan Perlu dicek: satu coach');
+      check((await page.$$('#list .ccard')).length === 1, 'saringan Perlu dicek: satu coach');
       await page.click('#chips [data-filter="all"]');
       const look = await page.evaluate(() => {
         const lum = c => { const m = c.match(/\d+/g).map(Number).slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
         const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-        const small = document.querySelector('.crow .cn small'), card = document.querySelector('#list');
+        const small = document.querySelector('.ccard .pl'), card = document.querySelector('.ccard');
         const dark = [...document.querySelectorAll('body *')].filter(el => { const c = getComputedStyle(el).backgroundColor; const m = c.match(/\d+/g); return m && +(m[3] || 1) > 0.5 && +m[0] < 40 && +m[1] < 40 && +m[2] < 40 && el.offsetWidth > 200 && el.offsetHeight > 40; }).length;
         return { mut: ratio(getComputedStyle(small).color, getComputedStyle(card).backgroundColor), side: getComputedStyle(document.querySelector('.side')).backgroundColor, dark };
       });
       check(look.mut >= 7 && look.side === 'rgb(255, 255, 255)' && look.dark === 0, 'terang lembut: teks abu ≥ 7:1, bilah samping terang, tanpa blok hitam besar (' + look.mut.toFixed(1) + ', ' + look.side + ', ' + look.dark + ')');
+      // T-2264 ronde 5: tanpa ruang kosong — baris kartu coach selebar halaman, kartu sebaris sama tinggi, kaki halaman.
+      const lay = await page.evaluate(() => {
+        const strip = document.getElementById('list').getBoundingClientRect(), pg = document.getElementById('page-coach').getBoundingClientRect();
+        const h = id => { const el = document.getElementById(id); return el ? Math.round(el.getBoundingClientRect().height) : -1; };
+        return { strip: strip.width / (pg.width - 48), health: h('health'), money: h('moneySum') };
+      });
+      check(lay.strip >= 0.9 && Math.abs(lay.health - lay.money) <= 2, 'baris kartu coach selebar halaman; Kesehatan dan Uang sama tinggi (' + JSON.stringify(lay) + ')');
+      check(((await txt('#hqfoot')) || '').includes('XNK HQ') && (await txt('#hqfoot')).includes('Library v11'), 'kaki halaman: XNK HQ, waktu cek, versi Library');
       await shot('hq-1440-ringkasan');
       await page.emulateMedia({ colorScheme: 'dark' }); await shot('hq-1440-dark'); await page.emulateMedia({ colorScheme: 'light' });
       // Detail coach
-      await page.click('#list .crow[data-sel="claudia"]');
+      await page.click('#list .ccard[data-sel="claudia"]');
       const insp = await txt('#insp');
       check(await page.isVisible('#insp') && !(await page.isVisible('#sumbox')) && insp.includes('Beres'), 'pilih coach → detail di kanan, ringkasan disembunyikan');
       check((await page.$$('#insp .tile svg.spark path.ln')).length === 4 && (await page.$$('#insp .g')).length === 3 && (await page.$('#insp .g.bad')) !== null, 'detail: 4 ubin dengan garis 30 hari, 3 meteran kuota (≥ 70 % merah)');
@@ -299,7 +307,7 @@ async function makeLogos(browser) {
       await page.click('#insp .sub-form button[type="submit"]');
       await waitDm('disimpan');
       check(JSON.stringify(PUSAT_CALLS.sub) === JSON.stringify(['claudia', { tier: 'pro', cycle: 'tahunan', price: '2490000', due: '2026-12-19', email: '', setupKind: 'standar', setupPrice: '400000' }]) &&
-        (await txt('#insp')).includes('Pro') && (await txt('#insp')).includes('tahunan') && (await txt('#list .crow[data-sel="claudia"]')).includes('Pro'),
+        (await txt('#insp')).includes('Pro') && (await txt('#insp')).includes('tahunan') && (await txt('#list .ccard[data-sel="claudia"]')).includes('Pro'),
         'Atur paket → pusatSubSave (paket, cara bayar, setup), detail dan daftar diperbarui (' + JSON.stringify(PUSAT_CALLS.sub) + ')');
       check((await txt('#insp')).includes('belum lunas'), 'setup Standar tampil belum lunas');
       // Tandai lunas = catat pembayaran → pusatSubPay
@@ -321,17 +329,21 @@ async function makeLogos(browser) {
       const uang = await txt('#page-uang');
       check(await page.isVisible('#page-uang') && !(await page.isVisible('#page-coach')) && uang.includes('Rp 207.500') && uang.includes('Rp 400.000') && (await txt('#payLog')).includes('transfer') && (await txt('#moneyTab')).includes('Pro'),
         'halaman Uang: rutin/bulan (tahunan ÷ 12), masuk bulan ini, catatan bayar, tabel per coach');
+      const ueq = await page.evaluate(() => { const cs = [...document.querySelectorAll('#page-uang .grid2 > .card')].map(c => Math.round(c.getBoundingClientRect().height)); return cs; });
+      check(ueq.length === 2 && Math.abs(ueq[0] - ueq[1]) <= 2, 'Uang: 6 bulan dan Pembayaran terakhir sama tinggi (' + ueq.join(',') + ')');
+      const foot = await page.evaluate(() => { const f = document.getElementById('hqfoot').getBoundingClientRect(); return { bottom: Math.round(f.bottom), vh: window.innerHeight }; });
+      check(Math.abs(foot.bottom - foot.vh) <= 2, 'halaman pendek: kaki halaman menempel di bawah layar, tanpa latar kosong (' + JSON.stringify(foot) + ')');
       await shot('hq-1440-uang');
       await page.click('#moneyTab tr[data-sel="claudia"]');
       check(await page.isVisible('#page-coach') && await page.isVisible('#insp'), 'klik coach di Uang → detail coach');
       await page.click('#backSum');
       check(await page.isVisible('#sumbox') && !(await page.isVisible('#insp')), '← Ringkasan kembali ke ringkasan');
       // Baca saja lewat menu ⋯ + dialog sendiri
-      await page.click('#list .crow[data-sel="claudia"]');
+      await page.click('#list .ccard[data-sel="claudia"]');
       await page.click('#insp [data-menu="coach"]');
       await page.click('#menu [data-act="sub-ro-on"]');
       await clearDm(); await dlgOk(); await waitDm('Selesai');
-      check(PUSAT_CALLS.subAct === 'sub-ro-on' && (await txt('#insp')).includes('dinyalakan tangan') && (await txt('#list .crow[data-sel="claudia"]')).includes('Baca saja'), 'Baca saja nyala lewat menu + dialog (bukan confirm)');
+      check(PUSAT_CALLS.subAct === 'sub-ro-on' && (await txt('#insp')).includes('dinyalakan tangan') && (await txt('#list .ccard[data-sel="claudia"]')).includes('Baca saja'), 'Baca saja nyala lewat menu + dialog (bukan confirm)');
       // T-2258: tempat
       check((await txt('#insp')).includes('Tempat: Gold Gym Kemang · Jakarta Selatan'), 'detail: tempat dari hub.json');
       await page.click('#insp [data-act="tempat"]');
@@ -357,7 +369,7 @@ async function makeLogos(browser) {
       await waitDm('Selesai di XNK HQ');
       check(JSON.stringify(PUSAT_CALLS.rename) === '["claudia","claudia-baru"]', 'Ganti slug → pusatRename (' + JSON.stringify(PUSAT_CALLS.rename) + ')');
       // T-2252: Coach keluar
-      await page.click('#list .crow[data-sel="claudia"]');
+      await page.click('#list .ccard[data-sel="claudia"]');
       await page.click('#insp [data-menu="coach"]');
       await page.click('#menu [data-act="leave"]');
       await page.fill('#lv-claudia', 'Claudia');
@@ -379,6 +391,8 @@ async function makeLogos(browser) {
       check(await page.isVisible('#page-sistem') && await page.isVisible('#setup') && (await txt('#setupWhy')).includes('Izin Google') && (await page.getAttribute('#setupEditor', 'href')) === 'https://script.google.com/d/SCRIPTPUSAT/edit',
         'Sistem: XNK HQ perlu disiapkan + langkah editor');
       check((await page.$$('#sysQuota .g')).length === 3 && (await txt('#sysNums')).includes('v11'), 'Sistem: kuota per coach + versi Library');
+      const seq = await page.evaluate(() => [...document.querySelectorAll('#page-sistem .grid3 > .card')].map(c => Math.round(c.getBoundingClientRect().height)));
+      check(seq.length === 3 && Math.max(...seq) - Math.min(...seq) <= 2, 'Sistem: tiga kartu atas sama tinggi (' + seq.join(',') + ')');
       await shot('hq-1440-sistem');
       const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('#sysSetup')]);
       if (tab) await tab.waitForURL(/[?]setup=/, { timeout: 5000 }).catch(() => {});
@@ -394,10 +408,10 @@ async function makeLogos(browser) {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(250);
       const ph = await page.evaluate(() => ({ wide: document.documentElement.scrollWidth <= window.innerWidth, bar: getComputedStyle(document.querySelector('.side')).position,
-        order: document.getElementById('sumbox').getBoundingClientRect().top < document.getElementById('list').getBoundingClientRect().top }));
-      check(ph.wide && ph.bar === 'fixed' && ph.order, 'HP: tanpa geser ke samping, bilah bawah, ringkasan di atas daftar (' + JSON.stringify(ph) + ')');
+        order: document.getElementById('list').getBoundingClientRect().top < document.getElementById('sumbox').getBoundingClientRect().top }));
+      check(ph.wide && ph.bar === 'fixed' && ph.order, 'HP: tanpa geser ke samping, bilah bawah, kartu coach lalu ringkasan (' + JSON.stringify(ph) + ')');
       await shot('hq-390-ringkasan');
-      await page.click('#list .crow[data-sel="claudia"]');
+      await page.click('#list .ccard[data-sel="claudia"]');
       await page.waitForTimeout(350);
       check(await page.evaluate(() => document.getElementById('dash').classList.contains('insp-open')), 'HP: ketuk coach → lembar detail penuh');
       await shot('hq-390-detail');
