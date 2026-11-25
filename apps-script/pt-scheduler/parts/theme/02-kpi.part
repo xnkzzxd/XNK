@@ -52,7 +52,8 @@ html.wl-on, html.wl-on body { overflow: hidden; }
 .mm-fig .mmf-base { fill: color-mix(in srgb, var(--fg) 10%, transparent); }
 .mm-fig .mmf { fill: color-mix(in srgb, var(--fg) 16%, transparent); transition: fill var(--t-base) var(--ease); }
 .mm-fig .mmf.half { fill: color-mix(in srgb, var(--fg) 45%, transparent); }
-.mm-fig .mmf.on { fill: var(--fg); animation: mmf-pulse 2.4s ease-in-out infinite; }
+/* Tiga denyut lalu diam: animasi SVG digambar ulang tiap frame di Safari (HP panas bila terus selama latihan). */
+.mm-fig .mmf.on { fill: var(--fg); animation: mmf-pulse 2.4s ease-in-out 3; }
 @keyframes mmf-pulse { 50% { opacity: .78; } }
 /* Kartu gerakan + tabel set ala Hevy (Fase O) */
 .wl-list { display: flex; flex-direction: column; gap: 10px; }

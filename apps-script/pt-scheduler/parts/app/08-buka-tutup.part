@@ -476,8 +476,8 @@
     if (list) dragSort(list, '.wl-ex', function (from, to) { wlMoveTo(from, to); });
     wlRenderRest();
   }
-  // Teks yang dipanggil timer 4× per detik: tulis hanya bila berubah (tiap tulis = tata letak ulang; HP cepat panas).
-  function wlSetText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
+  // Teks yang dipanggil timer 4× per detik: tulis hanya bila berubah (textIf, bagian 01).
+  function wlSetText(el, s) { textIf(el, s); }
   function wlRenderSub() {
     if (!wl) return;
     const sub = $('wl-sub'), st = wl.loading || wl.live ? '' : 'Catat ' + (wl.date === wkToday() ? 'hari ini' : pgLabel(wl.date));
