@@ -36,7 +36,8 @@
   .hide { display: none !important; }
   .mut { color: var(--mut); }
   .bad { color: var(--bad); }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; top: 0; left: 0; }
+  /* Salinan data untuk pembaca layar. Tabel mengabaikan height/overflow, jadi tabelnya dibungkus div .sr (dulu tabelnya menjulur ±600 px di bawah kaki halaman). */
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; top: 0; left: 0; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; display: inline-block; }
   .dot.bad { background: var(--bad); } .dot.off { background: var(--grey); }
   .num { font-variant-numeric: tabular-nums; }
@@ -562,8 +563,8 @@
       var t = dShort(d) + series.map(function (s) { return '\n' + s.name + ': ' + (s.vals[i] == null ? '-' : num(s.vals[i])); }).join('');
       g += '<rect class="hit" x="' + (x(i) - cw / 2) + '" y="' + T + '" width="' + cw + '" height="' + (Hh - T - B) + '" data-tip="' + esc(t) + '"/>';
     });
-    var tbl = '<table class="sr"><caption>' + esc(label) + '</caption><tr><th>Tanggal</th>' + series.map(function (s) { return '<th>' + esc(s.name) + '</th>'; }).join('') + '</tr>' +
-      ax.map(function (d, i) { return '<tr><td>' + esc(d) + '</td>' + series.map(function (s) { return '<td>' + (s.vals[i] == null ? '-' : s.vals[i]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+    var tbl = '<div class="sr"><table><caption>' + esc(label) + '</caption><tr><th>Tanggal</th>' + series.map(function (s) { return '<th>' + esc(s.name) + '</th>'; }).join('') + '</tr>' +
+      ax.map(function (d, i) { return '<tr><td>' + esc(d) + '</td>' + series.map(function (s) { return '<td>' + (s.vals[i] == null ? '-' : s.vals[i]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>';
     return '<svg class="chart line" viewBox="0 0 ' + W + ' ' + Hh + '" role="img" aria-label="' + esc(label) + '">' + g + '</svg>' + tbl;
   }
   function ring(parts, total) {

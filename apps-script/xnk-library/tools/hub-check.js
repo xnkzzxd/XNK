@@ -245,6 +245,11 @@ async function makeLogos(browser) {
       const dlgOk = async () => { await page.waitForSelector('#dlg[open]', { timeout: 5000 }).catch(() => {}); await page.click('#dlgOk'); };
       const dm = async () => (await page.textContent('#dm')) || '';
       const clearDm = () => page.evaluate(() => { document.getElementById('dm').textContent = ''; });
+      // Tidak ada ruang kosong di bawah kaki halaman (tabel pembaca layar dulu menjulur ±600 px).
+      const noTail = async (where) => {
+        const m = await page.evaluate(() => ({ doc: document.documentElement.scrollHeight, foot: Math.round(document.getElementById('hqfoot').getBoundingClientRect().bottom + window.scrollY) }));
+        check(Math.abs(m.doc - m.foot) <= 1, where + ': tidak ada ruang di bawah kaki halaman (' + JSON.stringify(m) + ')');
+      };
       const waitDm = t => page.waitForFunction(x => document.getElementById('dm').textContent.includes(x), t, { timeout: 5000 }).catch(() => {});
       const txt = async sel => (await page.textContent(sel).catch(() => '')) || '';
       const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
@@ -285,6 +290,7 @@ async function makeLogos(browser) {
       });
       check(lay.strip >= 0.9 && Math.abs(lay.health - lay.money) <= 2, 'baris kartu coach selebar halaman; Kesehatan dan Uang sama tinggi (' + JSON.stringify(lay) + ')');
       check(((await txt('#hqfoot')) || '').includes('XNK HQ') && (await txt('#hqfoot')).includes('Library v11'), 'kaki halaman: XNK HQ, waktu cek, versi Library');
+      await noTail('Coach · ringkasan 1440');
       await shot('hq-1440-ringkasan');
       await page.emulateMedia({ colorScheme: 'dark' }); await shot('hq-1440-dark'); await page.emulateMedia({ colorScheme: 'light' });
       // Detail coach
@@ -321,6 +327,7 @@ async function makeLogos(browser) {
       await waitDm('dicatat');
       check(JSON.stringify(PUSAT_CALLS.pay) === JSON.stringify(['claudia', { kind: 'setup', amount: '400000', date: today, note: 'transfer' }]) && (await txt('#insp')).includes('transfer'),
         'Tandai lunas → pusatSubPay, pembayaran tampil di detail (' + JSON.stringify(PUSAT_CALLS.pay) + ')');
+      await noTail('Coach · detail 1440');
       await shot('hq-1440-coach');
       // Halaman Uang
       await page.click('#nav-uang');
@@ -333,6 +340,7 @@ async function makeLogos(browser) {
       check(ueq.length === 2 && Math.abs(ueq[0] - ueq[1]) <= 2, 'Uang: 6 bulan dan Pembayaran terakhir sama tinggi (' + ueq.join(',') + ')');
       const foot = await page.evaluate(() => { const f = document.getElementById('hqfoot').getBoundingClientRect(); return { bottom: Math.round(f.bottom), vh: window.innerHeight }; });
       check(Math.abs(foot.bottom - foot.vh) <= 2, 'halaman pendek: kaki halaman menempel di bawah layar, tanpa latar kosong (' + JSON.stringify(foot) + ')');
+      await noTail('Uang 1440');
       await shot('hq-1440-uang');
       await page.click('#moneyTab tr[data-sel="claudia"]');
       check(await page.isVisible('#page-coach') && await page.isVisible('#insp'), 'klik coach di Uang → detail coach');
@@ -393,6 +401,7 @@ async function makeLogos(browser) {
       check((await page.$$('#sysQuota .g')).length === 6 && (await txt('#sysQuota')).includes('Kemarin') && (await txt('#sysQuota')).includes('18,4 rb / 20 rb') && (await txt('#sysNums')).includes('v11'), 'Sistem: kuota per coach (kemarin + hari ini, angka pendek) + versi Library');
       const seq = await page.evaluate(() => [...document.querySelectorAll('#page-sistem .grid3 > .card')].map(c => Math.round(c.getBoundingClientRect().height)));
       check(seq.length === 3 && Math.max(...seq) - Math.min(...seq) <= 2, 'Sistem: tiga kartu atas sama tinggi (' + seq.join(',') + ')');
+      await noTail('Sistem 1440');
       await shot('hq-1440-sistem');
       const [tab] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }).catch(() => null), page.click('#sysSetup')]);
       if (tab) await tab.waitForURL(/[?]setup=/, { timeout: 5000 }).catch(() => {});
@@ -403,6 +412,7 @@ async function makeLogos(browser) {
       await page.click('#nav-coach');
       await page.setViewportSize({ width: 1024, height: 768 });
       await page.waitForTimeout(200);
+      await noTail('1024');
       await shot('hq-1024');
       // HP 390 × 844
       await page.setViewportSize({ width: 390, height: 844 });
