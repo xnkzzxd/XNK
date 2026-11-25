@@ -132,3 +132,12 @@ test('getSettingsBundle = the three Settings reads in one call; a failing part b
   assert.deepEqual(b.packages, j(env.call('getPriceListAdmin', t)));
   assert.throws(() => env.call('getSettingsBundle', env.memberToken(KEY_A)), /AUTH_REQUIRED/);
 });
+
+test('client bundle carries the client\'s recent wins (athlete.moments) for the coach Progres tab', () => {
+  const env = seededEnv();
+  const t = env.adminToken(), mt = env.memberToken(KEY_A);
+  env.call('saveMyMeasurement', mt, { berat: 72, pinggang: 84 });
+  const b = j(env.call('getClientBundle', t, 'PT-A'));
+  assert.ok(b.athlete && Array.isArray(b.athlete.moments), 'moments part');
+  b.athlete.moments.forEach(m => assert.ok(m.kind && m.title && m.tanggal));
+});

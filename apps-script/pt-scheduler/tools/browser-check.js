@@ -1154,6 +1154,9 @@ async function contrastReport(page) {
     await shot(page, 'admin-client-tabs');
     await page.evaluate(() => window.cpTab('progres'));
     await page.waitForTimeout(300);
+    check(await visible(page, '#detail-body .cp-pgseg') && (await page.locator('#detail-body .cp-pgseg [data-cpseg]').count()) === 4 && await visible(page, '#cp-ph-progress'), 'client page: Progres opens on its Ringkasan sub-tab (Ringkasan, Ukuran, Tes, Foto)');
+    await page.evaluate(() => window.cpPgSeg('ukuran'));
+    await page.waitForTimeout(150);
     check(await visible(page, '#profile-progress-wrap') && (await page.textContent('#profile-progress-wrap')).includes('Belum ada catatan'), 'client page: a Progres section is shown');
     await page.waitForTimeout(500);
     check((await page.textContent('#profile-tests-wrap')).includes('Tes kebugaran'), 'client page: fitness tests are in the Progres tab (Fase AC)');
@@ -1371,10 +1374,21 @@ async function contrastReport(page) {
     check((await page.textContent('#wk-admin-stats')).includes('Riwayat latihan') && (await page.locator('#wk-admin-stats .wl-hist-row button:has-text("Ubah")').count()) === 1, 'workout history: the logged day has an "Ubah" button');
     const prgDays = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-program-wrap .prg-days > div')).map(d => { const r = d.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
-    await page.evaluate(() => window.cpTab('progres'));
+    await page.evaluate(() => { window.cpTab('progres'); window.cpPgSeg('ringkasan'); });
     await page.waitForTimeout(300);
-    check((await page.textContent('#detail-body [data-cppane="progres"]')).includes('Sesi selesai') && (await page.textContent('#detail-body [data-cppane="progres"]')).includes('Minggu beruntun') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
-    await page.click('#profile-progress-wrap .section-head .btn');
+    const pgPane = '#detail-body [data-cppane="progres"]';
+    check((await page.textContent(pgPane)).includes('Sesi selesai') && (await page.textContent(pgPane)).includes('Minggu beruntun') && (await page.textContent('#cp-pg-foto')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
+    // Fase AC Wave 2: sub-tab tanpa panggilan; tombol per sub-tab sedikit (baris yang bisa diketuk tidak dihitung); tanpa tombol bagikan.
+    const callsPg = calls.length, pgCtl = {};
+    for (const k of ['ukuran', 'tes', 'foto', 'ringkasan']) {
+      await page.evaluate(x => window.cpPgSeg(x), k);
+      await page.waitForTimeout(120);
+      pgCtl[k] = await page.evaluate(() => Array.from(document.querySelectorAll('#detail-body [data-cppane="progres"] button, #detail-body [data-cppane="progres"] select, #detail-body [data-cppane="progres"] input')).filter(e => !e.closest('.cp-row') && !e.classList.contains('cp-row') && e.getClientRects().length && e.getBoundingClientRect().width > 0).length);
+    }
+    check(calls.length === callsPg, 'progres: switching sub-tabs makes no server call (' + calls.slice(callsPg).join(',') + ')');
+    check(Object.values(pgCtl).every(n => n <= 8), 'progres: at most 8 controls per sub-tab, rows aside ' + JSON.stringify(pgCtl));
+    check((await page.locator('#detail-body .cp-pane [onclick*="shareCard"]').count()) === 0, 'client page: no share buttons inside the tabs (Bagikan lives in ⋯)');
+    await page.click('#detail-body .cp-card .cp-act:has-text("Catat ukuran")');
     await page.waitForTimeout(600);
     check(await visible(page, '#pg-date-field'), 'client page: the coach can choose the date');
     await page.fill('#pg-berat', '73');
@@ -1382,15 +1396,35 @@ async function contrastReport(page) {
     await page.waitForTimeout(800);
     const crow = env.sheet('Progress').rows.find(r => r[1] === 'PT-A' && r[5] === 'coach');
     check(!!crow && crow[3] === 73, 'client page: a coach entry is saved and marked "coach"');
-    check((await page.textContent('#profile-progress-wrap')).includes('coach') && (await page.textContent('#profile-progress-wrap')).includes('73'), 'client page: the entry and its author are listed');
+    await page.evaluate(() => window.cpPgSeg('ukuran'));
+    await page.waitForTimeout(200);
+    check((await page.textContent('#cp-pg-hist')).includes('coach') && (await page.textContent('#cp-pg-hist')).includes('73'), 'client page: the entry and its author are listed');
     const chartW = await page.evaluate(() => { const c = document.querySelector('#profile-progress-wrap .pg-chart'); return c ? Math.round(c.getBoundingClientRect().width) : 0; });
     check(chartW >= 200 && chartW <= 420, 'wide client page: the progress chart keeps a sensible size (' + chartW + ' px)');
-    await page.evaluate(() => document.querySelectorAll('#profile-progress-wrap details.fold').forEach(f => { f.open = true; }));
-    await page.click('#profile-progress-wrap .list-item .icon-btn');
-    await page.waitForTimeout(300);
+    check((await page.locator('#profile-progress-wrap .pg-chart').count()) === 1, 'progres: one chart at a time, picked with the measure chips');
+    await page.click('#cp-pg-hist .cp-row:has-text("coach")');
+    await page.waitForTimeout(400);
+    check(await visible(page, '#sheet-cp-row') && (await page.textContent('#cpr-body')).includes('73'), 'progres: tapping a measurement row opens its sheet with the values');
+    await page.click('#cpr-body .cp-danger');
+    await page.waitForTimeout(400);
     await page.click('#btn-confirm-modal-yes');
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(900);
     check(!env.sheet('Progress').rows.some(r => r[1] === 'PT-A' && r[5] === 'coach'), 'client page: a coach can delete an entry');
+    // Foto: baris foto membuka penampil privat (satu getMemberProgressPhoto), tanpa Hapus untuk coach; tutup = kembali ke sub-tab.
+    env.call('uploadMyProgressPhoto', env.memberToken(KEY_A), 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'image/png', 'depan');
+    await page.evaluate(() => window.loadClientBundle('PT-A', { force: true }));
+    await page.waitForTimeout(900);
+    await page.evaluate(() => window.cpPgSeg('foto'));
+    await page.waitForTimeout(200);
+    const callsF = calls.length;
+    await page.click('#cp-pg-foto .cp-row');
+    await page.waitForTimeout(900);
+    check(calls.slice(callsF).join() === 'getMemberProgressPhoto' && ((await page.getAttribute('#pg-view-img', 'src')) || '').startsWith('data:image/'), 'progres: a Foto row opens the private viewer with one call (' + calls.slice(callsF).join(',') + ')');
+    check(await page.evaluate(() => document.getElementById('pg-view-del').classList.contains('hide')), 'progres: the coach can view a photo but not delete it');
+    await page.evaluate(() => window.pgClosePhotoView());
+    await page.waitForTimeout(500);
+    check(!(await visible(page, '#sheet-photo-view')) && !(await visible(page, '#sheet-progress-photos')) && await visible(page, '#cp-pg-foto'), 'progres: closing the photo returns to the Foto sub-tab');
+    await shot(page, 'admin-client-progres-foto');
     noErrors(errors);
     await context.close();
   }

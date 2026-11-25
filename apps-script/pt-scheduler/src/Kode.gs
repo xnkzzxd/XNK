@@ -6558,7 +6558,7 @@ function getClientBundleImpl_(token, memberId, tr) {
       notes: part('notes', function () { return _notesForMember_(String(memberRow()[0]).trim()).slice(0, CLIENT_NOTES_MAX); }),
       todo: part('todo', function () { return _coachTodoFor_(memberRow(), { tasks: tasks, care: care, nutrition: nutrition, program: program, programGen: programGen }); }),
       // Fase X: kartu atlet dan level klien (baca saja) supaya coach melihat yang sama dengan klien.
-      athlete: part('athlete', function () { const x = _portalXFor_(memberRow(), { progress: progress, workout: workout }); return { profile: x.profile, level: x.level }; }),
+      athlete: part('athlete', function () { const x = _portalXFor_(memberRow(), { progress: progress, workout: workout }); return { profile: x.profile, level: x.level, moments: x.moments }; }),   // Fase AC: momen untuk tab Progres coach
       foodLog: part('foodLog', function () { return getClientFoodLog(token, memberId); }),
       share: part('share', function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
       insight: insight,

@@ -535,7 +535,7 @@
     const tests = d.tests || [];
     return '<div class="px-sec cp-sec"><h3>Tes kebugaran</h3><span>' + (tests.length ? tests.length + ' tes' : '') + '</span></div>' +
       (tests.length ? '<div class="card cp-card-pad stack" style="gap:6px">' + tests.map(t => careRow(t.label, h(t.first.nilai + (t.count > 1 ? ' → ' + t.latest.nilai : '')) + ' ' + h(t.unit.split(' ')[0]) + careTestChange(t)) + trendHtml(t, (d.testHistory || {})[t.id])).join('') + '</div>'
-        : '<p class="cp-empty">Belum ada hasil tes. Tambah lewat menu ⋯.</p>');
+        : '<p class="cp-empty">' + icon('activity') + ' Belum ada hasil tes. Tambah lewat menu ⋯ di atas.</p>');
   }
   window.cpTestsInner = testsInner;
   window.cpFeedback = function (memberId) {

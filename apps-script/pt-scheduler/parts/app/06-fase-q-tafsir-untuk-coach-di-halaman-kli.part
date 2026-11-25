@@ -2,6 +2,7 @@
   window.clientInsight = {};   // { memberId: getClientBundle.insight }; hanya di memori
   window.clientTodo = {};      // { memberId: getClientBundle.todo } — tugas coach (Fase AC)
   window.clientNotes = {};     // { memberId: getClientBundle.notes } — 10 catatan sesi terakhir (Fase AC)
+  window.clientMoments = {};   // { memberId: getClientBundle.athlete.moments } — momen klien untuk Progres (Fase AC, Wave 2)
   function cpInsHtml(id, kind) {
     const raw = window.clientInsight[String(id)];
     if (raw === undefined) {
@@ -13,9 +14,16 @@
     if (raw && raw.error) return /Hero$/.test(kind) && kind !== 'giziHero' ? insErr(kind === 'progresHero' ? 'Rapor tubuh' : 'Minggu ini') : '';
     return insWith(raw, function () {
       switch (kind) {
-        case 'progresHero': return insProgressHero(String(id));
-        case 'progresCards': { const pd = pg.admin[String(id)]; return insTiles(pd && !pd.error ? [mtileHtml('Minggu beruntun', String(pd.streak || 0), 'terbaik ' + (pd.bestStreak || 0)), mtileHtml('Sesi selesai', String(pd.completed || 0), '')] : []); }
-        case 'progresFolds': { const mb = insMeasuresBody(), lb = insLinksBody(); return (mb ? foldHtml('Lingkar badan & simetri', INS_RANGE_OPTS.filter(o => o[0] === insRange.v)[0][1], mb, false) : '') + (lb ? foldHtml('Yang berkaitan dengan hasil', '12 minggu', lb, false) : ''); }
+        // Fase AC (Wave 2): Progres panel punya penyaji sendiri (tanpa tombol; Catat ada di kartu klien, bagikan di ⋯).
+        case 'progresHero': return cpRaporHtml();
+        case 'progresCards': {
+          const pd = pg.admin[String(id)];
+          const t = insTiles(pd && !pd.error ? [mtileHtml('Minggu beruntun', String(pd.streak || 0), 'terbaik ' + (pd.bestStreak || 0)), mtileHtml('Sesi selesai', String(pd.completed || 0), '')] : []);
+          return t ? '<div class="px-sec cp-sec"><h3>Indikator</h3><span>perkiraan, bukan diagnosis</span></div>' + t : '';
+        }
+        case 'progresFolds': { const lb = insLinksBody(); return lb ? foldHtml('Yang berkaitan dengan hasil', '12 minggu', lb, false) : ''; }
+        case 'progresMeasures': { const mb = insMeasuresBody(); return mb ? '<div class="px-sec cp-sec"><h3>Lingkar &amp; simetri</h3><span>' + h(INS_RANGE_OPTS.filter(o => o[0] === insRange.v)[0][1]) + '</span></div><div class="card cp-card-pad">' + mb + '</div>' : ''; }
+        case 'progresFitness': return insFitnessCard() || '';
         case 'latihanHero': return insTrainingHero(String(id));
         case 'latihanCards': return insActivityCard() + insStrengthCard() + insBalanceCard();
         case 'giziHero': return cpGiziHero(String(id));
@@ -40,7 +48,7 @@
   function renderClientInsight() {
     const id = window.selectedMemberId;
     if (!id || !$('cp-ph-progress')) return;
-    [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards'], ['cp-ph-gizi', 'giziHero']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
+    [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ins-measures', 'progresMeasures'], ['cp-ins-fitness', 'progresFitness'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards'], ['cp-ph-gizi', 'giziHero']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
     cpRenderOverview(id);
     paintIcons();
   }
@@ -51,6 +59,7 @@
     const hl = $('cp-highlight'); if (hl) setHTML(hl, cpHighlightHtml(m));
     const wk = $('cp-week'); if (wk) setHTML(wk, cpWeekHtml(m));
     const ss = $('cp-sess'); if (ss) setHTML(ss, cpSessHtml(m));
+    const mo = $('cp-moments'); if (mo) setHTML(mo, cpMomentsHtml(id));
   }
   window.cpRenderOverview = cpRenderOverview;
 
@@ -281,6 +290,7 @@
       // Fase AC: tugas coach dan catatan sesi terakhir (bagian baru; salinan lama tanpa keduanya tetap dipakai).
       window.clientTodo[key] = Array.isArray(b.todo) ? b.todo : null;
       window.clientNotes[key] = Array.isArray(b.notes) ? b.notes : null;
+      window.clientMoments[key] = b.athlete && !b.athlete.error && Array.isArray(b.athlete.moments) ? b.athlete.moments : null;
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();
     } finally { cc.applying = false; }

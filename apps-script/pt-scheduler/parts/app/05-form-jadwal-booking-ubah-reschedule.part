@@ -916,12 +916,17 @@
     // Ringkasan (dua kolom bila panel cukup lebar; .cp-col = display:contents di HP)
     body += '<div class="cp-pane' + hid('ringkasan') + '" data-cppane="ringkasan"><div class="cp-col cp-col-main"><div id="cp-highlight" class="cp-stack">' + cpHighlightHtml(m) + '</div></div>' +
       '<div class="cp-col cp-col-side"><div id="cp-week">' + cpWeekHtml(m) + '</div><div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div><div id="cp-sess">' + cpSessHtml(m) + '</div></div></div>';
-    // Progres: rapor + tafsir, catatan progres, tes kebugaran (Wave 2 merombak tab ini)
-    body += '<div class="cp-pane cp-stack' + hid('progres') + '" data-cppane="progres"><div id="cp-ph-progress">' + cpInsHtml(m.id, 'progresHero') + '</div>' +
-      '<div id="cp-ins-progress">' + cpInsHtml(m.id, 'progresCards') + '</div>' +
-      '<div id="profile-progress-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>' +
-      '<div id="cp-ins-folds" class="stack" style="gap:10px">' + cpInsHtml(m.id, 'progresFolds') + '</div>' +
-      '<div id="profile-tests-wrap" class="stack" style="gap:10px" data-member="' + h(m.id) + '">' + testsInner(m.id) + '</div></div>';
+    // Progres (Fase AC, Wave 2): sub-tab Ringkasan · Ukuran · Tes · Foto (seperti Progres milik klien); ganti sub-tab tanpa panggilan.
+    const pgs = cpPgSegOf(m.id), pgHid = k => k === pgs ? '' : ' hide';
+    body += '<div class="cp-pane cp-stack' + hid('progres') + '" data-cppane="progres">' + cpPgSegHtml(pgs) +
+      '<div class="cp-stack' + pgHid('ringkasan') + '" data-cppg="ringkasan"><div id="cp-ph-progress">' + cpInsHtml(m.id, 'progresHero') + '</div>' +
+        '<div id="cp-ins-progress" class="cp-stack">' + cpInsHtml(m.id, 'progresCards') + '</div><div id="cp-moments">' + cpMomentsHtml(m.id) + '</div>' +
+        '<div id="cp-ins-folds">' + cpInsHtml(m.id, 'progresFolds') + '</div></div>' +
+      '<div class="cp-stack' + pgHid('ukuran') + '" data-cppg="ukuran"><div id="profile-progress-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>' +
+        '<div id="cp-ins-measures" class="cp-stack">' + cpInsHtml(m.id, 'progresMeasures') + '</div><div id="cp-pg-hist" data-member="' + h(m.id) + '">' + cpPgHistHtml(m.id) + '</div></div>' +
+      '<div class="cp-stack' + pgHid('tes') + '" data-cppg="tes"><div id="cp-ins-fitness">' + cpInsHtml(m.id, 'progresFitness') + '</div>' +
+        '<div id="profile-tests-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + testsInner(m.id) + '</div></div>' +
+      '<div class="cp-stack' + pgHid('foto') + '" data-cppg="foto"><div id="cp-pg-foto" class="cp-stack" data-member="' + h(m.id) + '">' + cpFotoHtml(m.id) + '</div></div></div>';
     // Latihan: minggu ini + tafsir, lalu program dan log (Wave 3 merombak tab ini)
     body += '<div class="cp-pane cp-stack' + hid('latihan') + '" data-cppane="latihan"><div id="cp-ph-latihan">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
       '<div id="profile-program-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + programAdminInner(m.id) + '</div>' +

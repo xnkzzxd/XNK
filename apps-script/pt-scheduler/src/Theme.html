@@ -3254,9 +3254,27 @@ html.desk .cn-wrap { max-width: none; }
   @container (min-width: 700px) {
     #app.detail-wide .cp-pane[data-cppane="ringkasan"] { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
     #app.detail-wide .cp-pane[data-cppane="ringkasan"] > .cp-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    /* Progres › Ukuran: grafik kiri, riwayat kanan (tanpa ruang kosong di samping grafik); lingkar & simetri selebar panel. */
+    #app.detail-wide [data-cppg="ukuran"] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+    #app.detail-wide [data-cppg="ukuran"] > #profile-progress-wrap { grid-column: 1; grid-row: 1; }
+    #app.detail-wide [data-cppg="ukuran"] > #cp-pg-hist { grid-column: 2; grid-row: 1; }
+    #app.detail-wide [data-cppg="ukuran"] > #cp-ins-measures { grid-column: 1 / -1; grid-row: 2; }
+    #app.detail-wide [data-cppg="ukuran"] > :empty { display: none; }
+    #app.detail-wide [data-cppg="ukuran"] .pg-chart { max-width: none; }
   }
 }
 html.big-text .cp-acts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* HP: kartu tetap pendek — nomor ada di Data › Profil dan jadwal berikutnya tepat di bawah kartu. */
 @media (max-width: 767px) { .cp-card .cp-phone, .cp-card .cp-left-next { display: none; } .cp-card { padding: 14px 16px; gap: 10px; } .cp-act { min-height: 54px; padding: 6px 4px; } .cp-meter { margin-top: 6px; } }
+/* ── Progres (Wave 2): sub-tab, satu grafik dengan pilihan ukuran, momen, baris riwayat ── */
+.detail[data-kind="client"] .cp-pgseg { margin: 0; width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.detail[data-kind="client"] .cp-pgseg button { padding: 0 6px; }
+.cp-pick { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.cp-pick .chip { min-height: 40px; }
+.cp-pick-more { width: auto; min-width: 9rem; min-height: 40px; flex: 0 1 auto; }
+.cp-chart-card .pg-block { margin: 0; }
+.detail[data-kind="client"] .mom-ic { background: var(--surface-3); color: var(--fg); }
+.cp-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.cp-danger { color: var(--danger); }
+.cp-danger svg.lucide { color: var(--danger); }
 </style>

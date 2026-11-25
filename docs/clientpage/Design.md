@@ -17,7 +17,7 @@ Code: `apps-script/pt-scheduler/parts/app/20-klien-ac.part` (panel-only renderer
 | Home | Holds | Where |
 | --- | --- | --- |
 | Action bar | Chat WA · Booking · Mulai latihan · Catat ukuran | In the client card at every width: four equal tiles on phones and in the 420 px panel, one row with "Mulai latihan" solid when the panel is ≥ 620 px wide. Same on every tab, never repeated in a tab. |
-| ⋯ menu (`#sheet-cp-more`) | Tambah: PR baru, Tes kebugaran, Foto progres, Latihan yang lewat, Catatan privat · Kirim lewat WA: ringkasan latihan, hasil tes, pengingat form kesehatan · Bagikan kartu · Klien: Ubah data, Hapus klien | Head right on every tab |
+| ⋯ menu (`#sheet-cp-more`) | Tambah: PR baru, Tes kebugaran, Latihan yang lewat, Catatan privat · Kirim lewat WA: ringkasan latihan, hasil tes, pengingat form kesehatan · Bagikan kartu · Klien: Ubah data, Hapus klien | Head right on every tab |
 | The thing itself | A row opens its own sheet (view / Ubah / Hapus): measurement, workout day, session, PR, photo, test | — |
 | One link per section | "+ PR", "Atur program", "Ubah data gizi" | Right of the section head (`.px-sec`) |
 
@@ -32,7 +32,8 @@ Old → new:
 | Chat WA, Booking | Action bar |
 | Mulai latihan (Latihan tab) | Action bar |
 | Catat ×2 in Progres | Action bar → Catat ukuran |
-| Foto | ⋯ → Foto progres; Progres › Foto shows the grid |
+| Three share buttons in Progres | ⋯ → Bagikan kartu |
+| Foto | Progres › Foto (rows → private viewer; only the client uploads) |
 | + Tes, Kirim hasil via WA | ⋯ → Tes kebugaran / ⋯ → Hasil tes |
 | Six share buttons | ⋯ → Bagikan kartu |
 | Delete per measurement | Tap the row → Hapus |
@@ -90,7 +91,13 @@ PHONE                                        PC (panel ±790 px at 1440)
 On PC from a panel ≥ 760 px wide: 1–2 left (`.cp-col-main`), 3–5 right (`.cp-col-side`).
 
 ### Progres (Wave 2)
-Sub-tabs Ringkasan · Ukuran · Tes · Foto (the client's own Progres has the same idea).
+A light segment **Ringkasan · Ukuran · Tes · Foto** at the top of the pane (`cpPgSegHtml`, `window.cpPgSeg`). The choice and the picked measure are kept per client (`cpg` in part 20; another client starts on Ringkasan / Berat) and survive `refreshDetail`. Switching makes no call: every sub-tab is rendered from the bundle already in memory.
+- **Ringkasan**: *Rapor tubuh* (`cpRaporHtml`: the same numbers, range switch, sparkline and sentence as the portal's rapor, without Catat or share buttons; light through the client-page CSS), *Indikator* tiles, *Momen* (5 latest of bundle `athlete.moments`: records, measurement changes, session milestones; `.mom` list from the portal, neutral icon disc), *Yang berkaitan dengan hasil* fold.
+- **Ukuran**: *Grafik ukuran*: one `pgChartSvg` at a time, chips *Berat · Pinggang* plus a "Lainnya…" select for the other six measures that have data (`cpPgPick`). *Lingkar & simetri* (`insMeasuresBody`) when there is data. *Riwayat catatan*: rows (date, coach/klien, first three values), 5 then "Tampilkan semua"; a tap opens `#sheet-cp-row` (all values, author, **Hapus catatan** → the existing optimistic `pgDeleteAdminEntry` with its confirm).
+- **Tes**: the coach fitness insight (`insFitnessCard`) and `#profile-tests-wrap` (Wave 1). Adding a test and sending results stay in ⋯.
+- **Foto**: photo rows (date, side). A tap sets `pg.mode = 'admin'` and opens the existing private viewer (`pgViewPhoto`: one `getMemberProgressPhoto`, data URL, no Hapus for the coach); closing returns to the sub-tab (`pg.fromTab`). No thumbnail grid, so no extra photo calls. *Badge* pills below.
+- Removed from the tab: Catat ×2 (action bar), Foto button (sub-tab), three share buttons (⋯ → Bagikan kartu), the per-entry delete icons (row sheet). ⋯ → Tambah no longer lists "Foto progres": only the client uploads photos.
+- Server: `getClientBundle.athlete` now also carries `moments` (computed by `_portalXFor_` already; one additive field).
 
 ### Latihan (Wave 3)
 Berikutnya (no buttons), program day cards + "Atur program", Minggu ini vs biasanya, Kekuatan (one list, tap expands the chart), Volume & keseimbangan, Riwayat (tap a row → Ubah).
@@ -125,4 +132,4 @@ Other:
 - The logger opened outside the client page loads the client through `loadClientBundle` (one cached call) instead of `getWorkoutLog` + `getMemberProgram`.
 - Panel boot: `getSettingsBundle` (`{settings, status, packages}`, a failing part = `{error}`) replaces three Settings prefetch calls.
 
-Budget (checked in `browser-check`): boot 3 · open Klien 0 · open client 1 · tab switch 0 · session detail / note of a loaded client 0 · PR tick 1 · gizi decision 1 · health reviewed 1.
+Budget (checked in `browser-check`): boot 3 · open Klien 0 · open client 1 · tab switch 0 · Progres sub-tab switch 0 · photo view 1 · session detail / note of a loaded client 0 · PR tick 1 · gizi decision 1 · health reviewed 1.
