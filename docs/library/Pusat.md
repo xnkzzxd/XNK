@@ -168,6 +168,40 @@ backup diganti namanya (ID sama; gagal = folder lama tetap dipakai dan disebut d
 dilewati). Jawabannya `{slug, from, site, folder, hub}`, masing-masing `'ok'` atau pesan. Langkah untuk pemilik:
 [Hub.md](Hub.md#ganti-slug-coach-t-2243).
 
+## Paket, cara bayar dan uang (T-2264)
+
+Paket mengikuti **XNK Proposal Coach**: `PUSAT_TIERS` di `Pusat.gs` (Starter Rp149rb / Pro Rp249rb / Studio Rp549rb per
+bulan; tahunan, lifetime dan beli putus) dan `PUSAT_SETUP` (Standar Rp400rb, Custom Rp2,1jt). **Ubah tabel itu bersama
+proposal.** Harga hanya bawaan saat paket dipilih; harga lain per coach boleh diisi.
+
+- `SUB_<slug>` kini menyimpan `tier`, `cycle` (`bulanan|tahunan|lifetime|putus`), `setup {kind, price, paidAt}` dan
+  `pay[]` (semua pembayaran, 60 terakhir). Data lama (`plan: 'bulanan'`, `history`) dibaca apa adanya: paket ditebak dari
+  harga bulanan, riwayat menjadi pembayaran langganan.
+- Bulanan dan tahunan punya jatuh tempo (aturan T-2251 tetap: H-7/H-1, 7 hari tenggang, lalu baca saja). Lifetime dan
+  beli putus tanpa jatuh tempo: `belum` sampai pembayarannya dicatat, lalu `lunas`; tidak pernah baca saja karena tanggal.
+- **Tandai lunas = catat pembayaran** (`pusatSubPay(token, slug, {kind, amount, date, note})`, hanya pemilik): langganan
+  memajukan jatuh tempo 1 bulan (bulanan) atau 12 bulan (tahunan) dan mengembalikan baca saja ke otomatis; setup mengisi
+  tanggal lunas setup. `pusatAction('sub-paid')` tetap ada (= langganan sebesar harga).
+- `pusatOverview.money`: pendapatan rutin per bulan (bulanan + tahunan ÷ 12, coach keluar tidak dihitung), uang masuk
+  bulan ini dan 6 bulan, tagihan terdekat, setup belum lunas, 20 pembayaran terakhir. Angka dan slug saja.
+
+Di `/adminxnk`: halaman **Uang** (empat angka, uang masuk 6 bulan, pembayaran terakhir, tabel per coach), grup
+**Langganan & pembayaran** di detail coach (**Tandai lunas**, **Atur paket**), ringkasan uang di halaman Coach.
+
+## Tampilan /adminxnk (T-2264)
+
+Terang lembut dan monokrom (tanpa blok hitam; merah hanya untuk masalah). Bilah samping tipis: **Coach** (baris kartu
+coach di atas; di bawahnya selebar layar = ringkasan semua coach — kesehatan, uang, pertumbuhan 30 hari, perbandingan —
+atau detail coach dengan **← Ringkasan**), **Uang** (angka, uang masuk 6 bulan, pembayaran terakhir + tagihan
+berikutnya, tabel per coach), **Sistem** (siapkan XNK HQ, tindakan, versi & pemakaian, kuota per coach). Saringan di
+atas kartu hanya muncul bila berisi. Di HP bilah samping menjadi bilah bawah, kartu coach satu kolom di atas ringkasan,
+dan detail coach terbuka sebagai lembar penuh.
+
+Aturan pemilik (putaran 5): **tanpa ruang kosong**. Kartu yang bersebelahan sama tinggi (tombol di kaki kartu), kartu
+ganjil terakhir melebar, dan halaman yang lebih pendek dari layar ditutup kaki halaman `#hqfoot` (XNK HQ · host, waktu
+cek terakhir, jumlah coach, versi Library, Cek semua, Situs hub). `tools/hub-check.js` memeriksa lebar baris kartu,
+tinggi pasangan kartu dan posisi kaki halaman.
+
 ## Langganan bulanan (T-2251)
 
 Setiap coach punya data langganan di Script Property XNK HQ `SUB_<slug>`: paket (**gratis** atau **bulanan**), harga

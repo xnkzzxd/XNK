@@ -50,7 +50,7 @@ function hubUrl_() { return prop_('HUB_URL', 'https://xnk.web.id').replace(/\/+$
 
 // ── Pintu JSON untuk /adminxnk dan wizard coach ──────────────────────────────────────────────────────────────
 
-var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSubSave: pusatSubSave, pusatSetPlace: pusatSetPlace, pusatLeave: pusatLeave };
+var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSubSave: pusatSubSave, pusatSubPay: pusatSubPay, pusatSetPlace: pusatSetPlace, pusatLeave: pusatLeave };
 
 function doPost(e) {
   var out;
@@ -395,6 +395,8 @@ function pusatOverview(token) {
       return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), hist: json_('HIST_' + slug, []), backup: backupView_(slug), push: pushView_(slug), sub: subView_(slug), out: outView_(slug, hubCoaches) };
     }),
     setup: setupState_(),
+    money: moneyView_(),   // T-2264
+    tiers: PUSAT_TIERS, setupPrices: PUSAT_SETUP,
   };
 }
 
@@ -880,43 +882,87 @@ function pusatRename(token, oldSlug, newSlug) {
 
 var PUSAT_SUB_GRACE_DAYS = 7;
 var PUSAT_SUB_REMIND = [7, 1];          // email pengingat H-7 dan H-1
-var PUSAT_SUB_HISTORY = 24;             // riwayat bayar yang disimpan
+var PUSAT_SUB_HISTORY = 24;             // (lama) riwayat bayar langganan
 var PUSAT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// T-2264: paket dan harga dari "XNK Proposal Coach" (29 Okt 2026). UBAH BERSAMA proposal bila harga berubah.
+// Harga hanya bawaan saat paket dipilih; pemilik boleh mengisi harga lain per coach.
+var PUSAT_TIERS = {
+  starter: { name: 'Starter', bulanan: 149000, tahunan: 1490000, lifetime: 3900000, putus: 2900000 },
+  pro: { name: 'Pro', bulanan: 249000, tahunan: 2490000, lifetime: 6900000, putus: 4900000 },
+  studio: { name: 'Studio', bulanan: 549000, tahunan: 5490000, lifetime: 14900000, putus: 10900000 },
+};
+var PUSAT_TIER_KEYS = ['gratis', 'starter', 'pro', 'studio', 'lain'];
+var PUSAT_CYCLES = ['bulanan', 'tahunan', 'lifetime', 'putus'];   // bulanan/tahunan punya jatuh tempo; lifetime/putus sekali bayar
+var PUSAT_SETUP = { standar: 400000, custom: 2100000 };
+var PUSAT_PAY_KINDS = ['langganan', 'setup', 'lifetime', 'putus'];
+var PUSAT_PAY_KEEP = 60;                // catatan pembayaran yang disimpan per coach
 
 /** Tanggal hari ini (WIB) sebagai YYYY-MM-DD. */
 function todayWib_() { return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10); }
 /** Selisih hari b − a (keduanya YYYY-MM-DD). */
 function dayDiff_(a, b) { return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5); }
 /** Tanggal yang sama bulan berikutnya; 31 Jan → 28/29 Feb. */
-function addMonth_(d) {
-  var y = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)), day = Number(d.slice(8, 10));
-  m += 1; if (m > 12) { m = 1; y += 1; }
+function addMonth_(d) { return addMonths_(d, 1); }
+/** Tanggal yang sama n bulan kemudian (hari dipotong ke akhir bulan). */
+function addMonths_(d, n) {
+  var y = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)) - 1 + n, day = Number(d.slice(8, 10));
+  y += Math.floor(m / 12); m = ((m % 12) + 12) % 12 + 1;
   var last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + Math.min(day, last)).slice(-2);
 }
+/** Paket dari harga bulanan (data lama tanpa `tier`). */
+function tierFromPrice_(price) {
+  var hit = ['starter', 'pro', 'studio'].filter(function (k) { return PUSAT_TIERS[k].bulanan === price; })[0];
+  return hit || 'lain';
+}
+/** plan turunan: bulanan = ada jatuh tempo (bulanan/tahunan), sekali = lifetime/beli putus, gratis. */
+function planOf_(tier, cycle) { return tier === 'gratis' ? 'gratis' : (cycle === 'bulanan' || cycle === 'tahunan') ? 'bulanan' : 'sekali'; }
 function validDate_(d) { return PUSAT_DATE_RE.test(String(d || '')) && !isNaN(Date.parse(d + 'T00:00:00Z')) && new Date(d + 'T00:00:00Z').toISOString().slice(0, 10) === d; }
 
-/** Data langganan tersimpan; tanpa baris = gratis. */
+/**
+ * Data langganan tersimpan; tanpa baris = gratis. T-2264: `tier` (paket proposal), `cycle` (cara bayar), `setup`, dan
+ * `pay` (semua pembayaran). Data lama {plan, price, history} dibaca apa adanya: plan bulanan → cycle bulanan, paket
+ * ditebak dari harga, history → pay jenis langganan. Bentuk baru ditulis pada simpan berikutnya.
+ */
 function subState_(slug) {
   var s = json_('SUB_' + slug, null);
   if (!s || typeof s !== 'object') s = {};
+  var price = Math.max(0, Math.floor(Number(s.price) || 0));
+  var tier = PUSAT_TIER_KEYS.indexOf(s.tier) !== -1 ? s.tier : s.plan === 'bulanan' ? tierFromPrice_(price) : 'gratis';
+  var cycle = PUSAT_CYCLES.indexOf(s.cycle) !== -1 ? s.cycle : 'bulanan';
+  var pay = Array.isArray(s.pay) ? s.pay : (Array.isArray(s.history) ? s.history : []).map(function (h) {
+    return { at: String(h.at || ''), date: String(h.at || '').slice(0, 10), amount: Math.max(0, Math.floor(Number(h.price) || 0)), kind: 'langganan', due: h.due || '', next: h.next || '', note: '' };
+  });
+  var su = s.setup && typeof s.setup === 'object' ? s.setup : {};
+  var sk = su.kind === 'standar' || su.kind === 'custom' ? su.kind : 'none';
   return {
-    plan: s.plan === 'bulanan' ? 'bulanan' : 'gratis',
-    price: Math.max(0, Math.floor(Number(s.price) || 0)),
+    tier: tier, cycle: cycle, plan: planOf_(tier, cycle),
+    price: price,
     due: validDate_(s.due) ? s.due : '',
     email: String(s.email || ''),
     ro: s.ro === 'on' || s.ro === 'off' ? s.ro : 'auto',
-    history: Array.isArray(s.history) ? s.history : [],
+    setup: { kind: sk, price: Math.max(0, Math.floor(Number(su.price) || 0)), paidAt: validDate_(su.paidAt) ? su.paidAt : '' },
+    pay: pay.filter(function (x) { return x && typeof x === 'object'; }),
     sent: s.sent && typeof s.sent === 'object' ? s.sent : {},
     pushed: s.pushed && typeof s.pushed === 'object' ? s.pushed : null,
   };
 }
-function subSave_(slug, s) { props_().setProperty('SUB_' + slug, JSON.stringify(s)); }
+function subSave_(slug, s) {
+  s.pay = (s.pay || []).slice(-PUSAT_PAY_KEEP);
+  delete s.history;
+  props_().setProperty('SUB_' + slug, JSON.stringify(s));
+}
+/** Pembayaran langganan saja, bentuk lama {at, due, next, price} (untuk tampilan dan tes lama). */
+function subHistory_(s) {
+  return (s.pay || []).filter(function (p) { return p.kind === 'langganan'; }).map(function (p) { return { at: p.at, due: p.due || '', next: p.next || '', price: p.amount }; });
+}
 
 /**
  * Hitung status (murni). gratis/tanpa jatuh tempo = tidak pernah baca saja kecuali pemilik menyalakannya sendiri.
  * @return {{state: string, days: ?number, graceLeft: ?number, readonly: boolean, manual: string}}
  *   state: gratis | aktif | segera (≤ 7 hari) | tenggang (lewat, ≤ 7 hari) | lewat (baca saja otomatis)
+ *          | lunas / belum (lifetime atau beli putus: sekali bayar, tidak pernah baca saja karena tanggal)
  */
 function subStatus_(s, today) {
   var out = { state: 'gratis', days: null, graceLeft: null, readonly: false, manual: s.ro };
@@ -928,6 +974,7 @@ function subStatus_(s, today) {
     else if (-days <= PUSAT_SUB_GRACE_DAYS) { out.state = 'tenggang'; out.graceLeft = PUSAT_SUB_GRACE_DAYS + days; }
     else { out.state = 'lewat'; out.readonly = true; }
   } else if (s.plan === 'bulanan') out.state = 'aktif';
+  else if (s.plan === 'sekali') out.state = (s.pay || []).some(function (p) { return p.kind === s.cycle; }) ? 'lunas' : 'belum';   // lifetime / beli putus
   if (s.ro === 'on') out.readonly = true;
   if (s.ro === 'off') out.readonly = false;
   return out;
@@ -944,9 +991,11 @@ function subNote_(s, st) {
 function subView_(slug) {
   var s = subState_(slug), st = subStatus_(s, todayWib_());
   return {
-    plan: s.plan, price: s.price, due: s.due, email: s.email, ro: s.ro,
+    plan: s.plan, tier: s.tier, tierName: (PUSAT_TIERS[s.tier] || {}).name || (s.tier === 'lain' ? 'Lainnya' : 'Gratis'), cycle: s.cycle,
+    price: s.price, due: s.due, email: s.email, ro: s.ro,
     state: st.state, days: st.days, graceLeft: st.graceLeft, readonly: st.readonly,
-    history: s.history.slice(-6),
+    setup: s.setup, pay: s.pay.slice(-10),
+    history: subHistory_(s).slice(-6),
     pushed: s.pushed ? { on: !!s.pushed.on, at: s.pushed.at || '', error: s.pushed.error || '' } : null,
   };
 }
@@ -999,7 +1048,8 @@ function subRemind_(slug) {
   var to = s.email || prop_('PUSAT_EMAIL') || Session.getEffectiveUser().getEmail();
   var name = String(((hubJson_().coaches || []).filter(function (x) { return x && x.slug === slug; })[0] || {}).name || slug);
   var when = st.days === 0 ? 'hari ini' : st.days === 1 ? 'besok' : st.days + ' hari lagi';
-  var body = 'Halo ' + name + ',\n\nLangganan XNK Coach untuk ' + hubUrl_() + '/' + slug + '/ jatuh tempo ' + when + ' (' + s.due + ')' +
+  var paket = ((PUSAT_TIERS[s.tier] || {}).name ? ' (paket ' + PUSAT_TIERS[s.tier].name + ', ' + s.cycle + ')' : s.cycle === 'tahunan' ? ' (tahunan)' : '');
+  var body = 'Halo ' + name + ',\n\nLangganan XNK Coach' + paket + ' untuk ' + hubUrl_() + '/' + slug + '/ jatuh tempo ' + when + ' (' + s.due + ')' +
     (s.price ? ', sebesar Rp ' + s.price.toLocaleString('id-ID') : '') + '.\n\n' +
     'Setelah jatuh tempo ada masa tenggang ' + PUSAT_SUB_GRACE_DAYS + ' hari. Bila belum diperpanjang, aplikasi masuk mode baca saja: ' +
     'semua data tetap aman dan bisa dilihat, tetapi belum bisa diubah. Situs tidak pernah dihapus.\n\nTerima kasih.\nXNK';
@@ -1027,7 +1077,9 @@ function subDaily_() {
 }
 
 /**
- * Simpan pengaturan langganan dari /adminxnk. data: {plan, price, due, email}. Hanya pemilik.
+ * Simpan pengaturan langganan dari /adminxnk. Hanya pemilik.
+ * data: {tier, cycle, price, due, email, setupKind, setupPrice} (T-2264); bentuk lama {plan: gratis|bulanan, …} tetap diterima.
+ * Harga kosong = harga proposal untuk paket + cara bayar itu.
  * @return {Object} pusatOverview
  */
 function pusatSubSave(token, slug, data) {
@@ -1037,20 +1089,113 @@ function pusatSubSave(token, slug, data) {
   if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
   if (outState_(slug)) throw new Error('Coach ini sudah keluar; langganan tidak bisa diubah. Tekan "Aktifkan lagi" dulu.');
   data = data && typeof data === 'object' ? data : {};
-  var plan = data.plan === 'bulanan' ? 'bulanan' : data.plan === 'gratis' ? 'gratis' : null;
-  if (!plan) throw new Error('Pilih paket: gratis atau bulanan.');
-  var price = Number(String(data.price == null ? '' : data.price).replace(/[.\s]/g, '') || 0);
-  if (!isFinite(price) || price < 0 || Math.floor(price) !== price || price > 100000000) throw new Error('Harga harus bilangan bulat Rp.');
+  var rupiah = function (v, what) {
+    var n = Number(String(v == null ? '' : v).replace(/[.\s]/g, '') || 0);
+    if (!isFinite(n) || n < 0 || Math.floor(n) !== n || n > 100000000) throw new Error(what + ' harus bilangan bulat Rp.');
+    return n;
+  };
+  var tier, cycle = PUSAT_CYCLES.indexOf(data.cycle) !== -1 ? data.cycle : 'bulanan';
+  if (data.tier != null && data.tier !== '') {
+    if (PUSAT_TIER_KEYS.indexOf(data.tier) === -1) throw new Error('Pilih paket: gratis, Starter, Pro, Studio atau lainnya.');
+    tier = data.tier;
+  } else if (data.plan === 'gratis') tier = 'gratis';
+  else if (data.plan === 'bulanan') tier = null;   // bentuk lama: paket ditebak dari harga di bawah
+  else throw new Error('Pilih paket: gratis atau bulanan.');
+  var priceRaw = String(data.price == null ? '' : data.price).trim();
+  var price = rupiah(priceRaw, 'Harga');
+  if (tier === null) tier = tierFromPrice_(price);
+  if (!priceRaw && PUSAT_TIERS[tier]) price = PUSAT_TIERS[tier][cycle];
+  var plan = planOf_(tier, cycle);
   var due = String(data.due || '').trim();
   if (due && !validDate_(due)) throw new Error('Tanggal jatuh tempo tidak valid.');
-  if (plan === 'bulanan' && !due) throw new Error('Isi tanggal jatuh tempo untuk paket bulanan.');
+  if (plan === 'bulanan' && !due) throw new Error('Isi tanggal jatuh tempo untuk paket ' + cycle + '.');
   var email = String(data.email || '').trim();
   if (email && (email.length > 120 || !/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(email))) throw new Error('Email coach tidak valid.');
   var s = subState_(slug);
-  s.plan = plan; s.price = price; s.due = due; s.email = email;
+  if (data.setupKind != null) {
+    var sk = data.setupKind === 'standar' || data.setupKind === 'custom' ? data.setupKind : data.setupKind === 'none' || data.setupKind === '' ? 'none' : null;
+    if (!sk) throw new Error('Jenis setup tidak dikenal.');
+    var spRaw = String(data.setupPrice == null ? '' : data.setupPrice).trim();
+    s.setup = { kind: sk, price: sk === 'none' ? 0 : spRaw ? rupiah(spRaw, 'Biaya setup') : PUSAT_SETUP[sk], paidAt: sk === 'none' ? '' : s.setup.paidAt };
+  }
+  s.tier = tier; s.cycle = cycle; s.plan = plan; s.price = price; s.due = plan === 'bulanan' ? due : ''; s.email = email;
   subSave_(slug, s);
   subSync_(slug, all[slug], false);
   return pusatOverview(token);
+}
+
+/**
+ * Catat pembayaran (T-2264, "Tandai lunas" di /adminxnk). Hanya pemilik.
+ * data: {kind: langganan|setup|lifetime|putus, amount (kosong = harga), date (YYYY-MM-DD, kosong = hari ini WIB), note}.
+ * langganan memajukan jatuh tempo 1 bulan (bulanan) atau 12 bulan (tahunan) dan mengembalikan baca saja ke otomatis.
+ * @return {Object} pusatOverview (+ notice bila coach belum menerima keadaan baca saja)
+ */
+function pusatSubPay(token, slug, data) {
+  requireOwnerToken_(token);
+  var notice = subPay_(String(slug || ''), data && typeof data === 'object' ? data : {});
+  var ov = pusatOverview(token);
+  if (notice) ov.notice = notice;
+  return ov;
+}
+
+/** Inti pencatatan pembayaran; mengembalikan pesan bila coach belum menerima keadaan baca saja. */
+function subPay_(slug, data) {
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  if (outState_(slug)) throw new Error('Coach ini sudah keluar; langganan tidak bisa diubah. Tekan "Aktifkan lagi" dulu.');
+  var kind = data.kind || 'langganan';
+  if (PUSAT_PAY_KINDS.indexOf(kind) === -1) throw new Error('Jenis pembayaran tidak dikenal.');
+  var s = subState_(slug);
+  if (kind === 'langganan' && (s.plan !== 'bulanan' || !s.due)) throw new Error('Atur paket bulanan atau tahunan dan jatuh tempo dulu.');
+  if (kind === 'setup' && s.setup.kind === 'none') throw new Error('Atur jenis setup (Standar / Custom) dulu.');
+  if ((kind === 'lifetime' || kind === 'putus') && s.cycle !== kind) throw new Error('Cara bayar coach ini bukan ' + (kind === 'putus' ? 'beli putus' : 'lifetime') + '.');
+  var raw = String(data.amount == null ? '' : data.amount).trim();
+  var amount = raw ? Number(raw.replace(/[.\s]/g, '')) : kind === 'setup' ? s.setup.price : s.price;
+  if (!isFinite(amount) || amount <= 0 || Math.floor(amount) !== amount || amount > 1000000000) throw new Error('Jumlah harus bilangan bulat Rp lebih dari 0.');
+  var date = String(data.date || '').trim() || todayWib_();
+  if (!validDate_(date) || dayDiff_(todayWib_(), date) > 1) throw new Error('Tanggal bayar tidak valid.');
+  var note = String(data.note || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  var entry = { at: new Date().toISOString(), date: date, amount: amount, kind: kind, note: note };
+  if (kind === 'langganan') {
+    entry.due = s.due; entry.next = addMonths_(s.due, s.cycle === 'tahunan' ? 12 : 1);
+    s.due = entry.next; s.ro = 'auto';
+  } else if (kind === 'setup') s.setup.paidAt = date;
+  s.pay.push(entry);
+  subSave_(slug, s);
+  var r = subSync_(slug, all[slug], false);
+  return r && r.error ? 'Pembayaran dicatat, tetapi coach belum menerima keadaan baca saja: ' + r.error + ' (dicoba lagi besok pagi).' : '';
+}
+
+/**
+ * Ringkasan uang untuk /adminxnk (T-2264), angka dan slug saja. Pendapatan rutin per bulan = bulanan + tahunan/12
+ * (coach keluar tidak dihitung); uang masuk dari catatan pembayaran (termasuk coach yang sudah keluar).
+ */
+function moneyView_() {
+  var all = json_('COACHES', {}), today = todayWib_(), monthKey = today.slice(0, 7);
+  var months = [];
+  for (var i = 5; i >= 0; i--) months.push({ key: addMonths_(monthKey + '-01', -i).slice(0, 7), amount: 0 });
+  var byKey = {}; months.forEach(function (m) { byKey[m.key] = m; });
+  var out = { mrr: 0, monthIn: 0, monthKey: monthKey, months: months, upcoming: [], setupUnpaid: [], payments: [] };
+  Object.keys(all).sort().forEach(function (slug) {
+    var s = subState_(slug), left = !!outState_(slug);
+    if (!left && s.plan === 'bulanan') {
+      out.mrr += s.cycle === 'tahunan' ? Math.round(s.price / 12) : s.price;
+      if (s.due) { var st = subStatus_(s, today); out.upcoming.push({ slug: slug, due: s.due, amount: s.price, cycle: s.cycle, state: st.state, days: st.days }); }
+    }
+    if (!left && s.setup.kind !== 'none' && !s.setup.paidAt) out.setupUnpaid.push(slug);
+    s.pay.forEach(function (p, i) {
+      var d = validDate_(p.date) ? p.date : String(p.at || '').slice(0, 10), amt = Number(p.amount) || 0;
+      if (!validDate_(d)) return;
+      if (byKey[d.slice(0, 7)]) byKey[d.slice(0, 7)].amount += amt;
+      if (d.slice(0, 7) === monthKey) out.monthIn += amt;
+      out.payments.push({ slug: slug, date: d, at: String(p.at || ''), amount: amt, kind: p.kind || 'langganan', note: p.note || '', i: i });
+    });
+  });
+  out.upcoming.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : 0; });
+  out.payments.sort(function (a, b) { var x = a.date + a.at, y = b.date + b.at; return x < y ? 1 : x > y ? -1 : b.i - a.i; });   // terbaru dulu; waktu sama = yang dicatat belakangan dulu
+  out.payments.forEach(function (p) { delete p.i; });
+  out.payments = out.payments.slice(0, 20);
+  return out;
 }
 
 /** Aksi langganan: sub-paid (lunas = jatuh tempo +1 bulan, kembali otomatis), sub-ro-on / sub-ro-off / sub-ro-auto. */
@@ -1059,14 +1204,8 @@ function subAction_(action, slug) {
   if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
   if (outState_(slug)) throw new Error('Coach ini sudah keluar; langganan tidak bisa diubah. Tekan "Aktifkan lagi" dulu.');
   var s = subState_(slug);
-  if (action === 'sub-paid') {
-    if (s.plan !== 'bulanan' || !s.due) throw new Error('Atur paket bulanan dan jatuh tempo dulu.');
-    var next = addMonth_(s.due);
-    s.history.push({ at: new Date().toISOString(), due: s.due, next: next, price: s.price });
-    s.history = s.history.slice(-PUSAT_SUB_HISTORY);
-    s.due = next;
-    s.ro = 'auto';
-  } else if (action === 'sub-ro-on') s.ro = 'on';
+  if (action === 'sub-paid') return subPay_(slug, { kind: 'langganan' });   // T-2264: = catat pembayaran langganan, jumlah = harga
+  if (action === 'sub-ro-on') s.ro = 'on';
   else if (action === 'sub-ro-off') s.ro = 'off';
   else if (action === 'sub-ro-auto') s.ro = 'auto';
   else throw new Error('Aksi tidak dikenal.');
