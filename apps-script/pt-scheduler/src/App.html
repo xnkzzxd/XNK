@@ -130,11 +130,39 @@
     return 'Selamat malam';
   }
 
-  // Ikon lucide dibuat ulang setelah DOM berubah (debounce).
+  // Ikon lucide digambar setelah DOM berubah (debounce), HANYA <i data-lucide> yang belum digambar.
+  // lucide.createIcons() menggambar ulang SEMUA ikon (svg hasilnya tetap punya data-lucide); bersama MutationObserver
+  // (bagian 14) itu jadi putaran tanpa henti, ±46 kali per detik, yang membuat HP panas (2026-11-20). Jangan panggil langsung.
   let iconTimer = null;
+  function iconPascal(name) {
+    return String(name).split(/[-_\s]+/).filter(Boolean).map(function (p) { return p.charAt(0).toUpperCase() + p.slice(1); }).join('');
+  }
+  function drawIcons() {
+    const L = window.lucide;
+    if (!L) return;
+    const todo = document.querySelectorAll('i[data-lucide]');
+    if (!todo.length) return;
+    if (typeof L.createElement !== 'function' || !L.icons) { L.createIcons(); return; }
+    for (let i = 0; i < todo.length; i++) {
+      const el = todo[i], name = el.getAttribute('data-lucide'), node = L.icons[iconPascal(name)];
+      if (!node || !el.parentNode) continue;
+      // Sama dengan replaceElement lucide: atribut elemen ikut, aria-hidden bila tanpa label, kelas lucide lucide-<nama>.
+      const attrs = { 'data-lucide': name };
+      let labelled = false;
+      for (let k = 0; k < el.attributes.length; k++) {
+        const at = el.attributes[k];
+        attrs[at.name] = at.value;
+        if (at.name.indexOf('aria-') === 0 || at.name === 'role' || at.name === 'title') labelled = true;
+      }
+      if (!labelled) attrs['aria-hidden'] = 'true';
+      attrs['class'] = ['lucide', 'lucide-' + name].concat((el.getAttribute('class') || '').split(/\s+/))
+        .filter(function (c, ix, arr) { return c && arr.indexOf(c) === ix; }).join(' ');
+      el.parentNode.replaceChild(L.createElement(node, attrs), el);
+    }
+  }
   function paintIcons() {
     clearTimeout(iconTimer);
-    iconTimer = setTimeout(function () { try { if (window.lucide) window.lucide.createIcons(); } catch (e) {} }, 16);
+    iconTimer = setTimeout(function () { try { drawIcons(); } catch (e) {} }, 16);
   }
   window.scheduleIconUpdate = paintIcons;
 
@@ -6742,12 +6770,14 @@
     if (list) dragSort(list, '.wl-ex', function (from, to) { wlMoveTo(from, to); });
     wlRenderRest();
   }
+  // Teks yang dipanggil timer 4× per detik: tulis hanya bila berubah (tiap tulis = tata letak ulang; HP cepat panas).
+  function wlSetText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
   function wlRenderSub() {
     if (!wl) return;
-    const sub = $('wl-sub');
-    sub.textContent = wl.loading || wl.live ? '' : 'Catat ' + (wl.date === wkToday() ? 'hari ini' : pgLabel(wl.date));
-    sub.classList.toggle('hide', !sub.textContent);
-    const d = $('wl-st-dur'); if (d && wl.live && wl.startedAt) d.textContent = wlClock((Date.now() - wl.startedAt) / 1000);
+    const sub = $('wl-sub'), st = wl.loading || wl.live ? '' : 'Catat ' + (wl.date === wkToday() ? 'hari ini' : pgLabel(wl.date));
+    wlSetText(sub, st);
+    sub.classList.toggle('hide', !st);
+    const d = $('wl-st-dur'); if (d && wl.live && wl.startedAt) wlSetText(d, wlClock((Date.now() - wl.startedAt) / 1000));
   }
   function wlScrollToOpen() {
     setTimeout(function () {
@@ -6931,7 +6961,7 @@
   function wlRestTick() {
     if (!wl || !wl.restUntil) return;
     const left = (wl.restUntil - Date.now()) / 1000, t = $('wl-rest-t'), f = $('wl-rest-fill');
-    if (t) t.textContent = left > 0 ? wlClock(Math.ceil(left)) : '0:00';
+    wlSetText(t, left > 0 ? wlClock(Math.ceil(left)) : '0:00');
     if (f) f.style.transform = 'scaleX(' + Math.max(0, Math.min(1, left / (wl.restTotal || 1))).toFixed(3) + ')';
     if (left <= 0 && !wlRt.restEnded) {
       wlRt.restEnded = true;
@@ -6945,7 +6975,7 @@
     wlRt.timer = setInterval(function () {
       if (!wl || !ui.wlOn) { clearInterval(wlRt.timer); wlRt.timer = null; return; }
       wlRenderSub(); wlRestTick();
-      if (wl.watch) { const el = $('wl-dur-' + wl.watch.i + '-' + wl.watch.j); if (el) el.textContent = wlClock((Date.now() - wl.watch.at) / 1000); }
+      if (wl.watch) wlSetText($('wl-dur-' + wl.watch.i + '-' + wl.watch.j), wlClock((Date.now() - wl.watch.at) / 1000));
     }, 250);
   }
   function wlAudioPrime() { try { const C = window.AudioContext || window.webkitAudioContext; if (!C) return; if (!wlRt.audio) wlRt.audio = new C(); if (wlRt.audio.state === 'suspended') wlRt.audio.resume(); } catch (e) {} }
@@ -11499,11 +11529,15 @@
   });
 
   // Ikon untuk elemen statis saat halaman pertama dibuka.
-  // (Hanya elemen baru; teks jam/hitung mundur yang berubah tiap detik diabaikan.)
+  // Hanya elemen baru yang membawa <i data-lucide> yang belum digambar; svg ikon yang baru digambar, teks jam/hitung mundur
+  // yang berubah tiap detik, dan elemen tanpa ikon diabaikan (kalau tidak: putaran gambar-ulang tanpa henti, HP panas).
   new MutationObserver(function (list) {
     for (let i = 0; i < list.length; i++) {
       const added = list[i].addedNodes;
-      for (let j = 0; j < added.length; j++) { if (added[j].nodeType === 1) { paintIcons(); return; } }
+      for (let j = 0; j < added.length; j++) {
+        const n = added[j];
+        if (n.nodeType === 1 && ((n.matches && n.matches('i[data-lucide]')) || (n.querySelector && n.querySelector('i[data-lucide]')))) { paintIcons(); return; }
+      }
     }
   }).observe(document.body, { childList: true, subtree: true });
 
