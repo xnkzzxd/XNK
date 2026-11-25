@@ -78,8 +78,8 @@ function doGet(e) {
   try { requireSetupTicket_(t); } catch (err) { return ContentService.createTextOutput('Link siapkan XNK HQ sudah tidak berlaku. Buka lagi dari xnk.web.id/adminxnk.'); }
   setupPusat_();
   // Izin baru (Drive/Spreadsheet) TIDAK bisa diberikan lewat link web: Google hanya menampilkan layar izin di editor.
-  if (!setupState_().auth) return ContentService.createTextOutput('Trigger XNK HQ sudah terpasang (cek harian 06:00 WIB, backup tiap jam), tetapi izin Google baru (Drive/Spreadsheet untuk backup) belum diberikan. Izin itu hanya bisa diberikan dari editor: buka ' + editorUrl_() + ' , pilih fungsi setupPusat, tekan Run, lalu Izinkan.');
-  return ContentService.createTextOutput('XNK HQ siap: izin Google lengkap, cek harian 06:00 WIB dan backup tiap jam terpasang. Tutup tab ini dan kembali ke xnk.web.id/adminxnk.');
+  if (!setupState_().auth) return ContentService.createTextOutput('Trigger XNK HQ sudah terpasang (cek harian 06:00 WIB, backup tiap jam, pembangun push tiap 10 menit), tetapi izin Google baru (Drive/Spreadsheet untuk backup) belum diberikan. Izin itu hanya bisa diberikan dari editor: buka ' + editorUrl_() + ' , pilih fungsi setupPusat, tekan Run, lalu Izinkan.');
+  return ContentService.createTextOutput('XNK HQ siap: izin Google lengkap, cek harian 06:00 WIB, backup tiap jam dan pembangun push tiap 10 menit terpasang. Tutup tab ini dan kembali ke xnk.web.id/adminxnk.');
 }
 
 var PUSAT_SETUP_MS = 10 * 60 * 1000;
@@ -104,8 +104,8 @@ function setupState_() {
   if (!auth) {
     try { drive_('get', '?pageSize=1&fields=files(id)'); auth = true; c.put('auth-ok', '1', 600); } catch (e) { auth = false; }
   }
-  var st = { auth: auth, daily: !!h.runPusatDaily, backup: !!h.runPusatBackup, editor: editorUrl_() };
-  st.ok = st.auth && st.daily && st.backup;
+  var st = { auth: auth, daily: !!h.runPusatDaily, backup: !!h.runPusatBackup, pushKick: !!h.runPusatPushKick, editor: editorUrl_() };
+  st.ok = st.auth && st.daily && st.backup && st.pushKick;
   return st;
 }
 
@@ -651,15 +651,17 @@ function backupNow_(slug) {
 
 // ── Pemasangan (dijalankan pemilik dari editor) ─────────────────────────────────────────────────────────────
 
-/** Sekali (dan lagi setelah izin baru): kunci sesi + trigger harian 06:00 WIB + trigger backup tiap jam. Aman diulang.
+/** Sekali (dan lagi setelah izin baru): kunci sesi + trigger harian 06:00 WIB + trigger backup tiap jam + pembangun
+ *  push tiap 10 menit (runPusatPushKick). Aman diulang.
  *  Dari editor, atau dari /adminxnk → "Siapkan XNK HQ" (doGet ?setup). */
 function setupPusat() { return setupPusat_(); }
 function setupPusat_() {
   if (prop_('SESSION_SECRET').length < 32) props_().setProperty('SESSION_SECRET', Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''));
-  ScriptApp.getProjectTriggers().forEach(function (t) { var h = t.getHandlerFunction(); if (h === 'runPusatDaily' || h === 'runPusatBackup') ScriptApp.deleteTrigger(t); });
+  ScriptApp.getProjectTriggers().forEach(function (t) { var h = t.getHandlerFunction(); if (h === 'runPusatDaily' || h === 'runPusatBackup' || h === 'runPusatPushKick') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('runPusatDaily').timeBased().atHour(6).everyDays(1).inTimezone('Asia/Jakarta').create();
   ScriptApp.newTrigger('runPusatBackup').timeBased().everyHours(1).create();
-  return 'XNK HQ siap (cek harian 06:00 WIB, backup tiap jam). Isi PUSAT_PIN dan PUSAT_ENROLL_CODE di Script Properties bila belum, lalu terbitkan sebagai aplikasi web.';
+  ScriptApp.newTrigger('runPusatPushKick').timeBased().everyMinutes(PUSHKICK_EVERY_MIN).create();
+  return 'XNK HQ siap (cek harian 06:00 WIB, backup tiap jam, pembangun push tiap ' + PUSHKICK_EVERY_MIN + ' menit). Isi PUSAT_PIN dan PUSAT_ENROLL_CODE di Script Properties bila belum, lalu terbitkan sebagai aplikasi web.';
 }
 
 // ── Web Push di hub (T-2240) ────────────────────────────────────────────────────────────────────────────────
@@ -743,14 +745,44 @@ function pushSet_(slug, on) {
 function pusatPushTargets(pushSecret) {
   var want = prop_('PUSAT_PUSH_SECRET');
   if (want.length < 32 || !eq_(String(pushSecret == null ? '' : pushSecret), want)) throw new Error('Permintaan tidak valid.');
+  return { coaches: pushTargets_() };
+}
+
+/** Coach yang push-nya menyala dan siap dikirimi: [{slug, exec, relay}]. Satu sumber untuk pusatPushTargets dan pembangun. */
+function pushTargets_() {
   var all = json_('COACHES', {});
-  return {
-    coaches: Object.keys(all).sort().map(function (slug) {
-      var p = pushState_(slug);
-      if (outState_(slug)) return null;   // T-2252: coach keluar tidak pernah dikirimi push
-      return p.on && p.active && p.relay && PUSAT_EXEC_RE.test(String(p.exec || '')) ? { slug: slug, exec: p.exec, relay: p.relay } : null;
-    }).filter(Boolean),
-  };
+  return Object.keys(all).sort().map(function (slug) {
+    var p = pushState_(slug);
+    if (outState_(slug)) return null;   // T-2252: coach keluar tidak pernah dikirimi push
+    return p.on && p.active && p.relay && PUSAT_EXEC_RE.test(String(p.exec || '')) ? { slug: slug, exec: p.exec, relay: p.relay } : null;
+  }).filter(Boolean);
+}
+
+// ── Pembangun Push XNK (2026-11-25) ─────────────────────────────────────────────────────────────────────────
+// Jadwal "tiap 5 menit" GitHub sering tertunda berjam-jam (audit 2026-11-25: Push XNK hanya ±3–4 kali sehari), padahal
+// pesan push coach baru dibuat saat workflow memanggil pushRelayPull. Jam Google tepat waktu: trigger ini (tiap 10 menit,
+// dipasang setupPusat) menjalankan workflow Push XNK lewat workflow_dispatch, hanya 05:00–22:59 WIB dan hanya bila ada
+// coach yang push-nya menyala. Cron di workflow tetap jadi cadangan; concurrency "push" di sana mencegah kiriman ganda.
+var PUSHKICK_EVERY_MIN = 10;
+var PUSHKICK_HOURS = [5, 23];   // jam WIB [mulai, selesai) — 05:00 sampai 22:59
+
+function runPusatPushKick() {
+  var hour = new Date(Date.now() + 7 * 3600 * 1000).getUTCHours();
+  if (hour < PUSHKICK_HOURS[0] || hour >= PUSHKICK_HOURS[1]) return { skipped: 'jam' };
+  if (!prop_('GITHUB_TOKEN')) return { skipped: 'token' };
+  if (!pushTargets_().length) return { skipped: 'mati' };
+  var code = 0;
+  try {
+    var repo = prop_('HUB_REPO', 'xnkzzxd/xnk-template-site');
+    var res = fetch_('https://api.github.com/repos/' + repo + '/actions/workflows/push.yml/dispatches', {
+      method: 'post', contentType: 'application/json', headers: gh_(), muteHttpExceptions: true,
+      payload: JSON.stringify({ ref: 'main', inputs: { aksi: 'kirim' } }),
+    });
+    code = res.getResponseCode();
+  } catch (e) { code = -1; }
+  if (code !== 204) props_().setProperty('PUSHKICK_LAST', JSON.stringify({ at: new Date().toISOString(), code: code }));
+  else props_().deleteProperty('PUSHKICK_LAST');
+  return { started: code === 204, code: code };
 }
 
 // ── Ganti slug coach (T-2243) ───────────────────────────────────────────────────────────────────────────────

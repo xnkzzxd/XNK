@@ -59,7 +59,8 @@ terisi hari demi hari sejak versi ini terpasang.
    - `PUSAT_EMAIL` — opsional; bawaan = akun ini.
    - `GITHUB_TOKEN` — opsional, untuk tombol aksi: *fine-grained token* hanya untuk repo `xnk-template-site`,
      izin **Actions: Read and write**.
-3. Di editor, pilih fungsi **setupPusat** → Run → beri izin. (Kunci sesi + trigger harian 06:00 WIB.) Sesudah itu,
+3. Di editor, pilih fungsi **setupPusat** → Run → beri izin. (Kunci sesi + trigger harian 06:00 WIB, backup tiap jam, dan
+   pembangun push `runPusatPushKick` tiap 10 menit, lihat [../push/Setup.md](../push/Setup.md) langkah 6.) Sesudah itu,
    izin atau trigger yang kurang bisa disiapkan dari `/adminxnk` → **Siapkan XNK HQ** (lihat di bawah).
 4. Repo hub → `hub.json`: tambahkan `"pusatUrl": "<XNK_PUSAT_URL>"`. Situs dibangun ulang dan
    `xnk.web.id/adminxnk/` aktif.
