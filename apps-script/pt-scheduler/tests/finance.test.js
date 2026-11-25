@@ -178,3 +178,117 @@ test('previewReminderText tagihan fills the placeholders', () => {
   const env = seededEnv();
   assert.match(env.call('previewReminderText', env.adminToken(), 'tagihan', '').text, /Rp300\.000/);
 });
+
+// ── Halaman Keuangan cepat (2026-11): satu panggilan, baca sekali, simpan ringan ─────────────────────────────
+
+test('getFinancePage: one call carries overview, bills, their payments, expenses, categories and methods', () => {
+  const env = seededEnv();
+  const t = on(env);
+  addClient(env, t);
+  const [bill] = env.call('getBills', t, {});
+  env.call('savePayment', t, { billId: bill.id, amount: 300000, date: today(), method: 'Tunai' });
+  env.call('saveExpense', t, { amount: 50000, date: today(), category: 'Alat', method: 'Tunai' });
+  const m = new Date().getMonth() + 1, y = new Date().getFullYear();
+  const p = plain(env.call('getFinancePage', t, m, y));
+  assert.deepEqual(p.overview, plain(env.call('getFinanceOverview', t, m, y)));
+  assert.deepEqual(p.bills, plain(env.call('getBills', t, {})));
+  assert.equal(p.payments.length, 1);
+  assert.equal(p.payments[0].billId, bill.id);
+  assert.deepEqual(p.payments, plain(env.call('getBillDetail', t, bill.id).payments));
+  assert.equal(p.expenses.length, 1);
+  assert.deepEqual(p.cats, plain(env.call('getFinanceCategories', t)));
+  assert.deepEqual(p.methods, ['Tunai', 'Transfer bank', 'QRIS / e-wallet']);
+  assert.ok(p.ver && p.day && p.from);
+  assert.throws(() => env.call('getFinancePage', t, 13, y), /Bulan/);
+});
+
+test('getFinancePage reads each finance sheet once and Schedules at most once; a repeat is a cache hit', () => {
+  const env = seededEnv();
+  const t = on(env);
+  addClient(env, t);
+  env.call('saveCoachShare', t, 'C-1', 'sesi', 50000);   // per-session share: Schedules is needed
+  const m = new Date().getMonth() + 1, y = new Date().getFullYear();
+  env.resetReads();
+  const a = plain(env.call('getFinancePage', t, m, y, true));
+  const r = env.reads().bySheet;
+  ['Tagihan', 'Pembayaran', 'Pengeluaran', 'KategoriKeuangan'].forEach(n => assert.ok((r[n] || 0) <= 1, n + ' read ' + r[n] + ' times'));
+  assert.ok((r.Schedules || 0) <= 1, 'Schedules read ' + r.Schedules + ' times');
+  env.resetReads();
+  const b = plain(env.call('getFinancePage', t, m, y));
+  assert.equal(env.reads().bySheet.Tagihan || 0, 0, 'second call comes from the cache');
+  assert.equal(b.ver, a.ver);
+  env.call('saveExpense', t, { amount: 1000, date: today(), category: 'Alat', method: 'Tunai' });
+  const c = plain(env.call('getFinancePage', t, m, y));
+  assert.notEqual(c.ver, a.ver, 'a write moves the finance version');
+  assert.equal(c.expenses.length, 1, 'and the next page is fresh');
+});
+
+test('getFinancePage keeps open and archived bills of any age, and paid bills of the last 12 months only', () => {
+  const env = seededEnv();
+  const t = on(env);
+  addClient(env, t, '081300000001');
+  addClient(env, t, '081300000002');
+  addClient(env, t, '081300000003');
+  const rows = env.sheet('Tagihan').rows;
+  const ids = rows.slice(1).map(r => r[0]);
+  rows.slice(1).forEach(r => { r[7] = '2024-01-05'; });    // all three bills are old
+  env.call('savePayment', t, { billId: ids[0], amount: 800000, date: '2024-01-06', method: 'Tunai' });   // old and paid
+  env.call('archiveFinanceItem', t, 'bill', ids[1]);                                                    // old and archived
+  const m = new Date().getMonth() + 1, y = new Date().getFullYear();
+  const p = plain(env.call('getFinancePage', t, m, y, true));
+  const got = p.bills.map(b => b.id).sort();
+  assert.deepEqual(got, [ids[1], ids[2]].sort());
+  assert.equal(p.payments.length, 0, 'payments of a bill that is left out are left out too');
+  assert.equal(plain(env.call('getFinancePage', t, 1, 2024, true)).bills.length, 3, 'picking that old month brings it back');
+});
+
+test('savePayment returns the new bill totals, writes the status once and bumps only that client', () => {
+  const env = seededEnv();
+  const t = on(env);
+  addClient(env, t, '081300000009');
+  const [bill] = env.call('getBills', t, {});
+  const vers = () => plain(env.call('getAdminMore', t, 1, 2026)).memberVers;
+  const v0 = vers();
+  env.resetReads();
+  const r = plain(env.call('savePayment', t, { billId: bill.id, amount: 800000, date: today(), method: 'Tunai' }));
+  // Dulu 19 pembacaan (cek skema di setiap simpan, Tagihan dan Pembayaran dibaca dua kali). Sekarang: data + header + baca
+  // balik _appendRow_ untuk Pembayaran, data + header untuk Tagihan.
+  assert.ok(env.reads().total <= 6, 'reads: ' + JSON.stringify(env.reads()));
+  assert.equal(env.reads().bySheet.KategoriKeuangan || 0, 0, 'no schema check on every save');
+  assert.deepEqual(r.bill, { id: bill.id, net: 800000, paid: 800000, remaining: 0, status: 'Lunas', lastPaid: today() });
+  assert.equal(env.sheet('Tagihan').rows[1][10], 'Lunas');
+  const v1 = vers();
+  assert.notEqual(v1[bill.memberId], v0[bill.memberId], 'the bill owner is bumped');
+  assert.equal(v1['*'], v0['*'], 'not everyone');
+  const other = Object.keys(v0).find(k => k !== bill.memberId && k !== '*');
+  if (other) assert.equal(v1[other], v0[other]);
+  const free = plain(env.call('savePayment', t, { amount: 1000, date: today(), method: 'Tunai', category: 'Lainnya' }));
+  assert.equal(free.bill, undefined, 'income without a bill has no bill totals');
+  assert.deepEqual(vers(), v1, 'and bumps no client');
+});
+
+test('moving a payment to another bill updates the status of the old bill too', () => {
+  const env = seededEnv();
+  const t = on(env);
+  addClient(env, t, '081300000001');
+  addClient(env, t, '081300000002');
+  const [b1, b2] = env.call('getBills', t, {});
+  const { id } = env.call('savePayment', t, { billId: b1.id, amount: 800000, date: today(), method: 'Tunai' });
+  assert.equal(env.call('getBillDetail', t, b1.id).bill.status, 'Lunas');
+  env.call('savePayment', t, { id, billId: b2.id, amount: 300000, date: today(), method: 'Tunai' });
+  const st = id2 => env.sheet('Tagihan').rows.find(r => r[0] === id2)[10];
+  assert.equal(st(b1.id), 'Belum bayar');
+  assert.equal(st(b2.id), 'DP');
+});
+
+test('every public finance writer moves the finance version (device copies and the page cache follow it)', () => {
+  const fs = require('fs'), path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '../src/Keuangan.gs'), 'utf8');
+  const { WRITE } = require('./api-lists');
+  const fns = {};
+  src.split('\nfunction ').slice(1).forEach(chunk => { fns[chunk.match(/^(\w+)/)[1]] = chunk; });
+  const writers = Object.keys(fns).filter(n => !n.endsWith('_') && WRITE.indexOf(n) !== -1);
+  assert.ok(writers.length >= 10, 'found the writers');
+  const missing = writers.filter(n => !/_finLocked_\(|_finArchive_\(|_finMigrate_\(|_bustFin_\(/.test(fns[n]));
+  assert.deepEqual(missing, []);
+});

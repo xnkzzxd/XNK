@@ -58,6 +58,20 @@ Requirements: PT-1…3.
 | [x] | T-430 | **`getMyBills`.** Member ID from the token only; `[]` while `FIN_PORTAL_VISIBLE` is off; exact key list. | Kode.gs, tests/finance.test.js, tests/security.test.js | T-402 | S | Key-list test passes; another member's ID in the arguments is ignored. |
 | [x] | T-431 | **Portal "Tagihan" card** on Beranda (read-only), plus a browser check at 360/390 in both themes. | App.html, Index.html, tools/browser-check.js | T-430 | S | The card is absent when off or empty; there is no button and no proof photo. |
 
+## H5: Speed (2026-11, coaches' complaints)
+
+Complaints: the page is slow to open, the bill detail is slow, Lunasi is slow, and refresh reloads everything. Design §3.2 "Speed".
+
+| | ID | Task | Files | Depends | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [x] | T-440 | **`getFinancePage`**: one admin read for the whole page, each sheet read once (`_readMemo_`), server cache keyed by the finance version (`_finVer_` / `_bustFin_`). | Keuangan.gs, api-lists.js, Api.gs, tests/finance.test.js | — | M | One call; at most one read per finance sheet; a repeat is a cache hit; every writer moves the version. |
+| [x] | T-441 | **Lighter writes**: `_finEnsure_` at most every 6 h, `savePayment` reads once and returns the bill totals, finance writers bump only the bill owner. | Keuangan.gs, tests/finance.test.js | — | S | `savePayment` ≤ 6 reads (was 19); income without a bill bumps no client. |
+| [x] | T-442 | **No wipe**: render from memory, quiet stale-while-revalidate, the device copy `xnk_fin_cache` (cleared on logout), `getAdminMore.finVer`. | part 14, part 03, Kode.gs | T-440 | M | `updateUI` never shows skeletons once data exists; reopening shows the copy at once. |
+| [x] | T-443 | **Instant detail and payment sheet** from the page data. | part 14, part 01 (`refreshDetail` bill) | T-442 | S | No `getBillDetail` / `getFinanceCategories` call for a bill in the page data. |
+| [x] | T-444 | **Instant Lunasi / Bayar / expense / archive** with undo; one quiet reload afterwards. | part 14 | T-442 | M | The bill shows Lunas before a slow server answers. |
+| [x] | T-446 | **Prepared in the background + photos without waiting** (owner 2026-11-25): `finPrefetch` after `getAdminMore`; a payment / expense with a proof photo shows at once and the photo uploads after the save (memory only, `beforeunload` warns while one is uploading); `pagehide` releases the tab's sync lease so the first save after reopening does not wait 20 s. | part 14, part 03, part 01, tools/browser-check.js | T-444 | S | The first tap on Keuangan is already filled; an expense with a photo shows at once and the photo arrives. |
+| [x] | T-445 | **Refresh scope**: pull to refresh on Keuangan loads Keuangan only; queued finance saves call `finStale`, not a full reload. Browser check "Keuangan cepat". | part 03, part 01, tools/browser-check.js | T-442 | S | No `getAdminBootstrap` / `getAdminMore` on a pull in Keuangan. |
+
 ## After H
 
 - Update [../Agent.md](../Agent.md) §7, `apps-script/README.md` (Indonesian) and the root `README.md`, and tick the boxes above.

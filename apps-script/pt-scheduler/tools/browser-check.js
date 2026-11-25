@@ -1428,6 +1428,91 @@ async function contrastReport(page) {
     check(errors.length === 0, 'desktop Keuangan: no page errors (' + errors.join(' | ') + ')');
     await page.context().close();
   })().catch(sectionCrash);
+  // ── Keuangan cepat (2026-11, keluhan coach: lama load, detail lama, lunasi lama, refresh malah reload semua) ──
+  // Server lambat 2,5 s. Satu panggilan getFinancePage; render ulang tidak mengosongkan layar; detail dan Lunasi tanpa
+  // menunggu server; tarik-untuk-segarkan di Keuangan hanya memuat Keuangan; buka lagi langsung dari salinan perangkat.
+  console.log('Keuangan cepat · server lambat');
+  await (async () => {
+    const env = richEnv();
+    const token = env.adminToken();
+    env.call('updateAppSettings', token, { finance: { enabled: true } });
+    env.call('addMember', token, { name: 'Cici Cepat', phone: '081399990002', goal: 'Fit', packageId: 'P1' });
+    const calls = [];
+    const slow = { getFinancePage: 2500, savePayment: 2500 };
+    const { page, errors } = await openPage(browser, env, '/Index', calls, { xnk_admin_token: token, xnk_fin_on: '1' }, { touch: true, delay: slow, wait: 1400 });
+    const count = fn => calls.filter(c => c === fn).length;
+    const skels = () => page.locator('#view-finance .skeleton').count();
+    await page.evaluate(() => window.navigate('finance'));
+    await page.waitForTimeout(3600);
+    check(((await page.textContent('#fin-list')) || '').includes('Cici Cepat'), 'fast finance: the open bill is listed after the first load');
+    check(count('getFinancePage') === 1 && count('getBills') === 0 && count('getFinanceOverview') === 0, 'fast finance: the page opens with one call (getFinancePage ' + count('getFinancePage') + ', getBills ' + count('getBills') + ', getFinanceOverview ' + count('getFinanceOverview') + ')');
+    await page.evaluate(() => { window.updateUI(); window.updateUI(); window.updateUI(); });
+    check((await skels()) === 0 && ((await page.textContent('#fin-list')) || '').includes('Cici Cepat'), 'fast finance: a re-render keeps the data on screen (no skeletons)');
+    await page.waitForTimeout(300);
+    check(count('getFinancePage') === 1, 'fast finance: a re-render does not fetch again (' + count('getFinancePage') + ')');
+    // detail langsung lengkap
+    await page.click('#fin-list .fin-bill');
+    await page.waitForTimeout(150);
+    const det = (await page.textContent('#detail-body')) || '';
+    check(det.includes('Lunasi') && det.includes('Bayar'), 'fast finance: the bill detail shows Lunasi and Bayar at once');
+    check(count('getBillDetail') === 0, 'fast finance: the detail needs no server call');
+    // Lunasi: lembar terbuka seketika, tagihan langsung lunas di layar
+    await page.click('#detail-body .btn-outline');
+    await page.waitForTimeout(150);
+    check(await visible(page, '#sheet-fin-payment'), 'fast finance: Lunasi opens the payment sheet at once');
+    check(count('getFinanceCategories') === 0, 'fast finance: the sheet needs no categories call');
+    await page.click('#fin-pay-save');
+    await page.waitForTimeout(400);
+    check(((await page.textContent('#detail-body')) || '').includes('Lunas'), 'fast finance: the bill shows Lunas before the server answers');
+    check(!((await page.textContent('#fin-list')) || '').includes('Cici Cepat'), 'fast finance: the paid bill leaves Belum lunas at once');
+    const cici = env.sheet('Tagihan').rows.find(r => r[3] === 'Cici Cepat');
+    const ciciPays = () => (env.sheet('Pembayaran') ? env.sheet('Pembayaran').rows.slice(1) : []).filter(r => r[1] === cici[0]).length;
+    check(ciciPays() === 0, 'fast finance: the server has not answered yet (slow server)');
+    await page.waitForTimeout(3200);
+    check(ciciPays() === 1 && cici[10] === 'Lunas', 'fast finance: the server saved one payment and the bill is Lunas');
+    check((await skels()) === 0, 'fast finance: no skeletons after the save');
+    // tarik-untuk-segarkan di Keuangan: hanya Keuangan
+    const boot0 = count('getAdminBootstrap'), more0 = count('getAdminMore'), page0 = count('getFinancePage');
+    await page.evaluate(() => window.closeDetail());
+    const pulled = page.evaluate(() => window.refreshAll());
+    await page.waitForTimeout(200);
+    check((await skels()) === 0, 'fast finance: pull to refresh keeps the data on screen');
+    await pulled;
+    check(count('getAdminBootstrap') === boot0 && count('getAdminMore') === more0 && count('getFinancePage') > page0, 'fast finance: pull to refresh on Keuangan loads Keuangan only');
+    // buka lagi: langsung dari salinan perangkat
+    check(await page.evaluate(() => !!localStorage.getItem('xnk_fin_cache') && !JSON.stringify(JSON.parse(localStorage.getItem('xnk_admin_cache') || '{}')).includes('remaining')), 'fast finance: the copy lives in xnk_fin_cache, never in xnk_admin_cache');
+    await page.reload();
+    await page.waitForTimeout(1600);
+    await page.evaluate(() => { window.navigate('finance'); window.finFilter('all'); });
+    await page.waitForTimeout(150);
+    check(((await page.textContent('#fin-list')) || '').includes('Cici Cepat') && (await skels()) === 0, 'fast finance: reopening shows the device copy at once');
+    // foto nota: lembar tertutup seketika, foto diunggah di belakang setelah ada id
+    await page.evaluate(() => { window.finTab('exps'); window.finOpenExpense(null); });
+    await page.waitForTimeout(300);
+    await page.fill('#fin-exp-amount', '45000');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    await page.setInputFiles('#fin-exp-proof', { name: 'nota.png', mimeType: 'image/png', buffer: png });
+    await page.waitForTimeout(500);
+    await page.click('#fin-exp-save');
+    await page.waitForTimeout(600);   // lembar selesai menutup; server belum perlu menjawab
+    check(!(await visible(page, '#sheet-fin-expense')) && ((await page.textContent('#fin-list')) || '').includes('45.000'), 'fast finance: an expense with a photo shows at once');
+    await page.waitForTimeout(2500);
+    const exp = env.call('getExpenses', token, {}).find(e => e.amount === 45000);
+    check(!!exp && exp.hasProof, 'fast finance: the photo is uploaded in the background');
+    await page.evaluate(() => window.clearFinCache());
+    check(await page.evaluate(() => localStorage.getItem('xnk_fin_cache') === null), 'fast finance: clearFinCache removes the copy');
+    check(errors.length === 0, 'fast finance: no page errors (' + errors.join(' | ') + ')');
+    await page.context().close();
+    // siapkan di latar: tanpa membuka Keuangan, datanya sudah dimuat; menu Keuangan langsung berisi
+    const calls2 = [];
+    const second = await openPage(browser, env, '/Index', calls2, { xnk_admin_token: token, xnk_fin_on: '1' }, { touch: true, delay: { getFinancePage: 300 }, wait: 1400 });
+    await second.page.waitForTimeout(4500);
+    check(calls2.indexOf('getFinancePage') !== -1, 'fast finance: the page data is prepared in the background');
+    await second.page.evaluate(() => { window.navigate('finance'); window.finFilter('all'); });
+    await second.page.waitForTimeout(100);
+    check(((await second.page.textContent('#fin-list')) || '').includes('Cici Cepat') && !(await second.page.locator('#view-finance .skeleton').count()), 'fast finance: the first tap on Keuangan is already filled');
+    await second.page.context().close();
+  })().catch(sectionCrash);
   console.log('Keuangan mati: menu tersembunyi');
   await (async () => {
     const env = richEnv();

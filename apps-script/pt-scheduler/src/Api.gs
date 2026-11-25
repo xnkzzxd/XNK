@@ -28,7 +28,7 @@ function _apiTable_() {
     hubPushKey: hubPushKey,
     hubSiteUrl: hubSiteUrl,
     hubReadonly: hubReadonly,
-    // admin: admin token (131)
+    // admin: admin token (132)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -157,6 +157,7 @@ function _apiTable_() {
     restoreFinanceItem: restoreFinanceItem,
     saveCoachShare: saveCoachShare,
     getFinanceOverview: getFinanceOverview,
+    getFinancePage: getFinancePage,
     uploadFinanceProof: uploadFinanceProof,
     getFinanceProof: getFinanceProof,
     exportFinanceCsv: exportFinanceCsv,

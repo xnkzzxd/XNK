@@ -66,22 +66,30 @@ function _finWrite_(map) {
     if (map[k] === '') props.deleteProperty(k); else props.setProperty(k, map[k]);
   });
   if (!wasOn && _finOn_()) _finMigrate_();   // pertama kali menyala: transaksi lama jadi Lunas
+  _bustFin_();   // metode pembayaran ikut getFinancePage
 }
 
 // ── Tabel (dibaca lewat nama header, hanya menambah kolom) ──────────────────
 
+// Sheet yang sudah ada langsung dipakai; hanya sheet baru yang dibuat + diberi format teks di kolom tanggal.
+// (Dulu setiap tulisan memanggil getOrCreateSheet_ + setNumberFormat: dua panggilan Sheets per tabel per simpan.)
 function _finSheet_(name, create) {
-  if (create) {
-    const sheet = getOrCreateSheet_(name, FIN_TABLES[name]);
-    if (FIN_DATE_COLS[name]) sheet.getRange(FIN_DATE_COLS[name]).setNumberFormat('@');
-    return sheet;
-  }
-  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  if (sh || !create) return sh;
+  const sheet = getOrCreateSheet_(name, FIN_TABLES[name]);
+  if (FIN_DATE_COLS[name]) sheet.getRange(FIN_DATE_COLS[name]).setNumberFormat('@');
+  return sheet;
 }
 
+// Cek skema penuh (4 tabel, header, format tanggal, kategori bawaan) paling sering 6 jam sekali, bukan di setiap simpan
+// (2026-11: ±12 panggilan Sheets di bawah kunci membuat "Lunasi" lambat). Naikkan angka kuncinya bila FIN_TABLES berubah.
+const FIN_ENSURE_KEY = 'fin:ensured:1';
 function _finEnsure_() {
+  const cache = CacheService.getScriptCache();
+  try { if (cache.get(FIN_ENSURE_KEY)) return; } catch (e) {}
   Object.keys(FIN_TABLES).forEach(function(n) {
     const sheet = _finSheet_(n, true);
+    if (FIN_DATE_COLS[n]) sheet.getRange(FIN_DATE_COLS[n]).setNumberFormat('@');
     const header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
     FIN_TABLES[n].forEach(function(h) {
       if (header.indexOf(h) === -1) { sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h); header.push(h); }
@@ -91,7 +99,26 @@ function _finEnsure_() {
   if (cat.getLastRow() <= 1) {
     FIN_DEFAULT_CATS.forEach(function(c, i) { _appendRow_(cat, ['KAT-' + (i + 1), c[0], c[1], i + 1, true]); });
   }
+  _finForget_('KategoriKeuangan');
+  try { cache.put(FIN_ENSURE_KEY, '1', 21600); } catch (e) {}
 }
+
+// Versi data keuangan: naik SESUDAH setiap penulisan keuangan (flush dulu). Kunci cache getFinancePage dan salinan di perangkat
+// coach (xnk_fin_cache) memakai versi ini; versi sama = salinan masih benar.
+function _finVer_() {
+  try { return CacheService.getScriptCache().get('fin:ver') || '0'; } catch (e) { return '0'; }
+}
+function _bustFin_() {
+  try { SpreadsheetApp.flush(); } catch (e) {}
+  const ver = _newVer_();
+  try { CacheService.getScriptCache().put('fin:ver', ver, 21600); } catch (e) {}
+  _bumpAdmin_();
+  return ver;
+}
+
+// Satu eksekusi baca-saja (getFinancePage, getAdminMore) membaca setiap tabel sekali lewat _readMemo_. Setiap tulisan
+// membuang salinan tabel itu, jadi penulis yang membaca lagi sesudah menulis selalu melihat data baru.
+function _finForget_(name) { if (_readMemo_) delete _readMemo_['fin:' + name]; }
 
 function _finDate_(v) {
   if (v instanceof Date) return Utilities.formatDate(v, REMINDER_TZ, 'yyyy-MM-dd');
@@ -103,6 +130,13 @@ function _finDate_(v) {
 }
 
 function _finRead_(name) {
+  const mk = 'fin:' + name;
+  if (_readMemo_ && _readMemo_[mk]) return _readMemo_[mk];
+  const out = _finReadRaw_(name);
+  if (_readMemo_) _readMemo_[mk] = out;
+  return out;
+}
+function _finReadRaw_(name) {
   const sheet = _finSheet_(name, false);
   if (!sheet || sheet.getLastRow() <= 1) return [];
   const values = sheet.getDataRange().getValues();
@@ -119,12 +153,14 @@ function _finRead_(name) {
 }
 
 function _finAppend_(name, obj) {
+  _finForget_(name);
   const sheet = _finSheet_(name, true);
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
   _appendRow_(sheet, header.map(function(h) { return obj[h] === undefined ? '' : obj[h]; }));
 }
 
 function _finUpdate_(name, rowNum, obj) {
+  _finForget_(name);
   const sheet = _finSheet_(name, true);
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
   Object.keys(obj).forEach(function(k) {
@@ -160,31 +196,42 @@ function _finLocked_(fn) {
   if (!lock.tryLock(10000)) throw new Error('Sedang sibuk, coba lagi.');
   try {
     const r = fn();
-    try { SpreadsheetApp.flush(); } catch (e) {}
-    _bumpAdmin_();   // Fase W: ringkasan keuangan di getAdminMore ikut segar
+    _bustFin_();   // flush + versi keuangan + Fase W: ringkasan keuangan di getAdminMore ikut segar
     return r;
   } finally { lock.releaseLock(); }
 }
 
 // ── Tagihan: dibuat dari transaksi, status dihitung dari pembayaran ─────────
 
-function _finBillTotals_(bill, payments) {
-  const net = Math.max(0, (Number(bill.Total) || 0) - (Number(bill.Diskon) || 0));
-  let paid = 0, last = '';
+/** Jumlah dibayar + tanggal terakhir per ID tagihan (pembayaran yang tidak diarsipkan), sekali jalan untuk semua tagihan. */
+function _finPayIndex_(payments) {
+  const idx = {};
   payments.forEach(function(p) {
-    if (String(p['ID Tagihan']) !== String(bill['ID Tagihan']) || p['Diarsipkan Pada']) return;
-    paid += Number(p.Jumlah) || 0;
-    if (p.Tanggal > last) last = p.Tanggal;
+    const k = String(p['ID Tagihan'] || '');
+    if (!k || p['Diarsipkan Pada']) return;
+    const e = idx[k] || (idx[k] = { paid: 0, last: '' });
+    e.paid += Number(p.Jumlah) || 0;
+    if (p.Tanggal > e.last) e.last = p.Tanggal;
   });
-  const status = paid >= net ? 'Lunas' : (paid > 0 ? 'DP' : 'Belum bayar');
-  return { net: net, paid: paid, remaining: Math.max(0, net - paid), status: status, lastPaid: last };
+  return idx;
 }
 
-function _finCacheStatus_(billId) {
-  const bill = _finRead_('Tagihan').filter(function(b) { return b['ID Tagihan'] === billId; })[0];
-  if (!bill) return;
-  const t = _finBillTotals_(bill, _finRead_('Pembayaran'));
-  _finUpdate_('Tagihan', bill._row, { Status: t.status, 'Diubah Pada': _finNow_() });
+/** payments = daftar baris Pembayaran, atau indeks dari _finPayIndex_ (untuk banyak tagihan sekaligus). */
+function _finBillTotals_(bill, payments) {
+  const idx = Array.isArray(payments) ? _finPayIndex_(payments) : payments;
+  const net = Math.max(0, (Number(bill.Total) || 0) - (Number(bill.Diskon) || 0));
+  const e = idx[String(bill['ID Tagihan'])] || { paid: 0, last: '' };
+  const status = e.paid >= net ? 'Lunas' : (e.paid > 0 ? 'DP' : 'Belum bayar');
+  return { net: net, paid: e.paid, remaining: Math.max(0, net - e.paid), status: status, lastPaid: e.last };
+}
+
+/** Tulis status cache satu tagihan. bill / payments boleh diberikan bila pemanggil sudah memegangnya (tanpa baca ulang). */
+function _finCacheStatus_(billId, bill, payments) {
+  bill = bill || _finRead_('Tagihan').filter(function(b) { return b['ID Tagihan'] === billId; })[0];
+  if (!bill) return null;
+  const t = _finBillTotals_(bill, payments || _finRead_('Pembayaran'));
+  if (String(bill.Status) !== t.status) _finUpdate_('Tagihan', bill._row, { Status: t.status, 'Diubah Pada': _finNow_() });
+  return t;
 }
 
 /** Dipanggil setelah baris transaksi ditulis (hanya saat keuangan aktif). Gagal tidak membatalkan transaksi. */
@@ -200,6 +247,7 @@ function _finBillFromTransaction_(trx) {
       Tanggal: _finDate_(trx.dateStr), Total: trx.price === '' ? 0 : trx.price, Diskon: 0, Status: 'Belum bayar', Catatan: '',
       'Dibuat Pada': _finNow_(), 'Diubah Pada': _finNow_()
     });
+    _bustFin_();
   } catch (e) { Logger.log('Tagihan gagal dibuat: ' + e); }
 }
 
@@ -271,7 +319,7 @@ function getBills(token, filter) {
   requireAdmin_(token);
   _finRequire_();
   filter = filter || {};
-  const payments = _finRead_('Pembayaran'), members = _finMembersById_();
+  const payments = _finPayIndex_(_finRead_('Pembayaran')), members = _finMembersById_();
   const q = String(filter.q || '').trim().toLowerCase();
   return _finRead_('Tagihan').map(function(b) { return _finBillView_(b, payments, members); }).filter(function(v) {
     if (!!filter.archived !== v.archived) return false;
@@ -303,9 +351,11 @@ function saveBillAdjust(token, billId, data) {
   requireAdmin_(token);
   _finRequire_();
   data = data || {};
-  return _bumpAfter_('*', _finLocked_(function() {
+  let member = '';
+  const res = _finLocked_(function() {
     const b = _finRead_('Tagihan').filter(function(x) { return x['ID Tagihan'] === String(billId); })[0];
     if (!b) throw new Error('Tagihan tidak ditemukan.');
+    member = String(b['Member ID'] || '');
     const upd = { 'Diubah Pada': _finNow_() };
     if (data.diskon !== undefined) {
       const d = _finInt_(data.diskon);
@@ -326,7 +376,8 @@ function saveBillAdjust(token, billId, data) {
     _finUpdate_('Tagihan', b._row, upd);
     _finCacheStatus_(b['ID Tagihan']);
     return getBillDetail(token, billId);
-  }));
+  });
+  return _bumpAfter_(member, res);   // hanya klien pemilik tagihan (portal getMyBills)
 }
 
 // ── Pembayaran ──────────────────────────────────────────────────────────────
@@ -351,7 +402,8 @@ function savePayment(token, p) {
   requireAdmin_(token);
   _finRequire_();
   p = p || {};
-  return _bumpAfter_('*', _finLocked_(function() {
+  const touched = [];   // klien yang tagihannya berubah (portal getMyBills); pembayaran tanpa tagihan tidak tampil di data klien
+  const res = _finLocked_(function() {
     _finEnsure_();
     const amount = _finAmount_(p.amount, 'Jumlah');
     const date = _finCheckDate_(p.date);
@@ -360,11 +412,12 @@ function savePayment(token, p) {
     const payments = _finRead_('Pembayaran');
     const existing = p.id ? payments.filter(function(x) { return x['ID Bayar'] === String(p.id); })[0] : null;
     if (p.id && !existing) throw new Error('Pembayaran tidak ditemukan.');
+    const others = payments.filter(function(x) { return !existing || x['ID Bayar'] !== existing['ID Bayar']; });
     let bill = null, category;
     if (p.billId) {
       bill = _finRead_('Tagihan').filter(function(b) { return b['ID Tagihan'] === String(p.billId) && !b['Diarsipkan Pada']; })[0];
       if (!bill) throw new Error('Tagihan tidak ditemukan.');
-      const rest = _finBillTotals_(bill, payments.filter(function(x) { return !existing || x['ID Bayar'] !== existing['ID Bayar']; })).remaining;
+      const rest = _finBillTotals_(bill, others).remaining;
       if (amount > rest) throw new Error('Jumlah melebihi sisa tagihan Rp' + rest + '.');
       category = 'Paket';
     } else {
@@ -375,9 +428,20 @@ function savePayment(token, p) {
     let id;
     if (existing) { id = existing['ID Bayar']; _finUpdate_('Pembayaran', existing._row, fields); }
     else { id = _finId_('BY'); _finAppend_('Pembayaran', Object.assign({ 'ID Bayar': id, 'Dibuat Pada': now }, fields)); }
-    if (bill) _finCacheStatus_(bill['ID Tagihan']);
-    return { id: id };
-  }));
+    if (existing && existing['ID Tagihan'] && (!bill || String(existing['ID Tagihan']) !== bill['ID Tagihan'])) {
+      _finCacheStatus_(String(existing['ID Tagihan']), null, others);   // pembayaran dipindah dari tagihan lain
+      touched.push(String(existing['Member ID'] || ''));
+    }
+    const out = { id: id };
+    if (bill) {
+      // Status dihitung dari baris yang sudah di memori (tanpa membaca Tagihan + Pembayaran lagi).
+      const t = _finCacheStatus_(bill['ID Tagihan'], bill, others.concat([{ 'ID Tagihan': bill['ID Tagihan'], Tanggal: date, Jumlah: amount }]));
+      out.bill = { id: bill['ID Tagihan'], net: t.net, paid: t.paid, remaining: t.remaining, status: t.status, lastPaid: t.lastPaid };
+      touched.push(String(bill['Member ID'] || ''));
+    }
+    return out;
+  });
+  return _bumpAfter_(touched.filter(Boolean), res);
 }
 
 // ── Pengeluaran dan kategori ────────────────────────────────────────────────
@@ -423,6 +487,9 @@ function getExpenses(token, filter) {
 function getFinanceCategories(token) {
   requireAdmin_(token);
   _finRequire_();
+  return _finCatsView_();
+}
+function _finCatsView_() {
   return _finRead_('KategoriKeuangan').map(function(c) { return { id: c.ID, type: c.Tipe, name: c.Nama, order: Number(c.Urutan) || 0, active: c.Aktif === true || String(c.Aktif).toLowerCase() === 'true' }; })
     .sort(function(a, b) { return a.order - b.order; });
 }
@@ -465,6 +532,7 @@ function deleteFinanceCategory(token, id) {
     if (!cat) throw new Error('Kategori tidak ditemukan.');
     const used = _finRead_(cat.Tipe === 'masuk' ? 'Pembayaran' : 'Pengeluaran').some(function(r) { return r.Kategori === cat.Nama; });
     if (used) throw new Error('Kategori sudah dipakai. Nonaktifkan saja, jangan dihapus.');
+    _finForget_('KategoriKeuangan');
     _finSheet_('KategoriKeuangan', true).deleteRow(cat._row);
     return { ok: true };
   });
@@ -472,12 +540,13 @@ function deleteFinanceCategory(token, id) {
 
 // ── Arsip (tidak ada yang dihapus permanen) ─────────────────────────────────
 
-function _finArchive_(kind, id, on) {
+function _finArchive_(kind, id, on, touched) {
   const table = { bill: ['Tagihan', 'ID Tagihan'], payment: ['Pembayaran', 'ID Bayar'], expense: ['Pengeluaran', 'ID Keluar'] }[kind];
   if (!table) throw new Error('Jenis data tidak dikenal.');
   return _finLocked_(function() {
     const row = _finRead_(table[0]).filter(function(x) { return x[table[1]] === String(id); })[0];
     if (!row) throw new Error('Data tidak ditemukan.');
+    if (touched && row['Member ID']) touched.push(String(row['Member ID']));
     const mark = on ? { 'Diarsipkan Pada': _finNow_(), 'Diarsipkan Oleh': 'admin' } : { 'Diarsipkan Pada': '', 'Diarsipkan Oleh': '' };
     _finUpdate_(table[0], row._row, mark);
     if (kind === 'bill') {   // pembayaran ikut diarsipkan / dipulihkan
@@ -491,8 +560,9 @@ function _finArchive_(kind, id, on) {
   });
 }
 
-function archiveFinanceItem(token, kind, id) { requireAdmin_(token); _finRequire_(); return _bumpAfter_('*', _finArchive_(kind, id, true)); }
-function restoreFinanceItem(token, kind, id) { requireAdmin_(token); _finRequire_(); return _bumpAfter_('*', _finArchive_(kind, id, false)); }
+// Hanya klien pemilik tagihan / pembayaran yang versinya naik (pengeluaran tidak tampil di data klien).
+function archiveFinanceItem(token, kind, id) { requireAdmin_(token); _finRequire_(); const m = []; const r = _finArchive_(kind, id, true, m); return _bumpAfter_(m, r); }
+function restoreFinanceItem(token, kind, id) { requireAdmin_(token); _finRequire_(); const m = []; const r = _finArchive_(kind, id, false, m); return _bumpAfter_(m, r); }
 
 // ── Bagi hasil coach ────────────────────────────────────────────────────────
 
@@ -545,8 +615,9 @@ function _financeSummary_(month, year) {
   const shares = {};
   const coaches = _coachesAll_(), byId = {};
   coaches.forEach(function(c) { byId[c.id] = c; });
+  const idx = _finPayIndex_(payments);   // sekali jalan (dulu: semua pembayaran disalin untuk setiap tagihan)
   bills.forEach(function(b) {
-    const t = _finBillTotals_(b, payments.concat([]).map(function(p) { return p; }));
+    const t = _finBillTotals_(b, idx);
     if (t.remaining > 0) { tunggakan += t.remaining; open++; }
     else if (t.net > 0 && t.lastPaid.slice(0, 7) === key) {   // persen dihitung di bulan lunas
       const cid = String(b['Coach ID'] || ''), c = byId[cid], s = _finShareOf_(c);
@@ -556,9 +627,10 @@ function _financeSummary_(month, year) {
       }
     }
   });
-  const sch = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
-  if (sch && sch.getLastRow() > 1) {
-    sch.getDataRange().getValues().slice(1).forEach(function(r) {
+  // Bagi hasil per sesi hanya perlu dihitung bila ada coach bertipe 'sesi'. Jadwal lewat _sheetRowsMemo_ (sekali per
+  // eksekusi di dalam getAdminMore / getFinancePage).
+  if (coaches.some(function(c) { return _finShareOf_(c).tipe === 'sesi'; })) {
+    _sheetRowsMemo_('Schedules').forEach(function(r) {
       if (String(r[7]).toLowerCase() !== 'completed' || !r[10]) return;
       const d = new Date(r[10]);
       if (isNaN(d) || _finDate_(d).slice(0, 7) !== key) return;
@@ -577,12 +649,72 @@ function _financeSummary_(month, year) {
   };
 }
 
+function _finMonthArgs_(month, year) {
+  const m = _finInt_(month), y = _finInt_(year);
+  if (!isFinite(m) || m < 1 || m > 12 || !isFinite(y) || y < 2000 || y > 2100) throw new Error('Bulan atau tahun tidak valid.');
+  return { m: m, y: y };
+}
+
 function getFinanceOverview(token, month, year) {
   requireAdmin_(token);
   _finRequire_();
-  const m = _finInt_(month), y = _finInt_(year);
-  if (!isFinite(m) || m < 1 || m > 12 || !isFinite(y) || y < 2000 || y > 2100) throw new Error('Bulan atau tahun tidak valid.');
-  return _financeSummary_(m, y);
+  const a = _finMonthArgs_(month, year);
+  return _financeSummary_(a.m, a.y);
+}
+
+// ── Halaman Keuangan: satu panggilan (2026-11, keluhan "lama load") ─────────
+// Semua yang dipakai halaman Keuangan panel coach dalam satu jawaban: ringkasan bulan itu, tagihan (semua yang belum lunas
+// + 12 bulan terakhir dari bulan yang dipilih + semua arsip), pembayaran tagihan-tagihan itu (detail tagihan terbuka tanpa
+// memanggil server), pengeluaran 12 bulan, kategori dan metode. Tab, filter dan detail disaring di browser.
+// Setiap tabel dibaca sekali (_readMemo_). Hasil disimpan di CacheService dengan kunci = hari + jam WIB + versi keuangan
+// (_bustFin_ di setiap penulisan) + bulan; fresh=true (tarik-untuk-segarkan) melewati cache tetapi tetap menyimpan hasil baru.
+// Jam WIB di kunci menjaga bagi hasil per sesi (dari jadwal selesai, tanpa versi keuangan) paling lama basi satu jam.
+const FIN_PAGE_MONTHS = 12;
+function getFinancePage(token, month, year, fresh) {
+  requireAdmin_(token);
+  _finRequire_();
+  const a = _finMonthArgs_(month, year);
+  const ver = _finVer_();   // dibaca SEBELUM sheet
+  const wib = _wibParts_(new Date());
+  const ckey = _payloadCacheOn_() ? 'fp:' + wib.date + ':' + wib.hour + ':' + ver + ':' + a.m + ':' + a.y : '';
+  if (ckey && !fresh) {
+    const hit = _payloadGet_(ckey);
+    if (hit) { hit.at = Date.now(); return hit; }
+  }
+  // _withMemberMemo_ memasang _readMemo_: Tagihan/Pembayaran/… dan Schedules (hanya bila ada bagi hasil per sesi) dibaca sekali.
+  const out = _plainJson_(_withMemberMemo_(function() { return _financePage_(a.m, a.y); }));
+  out.ver = ver;
+  out.day = wib.date;
+  out.at = Date.now();
+  if (ckey) _payloadPut_(ckey, out, 900);
+  return out;
+}
+
+function _financePage_(m, y) {
+  let fm = m - (FIN_PAGE_MONTHS - 1), fy = y;
+  while (fm < 1) { fm += 12; fy--; }
+  const from = _finMonthKey_(fy, fm);
+  const payRows = _finRead_('Pembayaran');
+  const idx = _finPayIndex_(payRows);
+  const members = _finMembersById_();
+  const bills = _finRead_('Tagihan').map(function(b) { return _finBillView_(b, idx, members); }).filter(function(v) {
+    return v.archived || v.status !== 'Lunas' || String(v.date).slice(0, 7) >= from;
+  }).sort(function(p, q) { return p.date < q.date ? 1 : -1; });
+  const keep = {};
+  bills.forEach(function(b) { keep[b.id] = true; });
+  const payments = payRows.filter(function(p) {
+    const bid = String(p['ID Tagihan'] || '');
+    return bid ? keep[bid] : String(p.Tanggal).slice(0, 7) >= from;
+  }).map(_finPaymentView_).sort(function(p, q) { return p.date < q.date ? -1 : 1; });
+  const expenses = _finRead_('Pengeluaran').map(_finExpenseView_).filter(function(e) { return String(e.date).slice(0, 7) >= from; })
+    .sort(function(p, q) { return p.date < q.date ? 1 : -1; });
+  const cats = _finCatsView_();
+  return {
+    month: m, year: y, from: from,
+    overview: _financeSummary_(m, y),
+    bills: bills, payments: payments, expenses: expenses, cats: cats,
+    methods: _finMethods_(), portalVisible: PropertiesService.getScriptProperties().getProperty('FIN_PORTAL_VISIBLE') === 'true'
+  };
 }
 
 // ── Foto bukti (folder Drive privat, tanpa link sharing) ────────────────────
