@@ -121,8 +121,29 @@ function _quotaToday_() {
     date: day.slice(0, 4) + '-' + day.slice(4, 6) + '-' + day.slice(6, 8),
     mail: cur.mail,
     fetch: cur.fetch,
-    triggerMin: Math.round(cur.triggerMs / 6000) / 10,
+    triggerMin: _quotaMin_(cur.triggerMs),
     mailRemaining: _mailRemaining_(),
     mailSkipped: cur.mailSkipped,
   };
+}
+
+/** Menit trigger dari ms, 2 desimal (beberapa detik tidak jadi 0). */
+function _quotaMin_(ms) { return Math.round((Number(ms) || 0) / 600) / 100; }
+
+/**
+ * Hari-hari penuh sebelum hari ini (terbaru dulu), untuk XNK HQ: XNK HQ mengecek pagi hari, jadi "hari ini" saja
+ * hanya berisi 00:00 sampai jam cek. Hanya angka; hari tanpa catatan = 0.
+ * @param {number=} n jumlah hari (bawaan 6, maks QUOTA_KEEP_DAYS - 1)
+ * @return {Array<{date: string, mail: number, fetch: number, triggerMin: number, mailSkipped: number}>}
+ */
+function _quotaDays_(n) {
+  var k = Math.max(1, Math.min(QUOTA_KEEP_DAYS - 1, Math.floor(Number(n) || QUOTA_KEEP_DAYS - 1)));
+  var now = Date.now(), out = [];
+  for (var i = 1; i <= k; i++) {
+    var day = _quotaDay_(new Date(now - i * 864e5));
+    var cur = _quotaRead_(day);
+    out.push({ date: day.slice(0, 4) + '-' + day.slice(4, 6) + '-' + day.slice(6, 8), mail: cur.mail, fetch: cur.fetch,
+      triggerMin: _quotaMin_(cur.triggerMs), mailSkipped: cur.mailSkipped });
+  }
+  return out;
 }

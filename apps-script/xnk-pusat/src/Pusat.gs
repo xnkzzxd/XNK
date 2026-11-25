@@ -286,9 +286,14 @@ function checkOne_(slug, c, latest) {
   }
   if (d.quota && typeof d.quota === 'object') {   // Library lama tanpa kuota = tidak dicek
     var lim = quotaLimits_(), names = { mail: 'Kuota email', fetch: 'Kuota UrlFetch', triggerMin: 'Menit trigger' };
-    Object.keys(names).forEach(function (k) {
-      var v = Number(d.quota[k]) || 0;
-      if (v >= lim[k] * PUSAT_QUOTA_WARN) st.problems.push(names[k] + ' hari ini ' + v + ' dari ' + lim[k] + ' (≥ 70 %).');
+    // Cek pagi: "hari ini" baru berisi beberapa jam, jadi hari kemarin yang penuh (quotaDays[0]) ikut dicek.
+    var y = Array.isArray(d.quotaDays) && d.quotaDays[0] && typeof d.quotaDays[0] === 'object' ? d.quotaDays[0] : null;
+    [['hari ini', d.quota], ['kemarin', y]].forEach(function (p) {
+      if (!p[1]) return;
+      Object.keys(names).forEach(function (k) {
+        var v = Number(p[1][k]) || 0;
+        if (v >= lim[k] * PUSAT_QUOTA_WARN) st.problems.push(names[k] + ' ' + p[0] + ' ' + v + ' dari ' + lim[k] + ' (≥ 70 %).');
+      });
     });
   }
   st.ok = st.problems.length === 0;
@@ -311,6 +316,7 @@ function checkAll_(only) {
 // T-2262: riwayat harian untuk grafik /adminxnk. Hanya angka (tanpa data klien), satu baris per hari WIB, 30 hari.
 // Baris: [yyyy-mm-dd, klien aktif 30 hari, total klien, sesi selesai 7 hari, sesi 7 hari ke depan, email, UrlFetch,
 // menit trigger, beres 1|0]. Cek ulang di hari yang sama menimpa baris hari itu. Gagal = angka null.
+// Kuota di baris hari-hari sebelumnya ditimpa angka hari penuh dari quotaDays (cek pagi hanya melihat 00:00–06:00).
 var PUSAT_HIST_DAYS = 30;
 function histPush_(slug, st) {
   var d = st && st.data, day = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
@@ -321,6 +327,14 @@ function histPush_(slug, st) {
   var h = json_('HIST_' + slug, []);
   if (!Array.isArray(h)) h = [];
   h = h.filter(function (r) { return Array.isArray(r) && r[0] !== day; });
+  // Hari-hari sebelumnya: angka kuota hari penuh dari coach (quotaDays) menimpa potongan pagi yang terekam dulu.
+  (d && Array.isArray(d.quotaDays) ? d.quotaDays : []).forEach(function (x) {
+    var dd = x && String(x.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dd) || dd >= day) return;
+    var hit = h.filter(function (r) { return r[0] === dd; })[0];
+    if (!hit) return;
+    hit[5] = n(x.mail); hit[6] = n(x.fetch); hit[7] = n(x.triggerMin);
+  });
   h.push(row);
   h.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
   props_().setProperty('HIST_' + slug, JSON.stringify(h.slice(-PUSAT_HIST_DAYS)));

@@ -73,3 +73,28 @@ test('hubStatus membawa kuota hari ini: hanya tanggal dan angka', () => {
   assert.equal(q.mailRemaining, 87);
   for (const k of Object.keys(q)) if (k !== 'date') assert.equal(typeof q[k], 'number', k);
 });
+
+test('_quotaDays_: hari-hari penuh sebelum hari ini, terbaru dulu, hari kosong = 0; hubStatus mengirimnya', () => {
+  const env = seededEnv();
+  const d1 = env.callRaw('_quotaDay_', new Date(Date.now() - 864e5));
+  const d3 = env.callRaw('_quotaDay_', new Date(Date.now() - 3 * 864e5));
+  env.props['QUOTA_' + d1] = JSON.stringify({ mail: 7, fetch: 120, triggerMs: 90000, mailSkipped: 1 });
+  env.props['QUOTA_' + d3] = JSON.stringify({ mail: 2 });
+  env.callRaw('_quotaFetch_');   // hari ini tidak ikut
+  const days = env.callRaw('_quotaDays_');
+  assert.equal(days.length, 6);
+  assert.equal(days[0].date.replace(/-/g, ''), d1);
+  assert.deepEqual(JSON.parse(JSON.stringify(days[0])), { date: days[0].date, mail: 7, fetch: 120, triggerMin: 1.5, mailSkipped: 1 });
+  assert.deepEqual([days[1].mail, days[2].mail], [0, 2]);
+  env.props.HUB_SECRET = SECRET;
+  const r = env.call('hubStatus', SECRET);
+  assert.equal(r.quotaDays[0].fetch, 120);
+  assert.equal(r.quota.fetch, 1);
+});
+
+test('menit trigger dua desimal: beberapa detik tidak tampil 0', () => {
+  const env = seededEnv();
+  env.callRaw('_quotaTrigger_', 3000);
+  env.props.HUB_SECRET = SECRET;
+  assert.equal(env.call('hubStatus', SECRET).quota.triggerMin, 0.05);
+});

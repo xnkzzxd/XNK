@@ -352,6 +352,27 @@ test('kuota: angka ≥ 70 % dari batas (bawaan 100 / 20.000 / 90, bisa ditimpa) 
   assert.ok(!/Kuota email/.test(e.mails[1].body), 'batas ditimpa: 70 dari 1000 aman');
 });
 
+test('kuota: kemarin penuh (quotaDays) dicek dan menimpa angka pagi di riwayat; Library lama tanpa quotaDays tetap jalan', () => {
+  const wib = i => new Date(Date.now() + 7 * 3600e3 - i * 86400e3).toISOString().slice(0, 10);
+  const days = [{ date: wib(1), mail: 80, fetch: 300, triggerMin: 4.25, mailSkipped: 0 }, { date: wib(2), mail: 3, fetch: 10, triggerMin: 0.5 }];
+  const servers = {
+    [EXEC(1)]: server(SECRET(1), status(SHA_NEW, { quota: { date: wib(0), mail: 0, fetch: 0, triggerMin: 0.02 }, quotaDays: days })),
+    [EXEC(2)]: server(SECRET(2), status(SHA_NEW, { quota: { date: wib(0), mail: 1, fetch: 0, triggerMin: 0 } })),
+  };
+  const e = env({ servers });
+  [['claudia', 1], ['dina', 2]].forEach(([s, n]) => assert.equal(e.call('pusatRegister', 'kode-daftar-9', s, EXEC(n), SECRET(n)).ok, true));
+  e.props.HIST_claudia = JSON.stringify([[wib(2), 5, 6, 1, 1, 0, 0, 0, 1], [wib(1), 5, 6, 1, 1, 0, 0, 0.1, 1]]);
+  e.ctx.runPusatDaily();
+  assert.equal(e.mails.length, 1);
+  assert.match(e.mails[0].body, /claudia: Kuota email kemarin 80 dari 100 \(≥ 70 %\)\./);
+  assert.ok(!/dina/.test(e.mails[0].body), 'Library lama: hanya hari ini');
+  const h = JSON.parse(e.props.HIST_claudia);
+  assert.deepEqual(h.map(r => r[0]), [wib(2), wib(1), wib(0)], 'tidak menambah hari yang tidak pernah dicek');
+  assert.deepEqual(h[0].slice(5), [3, 10, 0.5, 1]);
+  assert.deepEqual(h[1].slice(1), [5, 6, 1, 1, 80, 300, 4.25, 1], 'klien/sesi kemarin tetap, kuota jadi hari penuh');
+  assert.deepEqual(h[2].slice(5, 8), [0, 0, 0.02]);
+});
+
 // ── Backup mingguan (T-2250) ────────────────────────────────────────────────────────────────────────────────
 const plain = x => JSON.parse(JSON.stringify(x));
 const DATA = {
