@@ -428,13 +428,14 @@ async function contrastReport(page) {
     const box = await page.locator('#detail-panel').boundingBox();
     check(!!box && box.width >= MOBILE.width - 1, 'client detail opens full-screen on phone');
     // S9: hero profil klien di HP lebih pendek — cincin dan tombol satu baris, tab lebih rendah, Sorotan di layar pertama.
+    // Batas 250 px (2026-11-25, pemilik): baris Paket + Perpanjang di kaki kartu ikut di HP.
     await page.waitForTimeout(400);
     const s9 = await page.evaluate(() => {
       const r = q => { const e = document.querySelector('#detail-body ' + q); return e ? e.getBoundingClientRect() : null; };
       const hero = r('.client-hero'), ring = r('.client-ring'), act = r('.client-hero-actions'), tab = r('.cp-tabs .chip'), hl = r('#cp-highlight');
       return hero && ring && act && tab && hl ? { hero: Math.round(hero.height), row: Math.abs((ring.top + ring.height / 2) - (act.top + act.height / 2)) < 20, tab: Math.round(tab.height), hl: Math.round(hl.top), over: document.scrollingElement.scrollWidth - innerWidth } : null;
     });
-    check(!!s9 && s9.hero <= 200 && s9.row && s9.tab <= 48 && s9.hl < 844 && s9.over <= 1, 'client page (phone): short hero (ring and buttons in one row), low tabs, Sorotan on the first screen ' + JSON.stringify(s9));
+    check(!!s9 && s9.hero <= 250 && s9.row && s9.tab <= 48 && s9.hl < 844 && s9.over <= 1, 'client page (phone): short hero (ring and buttons in one row), low tabs, Sorotan on the first screen ' + JSON.stringify(s9));
     const phoneProf = await page.evaluate(() => ({
       tabs: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).gridTemplateColumns.split(' ').length,
       cols: Array.from(document.querySelectorAll('#detail-body .cp-col')).map(e => getComputedStyle(e).display),
@@ -545,6 +546,16 @@ async function contrastReport(page) {
     const ccStore = await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_client_cache') || 'null'));
     const admCache = await page.evaluate(() => localStorage.getItem('xnk_admin_cache') || '');
     check(!!ccStore && !!ccStore.items['PT-A'] && ccStore.order[0] === 'PT-A' && !admCache.includes('foodLog'), 'cache: the client page is kept in xnk_client_cache, not in the admin cache');
+    // Tombol Perpanjang di halaman klien: lembar Klien baru terisi, nomor terkunci (addMember = perpanjang).
+    await page.click('#profile-renew');
+    await page.waitForTimeout(400);
+    const rn = await page.evaluate(() => { const m = window.members.find(x => x.id === 'PT-A'); return { open: !document.getElementById('modal-add-member').classList.contains('hide'), title: document.getElementById('add-member-title').textContent, ro: document.getElementById('member-phone').readOnly, phoneOk: sanitizePhone(document.getElementById('member-phone').value) === sanitizePhone(m.phone), name: document.getElementById('member-name').value === m.name, pkg: document.getElementById('member-package').value === String(m.packageId || ''), used: document.getElementById('member-used-sessions').value }; });
+    check(rn.open && rn.title === 'Perpanjang paket' && rn.ro && rn.phoneOk && rn.name && rn.pkg && rn.used === '0', 'renew: the client page button opens a prefilled renew sheet with the number locked (' + JSON.stringify(rn) + ')');
+    await page.evaluate(() => { window.closeModal(); window.openAddMemberModal(); });
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => document.getElementById('add-member-title').textContent === 'Klien baru' && !document.getElementById('member-phone').readOnly && !document.getElementById('member-phone').value), 'renew: "Klien baru" afterwards opens an empty sheet again');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(300);
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(300);
 

@@ -602,6 +602,13 @@ html.kb-open .main-col::after { display: none; }
 .client-ring { width: 118px; height: 118px; }
 .client-ring-row { gap: 18px; margin-top: 18px; }
 .client-hero-actions { margin-top: 18px; }
+/* Baris paket di kaki kartu klien: paket sekarang + Perpanjang, selebar kartu (tanpa ruang kosong) */
+.client-pkg { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--on-ink) 16%, transparent); }
+.client-pkg .cpk-ic { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--on-ink) 10%, transparent); color: var(--on-ink); }
+.client-pkg .cpk-ic svg { width: 18px; height: 18px; }
+.client-pkg .eyebrow { color: color-mix(in srgb, var(--on-ink) 60%, transparent); }
+.client-pkg .cpk-v { font-weight: 700; color: var(--on-ink); line-height: 1.25; }
+.client-pkg .btn { flex: none; min-height: 44px; white-space: nowrap; }
 .chips.cp-tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 6px 0; }
 .detail-body { padding-bottom: calc(var(--tabbar-space) + 26px); }
 @media (max-width: 767px) {
@@ -621,6 +628,7 @@ html.kb-open .main-col::after { display: none; }
   .client-hero .client-ring .num { font-size: var(--fs-lg) !important; }
   .client-hero > .client-hero-actions { margin-top: 12px; align-self: center; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .client-hero > .client-hero-actions .btn { width: 100%; min-width: 0; padding-inline: 8px; gap: 6px; white-space: nowrap; }
+  .client-hero > .client-pkg { grid-column: 1 / -1; margin-top: 12px; padding-top: 12px; gap: 10px; }
   .chips.cp-tabs .chip { min-height: 44px; flex-direction: row; gap: 6px; }
 }
 .portal-hero .avatar { box-shadow: 0 0 0 3px color-mix(in srgb, var(--on-ink) 16%, transparent); }
@@ -1872,7 +1880,8 @@ button.avatar { border: 0; cursor: pointer; }
     #app.detail-wide #profile-nut-wrap > .cp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   }
   @container (min-width: 620px) {
-    #app.detail-wide .client-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "id ring" "acts ring"; column-gap: 32px; row-gap: 18px; align-items: center; }
+    #app.detail-wide .client-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "id ring" "acts ring" "pkg pkg"; column-gap: 32px; row-gap: 18px; align-items: center; }
+    #app.detail-wide .client-hero > .client-pkg { grid-area: pkg; margin-top: 0; }
     #app.detail-wide .client-hero > .client-hero-id { grid-area: id; }
     #app.detail-wide .client-hero > .client-ring-row { grid-area: ring; margin-top: 0; }
     #app.detail-wide .client-hero > .client-hero-actions { grid-area: acts; margin-top: 0; }

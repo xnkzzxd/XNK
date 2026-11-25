@@ -164,6 +164,10 @@ per bagian, tiap bagian punya tombol Simpan sendiri) bisa mengubah:
   menampilkan permintaan; setelah pembayaran diterima tekan **Setujui**: sesi klien direset sesuai paket dan
   transaksi dicatat dengan harga saat itu (sama seperti Perpanjang di form Tambah Klien). **Tolak** tidak
   mengubah data klien. Satu permintaan hanya bisa diputuskan sekali.
+- **Perpanjang dari panel** (halaman klien): baris **Paket** di kaki kartu hitam atas menampilkan paket klien
+  dengan tombol **Perpanjang** (putih saat kuota habis). Tombol itu membuka lembar yang sudah terisi: nama, nomor (terkunci), tujuan,
+  paket sekarang, coach, dan sesi terpakai 0. Ganti paket atau jumlah sesi bila perlu, lalu **Perpanjang**: sesi
+  direset, transaksi "Perpanjang" dicatat, dan tombol WhatsApp untuk mengabari klien muncul.
 - **Pesan baru ke klien** (Pengaturan → Pengingat Klien, semuanya **mati** sampai Anda menyalakannya): **Rekap bulanan**
   (tanggal 1, 09:00: sesi bulan lalu, perubahan berat/pinggang, streak), **Selamat milestone** (tiap hari 18:00:
   klien yang baru meraih badge; tiap badge hanya diselamati sekali) dan **Waktunya ukur** (tiap dua minggu,
