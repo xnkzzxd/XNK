@@ -387,6 +387,7 @@ async function contrastReport(page) {
     check(revenueText.includes('Rp'), 'revenue KPI loaded');
     check(revenueText.includes('65% dari harga paket'), 'revenue KPI says it is 65% of the package price');
     await idleCheck(page, 'panel');
+    await animCheck(page, 'panel Dashboard');   // new-booking dots: a GPU ring, four pulses, then still
     check(await page.evaluate(() => !document.getElementById('unread-badge').classList.contains('hide')), 'new-booking badge shown');
     await shot(page, 'admin-mobile-dashboard');
 
