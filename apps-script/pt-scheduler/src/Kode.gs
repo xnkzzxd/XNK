@@ -126,8 +126,10 @@ function _appApiReply_(obj) {
   obj.v = API_VERSION;
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
-/** Body: {fn, args:[...]} sebagai teks biasa (text/plain, tanpa preflight CORS). Jawaban: {ok, data, v} atau {ok:false, error, auth, v}. */
+/** Body: {fn, args:[...], cid?, re?} sebagai teks biasa (text/plain, tanpa preflight CORS). Jawaban: {ok, data, v, dup?} atau {ok:false, error, auth, v, code?}.
+ *  cid/re: nomor pesanan untuk kiriman ulang yang aman (Idem.gs). */
 function doPost(e) {
+  let idem = null;
   try {
     const raw = e && e.postData && e.postData.contents ? String(e.postData.contents) : '';
     if (!raw || raw.length > APP_API_UPLOAD_BYTES) throw new Error('Permintaan tidak valid.');
@@ -144,16 +146,20 @@ function doPost(e) {
     // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
     try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
     const args = Array.isArray(req.args) ? req.args : [];
+    idem = _idemBegin_(fn, req, args);   // kiriman ulang dengan nomor yang sama: jawaban pertama, tanpa menjalankan lagi
+    if (idem && idem.hit) return _appApiReply_({ ok: true, data: idem.data, dup: true });
     // Fase W6b (T-1825): satu baris "speed rpc <fn>" per panggilan (run = kerja fungsi, json = salin jawaban). SPEED_TRACE=false mematikan.
     const tr = _traceStart_();
     const data = _tp_(tr, 'run', function () { return api[fn].apply(null, args); });
     const out = _tp_(tr, 'json', function () { return _plainJson_(data === undefined ? null : data); });
     _traceEnd_(tr, 'rpc ' + fn);
+    _idemDone_(idem, out);
     return _appApiReply_({ ok: true, data: out });
   } catch (err) {
+    if (idem && !idem.hit) _idemFail_(idem);
     const msg = String(err && err.message ? err.message : err);
     const bad = { ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 };
-    if (err && err.code === 'readonly') bad.code = 'readonly';
+    if (err && (err.code === 'readonly' || err.code === 'inflight')) bad.code = err.code;
     return _appApiReply_(bad);
   }
 }
@@ -5516,7 +5522,9 @@ function completeMyTask(memberToken, taskId, note) {
     const sheet = _tasksSheet_();
     const found = _findTaskRow_(sheet, id);
     if (!found || String(found.row[1]).trim() !== memberId) throw new Error('PR tidak ditemukan.');
-    if (String(found.row[6]) !== 'todo') throw new Error('PR ini sudah selesai atau dilewati.');
+    // Kiriman ulang setelah jawaban hilang: sudah selesai = berhasil (bukan galat yang membatalkan layar).
+    if (String(found.row[6]) === 'done') return { status: 'success', already: true };
+    if (String(found.row[6]) !== 'todo') throw new Error('PR ini sudah dilewati.');
     sheet.getRange(found.rowNum, 7).setValue('done');
     sheet.getRange(found.rowNum, 11, 1, 2).setValues([[new Date().toISOString(), clientNote]]);
     _spawnNextTaskInstance_(sheet, found.row);

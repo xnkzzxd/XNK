@@ -937,9 +937,9 @@
     if (su && !su.ok) {
       $('setupAuth').classList.toggle('hide', !!su.auth);
       $('setupEditor').classList.toggle('hide', !!su.auth);
-      $('setupTrig').classList.toggle('hide', !su.auth || (su.daily && su.backup));
+      $('setupTrig').classList.toggle('hide', !su.auth || (su.daily && su.backup && su.pushKick !== false));
       if (su.editor && /^https:\/\/script\.google\.com\//.test(su.editor)) $('setupEditor').href = su.editor;
-      $('setupWhy').textContent = [!su.auth ? 'Izin Google baru belum diberikan.' : '', !su.daily ? 'Cek harian belum terpasang.' : '', !su.backup ? 'Backup tiap jam belum terpasang.' : ''].filter(Boolean).join(' ');
+      $('setupWhy').textContent = [!su.auth ? 'Izin Google baru belum diberikan.' : '', !su.daily ? 'Cek harian belum terpasang.' : '', !su.backup ? 'Backup tiap jam belum terpasang.' : '', su.pushKick === false ? 'Pembangun push tiap 10 menit belum terpasang.' : ''].filter(Boolean).join(' ');
     }
     document.querySelectorAll('[data-gh]').forEach(function (b) { b.disabled = !data.canAct; b.title = data.canAct ? '' : 'Isi GITHUB_TOKEN di XNK HQ dulu'; });
     $('ghNote').textContent = data.canAct ? 'Perbarui dan bangun ulang berjalan di GitHub Actions (±2 menit).' : 'Isi GITHUB_TOKEN di Script Properties XNK HQ untuk memakai Perbarui dan Bangun ulang.';

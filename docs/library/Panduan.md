@@ -66,15 +66,15 @@ Yang dijaga: sel berisi, baris judul kolom, dan sheet tidak pernah dihapus. Disi
 
 ## D. Yang tetap manual (aturan Google / GitHub)
 
-- Izin pertama dan **Deploy → Aplikasi web** di setiap salinan.
-- Menaikkan versi Library di salinan yang sudah ada.
+- Izin pertama di setiap salinan (XNK → Mulai setup). **Deploy → Aplikasi web** hanya manual bila salinan dibuat tanpa Coach XNK `baru`.
+- Menaikkan versi Library hanya di salinan yang tidak punya token clasp tersimpan (yang punya diperbarui otomatis, lihat C).
 - Alternatif tanpa hub: repo situs per coach dari `apps-script/xnk-library/site-template/` (domain sendiri, `build-tenant.js`). Tidak dipakai sebagai jalur utama.
 - Menambah coach ke hub: Anda menjalankan workflow Hub XNK (satu formulir).
 
 ## E. Batasan saat ini
 
-- Notifikasi push ke HP belum ada di situs coach. Halaman depan `xnk.web.id` baru berisi pengenalan singkat dan kotak masuk.
-- Coach tidak boleh memasang JavaScript sendiri di hub (syarat isolasi penyimpanan); tampilan hanya nama usaha.
+- Notifikasi push ke HP ada sejak T-2240, tetapi menyala per coach hanya setelah Anda menekan **Nyalakan push** di `/adminxnk` ([../push/Setup.md](../push/Setup.md)). Halaman depan `xnk.web.id` berisi daftar kartu coach dengan pencarian dan pilihan kota (T-2260).
+- Coach tidak boleh memasang JavaScript sendiri di hub (syarat isolasi penyimpanan); tampilan diatur lewat nama usaha, warna aksen, logo dan tempat di `hub.json`.
 - Pustaka gerakan dan makanan di hub disajikan dari `xnk.web.id/_lib/`.
 - Testimoni dari Google Form evaluasi: isi Script Property `EVAL_SHEET_ID` di salinan bila dipakai (kosong = tidak ada).
 - Library sedikit lebih lambat dari kode yang berdiri sendiri (catatan Google untuk semua Library).

@@ -91,18 +91,26 @@
       const btn = $('pg-onb-next'); if (btn) { btn.disabled = true; btn.textContent = 'Menyusun…'; }
       memberCall('saveMyProgramProfile', { level: v.level, tujuan: v.tujuan, hari: Number(v.hari), durasi: Number(v.durasi), fokus: v.fokus })
         .then(function (r) { pgApply(r); window.closeModal(); showToast(r.skipped === 'coach' ? 'Data disimpan.' : 'Program siap.'); })
-        .catch(function (e) { err.textContent = e.message || 'Gagal menyimpan.'; if (btn) { btn.disabled = false; btn.textContent = 'Buat program'; } });
+        .catch(function (e) { err.textContent = waitErr(e); if (btn) { btn.disabled = false; btn.textContent = 'Buat program'; } });   // menunggu: program disusun server
       return;
     }
     pgOnb.step = Math.max(1, Math.min(4, pgOnb.step + d)); pgOnbRender();
   };
   window.pgAccept = function () {
     window.showConfirmModal('Program coach disimpan ke Rutinitas saya, lalu program otomatis dibuat.', function () {
-      memberCall('acceptAutoProgram').then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+      memberCall('acceptAutoProgram').then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(waitErr(e)); });
     }, { title: 'Coba program otomatis?', confirmText: 'Coba' });
   };
   window.pgSetAuto = function (on) {
-    const go = function () { memberCall('setMyProgramAuto', !!on).then(function (r) { pgApply(r); showToast(on ? 'Program otomatis aktif.' : 'Program otomatis dimatikan.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    // Menyalakan menunggu (server menyusun program). Mematikan langsung: kartu berubah sekarang, ditolak = kembali.
+    const go = function () {
+      if (on) { memberCall('setMyProgramAuto', true).then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(waitErr(e)); }); return; }
+      const g = window.myProgramGen, was = g ? g.auto : undefined;
+      if (g) { g.auto = false; window.patchPortalMore('programGen', g); renderAutoProg(); }
+      optimistic({ q: { mode: 'member', fn: 'setMyProgramAuto', args: [false] }, ok: 'Program otomatis dimatikan.', label: 'Program otomatis',
+        then: function (r) { if (r) pgApply(r); },
+        undo: function () { if (g) { g.auto = was; window.patchPortalMore('programGen', g); renderAutoProg(); } } });
+    };
     if (on) go(); else window.showConfirmModal('Program yang sekarang tetap ada dan tidak berubah lagi otomatis.', go, { title: 'Matikan program otomatis?', confirmText: 'Matikan' });
   };
   window.pgSwapOpen = function () {
@@ -116,22 +124,22 @@
     wlSheet('Tukar gerakan', '<p class="li-sub">Pilih gerakan dengan pola sama. Program disusun ulang dengan pilihanmu.</p>' + html);
   };
   window.pgSwap = function (pola, id) {
-    memberCall('swapMyProgramExercise', pola, id).then(function (r) { pgApply(r); window.closeModal(); showToast('Gerakan ditukar.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+    memberCall('swapMyProgramExercise', pola, id).then(function (r) { pgApply(r); window.closeModal(); showToast('Gerakan ditukar.'); }).catch(function (e) { showToast(waitErr(e)); });   // menunggu: program disusun ulang server
   };
   // Panel coach: kartu di tab Latihan klien.
   // Kartu coach untuk program otomatis kini bagian dari kartu Program (programAdminInner0).
   function pgAdminApply(id, g) { pgAdminGen[id] = g; window.ccPatch(id, { programGen: g }); renderProgramAdmin(id); }
   window.pgAdminRegen = function (id) {
     const g = pgAdminGen[id];
-    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
     if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
   };
-  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(waitErr(e)); }); };
   window.pgAdminTag = function (id, t) {
     const g = pgAdminGen[id]; if (!g) return;
     const list = (g.pantangan || []).slice(), i = list.indexOf(t);
     if (i !== -1) list.splice(i, 1); else list.push(t);
-    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); });
   };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
@@ -272,7 +280,7 @@
     if (n.profile) n.profile.gaya = g;
     window.closeModal(); renderMakan();
     memberCall('setMyMenuStyle', g).then(function (r) { window.myNutrition = r; window.patchPortalMore('nutrition', r); renderMakan(); window.showToast('Menu ' + NUT_GAYA_L[g] + '.'); })
-      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(window.authMessage(err)); });
+      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(waitErr(err)); });
   };
   function renderMakan() {
     const w = $('pub-makan-pane'); if (w) setHTML(w, makanInner());
@@ -407,7 +415,7 @@
       const weigh = o.needKg ? memberCall('saveMyMeasurement', { berat: String(o.berat).replace(',', '.') }) : Promise.resolve();
       weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth, umur: o.hadBirth ? '' : String(o.umur).trim() }); })
         .then(function (r) { done(); window.myNutrition = r; window.patchPortalMore('nutrition', r); window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
-        .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+        .catch(function (err) { done(); window.showToast(waitErr(err)); });
       return;
     }
     o.step = Math.max(1, Math.min(3, o.step + d)); nutOnbDraw();
@@ -460,7 +468,14 @@
     } catch (e) { fqMem = q.slice(); }
   }
   function fqMine() { const sc = fqScope(); return sc ? fqAll().filter(x => x.scope === sc) : []; }
-  window.fqForget = function () { fqSet([]); fqMem = null; clearTimeout(fqRt.retry); clearTimeout(fqRt.watch); fqRt.flushing = false; };
+  // Antrean simpan (lencana #sync-badge): catatan makan yang ditolak server dibuang dari antrean (seperti sebelumnya),
+  // tetapi dicatat di xnk_food_failed supaya muncul di lencana dengan alasannya (maks 20, per akun). Hanya tambahan.
+  const FQ_FAILED = 'xnk_food_failed';
+  function fqFailedAll() { try { const a = JSON.parse(_lsGet(FQ_FAILED) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function fqFailedSet(a) { _lsSet(FQ_FAILED, a.length ? JSON.stringify(a.slice(-20)) : null); if (window.syncPaint) window.syncPaint(); }
+  window.fqFailedItems = function () { const sc = fqScope(); return sc ? fqFailedAll().filter(x => x.scope === sc) : []; };
+  window.fqFailedDrop = function (id) { fqFailedSet(fqFailedAll().filter(x => x.id !== id)); };
+  window.fqForget = function () { fqSet([]); fqMem = null; clearTimeout(fqRt.retry); clearTimeout(fqRt.watch); fqRt.flushing = false; _lsSet(FQ_FAILED, null); };
   const r1 = v => Math.round(v * 10) / 10;
   function fqCalc(e) {
     if (e.id && !e.custom) {
@@ -533,7 +548,9 @@
         return;
       }
       drop(); renderMakan(); renderInsightMakan();
-      window.showToast('Catatan makan tidak tersimpan: ' + msg);
+      const nm = (it.view && it.view.nama) || (it.op === 'del' ? 'Hapus catatan makan' : 'Catatan makan');
+      fqFailedSet(fqFailedAll().concat([{ kind: 'fq', id: it.id, scope: it.scope || fqScope(), label: nm + ' · ' + (it.tanggal || ''), err: msg, at: Date.now() }]));
+      window.showToast('Catatan makan belum tersimpan. Ketuk tanda di atas.');
       window.fqFlush();
     });
   };
@@ -553,7 +570,7 @@
     if (navigator.onLine === false) { window.showToast('Butuh sinyal untuk menyalin catatan kemarin.'); return; }
     const done = busy(btn, '…');
     memberCall('copyMyFoodYesterday').then(function (d) { done(); nutSetLog(d); window.showToast('Catatan kemarin disalin.'); })
-      .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   // Lembar tambah: cari di daftar (GitHub Pages, dimuat malas), terakhir/favorit, atau buat sendiri.
   const FOOD_URL = 'https://xnk.my.id/foods/foods.min.json', FOOD_KEY = 'xnk_foods_v3';

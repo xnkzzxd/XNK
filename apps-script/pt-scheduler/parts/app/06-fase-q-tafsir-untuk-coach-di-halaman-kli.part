@@ -92,30 +92,21 @@
     const known = REMIND_TYPES.map(function (t) { return t[0]; });
     const off = (m.reminderOff || []).filter(function (k) { return known.indexOf(k) === -1; });   // jenis lain (mis. makan) tetap
     document.querySelectorAll('#profile-remind-prefs input[data-remind]').forEach(function (el) { if (!el.checked) off.push(el.getAttribute('data-remind')); });
-    const boxes = document.querySelectorAll('#profile-remind-prefs input[data-remind]');
-    boxes.forEach(function (el) { el.disabled = true; });
-    adminCall('setMemberReminderPrefs', memberId, { off: off }).then(function (res) {
-      m.reminderOff = (res && res.reminderOff) || off;
-      boxes.forEach(function (el) { el.disabled = false; });
-      window.showToast('Pengingat klien disimpan.');
-    }).catch(function (err) {
-      input.checked = !input.checked;
-      boxes.forEach(function (el) { el.disabled = false; });
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    // Antrean simpan: tombol langsung berubah; ditolak = kembali ke posisi lama.
+    const was = m.reminderOff;
+    m.reminderOff = off;
+    optimistic({ q: { mode: 'admin', fn: 'setMemberReminderPrefs', args: [memberId, { off: off }] }, ok: 'Pengingat klien disimpan.', label: 'Pengingat klien',
+      then: function (res) { if (res && res.reminderOff) m.reminderOff = res.reminderOff; },
+      undo: function () { m.reminderOff = was; if (input && input.isConnected) input.checked = !input.checked; } });
   };
   window.toggleMealReminder = function (memberId, input) {
     const m = window.members.find(x => String(x.id) === String(memberId));
     const want = !!input.checked;
-    input.disabled = true;
-    adminCall('setMemberMealReminder', memberId, want).then(function (res) {
-      if (m) m.mealReminder = !!(res && res.mealReminder);
-      input.disabled = false;
-      window.showToast(want ? 'Reminder makan dinyalakan.' : 'Reminder makan dimatikan.');
-    }).catch(function (err) {
-      input.checked = !want; input.disabled = false;
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    const was = m ? m.mealReminder : null;
+    if (m) m.mealReminder = want;
+    optimistic({ q: { mode: 'admin', fn: 'setMemberMealReminder', args: [memberId, want] }, ok: want ? 'Reminder makan dinyalakan.' : 'Reminder makan dimatikan.', label: 'Reminder makan',
+      then: function (res) { if (m && res) m.mealReminder = !!res.mealReminder; },
+      undo: function () { if (m) m.mealReminder = was; if (input && input.isConnected) input.checked = !want; } });
   };
 
   // ── PR (Task) di profil klien (T-21) ────────────────────────────────────────
@@ -317,10 +308,14 @@
     const c = window.memberTasks[String(memberId)];
     const t = c && c.list.find(x => String(x.id) === String(taskId));
     if (!t) return;
-    if (btn) btn.disabled = true;
-    adminCall('updateTask', { id: taskId, status: t.status === 'done' ? 'todo' : 'done' })
-      .then(function () { return afterTaskChange(memberId); })
-      .catch(function (err) { if (btn) btn.disabled = false; window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Antrean simpan: centang langsung berubah; server menyusul (daftar dimuat ulang setelahnya), ditolak = kembali.
+    const was = t.status, want = was === 'done' ? 'todo' : 'done';
+    const paint = function () { renderTaskSection(String(memberId)); ccPatch(String(memberId), { tasks: c.list }); };
+    t.status = want;
+    paint();
+    optimistic({ q: { mode: 'admin', fn: 'updateTask', args: [{ id: taskId, status: want }] }, ok: false, label: 'PR',
+      then: function () { afterTaskChange(memberId); },
+      undo: function () { t.status = was; paint(); } });
   };
 
   window.deleteTaskItem = function (taskId, memberId) {
@@ -330,9 +325,13 @@
     const rec = t.repeat && t.repeat !== 'none' && t.groupId;
     const msg = '<b>' + h(t.title) + '</b> akan dihapus permanen.' + (rec ? ' Ini PR berulang: hanya PR ini yang dihapus, ulangannya berhenti.' : '');
     window.showConfirmModal(msg, function () {
-      adminCall('deleteTask', taskId)
-        .then(function () { window.showToast('PR dihapus.'); return afterTaskChange(memberId); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const at = c.list.indexOf(t);
+      const paint = function () { renderTaskSection(String(memberId)); ccPatch(String(memberId), { tasks: c.list }); };
+      c.list.splice(at, 1);
+      paint();
+      optimistic({ q: { mode: 'admin', fn: 'deleteTask', args: [taskId] }, ok: 'PR dihapus.', label: 'Hapus PR',
+        then: function () { afterTaskChange(memberId); },
+        undo: function () { c.list.splice(Math.min(at, c.list.length), 0, t); paint(); } });
     }, { title: 'Hapus PR?', confirmText: 'Hapus PR', variant: 'danger' });
   };
 
@@ -432,9 +431,11 @@
     const t = window.taskTemplates.find(x => String(x.id) === String(id));
     if (!t) return;
     window.showConfirmModal('Template <b>' + h(t.title) + '</b> akan dihapus. PR yang sudah dibuat darinya tidak terpengaruh.', function () {
-      adminCall('deleteTaskTemplate', id)
-        .then(function () { window.showToast('Template dihapus.'); return loadTaskTemplates(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const before = window.taskTemplates.slice();
+      window.taskTemplates = window.taskTemplates.filter(x => x !== t);
+      renderTaskTemplates();
+      optimistic({ q: { mode: 'admin', fn: 'deleteTaskTemplate', args: [id] }, ok: 'Template dihapus.', label: 'Hapus template PR',
+        undo: function () { window.taskTemplates = before; renderTaskTemplates(); } });
     }, { title: 'Hapus template?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -446,9 +447,9 @@
     if (!title) { window.showToast('Judul wajib diisi.'); $('task-title').focus(); return; }
     if (f.repeat !== 'none' && !dueIso) { window.showToast('PR berulang wajib punya tenggat awal.'); $('task-due').focus(); return; }
     const data = { title: title, description: $('task-desc').value.trim(), category: f.category, dueDate: isoToDmy(dueIso), repeat: f.repeat };
-    // Ubah = upsert (boleh masuk outbox); tambah baru tidak diantre supaya tidak dobel.
+    // Keduanya lewat antrean simpan: ubah = upsert, tambah baru dijaga nomor pesanan (Idem.gs), jadi kiriman ulang tidak dobel.
     optimistic(Object.assign(f.id ? { q: { mode: 'admin', fn: 'updateTask', args: [Object.assign({ id: f.id }, data)] } }
-      : { call: function () { return adminCall('addTask', Object.assign({ memberId: f.memberId }, data)); } },
+      : { q: { mode: 'admin', fn: 'addTask', args: [Object.assign({ memberId: f.memberId }, data)] } },
       { sheet: true, ok: f.id ? 'PR diperbarui.' : 'PR ditambahkan.', label: 'PR', then: function () { afterTaskChange(f.memberId); } }));
   };
 
@@ -498,13 +499,17 @@
   };
   window.confirmDeleteMember = function () {
     const id = window.selectedMemberId;
-    adminCall('deleteMember', id).then(function () {
-      window.members = window.members.filter(m => String(m.id) !== String(id));
-      window.schedules = window.schedules.filter(s => String(s.memberId) !== String(id));
-      window.closeDetail();
-      window.updateUI();
-      window.showToast('Klien dihapus.');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: klien & jadwalnya hilang sekarang; ditolak = semuanya kembali.
+    const members = window.members, schedules = window.schedules;
+    window.members = members.filter(m => String(m.id) !== String(id));
+    window.schedules = schedules.filter(s => String(s.memberId) !== String(id));
+    window.closeDetail();
+    window.updateUI();
+    optimistic({ q: { mode: 'admin', fn: 'deleteMember', args: [id] }, ok: 'Klien dihapus.', label: 'Hapus klien',
+      undo: function () {
+        const back = members.filter(m => String(m.id) === String(id)), backS = schedules.filter(s => String(s.memberId) === String(id));
+        window.members = window.members.concat(back); window.schedules = window.schedules.concat(backS); window.updateUI();
+      } });
   };
 
   // Pemilih paket (dengan pencarian)
@@ -607,7 +612,7 @@
       window.showToast(res.renewed ? 'Paket klien diperpanjang.' : 'Klien ditambahkan.');
       if (res.waLink) window.showWaPrompt(res.waLink, res.renewed ? 'Kabari klien soal perpanjangan paketnya.' : 'Kirim info booking ke klien baru.');
       if (window.currentView === 'clients') window.openProfile(res.id);
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── COACH ──────────────────────────────────────────────────────────────────
@@ -679,12 +684,12 @@
       const off = a.timeOff.length ? a.timeOff.map(function (o) {
         const when = o.from === o.to ? o.from : o.from + ' → ' + o.to;
         return '<div class="row-between" style="min-height:48px;gap:8px"><div class="grow"><p class="li-title">' + h(when) + '</p><p class="li-sub">' + (o.hourFrom === null ? 'Seharian' : p2(o.hourFrom) + '–' + p2(o.hourTo)) + (o.note ? ' · ' + h(o.note) : '') + '</p></div>' +
-          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\')">' + icon('trash-2') + '</button></div>';
+          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\', this)">' + icon('trash-2') + '</button></div>';
       }).join('') : '<p class="li-sub">Belum ada cuti.</p>';
       const body = '<div class="stack" style="gap:16px"><div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Jam kerja</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openHoursEditor()">Ubah</button></div>' + rows + '</div>' +
         '<div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Cuti</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTimeOffSheet()">' + icon('plus') + 'Tambah</button></div>' + off + '</div></div>';
       openDetail('hours', 'Jam kerja & cuti', '', body);
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function renderHoursRows() {
@@ -745,11 +750,13 @@
           '<button type="button" class="btn btn-secondary btn-sm" data-wa="' + h(c.phone) + '" data-text="' + h(text) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">WA klien</button>' +
           '<button type="button" class="btn btn-outline btn-sm" onclick="window.closeModal();window.navigate(\'calendar\');window.openScheduleDetail(\'' + h(c.scheduleId) + '\')">Buka jadwal</button></div>';
       }).join('');
-    }).catch(function (err) { done(); window.showToast(err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
-  window.deleteTimeOff = function (id) {
-    adminCall('deleteCoachTimeOff', id).then(function () { window.showToast('Cuti dihapus.'); window.openHoursPage(); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  window.deleteTimeOff = function (id, btn) {
+    const row = btn && btn.closest ? btn.closest('.row-between') : null;
+    if (row) row.classList.add('hide');
+    optimistic({ q: { mode: 'admin', fn: 'deleteCoachTimeOff', args: [id] }, ok: 'Cuti dihapus.', label: 'Hapus cuti',
+      then: function () { window.openHoursPage(); }, undo: function () { if (row) row.classList.remove('hide'); } });
   };
 
 

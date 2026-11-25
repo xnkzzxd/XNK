@@ -1,0 +1,14 @@
+/* ═══ Antrean simpan (2026-11-20): lencana #sync-badge di bilah atas. Tenang: abu-abu; merah hanya bila ada yang ditolak. ═══ */
+.sync-chip { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px; border: 0; border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent); color: inherit; font: inherit; font-size: var(--fs-sm, 0.875rem); font-weight: 600; white-space: nowrap; cursor: pointer; }
+.sync-chip.hide { display: none; }
+.sync-chip:not(.hide) + .topbar-actions { margin-left: 0; }
+.sync-chip svg { width: 16px; height: 16px; flex: none; }
+.sync-chip .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.7s linear infinite; }
+.sync-chip.bad { background: var(--danger); color: var(--on-band); }
+.sync-chip .num { font-variant-numeric: tabular-nums; }
+.sync-chip.bad .num::before { content: '('; } .sync-chip.bad .num::after { content: ')'; }
+@media (max-width: 399px) { .sync-chip .lbl { display: none; } .sync-chip.bad .num::before, .sync-chip.bad .num::after { content: ''; } }
+@media (min-width: 768px) { html:not(.desk) .sync-chip { position: absolute; top: 26px; right: var(--sync-r, max(var(--page-pad), var(--sa-r))); z-index: 21; } }
+@media (prefers-reduced-motion: reduce) { .sync-chip .spin { animation-duration: 2.4s; } }
+</style>

@@ -34,7 +34,7 @@ function env(opts) {
     Session: { getEffectiveUser: () => ({ getEmail: () => 'pemilik@contoh.id' }) },
     ScriptApp: {
       getProjectTriggers: () => triggers.map(h => ({ getHandlerFunction: () => h })), deleteTrigger: t => triggers.splice(triggers.indexOf(t.getHandlerFunction()), 1),
-      newTrigger: h => { const b = { timeBased: () => b, atHour: () => b, everyDays: () => b, everyHours: () => b, after: () => b, inTimezone: () => b, create: () => triggers.push(h) }; return b; },
+      newTrigger: h => { const b = { timeBased: () => b, atHour: () => b, everyDays: () => b, everyHours: () => b, everyMinutes: () => b, after: () => b, inTimezone: () => b, create: () => triggers.push(h) }; return b; },
       getOAuthToken: () => 'tok-pusat', getScriptId: () => 'SCRIPTPUSAT',
       // Seperti web app "Siapa saja": getAuthorizationInfo memeriksa pengunjung anonim, jadi selalu REQUIRED.
       AuthMode: { FULL: 'FULL' }, AuthorizationStatus: { REQUIRED: 'REQUIRED', NOT_REQUIRED: 'NOT_REQUIRED' },
@@ -171,11 +171,13 @@ function coach(secret, sheets, chunk) {
 const status = (commit, extra) => Object.assign({ at: 'x', lib: { hash: 'h', commit }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: false, lastTickAt: '' }, clients: { total: 12, active30d: 7 }, sessions: { done7d: 9, next7d: 5 } }, extra || {});
 const server = (secret, data) => req => (req.fn === 'hubStatus' && req.args[0] === secret ? { ok: true, data } : { ok: false, error: 'Permintaan tidak valid.' });
 
-test('setupPusat: kunci sesi, satu trigger harian dan satu trigger backup tiap jam; diulang tetap satu', () => {
+test('setupPusat: kunci sesi, trigger harian, backup tiap jam dan pembangun push; diulang tetap satu', () => {
   const e = env();
   e.ctx.setupPusat();
   assert.ok(e.props.SESSION_SECRET.length >= 32);
-  assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup']);
+  assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup', 'runPusatPushKick']);
+  e.ctx.setupPusat();
+  assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup', 'runPusatPushKick']);
 });
 
 test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet; tanda palsu/kedaluwarsa tidak; overview melapor', () => {
@@ -183,7 +185,7 @@ test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet
   e.triggers.length = 0;
   const tok = e.call('pusatLogin', 'pin-rahasia-1').data.token;
   const ov = e.call('pusatOverview', tok).data.setup;
-  assert.deepEqual([ov.ok, ov.auth, ov.daily, ov.backup], [false, false, false, false]);
+  assert.deepEqual([ov.ok, ov.auth, ov.daily, ov.backup, ov.pushKick], [false, false, false, false, false]);
   assert.equal(e.call('pusatAction', 'palsu', 'setup').auth, true, 'butuh login PIN');
   const t = e.call('pusatAction', tok, 'setup').data.ticket;
   assert.match(t, /^setup\.\d+\.[\w-]+$/);
@@ -199,7 +201,7 @@ test('siapkan dari /adminxnk: tanda siap 10 menit membuka setupPusat lewat doGet
   const g = env(), gt = g.call('pusatAction', g.call('pusatLogin', 'pin-rahasia-1').data.token, 'setup').data.ticket;
   assert.match(g.ctx.doGet({ parameter: { setup: gt } }).content, /XNK HQ siap: izin Google lengkap/);
   e.ctx.doGet({ parameter: { setup: t } });
-  assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup'], 'diulang tetap satu');
+  assert.deepEqual(e.triggers, ['runPusatDaily', 'runPusatBackup', 'runPusatPushKick'], 'diulang tetap satu');
   const D = vm.runInContext('Date', e.ctx), real = D.now;
   D.now = () => real.call(D) + 11 * 60 * 1000;
   try { assert.match(e.ctx.doGet({ parameter: { setup: t } }).content, /tidak berlaku/, 'lewat 10 menit'); } finally { D.now = real; }
@@ -1132,4 +1134,49 @@ test('catat pembayaran (T-2264): hanya pemilik; jumlah, tanggal dan jenis diperi
   assert.match(e.call('pusatSubSave', e.tok, 'claudia', { tier: 'emas' }).error, /Pilih paket/);
   const r = e.call('pusatAction', e.tok, 'sub-paid', 'claudia');
   assert.equal(subOf(r, 'claudia').pay.at(-1).amount, 149000, 'sub-paid = catat pembayaran langganan sebesar harga');
+});
+
+// ── Pembangun Push XNK (2026-11-25): jam Google menjalankan workflow Push XNK tiap 10 menit, 05:00–22:59 WIB ──
+function atWib(e, hour, fn) {
+  const D = vm.runInContext('Date', e.ctx), real = D.now;
+  const base = Date.UTC(2026, 10, 25, hour - 7, 30);
+  D.now = () => base;
+  try { return JSON.parse(JSON.stringify(fn())); } finally { D.now = real; }
+}
+const kicks = e => e.fetches.filter(f => f.url.endsWith('/actions/workflows/push.yml/dispatches'));
+
+test('pembangun push: tanpa coach menyala, di luar jam, atau tanpa token tidak menjalankan apa-apa', () => {
+  const { e } = pushEnv();
+  e.props.GITHUB_TOKEN = 'github_pat_x';
+  assert.deepEqual(atWib(e, 19, () => e.ctx.runPusatPushKick()), { skipped: 'mati' }, 'push belum menyala di coach mana pun');
+  e.call('pusatAction', e.tok, 'push-on', 'claudia');
+  assert.deepEqual(atWib(e, 4, () => e.ctx.runPusatPushKick()), { skipped: 'jam' }, '04:30 WIB');
+  assert.deepEqual(atWib(e, 23, () => e.ctx.runPusatPushKick()), { skipped: 'jam' }, '23:30 WIB');
+  delete e.props.GITHUB_TOKEN;
+  assert.deepEqual(atWib(e, 19, () => e.ctx.runPusatPushKick()), { skipped: 'token' });
+  assert.equal(kicks(e).length, 0);
+});
+
+test('pembangun push: coach menyala jam 05–22 WIB → satu workflow_dispatch Push XNK aksi kirim; coach keluar tidak dihitung', () => {
+  const { e } = pushEnv();
+  e.props.GITHUB_TOKEN = 'github_pat_x';
+  e.call('pusatAction', e.tok, 'push-on', 'claudia');
+  assert.deepEqual(atWib(e, 5, () => e.ctx.runPusatPushKick()), { started: true, code: 204 });
+  assert.deepEqual(atWib(e, 22, () => e.ctx.runPusatPushKick()), { started: true, code: 204 });
+  const k = kicks(e);
+  assert.equal(k.length, 2);
+  assert.equal(k[0].url, 'https://api.github.com/repos/xnkzzxd/xnk-template-site/actions/workflows/push.yml/dispatches');
+  assert.deepEqual(JSON.parse(k[0].o.payload), { ref: 'main', inputs: { aksi: 'kirim' } });
+  assert.equal(k[0].o.headers.Authorization, 'Bearer github_pat_x');
+  assert.equal(e.props.PUSHKICK_LAST, undefined);
+  e.props.OUT_claudia = JSON.stringify({ at: 'x' });
+  assert.deepEqual(atWib(e, 19, () => e.ctx.runPusatPushKick()), { skipped: 'mati' }, 'coach keluar tidak membangunkan push');
+});
+
+test('pembangun push: GitHub menolak → tidak melempar, dicatat di PUSHKICK_LAST', () => {
+  const { e } = pushEnv({ dispatch: 403 });
+  e.props.GITHUB_TOKEN = 'github_pat_x';
+  e.call('pusatAction', e.tok, 'push-on', 'claudia');
+  assert.deepEqual(atWib(e, 19, () => e.ctx.runPusatPushKick()), { started: false, code: 403 });
+  assert.equal(JSON.parse(e.props.PUSHKICK_LAST).code, 403);
 });

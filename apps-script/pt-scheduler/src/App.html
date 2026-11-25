@@ -130,11 +130,39 @@
     return 'Selamat malam';
   }
 
-  // Ikon lucide dibuat ulang setelah DOM berubah (debounce).
+  // Ikon lucide digambar setelah DOM berubah (debounce), HANYA <i data-lucide> yang belum digambar.
+  // lucide.createIcons() menggambar ulang SEMUA ikon (svg hasilnya tetap punya data-lucide); bersama MutationObserver
+  // (bagian 14) itu jadi putaran tanpa henti, ±46 kali per detik, yang membuat HP panas (2026-11-20). Jangan panggil langsung.
   let iconTimer = null;
+  function iconPascal(name) {
+    return String(name).split(/[-_\s]+/).filter(Boolean).map(function (p) { return p.charAt(0).toUpperCase() + p.slice(1); }).join('');
+  }
+  function drawIcons() {
+    const L = window.lucide;
+    if (!L) return;
+    const todo = document.querySelectorAll('i[data-lucide]');
+    if (!todo.length) return;
+    if (typeof L.createElement !== 'function' || !L.icons) { L.createIcons(); return; }
+    for (let i = 0; i < todo.length; i++) {
+      const el = todo[i], name = el.getAttribute('data-lucide'), node = L.icons[iconPascal(name)];
+      if (!node || !el.parentNode) continue;
+      // Sama dengan replaceElement lucide: atribut elemen ikut, aria-hidden bila tanpa label, kelas lucide lucide-<nama>.
+      const attrs = { 'data-lucide': name };
+      let labelled = false;
+      for (let k = 0; k < el.attributes.length; k++) {
+        const at = el.attributes[k];
+        attrs[at.name] = at.value;
+        if (at.name.indexOf('aria-') === 0 || at.name === 'role' || at.name === 'title') labelled = true;
+      }
+      if (!labelled) attrs['aria-hidden'] = 'true';
+      attrs['class'] = ['lucide', 'lucide-' + name].concat((el.getAttribute('class') || '').split(/\s+/))
+        .filter(function (c, ix, arr) { return c && arr.indexOf(c) === ix; }).join(' ');
+      el.parentNode.replaceChild(L.createElement(node, attrs), el);
+    }
+  }
   function paintIcons() {
     clearTimeout(iconTimer);
-    iconTimer = setTimeout(function () { try { if (window.lucide) window.lucide.createIcons(); } catch (e) {} }, 16);
+    iconTimer = setTimeout(function () { try { drawIcons(); } catch (e) {} }, 16);
   }
   window.scheduleIconUpdate = paintIcons;
 
@@ -144,6 +172,8 @@
     el.innerHTML = html;
     paintIcons();
   }
+  // Teks yang ditulis timer: hanya bila berubah (tiap tulis = hitung ulang gaya/tata letak; HP cepat panas).
+  function textIf(el, s) { if (el && el.textContent !== s) el.textContent = s; }
 
   function staggerIndex(root) {
     (root || document).querySelectorAll('.stagger').forEach(function (list) {
@@ -254,16 +284,17 @@
   // Seperti google.script.run, tapi token disisipkan sebagai argumen pertama dan
   // sesi yang habis membuka layar login lagi.
   function tokenRunner(getToken, onAuthLost) {
-    let onOk = null, onFail = null;
+    let onOk = null, onFail = null, meta = null;
     const proxy = new Proxy({}, {
       get: function (_, prop) {
+        if (prop === 'withMeta') return function (m) { meta = m || null; return proxy; };   // {cid, re}: nomor pesanan (antrean simpan)
         if (prop === 'withSuccessHandler') return function (fn) { onOk = fn; return proxy; };
         if (prop === 'withFailureHandler') return function (fn) { onFail = fn; return proxy; };
         return function () {
           const args = [getToken()].concat(Array.prototype.slice.call(arguments));
-          const ok = onOk, fail = onFail;
+          const ok = onOk, fail = onFail, m = meta;
           // rpc: google.script.run, fetch ke doPost, atau XNK_TRANSPORT (Scripts.html). then(a, b): galat di ok() tidak memanggil fail().
-          rpc(prop, args).then(function (res) { if (ok) ok(res); }, function (err) {
+          rpc(prop, args, m).then(function (res) { if (ok) ok(res); }, function (err) {
             if (window.isAuthError(err) && onAuthLost) onAuthLost(err);
             if (fail) fail(err);
           });
@@ -275,16 +306,160 @@
   window.adminApi = function () { return tokenRunner(function () { return _lsGet(ADMIN_TOKEN_KEY); }, function (err) { window.onAdminAuthLost(err); }); };
   window.memberApi = function () { return tokenRunner(function () { return _lsGet(MEMBER_TOKEN_KEY); }, function (err) { window.onMemberAuthLost(err); }); };
 
-  function call(runner, name) {
-    const args = Array.prototype.slice.call(arguments, 2);
+  function rawCall(runner, name, args, meta) {
     return new Promise(function (resolve, reject) {
       if (!hasServer()) { reject(new Error('Mode pratinjau: server tidak tersedia.')); return; }
-      const r = runner.withSuccessHandler(resolve).withFailureHandler(reject);
+      const r = (meta && runner.withMeta ? runner.withMeta(meta) : runner).withSuccessHandler(resolve).withFailureHandler(reject);
       r[name].apply(r, args);
     });
   }
+
+  // ── Satu jalur tulis (write lane) ───────────────────────────────────────────
+  // Layar optimistic berubah seketika, server menyusul. Tanpa jalur ini aksi cepat beruntun gagal:
+  // "Selesai" tepat setelah booking mengirim id sementara (tmp-…) yang belum dikenal server, panggilan
+  // bersamaan berebut kunci skrip ("Server sedang sibuk"), dan dua ubahan bisa tiba terbalik.
+  // Aturan: setiap fungsi tulis (bukan READ_FN_RE) dan setiap panggilan yang membawa id sementara
+  // berjalan SATU PER SATU sesuai urutan ketukan; id sementara diganti id asli saat dikirim; kunci
+  // sibuk dicoba lagi sendiri (server menolak sebelum menulis, jadi aman). tests/write-lane.test.js
+  // memastikan tidak ada nama di WRITE (tests/api-lists.js) yang cocok dengan READ_FN_RE.
+  const READ_FN_RE = /^(get|list|check|export|preview|search|find|count|verify|ping)/;
+  const TMP_RE = /^tmp-\d+(-\d+)?$/;
+  const LANE_MAX_MS = 45000;          // panggilan macet: jalur dilepas, jawaban tetap ditunggu
+  const BUSY_RETRY_MS = [1500, 4000]; // kunci skrip sibuk: dua kali coba lagi
+  const wlane = { tail: Promise.resolve(), inflight: 0, gen: 0, alias: {}, dead: {}, idle: {} };
+  let tmpN = 0;
+  window.tmpId = function () { return 'tmp-' + Date.now() + '-' + (++tmpN); };
+  window.isTmpId = function (id) { return TMP_RE.test(String(id == null ? '' : id)); };
+  // id sementara → id asli (bila sudah ada); id lain apa adanya.
+  function realId(id) {
+    let k = String(id == null ? '' : id), n = 0;
+    while (wlane.alias[k] && n++ < 5) k = wlane.alias[k];
+    return k === String(id) ? id : k;
+  }
+  window.realId = realId;
+  // Jadwal menurut id, juga bila id yang dipegang layar masih id sementara.
+  function schedById(id) {
+    if (id == null || id === '') return null;
+    const a = String(id), b = String(realId(id));
+    return (window.schedules || []).find(x => String(x.id) === a || String(x.id) === b) || null;
+  }
+  window.schedById = schedById;
+  function hasTmp(v, d) {
+    if (typeof v === 'string') return TMP_RE.test(v);
+    if (!v || typeof v !== 'object' || d > 1) return false;
+    return Object.keys(v).some(k => hasTmp(v[k], d + 1));
+  }
+  function resolveVal(v, d) {
+    if (typeof v === 'string' && TMP_RE.test(v)) {
+      const r = realId(v);
+      if (r !== v) return r;
+      throw new Error(wlane.dead[v] ? 'Booking ini tidak jadi tersimpan, jadi perubahan dibatalkan.' : 'Jadwal ini masih disimpan. Coba lagi sebentar.');
+    }
+    if (!v || typeof v !== 'object' || d > 1) return v;
+    if (Array.isArray(v)) return v.map(x => resolveVal(x, d + 1));
+    if (Object.getPrototypeOf(v) !== Object.prototype) return v;
+    const o = {};
+    Object.keys(v).forEach(k => { o[k] = resolveVal(v[k], d + 1); });
+    return o;
+  }
+  function resolveArgs(args) { return hasTmp(args, -1) ? args.map(a => resolveVal(a, 0)) : args; }
+  window.resolveTmpArgs = function (args) { try { return resolveArgs(args); } catch (e) { return args; } };
+  // ── Satu penilai galat (dipakai lane, antrean simpan, workout, makan, booking) ──
+  // 'auth' = sesi habis · 'transient' = belum tersambung / Google sedang ramai (simpan nanti, jangan batalkan layar)
+  // · 'rejected' = server menolak dengan alasan (tampil di lencana) · 'done' = hapus barang yang sudah tidak ada.
+  const TRANSIENT_RE = /network|jaringan|koneksi|failure|failed to fetch|load failed|timed? ?out|HTTP \d|offline|sibuk|Tunggu sebentar|\bquota\b|internal error|too many times|server error occurred|we're sorry|exceeded maximum execution|service unavailable|Versi aplikasi belum cocok|Server sedang diperbarui|masih disimpan|terlalu cepat/i;
+  // Pasti belum tersimpan (server menolak sebelum menulis): boleh dicoba lagi langsung di jalur.
+  const QUICK_RETRY_RE = /sibuk|too many times|Tunggu sebentar|masih disimpan|terlalu cepat/i;
+  function errKind(err, fn) {
+    if (window.isAuthError(err)) return 'auth';
+    if (err && err.code === 'readonly') return 'rejected';
+    if (err && (err.net || err.nonJson !== undefined || err.code === 'inflight' || err.code === 'unknown_fn')) return 'transient';
+    const m = String((err && err.message) || err || '');
+    if (/^delete/.test(String(fn || '')) && /tidak ditemukan/i.test(m)) return 'done';
+    return !m || TRANSIENT_RE.test(m) ? 'transient' : 'rejected';
+  }
+  window.errKind = errKind;
+  // Alur yang sengaja menunggu jawaban (tambah klien, paket baru, unggah…): gangguan sementara diberi kalimat tenang,
+  // bukan teks mentah Google. prefix (mis. 'Gagal: ') hanya untuk penolakan sungguhan.
+  function waitErr(err, prefix) {
+    if (errKind(err) === 'transient') return 'Belum tersambung. Coba lagi sebentar.';
+    return (prefix || '') + window.authMessage(err);
+  }
+  window.waitErr = waitErr;
+  function laneIdle() {
+    if (wlane.pending()) return;   // antrean simpan masih punya pesanan: tunggu sampai kosong
+    const fns = wlane.idle; wlane.idle = {};
+    Object.keys(fns).forEach(k => setTimeout(function () { try { fns[k](); } catch (e) { console.error(e); } }, 0));
+  }
+  wlane.pending = function () { return 0; };   // diganti antrean simpan (jumlah pesanan yang belum terkirim)
+  wlane.creating = {};                         // tmp → [resolve…]: pembuatnya masih di antrean
+  wlane.laneIdle = laneIdle;
+  function lane(job) {
+    wlane.inflight++; wlane.gen++;
+    const p = wlane.tail.then(job);
+    wlane.tail = new Promise(function (res) { p.then(res, res); setTimeout(res, LANE_MAX_MS); });
+    const done = function () { wlane.inflight = Math.max(0, wlane.inflight - 1); if (!wlane.inflight) laneIdle(); };
+    p.then(done, done);
+    return p;
+  }
+  function sendRetry(runner, name, args, n, meta) {
+    let a;
+    try { a = resolveArgs(args); } catch (e) { return Promise.reject(e); }
+    return rawCall(runner, name, a, meta).catch(function (err) {
+      const m = String((err && err.message) || err || '');
+      if (n >= BUSY_RETRY_MS.length || err && (err.net || err.nonJson !== undefined) || errKind(err, name) !== 'transient' || !QUICK_RETRY_RE.test(m)) throw err;
+      return new Promise(r => setTimeout(r, BUSY_RETRY_MS[n])).then(() => sendRetry(runner, name, args, n + 1, meta));
+    });
+  }
+  // id sementara yang pembuatnya masih menunggu di antrean: tunggu dulu DI LUAR jalur (pembuatnya juga lewat jalur).
+  function tmpsOf(v, d, out) {
+    if (typeof v === 'string') { if (TMP_RE.test(v)) out.push(v); return out; }
+    if (v && typeof v === 'object' && d <= 1) Object.keys(v).forEach(k => tmpsOf(v[k], d + 1, out));
+    return out;
+  }
+  function waitTmp(t) {
+    if (wlane.alias[t] || wlane.dead[t] || !wlane.creating[t]) return Promise.resolve();
+    return new Promise(function (res) { wlane.creating[t].push(res); setTimeout(res, 90000); });
+  }
+  function laneSend(runner, name, args, meta) {
+    const wait = tmpsOf(args, -1, []).filter(t => !wlane.alias[t] && !wlane.dead[t] && wlane.creating[t]);
+    const go = function () { return lane(function () { return sendRetry(runner, name, args, 0, meta); }); };
+    return wait.length ? Promise.all(wait.map(waitTmp)).then(go) : go();
+  }
+  // Terdaftar sebagai tulis (api-lists WRITE) tetapi hanya membaca (mengembalikan pilihan pengganti menu): jangan antre di belakang simpanan.
+  const LANE_SKIP = { swapMyMenuMeal: 1, swapMyMenuItem: 1 };
+  function call(runner, name) {
+    const args = Array.prototype.slice.call(arguments, 2);
+    if ((READ_FN_RE.test(name) || LANE_SKIP[name]) && !hasTmp(args, -1)) return rawCall(runner, name, args);
+    return laneSend(runner, name, args);
+  }
+  // Pembuat baris baru dengan id sementara `tmp`: begitu jawaban datang (masih di dalam jalur, jadi
+  // aksi berikutnya pada baris itu sudah memakai id asli) id dipetakan, baris di layar diganti namanya.
+  function tmpSettled(tmp) { const w = wlane.creating[tmp]; delete wlane.creating[tmp]; (w || []).forEach(f => f()); }
+  function bindTmp(tmp, res) {
+    const id = res && res.status !== 'conflict' ? (res.id || (res.schedule && res.schedule.id) || '') : '';
+    if (!id) { wlane.dead[tmp] = true; tmpSettled(tmp); return; }
+    wlane.alias[tmp] = String(id);
+    (window.schedules || []).forEach(function (s) { if (String(s.id) === tmp) { s.id = id; delete s.pending; } });
+    if (String(window.selectedScheduleDetailId) === tmp) window.selectedScheduleDetailId = id;
+    if (String(window.rescheduleScheduleId) === tmp) window.rescheduleScheduleId = id;
+    tmpSettled(tmp);
+  }
+  function tmpDead(tmp) { wlane.dead[tmp] = true; tmpSettled(tmp); }
+  function callCreate(runner, tmp, name, args) {
+    wlane.creating[tmp] = wlane.creating[tmp] || [];
+    return laneSend(runner, name, args).then(function (res) { bindTmp(tmp, res); return res; }, function (err) { tmpDead(tmp); throw err; });
+  }
+  // Data dari server yang diminta sebelum / selama penulisan bisa basi: jangan timpa layar optimistic.
+  window.wqSnap = function () { return wlane.gen; };
+  window.wqStale = function (snap) { return wlane.inflight > 0 || wlane.pending() > 0 || wlane.gen !== snap; };
+  window.wqBusy = function () { return wlane.inflight > 0 || wlane.pending() > 0; };
+  window.wqOnIdle = function (key, fn) { if (!wlane.inflight && !wlane.pending()) setTimeout(fn, 0); else wlane.idle[key] = fn; };
+
   const adminCall = function (name) { return call.apply(null, [window.adminApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
   const memberCall = function (name) { return call.apply(null, [window.memberApi(), name].concat(Array.prototype.slice.call(arguments, 1))); };
+  const adminCreate = function (tmp, name) { return callCreate(window.adminApi(), tmp, name, Array.prototype.slice.call(arguments, 2)); };
+  const memberCreate = function (tmp, name) { return callCreate(window.memberApi(), tmp, name, Array.prototype.slice.call(arguments, 2)); };
   const publicCall = function (name) { return rpc(name, Array.prototype.slice.call(arguments, 1)); };
 
   // ── Tombol sibuk ────────────────────────────────────────────────────────────
@@ -332,56 +507,282 @@
     window._toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3200);
   };
 
-  // ── Simpan langsung berhasil (optimistic UI) ────────────────────────────────
-  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, errEl, ok, label, then(res), undo() })
-  //   Layar langsung berubah (lembar `sheet` ditutup, toast `ok`), server bekerja di belakang.
-  //   Sukses: then(res) (muat ulang / ganti data sementara). Tanpa sinyal + `q`: masuk outbox
-  //   `xnk_outbox`, dikirim ulang sendiri. Ditolak server: undo(), lembar dibuka lagi (isinya
-  //   masih ada) dan pop-up "Coba lagi / Tutup". Sesi habis: jalur login biasa.
-  const OB_KEY = 'xnk_outbox';
-  const ob = { timer: null, wait: 20000, flushing: false };
-  function obCall(it) { return (it.mode === 'admin' ? adminCall : memberCall).apply(null, [it.fn].concat(it.args || [])); }
-  function obNet(err) {
-    if (window.isAuthError(err)) return false;
-    const m = String((err && err.message) || err || '');
-    return !m || /network|jaringan|koneksi|failure|failed to fetch|timeout|timed out|HTTP 0|offline|sibuk|Tunggu sebentar|quota|internal/i.test(m);
+  // ── Antrean simpan "buku catatan" (xnk_sync, 2026-11-20) ─────────────────────
+  // Setiap simpanan dicatat DI PERANGKAT DULU (tab ditutup / tertidur di tengah simpan = tidak hilang), lalu dikirim
+  // satu per satu lewat jalur tulis dengan nomor pesanan `id` (cid). Server (Idem.gs) memutar ulang jawaban untuk
+  // nomor yang sama, jadi kiriman ulang setelah jawaban hilang tidak menyimpan dua kali.
+  //   transient (sinyal, Google ramai) → tetap di antrean, dicoba lagi (5 dtk · 2^n, maks 5 mnt), layar TIDAK dibatalkan
+  //   rejected (server menolak dengan alasan) → undo(), pesanan "gagal" tampil di lencana #sync-badge (Coba lagi / Ubah / Buang)
+  //   auth → menunggu login akun yang sama (sig)
+  // Satu tab saja yang mengirim (sewa xnk_sync_lease); hub xnk.web.id: kunci otomatis berawalan slug.
+  // Item: {id, mode, fn, args, sig, label, at, tries, nextAt, state:'pending'|'sending'|'failed', err, tmp?, sentAt?}
+  const SQ_KEY = 'xnk_sync', SQ_OLD = 'xnk_outbox', SQ_LEASE = 'xnk_sync_lease';
+  const SQ_STUCK_MS = 75000, SQ_MAX_AGE = 7 * 86400000, SQ_BACKOFF = 5000, SQ_BACKOFF_MAX = 300000, SQ_LEASE_MS = 20000;
+  const SQ_FRESH_MS = 600000;   // pesanan lebih muda dari ini membuat data server yang baru datang dianggap basi
+  const sq = { hooks: {}, flushing: false, timer: null, mem: null, refresh: false,
+    tab: Math.random().toString(36).slice(2, 10) + Date.now().toString(36) };
+  function sqSig(mode) { const t = _lsGet(mode === 'admin' ? ADMIN_TOKEN_KEY : MEMBER_TOKEN_KEY); return t ? tokenSig(t) : ''; }
+  function newCid() { return 'c' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); }
+  function sqRead() {
+    if (sq.mem) return sq.mem.map(x => Object.assign({}, x));
+    try { const a = JSON.parse(_lsGet(SQ_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
   }
-  function obSig(mode) { const t = _lsGet(mode === 'admin' ? ADMIN_TOKEN_KEY : MEMBER_TOKEN_KEY); return t ? tokenSig(t) : ''; }
-  function obRead() { try { const a = JSON.parse(_lsGet(OB_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
-  function obWrite(a) { _lsSet(OB_KEY, a.length ? JSON.stringify(a) : null); }
-  window.obCount = function () { return obRead().length; };
-  window.obForget = function (mode) { obWrite(obRead().filter(it => it.mode !== mode)); };
-  function obAdd(q, label) {
-    const a = obRead();
-    a.push({ mode: q.mode, fn: q.fn, args: q.args || [], sig: obSig(q.mode), label: label || '', at: Date.now() });
-    obWrite(a);
-    window.showToast('Tersimpan di perangkat. Dikirim saat ada sinyal.', 'cloud-off');
-    obLater();
+  function sqWrite(a) {
+    const s = a.length ? JSON.stringify(a) : null;
+    _lsSet(SQ_KEY, s);
+    sq.mem = s && _lsGet(SQ_KEY) !== s ? a.map(x => Object.assign({}, x)) : null;   // penyimpanan penuh: antrean di memori
+    syncPaint();
   }
-  function obLater() { clearTimeout(ob.timer); ob.timer = setTimeout(function () { window.obFlush(); }, ob.wait); ob.wait = Math.min(ob.wait * 2, 300000); }
-  // ponytail: dikirim satu per satu sesuai urutan; item akun lain dibiarkan sampai akun itu masuk lagi.
-  window.obFlush = function () {
-    if (ob.flushing) return Promise.resolve();
-    const a = obRead(), i = a.findIndex(it => it.sig && it.sig === obSig(it.mode));
-    if (i < 0) return Promise.resolve();
-    ob.flushing = true;
-    const it = a[i];
-    return obCall(it).then(function () {
-      obWrite(obRead().filter(x => !(x.at === it.at && x.fn === it.fn)));
-      ob.flushing = false; ob.wait = 20000;
-      if (window.refreshAll && !window.obCount()) try { window.refreshAll(true); } catch (e) {}
-      return window.obFlush();
-    }, function (err) {
-      ob.flushing = false;
-      if (obNet(err)) { obLater(); return; }
-      obWrite(obRead().filter(x => !(x.at === it.at && x.fn === it.fn)));
-      if (!window.isAuthError(err)) failPopup(it.label, err);
-      return window.obFlush();
-    });
-  };
-  window.addEventListener('online', function () { ob.wait = 20000; window.obFlush(); });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) window.obFlush(); });
+  function sqMine(it) { return it.sig && it.sig === sqSig(it.mode); }
+  function sqUpdate(id, fn) { const a = sqRead(), it = a.find(x => x.id === id); if (it) { fn(it); sqWrite(a); } return it; }
+  window.sqItems = function () { return sqRead().filter(sqMine); };
+  function sqPending(fresh) { const now = Date.now(); return sqRead().filter(it => it.state !== 'failed' && sqMine(it) && (!fresh || now - it.at < SQ_FRESH_MS)).length; }
+  wlane.pending = function () { return sqPending(true); };
+  // Antrean lama (xnk_outbox) dipindah sekali; tries 1 = kirim sebagai ulangan (re).
+  setTimeout(function sqMigrate() {   // ditunda: tokenSig (part 03) belum ada saat bagian ini dijalankan
+    try {
+      const old = JSON.parse(_lsGet(SQ_OLD) || '[]');
+      if (Array.isArray(old) && old.length) {
+        const a = sqRead();
+        old.forEach(it => a.push({ id: newCid(), mode: it.mode, fn: it.fn, args: it.args || [], sig: it.sig || '', label: it.label || '', at: it.at || Date.now(), tries: 1, nextAt: 0, state: 'pending', err: '' }));
+        sqWrite(a);
+      }
+      _lsSet(SQ_OLD, null);
+    } catch (e) {}
+  }, 0);
+  window.obCount = function () { return window.sqItems().length; };
+  window.obForget = function (mode) { sqWrite(sqRead().filter(it => it.mode !== mode)); };
 
+  function sqAdd(q, o) {
+    o = o || {};
+    const it = { id: newCid(), mode: q.mode, fn: q.fn, args: q.args || [], sig: sqSig(q.mode), label: o.label || '', at: Date.now(), tries: 0, nextAt: 0, state: 'pending', err: '' };
+    if (o.tmp) { it.tmp = o.tmp; wlane.creating[o.tmp] = wlane.creating[o.tmp] || []; }
+    const a = sqRead(); a.push(it); sqWrite(a);
+    return new Promise(function (resolve) {
+      sq.hooks[it.id] = { then: o.then, undo: o.undo, resolve: resolve, sheet: o.sheet || '', errEl: o.errEl || '' };
+      setTimeout(sqFlush, 0);
+    });
+  }
+  function sqLease() {
+    const now = Date.now();
+    let l = null;
+    try { l = JSON.parse(_lsGet(SQ_LEASE) || 'null'); } catch (e) {}
+    if (l && l.tab !== sq.tab && l.until > now) return false;
+    _lsSet(SQ_LEASE, JSON.stringify({ tab: sq.tab, until: now + SQ_LEASE_MS }));
+    return true;
+  }
+  function sqLater(ms) { clearTimeout(sq.timer); sq.timer = setTimeout(sqFlush, Math.max(500, ms)); }
+  function sqRunner(mode) { return mode === 'admin' ? window.adminApi() : window.memberApi(); }
+  // Pembuat berhasil: id sementara di pesanan berikutnya diganti id asli (tetap benar setelah halaman dimuat ulang).
+  function sqRewriteTmp() {
+    const a = sqRead();
+    let ch = false;
+    a.forEach(it => { if (hasTmp(it.args, -1)) { const r = window.resolveTmpArgs(it.args); if (JSON.stringify(r) !== JSON.stringify(it.args)) { it.args = r; ch = true; } } });
+    if (ch) sqWrite(a);
+  }
+  function sqDone(it, res) {
+    sqWrite(sqRead().filter(x => x.id !== it.id));
+    if (it.tmp) { bindTmp(it.tmp, res); sqRewriteTmp(); }
+    const hk = sq.hooks[it.id];
+    delete sq.hooks[it.id];
+    if (hk) { if (hk.then) try { hk.then(res); } catch (e) { console.error(e); } hk.resolve(res); }
+    else sq.refresh = true;   // pesanan dari halaman sebelumnya: muat ulang data saat antrean kosong
+  }
+  function sqFail(it, err) {
+    const msg = window.authMessage(err) || 'Ditolak server.';
+    sqUpdate(it.id, x => { x.state = 'failed'; x.err = msg; delete x.sentAt; });
+    if (it.tmp) tmpDead(it.tmp);
+    const hk = sq.hooks[it.id];
+    if (hk) {
+      if (hk.undo) try { hk.undo(); } catch (e) { console.error(e); }
+      hk.resolve(undefined);
+      hk.then = hk.undo = null;   // lembar & kotak galat tetap dicatat untuk "Ubah"
+    }
+    window.showToast('Belum tersimpan: ' + (it.label || 'perubahan') + '. Ketuk tanda di atas.', 'cloud-alert');
+  }
+  function sqFlush() {
+    if (sq.flushing) return Promise.resolve();
+    const now = Date.now();
+    const a = sqRead();
+    let ch = false;
+    a.forEach(it => {
+      if (it.state === 'sending' && now - (it.sentAt || 0) > SQ_STUCK_MS) { it.state = 'pending'; it.tries = Math.max(1, it.tries || 0); ch = true; }   // tab mati / fetch beku: kirim ulang (cid sama)
+      if (it.state !== 'failed' && now - it.at > SQ_MAX_AGE) { it.state = 'failed'; it.err = 'Sudah lama tidak terkirim.'; ch = true; }
+    });
+    if (ch) sqWrite(a);
+    const it = a.find(x => x.state !== 'failed' && sqMine(x));
+    if (!it) {
+      if (sq.refresh) { sq.refresh = false; if (window.refreshAll) try { window.refreshAll(true); } catch (e) {} }
+      wlane.laneIdle();
+      return Promise.resolve();
+    }
+    if (it.state === 'sending') { sqLater(SQ_STUCK_MS); return Promise.resolve(); }   // tab lain sedang mengirim
+    if (it.nextAt > now) { sqLater(it.nextAt - now); return Promise.resolve(); }
+    if (navigator.onLine === false) return Promise.resolve();                         // 'online' melanjutkan
+    if (!sqLease()) { sqLater(SQ_LEASE_MS); return Promise.resolve(); }
+    // Pesanan yang bergantung pada id sementara yang tidak akan pernah tersimpan: ikut gagal.
+    const lost = tmpsOf(it.args, -1, []).find(t => !wlane.alias[t] && (wlane.dead[t] || !a.some(x => x.tmp === t && x.state !== 'failed' && x.id !== it.id)));
+    if (lost) {
+      const src = a.find(x => x.tmp === lost);
+      sqFail(it, new Error('Menunggu: ' + (src && src.label ? src.label : 'data sebelumnya') + ' yang belum tersimpan.'));
+      return sqFlush();
+    }
+    sq.flushing = true;
+    sqUpdate(it.id, x => { x.state = 'sending'; x.sentAt = now; });
+    const meta = { cid: it.id, re: (it.tries || 0) > 0 };
+    return lane(function () { return sendRetry(sqRunner(it.mode), it.fn, it.args, 0, meta); }).then(function (res) {
+      sqDone(it, res); return true;
+    }, function (err) {
+      const k = errKind(err, it.fn);
+      if (k === 'done') { sqDone(it, null); return true; }
+      if (k === 'rejected') { sqFail(it, err); return true; }
+      // transient / auth: tetap di antrean (layar tidak dibatalkan)
+      let wait = 0;
+      sqUpdate(it.id, x => {
+        x.state = 'pending'; delete x.sentAt;
+        x.tries = (x.tries || 0) + 1;
+        wait = k === 'auth' ? 0 : Math.min(SQ_BACKOFF * Math.pow(2, x.tries - 1), SQ_BACKOFF_MAX);
+        x.nextAt = Date.now() + wait; x.err = k === 'auth' ? '' : window.authMessage(err);
+      });
+      if (k === 'transient') sqLater(wait);
+      return false;   // auth: layar login; lanjut setelah masuk lagi (sig sama)
+    }).then(function (more) {
+      sq.flushing = false;
+      if (more) return sqFlush();
+    });
+  }
+  window.obFlush = window.sqFlush = sqFlush;
+  function sqWake() { const a = sqRead(); let ch = false; a.forEach(it => { if (it.state === 'pending' && it.nextAt > Date.now()) { it.nextAt = 0; ch = true; } }); if (ch) sqWrite(a); sqFlush(); }
+  window.addEventListener('online', function () { sqWake(); syncPaint(); });
+  window.addEventListener('offline', function () { syncPaint(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) sqFlush(); });
+  window.addEventListener('pageshow', function () { sqFlush(); });
+  window.addEventListener('focus', function () { sqFlush(); });
+  setInterval(function () { if (!document.hidden && sqPending()) sqFlush(); }, 15000);   // timer latar dibekukan browser: cek lagi saat terlihat
+  // Tab ditutup sebelum pesanan pertama sempat dikirim: kirim sekali dengan keepalive (jawaban tidak dibaca; pembukaan
+  // berikutnya mengirim ulang dengan cid yang sama dan server memutar ulang jawabannya).
+  window.addEventListener('pagehide', function () {
+    try {
+      if (typeof window.XNK_TRANSPORT === 'function' || !window.XNK_CONFIG || !window.XNK_CONFIG.exec || typeof fetch !== 'function') return;
+      const it = sqRead().find(x => x.state === 'pending' && !x.tries && sqMine(x));
+      if (!it || hasTmp(it.args, -1)) return;
+      const tok = _lsGet(it.mode === 'admin' ? ADMIN_TOKEN_KEY : MEMBER_TOKEN_KEY);
+      const body = JSON.stringify({ fn: it.fn, args: [tok].concat(it.args), cid: it.id, re: 0 });
+      if (body.length > 60000) return;
+      sqUpdate(it.id, x => { x.tries = 1; });
+      fetch(window.XNK_CONFIG.exec, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: body, keepalive: true, credentials: 'omit' }).catch(function () {});
+    } catch (e) {}
+  });
+
+  // ── Lencana sinkron (#sync-badge di bilah atas) ─────────────────────────────
+  // Belum tersimpan (N) › tanpa sinyal › Menyimpan… (setelah 3 dtk) › Data 10:42 (salinan lama) › tersembunyi.
+  ui.staleAt = 0;
+  window.setStaleAt = function (t) { ui.staleAt = t || 0; syncPaint(); };
+  let syncTick = null;
+  function syncPaint() {
+    const el = document.getElementById('sync-badge');
+    if (!el) return;
+    const items = window.sqItems ? window.sqItems() : [];
+    const extra = syncExtraItems().length;
+    const failed = items.filter(x => x.state === 'failed').length + extra;
+    const pend = items.filter(x => x.state !== 'failed');
+    const now = Date.now(), oldest = pend.reduce((m, x) => Math.min(m, x.at), now);
+    let html = '', cls = '', label = '';
+    if (failed) { cls = 'bad'; label = failed + ' perubahan belum tersimpan'; html = icon('cloud-alert') + '<span class="lbl">Belum tersimpan</span><span class="num">' + failed + '</span>'; }
+    else if (pend.length && navigator.onLine === false) { label = 'Tanpa sinyal, ' + pend.length + ' menunggu dikirim'; html = icon('cloud-off') + '<span class="num">' + pend.length + '</span>'; }
+    else if (pend.length && now - oldest > 3000) { label = 'Menyimpan ' + pend.length + ' perubahan'; html = '<span class="spin" aria-hidden="true"></span><span class="lbl">Menyimpan…</span>'; }
+    else if (ui.staleAt) { const d = new Date(ui.staleAt); label = 'Data dari ' + fmtTime(d) + '. Ketuk untuk memuat ulang'; html = icon('clock') + '<span class="lbl">Data ' + fmtTime(d) + '</span>'; }
+    el.classList.toggle('hide', !html);
+    el.classList.toggle('bad', cls === 'bad');
+    el.setAttribute('aria-label', label || 'Semua tersimpan');
+    if (el._last !== html) { el.innerHTML = html; el._last = html; paintIcons(); }
+    // Panel coach di layar lebar: bilah atas setinggi 0, tombol halaman melayang di kanan atas; lencana di sebelah kirinya.
+    const acts = html && window.innerWidth >= 768 && !document.documentElement.classList.contains('desk') ? document.getElementById('topbar-actions') : null;
+    if (acts) el.style.setProperty('--sync-r', 'calc(max(var(--page-pad), var(--sa-r)) + ' + (acts.offsetWidth ? acts.offsetWidth + 8 : 0) + 'px)');
+    clearTimeout(syncTick);
+    if (pend.length) syncTick = setTimeout(syncPaint, 1000);
+    if (ui.sheetOn && window.currentSheetId === 'sheet-sync') syncList();
+  }
+  window.syncPaint = syncPaint;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncPaint); else setTimeout(syncPaint, 0);
+  window.openSyncSheet = function () {
+    const items = window.sqItems();
+    if (!items.length && !syncExtraItems().length && ui.staleAt) { if (window.refreshAll) window.refreshAll(true); return; }
+    syncList();
+    openSheet('sheet-sync');
+    window.currentSheetId = 'sheet-sync';
+  };
+  function syncList() {
+    const box = document.getElementById('sync-list');
+    if (!box) return;
+    const items = window.sqItems();
+    const row = function (it) {
+      const t = new Date(it.at), hk = sq.hooks[it.id];
+      const when = fmtShort(t) + ' ' + fmtTime(t);
+      const btn = (fn, ic, txt, c) => '<button type="button" class="btn ' + (c || 'btn-outline') + ' btn-sm" onclick="window.' + fn + '(\'' + h(it.id) + '\')">' + icon(ic) + h(txt) + '</button>';
+      const acts = it.state === 'failed'
+        ? btn('syncRetry', 'rotate-cw', 'Coba lagi', 'btn-secondary') + (hk && hk.sheet ? btn('syncEdit', 'pencil', 'Ubah') : '') + btn('syncDrop', 'trash-2', 'Buang', 'btn-ghost')
+        : (Date.now() - it.at > 3600000 ? btn('syncDrop', 'trash-2', 'Buang', 'btn-ghost') : '');
+      return '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="li-title">' + h(it.label || it.fn) + '</p><span class="li-sub num">' + h(when) + '</span></div>' +
+        (it.state === 'failed' ? '<p class="li-sub" style="color:var(--danger)">' + h(it.err || 'Ditolak server.') + '</p>' : '<p class="li-sub">' + (navigator.onLine === false ? 'Menunggu sinyal' : it.state === 'sending' ? 'Sedang dikirim…' : 'Menunggu dikirim') + '</p>') +
+        (acts ? '<div class="btn-row">' + acts + '</div>' : '') + '</div>';
+    };
+    const failed = items.filter(x => x.state === 'failed'), pend = items.filter(x => x.state !== 'failed');
+    // Antrean latihan (xnk_wl_queue) dan makan (xnk_food_failed) punya penyimpanan sendiri; di sini hanya ditampilkan.
+    const extraRow = function (it) {
+      const t = new Date(it.at), b = (fn, ic, txt, c) => '<button type="button" class="btn ' + (c || 'btn-outline') + ' btn-sm" onclick="window.' + fn + '(\'' + h(it.id) + '\')">' + icon(ic) + h(txt) + '</button>';
+      const acts = it.kind === 'wl'
+        ? b('syncWlRetry', 'rotate-cw', 'Coba lagi', 'btn-secondary') + b('syncWlEdit', 'pencil', 'Ubah') + b('syncWlDrop', 'trash-2', 'Buang', 'btn-ghost')
+        : b('syncFqOpen', 'utensils', 'Buka Makan') + b('syncFqDrop', 'x', 'Tutup', 'btn-ghost');
+      return '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="li-title">' + h(it.label) + '</p><span class="li-sub num">' + h(fmtShort(t) + ' ' + fmtTime(t)) + '</span></div>' +
+        '<p class="li-sub" style="color:var(--danger)">' + h(it.err || 'Ditolak server.') + '</p><div class="btn-row">' + acts + '</div></div>';
+    };
+    const extra = syncExtraItems();
+    let html = '';
+    if (failed.length) html += '<p class="group-label">Belum tersimpan</p>' + failed.map(row).join('');
+    if (extra.length) html += '<p class="group-label">Latihan &amp; makan belum tersimpan</p>' + extra.map(extraRow).join('');
+    if (pend.length) html += '<p class="group-label">Menunggu dikirim</p>' + pend.map(row).join('');
+    if (!html) html = '<p class="li-sub" style="min-height:44px;display:flex;align-items:center">Semua perubahan sudah tersimpan.</p>';
+    setHTML(box, html);
+  }
+  function syncExtraItems() {
+    try { return [].concat(window.wlFailedItems ? window.wlFailedItems() : [], window.fqFailedItems ? window.fqFailedItems() : []); } catch (e) { return []; }
+  }
+  const syncAfter = function () { syncPaint(); if (!window.sqItems().length && !syncExtraItems().length) window.closeModal(); };
+  window.syncWlRetry = function (id) { if (window.wlRetryOne) window.wlRetryOne(id); setTimeout(syncAfter, 300); };
+  window.syncWlEdit = function (id) { window.closeModal(); setTimeout(function () { if (window.wlReopen) window.wlReopen(id); syncPaint(); }, 300); };
+  window.syncWlDrop = function (id) { if (window.wlDrop) window.wlDrop(id); syncAfter(); };
+  window.syncFqOpen = function (id) { if (window.fqFailedDrop) window.fqFailedDrop(id); window.closeModal(); setTimeout(function () { window.navigate('public-food'); }, 300); };
+  window.syncFqDrop = function (id) { if (window.fqFailedDrop) window.fqFailedDrop(id); syncAfter(); };
+  window.syncRetry = function (id) { sqUpdate(id, x => { x.state = 'pending'; x.err = ''; x.nextAt = 0; x.tries = Math.max(1, x.tries || 0); x.at = Date.now(); }); sq.refresh = true; syncPaint(); sqFlush(); };
+  window.syncDrop = function (id) {
+    const hk = sq.hooks[id];
+    sqWrite(sqRead().filter(x => x.id !== id));
+    delete sq.hooks[id];
+    if (hk && hk.undo) try { hk.undo(); } catch (e) {}
+    if (hk && hk.resolve) hk.resolve(undefined);
+    syncPaint();
+    if (!window.sqItems().length) { window.closeModal(); if (window.refreshAll) window.refreshAll(true); }
+  };
+  window.syncEdit = function (id) {
+    const it = sqRead().find(x => x.id === id), hk = sq.hooks[id];
+    if (!it || !hk || !hk.sheet) return;
+    sqWrite(sqRead().filter(x => x.id !== id));
+    delete sq.hooks[id];
+    window.closeModal();
+    setTimeout(function () {
+      openSheet(hk.sheet);
+      const box = hk.errEl && document.getElementById(hk.errEl);
+      if (box) box.textContent = it.err || '';
+    }, 300);
+  };
+
+  // ── Simpan langsung berhasil (optimistic UI) ────────────────────────────────
+  // optimistic({ q:{mode:'admin'|'member', fn, args} | call:()=>Promise, sheet, errEl, ok, label, then(res), undo(), tmp })
+  //   Layar langsung berubah (lembar `sheet` ditutup, toast `ok`), server bekerja di belakang.
+  //   `q` (bawaan untuk simpanan baru): masuk antrean simpan di atas (nomor pesanan, coba lagi sendiri, lencana).
+  //   `tmp`: pesanan ini membuat baris dengan id sementara itu (bindTmp saat berhasil).
+  //   `call` (hanya alur yang sengaja menunggu jawaban): ditolak = undo() + lembar dibuka lagi + pop-up.
   const fp = { n: 0, last: '' };
   function failPopup(label, err, retry) {
     const msg = window.authMessage(err) || 'Terjadi kesalahan.';
@@ -396,20 +797,19 @@
   window.failPopup = failPopup;
 
   function optimistic(o) {
-    const send = o.call || function () { return obCall(o.q); };
     if (o.sheet === true) {   // lembar yang sedang terbuka; dibuka lagi bila ditolak
       const cur = ui.sheetOn && document.querySelector('#sheet-layer > .sheet:not(.hide)');
       o = Object.assign({}, o, { sheet: cur ? cur.id : '' });
     }
     if (o.sheet) window.closeModal();
     if (o.ok !== false) window.showToast(o.ok || 'Tersimpan.');
-    return send().then(function (res) {
+    if (o.q) return sqAdd(o.q, o);
+    return o.call().then(function (res) {
       if (o.then) try { o.then(res); } catch (e) { console.error(e); }
       return res;
     }, function (err) {
-      if (window.isAuthError(err)) { if (o.undo) o.undo(); return; }
-      if (o.q && obNet(err)) { obAdd(o.q, o.label); return; }
       if (o.undo) try { o.undo(); } catch (e) { console.error(e); }
+      if (window.isAuthError(err)) return;
       if (o.sheet) openSheet(o.sheet);
       // Lembar punya kotak galat sendiri: pesan server tampil di sana (tanpa pop-up kedua).
       const box = o.errEl && o.sheet && document.getElementById(o.errEl);
@@ -729,7 +1129,7 @@
     } else if (kind === 'coach') {
       if (window.coaches.some(c => String(c.id) === id)) window.openCoachProfile(id); else window.closeDetail();
     } else if (kind === 'session') {
-      if (window.schedules.some(s => String(s.id) === id)) window.openScheduleDetail(id); else window.closeDetail();
+      if (schedById(id)) window.openScheduleDetail(id); else window.closeDetail();
     }
   }
   function highlightSelection() {
@@ -1246,14 +1646,12 @@
 
   window.pkgToggle = function (id, el) {
     const want = !!el.checked;
-    el.disabled = true;
-    adminCall('setPackageActive', id, want).then(function () {
-      window.showToast(want ? 'Paket ditampilkan.' : 'Paket disembunyikan.');
-      return pkgAfterChange();
-    }).catch(function (err) {
-      el.checked = !want; el.disabled = false;
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    // Antrean simpan: saklar langsung berubah; ditolak = kembali.
+    const p = pkgFind(id), was = p ? p.aktif : !want;
+    if (p) { p.aktif = want; pkgRefreshView(); }
+    optimistic({ q: { mode: 'admin', fn: 'setPackageActive', args: [id, want] }, ok: want ? 'Paket ditampilkan.' : 'Paket disembunyikan.', label: 'Paket aktif',
+      then: function () { pkgAfterChange(); },
+      undo: function () { if (p) { p.aktif = was; pkgRefreshView(); } else if (el.isConnected) el.checked = !want; } });
   };
 
   window.pkgMove = function (id, dir) {
@@ -1266,10 +1664,8 @@
     const tmp = all[a]; all[a] = all[b]; all[b] = tmp;
     pkgRefreshView();
     const ids = pkgList().map(function (p) { return p.id; });
-    adminCall('reorderPackages', pkgState.cat, ids).then(pkgRefreshPublic).catch(function (err) {
-      window.showToast('Gagal mengurutkan: ' + window.authMessage(err));
-      pkgLoad();
-    });
+    optimistic({ q: { mode: 'admin', fn: 'reorderPackages', args: [pkgState.cat, ids] }, ok: false, label: 'Urutan paket',
+      then: function () { pkgRefreshPublic(); }, undo: function () { pkgLoad(); } });
   };
 
   window.pkgMenu = function (id) {
@@ -1298,8 +1694,11 @@
     const p = pkgFind(id);
     if (!p) return;
     window.showConfirmModal('Paket <b>' + h(p.namaPaket) + '</b> dihapus permanen. Ini tidak bisa dibatalkan.', function () {
-      adminCall('deletePackage', id).then(function () { window.showToast('Paket dihapus.'); return pkgAfterChange(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const all = pkgState.data.packages, at = all.indexOf(p);
+      if (at >= 0) { all.splice(at, 1); pkgRefreshView(); }
+      optimistic({ q: { mode: 'admin', fn: 'deletePackage', args: [id] }, ok: 'Paket dihapus.', label: 'Hapus paket',
+        then: function () { pkgAfterChange(); },
+        undo: function () { if (at >= 0) { pkgState.data.packages.splice(Math.min(at, pkgState.data.packages.length), 0, p); pkgRefreshView(); } } });
     }, { title: 'Hapus paket?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -1407,13 +1806,10 @@
       jadwal: isClass ? $('pkg-schedule').value : '',
       privat: isClass && $('pkg-private').checked
     };
-    const done = busy($('pkg-save-btn'), 'Menyimpan…');
-    adminCall('savePackage', payload).then(function () {
-      done();
-      window.closeModal();
-      window.showToast('Paket disimpan.');
-      return pkgAfterChange();
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Antrean simpan (paket baru dijaga nomor pesanan + catatan Idem): daftar dimuat ulang setelah server selesai.
+    // Ditolak = lencana; "Ubah" membuka editor ini lagi dengan isian yang sama.
+    optimistic({ q: { mode: 'admin', fn: 'savePackage', args: [payload] }, sheet: true, ok: 'Paket disimpan.', label: 'Paket',
+      then: function () { pkgAfterChange(); } });
   };
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && e.target && e.target.id === 'pkg-benefit-input') { e.preventDefault(); window.pkgAddBenefit(); }
@@ -1512,7 +1908,7 @@
       const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();
       refreshSettingsNav();
       window.showToast('Trigger pengingat terpasang.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function renderSettingsSection(id) {
@@ -1706,14 +2102,14 @@
       window.showToast('Pengaturan disimpan.');
     }).catch(function (err) {
       setState.saving = false; done();
-      window.showToast('Gagal: ' + window.authMessage(err));
+      window.showToast(waitErr(err, 'Gagal: '));
     });
   };
   window.settingsClearToken = function () {
     window.showConfirmModal('Token bot Telegram yang tersimpan akan dihapus. Notifikasi Telegram berhenti sampai token baru diisi.', function () {
       adminCall('updateAppSettings', { telegramBotToken: '' }).then(function (s) {
         setState.data = s; renderSettingsSection('notifikasi'); window.showToast('Token dihapus.');
-      }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: 'Hapus token?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -1722,7 +2118,7 @@
     adminCall('sendReminderTest', jenis).then(function (res) {
       done();
       window.showToast(res.pesan);
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.sendTelegramTest = function () {
@@ -1731,7 +2127,7 @@
     adminCall('sendTelegramTest', $('set-tgToken').value, $('set-tgChat').value).then(function (res) {
       done();
       window.showToast(res.sent + ' dari ' + res.total + ' Chat ID berhasil menerima pesan tes.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── Navigasi ────────────────────────────────────────────────────────────────
@@ -2165,7 +2561,7 @@
       $('pin-old').value = ''; $('pin-new').value = '';
       window.closeModal();
       window.showToast('PIN diganti. Perangkat lain perlu login ulang.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.logoutCurrent = function () {
@@ -2189,11 +2585,12 @@
   // Salinan terakhir data panel (hanya di perangkat admin) supaya panel langsung
   // terisi saat dibuka; data segar menyusul di belakang layar.
   const ADMIN_CACHE_KEY = 'xnk_admin_cache';
+  let adminCopyAt = 0;   // kapan salinan panel di perangkat dibuat (lencana "Data 10:42" bila server tidak terjangkau)
   function saveAdminCache() {
     try {
       _lsSet(ADMIN_CACHE_KEY, JSON.stringify({
-        members: window.members, schedules: window.schedules, coaches: window.coaches,
-        priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || []
+        members: window.members, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
+        priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || [], at: Date.now()
       }));
     } catch (e) {}
     window.offlineSnapSoon();
@@ -2208,6 +2605,7 @@
       window.priceListData = c.priceList || [];
       window.taskSummary = c.taskSummary || {};
       window.renewals = c.renewals || [];
+      adminCopyAt = Number(c.at) || 0;
       return true;
     } catch (e) { return false; }
   }
@@ -2270,10 +2668,18 @@
     setTimeout(function () { if (window.obFlush) window.obFlush(); }, 1500);
     const safe = p => p.catch(function (err) { if (!window.isAuthError(err)) console.warn(err); return null; });
     // Satu panggilan server untuk layar pertama (backend-first: lebih sedikit bolak-balik).
+    const snap = window.wqSnap();
     return safe(adminCall('getAdminBootstrap')).then(function (b) {
       if (!_lsGet(ADMIN_TOKEN_KEY)) return; // sesi habis di tengah jalan
       const r = b ? [b.members, b.schedules, b.coaches, b.priceList, b.businessHours] : [];
-      // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan.
+      // Ada simpanan yang berjalan sejak permintaan ini dikirim: klien & jadwal di layar (optimistic) lebih baru
+      // dari jawaban ini. Pertahankan, lalu ambil lagi setelah semua simpanan selesai.
+      if (window.wqStale(snap) && (r[0] || r[1])) { r[0] = r[1] = null; window.wqOnIdle('admin-boot', function () { window.loadAllData(); }); }
+      // Gagal ambil (null) = pertahankan data yang sudah ada, jangan dikosongkan; lencana menunjukkan umurnya, coba lagi diam-diam.
+      if (!b && (window.members || []).length) {
+        window.setStaleAt(adminCopyAt || Date.now());
+        setTimeout(function () { if (ui.staleAt && _lsGet(ADMIN_TOKEN_KEY)) window.loadAllData(); }, 60000);
+      } else if (b) window.setStaleAt(0);
       if (r[0]) window.members = r[0];
       if (r[1]) window.schedules = normalizeSchedules(r[1]);
       if (r[2]) applyCoachesAdmin(r[2]);
@@ -2282,7 +2688,7 @@
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
       ui.dataReady = true;
       window.hideGlobalLoader();
-      if (r[0] && r[1]) saveAdminCache();
+      if (r[0] && r[1]) saveAdminCache();   // dilewati bila basi (r dikosongkan di atas)
       window.offlineSync();
       loadAdminExtras();
       if (!window.currentView || window.isPublicView) window.navigate('dashboard'); else window.updateUI();
@@ -2354,16 +2760,25 @@
     }
     // Panggilan 1: profil, jadwalku, jam kosong, coach, paket (cepat). Panggilan 2 (getPortalMore, data sisanya): tanpa salinan
     // langsung bersamaan; dengan salinan hanya bila versi data di bootstrap berbeda (moreUpToDate).
+    const snap = window.wqSnap();
     const boot = publicCall('getPortalBootstrap', token).catch(function () { return null; });
     const haveMore = cached && !!portalMoreRaw;
     if (token && !haveMore) setTimeout(function () { window.refreshPortalMore(true); }, 0);
     return boot.then(function (b) {
+      // Gagal tersambung (null): salinan di perangkat TIDAK dikosongkan dan tidak ditimpa; lencana menampilkan jamnya.
+      const lost = !b;
       b = b || {};
-      applyPortalBootstrap(b);
+      if (lost && cached) {
+        window.setStaleAt(portalCopyAt || Date.now()); ui.dataReady = true; window.hideGlobalLoader(); window.updateUI();
+        setTimeout(function () { if (ui.staleAt && window.publicLoggedMember) window.loadPublicData(); }, 60000);   // coba lagi diam-diam
+        return;
+      }
+      if (!lost) window.setStaleAt(0);
+      applyPortalBootstrap(b, snap);
       if (b.profile || b.openSlots) window.setReadonly(b.readonly ? { on: true } : null, 'portal');   // T-2251 (jawaban gagal = biarkan)
       if (token && haveMore && !b.authLost) { if (!moreUpToDate(b)) window.refreshPortalMore(true); else window.wlFlush(); }
-      window.coaches = b.coaches || [];
-      window.priceListData = b.priceList || [];
+      if (Array.isArray(b.coaches)) window.coaches = b.coaches;
+      if (Array.isArray(b.priceList)) window.priceListData = b.priceList;
       if (b.businessHours) Object.assign(DAY_HOURS, b.businessHours);
       if (token && b.authLost) window.onMemberAuthLost(new Error(b.authLost));
       else if (token && b.profile) window.setPublicMember(b.profile);
@@ -2381,7 +2796,7 @@
       } else {
         window.updateUI();
       }
-      savePortalCache();
+      if (!lost) savePortalCache();
       window.offlineSync();
       openPendingSlot();
       // Pustaka gerakan & makanan disimpan di perangkat lebih awal, supaya cari & catat tetap jalan tanpa sinyal.
@@ -2394,7 +2809,7 @@
   // pernah melihat salinan ini. Jam kosong tidak disimpan (selalu dari server).
   const PORTAL_CACHE_KEY = 'xnk_portal_cache';
   const tokenSig = t => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
-  let portalMoreRaw = null, portalMoreInflight = null, portalMoreAt = 0;
+  let portalMoreRaw = null, portalMoreInflight = null, portalMoreAt = 0, portalCopyAt = 0;
   const MORE_MAX_AGE = 6 * 3600000;   // batas aman: salinan lebih tua dari 6 jam selalu disegarkan
   // Salinan "more" masih sama dengan server: versi sama, hari (WIB) sama, belum 6 jam, dan tidak ada tulisan sendiri sejak itu.
   function moreUpToDate(b) {
@@ -2404,8 +2819,9 @@
   }
   // Tulis-terus: hasil simpan langsung masuk salinan di perangkat (buka lagi = langsung tampil, tanpa memuat).
   // Versi dikosongkan supaya ringkasan (insight, minggu ini) dihitung ulang sekali di belakang layar saat buka berikutnya.
-  function patchMore(part, value, keepVer) {
-    if (!portalMoreRaw || value == null) return;
+  // clear = true: simpan null dengan sengaja (keluar grup kelas, permintaan perpanjang dibatalkan).
+  function patchMore(part, value, keepVer, clear) {
+    if (!portalMoreRaw || (value == null && !clear)) return;
     portalMoreRaw[part] = value;
     if (!keepVer) portalMoreRaw.ver = '';
     savePortalCache();
@@ -2417,7 +2833,7 @@
     if (!token || !window.publicLoggedMember) return;
     try {
       _lsSet(PORTAL_CACHE_KEY, JSON.stringify({
-        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules, coaches: window.coaches,
+        v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
         priceList: window.priceListData, hours: DAY_HOURS, horizon: window.bookingHorizonDays, cutoff: window.rescheduleCutoffHours,
         infoLatest: window.infoLatest || '', feedback: window.myFeedback ? { enabled: window.myFeedback.enabled, pending: window.myFeedback.pending, pkgEval: window.myFeedback.pkgEval } : null,
         more: portalMoreRaw, moreAt: portalMoreAt
@@ -2449,6 +2865,7 @@
       window.infoLatest = c.infoLatest || '';
       window.myFeedback = Object.assign({ enabled: true, pending: null, pkgEval: false }, c.feedback || {}, { stars: 0, scheduleId: '' });
       if (c.more) { applyPortalMore(c.more, true); portalMoreAt = Number(c.moreAt) || 0; }
+      portalCopyAt = Number(c.at) || 0;
       renderTopbarActions();
       return true;
     } catch (e) { return false; }
@@ -2524,8 +2941,10 @@
   });
 
   // Jadwalku + jam kosong dari getPortalBootstrap (jadwal klien lain tidak pernah dikirim ke browser).
-  function applyPortalBootstrap(b) {
-    window.schedules = normalizeSchedules(b.schedules);
+  // snap (window.wqSnap() saat diminta): booking / reschedule berjalan sejak itu = jadwalku di layar lebih baru; pertahankan dan ambil lagi nanti.
+  function applyPortalBootstrap(b, snap) {
+    if (snap != null && window.wqStale(snap) && Array.isArray(b.schedules)) window.wqOnIdle('portal-boot', function () { window.refreshPortalSchedules().then(function () { window.updateUI(); }).catch(function () {}); });
+    else if (Array.isArray(b.schedules)) window.schedules = normalizeSchedules(b.schedules);   // jawaban tanpa jadwal tidak mengosongkan jadwalku
     if (b.horizonDays) window.bookingHorizonDays = b.horizonDays;
     if (b.rescheduleCutoffHours != null && isFinite(Number(b.rescheduleCutoffHours))) window.rescheduleCutoffHours = Number(b.rescheduleCutoffHours);
     if (b.openSlots) applyOpenSlots(b.openSlots);
@@ -2538,7 +2957,8 @@
     if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }
   window.refreshPortalSchedules = function () {
-    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b); savePortalCache(); return b; });
+    const snap = window.wqSnap();
+    return publicCall('getPortalBootstrap', _lsGet(MEMBER_TOKEN_KEY)).then(function (b) { b = b || {}; applyPortalBootstrap(b, snap); savePortalCache(); return b; });
   };
 
   // Jam yang dipilih di Landing (xnkbooking.my.id): setelah klien masuk, buka form
@@ -2599,12 +3019,13 @@
   window.markNotificationsRead = function (ids) {
     ids = ids || unreadList().map(s => s.id);
     if (!ids.length) { window.closeModal(); return; }
-    adminCall('markSchedulesAsRead', ids).then(function () {
-      window.schedules.forEach(function (s) { if (ids.indexOf(s.id) !== -1) s.status = 'read'; });
-      window.closeModal();
-      window.updateUI();
-      window.showToast(ids.length + ' booking ditandai dibaca.');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: langsung dibaca di layar; ditolak = status lama kembali (lencana di bilah atas).
+    const old = window.schedules.filter(s => ids.indexOf(s.id) !== -1).map(s => [s, s.status]);
+    old.forEach(p => { p[0].status = 'read'; });
+    window.closeModal();
+    window.updateUI();
+    optimistic({ q: { mode: 'admin', fn: 'markSchedulesAsRead', args: [ids] }, ok: ids.length + ' booking ditandai dibaca.', label: 'Tandai dibaca',
+      undo: function () { old.forEach(p => { p[0].status = p[1]; }); window.updateUI(); } });
   };
   window.closeNotificationModal = window.closeModal;
 
@@ -2653,7 +3074,7 @@
   }
 
   window.quickWa = function (id) {
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return;
     const d = new Date(s.start);
     window.waToClient(s, 'Halo ' + s.title + ', ini Coach XNK. Mengingatkan jadwal latihan kita ' + fmtDate(d) + ' jam ' + fmtTime(d) + ' WIB. Sampai ketemu!');
@@ -3242,7 +3663,7 @@
 
   window.updateDraggedEvent = function (event, revert) {
     if (window.isPublicView) { revert(); return; }
-    const s = window.schedules.find(x => String(x.id) === String(event.id));
+    const s = schedById(event.id);
     const data = {
       id: event.id,
       start: event.start.toISOString(),
@@ -3251,7 +3672,7 @@
     };
     const old = s ? { start: s.start, end: s.end } : null;
     if (s) { s.start = data.start; s.end = data.end; }
-    optimistic({ call: function () { return adminCall('updateScheduleData', data); }, ok: 'Jadwal dipindah ke ' + fmtShort(event.start) + ' ' + fmtTime(event.start) + '.', label: 'Pindah jadwal',
+    optimistic({ q: { mode: 'admin', fn: 'updateScheduleData', args: [data] }, ok: 'Jadwal dipindah ke ' + fmtShort(event.start) + ' ' + fmtTime(event.start) + '.', label: 'Pindah jadwal',
       then: function () { refreshDetail(); },
       undo: function () { if (s && old) Object.assign(s, old); revert(); } });
   };
@@ -3259,7 +3680,7 @@
   // ── Detail sesi (admin) ─────────────────────────────────────────────────────
   window.openScheduleDetail = function (id) {
     if (window.isPublicView) return;
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return;
     window.selectedScheduleDetailId = s.id;
     const d = new Date(s.start), end = new Date(s.end || d.getTime() + 3600000);
@@ -3305,11 +3726,12 @@
   window.openScheduleDetailModal = function (event) { window.openScheduleDetail(event && event.id); };
 
   window.markNotificationsReadSilently = function (ids) {
-    adminCall('markSchedulesAsRead', ids).then(function () {
-      window.schedules.forEach(function (s) { if (ids.indexOf(s.id) !== -1) s.status = 'read'; });
-      updateBadges();
-      if (window.currentView === 'dashboard' || window.currentView === 'calendar') renderView(window.currentView, { animate: false });
-    }).catch(function () {});
+    const paint = function () { updateBadges(); if (window.currentView === 'dashboard' || window.currentView === 'calendar') renderView(window.currentView, { animate: false }); };
+    const old = window.schedules.filter(s => ids.indexOf(s.id) !== -1).map(s => [s, s.status]);
+    old.forEach(p => { p[0].status = 'read'; });
+    paint();
+    optimistic({ q: { mode: 'admin', fn: 'markSchedulesAsRead', args: [ids] }, ok: false, label: 'Tandai dibaca',
+      undo: function () { old.forEach(p => { p[0].status = p[1]; }); paint(); } });
   };
 
   window.saveCoachAssignment = function () {
@@ -3317,19 +3739,18 @@
     const coachId = sel ? sel.value : '';
     const coach = window.coaches.find(c => String(c.id) === String(coachId));
     const coachName = coach ? coach.name : '';
-    const done = busy($('btn-save-coach'), '…');
-    adminCall('updateScheduleCoach', window.selectedScheduleDetailId, coachId).then(function () {
-      const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
-      if (s) { s.coachId = coachId; s.coachName = coach ? coach.name : ''; }
-      done();
-      window.showToast(coach ? window.coachLabel(coach.name) + ' ditugaskan.' : 'Coach dikosongkan.');
-      window.updateUI();
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    const s = schedById(window.selectedScheduleDetailId);
+    const old = s ? { coachId: s.coachId, coachName: s.coachName } : null;
+    if (s) { s.coachId = coachId; s.coachName = coachName; }
+    window.updateUI();
+    optimistic({ q: { mode: 'admin', fn: 'updateScheduleCoach', args: [window.selectedScheduleDetailId, coachId] },
+      ok: coach ? window.coachLabel(coach.name) + ' ditugaskan.' : 'Coach dikosongkan.', label: 'Coach sesi',
+      undo: function () { if (s && old) { Object.assign(s, old); window.updateUI(); } } });
   };
 
   window.contactDetailMember = function () { window.quickWa(window.selectedScheduleDetailId); };
   window.contactDetailCoach = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s || !s.coachId) { window.showToast('Pilih coach dulu.'); return; }
     const c = window.coaches.find(x => String(x.id) === String(s.coachId));
     if (!c) return;
@@ -3338,7 +3759,7 @@
   };
 
   window.markSessionCompleted = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     const m = window.members.find(x => String(x.id) === String(s.memberId));
     if (m && Number(m.usedSessions) >= Number(m.totalSessions)) { window.showToast('Kuota sesi klien ini sudah habis.'); return; }
@@ -3349,7 +3770,7 @@
       if (m) m.usedSessions = (Number(m.usedSessions) || 0) + 1;
       window.updateUI();
       setTimeout(function () { window.openSessionNote(s.id, true, null); }, 350);   // langsung, tanpa menunggu server
-      optimistic({ call: function () { return adminCall('completeSession', s.id, s.memberId); }, ok: 'Sesi selesai. Kuota dipotong.', label: 'Sesi selesai',
+      optimistic({ q: { mode: 'admin', fn: 'completeSession', args: [s.id, s.memberId] }, ok: 'Sesi selesai. Kuota dipotong.', label: 'Sesi selesai',
         // Tombol evaluasi paket (paket habis) muncul begitu jawaban server datang; lembar catatan sudah terbuka.
         then: function (result) { if (window.sessionNoteResult) window.sessionNoteResult(s.id, result); },
         undo: function () { s.status = old.status; s.completedAt = old.completedAt; if (m) m.usedSessions = old.used; window.updateUI(); } });
@@ -3357,34 +3778,40 @@
   };
 
   window.deleteScheduleFromDetail = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     window.showConfirmModal('Sesi <b>' + h(s.title) + '</b> pada ' + h(fmtShort(new Date(s.start))) + ' akan dihapus.' + (isDone(s) ? ' Kuota klien dikembalikan 1.' : ''), function () {
-      adminCall('deleteSchedule', s.id).then(function () {
-        window.schedules = window.schedules.filter(x => String(x.id) !== String(s.id));
-        if (isDone(s)) { const m = window.members.find(x => String(x.id) === String(s.memberId)); if (m) m.usedSessions = Math.max(0, (Number(m.usedSessions) || 0) - 1); }
-        window.closeDetail();
-        window.updateUI();
-        window.showToast('Sesi dihapus.');
-      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      // Antrean simpan: hilang dari layar sekarang; ditolak = sesi & kuota kembali (lencana di bilah atas).
+      const at = window.schedules.indexOf(s);
+      const m = isDone(s) ? window.members.find(x => String(x.id) === String(s.memberId)) : null;
+      const used = m ? m.usedSessions : null;
+      window.schedules = window.schedules.filter(x => x !== s && String(x.id) !== String(s.id));
+      if (m) m.usedSessions = Math.max(0, (Number(m.usedSessions) || 0) - 1);
+      window.closeDetail();
+      window.updateUI();
+      optimistic({ q: { mode: 'admin', fn: 'deleteSchedule', args: [s.id] }, ok: 'Sesi dihapus.', label: 'Hapus sesi',
+        undo: function () { window.schedules.splice(Math.max(0, Math.min(at, window.schedules.length)), 0, s); if (m) m.usedSessions = used; window.updateUI(); } });
     }, { title: 'Hapus sesi?', confirmText: 'Hapus', variant: 'danger' });
   };
   window.confirmDeleteSchedule = window.deleteScheduleFromDetail;
 
   window.deleteRecurringGroupFromDetail = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s || !s.recurringGroupId) return;
     const groupId = s.recurringGroupId;
     window.showConfirmModal('<b>Semua sesi</b> dalam seri berulang ini akan dihapus, termasuk yang sudah lewat. Kuota dari sesi yang sudah selesai dikembalikan.', function () {
-      adminCall('deleteRecurringGroup', groupId).then(function (res) {
-        window.schedules = window.schedules.filter(x => String(x.recurringGroupId) !== String(groupId));
-        return adminCall('getMembers').then(function (fresh) {
-          window.members = fresh || window.members;
-          window.closeDetail();
-          window.updateUI();
-          window.showToast((res && res.deletedCount) + ' sesi berulang dihapus.');
-        });
-      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      // Antrean simpan: seri hilang sekarang, kuota sesi yang sudah selesai dikembalikan di layar; kuota pasti dari server menyusul.
+      const gone = window.schedules.filter(x => String(x.recurringGroupId) === String(groupId));
+      const back = {};
+      gone.forEach(x => { if (isDone(x)) back[x.memberId] = (back[x.memberId] || 0) + 1; });
+      const usedOld = window.members.filter(mm => back[mm.id]).map(mm => [mm, mm.usedSessions]);
+      usedOld.forEach(p => { p[0].usedSessions = Math.max(0, (Number(p[0].usedSessions) || 0) - back[p[0].id]); });
+      window.schedules = window.schedules.filter(x => String(x.recurringGroupId) !== String(groupId));
+      window.closeDetail();
+      window.updateUI();
+      optimistic({ q: { mode: 'admin', fn: 'deleteRecurringGroup', args: [groupId] }, ok: gone.length + ' sesi berulang dihapus.', label: 'Hapus seri berulang',
+        then: function () { adminCall('getMembers').then(function (fresh) { if (Array.isArray(fresh)) { window.members = fresh; window.updateUI(); } }).catch(function () {}); },
+        undo: function () { window.schedules = window.schedules.concat(gone); usedOld.forEach(p => { p[0].usedSessions = p[1]; }); window.updateUI(); } });
     }, { title: 'Hapus seluruh seri?', confirmText: 'Hapus semua', variant: 'danger' });
   };
 
@@ -3542,7 +3969,7 @@
   window.openRescheduleModal = function (id) {
     const me = window.publicLoggedMember;
     if (!me) { window.showToast('Masuk dulu ya.'); return; }
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) { window.showToast('Jadwal tidak ditemukan.'); return; }
     if (String(s.memberId) !== String(me.id)) { window.showToast('Jadwal ini bukan milikmu.'); return; }
     if (isDone(s)) { window.showToast('Sesi yang sudah selesai tidak bisa diubah.'); return; }
@@ -3563,7 +3990,7 @@
   };
 
   window.openEditScheduleDetailModal = function () {
-    const s = window.schedules.find(x => String(x.id) === String(window.selectedScheduleDetailId));
+    const s = schedById(window.selectedScheduleDetailId);
     if (!s) return;
     window.isEditScheduleMode = true;
     window.isRescheduleMode = false;
@@ -3664,7 +4091,7 @@
     const sub = !alts.length ? 'Belum ada jam kosong yang cocok.' : res.code === 'duration' ? 'Ikut kelasnya dengan durasi yang sama?' : 'Pilih jam lain, durasi ' + reqMins + ' menit tetap sama.';
     let old = '';
     if (resched) {
-      const s = window.schedules.find(x => String(x.id) === String(window.rescheduleScheduleId));
+      const s = schedById(window.rescheduleScheduleId);
       if (s) old = 'Jadwal lama (' + whenLabel(s.start) + ') tetap aman.';
     }
     const el = document.createElement('div');
@@ -3764,7 +4191,7 @@
   }
 
   // Error yang tetap dilempar server (kuota, batas hari, sibuk, koneksi) tampil di dalam sheet, bukan toast.
-  const isNetworkError = msg => !msg || /network|failed to fetch|HTTP \d|timed? ?out|connection|koneksi|server error|sorry|exceeded/i.test(msg);
+  const isNetworkError = msg => !msg || /connection/i.test(msg) || errKind(new Error(msg)) === 'transient';   // satu penilai (01-awal)
   function showFormNotice(form, err) {
     if (form.getAttribute('aria-busy')) hideChecking(form);
     clearSchNotice(form);
@@ -3832,7 +4259,7 @@
       const isLive = live();
       if (window.isAuthError(err)) { if (isLive) { finish(); hideChecking(form); window.closeModal(); } return; }
       if (isLive) { finish(); showFormNotice(form, err); }
-      else window.showToast('Gagal: ' + window.authMessage(err));
+      else window.showToast(waitErr(err, 'Gagal: '));
     });
   }
 
@@ -3842,8 +4269,8 @@
       res.schedule || { id: res.id, start: data.start, end: data.end });
     if (!row.id) return null;
     row.memberId = member.id;
-    const have = window.schedules.find(x => String(x.id) === String(row.id));
-    if (have) return have;
+    const have = schedById(row.id);
+    if (have) { const fresh = normalizeSchedules([row])[0]; ['start', 'end', 'coachId', 'coachName', 'status'].forEach(k => { if (fresh[k] != null && fresh[k] !== '') have[k] = fresh[k]; }); delete have.pending; return have; }   // baris sementara yang sudah diganti id-nya oleh jalur tulis
     window.schedules.push(normalizeSchedules([row])[0]);
     return row;
   }
@@ -3865,7 +4292,7 @@
   function clientBookFast(form, data, member) {
     clearSchNotice(form);   // panel bentrok/galat lama tidak boleh tertinggal di lembar yang ditutup
     const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
-    const tmpId = 'tmp-' + Date.now();
+    const tmpId = window.tmpId();
     window.schedules.push(normalizeSchedules([{ id: tmpId, memberId: member.id, title: member.name, notes: data.notes, status: 'unread', start: data.start, end: data.end, coachId: data.coachId || '', pending: true }])[0]);
     const d = new Date(data.start);
     ui.selectedDate = new Date(d); ui.selectedDate.setHours(0, 0, 0, 0);
@@ -3876,7 +4303,8 @@
     window.showToast('Booking terkirim ke coach!');
     const drop = function () { window.schedules = window.schedules.filter(x => String(x.id) !== tmpId); };
     const reopen = function (show) { drop(); window.updateUI(); if (sheetId) { openSheet(sheetId); show(); } };
-    memberCall('clientBookSchedule', data, { soft: true }).then(function (res) {
+    // memberCreate: aksi lain pada sesi ini (reschedule, dll.) menunggu di jalur tulis lalu memakai id asli.
+    memberCreate(tmpId, 'clientBookSchedule', data, { soft: true }).then(function (res) {
       res = res || {};
       if (res.openSlots) applyOpenSlots(res.openSlots);
       if (res.openSlotsByCoach) applyOpenSlotsByCoach(res.openSlotsByCoach);
@@ -3920,7 +4348,7 @@
   }
 
   function clientRescheduleFast(form, id, data, notes) {
-    const s = window.schedules.find(x => String(x.id) === String(id));
+    const s = schedById(id);
     if (!s) return false;
     clearSchNotice(form);   // panel bentrok/galat lama tidak boleh tertinggal di lembar yang ditutup
     const sheetId = form.closest('.sheet') ? form.closest('.sheet').id : '';
@@ -3951,13 +4379,13 @@
   }
 
   function clientReschedule(form, btn, id, data, notes) {
-    const own = window.schedules.find(x => String(x.id) === String(id));
+    const own = schedById(id);
     if (navigator.onLine !== false && localSlotFree(data.start, data.end, own && own.coachId && window.openSlotsByCoachMap[own.coachId] ? String(own.coachId) : '') &&
         clientRescheduleFast(form, id, data, notes)) return;
     const label = hourLabel(data.start);
     const apply = function (res) {
       const ns = res.newStart || data.start, ne = res.newEnd || data.end;
-      const s = window.schedules.find(x => String(x.id) === String(id));
+      const s = schedById(id);
       if (s) { s.start = ns; s.end = ne; s.notes = notes; }
       return 'Jadwal dipindah ke ' + whenLabel(ns) + '.';
     };
@@ -4029,9 +4457,9 @@
 
     if (window.isEditScheduleMode) {
       data.id = window.selectedScheduleDetailId;
-      const s = window.schedules.find(x => String(x.id) === String(data.id));
+      const s = schedById(data.id);
       const old = s ? { start: s.start, end: s.end, notes: s.notes } : null;
-      optimistic({ call: function () { return adminCall('updateScheduleData', data); }, sheet: true, ok: 'Jadwal diperbarui.', label: 'Jadwal',
+      optimistic({ q: { mode: 'admin', fn: 'updateScheduleData', args: [data] }, sheet: true, ok: 'Jadwal diperbarui.', label: 'Jadwal',
         undo: function () { if (s && old) { Object.assign(s, old); window.updateUI(); } window.isEditScheduleMode = true; } });
       if (s) { s.start = data.start; s.end = data.end; s.notes = notes; }
       window.updateUI();
@@ -4069,16 +4497,18 @@
             window.updateUI();
             window.showToast((res && res.count) + ' sesi berulang dibuat.');
           });
-        }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+        }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
       return;
     }
 
     if (isClient) { clientBookSingle(form, btn, data, member); return; }
 
     // Optimistic: sesi langsung di kalender dengan id sementara; ditolak = dihapus lagi + pop-up, lembar dibuka.
-    const row = Object.assign({}, data, { id: 'tmp-' + Date.now(), title: member.name, status: 'read', coachId: '', coachName: '', pending: true });
-    optimistic({ call: function () { return adminCall('addSchedule', data); }, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
-      then: function (res) { row.id = res.id; row.coachId = res.coachId || ''; row.coachName = res.coachName || ''; delete row.pending; window.updateUI(); },
+    // Antrean simpan + tmp: "Selesai", ubah, geser, hapus, catatan pada sesi ini menunggu pembuatnya lalu memakai id asli.
+    const tmp = window.tmpId();
+    const row = Object.assign({}, data, { id: tmp, title: member.name, status: 'read', coachId: '', coachName: '', pending: true });
+    optimistic({ q: { mode: 'admin', fn: 'addSchedule', args: [data] }, tmp: tmp, sheet: true, ok: 'Booking tersimpan.', label: 'Booking',
+      then: function (res) { row.id = res.id; delete row.pending; row.coachId = res.coachId || ''; row.coachName = res.coachName || ''; window.updateUI(); },
       undo: function () { window.schedules = window.schedules.filter(x => x !== row); window.updateUI(); } });
     window.schedules.push(row);
     ui.selectedDate = new Date(start); ui.selectedDate.setHours(0, 0, 0, 0);
@@ -4446,30 +4876,21 @@
     const known = REMIND_TYPES.map(function (t) { return t[0]; });
     const off = (m.reminderOff || []).filter(function (k) { return known.indexOf(k) === -1; });   // jenis lain (mis. makan) tetap
     document.querySelectorAll('#profile-remind-prefs input[data-remind]').forEach(function (el) { if (!el.checked) off.push(el.getAttribute('data-remind')); });
-    const boxes = document.querySelectorAll('#profile-remind-prefs input[data-remind]');
-    boxes.forEach(function (el) { el.disabled = true; });
-    adminCall('setMemberReminderPrefs', memberId, { off: off }).then(function (res) {
-      m.reminderOff = (res && res.reminderOff) || off;
-      boxes.forEach(function (el) { el.disabled = false; });
-      window.showToast('Pengingat klien disimpan.');
-    }).catch(function (err) {
-      input.checked = !input.checked;
-      boxes.forEach(function (el) { el.disabled = false; });
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    // Antrean simpan: tombol langsung berubah; ditolak = kembali ke posisi lama.
+    const was = m.reminderOff;
+    m.reminderOff = off;
+    optimistic({ q: { mode: 'admin', fn: 'setMemberReminderPrefs', args: [memberId, { off: off }] }, ok: 'Pengingat klien disimpan.', label: 'Pengingat klien',
+      then: function (res) { if (res && res.reminderOff) m.reminderOff = res.reminderOff; },
+      undo: function () { m.reminderOff = was; if (input && input.isConnected) input.checked = !input.checked; } });
   };
   window.toggleMealReminder = function (memberId, input) {
     const m = window.members.find(x => String(x.id) === String(memberId));
     const want = !!input.checked;
-    input.disabled = true;
-    adminCall('setMemberMealReminder', memberId, want).then(function (res) {
-      if (m) m.mealReminder = !!(res && res.mealReminder);
-      input.disabled = false;
-      window.showToast(want ? 'Reminder makan dinyalakan.' : 'Reminder makan dimatikan.');
-    }).catch(function (err) {
-      input.checked = !want; input.disabled = false;
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    const was = m ? m.mealReminder : null;
+    if (m) m.mealReminder = want;
+    optimistic({ q: { mode: 'admin', fn: 'setMemberMealReminder', args: [memberId, want] }, ok: want ? 'Reminder makan dinyalakan.' : 'Reminder makan dimatikan.', label: 'Reminder makan',
+      then: function (res) { if (m && res) m.mealReminder = !!res.mealReminder; },
+      undo: function () { if (m) m.mealReminder = was; if (input && input.isConnected) input.checked = !want; } });
   };
 
   // ── PR (Task) di profil klien (T-21) ────────────────────────────────────────
@@ -4671,10 +5092,14 @@
     const c = window.memberTasks[String(memberId)];
     const t = c && c.list.find(x => String(x.id) === String(taskId));
     if (!t) return;
-    if (btn) btn.disabled = true;
-    adminCall('updateTask', { id: taskId, status: t.status === 'done' ? 'todo' : 'done' })
-      .then(function () { return afterTaskChange(memberId); })
-      .catch(function (err) { if (btn) btn.disabled = false; window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Antrean simpan: centang langsung berubah; server menyusul (daftar dimuat ulang setelahnya), ditolak = kembali.
+    const was = t.status, want = was === 'done' ? 'todo' : 'done';
+    const paint = function () { renderTaskSection(String(memberId)); ccPatch(String(memberId), { tasks: c.list }); };
+    t.status = want;
+    paint();
+    optimistic({ q: { mode: 'admin', fn: 'updateTask', args: [{ id: taskId, status: want }] }, ok: false, label: 'PR',
+      then: function () { afterTaskChange(memberId); },
+      undo: function () { t.status = was; paint(); } });
   };
 
   window.deleteTaskItem = function (taskId, memberId) {
@@ -4684,9 +5109,13 @@
     const rec = t.repeat && t.repeat !== 'none' && t.groupId;
     const msg = '<b>' + h(t.title) + '</b> akan dihapus permanen.' + (rec ? ' Ini PR berulang: hanya PR ini yang dihapus, ulangannya berhenti.' : '');
     window.showConfirmModal(msg, function () {
-      adminCall('deleteTask', taskId)
-        .then(function () { window.showToast('PR dihapus.'); return afterTaskChange(memberId); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const at = c.list.indexOf(t);
+      const paint = function () { renderTaskSection(String(memberId)); ccPatch(String(memberId), { tasks: c.list }); };
+      c.list.splice(at, 1);
+      paint();
+      optimistic({ q: { mode: 'admin', fn: 'deleteTask', args: [taskId] }, ok: 'PR dihapus.', label: 'Hapus PR',
+        then: function () { afterTaskChange(memberId); },
+        undo: function () { c.list.splice(Math.min(at, c.list.length), 0, t); paint(); } });
     }, { title: 'Hapus PR?', confirmText: 'Hapus PR', variant: 'danger' });
   };
 
@@ -4786,9 +5215,11 @@
     const t = window.taskTemplates.find(x => String(x.id) === String(id));
     if (!t) return;
     window.showConfirmModal('Template <b>' + h(t.title) + '</b> akan dihapus. PR yang sudah dibuat darinya tidak terpengaruh.', function () {
-      adminCall('deleteTaskTemplate', id)
-        .then(function () { window.showToast('Template dihapus.'); return loadTaskTemplates(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      const before = window.taskTemplates.slice();
+      window.taskTemplates = window.taskTemplates.filter(x => x !== t);
+      renderTaskTemplates();
+      optimistic({ q: { mode: 'admin', fn: 'deleteTaskTemplate', args: [id] }, ok: 'Template dihapus.', label: 'Hapus template PR',
+        undo: function () { window.taskTemplates = before; renderTaskTemplates(); } });
     }, { title: 'Hapus template?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -4800,9 +5231,9 @@
     if (!title) { window.showToast('Judul wajib diisi.'); $('task-title').focus(); return; }
     if (f.repeat !== 'none' && !dueIso) { window.showToast('PR berulang wajib punya tenggat awal.'); $('task-due').focus(); return; }
     const data = { title: title, description: $('task-desc').value.trim(), category: f.category, dueDate: isoToDmy(dueIso), repeat: f.repeat };
-    // Ubah = upsert (boleh masuk outbox); tambah baru tidak diantre supaya tidak dobel.
+    // Keduanya lewat antrean simpan: ubah = upsert, tambah baru dijaga nomor pesanan (Idem.gs), jadi kiriman ulang tidak dobel.
     optimistic(Object.assign(f.id ? { q: { mode: 'admin', fn: 'updateTask', args: [Object.assign({ id: f.id }, data)] } }
-      : { call: function () { return adminCall('addTask', Object.assign({ memberId: f.memberId }, data)); } },
+      : { q: { mode: 'admin', fn: 'addTask', args: [Object.assign({ memberId: f.memberId }, data)] } },
       { sheet: true, ok: f.id ? 'PR diperbarui.' : 'PR ditambahkan.', label: 'PR', then: function () { afterTaskChange(f.memberId); } }));
   };
 
@@ -4852,13 +5283,17 @@
   };
   window.confirmDeleteMember = function () {
     const id = window.selectedMemberId;
-    adminCall('deleteMember', id).then(function () {
-      window.members = window.members.filter(m => String(m.id) !== String(id));
-      window.schedules = window.schedules.filter(s => String(s.memberId) !== String(id));
-      window.closeDetail();
-      window.updateUI();
-      window.showToast('Klien dihapus.');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: klien & jadwalnya hilang sekarang; ditolak = semuanya kembali.
+    const members = window.members, schedules = window.schedules;
+    window.members = members.filter(m => String(m.id) !== String(id));
+    window.schedules = schedules.filter(s => String(s.memberId) !== String(id));
+    window.closeDetail();
+    window.updateUI();
+    optimistic({ q: { mode: 'admin', fn: 'deleteMember', args: [id] }, ok: 'Klien dihapus.', label: 'Hapus klien',
+      undo: function () {
+        const back = members.filter(m => String(m.id) === String(id)), backS = schedules.filter(s => String(s.memberId) === String(id));
+        window.members = window.members.concat(back); window.schedules = window.schedules.concat(backS); window.updateUI();
+      } });
   };
 
   // Pemilih paket (dengan pencarian)
@@ -4961,7 +5396,7 @@
       window.showToast(res.renewed ? 'Paket klien diperpanjang.' : 'Klien ditambahkan.');
       if (res.waLink) window.showWaPrompt(res.waLink, res.renewed ? 'Kabari klien soal perpanjangan paketnya.' : 'Kirim info booking ke klien baru.');
       if (window.currentView === 'clients') window.openProfile(res.id);
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── COACH ──────────────────────────────────────────────────────────────────
@@ -5033,12 +5468,12 @@
       const off = a.timeOff.length ? a.timeOff.map(function (o) {
         const when = o.from === o.to ? o.from : o.from + ' → ' + o.to;
         return '<div class="row-between" style="min-height:48px;gap:8px"><div class="grow"><p class="li-title">' + h(when) + '</p><p class="li-sub">' + (o.hourFrom === null ? 'Seharian' : p2(o.hourFrom) + '–' + p2(o.hourTo)) + (o.note ? ' · ' + h(o.note) : '') + '</p></div>' +
-          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\')">' + icon('trash-2') + '</button></div>';
+          '<button type="button" class="icon-btn plain" aria-label="Hapus cuti" onclick="window.deleteTimeOff(\'' + h(o.id) + '\', this)">' + icon('trash-2') + '</button></div>';
       }).join('') : '<p class="li-sub">Belum ada cuti.</p>';
       const body = '<div class="stack" style="gap:16px"><div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Jam kerja</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openHoursEditor()">Ubah</button></div>' + rows + '</div>' +
         '<div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Cuti</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTimeOffSheet()">' + icon('plus') + 'Tambah</button></div>' + off + '</div></div>';
       openDetail('hours', 'Jam kerja & cuti', '', body);
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function renderHoursRows() {
@@ -5099,11 +5534,13 @@
           '<button type="button" class="btn btn-secondary btn-sm" data-wa="' + h(c.phone) + '" data-text="' + h(text) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),this.getAttribute(\'data-text\'))">WA klien</button>' +
           '<button type="button" class="btn btn-outline btn-sm" onclick="window.closeModal();window.navigate(\'calendar\');window.openScheduleDetail(\'' + h(c.scheduleId) + '\')">Buka jadwal</button></div>';
       }).join('');
-    }).catch(function (err) { done(); window.showToast(err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
-  window.deleteTimeOff = function (id) {
-    adminCall('deleteCoachTimeOff', id).then(function () { window.showToast('Cuti dihapus.'); window.openHoursPage(); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+  window.deleteTimeOff = function (id, btn) {
+    const row = btn && btn.closest ? btn.closest('.row-between') : null;
+    if (row) row.classList.add('hide');
+    optimistic({ q: { mode: 'admin', fn: 'deleteCoachTimeOff', args: [id] }, ok: 'Cuti dihapus.', label: 'Hapus cuti',
+      then: function () { window.openHoursPage(); }, undo: function () { if (row) row.classList.remove('hide'); } });
   };
 
 
@@ -5266,8 +5703,9 @@
   window.contentDelete = function () {
     const id = cnt.editId; if (!id) return;
     window.showConfirmModal('Konten ini dihapus permanen dan hilang dari portal klien.', function () {
-      adminCall('deleteContent', id).then(function () { window.closeModal(); window.showToast('Konten dihapus.'); return window.loadContentAdmin(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      window.closeModal();
+      optimistic({ q: { mode: 'admin', fn: 'deleteContent', args: [id] }, ok: 'Konten dihapus.', label: 'Hapus konten',
+        then: function () { window.loadContentAdmin(); } });
     }, { title: 'Hapus konten?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -5823,10 +6261,13 @@
   window.wlFormOk = function (i, on) {
     const e = wl && wl.entries[i]; if (!e) return;
     const id = wl.memberId, key = wkKeyOf(e);
-    adminCall('setFormOk', id, key, !!on).then(function (r) {
-      if (pgAdminGen[id]) { pgAdminGen[id].formOk = r.formOk; window.ccPatch(id, { programGen: pgAdminGen[id] }); }
-      wlRender(); showToast(on ? 'Form ditandai OK.' : 'Tanda form dihapus.');
-    }).catch(function (err) { showToast(err.message || 'Gagal.'); });
+    // Antrean simpan: tanda langsung berubah; ditolak = tanda lama kembali.
+    const g = pgAdminGen[id], old = g ? g.formOk : null;
+    const apply = function (v) { if (!pgAdminGen[id]) return; pgAdminGen[id].formOk = v; window.ccPatch(id, { programGen: pgAdminGen[id] }); wlRender(); };
+    if (g) { const nx = Object.assign({}, old || {}); if (on) nx[key] = true; else delete nx[key]; apply(nx); }
+    optimistic({ q: { mode: 'admin', fn: 'setFormOk', args: [id, key, !!on] }, ok: on ? 'Form ditandai OK.' : 'Tanda form dihapus.', label: 'Form OK',
+      then: function (r) { if (r && r.formOk) apply(r.formOk); },
+      undo: function () { apply(old); } });
   };
   function wlFromLog(l, data, date) {
     const info = wkInfo(l.exId), last = (data.last || {})[l.key];
@@ -6331,12 +6772,14 @@
     if (list) dragSort(list, '.wl-ex', function (from, to) { wlMoveTo(from, to); });
     wlRenderRest();
   }
+  // Teks yang dipanggil timer 4× per detik: tulis hanya bila berubah (textIf, bagian 01).
+  function wlSetText(el, s) { textIf(el, s); }
   function wlRenderSub() {
     if (!wl) return;
-    const sub = $('wl-sub');
-    sub.textContent = wl.loading || wl.live ? '' : 'Catat ' + (wl.date === wkToday() ? 'hari ini' : pgLabel(wl.date));
-    sub.classList.toggle('hide', !sub.textContent);
-    const d = $('wl-st-dur'); if (d && wl.live && wl.startedAt) d.textContent = wlClock((Date.now() - wl.startedAt) / 1000);
+    const sub = $('wl-sub'), st = wl.loading || wl.live ? '' : 'Catat ' + (wl.date === wkToday() ? 'hari ini' : pgLabel(wl.date));
+    wlSetText(sub, st);
+    sub.classList.toggle('hide', !st);
+    const d = $('wl-st-dur'); if (d && wl.live && wl.startedAt) wlSetText(d, wlClock((Date.now() - wl.startedAt) / 1000));
   }
   function wlScrollToOpen() {
     setTimeout(function () {
@@ -6520,7 +6963,7 @@
   function wlRestTick() {
     if (!wl || !wl.restUntil) return;
     const left = (wl.restUntil - Date.now()) / 1000, t = $('wl-rest-t'), f = $('wl-rest-fill');
-    if (t) t.textContent = left > 0 ? wlClock(Math.ceil(left)) : '0:00';
+    wlSetText(t, left > 0 ? wlClock(Math.ceil(left)) : '0:00');
     if (f) f.style.transform = 'scaleX(' + Math.max(0, Math.min(1, left / (wl.restTotal || 1))).toFixed(3) + ')';
     if (left <= 0 && !wlRt.restEnded) {
       wlRt.restEnded = true;
@@ -6534,7 +6977,7 @@
     wlRt.timer = setInterval(function () {
       if (!wl || !ui.wlOn) { clearInterval(wlRt.timer); wlRt.timer = null; return; }
       wlRenderSub(); wlRestTick();
-      if (wl.watch) { const el = $('wl-dur-' + wl.watch.i + '-' + wl.watch.j); if (el) el.textContent = wlClock((Date.now() - wl.watch.at) / 1000); }
+      if (wl.watch) wlSetText($('wl-dur-' + wl.watch.i + '-' + wl.watch.j), wlClock((Date.now() - wl.watch.at) / 1000));
     }, 250);
   }
   function wlAudioPrime() { try { const C = window.AudioContext || window.webkitAudioContext; if (!C) return; if (!wlRt.audio) wlRt.audio = new C(); if (wlRt.audio.state === 'suspended') wlRt.audio.resume(); } catch (e) {} }
@@ -6785,10 +7228,10 @@
     if (it.mode === 'admin') return ui.mode === 'admin' && !!_lsGet(ADMIN_TOKEN_KEY);
     const t = _lsGet(MEMBER_TOKEN_KEY); return !!t && it.scope === 'm:' + tokenSig(t);
   }
+  // Satu penilai galat untuk semua antrean (errKind di 01-awal): Google ramai / sinyal = coba lagi, bukan ditolak.
   function wlRetryable(err) {
     if (window.isAuthError(err)) return false;
-    const m = String((err && err.message) || err || '');
-    return !m || /network|jaringan|koneksi|failure|failed|timeout|timed out|HTTP 0|fetch|offline|sibuk|Tunggu sebentar|pratinjau|quota|internal/i.test(m);
+    return errKind(err) === 'transient' || /pratinjau/i.test(String((err && err.message) || err || ''));
   }
   window.wlFlush = function (manual, focusId) {
     if (wlRt.flushing) return Promise.resolve();
@@ -6801,6 +7244,7 @@
     return p.then(function (r) {
       wlRt.flushing = false;
       wlQueueSet(wlQueue().filter(x => x.id !== it.id));
+      if (window.syncPaint) window.syncPaint();
       wlSaved(it, r);
       return window.wlFlush(false);
     }).catch(function (err) {
@@ -6808,10 +7252,18 @@
       const all = wlQueue(), cur = all.find(x => x.id === it.id);
       if (cur) { cur.tries = (cur.tries || 0) + 1; cur.err = window.authMessage(err); cur.retry = wlRetryable(err); wlQueueSet(all); }
       wlRenderResume();
-      if (cur && (manual || cur.tries === 1)) window.showToast(cur.retry ? 'Belum terkirim. Dikirim ulang otomatis saat sinyal kembali.' : 'Gagal menyimpan: ' + cur.err);
+      if (window.syncPaint) window.syncPaint();   // lencana bilah atas menghitung latihan yang ditolak
+      if (cur && (manual || cur.tries === 1)) window.showToast(cur.retry ? 'Belum terkirim. Dikirim ulang otomatis saat sinyal kembali.' : 'Latihan belum tersimpan. Ketuk tanda di atas.');
       if (cur && cur.retry) wlRt.retry = setTimeout(function () { window.wlFlush(false); }, Math.min(300000, 20000 * Math.pow(2, Math.min(4, cur.tries - 1))));
     });
   };
+  // Antrean simpan (lencana #sync-badge): catatan latihan akun ini yang ditolak server (retry === false). Hanya membaca antrean;
+  // cara latihan disimpan tidak berubah. Ubah = wlReopen (draf), Coba lagi = kirim ulang, Buang = hapus dari antrean.
+  window.wlFailedItems = function () {
+    return wlQueue().filter(it => wlCanSend(it) && it.retry === false).map(it => ({ kind: 'wl', id: it.id, label: 'Catatan latihan ' + (it.hari ? it.hari + ' · ' : '') + it.date, err: it.err || '', at: it.at || Date.now() }));
+  };
+  window.wlRetryOne = function (id) { const all = wlQueue(), it = all.find(x => x.id === id); if (!it) return; it.retry = true; wlQueueSet(all); window.wlFlush(true, id); };
+  window.wlDrop = function (id) { wlQueueSet(wlQueue().filter(x => x.id !== id)); wlRenderResume(); if (window.syncPaint) window.syncPaint(); };
   window.wlRetryAll = function () { const all = wlQueue(); all.forEach(x => { x.retry = true; }); wlQueueSet(all); window.wlFlush(true); };
   // Antrean yang gagal validasi dibuka lagi sebagai draf supaya angkanya bisa diperbaiki.
   window.wlReopen = function (id) {
@@ -7094,7 +7546,7 @@
     adminCall('getWorkoutSummaryMessage', memberId, date || wd.days[0].tanggal).then(function (r) {
       const m = window.members.find(x => String(x.id) === String(memberId)) || {};
       window.sendToParentWA(m.phone, r.text);
-    }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.wkChartPick = function (scope, key) { wkPick[scope] = key; const w = $('profile-program-wrap'); if (scope === 'me') renderWorkoutCard(); else if (w) renderProgramAdmin(w.getAttribute('data-member')); };
   function renderWorkoutCard() { const el = $('pub-workout-wrap'); if (el) { const d = window.myWorkout && window.myWorkout.state === 'ok' ? window.myWorkout.data : null; setHTML(el, d ? workoutStatsHtml(d, 'me') : '<div class="section-head"><h3 class="section-title">Grafik latihan</h3></div>' + skel(2, true)); } }
@@ -7109,7 +7561,8 @@
     }
     apply();
   };
-  function programDone(d, msg) { progAdmin[progMember] = d; renderProgramAdmin(progMember); window.closeModal(); window.showToast(msg); }
+  // programSetAdmin juga menulis ke salinan halaman klien (xnk_client_cache); dulu hanya progAdmin, jadi salinan basi.
+  function programDone(d, msg) { window.programSetAdmin(progMember, d); window.closeModal(); window.showToast(msg); }
   window.programSave = function (e) {
     if (e) e.preventDefault();
     $('prg-err').textContent = '';
@@ -7118,16 +7571,23 @@
       const r = pfCollect()[0] || { hari: '', items: [] };
       if (!r.hari) { done(); $('prg-err').textContent = 'Beri nama rutinitas dulu.'; return; }
       memberCall('saveMyRoutine', pf.oldName, r).then(function (d) { done(); rtSaved(d, 'Rutinitas "' + r.hari + '" disimpan.'); window.closeModal(); })
-        .catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+        .catch(function (err) { done(); $('prg-err').textContent = waitErr(err); });
       return;
     }
+    // Menunggu jawaban dengan sengaja: server merapikan hari & gerakan (tebakan rep, Exercise ID) sebelum program bisa digambar.
     adminCall('saveMemberProgram', progMember, pfCollect()).then(function (d) { done(); programDone(d, d.days.length ? 'Program disimpan.' : 'Program dihapus.'); })
-      .catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+      .catch(function (err) { done(); $('prg-err').textContent = waitErr(err); });
   };
   window.programClear = function () {
     if (pf.mode === 'own') { window.closeModal(); window.rtDelete(pf.oldName); return; }
     window.showConfirmModal('Program latihan klien ini dihapus. Centang klien tetap tersimpan.', function () {
-      adminCall('saveMemberProgram', progMember, []).then(function (d) { programDone(d, 'Program dihapus.'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: program kosong langsung tampil; ditolak = program lama kembali.
+      const id = progMember, old = progAdmin[id];
+      window.closeModal();
+      window.programSetAdmin(id, Object.assign({}, old && !old.error ? old : {}, { days: [], text: '' }));
+      optimistic({ q: { mode: 'admin', fn: 'saveMemberProgram', args: [id, []] }, ok: 'Program dihapus.', label: 'Hapus program',
+        then: function (d) { if (d && !d.error) window.programSetAdmin(id, d); },
+        undo: function () { window.programSetAdmin(id, old); } });
     }, { title: 'Hapus program?', confirmText: 'Hapus', variant: 'danger' });
   };
   window.programSaveTemplate = function () {
@@ -7140,15 +7600,20 @@
         $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '"' + (t.name === r.name ? ' selected' : '') + '>' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
         $('prg-tpl-del').classList.remove('hide');
       });
-    }).catch(function (err) { done(); $('prg-err').textContent = window.authMessage(err); });
+    }).catch(function (err) { done(); $('prg-err').textContent = waitErr(err); });   // menunggu: nama & jumlah hari dari server
   };
   window.programDeleteTemplate = function () {
     const name = $('prg-tpl').value; if (!name) return;
-    adminCall('deleteProgramTemplate', name).then(function () {
-      progTemplates = progTemplates.filter(t => t.name !== name);
-      $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
-      $('prg-tpl-del').classList.add('hide'); window.showToast('Template dihapus.');
-    }).catch(function (err) { $('prg-err').textContent = window.authMessage(err); });
+    const before = progTemplates.slice();
+    const paint = function () {
+      const sel = $('prg-tpl'); if (!sel) return;
+      sel.innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+      $('prg-tpl-del').classList.add('hide');
+    };
+    progTemplates = progTemplates.filter(t => t.name !== name);
+    paint();
+    optimistic({ q: { mode: 'admin', fn: 'deleteProgramTemplate', args: [name] }, ok: 'Template dihapus.', label: 'Hapus template program',
+      undo: function () { progTemplates = before; paint(); } });
   };
 
   // ── Perawatan klien (E4): catatan privat, kesehatan, assessment, tes ─────────
@@ -7172,7 +7637,7 @@
     adminCall('getTestResultMessage', memberId).then(function (r) {
       const m = window.members.find(x => String(x.id) === String(memberId)) || {};
       window.sendToParentWA(m.phone || '', r.text);
-    }).catch(function (err) { window.showToast(err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err)); });
   };
   const starsText = n => '★'.repeat(n) + '☆'.repeat(5 - n);
   function feedbackAdminHtml(f) {
@@ -7315,11 +7780,12 @@
       '<button type="button" class="btn btn-secondary" style="min-height:44px" onclick="window.decideNut(\'' + h(a.memberId) + '\',\'' + h(a.id) + '\',\'tolak\',this)">Tolak</button></div></div>';
   }
   window.decideNut = function (memberId, adviceId, decision, btn) {
-    const done = busy(btn, '…');
-    adminCall('decideNutritionAdvice', memberId, adviceId, decision).then(function () {
-      done(); window.showToast(decision === 'setuju' ? 'Target disesuaikan.' : 'Saran ditolak.');
-      window._hubAt = 0; loadHub(); return window.loadClientNutrition(memberId);
-    }).catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: saran hilang dari layar sekarang; target baru dihitung server lalu dimuat ulang.
+    const row = btn && btn.closest('.stack');
+    if (row) row.classList.add('hide');
+    optimistic({ q: { mode: 'admin', fn: 'decideNutritionAdvice', args: [memberId, adviceId, decision] }, ok: decision === 'setuju' ? 'Target disesuaikan.' : 'Saran ditolak.', label: 'Saran gizi',
+      then: function () { window._hubAt = 0; loadHub(); window.loadClientNutrition(memberId); },
+      undo: function () { if (row) row.classList.remove('hide'); } });
   };
   window.nutSet = function (memberId, d) {
     nut[memberId] = d;
@@ -7349,11 +7815,11 @@
   };
   window.submitNutEdit = function (e) {
     e.preventDefault();
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveClientNutrition', nutMember, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), umur: $('nut-umur').value.trim(), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
-      pantangan: nutPicked('nut-tags'), kondisi: nutPicked('nut-kondisi'), aktif: $('nut-aktif').checked })
-      .then(function () { done(); window.closeModal(); window.showToast('Data gizi disimpan.'); return window.loadClientNutrition(nutMember); })
-      .catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: lembar tertutup sekarang; target kalori & makro dihitung server lalu dimuat ulang. Ditolak = lencana (Ubah membuka lembar ini lagi).
+    const id = nutMember;
+    optimistic({ q: { mode: 'admin', fn: 'saveClientNutrition', args: [id, { tinggi: $('nut-tinggi').value.trim().replace(',', '.'), umur: $('nut-umur').value.trim(), jk: $('nut-jk').value, goal: $('nut-goal').value, anggaran: $('nut-anggaran').value,
+      pantangan: nutPicked('nut-tags'), kondisi: nutPicked('nut-kondisi'), aktif: $('nut-aktif').checked }] },
+      sheet: true, ok: 'Data gizi disimpan.', label: 'Data gizi', then: function () { window.loadClientNutrition(id); } });
   };
   function careDone(memberId, msg) { window.closeModal(); window.showToast(msg); return window.loadClientCare(memberId); }
   let careMember = '';
@@ -7364,9 +7830,13 @@
   };
   window.submitCareNotes = function (e) {
     e.preventDefault();
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveClientNotes', careMember, { flag: $('care-flag').value, notes: $('care-notes').value, birthDate: $('care-birth').value })
-      .then(function () { done(); return careDone(careMember, 'Catatan disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: catatan tampil sekarang; ditolak = catatan lama kembali.
+    const id = careMember, data = { flag: $('care-flag').value, notes: $('care-notes').value, birthDate: $('care-birth').value };
+    const old = care[id];
+    if (old && !old.error) window.careSet(id, Object.assign({}, old, data));
+    optimistic({ q: { mode: 'admin', fn: 'saveClientNotes', args: [id, data] }, sheet: true, ok: 'Catatan disimpan.', label: 'Catatan klien',
+      then: function () { window.loadClientCare(id); },
+      undo: function () { if (old) window.careSet(id, old); } });
   };
   window.openAssessment = function (id) {
     careMember = id; const a = (care[id] || {}).assessment || {};
@@ -7378,14 +7848,21 @@
   window.submitAssessment = function (e) {
     e.preventDefault();
     const v = k => $(k).value.trim().replace(',', '.');
-    const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
-    adminCall('saveAssessment', careMember, { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), hip: v('as-hip'),
-      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada') })
-      .then(function () {
-        done(); if (window.pgLoadAdmin) window.pgLoadAdmin(careMember);
-        const first = !((care[careMember] || {}).tests || []).length, id = careMember;
-        return careDone(careMember, 'Assessment disimpan.').then(function () { if (first) setTimeout(function () { window.openCareTests(id); }, 250); });
-      }).catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: isian assessment tampil sekarang; ukuran & ringkasan progres dari server menyusul.
+    const id = careMember, at = Date.now();
+    const data = { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), hip: v('as-hip'),
+      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada') };
+    const old = care[id];
+    const first = !((old || {}).tests || []).length;
+    if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.hip }) }));
+    optimistic({ q: { mode: 'admin', fn: 'saveAssessment', args: [id, data] }, sheet: true, ok: 'Assessment disimpan.', label: 'Assessment',
+      then: function () {
+        if (window.pgLoadAdmin) window.pgLoadAdmin(id);
+        window.loadClientCare(id);
+        // Assessment pertama: lembar tes dibuka, kecuali jawabannya baru datang lama kemudian (mis. setelah sinyal kembali).
+        if (first && Date.now() - at < 20000 && !ui.sheetOn) setTimeout(function () { window.openCareTests(id); }, 250);
+      },
+      undo: function () { if (old) window.careSet(id, old); } });
   };
   // ── Timer tes kebugaran: hitung mundur 1 menit (push-up, squat) atau stopwatch (plank) ──
   // Waktu dihitung dari jam sistem, bukan dari jumlah tick, jadi tetap benar kalau layar sempat redup.
@@ -7471,8 +7948,9 @@
     const values = {};
     document.querySelectorAll('#ft-fields [data-test]').forEach(function (el) { values[el.getAttribute('data-test')] = el.value.trim().replace(',', '.'); });
     const done = busy(e.target.querySelector('button[type=submit]'), 'Menyimpan…');
+    // Menunggu jawaban dengan sengaja: ringkasan & tren tes dihitung server.
     adminCall('saveFitnessTests', careMember, { tanggal: $('ft-date').value, values: values })
-      .then(function () { done(); return careDone(careMember, 'Hasil tes disimpan.'); }).catch(function (err) { done(); window.showToast(err.message); });
+      .then(function () { done(); return careDone(careMember, 'Hasil tes disimpan.'); }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   window.openCareHealth = function (id) {
     careMember = id; const d = care[id]; if (!d || !d.health) return;
@@ -7485,9 +7963,10 @@
     openSheet('modal-care-health');
   };
   window.markReviewed = function () {
-    const done = busy($('btn-review'), 'Menyimpan…');
-    adminCall('markHealthReviewed', careMember, $('care-review-note').value).then(function () { done(); return careDone(careMember, 'Ditandai sudah ditinjau.'); })
-      .catch(function (err) { done(); window.showToast(err.message); });
+    // Antrean simpan: lembar tertutup sekarang, status tinjauan dimuat ulang dari server sesudahnya.
+    const id = careMember;
+    optimistic({ q: { mode: 'admin', fn: 'markHealthReviewed', args: [id, $('care-review-note').value] }, sheet: true, ok: 'Ditandai sudah ditinjau.', label: 'Tinjau form kesehatan',
+      then: function () { window.loadClientCare(id); } });
   };
 
   // Briefing di atas detail sesi
@@ -7510,7 +7989,7 @@
   // Dibuka otomatis setelah "Selesai" (afterDone = true) dan dari detail sesi yang sudah selesai.
   let noteSched = null;
   window.openSessionNote = function (scheduleId, afterDone, result) {
-    const s = window.schedules.find(x => String(x.id) === String(scheduleId));
+    const s = schedById(scheduleId);
     if (!s) return;
     noteSched = s;
     ['sn-dilatih', 'sn-fokus', 'sn-rpe', 'sn-pribadi'].forEach(k => { $(k).value = ''; });
@@ -7575,7 +8054,7 @@
     }).join('') + '</div>';
   }
   window.snoozeCareUI = function (id) {
-    adminCall('snoozeCare', id, 7).then(function () { window.showToast('Disembunyikan 7 hari.'); loadHub(); }).catch(function (err) { window.showToast(err.message); });
+    optimistic({ q: { mode: 'admin', fn: 'snoozeCare', args: [id, 7] }, ok: 'Disembunyikan 7 hari.', label: 'Sembunyikan pengingat', then: function () { loadHub(); } });
   };
 
   // Portal: form kesehatan + tes kebugaran
@@ -7631,23 +8110,23 @@
       if (!r.sessions && !r.clients) { window.showToast('Semua jadwal sudah punya coach.'); return; }
       window.showConfirmModal('<b>' + r.sessions + '</b> jadwal dan <b>' + r.clients + '</b> klien tanpa coach akan ditetapkan ke <b>' + h(r.coachName) + '</b>. Sesi yang sudah selesai tidak berubah.', function () {
         adminCall('assignUnassignedToSelf', {}).then(function () { window.showToast('Selesai ditetapkan.'); return window.loadAllData(); })
-          .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+          .catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
       }, { title: 'Tetapkan ke saya?', confirmText: 'Tetapkan' });
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   function reloadCoaches() {
     return adminCall('getCoachesAdmin').then(function (res) { applyCoachesAdmin(res); saveAdminCache(); window.updateUI(); });
   }
   window.setCoachActiveUI = function (id, aktif) {
-    adminCall('setCoachActive', id, aktif).then(function () { window.closeDetail(); return reloadCoaches(); })
-      .then(function () { window.showToast(aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.'); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    // Antrean simpan: daftar coach (dan mode solo) dimuat ulang dari server setelah tersimpan.
+    window.closeDetail();
+    optimistic({ q: { mode: 'admin', fn: 'setCoachActive', args: [id, aktif] }, ok: aktif ? 'Coach diaktifkan.' : 'Coach dinonaktifkan.', label: 'Status coach',
+      then: function () { reloadCoaches(); } });
   };
   window.setSelfCoachUI = function (id) {
-    adminCall('setSelfCoach', id).then(function () { return reloadCoaches(); })
-      .then(function () { window.showToast('Ditandai sebagai "Ini saya".'); window.openCoachProfile(id); })
-      .catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    optimistic({ q: { mode: 'admin', fn: 'setSelfCoach', args: [id] }, ok: 'Ditandai sebagai "Ini saya".', label: 'Ini saya',
+      then: function () { Promise.resolve(reloadCoaches()).then(function () { if (ui.detail === 'coach:' + id) window.openCoachProfile(id); }).catch(function () {}); } });
   };
   window.updateCoachUI = function () { if (window.currentView === 'coaches') renderView('coaches', { animate: false }); };
 
@@ -7682,7 +8161,7 @@
       adminCall('deleteCoach', id).then(function () {
         window.closeDetail();
         return reloadCoaches().then(function () { window.showToast('Coach dihapus.'); });
-      }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+      }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
     }, { title: 'Hapus coach?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -7744,7 +8223,7 @@
       done();
       window.closeModal();
       window.showToast(editId ? 'Coach diperbarui.' : 'Coach ditambahkan.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   // ── Potong foto (coach & klien) ────────────────────────────────────────────
@@ -7789,7 +8268,7 @@
         window.updateUI();
         window.showToast('Foto profil diperbarui.');
       });
-    }).catch(function (err) { done(); window.showToast('Gagal mengunggah foto: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal mengunggah foto: ')); });
   };
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'pub-avatar-input') {
@@ -8064,7 +8543,7 @@
   }
   let calItems = [];
   window.openAddToCalendar = function (ids, headline) {
-    calItems = (ids || []).map(id => window.schedules.find(x => String(x.id) === String(id))).filter(Boolean)
+    calItems = (ids || []).map(id => schedById(id)).filter(Boolean)
       .filter(s => new Date(s.start) > new Date()).sort((x, y) => new Date(x.start) - new Date(y.start));
     if (!calItems.length) { window.showToast('Tidak ada sesi mendatang untuk disimpan.'); return; }
     $('cal-title').textContent = headline || 'Tambah ke kalender';
@@ -8117,18 +8596,17 @@
   window.fbStar = function (n) {
     const f = window.myFeedback; if (!f || !f.pending) return;
     f.stars = n; f.scheduleId = f.pending.scheduleId; fbRender();
-    memberCall('rateSession', f.pending.scheduleId, n, '', false).catch(function (err) { window.showToast(window.authMessage ? window.authMessage(err) : err.message); });
+    optimistic({ q: { mode: 'member', fn: 'rateSession', args: [f.pending.scheduleId, n, '', false] }, ok: false, label: 'Penilaian sesi' });
   };
   window.fbSendComment = function () {
     const f = window.myFeedback; if (!f || !f.pending) return;
     const c = $('fb-comment').value.trim(), consent = !!($('fb-consent') && $('fb-consent').checked);
     if (!c && !consent) { window.fbDone(); return; }
-    const done = busy($('fb-send'), 'Mengirim…');
-    // Tunggu sedikit: simpan bintang dan komentar tidak boleh berebut (jeda 3 detik di server).
-    setTimeout(function () {
-      memberCall('rateSession', f.pending.scheduleId, f.stars, c, consent).then(function () { done(); window.showToast('Terima kasih!'); window.fbDone(); })
-        .catch(function (err) { done(); window.showToast(err.message); });
-    }, 0);
+    // Antrean simpan: kartu selesai sekarang. Bintang dan komentar dikirim berurutan; jeda 3 detik di server
+    // ("Tunggu sebentar") dicoba lagi sendiri.
+    const sid = f.pending.scheduleId, stars = f.stars;
+    window.fbDone();
+    optimistic({ q: { mode: 'member', fn: 'rateSession', args: [sid, stars, c, consent] }, ok: 'Terima kasih!', label: 'Komentar sesi' });
   };
   window.fbDone = function () { const f = window.myFeedback; if (f) { f.pending = null; f.stars = 0; } fbRender(); };
 
@@ -8153,7 +8631,7 @@
       $('pe-body').innerHTML = html;
       $('pe-foot').classList.remove('hide');
       paintIcons();
-    }).catch(function (err) { $('pe-body').innerHTML = '<p class="li-sub">Gagal memuat: ' + h(err.message) + '</p>'; });
+    }).catch(function (err) { $('pe-body').innerHTML = '<p class="li-sub">' + h(waitErr(err, 'Gagal memuat: ')) + '</p>'; });
   };
   window.peStar = function (key, n) {
     pe.vals[key] = n;
@@ -8164,10 +8642,12 @@
     const missing = pe.data.aspects.find(a => !pe.vals[a.key]);
     if (missing) { $('pe-err').textContent = 'Beri bintang untuk ' + missing.label.toLowerCase() + '.'; return; }
     $('pe-err').textContent = '';
-    const done = busy($('pe-send'), 'Mengirim…');
-    memberCall('submitMyPackageEval', Object.assign({}, pe.vals, { komentar: $('pe-comment').value, consent: $('pe-consent').checked }))
-      .then(function () { done(); window.closeModal(); window.showToast('Terima kasih atas evaluasinya!'); if (window.myFeedback) window.myFeedback.pkgEval = false; fbRender(); })
-      .catch(function (err) { done(); $('pe-err').textContent = err.message; });
+    // Antrean simpan (nomor pesanan + catatan Idem): lembar tertutup sekarang; ditolak = ajakan evaluasi muncul lagi.
+    if (window.myFeedback) window.myFeedback.pkgEval = false;
+    fbRender();
+    optimistic({ q: { mode: 'member', fn: 'submitMyPackageEval', args: [Object.assign({}, pe.vals, { komentar: $('pe-comment').value, consent: $('pe-consent').checked })] },
+      sheet: true, errEl: 'pe-err', ok: 'Terima kasih atas evaluasinya!', label: 'Evaluasi paket',
+      undo: function () { if (window.myFeedback) window.myFeedback.pkgEval = true; fbRender(); } });
   };
   window.peRenew = function () { window.closeModal(); setTimeout(function () { if (window.openRenewSheet) window.openRenewSheet(); }, 300); };
 
@@ -8273,15 +8753,17 @@
     renderRenewSlot();
     const coach = (window.coaches || []).find(c => String(c.id) === String(coachId));
     window.showWaPrompt(window.waUrl(coach && coach.phone ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
-    memberCall('requestRenewal', p.id, coachId).then(function (res) {
-      window.myRenewal = res.request;
-      renderRenewSlot();
-    }).catch(function (err) {
-      window.myRenewal = prev;
-      renderRenewSlot();
-      const w = document.getElementById('wa-prompt'); if (w) w.remove();
-      window.showToast('Gagal: ' + window.authMessage(err));
-    });
+    // Antrean simpan (nomor pesanan + catatan Idem: kiriman ulang tidak membuat permintaan kedua). Salinan di perangkat
+    // langsung ikut, jadi "Menunggu konfirmasi" tetap tampil saat aplikasi dibuka lagi.
+    if (window.patchPortalMore) window.patchPortalMore('renewal', window.myRenewal);
+    optimistic({ q: { mode: 'member', fn: 'requestRenewal', args: [p.id, coachId] }, ok: false, label: 'Perpanjang paket',
+      then: function (res) { if (res && res.request) { window.myRenewal = res.request; renderRenewSlot(); if (window.patchPortalMore) window.patchPortalMore('renewal', res.request); } },
+      undo: function () {
+        window.myRenewal = prev;
+        renderRenewSlot();
+        if (window.patchPortalMore) window.patchPortalMore('renewal', prev || null, false, true);
+        const w = document.getElementById('wa-prompt'); if (w) w.remove();
+      } });
   };
   window.renewResend = function () {
     const r = window.myRenewal;
@@ -8312,13 +8794,12 @@
       ? 'Setujui perpanjangan <b>' + h(r.name) + '</b> (' + h(r.packageName) + ')? Sesi klien direset ke paket baru dan transaksi dicatat. Pastikan pembayaran sudah diterima.'
       : 'Tolak permintaan perpanjang <b>' + h(r.name) + '</b>? Data klien tidak berubah.';
     window.showConfirmModal(msg, function () {
+      // Antrean simpan (nomor pesanan + catatan Idem): kartu hilang sekarang; sesi & transaksi baru dimuat setelah server selesai.
       window.renewals = (window.renewals || []).filter(x => x.id !== id);
       window.renderDashboard();
-      window.showToast(approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.');
-      adminCall('decideRenewal', id, approve).then(function () {
-        return approve ? window.loadAllData() : null;
-      }).then(function () { return window.loadRenewals(); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); window.loadRenewals(); });
+      optimistic({ q: { mode: 'admin', fn: 'decideRenewal', args: [id, approve] }, ok: approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.', label: approve ? 'Setujui perpanjangan' : 'Tolak perpanjangan',
+        then: function () { Promise.resolve(approve ? window.loadAllData() : null).then(function () { return window.loadRenewals(); }).catch(function () {}); },
+        undo: function () { window.renewals = (window.renewals || []).concat([r]); window.renderDashboard(); } });
     }, approve ? { title: 'Setujui perpanjangan?', confirmText: 'Setujui' } : { title: 'Tolak permintaan?', confirmText: 'Tolak', variant: 'danger' });
   };
 
@@ -8362,7 +8843,8 @@
     window.shareBadge = (d.badges || []).filter(function (b) { return ids.indexOf(b.id) !== -1; }).pop() || null;
     $('pg-badge-share').setAttribute('data-text', 'Aku baru meraih badge ' + labels.join(' dan ') + ' di XNK Personal Training! 💪');
     openSheet('sheet-badge');
-    memberCall('markBadgesSeen', ids).then(function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r, true); } }).catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markBadgesSeen', args: [ids] }, ok: false, label: 'Badge dilihat',
+      then: function (r) { if (r) { pg.data = r; window.patchPortalMore('progress', r, true); } } });
   }
   window.pgShareBadge = function () {
     if (window.shareOn !== false && window.shareBadge && window.shareOpen) { window.shareCard('badge', '', { badge: window.shareBadge }); return; }
@@ -8433,8 +8915,12 @@
   };
   window.pgDeleteAdminEntry = function (memberId, id) {
     window.showConfirmModal('Catatan ini dihapus permanen.', function () {
-      adminCall('deleteMemberMeasurement', id).then(function (d) { window.pgSetAdmin(memberId, d); window.showToast('Catatan dihapus.'); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: catatan hilang sekarang; ringkasan progres dari server menyusul. Ditolak = kembali.
+      const old = pg.admin[memberId];
+      if (old && !old.error) window.pgSetAdmin(memberId, Object.assign({}, old, { entries: (old.entries || []).filter(x => String(x.id) !== String(id)) }));
+      optimistic({ q: { mode: 'admin', fn: 'deleteMemberMeasurement', args: [id] }, ok: 'Catatan dihapus.', label: 'Hapus ukuran tubuh',
+        then: function (d) { if (d && !d.error) window.pgSetAdmin(memberId, d); else window.pgLoadAdmin(memberId); },
+        undo: function () { if (old) window.pgSetAdmin(memberId, old); } });
     }, { title: 'Hapus catatan?', confirmText: 'Hapus', variant: 'danger' });
   };
   function pgStore(d) {
@@ -8485,7 +8971,7 @@
     fail('');
     const mode = pg.mode, mid = pg.memberId, tgl = $('pg-tanggal').value;
     optimistic({ sheet: true, errEl: 'pg-err', ok: 'Tersimpan.', label: 'Ukuran tubuh',
-      call: function () { return mode === 'admin' ? adminCall('saveMemberMeasurement', mid, Object.assign({ tanggal: tgl }, data)) : memberCall('saveMyMeasurement', data); },
+      q: mode === 'admin' ? { mode: 'admin', fn: 'saveMemberMeasurement', args: [mid, Object.assign({ tanggal: tgl }, data)] } : { mode: 'member', fn: 'saveMyMeasurement', args: [data] },
       then: function (d) {
         pgStore(d);
         if (mode !== 'admin' && window.shareMoment && d && d.entries && d.entries.length >= 2) window.shareMoment('ukuran', 'Ukuran tersimpan. Bagikan perubahanmu?');
@@ -8536,7 +9022,7 @@
       if (b64.length > 6900000) throw new Error('Foto terlalu besar. Coba foto lain.');
       return memberCall('uploadMyProgressPhoto', b64, 'image/jpeg', pg.side);
     }).then(function (d) { done(); pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); pgRenderPhotoList(); window.showToast('Foto tersimpan.'); })
-      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.pgViewPhoto = function (id) {
     pg.viewId = id;
@@ -8555,8 +9041,13 @@
   window.pgDeletePhoto = function () {
     const id = pg.viewId;
     window.showConfirmModal('Foto ini dihapus permanen dari Drive.', function () {
-      memberCall('deleteMyProgressPhoto', id).then(function (d) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); window.pgOpenPhotos('member'); window.showToast('Foto dihapus.'); })
-        .catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: foto hilang sekarang; ditolak = kembali.
+      const old = pg.data;
+      if (old && Array.isArray(old.photos)) { pg.data = Object.assign({}, old, { photos: old.photos.filter(x => String(x.id) !== String(id)) }); window.patchPortalMore('progress', pg.data); }
+      pgRenderCard(); window.pgOpenPhotos('member');
+      optimistic({ q: { mode: 'member', fn: 'deleteMyProgressPhoto', args: [id] }, ok: 'Foto dihapus.', label: 'Hapus foto progres',
+        then: function (d) { if (d && !d.error) { pg.data = d; window.patchPortalMore('progress', d); pgRenderCard(); } },
+        undo: function () { pg.data = old; window.patchPortalMore('progress', old); pgRenderCard(); } });
     }, { title: 'Hapus foto?', confirmText: 'Hapus', variant: 'danger' });
   };
 
@@ -8612,8 +9103,12 @@
     const id = window.taskDoneId;
     if (!id) return;
     window.taskDoneId = null;
+    // Antrean simpan: PR langsung tercentang (juga di salinan perangkat); ditolak = kembali.
+    const c = window.myTasks, t = c && c.state === 'ok' ? c.list.find(x => String(x.id) === String(id)) : null, was = t ? t.status : null;
+    const paint = function () { if (c && c.state === 'ok') window.patchPortalMore('tasks', c.list); renderMyTasksCard(); };
+    if (t) { t.status = 'done'; paint(); }
     optimistic({ q: { mode: 'member', fn: 'completeMyTask', args: [id, $('task-done-note').value.trim()] }, sheet: true, ok: 'PR selesai. Kerja bagus!', label: 'PR',
-      then: function () { window.loadMyTasks(true); }, undo: function () { window.taskDoneId = id; } });
+      then: function () { window.loadMyTasks(true); }, undo: function () { window.taskDoneId = id; if (t) { t.status = was; paint(); } } });
   };
 
   // ── Tab klien: Progres, Program, Info & Tips, Lainnya (Fase J) ───────────────
@@ -9008,7 +9503,11 @@
   window.rtDelete = function (hari) {
     if (!hari) return;
     window.showConfirmModal('Rutinitas <b>' + h(hari) + '</b> dihapus. Catatan latihannya tetap tersimpan.', function () {
-      memberCall('deleteMyRoutine', hari).then(function (d) { rtSaved(d, 'Rutinitas dihapus.'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: rutinitas hilang sekarang (juga di salinan perangkat); ditolak = kembali.
+      const old = rtData();
+      if (old) rtSaved(Object.assign({}, old, { own: (old.own || []).filter(x => x.hari !== hari) }));
+      optimistic({ q: { mode: 'member', fn: 'deleteMyRoutine', args: [hari] }, ok: 'Rutinitas dihapus.', label: 'Hapus rutinitas',
+        then: function (d) { if (d && !d.error) rtSaved(d); }, undo: function () { if (old) rtSaved(old); } });
     }, { title: 'Hapus rutinitas?', confirmText: 'Hapus', variant: 'danger' });
   };
   window.rtDup = function (hari) {
@@ -9017,14 +9516,17 @@
     let n = 2, name;
     do { name = hari.slice(0, 36) + ' (' + n + ')'; n++; } while (taken.indexOf(name.toLowerCase()) !== -1);
     window.closeModal();
-    memberCall('saveMyRoutine', '', { hari: name, items: d.items }).then(function (r) { rtSaved(r, 'Disalin jadi "' + name + '".'); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    // Antrean simpan (nomor pesanan + catatan Idem): salinan tampil sekarang; versi rapi dari server menyusul.
+    rtSaved(Object.assign({}, data, { own: (data.own || []).concat([{ hari: name, items: d.items }]) }));
+    optimistic({ q: { mode: 'member', fn: 'saveMyRoutine', args: ['', { hari: name, items: d.items }] }, ok: 'Disalin jadi "' + name + '".', label: 'Salin rutinitas',
+      then: function (r) { if (r && !r.error) rtSaved(r); }, undo: function () { rtSaved(data); } });
   };
   // Salin hari program coach (template kosong) atau template Jelajahi ke rutinitas sendiri.
   window.rtCopy = function (template, hari) {
     window.closeModal();
     memberCall('copyRoutineToMine', template ? { template: template } : { hari: hari }).then(function (r) {
       rtSaved(r, (r.added || []).length ? 'Ditambahkan ke Rutinitas saya: ' + r.added.join(', ') : 'Disalin.');
-    }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.rtExplore = function () {
     const list = (rtData() || {}).explore || [];
@@ -9131,18 +9633,26 @@
       const btn = $('pg-onb-next'); if (btn) { btn.disabled = true; btn.textContent = 'Menyusun…'; }
       memberCall('saveMyProgramProfile', { level: v.level, tujuan: v.tujuan, hari: Number(v.hari), durasi: Number(v.durasi), fokus: v.fokus })
         .then(function (r) { pgApply(r); window.closeModal(); showToast(r.skipped === 'coach' ? 'Data disimpan.' : 'Program siap.'); })
-        .catch(function (e) { err.textContent = e.message || 'Gagal menyimpan.'; if (btn) { btn.disabled = false; btn.textContent = 'Buat program'; } });
+        .catch(function (e) { err.textContent = waitErr(e); if (btn) { btn.disabled = false; btn.textContent = 'Buat program'; } });   // menunggu: program disusun server
       return;
     }
     pgOnb.step = Math.max(1, Math.min(4, pgOnb.step + d)); pgOnbRender();
   };
   window.pgAccept = function () {
     window.showConfirmModal('Program coach disimpan ke Rutinitas saya, lalu program otomatis dibuat.', function () {
-      memberCall('acceptAutoProgram').then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+      memberCall('acceptAutoProgram').then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(waitErr(e)); });
     }, { title: 'Coba program otomatis?', confirmText: 'Coba' });
   };
   window.pgSetAuto = function (on) {
-    const go = function () { memberCall('setMyProgramAuto', !!on).then(function (r) { pgApply(r); showToast(on ? 'Program otomatis aktif.' : 'Program otomatis dimatikan.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    // Menyalakan menunggu (server menyusun program). Mematikan langsung: kartu berubah sekarang, ditolak = kembali.
+    const go = function () {
+      if (on) { memberCall('setMyProgramAuto', true).then(function (r) { pgApply(r); showToast('Program otomatis aktif.'); }).catch(function (e) { showToast(waitErr(e)); }); return; }
+      const g = window.myProgramGen, was = g ? g.auto : undefined;
+      if (g) { g.auto = false; window.patchPortalMore('programGen', g); renderAutoProg(); }
+      optimistic({ q: { mode: 'member', fn: 'setMyProgramAuto', args: [false] }, ok: 'Program otomatis dimatikan.', label: 'Program otomatis',
+        then: function (r) { if (r) pgApply(r); },
+        undo: function () { if (g) { g.auto = was; window.patchPortalMore('programGen', g); renderAutoProg(); } } });
+    };
     if (on) go(); else window.showConfirmModal('Program yang sekarang tetap ada dan tidak berubah lagi otomatis.', go, { title: 'Matikan program otomatis?', confirmText: 'Matikan' });
   };
   window.pgSwapOpen = function () {
@@ -9156,22 +9666,22 @@
     wlSheet('Tukar gerakan', '<p class="li-sub">Pilih gerakan dengan pola sama. Program disusun ulang dengan pilihanmu.</p>' + html);
   };
   window.pgSwap = function (pola, id) {
-    memberCall('swapMyProgramExercise', pola, id).then(function (r) { pgApply(r); window.closeModal(); showToast('Gerakan ditukar.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+    memberCall('swapMyProgramExercise', pola, id).then(function (r) { pgApply(r); window.closeModal(); showToast('Gerakan ditukar.'); }).catch(function (e) { showToast(waitErr(e)); });   // menunggu: program disusun ulang server
   };
   // Panel coach: kartu di tab Latihan klien.
   // Kartu coach untuk program otomatis kini bagian dari kartu Program (programAdminInner0).
   function pgAdminApply(id, g) { pgAdminGen[id] = g; window.ccPatch(id, { programGen: g }); renderProgramAdmin(id); }
   window.pgAdminRegen = function (id) {
     const g = pgAdminGen[id];
-    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
     if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
   };
-  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(e.message || 'Gagal.'); }); };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(waitErr(e)); }); };
   window.pgAdminTag = function (id, t) {
     const g = pgAdminGen[id]; if (!g) return;
     const list = (g.pantangan || []).slice(), i = list.indexOf(t);
     if (i !== -1) list.splice(i, 1); else list.push(t);
-    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(e.message || 'Gagal.'); });
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); });
   };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
@@ -9312,7 +9822,7 @@
     if (n.profile) n.profile.gaya = g;
     window.closeModal(); renderMakan();
     memberCall('setMyMenuStyle', g).then(function (r) { window.myNutrition = r; window.patchPortalMore('nutrition', r); renderMakan(); window.showToast('Menu ' + NUT_GAYA_L[g] + '.'); })
-      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(window.authMessage(err)); });
+      .catch(function (err) { if (n.profile) n.profile.gaya = prev; renderMakan(); window.showToast(waitErr(err)); });
   };
   function renderMakan() {
     const w = $('pub-makan-pane'); if (w) setHTML(w, makanInner());
@@ -9447,7 +9957,7 @@
       const weigh = o.needKg ? memberCall('saveMyMeasurement', { berat: String(o.berat).replace(',', '.') }) : Promise.resolve();
       weigh.then(function () { return memberCall('saveMyNutritionProfile', { tinggi: String(o.tinggi).replace(',', '.'), jk: o.jk, goal: o.goal, pantangan: o.pantangan, anggaran: o.anggaran, birthDate: o.hadBirth ? '' : o.birth, umur: o.hadBirth ? '' : String(o.umur).trim() }); })
         .then(function (r) { done(); window.myNutrition = r; window.patchPortalMore('nutrition', r); window.closeModal(); renderMakan(); window.showToast('Data disimpan.'); window.refreshPortalMore(true); })
-        .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+        .catch(function (err) { done(); window.showToast(waitErr(err)); });
       return;
     }
     o.step = Math.max(1, Math.min(3, o.step + d)); nutOnbDraw();
@@ -9500,7 +10010,14 @@
     } catch (e) { fqMem = q.slice(); }
   }
   function fqMine() { const sc = fqScope(); return sc ? fqAll().filter(x => x.scope === sc) : []; }
-  window.fqForget = function () { fqSet([]); fqMem = null; clearTimeout(fqRt.retry); clearTimeout(fqRt.watch); fqRt.flushing = false; };
+  // Antrean simpan (lencana #sync-badge): catatan makan yang ditolak server dibuang dari antrean (seperti sebelumnya),
+  // tetapi dicatat di xnk_food_failed supaya muncul di lencana dengan alasannya (maks 20, per akun). Hanya tambahan.
+  const FQ_FAILED = 'xnk_food_failed';
+  function fqFailedAll() { try { const a = JSON.parse(_lsGet(FQ_FAILED) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function fqFailedSet(a) { _lsSet(FQ_FAILED, a.length ? JSON.stringify(a.slice(-20)) : null); if (window.syncPaint) window.syncPaint(); }
+  window.fqFailedItems = function () { const sc = fqScope(); return sc ? fqFailedAll().filter(x => x.scope === sc) : []; };
+  window.fqFailedDrop = function (id) { fqFailedSet(fqFailedAll().filter(x => x.id !== id)); };
+  window.fqForget = function () { fqSet([]); fqMem = null; clearTimeout(fqRt.retry); clearTimeout(fqRt.watch); fqRt.flushing = false; _lsSet(FQ_FAILED, null); };
   const r1 = v => Math.round(v * 10) / 10;
   function fqCalc(e) {
     if (e.id && !e.custom) {
@@ -9573,7 +10090,9 @@
         return;
       }
       drop(); renderMakan(); renderInsightMakan();
-      window.showToast('Catatan makan tidak tersimpan: ' + msg);
+      const nm = (it.view && it.view.nama) || (it.op === 'del' ? 'Hapus catatan makan' : 'Catatan makan');
+      fqFailedSet(fqFailedAll().concat([{ kind: 'fq', id: it.id, scope: it.scope || fqScope(), label: nm + ' · ' + (it.tanggal || ''), err: msg, at: Date.now() }]));
+      window.showToast('Catatan makan belum tersimpan. Ketuk tanda di atas.');
       window.fqFlush();
     });
   };
@@ -9593,7 +10112,7 @@
     if (navigator.onLine === false) { window.showToast('Butuh sinyal untuk menyalin catatan kemarin.'); return; }
     const done = busy(btn, '…');
     memberCall('copyMyFoodYesterday').then(function (d) { done(); nutSetLog(d); window.showToast('Catatan kemarin disalin.'); })
-      .catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   // Lembar tambah: cari di daftar (GitHub Pages, dimuat malas), terakhir/favorit, atau buat sendiri.
   const FOOD_URL = 'https://xnk.my.id/foods/foods.min.json', FOOD_KEY = 'xnk_foods_v3';
@@ -9860,7 +10379,7 @@
     const me = window.publicLoggedMember;
     if (guide.replay || !me || !me.guide) return;
     me.guide = null;
-    memberCall('markGuideSeen', 'semua').catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markGuideSeen', args: ['semua'] }, ok: false, label: 'Panduan dilihat' });
   }
   // Dipanggil setelah pindah halaman: klien baru melihat sambutan sekali, di halaman portal mana pun.
   window.guideCheck = function () {
@@ -10075,7 +10594,7 @@
   window.classCreateGroup = function () {
     const done = busy($('class-create-btn'), 'Membuat…');
     memberCall('createClassGroup').then(function (g) { done(); window.myGroup = g; renderClassSlot(); window.showToast('Grup dibuat. Bagikan kodenya ke temanmu.'); })
-      .catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+      .catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
   window.classOpenJoin = function () { $('class-join-code').value = ''; openSheet('sheet-class-join'); };
   window.classJoinSubmit = function (e) {
@@ -10083,13 +10602,17 @@
     const done = busy($('class-join-btn'), 'Menggabung…');
     memberCall('joinClassGroup', $('class-join-code').value.trim().toUpperCase()).then(function (g) {
       done(); window.myGroup = g; window.closeModal(); renderClassSlot(); window.showToast('Kamu sudah masuk grup.');
-    }).catch(function (err) { done(); window.showToast(window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err)); });
   };
   window.classLeaveGroup = function () {
     const g = window.myGroup;
     if (!g) return;
     window.showConfirmModal(g.isOwner ? 'Tutup grup ini? Anggota lain tidak bisa lagi memakai kodenya. Sesi yang sudah dibooking tetap berlaku.' : 'Keluar dari grup ini? Sesi yang sudah dibooking tetap berlaku.', function () {
-      memberCall('leaveClassGroup').then(function () { window.myGroup = null; renderClassSlot(); }).catch(function (err) { window.showToast('Gagal: ' + window.authMessage(err)); });
+      // Antrean simpan: grup hilang sekarang (juga di salinan perangkat); ditolak = grup kembali.
+      window.myGroup = null; renderClassSlot();
+      if (window.patchPortalMore) window.patchPortalMore('classGroup', null, false, true);
+      optimistic({ q: { mode: 'member', fn: 'leaveClassGroup', args: [] }, ok: g.isOwner ? 'Grup ditutup.' : 'Keluar dari grup.', label: 'Grup kelas',
+        undo: function () { window.myGroup = g; renderClassSlot(); if (window.patchPortalMore) window.patchPortalMore('classGroup', g); } });
     }, { title: g.isOwner ? 'Tutup grup?' : 'Keluar grup?', confirmText: g.isOwner ? 'Ya, tutup' : 'Ya, keluar' });
   };
   window.classShareGroup = function () {
@@ -10188,7 +10711,7 @@
       window.showToast('Pendaftaran berhasil! Berikutnya masuk dengan nomor WhatsApp-mu.', 'party-popper');
       if (res.token && res.member) { _lsSet(MEMBER_TOKEN_KEY, res.token); window.setPublicMember(res.member); window.loadPublicData(); }
       else window.navigate('public-login');
-    }).catch(function (err) { done(); window.showToast('Gagal mendaftar: ' + err.message); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal mendaftar: ')); });
   };
 
   // Halaman profil coach: dipakai portal klien dan pratinjau panel ("Lihat seperti klien").
@@ -10253,7 +10776,7 @@
     adminCall('previewCoachProfile').then(function (p) {
       $('coach-preview-body').innerHTML = window.renderCoachProfile(p, { preview: true });
       openSheet('modal-coach-preview');
-    }).catch(function (err) { window.showToast('Gagal: ' + err.message); });
+    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
   window.renderPublicCoaches = function () {
@@ -10334,12 +10857,17 @@
   };
 
   // ── Detik berjalan: jam & hitung mundur ────────────────────────────────────
-  setInterval(function () {
+  // Tidak bekerja saat halaman tersembunyi, melewati elemen yang tidak tampil (tab lain), dan menulis hanya teks yang berubah.
+  function tickClocks() {
+    if (document.hidden) return;
+    const shown = function (n) { return n.getClientRects().length > 0; };
     const clock = $('live-clock');
-    if (clock) clock.textContent = fmtTime(new Date());
-    document.querySelectorAll('[data-countdown]').forEach(function (n) { n.textContent = timeUntil(new Date(Number(n.getAttribute('data-countdown')))); });
-    document.querySelectorAll('[data-countdown-long]').forEach(function (n) { n.textContent = countdownText(new Date(Number(n.getAttribute('data-countdown-long')))); });
-  }, 1000);
+    if (clock && shown(clock)) textIf(clock, fmtTime(new Date()));
+    document.querySelectorAll('[data-countdown]').forEach(function (n) { if (shown(n)) textIf(n, timeUntil(new Date(Number(n.getAttribute('data-countdown'))))); });
+    document.querySelectorAll('[data-countdown-long]').forEach(function (n) { if (shown(n)) textIf(n, countdownText(new Date(Number(n.getAttribute('data-countdown-long'))))); });
+  }
+  setInterval(tickClocks, 1000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) tickClocks(); });
 
   // ── Keuangan (Fase H): tagihan, pembayaran, pengeluaran, laporan ─────────────
   const FIN_STATUS_PILL = { 'Lunas': 'pill solid', 'DP': 'pill', 'Belum bayar': 'pill dashed' };
@@ -10365,7 +10893,7 @@
     finTiles();
   }
   function finTiles() { document.querySelectorAll('.fin-tile').forEach(function (t) { t.classList.toggle('hide', !(ui.mode === 'admin' && finOn())); }); }
-  function finErr(err) { window.showToast('Gagal: ' + window.authMessage(err)); }
+  function finErr(err) { window.showToast(waitErr(err, 'Gagal: ')); }   // gangguan sementara: kalimat tenang
   function finMonthLabel() { return MONTHS[fin.month - 1] + ' ' + fin.year; }
   function finToday() { return ymd(new Date()); }
 
@@ -10514,7 +11042,7 @@
     }).catch(function (err) { done(); finErr(err); });
   };
   window.finRestore = function (kind, id) {
-    adminCall('restoreFinanceItem', kind, id).then(function () { window.showToast('Dipulihkan.'); finLoad(); }).catch(finErr);
+    optimistic({ q: { mode: 'admin', fn: 'restoreFinanceItem', args: [kind, id] }, ok: 'Dipulihkan.', label: 'Pulihkan', then: function () { finLoad(); } });
   };
 
   // Detail tagihan
@@ -10570,14 +11098,15 @@
   };
   window.finBillSave = function (e) {
     e.preventDefault();
-    const b = fin.detail.bill, btn = $('fin-bill-save'), done = busy(btn, 'Menyimpan…');
-    adminCall('saveBillAdjust', b.id, { diskon: finNum($('fin-bill-discount').value), total: finNum($('fin-bill-total').value), alasan: $('fin-bill-reason').value, catatan: $('fin-bill-note').value }).then(function () {
-      done(); window.closeModal(); window.showToast('Tagihan disimpan.'); window.finOpenBill(b.id); finLoad();
-    }).catch(function (err) { done(); $('fin-bill-err').textContent = window.authMessage(err); });
+    const b = fin.detail.bill;
+    // Antrean simpan: sisa & status tagihan dihitung server, dimuat ulang setelahnya. Ditolak = lencana (Ubah membuka lembar ini).
+    optimistic({ q: { mode: 'admin', fn: 'saveBillAdjust', args: [b.id, { diskon: finNum($('fin-bill-discount').value), total: finNum($('fin-bill-total').value), alasan: $('fin-bill-reason').value, catatan: $('fin-bill-note').value }] },
+      sheet: true, errEl: 'fin-bill-err', ok: 'Tagihan disimpan.', label: 'Tagihan', then: function () { window.finOpenBill(b.id); finLoad(); } });
   };
   window.finBillArchive = function () {
     const id = fin.detail.bill.id;
-    adminCall('archiveFinanceItem', 'bill', id).then(function () { window.closeModal(); window.closeDetail(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+    window.closeModal(); window.closeDetail();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['bill', id] }, ok: 'Diarsipkan. Pulihkan lewat filter Arsip.', label: 'Arsipkan tagihan', then: function () { finLoad(); } });
   };
 
   // Sheet pembayaran / pengeluaran
@@ -10654,15 +11183,24 @@
   };
   window.finPaySave = function (e) {
     e.preventDefault();
-    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
     const billId = fin.payPick || $('fin-pay-bill').value;
     const p = { id: fin.payId || undefined, billId: billId || undefined, amount: finNum($('fin-pay-amount').value), date: $('fin-pay-date').value, method: finPicked('fin-pay-method'), note: $('fin-pay-note').value, category: finPicked('fin-pay-cat') };
+    // Tanpa foto bukti: antrean simpan (nomor pesanan mencegah pembayaran dobel). Dengan foto: menunggu id dari server untuk unggahan.
+    if (!fin.proof) {
+      const bill = fin.billId;
+      optimistic({ q: { mode: 'admin', fn: 'savePayment', args: [p] }, sheet: true, errEl: 'fin-pay-err', ok: 'Pembayaran tersimpan.', label: 'Pembayaran',
+        then: function () { finLoad(); if (bill && ui.detail === 'bill:' + bill) window.finOpenBill(bill); } });
+      return;
+    }
+    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
     adminCall('savePayment', p).then(function (r) { return finUploadProof('payment', r.id); }).then(function () {
       done(); window.closeModal(); window.showToast('Pembayaran tersimpan.'); finLoad(); if (fin.billId && ui.detail === 'bill:' + fin.billId) window.finOpenBill(fin.billId);
-    }).catch(function (err) { done(); $('fin-pay-err').textContent = window.authMessage(err); });
+    }).catch(function (err) { done(); $('fin-pay-err').textContent = waitErr(err); });
   };
   window.finPayArchive = function () {
-    adminCall('archiveFinanceItem', 'payment', fin.payId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat tagihannya.'); finLoad(); if (fin.billId) window.finOpenBill(fin.billId); }).catch(finErr);
+    const bill = fin.billId;
+    window.closeModal();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['payment', fin.payId] }, ok: 'Diarsipkan. Pulihkan lewat tagihannya.', label: 'Arsipkan pembayaran', then: function () { finLoad(); if (bill) window.finOpenBill(bill); } });
   };
 
   window.finOpenExpense = function (id) {
@@ -10686,13 +11224,19 @@
   };
   window.finExpSave = function (e) {
     e.preventDefault();
+    const x = { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value };
+    if (!fin.proof) {   // tanpa foto bukti: antrean simpan (nomor pesanan mencegah dobel)
+      optimistic({ q: { mode: 'admin', fn: 'saveExpense', args: [x] }, sheet: true, errEl: 'fin-exp-err', ok: 'Pengeluaran tersimpan.', label: 'Pengeluaran', then: function () { finLoad(); } });
+      return;
+    }
     const btn = $('fin-exp-save'), done = busy(btn, 'Menyimpan…');
-    adminCall('saveExpense', { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value })
+    adminCall('saveExpense', x)
       .then(function (r) { return finUploadProof('expense', r.id); }).then(function () { done(); window.closeModal(); window.showToast('Pengeluaran tersimpan.'); finLoad(); })
-      .catch(function (err) { done(); $('fin-exp-err').textContent = window.authMessage(err); });
+      .catch(function (err) { done(); $('fin-exp-err').textContent = waitErr(err); });
   };
   window.finExpArchive = function () {
-    adminCall('archiveFinanceItem', 'expense', fin.expId).then(function () { window.closeModal(); window.showToast('Diarsipkan. Pulihkan lewat filter Arsip.'); finLoad(); }).catch(finErr);
+    window.closeModal();
+    optimistic({ q: { mode: 'admin', fn: 'archiveFinanceItem', args: ['expense', fin.expId] }, ok: 'Diarsipkan. Pulihkan lewat filter Arsip.', label: 'Arsipkan pengeluaran', then: function () { finLoad(); } });
   };
   window.finQuick = function (kind) {
     window.closeModal();
@@ -10799,12 +11343,12 @@
       utama: picked('gym-ut'), pendukung: picked('gym-pe'), hindari: picked('gym-hi'), repMin: $('gym-r1').value.trim(), repMax: $('gym-r2').value.trim(), exId: $('gym-ex').value.trim() });
     gymSt.busy = true;
     adminCall('saveGymExercise', it).then(function (d) { gymSt.data = d; gymSt.edit = null; gymSt.q = ''; gymSt.pola = ''; gymRender(); showToast('Tersimpan'); })
-      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = e.message || 'Gagal menyimpan.'; })
+      .catch(function (e) { const er = $('gym-err'); if (er) er.textContent = waitErr(e); })
       .then(function () { gymSt.busy = false; });
   };
   window.gymActive = function (id, on) {
     adminCall('setGymExerciseActive', id, on).then(function (d) { gymSt.data = d; gymRender(); })
-      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); gymRender(); });
+      .catch(function (e) { showToast(waitErr(e)); gymRender(); });
   };
   function exAliasLoad() {
     exEnsure().catch(function () {}).then(function () { gymLoad(); return adminCall('getManualExercises'); })
@@ -10841,7 +11385,7 @@
     exAl.busy[it.kunci] = true;
     adminCall('saveExerciseAlias', [Object.assign({ nama: it.nama }, v)])
       .then(function (d) { exAl.data = d; exAliasRender(); gymSumRender(); showToast('Tersimpan'); })
-      .catch(function (e) { showToast(e.message || 'Gagal menyimpan.'); exAliasRender(); })
+      .catch(function (e) { showToast(waitErr(e)); exAliasRender(); })
       .then(function () { delete exAl.busy[it.kunci]; });
   };
   window.exAliasPick = function (i) {
@@ -10894,55 +11438,29 @@
         '<button type="button" class="btn btn-outline btn-sm" onclick="window.finShareSave(\'' + h(c.id) + '\',this)">Simpan</button></div>';
     }).join('') || '<span class="li-sub">Belum ada coach.</span>';
   }
-  window.setNutrition = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { nutritionEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.nutritionEnabled = s.nutritionEnabled;
-      window.showToast(s.nutritionEnabled ? 'Gizi untuk klien aktif.' : 'Gizi untuk klien dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setFeedback = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { feedbackEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.feedbackEnabled = s.feedbackEnabled;
-      window.showToast(s.feedbackEnabled ? 'Penilaian klien aktif.' : 'Penilaian klien dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
+  // Saklar Pengaturan (antrean simpan): saklar & setState langsung berubah; ditolak = saklar kembali (lencana di bilah atas).
+  function setToggle(el, key, okOn, okOff, label, apply) {
+    const v = !!el.checked, was = setState.data ? setState.data[key] : !v;
+    if (setState.data) setState.data[key] = v;
+    if (apply) apply(v);
+    const patch = {}; patch[key] = v;
+    optimistic({ q: { mode: 'admin', fn: 'updateAppSettings', args: [patch] }, ok: v ? okOn : okOff, label: label,
+      then: function (s) { if (s && s[key] !== undefined && setState.data) setState.data[key] = s[key]; },
+      undo: function () { if (setState.data) setState.data[key] = was; if (apply) apply(was); if (el.isConnected) el.checked = !v; } });
+  }
+  window.setNutrition = function (el) { setToggle(el, 'nutritionEnabled', 'Gizi untuk klien aktif.', 'Gizi untuk klien dimatikan.', 'Gizi untuk klien'); };
+  window.setFeedback = function (el) { setToggle(el, 'feedbackEnabled', 'Penilaian klien aktif.', 'Penilaian klien dimatikan.', 'Penilaian klien'); };
   window.setShareQr = function (btn) {
     const v = String($('set-share-qr').value || '').trim();
     const done = busy(btn, 'Menyimpan…');
     adminCall('updateAppSettings', { shareQrUrl: v }).then(function (s) {
       done(); if (setState.data) { setState.data.shareQrUrl = s.shareQrUrl; }
       window.showToast(v ? 'Alamat QR tersimpan.' : 'Kembali ke alamat bawaan.');
-    }).catch(function (err) { done(); window.showToast('Gagal: ' + window.authMessage(err)); });
+    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
-  window.setShare = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { shareEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.shareEnabled = s.shareEnabled;
-      window.shareOn = s.shareEnabled !== false;
-      window.showToast(s.shareEnabled ? 'Kartu bagikan aktif.' : 'Kartu bagikan dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setWarm = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { warmEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.warmEnabled = s.warmEnabled;
-      window.showToast(s.warmEnabled ? 'Data disiapkan di latar tiap 15 menit.' : 'Penyiapan data di latar dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
-  window.setClientGuide = function (el) {
-    el.disabled = true;
-    adminCall('updateAppSettings', { clientGuideEnabled: el.checked }).then(function (s) {
-      if (setState.data) setState.data.clientGuideEnabled = s.clientGuideEnabled;
-      window.showToast(s.clientGuideEnabled ? 'Panduan klien baru aktif.' : 'Panduan klien baru dimatikan.');
-    }).catch(function (err) { el.checked = !el.checked; window.showToast('Gagal: ' + window.authMessage(err)); })
-      .then(function () { el.disabled = false; });
-  };
+  window.setShare = function (el) { setToggle(el, 'shareEnabled', 'Kartu bagikan aktif.', 'Kartu bagikan dimatikan.', 'Kartu bagikan', function (v) { window.shareOn = v !== false; }); };
+  window.setWarm = function (el) { setToggle(el, 'warmEnabled', 'Data disiapkan di latar tiap 15 menit.', 'Penyiapan data di latar dimatikan.', 'Siapkan data di latar'); };
+  window.setClientGuide = function (el) { setToggle(el, 'clientGuideEnabled', 'Panduan klien baru aktif.', 'Panduan klien baru dimatikan.', 'Panduan klien baru'); };
 
   function finSaveSettings(patch, then) {
     return adminCall('updateAppSettings', { finance: patch }).then(function (s) {
@@ -10974,14 +11492,20 @@
   window.finCatActive = function (id, on) {
     const c = (fin.cats || []).filter(function (x) { return x.id === id; })[0];
     if (!c) return;
-    adminCall('saveFinanceCategory', { id: id, name: c.name, active: on }).then(function () { c.active = on; }).catch(finErr);
+    const was = c.active;
+    c.active = on;
+    optimistic({ q: { mode: 'admin', fn: 'saveFinanceCategory', args: [{ id: id, name: c.name, active: on }] }, ok: false, label: 'Kategori keuangan',
+      undo: function () { c.active = was; finCatsRender(); } });
   };
   window.finCatDel = function (id) {
-    adminCall('deleteFinanceCategory', id).then(function () { fin.cats = (fin.cats || []).filter(function (c) { return c.id !== id; }); finCatsRender(); }).catch(finErr);
+    const before = fin.cats;
+    fin.cats = (fin.cats || []).filter(function (c) { return c.id !== id; });
+    finCatsRender();
+    optimistic({ q: { mode: 'admin', fn: 'deleteFinanceCategory', args: [id] }, ok: 'Kategori dihapus.', label: 'Hapus kategori',
+      undo: function () { fin.cats = before; finCatsRender(); } });
   };
   window.finShareSave = function (id, btn) {
-    const done = busy(btn, 'Menyimpan…');
-    adminCall('saveCoachShare', id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)).then(function () { done(); window.showToast('Bagi hasil tersimpan.'); }).catch(function (err) { done(); finErr(err); });
+    optimistic({ q: { mode: 'admin', fn: 'saveCoachShare', args: [id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)] }, ok: 'Bagi hasil tersimpan.', label: 'Bagi hasil coach' });
   };
   window.finSync = function (btn) {
     const done = busy(btn, 'Menyinkronkan…');
@@ -11012,11 +11536,15 @@
   });
 
   // Ikon untuk elemen statis saat halaman pertama dibuka.
-  // (Hanya elemen baru; teks jam/hitung mundur yang berubah tiap detik diabaikan.)
+  // Hanya elemen baru yang membawa <i data-lucide> yang belum digambar; svg ikon yang baru digambar, teks jam/hitung mundur
+  // yang berubah tiap detik, dan elemen tanpa ikon diabaikan (kalau tidak: putaran gambar-ulang tanpa henti, HP panas).
   new MutationObserver(function (list) {
     for (let i = 0; i < list.length; i++) {
       const added = list[i].addedNodes;
-      for (let j = 0; j < added.length; j++) { if (added[j].nodeType === 1) { paintIcons(); return; } }
+      for (let j = 0; j < added.length; j++) {
+        const n = added[j];
+        if (n.nodeType === 1 && ((n.matches && n.matches('i[data-lucide]')) || (n.querySelector && n.querySelector('i[data-lucide]')))) { paintIcons(); return; }
+      }
     }
   }).observe(document.body, { childList: true, subtree: true });
 
@@ -11455,7 +11983,7 @@
     if (!n || !n.count) return;
     n.count = 0; n.items.forEach(function (x) { x.fresh = false; });   // objek yang sama dengan salinan di perangkat: buka berikutnya tidak menghitung lagi
     renderTopbarActions(); savePortalCache();
-    memberCall('markNotifSeen').catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markNotifSeen', args: [] }, ok: false, label: 'Pemberitahuan dilihat' });
   };
   window.notifGo = function (id) {
     const kind = String(id).split(':')[0];
@@ -11655,7 +12183,7 @@
     if (!me) { window.showToast('Masuk dulu untuk booking jadwal.', 'lock'); window.navigate('public-login'); return; }
     let old = null;
     if (opts.resched) {
-      old = window.schedules.find(x => String(x.id) === String(opts.resched));
+      old = schedById(opts.resched);
       if (!old || String(old.memberId) !== String(me.id)) { window.showToast('Jadwal tidak ditemukan.'); return; }
       if (isDone(old)) { window.showToast('Sesi yang sudah selesai tidak bisa diubah.'); return; }
       const cutoff = window.rescheduleCutoffHours != null ? Number(window.rescheduleCutoffHours) : 2;
@@ -11738,7 +12266,7 @@
   }
   // Fase Y: di desktop booking jadi satu jendela dua panel (kalender | jam), ringkasan dan tombol di kaki.
   function bkDrawDesk() {
-    const me = window.publicLoggedMember, old = bkx.resched ? window.schedules.find(x => String(x.id) === bkx.resched) : null;
+    const me = window.publicLoggedMember, old = bkx.resched ? schedById(bkx.resched) : null;
     const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
     const coaches = bkMulti() && !old ? '<div class="bk-coaches" role="radiogroup" aria-label="Coach">' + window.coaches.map(function (c) {
       const on = String(c.id) === bkx.coach;
@@ -11770,7 +12298,7 @@
     if (window.deskIs && window.deskIs()) { $('bk-screen').classList.add('bk-desk'); bkDrawDesk(); return; }
     $('bk-screen').classList.remove('bk-desk');
     const me = window.publicLoggedMember, st = bkx.steps[bkx.i], n = bkx.steps.length;
-    const old = bkx.resched ? window.schedules.find(x => String(x.id) === bkx.resched) : null;
+    const old = bkx.resched ? schedById(bkx.resched) : null;
     const total = Number(me.totalSessions) || 0, rem = Math.max(0, total - (Number(me.usedSessions) || 0));
     let body = '', cta = 'Lanjut';
     if (st === 'coach') {
@@ -12160,7 +12688,7 @@
     if (!n || !n.count) return;
     n.count = 0; n.items.forEach(function (x) { x.fresh = false; });
     renderTopbarActions(); savePortalCache();
-    memberCall('markNotifSeen').catch(function () {});
+    optimistic({ q: { mode: 'member', fn: 'markNotifSeen', args: [] }, ok: false, label: 'Pemberitahuan dilihat' });
   };
   const notifGoBase = window.notifGo;
   window.notifGo = function (id) { deskClose(); notifGoBase(id); };
