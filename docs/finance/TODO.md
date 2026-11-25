@@ -72,6 +72,17 @@ Complaints: the page is slow to open, the bill detail is slow, Lunasi is slow, a
 | [x] | T-446 | **Prepared in the background + photos without waiting** (owner 2026-11-25): `finPrefetch` after `getAdminMore`; a payment / expense with a proof photo shows at once and the photo uploads after the save (memory only, `beforeunload` warns while one is uploading); `pagehide` releases the tab's sync lease so the first save after reopening does not wait 20 s. | part 14, part 03, part 01, tools/browser-check.js | T-444 | S | The first tap on Keuangan is already filled; an expense with a photo shows at once and the photo arrives. |
 | [x] | T-445 | **Refresh scope**: pull to refresh on Keuangan loads Keuangan only; queued finance saves call `finStale`, not a full reload. Browser check "Keuangan cepat". | part 03, part 01, tools/browser-check.js | T-442 | S | No `getAdminBootstrap` / `getAdminMore` on a pull in Keuangan. |
 
+## H6: New Keuangan UI (2026-11, approved by the owner from screenshots)
+
+| | ID | Task | Files | Depends | Size | Done when |
+| --- | --- | --- | --- | --- | --- | --- |
+| [x] | T-450 | **Sections and filters**: Tagihan / Pengeluaran / Laporan as one black segment bar (`.fin-seg`); filters as light text tabs with counts (`.fin-filt`, `finCount`); on desktop the bar and the search box share one row. | part 14, theme 04 | T-442 | S | The owner's circled areas are gone (two pill rows, empty space on the right). |
+| [x] | T-451 | **One-tap Lunasi with a confirmation** (`#sheet-fin-lunas`, `finLunas` / `finLunasGo`): amount = remaining, method must be picked, "Ubah detail" opens the full form; from the detail panel and from each unpaid row. | part 14, Index.html | T-444 | S | "Ya, lunasi" is disabled until a method is picked; the bill shows Lunas at once. |
+| [x] | T-452 | **Search and status groups**: name search (every word, any order, focus kept), groups Telat (> 3 days, like the Tagihan reminder) / Belum bayar / DP / Lunas with count and total. | part 14, theme 04 | T-442 | S | Late bills come first; search filters by name. |
+| [x] | T-453 | **Compact phone head**: 2×2 KPI tiles without icons; the 6-month chart moves to the Laporan tab on phones (a fold on desktop), so the first bill is visible at 390×844. | part 14, theme 04 | — | S | The first bill is visible without scrolling. |
+| [x] | T-454 | **Two panels on desktop (≥ 1024 px)**: the top row opens on the right by itself, ↑/↓ moves between bills. | part 14 | T-443 | S | Browser check "Keuangan · UI gelombang 2". |
+| [x] | T-455 | **Client history** in the bill panel (packages, total paid, all remaining, other bills, Halaman klien), **swipe left** on phones (WA tagih / Lunasi), **richer report** (vs last month, payment methods, average days to paid). | part 14, theme 04 | T-442 | M | All from the page data, no new server call. |
+
 ## After H
 
 - Update [../Agent.md](../Agent.md) §7, `apps-script/README.md` (Indonesian) and the root `README.md`, and tick the boxes above.

@@ -1457,14 +1457,17 @@ async function contrastReport(page) {
     check(det.includes('Lunasi') && det.includes('Bayar'), 'fast finance: the bill detail shows Lunasi and Bayar at once');
     check(count('getBillDetail') === 0, 'fast finance: the detail needs no server call');
     // Lunasi: lembar terbuka seketika, tagihan langsung lunas di layar
-    await page.click('#detail-body .btn-outline');
+    await page.click('#detail-body .fin-lunas-btn');
     await page.waitForTimeout(150);
-    check(await visible(page, '#sheet-fin-payment'), 'fast finance: Lunasi opens the payment sheet at once');
+    check(await visible(page, '#sheet-fin-lunas'), 'fast finance: Lunasi opens the one-tap confirmation at once');
     check(count('getFinanceCategories') === 0, 'fast finance: the sheet needs no categories call');
-    await page.click('#fin-pay-save');
+    check(await page.evaluate(() => document.getElementById('fin-lunas-go').disabled && document.getElementById('fin-lunas-text').textContent.includes('Cici Cepat')), 'fast finance: Ya, lunasi waits until a method is picked; the question names the client');
+    await page.click('#fin-lunas-method .chip >> nth=1');
+    await page.click('#fin-lunas-go');
     await page.waitForTimeout(400);
     check(((await page.textContent('#detail-body')) || '').includes('Lunas'), 'fast finance: the bill shows Lunas before the server answers');
     check(!((await page.textContent('#fin-list')) || '').includes('Cici Cepat'), 'fast finance: the paid bill leaves Belum lunas at once');
+    check(await page.evaluate(() => { const r = window.finTotals; return typeof r === 'function'; }), 'fast finance: totals helper is exposed');
     const cici = env.sheet('Tagihan').rows.find(r => r[3] === 'Cici Cepat');
     const ciciPays = () => (env.sheet('Pembayaran') ? env.sheet('Pembayaran').rows.slice(1) : []).filter(r => r[1] === cici[0]).length;
     check(ciciPays() === 0, 'fast finance: the server has not answered yet (slow server)');
@@ -1512,6 +1515,71 @@ async function contrastReport(page) {
     await second.page.waitForTimeout(100);
     check(((await second.page.textContent('#fin-list')) || '').includes('Cici Cepat') && !(await second.page.locator('#view-finance .skeleton').count()), 'fast finance: the first tap on Keuangan is already filled');
     await second.page.context().close();
+  })().catch(sectionCrash);
+  // ── Keuangan UI (gelombang 2): cari, kelompok status, Lunasi di baris, geser, riwayat klien, laporan ─────────
+  console.log('Keuangan · UI gelombang 2');
+  await (async () => {
+    const env = richEnv();
+    const token = env.adminToken();
+    env.call('updateAppSettings', token, { finance: { enabled: true } });
+    env.call('addMember', token, { name: 'Dodi Telat', phone: '081399990003', goal: 'Fit', packageId: 'P1' });
+    env.call('addMember', token, { name: 'Eka Baru', phone: '081399990004', goal: 'Fit', packageId: 'P1' });
+    const late = env.sheet('Tagihan').rows.find(r => r[3] === 'Dodi Telat');
+    late[7] = new Date(Date.now() - 9 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const { page, errors } = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_fin_on: '1' }, { touch: true, wait: 1400 });
+    await page.evaluate(() => window.navigate('finance'));
+    await page.waitForTimeout(1500);
+    const list = () => page.textContent('#fin-list').then(t => t || '');
+    check(/Telat/i.test(await list()) && (await list()).indexOf('Dodi Telat') < (await list()).indexOf('Eka Baru'), 'ui: open bills are grouped, late ones first');
+    check(await page.evaluate(() => !document.querySelector('#fin-head .fin-fold').open), 'ui: the 6-month chart is folded on phones');
+    const firstBill = await page.evaluate(() => { const r = document.querySelector('#fin-list .fin-bill'); return r ? r.getBoundingClientRect().top < window.innerHeight : false; });
+    check(firstBill, 'ui: the first bill is visible without scrolling on a phone');
+    await page.fill('#fin-q', 'eka');
+    await page.waitForTimeout(150);
+    check((await list()).includes('Eka Baru') && !(await list()).includes('Dodi Telat'), 'ui: search filters by name');
+    check(await page.evaluate(() => document.activeElement && document.activeElement.id === 'fin-q'), 'ui: the search box keeps focus while typing');
+    await page.fill('#fin-q', '');
+    await page.waitForTimeout(150);
+    await page.click('#fin-list .fin-bill:has-text("Eka Baru") .fin-row-pay');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-fin-lunas') && !(await visible(page, '#detail-panel.open')), 'ui: Lunasi on a row opens the confirmation, not the detail');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
+    // geser kiri
+    const box = await page.locator('#fin-list .fin-swipe').first().boundingBox();
+    await page.evaluate(b => {
+      const el = document.elementFromPoint(b.x + b.width - 30, b.y + b.height / 2);
+      const t = (x) => new Touch({ identifier: 1, target: el, clientX: x, clientY: b.y + b.height / 2 });
+      el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [t(b.x + b.width - 30)] }));
+      for (let i = 1; i <= 6; i++) el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, touches: [t(b.x + b.width - 30 - i * 30)] }));
+      el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [] }));
+    }, box);
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => !!document.querySelector('#fin-list .fin-swipe.open')), 'ui: swiping a row left reveals WA tagih and Lunasi');
+    // riwayat klien + laporan
+    await page.evaluate(() => { document.querySelectorAll('.fin-swipe.open').forEach(w => w.classList.remove('open')); window.finOpenBill(document.querySelector('#fin-list .fin-bill').getAttribute('data-key').slice(5)); });
+    await page.waitForTimeout(600);
+    check(((await page.textContent('#detail-body')) || '').includes('Riwayat klien'), 'ui: the bill detail shows the client history');
+    await page.evaluate(() => { window.closeDetail(); window.finTab('report'); });
+    await page.waitForTimeout(500);
+    const rep = await list();
+    check(rep.includes('Dibanding') && rep.includes('Metode bayar') && rep.includes('Sampai lunas'), 'ui: the report compares with last month, shows methods and days to paid');
+    check((await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'ui: no sideways scroll');
+    check(errors.length === 0, 'ui: no page errors (' + errors.join(' | ') + ')');
+    await page.context().close();
+    // desktop: dua panel, ↑/↓
+    const d = await openPage(browser, env, '/Index', [], { xnk_admin_token: token, xnk_fin_on: '1' }, { viewport: DESKTOP, wait: 1400 });
+    await d.page.click('#side-nav .nav-item[data-view="finance"]');
+    await d.page.waitForTimeout(1500);
+    const k0 = await d.page.evaluate(() => document.querySelector('#detail-panel.open') && document.querySelector('#fin-list .fin-bill.selected') ? document.querySelector('#fin-list .fin-bill.selected').getAttribute('data-key') : '');
+    check(!!k0, 'desktop: the first bill opens on the right by itself');
+    await d.page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await d.page.keyboard.press('ArrowDown');
+    await d.page.waitForTimeout(300);
+    const k1 = await d.page.evaluate(() => (document.querySelector('#fin-list .fin-bill.selected') || {}).getAttribute ? document.querySelector('#fin-list .fin-bill.selected').getAttribute('data-key') : '');
+    check(k1 && k1 !== k0, 'desktop: ↓ moves to the next bill');
+    check(d.errors.length === 0, 'desktop ui: no page errors (' + d.errors.join(' | ') + ')');
+    await d.page.context().close();
   })().catch(sectionCrash);
   console.log('Keuangan mati: menu tersembunyi');
   await (async () => {
