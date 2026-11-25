@@ -1183,16 +1183,17 @@ function moneyView_() {
       if (s.due) { var st = subStatus_(s, today); out.upcoming.push({ slug: slug, due: s.due, amount: s.price, cycle: s.cycle, state: st.state, days: st.days }); }
     }
     if (!left && s.setup.kind !== 'none' && !s.setup.paidAt) out.setupUnpaid.push(slug);
-    s.pay.forEach(function (p) {
+    s.pay.forEach(function (p, i) {
       var d = validDate_(p.date) ? p.date : String(p.at || '').slice(0, 10), amt = Number(p.amount) || 0;
       if (!validDate_(d)) return;
       if (byKey[d.slice(0, 7)]) byKey[d.slice(0, 7)].amount += amt;
       if (d.slice(0, 7) === monthKey) out.monthIn += amt;
-      out.payments.push({ slug: slug, date: d, at: String(p.at || ''), amount: amt, kind: p.kind || 'langganan', note: p.note || '' });
+      out.payments.push({ slug: slug, date: d, at: String(p.at || ''), amount: amt, kind: p.kind || 'langganan', note: p.note || '', i: i });
     });
   });
   out.upcoming.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : 0; });
-  out.payments.sort(function (a, b) { var x = a.date + a.at, y = b.date + b.at; return x < y ? 1 : x > y ? -1 : 0; });   // terbaru dulu
+  out.payments.sort(function (a, b) { var x = a.date + a.at, y = b.date + b.at; return x < y ? 1 : x > y ? -1 : b.i - a.i; });   // terbaru dulu; waktu sama = yang dicatat belakangan dulu
+  out.payments.forEach(function (p) { delete p.i; });
   out.payments = out.payments.slice(0, 20);
   return out;
 }
