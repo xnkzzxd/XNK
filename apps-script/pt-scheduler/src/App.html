@@ -666,6 +666,9 @@
   // Tab ditutup sebelum pesanan pertama sempat dikirim: kirim sekali dengan keepalive (jawaban tidak dibaca; pembukaan
   // berikutnya mengirim ulang dengan cid yang sama dan server memutar ulang jawabannya).
   window.addEventListener('pagehide', function () {
+    // Lepas giliran kirim milik tab ini: halaman yang dibuka lagi tidak perlu menunggu lease 20 detik habis (2026-11:
+    // "Lunasi" pertama setelah aplikasi dibuka ulang tertahan sampai 20 detik).
+    try { const l = JSON.parse(_lsGet(SQ_LEASE) || 'null'); if (l && l.tab === sq.tab) _lsSet(SQ_LEASE, null); } catch (e) {}
     try {
       if (typeof window.XNK_TRANSPORT === 'function' || !window.XNK_CONFIG || !window.XNK_CONFIG.exec || typeof fetch !== 'function') return;
       const it = sqRead().find(x => x.state === 'pending' && !x.tries && sqMine(x));
@@ -2740,6 +2743,7 @@
       if (ok(b.hub)) { window._hub = b.hub; window._hubAt = Date.now(); }
       if (ok(b.memberVers)) { window.memberVers = b.memberVers; window.memberVersAt = Date.now(); }   // versi data per klien (salinan halaman klien)
       if (b.finVer) window.finVer = b.finVer;   // versi keuangan: salinan xnk_fin_cache dipakai selama sama
+      if (window.finPrefetch) window.finPrefetch();   // Keuangan disiapkan di latar
       ui.revenue = ok(b.revenue) ? b.revenue : { error: true };
       renderRevenueKpi();
       window.updateUI();
@@ -11021,7 +11025,14 @@
     clearTimeout(fin.soon);
     fin.soon = setTimeout(function () { if (window.currentView === 'finance') finLoad({ force: true }); }, 1500);
   }
-  window.finRefresh = function () { return finLoad({ force: true, fresh: true }); };   // tarik-untuk-segarkan di halaman Keuangan
+  window.finRefresh = function () { return finLoad({ force: true, fresh: true }); };
+  // Siapkan di latar (keputusan pemilik 2026-11-25): setelah data panel datang, Keuangan dimuat diam-diam (hanya bila
+  // salinannya perlu diperbarui), supaya ketukan pertama pada menu Keuangan pun langsung berisi.
+  window.finPrefetch = function () {
+    if (!finOn() || ui.mode !== 'admin' || navigator.onLine === false) return;
+    clearTimeout(fin.pre);
+    fin.pre = setTimeout(function () { if (window.currentView !== 'finance') finLoad(); }, 2500);
+  };   // tarik-untuk-segarkan di halaman Keuangan
   window.finStale = function () { fin.ver = ''; fin.at = 0; if (window.currentView === 'finance') finLoad({ force: true }); };
 
   window.finGo = function () { if (finOn()) window.navigate('finance'); };
@@ -11376,11 +11387,6 @@
     if (!f) { $(input.getAttribute('data-lbl')).textContent = 'Tambah foto bukti'; return; }
     finShrink(f).then(function (b64) { fin.proof = b64; $(input.getAttribute('data-lbl')).textContent = 'Foto siap diunggah'; }).catch(finErr);
   };
-  function finUploadProof(kind, id) {
-    if (!fin.proof) return Promise.resolve();
-    const b64 = fin.proof; fin.proof = null;
-    return adminCall('uploadFinanceProof', kind, id, b64, 'image/jpeg');
-  }
   window.finViewProof = function (kind, id, boxId) {
     adminCall('getFinanceProof', kind, id).then(function (r) { $(boxId).innerHTML = '<img src="' + r.dataUrl + '" alt="Bukti" style="max-width:100%;border-radius:12px">'; }).catch(finErr);
   };
@@ -11418,32 +11424,51 @@
     if (fin.cats && (fin.data || billId || payId)) { fill(fin.data ? fin.data.bills : []); return; }
     Promise.all([finEnsureCats(), (!billId && !payId) ? adminCall('getBills', { status: 'open' }) : Promise.resolve([])]).then(function (res) { fill(res[1]); }).catch(finErr);
   };
+  // Foto bukti yang sudah diperkecil, diambil dari lembar: unggah setelah baris tersimpan (id asli dari server).
+  function finTakeProof(kind) {
+    const b64 = fin.proof;
+    fin.proof = null;
+    if (!b64) return null;
+    return function (id) {
+      if (!id) return;
+      fin.uploads = (fin.uploads || 0) + 1;
+      adminCall('uploadFinanceProof', kind, id, b64, 'image/jpeg').then(function () {
+        window.showToast('Foto bukti terunggah.');
+        const list = fin.data && (kind === 'payment' ? fin.data.payments : fin.data.expenses);
+        (list || []).forEach(function (x) { if (x.id === id) x.hasProof = true; });
+        finCacheSave(); if (window.currentView === 'finance') finPaint();
+      }).catch(function (err) {
+        window.showToast('Foto bukti belum terunggah (' + waitErr(err) + '). Buka ' + (kind === 'payment' ? 'pembayaran' : 'pengeluaran') + ' itu, lalu unggah lagi.', 'cloud-alert');
+      }).then(function () { fin.uploads--; });
+    };
+  }
+  window.addEventListener('beforeunload', function (e) { if (fin.uploads > 0) { e.preventDefault(); e.returnValue = ''; } });
   window.finPaySave = function (e) {
     e.preventDefault();
     const billId = fin.payPick || $('fin-pay-bill').value;
     const p = { id: fin.payId || undefined, billId: billId || undefined, amount: finNum($('fin-pay-amount').value), date: $('fin-pay-date').value, method: finPicked('fin-pay-method'), note: $('fin-pay-note').value, category: finPicked('fin-pay-cat') };
     // Tanpa foto bukti: tagihan, ringkasan dan panel langsung berubah; antrean simpan mengirim (nomor pesanan mencegah
     // pembayaran dobel). Pembayaran baru memakai id sementara, jadi "Ubah" sebelum server menjawab tetap ke baris yang benar.
-    if (!fin.proof) {
-      const tmp = p.id ? '' : window.tmpId();
-      const undo = finPayLocal(p, tmp);
-      optimistic({ q: { mode: 'admin', fn: 'savePayment', args: [p] }, tmp: tmp || undefined, sheet: true, errEl: 'fin-pay-err', ok: 'Pembayaran tersimpan.', label: 'Pembayaran', undo: undo,
-        then: function (r) {
-          if (fin.data && r) {
-            if (tmp && r.id) finServerId(fin.data.payments, tmp, r.id);
-            const b = r.bill && finBillById(r.bill.id);
-            if (b) Object.assign(b, { paid: r.bill.paid, remaining: r.bill.remaining, status: r.bill.status, lastPaid: r.bill.lastPaid });
-            finCacheSave(); finPaint();
-          }
-          finReloadSoon();   // bagi hasil coach dan angka lain dari server, diam-diam
-        } });
-      return;
-    }
-    const btn = $('fin-pay-save'), done = busy(btn, 'Menyimpan…');
-    adminCall('savePayment', p).then(function (r) { return finUploadProof('payment', r.id); }).then(function () {
-      done(); window.closeModal(); window.showToast('Pembayaran tersimpan.'); finLoad({ force: true });
-    }).catch(function (err) { done(); $('fin-pay-err').textContent = waitErr(err); });
+    if (!fin.proof) { finPaySend(p, 'fin-pay-err', 'Pembayaran tersimpan.'); return; }
+    // Dengan foto bukti (keputusan pemilik 2026-11-25): pembayaran tetap langsung di layar dan masuk antrean simpan; foto
+    // diunggah di belakang setelah server memberi id. Foto hanya di memori (terlalu besar untuk antrean di perangkat).
+    finPaySend(p, 'fin-pay-err', 'Pembayaran tersimpan. Foto bukti diunggah…', finTakeProof('payment'));
   };
+  function finPaySend(p, errEl, ok, upload) {
+    const tmp = p.id ? '' : window.tmpId();
+    const undo = finPayLocal(p, tmp);
+    optimistic({ q: { mode: 'admin', fn: 'savePayment', args: [p] }, tmp: tmp || undefined, sheet: true, errEl: errEl, ok: ok, label: 'Pembayaran', undo: undo,
+      then: function (r) {
+        if (fin.data && r) {
+          if (tmp && r.id) finServerId(fin.data.payments, tmp, r.id);
+          const b = r.bill && finBillById(r.bill.id);
+          if (b) Object.assign(b, { paid: r.bill.paid, remaining: r.bill.remaining, status: r.bill.status, lastPaid: r.bill.lastPaid });
+          finCacheSave(); finPaint();
+        }
+        if (upload) upload(r && r.id);
+        finReloadSoon();   // bagi hasil coach dan angka lain dari server, diam-diam
+      } });
+  }
   window.finPayArchive = function () {
     const id = fin.payId;
     window.closeModal();
@@ -11476,17 +11501,17 @@
   window.finExpSave = function (e) {
     e.preventDefault();
     const x = { id: fin.expId || undefined, amount: finNum($('fin-exp-amount').value), date: $('fin-exp-date').value, category: finPicked('fin-exp-cat'), method: finPicked('fin-exp-method'), note: $('fin-exp-note').value };
-    if (!fin.proof) {   // tanpa foto bukti: langsung di layar, antrean simpan (nomor pesanan mencegah dobel)
-      const tmp = x.id ? '' : window.tmpId();
-      const undo = finExpLocal(x, tmp);
-      optimistic({ q: { mode: 'admin', fn: 'saveExpense', args: [x] }, tmp: tmp || undefined, sheet: true, errEl: 'fin-exp-err', ok: 'Pengeluaran tersimpan.', label: 'Pengeluaran', undo: undo,
-        then: function (r) { if (fin.data && tmp && r && r.id) { finServerId(fin.data.expenses, tmp, r.id); finCacheSave(); } finReloadSoon(); } });
-      return;
-    }
-    const btn = $('fin-exp-save'), done = busy(btn, 'Menyimpan…');
-    adminCall('saveExpense', x)
-      .then(function (r) { return finUploadProof('expense', r.id); }).then(function () { done(); window.closeModal(); window.showToast('Pengeluaran tersimpan.'); finLoad({ force: true }); })
-      .catch(function (err) { done(); $('fin-exp-err').textContent = waitErr(err); });
+    // Langsung di layar, antrean simpan (nomor pesanan mencegah dobel); foto nota diunggah di belakang setelah ada id.
+    const upload = finTakeProof('expense');
+    const tmp = x.id ? '' : window.tmpId();
+    const undo = finExpLocal(x, tmp);
+    optimistic({ q: { mode: 'admin', fn: 'saveExpense', args: [x] }, tmp: tmp || undefined, sheet: true, errEl: 'fin-exp-err', ok: upload ? 'Pengeluaran tersimpan. Foto nota diunggah…' : 'Pengeluaran tersimpan.', label: 'Pengeluaran', undo: undo,
+      then: function (r) {
+        if (fin.data && tmp && r && r.id) { finServerId(fin.data.expenses, tmp, r.id); finCacheSave(); }
+        const id = r && r.id ? r.id : x.id;
+        if (upload) upload(id);
+        finReloadSoon();
+      } });
   };
   window.finExpArchive = function () {
     const id = fin.expId;

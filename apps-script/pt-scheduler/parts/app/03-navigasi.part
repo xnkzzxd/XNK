@@ -599,6 +599,7 @@
       if (ok(b.hub)) { window._hub = b.hub; window._hubAt = Date.now(); }
       if (ok(b.memberVers)) { window.memberVers = b.memberVers; window.memberVersAt = Date.now(); }   // versi data per klien (salinan halaman klien)
       if (b.finVer) window.finVer = b.finVer;   // versi keuangan: salinan xnk_fin_cache dipakai selama sama
+      if (window.finPrefetch) window.finPrefetch();   // Keuangan disiapkan di latar
       ui.revenue = ok(b.revenue) ? b.revenue : { error: true };
       renderRevenueKpi();
       window.updateUI();

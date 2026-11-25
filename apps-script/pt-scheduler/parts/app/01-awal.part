@@ -666,6 +666,9 @@
   // Tab ditutup sebelum pesanan pertama sempat dikirim: kirim sekali dengan keepalive (jawaban tidak dibaca; pembukaan
   // berikutnya mengirim ulang dengan cid yang sama dan server memutar ulang jawabannya).
   window.addEventListener('pagehide', function () {
+    // Lepas giliran kirim milik tab ini: halaman yang dibuka lagi tidak perlu menunggu lease 20 detik habis (2026-11:
+    // "Lunasi" pertama setelah aplikasi dibuka ulang tertahan sampai 20 detik).
+    try { const l = JSON.parse(_lsGet(SQ_LEASE) || 'null'); if (l && l.tab === sq.tab) _lsSet(SQ_LEASE, null); } catch (e) {}
     try {
       if (typeof window.XNK_TRANSPORT === 'function' || !window.XNK_CONFIG || !window.XNK_CONFIG.exec || typeof fetch !== 'function') return;
       const it = sqRead().find(x => x.state === 'pending' && !x.tries && sqMine(x));

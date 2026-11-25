@@ -1486,10 +1486,32 @@ async function contrastReport(page) {
     await page.evaluate(() => { window.navigate('finance'); window.finFilter('all'); });
     await page.waitForTimeout(150);
     check(((await page.textContent('#fin-list')) || '').includes('Cici Cepat') && (await skels()) === 0, 'fast finance: reopening shows the device copy at once');
+    // foto nota: lembar tertutup seketika, foto diunggah di belakang setelah ada id
+    await page.evaluate(() => { window.finTab('exps'); window.finOpenExpense(null); });
+    await page.waitForTimeout(300);
+    await page.fill('#fin-exp-amount', '45000');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    await page.setInputFiles('#fin-exp-proof', { name: 'nota.png', mimeType: 'image/png', buffer: png });
+    await page.waitForTimeout(500);
+    await page.click('#fin-exp-save');
+    await page.waitForTimeout(600);   // lembar selesai menutup; server belum perlu menjawab
+    check(!(await visible(page, '#sheet-fin-expense')) && ((await page.textContent('#fin-list')) || '').includes('45.000'), 'fast finance: an expense with a photo shows at once');
+    await page.waitForTimeout(2500);
+    const exp = env.call('getExpenses', token, {}).find(e => e.amount === 45000);
+    check(!!exp && exp.hasProof, 'fast finance: the photo is uploaded in the background');
     await page.evaluate(() => window.clearFinCache());
     check(await page.evaluate(() => localStorage.getItem('xnk_fin_cache') === null), 'fast finance: clearFinCache removes the copy');
     check(errors.length === 0, 'fast finance: no page errors (' + errors.join(' | ') + ')');
     await page.context().close();
+    // siapkan di latar: tanpa membuka Keuangan, datanya sudah dimuat; menu Keuangan langsung berisi
+    const calls2 = [];
+    const second = await openPage(browser, env, '/Index', calls2, { xnk_admin_token: token, xnk_fin_on: '1' }, { touch: true, delay: { getFinancePage: 300 }, wait: 1400 });
+    await second.page.waitForTimeout(4500);
+    check(calls2.indexOf('getFinancePage') !== -1, 'fast finance: the page data is prepared in the background');
+    await second.page.evaluate(() => { window.navigate('finance'); window.finFilter('all'); });
+    await second.page.waitForTimeout(100);
+    check(((await second.page.textContent('#fin-list')) || '').includes('Cici Cepat') && !(await second.page.locator('#view-finance .skeleton').count()), 'fast finance: the first tap on Keuangan is already filled');
+    await second.page.context().close();
   })().catch(sectionCrash);
   console.log('Keuangan mati: menu tersembunyi');
   await (async () => {

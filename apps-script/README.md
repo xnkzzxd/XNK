@@ -437,6 +437,8 @@ Pengaturan → **Keuangan** (mati sampai Anda menyalakannya):
   - **Detail tagihan dan lembar pembayaran** terbuka seketika, tanpa menunggu server.
   - **Lunasi / Bayar / pengeluaran** tanpa foto langsung mengubah status, sisa dan angka ringkasan di layar. Kalau server menolak, perubahan dikembalikan dan muncul tanda **Belum tersimpan**.
   - **Tarik ke bawah** di halaman Keuangan hanya memuat ulang Keuangan, bukan seluruh panel.
+  - **Disiapkan di latar**: data Keuangan dimuat diam-diam setelah panel terbuka, jadi ketukan pertama pun langsung berisi.
+  - **Foto bukti tidak membuat menunggu**: pembayaran/pengeluaran langsung tampil, foto diunggah di belakang (jangan tutup aplikasi sampai muncul "Foto bukti terunggah").
 
 ## Tampilan Klien baru (Fase Q)
 

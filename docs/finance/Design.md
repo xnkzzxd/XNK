@@ -184,6 +184,7 @@ status    = paid ≥ net ? 'Lunas' : paid > 0 ? 'DP' : 'Belum bayar'
     - `_finEnsure_` (full schema check) runs at most every 6 h (`FIN_ENSURE_KEY` in CacheService).
     - `savePayment` reads Tagihan and Pembayaran once and computes the status from memory. It went from 19 sheet reads to 6.
     - Finance writers bump only the bill owner's member version, not `'*'`.
+- Prepared in the background (T-446): `finPrefetch` runs 2.5 s after `getAdminMore` (only when the copy needs it), so the first tap on Keuangan is already filled. A proof photo no longer makes a save wait: the row shows at once, goes through the sync queue, and the shrunk photo (memory only, too big for the device queue) uploads once the server gives the id; a failed upload says so in a toast; closing the tab while a photo uploads asks first.
 - Pull to refresh on the Keuangan page reloads Keuangan only (`refreshAll()` → `finRefresh`, a quiet `getFinancePage` with `fresh`). Calls from code (`refreshAll(true)`) still reload the whole panel. A queued finance save that finishes after a reload calls `finStale`, not a full reload.
 - Status pills: Lunas = `.pill` filled ink, DP = `.pill` outline, Belum bayar = `.pill` with `.status-dot` warning token. Words are always shown, not colour alone.
 - Empty states use `.empty` with one action: "Belum ada pengeluaran bulan ini. [+ Pengeluaran]".
