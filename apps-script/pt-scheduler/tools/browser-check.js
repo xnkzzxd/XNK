@@ -41,7 +41,26 @@ function render(page) {
 
 const STUBS = {
   'cdn.tailwindcss.com': 'window.tailwind = window.tailwind || {};',
-  'unpkg.com/lucide': 'window.lucide = { createIcons: function() {} };',
+  // Like lucide 1.x: createIcons swaps EVERY [data-lucide] element (also svgs drawn before, they keep data-lucide) for a
+  // new <svg>; createElement / icons draw one icon. An empty stub hid the endless redraw loop that heated phones (2026-11-20).
+  'unpkg.com/lucide': `(function () {
+    var NS = 'http://www.w3.org/2000/svg';
+    function el(node, attrs) {
+      var s = document.createElementNS(NS, 'svg');
+      Object.keys(attrs || {}).forEach(function (k) { s.setAttribute(k, attrs[k]); });
+      (node || []).forEach(function (c) { var e = document.createElementNS(NS, c[0]); Object.keys(c[1] || {}).forEach(function (k) { e.setAttribute(k, c[1][k]); }); s.appendChild(e); });
+      window.__iconDraws = (window.__iconDraws || 0) + 1;
+      return s;
+    }
+    var icons = new Proxy({}, { get: function (t, k) { return typeof k === 'string' ? [['circle', { cx: 12, cy: 12, r: 10 }]] : undefined; } });
+    window.lucide = { icons: icons, createElement: el, createIcons: function () {
+      document.querySelectorAll('[data-lucide]').forEach(function (n) {
+        var a = {}; for (var i = 0; i < n.attributes.length; i++) a[n.attributes[i].name] = n.attributes[i].value;
+        a['class'] = 'lucide lucide-' + a['data-lucide'] + (n.getAttribute('class') ? ' ' + n.getAttribute('class') : '');
+        if (n.parentNode) n.parentNode.replaceChild(el(icons.X, a), n);
+      });
+    } };
+  })();`,
   'fullcalendar': `window.FullCalendar = { Calendar: function(el, opts) {
       window.__calendarOpts = opts; this.render = function() { el.setAttribute('data-fc', 'stub'); }; this.destroy = function() {}; } };`,
   'cropper.min.js': 'window.Cropper = function() { return { destroy: function() {}, getCroppedCanvas: function() { return document.createElement("canvas"); } }; };',
@@ -248,6 +267,46 @@ async function shot(page, name) {
   await page.waitForTimeout(700); // let entrance animations finish
   await page.screenshot({ path: path.join(SHOTS, name + '.png') });
 }
+// A screen nobody touches must stop working: no icon redraws and no new elements over and over (the icon loop of
+// 2026-11-20 redrew every icon ~46 times a second and heated phones). 12 slices of 250 ms; a render or two is fine.
+async function idleCheck(page, label) {
+  await page.waitForTimeout(1500);
+  const r = await page.evaluate(() => new Promise(res => {
+    let added = 0, busy = 0, last = [window.__iconDraws || 0, 0], n = 0, hidden = 0, same = 0;
+    const shown = el => !!el && el.getClientRects().length > 0;
+    // Text a timer rewrites: into elements not on screen (another tab) or with the same text = work for nothing.
+    const mo = new MutationObserver(list => list.forEach(m => {
+      if (m.type === 'characterData') { if (!shown(m.target.parentElement)) hidden++; if (m.oldValue === m.target.data) same++; return; }
+      const add = [...m.addedNodes], rem = [...m.removedNodes];
+      add.forEach(x => { if (x.nodeType === 1) added++; });
+      if ((add.length || rem.length) && add.concat(rem).every(x => x.nodeType === 3)) {
+        if (!shown(m.target)) hidden++;
+        if (add.map(x => x.data).join('') === rem.map(x => x.data).join('')) same++;
+      }
+    }));
+    mo.observe(document.body, { childList: true, subtree: true, characterData: true, characterDataOldValue: true });
+    const t = setInterval(() => {
+      const now = [window.__iconDraws || 0, added];
+      if (now[0] !== last[0] || now[1] !== last[1]) busy++;
+      last = now;
+      if (++n === 12) { clearInterval(t); mo.disconnect(); res({ busy: busy, added: added, hidden: hidden, same: same, undrawn: document.querySelectorAll('i[data-lucide]').length }); }
+    }, 250);
+  }));
+  check(r.busy <= 3, label + ': an untouched screen stops working (busy in ' + r.busy + ' of 12 slices, ' + r.added + ' new elements)');
+  check(r.undrawn === 0, label + ': every icon is drawn (' + r.undrawn + ' left as <i>)');
+  check(r.hidden === 0 && r.same === 0, label + ': timers write no text off-screen and no unchanged text (' + r.hidden + ' off-screen, ' + r.same + ' unchanged in 3 s)');
+}
+// No endless animation that repaints every frame (anything but transform / opacity, or inside an SVG) or runs off-screen.
+async function animCheck(page, label) {
+  const bad = await page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running' && a.effect && a.effect.target && a.effect.getTiming().iterations === Infinity).map(a => {
+    const t = a.effect.target, props = [...new Set(a.effect.getKeyframes().flatMap(k => Object.keys(k).filter(x => !/^(offset|easing|composite|computedOffset)$/.test(x))))];
+    const gpu = props.length > 0 && props.every(p => p === 'transform' || p === 'opacity') && !(t instanceof SVGElement && t.tagName.toLowerCase() !== 'svg');
+    const b = t.getBoundingClientRect(), on = t.getClientRects().length > 0 && b.bottom > 0 && b.top < innerHeight && b.right > 0 && b.left < innerWidth;
+    const cls = String(t.className && t.className.baseVal != null ? t.className.baseVal : t.className || '').trim().split(/\s+/).slice(0, 2).join('.');
+    return gpu && on ? null : (a.animationName || 'animation') + ' on ' + t.tagName.toLowerCase() + (cls ? '.' + cls : '') + (a.effect.pseudoElement || '') + (gpu ? ' (off-screen)' : ' (' + props.join('+') + ')');
+  }).filter(Boolean));
+  check(bad.length === 0, label + ': no endless animation that repaints every frame or runs off-screen' + (bad.length ? ' ' + JSON.stringify(bad.slice(0, 5)) : ''));
+}
 async function shownUrls(page, navigations) {
   const opened = await page.evaluate(() => window.__opened.map(w => w.location.href));
   return opened.concat(navigations).map(u => { try { return decodeURIComponent(u); } catch (e) { return u; } });
@@ -327,6 +386,7 @@ async function contrastReport(page) {
     const revenueText = await page.evaluate(() => document.querySelector('#kpi-revenue-tile').textContent);
     check(revenueText.includes('Rp'), 'revenue KPI loaded');
     check(revenueText.includes('65% dari harga paket'), 'revenue KPI says it is 65% of the package price');
+    await idleCheck(page, 'panel');
     check(await page.evaluate(() => !document.getElementById('unread-badge').classList.contains('hide')), 'new-booking badge shown');
     await shot(page, 'admin-mobile-dashboard');
 
@@ -1203,6 +1263,15 @@ async function contrastReport(page) {
     check(cardTops.length === 2 && cardTops[0] === cardTops[1], 'live workout (PC): cards sit side by side in a grid ' + JSON.stringify(cardTops));
     check((await page.textContent('#wl-title')).startsWith('Hari A') && (await page.locator('#wl-screen .wl-ex >> nth=0 >> .wl-tr:not(.wl-th)').count()) === 3 && (await page.textContent('#wl-screen .wl-ex >> nth=0 >> .wl-th')).includes('SEBELUMNYA'), 'live workout: the first exercise shows its three planned sets as table rows (SET | SEBELUMNYA | KG | REP | ✓)');
     check(await visible(page, '#wl-stats') && (await page.textContent('#wl-stats')).includes('Volume') && (await page.locator('#wl-stats svg.wl-mm').count()) === 1, 'live workout: duration, volume, sets and the muscle map sit under the top bar');
+    // The 250 ms timer must only touch text that changed (each write = a layout; phones ran hot during a workout).
+    const wlWrites = await page.evaluate(() => new Promise(res => {
+      const n = { sub: 0, dur: 0 }, sub = document.getElementById('wl-sub'), dur = document.getElementById('wl-st-dur');
+      const mo = new MutationObserver(list => list.forEach(m => { const t = m.target.nodeType === 3 ? m.target.parentNode : m.target; if (t === sub) n.sub++; else if (t === dur) n.dur++; }));
+      if (sub) mo.observe(sub, { childList: true, characterData: true, subtree: true });
+      if (dur) mo.observe(dur, { childList: true, characterData: true, subtree: true });
+      setTimeout(() => { mo.disconnect(); res(Object.assign(n, { live: !!dur })); }, 2100);
+    }));
+    check(wlWrites.live && wlWrites.sub === 0 && wlWrites.dur <= 3, 'live workout: the timer writes the clock only when it changes (≤ 3 in 2 s, header untouched) ' + JSON.stringify(wlWrites));
     await shot(page, 'admin-live-workout');
     const kg0 = '#wl-screen .wl-in[data-i="0"][data-j="0"][data-f="berat"]';
     check((await page.textContent('#wl-screen .wl-ex >> nth=0')).includes('Goblet Squat (Dumbbell)') && (await page.getAttribute(kg0, 'placeholder')) === '20' && (await page.inputValue(kg0)) === '', 'live workout: rows start grey from the coach\'s target weight');
@@ -1222,6 +1291,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     check((await page.locator('#wl-screen .wl-ex >> nth=0 >> .wl-tr.done').count()) === 1 && (await page.textContent('#wl-stats')).includes('200 kg'), 'table: ✓ ticks the row and the volume counts it (25 × 8)');
     check((await page.locator('#wl-stats svg.mm-fig').count()) === 1 && (await page.locator('#wl-stats svg.mm-fig .mmf.on').count()) > 0 && (await page.locator('#wl-stats svg.mm-fig .mmf.half').count()) > 0, 'muscle map: our own figure marks the ticked exercise\'s main muscle dark and helpers light');
+    await animCheck(page, 'live workout (muscle map)');   // main muscles pulse three times, not for the whole workout
     check((await page.textContent('#wl-screen .wl-ex.cur')).includes('Bench press') && !(await visible(page, '#wl-rest')), 'superset: after a squat set the logger jumps to the bench press without rest');
     await page.click('#wl-screen .wl-ex >> nth=1 >> .wl-ck >> nth=0');
     await page.waitForTimeout(400);
@@ -2138,6 +2208,13 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('public-dashboard'));
     await page.waitForTimeout(400);
     await shot(page, 'portal-mobile-home');
+    await idleCheck(page, 'portal');
+    await animCheck(page, 'portal Hari ini');
+    await page.evaluate(() => window.navigate('public-share'));
+    await page.waitForTimeout(1200);
+    await animCheck(page, 'portal Kartu saya');
+    await page.evaluate(() => window.navigate('public-dashboard'));
+    await page.waitForTimeout(400);
 
 
     // ── Streak, badge dan perayaan (Fase D2) ───────────────────────────────────
@@ -3415,6 +3492,8 @@ async function contrastReport(page) {
     await page.evaluate(d => window.applyHostInfo(d), IPHONE);
     await page.evaluate(() => window.openSheet('sheet-fin-expense'));
     await page.waitForTimeout(600);
+    const bdf = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('#sheet-layer .backdrop')); return (s.backdropFilter || 'none') + '|' + (s.webkitBackdropFilter || 'none'); });
+    check(bdf === 'none|none', 'iPhone: an open sheet only dims the page, no full-screen blur for Safari to redo (' + bdf + ')');
     const date = await page.locator('#fin-exp-date').boundingBox();
     const form = await page.locator('#form-fin-exp').boundingBox();
     check(date && form && date.x + date.width <= form.x + form.width + 1, 'iPhone: date field stays inside the form');

@@ -16,7 +16,8 @@ const read = f => fs.readFileSync(path.join(SRC, f), 'utf8');
 const gs = fs.readdirSync(SRC).filter(f => f.endsWith('.gs')).sort().map(read).join('\n;\n');
 const runtime = fs.readFileSync(path.join(__dirname, 'demo-runtime.js'), 'utf8');
 const page = read('Index.html').replace(/<\?!=\s*include\('([^']+)'\)\s*\?>/g, (_, f) => read(f.endsWith('.html') ? f : f + '.html'));
-if (/<\?/.test(page)) throw new Error('Index.html has a template tag the demo build does not handle.');
+// Only real template tags; the "<?xml" string in the .xlsx export (part 18, T-2255) is plain text.
+if (/<\?(?!xml\b)/.test(page)) throw new Error('Index.html has a template tag the demo build does not handle.');
 
 const js = runtime.replace("'/*__GS__*/", () => JSON.stringify(gs).replace(/<\//g, '<\\/') + " + '");
 const head = '<meta name="robots" content="noindex, nofollow">\n<script>\n' + js + '\n</script>\n';
