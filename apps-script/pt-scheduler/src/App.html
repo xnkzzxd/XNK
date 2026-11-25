@@ -4749,7 +4749,8 @@
       '<div class="ring-center"><span class="num" style="font-size:var(--fs-3xl);font-weight:800" id="profile-remaining">' + rem + '</span><span class="eyebrow">dari <span id="profile-total">' + total + '</span></span></div></div>' +
       '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p><p class="muted">' + used + ' terpakai · ' + doneCount + ' selesai</p></div></div>' +
       '<div class="btn-row client-hero-actions"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
-      '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div></div>';
+      '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button>' +
+      '<button type="button" class="btn ' + (rem === 0 ? 'btn-inverse' : 'btn-ghost-ink') + '" id="profile-renew" onclick="window.openRenewMember(\'' + h(m.id) + '\')">' + icon('repeat') + 'Perpanjang</button></div></div>';
     // Tab bagian halaman
     const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['latihan', 'Latihan', 'dumbbell'], ['gizi', 'Gizi', 'apple']];
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
@@ -5370,10 +5371,36 @@
     el.value = id || '';
   };
 
+  // Lembar yang sama untuk "Klien baru" dan "Perpanjang paket" (halaman klien). Perpanjang = nomor
+  // yang sudah terdaftar, jadi addMember di server memperpanjang paket klien itu.
+  function memberSheetMode(renew) {
+    const f = $('form-add-member');
+    f.reset();
+    f.dataset.mode = renew ? 'renew' : '';
+    $('add-member-title').textContent = renew ? 'Perpanjang paket' : 'Klien baru';
+    $('member-submit').textContent = renew ? 'Perpanjang' : 'Simpan klien';
+    $('member-phone').readOnly = !!renew;
+    $('member-phone-hint').classList.toggle('hide', !!renew);
+  }
   window.openAddMemberModal = function () {
-    $('form-add-member').reset();
+    memberSheetMode(false);
     window.populateMemberPackageOptions('member', '');
     window.populateMemberCoachOptions('member-coach', '');
+    openSheet('modal-add-member');
+  };
+  window.openRenewMember = function (id) {
+    const m = window.members.find(x => String(x.id) === String(id));
+    if (!m) { window.showToast('Data klien tidak ditemukan.'); return; }
+    memberSheetMode(true);
+    $('member-name').value = m.name || '';
+    $('member-phone').value = String(m.phone || '').replace(/\D/g, '').replace(/^62/, '');
+    $('member-goal').value = m.goal || '';   // server menimpa kolom Tujuan, jadi bawa tujuan lama
+    const pkg = window.priceListData.some(p => String(p.id) === String(m.packageId)) ? m.packageId : '';
+    window.populateMemberPackageOptions('member', pkg);
+    if (pkg) window.selectPackageOption('member', pkg);   // isi total sesi dari paket
+    else if (Number(m.totalSessions) > 0) $('member-total-sessions').value = m.totalSessions;
+    $('member-used-sessions').value = 0;
+    window.populateMemberCoachOptions('member-coach', m.preferredCoachId || '');
     openSheet('modal-add-member');
   };
 
@@ -5410,7 +5437,7 @@
       }
       window.closeModal();
       window.updateUI();
-      window.showToast(res.renewed ? 'Paket klien diperpanjang.' : 'Klien ditambahkan.');
+      window.showToast(res.renewed ? 'Paket klien diperpanjang.' : (e.target.dataset.mode === 'renew' ? 'Nomor tidak cocok, tersimpan sebagai klien baru.' : 'Klien ditambahkan.'));
       if (res.waLink) window.showWaPrompt(res.waLink, res.renewed ? 'Kabari klien soal perpanjangan paketnya.' : 'Kirim info booking ke klien baru.');
       if (window.currentView === 'clients') window.openProfile(res.id);
     }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });

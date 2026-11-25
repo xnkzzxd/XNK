@@ -545,6 +545,16 @@ async function contrastReport(page) {
     const ccStore = await page.evaluate(() => JSON.parse(localStorage.getItem('xnk_client_cache') || 'null'));
     const admCache = await page.evaluate(() => localStorage.getItem('xnk_admin_cache') || '');
     check(!!ccStore && !!ccStore.items['PT-A'] && ccStore.order[0] === 'PT-A' && !admCache.includes('foodLog'), 'cache: the client page is kept in xnk_client_cache, not in the admin cache');
+    // Tombol Perpanjang di halaman klien: lembar Klien baru terisi, nomor terkunci (addMember = perpanjang).
+    await page.click('#profile-renew');
+    await page.waitForTimeout(400);
+    const rn = await page.evaluate(() => { const m = window.members.find(x => x.id === 'PT-A'); return { open: !document.getElementById('modal-add-member').classList.contains('hide'), title: document.getElementById('add-member-title').textContent, ro: document.getElementById('member-phone').readOnly, phoneOk: sanitizePhone(document.getElementById('member-phone').value) === sanitizePhone(m.phone), name: document.getElementById('member-name').value === m.name, pkg: document.getElementById('member-package').value === String(m.packageId || ''), used: document.getElementById('member-used-sessions').value }; });
+    check(rn.open && rn.title === 'Perpanjang paket' && rn.ro && rn.phoneOk && rn.name && rn.pkg && rn.used === '0', 'renew: the client page button opens a prefilled renew sheet with the number locked (' + JSON.stringify(rn) + ')');
+    await page.evaluate(() => { window.closeModal(); window.openAddMemberModal(); });
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => document.getElementById('add-member-title').textContent === 'Klien baru' && !document.getElementById('member-phone').readOnly && !document.getElementById('member-phone').value), 'renew: "Klien baru" afterwards opens an empty sheet again');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(300);
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(300);
 

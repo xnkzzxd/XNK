@@ -569,10 +569,36 @@
     el.value = id || '';
   };
 
+  // Lembar yang sama untuk "Klien baru" dan "Perpanjang paket" (halaman klien). Perpanjang = nomor
+  // yang sudah terdaftar, jadi addMember di server memperpanjang paket klien itu.
+  function memberSheetMode(renew) {
+    const f = $('form-add-member');
+    f.reset();
+    f.dataset.mode = renew ? 'renew' : '';
+    $('add-member-title').textContent = renew ? 'Perpanjang paket' : 'Klien baru';
+    $('member-submit').textContent = renew ? 'Perpanjang' : 'Simpan klien';
+    $('member-phone').readOnly = !!renew;
+    $('member-phone-hint').classList.toggle('hide', !!renew);
+  }
   window.openAddMemberModal = function () {
-    $('form-add-member').reset();
+    memberSheetMode(false);
     window.populateMemberPackageOptions('member', '');
     window.populateMemberCoachOptions('member-coach', '');
+    openSheet('modal-add-member');
+  };
+  window.openRenewMember = function (id) {
+    const m = window.members.find(x => String(x.id) === String(id));
+    if (!m) { window.showToast('Data klien tidak ditemukan.'); return; }
+    memberSheetMode(true);
+    $('member-name').value = m.name || '';
+    $('member-phone').value = String(m.phone || '').replace(/\D/g, '').replace(/^62/, '');
+    $('member-goal').value = m.goal || '';   // server menimpa kolom Tujuan, jadi bawa tujuan lama
+    const pkg = window.priceListData.some(p => String(p.id) === String(m.packageId)) ? m.packageId : '';
+    window.populateMemberPackageOptions('member', pkg);
+    if (pkg) window.selectPackageOption('member', pkg);   // isi total sesi dari paket
+    else if (Number(m.totalSessions) > 0) $('member-total-sessions').value = m.totalSessions;
+    $('member-used-sessions').value = 0;
+    window.populateMemberCoachOptions('member-coach', m.preferredCoachId || '');
     openSheet('modal-add-member');
   };
 
@@ -609,7 +635,7 @@
       }
       window.closeModal();
       window.updateUI();
-      window.showToast(res.renewed ? 'Paket klien diperpanjang.' : 'Klien ditambahkan.');
+      window.showToast(res.renewed ? 'Paket klien diperpanjang.' : (e.target.dataset.mode === 'renew' ? 'Nomor tidak cocok, tersimpan sebagai klien baru.' : 'Klien ditambahkan.'));
       if (res.waLink) window.showWaPrompt(res.waLink, res.renewed ? 'Kabari klien soal perpanjangan paketnya.' : 'Kirim info booking ke klien baru.');
       if (window.currentView === 'clients') window.openProfile(res.id);
     }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });

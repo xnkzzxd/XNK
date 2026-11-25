@@ -915,7 +915,8 @@
       '<div class="ring-center"><span class="num" style="font-size:var(--fs-3xl);font-weight:800" id="profile-remaining">' + rem + '</span><span class="eyebrow">dari <span id="profile-total">' + total + '</span></span></div></div>' +
       '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p><p class="muted">' + used + ' terpakai · ' + doneCount + ' selesai</p></div></div>' +
       '<div class="btn-row client-hero-actions"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
-      '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button></div></div>';
+      '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button>' +
+      '<button type="button" class="btn ' + (rem === 0 ? 'btn-inverse' : 'btn-ghost-ink') + '" id="profile-renew" onclick="window.openRenewMember(\'' + h(m.id) + '\')">' + icon('repeat') + 'Perpanjang</button></div></div>';
     // Tab bagian halaman
     const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['latihan', 'Latihan', 'dumbbell'], ['gizi', 'Gizi', 'apple']];
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
