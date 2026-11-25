@@ -431,6 +431,12 @@ Pengaturan → **Keuangan** (mati sampai Anda menyalakannya):
 - **Klien bisa lihat tagihan** (mati): kartu Tagihan read-only di portal klien.
 - Pengingat **Tagihan** (Pengingat Klien, mati): tombol WA ke klien yang belum lunas lebih dari 3 hari.
 - Sheet baru: `Tagihan`, `Pembayaran`, `Pengeluaran`, `KategoriKeuangan`; `Coaches` mendapat 2 kolom bagi hasil.
+- **Lebih cepat (2026-11)**:
+  - **Satu panggilan.** Halaman Keuangan kini memuat semuanya dengan satu panggilan, lalu menyimpan salinannya di HP/laptop coach (keputusan Anda, 2026-11-25). Salinan dihapus saat keluar akun.
+  - **Langsung tampil.** Dibuka lagi, halaman langsung tampil dari salinan dan diperbarui diam-diam di belakang. Layar tidak lagi dikosongkan setiap kali data lain berubah.
+  - **Detail tagihan dan lembar pembayaran** terbuka seketika, tanpa menunggu server.
+  - **Lunasi / Bayar / pengeluaran** tanpa foto langsung mengubah status, sisa dan angka ringkasan di layar. Kalau server menolak, perubahan dikembalikan dan muncul tanda **Belum tersimpan**.
+  - **Tarik ke bawah** di halaman Keuangan hanya memuat ulang Keuangan, bukan seluruh panel.
 
 ## Tampilan Klien baru (Fase Q)
 

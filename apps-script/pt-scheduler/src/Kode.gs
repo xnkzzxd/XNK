@@ -2477,6 +2477,7 @@ function getAdminMore(token, month, year, fresh) {
       if (hit) {
         hit.at = Date.now();
         hit.memberVers = part('memberVers', _memberVersAll_);
+        hit.finVer = _finVer_();
         const ms = _traceEnd_(tr, 'getAdminMore:hit');
         if (ms) { ms.hit = true; hit.ms = ms; }
         return hit;
@@ -2498,6 +2499,7 @@ function getAdminMore(token, month, year, fresh) {
       hub: part('hub', function () { return _coachHub_(new Date(), tr); }),
       signals: part('signals', function () { return _clientSignals_(new Date()); }),
       memberVers: part('memberVers', _memberVersAll_),
+      finVer: _finVer_(),   // versi data keuangan (salinan xnk_fin_cache di perangkat coach)
       ms: _traceEnd_(tr, 'getAdminMore')
     };
     });

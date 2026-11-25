@@ -34,7 +34,7 @@ const ADMIN = [
   'getRenewalRequests', 'decideRenewal',
   'getMemberProgress', 'saveMemberMeasurement', 'deleteMemberMeasurement', 'getMemberProgressPhoto', 'getMemberShareData',
   'getPriceListAdmin', 'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'getClassGroups',
-  'syncFinanceTransactions', 'getBills', 'getBillDetail', 'saveBillAdjust', 'savePayment', 'saveExpense', 'getExpenses', 'getFinanceCategories', 'saveFinanceCategory', 'deleteFinanceCategory', 'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'getFinanceOverview', 'uploadFinanceProof', 'getFinanceProof', 'exportFinanceCsv',
+  'syncFinanceTransactions', 'getBills', 'getBillDetail', 'saveBillAdjust', 'savePayment', 'saveExpense', 'getExpenses', 'getFinanceCategories', 'saveFinanceCategory', 'deleteFinanceCategory', 'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'getFinanceOverview', 'getFinancePage', 'uploadFinanceProof', 'getFinanceProof', 'exportFinanceCsv',
 ];
 const MEMBER = [
   'getMemberProfile', 'getMemberSessions', 'getMyPushStatus', 'saveMyPush', 'removeMyPush', 'setMyPushPrefs', 'clientBookSchedule', 'clientBookRecurring',
@@ -95,7 +95,7 @@ const READ_OK = [
   'getTasksForMember', 'getTaskSummary', 'getTaskTemplates', 'sendReminderTest', 'getReminderStatus', 'installReminderTrigger',
   'getReminderLog', 'getAdminPushStatus', 'saveAdminPush', 'removeAdminPush', 'setAdminPushPrefs', 'previewReminderText',
   'getRenewalRequests', 'getMemberProgress', 'getMemberProgressPhoto', 'getMemberShareData', 'getPriceListAdmin',
-  'getClassGroups', 'getBills', 'getBillDetail', 'getExpenses', 'getFinanceCategories', 'getFinanceOverview', 'getFinanceProof',
+  'getClassGroups', 'getBills', 'getBillDetail', 'getExpenses', 'getFinanceCategories', 'getFinanceOverview', 'getFinancePage', 'getFinanceProof',
   'exportFinanceCsv', 'getMemberProfile', 'getMemberSessions', 'getMyPushStatus', 'saveMyPush', 'removeMyPush', 'setMyPushPrefs',
   'getMyTasks', 'getMyMealToday', 'getMyCoach', 'getPortalMore', 'getMyNutrition', 'getMyShopping', 'getMyFoodLog',
   'getMyContent', 'getMyProgram', 'getMyProgramProfile', 'getMyWorkout', 'getMyPackageEval', 'getMyHealthForm',

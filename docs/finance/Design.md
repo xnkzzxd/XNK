@@ -153,8 +153,38 @@ status    = paid ≥ net ? 'Lunas' : paid > 0 ? 'DP' : 'Belum bayar'
 │ ▢  ▢   (+)   ▢  ▢  tabbar│
 └──────────────────────────┘
 ```
-- First screen = one call, `getFinanceOverview`. Lists load after it (same pattern as "secondary data" in Agent §7), with `.skeleton` rows meanwhile.
-- Pull to refresh (`refreshAll`) reloads the overview and the open tab.
+- **Speed (2026-11, T-440…T-445, coaches' complaints: slow to open, slow bill detail, slow Lunasi, refresh reloading everything).**
+  - **One call.** The page asks one admin read, `getFinancePage(token, month, year, fresh)`. It returns:
+    - the month's overview;
+    - every open or archived bill, plus paid bills of the 12 months up to the chosen month (`from`);
+    - those bills' payments;
+    - the expenses of the same 12 months;
+    - categories, methods and `portalVisible`;
+    - `ver` and `day`.
+  - **Filtering in the browser.** Tabs, filters and the bill detail are filtered in the browser. A month older than `from` asks the server for that month.
+  - **Read each sheet once.** Each sheet is read once per call: `_finRead_` is memoised in `_readMemo_`, and every `_finAppend_` / `_finUpdate_` drops that table's memo. Schedules is read only when a coach is paid per session.
+  - **Server cache.** The result is cached under `fp:<WIB day>:<hour>:<finance version>:<month>:<year>`, TTL 900 s. `fresh` skips the read but still stores the result.
+  - **Finance version.** `_finVer_` / `_bustFin_` bump the version in `_finLocked_`, `_finBillFromTransaction_` and `_finWrite_`, and `getAdminMore.finVer` sends it to the browser. `tests/finance.test.js` fails when a finance writer does not move it.
+  - **Device copy (owner's decision 2026-11-25, an exception to "finance data never on the device").**
+    - The copy is `xnk_fin_cache`, keyed by the admin token signature. It holds the page data and up to 12 month overviews.
+    - It is removed by `clearAdminCache` (logout or auth loss), never put into `xnk_admin_cache`, and never stores `tmp-` rows.
+    - The page shows the copy at once. It asks the server only when one of these holds:
+      - the finance version differs;
+      - the WIB day changed;
+      - the copy is older than 6 h;
+      - the page is opened again more than 1 minute later.
+    - That call is quiet and never empties the screen. A save in flight defers the answer (`wqStale` / `wqOnIdle`).
+  - **Re-render.** Any `updateUI` re-renders from memory. Only a version change triggers a fetch.
+  - **Bill detail.** The detail opens complete from the page data, buttons included. `getBillDetail` is used only for a bill outside that data.
+  - **Payment sheet.** The payment sheet opens with no call: categories and methods come with the page.
+  - **Instant saves.** A payment or expense without a photo changes the bill, the totals, the 6-month bars and the open panel at once (`finPayLocal` / `finExpLocal`, with the same formula as `_finBillTotals_`). A rejection undoes it.
+    - `savePayment` returns `{id, bill: {net, paid, remaining, status, lastPaid}}`. One quiet reload follows to get the coach share.
+    - Archive and restore flip their flag on screen at once.
+  - **Lighter server writes.**
+    - `_finEnsure_` (full schema check) runs at most every 6 h (`FIN_ENSURE_KEY` in CacheService).
+    - `savePayment` reads Tagihan and Pembayaran once and computes the status from memory. It went from 19 sheet reads to 6.
+    - Finance writers bump only the bill owner's member version, not `'*'`.
+- Pull to refresh on the Keuangan page reloads Keuangan only (`refreshAll()` → `finRefresh`, a quiet `getFinancePage` with `fresh`). Calls from code (`refreshAll(true)`) still reload the whole panel. A queued finance save that finishes after a reload calls `finStale`, not a full reload.
 - Status pills: Lunas = `.pill` filled ink, DP = `.pill` outline, Belum bayar = `.pill` with `.status-dot` warning token. Words are always shown, not colour alone.
 - Empty states use `.empty` with one action: "Belum ada pengeluaran bulan ini. [+ Pengeluaran]".
 - The Pengeluaran tab shows rows with category, note, amount and date, plus a "+ Pengeluaran" button at the top.

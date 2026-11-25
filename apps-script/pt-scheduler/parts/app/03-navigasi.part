@@ -54,7 +54,7 @@
         case 'calendar': renderSchedule(); break;
         case 'clients': renderClients(); break;
         case 'coaches': renderCoaches(); break;
-        case 'finance': renderFinance(); break;
+        case 'finance': renderFinance(false, !!(opts && opts.animate)); break;
         case 'content': renderContentAdmin(); if (!cnt.list || (opts && opts.animate)) window.loadContentAdmin(); break;
         case 'settings': window.renderSettings(); break;
         case 'public-login': renderPublicLogin(); break;
@@ -278,11 +278,14 @@
   });
 
   // ── Tarik ke bawah untuk muat ulang ─────────────────────────────────────────
-  window.refreshAll = function () {
+  // internal = dipanggil kode (antrean simpan, lencana "Data HH:MM"): selalu muat semua. Tarik-untuk-segarkan (tanpa argumen) di
+  // halaman Keuangan hanya memuat Keuangan, diam-diam (2026-11, keluhan "refresh malah reload semua").
+  window.refreshAll = function (internal) {
     if (ui.pulling) return Promise.resolve();
     ui.pulling = true;
-    window._freshMore = true;   // tarik-untuk-segarkan: getAdminMore melewati cache server
-    const job = window.isPublicView ? window.loadPublicData() : window.loadAllData();
+    const finOnly = internal !== true && !window.isPublicView && window.currentView === 'finance' && window.finRefresh;
+    if (!finOnly) window._freshMore = true;   // tarik-untuk-segarkan: getAdminMore melewati cache server
+    const job = finOnly ? window.finRefresh() : window.isPublicView ? window.loadPublicData() : window.loadAllData();
     return Promise.resolve(job).catch(function () {}).then(function () { ui.pulling = false; });
   };
   function initPullRefresh() {
@@ -477,7 +480,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
+  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearFinCache) window.clearFinCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -595,6 +598,7 @@
       if (ok(b.packageTrend)) { window._trendCache = window._trendCache || {}; window._trendCache[mo + '-' + yr] = b.packageTrend; }
       if (ok(b.hub)) { window._hub = b.hub; window._hubAt = Date.now(); }
       if (ok(b.memberVers)) { window.memberVers = b.memberVers; window.memberVersAt = Date.now(); }   // versi data per klien (salinan halaman klien)
+      if (b.finVer) window.finVer = b.finVer;   // versi keuangan: salinan xnk_fin_cache dipakai selama sama
       ui.revenue = ok(b.revenue) ? b.revenue : { error: true };
       renderRevenueKpi();
       window.updateUI();

@@ -586,8 +586,11 @@
     const hk = sq.hooks[it.id];
     delete sq.hooks[it.id];
     if (hk) { if (hk.then) try { hk.then(res); } catch (e) { console.error(e); } hk.resolve(res); }
-    else sq.refresh = true;   // pesanan dari halaman sebelumnya: muat ulang data saat antrean kosong
+    else sqNeedsReload(it);   // pesanan dari halaman sebelumnya: muat ulang data saat antrean kosong
   }
+  // Simpanan keuangan cukup memuat ulang Keuangan (diam-diam), bukan seluruh panel.
+  const SQ_FIN_FN = /^(savePayment|saveExpense|saveBillAdjust|archiveFinanceItem|restoreFinanceItem|saveFinanceCategory|deleteFinanceCategory|saveCoachShare)$/;
+  function sqNeedsReload(it) { if (it && SQ_FIN_FN.test(it.fn)) sq.finReload = true; else sq.refresh = true; }
   function sqFail(it, err) {
     const msg = window.authMessage(err) || 'Ditolak server.';
     sqUpdate(it.id, x => { x.state = 'failed'; x.err = msg; delete x.sentAt; });
@@ -612,7 +615,8 @@
     if (ch) sqWrite(a);
     const it = a.find(x => x.state !== 'failed' && sqMine(x));
     if (!it) {
-      if (sq.refresh) { sq.refresh = false; if (window.refreshAll) try { window.refreshAll(true); } catch (e) {} }
+      if (sq.refresh) { sq.refresh = sq.finReload = false; if (window.refreshAll) try { window.refreshAll(true); } catch (e) {} }
+      else if (sq.finReload) { sq.finReload = false; if (window.finStale) try { window.finStale(); } catch (e) {} }
       wlane.laneIdle();
       return Promise.resolve();
     }
@@ -754,15 +758,18 @@
   window.syncWlDrop = function (id) { if (window.wlDrop) window.wlDrop(id); syncAfter(); };
   window.syncFqOpen = function (id) { if (window.fqFailedDrop) window.fqFailedDrop(id); window.closeModal(); setTimeout(function () { window.navigate('public-food'); }, 300); };
   window.syncFqDrop = function (id) { if (window.fqFailedDrop) window.fqFailedDrop(id); syncAfter(); };
-  window.syncRetry = function (id) { sqUpdate(id, x => { x.state = 'pending'; x.err = ''; x.nextAt = 0; x.tries = Math.max(1, x.tries || 0); x.at = Date.now(); }); sq.refresh = true; syncPaint(); sqFlush(); };
+  window.syncRetry = function (id) { sqNeedsReload(sqRead().find(x => x.id === id)); sqUpdate(id, x => { x.state = 'pending'; x.err = ''; x.nextAt = 0; x.tries = Math.max(1, x.tries || 0); x.at = Date.now(); }); syncPaint(); sqFlush(); };
   window.syncDrop = function (id) {
-    const hk = sq.hooks[id];
+    const hk = sq.hooks[id], dropped = sqRead().find(x => x.id === id);
     sqWrite(sqRead().filter(x => x.id !== id));
     delete sq.hooks[id];
     if (hk && hk.undo) try { hk.undo(); } catch (e) {}
     if (hk && hk.resolve) hk.resolve(undefined);
     syncPaint();
-    if (!window.sqItems().length) { window.closeModal(); if (window.refreshAll) window.refreshAll(true); }
+    if (!window.sqItems().length) {
+      window.closeModal();
+      if (dropped && SQ_FIN_FN.test(dropped.fn) && window.finStale) window.finStale(); else if (window.refreshAll) window.refreshAll(true);
+    }
   };
   window.syncEdit = function (id) {
     const it = sqRead().find(x => x.id === id), hk = sq.hooks[id];
@@ -1130,6 +1137,8 @@
       if (window.coaches.some(c => String(c.id) === id)) window.openCoachProfile(id); else window.closeDetail();
     } else if (kind === 'session') {
       if (schedById(id)) window.openScheduleDetail(id); else window.closeDetail();
+    } else if (kind === 'bill') {
+      if (window.finRefreshBill) window.finRefreshBill(id);   // tagihan di luar data halaman: biarkan seperti adanya
     }
   }
   function highlightSelection() {
