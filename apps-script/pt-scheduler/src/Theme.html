@@ -2479,6 +2479,11 @@ html.app-shell .nav-back { display: none; }
   .fin-bar:has(.fin-search) > #fin-filters { grid-area: filt; }
 }
 
+/* Kepala halaman Keuangan di HP (pemilik 2026-11-25: ruang kosong di kanan tombol): dua tombol membagi lebar penuh. */
+@media (max-width: 767px) {
+  #view-finance .page-head .btn-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  #view-finance .page-head .btn-row .btn { justify-content: center; }
+}
 
 /* ── Fase X: portal klien baru (lima tab, kartu atlet, warna aksen, grafis) ── */
 /* Warna aksen pilihan klien. Bawaan = hitam (sama dengan --ink), jadi tanpa data-accent tidak ada yang berubah.
