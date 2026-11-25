@@ -214,7 +214,6 @@ button.avatar { border: 0; cursor: pointer; }
 .ptr.ok .ptr-check { opacity: 1; transform: scale(1); }
 @media (prefers-reduced-motion: reduce) { .ptr.spinning .ptr-ring { animation-duration: 2.4s; } .ptr-ico, .ptr-ring circle { transition: none; } }
 @keyframes shimmer { to { transform: translateX(100%); } }
-@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fg) 40%, transparent); } 50% { box-shadow: 0 0 0 6px transparent; } }
 @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.94); opacity: 0.85; } }
 @keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
 @keyframes orbit { to { transform: translate(-50%, -50%) rotate(360deg); } }
