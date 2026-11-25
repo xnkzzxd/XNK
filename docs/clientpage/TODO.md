@@ -8,7 +8,7 @@ Wave 1 (one approval) — built and approved by the owner 2026-11-25 (PR #201)
 - [x] T-2302 Klien list: phone (band subtitle, sticky toolbar, chips, new rows, stray grey block) and PC split (icon button, search row, filter + sort selects, 56 px rows).
 - [x] T-2303 Profile shell + Ringkasan + Data: head with the name and ⋯, black client card with the action bar, five light sticky tabs, Ringkasan (Sesi berikutnya, Tugas coach, Minggu ini, PR, Sesi), Data hub, client wiring for write answers and notes from the bundle.
 
-Wave 2 — built 2026-11-25, waiting for the owner's yes on the screenshots
+Wave 2 — built and approved by the owner 2026-11-25 (PR #201)
 - [x] T-2304 Progres: sub-tabs Ringkasan · Ukuran · Tes · Foto (no calls on switch), light Rapor tubuh without buttons (`cpRaporHtml`), Momen from bundle `athlete.moments`, one chart with a measure picker, Riwayat catatan rows → `#sheet-cp-row` (values + Hapus) instead of delete icons, Foto rows → private viewer (one `getMemberProgressPhoto`), badges under Foto; ⋯ loses "Foto progres" (coaches cannot upload).
 
 Wave 3
