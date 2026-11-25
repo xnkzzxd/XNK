@@ -437,6 +437,7 @@ Pengaturan → **Keuangan** (mati sampai Anda menyalakannya):
   - **Detail tagihan dan lembar pembayaran** terbuka seketika, tanpa menunggu server.
   - **Lunasi / Bayar / pengeluaran** tanpa foto langsung mengubah status, sisa dan angka ringkasan di layar. Kalau server menolak, perubahan dikembalikan dan muncul tanda **Belum tersimpan**.
   - **Tarik ke bawah** di halaman Keuangan hanya memuat ulang Keuangan, bukan seluruh panel.
+  - **Tampilan baru (2026-11)**: bar Tagihan / Pengeluaran / Laporan, filter dengan jumlah, kolom cari nama, tagihan dikelompokkan (Telat lebih dari 3 hari dulu), tombol **Lunasi** di setiap baris (pilih metode lalu "Ya, lunasi"), geser baris ke kiri di HP untuk WA tagih / Lunasi, riwayat klien di detail tagihan, laporan dengan perbandingan bulan lalu, metode bayar dan rata-rata hari sampai lunas. Di laptop tagihan teratas langsung terbuka di kanan dan ↑/↓ pindah tagihan.
   - **Disiapkan di latar**: data Keuangan dimuat diam-diam setelah panel terbuka, jadi ketukan pertama pun langsung berisi.
   - **Foto bukti tidak membuat menunggu**: pembayaran/pengeluaran langsung tampil, foto diunggah di belakang (jangan tutup aplikasi sampai muncul "Foto bukti terunggah").
 

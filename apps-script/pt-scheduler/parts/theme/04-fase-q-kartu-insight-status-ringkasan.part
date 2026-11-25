@@ -446,3 +446,61 @@ html.app-shell .nav-back { display: none; }
 .fin-pay-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 .fin-pay-top b { font-size: var(--fs-lg); white-space: nowrap; }
 .fin-pay .btn-row { margin-top: 4px; }
+
+/* Keuangan gelombang 2 (2026-11): cari, kelompok per status, Lunasi di baris, lembar Lunasi, ringkasan ringkas di HP */
+.fin-search { position: relative; flex: 1 1 100%; }
+.fin-search .input { padding-left: 40px; }
+.fin-search-ic { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); display: inline-flex; color: var(--fg-muted); pointer-events: none; }
+.fin-search-ic svg { width: 18px; height: 18px; }
+.fin-bill-tags { display: inline-flex; align-items: center; gap: 8px; }
+.fin-row-pay svg { width: 16px; height: 16px; }
+.fin-group::after { order: 1; }
+.fin-group .num { order: 2; letter-spacing: 0; text-transform: none; }
+.fin-fold > summary { min-height: 48px; }
+.fin-lunas-q { display: flex; flex-direction: column; gap: 4px; }
+.fin-lunas-q p:first-child { font-size: var(--fs-lg); line-height: 1.35; overflow-wrap: anywhere; }
+#sheet-fin-lunas .sheet-foot .btn { flex: 1 1 0; }
+#fin-list > .list > .fin-group:first-child { margin-top: 2px; }
+.fin-fold-rep { display: none; }
+@media (max-width: 767px) {
+  #fin-head .fin-fold { display: none; }   /* HP: grafik 6 bulan pindah ke tab Laporan, daftar tagihan naik */
+  .fin-fold-rep { display: block; }
+  #fin-head { margin-bottom: 8px; }
+  #fin-head .fin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  #fin-head .fin-kpis .kpi { padding: 10px 12px; gap: 2px; }
+  #fin-head .fin-kpis .kpi-icon, #fin-head .fin-kpis .kpi-note { display: none; }
+  #fin-head .fin-kpis .kpi-value { font-size: var(--fs-xl); }
+}
+.fin-hist { min-height: 56px; }
+.fin-hist .li-trail { display: inline-flex; align-items: center; gap: 10px; }
+.fin-cmp .li-sub { margin-top: 2px; }
+/* Geser baris tagihan (HP): tombol di belakang baris, baris digeser dengan transform saja */
+.fin-swipe { position: relative; border-radius: var(--r-md); overflow: hidden; }
+.fin-swipe > .fin-bill { position: relative; z-index: 1; transition: transform var(--t-base, 200ms) var(--ease-out); }
+.fin-swipe-acts { position: absolute; top: 0; right: 0; bottom: 0; display: flex; visibility: hidden; }
+.fin-swipe.open .fin-swipe-acts, .fin-swipe.drag .fin-swipe-acts { visibility: visible; }   /* diam: tidak mengintip di sudut kartu */
+.fin-swipe-btn { min-width: 84px; min-height: 44px; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: var(--fs-xs); font-weight: 700; background: var(--surface-3); color: var(--fg); cursor: pointer; }
+.fin-swipe-btn.solid { background: var(--fg); color: var(--bg); }
+.fin-swipe-btn svg { width: 20px; height: 20px; }
+@media (prefers-reduced-motion: reduce) { .fin-swipe > .fin-bill { transition: none; } }
+/* Bagian + filter Keuangan (2026-11, pemilik: dua baris pil "jelek"): satu bar segmen, lalu tab teks ringan dengan jumlah */
+.fin-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 10px; }
+.fin-bar > * { min-width: 0; max-width: 100%; }
+.fin-bar .fin-search { flex: none; width: 100%; }
+.fin-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.fin-seg button { padding: 0 8px; }
+.fin-filt { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border); }
+.fin-filt::-webkit-scrollbar { display: none; }
+.fin-filt-b { flex: none; min-height: 44px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; font: inherit; font-size: var(--fs-sm); font-weight: 700; color: var(--fg-muted); white-space: nowrap; cursor: pointer; }
+.fin-filt-b.active { color: var(--fg); border-bottom-color: var(--fg); }
+.fin-filt-b .num { min-width: 1.5em; padding: 1px 6px; border-radius: var(--r-full); background: var(--surface-3); color: var(--fg-muted); font-size: var(--fs-2xs); text-align: center; }
+.fin-filt-b.active .num { background: var(--fg); color: var(--bg); }
+@media (hover: hover) { .fin-filt-b:hover { color: var(--fg); } }
+/* Laptop / PC (pemilik 2026-11-25: tidak ada ruang kosong di kanan bar): bar segmen kiri + cari kanan satu baris, filter di bawah. */
+@media (min-width: 768px) {
+  .fin-bar:has(.fin-search) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "seg search" "filt filt"; align-items: center; column-gap: 12px; }
+  .fin-bar:has(.fin-search) > .fin-seg { grid-area: seg; }
+  .fin-bar:has(.fin-search) > .fin-search { grid-area: search; }
+  .fin-bar:has(.fin-search) > #fin-filters { grid-area: filt; }
+}
+
