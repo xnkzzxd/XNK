@@ -25,7 +25,7 @@ function _hubMs_(v) {
 /**
  * Status spreadsheet ini untuk XNK HQ. Hanya angka.
  * @param {string} secret HUB_SECRET spreadsheet ini
- * @return {{at: string, lib: ?Object, api: number, triggers: Object, reminders: Object, clients: Object, sessions: Object, quota: Object}}
+ * @return {{at: string, lib: ?Object, api: number, triggers: Object, reminders: Object, clients: Object, sessions: Object, quota: Object, quotaDays: Array}}
  */
 function hubStatus(secret) {
   _hubAuth_(secret);
@@ -56,6 +56,7 @@ function hubStatus(secret) {
     clients: { total: Math.max(0, md.getLastRow() - 1), active30d: Object.keys(active).length },
     sessions: { done7d: done7, next7d: next7 },
     quota: _quotaToday_(),   // T-2253: email, fetch, menit trigger hari ini (WIB)
+    quotaDays: _quotaDays_(),   // hari-hari penuh sebelumnya (terbaru dulu); cek HQ pagi hari, jadi "hari ini" masih sedikit
     readonly: _readonlyOn_(),   // T-2251: mode baca saja (langganan)
     left: _hubLeft_(),          // T-2252: coach keluar
   };

@@ -39,8 +39,8 @@ Kontras tinggi: bilah samping, pita judul dan kepala inspektur hitam; teks abu m
 titik hijau kecil (beres) yang berwarna. Ringkasan di atas: **Kesehatan** (cincin beres / ada masalah / belum
 terdaftar + daftar masalah, klik = buka coach) dan **Pertumbuhan · 30 hari** (klien aktif semua coach, sesi selesai dan
 akan datang), lalu **Perbandingan coach** (batang, Klien aktif | Sesi 7 hari, 8 teratas). Tabel coach memakai garis
-kecil, batang sesi, meteran kuota dan batang umur backup; inspektur punya empat ubin dengan garis 30 hari, tiga
-meteran kuota dan batang backup. Semua grafik punya tooltip (arahkan / fokus) dan tabel tersembunyi untuk pembaca layar.
+kecil, batang sesi, meteran kuota dan batang umur backup; inspektur punya empat ubin dengan garis 30 hari, enam
+meteran kuota (kemarin + hari ini) dan batang backup. Semua grafik punya tooltip (arahkan / fokus) dan tabel tersembunyi untuk pembaca layar.
 
 Riwayatnya: setiap cek (`checkAll_`, termasuk Cek ulang) menulis satu baris per hari WIB ke Script Property
 `HIST_<slug>`: `[tanggal, klien aktif 30 hari, total klien, sesi selesai 7 hari, sesi 7 hari ke depan, email, UrlFetch,
@@ -76,14 +76,21 @@ terisi hari demi hari sejak versi ini terpasang.
 ## Yang dicek setiap pagi
 
 Server menjawab; versi Library = versi terbaru (tag `lib-v<N>`); trigger `runReminderTick` terpasang tepat satu;
-bila pengingat menyala, tick terakhir < 3 jam; **kuota Google hari ini** (T-2253) di bawah 70 % untuk email
+bila pengingat menyala, tick terakhir < 3 jam; **kuota Google hari ini dan kemarin** (T-2253) di bawah 70 % untuk email
 (batas `QUOTA_MAIL`, bawaan 100), UrlFetch (`QUOTA_FETCH`, 20.000) dan menit trigger (`QUOTA_TRIGGER_MIN`, 90) —
 batas bisa ditimpa di Script Properties XNK HQ. Ada masalah = **satu email** ke pemilik dengan daftar coach dan
 link dasbor. Tanpa masalah = tanpa email. Backup yang gagal **2 kali berturut-turut** ikut masuk email itu.
 
 Angka kuota datang dari `hubStatus().quota = {date, mail, fetch, triggerMin, mailRemaining, mailSkipped}` (hari WIB,
-angka saja). Di `/adminxnk` detail tiap coach punya tiga meteran: *email hari ini*, *UrlFetch hari ini*, *menit
-trigger hari ini* (angka / batas; merah ≥ 70 %). Coach dengan Library lama tanpa kuota tidak dicek dan tanpa ubin.
+angka saja) dan `hubStatus().quotaDays` (6 hari penuh sebelumnya, terbaru dulu, dari `QUOTA_<yyyymmdd>` coach).
+Cek harian jalan jam 06:00 WIB, jadi `quota` hanya berisi 00:00–06:00 (dulu kartu selalu tampak 0 %): karena itu
+`/adminxnk` menampilkan dua baris meteran, **Kemarin (sehari penuh)** dari `quotaDays[0]` dan **Hari ini s.d. <jam
+cek>**, peringatan ≥ 70 % juga melihat kemarin, dan riwayat `HIST_<slug>` menimpa angka kuota hari-hari sebelumnya
+dengan angka hari penuh (hanya baris yang sudah ada). Menit trigger 2 desimal, persen > 0 di bawah 1 tampil `<1%`,
+angka besar disingkat (`20 rb`), tooltip email menyebut sisa menurut Google (`mailRemaining`, 24 jam bergulir).
+Pemakaian klien (portal, booking lewat `doPost`, push lewat GitHub Actions) tidak memakai kuota ini; angka kecil di
+coach tanpa Telegram dan tanpa email ringkasan memang normal. Coach dengan Library lama tanpa kuota tidak dicek dan
+tanpa ubin; Library tanpa `quotaDays` hanya menampilkan baris hari ini.
 
 ## Email ringkasan coach (T-2254)
 

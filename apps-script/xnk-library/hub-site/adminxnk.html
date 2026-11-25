@@ -193,10 +193,13 @@
   .mtrack > i.hot { background: var(--bad); }
   .mtrack > b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--mut); }
   .scale { display: flex; justify-content: space-between; font-size: .72rem; color: var(--mut); margin-top: 3px; }
-  .gauges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; text-align: center; }
+  .gauges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 14px; text-align: center; }
+  .gauges .g { min-width: 0; }
   .gauges svg { display: block; width: 100%; max-width: 104px; margin: 0 auto; height: auto; overflow: visible; }
-  .gauges .g-l { font-size: .8rem; font-weight: 600; }
-  .gauges .g-s { font-size: .74rem; color: var(--mut); font-variant-numeric: tabular-nums; }
+  .gauges .g-l { font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gauges .g-s { font-size: .74rem; color: var(--mut); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .qwhen { font-size: .74rem; color: var(--mut); margin: 2px 0 4px; }
+  .qnote { font-size: .78rem; color: var(--mut); margin: 10px 0 0; }
   .gauges .bad .g-s, .gauges .bad .g-l { color: var(--bad); }
   .gtrack { fill: none; stroke: var(--track); stroke-width: 10; stroke-linecap: round; }
   .gval { fill: none; stroke: var(--ink); stroke-width: 10; stroke-linecap: round; }
@@ -280,7 +283,9 @@
   .mtab td.r, .mtab th.r { text-align: right; font-variant-numeric: tabular-nums; }
   .mtab tbody tr[data-sel] { cursor: pointer; }
   @media (hover: hover) { .mtab tbody tr[data-sel]:hover td { background: var(--hover); } }
-  .qrow { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .qrow { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) minmax(0, 1fr); gap: 12px 20px; align-items: start; padding: 12px 0; border-top: 1px solid var(--line); }
+  .qrow > b { align-self: center; }
+  @media (max-width: 760px) { .qrow { grid-template-columns: minmax(0, 1fr); } }
   .qrow:first-of-type { border-top: 0; }
   .steps { margin: 8px 0 12px; padding-left: 20px; font-size: .9rem; }
 
@@ -410,7 +415,7 @@
         </div>
       </div>
       <div class="card">
-        <h2>Kuota Google hari ini</h2>
+        <h2>Kuota Google</h2>
         <div id="sysQuota"></div>
       </div>
     </section>
@@ -491,6 +496,7 @@
 
   // ── Waktu ──
   var BLN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  function clock(iso) { var d = new Date(iso); return isNaN(d) ? '?' : d.toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
   function when(iso) { if (!iso) return '-'; var d = new Date(iso); return isNaN(d) ? '-' : d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }); }
   function rel(iso) {
     if (!iso) return '-'; var t = new Date(iso).getTime(); if (isNaN(t)) return '-';
@@ -573,14 +579,34 @@
     g += '<text x="56" y="60" text-anchor="middle" style="font:700 28px -apple-system,Segoe UI,Arial,sans-serif;fill:var(--fg)">' + total + '</text><text x="56" y="78" text-anchor="middle" style="font:500 11px -apple-system,Segoe UI,Arial,sans-serif;fill:var(--mut)">coach</text>';
     return '<svg class="chart ring" viewBox="0 0 112 112" role="img" aria-label="' + esc(parts.map(function (p) { return p.label + ' ' + p.v; }).join(', ')) + '">' + g + '</svg>';
   }
-  function gauge(v, max, label) {
+  // Angka pendek untuk gauge: 20.000 → 20 rb (tidak terpotong di kolom sempit); desimal kecil tetap terlihat (0,05).
+  function shortNum(v) {
+    v = Number(v) || 0;
+    if (v >= 1e6) return (Math.round(v / 1e5) / 10).toLocaleString('id-ID') + ' jt';
+    if (v >= 1e4) return (Math.round(v / 100) / 10).toLocaleString('id-ID') + ' rb';
+    return v.toLocaleString('id-ID', { maximumFractionDigits: v > 0 && v < 1 ? 2 : 1 });
+  }
+  function pctTxt(p) { return p > 0 && p < 0.01 ? '<1%' : Math.round(p * 100) + '%'; }
+  function gauge(v, max, label, tip) {
     v = Number(v) || 0; max = Number(max) || 1;
     var p = Math.min(1, v / max), hot = v >= max * 0.7, len = Math.PI * 40;
-    return '<div class="g' + (hot ? ' bad' : '') + '" data-tip="' + esc(label + ': ' + num(v) + ' dari ' + num(max)) + '" tabindex="0">' +
-      '<svg viewBox="0 0 100 58" role="img" aria-label="' + esc(label + ' ' + Math.round(p * 100) + ' persen') + '"><path class="gtrack" d="M10 50 A40 40 0 0 1 90 50"/>' +
-      (p > 0 ? '<path class="gval' + (hot ? ' hot' : '') + '" d="M10 50 A40 40 0 0 1 90 50" stroke-dasharray="' + (len * p).toFixed(1) + ' ' + len.toFixed(1) + '"/>' : '') +
-      '<text class="gtxt" x="50" y="48" text-anchor="middle">' + Math.round(p * 100) + '%</text></svg>' +
-      '<div class="g-l">' + esc(label) + '</div><div class="g-s">' + esc(num(v)) + ' / ' + esc(num(max)) + '</div></div>';
+    return '<div class="g' + (hot ? ' bad' : '') + '" data-tip="' + esc(label + ': ' + num(v) + ' dari ' + num(max) + (tip ? ' · ' + tip : '')) + '" tabindex="0">' +
+      '<svg viewBox="0 0 100 58" role="img" aria-label="' + esc(label + ' ' + pctTxt(p).replace('%', ' persen')) + '"><path class="gtrack" d="M10 50 A40 40 0 0 1 90 50"/>' +
+      (p > 0 ? '<path class="gval' + (hot ? ' hot' : '') + '" d="M10 50 A40 40 0 0 1 90 50" stroke-dasharray="' + Math.max(1.5, len * p).toFixed(1) + ' ' + len.toFixed(1) + '"/>' : '') +
+      '<text class="gtxt" x="50" y="48" text-anchor="middle">' + esc(pctTxt(p)) + '</text></svg>' +
+      '<div class="g-l">' + esc(label) + '</div><div class="g-s">' + esc(shortNum(v)) + ' / ' + esc(shortNum(max)) + '</div></div>';
+  }
+  // Satu blok kuota (kemarin penuh / hari ini sampai jam cek). q = {mail, fetch, triggerMin, mailRemaining?}.
+  function quotaBlock(q, lim, title) {
+    var mailTip = q.mailRemaining != null && isFinite(Number(q.mailRemaining)) ? 'sisa menurut Google ' + num(q.mailRemaining) + ' (24 jam terakhir)' : '';
+    return '<div><div class="qwhen">' + esc(title) + '</div><div class="gauges">' + gauge(q.mail, lim.mail, 'Email', mailTip) +
+      gauge(q.fetch, lim.fetch, 'UrlFetch') + gauge(q.triggerMin, lim.triggerMin, 'Trigger', 'menit') + '</div></div>';
+  }
+  function quotaBlocks(r, lim) {
+    var h = '';
+    if (r.qy) h += quotaBlock(r.qy, lim, 'Kemarin (sehari penuh)');
+    if (r.q) h += quotaBlock(r.q, lim, 'Hari ini s.d. ' + (r.st && r.st.at ? clock(r.st.at) : '?'));
+    return h;
   }
   function ageTrack(days, failed) {
     if (days == null) return '<div class="mtrack"><i class="hot" style="width:100%"></i></div>';
@@ -595,9 +621,10 @@
   }
 
   // ── Model: satu baris per coach (terdaftar di XNK HQ dan/atau ada di hub.json); masalah di atas, keluar di bawah ──
+  var QLIM = { mail: 100, fetch: 20000, triggerMin: 90 };
   var CYCLE = { bulanan: 'bulanan', tahunan: 'tahunan', lifetime: 'lifetime', putus: 'beli putus' };
   function model() {
-    var d = data, by = {}, lim = d.quotaLimits || { mail: 100, fetch: 20000, triggerMin: 90 };
+    var d = data, by = {};
     (d.coaches || []).forEach(function (c) { by[c.slug] = c; });
     Object.keys(HUB).forEach(function (s) { if (!by[s]) by[s] = { slug: s, missing: true, panel: d.hub + '/' + s + '/', klien: d.hub + '/' + s + '/klien/' }; });
     return Object.keys(by).map(function (s) {
@@ -605,10 +632,12 @@
       var probs = c.missing ? ['Belum terdaftar di XNK HQ (wizard setup → Daftarkan ke XNK HQ).'] : !st ? ['Belum pernah dicek.'] : (st.problems || []);
       var out = c.out && c.out.at ? c.out : null, sub = c.sub || {};
       if (!out && c.out && c.out.hubInactive) probs = probs.concat(['hub.json menandai coach ini tidak aktif, tetapi XNK HQ tidak mencatatnya keluar.']);
-      var q = x && x.quota, qs = q ? [['Email', q.mail, lim.mail], ['UrlFetch', q.fetch, lim.fetch], ['Trigger', q.triggerMin, lim.triggerMin]] : [];
+      var q = x && x.quota && typeof x.quota === 'object' ? x.quota : null;
+      var qy = q && Array.isArray(x.quotaDays) && x.quotaDays[0] && typeof x.quotaDays[0] === 'object' ? x.quotaDays[0] : null;
+      var qs = q ? [1] : [];
       var age = bk.okAt ? ageDays(bk.okAt) : null;
       var due = !c.missing && !out && sub.plan === 'bulanan';
-      return { s: s, c: c, name: HUB[s] || s, st: st, x: x, bk: bk, age: age, pu: pu, probs: probs, qs: qs, pl: (d.places || {})[s] || null,
+      return { s: s, c: c, name: HUB[s] || s, st: st, x: x, bk: bk, age: age, pu: pu, probs: probs, qs: qs, q: q, qy: qy, pl: (d.places || {})[s] || null,
         bkLate: !c.missing && !out && (age == null || age > 8 || !!bk.fails), sub: sub, out: out,
         ro: !c.missing && !out && (!!sub.readonly || !!(x && x.readonly)),
         subDue: due && /^(segera|tenggang|lewat)$/.test(sub.state || ''), subBad: due && /^(tenggang|lewat)$/.test(sub.state || '') };
@@ -851,7 +880,7 @@
       tileHtml('Sesi selesai 7 hr', x.sessions.done7d, histVals(c.hist, H.done, ax)) + tileHtml('Sesi 7 hr ke depan', x.sessions.next7d, histVals(c.hist, H.next, ax)) + '</div>';
     var cs = [], forms = [], side = '';
     if (!c.missing && !r.out) cs.push(card('Langganan & pembayaran', subCard(s, r.sub), 'subcard'));
-    if (r.qs.length) side += '<div class="subsect"><h3>Kuota hari ini</h3><div class="gauges">' + r.qs.map(function (a) { return gauge(a[1], a[2], a[0]); }).join('') + '</div></div>';
+    if (r.qs.length) side += '<div class="subsect"><h3>Kuota Google</h3>' + quotaBlocks(r, data.quotaLimits || QLIM) + '</div>';
     if (!c.missing) {
       var bk = r.bk, pu = r.pu;
       side += '<div class="subsect"><h3>Backup</h3><div class="stat bk"><span class="v' + (r.bkLate ? ' bad' : '') + '">' + (r.age == null ? '–' : Math.floor(r.age) + ' hr') + '</span>' +
@@ -951,9 +980,11 @@
       '<div class="kpi"><small>Baca saja</small><span class="v' + (rows.some(function (r) { return r.ro && !r.out; }) ? ' bad' : '') + '">' + rows.filter(function (r) { return r.ro && !r.out; }).length + '</span></div>' +
       '<div class="kpi"><small>Coach keluar</small><span class="v">' + rows.filter(function (r) { return r.out; }).length + '</span></div>';
     var qh = rows.filter(function (r) { return r.qs.length && !r.out; }).map(function (r) {
-      return '<div class="qrow"><b>' + esc(r.name) + '</b><div class="gauges">' + r.qs.map(function (a) { return gauge(a[1], a[2], a[0]); }).join('') + '</div></div>';
+      return '<div class="qrow"><b>' + esc(r.name) + '</b>' + quotaBlocks(r, data.quotaLimits || QLIM) + '</div>';
     }).join('');
-    $('sysQuota').innerHTML = qh || '<p class="line1">Belum ada angka kuota (Library coach lama atau belum dicek).</p>';
+    $('sysQuota').innerHTML = (qh || '<p class="line1">Belum ada angka kuota (Library coach lama atau belum dicek).</p>') +
+      '<p class="qnote">XNK HQ mengecek tiap pagi 06:00 WIB (atau saat Cek), jadi "hari ini" baru berisi pemakaian sejak tengah malam. ' +
+      'Buka portal, booking dan push klien tidak memakai kuota ini; yang dihitung: email, Telegram/UrlFetch, dan lama trigger pengingat dan "Siapkan data".</p>';
   }
 
   function skeleton() {

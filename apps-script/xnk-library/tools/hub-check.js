@@ -114,7 +114,7 @@ function fakePusat(req) {
   else if (req.fn === 'pusatAction' && /^sub-/.test(req.args[1])) { PUSAT_CALLS.subAct = req.args[1]; if (req.args[1] === 'sub-ro-on') Object.assign(PUSAT_SUB, { ro: 'on', readonly: true }); }
   else if (req.fn === 'pusatAction' && req.args[1] === 'leave-undo') { PUSAT_CALLS.undo = req.args[2]; PUSAT_OUT = null; }
   else if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
-  const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 }, quota: { date: '2026-11-19', mail: 12, fetch: 15200, triggerMin: 20 }, readonly: !!PUSAT_SUB.readonly, left: !!PUSAT_OUT } });
+  const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 }, quota: { date: '2026-11-19', mail: 12, fetch: 15200, triggerMin: 20, mailRemaining: 84 }, quotaDays: [{ date: '2026-11-18', mail: 31, fetch: 18400, triggerMin: 0.05 }], readonly: !!PUSAT_SUB.readonly, left: !!PUSAT_OUT } });
   return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, fetchToday: 34, money: fakeMoney(), tiers: PUSAT_TIERS, setupPrices: { standar: 400000, custom: 2100000 }, quotaLimits: { mail: 100, fetch: 20000, triggerMin: 90 }, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
     places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
     { slug: 'claudia', exec: EXEC_A, hist: HIST_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
@@ -291,7 +291,7 @@ async function makeLogos(browser) {
       await page.click('#list .ccard[data-sel="claudia"]');
       const insp = await txt('#insp');
       check(await page.isVisible('#insp') && !(await page.isVisible('#sumbox')) && insp.includes('Beres'), 'pilih coach → detail di kanan, ringkasan disembunyikan');
-      check((await page.$$('#insp .tile svg.spark path.ln')).length === 4 && (await page.$$('#insp .g')).length === 3 && (await page.$('#insp .g.bad')) !== null, 'detail: 4 ubin dengan garis 30 hari, 3 meteran kuota (≥ 70 % merah)');
+      check((await page.$$('#insp .tile svg.spark path.ln')).length === 4 && (await page.$$('#insp .g')).length === 6 && (await page.$('#insp .g.bad')) !== null && insp.includes('Kemarin (sehari penuh)') && insp.includes('<1%'), 'detail: 4 ubin dengan garis 30 hari, 6 meteran kuota kemarin + hari ini (≥ 70 % merah, <1%)');
       check(insp.includes('15 Nov 2026') && (await page.getAttribute('#insp .bk a', 'href')) === 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit' && insp.includes('perangkat · menyala'), 'detail: backup + link Buka, push');
       check(insp.includes('Gratis') && insp.includes('Tanpa langganan'), 'langganan: bawaan gratis');
       // T-2264: Atur paket (harga dari proposal) → pusatSubSave
@@ -390,7 +390,7 @@ async function makeLogos(browser) {
       await page.click('#nav-sistem');
       check(await page.isVisible('#page-sistem') && await page.isVisible('#setup') && (await txt('#setupWhy')).includes('Izin Google') && (await page.getAttribute('#setupEditor', 'href')) === 'https://script.google.com/d/SCRIPTPUSAT/edit',
         'Sistem: XNK HQ perlu disiapkan + langkah editor');
-      check((await page.$$('#sysQuota .g')).length === 3 && (await txt('#sysNums')).includes('v11'), 'Sistem: kuota per coach + versi Library');
+      check((await page.$$('#sysQuota .g')).length === 6 && (await txt('#sysQuota')).includes('Kemarin') && (await txt('#sysQuota')).includes('18,4 rb / 20 rb') && (await txt('#sysNums')).includes('v11'), 'Sistem: kuota per coach (kemarin + hari ini, angka pendek) + versi Library');
       const seq = await page.evaluate(() => [...document.querySelectorAll('#page-sistem .grid3 > .card')].map(c => Math.round(c.getBoundingClientRect().height)));
       check(seq.length === 3 && Math.max(...seq) - Math.min(...seq) <= 2, 'Sistem: tiga kartu atas sama tinggi (' + seq.join(',') + ')');
       await shot('hq-1440-sistem');
