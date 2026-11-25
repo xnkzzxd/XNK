@@ -1227,11 +1227,15 @@ async function contrastReport(page) {
     // Program latihan (Fase J2 → Fase M): tab Program di halaman klien, editor form, template.
     await page.evaluate(() => window.cpTab('program'));
     await page.waitForTimeout(300);
-    check((await page.textContent('#profile-program-wrap')).includes('Belum ada') && (await page.textContent('#profile-program-wrap')).includes('Buat program'), 'client page: the Program tab starts empty with a "Buat program" button');
-    check((await page.textContent('#profile-program-wrap')).includes('Program latihan') && (await page.locator('#profile-program-wrap .prg-card .btn-primary').count()) === 1 && (await page.locator('#profile-program-wrap details.fold:has-text("Lainnya")').count()) === 1, 'client page: one Program card with a single primary button and the rare actions folded into "Lainnya"');
+    check((await page.textContent('#profile-program-wrap')).includes('Belum ada program') && (await page.locator('#profile-program-wrap .cp-link:has-text("Atur program")').count()) === 1, 'client page: the Latihan tab starts with an empty Program section and its "Atur program" link');
+    // Fase AC (Wave 3): tidak ada tombol di bagian Program selain tautan "Atur program" (Mulai latihan di kartu klien, sisanya di lembar).
+    check((await page.locator('#profile-program-wrap button:not(.ex-th-btn)').count()) === 1, 'client page: the Program section has one link and no button rows (Mulai latihan is in the client card)');
     check(await page.evaluate(() => { const w = document.getElementById('profile-program-wrap'), c = document.getElementById('cp-ins-latihan'); return !!(w && c && (w.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING)); }), 'client page: the Program card comes before the insight cards on the Latihan tab');
-    await page.click('#profile-program-wrap .prg-card .btn-outline');
-    await page.waitForTimeout(600);
+    await page.click('#profile-program-wrap .cp-link:has-text("Atur program")');
+    await page.waitForTimeout(400);
+    check(await visible(page, '#sheet-cp-prog') && (await page.textContent('#cpp-body')).includes('Buat program'), 'Atur program: one sheet holds the program settings');
+    await page.click('#cpp-body button:has-text("Buat program")');
+    await page.waitForTimeout(700);
     check(await visible(page, '#prg-form') && !(await page.locator('#prg-text').count()), 'program editor: opens as a form (the text box is gone)');
     await page.click('#prg-form button:has-text("Tambah hari")');
     await page.waitForTimeout(200);
@@ -1302,10 +1306,11 @@ async function contrastReport(page) {
     await page.click('#prg-save');
     await page.waitForTimeout(800);
     const prgRows = env.sheet('ProgramItems').rows.filter(r => r[1] === 'PT-A');
-    check((await page.textContent('#profile-program-wrap')).includes('Hari A') && (await page.locator('#profile-program-wrap .prg-card .prg-ex').count()) === 3 && prgRows.length === 3, 'program: saved for the client and summarised on the client page');
+    check((await page.textContent('#profile-program-wrap')).includes('Hari A') && (await page.locator('#profile-program-wrap .cp-day .prg-ex').count()) === 3 && prgRows.length === 3, 'program: saved for the client and summarised on the client page');
     check(prgRows[0][16] === 'A' && prgRows[1][16] === 'A' && prgRows[0][14] === 20 && prgRows[0][15] === 60 && prgRows[2][17] === 'badan', 'program: superset, target kg, rest and kind are stored ' + JSON.stringify(prgRows.map(r => r.slice(12, 18))));
     // Mode latihan (Fase M), coach di PC: dua kolom, superset bergantian, simpan dengan rasa.
-    await page.click('#profile-program-wrap button:has-text("Mulai latihan")');
+    check((await page.locator('#profile-program-wrap .cp-day.is-next .pill:has-text("Berikutnya")').count()) === 1, 'program: the next day is marked "Berikutnya"');
+    await page.click('#detail-body .cp-card .cp-act:has-text("Mulai latihan")');
     await page.waitForTimeout(900);
     check(await visible(page, '#wl-screen') && (await page.locator('#wl-screen .wl-ex').count()) === 2, 'live workout (PC): the day\'s two exercises as compact cards');
     const cardTops = await page.locator('#wl-screen .wl-ex').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)));
@@ -1369,11 +1374,21 @@ async function contrastReport(page) {
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(500);
     check((await page.textContent('#profile-program-wrap')).includes('Terakhir dicatat'), 'workout: the client page shows the last logged day');
-    check((await page.textContent('#profile-program-wrap')).includes('Kirim ringkasan WA'), 'workout: after logging the coach can send the day summary by WhatsApp');
-    check((await page.locator('#wk-admin-stats .wk-sum').count()) === 1 && (await page.locator('#wk-admin-stats svg.pg-chart').count()) >= 1 && (await overflowX(page)) <= 0, 'workout charts: the client page shows the summary and weekly volume without sideways scroll');
-    check((await page.textContent('#wk-admin-stats')).includes('Riwayat latihan') && (await page.locator('#wk-admin-stats .wl-hist-row button:has-text("Ubah")').count()) === 1, 'workout history: the logged day has an "Ubah" button');
-    const prgDays = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-program-wrap .prg-days > div')).map(d => { const r = d.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
-    check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
+    await page.evaluate(() => window.cpMore('PT-A'));
+    await page.waitForTimeout(400);
+    check((await page.textContent('#cpm-body')).includes('Ringkasan latihan'), 'workout: after logging the coach can send the day summary by WhatsApp (⋯ → Ringkasan latihan)');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(300);
+    check((await page.locator('#cp-ins-latihan svg.pg-chart').count()) >= 1 && (await overflowX(page)) <= 0, 'workout charts: the Latihan tab shows weekly volume without sideways scroll');
+    check((await page.textContent('#cp-wk-hist')).includes('Riwayat latihan') && (await page.locator('#cp-wk-hist button.cp-row[aria-label^="Ubah latihan"]').count()) === 1, 'workout history: the logged day is a row that opens the editor');
+    check((await page.locator('#detail-body .cp-pane[data-cppane="latihan"] [onclick*="shareCard"]').count()) === 0, 'Latihan tab: no share buttons inside the tab (Bagikan lives in ⋯)');
+    const latCols = await page.evaluate(() => { const a = document.getElementById('profile-program-wrap').getBoundingClientRect(), b = document.getElementById('cp-ph-latihan').getBoundingClientRect(); return [Math.round(a.left), Math.round(a.top), Math.round(b.left), Math.round(b.top)]; });
+    check(latCols[0] < latCols[2] && Math.abs(latCols[1] - latCols[3]) <= 4, 'wide client page: Latihan splits into two columns, program and history left, numbers right ' + JSON.stringify(latCols));
+    await page.click('#cp-wk-hist button.cp-row[aria-label^="Ubah latihan"]');
+    await page.waitForTimeout(900);
+    check(await visible(page, '#wl-screen'), 'workout history: tapping a row reopens that day in the logger');
+    await page.evaluate(() => window.wlDiscard(true));
+    await page.waitForTimeout(600);
     await page.evaluate(() => { window.cpTab('progres'); window.cpPgSeg('ringkasan'); });
     await page.waitForTimeout(300);
     const pgPane = '#detail-body [data-cppane="progres"]';

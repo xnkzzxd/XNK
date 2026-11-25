@@ -38,7 +38,8 @@ Old → new:
 | Six share buttons | ⋯ → Bagikan kartu |
 | Delete per measurement | Tap the row → Hapus |
 | "Ubah" per workout day | Tap the row → Ubah |
-| Ubah program, Lainnya (auto, pantangan, regenerate) | "Atur program" → one sheet; catat yang lewat / WA summary → ⋯ |
+| Ubah program, Lainnya (auto, pantangan, regenerate) | "Atur program" → one sheet (`#sheet-cp-prog`); catat yang lewat / WA summary → ⋯ |
+| Three share buttons in Latihan | ⋯ → Bagikan kartu |
 | Care Ubah / Lihat jawaban / Isi / Kirim pengingat | Data tiles; reminder to fill → ⋯ |
 | Ten reminder switches on Ringkasan | Data → Pengingat WhatsApp |
 | PR "Tambah" | "+ PR" on the PR head (and ⋯) |
@@ -100,7 +101,15 @@ A light segment **Ringkasan · Ukuran · Tes · Foto** at the top of the pane (`
 - Server: `getClientBundle.athlete` now also carries `moments` (computed by `_portalXFor_` already; one additive field).
 
 ### Latihan (Wave 3)
-Berikutnya (no buttons), program day cards + "Atur program", Minggu ini vs biasanya, Kekuatan (one list, tap expands the chart), Volume & keseimbangan, Riwayat (tap a row → Ubah).
+Phone order: Program → Minggu ini → Kekuatan → Volume & keseimbangan → Riwayat. From a panel ≥ 700 px wide: two columns, Program + Riwayat left (lists), the numbers right (`.cp-col` with `display: contents` and `order` on phones).
+- **Program** (`programAdminInner0`, admin only): head with the status pill (Otomatis · blok n / Otomatis mati / Program coach / Belum ada) and the **Atur program** link; one muted profile line (level · tujuan · n× / minggu · durasi) for auto programs; mode-ringan and missing-equipment notes; one card per day. The next day (`workout.next`, else the first day) is open with every exercise (thumbnail → `exView`) and a solid **Berikutnya** pill: that is what *Mulai latihan* on the client card starts. Other days are `<details>` cards showing one line of exercise names; a tap opens the full list. A muted foot line: last logged day · last day the client ticked. Empty: one line pointing to Atur program.
+- **Atur program** (`#sheet-cp-prog`, `cpProgSheet`): Ubah / Buat program (closes, then `openProgramEditor`), the Program otomatis switch (`pgAdminAuto`), the latest "why" line, Pantangan chips (`pgAdminTag`), Buat ulang otomatis (`pgAdminRegen`), and the client's own routines. It re-renders in place after each answer (`renderProgramAdmin` → `cpProgSheetRefresh`).
+- **Minggu ini vs biasanya** (`cpLatWeekHtml`): the portal's numbers (days, working sets, volume, then RPE, feeling or duration) and sentence in the light hero, no share buttons; below it one card with the 12-week heatmap and two lines (active days of 84, program days this week).
+- **Kekuatan** (`cpStrengthHtml`): one list (up to 8 lifts from `insight.training.strength`): name, est. 1RM, × body weight, red *mandek*, sparkline, change %. A row is a `<details>`: opening it shows the PR and the full e1RM chart from `workout.stats.exercises` (same key), so the old exercise picker and the second strength card are gone.
+- **Volume & keseimbangan** (`cpVolumeHtml`): weekly volume bars, push / pull / legs / core shares over 4 weeks, the push:pull note and lifts missed for 2 weeks, in one card (the old "volume per otot" duplicate is dropped).
+- **Riwayat latihan** (`cpWkHistHtml`): rows (date + feeling, day name, exercises · sets · minutes, note); 5 then "Tampilkan semua"; a row within 90 days opens `workoutEditDay`; queued workouts show "Menunggu sinyal" / "Gagal".
+- Removed: Mulai latihan and Ubah program buttons (client card / Atur program), the "Lainnya" fold (Atur program; *Catat yang lewat* and *Kirim ringkasan WA* were already in ⋯), three share buttons (⋯ → Bagikan kartu), the last-session number tiles (the first history row says the same).
+- `cpLatRender(id)` redraws Kekuatan, Volume and Riwayat when the workout data changes (called from `renderProgramAdmin`); the insight parts redraw through `renderClientInsight` as before. No new calls.
 
 ### Gizi (Wave 4)
 Saran penyesuaian first, Hari ini (ring + macro bars + 7-day bars), Buku harian per meal (read-only), Data & dasar with "Ubah data gizi".

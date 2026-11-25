@@ -11,8 +11,8 @@ Wave 1 (one approval) — built and approved by the owner 2026-11-25 (PR #201)
 Wave 2 — built and approved by the owner 2026-11-25 (PR #201)
 - [x] T-2304 Progres: sub-tabs Ringkasan · Ukuran · Tes · Foto (no calls on switch), light Rapor tubuh without buttons (`cpRaporHtml`), Momen from bundle `athlete.moments`, one chart with a measure picker, Riwayat catatan rows → `#sheet-cp-row` (values + Hapus) instead of delete icons, Foto rows → private viewer (one `getMemberProgressPhoto`), badges under Foto; ⋯ loses "Foto progres" (coaches cannot upload).
 
-Wave 3
-- [ ] T-2305 Latihan: Berikutnya, program cards + Atur program sheet, Minggu ini, Kekuatan (merged), Volume & keseimbangan, Riwayat rows.
+Wave 3 — built 2026-11-25, waiting for the owner's yes on the screenshots
+- [x] T-2305 Latihan: Program section (profile line, day cards with the next day marked **Berikutnya** and open, other days folded to one line of names) + **Atur program** sheet `#sheet-cp-prog` (Ubah/Buat program, otomatis switch, pantangan, Buat ulang otomatis, client routines); light Minggu ini vs biasanya + activity line; Kekuatan as one folding list (tap = PR + full chart); Volume & keseimbangan in one card; Riwayat rows (tap = Ubah). Two columns on wide panels. No share buttons, no button rows.
 
 Wave 4
 - [ ] T-2306 Gizi: advice first, Hari ini ring + macros + 7-day bars, Buku harian per meal, Data & dasar.

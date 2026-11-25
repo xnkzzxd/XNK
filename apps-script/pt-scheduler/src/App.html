@@ -4763,10 +4763,13 @@
       '<div class="cp-stack' + pgHid('tes') + '" data-cppg="tes"><div id="cp-ins-fitness">' + cpInsHtml(m.id, 'progresFitness') + '</div>' +
         '<div id="profile-tests-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + testsInner(m.id) + '</div></div>' +
       '<div class="cp-stack' + pgHid('foto') + '" data-cppg="foto"><div id="cp-pg-foto" class="cp-stack" data-member="' + h(m.id) + '">' + cpFotoHtml(m.id) + '</div></div></div>';
-    // Latihan: minggu ini + tafsir, lalu program dan log (Wave 3 merombak tab ini)
-    body += '<div class="cp-pane cp-stack' + hid('latihan') + '" data-cppane="latihan"><div id="cp-ph-latihan">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
-      '<div id="profile-program-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + programAdminInner(m.id) + '</div>' +
-      '<div class="stack" style="gap:12px" id="cp-ins-latihan">' + cpInsHtml(m.id, 'latihanCards') + '</div></div>';
+    // Latihan (Fase AC, Wave 3): Program (hari berikutnya ditandai) → Minggu ini → Kekuatan → Volume & keseimbangan → Riwayat.
+    // PC lebar: kiri Program + Riwayat (daftar), kanan Minggu ini + Kekuatan + Volume (angka). HP: urutan lewat `order`.
+    body += '<div class="cp-pane cp-stack' + hid('latihan') + '" data-cppane="latihan"><div class="cp-col cp-col-main">' +
+      '<div id="profile-program-wrap" class="cp-stack cp-lat-prog" data-member="' + h(m.id) + '">' + programAdminInner(m.id) + '</div>' +
+      '<div id="cp-wk-hist" data-member="' + h(m.id) + '">' + cpWkHistHtml(m.id) + '</div></div><div class="cp-col cp-col-side">' +
+      '<div id="cp-ph-latihan" class="cp-stack">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
+      '<div class="cp-stack" id="cp-ins-latihan">' + cpInsHtml(m.id, 'latihanCards') + '</div></div></div>';
     // Gizi (Wave 4 merombak tab ini)
     body += '<div class="cp-pane cp-stack' + hid('gizi') + '" data-cppane="gizi"><div id="cp-ph-gizi">' + cpInsHtml(m.id, 'giziHero') + '</div><div id="profile-nut-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
     // Data: hub ala "Saya" di portal
@@ -4804,8 +4807,9 @@
         case 'progresFolds': { const lb = insLinksBody(); return lb ? foldHtml('Yang berkaitan dengan hasil', '12 minggu', lb, false) : ''; }
         case 'progresMeasures': { const mb = insMeasuresBody(); return mb ? '<div class="px-sec cp-sec"><h3>Lingkar &amp; simetri</h3><span>' + h(INS_RANGE_OPTS.filter(o => o[0] === insRange.v)[0][1]) + '</span></div><div class="card cp-card-pad">' + mb + '</div>' : ''; }
         case 'progresFitness': return insFitnessCard() || '';
-        case 'latihanHero': return insTrainingHero(String(id));
-        case 'latihanCards': return insActivityCard() + insStrengthCard() + insBalanceCard();
+        // Fase AC (Wave 3): Latihan panel punya penyaji sendiri (tanpa tombol bagikan; satu daftar kekuatan, satu kartu volume).
+        case 'latihanHero': return cpLatWeekHtml();
+        case 'latihanCards': return cpStrengthHtml(String(id)) + cpVolumeHtml(String(id));
         case 'giziHero': return cpGiziHero(String(id));
         default: return '';
       }
@@ -5817,43 +5821,68 @@
     return programAdminInner0(memberId, d);
   }
   function programAdminInner0(memberId, d) {
-    // Satu kartu Program (2026-11, T-1620): status, ringkasan, satu tombol utama; sisanya di lipatan "Lainnya".
+    // Fase AC (Wave 3): satu bagian Program — status, profil, kartu per hari ("Berikutnya" ditandai), satu tautan "Atur program".
+    // Mulai latihan ada di kartu klien; ubah program, otomatis, pantangan dan buat ulang ada di lembar Atur program.
     const g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
     const id = h(memberId), n = d.days.reduce((s, x) => s + x.items.length, 0), wd = wkAdmin[memberId];
     const hasLog = !!(wd && wd.days && wd.days.length);
     const status = g && g.isAuto ? 'Otomatis · blok ' + (g.block || 1) : (g && !g.auto ? 'Otomatis mati' : (n ? 'Program coach' : 'Belum ada'));
-    let html = '<div class="card-flat stack prg-card" style="gap:10px"><div class="row-between"><p class="eyebrow">Program latihan</p><span class="pill' + (g && g.isAuto ? ' solid' : ' soft') + '">' + h(status) + '</span></div>';
-    if (g && g.profile && (g.profile.level || g.profile.hari)) {
-      const p = g.profile;
-      html += '<div class="kv"><div><p class="k">Level</p><p class="v">' + h(PG_LVL_LBL[p.level] || '–') + '</p></div><div><p class="k">Tujuan</p><p class="v">' + h(PG_GOAL_LBL[p.tujuan] || '–') + '</p></div>' +
-        '<div><p class="k">Hari</p><p class="v">' + (p.hari ? h(p.hari) + ' / minggu' : '–') + '</p></div><div><p class="k">Durasi</p><p class="v">' + (p.durasi ? h(p.durasi) + ' menit' : '–') + '</p></div></div>';
-    }
-    if (g && g.light) html += '<p class="li-sub" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' Mode ringan: ' + h((g.reasons || []).map(function (r) { return PG_REASON_LBL[r] || r; }).join(', ')) + '.</p>';
-    if (g && (g.gaps || []).length) html += '<p class="li-sub" role="note">Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.</p>';
+    const next = n ? ((wd && wd.next && d.days.some(x => x.hari === wd.next)) ? wd.next : d.days[0].hari) : '';
+    let html = '<div class="px-sec cp-sec"><h3>Program</h3><span class="cp-sec-r"><span class="pill' + (g && g.isAuto ? ' solid' : ' soft') + '">' + h(status) + '</span>' +
+      '<button type="button" class="cp-link" onclick="window.cpProgSheet(\'' + id + '\')">Atur program</button></span></div>';
+    const p = g && g.profile && (g.profile.level || g.profile.hari) ? g.profile : null;
+    const notes = [];
+    if (g && g.light) notes.push(icon('alert-triangle', 'class="ic-inline"') + ' Mode ringan: ' + h((g.reasons || []).map(function (r) { return PG_REASON_LBL[r] || r; }).join(', ')) + '.');
+    if (g && (g.gaps || []).length) notes.push('Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.');
+    if (p) html += '<p class="cp-prof">' + [PG_LVL_LBL[p.level], PG_GOAL_LBL[p.tujuan], p.hari ? p.hari + '× / minggu' : '', p.durasi ? p.durasi + ' menit' : ''].filter(Boolean).map(h).join(' · ') + '</p>';
+    if (notes.length) html += notes.map(t => '<p class="li-sub" role="note">' + t + '</p>').join('');
     if (n) {
-      html += '<div class="prg-days">' + d.days.map(day => '<div class="prg-day stack" style="gap:4px"><p class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></p>' +
-        day.items.map(it => '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('') + '</div>').join('') + '</div>';
-      if (d.last) html += '<p class="li-sub">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
-    } else html += '<p class="li-sub">Belum ada program. Buat sendiri, atau nyalakan program otomatis.</p>';
-    if (hasLog) html += '<p class="li-sub">Terakhir dicatat: ' + h(pgLabel(wd.days[0].tanggal)) + ' · ' + wd.days[0].items.length + ' gerakan</p>';
-    html += '<div class="btn-row"><button type="button" class="btn btn-primary" onclick="window.workoutOpenAdmin(\'' + id + '\')">' + icon('play') + 'Mulai latihan</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.openProgramEditor(\'' + id + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button></div>';
-    // Lainnya: tindakan jarang dipakai
-    let more = '<div class="stack" style="gap:10px"><div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-ghost" onclick="window.workoutOpenAdmin(\'' + id + '\',\'\',\'\',true)">' + icon('calendar') + 'Catat yang lewat</button>' +
-      (hasLog ? '<button type="button" class="btn btn-ghost" onclick="window.workoutSummaryWA(\'' + id + '\')">' + icon('message-circle') + 'Kirim ringkasan WA</button>' : '') + '</div>';
-    if (g) {
-      more += (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('') +
-        '<p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div>' +
-        '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-outline" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + ' Buat ulang otomatis</button><button type="button" class="btn btn-ghost" onclick="window.pgAdminAuto(\'' + id + '\',' + (!g.auto) + ')">' + (g.auto ? 'Matikan otomatis' : 'Nyalakan otomatis') + '</button></div>';
-    }
-    if (d.own && d.own.length) more += '<details class="pg-more"><summary>Rutinitas buatan klien (' + d.own.length + ')</summary><div class="prg-days">' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => it.gerakan + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div></details>';
-    html += foldHtml('Lainnya', g ? 'otomatis, pantangan' : '', more + '</div>', false) + '</div>';
-    if (wd && wd.stats) html += '<div class="card-flat stack" style="gap:10px" id="wk-admin-stats">' + workoutStatsHtml(wd, 'adm', memberId) + '</div>';
+      // Hari berikutnya terbuka dengan semua gerakan; hari lain satu baris nama gerakan, ketuk untuk membuka.
+      const exList = day => day.items.map(it => '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('');
+      html += '<div class="cp-days">' + d.days.map(function (day) {
+        const head = '<span class="cp-day-h"><span class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></span>';
+        if (day.hari === next) return '<div class="card cp-day is-next">' + head + '<span class="pill solid">Berikutnya</span></span><div class="cp-day-ex">' + exList(day) + '</div></div>';
+        return '<details class="card cp-day"><summary>' + head + icon('chevron-down') + '</span><span class="li-sub cp-day-names">' + h(day.items.map(it => exNm(it)).join(' · ')) + '</span></summary><div class="cp-day-ex">' + exList(day) + '</div></details>';
+      }).join('') + '</div>';
+      const foot = [];
+      if (hasLog) foot.push('Terakhir dicatat ' + pgLabel(wd.days[0].tanggal) + ' · ' + wd.days[0].items.length + ' gerakan');
+      if (d.last) foot.push('dicentang klien ' + pgLabel(d.last.tanggal) + ' · ' + d.last.hari);
+      if (foot.length) html += '<p class="li-sub cp-foot">' + h(foot.join(' · ')) + '</p>';
+    } else html += '<p class="cp-empty">' + icon('dumbbell') + ' Belum ada program. Buat sendiri atau nyalakan program otomatis lewat Atur program.</p>';
     return html;
+  }
+  // Lembar "Atur program": semua pengaturan program di satu tempat (dulu tombol Ubah + lipatan Lainnya).
+  let cppMember = '';
+  function cpProgSheetHtml(memberId) {
+    const d = progAdmin[memberId] || {}, g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
+    const id = h(memberId), n = (d.days || []).reduce((s, x) => s + x.items.length, 0);
+    let html = '<button type="button" class="btn btn-primary btn-block" onclick="window.cpProgEdit(\'' + id + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button>' +
+      '<p class="li-sub">Hari, gerakan, set dan rep. Klien melihat perubahan di portalnya.</p>';
+    if (g) {
+      html += '<div class="cpp-group"><div class="cpp-row"><span class="grow"><b>Program otomatis</b><span class="li-sub">' + (g.auto ? 'Disusun dan dinaikkan otomatis tiap minggu' : 'Mati: program hanya berubah lewat coach') + '</span></span>' +
+        '<label class="toggle"><input type="checkbox" id="cpp-auto" aria-label="Program otomatis"' + (g.auto ? ' checked' : '') + ' onchange="window.pgAdminAuto(\'' + id + '\',this.checked)"><span></span></label></div>' +
+        (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('') + '</div>' +
+        '<div class="cpp-group"><p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div></div>' +
+        '<button type="button" class="btn btn-outline btn-block" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + 'Buat ulang otomatis</button>';
+    }
+    if (d.own && d.own.length) html += '<div class="cpp-group"><p class="label">Rutinitas buatan klien (' + d.own.length + ')</p>' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div>';
+    return '<div class="stack" style="gap:14px">' + html + '</div>';
+  }
+  window.cpProgSheet = function (memberId) {
+    cppMember = String(memberId);
+    setHTML('cpp-body', cpProgSheetHtml(cppMember));
+    openSheet('sheet-cp-prog');
+  };
+  window.cpProgEdit = function (memberId) { window.closeModal(); setTimeout(function () { window.openProgramEditor(memberId); }, 120); };
+  function cpProgSheetRefresh(memberId) {
+    const sh = $('sheet-cp-prog');
+    if (sh && !sh.classList.contains('hide') && cppMember === String(memberId)) { setHTML('cpp-body', cpProgSheetHtml(cppMember)); paintIcons(); }
   }
   function renderProgramAdmin(memberId) {
     const w = $('profile-program-wrap');
     if (w && w.getAttribute('data-member') === String(memberId)) { setHTML(w, programAdminInner(memberId)); }
+    cpProgSheetRefresh(memberId);
+    if (window.cpLatRender) window.cpLatRender(memberId);   // Fase AC: kekuatan, volume dan riwayat ikut data latihan
   }
   window.programSetAdmin = function (memberId, d) { progAdmin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { program: d }); renderProgramAdmin(memberId); };
   window.loadAdminProgram = function (memberId) {
@@ -13910,6 +13939,86 @@
     const key = String(memberId);
     const hh = $('cp-pg-hist'); if (hh && hh.getAttribute('data-member') === key) setHTML(hh, cpPgHistHtml(key));
     const f = $('cp-pg-foto'); if (f && f.getAttribute('data-member') === key) setHTML(f, cpFotoHtml(key));
+    paintIcons();
+  };
+
+  // ── Latihan (Wave 3): Minggu ini, Kekuatan (daftar + grafik saat diketuk), Volume & keseimbangan, Riwayat ──
+  // Semua dari bundle di memori (insight + workout). Penyaji portal (insTrainingHero, ins*Card, workoutStatsHtml) tidak diubah.
+  function cpLatWeekHtml() {
+    const d = insD();
+    if (!d) return insSkel('Minggu ini');
+    const t = d.training, w = t.week, a = d.activity;
+    if (!w.days.now && !w.days.avg && !t.strength.length) return insightHeroHtml({ eyebrow: 'Minggu ini', empty: 'Belum ada latihan tercatat. Mulai latihan dari kartu klien di atas.' });
+    const pct = x => x.pct == null ? '' : (x.pct > 0 ? '↑' : x.pct < 0 ? '↓' : '') + Math.abs(x.pct) + '%';
+    const stats = [{ v: String(w.days.now), l: 'Hari latihan', d: w.baseline ? 'rata-rata ' + w.days.avg : '' }, { v: w.sets.now + '', l: 'Set kerja', d: pct(w.sets) }, { v: Math.round(w.volume.now / 100) / 10 + 'k', d: pct(w.volume), l: 'Volume (kg)' }];
+    if (w.rpe != null) stats.push({ v: insNum(w.rpe), l: 'RPE rata-rata' });
+    else if (w.rasa != null) stats.push({ v: insNum(w.rasa) + '/5', l: 'Rasa latihan' });
+    else if (w.durasi.now) stats.push({ v: Math.round(w.durasi.now / 60) + '', d: 'mnt', l: 'Durasi' });
+    const hero = insightHeroHtml({ eyebrow: 'Minggu ini vs biasanya', stats: stats.slice(0, 4), text: t.text });
+    if (!a) return hero;
+    const adh = a.adherence && a.adherence.length ? a.adherence[a.adherence.length - 1] : null;
+    return hero + '<div class="card cp-card-pad cp-act-card"><div class="cp-act-heat" aria-hidden="true">' + heatHtml(a.levels) + '</div><div class="cp-act-t"><p><b class="num">' + a.active + ' / 84</b> hari aktif dalam 12 minggu</p>' +
+      (adh ? '<p><b class="num">' + adh.done + ' / ' + adh.planned + '</b> hari program minggu ini</p>' : '') + '<p class="li-sub">Sesi, latihan dan catat makan</p></div></div>';
+  }
+  function cpStrengthHtml(memberId) {
+    const d = insD(); if (!d || !d.training.strength.length) return '';
+    const wd = wkAdmin[String(memberId)], ex = wd && wd.stats ? wd.stats.exercises || [] : [];
+    const rows = d.training.strength.map(function (s) {
+      const full = ex.find(e => e.key === s.key);
+      const pts = full ? full.points.map(p => ({ tanggal: p.tanggal, v: p.e1rm || p.top })) : [];
+      const note = (s.perBw != null ? insNum(s.perBw) + '× berat badan' : '');
+      const chg = s.pct == null ? '' : (s.pct > 0 ? '↑ ' : s.pct < 0 ? '↓ ' : '') + Math.abs(s.pct) + '%';
+      return '<details class="cp-str"><summary class="cp-row"><span class="grow cp-str-t"><b class="truncate">' + h(exNm(s)) + '</b><span class="li-sub">' + insNum(s.e1rm) + ' kg' + (note ? ' · ' + h(note) : '') + (s.stalled ? ' · <span class="cp-warn">mandek</span>' : '') + '</span></span>' +
+        sparkHtml(s.spark, 'ins-spark') + '<span class="cp-str-p' + (s.pct < 0 ? ' cp-warn' : '') + '">' + h(chg) + '</span>' + icon('chevron-down') + '</summary><div class="cp-str-b">' +
+        (full && full.pr ? '<p class="li-sub"><b>PR:</b> ' + h(wkKg(full.pr.berat)) + ' kg × ' + full.pr.rep + ' · estimasi 1RM ' + h(wkKg(full.pr.e1rm)) + ' kg (' + h(pgLabel(full.pr.tanggal)) + ')</p>' : '') +
+        (s.stalled ? '<p class="li-sub cp-warn">Tidak naik 3 minggu: coba +1 rep atau +2,5 kg.</p>' : '') +
+        (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '') + '</div></details>';
+    }).join('');
+    return '<div class="px-sec cp-sec"><h3>Kekuatan</h3><span>perkiraan 1RM · ketuk untuk grafik</span></div><div class="card cp-list-card">' + rows + '</div>';
+  }
+  function cpVolumeHtml(memberId) {
+    const d = insD(), wd = wkAdmin[String(memberId)], st = wd && wd.stats;
+    const bal = d && d.training.balance && d.training.balance.enough ? d.training.balance : null;
+    if (!(st && st.weeks && st.weeks.length) && !bal) return '';
+    let body = st && st.weeks && st.weeks.length ? '<p class="label">Volume per minggu (kg × rep)</p>' + wkWeeksSvg(st.weeks) : '';
+    if (bal) {
+      body += '<p class="label" style="margin-top:14px">Keseimbangan otot · 4 minggu</p><div class="stack" style="gap:8px">' + bal.groups.filter(g => g.volume > 0).map(g => '<div class="ins-bar"><span>' + h(g.label) + '</span><div class="meter"><i style="width:' + g.share + '%"></i></div><b>' + g.share + '%</b></div>').join('') + '</div>';
+      const notes = [];
+      if (bal.pushPull != null) notes.push('Dorong : tarik ' + insNum(bal.pushPull) + ' : 1' + (bal.pushPull > 1.5 ? ', tambah gerakan menarik (row, pull-up).' : bal.pushPull < 0.67 ? ', tambah gerakan mendorong.' : ', cukup seimbang.'));
+      if (bal.missed.length) notes.push('Belum dilatih 2 minggu: ' + bal.missed.join(', ') + '.');
+      if (notes.length) body += '<ul class="ins-notes">' + notes.map(n => '<li>' + h(n) + '</li>').join('') + '</ul>';
+    }
+    return '<div class="px-sec cp-sec"><h3>Volume &amp; keseimbangan</h3><span>90 hari</span></div><div class="card cp-card-pad cp-vol">' + body + '</div>';
+  }
+  // Riwayat latihan: baris ringkas; ketuk = ubah hari itu (90 hari terakhir). Yang masih di antrean tampil dengan statusnya.
+  const cpw = { member: '', all: false };
+  function cpWkHistHtml(memberId) {
+    const key = String(memberId), wd = wkAdmin[key];
+    if (cpw.member !== key) { cpw.member = key; cpw.all = false; }
+    const days = (wd && wd.days) || [];
+    const pend = wlQueue().filter(wlCanSend).filter(q => q.mode === 'admin' && String(q.memberId) === key);
+    if (!days.length && !pend.length) return wd ? '<div class="px-sec cp-sec"><h3>Riwayat latihan</h3></div><p class="cp-empty">' + icon('dumbbell') + ' Belum ada latihan tercatat.</p>' : '';
+    const ses = {}; ((wd && wd.sessions) || []).forEach(x => { ses[x.tanggal] = x; });
+    const min = wkAddDays(wkToday(), -90), max = cpw.all ? days.length : 5, id = h(key);
+    const rows = pend.map(function (q) {
+      const sets = q.entries.reduce((n, e) => n + e.sets.length, 0);
+      return '<div class="cp-row"><span class="cp-row-d"><b>' + h(pgLabel(q.date)) + '</b><span>' + h(q.hari || 'Latihan bebas') + '</span></span><span class="grow cp-row-t truncate">' + h(q.entries.length + ' gerakan · ' + sets + ' set') + '</span><span class="pill soft cp-row-st">' + (q.retry ? 'Menunggu sinyal' : 'Gagal') + '</span></div>';
+    }).join('') + days.slice(0, max).map(function (d) {
+      const x = ses[d.tanggal] || {}, hr = x.hari || (d.items.find(i => i.hari) || {}).hari || 'Latihan bebas';
+      const sets = d.items.reduce((n, it) => n + it.sets.length, 0), meta = [d.items.length + ' gerakan', sets + ' set'];
+      if (x.durasi) meta.push(Math.round(x.durasi / 60) + ' mnt');
+      const inner = '<span class="cp-row-d"><b>' + h(pgLabel(d.tanggal)) + (x.rasa ? ' ' + WL_FACES[x.rasa - 1][0] : '') + '</b><span class="truncate">' + h(hr) + '</span></span><span class="grow cp-row-t truncate">' + h(meta.join(' · ')) + (x.catatan ? ' · ' + h(x.catatan) : '') + '</span>';
+      return d.tanggal >= min ? '<button type="button" class="cp-row" aria-label="Ubah latihan ' + h(pgLabel(d.tanggal)) + '" onclick="window.workoutEditDay(\'admin\',\'' + id + '\',\'' + h(d.tanggal) + '\')">' + inner + icon('pencil') + '</button>' : '<div class="cp-row">' + inner + '</div>';
+    }).join('');
+    return '<div class="px-sec cp-sec"><h3>Riwayat latihan</h3><span>' + days.length + ' hari · ketuk untuk ubah</span></div><div class="card cp-list-card">' + rows +
+      (days.length > max ? '<button type="button" class="cp-row cp-row-more" onclick="window.cpWkAll(\'' + id + '\')">Tampilkan semua (' + days.length + ')</button>' : '') + '</div>';
+  }
+  window.cpWkAll = function (memberId) { cpw.all = true; window.cpLatRender(memberId); };
+  window.cpLatRender = function (memberId) {
+    const key = String(memberId);
+    const hh = $('cp-wk-hist'); if (!hh || hh.getAttribute('data-member') !== key) return;
+    setHTML(hh, cpWkHistHtml(key));
+    const c = $('cp-ins-latihan'); if (c) setHTML(c, cpInsHtml(key, 'latihanCards'));
     paintIcons();
   };
 

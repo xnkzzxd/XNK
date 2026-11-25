@@ -174,43 +174,68 @@
     return programAdminInner0(memberId, d);
   }
   function programAdminInner0(memberId, d) {
-    // Satu kartu Program (2026-11, T-1620): status, ringkasan, satu tombol utama; sisanya di lipatan "Lainnya".
+    // Fase AC (Wave 3): satu bagian Program — status, profil, kartu per hari ("Berikutnya" ditandai), satu tautan "Atur program".
+    // Mulai latihan ada di kartu klien; ubah program, otomatis, pantangan dan buat ulang ada di lembar Atur program.
     const g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
     const id = h(memberId), n = d.days.reduce((s, x) => s + x.items.length, 0), wd = wkAdmin[memberId];
     const hasLog = !!(wd && wd.days && wd.days.length);
     const status = g && g.isAuto ? 'Otomatis · blok ' + (g.block || 1) : (g && !g.auto ? 'Otomatis mati' : (n ? 'Program coach' : 'Belum ada'));
-    let html = '<div class="card-flat stack prg-card" style="gap:10px"><div class="row-between"><p class="eyebrow">Program latihan</p><span class="pill' + (g && g.isAuto ? ' solid' : ' soft') + '">' + h(status) + '</span></div>';
-    if (g && g.profile && (g.profile.level || g.profile.hari)) {
-      const p = g.profile;
-      html += '<div class="kv"><div><p class="k">Level</p><p class="v">' + h(PG_LVL_LBL[p.level] || '–') + '</p></div><div><p class="k">Tujuan</p><p class="v">' + h(PG_GOAL_LBL[p.tujuan] || '–') + '</p></div>' +
-        '<div><p class="k">Hari</p><p class="v">' + (p.hari ? h(p.hari) + ' / minggu' : '–') + '</p></div><div><p class="k">Durasi</p><p class="v">' + (p.durasi ? h(p.durasi) + ' menit' : '–') + '</p></div></div>';
-    }
-    if (g && g.light) html += '<p class="li-sub" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' Mode ringan: ' + h((g.reasons || []).map(function (r) { return PG_REASON_LBL[r] || r; }).join(', ')) + '.</p>';
-    if (g && (g.gaps || []).length) html += '<p class="li-sub" role="note">Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.</p>';
+    const next = n ? ((wd && wd.next && d.days.some(x => x.hari === wd.next)) ? wd.next : d.days[0].hari) : '';
+    let html = '<div class="px-sec cp-sec"><h3>Program</h3><span class="cp-sec-r"><span class="pill' + (g && g.isAuto ? ' solid' : ' soft') + '">' + h(status) + '</span>' +
+      '<button type="button" class="cp-link" onclick="window.cpProgSheet(\'' + id + '\')">Atur program</button></span></div>';
+    const p = g && g.profile && (g.profile.level || g.profile.hari) ? g.profile : null;
+    const notes = [];
+    if (g && g.light) notes.push(icon('alert-triangle', 'class="ic-inline"') + ' Mode ringan: ' + h((g.reasons || []).map(function (r) { return PG_REASON_LBL[r] || r; }).join(', ')) + '.');
+    if (g && (g.gaps || []).length) notes.push('Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.');
+    if (p) html += '<p class="cp-prof">' + [PG_LVL_LBL[p.level], PG_GOAL_LBL[p.tujuan], p.hari ? p.hari + '× / minggu' : '', p.durasi ? p.durasi + ' menit' : ''].filter(Boolean).map(h).join(' · ') + '</p>';
+    if (notes.length) html += notes.map(t => '<p class="li-sub" role="note">' + t + '</p>').join('');
     if (n) {
-      html += '<div class="prg-days">' + d.days.map(day => '<div class="prg-day stack" style="gap:4px"><p class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></p>' +
-        day.items.map(it => '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('') + '</div>').join('') + '</div>';
-      if (d.last) html += '<p class="li-sub">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
-    } else html += '<p class="li-sub">Belum ada program. Buat sendiri, atau nyalakan program otomatis.</p>';
-    if (hasLog) html += '<p class="li-sub">Terakhir dicatat: ' + h(pgLabel(wd.days[0].tanggal)) + ' · ' + wd.days[0].items.length + ' gerakan</p>';
-    html += '<div class="btn-row"><button type="button" class="btn btn-primary" onclick="window.workoutOpenAdmin(\'' + id + '\')">' + icon('play') + 'Mulai latihan</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.openProgramEditor(\'' + id + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button></div>';
-    // Lainnya: tindakan jarang dipakai
-    let more = '<div class="stack" style="gap:10px"><div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-ghost" onclick="window.workoutOpenAdmin(\'' + id + '\',\'\',\'\',true)">' + icon('calendar') + 'Catat yang lewat</button>' +
-      (hasLog ? '<button type="button" class="btn btn-ghost" onclick="window.workoutSummaryWA(\'' + id + '\')">' + icon('message-circle') + 'Kirim ringkasan WA</button>' : '') + '</div>';
-    if (g) {
-      more += (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('') +
-        '<p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div>' +
-        '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-outline" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + ' Buat ulang otomatis</button><button type="button" class="btn btn-ghost" onclick="window.pgAdminAuto(\'' + id + '\',' + (!g.auto) + ')">' + (g.auto ? 'Matikan otomatis' : 'Nyalakan otomatis') + '</button></div>';
-    }
-    if (d.own && d.own.length) more += '<details class="pg-more"><summary>Rutinitas buatan klien (' + d.own.length + ')</summary><div class="prg-days">' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => it.gerakan + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div></details>';
-    html += foldHtml('Lainnya', g ? 'otomatis, pantangan' : '', more + '</div>', false) + '</div>';
-    if (wd && wd.stats) html += '<div class="card-flat stack" style="gap:10px" id="wk-admin-stats">' + workoutStatsHtml(wd, 'adm', memberId) + '</div>';
+      // Hari berikutnya terbuka dengan semua gerakan; hari lain satu baris nama gerakan, ketuk untuk membuka.
+      const exList = day => day.items.map(it => '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('');
+      html += '<div class="cp-days">' + d.days.map(function (day) {
+        const head = '<span class="cp-day-h"><span class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></span>';
+        if (day.hari === next) return '<div class="card cp-day is-next">' + head + '<span class="pill solid">Berikutnya</span></span><div class="cp-day-ex">' + exList(day) + '</div></div>';
+        return '<details class="card cp-day"><summary>' + head + icon('chevron-down') + '</span><span class="li-sub cp-day-names">' + h(day.items.map(it => exNm(it)).join(' · ')) + '</span></summary><div class="cp-day-ex">' + exList(day) + '</div></details>';
+      }).join('') + '</div>';
+      const foot = [];
+      if (hasLog) foot.push('Terakhir dicatat ' + pgLabel(wd.days[0].tanggal) + ' · ' + wd.days[0].items.length + ' gerakan');
+      if (d.last) foot.push('dicentang klien ' + pgLabel(d.last.tanggal) + ' · ' + d.last.hari);
+      if (foot.length) html += '<p class="li-sub cp-foot">' + h(foot.join(' · ')) + '</p>';
+    } else html += '<p class="cp-empty">' + icon('dumbbell') + ' Belum ada program. Buat sendiri atau nyalakan program otomatis lewat Atur program.</p>';
     return html;
+  }
+  // Lembar "Atur program": semua pengaturan program di satu tempat (dulu tombol Ubah + lipatan Lainnya).
+  let cppMember = '';
+  function cpProgSheetHtml(memberId) {
+    const d = progAdmin[memberId] || {}, g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
+    const id = h(memberId), n = (d.days || []).reduce((s, x) => s + x.items.length, 0);
+    let html = '<button type="button" class="btn btn-primary btn-block" onclick="window.cpProgEdit(\'' + id + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button>' +
+      '<p class="li-sub">Hari, gerakan, set dan rep. Klien melihat perubahan di portalnya.</p>';
+    if (g) {
+      html += '<div class="cpp-group"><div class="cpp-row"><span class="grow"><b>Program otomatis</b><span class="li-sub">' + (g.auto ? 'Disusun dan dinaikkan otomatis tiap minggu' : 'Mati: program hanya berubah lewat coach') + '</span></span>' +
+        '<label class="toggle"><input type="checkbox" id="cpp-auto" aria-label="Program otomatis"' + (g.auto ? ' checked' : '') + ' onchange="window.pgAdminAuto(\'' + id + '\',this.checked)"><span></span></label></div>' +
+        (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('') + '</div>' +
+        '<div class="cpp-group"><p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div></div>' +
+        '<button type="button" class="btn btn-outline btn-block" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + 'Buat ulang otomatis</button>';
+    }
+    if (d.own && d.own.length) html += '<div class="cpp-group"><p class="label">Rutinitas buatan klien (' + d.own.length + ')</p>' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div>';
+    return '<div class="stack" style="gap:14px">' + html + '</div>';
+  }
+  window.cpProgSheet = function (memberId) {
+    cppMember = String(memberId);
+    setHTML('cpp-body', cpProgSheetHtml(cppMember));
+    openSheet('sheet-cp-prog');
+  };
+  window.cpProgEdit = function (memberId) { window.closeModal(); setTimeout(function () { window.openProgramEditor(memberId); }, 120); };
+  function cpProgSheetRefresh(memberId) {
+    const sh = $('sheet-cp-prog');
+    if (sh && !sh.classList.contains('hide') && cppMember === String(memberId)) { setHTML('cpp-body', cpProgSheetHtml(cppMember)); paintIcons(); }
   }
   function renderProgramAdmin(memberId) {
     const w = $('profile-program-wrap');
     if (w && w.getAttribute('data-member') === String(memberId)) { setHTML(w, programAdminInner(memberId)); }
+    cpProgSheetRefresh(memberId);
+    if (window.cpLatRender) window.cpLatRender(memberId);   // Fase AC: kekuatan, volume dan riwayat ikut data latihan
   }
   window.programSetAdmin = function (memberId, d) { progAdmin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { program: d }); renderProgramAdmin(memberId); };
   window.loadAdminProgram = function (memberId) {

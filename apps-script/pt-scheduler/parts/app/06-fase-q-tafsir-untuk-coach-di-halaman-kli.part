@@ -24,8 +24,9 @@
         case 'progresFolds': { const lb = insLinksBody(); return lb ? foldHtml('Yang berkaitan dengan hasil', '12 minggu', lb, false) : ''; }
         case 'progresMeasures': { const mb = insMeasuresBody(); return mb ? '<div class="px-sec cp-sec"><h3>Lingkar &amp; simetri</h3><span>' + h(INS_RANGE_OPTS.filter(o => o[0] === insRange.v)[0][1]) + '</span></div><div class="card cp-card-pad">' + mb + '</div>' : ''; }
         case 'progresFitness': return insFitnessCard() || '';
-        case 'latihanHero': return insTrainingHero(String(id));
-        case 'latihanCards': return insActivityCard() + insStrengthCard() + insBalanceCard();
+        // Fase AC (Wave 3): Latihan panel punya penyaji sendiri (tanpa tombol bagikan; satu daftar kekuatan, satu kartu volume).
+        case 'latihanHero': return cpLatWeekHtml();
+        case 'latihanCards': return cpStrengthHtml(String(id)) + cpVolumeHtml(String(id));
         case 'giziHero': return cpGiziHero(String(id));
         default: return '';
       }
