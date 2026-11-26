@@ -563,7 +563,7 @@ async function contrastReport(page) {
       await page.waitForTimeout(600);
       await page.evaluate(() => window.setClientFilter('held'));
       await page.waitForTimeout(400);
-      check((await page.textContent('[data-filter="held"]')).includes('1') && (await page.locator('#client-list .state-pill.ditahan').count()) === 1, 'panel ' + label + ': Ditahan filter lists the client with a hold pill');
+      check((await page.textContent('[data-filter="held"]')).includes('1') && (await page.locator('#client-list .cc-st.held').count()) === 1 && /^Cuti/.test(await page.textContent('#client-list .cc-st.held')), 'panel ' + label + ': Ditahan filter lists the client with its hold status');
       check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'panel ' + label + ': no sideways scroll');
       await page.evaluate(() => window.openProfile('PT-A'));
       await page.waitForTimeout(800);
