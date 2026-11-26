@@ -3329,4 +3329,34 @@ details.cp-day[open] .cp-day-names { display: none; }
 .cpm-note { margin: 6px 4px 0; }
 .cp-share-btn + .cp-more-btn { margin-left: 4px; }
 .cp-row > svg.lucide.lucide-pencil { color: var(--fg-muted); }
+/* ── Gizi (Wave 4): saran, hari ini (cincin + makro), 7 hari, buku harian, Data & dasar ── */
+.cp-advice .btn-row { margin-top: 4px; }
+.cp-nut-today { display: flex; align-items: center; gap: 18px; }
+.cp-ring { width: 108px; height: 108px; }
+@media (min-width: 768px) { .cp-ring { width: 124px; height: 124px; } .cp-nut-today { gap: 24px; } }
+.cp-ring-n { font-size: var(--fs-2xl); font-weight: 800; line-height: 1.05; }
+.cp-ring-s { font-size: var(--fs-xs); color: var(--fg-muted); }
+.cp-mac { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cp-mac-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; font-size: var(--fs-sm); }
+.cp-mac-h b small { font-weight: 600; color: var(--fg-muted); }
+.cp-nut-week { display: flex; flex-direction: column; gap: 10px; }
+.cp-nut-t { margin: 0; font-size: var(--fs-sm); }
+.cp-miss { margin: 6px 0 0; font-size: var(--fs-sm); }
+.cp-diary .cp-str-b { gap: 12px; }
+.cp-meal-h { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 4px; font-size: var(--fs-sm); }
+.cp-meal-h span { color: var(--fg-muted); }
+.cp-meal-i { display: flex; gap: 8px; margin: 0; padding: 4px 0; font-size: var(--fs-sm); border-top: 1px solid var(--border); }
+.cp-meal-i:first-of-type { border-top: 0; }
+.cp-nut-data { display: flex; flex-direction: column; gap: 12px; }
+.cp-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 14px 18px; }
+.cp-num p { margin: 0; }
+.cp-num .k { font-size: var(--fs-2xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--fg-muted); }
+.cp-num .v { font-size: var(--fs-xl); font-weight: 800; line-height: 1.15; margin-top: 2px; }
+.cp-num .s { font-size: var(--fs-xs); color: var(--fg-muted); }
+.cp-nut-h { margin: 4px 0 -6px; padding-top: 12px; border-top: 1px solid var(--border); }
+.cp-kvl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; min-height: 40px; padding: 8px 0; border-top: 1px solid var(--border); font-size: var(--fs-sm); }
+.cp-kvl > div:first-child { border-top: 0; }
+.cp-kvl span { color: var(--fg-muted); flex: none; }
+.cp-kvl b { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.cp-sec .cp-link { margin-block: -8px; }
 </style>

@@ -8,10 +8,9 @@
     if (raw === undefined) {
       if (kind === 'progresHero') return insSkel('Rapor tubuh');
       if (kind === 'latihanHero') return insSkel('Minggu ini');
-      if (kind === 'giziHero') return '';
       return '';
     }
-    if (raw && raw.error) return /Hero$/.test(kind) && kind !== 'giziHero' ? insErr(kind === 'progresHero' ? 'Rapor tubuh' : 'Minggu ini') : '';
+    if (raw && raw.error) return /Hero$/.test(kind) ? insErr(kind === 'progresHero' ? 'Rapor tubuh' : 'Minggu ini') : '';
     return insWith(raw, function () {
       switch (kind) {
         // Fase AC (Wave 2): Progres panel punya penyaji sendiri (tanpa tombol; Catat ada di kartu klien, bagikan di ⋯).
@@ -27,29 +26,15 @@
         // Fase AC (Wave 3): Latihan panel punya penyaji sendiri (tanpa tombol bagikan; satu daftar kekuatan, satu kartu volume).
         case 'latihanHero': return cpLatWeekHtml();
         case 'latihanCards': return cpStrengthHtml(String(id)) + cpVolumeHtml(String(id));
-        case 'giziHero': return cpGiziHero(String(id));
         default: return '';
       }
     });
   }
-  function cpGiziHero(id) {
-    const d = nut[id];
-    if (!d || d.error || !d.target) return '';
-    const t = d.target;
-    if (!t.ok) return insightHeroHtml({ eyebrow: 'Gizi klien', empty: 'Data gizi klien belum lengkap, jadi target belum bisa dihitung.' });
-    const wk = d.foodLog ? nutWeek(d) : [], logged = wk.filter(x => x.kal);
-    const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kal, 0) / logged.length) : null;
-    const diff = avg != null ? avg - t.kal : null;
-    return insightHeroHtml({ eyebrow: 'Gizi klien · ' + (NUT_GOAL_LABEL[t.goal] || ''), stats: [{ v: nutNum(t.kal), d: 'kkal', l: 'Target harian' }, { v: avg != null ? nutNum(avg) : '–', d: avg != null ? 'kkal' : '', l: 'Rata-rata 7 hari' }, { v: logged.length + '/7', l: 'Hari tercatat' }, { v: nutNum(t.protein), d: 'g', l: 'Protein' }],
-      text: d.inputs && d.inputs.stale ? 'Berat terakhir sudah lebih dari 4 minggu. Minta klien menimbang lagi supaya target akurat.' :
-        avg == null ? 'Belum ada catatan makan minggu ini.' : Math.abs(diff) <= t.kal * 0.1 ? 'Asupan rata-rata dekat dengan target.' : 'Asupan rata-rata ' + (diff > 0 ? 'di atas' : 'di bawah') + ' target ' + nutNum(Math.abs(diff)) + ' kkal per hari.' });
-  }
-
   window.renderClientInsightNow = function () { renderClientInsight(); };
   function renderClientInsight() {
     const id = window.selectedMemberId;
     if (!id || !$('cp-ph-progress')) return;
-    [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ins-measures', 'progresMeasures'], ['cp-ins-fitness', 'progresFitness'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards'], ['cp-ph-gizi', 'giziHero']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
+    [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ins-measures', 'progresMeasures'], ['cp-ins-fitness', 'progresFitness'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
     cpRenderOverview(id);
     paintIcons();
   }

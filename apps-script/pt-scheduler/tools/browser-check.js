@@ -1168,8 +1168,11 @@ async function contrastReport(page) {
     await page.waitForTimeout(400);
     const gzCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-nut-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(gzCols.length === 2 && gzCols[1][0] > gzCols[0][0] && Math.abs(gzCols[1][1] - gzCols[0][1]) <= 2 && (await elOverflow(page, '#detail-body')) <= 1, 'wide client page: the Gizi tab has the numbers on the left and the coach inputs on the right ' + JSON.stringify(gzCols));
-    // The coach can type an age for the client (Gizi → Ubah).
-    await page.evaluate(() => window.openNutEdit('PT-A'));
+    // Fase AC (Wave 4): satu tautan "Ubah data gizi" di kepala Data & dasar; tanpa tombol bagikan atau deretan tombol di tab.
+    const gzBtns = await page.evaluate(() => Array.from(document.querySelectorAll('#detail-body [data-cppane="gizi"] button')).filter(b => !b.classList.contains('cp-row') && !b.closest('summary') && b.getClientRects().length).map(b => b.textContent.trim()));
+    check(gzBtns.length <= 4 && gzBtns.includes('Ubah data gizi') && (await page.locator('#detail-body [data-cppane="gizi"] [onclick*="shareCard"]').count()) === 0, 'Gizi tab: one "Ubah data gizi" link, no share buttons or button rows ' + JSON.stringify(gzBtns));
+    // The coach can type an age for the client (Gizi → Ubah data gizi).
+    await page.click('#profile-nut-wrap .cp-link:has-text("Ubah data gizi")');
     await page.waitForTimeout(600);
     check(await visible(page, '#nut-umur') && (await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('nut-umur')).fontSize))) >= 16, 'umur: the Gizi edit sheet has an age field (16 px)');
     await page.fill('#nut-umur', '29');
@@ -1178,7 +1181,7 @@ async function contrastReport(page) {
     await page.selectOption('#nut-goal', 'jaga');
     await page.click('#modal-nut-edit button[type=submit]');
     await page.waitForTimeout(1200);
-    check((await page.textContent('#profile-nut-wrap')).includes('29 tahun (diisi manual)'), 'umur: the typed age shows on the Gizi tab');
+    check((await page.textContent('#profile-nut-wrap')).includes('29 tahun (manual)'), 'umur: the typed age shows on the Gizi tab');
     await page.evaluate(() => window.cpTab('data'));
     await page.waitForTimeout(300);
     const careCols = await page.evaluate(() => { const t = Array.from(document.querySelectorAll('#profile-care-wrap .cp-tile')).map(c => Math.round(c.getBoundingClientRect().top)); return { tiles: t.length, perRow: t.filter(x => x === t[0]).length }; });
@@ -1866,7 +1869,7 @@ async function contrastReport(page) {
       await page.waitForTimeout(250);
       if (tab === 'gizi') {
         const gz = await page.evaluate(() => { const w = document.getElementById('profile-nut-wrap'); return { txt: w ? w.textContent : '', over: w ? w.scrollWidth - w.clientWidth : 99, tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size }; });
-        check(/Dasar perhitungan/.test(gz.txt) && /Lengkapi data|Target harian/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
+        check(/Data & dasar/.test(gz.txt) && /Lengkapi data|Hari ini/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
       }
       await shot(page, 'phone-client-' + tab + '-' + scheme);
     }

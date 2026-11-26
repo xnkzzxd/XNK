@@ -4771,7 +4771,8 @@
       '<div id="cp-ph-latihan" class="cp-stack">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
       '<div class="cp-stack" id="cp-ins-latihan">' + cpInsHtml(m.id, 'latihanCards') + '</div></div></div>';
     // Gizi (Wave 4 merombak tab ini)
-    body += '<div class="cp-pane cp-stack' + hid('gizi') + '" data-cppane="gizi"><div id="cp-ph-gizi">' + cpInsHtml(m.id, 'giziHero') + '</div><div id="profile-nut-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
+    // Gizi (Fase AC, Wave 4): saran → hari ini → 7 hari → buku harian | Data & dasar (kolom kanan di PC)
+    body += '<div class="cp-pane cp-stack' + hid('gizi') + '" data-cppane="gizi"><div id="profile-nut-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
     // Data: hub ala "Saya" di portal
     body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     body += '</div>';
@@ -4793,10 +4794,9 @@
     if (raw === undefined) {
       if (kind === 'progresHero') return insSkel('Rapor tubuh');
       if (kind === 'latihanHero') return insSkel('Minggu ini');
-      if (kind === 'giziHero') return '';
       return '';
     }
-    if (raw && raw.error) return /Hero$/.test(kind) && kind !== 'giziHero' ? insErr(kind === 'progresHero' ? 'Rapor tubuh' : 'Minggu ini') : '';
+    if (raw && raw.error) return /Hero$/.test(kind) ? insErr(kind === 'progresHero' ? 'Rapor tubuh' : 'Minggu ini') : '';
     return insWith(raw, function () {
       switch (kind) {
         // Fase AC (Wave 2): Progres panel punya penyaji sendiri (tanpa tombol; Catat ada di kartu klien, bagikan di ⋯).
@@ -4812,29 +4812,15 @@
         // Fase AC (Wave 3): Latihan panel punya penyaji sendiri (tanpa tombol bagikan; satu daftar kekuatan, satu kartu volume).
         case 'latihanHero': return cpLatWeekHtml();
         case 'latihanCards': return cpStrengthHtml(String(id)) + cpVolumeHtml(String(id));
-        case 'giziHero': return cpGiziHero(String(id));
         default: return '';
       }
     });
   }
-  function cpGiziHero(id) {
-    const d = nut[id];
-    if (!d || d.error || !d.target) return '';
-    const t = d.target;
-    if (!t.ok) return insightHeroHtml({ eyebrow: 'Gizi klien', empty: 'Data gizi klien belum lengkap, jadi target belum bisa dihitung.' });
-    const wk = d.foodLog ? nutWeek(d) : [], logged = wk.filter(x => x.kal);
-    const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kal, 0) / logged.length) : null;
-    const diff = avg != null ? avg - t.kal : null;
-    return insightHeroHtml({ eyebrow: 'Gizi klien · ' + (NUT_GOAL_LABEL[t.goal] || ''), stats: [{ v: nutNum(t.kal), d: 'kkal', l: 'Target harian' }, { v: avg != null ? nutNum(avg) : '–', d: avg != null ? 'kkal' : '', l: 'Rata-rata 7 hari' }, { v: logged.length + '/7', l: 'Hari tercatat' }, { v: nutNum(t.protein), d: 'g', l: 'Protein' }],
-      text: d.inputs && d.inputs.stale ? 'Berat terakhir sudah lebih dari 4 minggu. Minta klien menimbang lagi supaya target akurat.' :
-        avg == null ? 'Belum ada catatan makan minggu ini.' : Math.abs(diff) <= t.kal * 0.1 ? 'Asupan rata-rata dekat dengan target.' : 'Asupan rata-rata ' + (diff > 0 ? 'di atas' : 'di bawah') + ' target ' + nutNum(Math.abs(diff)) + ' kkal per hari.' });
-  }
-
   window.renderClientInsightNow = function () { renderClientInsight(); };
   function renderClientInsight() {
     const id = window.selectedMemberId;
     if (!id || !$('cp-ph-progress')) return;
-    [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ins-measures', 'progresMeasures'], ['cp-ins-fitness', 'progresFitness'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards'], ['cp-ph-gizi', 'giziHero']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
+    [['cp-ph-progress', 'progresHero'], ['cp-ins-progress', 'progresCards'], ['cp-ins-folds', 'progresFolds'], ['cp-ins-measures', 'progresMeasures'], ['cp-ins-fitness', 'progresFitness'], ['cp-ph-latihan', 'latihanHero'], ['cp-ins-latihan', 'latihanCards']].forEach(function (p) { const el = $(p[0]); if (el) setHTML(el, cpInsHtml(id, p[1])); });
     cpRenderOverview(id);
     paintIcons();
   }
@@ -7879,49 +7865,75 @@
     }
     return out;
   }
+  // Fase AC (Wave 4): Gizi ala tab Makan di portal, dari sisi coach. Saran dulu, lalu hari ini (cincin + makro), 7 hari, buku harian per waktu
+  // makan (hanya baca), dan Data & dasar dengan satu tautan "Ubah data gizi". Tanpa kartu di dalam kartu; tidak ada panggilan baru.
+  const NUT_MEAL_LBL = { sarapan: 'Sarapan', siang: 'Makan siang', malam: 'Makan malam', camilan: 'Camilan' };
+  function nutRingHtml(eaten, target) {
+    const C = 2 * Math.PI * 52, frac = target ? Math.min(1, eaten / target) : 0;
+    return '<div class="ring-wrap cp-ring" role="img" aria-label="' + h(nutNum(eaten)) + ' dari ' + h(nutNum(target)) + ' kkal"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
+      '<circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(1) + '"/></svg>' +
+      '<div class="ring-center"><span class="num cp-ring-n">' + h(nutNum(eaten)) + '</span><span class="cp-ring-s">dari ' + h(nutNum(target)) + '</span></div></div>';
+  }
+  function nutMacHtml(label, got, goal) {
+    const pct = goal ? Math.min(100, Math.round(got / goal * 100)) : 0;
+    return '<div class="cp-mac-row"><div class="cp-mac-h"><span>' + h(label) + '</span><b class="num">' + h(nutNum(got)) + ' <small>/ ' + h(nutNum(goal)) + ' g</small></b></div><div class="meter"><i style="width:' + pct + '%"></i></div></div>';
+  }
+  function nutDiaryDay(x) {
+    const by = {}; x.x.items.forEach(it => { (by[it.waktu] || (by[it.waktu] = [])).push(it); });
+    const keys = Object.keys(NUT_MEAL_LBL).filter(k => by[k]).concat(Object.keys(by).filter(k => !NUT_MEAL_LBL[k]));
+    return keys.map(function (k) {
+      const items = by[k], kal = items.reduce((a, it) => a + (Number(it.kal) || 0), 0);
+      return '<div class="cp-meal"><p class="cp-meal-h"><b>' + h(NUT_MEAL_LBL[k] || k) + '</b><span class="num">' + h(nutNum(kal)) + ' kkal</span></p>' +
+        items.map(it => '<p class="cp-meal-i"><span class="grow">' + h(it.nama) + ' <span class="li-sub">· ' + h(it.porsi) + '</span></span><span class="num li-sub">' + h(nutNum(it.kal)) + '</span></p>').join('') + '</div>';
+    }).join('');
+  }
   function nutInner(memberId) {
     const d = nut[memberId];
-    if (!d) return '<div class="card">' + skel(3, true) + '</div>';
-    if (d.error) return '<div class="card">' + errorState(d.error) + '</div>';
-    const p = d.profile || {}, t = d.target || {}, i = d.inputs || {};
-    let html = '<div class="cp-col cp-col-main">';
-    // Tubuh: empat angka dasar
-    html += '<div class="card stack" style="gap:12px"><div class="section-head"><h4 class="section-title">Dasar perhitungan</h4><span class="li-sub">perkiraan, bukan diagnosis</span></div><div class="mtiles">' +
-      mtileHtml('BMI', d.bmi ? nutNum(d.bmi.value, 1) : '–', d.bmi ? NUT_BMI_LABEL[d.bmi.kategori] || '' : '') +
-      mtileHtml('Pinggang / tinggi', d.whtr ? nutNum(d.whtr.value, 2) : '–', d.whtr ? NUT_WHTR_LABEL[d.whtr.kategori] || '' : '') +
-      mtileHtml('BMR', t.ok ? nutNum(t.bmr) : '–', 'kkal istirahat') + mtileHtml('TDEE', t.ok ? nutNum(t.tdee) : '–', 'kkal dengan aktivitas') + '</div>' +
-      '<p class="li-sub">Berat ' + (i.kg != null ? h(nutNum(i.kg, 1)) + ' kg (' + h(i.kgDate) + ')' : 'belum ada') + (i.stale ? ' · lebih dari 4 minggu, minta timbang ulang' : '') +
-      ' · pinggang ' + (i.waist != null ? h(nutNum(i.waist, 1)) + ' cm' : '–') + ' · ' + h(nutNum(i.sessionsPerWeek, 1)) + ' sesi/minggu</p></div>';
+    if (!d) return '<div class="card cp-card-pad">' + skel(3, true) + '</div>';
+    if (d.error) return '<div class="card cp-card-pad">' + errorState(d.error) + '</div>';
+    const p = d.profile || {}, t = d.target || {}, i = d.inputs || {}, av = d.advice || {}, id = h(memberId);
+    const wk = d.foodLog && d.foodLog.days ? nutWeek(d) : [], logged = wk.filter(x => x.kal);
+    const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kal, 0) / logged.length) : null;
+    let main = '';
+    if (av.pending) main += '<div class="px-sec cp-sec"><h3>Saran penyesuaian</h3><span>perlu keputusan</span></div><div class="card cp-card-pad cp-advice">' + nutAdviceRow(Object.assign({ memberId: memberId }, av.pending), false) + '</div>';
     if (t.ok) {
-      html += '<div class="card stack" style="gap:12px"><div class="section-head"><h4 class="section-title">Kebutuhan harian</h4><span class="li-sub">' + h(NUT_GOAL_LABEL[t.goal] || '') + '</span></div>' +
-        (t.warnings || []).map(w => '<p class="flag nut-flag">' + h(NUT_WARN_LABEL[w] || w) + '</p>').join('') +
-        '<div class="mtiles">' + mtileHtml('Protein', nutNum(t.protein) + ' g', '') + mtileHtml('Karbo', nutNum(t.karbo) + ' g', '') + mtileHtml('Lemak', nutNum(t.lemak) + ' g', '') + '</div>' +
-        '<p class="li-sub">Serat ≥ ' + h(nutNum(t.serat)) + ' g · natrium &lt; ' + h(nutNum(t.natrium)) + ' mg · air ± ' + h(nutNum(t.air)) + ' ml' + (t.adjust ? ' · penyesuaian aktif ' + h(nutDeltaText(t.adjust)) : '') + '</p></div>';
+      const today = wk.length ? wk[wk.length - 1] : null, tot = today && today.x ? today.x.totals : { kal: 0, p: 0, k: 0, l: 0 }, left = t.kal - (tot.kal || 0);
+      main += '<div class="px-sec cp-sec"><h3>Hari ini</h3><span>' + (tot.kal ? (left >= 0 ? 'sisa ' + h(nutNum(left)) + ' kkal' : 'lebih ' + h(nutNum(-left)) + ' kkal') : 'belum ada catatan') + '</span></div>' +
+        '<div class="card cp-card-pad cp-nut-today">' + nutRingHtml(tot.kal || 0, t.kal) + '<div class="cp-mac">' + nutMacHtml('Protein', tot.p || 0, t.protein) + nutMacHtml('Karbo', tot.k || 0, t.karbo) + nutMacHtml('Lemak', tot.l || 0, t.lemak) + '</div></div>';
+      const diff = avg != null ? avg - t.kal : null;
+      const txt = i.stale ? 'Berat terakhir sudah lebih dari 4 minggu. Minta klien menimbang lagi supaya target akurat.' :
+        avg == null ? 'Belum ada catatan makan minggu ini.' : Math.abs(diff) <= t.kal * 0.1 ? 'Asupan rata-rata dekat dengan target.' : 'Asupan rata-rata ' + (diff > 0 ? 'di atas' : 'di bawah') + ' target ' + nutNum(Math.abs(diff)) + ' kkal per hari.';
+      if (wk.length) main += '<div class="px-sec cp-sec"><h3>7 hari</h3><span>' + logged.length + '/7 hari tercatat' + (avg != null ? ' · rata-rata ' + h(nutNum(avg)) + ' kkal' : '') + '</span></div>' +
+        '<div class="card cp-card-pad cp-nut-week">' + kcalBarsHtml(wk, t.kal) + '<p class="cp-nut-t' + (i.stale ? ' cp-warn' : '') + '">' + h(txt) + '</p></div>';
     } else {
-      html += '<div class="card stack" style="gap:8px"><h4 class="section-title">Lengkapi data</h4><p class="li-sub">Target belum bisa dihitung. Yang masih kurang:</p>' +
-        (t.missingLabels || []).map(x => '<p>' + icon('circle-dashed', 'class="ic-inline"') + ' ' + h(x) + '</p>').join('') + '</div>';
+      main += '<div class="px-sec cp-sec"><h3>Lengkapi data</h3><button type="button" class="cp-link" onclick="window.openNutEdit(\'' + id + '\')">Isi data gizi</button></div>' +
+        '<div class="card cp-card-pad"><p class="li-sub">Target kalori dihitung setelah data ini ada:</p>' + (t.missingLabels || []).map(x => '<p class="cp-miss">' + icon('circle-dashed', 'class="ic-inline"') + ' ' + h(x) + '</p>').join('') + '</div>';
     }
-    const av = d.advice || {};
-    if (av.pending) html += '<div class="card stack" style="gap:8px"><h4 class="section-title">Saran penyesuaian</h4>' + nutAdviceRow(Object.assign({ memberId: memberId }, av.pending), false) + '</div>';
-    if (d.foodLog && d.foodLog.days) {
-      const wk = nutWeek(d), logged = wk.filter(x => x.kal);
-      const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kal, 0) / logged.length) : 0;
-      html += '<div class="card stack" style="gap:12px"><div class="section-head"><h4 class="section-title">Catatan makan 7 hari</h4><span class="li-sub">' + logged.length + ' hari tercatat' + (avg ? ' · rata-rata ' + h(nutNum(avg)) + ' kkal' : '') + '</span></div>' +
-        (logged.length ? kcalBarsHtml(wk, t.ok ? t.kal : 0) + logged.slice().reverse().map(function (x) {
-          return foldHtml(pgLabel(x.k), nutNum(x.x.totals.kal) + ' kkal · P ' + nutNum(x.x.totals.p, 1) + ' g', x.x.items.map(it => '<p class="li-sub">' + h(it.waktu) + ' · ' + h(it.nama) + ' · ' + h(it.porsi) + ' · ' + h(nutNum(it.kal)) + ' kkal</p>').join(''), false);
-        }).join('') : emptyState('utensils', 'Belum ada catatan', 'Klien belum mencatat makan dalam 7 hari terakhir.')) + '</div>';
-    }
-    if (!av.pending && av.last) html += '<p class="li-sub">Saran terakhir: ' + h(nutDeltaText(av.last.delta)) + ' · ' + (av.last.status === 'setuju' ? 'disetujui' : 'ditolak') + ' ' + h(av.last.diputuskan) + '</p>';
-    html += '</div><div class="cp-col cp-col-side"><div class="card stack" style="gap:6px"><div class="section-head"><h4 class="section-title">Input coach</h4><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutEdit(\'' + h(memberId) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
-      careRow('Umur', d.age != null ? h(d.age) + ' tahun' + (p.birthDate ? '' : p.umur !== '' && p.umur != null ? ' (diisi manual)' : '') : '-') +
-      careRow('Tinggi', p.tinggi === '' || p.tinggi == null ? '-' : h(nutNum(p.tinggi, 1)) + ' cm') +
-      careRow('Jenis kelamin', p.jk === 'L' ? 'Laki-laki' : p.jk === 'P' ? 'Perempuan' : '-') +
-      careRow('Goal', h(NUT_GOAL_LABEL[p.goal] || '-')) +
-      careRow('Anggaran', h(p.anggaran || 'standar')) +
-      careRow('Pantangan', h((p.pantangan || []).map(x => NUT_TAG_LABEL[x] || x).join(', ') || '-')) +
-      careRow('Kondisi khusus', h((p.kondisi || []).map(x => NUT_TAG_LABEL[x] || x).join(', ') || '-')) +
-      careRow('Gizi aktif', p.aktif ? 'Ya' : 'Tidak') + '</div></div>';
-    return html;
+    if (logged.length) {
+      main += '<div class="px-sec cp-sec"><h3>Buku harian</h3><span>ketuk hari untuk rincian</span></div><div class="card cp-list-card">' + logged.slice().reverse().map(function (x, n) {
+        return '<details class="cp-str cp-diary"' + (n === 0 ? ' open' : '') + '><summary class="cp-row"><span class="cp-row-d"><b>' + h(pgLabel(x.k)) + '</b><span>' + x.x.items.length + ' makanan</span></span><span class="grow cp-row-t">' + h(nutNum(x.x.totals.kal)) + ' kkal · P ' + h(nutNum(x.x.totals.p, 1)) + ' g</span>' + icon('chevron-down') + '</summary><div class="cp-str-b">' + nutDiaryDay(x) + '</div></details>';
+      }).join('') + '</div>';
+    } else if (d.foodLog) main += '<div class="px-sec cp-sec"><h3>Buku harian</h3></div><p class="cp-empty">' + icon('utensils') + ' Klien belum mencatat makan dalam 7 hari terakhir.</p>';
+    if (!av.pending && av.last) main += '<p class="li-sub cp-foot">Saran terakhir: ' + h(nutDeltaText(av.last.delta)) + ' · ' + (av.last.status === 'setuju' ? 'disetujui' : 'ditolak') + ' ' + h(av.last.diputuskan) + '</p>';
+    // Data & dasar: angka dasar tanpa kotak, peringatan, input coach sebagai baris.
+    const num = (k, v, sub) => '<div class="cp-num"><p class="k">' + h(k) + '</p><p class="v num">' + h(v) + '</p>' + (sub ? '<p class="s">' + h(sub) + '</p>' : '') + '</div>';
+    let side = '<div class="px-sec cp-sec"><h3>Data &amp; dasar</h3><button type="button" class="cp-link" onclick="window.openNutEdit(\'' + id + '\')">Ubah data gizi</button></div><div class="card cp-card-pad cp-nut-data">' +
+      '<div class="cp-nums">' + num('BMI', d.bmi ? nutNum(d.bmi.value, 1) : '–', d.bmi ? NUT_BMI_LABEL[d.bmi.kategori] || '' : '') + num('Pinggang / tinggi', d.whtr ? nutNum(d.whtr.value, 2) : '–', d.whtr ? NUT_WHTR_LABEL[d.whtr.kategori] || '' : '') +
+      num('BMR', t.ok ? nutNum(t.bmr) : '–', 'kkal istirahat') + num('TDEE', t.ok ? nutNum(t.tdee) : '–', 'kkal dengan aktivitas') + '</div>' +
+      '<p class="li-sub">Berat ' + (i.kg != null ? h(nutNum(i.kg, 1)) + ' kg (' + h(pgLabel(i.kgDate)) + ')' : 'belum ada') + ' · pinggang ' + (i.waist != null ? h(nutNum(i.waist, 1)) + ' cm' : '–') + ' · ' + h(nutNum(i.sessionsPerWeek, 1)) + ' sesi/minggu' +
+      (t.ok ? '<br>Serat ≥ ' + h(nutNum(t.serat)) + ' g · natrium &lt; ' + h(nutNum(t.natrium)) + ' mg · air ± ' + h(nutNum(t.air)) + ' ml' + (t.adjust ? ' · penyesuaian aktif ' + h(nutDeltaText(t.adjust)) : '') : '') + '</p>' +
+      (t.warnings || []).map(w => '<p class="flag nut-flag">' + h(NUT_WARN_LABEL[w] || w) + '</p>').join('') +
+      '<p class="cpm-h cp-nut-h">Input coach</p><div class="cp-kvl">' + [
+        ['Goal', NUT_GOAL_LABEL[p.goal] || '–'],
+        ['Umur', d.age != null ? d.age + ' tahun' + (p.birthDate ? '' : p.umur !== '' && p.umur != null ? ' (manual)' : '') : '–'],
+        ['Tinggi', p.tinggi === '' || p.tinggi == null ? '–' : nutNum(p.tinggi, 1) + ' cm'],
+        ['Jenis kelamin', p.jk === 'L' ? 'Laki-laki' : p.jk === 'P' ? 'Perempuan' : '–'],
+        ['Anggaran', p.anggaran || 'standar'],
+        ['Pantangan', (p.pantangan || []).map(x => NUT_TAG_LABEL[x] || x).join(', ') || '–'],
+        ['Kondisi khusus', (p.kondisi || []).map(x => NUT_TAG_LABEL[x] || x).join(', ') || '–'],
+        ['Gizi aktif', p.aktif ? 'Ya' : 'Tidak']
+      ].map(r => '<div><span>' + h(r[0]) + '</span><b>' + h(r[1]) + '</b></div>').join('') + '</div></div>';
+    return '<div class="cp-col cp-col-main">' + main + '</div><div class="cp-col cp-col-side">' + side + '</div>';
   }
 
 

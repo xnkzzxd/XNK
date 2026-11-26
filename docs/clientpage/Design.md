@@ -113,7 +113,13 @@ Phone order: Program → Minggu ini → Kekuatan → Volume & keseimbangan → R
 - `cpLatRender(id)` redraws Kekuatan, Volume and Riwayat when the workout data changes (called from `renderProgramAdmin`); the insight parts redraw through `renderClientInsight` as before. No new calls.
 
 ### Gizi (Wave 4)
-Saran penyesuaian first, Hari ini (ring + macro bars + 7-day bars), Buku harian per meal (read-only), Data & dasar with "Ubah data gizi".
+`nutInner` (admin only; the portal Makan tab is untouched) renders two `.cp-col` columns (one column on phones, two from the existing `#profile-nut-wrap` container rule):
+- **Saran penyesuaian** first when one is pending: the reason, ±kkal and Setuju / Tolak (`nutAdviceRow`, unchanged, also used by Beranda Coach).
+- **Hari ini**: a light calorie ring (`nutRingHtml`, eaten / target from today's food log) next to Protein, Karbo and Lemak bars (`x / target g`); the head says how much is left. Ring and bars stay side by side on phones (no empty space).
+- **7 hari**: the 7-day calorie bars against the target (`kcalBarsHtml`) and one sentence (average vs target, or "weigh again" when the weight is older than 4 weeks); the head carries days logged and the average. This replaces the old black/light "Gizi klien" hero (`cpGiziHero` removed).
+- **Buku harian**: one `<details>` row per logged day (newest open), grouped per meal (Sarapan, Makan siang, Makan malam, Camilan) with each food, portion and kkal. Read-only.
+- **Data & dasar** (right column on PC): BMI, waist/height, BMR, TDEE as plain numbers (no boxes), weight / waist / sessions per week, fibre / sodium / water, safety flags, then the coach inputs as one-line label–value rows. The head link **Ubah data gizi** opens `openNutEdit`; with incomplete data a *Lengkapi data* section lists what is missing with an **Isi data gizi** link.
+- Last decided advice as one muted line. No share buttons (header icon), no button rows, no new calls.
 
 ### Data
 Portal "Saya" style hub: tiles on phones, grouped list rows on PC. Profil (→ `openEditProfileModal`), Kesehatan (→ `openCareHealth`), Assessment (→ `openAssessment`), Catatan privat (→ `openCareNotes`), Masukan klien (→ `#sheet-cp-feedback`), Pengingat WhatsApp (→ `#sheet-cp-remind`, keeps `#profile-meal-wrap`, `#profile-meal-toggle`, `#profile-remind-prefs`). Each tile shows its status.

@@ -935,7 +935,8 @@
       '<div id="cp-ph-latihan" class="cp-stack">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
       '<div class="cp-stack" id="cp-ins-latihan">' + cpInsHtml(m.id, 'latihanCards') + '</div></div></div>';
     // Gizi (Wave 4 merombak tab ini)
-    body += '<div class="cp-pane cp-stack' + hid('gizi') + '" data-cppane="gizi"><div id="cp-ph-gizi">' + cpInsHtml(m.id, 'giziHero') + '</div><div id="profile-nut-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
+    // Gizi (Fase AC, Wave 4): saran → hari ini → 7 hari → buku harian | Data & dasar (kolom kanan di PC)
+    body += '<div class="cp-pane cp-stack' + hid('gizi') + '" data-cppane="gizi"><div id="profile-nut-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
     // Data: hub ala "Saya" di portal
     body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     body += '</div>';
