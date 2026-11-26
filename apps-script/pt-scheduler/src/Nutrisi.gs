@@ -901,6 +901,7 @@ function _nutritionFor_(row) {
     options: { goals: NUT_GOALS, budgets: NUT_BUDGETS, pantangan: NUT_TAGS_FOOD, gaya: NUT_GAYA }
   };
   if (c.target.ok) out.menu = _nutPlanDays_(c.target, _nutMenuOptsFor_(c), c.today, 1)[0];
+  try { out.feedback = _foodFeedbackFor_(c.id, COACHLOG.fbDaysClient); } catch (e) { out.feedback = {}; }   // Fase AD3: tanggapan coach (baca saja)
   return out;
 }
 
@@ -1173,19 +1174,20 @@ function copyMyFoodYesterday(memberToken, waktu) {
   }));
 }
 
-/** Admin: catatan makan satu klien, 7 hari terakhir (per hari: total dan item). Privat. */
-function getClientFoodLog(token, memberId) {
+/** Admin: catatan makan satu klien, 7 hari terakhir (Fase AD3: `days` sampai 31, plus tanggapan coach dan ringkasan). Privat. */
+function getClientFoodLog(token, memberId, days) {
   requireAdmin_(token);
   const m = _memberRowOrThrow_(memberId), id = String(m.row[0]).trim();
-  const today = _todayWib_(), since = _addDaysIso_(today, -6);
+  const n = Math.max(7, Math.min(COACHLOG.foodDaysMax, Math.floor(Number(days) || 7)));
+  const today = _todayWib_(), since = _addDaysIso_(today, -(n - 1));
   const rows = _foodLogRows_(id).filter(function(r) { return r.tanggal >= since; });
-  const days = [];
-  for (let d = 0; d < 7; d++) {
+  const list = [];
+  for (let d = 0; d < n; d++) {
     const day = _addDaysIso_(today, -d);
     const items = rows.filter(function(r) { return r.tanggal === day; });
-    days.push({ tanggal: day, items: items, totals: _foodLogTotals_(items) });
+    list.push({ tanggal: day, items: items, totals: _foodLogTotals_(items) });
   }
-  return { days: days };
+  return { days: list, n: n, feedback: _foodFeedbackFor_(id, n), stats: _foodMonthStats_(list) };
 }
 
 

@@ -3364,6 +3364,70 @@ details.cp-day[open] .cp-day-names { display: none; }
 .cp-kvl span { color: var(--fg-muted); flex: none; }
 .cp-kvl b { text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .cp-sec .cp-link { margin-block: -8px; }
+/* ═══ Fase AD (T-2403): tombol ? di samping label ukuran + lembar cara mengukur (#sheet-ukur) ═══ */
+.lbl-help { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; }
+.lbl-help .label { min-width: 0; }
+.help-btn { flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; margin: -12px -10px -12px 0; padding: 0; border: 0; border-radius: 999px;
+  background: none; color: var(--fg-muted); cursor: pointer; }
+.help-btn svg { width: 18px; height: 18px; }
+@media (hover: hover) { .help-btn:hover { color: var(--fg); } }
+.help-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: -8px; }
+.uk-chips { margin: 0 0 14px; }
+.uk-wrap { display: grid; gap: 16px; }
+.uk-fig { display: flex; justify-content: center; }
+.uk-svg { width: min(170px, 44vw); height: auto; }
+.uk-svg .ukb { fill: color-mix(in srgb, var(--fg) 8%, transparent); stroke: color-mix(in srgb, var(--fg) 50%, transparent); stroke-width: 4; }
+.uk-svg .ukl { stroke: var(--fg); stroke-width: 12; stroke-dasharray: 26 16; stroke-linecap: round; }
+.uk-skel { display: block; width: min(170px, 44vw); aspect-ratio: 1 / 2; border-radius: 16px; }
+.uk-scale { display: grid; place-items: center; width: 120px; height: 120px; border-radius: 24px; background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.uk-scale svg { width: 56px; height: 56px; }
+.uk-steps { margin: 0; padding-left: 1.25rem; display: grid; gap: 8px; line-height: 1.45; }
+.uk-umum { padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.uk-umum .uk-steps { font-size: var(--fs-sm); color: var(--fg-2); margin-top: 6px; }
+@media (min-width: 600px) { .uk-wrap { grid-template-columns: 190px minmax(0, 1fr); align-items: start; } }
+/* ═══ Fase AD1: klien ditahan (cuti / sakit / nonaktif) — pita halaman klien, kartu portal, pil daftar ═══ */
+.hold-band { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--fg) 5%, var(--card, transparent)); }
+.hold-band b { display: block; }
+.hold-band .li-sub { display: block; }
+.hold-band .hb-act { display: flex; gap: 6px; margin-left: auto; }
+.hb-ic { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--fg) 9%, transparent); color: var(--fg); }
+.hb-ic svg { width: 20px; height: 20px; }
+.hb-ic.sm { width: 32px; height: 32px; border-radius: 10px; }
+.hb-ic.sm svg { width: 16px; height: 16px; }
+.state-pill.ditahan { background: transparent; border: 1px dashed currentColor; }
+.cc-st.held { color: var(--fg-2); font-weight: 600; white-space: nowrap; }
+.hold-card b { font-size: var(--fs-lg, 1.125rem); }
+.hd-sess input, .hd-dec input { width: 20px; height: 20px; flex: none; accent-color: var(--fg); }
+#hd-jenis .chip svg, #cu-jenis .chip svg { width: 16px; height: 16px; }
+@media (max-width: 480px) { .hold-band .hb-act { width: 100%; } .hold-band .hb-act .btn { flex: 1; } }
+/* ═══ Fase AD3: alat catat coach (logger, riwayat gerakan, tab Gizi) dan tanggapan coach di Makan klien ═══ */
+.wl-setup { font-weight: 600; }
+.wl-sug-apply { margin-left: 4px; }
+.wl-done-sess input, .cf-fb input[type=checkbox] { width: 20px; height: 20px; flex: none; accent-color: var(--fg); }
+.wkx-tbl { display: grid; gap: 2px; }
+.wkx-tr { display: grid; grid-template-columns: minmax(0, 7.5rem) minmax(0, 1fr) 3.5rem; gap: 10px; align-items: start; min-height: 44px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.wkx-th { min-height: 0; padding-top: 0; font-size: var(--fs-xs); font-weight: 700; color: var(--fg-2); }
+.wkx-tr .num { text-align: right; font-weight: 700; }
+.cf-fb { display: grid; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--border); margin-top: 8px; }
+.cf-links { display: inline-flex; gap: 14px; align-items: center; }
+.cf-links .cp-link svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
+.cf-del summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.cfm { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cfm-h { font-size: var(--fs-xs); color: var(--fg-muted); text-align: center; }
+.cfm-d { display: grid; place-items: center; min-height: 34px; border-radius: 8px; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--fg-muted); background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.cfm-d.pad { background: none; }
+.cfm-d.logged { color: var(--fg); background: none; border: 1.5px solid var(--fg); }
+.cfm-d.hit { color: var(--bg, #fff); background: var(--fg); }
+.cfm-d.over { color: var(--danger); background: none; border: 1.5px solid var(--danger); }
+.nut-fb { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--fg) 6%, transparent); line-height: 1.4; }
+.nut-fb svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+/* ═══ Fase AD4: lembar laporan PDF (pratinjau halaman) ═══ */
+.rp-pages { display: grid; gap: 12px; margin-top: 8px; }
+.rp-pages img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+@media (min-width: 768px) { .rp-pages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rp-secs .chip { cursor: pointer; }
+#pub-report-btn { margin: 0 0 var(--gap, 12px); }
 </style>
 <style>html,body{height:100%;margin:0}.layer{position:fixed;inset:0}#share-toast{position:fixed;left:16px;right:16px;bottom:24px;background:#111;color:#fff;padding:12px;border-radius:10px;display:none;z-index:99;text-align:center}</style>
 </head><body>
@@ -3382,7 +3446,7 @@ details.cp-day[open] .cp-day-names { display: none; }
   const AXES = ['back', 'legs', 'chest', 'arms', 'core', 'shoulders'];
   const PART_GROUP = { 'back': 'back', 'upper legs': 'legs', 'lower legs': 'legs', 'chest': 'chest', 'shoulders': 'shoulders', 'neck': 'shoulders', 'waist': 'core', 'upper arms': 'arms', 'lower arms': 'arms' };
   const GROUP_PARTS = { back: ['back'], legs: ['upper legs', 'lower legs'], chest: ['chest'], shoulders: ['shoulders', 'neck'], core: ['waist'], arms: ['upper arms', 'lower arms'] };
-  const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri'];
+  const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri', 'pinggul'];
   const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'perjalanan', 'gizi', 'rekap', 'foto', 'badge'];
   const PERIOD_KINDS = { latihan: 1, exercises: 1, gizi: 1, ukuran: 1 };
   const PERIODS = ['hari', 'minggu', 'bulan', '3bulan'];
@@ -3400,7 +3464,7 @@ details.cp-day[open] .cp-day-names { display: none; }
       today: 'Today', thisWeek: 'This week', thisMonthP: 'This month', last3: 'Last 3 months', perDay: '/day', sessionsPerWeek: 'Sessions per week', dailyKcal: 'Calories per day',
       vs: { session: 'vs last session', minggu: 'vs last week', bulan: 'vs last month', '3bulan': 'vs previous 3 months', day: 'vs day before', month: 'vs last month' }, sinceStart: 'since start', ofTarget: 'of target', pickPhoto: 'Pick a photo', noData: 'No data yet',
       parts: { back: 'Back', legs: 'Legs', chest: 'Chest', arms: 'Arms', core: 'Core', shoulders: 'Shoulders' },
-      m: { berat: 'Weight', pinggang: 'Waist', perut: 'Belly', dada: 'Chest', lenganKanan: 'Right arm', lenganKiri: 'Left arm', pahaKanan: 'Right thigh', pahaKiri: 'Left thigh' },
+      m: { berat: 'Weight', pinggang: 'Waist', perut: 'Belly', dada: 'Chest', lenganKanan: 'Right arm', lenganKiri: 'Left arm', pahaKanan: 'Right thigh', pahaKiri: 'Left thigh', pinggul: 'Hips' },
       badge: { sesi: n => n + ' sessions', streak: n => n + '-week streak', catat: n => n + ' days logged', pr: n => n === 1 ? 'First PR' : n + ' PRs' }
     },
     id: {
@@ -3414,7 +3478,7 @@ details.cp-day[open] .cp-day-names { display: none; }
       today: 'Hari ini', thisWeek: 'Minggu ini', thisMonthP: 'Bulan ini', last3: '3 bulan terakhir', perDay: '/hari', sessionsPerWeek: 'Sesi per minggu', dailyKcal: 'Kalori per hari',
       vs: { session: 'vs sesi lalu', minggu: 'vs minggu lalu', bulan: 'vs bulan lalu', '3bulan': 'vs 3 bulan sebelumnya', day: 'vs hari sebelumnya', month: 'vs bulan lalu' }, sinceStart: 'sejak awal', ofTarget: 'dari target', pickPhoto: 'Pilih foto', noData: 'Belum ada data',
       parts: { back: 'Punggung', legs: 'Kaki', chest: 'Dada', arms: 'Lengan', core: 'Perut', shoulders: 'Bahu' },
-      m: { berat: 'Berat', pinggang: 'Pinggang', perut: 'Perut', dada: 'Dada', lenganKanan: 'Lengan kanan', lenganKiri: 'Lengan kiri', pahaKanan: 'Paha kanan', pahaKiri: 'Paha kiri' },
+      m: { berat: 'Berat', pinggang: 'Pinggang', perut: 'Perut', dada: 'Dada', lenganKanan: 'Lengan kanan', lenganKiri: 'Lengan kiri', pahaKanan: 'Paha kanan', pahaKiri: 'Paha kiri', pinggul: 'Pinggul' },
       badge: { sesi: n => n + ' sesi', streak: n => 'Streak ' + n + ' minggu', catat: n => n + ' hari dicatat', pr: n => n === 1 ? 'Rekor pertama' : n + ' rekor' }
     }
   };

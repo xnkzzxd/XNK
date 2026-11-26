@@ -703,6 +703,7 @@
   // Fase AC (T-2302): daftar klien tanpa kartu hitam ringkasan (angkanya di band), "Perlu perhatian" chip kedua,
   // baris: nama sebaris sendiri, sisa + meter + status di kanan, tanda perhatian hanya bila ada.
   function clientState(m) {
+    if (window.holdOn && window.holdOn(m.id)) return 'held';   // Fase AD1: cuti / sakit / nonaktif
     const total = Number(m.totalSessions) || 0, rem = remainingOf(m);
     if (total > 0 && rem === 0) return 'empty';
     if (total > 0 && rem <= 2) return 'low';
@@ -731,16 +732,16 @@
   }
   window.setClientSort = function (v) { ui.clientSort = v; _lsSet('xnk_client_sort', v); renderClientList(); };
   window.setClientView = function (v) { ui.clientView = v; _lsSet('xnk_client_view', v); document.querySelectorAll('#client-view-seg button').forEach(b => { const on = b.getAttribute('data-v') === v; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); }); renderClientList(); };
-  const CL_FILTERS = [['all', 'Semua'], ['perhatian', 'Perlu perhatian'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['active', 'Aktif'], ['archive', 'Riwayat paket']];
+  const CL_FILTERS = [['all', 'Semua'], ['perhatian', 'Perlu perhatian'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['active', 'Aktif'], ['held', 'Ditahan'], ['archive', 'Riwayat paket']];   // Fase AD1: Ditahan
   const CL_SORTS = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
   function clientCounts() {
-    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
+    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, held: 0, perhatian: 0, archive: (window.memberArchive || []).length };
     window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
     return counts;
   }
   // Ringkasan di band: satu kalimat di HP, dua angka kecil di PC (dulu kartu hitam tersendiri).
   function clientHeadSub(counts) {
-    return counts.all + ' klien' + (counts.perhatian ? ' · ' + counts.perhatian + ' perlu perhatian' : ' · semua aman');
+    return counts.all + ' klien' + (counts.perhatian ? ' · ' + counts.perhatian + ' perlu perhatian' : ' · semua aman') + (counts.held ? ' · ' + counts.held + ' ditahan' : '');
   }
   function clientHeadStats() {
     const g = window.clientSignals;
@@ -878,7 +879,8 @@
     const total = Number(m.totalSessions) || 0, rem = remainingOf(m), st = clientState(m);
     const nx = x.next ? new Date(x.next) : null;
     const nextTxt = nx ? fmtShort(nx) + ' · ' + fmtTime(nx) : 'Belum ada jadwal';
-    const stTxt = st === 'empty' ? 'Habis' : st === 'low' ? 'Hampir habis' : '';
+    const hp = st === 'held' && window.holdPillInfo ? window.holdPillInfo(m.id) : null;   // Fase AD1: "Cuti s/d 2 Des", "Sakit", "Nonaktif"
+    const stTxt = hp ? hp.label : st === 'empty' ? 'Habis' : st === 'low' ? 'Hampir habis' : '';
     return '<div class="list-item interactive client-card" role="button" tabindex="0" data-key="client:' + h(m.id) + '" onclick="window.openProfile(\'' + h(m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
       avatar(m.photo, m.name) +
       '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4>' +
@@ -886,7 +888,7 @@
       clientFlagsHtml(m, x) + (x.desk ? clientMeta(m, x) : '') + '</div>' +
       '<div class="li-trail cc-trail"><p class="cc-count num"><b>' + rem + '</b><span>/' + total + '</span></p>' +
       '<div class="meter cc-meter' + (st === 'low' ? ' low' : st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + (total ? Math.min(100, Math.round(rem / total * 100)) : 0) + '%"></i></div>' +
-      (stTxt ? '<p class="cc-st' + (st === 'empty' ? ' warn' : ' low') + '">' + stTxt + '</p>' : '') + '</div></div>';
+      (stTxt ? '<p class="cc-st' + (st === 'empty' ? ' warn' : st === 'held' ? ' held' : ' low') + '">' + h(stTxt) + '</p>' : '') + '</div></div>';
   }
 
   function archiveRow(a) {
@@ -911,6 +913,7 @@
     ui.cpTab = { id: String(m.id), name: tab0 };   // ingat tab yang benar-benar tampil (bukan tab kunjungan lama)
     let body = '<div class="cp" data-member="' + h(m.id) + '">';
     body += '<div class="cp-top" id="cp-card-wrap">' + cpCardHtml(m) + '</div>';
+    body += '<div id="hold-band-wrap">' + window.holdBandHtml(m.id) + '</div>';   // Fase AD1: cuti / sakit / nonaktif
     body += '<div id="cc-sync" data-member="' + h(m.id) + '">' + window.ccSyncHtml(m.id) + '</div>';
     body += '<div class="cp-tabs" role="tablist" aria-label="Bagian profil klien" onkeydown="window.cpTabKey(event)">' + tabs.map(t => '<button type="button" role="tab" class="cp-tab' + (t[0] === tab0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (t[0] === tab0) + '" tabindex="' + (t[0] === tab0 ? '0' : '-1') + '" onclick="window.cpTab(\'' + t[0] + '\')">' + t[1] + '</button>').join('') + '</div>';
     // Ringkasan (dua kolom bila panel cukup lebar; .cp-col = display:contents di HP)
@@ -938,7 +941,8 @@
     // Gizi (Fase AC, Wave 4): saran → hari ini → 7 hari → buku harian | Data & dasar (kolom kanan di PC)
     body += '<div class="cp-pane cp-stack' + hid('gizi') + '" data-cppane="gizi"><div id="profile-nut-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
     // Data: hub ala "Saya" di portal
-    body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
+    body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div>' +
+      '<div class="px-sec cp-sec"><h3>Cuti &amp; status</h3><span>' + h(window.holdHistCount(m.id)) + '</span></div><div class="card cp-card-pad"><div id="profile-hold-wrap" class="stack" style="gap:10px">' + window.holdHistHtml(m.id) + '</div></div></div>';   // Fase AD1
     body += '</div>';
     // Kepala: Bagikan (kartu sesuai tab yang terbuka) + menu ⋯. Satu tempat untuk berbagi di semua tab.
     const actions = (window.shareOn !== false ? '<button type="button" class="icon-btn plain cp-share-btn" onclick="window.cpShare(\'' + h(m.id) + '\')" aria-label="Bagikan kartu klien">' + icon('share-2') + '</button>' : '') +

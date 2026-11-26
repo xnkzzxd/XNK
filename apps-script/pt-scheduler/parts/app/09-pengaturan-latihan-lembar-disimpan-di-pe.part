@@ -44,7 +44,8 @@
     if (prs.length) body += '<p class="wl-prs">🏆 Rekor baru: ' + h(prs.join(', ')) + '</p>';
     body += '<div class="stack" style="gap:6px">' + rows.join('') + '</div>';
     if (open) body += '<p class="hint">' + open + ' set belum dicentang tidak ikut disimpan.</p>';
-    body += '<div class="field"><span class="label" id="wl-feel-lbl">Bagaimana latihannya?</span><div class="wl-faces" role="radiogroup" aria-labelledby="wl-feel-lbl">' +
+    body += (window.wlCompleteRowHtml ? window.wlCompleteRowHtml() : '') +   // Fase AD3: selesaikan sesi juga
+      '<div class="field"><span class="label" id="wl-feel-lbl">Bagaimana latihannya?</span><div class="wl-faces" role="radiogroup" aria-labelledby="wl-feel-lbl">' +
       WL_FACES.map((f, k) => '<button type="button" role="radio" aria-checked="' + (wl.rasa === k + 1) + '" class="wl-face' + (wl.rasa === k + 1 ? ' on' : '') + '" aria-label="' + f[1] + '" onclick="window.wlFeel(' + (k + 1) + ')"><span aria-hidden="true">' + f[0] + '</span><small>' + f[1] + '</small></button>').join('') + '</div></div>' +
       '<div class="field"><label class="label" for="wl-note-fin">Catatan latihan</label><textarea class="textarea" id="wl-note-fin" rows="2" maxlength="300" placeholder="Opsional" oninput="window.wlNote(this.value)">' + h(wl.note || '') + '</textarea></div>' +
       '<p class="hint err-msg" id="wl-fin-err" role="alert" style="display:block"></p>';
@@ -74,12 +75,14 @@
     const now = Date.now();
     const item = { id: wl.cid, scope: wl.scope, mode: wl.mode, memberId: wl.memberId, name: wl.name, date: wl.date, scheduleId: wl.scheduleId, hari: wl.hari, entries: entries, at: now, tries: 0, err: '', retry: true,
       session: { cid: wl.cid, hari: wl.hari, mulai: wl.live && wl.startedAt ? new Date(wl.startedAt).toISOString() : '', selesai: wl.live && wl.startedAt ? new Date(now).toISOString() : '', rasa: wl.rasa || '', catatan: wl.note || '' } };
+    const doneSid = window.wlCompleteWanted ? window.wlCompleteWanted() : '';   // Fase AD3
     const q = wlQueue().filter(x => x.id !== item.id); q.push(item); wlQueueSet(q);
     _lsSet(wlKey(wl.scope), null);
     wl = null;
     window.closeModal(); wlHide();
     wlRenderResume();
     window.wlFlush(true, item.id);
+    if (doneSid) setTimeout(function () { window.completeSessionQuick(doneSid); }, 300);
   };
   // Kirim antrean satu per satu. Gagal karena sinyal / server sibuk → dicoba lagi otomatis; gagal validasi → tunggu dibuka ulang.
   function wlCanSend(it) {
@@ -371,7 +374,8 @@
       const meta = [d.items.length + ' gerakan', sets + ' set'];
       if (x.durasi) meta.push(Math.round(x.durasi / 60) + ' mnt');
       return '<div class="wl-hist-row"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(pgLabel(d.tanggal)) + ' · ' + h(hr) + (x.rasa ? ' ' + WL_FACES[x.rasa - 1][0] : '') + '</b><span class="li-sub truncate" style="display:block">' + h(meta.join(' · ')) + (x.catatan ? ' · ' + h(x.catatan) : '') + '</span></span>' +
-        (d.tanggal >= min ? '<button type="button" class="btn btn-ghost btn-sm" onclick="window.workoutEditDay(\'' + (scope === 'adm' ? 'admin' : 'client') + '\',\'' + h(memberId || '') + '\',\'' + h(d.tanggal) + '\')" aria-label="Ubah latihan ' + h(pgLabel(d.tanggal)) + '">' + icon('pencil') + 'Ubah</button>' : '') + '</div>';
+        (d.tanggal >= min ? '<button type="button" class="btn btn-ghost btn-sm" onclick="window.workoutEditDay(\'' + (scope === 'adm' ? 'admin' : 'client') + '\',\'' + h(memberId || '') + '\',\'' + h(d.tanggal) + '\')" aria-label="Ubah latihan ' + h(pgLabel(d.tanggal)) + '">' + icon('pencil') + 'Ubah</button>' : '') +
+        (scope === 'adm' ? '<button type="button" class="icon-btn plain" onclick="window.wkDeleteDay(\'' + h(memberId || '') + '\',\'' + h(d.tanggal) + '\')" aria-label="Hapus latihan ' + h(pgLabel(d.tanggal)) + '">' + icon('trash-2') + '</button>' : '') + '</div>';   // Fase AD3
     }).join('') + '</div></div>';
   }
   function workoutStatsHtml(w, scope, memberId) {
@@ -387,7 +391,8 @@
       html += '<div class="wk-block"><div class="field"><label class="label" for="wk-ex-' + scope + '">Kekuatan per gerakan</label><select class="select" id="wk-ex-' + scope + '" onchange="window.wkChartPick(\'' + scope + '\',this.value)">' +
         st.exercises.map(e => '<option value="' + h(e.key) + '"' + (e.key === pick.key ? ' selected' : '') + '>' + h(exNm(e)) + '</option>').join('') + '</select></div>' +
         (pick.pr ? '<p class="li-sub"><b>PR:</b> ' + h(wkKg(pick.pr.berat)) + ' kg × ' + pick.pr.rep + ' · estimasi 1RM ' + h(wkKg(pick.pr.e1rm)) + ' kg (' + h(pgLabel(pick.pr.tanggal)) + ')</p>' : '') +
-        (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '<p class="li-sub">Catat lagi di sesi berikutnya untuk melihat tren.</p>') + '<p class="li-sub">Garis: estimasi 1RM tertinggi per sesi (rumus Epley, set sampai 12 rep).</p></div>';
+        (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '<p class="li-sub">Catat lagi di sesi berikutnya untuk melihat tren.</p>') + '<p class="li-sub">Garis: estimasi 1RM tertinggi per sesi (rumus Epley, set sampai 12 rep).</p>' +
+        (scope === 'adm' ? '<button type="button" class="btn btn-ghost btn-sm" id="wk-ex-full" onclick="window.wkExFull(\'' + h(memberId || '') + '\')">' + icon('table') + 'Riwayat lengkap gerakan ini</button>' : '') + '</div>';   // Fase AD3
     }
     html += '<div class="wk-block"><p class="label">Volume per minggu (kg × rep)</p>' + wkWeeksSvg(st.weeks) + '</div>';
     if (st.topParts.length) {
@@ -645,11 +650,12 @@
       main += '<div class="px-sec cp-sec"><h3>Lengkapi data</h3><button type="button" class="cp-link" onclick="window.openNutEdit(\'' + id + '\')">Isi data gizi</button></div>' +
         '<div class="card cp-card-pad"><p class="li-sub">Target kalori dihitung setelah data ini ada:</p>' + (t.missingLabels || []).map(x => '<p class="cp-miss">' + icon('circle-dashed', 'class="ic-inline"') + ' ' + h(x) + '</p>').join('') + '</div>';
     }
+    main += window.cfMonthSection(memberId, d);   // Fase AD3: 31 hari (kalender, rata-rata per minggu, makanan tersering)
     if (logged.length) {
-      main += '<div class="px-sec cp-sec"><h3>Buku harian</h3><span>ketuk hari untuk rincian</span></div><div class="card cp-list-card">' + logged.slice().reverse().map(function (x, n) {
-        return '<details class="cp-str cp-diary"' + (n === 0 ? ' open' : '') + '><summary class="cp-row"><span class="cp-row-d"><b>' + h(pgLabel(x.k)) + '</b><span>' + x.x.items.length + ' makanan</span></span><span class="grow cp-row-t">' + h(nutNum(x.x.totals.kal)) + ' kkal · P ' + h(nutNum(x.x.totals.p, 1)) + ' g</span>' + icon('chevron-down') + '</summary><div class="cp-str-b">' + nutDiaryDay(x) + '</div></details>';
+      main += '<div class="px-sec cp-sec"><h3>Buku harian</h3>' + window.cfHeadLinks(memberId) + '</div><div class="card cp-list-card">' + logged.slice().reverse().map(function (x, n) {
+        return '<details class="cp-str cp-diary"' + (n === 0 ? ' open' : '') + '><summary class="cp-row"><span class="cp-row-d"><b>' + h(pgLabel(x.k)) + '</b><span>' + x.x.items.length + ' makanan</span></span><span class="grow cp-row-t">' + h(nutNum(x.x.totals.kal)) + ' kkal · P ' + h(nutNum(x.x.totals.p, 1)) + ' g</span>' + icon('chevron-down') + '</summary><div class="cp-str-b">' + nutDiaryDay(x) + window.cfDayTools(memberId, x) + '</div></details>';
       }).join('') + '</div>';
-    } else if (d.foodLog) main += '<div class="px-sec cp-sec"><h3>Buku harian</h3></div><p class="cp-empty">' + icon('utensils') + ' Klien belum mencatat makan dalam 7 hari terakhir.</p>';
+    } else if (d.foodLog) main += '<div class="px-sec cp-sec"><h3>Buku harian</h3>' + window.cfHeadLinks(memberId) + '</div><p class="cp-empty">' + icon('utensils') + ' Klien belum mencatat makan dalam 7 hari terakhir.</p>';
     if (!av.pending && av.last) main += '<p class="li-sub cp-foot">Saran terakhir: ' + h(nutDeltaText(av.last.delta)) + ' · ' + (av.last.status === 'setuju' ? 'disetujui' : 'ditolak') + ' ' + h(av.last.diputuskan) + '</p>';
     // Data & dasar: angka dasar tanpa kotak, peringatan, input coach sebagai baris.
     const num = (k, v, sub) => '<div class="cp-num"><p class="k">' + h(k) + '</p><p class="v num">' + h(v) + '</p>' + (sub ? '<p class="s">' + h(sub) + '</p>' : '') + '</div>';
@@ -755,7 +761,7 @@
     careMember = id; const a = (care[id] || {}).assessment || {};
     $('as-goal').value = a.goal || ''; $('as-history').value = a.history || ''; $('as-pref').value = a.schedulePref || ''; $('as-motivation').value = a.motivation || ''; $('as-coach-notes').value = a.coachNotes || '';
     ['as-weight', 'as-waist'].concat(PG_MEASURES.slice(2).map(m => 'as-' + m[0])).forEach(k => { $(k).value = ''; });
-    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat; $('as-hip').value = a.hip === '' || a.hip == null ? '' : a.hip;
+    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat;   // pinggul kosong seperti ukuran lain (Fase AD: masuk Progres)
     openSheet('modal-care-assess');
   };
   window.submitAssessment = function (e) {
@@ -763,11 +769,11 @@
     const v = k => $(k).value.trim().replace(',', '.');
     // Antrean simpan: isian assessment tampil sekarang; ukuran & ringkasan progres dari server menyusul.
     const id = careMember, at = Date.now();
-    const data = { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), hip: v('as-hip'),
-      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada') };
+    const data = { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'),
+      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada'), pinggul: v('as-pinggul') };
     const old = care[id];
     const first = !((old || {}).tests || []).length;
-    if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.hip }) }));
+    if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.pinggul !== '' ? data.pinggul : (old.assessment || {}).hip }) }));
     optimistic({ q: { mode: 'admin', fn: 'saveAssessment', args: [id, data] }, sheet: true, ok: 'Assessment disimpan.', label: 'Assessment',
       then: function (res) {
         // Ukuran badan di assessment masuk ke Progres: hanya saat ada ukuran yang diisi, progres dimuat ulang.

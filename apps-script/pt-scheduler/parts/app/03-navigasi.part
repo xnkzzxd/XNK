@@ -102,6 +102,8 @@
   }
   // Satu sumber label status klien: aktif | hampir | habis.
   function clientStateInfo(m) {
+    const hp = window.holdPillInfo && window.holdPillInfo(m.id);   // Fase AD1
+    if (hp) return hp;
     const st = clientState(m);
     if (st === 'empty') return { key: 'habis', label: 'Habis' };
     if (st === 'low') return { key: 'hampir', label: 'Hampir habis' };
@@ -457,11 +459,12 @@
   // terisi saat dibuka; data segar menyusul di belakang layar.
   const ADMIN_CACHE_KEY = 'xnk_admin_cache';
   let adminCopyAt = 0;   // kapan salinan panel di perangkat dibuat (lencana "Data 10:42" bila server tidak terjangkau)
+  window.saveAdminCacheNow = function () { saveAdminCache(); };
   function saveAdminCache() {
     try {
       _lsSet(ADMIN_CACHE_KEY, JSON.stringify({
         members: window.members, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
-        priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || [], at: Date.now()
+        priceList: window.priceListData, taskSummary: window.taskSummary, renewals: window.renewals || [], holds: (window.holds || []).filter(x => !window.isTmpId(x.id)), at: Date.now()
       }));
     } catch (e) {}
     window.offlineSnapSoon();
@@ -476,6 +479,7 @@
       window.priceListData = c.priceList || [];
       window.taskSummary = c.taskSummary || {};
       window.renewals = c.renewals || [];
+      window.holds = Array.isArray(c.holds) ? c.holds : [];   // Fase AD1 (tanpa catatan)
       adminCopyAt = Number(c.at) || 0;
       return true;
     } catch (e) { return false; }
@@ -557,6 +561,7 @@
       if (r[3]) window.priceListData = r[3];
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
+      if (b && Array.isArray(b.holds) && !window.wqStale(snap)) window.holds = b.holds;   // Fase AD1
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (r[0] && r[1]) saveAdminCache();   // dilewati bila basi (r dikosongkan di atas)
@@ -709,7 +714,7 @@
         v: 1, th: tokenSig(token), at: Date.now(), profile: window.publicLoggedMember, schedules: window.schedules.filter(s => !window.isTmpId(s.id)), coaches: window.coaches,
         priceList: window.priceListData, hours: DAY_HOURS, horizon: window.bookingHorizonDays, cutoff: window.rescheduleCutoffHours,
         infoLatest: window.infoLatest || '', feedback: window.myFeedback ? { enabled: window.myFeedback.enabled, pending: window.myFeedback.pending, pkgEval: window.myFeedback.pkgEval } : null,
-        more: portalMoreRaw, moreAt: portalMoreAt
+        more: portalMoreRaw, moreAt: portalMoreAt, hold: window.myHold || null
       }));
     } catch (e) {}
     offlineSnapSoon();
@@ -729,6 +734,7 @@
       const c = JSON.parse(_lsGet(PORTAL_CACHE_KEY) || 'null');
       if (!c || c.v !== 1 || c.th !== tokenSig(token) || !c.profile || !Array.isArray(c.schedules)) { if (c) _lsSet(PORTAL_CACHE_KEY, null); return false; }
       window.publicLoggedMember = c.profile;
+      window.myHold = c.hold || null;
       window.schedules = normalizeSchedules(c.schedules);
       window.coaches = c.coaches || [];
       window.priceListData = c.priceList || [];
@@ -827,6 +833,7 @@
     window.shareOn = b.shareEnabled !== false;
     if (window.pushOnBootstrap) window.pushOnBootstrap(b.pushKey);   // Fase X
     window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
+    if (b.profile) window.myHold = b.hold || null;   // Fase AD1
     if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }
   window.refreshPortalSchedules = function () {

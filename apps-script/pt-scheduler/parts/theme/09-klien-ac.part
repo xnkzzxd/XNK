@@ -335,4 +335,3 @@ details.cp-day[open] .cp-day-names { display: none; }
 .cp-kvl span { color: var(--fg-muted); flex: none; }
 .cp-kvl b { text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .cp-sec .cp-link { margin-block: -8px; }
-</style>

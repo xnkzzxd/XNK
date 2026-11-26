@@ -24,7 +24,7 @@ var PUSH_OUT_SHEET = 'PushOutbox';
 var PUSH_SUBS_HEADERS = ['Sub ID', 'Peran', 'Member ID', 'Endpoint', 'p256dh', 'auth', 'Label', 'Dibuat', 'Terakhir Terlihat', 'Mati', 'Gagal'];
 var PUSH_OUT_HEADERS = ['ID', 'Kunci', 'Dibuat', 'Sub ID', 'Jenis', 'Judul', 'Isi', 'URL', 'Status', 'Percobaan', 'Diambil'];
 var PUSH_GROUPS_MEMBER = ['sesi', 'pr', 'makan'];
-var PUSH_GROUPS_ADMIN = ['sesi', 'perpanjangan'];
+var PUSH_GROUPS_ADMIN = ['sesi', 'perpanjangan', 'cuti'];
 var PUSH_MAX_DEVICES_MEMBER = 5;
 var PUSH_MAX_DEVICES_ADMIN = 10;
 var PUSH_HOST_OK = [/(^|\.)fcm\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)notify\.windows\.com$/];
@@ -228,7 +228,7 @@ function _pushSesiMessages_(schedules, members, mode, parts, now, slotHour) {
     var name = _pushFirst_((m && m.name) || g.title) || 'Klien';
     var labels = g.times.map(function(x) { return x.label; });
     all.push({ name: name, t: g.times[0].t, label: labels[0], n: labels.length });
-    if (!m || (m.off || []).indexOf('sesi-besok') !== -1) return;    // klien mematikan pengingat sesi
+    if (!m || _rmdIsOff_(m, 'sesi-besok')) return;    // klien mematikan pengingat sesi (atau ditahan, lihat HOLD_KEEP_TYPES)
     var when = (mode === 'besok' ? 'besok' : 'hari ini') + ' jam ' + _pushJoinTimes_(labels);
     out.push({ target: 'm:' + g.id, kind: kind, slot: slot, title: mode === 'besok' ? 'Sesi besok' : 'Sesi hari ini',
       body: _pushClip_('Kak ' + name + ', ' + when + (g.coach ? ' bersama Coach ' + _pushFirst_(String(g.coach).replace(/^\s*coach\b\s*/i, '')) : '') + '.', 140) });

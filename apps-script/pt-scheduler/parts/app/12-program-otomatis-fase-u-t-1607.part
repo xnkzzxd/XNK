@@ -429,6 +429,14 @@
   };
 
   // ── Catat makan (T-1020) ──
+  // Fase AD3: satu baris tanggapan coach (tanda + catatan) untuk hari ini, atau kemarin bila hari ini belum ada.
+  function nutFbLine(n) {
+    const fb = (n && n.feedback) || {}, t = n && n.today, y = t ? new Date(Date.parse(t + 'T00:00:00Z') - 864e5).toISOString().slice(0, 10) : '';
+    const k = fb[t] ? t : fb[y] ? y : '';
+    if (!k) return '';
+    const f = fb[k], L = { pas: 'Pas', kurang: 'Kurang', lebih: 'Lebih' };
+    return '<p class="nut-fb" id="nut-fb">' + icon('message-circle') + '<span><b>Dari coach · ' + (k === t ? 'hari ini' : 'kemarin') + '</b>' + (f.tanda ? ' · ' + h(L[f.tanda] || f.tanda) : '') + (f.catatan ? '<br>' + h(f.catatan) : '') + '</span></p>';
+  }
   const NUT_MEAL_L = { sarapan: 'Sarapan', siang: 'Makan siang', malam: 'Makan malam', camilan: 'Camilan' };
   function logCardHtml(n) {
     const log = n.log || { items: [], totals: { kal: 0 } };
@@ -436,6 +444,7 @@
     const meals = (n.menu && n.menu.meals) || [];
     let firstEmpty = true;
     let html = '<div class="stack" style="gap:var(--gap)" id="nut-log-card"><div class="px-sec"><h3>Buku harian</h3>' + (nPend ? '<span class="pill soft">' + nPend + ' menunggu sinyal</span>' : '<button type="button" class="link-btn" id="nut-copy-btn" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button>') + '</div>';
+    html += nutFbLine(n);   // Fase AD3: tanggapan coach hari ini / kemarin (baca saja)
     Object.keys(NUT_MEAL_L).forEach(function (k) {
       const its = log.items.filter(x => x.waktu === k), kal = its.reduce((a, x) => a + x.kal, 0);
       const tip = !its.length ? meals.find(m => nutMealWaktu(m.key) === k) : null;

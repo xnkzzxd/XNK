@@ -93,6 +93,7 @@
         '<button type="button" class="btn btn-on-ink-ghost" onclick="window.navigate(\'calendar\')">' + icon('calendar-days') + 'Jadwal</button></div>';
     }
     html += '</section>';
+    html += window.myHoldCardHtml();   // Fase AD1: cuti / permintaan cuti
     // Desktop (Fase Y): kartu nilai sesi pindah ke kolom kanan supaya dua kolom sama tinggi (tanpa ruang kosong besar).
     const fbSlot = '<div id="pub-feedback-slot">' + feedbackCardHtml() + '</div>', deskNow = window.deskIs && window.deskIs();
     if (!deskNow) html += fbSlot;
@@ -153,6 +154,8 @@
     if (nutTabOn()) tiles += tile(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh');
     if (window.shareOn !== false) tiles += tile(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres');
     tiles += tile(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span>');
+    tiles += tile('window.reportOpen(\'client\')', 'file-text', 'Laporan PDF', 'Rangkuman progres untuk dibaca');   // Fase AD4
+    tiles += tile('window.cutiOpen()', 'plane', 'Cuti / izin', 'Ajukan cuti atau izin sakit');   // Fase AD1
     tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Tema dan warna aksen');
     tiles += tile('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto');
     setHTML(el, '<div class="px-wrap px-stack px-2col px-saya">' + pxHead('Saya', '') + '<div class="px-band gfx-kontur"></div><div class="px-col px-sticky">' + athleteCardHtml({ hang: true }) + '</div>' +
@@ -375,7 +378,8 @@
   const bkx = { steps: [], i: 0, coach: '', date: '', time: '', month: '', repeat: false, resched: '' };
   const bkMulti = () => !window.isSoloCoach() && window.coaches.length > 1;
   function bkMap() { return (bkMulti() ? window.openSlotsByCoachMap[bkx.coach] : window.openSlotsByDate) || {}; }
-  function bkFreeHours(date) { const f = bkMap()[date] || {}; return Object.keys(f).map(Number).filter(hh => f[hh] > 0).sort((a, b) => a - b); }
+  // Fase AD1: hari di dalam cuti sendiri (atau akun nonaktif) tampil penuh; server tetap menolak dengan kalimat yang jelas.
+  function bkFreeHours(date) { if (window.myHoldBlocks && window.myHoldBlocks(date)) return []; const f = bkMap()[date] || {}; return Object.keys(f).map(Number).filter(hh => f[hh] > 0).sort((a, b) => a - b); }
   const bkDayLabel = date => { const p = date.split('-').map(Number); return fmtDate(new Date(p[0], p[1] - 1, p[2])); };
   window.bkOpen = function (opts) {
     opts = opts || {};

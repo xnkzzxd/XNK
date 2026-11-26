@@ -28,7 +28,7 @@ function _apiTable_() {
     hubPushKey: hubPushKey,
     hubSiteUrl: hubSiteUrl,
     hubReadonly: hubReadonly,
-    // admin: admin token (133)
+    // admin: admin token (144)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -133,6 +133,17 @@ function _apiTable_() {
     setMemberReminderPrefs: setMemberReminderPrefs,
     getRenewalRequests: getRenewalRequests,
     decideRenewal: decideRenewal,
+    setClientHold: setClientHold,
+    endClientHold: endClientHold,
+    deleteClientHold: deleteClientHold,
+    decideHoldRequest: decideHoldRequest,
+    saveExerciseNote: saveExerciseNote,
+    deleteWorkoutEntries: deleteWorkoutEntries,
+    getWorkoutExerciseHistory: getWorkoutExerciseHistory,
+    logClientFood: logClientFood,
+    deleteClientFood: deleteClientFood,
+    saveFoodFeedback: saveFoodFeedback,
+    getMemberReport: getMemberReport,
     getMemberProgress: getMemberProgress,
     saveMemberMeasurement: saveMemberMeasurement,
     deleteMemberMeasurement: deleteMemberMeasurement,
@@ -162,7 +173,7 @@ function _apiTable_() {
     uploadFinanceProof: uploadFinanceProof,
     getFinanceProof: getFinanceProof,
     exportFinanceCsv: exportFinanceCsv,
-    // member: member token (63)
+    // member: member token (67)
     getMemberProfile: getMemberProfile,
     getMemberSessions: getMemberSessions,
     getMyPushStatus: getMyPushStatus,
@@ -226,6 +237,10 @@ function _apiTable_() {
     markGuideSeen: markGuideSeen,
     saveMyProfileCard: saveMyProfileCard,
     markNotifSeen: markNotifSeen,
+    requestMyHold: requestMyHold,
+    cancelMyHoldRequest: cancelMyHoldRequest,
+    endMyHold: endMyHold,
+    getMyReport: getMyReport,
   };
 }
 
@@ -290,6 +305,15 @@ function _apiWrites_() {
     decideRenewal: 1,
     saveMemberMeasurement: 1,
     deleteMemberMeasurement: 1,
+    setClientHold: 1,
+    endClientHold: 1,
+    deleteClientHold: 1,
+    decideHoldRequest: 1,
+    saveExerciseNote: 1,
+    deleteWorkoutEntries: 1,
+    logClientFood: 1,
+    deleteClientFood: 1,
+    saveFoodFeedback: 1,
     savePackage: 1,
     setPackageActive: 1,
     deletePackage: 1,
@@ -338,5 +362,8 @@ function _apiWrites_() {
     joinClassGroup: 1,
     leaveClassGroup: 1,
     saveMyProfileCard: 1,
+    requestMyHold: 1,
+    cancelMyHoldRequest: 1,
+    endMyHold: 1,
   };
 }

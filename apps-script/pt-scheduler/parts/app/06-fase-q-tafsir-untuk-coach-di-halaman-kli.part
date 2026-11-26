@@ -84,7 +84,7 @@
       ' onchange="window.toggleMealReminder(\'' + mid + '\',this)"><span></span></label></div>';
   }
   // Pengingat WhatsApp per klien (T-123): mati per jenis; makan punya saklarnya sendiri di atas
-  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang'], ['tes-ulang', 'Tes ulang', 'Ajakan tes kebugaran tiap 4 minggu'], ['ulang-tahun', 'Ulang tahun', 'Ucapan di hari ulang tahun'], ['hidup-sehat', 'Hidup sehat', 'Ajakan hidup sehat & cardio tiap pagi']];
+  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang'], ['tes-ulang', 'Tes ulang', 'Ajakan tes kebugaran tiap 4 minggu'], ['ulang-tahun', 'Ulang tahun', 'Ucapan di hari ulang tahun'], ['kembali-latihan', 'Kembali latihan', 'Ucapan saat cuti selesai'], ['hidup-sehat', 'Hidup sehat', 'Ajakan hidup sehat & cardio tiap pagi']];
   function reminderPrefsHtml(m) {
     const off = m.reminderOff || [];
     return '<div><div class="section-head"><h4 class="section-title">Pengingat WhatsApp</h4></div><div class="list" id="profile-remind-prefs">' +
@@ -273,6 +273,11 @@
       window.nutSet(key, bad(b.nutrition) ? Object.assign({ error: msg(b.nutrition) }) : Object.assign({}, b.nutrition, { foodLog: bad(b.foodLog) ? null : b.foodLog }));
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
       shareAdmin[key] = bad(b.share) ? null : b.share;
+      if (!bad(b.holds) && Array.isArray(b.holds)) {   // Fase AD1: riwayat cuti (dengan catatan; admin saja)
+        window.holdHist[key] = b.holds;
+        const hw = $('profile-hold-wrap');
+        if (hw && String(window.selectedMemberId) === key) setHTML(hw, window.holdHistHtml(key));
+      }
       // Fase AC: tugas coach dan catatan sesi terakhir (bagian baru; salinan lama tanpa keduanya tetap dipakai).
       window.clientTodo[key] = Array.isArray(b.todo) ? b.todo : null;
       window.clientNotes[key] = Array.isArray(b.notes) ? b.notes : null;

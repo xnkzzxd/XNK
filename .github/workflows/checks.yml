@@ -49,6 +49,8 @@ jobs:
         run: node apps-script/pt-scheduler/tools/share-check.js
       - name: Demo check (opens signed in, leaves the real app's device state alone)
         run: node apps-script/pt-scheduler/tools/demo-check.js
+      - name: PDF report check (Fase AD4; valid A4 PDF built on the device, portal and panel)
+        run: node apps-script/pt-scheduler/tools/report-check.js
       - name: Host check (the static page answers its own host messages, service worker, offline open)
         run: node apps-script/pt-scheduler/tools/host-check.js
       - name: Site check (/ is the static panel, /legacy/ the old wrapper, workers do not clash; rollback build)

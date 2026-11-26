@@ -329,7 +329,7 @@ function runProgramAutoJob_(ctx) {
   if (!_pgEnabled_()) return true;
   const pools = _loadClientPools_();
   const props = PropertiesService.getScriptProperties();
-  const ids = pools.active.map(function(c) { return String(c.id); }).sort();
+  const ids = pools.active.filter(function(c) { return !c.hold; }).map(function(c) { return String(c.id); }).sort();   // Fase AD1: ditahan = tidak ditinjau
   const start = Number(props.getProperty('PG_JOB_CURSOR')) || 0;
   const batch = ids.slice(start, start + PG_JOB_MAX);
   const today = _todayWib_();

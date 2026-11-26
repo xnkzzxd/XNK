@@ -2261,6 +2261,7 @@ function getPortalBootstrapImpl_(memberToken) {
     businessHours: _businessHours_(),
     moreVer: moreVer,
     // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati dan tidak membawanya lagi saat cache kena).
+    hold: found ? _tp_(tr, 'hold', function() { return _holdForMember_(memberId); }) : null,   // Fase AD1
     readonly: _readonlyOn_(),   // T-2251: pita "hanya bisa dilihat" (tanpa catatan pemilik untuk klien)
     coachStatus: found ? _tp_(tr, 'coachStatus', function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } }) : null,
     ms: _traceEnd_(tr, 'getPortalBootstrap')
@@ -2417,7 +2418,8 @@ function getAdminBootstrap(token) {
     coaches: getCoachesAdmin(token),
     priceList: getPriceList(),
     businessHours: _businessHours_(),
-    readonly: _readonlyInfo_()   // T-2251: null = biasa; {on, note} = mode baca saja
+    readonly: _readonlyInfo_(),   // T-2251: null = biasa; {on, note} = mode baca saja
+    holds: _holdsForAdmin_()      // Fase AD1: cuti/sakit/nonaktif yang aktif, direncanakan, atau diminta (tanpa catatan)
   };
 }
 
@@ -2439,7 +2441,7 @@ function getAdminExtras(token) {
 // Sel "Tanggal" yang terlanjur diubah Sheets jadi tanggal sungguhan (lihat _appendRow_) dikembalikan jadi teks 'YYYY-MM-DD'.
 // Berjalan sendiri dari getAdminMore paling sering 6 jam sekali; pemilik juga bisa menjalankan repairDateCells dari editor.
 const DATE_TEXT_SHEETS_ = ['FoodLog', 'WorkoutLog', 'WorkoutSessions', 'Progress', 'ProgressPhotos', 'FitnessTests', 'SessionRatings', 'SessionNotes',
-  'NutritionAdvice', 'Assessments', 'HealthScreening', 'ProgramLog', 'Tagihan', 'Pembayaran', 'Pengeluaran', 'PackageEvaluations'];
+  'NutritionAdvice', 'Assessments', 'HealthScreening', 'ProgramLog', 'Tagihan', 'Pembayaran', 'Pengeluaran', 'PackageEvaluations', 'FoodFeedback'];
 function _repairDateCells_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let fixed = 0;
@@ -2467,6 +2469,60 @@ function _repairDateCellsSoon_() {
     try { _repairDateCells_(); c.put('datefix', '1', 21600); } finally { lock.releaseLock(); }
   } catch (e) {}
 }
+// Fase AD (T-2401): pinggul lama di Assessments (kolom M) disalin sekali ke Progres (kolom N) sebagai catatan coach,
+// hanya untuk klien + tanggal yang belum punya pinggul di Progres. Idempotent; tanda selesai = Script Property HIP_COPY_V1.
+function _hipCopyRun_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const asm = ss.getSheetByName('Assessments');
+  if (!asm || asm.getLastRow() < 2) return 0;
+  const want = {};
+  asm.getDataRange().getValues().slice(1).forEach(function(r) {
+    const id = String(r[1] || '').trim(), tgl = _isoDateCell_(r[2]), v = r[12];
+    if (!id || !tgl || v === '' || v == null || !isFinite(Number(v)) || Number(v) < 40 || Number(v) > 200) return;
+    want[id + '|' + tgl] = Math.round(Number(v) * 10) / 10;   // baris terakhir per hari menang
+  });
+  const keys = Object.keys(want);
+  if (!keys.length) return 0;
+  const sheet = _progressSheet_();
+  _ensureProgressColumns_(sheet);
+  const data = sheet.getDataRange().getValues();
+  const at = {};
+  for (let i = 1; i < data.length; i++) at[String(data[i][1]).trim() + '|' + _isoDateCell_(data[i][2])] = i;
+  const now = new Date().toISOString(), add = [];
+  let n = 0;
+  keys.forEach(function(k) {
+    const i = at[k];
+    if (i != null) {
+      const cur = data[i][13];
+      if (cur !== '' && cur != null) return;
+      sheet.getRange(i + 1, 14).setValue(want[k]);
+      n++;
+      return;
+    }
+    const p = k.split('|');
+    add.push(['PRG-' + new Date().getTime() + '-' + n + '-' + Math.floor(Math.random() * 1000), p[0], p[1], '', '', 'coach', now, '', '', '', '', '', '', want[k]]);
+    n++;
+  });
+  add.forEach(function(row) { _appendRow_(sheet, row); });
+  if (n) _bumpMember_('*');
+  return n;
+}
+function _hipCopyOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('HIP_COPY_V1')) return 0;
+  const n = _hipCopyRun_();
+  props.setProperty('HIP_COPY_V1', String(n));
+  return n;
+}
+function _hipCopySoon_() {
+  try {
+    if (PropertiesService.getScriptProperties().getProperty('HIP_COPY_V1')) return;
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(3000)) return;
+    try { _hipCopyOnce_(); } finally { lock.releaseLock(); }
+  } catch (e) { Logger.log('Salin pinggul gagal: ' + e); }
+}
+
 /** Editor saja: perbaiki semua sel Tanggal sekarang. Mengembalikan jumlah sel yang diperbaiki. */
 function repairDateCells() {
   requireOwner_();
@@ -2477,6 +2533,7 @@ function getAdminMore(token, month, year, fresh) {
   const tr = _traceStart_();
   _tp_(tr, 'auth', function() { requireAdmin_(token); });
   _tp_(tr, 'repairDates', _repairDateCellsSoon_);
+  _tp_(tr, 'hipCopy', _hipCopySoon_);
   const ymd = _wibParts_(new Date()).date.split('-').map(Number);
   const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
   const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
@@ -2606,6 +2663,10 @@ function addSchedule(token, scheduleData) {
       const left = found ? _memberQuotaLeft_(found.row) : null;
       if (left !== null && left < 0 && new Date(scheduleData.start).getTime() > Date.now()) res.warnings = (res.warnings || []).concat(['Sesi klien ini sudah habis terpakai/terbooking.']);
     } catch (e) { Logger.log('Cek kuota gagal: ' + e); }
+    try {   // Fase AD1: coach tetap boleh membooking klien yang ditahan, tetapi diberi tahu
+      const hm = scheduleData && scheduleData.memberId ? _holdBookBlock_(String(scheduleData.memberId).trim(), scheduleData.start, true) : '';
+      if (hm) res.warnings = (res.warnings || []).concat([hm]);
+    } catch (e) { Logger.log('Cek cuti gagal: ' + e); }
     return _bumpAfter_(scheduleData && scheduleData.memberId, res);
   });
 }
@@ -2721,6 +2782,7 @@ function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule, opts
   if (_memberClassContext_(member.row)) throw new Error('Sesi kelas dipilih satu per satu, tidak bisa berulang. Pilih jam kelasnya.');
   const base = baseScheduleData || {};
   const soft = !!(opts && opts.soft), skipTaken = !!(opts && opts.skipTaken);
+  _holdSeriesBlock_(String(member.row[0]).trim(), base.startDate, recurrenceRule);   // Fase AD1: seri tidak boleh masuk masa cuti
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
@@ -3063,6 +3125,13 @@ function _clientReschedule_(memberId, scheduleId, newStart, newEnd, soft) {
 
     // 4. Waktu BARU harus boleh dibooking; jadwal ini sendiri tidak dihitung.
     _assertBookingHorizon_(newStart);
+    const holdMsg = _holdBookBlock_(memberId, newStart);   // Fase AD1
+    if (holdMsg) {
+      if (!soft) throw new Error(holdMsg);
+      const ho = _bookConflict_('hold', holdMsg, { start: newStart, end: newEnd }, all, ver, _ownActiveRows_(memberId, all, id), id, [row.start, newStart], '');
+      ho.alternatives = []; ho.oldStart = row.start;
+      return ho;
+    }
     const keepCoach = _activeCoaches_().length > 1 ? String(row.coachId || '') : '';   // pindah jadwal: coach tetap sama
     const p = _ownOverlap_(memberId, newStart, newEnd, id, all)
       ? { code: 'mine', message: 'Kamu sudah punya sesi di jam itu.' }
@@ -3222,6 +3291,9 @@ function clientBookSchedule(memberToken, scheduleData, opts) {
         schedule: _ownScheduleOut_(dup)
       }, _slotsPayload_(all, ver, false));
     }
+    // Fase AD1: hari di dalam cuti/sakit tidak bisa dibooking klien; akun nonaktif tidak bisa booking sama sekali.
+    const holdMsg = _holdBookBlock_(memberId, req.start);
+    if (holdMsg) { if (!soft) throw new Error(holdMsg); return conflict('hold', holdMsg, []); }
 
     // Klien di paket kelas: sesinya memakai Kelas ID (kelas, atau grup privat). Jam yang sudah dipakai kelas yang sama
     // tetap bisa diikuti selama Kapasitas belum penuh; jam baru memakai aturan slot biasa.
@@ -4199,7 +4271,7 @@ function reorderPackagesImpl_(token, category, ids) {
 // klien (fotonya sendiri) atau token admin.
 
 const PROGRESS_HEADERS = ["ID", "Member ID", "Tanggal", "Berat (kg)", "Pinggang (cm)", "Dicatat Oleh", "Diubah Pada",
-  "Lengan Kanan (cm)", "Lengan Kiri (cm)", "Perut (cm)", "Paha Kanan (cm)", "Paha Kiri (cm)", "Dada (cm)"];
+  "Lengan Kanan (cm)", "Lengan Kiri (cm)", "Perut (cm)", "Paha Kanan (cm)", "Paha Kiri (cm)", "Dada (cm)", "Pinggul (cm)"];
 /** Ukuran badan yang dicatat: kunci, nama, satuan, kolom (1-based) di sheet Progress, batas. Kolom hanya ditambah di kanan. */
 const PROGRESS_MEASURES = [
   { key: 'berat', label: 'Berat', short: 'Berat', unit: 'kg', col: 4, min: 20, max: 300 },
@@ -4209,7 +4281,9 @@ const PROGRESS_MEASURES = [
   { key: 'perut', label: 'Lingkar perut', short: 'Perut', unit: 'cm', col: 10, min: 30, max: 250 },
   { key: 'pahaKanan', label: 'Lingkar paha kanan', short: 'Paha kanan', unit: 'cm', col: 11, min: 20, max: 120 },
   { key: 'pahaKiri', label: 'Lingkar paha kiri', short: 'Paha kiri', unit: 'cm', col: 12, min: 20, max: 120 },
-  { key: 'dada', label: 'Lingkar dada', short: 'Dada', unit: 'cm', col: 13, min: 40, max: 200 }
+  { key: 'dada', label: 'Lingkar dada', short: 'Dada', unit: 'cm', col: 13, min: 40, max: 200 },
+  // Fase AD (T-2401): pinggul jadi ukuran biasa (dulu hanya di Assessments kolom M). Batas sama dengan saveAssessment.
+  { key: 'pinggul', label: 'Lingkar pinggul', short: 'Pinggul', unit: 'cm', col: 14, min: 40, max: 200 }
 ];
 const PROGRESS_PHOTO_HEADERS = ["ID", "Member ID", "Tanggal", "Sisi", "File ID", "Dicatat Oleh"];
 const PROGRESS_LIMITS = { beratMin: 20, beratMax: 300, pinggangMin: 30, pinggangMax: 250, photosPerMember: 60, backDaysClient: 7, entriesShown: 120 };
@@ -4331,7 +4405,7 @@ function _saveMeasurement_(memberId, tanggal, vals, oleh) {
       }
     }
     const id = 'PRG-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    const row = [id, String(memberId).trim(), tanggal, '', '', oleh, now, '', '', '', '', '', ''];
+    const row = [id, String(memberId).trim(), tanggal, '', '', oleh, now, '', '', '', '', '', '', ''];
     PROGRESS_MEASURES.forEach(function(m) { if (vals[m.key] != null) row[m.col - 1] = vals[m.key]; });
     _appendRow_(sheet, row);
     return { id: id, tanggal: tanggal, updated: false };
@@ -4403,21 +4477,24 @@ function _completedWeeks_(schedules, memberId) {
   return { weeks: weeks, completed: completed };
 }
 
-/** Murni: streak saat ini (minggu berurutan sampai hari ini). */
-function _streak_(weeks, todayIso) {
+/** Murni: streak saat ini (minggu berurutan sampai hari ini). held (Fase AD1) = minggu cuti: tidak memutus, tidak menambah. */
+function _streak_(weeks, todayIso, held) {
+  held = held || {};
   const thisWeek = _weekStart_(todayIso);
-  let n = 0, w = _addDaysIso_(thisWeek, -7);
-  while (weeks[w]) { n++; w = _addDaysIso_(w, -7); }
+  let n = 0, w = _addDaysIso_(thisWeek, -7), guard = 0;
+  while ((weeks[w] || held[w]) && guard++ < 1000) { if (weeks[w]) n++; w = _addDaysIso_(w, -7); }
   if (weeks[thisWeek]) n++;
   return n;
 }
 
-/** Murni: streak terpanjang sepanjang riwayat. */
-function _bestStreak_(weeks) {
-  const keys = Object.keys(weeks).sort();
+/** Murni: streak terpanjang sepanjang riwayat. Minggu cuti (held) menjembatani tanpa menambah. */
+function _bestStreak_(weeks, held) {
+  held = held || {};
+  const keys = Object.keys(Object.assign({}, held, weeks)).sort();
   let best = 0, run = 0, prev = null;
   keys.forEach(function(k) {
-    run = (prev !== null && _addDaysIso_(prev, 7) === k) ? run + 1 : 1;
+    if (!(prev !== null && _addDaysIso_(prev, 7) === k)) run = 0;
+    if (weeks[k]) run++;
     if (run > best) best = run;
     prev = k;
   });
@@ -4434,8 +4511,11 @@ function _badges_(completed, bestStreak, extra) {
 
 function _streakInfo_(memberId) {
   const cw = _completedWeeks_(_getSchedulesAll_(), memberId);
-  const best = _bestStreak_(cw.weeks);
-  return { streak: _streak_(cw.weeks, _todayWib_()), bestStreak: best, completed: cw.completed, badges: _badges_(cw.completed, best, _workoutBadgeStats_(memberId)) };
+  const today = _todayWib_();
+  let held = {};
+  try { held = _holdHeldWeeks_(_holdRows_(), memberId, today); } catch (e) { Logger.log('Cuti streak dilewati: ' + e); }   // Fase AD1
+  const best = _bestStreak_(cw.weeks, held);
+  return { streak: _streak_(cw.weeks, today, held), bestStreak: best, completed: cw.completed, badges: _badges_(cw.completed, best, _workoutBadgeStats_(memberId)) };
 }
 
 // ── Klien (token member; ID klien selalu dari token, bukan dari argumen) ────
@@ -4455,15 +4535,27 @@ function _challengeDone_(schedules, memberId, month) {
 /** Tantangan bulan ini: { target, done, month }. Dihitung di server dari sesi selesai; tidak ada data baru. */
 function _monthlyChallenge_(memberId) {
   const month = _todayWib_().slice(0, 7);
-  const target = Math.max(1, Math.min(31, Math.floor(_numProp_('MONTHLY_CHALLENGE_SESSIONS', MONTHLY_CHALLENGE_DEFAULT))));
-  return { target: target, done: _challengeDone_(_getSchedulesAll_(), memberId, month), month: month };
+  const base = Math.max(1, Math.min(31, Math.floor(_numProp_('MONTHLY_CHALLENGE_SESSIONS', MONTHLY_CHALLENGE_DEFAULT))));
+  const out = { target: base, done: _challengeDone_(_getSchedulesAll_(), memberId, month), month: month };
+  // Fase AD1: target ikut mengecil sebanyak hari yang ditahan bulan ini; disembunyikan bila kurang dari 7 hari tersisa.
+  try {
+    const hd = _holdDaysInMonth_(_holdRows_(), memberId, month);
+    if (hd.held) {
+      const free = hd.days - hd.held;
+      out.target = Math.max(1, Math.ceil(base * free / hd.days));
+      out.held = hd.held;
+      if (free < 7) out.hidden = true;
+    }
+  } catch (e) { Logger.log('Cuti tantangan dilewati: ' + e); }
+  return out;
 }
 
 /** Payload klien + badge yang sudah diraih tapi belum pernah dirayakan (kolom Q). */
 function _myPayload_(row) {
   const memberId = String(row[0]).trim();
   const p = _progressPayload_(memberId);
-  p.challenge = _monthlyChallenge_(memberId);
+  const ch = _monthlyChallenge_(memberId);
+  p.challenge = ch && ch.hidden ? null : ch;   // Fase AD1: bulan yang hampir seluruhnya cuti tidak punya tantangan
   const seen = _rmdOffFrom_(row[MEMBER_BADGE_SEEN_COL - 1]);
   p.newBadges = p.badges.filter(function(b) { return b.earned && seen.indexOf(b.id) === -1; }).map(function(b) { return b.id; });
   return p;
@@ -6382,6 +6474,7 @@ function _coachHub_(now, tr) {
     workouts: _tp_(tr, 'hub.workouts', _workoutHubList_),
     nutrition: _tp_(tr, 'hub.nutrition', _nutHubList_),
     programAuto: _tp_(tr, 'hub.programAuto', _pgHubList_),
+    holds: _tp_(tr, 'hub.holds', function() { try { return _holdHubList_(members); } catch (e) { return []; } }),   // Fase AD1
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }
@@ -6560,6 +6653,7 @@ function getClientBundleImpl_(token, memberId, tr) {
       // Fase X: kartu atlet dan level klien (baca saja) supaya coach melihat yang sama dengan klien.
       athlete: part('athlete', function () { const x = _portalXFor_(memberRow(), { progress: progress, workout: workout }); return { profile: x.profile, level: x.level, moments: x.moments }; }),   // Fase AC: momen untuk tab Progres coach
       foodLog: part('foodLog', function () { return getClientFoodLog(token, memberId); }),
+      holds: part('holds', function () { return _holdMemberHistory_(memberId, _todayWib_(), true); }),   // Fase AD1 (catatan: admin saja)
       share: part('share', function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
       insight: insight,
       ms: _traceEnd_(tr, 'getClientBundle')
@@ -6716,7 +6810,7 @@ function snoozeCare(token, memberId, days) {
   return _bumpAfter_(m.row[0], { status: 'success' });
 }
 
-/** Admin: assessment pertama / perubahan. Berat dan lingkar badan (opsional, 8 ukuran) masuk ke Progres sebagai catatan coach. */
+/** Admin: assessment pertama / perubahan. Berat dan lingkar badan (opsional, 9 ukuran) masuk ke Progres sebagai catatan coach. */
 function saveAssessment(token, memberId, data) {
   requireAdmin_(token);
   data = data || {};
@@ -6726,12 +6820,14 @@ function saveAssessment(token, memberId, data) {
     _careStr_(data.goal, 200, 'Tujuan utama'), _careStr_(data.history, 500, 'Riwayat latihan'), _careStr_(data.schedulePref, 200, 'Preferensi jadwal'),
     _careStr_(data.motivation, 300, 'Motivasi'), _careStr_(data.coachNotes, 1000, 'Catatan coach'), new Date().toISOString()
   ];
-  // Lemak tubuh (J) dan pinggul (M) tetap di Assessments; kolom lama dada/lengan (K, L) tidak diisi lagi (data lama tetap terbaca).
-  const bodyFat = _parseMeasure_(data.bodyFat, 3, 60, 'Lemak tubuh'), hip = _parseMeasure_(data.hip, 40, 200, 'Lingkar pinggul');
-  row.push(bodyFat, '', '', hip);
-  // Ukuran badan masuk ke Progres sebagai catatan coach. `weight` dan `waist` = nama lama untuk berat dan pinggang.
-  const src = Object.assign({}, data, { berat: data.berat !== undefined ? data.berat : data.weight, pinggang: data.pinggang !== undefined ? data.pinggang : data.waist });
+  // Ukuran badan masuk ke Progres sebagai catatan coach. `weight`, `waist` dan `hip` = nama lama untuk berat, pinggang dan pinggul.
+  const src = Object.assign({}, data, { berat: data.berat !== undefined ? data.berat : data.weight, pinggang: data.pinggang !== undefined ? data.pinggang : data.waist,
+    pinggul: data.pinggul !== undefined ? data.pinggul : data.hip });
   const vals = _parseMeasures_(src);
+  // Lemak tubuh (J) dan pinggul (M) tetap ditulis di Assessments (pembaca lama); kolom lama dada/lengan (K, L) tidak diisi lagi.
+  // Sejak Fase AD pinggul juga masuk Progres (kolom N) lewat vals.
+  const bodyFat = _parseMeasure_(data.bodyFat, 3, 60, 'Lemak tubuh'), hip = vals.pinggul;
+  row.push(bodyFat, '', '', hip);
   const hasMeasure = PROGRESS_MEASURES.some(function(m) { return vals[m.key] !== ''; });
   if (!row[3] && !row[4] && !row[5] && !row[6] && !row[7] && !hasMeasure && bodyFat === '' && hip === '') throw new Error('Isi minimal satu bagian assessment.');
   const lock = LockService.getScriptLock();
@@ -7931,6 +8027,7 @@ function _workoutFor_(row) {
     } catch (e) { g.progress = {}; }
   }
   g.suggest = suggest;
+  try { g.notes = _exNotesFor_(id); } catch (e) { g.notes = {}; }   // Fase AD3: setelan alat & cue dari coach (klien baca saja)
   return g;
 }
 

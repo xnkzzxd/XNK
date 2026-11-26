@@ -32,6 +32,8 @@ const ADMIN = [
   'getAdminPushStatus', 'saveAdminPush', 'removeAdminPush', 'setAdminPushPrefs',
   'previewReminderText', 'setMemberReminderPrefs',
   'getRenewalRequests', 'decideRenewal',
+  'setClientHold', 'endClientHold', 'deleteClientHold', 'decideHoldRequest',
+  'saveExerciseNote', 'deleteWorkoutEntries', 'getWorkoutExerciseHistory', 'logClientFood', 'deleteClientFood', 'saveFoodFeedback', 'getMemberReport',
   'getMemberProgress', 'saveMemberMeasurement', 'deleteMemberMeasurement', 'getMemberProgressPhoto', 'getMemberShareData',
   'getPriceListAdmin', 'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'getClassGroups',
   'syncFinanceTransactions', 'getBills', 'getBillDetail', 'saveBillAdjust', 'savePayment', 'saveExpense', 'getExpenses', 'getFinanceCategories', 'saveFinanceCategory', 'deleteFinanceCategory', 'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'getFinanceOverview', 'getFinancePage', 'uploadFinanceProof', 'getFinanceProof', 'exportFinanceCsv',
@@ -41,6 +43,8 @@ const MEMBER = [
   'clientRescheduleSchedule', 'uploadMemberPhoto', 'updateMemberPhoto',
   'getMyTasks', 'completeMyTask', 'getMyMealToday',
   'getMyCoach', 'getPortalMore', 'getMyNutrition', 'saveMyNutritionProfile', 'setMyMenuStyle', 'getMyShopping', 'swapMyMenuItem', 'swapMyMenuMeal', 'logMyFood', 'deleteMyFood', 'getMyFoodLog', 'copyMyFoodYesterday', 'getMyContent', 'getMyProgram', 'logMyProgramDay', 'getMyProgramProfile', 'saveMyProgramProfile', 'acceptAutoProgram', 'setMyProgramAuto', 'swapMyProgramExercise', 'saveMyRoutine', 'deleteMyRoutine', 'copyRoutineToMine', 'getMyWorkout', 'logMyWorkout', 'rateSession', 'getMyPackageEval', 'submitMyPackageEval', 'getMyHealthForm', 'submitMyHealthForm', 'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'requestRenewal', 'getMyRenewal', 'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'getMyProgressPhoto', 'deleteMyProgressPhoto', 'getMyShareData', 'createClassGroup', 'joinClassGroup', 'leaveClassGroup', 'getMyClassGroup', 'getMyBills', 'markGuideSeen', 'saveMyProfileCard', 'markNotifSeen',
+  'requestMyHold', 'cancelMyHoldRequest', 'endMyHold',
+  'getMyReport',
 ];
 const OWNER = [
   'testDriveAccess', 'migrateSplitMembersData', 'pertahankanWABaruMemberData', 'pertahankanWABaru',
@@ -70,6 +74,8 @@ const WRITE = [
   'addSchedule', 'addRecurringSchedule', 'deleteRecurringGroup', 'updateScheduleData', 'updateScheduleCoach', 'completeSession', 'deleteSchedule',
   'updateAppSettings', 'addTask', 'updateTask', 'deleteTask', 'deleteTaskGroup', 'saveTaskTemplate', 'deleteTaskTemplate',
   'setMemberMealReminder', 'setMemberReminderPrefs', 'decideRenewal', 'saveMemberMeasurement', 'deleteMemberMeasurement',
+  'setClientHold', 'endClientHold', 'deleteClientHold', 'decideHoldRequest',
+  'saveExerciseNote', 'deleteWorkoutEntries', 'logClientFood', 'deleteClientFood', 'saveFoodFeedback',
   'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages',
   'syncFinanceTransactions', 'saveBillAdjust', 'savePayment', 'saveExpense', 'saveFinanceCategory', 'deleteFinanceCategory',
   'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'uploadFinanceProof',
@@ -79,7 +85,7 @@ const WRITE = [
   'logMyProgramDay', 'saveMyProgramProfile', 'acceptAutoProgram', 'setMyProgramAuto', 'swapMyProgramExercise', 'saveMyRoutine',
   'deleteMyRoutine', 'copyRoutineToMine', 'logMyWorkout', 'rateSession', 'submitMyPackageEval', 'submitMyHealthForm', 'requestRenewal',
   'saveMyMeasurement', 'deleteMyMeasurement', 'uploadMyProgressPhoto', 'deleteMyProgressPhoto', 'createClassGroup', 'joinClassGroup',
-  'leaveClassGroup', 'saveMyProfileCard',
+  'leaveClassGroup', 'saveMyProfileCard', 'requestMyHold', 'cancelMyHoldRequest', 'endMyHold',
 ];
 const READ_OK = [
   'exportMyData',   // T-2255: read-only export, allowed in read-only mode
@@ -100,7 +106,7 @@ const READ_OK = [
   'getMyTasks', 'getMyMealToday', 'getMyCoach', 'getPortalMore', 'getMyNutrition', 'getMyShopping', 'getMyFoodLog',
   'getMyContent', 'getMyProgram', 'getMyProgramProfile', 'getMyWorkout', 'getMyPackageEval', 'getMyHealthForm',
   'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'getMyRenewal', 'getMyProgressPhoto', 'getMyShareData',
-  'getMyClassGroup', 'getMyBills', 'markGuideSeen', 'markNotifSeen',
+  'getMyClassGroup', 'getMyBills', 'markGuideSeen', 'markNotifSeen', 'getWorkoutExerciseHistory', 'getMyReport', 'getMemberReport',
 ];
 
 module.exports = { WRITE, READ_OK, PUBLIC, ADMIN, MEMBER, OWNER, TRIGGER, NOT_API, PUBLIC_API, API_FUNCTIONS };

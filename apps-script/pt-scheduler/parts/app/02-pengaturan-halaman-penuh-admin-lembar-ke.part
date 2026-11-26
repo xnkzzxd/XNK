@@ -40,6 +40,7 @@
     { id: 'tes-ulang', title: 'Tes ulang', sub: 'Tiap Senin: klien yang tes kebugaran terakhirnya 28 hari lalu atau lebih' },
     { id: 'hidup-sehat', title: 'Hidup sehat', sub: 'Tiap pagi (bawaan 05:00): tombol WhatsApp ajakan hidup sehat dan cardio untuk semua klien aktif' },
     { id: 'ulang-tahun', title: 'Ulang tahun', sub: 'Tiap hari: tombol WhatsApp ucapan untuk klien yang berulang tahun' },
+    { id: 'kembali-latihan', title: 'Kembali latihan', sub: 'Tiap hari (bawaan 07:00): tombol WhatsApp selamat datang kembali untuk klien yang cutinya selesai kemarin' },
     { id: 'tagihan', title: 'Tagihan', sub: 'Tiap hari: klien yang belum lunas lebih dari 3 hari, dengan tombol WhatsApp. Butuh Keuangan aktif.' },
     { id: 'ringkasan-owner', title: 'Ringkasan bulanan (untukmu)', sub: 'Tanggal 1: satu pesan Telegram berisi sesi, klien baru, pendapatan, dan hasil target bulan lalu' }
   ];

@@ -214,7 +214,7 @@ function _waLink_(phone, text) {
  * _getSchedulesAll_(), now = Date.
  * @returns {{active:Array, bookable:Array, skipped:number}}
  */
-function _buildClientPools_(members, schedules, now) {
+function _buildClientPools_(members, schedules, now, holdMap) {
   var upcoming = {};
   (schedules || []).forEach(function(s) {
     var start = new Date(s.start);
@@ -238,7 +238,8 @@ function _buildClientPools_(members, schedules, now) {
       remaining: remaining, upcoming: upcoming[id] || 0,
       slots: remaining - (upcoming[id] || 0),
       packageId: String(row[6] || ''), coachId: String(row[10] || ''),
-      off: _rmdOffFrom_(row[15])                       // T-123: jenis pengingat yang dimatikan untuk klien ini (kolom P)
+      off: _rmdOffFrom_(row[15]),                      // T-123: jenis pengingat yang dimatikan untuk klien ini (kolom P)
+      hold: !!(holdMap && holdMap[id])                 // Fase AD1: sedang ditahan (lihat _rmdIsOff_)
     };
     all.push(c);                                       // semua klien bernomor, termasuk paket habis
     if (remaining <= 0) return;
@@ -250,8 +251,10 @@ function _buildClientPools_(members, schedules, now) {
 
 function _loadClientPools_() {
   var data = _getMemberDataSheet_().getDataRange().getValues().slice(1);
-  return _buildClientPools_(data, _getSchedulesAll_(), new Date());
+  return _buildClientPools_(data, _getSchedulesAll_(), new Date(), _holdMapToday_());
 }
+/** Fase AD1: { memberId: hold } yang aktif hari ini (WIB). */
+function _holdMapToday_() { try { return _holdMap_(_holdRows_(), _todayWib_()); } catch (e) { Logger.log('Cuti dilewati: ' + e); return {}; } }
 
 /** @returns {{clients:Array, skipped:number}} klien aktif (A3) */
 function _selectActiveClients_() {
@@ -418,7 +421,9 @@ var REMINDER_JOBS = [
   { jenis: 'ulang-tahun',       day: null, hour: 8,  handler: 'sendUlangTahunDigest_', defaultEnabled: false },
   { jenis: 'ringkasan-owner',   day: null, hour: 9,  dayOfMonth: 1, handler: 'sendRingkasanOwner_', defaultEnabled: false },
   // Fase H: tagihan yang belum lunas lebih dari 3 hari; hanya jalan bila Keuangan aktif.
-  { jenis: 'tagihan',           day: null, hour: 9,  handler: 'sendTagihanDigest_', defaultEnabled: false }
+  { jenis: 'tagihan',           day: null, hour: 9,  handler: 'sendTagihanDigest_', defaultEnabled: false },
+  // Fase AD1: klien yang cutinya berakhir kemarin (aktif lagi hari ini): tombol WhatsApp ucapan selamat datang kembali. Bawaan MATI.
+  { jenis: 'kembali-latihan',   day: null, hour: 7,  handler: 'sendKembaliLatihanDigest_', defaultEnabled: false }
 ];
 
 /** Nilai bawaan saklar satu jenis bila properti _ENABLED belum pernah diisi. */
@@ -630,6 +635,7 @@ var RMD_TPL_DEFAULT = {
   'tes-ulang': 'Halo Kak {nama}, sudah sebulan sejak tes kebugaran Kakak ({terakhir}). Di sesi berikutnya kita tes ulang ya, supaya kemajuannya terlihat. 💪 {link}',
   'hidup-sehat': 'Selamat pagi Kak {nama}! ☀️ Yuk jalani hari ini dengan hidup sehat: makan bergizi, minum air putih yang cukup, dan jangan lupa cardio hari ini ya. 🏃 Semangat! 💪{personal}',
   'ulang-tahun': 'Selamat ulang tahun Kak {nama}! 🎂 Semoga sehat selalu, bahagia, dan dimudahkan semua urusannya.',
+  'kembali-latihan': 'Halo Kak {nama}, selamat datang kembali. 😊\nSaya senang bisa latihan bersama Kakak lagi.\nKalau sudah siap, yuk kita atur jadwalnya: {link}',
   'tagihan': 'Halo Kak {nama}, mohon maaf mengingatkan, sisa pembayaran paket {paket} Rp{sisa}. Terima kasih banyak 🙏',
   'ringkasan-owner': '📊 Ringkasan {bulan}\nSesi selesai: {sesi} ({jam} jam)\nKlien baru: {klienbaru}\nPendapatan (estimasi): {pendapatan}{target}',
   // Pesan manual (bukan job terjadwal): dibuat saat pemilik menekan tombol. Template bisa diganti lewat Script Property RMD_TPL_<JENIS>.
@@ -650,6 +656,7 @@ var RMD_PLACEHOLDERS = {
   'tes-ulang': ['nama', 'terakhir', 'link'],
   'hidup-sehat': ['nama', 'personal'],
   'ulang-tahun': ['nama'],
+  'kembali-latihan': ['nama', 'link'],
   'tagihan': ['nama', 'paket', 'sisa'],
   'ringkasan-owner': ['bulan', 'sesi', 'jam', 'klienbaru', 'pendapatan', 'target'],
   'hasil-tes': ['nama', 'hasil', 'link'],
@@ -708,7 +715,11 @@ function _rmdCheckTpl_(allowed, text) {
 function _rmdOffFrom_(cell) {
   return String(cell == null ? '' : cell).split(',').map(function(x) { return x.trim().toLowerCase(); }).filter(String);
 }
-function _rmdIsOff_(client, jenis) { return ((client && client.off) || []).indexOf(jenis) !== -1; }
+function _rmdIsOff_(client, jenis) {
+  // Fase AD1: klien yang ditahan (cuti/sakit/nonaktif) tidak menerima pengingat, kecuali HOLD_KEEP_TYPES (Cuti.gs).
+  if (client && client.hold && HOLD_KEEP_TYPES.indexOf(jenis) === -1) return true;
+  return ((client && client.off) || []).indexOf(jenis) !== -1;
+}
 
 /** Murni: label tombol "Nama · fakta" maksimal TELEGRAM_BUTTON_TEXT_MAX karakter; fakta dipertahankan, nama dipotong. */
 function _rmdButtonLabel_(name, fact) {
@@ -874,6 +885,7 @@ function _rmdSampleVars_(jenis) {
   else if (jenis === 'rekap-bulanan') { v.bulan = 'September'; v.sesi = '8'; v.berat = '\n⚖️ Berat −2,1 kg'; v.pinggang = '\n📏 Pinggang −3 cm'; v.streak = '\n🔥 Streak 5 minggu'; v.link = RMD_PORTAL_URL; }
   else if (jenis === 'selamat-milestone') v.badge = '25 sesi';
   else if (jenis === 'tes-ulang') { v.terakhir = '12 Sep'; v.link = RMD_PORTAL_URL; }
+  else if (jenis === 'kembali-latihan') v.link = RMD_PORTAL_URL;
   else if (jenis === 'ulang-tahun' || jenis === 'hidup-sehat') { /* hanya {nama} */ }
   else if (jenis === 'tagihan') { v.nama = 'Budi'; v.paket = 'Regular 8'; v.sisa = '300.000'; }
   else if (jenis === 'ringkasan-owner') { v.bulan = 'September'; v.sesi = '58'; v.jam = '58'; v.klienbaru = '3'; v.pendapatan = 'Rp 6.500.000'; v.target = '\nTarget sesi: 58 dari 80'; }
@@ -937,12 +949,12 @@ function setMemberReminderPrefs(token, memberId, prefs) {
 
 /** Indeks klien untuk pengingat sesi: { id: {id, name, phone (62… atau null), off} }. */
 function _rmdMemberIndex_() {
-  var idx = {};
+  var idx = {}, held = _holdMapToday_();
   _getMemberDataSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
     if (!row || !row[0]) return;
     var id = String(row[0]).trim();
     var total = parseInt(row[8], 10); if (isNaN(total)) total = 10;
-    idx[id] = { id: id, name: String(row[1] || '').trim(), phone: _rmdNormalizePhone_(row[2]), off: _rmdOffFrom_(row[15]), remaining: total - (parseInt(row[9], 10) || 0) };
+    idx[id] = { id: id, name: String(row[1] || '').trim(), phone: _rmdNormalizePhone_(row[2]), off: _rmdOffFrom_(row[15]), remaining: total - (parseInt(row[9], 10) || 0), hold: !!held[id] };
   });
   return idx;
 }
@@ -1132,9 +1144,9 @@ function sendMilestoneDigest_(ctx) {
   var today = _wibParts_(now).date, since = _addDaysIso_(today, -MILESTONE_RECENT_DAYS);
   var schedules = _getSchedulesAll_();
   var data = _getMemberDataSheet_().getDataRange().getValues().slice(1);
-  var tpl = _rmdTemplate_('selamat-milestone'), items = [], noPhone = [], toMark = {};
+  var tpl = _rmdTemplate_('selamat-milestone'), items = [], noPhone = [], toMark = {}, held = _holdMapToday_();
   data.forEach(function(row) {
-    if (!row || !row[0]) return;
+    if (!row || !row[0] || held[String(row[0]).trim()]) return;   // Fase AD1: diselamati sesudah kembali
     var id = String(row[0]).trim(), given = _rmdOffFrom_(row[MEMBER_BADGE_GIVEN_COL - 1]);
     var cw = _completedWeeks_(schedules, id);
     var fresh = _badges_(cw.completed, _bestStreak_(cw.weeks)).filter(function(b) { return b.earned && given.indexOf(b.id) === -1; });
@@ -1495,7 +1507,7 @@ function _sleepLine_(hour) {
 //   - Throttle 15 detik per jenis (mencegah spam dari tombol).
 // Hasil: {jenis, terkirim:boolean, pesan:string}. `terkirim` false + pesan = alasan.
 
-var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore', 'rekap-bulanan', 'selamat-milestone', 'waktunya-ukur', 'tes-ulang', 'ulang-tahun', 'hidup-sehat', 'ringkasan-owner', 'tagihan'];
+var RMD_TEST_JENIS = ['sesi-besok', 'booking-minggu', 'pr', 'tidur', 'makan-pagi', 'makan-sore', 'rekap-bulanan', 'selamat-milestone', 'waktunya-ukur', 'tes-ulang', 'ulang-tahun', 'hidup-sehat', 'ringkasan-owner', 'tagihan', 'kembali-latihan'];
 var RMD_TEST_MIN_GAP_MS = 15000;
 
 /** Murni: nama jenis valid → jenis itu sendiri; selain itu lempar error. */
@@ -1532,7 +1544,7 @@ function sendReminderTest(token, jenis) {
     return { jenis: j, terkirim: true, pesan: 'Pratinjau kalimat tidur terkirim ke Telegram.' };
   }
 
-  var handler = { 'rekap-bulanan': sendRekapBulananDigest_, 'selamat-milestone': sendMilestoneDigest_, 'waktunya-ukur': sendUkurDigest_, 'tes-ulang': sendTesUlangDigest_, 'ulang-tahun': sendUlangTahunDigest_, 'hidup-sehat': sendHidupSehatDigest_, 'ringkasan-owner': sendRingkasanOwner_, 'tagihan': sendTagihanDigest_, 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
+  var handler = { 'rekap-bulanan': sendRekapBulananDigest_, 'selamat-milestone': sendMilestoneDigest_, 'waktunya-ukur': sendUkurDigest_, 'tes-ulang': sendTesUlangDigest_, 'kembali-latihan': sendKembaliLatihanDigest_, 'ulang-tahun': sendUlangTahunDigest_, 'hidup-sehat': sendHidupSehatDigest_, 'ringkasan-owner': sendRingkasanOwner_, 'tagihan': sendTagihanDigest_, 'sesi-besok': sendSesiBesokDigest_, 'pr': sendPrDigest_, 'booking-minggu': sendBookingMingguDigest_,
                   'makan-pagi': sendMakanPagiDigest_, 'makan-sore': sendMakanSoreDigest_ }[j];
   var ok;
   try {

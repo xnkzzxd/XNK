@@ -1,0 +1,7 @@
+/* ═══ Fase AD4: lembar laporan PDF (pratinjau halaman) ═══ */
+.rp-pages { display: grid; gap: 12px; margin-top: 8px; }
+.rp-pages img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+@media (min-width: 768px) { .rp-pages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rp-secs .chip { cursor: pointer; }
+#pub-report-btn { margin: 0 0 var(--gap, 12px); }
+</style>

@@ -27,7 +27,11 @@ var IDEM_DURABLE = { addSchedule: 1, addRecurringSchedule: 1, addTask: 1, addMem
   decideRenewal: 1, decideNutritionAdvice: 1, saveAssessment: 1, saveFinanceCategory: 1,
   // Gelombang 3 (portal klien): kiriman ulang menambah baris kedua (perpanjangan + Telegram/push, salinan rutinitas "(2)",
   // grup kelas) atau memaksa blok program baru.
-  requestRenewal: 1, copyRoutineToMine: 1, createClassGroup: 1, acceptAutoProgram: 1 };
+  requestRenewal: 1, copyRoutineToMine: 1, createClassGroup: 1, acceptAutoProgram: 1,
+  // Fase AD1: kiriman ulang tidak boleh membuat cuti kedua atau menjawab "sudah diputuskan".
+  setClientHold: 1, decideHoldRequest: 1, requestMyHold: 1,
+  // Fase AD3: catatan makan oleh coach (cid diteruskan; satu baris walau dikirim ulang).
+  logClientFood: 1 };
 
 function _idemCidOk_(cid) { return typeof cid === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(cid); }
 
