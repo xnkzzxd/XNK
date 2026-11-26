@@ -28,7 +28,7 @@ function _apiTable_() {
     hubPushKey: hubPushKey,
     hubSiteUrl: hubSiteUrl,
     hubReadonly: hubReadonly,
-    // admin: admin token (142)
+    // admin: admin token (143)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -142,6 +142,7 @@ function _apiTable_() {
     logClientFood: logClientFood,
     deleteClientFood: deleteClientFood,
     saveFoodFeedback: saveFoodFeedback,
+    getMemberReport: getMemberReport,
     getMemberProgress: getMemberProgress,
     saveMemberMeasurement: saveMemberMeasurement,
     deleteMemberMeasurement: deleteMemberMeasurement,
@@ -171,7 +172,7 @@ function _apiTable_() {
     uploadFinanceProof: uploadFinanceProof,
     getFinanceProof: getFinanceProof,
     exportFinanceCsv: exportFinanceCsv,
-    // member: member token (66)
+    // member: member token (67)
     getMemberProfile: getMemberProfile,
     getMemberSessions: getMemberSessions,
     getMyPushStatus: getMyPushStatus,
@@ -238,6 +239,7 @@ function _apiTable_() {
     requestMyHold: requestMyHold,
     cancelMyHoldRequest: cancelMyHoldRequest,
     endMyHold: endMyHold,
+    getMyReport: getMyReport,
   };
 }
 

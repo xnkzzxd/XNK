@@ -200,6 +200,23 @@
       <div class="sheet-head"><h2 class="sheet-title" id="pc-title">Ubah profil</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <div class="sheet-body stack" style="gap:18px;padding-top:16px" id="pc-body"></div>
     </div>
+    <div class="sheet hide" id="sheet-report" role="dialog" aria-modal="true" aria-labelledby="rp-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="rp-title">Laporan PDF</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body form-grid">
+        <p class="li-sub">Dibuat di perangkat ini saat tombol ditekan; tidak ada yang diunggah.</p>
+        <div class="field"><span class="label">Periode</span><div class="chips" id="rp-periods" role="group" aria-label="Periode"></div></div>
+        <div class="two hide" id="rp-dates">
+          <div class="field"><label class="label" for="rp-from">Dari</label><input class="input" type="date" id="rp-from"></div>
+          <div class="field"><label class="label" for="rp-to">Sampai</label><input class="input" type="date" id="rp-to"></div>
+        </div>
+        <div class="field"><span class="label">Bagian</span><div class="chips rp-secs" id="rp-secs" role="group" aria-label="Bagian laporan"></div></div>
+        <div class="field hide" id="rp-msg-wrap"><label class="label" for="rp-msg">Pesan untuk klien (halaman pertama)</label><textarea class="textarea" id="rp-msg" rows="3" maxlength="600" placeholder="Opsional: kemajuan yang paling membanggakan, fokus bulan depan…" oninput="window.rpMsg(this.value)"></textarea></div>
+        <p class="hint err-msg" id="rp-err" role="alert" style="display:block"></p>
+        <div id="rp-preview"></div>
+      </div>
+      <div class="sheet-foot" id="rp-foot"></div>
+    </div>
     <div class="sheet sm hide" id="sheet-cfood" role="dialog" aria-modal="true" aria-labelledby="cf-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="cf-title">Catat untuk klien</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>

@@ -284,5 +284,3 @@
     optimistic({ q: { mode: 'admin', fn: 'logClientFood', args: [memberId, entry] }, sheet: true, label: 'Catat makanan', ok: 'Tercatat untuk klien.',
       then: function (r) { cfApply(memberId, r); } });
   };
-})();
-</script>

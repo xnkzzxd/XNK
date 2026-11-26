@@ -596,6 +596,7 @@
     const segs = [['ringkasan', 'Ringkasan'], ['ukuran', 'Ukuran'], ['tes', 'Tes'], ['riwayat', 'Riwayat']];
     // Fase X: cerita perjalanan di atas (kalimat utama + awal/sekarang/selisih), Momen di Ringkasan.
     let html = pxHead('Progres', '') + '<div class="px-band gfx-kontur"></div><div id="pub-journey">' + journeyHeroHtml() + '</div>' +
+      '<button type="button" class="btn btn-secondary btn-block" id="pub-report-btn" onclick="window.reportOpen(\'client\')">' + icon('file-text') + 'Laporan PDF</button>' +   // Fase AC4
       '<div class="seg pg-seg" id="pg-seg" role="tablist" aria-label="Bagian progres">' + segs.map(x => '<button type="button" role="tab" data-pgseg="' + x[0] + '" class="' + (pgSeg === x[0] ? 'active' : '') + '" aria-selected="' + (pgSeg === x[0]) + '" onclick="window.setPgSeg(\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '<span class="seg-thumb"></span></div>';
     html += pane('ringkasan', '<div id="pub-moments">' + momentsCardHtml() + '</div><div id="ph-progress">' + insProgressHero() + '</div><div class="stack" style="gap:var(--gap)" id="pub-ins-progress">' + insProgressCards() + '</div>', insightsCard(me, mine));
     html += pane('ukuran', '<div class="card" id="pub-progress-wrap">' + pgCardInner() + '</div>', '<div id="pub-ins-measures">' + insMeasuresCard() + '</div>');

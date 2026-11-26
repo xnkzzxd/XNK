@@ -86,6 +86,8 @@ const TEXT_SWAPS = [
 `, 1],
   ['App.html', "+ 'XNK Personal Training';", "+ window.brandName();", 1],
   ['App.html', "TITLES[viewId] || 'XNK';", "TITLES[viewId] || window.brandName();", 1],
+  // Fase AC4: kaki halaman laporan PDF memakai nama usaha coach.
+  ['App.html', "const brand = window.brandName ? window.brandName() : 'XNK';", "const brand = window.brandName();", 1],
   ['App.html', "', ini Coach XNK. Mengingatkan", "', ini ' + window.coachLabel(window.brandName()) + '. Mengingatkan", 1],
   ['App.html', "', ini Coach XNK. ';", "', ini ' + window.coachLabel(window.brandName()) + '. ';", 1],
   ['App.html', '<p class="eyebrow">XNK Personal Training</p>', `<p class="eyebrow">' + h(window.brandName()) + '</p>`, 1],

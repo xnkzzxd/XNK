@@ -1,6 +1,6 @@
 # Phase AC — Coach kit: client hold, measurement guide, coach logger, PDF report (PRD)
 
-Status: **planned** (2026-11-26). Tasks: [TODO.md](TODO.md) (T-2300…T-2399). How: [Design.md](Design.md).
+Status: **built** (2026-11-26; T-2309b, a lighter return for the automatic program, is not built until it has a sourced rule). Tasks: [TODO.md](TODO.md) (T-2300…T-2399). How: [Design.md](Design.md).
 
 The owner asked for four things (2026-11-26). They ship as four parts that can be built and merged on their own:
 

@@ -125,7 +125,9 @@ Boundary: the client logger (`mode: 'client'`), `logMyWorkout`, `logMyFood`, the
 
 ---
 
-## AC4 — PDF report on demand
+## AC4 — PDF report on demand (built 2026-11-26)
+
+Built as below, with these changes: no server cache (made only on a tap); no Cetak button; Bagikan uses `navigator.share` with the PDF file and falls back to a download (the iframe wrappers only accept PNG / video, so on the old wrapper pages the PDF downloads); the report counts a week as active when it has a coach session **or** a logged workout; sections start a new page only when the remaining space is too small; the footer brand goes through `TEXT_SWAPS` (`window.brandName()` on the Library). Check: `tools/report-check.js` (CI step "PDF report check").
 
 ### Server (`src/Laporan.gs`)
 - Pure `_reportCalc_(src, from, to, tone)` → `{ period, prev, headline:[{key,label,value,unit,delta}], attendance, holds, training, body, nutrition, tests, notes, text:{summary:[…], next:[…]} }`. Reuses `_workoutStats_`, `_insightBody_`, `_insightTraining_`, `_insightActivity_`, `_completedWeeks_`, `_foodLogTotals_`, `_sharedNotesFor_` (client-safe notes only). Interpretation sentences follow the client tone rules (no RPE, soft labels).

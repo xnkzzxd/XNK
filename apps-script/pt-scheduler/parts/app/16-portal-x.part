@@ -154,6 +154,7 @@
     if (nutTabOn()) tiles += tile(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh');
     if (window.shareOn !== false) tiles += tile(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres');
     tiles += tile(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', '<span class="new-dot' + (infoHasNew() ? '' : ' hide') + '" id="more-info-dot" aria-label="Baru"></span>');
+    tiles += tile('window.reportOpen(\'client\')', 'file-text', 'Laporan PDF', 'Rangkuman progres untuk dibaca');   // Fase AC4
     tiles += tile('window.cutiOpen()', 'plane', 'Cuti / izin', 'Ajukan cuti atau izin sakit');   // Fase AC1
     tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Tema dan warna aksen');
     tiles += tile('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto');

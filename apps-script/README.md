@@ -467,3 +467,10 @@ Pengaturan → **Keuangan** (mati sampai Anda menyalakannya):
 - **Riwayat latihan di halaman klien:** tombol hapus untuk satu hari latihan, dan **Riwayat lengkap gerakan ini** (setahun, semua set dan estimasi 1RM).
 - **Tab Gizi klien:** **Catat** untuk mencatatkan makanan klien (mis. dari foto di WhatsApp; ditandai "coach"), hapus catatan, **tanggapan harian** (Pas / Kurang / Lebih + catatan singkat yang terlihat klien di Makan), dan pilihan **7 hari / 31 hari** dengan kalender, rata-rata per minggu, dan makanan yang paling sering.
 
+## Laporan PDF (Fase AC, 2026-11)
+
+- Tombol **Laporan PDF** ada di portal klien (halaman Progres dan Saya) dan di halaman klien panel (Ringkasan). Laporan **hanya dibuat saat tombol ditekan**, langsung di HP/laptop; tidak ada yang disimpan di server atau diunggah.
+- Pilih periode (4 minggu, bulan ini, bulan lalu, sejak mulai, atau tanggal sendiri) dan bagian (Kehadiran, Latihan, Tubuh, Makan, Catatan sesi). Coach bisa menulis **pesan untuk klien** yang tampil paling depan.
+- Isi: ringkasan angka dibanding periode sebelumnya, kalimat tafsir yang mudah dibaca, rencana ke depan, kehadiran per minggu (masa cuti ditandai), kekuatan gerakan utama, rekor, ukuran tubuh (termasuk pinggul), tes kebugaran, makan, dan catatan sesi yang memang dibagikan ke klien. Tidak memuat nomor HP, RPE, catatan pribadi coach, catatan cuti, atau foto.
+- Hasilnya PDF A4 (biasanya 3–6 halaman, ±0,5 MB) yang bisa **Bagikan** (mis. ke WhatsApp) atau **Unduh**.
+

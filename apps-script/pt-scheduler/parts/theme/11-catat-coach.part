@@ -16,4 +16,3 @@
 .cfm-d.over { color: var(--danger); background: none; border: 1.5px solid var(--danger); }
 .nut-fb { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--fg) 6%, transparent); line-height: 1.4; }
 .nut-fb svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
-</style>

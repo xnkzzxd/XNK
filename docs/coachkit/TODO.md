@@ -33,8 +33,8 @@ Build order: AC2 → AC1 → AC3 → AC4. Each task: tests, checks (Agent.md §5
 - [x] **T-2329** Browser-check "Catat coach" (logger setup line, finish + complete session, coach food log, day mark). The client logger only gains the read-only setup line; no pixel compare was added.
 
 ## AC4 — PDF report on demand
-- [ ] **T-2340** `src/Laporan.gs`: `_reportCalc_` (pure), `getMyReport`, `getMemberReport`, cache, privacy tests.
-- [ ] **T-2341** Built-in PDF writer (JPEG pages) + unit test (valid structure, page count, size).
-- [ ] **T-2342** Page layout on canvas (cover, ringkasan, kehadiran, latihan, tubuh, makan, dari coach, rencana) with the share-card helpers; accent from the page.
-- [ ] **T-2343** `#sheet-report` (period, sections, coach message draft), preview, Bagikan / Unduh / Cetak; buttons in portal Progres + Saya and the client page menu.
-- [ ] **T-2344** `tools/report-check.js` (both modes, margins, Library build with `TEXT_SWAPS` footer).
+- [x] **T-2340** `src/Laporan.gs`: `_reportCalc_` (pure), `getMyReport`, `getMemberReport`, privacy tests (no server cache: the report is made only on a tap).
+- [x] **T-2341** Built-in PDF writer (JPEG pages) + unit test (valid structure, page count, size).
+- [x] **T-2342** Page layout on canvas (cover, ringkasan, kehadiran, latihan, tubuh, makan, dari coach, rencana) with the share-card helpers; accent from the page.
+- [x] **T-2343** `#sheet-report` (period, sections, coach message draft), preview, Bagikan / Unduh; buttons on portal Progres, Saya (phone and desktop) and the client page (Ringkasan). No separate Cetak button: the PDF prints from any viewer.
+- [x] **T-2344** `tools/report-check.js` (both modes, margins, Library build with `TEXT_SWAPS` footer).

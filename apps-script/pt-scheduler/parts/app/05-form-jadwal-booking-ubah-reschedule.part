@@ -938,6 +938,7 @@
       '<div><p class="k">Coach</p><p class="v">' + h(m.preferredCoachName || 'Belum ditentukan') + '</p></div>' +
       '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
     body += '<div class="btn-row cp-edit-row"><button type="button" class="btn btn-ghost btn-sm" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" id="profile-report" onclick="window.reportOpen(\'admin\',\'' + h(m.id) + '\')">' + icon('file-text') + 'Laporan PDF</button>' +   // Fase AC4
       '<button type="button" class="btn btn-ghost btn-sm" id="profile-hold" onclick="window.openHoldSheet(\'' + h(m.id) + '\')">' + icon('pause') + 'Tahan klien</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" onclick="window.openDeleteConfirmModal()">' + icon('trash-2') + 'Hapus klien</button></div>';
     body += '</div><div class="cp-col cp-col-side">';
