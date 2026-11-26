@@ -491,6 +491,20 @@ function _maskSecret_(value) {
   return '••••' + (v.length > 8 ? v.slice(-4) : '');
 }
 
+/**
+ * Fase AC (T-2301): Pengaturan dalam SATU panggilan untuk prefetch panel (dulu tiga: getAppSettings, getReminderStatus,
+ * getPriceListAdmin). Tiap bagian sama persis dengan fungsi lamanya; bagian yang gagal = {error}. Fungsi lama tetap ada.
+ */
+function getSettingsBundle(token) {
+  requireAdmin_(token);
+  const part = function(fn) { try { return fn(); } catch (e) { return { error: String((e && e.message) || e) }; } };
+  return {
+    settings: part(function() { return getAppSettings(token); }),
+    status: part(function() { return getReminderStatus(token); }),
+    packages: part(function() { return getPriceListAdmin(token); })
+  };
+}
+
 /** Info Pengaturan buat form admin: notifikasi, jam operasional, keamanan/sesi. */
 function getAppSettings(token) {
   requireAdmin_(token);
@@ -2247,7 +2261,7 @@ function getPortalBootstrapImpl_(memberToken) {
     businessHours: _businessHours_(),
     moreVer: moreVer,
     // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati dan tidak membawanya lagi saat cache kena).
-    hold: found ? _tp_(tr, 'hold', function() { return _holdForMember_(memberId); }) : null,   // Fase AC1
+    hold: found ? _tp_(tr, 'hold', function() { return _holdForMember_(memberId); }) : null,   // Fase AD1
     readonly: _readonlyOn_(),   // T-2251: pita "hanya bisa dilihat" (tanpa catatan pemilik untuk klien)
     coachStatus: found ? _tp_(tr, 'coachStatus', function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } }) : null,
     ms: _traceEnd_(tr, 'getPortalBootstrap')
@@ -2405,7 +2419,7 @@ function getAdminBootstrap(token) {
     priceList: getPriceList(),
     businessHours: _businessHours_(),
     readonly: _readonlyInfo_(),   // T-2251: null = biasa; {on, note} = mode baca saja
-    holds: _holdsForAdmin_()      // Fase AC1: cuti/sakit/nonaktif yang aktif, direncanakan, atau diminta (tanpa catatan)
+    holds: _holdsForAdmin_()      // Fase AD1: cuti/sakit/nonaktif yang aktif, direncanakan, atau diminta (tanpa catatan)
   };
 }
 
@@ -2455,7 +2469,7 @@ function _repairDateCellsSoon_() {
     try { _repairDateCells_(); c.put('datefix', '1', 21600); } finally { lock.releaseLock(); }
   } catch (e) {}
 }
-// Fase AC (T-2301): pinggul lama di Assessments (kolom M) disalin sekali ke Progres (kolom N) sebagai catatan coach,
+// Fase AD (T-2401): pinggul lama di Assessments (kolom M) disalin sekali ke Progres (kolom N) sebagai catatan coach,
 // hanya untuk klien + tanggal yang belum punya pinggul di Progres. Idempotent; tanda selesai = Script Property HIP_COPY_V1.
 function _hipCopyRun_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2649,7 +2663,7 @@ function addSchedule(token, scheduleData) {
       const left = found ? _memberQuotaLeft_(found.row) : null;
       if (left !== null && left < 0 && new Date(scheduleData.start).getTime() > Date.now()) res.warnings = (res.warnings || []).concat(['Sesi klien ini sudah habis terpakai/terbooking.']);
     } catch (e) { Logger.log('Cek kuota gagal: ' + e); }
-    try {   // Fase AC1: coach tetap boleh membooking klien yang ditahan, tetapi diberi tahu
+    try {   // Fase AD1: coach tetap boleh membooking klien yang ditahan, tetapi diberi tahu
       const hm = scheduleData && scheduleData.memberId ? _holdBookBlock_(String(scheduleData.memberId).trim(), scheduleData.start, true) : '';
       if (hm) res.warnings = (res.warnings || []).concat([hm]);
     } catch (e) { Logger.log('Cek cuti gagal: ' + e); }
@@ -2768,7 +2782,7 @@ function clientBookRecurring(memberToken, baseScheduleData, recurrenceRule, opts
   if (_memberClassContext_(member.row)) throw new Error('Sesi kelas dipilih satu per satu, tidak bisa berulang. Pilih jam kelasnya.');
   const base = baseScheduleData || {};
   const soft = !!(opts && opts.soft), skipTaken = !!(opts && opts.skipTaken);
-  _holdSeriesBlock_(String(member.row[0]).trim(), base.startDate, recurrenceRule);   // Fase AC1: seri tidak boleh masuk masa cuti
+  _holdSeriesBlock_(String(member.row[0]).trim(), base.startDate, recurrenceRule);   // Fase AD1: seri tidak boleh masuk masa cuti
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Server sedang sibuk. Coba lagi sebentar.');
   try {
@@ -3111,7 +3125,7 @@ function _clientReschedule_(memberId, scheduleId, newStart, newEnd, soft) {
 
     // 4. Waktu BARU harus boleh dibooking; jadwal ini sendiri tidak dihitung.
     _assertBookingHorizon_(newStart);
-    const holdMsg = _holdBookBlock_(memberId, newStart);   // Fase AC1
+    const holdMsg = _holdBookBlock_(memberId, newStart);   // Fase AD1
     if (holdMsg) {
       if (!soft) throw new Error(holdMsg);
       const ho = _bookConflict_('hold', holdMsg, { start: newStart, end: newEnd }, all, ver, _ownActiveRows_(memberId, all, id), id, [row.start, newStart], '');
@@ -3277,7 +3291,7 @@ function clientBookSchedule(memberToken, scheduleData, opts) {
         schedule: _ownScheduleOut_(dup)
       }, _slotsPayload_(all, ver, false));
     }
-    // Fase AC1: hari di dalam cuti/sakit tidak bisa dibooking klien; akun nonaktif tidak bisa booking sama sekali.
+    // Fase AD1: hari di dalam cuti/sakit tidak bisa dibooking klien; akun nonaktif tidak bisa booking sama sekali.
     const holdMsg = _holdBookBlock_(memberId, req.start);
     if (holdMsg) { if (!soft) throw new Error(holdMsg); return conflict('hold', holdMsg, []); }
 
@@ -4268,7 +4282,7 @@ const PROGRESS_MEASURES = [
   { key: 'pahaKanan', label: 'Lingkar paha kanan', short: 'Paha kanan', unit: 'cm', col: 11, min: 20, max: 120 },
   { key: 'pahaKiri', label: 'Lingkar paha kiri', short: 'Paha kiri', unit: 'cm', col: 12, min: 20, max: 120 },
   { key: 'dada', label: 'Lingkar dada', short: 'Dada', unit: 'cm', col: 13, min: 40, max: 200 },
-  // Fase AC (T-2301): pinggul jadi ukuran biasa (dulu hanya di Assessments kolom M). Batas sama dengan saveAssessment.
+  // Fase AD (T-2401): pinggul jadi ukuran biasa (dulu hanya di Assessments kolom M). Batas sama dengan saveAssessment.
   { key: 'pinggul', label: 'Lingkar pinggul', short: 'Pinggul', unit: 'cm', col: 14, min: 40, max: 200 }
 ];
 const PROGRESS_PHOTO_HEADERS = ["ID", "Member ID", "Tanggal", "Sisi", "File ID", "Dicatat Oleh"];
@@ -4463,7 +4477,7 @@ function _completedWeeks_(schedules, memberId) {
   return { weeks: weeks, completed: completed };
 }
 
-/** Murni: streak saat ini (minggu berurutan sampai hari ini). held (Fase AC1) = minggu cuti: tidak memutus, tidak menambah. */
+/** Murni: streak saat ini (minggu berurutan sampai hari ini). held (Fase AD1) = minggu cuti: tidak memutus, tidak menambah. */
 function _streak_(weeks, todayIso, held) {
   held = held || {};
   const thisWeek = _weekStart_(todayIso);
@@ -4499,7 +4513,7 @@ function _streakInfo_(memberId) {
   const cw = _completedWeeks_(_getSchedulesAll_(), memberId);
   const today = _todayWib_();
   let held = {};
-  try { held = _holdHeldWeeks_(_holdRows_(), memberId, today); } catch (e) { Logger.log('Cuti streak dilewati: ' + e); }   // Fase AC1
+  try { held = _holdHeldWeeks_(_holdRows_(), memberId, today); } catch (e) { Logger.log('Cuti streak dilewati: ' + e); }   // Fase AD1
   const best = _bestStreak_(cw.weeks, held);
   return { streak: _streak_(cw.weeks, today, held), bestStreak: best, completed: cw.completed, badges: _badges_(cw.completed, best, _workoutBadgeStats_(memberId)) };
 }
@@ -4523,7 +4537,7 @@ function _monthlyChallenge_(memberId) {
   const month = _todayWib_().slice(0, 7);
   const base = Math.max(1, Math.min(31, Math.floor(_numProp_('MONTHLY_CHALLENGE_SESSIONS', MONTHLY_CHALLENGE_DEFAULT))));
   const out = { target: base, done: _challengeDone_(_getSchedulesAll_(), memberId, month), month: month };
-  // Fase AC1: target ikut mengecil sebanyak hari yang ditahan bulan ini; disembunyikan bila kurang dari 7 hari tersisa.
+  // Fase AD1: target ikut mengecil sebanyak hari yang ditahan bulan ini; disembunyikan bila kurang dari 7 hari tersisa.
   try {
     const hd = _holdDaysInMonth_(_holdRows_(), memberId, month);
     if (hd.held) {
@@ -4541,7 +4555,7 @@ function _myPayload_(row) {
   const memberId = String(row[0]).trim();
   const p = _progressPayload_(memberId);
   const ch = _monthlyChallenge_(memberId);
-  p.challenge = ch && ch.hidden ? null : ch;   // Fase AC1: bulan yang hampir seluruhnya cuti tidak punya tantangan
+  p.challenge = ch && ch.hidden ? null : ch;   // Fase AD1: bulan yang hampir seluruhnya cuti tidak punya tantangan
   const seen = _rmdOffFrom_(row[MEMBER_BADGE_SEEN_COL - 1]);
   p.newBadges = p.badges.filter(function(b) { return b.earned && seen.indexOf(b.id) === -1; }).map(function(b) { return b.id; });
   return p;
@@ -4863,7 +4877,9 @@ function decideRenewal(token, id, approve) {
       packageId: req.packageId, usedSessions: 0, coachId: req.coachId || String(row[10] || '')
     }, { silent: true });
     _bumpMember_(req.memberId);
-    return { status: 'disetujui', id: rid, packageName: res.packageName, totalSessions: res.totalSessions };
+    // Fase AC: klien yang sudah diperbarui ikut dikirim, jadi panel langsung menampilkan paket barunya.
+    const fresh = _findMemberRow_(function(r) { return String(r[0]).trim() === req.memberId; });
+    return { status: 'disetujui', id: rid, packageName: res.packageName, totalSessions: res.totalSessions, member: fresh ? _memberPublicProfile_(fresh.row) : null };
   } catch (e) {
     const l2 = LockService.getScriptLock();
     if (l2.tryLock(10000)) {
@@ -5417,7 +5433,7 @@ function addTask(token, data) {
     const id = 'TSK-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const groupId = repeat === 'none' ? '' : _newTaskGroupId_();
     _appendRow_(sheet, [id, memberId, title, description, category, dueDate, 'todo', repeat, 'coach', new Date().toISOString(), '', '', groupId]);
-    return _bumpAfter_(memberId, { status: 'success', id: id });
+    return _bumpAfter_(memberId, Object.assign({ status: 'success', id: id }, _taskFresh_(memberId)));
   });
 }
 
@@ -5468,7 +5484,7 @@ function updateTask(token, data) {
     }
     sheet.getRange(found.rowNum, 1, 1, TASKS_HEADERS.length).setValues([row]);
     if (statusChanged && (row[6] === 'done' || row[6] === 'skipped')) _spawnNextTaskInstance_(sheet, row);
-    return _bumpAfter_(row[1], { status: 'success' });
+    return _bumpAfter_(row[1], Object.assign({ status: 'success' }, _taskFresh_(row[1])));
   });
 }
 
@@ -5482,8 +5498,18 @@ function deleteTask(token, taskId) {
     const found = _findTaskRow_(sheet, taskId);
     if (!found) throw new Error('PR tidak ditemukan.');
     sheet.deleteRow(found.rowNum);
-    return _bumpAfter_(found.row[1], { status: 'success' });
+    return _bumpAfter_(found.row[1], Object.assign({ status: 'success' }, _taskFresh_(found.row[1])));
   });
+}
+
+/**
+ * Fase AC (T-2301): jawaban penulis PR membawa daftar PR klien itu dan ringkasannya, jadi panel tidak perlu
+ * memanggil getTasksForMember + getTaskSummary lagi. Dibaca langsung dari sheet setelah menulis (bukan memo).
+ */
+function _taskFresh_(memberId) {
+  const tasks = _tasksOfMember_(memberId);
+  const open = tasks.filter(function(t) { return t.status === 'todo'; });
+  return { memberId: String(memberId).trim(), tasks: tasks, taskSummary: { open: open.length, overdue: open.filter(function(t) { return t.overdue; }).length } };
 }
 
 
@@ -5524,7 +5550,10 @@ function getTasksForMember(token, memberId) {
   requireAdmin_(token);
   memberId = String(memberId == null ? '' : memberId).trim();
   if (!memberId) throw new Error('Klien wajib dipilih.');
-
+  return _tasksOfMember_(memberId);
+}
+function _tasksOfMember_(memberId) {
+  memberId = String(memberId == null ? '' : memberId).trim();
   const data = _tasksSheet_().getDataRange().getValues();
   const list = [];
   for (let i = 1; i < data.length; i++) {
@@ -6445,7 +6474,7 @@ function _coachHub_(now, tr) {
     workouts: _tp_(tr, 'hub.workouts', _workoutHubList_),
     nutrition: _tp_(tr, 'hub.nutrition', _nutHubList_),
     programAuto: _tp_(tr, 'hub.programAuto', _pgHubList_),
-    holds: _tp_(tr, 'hub.holds', function() { try { return _holdHubList_(members); } catch (e) { return []; } }),   // Fase AC1
+    holds: _tp_(tr, 'hub.holds', function() { try { return _holdHubList_(members); } catch (e) { return []; } }),   // Fase AD1
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
 }
@@ -6605,20 +6634,26 @@ function getClientBundleImpl_(token, memberId, tr) {
       const bodyFat = care && care.assessment && care.assessment.bodyFat !== '' && care.assessment.bodyFat != null ? Number(care.assessment.bodyFat) : null;
       return _insightFor_(row, 'coach', { progress: progress, workout: workout, bodyFat: bodyFat });
     });
+    const tasks = part('tasks', function () { return getTasksForMember(token, memberId); });
+    const nutrition = part('nutrition', function () { return getClientNutrition(token, memberId); });
+    const programGen = part('programGen', function () { return _programGenFor_(memberRow(), true); });
     return {
       ver: ver,
       day: _todayWib_(),
-      tasks: part('tasks', function () { return getTasksForMember(token, memberId); }),
+      tasks: tasks,
       progress: progress,
       care: care,
       program: program,
       workout: workout,
-      nutrition: part('nutrition', function () { return getClientNutrition(token, memberId); }),
-      programGen: part('programGen', function () { return _programGenFor_(memberRow(), true); }),
+      nutrition: nutrition,
+      programGen: programGen,
+      // Fase AC: catatan sesi terakhir (briefing, "Fokus terakhir", isi awal lembar catatan) dan tugas coach untuk klien ini.
+      notes: part('notes', function () { return _notesForMember_(String(memberRow()[0]).trim()).slice(0, CLIENT_NOTES_MAX); }),
+      todo: part('todo', function () { return _coachTodoFor_(memberRow(), { tasks: tasks, care: care, nutrition: nutrition, program: program, programGen: programGen }); }),
       // Fase X: kartu atlet dan level klien (baca saja) supaya coach melihat yang sama dengan klien.
-      athlete: part('athlete', function () { const x = _portalXFor_(memberRow(), { progress: progress, workout: workout }); return { profile: x.profile, level: x.level }; }),
+      athlete: part('athlete', function () { const x = _portalXFor_(memberRow(), { progress: progress, workout: workout }); return { profile: x.profile, level: x.level, moments: x.moments }; }),   // Fase AC: momen untuk tab Progres coach
       foodLog: part('foodLog', function () { return getClientFoodLog(token, memberId); }),
-      holds: part('holds', function () { return _holdMemberHistory_(memberId, _todayWib_(), true); }),   // Fase AC1 (catatan: admin saja)
+      holds: part('holds', function () { return _holdMemberHistory_(memberId, _todayWib_(), true); }),   // Fase AD1 (catatan: admin saja)
       share: part('share', function () { const row = _memberRowOrThrow_(memberId).row; return _shareFor_(row, workout, progress); }),
       insight: insight,
       ms: _traceEnd_(tr, 'getClientBundle')
@@ -6630,6 +6665,58 @@ function getClientBundleImpl_(token, memberId, tr) {
     _payloadPut_(ckey, copy, Math.max(30, Math.min(1800, Math.floor(_numProp_('CLIENT_BUNDLE_CACHE_SECONDS', 900)))));
   }
   return result;
+}
+
+const CLIENT_NOTES_MAX = 10;
+
+/** Kumpulkan masukan _coachTodoCalc_ untuk satu klien dari bagian bundle yang sudah dibaca (pre) + jadwal dan permintaan perpanjang. */
+function _coachTodoFor_(row, pre) {
+  pre = pre || {};
+  const ok = function(x) { return x && !x.error ? x : null; };
+  const id = String(row[0]).trim(), today = _todayWib_(), now = Date.now();
+  const total = parseInt(row[8], 10) || 0, used = parseInt(row[9], 10) || 0;
+  const joined = _parseTanggalDMY_(row[4]);
+  let lastDone = '', hasUpcoming = false, sessionToday = false;
+  _getSchedulesAll_().forEach(function(s) {
+    if (String(s.memberId).trim() !== id) return;
+    const st = String(s.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'available') return;
+    const t = new Date(s.start).getTime();
+    if (isNaN(t)) return;
+    const day = _wibDate_(s.start);
+    if (day === today) sessionToday = true;
+    if (st === 'completed') { if (day > lastDone) lastDone = day; }
+    else if (t >= now) hasUpcoming = true;
+  });
+  let renewal = null;
+  _sheetRowsMemo_('RenewalRequests').forEach(function(r) {
+    if (!r[0]) return;
+    const q = _renewalFromRow_(r);
+    if (q.memberId === id && q.status === 'menunggu') renewal = { id: q.id, packageId: q.packageId };
+  });
+  if (renewal) {
+    const pc = _priceListSheetAndColumns_();
+    const pk = _readPackages_(pc.sheet, pc.idx).find(function(p) { return String(p.id) === renewal.packageId; });
+    renewal.packageName = pk ? pk.namaPaket : '';
+  }
+  const care = ok(pre.care), nut = ok(pre.nutrition), prog = ok(pre.program), gen = ok(pre.programGen);
+  const tasks = Array.isArray(pre.tasks) ? pre.tasks : [];
+  const cutoff = _addDaysIso_(today, -COACH_TODO.lowRatingDays);
+  const ratings = care && care.feedback ? care.feedback.ratings || [] : [];
+  let lastTest = '';
+  ((care && care.tests) || []).forEach(function(t) { const d = t.latest ? String(t.latest.tanggal || '') : ''; if (d > lastTest) lastTest = d; });
+  return _coachTodoCalc_({
+    today: today, total: total, remaining: Math.max(0, total - used),
+    joinedDays: joined ? Math.floor((now - joined.getTime()) / 86400000) : 999,
+    lastDone: lastDone, hasUpcoming: hasUpcoming, sessionToday: sessionToday, inactiveDays: _inactiveDays_(),
+    renewal: renewal, overdueTasks: tasks.filter(function(t) { return t.status === 'todo' && t.overdue; }).length,
+    lowRating: ratings.some(function(r) { return r.bintang > 0 && r.bintang <= 3 && String(r.tanggal) >= cutoff; }),
+    health: !care ? 'ok' : !care.health ? 'none' : care.health.reviewedAt ? 'ok' : 'review',
+    assessment: !care || !!care.assessment, lastTest: lastTest,
+    flag: care ? care.flag : '', snoozed: !!(care && care.snoozedUntil && care.snoozedUntil >= today),
+    nutrition: nut && _nutEnabled_() && nut.profile && nut.profile.aktif ? { advice: !!(nut.advice && nut.advice.pending), stale: !!(nut.inputs && nut.inputs.stale) } : null,
+    hasProgram: !prog || (prog.days || []).length > 0 || !!(gen && gen.isAuto)
+  });
 }
 
 /**
@@ -6696,6 +6783,7 @@ function saveClientNotes(token, memberId, data) {
   const flag = _careStr_(data.flag, 80, 'Perhatian'), notes = _careStr_(data.notes, 2000, 'Catatan');
   let birth = String(data.birthDate == null ? '' : data.birthDate).trim();
   if (birth && (!_validDate_(birth) || birth > _todayWib_())) throw new Error('Tanggal lahir tidak valid.');
+  let id = '';
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -6704,10 +6792,12 @@ function saveClientNotes(token, memberId, data) {
     m.sheet.getRange(m.rowNum, MEMBER_FLAG_COL).setValue(flag);
     m.sheet.getRange(m.rowNum, MEMBER_NOTES_COL).setValue(notes);
     m.sheet.getRange(m.rowNum, MEMBER_BIRTH_COL).setNumberFormat('@').setValue(birth);
-    return _bumpAfter_(m.row[0], { status: 'success' });
+    _bumpMember_(m.row[0]);
+    id = String(m.row[0]).trim();
   } finally {
     lock.releaseLock();
   }
+  return { status: 'success', care: _careFresh_(token, id) };
 }
 
 /** Admin: sembunyikan klien dari daftar "Perlu perhatian" selama `days` hari (1-30). */
@@ -6735,7 +6825,7 @@ function saveAssessment(token, memberId, data) {
     pinggul: data.pinggul !== undefined ? data.pinggul : data.hip });
   const vals = _parseMeasures_(src);
   // Lemak tubuh (J) dan pinggul (M) tetap ditulis di Assessments (pembaca lama); kolom lama dada/lengan (K, L) tidak diisi lagi.
-  // Sejak Fase AC pinggul juga masuk Progres (kolom N) lewat vals.
+  // Sejak Fase AD pinggul juga masuk Progres (kolom N) lewat vals.
   const bodyFat = _parseMeasure_(data.bodyFat, 3, 60, 'Lemak tubuh'), hip = vals.pinggul;
   row.push(bodyFat, '', '', hip);
   const hasMeasure = PROGRESS_MEASURES.some(function(m) { return vals[m.key] !== ''; });
@@ -6750,7 +6840,7 @@ function saveAssessment(token, memberId, data) {
     lock.releaseLock();
   }
   if (hasMeasure) _saveMeasurement_(id, _todayWib_(), vals, 'coach');
-  return _bumpAfter_(id, { status: 'success' });
+  return _bumpAfter_(id, { status: 'success', care: _careFresh_(token, id) });
 }
 
 /** Admin: nilai tes kebugaran. values = { pushup: 24, plank: 60 }; kosong diabaikan. Upsert per klien, tanggal, dan tes. */
@@ -6811,7 +6901,12 @@ function markHealthReviewed(token, memberId, note) {
   if (!hs) throw new Error('Klien ini belum mengisi form kesehatan.');
   hs.sheet.getRange(hs.rowNum, 15).setValue(new Date().toISOString());
   hs.sheet.getRange(hs.rowNum, 16).setValue(_careStr_(note, 300, 'Catatan'));
-  return _bumpAfter_(id, { status: 'success' });
+  return _bumpAfter_(id, { status: 'success', care: _careFresh_(token, id) });
+}
+
+/** Fase AC (T-2301): data perawatan segar untuk jawaban penulisnya (panel menempelnya tanpa getClientCare lagi). Gagal = tanpa bagian ini. */
+function _careFresh_(token, memberId) {
+  try { return _plainJson_(getClientCare(token, memberId)); } catch (e) { return undefined; }
 }
 
 // ── Konten untuk klien: pengumuman, tips, video (Fase J3) ─────────────────────
@@ -7932,7 +8027,7 @@ function _workoutFor_(row) {
     } catch (e) { g.progress = {}; }
   }
   g.suggest = suggest;
-  try { g.notes = _exNotesFor_(id); } catch (e) { g.notes = {}; }   // Fase AC3: setelan alat & cue dari coach (klien baca saja)
+  try { g.notes = _exNotesFor_(id); } catch (e) { g.notes = {}; }   // Fase AD3: setelan alat & cue dari coach (klien baca saja)
   return g;
 }
 

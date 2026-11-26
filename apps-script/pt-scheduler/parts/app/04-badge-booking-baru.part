@@ -121,7 +121,7 @@
 
     html += '<div class="dash-grid stagger">';
     html += renewalsCardHtml();
-    html += window.holdReqCardHtml();   // Fase AC1: hanya tampil bila ada permintaan cuti
+    html += window.holdReqCardHtml();   // Fase AD1: hanya tampil bila ada permintaan cuti
 
     // Sesi berikutnya (kartu hitam)
     html += '<div class="span-5">' + nextSessionCard(next) + '</div>';

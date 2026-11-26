@@ -26,7 +26,7 @@
       }).join('') + '</div>';
     }
     html += pgHubHtml(hub.programAuto);
-    html += window.holdHubHtml(hub.holds);   // Fase AC1
+    html += window.holdHubHtml(hub.holds);   // Fase AD1
     if (hub.nutrition && hub.nutrition.length) html += '<div class="card-flat stack" id="hub-nutrition" style="gap:8px"><div class="row-between"><p class="eyebrow">Saran target gizi</p><span class="li-sub">' + hub.nutrition.length + '</span></div>' + hub.nutrition.map(function (a) { return nutAdviceRow(a, true); }).join('') + '</div>';
     html += '<div class="card-flat stack" style="gap:8px"><div class="row-between"><p class="eyebrow">Target bulan ini</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTargetsSheet()">' + (hub.targets.length ? 'Ubah' : 'Atur target') + '</button></div>';
     if (!hub.targets.length) html += '<p class="li-sub">Belum ada target. Atur target sesi, klien, atau pendapatan.</p>';
@@ -175,43 +175,70 @@
     return programAdminInner0(memberId, d);
   }
   function programAdminInner0(memberId, d) {
-    // Satu kartu Program (2026-11, T-1620): status, ringkasan, satu tombol utama; sisanya di lipatan "Lainnya".
+    // Fase AC (Wave 3): satu bagian Program — status, profil, kartu per hari ("Berikutnya" ditandai), satu tautan "Atur program".
+    // Mulai latihan ada di kartu klien; ubah program, otomatis, pantangan dan buat ulang ada di lembar Atur program.
     const g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
     const id = h(memberId), n = d.days.reduce((s, x) => s + x.items.length, 0), wd = wkAdmin[memberId];
     const hasLog = !!(wd && wd.days && wd.days.length);
     const status = g && g.isAuto ? 'Otomatis · blok ' + (g.block || 1) : (g && !g.auto ? 'Otomatis mati' : (n ? 'Program coach' : 'Belum ada'));
-    let html = '<div class="card-flat stack prg-card" style="gap:10px"><div class="row-between"><p class="eyebrow">Program latihan</p><span class="pill' + (g && g.isAuto ? ' solid' : ' soft') + '">' + h(status) + '</span></div>';
-    if (g && g.profile && (g.profile.level || g.profile.hari)) {
-      const p = g.profile;
-      html += '<div class="kv"><div><p class="k">Level</p><p class="v">' + h(PG_LVL_LBL[p.level] || '–') + '</p></div><div><p class="k">Tujuan</p><p class="v">' + h(PG_GOAL_LBL[p.tujuan] || '–') + '</p></div>' +
-        '<div><p class="k">Hari</p><p class="v">' + (p.hari ? h(p.hari) + ' / minggu' : '–') + '</p></div><div><p class="k">Durasi</p><p class="v">' + (p.durasi ? h(p.durasi) + ' menit' : '–') + '</p></div></div>';
-    }
-    if (g && g.light) html += '<p class="li-sub" role="note">' + icon('alert-triangle', 'class="ic-inline"') + ' Mode ringan: ' + h((g.reasons || []).map(function (r) { return PG_REASON_LBL[r] || r; }).join(', ')) + '.</p>';
-    if (g && (g.gaps || []).length) html += '<p class="li-sub" role="note">Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.</p>';
+    const next = n ? ((wd && wd.next && d.days.some(x => x.hari === wd.next)) ? wd.next : d.days[0].hari) : '';
+    let html = '<div class="px-sec cp-sec"><h3>Program</h3><span class="cp-sec-r"><span class="pill' + (g && g.isAuto ? ' solid' : ' soft') + '">' + h(status) + '</span>' +
+      '<button type="button" class="cp-link" onclick="window.cpProgSheet(\'' + id + '\')">Atur program</button></span></div>';
+    const p = g && g.profile && (g.profile.level || g.profile.hari) ? g.profile : null;
+    const notes = [];
+    if (g && g.light) notes.push(icon('alert-triangle', 'class="ic-inline"') + ' Mode ringan: ' + h((g.reasons || []).map(function (r) { return PG_REASON_LBL[r] || r; }).join(', ')) + '.');
+    if (g && (g.gaps || []).length) notes.push('Belum ada alat untuk pola: ' + h(g.gaps.map(function (x) { return PG_POLA_LBL[x] || x; }).join(', ')) + '.');
+    if (p) html += '<p class="cp-prof">' + [PG_LVL_LBL[p.level], PG_GOAL_LBL[p.tujuan], p.hari ? p.hari + '× / minggu' : '', p.durasi ? p.durasi + ' menit' : ''].filter(Boolean).map(h).join(' · ') + '</p>';
+    if (notes.length) html += notes.map(t => '<p class="li-sub" role="note">' + t + '</p>').join('');
     if (n) {
-      html += '<div class="prg-days">' + d.days.map(day => '<div class="prg-day stack" style="gap:4px"><p class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></p>' +
-        day.items.map(it => '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('') + '</div>').join('') + '</div>';
-      if (d.last) html += '<p class="li-sub">Terakhir dicentang klien: ' + h(pgLabel(d.last.tanggal)) + ' · ' + h(d.last.hari) + ' (' + d.last.selesai + ' gerakan)</p>';
-    } else html += '<p class="li-sub">Belum ada program. Buat sendiri, atau nyalakan program otomatis.</p>';
-    if (hasLog) html += '<p class="li-sub">Terakhir dicatat: ' + h(pgLabel(wd.days[0].tanggal)) + ' · ' + wd.days[0].items.length + ' gerakan</p>';
-    html += '<div class="btn-row"><button type="button" class="btn btn-primary" onclick="window.workoutOpenAdmin(\'' + id + '\')">' + icon('play') + 'Mulai latihan</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.openProgramEditor(\'' + id + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button></div>';
-    // Lainnya: tindakan jarang dipakai
-    let more = '<div class="stack" style="gap:10px"><div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-ghost" onclick="window.workoutOpenAdmin(\'' + id + '\',\'\',\'\',true)">' + icon('calendar') + 'Catat yang lewat</button>' +
-      (hasLog ? '<button type="button" class="btn btn-ghost" onclick="window.workoutSummaryWA(\'' + id + '\')">' + icon('message-circle') + 'Kirim ringkasan WA</button>' : '') + '</div>';
-    if (g) {
-      more += (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('') +
-        '<p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div>' +
-        '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn btn-outline" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + ' Buat ulang otomatis</button><button type="button" class="btn btn-ghost" onclick="window.pgAdminAuto(\'' + id + '\',' + (!g.auto) + ')">' + (g.auto ? 'Matikan otomatis' : 'Nyalakan otomatis') + '</button></div>';
-    }
-    if (d.own && d.own.length) more += '<details class="pg-more"><summary>Rutinitas buatan klien (' + d.own.length + ')</summary><div class="prg-days">' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => it.gerakan + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div></details>';
-    html += foldHtml('Lainnya', g ? 'otomatis, pantangan' : '', more + '</div>', false) + '</div>';
-    if (wd && wd.stats) html += '<div class="card-flat stack" style="gap:10px" id="wk-admin-stats">' + workoutStatsHtml(wd, 'adm', memberId) + '</div>';
+      // Hari berikutnya terbuka dengan semua gerakan; hari lain satu baris nama gerakan, ketuk untuk membuka.
+      const exList = day => day.items.map(it => '<div class="prg-ex">' + exThumbBtn(it, 'prg-th', wkInfo(it.exId)) + '<span class="prg-ex-n"><b>' + h(exNm(it)) + '</b><span class="li-sub">' + it.set + '×' + h(it.rep) + (it.video ? ' ' + icon('circle-play', 'class="ic-inline"') : '') + '</span></span></div>').join('');
+      html += '<div class="cp-days">' + d.days.map(function (day) {
+        const head = '<span class="cp-day-h"><span class="li-title">' + h(day.hari) + ' <span class="li-sub">· ' + day.items.length + ' gerakan</span></span>';
+        if (day.hari === next) return '<div class="card cp-day is-next">' + head + '<span class="pill solid">Berikutnya</span></span><div class="cp-day-ex">' + exList(day) + '</div></div>';
+        return '<details class="card cp-day"><summary>' + head + icon('chevron-down') + '</span><span class="li-sub cp-day-names">' + h(day.items.map(it => exNm(it)).join(' · ')) + '</span></summary><div class="cp-day-ex">' + exList(day) + '</div></details>';
+      }).join('') + '</div>';
+      const foot = [];
+      if (hasLog) foot.push('Terakhir dicatat ' + pgLabel(wd.days[0].tanggal) + ' · ' + wd.days[0].items.length + ' gerakan');
+      if (d.last) foot.push('dicentang klien ' + pgLabel(d.last.tanggal) + ' · ' + d.last.hari);
+      if (foot.length) html += '<p class="li-sub cp-foot">' + h(foot.join(' · ')) + '</p>';
+    } else html += '<p class="cp-empty">' + icon('dumbbell') + ' Belum ada program. Buat sendiri atau nyalakan program otomatis lewat Atur program.</p>';
     return html;
+  }
+  // Lembar "Atur program": semua pengaturan program di satu tempat (dulu tombol Ubah + lipatan Lainnya).
+  let cppMember = '';
+  function cpProgSheetHtml(memberId) {
+    // Gaya daftar pengaturan (sama dengan menu ⋯): baris dengan ikon + panah untuk tindakan, baris dengan sakelar untuk pilihan.
+    const d = progAdmin[memberId] || {}, g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
+    const id = h(memberId), n = (d.days || []).reduce((s, x) => s + x.items.length, 0);
+    const row = (ic, label, sub, js) => '<button type="button" class="cpm-row" onclick="' + js + '">' + icon(ic) + '<span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + icon('chevron-right') + '</button>';
+    const sw = (label, sub, on, js, key) => '<div class="cpm-row cpm-sw"><span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span><label class="toggle"><input type="checkbox" data-cpp="' + h(key) + '" aria-label="' + h(label) + '"' + (on ? ' checked' : '') + ' onchange="' + js + '"><span></span></label></div>';
+    const group = (title, rows, note) => '<div class="cpm-group"><p class="cpm-h">' + h(title) + '</p><div class="cpm-list">' + rows + '</div>' + (note ? '<p class="li-sub cpm-note">' + note + '</p>' : '') + '</div>';
+    let html = group('Program', row('pencil', n ? 'Ubah program' : 'Buat program', 'Hari, gerakan, set dan rep', "window.cpProgEdit('" + id + "')"));
+    if (g) {
+      html += group('Otomatis', sw('Program otomatis', g.auto ? 'Disusun dan dinaikkan tiap minggu' : 'Mati: hanya berubah lewat coach', g.auto, "window.pgAdminAuto('" + id + "',this.checked)", 'auto') +
+        row('refresh-cw', 'Buat ulang otomatis', 'Susun ulang dari profil dan alat gym', "window.pgAdminRegen('" + id + "')"), (g.why || []).slice(-1).map(h).join(''));
+      const TAG = { lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' };
+      html += group('Pantangan gerakan', (g.tags || []).map(function (t) { return sw(TAG[t] || t, '', (g.pantangan || []).indexOf(t) !== -1, "window.pgAdminTag('" + id + "','" + h(t) + "')", 'tag-' + t); }).join(''), 'Gerakan yang membebani bagian ini dilewati saat program disusun.');
+    }
+    if (d.own && d.own.length) html += group('Rutinitas buatan klien (' + d.own.length + ')', d.own.map(day => '<div class="cpm-row cpm-text"><span class="grow"><b>' + h(day.hari) + '</b><span>' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</span></span></div>').join(''));
+    return html;
+  }
+  window.cpProgSheet = function (memberId) {
+    cppMember = String(memberId);
+    setHTML('cpp-body', cpProgSheetHtml(cppMember));
+    openSheet('sheet-cp-prog');
+  };
+  window.cpProgEdit = function (memberId) { window.closeModal(); setTimeout(function () { window.openProgramEditor(memberId); }, 120); };
+  function cpProgSheetRefresh(memberId) {
+    const sh = $('sheet-cp-prog');
+    if (sh && !sh.classList.contains('hide') && cppMember === String(memberId)) { setHTML('cpp-body', cpProgSheetHtml(cppMember)); paintIcons(); }
   }
   function renderProgramAdmin(memberId) {
     const w = $('profile-program-wrap');
     if (w && w.getAttribute('data-member') === String(memberId)) { setHTML(w, programAdminInner(memberId)); }
+    cpProgSheetRefresh(memberId);
+    if (window.cpLatRender) window.cpLatRender(memberId);   // Fase AC: kekuatan, volume dan riwayat ikut data latihan
   }
   window.programSetAdmin = function (memberId, d) { progAdmin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { program: d }); renderProgramAdmin(memberId); };
   window.loadAdminProgram = function (memberId) {
@@ -665,9 +692,15 @@
       return Promise.all([w || memberCall('getMyWorkout').then(function (r) { window.myWorkout = { state: 'ok', data: r }; return r; }),
         p || memberCall('getMyProgram').then(function (r) { window.myProgram = { state: 'ok', data: r }; return r; })]);
     }
-    const w = wkAdmin[memberId], p = progAdmin[memberId] && progAdmin[memberId].days ? progAdmin[memberId] : null;
-    return Promise.all([w || adminCall('getWorkoutLog', memberId).then(function (r) { wkAdmin[memberId] = r; return r; }),
-      p || adminCall('getMemberProgram', memberId).then(function (r) { progAdmin[memberId] = r; return r; })]);
+    const have = function () { return [wkAdmin[memberId], progAdmin[memberId] && progAdmin[memberId].days ? progAdmin[memberId] : null]; };
+    const direct = function (x) {
+      return Promise.all([x[0] || adminCall('getWorkoutLog', memberId).then(function (r) { wkAdmin[memberId] = r; return r; }),
+        x[1] || adminCall('getMemberProgram', memberId).then(function (r) { progAdmin[memberId] = r; return r; })]);
+    };
+    const x0 = have();
+    if (x0[0] && x0[1]) return Promise.resolve(x0);
+    // Fase AC: dibuka dari Beranda/Jadwal sebelum halaman klien = satu panggilan bundle (bersalinan) alih-alih dua panggilan terpisah.
+    return window.loadClientBundle(memberId).catch(function () {}).then(function () { return direct(have()); });
   }
   function wlKindGuess(info, sets) {
     if (sets && sets.length) {

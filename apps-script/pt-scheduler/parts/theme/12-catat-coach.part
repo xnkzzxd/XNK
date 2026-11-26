@@ -1,4 +1,4 @@
-/* ═══ Fase AC3: alat catat coach (logger, riwayat gerakan, tab Gizi) dan tanggapan coach di Makan klien ═══ */
+/* ═══ Fase AD3: alat catat coach (logger, riwayat gerakan, tab Gizi) dan tanggapan coach di Makan klien ═══ */
 .wl-setup { font-weight: 600; }
 .wl-sug-apply { margin-left: 4px; }
 .wl-done-sess input, .cf-fb input[type=checkbox] { width: 20px; height: 20px; flex: none; accent-color: var(--fg); }
@@ -6,7 +6,10 @@
 .wkx-tr { display: grid; grid-template-columns: minmax(0, 7.5rem) minmax(0, 1fr) 3.5rem; gap: 10px; align-items: start; min-height: 44px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .wkx-th { min-height: 0; padding-top: 0; font-size: var(--fs-xs); font-weight: 700; color: var(--fg-2); }
 .wkx-tr .num { text-align: right; font-weight: 700; }
-.cf-fb { display: grid; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--border); margin-top: 4px; }
+.cf-fb { display: grid; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--border); margin-top: 8px; }
+.cf-links { display: inline-flex; gap: 14px; align-items: center; }
+.cf-links .cp-link svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
+.cf-del summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 .cfm { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cfm-h { font-size: var(--fs-xs); color: var(--fg-muted); text-align: center; }
 .cfm-d { display: grid; place-items: center; min-height: 34px; border-radius: 8px; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--fg-muted); background: color-mix(in srgb, var(--fg) 4%, transparent); }

@@ -88,8 +88,10 @@
     else if (x === 'theme' && /^#[0-9a-f]{6}$/i.test(e.data.color || '')) {
       var meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.setAttribute('content', e.data.color);
+      // Hanya bilah status (meta) dan latar <html> (tarikan di tepi atas iOS). Body TIDAK diwarnai: di sini body adalah
+      // halaman aplikasi itu sendiri (beda dengan pembungkus iframe). Dulu body ikut jadi warna band (#161616 gelap,
+      // hitam di terang), sehingga bilah cari Klien yang memakai var(--bg) tampak sebagai kotak hitam.
       root.style.background = e.data.color;
-      if (document.body) document.body.style.background = e.data.color;
     }
     else if (x === 'share' || x === 'copy') { try { window.postMessage({ xnk: x + '-done', ok: false }, location.origin); } catch (er) {} }
   });

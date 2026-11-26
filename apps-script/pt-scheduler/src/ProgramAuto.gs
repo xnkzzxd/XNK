@@ -251,7 +251,13 @@ function regenerateProgram(token, memberId) {
   const id = String(_memberRowOrThrow_(memberId).row[0]).trim();
   const r = _pgGenerate_(id, { force: true });
   if (r.skipped === 'katalog') throw new Error('Katalog alat gym belum punya gerakan aktif untuk klien ini.');
-  return _bumpAfter_(id, getProgramGenPreview(token, id));
+  return _bumpAfter_(id, _pgWithProgram_(token, id, getProgramGenPreview(token, id)));
+}
+
+/** Fase AC (T-2301): pratinjau program otomatis + program yang tersimpan, supaya panel tidak memanggil getMemberProgram lagi. */
+function _pgWithProgram_(token, id, preview) {
+  try { preview.program = _plainJson_(getMemberProgram(token, id)); } catch (e) { /* tanpa bagian ini, panel memuat sendiri */ }
+  return preview;
 }
 
 /** Admin: setel per klien. v = { auto?, pantangan?, level? }. */
@@ -264,7 +270,7 @@ function setClientProgramAuto(token, memberId, v) {
   _locked_(function() { _pgWrite_(_memberRowOrThrow_(id), clean); });
   const p = _pgProfileFrom_(_memberRowOrThrow_(id).row);
   if (_pgEnabled_() && p.auto && /^auto:|^$/.test(_programDays_(id).sumber || '') && (!_programDays_(id).days.length || /^auto:/.test(_programDays_(id).sumber || ''))) _pgGenerate_(id, {});
-  return _bumpAfter_(id, getProgramGenPreview(token, id));
+  return _bumpAfter_(id, _pgWithProgram_(token, id, getProgramGenPreview(token, id)));
 }
 
 /** Admin: tandai form satu gerakan OK di sesi PT (gerbang kenaikan beban, aturan 9a). exKey = kunci riwayat (ex:<id> / nm:<nama>). */
@@ -323,7 +329,7 @@ function runProgramAutoJob_(ctx) {
   if (!_pgEnabled_()) return true;
   const pools = _loadClientPools_();
   const props = PropertiesService.getScriptProperties();
-  const ids = pools.active.filter(function(c) { return !c.hold; }).map(function(c) { return String(c.id); }).sort();   // Fase AC1: ditahan = tidak ditinjau
+  const ids = pools.active.filter(function(c) { return !c.hold; }).map(function(c) { return String(c.id); }).sort();   // Fase AD1: ditahan = tidak ditinjau
   const start = Number(props.getProperty('PG_JOB_CURSOR')) || 0;
   const batch = ids.slice(start, start + PG_JOB_MAX);
   const today = _todayWib_();

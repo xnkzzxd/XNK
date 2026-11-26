@@ -129,17 +129,24 @@
   // Panel coach: kartu di tab Latihan klien.
   // Kartu coach untuk program otomatis kini bagian dari kartu Program (programAdminInner0).
   function pgAdminApply(id, g) { pgAdminGen[id] = g; window.ccPatch(id, { programGen: g }); renderProgramAdmin(id); }
+  // Fase AC: jawaban setClientProgramAuto / regenerateProgram membawa program tersimpan (r.program); tanpa itu = getMemberProgram seperti dulu.
+  function pgAdminFromWrite(id, r) {
+    const p = r && r.program;
+    if (r) delete r.program;
+    pgAdminApply(id, r);
+    return p && !p.error ? Promise.resolve(p) : adminCall('getMemberProgram', id);
+  }
   window.pgAdminRegen = function (id) {
     const g = pgAdminGen[id];
-    const go = function () { adminCall('regenerateProgram', id).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
+    const go = function () { adminCall('regenerateProgram', id).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
     if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
   };
-  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { pgAdminApply(id, r); }).catch(function (e) { showToast(waitErr(e)); }); };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); renderProgramAdmin(id); }); };
   window.pgAdminTag = function (id, t) {
     const g = pgAdminGen[id]; if (!g) return;
     const list = (g.pantangan || []).slice(), i = list.indexOf(t);
     if (i !== -1) list.splice(i, 1); else list.push(t);
-    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { pgAdminApply(id, r); return adminCall('getMemberProgram', id); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); });
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); renderProgramAdmin(id); });
   };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
@@ -422,7 +429,7 @@
   };
 
   // ── Catat makan (T-1020) ──
-  // Fase AC3: satu baris tanggapan coach (tanda + catatan) untuk hari ini, atau kemarin bila hari ini belum ada.
+  // Fase AD3: satu baris tanggapan coach (tanda + catatan) untuk hari ini, atau kemarin bila hari ini belum ada.
   function nutFbLine(n) {
     const fb = (n && n.feedback) || {}, t = n && n.today, y = t ? new Date(Date.parse(t + 'T00:00:00Z') - 864e5).toISOString().slice(0, 10) : '';
     const k = fb[t] ? t : fb[y] ? y : '';
@@ -437,7 +444,7 @@
     const meals = (n.menu && n.menu.meals) || [];
     let firstEmpty = true;
     let html = '<div class="stack" style="gap:var(--gap)" id="nut-log-card"><div class="px-sec"><h3>Buku harian</h3>' + (nPend ? '<span class="pill soft">' + nPend + ' menunggu sinyal</span>' : '<button type="button" class="link-btn" id="nut-copy-btn" onclick="window.nutCopyYesterday(this)">' + icon('copy') + 'Salin kemarin</button>') + '</div>';
-    html += nutFbLine(n);   // Fase AC3: tanggapan coach hari ini / kemarin (baca saja)
+    html += nutFbLine(n);   // Fase AD3: tanggapan coach hari ini / kemarin (baca saja)
     Object.keys(NUT_MEAL_L).forEach(function (k) {
       const its = log.items.filter(x => x.waktu === k), kal = its.reduce((a, x) => a + x.kal, 0);
       const tip = !its.length ? meals.find(m => nutMealWaktu(m.key) === k) : null;

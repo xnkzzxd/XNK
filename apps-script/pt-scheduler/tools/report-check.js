@@ -1,5 +1,5 @@
 'use strict';
-// Fase AC4 (T-2344): builds the PDF report in a real browser (the demo build, portal and panel) and checks it:
+// Fase AD4 (T-2444): builds the PDF report in a real browser (the demo build, portal and panel) and checks it:
 //   - the file is a PDF 1.4 with one JPEG image per A4 page and a valid cross-reference table,
 //   - every page image is a JPEG (FFD8) of 1240 × 1754 at most ~400 KB, and the outer page margin stays white,
 //   - the coach's message is drawn on page 1 only in coach reports.

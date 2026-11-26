@@ -1,6 +1,6 @@
-# Sumber cara mengukur (Fase AC, T-2300)
+# Sumber cara mengukur (Fase AD, T-2400)
 
-Every step in the measuring guide (`parts/app/20-cara-ukur.part`, `UKUR_STEPS` / `UKUR_UMUM`) follows one of these protocols. Change a step only together with this table.
+Every step in the measuring guide (`parts/app/21-cara-ukur.part`, `UKUR_STEPS` / `UKUR_UMUM`) follows one of these protocols. Change a step only together with this table.
 
 | ID | Ukuran | Langkah di aplikasi (ringkas) | Protokol | Sumber |
 | --- | --- | --- | --- | --- |

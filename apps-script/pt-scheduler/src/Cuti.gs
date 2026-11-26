@@ -1,9 +1,9 @@
 // =============================================================================
-// Cuti.gs — Fase AC1 (T-2304…T-2311): klien ditahan (cuti, sakit, berhenti).
+// Cuti.gs — Fase AD1 (T-2404…T-2411): klien ditahan (cuti, sakit, berhenti).
 // Sheet ClientHolds adalah satu-satunya sumber (riwayat ikut). Status dihitung dari tanggal, jadi klien aktif lagi
 // sendiri sehari sesudah tanggal "Sampai". Catatan bisa berisi info kesehatan: hanya untuk admin (getClientBundle),
 // tidak pernah di bootstrap, Telegram, push, xnk_admin_cache, jawaban publik, atau laporan PDF.
-// docs/coachkit/Design.md §AC1.
+// docs/coachkit/Design.md §AD1.
 // =============================================================================
 
 const HOLD_HEADERS = ['ID', 'Member ID', 'Jenis', 'Mulai', 'Sampai', 'Catatan', 'Status', 'Dibuat Oleh', 'Dibuat Pada', 'Diputuskan Pada', 'Diakhiri Pada', 'Sesi Dibatalkan'];
@@ -415,7 +415,7 @@ function _holdReturning_(holds, today) {
   });
 }
 
-/** Handler 'kembali-latihan' (Fase AC1, bawaan mati): satu tombol WhatsApp per klien yang aktif lagi hari ini. */
+/** Handler 'kembali-latihan' (Fase AD1, bawaan mati): satu tombol WhatsApp per klien yang aktif lagi hari ini. */
 function sendKembaliLatihanDigest_(ctx) {
   var now = (ctx && ctx.now) || new Date();
   var today = _wibParts_(now).date, members = _rmdMemberIndex_();

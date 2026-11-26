@@ -2,7 +2,7 @@
 
 One line per phase: letter, topic, folder, task range, status. Status: **built** · **pending** (paused by the owner) · **redo** (plan being rewritten in another session) · **backlog** (not built, not scheduled).
 Task status in every `TODO.md`: `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` deferred or dropped by the owner.
-Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique; never reuse one. The next free letter is **AD**; the next free range is **T-2400**.
+Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique; never reuse one. The next free letter is **AE**; the next free range is **T-2500**.
 
 | Phase | Topic | Folder | Tasks | Status |
 | --- | --- | --- | --- | --- |
@@ -26,7 +26,8 @@ Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique
 | Y | Client portal desktop shell | [desk/](desk/) | T-2000+ | built |
 | Z | Web Push | [push/](push/) | T-2100+ | built (T-2105 is the owner's install step) |
 | AB | XNK Library + Template + hub xnk.web.id (multi-coach on Apps Script, production untouched) | [library/](library/) | T-2200+ | built (T-2208, T-2210, T-2214, T-2215 are the owner's install steps); hub upgrade T-2220+ in progress (T-2220…T-2223, T-2230…T-2234 built) |
-| AC | Coach kit: client hold (Cuti / Sakit / Berhenti), measurement guide + Pinggul, coach logger upgrade, PDF report on demand | [coachkit/](coachkit/) | T-2300+ | built (2026-11-26; T-2309b dropped) |
+| AC | Klien list + client profile redesign in the coach panel (portal patterns, one home per action, lean calls) | [clientpage/](clientpage/) | T-2300+ | built (Waves 1–4 approved by the owner, PR #201) |
+| AD | Coach kit: client hold (Cuti / Sakit / Berhenti), measurement guide + Pinggul, coach logger upgrade, PDF report on demand | [coachkit/](coachkit/) | T-2400+ | built (2026-11-26; T-2409b dropped) |
 | — | Reminder texts: tone rules and sources of the science tips | [reminder/Sumber.md](reminder/Sumber.md) | — | built (2026-11) |
 
 Notes

@@ -1,0 +1,363 @@
+  // ═══ Fase AC (T-2303): halaman klien di panel coach ═══
+  // Satu kartu hitam (identitas, sisa sesi, empat aksi) di bawah kepala ber-nama klien; Ringkasan ala "Hari ini" portal:
+  // Sesi berikutnya, Tugas coach (dihitung server, bundle `todo`), Minggu ini, PR, Sesi. Semua yang jarang dipakai ada di ⋯.
+  // Hanya panel coach; portal tidak memakai fungsi di sini (kelas CSS-nya dipinjam dari portal: .px-sec, .todo, .week-x, .px-tiles).
+
+  function cpSessionsOf(memberId) {
+    return window.schedules.filter(s => String(s.memberId) === String(memberId) && !isAvailable(s));
+  }
+  function cpUpcoming(memberId) {
+    const now = Date.now();
+    return cpSessionsOf(memberId).filter(s => !isDone(s) && new Date(s.end || s.start).getTime() >= now).sort(byStart);
+  }
+  // "1 hari lagi", "3 jam lagi", "Sedang berlangsung" — hitungan mundur ala kartu sesi portal.
+  function cpCountdown(s) {
+    const st = new Date(s.start).getTime(), en = new Date(s.end || s.start).getTime(), now = Date.now();
+    if (now >= st && now < en) return 'Sedang berlangsung';
+    const d = st - now;
+    if (d < 0) return 'Belum ditandai selesai';
+    const mins = Math.round(d / 60000), hrs = Math.floor(mins / 60), days = Math.floor(hrs / 24);
+    if (days >= 1) return days + ' hari ' + (hrs % 24 ? (hrs % 24) + ' jam ' : '') + 'lagi';
+    if (hrs >= 1) return hrs + ' jam ' + (mins % 60 ? (mins % 60) + ' menit ' : '') + 'lagi';
+    return Math.max(1, mins) + ' menit lagi';
+  }
+
+  // ── Kartu klien: satu-satunya kartu hitam; aksi utama selalu di sini (HP: empat ubin; PC: satu baris) ──
+  function cpCardHtml(m) {
+    const id = h(m.id), total = Number(m.totalSessions) || 0, rem = remainingOf(m);
+    const done = cpSessionsOf(m.id).filter(isDone).length;
+    const goal = String(m.goal || '').split('|')[0].trim();
+    const nx = cpUpcoming(m.id)[0];
+    const pct = total ? Math.min(100, Math.round(rem / total * 100)) : 100;
+    const st = clientState(m);
+    const act = (cls, ic, label, js, extra) => '<button type="button" class="btn cp-act' + (cls ? ' ' + cls : '') + '" onclick="' + js + '"' + (extra || '') + '>' + icon(ic) + '<span>' + label + '</span></button>';
+    return '<section class="card-ink client-hero cp-card gfx-kontur" aria-label="' + h(m.name) + '">' +
+      '<div class="client-hero-id cp-id">' + avatar(m.photo, m.name, 'lg') + '<div class="grow"><div class="cp-tags">' + statePillHtml(m) + '</div>' +
+        (goal ? '<p class="cp-goal">' + h(goal) + '</p>' : '') + '<p class="cp-phone" id="profile-phone">+' + h(m.phone) + '</p></div></div>' +
+      // Paket + Perpanjang (keputusan pemilik 2026-11-25: perpanjang milik paket; lembar Klien baru terisi → addMember memperpanjang)
+      '<div class="cp-left client-pkg"><div class="cp-pkg-row"><div class="grow" style="min-width:0"><p class="cp-pkg-name truncate">' + icon('package') + '<span>' + h(m.packageName || 'Paket custom') + '</span></p>' +
+        (total ? '<p class="cp-left-t"><b class="num" id="profile-remaining">' + rem + '</b><span> dari <span id="profile-total">' + total + '</span> sesi</span><span class="cp-left-n"> · ' + done + ' selesai</span></p>'
+          : '<p class="cp-left-t"><b>Tanpa batas sesi</b><span class="cp-left-n"> · ' + done + ' selesai</span><span class="hide" id="profile-remaining">' + rem + '</span><span class="hide" id="profile-total">0</span></p>') + '</div>' +
+        '<button type="button" class="btn btn-sm cp-renew ' + (total && rem === 0 ? 'btn-inverse' : 'btn-ghost-ink') + '" id="profile-renew" onclick="window.openRenewMember(\'' + id + '\')">' + icon('repeat') + 'Perpanjang</button></div>' +
+        '<div class="meter cp-meter' + (st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
+        (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') + '</div>' +
+      '<div class="client-hero-actions cp-acts">' +
+        act('', 'message-circle', 'Chat WA', "window.sendToParentWA(this.getAttribute('data-wa'),'')", ' data-wa="' + h(m.phone) + '"') +
+        act('', 'calendar-plus', 'Booking', "window.openBookingSheet({memberId:'" + id + "'})") +
+        act('cp-act-main', 'play', 'Mulai latihan', "window.workoutOpenAdmin('" + id + "')") +
+        act('', 'scale', 'Catat ukuran', "window.pgOpenEntry('admin','" + id + "')") +
+      '</div></section>';
+  }
+
+  // ── Ringkasan kiri: Sesi berikutnya + Tugas coach ──
+  function cpHighlightHtml(m) { return cpNextHtml(m) + cpTodoHtml(m); }
+  function cpNextHtml(m) {
+    const id = String(m.id), up = cpUpcoming(id), nx = up[0];
+    const head = '<div class="px-sec cp-sec"><h3>Sesi berikutnya</h3><span>' + (up.length > 1 ? up.length + ' terjadwal' : '') + '</span></div>';
+    if (!nx) return head + '<div class="card cp-card-pad cp-next none"><p class="cp-next-when">Belum ada jadwal</p><p class="li-sub">Booking sesi berikutnya supaya klien tetap rutin.</p></div>';
+    const d = new Date(nx.start), today = ymd(d) === ymd(new Date());
+    const wd = wkAdmin[id], plan = wd && wd.next ? wd.next : '';
+    const notes = window.clientNotes[id] || [];
+    const prev = notes.filter(n => n.scheduleId !== String(nx.id) && (n.fokus || n.dilatih))[0];
+    const q = h(nx.id);
+    const btns = today ? sessActions(nx.id, { phone: m.phone }) :
+      '<div class="sess-actions" onclick="event.stopPropagation()"><button type="button" class="btn btn-outline" onclick="window.quickEdit(\'' + q + '\')">' + icon('calendar-clock') + 'Ubah</button>' +
+      (m.phone ? '<button type="button" class="btn btn-outline" onclick="window.quickWa(\'' + q + '\')" aria-label="Chat WhatsApp klien">' + icon('message-circle') + 'WA</button>' : '') + '</div>';
+    return head + '<div class="card cp-card-pad cp-next" role="button" tabindex="0" onclick="window.openScheduleDetail(\'' + q + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
+      '<p class="cp-next-when">' + h(fmtDate(d)) + ' · ' + fmtTime(d) + '</p><p class="cp-next-cd">' + h(cpCountdown(nx)) + '</p>' +
+      ((plan || prev) ? '<div class="cp-next-info">' + (plan ? '<p>' + icon('dumbbell') + '<span><b>Rencana:</b> ' + h(plan) + '</span></p>' : '') +
+        (prev ? '<p>' + icon('target') + '<span><b>Fokus terakhir:</b> ' + h(prev.fokus || prev.dilatih) + ' <span class="li-sub">(' + h(pgLabel(prev.tanggal)) + ')</span></span></p>' : '') + '</div>' : '') +
+      btns + '</div>';
+  }
+  const CP_TODO_ICON = { perpanjang: 'refresh-cw', paket: 'package', catatan: 'alert-triangle', kesehatan: 'heart-pulse', pr: 'list-checks', gizi: 'utensils', inaktif: 'message-circle',
+    booking: 'calendar-plus', rating: 'star', timbang: 'scale', program: 'dumbbell', tes: 'timer', assessment: 'clipboard-list', 'form-kesehatan': 'heart-pulse' };
+  function cpTodoHtml(m) {
+    const t = window.clientTodo[String(m.id)];
+    if (t === null) return '';   // salinan lama tanpa bagian ini: tidak ditampilkan sampai bundle berikutnya
+    const head = '<div class="px-sec cp-sec"><h3>Tugas coach</h3><span>' + (t && t.length ? t.length + ' hal' : '') + '</span></div>';
+    if (t === undefined) return head + '<div class="card cp-card-pad">' + skel(2) + '</div>';
+    if (!t.length) return head + '<p class="cp-empty">' + icon('check-check') + ' Semua beres untuk klien ini.</p>';
+    const id = h(m.id);
+    return head + '<div class="card todo cp-todo">' + t.map(function (x) {
+      return '<button type="button" class="todo-row' + (x.danger ? ' danger' : '') + '" data-kind="' + h(x.kind) + '" onclick="window.cpTodoGo(\'' + id + '\',\'' + h(x.kind) + '\',\'' + h(x.ref || '') + '\')">' +
+        '<span class="cp-todo-ic" aria-hidden="true">' + icon(CP_TODO_ICON[x.kind] || 'circle') + '</span><span class="todo-txt"><span class="todo-title">' + h(x.title) + '</span>' + (x.sub ? '<span class="todo-sub">' + h(x.sub) + '</span>' : '') + '</span>' +
+        (x.act ? '<span class="todo-act">' + h(x.act) + '</span>' : icon('chevron-right')) + '</button>';
+    }).join('') + '</div>';
+  }
+  window.cpTodoGo = function (memberId, kind, ref) {
+    const m = window.members.find(x => String(x.id) === String(memberId)) || {};
+    const wa = () => window.sendToParentWA(m.phone || '', '');
+    const go = {
+      perpanjang: () => cpRenewSheet(memberId, ref), paket: wa, inaktif: wa, timbang: wa,
+      catatan: () => window.openCareNotes(memberId), kesehatan: () => window.openCareHealth(memberId), 'form-kesehatan': () => window.cpHealthRemind(memberId),
+      pr: () => { window.cpTab('ringkasan'); const el = $('profile-tasks-wrap'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+      gizi: () => window.cpTab('gizi'), booking: () => window.openBookingSheet({ memberId: memberId }), rating: () => window.cpFeedback(memberId),
+      program: () => window.openProgramEditor(memberId), tes: () => window.openCareTests(memberId), assessment: () => window.openAssessment(memberId)
+    }[kind];
+    if (go) go();
+  };
+  // "Minta perpanjang": keputusan lewat alur yang sama dengan kartu Beranda (renewalDecide, antrean simpan).
+  function cpRenewSheet(memberId, ref) {
+    const r = (window.renewals || []).find(x => String(x.id) === String(ref)) || (window.renewals || []).find(x => String(x.memberId) === String(memberId) && x.status === 'menunggu');
+    if (!r) { window.showToast('Permintaan ini sudah diputuskan.'); window.cpTodoDrop(memberId, 'perpanjang'); return; }
+    $('cpm-title').textContent = 'Minta perpanjang';
+    setHTML('cpm-body', '<div class="stack" style="gap:14px"><div class="card-flat stack" style="gap:2px"><p class="li-title">' + h(r.packageName || 'Paket') + '</p><p class="li-sub">' + h(formatRp(r.harga)) + ' · diminta ' + h(fmtShort(new Date(r.createdAt))) + '</p></div>' +
+      '<p class="hint">Setujui setelah pembayaran diterima: sesi klien direset sesuai paket dan transaksi dicatat.</p>' +
+      '<div class="btn-row"><button type="button" class="btn btn-outline" onclick="window.cpRenewGo(\'' + h(r.id) + '\', false)">Tolak</button><button type="button" class="btn btn-primary" onclick="window.cpRenewGo(\'' + h(r.id) + '\', true)">' + icon('check') + 'Setujui</button></div></div>');
+    openSheet('sheet-cp-more');
+  }
+  window.cpRenewGo = function (id, approve) { window.closeModal(); setTimeout(function () { window.renewalDecide(id, approve); }, 120); };
+
+  // ── Minggu ini: strip 7 hari ala portal (sesi coach / latihan tercatat = penuh, sesi terjadwal = setengah) ──
+  function cpWeekHtml(m) {
+    const id = String(m.id), now = new Date(), today = ymd(now);
+    const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const lvl = {};
+    cpSessionsOf(id).forEach(function (s) { const k = ymd(new Date(s.start)); lvl[k] = Math.max(lvl[k] || 0, isDone(s) ? 2 : 1); });
+    const wd = wkAdmin[id];
+    ((wd && wd.days) || []).forEach(function (d) { lvl[d.tanggal] = 2; });
+    const ins = window.clientInsight[id], wk = ins && !ins.error ? ins.week : null;
+    const sum = wk ? wk.sessionsDone + ' sesi · ' + wk.workoutDays + ' latihan' + (wk.foodDays != null ? ' · makan ' + wk.foodDays + '/7' : '') : '';
+    let strip = '<div class="week-x">';
+    ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].forEach(function (n, i) {
+      const k = ymd(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)), l = lvl[k] || 0;
+      strip += '<div class="' + (l ? 'l' + l : '') + (k === today ? ' now' : '') + '"><i></i>' + n + '</div>';
+    });
+    strip += '</div>';
+    const g = sigOf(m), bits = [];
+    if (g && g.weightDelta != null) bits.push('Berat 30 hari <b class="num">' + h((g.weightDelta > 0 ? '+' : g.weightDelta < 0 ? '−' : '') + String(Math.abs(g.weightDelta)).replace('.', ',')) + ' kg</b>');
+    if (g && g.lastDone) bits.push('Terakhir latihan <b>' + h(fmtShort(new Date(g.lastDone + 'T12:00:00+07:00'))) + '</b>');
+    return '<div class="px-sec cp-sec"><h3>Minggu ini</h3><span>' + h(sum) + '</span></div><div class="card cp-card-pad">' + strip +
+      (bits.length ? '<p class="cp-week-foot">' + bits.join('<span aria-hidden="true"> · </span>') + '</p>' : '') + '</div>';
+  }
+
+  // ── Sesi: Mendatang | Riwayat, baris ringkas (ketuk = detail sesi) ──
+  const cps = { seg: 'up', all: false, member: '' };
+  function cpSessHtml(m) {
+    if (cps.member !== String(m.id)) { cps.member = String(m.id); cps.seg = 'up'; cps.all = false; }   // klien lain: mulai dari Mendatang
+    const ss = cpSessionsOf(m.id), now = Date.now();
+    const up = ss.filter(s => !isDone(s) && new Date(s.end || s.start).getTime() >= now).sort(byStart);
+    const past = ss.filter(s => !(!isDone(s) && new Date(s.end || s.start).getTime() >= now)).sort((a, b) => new Date(b.start) - new Date(a.start));
+    const seg = cps.seg === 'past' ? 'past' : 'up', list = seg === 'past' ? past : up, max = cps.all ? list.length : 8;
+    const btn = (k, label, n) => '<button type="button" class="' + (seg === k ? 'active' : '') + '" aria-pressed="' + (seg === k) + '" onclick="window.cpSessSeg(\'' + k + '\')">' + label + ' <span class="num">' + n + '</span></button>';
+    const stOf = s => isDone(s) ? ['Selesai', ''] : new Date(s.end || s.start).getTime() < now ? ['Belum selesai', ' warn'] : String(s.status) === 'unread' ? ['Baru', ' solid'] : ['Terjadwal', ''];
+    const rows = list.slice(0, max).map(function (s) {
+      const d = new Date(s.start), st = stOf(s);
+      return '<button type="button" class="cp-row" onclick="window.openScheduleDetail(\'' + h(s.id) + '\')"><span class="cp-row-d"><b>' + h(fmtShort(d)) + '</b><span class="num">' + fmtTime(d) + '</span></span>' +
+        '<span class="grow cp-row-t truncate">' + h(s.notes || 'Sesi latihan') + '</span><span class="pill cp-row-st' + st[1] + '">' + st[0] + '</span>' + icon('chevron-right') + '</button>';
+    }).join('');
+    return '<div class="px-sec cp-sec"><h3>Sesi</h3><div class="seg cp-seg" role="group" aria-label="Sesi">' + btn('up', 'Mendatang', up.length) + btn('past', 'Riwayat', past.length) + '</div></div>' +
+      '<div class="card cp-list-card"' + (seg === 'past' ? ' id="profile-history"' : '') + '>' + (rows || '<p class="cp-empty">' + (seg === 'past' ? 'Belum ada riwayat latihan.' : 'Belum ada jadwal mendatang.') + '</p>') +
+      (list.length > max ? '<button type="button" class="cp-row cp-row-more" onclick="window.cpSessAll()">Tampilkan semua (' + list.length + ')</button>' : '') + '</div>';
+  }
+  function cpSessPaint() { const el = $('cp-sess'), m = window.members.find(x => String(x.id) === String(window.selectedMemberId)); if (el && m) { setHTML(el, cpSessHtml(m)); paintIcons(); } }
+  window.cpSessSeg = function (k) { cps.seg = k; cps.all = false; cpSessPaint(); };
+  window.cpSessAll = function () { cps.all = true; cpSessPaint(); };
+
+  // ── Progres (Fase AC, Wave 2): sub-tab Ringkasan · Ukuran · Tes · Foto ──
+  // Pilihan sub-tab dan ukuran grafik per klien (klien lain = mulai dari Ringkasan / Berat); bertahan saat data diperbarui.
+  const cpg = { member: '', seg: 'ringkasan', measure: 'berat', all: false };
+  function cpPgState(memberId) { if (cpg.member !== String(memberId)) { cpg.member = String(memberId); cpg.seg = 'ringkasan'; cpg.measure = 'berat'; cpg.all = false; } return cpg; }
+  function cpPgSegOf(memberId) { return cpPgState(memberId).seg; }
+  window.cpPgMeasureOf = function (memberId) { return cpPgState(memberId).measure; };
+  const CP_PG_SEGS = [['ringkasan', 'Ringkasan'], ['ukuran', 'Ukuran'], ['tes', 'Tes'], ['foto', 'Foto']];
+  function cpPgSegHtml(cur) {
+    return '<div class="seg cp-seg cp-pgseg" role="tablist" aria-label="Bagian progres">' + CP_PG_SEGS.map(x => '<button type="button" role="tab" data-cpseg="' + x[0] + '" class="' + (cur === x[0] ? 'active' : '') + '" aria-selected="' + (cur === x[0]) + '" onclick="window.cpPgSeg(\'' + x[0] + '\')">' + x[1] + '</button>').join('') + '</div>';
+  }
+  window.cpPgSeg = function (k) {
+    cpPgState(window.selectedMemberId).seg = k;
+    document.querySelectorAll('#detail-body [data-cpseg]').forEach(b => { const on = b.getAttribute('data-cpseg') === k; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('#detail-body [data-cppg]').forEach(p => p.classList.toggle('hide', p.getAttribute('data-cppg') !== k));
+  };
+  window.cpPgPick = function (memberId, key) {
+    if (!key) return;
+    cpPgState(memberId).measure = key;
+    const w = $('profile-progress-wrap');
+    if (w && w.getAttribute('data-member') === String(memberId)) { setHTML(w, pgAdminInner(memberId)); paintIcons(); }
+  };
+  // Rapor tubuh: data yang sama dengan kartu Rapor di portal, tanpa tombol (kartu terang lewat CSS halaman klien).
+  function cpRaporHtml() {
+    const d = insD();
+    if (!d) return insSkel('Rapor tubuh');
+    const b = d.body, r = b.ranges[insRange.v], m = r.measures;
+    if (b.sedikit) return insightHeroHtml({ eyebrow: 'Rapor tubuh', empty: 'Catat berat badan dua kali atau lebih (tombol Catat ukuran di kartu atas) untuk melihat tren dan kesimpulannya.' });
+    const stats = [];
+    if (m.berat) stats.push({ v: insSigned(m.berat.delta), d: 'kg', l: 'Berat' });
+    if (m.pinggang) stats.push({ v: insSigned(m.pinggang.delta), d: 'cm', l: 'Pinggang' });
+    if (m.berat && m.berat.perWeek != null) stats.push({ v: insSigned(m.berat.perWeek), d: 'kg', l: 'per minggu' });
+    return insightHeroHtml({ eyebrow: 'Rapor tubuh', range: { key: insRange.v, options: INS_RANGE_OPTS, onPick: "window.setInsRange('%k')" }, stats: stats.slice(0, 4), spark: b.spark.map(p => p.v), text: r.text });
+  }
+  // Momen: kemenangan kecil klien (rekor, perubahan ukuran, sesi beruntun) dari bundle (athlete.moments), gaya daftar portal.
+  const CP_MOM_IC = { pr: 'trophy', sesi: 'flag', ukur: 'ruler' };
+  function cpMomentsHtml(memberId) {
+    const mm = window.clientMoments[String(memberId)];
+    if (!mm || !mm.length) return '';
+    return '<div class="px-sec cp-sec"><h3>Momen</h3><span>' + (mm.length > 5 ? '5 dari ' + mm.length : mm.length + ' terbaru') + '</span></div><div class="card cp-card-pad"><ol class="mom">' + mm.slice(0, 5).map(x =>
+      '<li><span class="mom-ic">' + icon(CP_MOM_IC[x.kind] || 'star') + '</span><span class="grow"><b>' + h(x.title) + '</b><span class="li-sub">' + h(pgLabel(x.tanggal)) + '</span></span></li>').join('') + '</ol></div>';
+  }
+  // Riwayat catatan ukur: baris ringkas; ketuk = lembar dengan semua angka + Hapus (dulu ikon hapus di tiap baris).
+  function cpPgVals(e) {
+    const out = [];
+    PG_MEASURES.forEach(function (m) { if (e[m[0]] !== '' && e[m[0]] != null) out.push([m[1], pgNum(e[m[0]]) + ' ' + m[2]]); });
+    return out;
+  }
+  function cpPgHistHtml(memberId) {
+    const d = pg.admin[String(memberId)];
+    if (!d || d.error || !d.entries || !d.entries.length) return '';
+    const list = d.entries.slice().reverse(), st = cpPgState(memberId), max = st.all ? list.length : 5, id = h(memberId);
+    const rows = list.slice(0, max).map(function (e) {
+      const v = cpPgVals(e).map(x => x[1]).slice(0, 3).join(' · ');
+      return '<button type="button" class="cp-row" onclick="window.cpPgRow(\'' + id + '\',\'' + h(e.id) + '\')"><span class="cp-row-d"><b>' + h(pgLabel(e.tanggal)) + '</b><span>' + (e.oleh === 'coach' ? 'coach' : 'klien') + '</span></span>' +
+        '<span class="grow cp-row-t truncate">' + h(v) + '</span>' + icon('chevron-right') + '</button>';
+    }).join('');
+    return '<div class="px-sec cp-sec"><h3>Riwayat catatan</h3><span>' + list.length + ' catatan</span></div><div class="card cp-list-card">' + rows +
+      (list.length > max ? '<button type="button" class="cp-row cp-row-more" onclick="window.cpPgAll(\'' + id + '\')">Tampilkan semua (' + list.length + ')</button>' : '') + '</div>';
+  }
+  window.cpPgAll = function (memberId) { cpPgState(memberId).all = true; window.cpPgRender(memberId); };
+  window.cpPgRow = function (memberId, entryId) {
+    const d = pg.admin[String(memberId)], e = d && d.entries ? d.entries.find(x => String(x.id) === String(entryId)) : null;
+    if (!e) return;
+    $('cpr-title').textContent = 'Catatan ' + pgLabel(e.tanggal);
+    setHTML('cpr-body', '<div class="kv">' + cpPgVals(e).map(x => '<div><p class="k">' + h(x[0]) + '</p><p class="v num">' + h(x[1]) + '</p></div>').join('') + '</div>' +
+      '<p class="li-sub" style="margin-top:12px">Dicatat oleh ' + (e.oleh === 'coach' ? 'coach' : 'klien') + '.</p>' +
+      '<button type="button" class="btn btn-ghost btn-block cp-danger" style="margin-top:16px" onclick="window.cpPgRowDel(\'' + h(memberId) + '\',\'' + h(e.id) + '\')">' + icon('trash-2') + 'Hapus catatan</button>');
+    openSheet('sheet-cp-row');
+  };
+  window.cpPgRowDel = function (memberId, entryId) { window.closeModal(); setTimeout(function () { window.pgDeleteAdminEntry(memberId, entryId); }, 120); };
+  // Foto: daftar foto (tanggal, sisi); ketuk = penampil privat (satu foto per panggilan, cek token admin di server). Badge di bawahnya.
+  function cpFotoHtml(memberId) {
+    const d = pg.admin[String(memberId)];
+    if (!d) return '<div class="card cp-card-pad">' + skel(2) + '</div>';
+    if (d.error) return '';
+    const photos = (d.photos || []).slice().sort((a, b) => a.tanggal < b.tanggal ? 1 : -1), id = h(memberId);
+    const earned = (d.badges || []).filter(b => b.earned);
+    let html = '<div class="px-sec cp-sec"><h3>Foto progres</h3><span>' + (photos.length ? photos.length + ' foto' : '') + '</span></div>';
+    html += photos.length ? '<div class="card cp-list-card">' + photos.map(p => '<button type="button" class="cp-row" onclick="window.cpPhotoView(\'' + id + '\',\'' + h(p.id) + '\')"><span class="cp-row-d"><b>' + h(pgLabel(p.tanggal)) + '</b><span>' + (p.sisi === 'samping' ? 'Samping' : 'Depan') + '</span></span><span class="grow cp-row-t">Ketuk untuk melihat</span>' + icon('chevron-right') + '</button>').join('') + '</div>'
+      : '<p class="cp-empty">' + icon('camera') + ' Belum ada foto. Klien mengunggah foto dari portalnya; foto hanya bisa dilihat klien dan coach.</p>';
+    html += '<div class="px-sec cp-sec"><h3>Badge</h3><span>' + earned.length + ' diraih</span></div>' +
+      (earned.length ? '<div class="pg-pills cp-badges">' + earned.map(b => '<span class="pill">' + h(pgShortBadge(b)) + '</span>').join('') + '</div>' : '<p class="cp-empty">Belum ada badge.</p>');
+    return html;
+  }
+  window.cpPhotoView = function (memberId, photoId) { pg.mode = 'admin'; pg.memberId = String(memberId); window.pgViewPhoto(photoId); pg.fromTab = true; };
+  window.cpPgRender = function (memberId) {
+    const key = String(memberId);
+    const hh = $('cp-pg-hist'); if (hh && hh.getAttribute('data-member') === key) setHTML(hh, cpPgHistHtml(key));
+    const f = $('cp-pg-foto'); if (f && f.getAttribute('data-member') === key) setHTML(f, cpFotoHtml(key));
+    paintIcons();
+  };
+
+  // ── Latihan (Wave 3): Minggu ini, Kekuatan (daftar + grafik saat diketuk), Volume & keseimbangan, Riwayat ──
+  // Semua dari bundle di memori (insight + workout). Penyaji portal (insTrainingHero, ins*Card, workoutStatsHtml) tidak diubah.
+  function cpLatWeekHtml() {
+    const d = insD();
+    if (!d) return insSkel('Minggu ini');
+    const t = d.training, w = t.week, a = d.activity;
+    if (!w.days.now && !w.days.avg && !t.strength.length) return insightHeroHtml({ eyebrow: 'Minggu ini', empty: 'Belum ada latihan tercatat. Mulai latihan dari kartu klien di atas.' });
+    const pct = x => x.pct == null ? '' : (x.pct > 0 ? '↑' : x.pct < 0 ? '↓' : '') + Math.abs(x.pct) + '%';
+    const stats = [{ v: String(w.days.now), l: 'Hari latihan', d: w.baseline ? 'rata-rata ' + w.days.avg : '' }, { v: w.sets.now + '', l: 'Set kerja', d: pct(w.sets) }, { v: Math.round(w.volume.now / 100) / 10 + 'k', d: pct(w.volume), l: 'Volume (kg)' }];
+    if (w.rpe != null) stats.push({ v: insNum(w.rpe), l: 'RPE rata-rata' });
+    else if (w.rasa != null) stats.push({ v: insNum(w.rasa) + '/5', l: 'Rasa latihan' });
+    else if (w.durasi.now) stats.push({ v: Math.round(w.durasi.now / 60) + '', d: 'mnt', l: 'Durasi' });
+    const hero = insightHeroHtml({ eyebrow: 'Minggu ini vs biasanya', stats: stats.slice(0, 4), text: t.text });
+    if (!a) return hero;
+    const adh = a.adherence && a.adherence.length ? a.adherence[a.adherence.length - 1] : null;
+    return hero + '<div class="card cp-card-pad cp-act-card"><div class="cp-act-head"><b>Aktivitas</b><span class="li-sub">12 minggu · sesi, latihan, catat makan</span></div>' + heatHtml(a.levels) +
+      '<div class="cp-act-t"><p><b class="num">' + a.active + '</b><span>dari 84 hari aktif</span></p>' + (adh ? '<p><b class="num">' + adh.done + ' / ' + adh.planned + '</b><span>hari program minggu ini</span></p>' : '') + '</div></div>';
+  }
+  function cpStrengthHtml(memberId) {
+    const d = insD(); if (!d || !d.training.strength.length) return '';
+    const wd = wkAdmin[String(memberId)], ex = wd && wd.stats ? wd.stats.exercises || [] : [];
+    const rows = d.training.strength.map(function (s) {
+      const full = ex.find(e => e.key === s.key);
+      const pts = full ? full.points.map(p => ({ tanggal: p.tanggal, v: p.e1rm || p.top })) : [];
+      const note = (s.perBw != null ? insNum(s.perBw) + '× berat badan' : '');
+      const chg = s.pct == null ? '' : (s.pct > 0 ? '↑ ' : s.pct < 0 ? '↓ ' : '') + Math.abs(s.pct) + '%';
+      return '<details class="cp-str"><summary class="cp-row"><span class="grow cp-str-t"><b class="truncate">' + h(exNm(s)) + '</b><span class="li-sub">' + insNum(s.e1rm) + ' kg' + (note ? ' · ' + h(note) : '') + (s.stalled ? ' · <span class="cp-warn">mandek</span>' : '') + '</span></span>' +
+        sparkHtml(s.spark, 'ins-spark') + '<span class="cp-str-p' + (s.pct < 0 ? ' cp-warn' : '') + '">' + h(chg) + '</span>' + icon('chevron-down') + '</summary><div class="cp-str-b">' +
+        (full && full.pr ? '<p class="li-sub"><b>PR:</b> ' + h(wkKg(full.pr.berat)) + ' kg × ' + full.pr.rep + ' · estimasi 1RM ' + h(wkKg(full.pr.e1rm)) + ' kg (' + h(pgLabel(full.pr.tanggal)) + ')</p>' : '') +
+        (s.stalled ? '<p class="li-sub cp-warn">Tidak naik 3 minggu: coba +1 rep atau +2,5 kg.</p>' : '') +
+        (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '') + '</div></details>';
+    }).join('');
+    return '<div class="px-sec cp-sec"><h3>Kekuatan</h3><span>perkiraan 1RM · ketuk untuk grafik</span></div><div class="card cp-list-card">' + rows + '</div>';
+  }
+  function cpVolumeHtml(memberId) {
+    const d = insD(), wd = wkAdmin[String(memberId)], st = wd && wd.stats;
+    const bal = d && d.training.balance && d.training.balance.enough ? d.training.balance : null;
+    if (!(st && st.weeks && st.weeks.length) && !bal) return '';
+    let body = st && st.weeks && st.weeks.length ? '<p class="label">Volume per minggu (kg × rep)</p>' + wkWeeksSvg(st.weeks) : '';
+    if (bal) {
+      body += '<p class="label" style="margin-top:14px">Keseimbangan otot · 4 minggu</p><div class="stack" style="gap:8px">' + bal.groups.filter(g => g.volume > 0).map(g => '<div class="ins-bar"><span>' + h(g.label) + '</span><div class="meter"><i style="width:' + g.share + '%"></i></div><b>' + g.share + '%</b></div>').join('') + '</div>';
+      const notes = [];
+      if (bal.pushPull != null) notes.push('Dorong : tarik ' + insNum(bal.pushPull) + ' : 1' + (bal.pushPull > 1.5 ? ', tambah gerakan menarik (row, pull-up).' : bal.pushPull < 0.67 ? ', tambah gerakan mendorong.' : ', cukup seimbang.'));
+      if (bal.missed.length) notes.push('Belum dilatih 2 minggu: ' + bal.missed.join(', ') + '.');
+      if (notes.length) body += '<ul class="ins-notes">' + notes.map(n => '<li>' + h(n) + '</li>').join('') + '</ul>';
+    }
+    return '<div class="px-sec cp-sec"><h3>Volume &amp; keseimbangan</h3><span>90 hari</span></div><div class="card cp-card-pad cp-vol">' + body + '</div>';
+  }
+  // Riwayat latihan: baris ringkas; ketuk = ubah hari itu (90 hari terakhir). Yang masih di antrean tampil dengan statusnya.
+  const cpw = { member: '', all: false };
+  function cpWkHistHtml(memberId) {
+    const key = String(memberId), wd = wkAdmin[key];
+    if (cpw.member !== key) { cpw.member = key; cpw.all = false; }
+    const days = (wd && wd.days) || [];
+    const pend = wlQueue().filter(wlCanSend).filter(q => q.mode === 'admin' && String(q.memberId) === key);
+    if (!days.length && !pend.length) return wd ? '<div class="px-sec cp-sec"><h3>Riwayat latihan</h3></div><p class="cp-empty">' + icon('dumbbell') + ' Belum ada latihan tercatat.</p>' : '';
+    const ses = {}; ((wd && wd.sessions) || []).forEach(x => { ses[x.tanggal] = x; });
+    const min = wkAddDays(wkToday(), -90), max = cpw.all ? days.length : 5, id = h(key);
+    const rows = pend.map(function (q) {
+      const sets = q.entries.reduce((n, e) => n + e.sets.length, 0);
+      return '<div class="cp-row"><span class="cp-row-d"><b>' + h(pgLabel(q.date)) + '</b><span>' + h(q.hari || 'Latihan bebas') + '</span></span><span class="grow cp-row-t truncate">' + h(q.entries.length + ' gerakan · ' + sets + ' set') + '</span><span class="pill soft cp-row-st">' + (q.retry ? 'Menunggu sinyal' : 'Gagal') + '</span></div>';
+    }).join('') + days.slice(0, max).map(function (d) {
+      const x = ses[d.tanggal] || {}, hr = x.hari || (d.items.find(i => i.hari) || {}).hari || 'Latihan bebas';
+      const sets = d.items.reduce((n, it) => n + it.sets.length, 0), meta = [d.items.length + ' gerakan', sets + ' set'];
+      if (x.durasi) meta.push(Math.round(x.durasi / 60) + ' mnt');
+      const inner = '<span class="cp-row-d"><b>' + h(pgLabel(d.tanggal)) + (x.rasa ? ' ' + WL_FACES[x.rasa - 1][0] : '') + '</b><span class="truncate">' + h(hr) + '</span></span><span class="grow cp-row-t truncate">' + h(meta.join(' · ')) + (x.catatan ? ' · ' + h(x.catatan) : '') + '</span>';
+      return d.tanggal >= min ? '<button type="button" class="cp-row" aria-label="Ubah latihan ' + h(pgLabel(d.tanggal)) + '" onclick="window.workoutEditDay(\'admin\',\'' + id + '\',\'' + h(d.tanggal) + '\')">' + inner + icon('pencil') + '</button>' : '<div class="cp-row">' + inner + '</div>';
+    }).join('');
+    return '<div class="px-sec cp-sec"><h3>Riwayat latihan</h3><span>' + days.length + ' hari · ketuk untuk ubah</span></div><div class="card cp-list-card">' + rows +
+      (days.length > max ? '<button type="button" class="cp-row cp-row-more" onclick="window.cpWkAll(\'' + id + '\')">Tampilkan semua (' + days.length + ')</button>' : '') + '</div>';
+  }
+  window.cpWkAll = function (memberId) { cpw.all = true; window.cpLatRender(memberId); };
+  window.cpLatRender = function (memberId) {
+    const key = String(memberId);
+    const hh = $('cp-wk-hist'); if (!hh || hh.getAttribute('data-member') !== key) return;
+    setHTML(hh, cpWkHistHtml(key));
+    const c = $('cp-ins-latihan'); if (c) setHTML(c, cpInsHtml(key, 'latihanCards'));
+    paintIcons();
+  };
+
+  // ── Bagikan (ikon di kepala): kartu yang cocok dengan tab yang terbuka; editor kartu tetap bisa ganti kartu ──
+  window.cpShare = function (memberId) {
+    const t = ui.cpTab && String(ui.cpTab.id) === String(memberId) ? ui.cpTab.name : 'ringkasan';
+    const kind = t === 'progres' ? (cpg.seg === 'ukuran' ? 'ukuran' : 'progres') : t === 'latihan' ? 'latihan' : t === 'gizi' ? 'gizi' : 'rekap';
+    window.shareCard(kind, String(memberId));
+  };
+
+  // ── Menu ⋯: semua aksi yang jarang dipakai, dikelompokkan, di satu tempat yang sama di setiap tab ──
+  let cpmMember = '';
+  window.cpMore = function (memberId) {
+    cpmMember = String(memberId);
+    const c = window.careOf ? window.careOf(memberId) : null, wd = wkAdmin[cpmMember];
+    const row = (k, ic, label, sub, danger) => '<button type="button" class="cpm-row' + (danger ? ' danger' : '') + '" onclick="window.cpMoreGo(\'' + k + '\')">' + icon(ic) + '<span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + icon('chevron-right') + '</button>';
+    const group = (title, rows) => rows ? '<div class="cpm-group"><p class="cpm-h">' + h(title) + '</p><div class="cpm-list">' + rows + '</div></div>' : '';
+    const send = (wd && wd.days && wd.days.length ? row('wa-latihan', 'message-circle', 'Ringkasan latihan', 'Latihan terakhir yang dicatat') : '') +
+      (c && !c.error && (c.tests || []).length ? row('wa-tes', 'message-circle', 'Hasil tes', 'Hasil tes kebugaran terakhir') : '') +
+      (c && !c.error && !c.health ? row('wa-form', 'message-circle', 'Pengingat form kesehatan', 'Minta klien mengisi form') : '');
+    $('cpm-title').textContent = 'Menu klien';
+    setHTML('cpm-body', group('Tambah', row('pr', 'list-plus', 'PR baru', '') + row('tes', 'timer', 'Tes kebugaran', '') + row('lewat', 'calendar-check', 'Latihan yang lewat', 'Catat latihan hari sebelumnya') + row('catatan', 'notebook-pen', 'Catatan privat', '')) +
+      group('Kirim lewat WhatsApp', send) +
+      group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('laporan', 'file-text', 'Laporan PDF', 'Rangkuman progres untuk klien') +
+        row('tahan', 'pause', 'Tahan klien', 'Cuti, sakit, atau berhenti') + row('hapus', 'trash-2', 'Hapus klien', '', true)));   // Fase AD: laporan, tahan
+    openSheet('sheet-cp-more');
+  };
+  window.cpMoreGo = function (k) {
+    const id = cpmMember;
+    const go = {
+      pr: () => window.addTaskFor(id), tes: () => window.openCareTests(id), lewat: () => window.workoutOpenAdmin(id, '', '', true), catatan: () => window.openCareNotes(id),
+      'wa-latihan': () => window.workoutSummaryWA(id), 'wa-tes': () => window.sendTestResult(id), 'wa-form': () => window.cpHealthRemind(id),
+      ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal(),
+      laporan: () => window.reportOpen('admin', id), tahan: () => window.openHoldSheet(id)   // Fase AD
+    }[k];
+    window.closeModal();
+    if (go) setTimeout(go, 120);
+  };

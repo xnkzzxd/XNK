@@ -1,4 +1,4 @@
-/* ═══ Fase AC1: klien ditahan (cuti / sakit / nonaktif) — pita halaman klien, kartu portal, pil daftar ═══ */
+/* ═══ Fase AD1: klien ditahan (cuti / sakit / nonaktif) — pita halaman klien, kartu portal, pil daftar ═══ */
 .hold-band { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--border);
   background: color-mix(in srgb, var(--fg) 5%, var(--card, transparent)); }
 .hold-band b { display: block; }

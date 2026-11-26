@@ -1,6 +1,6 @@
 'use strict';
-// Fase AC3 (T-2320…T-2328): alat catat coach — setelan alat & cue, hapus catatan latihan, riwayat per gerakan,
-// coach mencatat makanan klien, tanggapan harian, ringkasan 31 hari. docs/coachkit/Design.md §AC3.
+// Fase AD3 (T-2420…T-2428): alat catat coach — setelan alat & cue, hapus catatan latihan, riwayat per gerakan,
+// coach mencatat makanan klien, tanggapan harian, ringkasan 31 hari. docs/coachkit/Design.md §AD3.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { seededEnv, KEY_A, KEY_B } = require('./fixtures');

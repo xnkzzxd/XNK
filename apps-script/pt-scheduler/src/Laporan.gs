@@ -1,8 +1,8 @@
 // =============================================================================
-// Laporan.gs — Fase AC4 (T-2340): data laporan PDF yang dibuat HANYA saat klien atau coach menekan tombol.
+// Laporan.gs — Fase AD4 (T-2440): data laporan PDF yang dibuat HANYA saat klien atau coach menekan tombol.
 // Server menghitung angka dan kalimat tafsir (nada klien, tanpa RPE, catatan privat, catatan cuti, nomor HP, atau foto);
 // browser menggambar halaman A4 dan menyusun PDF di perangkat (parts/app/23-laporan.part). Tidak ada yang disimpan
-// atau diunggah. docs/coachkit/Design.md §AC4.
+// atau diunggah. docs/coachkit/Design.md §AD4.
 // =============================================================================
 
 const REPORT = { maxDays: 400, defaultDays: 28, notesMax: 6, liftsMax: 3, weightPts: 40 };

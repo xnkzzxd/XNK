@@ -1,4 +1,4 @@
-  // ═══ Fase AC (T-2303): cara mengukur ukuran tubuh ═══
+  // ═══ Fase AD (T-2403): cara mengukur ukuran tubuh ═══
   // Tombol ? di samping tiap ukuran (lembar catat klien/coach, assessment) membuka #sheet-ukur: figur depan sendiri
   // (figure/figure.min.json, pria/wanita) dengan garis pita di tinggi yang benar, 3 langkah singkat dan aturan umum.
   // Sumber tiap langkah: docs/coachkit/Sumber.md (U01–U08). Tanpa panggilan server; figur dimuat malas seperti peta otot.

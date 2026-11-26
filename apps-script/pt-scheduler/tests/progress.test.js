@@ -205,7 +205,7 @@ test('the assessment saves the eight measures to Progress as coach entries, keep
   assert.throws(() => env.call('saveAssessment', t, 'PT-A', { perut: 5 }), /perut/i);
 });
 
-test('Pinggul (Fase AC): client and coach save it, the assessment hip lands in Progress too, limits 40-200', () => {
+test('Pinggul (Fase AD): client and coach save it, the assessment hip lands in Progress too, limits 40-200', () => {
   const { env, ani } = setup();
   const res = env.call('saveMyMeasurement', ani, { pinggul: '96,5' });
   assert.equal(res.entries[0].pinggul, 96.5);

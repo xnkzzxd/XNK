@@ -239,7 +239,7 @@ function _buildClientPools_(members, schedules, now, holdMap) {
       slots: remaining - (upcoming[id] || 0),
       packageId: String(row[6] || ''), coachId: String(row[10] || ''),
       off: _rmdOffFrom_(row[15]),                      // T-123: jenis pengingat yang dimatikan untuk klien ini (kolom P)
-      hold: !!(holdMap && holdMap[id])                 // Fase AC1: sedang ditahan (lihat _rmdIsOff_)
+      hold: !!(holdMap && holdMap[id])                 // Fase AD1: sedang ditahan (lihat _rmdIsOff_)
     };
     all.push(c);                                       // semua klien bernomor, termasuk paket habis
     if (remaining <= 0) return;
@@ -253,7 +253,7 @@ function _loadClientPools_() {
   var data = _getMemberDataSheet_().getDataRange().getValues().slice(1);
   return _buildClientPools_(data, _getSchedulesAll_(), new Date(), _holdMapToday_());
 }
-/** Fase AC1: { memberId: hold } yang aktif hari ini (WIB). */
+/** Fase AD1: { memberId: hold } yang aktif hari ini (WIB). */
 function _holdMapToday_() { try { return _holdMap_(_holdRows_(), _todayWib_()); } catch (e) { Logger.log('Cuti dilewati: ' + e); return {}; } }
 
 /** @returns {{clients:Array, skipped:number}} klien aktif (A3) */
@@ -422,7 +422,7 @@ var REMINDER_JOBS = [
   { jenis: 'ringkasan-owner',   day: null, hour: 9,  dayOfMonth: 1, handler: 'sendRingkasanOwner_', defaultEnabled: false },
   // Fase H: tagihan yang belum lunas lebih dari 3 hari; hanya jalan bila Keuangan aktif.
   { jenis: 'tagihan',           day: null, hour: 9,  handler: 'sendTagihanDigest_', defaultEnabled: false },
-  // Fase AC1: klien yang cutinya berakhir kemarin (aktif lagi hari ini): tombol WhatsApp ucapan selamat datang kembali. Bawaan MATI.
+  // Fase AD1: klien yang cutinya berakhir kemarin (aktif lagi hari ini): tombol WhatsApp ucapan selamat datang kembali. Bawaan MATI.
   { jenis: 'kembali-latihan',   day: null, hour: 7,  handler: 'sendKembaliLatihanDigest_', defaultEnabled: false }
 ];
 
@@ -716,7 +716,7 @@ function _rmdOffFrom_(cell) {
   return String(cell == null ? '' : cell).split(',').map(function(x) { return x.trim().toLowerCase(); }).filter(String);
 }
 function _rmdIsOff_(client, jenis) {
-  // Fase AC1: klien yang ditahan (cuti/sakit/nonaktif) tidak menerima pengingat, kecuali HOLD_KEEP_TYPES (Cuti.gs).
+  // Fase AD1: klien yang ditahan (cuti/sakit/nonaktif) tidak menerima pengingat, kecuali HOLD_KEEP_TYPES (Cuti.gs).
   if (client && client.hold && HOLD_KEEP_TYPES.indexOf(jenis) === -1) return true;
   return ((client && client.off) || []).indexOf(jenis) !== -1;
 }
@@ -1146,7 +1146,7 @@ function sendMilestoneDigest_(ctx) {
   var data = _getMemberDataSheet_().getDataRange().getValues().slice(1);
   var tpl = _rmdTemplate_('selamat-milestone'), items = [], noPhone = [], toMark = {}, held = _holdMapToday_();
   data.forEach(function(row) {
-    if (!row || !row[0] || held[String(row[0]).trim()]) return;   // Fase AC1: diselamati sesudah kembali
+    if (!row || !row[0] || held[String(row[0]).trim()]) return;   // Fase AD1: diselamati sesudah kembali
     var id = String(row[0]).trim(), given = _rmdOffFrom_(row[MEMBER_BADGE_GIVEN_COL - 1]);
     var cw = _completedWeeks_(schedules, id);
     var fresh = _badges_(cw.completed, _bestStreak_(cw.weeks)).filter(function(b) { return b.earned && given.indexOf(b.id) === -1; });

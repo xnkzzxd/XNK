@@ -1,10 +1,10 @@
 // =============================================================================
-// CatatCoach.gs — Fase AC3 (T-2320…T-2328): alat catat untuk coach di panel.
+// CatatCoach.gs — Fase AD3 (T-2420…T-2428): alat catat untuk coach di panel.
 // Setelan alat & cue per klien per gerakan (sheet ExerciseNotes), hapus catatan latihan, riwayat per gerakan (365 hari),
 // coach mencatat / menghapus makanan klien, tanggapan harian coach atas catatan makan (sheet FoodFeedback),
 // dan ringkasan makan 31 hari. Logger klien dan catatan makan klien tidak diubah; klien hanya MEMBACA setelan/cue
 // (di logger, lewat _workoutFor_.notes) dan tanggapan harian (di Makan, lewat _nutritionFor_.feedback).
-// docs/coachkit/Design.md §AC3.
+// docs/coachkit/Design.md §AD3.
 // =============================================================================
 
 const EXNOTE_HEADERS = ['ID', 'Member ID', 'Exercise Key', 'Setelan', 'Cue', 'Diubah Pada', 'Oleh'];

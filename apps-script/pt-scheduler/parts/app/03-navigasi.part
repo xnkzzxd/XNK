@@ -102,7 +102,7 @@
   }
   // Satu sumber label status klien: aktif | hampir | habis.
   function clientStateInfo(m) {
-    const hp = window.holdPillInfo && window.holdPillInfo(m.id);   // Fase AC1
+    const hp = window.holdPillInfo && window.holdPillInfo(m.id);   // Fase AD1
     if (hp) return hp;
     const st = clientState(m);
     if (st === 'empty') return { key: 'habis', label: 'Habis' };
@@ -479,7 +479,7 @@
       window.priceListData = c.priceList || [];
       window.taskSummary = c.taskSummary || {};
       window.renewals = c.renewals || [];
-      window.holds = Array.isArray(c.holds) ? c.holds : [];   // Fase AC1 (tanpa catatan)
+      window.holds = Array.isArray(c.holds) ? c.holds : [];   // Fase AD1 (tanpa catatan)
       adminCopyAt = Number(c.at) || 0;
       return true;
     } catch (e) { return false; }
@@ -561,7 +561,7 @@
       if (r[3]) window.priceListData = r[3];
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
-      if (b && Array.isArray(b.holds) && !window.wqStale(snap)) window.holds = b.holds;   // Fase AC1
+      if (b && Array.isArray(b.holds) && !window.wqStale(snap)) window.holds = b.holds;   // Fase AD1
       ui.dataReady = true;
       window.hideGlobalLoader();
       if (r[0] && r[1]) saveAdminCache();   // dilewati bila basi (r dikosongkan di atas)
@@ -833,7 +833,7 @@
     window.shareOn = b.shareEnabled !== false;
     if (window.pushOnBootstrap) window.pushOnBootstrap(b.pushKey);   // Fase X
     window.myFeedback = { enabled: b.feedbackEnabled !== false, pending: b.pendingRating || null, pkgEval: !!(b.packageEval && b.packageEval.eligible), stars: 0, scheduleId: '' };
-    if (b.profile) window.myHold = b.hold || null;   // Fase AC1
+    if (b.profile) window.myHold = b.hold || null;   // Fase AD1
     if (b.coachStatus && b.coachStatus.status) { window.myCoachStatus = b.coachStatus; if (portalMoreRaw) portalMoreRaw.coachStatus = b.coachStatus; renderCoachStatusChip(); }
   }
   window.refreshPortalSchedules = function () {

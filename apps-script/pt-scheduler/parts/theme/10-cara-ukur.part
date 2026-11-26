@@ -1,4 +1,4 @@
-/* ═══ Fase AC (T-2303): tombol ? di samping label ukuran + lembar cara mengukur (#sheet-ukur) ═══ */
+/* ═══ Fase AD (T-2403): tombol ? di samping label ukuran + lembar cara mengukur (#sheet-ukur) ═══ */
 .lbl-help { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; }
 .lbl-help .label { min-width: 0; }
 .help-btn { flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; margin: -12px -10px -12px 0; padding: 0; border: 0; border-radius: 999px;

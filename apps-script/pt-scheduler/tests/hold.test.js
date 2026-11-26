@@ -1,5 +1,5 @@
 'use strict';
-// Fase AC1 (T-2304…T-2311): klien ditahan (cuti / sakit / berhenti). docs/coachkit/Design.md §AC1.
+// Fase AD1 (T-2404…T-2411): klien ditahan (cuti / sakit / berhenti). docs/coachkit/Design.md §AD1.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { seededEnv, KEY_A, KEY_B, inDays, wibSlot } = require('./fixtures');
@@ -170,7 +170,7 @@ test('the hold note never reaches the portal of another client or public answers
   assert.ok(!JSON.stringify(j(env.call('getPortalBootstrap', ''))).includes('Cedera'));
 });
 
-// ── effects (T-2306, T-2307) ─────────────────────────────────────────────────────
+// ── effects (T-2406, T-2407) ─────────────────────────────────────────────────────
 
 test('reminders: a held client gets nothing except the birthday greeting and the reminder of a session that was kept', () => {
   const { env } = setup();

@@ -1,12 +1,12 @@
-# Phase AC — Design
+# Phase AD — Design
 
 What and why: [PRD.md](PRD.md). Tasks: [TODO.md](TODO.md). Every rule in [../Agent.md](../Agent.md) §2 and §4 applies (public functions guarded and listed in `tests/api-lists.js` + `WRITE`/`READ_OK`, `tools/build-api.js`, `_appendRow_`, `_bumpMember_` after writes, `optimistic({q})` for browser writes, new creators in `IDEM_DURABLE`, phone first, `h()`, tokens only).
 
 ---
 
-## AC1 — Hold a client (built 2026-11-26)
+## AD1 — Hold a client (built 2026-11-26)
 
-Built as below, with these changes: `HOLD_KEEP_TYPES = ['ulang-tahun', 'sesi-besok']` (a session the coach kept inside a hold is still reminded); the return-day message is the normal reminder type `kembali-latihan` (off by default) instead of a separate job; no "Ditahan:" digest footer; reminders skip held clients through `_rmdIsOff_` (pools and `_rmdMemberIndex_` carry `hold`); the hold sheet lists sessions from `window.schedules` in the browser (no dry-run call); browser code is part `21-tahan-klien.part`, styles `10-tahan-klien.part`.
+Built as below, with these changes: `HOLD_KEEP_TYPES = ['ulang-tahun', 'sesi-besok']` (a session the coach kept inside a hold is still reminded); the return-day message is the normal reminder type `kembali-latihan` (off by default) instead of a separate job; no "Ditahan:" digest footer; reminders skip held clients through `_rmdIsOff_` (pools and `_rmdMemberIndex_` carry `hold`); the hold sheet lists sessions from `window.schedules` in the browser (no dry-run call); browser code is part `22-tahan-klien.part`, styles `11-tahan-klien.part`.
 
 ### Data
 New sheet **`ClientHolds`** (the only truth; history included). Headers:
@@ -57,7 +57,7 @@ Where holds are read:
 4. **Streak**: `_streak_(weeks, todayIso, heldWeeks)` and `_bestStreak_(weeks, heldWeeks)`: a held week with no session is skipped (neither counts nor breaks); a held week with a session counts. Old signature (no third argument) behaves as today.
 5. **Monthly challenge**: `_monthlyChallenge_` → `target = ceil(target × freeDays / daysInMonth)`, `hidden: true` when `freeDays < 7`.
 6. **Signals / hub**: `_clientSignalsCalc_` drops inactivity flags for held clients and sets `hold`; `getCoachHub().holds` = active + ending within 3 days (first name, type, end).
-7. **Auto program**: `runProgramAutoJob_` skips held clients. Lighter return: only after a sourced rule is added to [../program/Rules.md](../program/Rules.md) and `PGEN` (task T-2309 is blocked on that source).
+7. **Auto program**: `runProgramAutoJob_` skips held clients. Lighter return: only after a sourced rule is added to [../program/Rules.md](../program/Rules.md) and `PGEN` (task T-2409 is blocked on that source).
 8. **Warm cache**: `_warmPick_` skips held clients.
 9. **Return day**: inside `runReminderTick`, a daily step at 07:00 WIB (`runHoldReturnJob_`, not a reminder type, guarded by ReminderLog key `kembali|<date>`) sends the coach one Telegram digest "Aktif lagi hari ini" with, when `kembali-latihan` is on, one `wa.me` button per client (template in `RMD_TPL_DEFAULT`, tone rules of `tests/reminder-variants.test.js`). Planned holds starting today get one line too ("Mulai cuti hari ini").
 
@@ -80,7 +80,7 @@ Where holds are read:
 
 ---
 
-## AC2 — Measurement guide + Pinggul
+## AD2 — Measurement guide + Pinggul
 
 ### Pinggul as a measure
 - `PROGRESS_HEADERS` gains `"Pinggul (cm)"` at column 14 (N); `PROGRESS_MEASURES` gains `{ key: 'pinggul', label: 'Lingkar pinggul', short: 'Pinggul', unit: 'cm', col: 14, min: 40, max: 200 }` (same limits as `saveAssessment`). `_ensureProgressColumns_` adds the header (append-only, rule 4).
@@ -90,7 +90,7 @@ Where holds are read:
 - Library compat: `check-compat.js` stays green.
 
 ### Guide (built)
-- Part `parts/app/20-cara-ukur.part` (closes the App IIFE now) and theme part `09-cara-ukur.part` (closes `</style>`).
+- Part `parts/app/21-cara-ukur.part` (closes the App IIFE now) and theme part `10-cara-ukur.part` (closes `</style>`).
 - `UKUR_LINE[sex][line] = [y %, x1 %, x2 %]` on the front view of `figure/figure.min.json` (viewBox 724 × 1448); `lengan` and `paha` are drawn on the client's right side (viewer's left) and mirrored around `UKUR_MID[sex]` for *kiri*. `UKUR_STEPS` (3 steps per line, Berat has rules only and a scale icon), `UKUR_UMUM` (4 general rules). Sex from `figSexOf` (nutrition profile), male by default. When the figure is not on the device yet a grey skeleton shows and `figEnsure()` redraws it.
 - Every measure label in `#sheet-progress` and `#modal-care-assess` is wrapped in `.lbl-help` with a 44 px `.help-btn` (`circle-help`) calling `window.ukurOpen(key)`. The sheet `#sheet-ukur` (prefix `uk-`) has a chip row to switch measures; closing it returns to the sheet it was opened from (`ui.sheetReturn`, handled in `closeModal`), with typed values kept.
 - The assessment's separate hip field is gone: `as-pinggul` sits with the other measures and is empty on open like them (the old prefill would have written yesterday's hip as a new measurement).
@@ -101,9 +101,9 @@ Where holds are read:
 
 ---
 
-## AC3 — Coach logger upgrade (coach panel only; built 2026-11-26)
+## AD3 — Coach logger upgrade (coach panel only; built 2026-11-26)
 
-Built as below, with these changes: server code is `src/CatatCoach.gs`, browser code part `22-catat-coach.part`, styles `11-catat-coach.part`. W2 = ⋯ "Isi seperti terakhir", a "Pakai" link on the "Naik ke … kg" line and top-menu "Ulangi latihan terakhir" (`wlRebuild` with the last logged routine). W4: deleting one exercise already existed through "Ubah" on a past day (⋯ → Hapus catatan gerakan ini); new is the trash button for a whole day (`deleteWorkoutEntries` with no keys, which also removes the `WorkoutSessions` row). W5 = "Riwayat lengkap gerakan ini" under the strength chart, sheet `#sheet-wkx`. W6 = top-menu "Ganti klien" (clients with a session within 60 minutes of this one, plus any open coach draft; each keeps its own `adm:<id>` draft). F1 marks coach entries with a `coach-` CID (no new FoodLog column). F3: `getClientFoodLog(token, id, days)` returns `{days, n, feedback, stats}`; the Gizi tab has a 7 / 31 day switch.
+Built as below, with these changes: server code is `src/CatatCoach.gs`, browser code part `23-catat-coach.part`, styles `12-catat-coach.part`. W2 = ⋯ "Isi seperti terakhir", a "Pakai" link on the "Naik ke … kg" line and top-menu "Ulangi latihan terakhir" (`wlRebuild` with the last logged routine). W4: deleting one exercise already existed through "Ubah" on a past day (⋯ → Hapus catatan gerakan ini); new is the trash button for a whole day (`deleteWorkoutEntries` with no keys, which also removes the `WorkoutSessions` row). W5 = "Riwayat lengkap gerakan ini" under the strength chart, sheet `#sheet-wkx`. W6 = top-menu "Ganti klien" (clients with a session within 60 minutes of this one, plus any open coach draft; each keeps its own `adm:<id>` draft). F1 marks coach entries with a `coach-` CID (no new FoodLog column). F3: `getClientFoodLog(token, id, days)` returns `{days, n, feedback, stats}`; the Gizi tab has a 7 / 31 day switch.
 
 Boundary: the client logger (`mode: 'client'`), `logMyWorkout`, `logMyFood`, their queues (`xnk_wl_queue`, `xnk_food_queue`), storage keys and cids are **not changed**. Coach code goes into a new part `parts/app/21-coach-catat.part` plus small hooks in the existing logger (`mode === 'admin'` branches only). Server functions are admin-only. Client-visible additions (W3 cue line, F2 food note) are read-only (owner: yes).
 
@@ -125,7 +125,7 @@ Boundary: the client logger (`mode: 'client'`), `logMyWorkout`, `logMyFood`, the
 
 ---
 
-## AC4 — PDF report on demand (built 2026-11-26)
+## AD4 — PDF report on demand (built 2026-11-26)
 
 Built as below, with these changes: no server cache (made only on a tap); no Cetak button; Bagikan uses `navigator.share` with the PDF file and falls back to a download (the iframe wrappers only accept PNG / video, so on the old wrapper pages the PDF downloads); the report counts a week as active when it has a coach session **or** a logged workout; sections start a new page only when the remaining space is too small; the footer brand goes through `TEXT_SWAPS` (`window.brandName()` on the Library). Check: `tools/report-check.js` (CI step "PDF report check").
 

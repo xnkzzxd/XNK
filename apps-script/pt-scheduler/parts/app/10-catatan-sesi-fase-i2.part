@@ -14,11 +14,20 @@
     pk.classList.toggle('hide', !(result && result.packageDone));
     pk.onclick = result && result.packageDone ? function () { window.waToClient(s, result.evalText); } : null;
     openSheet('modal-session-note');
-    adminCall('getSessionNote', s.id).then(function (n) {
+    // Fase AC: catatan dari bundle klien di perangkat (10 terakhir) bila ada; sesi lama / klien belum dibuka = getSessionNote.
+    const b = window.ccBundleOf ? window.ccBundleOf(s.memberId) : null;
+    const local = b && Array.isArray(b.notes) ? b.notes.find(n => n.scheduleId === String(s.id)) : undefined;
+    const newest = b && Array.isArray(b.notes) && b.notes.length < 10;   // daftar lengkap: tidak ada catatan = memang belum ada
+    (local || newest ? Promise.resolve(local || {}) : adminCall('getSessionNote', s.id)).then(function (n) {
       if (noteSched !== s) return;
-      if (!$('sn-dilatih').value && !$('sn-fokus').value) { $('sn-dilatih').value = n.dilatih || ''; $('sn-fokus').value = n.fokus || ''; $('sn-rpe').value = n.rpe === '' ? '' : n.rpe; $('sn-pribadi').value = n.pribadi || ''; }
+      if (!$('sn-dilatih').value && !$('sn-fokus').value) { $('sn-dilatih').value = n.dilatih || ''; $('sn-fokus').value = n.fokus || ''; $('sn-rpe').value = n.rpe === '' || n.rpe == null ? '' : n.rpe; $('sn-pribadi').value = n.pribadi || ''; }
     }).catch(function () {});
   };
+  // Catatan yang baru disimpan langsung masuk ke catatan klien di memori dan salinan perangkat (briefing, "Fokus terakhir").
+  function noteRemember(s, note) {
+    if (!s || !s.memberId || !window.cpNotePut) return;
+    window.cpNotePut(s.memberId, { scheduleId: String(s.id), memberId: String(s.memberId), tanggal: ymd(new Date(s.start)), dilatih: note.dilatih, fokus: note.fokus, rpe: note.rpe === '' ? '' : Number(note.rpe), pribadi: note.pribadi });
+  }
   // Jawaban completeSession datang setelah lembar terbuka: pasang tombol evaluasi paket bila paket habis.
   window.sessionNoteResult = function (scheduleId, result) {
     if (!noteSched || String(noteSched.id) !== String(scheduleId) || !result || !result.packageDone) return;
@@ -38,6 +47,7 @@
       const done = busy($('sn-wa-btn'), 'Menyimpan…');
       adminCall('saveSessionNote', s.id, note).then(function (r) {
         done(); window.closeModal(); window.showToast('Catatan sesi disimpan.');
+        noteRemember(s, note);
         // waLink dibuat server dari nomor profil klien yang sekarang (bukan salinan di jadwal).
         setTimeout(function () {
           const mm = /^https:\/\/wa\.me\/(\d{8,})/.exec(String((r && r.waLink) || ''));
@@ -46,6 +56,7 @@
       }).catch(function (err) { done(); $('sn-err').textContent = window.authMessage(err); });
       return;
     }
+    noteRemember(s, note);
     optimistic({ q: { mode: 'admin', fn: 'saveSessionNote', args: [s.id, note] }, sheet: true, errEl: 'sn-err', ok: 'Catatan sesi disimpan.', label: 'Catatan sesi' });
   };
 

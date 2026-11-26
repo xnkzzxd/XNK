@@ -1,4 +1,4 @@
-  // ═══ Fase AC1 (T-2308, T-2311): klien ditahan — cuti, sakit, nonaktif ═══
+  // ═══ Fase AD1 (T-2408, T-2411): klien ditahan — cuti, sakit, nonaktif ═══
   // Panel: window.holds (getAdminBootstrap.holds: aktif, direncanakan, diminta; tanpa catatan) → pil di daftar Klien, filter
   // "Ditahan", pita di halaman klien, lembar #sheet-hold (prefix hd-), kartu "Minta cuti" di Dashboard, daftar di hub coach.
   // Riwayat lengkap dengan catatan hanya dari getClientBundle.holds (window.holdHist). Portal: window.myHold

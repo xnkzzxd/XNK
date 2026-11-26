@@ -65,6 +65,9 @@ const TYPE = { js: 'application/javascript', css: 'text/css', html: 'text/html' 
   await page.evaluate(() => window.postMessage({ xnk: 'theme', color: '#123456' }, location.origin));
   await page.waitForTimeout(200);
   check((await page.getAttribute('meta[name="theme-color"]', 'content')) === '#123456', 'the theme message sets the theme-color meta');
+  // Here the body is the app page itself: painting it with the band colour made var(--bg) bars look like black boxes.
+  const bodyBg = await page.evaluate(() => ({ inline: document.body.style.background, computed: getComputedStyle(document.body).backgroundColor }));
+  check(!bodyBg.inline && bodyBg.computed !== 'rgb(18, 52, 86)', 'the theme message leaves the app page background alone ' + JSON.stringify(bodyBg));
   await page.evaluate(() => window.postMessage({ xnk: 'theme', color: 'red' }, location.origin));
   await page.waitForTimeout(100);
   check((await page.getAttribute('meta[name="theme-color"]', 'content')) === '#123456', 'a bad colour value is ignored');

@@ -1,5 +1,5 @@
 'use strict';
-// Fase AC4 (T-2340): data laporan PDF (dibuat saat tombol ditekan). docs/coachkit/Design.md §AC4.
+// Fase AD4 (T-2440): data laporan PDF (dibuat saat tombol ditekan). docs/coachkit/Design.md §AD4.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { seededEnv, KEY_A, KEY_B } = require('./fixtures');

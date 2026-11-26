@@ -540,13 +540,15 @@
     });
   };
 
-  // Tiga panggilan berjalan bersamaan, dan dimulai diam-diam setelah getAdminMore selesai (loadAdminExtras),
-  // supaya Pengaturan sudah terisi saat dibuka tanpa memperlambat layar pertama.
+  // Fase AC: SATU panggilan (getSettingsBundle; dulu tiga), dimulai diam-diam setelah getAdminMore selesai (loadAdminExtras),
+  // supaya Pengaturan sudah terisi saat dibuka tanpa memperlambat layar pertama. Bagian yang gagal = {error} dari server.
   function settingsPrefetch() {
+    const all = adminCall('getSettingsBundle');
+    const pick = function (k) { return all.then(function (r) { const v = r && r[k]; if (!v || v.error) throw new Error((v && v.error) || 'Tidak ada jawaban.'); return v; }); };
     const p = {
-      settings: adminCall('getAppSettings'),
-      status: adminCall('getReminderStatus'),
-      pkg: adminCall('getPriceListAdmin').catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); return null; })
+      settings: pick('settings'),
+      status: pick('status'),
+      pkg: pick('packages').catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); return null; })
     };
     p.settings.catch(function () {});   // kesalahan ditangani saat halaman dibuka
     p.status.catch(function () {});

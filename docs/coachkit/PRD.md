@@ -1,23 +1,23 @@
-# Phase AC — Coach kit: client hold, measurement guide, coach logger, PDF report (PRD)
+# Phase AD — Coach kit: client hold, measurement guide, coach logger, PDF report (PRD)
 
-Status: **built** (2026-11-26; T-2309b, a lighter return for the automatic program, is not built until it has a sourced rule). Tasks: [TODO.md](TODO.md) (T-2300…T-2399). How: [Design.md](Design.md).
+Status: **built** (2026-11-26; T-2409b, a lighter return for the automatic program, is not built until it has a sourced rule). Tasks: [TODO.md](TODO.md) (T-2400…T-2499). How: [Design.md](Design.md).
 
 The owner asked for four things (2026-11-26). They ship as four parts that can be built and merged on their own:
 
 | Part | What | Why |
 | --- | --- | --- |
-| AC1 | **Hold a client**: Cuti, Sakit, Berhenti (with dates), plus the client asking for a hold from the portal | Today a client is "Aktif" only because sessions are left. A client on holiday or sick still gets reminders, their streak breaks, and the coach cannot see who is really active. |
-| AC2 | **Measurement guide + Pinggul**: a **?** button per body measure that shows where and how to measure; hip becomes a normal measure | Measuring is a bare number form. Hip is stored only in the coach's assessment and is never shown or charted. |
-| AC3 | **Coach logger upgrade** (coach panel only): faster workout logging, machine settings and cues, history per exercise, the coach logging and commenting on food | The coach can log workouts but has few shortcuts, and food is read-only for 7 days. |
-| AC4 | **PDF report on demand**: a button for the client and the coach that builds a readable report for a chosen period | The analysis lives in small cards. A report the client can read slowly makes the coaching feel real. Made only when someone taps the button. |
+| AD1 | **Hold a client**: Cuti, Sakit, Berhenti (with dates), plus the client asking for a hold from the portal | Today a client is "Aktif" only because sessions are left. A client on holiday or sick still gets reminders, their streak breaks, and the coach cannot see who is really active. |
+| AD2 | **Measurement guide + Pinggul**: a **?** button per body measure that shows where and how to measure; hip becomes a normal measure | Measuring is a bare number form. Hip is stored only in the coach's assessment and is never shown or charted. |
+| AD3 | **Coach logger upgrade** (coach panel only): faster workout logging, machine settings and cues, history per exercise, the coach logging and commenting on food | The coach can log workouts but has few shortcuts, and food is read-only for 7 days. |
+| AD4 | **PDF report on demand**: a button for the client and the coach that builds a readable report for a chosen period | The analysis lives in small cards. A report the client can read slowly makes the coaching feel real. Made only when someone taps the button. |
 
-Build order: **AC2 → AC1 → AC3 → AC4** (AC2 is small; the report uses holds and the hip measure).
+Build order: **AD2 → AD1 → AD3 → AD4** (AD2 is small; the report uses holds and the hip measure).
 
 Not in scope (owner said no, 2026-11-26): package expiry, cancellation policy, weekly check-in, goals with a date, photo comparison, waitlist.
 
 ---
 
-## AC1 — Hold a client
+## AD1 — Hold a client
 
 ### Users and stories
 - **Coach**: "Sari is in Bali until 12 Dec. I put her on Cuti; she gets no reminders, her booked sessions in that week are cancelled, and on 13 Dec she is active again without me remembering."
@@ -52,7 +52,7 @@ A hold has a start date (today or later, or up to 30 days back for the coach), a
 
 Not changed: finance bills and the `tagihan` reminder (money is still owed), packages and quota numbers, the client's data.
 
-### AC1b — the client asks for a hold (optional part, owner wants it)
+### AD1b — the client asks for a hold (optional part, owner wants it)
 - Portal **Saya → Ajukan cuti** (also in the ＋ sheet): type Cuti or Sakit, start, end (required for Cuti, max `HOLD_REQUEST_MAX_DAYS`, default 60), short note.
 - One open request per client; no overlap with an existing hold.
 - The coach gets Telegram (first name + type + dates, **never the note**) and a push `cuti`; the panel Dashboard shows a "Minta cuti" card with **Setujui / Tolak** (same pattern as "Minta perpanjang").
@@ -69,17 +69,17 @@ The hold **note** can hold health information (Sakit). It is care data: admin on
 
 ---
 
-## AC2 — Measurement guide + Pinggul
+## AD2 — Measurement guide + Pinggul
 
 - Every body measure in the entry sheet (client and coach) and in the assessment sheet gets a **?** button. It opens a small sheet: a body figure with the tape line drawn at the right height (front or side view), 2–3 short steps in Indonesian, and the general rules (same time of day, before eating, tape snug but not pressing, measure twice).
 - One "Cara mengukur" link at the top of the sheet opens all measures in one scrollable guide.
 - **Pinggul** (hip) becomes the ninth measure: client and coach can enter it, it is charted, it shows in Progres, insights, share cards and the report. The assessment's hip field writes to the same place. Old hip values from Assessments are copied once into Progress so the history is complete.
-- Texts follow cited measuring protocols (WHO STEPS for waist and hip, ISAK for arm, chest, thigh); each step has a source in [Design.md](Design.md) §AC2.
+- Texts follow cited measuring protocols (WHO STEPS for waist and hip, ISAK for arm, chest, thigh); each step has a source in [Design.md](Design.md) §AD2.
 - Works offline (the figure and texts ship with the app), phone first.
 
 ---
 
-## AC3 — Coach logger upgrade (coach panel only)
+## AD3 — Coach logger upgrade (coach panel only)
 
 The client logger and the client food log are **not changed** (the client side is being re-planned in another session; this part only adds coach screens and coach-only server functions, and at most a read-only line on the client side where marked). The owner picks the items; all are listed so any can be struck.
 
@@ -100,7 +100,7 @@ Success: logging a full session for a client takes fewer taps than today (measur
 
 ---
 
-## AC4 — PDF report on demand
+## AD4 — PDF report on demand
 
 - A **Laporan PDF** button: portal (Progres page and Saya) for the client; the client page (top-bar menu) for the coach. **Nothing is generated, stored or sent until someone taps it.** Nothing is uploaded; the PDF is built on the device.
 - The sheet asks: period (4 minggu terakhir · Bulan ini · Bulan lalu · Sejak mulai · Pilih tanggal), sections on/off, and for the coach an optional message to the client (2–600 characters, kept as a draft on the device only).
@@ -125,5 +125,5 @@ Success: a client can open the PDF on a phone and read it without the app; gener
 1. Birthday greeting during a hold: **keep sending** (`HOLD_KEEP_TYPES = ['ulang-tahun']`).
 2. `kembali-latihan` welcome-back WhatsApp text: **off by default**.
 3. Coach cue / machine setting (W3) and daily food note (F2): **shown to the client, read-only**.
-4. AC3: **build all** of W1–W6 and F1–F3.
-5. AC4: **the client may make their own report** too.
+4. AD3: **build all** of W1–W6 and F1–F3.
+5. AD4: **the client may make their own report** too.
