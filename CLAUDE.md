@@ -2,7 +2,7 @@
 
 The full agent guide is docs/Agent.md, imported below. Plans for the current upgrade:
 docs/PRD.md (what), docs/Design.md (how), docs/Task.md (task list, T-100+).
-Phase index with status and folders: docs/README.md. Status key: built · pending (owner paused) · redo (plan being rewritten in another session).
+Phase index with status and folders: docs/README.md. Status key: built · planned (plan written, not built) · pending (owner paused) · redo (plan being rewritten in another session).
 Phases A–D, F, G (settings, price list, reminders, progress, landing, classes): docs/Task.md (T-100+; Phase D = PRD §10 / Design §10).
 Phase E (coach hub, coach profile, client care, built): docs/coach/ (PRD, Design, Agent, TODO; tasks T-200+).
 Phase H (Keuangan, built): docs/finance/ (PRD, Design, TODO; tasks T-400+).
@@ -23,5 +23,6 @@ Phase X (new client portal for phones, built): docs/portal2/ (tasks T-1900+).
 Phase Y (client portal as a Mac-like app on tablet, laptop, PC, built): docs/desk/ (tasks T-2000+).
 Phase Z (Web Push for coach and clients, built; installed by the owner via docs/push/Setup.md; the code still labels it "Fase X"): docs/push/ (tasks T-2100+).
 Phase AB (XNK Library + XNK Template + hub xnk.web.id for all coaches + owner dashboard XNK HQ at /adminxnk; production untouched, built): docs/library/ (tasks T-2200+); code in apps-script/xnk-library/.
+Phase AC (coach kit: client hold, measurement guide + Pinggul, coach logger upgrade on the coach side, PDF report on demand; **planned** 2026-11-26): docs/coachkit/ (PRD, Design, TODO; tasks T-2300+).
 
 @docs/Agent.md
