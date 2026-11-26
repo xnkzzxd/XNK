@@ -10,7 +10,7 @@
   const AXES = ['back', 'legs', 'chest', 'arms', 'core', 'shoulders'];
   const PART_GROUP = { 'back': 'back', 'upper legs': 'legs', 'lower legs': 'legs', 'chest': 'chest', 'shoulders': 'shoulders', 'neck': 'shoulders', 'waist': 'core', 'upper arms': 'arms', 'lower arms': 'arms' };
   const GROUP_PARTS = { back: ['back'], legs: ['upper legs', 'lower legs'], chest: ['chest'], shoulders: ['shoulders', 'neck'], core: ['waist'], arms: ['upper arms', 'lower arms'] };
-  const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri'];
+  const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri', 'pinggul'];
   const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'perjalanan', 'gizi', 'rekap', 'foto', 'badge'];
   const PERIOD_KINDS = { latihan: 1, exercises: 1, gizi: 1, ukuran: 1 };
   const PERIODS = ['hari', 'minggu', 'bulan', '3bulan'];
@@ -28,7 +28,7 @@
       today: 'Today', thisWeek: 'This week', thisMonthP: 'This month', last3: 'Last 3 months', perDay: '/day', sessionsPerWeek: 'Sessions per week', dailyKcal: 'Calories per day',
       vs: { session: 'vs last session', minggu: 'vs last week', bulan: 'vs last month', '3bulan': 'vs previous 3 months', day: 'vs day before', month: 'vs last month' }, sinceStart: 'since start', ofTarget: 'of target', pickPhoto: 'Pick a photo', noData: 'No data yet',
       parts: { back: 'Back', legs: 'Legs', chest: 'Chest', arms: 'Arms', core: 'Core', shoulders: 'Shoulders' },
-      m: { berat: 'Weight', pinggang: 'Waist', perut: 'Belly', dada: 'Chest', lenganKanan: 'Right arm', lenganKiri: 'Left arm', pahaKanan: 'Right thigh', pahaKiri: 'Left thigh' },
+      m: { berat: 'Weight', pinggang: 'Waist', perut: 'Belly', dada: 'Chest', lenganKanan: 'Right arm', lenganKiri: 'Left arm', pahaKanan: 'Right thigh', pahaKiri: 'Left thigh', pinggul: 'Hips' },
       badge: { sesi: n => n + ' sessions', streak: n => n + '-week streak', catat: n => n + ' days logged', pr: n => n === 1 ? 'First PR' : n + ' PRs' }
     },
     id: {
@@ -42,7 +42,7 @@
       today: 'Hari ini', thisWeek: 'Minggu ini', thisMonthP: 'Bulan ini', last3: '3 bulan terakhir', perDay: '/hari', sessionsPerWeek: 'Sesi per minggu', dailyKcal: 'Kalori per hari',
       vs: { session: 'vs sesi lalu', minggu: 'vs minggu lalu', bulan: 'vs bulan lalu', '3bulan': 'vs 3 bulan sebelumnya', day: 'vs hari sebelumnya', month: 'vs bulan lalu' }, sinceStart: 'sejak awal', ofTarget: 'dari target', pickPhoto: 'Pilih foto', noData: 'Belum ada data',
       parts: { back: 'Punggung', legs: 'Kaki', chest: 'Dada', arms: 'Lengan', core: 'Perut', shoulders: 'Bahu' },
-      m: { berat: 'Berat', pinggang: 'Pinggang', perut: 'Perut', dada: 'Dada', lenganKanan: 'Lengan kanan', lenganKiri: 'Lengan kiri', pahaKanan: 'Paha kanan', pahaKiri: 'Paha kiri' },
+      m: { berat: 'Berat', pinggang: 'Pinggang', perut: 'Perut', dada: 'Dada', lenganKanan: 'Lengan kanan', lenganKiri: 'Lengan kiri', pahaKanan: 'Paha kanan', pahaKiri: 'Paha kiri', pinggul: 'Pinggul' },
       badge: { sesi: n => n + ' sesi', streak: n => 'Streak ' + n + ' minggu', catat: n => n + ' hari dicatat', pr: n => n === 1 ? 'Rekor pertama' : n + ' rekor' }
     }
   };

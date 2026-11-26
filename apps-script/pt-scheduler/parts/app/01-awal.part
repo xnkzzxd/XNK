@@ -1003,7 +1003,7 @@
     const layer = $('sheet-layer');
     if (!layer || layer.classList.contains('hide')) return;
     // Lembar cari gerakan dari editor program: tutup/back kembali ke lembar program (isi form tetap).
-    if (ui.sheetReturn && ui.sheetOn && !$('ex-search').classList.contains('hide')) { const r = ui.sheetReturn; ui.sheetReturn = ''; openSheet(r); return; }
+    if (ui.sheetReturn && ui.sheetOn && ['ex-search', 'sheet-ukur'].some(function (k) { const x = $(k); return x && !x.classList.contains('hide'); })) { const r = ui.sheetReturn; ui.sheetReturn = ''; openSheet(r); return; }
     ui.sheetReturn = '';
     layer.classList.remove('open');
     ui.sheetOn = false;

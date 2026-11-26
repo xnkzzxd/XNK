@@ -478,7 +478,7 @@
   // Dipakai di portal klien (memberCall) dan di halaman klien panel (adminCall).
   const pg = { data: null, admin: {}, mode: 'member', memberId: null, side: 'depan', viewId: null };
   const PG_MEASURES = [['berat', 'Berat', 'kg', 20, 300], ['pinggang', 'Pinggang', 'cm', 30, 250], ['lenganKanan', 'Lengan kanan', 'cm', 10, 80], ['lenganKiri', 'Lengan kiri', 'cm', 10, 80],
-    ['perut', 'Perut', 'cm', 30, 250], ['pahaKanan', 'Paha kanan', 'cm', 20, 120], ['pahaKiri', 'Paha kiri', 'cm', 20, 120], ['dada', 'Dada', 'cm', 40, 200]];
+    ['perut', 'Perut', 'cm', 30, 250], ['pahaKanan', 'Paha kanan', 'cm', 20, 120], ['pahaKiri', 'Paha kiri', 'cm', 20, 120], ['dada', 'Dada', 'cm', 40, 200], ['pinggul', 'Pinggul', 'cm', 40, 200]];
   const pgNum = v => Number(v).toLocaleString('id-ID', { maximumFractionDigits: 1 });
   const pgDate = iso => { const p = String(iso).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
   const pgLabel = iso => pgDate(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });

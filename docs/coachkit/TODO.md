@@ -4,10 +4,10 @@ What: [PRD.md](PRD.md). How: [Design.md](Design.md). `[ ]` open · `[~]` in prog
 Build order: AC2 → AC1 → AC3 → AC4. Each task: tests, checks (Agent.md §5), docs (Agent.md §7, `apps-script/README.md`), tick here.
 
 ## AC2 — Measurement guide + Pinggul
-- [ ] **T-2300** `Sumber.md` for U01–U08: check each step against WHO STEPS / ISAK text; remove ⚠ or rewrite.
-- [ ] **T-2301** Pinggul in `PROGRESS_HEADERS` / `PROGRESS_MEASURES` (column 14), `saveAssessment` also writes it, `_hipCopyOnce_` (idempotent, locked), tests.
-- [ ] **T-2302** Every reader of measures shows Pinggul (portal, panel, insights, share cards with 9 measures in `share-check.js`, offline snapshot); Library `check-compat.js` green.
-- [ ] **T-2303** Part `20-cara-ukur.part`: `MEASURE_GUIDE`, figure with tape line (front/side, both sexes), `#sheet-ukur`, ? buttons in client, coach and assessment sheets; browser-check "Cara ukur".
+- [x] **T-2300** `Sumber.md` for U01–U08: steps checked against WHO and ISAK summaries (ISAK wording still to confirm against the official manual; noted in Sumber.md). Perut and Berat are marked as common practice, not protocols.
+- [x] **T-2301** Pinggul in `PROGRESS_HEADERS` / `PROGRESS_MEASURES` (column 14), `saveAssessment` also writes it, `_hipCopyOnce_` (idempotent, locked), tests.
+- [x] **T-2302** Every reader of measures shows Pinggul (portal, panel, insights, share cards); Library `check-compat.js` green. `offline.js` keeps its six-measure subset (changing it means syncing BookingPT-Client; not needed).
+- [x] **T-2303** Part `20-cara-ukur.part`: `UKUR_LINE` / `UKUR_STEPS`, front figure with tape line (both sexes; no side view needed), `#sheet-ukur`, ? buttons in client, coach and assessment sheets; browser-check "Cara ukur".
 
 ## AC1 — Hold a client
 - [ ] **T-2304** Sheet `ClientHolds`, `src/Cuti.gs` pure helpers + `HOLD` constants, tests.
@@ -19,15 +19,15 @@ Build order: AC2 → AC1 → AC3 → AC4. Each task: tests, checks (Agent.md §5
 - [ ] **T-2310** (AC1b) Member `requestMyHold`, `cancelMyHoldRequest`, `endMyHold`; admin `decideHoldRequest`; Telegram (no note), push kind `cuti`; tests.
 - [ ] **T-2311** (AC1b) Portal: hold card + **Saya sudah kembali**, **Ajukan cuti** sheet, pending/decided states, booking calendar shows hold days; Dashboard "Minta cuti" card; offline snapshot label.
 
-## AC3 — Coach logger upgrade (owner to strike items, PRD Q4)
+## AC3 — Coach logger upgrade (owner: build all)
 - [ ] **T-2320** W1 Simpan & selesaikan sesi from the logger.
 - [ ] **T-2321** W2 Isi seperti terakhir / Ulangi latihan terakhir / +kg chip.
-- [ ] **T-2322** W3 `ExerciseNotes` (setelan alat + cue), coach logger line; client read-only line only if PRD Q3 = yes.
+- [ ] **T-2322** W3 `ExerciseNotes` (setelan alat + cue), coach logger line; client read-only line (owner: yes).
 - [ ] **T-2323** W4 `deleteWorkoutEntries` + history actions with undo.
 - [ ] **T-2324** W5 Riwayat per gerakan on the client page (`getWorkoutExerciseHistory`).
 - [ ] **T-2325** W6 Two or more clients in one logger session.
 - [ ] **T-2326** F1 `logClientFood` / `deleteClientFood` + **+ Catat** in the Gizi tab.
-- [ ] **T-2327** F2 `FoodFeedback` + day mark and note; client read-only line only if PRD Q3 = yes.
+- [ ] **T-2327** F2 `FoodFeedback` + day mark and note; client read-only line (owner: yes).
 - [ ] **T-2328** F3 31-day food log, month calendar, weekly averages, top foods (`_foodMonthStats_`).
 - [ ] **T-2329** Browser-check "Catat coach" + client logger 390 px unchanged check.
 

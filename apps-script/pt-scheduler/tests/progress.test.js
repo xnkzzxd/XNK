@@ -19,7 +19,7 @@ test('a client saves weight and waist for today; the entry comes back with a cha
   const { env, ani } = setup();
   const res = env.call('saveMyMeasurement', ani, { berat: 72.44, pinggang: '80,5' });
   assert.equal(res.entries.length, 1);
-  assert.deepEqual(res.entries[0], { id: res.entries[0].id, tanggal: today(env), berat: 72.4, pinggang: 80.5, lenganKanan: '', lenganKiri: '', perut: '', pahaKanan: '', pahaKiri: '', dada: '', oleh: 'klien' });
+  assert.deepEqual(res.entries[0], { id: res.entries[0].id, tanggal: today(env), berat: 72.4, pinggang: 80.5, lenganKanan: '', lenganKiri: '', perut: '', pahaKanan: '', pahaKiri: '', dada: '', pinggul: '', oleh: 'klien' });
   assert.equal(res.summary.berat.change, 0);
   assert.equal(res.summary.berat.count, 1);
   const sheet = env.sheet('Progress').rows;
@@ -169,7 +169,7 @@ test('_addDaysIso_ handles month and year boundaries', () => {
   assert.equal(env.call('_addDaysIso_', '2026-12-31', 1), '2027-01-01');
 });
 
-test('eight body measurements: saved by client and coach, ranges checked, the old 7-column sheet is extended in place', () => {
+test('nine body measurements: saved by client and coach, ranges checked, the old 7-column sheet is extended in place', () => {
   const { env, ani } = setup();
   // An old Progress sheet from before the new columns: 7 headers and one row.
   env.ss.seed('Progress', [['ID', 'Member ID', 'Tanggal', 'Berat (kg)', 'Pinggang (cm)', 'Dicatat Oleh', 'Diubah Pada'], ['PRG-OLD', 'PT-A', daysAgo(env, 20), 75, 84, 'klien', 'x']]);
@@ -180,9 +180,9 @@ test('eight body measurements: saved by client and coach, ranges checked, the ol
   assert.equal(res.entries[0].dada, '');   // the old row reads blank, not NaN
   assert.equal(res.summary.dada.count, 1);
   assert.equal(res.summary.berat.change, -1);
-  assert.equal(res.measures.length, 8);
+  assert.equal(res.measures.length, 9);
   const head = Array.from(env.sheet('Progress').rows[0]);
-  assert.deepEqual(head.slice(7), ['Lengan Kanan (cm)', 'Lengan Kiri (cm)', 'Perut (cm)', 'Paha Kanan (cm)', 'Paha Kiri (cm)', 'Dada (cm)']);
+  assert.deepEqual(head.slice(7), ['Lengan Kanan (cm)', 'Lengan Kiri (cm)', 'Perut (cm)', 'Paha Kanan (cm)', 'Paha Kiri (cm)', 'Dada (cm)', 'Pinggul (cm)']);
   env.call('saveMyMeasurement', ani, { perut: 89 });   // idempotent migration, same-day update keeps the others
   assert.equal(env.sheet('Progress').rows.length, 3);
   assert.throws(() => env.call('saveMyMeasurement', ani, { lenganKiri: 5 }), /lengan kiri harus angka antara 10 dan 80/i);
@@ -203,6 +203,46 @@ test('the assessment saves the eight measures to Progress as coach entries, keep
   assert.equal(a.bodyFat, 22);
   assert.equal(a.hip, 95);
   assert.throws(() => env.call('saveAssessment', t, 'PT-A', { perut: 5 }), /perut/i);
+});
+
+test('Pinggul (Fase AC): client and coach save it, the assessment hip lands in Progress too, limits 40-200', () => {
+  const { env, ani } = setup();
+  const res = env.call('saveMyMeasurement', ani, { pinggul: '96,5' });
+  assert.equal(res.entries[0].pinggul, 96.5);
+  assert.equal(res.measures.find(m => m.key === 'pinggul').label, 'Lingkar pinggul');
+  assert.equal(env.sheet('Progress').rows[1][13], 96.5, 'column N');
+  assert.throws(() => env.call('saveMyMeasurement', ani, { pinggul: 20 }), /pinggul harus angka antara 40 dan 200/i);
+  const t = env.adminToken();
+  env.call('saveAssessment', t, 'PT-B', { hip: 101 });
+  const e = env.call('getMemberProgress', t, 'PT-B').entries[0];
+  assert.equal(e.pinggul, 101);
+  assert.equal(e.oleh, 'coach');
+  assert.equal(env.call('getClientCare', t, 'PT-B').assessment.hip, 101, 'Assessments column M is still written');
+  env.call('saveAssessment', t, 'PT-B', { pinggul: 99 });
+  assert.equal(env.call('getClientCare', t, 'PT-B').assessment.hip, 99, 'the new name fills column M as well');
+});
+
+test('old assessment hips are copied once into Progress: fills empty cells, adds missing days, never overwrites, runs once', () => {
+  const { env } = setup();
+  const d1 = daysAgo(env, 30), d2 = daysAgo(env, 10);
+  const asmHead = ['ID', 'Member ID', 'Tanggal', 'Tujuan Utama', 'Riwayat Latihan', 'Preferensi Jadwal', 'Motivasi', 'Catatan Coach', 'Diubah Pada', 'Lemak Tubuh (%)', 'Dada (cm)', 'Lengan (cm)', 'Pinggul (cm)'];
+  env.ss.seed('Assessments', [asmHead,
+    ['ASM-1', 'PT-A', d1, 'x', '', '', '', '', '', '', '', '', 98],
+    ['ASM-2', 'PT-A', d2, 'x', '', '', '', '', '', '', '', '', 97],
+    ['ASM-3', 'PT-B', d2, 'x', '', '', '', '', '', '', '', '', ''],
+    ['ASM-4', 'PT-B', d1, 'x', '', '', '', '', '', '', '', '', 5]]);
+  env.ss.seed('Progress', [['ID', 'Member ID', 'Tanggal', 'Berat (kg)', 'Pinggang (cm)', 'Dicatat Oleh', 'Diubah Pada'],
+    ['PRG-1', 'PT-A', d2, 70, '', 'klien', 'x']]);
+  assert.equal(env.call('_hipCopyOnce_'), 2);
+  const t = env.adminToken();
+  const es = env.call('getMemberProgress', t, 'PT-A').entries;
+  assert.deepEqual(es.map(e => [e.tanggal, e.berat, e.pinggul]), [[d1, '', 98], [d2, 70, 97]]);
+  assert.equal(env.call('getMemberProgress', t, 'PT-B').entries.length, 0, 'empty and out-of-range hips are skipped');
+  assert.equal(env.props.HIP_COPY_V1, '2');
+  env.sheet('Progress').rows[1][13] = 90;
+  assert.equal(env.call('_hipCopyOnce_'), 0, 'second run does nothing');
+  env.props.HIP_COPY_V1 = '';
+  assert.equal(env.call('_hipCopyRun_'), 0, 'a rerun never overwrites a Progress value');
 });
 
 test('monthly challenge: sessions completed this WIB month, target from a property (default 8, 1-31)', () => {

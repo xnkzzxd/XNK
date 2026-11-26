@@ -121,9 +121,9 @@ Success: a client can open the PDF on a phone and read it without the app; gener
 
 ---
 
-## Open questions for the owner
-1. Birthday greeting during a hold: keep sending (proposed) or skip?
-2. `kembali-latihan` welcome-back WhatsApp text: off by default (proposed), or on?
-3. AC3 W3 and F2: show the coach's cue / food note to the client (proposed yes, read-only), or coach-only?
-4. AC3: which of W1–W6 and F1–F3 to build (all proposed; W6 and F3 are the largest).
-5. AC4: should the client be allowed to make their own report (proposed yes), or only the coach?
+## Owner decisions (2026-11-26)
+1. Birthday greeting during a hold: **keep sending** (`HOLD_KEEP_TYPES = ['ulang-tahun']`).
+2. `kembali-latihan` welcome-back WhatsApp text: **off by default**.
+3. Coach cue / machine setting (W3) and daily food note (F2): **shown to the client, read-only**.
+4. AC3: **build all** of W1–W6 and F1–F3.
+5. AC4: **the client may make their own report** too.

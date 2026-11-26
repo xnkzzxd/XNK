@@ -1003,7 +1003,7 @@
     const layer = $('sheet-layer');
     if (!layer || layer.classList.contains('hide')) return;
     // Lembar cari gerakan dari editor program: tutup/back kembali ke lembar program (isi form tetap).
-    if (ui.sheetReturn && ui.sheetOn && !$('ex-search').classList.contains('hide')) { const r = ui.sheetReturn; ui.sheetReturn = ''; openSheet(r); return; }
+    if (ui.sheetReturn && ui.sheetOn && ['ex-search', 'sheet-ukur'].some(function (k) { const x = $(k); return x && !x.classList.contains('hide'); })) { const r = ui.sheetReturn; ui.sheetReturn = ''; openSheet(r); return; }
     ui.sheetReturn = '';
     layer.classList.remove('open');
     ui.sheetOn = false;
@@ -1374,6 +1374,7 @@
     { id: 'tes-ulang', title: 'Tes ulang', sub: 'Tiap Senin: klien yang tes kebugaran terakhirnya 28 hari lalu atau lebih' },
     { id: 'hidup-sehat', title: 'Hidup sehat', sub: 'Tiap pagi (bawaan 05:00): tombol WhatsApp ajakan hidup sehat dan cardio untuk semua klien aktif' },
     { id: 'ulang-tahun', title: 'Ulang tahun', sub: 'Tiap hari: tombol WhatsApp ucapan untuk klien yang berulang tahun' },
+    { id: 'kembali-latihan', title: 'Kembali latihan', sub: 'Tiap hari (bawaan 07:00): tombol WhatsApp selamat datang kembali untuk klien yang cutinya selesai kemarin' },
     { id: 'tagihan', title: 'Tagihan', sub: 'Tiap hari: klien yang belum lunas lebih dari 3 hari, dengan tombol WhatsApp. Butuh Keuangan aktif.' },
     { id: 'ringkasan-owner', title: 'Ringkasan bulanan (untukmu)', sub: 'Tanggal 1: satu pesan Telegram berisi sesi, klien baru, pendapatan, dan hasil target bulan lalu' }
   ];
@@ -4883,7 +4884,7 @@
       ' onchange="window.toggleMealReminder(\'' + mid + '\',this)"><span></span></label></div>';
   }
   // Pengingat WhatsApp per klien (T-123): mati per jenis; makan punya saklarnya sendiri di atas
-  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang'], ['tes-ulang', 'Tes ulang', 'Ajakan tes kebugaran tiap 4 minggu'], ['ulang-tahun', 'Ulang tahun', 'Ucapan di hari ulang tahun'], ['hidup-sehat', 'Hidup sehat', 'Ajakan hidup sehat & cardio tiap pagi']];
+  const REMIND_TYPES = [['sesi-besok', 'Sesi besok', 'Ajakan konfirmasi sesi besok'], ['booking-minggu', 'Booking mingguan', 'Ajakan booking tiap Minggu'], ['pr', 'PR (Task)', 'Pengingat PR telat / jatuh tempo'], ['rekap-bulanan', 'Rekap bulanan', 'Rekap latihan tiap awal bulan'], ['selamat-milestone', 'Selamat milestone', 'Ucapan saat meraih badge'], ['waktunya-ukur', 'Waktunya ukur', 'Ajakan catat berat/pinggang'], ['tes-ulang', 'Tes ulang', 'Ajakan tes kebugaran tiap 4 minggu'], ['ulang-tahun', 'Ulang tahun', 'Ucapan di hari ulang tahun'], ['kembali-latihan', 'Kembali latihan', 'Ucapan saat cuti selesai'], ['hidup-sehat', 'Hidup sehat', 'Ajakan hidup sehat & cardio tiap pagi']];
   function reminderPrefsHtml(m) {
     const off = m.reminderOff || [];
     return '<div><div class="section-head"><h4 class="section-title">Pengingat WhatsApp</h4></div><div class="list" id="profile-remind-prefs">' +
@@ -7890,7 +7891,7 @@
     careMember = id; const a = (care[id] || {}).assessment || {};
     $('as-goal').value = a.goal || ''; $('as-history').value = a.history || ''; $('as-pref').value = a.schedulePref || ''; $('as-motivation').value = a.motivation || ''; $('as-coach-notes').value = a.coachNotes || '';
     ['as-weight', 'as-waist'].concat(PG_MEASURES.slice(2).map(m => 'as-' + m[0])).forEach(k => { $(k).value = ''; });
-    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat; $('as-hip').value = a.hip === '' || a.hip == null ? '' : a.hip;
+    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat;   // pinggul kosong seperti ukuran lain (Fase AC: masuk Progres)
     openSheet('modal-care-assess');
   };
   window.submitAssessment = function (e) {
@@ -7898,11 +7899,11 @@
     const v = k => $(k).value.trim().replace(',', '.');
     // Antrean simpan: isian assessment tampil sekarang; ukuran & ringkasan progres dari server menyusul.
     const id = careMember, at = Date.now();
-    const data = { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), hip: v('as-hip'),
-      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada') };
+    const data = { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'),
+      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada'), pinggul: v('as-pinggul') };
     const old = care[id];
     const first = !((old || {}).tests || []).length;
-    if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.hip }) }));
+    if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.pinggul !== '' ? data.pinggul : (old.assessment || {}).hip }) }));
     optimistic({ q: { mode: 'admin', fn: 'saveAssessment', args: [id, data] }, sheet: true, ok: 'Assessment disimpan.', label: 'Assessment',
       then: function () {
         if (window.pgLoadAdmin) window.pgLoadAdmin(id);
@@ -8513,7 +8514,7 @@
   // Dipakai di portal klien (memberCall) dan di halaman klien panel (adminCall).
   const pg = { data: null, admin: {}, mode: 'member', memberId: null, side: 'depan', viewId: null };
   const PG_MEASURES = [['berat', 'Berat', 'kg', 20, 300], ['pinggang', 'Pinggang', 'cm', 30, 250], ['lenganKanan', 'Lengan kanan', 'cm', 10, 80], ['lenganKiri', 'Lengan kiri', 'cm', 10, 80],
-    ['perut', 'Perut', 'cm', 30, 250], ['pahaKanan', 'Paha kanan', 'cm', 20, 120], ['pahaKiri', 'Paha kiri', 'cm', 20, 120], ['dada', 'Dada', 'cm', 40, 200]];
+    ['perut', 'Perut', 'cm', 30, 250], ['pahaKanan', 'Paha kanan', 'cm', 20, 120], ['pahaKiri', 'Paha kiri', 'cm', 20, 120], ['dada', 'Dada', 'cm', 40, 200], ['pinggul', 'Pinggul', 'cm', 40, 200]];
   const pgNum = v => Number(v).toLocaleString('id-ID', { maximumFractionDigits: 1 });
   const pgDate = iso => { const p = String(iso).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
   const pgLabel = iso => pgDate(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
@@ -9015,7 +9016,7 @@
       if (!bad && (isNaN(Number(v)) || Number(v) < m[3] || Number(v) > m[4])) bad = m[1] + ' harus antara ' + m[3] + ' dan ' + m[4] + ' ' + m[2] + '.';
     });
     if (!any) return fail('Isi minimal satu ukuran (berat atau lingkar badan).');
-    if (bad) { if (/Lengan|Perut|Paha|Dada/.test(bad)) $('pg-more').open = true; return fail(bad); }
+    if (bad) { if (/Lengan|Perut|Paha|Dada|Pinggul/.test(bad)) $('pg-more').open = true; return fail(bad); }
     fail('');
     const mode = pg.mode, mid = pg.memberId, tgl = $('pg-tanggal').value;
     optimistic({ sheet: true, errEl: 'pg-err', ok: 'Tersimpan.', label: 'Ukuran tubuh',
@@ -12185,7 +12186,8 @@
     sesi: ['Sesi', 'Sesi besok dan pagi hari sesi'],
     pr: ['PR', 'PR yang jatuh tempo atau terlambat'],
     makan: ['Makan', 'Waktu makan pagi dan sore'],
-    perpanjangan: ['Perpanjangan', 'Klien minta perpanjang paket']
+    perpanjangan: ['Perpanjangan', 'Klien minta perpanjang paket'],
+    cuti: ['Cuti', 'Klien minta cuti atau kembali latihan']
   };
   const px = { key: '', ep: '', sub: null, ready: false, initing: false, st: null, open: false, busy: false };
 
@@ -13537,6 +13539,88 @@
     el.innerHTML = '<span class="ro-ic" aria-hidden="true">' + icon('lock') + '</span><div class="ro-tx"><b>Mode baca saja</b><span>' + h(txt) + '</span>' + note + '</div>';
     el.classList.remove('hide');
     paintIcons();
+  };
+  // ═══ Fase AC (T-2303): cara mengukur ukuran tubuh ═══
+  // Tombol ? di samping tiap ukuran (lembar catat klien/coach, assessment) membuka #sheet-ukur: figur depan sendiri
+  // (figure/figure.min.json, pria/wanita) dengan garis pita di tinggi yang benar, 3 langkah singkat dan aturan umum.
+  // Sumber tiap langkah: docs/coachkit/Sumber.md (U01–U08). Tanpa panggilan server; figur dimuat malas seperti peta otot.
+  // Garis pita: [tinggi %, x kiri %, x kanan %] dari viewBox figur depan (724 × 1448). Kanan klien = sisi kiri gambar.
+  const UKUR_LINE = {
+    m: { dada: [30, 31, 69], lengan: [37, 18, 30], pinggang: [41, 32, 68], perut: [44, 32, 68], pinggul: [49.5, 31, 69], paha: [56, 32, 49] },
+    f: { dada: [29, 31, 55], lengan: [36, 14, 26], pinggang: [40, 31, 56], perut: [44, 29, 58], pinggul: [50, 25, 62], paha: [56, 26, 43] }
+  };
+  // Sumbu tengah figur (x %) untuk mencerminkan sisi kiri; figur wanita lebih sempit dari viewBox.
+  const UKUR_MID = { m: 50, f: 44 };
+  const UKUR_STEPS = {
+    berat: ['Timbang pagi hari setelah ke kamar kecil, sebelum makan dan minum.', 'Pakai baju tipis, tanpa alas kaki.', 'Pakai timbangan yang sama, di lantai yang rata dan keras.'],
+    pinggang: ['Berdiri tegak, perut rileks, lengan di samping badan.', 'Cari tulang rusuk paling bawah dan puncak tulang pinggul; lingkarkan pita tepat di tengah keduanya.', 'Baca angkanya di akhir napas keluar yang biasa.'],
+    perut: ['Berdiri tegak, perut rileks.', 'Lingkarkan pita tepat setinggi pusar.', 'Baca di akhir napas keluar yang biasa, tanpa menahan atau mengempiskan perut.'],
+    pinggul: ['Berdiri tegak, kedua kaki rapat, lengan di samping badan.', 'Lingkarkan pita di bagian bokong yang paling menonjol (paling lebar).', 'Lihat cermin dari samping supaya pita lurus mendatar.'],
+    dada: ['Berdiri tegak, lengan rileks di samping badan.', 'Lingkarkan pita di tengah dada, lewat bawah ketiak, setinggi puting.', 'Baca di akhir napas keluar yang biasa.'],
+    lengan: ['Biarkan lengan tergantung rileks di samping badan.', 'Cari titik tengah antara ujung bahu dan siku; lingkarkan pita di situ.', 'Pita mendatar, tidak mengikuti lekuk otot.'],
+    paha: ['Berdiri tegak, berat badan di kedua kaki, kaki sedikit terbuka.', 'Lingkarkan pita sekitar 1 cm di bawah lipatan bokong.', 'Pita mendatar dan tidak menekan kulit.']
+  };
+  const UKUR_UMUM = ['Ukur di waktu yang sama, sebaiknya pagi sebelum makan.', 'Pita menempel di kulit, kencang tetapi tidak menekan.', 'Ukur dua kali dan pakai rata-ratanya.', 'Selalu sisi yang sama, dan bila bisa oleh orang yang sama.'];
+  // Kunci form → [kunci, nama, garis, sisi]. Sisi 'kiri' = cermin dari sisi kanan.
+  const UKUR_KEYS = [['berat', 'Berat', '', ''], ['pinggang', 'Pinggang', 'pinggang', ''], ['perut', 'Perut', 'perut', ''], ['pinggul', 'Pinggul', 'pinggul', ''],
+    ['dada', 'Dada', 'dada', ''], ['lenganKanan', 'Lengan kanan', 'lengan', 'kanan'], ['lenganKiri', 'Lengan kiri', 'lengan', 'kiri'],
+    ['pahaKanan', 'Paha kanan', 'paha', 'kanan'], ['pahaKiri', 'Paha kiri', 'paha', 'kiri']];
+  window.UKUR_KEYS = UKUR_KEYS.map(x => x[0]);
+  const ukurDef = k => UKUR_KEYS.find(x => x[0] === k) || UKUR_KEYS[0];
+  const ukur = { key: 'pinggang', sex: 'm' };
+  /** Figur depan + garis pita (SVG). null bila figur belum ada di perangkat. */
+  function ukurFigSvg(key, sex) {
+    const f = figSync(), v = f && f.views && (f.views[sex] || f.views.m);
+    if (!v || !v.front) return null;
+    const s = f.views[sex] ? sex : 'm', d = ukurDef(key), L = d[2] ? UKUR_LINE[s][d[2]] : null;
+    let tape = '';
+    if (L) {
+      let x1 = L[1], x2 = L[2];
+      if (d[3] === 'kiri') { const mid = UKUR_MID[s]; x1 = 2 * mid - L[2]; x2 = 2 * mid - L[1]; }
+      const y = (L[0] * 14.48).toFixed(1);
+      tape = '<line class="ukl" x1="' + (x1 * 7.24).toFixed(1) + '" x2="' + (x2 * 7.24).toFixed(1) + '" y1="' + y + '" y2="' + y + '"/>';
+    }
+    return '<svg class="uk-svg" viewBox="' + h(v.front.vb) + '" role="img" aria-label="' + h('Letak pita: ' + d[1]) + '"><path class="ukb" d="' + v.front.outline + '"/>' + tape + '</svg>';
+  }
+  window.ukurFigSvg = ukurFigSvg;
+  function ukurRender() {
+    const d = ukurDef(ukur.key), steps = UKUR_STEPS[d[2] || 'berat'];
+    const fig = d[2] ? ukurFigSvg(ukur.key, ukur.sex) : '<span class="uk-scale" aria-hidden="true">' + icon('scale') + '</span>';
+    if (!fig) figEnsure().then(function (x) { const el = $('sheet-ukur'); if (x && el && !el.classList.contains('hide')) ukurRender(); });
+    $('uk-title').textContent = 'Cara mengukur ' + d[1].toLowerCase();
+    setHTML('uk-body',
+      '<div class="chips uk-chips" role="tablist" aria-label="Pilih ukuran">' + UKUR_KEYS.map(function (x) {
+        const on = x[0] === ukur.key;
+        return '<button type="button" role="tab" class="chip' + (on ? ' active' : '') + '" aria-selected="' + on + '" onclick="window.ukurPick(\'' + x[0] + '\')">' + h(x[1]) + '</button>';
+      }).join('') + '</div>' +
+      '<div class="uk-wrap"><div class="uk-fig">' + (fig || '<span class="skel uk-skel"></span>') + '</div>' +
+      '<div class="stack" style="gap:12px"><ol class="uk-steps">' + steps.map(function (t) { return '<li>' + h(t) + '</li>'; }).join('') + '</ol>' +
+      (d[3] ? '<p class="hint">Ukur sisi ' + d[3] + ' setiap kali, supaya angkanya bisa dibandingkan.</p>' : '') +
+      '<div class="uk-umum"><p class="eyebrow">Supaya angka bisa dibandingkan</p><ul class="uk-steps">' + UKUR_UMUM.map(function (t) { return '<li>' + h(t) + '</li>'; }).join('') + '</ul></div>' +
+      '<p class="li-sub uk-src">Cara ukur mengikuti panduan WHO (pinggang, pinggul) dan ISAK (lengan, dada, paha).</p></div></div>');
+    ukurChipIntoView();
+  }
+  // Chip terpilih ke tengah baris chip (hanya geser mendatar; isi sheet tidak ikut bergulir).
+  function ukurChipIntoView() {
+    const row = document.querySelector('#uk-body .uk-chips'), act = row && row.querySelector('.active');
+    if (act && row.clientWidth) row.scrollLeft = Math.max(0, act.offsetLeft - row.offsetLeft - (row.clientWidth - act.offsetWidth) / 2);
+  }
+  window.ukurPick = function (k) { ukur.key = ukurDef(k)[0]; ukurRender(); };
+  /** Buka panduan untuk satu ukuran. Lembar yang sedang terbuka (catat / assessment) kembali saat panduan ditutup. */
+  window.ukurOpen = function (key) {
+    const layer = $('sheet-layer');
+    const open = layer && !layer.classList.contains('hide') ? layer.querySelector(':scope > .sheet:not(.hide)') : null;
+    let sex = 'm';
+    try {
+      if (open && open.id === 'modal-care-assess') sex = figSexOf('admin', careMember);
+      else if (open && open.id === 'sheet-progress') sex = pg.mode === 'admin' ? figSexOf('admin', pg.memberId) : figSexOf('client');
+      else if (window.myNutrition) sex = figSexOf('client');
+    } catch (e) {}
+    ukur.key = ukurDef(key)[0]; ukur.sex = sex;
+    ukurRender();
+    if (open && open.id !== 'sheet-ukur') ui.sheetReturn = open.id;
+    openSheet('sheet-ukur');
+    setTimeout(ukurChipIntoView, 60);
   };
 })();
 </script>

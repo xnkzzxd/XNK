@@ -72,7 +72,7 @@ function _warmTickRun_() {
     } catch (e) { res.admin = 'gagal'; Logger.log('Warm getAdminMore: ' + e); }
   }
   let ids = [];
-  try { ids = _warmPick_(_readSchedulesAll_(), Date.now(), WARM_MAX_CLIENTS); } catch (e) { Logger.log('Warm jadwal: ' + e); }
+  try { const held = _holdMapToday_(); ids = _warmPick_(_readSchedulesAll_(), Date.now(), WARM_MAX_CLIENTS).filter(function(x) { return !held[x]; }); } catch (e) { Logger.log('Warm jadwal: ' + e); }
   for (let i = 0; i < ids.length && left() > 4000; i++) {
     const id = ids[i];
     try {

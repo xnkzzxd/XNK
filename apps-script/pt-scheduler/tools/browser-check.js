@@ -479,6 +479,50 @@ async function contrastReport(page) {
     await context.close(); await reload.context.close(); await revoked.context.close();
   })().catch(sectionCrash);
 
+  // ── Fase AC (T-2303): tombol ? di tiap ukuran tubuh → lembar cara mengukur, kembali ke form ───────
+  console.log('Cara ukur (portal + assessment coach)');
+  await (async () => {
+    const env = richEnv();
+    const adminTok = env.adminToken(), memberTok = env.memberToken(KEY_A);
+    for (const [vp, label] of [[MOBILE, 'phone'], [DESKTOP, 'desktop']]) {
+      const pub = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: memberTok }, { viewport: vp, wait: 1500 });
+      const page = pub.page;
+      await page.evaluate(() => window.pgOpenEntry('member'));
+      await page.waitForTimeout(500);
+      const keys = await page.$$eval('#sheet-progress .help-btn', bs => bs.map(b => (b.getAttribute('onclick').match(/'([^']+)'/) || [])[1]));
+      check(keys.length === 9 && ['berat', 'pinggang', 'pinggul', 'pahaKiri'].every(k => keys.includes(k)), 'portal ' + label + ': every measure (9, Pinggul included) has a ? button');
+      check(await page.locator('#pg-more #pg-pinggul').count() === 1, 'portal ' + label + ': Pinggul input is in the entry sheet (under "Lingkar badan lainnya")');
+      const box = await page.locator('#sheet-progress .help-btn').first().boundingBox();
+      check(box && box.width >= 44 && box.height >= 44, 'portal ' + label + ': ? button is a 44 px touch target');
+      await page.fill('#pg-pinggang', '81');
+      await page.click('#sheet-progress .help-btn[onclick*="pinggang"]');
+      await page.waitForTimeout(700);
+      check(await visible(page, '#sheet-ukur') && (await page.textContent('#uk-title')).includes('pinggang'), 'portal ' + label + ': the guide opens on the tapped measure');
+      check(await page.locator('#uk-body .uk-svg .ukl').count() === 1, 'portal ' + label + ': the figure shows one tape line');
+      check((await page.textContent('#uk-body')).includes('tulang rusuk paling bawah'), 'portal ' + label + ': waist steps follow the WHO protocol');
+      await page.click('#uk-body .uk-chips button:has-text("Berat")');
+      check(await page.locator('#uk-body .uk-svg').count() === 0 && (await page.textContent('#uk-title')).includes('berat'), 'portal ' + label + ': Berat shows the scale rules, no tape line');
+      check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'portal ' + label + ': guide causes no sideways scroll');
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(600);
+      check(await visible(page, '#sheet-progress') && (await page.inputValue('#pg-pinggang')) === '81', 'portal ' + label + ': closing the guide returns to the entry sheet with the typed value');
+      noErrors(pub.errors);
+      await pub.context.close();
+    }
+    const adm = await openPage(browser, env, '/Index', [], { xnk_admin_token: adminTok }, { viewport: MOBILE, wait: 1500 });
+    await adm.page.evaluate(() => window.openAssessment('PT-A'));
+    await adm.page.waitForTimeout(500);
+    check(await adm.page.locator('#modal-care-assess .help-btn').count() === 9 && await visible(adm.page, '#as-pinggul'), 'assessment: 9 ? buttons and Pinggul with the other measures');
+    await adm.page.click('#modal-care-assess .help-btn[onclick*="pahaKiri"]');
+    await adm.page.waitForTimeout(700);
+    check((await adm.page.textContent('#uk-title')).includes('paha kiri') && (await adm.page.textContent('#uk-body')).includes('Ukur sisi kiri'), 'assessment: left thigh guide names the side');
+    await adm.page.evaluate(() => window.closeModal());
+    await adm.page.waitForTimeout(600);
+    check(await visible(adm.page, '#modal-care-assess'), 'assessment: closing the guide returns to the assessment');
+    noErrors(adm.errors);
+    await adm.context.close();
+  })().catch(sectionCrash);
+
   // ── T-2251: mode baca saja (langganan coach di hub) — pita tenang di panel dan portal ───────
   console.log('Mode baca saja (pita panel + portal)');
   await (async () => {

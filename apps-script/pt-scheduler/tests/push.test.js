@@ -81,7 +81,7 @@ test('per-device switches keep their own groups and only accept groups of that r
   env.call('saveAdminPush', admin, sub(2), 'Laptop');
   st = env.call('setAdminPushPrefs', admin, sub(2).endpoint, ['perpanjangan', 'pr']);
   assert.deepEqual(st.current.off, ['perpanjangan']);
-  assert.deepEqual(st.kinds, ['sesi', 'perpanjangan']);
+  assert.deepEqual(st.kinds, ['sesi', 'perpanjangan', 'cuti']);   // Fase AC1: klien minta cuti / kembali
 });
 
 test('sesi besok: one short message per client (first name, times, coach) and one summary for the coach', () => {

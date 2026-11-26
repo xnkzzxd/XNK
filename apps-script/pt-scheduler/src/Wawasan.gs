@@ -331,14 +331,17 @@ function _clientSignalsCalc_(ctx, today) {
     const rem = Math.max(0, (Number(m.total) || 0) - (Number(m.used) || 0)), total = Number(m.total) || 0;
     const flags = [];
     const ref0 = lastDone || m.joined || '';
-    if (total > 0 && rem > 0 && ref0 && _insDays_(ref0, today) >= days) flags.push('inaktif');
+    // Fase AC1: klien yang ditahan tidak ditandai tidak aktif / hampir habis / PR telat, dan tidak dihitung aktif.
+    const held = !!(ctx.holds && ctx.holds[m.id]);
+    if (!held && total > 0 && rem > 0 && ref0 && _insDays_(ref0, today) >= days) flags.push('inaktif');
     if (total > 0 && rem === 0) flags.push('habis');
-    else if (total > 0 && rem <= 2 && !list.some(function(s) { return !s.done && s.date >= today; })) flags.push('hampir');
-    if (ctx.overdue && ctx.overdue[m.id]) flags.push('pr-telat');
+    else if (!held && total > 0 && rem <= 2 && !list.some(function(s) { return !s.done && s.date >= today; })) flags.push('hampir');
+    if (!held && ctx.overdue && ctx.overdue[m.id]) flags.push('pr-telat');
     if (ctx.renewal && ctx.renewal[m.id]) flags.push('perpanjang');
     if (ctx.lowRating && ctx.lowRating[m.id]) flags.push('rating-rendah');
     byId[m.id] = { lastDone: lastDone, weeks: weeks, weightDelta: weightDelta, flags: flags };
-    if (total === 0 || rem > 0) {
+    if (held) byId[m.id].held = true;
+    if (!held && (total === 0 || rem > 0)) {
       aktif++;
       if (lastDone && _insDays_(lastDone, today) <= 14) konsisten++;
     }
@@ -373,7 +376,8 @@ function _clientSignals_(now) {
   return _clientSignalsCalc_({
     members: rows.map(function(r) { return { id: String(r[0]).trim(), total: parseInt(sanitizeValue(r[8])) || 10, used: parseInt(sanitizeValue(r[9])) || 0, joined: _insIsoFromDmy_(sanitizeValue(r[4])) }; }),
     sessions: _getSchedulesAll_().map(function(s) { return { memberId: String(s.memberId).trim(), date: _wibDate_(s.start), done: String(s.status || '').toLowerCase() === 'completed' }; }),
-    weights: weights, overdue: overdue, renewal: renewal, lowRating: lowRating, inactiveDays: _inactiveDays_()
+    weights: weights, overdue: overdue, renewal: renewal, lowRating: lowRating, inactiveDays: _inactiveDays_(),
+    holds: _holdMapToday_()   // Fase AC1
   }, today);
 }
 

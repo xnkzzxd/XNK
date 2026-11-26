@@ -700,7 +700,7 @@
     careMember = id; const a = (care[id] || {}).assessment || {};
     $('as-goal').value = a.goal || ''; $('as-history').value = a.history || ''; $('as-pref').value = a.schedulePref || ''; $('as-motivation').value = a.motivation || ''; $('as-coach-notes').value = a.coachNotes || '';
     ['as-weight', 'as-waist'].concat(PG_MEASURES.slice(2).map(m => 'as-' + m[0])).forEach(k => { $(k).value = ''; });
-    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat; $('as-hip').value = a.hip === '' || a.hip == null ? '' : a.hip;
+    $('as-fat').value = a.bodyFat === '' || a.bodyFat == null ? '' : a.bodyFat;   // pinggul kosong seperti ukuran lain (Fase AC: masuk Progres)
     openSheet('modal-care-assess');
   };
   window.submitAssessment = function (e) {
@@ -708,11 +708,11 @@
     const v = k => $(k).value.trim().replace(',', '.');
     // Antrean simpan: isian assessment tampil sekarang; ukuran & ringkasan progres dari server menyusul.
     const id = careMember, at = Date.now();
-    const data = { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'), hip: v('as-hip'),
-      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada') };
+    const data = { goal: v('as-goal'), history: $('as-history').value, schedulePref: v('as-pref'), motivation: v('as-motivation'), coachNotes: $('as-coach-notes').value, weight: v('as-weight'), waist: v('as-waist'), bodyFat: v('as-fat'),
+      lenganKanan: v('as-lenganKanan'), lenganKiri: v('as-lenganKiri'), perut: v('as-perut'), pahaKanan: v('as-pahaKanan'), pahaKiri: v('as-pahaKiri'), dada: v('as-dada'), pinggul: v('as-pinggul') };
     const old = care[id];
     const first = !((old || {}).tests || []).length;
-    if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.hip }) }));
+    if (old && !old.error) window.careSet(id, Object.assign({}, old, { assessment: Object.assign({}, old.assessment || {}, { goal: data.goal, history: data.history, schedulePref: data.schedulePref, motivation: data.motivation, coachNotes: data.coachNotes, bodyFat: data.bodyFat, hip: data.pinggul !== '' ? data.pinggul : (old.assessment || {}).hip }) }));
     optimistic({ q: { mode: 'admin', fn: 'saveAssessment', args: [id, data] }, sheet: true, ok: 'Assessment disimpan.', label: 'Assessment',
       then: function () {
         if (window.pgLoadAdmin) window.pgLoadAdmin(id);

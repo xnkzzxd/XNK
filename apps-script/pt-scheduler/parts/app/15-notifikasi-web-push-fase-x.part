@@ -7,7 +7,8 @@
     sesi: ['Sesi', 'Sesi besok dan pagi hari sesi'],
     pr: ['PR', 'PR yang jatuh tempo atau terlambat'],
     makan: ['Makan', 'Waktu makan pagi dan sore'],
-    perpanjangan: ['Perpanjangan', 'Klien minta perpanjang paket']
+    perpanjangan: ['Perpanjangan', 'Klien minta perpanjang paket'],
+    cuti: ['Cuti', 'Klien minta cuti atau kembali latihan']
   };
   const px = { key: '', ep: '', sub: null, ready: false, initing: false, st: null, open: false, busy: false };
 

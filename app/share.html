@@ -3152,6 +3152,27 @@ html.desk .cn-wrap { max-width: none; }
 @media (max-width: 399px) { .sync-chip .lbl { display: none; } .sync-chip.bad .num::before, .sync-chip.bad .num::after { content: ''; } }
 @media (min-width: 768px) { html:not(.desk) .sync-chip { position: absolute; top: 26px; right: var(--sync-r, max(var(--page-pad), var(--sa-r))); z-index: 21; } }
 @media (prefers-reduced-motion: reduce) { .sync-chip .spin { animation-duration: 2.4s; } }
+/* ═══ Fase AC (T-2303): tombol ? di samping label ukuran + lembar cara mengukur (#sheet-ukur) ═══ */
+.lbl-help { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; }
+.lbl-help .label { min-width: 0; }
+.help-btn { flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; margin: -12px -10px -12px 0; padding: 0; border: 0; border-radius: 999px;
+  background: none; color: var(--fg-muted); cursor: pointer; }
+.help-btn svg { width: 18px; height: 18px; }
+@media (hover: hover) { .help-btn:hover { color: var(--fg); } }
+.help-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: -8px; }
+.uk-chips { margin: 0 0 14px; }
+.uk-wrap { display: grid; gap: 16px; }
+.uk-fig { display: flex; justify-content: center; }
+.uk-svg { width: min(170px, 44vw); height: auto; }
+.uk-svg .ukb { fill: color-mix(in srgb, var(--fg) 8%, transparent); stroke: color-mix(in srgb, var(--fg) 50%, transparent); stroke-width: 4; }
+.uk-svg .ukl { stroke: var(--fg); stroke-width: 12; stroke-dasharray: 26 16; stroke-linecap: round; }
+.uk-skel { display: block; width: min(170px, 44vw); aspect-ratio: 1 / 2; border-radius: 16px; }
+.uk-scale { display: grid; place-items: center; width: 120px; height: 120px; border-radius: 24px; background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.uk-scale svg { width: 56px; height: 56px; }
+.uk-steps { margin: 0; padding-left: 1.25rem; display: grid; gap: 8px; line-height: 1.45; }
+.uk-umum { padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.uk-umum .uk-steps { font-size: var(--fs-sm); color: var(--fg-2); margin-top: 6px; }
+@media (min-width: 600px) { .uk-wrap { grid-template-columns: 190px minmax(0, 1fr); align-items: start; } }
 </style>
 <style>html,body{height:100%;margin:0}.layer{position:fixed;inset:0}#share-toast{position:fixed;left:16px;right:16px;bottom:24px;background:#111;color:#fff;padding:12px;border-radius:10px;display:none;z-index:99;text-align:center}</style>
 </head><body>
@@ -3170,7 +3191,7 @@ html.desk .cn-wrap { max-width: none; }
   const AXES = ['back', 'legs', 'chest', 'arms', 'core', 'shoulders'];
   const PART_GROUP = { 'back': 'back', 'upper legs': 'legs', 'lower legs': 'legs', 'chest': 'chest', 'shoulders': 'shoulders', 'neck': 'shoulders', 'waist': 'core', 'upper arms': 'arms', 'lower arms': 'arms' };
   const GROUP_PARTS = { back: ['back'], legs: ['upper legs', 'lower legs'], chest: ['chest'], shoulders: ['shoulders', 'neck'], core: ['waist'], arms: ['upper arms', 'lower arms'] };
-  const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri'];
+  const MEASURES = ['berat', 'pinggang', 'perut', 'dada', 'lenganKanan', 'lenganKiri', 'pahaKanan', 'pahaKiri', 'pinggul'];
   const KINDS = ['latihan', 'exercises', 'record', 'progres', 'ukuran', 'konsistensi', 'badges', 'atlet', 'perjalanan', 'gizi', 'rekap', 'foto', 'badge'];
   const PERIOD_KINDS = { latihan: 1, exercises: 1, gizi: 1, ukuran: 1 };
   const PERIODS = ['hari', 'minggu', 'bulan', '3bulan'];
@@ -3188,7 +3209,7 @@ html.desk .cn-wrap { max-width: none; }
       today: 'Today', thisWeek: 'This week', thisMonthP: 'This month', last3: 'Last 3 months', perDay: '/day', sessionsPerWeek: 'Sessions per week', dailyKcal: 'Calories per day',
       vs: { session: 'vs last session', minggu: 'vs last week', bulan: 'vs last month', '3bulan': 'vs previous 3 months', day: 'vs day before', month: 'vs last month' }, sinceStart: 'since start', ofTarget: 'of target', pickPhoto: 'Pick a photo', noData: 'No data yet',
       parts: { back: 'Back', legs: 'Legs', chest: 'Chest', arms: 'Arms', core: 'Core', shoulders: 'Shoulders' },
-      m: { berat: 'Weight', pinggang: 'Waist', perut: 'Belly', dada: 'Chest', lenganKanan: 'Right arm', lenganKiri: 'Left arm', pahaKanan: 'Right thigh', pahaKiri: 'Left thigh' },
+      m: { berat: 'Weight', pinggang: 'Waist', perut: 'Belly', dada: 'Chest', lenganKanan: 'Right arm', lenganKiri: 'Left arm', pahaKanan: 'Right thigh', pahaKiri: 'Left thigh', pinggul: 'Hips' },
       badge: { sesi: n => n + ' sessions', streak: n => n + '-week streak', catat: n => n + ' days logged', pr: n => n === 1 ? 'First PR' : n + ' PRs' }
     },
     id: {
@@ -3202,7 +3223,7 @@ html.desk .cn-wrap { max-width: none; }
       today: 'Hari ini', thisWeek: 'Minggu ini', thisMonthP: 'Bulan ini', last3: '3 bulan terakhir', perDay: '/hari', sessionsPerWeek: 'Sesi per minggu', dailyKcal: 'Kalori per hari',
       vs: { session: 'vs sesi lalu', minggu: 'vs minggu lalu', bulan: 'vs bulan lalu', '3bulan': 'vs 3 bulan sebelumnya', day: 'vs hari sebelumnya', month: 'vs bulan lalu' }, sinceStart: 'sejak awal', ofTarget: 'dari target', pickPhoto: 'Pilih foto', noData: 'Belum ada data',
       parts: { back: 'Punggung', legs: 'Kaki', chest: 'Dada', arms: 'Lengan', core: 'Perut', shoulders: 'Bahu' },
-      m: { berat: 'Berat', pinggang: 'Pinggang', perut: 'Perut', dada: 'Dada', lenganKanan: 'Lengan kanan', lenganKiri: 'Lengan kiri', pahaKanan: 'Paha kanan', pahaKiri: 'Paha kiri' },
+      m: { berat: 'Berat', pinggang: 'Pinggang', perut: 'Perut', dada: 'Dada', lenganKanan: 'Lengan kanan', lenganKiri: 'Lengan kiri', pahaKanan: 'Paha kanan', pahaKiri: 'Paha kiri', pinggul: 'Pinggul' },
       badge: { sesi: n => n + ' sesi', streak: n => 'Streak ' + n + ' minggu', catat: n => n + ' hari dicatat', pr: n => n === 1 ? 'Rekor pertama' : n + ' rekor' }
     }
   };

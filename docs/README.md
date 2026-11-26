@@ -26,7 +26,7 @@ Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique
 | Y | Client portal desktop shell | [desk/](desk/) | T-2000+ | built |
 | Z | Web Push | [push/](push/) | T-2100+ | built (T-2105 is the owner's install step) |
 | AB | XNK Library + Template + hub xnk.web.id (multi-coach on Apps Script, production untouched) | [library/](library/) | T-2200+ | built (T-2208, T-2210, T-2214, T-2215 are the owner's install steps); hub upgrade T-2220+ in progress (T-2220…T-2223, T-2230…T-2234 built) |
-| AC | Coach kit: client hold (Cuti / Sakit / Berhenti), measurement guide + Pinggul, coach logger upgrade, PDF report on demand | [coachkit/](coachkit/) | T-2300+ | **planned** (2026-11-26) |
+| AC | Coach kit: client hold (Cuti / Sakit / Berhenti), measurement guide + Pinggul, coach logger upgrade, PDF report on demand | [coachkit/](coachkit/) | T-2300+ | in progress (AC2 built 2026-11-26) |
 | — | Reminder texts: tone rules and sources of the science tips | [reminder/Sumber.md](reminder/Sumber.md) | — | built (2026-11) |
 
 Notes

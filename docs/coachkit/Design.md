@@ -87,22 +87,12 @@ Where holds are read:
 - Everything that maps over `PROGRESS_MEASURES` picks it up (portal form, chart, insights `Wawasan.gs`, share cards `BagikanData.gs`, offline snapshot). Check `share-check.js` still fits the Ukuran tubuh card with 9 measures.
 - Library compat: `check-compat.js` stays green.
 
-### Guide
-- Data: `MEASURE_GUIDE` in a new part `parts/app/20-cara-ukur.part` (after part 19 closes the IIFE the same way): per key `{ view: 'front'|'side', y: 0–1 (tape height on the figure), steps: [3 short sentences], src: 'Uxx' }`, plus `general` (4 rules). Text Indonesian, neutral (no "kamu"), measures named like the form.
-- Figure: a simple outline drawn inline (SVG, `currentColor`, both sexes from `figSexOf`), reusing the silhouette of `figure/figure.min.json` when loaded and a plain outline fallback, with a dashed tape line at `y` and the measure name. No new library, works offline. Respects reduced motion (no animation needed).
-- UI: a 44 px **?** icon button (`icon('circle-help')`, `aria-label="Cara mengukur <nama>"`) next to each measure label in the client entry sheet, the coach entry sheet and the assessment sheet → `#sheet-ukur` (prefix `uk-`) with that measure; "Cara mengukur" link at the top shows all. The keyboard stays closed when the sheet opens; closing returns focus to the input.
-- Sources (`docs/coachkit/Sumber.md`, same format as [../reminder/Sumber.md](../reminder/Sumber.md); ⚠ = check the exact wording against the document before shipping):
-
-| ID | Measure | Protocol |
-| --- | --- | --- |
-| U01 | Pinggang | WHO STEPS: midpoint between the lowest rib and the top of the hip bone, end of a normal breath out ⚠ |
-| U02 | Pinggul | WHO: around the widest part of the buttocks, feet together ⚠ |
-| U03 | Perut | at the navel, end of a normal breath out (common practice; mark as practice, not a protocol) ⚠ |
-| U04 | Lengan | ISAK: relaxed arm, midway between shoulder tip (acromion) and elbow (radiale) ⚠ |
-| U05 | Dada | ISAK: at mid-chest (mesosternale) level, end of a normal breath out ⚠ |
-| U06 | Paha | ISAK: 1 cm below the gluteal fold, weight on both feet (or mid-thigh; pick one and keep it) ⚠ |
-| U07 | Berat | same scale, morning, after the toilet, before eating, light clothes ⚠ |
-| U08 | General | tape level and snug without pressing the skin, measure twice and take the average, same side and time each time ⚠ |
+### Guide (built)
+- Part `parts/app/20-cara-ukur.part` (closes the App IIFE now) and theme part `09-cara-ukur.part` (closes `</style>`).
+- `UKUR_LINE[sex][line] = [y %, x1 %, x2 %]` on the front view of `figure/figure.min.json` (viewBox 724 × 1448); `lengan` and `paha` are drawn on the client's right side (viewer's left) and mirrored around `UKUR_MID[sex]` for *kiri*. `UKUR_STEPS` (3 steps per line, Berat has rules only and a scale icon), `UKUR_UMUM` (4 general rules). Sex from `figSexOf` (nutrition profile), male by default. When the figure is not on the device yet a grey skeleton shows and `figEnsure()` redraws it.
+- Every measure label in `#sheet-progress` and `#modal-care-assess` is wrapped in `.lbl-help` with a 44 px `.help-btn` (`circle-help`) calling `window.ukurOpen(key)`. The sheet `#sheet-ukur` (prefix `uk-`) has a chip row to switch measures; closing it returns to the sheet it was opened from (`ui.sheetReturn`, handled in `closeModal`), with typed values kept.
+- The assessment's separate hip field is gone: `as-pinggul` sits with the other measures and is empty on open like them (the old prefill would have written yesterday's hip as a new measurement).
+- Sources: [Sumber.md](Sumber.md).
 
 ### Tests
 `progress.test.js` (pinggul save/read/limits, assessment writes it, copy-once idempotent), `browser-check` "Cara ukur" (phone: every measure has a ? button, sheet opens, figure present, no sideways scroll).
@@ -111,12 +101,12 @@ Where holds are read:
 
 ## AC3 — Coach logger upgrade (coach panel only)
 
-Boundary: the client logger (`mode: 'client'`), `logMyWorkout`, `logMyFood`, their queues (`xnk_wl_queue`, `xnk_food_queue`), storage keys and cids are **not changed**. Coach code goes into a new part `parts/app/21-coach-catat.part` plus small hooks in the existing logger (`mode === 'admin'` branches only). Server functions are admin-only. Client-visible additions (W3 cue line, F2 food note) are read-only and optional.
+Boundary: the client logger (`mode: 'client'`), `logMyWorkout`, `logMyFood`, their queues (`xnk_wl_queue`, `xnk_food_queue`), storage keys and cids are **not changed**. Coach code goes into a new part `parts/app/21-coach-catat.part` plus small hooks in the existing logger (`mode === 'admin'` branches only). Server functions are admin-only. Client-visible additions (W3 cue line, F2 food note) are read-only (owner: yes).
 
 ### Workout
 - **W1** `wlFinish` in admin mode with `wl.scheduleId`: a check "Selesaikan sesi juga" (default on when the session is today and not completed) → after the log save, `completeSession` through the same queue (`optimistic({q})`), then the session note as today. No server change.
 - **W2** "Isi seperti terakhir" (per exercise ⋯ and the top menu "Ulangi latihan terakhir") fills sets from `wkAdmin[id].best/last`; +kg chip from `suggest`. Browser only.
-- **W3** sheet **`ExerciseNotes`**: `ID | Member ID | Exercise Key | Setelan | Cue | Diubah Pada | Oleh` (key = `_exKeyOf_`, canonical through `exCanon`). Admin `saveExerciseNote(token, memberId, exKey, data)` (upsert, empty both = delete; WRITE); read in `getClientBundle.workout.notes` and the coach logger data. Optional client read: `getPortalMore.workout.notes` (`{key: {setelan, cue}}`), rendered as one line in the client logger card — only if the owner says yes (Q3).
+- **W3** sheet **`ExerciseNotes`**: `ID | Member ID | Exercise Key | Setelan | Cue | Diubah Pada | Oleh` (key = `_exKeyOf_`, canonical through `exCanon`). Admin `saveExerciseNote(token, memberId, exKey, data)` (upsert, empty both = delete; WRITE); read in `getClientBundle.workout.notes` and the coach logger data. Optional client read: `getPortalMore.workout.notes` (`{key: {setelan, cue}}`), rendered as one line in the client logger card (owner decision 2026-11-26: yes).
 - **W4** admin `deleteWorkoutEntries(token, memberId, date, keys)` (`keys` empty = whole day; rows by any author; `_locked_`, bump, WRITE) → history ⋯ "Hapus gerakan" / "Hapus latihan hari ini", `optimistic({q})` with undo (undo re-saves the removed sets through `saveWorkoutLog`).
 - **W5** client page Latihan tab: exercise picker (from the client's own history) → table + e1RM sparkline; data already in `_workoutFor_` (90 days); add `readDays` 365 for this view only through admin `getWorkoutExerciseHistory(token, memberId, exKey)` (READ_OK) when older data is asked for.
 - **W6** logger top bar in admin mode: client switcher (clients of the same session start / class key, or "Tambah klien"); each client is its own `wl` state under `adm:<memberId>` (already separate drafts); Selesai saves each through its own queue item. The rest timer is shared.

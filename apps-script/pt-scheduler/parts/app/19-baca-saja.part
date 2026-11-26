@@ -15,5 +15,3 @@
     el.classList.remove('hide');
     paintIcons();
   };
-})();
-</script>
