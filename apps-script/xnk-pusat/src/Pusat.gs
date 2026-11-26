@@ -474,25 +474,49 @@ var PUSAT_BK_LOCK_MS = 7 * 60 * 1000;     // BK_RUN lebih muda dari ini = jalan 
 var DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 var MIME_SHEET = 'application/vnd.google-apps.spreadsheet', MIME_DIR = 'application/vnd.google-apps.folder';
 
-/** Panggil Drive REST v3; null bila 404. */
-function drive_(method, path, body) {
+/** Panggil Drive REST v3; null bila 404. Galat membawa alasan Google (e.driveCode, e.reason) dan langkahnya. */
+function drive_(method, path, body, step) {
   var o = { method: method, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } };
   if (body) { o.contentType = 'application/json'; o.payload = JSON.stringify(body); }
   var res = fetch_(DRIVE_API + path, o), code = res.getResponseCode();
   if (code === 404) return null;
-  if (code < 200 || code >= 300) throw new Error('Drive menolak (' + code + '). Jalankan setupPusat sekali lagi untuk memberi izin.');
+  if (code < 200 || code >= 300) throw driveErr_(code, res.getContentText(), step);
   var t = res.getContentText();
   return t ? JSON.parse(t) : {};
 }
-function driveTrash_(id) { drive_('patch', '/' + encodeURIComponent(id) + '?fields=id', { trashed: true }); }
+
+// Alasan Google yang berarti "berkas/folder ini bukan milik XNK HQ lagi" (izin drive.file hanya untuk berkas buatan
+// proyek ini; folder lama dari proyek/izin sebelumnya ditolak 403 walau pemilik akun yang sama).
+var DRIVE_NOT_MINE = ['appNotAuthorizedToFile', 'insufficientFilePermissions', 'forbidden'];
+
+/** Galat Drive yang bisa dibaca pemilik: alasan Google + saran yang cocok (bukan selalu "setupPusat"). */
+function driveErr_(code, text, step) {
+  var reason = '', gmsg = '';
+  try { var j = JSON.parse(text || '{}').error || {}; reason = String(((j.errors || [])[0] || {}).reason || j.status || ''); gmsg = String(j.message || ''); } catch (e) { /* bukan JSON */ }
+  var hint = reason === 'storageQuotaExceeded' ? 'Penyimpanan Google penuh.'
+    : /rateLimit|RateLimit|dailyLimit/.test(reason) ? 'Google membatasi sementara; dicoba lagi otomatis.'
+    : reason === 'accessNotConfigured' || /has not been used|disabled/.test(gmsg) ? 'Drive API belum aktif di proyek Google XNK HQ.'
+    : DRIVE_NOT_MINE.indexOf(reason) >= 0 ? 'Berkas/folder ini tidak bisa diakses XNK HQ; folder backup dibuat baru.'
+    : code === 401 || reason === 'insufficientPermissions' || /insufficient authentication scopes/i.test(gmsg) ? 'Izin Drive kurang: jalankan setupPusat sekali lagi.'
+    : gmsg ? gmsg.slice(0, 80) : '';
+  var e = new Error('Drive menolak (' + code + (reason ? ' ' + reason : '') + ')' + (step ? ' saat ' + step : '') + '.' + (hint ? ' ' + hint : ''));
+  e.driveCode = code; e.reason = reason;
+  return e;
+}
+function driveNotMine_(e) { return !!(e && e.driveCode === 403 && DRIVE_NOT_MINE.indexOf(e.reason) >= 0); }
+function driveTrash_(id) { drive_('patch', '/' + encodeURIComponent(id) + '?fields=id', { trashed: true }, 'membuang salinan lama'); }
 function driveMkdir_(name, parent) {
-  return drive_('post', '?fields=id', { name: name, mimeType: MIME_DIR, parents: parent ? [parent] : undefined }).id;
+  return drive_('post', '?fields=id', { name: name, mimeType: MIME_DIR, parents: parent ? [parent] : undefined }, 'membuat folder ' + name).id;
 }
 
-/** Folder XNK Backup/<slug> (ID disimpan; dibuat lagi bila hilang atau di sampah). */
-function bkDir_(slug) {
-  var dirs = json_('BK_DIRS', {}) || {};
-  var alive = function (id) { if (!id) return false; var f = drive_('get', '/' + encodeURIComponent(id) + '?fields=id,trashed'); return !!(f && !f.trashed); };
+/** Folder XNK Backup/<slug> (ID disimpan; dibuat lagi bila hilang, di sampah, atau tidak bisa diakses XNK HQ lagi). */
+function bkDir_(slug, fresh) {
+  var dirs = fresh ? {} : (json_('BK_DIRS', {}) || {});
+  var alive = function (id) {
+    if (!id) return false;
+    try { var f = drive_('get', '/' + encodeURIComponent(id) + '?fields=id,trashed', null, 'memeriksa folder backup'); return !!(f && !f.trashed); }
+    catch (e) { if (driveNotMine_(e)) return false; throw e; }
+  };
   if (!alive(dirs.root)) dirs = { root: driveMkdir_('XNK Backup', null) };
   if (!alive(dirs[slug])) dirs[slug] = driveMkdir_(slug, dirs.root);
   props_().setProperty('BK_DIRS', JSON.stringify(dirs));
@@ -616,7 +640,10 @@ function backupStep_() {
       if (!cur.sheets.length) throw new Error('Spreadsheet coach tanpa sheet.');
       cur.dir = bkDir_(slug);
       var day = new Date(t0 + 7 * 3600 * 1000).toISOString().slice(0, 10);   // tanggal WIB
-      var f = drive_('post', '?fields=id,webViewLink', { name: slug + ' ' + day, mimeType: MIME_SHEET, parents: [cur.dir] });
+      var mk = function () { return drive_('post', '?fields=id,webViewLink', { name: slug + ' ' + day, mimeType: MIME_SHEET, parents: [cur.dir] }, 'membuat salinan'); };
+      var f;
+      try { f = mk(); }
+      catch (e) { if (!driveNotMine_(e)) throw e; cur.dir = bkDir_(slug, true); f = mk(); }   // folder lama bukan milik XNK HQ lagi: folder baru
       cur.fileId = f.id;
       cur.fileUrl = f.webViewLink || 'https://docs.google.com/spreadsheets/d/' + f.id + '/edit';
       bkSave_(cur);
