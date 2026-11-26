@@ -118,7 +118,7 @@ class FakeBook {
 }
 function driveFetch(drive, url, o, reply, opts) {
   assert.equal(o.headers.Authorization, 'Bearer tok-pusat');
-  if (opts.driveDown) return reply(403, '{}');
+  if (opts.driveDown) return opts.driveDown === true ? reply(403, '{}') : reply(opts.driveDown.code || 403, JSON.stringify({ error: { errors: [{ reason: opts.driveDown.reason }], message: opts.driveDown.message || '' } }));
   const [p, qs] = url.slice(DRIVE.length).split('?');
   const q = new URLSearchParams(qs || '');
   const method = String(o.method || 'get').toLowerCase();
@@ -135,6 +135,7 @@ function driveFetch(drive, url, o, reply, opts) {
     return reply(200, 'PK-XLSX-' + f.id);
   }
   const id = decodeURIComponent(p.slice(1));
+  if (id && opts.notMine && opts.notMine.includes(id)) return reply(403, JSON.stringify({ error: { errors: [{ reason: 'appNotAuthorizedToFile' }], message: 'The user has not granted the app write access to the file.' } }));
   if (id) {
     const f = drive.files[id];
     if (!f) return reply(404, '{}');
@@ -528,8 +529,34 @@ test('backup: Library lama tanpa hubExport = pesan "perbarui coach"; Drive menol
   e.call('pusatRegister', 'kode-daftar-9', 'claudia', EXEC(1), SECRET(1));
   assert.match(e.ctx.runPusatBackup().error, /Library coach belum punya hubExport; perbarui coach/);
   const d = bkEnv({ claudia: DATA }, { driveDown: true });
-  assert.match(d.ctx.runPusatBackup().error, /Drive menolak \(403\)\. Jalankan setupPusat/);
+  assert.match(d.ctx.runPusatBackup().error, /^Drive menolak \(403\) saat membuat folder XNK Backup\.$/, 'tanpa alasan Google: tanpa saran setupPusat');
   assert.equal(bkst(d, 'claudia').fails, 1);
+});
+
+test('backup: galat Drive menyebut alasan Google dan saran yang cocok', () => {
+  const run = dd => bkEnv({ claudia: DATA }, { driveDown: dd }).ctx.runPusatBackup().error;
+  assert.equal(run({ reason: 'storageQuotaExceeded' }), 'Drive menolak (403 storageQuotaExceeded) saat membuat folder XNK Backup. Penyimpanan Google penuh.');
+  assert.match(run({ reason: 'userRateLimitExceeded' }), /dicoba lagi otomatis/);
+  assert.match(run({ reason: 'accessNotConfigured', message: 'Google Drive API has not been used in project 1 before or it is disabled.' }), /Drive API belum aktif/);
+  assert.match(run({ code: 403, reason: 'insufficientPermissions', message: 'Request had insufficient authentication scopes.' }), /Izin Drive kurang: jalankan setupPusat/);
+  assert.match(run({ code: 500, reason: 'backendError', message: 'Backend Error' }), /\(500 backendError\).*Backend Error/);
+});
+
+test('backup: folder lama yang tidak bisa diakses XNK HQ lagi (403 appNotAuthorizedToFile) diganti folder baru, backup jadi', () => {
+  const opts = { notMine: [] };
+  const e = bkEnv({ claudia: DATA }, opts);
+  e.ctx.PUSAT_BK_BUDGET_MS = 60e3;
+  assert.equal(e.ctx.runPusatBackup().done, true);
+  const old = JSON.parse(e.props.BK_DIRS);
+  opts.notMine.push(old.root, old.claudia);   // mis. folder dari proyek XNK HQ sebelumnya
+  e.call('pusatAction', e.tok(), 'backup', 'claudia');
+  const r = e.ctx.runPusatBackup();
+  assert.equal(r.done, true, JSON.stringify(r));
+  const nd = JSON.parse(e.props.BK_DIRS);
+  assert.ok(nd.root !== old.root && nd.claudia !== old.claudia, 'folder baru');
+  assert.equal(e.drive.files[nd.root].name, 'XNK Backup');
+  assert.equal(live(e, nd.claudia).length, 1);
+  assert.deepEqual([bkst(e, 'claudia').fails, bkst(e, 'claudia').error], [0, '']);
 });
 
 test('backup: coach dihapus dari daftar di tengah jalan = salinan dibuang tanpa status; folder hilang dibuat lagi', () => {

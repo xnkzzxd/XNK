@@ -122,6 +122,12 @@ sampah Drive (masih bisa dipulihkan 30 hari dari sampah).
 - **Izin.** XNK HQ memakai izin `spreadsheets` dan `drive.file` (hanya file yang dibuatnya sendiri; Drive lewat REST
   API karena DriveApp meminta akses Drive penuh). Setelah versi ini terpasang, buka `/adminxnk` → **Siapkan XNK HQ**
   (atau jalankan `setupPusat` di editor) untuk memberi izin baru dan memasang trigger backup tiap jam.
+- **Galat Drive (2026-11-26).** `drive_` menyertakan alasan Google dan langkahnya (`driveErr_`): mis. "Drive menolak
+  (403 storageQuotaExceeded) saat membuat salinan. Penyimpanan Google penuh." Saran *jalankan setupPusat* hanya muncul
+  bila Google bilang izinnya kurang (401 / `insufficientPermissions`); bila izinnya sudah ada, `setupPusat` memang tidak
+  menampilkan layar izin. Folder `BK_DIRS` yang ditolak dengan `appNotAuthorizedToFile` / `insufficientFilePermissions`
+  (mis. folder dari proyek atau izin XNK HQ sebelumnya) dianggap hilang: XNK HQ membuat folder "XNK Backup" baru dan
+  backup tetap jalan; salinan lama di folder lama tidak dipangkas lagi (hapus manual bila perlu).
 
 ## Siapkan XNK HQ dari /adminxnk
 `pusatOverview.setup` = `{auth, daily, backup, ok, editor}`. `auth` diuji langsung: satu permintaan kecil ke Drive dengan token skrip (berhasil = disimpan 10 menit). **Jangan pakai `ScriptApp.getAuthorizationInfo`** di sini: dari web app "Siapa saja" ia memeriksa pengunjung anonim, jadi selalu "perlu izin" walau pemilik sudah memberi izin.
