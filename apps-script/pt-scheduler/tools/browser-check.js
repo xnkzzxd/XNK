@@ -1234,6 +1234,7 @@ async function contrastReport(page) {
     await page.click('#profile-program-wrap .cp-link:has-text("Atur program")');
     await page.waitForTimeout(400);
     check(await visible(page, '#sheet-cp-prog') && (await page.textContent('#cpp-body')).includes('Buat program'), 'Atur program: one sheet holds the program settings');
+    check((await page.locator('#cpp-body .chip').count()) === 0 && (await page.locator('#cpp-body .cpm-row').count()) >= 1, 'Atur program: settings rows with switches, no pill buttons');
     await page.click('#cpp-body button:has-text("Buat program")');
     await page.waitForTimeout(700);
     check(await visible(page, '#prg-form') && !(await page.locator('#prg-text').count()), 'program editor: opens as a form (the text box is gone)');
@@ -1377,11 +1378,17 @@ async function contrastReport(page) {
     await page.evaluate(() => window.cpMore('PT-A'));
     await page.waitForTimeout(400);
     check((await page.textContent('#cpm-body')).includes('Ringkasan latihan'), 'workout: after logging the coach can send the day summary by WhatsApp (⋯ → Ringkasan latihan)');
+    check(!(await page.textContent('#cpm-body')).includes('Bagikan'), '⋯ menu: sharing is not repeated here (one home: the header icon)');
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(300);
+    await page.click('#detail-head .cp-share-btn, .detail-head .cp-share-btn');
+    await page.waitForTimeout(900);
+    check(await visible(page, '#sheet-share') && /latihan/i.test(await page.textContent('#share-title')), 'header share icon: on the Latihan tab it opens the share editor on the Latihan card (' + (await page.textContent('#share-title')) + ')');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
     check((await page.locator('#cp-ins-latihan svg.pg-chart').count()) >= 1 && (await overflowX(page)) <= 0, 'workout charts: the Latihan tab shows weekly volume without sideways scroll');
     check((await page.textContent('#cp-wk-hist')).includes('Riwayat latihan') && (await page.locator('#cp-wk-hist button.cp-row[aria-label^="Ubah latihan"]').count()) === 1, 'workout history: the logged day is a row that opens the editor');
-    check((await page.locator('#detail-body .cp-pane[data-cppane="latihan"] [onclick*="shareCard"]').count()) === 0, 'Latihan tab: no share buttons inside the tab (Bagikan lives in ⋯)');
+    check((await page.locator('#detail-body .cp-pane[data-cppane="latihan"] [onclick*="shareCard"]').count()) === 0, 'Latihan tab: no share buttons inside the tab (Bagikan is the header icon)');
     const latCols = await page.evaluate(() => { const a = document.getElementById('profile-program-wrap').getBoundingClientRect(), b = document.getElementById('cp-ph-latihan').getBoundingClientRect(); return [Math.round(a.left), Math.round(a.top), Math.round(b.left), Math.round(b.top)]; });
     check(latCols[0] < latCols[2] && Math.abs(latCols[1] - latCols[3]) <= 4, 'wide client page: Latihan splits into two columns, program and history left, numbers right ' + JSON.stringify(latCols));
     await page.click('#cp-wk-hist button.cp-row[aria-label^="Ubah latihan"]');
@@ -1402,7 +1409,7 @@ async function contrastReport(page) {
     }
     check(calls.length === callsPg, 'progres: switching sub-tabs makes no server call (' + calls.slice(callsPg).join(',') + ')');
     check(Object.values(pgCtl).every(n => n <= 8), 'progres: at most 8 controls per sub-tab, rows aside ' + JSON.stringify(pgCtl));
-    check((await page.locator('#detail-body .cp-pane [onclick*="shareCard"]').count()) === 0, 'client page: no share buttons inside the tabs (Bagikan lives in ⋯)');
+    check((await page.locator('#detail-body .cp-pane [onclick*="shareCard"]').count()) === 0, 'client page: no share buttons inside the tabs (Bagikan is the header icon)');
     await page.click('#detail-body .cp-card .cp-act:has-text("Catat ukuran")');
     await page.waitForTimeout(600);
     check(await visible(page, '#pg-date-field'), 'client page: the coach can choose the date');

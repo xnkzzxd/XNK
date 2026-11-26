@@ -3707,10 +3707,15 @@ details.cp-day[open] .cp-day-names { display: none; }
 .cp-day-names { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .cp-day-ex { display: flex; flex-direction: column; gap: 6px; }
 .cp-foot { padding: 0 2px; }
-.cp-act-card { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
-.cp-act-heat { flex: none; }
-.cp-act-t { flex: 1 1 12rem; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
-.cp-act-t b { font-size: var(--fs-md); }
+/* Aktivitas: peta 12 minggu selebar kartu (kolom 1fr, tinggi tetap), dua angka di bawahnya — tanpa ruang kosong di samping. */
+.cp-act-card { display: flex; flex-direction: column; gap: 12px; }
+.cp-act-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cp-act-card .heat-grid { width: 100%; grid-template-rows: repeat(7, 14px); grid-auto-columns: minmax(0, 1fr); gap: 4px; }
+.cp-act-card .heat-grid i { width: auto; height: auto; border-radius: 4px; }
+.cp-act-t { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 8px 16px; }
+.cp-act-t p { margin: 0; display: flex; flex-direction: column; }
+.cp-act-t b { font-size: var(--fs-xl); font-weight: 800; line-height: 1.1; }
+.cp-act-t span { font-size: var(--fs-xs); color: var(--fg-muted); }
 /* HP: Program → Minggu ini → Kekuatan/Volume → Riwayat (kolom PC memakai display:contents di HP) */
 .cp-pane[data-cppane="latihan"] > .cp-col { display: contents; }
 .cp-pane[data-cppane="latihan"] #profile-program-wrap { order: 1; }
@@ -3729,9 +3734,10 @@ details.cp-day[open] .cp-day-names { display: none; }
 .cp-str-b { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 6px; }
 .cp-warn { color: var(--danger); }
 .cp-vol .ins-notes { margin: 12px 0 0; }
-.cpp-group { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
-.cpp-row { display: flex; align-items: center; gap: 12px; min-height: 52px; }
-.cpp-row .grow { display: flex; flex-direction: column; min-width: 0; }
+.cpm-sw, .cpm-text { cursor: default; }
+.cpm-sw .toggle { flex: none; }
+.cpm-note { margin: 6px 4px 0; }
+.cp-share-btn + .cp-more-btn { margin-left: 4px; }
 .cp-row > svg.lucide.lucide-pencil { color: var(--fg-muted); }
 </style>
 </head>
@@ -9588,7 +9594,9 @@ details.cp-day[open] .cp-day-names { display: none; }
     // Data: hub ala "Saya" di portal
     body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     body += '</div>';
-    const actions = '<button type="button" class="icon-btn plain cp-more-btn" onclick="window.cpMore(\'' + h(m.id) + '\')" aria-label="Menu klien" aria-haspopup="dialog">' + icon('ellipsis') + '</button>';
+    // Kepala: Bagikan (kartu sesuai tab yang terbuka) + menu ⋯. Satu tempat untuk berbagi di semua tab.
+    const actions = (window.shareOn !== false ? '<button type="button" class="icon-btn plain cp-share-btn" onclick="window.cpShare(\'' + h(m.id) + '\')" aria-label="Bagikan kartu klien">' + icon('share-2') + '</button>' : '') +
+      '<button type="button" class="icon-btn plain cp-more-btn" onclick="window.cpMore(\'' + h(m.id) + '\')" aria-label="Menu klien" aria-haspopup="dialog">' + icon('ellipsis') + '</button>';
     openDetail('client:' + m.id, m.name || 'Profil klien', actions, body);
     window.loadClientBundle(m.id);
   };
@@ -10667,19 +10675,21 @@ details.cp-day[open] .cp-day-names { display: none; }
   // Lembar "Atur program": semua pengaturan program di satu tempat (dulu tombol Ubah + lipatan Lainnya).
   let cppMember = '';
   function cpProgSheetHtml(memberId) {
+    // Gaya daftar pengaturan (sama dengan menu ⋯): baris dengan ikon + panah untuk tindakan, baris dengan sakelar untuk pilihan.
     const d = progAdmin[memberId] || {}, g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
     const id = h(memberId), n = (d.days || []).reduce((s, x) => s + x.items.length, 0);
-    let html = '<button type="button" class="btn btn-primary btn-block" onclick="window.cpProgEdit(\'' + id + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button>' +
-      '<p class="li-sub">Hari, gerakan, set dan rep. Klien melihat perubahan di portalnya.</p>';
+    const row = (ic, label, sub, js) => '<button type="button" class="cpm-row" onclick="' + js + '">' + icon(ic) + '<span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + icon('chevron-right') + '</button>';
+    const sw = (label, sub, on, js, key) => '<div class="cpm-row cpm-sw"><span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span><label class="toggle"><input type="checkbox" data-cpp="' + h(key) + '" aria-label="' + h(label) + '"' + (on ? ' checked' : '') + ' onchange="' + js + '"><span></span></label></div>';
+    const group = (title, rows, note) => '<div class="cpm-group"><p class="cpm-h">' + h(title) + '</p><div class="cpm-list">' + rows + '</div>' + (note ? '<p class="li-sub cpm-note">' + note + '</p>' : '') + '</div>';
+    let html = group('Program', row('pencil', n ? 'Ubah program' : 'Buat program', 'Hari, gerakan, set dan rep', "window.cpProgEdit('" + id + "')"));
     if (g) {
-      html += '<div class="cpp-group"><div class="cpp-row"><span class="grow"><b>Program otomatis</b><span class="li-sub">' + (g.auto ? 'Disusun dan dinaikkan otomatis tiap minggu' : 'Mati: program hanya berubah lewat coach') + '</span></span>' +
-        '<label class="toggle"><input type="checkbox" id="cpp-auto" aria-label="Program otomatis"' + (g.auto ? ' checked' : '') + ' onchange="window.pgAdminAuto(\'' + id + '\',this.checked)"><span></span></label></div>' +
-        (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('') + '</div>' +
-        '<div class="cpp-group"><p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div></div>' +
-        '<button type="button" class="btn btn-outline btn-block" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + 'Buat ulang otomatis</button>';
+      html += group('Otomatis', sw('Program otomatis', g.auto ? 'Disusun dan dinaikkan tiap minggu' : 'Mati: hanya berubah lewat coach', g.auto, "window.pgAdminAuto('" + id + "',this.checked)", 'auto') +
+        row('refresh-cw', 'Buat ulang otomatis', 'Susun ulang dari profil dan alat gym', "window.pgAdminRegen('" + id + "')"), (g.why || []).slice(-1).map(h).join(''));
+      const TAG = { lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' };
+      html += group('Pantangan gerakan', (g.tags || []).map(function (t) { return sw(TAG[t] || t, '', (g.pantangan || []).indexOf(t) !== -1, "window.pgAdminTag('" + id + "','" + h(t) + "')", 'tag-' + t); }).join(''), 'Gerakan yang membebani bagian ini dilewati saat program disusun.');
     }
-    if (d.own && d.own.length) html += '<div class="cpp-group"><p class="label">Rutinitas buatan klien (' + d.own.length + ')</p>' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div>';
-    return '<div class="stack" style="gap:14px">' + html + '</div>';
+    if (d.own && d.own.length) html += group('Rutinitas buatan klien (' + d.own.length + ')', d.own.map(day => '<div class="cpm-row cpm-text"><span class="grow"><b>' + h(day.hari) + '</b><span>' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</span></span></div>').join(''));
+    return html;
   }
   window.cpProgSheet = function (memberId) {
     cppMember = String(memberId);
@@ -14693,12 +14703,12 @@ details.cp-day[open] .cp-day-names { display: none; }
     const go = function () { adminCall('regenerateProgram', id).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
     if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
   };
-  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); }); };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); renderProgramAdmin(id); }); };
   window.pgAdminTag = function (id, t) {
     const g = pgAdminGen[id]; if (!g) return;
     const list = (g.pantangan || []).slice(), i = list.indexOf(t);
     if (i !== -1) list.splice(i, 1); else list.push(t);
-    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); });
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); renderProgramAdmin(id); });
   };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
@@ -18770,8 +18780,8 @@ details.cp-day[open] .cp-day-names { display: none; }
     const hero = insightHeroHtml({ eyebrow: 'Minggu ini vs biasanya', stats: stats.slice(0, 4), text: t.text });
     if (!a) return hero;
     const adh = a.adherence && a.adherence.length ? a.adherence[a.adherence.length - 1] : null;
-    return hero + '<div class="card cp-card-pad cp-act-card"><div class="cp-act-heat" aria-hidden="true">' + heatHtml(a.levels) + '</div><div class="cp-act-t"><p><b class="num">' + a.active + ' / 84</b> hari aktif dalam 12 minggu</p>' +
-      (adh ? '<p><b class="num">' + adh.done + ' / ' + adh.planned + '</b> hari program minggu ini</p>' : '') + '<p class="li-sub">Sesi, latihan dan catat makan</p></div></div>';
+    return hero + '<div class="card cp-card-pad cp-act-card"><div class="cp-act-head"><b>Aktivitas</b><span class="li-sub">12 minggu · sesi, latihan, catat makan</span></div>' + heatHtml(a.levels) +
+      '<div class="cp-act-t"><p><b class="num">' + a.active + '</b><span>dari 84 hari aktif</span></p>' + (adh ? '<p><b class="num">' + adh.done + ' / ' + adh.planned + '</b><span>hari program minggu ini</span></p>' : '') + '</div></div>';
   }
   function cpStrengthHtml(memberId) {
     const d = insD(); if (!d || !d.training.strength.length) return '';
@@ -18835,6 +18845,13 @@ details.cp-day[open] .cp-day-names { display: none; }
     paintIcons();
   };
 
+  // ── Bagikan (ikon di kepala): kartu yang cocok dengan tab yang terbuka; editor kartu tetap bisa ganti kartu ──
+  window.cpShare = function (memberId) {
+    const t = ui.cpTab && String(ui.cpTab.id) === String(memberId) ? ui.cpTab.name : 'ringkasan';
+    const kind = t === 'progres' ? (cpg.seg === 'ukuran' ? 'ukuran' : 'progres') : t === 'latihan' ? 'latihan' : t === 'gizi' ? 'gizi' : 'rekap';
+    window.shareCard(kind, String(memberId));
+  };
+
   // ── Menu ⋯: semua aksi yang jarang dipakai, dikelompokkan, di satu tempat yang sama di setiap tab ──
   let cpmMember = '';
   window.cpMore = function (memberId) {
@@ -18848,7 +18865,6 @@ details.cp-day[open] .cp-day-names { display: none; }
     $('cpm-title').textContent = 'Menu klien';
     setHTML('cpm-body', group('Tambah', row('pr', 'list-plus', 'PR baru', '') + row('tes', 'timer', 'Tes kebugaran', '') + row('lewat', 'calendar-check', 'Latihan yang lewat', 'Catat latihan hari sebelumnya') + row('catatan', 'notebook-pen', 'Catatan privat', '')) +
       group('Kirim lewat WhatsApp', send) +
-      (window.shareOn !== false ? group('Bagikan', row('bagikan', 'share-2', 'Bagikan kartu', 'Latihan, progres, rekap, badge')) : '') +
       group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('hapus', 'trash-2', 'Hapus klien', '', true)));
     openSheet('sheet-cp-more');
   };
@@ -18857,7 +18873,7 @@ details.cp-day[open] .cp-day-names { display: none; }
     const go = {
       pr: () => window.addTaskFor(id), tes: () => window.openCareTests(id), lewat: () => window.workoutOpenAdmin(id, '', '', true), catatan: () => window.openCareNotes(id),
       'wa-latihan': () => window.workoutSummaryWA(id), 'wa-tes': () => window.sendTestResult(id), 'wa-form': () => window.cpHealthRemind(id),
-      bagikan: () => window.shareCard('latihan', id), ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal()
+      ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal()
     }[k];
     window.closeModal();
     if (go) setTimeout(go, 120);

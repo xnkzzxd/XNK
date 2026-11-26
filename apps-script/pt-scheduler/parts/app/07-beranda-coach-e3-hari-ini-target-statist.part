@@ -207,19 +207,21 @@
   // Lembar "Atur program": semua pengaturan program di satu tempat (dulu tombol Ubah + lipatan Lainnya).
   let cppMember = '';
   function cpProgSheetHtml(memberId) {
+    // Gaya daftar pengaturan (sama dengan menu ⋯): baris dengan ikon + panah untuk tindakan, baris dengan sakelar untuk pilihan.
     const d = progAdmin[memberId] || {}, g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
     const id = h(memberId), n = (d.days || []).reduce((s, x) => s + x.items.length, 0);
-    let html = '<button type="button" class="btn btn-primary btn-block" onclick="window.cpProgEdit(\'' + id + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button>' +
-      '<p class="li-sub">Hari, gerakan, set dan rep. Klien melihat perubahan di portalnya.</p>';
+    const row = (ic, label, sub, js) => '<button type="button" class="cpm-row" onclick="' + js + '">' + icon(ic) + '<span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + icon('chevron-right') + '</button>';
+    const sw = (label, sub, on, js, key) => '<div class="cpm-row cpm-sw"><span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span><label class="toggle"><input type="checkbox" data-cpp="' + h(key) + '" aria-label="' + h(label) + '"' + (on ? ' checked' : '') + ' onchange="' + js + '"><span></span></label></div>';
+    const group = (title, rows, note) => '<div class="cpm-group"><p class="cpm-h">' + h(title) + '</p><div class="cpm-list">' + rows + '</div>' + (note ? '<p class="li-sub cpm-note">' + note + '</p>' : '') + '</div>';
+    let html = group('Program', row('pencil', n ? 'Ubah program' : 'Buat program', 'Hari, gerakan, set dan rep', "window.cpProgEdit('" + id + "')"));
     if (g) {
-      html += '<div class="cpp-group"><div class="cpp-row"><span class="grow"><b>Program otomatis</b><span class="li-sub">' + (g.auto ? 'Disusun dan dinaikkan otomatis tiap minggu' : 'Mati: program hanya berubah lewat coach') + '</span></span>' +
-        '<label class="toggle"><input type="checkbox" id="cpp-auto" aria-label="Program otomatis"' + (g.auto ? ' checked' : '') + ' onchange="window.pgAdminAuto(\'' + id + '\',this.checked)"><span></span></label></div>' +
-        (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('') + '</div>' +
-        '<div class="cpp-group"><p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div></div>' +
-        '<button type="button" class="btn btn-outline btn-block" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + 'Buat ulang otomatis</button>';
+      html += group('Otomatis', sw('Program otomatis', g.auto ? 'Disusun dan dinaikkan tiap minggu' : 'Mati: hanya berubah lewat coach', g.auto, "window.pgAdminAuto('" + id + "',this.checked)", 'auto') +
+        row('refresh-cw', 'Buat ulang otomatis', 'Susun ulang dari profil dan alat gym', "window.pgAdminRegen('" + id + "')"), (g.why || []).slice(-1).map(h).join(''));
+      const TAG = { lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' };
+      html += group('Pantangan gerakan', (g.tags || []).map(function (t) { return sw(TAG[t] || t, '', (g.pantangan || []).indexOf(t) !== -1, "window.pgAdminTag('" + id + "','" + h(t) + "')", 'tag-' + t); }).join(''), 'Gerakan yang membebani bagian ini dilewati saat program disusun.');
     }
-    if (d.own && d.own.length) html += '<div class="cpp-group"><p class="label">Rutinitas buatan klien (' + d.own.length + ')</p>' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div>';
-    return '<div class="stack" style="gap:14px">' + html + '</div>';
+    if (d.own && d.own.length) html += group('Rutinitas buatan klien (' + d.own.length + ')', d.own.map(day => '<div class="cpm-row cpm-text"><span class="grow"><b>' + h(day.hari) + '</b><span>' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</span></span></div>').join(''));
+    return html;
   }
   window.cpProgSheet = function (memberId) {
     cppMember = String(memberId);

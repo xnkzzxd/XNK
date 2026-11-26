@@ -17,7 +17,8 @@ Code: `apps-script/pt-scheduler/parts/app/20-klien-ac.part` (panel-only renderer
 | Home | Holds | Where |
 | --- | --- | --- |
 | Action bar | Chat WA · Booking · Mulai latihan · Catat ukuran | In the client card at every width: four equal tiles on phones and in the 420 px panel, one row with "Mulai latihan" solid when the panel is ≥ 620 px wide. Same on every tab, never repeated in a tab. |
-| ⋯ menu (`#sheet-cp-more`) | Tambah: PR baru, Tes kebugaran, Latihan yang lewat, Catatan privat · Kirim lewat WA: ringkasan latihan, hasil tes, pengingat form kesehatan · Bagikan kartu · Klien: Ubah data, Hapus klien | Head right on every tab |
+| Share icon | Bagikan kartu: opens the share editor on the card for the open tab (Ringkasan → Rekap, Progres → Progres or Ukuran, Latihan → Latihan, Gizi → Gizi; `cpShare`) | Head right, next to ⋯, on every tab (owner's request after Wave 3: share in one neat place) |
+| ⋯ menu (`#sheet-cp-more`) | Tambah: PR baru, Tes kebugaran, Latihan yang lewat, Catatan privat · Kirim lewat WA: ringkasan latihan, hasil tes, pengingat form kesehatan · Klien: Ubah data, Hapus klien | Head right on every tab |
 | The thing itself | A row opens its own sheet (view / Ubah / Hapus): measurement, workout day, session, PR, photo, test | — |
 | One link per section | "+ PR", "Atur program", "Ubah data gizi" | Right of the section head (`.px-sec`) |
 
@@ -32,14 +33,14 @@ Old → new:
 | Chat WA, Booking | Action bar |
 | Mulai latihan (Latihan tab) | Action bar |
 | Catat ×2 in Progres | Action bar → Catat ukuran |
-| Three share buttons in Progres | ⋯ → Bagikan kartu |
+| Three share buttons in Progres | Share icon in the head |
 | Foto | Progres › Foto (rows → private viewer; only the client uploads) |
 | + Tes, Kirim hasil via WA | ⋯ → Tes kebugaran / ⋯ → Hasil tes |
-| Six share buttons | ⋯ → Bagikan kartu |
+| Six share buttons | Share icon in the head |
 | Delete per measurement | Tap the row → Hapus |
 | "Ubah" per workout day | Tap the row → Ubah |
 | Ubah program, Lainnya (auto, pantangan, regenerate) | "Atur program" → one sheet (`#sheet-cp-prog`); catat yang lewat / WA summary → ⋯ |
-| Three share buttons in Latihan | ⋯ → Bagikan kartu |
+| Three share buttons in Latihan | Share icon in the head |
 | Care Ubah / Lihat jawaban / Isi / Kirim pengingat | Data tiles; reminder to fill → ⋯ |
 | Ten reminder switches on Ringkasan | Data → Pengingat WhatsApp |
 | PR "Tambah" | "+ PR" on the PR head (and ⋯) |
@@ -97,18 +98,18 @@ A light segment **Ringkasan · Ukuran · Tes · Foto** at the top of the pane (`
 - **Ukuran**: *Grafik ukuran*: one `pgChartSvg` at a time, chips *Berat · Pinggang* plus a "Lainnya…" select for the other six measures that have data (`cpPgPick`). *Lingkar & simetri* (`insMeasuresBody`) when there is data. *Riwayat catatan*: rows (date, coach/klien, first three values), 5 then "Tampilkan semua"; a tap opens `#sheet-cp-row` (all values, author, **Hapus catatan** → the existing optimistic `pgDeleteAdminEntry` with its confirm).
 - **Tes**: the coach fitness insight (`insFitnessCard`) and `#profile-tests-wrap` (Wave 1). Adding a test and sending results stay in ⋯.
 - **Foto**: photo rows (date, side). A tap sets `pg.mode = 'admin'` and opens the existing private viewer (`pgViewPhoto`: one `getMemberProgressPhoto`, data URL, no Hapus for the coach); closing returns to the sub-tab (`pg.fromTab`). No thumbnail grid, so no extra photo calls. *Badge* pills below.
-- Removed from the tab: Catat ×2 (action bar), Foto button (sub-tab), three share buttons (⋯ → Bagikan kartu), the per-entry delete icons (row sheet). ⋯ → Tambah no longer lists "Foto progres": only the client uploads photos.
+- Removed from the tab: Catat ×2 (action bar), Foto button (sub-tab), three share buttons (share icon in the head), the per-entry delete icons (row sheet). ⋯ → Tambah no longer lists "Foto progres": only the client uploads photos.
 - Server: `getClientBundle.athlete` now also carries `moments` (computed by `_portalXFor_` already; one additive field).
 
 ### Latihan (Wave 3)
 Phone order: Program → Minggu ini → Kekuatan → Volume & keseimbangan → Riwayat. From a panel ≥ 700 px wide: two columns, Program + Riwayat left (lists), the numbers right (`.cp-col` with `display: contents` and `order` on phones).
 - **Program** (`programAdminInner0`, admin only): head with the status pill (Otomatis · blok n / Otomatis mati / Program coach / Belum ada) and the **Atur program** link; one muted profile line (level · tujuan · n× / minggu · durasi) for auto programs; mode-ringan and missing-equipment notes; one card per day. The next day (`workout.next`, else the first day) is open with every exercise (thumbnail → `exView`) and a solid **Berikutnya** pill: that is what *Mulai latihan* on the client card starts. Other days are `<details>` cards showing one line of exercise names; a tap opens the full list. A muted foot line: last logged day · last day the client ticked. Empty: one line pointing to Atur program.
-- **Atur program** (`#sheet-cp-prog`, `cpProgSheet`): Ubah / Buat program (closes, then `openProgramEditor`), the Program otomatis switch (`pgAdminAuto`), the latest "why" line, Pantangan chips (`pgAdminTag`), Buat ulang otomatis (`pgAdminRegen`), and the client's own routines. It re-renders in place after each answer (`renderProgramAdmin` → `cpProgSheetRefresh`).
-- **Minggu ini vs biasanya** (`cpLatWeekHtml`): the portal's numbers (days, working sets, volume, then RPE, feeling or duration) and sentence in the light hero, no share buttons; below it one card with the 12-week heatmap and two lines (active days of 84, program days this week).
+- **Atur program** (`#sheet-cp-prog`, `cpProgSheet`): a settings list in the ⋯ menu's style (`.cpm-group` / `.cpm-row`, no pill buttons; owner's request): *Program* → Ubah / Buat program (closes, then `openProgramEditor`); *Otomatis* → a Program otomatis switch row (`pgAdminAuto`) and a Buat ulang otomatis row (`pgAdminRegen`), with the latest "why" line under it; *Pantangan gerakan* → one switch row per tag (`pgAdminTag`); the client's own routines as text rows. It re-renders in place after each answer (`renderProgramAdmin` → `cpProgSheetRefresh`); a failed answer re-renders too, so a switch never shows a state that was not saved.
+- **Minggu ini vs biasanya** (`cpLatWeekHtml`): the portal's numbers (days, working sets, volume, then RPE, feeling or duration) and sentence in the light hero, no share buttons; below it one *Aktivitas* card: the 12-week heatmap stretched across the whole card (columns `1fr`, 14 px rows, so no empty space beside it; owner's request) and two numbers under it (active days of 84, program days this week).
 - **Kekuatan** (`cpStrengthHtml`): one list (up to 8 lifts from `insight.training.strength`): name, est. 1RM, × body weight, red *mandek*, sparkline, change %. A row is a `<details>`: opening it shows the PR and the full e1RM chart from `workout.stats.exercises` (same key), so the old exercise picker and the second strength card are gone.
 - **Volume & keseimbangan** (`cpVolumeHtml`): weekly volume bars, push / pull / legs / core shares over 4 weeks, the push:pull note and lifts missed for 2 weeks, in one card (the old "volume per otot" duplicate is dropped).
 - **Riwayat latihan** (`cpWkHistHtml`): rows (date + feeling, day name, exercises · sets · minutes, note); 5 then "Tampilkan semua"; a row within 90 days opens `workoutEditDay`; queued workouts show "Menunggu sinyal" / "Gagal".
-- Removed: Mulai latihan and Ubah program buttons (client card / Atur program), the "Lainnya" fold (Atur program; *Catat yang lewat* and *Kirim ringkasan WA* were already in ⋯), three share buttons (⋯ → Bagikan kartu), the last-session number tiles (the first history row says the same).
+- Removed: Mulai latihan and Ubah program buttons (client card / Atur program), the "Lainnya" fold (Atur program; *Catat yang lewat* and *Kirim ringkasan WA* were already in ⋯), three share buttons (share icon in the head), the last-session number tiles (the first history row says the same).
 - `cpLatRender(id)` redraws Kekuatan, Volume and Riwayat when the workout data changes (called from `renderProgramAdmin`); the insight parts redraw through `renderClientInsight` as before. No new calls.
 
 ### Gizi (Wave 4)

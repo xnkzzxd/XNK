@@ -3302,10 +3302,15 @@ details.cp-day[open] .cp-day-names { display: none; }
 .cp-day-names { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .cp-day-ex { display: flex; flex-direction: column; gap: 6px; }
 .cp-foot { padding: 0 2px; }
-.cp-act-card { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
-.cp-act-heat { flex: none; }
-.cp-act-t { flex: 1 1 12rem; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
-.cp-act-t b { font-size: var(--fs-md); }
+/* Aktivitas: peta 12 minggu selebar kartu (kolom 1fr, tinggi tetap), dua angka di bawahnya — tanpa ruang kosong di samping. */
+.cp-act-card { display: flex; flex-direction: column; gap: 12px; }
+.cp-act-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cp-act-card .heat-grid { width: 100%; grid-template-rows: repeat(7, 14px); grid-auto-columns: minmax(0, 1fr); gap: 4px; }
+.cp-act-card .heat-grid i { width: auto; height: auto; border-radius: 4px; }
+.cp-act-t { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 8px 16px; }
+.cp-act-t p { margin: 0; display: flex; flex-direction: column; }
+.cp-act-t b { font-size: var(--fs-xl); font-weight: 800; line-height: 1.1; }
+.cp-act-t span { font-size: var(--fs-xs); color: var(--fg-muted); }
 /* HP: Program → Minggu ini → Kekuatan/Volume → Riwayat (kolom PC memakai display:contents di HP) */
 .cp-pane[data-cppane="latihan"] > .cp-col { display: contents; }
 .cp-pane[data-cppane="latihan"] #profile-program-wrap { order: 1; }
@@ -3324,9 +3329,10 @@ details.cp-day[open] .cp-day-names { display: none; }
 .cp-str-b { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 6px; }
 .cp-warn { color: var(--danger); }
 .cp-vol .ins-notes { margin: 12px 0 0; }
-.cpp-group { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
-.cpp-row { display: flex; align-items: center; gap: 12px; min-height: 52px; }
-.cpp-row .grow { display: flex; flex-direction: column; min-width: 0; }
+.cpm-sw, .cpm-text { cursor: default; }
+.cpm-sw .toggle { flex: none; }
+.cpm-note { margin: 6px 4px 0; }
+.cp-share-btn + .cp-more-btn { margin-left: 4px; }
 .cp-row > svg.lucide.lucide-pencil { color: var(--fg-muted); }
 </style>
 <style>html,body{height:100%;margin:0}.layer{position:fixed;inset:0}#share-toast{position:fixed;left:16px;right:16px;bottom:24px;background:#111;color:#fff;padding:12px;border-radius:10px;display:none;z-index:99;text-align:center}</style>

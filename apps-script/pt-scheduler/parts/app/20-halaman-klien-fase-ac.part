@@ -261,8 +261,8 @@
     const hero = insightHeroHtml({ eyebrow: 'Minggu ini vs biasanya', stats: stats.slice(0, 4), text: t.text });
     if (!a) return hero;
     const adh = a.adherence && a.adherence.length ? a.adherence[a.adherence.length - 1] : null;
-    return hero + '<div class="card cp-card-pad cp-act-card"><div class="cp-act-heat" aria-hidden="true">' + heatHtml(a.levels) + '</div><div class="cp-act-t"><p><b class="num">' + a.active + ' / 84</b> hari aktif dalam 12 minggu</p>' +
-      (adh ? '<p><b class="num">' + adh.done + ' / ' + adh.planned + '</b> hari program minggu ini</p>' : '') + '<p class="li-sub">Sesi, latihan dan catat makan</p></div></div>';
+    return hero + '<div class="card cp-card-pad cp-act-card"><div class="cp-act-head"><b>Aktivitas</b><span class="li-sub">12 minggu · sesi, latihan, catat makan</span></div>' + heatHtml(a.levels) +
+      '<div class="cp-act-t"><p><b class="num">' + a.active + '</b><span>dari 84 hari aktif</span></p>' + (adh ? '<p><b class="num">' + adh.done + ' / ' + adh.planned + '</b><span>hari program minggu ini</span></p>' : '') + '</div></div>';
   }
   function cpStrengthHtml(memberId) {
     const d = insD(); if (!d || !d.training.strength.length) return '';
@@ -326,6 +326,13 @@
     paintIcons();
   };
 
+  // ── Bagikan (ikon di kepala): kartu yang cocok dengan tab yang terbuka; editor kartu tetap bisa ganti kartu ──
+  window.cpShare = function (memberId) {
+    const t = ui.cpTab && String(ui.cpTab.id) === String(memberId) ? ui.cpTab.name : 'ringkasan';
+    const kind = t === 'progres' ? (cpg.seg === 'ukuran' ? 'ukuran' : 'progres') : t === 'latihan' ? 'latihan' : t === 'gizi' ? 'gizi' : 'rekap';
+    window.shareCard(kind, String(memberId));
+  };
+
   // ── Menu ⋯: semua aksi yang jarang dipakai, dikelompokkan, di satu tempat yang sama di setiap tab ──
   let cpmMember = '';
   window.cpMore = function (memberId) {
@@ -339,7 +346,6 @@
     $('cpm-title').textContent = 'Menu klien';
     setHTML('cpm-body', group('Tambah', row('pr', 'list-plus', 'PR baru', '') + row('tes', 'timer', 'Tes kebugaran', '') + row('lewat', 'calendar-check', 'Latihan yang lewat', 'Catat latihan hari sebelumnya') + row('catatan', 'notebook-pen', 'Catatan privat', '')) +
       group('Kirim lewat WhatsApp', send) +
-      (window.shareOn !== false ? group('Bagikan', row('bagikan', 'share-2', 'Bagikan kartu', 'Latihan, progres, rekap, badge')) : '') +
       group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('hapus', 'trash-2', 'Hapus klien', '', true)));
     openSheet('sheet-cp-more');
   };
@@ -348,7 +354,7 @@
     const go = {
       pr: () => window.addTaskFor(id), tes: () => window.openCareTests(id), lewat: () => window.workoutOpenAdmin(id, '', '', true), catatan: () => window.openCareNotes(id),
       'wa-latihan': () => window.workoutSummaryWA(id), 'wa-tes': () => window.sendTestResult(id), 'wa-form': () => window.cpHealthRemind(id),
-      bagikan: () => window.shareCard('latihan', id), ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal()
+      ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal()
     }[k];
     window.closeModal();
     if (go) setTimeout(go, 120);

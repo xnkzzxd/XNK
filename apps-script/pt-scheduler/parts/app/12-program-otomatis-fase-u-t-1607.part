@@ -141,12 +141,12 @@
     const go = function () { adminCall('regenerateProgram', id).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
     if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
   };
-  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); }); };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); renderProgramAdmin(id); }); };
   window.pgAdminTag = function (id, t) {
     const g = pgAdminGen[id]; if (!g) return;
     const list = (g.pantangan || []).slice(), i = list.indexOf(t);
     if (i !== -1) list.splice(i, 1); else list.push(t);
-    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); });
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); renderProgramAdmin(id); });
   };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;

@@ -4775,7 +4775,9 @@
     // Data: hub ala "Saya" di portal
     body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     body += '</div>';
-    const actions = '<button type="button" class="icon-btn plain cp-more-btn" onclick="window.cpMore(\'' + h(m.id) + '\')" aria-label="Menu klien" aria-haspopup="dialog">' + icon('ellipsis') + '</button>';
+    // Kepala: Bagikan (kartu sesuai tab yang terbuka) + menu ⋯. Satu tempat untuk berbagi di semua tab.
+    const actions = (window.shareOn !== false ? '<button type="button" class="icon-btn plain cp-share-btn" onclick="window.cpShare(\'' + h(m.id) + '\')" aria-label="Bagikan kartu klien">' + icon('share-2') + '</button>' : '') +
+      '<button type="button" class="icon-btn plain cp-more-btn" onclick="window.cpMore(\'' + h(m.id) + '\')" aria-label="Menu klien" aria-haspopup="dialog">' + icon('ellipsis') + '</button>';
     openDetail('client:' + m.id, m.name || 'Profil klien', actions, body);
     window.loadClientBundle(m.id);
   };
@@ -5854,19 +5856,21 @@
   // Lembar "Atur program": semua pengaturan program di satu tempat (dulu tombol Ubah + lipatan Lainnya).
   let cppMember = '';
   function cpProgSheetHtml(memberId) {
+    // Gaya daftar pengaturan (sama dengan menu ⋯): baris dengan ikon + panah untuk tindakan, baris dengan sakelar untuk pilihan.
     const d = progAdmin[memberId] || {}, g0 = pgAdminGen[memberId], g = g0 && !g0.error && g0.enabled ? g0 : null;
     const id = h(memberId), n = (d.days || []).reduce((s, x) => s + x.items.length, 0);
-    let html = '<button type="button" class="btn btn-primary btn-block" onclick="window.cpProgEdit(\'' + id + '\')">' + icon('pencil') + (n ? 'Ubah program' : 'Buat program') + '</button>' +
-      '<p class="li-sub">Hari, gerakan, set dan rep. Klien melihat perubahan di portalnya.</p>';
+    const row = (ic, label, sub, js) => '<button type="button" class="cpm-row" onclick="' + js + '">' + icon(ic) + '<span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span>' + icon('chevron-right') + '</button>';
+    const sw = (label, sub, on, js, key) => '<div class="cpm-row cpm-sw"><span class="grow"><b>' + h(label) + '</b>' + (sub ? '<span>' + h(sub) + '</span>' : '') + '</span><label class="toggle"><input type="checkbox" data-cpp="' + h(key) + '" aria-label="' + h(label) + '"' + (on ? ' checked' : '') + ' onchange="' + js + '"><span></span></label></div>';
+    const group = (title, rows, note) => '<div class="cpm-group"><p class="cpm-h">' + h(title) + '</p><div class="cpm-list">' + rows + '</div>' + (note ? '<p class="li-sub cpm-note">' + note + '</p>' : '') + '</div>';
+    let html = group('Program', row('pencil', n ? 'Ubah program' : 'Buat program', 'Hari, gerakan, set dan rep', "window.cpProgEdit('" + id + "')"));
     if (g) {
-      html += '<div class="cpp-group"><div class="cpp-row"><span class="grow"><b>Program otomatis</b><span class="li-sub">' + (g.auto ? 'Disusun dan dinaikkan otomatis tiap minggu' : 'Mati: program hanya berubah lewat coach') + '</span></span>' +
-        '<label class="toggle"><input type="checkbox" id="cpp-auto" aria-label="Program otomatis"' + (g.auto ? ' checked' : '') + ' onchange="window.pgAdminAuto(\'' + id + '\',this.checked)"><span></span></label></div>' +
-        (g.why || []).slice(-1).map(function (w) { return '<p class="li-sub">' + h(w) + '</p>'; }).join('') + '</div>' +
-        '<div class="cpp-group"><p class="label">Pantangan gerakan</p><div class="chips" style="flex-wrap:wrap">' + (g.tags || []).map(function (t) { const on = (g.pantangan || []).indexOf(t) !== -1; return '<button type="button" class="chip' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="window.pgAdminTag(\'' + id + '\',\'' + h(t) + '\')">' + h({ lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' }[t] || t) + '</button>'; }).join('') + '</div></div>' +
-        '<button type="button" class="btn btn-outline btn-block" onclick="window.pgAdminRegen(\'' + id + '\')">' + icon('refresh-cw') + 'Buat ulang otomatis</button>';
+      html += group('Otomatis', sw('Program otomatis', g.auto ? 'Disusun dan dinaikkan tiap minggu' : 'Mati: hanya berubah lewat coach', g.auto, "window.pgAdminAuto('" + id + "',this.checked)", 'auto') +
+        row('refresh-cw', 'Buat ulang otomatis', 'Susun ulang dari profil dan alat gym', "window.pgAdminRegen('" + id + "')"), (g.why || []).slice(-1).map(h).join(''));
+      const TAG = { lutut: 'Lutut', 'punggung-bawah': 'Punggung bawah', bahu: 'Bahu', hamil: 'Hamil' };
+      html += group('Pantangan gerakan', (g.tags || []).map(function (t) { return sw(TAG[t] || t, '', (g.pantangan || []).indexOf(t) !== -1, "window.pgAdminTag('" + id + "','" + h(t) + "')", 'tag-' + t); }).join(''), 'Gerakan yang membebani bagian ini dilewati saat program disusun.');
     }
-    if (d.own && d.own.length) html += '<div class="cpp-group"><p class="label">Rutinitas buatan klien (' + d.own.length + ')</p>' + d.own.map(day => '<div class="stack" style="gap:2px"><p class="li-title">' + h(day.hari) + '</p><p class="li-sub">' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</p></div>').join('') + '</div>';
-    return '<div class="stack" style="gap:14px">' + html + '</div>';
+    if (d.own && d.own.length) html += group('Rutinitas buatan klien (' + d.own.length + ')', d.own.map(day => '<div class="cpm-row cpm-text"><span class="grow"><b>' + h(day.hari) + '</b><span>' + h(day.items.map(it => exNm(it) + ' ' + it.set + '×' + it.rep).join(', ')) + '</span></span></div>').join(''));
+    return html;
   }
   window.cpProgSheet = function (memberId) {
     cppMember = String(memberId);
@@ -9880,12 +9884,12 @@
     const go = function () { adminCall('regenerateProgram', id).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); showToast('Program dibuat ulang.'); }).catch(function (e) { showToast(waitErr(e)); }); };
     if (g && g.hasCoachProgram) window.showConfirmModal('Program buatan coach akan diganti program otomatis.', go, { title: 'Buat ulang program?', confirmText: 'Ganti', variant: 'danger' }); else go();
   };
-  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); }); };
+  window.pgAdminAuto = function (id, on) { adminCall('setClientProgramAuto', id, { auto: !!on }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); renderProgramAdmin(id); }); };
   window.pgAdminTag = function (id, t) {
     const g = pgAdminGen[id]; if (!g) return;
     const list = (g.pantangan || []).slice(), i = list.indexOf(t);
     if (i !== -1) list.splice(i, 1); else list.push(t);
-    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); });
+    adminCall('setClientProgramAuto', id, { pantangan: list }).then(function (r) { return pgAdminFromWrite(id, r); }).then(function (p) { window.programSetAdmin(id, p); }).catch(function (e) { showToast(waitErr(e)); renderProgramAdmin(id); });
   };
   function renderPublicProgram() {
     const el = $('view-public-program'), me = window.publicLoggedMember;
@@ -13957,8 +13961,8 @@
     const hero = insightHeroHtml({ eyebrow: 'Minggu ini vs biasanya', stats: stats.slice(0, 4), text: t.text });
     if (!a) return hero;
     const adh = a.adherence && a.adherence.length ? a.adherence[a.adherence.length - 1] : null;
-    return hero + '<div class="card cp-card-pad cp-act-card"><div class="cp-act-heat" aria-hidden="true">' + heatHtml(a.levels) + '</div><div class="cp-act-t"><p><b class="num">' + a.active + ' / 84</b> hari aktif dalam 12 minggu</p>' +
-      (adh ? '<p><b class="num">' + adh.done + ' / ' + adh.planned + '</b> hari program minggu ini</p>' : '') + '<p class="li-sub">Sesi, latihan dan catat makan</p></div></div>';
+    return hero + '<div class="card cp-card-pad cp-act-card"><div class="cp-act-head"><b>Aktivitas</b><span class="li-sub">12 minggu · sesi, latihan, catat makan</span></div>' + heatHtml(a.levels) +
+      '<div class="cp-act-t"><p><b class="num">' + a.active + '</b><span>dari 84 hari aktif</span></p>' + (adh ? '<p><b class="num">' + adh.done + ' / ' + adh.planned + '</b><span>hari program minggu ini</span></p>' : '') + '</div></div>';
   }
   function cpStrengthHtml(memberId) {
     const d = insD(); if (!d || !d.training.strength.length) return '';
@@ -14022,6 +14026,13 @@
     paintIcons();
   };
 
+  // ── Bagikan (ikon di kepala): kartu yang cocok dengan tab yang terbuka; editor kartu tetap bisa ganti kartu ──
+  window.cpShare = function (memberId) {
+    const t = ui.cpTab && String(ui.cpTab.id) === String(memberId) ? ui.cpTab.name : 'ringkasan';
+    const kind = t === 'progres' ? (cpg.seg === 'ukuran' ? 'ukuran' : 'progres') : t === 'latihan' ? 'latihan' : t === 'gizi' ? 'gizi' : 'rekap';
+    window.shareCard(kind, String(memberId));
+  };
+
   // ── Menu ⋯: semua aksi yang jarang dipakai, dikelompokkan, di satu tempat yang sama di setiap tab ──
   let cpmMember = '';
   window.cpMore = function (memberId) {
@@ -14035,7 +14046,6 @@
     $('cpm-title').textContent = 'Menu klien';
     setHTML('cpm-body', group('Tambah', row('pr', 'list-plus', 'PR baru', '') + row('tes', 'timer', 'Tes kebugaran', '') + row('lewat', 'calendar-check', 'Latihan yang lewat', 'Catat latihan hari sebelumnya') + row('catatan', 'notebook-pen', 'Catatan privat', '')) +
       group('Kirim lewat WhatsApp', send) +
-      (window.shareOn !== false ? group('Bagikan', row('bagikan', 'share-2', 'Bagikan kartu', 'Latihan, progres, rekap, badge')) : '') +
       group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('hapus', 'trash-2', 'Hapus klien', '', true)));
     openSheet('sheet-cp-more');
   };
@@ -14044,7 +14054,7 @@
     const go = {
       pr: () => window.addTaskFor(id), tes: () => window.openCareTests(id), lewat: () => window.workoutOpenAdmin(id, '', '', true), catatan: () => window.openCareNotes(id),
       'wa-latihan': () => window.workoutSummaryWA(id), 'wa-tes': () => window.sendTestResult(id), 'wa-form': () => window.cpHealthRemind(id),
-      bagikan: () => window.shareCard('latihan', id), ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal()
+      ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal()
     }[k];
     window.closeModal();
     if (go) setTimeout(go, 120);

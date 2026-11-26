@@ -939,7 +939,9 @@
     // Data: hub ala "Saya" di portal
     body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     body += '</div>';
-    const actions = '<button type="button" class="icon-btn plain cp-more-btn" onclick="window.cpMore(\'' + h(m.id) + '\')" aria-label="Menu klien" aria-haspopup="dialog">' + icon('ellipsis') + '</button>';
+    // Kepala: Bagikan (kartu sesuai tab yang terbuka) + menu ⋯. Satu tempat untuk berbagi di semua tab.
+    const actions = (window.shareOn !== false ? '<button type="button" class="icon-btn plain cp-share-btn" onclick="window.cpShare(\'' + h(m.id) + '\')" aria-label="Bagikan kartu klien">' + icon('share-2') + '</button>' : '') +
+      '<button type="button" class="icon-btn plain cp-more-btn" onclick="window.cpMore(\'' + h(m.id) + '\')" aria-label="Menu klien" aria-haspopup="dialog">' + icon('ellipsis') + '</button>';
     openDetail('client:' + m.id, m.name || 'Profil klien', actions, body);
     window.loadClientBundle(m.id);
   };
