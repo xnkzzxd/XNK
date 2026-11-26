@@ -19,7 +19,7 @@ var TIDY_COL_MIN_BY_SHEET = { MemberData: 60 };   // MemberData memakai kolom te
 var TIDY_CELL_LIMIT = 10000000;              // batas sel per spreadsheet dari Google
 var TIDY_SCAN_MAX = 200000;                  // area cadangan lebih besar dari ini tidak dipindai (dan tidak dibersihkan)
 // Sheet yang dibaca/dibuat kode. tests/rapikan.test.js memastikan daftar ini lengkap.
-var TIDY_KNOWN_SHEETS = ['Assessments', 'ClassGroups', 'ClientHolds', 'CoachAvailability', 'CoachTimeOff', 'Coaches', 'Content',
+var TIDY_KNOWN_SHEETS = ['Assessments', 'ClassGroups', 'ClientHolds', 'ExerciseNotes', 'FoodFeedback', 'CoachAvailability', 'CoachTimeOff', 'Coaches', 'Content',
   'ExerciseAlias', 'FitnessTests', 'FoodLog', 'GymExercises', 'HealthScreening', 'Idem', 'KategoriKeuangan', 'Logs', 'MealTips',
   'MemberData', 'Members', 'NutritionAdvice', 'PackageEvaluations', 'Pembayaran', 'Pengeluaran', 'PesanVariasi',
   'PriceList', 'ProgramItems', 'ProgramLog', 'Progress', 'ProgressPhotos', 'PushOutbox', 'PushSubs', 'ReminderLog',

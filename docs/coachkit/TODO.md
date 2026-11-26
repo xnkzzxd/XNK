@@ -10,26 +10,27 @@ Build order: AC2 → AC1 → AC3 → AC4. Each task: tests, checks (Agent.md §5
 - [x] **T-2303** Part `20-cara-ukur.part`: `UKUR_LINE` / `UKUR_STEPS`, front figure with tape line (both sexes; no side view needed), `#sheet-ukur`, ? buttons in client, coach and assessment sheets; browser-check "Cara ukur".
 
 ## AC1 — Hold a client
-- [ ] **T-2304** Sheet `ClientHolds`, `src/Cuti.gs` pure helpers + `HOLD` constants, tests.
-- [ ] **T-2305** Admin `setClientHold` (dry run, cancel sessions in range, `_bustSlots_`), `endClientHold`, `deleteClientHold`; bootstrap `holds`, bundle history with note; api lists, `IDEM_DURABLE`, bump.
-- [ ] **T-2306** Effects: `_buildClientPools_` holds (every reminder job + push kind tested, `HOLD_KEEP_TYPES = ['ulang-tahun']`, digest footer), booking soft conflict / admin warning, `_warmPick_`, `runProgramAutoJob_` skip.
-- [ ] **T-2307** Streak bridging (`heldWeeks`), monthly challenge pro rata, signals and `getCoachHub().holds`.
-- [ ] **T-2308** Panel UI: Klien chip **Ditahan**, pills, counts, hero band, `#sheet-hold` with session list, history fold, hub fold; phone + desktop, light/dark; browser-check "Tahan klien".
-- [ ] **T-2309** Return day job `runHoldReturnJob_` (Telegram digest, `kembali-latihan` template **off by default**, coach push). Lighter-return rule for the auto program: blocked until a source is added to program/Rules.md (owner may drop).
-- [ ] **T-2310** (AC1b) Member `requestMyHold`, `cancelMyHoldRequest`, `endMyHold`; admin `decideHoldRequest`; Telegram (no note), push kind `cuti`; tests.
-- [ ] **T-2311** (AC1b) Portal: hold card + **Saya sudah kembali**, **Ajukan cuti** sheet, pending/decided states, booking calendar shows hold days; Dashboard "Minta cuti" card; offline snapshot label.
+- [x] **T-2304** Sheet `ClientHolds`, `src/Cuti.gs` pure helpers + `HOLD` constants, tests.
+- [x] **T-2305** Admin `setClientHold` (dry run, cancel sessions in range, `_bustSlots_`), `endClientHold`, `deleteClientHold`; bootstrap `holds`, bundle history with note; api lists, `IDEM_DURABLE`, bump.
+- [x] **T-2306** Effects: `_buildClientPools_` holds (every reminder job + push kind; `HOLD_KEEP_TYPES = ['ulang-tahun', 'sesi-besok']`; the "Ditahan:" digest footer was dropped), booking soft conflict / admin warning, `_warmPick_`, `runProgramAutoJob_` skip.
+- [x] **T-2307** Streak bridging (`heldWeeks`), monthly challenge pro rata, signals and `getCoachHub().holds`.
+- [x] **T-2308** Panel UI: Klien chip **Ditahan**, pills, counts, hero band, `#sheet-hold` with session list, history fold, hub fold; phone + desktop, light/dark; browser-check "Tahan klien".
+- [x] **T-2309** Return day: built as a normal reminder type `kembali-latihan` (07:00, **off by default**, one `wa.me` button per client whose hold ended yesterday by itself; `sendKembaliLatihanDigest_`, `_holdReturning_`), so the owner gets the usual on/off, hour and template editing in Pengaturan. No separate coach push (the hub lists who comes back soon).
+- [-] **T-2309b** Lighter first sessions after a long hold for the auto program: needs a sourced rule in program/Rules.md first; not built.
+- [x] **T-2310** (AC1b) Member `requestMyHold`, `cancelMyHoldRequest`, `endMyHold`; admin `decideHoldRequest`; Telegram (no note), push kind `cuti`; tests.
+- [x] **T-2311** (AC1b) Portal: hold card + **Saya sudah kembali**, **Ajukan cuti** sheet, pending/decided states, booking calendar shows hold days; Dashboard "Minta cuti" card; offline snapshot label.
 
 ## AC3 — Coach logger upgrade (owner: build all)
-- [ ] **T-2320** W1 Simpan & selesaikan sesi from the logger.
-- [ ] **T-2321** W2 Isi seperti terakhir / Ulangi latihan terakhir / +kg chip.
-- [ ] **T-2322** W3 `ExerciseNotes` (setelan alat + cue), coach logger line; client read-only line (owner: yes).
-- [ ] **T-2323** W4 `deleteWorkoutEntries` + history actions with undo.
-- [ ] **T-2324** W5 Riwayat per gerakan on the client page (`getWorkoutExerciseHistory`).
-- [ ] **T-2325** W6 Two or more clients in one logger session.
-- [ ] **T-2326** F1 `logClientFood` / `deleteClientFood` + **+ Catat** in the Gizi tab.
-- [ ] **T-2327** F2 `FoodFeedback` + day mark and note; client read-only line (owner: yes).
-- [ ] **T-2328** F3 31-day food log, month calendar, weekly averages, top foods (`_foodMonthStats_`).
-- [ ] **T-2329** Browser-check "Catat coach" + client logger 390 px unchanged check.
+- [x] **T-2320** W1 Simpan & selesaikan sesi from the logger.
+- [x] **T-2321** W2 Isi seperti terakhir / Ulangi latihan terakhir / +kg chip.
+- [x] **T-2322** W3 `ExerciseNotes` (setelan alat + cue), coach logger line; client read-only line (owner: yes).
+- [x] **T-2323** W4 `deleteWorkoutEntries` + history actions with undo.
+- [x] **T-2324** W5 Riwayat per gerakan on the client page (`getWorkoutExerciseHistory`).
+- [x] **T-2325** W6 Two or more clients in one logger session.
+- [x] **T-2326** F1 `logClientFood` / `deleteClientFood` + **+ Catat** in the Gizi tab.
+- [x] **T-2327** F2 `FoodFeedback` + day mark and note; client read-only line (owner: yes).
+- [x] **T-2328** F3 31-day food log, month calendar, weekly averages, top foods (`_foodMonthStats_`).
+- [x] **T-2329** Browser-check "Catat coach" (logger setup line, finish + complete session, coach food log, day mark). The client logger only gains the read-only setup line; no pixel compare was added.
 
 ## AC4 — PDF report on demand
 - [ ] **T-2340** `src/Laporan.gs`: `_reportCalc_` (pure), `getMyReport`, `getMemberReport`, cache, privacy tests.

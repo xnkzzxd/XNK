@@ -188,9 +188,10 @@
       '<button type="button" class="wl-ex-name" onclick="window.wlHistory(' + i + ')" aria-label="' + h(exNm(e)) + ': riwayat">' + wlThumb(e, 'wl-thumb') + '<span class="truncate">' + h(exNm(e)) + '</span>' + (ss ? '<span class="pill soft">' + h(ss) + '</span>' : '') + '</button>' +
       '<button type="button" class="icon-btn plain" aria-label="Menu ' + h(exNm(e)) + '" onclick="window.wlMenu(' + i + ')">' + icon('more-horizontal') + '</button></div>';
     if (e.plan && e.plan.catatan) html += '<p class="wl-ex-note">' + icon('message-square-quote') + '<span>' + h(e.plan.catatan) + '</span></p>';
+    html += wlNoteLine(e);   // Fase AC3: setelan alat & cue dari coach (klien baca saja)
     if (e.skipped) return html + '<p class="wl-ex-sub">Dilewati · buka ⋯ untuk membatalkan</p></section>';
     if (wl.live) html += '<button type="button" class="wl-rest-link" onclick="window.wlRestPick(' + i + ')">' + icon('timer') + 'Istirahat: ' + h(wlRestText(wlRestOf(e))) + '</button>';
-    if (e.sug && !e.had) html += '<p class="wl-ex-sub"><b>Naik ke ' + h(wlNum(e.sug.kg)) + ' kg</b> · ' + h(e.sug.why) + '</p>';
+    if (e.sug && !e.had) html += '<p class="wl-ex-sub"><b>Naik ke ' + h(wlNum(e.sug.kg)) + ' kg</b> · ' + h(e.sug.why) + (wl.mode === 'admin' && e.sets.some(s => !s.done && s.jenis !== 'w' && Number(s.berat) !== Number(e.sug.kg)) ? ' <button type="button" class="link-btn wl-sug-apply" onclick="window.wlApplySug(' + i + ')">Pakai</button>' : '') + '</p>';
     else if (e.prog && e.prog.why && !e.had) html += '<p class="wl-ex-sub">' + h(e.prog.why) + '</p>';
     else if (!e.last && e.plan) html += '<p class="wl-ex-sub">Target ' + h(wlPlanText(e)) + '</p>';
     const plate = wlPlateText(e);
@@ -743,6 +744,8 @@
       (i > 0 ? btn('arrow-up', 'Pindah ke atas', 'window.wlMove(' + i + ',-1)') : '') +
       (i < wl.entries.length - 1 ? btn('arrow-down', 'Pindah ke bawah', 'window.wlMove(' + i + ',1)') : '') +
       btn('history', 'Riwayat gerakan', 'window.wlHistory(' + i + ')') +
+      (e.last && !e.had ? btn('rotate-ccw', 'Isi seperti terakhir', 'window.wlFillLast(' + i + ')') : '') +   // Fase AC3
+      (wl.mode === 'admin' ? btn('sliders-horizontal', 'Setelan alat & cue', 'window.wlSetupOpen(' + i + ')') : '') +
       btn('skip-forward', e.skipped ? 'Batal lewati' : 'Lewati gerakan ini', 'window.wlSkip(' + i + ')');
     if (e.own || e.had) body += btn('trash-2', e.had ? 'Hapus catatan gerakan ini' : 'Hapus gerakan', 'window.wlRemove(' + i + ')', ' danger');
     wlSheet(e.gerakan, body + '</div>');
@@ -814,6 +817,7 @@
       btn('list', 'Ganti rutinitas', wl.hari || 'Latihan kosong', 'window.wlDayPick()') +
       btn('calendar', 'Ganti tanggal', wl.date === wkToday() ? 'Hari ini' : pgLabel(wl.date), 'window.wlDatePick()') +
       btn('plus', 'Tambah gerakan', '', 'window.wlAddOpen()') +
+      window.wlTopExtraHtml(btn) +   // Fase AC3: ulangi latihan terakhir, ganti klien (coach)
       btn('settings', 'Pengaturan latihan', 'Istirahat, pemanasan, piringan, RPE', 'window.wlSettings()') +
       btn('trash-2', 'Buang latihan ini', 'Set yang dicentang tidak disimpan', 'window.closeModal();window.wlDiscard()', ' danger') + '</div>');
   };

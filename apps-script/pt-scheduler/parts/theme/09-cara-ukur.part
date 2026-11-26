@@ -19,4 +19,3 @@
 .uk-umum { padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--fg) 5%, transparent); }
 .uk-umum .uk-steps { font-size: var(--fs-sm); color: var(--fg-2); margin-top: 6px; }
 @media (min-width: 600px) { .uk-wrap { grid-template-columns: 190px minmax(0, 1fr); align-items: start; } }
-</style>

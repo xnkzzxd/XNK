@@ -200,6 +200,65 @@
       <div class="sheet-head"><h2 class="sheet-title" id="pc-title">Ubah profil</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
       <div class="sheet-body stack" style="gap:18px;padding-top:16px" id="pc-body"></div>
     </div>
+    <div class="sheet sm hide" id="sheet-cfood" role="dialog" aria-modal="true" aria-labelledby="cf-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="cf-title">Catat untuk klien</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body form-grid">
+        <div class="chips" id="cf-meals" role="group" aria-label="Waktu makan"></div>
+        <div class="field"><label class="label" for="cf-date">Tanggal</label><input class="input" type="date" id="cf-date" onchange="window.cfSet('tanggal', this.value)"></div>
+        <div class="field"><label class="label" for="cf-q">Cari makanan</label><input class="input" type="search" id="cf-q" autocomplete="off" placeholder="nasi, telur, ayam…" oninput="window.cfSet('q', this.value)"></div>
+        <div id="cf-list"></div>
+        <p class="hint">Tercatat di buku harian klien dengan tanda "coach".</p>
+        <p class="hint err-msg" id="cf-err" role="alert" style="display:block"></p>
+      </div>
+      <div class="sheet-foot"><button type="button" class="btn btn-primary btn-lg btn-block" onclick="window.cfSave()">Simpan</button></div>
+    </div>
+    <div class="sheet hide" id="sheet-wkx" role="dialog" aria-modal="true" aria-labelledby="wkx-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="wkx-title">Riwayat gerakan</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body" id="wkx-body" style="padding-top:16px"></div>
+    </div>
+    <div class="sheet sm hide" id="sheet-hold" role="dialog" aria-modal="true" aria-labelledby="hd-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="hd-title">Tahan klien</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-hold" onsubmit="window.holdSave(event)" novalidate>
+        <p class="li-sub" id="hd-name"></p>
+        <div class="chips" id="hd-jenis" role="radiogroup" aria-label="Jenis">
+          <button type="button" class="chip" role="radio" data-j="cuti" onclick="window.hdJenis('cuti')"><i data-lucide="plane"></i> Cuti</button>
+          <button type="button" class="chip" role="radio" data-j="sakit" onclick="window.hdJenis('sakit')"><i data-lucide="thermometer"></i> Sakit</button>
+          <button type="button" class="chip" role="radio" data-j="berhenti" onclick="window.hdJenis('berhenti')"><i data-lucide="pause"></i> Berhenti</button>
+        </div>
+        <div class="two">
+          <div class="field"><label class="label" for="hd-mulai">Mulai</label><input class="input" type="date" id="hd-mulai" onchange="window.hdDraw()"></div>
+          <div class="field" id="hd-sampai-field"><label class="label" for="hd-sampai">Sampai (hari terakhir)</label><input class="input" type="date" id="hd-sampai" onchange="window.hdDraw()"></div>
+        </div>
+        <div class="chips" id="hd-quick" aria-label="Pilihan cepat"><button type="button" class="chip" onclick="window.hdQuick(7)">1 minggu</button><button type="button" class="chip" onclick="window.hdQuick(14)">2 minggu</button><button type="button" class="chip" onclick="window.hdQuick(30)">1 bulan</button><button type="button" class="chip" onclick="window.hdQuick(0)">Belum tahu</button></div>
+        <p class="hint" id="hd-hint"></p>
+        <div class="field"><label class="label" for="hd-note">Catatan (hanya terlihat coach)</label><textarea class="textarea" id="hd-note" rows="2" maxlength="200" placeholder="Mudik, cedera lutut, …"></textarea></div>
+        <div id="hd-sessions"></div>
+        <p class="hint err-msg" id="hd-err" role="alert" style="display:block"></p>
+      </form>
+      <div class="sheet-foot"><button type="submit" form="form-hold" class="btn btn-primary btn-lg btn-block">Simpan</button></div>
+    </div>
+    <div class="sheet sm hide" id="sheet-cuti" role="dialog" aria-modal="true" aria-labelledby="cu-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="cu-title">Ajukan cuti</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body form-grid" id="form-cuti" onsubmit="window.cutiSend(event)" novalidate>
+        <p class="li-sub">Coach akan menyetujui dulu. Selama cuti, pengingat berhenti dan streak tidak putus.</p>
+        <div class="chips" id="cu-jenis" role="radiogroup" aria-label="Jenis">
+          <button type="button" class="chip" role="radio" data-j="cuti" onclick="window.cuJenis('cuti')"><i data-lucide="plane"></i> Cuti</button>
+          <button type="button" class="chip" role="radio" data-j="sakit" onclick="window.cuJenis('sakit')"><i data-lucide="thermometer"></i> Izin sakit</button>
+        </div>
+        <div class="two">
+          <div class="field"><label class="label" for="cu-mulai">Mulai</label><input class="input" type="date" id="cu-mulai"></div>
+          <div class="field"><label class="label" for="cu-sampai">Sampai (hari terakhir)</label><input class="input" type="date" id="cu-sampai"></div>
+        </div>
+        <p class="hint" id="cu-hint"></p>
+        <div class="field"><label class="label" for="cu-note">Catatan untuk coach (opsional)</label><textarea class="textarea" id="cu-note" rows="2" maxlength="200"></textarea></div>
+        <p class="hint err-msg" id="cu-err" role="alert" style="display:block"></p>
+      </form>
+      <div class="sheet-foot"><button type="submit" form="form-cuti" class="btn btn-primary btn-lg btn-block">Kirim ke coach</button></div>
+    </div>
     <div class="sheet hide" id="sheet-ukur" role="dialog" aria-modal="true" aria-labelledby="uk-title">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h2 class="sheet-title" id="uk-title">Cara mengukur</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>

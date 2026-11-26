@@ -701,6 +701,7 @@
 
   // ── KLIEN (admin) ──────────────────────────────────────────────────────────
   function clientState(m) {
+    if (window.holdOn && window.holdOn(m.id)) return 'held';   // Fase AC1: cuti / sakit / nonaktif
     const total = Number(m.totalSessions) || 0, rem = remainingOf(m);
     if (total > 0 && rem === 0) return 'empty';
     if (total > 0 && rem <= 2) return 'low';
@@ -743,11 +744,11 @@
     const caret = ae && ae.id === 'search-client' ? [ae.selectionStart, ae.selectionEnd] : null;
     const fKey = focusedRowKey();
     loadClientPrefs();
-    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
+    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, held: 0, perhatian: 0, archive: (window.memberArchive || []).length };
     window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
-    const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian'], ['archive', 'Riwayat paket']];
+    const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['held', 'Ditahan'], ['perhatian', 'Perlu perhatian'], ['archive', 'Riwayat paket']];
     const sorts = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
-    const html = '<div class="page-head"><div><h2 class="page-title">Klien</h2><p class="page-sub">' + counts.all + ' klien · ' + (counts.active + counts.low) + ' punya sisa sesi</p></div>' +
+    const html = '<div class="page-head"><div><h2 class="page-title">Klien</h2><p class="page-sub">' + counts.all + ' klien · ' + (counts.active + counts.low) + ' punya sisa sesi' + (counts.held ? ' · ' + counts.held + ' ditahan' : '') + '</p></div>' +
       '<button type="button" class="btn btn-primary" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button></div>' +
       '<div class="client-top" id="client-top"><div id="client-hero">' + clientHeroHtml(counts) + '</div>' +
       '</div>' +
@@ -921,6 +922,7 @@
       '<div class="client-pkg"><span class="cpk-ic">' + icon('package') + '</span>' +
       '<div class="grow" style="min-width:0"><p class="eyebrow">Paket</p><p class="cpk-v truncate">' + h(m.packageName || 'Paket custom') + '</p></div>' +
       '<button type="button" class="btn btn-sm ' + (rem === 0 ? 'btn-inverse' : 'btn-ghost-ink') + '" id="profile-renew" onclick="window.openRenewMember(\'' + h(m.id) + '\')">' + icon('repeat') + 'Perpanjang</button></div></div>';
+    body += '<div id="hold-band-wrap">' + window.holdBandHtml(m.id) + '</div>';   // Fase AC1: cuti / sakit / nonaktif
     // Tab bagian halaman
     const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['latihan', 'Latihan', 'dumbbell'], ['gizi', 'Gizi', 'apple']];
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
@@ -936,6 +938,7 @@
       '<div><p class="k">Coach</p><p class="v">' + h(m.preferredCoachName || 'Belum ditentukan') + '</p></div>' +
       '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
     body += '<div class="btn-row cp-edit-row"><button type="button" class="btn btn-ghost btn-sm" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" id="profile-hold" onclick="window.openHoldSheet(\'' + h(m.id) + '\')">' + icon('pause') + 'Tahan klien</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" onclick="window.openDeleteConfirmModal()">' + icon('trash-2') + 'Hapus klien</button></div>';
     body += '</div><div class="cp-col cp-col-side">';
     // Bagian yang panjang dilipat (accordion) supaya kolom kanan terisi rapi, bukan kosong atau memanjang.
@@ -944,6 +947,7 @@
     body += foldHtml('Jadwal mendatang', upcoming.length + ' sesi', upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>', upcoming.length > 0);
     body += foldHtml('Riwayat', past.length + ' sesi', past.length ? '<div class="timeline" id="profile-history">' + past.slice(0, 12).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub" id="profile-history">Belum ada riwayat latihan.</p>', false);
     const remOn = REMIND_TYPES.filter(t => (m.reminderOff || []).indexOf(t[0]) === -1).length + (m.mealReminder !== false ? 1 : 0);
+    body += foldHtml('Cuti & status', window.holdHistCount(m.id), '<div id="profile-hold-wrap" class="stack" style="gap:10px">' + window.holdHistHtml(m.id) + '</div>', !!(window.holdOn(m.id)));
     body += foldHtml('Pengingat WhatsApp', remOn + ' aktif', '<div class="stack" style="gap:12px">' + mealToggleHtml(m) + reminderPrefsHtml(m) + '</div>', false);
     body += '</div></div>';
     // Progres: kartu hitam rapor + tafsir, lalu catatan progres dan perawatan (tes, form kesehatan)

@@ -44,7 +44,8 @@
     if (prs.length) body += '<p class="wl-prs">🏆 Rekor baru: ' + h(prs.join(', ')) + '</p>';
     body += '<div class="stack" style="gap:6px">' + rows.join('') + '</div>';
     if (open) body += '<p class="hint">' + open + ' set belum dicentang tidak ikut disimpan.</p>';
-    body += '<div class="field"><span class="label" id="wl-feel-lbl">Bagaimana latihannya?</span><div class="wl-faces" role="radiogroup" aria-labelledby="wl-feel-lbl">' +
+    body += (window.wlCompleteRowHtml ? window.wlCompleteRowHtml() : '') +   // Fase AC3: selesaikan sesi juga
+      '<div class="field"><span class="label" id="wl-feel-lbl">Bagaimana latihannya?</span><div class="wl-faces" role="radiogroup" aria-labelledby="wl-feel-lbl">' +
       WL_FACES.map((f, k) => '<button type="button" role="radio" aria-checked="' + (wl.rasa === k + 1) + '" class="wl-face' + (wl.rasa === k + 1 ? ' on' : '') + '" aria-label="' + f[1] + '" onclick="window.wlFeel(' + (k + 1) + ')"><span aria-hidden="true">' + f[0] + '</span><small>' + f[1] + '</small></button>').join('') + '</div></div>' +
       '<div class="field"><label class="label" for="wl-note-fin">Catatan latihan</label><textarea class="textarea" id="wl-note-fin" rows="2" maxlength="300" placeholder="Opsional" oninput="window.wlNote(this.value)">' + h(wl.note || '') + '</textarea></div>' +
       '<p class="hint err-msg" id="wl-fin-err" role="alert" style="display:block"></p>';
@@ -74,12 +75,14 @@
     const now = Date.now();
     const item = { id: wl.cid, scope: wl.scope, mode: wl.mode, memberId: wl.memberId, name: wl.name, date: wl.date, scheduleId: wl.scheduleId, hari: wl.hari, entries: entries, at: now, tries: 0, err: '', retry: true,
       session: { cid: wl.cid, hari: wl.hari, mulai: wl.live && wl.startedAt ? new Date(wl.startedAt).toISOString() : '', selesai: wl.live && wl.startedAt ? new Date(now).toISOString() : '', rasa: wl.rasa || '', catatan: wl.note || '' } };
+    const doneSid = window.wlCompleteWanted ? window.wlCompleteWanted() : '';   // Fase AC3
     const q = wlQueue().filter(x => x.id !== item.id); q.push(item); wlQueueSet(q);
     _lsSet(wlKey(wl.scope), null);
     wl = null;
     window.closeModal(); wlHide();
     wlRenderResume();
     window.wlFlush(true, item.id);
+    if (doneSid) setTimeout(function () { window.completeSessionQuick(doneSid); }, 300);
   };
   // Kirim antrean satu per satu. Gagal karena sinyal / server sibuk → dicoba lagi otomatis; gagal validasi → tunggu dibuka ulang.
   function wlCanSend(it) {
@@ -371,7 +374,8 @@
       const meta = [d.items.length + ' gerakan', sets + ' set'];
       if (x.durasi) meta.push(Math.round(x.durasi / 60) + ' mnt');
       return '<div class="wl-hist-row"><span class="grow" style="min-width:0"><b class="truncate" style="display:block">' + h(pgLabel(d.tanggal)) + ' · ' + h(hr) + (x.rasa ? ' ' + WL_FACES[x.rasa - 1][0] : '') + '</b><span class="li-sub truncate" style="display:block">' + h(meta.join(' · ')) + (x.catatan ? ' · ' + h(x.catatan) : '') + '</span></span>' +
-        (d.tanggal >= min ? '<button type="button" class="btn btn-ghost btn-sm" onclick="window.workoutEditDay(\'' + (scope === 'adm' ? 'admin' : 'client') + '\',\'' + h(memberId || '') + '\',\'' + h(d.tanggal) + '\')" aria-label="Ubah latihan ' + h(pgLabel(d.tanggal)) + '">' + icon('pencil') + 'Ubah</button>' : '') + '</div>';
+        (d.tanggal >= min ? '<button type="button" class="btn btn-ghost btn-sm" onclick="window.workoutEditDay(\'' + (scope === 'adm' ? 'admin' : 'client') + '\',\'' + h(memberId || '') + '\',\'' + h(d.tanggal) + '\')" aria-label="Ubah latihan ' + h(pgLabel(d.tanggal)) + '">' + icon('pencil') + 'Ubah</button>' : '') +
+        (scope === 'adm' ? '<button type="button" class="icon-btn plain" onclick="window.wkDeleteDay(\'' + h(memberId || '') + '\',\'' + h(d.tanggal) + '\')" aria-label="Hapus latihan ' + h(pgLabel(d.tanggal)) + '">' + icon('trash-2') + '</button>' : '') + '</div>';   // Fase AC3
     }).join('') + '</div></div>';
   }
   function workoutStatsHtml(w, scope, memberId) {
@@ -387,7 +391,8 @@
       html += '<div class="wk-block"><div class="field"><label class="label" for="wk-ex-' + scope + '">Kekuatan per gerakan</label><select class="select" id="wk-ex-' + scope + '" onchange="window.wkChartPick(\'' + scope + '\',this.value)">' +
         st.exercises.map(e => '<option value="' + h(e.key) + '"' + (e.key === pick.key ? ' selected' : '') + '>' + h(exNm(e)) + '</option>').join('') + '</select></div>' +
         (pick.pr ? '<p class="li-sub"><b>PR:</b> ' + h(wkKg(pick.pr.berat)) + ' kg × ' + pick.pr.rep + ' · estimasi 1RM ' + h(wkKg(pick.pr.e1rm)) + ' kg (' + h(pgLabel(pick.pr.tanggal)) + ')</p>' : '') +
-        (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '<p class="li-sub">Catat lagi di sesi berikutnya untuk melihat tren.</p>') + '<p class="li-sub">Garis: estimasi 1RM tertinggi per sesi (rumus Epley, set sampai 12 rep).</p></div>';
+        (pts.length > 1 ? pgChartSvg(pts, 'v', 'kg') : '<p class="li-sub">Catat lagi di sesi berikutnya untuk melihat tren.</p>') + '<p class="li-sub">Garis: estimasi 1RM tertinggi per sesi (rumus Epley, set sampai 12 rep).</p>' +
+        (scope === 'adm' ? '<button type="button" class="btn btn-ghost btn-sm" id="wk-ex-full" onclick="window.wkExFull(\'' + h(memberId || '') + '\')">' + icon('table') + 'Riwayat lengkap gerakan ini</button>' : '') + '</div>';   // Fase AC3
     }
     html += '<div class="wk-block"><p class="label">Volume per minggu (kg × rep)</p>' + wkWeeksSvg(st.weeks) + '</div>';
     if (st.topParts.length) {
@@ -607,14 +612,7 @@
     }
     const av = d.advice || {};
     if (av.pending) html += '<div class="card stack" style="gap:8px"><h4 class="section-title">Saran penyesuaian</h4>' + nutAdviceRow(Object.assign({ memberId: memberId }, av.pending), false) + '</div>';
-    if (d.foodLog && d.foodLog.days) {
-      const wk = nutWeek(d), logged = wk.filter(x => x.kal);
-      const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kal, 0) / logged.length) : 0;
-      html += '<div class="card stack" style="gap:12px"><div class="section-head"><h4 class="section-title">Catatan makan 7 hari</h4><span class="li-sub">' + logged.length + ' hari tercatat' + (avg ? ' · rata-rata ' + h(nutNum(avg)) + ' kkal' : '') + '</span></div>' +
-        (logged.length ? kcalBarsHtml(wk, t.ok ? t.kal : 0) + logged.slice().reverse().map(function (x) {
-          return foldHtml(pgLabel(x.k), nutNum(x.x.totals.kal) + ' kkal · P ' + nutNum(x.x.totals.p, 1) + ' g', x.x.items.map(it => '<p class="li-sub">' + h(it.waktu) + ' · ' + h(it.nama) + ' · ' + h(it.porsi) + ' · ' + h(nutNum(it.kal)) + ' kkal</p>').join(''), false);
-        }).join('') : emptyState('utensils', 'Belum ada catatan', 'Klien belum mencatat makan dalam 7 hari terakhir.')) + '</div>';
-    }
+    if (d.foodLog && d.foodLog.days) html += window.cfoodCardHtml(memberId, d, t);   // Fase AC3: catat untuk klien, tanggapan, 7 / 31 hari
     if (!av.pending && av.last) html += '<p class="li-sub">Saran terakhir: ' + h(nutDeltaText(av.last.delta)) + ' · ' + (av.last.status === 'setuju' ? 'disetujui' : 'ditolak') + ' ' + h(av.last.diputuskan) + '</p>';
     html += '</div><div class="cp-col cp-col-side"><div class="card stack" style="gap:6px"><div class="section-head"><h4 class="section-title">Input coach</h4><button type="button" class="btn btn-secondary btn-sm" onclick="window.openNutEdit(\'' + h(memberId) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
       careRow('Umur', d.age != null ? h(d.age) + ' tahun' + (p.birthDate ? '' : p.umur !== '' && p.umur != null ? ' (diisi manual)' : '') : '-') +

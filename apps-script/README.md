@@ -451,3 +451,19 @@ Pengaturan → **Keuangan** (mati sampai Anda menyalakannya):
 - **Portal klien:** tiap tab dibuka dengan **kartu hitam** ringkasan. Beranda menampilkan sesi berikutnya paling atas, lalu kartu **Minggu ini** (sesi, latihan mandiri, catat makan, streak, tantangan). Tab **Progres** punya rapor tubuh (4 mgg · 3 bln · Semua) dengan kalimat kesimpulan, BMI/rasio pinggang dengan bahasa lembut, lingkar badan dan simetri, kemajuan tes, serta hubungan konsistensi dengan hasil. Tab **Latihan** punya perbandingan minggu ini vs biasanya, kalender aktivitas 12 minggu, kekuatan per gerakan (termasuk tanda mandek), dan keseimbangan otot.
 - **Panel Klien:** kartu hitam ringkasan, filter **Perlu perhatian** (tidak latihan ≥ 14 hari, kuota habis/hampir tanpa jadwal, PR telat, minta perpanjang, rating ≤ 3), urutkan, dan sakelar Kartu/Daftar di laptop. Halaman klien kini 4 tab: **Ringkasan** (Sorotan, data, PR, jadwal, Riwayat, pengingat WA yang dilipat), **Progres**, **Latihan**, **Gizi**.
 - Satu-satunya warna adalah merah kecil untuk tanda bahaya. Batas "tidak latihan" bisa diubah lewat Script Property `CLIENT_INACTIVE_DAYS` (bawaan 14, 3–90). Tidak ada sheet atau kolom baru.
+
+## Klien ditahan: cuti, sakit, berhenti (Fase AC, 2026-11)
+
+- Di halaman klien ada tombol **Tahan klien**. Pilih **Cuti**, **Sakit**, atau **Berhenti**, tanggal mulai dan (boleh kosong) tanggal selesai, plus catatan yang hanya terlihat coach. Sesi yang sudah terjadwal di masa itu muncul dengan centang; yang dicentang dibatalkan (kuota sesi tidak terpakai).
+- Selama ditahan: klien tidak menerima pengingat WhatsApp maupun push (kecuali ucapan ulang tahun dan pengingat sesi yang tetap dibiarkan), tidak bisa booking di tanggal itu (coach tetap bisa, dengan peringatan), streak tidak putus, tantangan bulanan mengecil, dan klien tidak muncul di "Perlu perhatian". Tanggal selesai lewat = klien aktif lagi otomatis.
+- **Berhenti** = nonaktif: keluar dari daftar aktif, tidak bisa booking, semua data tetap ada; **Aktifkan lagi** kapan saja dari halaman klien.
+- Daftar Klien punya filter **Ditahan**; hub coach menampilkan siapa yang sedang ditahan dan yang segera kembali.
+- Klien bisa **Ajukan cuti** dari Saya (paling lama 60 hari, `HOLD_REQUEST_MAX_DAYS`); coach menyetujui atau menolak di Dashboard → **Minta cuti** (Telegram + push "Cuti", nama depan dan tanggal saja). Klien bisa menekan **Saya sudah kembali** untuk mengakhiri cutinya lebih awal.
+- Pengingat baru **Kembali latihan** (Pengaturan → Pengingat Klien, bawaan mati): tombol WhatsApp ucapan selamat datang kembali untuk klien yang cutinya selesai kemarin.
+
+## Alat catat coach (Fase AC, 2026-11)
+
+- **Logger latihan (coach):** di lembar Selesai ada **Selesaikan sesi juga** (bawaan tercentang bila logger dibuka dari sesi hari ini): latihan disimpan, sesi ditandai selesai, lalu catatan sesi terbuka. Menu ⋯ tiap gerakan: **Isi seperti terakhir** dan **Setelan alat & cue** (mis. "Kursi 4, sandaran 2 · Lutut ke luar"; muncul di logger coach dan klien setiap kali gerakan itu dibuka). Saran "Naik ke … kg" punya tombol **Pakai**. Menu atas: **Ulangi latihan terakhir** dan **Ganti klien** (sesi berdua / kelas; tiap klien punya drafnya sendiri).
+- **Riwayat latihan di halaman klien:** tombol hapus untuk satu hari latihan, dan **Riwayat lengkap gerakan ini** (setahun, semua set dan estimasi 1RM).
+- **Tab Gizi klien:** **Catat** untuk mencatatkan makanan klien (mis. dari foto di WhatsApp; ditandai "coach"), hapus catatan, **tanggapan harian** (Pas / Kurang / Lebih + catatan singkat yang terlihat klien di Makan), dan pilihan **7 hari / 31 hari** dengan kalender, rata-rata per minggu, dan makanan yang paling sering.
+

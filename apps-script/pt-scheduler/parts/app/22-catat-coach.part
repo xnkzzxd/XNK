@@ -1,0 +1,288 @@
+  // ═══ Fase AC3 (T-2320…T-2328): alat catat coach ═══
+  // Hanya menambah di sisi coach: logger mode 'admin' (selesaikan sesi, ulangi terakhir, pakai saran, setelan alat & cue,
+  // ganti klien untuk sesi berdua), riwayat latihan (hapus hari, riwayat lengkap satu gerakan), tab Gizi (catat makanan
+  // untuk klien, tanggapan harian, 31 hari). Klien hanya membaca setelan/cue di logger dan tanggapan coach di Makan.
+  // Server: src/CatatCoach.gs. Antrean latihan/makan klien (xnk_wl_queue, xnk_food_queue) tidak disentuh.
+
+  // ── W1: Selesai latihan + selesaikan sesi ──
+  window.wlCompleteRowHtml = function () {
+    if (!wl || wl.mode !== 'admin' || !wl.scheduleId) return '';
+    const s = schedById(wl.scheduleId);
+    if (!s || isDone(s)) return '';
+    return '<label class="row wl-done-sess" style="gap:10px;min-height:44px"><input type="checkbox" id="wl-complete" checked>' +
+      '<span>Selesaikan sesi juga <span class="li-sub">(kuota dipotong 1, lalu catatan sesi)</span></span></label>';
+  };
+  window.wlCompleteWanted = function () {
+    if (!wl || wl.mode !== 'admin' || !wl.scheduleId) return '';
+    const c = $('wl-complete');
+    return c && c.checked ? String(wl.scheduleId) : '';
+  };
+  /** Tandai sesi selesai tanpa konfirmasi kedua (sudah dipilih di lembar Selesai latihan); sama dengan markSessionCompleted. */
+  window.completeSessionQuick = function (sid) {
+    const s = schedById(sid);
+    if (!s || isDone(s)) return;
+    const m = window.members.find(x => String(x.id) === String(s.memberId));
+    if (m && Number(m.totalSessions) > 0 && Number(m.usedSessions) >= Number(m.totalSessions)) { window.showToast('Kuota sesi klien ini sudah habis; sesi tidak ditandai selesai.'); return; }
+    const old = { status: s.status, completedAt: s.completedAt, used: m ? m.usedSessions : null };
+    s.status = 'completed'; s.completedAt = new Date().toISOString();
+    if (m) m.usedSessions = (Number(m.usedSessions) || 0) + 1;
+    window.updateUI();
+    setTimeout(function () { if (window.openSessionNote) window.openSessionNote(s.id, true, null); }, 450);
+    optimistic({ q: { mode: 'admin', fn: 'completeSession', args: [s.id, s.memberId] }, ok: 'Latihan tersimpan, sesi selesai.', label: 'Sesi selesai',
+      then: function (result) { if (window.sessionNoteResult) window.sessionNoteResult(s.id, result); },
+      undo: function () { s.status = old.status; s.completedAt = old.completedAt; if (m) m.usedSessions = old.used; window.updateUI(); } });
+  };
+
+  // ── W2: isi seperti terakhir, pakai saran beban, ulangi latihan terakhir ──
+  window.wlFillLast = function (i) {
+    const e = wl && wl.entries[i];
+    if (!e || !e.last) return;
+    e.sets = e.last.sets.map(s => Object.assign(wlCopy(s), { done: false, rpe: '' }));
+    e.skipped = false;
+    window.closeModal(); wlChanged();
+    window.showToast('Diisi seperti ' + pgLabel(e.last.tanggal) + '.');
+  };
+  window.wlApplySug = function (i) {
+    const e = wl && wl.entries[i];
+    if (!e || !e.sug) return;
+    e.sets.forEach(function (s) { if (!s.done && s.jenis !== 'w') s.berat = e.sug.kg; });
+    wlChanged();
+  };
+  // Latihan terakhir klien (sebelum tanggal ini) yang punya nama hari/rutinitas.
+  function wlLastHari() {
+    const d = wlRt.data && (wlRt.data.days || []).find(x => x.tanggal !== wl.date && x.items.some(i => i.hari));
+    return d ? { hari: d.items.find(i => i.hari).hari, tanggal: d.tanggal } : null;
+  }
+  window.wlRepeatLast = function () {
+    const x = wl && wlLastHari();
+    if (!x) { window.showToast('Belum ada latihan sebelumnya dengan rutinitas.'); return; }
+    window.closeModal();
+    wlRebuild(x.hari, wl.date);
+    window.showToast('Mengulang ' + x.hari + ' (' + pgLabel(x.tanggal) + ').');
+  };
+  window.wlTopExtraHtml = function (btn) {
+    if (!wl || wl.mode !== 'admin') return '';
+    const x = wlLastHari();
+    return (x ? btn('repeat', 'Ulangi latihan terakhir', x.hari + ' · ' + pgLabel(x.tanggal), 'window.wlRepeatLast()') : '') +
+      btn('users', 'Ganti klien', 'Sesi berdua atau kelas: tiap klien punya drafnya sendiri', 'window.wlSwitchOpen()');
+  };
+
+  // ── W3: setelan alat & cue (coach menulis; klien membaca di logger) ──
+  function wlNoteLine(e) {
+    const n = wlRt.data && wlRt.data.notes && wlRt.data.notes[e.key];
+    if (!n || (!n.setelan && !n.cue)) return '';
+    return '<p class="wl-ex-note wl-setup">' + icon('sliders-horizontal') + '<span>' + h([n.setelan, n.cue].filter(Boolean).join(' · ')) + '</span></p>';
+  }
+  window.wlNoteLine = wlNoteLine;
+  window.wlSetupOpen = function (i) {
+    const e = wl && wl.entries[i];
+    if (!e) return;
+    const n = (wlRt.data && wlRt.data.notes && wlRt.data.notes[e.key]) || {};
+    wlSheet('Setelan alat & cue', '<div class="stack" style="gap:12px"><p class="li-sub">' + h(exNm(e)) + ' · tampil di logger coach dan klien setiap kali gerakan ini dibuka.</p>' +
+      '<div class="field"><label class="label" for="wl-setup-alat">Setelan alat</label><input class="input" id="wl-setup-alat" maxlength="80" placeholder="Kursi 4, sandaran 2" value="' + h(n.setelan || '') + '"></div>' +
+      '<div class="field"><label class="label" for="wl-setup-cue">Cue</label><input class="input" id="wl-setup-cue" maxlength="120" placeholder="Lutut ke luar, dada tegak" value="' + h(n.cue || '') + '"></div></div>',
+      '<div class="btn-row"><button type="button" class="btn btn-ghost btn-lg" onclick="window.closeModal()">Batal</button><button type="button" class="btn btn-primary btn-lg" onclick="window.wlSetupSave(' + i + ')">Simpan</button></div>');
+  };
+  window.wlSetupSave = function (i) {
+    const e = wl && wl.entries[i];
+    if (!e) return;
+    const data = { setelan: $('wl-setup-alat').value.trim(), cue: $('wl-setup-cue').value.trim() };
+    const mid = wl.memberId, key = e.key;
+    const notes = (wlRt.data.notes = wlRt.data.notes || {}), prev = notes[key];
+    if (data.setelan || data.cue) notes[key] = data; else delete notes[key];
+    if (wkAdmin[mid]) wkAdmin[mid].notes = notes;
+    wlRender();
+    optimistic({ q: { mode: 'admin', fn: 'saveExerciseNote', args: [mid, key, data] }, sheet: true, label: 'Setelan alat', ok: 'Tersimpan.',
+      then: function (r) { if (r && r.notes) { if (wl && wl.memberId === mid && wlRt.data) wlRt.data.notes = r.notes; if (wkAdmin[mid]) wkAdmin[mid].notes = r.notes; if (ui.wlOn) wlRender(); } },
+      undo: function () { if (prev) notes[key] = prev; else delete notes[key]; if (ui.wlOn) wlRender(); } });
+  };
+
+  // ── W6: ganti klien (sesi berdua / kelas) ──
+  window.wlSwitchOpen = function () {
+    if (!wl || wl.mode !== 'admin') return;
+    const cur = schedById(wl.scheduleId), t0 = cur ? new Date(cur.start).getTime() : Date.now();
+    // Klien dengan sesi yang mulai dalam 60 menit dari sesi ini, ditambah klien yang punya draf coach di perangkat ini.
+    const near = (window.schedules || []).filter(s => !window.isTmpId(s.id) && String(s.memberId) !== String(wl.memberId) && Math.abs(new Date(s.start).getTime() - t0) <= 3600000)
+      .map(s => ({ id: String(s.memberId), sid: String(s.id), name: s.title, sub: fmtTime(new Date(s.start)) }));
+    wlDraftKeys('adm:').forEach(function (k) {
+      const id = k.replace(/^.*adm:/, '');
+      if (id && id !== String(wl.memberId) && !near.some(x => x.id === id)) { const m = window.members.find(x => String(x.id) === id); if (m) near.push({ id: id, sid: '', name: m.name, sub: 'draf belum selesai' }); }
+    });
+    const row = x => '<button type="button" class="wl-menu-btn" onclick="window.wlSwitchTo(\'' + h(x.id) + '\',\'' + h(x.sid) + '\')">' + icon('user-round') + '<span><b>' + h(x.name) + '</b><small>' + h(x.sub) + '</small></span></button>';
+    wlSheet('Ganti klien', '<div class="stack" style="gap:4px">' + (near.length ? near.map(row).join('') : '<p class="li-sub">Tidak ada klien lain di jam ini.</p>') +
+      '<div class="field" style="margin-top:8px"><label class="label" for="wl-switch-pick">Klien lain</label><select class="select" id="wl-switch-pick" onchange="if(this.value)window.wlSwitchTo(this.value,\'\')"><option value="">Pilih klien…</option>' +
+      (window.members || []).filter(m => String(m.id) !== String(wl.memberId)).map(m => '<option value="' + h(m.id) + '">' + h(m.name) + '</option>').join('') + '</select></div>' +
+      '<p class="hint">Latihan klien ini tetap tersimpan sebagai draf; kembali kapan saja lewat Ganti klien.</p></div>');
+  };
+  window.wlSwitchTo = function (memberId, sid) {
+    if (!wl) return;
+    wlSave();
+    const date = wl.date;
+    window.closeModal();
+    setTimeout(function () { window.wlStart({ mode: 'admin', memberId: memberId, scheduleId: sid || '', date: date, live: date === wkToday() }); }, 250);
+  };
+
+  // ── W4: hapus satu hari latihan dari riwayat ──
+  window.wkDeleteDay = function (memberId, date) {
+    window.showConfirmModal('Hapus semua catatan latihan <b>' + h(pgLabel(date)) + '</b>? Rekor dan grafik dihitung ulang.', function () {
+      const prev = wkAdmin[memberId];
+      if (prev && prev.days) { wkAdmin[memberId] = Object.assign({}, prev, { days: prev.days.filter(d => d.tanggal !== date) }); window.wkSetAdmin(memberId, wkAdmin[memberId]); }
+      optimistic({ q: { mode: 'admin', fn: 'deleteWorkoutEntries', args: [memberId, date, []] }, label: 'Hapus latihan', ok: 'Catatan latihan dihapus.',
+        then: function (r) { if (r && r.days) window.wkSetAdmin(memberId, r); },
+        undo: function () { if (prev) window.wkSetAdmin(memberId, prev); } });
+    }, { title: 'Hapus latihan?', confirmText: 'Hapus', variant: 'danger' });
+  };
+
+  // ── W5: riwayat lengkap satu gerakan (365 hari) ──
+  window.wkExFull = function (memberId) {
+    const sel = $('wk-ex-adm'), key = sel ? sel.value : '';
+    if (!key) return;
+    const name = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : 'Gerakan';
+    wlSheetOrModal('Riwayat ' + name, '<p class="li-sub">Memuat…</p>');
+    adminCall('getWorkoutExerciseHistory', memberId, key).then(function (r) {
+      const days = (r && r.days) || [];
+      setHTML('wkx-body', days.length ? '<div class="wkx-tbl" role="table" aria-label="Riwayat ' + h(name) + '"><div class="wkx-tr wkx-th" role="row"><span role="columnheader">Tanggal</span><span role="columnheader">Set</span><span role="columnheader">1RM</span></div>' +
+        days.map(d => '<div class="wkx-tr" role="row"><span role="cell">' + h(pgLabel(d.tanggal)) + (d.oleh === 'klien' ? ' <span class="pill soft">klien</span>' : '') + '</span><span role="cell" class="li-sub">' +
+          d.sets.map(s => (s.jenis === 'w' ? 'W ' : '') + (s.berat !== '' ? h(wkKg(s.berat)) + ' kg' : '') + (s.rep !== '' ? ' × ' + s.rep : '') + (s.durasi !== '' ? s.durasi + ' dtk' : '') + (s.jarak !== '' ? s.jarak + ' m' : '')).join(', ') +
+          '</span><span role="cell" class="num">' + (d.top ? h(wkKg(d.top)) : '–') + '</span></div>').join('') + '</div><p class="hint">365 hari terakhir, terbaru di atas. 1RM = estimasi tertinggi hari itu (Epley).</p>'
+        : '<p class="li-sub">Belum ada catatan gerakan ini.</p>');
+    }).catch(function (err) { setHTML('wkx-body', '<p class="li-sub">' + h(waitErr(err)) + '</p>'); });
+  };
+  function wlSheetOrModal(title, body) {
+    $('wkx-title').textContent = title;
+    setHTML('wkx-body', body);
+    openSheet('sheet-wkx');
+  }
+
+  // ── F1–F3: tab Gizi coach — catat untuk klien, tanggapan harian, 31 hari ──
+  const cf = { memberId: '', waktu: 'siang', q: '', pick: null, gram: '', days: {}, tanggal: '' };
+  const CF_MEALS = [['sarapan', 'Sarapan'], ['siang', 'Siang'], ['malam', 'Malam'], ['camilan', 'Camilan']];
+  const FB_MARK = { pas: 'Pas', kurang: 'Kurang', lebih: 'Lebih' };
+  window.cfoodCardHtml = function (memberId, d, t) {
+    const n = cf.days[memberId] || 7, fl = d.foodLog, fb = fl.feedback || {};
+    const goal = t && t.ok ? t.kal : 0;
+    const seg = '<div class="seg" role="group" aria-label="Rentang"><button type="button" class="' + (n === 7 ? 'active' : '') + '" aria-pressed="' + (n === 7) + '" onclick="window.cfRange(\'' + h(memberId) + '\',7)">7 hari</button>' +
+      '<button type="button" class="' + (n === 31 ? 'active' : '') + '" aria-pressed="' + (n === 31) + '" onclick="window.cfRange(\'' + h(memberId) + '\',31)">31 hari</button></div>';
+    let html = '<div class="card stack" style="gap:12px" id="cf-card"><div class="section-head" style="flex-wrap:wrap;gap:8px"><h4 class="section-title">Catatan makan</h4>' + seg +
+      '<button type="button" class="btn btn-secondary btn-sm" id="cf-add" onclick="window.cfOpen(\'' + h(memberId) + '\')">' + icon('plus') + 'Catat</button></div>';
+    if (n === 31 && fl.stats) html += cfMonthHtml(fl, goal);
+    else {
+      const wk = nutWeek(d), logged = wk.filter(x => x.kal);
+      const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kal, 0) / logged.length) : 0;
+      html += '<p class="li-sub">' + logged.length + ' hari tercatat' + (avg ? ' · rata-rata ' + h(nutNum(avg)) + ' kkal' : '') + '</p>' + (logged.length ? kcalBarsHtml(wk, goal) : '');
+    }
+    const shown = (fl.days || []).slice(0, n === 31 ? 31 : 7).filter(x => x.items.length || fb[x.tanggal]);
+    html += shown.length ? shown.map(function (x) {
+      const f = fb[x.tanggal] || {};
+      const body = x.items.map(it => '<div class="row" style="gap:8px;min-height:44px"><p class="li-sub grow">' + h(it.waktu) + ' · ' + h(it.nama) + ' · ' + h(it.porsi) + ' · ' + h(nutNum(it.kal)) + ' kkal' +
+        (/^coach-/.test(it.cid || '') ? ' <span class="pill soft">coach</span>' : '') + '</p><button type="button" class="icon-btn plain" aria-label="Hapus ' + h(it.nama) + '" onclick="window.cfDel(\'' + h(memberId) + '\',\'' + h(it.id) + '\')">' + icon('trash-2') + '</button></div>').join('') +
+        '<div class="cf-fb" data-cfd="' + x.tanggal + '" role="group" aria-label="Tanggapan coach ' + h(pgLabel(x.tanggal)) + '"><span class="label">Tanggapan</span><div class="chips">' +
+        Object.keys(FB_MARK).map(k => '<button type="button" class="chip' + (f.tanda === k ? ' active' : '') + '" aria-pressed="' + (f.tanda === k) + '" onclick="window.cfMark(\'' + h(memberId) + '\',\'' + x.tanggal + '\',\'' + k + '\')">' + FB_MARK[k] + '</button>').join('') + '</div>' +
+        '<input class="input" maxlength="160" placeholder="Catatan singkat untuk klien (opsional)" value="' + h(f.catatan || '') + '" aria-label="Catatan untuk klien" onchange="window.cfNote(\'' + h(memberId) + '\',\'' + x.tanggal + '\',this.value)"></div>';
+      return foldHtml(pgLabel(x.tanggal), nutNum(x.totals.kal) + ' kkal · P ' + nutNum(x.totals.p, 1) + ' g' + (f.tanda ? ' · ' + FB_MARK[f.tanda] : ''), body, false);
+    }).join('') : emptyState('utensils', 'Belum ada catatan', 'Klien belum mencatat makan. Ketuk Catat untuk mencatatkan dari foto atau chat.');
+    return html + '</div>';
+  };
+  function cfMonthHtml(fl, goal) {
+    const by = {}; (fl.days || []).forEach(x => { by[x.tanggal] = x; });
+    const today = wkToday(), first = wkAddDays(today, -30);
+    const p = first.split('-').map(Number), dow = (new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay() + 6) % 7;
+    let cells = '';
+    for (let i = 0; i < dow; i++) cells += '<span class="cfm-d pad"></span>';
+    for (let i = 0; i <= 30; i++) {
+      const k = wkAddDays(first, i), x = by[k], kal = x && x.items.length ? x.totals.kal : 0;
+      const cls = !kal ? 'none' : goal && Math.abs(kal - goal) <= goal * 0.1 ? 'hit' : goal && kal > goal * 1.25 ? 'over' : 'logged';
+      cells += '<span class="cfm-d ' + cls + '" title="' + h(pgLabel(k)) + (kal ? ': ' + nutNum(kal) + ' kkal' : '') + '">' + Number(k.slice(8)) + '</span>';
+    }
+    const st = fl.stats;
+    return '<div class="cfm" role="img" aria-label="Kalender makan 31 hari">' + ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map(d => '<span class="cfm-h">' + d + '</span>').join('') + cells + '</div>' +
+      '<p class="hint">Hitam = sesuai target ±10 %, garis = tercatat, merah = jauh di atas target.</p>' +
+      '<p class="li-sub">' + st.logged + ' dari ' + st.total + ' hari tercatat</p>' +
+      (st.minggu.length ? '<div class="kv">' + st.minggu.map(w => '<div><p class="k">Minggu ' + h(pgLabel(w.minggu)) + '</p><p class="v num">' + h(nutNum(w.kal)) + ' kkal · P ' + w.p + ' g</p><p class="li-sub">' + w.hari + ' hari</p></div>').join('') + '</div>' : '') +
+      (st.top.length ? '<p class="li-sub"><b>Paling sering:</b> ' + st.top.map(x => h(x.nama) + ' (' + x.kali + '×)').join(', ') + '</p>' : '');
+  }
+  window.cfRange = function (memberId, n) {
+    cf.days[memberId] = n;
+    const d = nut[memberId];
+    if (n === 31 && (!d.foodLog || (d.foodLog.n || 7) < 31)) {
+      setHTML('cf-card', '<p class="li-sub">Memuat 31 hari…</p>');
+      adminCall('getClientFoodLog', memberId, 31).then(function (fl) { const x = nut[memberId]; if (x) { x.foodLog = fl; window.nutSet(memberId, x); } }).catch(function (err) { window.showToast(waitErr(err)); cf.days[memberId] = 7; window.nutSet(memberId, nut[memberId]); });
+      return;
+    }
+    window.nutSet(memberId, d);
+  };
+  function cfApply(memberId, fl) { const x = nut[memberId]; if (x && fl && fl.days) { x.foodLog = fl; window.nutSet(memberId, x); } }
+  window.cfMark = function (memberId, date, k) {
+    const fl = nut[memberId] && nut[memberId].foodLog;
+    if (!fl) return;
+    const fb = (fl.feedback = fl.feedback || {}), prev = fb[date] ? Object.assign({}, fb[date]) : null;
+    const cur = fb[date] || { tanda: '', catatan: '' }, next = { tanda: cur.tanda === k ? '' : k, catatan: cur.catatan || '' };
+    if (next.tanda || next.catatan) fb[date] = next; else delete fb[date];
+    // Hanya chip yang diperbarui (lipatan hari ini tetap terbuka).
+    document.querySelectorAll('[data-cfd="' + date + '"] .chip').forEach(function (b, i) { const on = Object.keys(FB_MARK)[i] === next.tanda; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); });
+    optimistic({ q: { mode: 'admin', fn: 'saveFoodFeedback', args: [memberId, date, next] }, label: 'Tanggapan makan', ok: false,
+      undo: function () { if (prev) fb[date] = prev; else delete fb[date]; window.nutSet(memberId, nut[memberId]); } });
+  };
+  window.cfNote = function (memberId, date, v) {
+    const fl = nut[memberId] && nut[memberId].foodLog;
+    if (!fl) return;
+    const fb = (fl.feedback = fl.feedback || {}), prev = fb[date] ? Object.assign({}, fb[date]) : null;
+    const next = { tanda: (fb[date] || {}).tanda || '', catatan: String(v || '').trim().slice(0, 160) };
+    if (next.tanda || next.catatan) fb[date] = next; else delete fb[date];
+    optimistic({ q: { mode: 'admin', fn: 'saveFoodFeedback', args: [memberId, date, next] }, label: 'Tanggapan makan', ok: 'Tanggapan tersimpan.',
+      undo: function () { if (prev) fb[date] = prev; else delete fb[date]; window.nutSet(memberId, nut[memberId]); } });
+  };
+  window.cfDel = function (memberId, logId) {
+    const x = nut[memberId], fl = x && x.foodLog;
+    if (!fl) return;
+    const prev = JSON.parse(JSON.stringify(fl));
+    fl.days.forEach(function (d) { const i = d.items.findIndex(it => it.id === logId); if (i !== -1) { d.items.splice(i, 1); d.totals = d.items.reduce((t, it) => ({ kal: t.kal + it.kal, p: t.p + it.p, l: t.l + it.l, k: t.k + it.k }), { kal: 0, p: 0, l: 0, k: 0 }); } });
+    window.nutSet(memberId, x);
+    optimistic({ q: { mode: 'admin', fn: 'deleteClientFood', args: [memberId, logId, cf.days[memberId] || 7] }, label: 'Hapus makanan', ok: 'Dihapus.',
+      then: function (r) { cfApply(memberId, r); },
+      undo: function () { x.foodLog = prev; window.nutSet(memberId, x); } });
+  };
+  window.cfOpen = function (memberId) {
+    cf.memberId = String(memberId); cf.q = ''; cf.pick = null; cf.gram = ''; cf.tanggal = wkToday();
+    const hr = new Date().getHours(); cf.waktu = hr < 10 ? 'sarapan' : hr < 15 ? 'siang' : hr < 20 ? 'malam' : 'camilan';
+    $('cf-title').textContent = 'Catat untuk ' + String((window.members.find(m => String(m.id) === cf.memberId) || {}).name || 'klien').split(' ')[0];
+    cfDraw();
+    openSheet('sheet-cfood');
+    foodEnsure().then(cfDraw).catch(function () { setHTML('cf-list', '<p class="li-sub">Daftar makanan gagal dimuat. Periksa koneksi, lalu buka lagi.</p>'); });
+  };
+  window.cfSet = function (k, v) {
+    cf[k] = v;
+    if (k === 'gram') { const f = foodLib && cf.pick && foodLib.items.find(x => x.id === cf.pick), el = $('cf-kal'), g = Number(String(v).replace(',', '.')); if (el) el.textContent = f && g > 0 ? '≈ ' + Math.round(f.kal * g / 100) + ' kkal' : ''; return; }
+    if (k === 'q') cf.pick = null;
+    cfDraw(k === 'q');
+  };
+  window.cfPick = function (id) { cf.pick = id; const f = foodLib && foodLib.items.find(x => x.id === id); cf.gram = f && f.por && f.por[0] ? String(f.por[0][1]) : '100'; cfDraw(); };
+  function cfDraw(keepFocus) {
+    setHTML('cf-meals', CF_MEALS.map(m => '<button type="button" class="chip' + (cf.waktu === m[0] ? ' active' : '') + '" aria-pressed="' + (cf.waktu === m[0]) + '" onclick="window.cfSet(\'waktu\',\'' + m[0] + '\')">' + m[1] + '</button>').join(''));
+    const dt = $('cf-date'); if (dt && !keepFocus) { dt.value = cf.tanggal; dt.max = wkToday(); dt.min = wkAddDays(wkToday(), -30); }
+    if (!keepFocus) { $('cf-q').value = cf.q; }
+    const q = cf.q.trim().toLowerCase(), items = foodLib ? foodLib.items : [];
+    const hits = q.length >= 2 ? items.filter(f => f.n.toLowerCase().indexOf(q) !== -1).slice(0, 8) : [];
+    const pick = cf.pick && items.find(x => x.id === cf.pick);
+    setHTML('cf-list', !foodLib ? '<p class="li-sub">Memuat daftar makanan…</p>' : pick
+      ? '<div class="list-item" style="gap:10px"><div class="grow"><p class="li-title">' + h(pick.n) + '</p><p class="li-sub">' + h(Math.round(pick.kal)) + ' kkal / 100 g' + (pick.por && pick.por[0] ? ' · ' + h(pick.por[0][0]) + ' = ' + pick.por[0][1] + ' g' : '') + '</p></div>' +
+        '<button type="button" class="btn btn-ghost btn-sm" onclick="window.cfSet(\'pick\',null)">Ganti</button></div>' +
+        '<div class="field"><label class="label" for="cf-gram">Jumlah (gram)</label><input class="input num" id="cf-gram" inputmode="decimal" value="' + h(cf.gram) + '" oninput="window.cfSet(\'gram\',this.value)"></div>' +
+        '<p class="li-sub" id="cf-kal">' + (Number(cf.gram) > 0 ? '≈ ' + Math.round(pick.kal * Number(String(cf.gram).replace(',', '.')) / 100) + ' kkal' : '') + '</p>'
+      : (hits.length ? '<div class="list">' + hits.map(f => '<button type="button" class="list-item interactive" style="min-height:48px;text-align:left" onclick="window.cfPick(\'' + h(f.id) + '\')"><span class="grow">' + h(f.n) + '</span><span class="li-sub num">' + Math.round(f.kal) + ' kkal/100 g</span></button>').join('') + '</div>'
+        : '<p class="li-sub">' + (q.length >= 2 ? 'Tidak ketemu. Coba kata lain.' : 'Ketik minimal 2 huruf, mis. "nasi", "telur".') + '</p>'));
+  }
+  window.cfSave = function () {
+    const err = m => { $('cf-err').textContent = m; };
+    if (!cf.pick) return err('Pilih makanan dulu.');
+    const gram = Number(String(cf.gram).replace(',', '.'));
+    if (!(gram > 0 && gram <= 2000)) return err('Jumlah harus antara 1 dan 2000 gram.');
+    const tanggal = $('cf-date').value || wkToday();
+    err('');
+    const memberId = cf.memberId, days = cf.days[memberId] || 7;
+    const entry = { waktu: cf.waktu, id: cf.pick, gram: gram, tanggal: tanggal, cid: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), days: days };
+    optimistic({ q: { mode: 'admin', fn: 'logClientFood', args: [memberId, entry] }, sheet: true, label: 'Catat makanan', ok: 'Tercatat untuk klien.',
+      then: function (r) { cfApply(memberId, r); } });
+  };
+})();
+</script>

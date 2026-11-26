@@ -246,7 +246,7 @@ function setClientHold(token, memberId, data, opts) {
   });
   _bumpMember_(id);
   const hist = _holdMemberHistory_(id, today, true);
-  return { status: 'success', hold: hist.find(function(x) { return x.id === out.holdId; }) || null, holds: hist, cancelled: out.cancelled.length,
+  return { status: 'success', id: out.holdId, hold: hist.find(function(x) { return x.id === out.holdId; }) || null, holds: hist, cancelled: out.cancelled.length,
     inRange: _holdSessionsIn_(id, v.mulai, v.sampai) };
 }
 

@@ -523,6 +523,129 @@ async function contrastReport(page) {
     await adm.context.close();
   })().catch(sectionCrash);
 
+  // ── Fase AC1 (T-2308, T-2311): klien ditahan — panel (lembar, pil, filter, pita, akhiri) dan portal (ajukan, kartu) ───────
+  console.log('Tahan klien (panel + portal)');
+  await (async () => {
+    for (const [vp, label] of [[MOBILE, 'phone'], [DESKTOP, 'desktop']]) {
+      const env = richEnv();
+      const adminTok = env.adminToken(), memberTok = env.memberToken(KEY_A);
+      const adm = await openPage(browser, env, '/Index', [], { xnk_admin_token: adminTok }, { viewport: vp, wait: 1500 });
+      const page = adm.page;
+      await page.evaluate(() => window.openProfile('PT-A'));
+      await page.waitForTimeout(800);
+      check(await visible(page, '#profile-hold'), 'panel ' + label + ': "Tahan klien" on the client page');
+      await page.click('#profile-hold');
+      await page.waitForTimeout(500);
+      check(await visible(page, '#sheet-hold') && (await page.textContent('#hd-hint')).includes('Aktif lagi otomatis'), 'panel ' + label + ': hold sheet opens with Cuti and an automatic end');
+      await page.fill('#hd-note', 'Ke Bali');
+      await page.click('#sheet-hold .sheet-foot button');
+      await page.waitForTimeout(1500);
+      const rows = env.sheet('ClientHolds') ? env.sheet('ClientHolds').rows.slice(1) : [];
+      check(rows.length === 1 && rows[0][1] === 'PT-A' && rows[0][2] === 'cuti' && rows[0][5] === 'Ke Bali', 'panel ' + label + ': the hold is saved on the server');
+      check(await visible(page, '#hold-band-wrap .hold-band'), 'panel ' + label + ': band under the client hero');
+      const cache = await page.evaluate(() => localStorage.getItem('xnk_admin_cache') || '');
+      check(!cache.includes('Ke Bali'), 'panel ' + label + ': the private note never lands in xnk_admin_cache');
+      await page.evaluate(() => { window.navigate('clients'); });
+      await page.waitForTimeout(600);
+      await page.evaluate(() => window.setClientFilter('held'));
+      await page.waitForTimeout(400);
+      check((await page.textContent('[data-filter="held"]')).includes('1') && (await page.locator('#client-list .state-pill.ditahan').count()) === 1, 'panel ' + label + ': Ditahan filter lists the client with a hold pill');
+      check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'panel ' + label + ': no sideways scroll');
+      await page.evaluate(() => window.openProfile('PT-A'));
+      await page.waitForTimeout(800);
+      await page.click('#hold-band-wrap .hb-act .btn-secondary');
+      await page.waitForTimeout(300);
+      await page.click('#btn-confirm-modal-yes');
+      await page.waitForTimeout(1500);
+      check(!(await visible(page, '#hold-band-wrap .hold-band')), 'panel ' + label + ': Akhiri removes the band');
+      noErrors(adm.errors);
+      await adm.context.close();
+
+      const pub = await openPage(browser, env, '/Index?view=public', [], { xnk_member_token: memberTok }, { viewport: vp, wait: 1500 });
+      await pub.page.evaluate(() => window.cutiOpen());
+      await pub.page.waitForTimeout(500);
+      check(await visible(pub.page, '#sheet-cuti'), 'portal ' + label + ': "Ajukan cuti" sheet opens');
+      await pub.page.click('#sheet-cuti .sheet-foot button');
+      await pub.page.waitForTimeout(1500);
+      const req = env.sheet('ClientHolds').rows.slice(1).find(r => r[6] === 'minta');
+      check(!!req && req[1] === 'PT-A' && req[7] === 'klien', 'portal ' + label + ': the request reaches the server');
+      await pub.page.evaluate(() => window.navigate('public-dashboard'));
+      await pub.page.waitForTimeout(600);
+      check((await pub.page.textContent('#pub-hold-card').catch(() => '')).includes('Menunggu jawaban coach'), 'portal ' + label + ': Hari ini shows the waiting request');
+      noErrors(pub.errors);
+      await pub.context.close();
+    }
+  })().catch(sectionCrash);
+
+  // ── Fase AC3 (T-2329): alat catat coach — setelan & cue, selesaikan sesi dari logger, catat makanan klien, tanggapan ───────
+  console.log('Catat coach (logger + Gizi)');
+  await (async () => {
+    const env = richEnv();
+    const adminTok = env.adminToken();
+    const rows = env.sheet('Schedules').rows;
+    const now = new Date(Date.now() - 20 * 60000).toISOString(), end = new Date(Date.now() + 40 * 60000).toISOString();
+    rows.push(['SCH-AC3', 'PT-A', 'Ani Anggraini', '6281111111111', now, end, '', 'read', 'C-1', 'Rizky', '', '']);
+    env.call('saveMemberProgram', adminTok, 'PT-A', '# Hari A\nSquat | 3x10\nPlank | 3x30 detik');
+    const adm = await openPage(browser, env, '/Index', [], { xnk_admin_token: adminTok }, { viewport: MOBILE, wait: 1500 });
+    const page = adm.page;
+    await page.route('https://xnk.my.id/foods/foods.min.json', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: require('fs').readFileSync(require('path').join(__dirname, '../../../foods/foods.min.json'), 'utf8') }));
+    await page.evaluate(s => window.workoutOpenAdmin('PT-A', 'SCH-AC3', s), now);
+    await page.waitForTimeout(1200);
+    const n = await page.locator('#wl-screen .wl-ex').count();
+    await page.evaluate(() => window.wlTopMenu());
+    await page.waitForTimeout(400);
+    check((await page.textContent('#wls-body').catch(() => '')).includes('Ganti klien'), 'logger (coach): top menu offers "Ganti klien"');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    if (n) {
+      await page.evaluate(() => window.wlSetupOpen(0));
+      await page.waitForTimeout(400);
+      await page.fill('#wl-setup-alat', 'Kursi 4');
+      await page.evaluate(() => window.wlSetupSave(0));
+      await page.waitForTimeout(1200);
+      const ex = env.sheet('ExerciseNotes');
+      check(!!ex && ex.rows.length === 2 && ex.rows[1][3] === 'Kursi 4', 'logger (coach): setelan alat saved on the server');
+      check((await page.textContent('#wl-screen .wl-ex .wl-setup').catch(() => '')).includes('Kursi 4'), 'logger (coach): the setup line shows on the exercise card');
+      await page.evaluate(() => window.wlTickAll(0));
+      await page.evaluate(() => window.wlFinish());
+      await page.waitForTimeout(500);
+      check(await page.locator('#wl-complete:checked').count() === 1, 'finish sheet: "Selesaikan sesi juga" is offered and on');
+      await page.evaluate(() => window.wlSubmit());
+      await page.waitForTimeout(2500);
+      const sch = env.sheet('Schedules').rows.find(r => r[0] === 'SCH-AC3');
+      check(sch && String(sch[7]).toLowerCase() === 'completed', 'finish sheet: the session is completed after the workout is saved');
+      await page.evaluate(() => window.closeModal());
+      await page.waitForTimeout(500);
+    } else check(false, 'logger (coach): the session opens with exercises from the program');
+    await page.evaluate(() => { window.openProfile('PT-A'); });
+    await page.waitForTimeout(700);
+    await page.evaluate(() => window.cpTab('gizi'));
+    await page.waitForTimeout(1500);
+    check(await visible(page, '#cf-add'), 'Gizi tab: "Catat" for the coach');
+    await page.click('#cf-add');
+    await page.waitForTimeout(1200);
+    await page.fill('#cf-q', 'telur');
+    await page.waitForTimeout(400);
+    await page.click('#cf-list .list-item');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.cfSave());
+    await page.waitForTimeout(1500);
+    const fl = env.sheet('FoodLog').rows.slice(1).filter(r => r[1] === 'PT-A' && /^coach-/.test(String(r[14] || '')));
+    check(fl.length === 1, 'Gizi tab: the coach logs a food for the client (marked coach)');
+    await page.waitForTimeout(500);
+    await page.evaluate(() => { document.querySelectorAll('#cf-card details.fold').forEach(f => { f.open = true; }); });
+    const chip = page.locator('#cf-card .cf-fb .chip').first();
+    if (await chip.count()) {
+      await chip.click();
+      await page.waitForTimeout(1200);
+      const fb = env.sheet('FoodFeedback');
+      check(!!fb && fb.rows.length === 2 && fb.rows[1][3] === 'pas', 'Gizi tab: a day mark is saved as feedback');
+    } else check(false, 'Gizi tab: each logged day has feedback chips');
+    check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Gizi tab: no sideways scroll');
+    noErrors(adm.errors);
+    await adm.context.close();
+  })().catch(sectionCrash);
+
   // ── T-2251: mode baca saja (langganan coach di hub) — pita tenang di panel dan portal ───────
   console.log('Mode baca saja (pita panel + portal)');
   await (async () => {
@@ -1074,7 +1197,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(700);
     await page.evaluate(() => document.querySelectorAll('.rmd-acc').forEach(d => { d.open = true; }));
     check(await page.locator('[data-k="job-sesi-besok-enabled"]').count() === 1, 'Pengingat has a "Sesi besok" card');
-    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 13, 'every reminder type has an editable client message');
+    check((await page.locator('#settings-body textarea[data-k$="-tpl"]').count()) === 14, 'every reminder type has an editable client message (14 with Kembali latihan, Fase AC1)');
     check((await page.textContent('#pv-pr')).startsWith('Halo Kak Budi, pengingat PR Kakak'), 'the preview shows the default client message with sample data');
     check((await page.locator('[data-k="job-rekap-bulanan-enabled"]:not(:checked), [data-k="job-selamat-milestone-enabled"]:not(:checked), [data-k="job-waktunya-ukur-enabled"]:not(:checked)').count()) === 3, 'the three new message types (rekap, milestone, ukur) start switched off');
     check((await page.textContent('#pv-rekap-bulanan')).includes('rekap latihan bulan September') && (await page.textContent('#pv-selamat-milestone')).includes('badge 25 sesi') && (await page.textContent('#pv-waktunya-ukur')).includes('waktunya mencatat progres'), 'the new types show a preview of their client message');
@@ -1150,7 +1273,7 @@ async function contrastReport(page) {
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
     await page.evaluate(() => { document.querySelectorAll('#detail-body details.fold').forEach(f => { f.open = true; }); });
-    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 9, 'client page: all nine reminder switches start on');
+    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 10, 'client page: all ten reminder switches start on (Kembali latihan added, Fase AC1)');
     await page.click('#profile-remind-prefs input[data-remind="pr"]');
     await page.waitForTimeout(600);
     check(env.memberRow('PT-A')[15] === 'pr', 'client page: switching PR off is saved for that client (MemberData column P)');
@@ -1808,7 +1931,7 @@ async function contrastReport(page) {
     await page.evaluate(() => window.cpTab('ringkasan'));
     await page.evaluate(() => { document.querySelectorAll('#detail-body details.fold').forEach(f => { f.open = true; }); });
     const remind = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
-    check(remind.length === 9 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
+    check(remind.length === 10 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
     const hit = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs input[data-remind]')).map(e => e.getBoundingClientRect()).every(r => r.height >= 43.5 && r.width >= 43.5));
     check(hit, 'phone: the switch touch area is at least 44 × 44 px');
     check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');

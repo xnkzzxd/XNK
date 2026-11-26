@@ -1,0 +1,15 @@
+/* ═══ Fase AC1: klien ditahan (cuti / sakit / nonaktif) — pita halaman klien, kartu portal, pil daftar ═══ */
+.hold-band { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--fg) 5%, var(--card, transparent)); }
+.hold-band b { display: block; }
+.hold-band .li-sub { display: block; }
+.hold-band .hb-act { display: flex; gap: 6px; margin-left: auto; }
+.hb-ic { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--fg) 9%, transparent); color: var(--fg); }
+.hb-ic svg { width: 20px; height: 20px; }
+.hb-ic.sm { width: 32px; height: 32px; border-radius: 10px; }
+.hb-ic.sm svg { width: 16px; height: 16px; }
+.state-pill.ditahan { background: transparent; border: 1px dashed currentColor; }
+.hold-card b { font-size: var(--fs-lg, 1.125rem); }
+.hd-sess input, .hd-dec input { width: 20px; height: 20px; flex: none; accent-color: var(--fg); }
+#hd-jenis .chip svg, #cu-jenis .chip svg { width: 16px; height: 16px; }
+@media (max-width: 480px) { .hold-band .hb-act { width: 100%; } .hold-band .hb-act .btn { flex: 1; } }

@@ -33,6 +33,7 @@ const ADMIN = [
   'previewReminderText', 'setMemberReminderPrefs',
   'getRenewalRequests', 'decideRenewal',
   'setClientHold', 'endClientHold', 'deleteClientHold', 'decideHoldRequest',
+  'saveExerciseNote', 'deleteWorkoutEntries', 'getWorkoutExerciseHistory', 'logClientFood', 'deleteClientFood', 'saveFoodFeedback',
   'getMemberProgress', 'saveMemberMeasurement', 'deleteMemberMeasurement', 'getMemberProgressPhoto', 'getMemberShareData',
   'getPriceListAdmin', 'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'getClassGroups',
   'syncFinanceTransactions', 'getBills', 'getBillDetail', 'saveBillAdjust', 'savePayment', 'saveExpense', 'getExpenses', 'getFinanceCategories', 'saveFinanceCategory', 'deleteFinanceCategory', 'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'getFinanceOverview', 'getFinancePage', 'uploadFinanceProof', 'getFinanceProof', 'exportFinanceCsv',
@@ -73,6 +74,7 @@ const WRITE = [
   'updateAppSettings', 'addTask', 'updateTask', 'deleteTask', 'deleteTaskGroup', 'saveTaskTemplate', 'deleteTaskTemplate',
   'setMemberMealReminder', 'setMemberReminderPrefs', 'decideRenewal', 'saveMemberMeasurement', 'deleteMemberMeasurement',
   'setClientHold', 'endClientHold', 'deleteClientHold', 'decideHoldRequest',
+  'saveExerciseNote', 'deleteWorkoutEntries', 'logClientFood', 'deleteClientFood', 'saveFoodFeedback',
   'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages',
   'syncFinanceTransactions', 'saveBillAdjust', 'savePayment', 'saveExpense', 'saveFinanceCategory', 'deleteFinanceCategory',
   'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'uploadFinanceProof',
@@ -103,7 +105,7 @@ const READ_OK = [
   'getMyTasks', 'getMyMealToday', 'getMyCoach', 'getPortalMore', 'getMyNutrition', 'getMyShopping', 'getMyFoodLog',
   'getMyContent', 'getMyProgram', 'getMyProgramProfile', 'getMyWorkout', 'getMyPackageEval', 'getMyHealthForm',
   'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'getMyRenewal', 'getMyProgressPhoto', 'getMyShareData',
-  'getMyClassGroup', 'getMyBills', 'markGuideSeen', 'markNotifSeen',
+  'getMyClassGroup', 'getMyBills', 'markGuideSeen', 'markNotifSeen', 'getWorkoutExerciseHistory',
 ];
 
 module.exports = { WRITE, READ_OK, PUBLIC, ADMIN, MEMBER, OWNER, TRIGGER, NOT_API, PUBLIC_API, API_FUNCTIONS };

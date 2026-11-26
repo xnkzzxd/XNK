@@ -4,7 +4,9 @@ What and why: [PRD.md](PRD.md). Tasks: [TODO.md](TODO.md). Every rule in [../Age
 
 ---
 
-## AC1 — Hold a client
+## AC1 — Hold a client (built 2026-11-26)
+
+Built as below, with these changes: `HOLD_KEEP_TYPES = ['ulang-tahun', 'sesi-besok']` (a session the coach kept inside a hold is still reminded); the return-day message is the normal reminder type `kembali-latihan` (off by default) instead of a separate job; no "Ditahan:" digest footer; reminders skip held clients through `_rmdIsOff_` (pools and `_rmdMemberIndex_` carry `hold`); the hold sheet lists sessions from `window.schedules` in the browser (no dry-run call); browser code is part `21-tahan-klien.part`, styles `10-tahan-klien.part`.
 
 ### Data
 New sheet **`ClientHolds`** (the only truth; history included). Headers:
@@ -99,7 +101,9 @@ Where holds are read:
 
 ---
 
-## AC3 — Coach logger upgrade (coach panel only)
+## AC3 — Coach logger upgrade (coach panel only; built 2026-11-26)
+
+Built as below, with these changes: server code is `src/CatatCoach.gs`, browser code part `22-catat-coach.part`, styles `11-catat-coach.part`. W2 = ⋯ "Isi seperti terakhir", a "Pakai" link on the "Naik ke … kg" line and top-menu "Ulangi latihan terakhir" (`wlRebuild` with the last logged routine). W4: deleting one exercise already existed through "Ubah" on a past day (⋯ → Hapus catatan gerakan ini); new is the trash button for a whole day (`deleteWorkoutEntries` with no keys, which also removes the `WorkoutSessions` row). W5 = "Riwayat lengkap gerakan ini" under the strength chart, sheet `#sheet-wkx`. W6 = top-menu "Ganti klien" (clients with a session within 60 minutes of this one, plus any open coach draft; each keeps its own `adm:<id>` draft). F1 marks coach entries with a `coach-` CID (no new FoodLog column). F3: `getClientFoodLog(token, id, days)` returns `{days, n, feedback, stats}`; the Gizi tab has a 7 / 31 day switch.
 
 Boundary: the client logger (`mode: 'client'`), `logMyWorkout`, `logMyFood`, their queues (`xnk_wl_queue`, `xnk_food_queue`), storage keys and cids are **not changed**. Coach code goes into a new part `parts/app/21-coach-catat.part` plus small hooks in the existing logger (`mode === 'admin'` branches only). Server functions are admin-only. Client-visible additions (W3 cue line, F2 food note) are read-only (owner: yes).
 

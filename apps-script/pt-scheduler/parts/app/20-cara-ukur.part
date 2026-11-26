@@ -80,5 +80,3 @@
     openSheet('sheet-ukur');
     setTimeout(ukurChipIntoView, 60);
   };
-})();
-</script>

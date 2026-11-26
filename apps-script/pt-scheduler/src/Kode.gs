@@ -2427,7 +2427,7 @@ function getAdminExtras(token) {
 // Sel "Tanggal" yang terlanjur diubah Sheets jadi tanggal sungguhan (lihat _appendRow_) dikembalikan jadi teks 'YYYY-MM-DD'.
 // Berjalan sendiri dari getAdminMore paling sering 6 jam sekali; pemilik juga bisa menjalankan repairDateCells dari editor.
 const DATE_TEXT_SHEETS_ = ['FoodLog', 'WorkoutLog', 'WorkoutSessions', 'Progress', 'ProgressPhotos', 'FitnessTests', 'SessionRatings', 'SessionNotes',
-  'NutritionAdvice', 'Assessments', 'HealthScreening', 'ProgramLog', 'Tagihan', 'Pembayaran', 'Pengeluaran', 'PackageEvaluations'];
+  'NutritionAdvice', 'Assessments', 'HealthScreening', 'ProgramLog', 'Tagihan', 'Pembayaran', 'Pengeluaran', 'PackageEvaluations', 'FoodFeedback'];
 function _repairDateCells_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let fixed = 0;
@@ -7932,6 +7932,7 @@ function _workoutFor_(row) {
     } catch (e) { g.progress = {}; }
   }
   g.suggest = suggest;
+  try { g.notes = _exNotesFor_(id); } catch (e) { g.notes = {}; }   // Fase AC3: setelan alat & cue dari coach (klien baca saja)
   return g;
 }
 

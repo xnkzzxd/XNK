@@ -1,0 +1,19 @@
+/* ═══ Fase AC3: alat catat coach (logger, riwayat gerakan, tab Gizi) dan tanggapan coach di Makan klien ═══ */
+.wl-setup { font-weight: 600; }
+.wl-sug-apply { margin-left: 4px; }
+.wl-done-sess input, .cf-fb input[type=checkbox] { width: 20px; height: 20px; flex: none; accent-color: var(--fg); }
+.wkx-tbl { display: grid; gap: 2px; }
+.wkx-tr { display: grid; grid-template-columns: minmax(0, 7.5rem) minmax(0, 1fr) 3.5rem; gap: 10px; align-items: start; min-height: 44px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.wkx-th { min-height: 0; padding-top: 0; font-size: var(--fs-xs); font-weight: 700; color: var(--fg-2); }
+.wkx-tr .num { text-align: right; font-weight: 700; }
+.cf-fb { display: grid; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--border); margin-top: 4px; }
+.cfm { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cfm-h { font-size: var(--fs-xs); color: var(--fg-muted); text-align: center; }
+.cfm-d { display: grid; place-items: center; min-height: 34px; border-radius: 8px; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--fg-muted); background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.cfm-d.pad { background: none; }
+.cfm-d.logged { color: var(--fg); background: none; border: 1.5px solid var(--fg); }
+.cfm-d.hit { color: var(--bg, #fff); background: var(--fg); }
+.cfm-d.over { color: var(--danger); background: none; border: 1.5px solid var(--danger); }
+.nut-fb { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--fg) 6%, transparent); line-height: 1.4; }
+.nut-fb svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+</style>

@@ -29,7 +29,9 @@ var IDEM_DURABLE = { addSchedule: 1, addRecurringSchedule: 1, addTask: 1, addMem
   // grup kelas) atau memaksa blok program baru.
   requestRenewal: 1, copyRoutineToMine: 1, createClassGroup: 1, acceptAutoProgram: 1,
   // Fase AC1: kiriman ulang tidak boleh membuat cuti kedua atau menjawab "sudah diputuskan".
-  setClientHold: 1, decideHoldRequest: 1, requestMyHold: 1 };
+  setClientHold: 1, decideHoldRequest: 1, requestMyHold: 1,
+  // Fase AC3: catatan makan oleh coach (cid diteruskan; satu baris walau dikirim ulang).
+  logClientFood: 1 };
 
 function _idemCidOk_(cid) { return typeof cid === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(cid); }
 

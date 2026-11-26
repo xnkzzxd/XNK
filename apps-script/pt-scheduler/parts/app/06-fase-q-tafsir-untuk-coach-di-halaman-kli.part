@@ -236,6 +236,11 @@
       window.nutSet(key, bad(b.nutrition) ? Object.assign({ error: msg(b.nutrition) }) : Object.assign({}, b.nutrition, { foodLog: bad(b.foodLog) ? null : b.foodLog }));
       if (!bad(b.workout)) window.wkSetAdmin(key, b.workout);
       shareAdmin[key] = bad(b.share) ? null : b.share;
+      if (!bad(b.holds) && Array.isArray(b.holds)) {   // Fase AC1: riwayat cuti (dengan catatan; admin saja)
+        window.holdHist[key] = b.holds;
+        const hw = $('profile-hold-wrap');
+        if (hw && String(window.selectedMemberId) === key) setHTML(hw, window.holdHistHtml(key));
+      }
       window.clientInsight[key] = b.insight && !b.insight.error ? b.insight : { error: msg(b.insight) };
       if (String(window.selectedMemberId) === key) renderClientInsight();
     } finally { cc.applying = false; }
