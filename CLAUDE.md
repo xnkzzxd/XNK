@@ -23,6 +23,6 @@ Phase X (new client portal for phones, built): docs/portal2/ (tasks T-1900+).
 Phase Y (client portal as a Mac-like app on tablet, laptop, PC, built): docs/desk/ (tasks T-2000+).
 Phase Z (Web Push for coach and clients, built; installed by the owner via docs/push/Setup.md; the code still labels it "Fase X"): docs/push/ (tasks T-2100+).
 Phase AB (XNK Library + XNK Template + hub xnk.web.id for all coaches + owner dashboard XNK HQ at /adminxnk; production untouched, built): docs/library/ (tasks T-2200+); code in apps-script/xnk-library/.
-Phase AC (Klien list + client profile redesign in the coach panel, modelled on the portal; one home per action; writes return their part; in progress): docs/clientpage/ (tasks T-2300+).
+Phase AC (Klien list + client profile redesign in the coach panel, modelled on the portal; one home per action; writes return their part; built): docs/clientpage/ (tasks T-2300+).
 
 @docs/Agent.md

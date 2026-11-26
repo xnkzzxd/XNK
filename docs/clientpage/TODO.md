@@ -14,6 +14,6 @@ Wave 2 — built and approved by the owner 2026-11-25 (PR #201)
 Wave 3 — built and approved by the owner 2026-11-26 (PR #201)
 - [x] T-2305 Latihan: Program section (profile line, day cards with the next day marked **Berikutnya** and open, other days folded to one line of names) + **Atur program** sheet `#sheet-cp-prog` (Ubah/Buat program, otomatis switch, pantangan, Buat ulang otomatis, client routines); light Minggu ini vs biasanya + activity line; Kekuatan as one folding list (tap = PR + full chart); Volume & keseimbangan in one card; Riwayat rows (tap = Ubah). Two columns on wide panels. No share buttons, no button rows. Owner's review: sharing moved to one share icon in the head (card for the open tab; out of ⋯), the activity heatmap spans the card, Atur program uses settings rows with switches instead of pill buttons.
 
-Wave 4 — built 2026-11-26, waiting for the owner's yes on the screenshots
+Wave 4 — built and approved by the owner 2026-11-26 (PR #201). Phase AC is complete.
 - [x] T-2306 Gizi: advice first, Hari ini (light calorie ring + macro bars side by side), 7 hari (bars + sentence, replaces the hero), Buku harian per meal (`<details>` per day, read-only), Data & dasar (plain numbers, flags, one-line input rows, "Ubah data gizi" link).
 - [x] T-2307 Checks and docs: per-tab button budgets and "no share buttons in tabs" checks in `browser-check` (Progres, Latihan, Gizi), call checks (sub-tab switch 0, photo view 1), Agent.md §7, apps-script/README.md, Design.md.
