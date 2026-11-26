@@ -25,7 +25,18 @@
       window.renewals = (window.renewals || []).filter(x => x.id !== id);
       window.renderDashboard();
       optimistic({ q: { mode: 'admin', fn: 'decideRenewal', args: [id, approve] }, ok: approve ? 'Perpanjangan disetujui.' : 'Permintaan ditolak.', label: approve ? 'Setujui perpanjangan' : 'Tolak perpanjangan',
-        then: function () { Promise.resolve(approve ? window.loadAllData() : null).then(function () { return window.loadRenewals(); }).catch(function () {}); },
+        // Fase AC: setuju = jawaban membawa klien yang sudah diperbarui (paket baru langsung tampil); data panel (transaksi,
+        // pendapatan, daftar permintaan) dimuat ulang sekali di latar. Tolak = tidak ada yang perlu dimuat ulang.
+        then: function (res) {
+          window.cpTodoDrop(r.memberId, 'perpanjang');
+          if (!approve) return;
+          if (res && res.member) {
+            const i = window.members.findIndex(x => String(x.id) === String(res.member.id));
+            if (i !== -1) window.members[i] = Object.assign({}, window.members[i], res.member);
+            window.updateUI();
+          }
+          window.loadAllData().catch(function () {});
+        },
         undo: function () { window.renewals = (window.renewals || []).concat([r]); window.renderDashboard(); } });
     }, approve ? { title: 'Setujui perpanjangan?', confirmText: 'Setujui' } : { title: 'Tolak permintaan?', confirmText: 'Tolak', variant: 'danger' });
   };
@@ -108,32 +119,27 @@
       });
   };
 
-  // Panel: bagian "Progres" di halaman klien
+  // Panel: tab Progres › Ukuran (Fase AC, Wave 2): satu grafik dengan pilihan ukuran (dulu delapan grafik bertumpuk).
+  // Catat ada di kartu klien (aksi), foto di sub-tab Foto, riwayat catatan di #cp-pg-hist (ketuk baris = Hapus).
   function pgAdminInner(memberId) {
     const d = pg.admin[memberId];
-    const nPhoto = d && d.photos ? d.photos.length : 0;
-    const btns = '<div class="btn-row"><button type="button" class="btn btn-secondary btn-sm" onclick="window.pgOpenEntry(\'admin\',\'' + h(memberId) + '\')">' + icon('plus') + 'Catat</button>' +
-      '<button type="button" class="btn btn-secondary btn-sm" onclick="window.pgOpenPhotos(\'admin\',\'' + h(memberId) + '\')">' + icon('camera') + 'Foto' + (nPhoto ? ' (' + nPhoto + ')' : '') + '</button></div>';
-    if (!d) return '<div class="card">' + skel(3, true) + '</div>';
-    if (d.error) return '<div class="card">' + errorState(d.error, "window.loadClientBundle('" + h(memberId) + "')") + '</div>';
-    let html = '<div class="card"><div class="section-head"><h4 class="section-title">Grafik ukuran</h4>' + btns + '</div>' +
-      (d.entries.length ? '<div class="stack pg-grid" style="gap:18px">' + pgBlocksHtml(d) + '</div>' : emptyState('trending-up', 'Belum ada catatan', 'Catat berat atau lingkar pinggang klien.')) + '</div>';
-    if (d.entries.length) {
-      html += foldHtml('Riwayat catatan ukur', d.entries.length + ' catatan', '<div class="list pg-notes">' + d.entries.slice().reverse().slice(0, 10).map(function (e) {
-        const parts = [];
-        PG_MEASURES.forEach(function (m) { if (e[m[0]] !== '' && e[m[0]] != null) parts.push((m[0] === 'berat' || m[0] === 'pinggang' ? '' : m[1] + ' ') + pgNum(e[m[0]]) + ' ' + m[2]); });
-        return '<div class="list-item" style="min-height:60px"><div class="grow" style="min-width:0"><p class="li-title num">' + h(parts.join(' · ')) + '</p><p class="li-sub">' + h(pgLabel(e.tanggal)) + ' · <span class="pill">' + (e.oleh === 'coach' ? 'coach' : 'klien') + '</span></p></div>' +
-          '<button type="button" class="icon-btn plain" aria-label="Hapus catatan ' + h(pgLabel(e.tanggal)) + '" onclick="window.pgDeleteAdminEntry(\'' + h(memberId) + '\',\'' + h(e.id) + '\')">' + icon('trash-2') + '</button></div>';
-      }).join('') + '</div>', false);
-    }
-    const earned = (d.badges || []).filter(b => b.earned);
-    html += foldHtml('Badge', earned.length + ' diraih', '<div class="pg-pills">' + (earned.length ? earned.map(b => '<span class="pill">' + h(pgShortBadge(b)) + '</span>').join('') : '<span class="li-sub">Belum ada badge.</span>') + '</div>', false);
-    return html;
+    if (!d) return '<div class="card cp-card-pad">' + skel(3, true) + '</div>';
+    if (d.error) return '<div class="card cp-card-pad">' + errorState(d.error, "window.loadClientBundle('" + h(memberId) + "', { force: true })") + '</div>';
+    if (!d.entries.length) return '<div class="px-sec cp-sec"><h3>Grafik ukuran</h3></div><p class="cp-empty">' + icon('trending-up') + ' Belum ada catatan. Catat berat atau lingkar badan lewat tombol Catat ukuran di kartu atas.</p>';
+    const have = PG_MEASURES.filter(m => d.summary && d.summary[m[0]]);
+    const want = window.cpPgMeasureOf ? window.cpPgMeasureOf(memberId) : 'berat';
+    const cur = have.find(m => m[0] === want) || have[0] || PG_MEASURES[0];
+    const main = have.filter(m => m[0] === 'berat' || m[0] === 'pinggang'), more = have.filter(m => m[0] !== 'berat' && m[0] !== 'pinggang');
+    const id = h(memberId);
+    const pick = '<div class="cp-pick" role="group" aria-label="Pilih ukuran">' + main.map(m => '<button type="button" class="chip' + (m === cur ? ' active' : '') + '" aria-pressed="' + (m === cur) + '" onclick="window.cpPgPick(\'' + id + '\',\'' + m[0] + '\')">' + m[1] + '</button>').join('') +
+      (more.length ? '<select class="select cp-pick-more" aria-label="Lingkar badan lainnya" onchange="window.cpPgPick(\'' + id + '\',this.value)"><option value="">' + (more.indexOf(cur) !== -1 ? h(cur[1]) : 'Lainnya…') + '</option>' + more.filter(m => m !== cur).map(m => '<option value="' + m[0] + '">' + m[1] + '</option>').join('') + '</select>' : '') + '</div>';
+    return '<div class="px-sec cp-sec"><h3>Grafik ukuran</h3><span>' + d.entries.length + ' catatan</span></div><div class="card cp-card-pad cp-chart-card">' + pick + pgBlockHtml(d, cur) + '</div>';
   }
 
   function pgAdminRender(memberId) {
     const wrap = $('profile-progress-wrap');
     if (wrap && wrap.getAttribute('data-member') === String(memberId)) setHTML(wrap, pgAdminInner(memberId));
+    if (window.cpPgRender) window.cpPgRender(memberId);   // Fase AC: riwayat catatan dan sub-tab Foto ikut data progres
   }
   window.pgSetAdmin = function (memberId, d) { pg.admin[memberId] = d; if (d && !d.error) window.ccPatch(memberId, { progress: d }); pgAdminRender(memberId); };
   window.pgLoadAdmin = function (memberId) {
@@ -217,7 +223,7 @@
     paintIcons();
   }
   window.pgOpenPhotos = function (mode, memberId) {
-    pg.mode = mode; pg.memberId = memberId || null;
+    pg.mode = mode; pg.memberId = memberId || null; pg.fromTab = false;
     $('pg-photo-upload').classList.toggle('hide', mode === 'admin');
     pgRenderPhotoList();
     openSheet('sheet-progress-photos');
@@ -264,7 +270,8 @@
       $('pg-view-img').src = r.dataUrl; $('pg-view-loading').classList.add('hide');
     }).catch(function (err) { $('pg-view-loading').textContent = 'Gagal memuat foto: ' + window.authMessage(err); });
   };
-  window.pgClosePhotoView = function () { window.pgOpenPhotos(pg.mode, pg.memberId); };
+  // Dibuka dari tab Progres › Foto di panel (pg.fromTab): tutup = kembali ke halaman, bukan ke daftar foto.
+  window.pgClosePhotoView = function () { if (pg.fromTab) { pg.fromTab = false; window.closeModal(); return; } window.pgOpenPhotos(pg.mode, pg.memberId); };
   window.pgDeletePhoto = function () {
     const id = pg.viewId;
     window.showConfirmModal('Foto ini dihapus permanen dari Drive.', function () {

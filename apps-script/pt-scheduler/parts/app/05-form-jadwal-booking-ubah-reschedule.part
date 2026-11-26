@@ -700,6 +700,8 @@
   };
 
   // ── KLIEN (admin) ──────────────────────────────────────────────────────────
+  // Fase AC (T-2302): daftar klien tanpa kartu hitam ringkasan (angkanya di band), "Perlu perhatian" chip kedua,
+  // baris: nama sebaris sendiri, sisa + meter + status di kanan, tanda perhatian hanya bila ada.
   function clientState(m) {
     const total = Number(m.totalSessions) || 0, rem = remainingOf(m);
     if (total > 0 && rem === 0) return 'empty';
@@ -729,12 +731,21 @@
   }
   window.setClientSort = function (v) { ui.clientSort = v; _lsSet('xnk_client_sort', v); renderClientList(); };
   window.setClientView = function (v) { ui.clientView = v; _lsSet('xnk_client_view', v); document.querySelectorAll('#client-view-seg button').forEach(b => { const on = b.getAttribute('data-v') === v; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); }); renderClientList(); };
-  function clientHeroHtml(counts) {
-    const g = window.clientSignals, ok = g && !g.error, n = counts.perhatian;
-    return insightHeroHtml({ slim: true, eyebrow: 'Ringkasan klien',
-      text: !ok ? 'Memuat ringkasan…' : n ? n + ' klien perlu perhatian' : 'Semua klien aman hari ini',
-      stats: [{ v: String(counts.all), l: 'Klien' }, { v: ok ? String(g.totals.sesiMinggu) : '–', l: 'Sesi minggu ini' }, { v: ok ? g.totals.konsisten + '%' : '–', l: 'Aktif 14 hari' }],
-      actions: ok && n ? '<button type="button" class="btn btn-on-ink btn-sm" onclick="window.setClientFilter(\'perhatian\')">' + icon('eye') + 'Lihat siapa</button>' : '' });
+  const CL_FILTERS = [['all', 'Semua'], ['perhatian', 'Perlu perhatian'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['active', 'Aktif'], ['archive', 'Riwayat paket']];
+  const CL_SORTS = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
+  function clientCounts() {
+    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
+    window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
+    return counts;
+  }
+  // Ringkasan di band: satu kalimat di HP, dua angka kecil di PC (dulu kartu hitam tersendiri).
+  function clientHeadSub(counts) {
+    return counts.all + ' klien' + (counts.perhatian ? ' · ' + counts.perhatian + ' perlu perhatian' : ' · semua aman');
+  }
+  function clientHeadStats() {
+    const g = window.clientSignals;
+    if (!g || g.error || !g.totals) return '';
+    return '<div class="cl-stats" aria-label="Ringkasan klien"><div><b class="num">' + h(g.totals.sesiMinggu) + '</b><span>Sesi minggu ini</span></div><div><b class="num">' + h(g.totals.konsisten) + '%</b><span>Aktif 14 hari</span></div></div>';
   }
 
   function renderClients() {
@@ -743,20 +754,17 @@
     const caret = ae && ae.id === 'search-client' ? [ae.selectionStart, ae.selectionEnd] : null;
     const fKey = focusedRowKey();
     loadClientPrefs();
-    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, perhatian: 0, archive: (window.memberArchive || []).length };
-    window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
-    const chips = [['all', 'Semua'], ['active', 'Aktif'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['perhatian', 'Perlu perhatian'], ['archive', 'Riwayat paket']];
-    const sorts = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
-    const html = '<div class="page-head"><div><h2 class="page-title">Klien</h2><p class="page-sub">' + counts.all + ' klien · ' + (counts.active + counts.low) + ' punya sisa sesi</p></div>' +
-      '<button type="button" class="btn btn-primary" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button></div>' +
-      '<div class="client-top" id="client-top"><div id="client-hero">' + clientHeroHtml(counts) + '</div>' +
-      '</div>' +
-      '<div class="stack" style="gap:12px;margin-bottom:8px">' +
-        '<div class="cl-tools"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari klien…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
-        '<select class="select" id="sort-client" aria-label="Urutkan klien" onchange="window.setClientSort(this.value)">' + sorts.map(o => '<option value="' + o[0] + '"' + (ui.clientSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>' +
-        '<div class="seg only-desktop" id="client-view-seg" role="group" aria-label="Tampilan"><button type="button" data-v="card" class="' + (ui.clientView === 'card' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'card') + '" onclick="window.setClientView(\'card\')">Kartu</button><button type="button" data-v="list" class="' + (ui.clientView === 'list' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'list') + '" onclick="window.setClientView(\'list\')">Daftar</button></div></div>' +
-        '<div class="chips" role="tablist" aria-label="Filter klien">' + chips.map(c => '<button type="button" role="tab" class="chip' + (ui.clientFilter === c[0] ? ' active' : '') + '" data-filter="' + c[0] + '" aria-selected="' + (ui.clientFilter === c[0]) + '" onclick="window.setClientFilter(\'' + c[0] + '\')">' + c[1] + ' <span class="chip-count num">' + counts[c[0]] + '</span></button>').join('') + '</div>' +
-      '</div><div id="client-list"></div>';
+    const counts = clientCounts();
+    const opt = (o, cur, n) => '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + (n != null ? ' (' + n + ')' : '') + '</option>';
+    const html = '<div class="page-head cl-head"><div class="cl-head-t"><h2 class="page-title">Klien</h2><p class="page-sub" id="cl-sub">' + h(clientHeadSub(counts)) + '</p></div>' + clientHeadStats() +
+      '<button type="button" class="btn btn-primary cl-new" onclick="window.openAddMemberModal()" aria-label="Klien baru">' + icon('user-plus') + '<span class="cl-new-t">Klien baru</span></button></div>' +
+      '<div class="cl-bar" id="cl-bar"><div class="input-search">' + icon('search') + '<input class="input" type="search" id="search-client" placeholder="Cari klien…" value="' + h(ui.clientQuery) + '" oninput="window.filterClients()" autocomplete="off" aria-label="Cari klien"><kbd class="only-desktop">/</kbd></div>' +
+        '<select class="select cl-filter" id="filter-client" aria-label="Filter klien" onchange="window.setClientFilter(this.value)">' + CL_FILTERS.map(o => opt(o, ui.clientFilter, counts[o[0]])).join('') + '</select>' +
+        '<select class="select cl-sort" id="sort-client" aria-label="Urutkan klien" onchange="window.setClientSort(this.value)">' + CL_SORTS.map(o => opt(o, ui.clientSort)).join('') + '</select>' +
+        '<div class="seg only-desktop cl-view" id="client-view-seg" role="group" aria-label="Tampilan"><button type="button" data-v="card" class="' + (ui.clientView === 'card' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'card') + '" onclick="window.setClientView(\'card\')">Kartu</button><button type="button" data-v="list" class="' + (ui.clientView === 'list' ? 'active' : '') + '" aria-pressed="' + (ui.clientView === 'list') + '" onclick="window.setClientView(\'list\')">Daftar</button></div></div>' +
+      '<div class="chips cl-chips" role="tablist" aria-label="Filter klien">' + CL_FILTERS.map(c => '<button type="button" role="tab" class="chip' + (ui.clientFilter === c[0] ? ' active' : '') + '" data-filter="' + c[0] + '" aria-selected="' + (ui.clientFilter === c[0]) + '" onclick="window.setClientFilter(\'' + c[0] + '\')">' +
+        (c[0] === 'perhatian' && counts.perhatian ? '<span class="cl-dot" aria-hidden="true"></span>' : '') + c[1] + ' <span class="chip-count num">' + counts[c[0]] + '</span></button>').join('') + '</div>' +
+      '<div id="client-list"></div>';
     setHTML(el, html);
     renderClientList();
     if (caret) {
@@ -776,10 +784,10 @@
     if (!el) return;
     const fKey = focusedRowKey();
     document.querySelectorAll('#view-clients [data-filter]').forEach(function (c) {
-      const f = c.getAttribute('data-filter'), on = f === ui.clientFilter;
-      if (c.classList.contains('stat-tile')) { c.classList.toggle('active', on); c.setAttribute('aria-pressed', on); }
-      else { c.classList.toggle('active', on); c.setAttribute('aria-selected', on); }
+      const on = c.getAttribute('data-filter') === ui.clientFilter;
+      c.classList.toggle('active', on); c.setAttribute('aria-selected', on);
     });
+    const fs = $('filter-client'); if (fs && fs.value !== ui.clientFilter) fs.value = ui.clientFilter;
     const q = ui.clientQuery.trim().toLowerCase();
     const match = x => !q || String(x.name || '').toLowerCase().indexOf(q) !== -1 || String(x.phone || '').indexOf(q.replace(/\D/g, '') || '\u0000') !== -1;
     let entries = [];
@@ -803,7 +811,7 @@
         q ? '' : '<button type="button" class="btn btn-secondary btn-sm" onclick="window.openAddMemberModal()">' + icon('user-plus') + 'Klien baru</button>'));
       return;
     }
-    // Info kartu PC (tidak dibuat di HP): sesi berikutnya dan permintaan perpanjang, satu kali lewat data.
+    // Sesi berikutnya dan permintaan perpanjang, satu kali lewat data.
     const desk = !isPhone(), now = Date.now(), nextBy = {}, renewBy = {}, solo = window.isSoloCoach();
     window.schedules.forEach(function (s) {
       if (!s.memberId || isAvailable(s) || isDone(s)) return;
@@ -837,136 +845,106 @@
     refocusRow(fKey);
   }
 
-  function clientRow(m, x) {
-    x = x || {};
-    const total = Number(m.totalSessions) || 0, used = Number(m.usedSessions) || 0, rem = remainingOf(m);
-    const st = clientState(m);
-    const pill = st === 'active' ? '' : '<span class="cc-state">' + statePillHtml(m) + '</span>';
-    const ts = (window.taskSummary || {})[String(m.id)] || {};
-    const tOpen = Number(ts.open) || 0, tLate = Number(ts.overdue) || 0;
-    const taskPills = (tOpen || tLate)
-      ? '<div class="row cc-pills" style="gap:6px;margin-top:6px;flex-wrap:wrap">' +
-          (tOpen ? '<span class="pill soft num">PR ' + tOpen + '</span>' : '') +
-          (tLate ? '<span class="pill solid num">Telat ' + tLate + '</span>' : '') + '</div>'
-      : '';
-    return '<div class="list-item interactive client-card" role="button" tabindex="0" data-key="client:' + h(m.id) + '" onclick="window.openProfile(\'' + h(m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
-      avatar(m.photo, m.name) +
-      '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4><p class="li-sub truncate"><span class="cc-phone">+' + h(m.phone) + (m.packageName ? ' · ' : '') + '</span>' + (m.packageName ? h(m.packageName) : '') + '</p>' + taskPills +
-      '<div class="meter cc-meter' + (st === 'low' ? ' low' : st === 'empty' ? ' empty' : '') + '"><i style="width:' + (total ? Math.min(100, Math.round(used / total * 100)) : 0) + '%"></i></div>' + clientExtra(m, x) + (x.desk ? clientMeta(m, x) : '') + '</div>' +
-      '<div class="li-trail"><div class="cc-count" style="text-align:right"><p class="num" style="font-weight:800;font-size:var(--fs-lg)">' + rem + '<span class="li-sub">/' + total + '</span></p><p class="li-sub">sisa sesi</p></div>' + pill + '</div></div>';
-  }
-  // Tanda perhatian, sesi berikutnya (HP) dan tren 4 minggu. Bagian dari baris klien di semua lebar.
+  // Tanda perhatian (teks) dan PR terbuka/telat: satu baris kecil, hanya bila ada.
   const FLAG_TEXT = { inaktif: (m, g) => (g && g.lastDone ? Math.max(1, Math.round((Date.now() - new Date(g.lastDone + 'T00:00:00+07:00')) / 86400000)) + ' hari tidak latihan' : 'Belum pernah latihan'), 'pr-telat': (m) => 'PR telat ' + (((window.taskSummary || {})[String(m.id)] || {}).overdue || ''), perpanjang: () => 'Minta perpanjang', 'rating-rendah': () => 'Rating rendah' };
-  function clientExtra(m, x) {
+  function clientFlagsHtml(m, x) {
     const g = sigOf(m);
     const fl = (g ? g.flags : []).slice();
     if (x.renew && fl.indexOf('perpanjang') === -1) fl.push('perpanjang');   // permintaan terbaru lebih cepat dari sinyal server
-    const flags = fl.filter(f => FLAG_TEXT[f]).map(f => flagHtml(FLAG_TEXT[f](m, g))).join('');
-    const nx = x.next ? new Date(x.next) : null;
-    const mx = g ? Math.max.apply(null, g.weeks.concat([1])) : 1;
-    const trend = g ? '<div class="cc-trend" title="Sesi 4 minggu terakhir"><span class="cc-bars" aria-hidden="true">' + g.weeks.map(n => '<i style="height:' + Math.max(12, Math.round(n / mx * 100)) + '%"' + (n ? '' : ' class="z"') + '></i>').join('') + '</span>' +
-      (g.weightDelta != null && g.weightDelta !== 0 ? '<span class="cc-wd num">' + (g.weightDelta < 0 ? '↓' : '↑') + ' ' + String(Math.abs(g.weightDelta)).replace('.', ',') + ' kg</span>' : '') + '</div>' : '';
-    return '<div class="cc-extra">' + (flags ? '<div class="cc-flags">' + flags + '</div>' : '') +
-      '<p class="cc-line cc-next-m">' + icon('calendar-clock') + '<span class="truncate">' + (nx ? h(fmtShort(nx)) + ' · ' + fmtTime(nx) : 'Belum ada jadwal') + '</span></p>' + trend + '</div>';
+    let out = fl.filter(f => FLAG_TEXT[f]).map(f => flagHtml(FLAG_TEXT[f](m, g))).join('');
+    const ts = (window.taskSummary || {})[String(m.id)] || {}, tOpen = Number(ts.open) || 0;
+    if (tOpen && fl.indexOf('pr-telat') === -1) out += '<span class="pill soft num cc-pr">PR ' + tOpen + '</span>';
+    return out ? '<div class="cc-flags">' + out + '</div>' : '';
   }
-  // Kartu PC: jadwal berikutnya, coach (kalau lebih dari satu), terakhir aktif, minta perpanjang. Disembunyikan di HP lewat CSS.
+  // Batang 4 minggu + perubahan berat (kartu PC).
+  function clientTrendHtml(m) {
+    const g = sigOf(m);
+    if (!g) return '';
+    const mx = Math.max.apply(null, g.weeks.concat([1]));
+    return '<div class="cc-trend" title="Sesi 4 minggu terakhir"><span class="cc-bars" aria-hidden="true">' + g.weeks.map(n => '<i style="height:' + Math.max(12, Math.round(n / mx * 100)) + '%"' + (n ? '' : ' class="z"') + '></i>').join('') + '</span>' +
+      (g.weightDelta != null && g.weightDelta !== 0 ? '<span class="cc-wd num">' + (g.weightDelta < 0 ? '↓' : '↑') + ' ' + String(Math.abs(g.weightDelta)).replace('.', ',') + ' kg</span>' : '') + '</div>';
+  }
+  // Kartu PC: coach (kalau lebih dari satu) dan terakhir aktif. Disembunyikan di HP dan di daftar ringkas.
   let lastFmt = null;
   function clientMeta(m, x) {
-    const nx = x.next ? new Date(x.next) : null;
     if (!lastFmt) lastFmt = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
     const last = x.date && x.date.getTime() > 0 ? lastFmt.format(x.date) : '-';
-    return '<div class="cc-meta">' +
-      '<p class="cc-line cc-next">' + icon('calendar-clock') + '<span class="truncate">' + (nx ? h(fmtShort(nx)) + ' · ' + fmtTime(nx) : 'Belum ada jadwal') + '</span></p>' +
+    return '<div class="cc-meta">' + clientTrendHtml(m) +
       (x.solo ? '' : '<p class="cc-line cc-coach">' + icon('dumbbell') + '<span class="truncate">' + h(m.preferredCoachName || 'Belum ada coach') + '</span></p>') +
-      '<p class="cc-line cc-last">' + icon('history') + '<span class="truncate">Aktif terakhir ' + h(last) + '</span></p>' +
-      '</div>';
+      '<p class="cc-line cc-last">' + icon('history') + '<span class="truncate">Aktif terakhir ' + h(last) + '</span></p></div>';
+  }
+  function clientRow(m, x) {
+    x = x || {};
+    const total = Number(m.totalSessions) || 0, rem = remainingOf(m), st = clientState(m);
+    const nx = x.next ? new Date(x.next) : null;
+    const nextTxt = nx ? fmtShort(nx) + ' · ' + fmtTime(nx) : 'Belum ada jadwal';
+    const stTxt = st === 'empty' ? 'Habis' : st === 'low' ? 'Hampir habis' : '';
+    return '<div class="list-item interactive client-card" role="button" tabindex="0" data-key="client:' + h(m.id) + '" onclick="window.openProfile(\'' + h(m.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
+      avatar(m.photo, m.name) +
+      '<div class="grow"><h4 class="li-title truncate">' + h(m.name) + '</h4>' +
+      '<p class="cc-sub"><span class="cc-next' + (nx ? '' : ' none') + '">' + h(nextTxt) + '</span>' + (m.packageName ? '<span class="cc-sep" aria-hidden="true"> · </span><span class="cc-pkg">' + h(m.packageName) + '</span>' : '') + '</p>' +
+      clientFlagsHtml(m, x) + (x.desk ? clientMeta(m, x) : '') + '</div>' +
+      '<div class="li-trail cc-trail"><p class="cc-count num"><b>' + rem + '</b><span>/' + total + '</span></p>' +
+      '<div class="meter cc-meter' + (st === 'low' ? ' low' : st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + (total ? Math.min(100, Math.round(rem / total * 100)) : 0) + '%"></i></div>' +
+      (stTxt ? '<p class="cc-st' + (st === 'empty' ? ' warn' : ' low') + '">' + stTxt + '</p>' : '') + '</div></div>';
   }
 
   function archiveRow(a) {
     return '<div class="list-item interactive muted-item client-card" role="button" tabindex="0" data-key="client:' + h(a.id) + '" onclick="window.openProfile(\'' + h(a.id) + '\')" onkeydown="if(event.key===\'Enter\')this.click()">' +
-      avatar(a.photo, a.name) + '<div class="grow"><h4 class="li-title truncate">' + h(a.name) + '</h4><p class="li-sub truncate">' + h(a.packageName || 'Paket') + ' · ' + (a.totalSessions || 0) + ' sesi · ' + h(a.date) + '</p></div>' +
+      avatar(a.photo, a.name) + '<div class="grow"><h4 class="li-title truncate">' + h(a.name) + '</h4><p class="cc-sub truncate">' + h(a.packageName || 'Paket') + ' · ' + (a.totalSessions || 0) + ' sesi · ' + h(a.date) + '</p></div>' +
       '<div class="li-trail"><span class="pill soft cc-state">' + icon(a.jenis === 'Baru' ? 'user-plus' : 'history') + h(a.jenis || 'Riwayat') + '</span></div></div>';
   }
   window.updateMemberUI = function () { if (window.currentView === 'clients') renderClientList(); };
 
+  // ── Halaman klien (Fase AC, T-2303) ─────────────────────────────────────────
+  // Kepala = nama klien + ⋯; satu kartu hitam (identitas, sisa sesi, empat aksi); lima tab terang yang menempel.
+  // Isi tiap tab digambar oleh fungsi di part 20 (Ringkasan, Data) dan part lama (Progres, Latihan, Gizi).
   window.openProfile = function (id) {
     if (window.isPublicView) return;
     const m = window.members.find(x => String(x.id) === String(id));
     if (!m) { window.showToast('Data klien tidak ditemukan.'); return; }
     window.selectedMemberId = m.id;
-    const total = Number(m.totalSessions) || 0, used = Number(m.usedSessions) || 0, rem = remainingOf(m);
-    const st = clientState(m);
-    const goal = String(m.goal || '');
-    const goalMain = goal.split('|')[0].trim(), goalTag = goal.indexOf('|') !== -1 ? goal.split('|')[1].trim() : '';
-    const sessions = window.schedules.filter(s => String(s.memberId) === String(m.id) && !isAvailable(s)).sort((a, b) => new Date(b.start) - new Date(a.start));
-    const upcoming = sessions.filter(s => new Date(s.start) >= new Date() && !isDone(s)).sort(byStart);
-    const past = sessions.filter(s => !(new Date(s.start) >= new Date() && !isDone(s)));
-    const C = 2 * Math.PI * 52, pct = total ? rem / total : 0;
-
-    const doneCount = sessions.filter(isDone).length;
-    const stPill = statePillHtml(m);
-    let body = '<div class="stack" style="gap:16px">' + '<div id="cc-sync" data-member="' + h(m.id) + '">' + window.ccSyncHtml(m.id) + '</div>';
-    // Hero (kartu ink seperti dashboard): identitas, sisa sesi, tiga angka, aksi cepat
-    body += '<div class="card-ink client-hero"><div class="row client-hero-id" style="gap:14px">' + avatar(m.photo, m.name, 'lg') +
-      '<div class="grow" style="min-width:0"><h3 class="profile-name truncate">' + h(m.name) + '</h3><p class="muted" id="profile-phone">+' + h(m.phone) + '</p>' +
-      '<div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap">' + stPill + '</div></div></div>' +
-      '<div class="row client-ring-row"><div class="ring-wrap client-ring"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>' +
-      '<circle class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-offset="' + (C - pct * C).toFixed(1) + '"/></svg>' +
-      '<div class="ring-center"><span class="num" style="font-size:var(--fs-3xl);font-weight:800" id="profile-remaining">' + rem + '</span><span class="eyebrow">dari <span id="profile-total">' + total + '</span></span></div></div>' +
-      '<div class="grow stack" style="gap:6px"><p class="eyebrow">Sisa sesi</p><p style="font-size:var(--fs-xl);font-weight:800">' + (rem === 0 ? 'Kuota habis' : rem + ' sesi lagi') + '</p><p class="muted">' + used + ' terpakai · ' + doneCount + ' selesai</p></div></div>' +
-      '<div class="btn-row client-hero-actions"><button type="button" class="btn btn-inverse" data-wa="' + h(m.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
-      '<button type="button" class="btn btn-ghost-ink" onclick="window.openBookingSheet({memberId:\'' + h(m.id) + '\'})">' + icon('calendar-plus') + 'Booking</button>' +
-      '</div>' +
-      // Baris paket: paket yang sedang dipakai + Perpanjang (lembar Klien baru terisi → addMember memperpanjang)
-      '<div class="client-pkg"><span class="cpk-ic">' + icon('package') + '</span>' +
-      '<div class="grow" style="min-width:0"><p class="eyebrow">Paket</p><p class="cpk-v truncate">' + h(m.packageName || 'Paket custom') + '</p></div>' +
-      '<button type="button" class="btn btn-sm ' + (rem === 0 ? 'btn-inverse' : 'btn-ghost-ink') + '" id="profile-renew" onclick="window.openRenewMember(\'' + h(m.id) + '\')">' + icon('repeat') + 'Perpanjang</button></div></div>';
-    // Tab bagian halaman
-    const tabs = [['ringkasan', 'Ringkasan', 'layout-dashboard'], ['progres', 'Progres', 'trending-up'], ['latihan', 'Latihan', 'dumbbell'], ['gizi', 'Gizi', 'apple']];
+    const tabs = CP_TABS;
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
     const tab0 = (ui.detail === 'client:' + m.id && ui.cpTab && ui.cpTab.id === String(m.id) && tabs.some(t => t[0] === cpTabName(ui.cpTab.name))) ? cpTabName(ui.cpTab.name) : 'ringkasan';
     const hid = n => n === tab0 ? '' : ' hide';
     ui.cpTab = { id: String(m.id), name: tab0 };   // ingat tab yang benar-benar tampil (bukan tab kunjungan lama)
-    body += '<div class="chips cp-tabs" role="tablist" aria-label="Bagian profil klien">' + tabs.map(t => '<button type="button" role="tab" class="chip' + (t[0] === tab0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (t[0] === tab0) + '" onclick="window.cpTab(\'' + t[0] + '\')">' + icon(t[2]) + t[1] + '</button>').join('') + '</div>';
-    // Ringkasan (dua kolom di panel lebar PC; .cp-col = display:contents di HP)
-    body += '<div class="cp-pane stack' + hid('ringkasan') + '" data-cppane="ringkasan" style="gap:16px"><div class="cp-col cp-col-main">';
-    body += '<div id="cp-highlight">' + cpHighlightHtml(m, sessions, upcoming) + '</div>';
-    body += '<div class="kv">' +
-      '<div><p class="k">Bergabung</p><p class="v">' + h(m.joinDate || '-') + '</p></div>' +
-      '<div><p class="k">Coach</p><p class="v">' + h(m.preferredCoachName || 'Belum ditentukan') + '</p></div>' +
-      '<div style="grid-column:span 2"><p class="k">Tujuan</p><p class="v">' + h(goalMain || '-') + (goalTag ? ' <span class="pill soft" style="margin-left:4px">' + h(goalTag) + '</span>' : '') + '</p></div></div>';
-    body += '<div class="btn-row cp-edit-row"><button type="button" class="btn btn-ghost btn-sm" onclick="window.openEditProfileModal()">' + icon('pencil') + 'Ubah data</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" onclick="window.openDeleteConfirmModal()">' + icon('trash-2') + 'Hapus klien</button></div>';
-    body += '</div><div class="cp-col cp-col-side">';
-    // Bagian yang panjang dilipat (accordion) supaya kolom kanan terisi rapi, bukan kosong atau memanjang.
-    const nOpenTask = ((window.memberTasks[String(m.id)] || {}).list || []).filter(t => t.status === 'todo').length;
-    body += foldHtml('PR (Task)', nOpenTask ? nOpenTask + ' terbuka' : '', '<div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div>', true, 'fold-pr-meta');
-    body += foldHtml('Jadwal mendatang', upcoming.length + ' sesi', upcoming.length ? '<div class="timeline">' + upcoming.slice(0, 5).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub">Belum ada jadwal mendatang.</p>', upcoming.length > 0);
-    body += foldHtml('Riwayat', past.length + ' sesi', past.length ? '<div class="timeline" id="profile-history">' + past.slice(0, 12).map(s => sessionItem(s, { showDate: true, inProfile: true })).join('') + '</div>' : '<p class="li-sub" id="profile-history">Belum ada riwayat latihan.</p>', false);
-    const remOn = REMIND_TYPES.filter(t => (m.reminderOff || []).indexOf(t[0]) === -1).length + (m.mealReminder !== false ? 1 : 0);
-    body += foldHtml('Pengingat WhatsApp', remOn + ' aktif', '<div class="stack" style="gap:12px">' + mealToggleHtml(m) + reminderPrefsHtml(m) + '</div>', false);
-    body += '</div></div>';
-    // Progres: kartu hitam rapor + tafsir, lalu catatan progres dan perawatan (tes, form kesehatan)
-    // Urutan: rapor → indikator → grafik → rincian dalam lipatan (lingkar, catatan, kesehatan, asesmen, tes).
-    body += '<div class="cp-pane stack' + hid('progres') + '" data-cppane="progres" style="gap:16px"><div id="cp-ph-progress">' + cpInsHtml(m.id, 'progresHero') + '</div>' +
-      '<div id="cp-ins-progress">' + cpInsHtml(m.id, 'progresCards') + '</div>' +
-      '<div id="profile-progress-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>' +
-      '<div id="cp-ins-folds" class="stack" style="gap:10px">' + cpInsHtml(m.id, 'progresFolds') + '</div>' +
-      '<div id="profile-care-wrap" class="stack" style="gap:10px" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
-    // Latihan: kartu hitam minggu ini + tafsir, lalu program dan log (Fase J2/M)
-    body += '<div class="cp-pane stack' + hid('latihan') + '" data-cppane="latihan" style="gap:16px"><div id="cp-ph-latihan">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
-      '<div id="profile-program-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + programAdminInner(m.id) + '</div>' +
-      '<div class="stack" style="gap:12px" id="cp-ins-latihan">' + cpInsHtml(m.id, 'latihanCards') + '</div></div>';
-    // Gizi
-    body += '<div class="cp-pane stack' + hid('gizi') + '" data-cppane="gizi" style="gap:16px"><div id="cp-ph-gizi">' + cpInsHtml(m.id, 'giziHero') + '</div><div id="profile-nut-wrap" class="stack" style="gap:12px" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
+    let body = '<div class="cp" data-member="' + h(m.id) + '">';
+    body += '<div class="cp-top" id="cp-card-wrap">' + cpCardHtml(m) + '</div>';
+    body += '<div id="cc-sync" data-member="' + h(m.id) + '">' + window.ccSyncHtml(m.id) + '</div>';
+    body += '<div class="cp-tabs" role="tablist" aria-label="Bagian profil klien" onkeydown="window.cpTabKey(event)">' + tabs.map(t => '<button type="button" role="tab" class="cp-tab' + (t[0] === tab0 ? ' active' : '') + '" data-cptab="' + t[0] + '" aria-selected="' + (t[0] === tab0) + '" tabindex="' + (t[0] === tab0 ? '0' : '-1') + '" onclick="window.cpTab(\'' + t[0] + '\')">' + t[1] + '</button>').join('') + '</div>';
+    // Ringkasan (dua kolom bila panel cukup lebar; .cp-col = display:contents di HP)
+    body += '<div class="cp-pane' + hid('ringkasan') + '" data-cppane="ringkasan"><div class="cp-col cp-col-main"><div id="cp-highlight" class="cp-stack">' + cpHighlightHtml(m) + '</div></div>' +
+      '<div class="cp-col cp-col-side"><div id="cp-week">' + cpWeekHtml(m) + '</div><div id="profile-tasks-wrap">' + taskSectionHtml(m.id) + '</div><div id="cp-sess">' + cpSessHtml(m) + '</div></div></div>';
+    // Progres (Fase AC, Wave 2): sub-tab Ringkasan · Ukuran · Tes · Foto (seperti Progres milik klien); ganti sub-tab tanpa panggilan.
+    const pgs = cpPgSegOf(m.id), pgHid = k => k === pgs ? '' : ' hide';
+    body += '<div class="cp-pane cp-stack' + hid('progres') + '" data-cppane="progres">' + cpPgSegHtml(pgs) +
+      '<div class="cp-stack' + pgHid('ringkasan') + '" data-cppg="ringkasan"><div id="cp-ph-progress">' + cpInsHtml(m.id, 'progresHero') + '</div>' +
+        '<div id="cp-ins-progress" class="cp-stack">' + cpInsHtml(m.id, 'progresCards') + '</div><div id="cp-moments">' + cpMomentsHtml(m.id) + '</div>' +
+        '<div id="cp-ins-folds">' + cpInsHtml(m.id, 'progresFolds') + '</div></div>' +
+      '<div class="cp-stack' + pgHid('ukuran') + '" data-cppg="ukuran"><div id="profile-progress-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + pgAdminInner(m.id) + '</div>' +
+        '<div id="cp-ins-measures" class="cp-stack">' + cpInsHtml(m.id, 'progresMeasures') + '</div><div id="cp-pg-hist" data-member="' + h(m.id) + '">' + cpPgHistHtml(m.id) + '</div></div>' +
+      '<div class="cp-stack' + pgHid('tes') + '" data-cppg="tes"><div id="cp-ins-fitness">' + cpInsHtml(m.id, 'progresFitness') + '</div>' +
+        '<div id="profile-tests-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + testsInner(m.id) + '</div></div>' +
+      '<div class="cp-stack' + pgHid('foto') + '" data-cppg="foto"><div id="cp-pg-foto" class="cp-stack" data-member="' + h(m.id) + '">' + cpFotoHtml(m.id) + '</div></div></div>';
+    // Latihan (Fase AC, Wave 3): Program (hari berikutnya ditandai) → Minggu ini → Kekuatan → Volume & keseimbangan → Riwayat.
+    // PC lebar: kiri Program + Riwayat (daftar), kanan Minggu ini + Kekuatan + Volume (angka). HP: urutan lewat `order`.
+    body += '<div class="cp-pane cp-stack' + hid('latihan') + '" data-cppane="latihan"><div class="cp-col cp-col-main">' +
+      '<div id="profile-program-wrap" class="cp-stack cp-lat-prog" data-member="' + h(m.id) + '">' + programAdminInner(m.id) + '</div>' +
+      '<div id="cp-wk-hist" data-member="' + h(m.id) + '">' + cpWkHistHtml(m.id) + '</div></div><div class="cp-col cp-col-side">' +
+      '<div id="cp-ph-latihan" class="cp-stack">' + cpInsHtml(m.id, 'latihanHero') + '</div>' +
+      '<div class="cp-stack" id="cp-ins-latihan">' + cpInsHtml(m.id, 'latihanCards') + '</div></div></div>';
+    // Gizi (Wave 4 merombak tab ini)
+    // Gizi (Fase AC, Wave 4): saran → hari ini → 7 hari → buku harian | Data & dasar (kolom kanan di PC)
+    body += '<div class="cp-pane cp-stack' + hid('gizi') + '" data-cppane="gizi"><div id="profile-nut-wrap" class="cp-stack" data-member="' + h(m.id) + '">' + nutInner(m.id) + '</div></div>';
+    // Data: hub ala "Saya" di portal
+    body += '<div class="cp-pane' + hid('data') + '" data-cppane="data"><div id="profile-care-wrap" data-member="' + h(m.id) + '">' + careInner(m.id) + '</div></div>';
     body += '</div>';
-    const actions = '<button type="button" class="icon-btn plain" onclick="window.openEditProfileModal()" aria-label="Ubah data klien">' + icon('pencil') + '</button>';
-    openDetail('client:' + m.id, 'Profil klien', actions, body);
+    // Kepala: Bagikan (kartu sesuai tab yang terbuka) + menu ⋯. Satu tempat untuk berbagi di semua tab.
+    const actions = (window.shareOn !== false ? '<button type="button" class="icon-btn plain cp-share-btn" onclick="window.cpShare(\'' + h(m.id) + '\')" aria-label="Bagikan kartu klien">' + icon('share-2') + '</button>' : '') +
+      '<button type="button" class="icon-btn plain cp-more-btn" onclick="window.cpMore(\'' + h(m.id) + '\')" aria-label="Menu klien" aria-haspopup="dialog">' + icon('ellipsis') + '</button>';
+    openDetail('client:' + m.id, m.name || 'Profil klien', actions, body);
     window.loadClientBundle(m.id);
-    requestAnimationFrame(function () {
-      const ring = document.querySelector('#detail-body .ring-fill');
-      if (ring) setTimeout(function () { ring.style.strokeDashoffset = ring.getAttribute('data-offset'); }, 120);
-    });
   };
 
   // Tab di halaman klien (panel): satu bagian tampil sekali, supaya halaman tidak panjang di HP.

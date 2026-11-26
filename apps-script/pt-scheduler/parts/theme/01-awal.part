@@ -592,45 +592,11 @@ html.kb-open .main-col::after { display: none; }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 
 /* ── Halaman klien (panel) & beranda klien (portal): gaya dashboard ─────────── */
-.client-hero .profile-name { font-size: var(--fs-2xl); letter-spacing: -0.03em; }
-.client-hero .btn-inverse, .portal-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
-.client-hero .btn-ghost-ink, .portal-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
-.chips.cp-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; overflow: visible; padding: 0; margin: 0; }
-.chips.cp-tabs .chip { min-height: 56px; width: 100%; min-width: 0; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: var(--fs-2xs); line-height: 1.1; border-radius: 14px; }
-.chips.cp-tabs .chip svg { width: 16px; height: 16px; }
+/* Panel: lihat parts/theme/09-klien-ac.part (Fase AC). */
+.portal-hero .btn-inverse { background: var(--on-ink); color: var(--ink); }
+.portal-hero .btn-ghost-ink { background: transparent; color: var(--on-ink); border-color: color-mix(in srgb, var(--on-ink) 40%, transparent); }
 .cp-pane.hide { display: none; }
-.client-ring { width: 118px; height: 118px; }
-.client-ring-row { gap: 18px; margin-top: 18px; }
-.client-hero-actions { margin-top: 18px; }
-/* Baris paket di kaki kartu klien: paket sekarang + Perpanjang, selebar kartu (tanpa ruang kosong) */
-.client-pkg { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--on-ink) 16%, transparent); }
-.client-pkg .cpk-ic { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--on-ink) 10%, transparent); color: var(--on-ink); }
-.client-pkg .cpk-ic svg { width: 18px; height: 18px; }
-.client-pkg .eyebrow { color: color-mix(in srgb, var(--on-ink) 60%, transparent); }
-.client-pkg .cpk-v { font-weight: 700; color: var(--on-ink); line-height: 1.25; }
-.client-pkg .btn { flex: none; min-height: 44px; white-space: nowrap; }
-.chips.cp-tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 6px 0; }
 .detail-body { padding-bottom: calc(var(--tabbar-space) + 26px); }
-@media (max-width: 767px) {
-  .client-hero { padding: 16px; }
-  .client-ring { width: 88px; height: 88px; }
-  .client-ring .num { font-size: var(--fs-xl) !important; }
-  .client-ring .eyebrow { font-size: .5625rem; }
-  .client-ring-row { gap: 14px; margin-top: 12px; }
-  .client-hero-actions { margin-top: 12px; }
-  .client-hero .profile-name { font-size: var(--fs-xl); }
-  /* S9: hero lebih pendek di HP — cincin sisa sesi dan dua tombol satu baris; tab lebih rendah */
-  .client-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; padding: 14px; }
-  .client-hero > .client-hero-id { grid-column: 1 / -1; }
-  .client-hero > .client-ring-row { margin-top: 12px; gap: 0; }
-  .client-hero > .client-ring-row > .grow { display: none; }
-  .client-hero .client-ring { width: 64px; height: 64px; }
-  .client-hero .client-ring .num { font-size: var(--fs-lg) !important; }
-  .client-hero > .client-hero-actions { margin-top: 12px; align-self: center; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .client-hero > .client-hero-actions .btn { width: 100%; min-width: 0; padding-inline: 8px; gap: 6px; white-space: nowrap; }
-  .client-hero > .client-pkg { grid-column: 1 / -1; margin-top: 12px; padding-top: 12px; gap: 10px; }
-  .chips.cp-tabs .chip { min-height: 44px; flex-direction: row; gap: 6px; }
-}
 .portal-hero .avatar { box-shadow: 0 0 0 3px color-mix(in srgb, var(--on-ink) 16%, transparent); }
 .portal-kpis { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .portal-kpis .kpi { min-height: 92px; padding: 12px 10px; align-items: center; text-align: center; }

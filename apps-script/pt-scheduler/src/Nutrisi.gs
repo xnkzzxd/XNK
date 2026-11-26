@@ -317,7 +317,7 @@ function _nutPutUmur_(m, umur) {
 function saveClientNutrition(token, memberId, data) {
   requireAdmin_(token);
   const v = _nutValidateProfile_(data);
-  return _locked_(function() {
+  return _nutWithFresh_(token, memberId, _locked_(function() {
     const m = _memberRowOrThrow_(memberId);
     _ensureNutritionColumns_(m.sheet);
     const put = function(k, val) { m.sheet.getRange(m.rowNum, NUT_COLS[k]).setNumberFormat('@').setValue(val); };
@@ -325,7 +325,13 @@ function saveClientNutrition(token, memberId, data) {
     put('pantangan', v.tags); put('anggaran', v.anggaran); put('aktif', v.aktif);
     _nutPutUmur_(m, v.umur);
     return _bumpAfter_(m.row[0], { status: 'success' });
-  });
+  }));
+}
+
+/** Fase AC (T-2301): jawaban penulis gizi membawa data gizi segar (dihitung sesudah lock dilepas); panel tidak memanggil getClientNutrition lagi. */
+function _nutWithFresh_(token, memberId, res) {
+  try { res.nutrition = _plainJson_(getClientNutrition(token, memberId)); } catch (e) { /* jawaban tetap sah tanpa bagian ini */ }
+  return res;
 }
 
 // ------------------------------------------------------------
@@ -407,7 +413,7 @@ function decideNutritionAdvice(token, memberId, adviceId, decision) {
   requireAdmin_(token);
   decision = String(decision || '');
   if (decision !== 'setuju' && decision !== 'tolak') throw new Error('Keputusan harus setuju atau tolak.');
-  return _locked_(function() {
+  return _nutWithFresh_(token, memberId, _locked_(function() {
     const sheet = _nutAdviceSheet_();
     const data = sheet.getDataRange().getValues();
     let rowNum = 0, delta = 0;
@@ -429,7 +435,7 @@ function decideNutritionAdvice(token, memberId, adviceId, decision) {
     sheet.getRange(rowNum, 7).setValue(_todayWib_());
     CacheService.getScriptCache().remove('nut:scan');
     return _bumpAfter_(memberId, { status: 'success' });
-  });
+  }));
 }
 
 /** Untuk dashboard coach: perbarui saran semua klien (maks sekali per 30 menit) lalu daftar yang menunggu. Nama depan saja. */

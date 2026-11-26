@@ -28,7 +28,7 @@ function _apiTable_() {
     hubPushKey: hubPushKey,
     hubSiteUrl: hubSiteUrl,
     hubReadonly: hubReadonly,
-    // admin: admin token (132)
+    // admin: admin token (133)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -108,6 +108,7 @@ function _apiTable_() {
     getPackageTrendStats: getPackageTrendStats,
     getRevenueSummary: getRevenueSummary,
     getAppSettings: getAppSettings,
+    getSettingsBundle: getSettingsBundle,
     updateAppSettings: updateAppSettings,
     sendTelegramTest: sendTelegramTest,
     addTask: addTask,

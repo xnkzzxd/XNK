@@ -402,20 +402,25 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.__xss)) === undefined, 'client name with <img onerror> is not executed');
     check((await page.textContent('#client-list')).includes('<img src=x'), 'client name is shown as plain text');
-    // S7: tanpa empat ubin, ringkasan hitam satu baris, cari + urutkan satu baris, klien pertama di layar pertama.
+    // S7 / Fase AC: tanpa ubin dan tanpa kartu hitam ringkasan (angkanya di band), cari + urutkan satu baris, "Perlu perhatian" chip kedua,
+    // klien pertama di layar pertama.
     const s7 = await page.evaluate(() => {
-      const hero = document.querySelector('#client-hero .insight-hero'), srch = document.querySelector('.cl-tools .input-search'), sort = document.getElementById('sort-client'), first = document.querySelector('#client-list .client-card');
-      const hb = hero.getBoundingClientRect(), a = srch.getBoundingClientRect(), b = sort.getBoundingClientRect(), f = first.getBoundingClientRect();
+      const srch = document.querySelector('.cl-bar .input-search'), sort = document.getElementById('sort-client'), first = document.querySelector('#client-list .client-card');
+      const a = srch.getBoundingClientRect(), b = sort.getBoundingClientRect(), f = first.getBoundingClientRect();
       const bar = document.getElementById('tabbar').getBoundingClientRect();
-      return { tiles: document.querySelectorAll('#view-clients .stat-tile, #view-clients .client-tiles').length, heroH: Math.round(hb.height), oneRow: Math.abs(a.top - b.top) < 4, firstTop: Math.round(f.top), firstBottom: Math.round(f.bottom), barTop: Math.round(bar.top) };
+      const chips = Array.from(document.querySelectorAll('#view-clients .cl-chips [data-filter]')).map(c => c.getAttribute('data-filter'));
+      return { tiles: document.querySelectorAll('#view-clients .stat-tile, #view-clients .client-tiles').length, inkCards: document.querySelectorAll('#view-clients .insight-hero, #view-clients .card-ink').length,
+        sub: (document.getElementById('cl-sub') || {}).textContent || '', oneRow: Math.abs(a.top - b.top) < 4, chip2: chips[1], firstTop: Math.round(f.top), firstBottom: Math.round(f.bottom), barTop: Math.round(bar.top) };
     });
-    check(s7.tiles === 0 && s7.heroH <= 80 && s7.oneRow && s7.firstBottom <= s7.barTop, 'Klien (phone): no summary tiles, one-line black summary, search and sort in one row, first client fully on the first screen ' + JSON.stringify(s7));
+    check(s7.tiles === 0 && s7.inkCards === 0 && /\d+ klien/.test(s7.sub) && s7.oneRow && s7.chip2 === 'perhatian' && s7.firstBottom <= s7.barTop, 'Klien (phone): no summary tiles and no black summary card (numbers in the band), search and sort in one row, "Perlu perhatian" second, first client fully on the first screen ' + JSON.stringify(s7));
     const phoneList = await page.evaluate(() => {
-      const l = document.querySelector('#client-list > .list'), c = document.querySelector('#client-list .client-card');
-      return { list: getComputedStyle(l).display + '/' + getComputedStyle(l).flexDirection, card: getComputedStyle(c).display, meter: getComputedStyle(c.querySelector('.cc-meter')).maxWidth,
-        meta: Array.from(document.querySelectorAll('#client-list .cc-meta, #client-list .cc-renew')).filter(e => e.getClientRects().length).length };
+      const l = document.querySelector('#client-list > .list'), cards = Array.from(document.querySelectorAll('#client-list .client-card:not(.muted-item)')), c = cards[0];
+      const seen = n => cards.filter(x => (n = x.querySelector('.cc-next')) && n.getClientRects().length && n.scrollWidth <= n.clientWidth + 1).length;
+      return { list: getComputedStyle(l).display + '/' + getComputedStyle(l).flexDirection, card: getComputedStyle(c).display, nextWhole: seen() === cards.length,
+        meta: Array.from(document.querySelectorAll('#client-list .cc-meta')).filter(e => e.getClientRects().length).length,
+        dashed: cards.filter(x => Array.from(x.querySelectorAll('*')).some(e => getComputedStyle(e).borderStyle === 'dashed')).length };
     });
-    check(phoneList.list === 'flex/column' && phoneList.card === 'flex' && phoneList.meter === '220px' && phoneList.meta === 0, 'phone: the client list is the same one-column list (no desktop card details) ' + JSON.stringify(phoneList));
+    check(phoneList.list === 'flex/column' && phoneList.card === 'flex' && phoneList.nextWhole && phoneList.meta === 0 && phoneList.dashed === 0, 'phone: one-column list, the next session is never cut off, no desktop details, no stray dashed box (meter state class) ' + JSON.stringify(phoneList));
     await shot(page, 'admin-mobile-clients');
     await page.fill('#search-client', 'citra');
     await page.waitForTimeout(200);
@@ -427,22 +432,29 @@ async function contrastReport(page) {
     await page.waitForTimeout(700);
     const box = await page.locator('#detail-panel').boundingBox();
     check(!!box && box.width >= MOBILE.width - 1, 'client detail opens full-screen on phone');
-    // S9: hero profil klien di HP lebih pendek — cincin dan tombol satu baris, tab lebih rendah, Sorotan di layar pertama.
-    // Batas 250 px (2026-11-25, pemilik): baris Paket + Perpanjang di kaki kartu ikut di HP.
+    // S9 / Fase AC: kepala = nama klien; satu kartu hitam pendek dengan empat aksi sebaris; tab terang rendah; kartu pertama Ringkasan di layar pertama.
+    // Batas kartu 250 px (2026-11-25, pemilik): baris Paket + Perpanjang ikut di kartu.
     await page.waitForTimeout(400);
     const s9 = await page.evaluate(() => {
       const r = q => { const e = document.querySelector('#detail-body ' + q); return e ? e.getBoundingClientRect() : null; };
-      const hero = r('.client-hero'), ring = r('.client-ring'), act = r('.client-hero-actions'), tab = r('.cp-tabs .chip'), hl = r('#cp-highlight');
-      return hero && ring && act && tab && hl ? { hero: Math.round(hero.height), row: Math.abs((ring.top + ring.height / 2) - (act.top + act.height / 2)) < 20, tab: Math.round(tab.height), hl: Math.round(hl.top), over: document.scrollingElement.scrollWidth - innerWidth } : null;
+      const card = r('.cp-card'), tabs = r('.cp-tabs'), first = r('#cp-highlight .cp-next');
+      const acts = Array.from(document.querySelectorAll('#detail-body .cp-acts .btn')).map(b => b.getBoundingClientRect());
+      return card && tabs && first ? { card: Math.round(card.height), acts: acts.length, actsRow: new Set(acts.map(a => Math.round(a.top))).size === 1, actsTall: acts.every(a => a.height >= 44 && a.width >= 44),
+        tab: Math.round(tabs.height), first: Math.round(first.top), over: document.scrollingElement.scrollWidth - innerWidth,
+        renew: !!document.querySelector('#detail-body .cp-card #profile-renew'),
+        name: document.getElementById('detail-title').textContent === (window.members.find(m => m.id === 'PT-C') || {}).name } : null;
     });
-    check(!!s9 && s9.hero <= 250 && s9.row && s9.tab <= 48 && s9.hl < 844 && s9.over <= 1, 'client page (phone): short hero (ring and buttons in one row), low tabs, Sorotan on the first screen ' + JSON.stringify(s9));
+    check(!!s9 && s9.card <= 250 && s9.acts === 4 && s9.actsRow && s9.actsTall && s9.renew && s9.tab <= 52 && s9.first < 700 && s9.over <= 1 && s9.name,
+      'client page (phone): head shows the name, one short black card with the four actions in one row (≥ 44 px) and the package row with Perpanjang, low light tabs, "Sesi berikutnya" on the first screen ' + JSON.stringify(s9));
     const phoneProf = await page.evaluate(() => ({
-      tabs: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).gridTemplateColumns.split(' ').length,
+      tabs: document.querySelectorAll('#detail-body [data-cptab]').length,
+      tabRows: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size,
       cols: Array.from(document.querySelectorAll('#detail-body .cp-col')).map(e => getComputedStyle(e).display),
       pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom),
-      wide: document.getElementById('app').classList.contains('detail-wide') && getComputedStyle(document.getElementById('detail-panel')).width,
+      ink: Array.from(document.querySelectorAll('#detail-body .card-ink, #detail-body .insight-hero')).filter(e => e.getClientRects().length && getComputedStyle(e).backgroundColor === getComputedStyle(document.querySelector('#detail-body .cp-card')).backgroundColor).length,
     }));
-    check(phoneProf.tabs === 4 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100, 'phone: the client page keeps the phone layout (4-column tab tiles, one column, room for the tab bar) ' + JSON.stringify(phoneProf));
+    check(phoneProf.tabs === 5 && phoneProf.tabRows === 1 && phoneProf.cols.length >= 2 && phoneProf.cols.every(d => d === 'contents') && phoneProf.pad >= 100 && phoneProf.ink === 1,
+      'phone: the client page keeps the phone layout (five tabs on one row, one column, room for the tab bar, one black card only) ' + JSON.stringify(phoneProf));
     const detail = await page.textContent('#detail-panel');
     check(detail.includes('Citra') && !detail.includes('Kirim Link') && !detail.includes('Link Baru'), 'client detail shows the client, no member-link buttons');
     await shot(page, 'admin-mobile-client-detail');
@@ -528,9 +540,9 @@ async function contrastReport(page) {
     check(!(await visible(page, '#admin-login')) && (await page.evaluate(() => window.members.length)) === 3, 'login: dashboard is ready when the login box closes');
     check(calls.filter(c => c === 'getAdminBootstrap').length === 1 && calls.includes('getAdminMore'), 'login: one call for the first screen, one for the secondary data');
     // Pengaturan diisi di latar setelah getAdminMore selesai (#149): tiga panggilan itu bukan bagian dari layar pertama.
-    const PREFETCH = ['getAppSettings', 'getReminderStatus', 'getPriceListAdmin'];
+    const PREFETCH = ['getSettingsBundle'];   // Fase AC: satu panggilan untuk Pengaturan (dulu tiga)
     const gets = () => calls.filter(c => /^get/.test(c));
-    check(gets().slice(0, 2).join() === 'getAdminBootstrap,getAdminMore' && gets().slice(2).every(c => PREFETCH.includes(c)), 'fast: the panel opens with exactly two server calls, settings are fetched only after them (' + calls.join(',') + ')');
+    check(gets().slice(0, 2).join() === 'getAdminBootstrap,getAdminMore' && gets().slice(2).every(c => PREFETCH.includes(c)) && gets().length <= 3, 'fast: the panel opens with exactly two server calls, settings are fetched only after them in one call (' + calls.join(',') + ')');
     const getsBefore = gets().length;
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(700);
@@ -703,24 +715,33 @@ async function contrastReport(page) {
       'client detail opens as a wide right-hand column (' + Math.round(panel.width) + ' px), the list keeps ' + Math.round(listBox.width) + ' px');
     check(await visible(page, '#client-list'), 'client list stays visible next to the detail');
     check((await page.locator('#client-list .selected').count()) === 1, 'selected client is highlighted in the list');
+    // Fase AC: daftar di samping profil = baris ringkas; cari tetap lebar, filter jadi pilihan, kepala daftar satu baris.
     const compact = await page.evaluate(() => {
       const cards = Array.from(document.querySelectorAll('#client-list .client-card')), sc = document.getElementById('main-scroll-area').getBoundingClientRect();
       const sel = document.querySelector('#client-list .selected').getBoundingClientRect();
-      return { lefts: new Set(cards.map(c => Math.round(c.getBoundingClientRect().left))).size, meta: Array.from(document.querySelectorAll('#client-list .cc-meta, #client-list .cc-meter, #client-list .grow > .li-sub')).filter(e => e.getClientRects().length).length,
-        kpis: document.querySelector('#view-clients .client-top').getClientRects().length, selIn: sel.top >= sc.top && sel.bottom <= sc.bottom };
+      const vis = q => Array.from(document.querySelectorAll(q)).filter(e => e.getClientRects().length).length;
+      const head = document.querySelector('#view-clients .cl-head'), title = head.querySelector('.page-title').getBoundingClientRect(), nb = head.querySelector('.cl-new').getBoundingClientRect();
+      const filt = document.getElementById('filter-client');
+      return { lefts: new Set(cards.map(c => Math.round(c.getBoundingClientRect().left))).size, meta: vis('#client-list .cc-meta, #client-list .cc-meter, #client-list .cc-pkg'),
+        chips: vis('#view-clients .cl-chips'), filter: !!filt && filt.getClientRects().length > 0, search: Math.round(document.querySelector('.cl-bar .input-search').getBoundingClientRect().width),
+        headOne: Math.abs(nb.top - title.top) < 30, selIn: sel.top >= sc.top && sel.bottom <= sc.bottom };
     });
-    check(compact.lefts === 1 && compact.meta === 0 && compact.kpis === 0 && compact.selIn, 'open client: the list becomes one column of names (no details, no summary tiles) and the open client is in view ' + JSON.stringify(compact));
+    check(compact.lefts === 1 && compact.meta === 0 && compact.chips === 0 && compact.filter && compact.search >= 200 && compact.headOne && compact.selIn,
+      'open client: the list becomes one column of compact rows, the filter is a select, the search keeps ≥ 200 px, the list head stays on one line, the open client is in view ' + JSON.stringify(compact));
     check((await elOverflow(page, '#detail-body')) <= 1 && (await elOverflow(page, '#client-list')) <= 1, 'open client: nothing overflows sideways in the panel or the list');
     const wideProf = await page.evaluate(() => {
       const r = s => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
-      const main = r('#detail-body .cp-col-main'), side = r('#detail-body .cp-col-side'), id = r('#detail-body .client-hero-id'), ring = r('#detail-body .client-ring-row');
-      return { cols: !!main && !!side && side.left >= main.right && Math.abs(side.top - main.top) <= 2, hero: !!id && !!ring && ring.left >= id.right,
-        btns: Array.from(document.querySelectorAll('#detail-body .client-hero-actions .btn')).every(b => b.getBoundingClientRect().width < 200),
+      const main = r('#detail-body .cp-col-main'), side = r('#detail-body .cp-col-side'), id = r('#detail-body .cp-id'), left = r('#detail-body .cp-left');
+      const acts = Array.from(document.querySelectorAll('#detail-body .client-hero-actions .btn'));
+      return { cols: !!main && !!side && side.left >= main.right && Math.abs(side.top - main.top) <= 2, card: !!id && !!left && left.left >= id.right - 1,
+        btns: acts.length === 4 && acts.every(b => b.getBoundingClientRect().width < 200), actsRow: new Set(acts.map(b => Math.round(b.getBoundingClientRect().top))).size === 1,
         tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size,
         tabBg: getComputedStyle(document.querySelector('#detail-body .cp-tabs')).backgroundColor === getComputedStyle(document.getElementById('detail-panel')).backgroundColor,
+        name: document.getElementById('detail-title').textContent === (window.members.find(m => m.id === 'PT-A') || {}).name,
         head: Math.round(r('.detail-head').height) === Math.round((r('#topbar').height || r('#view-clients .page-head').height)), pad: parseFloat(getComputedStyle(document.getElementById('detail-body')).paddingBottom) };
     });
-    check(wideProf.cols && wideProf.hero && wideProf.btns && wideProf.tabs === 1 && wideProf.head && wideProf.pad <= 48, 'open client: two-column Ringkasan, wide hero, one row of tabs, header lined up with the top bar ' + JSON.stringify(wideProf));
+    check(wideProf.cols && wideProf.card && wideProf.btns && wideProf.actsRow && wideProf.tabs === 1 && wideProf.tabBg && wideProf.name && wideProf.head && wideProf.pad <= 48,
+      'open client: two-column Ringkasan, card with identity left and sessions right, the four actions in one row, one row of light tabs, the head shows the client name and lines up with the top bar ' + JSON.stringify(wideProf));
     await shot(page, 'admin-desktop-' + scheme + '-clients');
 
     // ↑/↓ in the list opens the neighbouring client; arrows inside the panel keep scrolling it.
@@ -735,7 +756,7 @@ async function contrastReport(page) {
     await page.waitForTimeout(500);
     const k2 = await page.evaluate(() => document.querySelector('#client-list .selected').getAttribute('data-key'));
     check(k1.sel === nb && k1.act === nb && k2 === 'client:PT-A', 'keyboard: ' + dir + ' opens the next client in the list, ' + back + ' goes back ' + JSON.stringify([k1, k2]));
-    await page.click('#detail-body .profile-name');
+    await page.click('#detail-body .cp-id');
     await page.keyboard.press('ArrowDown');
     await page.waitForTimeout(400);
     check((await page.evaluate(() => document.querySelector('#client-list .selected').getAttribute('data-key'))) === 'client:PT-A', 'keyboard: arrows pressed inside the panel do not switch clients');
@@ -781,9 +802,10 @@ async function contrastReport(page) {
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(900);
     const dPanel = await page.locator('#detail-panel').boundingBox();
-    const dTabs = await page.evaluate(() => { const t = Array.from(document.querySelectorAll('#detail-body [data-cptab]')); return { rows: new Set(t.map(b => Math.round(b.getBoundingClientRect().top))).size, over: t.map(b => b.scrollWidth - b.clientWidth).filter(x => x > 1).length }; });
-    check(!(await page.evaluate(() => document.getElementById('app').classList.contains('detail-wide'))) && dPanel.width > 380 && dPanel.width < 460 && dTabs.rows === 1 && dTabs.over === 0,
-      'a client opened from the dashboard keeps the 420 px panel, four tabs on one row ' + JSON.stringify(dTabs));
+    const dTabs = await page.evaluate(() => { const t = Array.from(document.querySelectorAll('#detail-body [data-cptab]')), bar = document.querySelector('#detail-body .cp-tabs');
+      return { n: t.length, rows: new Set(t.map(b => Math.round(b.getBoundingClientRect().top))).size, over: t.map(b => b.scrollWidth - b.clientWidth).filter(x => x > 1).length, scrolls: bar.scrollWidth > bar.clientWidth + 1 }; });
+    check(!(await page.evaluate(() => document.getElementById('app').classList.contains('detail-wide'))) && dPanel.width > 380 && dPanel.width < 460 && dTabs.n === 5 && dTabs.rows === 1 && dTabs.over === 0 && !dTabs.scrolls,
+      'a client opened from the dashboard keeps the 420 px panel, five tabs on one row without scrolling ' + JSON.stringify(dTabs));
     await page.evaluate(() => window.closeDetail());
     await page.waitForTimeout(600);
 
@@ -795,8 +817,10 @@ async function contrastReport(page) {
     await page.waitForTimeout(900);
     const p1280 = await page.locator('#detail-panel').boundingBox(), l1280 = await page.locator('#client-list').boundingBox();
     const one1280 = await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display);
-    check(p1280.width >= 0.55 * (1280 - sideW) && l1280.width >= 340 && (await elOverflow(page, '#detail-body')) <= 1 && (await elOverflow(page, '#client-list')) <= 1 && one1280 === 'flex',
-      '1280 × 720: wide panel ' + Math.round(p1280.width) + ' px, list ' + Math.round(l1280.width) + ' px, Ringkasan in one column (' + one1280 + ')');
+    const bar1280 = await page.evaluate(() => ({ search: Math.round(document.querySelector('.cl-bar .input-search').getBoundingClientRect().width), filter: document.getElementById('filter-client').getClientRects().length > 0,
+      headOne: Math.abs(document.querySelector('#view-clients .cl-new').getBoundingClientRect().top - document.querySelector('#view-clients .cl-head .page-title').getBoundingClientRect().top) < 30 }));
+    check(p1280.width >= 0.55 * (1280 - sideW) && l1280.width >= 340 && (await elOverflow(page, '#detail-body')) <= 1 && (await elOverflow(page, '#client-list')) <= 1 && one1280 === 'flex' && bar1280.search >= 200 && bar1280.filter && bar1280.headOne,
+      '1280 × 720: wide panel ' + Math.round(p1280.width) + ' px, list ' + Math.round(l1280.width) + ' px (search ' + bar1280.search + ' px, filter select, head on one line), Ringkasan in one column (' + one1280 + ')');
     await shot(page, 'admin-desktop-' + scheme + '-clients-1280');
     await page.evaluate(() => window.closeDetail());
     await page.setViewportSize(DESKTOP);
@@ -1102,37 +1126,53 @@ async function contrastReport(page) {
     // ── Saklar pengingat per klien (halaman klien) ─────────────────────────────
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.waitForTimeout(400);
-    check((await page.locator('#view-clients .stat-tile').count()) === 0 && await visible(page, '#client-hero .insight-hero'), 'Klien list: one black summary card, no duplicate count tiles (S7)');
+    check((await page.locator('#view-clients .stat-tile').count()) === 0 && (await page.locator('#view-clients .insight-hero, #view-clients .card-ink').count()) === 0 && /\d+ klien/.test(await page.textContent('#cl-sub')),
+      'Klien list: no summary card and no count tiles; the numbers are in the band (S7, Fase AC)');
     await page.evaluate(() => { window.navigate('clients'); window.openProfile('PT-A'); });
     await page.waitForTimeout(700);
-    await page.evaluate(() => { document.querySelectorAll('#detail-body details.fold').forEach(f => { f.open = true; }); });
-    check((await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 9, 'client page: all nine reminder switches start on');
+    // Fase AC: pengingat WhatsApp ada di tab Data → ubin → lembar sendiri.
+    await page.evaluate(() => window.cpTab('data'));
+    await page.waitForTimeout(300);
+    await page.click('#profile-care-wrap .cp-tile:has-text("Pengingat WhatsApp")');
+    await page.waitForTimeout(500);
+    check(await visible(page, '#sheet-cp-remind') && (await page.locator('#profile-remind-prefs input[data-remind]:checked').count()) === 9, 'client page: Data → Pengingat WhatsApp opens a sheet with all nine reminder switches on');
     await page.click('#profile-remind-prefs input[data-remind="pr"]');
     await page.waitForTimeout(600);
     check(env.memberRow('PT-A')[15] === 'pr', 'client page: switching PR off is saved for that client (MemberData column P)');
     await page.click('#profile-remind-prefs input[data-remind="pr"]');
     await page.waitForTimeout(500);
     check(env.memberRow('PT-A')[15] === '', 'client page: switching it back on clears it');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.cpTab('ringkasan'));
 
     // ── Progres di halaman klien (panel) ───────────────────────────────────────
-    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 4, 'client page: dark hero and four tabs (Ringkasan, Progres, Latihan, Gizi)');
+    check(await visible(page, '.client-hero') && (await page.locator('#detail-body [data-cptab]').count()) === 5, 'client page: black client card and five tabs (Ringkasan, Progres, Latihan, Gizi, Data)');
     const tabBox = await page.evaluate(() => { const t = document.querySelector('#detail-body .cp-tabs'), d = document.querySelector('#detail-body'); if (!t || !d) return null; const r = t.getBoundingClientRect(), dr = d.getBoundingClientRect(); return { l: Math.round(r.left - dr.left), r: Math.round(dr.right - r.right), over: t.scrollWidth - t.clientWidth, chips: Array.from(t.children).map(c => Math.round(c.scrollWidth - c.clientWidth)) }; });
     check(!!tabBox && tabBox.l >= 0 && tabBox.r >= 0 && tabBox.over <= 1 && tabBox.chips.every(x => x <= 1), 'client page: the tab pills stay inside the panel (no bleed) ' + JSON.stringify(tabBox));
     await page.evaluate(() => { const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; });
     await shot(page, 'admin-client-tabs');
     await page.evaluate(() => window.cpTab('progres'));
     await page.waitForTimeout(300);
+    check(await visible(page, '#detail-body .cp-pgseg') && (await page.locator('#detail-body .cp-pgseg [data-cpseg]').count()) === 4 && await visible(page, '#cp-ph-progress'), 'client page: Progres opens on its Ringkasan sub-tab (Ringkasan, Ukuran, Tes, Foto)');
+    await page.evaluate(() => window.cpPgSeg('ukuran'));
+    await page.waitForTimeout(150);
     check(await visible(page, '#profile-progress-wrap') && (await page.textContent('#profile-progress-wrap')).includes('Belum ada catatan'), 'client page: a Progres section is shown');
     await page.waitForTimeout(500);
-    await page.evaluate(() => window.cpTab('perawatan'));
+    check((await page.textContent('#profile-tests-wrap')).includes('Tes kebugaran'), 'client page: fitness tests are in the Progres tab (Fase AC)');
+    await page.evaluate(() => window.cpTab('perawatan'));   // nama lama → tab Data
     await page.waitForTimeout(300);
-    check((await page.textContent('#profile-care-wrap')).includes('Catatan privat') && (await page.textContent('#profile-care-wrap')).includes('Tes kebugaran'), 'client page: private notes, health, assessment and fitness sections');
+    const careTxt = await page.textContent('#profile-care-wrap');
+    check(await visible(page, '#profile-care-wrap') && ['Profil', 'Kesehatan', 'Assessment', 'Catatan privat', 'Masukan klien', 'Pengingat WhatsApp'].every(t => careTxt.includes(t)), 'client page: the Data tab (old name "perawatan") is a hub: profile, health, assessment, private notes, feedback, reminders');
     await page.evaluate(() => window.cpTab('gizi'));
     await page.waitForTimeout(400);
     const gzCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-nut-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
     check(gzCols.length === 2 && gzCols[1][0] > gzCols[0][0] && Math.abs(gzCols[1][1] - gzCols[0][1]) <= 2 && (await elOverflow(page, '#detail-body')) <= 1, 'wide client page: the Gizi tab has the numbers on the left and the coach inputs on the right ' + JSON.stringify(gzCols));
-    // The coach can type an age for the client (Gizi → Ubah).
-    await page.evaluate(() => window.openNutEdit('PT-A'));
+    // Fase AC (Wave 4): satu tautan "Ubah data gizi" di kepala Data & dasar; tanpa tombol bagikan atau deretan tombol di tab.
+    const gzBtns = await page.evaluate(() => Array.from(document.querySelectorAll('#detail-body [data-cppane="gizi"] button')).filter(b => !b.classList.contains('cp-row') && !b.closest('summary') && b.getClientRects().length).map(b => b.textContent.trim()));
+    check(gzBtns.length <= 4 && gzBtns.includes('Ubah data gizi') && (await page.locator('#detail-body [data-cppane="gizi"] [onclick*="shareCard"]').count()) === 0, 'Gizi tab: one "Ubah data gizi" link, no share buttons or button rows ' + JSON.stringify(gzBtns));
+    // The coach can type an age for the client (Gizi → Ubah data gizi).
+    await page.click('#profile-nut-wrap .cp-link:has-text("Ubah data gizi")');
     await page.waitForTimeout(600);
     check(await visible(page, '#nut-umur') && (await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('nut-umur')).fontSize))) >= 16, 'umur: the Gizi edit sheet has an age field (16 px)');
     await page.fill('#nut-umur', '29');
@@ -1141,12 +1181,12 @@ async function contrastReport(page) {
     await page.selectOption('#nut-goal', 'jaga');
     await page.click('#modal-nut-edit button[type=submit]');
     await page.waitForTimeout(1200);
-    check((await page.textContent('#profile-nut-wrap')).includes('29 tahun (diisi manual)'), 'umur: the typed age shows on the Gizi tab');
-    await page.evaluate(() => window.cpTab('perawatan'));
+    check((await page.textContent('#profile-nut-wrap')).includes('29 tahun (manual)'), 'umur: the typed age shows on the Gizi tab');
+    await page.evaluate(() => window.cpTab('data'));
     await page.waitForTimeout(300);
-    const careCols = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-care-wrap > .cp-col')).map(c => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
-    check(careCols.length === 2 && careCols[1][0] > careCols[0][0] && Math.abs(careCols[1][1] - careCols[0][1]) <= 2 && (await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display)) === 'none',
-      'wide client page: Perawatan in two columns, hidden tabs stay hidden ' + JSON.stringify(careCols));
+    const careCols = await page.evaluate(() => { const t = Array.from(document.querySelectorAll('#profile-care-wrap .cp-tile')).map(c => Math.round(c.getBoundingClientRect().top)); return { tiles: t.length, perRow: t.filter(x => x === t[0]).length }; });
+    check(careCols.tiles === 6 && careCols.perRow === 3 && (await page.evaluate(() => getComputedStyle(document.querySelector('#detail-body [data-cppane="ringkasan"]')).display)) === 'none',
+      'wide client page: Data hub tiles three per row, hidden tabs stay hidden ' + JSON.stringify(careCols));
     await page.evaluate(() => window.openCareTests('PT-A'));
     await page.waitForTimeout(500);
     check(await visible(page, '#ft-pushup') && (await page.getAttribute('#ft-pushup', 'inputmode')) === 'decimal', 'fitness test sheet opens with a decimal keypad');
@@ -1190,11 +1230,16 @@ async function contrastReport(page) {
     // Program latihan (Fase J2 → Fase M): tab Program di halaman klien, editor form, template.
     await page.evaluate(() => window.cpTab('program'));
     await page.waitForTimeout(300);
-    check((await page.textContent('#profile-program-wrap')).includes('Belum ada') && (await page.textContent('#profile-program-wrap')).includes('Buat program'), 'client page: the Program tab starts empty with a "Buat program" button');
-    check((await page.textContent('#profile-program-wrap')).includes('Program latihan') && (await page.locator('#profile-program-wrap .prg-card .btn-primary').count()) === 1 && (await page.locator('#profile-program-wrap details.fold:has-text("Lainnya")').count()) === 1, 'client page: one Program card with a single primary button and the rare actions folded into "Lainnya"');
+    check((await page.textContent('#profile-program-wrap')).includes('Belum ada program') && (await page.locator('#profile-program-wrap .cp-link:has-text("Atur program")').count()) === 1, 'client page: the Latihan tab starts with an empty Program section and its "Atur program" link');
+    // Fase AC (Wave 3): tidak ada tombol di bagian Program selain tautan "Atur program" (Mulai latihan di kartu klien, sisanya di lembar).
+    check((await page.locator('#profile-program-wrap button:not(.ex-th-btn)').count()) === 1, 'client page: the Program section has one link and no button rows (Mulai latihan is in the client card)');
     check(await page.evaluate(() => { const w = document.getElementById('profile-program-wrap'), c = document.getElementById('cp-ins-latihan'); return !!(w && c && (w.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING)); }), 'client page: the Program card comes before the insight cards on the Latihan tab');
-    await page.click('#profile-program-wrap .prg-card .btn-outline');
-    await page.waitForTimeout(600);
+    await page.click('#profile-program-wrap .cp-link:has-text("Atur program")');
+    await page.waitForTimeout(400);
+    check(await visible(page, '#sheet-cp-prog') && (await page.textContent('#cpp-body')).includes('Buat program'), 'Atur program: one sheet holds the program settings');
+    check((await page.locator('#cpp-body .chip').count()) === 0 && (await page.locator('#cpp-body .cpm-row').count()) >= 1, 'Atur program: settings rows with switches, no pill buttons');
+    await page.click('#cpp-body button:has-text("Buat program")');
+    await page.waitForTimeout(700);
     check(await visible(page, '#prg-form') && !(await page.locator('#prg-text').count()), 'program editor: opens as a form (the text box is gone)');
     await page.click('#prg-form button:has-text("Tambah hari")');
     await page.waitForTimeout(200);
@@ -1265,10 +1310,11 @@ async function contrastReport(page) {
     await page.click('#prg-save');
     await page.waitForTimeout(800);
     const prgRows = env.sheet('ProgramItems').rows.filter(r => r[1] === 'PT-A');
-    check((await page.textContent('#profile-program-wrap')).includes('Hari A') && (await page.locator('#profile-program-wrap .prg-card .prg-ex').count()) === 3 && prgRows.length === 3, 'program: saved for the client and summarised on the client page');
+    check((await page.textContent('#profile-program-wrap')).includes('Hari A') && (await page.locator('#profile-program-wrap .cp-day .prg-ex').count()) === 3 && prgRows.length === 3, 'program: saved for the client and summarised on the client page');
     check(prgRows[0][16] === 'A' && prgRows[1][16] === 'A' && prgRows[0][14] === 20 && prgRows[0][15] === 60 && prgRows[2][17] === 'badan', 'program: superset, target kg, rest and kind are stored ' + JSON.stringify(prgRows.map(r => r.slice(12, 18))));
     // Mode latihan (Fase M), coach di PC: dua kolom, superset bergantian, simpan dengan rasa.
-    await page.click('#profile-program-wrap button:has-text("Mulai latihan")');
+    check((await page.locator('#profile-program-wrap .cp-day.is-next .pill:has-text("Berikutnya")').count()) === 1, 'program: the next day is marked "Berikutnya"');
+    await page.click('#detail-body .cp-card .cp-act:has-text("Mulai latihan")');
     await page.waitForTimeout(900);
     check(await visible(page, '#wl-screen') && (await page.locator('#wl-screen .wl-ex').count()) === 2, 'live workout (PC): the day\'s two exercises as compact cards');
     const cardTops = await page.locator('#wl-screen .wl-ex').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)));
@@ -1332,15 +1378,42 @@ async function contrastReport(page) {
     await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(500);
     check((await page.textContent('#profile-program-wrap')).includes('Terakhir dicatat'), 'workout: the client page shows the last logged day');
-    check((await page.textContent('#profile-program-wrap')).includes('Kirim ringkasan WA'), 'workout: after logging the coach can send the day summary by WhatsApp');
-    check((await page.locator('#wk-admin-stats .wk-sum').count()) === 1 && (await page.locator('#wk-admin-stats svg.pg-chart').count()) >= 1 && (await overflowX(page)) <= 0, 'workout charts: the client page shows the summary and weekly volume without sideways scroll');
-    check((await page.textContent('#wk-admin-stats')).includes('Riwayat latihan') && (await page.locator('#wk-admin-stats .wl-hist-row button:has-text("Ubah")').count()) === 1, 'workout history: the logged day has an "Ubah" button');
-    const prgDays = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-program-wrap .prg-days > div')).map(d => { const r = d.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }));
-    check(prgDays.length === 2 && prgDays[0][1] === prgDays[1][1] && prgDays[0][0] !== prgDays[1][0], 'wide client page: program days sit side by side ' + JSON.stringify(prgDays));
-    await page.evaluate(() => window.cpTab('progres'));
+    await page.evaluate(() => window.cpMore('PT-A'));
+    await page.waitForTimeout(400);
+    check((await page.textContent('#cpm-body')).includes('Ringkasan latihan'), 'workout: after logging the coach can send the day summary by WhatsApp (⋯ → Ringkasan latihan)');
+    check(!(await page.textContent('#cpm-body')).includes('Bagikan'), '⋯ menu: sharing is not repeated here (one home: the header icon)');
+    await page.evaluate(() => window.closeModal());
     await page.waitForTimeout(300);
-    check((await page.textContent('#detail-body [data-cppane="progres"]')).includes('Sesi selesai') && (await page.textContent('#detail-body [data-cppane="progres"]')).includes('Minggu beruntun') && (await page.textContent('#profile-progress-wrap')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
-    await page.click('#profile-progress-wrap .section-head .btn');
+    await page.click('#detail-head .cp-share-btn, .detail-head .cp-share-btn');
+    await page.waitForTimeout(900);
+    check(await visible(page, '#sheet-share') && /latihan/i.test(await page.textContent('#share-title')), 'header share icon: on the Latihan tab it opens the share editor on the Latihan card (' + (await page.textContent('#share-title')) + ')');
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
+    check((await page.locator('#cp-ins-latihan svg.pg-chart').count()) >= 1 && (await overflowX(page)) <= 0, 'workout charts: the Latihan tab shows weekly volume without sideways scroll');
+    check((await page.textContent('#cp-wk-hist')).includes('Riwayat latihan') && (await page.locator('#cp-wk-hist button.cp-row[aria-label^="Ubah latihan"]').count()) === 1, 'workout history: the logged day is a row that opens the editor');
+    check((await page.locator('#detail-body .cp-pane[data-cppane="latihan"] [onclick*="shareCard"]').count()) === 0, 'Latihan tab: no share buttons inside the tab (Bagikan is the header icon)');
+    const latCols = await page.evaluate(() => { const a = document.getElementById('profile-program-wrap').getBoundingClientRect(), b = document.getElementById('cp-ph-latihan').getBoundingClientRect(); return [Math.round(a.left), Math.round(a.top), Math.round(b.left), Math.round(b.top)]; });
+    check(latCols[0] < latCols[2] && Math.abs(latCols[1] - latCols[3]) <= 4, 'wide client page: Latihan splits into two columns, program and history left, numbers right ' + JSON.stringify(latCols));
+    await page.click('#cp-wk-hist button.cp-row[aria-label^="Ubah latihan"]');
+    await page.waitForTimeout(900);
+    check(await visible(page, '#wl-screen'), 'workout history: tapping a row reopens that day in the logger');
+    await page.evaluate(() => window.wlDiscard(true));
+    await page.waitForTimeout(600);
+    await page.evaluate(() => { window.cpTab('progres'); window.cpPgSeg('ringkasan'); });
+    await page.waitForTimeout(300);
+    const pgPane = '#detail-body [data-cppane="progres"]';
+    check((await page.textContent(pgPane)).includes('Sesi selesai') && (await page.textContent(pgPane)).includes('Minggu beruntun') && (await page.textContent('#cp-pg-foto')).includes('10 sesi'), 'client page: streak, completed sessions and earned badges are summarised');
+    // Fase AC Wave 2: sub-tab tanpa panggilan; tombol per sub-tab sedikit (baris yang bisa diketuk tidak dihitung); tanpa tombol bagikan.
+    const callsPg = calls.length, pgCtl = {};
+    for (const k of ['ukuran', 'tes', 'foto', 'ringkasan']) {
+      await page.evaluate(x => window.cpPgSeg(x), k);
+      await page.waitForTimeout(120);
+      pgCtl[k] = await page.evaluate(() => Array.from(document.querySelectorAll('#detail-body [data-cppane="progres"] button, #detail-body [data-cppane="progres"] select, #detail-body [data-cppane="progres"] input')).filter(e => !e.closest('.cp-row') && !e.classList.contains('cp-row') && e.getClientRects().length && e.getBoundingClientRect().width > 0).length);
+    }
+    check(calls.length === callsPg, 'progres: switching sub-tabs makes no server call (' + calls.slice(callsPg).join(',') + ')');
+    check(Object.values(pgCtl).every(n => n <= 8), 'progres: at most 8 controls per sub-tab, rows aside ' + JSON.stringify(pgCtl));
+    check((await page.locator('#detail-body .cp-pane [onclick*="shareCard"]').count()) === 0, 'client page: no share buttons inside the tabs (Bagikan is the header icon)');
+    await page.click('#detail-body .cp-card .cp-act:has-text("Catat ukuran")');
     await page.waitForTimeout(600);
     check(await visible(page, '#pg-date-field'), 'client page: the coach can choose the date');
     await page.fill('#pg-berat', '73');
@@ -1348,15 +1421,35 @@ async function contrastReport(page) {
     await page.waitForTimeout(800);
     const crow = env.sheet('Progress').rows.find(r => r[1] === 'PT-A' && r[5] === 'coach');
     check(!!crow && crow[3] === 73, 'client page: a coach entry is saved and marked "coach"');
-    check((await page.textContent('#profile-progress-wrap')).includes('coach') && (await page.textContent('#profile-progress-wrap')).includes('73'), 'client page: the entry and its author are listed');
+    await page.evaluate(() => window.cpPgSeg('ukuran'));
+    await page.waitForTimeout(200);
+    check((await page.textContent('#cp-pg-hist')).includes('coach') && (await page.textContent('#cp-pg-hist')).includes('73'), 'client page: the entry and its author are listed');
     const chartW = await page.evaluate(() => { const c = document.querySelector('#profile-progress-wrap .pg-chart'); return c ? Math.round(c.getBoundingClientRect().width) : 0; });
     check(chartW >= 200 && chartW <= 420, 'wide client page: the progress chart keeps a sensible size (' + chartW + ' px)');
-    await page.evaluate(() => document.querySelectorAll('#profile-progress-wrap details.fold').forEach(f => { f.open = true; }));
-    await page.click('#profile-progress-wrap .list-item .icon-btn');
-    await page.waitForTimeout(300);
+    check((await page.locator('#profile-progress-wrap .pg-chart').count()) === 1, 'progres: one chart at a time, picked with the measure chips');
+    await page.click('#cp-pg-hist .cp-row:has-text("coach")');
+    await page.waitForTimeout(400);
+    check(await visible(page, '#sheet-cp-row') && (await page.textContent('#cpr-body')).includes('73'), 'progres: tapping a measurement row opens its sheet with the values');
+    await page.click('#cpr-body .cp-danger');
+    await page.waitForTimeout(400);
     await page.click('#btn-confirm-modal-yes');
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(900);
     check(!env.sheet('Progress').rows.some(r => r[1] === 'PT-A' && r[5] === 'coach'), 'client page: a coach can delete an entry');
+    // Foto: baris foto membuka penampil privat (satu getMemberProgressPhoto), tanpa Hapus untuk coach; tutup = kembali ke sub-tab.
+    env.call('uploadMyProgressPhoto', env.memberToken(KEY_A), 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'image/png', 'depan');
+    await page.evaluate(() => window.loadClientBundle('PT-A', { force: true }));
+    await page.waitForTimeout(900);
+    await page.evaluate(() => window.cpPgSeg('foto'));
+    await page.waitForTimeout(200);
+    const callsF = calls.length;
+    await page.click('#cp-pg-foto .cp-row');
+    await page.waitForTimeout(900);
+    check(calls.slice(callsF).join() === 'getMemberProgressPhoto' && ((await page.getAttribute('#pg-view-img', 'src')) || '').startsWith('data:image/'), 'progres: a Foto row opens the private viewer with one call (' + calls.slice(callsF).join(',') + ')');
+    check(await page.evaluate(() => document.getElementById('pg-view-del').classList.contains('hide')), 'progres: the coach can view a photo but not delete it');
+    await page.evaluate(() => window.pgClosePhotoView());
+    await page.waitForTimeout(500);
+    check(!(await visible(page, '#sheet-photo-view')) && !(await visible(page, '#sheet-progress-photos')) && await visible(page, '#cp-pg-foto'), 'progres: closing the photo returns to the Foto sub-tab');
+    await shot(page, 'admin-client-progres-foto');
     noErrors(errors);
     await context.close();
   }
@@ -1761,20 +1854,22 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('clients', { force: true }));
     await page.evaluate(() => window.openProfile('PT-A'));
     await page.waitForTimeout(800);
-    await page.evaluate(() => window.cpTab('ringkasan'));
-    await page.evaluate(() => { document.querySelectorAll('#detail-body details.fold').forEach(f => { f.open = true; }); });
+    await page.evaluate(() => window.cpRemind('PT-A'));
+    await page.waitForTimeout(500);
     const remind = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs .list-item')).map(e => Math.round(e.getBoundingClientRect().height)));
     check(remind.length === 9 && remind.every(x => x >= 44), 'phone: client reminder switches are 44 px+ rows (' + remind.join(', ') + ')');
     const hit = await page.evaluate(() => Array.from(document.querySelectorAll('#profile-remind-prefs input[data-remind]')).map(e => e.getBoundingClientRect()).every(r => r.height >= 43.5 && r.width >= 43.5));
     check(hit, 'phone: the switch touch area is at least 44 × 44 px');
-    check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');
     await shot(page, 'client-reminders-mobile-' + scheme);
-    for (const tab of ['ringkasan', 'progres', 'latihan', 'gizi']) {
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(400);
+    check((await overflow()) <= 0, 'phone: the client page has no sideways scroll');
+    for (const tab of ['ringkasan', 'progres', 'latihan', 'gizi', 'data']) {
       await page.evaluate(t => { window.cpTab(t); const b = document.querySelector('#detail-body'); if (b) b.scrollTop = 0; }, tab);
       await page.waitForTimeout(250);
       if (tab === 'gizi') {
         const gz = await page.evaluate(() => { const w = document.getElementById('profile-nut-wrap'); return { txt: w ? w.textContent : '', over: w ? w.scrollWidth - w.clientWidth : 99, tabs: new Set(Array.from(document.querySelectorAll('#detail-body [data-cptab]')).map(b => Math.round(b.getBoundingClientRect().top))).size }; });
-        check(/Dasar perhitungan/.test(gz.txt) && /Lengkapi data|Target harian/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
+        check(/Data & dasar/.test(gz.txt) && /Lengkapi data|Hari ini/.test(gz.txt) && gz.over <= 1, 'phone ' + scheme + ': the Gizi tab shows the summary and what is missing, no sideways scroll ' + JSON.stringify({ over: gz.over, tabRows: gz.tabs }));
       }
       await shot(page, 'phone-client-' + tab + '-' + scheme);
     }
