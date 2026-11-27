@@ -14,7 +14,7 @@ Keputusan pemilik (2026-11-17): satu situs untuk semua coach, `xnk.web.id/<slug>
 | `hub-site/adminxnk.html` | Dasbor pemilik `xnk.web.id/adminxnk/` (data dari XNK HQ, [Pusat.md](Pusat.md)). |
 | `tools/coach-ops.js` | Workflow **Coach XNK**: coach baru, hubungkan, perbarui ([Akun.md](Akun.md)). |
 | `tools/hub-edit.js` | Tambah, ubah, hapus satu coach di `hub.json` dengan pemeriksaan penuh (dipakai form Actions). |
-| `hub-site/` | `index.html` (landing profil brand XNK: hero, fitur klien/coach, tangkapan layar, cara kerja, privasi, daftar coach dari `hub.json` di `<!--COACHES-->` (bagian hilang bila kosong), kotak masuk, tanya jawab, tombol kontak dari `contactUrl` di `<!--CONTACT-->`), `img/` (tangkapan layar demo + `og.jpg`, dibuat oleh `tools/hub-shots.js`; jalankan ulang bila tampilan app berubah banyak), `404.html`, `storage-prefix.js`, `manifest.webmanifest` + `sw.js` (landing bisa dipasang dari Chrome/Edge; service worker hanya melayani `/`, `/manifest.webmanifest`, `/img/*`, tidak pernah halaman coach atau cache coach), `desktop.ico`. Ikon (`img/icon-192.png`, `img/icon-512.png`, `img/logo-64.png`, `desktop.ico`) dibuat dari `logo.png` di akar repo di atas latar hitam; perintahnya ada di `tools/hub-shots.js`. Bagian "Aplikasi" menautkan `github.com/xnkzzxd/XNK/releases/download/app-latest/` (`XNK-Android.apk`, `XNK-Windows.msi`, `XNK-macOS.dmg`), dibangun oleh workflow `apps.yml` di repo XNK. Slug `img` dipakai sistem. |
+| `hub-site/` | `index.html` (landing profil brand XNK: hero, fitur klien/coach, tangkapan layar, cara kerja, privasi, daftar coach dari `hub.json` di `<!--COACHES-->` (bagian hilang bila kosong), kotak masuk, tanya jawab, tombol kontak dari `contactUrl` di `<!--CONTACT-->`; sejak T-2265 juga harga, coba demo, form daftar, Instagram — lihat [Halaman depan](#halaman-depan-harga-demo-daftar-t-2265)), `img/` (tangkapan layar demo + `og.jpg`, dibuat oleh `tools/hub-shots.js`; jalankan ulang bila tampilan app berubah banyak), `404.html`, `storage-prefix.js`, `manifest.webmanifest` + `sw.js` (landing bisa dipasang dari Chrome/Edge; service worker hanya melayani `/`, `/manifest.webmanifest`, `/img/*`, tidak pernah halaman coach atau cache coach), `desktop.ico`. Ikon (`img/icon-192.png`, `img/icon-512.png`, `img/logo-64.png`, `desktop.ico`) dibuat dari `logo.png` di akar repo di atas latar hitam; perintahnya ada di `tools/hub-shots.js`. Bagian "Aplikasi" menautkan `github.com/xnkzzxd/XNK/releases/download/app-latest/` (`XNK-Android.apk`, `XNK-Windows.msi`, `XNK-macOS.dmg`), dibangun oleh workflow `apps.yml` di repo XNK. Slug `img` dipakai sistem. |
 | `hub-repo/` | Isi repo hub `xnk-template-site`: `hub.json`, workflow `hub.yml` (form simpan/hapus/bangun, harian 03:17 WIB), README (DNS, cara menambah coach). |
 | `hub-site/info.html` | Halaman info publik per coach `/<slug>/info/` (T-2241). |
 | `tools/hub-check.js`, `tests/hub.test.js`, `tests/hub-brand.test.js` | Cek browser dan tes. |
@@ -137,6 +137,32 @@ lewat form Actions (*tempat* kosong = tetap, `-` = hapus). Tempat ikut terbawa s
   dan deskripsi halaman. Tanpa tempat di `hub.json`, kolom *Lokasi* profil coach (`getCoaches`) dipakai bila ada.
 - Halaman depan: tiap kartu coach menampilkan tempat; `data-city` / `data-q` dipakai kotak cari (≥ 2 coach) dan
   pilihan kota (≥ 2 coach bertempat, kota digabung tanpa beda huruf besar/kecil). Tidak ada yang disimpan di perangkat.
+
+## Halaman depan: harga, demo, daftar (T-2265)
+
+Halaman depan adalah proposal coach yang selalu terbaru (proposal PDF 29 Okt 2026 sudah lewat masa berlakunya).
+
+- **Harga** (`<!--HARGA-->`): dirender dari `tools/hub-harga.js` (`TIERS`, `SETUP`, `COMPARE`, `FIRST_MONTH_FREE`).
+  Angkanya **harus sama** dengan `PUSAT_TIERS` / `PUSAT_SETUP` di `xnk-pusat/src/Pusat.gs`; `tests/hub.test.js` gagal
+  bila berbeda, dan `hub-site/index.html` tidak boleh menulis "Rp …" sendiri (`{{mulai}}` = harga bulanan termurah).
+  Saklar Bulanan / Tahunan hanya mengganti kelas `#harga.yr` (tanpa JavaScript = bulanan). Fitur per paket mengikuti
+  proposal, dengan teks yang benar untuk hub: halaman info publik di semua paket, notifikasi coach lewat push / email /
+  Telegram, Laporan PDF dan program otomatis di Pro dan Studio, akun Google + spreadsheet dibuatkan pemilik.
+- **Coba demo**: tautan ke `https://xnk.my.id/demo/` (panel, PIN 123456) dan `…/demo/?klien`, tab baru. `hub-check.js`
+  tidak membukanya (permintaan ke xnk.my.id dihitung gagal di sana).
+- **Daftar** (`<!--DAFTAR-->…<!--/DAFTAR-->`): form hanya dipasang bila `contactUrl` berbentuk `https://wa.me/<nomor>`
+  (`data-wa`); isinya disusun di browser menjadi pesan WhatsApp (`?text=`), tidak ada yang dikirim ke server atau
+  disimpan. Kontak lain = kartu dengan tombol kontak; tanpa kontak = kartu teks saja. Tombol **Pilih <paket>** mengisi
+  paket dan cara bayar yang sedang dipilih.
+- **Instagram**: `hub.json` `instagramUrl` (opsional, `https://instagram.com/<nama>` atau `www.`; `IG_RE`) →
+  `<!--IG-->` (tombol di bagian Daftar) dan `<!--IG-FOOT-->` (kaki halaman).
+- **Mesin pencari**: `robots.txt` (semua boleh kecuali `/adminxnk/`, `/_hub/`, `/_lib/` dan panel / portal tiap coach
+  aktif; `/<slug>/info/` boleh) dan `sitemap.xml` (halaman depan + `/<slug>/info/` coach aktif, tanpa `lastmod` supaya
+  build tetap sama). Halaman depan membawa JSON-LD `SoftwareApplication` (harga bulanan per paket) dan `FAQPage` (dari
+  `.faq`, bentuk `<details><summary>…</summary><p>…</p></details>` harus tetap). JSON-LD tidak dijalankan browser, jadi
+  tidak perlu sidik CSP.
+- **Gambar**: `tools/hub-shots.js` mengambil 8 layar HP (+ `coach-klien` = `openProfile`, `coach-laporan` =
+  `reportOpen` + `rpBuild`), satu layar desktop dan `og.jpg` dari demo; bangun ulang demo dulu.
 
 ## Web Push (T-2240)
 

@@ -926,7 +926,8 @@ var PUSAT_SUB_REMIND = [7, 1];          // email pengingat H-7 dan H-1
 var PUSAT_SUB_HISTORY = 24;             // (lama) riwayat bayar langganan
 var PUSAT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// T-2264: paket dan harga dari "XNK Proposal Coach" (29 Okt 2026). UBAH BERSAMA proposal bila harga berubah.
+// T-2264: paket dan harga dari "XNK Proposal Coach" (29 Okt 2026). UBAH BERSAMA proposal dan
+// xnk-library/tools/hub-harga.js (harga di halaman depan xnk.web.id, T-2265; tests/hub.test.js membandingkan keduanya).
 // Harga hanya bawaan saat paket dipilih; pemilik boleh mengisi harga lain per coach.
 var PUSAT_TIERS = {
   starter: { name: 'Starter', bulanan: 149000, tahunan: 1490000, lifetime: 3900000, putus: 2900000 },

@@ -70,7 +70,8 @@ const PUSAT_CALLS = [];
 const HIST_A = Array.from({ length: 30 }, (_, i) => [new Date(Date.now() + 7 * 3600e3 - (29 - i) * 86400e3).toISOString().slice(0, 10), 6 + Math.round(i / 4), 15 + Math.round(i / 5), 8 + (i % 5) + Math.round(i / 6), 5 + (i % 4), 3, 9000 + i * 200, 12, 1]);
 let PUSAT_OUT = null;   // T-2252: keadaan coach keluar claudia di XNK HQ palsu
 // T-2251 / T-2264: langganan palsu claudia (bawaan gratis), bentuk sama dengan subView_ di Pusat.gs.
-const PUSAT_TIERS = { starter: { name: 'Starter', bulanan: 149000, tahunan: 1490000, lifetime: 3900000, putus: 2900000 }, pro: { name: 'Pro', bulanan: 249000, tahunan: 2490000, lifetime: 6900000, putus: 4900000 }, studio: { name: 'Studio', bulanan: 549000, tahunan: 5490000, lifetime: 14900000, putus: 10900000 } };
+// T-2265: paket dan harga dari satu sumber (sama dengan PUSAT_TIERS di Pusat.gs, dicek tests/hub.test.js).
+const PUSAT_TIERS = require('./hub-harga').pusatShape().tiers;
 const PUSAT_SUB = { plan: 'gratis', tier: 'gratis', tierName: 'Gratis', cycle: 'bulanan', price: 0, due: '', email: '', ro: 'auto', state: 'gratis', days: null, graceLeft: null, readonly: false,
   setup: { kind: 'none', price: 0, paidAt: '' }, pay: [], history: [], pushed: null };
 const todayWibHC = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
@@ -115,7 +116,7 @@ function fakePusat(req) {
   else if (req.fn === 'pusatAction' && req.args[1] === 'leave-undo') { PUSAT_CALLS.undo = req.args[2]; PUSAT_OUT = null; }
   else if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
   const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 }, quota: { date: '2026-11-19', mail: 12, fetch: 15200, triggerMin: 20, mailRemaining: 84 }, quotaDays: [{ date: '2026-11-18', mail: 31, fetch: 18400, triggerMin: 0.05 }], readonly: !!PUSAT_SUB.readonly, left: !!PUSAT_OUT } });
-  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, fetchToday: 34, money: fakeMoney(), tiers: PUSAT_TIERS, setupPrices: { standar: 400000, custom: 2100000 }, quotaLimits: { mail: 100, fetch: 20000, triggerMin: 90 }, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
+  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, fetchToday: 34, money: fakeMoney(), tiers: PUSAT_TIERS, setupPrices: require('./hub-harga').pusatShape().setup, quotaLimits: { mail: 100, fetch: 20000, triggerMin: 90 }, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
     places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
     { slug: 'claudia', exec: EXEC_A, hist: HIST_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
       backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, push: PUSAT_OUT ? { on: false, active: false, subs: 0, at: '', error: '' } : { on: true, active: true, subs: 3, at: new Date().toISOString(), error: '' }, sub: Object.assign({}, PUSAT_SUB), out: PUSAT_OUT },
@@ -192,7 +193,7 @@ async function makeLogos(browser) {
       const seen = [], errors = [];
       const context = await newContext(browser, be, seen);
       const page = await open(context, O + '/', errors);
-      check((await page.title()) === 'XNK', 'judul landing = XNK');
+      check((await page.title()) === 'XNK · aplikasi personal trainer dan kliennya', 'judul landing');
       check(await page.isVisible('#slug'), 'ada isian nama coach');
       check((await page.textContent('body')).includes('Hubungi XNK'), 'tombol kontak tampil (kontak diisi)');
       check(await page.locator('a.coach[href="/claudia/info/"]').count() === 1 && await page.locator('a.coach[href="/claudia-2/info/"]').count() === 1, 'daftar coach menautkan halaman info /<slug>/info/');
@@ -211,6 +212,8 @@ async function makeLogos(browser) {
       check(await vis() === '/claudia/info/,/claudia-2/info/' && !(await page.isVisible('#no-hit')), 'kosongkan cari → semua coach lagi');
       check(await page.evaluate(() => [...document.querySelectorAll('#cities button')].every(b => b.getBoundingClientRect().height >= 43.5)), 'pilihan kota ≥ 44 px');
       check(await page.evaluate(() => [...document.querySelectorAll('.phones img')].filter(i => i.offsetParent).every(i => i.naturalWidth > 0)), 'gambar hero termuat');
+      // T-2265: tabel perbandingan dan pilihan bayar dibuka, supaya ikut dicek tanpa scroll ke samping.
+      await page.evaluate(() => document.querySelectorAll('details.more').forEach(d => { d.open = true; }));
       // Berbagai rasio layar: HP tegak/mendatar, tablet, laptop, ultrawide, monitor tegak.
       for (const [w, h] of [[320, 568], [390, 844], [844, 390], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1080], [1080, 1920], [3440, 1440]]) {
         await page.setViewportSize({ width: w, height: h });
@@ -220,6 +223,35 @@ async function makeLogos(browser) {
         if (w > h) check(r.pad >= 32, `landing ${w}×${h}: pita hitam hero turun di bawah teks dan HP (${Math.round(r.pad)} px)`);
       }
       await page.setViewportSize({ width: 390, height: 844 });
+      // T-2265: harga bulanan / tahunan, "Pilih Pro" mengisi form daftar, form membuka WhatsApp (window.open ditangkap).
+      {
+        const T = require('./hub-harga').TIERS, pro = T.find(t => t.key === 'pro');
+        const shown = () => page.evaluate(() => [...document.querySelectorAll('#paket-pro .price')].filter(p => p.offsetParent).map(p => p.querySelector('b').textContent).join('|'));
+        check(await shown() === 'Rp 249.000' && await page.getAttribute('#cyc button[data-cyc="bulanan"]', 'aria-pressed') === 'true', 'harga: bulanan tampil lebih dulu (' + await shown() + ')');
+        check(await page.isVisible('#paket-pro .free'), 'harga: "Bulan pertama gratis" di bulanan');
+        await page.click('#cyc button[data-cyc="tahunan"]');
+        check(await shown() === require('./hub-harga').rp(pro.tahunan) && !(await page.isVisible('#paket-pro .free')), 'harga: Tahunan → harga tahunan Pro, tanpa "bulan pertama gratis"');
+        check(await page.evaluate(() => [...document.querySelectorAll('#cyc button, a[data-plan], #df select, #df input:not([type=checkbox]), #df .chk, #df button')].filter(e => e.offsetParent).every(e => e.getBoundingClientRect().height >= 43.5)), 'harga dan form: tombol dan isian ≥ 44 px');
+        await page.click('a[data-plan="pro"]');
+        await page.waitForTimeout(300);
+        check(await page.inputValue('#df-paket') === 'pro' && await page.inputValue('#df-bayar') === 'tahunan', '"Pilih Pro" (tahunan) → form daftar terisi Pro, tahunan');
+        // Gulir halus (scroll-behavior: smooth): tunggu sampai bagian Daftar sampai di bawah bilah atas.
+        check(await page.waitForFunction(() => location.hash === '#daftar' && Math.abs(document.getElementById('daftar').getBoundingClientRect().top) < 150, null, { timeout: 5000 }).then(() => true, () => false), '"Pilih Pro" membawa ke form daftar');
+        await page.evaluate(() => { window.__wa = []; window.open = function (u) { window.__wa.push(u); return {}; }; });
+        await page.click('#df button[type="submit"]');
+        check(((await page.textContent('#df-err')) || '').includes('nama') && (await page.evaluate(() => window.__wa.length)) === 0, 'form tanpa nama → pesan, WhatsApp tidak dibuka');
+        await page.fill('#df-nama', 'Rina & Co');
+        await page.fill('#df-kota', 'Bandung');
+        await page.selectOption('#df-klien', { label: '5–15' });
+        await page.click('#df button[type="submit"]');
+        const wa = await page.evaluate(() => window.__wa[0] || '');
+        const msg = wa.includes('?text=') ? decodeURIComponent(wa.split('?text=')[1]) : '';
+        check(wa.startsWith('https://wa.me/6281234567890?text=') && msg === ['Halo XNK, saya tertarik memakai XNK.', 'Nama: Rina & Co', 'Kota / tempat: Bandung', 'Klien aktif: 5–15', 'Paket: Pro', 'Cara bayar: Tahunan', 'Mau demo 30 menit dulu: ya'].join('\n'),
+          'form → wa.me dengan pesan terisi' + (msg ? '' : ' (' + wa + ')'));
+        check(await page.getAttribute('a[href="https://xnk.my.id/demo/"]', 'target') === '_blank' && await page.locator('a[href="https://xnk.my.id/demo/?klien"]').count() === 1, 'coba demo: panel dan portal contoh (tab baru)');
+        check(await page.evaluate(() => Promise.all([...document.querySelectorAll('.shots img')].map(i => fetch(i.src).then(r => r.ok, () => false))).then(a => a.length === 8 && a.every(Boolean))), 'strip: 8 gambar ada (termasuk klien dan laporan)');
+        await page.goto(O + '/?hub', { waitUntil: 'load' });
+      }
       await page.fill('#slug', 'a b!');
       await page.click('button[data-to="klien"]');
       check(((await page.textContent('#err')) || '').includes('tidak valid'), 'nama tidak valid → pesan, tidak pindah halaman');

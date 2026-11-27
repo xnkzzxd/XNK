@@ -90,9 +90,14 @@ memberi tahu bahwa XNK HQ belum diatur.
 3. **Settings → Pages → Custom domain**: isi `xnk.web.id`, Simpan, tunggu centang DNS hijau, lalu centang **Enforce HTTPS**. DNS bisa butuh beberapa menit sampai beberapa jam.
 4. (Disarankan) **Verifikasi domain** di pengaturan akun GitHub (Settings → Pages → Add a domain), supaya orang lain tidak bisa memasang domain Anda di repo mereka.
 
-## Halaman depan: tombol "Hubungi XNK"
+## Halaman depan: kontak, form daftar, Instagram
 
 Isi `contactUrl` di `hub.json` dengan link `https://` (mis. link WhatsApp bisnis `https://wa.me/62…`). Kosong = tombolnya tidak tampil.
+Bila link-nya `https://wa.me/<nomor>`, bagian **Daftar** di halaman depan juga berisi form singkat yang membuka WhatsApp
+dengan pesan terisi (nama, kota, jumlah klien, paket, cara bayar). Tidak ada yang disimpan di situs.
+
+`instagramUrl` (opsional): link profil `https://instagram.com/<nama>`, tampil di bagian Daftar dan di kaki halaman.
+Harga paket di halaman depan tidak diatur di sini; harganya ikut kode XNK (`tools/hub-harga.js`, sama dengan XNK HQ).
 
 ## Catatan
 

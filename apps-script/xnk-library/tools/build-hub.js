@@ -1,9 +1,10 @@
 'use strict';
 // Membangun situs hub xnk.web.id: satu situs, banyak coach.
 //   node apps-script/xnk-library/tools/build-hub.js <outDir> --config hub.json
-// hub.json: { "contactUrl": "https://wa.me/…" (opsional), "coaches": [ { "slug": "claudia", "brand": "Claudia Fit", "exec": "https://script.google.com/macros/s/…/exec" } ] }
+// hub.json: { "contactUrl": "https://wa.me/…" (opsional), "instagramUrl": "https://instagram.com/…" (opsional, T-2265), "coaches": [ { "slug": "claudia", "brand": "Claudia Fit", "exec": "https://script.google.com/macros/s/…/exec" } ] }
 // Hasil:
-//   /index.html, /404.html, /img/    landing XNK (hub-site/; gambar dari tools/hub-shots.js)
+//   /index.html, /404.html, /img/    landing XNK (hub-site/; gambar dari tools/hub-shots.js; harga dari tools/hub-harga.js)
+//   /robots.txt, /sitemap.xml        T-2265: halaman depan + halaman info coach aktif untuk mesin pencari
 //   /<slug>/                         panel coach (PIN)
 //   /<slug>/klien/                   portal klien
 //   /<alias>/, /<alias>/klien/, /<alias>/info/   T-2243: slug lama coach yang ganti nama → halaman pengalih ke slug baru
@@ -16,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const tenant = require('./build-tenant');
+const harga = require('./hub-harga');
 
 const HERE = path.join(__dirname, '..');
 const SITE = path.join(HERE, 'hub-site');
@@ -135,6 +137,8 @@ function readHub(cfg, opts) {
   // T-2240: kunci publik VAPID seluruh hub (satu origin = satu pasang kunci); kunci privat hanya di secret repo hub.
   const vapid = String(cfg.vapidPublic == null ? '' : cfg.vapidPublic).trim();
   if (vapid && !VAPID_RE.test(vapid)) throw new Error('hub.json: "vapidPublic" harus kunci publik VAPID (base64url, 87 karakter, diawali B). Jalankan workflow Push XNK aksi "kunci".');
+  const instagram = String(cfg.instagramUrl == null ? '' : cfg.instagramUrl).trim();
+  if (instagram && !IG_RE.test(instagram)) throw new Error('hub.json: "instagramUrl" harus link profil https://instagram.com/<nama> (huruf, angka, titik, garis bawah).');
   const seen = new Set();
   const coaches = cfg.coaches.map((c, i) => {
     const slug = String(c && c.slug || '').trim();
@@ -200,10 +204,13 @@ function readHub(cfg, opts) {
   const dup = execs.find((e, i) => execs.indexOf(e) !== i);
   if (dup) throw new Error('hub.json: dua coach memakai link /exec yang sama; setiap coach harus punya spreadsheet sendiri.');
   if (pusat && execs.includes(pusat)) throw new Error('hub.json: "pusatUrl" tidak boleh sama dengan /exec coach.');
-  return { contact, coaches, pusat, vapid };
+  return { contact, coaches, pusat, vapid, instagram };
 }
 
 const VAPID_RE = /^B[A-Za-z0-9_-]{86}$/;
+// T-2265: profil Instagram pemilik (opsional) di halaman depan; form daftar hanya bila contactUrl = wa.me/<nomor>.
+const IG_RE = /^https:\/\/(www\.)?instagram\.com\/[A-Za-z0-9._]{1,30}\/?$/;
+const WA_RE = /^https:\/\/wa\.me\/\d{8,15}$/;
 
 /**
  * T-2252: berkas coach yang tidak aktif lagi (coach keluar). /<slug>/, /<slug>/klien/ dan /<slug>/info/ = halaman kecil
@@ -512,7 +519,7 @@ function build(cfg, opts) {
   files['_hub/versions.json'] = JSON.stringify(built, null, 1) + '\n';
   // T-2240: kunci publik push (bukan rahasia) untuk pemeriksaan; coach menerimanya dari XNK HQ (hubPushKey).
   if (hub.vapid) files['_hub/push.json'] = JSON.stringify({ vapidPublic: hub.vapid }) + '\n';
-  let landing = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
+  let landing = landingSales(fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), hub);
   const contact = hub.contact
     ? `<a class="btn ghost" href="${esc(hub.contact)}" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg>Hubungi XNK</a>`
     : '';
@@ -568,7 +575,8 @@ function build(cfg, opts) {
   if (!landing.includes('/*ACCENTS*/')) throw new Error('build-hub: /*ACCENTS*/ tidak ada di hub-site/index.html');
   landing = landing.replace('/*ACCENTS*/', Object.entries(ACCENTS).map(([k, v]) =>
     `.coach .av.acc-${k} { background: ${v[0]}; color: ${v[1]}; } @media (prefers-color-scheme: dark) { .coach .av.acc-${k} { background: ${v[2]}; color: ${v[3]}; } }`).join('\n  '));
-  files['index.html'] = cspStatic(landing);
+  files['index.html'] = cspStatic(landingLd(landing));
+  Object.assign(files, seoFiles(hub));
   for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
   // Bisa dipasang (PWA): manifest + service worker yang hanya melayani halaman depan; nama cache ikut isi landing.
   files['manifest.webmanifest'] = fs.readFileSync(path.join(SITE, 'manifest.webmanifest'), 'utf8');
@@ -584,6 +592,67 @@ function build(cfg, opts) {
   files['404.html'] = cspStatic(fs.readFileSync(path.join(SITE, '404.html'), 'utf8'));
   files['.nojekyll'] = '';
   return { files, coaches: hub.coaches };
+}
+
+/**
+ * T-2265: harga (tools/hub-harga.js), form daftar lewat WhatsApp, tautan Instagram. Dijalankan sebelum <!--CONTACT-->
+ * diganti, karena pengganti form (kontak bukan wa.me) memakai tombol kontak yang sama.
+ */
+function landingSales(landing, hub) {
+  for (const k of ['<!--HARGA-->', '<!--DAFTAR-->', '<!--/DAFTAR-->', '<!--PAKET-->', '<!--IG-->', '<!--IG-FOOT-->', '{{mulai}}']) {
+    if (!landing.includes(k)) throw new Error('build-hub: ' + k + ' tidak ada di hub-site/index.html');
+  }
+  landing = landing.split('{{mulai}}').join(harga.mulai()).replace('<!--HARGA-->', () => harga.render());
+  const block = /<!--DAFTAR-->([\s\S]*?)<!--\/DAFTAR-->/;
+  if (WA_RE.test(hub.contact)) {
+    landing = landing.replace(block, (m, form) => form.split('__WA__').join(esc(hub.contact)).replace('<!--PAKET-->', harga.planOptions()));
+  } else {
+    // Tanpa nomor WhatsApp: tidak ada form (pesan tidak bisa diisi otomatis); tombol kontak bila ada.
+    landing = landing.replace(block, '<div class="card daftar-alt"><h3>Hubungi tim XNK</h3><p class="mut">Ceritakan nama, kota, jumlah klien, dan paket yang Anda minati. Kami atur demo 30 menit di HP Anda.</p><div class="cta"><!--CONTACT--></div></div>');
+  }
+  if (landing.includes('__WA__') || landing.includes('<!--PAKET-->')) throw new Error('build-hub: penanda form daftar tersisa di hub-site/index.html');
+  const ig = hub.instagram, handle = ig ? '@' + ig.replace(/\/$/, '').split('/').pop() : '';
+  return landing
+    .split('<!--IG-->').join(ig ? `<a class="btn ghost" href="${esc(ig)}" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-insta"/></svg>${esc(handle)}</a>` : '')
+    .split('<!--IG-FOOT-->').join(ig ? `<a href="${esc(ig)}" rel="noopener">Instagram</a>` : '');
+}
+
+/** Teks polos dari potongan HTML landing (tanpa tag, entitas dasar dikembalikan). */
+function plain(s) {
+  return String(s).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+}
+
+/**
+ * T-2265: data terstruktur (schema.org) untuk mesin pencari: aplikasi + harga per paket, dan tanya jawab dari .faq.
+ * <script type="application/ld+json"> tidak dijalankan browser, jadi tidak ikut sidik CSP; '<' ditulis \u003c.
+ */
+function landingLd(landing) {
+  const desc = plain((landing.match(/<meta name="description" content="([^"]*)">/) || [])[1] || '');
+  const faqBox = (landing.match(/<div class="faq">([\s\S]*?)<\/div>/) || [])[1] || '';
+  const faq = [...faqBox.matchAll(/<details><summary>([\s\S]*?)<\/summary><p>([\s\S]*?)<\/p><\/details>/g)]
+    .map(m => ({ '@type': 'Question', name: plain(m[1]), acceptedAnswer: { '@type': 'Answer', text: plain(m[2]) } }));
+  const ld = [{ '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'XNK', url: HUB_ORIGIN + '/', description: desc, inLanguage: 'id',
+    applicationCategory: 'BusinessApplication', operatingSystem: 'Web, Android, Windows, macOS', image: HUB_ORIGIN + '/img/og.jpg', offers: harga.offers(HUB_ORIGIN + '/') }];
+  if (faq.length) ld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq });
+  if (!landing.includes('</head>')) throw new Error('build-hub: </head> tidak ada di hub-site/index.html');
+  return landing.replace('</head>', () => ld.map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>\n').join('') + '</head>');
+}
+
+/**
+ * T-2265: robots.txt dan sitemap.xml. Yang didaftarkan: halaman depan dan /<slug>/info/ coach aktif. Panel dan portal
+ * coach (halaman masuk) tidak perlu dirayapi; halaman pengalih dan coach tidak aktif sudah noindex (dibiarkan terbaca
+ * supaya noindex-nya terlihat). Tanpa lastmod, supaya build tetap sama byte demi byte.
+ */
+function seoFiles(hub) {
+  const active = hub.coaches.filter(c => !c.inactive);
+  const robots = ['User-agent: *', 'Allow: /', 'Disallow: /adminxnk/', 'Disallow: /_hub/', 'Disallow: /_lib/']
+    .concat(...active.map(c => [`Disallow: /${c.slug}/`, `Allow: /${c.slug}/info/`]))
+    .concat(['', `Sitemap: ${HUB_ORIGIN}/sitemap.xml`, '']).join('\n');
+  const urls = [HUB_ORIGIN + '/'].concat(active.map(c => `${HUB_ORIGIN}/${c.slug}/info/`));
+  const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.map(u => `  <url><loc>${esc(u)}</loc></url>`).join('\n') + '\n</urlset>\n';
+  return { 'robots.txt': robots, 'sitemap.xml': sitemap };
 }
 
 /** build-tenant.js dari checkout XNK lain (commit coach itu), atau milik build ini. */
@@ -603,7 +672,7 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, slugError, readLogo, cleanPlace, PLACE_MAX, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles, inactiveFiles };
+module.exports = { build, write, readHub, IG_RE, WA_RE, slugError, readLogo, cleanPlace, PLACE_MAX, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles, inactiveFiles };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

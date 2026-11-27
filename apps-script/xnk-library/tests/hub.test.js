@@ -57,7 +57,7 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
   assert.ok(!files['index.html'].includes('<!--CONTACT-->'));
   // Tanpa coach pun situs jadi (hanya landing).
   const empty = hub.build({ coaches: [] }).files;
-  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'index.html', 'manifest.webmanifest', 'sw.js']);
+  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'index.html', 'manifest.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js']);
   assert.ok(Buffer.isBuffer(empty['img/og.jpg']) && empty['img/og.jpg'].length > 1000, 'gambar landing ikut dibangun');
 });
 
@@ -68,10 +68,11 @@ test('landing: daftar coach dari hub.json, nama di-escape, gambar yang dirujuk a
   assert.match(html, /href="\/claudia\/info\/"[\s\S]*Claudia Fit/);
   assert.match(html, /href="\/claudia-2\/info\/"/);
   assert.ok(!html.includes('<!--COACHES-->') && !html.includes('<!--CONTACT-->'));
-  assert.equal(html.split('Hubungi XNK').length - 1, 2, 'kontak di hero dan di penutup');
+  // T-2265: hero = Coba demo + Lihat harga; kontak di penutup, form daftar membuka WhatsApp yang sama.
+  assert.equal(html.split('Hubungi XNK').length - 1, 1, 'kontak di penutup');
   for (const m of html.matchAll(/(?:src|content)="(?:https:\/\/xnk\.web\.id\/)?(img\/[^"]+)"/g)) assert.ok(m[1] in files, m[1]);
   // Form masuk tetap sama (hub-check dan link lama bergantung padanya).
-  for (const id of ['id="f"', 'id="slug"', 'id="err"', 'data-to="klien"', 'data-to="panel"', '<title>XNK</title>']) assert.ok(html.includes(id), id);
+  for (const id of ['id="f"', 'id="slug"', 'id="err"', 'data-to="klien"', 'data-to="panel"', '<title>XNK · aplikasi personal trainer dan kliennya</title>']) assert.ok(html.includes(id), id);
   const evil = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['index.html'];
   assert.ok(!evil.includes('<img src=x') && evil.includes('&lt;img src=x'), 'nama usaha di-escape');
   const evilInfo = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['evil/info/index.html'];
@@ -349,4 +350,99 @@ test('workflow Coach XNK: satu secret per job (secrets[matrix.secret]), tidak pe
   assert.match(y, /CLASP_RC: \$\{\{ secrets\[matrix\.secret\] \}\}/);
   assert.match(y, /max-parallel: 1/);
   assert.match(y, /fail-fast: true/);
+});
+
+// T-2265: harga, form daftar WhatsApp, Instagram, coba demo, SEO.
+const harga = require('../tools/hub-harga');
+const PUSAT_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'xnk-pusat', 'src', 'Pusat.gs'), 'utf8');
+
+test('harga landing = harga XNK HQ (PUSAT_TIERS / PUSAT_SETUP di Pusat.gs)', () => {
+  const ctx = {};
+  vm.runInNewContext(PUSAT_SRC.match(/var PUSAT_TIERS = \{[\s\S]*?\n\};/)[0] + PUSAT_SRC.match(/var PUSAT_SETUP = \{[^\n]*\};/)[0] +
+    ';this.T = PUSAT_TIERS; this.S = PUSAT_SETUP;', ctx);
+  assert.deepEqual(JSON.parse(JSON.stringify({ tiers: ctx.T, setup: ctx.S })), harga.pusatShape(), 'ubah tools/hub-harga.js dan Pusat.gs bersama');
+  assert.equal(harga.rp(149000), 'Rp 149.000');
+  assert.equal(harga.rp(14900000), 'Rp 14.900.000');
+  assert.equal(harga.rpShort(1490000), 'Rp 1,49 jt');
+  assert.equal(harga.rpShort(2100000), 'Rp 2,1 jt');
+  assert.equal(harga.rpShort(124166.67), 'Rp 124rb');
+  assert.equal(harga.mulai(), 'Rp 149rb');
+});
+
+test('landing: semua harga dari hub-harga.js, bulanan dan tahunan, setup, tabel perbandingan', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'hub-site', 'index.html'), 'utf8');
+  assert.ok(!/Rp\s?\d/.test(src), 'hub-site/index.html tidak menulis harga sendiri');
+  const html = hub.build(CFG).files['index.html'];
+  for (const k of ['<!--HARGA-->', '<!--DAFTAR-->', '<!--/DAFTAR-->', '<!--PAKET-->', '<!--IG-->', '<!--IG-FOOT-->', '{{mulai}}', '__WA__']) assert.ok(!html.includes(k), k);
+  for (const t of harga.TIERS) {
+    const card = html.match(new RegExp(`<article class="card tier[^"]*" id="paket-${t.key}"[\\s\\S]*?</article>`))[0];
+    assert.ok(card.includes(`<p class="price m"><b>${harga.rp(t.bulanan)}</b>`), t.key + ' bulanan');
+    assert.ok(card.includes(`<p class="price y"><b>${harga.rp(t.tahunan)}</b>`), t.key + ' tahunan');
+    assert.ok(card.includes(`href="#daftar" data-plan="${t.key}"`), t.key + ' tombol pilih');
+    // Bulan pertama gratis hanya di harga bulanan.
+    assert.match(card, /<p class="psub m"><span class="free">Bulan pertama gratis<\/span><\/p>/);
+    assert.ok(!/class="[^"]*\by\b[^"]*">[^<]*Bulan pertama gratis/.test(card), t.key + ': tidak di tahunan');
+    for (const k of ['lifetime', 'putus']) assert.ok(html.includes(harga.rpShort(t[k])), t.key + ' ' + k);
+  }
+  assert.ok(html.includes('id="paket-pro"') && /id="paket-pro"[\s\S]{0,200}Disarankan/.test(html), 'Pro disarankan');
+  assert.ok(!html.includes('Paling dipilih'), 'tanpa klaim "paling dipilih"');
+  for (const s of Object.values(harga.SETUP)) assert.ok(html.includes(`<b>${harga.rp(s.price)}</b>`), s.name);
+  assert.ok(html.includes('Akun Google &amp; spreadsheet khusus, kami yang buatkan'), 'akun Google dibuatkan pemilik');
+  assert.ok(!/akun Google-mu|Pemasangan di akun Google/i.test(html), 'tidak menjanjikan pemasangan di akun Google coach');
+  // Fitur baru (Fase AD) dan program otomatis: Pro dan Studio saja; halaman info publik: semua paket.
+  const row = name => html.match(new RegExp(`<tr><th scope="row">${name}</th>([\\s\\S]*?)</tr>`))[1].match(/aria-label="(Ya|Tidak)"/g).map(x => x.slice(12, -1));
+  assert.deepEqual(row('Laporan PDF progres klien'), ['Tidak', 'Ya', 'Ya']);
+  assert.deepEqual(row('Program latihan otomatis'), ['Tidak', 'Ya', 'Ya']);
+  assert.deepEqual(row('Halaman info publik \\(paket, jam kosong, daftar\\)'), ['Ya', 'Ya', 'Ya']);
+  assert.ok(html.includes('Mulai Rp 149rb/bulan'), 'hero: harga termurah');
+  assert.match(html, /<meta name="description" content="[^"]*mulai Rp 149rb\/bulan\.">/);
+});
+
+test('landing: form daftar membuka WhatsApp (hanya kontak wa.me), Instagram, coba demo', () => {
+  const html = hub.build(CFG).files['index.html'];
+  assert.ok(html.includes('<form id="df" data-wa="https://wa.me/6281234567890"'), 'form memakai nomor kontak');
+  assert.match(html, /<select id="df-paket" name="paket"><option value="">Belum tahu<\/option><option value="starter">Starter<\/option><option value="pro">Pro<\/option><option value="studio">Studio<\/option><\/select>/);
+  assert.ok(!/<form[^>]*action=/.test(html.match(/<form id="df"[^>]*>/)[0]), 'form tidak dikirim ke server');
+  // Kontak bukan wa.me / tanpa kontak: tidak ada form, halaman tetap jadi.
+  const web = hub.build(Object.assign({}, CFG, { contactUrl: 'https://contoh.com/kontak' })).files['index.html'];
+  assert.ok(!web.includes('id="df"') && web.includes('daftar-alt') && web.includes('href="https://contoh.com/kontak"'));
+  const none = hub.build({ coaches: [] }).files['index.html'];
+  assert.ok(!none.includes('id="df"') && none.includes('daftar-alt') && !none.includes('Hubungi XNK'));
+  // Instagram (opsional).
+  assert.ok(!html.includes('instagram.com'), 'tanpa instagramUrl tidak ada tautan');
+  const ig = hub.build(Object.assign({}, CFG, { instagramUrl: 'https://www.instagram.com/jiz.dan/' })).files['index.html'];
+  assert.ok(ig.includes('href="https://www.instagram.com/jiz.dan/" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-insta"/></svg>@jiz.dan</a>'));
+  assert.ok(ig.includes('<a href="https://www.instagram.com/jiz.dan/" rel="noopener">Instagram</a>'), 'tautan di kaki halaman');
+  for (const bad of ['javascript:alert(1)', 'http://instagram.com/jiz', 'https://evil.com/instagram.com/x', 'https://instagram.com/a"b', 'https://instagram.com/']) {
+    assert.throws(() => hub.readHub({ coaches: [], instagramUrl: bad }), /instagramUrl/, bad);
+  }
+  // Coba demo: demo xnk.my.id (data contoh), tab baru.
+  assert.ok(html.includes('href="https://xnk.my.id/demo/" target="_blank" rel="noopener"'));
+  assert.ok(html.includes('href="https://xnk.my.id/demo/?klien" target="_blank" rel="noopener"'));
+  for (const im of ['img/coach-klien.jpg', 'img/coach-laporan.jpg']) assert.ok(html.includes(`src="${im}"`) && im in hub.build(CFG).files, im);
+});
+
+test('landing: data terstruktur, robots.txt dan sitemap.xml', () => {
+  const cfg = { contactUrl: CFG.contactUrl, coaches: CFG.coaches.concat([
+    { slug: 'budi', brand: 'Budi', exec: EXEC(3), inactive: true },
+    { slug: 'andi-baru', brand: 'Andi <b>', exec: EXEC(4), aliases: ['andi'] },
+  ]) };
+  const { files } = hub.build(cfg);
+  const html = files['index.html'];
+  const ld = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  assert.equal(ld.length, 2);
+  for (const t of ld) assert.ok(!t.includes('<'), 'tanpa < mentah');
+  const [app, faq] = ld.map(t => JSON.parse(t));
+  assert.equal(app['@type'], 'SoftwareApplication');
+  assert.deepEqual(app.offers.map(o => [o.name, Number(o.price), o.priceCurrency]), harga.TIERS.map(t => [t.name, t.bulanan, 'IDR']));
+  assert.equal(faq['@type'], 'FAQPage');
+  assert.equal(faq.mainEntity.length, (html.match(/<details><summary>/g) || []).length);
+  assert.ok(faq.mainEntity.every(q => q.name && q.acceptedAnswer.text && !/<|&amp;/.test(q.name + q.acceptedAnswer.text)));
+  // CSP: data terstruktur tidak dijalankan, jadi tidak perlu sidik; skrip yang dijalankan tetap bersidik.
+  assert.ok(!/script-src[^;]*unsafe-inline/.test(html));
+  const robots = files['robots.txt'];
+  for (const l of ['Disallow: /adminxnk/', 'Disallow: /claudia/', 'Allow: /claudia/info/', 'Allow: /andi-baru/info/', 'Sitemap: https://xnk.web.id/sitemap.xml']) assert.ok(robots.split('\n').includes(l), l);
+  assert.ok(!robots.includes('/budi/') && !robots.includes('/andi/'), 'coach tidak aktif dan alamat lama tidak disebut (noindex sendiri)');
+  const locs = [...files['sitemap.xml'].matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
+  assert.deepEqual(locs, ['https://xnk.web.id/', 'https://xnk.web.id/claudia/info/', 'https://xnk.web.id/claudia-2/info/', 'https://xnk.web.id/andi-baru/info/']);
 });
