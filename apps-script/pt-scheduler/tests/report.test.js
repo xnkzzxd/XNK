@@ -64,3 +64,32 @@ test('an empty period still answers with a friendly sentence', () => {
   assert.equal(r.latihan.hari, 0);
   assert.ok(r.teks.ringkas.length >= 1);
 });
+
+// AD5 (T-2450): skor, hal terbaik, fokus, analisis
+test('AD5: score from pillars, wins, at most two focus items, explained sections', () => {
+  const { env, ani, admin } = setup();
+  env.call('saveWorkoutLog', admin, 'PT-A', day(env, -20), '', [{ gerakan: 'Leg press', sets: [{ berat: 80, rep: 10 }] }, { gerakan: 'Bench press', sets: [{ berat: 40, rep: 8 }] }]);
+  env.call('saveWorkoutLog', admin, 'PT-A', day(env, -3), '', [{ gerakan: 'Leg press', sets: [{ berat: 90, rep: 10 }] }, { gerakan: 'Bench press', sets: [{ berat: 45, rep: 8 }] }]);
+  env.call('saveMemberMeasurement', admin, 'PT-A', { tanggal: day(env, -25), berat: 72, pinggang: 82 });
+  env.call('saveMemberMeasurement', admin, 'PT-A', { tanggal: day(env, -2), berat: 71, pinggang: 80 });
+  const r = j(env.call('getMyReport', ani, {}));
+  assert.ok(r.skor.total >= 0 && r.skor.total <= 100);
+  const kek = r.skor.pilar.find(p => p.key === 'kekuatan');
+  assert.ok(kek.skor >= 75 && kek.status === 'baik', 'both lifts went up');
+  assert.ok(r.skor.pilar.find(p => p.key === 'tubuh').skor != null);
+  assert.ok(r.menang.length >= 1 && r.menang.length <= 3);
+  assert.ok(r.fokus.length >= 1 && r.fokus.length <= 2);
+  assert.ok(/^Artinya:/.test(r.analisis.kekuatan.tafsir) && /^Artinya:/.test(r.analisis.volume.tafsir));
+  assert.ok(r.analisis.volume.otot.some(o => o.key === 'kaki'));
+  assert.equal(r.latihan.angkatanSemua.length, 2);
+  assert.ok(!/"rpe"/.test(JSON.stringify(r)));
+});
+
+test('AD5: no data = no pillar scores and a friendly verdict', () => {
+  const { env } = setup();
+  const R = j(env.call('_reportRange_', {}, '2026-11-26'));
+  const r = j(env.call('_reportCalc_', { name: 'X', today: '2026-11-26', range: R, sessions: [], workoutRows: [], progress: [], measures: [], testDefs: [] }));
+  assert.equal(r.skor.total, null);
+  assert.ok(r.skor.pilar.every(p => p.skor === null || p.key === 'konsistensi'));
+  assert.ok(r.fokus.length >= 1);
+});

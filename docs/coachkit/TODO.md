@@ -38,3 +38,8 @@ Build order: AD2 → AD1 → AD3 → AD4. Each task: tests, checks (Agent.md §5
 - [x] **T-2442** Page layout on canvas (cover, ringkasan, kehadiran, latihan, tubuh, makan, dari coach, rencana) with the share-card helpers; accent from the page.
 - [x] **T-2443** `#sheet-report` (period, sections, coach message draft), preview, Bagikan / Unduh; buttons on portal Progres, Saya (phone and desktop) and the client page (Ringkasan). No separate Cetak button: the PDF prints from any viewer.
 - [x] **T-2444** `tools/report-check.js` (both modes, margins, Library build with `TEXT_SWAPS` footer).
+
+## AD5 — Clearer client report
+
+- [x] T-2450 Server: pillar score, wins, focus, per-section analysis (`_reportAnalysis_`), tests in `tests/report.test.js`.
+- [x] T-2451 PDF layout: one-page summary + explained detail pages.

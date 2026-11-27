@@ -14848,7 +14848,7 @@
     optimistic({ q: { mode: 'admin', fn: 'logClientFood', args: [memberId, entry] }, sheet: true, label: 'Catat makanan', ok: 'Tercatat untuk klien.',
       then: function (r) { cfApply(memberId, r); } });
   };
-  // ═══ Fase AD4 (T-2441…T-2443): laporan PDF, dibuat hanya saat tombol ditekan ═══
+  // ═══ Fase AD4 (T-2441…T-2443) + AD5 (T-2451): laporan PDF, dibuat hanya saat tombol ditekan ═══
   // Server (Laporan.gs: getMyReport / getMemberReport) mengirim angka + kalimat; di sini halaman A4 digambar di kanvas
   // (150 dpi, 1240 × 1754), tiap halaman jadi JPEG, lalu disusun jadi PDF dengan penulis kecil sendiri (tanpa pustaka).
   // Tidak ada yang disimpan di server atau diunggah. Pilihan bagian disimpan di perangkat (xnk_report_prefs); pesan coach
@@ -15053,85 +15053,263 @@
         if (label) text(label, 20, 500, MUT);
       }
 
-      newPage();
-      // Sampul: pita hitam dengan nama dan periode
-      c.fillStyle = INK; rpRound(c, RP_M, RP_M, contentW, 300, 36); c.fill();
-      c.fillStyle = A; c.fillRect(RP_M + 48, RP_M + 54, 80, 10);
-      c.font = RPF(700, 26); c.fillStyle = '#d8d8d8'; c.fillText('LAPORAN PROGRES', RP_M + 48, RP_M + 112);
-      c.font = RPF(400, 84, 'big'); c.fillStyle = '#ffffff'; c.fillText(String(d.name || '').toUpperCase().slice(0, 22), RP_M + 48, RP_M + 200);
-      c.font = RPF(600, 28); c.fillStyle = '#d8d8d8';
-      c.fillText(pgLabel(d.periode.from) + ' – ' + pgLabel(d.periode.to) + ' · ' + d.periode.days + ' hari' + (d.coach ? ' · ' + window.coachLabel(d.coach) : ''), RP_M + 48, RP_M + 252);
-      y = RP_M + 340;
-      if (msg) {   // pesan coach paling depan (paling dibaca)
-        section('Dari coach');
-        const mh = wrap(msg, RPF(500, 30), contentW - 60).length * 44 + 48;
-        need(mh); c.fillStyle = SOFT; rpRound(c, x, y, contentW, mh, 22); c.fill();
-        const y0 = y; y += 24; text(msg, 30, 500, INK, { x: x + 30, w: contentW - 60 }); y = Math.max(y, y0 + mh) + 24;
+      // ── AD5 (T-2451) alat gambar tambahan
+      const STC = { baik: A, cukup: '#8a8a8a', perlu: INK }, STL = { baik: 'Baik', cukup: 'Cukup', perlu: 'Perlu perhatian' };
+      function pill(px0, py0, label, bg, fg) {
+        c.font = RPF(700, 20); const w = c.measureText(label).width + 32;
+        c.fillStyle = bg; rpRound(c, px0, py0, w, 38, 19); c.fill(); c.fillStyle = fg; c.fillText(label, px0 + 16, py0 + 26); return w;
       }
-      section('Ringkasan');
+      function callout(t) {
+        if (!t) return;
+        const lines = wrap(t, RPF(500, 25), contentW - 70), hh = lines.length * 36 + 40;
+        need(hh + 16); c.fillStyle = SOFT; rpRound(c, x, y, contentW, hh, 18); c.fill();
+        c.fillStyle = A; c.fillRect(x, y + 14, 8, hh - 28);
+        const y0 = y; y += 18; text(t, 25, 500, INK, { x: x + 40, w: contentW - 70 }); y = y0 + hh + 16;
+      }
+      function lead(t) { if (t) { text(t, 30, 700, INK); gap(10); } }
+      function gauge(score, status, vonis) {
+        const hh = 280; need(hh + 10);
+        const cx0 = x + 190, cy0 = y + 210, r = 155;
+        c.lineCap = 'round'; c.lineWidth = 34;
+        c.strokeStyle = LINE; c.beginPath(); c.arc(cx0, cy0, r, Math.PI, 2 * Math.PI); c.stroke();
+        if (score != null) { c.strokeStyle = A; c.beginPath(); c.arc(cx0, cy0, r, Math.PI, Math.PI + Math.PI * Math.max(0.02, score / 100)); c.stroke(); }
+        c.lineCap = 'butt';
+        c.textAlign = 'center'; c.font = RPF(400, 110, 'big'); c.fillStyle = INK; c.fillText(score == null ? '–' : String(score), cx0, cy0 - 10);
+        c.font = RPF(600, 22); c.fillStyle = MUT; c.fillText('dari 100', cx0, cy0 + 26); c.textAlign = 'left';
+        const tx = x + 470, tw = contentW - 470, y0 = y;
+        y += 50;
+        text('SKOR PERIODE INI', 22, 800, MUT, { x: tx, w: tw });
+        gap(6);
+        if (status) { pill(tx, y, STL[status], STC[status], status === 'cukup' ? '#ffffff' : (status === 'baik' ? '#ffffff' : '#ffffff')); y += 54; }
+        text(vonis, 32, 700, INK, { x: tx, w: tw });
+        y = Math.max(y, y0 + hh);
+      }
+      function pillars(list) {
+        const ps = list.filter(p => p.skor != null); if (!ps.length) return;
+        const cols = 2, gw = 20, tw = (contentW - gw) / cols, th = 196;
+        for (let i = 0; i < ps.length; i += cols) {
+          need(th + gw);
+          ps.slice(i, i + cols).forEach(function (p, k) {
+            const tx = x + k * (tw + gw);
+            c.fillStyle = SOFT; rpRound(c, tx, y, tw, th, 22); c.fill();
+            c.font = RPF(800, 28); c.fillStyle = INK; c.fillText(p.label, tx + 26, y + 50);
+            c.font = RPF(400, 56, 'big'); c.textAlign = 'right'; c.fillText(String(p.skor), tx + tw - 26, y + 62); c.textAlign = 'left';
+            c.fillStyle = LINE; rpRound(c, tx + 26, y + 80, tw - 52, 12, 6); c.fill();
+            c.fillStyle = STC[p.status]; rpRound(c, tx + 26, y + 80, Math.max(12, (tw - 52) * p.skor / 100), 12, 6); c.fill();
+            const ls = wrap(p.kalimat, RPF(500, 23), tw - 52).slice(0, 3);
+            c.font = RPF(500, 23); c.fillStyle = INK; ls.forEach((ln, li) => c.fillText(ln, tx + 26, y + 130 + li * 30));
+          });
+          y += th + gw;
+        }
+      }
+      function wins(list) {
+        if (!list.length) return;
+        const n = list.length, gw = 24, tw = (contentW - gw * (n - 1)) / n, th = 226;
+        need(th + 20);
+        list.forEach(function (w, k) {
+          const tx = x + k * (tw + gw);
+          c.strokeStyle = LINE; c.lineWidth = 3; rpRound(c, tx, y, tw, th, 22); c.stroke();
+          c.fillStyle = A; c.fillRect(tx + 24, y + 26, 46, 8);
+          c.font = RPF(400, 58, 'big'); c.fillStyle = INK; c.fillText(String(w.angka), tx + 24, y + 104);
+          c.font = RPF(800, 24); c.fillText(String(w.judul).slice(0, 26), tx + 24, y + 144);
+          c.font = RPF(500, 21); c.fillStyle = MUT; wrap(w.kalimat, RPF(500, 21), tw - 48).slice(0, 2).forEach((ln, li) => c.fillText(ln, tx + 24, y + 180 + li * 28));
+        });
+        y += th + 24;
+      }
+      function deltas(list) {   // ukuran awal → akhir: dua titik di satu garis, panah ke arah perubahan
+        list.forEach(function (u) {
+          need(90);
+          c.font = RPF(700, 26); c.fillStyle = INK; c.fillText(u.label, x, y + 34);
+          const bx = x + 260, bw = contentW - 520, a0 = Number(u.awal), a1 = Number(u.akhir);
+          const lo = Math.min(a0, a1), hi = Math.max(a0, a1), pad = Math.max((hi - lo) * 0.6, Math.abs(hi) * 0.02, 0.5);
+          const px = v => bx + bw * (v - (lo - pad)) / ((hi + pad) - (lo - pad));
+          c.strokeStyle = LINE; c.lineWidth = 6; c.lineCap = 'round'; c.beginPath(); c.moveTo(bx, y + 26); c.lineTo(bx + bw, y + 26); c.stroke();
+          if (a0 !== a1) { c.strokeStyle = A; c.lineWidth = 6; c.beginPath(); c.moveTo(px(a0), y + 26); c.lineTo(px(a1), y + 26); c.stroke(); }
+          c.lineCap = 'butt';
+          c.fillStyle = '#ffffff'; c.strokeStyle = MUT; c.lineWidth = 4; c.beginPath(); c.arc(px(a0), y + 26, 11, 0, Math.PI * 2); c.fill(); c.stroke();
+          c.fillStyle = A; c.beginPath(); c.arc(px(a1), y + 26, 13, 0, Math.PI * 2); c.fill();
+          c.font = RPF(500, 20); c.fillStyle = MUT; c.textAlign = 'center';
+          c.fillText(rpN(a0), px(a0), y + 70); if (a0 !== a1) { c.fillStyle = INK; c.fillText(rpN(a1), px(a1), y + 70); }
+          c.textAlign = 'right'; c.font = RPF(800, 28); c.fillStyle = INK; c.fillText(u.ubah ? rpDelta(u.ubah) + ' ' + u.unit : 'tetap', x + contentW, y + 38); c.textAlign = 'left';
+          y += 92;
+        });
+        text('Titik putih = awal periode · titik penuh = terakhir', 20, 500, MUT); gap(8);
+      }
+      function hbars(list, unitFn) {   // batang mendatar: sekarang (aksen) vs periode lalu (abu)
+        if (!list.length) return;
+        const mx = Math.max.apply(null, list.map(o => Math.max(o.v, o.prev || 0))) || 1, bx = x + 250, bw = contentW - 420;
+        list.forEach(function (o) {
+          need(64);
+          c.font = RPF(600, 24); c.fillStyle = INK; c.fillText(o.label, x, y + 30);
+          if (o.prev) { c.fillStyle = LINE; rpRound(c, bx, y + 36, Math.max(6, bw * o.prev / mx), 10, 5); c.fill(); }
+          c.fillStyle = A; rpRound(c, bx, y + 12, Math.max(6, bw * o.v / mx), 20, 8); c.fill();
+          c.textAlign = 'right'; c.font = RPF(700, 22); c.fillText(unitFn(o.v), x + contentW, y + 30); c.textAlign = 'left';
+          y += 64;
+        });
+        text('Batang warna = periode ini · garis abu = periode sebelumnya', 20, 500, MUT); gap(8);
+      }
+      function vbars(list, ref, label) {   // batang tegak per minggu dengan garis rata-rata periode lalu
+        if (!list.length) return;
+        const hh = 240, mx = Math.max(ref || 0, Math.max.apply(null, list.map(b => b.v))) || 1, bw = Math.min(90, (contentW - (list.length - 1) * 14) / list.length);
+        need(hh + 40);
+        list.forEach(function (b, i) {
+          const bx = x + i * (bw + 14), bh = Math.round((hh - 70) * b.v / mx);
+          c.fillStyle = b.dim || !b.v ? LINE : A; rpRound(c, bx, y + hh - 40 - Math.max(bh, 6), bw, Math.max(bh, 6), 10); c.fill();
+          c.font = RPF(600, 18); c.fillStyle = MUT; c.textAlign = 'center'; c.fillText(b.l, bx + bw / 2, y + hh - 10);
+          if (b.v) { c.fillStyle = INK; c.fillText(b.t || rpN(b.v, 0), bx + bw / 2, y + hh - 50 - bh); }
+          c.textAlign = 'left';
+        });
+        if (ref) {
+          const ry = y + hh - 40 - Math.round((hh - 70) * ref / mx);
+          c.setLineDash([12, 10]); c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.moveTo(x, ry); c.lineTo(x + contentW, ry); c.stroke(); c.setLineDash([]);
+        }
+        y += hh + 6;
+        if (label) text(label, 20, 500, MUT);
+        gap(8);
+      }
+      function spark(pts, sx, sy, sw, sh) {
+        if (!pts || pts.length < 2) return;
+        const vs = pts.map(p => Number(p.v)), mn = Math.min.apply(null, vs), mx = Math.max.apply(null, vs), span = (mx - mn) || 1;
+        c.strokeStyle = A; c.lineWidth = 4; c.lineJoin = 'round'; c.beginPath();
+        pts.forEach(function (p, i) { const px = sx + sw * i / (pts.length - 1), py = sy + sh - sh * (Number(p.v) - mn) / span; if (i) c.lineTo(px, py); else c.moveTo(px, py); }); c.stroke();
+      }
+
+      const S = d.skor || {}, AN = d.analisis || {};
+      newPage();
+      // ═══ Halaman 1: ringkasan satu halaman ═══
+      c.fillStyle = INK; rpRound(c, RP_M, RP_M, contentW, 260, 36); c.fill();
+      c.fillStyle = A; c.fillRect(RP_M + 48, RP_M + 50, 80, 10);
+      c.font = RPF(700, 26); c.fillStyle = '#d8d8d8'; c.fillText('LAPORAN PROGRES', RP_M + 48, RP_M + 106);
+      c.font = RPF(400, 80, 'big'); c.fillStyle = '#ffffff'; c.fillText(String(d.name || '').toUpperCase().slice(0, 22), RP_M + 48, RP_M + 186);
+      c.font = RPF(600, 26); c.fillStyle = '#d8d8d8';
+      c.fillText(pgLabel(d.periode.from) + ' – ' + pgLabel(d.periode.to) + ' · ' + d.periode.days + ' hari' + (d.coach ? ' · ' + window.coachLabel(d.coach) : ''), RP_M + 48, RP_M + 232);
+      y = RP_M + 290;
+      gauge(S.total, S.status, S.vonis || '');
+      pillars(S.pilar || []);
+      if ((d.menang || []).length) { section('Hal terbaik'); wins(d.menang); }
+      section('Fokus berikutnya');
+      (d.fokus || []).forEach(function (f, i) {
+        const ls = wrap(f.kalimat, RPF(500, 26), contentW - 90), hh = 48 + ls.length * 36;
+        need(hh + 14);
+        c.fillStyle = A; c.beginPath(); c.arc(x + 26, y + 30, 24, 0, Math.PI * 2); c.fill();
+        c.font = RPF(800, 26); c.fillStyle = '#ffffff'; c.textAlign = 'center'; c.fillText(String(i + 1), x + 26, y + 39); c.textAlign = 'left';
+        c.font = RPF(800, 26); c.fillStyle = INK; c.fillText(f.judul, x + 70, y + 38);
+        c.font = RPF(500, 26); ls.forEach((ln, li) => c.fillText(ln, x + 70, y + 76 + li * 36));
+        y += hh + 14;
+      });
+      if (msg) {   // pesan coach
+        gap(10); section('Dari coach');
+        const mh = wrap(msg, RPF(500, 28), contentW - 60).length * 40 + 44;
+        need(mh); c.fillStyle = SOFT; rpRound(c, x, y, contentW, mh, 22); c.fill();
+        const y0 = y; y += 22; text(msg, 28, 500, INK, { x: x + 30, w: contentW - 60 }); y = Math.max(y, y0 + mh) + 20;
+      }
+
+      // ═══ Halaman detail ═══
+      const block = function (title, minH) { if (y + minH > bottom) newPage(); else gap(28); section(title); };
+      newPage();
+      text('RINCIAN', 22, 800, MUT); gap(4);
+      text('Tiap bagian: satu kalimat inti, satu grafik, lalu "Artinya" untuk membacanya.', 26, 500, MUT); gap(16);
+      section('Angka utama');
       tiles((d.headline || []).map(function (t) {
         const unit = t.unit ? ' ' + t.unit : '';
         const val = t.key === 'volume' ? (t.value >= 10000 ? rpN(t.value / 1000, 1) + ' t' : rpN(t.value, 0) + ' kg') : t.of ? t.value + '/' + t.of : rpN(t.value) + (t.change ? unit : '');
-        const sub = t.change ? (t.delta ? rpDelta(t.delta) + unit + ' sejak awal' : 'tetap') : (t.prev != null ? (t.delta ? rpDelta(t.delta) + ' dari periode lalu' : 'sama dengan periode lalu') : '');
+        const dl = t.key === 'volume' && t.delta ? (Math.abs(t.delta) >= 1000 ? rpDelta(Math.round(t.delta / 100) / 10) + ' t' : rpDelta(t.delta) + ' kg') : rpDelta(t.delta);
+        const sub = t.change ? (t.delta ? rpDelta(t.delta) + unit + ' sejak awal' : 'tetap') : (t.prev != null ? (t.delta ? dl + ' dari periode lalu' : 'sama dgn periode lalu') : '');
         return { label: t.label, value: val, sub: sub };
       }));
-      (d.teks.ringkas || []).forEach(function (t) { text('• ' + t, 28, 500, INK); gap(4); });
-      gap(18);
-      section('Rencana ke depan');
-      (d.teks.lanjut || []).forEach(function (t) { text('→ ' + t, 28, 600, INK); gap(4); });
-
-      // Bagian baru mulai di halaman baru hanya bila sisa ruang tidak cukup (halaman tidak setengah kosong).
-      const block = function (title, minH) { if (y + minH > bottom) newPage(); else gap(24); section(title); };
       if (rp.sec.kehadiran) {
+        const K = AN.kehadiran || {};
         block('Kehadiran', 640);
-        tiles([{ label: 'Sesi selesai', value: String(d.kehadiran.sesi), sub: d.kehadiran.sesiPrev != null ? 'periode lalu ' + d.kehadiran.sesiPrev : '' },
-          { label: 'Streak', value: d.kehadiran.streak + ' mgg', sub: 'terbaik ' + d.kehadiran.bestStreak + ' minggu' }]);
-        bars((d.kehadiran.minggu || []).map(w => ({ l: pgLabel(w.minggu), v: w.sesi, dim: w.cuti })), 'Sesi dengan coach per minggu (mulai Senin; abu-abu = minggu cuti).');
-        rpCalendar(d, A, INK, MUT, LINE, SOFT);
+        lead(d.kehadiran.sesi + ' sesi selesai · rata-rata ' + rpN(K.perMinggu) + ' per minggu · streak ' + d.kehadiran.streak + ' minggu (terbaik ' + d.kehadiran.bestStreak + ').');
+        vbars((d.kehadiran.minggu || []).map(w => ({ l: pgLabel(w.minggu), v: w.sesi, dim: w.cuti })), 0, 'Sesi dengan coach per minggu (mulai Senin). Abu-abu = minggu cuti.');
+        rpCalendar();
         (d.cuti || []).forEach(function (h) { text((h.jenis === 'sakit' ? 'Sakit' : h.jenis === 'berhenti' ? 'Nonaktif' : 'Cuti') + ': ' + pgLabel(h.mulai) + (h.sampai !== h.mulai ? ' – ' + pgLabel(h.sampai) : ''), 24, 500, MUT); });
+        callout(K.tafsir);
       }
       function rpCalendar() {
         const cal = d.kehadiran.calendar || {}, from = d.periode.from, to = d.periode.to;
         const cell = 46, gp = 8, perRow = Math.floor((contentW + gp) / (cell + gp));
         let n = 0; for (let t = from; t <= to; t = wkAddDays(t, 1)) n++;
         const rowsN = Math.ceil(Math.min(n, 140) / perRow);
-        need(rowsN * (cell + gp) + 60);
+        need(rowsN * (cell + gp) + 70);
         let i = 0;
         for (let t = from; t <= to && i < 140; t = wkAddDays(t, 1), i++) {
           const cx = x + (i % perRow) * (cell + gp), cy = y + Math.floor(i / perRow) * (cell + gp), k = cal[t];
           c.fillStyle = k === 'sesi' ? INK : k === 'latihan' ? A : k === 'makan' ? LINE : SOFT;
           rpRound(c, cx, cy, cell, cell, 10); c.fill();
         }
-        y += rowsN * (cell + gp) + 10;
-        text('Hitam = sesi dengan coach · warna = latihan sendiri · abu = catat makan saja', 20, 500, MUT);
-        gap(10);
+        y += rowsN * (cell + gp) + 8;
+        let lx = x;
+        [['Sesi coach', INK], ['Latihan sendiri', A], ['Catat makan', LINE], ['Kosong', SOFT]].forEach(function (L) {
+          c.fillStyle = L[1]; rpRound(c, lx, y + 4, 28, 28, 7); c.fill();
+          c.font = RPF(600, 20); c.fillStyle = MUT; c.fillText(L[0], lx + 38, y + 26); lx += 48 + c.measureText(L[0]).width + 30;
+        });
+        y += 50;
       }
       if (rp.sec.latihan) {
-        block('Latihan', 560);
-        const L = d.latihan;
-        tiles([{ label: 'Hari latihan', value: String(L.hari) }, { label: 'Set', value: rpN(L.set, 0) }, { label: 'Volume', value: L.volume >= 10000 ? rpN(L.volume / 1000, 1) + ' t' : rpN(L.volume, 0) + ' kg', sub: L.volumePrev ? 'periode lalu ' + rpN(L.volumePrev, 0) + ' kg' : '' }]);
-        (L.angkatan || []).forEach(function (a) {
-          need(a.titik && a.titik.length > 1 ? 400 : 60);   // judul tidak terpisah dari grafiknya
-          text(a.gerakan + ' · estimasi 1RM ' + rpN(a.awal) + ' → ' + rpN(a.akhir) + ' kg' + (a.pct ? ' (' + (a.pct > 0 ? '+' : '') + a.pct + '%)' : ''), 28, 700, INK);
-          line(a.titik, 'estimasi 1RM', 'kg');
-        });
-        if ((L.rekor || []).length) { text('Rekor pribadi', 26, 700, INK); L.rekor.forEach(r => text('🏆 ' + r.gerakan + ' · ' + pgLabel(r.tanggal), 24, 500, INK)); gap(10); }
-        if ((L.otot || []).length) bars(L.otot.map(o => ({ l: String(o.part).slice(0, 9), v: Math.round(o.volume) })), 'Volume per bagian tubuh (4 minggu terakhir periode).');
-        if (!L.hari) text('Belum ada latihan yang dicatat di periode ini.', 26, 500, MUT);
+        const L = d.latihan, all = L.angkatanSemua || L.angkatan || [];
+        block('Kekuatan', 520);
+        const up = all.filter(a => a.kali >= 2 && a.pct > 0).length;
+        lead(all.length ? up + ' dari ' + all.length + ' gerakan makin kuat' + ((L.rekor || []).length ? ' · ' + L.rekor.length + ' rekor pribadi.' : '.') : 'Belum ada latihan beban yang dicatat.');
+        if (all.length) {
+          table([['Gerakan', 'Set terbaik', 'Perkiraan maks.', 'Perubahan']].concat(all.map(a => [String(a.gerakan).slice(0, 26), a.terbaik ? rpN(a.terbaik.berat) + ' kg × ' + a.terbaik.rep : '–', rpN(a.akhir) + ' kg', a.kali >= 2 ? (a.pct > 0 ? '+' : '') + a.pct + '% ' + (a.pct > 0 ? '↑' : a.pct < 0 ? '↓' : '→') : 'baru 1×'])), [0.4, 0.2, 0.2, 0.2]);
+          const ch = all.filter(a => a.titik && a.titik.length > 1).slice(0, 3);
+          if (ch.length) {
+            const gw = 24, tw = (contentW - gw * (ch.length - 1)) / ch.length, th = 230; need(th + 20);
+            ch.forEach(function (a, k) {
+              const tx = x + k * (tw + gw);
+              c.fillStyle = SOFT; rpRound(c, tx, y, tw, th, 20); c.fill();
+              c.font = RPF(700, 22); c.fillStyle = INK; c.fillText(String(a.gerakan).slice(0, 22), tx + 20, y + 40);
+              spark(a.titik, tx + 24, y + 70, tw - 48, 100);
+              c.font = RPF(600, 20); c.fillStyle = MUT; c.fillText(rpN(a.awal) + ' kg', tx + 20, y + 206);
+              c.textAlign = 'right'; c.fillStyle = INK; c.fillText(rpN(a.akhir) + ' kg', tx + tw - 20, y + 206); c.textAlign = 'left';
+            });
+            y += th + 20;
+          }
+          if ((L.rekor || []).length) { text('Rekor pribadi: ' + L.rekor.map(r => r.gerakan + ' (' + pgLabel(r.tanggal) + ')').join(' · '), 22, 600, INK); gap(8); }
+        }
+        callout((AN.kekuatan || {}).tafsir);
+        const V = AN.volume || {};
+        if (L.hari) {
+          block('Volume & keseimbangan', 560);
+          lead(L.hari + ' hari latihan · ' + rpN(L.set, 0) + ' set · ' + (L.volume >= 10000 ? rpN(L.volume / 1000, 1) + ' ton' : rpN(L.volume, 0) + ' kg') + ' total' + (L.volumePrev ? ' (periode lalu ' + (L.volumePrev >= 10000 ? rpN(L.volumePrev / 1000, 1) + ' ton' : rpN(L.volumePrev, 0) + ' kg') + ').' : '.'));
+          const kt = v => v >= 10000 ? rpN(v / 1000, 1) + 't' : rpN(v / 1000, 1) + 't';
+          vbars((V.mingguan || []).map(w => ({ l: pgLabel(w.minggu), v: w.v, t: kt(w.v), dim: w.cuti })), V.rataPrev, 'Volume per minggu (ton). Garis putus = rata-rata per minggu periode sebelumnya.');
+          if ((V.otot || []).length) { text('Per bagian tubuh', 26, 800, INK); gap(6); hbars(V.otot, v => (v >= 1000 ? rpN(v / 1000, 1) + ' t' : rpN(v, 0) + ' kg')); }
+          callout(V.tafsir);
+        }
       }
       if (rp.sec.tubuh) {
+        const T = AN.tubuh || {};
         block('Tubuh', 520);
+        const lb = (T.laju || []).find(l => l.key === 'berat');
+        lead((d.tubuh.ukuran || []).length ? (lb ? 'Berat ' + rpDelta(lb.perMinggu) + ' kg per minggu.' : 'Ukuran tubuh periode ini.') : 'Belum ada ukuran tubuh di periode ini.');
         line(d.tubuh.berat, 'berat badan', 'kg');
-        if ((d.tubuh.ukuran || []).length) table([['Ukuran', 'Awal', 'Akhir', 'Perubahan']].concat(d.tubuh.ukuran.map(u => [u.label, rpN(u.awal) + ' ' + u.unit, rpN(u.akhir) + ' ' + u.unit, u.ubah ? rpDelta(u.ubah) + ' ' + u.unit : 'tetap'])), [0.4, 0.2, 0.2, 0.2]);
-        else text('Belum ada ukuran tubuh yang dicatat di periode ini.', 26, 500, MUT);
-        if ((d.tes || []).length) { gap(10); text('Tes kebugaran', 30, 800, INK); gap(6); table([['Tes', 'Sebelumnya', 'Terakhir', 'Perubahan']].concat(d.tes.map(t => [t.label, t.awal == null ? '–' : rpN(t.awal), rpN(t.akhir) + ' ' + String(t.unit).split(' ')[0], t.ubah == null ? '–' : rpDelta(t.ubah) + (t.membaik ? ' ✓' : '')])), [0.4, 0.2, 0.2, 0.2]); }
+        deltas(d.tubuh.ukuran || []);
+        if ((d.tes || []).length) { gap(6); text('Tes kebugaran', 28, 800, INK); gap(6); table([['Tes', 'Sebelumnya', 'Terakhir', 'Hasil']].concat(d.tes.map(t => [t.label, t.awal == null ? '–' : rpN(t.awal), rpN(t.akhir) + ' ' + String(t.unit).split(' ')[0], t.ubah == null ? 'tes pertama' : t.membaik ? 'membaik ' + rpDelta(t.ubah) : t.ubah === 0 ? 'tetap' : 'turun ' + rpDelta(t.ubah)])), [0.4, 0.2, 0.2, 0.2]); }
+        callout(T.tafsir);
       }
       if (rp.sec.makan && d.makan) {
-        block('Makan', 330);
-        const M = d.makan;
-        tiles([{ label: 'Hari tercatat', value: M.hari + '/' + M.dari }, { label: 'Rata-rata kalori', value: rpN(M.kal, 0), sub: M.targetKal ? 'target ' + rpN(M.targetKal, 0) + ' kkal' : 'kkal' },
-          { label: 'Protein', value: rpN(M.protein, 0) + ' g', sub: M.targetProtein ? 'target ' + rpN(M.targetProtein, 0) + ' g' : '' }]);
-        if (M.proteinCukup != null && M.hari) text('Protein cukup di ' + M.proteinCukup + ' dari ' + M.hari + ' hari yang tercatat.', 26, 500, INK);
+        const M = d.makan, MD = AN.makan || {};
+        block('Makan', 520);
+        lead('Tercatat ' + M.hari + ' dari ' + M.dari + ' hari · rata-rata ' + rpN(M.kal, 0) + ' kkal' + (M.targetKal ? ' (target ' + rpN(M.targetKal, 0) + ')' : '') + ' · protein ' + rpN(M.protein, 0) + ' g' + (M.targetProtein ? ' (target ' + rpN(M.targetProtein, 0) + ')' : '') + '.');
+        const hk = (MD.hariKal || []).slice(-28);
+        if (hk.length >= 3) {
+          const hh = 240, tg = M.targetKal || 0, mx = Math.max(tg * 1.3, Math.max.apply(null, hk.map(h => h.v))) || 1, bw = Math.min(36, (contentW - (hk.length - 1) * 6) / hk.length);
+          need(hh + 40);
+          const py = v => y + hh - 30 - (hh - 50) * v / mx;
+          if (tg) { c.fillStyle = SOFT; c.fillRect(x, py(tg * 1.1), contentW, py(tg * 0.9) - py(tg * 1.1)); }
+          hk.forEach(function (h, i) {
+            const bx = x + i * (bw + 6), inBand = tg && Math.abs(h.v - tg) <= tg * 0.1;
+            c.fillStyle = inBand || !tg ? A : MUT; rpRound(c, bx, py(h.v), bw, Math.max(4, y + hh - 30 - py(h.v)), 6); c.fill();
+          });
+          c.font = RPF(500, 18); c.fillStyle = MUT; c.fillText(pgLabel(hk[0].tanggal), x, y + hh); c.textAlign = 'right'; c.fillText(pgLabel(hk[hk.length - 1].tanggal), x + contentW, y + hh); c.textAlign = 'left';
+          y += hh + 10;
+          text('Tiap batang = satu hari tercatat. Pita abu = target ±10 %; batang warna = pas target.', 20, 500, MUT); gap(8);
+        }
+        tiles([{ label: 'Pas target', value: MD.pasTarget != null ? MD.pasTarget + ' hari' : '–' }, { label: 'Protein cukup', value: M.proteinCukup != null ? M.proteinCukup + ' hari' : '–' },
+          { label: 'Hari kerja / akhir pekan', value: (MD.rataKerja ? rpN(MD.rataKerja, 0) : '–') + ' / ' + (MD.rataAkhirPekan ? rpN(MD.rataAkhirPekan, 0) : '–'), sub: 'kkal rata-rata' }]);
+        callout(MD.tafsir);
       }
       if (rp.sec.catatan && (d.catatan || []).length) {
         block('Catatan sesi', 260);
@@ -15141,6 +15319,10 @@
           if (n.fokus) text('Fokus berikutnya: ' + n.fokus, 26, 500, INK);
           gap(14);
         });
+      }
+      if ((AN.glosarium || []).length) {
+        block('Istilah', 260);
+        AN.glosarium.forEach(g => { text(g[0] + ': ' + g[1], 22, 500, MUT); gap(2); });
       }
       // Kaki halaman: nama merek, nama klien, nomor halaman
       const brand = window.brandName ? window.brandName() : 'XNK';
