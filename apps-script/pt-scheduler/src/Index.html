@@ -796,6 +796,19 @@
       </form>
     </div>
 
+    <!-- Fase AE: pilih / pindah coach klien (hanya pemilik) -->
+    <div class="sheet sm hide" id="sheet-mcoach" role="dialog" aria-modal="true" aria-labelledby="mc-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="mc-title">Pindah coach</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px">
+        <p class="li-sub" id="mc-sub"></p>
+        <div class="stack" style="gap:8px" id="mc-list" role="radiogroup" aria-label="Coach"></div>
+        <div class="row-between" style="gap:12px"><span>Pindahkan juga sesi mendatang</span><label class="toggle"><input type="checkbox" id="mc-move" checked aria-label="Pindahkan juga sesi mendatang"><span></span></label></div>
+        <p class="li-sub">Sesi yang sudah lewat dan tagihan lama tetap tercatat di coach lama. Sesi yang bentrok dengan jadwal coach baru tidak dipindah.</p>
+        <button type="button" class="btn btn-primary btn-block" id="mc-save" onclick="window.mcoachSave()">Simpan</button>
+      </div>
+    </div>
+
     <!-- Nomor belum terdaftar: arahkan ke pilihan paket -->
     <div class="sheet sm hide" id="modal-not-member" role="dialog" aria-modal="true" aria-labelledby="nm-title">
       <div class="sheet-handle"></div>

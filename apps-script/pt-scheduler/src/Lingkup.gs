@@ -43,7 +43,78 @@ const COACH_FNS = {
   saveExpense: ['x'],
   getFinanceCategories: [],
   getFinanceProof: ['x', 'x'],
-  exportFinanceCsv: ['x', 'x', 'x']
+  exportFinanceCsv: ['x', 'x', 'x'],
+  // ── Gelombang 2 (T-2510+) ──
+  // Klien: tambah / perpanjang (coach dipaksa ke coach ini; nomor klien coach lain ditolak), ubah profil.
+  addMember: ['mnew'],
+  updateMemberProfile: ['mo'],
+  setMemberMealReminder: ['m', 'x'],
+  setMemberReminderPrefs: ['m', 'x'],
+  // PR / tugas. Templat hanya dibaca.
+  addTask: ['mo'],
+  updateTask: [['rowo', 'Tasks', 0, 1, 'id']],
+  deleteTask: [['row', 'Tasks', 0, 1]],
+  deleteTaskGroup: [['grp', 'Tasks', 12, 1]],
+  getTasksForMember: ['m'],
+  getTaskTemplates: [],
+  // Program. Templat hanya dibaca dan dipakai.
+  getMemberProgram: ['m'],
+  saveMemberProgram: ['m', 'x'],
+  applyProgramTemplate: ['m', 'x'],
+  regenerateProgram: ['m'],
+  setClientProgramAuto: ['m', 'x'],
+  getProgramGenPreview: ['m'],
+  setFormOk: ['m', 'x', 'x'],
+  getProgramTemplates: [],
+  getManualExercises: [],
+  getGymCatalog: [],
+  // Gizi.
+  getClientNutrition: ['m'],
+  saveClientNutrition: ['m', 'x'],
+  decideNutritionAdvice: ['m', 'x', 'x'],
+  getClientFoodLog: ['m', 'x'],
+  logClientFood: ['m', 'x'],
+  deleteClientFood: ['m', 'x', 'x'],
+  saveFoodFeedback: ['m', 'x', 'x'],
+  // Catat coach (AD3).
+  saveExerciseNote: ['m', 'x', 'x'],
+  deleteWorkoutEntries: ['m', 'x', 'x'],
+  getWorkoutExerciseHistory: ['m', 'x'],
+  getWorkoutSummaryMessage: ['m', 'x'],
+  // Perawatan.
+  getClientCare: ['m'],
+  saveAssessment: ['m', 'x'],
+  saveFitnessTests: ['m', 'x'],
+  deleteFitnessTest: [['row', 'FitnessTests', 0, 1]],
+  markHealthReviewed: ['m', 'x'],
+  snoozeCare: ['m', 'x'],
+  getTestResultMessage: ['m'],
+  // Cuti klien (sesi yang dibatalkan hanya sesi coach ini: Cuti.gs).
+  setClientHold: ['m', 'x', 'x'],
+  endClientHold: [['row', 'ClientHolds', 0, 1]],
+  deleteClientHold: [['row', 'ClientHolds', 0, 1]],
+  decideHoldRequest: [['row', 'ClientHolds', 0, 1], 'x', 'x'],
+  // Booking berulang.
+  addRecurringSchedule: ['so', 'x'],
+  deleteRecurringGroup: ['sg'],
+  // Foto, ukuran, kartu, laporan.
+  getMemberProgressPhoto: [['row', 'ProgressPhotos', 0, 1]],
+  deleteMemberMeasurement: [['row', 'Progress', 0, 1]],
+  getMemberShareData: ['m', 'x', 'x'],
+  getMemberReport: ['m', 'x'],
+  // Perpanjangan: klien sendiri, atau klien yang memilih coach ini.
+  getRenewalRequests: ['x'],
+  decideRenewal: ['rr', 'x'],
+  // Beranda Coach (dihitung untuk coach ini saja).
+  getCoachHub: [],
+  // Keuangan: baris sudah dibatasi _finRead_ (_scopeFinRows_), jadi ID milik coach lain = "tidak ditemukan".
+  archiveFinanceItem: ['x', 'x'],
+  restoreFinanceItem: ['x', 'x'],
+  saveBillAdjust: ['x', 'x'],
+  getFinanceOverview: ['x', 'x'],
+  // Jadwal milik sendiri.
+  getPeakHourData: [],
+  getCoachMonthlyStats: ['x', 'x']
 };
 
 function _coachPinKey_(coachId) { return COACH_PIN_PREFIX + String(coachId); }
@@ -108,6 +179,31 @@ function _coachGate_(fn, args) {
     else if (rule === 's') { if (!_coachOwnsSchedule_(cid, a)) throw new Error('Jadwal tidak ditemukan.'); }
     else if (rule === 'c') { if (String(a) !== cid) throw _ownerOnlyError_(); }
     else if (rule === 'sl') { args[i + 1] = (Array.isArray(a) ? a : []).filter(function(id) { return _coachOwnsSchedule_(cid, id); }); }
+    else if (Array.isArray(rule)) { _coachRowRule_(cid, rule, a); }
+    else if (rule === 'mo') {
+      const o = a && typeof a === 'object' ? a : {};
+      const mid = o.memberId != null ? o.memberId : o.id;
+      if (!_coachOwnsMember_(cid, mid)) throw new Error('Klien tidak ditemukan.');
+      const coach = _coachById_(cid);
+      // Coach tidak bisa memindahkan klien ke coach lain (pindah coach = pemilik, setMemberCoach).
+      args[i + 1] = Object.assign({}, o, o.coachId !== undefined ? { coachId: cid, coachName: coach ? coach.name : '' } : {});
+    }
+    else if (rule === 'mnew') {
+      const o = a && typeof a === 'object' ? a : {};
+      const data = _memberValues_().data;
+      const at = _findMemberRowIndexByPhone_(data, o.phone);
+      if (at !== -1 && String(data[at][10] || '').trim() !== cid) throw new Error('Nomor ini klien coach lain. Hubungi pemilik.');
+      const coach = _coachById_(cid);
+      args[i + 1] = Object.assign({}, o, { coachId: cid, coachName: coach ? coach.name : '' });
+    }
+    else if (rule === 'sg') {
+      const rows = _getSchedulesAll_().filter(function(x) { return String(x.recurringGroupId) === String(a || ''); });
+      if (!rows.length || rows.some(function(x) { return String(x.coachId) !== cid; })) throw new Error('Jadwal tidak ditemukan.');
+    }
+    else if (rule === 'rr') {
+      const row = _sheetRowsByName_('RenewalRequests').filter(function(r) { return String(r[0]) === String(a); })[0];
+      if (!row || !(_coachOwnsMember_(cid, row[1]) || String(row[7] || '') === cid)) throw new Error('Permintaan tidak ditemukan.');
+    }
     else if (rule === 'so') {
       const o = a && typeof a === 'object' ? a : {};
       if (o.id && !_coachOwnsSchedule_(cid, o.id)) throw new Error('Jadwal tidak ditemukan.');
@@ -159,7 +255,7 @@ function _scopeFinRows_(name, rows) {
   if (name === 'Pembayaran') {
     const bills = {};
     _finReadRaw_('Tagihan').forEach(function(b) { if (String(b['Coach ID'] || '') === c) bills[String(b['ID Tagihan'])] = true; });
-    return rows.filter(function(p) { return bills[String(p['ID Tagihan'] || '')]; });
+    return rows.filter(function(p) { return bills[String(p['ID Tagihan'] || '')] || String(p['Coach ID'] || '') === c; });
   }
   return rows;
 }
@@ -181,7 +277,7 @@ function _adminMoreForCoach_(token) {
         shareEnabled: _shareEnabled_(),
         revenue: null,
         packageTrend: null,
-        hub: null,
+        hub: part(function () { return _coachHub_(new Date(), null); }),
         signals: _scopeByMember_(part(function () { return _clientSignals_(new Date()); }), ids),
         memberVers: _scopeByMember_(part(_memberVersAll_), ids),
         finVer: _finVer_()
@@ -224,3 +320,102 @@ function _coachPinFlags_() {
 
 /** Untuk tes: nama fungsi yang menerima token coach. */
 function _coachFnNames_() { return Object.keys(COACH_FNS); }
+
+/** Demo runtime: tutup lingkup coach setelah satu panggilan (doPost melakukannya di finally). */
+function _coachScopeReset_() { _coachScope_ = null; _coachGateFn_ = null; }
+
+/** Baris sheet (tanpa header) langsung dari sheet, untuk pengecekan gerbang. */
+function _sheetRowsByName_(name) {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  return sh && sh.getLastRow() >= 2 ? sh.getDataRange().getValues().slice(1) : [];
+}
+/**
+ * Aturan baris: ['row', sheet, kolomId, kolomMember] (nilai = ID baris), ['rowo', …, field] (nilai = objek, ID di field),
+ * ['grp', sheet, kolomKunci, kolomMember] (semua baris berkunci itu harus milik klien coach ini).
+ */
+function _coachRowRule_(cid, rule, a) {
+  const kind = rule[0], rows = _sheetRowsByName_(rule[1]), idc = rule[2], mc = rule[3];
+  const key = kind === 'rowo' ? (a && typeof a === 'object' ? a[rule[4]] : '') : a;
+  const hit = rows.filter(function(r) { return key !== '' && key != null && String(r[idc]).trim() === String(key).trim(); });
+  const ok = hit.length && (kind === 'grp' ? hit.every : hit.some).call(hit, function(r) { return _coachOwnsMember_(cid, r[mc]); });
+  if (!ok) throw new Error('Data tidak ditemukan.');
+  if (kind === 'rowo' && a && a.memberId != null && !_coachOwnsMember_(cid, a.memberId)) throw new Error('Klien tidak ditemukan.');
+}
+
+/** Isi bersarang: buang setiap objek ber-memberId yang bukan klien coach ini (Beranda Coach). */
+function _scopeDeep_(x, ids) {
+  if (Array.isArray(x)) return x.filter(function(o) { return !(o && typeof o === 'object' && o.memberId != null && !ids[String(o.memberId)]); }).map(function(o) { return _scopeDeep_(o, ids); });
+  if (x && typeof x === 'object') { const out = {}; Object.keys(x).forEach(function(k) { out[k] = _scopeDeep_(x[k], ids); }); return out; }
+  return x;
+}
+function _scopeMemberIds_() {
+  const ids = {};
+  _scopeMembers_(_getMembersAll_()).forEach(function(m) { ids[String(m.id)] = true; });
+  return ids;
+}
+
+/**
+ * Pemilik: tetapkan atau pindahkan coach seorang klien. opts.moveSessions = sesi mendatang yang belum selesai ikut pindah
+ * (yang bentrok dengan jadwal coach baru dibiarkan dan dilaporkan). Tagihan lama tetap milik coach lama.
+ */
+function setMemberCoach(token, memberId, coachId, opts) {
+  requireAdmin_(token);
+  if (_scopeCoach_()) throw _ownerOnlyError_();
+  return _bumpAfter_('*', _setMembersCoach_([memberId], coachId, opts || {}));
+}
+/** Pemilik: tetapkan satu coach untuk banyak klien sekaligus (mis. semua yang belum punya coach). */
+function assignClientsToCoach(token, memberIds, coachId, opts) {
+  requireAdmin_(token);
+  if (_scopeCoach_()) throw _ownerOnlyError_();
+  if (!Array.isArray(memberIds) || !memberIds.length) throw new Error('Pilih klien dulu.');
+  if (memberIds.length > 500) throw new Error('Terlalu banyak klien sekaligus.');
+  return _bumpAfter_('*', _setMembersCoach_(memberIds, coachId, opts || {}));
+}
+function _setMembersCoach_(memberIds, coachId, opts) {
+  const coach = _coachById_(coachId);
+  if (!coach || !coach.aktif) throw new Error('Coach tidak ditemukan atau tidak aktif.');
+  const want = {};
+  memberIds.forEach(function(id) { want[String(id).trim()] = true; });
+  return _locked_(function() {
+    const sheet = _getMemberDataSheet_();
+    const data = sheet.getDataRange().getValues();
+    const changed = [];
+    for (let i = 1; i < data.length; i++) {
+      const id = String(data[i][0]).trim();
+      if (!want[id]) continue;
+      sheet.getRange(i + 1, 11, 1, 2).setValues([[coach.id, coach.name]]);
+      changed.push(id);
+    }
+    if (!changed.length) throw new Error('Klien tidak ditemukan.');
+    const moved = [], kept = [];
+    if (opts.moveSessions) {
+      const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Schedules');
+      const rows = sh ? sh.getDataRange().getValues() : [];
+      const now = Date.now();
+      const mine = {};
+      changed.forEach(function(id) { mine[id] = true; });
+      const busy = function(start, end, skipId) {
+        const a = new Date(start).getTime(), b = new Date(end || start).getTime();
+        return rows.slice(1).some(function(r) {
+          if (String(r[0]) === skipId || String(r[8]) !== coach.id) return false;
+          const st = String(r[7] || '').toLowerCase();
+          if (st === 'cancelled' || st === 'available') return false;
+          const x = new Date(r[4]).getTime(), y = new Date(r[5] || r[4]).getTime();
+          return x < b && a < y;
+        });
+      };
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!mine[String(r[1]).trim()] || String(r[8]) === coach.id) continue;
+        const st = String(r[7] || '').toLowerCase();
+        if (st === 'completed' || st === 'cancelled' || new Date(r[4]).getTime() < now) continue;
+        if (busy(r[4], r[5], String(r[0]))) { kept.push(String(r[0])); continue; }
+        sh.getRange(i + 1, 9, 1, 2).setValues([[coach.id, coach.name]]);
+        r[8] = coach.id;
+        moved.push(String(r[0]));
+      }
+    }
+    _bustSlots_();
+    return { status: 'success', coachId: coach.id, coachName: coach.name, members: changed, moved: moved, kept: kept };
+  });
+}

@@ -4837,6 +4837,7 @@ function getRenewalRequests(token, opts) {
   if (limit > 200) limit = 200;
   const members = {};
   _memberValues_().data.slice(1).forEach(function(r) { if (r[0]) members[String(r[0]).trim()] = { name: String(r[1] || '').trim(), phone: String(r[2] || '').trim() }; });
+  const scopeC = _scopeCoach_(), scopeIds = scopeC ? _scopeMemberIds_() : null;
   const pkgNames = {};
   const ctx = _priceListSheetAndColumns_();
   _readPackages_(ctx.sheet, ctx.idx).forEach(function(p) { pkgNames[p.id] = p.namaPaket; });
@@ -4845,6 +4846,7 @@ function getRenewalRequests(token, opts) {
     if (!r[0]) return;
     const q = _renewalFromRow_(r);
     if (want ? q.status !== want : q.status === 'dibatalkan') return;
+    if (scopeC && !(scopeIds[String(q.memberId)] || String(q.coachId || '') === scopeC)) return;   // Fase AE
     const m = members[q.memberId] || { name: 'Klien dihapus', phone: '' };
     q.name = m.name; q.phone = m.phone; q.packageName = pkgNames[q.packageId] || '(paket dihapus)';
     q._n = list.length;
@@ -5004,7 +5006,7 @@ function getPeakHourData(token) {
       }
     });
 
-    const schedules = _getSchedulesAll_(); // semua status ikut dihitung
+    const schedules = _scopeSchedules_(_getSchedulesAll_()); // semua status ikut dihitung (coach: miliknya saja)
     let totalBookings = 0;
 
     schedules.forEach(function(sch) {
@@ -5070,7 +5072,7 @@ function getCoachMonthlyStats(token, month, year) {
 
 function _coachMonthlyStats_(month, year) {
   try {
-    const schedules = _getSchedulesAll_(); // sudah termasuk field completedAt
+    const schedules = _scopeSchedules_(_getSchedulesAll_()); // sudah termasuk field completedAt (coach: miliknya saja)
 
     const statsMap = {}; // coachId -> { coachName, totalSessions, clientSet }
 
@@ -6425,9 +6427,10 @@ function _wibDate_(d) {
   return isNaN(t) ? '' : new Date(t + 25200000).toISOString().slice(0, 10);
 }
 function _coachHub_(now, tr) {
-  const self = _tp_(tr, 'hub.self', _selfCoach_);
+  const scopeC = _scopeCoach_();   // Fase AE: coach yang login = "saya", hanya kliennya
+  const self = scopeC ? _coachById_(scopeC) : _tp_(tr, 'hub.self', _selfCoach_);
   const wib = _wibParts_(now);
-  const mine = function(s) { return !s.coachId || (self && s.coachId === self.id); };
+  const mine = function(s) { return scopeC ? s.coachId === scopeC : (!s.coachId || (self && s.coachId === self.id)); };
   const all = _getSchedulesAll_().filter(mine);
   const done = all.filter(function(s) { return String(s.status || '').toLowerCase() === 'completed'; });
   const dateOf = function(s) {
@@ -6451,7 +6454,7 @@ function _coachHub_(now, tr) {
   stats.weekHours = Math.round(stats.weekHours * 10) / 10;
   stats.monthHours = Math.round(stats.monthHours * 10) / 10;
   stats.streak = _streak_(weeks, wib.date);
-  const members = _tp_(tr, 'hub.members', _getMembersAll_);
+  const members = _scopeMembers_(_tp_(tr, 'hub.members', _getMembersAll_));
   stats.activeClients = members.filter(function(m) { return Number(m.totalSessions) > Number(m.usedSessions); }).length;
 
   const today = all.filter(function(s) {
@@ -6469,7 +6472,7 @@ function _coachHub_(now, tr) {
   const p = wib.date.split('-').map(Number);
   const daysInMonth = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
   const targets = [];
-  Object.keys(COACH_TARGETS).forEach(function(k) {
+  if (!scopeC) Object.keys(COACH_TARGETS).forEach(function(k) {   // target bulanan milik pemilik
     const goal = _numProp_(COACH_TARGETS[k].key, NaN);
     if (isNaN(goal) || goal <= 0) return;
     let actual = 0;
@@ -6486,7 +6489,7 @@ function _coachHub_(now, tr) {
     const pace = k === 'klienAktif' ? { pace: goal, onPace: actual >= goal } : _targetPace_(goal, actual, p[2], daysInMonth);
     targets.push({ key: k, label: COACH_TARGETS[k].label, goal: goal, actual: actual, pace: pace.pace, onPace: pace.onPace });
   });
-  return {
+  const hubOut = {
     selfName: self ? self.name : '', solo: _activeCoaches_().length === 1, date: wib.date,
     today: today, stats: stats, targets: targets,
     care: _tp_(tr, 'hub.care', function() { return _careList_(now); }),
@@ -6497,6 +6500,12 @@ function _coachHub_(now, tr) {
     holds: _tp_(tr, 'hub.holds', function() { try { return _holdHubList_(members); } catch (e) { return []; } }),   // Fase AD1
     rawTargets: Object.keys(COACH_TARGETS).reduce(function(o, k) { const n = _numProp_(COACH_TARGETS[k].key, NaN); o[k] = isNaN(n) ? '' : n; return o; }, {})
   };
+  if (!scopeC) return hubOut;
+  const ids = {};
+  members.forEach(function(m) { ids[String(m.id)] = true; });
+  ['care', 'feedback', 'workouts', 'nutrition', 'programAuto', 'holds'].forEach(function(k) { hubOut[k] = _scopeDeep_(hubOut[k], ids); });
+  hubOut.rawTargets = {};
+  return hubOut;
 }
 
 /** Ringkasan satu bulan (y, m=1-12): sesi & jam selesai, klien baru, pendapatan, dan hasil tiap target. */

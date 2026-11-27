@@ -18,16 +18,37 @@ Status: **built, wave 1** (2026-11-27). The owner's request: "every coach sees o
 - PINs: Script Property `COACH_PIN_<coachId>` = `salt:sha256`. They are never in a sheet, the browser, or Unduh data. A coach PIN must differ from the owner PIN and from every other coach PIN. Login failures share the panel's lock counter.
 - The scope lives in per-execution memos `_coachScope_` / `_coachGateFn_`. They are cleared at the end of `doPost` and are in the Library `MEMOS` / `_resetLibMemos_`.
 
-## Wave 1 limits (not yet for coaches)
-These stay owner-only and are refused with "Hanya pemilik…":
-- add, renew, or delete a client;
-- tasks / PR, programs, nutrition, holds;
-- session series;
-- photos, delete measurement;
-- coach hub, renewals decide;
-- payments without a bill.
+## Wave 2 (T-2510+, built 2026-11-27)
 
-Each needs its own rules before it joins `COACH_FNS`.
+Coaches can now do their own client work through `COACH_FNS`. Each rule is checked before the function runs:
+- **Clients:** add / renew (`mnew`: coach forced; a phone number of another coach's client → "Nomor ini klien coach lain. Hubungi pemilik."), edit profile (`mo`; a coach cannot move a client to another coach), reminder switches.
+- **PR / tasks:** row rules on `Tasks` (`['row'|'rowo'|'grp', sheet, idCol, memberCol]`).
+- **Program, nutrition, coach logging (AD3), care, fitness tests.**
+- **Client holds:** cancelled sessions are the coach's own only.
+- **Series bookings:** `sg` = every session of the group is the coach's.
+- **Photos, delete measurement, share data, PDF report.**
+- **Renewals** (`rr`: own client, or a request that picked this coach). `getRenewalRequests` is filtered.
+- **Beranda Coach:** `_coachHub_` uses the coach as "self", own clients only, no gym targets. Lists are filtered by `_scopeDeep_`.
+- **Payments without a bill:** Pembayaran gained column **Coach ID** (`FIN_ENSURE_KEY` v2). Such a payment is visible to that coach and the owner only.
+- Archive / restore / bill adjust, peak hours, monthly stats.
+
+**Pick / move coach (owner):**
+- `setMemberCoach(token, memberId, coachId, {moveSessions})` and `assignClientsToCoach(token, ids, coachId, opts)`.
+  - They write MemberData K/L.
+  - Upcoming unfinished sessions move unless they clash with the new coach. Clashing ones stay and are returned as `kept`.
+  - Old bills stay with the old coach.
+- Panel:
+  - Client card row "Coach X · Pindah" (`#profile-coach-move`).
+  - Sheet `#sheet-mcoach` (prefix `mc-`).
+  - Klien filter **Tanpa coach** with **Tetapkan coach** for all of them.
+- A coach's Dashboard hides the gym-wide revenue tile. It shows the coach's own finance summary only when Keuangan is on.
+
+**Still owner-only:**
+- Settings, packages, content.
+- Coach data, PINs and share.
+- Finance categories.
+- Program and task templates (coaches can read and apply them).
+- Delete client, Unduh data, gym catalogue edits.
 
 ## Scale
 Fine for one gym with several coaches (about up to 10) and a few hundred active clients:

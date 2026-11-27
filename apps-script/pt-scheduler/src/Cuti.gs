@@ -165,7 +165,7 @@ function _holdCancelSessions_(memberId, mulai, sampai, ids) {
   const want = {};
   (ids || []).forEach(function(x) { want[String(x)] = true; });
   if (!Object.keys(want).length) return [];
-  const ok = _holdSessionsIn_(memberId, mulai, sampai, _readSchedulesAll_()).filter(function(s) { return want[s.id]; });
+  const ok = _holdSessionsIn_(memberId, mulai, sampai, _scopeSchedules_(_readSchedulesAll_())).filter(function(s) { return want[s.id]; });   // coach: sesinya sendiri
   ok.forEach(function(s) { _deleteSchedule_(s.id); });
   if (ok.length) _bustSlots_();
   return ok.map(function(s) { return s.id; });

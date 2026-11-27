@@ -36,5 +36,42 @@
     cpinSend(pin, 'PIN coach disimpan.');
   };
   window.coachPinDelete = function () { cpinSend('', 'PIN coach dihapus.'); };
+  // ── Pilih / pindah coach klien (pemilik) ──
+  const mc = { ids: [], pick: '' };
+  window.mcoachOpen = function (memberId) {
+    const coaches = (window.coaches || []).filter(function (c) { return c.aktif !== false; });
+    if (!coaches.length) { window.showToast('Belum ada coach aktif.'); return; }
+    const m = memberId ? (window.members || []).filter(function (x) { return String(x.id) === String(memberId); })[0] : null;
+    mc.ids = m ? [m.id] : (window.members || []).filter(function (x) { return !x.preferredCoachId; }).map(function (x) { return x.id; });
+    if (!mc.ids.length) { window.showToast('Semua klien sudah punya coach.'); return; }
+    mc.pick = m && m.preferredCoachId ? String(m.preferredCoachId) : '';
+    $('mc-title').textContent = m ? (m.preferredCoachId ? 'Pindah coach' : 'Pilih coach') : 'Tetapkan coach';
+    $('mc-sub').textContent = m ? m.name + (m.preferredCoachName ? ' · sekarang ' + window.coachLabel(m.preferredCoachName) : ' · belum punya coach') : mc.ids.length + ' klien belum punya coach.';
+    mcDraw(coaches);
+    window.openSheet('sheet-mcoach');
+  };
+  function mcDraw(coaches) {
+    setHTML('mc-list', (coaches || window.coaches || []).filter(function (c) { return c.aktif !== false; }).map(function (c) {
+      const on = String(c.id) === mc.pick;
+      return '<button type="button" class="bk-opt' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.mcoachPick(this.dataset.id)">' + avatar(c.photo, c.name, 'sm') +
+        '<span class="grow"><b>' + h(c.name) + '</b>' + (c.specialty ? '<span class="li-sub" style="display:block">' + h(c.specialty) + '</span>' : '') + '</span>' + (on ? icon('check') : '') + '</button>';
+    }).join(''));
+  }
+  window.mcoachPick = function (id) { mc.pick = String(id); mcDraw(); };
+  window.mcoachSave = function () {
+    if (!mc.pick) { window.showToast('Pilih coach dulu.'); return; }
+    const move = $('mc-move').checked, done = busy($('mc-save'), 'Menyimpan…');
+    const one = mc.ids.length === 1;
+    (one ? adminCall('setMemberCoach', mc.ids[0], mc.pick, { moveSessions: move }) : adminCall('assignClientsToCoach', mc.ids, mc.pick, { moveSessions: move })).then(function (r) {
+      done();
+      const keep = {};
+      (r.members || []).forEach(function (id) { keep[String(id)] = true; });
+      (window.members || []).forEach(function (m) { if (keep[String(m.id)]) { m.preferredCoachId = r.coachId; m.preferredCoachName = r.coachName; } });
+      (r.moved || []).forEach(function (sid) { const s = window.schedById ? window.schedById(sid) : null; if (s) { s.coachId = r.coachId; s.coachName = r.coachName; } });
+      window.closeModal();
+      window.showToast((one ? 'Coach diganti' : (r.members || []).length + ' klien diberi coach') + ((r.kept || []).length ? '. ' + r.kept.length + ' sesi bentrok tetap di coach lama.' : '.'));
+      if (window.updateUI) window.updateUI();
+    }, function (err) { done(); window.showToast(window.waitErr ? window.waitErr(err) : window.authMessage(err)); });
+  };
 })();
 </script>

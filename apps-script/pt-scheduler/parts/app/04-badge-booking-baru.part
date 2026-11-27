@@ -208,6 +208,9 @@
   function renderRevenueKpi() {
     const el = $('kpi-revenue-tile');
     if (!el) return;
+    // Fase AE: coach melihat keuangannya sendiri hanya bila Keuangan menyala; omzet gabungan milik pemilik.
+    if (window.isCoachRole() && !(ui.revenue && ui.revenue.fin)) { el.classList.add('hide'); return; }
+    el.classList.remove('hide');
     const month = MONTHS[new Date().getMonth()];
     const r = ui.revenue;
     let body;

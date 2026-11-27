@@ -3237,6 +3237,9 @@
   function renderRevenueKpi() {
     const el = $('kpi-revenue-tile');
     if (!el) return;
+    // Fase AE: coach melihat keuangannya sendiri hanya bila Keuangan menyala; omzet gabungan milik pemilik.
+    if (window.isCoachRole() && !(ui.revenue && ui.revenue.fin)) { el.classList.add('hide'); return; }
+    el.classList.remove('hide');
     const month = MONTHS[new Date().getMonth()];
     const r = ui.revenue;
     let body;
@@ -4588,11 +4591,14 @@
   }
   window.setClientSort = function (v) { ui.clientSort = v; _lsSet('xnk_client_sort', v); renderClientList(); };
   window.setClientView = function (v) { ui.clientView = v; _lsSet('xnk_client_view', v); document.querySelectorAll('#client-view-seg button').forEach(b => { const on = b.getAttribute('data-v') === v; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); }); renderClientList(); };
-  const CL_FILTERS = [['all', 'Semua'], ['perhatian', 'Perlu perhatian'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['active', 'Aktif'], ['held', 'Ditahan'], ['archive', 'Riwayat paket']];   // Fase AD1: Ditahan
+  const CL_FILTERS_ALL = [['all', 'Semua'], ['perhatian', 'Perlu perhatian'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['active', 'Aktif'], ['held', 'Ditahan'], ['nocoach', 'Tanpa coach'], ['archive', 'Riwayat paket']];   // Fase AD1: Ditahan; Fase AE: Tanpa coach
+  // "Tanpa coach" hanya untuk pemilik, dan hanya saat ada 2+ coach aktif atau memang ada klien tanpa coach.
+  const clNoCoachOn = () => !window.isCoachRole() && (window.coaches || []).length > 1;
+  let CL_FILTERS = CL_FILTERS_ALL;
   const CL_SORTS = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
   function clientCounts() {
-    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, held: 0, perhatian: 0, archive: (window.memberArchive || []).length };
-    window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
+    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, held: 0, perhatian: 0, nocoach: 0, archive: (window.memberArchive || []).length };
+    window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; if (!m.preferredCoachId) counts.nocoach++; });
     return counts;
   }
   // Ringkasan di band: satu kalimat di HP, dua angka kecil di PC (dulu kartu hitam tersendiri).
@@ -4612,6 +4618,8 @@
     const fKey = focusedRowKey();
     loadClientPrefs();
     const counts = clientCounts();
+    CL_FILTERS = clNoCoachOn() || counts.nocoach && !window.isCoachRole() && (window.coaches || []).length ? CL_FILTERS_ALL : CL_FILTERS_ALL.filter(c => c[0] !== 'nocoach');
+    if (ui.clientFilter === 'nocoach' && CL_FILTERS !== CL_FILTERS_ALL) ui.clientFilter = 'all';
     const opt = (o, cur, n) => '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + (n != null ? ' (' + n + ')' : '') + '</option>';
     const html = '<div class="page-head cl-head"><div class="cl-head-t"><h2 class="page-title">Klien</h2><p class="page-sub" id="cl-sub">' + h(clientHeadSub(counts)) + '</p></div>' + clientHeadStats() +
       '<button type="button" class="btn btn-primary cl-new" onclick="window.openAddMemberModal()" aria-label="Klien baru">' + icon('user-plus') + '<span class="cl-new-t">Klien baru</span></button></div>' +
@@ -4649,7 +4657,7 @@
     const match = x => !q || String(x.name || '').toLowerCase().indexOf(q) !== -1 || String(x.phone || '').indexOf(q.replace(/\D/g, '') || '\u0000') !== -1;
     let entries = [];
     if (ui.clientFilter !== 'archive') {
-      window.members.filter(match).filter(m => ui.clientFilter === 'all' || (ui.clientFilter === 'perhatian' ? flagsOf(m).length > 0 : clientState(m) === ui.clientFilter))
+      window.members.filter(match).filter(m => ui.clientFilter === 'all' || (ui.clientFilter === 'perhatian' ? flagsOf(m).length > 0 : ui.clientFilter === 'nocoach' ? !m.preferredCoachId : clientState(m) === ui.clientFilter))
         .forEach(m => entries.push({ type: 'live', data: m, date: window.parseFlexibleDate(m.lastActivityDate || m.joinDate) }));
     }
     if (ui.clientFilter === 'archive' || (ui.clientFilter === 'all' && q)) {
@@ -4691,6 +4699,11 @@
     };
     const labels = q ? [] : entries.map(groupOf), many = labels.some(l => l !== labels[0]);
     let html = '', group = '';
+    // Fase AE: semua klien tanpa coach sekaligus diberi coach (pemilik).
+    if (ui.clientFilter === 'nocoach' && !window.isCoachRole()) {
+      html += '<div class="card-flat row-between" style="gap:12px;margin-bottom:12px"><p class="li-sub" style="margin:0">' + entries.length + ' klien belum punya coach. Coach hanya melihat klien miliknya.</p>' +
+        '<button type="button" class="btn btn-primary btn-sm" onclick="window.mcoachOpen(null)">' + icon('user-check') + 'Tetapkan coach</button></div>';
+    }
     entries.forEach(function (e, i) {
       const g = labels[i];
       if (many && g !== group) { html += '<div class="group-label month-divider"><span>' + h(g) + '</span></div>'; group = g; }
@@ -13823,7 +13836,10 @@
           : '<p class="cp-left-t"><b>Tanpa batas sesi</b><span class="cp-left-n"> · ' + done + ' selesai</span><span class="hide" id="profile-remaining">' + rem + '</span><span class="hide" id="profile-total">0</span></p>') + '</div>' +
         '<button type="button" class="btn btn-sm cp-renew ' + (total && rem === 0 ? 'btn-inverse' : 'btn-ghost-ink') + '" id="profile-renew" onclick="window.openRenewMember(\'' + id + '\')">' + icon('repeat') + 'Perpanjang</button></div>' +
         '<div class="meter cp-meter' + (st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
-        (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') + '</div>' +
+        (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') +
+        // Fase AE: coach klien + Pindah (pemilik saja, saat ada 2+ coach atau klien belum punya coach)
+        (!window.isCoachRole() && ((window.coaches || []).length > 1 || !m.preferredCoachId) ? '<p class="cp-left-next cp-coach-row">' + icon('dumbbell') + '<span>' + (m.preferredCoachName ? h(window.coachLabel(m.preferredCoachName)) : 'Belum punya coach') + '</span> · ' +
+          '<button type="button" class="cp-link-ink" id="profile-coach-move" onclick="window.mcoachOpen(\'' + id + '\')">' + (m.preferredCoachId ? 'Pindah' : 'Pilih coach') + '</button></p>' : '') + '</div>' +
       '<div class="client-hero-actions cp-acts">' +
         act('', 'message-circle', 'Chat WA', "window.sendToParentWA(this.getAttribute('data-wa'),'')", ' data-wa="' + h(m.phone) + '"') +
         act('', 'calendar-plus', 'Booking', "window.openBookingSheet({memberId:'" + id + "'})") +
@@ -15211,5 +15227,42 @@
     cpinSend(pin, 'PIN coach disimpan.');
   };
   window.coachPinDelete = function () { cpinSend('', 'PIN coach dihapus.'); };
+  // ── Pilih / pindah coach klien (pemilik) ──
+  const mc = { ids: [], pick: '' };
+  window.mcoachOpen = function (memberId) {
+    const coaches = (window.coaches || []).filter(function (c) { return c.aktif !== false; });
+    if (!coaches.length) { window.showToast('Belum ada coach aktif.'); return; }
+    const m = memberId ? (window.members || []).filter(function (x) { return String(x.id) === String(memberId); })[0] : null;
+    mc.ids = m ? [m.id] : (window.members || []).filter(function (x) { return !x.preferredCoachId; }).map(function (x) { return x.id; });
+    if (!mc.ids.length) { window.showToast('Semua klien sudah punya coach.'); return; }
+    mc.pick = m && m.preferredCoachId ? String(m.preferredCoachId) : '';
+    $('mc-title').textContent = m ? (m.preferredCoachId ? 'Pindah coach' : 'Pilih coach') : 'Tetapkan coach';
+    $('mc-sub').textContent = m ? m.name + (m.preferredCoachName ? ' · sekarang ' + window.coachLabel(m.preferredCoachName) : ' · belum punya coach') : mc.ids.length + ' klien belum punya coach.';
+    mcDraw(coaches);
+    window.openSheet('sheet-mcoach');
+  };
+  function mcDraw(coaches) {
+    setHTML('mc-list', (coaches || window.coaches || []).filter(function (c) { return c.aktif !== false; }).map(function (c) {
+      const on = String(c.id) === mc.pick;
+      return '<button type="button" class="bk-opt' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.mcoachPick(this.dataset.id)">' + avatar(c.photo, c.name, 'sm') +
+        '<span class="grow"><b>' + h(c.name) + '</b>' + (c.specialty ? '<span class="li-sub" style="display:block">' + h(c.specialty) + '</span>' : '') + '</span>' + (on ? icon('check') : '') + '</button>';
+    }).join(''));
+  }
+  window.mcoachPick = function (id) { mc.pick = String(id); mcDraw(); };
+  window.mcoachSave = function () {
+    if (!mc.pick) { window.showToast('Pilih coach dulu.'); return; }
+    const move = $('mc-move').checked, done = busy($('mc-save'), 'Menyimpan…');
+    const one = mc.ids.length === 1;
+    (one ? adminCall('setMemberCoach', mc.ids[0], mc.pick, { moveSessions: move }) : adminCall('assignClientsToCoach', mc.ids, mc.pick, { moveSessions: move })).then(function (r) {
+      done();
+      const keep = {};
+      (r.members || []).forEach(function (id) { keep[String(id)] = true; });
+      (window.members || []).forEach(function (m) { if (keep[String(m.id)]) { m.preferredCoachId = r.coachId; m.preferredCoachName = r.coachName; } });
+      (r.moved || []).forEach(function (sid) { const s = window.schedById ? window.schedById(sid) : null; if (s) { s.coachId = r.coachId; s.coachName = r.coachName; } });
+      window.closeModal();
+      window.showToast((one ? 'Coach diganti' : (r.members || []).length + ' klien diberi coach') + ((r.kept || []).length ? '. ' + r.kept.length + ' sesi bentrok tetap di coach lama.' : '.'));
+      if (window.updateUI) window.updateUI();
+    }, function (err) { done(); window.showToast(window.waitErr ? window.waitErr(err) : window.authMessage(err)); });
+  };
 })();
 </script>

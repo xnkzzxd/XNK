@@ -34,7 +34,7 @@ test('coach: setiap nama di COACH_FNS ada di daftar ADMIN, dan setCoachPin khusu
   const fns = env.call('_coachFnNames_');
   for (const n of fns) assert.ok(L.ADMIN.includes(n), n + ' di COACH_FNS harus fungsi admin');
   assert.ok(!fns.includes('setCoachPin'));
-  for (const n of ['updateAppSettings', 'savePackage', 'deleteMember', 'addMember', 'saveCoachShare', 'exportMyData', 'getSettingsBundle']) assert.ok(!fns.includes(n), n + ' harus khusus pemilik');
+  for (const n of ['updateAppSettings', 'savePackage', 'deleteMember', 'saveCoachShare', 'exportMyData', 'getSettingsBundle', 'setMemberCoach', 'assignClientsToCoach', 'saveProgramTemplate', 'saveTaskTemplate', 'setCoachPin', 'saveCoach', 'saveContent']) assert.ok(!fns.includes(n), n + ' harus khusus pemilik');
 });
 
 test('coach: PIN coach login dengan me, PIN pemilik tetap pemilik, PIN kembar ditolak', () => {
@@ -120,7 +120,16 @@ test('coach: keuangan hanya tagihan dan pengeluaran sendiri', () => {
   assert.deepEqual(page.data.bills.map(b => b.id), ['TG-A']);
   assert.equal(post(env, 'getBillDetail', [tokA, 'TG-B']).ok, false);
   assert.equal(post(env, 'savePayment', [tokA, { billId: 'TG-B', amount: 1000, date: day, method: 'Tunai' }]).ok, false);
-  assert.equal(post(env, 'savePayment', [tokA, { amount: 1000, date: day, method: 'Tunai', category: 'Lainnya' }]).ok, false);
+  const free = post(env, 'savePayment', [tokA, { amount: 1000, date: day, method: 'Tunai', category: 'Lainnya' }]);
+  if (free.ok) {
+    const row = env.call('_finReadRaw_', 'Pembayaran').find(x => x['ID Bayar'] === free.data.id);
+    assert.equal(row['Coach ID'], 'C-1', 'payment without a bill belongs to the coach');
+    const tokB = post(env, 'adminLogin', ['222222']).data.token;
+    const pageB = post(env, 'getFinancePage', [tokB, mm, yy, true]).data;
+    assert.ok(!pageB.payments.some(x => x.id === free.data.id), 'coach B never sees coach A payment');
+    const pageA = post(env, 'getFinancePage', [tokA, mm, yy, true]).data;
+    assert.ok(pageA.payments.some(x => x.id === free.data.id));
+  }
   const ex = post(env, 'saveExpense', [tokA, { amount: 5000, date: day, method: 'Tunai', category: 'Alat', coachId: 'C-2' }]);
   if (ex.ok) {
     const row = env.call('_finReadRaw_', 'Pengeluaran').find(e => e['ID Keluar'] === ex.data.id);
@@ -128,4 +137,69 @@ test('coach: keuangan hanya tagihan dan pengeluaran sendiri', () => {
   }
   const ownerPage = env.call('getFinancePage', owner, mm, yy, true);
   assert.equal(ownerPage.bills.length, 2);
+});
+
+test('coach gelombang 2: tambah klien dipaksa ke coach sendiri; nomor klien coach lain ditolak', () => {
+  const { env, tokA } = twoCoaches();
+  const r = post(env, 'addMember', [tokA, { name: 'Eka', phone: '6289999000111', goal: 'Sehat', packageId: 'P1', coachId: 'C-2' }]);
+  assert.equal(r.ok, true, r.error);
+  const row = env.sheet('MemberData').rows.find(x => x[1] === 'Eka');
+  assert.equal(row[10], 'C-1');
+  const bad = post(env, 'addMember', [tokA, { name: 'Budi', phone: '081222222222', goal: 'x', packageId: 'P1' }]);
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /klien coach lain/);
+});
+
+test('coach gelombang 2: PR, program, gizi, cuti hanya untuk klien sendiri', () => {
+  const { env, tokA } = twoCoaches();
+  const ok = (fn, args) => { const r = post(env, fn, [tokA, ...args]); assert.equal(r.ok, true, fn + ': ' + r.error); return r.data; };
+  const no = (fn, args) => { const r = post(env, fn, [tokA, ...args]); assert.equal(r.ok, false, fn + ' must refuse'); };
+  ok('addTask', [{ memberId: 'PT-A', title: 'Jalan 30 menit', category: 'aktivitas' }]);
+  no('addTask', [{ memberId: 'PT-B', title: 'x', category: 'aktivitas' }]);
+  ok('getTasksForMember', ['PT-A']);
+  no('getTasksForMember', ['PT-B']);
+  ok('getMemberProgram', ['PT-A']);
+  no('saveMemberProgram', ['PT-B', []]);
+  no('getClientNutrition', ['PT-B']);
+  no('setClientHold', ['PT-B', { jenis: 'cuti', mulai: '2026-12-01' }, {}]);
+  no('getClientCare', ['PT-B']);
+  no('deleteRecurringGroup', ['GRP-X']);
+  no('getMemberReport', ['PT-B', {}]);
+});
+
+test('coach gelombang 2: tugas coach lain tidak bisa diubah atau dihapus', () => {
+  const { env, owner, tokA } = twoCoaches();
+  const t = env.call('addTask', owner, { memberId: 'PT-B', title: 'Milik B', category: 'aktivitas' });
+  const id = t.id || (t.task && t.task.id) || env.sheet('Tasks').rows.find(r => r[1] === 'PT-B')[0];
+  assert.equal(post(env, 'deleteTask', [tokA, id]).ok, false);
+  assert.equal(post(env, 'updateTask', [tokA, { id: id, title: 'diubah' }]).ok, false);
+  assert.ok(env.sheet('Tasks').rows.find(r => r[0] === id));
+});
+
+test('coach gelombang 2: Beranda Coach dan perpanjangan hanya klien sendiri', () => {
+  const { env, tokA } = twoCoaches();
+  const hub = post(env, 'getCoachHub', [tokA]);
+  assert.equal(hub.ok, true, hub.error);
+  assert.equal(hub.data.selfName, 'Rizky');
+  assert.equal(hub.data.stats.activeClients, 1);
+  assert.ok(hub.data.today.every(s => s.memberId === 'PT-A'));
+  assert.deepEqual(hub.data.targets, []);
+  const rr = post(env, 'getRenewalRequests', [tokA, {}]);
+  assert.equal(rr.ok, true, rr.error);
+  assert.ok(rr.data.every(q => q.memberId === 'PT-A' || q.coachId === 'C-1'));
+});
+
+test('pemilik: pindah coach memindahkan klien dan sesi mendatang, coach tidak boleh', () => {
+  const { env, owner, tokA, tokB } = twoCoaches();
+  assert.equal(post(env, 'setMemberCoach', [tokA, 'PT-A', 'C-2']).ok, false);
+  const r = env.call('setMemberCoach', owner, 'PT-A', 'C-2', { moveSessions: true });
+  assert.equal(r.coachId, 'C-2');
+  assert.deepEqual(r.moved, ['SCH-A1']);
+  assert.equal(env.sheet('MemberData').rows.find(x => x[0] === 'PT-A')[10], 'C-2');
+  assert.equal(env.sheet('Schedules').rows.find(x => x[0] === 'SCH-A1')[8], 'C-2');
+  const b = post(env, 'getAdminBootstrap', [tokB]).data;
+  assert.deepEqual(b.members.map(m => m.id).sort(), ['PT-A', 'PT-B']);
+  assert.deepEqual(post(env, 'getAdminBootstrap', [tokA]).data.members, []);
+  const many = env.call('assignClientsToCoach', owner, ['PT-C'], 'C-1');
+  assert.deepEqual(many.members, ['PT-C']);
 });

@@ -7,7 +7,7 @@
 
 const FIN_TABLES = {
   Tagihan: ['ID Tagihan', 'Transaksi ID', 'Member ID', 'Nama Klien', 'Paket ID', 'Nama Paket', 'Coach ID', 'Tanggal', 'Total', 'Diskon', 'Status', 'Catatan', 'Dibuat Pada', 'Diubah Pada', 'Diarsipkan Pada', 'Diarsipkan Oleh'],
-  Pembayaran: ['ID Bayar', 'ID Tagihan', 'Member ID', 'Tanggal', 'Jumlah', 'Metode', 'Kategori', 'Bukti File ID', 'Catatan', 'Dibuat Pada', 'Diubah Pada', 'Diarsipkan Pada', 'Diarsipkan Oleh'],
+  Pembayaran: ['ID Bayar', 'ID Tagihan', 'Member ID', 'Tanggal', 'Jumlah', 'Metode', 'Kategori', 'Bukti File ID', 'Catatan', 'Dibuat Pada', 'Diubah Pada', 'Diarsipkan Pada', 'Diarsipkan Oleh', 'Coach ID'],
   Pengeluaran: ['ID Keluar', 'Tanggal', 'Kategori', 'Jumlah', 'Metode', 'Bukti File ID', 'Catatan', 'Coach ID', 'Dibuat Pada', 'Diubah Pada', 'Diarsipkan Pada', 'Diarsipkan Oleh'],
   KategoriKeuangan: ['ID', 'Tipe', 'Nama', 'Urutan', 'Aktif']
 };
@@ -83,7 +83,7 @@ function _finSheet_(name, create) {
 
 // Cek skema penuh (4 tabel, header, format tanggal, kategori bawaan) paling sering 6 jam sekali, bukan di setiap simpan
 // (2026-11: ±12 panggilan Sheets di bawah kunci membuat "Lunasi" lambat). Naikkan angka kuncinya bila FIN_TABLES berubah.
-const FIN_ENSURE_KEY = 'fin:ensured:1';
+const FIN_ENSURE_KEY = 'fin:ensured:2';   // 2: Pembayaran + Coach ID (Fase AE)
 function _finEnsure_() {
   const cache = CacheService.getScriptCache();
   try { if (cache.get(FIN_ENSURE_KEY)) return; } catch (e) {}
@@ -402,7 +402,6 @@ function savePayment(token, p) {
   requireAdmin_(token);
   _finRequire_();
   p = p || {};
-  if (_scopeCoach_() && !p.billId) throw new Error('Pembayaran coach harus untuk sebuah tagihan.');
   const touched = [];   // klien yang tagihannya berubah (portal getMyBills); pembayaran tanpa tagihan tidak tampil di data klien
   const res = _finLocked_(function() {
     _finEnsure_();
@@ -425,7 +424,9 @@ function savePayment(token, p) {
       category = _finCategory_('masuk', p.category);
     }
     const now = _finNow_();
-    const fields = { 'ID Tagihan': bill ? bill['ID Tagihan'] : '', 'Member ID': bill ? String(bill['Member ID']) : '', Tanggal: date, Jumlah: amount, Metode: method, Kategori: category, Catatan: note, 'Diubah Pada': now };
+    // Fase AE: pembayaran tanpa tagihan dari coach dicatat atas nama coach itu (Coach ID), supaya hanya terlihat olehnya dan pemilik.
+    const payCoach = bill ? String(bill['Coach ID'] || '') : (_scopeCoach_() || String((existing && existing['Coach ID']) || ''));
+    const fields = { 'Coach ID': payCoach, 'ID Tagihan': bill ? bill['ID Tagihan'] : '', 'Member ID': bill ? String(bill['Member ID']) : '', Tanggal: date, Jumlah: amount, Metode: method, Kategori: category, Catatan: note, 'Diubah Pada': now };
     let id;
     if (existing) { id = existing['ID Bayar']; _finUpdate_('Pembayaran', existing._row, fields); }
     else { id = _finId_('BY'); _finAppend_('Pembayaran', Object.assign({ 'ID Bayar': id, 'Dibuat Pada': now }, fields)); }
