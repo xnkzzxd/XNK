@@ -715,7 +715,7 @@
     var newest = rows.reduce(function (m, r) { return r.st && r.st.at > m ? r.st.at : m; }, ''), hub = /^https:\/\//.test(data.hub || '') ? data.hub : 'https://xnk.web.id';
     $('hqfoot').innerHTML = '<span><b>XNK HQ</b> · ' + esc(hub.replace(/^https:\/\//, '')) + '</span>' +
       '<span class="mid">Dicek ' + (newest ? esc(rel(newest)) : 'belum') + ' · ' + rows.length + ' coach' + (data.latest ? ' · Library v' + esc(data.latest.version) : '') + '</span>' +
-      '<span class="acts" style="margin:0"><button class="btn" type="button" data-act="cek">Cek semua</button><a class="btn" href="' + esc(hub) + '/?hub" target="_blank" rel="noopener">' + ic('ext') + 'Situs hub</a></span>';
+      '<span class="acts" style="margin:0"><button class="btn" type="button" id="liveBtn" data-live="1" title="Cek otomatis tiap 60 detik selama halaman ini terbuka">' + liveText() + '</button><button class="btn" type="button" data-act="cek">Cek semua</button><a class="btn" href="' + esc(hub) + '/?hub" target="_blank" rel="noopener">' + ic('ext') + 'Situs hub</a></span>';
     $('cekAll').disabled = false;
   }
 
@@ -1362,6 +1362,32 @@
     var c = ev.target.closest('[data-job]'), k = ev.target.closest('[data-job-cek]');
     if (c) jobClose(jobList[+c.getAttribute('data-job')]);
     if (k) { var j = jobList[+k.getAttribute('data-job-cek')]; j.t0 = Date.now() - JOB_MS; jobRun(j); }
+  });
+
+
+  // ── Live: cek otomatis selama tab terlihat (60 dtk; 15 dtk saat tugas GitHub berjalan). Coach yang dibuka saja, atau semua bila tidak ada. ──
+  var LIVE_KEY = 'xnk_hq_live', live = true, liveBusy = false, liveAt = 0;
+  try { live = localStorage.getItem(LIVE_KEY) !== '0'; } catch (e) {}
+  function liveText() {
+    if (!live) return 'Live jeda';
+    var t = liveAt ? Math.round((Date.now() - liveAt) / 1000) : -1;
+    return 'Live' + (liveBusy ? ' · mengecek…' : t >= 0 ? ' · ' + (t < 60 ? t + ' dtk' : Math.floor(t / 60) + ' mnt') + ' lalu' : '');
+  }
+  function liveDraw() { var b = $('liveBtn'); if (b) { var t = liveText(); if (b.textContent !== t) b.textContent = t; } }
+  function liveTick() {
+    if (!live || liveBusy || !tok() || !data || document.hidden || $('dlg').open) return liveDraw();
+    var gap = jobList.some(function (j) { return j.state === 'run'; }) ? 15000 : 60000;
+    if (liveAt && Date.now() - liveAt < gap) return liveDraw();
+    liveBusy = true; liveDraw();
+    rpc('pusatCheck', [tok(), ui.sel || '']).then(function (d) { data = d; liveAt = Date.now(); liveBusy = false; render(); },
+      function () { liveAt = Date.now(); liveBusy = false; liveDraw(); });
+  }
+  setInterval(function () { if (!document.hidden) liveTick(); }, 1000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) liveTick(); });
+  document.addEventListener('click', function (ev) {
+    if (!ev.target.closest('[data-live]')) return;
+    live = !live; try { localStorage.setItem(LIVE_KEY, live ? '1' : '0'); } catch (e) {}
+    if (live) liveAt = 0; liveDraw(); liveTick();
   });
 
   // ── Papan ketik: / cari, ↑↓ pilih coach, Esc kembali ke ringkasan ──
