@@ -143,3 +143,22 @@ Built as below, with these changes: no server cache (made only on a tap); no Cet
 
 ### Tests
 `report.test.js` (pure calc on `seededEnv`, deltas, hold and nutrition sections, privacy: no phone, no RPE, no private notes, no hold note; guards; member reads only own data). `tools/report-check.js` (Playwright): builds a PDF in both modes, checks it starts with `%PDF-`, page count, size limit, and that every section stays inside the page margins (like `share-check.js`).
+
+## AD5 — Clearer client report (built 2026-11-27)
+
+Owner's brief: the AD4 PDF showed many numbers with no story; clients felt lost. One report, client tone, same privacy as AD4 (no RPE, private notes, hold notes, phone, photos).
+
+### Server (`_reportAnalysis_` in `src/Laporan.gs`, pure)
+- `skor = {total, status, vonis, pilar[]}`: four pillars 0–100, status `baik` ≥ 75, `cukup` ≥ 50, else `perlu` (`REPORT.baik/cukup`). A pillar without data is `null` and not counted.
+  - Konsistensi = 70 × active weeks / non-hold weeks + 30 × min(1, sessions per week / `sesiTarget` 2).
+  - Kekuatan = 50 + 5 × median e1RM % change (lifts logged ≥ 2×) + 5 per PR (max 20).
+  - Tubuh = 60 ± weight change vs the client's `Goal Gizi` (turun/naik; jaga/recomp/none reward ≤ 2 % change) + 15 if waist went down.
+  - Makan = 40 × logged-day ratio (of 80 % of days) + 35 × days within ±10 % of target + 25 × protein days.
+- `menang` (≤ 3 wins, ranked), `fokus` (≤ 2: last coach focus note, then the weakest pillars' advice).
+- `analisis`: `kehadiran` (per week, longest gap), `kekuatan`, `volume` (weekly volume in the period, previous-period weekly average, volume per body group now vs before, push/pull and upper/lower balance sentence), `tubuh` (change per week, healthy-rate sentence for `turun`), `makan` (daily kcal, days on target, weekday vs weekend), `glosarium`. Each has `tafsir` starting "Artinya:".
+- `latihan.angkatanSemua` (up to 6 lifts with best set); `angkatan` stays the first 3.
+- Non-ASCII in server strings is written as `\u` escapes (the demo build mangled raw `−`).
+
+### Browser (`parts/app/24-laporan.part`)
+Page 1 is a one-page summary: cover, score gauge + verdict, pillar cards, "Hal terbaik", "Fokus berikutnya", coach message. Detail pages: Angka utama, Kehadiran (a real month calendar: month title, Sen–Min, dates; coach session = filled, own workout = ring, food only = dot, hold = grey; then weekly bars and Artinya), Kekuatan (lift table + sparklines + PRs), Volume & keseimbangan (weekly bars with previous average line, body-group bars), Tubuh (weight line, start→end dot scale, tests with membaik/turun), Makan (daily kcal vs target band, needs ≥ 3 days), Catatan sesi, Istilah.
+- T-2452: icons (Lucide nodes turned into SVG images: calendar-check, dumbbell, person-standing, utensils, trophy, user-round), the logo (`--logo-mask` PNG, tinted like `.logo-mark`) on the cover and in the footer, a coach box on the cover, and the muscle figure (`mmFigSvg` from `figure.min.json`, sex from the client's Gizi profile, muscles from `analisis.volume.figur`) on the Volume page. Each image is optional: if it does not load, that part is skipped.
