@@ -37,13 +37,14 @@
   addEventListener('pageshow', function (e) { if (e.persisted) run(true); });
 })();
 </script>
-<title>XNK</title>
-<meta name="description" content="XNK: aplikasi untuk personal trainer dan kliennya. Booking, latihan, makan, dan progres di satu tempat, bisa dibuka tanpa sinyal.">
+<script>document.documentElement.className += ' js';</script>
+<title>XNK · aplikasi personal trainer dan kliennya</title>
+<meta name="description" content="XNK: aplikasi untuk personal trainer dan kliennya. Jadwal, latihan, gizi, progres, dan keuangan klien di satu tempat. Coba demo gratis, mulai {{mulai}}/bulan.">
 <link rel="canonical" href="https://xnk.web.id/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="XNK">
 <meta property="og:title" content="XNK · aplikasi personal trainer dan kliennya">
-<meta property="og:description" content="Booking, latihan, makan, dan progres klien di satu aplikasi. Data tiap coach terpisah, coach cukup membuka satu link.">
+<meta property="og:description" content="Jadwal, latihan, progres, gizi, dan keuangan klien di satu aplikasi. Coba demo gratis, mulai {{mulai}}/bulan.">
 <meta property="og:url" content="https://xnk.web.id/">
 <meta property="og:image" content="https://xnk.web.id/img/og.jpg">
 <meta property="og:image:width" content="1200">
@@ -54,145 +55,417 @@
 <link rel="apple-touch-icon" href="/img/icon-192.png">
 <meta name="apple-mobile-web-app-title" content="XNK">
 <link rel="icon" type="image/png" href="/img/icon-192.png">
+<link rel="preload" href="/fonts/inter-tight.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  /* T-2265: huruf dari situs sendiri (OFL, fonts/OFL-*.txt). Judul Inter Tight, label JetBrains Mono, teks huruf sistem. */
+  @font-face { font-family: "Inter Tight"; src: url("/fonts/inter-tight.woff2") format("woff2"); font-weight: 600 900; font-style: normal; font-display: swap; }
+  @font-face { font-family: "JetBrains Mono"; src: url("/fonts/jetbrains-mono.woff2") format("woff2"); font-weight: 500 700; font-style: normal; font-display: swap; }
   :root {
+    color-scheme: light dark;
     --bg:#fafaf9; --fg:#0b0b0b; --mut:#5f5f5b; --line:#e2e2de; --card:#fff; --soft:#f0f0ed;
-    --ink:#0b0b0b; --on-ink:#fff; --band:#0b0b0b; --band-card:#1a1a19; --on-band:#f5f5f3; --band-mut:#a3a39e; --band-line:#2e2e2c;
-    --bad:#c5221f; --r:1.1rem;
+    --ink:#0b0b0b; --on-ink:#fff; --band:#0b0b0b; --band-card:#181817; --on-band:#f5f5f3; --band-mut:#a3a39e; --band-line:#2e2e2c;
+    --red:#d91f26; --red-band:#ff4b52; --bad:#c5221f; --r:1.1rem;
+    --display:"Inter Tight", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --ease:cubic-bezier(.2,.75,.2,1);
   }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#0b0b0b; --fg:#f5f5f3; --mut:#a3a39e; --line:#2a2a28; --card:#151514; --soft:#1d1d1c;
-      --ink:#f5f5f3; --on-ink:#0b0b0b; --band:#000; --band-card:#151514; --band-line:#262624; --bad:#ff8a80; }
+      --ink:#f5f5f3; --on-ink:#0b0b0b; --band:#000; --band-card:#141413; --band-line:#262624; --red:#ff4b52; --bad:#ff8a80; }
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 4.5rem; }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  html.sheet-open { overflow: hidden; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 1rem/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
   img { max-width: 100%; height: auto; display: block; }
-  /* Layar lebar dan besar: semua ukuran (rem) ikut membesar, jadi isi tidak mengecil di tengah layar. */
   @media (min-width: 1700px) { html { font-size: 112.5%; } }
   @media (min-width: 2200px) { html { font-size: 131.25%; } }
   @media (min-width: 3000px) { html { font-size: 162.5%; } }
   a { color: inherit; }
-  /* Lebar isi ikut layar (tanpa pita kosong besar di kiri-kanan); batas hanya di layar sangat lebar. */
+  :focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
   .wrap { max-width: 112rem; margin: 0 auto; padding: 0 max(clamp(1rem, 4vw, 4.5rem), env(safe-area-inset-right)) 0 max(clamp(1rem, 4vw, 4.5rem), env(safe-area-inset-left)); }
   .mut { color: var(--mut); }
+  .red { color: var(--red); }
+  .band .red, .hero .red { color: var(--red-band); }
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  h1, h2, h3 { font-family: var(--display); }
+  h2 { font-size: clamp(2.1rem, 7.5vw, 4rem); font-weight: 800; line-height: 1; letter-spacing: -.025em; word-spacing: .04em; margin: 0 0 1rem; }
+  .kicker { font-family: var(--mono); font-size: .76rem; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); margin: 0 0 .9rem; }
+  .band .kicker { color: var(--band-mut); }
+  svg.i { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  code { font: .9em var(--mono); background: var(--soft); padding: .1rem .35rem; border-radius: .35rem; overflow-wrap: anywhere; }
 
-  /* Top bar */
-  .top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--band) 92%, transparent); color: var(--on-band);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding-top: env(safe-area-inset-top); }
+  /* Bilah atas */
+  .top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--band) 90%, transparent); color: var(--on-band);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding-top: env(safe-area-inset-top); }
   .top .wrap { display: flex; align-items: center; gap: 1rem; min-height: 3.75rem; }
-  .brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; font-size: 1.15rem; text-decoration: none; letter-spacing: .02em; }
+  .brand { display: flex; align-items: center; gap: .6rem; font-family: var(--display); font-weight: 800; font-size: 1.2rem; text-decoration: none; letter-spacing: .01em; }
   .logo { width: 2.2rem; height: 2.2rem; border-radius: .65rem; background: #0b0b0b; box-shadow: inset 0 0 0 1px var(--band-line); }
-  .nav { display: none; gap: 1.5rem; margin-left: auto; font-size: .95rem; }
+  .nav { display: none; gap: 1.6rem; margin-left: auto; font-size: .95rem; }
   .nav a { text-decoration: none; color: var(--band-mut); }
   .nav a:hover { color: var(--on-band); }
-  .top .btn { margin-left: auto; }
-  @media (min-width: 768px) { .nav { display: flex; } .top .btn { margin-left: 0; } }
+  .top-cta { display: flex; gap: .5rem; margin-left: auto; }
+  .top-cta .daftar { display: none; }
+  @media (min-width: 768px) { .nav { display: flex; } .top-cta { margin-left: .5rem; } .top-cta .daftar { display: inline-flex; } }
 
-  /* Buttons */
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 2.9rem; padding: .6rem 1.2rem; border-radius: .8rem;
-    border: 1px solid var(--ink); background: var(--ink); color: var(--on-ink); font: inherit; font-weight: 650; text-decoration: none; cursor: pointer; }
+  /* Tombol */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 2.9rem; padding: .6rem 1.25rem; border-radius: .85rem;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--on-ink); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer;
+    transition: transform .2s var(--ease), background-color .2s, color .2s, border-color .2s; }
   .btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
   .band .btn, .top .btn { background: var(--on-band); color: var(--band); border-color: var(--on-band); }
-  .band .btn.ghost { background: transparent; color: var(--on-band); border-color: var(--band-line); }
-  .btn svg { width: 1.15rem; height: 1.15rem; }
+  .band .btn.ghost, .top .btn.ghost { background: transparent; color: var(--on-band); border-color: var(--band-line); }
+  .btn svg { width: 1.15rem; height: 1.15rem; transition: transform .2s var(--ease); }
+  .btn.big { min-height: 3.4rem; padding: .7rem 1.6rem; font-size: 1.05rem; }
+  @media (hover: hover) { .btn:hover { transform: translateY(-1px); } .btn:hover svg.go { transform: translateX(3px); } }
 
   /* Hero */
   .band { background: var(--band); color: var(--on-band); }
-  .hero { padding: 2.5rem 0 0; overflow: hidden; }
+  .hero { position: relative; padding: 2.5rem 0 0; overflow: hidden; isolation: isolate; }
+  .hero::before { content: ""; position: absolute; z-index: -1; right: -15%; bottom: -35%; width: 80%; height: 90%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--red-band) 24%, transparent), transparent); pointer-events: none;
+    transform: translate3d(var(--gx, 0px), var(--gy, 0px), 0); transition: transform .8s var(--ease); }
   .hero .wrap { display: grid; gap: 2.5rem; }
-  .eyebrow { display: inline-block; max-width: 100%; font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--band-mut);
-    border: 1px solid var(--band-line); border-radius: 999px; padding: .3rem .8rem; }
-  .hero h1 { font-size: clamp(2rem, min(9vw, 11vh, 4.6vw + 1rem), 5rem); line-height: 1.02; letter-spacing: -.035em; margin: 1rem 0 1rem; }
-  .hero p.lead { font-size: 1.12rem; color: var(--band-mut); margin: 0 0 1.6rem; max-width: 36rem; }
+  .eyebrow { display: inline-block; max-width: 100%; font-family: var(--mono); font-size: .74rem; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--band-mut);
+    border: 1px solid var(--band-line); border-radius: 999px; padding: .35rem .85rem; }
+  .hero h1 { text-wrap: balance; font-size: clamp(2.8rem, min(12.5vw, 13vh, 4.4vw + 1rem), 6.2rem); font-weight: 800; line-height: .96; letter-spacing: -.03em; word-spacing: .05em; margin: 1.1rem 0 1.2rem; }
+  .ln { display: block; }
+  .hero .copy { transform: translate3d(0, calc(var(--py, 0) * .2px), 0); opacity: calc(1 - var(--py, 0) / 1000); }
+  .hero p.lead { font-size: 1.15rem; color: var(--band-mut); margin: 0 0 1.6rem; max-width: 34rem; }
   .hero .cta { display: flex; flex-wrap: wrap; gap: .7rem; }
-  .facts { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin: 1.8rem 0 0; padding: 0; list-style: none; font-size: .9rem; color: var(--band-mut); }
+  .hero .rise { animation: fade .8s .3s var(--ease) both; }
+  .hero-in { margin: 1.1rem 0 0; font-size: .95rem; color: var(--band-mut); }
+  .hero-in a { color: var(--on-band); font-weight: 650; }
+  .facts { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin: 1.6rem 0 0; padding: 0; list-style: none; font-size: .9rem; color: var(--band-mut); }
   .facts li::before { content: "✓"; color: var(--on-band); font-weight: 800; margin-right: .45rem; }
-  .phones { position: relative; display: flex; justify-content: center; align-items: flex-end; gap: 1rem; min-height: 22rem; }
+  .phones { position: relative; display: flex; justify-content: center; align-items: flex-end; gap: 1rem; min-height: 22rem; perspective: 1200px; }
+  .phones > div:nth-child(1) { animation: flyL 1.3s .25s var(--ease) both; }
+  .phones > div:nth-child(2) { animation: flyU 1.3s .4s var(--ease) both; }
+  .phones > div:nth-child(3) { animation: flyR 1.3s .55s var(--ease) both; }
   .phone { width: min(15.5rem, 42vw, 34vh); border-radius: 2rem; padding: .45rem; background: #1f1f1e; border: 1px solid #333331;
-    box-shadow: 0 30px 60px -20px rgba(0,0,0,.6); flex: none; }
+    box-shadow: 0 40px 70px -24px rgba(0,0,0,.75); flex: none; will-change: transform; transition: transform .6s var(--ease); }
   .phone img { border-radius: 1.6rem; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; width: 100%; background: #fafaf9; }
-  .phones .phone:first-child { transform: translateY(1.5rem); }
-  .phones .phone:last-child { margin-bottom: -4rem; }
+  /* Miring seperti di proposal; --py (gulir, px) menggeser tiap HP dengan kecepatan berbeda (paralaks). */
+  .phones > div:nth-child(1) .phone { transform: perspective(1100px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)) translate3d(calc(var(--py, 0) * -.12px), calc(1.5rem + var(--py, 0) * -.05px), 0) rotate(calc(-4deg - var(--py, 0) * .012deg)); }
+  .phones > div:nth-child(2) .phone { transform: perspective(1100px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)) translate3d(0, calc(var(--py, 0) * -.16px), 0); }
+  .phones > div:nth-child(3) .phone { transform: perspective(1100px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)) translate3d(calc(var(--py, 0) * .12px), calc(var(--py, 0) * -.02px), 0) rotate(calc(4deg + var(--py, 0) * .012deg)); margin-bottom: -4rem; }
   .phones .px3 { display: none; }
-  .cap { text-align: center; font-size: .8rem; color: var(--band-mut); margin-top: .55rem; }
-  /* Dua kolom di layar lebar, dan di layar mendatar (HP/tablet landscape) supaya mockup tidak jatuh jauh di bawah. */
+  @media (max-width: 899px) and (orientation: portrait) { .phones .cap { display: none; } }   /* HP miring menutupi keterangannya */
+  .cap { text-align: center; font-family: var(--mono); font-size: .72rem; letter-spacing: .04em; color: var(--band-mut); margin-top: .7rem; }
   @media (min-width: 900px), (min-width: 560px) and (orientation: landscape) {
     .hero .wrap { grid-template-columns: 1.05fr 1fr; align-items: center; gap: 2rem; }
     .hero { padding-bottom: clamp(3rem, 9vh, 6rem); }
-    .phones { min-height: 0; padding-bottom: 0; }
-    .phones .phone:last-child { margin-bottom: 0; }
+    .phones { min-height: 0; }
+    .phones > div:nth-child(3) .phone { margin-bottom: 0; }
     .phone { width: min(15.5rem, 20vw, 36vh); }
   }
   @media (min-width: 900px) { .hero { padding-top: 4.5rem; } }
-  /* Layar lebar: tiga layar app, ukurannya mengikuti lebar dan tinggi layar. */
   @media (min-width: 1200px) and (orientation: landscape) {
-    .hero .wrap { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 3rem; }
+    .hero .wrap { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 3rem; }
     .phones .px3 { display: block; }
     .phones { gap: 1.25rem; }
     .phone { width: min(18rem, 12.5vw, 44vh); }
-    .phones .phone { transform: none; margin-bottom: 0 !important; }
-    .phones > div:nth-child(2) { transform: translateY(-1.5rem); }
+    .phones > div:nth-child(1) .phone { transform: perspective(1100px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)) translate3d(calc(var(--py, 0) * -.12px), calc(2rem + var(--py, 0) * -.05px), 0) rotate(calc(-5deg - var(--py, 0) * .012deg)); }
+    .phones > div:nth-child(2) .phone { transform: perspective(1100px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)) translate3d(0, calc(-1.5rem + var(--py, 0) * -.16px), 0); }
   }
   @media (orientation: landscape) and (max-height: 500px) {
     .hero { padding-top: 1.5rem; }
+    .hero h1 { margin: .7rem 0 .8rem; }
     .hero p.lead { font-size: 1rem; margin-bottom: 1rem; }
+    .hero-in { display: none; }
     .facts { margin-top: 1rem; }
   }
+  @keyframes flyL { from { opacity: 0; transform: translate3d(-70px, 180px, 0) rotate(-14deg); } }
+  @keyframes flyU { from { opacity: 0; transform: translate3d(0, 220px, 0) scale(.92); } }
+  @keyframes flyR { from { opacity: 0; transform: translate3d(70px, 180px, 0) rotate(14deg); } }
+  @keyframes fade { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-  /* Sections */
-  section.sec { padding: 4.5rem 0; }
-  .kicker { font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mut); margin: 0 0 .5rem; }
-  h2 { font-size: clamp(1.7rem, 5.5vw, 2.6rem); line-height: 1.1; letter-spacing: -.025em; margin: 0 0 .8rem; }
-  .sec > .wrap > p.intro { max-width: 44rem; color: var(--mut); margin: 0 0 2rem; font-size: 1.05rem; }
+  /* Ringkasan di bawah hero */
+  .strip { border-bottom: 1px solid var(--line); }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+  .stats > div { padding: 1.4rem 1rem 1.4rem 0; border-top: 1px solid var(--line); }
+  .stats > div:nth-child(-n+2) { border-top: 0; }
+  .stats dt { font-family: var(--mono); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); }
+  .stats dd { margin: .3rem 0 0; font-family: var(--display); font-weight: 800; font-size: clamp(1.25rem, 4.5vw, 1.9rem); letter-spacing: -.015em; line-height: 1.1; }
+  @media (min-width: 900px) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } .stats > div { border-top: 0; padding: 2rem 1.5rem 2rem 0; } .stats > div + div { border-left: 1px solid var(--line); padding-left: 1.5rem; } }
+
+  /* Bagian */
+  section.sec { padding: clamp(4rem, 9vw, 7rem) 0; }
+  section.soft { background: var(--soft); }
+  .intro { max-width: 44rem; color: var(--mut); margin: 0 0 2.2rem; font-size: 1.08rem; }
+  .band .intro { color: var(--band-mut); }
   .grid2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   @media (min-width: 768px) { .grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 1.4rem; }
   .card.ink { background: var(--band); color: var(--on-band); border-color: var(--band); }
   .card.ink .mut { color: var(--band-mut); }
-  .card h3 { font-size: 1.25rem; margin: 0 0 .2rem; letter-spacing: -.01em; }
-  .feat { list-style: none; padding: 0; margin: 1.2rem 0 0; display: grid; gap: 1rem; }
-  .feat li { display: grid; grid-template-columns: 2.5rem 1fr; gap: .8rem; align-items: start; }
-  .feat b { display: block; font-size: 1rem; }
-  .feat span { font-size: .93rem; color: var(--mut); }
-  .card.ink .feat span { color: var(--band-mut); }
-  .ic { width: 2.5rem; height: 2.5rem; border-radius: .7rem; display: grid; place-items: center; background: var(--soft); }
+  .card h3 { font-size: 1.3rem; font-weight: 750; margin: 0 0 .2rem; letter-spacing: -.02em; }
+  .ic { width: 2.5rem; height: 2.5rem; border-radius: .7rem; display: grid; place-items: center; background: var(--soft); flex: none; }
   .card.ink .ic { background: var(--band-card); }
   .ic svg { width: 1.3rem; height: 1.3rem; }
-  svg.i { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ticks { list-style: none; padding: 0; margin: 1.1rem 0 1.3rem; display: grid; gap: .55rem; font-size: .95rem; }
+  .ticks li { display: grid; grid-template-columns: 1.3rem minmax(0, 1fr); gap: .35rem; }
+  .ticks li::before { content: "✓"; font-weight: 800; }
 
-  /* Screenshot strip */
-  .shots { display: grid; grid-auto-flow: column; grid-auto-columns: min(14rem, 62vw); gap: 1rem; overflow-x: auto; scroll-snap-type: x mandatory;
-    padding: .25rem 1rem 1rem; margin: 0 -1rem; scrollbar-width: none; }
-  .shots::-webkit-scrollbar { display: none; }
-  .shots figure { margin: 0; scroll-snap-align: center; }
-  .shots img { border-radius: 1.4rem; border: 1px solid var(--line); aspect-ratio: 390 / 844; object-fit: cover; object-position: top; width: 100%; background: #fafaf9; }
-  .shots figcaption { font-size: .88rem; margin-top: .6rem; }
-  .shots figcaption b { display: block; }
-  .shots figcaption span { color: var(--mut); }
-  @media (min-width: 1000px) { .shots { grid-auto-flow: row; grid-template-columns: repeat(6, 1fr); overflow: visible; margin: 0; padding: 0; } }
+  /* 01 · Masalah: 5 aplikasi, 1 coach */
+  .pb { display: grid; gap: 2rem; }
+  @media (min-width: 960px) { .pb { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 4rem; align-items: start; } .pb-head { position: sticky; top: 6rem; } .pb .mega { font-size: min(8rem, 8.6vw - .5rem); } }   /* dua kolom: tiap baris tetap satu baris */
+  .mega { font-size: clamp(3.3rem, 14vw, 8rem); font-weight: 900; line-height: .9; letter-spacing: -.035em; word-spacing: .05em; margin: 0 0 1.5rem; }
+  .mega > span { display: block; }
+  .tools { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+  .tool { display: grid; grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr); gap: .2rem 1.25rem; padding: 1.15rem 1.3rem; border: 1px solid var(--line); border-radius: var(--r); background: var(--card); }
+  .tool b { font-family: var(--display); font-size: 1.3rem; font-weight: 800; letter-spacing: -.02em; position: relative; justify-self: start; grid-row: span 2; align-self: center; }
+  .tool b::after { content: ""; position: absolute; left: -3%; right: -3%; top: 54%; height: 3px; border-radius: 2px; background: var(--red);
+    transform: scaleX(0); transform-origin: left; transition: transform .5s var(--ease); }
+  .tool.x b::after { transform: scaleX(1); }
+  .tool span { font-weight: 650; }
+  .tool em { font-style: normal; color: var(--mut); font-size: .93rem; }
+  .tool.xnk { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+  .tool.xnk b::after { display: none; }
+  .tool.xnk em { color: color-mix(in srgb, var(--on-ink) 72%, transparent); }
+  @media (max-width: 559px) { .tool { grid-template-columns: minmax(0, 1fr); } .tool b { grid-row: auto; margin-bottom: .2rem; } }
 
-  /* Steps */
-  .steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; counter-reset: s; }
-  @media (min-width: 768px) { .steps { grid-template-columns: repeat(3, 1fr); } }
-  .steps li { counter-increment: s; }
-  .steps li::before { content: counter(s); display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%;
-    background: var(--ink); color: var(--on-ink); font-weight: 800; margin-bottom: 1rem; }
-  .steps h3 { font-size: 1.1rem; margin: 0 0 .35rem; }
-  .steps p { margin: 0; color: var(--mut); font-size: .95rem; }
-  code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--soft); padding: .1rem .35rem; border-radius: .35rem; overflow-wrap: anywhere; }
+  /* 02 · Fitur: satu layar HP dengan tab */
+  #fitur { overflow: hidden; }   /* cahaya di belakang HP tidak boleh membuat halaman bisa digeser ke samping */
+  .show { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "seg" "tabs" "dev" "caps"; }
+  .show-head { grid-area: head; }
+  .show-head .intro { margin-bottom: .4rem; }
+  .seg { grid-area: seg; justify-self: start; display: inline-flex; padding: .25rem; border-radius: 999px; background: var(--band-card); border: 1px solid var(--band-line); }
+  .seg button { min-height: 2.75rem; padding: 0 1.15rem; border: 0; border-radius: 999px; background: transparent; color: var(--band-mut); font: inherit; font-weight: 700; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--on-band); color: var(--band); }
+  .tabs { grid-area: tabs; display: flex; gap: .5rem; overflow-x: auto; scrollbar-width: none; margin: 0 -1rem; padding: .1rem 1rem; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; position: relative; overflow: hidden; display: flex; align-items: center; gap: .55rem; min-height: 2.75rem; padding: .55rem 1rem;
+    border-radius: .8rem; border: 1px solid var(--band-line); background: transparent; color: var(--band-mut); font: inherit; font-weight: 700; text-align: left; cursor: pointer;
+    transition: color .2s, border-color .2s, background-color .2s; }
+  .tab .n { font-family: var(--mono); font-size: .7rem; font-weight: 500; opacity: .75; }
+  .tab.on { color: var(--on-band); border-color: var(--on-band); background: var(--band-card); }
+  .tab .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
+  .tab .bar i { display: block; height: 100%; background: var(--red-band); transform: scaleX(0); transform-origin: left; }
+  .show.run .tab.on .bar i { animation: fill 6s linear forwards; }
+  .show.paused .tab.on .bar i, .show.off .tab.on .bar i { animation-play-state: paused; }
+  @keyframes fill { to { transform: scaleX(1); } }
+  .show:not([data-group="coach"]) [data-g="coach"], .show:not([data-group="klien"]) [data-g="klien"] { display: none; }
+  .dev { grid-area: dev; position: relative; justify-self: center; width: min(17rem, 72vw); margin: .5rem 0; }
+  .dev::before { content: ""; position: absolute; inset: -12% -35%; background: radial-gradient(closest-side, color-mix(in srgb, var(--red-band) 26%, transparent), transparent); pointer-events: none; }
+  .frame { position: relative; border-radius: 2.3rem; padding: .5rem; background: #1f1f1e; border: 1px solid #333331; box-shadow: 0 50px 90px -30px rgba(0,0,0,.85); }
+  .dscr { position: relative; aspect-ratio: 390 / 844; border-radius: 1.8rem; overflow: hidden; background: #fafaf9; }
+  .dscr img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; opacity: 0; transform: translate3d(0, 9%, 0) scale(1.02); transition: opacity .45s var(--ease), transform .75s var(--ease); }
+  .dscr img.on { opacity: 1; transform: none; }
+  .dscr img.out { opacity: 0; transform: translate3d(0, -7%, 0) scale(.98); }
+  .caps { grid-area: caps; }
+  .cap2 { display: none; }
+  .cap2.on { display: block; animation: fade .5s var(--ease) both; }
+  .cap2 h3 { font-size: clamp(1.5rem, 5vw, 2.1rem); font-weight: 800; letter-spacing: -.02em; line-height: 1.05; margin: 0 0 .5rem; }
+  .cap2 p { margin: 0; color: var(--band-mut); font-size: 1.02rem; max-width: 34rem; }
+  .cap2 .ticks { margin-bottom: 0; }
+  @media (min-width: 900px) {
+    .show { grid-template-columns: minmax(0, 1fr) minmax(0, 23rem); grid-template-areas: "head dev" "seg dev" "tabs dev" "caps dev"; grid-template-rows: auto auto auto 1fr; gap: 1.5rem 4rem; }
+    .tabs { flex-direction: column; overflow: visible; margin: 0; padding: 0; gap: .4rem; }
+    .tab { width: 100%; max-width: 30rem; padding: .85rem 1.1rem; font-size: 1.12rem; }
+    .dev { width: min(22rem, 100%); align-self: center; margin: 0; }
+  }
 
-  /* Privacy band */
-  .priv { display: grid; gap: 1rem; margin-top: 2rem; }
-  @media (min-width: 768px) { .priv { grid-template-columns: repeat(3, 1fr); } }
+  /* 03 · Coba demo */
+  .demos { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 768px) { .demos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .dtile { position: relative; overflow: hidden; isolation: isolate; display: flex; flex-direction: column; gap: .45rem; min-height: 16rem; padding: 1.6rem 40% 1.6rem 1.6rem;
+    border-radius: 1.5rem; text-decoration: none; }
+  .dtile b { font-family: var(--display); font-size: clamp(1.6rem, 5vw, 2.2rem); font-weight: 800; letter-spacing: -.02em; line-height: 1.05; }
+  .dtile small { color: var(--mut); font-size: .95rem; }
+  .dtile.ink small { color: var(--band-mut); }
+  .dtile small b { font: inherit; font-weight: 800; color: var(--fg); letter-spacing: 0; }
+  .dtile.ink small b { color: var(--on-band); }
+  .dtile .get { margin-top: auto; padding-top: .8rem; display: inline-flex; align-items: center; gap: .45rem; font-weight: 750; }
+  .dtile .get svg { width: 1.1rem; height: 1.1rem; transition: transform .2s var(--ease); }
+  .dtile img { position: absolute; z-index: -1; right: 1.2rem; top: 1.6rem; width: min(34%, 12rem); min-width: 7.5rem; border-radius: 1.3rem; border: 5px solid #1f1f1e;
+    transform: rotate(-7deg) translate3d(var(--mx, 0px), var(--my, 0px), 0); transition: transform .5s var(--ease); box-shadow: 0 30px 50px -20px rgba(0,0,0,.6); }
+  @media (hover: hover) { .dtile:hover img { transform: rotate(-3deg) translate3d(var(--mx, 0px), calc(var(--my, 0px) - 10px), 0); } .dtile:hover .get svg { transform: translateX(4px); } .dtile:not(.ink):hover { border-color: var(--fg); } }
+
+  /* 04 · Keamanan */
+  .priv { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
   .priv .card { background: var(--band-card); border-color: var(--band-line); color: var(--on-band); }
-  .priv .card p { color: var(--band-mut); margin: .3rem 0 0; font-size: .95rem; }
+  .priv .card b { display: block; font-family: var(--display); font-size: 1.2rem; letter-spacing: -.02em; }
+  .priv .card p { color: var(--band-mut); margin: .35rem 0 0; font-size: .95rem; }
   .priv .ic { background: var(--band); margin-bottom: 1rem; }
-  .band .kicker, .band p.intro { color: var(--band-mut); }
 
-  /* Coaches */
-  .coaches { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); }
+  /* 05 · Harga (isi dari tools/hub-harga.js) */
+  .cyc { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; border: 1px solid var(--line); border-radius: 1.6rem; background: var(--card); margin: 0 0 1.25rem; max-width: 100%; }
+  .cyc button { min-height: 2.75rem; padding: 0 1.1rem; border: 0; border-radius: 999px; background: transparent; color: var(--fg); font: inherit; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: .45rem; }
+  .cyc button span { font-size: .78rem; font-weight: 600; color: var(--mut); }
+  .cyc button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
+  .cyc button[aria-pressed="true"] span { color: inherit; opacity: .8; }
+  .tiers { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .tiers { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .tier { display: flex; flex-direction: column; padding: 1.6rem; border-radius: 1.4rem; transition: transform .3s var(--ease), border-color .2s; }
+  @media (hover: hover) { .tier:hover { transform: translateY(-4px); } .tier:not(.ink):hover { border-color: var(--fg); } }
+  .tier-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; min-height: 1.8rem; }
+  .tier h3 { font-family: var(--mono); font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin: 0; }
+  .tag { font-size: .75rem; font-weight: 800; padding: .25rem .7rem; border-radius: 999px; background: #d91f26; color: #fff; }
+  .lim { margin: .25rem 0 0; font-size: .9rem; color: var(--mut); }
+  .price { margin: .9rem 0 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: .3rem; }
+  .price b { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 7vw, 2.6rem); letter-spacing: -.025em; line-height: 1.05; }
+  .price span { color: var(--mut); font-size: .95rem; }
+  .psub { margin: .4rem 0 0; font-size: .88rem; color: var(--mut); min-height: 1.75rem; }
+  .free { display: inline-block; font-size: .8rem; font-weight: 750; padding: .2rem .65rem; border-radius: 999px; border: 1px solid currentColor; color: var(--fg); }
+  .card.ink .lim, .card.ink .psub, .card.ink .fit, .card.ink .lead2, .card.ink .price span { color: var(--band-mut); }
+  .card.ink .free { color: var(--on-band); }
+  .tiers .y { display: none; }
+  #harga.yr .tiers .m { display: none; }
+  #harga.yr .tiers .price.y { display: flex; }
+  #harga.yr .tiers .psub.y { display: block; }
+  .tier .fit { margin: auto 0 0; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .9rem; color: var(--mut); }
+  .card.ink .fit { border-color: var(--band-line); }
+  .tier.ink { outline: 2px solid var(--ink); outline-offset: -2px; }
+  .tier .btn { margin-top: 1rem; width: 100%; }
+  .card.ink .btn { background: var(--on-band); color: var(--band); border-color: var(--on-band); }
+  .kicker.sub { margin-top: 2.5rem; }
+  .setups h3 { font-size: 1.15rem; }
+  .setups .price { margin-top: .4rem; }
+  .lead2 { margin: .3rem 0 0; color: var(--mut); }
+  .setups .ticks { margin-bottom: 0; }
+  .payback { margin-top: 1rem; display: grid; gap: .5rem 2rem; background: var(--soft); border-color: var(--soft); }
+  @media (min-width: 768px) { .payback { grid-template-columns: minmax(0, 17rem) minmax(0, 1fr); align-items: center; } }
+  .payback .kicker { margin: 0 0 .2rem; }
+  .payback b { font-family: var(--display); font-weight: 800; font-size: clamp(1.7rem, 5vw, 2.4rem); letter-spacing: -.025em; line-height: 1.1; }
+  .payback p { margin: 0; color: var(--mut); }
+  details.more { margin-top: 1rem; border: 1px solid var(--line); border-radius: .9rem; background: var(--card); padding: 0 .7rem; }
+  details.more > summary { cursor: pointer; font-weight: 700; min-height: 2.75rem; padding: 1rem .4rem; list-style: none; display: flex; justify-content: space-between; gap: 1rem; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary::after { content: "+"; font-weight: 400; font-size: 1.3rem; line-height: 1; color: var(--mut); transition: transform .3s var(--ease); }
+  details.more[open] > summary::after { transform: rotate(45deg); }
+  details.more[open] { padding-bottom: 1rem; }
+  details.more .note { padding: 0 .4rem; }
+  .cmp { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .8rem; line-height: 1.35; }
+  .cmp th, .cmp td { padding: .55rem .25rem; border-bottom: 1px solid var(--line); vertical-align: middle; overflow-wrap: break-word; }
+  .cmp thead th { text-align: center; font-size: .9rem; }
+  .cmp thead th:first-child { width: 34%; }
+  .cmp thead th small { display: block; font-weight: 400; color: var(--mut); font-size: .72rem; }
+  .cmp tbody th { text-align: left; font-weight: 500; padding-left: .4rem; }
+  .cmp td { text-align: center; }
+  .cmp tr.grp th { font-family: var(--mono); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); font-weight: 700; padding-top: 1.2rem; border-bottom: 2px solid var(--fg); }
+  .cmp .p { background: var(--band); color: var(--on-band); }
+  .cmp thead .p small { color: inherit; opacity: .75; }
+  .cmp .ok { font-weight: 800; }
+  .cmp .no { color: var(--mut); }
+  .cmp .p .no { color: inherit; opacity: .55; }
+  .cmp tr.tot th, .cmp tr.tot td { font-weight: 700; border-bottom: 0; }
+  .cmp.pay tbody th small { display: block; color: var(--mut); font-size: .75rem; font-weight: 400; margin-top: .15rem; }
+  .cmp.pay td { font-weight: 700; }
+  @media (max-width: 559px) { .cmp thead th small { display: none; } .cyc button { padding: 0 .85rem; } }
+  @media (min-width: 560px) { .cmp { font-size: .92rem; } .cmp th, .cmp td { padding: .6rem .6rem; } .cmp thead th:first-child { width: 40%; } .cmp thead th small { font-size: .78rem; } }
+  .note { font-size: .85rem; color: var(--mut); margin: 1rem 0 0; }
+  .card.ink .note { color: var(--band-mut); }
+
+  /* 06 · Daftar */
+  .two-col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2rem; align-items: start; }
+  @media (min-width: 900px) { .two-col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4rem; } }
+  .flow { list-style: none; padding: 0; margin: 1.6rem 0 0; display: grid; gap: 1rem; counter-reset: f; }
+  .flow li { counter-increment: f; display: grid; grid-template-columns: 2.4rem minmax(0, 1fr); gap: 0 .9rem; }
+  .flow li::before { content: counter(f); grid-row: span 2; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--ink); color: var(--on-ink); font-family: var(--display); font-weight: 800; }
+  .flow b { display: block; font-family: var(--display); font-size: 1.1rem; letter-spacing: -.01em; }
+  .flow span { color: var(--mut); font-size: .93rem; }
+  .flow em { font-style: normal; font-family: var(--mono); font-size: .72rem; color: var(--mut); margin-left: .4rem; }
+  .daftar-in .cta { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1.6rem; }
+  .daftar-in .cta:empty { display: none; }
+  label { display: block; font-weight: 650; font-size: .9rem; margin: .9rem 0 .35rem; }
+  .row { display: flex; align-items: center; border: 1px solid var(--line); border-radius: .75rem; background: var(--bg); overflow: hidden; }
+  .row span { padding: 0 .1rem 0 .8rem; color: var(--mut); white-space: nowrap; font-size: .95rem; }
+  .row input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 1rem; padding: .8rem .8rem .8rem 0; outline: 0; }
+  .row > input:first-child { padding-left: .8rem; }
+  .row select { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 1rem; min-height: 2.9rem; padding: 0 .6rem; outline: 0; }
+  .row:focus-within { border-color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 12%, transparent); }
+  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 .75rem; }
+  .chk { display: flex; align-items: center; gap: .65rem; min-height: 2.75rem; font-weight: 650; margin: .7rem 0 0; cursor: pointer; }
+  .chk input { width: 1.3rem; height: 1.3rem; margin: 0; accent-color: var(--ink); flex: none; }
+  .form-card { padding: 1.6rem; border-radius: 1.4rem; box-shadow: 0 30px 60px -40px rgba(0,0,0,.35); }
+  #df .btn { width: 100%; }
+  .btns { display: grid; gap: .6rem; margin-top: 1rem; }
+  .err { color: var(--bad); font-size: .9rem; min-height: 1.3rem; margin: .6rem 0 0; }
+
+  /* 07 · Tanya jawab */
+  .faq { display: grid; gap: .6rem; align-items: start; }
+  @media (min-width: 1000px) { .faq { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: .9rem; padding: 0 1.1rem; }
+  .faq summary { cursor: pointer; font-weight: 700; padding: 1rem 0; min-height: 2.75rem; list-style: none; display: flex; justify-content: space-between; gap: 1rem; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; font-weight: 400; font-size: 1.3rem; line-height: 1; color: var(--mut); transition: transform .3s var(--ease); }
+  .faq details[open] summary::after { transform: rotate(45deg); }
+  .faq details p { margin: 0 0 1rem; color: var(--mut); }
+
+  /* 08 · Aplikasi */
+  .apps { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 560px) { .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .apps-wrap { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); align-items: center; }
+  @media (min-width: 1100px) { .apps-wrap { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
+  .devices { position: relative; padding: 0 9% 1.5rem 0; max-width: 46rem; width: 100%; margin: 0 auto; }
+  .laptop .scr { border: .55rem solid #1f1f1e; border-bottom-width: .8rem; border-radius: 1rem 1rem 0 0; aspect-ratio: 16 / 10; overflow: hidden; background: #fafaf9; }
+  .laptop .scr img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+  .laptop .base { height: .85rem; margin: 0 -7%; border-radius: 0 0 1.2rem 1.2rem; background: linear-gradient(#e2e2de, #b4b4af); box-shadow: 0 18px 30px -18px rgba(0,0,0,.45); }
+  @media (prefers-color-scheme: dark) { .laptop .base { background: linear-gradient(#3a3a38, #222221); } }
+  .phone-s { position: absolute; right: 0; bottom: 0; width: 23%; padding: .3rem; border-radius: 1.3rem; background: #1f1f1e; border: 1px solid #333331; box-shadow: 0 20px 40px -16px rgba(0,0,0,.55); }
+  .phone-s img { border-radius: 1.05rem; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; width: 100%; }
+  .tile { display: flex; flex-direction: column; gap: .35rem; text-decoration: none; min-height: 11rem; }
+  .tile .ic { margin-bottom: .6rem; }
+  .tile > b { font-size: 1.15rem; }
+  .tile small { color: var(--mut); font-size: .9rem; }
+  .card.ink.tile small { color: var(--band-mut); }
+  .tile .get, .tile .btn { margin-top: auto; }
+  .tile .get { display: inline-flex; align-items: center; gap: .45rem; font-weight: 700; padding-top: 1rem; }
+  .tile .get svg { width: 1.1rem; height: 1.1rem; }
+  a.tile:hover { border-color: var(--fg); }
+  .tile .note { margin-top: auto; padding-top: 1rem; }
+  @media (max-width: 559px) {
+    .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    .apps .ink, .apps a.tile:last-child { grid-column: 1 / -1; }
+    .tile { min-height: 0; padding: 1rem; }
+    .tile .ic { margin-bottom: .2rem; }
+    .tile .get { padding-top: .6rem; }
+  }
+  #inst-ios, #inst-done, #inst-menu, #inst-btn[hidden] { display: none; }
+
+  .resume { display: none; background: var(--soft); border-bottom: 1px solid var(--line); }
+  .resume .wrap { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; justify-content: space-between; padding-top: .7rem; padding-bottom: .7rem; }
+  .resume span { overflow-wrap: anywhere; }
+
+  /* Penutup + kaki */
+  .end { text-align: center; padding: clamp(4rem, 10vw, 7rem) 0; border-bottom: 1px solid var(--band-line); }
+  .end h2 { font-size: clamp(2.4rem, 9vw, 5.5rem); margin-bottom: 1rem; }
+  .end p { color: var(--band-mut); max-width: 32rem; margin: 0 auto 1.8rem; font-size: 1.08rem; }
+  .end .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: .7rem; }
+  footer { padding: 2.5rem 0 max(2.5rem, env(safe-area-inset-bottom)); font-size: .9rem; color: var(--band-mut); }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; justify-content: space-between; }
+  footer .brand { color: var(--on-band); }
+  footer .links { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--on-band); }
+
+  /* Bilah bawah di HP: Coba demo + Daftar (sembunyi di hero, harga, daftar, kaki) */
+  .dock { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: flex; gap: .6rem;
+    padding: .7rem max(1rem, env(safe-area-inset-right)) max(.7rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line);
+    transform: translateY(110%); visibility: hidden; transition: transform .3s var(--ease), visibility 0s .3s; }
+  .dock.on { transform: none; visibility: visible; transition: transform .3s var(--ease); }
+  .dock .btn { flex: 1; }
+  @media (min-width: 768px) { .dock { display: none; } }
+
+  /* Masuk: lembar dari bawah (HP) atau panel kanan (layar lebar) */
+  dialog.sheet { position: fixed; margin: 0; padding: 0; border: 0; max-width: none; max-height: none; background: var(--bg); color: var(--fg); overflow: auto; overscroll-behavior: contain;
+    box-shadow: 0 -20px 60px -20px rgba(0,0,0,.5); transition: transform .34s var(--ease); }
+  dialog.sheet::backdrop { background: rgba(0,0,0,.55); }
+  @media (max-width: 767px) { dialog.sheet { inset: auto 0 0 0; width: 100%; max-height: 92dvh; border-radius: 1.4rem 1.4rem 0 0; transform: translateY(100%); } }
+  @media (min-width: 768px) { dialog.sheet { inset: 0 0 0 auto; width: min(31rem, 94vw); height: 100dvh; border-radius: 1.3rem 0 0 1.3rem; transform: translateX(100%); } }
+  dialog.sheet.in { transform: none; }
+  .sheet-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; background: var(--band); color: var(--on-band); }
+  .sheet-head h2 { font-size: 1.7rem; margin: 0; }
+  .sheet-head p { margin: .15rem 0 0; font-size: .88rem; color: var(--band-mut); }
+  .sheet .x { flex: none; width: 2.75rem; height: 2.75rem; border-radius: 50%; border: 1px solid var(--band-line); background: transparent; color: var(--on-band); display: grid; place-items: center; cursor: pointer; }
+  .sheet .x svg { width: 1.2rem; height: 1.2rem; }
+  .sheet-body { padding: 1.25rem 1.25rem max(1.6rem, env(safe-area-inset-bottom)); }
+  .sheet-body:focus { outline: none; }   /* fokus awal lembar (tanpa cincin di tombol tutup); Tab lanjut ke isian */
+
+  /* Daftar coach (di lembar Masuk) */
+  .coaches { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); }
   .coach { display: flex; align-items: center; gap: .9rem; text-decoration: none; padding: 1rem 1.1rem; }
   .coach .av { width: 3rem; height: 3rem; border-radius: 50%; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; font-weight: 800; flex: none; }
   .coach b { display: block; font-size: 1.05rem; line-height: 1.25; overflow-wrap: anywhere; }
@@ -205,14 +478,13 @@
   .coach .pl { display: flex; align-items: flex-start; gap: .3rem; margin-top: .2rem; color: var(--fg); font-size: .88rem; line-height: 1.35; }
   .coach .pl svg { width: .95rem; height: .95rem; flex: none; margin-top: .1rem; color: var(--mut); }
   .coach .pl em { font-style: normal; color: var(--mut); }
-  /* T-2260: cari coach dan saring per kota (hanya bila ada ≥ 2 coach). */
   .find { display: grid; gap: .7rem; margin: 0 0 1rem; }
   .find .row svg { width: 1.1rem; height: 1.1rem; margin-left: .8rem; color: var(--mut); flex: none; }
   .find .row input { padding-left: .6rem; }
   .cities { display: flex; gap: .4rem; overflow-x: auto; scrollbar-width: none; padding: .1rem; margin: 0 -.1rem; }
   .cities::-webkit-scrollbar { display: none; }
   .cities button { flex: none; min-height: 2.75rem; padding: 0 .95rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg);
-    font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    font: inherit; font-size: .92rem; font-weight: 650; cursor: pointer; white-space: nowrap; }
   .cities button span { color: var(--mut); font-weight: 400; margin-left: .3rem; }
   .cities button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
   .cities button[aria-pressed="true"] span { color: inherit; opacity: .75; }
@@ -220,91 +492,124 @@
   .no-hit { margin: .4rem 0 0; color: var(--mut); }
   /*ACCENTS*/
 
-  /* Masuk */
-  .login { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; align-items: start; }
-  @media (min-width: 900px) { .login { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3rem; } }
-  label { display: block; font-weight: 600; font-size: .9rem; margin: .9rem 0 .35rem; }
-  .row { display: flex; align-items: center; border: 1px solid var(--line); border-radius: .7rem; background: var(--bg); overflow: hidden; }
-  .row span { padding: 0 .1rem 0 .8rem; color: var(--mut); white-space: nowrap; font-size: .95rem; }
-  .row input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 1rem; padding: .8rem .8rem .8rem 0; outline: 0; }
-  .row:focus-within { border-color: var(--fg); }
-  .btns { display: grid; gap: .6rem; margin-top: 1rem; }
-  .err { color: var(--bad); font-size: .9rem; min-height: 1.3rem; margin: .6rem 0 0; }
 
-  /* FAQ */
-  .faq { display: grid; gap: .6rem; align-items: start; }
-  @media (min-width: 1000px) { .faq { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: .9rem; padding: 0 1.1rem; }
-  .faq summary { cursor: pointer; font-weight: 650; padding: 1rem 0; min-height: 2.75rem; list-style: none; display: flex; justify-content: space-between; gap: 1rem; }
-  .faq summary::-webkit-details-marker { display: none; }
-  .faq summary::after { content: "+"; font-weight: 400; font-size: 1.3rem; line-height: 1; color: var(--mut); }
-  .faq details[open] summary::after { content: "–"; }
-  .faq details p { margin: 0 0 1rem; color: var(--mut); }
-
-  /* Pasang aplikasi: empat kartu sejajar di layar lebar, dua di tablet, satu kolom di HP. */
-  .apps { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
-  @media (min-width: 560px) { .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  /* Gambar perangkat (laptop + HP) di samping kartu: tanpa bidang kosong. */
-  .apps-wrap { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); align-items: center; }
-  @media (min-width: 1100px) { .apps-wrap { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
-  .devices { position: relative; padding: 0 9% 1.5rem 0; max-width: 46rem; width: 100%; margin: 0 auto; }
-  .laptop .scr { border: .55rem solid #1f1f1e; border-bottom-width: .8rem; border-radius: 1rem 1rem 0 0; aspect-ratio: 16 / 10; overflow: hidden; background: #fafaf9; }
-  .laptop .scr img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
-  .laptop .base { height: .85rem; margin: 0 -7%; border-radius: 0 0 1.2rem 1.2rem; background: linear-gradient(#e2e2de, #b4b4af); box-shadow: 0 18px 30px -18px rgba(0,0,0,.45); }
-  @media (prefers-color-scheme: dark) { .laptop .base { background: linear-gradient(#3a3a38, #222221); } }
-  .phone-s { position: absolute; right: 0; bottom: 0; width: 23%; padding: .3rem; border-radius: 1.3rem; background: #1f1f1e; border: 1px solid #333331; box-shadow: 0 20px 40px -16px rgba(0,0,0,.55); }
-  .phone-s img { border-radius: 1.05rem; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; width: 100%; }
-  .tile { min-height: 11rem !important; }
-  @media (max-width: 559px) {
-    .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
-    .apps .ink, .apps a.tile:last-child { grid-column: 1 / -1; }
-    .tile { min-height: 0 !important; padding: 1rem; }
-    .tile .ic { margin-bottom: .2rem; }
-    .tile .get { padding-top: .6rem; }
+  /* ===== Gerak (T-2265). Hanya transform/opacity; berhenti saat tidak terlihat; tidak ada dengan "kurangi gerakan". ===== */
+  .prog { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none; }
+  .prog i { display: block; height: 100%; background: var(--red-band); transform-origin: left; transform: scaleX(0); }
+  [data-split] .w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 .03em .14em; margin: 0 -.03em -.14em; }
+  [data-split] .w > span { display: inline-block; }
+  /* Pita merah berjalan; miring sesuai kecepatan gulir */
+  .marq { position: relative; overflow: hidden; background: #d91f26; color: #fff; padding: 1rem 0; }
+  .marq-in { will-change: transform; }
+  .marq-track { display: flex; width: max-content; animation: marq 38s linear infinite; }
+  .marq-track span { flex: none; padding: 0 1.3rem; font-family: var(--display); font-weight: 800; font-size: clamp(1.5rem, 4.6vw, 2.9rem); line-height: 1.1; text-transform: uppercase; white-space: nowrap; }
+  .marq-track .sep { padding: 0; opacity: .5; }
+  .marq.off .marq-track { animation-play-state: paused; }
+  @keyframes marq { to { transform: translate3d(-50%, 0, 0); } }
+  /* 01: 5 -> 1, Capek -> Beres; di HP judulnya menempel di atas saat daftar alat digulir */
+  .mg, .mg-l { display: block; }
+  .num { display: inline-block; height: .9em; overflow: hidden; vertical-align: top; }
+  .roll { display: block; transform: translate3d(0, calc(var(--k, 0) * -.9em), 0); transition: transform .7s var(--ease); }
+  .roll > span { display: block; height: .9em; line-height: .9; }
+  .mg-l.swap { position: relative; overflow: hidden; padding-bottom: .16em; margin-bottom: -.16em; }
+  .swap .a, .swap .b { display: block; transition: transform .7s var(--ease), opacity .5s; }
+  .swap .b { position: absolute; left: 0; top: 0; transform: translate3d(0, 105%, 0); opacity: 0; }
+  .pb.done .swap .a { transform: translate3d(0, -105%, 0); opacity: 0; }
+  .pb.done .swap .b { transform: none; opacity: 1; }
+  .tool { transition: opacity .5s var(--ease), transform .5s var(--ease), box-shadow .5s; }
+  .tool.x { opacity: .5; }
+  html.js .tool.rv.in.x { opacity: .5; transform: scale(.97); }
+  html.js .tool.xnk.rv.in:not(.on) { opacity: .55; transform: scale(.95); }
+  .tool.xnk.on { box-shadow: 0 26px 60px -24px rgba(217, 31, 38, .55); }
+  @media (max-width: 959px) {
+    .pb { gap: 1.1rem; }
+    .pb-head { display: contents; }
+    .pb .kicker { order: 0; margin: 0; }
+    .pb .mega { order: 1; position: sticky; top: calc(3.75rem + env(safe-area-inset-top)); z-index: 2; margin: 0 -1rem; padding: .7rem 1rem .9rem;
+      background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .pb .tools { order: 2; }
+    .pb .intro { order: 3; margin: .6rem 0 0; }
   }
-  .tile { display: flex; flex-direction: column; gap: .35rem; text-decoration: none; min-height: 13rem; }
-  .tile .ic { margin-bottom: .6rem; }
-  .tile > b { font-size: 1.15rem; }
-  .tile small { color: var(--mut); font-size: .9rem; }
-  .card.ink.tile small { color: var(--band-mut); }
-  .tile .get, .tile .btn { margin-top: auto; }
-  .tile .get { display: inline-flex; align-items: center; gap: .45rem; font-weight: 650; padding-top: 1rem; }
-  .tile .get svg { width: 1.1rem; height: 1.1rem; }
-  a.tile:hover { border-color: var(--fg); }
-  .tile .note { margin-top: auto; padding-top: 1rem; }
-  .note { font-size: .85rem; color: var(--mut); margin: 1rem 0 0; }
-  .card.ink .note { color: var(--band-mut); }
-  .card.ink .btn { background: var(--on-band); color: var(--band); border-color: var(--on-band); }
-  #inst-ios, #inst-done, #inst-menu, #inst-btn[hidden] { display: none; }
-  .resume { display: none; background: var(--soft); border-bottom: 1px solid var(--line); }
-  .resume .wrap { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; justify-content: space-between; padding-top: .7rem; padding-bottom: .7rem; }
-  .resume span { overflow-wrap: anywhere; }
-  footer { padding: 2.5rem 0 max(2.5rem, env(safe-area-inset-bottom)); font-size: .9rem; color: var(--band-mut); }
-  footer .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; justify-content: space-between; }
-  footer .brand { color: var(--on-band); }
-  footer .links { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; }
-  footer a { text-decoration: none; }
-  footer a:hover { color: var(--on-band); }
-  .end { background: var(--band); color: var(--on-band); text-align: center; padding: 4rem 0 3rem; border-bottom: 1px solid var(--band-line); }
-  .end h2 { margin-bottom: 1rem; }
-  .end p { color: var(--band-mut); max-width: 32rem; margin: 0 auto 1.6rem; }
-  .end .cta .btn:first-child { background: var(--on-band); color: var(--band); border-color: var(--on-band); }
-  .end .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: .7rem; }
+  /* 02: lencana kecil di sekitar HP, layar miring mengikuti tetikus, geser untuk ganti */
+  .dev { touch-action: pan-y; }
+  .frame { transform: perspective(1100px) rotateX(var(--dx, 0deg)) rotateY(var(--dy, 0deg)); transition: transform .6s var(--ease); }
+  .chip { position: absolute; z-index: 3; display: inline-flex; align-items: center; gap: .45rem; padding: .55rem .85rem; border-radius: .95rem; background: #fff; color: #0b0b0b;
+    font-size: .82rem; font-weight: 650; line-height: 1.2; white-space: nowrap; box-shadow: 0 22px 44px -18px rgba(0,0,0,.75); pointer-events: none;
+    opacity: 0; transform: translate3d(0, 18px, 0) scale(.88); transition: opacity .3s, transform .6s cubic-bezier(.3, 1.4, .5, 1); }
+  .chip i { width: .55rem; height: .55rem; border-radius: 50%; background: #d91f26; flex: none; }
+  .chip b { font-family: var(--display); font-weight: 800; font-size: 1.02rem; }
+  .chip[data-p="a"] { left: -20%; top: 15%; }
+  .chip[data-p="b"] { right: -18%; bottom: 21%; }
+  .chip.on { opacity: 1; transform: none; transition-delay: .3s; }
+  .chip.on[data-p="b"] { transition-delay: .5s; }
+  @media (max-width: 899px) { .chip[data-p="a"] { left: -12%; } .chip[data-p="b"] { right: -12%; } }
+  /* 03: kartu demo miring mengikuti tetikus */
+  html.js .dtile.rv.in { transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: opacity .7s var(--ease), transform .5s var(--ease); }
+  /* 04: ikon muncul memantul; sorotan mengikuti tetikus di kartu */
+  .priv .card, .tier { --spot: rgba(0, 0, 0, .05); }
+  .priv .card, .tier.ink { --spot: rgba(255, 255, 255, .08); }
+  @media (hover: hover) and (pointer: fine) { .priv .card, .tier { background-image: radial-gradient(420px circle at var(--x, -999px) var(--y, -999px), var(--spot), transparent 45%); } }
+  /* 05: penanda Bulanan/Tahunan bergeser, harga membalik, kilau sekali di Pro */
+  .cyc { position: relative; isolation: isolate; }
+  .cyc button { transition: color .3s; }
+  .cyc.ready::before { content: ""; position: absolute; z-index: -1; left: 0; top: 0; width: var(--cw); height: var(--ch); border-radius: 999px; background: var(--ink);
+    transform: translate3d(var(--cx), var(--cy), 0); transition: transform .45s var(--ease), width .45s var(--ease); }
+  .cyc.ready button[aria-pressed="true"] { background: transparent; }
+  .tier { position: relative; overflow: hidden; }
+  .tier.ink::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transform: translate3d(-110%, 0, 0);
+    background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .16) 50%, transparent 65%); }
+  .tier.ink.in::after { transform: translate3d(110%, 0, 0); transition: transform 1.6s .5s var(--ease); }
+  #harga.flip .tiers .price, #harga.flip .tiers .psub { animation: flip .55s var(--ease) both; }
+  @keyframes flip { from { opacity: 0; transform: perspective(400px) rotateX(-70deg) translate3d(0, 6px, 0); } }
+  /* 06: garis langkah terisi saat digulir */
+  .flow { position: relative; }
+  .flow::before, .flow::after { content: ""; position: absolute; left: calc(1.2rem - 1px); top: 1.2rem; width: 2px; height: var(--fh, calc(100% - 2.4rem)); border-radius: 2px; }
+  .flow::before { background: var(--line); }
+  .flow::after { background: var(--red); transform-origin: top; transform: scaleY(var(--fp, 0)); }
+  .flow li { position: relative; z-index: 1; }
+  .flow li::before { transition: background-color .3s, color .3s, transform .45s cubic-bezier(.3, 1.6, .5, 1); }
+  .flow li.on::before { background: var(--red); color: #fff; transform: scale(1.1); }
+  /* Tanya jawab: buka dan tutup halus (browser yang mendukung) */
+  .faq details::details-content, details.more::details-content { block-size: 0; overflow-y: clip; transition: block-size .4s var(--ease), content-visibility .4s allow-discrete; }
+  .faq details[open]::details-content, details.more[open]::details-content { block-size: auto; }
+  :root { interpolate-size: allow-keywords; }
+  /* Penutup: tulisan besar bergeser saat digulir */
+  .end { position: relative; overflow: hidden; isolation: isolate; }
+  .end-bg { position: absolute; z-index: -1; left: 0; top: 50%; white-space: nowrap; font-family: var(--display); font-weight: 900; font-size: clamp(7rem, 24vw, 20rem);
+    line-height: 1; letter-spacing: -.03em; text-transform: uppercase; color: transparent; -webkit-text-stroke: 1.5px var(--band-line); pointer-events: none;
+    transform: translate3d(calc(var(--ep, .5) * -40% + 8%), -50%, 0); }
+  @media (prefers-reduced-motion: no-preference) {
+    html.js [data-split] .w > span { transform: translate3d(0, 112%, 0) rotate(6deg); transform-origin: 0 100%; }
+    html.js [data-split].in .w > span { transform: none; transition: transform 1s var(--ease) calc(var(--i, 0) * 55ms); }
+    html.js .hero h1:not(.ready) { opacity: 0; animation: late 0s 2s forwards; }
+    html.js .mega .mg-l { opacity: 0; transform: translate3d(-8%, 0, 0); }
+    html.js .mega.in .mg-l { opacity: 1; transform: none; transition: opacity .8s var(--ease), transform 1s var(--ease); }
+    html.js .mega.in .mg-l:nth-child(2) { transition-delay: .12s; }
+    html.js .mega.in .mg-l:nth-child(3) { transition-delay: .24s; }
+    html.js .priv .card.rv .ic { opacity: 0; transform: scale(.4) rotate(-25deg); }
+    html.js .priv .card.rv.in .ic { opacity: 1; transform: none; transition: transform .7s cubic-bezier(.3, 1.6, .5, 1) .25s, opacity .4s .25s; }
+  }
+  @keyframes late { to { opacity: 1; } }
+
+  /* Muncul saat digulir (sekali). Tanpa JavaScript atau dengan "kurangi gerakan": langsung tampil. */
+  html.js .rv { opacity: 0; transform: translateY(28px); }
+  html.js .rv.in { opacity: 1; transform: none; transition: opacity .7s var(--ease), transform .8s var(--ease); transition-delay: calc(var(--d, 0) * 90ms); }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    html.js .rv { opacity: 1; transform: none; }
+    .hero .rise, .phones > div:nth-child(n), .cap2.on, .marq-track, #harga.flip .tiers .price, #harga.flip .tiers .psub { animation: none; }
+    .tool b::after, .dscr img, dialog.sheet, .dock, .btn, .tier, .dtile img, .phone, .frame, .chip, .roll, .swap .a, .swap .b, .tool, .cyc.ready::before, .flow li::before, .hero::before { transition: none; }
+    .faq details::details-content, details.more::details-content { transition: none; }
+    .show.run .tab.on .bar i { animation: none; }
+  }
 </style>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
-  <symbol id="i-dumbbell" viewBox="0 0 24 24"><path d="M14.4 14.4 9.6 9.6M18.66 21.51a2 2 0 1 1-2.83-2.83l-1.77 1.77a2 2 0 1 1-2.83-2.83l6.37-6.37a2 2 0 1 1 2.83 2.83l-1.77 1.77a2 2 0 1 1 2.83 2.83zM21.5 21.5l-1.4-1.4M3.9 3.9 2.5 2.5M6.4 12.77a2 2 0 1 1-2.83-2.83l1.77-1.77a2 2 0 1 1-2.83-2.83l2.83-2.83a2 2 0 1 1 2.83 2.83l1.77-1.77a2 2 0 1 1 2.83 2.83z"/></symbol>
-  <symbol id="i-food" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></symbol>
-  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/></symbol>
-  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></symbol>
   <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
-  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
-  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
-  <symbol id="i-wand" viewBox="0 0 24 24"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72M14 7l3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9"/></symbol>
   <symbol id="i-sheet" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M8 13h8M8 17h8M10 9H8"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/></symbol>
   <symbol id="i-wifioff" viewBox="0 0 24 24"><path d="M12 20h.01M8.5 16.43a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76M2 2l20 20"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 15V3M7 10l5 5 5-5M5 21h14"/></symbol>
@@ -313,93 +618,241 @@
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-insta" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37zM17.5 6.5h.01"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
 </svg>
 
 <header class="top">
   <div class="wrap">
     <a class="brand" href="#"><img class="logo" src="img/logo-64.png" alt="" width="64" height="64">XNK</a>
     <nav class="nav" aria-label="Menu">
-      <a href="#fitur">Fitur</a><a href="#aplikasi">Aplikasi</a><a href="#cara-kerja">Cara kerja</a><a href="#coach">Coach</a><a href="#tanya">Tanya jawab</a>
+      <a href="#fitur">Fitur</a><a href="#demo">Demo</a><a href="#harga">Harga</a><a href="#tanya">Tanya jawab</a>
     </nav>
-    <a class="btn" href="#masuk">Masuk</a>
+    <div class="top-cta"><a class="btn ghost" href="#masuk">Masuk</a><a class="btn daftar" href="#daftar">Daftar</a></div>
   </div>
+  <div class="prog" aria-hidden="true"><i></i></div>
 </header>
 <div class="resume" id="resume" role="region" aria-label="Lanjutkan">
   <div class="wrap"><span>Terakhir dibuka: <b id="resume-name"></b></span><a class="btn" id="resume-go" href="/">Lanjutkan</a></div>
 </div>
 
 <main>
-  <section class="band hero">
+  <section class="band hero" aria-labelledby="hero-judul">
     <div class="wrap">
-      <div>
-        <span class="eyebrow">Untuk personal trainer &amp; klien</span>
-        <h1>Latihan, makan, dan jadwal PT di satu aplikasi.</h1>
-        <p class="lead">Klien booking sendiri, mencatat latihan dan makan, dan melihat progresnya. Coach mengatur jadwal, paket, dan keuangan dari HP.</p>
-        <div class="cta">
-          <a class="btn" href="#masuk">Masuk <svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a>
-          <!--CONTACT-->
+      <div class="copy">
+        <span class="eyebrow rise">Untuk personal trainer &amp; studio</span>
+        <h1 id="hero-judul" data-split><span class="ln">Anda melatih.</span> <span class="ln red">Sisanya beres.</span></h1>
+        <p class="lead rise">Jadwal, latihan, progres, gizi, dan keuangan klien dalam satu aplikasi: panel coach di HP Anda, portal klien di HP mereka.</p>
+        <div class="cta rise">
+          <a class="btn big" href="#demo">Coba demo <svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="btn ghost big" href="#harga">Lihat harga</a>
         </div>
-        <ul class="facts">
-          <li>Bisa dibuka tanpa sinyal</li>
+        <p class="hero-in rise">Sudah punya coach di XNK? <a href="#masuk">Masuk di sini</a></p>
+        <ul class="facts rise">
+          <li>Mulai {{mulai}}/bulan</li>
           <li>Data tiap coach terpisah</li>
-          <li>Tanpa unduh aplikasi</li>
+          <li>Bisa dibuka tanpa sinyal</li>
         </ul>
       </div>
       <div class="phones" aria-hidden="true">
         <div><div class="phone"><img src="img/klien-hari-ini.jpg" alt="" width="390" height="844" fetchpriority="high"></div><p class="cap">Portal klien</p></div>
-        <div class="px3"><div class="phone"><img src="img/klien-latihan.jpg" alt="" width="390" height="844" loading="lazy"></div><p class="cap">Latihan klien</p></div>
+        <div class="px3"><div class="phone"><img src="img/klien-latihan.jpg" alt="" width="390" height="844"></div><p class="cap">Latihan klien</p></div>
         <div><div class="phone"><img src="img/coach-dashboard.jpg" alt="" width="390" height="844"></div><p class="cap">Panel coach</p></div>
       </div>
     </div>
   </section>
 
-  <section class="sec" id="fitur">
+  <div class="marq" aria-hidden="true"><div class="marq-in"><div class="marq-track"><span>Booking mandiri</span><span class="sep">✕</span><span>Program otomatis</span><span class="sep">✕</span><span>Target kalori</span><span class="sep">✕</span><span>Tagihan rapi</span><span class="sep">✕</span><span>Laporan PDF</span><span class="sep">✕</span><span>Kartu Instagram</span><span class="sep">✕</span><span>Tanpa sinyal</span><span class="sep">✕</span><span>Pengingat WhatsApp</span><span class="sep">✕</span><span>Booking mandiri</span><span class="sep">✕</span><span>Program otomatis</span><span class="sep">✕</span><span>Target kalori</span><span class="sep">✕</span><span>Tagihan rapi</span><span class="sep">✕</span><span>Laporan PDF</span><span class="sep">✕</span><span>Kartu Instagram</span><span class="sep">✕</span><span>Tanpa sinyal</span><span class="sep">✕</span><span>Pengingat WhatsApp</span><span class="sep">✕</span></div></div></div>
+
+  <section class="strip" aria-label="Ringkasan">
     <div class="wrap">
-      <p class="kicker">Fitur</p>
-      <h2>Satu aplikasi, dua sisi.</h2>
-      <p class="intro">Klien dan coach membuka alamat yang sama dari HP, tablet, atau laptop. Semua yang dicatat klien langsung terlihat oleh coach.</p>
-      <div class="grid2">
-        <div class="card">
-          <h3>Untuk klien</h3>
-          <p class="mut" style="margin:0">Masuk dengan nomor WhatsApp, tanpa kata sandi.</p>
-          <ul class="feat">
-            <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-cal"/></svg></span><div><b>Booking sendiri</b><span>Pilih jam yang masih kosong, pindah jadwal, simpan ke kalender HP.</span></div></li>
-            <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-dumbbell"/></svg></span><div><b>Catat latihan</b><span>Program dari coach, set dan beban, rekor pribadi, contoh gerakan.</span></div></li>
-            <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-food"/></svg></span><div><b>Makan sesuai target</b><span>Target kalori otomatis, menu harian masakan rumahan, daftar belanja.</span></div></li>
-            <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-trend"/></svg></span><div><b>Progres yang terlihat</b><span>Berat, lingkar tubuh, foto pribadi, badge, dan kartu untuk dibagikan.</span></div></li>
-          </ul>
+      <dl class="stats">
+        <div><dt>Untuk</dt><dd>PT perorangan &amp; studio</dd></div>
+        <div><dt>Dipakai di</dt><dd>HP &amp; laptop</dd></div>
+        <div><dt>Siap pakai</dt><dd>± 3 hari</dd></div>
+        <div><dt>Mulai dari</dt><dd>{{mulai}}/bln</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="sec" id="masalah" aria-labelledby="masalah-judul">
+    <div class="wrap pb">
+      <div class="pb-head">
+        <p class="kicker">01 · Masalah coach hari ini</p>
+        <h2 class="mega" id="masalah-judul"><span class="vh">5 aplikasi. 1 coach. Capek.</span><span class="mg" aria-hidden="true"><span class="mg-l"><span class="num"><span class="roll"><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></span></span> aplikasi.</span><span class="mg-l">1 coach.</span><span class="mg-l swap"><span class="a red">Capek.</span><span class="b">Beres.</span></span></span></h2>
+        <p class="intro">Jam yang seharusnya untuk melatih atau mencari klien baru habis untuk admin. Klien juga tidak melihat progresnya sendiri, jadi lebih mudah berhenti.</p>
+      </div>
+      <ol class="tools" aria-label="Alat yang biasa dipakai coach">
+        <li class="tool" style="--d:0"><b>WhatsApp</b><span>Atur jadwal, tanya sisa sesi</span><em>Chat tenggelam, klien bertanya hal yang sama berulang kali.</em></li>
+        <li class="tool" style="--d:1"><b>Kertas</b><span>Catat beban dan repetisi</span><em>Mudah hilang, progresnya tidak bisa dilihat.</em></li>
+        <li class="tool" style="--d:2"><b>Excel</b><span>Paket, pembayaran, sisa sesi</span><em>Rumus rusak, lupa diperbarui, tagihan terlewat.</em></li>
+        <li class="tool" style="--d:3"><b>Kalender</b><span>Slot latihan</span><em>Jadwal bentrok, klien tidak tahu jam yang kosong.</em></li>
+        <li class="tool" style="--d:4"><b>Kalkulator</b><span>Pendapatan dan kalori</span><em>Manual, makan waktu, rawan salah.</em></li>
+        <li class="tool xnk" style="--d:5"><b>XNK</b><span>Semua di atas, dalam satu aplikasi</span><em>Klien booking dan mencatat sendiri; semuanya langsung muncul di panel Anda.</em></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="sec band" id="fitur" aria-labelledby="fitur-judul">
+    <div class="wrap">
+      <div class="show" id="show" data-group="coach">
+        <div class="show-head">
+          <p class="kicker">02 · Satu aplikasi, dua sisi</p>
+          <h2 id="fitur-judul" data-split>Semua urusan klien<br>di saku.</h2>
+          <p class="intro">Anda memakai panel coach dengan PIN. Klien memakai portal dengan nomor WhatsApp mereka, tanpa unduh dari toko aplikasi. Yang klien catat langsung terlihat oleh Anda.</p>
         </div>
-        <div class="card ink">
-          <h3>Untuk coach</h3>
-          <p class="mut" style="margin:0">Panel dengan PIN, rapi di HP maupun laptop.</p>
-          <ul class="feat">
-            <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-users"/></svg></span><div><b>Klien dan jadwal</b><span>Kalender sesi, catatan tiap sesi, penilaian dari klien, tanda klien yang perlu perhatian.</span></div></li>
-            <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-wand"/></svg></span><div><b>Program otomatis</b><span>Program latihan dibuat dari profil klien dan naik bertahap; coach tetap bisa mengubahnya.</span></div></li>
-            <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg></span><div><b>Paket dan keuangan</b><span>Daftar harga, perpanjangan paket satu ketuk, tagihan, pengeluaran, laporan.</span></div></li>
-            <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><div><b>Pengingat siap kirim</b><span>Pesan WhatsApp yang sopan dan personal untuk sesi, makan, dan tugas klien.</span></div></li>
-          </ul>
+        <div class="seg" role="group" aria-label="Pilih sisi aplikasi"><button type="button" data-g2="coach" aria-pressed="true">Untuk coach</button><button type="button" data-g2="klien" aria-pressed="false">Untuk klien</button></div>
+        <div class="tabs" role="tablist" aria-label="Fitur">
+          <button type="button" role="tab" id="t-dash" data-k="dash" data-g="coach" aria-selected="true" aria-controls="show-panel" class="tab on"><span class="n">01</span>Dashboard<span class="bar"><i></i></span></button>
+          <button type="button" role="tab" id="t-jadwal" data-k="jadwal" data-g="coach" aria-selected="false" aria-controls="show-panel" class="tab" tabindex="-1"><span class="n">02</span>Jadwal<span class="bar"><i></i></span></button>
+          <button type="button" role="tab" id="t-klien" data-k="klien" data-g="coach" aria-selected="false" aria-controls="show-panel" class="tab" tabindex="-1"><span class="n">03</span>Profil klien<span class="bar"><i></i></span></button>
+          <button type="button" role="tab" id="t-uang" data-k="uang" data-g="coach" aria-selected="false" aria-controls="show-panel" class="tab" tabindex="-1"><span class="n">04</span>Keuangan<span class="bar"><i></i></span></button>
+          <button type="button" role="tab" id="t-lapor" data-k="lapor" data-g="coach" aria-selected="false" aria-controls="show-panel" class="tab" tabindex="-1"><span class="n">05</span>Laporan PDF<span class="bar"><i></i></span></button>
+          <button type="button" role="tab" id="t-hari" data-k="hari" data-g="klien" aria-selected="false" aria-controls="show-panel" class="tab" tabindex="-1"><span class="n">01</span>Hari ini<span class="bar"><i></i></span></button>
+          <button type="button" role="tab" id="t-latihan" data-k="latihan" data-g="klien" aria-selected="false" aria-controls="show-panel" class="tab" tabindex="-1"><span class="n">02</span>Latihan<span class="bar"><i></i></span></button>
+          <button type="button" role="tab" id="t-makan" data-k="makan" data-g="klien" aria-selected="false" aria-controls="show-panel" class="tab" tabindex="-1"><span class="n">03</span>Makan<span class="bar"><i></i></span></button>
+          <button type="button" role="tab" id="t-progres" data-k="progres" data-g="klien" aria-selected="false" aria-controls="show-panel" class="tab" tabindex="-1"><span class="n">04</span>Progres<span class="bar"><i></i></span></button>
+        </div>
+        <div class="dev" aria-hidden="true">
+          <div class="frame"><div class="dscr">
+            <img class="on" data-k="dash" src="img/coach-dashboard.jpg" alt="" width="390" height="844" loading="lazy">
+            <img data-k="jadwal" data-src="img/coach-jadwal.jpg" alt="" width="390" height="844">
+            <img data-k="klien" data-src="img/coach-klien.jpg" alt="" width="390" height="844">
+            <img data-k="uang" data-src="img/coach-keuangan.jpg" alt="" width="390" height="844">
+            <img data-k="lapor" data-src="img/coach-laporan.jpg" alt="" width="390" height="844">
+            <img data-k="hari" data-src="img/klien-hari-ini.jpg" alt="" width="390" height="844">
+            <img data-k="latihan" data-src="img/klien-latihan.jpg" alt="" width="390" height="844">
+            <img data-k="makan" data-src="img/klien-makan.jpg" alt="" width="390" height="844">
+            <img data-k="progres" data-src="img/klien-progres.jpg" alt="" width="390" height="844">
+          </div></div>
+          <span class="chip on" data-k="dash" data-p="a"><i></i><b>10.00</b>Sari · sesi berikutnya</span>
+          <span class="chip on" data-k="dash" data-p="b"><i></i><b>3</b>sesi hari ini</span>
+          <span class="chip" data-k="jadwal" data-p="a"><i></i><b>Baru</b>booking Kamis 07.00</span>
+          <span class="chip" data-k="jadwal" data-p="b"><i></i><b>✓</b>sesi selesai, sisa 5</span>
+          <span class="chip" data-k="klien" data-p="a"><i></i><b>5/12</b>sesi tersisa</span>
+          <span class="chip" data-k="klien" data-p="b"><i></i><b>Cuti</b>sampai 2 Des</span>
+          <span class="chip" data-k="uang" data-p="a"><i></i><b>Lunas</b>tagihan Dewi</span>
+          <span class="chip" data-k="uang" data-p="b"><i></i><b>DP</b>tagihan Bima</span>
+          <span class="chip" data-k="lapor" data-p="a"><i></i><b>PDF</b>4 halaman siap</span>
+          <span class="chip" data-k="lapor" data-p="b"><i></i><b>↗</b>dibagikan ke Sari</span>
+          <span class="chip" data-k="hari" data-p="a"><i></i><b>07.00</b>sesi besok</span>
+          <span class="chip" data-k="hari" data-p="b"><i></i><b>+</b>ke kalender HP</span>
+          <span class="chip" data-k="latihan" data-p="a"><i></i><b>Rekor</b>Squat 55 kg</span>
+          <span class="chip" data-k="latihan" data-p="b"><i></i><b>1:30</b>istirahat</span>
+          <span class="chip" data-k="makan" data-p="a"><i></i><b>561</b>kkal tersisa</span>
+          <span class="chip" data-k="makan" data-p="b"><i></i><b>Menu</b>hari ini siap</span>
+          <span class="chip" data-k="progres" data-p="a"><i></i><b>−3,6</b>kg sejak awal</span>
+          <span class="chip" data-k="progres" data-p="b"><i></i><b>Badge</b>baru terbuka</span>
+        </div>
+        <div class="caps" id="show-panel" role="tabpanel" aria-labelledby="t-dash" aria-live="polite">
+          <div class="cap2 on" data-k="dash"><h3>Hari Anda dalam satu layar.</h3><p>Sesi berikutnya dan klien yang perlu perhatian, begitu panel dibuka.</p><ul class="ticks"><li>Sesi hari ini, minggu ini, dan tingkat selesai</li><li>Ingatkan klien lewat WhatsApp dengan satu ketuk</li><li>Permintaan perpanjang dan cuti langsung terlihat</li></ul></div>
+          <div class="cap2" data-k="jadwal"><h3>Jadwal tanpa bentrok.</h3><p>Kalender bulanan dan sesi hari ini; sisa sesi berkurang sendiri saat sesi ditandai selesai.</p><ul class="ticks"><li>Klien booking sendiri di jam yang masih kosong</li><li>Catatan tiap sesi dan briefing sebelum sesi berikutnya</li><li>Jam operasional dan cuti coach</li></ul></div>
+          <div class="cap2" data-k="klien"><h3>Semua tentang satu klien.</h3><p>Sisa sesi, progres, latihan, dan gizi tiap klien di satu halaman.</p><ul class="ticks"><li>Tugas coach: siapa yang perlu dihubungi hari ini</li><li>Tahan klien saat cuti atau sakit; sesi dan pengingat ikut berhenti</li><li>Ukuran tubuh dengan panduan cara mengukur</li></ul></div>
+          <div class="cap2" data-k="uang"><h3>Tagihan tidak terlewat.</h3><p>Tagihan dibuat saat klien membeli paket, dengan status belum bayar, DP, atau lunas.</p><ul class="ticks"><li>Lunasi satu ketuk, catat pengeluaran dengan foto bukti</li><li>Laporan enam bulan dan ekspor CSV</li><li>Bagi hasil coach untuk studio</li></ul></div>
+          <div class="cap2" data-k="lapor"><h3>Rapor yang siap dikirim.</h3><p>Laporan progres klien dalam PDF, dengan warna Anda.</p><ul class="ticks"><li>Sesi, ukuran tubuh, latihan, dan makan per periode</li><li>Pesan coach di halaman pertama</li><li>Bagikan langsung dari HP</li></ul></div>
+          <div class="cap2" data-k="hari"><h3>Klien tahu harus apa hari ini.</h3><p>Sesi berikutnya, tugas hari ini, dan nilai untuk sesi terakhir.</p><ul class="ticks"><li>Booking dan pindah jadwal sendiri di jam kosong</li><li>Simpan sesi ke kalender HP</li><li>Masuk dengan nomor WhatsApp, tanpa kata sandi</li></ul></div>
+          <div class="cap2" data-k="latihan"><h3>Latihan seperti aplikasi gym.</h3><p>Program dari coach, atau program otomatis yang naik bertahap.</p><ul class="ticks"><li>Centang set, timer istirahat, saran naik beban</li><li>Contoh gerakan dan peta otot</li><li>Tetap bisa dicatat tanpa sinyal</li></ul></div>
+          <div class="cap2" data-k="makan"><h3>Makan sesuai target.</h3><p>Target kalori dan makro otomatis, dengan menu harian masakan rumahan.</p><ul class="ticks"><li>Catat makan dari daftar makanan Indonesia</li><li>Ganti menu dan daftar belanja</li><li>Coach bisa memberi catatan harian</li></ul></div>
+          <div class="cap2" data-k="progres"><h3>Progres yang kelihatan.</h3><p>Berat, ukuran tubuh, foto pribadi, rekor, dan badge.</p><ul class="ticks"><li>Grafik perubahan dari minggu ke minggu</li><li>Kartu bagikan untuk Instagram Story</li><li>Foto progres hanya terlihat oleh klien dan coach-nya</li></ul></div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="sec" style="padding-top:0" aria-label="Tampilan aplikasi">
+  <section class="sec" id="demo" aria-labelledby="demo-judul">
     <div class="wrap">
-      <div class="shots">
-        <figure><img src="img/klien-latihan.jpg" alt="Halaman Latihan klien: rutinitas dari coach dan tombol mulai" width="390" height="844" loading="lazy"><figcaption><b>Latihan</b><span>Rutinitas dari coach</span></figcaption></figure>
-        <figure><img src="img/klien-makan.jpg" alt="Halaman Makan klien: sisa kalori, protein, karbo, lemak, dan menu hari ini" width="390" height="844" loading="lazy"><figcaption><b>Makan</b><span>Target dan menu harian</span></figcaption></figure>
-        <figure><img src="img/klien-progres.jpg" alt="Halaman Progres klien: berat turun, momen dan rekor terbaru" width="390" height="844" loading="lazy"><figcaption><b>Progres</b><span>Perubahan dan rekor</span></figcaption></figure>
-        <figure><img src="img/klien-hari-ini.jpg" alt="Halaman Hari ini klien: sesi berikutnya dan tugas hari ini" width="390" height="844" loading="lazy"><figcaption><b>Hari ini</b><span>Sesi dan tugas klien</span></figcaption></figure>
-        <figure><img src="img/coach-jadwal.jpg" alt="Jadwal coach: kalender bulan dan sesi hari ini" width="390" height="844" loading="lazy"><figcaption><b>Jadwal</b><span>Kalender coach</span></figcaption></figure>
-        <figure><img src="img/coach-dashboard.jpg" alt="Dashboard coach: sesi berikutnya dan ringkasan klien" width="390" height="844" loading="lazy"><figcaption><b>Dashboard</b><span>Ringkasan coach</span></figcaption></figure>
+      <p class="kicker">03 · Coba demo</p>
+      <h2 id="demo-judul" data-split>Coba sendiri,<br>tanpa daftar.</h2>
+      <p class="intro">Dua sisi aplikasi dengan data contoh. Semuanya kembali seperti semula setiap halaman dimuat ulang.</p>
+      <div class="demos">
+        <a class="card ink dtile" href="https://xnk.my.id/demo/" target="_blank" rel="noopener"><b>Panel coach</b><small>Jadwal, klien, program, keuangan, dan laporan. Masuk dengan PIN <b>123456</b>.</small><span class="get">Buka demo coach <svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></span><img src="img/coach-dashboard.jpg" alt="" width="390" height="844" loading="lazy"></a>
+        <a class="card dtile" href="https://xnk.my.id/demo/?klien" target="_blank" rel="noopener"><b>Portal klien</b><small>Langsung masuk sebagai klien contoh: booking, latihan, makan, dan progres.</small><span class="get">Buka demo klien <svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></span><img src="img/klien-latihan.jpg" alt="" width="390" height="844" loading="lazy"></a>
       </div>
     </div>
   </section>
 
-  <section class="sec" id="aplikasi" style="padding-top:1rem">
+  <section class="sec band" id="keamanan" aria-labelledby="priv-judul">
     <div class="wrap">
-      <p class="kicker">Aplikasi</p>
-      <h2>Pasang di HP atau komputer.</h2>
+      <p class="kicker">04 · Keamanan &amp; data</p>
+      <h2 id="priv-judul" data-split>Data klien<br>tetap aman.</h2>
+      <p class="intro">Kepercayaan klien adalah aset utama coach. Data mereka hanya terlihat oleh orang yang berhak.</p>
+      <div class="priv">
+        <div class="card"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sheet"/></svg></span><b>Data terpisah per coach</b><p>Setiap coach punya tempat data sendiri yang kami siapkan. Tidak tercampur dengan coach lain dan bisa diunduh (Excel) kapan saja.</p></div>
+        <div class="card"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></span><b>Login terpisah</b><p>Coach masuk dengan PIN, klien dengan nomor WhatsApp masing-masing. Login dikunci sementara setelah terlalu banyak percobaan salah.</p></div>
+        <div class="card"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg></span><b>Privasi antar klien</b><p>Klien hanya melihat data dan jadwalnya sendiri. Foto progres tidak pernah dibagikan lewat link.</p></div>
+        <div class="card"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-wifioff"/></svg></span><b>Tetap jalan tanpa sinyal</b><p>Latihan dan makan bisa dicatat di gym tanpa sinyal, lalu terkirim sendiri saat online.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="harga" aria-labelledby="harga-judul">
+    <div class="wrap">
+      <p class="kicker">05 · Harga</p>
+      <h2 id="harga-judul" data-split>Pilih sesuai<br>cara kerja Anda.</h2>
+      <p class="intro">Harga untuk satu coach atau studio, sudah termasuk panel coach, portal klien, dan pembaruan fitur. Klien Anda tidak membayar apa pun.</p>
+      <!--HARGA-->
+    </div>
+  </section>
+
+  <section class="sec soft" id="daftar" aria-labelledby="daftar-judul">
+    <div class="wrap two-col">
+      <div class="daftar-in">
+        <p class="kicker">06 · Daftar</p>
+        <h2 id="daftar-judul" data-split>Siap pakai<br>dalam ± 3 hari.</h2>
+        <p class="mut" style="margin:0">Isi singkat, lalu pesannya terbuka di WhatsApp Anda. Kami balas untuk mengatur demo dan setup.</p>
+        <ol class="flow">
+          <li><b>Demo 30 menit <em>Hari 1</em></b><span>Kami tunjukkan aplikasinya langsung di HP Anda, sesuai cara kerja Anda sekarang.</span></li>
+          <li><b>Setup dan impor data <em>Hari 1–2</em></b><span>Kami siapkan aplikasi Anda, lalu memasukkan paket, harga, jam operasional, dan daftar klien.</span></li>
+          <li><b>Ajak klien masuk <em>Hari 3</em></b><span>Klien menerima link portal dan pesan WhatsApp siap kirim.</span></li>
+          <li><b>Didampingi <em>Bulan pertama</em></b><span>Kami dampingi lewat WhatsApp selama bulan pertama.</span></li>
+        </ol>
+        <div class="cta"><!--CONTACT--><!--IG--></div>
+      </div>
+      <!--DAFTAR-->
+      <div class="card form-card">
+        <form id="df" data-wa="__WA__" novalidate aria-labelledby="daftar-judul">
+          <label for="df-nama" style="margin-top:0">Nama</label>
+          <div class="row"><input id="df-nama" name="nama" autocomplete="name" maxlength="60" placeholder="Nama Anda atau nama usaha"></div>
+          <label for="df-kota">Kota / tempat latihan</label>
+          <div class="row"><input id="df-kota" name="kota" autocomplete="address-level2" maxlength="80" placeholder="Misalnya Bandung, Gym Sehat"></div>
+          <label for="df-klien">Klien aktif sekarang</label>
+          <div class="row"><select id="df-klien" name="klien"><option value="">Belum tahu</option><option>Kurang dari 5</option><option>5–15</option><option>16–40</option><option>Lebih dari 40</option></select></div>
+          <div class="two">
+            <div><label for="df-paket">Paket</label><div class="row"><select id="df-paket" name="paket"><!--PAKET--></select></div></div>
+            <div><label for="df-bayar">Cara bayar</label><div class="row"><select id="df-bayar" name="bayar"><option value="bulanan">Bulanan</option><option value="tahunan">Tahunan</option><option value="lifetime">Lifetime</option><option value="putus">Beli putus</option><option value="">Belum tahu</option></select></div></div>
+          </div>
+          <label class="chk"><input type="checkbox" id="df-demo" checked>Saya mau demo 30 menit dulu</label>
+          <p class="err" id="df-err" role="alert"></p>
+          <button class="btn big" type="submit"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg>Kirim lewat WhatsApp</button>
+          <p class="note">Pesan terbuka di WhatsApp Anda dan baru terkirim setelah Anda menekan kirim di sana. Situs ini tidak menyimpan apa pun.</p>
+        </form>
+      </div>
+      <!--/DAFTAR-->
+    </div>
+  </section>
+
+  <section class="sec" id="tanya" aria-labelledby="tanya-judul">
+    <div class="wrap">
+      <p class="kicker">07 · Tanya jawab</p>
+      <h2 id="tanya-judul" data-split>Yang sering<br>ditanyakan.</h2>
+      <div class="faq">
+        <details><summary>Saya coach. Bagaimana cara bergabung?</summary><p>Isi form Daftar atau hubungi kami lewat WhatsApp. Kami tunjukkan demo 30 menit di HP Anda; setelah biaya setup dibayar, aplikasi Anda siap dalam ± 3 hari. Anda tinggal menerima link panel coach dan link portal untuk klien.</p></details>
+        <details><summary>Apakah data saya tercampur dengan coach lain?</summary><p>Tidak. Setiap coach punya tempat data sendiri yang kami siapkan khusus, jadi coach lain tidak bisa melihat klien Anda. Anda tidak perlu memasang atau mengatur apa pun.</p></details>
+        <details><summary>Apa saja yang termasuk biaya setup?</summary><p>Setup Standar: kami siapkan aplikasi dan tempat data khusus untuk Anda, impor data klien dari Excel atau catatan, pengaturan paket, harga, dan jam operasional, serta pelatihan online 1 jam. Setup Custom menambah nama, logo, dan warna Anda sendiri, penyesuaian tampilan, impor riwayat lama, dan pelatihan 2 sesi.</p></details>
+        <details><summary>Bagaimana kalau saya berhenti berlangganan?</summary><p>Setelah jatuh tempo ada 7 hari tenggang. Lewat dari itu aplikasi masuk mode baca saja: data tetap bisa dilihat, tetapi tidak bisa diubah. Data tidak pernah dihapus, dan semuanya bisa diunduh sebagai Excel dari Pengaturan.</p></details>
+        <details><summary>Apakah klien perlu mengunduh aplikasi?</summary><p>Tidak. Portal dibuka dari browser HP. Di Android dan iPhone, portal bisa ditambahkan ke layar utama sehingga terbuka seperti aplikasi.</p></details>
+        <details><summary>Bagaimana klien masuk?</summary><p>Dengan nomor WhatsApp yang terdaftar di coach-nya. Tidak ada kata sandi yang perlu diingat.</p></details>
+        <details><summary>Saya lupa nama coach saya.</summary><p>Nama coach ada di link yang dikirim coach Anda, setelah <code>xnk.web.id/</code>. Bisa juga dicari lewat tombol Masuk, atau tanyakan langsung ke coach Anda.</p></details>
+        <details><summary>Siapa yang bisa melihat data saya?</summary><p>Hanya Anda dan coach Anda. Data tidak dibagikan ke coach lain atau ke pihak luar.</p></details>
+        <details><summary>Bisa memakai domain sendiri?</summary><p>Alamat Anda ada di xnk.web.id/namaanda. Domain sendiri (misalnya namaanda.com) tidak termasuk paket; tanyakan dulu ke kami, biayanya dibayar langsung ke penyedia domain.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="aplikasi" style="padding-top:1rem" aria-labelledby="aplikasi-judul">
+    <div class="wrap">
+      <p class="kicker">08 · Aplikasi</p>
+      <h2 id="aplikasi-judul" data-split>Pasang di HP<br>atau komputer.</h2>
       <p class="intro">Buka XNK seperti aplikasi biasa, langsung dari layar utama atau desktop.</p>
       <div class="apps-wrap">
       <div class="devices" aria-hidden="true">
@@ -425,77 +878,12 @@
     </div>
   </section>
 
-  <section class="sec" id="cara-kerja" style="padding-top:1rem">
+  <section class="end band" aria-labelledby="end-judul">
+    <div class="end-bg" aria-hidden="true">Sisanya beres · Sisanya beres · Sisanya beres</div>
     <div class="wrap">
-      <p class="kicker">Cara kerja</p>
-      <h2>Mulai dalam tiga langkah.</h2>
-      <p class="intro">Tidak ada aplikasi yang perlu diunduh dari toko aplikasi. Cukup satu link.</p>
-      <ol class="steps">
-        <li class="card"><h3>Coach bergabung</h3><p>Tim XNK menyiapkan semuanya. Coach tinggal menerima link panelnya sendiri: <code>xnk.web.id/namacoach/</code>.</p></li>
-        <li class="card"><h3>Bagikan link ke klien</h3><p>Klien membuka <code>xnk.web.id/namacoach/klien/</code>, bisa disimpan ke layar utama HP seperti aplikasi.</p></li>
-        <li class="card"><h3>Klien masuk</h3><p>Cukup nomor WhatsApp. Klien langsung bisa booking, mencatat, dan melihat progres.</p></li>
-      </ol>
-    </div>
-  </section>
-
-  <section class="sec band" aria-labelledby="priv-judul">
-    <div class="wrap">
-      <p class="kicker">Privasi &amp; keandalan</p>
-      <h2 id="priv-judul">Data klien aman dan terpisah.</h2>
-      <div class="priv">
-        <div class="card"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sheet"/></svg></span><b>Terpisah per coach</b><p>Setiap coach punya tempat data sendiri. Coach lain tidak bisa melihat klien Anda.</p></div>
-        <div class="card"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg></span><b>Foto progres privat</b><p>Foto tidak pernah dibuat publik; hanya klien itu dan coach-nya yang bisa membukanya.</p></div>
-        <div class="card"><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-wifioff"/></svg></span><b>Tetap jalan tanpa sinyal</b><p>Latihan dan makan bisa dicatat di gym tanpa sinyal, lalu terkirim sendiri saat online.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="sec" id="masuk">
-    <div class="wrap login">
-      <div>
-        <p class="kicker">Masuk</p>
-        <h2 id="masuk-judul">Sudah punya coach di XNK?</h2>
-        <p class="mut" style="margin:0">Pilih coach Anda di bawah (cari nama, tempat, atau kota), atau ketik namanya. Nama ini ada di link dari coach, misalnya <code>xnk.web.id/namacoach</code>.</p>
-        <div class="coach-list" id="coach" data-coaches>
-          <p class="kicker" style="margin-top:1.6rem">Coach di XNK</p>
-          <!--FIND-->
-          <div class="coaches" id="coaches"><!--COACHES--></div>
-          <p class="no-hit" id="no-hit" hidden>Tidak ada coach yang cocok. Coba nama lain atau pilih <b>Semua</b>.</p>
-        </div><!--/coaches-->
-      </div>
-      <div class="card">
-        <form id="f" novalidate aria-labelledby="masuk-judul">
-          <label for="slug" style="margin-top:0">Nama coach</label>
-          <div class="row"><span>xnk.web.id/</span><input id="slug" name="slug" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="url" placeholder="namacoach"></div>
-          <p class="err" id="err" role="alert"></p>
-          <div class="btns">
-            <button class="btn" type="submit" data-to="klien">Masuk sebagai klien</button>
-            <button class="btn ghost" type="submit" data-to="panel">Masuk sebagai coach</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </section>
-
-  <section class="sec" id="tanya" style="padding-top:1rem">
-    <div class="wrap">
-      <p class="kicker">Tanya jawab</p>
-      <h2>Yang sering ditanyakan.</h2>
-      <div class="faq">
-        <details><summary>Apakah klien perlu mengunduh aplikasi?</summary><p>Tidak. Portal dibuka dari browser HP. Di Android dan iPhone, portal bisa ditambahkan ke layar utama sehingga terbuka seperti aplikasi.</p></details>
-        <details><summary>Bagaimana klien masuk?</summary><p>Dengan nomor WhatsApp yang terdaftar di coach-nya. Tidak ada kata sandi yang perlu diingat.</p></details>
-        <details><summary>Saya lupa nama coach saya.</summary><p>Nama coach ada di link yang dikirim coach Anda, setelah <code>xnk.web.id/</code>. Bisa juga dicari di daftar coach di atas, atau tanyakan langsung ke coach Anda.</p></details>
-        <details><summary>Siapa yang bisa melihat data saya?</summary><p>Hanya Anda dan coach Anda. Data tidak dibagikan ke coach lain atau ke pihak luar.</p></details>
-        <details><summary>Saya coach. Bagaimana cara bergabung?</summary><p>Hubungi tim XNK. Kami siapkan semuanya, Anda tinggal menerima link panel coach dan link portal untuk klien. Tidak perlu memasang atau mengatur apa pun.</p></details>
-      </div>
-    </div>
-  </section>
-
-  <section class="end band">
-    <div class="wrap">
-      <h2>Coach yang ingin memakai XNK?</h2>
-      <p>Jadwal, program, makan, dan keuangan klien dalam satu aplikasi. Kami yang menyiapkan, Anda tinggal buka link.</p>
-      <div class="cta"><!--CONTACT--><a class="btn ghost" href="#masuk">Sudah terdaftar? Masuk</a></div>
+      <h2 id="end-judul" data-split>Fokus melatih.<br><span class="red">Biar XNK yang urus.</span></h2>
+      <p>Coba demonya sekarang, atau minta kami tunjukkan langsung di HP Anda.</p>
+      <div class="cta"><a class="btn big" href="#demo">Coba demo <svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="btn ghost big" href="#daftar">Daftar</a></div>
     </div>
   </section>
 </main>
@@ -503,12 +891,39 @@
 <footer class="band">
   <div class="wrap">
     <a class="brand" href="#"><img class="logo" src="img/logo-64.png" alt="" width="64" height="64">XNK</a>
-    <nav class="links" aria-label="Tautan bawah"><a href="#fitur">Fitur</a><a href="#aplikasi">Aplikasi</a><a href="#cara-kerja">Cara kerja</a><a href="#coach">Coach</a><a href="#masuk">Masuk</a><a href="#tanya">Tanya jawab</a></nav>
+    <nav class="links" aria-label="Tautan bawah"><a href="#fitur">Fitur</a><a href="#demo">Demo</a><a href="#harga">Harga</a><a href="#daftar">Daftar</a><a href="#masuk">Masuk</a><a href="#tanya">Tanya jawab</a><a href="#aplikasi">Aplikasi</a><!--IG-FOOT--></nav>
     <span>© XNK</span>
   </div>
 </footer>
+
+<div class="dock" id="dock" aria-hidden="true" inert><a class="btn" href="#demo">Coba demo</a><a class="btn ghost" href="#daftar">Daftar</a></div>
+
+<dialog class="sheet" id="masuk" aria-labelledby="masuk-judul">
+  <div class="sheet-head">
+    <div><h2 id="masuk-judul">Masuk</h2><p>Sebagai klien atau coach, atau cari coach Anda.</p></div>
+    <button class="x" type="button" id="masuk-x" aria-label="Tutup"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="sheet-body" tabindex="-1">
+    <form id="f" novalidate aria-labelledby="masuk-judul">
+      <label for="slug" style="margin-top:0">Nama coach</label>
+      <div class="row"><span>xnk.web.id/</span><input id="slug" name="slug" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="url" placeholder="namacoach"></div>
+      <p class="err" id="err" role="alert"></p>
+      <div class="btns">
+        <button class="btn" type="submit" data-to="klien">Masuk sebagai klien</button>
+        <button class="btn ghost" type="submit" data-to="panel">Masuk sebagai coach</button>
+      </div>
+    </form>
+    <div class="coach-list" id="coach" data-coaches>
+      <p class="kicker" style="margin-top:1.8rem">Coach di XNK</p>
+      <!--FIND-->
+      <div class="coaches" id="coaches"><!--COACHES--></div>
+      <p class="no-hit" id="no-hit" hidden>Tidak ada coach yang cocok. Coba nama lain atau pilih <b>Semua</b>.</p>
+    </div><!--/coaches-->
+  </div>
+</dialog>
 <script>
 (function () {
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   var f = document.getElementById('f'), slug = document.getElementById('slug'), err = document.getElementById('err'), dest = 'klien';
   var RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
   Array.prototype.forEach.call(f.querySelectorAll('button'), function (b) { b.addEventListener('click', function () { dest = b.getAttribute('data-to'); }); });
@@ -556,19 +971,338 @@
     filter();
   });
 
+  // T-2265: lembar Masuk. Semua tautan #masuk membukanya; tombol kembali HP menutupnya (riwayat #masuk);
+  // dibuka langsung dari xnk.web.id/#masuk juga bisa (tautan lama).
+  var sheet = document.getElementById('masuk'), pushed = false, closing = 0;
+  function openSheet() {
+    if (!sheet || sheet.open) return;
+    if (sheet.showModal) sheet.showModal(); else sheet.setAttribute('open', '');
+    document.documentElement.classList.add('sheet-open');
+    sheet.querySelector('.sheet-body').focus({ preventScroll: true });   // bukan tombol tutup: tanpa cincin fokus saat dibuka dengan ketukan
+    sheet.scrollTop = 0;
+    requestAnimationFrame(function () { requestAnimationFrame(function () { sheet.classList.add('in'); }); });
+  }
+  function shut() {
+    if (!sheet || !sheet.open) return;
+    sheet.classList.remove('in');
+    document.documentElement.classList.remove('sheet-open');
+    clearTimeout(closing);
+    closing = setTimeout(function () { if (sheet.close) sheet.close(); else sheet.removeAttribute('open'); }, reduce ? 0 : 320);
+  }
+  function closeSheet() {
+    if (pushed && location.hash === '#masuk') { pushed = false; history.back(); return; }   // popstate menutupnya
+    pushed = false;
+    if (location.hash === '#masuk') history.replaceState(history.state, '', location.pathname + location.search);
+    shut();
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href="#masuk"]');
+    if (!a) return;
+    e.preventDefault();
+    if (location.hash !== '#masuk') { history.pushState({ xnkSheet: 1 }, '', '#masuk'); pushed = true; }
+    openSheet();
+  });
+  addEventListener('popstate', function () { if (location.hash === '#masuk') openSheet(); else { pushed = false; shut(); } });
+  addEventListener('hashchange', function () { if (location.hash === '#masuk') openSheet(); });
+  if (sheet) {
+    document.getElementById('masuk-x').addEventListener('click', closeSheet);
+    sheet.addEventListener('cancel', function (e) { e.preventDefault(); closeSheet(); });
+    sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSheet(); });
+    if (location.hash === '#masuk') openSheet();
+  }
+
+  // T-2265: harga bulanan / tahunan, tombol "Pilih <paket>" mengisi form daftar, form membuka WhatsApp. Tidak ada yang disimpan.
+  var hg = document.getElementById('harga'), cyc = document.getElementById('cyc'), cycle = 'bulanan';
+  if (cyc) cyc.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button[data-cyc]');
+    if (!b) return;
+    cycle = b.getAttribute('data-cyc');
+    hg.classList.toggle('yr', cycle === 'tahunan');
+    Array.prototype.forEach.call(cyc.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    cycMove();
+    if (!reduce) { hg.classList.remove('flip'); void hg.offsetWidth; hg.classList.add('flip'); }
+  });
+  // Penanda bergeser di belakang pilihan yang aktif (posisi dari tombol itu sendiri, juga bila barisnya terlipat).
+  function cycMove() {
+    var b = cyc && cyc.querySelector('[aria-pressed="true"]');
+    if (!b) return;
+    cyc.style.setProperty('--cx', b.offsetLeft + 'px'); cyc.style.setProperty('--cy', b.offsetTop + 'px');
+    cyc.style.setProperty('--cw', b.offsetWidth + 'px'); cyc.style.setProperty('--ch', b.offsetHeight + 'px');
+    cyc.classList.add('ready');
+  }
+  cycMove();
+  addEventListener('resize', cycMove);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(cycMove);
+  var df = document.getElementById('df');
+  function val(id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
+  function txt(id) { var el = document.getElementById(id); return el && el.value ? el.options[el.selectedIndex].text : 'Belum tahu'; }
+  Array.prototype.forEach.call(document.querySelectorAll('a[data-plan]'), function (a) {
+    a.addEventListener('click', function () {
+      if (!df) return;
+      document.getElementById('df-paket').value = a.getAttribute('data-plan');
+      document.getElementById('df-bayar').value = cycle;
+    });
+  });
+  if (df) df.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var de = document.getElementById('df-err'), nama = val('df-nama');
+    if (!nama) { de.textContent = 'Isi nama Anda dulu.'; document.getElementById('df-nama').focus(); return; }
+    de.textContent = '';
+    var lines = ['Halo XNK, saya tertarik memakai XNK.', 'Nama: ' + nama];
+    if (val('df-kota')) lines.push('Kota / tempat: ' + val('df-kota'));
+    lines.push('Klien aktif: ' + txt('df-klien'), 'Paket: ' + txt('df-paket'), 'Cara bayar: ' + txt('df-bayar'),
+      'Mau demo 30 menit dulu: ' + (document.getElementById('df-demo').checked ? 'ya' : 'tidak'));
+    var url = df.getAttribute('data-wa') + '?text=' + encodeURIComponent(lines.join('\n'));
+    var w = window.open(url, '_blank');
+    if (w) { try { w.opener = null; } catch (x) {} } else location.href = url;
+  });
+
+  // T-2265: fitur = satu HP dengan tab. Berganti sendiri tiap 6 detik selama terlihat; berhenti setelah tab diketuk,
+  // dan tidak pernah berganti sendiri dengan "kurangi gerakan". Gambar dimuat saat dibutuhkan (plus satu berikutnya).
+  var show = document.getElementById('show');
+  if (show) {
+    var tabs = [].slice.call(show.querySelectorAll('[role="tab"]')), imgs = [].slice.call(show.querySelectorAll('.dscr img')),
+      caps = [].slice.call(show.querySelectorAll('.cap2')), panel = document.getElementById('show-panel'), tabsBox = show.querySelector('.tabs'),
+      chips = [].slice.call(show.querySelectorAll('.chip')), dev = show.querySelector('.dev'), outT = 0,
+      group = 'coach', auto = !reduce, cur = 'dash';
+    var vis = function () { return tabs.filter(function (t) { return t.getAttribute('data-g') === group; }); };
+    var load = function (k) { imgs.forEach(function (im) { if (im.getAttribute('data-k') === k && !im.getAttribute('src')) im.src = im.getAttribute('data-src'); }); };
+    var restart = function () { show.classList.remove('run'); void show.offsetWidth; if (auto) show.classList.add('run'); };
+    var pick = function (k, focus) {
+      cur = k;
+      tabs.forEach(function (t) { var on = t.getAttribute('data-k') === k; t.classList.toggle('on', on); t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });
+      load(k);
+      var prev = imgs.filter(function (im) { return im.classList.contains('on'); })[0];
+      imgs.forEach(function (im) { var on = im.getAttribute('data-k') === k; im.classList.toggle('on', on); im.classList.toggle('out', !on && im === prev); });
+      clearTimeout(outT); outT = setTimeout(function () { imgs.forEach(function (im) { im.classList.remove('out'); }); }, 800);
+      chips.forEach(function (c) { c.classList.toggle('on', c.getAttribute('data-k') === k); });
+      caps.forEach(function (c) { c.classList.toggle('on', c.getAttribute('data-k') === k); });
+      panel.setAttribute('aria-labelledby', 't-' + k);
+      var v = vis(), i = v.map(function (t) { return t.getAttribute('data-k'); }).indexOf(k), nx = v[(i + 1) % v.length];
+      if (nx) load(nx.getAttribute('data-k'));
+      var t = v[i];
+      if (t && tabsBox.scrollWidth > tabsBox.clientWidth + 2) tabsBox.scrollTo({ left: t.offsetLeft - (tabsBox.clientWidth - t.offsetWidth) / 2, behavior: reduce ? 'auto' : 'smooth' });
+      restart();
+    };
+    var next = function () { var v = vis(), i = v.map(function (t) { return t.getAttribute('data-k'); }).indexOf(cur); pick(v[(i + 1) % v.length].getAttribute('data-k')); };
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () { auto = false; pick(t.getAttribute('data-k')); });
+      t.querySelector('.bar i').addEventListener('animationend', function () { if (auto && t.classList.contains('on')) next(); });
+    });
+    tabsBox.addEventListener('keydown', function (e) {
+      var v = vis(), i = v.map(function (t) { return t.getAttribute('data-k'); }).indexOf(cur), j = -1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') j = (i + 1) % v.length;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') j = (i - 1 + v.length) % v.length;
+      else if (e.key === 'Home') j = 0; else if (e.key === 'End') j = v.length - 1;
+      if (j < 0) return;
+      e.preventDefault(); auto = false; pick(v[j].getAttribute('data-k'), true);
+    });
+    Array.prototype.forEach.call(show.querySelectorAll('[data-g2]'), function (b) {
+      b.addEventListener('click', function () {
+        group = b.getAttribute('data-g2');
+        show.setAttribute('data-group', group);
+        Array.prototype.forEach.call(show.querySelectorAll('[data-g2]'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        pick(vis()[0].getAttribute('data-k'));
+      });
+    });
+    // Geser layar HP ke kiri/kanan untuk ganti fitur (HP); di layar lebar HP sedikit miring mengikuti tetikus.
+    var sx = null;
+    dev.addEventListener('pointerdown', function (e) { sx = e.clientX; });
+    dev.addEventListener('pointerup', function (e) {
+      if (sx == null) return;
+      var d = e.clientX - sx, v = vis(), i = v.map(function (t) { return t.getAttribute('data-k'); }).indexOf(cur); sx = null;
+      if (Math.abs(d) < 40) return;
+      auto = false; pick(v[(i + (d < 0 ? 1 : v.length - 1)) % v.length].getAttribute('data-k'));
+    });
+    dev.addEventListener('pointercancel', function () { sx = null; });
+    if (!reduce && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      show.addEventListener('pointermove', function (e) {
+        var r = dev.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - .5, py = (e.clientY - r.top) / r.height - .5;
+        dev.style.setProperty('--dy', Math.max(-12, Math.min(12, px * 14)).toFixed(2) + 'deg');
+        dev.style.setProperty('--dx', Math.max(-10, Math.min(10, -py * 10)).toFixed(2) + 'deg');
+      });
+      show.addEventListener('pointerleave', function () { dev.style.removeProperty('--dx'); dev.style.removeProperty('--dy'); });
+    }
+    show.addEventListener('mouseenter', function () { show.classList.add('paused'); });
+    show.addEventListener('mouseleave', function () { show.classList.remove('paused'); });
+    show.addEventListener('focusin', function () { show.classList.add('paused'); });
+    show.addEventListener('focusout', function () { show.classList.remove('paused'); });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (es) { es.forEach(function (en) { show.classList.toggle('off', !en.isIntersecting); }); }, { threshold: .35 }).observe(show);
+    }
+    restart();
+  }
+
+  // T-2265: gerak. Hanya transform/opacity, tanpa pustaka luar; semuanya berhenti saat tidak terlihat, dan dengan
+  // "kurangi gerakan" isi langsung tampil diam (keadaan akhir), tanpa animasi apa pun.
+  var fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  // Judul dipecah per kata (teksnya tetap utuh untuk pembaca layar), lalu tiap kata naik bergantian.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-split]'), function (el) {
+    var i = 0;
+    (function walk(node) {
+      Array.prototype.slice.call(node.childNodes).forEach(function (n) {
+        if (n.nodeType === 3) {
+          var frag = document.createDocumentFragment();
+          n.textContent.split(/(\s+)/).forEach(function (part) {
+            if (!part) return;
+            if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
+            var w = document.createElement('span'), t = document.createElement('span');
+            w.className = 'w'; t.textContent = part; t.style.setProperty('--i', String(i++)); w.appendChild(t); frag.appendChild(w);
+          });
+          n.parentNode.replaceChild(frag, n);
+        } else if (n.nodeType === 1 && n.tagName !== 'BR') walk(n);
+      });
+    })(el);
+  });
+  var h1 = document.querySelector('.hero h1');
+  if (h1) { h1.classList.add('ready'); requestAnimationFrame(function () { requestAnimationFrame(function () { h1.classList.add('in'); }); }); }
+
+  // Kode bagian (mono) "terurai" dari huruf acak; angka ringkasan menghitung naik. Sekali saja.
+  var GLYPH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/';
+  function scramble(el) {
+    var fin = el.textContent, n = fin.length, t0 = performance.now();
+    (function step(t) {
+      var p = Math.min(1, (t - t0) / 650), done = Math.floor(p * n), out = '';
+      for (var i = 0; i < n; i++) out += i < done || /\s|·/.test(fin[i]) ? fin[i] : GLYPH[(Math.random() * GLYPH.length) | 0];
+      el.textContent = p < 1 ? out : fin;
+      if (p < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+  function countUp(dd) {
+    var tw = document.createTreeWalker(dd, NodeFilter.SHOW_TEXT), tn = null;
+    while (tw.nextNode()) if (/\d/.test(tw.currentNode.textContent)) { tn = tw.currentNode; break; }
+    if (!tn) return;
+    var txt0 = tn.textContent, m = txt0.match(/\d+/), to = +m[0], pre = txt0.slice(0, m.index), post = txt0.slice(m.index + m[0].length), t0 = performance.now();
+    (function step(t) {
+      var p = Math.min(1, (t - t0) / 1300), e = 1 - Math.pow(1 - p, 3);
+      tn.textContent = p < 1 ? pre + Math.round(to * e) + post : txt0;
+      if (p < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+
+  // Muncul saat digulir (sekali): kartu dan teks naik, judul per kata, kode bagian terurai, angka menghitung.
+  var rv = document.querySelectorAll('.sec .intro, .tool, .show, .dtile, .priv .card, .tier, .setups > .card, .payback, .flow li, .form-card, .faq details, .stats > div');
+  var onIn = document.querySelectorAll('[data-split]:not(.hero h1), .mega, .stats, .sec .kicker');
+  if (!reduce && 'IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        var el = en.target;
+        el.classList.add('in'); io.unobserve(el);
+        if (el.classList.contains('kicker')) scramble(el);
+        if (el.classList.contains('stats')) Array.prototype.forEach.call(el.querySelectorAll('dd'), countUp);
+      });
+    }, { threshold: .15, rootMargin: '0px 0px -6% 0px' });
+    Array.prototype.forEach.call(rv, function (el) { el.classList.add('rv'); io.observe(el); });
+    Array.prototype.forEach.call(onIn, function (el) { io.observe(el); });
+  } else {
+    Array.prototype.forEach.call(rv, function (el) { el.classList.add('in'); });
+    Array.prototype.forEach.call(onIn, function (el) { el.classList.add('in'); });
+  }
+
+  var dock = document.getElementById('dock');
+  if (dock && 'IntersectionObserver' in window) {
+    var block = {}, hide = document.querySelectorAll('.hero, #harga, #daftar, footer, .end');
+    var dio = new IntersectionObserver(function (es) {
+      es.forEach(function (en) { block[Array.prototype.indexOf.call(hide, en.target)] = en.isIntersecting; });
+      var on = !Object.keys(block).some(function (k) { return block[k]; });
+      dock.classList.toggle('on', on);
+      dock.setAttribute('aria-hidden', String(!on));
+      if (on) dock.removeAttribute('inert'); else dock.setAttribute('inert', '');
+    });
+    Array.prototype.forEach.call(hide, function (el) { dio.observe(el); });
+  }
+  // Pita berjalan hanya bergerak selama terlihat.
+  var marq = document.querySelector('.marq'), marqIn = document.querySelector('.marq-in');
+  if (marq && 'IntersectionObserver' in window) new IntersectionObserver(function (es) { marq.classList.toggle('off', !es[0].isIntersecting); }).observe(marq);
+
+  // Satu mesin gulir (requestAnimationFrame hanya saat menggulir): garis kemajuan, paralaks hero, 5 -> 1, garis langkah,
+  // tulisan besar penutup, dan pita yang miring sesuai kecepatan. Membaca posisi dulu, lalu menulis variabel CSS.
+  var prog = document.querySelector('.prog i'), hero = document.querySelector('.hero'), heroCopy = document.querySelector('.hero .copy'), phones = document.querySelector('.phones');
+  var pb = document.querySelector('.pb'), roll = document.querySelector('.roll'), tools = [].slice.call(document.querySelectorAll('.tool'));
+  var flow = document.querySelector('.flow'), flowLi = flow ? [].slice.call(flow.children) : [], endEl = document.querySelector('.end');
+  var lastY = scrollY, sk = 0, raf = 0;
+  function frame() {
+    raf = 0;
+    var y = scrollY, vh = innerHeight, max = document.documentElement.scrollHeight - vh;
+    if (prog) prog.style.transform = 'scaleX(' + (max > 0 ? Math.min(1, y / max) : 0).toFixed(4) + ')';
+    if (hero && y < hero.offsetHeight + 120) { var py = String(Math.round(y)); phones.style.setProperty('--py', py); heroCopy.style.setProperty('--py', py); }
+    if (pb) {
+      var r = pb.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < vh) {
+        var k = 0, xnk = false;
+        tools.forEach(function (li) {
+          var b = li.getBoundingClientRect();
+          if (li.classList.contains('xnk')) { xnk = b.top < vh * .72; li.classList.toggle('on', xnk); return; }
+          var x = b.top + b.height / 2 < vh * .55; li.classList.toggle('x', x); if (x) k++;
+        });
+        roll.style.setProperty('--k', String(Math.min(4, k)));
+        pb.classList.toggle('done', xnk);
+      }
+    }
+    if (flow) {
+      var fr = flow.getBoundingClientRect();
+      if (fr.bottom > 0 && fr.top < vh) {
+        var last = flowLi[flowLi.length - 1], len = last.offsetTop - flowLi[0].offsetTop;
+        flow.style.setProperty('--fh', len + 'px');
+        flow.style.setProperty('--fp', Math.max(0, Math.min(1, (vh * .62 - fr.top - 19) / Math.max(1, len))).toFixed(3));
+        flowLi.forEach(function (li) { li.classList.toggle('on', li.getBoundingClientRect().top + 19 < vh * .62); });
+      }
+    }
+    if (endEl) { var er = endEl.getBoundingClientRect(); if (er.bottom > 0 && er.top < vh) endEl.style.setProperty('--ep', ((vh - er.top) / (vh + er.height)).toFixed(3)); }
+    var v = y - lastY; lastY = y;
+    sk += (Math.max(-10, Math.min(10, v * .3)) - sk) * .18;
+    if (Math.abs(sk) > .05) { if (marqIn) marqIn.style.transform = 'skewX(' + (-sk).toFixed(2) + 'deg)'; raf = requestAnimationFrame(frame); }
+    else if (marqIn) { sk = 0; marqIn.style.transform = ''; }
+  }
+  function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+  if (!reduce) { addEventListener('scroll', kick, { passive: true }); addEventListener('resize', kick); kick(); }
+  else tools.forEach(function (li) { li.classList.add(li.classList.contains('xnk') ? 'on' : 'x'); });
+
+  // Tetikus (hanya layar dengan tetikus): cahaya hero mengikuti, HP hero miring, kartu demo miring, sorotan di kartu,
+  // dan tombol besar sedikit "tertarik" ke kursor.
+  if (fine && !reduce) {
+    if (hero && phones) {
+      hero.addEventListener('pointermove', function (e) {
+        var r = hero.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - .5, py = (e.clientY - r.top) / r.height - .5;
+        hero.style.setProperty('--gx', (px * 220).toFixed(0) + 'px'); hero.style.setProperty('--gy', (py * 160).toFixed(0) + 'px');
+        phones.style.setProperty('--ty', (px * 12).toFixed(2) + 'deg'); phones.style.setProperty('--tx', (-py * 8).toFixed(2) + 'deg');
+      });
+      hero.addEventListener('pointerleave', function () { ['--gx', '--gy'].forEach(function (k) { hero.style.removeProperty(k); }); ['--tx', '--ty'].forEach(function (k) { phones.style.removeProperty(k); }); });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.dtile'), function (c) {
+      c.addEventListener('pointermove', function (e) {
+        var r = c.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - .5, py = (e.clientY - r.top) / r.height - .5;
+        c.style.setProperty('--ry', (px * 9).toFixed(2) + 'deg'); c.style.setProperty('--rx', (-py * 9).toFixed(2) + 'deg');
+        c.style.setProperty('--mx', (px * 18).toFixed(1) + 'px'); c.style.setProperty('--my', (py * 18).toFixed(1) + 'px');
+      });
+      c.addEventListener('pointerleave', function () { ['--rx', '--ry', '--mx', '--my'].forEach(function (k) { c.style.removeProperty(k); }); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.priv .card, .tier'), function (c) {
+      c.addEventListener('pointermove', function (e) { var r = c.getBoundingClientRect(); c.style.setProperty('--x', Math.round(e.clientX - r.left) + 'px'); c.style.setProperty('--y', Math.round(e.clientY - r.top) + 'px'); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.btn.big, .top-cta .btn'), function (b) {
+      b.addEventListener('pointermove', function (e) {
+        var r = b.getBoundingClientRect();
+        b.style.transform = 'translate3d(' + ((e.clientX - r.left - r.width / 2) * .2).toFixed(1) + 'px,' + ((e.clientY - r.top - r.height / 2) * .3).toFixed(1) + 'px,0)';
+      });
+      b.addEventListener('pointerleave', function () { b.style.transform = ''; });
+    });
+  }
+
   // Pasang aplikasi (PWA). Tombol muncul hanya bila browser menawarkan pemasangan (Chrome, Edge, Android).
   var btn = document.getElementById('inst-btn'), deferred = null;
-  function show(id) { ['inst-menu', 'inst-ios', 'inst-done'].forEach(function (x) { document.getElementById(x).style.display = x === id ? 'block' : 'none'; }); }
+  function show2(id) { ['inst-menu', 'inst-ios', 'inst-done'].forEach(function (x) { document.getElementById(x).style.display = x === id ? 'block' : 'none'; }); }
   var installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || /XNKAndroid|XNKiOS|Pake/.test(navigator.userAgent);
   var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  show(installed ? 'inst-done' : ios ? 'inst-ios' : 'inst-menu');
-  addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; btn.hidden = false; show(''); });
-  addEventListener('appinstalled', function () { deferred = null; btn.hidden = true; show('inst-done'); });
+  show2(installed ? 'inst-done' : ios ? 'inst-ios' : 'inst-menu');
+  addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; btn.hidden = false; show2(''); });
+  addEventListener('appinstalled', function () { deferred = null; btn.hidden = true; show2('inst-done'); });
   btn.addEventListener('click', function () {
     if (!deferred) return;
     var d = deferred; deferred = null;
     d.prompt();
-    d.userChoice.then(function (c) { btn.hidden = true; show(c.outcome === 'accepted' ? 'inst-done' : 'inst-menu'); });
+    d.userChoice.then(function (c) { btn.hidden = true; show2(c.outcome === 'accepted' ? 'inst-done' : 'inst-menu'); });
   });
   if ('serviceWorker' in navigator) addEventListener('load', function () { navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {}); });
 })();

@@ -2,10 +2,10 @@
 // Halaman coach (/<slug>/…) TIDAK disentuh: permintaan itu tidak dijawab di sini, jadi langsung ke jaringan atau ke
 // service worker coach itu sendiri. Cache lain tidak pernah dihapus (awalan coach: "xnk-page-<slug>~").
 var CACHE = 'xnk-hub-__HASH__';
-var OWN = /^\/(|index\.html|manifest\.webmanifest|img\/[^/]+)$/;
+var OWN = /^\/(|index\.html|manifest\.webmanifest|img\/[^/]+|fonts\/[^/]+\.woff2)$/;
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(['/', '/manifest.webmanifest', '/img/icon-192.png']); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(['/', '/manifest.webmanifest', '/img/icon-192.png', '/fonts/inter-tight.woff2']); }).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) {

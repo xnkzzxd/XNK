@@ -185,7 +185,9 @@ dilewati). Jawabannya `{slug, from, site, folder, hub}`, masing-masing `'ok'` at
 
 Paket mengikuti **XNK Proposal Coach**: `PUSAT_TIERS` di `Pusat.gs` (Starter Rp149rb / Pro Rp249rb / Studio Rp549rb per
 bulan; tahunan, lifetime dan beli putus) dan `PUSAT_SETUP` (Standar Rp400rb, Custom Rp2,1jt). **Ubah tabel itu bersama
-proposal.** Harga hanya bawaan saat paket dipilih; harga lain per coach boleh diisi.
+proposal dan `xnk-library/tools/hub-harga.js`** (harga di halaman depan xnk.web.id, T-2265; `tests/hub.test.js` gagal
+bila berbeda). Harga hanya bawaan saat paket dipilih; harga lain per coach boleh diisi. Halaman depan menjanjikan
+**bulan pertama gratis** untuk bayar bulanan: isi jatuh tempo pertama sebulan setelah aplikasi coach siap.
 
 - `SUB_<slug>` kini menyimpan `tier`, `cycle` (`bulanan|tahunan|lifetime|putus`), `setup {kind, price, paidAt}` dan
   `pay[]` (semua pembayaran, 60 terakhir). Data lama (`plan: 'bulanan'`, `history`) dibaca apa adanya: paket ditebak dari

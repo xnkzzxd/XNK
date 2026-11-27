@@ -835,7 +835,7 @@ function runPusatPushKick() {
 // Pemeriksaan nama sama dengan tools/build-hub.js (RESERVED dicek sama oleh tests/pusat.test.js).
 
 var PUSAT_RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
-  'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
+  'index', '404', 'cname', 'img', 'fonts', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
 var PUSAT_SLUG_KEYS = ['ST_', 'HIST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_', 'SUB_', 'OUT_'];
 
 /** Kirim SITEQ_<slug> (alamat situs baru) ke coach; berhasil = antrean dihapus. {ok} atau {error}. */
@@ -926,7 +926,8 @@ var PUSAT_SUB_REMIND = [7, 1];          // email pengingat H-7 dan H-1
 var PUSAT_SUB_HISTORY = 24;             // (lama) riwayat bayar langganan
 var PUSAT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// T-2264: paket dan harga dari "XNK Proposal Coach" (29 Okt 2026). UBAH BERSAMA proposal bila harga berubah.
+// T-2264: paket dan harga dari "XNK Proposal Coach" (29 Okt 2026). UBAH BERSAMA proposal dan
+// xnk-library/tools/hub-harga.js (harga di halaman depan xnk.web.id, T-2265; tests/hub.test.js membandingkan keduanya).
 // Harga hanya bawaan saat paket dipilih; pemilik boleh mengisi harga lain per coach.
 var PUSAT_TIERS = {
   starter: { name: 'Starter', bulanan: 149000, tahunan: 1490000, lifetime: 3900000, putus: 2900000 },

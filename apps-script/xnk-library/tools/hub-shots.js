@@ -13,7 +13,8 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const OUT = path.join(__dirname, '..', 'hub-site', 'img');
 const DEMO = fs.readFileSync(path.join(ROOT, 'demo', 'index.html'));
 
-// [file, url, view]; view = id untuk navigate(), kosong = layar pertama.
+// [file, url, view, lebar, tinggi, aksi]; view = id untuk navigate(), kosong = layar pertama; tanpa lebar = HP 390 × 844;
+// aksi (T-2265) = nama di ACTS, dijalankan setelah halaman siap.
 const SHOTS = [
   ['klien-hari-ini', '/demo/?klien', ''],
   ['klien-latihan', '/demo/?klien', 'public-program'],
@@ -21,9 +22,53 @@ const SHOTS = [
   ['klien-progres', '/demo/?klien', 'public-progress'],
   ['coach-dashboard', '/demo/', ''],
   ['coach-jadwal', '/demo/', 'calendar'],
+  // T-2265: halaman klien di panel coach dan laporan PDF progres (Fase AD).
+  ['coach-klien', '/demo/', '', 0, 0, 'klien'],
+  ['coach-laporan', '/demo/', '', 0, 0, 'laporan'],
+  ['coach-keuangan', '/demo/', '', 0, 0, 'keuangan'],
   // Tampilan desktop (portal klien ala Mac app) untuk gambar laptop di bagian Aplikasi.
   ['klien-desktop', '/demo/?klien', '', 1280, 800],
 ];
+
+// Klien contoh yang datanya paling lengkap di demo (sama dengan pt-scheduler/tools/report-check.js).
+const SAMPLE = () => (window.members.find(m => /Sari/.test(m.name)) || window.members[0]).id;
+const ACTS = {
+  klien: async page => { await page.evaluate(`window.openProfile((${SAMPLE})())`); await page.waitForTimeout(2500); },
+  laporan: async page => {
+    await page.evaluate(`window.reportOpen('admin', (${SAMPLE})())`);
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.rpBuild());
+    await page.waitForFunction(() => !!(window.rpBlob && window.rpBlob()) && document.querySelectorAll('#rp-preview img').length > 0, null, { timeout: 30000 });
+    await page.evaluate(() => Promise.all([...document.querySelectorAll('#rp-preview img')].map(i => i.decode ? i.decode().catch(() => {}) : 0)));
+    // Halaman laporan yang tampil, bukan pilihan di atasnya.
+    await page.evaluate(() => document.querySelector('#rp-preview').scrollIntoView({ block: 'start' }));
+    await page.waitForTimeout(800);
+  },
+  // Keuangan contoh hanya di memori halaman demo ini (demo-nya sendiri tidak berubah): nyalakan keuangan, perpanjang
+  // tiga klien (tagihan otomatis), satu DP, satu lunas, satu pengeluaran; lalu buka halaman Keuangan.
+  keuangan: async page => {
+    await page.evaluate(async () => {
+      const t = localStorage.getItem('xnk_admin_token');
+      const call = (fn, ...a) => window.XNK_TRANSPORT(fn, [t].concat(a));
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      await call('updateAppSettings', { finance: { enabled: true } });
+      await call('syncFinanceTransactions');
+      const ms = window.members || [];
+      for (const id of ['PT-2', 'PT-3', 'PT-5', 'PT-6']) {
+        const m = ms.find(x => x.id === id);
+        if (m) await call('addMember', { name: m.name, phone: m.phone, packageId: m.packageId, goal: m.goal || '' });
+      }
+      const bills = ((await call('getBills', {})) || {}).bills || (await call('getBills', {})) || [];
+      const open = (Array.isArray(bills) ? bills : []).filter(b => b.remaining > 0);
+      if (open[0]) await call('savePayment', { billId: open[0].id, amount: Math.round(open[0].remaining / 2), date: today, method: 'Transfer bank' });
+      if (open[1]) await call('savePayment', { billId: open[1].id, amount: open[1].remaining, date: today, method: 'QRIS / e-wallet' });
+      await call('saveExpense', { amount: 350000, date: today, category: 'Sewa tempat', method: 'Transfer bank', note: 'Sewa studio' });
+      localStorage.setItem('xnk_fin_on', '1');   // salinan perangkat panel (part 14 finOn), biasanya diisi saat panel dimuat
+    });
+    await page.evaluate(() => window.navigate('finance'));
+    await page.waitForTimeout(3000);
+  },
+};
 
 (async () => {
   const server = http.createServer((req, res) => {
@@ -34,7 +79,10 @@ const SHOTS = [
   const base = 'http://127.0.0.1:' + server.address().port;
   const browser = await pw.chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   fs.mkdirSync(OUT, { recursive: true });
-  for (const [name, url, view, w, h] of SHOTS) {
+  // ONLY=coach-keuangan,og: ambil ulang sebagian saja (og hanya bila disebut atau ONLY kosong).
+  const only = (process.env.ONLY || '').split(',').filter(Boolean);
+  for (const [name, url, view, w, h, act] of SHOTS) {
+    if (only.length && !only.includes(name)) continue;
     const desk = !!w;
     const ctx = await browser.newContext(desk ? { viewport: { width: w, height: h }, deviceScaleFactor: 1.5, colorScheme: 'light' }
       : { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'light' });
@@ -48,12 +96,14 @@ const SHOTS = [
     });
     await tidy(); await page.waitForTimeout(600);
     if (view) { await page.evaluate(v => window.navigate(v), view); await page.waitForTimeout(2500); await tidy(); }
+    if (act) await ACTS[act](page);
     await page.waitForTimeout(600);
     // JPEG kualitas 82: ±4x lebih kecil dari PNG, tanpa paket tambahan.
     fs.writeFileSync(path.join(OUT, name + '.jpg'), await page.screenshot({ type: 'jpeg', quality: 82 }));
     console.log('  ' + name);
     await ctx.close();
   }
+  if (only.length && !only.includes('og')) { await browser.close(); server.close(); return; }
   // Ikon aplikasi (PWA, favicon, header, desktop) dibuat dari logo.png di akar repo, di atas latar hitam:
   //   magick logo.png -background "#0b0b0b" -flatten -resize 512x512 hub-site/img/icon-512.png   (juga 192, logo-64)
   //   magick logo.png -background "#0b0b0b" -flatten -define icon:auto-resize=256,128,64,48,32,16 hub-site/desktop.ico
@@ -63,7 +113,7 @@ const SHOTS = [
   const img = n => 'data:image/jpeg;base64,' + fs.readFileSync(path.join(OUT, n + '.jpg')).toString('base64');
   await page.setContent(`<body style="margin:0;width:1200px;height:630px;background:#0b0b0b;color:#f5f5f3;font-family:system-ui,'Segoe UI',sans-serif;display:flex;align-items:center;overflow:hidden">
     <div style="padding:0 0 0 80px;width:620px"><img src="data:image/png;base64,${fs.readFileSync(path.join(OUT, 'icon-192.png')).toString('base64')}" style="width:88px;height:88px;border-radius:22px;box-shadow:inset 0 0 0 1px #2e2e2c">
-    <h1 style="font-size:64px;line-height:1.02;letter-spacing:-2px;margin:36px 0 20px">Latihan, makan, dan jadwal PT di satu aplikasi.</h1>
+    <h1 style="font-size:72px;line-height:1.02;letter-spacing:-2px;margin:36px 0 20px">Anda melatih.<br>Sisanya beres.</h1>
     <p style="font-size:26px;color:#a3a39e;margin:0">xnk.web.id</p></div>
     <div style="display:flex;gap:24px;align-items:flex-start;margin-top:120px">${['klien-hari-ini', 'klien-latihan'].map((n, i) =>
       `<img src="${img(n)}" style="width:240px;border-radius:30px;border:8px solid #1f1f1e;${i ? 'margin-top:-60px' : ''}">`).join('')}</div></body>`);

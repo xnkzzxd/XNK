@@ -3417,7 +3417,23 @@ async function contrastReport(page) {
     await page.click('#bk-next');
     await page.waitForTimeout(300);
     check((await page.textContent('#bk-screen .bk-count')).includes('1 dari 3') && (await page.textContent('#toast-msg')).includes('Pilih hari'), 'booking: Lanjut without a day asks for one');
-    check((await page.locator('#bk-screen .bk-day:not(.off)').count()) >= 5 && (await page.locator('#bk-screen .bk-day.off').count()) >= 1, 'booking: days with free hours can be tapped, past or full days cannot');
+    // The calendar shows one month from today, so near the end of a month only a few days are left to tap
+    // (27 Nov: 27–30). Check the rule itself against the client's own free hours, not a fixed count.
+    const cal = await page.evaluate(() => {
+      const map = window.openSlotsByDate || {};
+      const free = k => !(window.myHoldBlocks && window.myHoldBlocks(k)) && Object.values(map[k] || {}).some(n => n > 0);
+      const cells = [...document.querySelectorAll('#bk-screen .bk-day')];
+      const taps = cells.filter(c => !c.classList.contains('off'));
+      const dates = taps.map(b => ((b.getAttribute('onclick') || '').match(/'(\d{4}-\d{2}-\d{2})'/) || [])[1] || '');
+      const month = (dates[0] || '').slice(0, 7);
+      const key = c => month + '-' + String(c.textContent.trim()).padStart(2, '0');
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const inMonth = cells.map(key), past = inMonth.filter(k => k < today);
+      return { taps: taps.length, expected: inMonth.filter(free).length, tapsFree: dates.every(d => d && free(d)),
+        offNotFree: cells.filter(c => c.classList.contains('off')).every(c => !free(key(c))),
+        pastOff: past.every(k => cells.find(c => key(c) === k).classList.contains('off')) };
+    });
+    check(cal.taps >= 1 && cal.taps === cal.expected && cal.tapsFree && cal.offNotFree && cal.pastOff, 'booking: days with free hours can be tapped, past or full days cannot ' + JSON.stringify(cal));
     await page.evaluate(d => window.bkPick('hari', d), day6);
     await page.waitForTimeout(200);
     check((await page.textContent('#bk-day-note')).includes('jam kosong'), 'booking: the chosen day shows how many hours are free');
