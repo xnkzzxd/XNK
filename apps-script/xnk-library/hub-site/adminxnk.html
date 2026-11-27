@@ -1114,7 +1114,7 @@
   function load(fn, args, note) {
     if (note) toast(note);
     if (!data) skeleton(); else $('cekAll').disabled = true;
-    return rpc(fn, args).then(function (d) { data = d; render(); if (note) toast(d && d.notice ? d.notice : '', d && d.notice ? 'bad' : ''); },
+    return rpc(fn, args).then(function (d) { data = d; liveAt = Date.now(); render(); if (note) toast(d && d.notice ? d.notice : '', d && d.notice ? 'bad' : ''); },
       function (e) { $('cekAll').disabled = false; if (!data && tok()) { $('list').innerHTML = '<p class="line1" style="padding:12px">Data belum termuat.</p>'; $('sumbox').innerHTML = ''; } toast(e.message, 'bad'); });
   }
 
@@ -1375,7 +1375,8 @@
   }
   function liveDraw() { var b = $('liveBtn'); if (b) { var t = liveText(); if (b.textContent !== t) b.textContent = t; } }
   function liveTick() {
-    if (!live || liveBusy || !tok() || !data || document.hidden || $('dlg').open) return liveDraw();
+    var editing = openPlace || openRename || openSub || openPay || openLeave || /^(input|textarea|select)$/i.test((document.activeElement || {}).tagName || '');
+    if (!live || liveBusy || editing || pending || !tok() || !data || document.hidden || $('dlg').open) return liveDraw();
     var gap = jobList.some(function (j) { return j.state === 'run'; }) ? 15000 : 60000;
     if (liveAt && Date.now() - liveAt < gap) return liveDraw();
     liveBusy = true; liveDraw();
@@ -1387,7 +1388,7 @@
   document.addEventListener('click', function (ev) {
     if (!ev.target.closest('[data-live]')) return;
     live = !live; try { localStorage.setItem(LIVE_KEY, live ? '1' : '0'); } catch (e) {}
-    if (live) liveAt = 0; liveDraw(); liveTick();
+    liveDraw(); liveTick();
   });
 
   // ── Papan ketik: / cari, ↑↓ pilih coach, Esc kembali ke ringkasan ──
