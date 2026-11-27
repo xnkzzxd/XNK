@@ -14946,6 +14946,10 @@
     let a = ''; try { a = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); } catch (e) {}
     return a && !/transparent/.test(a) ? a : '#111111';
   }
+  function rpAccentOnInk() {   // --accent-on-ink: aksen yang terbaca di atas hitam (Fase X)
+    let a = ''; try { a = getComputedStyle(document.documentElement).getPropertyValue('--accent-on-ink').trim(); } catch (e) {}
+    return a && !/transparent/.test(a) ? a : '#ffffff';
+  }
   function rpFontsReady() {   // kanvas hanya memakai font yang sudah dimuat: muat Inter (semua ketebalan yang dipakai) dulu
     try {
       if (!document.fonts || !document.fonts.load) return Promise.resolve();
@@ -14963,6 +14967,30 @@
       function card(cx, cy, w, hh, r) {   // .card-flat: wit, rand --border, hoek --r-lg
         c.fillStyle = CARD; rpRound(c, cx, cy, w, hh, r || 32); c.fill();
         c.strokeStyle = LINE; c.lineWidth = 2; rpRound(c, cx + 1, cy + 1, w - 2, hh - 2, r || 32); c.stroke();
+      }
+      const AI = rpAccentOnInk();
+      let secNo = 0;
+      function kontur(bx, by, bw, bh, r) {   // .gfx-kontur: garis kontur tipis di pita hitam
+        c.save(); rpRound(c, bx, by, bw, bh, r); c.clip();
+        c.strokeStyle = 'rgba(255,255,255,0.13)'; c.lineWidth = 2;
+        const ox = bx + bw * 0.86, oy = by + bh * 0.2;
+        for (let k = 1; k <= 14; k++) {
+          const rr = 34 * k; c.beginPath();
+          for (let a = 0; a <= 64; a++) {
+            const t = a / 64 * Math.PI * 2, w = 1 + 0.08 * Math.sin(t * 3 + k * 0.7) + 0.05 * Math.cos(t * 5 - k);
+            const px = ox + Math.cos(t) * rr * w * 1.35, py = oy + Math.sin(t) * rr * w;
+            if (a) c.lineTo(px, py); else c.moveTo(px, py);
+          }
+          c.closePath(); c.stroke();
+        }
+        c.restore();
+      }
+      function geo(bx, by, bw, bh, r) {   // .gfx-geo: lingkaran besar + titik aksen di kartu hitam
+        c.save(); rpRound(c, bx, by, bw, bh, r); c.clip();
+        c.fillStyle = 'rgba(255,255,255,0.06)'; c.beginPath(); c.arc(bx + bw - 60, by + 40, 230, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = 'rgba(255,255,255,0.12)'; c.lineWidth = 2; c.beginPath(); c.arc(bx + bw - 60, by + 40, 300, 0, Math.PI * 2); c.stroke();
+        c.fillStyle = AI; c.beginPath(); c.arc(bx + bw - 64, by + bh - 64, 18, 0, Math.PI * 2); c.fill();
+        c.restore();
       }
       function eyebrow(t, ex, ey, color) { c.font = RPF(700, 19); track(2.4); c.fillStyle = color || MUT; c.fillText(String(t).toUpperCase(), ex, ey); track(0); }
       const pages = [];
@@ -14996,9 +15024,14 @@
       }
       function gap(n) { y += n; }
       function section(title) {
-        need(120);
-        c.font = RPF(800, 40); track(-0.6); c.fillStyle = INK; c.fillText(title, x, y + 40); track(0);
-        y += 68;
+        need(120); secNo++;
+        const tag = String(secNo).padStart(2, '0');
+        c.fillStyle = INK; rpRound(c, x, y + 4, 64, 44, 14); c.fill();
+        c.font = RPF(800, 22); c.fillStyle = '#ffffff'; c.textAlign = 'center'; c.fillText(tag, x + 32, y + 34); c.textAlign = 'left';
+        c.font = RPF(800, 40); track(-0.6); c.fillStyle = INK; c.fillText(title, x + 84, y + 40); const tw0 = c.measureText(title).width; track(0);
+        c.strokeStyle = LINE; c.lineWidth = 2; c.beginPath(); c.moveTo(x + 84 + tw0 + 24, y + 26); c.lineTo(x + contentW, y + 26); c.stroke();
+        c.fillStyle = A; c.beginPath(); c.arc(x + contentW - 6, y + 26, 6, 0, Math.PI * 2); c.fill();
+        y += 72;
       }
       function tiles(list) {
         const cols = 3, gw = 24, tw = (contentW - gw * (cols - 1)) / cols, th = 170;
@@ -15074,26 +15107,28 @@
         if (!t) return;
         const lines = wrap(t, RPF(500, 25), contentW - 70), hh = lines.length * 36 + 40;
         need(hh + 16); card(x, y, contentW, hh, 28);
-        c.fillStyle = A; c.fillRect(x, y + 14, 8, hh - 28);
+        c.fillStyle = A; rpRound(c, x + 16, y + 16, 8, hh - 32, 4); c.fill();
         const y0 = y; y += 18; text(t, 25, 500, INK, { x: x + 40, w: contentW - 70 }); y = y0 + hh + 16;
       }
       function lead(t) { if (t) { text(t, 30, 700, INK); gap(10); } }
-      function gauge(score, status, vonis) {
-        const hh = 280; need(hh + 10);
-        const cx0 = x + 190, cy0 = y + 210, r = 155;
-        c.lineCap = 'round'; c.lineWidth = 34;
-        c.strokeStyle = LINE; c.beginPath(); c.arc(cx0, cy0, r, Math.PI, 2 * Math.PI); c.stroke();
-        if (score != null) { c.strokeStyle = A; c.beginPath(); c.arc(cx0, cy0, r, Math.PI, Math.PI + Math.PI * Math.max(0.02, score / 100)); c.stroke(); }
+      function gauge(score, status, vonis) {   // kartu hitam (.insight-hero) dengan gfx-geo
+        const hh = 290; need(hh + 20);
+        const y0 = y;
+        c.fillStyle = '#1a1a19'; rpRound(c, x, y, contentW, hh, 40); c.fill();
+        geo(x, y, contentW, hh, 40);
+        const cx0 = x + 210, cy0 = y + 222, r = 145;
+        c.lineCap = 'round'; c.lineWidth = 32;
+        c.strokeStyle = 'rgba(255,255,255,0.14)'; c.beginPath(); c.arc(cx0, cy0, r, Math.PI, 2 * Math.PI); c.stroke();
+        if (score != null) { c.strokeStyle = AI; c.beginPath(); c.arc(cx0, cy0, r, Math.PI, Math.PI + Math.PI * Math.max(0.02, score / 100)); c.stroke(); }
         c.lineCap = 'butt';
-        c.textAlign = 'center'; c.font = RPF(800, 104, 'big'); track(-3); c.fillStyle = INK; c.fillText(score == null ? '–' : String(score), cx0, cy0 - 10); track(0);
-        c.font = RPF(600, 22); c.fillStyle = MUT; c.fillText('dari 100', cx0, cy0 + 26); c.textAlign = 'left';
-        const tx = x + 470, tw = contentW - 470, y0 = y;
-        y += 50;
-        eyebrow('Skor periode ini', tx, y + 22); y += 32;
-        gap(6);
-        if (status) { pill(tx, y, STL[status], STC[status], status === 'cukup' ? '#ffffff' : (status === 'baik' ? '#ffffff' : '#ffffff')); y += 54; }
-        text(vonis, 32, 700, INK, { x: tx, w: tw });
-        y = Math.max(y, y0 + hh);
+        c.textAlign = 'center'; c.font = RPF(800, 100, 'big'); track(-3); c.fillStyle = '#ffffff'; c.fillText(score == null ? '–' : String(score), cx0, cy0 - 14); track(0);
+        c.font = RPF(600, 22); c.fillStyle = '#a7a7a4'; c.fillText('dari 100', cx0, cy0 + 24); c.textAlign = 'left';
+        const tx = x + 450, tw = contentW - 450 - 150;
+        y += 60;
+        eyebrow('Skor periode ini', tx, y, '#a7a7a4'); y += 22;
+        if (status) { pill(tx, y, STL[status], status === 'perlu' ? '#ffffff' : AI, status === 'perlu' ? '#0b0b0b' : '#0b0b0b'); y += 58; }
+        text(vonis, 30, 700, '#ffffff', { x: tx, w: tw });
+        y = y0 + hh + 20;
       }
       function pillars(list) {
         const ps = list.filter(p => p.skor != null); if (!ps.length) return;
@@ -15115,11 +15150,14 @@
       }
       function wins(list) {
         if (!list.length) return;
-        const n = list.length, gw = 24, tw = (contentW - gw * (n - 1)) / n, th = 226;
+        const n = list.length, gw = 24, tw = (contentW - gw * (n - 1)) / n, th = 206;
         need(th + 20);
         list.forEach(function (w, k) {
           const tx = x + k * (tw + gw);
           card(tx, y, tw, th);
+          c.save(); rpRound(c, tx, y, tw, th, 32); c.clip();
+          c.font = RPF(800, 240, 'big'); track(-12); c.fillStyle = '#f1f0ee'; c.textAlign = 'right'; c.fillText(String(k + 1), tx + tw + 6, y + th + 40); c.textAlign = 'left'; track(0);
+          c.restore();
           c.fillStyle = A; c.fillRect(tx + 24, y + 26, 46, 8);
           c.font = RPF(800, 54, 'big'); track(-1.5); c.fillStyle = INK; c.fillText(String(w.angka), tx + 24, y + 104); track(0);
           c.font = RPF(800, 24); c.fillText(String(w.judul).slice(0, 26), tx + 24, y + 144);
@@ -15178,18 +15216,23 @@
         if (label) text(label, 20, 500, MUT);
         gap(8);
       }
-      function spark(pts, sx, sy, sw, sh) {
+      function spark(pts, sx, sy, sw, sh) {   // garis tren dengan area lembut, titik akhir aksen
         if (!pts || pts.length < 2) return;
         const vs = pts.map(p => Number(p.v)), mn = Math.min.apply(null, vs), mx = Math.max.apply(null, vs), span = (mx - mn) || 1;
-        c.strokeStyle = A; c.lineWidth = 4; c.lineJoin = 'round'; c.beginPath();
-        pts.forEach(function (p, i) { const px = sx + sw * i / (pts.length - 1), py = sy + sh - sh * (Number(p.v) - mn) / span; if (i) c.lineTo(px, py); else c.moveTo(px, py); }); c.stroke();
+        const P = pts.map((p, i) => [sx + sw * i / (pts.length - 1), sy + sh - sh * (Number(p.v) - mn) / span]);
+        const gr = c.createLinearGradient(0, sy, 0, sy + sh); gr.addColorStop(0, 'rgba(11,11,11,0.14)'); gr.addColorStop(1, 'rgba(11,11,11,0)');
+        c.fillStyle = gr; c.beginPath(); c.moveTo(P[0][0], sy + sh); P.forEach(q => c.lineTo(q[0], q[1])); c.lineTo(P[P.length - 1][0], sy + sh); c.closePath(); c.fill();
+        c.strokeStyle = A; c.lineWidth = 4; c.lineJoin = 'round'; c.beginPath(); P.forEach((q, i) => i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.stroke();
+        P.forEach((q, i) => { if (i && i < P.length - 1) { c.fillStyle = '#ffffff'; c.strokeStyle = A; c.lineWidth = 3; c.beginPath(); c.arc(q[0], q[1], 5, 0, Math.PI * 2); c.fill(); c.stroke(); } });
+        const L = P[P.length - 1]; c.fillStyle = A; c.beginPath(); c.arc(L[0], L[1], 9, 0, Math.PI * 2); c.fill();
       }
+
 
       const S = d.skor || {}, AN = d.analisis || {};
       newPage();
       // ═══ Halaman 1: ringkasan satu halaman ═══
-      c.fillStyle = '#0b0b0b'; rpRound(c, RP_M, RP_M, contentW, 260, 44); c.fill();
-      c.fillStyle = A; c.fillRect(RP_M + 48, RP_M + 50, 80, 10);
+      c.fillStyle = '#0b0b0b'; rpRound(c, RP_M, RP_M, contentW, 260, 44); c.fill(); kontur(RP_M, RP_M, contentW, 260, 44);
+      c.fillStyle = AI; c.fillRect(RP_M + 48, RP_M + 50, 80, 10);
       eyebrow('Laporan progres', RP_M + 48, RP_M + 106, '#a7a7a4');
       c.font = RPF(800, 76, 'big'); track(-2.2); c.fillStyle = '#ffffff'; c.fillText(String(d.name || '').slice(0, 26), RP_M + 48, RP_M + 186); track(0);
       c.font = RPF(500, 26); c.fillStyle = '#a7a7a4';
@@ -15197,8 +15240,8 @@
       y = RP_M + 290;
       gauge(S.total, S.status, S.vonis || '');
       pillars(S.pilar || []);
-      if ((d.menang || []).length) { section('Hal terbaik'); wins(d.menang); }
-      section('Fokus berikutnya');
+      if ((d.menang || []).length) { need(72 + 230); section('Hal terbaik'); wins(d.menang); }
+      need(72 + 130); section('Fokus berikutnya');   // judul tidak pernah sendirian di bawah halaman
       (d.fokus || []).forEach(function (f, i) {
         const ls = wrap(f.kalimat, RPF(500, 26), contentW - 90), hh = 48 + ls.length * 36;
         need(hh + 14);
@@ -15217,7 +15260,7 @@
 
       // ═══ Halaman detail ═══
       const block = function (title, minH) { if (y + minH > bottom) newPage(); else gap(28); section(title); };
-      newPage();
+      if (pages.length > 1 || y + 500 > bottom) { if (y + 500 > bottom) newPage(); else gap(40); } else newPage();
       eyebrow('Rincian', x, y + 22); y += 36;
       text('Tiap bagian: satu kalimat inti, satu grafik, lalu "Artinya" untuk membacanya.', 26, 500, MUT); gap(16);
       section('Angka utama');
@@ -15230,7 +15273,7 @@
       }));
       if (rp.sec.kehadiran) {
         const K = AN.kehadiran || {};
-        block('Kehadiran', 640);
+        block('Kehadiran', 560);
         lead(d.kehadiran.sesi + ' sesi selesai · rata-rata ' + rpN(K.perMinggu) + ' per minggu · streak ' + d.kehadiran.streak + ' minggu (terbaik ' + d.kehadiran.bestStreak + ').');
         rpCalendar();
         vbars((d.kehadiran.minggu || []).map(w => ({ l: pgLabel(w.minggu), v: w.sesi, dim: w.cuti })), 0, 'Sesi dengan coach per minggu (mulai Senin). Abu-abu = minggu cuti.');
