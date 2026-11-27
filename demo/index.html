@@ -19977,19 +19977,31 @@ details.cp-day[open] .cp-day-names { display: none; }
     let a = ''; try { a = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); } catch (e) {}
     return a && !/transparent/.test(a) ? a : '#111111';
   }
-  function rpFontsReady() { try { return document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve(); } catch (e) { return Promise.resolve(); } }
-  const RPF = (w, px, fam) => w + ' ' + px + 'px ' + (fam === 'big' ? '"Anton", "Inter", sans-serif' : '"Inter", system-ui, sans-serif');
+  function rpFontsReady() {   // kanvas hanya memakai font yang sudah dimuat: muat Inter (semua ketebalan yang dipakai) dulu
+    try {
+      if (!document.fonts || !document.fonts.load) return Promise.resolve();
+      const want = ['400', '500', '600', '700', '800', '900'].map(w => document.fonts.load(w + ' 32px "Inter"'));
+      return Promise.race([Promise.all(want).then(() => document.fonts.ready), new Promise(r => setTimeout(r, 2500))]);
+    } catch (e) { return Promise.resolve(); }
+  }
+  const RPF = (w, px, fam) => (fam === 'big' ? 800 : w) + ' ' + px + 'px "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   const rpN = (n, dp) => n == null || n === '' ? '–' : Number(n).toLocaleString('id-ID', { maximumFractionDigits: dp == null ? 1 : dp });
   const rpDelta = (x) => x == null || x === 0 ? '' : (x > 0 ? '+' : '−') + rpN(Math.abs(x));
   function rpRender(d, msg) {
     return rpFontsReady().then(function () {
-      const A = rpAccent(), INK = '#111111', MUT = '#6b6b6b', LINE = '#e6e6e6', SOFT = '#f4f4f2';
+      const A = rpAccent(), INK = '#0b0b0b', MUT = '#676764', LINE = '#e7e5e4', SOFT = '#f5f5f4', BG = '#fafaf9', CARD = '#ffffff';
+      const track = px => { if ('letterSpacing' in c) c.letterSpacing = px + 'px'; };
+      function card(cx, cy, w, hh, r) {   // .card-flat: wit, rand --border, hoek --r-lg
+        c.fillStyle = CARD; rpRound(c, cx, cy, w, hh, r || 32); c.fill();
+        c.strokeStyle = LINE; c.lineWidth = 2; rpRound(c, cx + 1, cy + 1, w - 2, hh - 2, r || 32); c.stroke();
+      }
+      function eyebrow(t, ex, ey, color) { c.font = RPF(700, 19); track(2.4); c.fillStyle = color || MUT; c.fillText(String(t).toUpperCase(), ex, ey); track(0); }
       const pages = [];
       let c, x, y;
       const contentW = RP_W - 2 * RP_M, bottom = RP_H - RP_M - RP_FOOT;
       function newPage() {
         const cv = document.createElement('canvas'); cv.width = RP_W; cv.height = RP_H;
-        c = cv.getContext('2d'); c.fillStyle = '#ffffff'; c.fillRect(0, 0, RP_W, RP_H);
+        c = cv.getContext('2d'); c.fillStyle = '#fafaf9'; c.fillRect(0, 0, RP_W, RP_H);
         c.textBaseline = 'alphabetic';
         pages.push(cv); x = RP_M; y = RP_M;
       }
@@ -20016,9 +20028,8 @@ details.cp-day[open] .cp-day-names { display: none; }
       function gap(n) { y += n; }
       function section(title) {
         need(120);
-        c.fillStyle = A; c.fillRect(x, y + 6, 10, 40);
-        c.font = RPF(800, 38); c.fillStyle = INK; c.fillText(title, x + 26, y + 40);
-        y += 70;
+        c.font = RPF(800, 40); track(-0.6); c.fillStyle = INK; c.fillText(title, x, y + 40); track(0);
+        y += 68;
       }
       function tiles(list) {
         const cols = 3, gw = 24, tw = (contentW - gw * (cols - 1)) / cols, th = 170;
@@ -20026,9 +20037,9 @@ details.cp-day[open] .cp-day-names { display: none; }
           need(th + gw);
           list.slice(i, i + cols).forEach(function (t, k) {
             const tx = x + k * (tw + gw);
-            c.fillStyle = SOFT; rpRound(c, tx, y, tw, th, 22); c.fill();
-            c.font = RPF(600, 24); c.fillStyle = MUT; c.fillText(t.label, tx + 26, y + 44);
-            c.font = RPF(400, 64, 'big'); c.fillStyle = INK; c.fillText(t.value, tx + 26, y + 116);
+            card(tx, y, tw, th);
+            eyebrow(t.label, tx + 26, y + 44);
+            c.font = RPF(800, 60, 'big'); track(-1.5); c.fillStyle = INK; c.fillText(t.value, tx + 26, y + 114); track(0);
             if (t.sub) { c.font = RPF(600, 22); c.fillStyle = t.subColor || MUT; c.fillText(t.sub, tx + 26, y + 150); }
           });
           y += th + gw;
@@ -20093,7 +20104,7 @@ details.cp-day[open] .cp-day-names { display: none; }
       function callout(t) {
         if (!t) return;
         const lines = wrap(t, RPF(500, 25), contentW - 70), hh = lines.length * 36 + 40;
-        need(hh + 16); c.fillStyle = SOFT; rpRound(c, x, y, contentW, hh, 18); c.fill();
+        need(hh + 16); card(x, y, contentW, hh, 28);
         c.fillStyle = A; c.fillRect(x, y + 14, 8, hh - 28);
         const y0 = y; y += 18; text(t, 25, 500, INK, { x: x + 40, w: contentW - 70 }); y = y0 + hh + 16;
       }
@@ -20105,11 +20116,11 @@ details.cp-day[open] .cp-day-names { display: none; }
         c.strokeStyle = LINE; c.beginPath(); c.arc(cx0, cy0, r, Math.PI, 2 * Math.PI); c.stroke();
         if (score != null) { c.strokeStyle = A; c.beginPath(); c.arc(cx0, cy0, r, Math.PI, Math.PI + Math.PI * Math.max(0.02, score / 100)); c.stroke(); }
         c.lineCap = 'butt';
-        c.textAlign = 'center'; c.font = RPF(400, 110, 'big'); c.fillStyle = INK; c.fillText(score == null ? '–' : String(score), cx0, cy0 - 10);
+        c.textAlign = 'center'; c.font = RPF(800, 104, 'big'); track(-3); c.fillStyle = INK; c.fillText(score == null ? '–' : String(score), cx0, cy0 - 10); track(0);
         c.font = RPF(600, 22); c.fillStyle = MUT; c.fillText('dari 100', cx0, cy0 + 26); c.textAlign = 'left';
         const tx = x + 470, tw = contentW - 470, y0 = y;
         y += 50;
-        text('SKOR PERIODE INI', 22, 800, MUT, { x: tx, w: tw });
+        eyebrow('Skor periode ini', tx, y + 22); y += 32;
         gap(6);
         if (status) { pill(tx, y, STL[status], STC[status], status === 'cukup' ? '#ffffff' : (status === 'baik' ? '#ffffff' : '#ffffff')); y += 54; }
         text(vonis, 32, 700, INK, { x: tx, w: tw });
@@ -20122,9 +20133,9 @@ details.cp-day[open] .cp-day-names { display: none; }
           need(th + gw);
           ps.slice(i, i + cols).forEach(function (p, k) {
             const tx = x + k * (tw + gw);
-            c.fillStyle = SOFT; rpRound(c, tx, y, tw, th, 22); c.fill();
+            card(tx, y, tw, th);
             c.font = RPF(800, 28); c.fillStyle = INK; c.fillText(p.label, tx + 26, y + 50);
-            c.font = RPF(400, 56, 'big'); c.textAlign = 'right'; c.fillText(String(p.skor), tx + tw - 26, y + 62); c.textAlign = 'left';
+            c.font = RPF(800, 52, 'big'); track(-1.5); c.textAlign = 'right'; c.fillStyle = INK; c.fillText(String(p.skor), tx + tw - 26, y + 62); c.textAlign = 'left'; track(0);
             c.fillStyle = LINE; rpRound(c, tx + 26, y + 80, tw - 52, 12, 6); c.fill();
             c.fillStyle = STC[p.status]; rpRound(c, tx + 26, y + 80, Math.max(12, (tw - 52) * p.skor / 100), 12, 6); c.fill();
             const ls = wrap(p.kalimat, RPF(500, 23), tw - 52).slice(0, 3);
@@ -20139,9 +20150,9 @@ details.cp-day[open] .cp-day-names { display: none; }
         need(th + 20);
         list.forEach(function (w, k) {
           const tx = x + k * (tw + gw);
-          c.strokeStyle = LINE; c.lineWidth = 3; rpRound(c, tx, y, tw, th, 22); c.stroke();
+          card(tx, y, tw, th);
           c.fillStyle = A; c.fillRect(tx + 24, y + 26, 46, 8);
-          c.font = RPF(400, 58, 'big'); c.fillStyle = INK; c.fillText(String(w.angka), tx + 24, y + 104);
+          c.font = RPF(800, 54, 'big'); track(-1.5); c.fillStyle = INK; c.fillText(String(w.angka), tx + 24, y + 104); track(0);
           c.font = RPF(800, 24); c.fillText(String(w.judul).slice(0, 26), tx + 24, y + 144);
           c.font = RPF(500, 21); c.fillStyle = MUT; wrap(w.kalimat, RPF(500, 21), tw - 48).slice(0, 2).forEach((ln, li) => c.fillText(ln, tx + 24, y + 180 + li * 28));
         });
@@ -20208,11 +20219,11 @@ details.cp-day[open] .cp-day-names { display: none; }
       const S = d.skor || {}, AN = d.analisis || {};
       newPage();
       // ═══ Halaman 1: ringkasan satu halaman ═══
-      c.fillStyle = INK; rpRound(c, RP_M, RP_M, contentW, 260, 36); c.fill();
+      c.fillStyle = '#0b0b0b'; rpRound(c, RP_M, RP_M, contentW, 260, 44); c.fill();
       c.fillStyle = A; c.fillRect(RP_M + 48, RP_M + 50, 80, 10);
-      c.font = RPF(700, 26); c.fillStyle = '#d8d8d8'; c.fillText('LAPORAN PROGRES', RP_M + 48, RP_M + 106);
-      c.font = RPF(400, 80, 'big'); c.fillStyle = '#ffffff'; c.fillText(String(d.name || '').toUpperCase().slice(0, 22), RP_M + 48, RP_M + 186);
-      c.font = RPF(600, 26); c.fillStyle = '#d8d8d8';
+      eyebrow('Laporan progres', RP_M + 48, RP_M + 106, '#a7a7a4');
+      c.font = RPF(800, 76, 'big'); track(-2.2); c.fillStyle = '#ffffff'; c.fillText(String(d.name || '').slice(0, 26), RP_M + 48, RP_M + 186); track(0);
+      c.font = RPF(500, 26); c.fillStyle = '#a7a7a4';
       c.fillText(pgLabel(d.periode.from) + ' – ' + pgLabel(d.periode.to) + ' · ' + d.periode.days + ' hari' + (d.coach ? ' · ' + window.coachLabel(d.coach) : ''), RP_M + 48, RP_M + 232);
       y = RP_M + 290;
       gauge(S.total, S.status, S.vonis || '');
@@ -20231,14 +20242,14 @@ details.cp-day[open] .cp-day-names { display: none; }
       if (msg) {   // pesan coach
         gap(10); section('Dari coach');
         const mh = wrap(msg, RPF(500, 28), contentW - 60).length * 40 + 44;
-        need(mh); c.fillStyle = SOFT; rpRound(c, x, y, contentW, mh, 22); c.fill();
+        need(mh); card(x, y, contentW, mh);
         const y0 = y; y += 22; text(msg, 28, 500, INK, { x: x + 30, w: contentW - 60 }); y = Math.max(y, y0 + mh) + 20;
       }
 
       // ═══ Halaman detail ═══
       const block = function (title, minH) { if (y + minH > bottom) newPage(); else gap(28); section(title); };
       newPage();
-      text('RINCIAN', 22, 800, MUT); gap(4);
+      eyebrow('Rincian', x, y + 22); y += 36;
       text('Tiap bagian: satu kalimat inti, satu grafik, lalu "Artinya" untuk membacanya.', 26, 500, MUT); gap(16);
       section('Angka utama');
       tiles((d.headline || []).map(function (t) {
@@ -20279,7 +20290,7 @@ details.cp-day[open] .cp-day-names { display: none; }
             for (let dd = 1; dd <= n; dd++) {
               const t = m.slice(0, 8) + String(dd).padStart(2, '0'), i = off + dd - 1, cx = mx0 + (i % 7) * cw + cw / 2, cy = y + 92 + Math.floor(i / 7) * ch + ch / 2;
               const inP = t >= from && t <= to, k = cal[t], r = Math.min(cw, ch) / 2 - 5;
-              if (inP && held[t]) { c.fillStyle = SOFT; rpRound(c, cx - r, cy - r, 2 * r, 2 * r, 10); c.fill(); }
+              if (inP && held[t]) { c.fillStyle = '#ecebe9'; rpRound(c, cx - r, cy - r, 2 * r, 2 * r, 10); c.fill(); }
               if (inP && k === 'sesi') { c.fillStyle = A; rpRound(c, cx - r, cy - r, 2 * r, 2 * r, 10); c.fill(); }
               else if (inP && k === 'latihan') { c.strokeStyle = A; c.lineWidth = 4; rpRound(c, cx - r + 2, cy - r + 2, 2 * r - 4, 2 * r - 4, 10); c.stroke(); }
               c.font = RPF(k === 'sesi' || k === 'latihan' ? 800 : 500, 22); c.fillStyle = !inP ? LINE : k === 'sesi' ? '#ffffff' : INK;
@@ -20295,7 +20306,7 @@ details.cp-day[open] .cp-day-names { display: none; }
           if (L[1] === 'fill') { c.fillStyle = A; rpRound(c, lx, y + 4, 28, 28, 7); c.fill(); }
           else if (L[1] === 'ring') { c.strokeStyle = A; c.lineWidth = 4; rpRound(c, lx + 2, y + 6, 24, 24, 7); c.stroke(); }
           else if (L[1] === 'dot') { c.fillStyle = MUT; c.beginPath(); c.arc(lx + 14, y + 18, 5, 0, Math.PI * 2); c.fill(); }
-          else { c.fillStyle = SOFT; rpRound(c, lx, y + 4, 28, 28, 7); c.fill(); }
+          else { c.fillStyle = '#ecebe9'; rpRound(c, lx, y + 4, 28, 28, 7); c.fill(); }
           c.font = RPF(600, 20); c.fillStyle = MUT; c.fillText(L[0], lx + 38, y + 26); lx += 48 + c.measureText(L[0]).width + 30;
         });
         y += 50;
@@ -20312,7 +20323,7 @@ details.cp-day[open] .cp-day-names { display: none; }
             const gw = 24, tw = (contentW - gw * (ch.length - 1)) / ch.length, th = 230; need(th + 20);
             ch.forEach(function (a, k) {
               const tx = x + k * (tw + gw);
-              c.fillStyle = SOFT; rpRound(c, tx, y, tw, th, 20); c.fill();
+              card(tx, y, tw, th);
               c.font = RPF(700, 22); c.fillStyle = INK; c.fillText(String(a.gerakan).slice(0, 22), tx + 20, y + 40);
               spark(a.titik, tx + 24, y + 70, tw - 48, 100);
               c.font = RPF(600, 20); c.fillStyle = MUT; c.fillText(rpN(a.awal) + ' kg', tx + 20, y + 206);
