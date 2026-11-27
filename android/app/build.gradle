@@ -5,9 +5,11 @@ plugins {
 // Two apps from one shell:
 //   default            → book.xnkbooking.my.id (the owner's client portal), id.my.xnkbooking.book
 //   -PxnkHub           → xnk.web.id (the hub: landing + every coach), id.web.xnk.app
+//   -PxnkPanel         → xnk.my.id (the owner's coach panel), id.my.xnk.panel
 // Release signing comes from env (XNK_KEYSTORE = path to a PKCS12 file, XNK_KEYSTORE_PASSWORD); without it the
 // release APK is unsigned and only the debug APK can be installed.
 def hub = project.hasProperty('xnkHub')
+def panel = project.hasProperty('xnkPanel')
 def ks = System.getenv('XNK_KEYSTORE')
 
 android {
@@ -15,12 +17,13 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId hub ? 'id.web.xnk.app' : 'id.my.xnkbooking.book'
+        applicationId panel ? 'id.my.xnk.panel' : hub ? 'id.web.xnk.app' : 'id.my.xnkbooking.book'
         minSdk 24
         targetSdk 34
         versionCode((System.getenv('XNK_VERSION_CODE') ?: '3') as int)
         versionName '1.2'
-        buildConfigField 'String', 'HOME', hub ? '"https://xnk.web.id/"' : '"https://book.xnkbooking.my.id/"'
+        resValue 'string', 'app_name', panel ? 'XNK Panel' : 'XNK'
+        buildConfigField 'String', 'HOME', panel ? '"https://xnk.my.id/"' : hub ? '"https://xnk.web.id/"' : '"https://book.xnkbooking.my.id/"'
     }
     buildFeatures { buildConfig true }
     if (ks) {

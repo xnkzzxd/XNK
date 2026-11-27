@@ -4,6 +4,8 @@ name: apps
 #   XNK-Android.apk  — android/ dengan -PxnkHub (membuka https://xnk.web.id/)
 #   XNK-Windows.msi  — Pake (Tauri) di sekitar https://xnk.web.id/
 #   XNK-macOS.dmg    — sama, untuk Mac Apple silicon
+# Panel coach xnk.my.id (tombol "Pasang aplikasi" di Pengaturan → Akun):
+#   XNK-Panel-Android.apk / XNK-Panel-Windows.msi / XNK-Panel-macOS.dmg — sama, membuka https://xnk.my.id/
 # Push ke main (bila berkas di bawah berubah) atau Run workflow → dibangun lalu diunggah ke GitHub Release tetap
 # "app-latest", jadi link di landing (…/releases/download/app-latest/<berkas>) tidak pernah berubah.
 # PR hanya membangun (artefak), tanpa mengunggah.
@@ -24,11 +26,16 @@ concurrency:
   group: apps-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  APP_URL: https://xnk.web.id/
-
 jobs:
   android:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flag: -PxnkHub
+            out: XNK-Android.apk
+          - flag: -PxnkPanel
+            out: XNK-Panel-Android.apk
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -50,17 +57,17 @@ jobs:
           if [ -n "$KS_B64" ]; then
             echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/xnk.p12"
             export XNK_KEYSTORE="$RUNNER_TEMP/xnk.p12"
-            gradle assembleRelease -PxnkHub --no-daemon
-            cp app/build/outputs/apk/release/app-release.apk ../XNK-Android.apk
+            gradle assembleRelease ${{ matrix.flag }} --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk ../${{ matrix.out }}
           else
             echo "::warning title=APK debug::Secret ANDROID_KEYSTORE_B64 belum ada; yang dibangun APK debug."
-            gradle assembleDebug -PxnkHub --no-daemon
-            cp app/build/outputs/apk/debug/app-debug.apk ../XNK-Android.apk
+            gradle assembleDebug ${{ matrix.flag }} --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk ../${{ matrix.out }}
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: android
-          path: XNK-Android.apk
+          name: android-${{ matrix.out }}
+          path: ${{ matrix.out }}
 
   desktop:
     strategy:
@@ -69,8 +76,20 @@ jobs:
         include:
           - os: windows-latest
             out: XNK-Windows.msi
+            url: https://xnk.web.id/
+            name: XNK
           - os: macos-15
             out: XNK-macOS.dmg
+            url: https://xnk.web.id/
+            name: XNK
+          - os: windows-latest
+            out: XNK-Panel-Windows.msi
+            url: https://xnk.my.id/
+            name: XNKPanel
+          - os: macos-15
+            out: XNK-Panel-macOS.dmg
+            url: https://xnk.my.id/
+            name: XNKPanel
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -91,13 +110,13 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then ICON=apps-script/xnk-library/hub-site/desktop.ico; else ICON=xnk.icns; fi
-          npx -y pake-cli@3.17.2 "$APP_URL" --name XNK --icon "$ICON" --width 1280 --height 840
-          f=$(find . -maxdepth 1 -name 'XNK*.msi' -o -maxdepth 1 -name 'XNK*.dmg' | head -1)
+          npx -y pake-cli@3.17.2 "${{ matrix.url }}" --name ${{ matrix.name }} --icon "$ICON" --width 1280 --height 840
+          f=$(find . -maxdepth 1 -name '${{ matrix.name }}*.msi' -o -maxdepth 1 -name '${{ matrix.name }}*.dmg' | head -1)
           [ -n "$f" ] || { echo "::error::Pake tidak menghasilkan berkas"; ls -la; exit 1; }
           mv "$f" "${{ matrix.out }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop-${{ runner.os }}
+          name: desktop-${{ matrix.out }}
           path: ${{ matrix.out }}
 
   release:
@@ -116,5 +135,5 @@ jobs:
         run: |
           ls -la out
           gh release view app-latest >/dev/null 2>&1 || gh release create app-latest --title "Aplikasi XNK" \
-            --notes "Aplikasi XNK untuk Android, Windows, dan macOS. Membuka https://xnk.web.id/. Diperbarui otomatis oleh workflow apps."
+            --notes "Aplikasi XNK untuk Android, Windows, dan macOS. XNK-* membuka https://xnk.web.id/, XNK-Panel-* membuka https://xnk.my.id/. Diperbarui otomatis oleh workflow apps."
           gh release upload app-latest out/* --clobber

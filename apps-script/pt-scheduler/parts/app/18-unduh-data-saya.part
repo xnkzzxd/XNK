@@ -18,6 +18,35 @@
       if (!unduh.run) paintIcons();
     }
   }
+  // ── Pasang aplikasi panel (Pengaturan → Akun): APK / MSI / DMG dari GitHub Release "app-latest" (workflow apps.yml),
+  // jadi tidak perlu Chrome. Hanya di xnk.my.id, bukan di hub atau di dalam aplikasi itu sendiri.
+  var APP_DL = 'https://github.com/xnkzzxd/' + ['X', 'NK'].join('') + '/releases/download/app-latest/' + ['X', 'NK'].join('') + '-Panel-';
+  var pwaPrompt = null;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); pwaPrompt = e; });
+  window.pasangPwa = function () {
+    if (!pwaPrompt) return;
+    pwaPrompt.prompt();
+    pwaPrompt = null;
+  };
+  window.pasangCardHtml = function () {
+    var host = String(location.hostname || '');
+    if (!/(^|\.)xnk\.my\.id$/.test(host)) return '';
+    var ua = navigator.userAgent || '';
+    if (/XNKAndroid|XNKiOS|Pake|Tauri/i.test(ua)) return '';
+    var os = /Android/i.test(ua) ? 'android' : /iPhone|iPad|iPod/i.test(ua) ? 'ios' : /Windows/i.test(ua) ? 'win' : /Mac/i.test(ua) ? 'mac' : '';
+    var btn = function (file, label, main) {
+      return '<a class="btn ' + (main ? 'btn-primary' : 'btn-outline') + ' btn-block" href="' + APP_DL + file + '" rel="noopener">' + icon('download') + ' ' + h(label) + '</a>';
+    };
+    var list = [['android', 'Android.apk', 'Android (.apk)'], ['win', 'Windows.msi', 'Windows (.msi)'], ['mac', 'macOS.dmg', 'Mac (.dmg)']];
+    list.sort(function (a, b) { return (b[0] === os) - (a[0] === os); });
+    var body = list.map(function (x) { return btn(x[1], x[2], x[0] === os); }).join('');
+    var ios = os === 'ios' ? '<p class="li-sub">iPhone/iPad: buka ' + h(host) + ' di Safari → Bagikan → <b>Tambah ke Layar Utama</b>.</p>' : '';
+    var pwa = pwaPrompt ? '<button type="button" class="btn btn-outline btn-block" onclick="window.pasangPwa()">' + icon('smartphone') + ' Pasang dari browser ini</button>' : '';
+    return '<div class="card-flat stack"><div><p class="li-title">Pasang aplikasi</p>' +
+      '<p class="li-sub">Panel ini sebagai aplikasi sendiri, tanpa Chrome. Android: izinkan "pasang dari sumber ini" bila ditanya.</p></div>' +
+      ios + body + pwa + '</div>';
+  };
+
   window.unduhCardHtml = function () {
     return '<div class="card-flat stack"><div><p class="li-title">Unduh data saya</p>' +
       '<p class="li-sub">Semua data (klien, jadwal, latihan, gizi, keuangan, …) dalam satu berkas Excel. Foto progres, kunci perangkat, dan pengaturan rahasia tidak ikut.</p></div>' +
