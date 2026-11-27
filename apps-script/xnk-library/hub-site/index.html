@@ -499,11 +499,12 @@
   [data-split] .w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 .03em .14em; margin: 0 -.03em -.14em; }
   [data-split] .w > span { display: inline-block; }
   /* Pita merah berjalan; miring sesuai kecepatan gulir */
-  .marq { position: relative; overflow: hidden; background: #d91f26; color: #fff; padding: 1rem 0; }
+  .marq { position: relative; overflow: hidden; color: var(--mut); border-block: 1px solid var(--line); padding: .7rem 0;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
   .marq-in { will-change: transform; }
-  .marq-track { display: flex; width: max-content; animation: marq 38s linear infinite; }
-  .marq-track span { flex: none; padding: 0 1.3rem; font-family: var(--display); font-weight: 800; font-size: clamp(1.5rem, 4.6vw, 2.9rem); line-height: 1.1; text-transform: uppercase; white-space: nowrap; }
-  .marq-track .sep { padding: 0; opacity: .5; }
+  .marq-track { display: flex; width: max-content; animation: marq 30s linear infinite; }
+  .marq-track span { flex: none; padding: 0 1rem; font-family: var(--mono); font-weight: 500; font-size: .78rem; letter-spacing: .1em; line-height: 1.4; text-transform: uppercase; white-space: nowrap; }
+  .marq-track .sep { padding: 0; opacity: .45; }
   .marq.off .marq-track { animation-play-state: paused; }
   @keyframes marq { to { transform: translate3d(-50%, 0, 0); } }
   /* 01: 5 -> 1, Capek -> Beres; di HP judulnya menempel di atas saat daftar alat digulir */
@@ -1251,7 +1252,7 @@
     }
     if (endEl) { var er = endEl.getBoundingClientRect(); if (er.bottom > 0 && er.top < vh) endEl.style.setProperty('--ep', ((vh - er.top) / (vh + er.height)).toFixed(3)); }
     var v = y - lastY; lastY = y;
-    sk += (Math.max(-10, Math.min(10, v * .3)) - sk) * .18;
+    sk += (Math.max(-4, Math.min(4, v * .15)) - sk) * .18;
     if (Math.abs(sk) > .05) { if (marqIn) marqIn.style.transform = 'skewX(' + (-sk).toFixed(2) + 'deg)'; raf = requestAnimationFrame(frame); }
     else if (marqIn) { sk = 0; marqIn.style.transform = ''; }
   }
