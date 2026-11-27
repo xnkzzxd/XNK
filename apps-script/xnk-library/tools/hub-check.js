@@ -551,7 +551,8 @@ async function makeLogos(browser) {
       await a.reload({ waitUntil: 'domcontentloaded' });
       await a.waitForTimeout(1500);
       check(!(await a.isVisible('#admin-login')), 'claudia tetap login setelah claudia-2 login dan keluar masuk');
-      await b.evaluate(() => { try { window.adminLogout && window.adminLogout(); } catch (e) {} });
+      // Keluar di claudia-2 seperti tombol Keluar (tanpa dialog konfirmasi): token dan salinan perangkat dihapus.
+      await b.evaluate(() => { try { localStorage.removeItem('xnk_admin_token'); localStorage.removeItem('xnk_admin_cache'); localStorage.removeItem('xnk_admin_me'); } catch (e) {} });
       await b.waitForTimeout(800);
       await a.reload({ waitUntil: 'domcontentloaded' });
       await a.waitForTimeout(1500);
