@@ -14971,14 +14971,22 @@
   };
 
   // ── Gambar halaman ──
+  // PDF selalu kertas putih, jadi aksen diambil dari nilai TEMA TERANG, bukan --accent yang sedang tampil:
+  // di mode gelap --accent bawaan = --ink (#f4f4f2, hampir putih) dan aksen warna memakai warna terang, lalu
+  // kotak kalender / batang yang mestinya hitam tercetak abu (laporan pemilik 2026-11-27).
+  // Nilai sama dengan parts/theme/05-portal-x.part baris 5–11 (ubah bersama). [aksen, aksen di atas hitam]
+  const RP_ACC = { biru: ['#1d4ed8', '#60a5fa'], hijau: ['#15803d', '#4ade80'], toska: ['#0f766e', '#2dd4bf'], ungu: ['#6d28d9', '#a78bfa'], pink: ['#be185d', '#f472b6'], oranye: ['#c2410c', '#fb923c'] };
+  function rpAccKey() { try { return document.documentElement.getAttribute('data-accent') || ''; } catch (e) { return ''; } }
+  function rpLum(hex) {   // luminans relatif WCAG dari #rrggbb
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim()); if (!m) return 0;
+    const n = parseInt(m[1], 16), ch = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  }
   function rpAccent() {
-    let a = ''; try { a = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); } catch (e) {}
-    return a && !/transparent/.test(a) ? a : '#111111';
+    const a = (RP_ACC[rpAccKey()] || [])[0] || '#0b0b0b';
+    return 1.05 / (rpLum(a) + 0.05) >= 3 ? a : '#0b0b0b';   // kontras dengan kertas putih minimal 3:1
   }
-  function rpAccentOnInk() {   // --accent-on-ink: aksen yang terbaca di atas hitam (Fase X)
-    let a = ''; try { a = getComputedStyle(document.documentElement).getPropertyValue('--accent-on-ink').trim(); } catch (e) {}
-    return a && !/transparent/.test(a) ? a : '#ffffff';
-  }
+  function rpAccentOnInk() { return (RP_ACC[rpAccKey()] || [])[1] || '#ffffff'; }
   // ── AD5 (T-2452): gambar untuk PDF (ikon Lucide, logo, figur tubuh) dimuat dulu, lalu digambar di kanvas
   function rpImg(src) { return new Promise(function (res) { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; setTimeout(() => res(null), 4000); }); }
   const rpSvgUrl = svg => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);

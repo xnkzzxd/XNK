@@ -41,9 +41,11 @@ function pdfInfo(buf) {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const base = 'http://127.0.0.1:' + server.address().port;
   const browser = await chromium.launch();
-  for (const [mode, url] of [['client', '/demo/?klien'], ['admin', '/demo/']]) {
+  const darkPx = {};
+  // client-dark: the app in dark mode must still print black, not the pale dark-mode --accent (owner's report 2026-11-27).
+  for (const [mode, url] of [['client', '/demo/?klien'], ['admin', '/demo/'], ['client-dark', '/demo/?klien']]) {
     console.log('Laporan PDF · ' + mode);
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: mode === 'client-dark' ? 'dark' : 'light' });
     await ctx.route('**/*', r => {
       const u = r.request().url();
       if (u.startsWith(base)) return r.continue();
@@ -68,6 +70,7 @@ function pdfInfo(buf) {
     }
     check(await page.locator('#sheet-report:not(.hide)').count() === 1, 'the report sheet opens');
     check(await page.locator('#rp-msg-wrap.hide').count() === (mode === 'admin' ? 0 : 1), mode === 'admin' ? 'coach sees the message box' : 'clients have no message box');
+    if (mode === 'client-dark') await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     await page.evaluate(() => window.rpBuild());
     await page.waitForFunction(() => !!(window.rpBlob && window.rpBlob()), null, { timeout: 30000 }).catch(() => {});
     const bytes = await page.evaluate(async () => { const b = window.rpBlob && window.rpBlob(); return b ? Array.from(new Uint8Array(await b.arrayBuffer())) : null; });
@@ -93,6 +96,18 @@ function pdfInfo(buf) {
         return out;
       });
       check(white.length && white.every(Boolean), 'nothing is drawn in the outer page margin');
+      // Black stays black: count near-black pixels on every page (calendar boxes, bars, gauge, tags).
+      darkPx[mode] = await page.evaluate(async () => {
+        let n = 0;
+        for (const im of document.querySelectorAll('#rp-preview img')) {
+          await (im.decode ? im.decode().catch(() => {}) : Promise.resolve());
+          const cv = document.createElement('canvas'); cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+          const g = cv.getContext('2d'); g.drawImage(im, 0, 0); const d = g.getImageData(0, 0, cv.width, cv.height).data;
+          for (let i = 0; i < d.length; i += 16) if (d[i] < 50 && d[i + 1] < 50 && d[i + 2] < 50) n++;
+        }
+        return n;
+      });
+      if (mode === 'client-dark') check(darkPx['client-dark'] >= darkPx.client * 0.95, 'dark mode prints the same black as light mode (' + darkPx['client-dark'] + ' vs ' + darkPx.client + ' dark pixels)');
     }
     check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await ctx.close();
