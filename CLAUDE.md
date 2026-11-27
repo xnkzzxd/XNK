@@ -25,5 +25,6 @@ Phase Z (Web Push for coach and clients, built; installed by the owner via docs/
 Phase AB (XNK Library + XNK Template + hub xnk.web.id for all coaches + owner dashboard XNK HQ at /adminxnk; production untouched, built): docs/library/ (tasks T-2200+); code in apps-script/xnk-library/.
 Phase AC (Klien list + client profile redesign in the coach panel, modelled on the portal; one home per action; writes return their part; built): docs/clientpage/ (tasks T-2300+).
 Phase AD (coach kit: client hold, measurement guide + Pinggul, coach logger upgrade on the coach side, PDF report on demand; built 2026-11-26): docs/coachkit/ (PRD, Design, TODO; tasks T-2400+).
+Phase AE (login per coach: own PIN, own clients and finance; deny-by-default gate in src/Lingkup.gs; built, wave 1): docs/akses/ (tasks T-2500+).
 
 @docs/Agent.md

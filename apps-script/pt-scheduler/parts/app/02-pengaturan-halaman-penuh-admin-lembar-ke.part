@@ -555,7 +555,7 @@
     setState.pre = p;
     return p;
   }
-  window.settingsPrefetch = function () { if (!setState.built && !setState.pre) settingsPrefetch(); };
+  window.settingsPrefetch = function () { if (window.isCoachRole()) return; if (!setState.built && !setState.pre) settingsPrefetch(); };
   function applyRmdStatus(s) {
     setState.status = s;
     const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();

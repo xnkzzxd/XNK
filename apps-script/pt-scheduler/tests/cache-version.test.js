@@ -11,6 +11,7 @@ const boot = (env, key) => j(env.call('getPortalBootstrap', env.memberToken(key)
 // Fungsi baca (get*, preview*, export*, check*) tidak perlu didaftar. Fungsi baru yang menulis data klien harus memanggil
 // _bumpMember_ / _bumpAfter_; kalau tidak, daftarkan di sini dengan alasan.
 const NO_MEMBER_DATA = [
+  'setCoachPin',   // Fase AE: Script Property saja, tidak ada data klien
   // login, sesi, pengaturan akun
   'adminLogin', 'memberLoginByKey', 'memberLoginByPhone', 'registerNewClient', 'changeAdminPin', 'markGuideSeen', 'doPost' /* hanya meneruskan ke fungsi klien yang menaikkan versinya sendiri */,
   // T-2251: mode baca saja ada di getAdminBootstrap / getPortalBootstrap (selalu segar), bukan di getPortalMore

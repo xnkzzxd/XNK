@@ -288,6 +288,15 @@ Tab **Coach** di panel adalah berandamu sebagai coach.
 
 Sebelum deploy pertama fase ini, salin spreadsheet (File → Buat salinan). Sheet baru dibuat otomatis: `CoachTimeOff`, `Assessments`, `FitnessTests`, `HealthScreening`; sheet `Coaches` dan `MemberData` hanya ditambah kolom di kanan.
 
+## Login per coach (Fase AE)
+
+- Buka **Coach** → pilih coach → **Buat PIN login coach** (6 angka). Coach masuk lewat halaman login panel yang sama dengan PIN-nya sendiri.
+- Coach hanya melihat klien yang coach-nya dia, jadwalnya sendiri, dan tagihan serta pengeluarannya sendiri di Keuangan.
+- Pengaturan, paket, konten, data coach lain, menambah atau menghapus klien, dan omzet gabungan tetap hanya untuk Anda.
+- **Hapus PIN** mengeluarkan coach itu seketika.
+- Pastikan setiap klien sudah punya coach. Klien tanpa coach hanya terlihat oleh Anda.
+- Di portal, klien selalu memilih coach dulu. Kartu tiap coach menampilkan jumlah jam kosong 7 hari ke depan, lalu klien memilih hari dan jam coach itu.
+
 ## Panduan klien baru (portal)
 
 Klien yang **mendaftar sendiri** (dari landing atau katalog portal) mendapat panduan langkah demi langkah di portal: layar digelapkan dan hanya tombol yang perlu diklik yang terang, dengan teks singkat dan tombol **Lanjut** / **Lewati**. Panduan muncul sekali per halaman (Beranda, form Booking, Jadwal, Paket, Coach). Klien lama yang masuk dengan nomor WA, klien yang perpanjang, dan klien yang kamu tambahkan sendiri **tidak** melihat panduan.

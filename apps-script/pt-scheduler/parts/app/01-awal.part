@@ -1209,6 +1209,9 @@
   });
 
   // ── Chrome: sidebar, topbar, bar bawah ─────────────────────────────────────
+  // Fase AE: siapa yang login di panel ({role:'owner'} atau {role:'coach', coachId, name}); disalin ke xnk_admin_me.
+  window.adminMe = (function () { try { return JSON.parse(localStorage.getItem('xnk_admin_me') || 'null'); } catch (e) { return null; } })();
+  window.isCoachRole = function () { return !!(window.adminMe && window.adminMe.role === 'coach'); };
   const NAV = {
     admin: [
       ['dashboard', 'layout-dashboard', 'Dashboard'],
@@ -1267,7 +1270,8 @@
     ui.chromeGuest = isGuest();
     ui.chromeNut = nutTabOn();
     const items = ui.chromeGuest ? GUEST_NAV : (ui.mode === 'public' && !ui.chromeNut ? NAV.public.filter(n => n[0] !== 'public-food') : NAV[ui.mode]);
-    const sideItems = items.concat(ui.mode === 'admin' ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
+    const coachRole = ui.mode === 'admin' && window.isCoachRole();   // Fase AE: login coach, tanpa halaman khusus pemilik
+    const sideItems = items.concat(ui.mode === 'admin' && !coachRole ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
     const navBtn = function (n) {
       return '<button type="button" class="nav-item" data-view="' + n[0] + '" title="' + n[2] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
         icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' +
@@ -1283,6 +1287,9 @@
       ? '<button type="button" class="side-me" id="side-me" onclick="window.navigate(\'public-more\')" title="Saya">' + avatar(window.publicLoggedMember.photo, window.publicLoggedMember.name, 'sm') +
         '<span class="side-me-text"><b>' + h(String(window.publicLoggedMember.name || '').split(' ')[0]) + '</b><span id="side-me-lv"></span></span></button>' +
         '<button type="button" class="nav-item hide" id="side-auth-btn" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>'
+      : ui.mode === 'admin' && window.isCoachRole()
+      ? '<button type="button" class="nav-item" onclick="window.openSettings()">' + icon('sun-moon') + '<span class="nav-label">Tampilan</span></button>' +
+        '<button type="button" class="nav-item" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>'
       : ui.mode === 'admin'
       ? '<button type="button" class="nav-item" data-view="settings" onclick="window.navigate(\'settings\')">' + icon('settings') + '<span class="nav-label">Pengaturan</span></button>'
       : '<button type="button" class="nav-item" onclick="window.openSettings()">' + icon('sun-moon') + '<span class="nav-label">Tampilan</span></button>' +
@@ -1313,7 +1320,9 @@
     let html = '';
     if (ui.mode === 'admin') {
       html += '<button type="button" class="icon-btn" id="notification-btn" onclick="window.openNotificationModal()" aria-label="Booking baru">' + icon('bell') + '<span class="badge-dot hide" id="unread-badge"></span></button>';
-      html += '<button type="button" class="icon-btn only-mobile" onclick="window.openSettings()" aria-label="Pengaturan">' + icon('settings') + '</button>';
+      html += window.isCoachRole()
+        ? '<button type="button" class="icon-btn only-mobile" onclick="window.logoutCurrent()" aria-label="Keluar">' + icon('log-out') + '</button>'
+        : '<button type="button" class="icon-btn only-mobile" onclick="window.openSettings()" aria-label="Pengaturan">' + icon('settings') + '</button>';
     } else {
       if (!window.publicLoggedMember) {
         html += '<button type="button" class="icon-btn only-mobile" onclick="window.openSettings()" aria-label="Tampilan">' + icon('sun-moon') + '</button>';

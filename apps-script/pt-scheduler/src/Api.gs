@@ -28,7 +28,7 @@ function _apiTable_() {
     hubPushKey: hubPushKey,
     hubSiteUrl: hubSiteUrl,
     hubReadonly: hubReadonly,
-    // admin: admin token (144)
+    // admin: admin token (145)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -155,6 +155,7 @@ function _apiTable_() {
     deletePackage: deletePackage,
     reorderPackages: reorderPackages,
     getClassGroups: getClassGroups,
+    setCoachPin: setCoachPin,
     syncFinanceTransactions: syncFinanceTransactions,
     getBills: getBills,
     getBillDetail: getBillDetail,
@@ -247,6 +248,7 @@ function _apiTable_() {
 // T-2251: fungsi tulis (tests/api-lists.js WRITE). Ditolak _readonlyGate_ saat mode baca saja menyala.
 function _apiWrites_() {
   return {
+    setCoachPin: 1,
     registerNewClient: 1,
     saveClientNutrition: 1,
     decideNutritionAdvice: 1,

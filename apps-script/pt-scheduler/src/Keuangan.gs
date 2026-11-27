@@ -132,7 +132,7 @@ function _finDate_(v) {
 function _finRead_(name) {
   const mk = 'fin:' + name;
   if (_readMemo_ && _readMemo_[mk]) return _readMemo_[mk];
-  const out = _finReadRaw_(name);
+  const out = _scopeFinRows_(name, _finReadRaw_(name));   // Fase AE: coach hanya barisnya sendiri
   if (_readMemo_) _readMemo_[mk] = out;
   return out;
 }
@@ -239,7 +239,7 @@ function _finBillFromTransaction_(trx) {
   try {
     if (!_finOn_()) return;
     _finEnsure_();
-    if (_finRead_('Tagihan').some(function(b) { return b['Transaksi ID'] === trx.trxId; })) return;
+    if (_finReadRaw_('Tagihan').some(function(b) { return b['Transaksi ID'] === trx.trxId; })) return;   // semua baris, bukan lingkup coach
     const m = _getMembersAll_().filter(function(x) { return String(x.id) === String(trx.memberId); })[0];
     _finAppend_('Tagihan', {
       'ID Tagihan': _finId_('TG'), 'Transaksi ID': trx.trxId, 'Member ID': trx.memberId, 'Nama Klien': m ? m.name : '',
@@ -256,7 +256,7 @@ function _finMigrate_() {
   return _finLocked_(function() {
     _finEnsure_();
     const have = {};
-    _finRead_('Tagihan').forEach(function(b) { have[b['Transaksi ID']] = true; });
+    _finReadRaw_('Tagihan').forEach(function(b) { have[b['Transaksi ID']] = true; });
     const prices = _allPackagePrices_();
     const names = {};
     _getMembersAll_().forEach(function(m) { names[String(m.id)] = m.name; });
@@ -402,6 +402,7 @@ function savePayment(token, p) {
   requireAdmin_(token);
   _finRequire_();
   p = p || {};
+  if (_scopeCoach_() && !p.billId) throw new Error('Pembayaran coach harus untuk sebuah tagihan.');
   const touched = [];   // klien yang tagihannya berubah (portal getMyBills); pembayaran tanpa tagihan tidak tampil di data klien
   const res = _finLocked_(function() {
     _finEnsure_();
@@ -464,7 +465,7 @@ function saveExpense(token, e) {
     const existing = e.id ? _finRead_('Pengeluaran').filter(function(x) { return x['ID Keluar'] === String(e.id); })[0] : null;
     if (e.id && !existing) throw new Error('Pengeluaran tidak ditemukan.');
     const now = _finNow_();
-    const fields = { Tanggal: date, Kategori: category, Jumlah: amount, Metode: method, Catatan: note, 'Coach ID': String(e.coachId || ''), 'Diubah Pada': now };
+    const fields = { Tanggal: date, Kategori: category, Jumlah: amount, Metode: method, Catatan: note, 'Coach ID': _scopeCoach_() || String(e.coachId || ''), 'Diubah Pada': now };
     if (existing) { _finUpdate_('Pengeluaran', existing._row, fields); return { id: existing['ID Keluar'] }; }
     const id = _finId_('PG');
     _finAppend_('Pengeluaran', Object.assign({ 'ID Keluar': id, 'Dibuat Pada': now }, fields));
@@ -676,7 +677,7 @@ function getFinancePage(token, month, year, fresh) {
   const a = _finMonthArgs_(month, year);
   const ver = _finVer_();   // dibaca SEBELUM sheet
   const wib = _wibParts_(new Date());
-  const ckey = _payloadCacheOn_() ? 'fp:' + wib.date + ':' + wib.hour + ':' + ver + ':' + a.m + ':' + a.y : '';
+  const ckey = _payloadCacheOn_() ? 'fp:' + _scopeCoach_() + ':' + wib.date + ':' + wib.hour + ':' + ver + ':' + a.m + ':' + a.y : '';
   if (ckey && !fresh) {
     const hit = _payloadGet_(ckey);
     if (hit) { hit.at = Date.now(); return hit; }

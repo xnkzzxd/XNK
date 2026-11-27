@@ -782,6 +782,20 @@
       </div>
     </div>
 
+    <!-- Fase AE: PIN login coach (hanya pemilik) -->
+    <div class="sheet sm hide" id="sheet-cpin" role="dialog" aria-modal="true" aria-labelledby="cpin-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="cpin-title">PIN login coach</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <form class="sheet-body stack" style="gap:12px" onsubmit="window.coachPinSave(event)">
+        <p class="li-sub" id="cpin-sub"></p>
+        <div class="field"><label class="label" for="cpin-pin">PIN baru (6 angka)</label>
+          <input class="input" id="cpin-pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="new-password" required></div>
+        <p class="li-sub">Coach ini hanya melihat kliennya sendiri, jadwalnya sendiri dan tagihannya sendiri. Pengaturan, paket, konten dan coach lain tetap milik pemilik.</p>
+        <button type="submit" class="btn btn-primary btn-block" id="cpin-save">Simpan PIN</button>
+        <button type="button" class="btn btn-ghost btn-block hide" id="cpin-del" onclick="window.coachPinDelete()">Hapus PIN (coach tidak bisa login)</button>
+      </form>
+    </div>
+
     <!-- Nomor belum terdaftar: arahkan ke pilihan paket -->
     <div class="sheet sm hide" id="modal-not-member" role="dialog" aria-modal="true" aria-labelledby="nm-title">
       <div class="sheet-handle"></div>

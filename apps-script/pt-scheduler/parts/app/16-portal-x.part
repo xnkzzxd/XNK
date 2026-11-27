@@ -379,6 +379,19 @@
   const bkMulti = () => !window.isSoloCoach() && window.coaches.length > 1;
   function bkMap() { return (bkMulti() ? window.openSlotsByCoachMap[bkx.coach] : window.openSlotsByDate) || {}; }
   // Fase AD1: hari di dalam cuti sendiri (atau akun nonaktif) tampil penuh; server tetap menolak dengan kalimat yang jelas.
+  // Fase AE: ringkasan jam kosong seorang coach untuk 7 hari ke depan (dari openSlotsByCoachMap; tanpa panggilan server).
+  function bkCoachWeek(id) {
+    const m = (window.openSlotsByCoachMap || {})[String(id)] || {};
+    let hours = 0, first = '';
+    for (let d = 0; d < 7; d++) {
+      const k = wibParts(new Date(Date.now() + d * 86400000)).date, f = m[k] || {};
+      if (window.myHoldBlocks && window.myHoldBlocks(k)) continue;
+      const hs = Object.keys(f).map(Number).filter(hh => f[hh] > 0).sort((a, b) => a - b);
+      hours += hs.length;
+      if (!first && hs.length) first = (d === 0 ? 'hari ini' : d === 1 ? 'besok' : bkDayLabel(k)) + ' ' + pad(hs[0]) + ':00';
+    }
+    return { hours: hours, first: first };
+  }
   function bkFreeHours(date) { if (window.myHoldBlocks && window.myHoldBlocks(date)) return []; const f = bkMap()[date] || {}; return Object.keys(f).map(Number).filter(hh => f[hh] > 0).sort((a, b) => a - b); }
   const bkDayLabel = date => { const p = date.split('-').map(Number); return fmtDate(new Date(p[0], p[1] - 1, p[2])); };
   window.bkOpen = function (opts) {
@@ -397,7 +410,7 @@
     Object.assign(bkx, { steps: (multi && !old ? ['coach'] : []).concat(['hari', 'jam', 'cek']), i: 0, repeat: false, resched: old ? String(old.id) : '',
       coach: multi ? String((old && old.coachId) || ui.bookCoach || '') : '', date: opts.date || '', time: opts.time || '' });
     if (bkx.date && bkx.time) bkx.i = bkx.steps.indexOf('cek');
-    else if (bkx.coach && bkx.steps[0] === 'coach') bkx.i = 1;
+    // Fase AE: langkah coach selalu tampil dulu (coach klien sudah terpilih), supaya jadwal semua coach terlihat.
     bkx.month = (bkx.date || wibParts(new Date()).date).slice(0, 7);
     ui.bkOn = true;
     const el = $('bk-screen');
@@ -508,7 +521,9 @@
     if (st === 'coach') {
       body = '<h3 class="bk-q">Pilih coach</h3><div class="px-stack" style="gap:10px">' + window.coaches.map(function (c) {
         const on = String(c.id) === bkx.coach;
-        return '<button type="button" class="bk-opt' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.bkPick(\'coach\',this.dataset.id)">' + avatar(c.photo, c.name, 'sm') + '<b class="grow">' + h(c.name) + '</b></button>';
+        const wk = bkCoachWeek(c.id);   // Fase AE: jam kosong tiap coach, 7 hari ke depan, sebelum memilih
+        return '<button type="button" class="bk-opt' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.bkPick(\'coach\',this.dataset.id)">' + avatar(c.photo, c.name, 'sm') +
+          '<span class="grow"><b>' + h(c.name) + '</b><span class="li-sub" style="display:block">' + h(c.specialty || '') + (c.specialty ? ' · ' : '') + (wk.hours ? wk.hours + ' jam kosong dalam 7 hari' + (wk.first ? ', paling cepat ' + h(wk.first) : '') : 'Belum ada jam kosong 7 hari ini') + '</span></span></button>';
       }).join('') + '</div>';
     } else if (st === 'hari') {
       const free = bkx.date ? bkFreeHours(bkx.date).length : 0;

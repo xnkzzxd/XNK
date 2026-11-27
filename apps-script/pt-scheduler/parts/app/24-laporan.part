@@ -339,5 +339,3 @@
   }
   window.pdfFromJpegs = pdfFromJpegs;   // untuk tools/report-check.js
   window.rpBlob = function () { return rp.blob; };
-})();
-</script>

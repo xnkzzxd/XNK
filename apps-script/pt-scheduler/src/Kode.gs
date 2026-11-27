@@ -128,6 +128,7 @@ function _appApiReply_(obj) {
 }
 /** Body: {fn, args:[...], cid?, re?} sebagai teks biasa (text/plain, tanpa preflight CORS). Jawaban: {ok, data, v, dup?} atau {ok:false, error, auth, v, code?}.
  *  cid/re: nomor pesanan untuk kiriman ulang yang aman (Idem.gs). */
+function args0_(req) { if (!Array.isArray(req.args)) req.args = []; return req.args; }
 function doPost(e) {
   let idem = null;
   try {
@@ -142,10 +143,11 @@ function doPost(e) {
     }
     const limit = Object.prototype.hasOwnProperty.call(API_BODY_LIMITS, fn) ? API_BODY_LIMITS[fn] : APP_API_MAX_BYTES;
     if (raw.length > limit) throw new Error('Permintaan tidak valid.');
+    _coachGate_(fn, args0_(req));   // Fase AE: token coach hanya untuk COACH_FNS, ID di argumen harus miliknya
     _readonlyGate_(fn);   // T-2251: mode baca saja (langganan coach di hub) menolak fungsi tulis di sini saja
     // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
     try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
-    const args = Array.isArray(req.args) ? req.args : [];
+    const args = args0_(req);
     idem = _idemBegin_(fn, req, args);   // kiriman ulang dengan nomor yang sama: jawaban pertama, tanpa menjalankan lagi
     if (idem && idem.hit) return _appApiReply_({ ok: true, data: idem.data, dup: true });
     // Fase W6b (T-1825): satu baris "speed rpc <fn>" per panggilan (run = kerja fungsi, json = salin jawaban). SPEED_TRACE=false mematikan.
@@ -159,8 +161,11 @@ function doPost(e) {
     if (idem && !idem.hit) _idemFail_(idem);
     const msg = String(err && err.message ? err.message : err);
     const bad = { ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 };
-    if (err && (err.code === 'readonly' || err.code === 'inflight')) bad.code = err.code;
+    if (err && (err.code === 'readonly' || err.code === 'inflight' || err.code === 'owner_only')) bad.code = err.code;
     return _appApiReply_(bad);
+  } finally {
+    _coachScope_ = null;   // Fase AE: lingkup coach hanya untuk satu panggilan
+    _coachGateFn_ = null;
   }
 }
 
@@ -371,6 +376,8 @@ function _adminPinVersion_() {
 function requireAdmin_(token) {
   const payload = _readToken_(token);
   const version = _adminPinVersion_();
+  if (payload && payload.r === 'admin' && payload.c) return _requireCoachToken_(payload);   // Fase AE: token coach
+  _coachScope_ = null;   // token pemilik: lihat semua
   if (!payload || payload.r !== 'admin' || !version || payload.v !== version) {
     throw _authError_('Sesi admin berakhir. Silakan login lagi.');
   }
@@ -405,6 +412,14 @@ function adminLogin(pin) {
   const fails = parseInt(cache.get('admin_login_fails') || '0', 10);
   if (fails >= loginMaxFails) {
     throw new Error('Terlalu banyak percobaan PIN salah. Coba lagi dalam 10 menit.');
+  }
+  const coachHit = _safeEqual_(String(pin == null ? '' : pin).trim(), stored) ? null : _coachByPin_(String(pin == null ? '' : pin).trim());
+  if (coachHit) {   // Fase AE: PIN coach → token yang membawa ID coach
+    cache.remove('admin_login_fails');
+    return {
+      token: _issueToken_({ r: 'admin', c: String(coachHit.id), v: _coachPinVersion_(coachHit.id), exp: Date.now() + _numProp_('ADMIN_SESSION_DAYS', ADMIN_SESSION_DAYS) * 86400000 }),
+      me: { role: 'coach', coachId: String(coachHit.id), name: coachHit.name }
+    };
   }
   if (!_safeEqual_(String(pin == null ? '' : pin).trim(), stored)) {
     cache.put('admin_login_fails', String(fails + 1), loginLockSeconds);
@@ -1242,12 +1257,15 @@ function getCoachesAdmin(token) {
   const usage = _coachUsage_();
   const self = _selfCoach_();
   const all = _coachesAll_();
+  const coachId = _scopeCoach_(), pins = coachId ? {} : _coachPinFlags_();
   return {
     coaches: all.map(function(c) {
       const out = Object.assign({}, c);
       delete out._row;
       out.usage = usage[c.id] || { sessions: 0, clients: 0, logEntries: 0 };
       out.isSelf = !!self && self.id === c.id;
+      if (!coachId || out.id === coachId) out.hasPin = !!pins[c.id];
+      if (coachId && out.id !== coachId) { delete out.shareType; delete out.shareValue; delete out.phone; }
       return out;
     }),
     selfId: self ? self.id : '',
@@ -2413,9 +2431,10 @@ function _portalHorizonDays_() {
 function getAdminBootstrap(token) {
   requireAdmin_(token);
   return {
-    members: getMembers(token),
-    schedules: _getSchedulesAll_(),
+    members: _scopeMembers_(getMembers(token)),   // Fase AE: coach hanya kliennya sendiri
+    schedules: _scopeSchedules_(_getSchedulesAll_()),
     coaches: getCoachesAdmin(token),
+    me: _adminMe_(),
     priceList: getPriceList(),
     businessHours: _businessHours_(),
     readonly: _readonlyInfo_(),   // T-2251: null = biasa; {on, note} = mode baca saja
@@ -2532,6 +2551,7 @@ function repairDateCells() {
 function getAdminMore(token, month, year, fresh) {
   const tr = _traceStart_();
   _tp_(tr, 'auth', function() { requireAdmin_(token); });
+  if (_scopeCoach_()) return _adminMoreForCoach_(token);   // Fase AE
   _tp_(tr, 'repairDates', _repairDateCellsSoon_);
   _tp_(tr, 'hipCopy', _hipCopySoon_);
   const ymd = _wibParts_(new Date()).date.split('-').map(Number);

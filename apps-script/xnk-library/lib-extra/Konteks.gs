@@ -19,6 +19,8 @@ var _XCTX_DEPTH_ = 0;
 /** Memo per eksekusi di kode produksi; dikosongkan setiap kali konteks dipasang supaya tidak terbawa ke spreadsheet lain. */
 function _resetLibMemos_() {
   _memberMemo_ = null;
+  _coachScope_ = null;
+  _coachGateFn_ = null;
   _schedMemo_ = null;
   _readMemo_ = null;
   _progMemo_ = null;

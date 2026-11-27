@@ -1,0 +1,40 @@
+  // ── Fase AE (T-2500+): login per coach ───────────────────────────────────────────────────────────────────────
+  // window.adminMe datang dari adminLogin / getAdminBootstrap.me. Coach: menu tanpa Pengaturan dan Konten, tanpa tombol
+  // pemilik di halaman Coach; server tetap yang menjaga (Lingkup.gs), tampilan ini hanya merapikan.
+  window.setAdminMe = function (me) {
+    const prev = window.isCoachRole();
+    window.adminMe = me && me.role ? me : { role: 'owner' };
+    _lsSet('xnk_admin_me', JSON.stringify(window.adminMe));
+    document.documentElement.classList.toggle('coach-role', window.isCoachRole());
+    if (prev !== window.isCoachRole() && ui.mode === 'admin') buildChrome();
+  };
+  document.documentElement.classList.toggle('coach-role', window.isCoachRole());
+
+  let cpinId = '';
+  window.coachPinOpen = function (id) {
+    const c = (window.coachesAll || []).filter(function (x) { return x.id === id; })[0] || { id: id, name: '' };
+    cpinId = id;
+    $('cpin-sub').textContent = (c.hasPin ? 'Ganti PIN login untuk ' : 'Buat PIN login untuk ') + (c.name || 'coach ini') + '. Coach masuk lewat halaman login panel yang sama.';
+    $('cpin-pin').value = '';
+    $('cpin-del').classList.toggle('hide', !c.hasPin);
+    window.openSheet('sheet-cpin');
+  };
+  function cpinSend(pin, okText) {
+    const done = busy($('cpin-save'), 'Menyimpan…');
+    adminCall('setCoachPin', cpinId, pin).then(function (r) {
+      done();
+      (window.coachesAll || []).forEach(function (x) { if (x.id === cpinId) x.hasPin = !!(r && r.hasPin); });
+      window.closeModal();
+      window.showToast(okText);
+      if (window.currentCoachId === cpinId && window.openCoachProfile) window.openCoachProfile(cpinId);
+    }, function (err) { done(); window.showToast(window.waitErr ? window.waitErr(err) : window.authMessage(err)); });
+  }
+  window.coachPinSave = function (e) {
+    if (e) e.preventDefault();
+    const pin = $('cpin-pin').value.trim();
+    if (!/^\d{6}$/.test(pin)) { window.showToast('PIN coach harus 6 angka.'); $('cpin-pin').focus(); return; }
+    cpinSend(pin, 'PIN coach disimpan.');
+  };
+  window.coachPinDelete = function () { cpinSend('', 'PIN coach dihapus.'); };
+})();
+</script>
