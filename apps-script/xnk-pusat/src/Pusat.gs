@@ -175,9 +175,10 @@ function pusatRegister(code, slug, exec, secret) {
 // ── Pemeriksaan ──────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Versi Library terbaru dari tag lib-v<N> repo XNK (GitHub API publik): {version, commit}; disimpan 1 jam. */
-function latestLib_() {
+function latestLib_(fresh) {
   var c = json_('LATEST_LIB', null);
-  if (c && Date.now() - c.at < 3600 * 1000) return c;
+  // fresh: salinan 1 jam bisa tertinggal dari tag baru (coach sudah di v52, salinan masih v51), jadi baca ulang.
+  if (c && Date.now() - c.at < (fresh ? 60 * 1000 : 3600 * 1000)) return c;
   try {
     var repo = prop_('XNK_REPO', 'xnkzzxd/XNK');
     var res = fetch_('https://api.github.com/repos/' + repo + '/git/matching-refs/tags/lib-v', { muteHttpExceptions: true, headers: gh_() });
@@ -277,6 +278,11 @@ function checkOne_(slug, c, latest) {
     if (d.readonly !== true) st.problems.push('Coach keluar, tetapi mode baca saja belum menyala.');
     st.ok = st.problems.length === 0;
     return st;
+  }
+  if (latest && d.lib && d.lib.commit && d.lib.commit !== latest.commit) {
+    // Commit coach beda dengan salinan "terbaru": mungkin coach justru lebih baru dari salinan itu.
+    var fresh = latestLib_(true);
+    if (fresh) { latest.version = fresh.version; latest.commit = fresh.commit; }
   }
   if (latest && d.lib && d.lib.commit && d.lib.commit !== latest.commit) st.problems.push('Library tertinggal (terbaru v' + latest.version + ').');
   if (!d.triggers || d.triggers.runReminderTick !== 1) st.problems.push('Trigger pengingat ' + (d.triggers && d.triggers.runReminderTick ? 'terpasang ' + d.triggers.runReminderTick + ' kali' : 'tidak terpasang') + '.');

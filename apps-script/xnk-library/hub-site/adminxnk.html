@@ -309,6 +309,23 @@
   .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
   .toast.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
   .toast.ok { border-left: 4px solid var(--ok); }
+  /* Sedang bekerja: pita atas + putaran di tombol yang ditekan + kartu tugas GitHub (hanya transform/opacity, berhenti saat selesai). */
+  .busybar { position: fixed; left: 0; right: 0; top: 0; height: 3px; z-index: 80; overflow: hidden; opacity: 0; transition: opacity .15s; pointer-events: none; }
+  .busybar.on { opacity: 1; }
+  .busybar i { position: absolute; top: 0; bottom: 0; width: 40%; background: var(--fg); }
+  .busybar.on i { animation: bb 1.1s ease-in-out infinite; }
+  @keyframes bb { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  .btn.busy { pointer-events: none; opacity: .75; }
+  .btn.busy::before { content: ''; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .jobs { position: fixed; right: 16px; top: 64px; z-index: 65; display: grid; gap: 8px; width: min(340px, calc(100vw - 32px)); }
+  .job { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; box-shadow: var(--shadow); font-size: .88rem; }
+  .job b { display: block; margin-bottom: 2px; }
+  .job .mut { color: var(--mut); font-size: .82rem; }
+  .job .bar { height: 4px; border-radius: 2px; background: var(--soft); margin: 8px 0 6px; overflow: hidden; }
+  .job .bar i { display: block; height: 100%; background: var(--fg); transform-origin: left; transition: transform 1s linear; }
+  .job.ok { border-left: 4px solid var(--ok); } .job.bad { border-left: 4px solid var(--bad); }
+  .job .acts { margin: 6px 0 0; gap: 6px; }
 
   /* HP: bilah samping jadi bilah bawah; ringkasan di atas daftar; detail = lembar penuh */
   @media (max-width: 899px) {
@@ -331,7 +348,7 @@
     .mtab .hide-s { display: none; }
     .toast { bottom: calc(76px + var(--sa-b)); }
   }
-  @media (prefers-reduced-motion: reduce) { .insp, .toast { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .insp, .toast, .job .bar i { transition: none; } .busybar.on i, .btn.busy::before { animation: none; } .busybar.on i { width: 100%; opacity: .5; } }
 </style>
 </head>
 <body>
@@ -434,6 +451,8 @@
 </dialog>
 <div class="tip hide" id="tip" role="tooltip"></div>
 <div class="toast" id="dm" role="status" aria-live="polite"></div>
+<div class="busybar" id="bb" aria-hidden="true"><i></i></div>
+<div class="jobs" id="jobs" aria-live="polite"></div>
 
 <script>
 (function () {
@@ -480,7 +499,15 @@
   }
   function isPhone() { return window.matchMedia('(max-width: 899px)').matches; }
 
+  // Sedang bekerja: berapa panggilan berjalan, dan tombol yang terakhir ditekan (dapat putaran sampai jawabannya datang).
+  var pending = 0, pressed = null;
+  function busyOn(b) { pending++; $('bb').classList.add('on'); if (b) { b.classList.add('busy'); b.setAttribute('aria-busy', 'true'); } }
+  function busyOff(b) { pending = Math.max(0, pending - 1); if (!pending) $('bb').classList.remove('on'); if (b) { b.classList.remove('busy'); b.removeAttribute('aria-busy'); } }
   function rpc(fn, args) {
+    var b = pressed; pressed = null; busyOn(b);
+    return rpc0(fn, args).then(function (d) { busyOff(b); return d; }, function (e) { busyOff(b); throw e; });
+  }
+  function rpc0(fn, args) {
     return fetch(PUSAT, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ fn: fn, args: args || [] }), credentials: 'omit', redirect: 'follow' })
       .then(function (r) { return r.json(); }, function () { throw new Error('Tidak tersambung ke XNK HQ.'); })
       .then(function (j) {
@@ -688,7 +715,7 @@
     var newest = rows.reduce(function (m, r) { return r.st && r.st.at > m ? r.st.at : m; }, ''), hub = /^https:\/\//.test(data.hub || '') ? data.hub : 'https://xnk.web.id';
     $('hqfoot').innerHTML = '<span><b>XNK HQ</b> · ' + esc(hub.replace(/^https:\/\//, '')) + '</span>' +
       '<span class="mid">Dicek ' + (newest ? esc(rel(newest)) : 'belum') + ' · ' + rows.length + ' coach' + (data.latest ? ' · Library v' + esc(data.latest.version) : '') + '</span>' +
-      '<span class="acts" style="margin:0"><button class="btn" type="button" data-act="cek">Cek semua</button><a class="btn" href="' + esc(hub) + '/?hub" target="_blank" rel="noopener">' + ic('ext') + 'Situs hub</a></span>';
+      '<span class="acts" style="margin:0"><button class="btn" type="button" id="liveBtn" data-live="1" title="Cek otomatis tiap 60 detik selama halaman ini terbuka">' + liveText() + '</button><button class="btn" type="button" data-act="cek">Cek semua</button><a class="btn" href="' + esc(hub) + '/?hub" target="_blank" rel="noopener">' + ic('ext') + 'Situs hub</a></span>';
     $('cekAll').disabled = false;
   }
 
@@ -1214,7 +1241,7 @@
     if (mb) return openMenu(mb, coachMenu(mb.getAttribute('data-slug')));
     var b = t.closest('[data-act]');
     if (!b || b.disabled) return;
-    if (b.closest('#menu')) closeMenu();
+    if (b.closest('#menu')) closeMenu(); else pressed = b;
     act(b.getAttribute('data-act'), b.getAttribute('data-slug') || '');
   });
 
@@ -1293,12 +1320,75 @@
       var label = a === 'bangun' ? 'Bangun ulang situs' : (a === 'perbarui' ? 'Perbarui ' : 'Hubungkan ') + (slug || 'semua coach');
       return ask(label + '?', 'Dijalankan di GitHub Actions. Hasilnya terlihat setelah "Cek ulang" beberapa menit lagi.', 'Jalankan').then(function (y) {
         if (!y) return;
-        toast('Mengirim…');
-        rpc('pusatAction', [tok(), a, slug]).then(function () { toast('Dijalankan di GitHub Actions. Hasilnya muncul di sini setelah "Cek ulang" beberapa menit lagi.', 'ok'); },
-          function (e) { toast(e.message, 'bad'); });
+        var j = job(label, slug);
+        rpc('pusatAction', [tok(), a, slug]).then(function () { jobRun(j); }, function (e) { jobEnd(j, 'bad', 'Gagal dikirim: ' + e.message); });
       });
     }
   }
+
+
+  // ── Tugas GitHub (Perbarui, Hubungkan, Bangun ulang): kartu dengan hitung waktu, lalu cek otomatis ──
+  var JOB_MS = 150 * 1000, jobList = [];
+  function mmss(ms) { var t = Math.max(0, Math.round(ms / 1000)); return Math.floor(t / 60) + ':' + ('0' + t % 60).slice(-2); }
+  function job(label, slug) {
+    var j = { label: label, slug: slug, state: 'send', t0: Date.now(), msg: 'Mengirim ke GitHub…' };
+    jobList.push(j); jobDraw(); return j;
+  }
+  function jobRun(j) {
+    j.state = 'run'; j.t0 = Date.now(); jobDraw();
+    j.tick = setInterval(function () {
+      if (Date.now() - j.t0 < JOB_MS) return jobDraw();
+      clearInterval(j.tick); j.state = 'check'; jobDraw();
+      rpc('pusatCheck', [tok(), j.slug]).then(function (d) {
+        data = d; render();
+        var bad = (d.coaches || []).filter(function (c) { return (!j.slug || c.slug === j.slug) && c.status && c.status.problems && c.status.problems.length; });
+        jobEnd(j, bad.length ? 'bad' : 'ok', bad.length ? bad.map(function (c) { return c.slug + ': ' + c.status.problems.join(' '); }).join('\n') + '\nKalau workflow belum selesai, tekan Cek lagi sebentar lagi.' : 'Selesai dan sudah dicek' + (d.latest ? ' (Library v' + d.latest.version + ')' : '') + '.');
+      }, function (e) { jobEnd(j, 'bad', 'Cek gagal: ' + e.message); });
+    }, 1000);
+  }
+  function jobEnd(j, k, msg) { clearInterval(j.tick); j.state = k; j.msg = msg; jobDraw(); if (k === 'ok') setTimeout(function () { jobClose(j); }, 12000); }
+  function jobClose(j) { clearInterval(j.tick); jobList = jobList.filter(function (x) { return x !== j; }); jobDraw(); }
+  function jobDraw() {
+    $('jobs').innerHTML = jobList.map(function (j, i) {
+      var el = Date.now() - j.t0, h = '<div class="job' + (j.state === 'ok' || j.state === 'bad' ? ' ' + j.state : '') + '"><b>' + esc(j.label) + '</b>';
+      if (j.state === 'send') h += '<span class="mut">Mengirim ke GitHub…</span>';
+      else if (j.state === 'run') h += '<div class="bar"><i style="transform:scaleX(' + Math.min(1, el / JOB_MS).toFixed(3) + ')"></i></div><span class="mut">Berjalan di GitHub Actions · ' + mmss(el) + ' / ±' + mmss(JOB_MS) + '. Setelah itu dicek otomatis.</span>';
+      else if (j.state === 'check') h += '<span class="mut">Memeriksa hasil…</span>';
+      else h += '<span class="mut" style="white-space:pre-line">' + esc(j.msg) + '</span><div class="acts"><button class="btn" type="button" data-job="' + i + '">Tutup</button>' + (j.state === 'bad' ? '<button class="btn" type="button" data-job-cek="' + i + '">Cek lagi</button>' : '') + '</div>';
+      return h + '</div>';
+    }).join('');
+  }
+  $('jobs').addEventListener('click', function (ev) {
+    var c = ev.target.closest('[data-job]'), k = ev.target.closest('[data-job-cek]');
+    if (c) jobClose(jobList[+c.getAttribute('data-job')]);
+    if (k) { var j = jobList[+k.getAttribute('data-job-cek')]; j.t0 = Date.now() - JOB_MS; jobRun(j); }
+  });
+
+
+  // ── Live: cek otomatis selama tab terlihat (60 dtk; 15 dtk saat tugas GitHub berjalan). Coach yang dibuka saja, atau semua bila tidak ada. ──
+  var LIVE_KEY = 'xnk_hq_live', live = true, liveBusy = false, liveAt = 0;
+  try { live = localStorage.getItem(LIVE_KEY) !== '0'; } catch (e) {}
+  function liveText() {
+    if (!live) return 'Live jeda';
+    var t = liveAt ? Math.round((Date.now() - liveAt) / 1000) : -1;
+    return 'Live' + (liveBusy ? ' · mengecek…' : t >= 0 ? ' · ' + (t < 60 ? t + ' dtk' : Math.floor(t / 60) + ' mnt') + ' lalu' : '');
+  }
+  function liveDraw() { var b = $('liveBtn'); if (b) { var t = liveText(); if (b.textContent !== t) b.textContent = t; } }
+  function liveTick() {
+    if (!live || liveBusy || !tok() || !data || document.hidden || $('dlg').open) return liveDraw();
+    var gap = jobList.some(function (j) { return j.state === 'run'; }) ? 15000 : 60000;
+    if (liveAt && Date.now() - liveAt < gap) return liveDraw();
+    liveBusy = true; liveDraw();
+    rpc('pusatCheck', [tok(), ui.sel || '']).then(function (d) { data = d; liveAt = Date.now(); liveBusy = false; render(); },
+      function () { liveAt = Date.now(); liveBusy = false; liveDraw(); });
+  }
+  setInterval(function () { if (!document.hidden) liveTick(); }, 1000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) liveTick(); });
+  document.addEventListener('click', function (ev) {
+    if (!ev.target.closest('[data-live]')) return;
+    live = !live; try { localStorage.setItem(LIVE_KEY, live ? '1' : '0'); } catch (e) {}
+    if (live) liveAt = 0; liveDraw(); liveTick();
+  });
 
   // ── Papan ketik: / cari, ↑↓ pilih coach, Esc kembali ke ringkasan ──
   document.addEventListener('keydown', function (ev) {
