@@ -42,7 +42,7 @@
         '<div class="meter cp-meter' + (st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
         (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') +
         // Fase AE: coach klien + Pindah (pemilik saja, saat ada 2+ coach atau klien belum punya coach)
-        (!window.isCoachRole() && ((window.coaches || []).length > 1 || !m.preferredCoachId) ? '<p class="cp-left-next cp-coach-row">' + icon('dumbbell') + '<span>' + (m.preferredCoachName ? h(window.coachLabel(m.preferredCoachName)) : 'Belum punya coach') + '</span> · ' +
+        (!window.isCoachRole() && (window.coaches || []).length > 1 ? '<p class="cp-left-next cp-coach-row">' + icon('dumbbell') + '<span>' + (m.preferredCoachName ? h(window.coachLabel(m.preferredCoachName)) : 'Belum punya coach') + '</span> · ' +
           '<button type="button" class="cp-link-ink" id="profile-coach-move" onclick="window.mcoachOpen(\'' + id + '\')">' + (m.preferredCoachId ? 'Pindah' : 'Pilih coach') + '</button></p>' : '') + '</div>' +
       '<div class="client-hero-actions cp-acts">' +
         act('', 'message-circle', 'Chat WA', "window.sendToParentWA(this.getAttribute('data-wa'),'')", ' data-wa="' + h(m.phone) + '"') +
