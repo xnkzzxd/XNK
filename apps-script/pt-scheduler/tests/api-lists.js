@@ -36,6 +36,7 @@ const ADMIN = [
   'saveExerciseNote', 'deleteWorkoutEntries', 'getWorkoutExerciseHistory', 'logClientFood', 'deleteClientFood', 'saveFoodFeedback', 'getMemberReport',
   'getMemberProgress', 'saveMemberMeasurement', 'deleteMemberMeasurement', 'getMemberProgressPhoto', 'getMemberShareData',
   'getPriceListAdmin', 'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'getClassGroups',
+  'setCoachPin', 'setMemberCoach', 'assignClientsToCoach',
   'syncFinanceTransactions', 'getBills', 'getBillDetail', 'saveBillAdjust', 'savePayment', 'saveExpense', 'getExpenses', 'getFinanceCategories', 'saveFinanceCategory', 'deleteFinanceCategory', 'archiveFinanceItem', 'restoreFinanceItem', 'saveCoachShare', 'getFinanceOverview', 'getFinancePage', 'uploadFinanceProof', 'getFinanceProof', 'exportFinanceCsv',
 ];
 const MEMBER = [
@@ -62,6 +63,7 @@ const API_FUNCTIONS = [...PUBLIC_API, ...ADMIN, ...MEMBER];
 // (tests/readonly.test.js). WRITE is refused while read-only is on (_readonlyGate_ via _apiWrites_ in Api.gs);
 // READ_OK keeps working: reads, login, PIN change, device push settings, "seen" markers, tests sends, Pusat/relay calls.
 const WRITE = [
+  'setCoachPin', 'setMemberCoach', 'assignClientsToCoach',
   // public
   'registerNewClient',
   // admin

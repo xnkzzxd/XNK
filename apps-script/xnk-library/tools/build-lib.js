@@ -32,7 +32,7 @@ const SERVICE_SWAPS = [
 // Setelah diganti, tidak boleh ada lagi pemakaian langsung layanan ini di kode produksi yang disalin.
 const FORBIDDEN = [/\bPropertiesService\b/, /\bCacheService\b/, /\bLockService\b/, /\bScriptApp\b/, /getActiveSpreadsheet/];
 // Memo per eksekusi yang dikosongkan Konteks.gs setiap konteks dipasang.
-const MEMOS = ['_memberMemo_', '_schedMemo_', '_readMemo_', '_progMemo_', '_exAliasMemo_', '_lockDepth_', '_quotaAcc_', '_quotaHold_', '_rmdCurJob_'];
+const MEMOS = ['_memberMemo_', '_schedMemo_', '_readMemo_', '_progMemo_', '_exAliasMemo_', '_lockDepth_', '_quotaAcc_', '_quotaHold_', '_rmdCurJob_', '_coachScope_', '_coachGateFn_'];
 // Fungsi produksi yang dipakai LibApi.gs.
 const NEEDED = ['_ensureCoachSchema_', '_getMemberDataSheet_', '_getMembersLogSheet_', '_readSchedulesAll_',
   '_priceListSheetAndColumns_', '_sessionSecret_', '_locked_', '_bustShared_', '_bustSlots_', '_installReminderTrigger_',

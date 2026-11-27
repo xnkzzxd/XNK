@@ -247,8 +247,13 @@
     var fn = server(name);
     if (typeof fn !== 'function') throw new Error('No server function ' + name);
     var args = JSON.parse(JSON.stringify([].slice.call(arguments, 1)));
-    var out = fn.apply(null, args);
-    return out === undefined ? undefined : JSON.parse(JSON.stringify(out));
+    // Fase AE: the same coach gate as doPost (a coach token works only for COACH_FNS, own IDs only).
+    var gate = server('_coachGate_'), reset = server('_coachScopeReset_');
+    try {
+      if (typeof gate === 'function') gate(name, args);
+      var out = fn.apply(null, args);
+      return out === undefined ? undefined : JSON.parse(JSON.stringify(out));
+    } finally { if (typeof reset === 'function') reset(); }
   }
 
   // ── Demo data ─────────────────────────────────────────────────────────────

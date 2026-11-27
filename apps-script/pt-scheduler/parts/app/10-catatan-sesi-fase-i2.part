@@ -170,12 +170,13 @@
       ((c.achievements && c.achievements.length) ? '<div class="card-flat"><p class="eyebrow">Prestasi</p><p style="margin-top:6px">' + c.achievements.map(h).join(' · ') + '</p></div>' : '') +
       ((c.location || c.instagram) ? '<div class="card-flat"><p class="eyebrow">Lokasi & sosial</p><p style="margin-top:6px">' + h(c.location || '') + (c.location && c.instagram ? ' · ' : '') + (c.instagram ? '@' + h(c.instagram) : '') + '</p></div>' : '') +
       '<div class="btn-row"><button type="button" class="btn btn-primary" data-wa="' + h(c.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
-      (c.id === window.coachSelfId ? '<button type="button" class="btn btn-secondary btn-block" onclick="window.openCoachPreview()">' + icon('eye') + 'Lihat seperti klien</button>' : '') +
+      (window.isCoachRole() ? '' : '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button>') + '</div>' +
+      (window.isCoachRole() ? '' : '<button type="button" class="btn btn-outline btn-block" onclick="window.coachPinOpen(\'' + h(c.id) + '\')">' + icon('key-round') + (c.hasPin ? 'Ganti PIN login coach' : 'Buat PIN login coach') + '</button>') +
+      (window.isCoachRole() ? '</div>' : (c.id === window.coachSelfId ? '<button type="button" class="btn btn-secondary btn-block" onclick="window.openCoachPreview()">' + icon('eye') + 'Lihat seperti klien</button>' : '') +
       (c.aktif !== false && c.id !== window.coachSelfId ? '<button type="button" class="btn btn-outline btn-block" onclick="window.setSelfCoachUI(\'' + h(c.id) + '\')">' + icon('user-check') + 'Jadikan "Ini saya"</button>' : '') +
       '<button type="button" class="btn btn-outline btn-block" onclick="window.setCoachActiveUI(\'' + h(c.id) + '\',' + (c.aktif === false ? 'true' : 'false') + ')">' + icon('power') + (c.aktif === false ? 'Aktifkan coach' : 'Nonaktifkan coach') + '</button>' +
-      '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>';
-    openDetail('coach:' + c.id, 'Profil coach', '<button type="button" class="icon-btn plain" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')" aria-label="Ubah coach">' + icon('pencil') + '</button>', body);
+      '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>');
+    openDetail('coach:' + c.id, 'Profil coach', window.isCoachRole() ? '' : '<button type="button" class="icon-btn plain" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')" aria-label="Ubah coach">' + icon('pencil') + '</button>', body);
   };
 
   window.deleteCoachConfirm = function (id) {

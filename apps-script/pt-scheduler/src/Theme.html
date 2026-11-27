@@ -3423,4 +3423,9 @@ details.cp-day[open] .cp-day-names { display: none; }
 @media (min-width: 768px) { .rp-pages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .rp-secs .chip { cursor: pointer; }
 #pub-report-btn { margin: 0 0 var(--gap, 12px); }
+/* Fase AE: baris coach di kartu klien hitam (pemilik: Pindah / Pilih coach). */
+.cp-card .cp-coach-row { display: flex !important; margin-top: 4px; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cp-coach-row svg { width: 16px; height: 16px; }
+.cp-link-ink { background: none; border: 0; padding: 0 2px; min-height: 44px; color: var(--on-band); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+@media (max-width: 767px) { .cp-card .cp-coach-row { margin-top: 0; font-size: var(--fs-sm); } .cp-card .cp-coach-row svg { display: none; } .cp-card .cp-link-ink { min-height: 44px; padding: 0 6px; margin: -12px 0; } }
 </style>

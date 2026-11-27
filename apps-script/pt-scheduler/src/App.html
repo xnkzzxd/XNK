@@ -1209,6 +1209,9 @@
   });
 
   // ── Chrome: sidebar, topbar, bar bawah ─────────────────────────────────────
+  // Fase AE: siapa yang login di panel ({role:'owner'} atau {role:'coach', coachId, name}); disalin ke xnk_admin_me.
+  window.adminMe = (function () { try { return JSON.parse(localStorage.getItem('xnk_admin_me') || 'null'); } catch (e) { return null; } })();
+  window.isCoachRole = function () { return !!(window.adminMe && window.adminMe.role === 'coach'); };
   const NAV = {
     admin: [
       ['dashboard', 'layout-dashboard', 'Dashboard'],
@@ -1267,7 +1270,8 @@
     ui.chromeGuest = isGuest();
     ui.chromeNut = nutTabOn();
     const items = ui.chromeGuest ? GUEST_NAV : (ui.mode === 'public' && !ui.chromeNut ? NAV.public.filter(n => n[0] !== 'public-food') : NAV[ui.mode]);
-    const sideItems = items.concat(ui.mode === 'admin' ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
+    const coachRole = ui.mode === 'admin' && window.isCoachRole();   // Fase AE: login coach, tanpa halaman khusus pemilik
+    const sideItems = items.concat(ui.mode === 'admin' && !coachRole ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
     const navBtn = function (n) {
       return '<button type="button" class="nav-item" data-view="' + n[0] + '" title="' + n[2] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
         icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' +
@@ -1283,6 +1287,9 @@
       ? '<button type="button" class="side-me" id="side-me" onclick="window.navigate(\'public-more\')" title="Saya">' + avatar(window.publicLoggedMember.photo, window.publicLoggedMember.name, 'sm') +
         '<span class="side-me-text"><b>' + h(String(window.publicLoggedMember.name || '').split(' ')[0]) + '</b><span id="side-me-lv"></span></span></button>' +
         '<button type="button" class="nav-item hide" id="side-auth-btn" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>'
+      : ui.mode === 'admin' && window.isCoachRole()
+      ? '<button type="button" class="nav-item" onclick="window.openSettings()">' + icon('sun-moon') + '<span class="nav-label">Tampilan</span></button>' +
+        '<button type="button" class="nav-item" onclick="window.logoutCurrent()">' + icon('log-out') + '<span class="nav-label">Keluar</span></button>'
       : ui.mode === 'admin'
       ? '<button type="button" class="nav-item" data-view="settings" onclick="window.navigate(\'settings\')">' + icon('settings') + '<span class="nav-label">Pengaturan</span></button>'
       : '<button type="button" class="nav-item" onclick="window.openSettings()">' + icon('sun-moon') + '<span class="nav-label">Tampilan</span></button>' +
@@ -1313,7 +1320,9 @@
     let html = '';
     if (ui.mode === 'admin') {
       html += '<button type="button" class="icon-btn" id="notification-btn" onclick="window.openNotificationModal()" aria-label="Booking baru">' + icon('bell') + '<span class="badge-dot hide" id="unread-badge"></span></button>';
-      html += '<button type="button" class="icon-btn only-mobile" onclick="window.openSettings()" aria-label="Pengaturan">' + icon('settings') + '</button>';
+      html += window.isCoachRole()
+        ? '<button type="button" class="icon-btn only-mobile" onclick="window.logoutCurrent()" aria-label="Keluar">' + icon('log-out') + '</button>'
+        : '<button type="button" class="icon-btn only-mobile" onclick="window.openSettings()" aria-label="Pengaturan">' + icon('settings') + '</button>';
     } else {
       if (!window.publicLoggedMember) {
         html += '<button type="button" class="icon-btn only-mobile" onclick="window.openSettings()" aria-label="Tampilan">' + icon('sun-moon') + '</button>';
@@ -1889,7 +1898,7 @@
     setState.pre = p;
     return p;
   }
-  window.settingsPrefetch = function () { if (!setState.built && !setState.pre) settingsPrefetch(); };
+  window.settingsPrefetch = function () { if (window.isCoachRole()) return; if (!setState.built && !setState.pre) settingsPrefetch(); };
   function applyRmdStatus(s) {
     setState.status = s;
     const el = $('rmd-status'); if (el) el.innerHTML = rmdStatusHtml();
@@ -2555,6 +2564,7 @@
       .then(function (res) {
         // Tombol tetap "Memeriksa…" sampai data siap: satu loading saja.
         _lsSet(ADMIN_TOKEN_KEY, res.token);
+        window.setAdminMe(res.me || { role: 'owner' });   // Fase AE
         window.loadAllData().then(function () {
           done();
           $('admin-pin').value = '';
@@ -2631,7 +2641,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearFinCache) window.clearFinCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
+  function clearAdminCache() { _lsSet('xnk_admin_me', null); window.adminMe = null; window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearFinCache) window.clearFinCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -2708,6 +2718,7 @@
       if (r[3]) window.priceListData = r[3];
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
+      if (b && b.me) window.setAdminMe(b.me);           // Fase AE
       if (b && Array.isArray(b.holds) && !window.wqStale(snap)) window.holds = b.holds;   // Fase AD1
       ui.dataReady = true;
       window.hideGlobalLoader();
@@ -3226,6 +3237,9 @@
   function renderRevenueKpi() {
     const el = $('kpi-revenue-tile');
     if (!el) return;
+    // Fase AE: coach melihat keuangannya sendiri hanya bila Keuangan menyala; omzet gabungan milik pemilik.
+    if (window.isCoachRole() && !(ui.revenue && ui.revenue.fin)) { el.classList.add('hide'); return; }
+    el.classList.remove('hide');
     const month = MONTHS[new Date().getMonth()];
     const r = ui.revenue;
     let body;
@@ -4577,11 +4591,14 @@
   }
   window.setClientSort = function (v) { ui.clientSort = v; _lsSet('xnk_client_sort', v); renderClientList(); };
   window.setClientView = function (v) { ui.clientView = v; _lsSet('xnk_client_view', v); document.querySelectorAll('#client-view-seg button').forEach(b => { const on = b.getAttribute('data-v') === v; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); }); renderClientList(); };
-  const CL_FILTERS = [['all', 'Semua'], ['perhatian', 'Perlu perhatian'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['active', 'Aktif'], ['held', 'Ditahan'], ['archive', 'Riwayat paket']];   // Fase AD1: Ditahan
+  const CL_FILTERS_ALL = [['all', 'Semua'], ['perhatian', 'Perlu perhatian'], ['low', 'Hampir habis'], ['empty', 'Habis'], ['active', 'Aktif'], ['held', 'Ditahan'], ['nocoach', 'Tanpa coach'], ['archive', 'Riwayat paket']];   // Fase AD1: Ditahan; Fase AE: Tanpa coach
+  // "Tanpa coach" hanya untuk pemilik, dan hanya saat ada 2+ coach aktif atau memang ada klien tanpa coach.
+  const clNoCoachOn = () => !window.isCoachRole() && (window.coaches || []).length > 1;
+  let CL_FILTERS = CL_FILTERS_ALL;
   const CL_SORTS = [['terbaru', 'Terbaru'], ['perhatian', 'Perlu perhatian'], ['nama', 'Nama'], ['sisa', 'Sisa sesi'], ['lama', 'Lama tidak latihan']];
   function clientCounts() {
-    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, held: 0, perhatian: 0, archive: (window.memberArchive || []).length };
-    window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; });
+    const counts = { all: window.members.length, active: 0, low: 0, empty: 0, held: 0, perhatian: 0, nocoach: 0, archive: (window.memberArchive || []).length };
+    window.members.forEach(m => { counts[clientState(m)]++; if (flagsOf(m).length) counts.perhatian++; if (!m.preferredCoachId) counts.nocoach++; });
     return counts;
   }
   // Ringkasan di band: satu kalimat di HP, dua angka kecil di PC (dulu kartu hitam tersendiri).
@@ -4601,6 +4618,8 @@
     const fKey = focusedRowKey();
     loadClientPrefs();
     const counts = clientCounts();
+    CL_FILTERS = clNoCoachOn() || counts.nocoach && !window.isCoachRole() && (window.coaches || []).length ? CL_FILTERS_ALL : CL_FILTERS_ALL.filter(c => c[0] !== 'nocoach');
+    if (ui.clientFilter === 'nocoach' && CL_FILTERS !== CL_FILTERS_ALL) ui.clientFilter = 'all';
     const opt = (o, cur, n) => '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + (n != null ? ' (' + n + ')' : '') + '</option>';
     const html = '<div class="page-head cl-head"><div class="cl-head-t"><h2 class="page-title">Klien</h2><p class="page-sub" id="cl-sub">' + h(clientHeadSub(counts)) + '</p></div>' + clientHeadStats() +
       '<button type="button" class="btn btn-primary cl-new" onclick="window.openAddMemberModal()" aria-label="Klien baru">' + icon('user-plus') + '<span class="cl-new-t">Klien baru</span></button></div>' +
@@ -4638,7 +4657,7 @@
     const match = x => !q || String(x.name || '').toLowerCase().indexOf(q) !== -1 || String(x.phone || '').indexOf(q.replace(/\D/g, '') || '\u0000') !== -1;
     let entries = [];
     if (ui.clientFilter !== 'archive') {
-      window.members.filter(match).filter(m => ui.clientFilter === 'all' || (ui.clientFilter === 'perhatian' ? flagsOf(m).length > 0 : clientState(m) === ui.clientFilter))
+      window.members.filter(match).filter(m => ui.clientFilter === 'all' || (ui.clientFilter === 'perhatian' ? flagsOf(m).length > 0 : ui.clientFilter === 'nocoach' ? !m.preferredCoachId : clientState(m) === ui.clientFilter))
         .forEach(m => entries.push({ type: 'live', data: m, date: window.parseFlexibleDate(m.lastActivityDate || m.joinDate) }));
     }
     if (ui.clientFilter === 'archive' || (ui.clientFilter === 'all' && q)) {
@@ -4680,6 +4699,11 @@
     };
     const labels = q ? [] : entries.map(groupOf), many = labels.some(l => l !== labels[0]);
     let html = '', group = '';
+    // Fase AE: semua klien tanpa coach sekaligus diberi coach (pemilik).
+    if (ui.clientFilter === 'nocoach' && !window.isCoachRole()) {
+      html += '<div class="card-flat row-between" style="gap:12px;margin-bottom:12px"><p class="li-sub" style="margin:0">' + entries.length + ' klien belum punya coach. Coach hanya melihat klien miliknya.</p>' +
+        '<button type="button" class="btn btn-primary btn-sm" onclick="window.mcoachOpen(null)">' + icon('user-check') + 'Tetapkan coach</button></div>';
+    }
     entries.forEach(function (e, i) {
       const g = labels[i];
       if (many && g !== group) { html += '<div class="group-label month-divider"><span>' + h(g) + '</span></div>'; group = g; }
@@ -8381,12 +8405,13 @@
       ((c.achievements && c.achievements.length) ? '<div class="card-flat"><p class="eyebrow">Prestasi</p><p style="margin-top:6px">' + c.achievements.map(h).join(' · ') + '</p></div>' : '') +
       ((c.location || c.instagram) ? '<div class="card-flat"><p class="eyebrow">Lokasi & sosial</p><p style="margin-top:6px">' + h(c.location || '') + (c.location && c.instagram ? ' · ' : '') + (c.instagram ? '@' + h(c.instagram) : '') + '</p></div>' : '') +
       '<div class="btn-row"><button type="button" class="btn btn-primary" data-wa="' + h(c.phone) + '" onclick="window.sendToParentWA(this.getAttribute(\'data-wa\'),\'\')">' + icon('message-circle') + 'Chat WA</button>' +
-      '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button></div>' +
-      (c.id === window.coachSelfId ? '<button type="button" class="btn btn-secondary btn-block" onclick="window.openCoachPreview()">' + icon('eye') + 'Lihat seperti klien</button>' : '') +
+      (window.isCoachRole() ? '' : '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button>') + '</div>' +
+      (window.isCoachRole() ? '' : '<button type="button" class="btn btn-outline btn-block" onclick="window.coachPinOpen(\'' + h(c.id) + '\')">' + icon('key-round') + (c.hasPin ? 'Ganti PIN login coach' : 'Buat PIN login coach') + '</button>') +
+      (window.isCoachRole() ? '</div>' : (c.id === window.coachSelfId ? '<button type="button" class="btn btn-secondary btn-block" onclick="window.openCoachPreview()">' + icon('eye') + 'Lihat seperti klien</button>' : '') +
       (c.aktif !== false && c.id !== window.coachSelfId ? '<button type="button" class="btn btn-outline btn-block" onclick="window.setSelfCoachUI(\'' + h(c.id) + '\')">' + icon('user-check') + 'Jadikan "Ini saya"</button>' : '') +
       '<button type="button" class="btn btn-outline btn-block" onclick="window.setCoachActiveUI(\'' + h(c.id) + '\',' + (c.aktif === false ? 'true' : 'false') + ')">' + icon('power') + (c.aktif === false ? 'Aktifkan coach' : 'Nonaktifkan coach') + '</button>' +
-      '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>';
-    openDetail('coach:' + c.id, 'Profil coach', '<button type="button" class="icon-btn plain" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')" aria-label="Ubah coach">' + icon('pencil') + '</button>', body);
+      '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>');
+    openDetail('coach:' + c.id, 'Profil coach', window.isCoachRole() ? '' : '<button type="button" class="icon-btn plain" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')" aria-label="Ubah coach">' + icon('pencil') + '</button>', body);
   };
 
   window.deleteCoachConfirm = function (id) {
@@ -12911,6 +12936,19 @@
   const bkMulti = () => !window.isSoloCoach() && window.coaches.length > 1;
   function bkMap() { return (bkMulti() ? window.openSlotsByCoachMap[bkx.coach] : window.openSlotsByDate) || {}; }
   // Fase AD1: hari di dalam cuti sendiri (atau akun nonaktif) tampil penuh; server tetap menolak dengan kalimat yang jelas.
+  // Fase AE: ringkasan jam kosong seorang coach untuk 7 hari ke depan (dari openSlotsByCoachMap; tanpa panggilan server).
+  function bkCoachWeek(id) {
+    const m = (window.openSlotsByCoachMap || {})[String(id)] || {};
+    let hours = 0, first = '';
+    for (let d = 0; d < 7; d++) {
+      const k = wibParts(new Date(Date.now() + d * 86400000)).date, f = m[k] || {};
+      if (window.myHoldBlocks && window.myHoldBlocks(k)) continue;
+      const hs = Object.keys(f).map(Number).filter(hh => f[hh] > 0).sort((a, b) => a - b);
+      hours += hs.length;
+      if (!first && hs.length) first = (d === 0 ? 'hari ini' : d === 1 ? 'besok' : bkDayLabel(k)) + ' ' + pad(hs[0]) + ':00';
+    }
+    return { hours: hours, first: first };
+  }
   function bkFreeHours(date) { if (window.myHoldBlocks && window.myHoldBlocks(date)) return []; const f = bkMap()[date] || {}; return Object.keys(f).map(Number).filter(hh => f[hh] > 0).sort((a, b) => a - b); }
   const bkDayLabel = date => { const p = date.split('-').map(Number); return fmtDate(new Date(p[0], p[1] - 1, p[2])); };
   window.bkOpen = function (opts) {
@@ -12929,7 +12967,7 @@
     Object.assign(bkx, { steps: (multi && !old ? ['coach'] : []).concat(['hari', 'jam', 'cek']), i: 0, repeat: false, resched: old ? String(old.id) : '',
       coach: multi ? String((old && old.coachId) || ui.bookCoach || '') : '', date: opts.date || '', time: opts.time || '' });
     if (bkx.date && bkx.time) bkx.i = bkx.steps.indexOf('cek');
-    else if (bkx.coach && bkx.steps[0] === 'coach') bkx.i = 1;
+    // Fase AE: langkah coach selalu tampil dulu (coach klien sudah terpilih), supaya jadwal semua coach terlihat.
     bkx.month = (bkx.date || wibParts(new Date()).date).slice(0, 7);
     ui.bkOn = true;
     const el = $('bk-screen');
@@ -13040,7 +13078,9 @@
     if (st === 'coach') {
       body = '<h3 class="bk-q">Pilih coach</h3><div class="px-stack" style="gap:10px">' + window.coaches.map(function (c) {
         const on = String(c.id) === bkx.coach;
-        return '<button type="button" class="bk-opt' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.bkPick(\'coach\',this.dataset.id)">' + avatar(c.photo, c.name, 'sm') + '<b class="grow">' + h(c.name) + '</b></button>';
+        const wk = bkCoachWeek(c.id);   // Fase AE: jam kosong tiap coach, 7 hari ke depan, sebelum memilih
+        return '<button type="button" class="bk-opt' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.bkPick(\'coach\',this.dataset.id)">' + avatar(c.photo, c.name, 'sm') +
+          '<span class="grow"><b>' + h(c.name) + '</b><span class="li-sub" style="display:block">' + h(c.specialty || '') + (c.specialty ? ' · ' : '') + (wk.hours ? wk.hours + ' jam kosong dalam 7 hari' + (wk.first ? ', paling cepat ' + h(wk.first) : '') : 'Belum ada jam kosong 7 hari ini') + '</span></span></button>';
       }).join('') + '</div>';
     } else if (st === 'hari') {
       const free = bkx.date ? bkFreeHours(bkx.date).length : 0;
@@ -13796,7 +13836,10 @@
           : '<p class="cp-left-t"><b>Tanpa batas sesi</b><span class="cp-left-n"> · ' + done + ' selesai</span><span class="hide" id="profile-remaining">' + rem + '</span><span class="hide" id="profile-total">0</span></p>') + '</div>' +
         '<button type="button" class="btn btn-sm cp-renew ' + (total && rem === 0 ? 'btn-inverse' : 'btn-ghost-ink') + '" id="profile-renew" onclick="window.openRenewMember(\'' + id + '\')">' + icon('repeat') + 'Perpanjang</button></div>' +
         '<div class="meter cp-meter' + (st === 'empty' ? ' m-empty' : '') + '" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
-        (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') + '</div>' +
+        (nx ? '<p class="cp-left-next">Berikutnya ' + h(fmtShort(new Date(nx.start))) + ' · ' + fmtTime(new Date(nx.start)) + '</p>' : '') +
+        // Fase AE: coach klien + Pindah (pemilik saja, saat ada 2+ coach atau klien belum punya coach)
+        (!window.isCoachRole() && (window.coaches || []).length > 1 ? '<p class="cp-left-next cp-coach-row">' + icon('dumbbell') + '<span>' + (m.preferredCoachName ? h(window.coachLabel(m.preferredCoachName)) : 'Belum punya coach') + '</span> · ' +
+          '<button type="button" class="cp-link-ink" id="profile-coach-move" onclick="window.mcoachOpen(\'' + id + '\')">' + (m.preferredCoachId ? 'Pindah' : 'Pilih coach') + '</button></p>' : '') + '</div>' +
       '<div class="client-hero-actions cp-acts">' +
         act('', 'message-circle', 'Chat WA', "window.sendToParentWA(this.getAttribute('data-wa'),'')", ' data-wa="' + h(m.phone) + '"') +
         act('', 'calendar-plus', 'Booking', "window.openBookingSheet({memberId:'" + id + "'})") +
@@ -15146,5 +15189,80 @@
   }
   window.pdfFromJpegs = pdfFromJpegs;   // untuk tools/report-check.js
   window.rpBlob = function () { return rp.blob; };
+  // ── Fase AE (T-2500+): login per coach ───────────────────────────────────────────────────────────────────────
+  // window.adminMe datang dari adminLogin / getAdminBootstrap.me. Coach: menu tanpa Pengaturan dan Konten, tanpa tombol
+  // pemilik di halaman Coach; server tetap yang menjaga (Lingkup.gs), tampilan ini hanya merapikan.
+  window.setAdminMe = function (me) {
+    const prev = window.isCoachRole();
+    window.adminMe = me && me.role ? me : { role: 'owner' };
+    _lsSet('xnk_admin_me', JSON.stringify(window.adminMe));
+    document.documentElement.classList.toggle('coach-role', window.isCoachRole());
+    if (prev !== window.isCoachRole() && ui.mode === 'admin') buildChrome();
+  };
+  document.documentElement.classList.toggle('coach-role', window.isCoachRole());
+
+  let cpinId = '';
+  window.coachPinOpen = function (id) {
+    const c = (window.coachesAll || []).filter(function (x) { return x.id === id; })[0] || { id: id, name: '' };
+    cpinId = id;
+    $('cpin-sub').textContent = (c.hasPin ? 'Ganti PIN login untuk ' : 'Buat PIN login untuk ') + (c.name || 'coach ini') + '. Coach masuk lewat halaman login panel yang sama.';
+    $('cpin-pin').value = '';
+    $('cpin-del').classList.toggle('hide', !c.hasPin);
+    window.openSheet('sheet-cpin');
+  };
+  function cpinSend(pin, okText) {
+    const done = busy($('cpin-save'), 'Menyimpan…');
+    adminCall('setCoachPin', cpinId, pin).then(function (r) {
+      done();
+      (window.coachesAll || []).forEach(function (x) { if (x.id === cpinId) x.hasPin = !!(r && r.hasPin); });
+      window.closeModal();
+      window.showToast(okText);
+      if (window.currentCoachId === cpinId && window.openCoachProfile) window.openCoachProfile(cpinId);
+    }, function (err) { done(); window.showToast(window.waitErr ? window.waitErr(err) : window.authMessage(err)); });
+  }
+  window.coachPinSave = function (e) {
+    if (e) e.preventDefault();
+    const pin = $('cpin-pin').value.trim();
+    if (!/^\d{6}$/.test(pin)) { window.showToast('PIN coach harus 6 angka.'); $('cpin-pin').focus(); return; }
+    cpinSend(pin, 'PIN coach disimpan.');
+  };
+  window.coachPinDelete = function () { cpinSend('', 'PIN coach dihapus.'); };
+  // ── Pilih / pindah coach klien (pemilik) ──
+  const mc = { ids: [], pick: '' };
+  window.mcoachOpen = function (memberId) {
+    const coaches = (window.coaches || []).filter(function (c) { return c.aktif !== false; });
+    if (!coaches.length) { window.showToast('Belum ada coach aktif.'); return; }
+    const m = memberId ? (window.members || []).filter(function (x) { return String(x.id) === String(memberId); })[0] : null;
+    mc.ids = m ? [m.id] : (window.members || []).filter(function (x) { return !x.preferredCoachId; }).map(function (x) { return x.id; });
+    if (!mc.ids.length) { window.showToast('Semua klien sudah punya coach.'); return; }
+    mc.pick = m && m.preferredCoachId ? String(m.preferredCoachId) : '';
+    $('mc-title').textContent = m ? (m.preferredCoachId ? 'Pindah coach' : 'Pilih coach') : 'Tetapkan coach';
+    $('mc-sub').textContent = m ? m.name + (m.preferredCoachName ? ' · sekarang ' + window.coachLabel(m.preferredCoachName) : ' · belum punya coach') : mc.ids.length + ' klien belum punya coach.';
+    mcDraw(coaches);
+    window.openSheet('sheet-mcoach');
+  };
+  function mcDraw(coaches) {
+    setHTML('mc-list', (coaches || window.coaches || []).filter(function (c) { return c.aktif !== false; }).map(function (c) {
+      const on = String(c.id) === mc.pick;
+      return '<button type="button" class="bk-opt' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-id="' + h(String(c.id)) + '" onclick="window.mcoachPick(this.dataset.id)">' + avatar(c.photo, c.name, 'sm') +
+        '<span class="grow"><b>' + h(c.name) + '</b>' + (c.specialty ? '<span class="li-sub" style="display:block">' + h(c.specialty) + '</span>' : '') + '</span>' + (on ? icon('check') : '') + '</button>';
+    }).join(''));
+  }
+  window.mcoachPick = function (id) { mc.pick = String(id); mcDraw(); };
+  window.mcoachSave = function () {
+    if (!mc.pick) { window.showToast('Pilih coach dulu.'); return; }
+    const move = $('mc-move').checked, done = busy($('mc-save'), 'Menyimpan…');
+    const one = mc.ids.length === 1;
+    (one ? adminCall('setMemberCoach', mc.ids[0], mc.pick, { moveSessions: move }) : adminCall('assignClientsToCoach', mc.ids, mc.pick, { moveSessions: move })).then(function (r) {
+      done();
+      const keep = {};
+      (r.members || []).forEach(function (id) { keep[String(id)] = true; });
+      (window.members || []).forEach(function (m) { if (keep[String(m.id)]) { m.preferredCoachId = r.coachId; m.preferredCoachName = r.coachName; } });
+      (r.moved || []).forEach(function (sid) { const s = window.schedById ? window.schedById(sid) : null; if (s) { s.coachId = r.coachId; s.coachName = r.coachName; } });
+      window.closeModal();
+      window.showToast((one ? 'Coach diganti' : (r.members || []).length + ' klien diberi coach') + ((r.kept || []).length ? '. ' + r.kept.length + ' sesi bentrok tetap di coach lama.' : '.'));
+      if (window.updateUI) window.updateUI();
+    }, function (err) { done(); window.showToast(window.waitErr ? window.waitErr(err) : window.authMessage(err)); });
+  };
 })();
 </script>

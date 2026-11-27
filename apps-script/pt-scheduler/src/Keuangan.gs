@@ -7,7 +7,7 @@
 
 const FIN_TABLES = {
   Tagihan: ['ID Tagihan', 'Transaksi ID', 'Member ID', 'Nama Klien', 'Paket ID', 'Nama Paket', 'Coach ID', 'Tanggal', 'Total', 'Diskon', 'Status', 'Catatan', 'Dibuat Pada', 'Diubah Pada', 'Diarsipkan Pada', 'Diarsipkan Oleh'],
-  Pembayaran: ['ID Bayar', 'ID Tagihan', 'Member ID', 'Tanggal', 'Jumlah', 'Metode', 'Kategori', 'Bukti File ID', 'Catatan', 'Dibuat Pada', 'Diubah Pada', 'Diarsipkan Pada', 'Diarsipkan Oleh'],
+  Pembayaran: ['ID Bayar', 'ID Tagihan', 'Member ID', 'Tanggal', 'Jumlah', 'Metode', 'Kategori', 'Bukti File ID', 'Catatan', 'Dibuat Pada', 'Diubah Pada', 'Diarsipkan Pada', 'Diarsipkan Oleh', 'Coach ID'],
   Pengeluaran: ['ID Keluar', 'Tanggal', 'Kategori', 'Jumlah', 'Metode', 'Bukti File ID', 'Catatan', 'Coach ID', 'Dibuat Pada', 'Diubah Pada', 'Diarsipkan Pada', 'Diarsipkan Oleh'],
   KategoriKeuangan: ['ID', 'Tipe', 'Nama', 'Urutan', 'Aktif']
 };
@@ -83,7 +83,7 @@ function _finSheet_(name, create) {
 
 // Cek skema penuh (4 tabel, header, format tanggal, kategori bawaan) paling sering 6 jam sekali, bukan di setiap simpan
 // (2026-11: ±12 panggilan Sheets di bawah kunci membuat "Lunasi" lambat). Naikkan angka kuncinya bila FIN_TABLES berubah.
-const FIN_ENSURE_KEY = 'fin:ensured:1';
+const FIN_ENSURE_KEY = 'fin:ensured:2';   // 2: Pembayaran + Coach ID (Fase AE)
 function _finEnsure_() {
   const cache = CacheService.getScriptCache();
   try { if (cache.get(FIN_ENSURE_KEY)) return; } catch (e) {}
@@ -132,7 +132,7 @@ function _finDate_(v) {
 function _finRead_(name) {
   const mk = 'fin:' + name;
   if (_readMemo_ && _readMemo_[mk]) return _readMemo_[mk];
-  const out = _finReadRaw_(name);
+  const out = _scopeFinRows_(name, _finReadRaw_(name));   // Fase AE: coach hanya barisnya sendiri
   if (_readMemo_) _readMemo_[mk] = out;
   return out;
 }
@@ -239,7 +239,7 @@ function _finBillFromTransaction_(trx) {
   try {
     if (!_finOn_()) return;
     _finEnsure_();
-    if (_finRead_('Tagihan').some(function(b) { return b['Transaksi ID'] === trx.trxId; })) return;
+    if (_finReadRaw_('Tagihan').some(function(b) { return b['Transaksi ID'] === trx.trxId; })) return;   // semua baris, bukan lingkup coach
     const m = _getMembersAll_().filter(function(x) { return String(x.id) === String(trx.memberId); })[0];
     _finAppend_('Tagihan', {
       'ID Tagihan': _finId_('TG'), 'Transaksi ID': trx.trxId, 'Member ID': trx.memberId, 'Nama Klien': m ? m.name : '',
@@ -256,7 +256,7 @@ function _finMigrate_() {
   return _finLocked_(function() {
     _finEnsure_();
     const have = {};
-    _finRead_('Tagihan').forEach(function(b) { have[b['Transaksi ID']] = true; });
+    _finReadRaw_('Tagihan').forEach(function(b) { have[b['Transaksi ID']] = true; });
     const prices = _allPackagePrices_();
     const names = {};
     _getMembersAll_().forEach(function(m) { names[String(m.id)] = m.name; });
@@ -424,7 +424,9 @@ function savePayment(token, p) {
       category = _finCategory_('masuk', p.category);
     }
     const now = _finNow_();
-    const fields = { 'ID Tagihan': bill ? bill['ID Tagihan'] : '', 'Member ID': bill ? String(bill['Member ID']) : '', Tanggal: date, Jumlah: amount, Metode: method, Kategori: category, Catatan: note, 'Diubah Pada': now };
+    // Fase AE: pembayaran tanpa tagihan dari coach dicatat atas nama coach itu (Coach ID), supaya hanya terlihat olehnya dan pemilik.
+    const payCoach = bill ? String(bill['Coach ID'] || '') : (_scopeCoach_() || String((existing && existing['Coach ID']) || ''));
+    const fields = { 'Coach ID': payCoach, 'ID Tagihan': bill ? bill['ID Tagihan'] : '', 'Member ID': bill ? String(bill['Member ID']) : '', Tanggal: date, Jumlah: amount, Metode: method, Kategori: category, Catatan: note, 'Diubah Pada': now };
     let id;
     if (existing) { id = existing['ID Bayar']; _finUpdate_('Pembayaran', existing._row, fields); }
     else { id = _finId_('BY'); _finAppend_('Pembayaran', Object.assign({ 'ID Bayar': id, 'Dibuat Pada': now }, fields)); }
@@ -464,7 +466,7 @@ function saveExpense(token, e) {
     const existing = e.id ? _finRead_('Pengeluaran').filter(function(x) { return x['ID Keluar'] === String(e.id); })[0] : null;
     if (e.id && !existing) throw new Error('Pengeluaran tidak ditemukan.');
     const now = _finNow_();
-    const fields = { Tanggal: date, Kategori: category, Jumlah: amount, Metode: method, Catatan: note, 'Coach ID': String(e.coachId || ''), 'Diubah Pada': now };
+    const fields = { Tanggal: date, Kategori: category, Jumlah: amount, Metode: method, Catatan: note, 'Coach ID': _scopeCoach_() || String(e.coachId || ''), 'Diubah Pada': now };
     if (existing) { _finUpdate_('Pengeluaran', existing._row, fields); return { id: existing['ID Keluar'] }; }
     const id = _finId_('PG');
     _finAppend_('Pengeluaran', Object.assign({ 'ID Keluar': id, 'Dibuat Pada': now }, fields));
@@ -676,7 +678,7 @@ function getFinancePage(token, month, year, fresh) {
   const a = _finMonthArgs_(month, year);
   const ver = _finVer_();   // dibaca SEBELUM sheet
   const wib = _wibParts_(new Date());
-  const ckey = _payloadCacheOn_() ? 'fp:' + wib.date + ':' + wib.hour + ':' + ver + ':' + a.m + ':' + a.y : '';
+  const ckey = _payloadCacheOn_() ? 'fp:' + _scopeCoach_() + ':' + wib.date + ':' + wib.hour + ':' + ver + ':' + a.m + ':' + a.y : '';
   if (ckey && !fresh) {
     const hit = _payloadGet_(ckey);
     if (hit) { hit.at = Date.now(); return hit; }
