@@ -371,27 +371,50 @@
         const K = AN.kehadiran || {};
         block('Kehadiran', 640);
         lead(d.kehadiran.sesi + ' sesi selesai · rata-rata ' + rpN(K.perMinggu) + ' per minggu · streak ' + d.kehadiran.streak + ' minggu (terbaik ' + d.kehadiran.bestStreak + ').');
-        vbars((d.kehadiran.minggu || []).map(w => ({ l: pgLabel(w.minggu), v: w.sesi, dim: w.cuti })), 0, 'Sesi dengan coach per minggu (mulai Senin). Abu-abu = minggu cuti.');
         rpCalendar();
+        vbars((d.kehadiran.minggu || []).map(w => ({ l: pgLabel(w.minggu), v: w.sesi, dim: w.cuti })), 0, 'Sesi dengan coach per minggu (mulai Senin). Abu-abu = minggu cuti.');
         (d.cuti || []).forEach(function (h) { text((h.jenis === 'sakit' ? 'Sakit' : h.jenis === 'berhenti' ? 'Nonaktif' : 'Cuti') + ': ' + pgLabel(h.mulai) + (h.sampai !== h.mulai ? ' – ' + pgLabel(h.sampai) : ''), 24, 500, MUT); });
         callout(K.tafsir);
       }
-      function rpCalendar() {
+      function rpCalendar() {   // kalender bulan sungguhan: judul bulan, Sen–Min, tanggal; sesi = kotak penuh, latihan sendiri = cincin, makan = titik
         const cal = d.kehadiran.calendar || {}, from = d.periode.from, to = d.periode.to;
-        const cell = 46, gp = 8, perRow = Math.floor((contentW + gp) / (cell + gp));
-        let n = 0; for (let t = from; t <= to; t = wkAddDays(t, 1)) n++;
-        const rowsN = Math.ceil(Math.min(n, 140) / perRow);
-        need(rowsN * (cell + gp) + 70);
-        let i = 0;
-        for (let t = from; t <= to && i < 140; t = wkAddDays(t, 1), i++) {
-          const cx = x + (i % perRow) * (cell + gp), cy = y + Math.floor(i / perRow) * (cell + gp), k = cal[t];
-          c.fillStyle = k === 'sesi' ? INK : k === 'latihan' ? A : k === 'makan' ? LINE : SOFT;
-          rpRound(c, cx, cy, cell, cell, 10); c.fill();
+        const BLN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+        const dow = t => { const p = t.split('-').map(Number); return (new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay() + 6) % 7; };
+        const months = [];
+        for (let t = from.slice(0, 7) + '-01'; t <= to; ) { months.push(t); const p = t.split('-').map(Number); t = (p[1] === 12 ? (p[0] + 1) + '-01' : p[0] + '-' + String(p[1] + 1).padStart(2, '0')) + '-01'; }
+        const held = {};
+        (d.cuti || []).forEach(h => { for (let t = h.mulai; t <= h.sampai; t = wkAddDays(t, 1)) held[t] = true; });
+        const perRow = months.length > 1 ? 2 : 1, gw = 40, mw = (contentW - gw * (perRow - 1)) / perRow, cw = mw / 7, ch = Math.min(cw * 0.78, 74);
+        for (let mi = 0; mi < months.length; mi += perRow) {
+          const group = months.slice(mi, mi + perRow);
+          const rowsOf = m => { const p = m.split('-').map(Number), n = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate(); return Math.ceil((dow(m) + n) / 7); };
+          const hh = 100 + Math.max.apply(null, group.map(rowsOf)) * ch;
+          need(hh + 10);
+          group.forEach(function (m, gi) {
+            const mx0 = x + gi * (mw + gw), p = m.split('-').map(Number), n = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate(), off = dow(m);
+            c.font = RPF(800, 28); c.fillStyle = INK; c.fillText(BLN[p[1] - 1] + ' ' + p[0], mx0, y + 32);
+            c.font = RPF(700, 19); c.fillStyle = MUT; c.textAlign = 'center';
+            ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].forEach((w, k) => c.fillText(w, mx0 + cw * k + cw / 2, y + 74));
+            for (let dd = 1; dd <= n; dd++) {
+              const t = m.slice(0, 8) + String(dd).padStart(2, '0'), i = off + dd - 1, cx = mx0 + (i % 7) * cw + cw / 2, cy = y + 92 + Math.floor(i / 7) * ch + ch / 2;
+              const inP = t >= from && t <= to, k = cal[t], r = Math.min(cw, ch) / 2 - 5;
+              if (inP && held[t]) { c.fillStyle = SOFT; rpRound(c, cx - r, cy - r, 2 * r, 2 * r, 10); c.fill(); }
+              if (inP && k === 'sesi') { c.fillStyle = A; rpRound(c, cx - r, cy - r, 2 * r, 2 * r, 10); c.fill(); }
+              else if (inP && k === 'latihan') { c.strokeStyle = A; c.lineWidth = 4; rpRound(c, cx - r + 2, cy - r + 2, 2 * r - 4, 2 * r - 4, 10); c.stroke(); }
+              c.font = RPF(k === 'sesi' || k === 'latihan' ? 800 : 500, 22); c.fillStyle = !inP ? LINE : k === 'sesi' ? '#ffffff' : INK;
+              c.fillText(String(dd), cx, cy + 8);
+              if (inP && k === 'makan') { c.fillStyle = MUT; c.beginPath(); c.arc(cx, cy + 22, 4, 0, Math.PI * 2); c.fill(); }
+            }
+            c.textAlign = 'left';
+          });
+          y += hh + 10;
         }
-        y += rowsN * (cell + gp) + 8;
         let lx = x;
-        [['Sesi coach', INK], ['Latihan sendiri', A], ['Catat makan', LINE], ['Kosong', SOFT]].forEach(function (L) {
-          c.fillStyle = L[1]; rpRound(c, lx, y + 4, 28, 28, 7); c.fill();
+        [['Sesi dengan coach', 'fill'], ['Latihan sendiri', 'ring'], ['Hanya catat makan', 'dot'], ['Cuti / sakit', 'soft']].forEach(function (L) {
+          if (L[1] === 'fill') { c.fillStyle = A; rpRound(c, lx, y + 4, 28, 28, 7); c.fill(); }
+          else if (L[1] === 'ring') { c.strokeStyle = A; c.lineWidth = 4; rpRound(c, lx + 2, y + 6, 24, 24, 7); c.stroke(); }
+          else if (L[1] === 'dot') { c.fillStyle = MUT; c.beginPath(); c.arc(lx + 14, y + 18, 5, 0, Math.PI * 2); c.fill(); }
+          else { c.fillStyle = SOFT; rpRound(c, lx, y + 4, 28, 28, 7); c.fill(); }
           c.font = RPF(600, 20); c.fillStyle = MUT; c.fillText(L[0], lx + 38, y + 26); lx += 48 + c.measureText(L[0]).width + 30;
         });
         y += 50;
