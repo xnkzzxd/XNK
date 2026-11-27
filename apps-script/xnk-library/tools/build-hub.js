@@ -24,7 +24,7 @@ const SITE = path.join(HERE, 'hub-site');
 
 // Kata yang dipakai sistem atau mudah menipu; dan nama berkas di akar situs.
 const RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
-  'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
+  'index', '404', 'cname', 'img', 'fonts', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 // T-2243: nama secret clasp coach (CLASP_<SLUG>); disimpan di hub.json saat slug diganti supaya secret lama tetap dipakai.
 const SECRET_RE = /^CLASP_[A-Z0-9_]{3,40}$/;
@@ -557,7 +557,7 @@ function build(cfg, opts) {
     if (!landing.includes('<!--FIND-->')) throw new Error('build-hub: <!--FIND--> tidak ada di hub-site/index.html');
     landing = landing.replace('<!--FIND-->', find);
   } else {
-    landing = landing.replace(sec, '').split('<a href="#coach">Coach</a>').join('').replace('Bisa juga dicari di daftar coach di atas, atau tanyakan', 'Bisa juga ditanyakan');
+    landing = landing.replace(sec, '').split('<a href="#coach">Coach</a>').join('').replace('Bisa juga dicari lewat tombol Masuk, atau tanyakan', 'Bisa juga ditanyakan');
   }
   // T-2243: login yang tersimpan di awalan lama (storageSlug) membuka slug baru langsung, tanpa lewat halaman pengalih.
   if (!landing.includes('/*SLUGMAP*/{}')) throw new Error('build-hub: /*SLUGMAP*/{} tidak ada di hub-site/index.html');
@@ -578,6 +578,8 @@ function build(cfg, opts) {
   files['index.html'] = cspStatic(landingLd(landing));
   Object.assign(files, seoFiles(hub));
   for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
+  // T-2265: huruf landing (Inter Tight, JetBrains Mono; OFL, berkas lisensi ikut), dari situs sendiri: tanpa Google, ikut offline.
+  for (const n of fs.readdirSync(path.join(SITE, 'fonts'))) files['fonts/' + n] = fs.readFileSync(path.join(SITE, 'fonts', n));
   // Bisa dipasang (PWA): manifest + service worker yang hanya melayani halaman depan; nama cache ikut isi landing.
   files['manifest.webmanifest'] = fs.readFileSync(path.join(SITE, 'manifest.webmanifest'), 'utf8');
   const sw = fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8');
@@ -607,8 +609,8 @@ function landingSales(landing, hub) {
   if (WA_RE.test(hub.contact)) {
     landing = landing.replace(block, (m, form) => form.split('__WA__').join(esc(hub.contact)).replace('<!--PAKET-->', harga.planOptions()));
   } else {
-    // Tanpa nomor WhatsApp: tidak ada form (pesan tidak bisa diisi otomatis); tombol kontak bila ada.
-    landing = landing.replace(block, '<div class="card daftar-alt"><h3>Hubungi tim XNK</h3><p class="mut">Ceritakan nama, kota, jumlah klien, dan paket yang Anda minati. Kami atur demo 30 menit di HP Anda.</p><div class="cta"><!--CONTACT--></div></div>');
+    // Tanpa nomor WhatsApp: tidak ada form (pesan tidak bisa diisi otomatis); tombol kontak (bila ada) di kolom kiri.
+    landing = landing.replace(block, '<div class="card form-card daftar-alt"><h3>Hubungi tim XNK</h3><p class="mut">Ceritakan nama, kota, jumlah klien, dan paket yang Anda minati. Kami atur demo 30 menit di HP Anda.</p></div>');
   }
   if (landing.includes('__WA__') || landing.includes('<!--PAKET-->')) throw new Error('build-hub: penanda form daftar tersisa di hub-site/index.html');
   const ig = hub.instagram, handle = ig ? '@' + ig.replace(/\/$/, '').split('/').pop() : '';

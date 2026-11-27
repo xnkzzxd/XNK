@@ -57,7 +57,7 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
   assert.ok(!files['index.html'].includes('<!--CONTACT-->'));
   // Tanpa coach pun situs jadi (hanya landing).
   const empty = hub.build({ coaches: [] }).files;
-  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'index.html', 'manifest.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js']);
+  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/') && !n.startsWith('fonts/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'index.html', 'manifest.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js']);
   assert.ok(Buffer.isBuffer(empty['img/og.jpg']) && empty['img/og.jpg'].length > 1000, 'gambar landing ikut dibangun');
 });
 
@@ -361,12 +361,13 @@ test('harga landing = harga XNK HQ (PUSAT_TIERS / PUSAT_SETUP di Pusat.gs)', () 
   vm.runInNewContext(PUSAT_SRC.match(/var PUSAT_TIERS = \{[\s\S]*?\n\};/)[0] + PUSAT_SRC.match(/var PUSAT_SETUP = \{[^\n]*\};/)[0] +
     ';this.T = PUSAT_TIERS; this.S = PUSAT_SETUP;', ctx);
   assert.deepEqual(JSON.parse(JSON.stringify({ tiers: ctx.T, setup: ctx.S })), harga.pusatShape(), 'ubah tools/hub-harga.js dan Pusat.gs bersama');
-  assert.equal(harga.rp(149000), 'Rp 149.000');
-  assert.equal(harga.rp(14900000), 'Rp 14.900.000');
-  assert.equal(harga.rpShort(1490000), 'Rp 1,49 jt');
-  assert.equal(harga.rpShort(2100000), 'Rp 2,1 jt');
-  assert.equal(harga.rpShort(124166.67), 'Rp 124rb');
-  assert.equal(harga.mulai(), 'Rp 149rb');
+  // Spasi tak terputus setelah "Rp" dan sebelum "jt": di kolom sempit angka tidak terpisah dari satuannya.
+  assert.equal(harga.rp(149000), 'Rp\u00a0149.000');
+  assert.equal(harga.rp(14900000), 'Rp\u00a014.900.000');
+  assert.equal(harga.rpShort(1490000), 'Rp\u00a01,49\u00a0jt');
+  assert.equal(harga.rpShort(2100000), 'Rp\u00a02,1\u00a0jt');
+  assert.equal(harga.rpShort(124166.67), 'Rp\u00a0124rb');
+  assert.equal(harga.mulai(), 'Rp\u00a0149rb');
 });
 
 test('landing: semua harga dari hub-harga.js, bulanan dan tahunan, setup, tabel perbandingan', () => {
@@ -387,15 +388,16 @@ test('landing: semua harga dari hub-harga.js, bulanan dan tahunan, setup, tabel 
   assert.ok(html.includes('id="paket-pro"') && /id="paket-pro"[\s\S]{0,200}Disarankan/.test(html), 'Pro disarankan');
   assert.ok(!html.includes('Paling dipilih'), 'tanpa klaim "paling dipilih"');
   for (const s of Object.values(harga.SETUP)) assert.ok(html.includes(`<b>${harga.rp(s.price)}</b>`), s.name);
-  assert.ok(html.includes('Akun Google &amp; spreadsheet khusus, kami yang buatkan'), 'akun Google dibuatkan pemilik');
-  assert.ok(!/akun Google-mu|Pemasangan di akun Google/i.test(html), 'tidak menjanjikan pemasangan di akun Google coach');
+  // Keputusan pemilik: halaman depan tidak menyebut Google atau spreadsheet (juga di data terstruktur dan tanya jawab).
+  assert.ok(!/google|spreadsheet/i.test(html), 'halaman depan tidak menyebut Google / spreadsheet: ' + (html.match(/.{0,30}(google|spreadsheet).{0,30}/i) || [''])[0]);
+  assert.ok(html.includes('Aplikasi dan tempat data khusus, kami yang siapkan'), 'setup Standar: tempat data khusus disiapkan pemilik');
   // Fitur baru (Fase AD) dan program otomatis: Pro dan Studio saja; halaman info publik: semua paket.
   const row = name => html.match(new RegExp(`<tr><th scope="row">${name}</th>([\\s\\S]*?)</tr>`))[1].match(/aria-label="(Ya|Tidak)"/g).map(x => x.slice(12, -1));
   assert.deepEqual(row('Laporan PDF progres klien'), ['Tidak', 'Ya', 'Ya']);
   assert.deepEqual(row('Program latihan otomatis'), ['Tidak', 'Ya', 'Ya']);
   assert.deepEqual(row('Halaman info publik \\(paket, jam kosong, daftar\\)'), ['Ya', 'Ya', 'Ya']);
-  assert.ok(html.includes('Mulai Rp 149rb/bulan'), 'hero: harga termurah');
-  assert.match(html, /<meta name="description" content="[^"]*mulai Rp 149rb\/bulan\.">/);
+  assert.ok(html.includes('Mulai ' + harga.mulai() + '/bulan') && html.includes('<dd>' + harga.mulai() + '/bln</dd>'), 'hero dan ringkasan: harga termurah');
+  assert.ok(html.includes('mulai ' + harga.mulai() + '/bulan.">'), 'deskripsi: harga termurah');
 });
 
 test('landing: form daftar membuka WhatsApp (hanya kontak wa.me), Instagram, coba demo', () => {
@@ -445,4 +447,33 @@ test('landing: data terstruktur, robots.txt dan sitemap.xml', () => {
   assert.ok(!robots.includes('/budi/') && !robots.includes('/andi/'), 'coach tidak aktif dan alamat lama tidak disebut (noindex sendiri)');
   const locs = [...files['sitemap.xml'].matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
   assert.deepEqual(locs, ['https://xnk.web.id/', 'https://xnk.web.id/claudia/info/', 'https://xnk.web.id/claudia-2/info/', 'https://xnk.web.id/andi-baru/info/']);
+});
+
+test('landing (T-2265, tampilan baru): masuk di lembar, fitur bertab, huruf sendiri, gerak aman', () => {
+  const { files } = hub.build(CFG);
+  const html = files['index.html'];
+  // Masuk = <dialog id="masuk"> dengan form nama coach dan daftar coach; #masuk dan tautan lama tetap membukanya.
+  const sheet = html.match(/<dialog class="sheet" id="masuk"[\s\S]*?<\/dialog>/);
+  assert.ok(sheet, 'lembar Masuk ada');
+  for (const id of ['id="f"', 'id="slug"', 'id="coaches"', 'href="/claudia/info/"', 'id="masuk-x"']) assert.ok(sheet[0].includes(id), 'di lembar Masuk: ' + id);
+  assert.ok((html.match(/href="#masuk"/g) || []).length >= 3, 'beberapa tautan membuka Masuk');
+  // Fitur: 9 tab (5 coach, 4 klien), satu layar HP; semua gambar (src dan data-src) ikut dibangun.
+  const tabs = html.match(/role="tab"[^>]*data-g="(coach|klien)"/g) || [];
+  assert.equal(tabs.length, 9);
+  assert.equal(tabs.filter(t => /data-g="coach"/.test(t)).length, 5);
+  for (const m of html.matchAll(/(?:src|data-src)="(img\/[^"]+)"/g)) assert.ok(m[1] in files, m[1]);
+  assert.equal((html.match(/class="cap2[^"]*" data-k=/g) || []).length, 9, 'satu keterangan per tab');
+  // Huruf dari situs sendiri (tanpa Google Fonts), lisensi OFL ikut; slug "fonts" dipakai sistem.
+  for (const f of ['fonts/inter-tight.woff2', 'fonts/jetbrains-mono.woff2', 'fonts/OFL-InterTight.txt', 'fonts/OFL-JetBrainsMono.txt']) assert.ok(f in files, f);
+  assert.ok(!/fonts\.googleapis|fonts\.gstatic/.test(html), 'tanpa Google Fonts');
+  assert.match(hub.slugError('fonts'), /dipakai sistem/);
+  const own = new Function(files['sw.js'].match(/var OWN = .*;/)[0] + ' return OWN;')();
+  assert.ok(own.test('/fonts/inter-tight.woff2') && !own.test('/fonts/OFL-InterTight.txt'), 'service worker menyimpan huruf untuk tanpa sinyal');
+  // Gerak: hanya bila tidak "kurangi gerakan"; pita berjalan dan isi dekoratif disembunyikan dari pembaca layar.
+  assert.match(html, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(html, /<div class="marq" aria-hidden="true">/);
+  assert.match(html, /<span class="vh">5 aplikasi\. 1 coach\. Capek\.<\/span><span class="mg" aria-hidden="true">/);
+  assert.match(html, /<div class="dock" id="dock" aria-hidden="true" inert>/);
+  // Bagian lama "Cara kerja" sudah masuk ke Daftar (4 langkah); tidak ada tautan ke bagian yang hilang.
+  for (const m of html.matchAll(/href="#([a-z-]+)"/g)) assert.ok(html.includes('id="' + m[1] + '"'), 'tujuan tautan ada: #' + m[1]);
 });

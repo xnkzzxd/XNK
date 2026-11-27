@@ -835,7 +835,7 @@ function runPusatPushKick() {
 // Pemeriksaan nama sama dengan tools/build-hub.js (RESERVED dicek sama oleh tests/pusat.test.js).
 
 var PUSAT_RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
-  'index', '404', 'cname', 'img', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
+  'index', '404', 'cname', 'img', 'fonts', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
 var PUSAT_SLUG_KEYS = ['ST_', 'HIST_', 'BKST_', 'BKNOW_', 'PUSH_', 'SITEQ_', 'SUB_', 'OUT_'];
 
 /** Kirim SITEQ_<slug> (alamat situs baru) ke coach; berhasil = antrean dihapus. {ok} atau {error}. */

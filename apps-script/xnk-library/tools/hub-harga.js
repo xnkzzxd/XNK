@@ -2,7 +2,8 @@
 // T-2265: paket dan harga XNK untuk halaman depan xnk.web.id (bagian #harga, isian paket di form daftar, data terstruktur).
 // SATU sumber untuk landing. Angkanya HARUS sama dengan PUSAT_TIERS / PUSAT_SETUP di apps-script/xnk-pusat/src/Pusat.gs
 // (XNK HQ); tests/hub.test.js membandingkan keduanya. Ubah keduanya bersama bila harga berubah.
-// Isi mengikuti "XNK Proposal Coach" (29 Okt 2026), dengan teks yang benar untuk hub hari ini: akun Google dan spreadsheet
+// Isi mengikuti "XNK Proposal Coach" (29 Okt 2026), dengan teks yang benar untuk hub hari ini. Keputusan pemilik: halaman depan
+// TIDAK menyebut Google atau spreadsheet (tests/hub.test.js memeriksanya); tempat data cukup disebut "tempat data khusus". Akun dan data
 // coach dibuatkan pemilik (docs/library/Akun.md), halaman info publik ada di semua paket, notifikasi coach lewat push/email.
 
 const TIERS = [
@@ -29,7 +30,7 @@ const TIERS = [
 const SETUP = {
   standar: {
     name: 'Setup Standar', price: 400000, lead: 'Aplikasi siap pakai dengan tampilan XNK.',
-    items: ['Akun Google & spreadsheet khusus, kami yang buatkan', 'Impor data klien dari Excel / catatan', 'Atur paket, harga, jam operasional', 'Pelatihan online 1 jam'],
+    items: ['Aplikasi dan tempat data khusus, kami yang siapkan', 'Impor data klien dari Excel / catatan', 'Atur paket, harga, jam operasional', 'Pelatihan online 1 jam'],
   },
   custom: {
     name: 'Setup Custom', price: 2100000, lead: 'Semua di Standar, plus sesuai permintaan Anda.',
@@ -78,13 +79,13 @@ const COMPARE = [
 
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** "Rp 149.000" (titik ribuan, tanpa desimal). */
-function rp(n) { return 'Rp ' + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+/** "Rp 149.000" (titik ribuan, tanpa desimal; spasi tak terputus setelah "Rp"). */
+function rp(n) { return 'Rp\u00a0' + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
 /** Ringkas: "Rp 149rb", "Rp 1,49 jt", "Rp 2,1 jt", "Rp 14,9 jt" (spasi sebelum "jt" tidak terputus). */
 function rpShort(n) {
   // Spasi tak terputus sebelum "jt": di kolom sempit baris hanya patah setelah "Rp", tidak sebelum "jt".
-  if (n >= 1e6) return 'Rp ' + String(Math.round(n / 1e4) / 100).replace('.', ',') + '\u00a0jt';
-  return 'Rp ' + Math.round(n / 1000) + 'rb';
+  if (n >= 1e6) return 'Rp\u00a0' + String(Math.round(n / 1e4) / 100).replace('.', ',') + '\u00a0jt';
+  return 'Rp\u00a0' + Math.round(n / 1000) + 'rb';
 }
 /** Harga bulanan termurah, ringkas ("Rp 149rb"): dipakai "Mulai …" di hero dan deskripsi. */
 function mulai() { return rpShort(Math.min.apply(null, TIERS.map(t => t.bulanan))); }

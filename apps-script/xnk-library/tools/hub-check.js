@@ -194,7 +194,11 @@ async function makeLogos(browser) {
       const context = await newContext(browser, be, seen);
       const page = await open(context, O + '/', errors);
       check((await page.title()) === 'XNK · aplikasi personal trainer dan kliennya', 'judul landing');
-      check(await page.isVisible('#slug'), 'ada isian nama coach');
+      // T-2265: nama coach dan daftar coach ada di lembar Masuk (bilah atas, "Masuk di sini", kaki halaman, #masuk).
+      check(!(await page.isVisible('#slug')), 'lembar Masuk tertutup saat halaman dibuka');
+      await page.click('.top-cta a[href="#masuk"]');
+      await page.waitForTimeout(500);
+      check(await page.isVisible('#slug') && page.url().endsWith('#masuk'), 'Masuk di bilah atas membuka lembar (alamat #masuk)');
       check((await page.textContent('body')).includes('Hubungi XNK'), 'tombol kontak tampil (kontak diisi)');
       check(await page.locator('a.coach[href="/claudia/info/"]').count() === 1 && await page.locator('a.coach[href="/claudia-2/info/"]').count() === 1, 'daftar coach menautkan halaman info /<slug>/info/');
       check(await page.evaluate(() => [...document.querySelectorAll('a.coach .av img')].map(i => i.naturalWidth > 0 && i.getAttribute('src')).join(',')) === '/claudia/logo.png,/claudia-2/logo.webp', 'kartu coach memuat logo PNG dan WebP');
@@ -211,6 +215,14 @@ async function makeLogos(browser) {
       await page.fill('#coach-q', '');
       check(await vis() === '/claudia/info/,/claudia-2/info/' && !(await page.isVisible('#no-hit')), 'kosongkan cari → semua coach lagi');
       check(await page.evaluate(() => [...document.querySelectorAll('#cities button')].every(b => b.getBoundingClientRect().height >= 43.5)), 'pilihan kota ≥ 44 px');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      check(!(await page.isVisible('#slug')) && !page.url().includes('#masuk'), 'Esc menutup lembar Masuk dan #masuk hilang dari alamat');
+      await page.click('.hero-in a[href="#masuk"]');
+      await page.waitForTimeout(500);
+      await page.goBack();
+      await page.waitForTimeout(600);
+      check(!(await page.isVisible('#slug')) && page.url() === O + '/', 'tombol kembali HP menutup lembar, tetap di halaman depan');
       check(await page.evaluate(() => [...document.querySelectorAll('.phones img')].filter(i => i.offsetParent).every(i => i.naturalWidth > 0)), 'gambar hero termuat');
       // T-2265: tabel perbandingan dan pilihan bayar dibuka, supaya ikut dicek tanpa scroll ke samping.
       await page.evaluate(() => document.querySelectorAll('details.more').forEach(d => { d.open = true; }));
@@ -227,7 +239,7 @@ async function makeLogos(browser) {
       {
         const T = require('./hub-harga').TIERS, pro = T.find(t => t.key === 'pro');
         const shown = () => page.evaluate(() => [...document.querySelectorAll('#paket-pro .price')].filter(p => p.offsetParent).map(p => p.querySelector('b').textContent).join('|'));
-        check(await shown() === 'Rp 249.000' && await page.getAttribute('#cyc button[data-cyc="bulanan"]', 'aria-pressed') === 'true', 'harga: bulanan tampil lebih dulu (' + await shown() + ')');
+        check(await shown() === require('./hub-harga').rp(pro.bulanan) && await page.getAttribute('#cyc button[data-cyc="bulanan"]', 'aria-pressed') === 'true', 'harga: bulanan tampil lebih dulu (' + await shown() + ')');
         check(await page.isVisible('#paket-pro .free'), 'harga: "Bulan pertama gratis" di bulanan');
         await page.click('#cyc button[data-cyc="tahunan"]');
         check(await shown() === require('./hub-harga').rp(pro.tahunan) && !(await page.isVisible('#paket-pro .free')), 'harga: Tahunan → harga tahunan Pro, tanpa "bulan pertama gratis"');
@@ -249,9 +261,32 @@ async function makeLogos(browser) {
         check(wa.startsWith('https://wa.me/6281234567890?text=') && msg === ['Halo XNK, saya tertarik memakai XNK.', 'Nama: Rina & Co', 'Kota / tempat: Bandung', 'Klien aktif: 5–15', 'Paket: Pro', 'Cara bayar: Tahunan', 'Mau demo 30 menit dulu: ya'].join('\n'),
           'form → wa.me dengan pesan terisi' + (msg ? '' : ' (' + wa + ')'));
         check(await page.getAttribute('a[href="https://xnk.my.id/demo/"]', 'target') === '_blank' && await page.locator('a[href="https://xnk.my.id/demo/?klien"]').count() === 1, 'coba demo: panel dan portal contoh (tab baru)');
-        check(await page.evaluate(() => Promise.all([...document.querySelectorAll('.shots img')].map(i => fetch(i.src).then(r => r.ok, () => false))).then(a => a.length === 8 && a.every(Boolean))), 'strip: 8 gambar ada (termasuk klien dan laporan)');
+        check(await page.evaluate(() => Promise.all([...document.querySelectorAll('.dscr img')].map(i => fetch(i.getAttribute('src') || i.getAttribute('data-src')).then(r => r.ok, () => false))).then(a => a.length === 9 && a.every(Boolean))), 'fitur: 9 layar ada (coach dan klien)');
+        // Fitur bertab: tab diketuk = layar, keterangan dan lencana berganti; sisi Untuk klien punya tabnya sendiri.
+        await page.evaluate(() => document.getElementById('fitur').scrollIntoView());
+        await page.click('#t-uang');
+        await page.waitForTimeout(500);
+        check(await page.evaluate(() => document.querySelector('.dscr img.on').getAttribute('data-k') === 'uang' && document.querySelector('.cap2.on').getAttribute('data-k') === 'uang'
+          && document.querySelectorAll('.chip.on[data-k="uang"]').length === 2 && document.getElementById('t-uang').getAttribute('aria-selected') === 'true'), 'fitur: tab Keuangan → layar, keterangan, dan lencana Keuangan');
+        await page.click('[data-g2="klien"]');
+        await page.waitForTimeout(400);
+        check(await page.isVisible('#t-latihan') && !(await page.isVisible('#t-uang')) && await page.evaluate(() => document.querySelector('.cap2.on').getAttribute('data-k') === 'hari'), 'fitur: Untuk klien → tab klien, mulai dari Hari ini');
+        check(await page.evaluate(() => [...document.querySelectorAll('#show [role="tab"], .seg button')].filter(e => e.offsetParent).every(e => e.getBoundingClientRect().height >= 43.5)), 'fitur: tab dan pilihan sisi ≥ 44 px');
+        // Gerak: 5 -> 1 saat daftar alat digulir, "Capek." jadi "Beres."; tanpa sisa animasi setelah berhenti menggulir.
+        await page.evaluate(() => { document.documentElement.style.scrollBehavior = 'auto'; scrollTo(0, document.querySelector('.tool.xnk').getBoundingClientRect().top + scrollY - innerHeight * .4); });
+        await page.waitForTimeout(900);
+        check(await page.evaluate(() => document.querySelectorAll('.tool.x').length === 5 && document.querySelector('.roll').style.getPropertyValue('--k') === '4' && document.querySelector('.pb').classList.contains('done')), '5 aplikasi → 1 aplikasi, "Capek." → "Beres." setelah semua alat digulir');
+        await page.evaluate(() => scrollTo(0, document.getElementById('masalah').offsetTop - 200));
+        await page.waitForTimeout(900);
+        check(await page.evaluate(() => document.querySelectorAll('.tool.x').length === 0 && !document.querySelector('.pb').classList.contains('done')), 'gulir kembali ke atas → 5 aplikasi lagi');
+        await page.evaluate(() => scrollTo(0, document.getElementById('tanya').offsetTop));
+        await page.waitForTimeout(2500);
+        const idle = await page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').map(a => { const t = a.effect && a.effect.target; return (t && (t.className || t.tagName)) + ':' + (a.animationName || a.transitionProperty); }));
+        check(idle.length === 0, 'diam di Tanya jawab: tidak ada animasi berjalan (pita dan tab fitur berhenti di luar layar)' + (idle.length ? ': ' + idle.slice(0, 3).join(', ') : ''));
         await page.goto(O + '/?hub', { waitUntil: 'load' });
       }
+      await page.click('.top-cta a[href="#masuk"]');
+      await page.waitForTimeout(500);
       await page.fill('#slug', 'a b!');
       await page.click('button[data-to="klien"]');
       check(((await page.textContent('#err')) || '').includes('tidak valid'), 'nama tidak valid → pesan, tidak pindah halaman');
@@ -263,6 +298,22 @@ async function makeLogos(browser) {
       check(page.url() === O + '/claudia/', '/claudia diarahkan ke /claudia/ (garis miring)');
       const r = await page.goto(O + '/tidak-ada/', { waitUntil: 'domcontentloaded' });
       check(r.status() === 404 && (await page.textContent('h1')).includes('tidak ditemukan'), 'coach yang tidak ada → halaman 404 yang ramah');
+      check(errors.length === 0, 'tanpa error JavaScript' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
+      await context.close();
+    }
+
+    console.log('Hub · landing dengan "kurangi gerakan"');
+    {
+      const errors = [];
+      const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+      await context.route(/^https:\/\/xnk\.my\.id\//, route => { XNK_HITS.push(route.request().url()); return route.abort('failed'); });
+      const page = await open(context, O + '/?hub', errors);
+      const still = async () => page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').length);
+      check(await still() === 0, 'kurangi gerakan: tidak ada animasi saat dibuka');
+      check(await page.evaluate(() => getComputedStyle(document.querySelector('.hero h1')).opacity === '1' && getComputedStyle(document.querySelector('#harga-judul .w > span')).transform === 'none'), 'kurangi gerakan: judul langsung tampil');
+      await page.evaluate(() => scrollTo(0, document.getElementById('fitur').offsetTop));
+      await page.waitForTimeout(800);
+      check(await still() === 0 && await page.evaluate(() => document.querySelectorAll('.tool.x').length === 5), 'kurangi gerakan: fitur tidak berganti sendiri, daftar alat langsung tercoret');
       check(errors.length === 0, 'tanpa error JavaScript' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close();
     }

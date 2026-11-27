@@ -25,6 +25,7 @@ const SHOTS = [
   // T-2265: halaman klien di panel coach dan laporan PDF progres (Fase AD).
   ['coach-klien', '/demo/', '', 0, 0, 'klien'],
   ['coach-laporan', '/demo/', '', 0, 0, 'laporan'],
+  ['coach-keuangan', '/demo/', '', 0, 0, 'keuangan'],
   // Tampilan desktop (portal klien ala Mac app) untuk gambar laptop di bagian Aplikasi.
   ['klien-desktop', '/demo/?klien', '', 1280, 800],
 ];
@@ -43,6 +44,30 @@ const ACTS = {
     await page.evaluate(() => document.querySelector('#rp-preview').scrollIntoView({ block: 'start' }));
     await page.waitForTimeout(800);
   },
+  // Keuangan contoh hanya di memori halaman demo ini (demo-nya sendiri tidak berubah): nyalakan keuangan, perpanjang
+  // tiga klien (tagihan otomatis), satu DP, satu lunas, satu pengeluaran; lalu buka halaman Keuangan.
+  keuangan: async page => {
+    await page.evaluate(async () => {
+      const t = localStorage.getItem('xnk_admin_token');
+      const call = (fn, ...a) => window.XNK_TRANSPORT(fn, [t].concat(a));
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      await call('updateAppSettings', { finance: { enabled: true } });
+      await call('syncFinanceTransactions');
+      const ms = window.members || [];
+      for (const id of ['PT-2', 'PT-3', 'PT-5', 'PT-6']) {
+        const m = ms.find(x => x.id === id);
+        if (m) await call('addMember', { name: m.name, phone: m.phone, packageId: m.packageId, goal: m.goal || '' });
+      }
+      const bills = ((await call('getBills', {})) || {}).bills || (await call('getBills', {})) || [];
+      const open = (Array.isArray(bills) ? bills : []).filter(b => b.remaining > 0);
+      if (open[0]) await call('savePayment', { billId: open[0].id, amount: Math.round(open[0].remaining / 2), date: today, method: 'Transfer bank' });
+      if (open[1]) await call('savePayment', { billId: open[1].id, amount: open[1].remaining, date: today, method: 'QRIS / e-wallet' });
+      await call('saveExpense', { amount: 350000, date: today, category: 'Sewa tempat', method: 'Transfer bank', note: 'Sewa studio' });
+      localStorage.setItem('xnk_fin_on', '1');   // salinan perangkat panel (part 14 finOn), biasanya diisi saat panel dimuat
+    });
+    await page.evaluate(() => window.navigate('finance'));
+    await page.waitForTimeout(3000);
+  },
 };
 
 (async () => {
@@ -54,7 +79,10 @@ const ACTS = {
   const base = 'http://127.0.0.1:' + server.address().port;
   const browser = await pw.chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   fs.mkdirSync(OUT, { recursive: true });
+  // ONLY=coach-keuangan,og: ambil ulang sebagian saja (og hanya bila disebut atau ONLY kosong).
+  const only = (process.env.ONLY || '').split(',').filter(Boolean);
   for (const [name, url, view, w, h, act] of SHOTS) {
+    if (only.length && !only.includes(name)) continue;
     const desk = !!w;
     const ctx = await browser.newContext(desk ? { viewport: { width: w, height: h }, deviceScaleFactor: 1.5, colorScheme: 'light' }
       : { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'light' });
@@ -75,6 +103,7 @@ const ACTS = {
     console.log('  ' + name);
     await ctx.close();
   }
+  if (only.length && !only.includes('og')) { await browser.close(); server.close(); return; }
   // Ikon aplikasi (PWA, favicon, header, desktop) dibuat dari logo.png di akar repo, di atas latar hitam:
   //   magick logo.png -background "#0b0b0b" -flatten -resize 512x512 hub-site/img/icon-512.png   (juga 192, logo-64)
   //   magick logo.png -background "#0b0b0b" -flatten -define icon:auto-resize=256,128,64,48,32,16 hub-site/desktop.ico

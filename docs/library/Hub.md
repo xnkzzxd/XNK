@@ -147,7 +147,8 @@ Halaman depan adalah proposal coach yang selalu terbaru (proposal PDF 29 Okt 202
   bila berbeda, dan `hub-site/index.html` tidak boleh menulis "Rp …" sendiri (`{{mulai}}` = harga bulanan termurah).
   Saklar Bulanan / Tahunan hanya mengganti kelas `#harga.yr` (tanpa JavaScript = bulanan). Fitur per paket mengikuti
   proposal, dengan teks yang benar untuk hub: halaman info publik di semua paket, notifikasi coach lewat push / email /
-  Telegram, Laporan PDF dan program otomatis di Pro dan Studio, akun Google + spreadsheet dibuatkan pemilik.
+  Telegram, Laporan PDF dan program otomatis di Pro dan Studio. **Halaman depan tidak pernah menyebut Google atau spreadsheet** (keputusan
+  pemilik); data coach disebut "tempat data khusus yang kami siapkan". `tests/hub.test.js` gagal bila kata itu muncul.
 - **Coba demo**: tautan ke `https://xnk.my.id/demo/` (panel, PIN 123456) dan `…/demo/?klien`, tab baru. `hub-check.js`
   tidak membukanya (permintaan ke xnk.my.id dihitung gagal di sana).
 - **Daftar** (`<!--DAFTAR-->…<!--/DAFTAR-->`): form hanya dipasang bila `contactUrl` berbentuk `https://wa.me/<nomor>`
@@ -161,8 +162,25 @@ Halaman depan adalah proposal coach yang selalu terbaru (proposal PDF 29 Okt 202
   build tetap sama). Halaman depan membawa JSON-LD `SoftwareApplication` (harga bulanan per paket) dan `FAQPage` (dari
   `.faq`, bentuk `<details><summary>…</summary><p>…</p></details>` harus tetap). JSON-LD tidak dijalankan browser, jadi
   tidak perlu sidik CSP.
-- **Gambar**: `tools/hub-shots.js` mengambil 8 layar HP (+ `coach-klien` = `openProfile`, `coach-laporan` =
-  `reportOpen` + `rpBuild`), satu layar desktop dan `og.jpg` dari demo; bangun ulang demo dulu.
+- **Tampilan** (gaya proposal): judul Inter Tight dan label JetBrains Mono **dari situs sendiri** (`hub-site/fonts/`,
+  OFL, lisensi ikut; slug `fonts` dipakai sistem; service worker menyimpannya), satu warna aksen merah, bagian bernomor
+  01–08 berurutan untuk menjual: hero → ringkasan → masalah (5 aplikasi) → fitur → coba demo → keamanan → harga → daftar →
+  tanya jawab → aplikasi → penutup. **Masuk** adalah `<dialog id="masuk">` (lembar dari bawah di HP, panel kanan di layar
+  lebar) berisi isian nama coach dan daftar coach (`data-coaches` tetap di dalamnya); semua `href="#masuk"` membukanya,
+  `xnk.web.id/#masuk` membukanya saat dimuat, tombol kembali HP / Esc menutupnya. Bilah bawah HP (`#dock`, Coba demo +
+  Daftar) hanya tampil di antara bagian, tidak di hero, harga, daftar, dan kaki. **Fitur** = satu layar HP dengan
+  `Untuk coach | Untuk klien` dan 9 tab (gambar dimuat saat dibutuhkan, `data-src`).
+- **Gerak** (semua tanpa pustaka luar; hanya `transform` / `opacity`): judul per kata, HP hero terbang masuk + paralaks
+  gulir + miring ke tetikus, pita merah berjalan, angka ringkasan menghitung, "5 aplikasi" menghitung turun ke 1 saat daftar
+  alat digulir (judulnya menempel di atas pada HP) lalu "Capek." → "Beres.", layar fitur bergeser + lencana + geser jari,
+  kode bagian terurai, penanda Bulanan/Tahunan bergeser + harga membalik, kartu miring/disorot tetikus, garis langkah
+  Daftar, tanya jawab terbuka halus, tulisan besar penutup bergeser, garis kemajuan di bilah atas. Aturan: satu mesin gulir
+  (rAF hanya saat menggulir); pita dan tab fitur berhenti di luar layar; efek tetikus hanya `(hover: hover) and
+  (pointer: fine)`; `prefers-reduced-motion: reduce` = diam total, keadaan akhir langsung tampil. `hub-check.js` memeriksa
+  lembar Masuk (Esc, tombol kembali), tab fitur, 5 → 1, tidak ada animasi saat diam, dan mode kurangi gerakan.
+- **Gambar**: `tools/hub-shots.js` mengambil 9 layar HP (+ `coach-klien` = `openProfile`, `coach-laporan` = `reportOpen` +
+  `rpBuild`, `coach-keuangan` = keuangan contoh yang dibuat hanya di memori halaman demo saat difoto), satu layar desktop dan
+  `og.jpg` dari demo; bangun ulang demo dulu. `ONLY=coach-keuangan,og` mengambil ulang sebagian saja.
 
 ## Web Push (T-2240)
 
