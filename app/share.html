@@ -3131,7 +3131,9 @@ html.desk .cn-wrap { max-width: none; }
 
 /* Kartu klien: menggantung di tepi band (pola kartu atlet portal) */
 .cp-top { margin: -4px -16px 0; padding: 4px 16px 0; background: linear-gradient(to bottom, var(--band) 0, var(--band) 56px, transparent 56px); }
-.cp-card { display: grid; gap: 14px; padding: 18px; border-radius: var(--r-xl); }
+.cp-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 18px; border-radius: var(--r-xl); }
+/* Isi kartu tidak boleh melebarkan kolom (nama paket / coach panjang memotong kartu di HP) */
+.cp-card > * { min-width: 0; }
 .cp-id { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .cp-id .avatar { flex: none; }
 .cp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
