@@ -14950,6 +14950,43 @@
     let a = ''; try { a = getComputedStyle(document.documentElement).getPropertyValue('--accent-on-ink').trim(); } catch (e) {}
     return a && !/transparent/.test(a) ? a : '#ffffff';
   }
+  // ── AD5 (T-2452): gambar untuk PDF (ikon Lucide, logo, figur tubuh) dimuat dulu, lalu digambar di kanvas
+  function rpImg(src) { return new Promise(function (res) { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; setTimeout(() => res(null), 4000); }); }
+  const rpSvgUrl = svg => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  function rpIconSvg(name, color) {   // node Lucide → SVG utuh (warna tetap; kanvas tidak membaca CSS)
+    try {
+      const L = window.lucide, key = String(name).replace(/(^|-)([a-z0-9])/g, (m, a, b) => b.toUpperCase()), node = L && L.icons && (L.icons[key] || L.icons[name]);
+      if (!node) return null;
+      const kids = typeof node[0] === 'string' ? node[2] || [] : node;
+      const attr = o => Object.keys(o || {}).map(k => k + '="' + String(o[k]).replace(/"/g, '&quot;') + '"').join(' ');
+      return '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        kids.map(c => '<' + c[0] + ' ' + attr(c[1]) + '/>').join('') + '</svg>';
+    } catch (e) { return null; }
+  }
+  function rpFigSvg(levels, sex, A) {
+    if (!window.mmFigSvg) return null;
+    let svg = window.mmFigSvg(levels, 'Otot dilatih', sex, 'rp');
+    if (!svg) return null;
+    svg = svg.replace('<svg class="rp mm-fig"', '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"')
+      .replace(/class="mmf-body"/g, 'fill="#efeeec" stroke="#cfcfcb" stroke-width="3"').replace(/class="mmf-base"/g, 'fill="#e4e3e0"')
+      .replace(/class="mmf on"/g, 'fill="' + A + '"').replace(/class="mmf half"/g, 'fill="' + A + '" fill-opacity="0.38"').replace(/class="mmf"/g, 'fill="#dcdbd8"');
+    return svg;
+  }
+  function rpLogoUrl() {
+    try { const m = getComputedStyle(document.documentElement).getPropertyValue('--logo-mask').match(/url\(["']?([^"')]+)["']?\)/); return m ? m[1] : null; } catch (e) { return null; }
+  }
+  function rpAssets(d) {
+    const A = rpAccent(), AI = rpAccentOnInk(), out = { icon: {} };
+    const icons = [['konsistensi', 'calendar-check', A], ['kekuatan', 'dumbbell', A], ['tubuh', 'person-standing', A], ['makan', 'utensils', A], ['menang', 'trophy', A], ['coach', 'user-round', AI], ['fokus', 'target', '#ffffff']];
+    const jobs = icons.map(function (ic) { const svg = rpIconSvg(ic[1], ic[2]); return svg ? rpImg(rpSvgUrl(svg)).then(im => { out.icon[ic[0]] = im; }) : null; });
+    const lu = rpLogoUrl(); if (lu) jobs.push(rpImg(lu).then(im => { out.logo = im; }));
+    const list = ((d.analisis || {}).volume || {}).figur || [];
+    if (list.length && window.figEnsure && window.mmLevels) jobs.push(window.figEnsure().then(function () {
+      const svg = rpFigSvg(window.mmLevels(list), d.jk === 'f' ? 'f' : 'm', A);
+      return svg ? rpImg(rpSvgUrl(svg)).then(im => { out.fig = im; }) : null;
+    }).catch(() => null));
+    return Promise.all(jobs.filter(Boolean)).then(() => out);
+  }
   function rpFontsReady() {   // kanvas hanya memakai font yang sudah dimuat: muat Inter (semua ketebalan yang dipakai) dulu
     try {
       if (!document.fonts || !document.fonts.load) return Promise.resolve();
@@ -14961,7 +14998,7 @@
   const rpN = (n, dp) => n == null || n === '' ? '–' : Number(n).toLocaleString('id-ID', { maximumFractionDigits: dp == null ? 1 : dp });
   const rpDelta = (x) => x == null || x === 0 ? '' : (x > 0 ? '+' : '−') + rpN(Math.abs(x));
   function rpRender(d, msg) {
-    return rpFontsReady().then(function () {
+    return rpFontsReady().then(function () { return rpAssets(d); }).then(function (AS) {
       const A = rpAccent(), INK = '#0b0b0b', MUT = '#676764', LINE = '#e7e5e4', SOFT = '#f5f5f4', BG = '#fafaf9', CARD = '#ffffff';
       const track = px => { if ('letterSpacing' in c) c.letterSpacing = px + 'px'; };
       function card(cx, cy, w, hh, r) {   // .card-flat: wit, rand --border, hoek --r-lg
@@ -14970,6 +15007,17 @@
       }
       const AI = rpAccentOnInk();
       let secNo = 0;
+      function logo(lx, ly, w, color) {   // logo = topeng PNG: diwarnai seperti .logo-mark (currentColor)
+        if (!AS.logo) return 0;
+        const hh = Math.round(w * AS.logo.height / AS.logo.width), t = document.createElement('canvas'); t.width = w * 2; t.height = hh * 2;
+        const g = t.getContext('2d'); g.drawImage(AS.logo, 0, 0, t.width, t.height); g.globalCompositeOperation = 'source-in'; g.fillStyle = color; g.fillRect(0, 0, t.width, t.height);
+        c.drawImage(t, lx, ly, w, hh); return hh;
+      }
+      function chip(key, cx, cy, size, bg) {   // ikon dalam kotak bulat, seperti .avatar
+        const im = AS.icon[key]; if (!im) return false;
+        if (bg) { c.fillStyle = bg; rpRound(c, cx, cy, size, size, size * 0.3); c.fill(); }
+        const p = size * 0.24; c.drawImage(im, cx + p, cy + p, size - 2 * p, size - 2 * p); return true;
+      }
       function kontur(bx, by, bw, bh, r) {   // .gfx-kontur: garis kontur tipis di pita hitam
         c.save(); rpRound(c, bx, by, bw, bh, r); c.clip();
         c.strokeStyle = 'rgba(255,255,255,0.13)'; c.lineWidth = 2;
@@ -15138,7 +15186,7 @@
           ps.slice(i, i + cols).forEach(function (p, k) {
             const tx = x + k * (tw + gw);
             card(tx, y, tw, th);
-            c.font = RPF(800, 28); c.fillStyle = INK; c.fillText(p.label, tx + 26, y + 50);
+            const hasI = chip(p.key, tx + 22, y + 18, 50, SOFT); c.font = RPF(800, 28); c.fillStyle = INK; c.fillText(p.label, tx + (hasI ? 86 : 26), y + 52);
             c.font = RPF(800, 52, 'big'); track(-1.5); c.textAlign = 'right'; c.fillStyle = INK; c.fillText(String(p.skor), tx + tw - 26, y + 62); c.textAlign = 'left'; track(0);
             c.fillStyle = LINE; rpRound(c, tx + 26, y + 80, tw - 52, 12, 6); c.fill();
             c.fillStyle = STC[p.status]; rpRound(c, tx + 26, y + 80, Math.max(12, (tw - 52) * p.skor / 100), 12, 6); c.fill();
@@ -15158,7 +15206,7 @@
           c.save(); rpRound(c, tx, y, tw, th, 32); c.clip();
           c.font = RPF(800, 240, 'big'); track(-12); c.fillStyle = '#f1f0ee'; c.textAlign = 'right'; c.fillText(String(k + 1), tx + tw + 6, y + th + 40); c.textAlign = 'left'; track(0);
           c.restore();
-          c.fillStyle = A; c.fillRect(tx + 24, y + 26, 46, 8);
+          if (!chip('menang', tx + 20, y + 18, 46, SOFT)) { c.fillStyle = A; c.fillRect(tx + 24, y + 26, 46, 8); }
           c.font = RPF(800, 54, 'big'); track(-1.5); c.fillStyle = INK; c.fillText(String(w.angka), tx + 24, y + 104); track(0);
           c.font = RPF(800, 24); c.fillText(String(w.judul).slice(0, 26), tx + 24, y + 144);
           c.font = RPF(500, 21); c.fillStyle = MUT; wrap(w.kalimat, RPF(500, 21), tw - 48).slice(0, 2).forEach((ln, li) => c.fillText(ln, tx + 24, y + 180 + li * 28));
@@ -15231,13 +15279,20 @@
       const S = d.skor || {}, AN = d.analisis || {};
       newPage();
       // ═══ Halaman 1: ringkasan satu halaman ═══
-      c.fillStyle = '#0b0b0b'; rpRound(c, RP_M, RP_M, contentW, 260, 44); c.fill(); kontur(RP_M, RP_M, contentW, 260, 44);
-      c.fillStyle = AI; c.fillRect(RP_M + 48, RP_M + 50, 80, 10);
-      eyebrow('Laporan progres', RP_M + 48, RP_M + 106, '#a7a7a4');
-      c.font = RPF(800, 76, 'big'); track(-2.2); c.fillStyle = '#ffffff'; c.fillText(String(d.name || '').slice(0, 26), RP_M + 48, RP_M + 186); track(0);
+      c.fillStyle = '#0b0b0b'; rpRound(c, RP_M, RP_M, contentW, 300, 44); c.fill(); kontur(RP_M, RP_M, contentW, 300, 44);
+      if (!logo(RP_M + 48, RP_M + 40, 64, '#ffffff')) { c.fillStyle = AI; c.fillRect(RP_M + 48, RP_M + 50, 80, 10); }
+      eyebrow('Laporan progres', RP_M + 48, RP_M + 146, '#a7a7a4');
+      c.font = RPF(800, 76, 'big'); track(-2.2); c.fillStyle = '#ffffff'; c.fillText(String(d.name || '').slice(0, 26), RP_M + 48, RP_M + 226); track(0);
       c.font = RPF(500, 26); c.fillStyle = '#a7a7a4';
-      c.fillText(pgLabel(d.periode.from) + ' – ' + pgLabel(d.periode.to) + ' · ' + d.periode.days + ' hari' + (d.coach ? ' · ' + window.coachLabel(d.coach) : ''), RP_M + 48, RP_M + 232);
-      y = RP_M + 290;
+      c.fillText(pgLabel(d.periode.from) + ' – ' + pgLabel(d.periode.to) + ' · ' + d.periode.days + ' hari', RP_M + 48, RP_M + 272);
+      if (d.coach) {   // kotak coach di kanan atas pita
+        const cn = String(d.coach).slice(0, 22); c.font = RPF(800, 26); const cw0 = Math.max(170, c.measureText(cn).width) + 104, bx0 = RP_M + contentW - 36 - cw0, by0 = RP_M + 36;
+        c.fillStyle = 'rgba(255,255,255,0.10)'; rpRound(c, bx0, by0, cw0, 84, 26); c.fill();
+        chip('coach', bx0 + 14, by0 + 14, 56, 'rgba(255,255,255,0.12)');
+        eyebrow('Coach', bx0 + 84, by0 + 36, '#a7a7a4');
+        c.font = RPF(800, 26); c.fillStyle = '#ffffff'; c.fillText(cn, bx0 + 84, by0 + 68);
+      }
+      y = RP_M + 330;
       gauge(S.total, S.status, S.vonis || '');
       pillars(S.pilar || []);
       if ((d.menang || []).length) { need(72 + 230); section('Hal terbaik'); wins(d.menang); }
@@ -15352,6 +15407,19 @@
           lead(L.hari + ' hari latihan · ' + rpN(L.set, 0) + ' set · ' + (L.volume >= 10000 ? rpN(L.volume / 1000, 1) + ' ton' : rpN(L.volume, 0) + ' kg') + ' total' + (L.volumePrev ? ' (periode lalu ' + (L.volumePrev >= 10000 ? rpN(L.volumePrev / 1000, 1) + ' ton' : rpN(L.volumePrev, 0) + ' kg') + ').' : '.'));
           const kt = v => v >= 10000 ? rpN(v / 1000, 1) + 't' : rpN(v / 1000, 1) + 't';
           vbars((V.mingguan || []).map(w => ({ l: pgLabel(w.minggu), v: w.v, t: kt(w.v), dim: w.cuti })), V.rataPrev, 'Volume per minggu (ton). Garis putus = rata-rata per minggu periode sebelumnya.');
+          if (AS.fig) {   // figur tubuh: depan + belakang, otot utama penuh, pendukung pudar
+            const fh = 560; need(fh + 60); card(x, y, contentW, fh + 20);
+            c.drawImage(AS.fig, x + 30, y + 10, fh, fh);
+            const lx0 = x + fh + 70; let ly = y + 70;
+            eyebrow('Otot yang dilatih', lx0, ly); ly += 46;
+            [[A, 1, 'Otot utama'], [A, 0.38, 'Otot pendukung'], ['#dcdbd8', 1, 'Belum dilatih']].forEach(function (L) {
+              c.globalAlpha = L[1]; c.fillStyle = L[0]; rpRound(c, lx0, ly - 24, 30, 30, 8); c.fill(); c.globalAlpha = 1;
+              c.font = RPF(600, 24); c.fillStyle = INK; c.fillText(L[2], lx0 + 46, ly); ly += 50;
+            });
+            ly += 10; c.font = RPF(500, 22); c.fillStyle = MUT;
+            wrap('Depan (kiri) dan belakang (kanan). Dihitung dari gerakan yang dicatat di periode ini.', RPF(500, 22), contentW - fh - 100).forEach(function (ln) { c.fillText(ln, lx0, ly); ly += 32; });
+            y += fh + 44;
+          }
           if ((V.otot || []).length) { text('Per bagian tubuh', 26, 800, INK); gap(6); hbars(V.otot, v => (v >= 1000 ? rpN(v / 1000, 1) + ' t' : rpN(v, 0) + ' kg')); }
           callout(V.tafsir);
         }
@@ -15406,8 +15474,13 @@
       pages.forEach(function (cv, i) {
         const g = cv.getContext('2d');
         g.strokeStyle = LINE; g.lineWidth = 2; g.beginPath(); g.moveTo(RP_M, RP_H - RP_M - 20); g.lineTo(RP_W - RP_M, RP_H - RP_M - 20); g.stroke();
-        g.font = RPF(600, 20); g.fillStyle = MUT; g.textAlign = 'left';
-        g.fillText(brand + ' · ' + (d.name || '') + ' · dibuat ' + pgLabel(d.dibuat), RP_M, RP_H - RP_M + 14);
+        let fx = RP_M;
+        if (AS.logo) { const lw = 30, lh = Math.round(lw * AS.logo.height / AS.logo.width), t = document.createElement('canvas'); t.width = lw * 2; t.height = lh * 2;
+          const tg = t.getContext('2d'); tg.drawImage(AS.logo, 0, 0, t.width, t.height); tg.globalCompositeOperation = 'source-in'; tg.fillStyle = INK; tg.fillRect(0, 0, t.width, t.height);
+          g.drawImage(t, fx, RP_H - RP_M + 14 - lh + 4, lw, lh); fx += lw + 12; }
+        g.font = RPF(800, 20); g.fillStyle = INK; g.textAlign = 'left'; g.fillText(brand, fx, RP_H - RP_M + 14); fx += g.measureText(brand).width;
+        g.font = RPF(600, 20); g.fillStyle = MUT;
+        g.fillText(' · ' + (d.name || '') + (d.coach ? ' · ' + window.coachLabel(d.coach) : '') + ' · dibuat ' + pgLabel(d.dibuat), fx, RP_H - RP_M + 14);
         g.textAlign = 'right'; g.fillText((i + 1) + ' / ' + pages.length, RP_W - RP_M, RP_H - RP_M + 14); g.textAlign = 'left';
       });
       return Promise.all(pages.map(function (cv) {

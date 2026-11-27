@@ -153,7 +153,7 @@ function _reportCalc_(src) {
     tes: tes, notes: notes, streak: src.streak || 0, bestStreak: src.bestStreak || 0, goal: src.goal || '' });
 
   return {
-    skor: an.skor, menang: an.menang, fokus: an.fokus, analisis: an.detail,
+    jk: src.jk === 'P' ? 'f' : 'm', skor: an.skor, menang: an.menang, fokus: an.fokus, analisis: an.detail,
     name: src.name, coach: src.coach, periode: { from: R.from, to: R.to, days: R.days, prevFrom: R.prevFrom, prevTo: R.prevTo }, dibuat: src.today,
     headline: headline, kehadiran: { sesi: sesi, sesiPrev: sesiPrev, minggu: weekList, streak: src.streak || 0, bestStreak: src.bestStreak || 0, calendar: calendar }, cuti: holds,
     latihan: { hari: g.days.length, set: vNow.sets, volume: vNow.v, volumePrev: vPrev.v, angkatan: lifts, angkatanSemua: liftsAll, rekor: prs.map(function(p) { return { tanggal: p.tanggal, gerakan: p.gerakan }; }).slice(0, 8), otot: parts, mingguan: stats.weeks },
@@ -287,6 +287,14 @@ function _reportAnalysis_(a) {
     return o;
   };
   const pNow = grp(a.days), pPrev = grp(a.daysPrev);
+  // Otot yang dilatih (untuk figur tubuh di PDF): gerakan unik dengan volume, terbanyak dulu
+  const exMap = {};
+  a.days.forEach(function(d) { d.items.forEach(function(it) {
+    let v = 0; it.sets.forEach(function(s) { if (!_isWarmup_(s.jenis)) v += (Number(s.berat) || 0) * (Number(s.rep) || 0); });
+    const k = it.exId || it.target || it.bodyPart || it.key, e = exMap[k] || (exMap[k] = { exId: it.exId || '', target: it.target || '', bodyPart: it.bodyPart || '', v: 0 });
+    e.v += v || 1;
+  }); });
+  const figur = Object.keys(exMap).map(function(k) { return exMap[k]; }).sort(function(x, y) { return y.v - x.v; }).slice(0, 16).map(function(e) { return { exId: e.exId, target: e.target, bodyPart: e.bodyPart, v: Math.round(e.v) }; });
   volWeeks.forEach(function(w) { w.v = Math.round(w.v); });
   const prevWeeks = Math.max(1, Math.round(R.days / 7)), rataPrev = a.vPrev.v ? Math.round(a.vPrev.v / prevWeeks) : 0;
   const otot = Object.keys(RP_GROUP_LABEL_).filter(function(k) { return pNow[k] || pPrev[k]; })
@@ -308,7 +316,7 @@ function _reportAnalysis_(a) {
       tafsir: 'Artinya: ' + (kons == null ? 'belum ada minggu aktif di periode ini.' : kons >= REPORT.baik ? 'ritme latihan sudah stabil. Inilah dasar semua kemajuan lain.' : 'hasil paling cepat datang dari ritme yang tetap; ' + REPORT.sesiTarget + ' sesi per minggu sudah cukup.') + (jeda >= 10 ? ' Jeda terpanjang ' + jeda + ' hari.' : '') },
     kekuatan: { tafsir: 'Artinya: ' + (!pcts.length ? 'gerakan perlu dicatat minimal dua kali supaya perubahannya terlihat.' : naik >= Math.ceil(pcts.length / 2) ? 'otot merespons latihan dengan baik; beban bisa terus dinaikkan pelan-pelan.' : 'kekuatan cenderung datar; ini wajar sesekali, dan coach bisa mengubah variasi atau beban.') +
       ' "Perkiraan angkatan maksimal" (1RM) = beban terberat yang diperkirakan bisa diangkat satu kali, dihitung dari set yang dicatat.' },
-    volume: { mingguan: volWeeks, rataPrev: rataPrev, otot: otot,
+    volume: { figur: figur, mingguan: volWeeks, rataPrev: rataPrev, otot: otot,
       tafsir: 'Artinya: volume = beban \u00d7 repetisi dari semua set. ' + (a.vPrev.v ? (a.vNow.v >= a.vPrev.v ? 'Total kerja otot naik dari periode sebelumnya.' : 'Total kerja otot lebih sedikit dari periode sebelumnya.') + ' ' : '') + seimbang },
     tubuh: { laju: laju, goal: goal,
       tafsir: 'Artinya: ' + (!a.body.length ? 'belum ada ukuran di periode ini.' : (lajuBerat ? 'berat berubah ' + _rpSigned_(lajuBerat.perMinggu, 'kg') + ' per minggu' + (goal === 'turun' ? (lajuBerat.perMinggu < 0 && lajuBerat.perMinggu >= -1 ? ', laju yang sehat (0,25\u20131 kg per minggu).' : lajuBerat.perMinggu < -1 ? ', agak cepat; pastikan makan dan protein cukup.' : '; dengan tujuan turun, coach akan membantu menyesuaikan makan.') : '.') + ' ' : '') + 'Berat harian naik-turun karena air dan makanan; lihat arahnya, bukan angka satu hari.') },
@@ -336,15 +344,15 @@ function _reportFor_(row, req) {
         }
       }
     } catch (e) { food = null; }
-    let goal = '';
-    try { goal = _nutProfileFrom_(row).goal; } catch (e) {}
+    let goal = '', jk = '';
+    try { const np = _nutProfileFrom_(row); goal = np.goal; jk = np.jk; } catch (e) {}
     let holds = [];
     try { holds = _holdRows_().filter(function(h) { return h.memberId === id && h.status === 'ok'; }).map(function(h) { return { jenis: h.jenis, mulai: h.mulai, sampai: h.sampai }; }); } catch (e) {}
     const info = _streakInfo_(id);
     return _reportCalc_({
       name: String(row[1] || '').trim(), coach: String(row[11] || '').trim(), today: today, range: range, sessions: sessions, holds: holds, workoutRows: wrows, prsAll: prsAll,
       progress: _readProgress_(id), measures: PROGRESS_MEASURES, food: food, target: target, tests: _fitnessByMember_(id), testDefs: FITNESS_TESTS,
-      goal: goal, notes: _sharedNotesFor_(id), streak: info.streak, bestStreak: info.bestStreak
+      goal: goal, jk: jk, notes: _sharedNotesFor_(id), streak: info.streak, bestStreak: info.bestStreak
     });
   });
 }
