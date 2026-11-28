@@ -3474,7 +3474,9 @@ async function contrastReport(page) {
     check((await page.locator('#coach-profile-page .btn-row .btn').evaluateAll(els => els.every(e => e.getBoundingClientRect().height >= 44))), 'portal coach page: buttons are 44 px or taller');
     await shot(page, 'portal-mobile-coach-premium');
     await page.locator('#coach-profile-page .btn-inverse').first().click();
-    check((await page.evaluate(() => window.__opened.map(w => w.location.href))).some(u => u.startsWith('https://wa.me/6281112223334')), '"Chat WA" on the coach page opens WhatsApp to the coach');
+    const waTo = await page.evaluate(() => window.coachWa('6281112223334'));   // xnk.my.id: owner's number (#221); hub: the coach's
+    check(waTo === '6288221254305', "xnk.my.id: client WhatsApp to a coach goes to the owner's number");
+    check((await page.evaluate(() => window.__opened.map(w => w.location.href))).some(u => u.startsWith('https://wa.me/' + waTo)), '"Chat WA" on the coach page opens WhatsApp to the owner\'s contact number');
     await shot(page, 'portal-mobile-coaches');
     await page.evaluate(() => window.navigate('public-catalog'));
     await page.waitForTimeout(400);
