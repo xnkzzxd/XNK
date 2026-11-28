@@ -496,3 +496,15 @@ test('halaman kota: /personal-trainer/<kota>/ untuk pencarian lokal, di sitemap 
   assert.ok(files['satu/info/index.html'].includes('<title>Satu Fit · Personal Trainer Purwokerto</title>'));
   assert.match(hub.slugError('personal-trainer') || '', /./);
 });
+
+test('coach dengan situs sendiri (url): halaman info + pengalih, tanpa aplikasi', () => {
+  const PROD = 'https://script.google.com/macros/s/AKfycbyVOm1Csc7UmCxPe3buHUkZkIaskguIRgT8dvTJw_aaTAX5UYY_-irjDi1X6vOD1BgJ/exec';
+  const { files } = hub.build({ coaches: [{ slug: 'jizdan', brand: 'Coach Yandura', exec: PROD, url: 'https://book.xnkbooking.my.id/', place: { name: 'XNK Gym', city: 'Purwokerto' } }] });
+  const info = files['jizdan/info/index.html'];
+  assert.ok(info.includes('<title>Coach Yandura · Personal Trainer Purwokerto</title>') && info.includes('https://book.xnkbooking.my.id/'));
+  assert.ok(files['jizdan/index.html'].includes('url=https://book.xnkbooking.my.id/'));
+  assert.ok(!Object.keys(files).some(n => n.startsWith('jizdan/') && /sw-app|lib-latest/.test(n)));
+  assert.ok(files['personal-trainer/purwokerto/index.html'].includes('/jizdan/info/'));
+  assert.ok(files['index.html'].includes('book.xnkbooking.my.id'));
+  assert.throws(() => hub.build({ coaches: [{ slug: 'jizdan', brand: 'X', exec: PROD, url: 'http://x.id' }] }), /url/);
+});

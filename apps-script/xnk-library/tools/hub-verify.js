@@ -40,7 +40,7 @@ function verifySite(dir, cfg, opts) {
   const files = walk(dir, '', []);
   for (const rel of files.filter(f => /\.(html|js|json)$/.test(f))) {
     const t = read(rel);
-    if (t.includes(PROD_DEPLOYMENT)) problems.push(`${rel} memuat alamat aplikasi xnk.my.id.`);
+    if (t.includes(PROD_DEPLOYMENT) && !hub.coaches.some(c => c.url && rel === `${c.slug}/info/index.html`)) problems.push(`${rel} memuat alamat aplikasi xnk.my.id.`);
     if (/https:\/\/xnk\.my\.id\/(exercises|foods|figure)\//.test(t)) problems.push(`${rel} masih memuat pustaka dari xnk.my.id (harus /_lib/).`);
   }
   if (hub.coaches.length) {
@@ -50,6 +50,7 @@ function verifySite(dir, cfg, opts) {
     }
   }
   for (const c of hub.coaches) {
+    if (c.url) { if (!has(`${c.slug}/info/index.html`)) problems.push(`${c.slug}: /${c.slug}/info/ tidak ada.`); continue; }
     // T-2252: coach tidak aktif = halaman pemberitahuan (CSP ketat, noindex) dan worker pembersih; tidak ada aplikasi.
     if (c.inactive) {
       const st = c.storageSlug || c.slug;

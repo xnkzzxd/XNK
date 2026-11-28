@@ -147,7 +147,13 @@ function readHub(cfg, opts) {
     if (seen.has(slug)) throw new Error(`hub.json: slug "${slug}" dipakai dua kali.`);
     seen.add(slug);
     let conf;
-    try { conf = tenant.readConfig({ exec: c.exec, brand: c.brand }); } catch (e) { throw new Error(`hub.json, "${slug}": ${e.message.replace(/^config\.json: /, '')}`); }
+    // Coach dengan situs sendiri (url) boleh memakai /exec aplikasi xnk.my.id; hanya halaman info yang memanggilnya.
+    if (c.url) {
+      const ex = String(c.exec || '').trim(), br = String(c.brand || '').trim();
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(ex)) throw new Error(`hub.json, "${slug}": exec harus link /exec Apps Script.`);
+      if (!br || br.length > 60) throw new Error(`hub.json, "${slug}": nama usaha wajib (maks. 60 huruf).`);
+      conf = { exec: ex, brand: br };
+    } else try { conf = tenant.readConfig({ exec: c.exec, brand: c.brand }); } catch (e) { throw new Error(`hub.json, "${slug}": ${e.message.replace(/^config\.json: /, '')}`); }
     // T-2230: ID proyek Apps Script dan deployment coach (bukan rahasia) untuk workflow "Coach XNK" (coach-ops.js).
     const out = { slug, brand: conf.brand, exec: conf.exec };
     for (const k of ['scriptId', 'deploymentId']) {
@@ -189,6 +195,12 @@ function readHub(cfg, opts) {
     // T-2252: coach keluar = situs tidak aktif (halaman pemberitahuan saja, tanpa aplikasi). Hanya true/false.
     if (c.inactive != null && c.inactive !== true && c.inactive !== false) throw new Error(`hub.json, "${slug}": inactive harus true atau false.`);
     if (c.inactive === true) out.inactive = true;
+    // Coach dengan situs sendiri (mis. pemilik: book.xnkbooking.my.id): hanya halaman info + pengalih di hub, tanpa aplikasi.
+    if (c.url != null && c.url !== '') {
+      const u = String(c.url).trim();
+      if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s'"<>\\]*)?$/i.test(u)) throw new Error(`hub.json, "${slug}": url harus link https:// situs coach.`);
+      out.url = u;
+    }
     return out;
   });
   // Satu nama di alamat hanya untuk satu tujuan: slug dan alamat lama semua coach tidak boleh bertabrakan.
@@ -455,7 +467,7 @@ function infoPage(c) {
     `<a class="btn ghost" href="${esc(maps)}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-map"/></svg>Buka di Maps</a></div>\n    </section>`;
   const logo = c.logoFile ? `/${c.slug}/logo.${c.logoFile.ext}` : '';
   const ini = esc((c.brand.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase());
-  const cfg = { exec: c.exec, slug: c.slug, brand: c.brand, klien: `/${c.slug}/klien/`, place: pl };
+  const cfg = { exec: c.exec, slug: c.slug, brand: c.brand, klien: c.url || `/${c.slug}/klien/`, place: pl };
   const swaps = {
     '__ACCENT_ATTR__': c.accent ? ` data-accent="${c.accent}"` : '',
     '__THEME_KEY__': JSON.stringify(c.storageSlug + ':xnk_theme'),
@@ -494,6 +506,15 @@ function build(cfg, opts) {
   for (const c of hub.coaches) {
     // T-2252: coach keluar = halaman pemberitahuan + worker pembersih; tidak ada aplikasi, tidak ada versi server.
     if (c.inactive) { Object.assign(files, inactiveFiles(c, hub.contact)); continue; }
+    if (c.url) {
+      if (c.logoFile) files[`${c.slug}/logo.${c.logoFile.ext}`] = c.logoFile.body;
+      files[c.slug + '/info/index.html'] = infoPage(c);
+      for (const sub of ['', 'klien/']) files[`${c.slug}/${sub}index.html`] = cspStatic(['<!doctype html>', '<html lang="id">', '<head>',
+        '<meta charset="utf-8">', '<meta name="viewport" content="width=device-width, initial-scale=1">', '<meta name="robots" content="noindex">',
+        `<meta http-equiv="refresh" content="0; url=${esc(c.url)}">`, `<title>${esc(c.brand)}</title>`, '</head>', '<body>',
+        `<p style="font:16px/1.5 system-ui,sans-serif;text-align:center;padding:48px 16px"><a href="${esc(c.url)}">${esc(c.brand)}</a></p>`, '</body>', '</html>', ''].join('\n'));
+      continue;
+    }
     const v = versions[c.slug];
     const t = tenantFor(v).build({ exec: c.exec, brand: c.brand });
     if (!v || !v.dir) latest = t.hash;
@@ -521,6 +542,7 @@ function build(cfg, opts) {
     // SITE_URL coach = xnk.web.id/<slug>; healthCheck membaca SITE_URL/lib-latest.json untuk tahu ada versi baru.
     const latestJson = JSON.stringify({ library: { hash: latest } }) + '\n';
     for (const c of hub.coaches) {
+      if (c.url) continue;
       files[c.slug + '/lib-latest.json'] = latestJson;
       Object.assign(files, aliasFiles(c, latestJson));
     }
@@ -550,7 +572,7 @@ function build(cfg, opts) {
       (c.logoFile ? `<img src="/${c.slug}/logo.${c.logoFile.ext}" alt="" width="48" height="48">` : esc(c.brand.trim().charAt(0).toUpperCase() || '?')) + '</span>' +
       `<div><b>${esc(c.brand)}</b>` +
       (c.place ? `<span class="pl"><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span>${esc(c.place.name)} <em>· ${esc(c.place.city)}</em></span></span>` : '') +
-      `<span>xnk.web.id/${c.slug}</span></div><svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a>`).join(''));
+      `<span>${esc(c.url ? c.url.replace(/^https:\/\/|\/$/g, '') : 'xnk.web.id/' + c.slug)}</span></div><svg class="i go" aria-hidden="true"><use href="#i-arrow"/></svg></a>`).join(''));
     // Kotak cari (≥ 2 coach) dan pilihan kota (≥ 2 coach yang punya tempat). Kota sama tanpa beda huruf besar/kecil.
     const byCity = new Map();
     for (const c of listed) if (c.place) {
@@ -598,7 +620,7 @@ function build(cfg, opts) {
   // Dasbor pemilik: halaman statis tanpa data; datanya dari XNK HQ setelah login PIN.
   const adm = fs.readFileSync(path.join(SITE, 'adminxnk.html'), 'utf8')
     .split("'__PUSAT_URL__'").join(JSON.stringify(hub.pusat))
-    .split('__HUB_COACHES__').join(JSON.stringify(Object.fromEntries(hub.coaches.map(c => [c.slug, c.brand]))).replace(/</g, '\\u003c'));
+    .split('__HUB_COACHES__').join(JSON.stringify(Object.fromEntries(hub.coaches.filter(c => !c.url).map(c => [c.slug, c.brand]))).replace(/</g, '\\u003c'));
   if (adm.includes('__PUSAT_URL__') || adm.includes('__HUB_COACHES__')) throw new Error('build-hub: penanda adminxnk.html tersisa.');
   files['adminxnk/index.html'] = cspStatic(adm, 'https://script.google.com https://script.googleusercontent.com');
   files['404.html'] = cspStatic(fs.readFileSync(path.join(SITE, '404.html'), 'utf8'));
