@@ -617,6 +617,7 @@ function build(cfg, opts) {
     `.coach .av.acc-${k} { background: ${v[0]}; color: ${v[1]}; } @media (prefers-color-scheme: dark) { .coach .av.acc-${k} { background: ${v[2]}; color: ${v[3]}; } }`).join('\n  '));
   files['index.html'] = cspStatic(landingLd(landing));
   Object.assign(files, seoFiles(hub, plain((landing.match(/<meta name="description" content="([^"]*)">/) || [])[1] || '')));
+  files['favicon.ico'] = fs.readFileSync(path.join(SITE, 'desktop.ico'));
   for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
   // T-2265: huruf landing (Inter Tight, JetBrains Mono; OFL, berkas lisensi ikut), dari situs sendiri: tanpa Google, ikut offline.
   for (const n of fs.readdirSync(path.join(SITE, 'fonts'))) files['fonts/' + n] = fs.readFileSync(path.join(SITE, 'fonts', n));
@@ -680,7 +681,7 @@ function landingLd(landing) {
     logo: HUB_ORIGIN + '/img/icon-512.png', areaServed: 'ID',
     founder: { '@type': 'Person', name: 'Yandura Jizdan', homeLocation: { '@type': 'City', name: 'Purwokerto' } },
     address: { '@type': 'PostalAddress', addressLocality: 'Purwokerto', addressRegion: 'Jawa Tengah', addressCountry: 'ID' } },
-  { '@context': 'https://schema.org', '@type': 'WebSite', '@id': HUB_ORIGIN + '/#website', name: 'XNK', url: HUB_ORIGIN + '/', inLanguage: 'id', publisher: { '@id': HUB_ORIGIN + '/#org' } });
+  { '@context': 'https://schema.org', '@type': 'WebSite', '@id': HUB_ORIGIN + '/#website', name: 'XNK', alternateName: ['XNK App', 'XNK Coach', 'xnk.web.id'], url: HUB_ORIGIN + '/', inLanguage: 'id', publisher: { '@id': HUB_ORIGIN + '/#org' } });
   if (faq.length) ld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq });
   if (!landing.includes('</head>')) throw new Error('build-hub: </head> tidak ada di hub-site/index.html');
   return landing.replace('</head>', () => ld.map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>\n').join('') + '</head>');

@@ -202,7 +202,7 @@ async function makeLogos(browser) {
       const seen = [], errors = [];
       const context = await newContext(browser, be, seen);
       const page = await open(context, O + '/', errors);
-      check((await page.title()) === 'XNK · aplikasi personal trainer dan kliennya', 'judul landing');
+      check((await page.title()) === 'XNK | Aplikasi Personal Trainer & Manajemen Klien', 'judul landing');
       // T-2265: nama coach dan daftar coach ada di lembar Masuk (bilah atas, "Masuk di sini", kaki halaman, #masuk).
       check(!(await page.isVisible('#slug')), 'lembar Masuk tertutup saat halaman dibuka');
       await page.click('.top-cta a[href="#masuk"]');
