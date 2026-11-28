@@ -503,18 +503,20 @@ async function contrastReport(page) {
     await page.evaluate(() => window.navigate('settings'));
     await page.waitForTimeout(1200);
     let m = calls.length;
+    await page.evaluate(() => window.settingsOpen('paket'));
+    await page.waitForTimeout(900);
+    check(since(m, 'getPriceListAdmin') === 0 && await page.locator('#pkg-list .pkg-row').count() > 0, 'Paket & Harga shows the prefetched packages with no new call');
+    m = calls.length;
     await page.evaluate(() => window.settingsOpen('pengingat'));
     await page.waitForTimeout(1200);
     check(since(m, 'previewReminderText') === 0, 'Pengingat opens with no previewReminderText call (was one per reminder type)');
     const pv = await page.$$eval('#settings-body .wa-bubble', els => els.map(e => e.textContent.trim()));
     check(pv.length >= 10 && pv.every(t => t && t !== '…'), 'every reminder preview is filled at once (' + pv.length + ')');
+    const tplWas = await page.evaluate(() => document.getElementById('set-job-sesi-besok-tpl').value);
     await page.evaluate(() => { const el = document.getElementById('set-job-sesi-besok-tpl'); el.value = 'Halo {nama}, jam {jam}.'; el.dispatchEvent(new Event('input', { bubbles: true })); });   // di dalam lipatan tertutup
     await page.waitForTimeout(1200);
     check((await page.textContent('#pv-sesi-besok')).includes('jam 07:00'), 'a newly typed template is still previewed by the server');
-    m = calls.length;
-    await page.evaluate(() => window.settingsOpen('paket'));
-    await page.waitForTimeout(900);
-    check(since(m, 'getPriceListAdmin') === 0 && await page.locator('#pkg-root .pkg-main').count() > 0, 'Paket & Harga shows the prefetched packages with no new call');
+    await page.evaluate(v => { const el = document.getElementById('set-job-sesi-besok-tpl'); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, tplWas);   // isian kembali seperti semula: bagian lain bisa dibuka tanpa "Buang perubahan?"
     await page.evaluate(() => window.settingsOpen('latihan'));
     await page.waitForTimeout(1500);
     m = calls.length;
