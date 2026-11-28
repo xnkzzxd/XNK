@@ -33,6 +33,7 @@ const check = (ok, msg) => { console.log((ok ? '  ✓ ' : '  ✗ ') + msg); if (
     await ctx.route('**/*', r => {
       const u = r.request().url();
       if (u.startsWith(base)) return r.continue();
+      if (process.env.POSTER_FONTS && /fonts\.(googleapis|gstatic)\.com/.test(u)) return r.continue();   // screenshots with the real fonts
       if (u.includes('lucide')) return r.fulfill({ contentType: 'application/javascript', body: 'window.lucide={createIcons(){},icons:{},createElement(){return document.createElementNS("http://www.w3.org/2000/svg","svg")}};' });
       if (u.includes('fullcalendar')) return r.fulfill({ contentType: 'application/javascript', body: 'window.FullCalendar={Calendar:function(){this.render=function(){};this.destroy=function(){};this.getEvents=function(){return []};this.removeAllEvents=function(){};this.addEventSource=function(){};this.changeView=function(){};this.gotoDate=function(){};this.updateSize=function(){};}};' });
       if (u.includes('cropper.min.js')) return r.fulfill({ contentType: 'application/javascript', body: 'window.Cropper=function(){};' });
@@ -74,8 +75,9 @@ const check = (ok, msg) => { console.log((ok ? '  ✓ ' : '  ✗ ') + msg); if (
         const corner = await page.evaluate(async a => {
           const im = new Image(); im.src = a.url; await im.decode();
           const c = document.createElement('canvas'); c.width = 1080; c.height = a.H; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
-          const d = g.getImageData(0, a.H - 60, 1080, 60).data, bg = g.getImageData(4, a.H - 4, 1, 1).data;
-          for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - bg[0]) > 8 || Math.abs(d[i + 1] - bg[1]) > 8 || Math.abs(d[i + 2] - bg[2]) > 8) return false;
+          // the strip below the footer holds only the (gradient) background: every pixel equals the bottom pixel of its column
+          const d = g.getImageData(0, a.H - 48, 1080, 48).data, bg = g.getImageData(0, a.H - 1, 1080, 1).data;
+          for (let i = 0; i < d.length; i += 4) { const x = (i / 4) % 1080; if (Math.abs(d[i] - bg[x * 4]) > 6 || Math.abs(d[i + 1] - bg[x * 4 + 1]) > 6 || Math.abs(d[i + 2] - bg[x * 4 + 2]) > 6) return false; }
           return true;
         }, { url: r.url, H: H });
         check(inBox && corner, type + ' · ' + size + ' · ' + style + ': layout inside the margins, empty corner strip');
