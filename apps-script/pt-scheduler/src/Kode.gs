@@ -1090,7 +1090,33 @@ function _coachesAll_() {
       shareType: String(cell(row, 'shareType')), shareValue: cell(row, 'shareValue'), _row: i + 1
     });
   }
-  return out;
+  return _coachSort_(out, PropertiesService.getScriptProperties().getProperty('COACH_ORDER'));
+}
+
+/** Murni: urutkan coach menurut COACH_ORDER (ID dipisah koma, diatur pemilik); ID yang tidak ada di daftar tetap di akhir sesuai urutan sheet. */
+function _coachSort_(list, order) {
+  const ids = String(order || '').split(',').map(function(x) { return x.trim(); }).filter(Boolean);
+  if (!ids.length) return list;
+  const rank = function(c) { const k = ids.indexOf(c.id); return k === -1 ? ids.length : k; };
+  return list.map(function(c, i) { return { c: c, i: i }; })
+    .sort(function(a, b) { return (rank(a.c) - rank(b.c)) || (a.i - b.i); })
+    .map(function(x) { return x.c; });
+}
+
+/** Pemilik saja: urutan coach di panel, landing dan portal. ids = semua ID coach dalam urutan baru. */
+function setCoachOrderImpl_(token, ids) {
+  requireAdmin_(token);
+  if (_scopeCoach_()) throw new Error('Hanya pemilik yang bisa mengatur urutan coach.');
+  if (!Array.isArray(ids) || !ids.length) throw new Error('Urutan coach kosong.');
+  const known = _coachesAll_().map(function(c) { return c.id; });
+  const clean = [];
+  ids.forEach(function(x) {
+    const id = String(x == null ? '' : x).trim();
+    if (known.indexOf(id) === -1) throw new Error('Coach tidak ditemukan.');
+    if (clean.indexOf(id) === -1) clean.push(id);
+  });
+  PropertiesService.getScriptProperties().setProperty('COACH_ORDER', clean.join(','));
+  return { status: 'success', order: clean };
 }
 
 function _activeCoaches_() { return _coachesAll_().filter(function(c) { return c.aktif; }); }
@@ -8831,6 +8857,11 @@ function saveCoach(token, data) {
 function setCoachActive(token, id, aktif) {
   requireAdmin_(token);
   try { return setCoachActiveImpl_(token, id, aktif); } finally { _bustShared_(); }
+}
+
+function setCoachOrder(token, ids) {
+  requireAdmin_(token);
+  try { return setCoachOrderImpl_(token, ids); } finally { _bustShared_(); }
 }
 
 function saveCoachAvailability(token, coachId, week) {

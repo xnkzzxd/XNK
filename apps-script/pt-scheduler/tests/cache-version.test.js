@@ -19,7 +19,7 @@ const NO_MEMBER_DATA = [
   // profil & foto profil ikut getPortalBootstrap (selalu segar)
   'uploadMemberPhoto', 'updateMemberPhoto', 'deleteMember',
   // coach, paket, konten, pengaturan: cache bersama (_bustShared_ masuk versi) atau bootstrap
-  'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto', 'saveCoach', 'setCoachActive', 'setSelfCoach', 'assignUnassignedToSelf',
+  'addCoach', 'updateCoach', 'deleteCoach', 'uploadCoachPhoto', 'saveCoach', 'setCoachActive', 'setCoachOrder', 'setSelfCoach', 'assignUnassignedToSelf',
   'saveCoachAvailability', 'addCoachTimeOff', 'deleteCoachTimeOff', 'saveCoachTargets', 'saveCoachShare',
   'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'saveContent', 'deleteContent', 'updateAppSettings',
   // data panel saja (tidak di portal maupun halaman klien)
