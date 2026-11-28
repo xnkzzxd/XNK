@@ -15818,7 +15818,8 @@
   const dShort = iso => { const p = String(iso || '').split('-').map(Number); return p[0] ? p[2] + ' ' + MON_ID[p[1] - 1] : ''; };
   const periodLabel = k => ({ bulan: 'Bulan ini', bulanLalu: 'Bulan lalu', '3bulan': '3 bulan terakhir', semua: 'Sejak awal' }[k] || '');
 
-  // ── warna: tampilan xnk.my.id (hitam-putih, abu lembut, kartu kaca); aksen hanya dari token halaman ──
+  // ── warna: tanda khas xnk.my.id = kartu hitam "Sesi berikutnya" (card-ink: #1A1A19, lingkaran di kanan atas, label
+  // huruf kapital berjarak, pil bergaris). Latar = latar aplikasi (--bg terang #FAFAF9 / pita #0B0B0B). Aksen hanya dari token.
   function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
   function hasAccent() { const a = document.documentElement.getAttribute('data-accent') || document.documentElement.getAttribute('data-brand-accent') || ''; return !!a && a !== 'hitam'; }
   function rgbOf(c) {
@@ -15828,12 +15829,13 @@
     return r ? r[1].split(',').slice(0, 3).map(v => Number(v) || 0) : [255, 255, 255];
   }
   const alpha = (c, a) => 'rgba(' + rgbOf(c).join(',') + ',' + a + ')';
-  /** bg = gradasi latar [atas, bawah]; card / line = kartu kaca; strong = kartu terpilih; btn = tombol pil. */
+  // Nilai sama dengan token Theme (--bg, --surface, --border, --band, --band-card, --on-band, --on-band-muted, --shadow-2).
+  const HERO = { bg: '#1A1A19', ink: '#FFFFFF', muted: '#A7A7A4' };
   function poColors(style) {
     const acc = hasAccent() ? cssVar('--accent') : '', onAcc = hasAccent() ? cssVar('--on-accent') : '';
-    if (style === 'terang') return { light: true, bg: ['#F5F5F4', '#D4D4D2'], ink: '#0B0B0B', card: 'rgba(255,255,255,.55)', line: 'rgba(255,255,255,.95)', strong: '#0B0B0B', onStrong: '#FFFFFF', btn: '#0B0B0B', onBtn: '#FFFFFF', shadow: 'rgba(0,0,0,.14)' };
-    if (style === 'aksen' && acc) { const ink = onAcc || '#FFFFFF'; return { light: false, bg: [acc, acc], shade: true, ink: ink, card: alpha(ink, .1), line: alpha(ink, .22), strong: ink, onStrong: acc, btn: ink, onBtn: acc, shadow: 'rgba(0,0,0,.18)' }; }
-    return { light: false, bg: ['#222222', '#070707'], ink: '#FFFFFF', card: 'rgba(255,255,255,.07)', line: 'rgba(255,255,255,.16)', strong: '#FFFFFF', onStrong: '#0B0B0B', btn: '#FFFFFF', onBtn: '#0B0B0B', shadow: 'rgba(0,0,0,.35)' };
+    if (style === 'terang') return { light: true, bg: '#FAFAF9', ink: '#0B0B0B', muted: '#78716C', card: '#FFFFFF', line: '#E7E5E4', strong: HERO.bg, onStrong: '#FFFFFF', btn: '#0B0B0B', onBtn: '#FFFFFF', shadow: 'rgba(0,0,0,.08)' };
+    if (style === 'aksen' && acc) { const ink = onAcc || '#FFFFFF'; return { light: false, bg: acc, ink: ink, muted: alpha(ink, .7), card: alpha(ink, .1), line: alpha(ink, .2), strong: ink, onStrong: acc, btn: ink, onBtn: acc, shadow: 'rgba(0,0,0,.2)' }; }
+    return { light: false, bg: '#0B0B0B', ink: '#FFFFFF', muted: HERO.muted, card: HERO.bg, line: 'rgba(255,255,255,.10)', strong: '#FFFFFF', onStrong: '#0B0B0B', btn: '#FFFFFF', onBtn: '#0B0B0B', shadow: 'rgba(0,0,0,.4)' };
   }
 
   // ── teks di kanvas: Inter seperti aplikasi (judul 800, jarak huruf rapat, huruf biasa, bukan kapital) ──
@@ -15862,34 +15864,66 @@
     for (let i = 0; i < 10; i++) { const rr = i % 2 ? r * .45 : r, an = -Math.PI / 2 + i * Math.PI / 5; ctx[i ? 'lineTo' : 'moveTo'](cx + rr * Math.cos(an), cy + rr * Math.sin(an)); }
     ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
   }
-  /** Kartu kaca: isi tipis, garis tepi terang, kilau lembut di atas (seperti kartu aplikasi). strong = kartu terpilih. */
+  /** Label kecil seperti .eyebrow aplikasi: 700, huruf kapital, jarak huruf 0,08em, warna redup. */
+  function eyebrow(ctx, text, x, y, px, color, al, max) {
+    const t = String(text || '').toUpperCase();
+    ctx.font = '700 ' + Math.round(px) + 'px ' + PO_FONT;
+    if (hasLS(ctx)) ctx.letterSpacing = Math.round(px * .08) + 'px';
+    while (max && px > 14 && ctx.measureText(t).width > max) { px -= 1; ctx.font = '700 ' + Math.round(px) + 'px ' + PO_FONT; if (hasLS(ctx)) ctx.letterSpacing = Math.round(px * .08) + 'px'; }
+    const f = ctx.fillStyle; ctx.fillStyle = color; ctx.textAlign = al || 'left'; ctx.fillText(t, x, y); ctx.fillStyle = f;
+    if (hasLS(ctx)) ctx.letterSpacing = '0px';
+  }
+  /** Kartu biasa (.card aplikasi): permukaan + garis tepi tipis; strong = kartu hitam / terpilih. */
   function card(ctx, x, y, w, h, r, c, strong) {
     const K = kit();
     ctx.save();
-    if (c.light || strong) { ctx.shadowColor = c.shadow; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14; }
+    if (c.light) { ctx.shadowColor = c.shadow; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10; }
     K.rrect(ctx, x, y, w, h, r); ctx.fillStyle = strong ? c.strong : c.card; ctx.fill();
     ctx.restore();
-    if (!strong) {
-      ctx.save(); K.rrect(ctx, x, y, w, h, r); ctx.clip();
-      const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(255,255,255,' + (c.light ? .45 : .06) + ')'); g.addColorStop(.5, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g; ctx.fillRect(x, y, w, h); ctx.restore();
-      ctx.save(); K.rrect(ctx, x + 1, y + 1, w - 2, h - 2, r - 1); ctx.strokeStyle = c.line; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
-    }
+    if (!strong) { ctx.save(); K.rrect(ctx, x + 1, y + 1, w - 2, h - 2, r - 1); ctx.strokeStyle = c.line; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); }
     ctx.fillStyle = strong ? c.onStrong : c.ink;
   }
-  /** Pil kecil (label, jam). kind: 'line' garis tepi, 'solid' terisi, 'soft' kaca. */
+  /**
+   * Kartu tanda khas (card-ink): hitam #1A1A19, sudut 28 px aplikasi, lingkaran tipis di kanan atas dengan dua cincin
+   * lembut (sama dengan .card-ink::before, diskalakan dari kartu 430 px). Mengembalikan warna di dalamnya.
+   */
+  function hero(ctx, x, y, w, h, c, s) {
+    const K = kit(), k = w / 430, r = 28 * k;
+    ctx.save();
+    ctx.shadowColor = c.light ? 'rgba(0,0,0,.18)' : 'rgba(0,0,0,0)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14;
+    K.rrect(ctx, x, y, w, h, r); ctx.fillStyle = HERO.bg; ctx.fill();
+    ctx.restore();
+    ctx.save(); K.rrect(ctx, x, y, w, h, r); ctx.clip();
+    const cx = x + w + 40 * k - 90 * k, cy = y - 40 * k + 90 * k, rr = 90 * k;
+    const ring = (r1, r2, a) => { ctx.beginPath(); ctx.arc(cx, cy, r2, 0, 7); ctx.arc(cx, cy, r1, 0, 7, true); ctx.fillStyle = 'rgba(255,255,255,' + a + ')'; ctx.fill(); };
+    ring(rr, rr + 28 * k, .04); ring(rr + 28 * k, rr + 56 * k, .03);
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 7); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = Math.max(2, k); ctx.stroke();
+    ctx.restore();
+    if (!c.light && c.line) { ctx.save(); K.rrect(ctx, x + 1, y + 1, w - 2, h - 2, r - 1); ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); }
+    ctx.fillStyle = HERO.ink;
+    return { light: false, ink: HERO.ink, muted: HERO.muted, card: 'rgba(255,255,255,.07)', line: 'rgba(255,255,255,.12)', strong: '#FFFFFF', onStrong: '#0B0B0B', shadow: 'rgba(0,0,0,0)' };
+  }
+  /** Pil (.pill aplikasi). kind: 'line' bergaris, 'solid' terisi, 'soft' permukaan. */
   function pill(ctx, text, x, y, px, c, kind, al) {
-    const K = kit(), w = TW(ctx, text, px, 600) + px * 1.4, hgt = px * 2;
+    const K = kit(), w = TW(ctx, text, px, 700) + px * 1.5, hgt = px * 2;
     if (al === 'right') x -= w;
     K.rrect(ctx, x, y, w, hgt, hgt / 2);
-    if (kind === 'solid') { ctx.fillStyle = c.strong; ctx.fill(); } else if (kind === 'soft') { ctx.fillStyle = c.card; ctx.fill(); ctx.strokeStyle = c.line; ctx.lineWidth = 2; ctx.stroke(); } else { ctx.strokeStyle = alpha(c.ink, .28); ctx.lineWidth = 2; ctx.stroke(); }
-    ctx.fillStyle = kind === 'solid' ? c.onStrong : c.ink; T(ctx, text, x + w / 2, y + hgt * .68, px, 600, 1, 'center'); ctx.fillStyle = c.ink;
+    if (kind === 'solid') { ctx.fillStyle = c.strong; ctx.fill(); } else if (kind === 'soft') { ctx.fillStyle = c.card; ctx.fill(); ctx.strokeStyle = c.line; ctx.lineWidth = 2; ctx.stroke(); } else { ctx.strokeStyle = c.ink; ctx.lineWidth = Math.max(2, px * .08); ctx.stroke(); }
+    ctx.fillStyle = kind === 'solid' ? c.onStrong : c.ink; T(ctx, text, x + w / 2, y + hgt * .68, px, 700, 1, 'center'); ctx.fillStyle = c.ink;
     return w;
   }
   function radio(ctx, cx, cy, r, c, on, ink) {
     ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.stroke();
     if (on) { ctx.beginPath(); ctx.arc(cx, cy, r * .55, 0, 7); ctx.fillStyle = ink; ctx.fill(); }
     ctx.restore();
+  }
+  /** Avatar bulat seperti "CA": inisial di lingkaran putih 14 %, atau foto. */
+  function avatarC(ctx, x, y, d, name, im, hc) {
+    const K = kit();
+    ctx.save(); ctx.beginPath(); ctx.arc(x + d / 2, y + d / 2, d / 2, 0, 7); ctx.fillStyle = alpha(hc.ink, .14); ctx.fill(); ctx.restore();
+    if (im && im.naturalWidth) { K.drawAvatar(ctx, im, x, y, d); return; }
+    const ini = String(name || '').replace(/^coach\s+/i, '').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
+    ctx.fillStyle = hc.ink; T(ctx, ini, x + d / 2, y + d / 2 + d * .14, d * .38, 700, 1, 'center');
   }
 
   // ── isi tiap jenis ──
@@ -15902,7 +15936,7 @@
       slot: { head: 'Slot kosong minggu ini', sub: slotRange(), cta: 'Amankan jadwalmu' },
       profil: { head: c.name || '', sub: c.headline || c.specialty || 'Personal trainer', cta: 'Chat untuk jadwal latihan' },
       testi: { head: 'Kata klien', sub: '', cta: 'Mulai latihanmu' },
-      hasil: { head: 'Hasil coaching', sub: periodLabel(PP.period), cta: 'Giliranmu berikutnya' },
+      hasil: { head: 'Hasil coaching ' + coachName(), sub: '', cta: 'Giliranmu berikutnya' },
       kisah: { head: st.berat && st.berat.change < 0 ? 'Turun ' + pnum(-st.berat.change) + ' kg' : st.lift ? 'Lebih kuat ' + Math.round((st.lift.to - st.lift.from) / Math.max(1, st.lift.from) * 100) + '%' : 'Perjalanan ' + (st.first || ''), sub: '', cta: 'Mulai perjalananmu' },
       xnk: { head: 'Aplikasi untuk personal trainer', sub: 'Booking, jadwal, latihan, gizi, dan progres klien dalam satu tempat.', cta: x.url ? 'Daftar di ' + String(x.url).replace(/^https?:\/\//, '') : '' }
     };
@@ -15955,25 +15989,20 @@
     await K.loadFonts(); await poFonts();
     const img = await K.logo();
     const s = H === 1920 ? 1 : .86, W = PO_W, M = PO_M;
-    // latar: gradasi lembut + cahaya di kiri atas (seperti kartu aplikasi), atau foto yang digelapkan
-    const g = ctx.createLinearGradient(0, 0, W * .4, H); g.addColorStop(0, c.bg[0]); g.addColorStop(1, c.bg[1]);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    if (c.shade) { const g2 = ctx.createLinearGradient(0, 0, 0, H); g2.addColorStop(0, 'rgba(0,0,0,0)'); g2.addColorStop(1, 'rgba(0,0,0,.3)'); ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H); }
-    const rg = ctx.createRadialGradient(W * .15, H * .02, 0, W * .15, H * .02, W * 1.2);
-    rg.addColorStop(0, 'rgba(255,255,255,' + (c.light ? .8 : .09) + ')'); rg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = c.bg; ctx.fillRect(0, 0, W, H);
     if (o.style === 'foto' && po.photo) {
       K.drawCover(ctx, po.photo, 0, 0, W, H);
-      const gp = ctx.createLinearGradient(0, 0, 0, H); gp.addColorStop(0, 'rgba(0,0,0,.5)'); gp.addColorStop(.35, 'rgba(0,0,0,.2)'); gp.addColorStop(1, 'rgba(0,0,0,.85)');
+      const gp = ctx.createLinearGradient(0, 0, 0, H); gp.addColorStop(0, 'rgba(0,0,0,.55)'); gp.addColorStop(.35, 'rgba(0,0,0,.25)'); gp.addColorStop(1, 'rgba(0,0,0,.88)');
       ctx.fillStyle = gp; ctx.fillRect(0, 0, W, H);
     }
     ctx.fillStyle = c.ink; ctx.textBaseline = 'alphabetic';
-    // kepala: logo + merek seperti bilah aplikasi, label pil di kanan
+    // kepala: logo + merek seperti bilah aplikasi, pil bergaris di kanan
     const lh = 40 * s; let x0 = M;
     if (img) { const lw = Math.round(lh * img.width / img.height); ctx.drawImage(K.tinted(img, lw, lh, c.ink), M, M); x0 += lw + 14 * s; }
     const brand = String(poBrand()).slice(0, 22);
     T(ctx, brand, x0, M + lh * .84, fitP(ctx, brand, 40 * s, 800, W - 2 * M - 380 * s), 800, 1);
     pill(ctx, o.type === 'xnk' ? 'Untuk coach' : 'Personal training', W - M, M + lh / 2 - 22 * s, 22 * s, c, 'line', 'right');
-    const top = M + lh + 72 * s;
+    const top = M + lh + 64 * s;
     // kaki kecil: tombol pil + kontak, QR kecil di kartu putih
     const k = pk(o.type), d = po.data || {}, coach = d.coach || {};
     const qrUrl = o.type === 'xnk' ? (d.xnkCoach && d.xnkCoach.url) : d.qrUrl;
@@ -15992,11 +16021,12 @@
       ctx.fillStyle = c.onBtn; T(ctx, cta, bx + bw / 2, fy + btnH / 2 + bpx * .36, bpx, 700, 1, 'center'); ctx.fillStyle = c.ink;
       fy += btnH;
     }
-    if (contact) T(ctx, contact, center ? W / 2 : M + (cta ? 0 : 0), fy + 38 * s, fitP(ctx, contact, 26 * s, 500, avail), 500, .72, center ? 'center' : 'left');
+    if (contact) T(ctx, contact, center ? W / 2 : M, fy + 38 * s, fitP(ctx, contact, 26 * s, 500, avail), 500, .72, center ? 'center' : 'left');
     if (qr) {
       const qx = W - M - qr - 2 * qp, qy = footTop + (footH - qr - 2 * qp) / 2;
-      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.16)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 4;
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.14)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 4;
       K.rrect(ctx, qx, qy, qr + 2 * qp, qr + 2 * qp, 24 * s); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
+      if (!c.light) { ctx.save(); K.rrect(ctx, qx, qy, qr + 2 * qp, qr + 2 * qp, 24 * s); ctx.strokeStyle = c.line; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); }
       K.drawQr(ctx, qrUrl, qx + qp, qy + qp, qr, '#FFFFFF');
     }
     ctx.fillStyle = c.ink;
@@ -16015,71 +16045,105 @@
     return canvas;
   }
 
-  /** Judul + teks kecil. Kembali: y di bawahnya. */
-  function head(ctx, b, c, s, t, maxLines, startPx) {
-    const ttl = fitTitle(ctx, txt(t, 'head'), b.w, (startPx || 100) * s, maxLines || 3, 52);
-    const lh = ttl.px * 1.08;
-    let y = b.y + ttl.px * .9;
-    ctx.fillStyle = c.ink; lines(ctx, ttl.lines, b.x, y, ttl.px, lh, 800, 1);
-    y += (ttl.lines.length - 1) * lh;
-    const sub = txt(t, 'sub');
-    if (sub) { const sl = wrap(ctx, sub, b.w, 32 * s, 500, 3); y += 28 * s + 32 * s; lines(ctx, sl, b.x, y, 32 * s, 44 * s, 500, .7); y += (sl.length - 1) * 44 * s; }
-    return y + 52 * s;
+  /**
+   * Kartu tanda khas seperti "Sesi berikutnya": label kecil + pil status di atas, (avatar +) judul dan teks redup,
+   * lalu pasangan LABEL / nilai. h = { label, status, title, sub, titlePx, titleW, maxLines, av: {name, im, d}, pairs: [[label, value, 'big'|'quote'|'']] }.
+   * Kembali: y di bawah kartu.
+   */
+  function heroBlock(ctx, b, c, s, h) {
+    const pad = 48 * s, iw = b.w - 2 * pad, hc = { ink: HERO.ink };
+    const d = h.av ? (h.av.d || 132) * s : 0, tx = pad + (d ? d + 32 * s : 0), tw = b.w - tx - pad;
+    const tpx0 = (h.titlePx || (d ? 60 : 88)) * s, tw8 = h.titleW || 800;
+    let tl, tpx;
+    if (tw8 === 800) { const f = fitTitle(ctx, h.title || '', tw, tpx0, h.maxLines || (d ? 2 : 3), 40); tl = f.lines; tpx = f.px; }
+    else { tpx = tpx0; tl = wrap(ctx, h.title || '', tw, tpx, tw8, h.maxLines || 6); }
+    const tlh = tpx * (tw8 === 800 ? 1.08 : 1.35);
+    const sl = h.sub ? wrap(ctx, h.sub, tw, 28 * s, 500, 2) : [];
+    const textH = tl.length * tlh + (sl.length ? 14 * s + sl.length * 38 * s : 0);
+    const mainH = Math.max(d, textH);
+    const pairs = (h.pairs || []).filter(p => String(p[1] || '').trim()).map(function (p) {
+      const big = p[2] === 'big', quote = p[2] === 'quote';
+      const px = (big ? 64 : quote ? (String(p[1]).length < 120 ? 44 : String(p[1]).length < 200 ? 38 : 32) : 34) * s;
+      const ls = wrap(ctx, String(p[1]), iw, px, big ? 800 : quote ? 600 : 700, big ? 1 : quote ? 8 : 2);
+      return { l: p[0], ls: ls, px: px, w: big ? 800 : quote ? 600 : 700, lh: px * (quote ? 1.4 : 1.15) };
+    });
+    const pairsH = pairs.reduce((a, p) => a + 40 * s + 22 * s + 18 * s + p.ls.length * p.lh - (p.lh - p.px), 0);
+    const total = pad + 44 * s + 36 * s + mainH + pairsH + pad;
+    const H2 = hero(ctx, b.x, b.y, b.w, total, c, s);
+    // atas: label + pil status
+    eyebrow(ctx, h.label || '', b.x + pad, b.y + pad + 28 * s, 22 * s, HERO.muted, 'left', iw * .6);
+    if (h.status) pill(ctx, h.status, b.x + b.w - pad, b.y + pad, 22 * s, Object.assign({}, H2, { ink: HERO.ink }), 'line', 'right');
+    let y = b.y + pad + 44 * s + 36 * s;
+    if (d) avatarC(ctx, b.x + pad, y + (mainH - d) / 2, d, h.av.name, h.av.im, hc);
+    let ty = y + (mainH - textH) / 2 + tpx * .86;
+    ctx.fillStyle = HERO.ink; lines(ctx, tl, b.x + tx, ty, tpx, tlh, tw8, 1);
+    ty += (tl.length - 1) * tlh;
+    if (sl.length) { ctx.fillStyle = HERO.muted; lines(ctx, sl, b.x + tx, ty + 14 * s + 34 * s, 28 * s, 38 * s, 500, 1); }
+    y += mainH;
+    pairs.forEach(function (p) {
+      y += 40 * s;
+      eyebrow(ctx, p.l, b.x + pad, y + 18 * s, 22 * s, HERO.muted, 'left', iw);
+      y += 22 * s + 18 * s;
+      ctx.fillStyle = HERO.ink; lines(ctx, p.ls, b.x + pad, y + p.px * .86, p.px, p.lh, p.w, 1);
+      y += p.ls.length * p.lh - (p.lh - p.px);
+    });
+    ctx.fillStyle = c.ink;
+    return b.y + total;
   }
-  /** Baris pilihan seperti "Select your plan": radio, nama + keterangan, harga di kanan, lencana di atas. */
+  /** Baris pilihan seperti pemilih paket: radio, nama + keterangan, harga di kanan, lencana di atas. */
   function planRow(ctx, x, y, w, hgt, c, s, on, name, meta, price, per, badge) {
-    card(ctx, x, y, w, hgt, 32 * s, c, false);
-    if (on) { ctx.save(); kit().rrect(ctx, x + 1.5, y + 1.5, w - 3, hgt - 3, 32 * s); ctx.strokeStyle = alpha(c.ink, .85); ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); }
+    card(ctx, x, y, w, hgt, 28 * s, c, false);
+    if (on) { ctx.save(); kit().rrect(ctx, x + 1.5, y + 1.5, w - 3, hgt - 3, 28 * s); ctx.strokeStyle = c.ink; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); }
     ctx.fillStyle = c.ink;
     const pad = 36 * s, ry = y + hgt / 2;
     radio(ctx, x + pad + 16 * s, ry, 16 * s, c, on, c.ink);
-    const pw = TW(ctx, price, 44 * s, 800), tx = x + pad + 54 * s, tw = w - (tx - x) - pad - pw - 24 * s;
-    T(ctx, name, tx, ry + (meta ? -4 * s : 12 * s), fitP(ctx, name, 36 * s, 700, tw), 700, 1);
-    if (meta) T(ctx, meta, tx, ry + 32 * s, fitP(ctx, meta, 24 * s, 500, tw), 500, .6);
-    T(ctx, price, x + w - pad, ry + (per ? -2 * s : 14 * s), 44 * s, 800, 1, 'right');
-    if (per) T(ctx, per, x + w - pad, ry + 32 * s, 22 * s, 500, .6, 'right');
+    const pw = TW(ctx, price, 42 * s, 800), tx = x + pad + 54 * s, tw = w - (tx - x) - pad - pw - 24 * s;
+    T(ctx, name, tx, ry + (meta ? -4 * s : 12 * s), fitP(ctx, name, 34 * s, 700, tw), 700, 1);
+    if (meta) { ctx.fillStyle = c.muted; T(ctx, meta, tx, ry + 32 * s, fitP(ctx, meta, 24 * s, 500, tw), 500, 1); ctx.fillStyle = c.ink; }
+    T(ctx, price, x + w - pad, ry + (per ? -2 * s : 14 * s), 42 * s, 800, 1, 'right');
+    if (per) { ctx.fillStyle = c.muted; T(ctx, per, x + w - pad, ry + 32 * s, 22 * s, 500, 1, 'right'); ctx.fillStyle = c.ink; }
     if (badge) pill(ctx, badge, x + 28 * s, y - 20 * s, 20 * s, c, 'solid');
   }
+  const muted = (ctx, c, fn) => { ctx.fillStyle = c.muted; fn(); ctx.fillStyle = c.ink; };
 
   const DRAW = {
     promo: function (ctx, b, c, s, o) {
-      let y = head(ctx, b, c, s, 'promo');
+      let y = heroBlock(ctx, b, c, s, { label: 'Promo paket', status: coachName(), title: txt('promo', 'head'), sub: txt('promo', 'sub') }) + 44 * s;
       const list = pickedPkgs();
-      if (!list.length) { T(ctx, 'Belum ada paket aktif', b.x, y + 40 * s, 36 * s, 500, .6); return; }
-      y += 8 * s; T(ctx, 'Pilih paket', b.x + b.w / 2, y, 26 * s, 600, .65, 'center'); y += 52 * s;
+      if (!list.length) { muted(ctx, c, () => T(ctx, 'Belum ada paket aktif', b.x, y + 20 * s, 30 * s, 500, 1)); return y + 40 * s; }
+      eyebrow(ctx, 'Pilih paket', b.x + b.w / 2, y + 10 * s, 22 * s, c.muted, 'center'); y += 52 * s;
       const per = p => (p.sesi > 0 && p.harga > 0 ? p.harga / p.sesi : 0);
       const cheap = list.length > 1 ? list.reduce((a, p) => (per(p) && (!per(a) || per(p) < per(a)) ? p : a), list[0]) : null;
-      const gap = 28 * s, one = list.length === 1;
-      const rh = Math.min((o.size === 'story' ? 156 : 132) * s, (b.y + b.h - y - gap * (list.length - 1)) / list.length);
+      const gap = 28 * s, rh = Math.min((o.size === 'story' ? 140 : 120) * s, (b.y + b.h - y - gap * (list.length - 1)) / list.length);
       list.forEach(function (p, i) {
         const meta = [p.sesi ? p.sesi + ' sesi' : '', p.durasi ? String(p.durasi) : ''].filter(Boolean).join(' · ');
         planRow(ctx, b.x, y + i * (rh + gap), b.w, rh, c, s, i === 0, String(p.nama || ''), meta, rupiah(p.harga), per(p) ? rpShort(per(p)) + ' / sesi' : '', cheap === p && per(p) ? 'Paling hemat' : '');
       });
       y += list.length * (rh + gap) - gap;
-      if (one && (list[0].benefit || []).length) {
+      if (list.length === 1 && (list[0].benefit || []).length) {
         y += gap;
         const bn = list[0].benefit.slice(0, 4), ch = Math.min(b.y + b.h - y, (bn.length * 56 + 48) * s);
-        if (ch > 120 * s) { card(ctx, b.x, y, b.w, ch, 32 * s, c, false); bn.forEach((t2, j) => { if ((j + 1) * 56 * s + 24 * s < ch) T(ctx, '✓   ' + t2, b.x + 36 * s, y + 60 * s + j * 56 * s, fitP(ctx, '✓   ' + t2, 30 * s, 500, b.w - 72 * s), 500, .9); }); y += ch; }
+        if (ch > 120 * s) { card(ctx, b.x, y, b.w, ch, 28 * s, c, false); bn.forEach((t2, j) => { if ((j + 1) * 56 * s + 24 * s < ch) T(ctx, '✓   ' + t2, b.x + 36 * s, y + 60 * s + j * 56 * s, fitP(ctx, '✓   ' + t2, 30 * s, 500, b.w - 72 * s), 500, .9); }); y += ch; }
       }
       return y;
     },
     slot: function (ctx, b, c, s) {
       const days = ((po.data && po.data.slots) || []).slice(0, 7);
       const total = days.reduce((a, d) => a + d.hours.length, 0);
-      let y = head(ctx, b, c, s, 'slot', 2, 100);
-      if (!days.length || !total) { T(ctx, 'Semua jam minggu ini sudah penuh', b.x, y + 20 * s, 34 * s, 500, .6); return; }
-      const pad = 32 * s, rowH = Math.min(116 * s, (b.y + b.h - y - 2 * pad) / days.length);
-      card(ctx, b.x, y, b.w, rowH * days.length + 2 * pad, 36 * s, c, false);
+      let y = heroBlock(ctx, b, c, s, { label: 'Slot minggu ini', status: total + ' jam kosong', title: txt('slot', 'head'), sub: txt('slot', 'sub'), maxLines: 2 }) + 28 * s;
+      if (!days.length || !total) { muted(ctx, c, () => T(ctx, 'Semua jam minggu ini sudah penuh', b.x, y + 30 * s, 30 * s, 500, 1)); return y + 50 * s; }
+      const pad = 32 * s, rowH = Math.min(104 * s, (b.y + b.h - y - 2 * pad) / days.length);
+      card(ctx, b.x, y, b.w, rowH * days.length + 2 * pad, 28 * s, c, false);
       const lw = 150 * s, px = 24 * s, gap = 10 * s;
       days.forEach(function (d, i) {
         const ry = y + pad + i * rowH, mid = ry + rowH / 2;
-        if (i) { ctx.fillStyle = alpha(c.ink, .1); ctx.fillRect(b.x + pad, ry, b.w - 2 * pad, 2); ctx.fillStyle = c.ink; }
-        T(ctx, DOW_ID[d.dow], b.x + pad, mid - 2 * s, 30 * s, 700, 1);
-        T(ctx, dShort(d.date), b.x + pad, mid + 28 * s, 22 * s, 500, .55);
+        if (i) { ctx.fillStyle = c.line; ctx.fillRect(b.x + pad, ry, b.w - 2 * pad, 2); ctx.fillStyle = c.ink; }
+        eyebrow(ctx, DOW_ID[d.dow], b.x + pad, mid - 4 * s, 22 * s, c.ink);
+        muted(ctx, c, () => T(ctx, dShort(d.date), b.x + pad, mid + 26 * s, 22 * s, 500, 1));
         let x = b.x + pad + lw;
         const hrs = d.hours.map(hh => ('0' + hh).slice(-2) + '.00');
-        if (!hrs.length) { T(ctx, d.closed ? 'Libur' : 'Penuh', x, mid + 10 * s, 28 * s, 500, .45); return; }
-        const pw = TW(ctx, '00.00', px, 600) + px * 1.4, room = b.x + b.w - pad - x;
+        if (!hrs.length) { muted(ctx, c, () => T(ctx, d.closed ? 'Libur' : 'Penuh', x, mid + 10 * s, 26 * s, 500, 1)); return; }
+        const pw = TW(ctx, '00.00', px, 700) + px * 1.5, room = b.x + b.w - pad - x;
         const fitN = Math.max(1, Math.floor((room + gap) / (pw + gap)));
         const show = hrs.length > fitN ? hrs.slice(0, fitN - 1) : hrs;
         show.forEach(function (t2) { x += pill(ctx, t2, x, mid - px, px, c, 'line') + gap; });
@@ -16087,123 +16151,86 @@
       });
       return y + rowH * days.length + 2 * pad;
     },
-    profil: function (ctx, b, c, s, o) {
-      const K = kit(), co = (po.data && po.data.coach) || {};
-      const ph = Math.round(b.h * (o.size === 'story' ? .58 : .54)), r = 44 * s;
-      // foto besar seperti kartu profil di aplikasi; nama dan label di atas foto
-      ctx.save(); ctx.shadowColor = c.shadow; ctx.shadowBlur = 50; ctx.shadowOffsetY = 18; K.rrect(ctx, b.x, b.y, b.w, ph, r); ctx.fillStyle = c.light ? '#BDBDBB' : '#1E1E1E'; ctx.fill(); ctx.restore();
-      ctx.save(); K.rrect(ctx, b.x, b.y, b.w, ph, r); ctx.clip();
-      if (po.avatar && po.avatar.naturalWidth) K.drawCover(ctx, po.avatar, b.x, b.y, b.w, ph, .25);
-      else { const gg = ctx.createLinearGradient(b.x, b.y, b.x + b.w, b.y + ph); gg.addColorStop(0, '#5A5A58'); gg.addColorStop(1, '#161616'); ctx.fillStyle = gg; ctx.fillRect(b.x, b.y, b.w, ph); ctx.fillStyle = '#FFFFFF'; T(ctx, (first(co.name).replace(/^coach$/i, '')[0] || first(String(co.name).replace(/^coach\s+/i, ''))[0] || '?').toUpperCase(), b.x + b.w / 2, b.y + ph * .55, ph * .42, 800, .22, 'center'); }
-      const gd = ctx.createLinearGradient(0, b.y + ph * .45, 0, b.y + ph); gd.addColorStop(0, 'rgba(0,0,0,0)'); gd.addColorStop(1, 'rgba(0,0,0,.72)'); ctx.fillStyle = gd; ctx.fillRect(b.x, b.y, b.w, ph);
-      ctx.restore();
-      const onPhoto = { strong: 'rgba(0,0,0,.45)', onStrong: '#FFFFFF', ink: '#FFFFFF', card: 'rgba(255,255,255,.18)', line: 'rgba(255,255,255,.35)' };
-      const pad = 40 * s, nm = txt('profil', 'head'), sub = txt('profil', 'sub');
-      const npx = fitP(ctx, nm, 76 * s, 800, b.w - 2 * pad);
-      ctx.fillStyle = '#FFFFFF';
-      const ny = b.y + ph - pad - (sub ? 46 * s : 0);
-      T(ctx, nm, b.x + pad, ny, npx, 800, 1);
-      if (sub) T(ctx, sub, b.x + pad, ny + 46 * s, fitP(ctx, sub, 28 * s, 500, b.w - 2 * pad), 500, .85);
-      pill(ctx, 'Personal trainer', b.x + pad, ny - npx - 34 * s, 22 * s, onPhoto, 'solid');
-      ctx.fillStyle = c.ink;
-      let y = b.y + ph + 32 * s;
-      const on = factsOn();
-      const spec = String(co.specialty || '').split(/[,;/]/).map(x => x.trim()).filter(Boolean).slice(0, 4);
-      if (on.indexOf('spec') !== -1 && spec.length) { let x = b.x; spec.forEach(function (sp) { if (x + TW(ctx, sp, 24 * s, 600) + 40 * s > b.x + b.w) return; x += pill(ctx, sp, x, y, 24 * s, c, 'soft') + 12 * s; }); y += 48 * s + 28 * s; }
-      const facts = [['bio', 'Tentang saya', co.bio], ['exp', 'Pengalaman', co.experience], ['loc', 'Lokasi', co.location],
-        ['cert', 'Sertifikasi', (co.certifications || []).slice(0, 3).join(' · ')], ['ach', 'Prestasi', (co.achievements || []).slice(0, 2).join(' · ')]]
+    profil: function (ctx, b, c, s) {
+      const co = (po.data && po.data.coach) || {}, on = factsOn();
+      const spec = String(co.specialty || '').split(/[,;/]/).map(x => x.trim()).filter(Boolean).slice(0, 3).join(' · ');
+      let y = heroBlock(ctx, b, c, s, {
+        label: 'Personal trainer', status: on.indexOf('exp') !== -1 && co.experience ? String(co.experience) : '',
+        av: { name: co.name, im: po.avatar, d: 168 }, title: txt('profil', 'head'), sub: txt('profil', 'sub'),
+        pairs: [[on.indexOf('spec') !== -1 ? 'Spesialisasi' : '', on.indexOf('spec') !== -1 ? spec : ''], [on.indexOf('loc') !== -1 ? 'Lokasi' : '', on.indexOf('loc') !== -1 ? co.location : '']]
+      }) + 28 * s;
+      const facts = [['bio', 'Tentang saya', co.bio], ['cert', 'Sertifikasi', (co.certifications || []).slice(0, 3).join(' · ')], ['ach', 'Prestasi', (co.achievements || []).slice(0, 2).join(' · ')]]
         .filter(f => on.indexOf(f[0]) !== -1 && String(f[2] || '').trim());
-      const gap = 20 * s, cw = (b.w - gap) / 2;
-      let col = 0, rowY = y;
       facts.forEach(function (f) {
-        const wide = f[0] === 'bio' || f[0] === 'cert' || f[0] === 'ach' || String(f[2]).length > 22;
-        if (wide && col === 1) { col = 0; rowY += 128 * s + gap; }
-        const w = wide ? b.w : cw, l = wrap(ctx, String(f[2]), w - 64 * s, 28 * s, 600, wide ? 2 : 1), ch = (68 + l.length * 38) * s;
-        if (rowY + ch > b.y + b.h + 2) return;
-        const x = b.x + col * (cw + gap);
-        card(ctx, x, rowY, w, ch, 28 * s, c, false);
-        T(ctx, f[1], x + 32 * s, rowY + 44 * s, 22 * s, 500, .6);
-        lines(ctx, l, x + 32 * s, rowY + 82 * s, 28 * s, 38 * s, 600, 1);
-        if (wide) { rowY += ch + gap; col = 0; } else if (col === 0) { col = 1; } else { col = 0; rowY += ch + gap; }
+        const l = wrap(ctx, String(f[2]), b.w - 72 * s, 30 * s, 600, f[0] === 'bio' ? 3 : 2), ch = (86 + l.length * 42) * s;
+        if (y + ch > b.y + b.h + 2) return;
+        card(ctx, b.x, y, b.w, ch, 28 * s, c, false);
+        eyebrow(ctx, f[1], b.x + 36 * s, y + 52 * s, 22 * s, c.muted);
+        lines(ctx, l, b.x + 36 * s, y + 98 * s, 30 * s, 42 * s, 600, 1);
+        y += ch + 20 * s;
       });
+      return y - 20 * s;
     },
     testi: function (ctx, b, c, s) {
       const list = (po.data && po.data.testimonials) || [], t = list[pk('testi').testi] || list[0];
-      let y = head(ctx, b, c, s, 'testi', 2, 92);
-      if (!t) { T(ctx, 'Belum ada testimoni yang diizinkan klien', b.x, y + 20 * s, 32 * s, 500, .6); return; }
-      const pad = 52 * s, room = b.y + b.h - y;
-      const len = t.text.length, px = (len < 90 ? 56 : len < 160 ? 48 : len < 230 ? 42 : 36) * s;
-      const maxL = Math.max(3, Math.floor((room - 150 * s - pad * 2 - 200 * s) / (px * 1.4)));
-      const l = wrap(ctx, t.text, b.w - 2 * pad, px, 600, maxL);
-      const ch = Math.min(room, 150 * s + l.length * px * 1.4 + 230 * s + pad * 2);
-      card(ctx, b.x, y, b.w, ch, 40 * s, c, false);
-      T(ctx, '“', b.x + pad - 8 * s, y + pad + 120 * s, 200 * s, 800, .2);
-      const ty = y + pad + 150 * s;
-      lines(ctx, l, b.x + pad, ty, px, px * 1.4, 600, 1);
-      const sy = Math.min(ty + l.length * px * 1.4 + 30 * s, y + ch - pad - 130 * s);
-      for (let i = 0; i < 5; i++) star(ctx, b.x + pad + 20 * s + i * 50 * s, sy, 20 * s, i < (t.stars || 5) ? c.ink : alpha(c.ink, .2));
-      ctx.fillStyle = c.ink;
-      const ay = y + ch - pad - 72 * s;
-      ctx.beginPath(); ctx.arc(b.x + pad + 36 * s, ay + 36 * s, 36 * s, 0, 7); ctx.fillStyle = alpha(c.ink, .12); ctx.fill(); ctx.fillStyle = c.ink;
-      T(ctx, (t.name[0] || '?').toUpperCase(), b.x + pad + 36 * s, ay + 48 * s, 32 * s, 700, .8, 'center');
-      T(ctx, t.name, b.x + pad + 96 * s, ay + 30 * s, 30 * s, 700, 1);
-      T(ctx, txt('testi', 'sub') || ('Klien ' + coachName()), b.x + pad + 96 * s, ay + 66 * s, 24 * s, 500, .6);
-      return y + ch;
+      if (!t) { muted(ctx, c, () => T(ctx, 'Belum ada testimoni yang diizinkan klien', b.x, b.y + 40 * s, 30 * s, 500, 1)); return b.y + 60 * s; }
+      return heroBlock(ctx, b, c, s, {
+        label: txt('testi', 'head'), status: '★ ' + (t.stars || 5) + '/5', av: { name: t.name }, title: t.name,
+        sub: txt('testi', 'sub') || ('Klien ' + coachName()), pairs: [['Cerita', t.text, 'quote']]
+      });
     },
     hasil: function (ctx, b, c, s) {
-      const y = head(ctx, b, c, s, 'hasil', 2, 100);
       const r = curResults(), on = pickedStats();
-      if (!r) { T(ctx, 'Memuat angka…', b.x, y + 20 * s, 32 * s, 500, .6); return; }
-      if (!on.length) { T(ctx, 'Belum ada angka untuk periode ini', b.x, y + 20 * s, 32 * s, 500, .6); return; }
-      const cols = 2, rows = Math.ceil(on.length / cols), gap = 20 * s;
-      const th = Math.min(260 * s, (b.y + b.h - y - gap * (rows - 1)) / rows), tw = (b.w - gap) / cols;
-      on.forEach(function (key, i) {
+      const firstV = r && on.length ? statVal(r, on[0]) : null;
+      let y = heroBlock(ctx, b, c, s, { label: 'Hasil coaching', status: periodLabel(PP.period), title: txt('hasil', 'head'), sub: txt('hasil', 'sub'), maxLines: 2, pairs: firstV ? [[firstV[1], firstV[0], 'big']] : [] }) + 28 * s;
+      if (!r) { muted(ctx, c, () => T(ctx, 'Memuat angka…', b.x, y + 20 * s, 30 * s, 500, 1)); return y + 40 * s; }
+      if (!on.length) { muted(ctx, c, () => T(ctx, 'Belum ada angka untuk periode ini', b.x, y + 20 * s, 30 * s, 500, 1)); return y + 40 * s; }
+      const rest = on.slice(1), cols = 2, rows = Math.ceil(rest.length / cols), gap = 20 * s;
+      if (!rest.length) return y - 28 * s;
+      const th = Math.min(200 * s, (b.y + b.h - y - gap * (rows - 1)) / rows), tw = (b.w - gap) / cols;
+      rest.forEach(function (key, i) {
         const tx = b.x + (i % cols) * (tw + gap), ty = y + Math.floor(i / cols) * (th + gap), v = statVal(r, key);
-        card(ctx, tx, ty, tw, th, 32 * s, c, i === 0);
-        const vp = fitP(ctx, v[0], Math.min(92 * s, th * .4), 800, tw - 64 * s);
-        T(ctx, v[0], tx + 32 * s, ty + th * .56, vp, 800, 1);
-        T(ctx, v[1], tx + 32 * s, ty + th * .56 + 44 * s, fitP(ctx, v[1], 24 * s, 500, tw - 64 * s), 500, .65);
-        ctx.fillStyle = c.ink;
+        card(ctx, tx, ty, tw, th, 28 * s, c, false);
+        eyebrow(ctx, v[1], tx + 32 * s, ty + 52 * s, 20 * s, c.muted, 'left', tw - 64 * s);
+        T(ctx, v[0], tx + 32 * s, ty + th - 40 * s, fitP(ctx, v[0], Math.min(72 * s, th * .4), 800, tw - 64 * s), 800, 1);
       });
       return y + rows * (th + gap) - gap;
     },
     kisah: function (ctx, b, c, s, o, hasPhoto) {
       const K = kit(), st = po.story;
-      if (!st) { T(ctx, (po.data && po.data.stories && po.data.stories.length) ? 'Pilih klien di Isi' : 'Belum ada klien yang memberi izin', b.x, b.y + 60 * s, 34 * s, 500, .6); return; }
+      if (!st) { muted(ctx, c, () => T(ctx, (po.data && po.data.stories && po.data.stories.length) ? 'Pilih klien di Isi' : 'Belum ada klien yang memberi izin', b.x, b.y + 40 * s, 30 * s, 500, 1)); return b.y + 60 * s; }
       let y = b.y;
       if (hasPhoto && o.style !== 'foto') {
-        const ph = Math.round(b.h * (o.size === 'story' ? .38 : .32));
-        ctx.save(); ctx.shadowColor = c.shadow; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14; K.rrect(ctx, b.x, y, b.w, ph, 44 * s); ctx.fillStyle = '#1E1E1E'; ctx.fill(); ctx.restore();
-        ctx.save(); K.rrect(ctx, b.x, y, b.w, ph, 44 * s); ctx.clip(); K.drawCover(ctx, po.photo, b.x, y, b.w, ph, .3); ctx.restore();
-        y += ph + 44 * s;
+        const ph = Math.round(b.h * (o.size === 'story' ? .34 : .28));
+        ctx.save(); K.rrect(ctx, b.x, y, b.w, ph, 28 * b.w / 430); ctx.clip(); K.drawCover(ctx, po.photo, b.x, y, b.w, ph, .3); ctx.restore();
+        y += ph + 24 * s;
       }
-      pill(ctx, 'Kisah ' + st.first, b.x, y, 22 * s, c, 'line');
-      y = head(ctx, { x: b.x, y: y + 72 * s, w: b.w, h: b.h }, c, s, 'kisah', 2, 100);
+      y = heroBlock(ctx, { x: b.x, y: y, w: b.w, h: b.h }, c, s, { label: 'Kisah klien', status: st.weeks ? st.weeks + ' minggu' : '', av: { name: st.first }, title: st.first, sub: 'Bersama ' + coachName(), pairs: [['Hasil', txt('kisah', 'head'), 'big']] }) + 28 * s;
       const on = storyOn(), rows = [];
       const sg = v => (v > 0 ? '+' : v < 0 ? '−' : '') + pnum(Math.abs(v));
       if (on.indexOf('berat') !== -1 && st.berat) rows.push(['Berat', pnum(st.berat.from) + ' → ' + pnum(st.berat.to) + ' kg', sg(st.berat.change) + ' kg']);
       if (on.indexOf('pinggang') !== -1 && st.pinggang) rows.push(['Pinggang', pnum(st.pinggang.from) + ' → ' + pnum(st.pinggang.to) + ' cm', sg(st.pinggang.change) + ' cm']);
       if (on.indexOf('lift') !== -1 && st.lift) rows.push([st.lift.gerakan, pnum(st.lift.from, 0) + ' → ' + pnum(st.lift.to, 0) + ' kg', '+' + pnum(st.lift.to - st.lift.from, 0) + ' kg']);
-      if (on.indexOf('sesi') !== -1 && (st.weeks || st.sessions)) rows.push(['Bersama ' + coachName(), st.weeks + ' minggu', st.sessions + ' sesi']);
-      if (!rows.length) return;
-      const pad = 32 * s, rh = Math.min((o.size === 'story' ? 150 : 124) * s, (b.y + b.h - y - 2 * pad) / rows.length);
-      if (rh < 80 * s) return;
-      card(ctx, b.x, y, b.w, rows.length * rh + 2 * pad, 36 * s, c, false);
+      if (on.indexOf('sesi') !== -1 && st.sessions) rows.push(['Sesi latihan', st.sessions + ' sesi', st.prs ? st.prs + ' rekor' : '']);
+      if (!rows.length) return y - 28 * s;
+      const pad = 32 * s, rh = Math.min((o.size === 'story' ? 124 : 104) * s, (b.y + b.h - y - 2 * pad) / rows.length);
+      if (rh < 80 * s) return y - 28 * s;
+      card(ctx, b.x, y, b.w, rows.length * rh + 2 * pad, 28 * s, c, false);
       rows.forEach(function (r, i) {
         const ry = y + pad + i * rh, mid = ry + rh / 2;
-        if (i) { ctx.fillStyle = alpha(c.ink, .1); ctx.fillRect(b.x + pad, ry, b.w - 2 * pad, 2); ctx.fillStyle = c.ink; }
-        T(ctx, r[0], b.x + pad, mid - 16 * s, fitP(ctx, r[0], 22 * s, 500, b.w * .55), 500, .6);
-        T(ctx, r[1], b.x + pad, mid + 30 * s, fitP(ctx, r[1], 46 * s, 800, b.w * .58), 800, 1);
-        pill(ctx, r[2], b.x + b.w - pad, mid - 24 * s, 24 * s, c, 'solid', 'right');
+        if (i) { ctx.fillStyle = c.line; ctx.fillRect(b.x + pad, ry, b.w - 2 * pad, 2); ctx.fillStyle = c.ink; }
+        eyebrow(ctx, r[0], b.x + pad, mid - 14 * s, 20 * s, c.muted, 'left', b.w * .55);
+        T(ctx, r[1], b.x + pad, mid + 30 * s, fitP(ctx, r[1], 40 * s, 800, b.w * .58), 800, 1);
+        if (r[2]) pill(ctx, r[2], b.x + b.w - pad, mid - 22 * s, 22 * s, c, 'solid', 'right');
       });
       return y + rows.length * rh + 2 * pad;
     },
-    xnk: function (ctx, b, c, s) {
+    xnk: function (ctx, b, c, s, o) {
       const x = (po.data && po.data.xnkCoach) || { tiers: [] };
-      let y = head(ctx, b, c, s, 'xnk', 3, 100);
+      let y = heroBlock(ctx, b, c, s, { label: x.title || '', status: (x.tiers || []).length ? 'Mulai ' + rpShort(Math.min.apply(null, x.tiers.map(t => t.bulanan))) : '', title: txt('xnk', 'head'), sub: txt('xnk', 'sub') }) + 44 * s;
       const tiers = x.tiers || [];
-      y += 8 * s; T(ctx, 'Pilih paket', b.x + b.w / 2, y, 26 * s, 600, .65, 'center'); y += 52 * s;
-      const gap = 28 * s, rh = Math.min(140 * s, (b.y + b.h - y - gap * (tiers.length - 1)) / Math.max(1, tiers.length));
+      eyebrow(ctx, 'Pilih paket', b.x + b.w / 2, y + 10 * s, 22 * s, c.muted, 'center'); y += 52 * s;
+      const gap = 28 * s, rh = Math.min((o.size === 'story' ? 140 : 120) * s, (b.y + b.h - y - gap * (tiers.length - 1)) / Math.max(1, tiers.length));
       tiers.forEach(function (t, i) { planRow(ctx, b.x, y + i * (rh + gap), b.w, rh, c, s, !!t.popular, t.name, t.limit, rpShort(t.bulanan), '/ bulan', t.popular ? 'Paling dipilih' : ''); });
       return y + tiers.length * (rh + gap) - gap;
     }
