@@ -72,7 +72,7 @@ test('landing: daftar coach dari hub.json, nama di-escape, gambar yang dirujuk a
   assert.equal(html.split('Hubungi XNK').length - 1, 1, 'kontak di penutup');
   for (const m of html.matchAll(/(?:src|content)="(?:https:\/\/xnk\.web\.id\/)?(img\/[^"]+)"/g)) assert.ok(m[1] in files, m[1]);
   // Form masuk tetap sama (hub-check dan link lama bergantung padanya).
-  for (const id of ['id="f"', 'id="slug"', 'id="err"', 'data-to="klien"', 'data-to="panel"', '<title>XNK | Aplikasi Personal Trainer &amp; Manajemen Klien</title>']) assert.ok(html.includes(id), id);
+  for (const id of ['id="f"', 'id="slug"', 'id="err"', 'data-to="klien"', 'data-to="panel"', '<title>XNK Coach | Aplikasi Personal Trainer &amp; Manajemen Klien</title>']) assert.ok(html.includes(id), id);
   const evil = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['index.html'];
   assert.ok(!evil.includes('<img src=x') && evil.includes('&lt;img src=x'), 'nama usaha di-escape');
   const evilInfo = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['evil/info/index.html'];

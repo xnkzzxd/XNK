@@ -561,7 +561,7 @@ function build(cfg, opts) {
   if (hub.vapid) files['_hub/push.json'] = JSON.stringify({ vapidPublic: hub.vapid }) + '\n';
   let landing = landingSales(fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), hub);
   const contact = hub.contact
-    ? `<a class="btn ghost" href="${esc(hub.contact)}" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg>Hubungi XNK</a>`
+    ? `<a class="btn ghost" href="${esc(hub.contact)}" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg>Hubungi XNK Coach</a>`
     : '';
   if (!landing.includes('<!--CONTACT-->')) throw new Error('build-hub: <!--CONTACT--> tidak ada di hub-site/index.html');
   landing = landing.split('<!--CONTACT-->').join(contact);
@@ -675,13 +675,13 @@ function landingLd(landing) {
   const faqBox = (landing.match(/<div class="faq">([\s\S]*?)<\/div>/) || [])[1] || '';
   const faq = [...faqBox.matchAll(/<details><summary>([\s\S]*?)<\/summary><p>([\s\S]*?)<\/p><\/details>/g)]
     .map(m => ({ '@type': 'Question', name: plain(m[1]), acceptedAnswer: { '@type': 'Answer', text: plain(m[2]) } }));
-  const ld = [{ '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'XNK', url: HUB_ORIGIN + '/', description: desc, inLanguage: 'id',
+  const ld = [{ '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'XNK Coach', url: HUB_ORIGIN + '/', description: desc, inLanguage: 'id',
     applicationCategory: 'BusinessApplication', operatingSystem: 'Web, Android, Windows, macOS', image: HUB_ORIGIN + '/img/og.jpg', offers: harga.offers(HUB_ORIGIN + '/') }];
-  ld.push({ '@context': 'https://schema.org', '@type': 'Organization', '@id': HUB_ORIGIN + '/#org', name: 'XNK', url: HUB_ORIGIN + '/',
+  ld.push({ '@context': 'https://schema.org', '@type': 'Organization', '@id': HUB_ORIGIN + '/#org', name: 'XNK Coach', alternateName: 'XNK', url: HUB_ORIGIN + '/',
     logo: HUB_ORIGIN + '/img/icon-512.png', areaServed: 'ID',
     founder: { '@type': 'Person', name: 'Yandura Jizdan', homeLocation: { '@type': 'City', name: 'Purwokerto' } },
     address: { '@type': 'PostalAddress', addressLocality: 'Purwokerto', addressRegion: 'Jawa Tengah', addressCountry: 'ID' } },
-  { '@context': 'https://schema.org', '@type': 'WebSite', '@id': HUB_ORIGIN + '/#website', name: 'XNK', alternateName: ['XNK App', 'XNK Coach', 'xnk.web.id'], url: HUB_ORIGIN + '/', inLanguage: 'id', publisher: { '@id': HUB_ORIGIN + '/#org' } });
+  { '@context': 'https://schema.org', '@type': 'WebSite', '@id': HUB_ORIGIN + '/#website', name: 'XNK Coach', alternateName: ['XNK', 'xnk.web.id'], url: HUB_ORIGIN + '/', inLanguage: 'id', publisher: { '@id': HUB_ORIGIN + '/#org' } });
   if (faq.length) ld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq });
   if (!landing.includes('</head>')) throw new Error('build-hub: </head> tidak ada di hub-site/index.html');
   return landing.replace('</head>', () => ld.map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>\n').join('') + '</head>');
@@ -727,7 +727,7 @@ function cityPages(hub) {
     '<link rel="icon" type="image/png" href="/img/icon-192.png">', css,
     ...ld.map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>'),
     '</head>', '<body>', '<main>', body,
-    `<footer>Coach memakai <a href="${HUB_ORIGIN}/">XNK</a> untuk jadwal, program latihan, gizi, dan progres klien.</footer>`,
+    `<footer>Coach memakai <a href="${HUB_ORIGIN}/">XNK Coach</a> untuk jadwal, program latihan, gizi, dan progres klien.</footer>`,
     '</main>', '</body>', '</html>', ''].join('\n'));
   for (const k of keys) {
     const { city, coaches } = groups[k];
@@ -747,7 +747,7 @@ function cityPages(hub) {
   }
   const url = HUB_ORIGIN + '/personal-trainer/';
   const items = keys.map(k => `<li><a href="/personal-trainer/${k}/"><b>Personal Trainer ${esc(groups[k].city)}</b><span>${groups[k].coaches.length} coach</span></a></li>`).join('\n');
-  out['personal-trainer/index.html'] = page('Personal Trainer per kota · XNK', 'Cari personal trainer di kota Anda: ' + keys.map(k => groups[k].city).join(', ') + '. Lihat paket, harga, dan jam kosong, lalu daftar online.', url,
+  out['personal-trainer/index.html'] = page('Personal Trainer per kota · XNK Coach', 'Cari personal trainer di kota Anda: ' + keys.map(k => groups[k].city).join(', ') + '. Lihat paket, harga, dan jam kosong, lalu daftar online.', url,
     `<nav class="crumb" aria-label="Remah roti"><a href="/">Beranda</a> › Personal trainer</nav>\n<h1>Personal Trainer per kota</h1>\n<p class="lead">Pilih kota untuk melihat personal trainer di sana.</p>\n<ul class="list">\n${items}\n</ul>`,
     [{ '@context': 'https://schema.org', '@type': 'ItemList', name: 'Personal Trainer per kota', url,
       itemListElement: keys.map((k, i) => ({ '@type': 'ListItem', position: i + 1, url: `${HUB_ORIGIN}/personal-trainer/${k}/`, name: 'Personal Trainer ' + groups[k].city })) }]);
@@ -780,9 +780,9 @@ function infoLd(c, url, desc, logo, ptTitle) {
  */
 function llmsTxt(hub, desc) {
   const active = hub.coaches.filter(c => !c.inactive);
-  const L = ['# XNK', '', '> ' + desc, '',
-    'XNK dibuat oleh Yandura Jizdan di Purwokerto, Jawa Tengah. XNK adalah aplikasi web untuk personal trainer di Indonesia dan klien mereka: jadwal dan booking sesi, program latihan dan pencatat latihan, gizi dan catatan makan, progres tubuh, laporan PDF, keuangan, serta pengingat. Klien memakai portal di ponsel; coach memakai panel di ponsel atau komputer. Bahasa: Indonesia.', '',
-    '## Halaman utama', '', `- [XNK](${HUB_ORIGIN}/): fitur, harga paket coach, demo, dan pendaftaran lewat WhatsApp`];
+  const L = ['# XNK Coach', '', '> ' + desc, '',
+    'XNK Coach dibuat oleh Yandura Jizdan di Purwokerto, Jawa Tengah. XNK Coach adalah aplikasi web untuk personal trainer di Indonesia dan klien mereka: jadwal dan booking sesi, program latihan dan pencatat latihan, gizi dan catatan makan, progres tubuh, laporan PDF, keuangan, serta pengingat. Klien memakai portal di ponsel; coach memakai panel di ponsel atau komputer. Bahasa: Indonesia.', '',
+    '## Halaman utama', '', `- [XNK Coach](${HUB_ORIGIN}/): fitur, harga paket coach, demo, dan pendaftaran lewat WhatsApp`];
   if (active.length) {
     L.push('', '## Coach di XNK', '');
     for (const c of active) {

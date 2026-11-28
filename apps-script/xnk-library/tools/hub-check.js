@@ -202,7 +202,7 @@ async function makeLogos(browser) {
       const seen = [], errors = [];
       const context = await newContext(browser, be, seen);
       const page = await open(context, O + '/', errors);
-      check((await page.title()) === 'XNK | Aplikasi Personal Trainer & Manajemen Klien', 'judul landing');
+      check((await page.title()) === 'XNK Coach | Aplikasi Personal Trainer & Manajemen Klien', 'judul landing');
       // T-2265: nama coach dan daftar coach ada di lembar Masuk (bilah atas, "Masuk di sini", kaki halaman, #masuk).
       check(!(await page.isVisible('#slug')), 'lembar Masuk tertutup saat halaman dibuka');
       await page.click('.top-cta a[href="#masuk"]');
@@ -267,7 +267,7 @@ async function makeLogos(browser) {
         await page.click('#df button[type="submit"]');
         const wa = await page.evaluate(() => window.__wa[0] || '');
         const msg = wa.includes('?text=') ? decodeURIComponent(wa.split('?text=')[1]) : '';
-        check(wa.startsWith('https://wa.me/6281234567890?text=') && msg === ['Halo XNK, saya tertarik memakai XNK.', 'Nama: Rina & Co', 'Kota / tempat: Bandung', 'Klien aktif: 5–15', 'Paket: Pro', 'Cara bayar: Tahunan', 'Mau demo 30 menit dulu: ya'].join('\n'),
+        check(wa.startsWith('https://wa.me/6281234567890?text=') && msg === ['Halo XNK Coach, saya tertarik memakai XNK Coach.', 'Nama: Rina & Co', 'Kota / tempat: Bandung', 'Klien aktif: 5–15', 'Paket: Pro', 'Cara bayar: Tahunan', 'Mau demo 30 menit dulu: ya'].join('\n'),
           'form → wa.me dengan pesan terisi' + (msg ? '' : ' (' + wa + ')'));
         check(await page.getAttribute('a[href="https://xnk.my.id/demo/"]', 'target') === '_blank' && await page.locator('a[href="https://xnk.my.id/demo/?klien"]').count() === 1, 'coba demo: panel dan portal contoh (tab baru)');
         check(await page.evaluate(() => Promise.all([...document.querySelectorAll('.dscr img')].map(i => fetch(i.getAttribute('src') || i.getAttribute('data-src')).then(r => r.ok, () => false))).then(a => a.length === 9 && a.every(Boolean))), 'fitur: 9 layar ada (coach dan klien)');
