@@ -471,6 +471,7 @@ function infoPage(c) {
     t = t.split(k).join(v);
   }
   if (/__[A-Z_]+__/.test(t)) throw new Error('build-hub: penanda tersisa di halaman info ' + c.slug);
+  t = t.replace('</head>', () => infoLd(c, url, desc, logo) + '</head>');
   // Foto coach dari Drive (lh3.googleusercontent.com / drive.google.com); data hanya ke Apps Script coach.
   return cspStatic(t, { connect: 'https://script.google.com https://script.googleusercontent.com', img: 'https://drive.google.com https://*.googleusercontent.com' });
 }
@@ -583,7 +584,7 @@ function build(cfg, opts) {
   landing = landing.replace('/*ACCENTS*/', Object.entries(ACCENTS).map(([k, v]) =>
     `.coach .av.acc-${k} { background: ${v[0]}; color: ${v[1]}; } @media (prefers-color-scheme: dark) { .coach .av.acc-${k} { background: ${v[2]}; color: ${v[3]}; } }`).join('\n  '));
   files['index.html'] = cspStatic(landingLd(landing));
-  Object.assign(files, seoFiles(hub));
+  Object.assign(files, seoFiles(hub, plain((landing.match(/<meta name="description" content="([^"]*)">/) || [])[1] || '')));
   for (const n of fs.readdirSync(path.join(SITE, 'img'))) files['img/' + n] = fs.readFileSync(path.join(SITE, 'img', n));
   // T-2265: huruf landing (Inter Tight, JetBrains Mono; OFL, berkas lisensi ikut), dari situs sendiri: tanpa Google, ikut offline.
   for (const n of fs.readdirSync(path.join(SITE, 'fonts'))) files['fonts/' + n] = fs.readFileSync(path.join(SITE, 'fonts', n));
@@ -643,9 +644,51 @@ function landingLd(landing) {
     .map(m => ({ '@type': 'Question', name: plain(m[1]), acceptedAnswer: { '@type': 'Answer', text: plain(m[2]) } }));
   const ld = [{ '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'XNK', url: HUB_ORIGIN + '/', description: desc, inLanguage: 'id',
     applicationCategory: 'BusinessApplication', operatingSystem: 'Web, Android, Windows, macOS', image: HUB_ORIGIN + '/img/og.jpg', offers: harga.offers(HUB_ORIGIN + '/') }];
+  ld.push({ '@context': 'https://schema.org', '@type': 'Organization', '@id': HUB_ORIGIN + '/#org', name: 'XNK', url: HUB_ORIGIN + '/',
+    logo: HUB_ORIGIN + '/img/icon-512.png', areaServed: 'ID' },
+  { '@context': 'https://schema.org', '@type': 'WebSite', '@id': HUB_ORIGIN + '/#website', name: 'XNK', url: HUB_ORIGIN + '/', inLanguage: 'id', publisher: { '@id': HUB_ORIGIN + '/#org' } });
   if (faq.length) ld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq });
   if (!landing.includes('</head>')) throw new Error('build-hub: </head> tidak ada di hub-site/index.html');
   return landing.replace('</head>', () => ld.map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>\n').join('') + '</head>');
+}
+
+/** SEO/GEO: data terstruktur halaman info coach (bisnis lokal + remah roti). Hanya data publik dari hub.json. */
+function infoLd(c, url, desc, logo) {
+  const pl = c.place || null;
+  const biz = { '@context': 'https://schema.org', '@type': ['LocalBusiness', 'HealthAndBeautyBusiness'], '@id': url + '#coach',
+    name: c.brand, url, description: desc, inLanguage: 'id', image: logo ? HUB_ORIGIN + logo : HUB_ORIGIN + '/img/og.jpg',
+    knowsAbout: ['Personal training', 'Latihan beban', 'Gizi', 'Penurunan berat badan'], isPartOf: { '@id': HUB_ORIGIN + '/#website' } };
+  if (pl) biz.address = { '@type': 'PostalAddress', addressLocality: pl.city, addressCountry: 'ID', name: pl.name };
+  if (pl) biz.areaServed = { '@type': 'City', name: pl.city };
+  if (c.contactUrl) biz.sameAs = [c.contactUrl].concat(c.instagramUrl ? [c.instagramUrl] : []);
+  else if (c.instagramUrl) biz.sameAs = [c.instagramUrl];
+  const crumbs = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Beranda', item: HUB_ORIGIN + '/' },
+    { '@type': 'ListItem', position: 2, name: c.brand, item: url }] };
+  const meta = '<meta property="og:locale" content="id_ID">\n' +
+    `<meta name="twitter:title" content="${esc(c.brand + ' · Personal trainer')}">\n<meta name="twitter:description" content="${esc(desc)}">\n` +
+    '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">\n';
+  return meta + [biz, crumbs].map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>\n').join('');
+}
+
+/**
+ * GEO: /llms.txt (llmstxt.org) supaya asisten AI (ChatGPT, Claude, Perplexity, Gemini) bisa merangkum XNK dan
+ * menyebut coach aktif dengan benar. Hanya data publik: nama, tempat, kota, alamat halaman info.
+ */
+function llmsTxt(hub, desc) {
+  const active = hub.coaches.filter(c => !c.inactive);
+  const L = ['# XNK', '', '> ' + desc, '',
+    'XNK adalah aplikasi web untuk personal trainer di Indonesia dan klien mereka: jadwal dan booking sesi, program latihan dan pencatat latihan, gizi dan catatan makan, progres tubuh, laporan PDF, keuangan, serta pengingat. Klien memakai portal di ponsel; coach memakai panel di ponsel atau komputer. Bahasa: Indonesia.', '',
+    '## Halaman utama', '', `- [XNK](${HUB_ORIGIN}/): fitur, harga paket coach, demo, dan pendaftaran lewat WhatsApp`];
+  if (active.length) {
+    L.push('', '## Coach di XNK', '');
+    for (const c of active) {
+      const pl = c.place ? ` — ${c.place.name}, ${c.place.city}` : '';
+      L.push(`- [${c.brand}](${HUB_ORIGIN}/${c.slug}/info/): personal trainer${pl}; paket, harga, jam kosong, daftar online`);
+    }
+  }
+  L.push('', '## Opsional', '', `- [Sitemap](${HUB_ORIGIN}/sitemap.xml)`, '');
+  return L.join('\n');
 }
 
 /**
@@ -653,7 +696,7 @@ function landingLd(landing) {
  * coach (halaman masuk) tidak perlu dirayapi; halaman pengalih dan coach tidak aktif sudah noindex (dibiarkan terbaca
  * supaya noindex-nya terlihat). Tanpa lastmod, supaya build tetap sama byte demi byte.
  */
-function seoFiles(hub) {
+function seoFiles(hub, desc) {
   const active = hub.coaches.filter(c => !c.inactive);
   const robots = ['User-agent: *', 'Allow: /', 'Disallow: /adminxnk/', 'Disallow: /_hub/', 'Disallow: /_lib/']
     .concat(...active.map(c => [`Disallow: /${c.slug}/`, `Allow: /${c.slug}/info/`]))
@@ -661,7 +704,7 @@ function seoFiles(hub) {
   const urls = [HUB_ORIGIN + '/'].concat(active.map(c => `${HUB_ORIGIN}/${c.slug}/info/`));
   const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
     urls.map(u => `  <url><loc>${esc(u)}</loc></url>`).join('\n') + '\n</urlset>\n';
-  return { 'robots.txt': robots, 'sitemap.xml': sitemap };
+  return { 'robots.txt': robots, 'sitemap.xml': sitemap, 'llms.txt': llmsTxt(hub, desc) };
 }
 
 /** build-tenant.js dari checkout XNK lain (commit coach itu), atau milik build ini. */

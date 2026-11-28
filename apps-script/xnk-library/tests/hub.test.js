@@ -57,7 +57,7 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
   assert.ok(!files['index.html'].includes('<!--CONTACT-->'));
   // Tanpa coach pun situs jadi (hanya landing).
   const empty = hub.build({ coaches: [] }).files;
-  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/') && !n.startsWith('fonts/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'index.html', 'manifest.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js']);
+  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/') && !n.startsWith('fonts/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'index.html', 'llms.txt', 'manifest.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js']);
   assert.ok(Buffer.isBuffer(empty['img/og.jpg']) && empty['img/og.jpg'].length > 1000, 'gambar landing ikut dibangun');
 });
 
@@ -432,9 +432,12 @@ test('landing: data terstruktur, robots.txt dan sitemap.xml', () => {
   const { files } = hub.build(cfg);
   const html = files['index.html'];
   const ld = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => m[1]);
-  assert.equal(ld.length, 2);
+  assert.equal(ld.length, 4);
   for (const t of ld) assert.ok(!t.includes('<'), 'tanpa < mentah');
-  const [app, faq] = ld.map(t => JSON.parse(t));
+  const all = ld.map(t => JSON.parse(t)), by = k => all.find(o => o['@type'] === k);
+  const app = by('SoftwareApplication'), faq = by('FAQPage');
+  assert.ok(by('Organization') && by('WebSite'));
+  assert.ok(files['llms.txt'].startsWith('# XNK') && files['llms.txt'].includes('/claudia/info/') && !files['llms.txt'].includes('/budi/'));
   assert.equal(app['@type'], 'SoftwareApplication');
   assert.deepEqual(app.offers.map(o => [o.name, Number(o.price), o.priceCurrency]), harga.TIERS.map(t => [t.name, t.bulanan, 'IDR']));
   assert.equal(faq['@type'], 'FAQPage');
