@@ -57,6 +57,7 @@ function hubStatus(secret) {
     sessions: { done7d: done7, next7d: next7 },
     quota: _quotaToday_(),   // T-2253: email, fetch, menit trigger hari ini (WIB)
     quotaDays: _quotaDays_(),   // hari-hari penuh sebelumnya (terbaru dulu); cek HQ pagi hari, jadi "hari ini" masih sedikit
+    plan: _planInfo_(true),   // Fase AF
     readonly: _readonlyOn_(),   // T-2251: mode baca saja (langganan)
     left: _hubLeft_(),          // T-2252: coach keluar
   };

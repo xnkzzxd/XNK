@@ -33,7 +33,7 @@ function run(ctx, name, args) {
     throw new Error('Fungsi tidak dikenal: ' + name);
   }
   // T-2251: gerbang baca saja yang sama dengan doPost (halaman google.script.run lewat penghubung).
-  return _withCtx_(ctx, function () { args = args || []; _coachGate_(name, args); _readonlyGate_(name); return table[name].apply(null, args); });
+  return _withCtx_(ctx, function () { args = args || []; _coachGate_(name, args); _readonlyGate_(name); _planGate_(name); return table[name].apply(null, args); });
 }
 
 /**

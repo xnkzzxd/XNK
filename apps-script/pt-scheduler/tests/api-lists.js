@@ -13,7 +13,7 @@
 
 const PUBLIC = [
   'doGet', 'doPost', 'include', 'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'registerNewClient', 'getPublicSchedules',
-  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo', 'hubStatus', 'hubExport', 'hubPushKey', 'hubSiteUrl', 'hubReadonly',
+  'getPriceList', 'getPriceListPublic', 'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots', 'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo', 'hubStatus', 'hubExport', 'hubPushKey', 'hubSiteUrl', 'hubReadonly', 'hubPlan',
   'sanitizeValue', 'escapeHtmlTelegram',
 ];
 const ADMIN = [
@@ -94,7 +94,7 @@ const READ_OK = [
   'adminLogin', 'memberLoginByPhone', 'memberLoginByKey', 'getPublicSchedules', 'getPriceList', 'getPriceListPublic',
   'getCoaches', 'getLandingStats', 'getPublicTestimonials', 'getPublicAvailability', 'getBusinessHours', 'getOpenSlots',
   'getCoachStatus', 'getPortalBootstrap', 'pushRelayPull', 'pushRelayAck', 'getServerInfo', 'hubStatus', 'hubExport',
-  'hubPushKey', 'hubSiteUrl', 'hubReadonly', 'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras',
+  'hubPushKey', 'hubSiteUrl', 'hubReadonly', 'hubPlan', 'checkAdminSession', 'changeAdminPin', 'getAdminBootstrap', 'getAdminExtras',
   'getAdminMore', 'getClientBundle', 'getClientNutrition', 'getClientFoodLog', 'getMembers', 'getMemberTransactionLog',
   'getSchedules', 'previewCoachProfile', 'getClientCare', 'getWorkoutLog', 'getWorkoutSummaryMessage', 'getTestResultMessage',
   'getSessionBriefing', 'getContentAdmin', 'getMemberProgram', 'getManualExercises', 'getGymCatalog', 'getProgramGenPreview',

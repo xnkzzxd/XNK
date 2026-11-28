@@ -717,6 +717,7 @@ function _rmdOffFrom_(cell) {
 }
 function _rmdIsOff_(client, jenis) {
   // Fase AD1: klien yang ditahan (cuti/sakit/nonaktif) tidak menerima pengingat, kecuali HOLD_KEEP_TYPES (Cuti.gs).
+  if (!_planReminderOk_(jenis)) return true;   // Fase AF: Starter hanya pengingat dasar
   if (client && client.hold && HOLD_KEEP_TYPES.indexOf(jenis) === -1) return true;
   return ((client && client.off) || []).indexOf(jenis) !== -1;
 }
