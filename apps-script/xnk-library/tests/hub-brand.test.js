@@ -233,7 +233,8 @@ test('tempat di halaman info: pita atas, bagian Tempat dengan link Maps, deskrip
   assert.match(t, /<p class="where" id="where"><svg[^>]*>.*<\/svg><span>Gold's Gym Kemang · Jakarta Selatan<\/span><\/p>/);
   assert.match(t, /<section id="tempat" aria-labelledby="h-tempat">/);
   assert.ok(t.includes('href="https://www.google.com/maps/search/?api=1&amp;query=Gold\'s%20Gym%20Kemang%2C%20Jakarta%20Selatan" target="_blank" rel="noopener"'));
-  assert.ok(t.includes('<meta name="description" content="Claudia Fit: personal trainer di Gold\'s Gym Kemang, Jakarta Selatan.'));
+  assert.ok(t.includes('<meta name="description" content="Claudia Fit, personal trainer di Jakarta Selatan (Gold&#39;s Gym Kemang).') || t.includes('content="Claudia Fit, personal trainer di Jakarta Selatan (Gold\'s Gym Kemang).'));
+  assert.ok(t.includes('<title>Claudia Fit · Personal Trainer Jakarta Selatan</title>'));
   assert.ok(t.includes('"place":{"name":"Gold\'s Gym Kemang","city":"Jakarta Selatan"}'), 'tempat juga di CFG halaman');
   assert.ok(files['budi/info/index.html'].includes('<b>Studio &amp; Co</b>'), 'nama tempat di-escape');
   const p = files['polos/info/index.html'];
