@@ -3870,6 +3870,14 @@ details.cp-day[open] .cp-day-names { display: none; }
 .plan-chip svg { width: 13px; height: 13px; }
 .plan-up { text-decoration: none; }
 .plan-foot { display: flex; gap: 6px; align-items: center; margin: 0; font-size: var(--fs-xs, .78rem); color: var(--fg-muted); }
+.plan-fold { border-top: 1px solid color-mix(in srgb, var(--fg) 10%, transparent); padding-top: 4px; }
+.plan-fold > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; cursor: pointer; font-weight: 700; }
+.plan-fold > summary::-webkit-details-marker { display: none; }
+.plan-fold > summary b { margin-left: auto; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--fg) 8%, transparent); font-size: var(--fs-sm); }
+.plan-fold > summary svg { width: 16px; height: 16px; flex: none; }
+.plan-fold > summary svg:last-child { transition: transform .15s; }
+.plan-fold[open] > summary svg:last-child { transform: rotate(180deg); }
+.plan-fold > .plan-chips { padding-bottom: 6px; }
 </style>
 
 </head>
@@ -20792,8 +20800,9 @@ details.cp-day[open] .cp-day-names { display: none; }
       (warn ? '<ul class="plan-rows">' + row('calendar', 'Berlaku penuh <b>' + h(fmt(p.enforceFrom)) + '</b>') +
         (over ? row('users', 'Klien aktif ' + h(cl.used) + ' · batas ' + h(cl.max) + ' · klien baru ditahan', true) : '') +
         (off.length ? row('eye-off', 'Fitur di luar paket disembunyikan · data aman') : '') + '</ul>' : '') +
-      (offPro.length ? '<p class="plan-cap">Ada di Pro</p>' + chips(offPro) : '') +
-      (offStudio.length ? '<p class="plan-cap">Ada di Studio</p>' + chips(offStudio) : '') +
+      (off.length ? '<details class="plan-fold"><summary>' + icon('lock') + '<span>Belum termasuk</span><b>' + off.length + '</b>' + icon('chevron-down') + '</summary>' +
+        (offPro.length ? '<p class="plan-cap">Ada di Pro</p>' + chips(offPro) : '') +
+        (offStudio.length ? '<p class="plan-cap">Ada di Studio</p>' + chips(offStudio) : '') + '</details>' : '') +
       (!off.length ? '<p class="plan-cap">Semua fitur termasuk</p>' : '') +
       (link && (off.length || cl.max) ? '<a class="btn btn-primary btn-block plan-up" href="' + h(link) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Naik paket via WhatsApp</a>' : '') +
       '<p class="plan-foot">' + icon('info') + 'Klien cuti tidak dihitung</p></div>';

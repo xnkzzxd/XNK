@@ -307,6 +307,13 @@
   .pseg button { min-height: 40px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-weight: 700; color: var(--mut); cursor: pointer; }
   .pseg button.on { background: var(--card); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .pseg.sm button { min-height: 36px; font-size: .85rem; }
+  .pfold { border: 1px solid var(--line); border-radius: 12px; margin: 8px 0 0; overflow: hidden; }
+  .pfold > summary { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; cursor: pointer; list-style: none; font-weight: 700; }
+  .pfold > summary::-webkit-details-marker { display: none; }
+  .pfold > summary b { margin-left: auto; font-size: .8rem; color: var(--mut); font-variant-numeric: tabular-nums; }
+  .pchev { width: 8px; height: 8px; border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut); transform: rotate(45deg); margin: -4px 2px 0 4px; transition: transform .15s; }
+  .pfold[open] .pchev { transform: rotate(-135deg); margin-top: 4px; }
+  .pfold .prows { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
   .pcap { margin: 14px 0 6px !important; font-size: .72rem !important; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); }
   .pnote { margin: 4px 0 0 !important; font-size: .78rem !important; color: var(--mut); }
   .prows { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
@@ -930,12 +937,16 @@
     var p = pd.p, t = p.tiers[pd.tier] || { features: p.base, clients: 0, coaches: 0 }, base = p.frozen && pd.tier === p.tier ? p.base : t.features;
     var seg = '<div class="pseg" role="radiogroup" aria-label="Paket">' + ['starter', 'pro', 'studio'].map(function (k) {
       return '<button type="button" role="radio" aria-checked="' + (pd.tier === k) + '" class="' + (pd.tier === k ? 'on' : '') + '" data-act="plan-tier" data-v="' + k + '">' + TIERN[k] + '</button>'; }).join('') + '</div>';
-    var rows = PLAN_GROUPS.map(function (g) {
-      return '<p class="pcap">' + esc(g[0]) + '</p><div class="prows">' + g[1].map(function (f) {
+    pd.open = pd.open || {};
+    var rows = PLAN_GROUPS.map(function (g, gi) {
+      var n = g[1].filter(function (f) { return pd.on.indexOf(f) !== -1; }).length;
+      var diff = g[1].some(function (f) { return (pd.on.indexOf(f) !== -1) !== (base.indexOf(f) !== -1); });
+      return '<details class="pfold" data-g="' + gi + '"' + (pd.open[gi] ? ' open' : '') + '><summary><span>' + esc(g[0]) + '</span>' + (diff ? '<span class="pchip add">diubah</span>' : '') +
+        '<b>' + n + ' / ' + g[1].length + ' nyala</b><i class="pchev" aria-hidden="true"></i></summary><div class="prows">' + g[1].map(function (f) {
         var on = pd.on.indexOf(f) !== -1, inBase = base.indexOf(f) !== -1;
         var tag = on && !inBase ? '<span class="pchip add">tambahan</span>' : !on && inBase ? '<span class="pchip off">dimatikan</span>' : '';
         return '<label class="prow"><span>' + esc(p.labels[f]) + tag + '</span><input type="checkbox" class="psw" role="switch" data-pf="' + f + '"' + (on ? ' checked' : '') + '></label>';
-      }).join('') + '</div>';
+      }).join('') + '</div></details>';
     }).join('');
     var limRow = function (k, label, v, tv) {
       return '<div class="plim"><span class="pl">' + label + '</span><input data-pl="' + k + '" inputmode="numeric" autocomplete="off" placeholder="' + esc(lim(tv)) + '" value="' + esc(v != null ? v : '') + '" aria-label="' + label + '">' +
@@ -954,6 +965,7 @@
   function planRead() {
     var f = $('dlgPlan');
     pd.on = [].slice.call(f.querySelectorAll('[data-pf]')).filter(function (x) { return x.checked; }).map(function (x) { return x.getAttribute('data-pf'); });
+    [].slice.call(f.querySelectorAll('.pfold')).forEach(function (d) { pd.open[d.getAttribute('data-g')] = d.open; });
     var c = f.querySelector('[data-pl="clients"]'), k = f.querySelector('[data-pl="coaches"]'), e = $('pp-e');
     pd.clients = c && c.value.trim() !== '' ? c.value.trim() : null; pd.coaches = k && k.value.trim() !== '' ? k.value.trim() : null;
     if (e) pd.date = e.value;

@@ -450,13 +450,17 @@ async function makeLogos(browser) {
       await shot('af-hq-kartu');
       await page.click('#insp [data-act="plan-edit"]');
       await page.waitForSelector('#dlgPlan[open]', { timeout: 5000 }).catch(() => {});
+      check(await page.evaluate(() => document.querySelectorAll('#dlgPlan .pfold').length === 3 && !document.querySelector('#dlgPlan .pfold[open]')), 'dialog: grup fitur tertutup (lipat)');
+      await shot('af-hq-dialog-tutup');
       check(await page.isVisible('#dlgPlan .plan-form'), 'Paket & fitur: dialog terbuka (bukan window.confirm)');
+      await page.evaluate(() => document.querySelectorAll('#dlgPlan .pfold').forEach(d => { d.open = true; }));
       check(await page.evaluate(() => /tambahan/.test(document.querySelector('#dlgPlan [data-pf="classes"]').closest('label').textContent) && /dimatikan/.test(document.querySelector('#dlgPlan [data-pf="report"]').closest('label').textContent)), 'dialog: tanda tambahan / dimatikan');
       await shot('af-hq-dialog');
       await page.click('#dlgPlan [data-pf="report"]');
       await page.fill('#dlgPlan [data-pl="clients"]', '30');
       await page.click('#dlgPlan [data-act="plan-when"][data-v="warn"]');
       await page.click('#dlgPlan [data-act="plan-tier"][data-v="studio"]');
+      check(await page.evaluate(() => document.querySelectorAll('#dlgPlan .pfold[open]').length === 3), 'dialog: grup yang dibuka tetap terbuka saat paket diganti');
       check(await page.evaluate(() => document.querySelector('#dlgPlan [data-pf="multiCoach"]').checked && document.querySelector('#dlgPlan [data-pl="clients"]').value === '30'), 'dialog: ganti paket mengisi fitur paket baru, batas tetap');
       await shot('af-hq-dialog-studio');
       await clearDm(); await page.click('#dlgPlan button[type="submit"]'); await waitDm('disimpan');

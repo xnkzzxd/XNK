@@ -65,8 +65,9 @@
       (warn ? '<ul class="plan-rows">' + row('calendar', 'Berlaku penuh <b>' + h(fmt(p.enforceFrom)) + '</b>') +
         (over ? row('users', 'Klien aktif ' + h(cl.used) + ' · batas ' + h(cl.max) + ' · klien baru ditahan', true) : '') +
         (off.length ? row('eye-off', 'Fitur di luar paket disembunyikan · data aman') : '') + '</ul>' : '') +
-      (offPro.length ? '<p class="plan-cap">Ada di Pro</p>' + chips(offPro) : '') +
-      (offStudio.length ? '<p class="plan-cap">Ada di Studio</p>' + chips(offStudio) : '') +
+      (off.length ? '<details class="plan-fold"><summary>' + icon('lock') + '<span>Belum termasuk</span><b>' + off.length + '</b>' + icon('chevron-down') + '</summary>' +
+        (offPro.length ? '<p class="plan-cap">Ada di Pro</p>' + chips(offPro) : '') +
+        (offStudio.length ? '<p class="plan-cap">Ada di Studio</p>' + chips(offStudio) : '') + '</details>' : '') +
       (!off.length ? '<p class="plan-cap">Semua fitur termasuk</p>' : '') +
       (link && (off.length || cl.max) ? '<a class="btn btn-primary btn-block plan-up" href="' + h(link) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Naik paket via WhatsApp</a>' : '') +
       '<p class="plan-foot">' + icon('info') + 'Klien cuti tidak dihitung</p></div>';
