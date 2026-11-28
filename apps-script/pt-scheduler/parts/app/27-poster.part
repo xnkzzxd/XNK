@@ -28,7 +28,15 @@
     return { v: 1, size: PO_SIZES[p.size] ? p.size : 'story', style: ['gelap', 'terang', 'aksen', 'foto'].indexOf(p.style) !== -1 ? p.style : 'gelap', period: p.period || 'bulan', k: p.k && typeof p.k === 'object' ? p.k : {} };
   }
   function poSave() { try { localStorage.setItem(PO_PREF, JSON.stringify(PP)); } catch (e) {} }
-  function pk(t) { t = t || po.type; PP.k[t] = Object.assign({}, PO_KDEF, PP.k[t] || {}); return PP.k[t]; }
+  // Satu objek per jenis poster yang sama terus (dulu tiap panggilan membuat objek baru, sehingga pilihan paket, angka
+  // dan isian yang ditulis ke objek lama hilang: "isi poster tidak bisa diubah").
+  function pk(t) {
+    t = t || po.type;
+    const cur = PP.k[t];
+    if (!cur || typeof cur !== 'object') { PP.k[t] = JSON.parse(JSON.stringify(PO_KDEF)); return PP.k[t]; }
+    Object.keys(PO_KDEF).forEach(function (x) { if (cur[x] === undefined) cur[x] = Array.isArray(PO_KDEF[x]) ? PO_KDEF[x].slice() : PO_KDEF[x]; });
+    return cur;
+  }
   const poName = t => (t === 'xnk' ? ((po.data && po.data.xnkCoach && po.data.xnkCoach.title) || '') : PO_NAME[t]);
   const kit = () => window.shareKit;
 
@@ -483,7 +491,7 @@
     sh.classList.add('share-sheet', 'poster-sheet');
     sh.innerHTML = '<div class="sh-top"><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup">' + icon('x') + '</button>' +
       '<h2 class="sh-title" id="po-title">Poster</h2><button type="button" class="btn btn-ghost btn-sm sh-reset" onclick="window.posterResetText()">Reset teks</button></div>' +
-      '<div class="sh-main"><div class="sh-stage" id="po-stage"><div class="share-preview solid" id="po-box" role="img" aria-label="Pratinjau poster"><img id="po-img" alt="Pratinjau poster" draggable="false"><div class="sh-busy hide" id="po-busy"></div></div>' +
+      '<div class="sh-main"><div class="sh-stage" id="po-stage"><div class="share-preview solid" id="po-box" role="img" aria-label="Pratinjau poster"><img id="po-img" alt="Pratinjau poster" draggable="false"><canvas id="po-cnv" class="sh-cnv hide" aria-hidden="true"></canvas><div class="sh-busy hide" id="po-busy"></div></div>' +
       '<p class="po-msg hide" id="po-msg" role="status"></p></div>' +
       '<div class="sh-side"><div class="sh-tools" id="po-tabs" role="tablist" aria-label="Alat poster"></div><div class="sh-body" id="po-body"></div></div></div>' +
       '<div class="sh-foot" id="po-foot"></div>' +
@@ -575,19 +583,36 @@
   }
   window.addEventListener('resize', function () { if ($p('po-stage')) requestAnimationFrame(poFit); });
   let poTimer = 0;
+  // Pratinjau cepat: digambar langsung di kanvas seukuran kotak pratinjau; PNG penuh 1080 px untuk Bagikan / Simpan dibuat
+  // di belakang setelah perubahan berhenti sebentar (atau saat tombol ditekan bila belum siap).
   function poRefresh() {
-    clearTimeout(poTimer);
+    clearTimeout(poTimer); clearTimeout(po.blobT); po.blobOk = false;
     poTimer = setTimeout(async function () {
       if (!po.data || !kit()) return;
       const my = ++po.token;
-      const cnv = await poDraw({ type: po.type, size: PP.size, style: PP.style });
-      const blob = await new Promise(r => cnv.toBlob(r, 'image/png'));
-      if (my !== po.token || !blob) return;
-      po.blob = blob; if (po.url) URL.revokeObjectURL(po.url); po.url = URL.createObjectURL(blob);
-      const im = $p('po-img'); if (im) im.src = po.url;
       po.ratio = (PO_SIZES[PP.size] || 1920) / PO_W; poFit();
-    }, 60);
+      const box = $p('po-box'), cv = $p('po-cnv');
+      if (cv && box && box.clientWidth) {
+        const sc = Math.max(.2, Math.min(1, box.clientWidth * Math.min(2, window.devicePixelRatio || 1) / PO_W));
+        await poDraw({ type: po.type, size: PP.size, style: PP.style, scale: sc }, cv);
+        if (my !== po.token) return;
+        cv.classList.remove('hide');
+        const im = $p('po-img'); if (im) im.style.visibility = 'hidden';
+      }
+      po.blobT = setTimeout(function () { poBlob(my); }, cv ? 400 : 0);
+    }, 30);
   }
+  async function poBlob(my) {
+    if (!po.data || !kit()) return null;
+    if (my == null) my = po.token;
+    const cnv = await poDraw({ type: po.type, size: PP.size, style: PP.style });
+    const blob = await new Promise(r => cnv.toBlob(r, 'image/png'));
+    if (my !== po.token || !blob) return null;
+    po.blob = blob; po.blobOk = true; if (po.url) URL.revokeObjectURL(po.url); po.url = URL.createObjectURL(blob);
+    const im = $p('po-img'); if (im) im.src = po.url;
+    return blob;
+  }
+  async function poEnsure() { if (po.blobOk && po.blob) return po.blob; clearTimeout(po.blobT); return (await poBlob()) || po.blob; }
 
   function loadResults(period) {
     if (po.results[period] || po.results[period + ':loading']) return;
@@ -668,9 +693,9 @@
     im.src = u;
   };
   function poFname() { return 'poster-' + po.type + '-' + (PP.size === 'story' ? '9x16' : '4x5') + '.png'; }
-  window.posterSave = function () { if (!po.blob) return; kit().download(po.blob, poFname()); window.showToast('Poster disimpan. Di iPhone: tekan lama gambar → Simpan ke Foto.'); };
-  window.posterCopy = function () { if (po.blob) kit().copy(po.blob); };
-  window.posterGo = function () { if (!po.blob) return; const b = po.blob, n = poFname(); kit().sendFiles([{ blob: b, name: n }], function () { kit().download(b, n); }); };
+  window.posterSave = async function () { const b = await poEnsure(); if (!b) return; kit().download(b, poFname()); window.showToast('Poster disimpan. Di iPhone: tekan lama gambar → Simpan ke Foto.'); };
+  window.posterCopy = async function () { const b = await poEnsure(); if (b) kit().copy(b); };
+  window.posterGo = async function () { const b = await poEnsure(); if (!b) return; const n = poFname(); kit().sendFiles([{ blob: b, name: n }], function () { kit().download(b, n); }); };
 
   // ── izin klien (portal → Saya): hasil boleh dipakai coach di poster ──
   window.posterConsentHtml = function (desk) {
