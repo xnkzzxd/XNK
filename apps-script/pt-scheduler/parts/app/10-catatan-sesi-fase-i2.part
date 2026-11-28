@@ -681,7 +681,7 @@
   function renewCoachPhone() {
     const me = window.publicLoggedMember || {};
     const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId));
-    return coach ? coach.phone : window.coachContactNumber();
+    return window.coachWa(coach && coach.phone);
   }
   function renewText(pkgName, harga) {
     const me = window.publicLoggedMember || {};
@@ -777,7 +777,7 @@
     window.closeModal();
     renderRenewSlot();
     const coach = (window.coaches || []).find(c => String(c.id) === String(coachId));
-    window.showWaPrompt(window.waUrl(coach && coach.phone ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
+    window.showWaPrompt(window.waUrl(coach && coach.phone ? window.coachWa(coach.phone) : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
     // Antrean simpan (nomor pesanan + catatan Idem: kiriman ulang tidak membuat permintaan kedua). Salinan di perangkat
     // langsung ikut, jadi "Menunggu konfirmasi" tetap tampil saat aplikasi dibuka lagi.
     if (window.patchPortalMore) window.patchPortalMore('renewal', window.myRenewal);

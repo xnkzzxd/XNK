@@ -117,7 +117,7 @@
       ? 'Halo Coach, saya ' + (me.name || '') + '. Saya mau perpanjang paket latihan.'
       : 'Halo Coach, saya ' + (me.name || '') + ' (member XNK).';
     const coach = window.coaches.find(c => String(c.id) === String(me.preferredCoachId));
-    window.sendToParentWA(coach ? coach.phone : window.coachContactNumber(), text);
+    window.sendToParentWA(window.coachWa(coach && coach.phone), text);
   };
 
   function weeklyBuckets(completed, joinDate) {
@@ -516,6 +516,6 @@
     const c = window.coaches.find(x => String(x.id) === String(id));
     if (!c) return;
     const me = window.publicLoggedMember;
-    window.sendToParentWA(c.phone, 'Halo ' + window.coachLabel(c.name) + ', saya ' + (me ? me.name : '') + ' ingin tanya program latihan' + (c.specialty ? ' ' + c.specialty : '') + '.');
+    window.sendToParentWA(window.coachWa(c.phone), 'Halo ' + window.coachLabel(c.name) + ', saya ' + (me ? me.name : '') + ' ingin tanya program latihan' + (c.specialty ? ' ' + c.specialty : '') + '.');
   };
 
