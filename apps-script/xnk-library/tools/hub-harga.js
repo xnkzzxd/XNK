@@ -9,18 +9,21 @@
 const TIERS = [
   {
     key: 'starter', name: 'Starter', bulanan: 149000, tahunan: 1490000, lifetime: 3900000, putus: 2900000,
+    myr: { bulanan: 59, tahunan: 590, lifetime: 1490, putus: 1090 },
     limit: '1 coach · sampai 15 klien aktif',
     items: ['Booking & jadwal mandiri oleh klien', 'Mode latihan & rekor', 'Berat & ukuran tubuh', 'Pengingat sesi & booking'],
     fit: 'Untuk PT yang baru mulai merapikan klien.',
   },
   {
     key: 'pro', name: 'Pro', bulanan: 249000, tahunan: 2490000, lifetime: 6900000, putus: 4900000, popular: true,
+    myr: { bulanan: 99, tahunan: 990, lifetime: 2690, putus: 1890 },
     limit: '1 coach · klien tanpa batas',
     items: ['Semua di Starter', 'Keuangan & tagihan', 'Gizi & target kalori', 'Foto progres, asesmen, catatan sesi', 'Laporan PDF progres klien', 'Kartu bagikan & template program'],
     fit: 'Untuk PT full-time yang ingin klien bertahan lama.',
   },
   {
     key: 'studio', name: 'Studio', bulanan: 549000, tahunan: 5490000, lifetime: 14900000, putus: 10900000,
+    myr: { bulanan: 219, tahunan: 2190, lifetime: 5890, putus: 4290 },
     limit: 'Sampai 5 coach · klien tanpa batas',
     items: ['Semua di Pro', 'Banyak coach, klien pilih coach', 'Kelas grup & bagi hasil coach', 'Login sendiri untuk tiap coach'],
     fit: 'Untuk tim kecil atau studio privat. Wajib setup Custom.',
@@ -29,11 +32,11 @@ const TIERS = [
 
 const SETUP = {
   standar: {
-    name: 'Setup Standar', price: 400000, lead: 'Aplikasi siap pakai dengan tampilan XNK.',
+    name: 'Setup Standar', price: 400000, myr: 149, lead: 'Aplikasi siap pakai dengan tampilan XNK.',
     items: ['Aplikasi dan tempat data khusus, kami yang siapkan', 'Impor data klien dari Excel / catatan', 'Atur paket, harga, jam operasional', 'Pelatihan online 1 jam'],
   },
   custom: {
-    name: 'Setup Custom', price: 2100000, lead: 'Semua di Standar, plus sesuai permintaan Anda.',
+    name: 'Setup Custom', price: 2100000, myr: 790, lead: 'Semua di Standar, plus sesuai permintaan Anda.',
     items: ['Nama, logo & warna brand Anda sendiri', 'Halaman info & booking dengan brand Anda', 'Penyesuaian fitur, teks & tampilan', 'Impor riwayat lama, pelatihan 2 sesi'],
   },
 };
@@ -87,8 +90,22 @@ function rpShort(n) {
   if (n >= 1e6) return 'Rp\u00a0' + String(Math.round(n / 1e4) / 100).replace('.', ',') + '\u00a0jt';
   return 'Rp\u00a0' + Math.round(n / 1000) + 'rb';
 }
+/** "RM 1,490" (koma ribuan; spasi tak terputus). Harga Malaysia (MYR). */
+function rm(n) { return 'RM\u00a0' + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+/** Dua mata uang dalam satu tempat: Rupiah tampil, Ringgit tampil saat #harga.myr (tombol Rp | RM). */
+function duo(id, my) { return `<span class="ci">${id}</span><span class="cm">${my}</span>`; }
+/** Harga paket t (kunci cara bayar k): penuh atau ringkas, dua mata uang. */
+const tp = (t, k, short) => duo(short ? rpShort(t[k]) : rp(t[k]), rm(t.myr[k]));
+const sp = (s, short) => duo(short ? rpShort(s.price) : rp(s.price), rm(s.myr));
+/** Bentuk PUSAT_TIERS_MYR / PUSAT_SETUP_MYR (tests/hub.test.js). */
+function pusatShapeMyr() {
+  const tiers = {};
+  for (const t of TIERS) tiers[t.key] = Object.assign({}, t.myr);
+  return { tiers, setup: { standar: SETUP.standar.myr, custom: SETUP.custom.myr } };
+}
 /** Harga bulanan termurah, ringkas ("Rp 149rb"): dipakai "Mulai …" di hero dan deskripsi. */
 function mulai() { return rpShort(Math.min.apply(null, TIERS.map(t => t.bulanan))); }
+function mulaiMyr() { return rm(Math.min.apply(null, TIERS.map(t => t.myr.bulanan))); }
 /** Angka saja, dalam bentuk PUSAT_TIERS / PUSAT_SETUP (untuk tes dan hub-check). */
 function pusatShape() {
   const tiers = {};
@@ -106,29 +123,32 @@ function render() {
   const pro = TIERS.find(t => t.key === 'pro');
   const cyc = '<div class="cyc" id="cyc" role="group" aria-label="Cara bayar">' +
     '<button type="button" data-cyc="bulanan" aria-pressed="true">Bulanan</button>' +
-    '<button type="button" data-cyc="tahunan" aria-pressed="false">Tahunan<span>gratis 2 bulan</span></button></div>';
+    '<button type="button" data-cyc="tahunan" aria-pressed="false">Tahunan<span>gratis 2 bulan</span></button></div>' +
+    '<div class="cyc cur" id="cur" role="group" aria-label="Mata uang">' +
+    '<button type="button" data-cur="idr" aria-pressed="true">Rp<span>Indonesia</span></button>' +
+    '<button type="button" data-cur="myr" aria-pressed="false">RM<span>Malaysia</span></button></div>';
   const cards = '<div class="tiers">' + TIERS.map(t =>
     `<article class="card tier${t.popular ? ' ink' : ''}" id="paket-${t.key}" aria-labelledby="paket-${t.key}-h">` +
     `<div class="tier-head"><h3 id="paket-${t.key}-h">${esc(t.name)}</h3>${t.popular ? '<span class="tag">Disarankan</span>' : ''}</div>` +
     `<p class="lim">${esc(t.limit)}</p>` +
-    `<p class="price m"><b>${rp(t.bulanan)}</b><span>/bulan</span></p>` +
-    `<p class="price y"><b>${rp(t.tahunan)}</b><span>/tahun</span></p>` +
+    `<p class="price m"><b>${tp(t, 'bulanan')}</b><span>/bulan</span></p>` +
+    `<p class="price y"><b>${tp(t, 'tahunan')}</b><span>/tahun</span></p>` +
     (FIRST_MONTH_FREE ? '<p class="psub m"><span class="free">Bulan pertama gratis</span></p>' : '<p class="psub m">Bayar tiap bulan, berhenti kapan saja</p>') +
-    `<p class="psub y">± ${rpShort(t.tahunan / 12)}/bulan · gratis 2 bulan</p>` +
+    `<p class="psub y">± ${duo(rpShort(t.tahunan / 12), rm(t.myr.tahunan / 12))}/bulan · gratis 2 bulan</p>` +
     ticks(t.items) +
     `<p class="fit">${esc(t.fit)}</p>` +
     `<a class="btn" href="#daftar" data-plan="${t.key}">Pilih ${esc(t.name)}</a></article>`).join('') + '</div>';
   const setups = '<p class="kicker sub">Biaya setup · sekali bayar</p><div class="grid2 setups">' + ['standar', 'custom'].map((k, i) => {
     const s = SETUP[k];
-    return `<div class="card${i ? ' ink' : ''}"><h3>${esc(s.name)}</h3><p class="price"><b>${rp(s.price)}</b></p><p class="lead2">${esc(s.lead)}</p>${ticks(s.items)}</div>`;
+    return `<div class="card${i ? ' ink' : ''}"><h3>${esc(s.name)}</h3><p class="price"><b>${sp(s)}</b></p><p class="lead2">${esc(s.lead)}</p>${ticks(s.items)}</div>`;
   }).join('') + '</div>';
   const head = '<thead><tr><th scope="col"><span class="vh">Fitur</span></th>' + TIERS.map(t =>
-    `<th scope="col"${t.popular ? ' class="p"' : ''}>${esc(t.name)}<small>${rpShort(t.bulanan)}/bln</small></th>`).join('') + '</tr></thead>';
+    `<th scope="col"${t.popular ? ' class="p"' : ''}>${esc(t.name)}<small>${tp(t, 'bulanan', 1)}/bln</small></th>`).join('') + '</tr></thead>';
   const body = '<tbody>' + COMPARE.map(([g, rows]) =>
     `<tr class="grp"><th colspan="${TIERS.length + 1}" scope="colgroup">${esc(g)}</th></tr>` + rows.map(r =>
       `<tr><th scope="row">${esc(r[0])}</th>` + TIERS.map((t, i) => `<td${t.popular ? ' class="p"' : ''}>${cell(r[i + 1])}</td>`).join('') + '</tr>').join('')).join('') +
     '<tr class="tot"><th scope="row">Biaya setup (sekali)</th>' + TIERS.map(t =>
-      `<td${t.popular ? ' class="p"' : ''}>${t.key === 'studio' ? rpShort(SETUP.custom.price) : 'mulai ' + rpShort(SETUP.standar.price)}</td>`).join('') + '</tr></tbody>';
+      `<td${t.popular ? ' class="p"' : ''}>${t.key === 'studio' ? sp(SETUP.custom, 1) : 'mulai ' + sp(SETUP.standar, 1)}</td>`).join('') + '</tr></tbody>';
   const cmp = `<details class="more" id="banding"><summary>Bandingkan semua fitur</summary><table class="cmp">${head}${body}</table></details>`;
   const other = '<details class="more" id="bayar-lain"><summary>Pilihan bayar lain: lifetime dan beli putus</summary><table class="cmp pay">' +
     '<thead><tr><th scope="col"><span class="vh">Cara bayar</span></th>' + TIERS.map(t => `<th scope="col"${t.popular ? ' class="p"' : ''}>${esc(t.name)}</th>`).join('') + '</tr></thead><tbody>' +
@@ -136,13 +156,13 @@ function render() {
       ['tahunan', 'Tahunan', '12 bulan di muka, gratis 2 bulan.'],
       ['lifetime', 'Lifetime', 'Bayar sekali; update dan dukungan selama layanan XNK berjalan. Setup Standar gratis.'],
       ['putus', 'Beli putus', 'Bayar sekali, aplikasi jadi milik Anda; garansi perbaikan 30 hari, tanpa update dan dukungan setelahnya.']].map(([k, n, d]) =>
-      `<tr><th scope="row">${n}<small>${esc(d)}</small></th>` + TIERS.map(t => `<td${t.popular ? ' class="p"' : ''}>${rpShort(t[k])}</td>`).join('') + '</tr>').join('') +
+      `<tr><th scope="row">${n}<small>${esc(d)}</small></th>` + TIERS.map(t => `<td${t.popular ? ' class="p"' : ''}>${tp(t, k, 1)}</td>`).join('') + '</tr>').join('') +
     '</tbody></table>' +
-    `<p class="note">Bulanan, tahunan, dan beli putus ditambah biaya setup (Standar ${rp(SETUP.standar.price)} atau Custom ${rp(SETUP.custom.price)}). ` +
-    `Lifetime sudah termasuk setup Standar; setup Custom tetap ${rp(SETUP.custom.price)}. Lifetime dan beli putus adalah lisensi untuk satu coach atau studio, tidak untuk dijual ulang.</p></details>`;
-  const sesi = Math.ceil(pro.bulanan / 50000) * 50000;
+    `<p class="note">Bulanan, tahunan, dan beli putus ditambah biaya setup (Standar ${sp(SETUP.standar)} atau Custom ${sp(SETUP.custom)}). ` +
+    `Lifetime sudah termasuk setup Standar; setup Custom tetap ${sp(SETUP.custom)}. Lifetime dan beli putus adalah lisensi untuk satu coach atau studio, tidak untuk dijual ulang.</p></details>`;
+  const sesi = Math.ceil(pro.bulanan / 50000) * 50000, sesiMy = Math.ceil(pro.myr.bulanan / 50) * 50;
   const payback = '<div class="card payback"><div><p class="kicker">Hitung balik modal</p><b>± 1 sesi / bulan</b></div>' +
-    `<p>Kalau satu sesi PT Anda sekitar ${rp(sesi)}, satu sesi tambahan per bulan, dari klien yang tidak jadi berhenti atau dari jam admin yang kini bisa dipakai melatih, sudah menutup paket Pro.</p></div>`;
+    `<p>Kalau satu sesi PT Anda sekitar ${duo(rp(sesi), rm(sesiMy))}, satu sesi tambahan per bulan, dari klien yang tidak jadi berhenti atau dari jam admin yang kini bisa dipakai melatih, sudah menutup paket Pro.</p></div>`;
   const notes = '<p class="note">' + (FIRST_MONTH_FREE ? 'Bulan pertama gratis untuk bayar bulanan: tagihan pertama jatuh sebulan setelah aplikasi Anda siap. ' : '') +
     'Domain sendiri (misalnya namaanda.com) tidak termasuk; biayanya mengikuti penyedia domain dan dibayar langsung oleh coach.</p>';
   return cyc + cards + setups + payback + cmp + other + notes;
@@ -158,7 +178,10 @@ function offers(url) {
   return TIERS.map(t => ({
     '@type': 'Offer', name: t.name, url: url + '#paket-' + t.key, price: String(t.bulanan), priceCurrency: 'IDR',
     priceSpecification: { '@type': 'UnitPriceSpecification', price: t.bulanan, priceCurrency: 'IDR', unitCode: 'MON', referenceQuantity: { '@type': 'QuantitativeValue', value: 1, unitCode: 'MON' } },
-  }));
+  })).concat(TIERS.map(t => ({
+    '@type': 'Offer', name: t.name + ' (Malaysia)', url: url + '#paket-' + t.key, price: String(t.myr.bulanan), priceCurrency: 'MYR', eligibleRegion: 'MY',
+    priceSpecification: { '@type': 'UnitPriceSpecification', price: t.myr.bulanan, priceCurrency: 'MYR', unitCode: 'MON', referenceQuantity: { '@type': 'QuantitativeValue', value: 1, unitCode: 'MON' } },
+  })));
 }
 
-module.exports = { TIERS, SETUP, COMPARE, FIRST_MONTH_FREE, rp, rpShort, mulai, pusatShape, render, planOptions, offers };
+module.exports = { TIERS, SETUP, COMPARE, FIRST_MONTH_FREE, rp, rpShort, rm, mulai, mulaiMyr, pusatShape, pusatShapeMyr, render, planOptions, offers };

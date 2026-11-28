@@ -295,6 +295,10 @@
   .cyc button span { font-size: .78rem; font-weight: 600; color: var(--mut); }
   .cyc button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
   .cyc button[aria-pressed="true"] span { color: inherit; opacity: .8; }
+  .cyc.cur { margin-left: .5rem; }
+  #harga .cm { display: none; }
+  #harga.myr .ci { display: none; }
+  #harga.myr .cm { display: inline; }
   .tiers { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 900px) { .tiers { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   .tier { display: flex; flex-direction: column; padding: 1.6rem; border-radius: 1.4rem; transition: transform .3s var(--ease), border-color .2s; }
@@ -1024,7 +1028,23 @@
     if (!reduce) { hg.classList.remove('flip'); void hg.offsetWidth; hg.classList.add('flip'); }
   });
   // Penanda bergeser di belakang pilihan yang aktif (posisi dari tombol itu sendiri, juga bila barisnya terlipat).
-  function cycMove() {
+  // Mata uang: Rp (bawaan) atau RM. Pengunjung dari Malaysia (zona waktu / bahasa) langsung melihat RM.
+  var curEl = document.getElementById('cur'), money = 'idr';
+  function setCur(c) {
+    money = c; hg.classList.toggle('myr', c === 'myr');
+    Array.prototype.forEach.call(curEl.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x.getAttribute('data-cur') === c)); });
+    cycMove(curEl);
+  }
+  if (curEl) {
+    curEl.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('button[data-cur]'); if (b) setCur(b.getAttribute('data-cur')); });
+    try {
+      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '', lg = (navigator.languages || [navigator.language || '']).join(',');
+      if (/^Asia\/(Kuala_Lumpur|Kuching)$/.test(tz) || /(^|,)ms|-MY(,|$)/i.test(lg)) setCur('myr');
+    } catch (x) { /* tetap Rp */ }
+  }
+  function cycMove(el) {
+    if (el === curEl) { if (!curEl) return; var c = curEl.querySelector('[aria-pressed="true"]'); curEl.style.setProperty('--cx', c.offsetLeft + 'px'); curEl.style.setProperty('--cy', c.offsetTop + 'px'); curEl.style.setProperty('--cw', c.offsetWidth + 'px'); curEl.style.setProperty('--ch', c.offsetHeight + 'px'); curEl.classList.add('ready'); return; }
+    if (curEl && el !== false) cycMove(curEl);
     var b = cyc && cyc.querySelector('[aria-pressed="true"]');
     if (!b) return;
     cyc.style.setProperty('--cx', b.offsetLeft + 'px'); cyc.style.setProperty('--cy', b.offsetTop + 'px');
@@ -1051,7 +1071,7 @@
     de.textContent = '';
     var lines = ['Halo XNK, saya tertarik memakai XNK.', 'Nama: ' + nama];
     if (val('df-kota')) lines.push('Kota / tempat: ' + val('df-kota'));
-    lines.push('Klien aktif: ' + txt('df-klien'), 'Paket: ' + txt('df-paket'), 'Cara bayar: ' + txt('df-bayar'),
+    lines.push('Klien aktif: ' + txt('df-klien'), 'Paket: ' + txt('df-paket'), 'Cara bayar: ' + txt('df-bayar'), 'Mata uang: ' + (money === 'myr' ? 'RM (Malaysia)' : 'Rp (Indonesia)'),
       'Mau demo 30 menit dulu: ' + (document.getElementById('df-demo').checked ? 'ya' : 'tidak'));
     var url = df.getAttribute('data-wa') + '?text=' + encodeURIComponent(lines.join('\n'));
     var w = window.open(url, '_blank');

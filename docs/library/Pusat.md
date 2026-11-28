@@ -309,3 +309,15 @@ detail coach menampilkan "Situs masih aktif di hub" dan mulai hari berikutnya ha
 - **Hub** ([Hub.md](Hub.md#coach-tidak-aktif-t-2252)): `hub.json` `"inactive": true` (aksi `nonaktif` / `aktifkan`).
 - **Izin**: tidak ada izin Google baru (`drive.file` sudah dipakai backup; ekspor dan unggah hanya untuk berkas buatan
   XNK HQ sendiri).
+
+## Harga Malaysia (RM, 2026-11-28)
+
+Landing xnk.web.id punya tombol **Rp | RM** di bagian Harga; pengunjung dengan zona waktu Malaysia atau bahasa `ms` / `-MY` langsung melihat RM. Harga RM ada di `myr` tiap paket di `xnk-library/tools/hub-harga.js` dan **harus sama** dengan `PUSAT_TIERS_MYR` / `PUSAT_SETUP_MYR` di `xnk-pusat/src/Pusat.gs` (`tests/hub.test.js`).
+
+| | Bulanan | Tahunan | Lifetime | Beli putus |
+|---|---|---|---|---|
+| Starter | RM 59 | RM 590 | RM 1,490 | RM 1,090 |
+| Pro | RM 99 | RM 990 | RM 2,690 | RM 1,890 |
+| Studio | RM 219 | RM 2,190 | RM 5,890 | RM 4,290 |
+
+Setup Standar RM 149, Custom RM 790. Di XNK HQ, **Atur paket** punya pilihan *Mata uang* (Rupiah / Ringgit) per coach: harga bawaan, jatuh tempo, dan pembayaran coach itu dalam RM (`sub.cur`, `pay[].cur`). Ringkasan uang (rutin per bulan, masuk bulan ini, grafik) tetap Rupiah: RM dikali kurs Script Property `PUSAT_MYR_IDR` (bawaan 3700); perbarui bila kurs berubah jauh.

@@ -125,7 +125,7 @@ function fakePusat(req) {
   else if (req.fn === 'pusatAction' && req.args[1] === 'leave-undo') { PUSAT_CALLS.undo = req.args[2]; PUSAT_OUT = null; }
   else if (req.fn === 'pusatAction') { if (req.args[1] === 'backup') PUSAT_CALLS.backup = true; return { ok: true, data: { started: req.args[1], slug: req.args[2] } }; }
   const st = (ok, problems) => ({ at: new Date().toISOString(), ok, problems, data: { lib: { commit: 'c'.repeat(40) }, api: 1, triggers: { runReminderTick: 1 }, reminders: { enabled: true, lastTickAt: new Date().toISOString() }, clients: { total: 21, active30d: 13 }, sessions: { done7d: 17, next7d: 9 }, quota: { date: '2026-11-19', mail: 12, fetch: 15200, triggerMin: 20, mailRemaining: 84 }, quotaDays: [{ date: '2026-11-18', mail: 31, fetch: 18400, triggerMin: 0.05 }], readonly: !!PUSAT_SUB.readonly, left: !!PUSAT_OUT } });
-  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, fetchToday: 34, money: fakeMoney(), tiers: PUSAT_TIERS, setupPrices: require('./hub-harga').pusatShape().setup, quotaLimits: { mail: 100, fetch: 20000, triggerMin: 90 }, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
+  return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, fetchToday: 34, money: fakeMoney(), tiers: PUSAT_TIERS, setupPrices: require('./hub-harga').pusatShape().setup, tiersMyr: require('./hub-harga').pusatShapeMyr().tiers, setupPricesMyr: require('./hub-harga').pusatShapeMyr().setup, myrIdr: 3700, quotaLimits: { mail: 100, fetch: 20000, triggerMin: 90 }, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
     places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
     { slug: 'claudia', exec: EXEC_A, hist: HIST_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
       backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, push: PUSAT_OUT ? { on: false, active: false, subs: 0, at: '', error: '' } : { on: true, active: true, subs: 3, at: new Date().toISOString(), error: '' }, sub: Object.assign({}, PUSAT_SUB), plan: PUSAT_OUT ? null : JSON.parse(JSON.stringify(PUSAT_PLAN)), out: PUSAT_OUT },
@@ -247,11 +247,14 @@ async function makeLogos(browser) {
       // T-2265: harga bulanan / tahunan, "Pilih Pro" mengisi form daftar, form membuka WhatsApp (window.open ditangkap).
       {
         const T = require('./hub-harga').TIERS, pro = T.find(t => t.key === 'pro');
-        const shown = () => page.evaluate(() => [...document.querySelectorAll('#paket-pro .price')].filter(p => p.offsetParent).map(p => p.querySelector('b').textContent).join('|'));
+        const shown = () => page.evaluate(() => [...document.querySelectorAll('#paket-pro .price')].filter(p => p.offsetParent).map(p => [...p.querySelectorAll('b > span')].filter(x => getComputedStyle(x).display !== 'none').map(x => x.textContent).join('')).join('|'));
         check(await shown() === require('./hub-harga').rp(pro.bulanan) && await page.getAttribute('#cyc button[data-cyc="bulanan"]', 'aria-pressed') === 'true', 'harga: bulanan tampil lebih dulu (' + await shown() + ')');
         check(await page.isVisible('#paket-pro .free'), 'harga: "Bulan pertama gratis" di bulanan');
         await page.click('#cyc button[data-cyc="tahunan"]');
         check(await shown() === require('./hub-harga').rp(pro.tahunan) && !(await page.isVisible('#paket-pro .free')), 'harga: Tahunan → harga tahunan Pro, tanpa "bulan pertama gratis"');
+        await page.click('#cur button[data-cur="myr"]');
+        check(await shown() === require('./hub-harga').rm(pro.myr.tahunan), 'harga: RM → harga Malaysia (' + await shown() + ')');
+        await page.click('#cur button[data-cur="idr"]');
         check(await page.evaluate(() => [...document.querySelectorAll('#cyc button, a[data-plan], #df select, #df input:not([type=checkbox]), #df .chk, #df button')].filter(e => e.offsetParent).every(e => e.getBoundingClientRect().height >= 43.5)), 'harga dan form: tombol dan isian ≥ 44 px');
         await page.click('a[data-plan="pro"]');
         await page.waitForTimeout(300);
@@ -267,7 +270,7 @@ async function makeLogos(browser) {
         await page.click('#df button[type="submit"]');
         const wa = await page.evaluate(() => window.__wa[0] || '');
         const msg = wa.includes('?text=') ? decodeURIComponent(wa.split('?text=')[1]) : '';
-        check(wa.startsWith('https://wa.me/6281234567890?text=') && msg === ['Halo XNK, saya tertarik memakai XNK.', 'Nama: Rina & Co', 'Kota / tempat: Bandung', 'Klien aktif: 5–15', 'Paket: Pro', 'Cara bayar: Tahunan', 'Mau demo 30 menit dulu: ya'].join('\n'),
+        check(wa.startsWith('https://wa.me/6281234567890?text=') && msg === ['Halo XNK, saya tertarik memakai XNK.', 'Nama: Rina & Co', 'Kota / tempat: Bandung', 'Klien aktif: 5–15', 'Paket: Pro', 'Cara bayar: Tahunan', 'Mata uang: Rp (Indonesia)', 'Mau demo 30 menit dulu: ya'].join('\n'),
           'form → wa.me dengan pesan terisi' + (msg ? '' : ' (' + wa + ')'));
         check(await page.getAttribute('a[href="https://xnk.my.id/demo/"]', 'target') === '_blank' && await page.locator('a[href="https://xnk.my.id/demo/?klien"]').count() === 1, 'coba demo: panel dan portal contoh (tab baru)');
         check(await page.evaluate(() => Promise.all([...document.querySelectorAll('.dscr img')].map(i => fetch(i.getAttribute('src') || i.getAttribute('data-src')).then(r => r.ok, () => false))).then(a => a.length === 9 && a.every(Boolean))), 'fitur: 9 layar ada (coach dan klien)');
@@ -404,7 +407,7 @@ async function makeLogos(browser) {
       await clearDm();
       await page.click('#insp .sub-form button[type="submit"]');
       await waitDm('disimpan');
-      check(JSON.stringify(PUSAT_CALLS.sub) === JSON.stringify(['claudia', { tier: 'pro', cycle: 'tahunan', price: '2490000', due: '2026-12-19', email: '', setupKind: 'standar', setupPrice: '400000' }]) &&
+      check(JSON.stringify(PUSAT_CALLS.sub) === JSON.stringify(['claudia', { tier: 'pro', cycle: 'tahunan', price: '2490000', due: '2026-12-19', email: '', setupKind: 'standar', setupPrice: '400000', cur: 'IDR' }]) &&
         (await txt('#insp')).includes('Pro') && (await txt('#insp')).includes('tahunan') && (await txt('#list .ccard[data-sel="claudia"]')).includes('Pro'),
         'Atur paket → pusatSubSave (paket, cara bayar, setup), detail dan daftar diperbarui (' + JSON.stringify(PUSAT_CALLS.sub) + ')');
       check((await txt('#insp')).includes('belum lunas'), 'setup Standar tampil belum lunas');

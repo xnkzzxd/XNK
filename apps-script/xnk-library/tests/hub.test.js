@@ -356,6 +356,18 @@ test('workflow Coach XNK: satu secret per job (secrets[matrix.secret]), tidak pe
 const harga = require('../tools/hub-harga');
 const PUSAT_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'xnk-pusat', 'src', 'Pusat.gs'), 'utf8');
 
+test('harga Malaysia landing = XNK HQ (PUSAT_TIERS_MYR / PUSAT_SETUP_MYR); tombol Rp | RM', () => {
+  const ctx = {};
+  vm.runInNewContext(PUSAT_SRC.match(/var PUSAT_TIERS_MYR = \{[\s\S]*?\n\};/)[0] + PUSAT_SRC.match(/var PUSAT_SETUP_MYR = \{[^\n]*\};/)[0] +
+    ';this.T = PUSAT_TIERS_MYR; this.S = PUSAT_SETUP_MYR;', ctx);
+  assert.deepEqual(JSON.parse(JSON.stringify({ tiers: ctx.T, setup: ctx.S })), harga.pusatShapeMyr(), 'ubah myr di tools/hub-harga.js dan Pusat.gs bersama');
+  assert.equal(harga.rm(1490), 'RM\u00a01,490');
+  const html = harga.render();
+  assert.match(html, /id="cur"[\s\S]*data-cur="myr"/);
+  for (const t of harga.TIERS) assert.ok(html.includes('<span class="cm">' + harga.rm(t.myr.bulanan) + '</span>'), t.key);
+  assert.ok(harga.offers('https://x/').some(o => o.priceCurrency === 'MYR'));
+});
+
 test('harga landing = harga XNK HQ (PUSAT_TIERS / PUSAT_SETUP di Pusat.gs)', () => {
   const ctx = {};
   vm.runInNewContext(PUSAT_SRC.match(/var PUSAT_TIERS = \{[\s\S]*?\n\};/)[0] + PUSAT_SRC.match(/var PUSAT_SETUP = \{[^\n]*\};/)[0] +
@@ -377,8 +389,8 @@ test('landing: semua harga dari hub-harga.js, bulanan dan tahunan, setup, tabel 
   for (const k of ['<!--HARGA-->', '<!--DAFTAR-->', '<!--/DAFTAR-->', '<!--PAKET-->', '<!--IG-->', '<!--IG-FOOT-->', '{{mulai}}', '__WA__']) assert.ok(!html.includes(k), k);
   for (const t of harga.TIERS) {
     const card = html.match(new RegExp(`<article class="card tier[^"]*" id="paket-${t.key}"[\\s\\S]*?</article>`))[0];
-    assert.ok(card.includes(`<p class="price m"><b>${harga.rp(t.bulanan)}</b>`), t.key + ' bulanan');
-    assert.ok(card.includes(`<p class="price y"><b>${harga.rp(t.tahunan)}</b>`), t.key + ' tahunan');
+    assert.ok(card.includes(`<p class="price m"><b><span class="ci">${harga.rp(t.bulanan)}</span><span class="cm">${harga.rm(t.myr.bulanan)}</span></b>`), t.key + ' bulanan');
+    assert.ok(card.includes(`<p class="price y"><b><span class="ci">${harga.rp(t.tahunan)}</span><span class="cm">${harga.rm(t.myr.tahunan)}</span></b>`), t.key + ' tahunan');
     assert.ok(card.includes(`href="#daftar" data-plan="${t.key}"`), t.key + ' tombol pilih');
     // Bulan pertama gratis hanya di harga bulanan.
     assert.match(card, /<p class="psub m"><span class="free">Bulan pertama gratis<\/span><\/p>/);
@@ -387,7 +399,7 @@ test('landing: semua harga dari hub-harga.js, bulanan dan tahunan, setup, tabel 
   }
   assert.ok(html.includes('id="paket-pro"') && /id="paket-pro"[\s\S]{0,200}Disarankan/.test(html), 'Pro disarankan');
   assert.ok(!html.includes('Paling dipilih'), 'tanpa klaim "paling dipilih"');
-  for (const s of Object.values(harga.SETUP)) assert.ok(html.includes(`<b>${harga.rp(s.price)}</b>`), s.name);
+  for (const s of Object.values(harga.SETUP)) assert.ok(html.includes(`<b><span class="ci">${harga.rp(s.price)}</span><span class="cm">${harga.rm(s.myr)}</span></b>`), s.name);
   // Keputusan pemilik: halaman depan tidak menyebut Google atau spreadsheet (juga di data terstruktur dan tanya jawab).
   assert.ok(!/google|spreadsheet/i.test(html), 'halaman depan tidak menyebut Google / spreadsheet: ' + (html.match(/.{0,30}(google|spreadsheet).{0,30}/i) || [''])[0]);
   assert.ok(html.includes('Aplikasi dan tempat data khusus, kami yang siapkan'), 'setup Standar: tempat data khusus disiapkan pemilik');
@@ -436,7 +448,7 @@ test('landing: data terstruktur, robots.txt dan sitemap.xml', () => {
   for (const t of ld) assert.ok(!t.includes('<'), 'tanpa < mentah');
   const [app, faq] = ld.map(t => JSON.parse(t));
   assert.equal(app['@type'], 'SoftwareApplication');
-  assert.deepEqual(app.offers.map(o => [o.name, Number(o.price), o.priceCurrency]), harga.TIERS.map(t => [t.name, t.bulanan, 'IDR']));
+  assert.deepEqual(app.offers.map(o => [o.name, Number(o.price), o.priceCurrency]), harga.TIERS.map(t => [t.name, t.bulanan, 'IDR']).concat(harga.TIERS.map(t => [t.name + ' (Malaysia)', t.myr.bulanan, 'MYR'])));
   assert.equal(faq['@type'], 'FAQPage');
   assert.equal(faq.mainEntity.length, (html.match(/<details><summary>/g) || []).length);
   assert.ok(faq.mainEntity.every(q => q.name && q.acceptedAnswer.text && !/<|&amp;/.test(q.name + q.acceptedAnswer.text)));

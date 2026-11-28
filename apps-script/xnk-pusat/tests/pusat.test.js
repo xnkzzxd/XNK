@@ -1299,3 +1299,18 @@ test('paket & fitur: ganti paket dari dialog — cara bayar tetap, harga dari pr
   assert.equal(a.st.plans.at(-1).tier, 'studio');
   assert.match(e.call('pusatPlanSave', e.tok, 'claudia', { tier: 'emas' }).error, /Pilih paket/);
 });
+
+test('coach Malaysia: harga bawaan RM, pembayaran dalam RM, ringkasan uang dihitung ke Rupiah', () => {
+  const { e } = subEnv();
+  let r = e.call('pusatSubSave', e.tok, 'claudia', { tier: 'pro', cycle: 'bulanan', due: wib(10), setupKind: 'standar', cur: 'MYR' });
+  assert.equal(r.ok, true, r.error);
+  let v = r.data.coaches.find(c => c.slug === 'claudia');
+  assert.deepEqual([v.sub.cur, v.sub.price, v.sub.setup.price], ['MYR', 99, 149]);
+  assert.equal(r.data.money.mrr, 99 * 3700);
+  r = e.call('pusatSubPay', e.tok, 'claudia', { kind: 'langganan' });
+  assert.equal(r.ok, true, r.error);
+  const p = r.data.money.payments[0];
+  assert.deepEqual([p.amount, p.cur], [99, 'MYR']);
+  assert.equal(r.data.money.monthIn, 99 * 3700);
+  assert.match(e.call('pusatSubSave', e.tok, 'claudia', { tier: 'pro', cycle: 'bulanan', due: wib(10), cur: 'SGD' }).error, /IDR atau MYR/);
+});
