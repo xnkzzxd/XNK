@@ -392,7 +392,7 @@
     const section = (ic, title, body) => '<div class="card"><div class="section-head"><h3 class="section-title">' + icon(ic, 'style="width:16px;height:16px;vertical-align:-3px;margin-right:6px"') + h(title) + '</h3></div>' + body + '</div>';
     const rows = (ic, items) => '<div>' + items.map(i => '<div class="coach-row"><span class="ico">' + icon(ic, 'style="width:16px;height:16px"') + '</span><span style="padding-top:6px">' + h(i) + '</span></div>').join('') + '</div>';
     const specs = String(c.specialty || '').split(',').map(x => x.trim()).filter(Boolean);
-    let html = '<div class="stack stagger" style="gap:16px">';
+    let html = '<div class="stack' + (opts.calm ? '' : ' stagger') + '" style="gap:16px">';   // calm = isi diperbarui diam-diam, tanpa animasi masuk lagi
     // Hero ringkas: foto, nama, status dan angka dalam satu kartu; tombol di kanan (PC) atau di bawah (HP).
     const s = p.stats || {};
     const kp = [[s.clients, 'Klien'], [s.sessions, 'Sesi selesai'], [s.rating, 'Rating']].filter(k => k[0] !== '' && k[0] != null && Number(k[0]) !== 0);
@@ -442,24 +442,38 @@
     }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
   };
 
+  // Profil coach berubah jarang: salinan di memori (bukan di perangkat) digambar langsung, server ditanya lagi bila > 5 menit.
+  // Belum pernah dibuka = profil dasar dari window.coaches langsung tampil, status dan testimoni menyusul.
+  const coachProf = {};
+  function coachProfGet(coachId, base, draw) {
+    const logged = !!(_lsGet(MEMBER_TOKEN_KEY) && window.publicLoggedMember);
+    const key = (logged ? 'm|' : 'p|') + (coachId || '');
+    const hit = coachProf[key];
+    if (hit) draw(hit.data); else if (base) draw({ coach: base, status: null, testimonials: [] });
+    if (hit && Date.now() - hit.at < 300000) return;
+    const shown = hit ? JSON.stringify(hit.data) : '';
+    const keep = function (p) { coachProf[key] = { data: p, at: Date.now() }; if (JSON.stringify(p) !== shown) draw(p, true); };
+    if (logged) {
+      (coachId ? memberCall('getMyCoach', coachId) : memberCall('getMyCoach')).then(keep).catch(function () { if (!hit && !base) draw({ coach: null }); });
+    } else {
+      Promise.all([(coachId ? publicCall('getCoachStatus', coachId) : publicCall('getCoachStatus')).catch(() => null), publicCall('getPublicTestimonials').catch(() => [])]).then(function (r) {
+        keep({ coach: base, status: r[0], testimonials: (r[1] || []).slice(0, 3) });
+      });
+    }
+  }
+
   window.renderPublicCoaches = function () {
     const el = $('view-public-coaches');
     if (!el) return;
     if (window.isSoloCoach()) {
       setHTML(el, '<div class="page-head"><div><h2 class="page-title">Coach</h2></div></div><div id="coach-profile-page">' + '<p class="li-sub">Memuat profil…</p>' + '</div>');
-      const draw = function (p) {
+      const draw = function (p, calm) {
         const box = $('coach-profile-page'); if (!box) return;
         // Desktop: sesi sendiri (Mendatang, Selesai) di bawah profil supaya halaman tidak kosong; di HP disembunyikan (.desk-x).
-        box.innerHTML = window.renderCoachProfile(p) + (window.publicLoggedMember && window.mySessionListsHtml ? '<div class="desk-x dx-grid" id="coach-my-sess">' + window.mySessionListsHtml().replace(/id="pub-(upcoming-list|sched-history)"/g, '') + '</div>' : '');
+        box.innerHTML = window.renderCoachProfile(p, { calm: calm }) + (window.publicLoggedMember && window.mySessionListsHtml ? '<div class="desk-x dx-grid" id="coach-my-sess">' + window.mySessionListsHtml().replace(/id="pub-(upcoming-list|sched-history)"/g, '') + '</div>' : '');
         paintIcons();
       };
-      if (_lsGet(MEMBER_TOKEN_KEY) && window.publicLoggedMember) {
-        memberCall('getMyCoach').then(draw).catch(function () { draw({ coach: window.coaches[0], status: null, testimonials: [] }); });
-      } else {
-        Promise.all([publicCall('getCoachStatus').catch(() => null), publicCall('getPublicTestimonials').catch(() => [])]).then(function (r) {
-          draw({ coach: window.coaches[0], status: r[0], testimonials: (r[1] || []).slice(0, 3) });
-        });
-      }
+      coachProfGet('', window.coaches[0], draw);
       return;
     }
     let html = '<div style="margin-bottom:var(--gap)">' + coachesHeroHtml() + '</div><div class="page-head"><div><h2 class="page-title">Tim coach</h2><p class="page-sub">Pilih coach untuk melihat profil, jadwal tersedia, dan testimoni.</p></div></div>';
@@ -484,15 +498,11 @@
     $('coach-sheet-title').textContent = c ? c.name : 'Profil coach';
     $('coach-sheet-body').innerHTML = '<p class="li-sub">Memuat profil…</p>';
     openSheet('sheet-coach-profile');
-    const draw = function (p) { $('coach-sheet-body').innerHTML = window.renderCoachProfile(p, { inSheet: true }); paintIcons(); };
-    if (_lsGet(MEMBER_TOKEN_KEY) && window.publicLoggedMember) {
-      memberCall('getMyCoach', coachId).then(draw).catch(function () { draw({ coach: c, status: null, testimonials: [] }); });
-    } else {
-      Promise.all([publicCall('getCoachStatus', coachId).catch(() => null), publicCall('getPublicTestimonials').catch(() => [])]).then(function (r) {
-        draw({ coach: c, status: r[0], testimonials: (r[1] || []).slice(0, 3) });
-      });
-    }
+    coachSheetId = String(coachId);
+    const draw = function (p, calm) { if (coachSheetId !== String(coachId)) return; $('coach-sheet-body').innerHTML = window.renderCoachProfile(p, { inSheet: true, calm: calm }); paintIcons(); };
+    coachProfGet(String(coachId), c, draw);
   };
+  let coachSheetId = '';
 
   // Kartu "Coach kamu" di beranda klien
   function myCoachCardHtml(me) {

@@ -183,11 +183,24 @@
     onSettingsEdit();
   };
   const rmdPreviewTimers = {}, rmdPreviewSeq = {};
+  // Pratinjau yang sudah diketahui (jenis + teks template). Teks tersimpan datang dari server bersama data Pengaturan
+  // (job.preview), jadi membuka Pengingat tidak memanggil server; hanya teks yang baru diketik yang ditanyakan, sekali.
+  const rmdPvMemo = {};
+  function rmdPvKnown(jobId, tpl) {
+    const k = jobId + '\n' + tpl;
+    if (Object.prototype.hasOwnProperty.call(rmdPvMemo, k)) return rmdPvMemo[k];
+    const job = setState.data && setState.data.reminder && setState.data.reminder.jobs ? setState.data.reminder.jobs[jobId] : null;
+    if (job && typeof job.preview === 'string' && tpl === (job.tpl || job.tplDefault || '')) return job.preview;
+    return null;
+  }
   function rmdPreview(jobId) {
     const el = $('set-job-' + jobId + '-tpl'), out = $('pv-' + jobId);
     if (!el || !out) return;
     const seq = (rmdPreviewSeq[jobId] = (rmdPreviewSeq[jobId] || 0) + 1);   // abaikan jawaban lama kalau pengguna sudah mengetik lagi
-    adminCall('previewReminderText', jobId, el.value).then(function (r) {
+    const tpl = el.value, known = rmdPvKnown(jobId, tpl);
+    if (known != null) { out.textContent = known; out.classList.remove('wa-error'); return; }
+    adminCall('previewReminderText', jobId, tpl).then(function (r) {
+      rmdPvMemo[jobId + '\n' + tpl] = r.text;
       if (seq !== rmdPreviewSeq[jobId]) return;
       out.textContent = r.text;
       out.classList.remove('wa-error');
@@ -311,7 +324,7 @@
     refreshSettingsNav();
   }
   function pkgLoad() {
-    return adminCall('getPriceListAdmin').then(function (d) { pkgState.data = d; pkgRefreshView(); })
+    return adminCall('getPriceListAdmin').then(function (d) { pkgState.data = d; pkgState.at = Date.now(); pkgRefreshView(); })
       .catch(function (err) { window.showToast('Gagal memuat paket: ' + window.authMessage(err)); });
   }
   // Setelah perubahan: form klien, katalog portal, dan pilihan paket ikut yang terbaru tanpa muat ulang.
@@ -536,7 +549,7 @@
       refreshSettingsNav();
       if (setState.open && !editing) renderSettingsSection(setState.open);
       pre.status.then(applyRmdStatus).catch(function () {});
-      if (!pkgState.data) pre.pkg.then(function (d) { if (d) { pkgState.data = d; pkgRefreshView(); } });
+      if (!pkgState.data) pre.pkg.then(function (d) { if (d && !pkgState.data) { pkgState.data = d; pkgState.at = Date.now(); pkgRefreshView(); } });
     }).catch(function (err) {
       setState.built = false;
       window.showToast('Gagal memuat Pengaturan: ' + window.authMessage(err));
@@ -606,10 +619,11 @@
     setDirty(false);
     paintIcons();
     if (id === 'tampilan') renderThemeSeg();
-    if (id === 'paket') pkgLoad();
+    // Paket sudah ada dari getSettingsBundle / simpan terakhir: tampil dari memori, tanya server lagi hanya bila salinannya > 5 menit.
+    if (id === 'paket' && (!pkgState.data || Date.now() - (pkgState.at || 0) > 300000)) pkgLoad();
     if (id === 'keuangan') finSettingsLoad();
     if (id === 'latihan') exAliasLoad();
-    if (id === 'pengingat') { setState.log = null; window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); rmdPreviewAll(); }
+    if (id === 'pengingat') { window.settingsLoadLog(); if (!setState.status) loadRmdStatus(); rmdPreviewAll(); }
     refreshSettingsNav();
     const sc = $('main-scroll-area'); if (sc) sc.scrollTo({ top: 0 });
   }

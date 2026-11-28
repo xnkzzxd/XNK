@@ -473,3 +473,21 @@ test('hidup-sehat: every active client gets a cardio button; on by default at 05
   assert.equal(job.enabled, true);
   assert.match(JSON.stringify(job), /05:00|"hour":5|:5\b/);
 });
+
+// Pengaturan → Pengingat dibuka tanpa satu panggilan per jenis: data Pengaturan membawa pratinjau teks yang tersimpan.
+test('getAppSettings carries a preview equal to previewReminderText for every template job', () => {
+  const env = seededEnv();
+  const token = env.adminToken();
+  env.props.RMD_TPL_SESI_BESOK = 'Halo {nama}, sampai jumpa jam {jam} ya.';
+  const jobs = env.call('getAppSettings', token).reminder.jobs;
+  let n = 0;
+  Object.keys(jobs).forEach(function (id) {
+    const j = jobs[id];
+    if (!j.placeholders.length) return;
+    n++;
+    assert.equal(typeof j.preview, 'string', id);
+    assert.equal(j.preview, env.call('previewReminderText', token, id, j.tpl || j.tplDefault).text, id);
+  });
+  assert.ok(n >= 10, 'expected the template jobs to have previews');
+  assert.match(jobs['sesi-besok'].preview, /sampai jumpa jam 07:00 ya\.$/);   // template tersimpan, bukan bawaan
+});

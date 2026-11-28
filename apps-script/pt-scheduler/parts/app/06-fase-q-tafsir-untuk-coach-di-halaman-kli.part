@@ -769,10 +769,26 @@
 
   function hoursSummary(ranges) { return ranges.length ? ranges.map(r => p2(r[0]) + '–' + p2(r[1])).join(', ') : 'Libur'; }
 
-  window.openHoursPage = function () {
+  // Jam kerja & cuti: salinan terakhir (memori) langsung tampil, server ditanya di latar bila salinannya > 1 menit.
+  // Sesudah simpan / tambah / hapus cuti: opts.fresh = selalu tanya server.
+  window.openHoursPage = function (opts) {
+    opts = opts || {};
+    const have = window._hoursAvail, at = window._hoursAvailAt || 0;
+    if (have && !opts.fresh) hoursDraw(have, false);
+    if (have && !opts.fresh && Date.now() - at < 60000) return;
+    const shown = have ? JSON.stringify(have) : '';
     adminCall('getCoachAvailability').then(function (a) {
+      window._hoursAvail = a; window._hoursAvailAt = Date.now();
+      if (have && !opts.fresh) {
+        // Pembaruan di latar: jangan ganggu editor jam yang sedang terbuka (hoursState = isian coach), dan jangan gambar ulang bila sama.
+        const editing = $('modal-coach-hours') && !$('modal-coach-hours').classList.contains('hide') && !$('sheet-layer').classList.contains('hide');
+        if (editing || ui.detail !== 'hours' || JSON.stringify(a) === shown) return;
+      }
+      hoursDraw(a, !!(have && ui.detail === 'hours'));
+    }).catch(function (err) { if (!have || opts.fresh) window.showToast(waitErr(err, 'Gagal: ')); });
+  };
+  function hoursDraw(a, calm) {
       hoursState = a.week; hoursStudio = a.businessHours; hoursCoachId = a.coachId;
-      window._hoursAvail = a;
       const rows = HOURS_DAYS.map(d => '<div class="row-between" style="min-height:44px"><span>' + d[1] + '</span><span class="li-sub num">' + (a.hasRules ? h(hoursSummary(a.week[d[0]])) : 'Ikut jam studio') + '</span></div>').join('');
       const off = a.timeOff.length ? a.timeOff.map(function (o) {
         const when = o.from === o.to ? o.from : o.from + ' → ' + o.to;
@@ -781,9 +797,10 @@
       }).join('') : '<p class="li-sub">Belum ada cuti.</p>';
       const body = '<div class="stack" style="gap:16px"><div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Jam kerja</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openHoursEditor()">Ubah</button></div>' + rows + '</div>' +
         '<div class="card-flat stack" style="gap:4px"><div class="row-between"><p class="eyebrow">Cuti</p><button type="button" class="btn btn-secondary btn-sm" onclick="window.openTimeOffSheet()">' + icon('plus') + 'Tambah</button></div>' + off + '</div></div>';
-      openDetail('hours', 'Jam kerja & cuti', '', body);
-    }).catch(function (err) { window.showToast(waitErr(err, 'Gagal: ')); });
-  };
+      const was = ui.refreshing;
+      if (calm) ui.refreshing = true;   // isi diperbarui di tempat, tanpa animasi panel lagi
+      try { openDetail('hours', 'Jam kerja & cuti', '', body); } finally { ui.refreshing = was; }
+  }
 
   function renderHoursRows() {
     $('coach-hours-rows').innerHTML = HOURS_DAYS.map(function (d) {
@@ -816,7 +833,7 @@
   };
   window.saveHours = function () {
     optimistic({ q: { mode: 'admin', fn: 'saveCoachAvailability', args: [hoursCoachId, hoursState] }, sheet: true, ok: 'Jam kerja disimpan.', label: 'Jam kerja',
-      then: function () { window.openHoursPage(); } });
+      then: function () { window.openHoursPage({ fresh: true }); } });
   };
 
   window.toggleOffHours = function () { $('off-hours').classList.toggle('hide', $('off-allday').checked); };
@@ -835,7 +852,7 @@
     adminCall('addCoachTimeOff', data).then(function (r) {
       done();
       window.showToast('Cuti disimpan.');
-      if (!r.clashes.length) { window.closeModal(); window.openHoursPage(); return; }
+      if (!r.clashes.length) { window.closeModal(); window.openHoursPage({ fresh: true }); return; }
       $('off-clashes').innerHTML = '<p class="li-title">' + r.clashes.length + ' sesi bertepatan dengan cuti ini</p>' + r.clashes.map(function (c, i) {
         const d = new Date(c.start);
         const text = 'Hai ' + c.memberName + ', mohon maaf sesi ' + fmtShort(d) + ' jam ' + fmtTime(d) + ' perlu dipindah karena coach berhalangan. Boleh kita atur ulang?';
@@ -849,7 +866,7 @@
     const row = btn && btn.closest ? btn.closest('.row-between') : null;
     if (row) row.classList.add('hide');
     optimistic({ q: { mode: 'admin', fn: 'deleteCoachTimeOff', args: [id] }, ok: 'Cuti dihapus.', label: 'Hapus cuti',
-      then: function () { window.openHoursPage(); }, undo: function () { if (row) row.classList.remove('hide'); } });
+      then: function () { window.openHoursPage({ fresh: true }); }, undo: function () { if (row) row.classList.remove('hide'); } });
   };
 
 

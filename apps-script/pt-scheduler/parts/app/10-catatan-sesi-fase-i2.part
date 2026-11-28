@@ -140,7 +140,7 @@
   };
 
   function reloadCoaches() {
-    return adminCall('getCoachesAdmin').then(function (res) { applyCoachesAdmin(res); saveAdminCache(); window.updateUI(); });
+    return adminCall('getCoachesAdmin').then(function (res) { applyCoachesAdmin(res); if (res && res.coaches) { fin.coaches = res.coaches; fin.setAt = Date.now(); } saveAdminCache(); window.updateUI(); });
   }
   window.setCoachActiveUI = function (id, aktif) {
     // Antrean simpan: daftar coach (dan mode solo) dimuat ulang dari server setelah tersimpan.

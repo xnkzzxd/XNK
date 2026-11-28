@@ -312,6 +312,11 @@ function _rmdRead_() {
       variasi: RMD_VARIASI_JENIS.indexOf(j.jenis) >= 0,     // teks berganti tiap hari dari sheet PesanVariasi
       placeholders: RMD_PLACEHOLDERS[j.jenis] || []
     };
+    // Pratinjau teks yang tersimpan, supaya membuka Pengingat tidak perlu satu panggilan per jenis (previewReminderText hanya saat mengetik).
+    if (RMD_PLACEHOLDERS[j.jenis]) {
+      var t = jobs[j.jenis].tpl || jobs[j.jenis].tplDefault;
+      try { jobs[j.jenis].preview = _rmdFill_(t, _rmdSampleVars_(j.jenis)); } catch (e) { /* biarkan browser bertanya ke server */ }
+    }
   });
   return {
     enabled: props.getProperty('RMD_ENABLED') === 'true',

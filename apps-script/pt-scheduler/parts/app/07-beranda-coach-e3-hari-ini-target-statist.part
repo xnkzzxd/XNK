@@ -166,7 +166,7 @@
 
   // ── Program latihan di halaman klien (panel, Fase J2) ──────────────────────────
   const progAdmin = {};   // memberId → { days, text, last } | { error }
-  let progTemplates = [];
+  let progTemplates = [], progTplAt = 0;   // template program: dimuat sekali, simpan/hapus template memperbarui daftar ini
   let progMember = '';
   function programAdminInner(memberId) {
     const d = progAdmin[memberId];
@@ -263,12 +263,14 @@
     $('prg-who').textContent = m.name || '';
     pfLoad((progAdmin[memberId] && progAdmin[memberId].days) || []);
     $('prg-err').textContent = ''; $('prg-tpl-name').value = ''; $('prg-tpl-pub').checked = false;
-    $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>'; $('prg-tpl-del').classList.add('hide');
+    const tplFill = function () { $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join(''); };
+    tplFill(); $('prg-tpl-del').classList.add('hide');
     $('prg-clear').classList.toggle('hide', !(progAdmin[memberId] && progAdmin[memberId].days && progAdmin[memberId].days.length));
     openSheet('modal-program');
+    if (progTplAt && Date.now() - progTplAt < 300000) return;
     adminCall('getProgramTemplates').then(function (list) {
-      progTemplates = list || [];
-      $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '">' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
+      progTemplates = list || []; progTplAt = Date.now();
+      if (!$('prg-tpl').value) tplFill();   // jangan ganti pilihan yang sudah dibuat coach
     }).catch(function () {});
   };
   // ── Editor program berbentuk form (Fase M) ─────────────────────────────────────
